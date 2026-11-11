@@ -1,0 +1,86 @@
+{
+  "_about": "Aircraft performance data. The flight model derives drag from these documented figures (weight, wing, engine power, top speed at height), so climb and turn performance come out of the physics instead of being typed in. refClimbSlMs is the documented initial climb rate, used only by the tests to check the model. Change a number here and every battle uses it.",
+  "spitfire_mk1": {
+    "name": "Spitfire Mk I", "short": "Spitfire", "role": "fighter", "nation": "UK",
+    "massKg": 2750, "wingAreaM2": 22.48, "spanM": 11.23, "lengthM": 9.12,
+    "engines": 1, "powerKw": 768, "critAltM": 4950, "slPowerFrac": 0.88, "propEff": 0.8,
+    "vmaxMs": 157.5, "vmaxAltM": 5800, "oswald": 0.85, "clMax": 1.36, "gLimit": 6.2,
+    "rollRateDeg": 85, "vneMs": 201, "ceilingM": 10400, "cruiseMs": 118, "climbIasMs": 76,
+    "floatCarb": true,
+    "fuelKg": 278, "burnCruiseKgS": 0.035, "burnCombatKgS": 0.09,
+    "guns": [{ "name": ".303 Browning", "count": 8, "rof": 19, "dmg": 1, "ammoSec": 15.8 }],
+    "durability": 20, "pilotArmor": 0.45, "selfSealing": false, "crew": 1,
+    "refClimbSlMs": 14.7
+  },
+  "hurricane_mk1": {
+    "name": "Hurricane Mk I", "short": "Hurricane", "role": "fighter", "nation": "UK",
+    "massKg": 2990, "wingAreaM2": 23.92, "spanM": 12.19, "lengthM": 9.58,
+    "engines": 1, "powerKw": 768, "critAltM": 4950, "slPowerFrac": 0.88, "propEff": 0.8,
+    "vmaxMs": 144.7, "vmaxAltM": 5300, "oswald": 0.8, "clMax": 1.35, "gLimit": 6.2,
+    "rollRateDeg": 75, "vneMs": 174, "ceilingM": 10200, "cruiseMs": 112, "climbIasMs": 72,
+    "floatCarb": true,
+    "fuelKg": 317, "burnCruiseKgS": 0.035, "burnCombatKgS": 0.09,
+    "guns": [{ "name": ".303 Browning", "count": 8, "rof": 19, "dmg": 1, "ammoSec": 17.6 }],
+    "durability": 24, "pilotArmor": 0.45, "selfSealing": false, "crew": 1,
+    "refClimbSlMs": 12.9
+  },
+  "bf109e4": {
+    "name": "Bf 109 E-4", "short": "Bf 109", "role": "fighter", "nation": "Germany",
+    "massKg": 2570, "wingAreaM2": 16.17, "spanM": 9.87, "lengthM": 8.64,
+    "engines": 1, "powerKw": 745, "critAltM": 4500, "slPowerFrac": 0.9, "propEff": 0.8,
+    "vmaxMs": 155.6, "vmaxAltM": 4500, "oswald": 0.78, "clMax": 1.45, "gLimit": 6.2,
+    "rollRateDeg": 90, "vneMs": 208, "ceilingM": 10500, "cruiseMs": 115, "climbIasMs": 69,
+    "floatCarb": false,
+    "fuelKg": 288, "burnCruiseKgS": 0.05, "burnCombatKgS": 0.075,
+    "guns": [
+      { "name": "20 mm MG FF/M", "count": 2, "rof": 8.7, "dmg": 9, "ammoSec": 6.9 },
+      { "name": "7.92 mm MG 17", "count": 2, "rof": 19, "dmg": 1, "ammoSec": 52 }
+    ],
+    "durability": 19, "pilotArmor": 0.5, "selfSealing": true, "crew": 1,
+    "refClimbSlMs": 15.5
+  },
+  "bf110c": {
+    "name": "Bf 110 C-4", "short": "Bf 110", "role": "heavy_fighter", "nation": "Germany",
+    "massKg": 6700, "wingAreaM2": 38.4, "spanM": 16.25, "lengthM": 12.1,
+    "engines": 2, "powerKw": 1500, "critAltM": 4500, "slPowerFrac": 0.9, "propEff": 0.8,
+    "vmaxMs": 150, "vmaxAltM": 6000, "oswald": 0.78, "clMax": 1.4, "gLimit": 5,
+    "rollRateDeg": 50, "vneMs": 195, "ceilingM": 10000, "cruiseMs": 112, "climbIasMs": 75,
+    "floatCarb": false,
+    "fuelKg": 915, "burnCruiseKgS": 0.1, "burnCombatKgS": 0.15,
+    "guns": [
+      { "name": "20 mm MG FF", "count": 2, "rof": 8.7, "dmg": 8, "ammoSec": 20 },
+      { "name": "7.92 mm MG 17", "count": 4, "rof": 19, "dmg": 1, "ammoSec": 52 }
+    ],
+    "defGuns": { "nose": 0, "dorsal": 1, "ventral": 0, "beam": 0 },
+    "durability": 34, "pilotArmor": 0.4, "selfSealing": true, "crew": 2,
+    "refClimbSlMs": 11
+  },
+  "do17z": {
+    "name": "Dornier Do 17 Z", "short": "Do 17", "role": "bomber", "nation": "Germany",
+    "massKg": 8590, "wingAreaM2": 55, "spanM": 18, "lengthM": 15.8,
+    "engines": 2, "powerKw": 1380, "critAltM": 4000, "slPowerFrac": 1.0, "propEff": 0.78,
+    "vmaxMs": 113.9, "vmaxAltM": 4000, "oswald": 0.75, "clMax": 1.4, "gLimit": 2.8,
+    "rollRateDeg": 28, "vneMs": 155, "ceilingM": 8200, "cruiseMs": 84, "climbIasMs": 70,
+    "floatCarb": false,
+    "fuelKg": 1100, "burnCruiseKgS": 0.09, "burnCombatKgS": 0.12,
+    "guns": [],
+    "defGuns": { "nose": 1, "dorsal": 1, "ventral": 1, "beam": 2 },
+    "durability": 55, "pilotArmor": 0.25, "selfSealing": true, "crew": 4,
+    "bombKg": 1000,
+    "refClimbSlMs": 5.5
+  },
+  "he111h": {
+    "name": "Heinkel He 111 H", "short": "He 111", "role": "bomber", "nation": "Germany",
+    "massKg": 12600, "wingAreaM2": 87.6, "spanM": 22.6, "lengthM": 16.4,
+    "engines": 2, "powerKw": 1620, "critAltM": 5000, "slPowerFrac": 0.92, "propEff": 0.78,
+    "vmaxMs": 113, "vmaxAltM": 5000, "oswald": 0.8, "clMax": 1.4, "gLimit": 2.6,
+    "rollRateDeg": 24, "vneMs": 150, "ceilingM": 7800, "cruiseMs": 83, "climbIasMs": 70,
+    "floatCarb": false,
+    "fuelKg": 2500, "burnCruiseKgS": 0.11, "burnCombatKgS": 0.15,
+    "guns": [],
+    "defGuns": { "nose": 1, "dorsal": 1, "ventral": 1, "beam": 2 },
+    "durability": 72, "pilotArmor": 0.3, "selfSealing": true, "crew": 5,
+    "bombKg": 2000,
+    "refClimbSlMs": 4.2
+  }
+}

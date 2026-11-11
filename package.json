@@ -1,0 +1,26 @@
+{
+  "name": "theater-command",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Theater Command 1939-1945 (working title). Phase 1 prototypes: campaign rules with auto-resolve on a browser map, and a gray-box air battle.",
+  "type": "module",
+  "scripts": {
+    "geo": "node tools/build-geo.mjs",
+    "build": "node build.mjs",
+    "test": "vitest run",
+    "exit-tests": "vitest run tests/exit",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/three": "^0.159.0",
+    "d3-delaunay": "^6.0.6",
+    "d3-geo": "^3.1.2",
+    "esbuild": "^0.28.2",
+    "polygon-clipping": "^0.15.7",
+    "three": "^0.159.0",
+    "topojson-client": "^3.1.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "world-atlas": "^2.0.2"
+  }
+}
