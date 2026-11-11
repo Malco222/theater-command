@@ -203,7 +203,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
   const dist = new Float32Array(N).fill(1e9);
   const q: number[] = [];
   for (const r of g.regions) {
-    if (!allied(g, nat, r.ctrl)) continue;
+    if (r.ctrl !== nat) continue; // an army closes up to its own front, not to an ally's
     let open = false, walled = false;
     for (const j of r.nb) {
       const t = g.regions[j];
