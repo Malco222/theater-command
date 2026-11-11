@@ -1,0 +1,22 @@
+{
+  "_about": "What each AI nation sets out to do in Historical mode, by turn (turn 1 is September 1939). These are intentions, not results: the armies still have to win the battles. declare lists nations the AI declares war on that turn. posture is attack, defend or redeploy. objectives are worked through in order.",
+  "GER": [
+    { "from": 1, "to": 2, "posture": "attack", "enemies": ["POL"],
+      "objectives": ["Danzig Corridor", "Polish Silesia", "Lodz", "Krakow", "Poznan", "Warsaw", "Lublin", "Przemysl", "Kielce", "Pomorze", "Mlawa"] },
+    { "from": 3, "to": 7, "posture": "redeploy",
+      "assembly": ["Eifel", "Rhineland", "Westphalia", "Frankfurt", "Saar", "Ruhr", "Bremen", "Hesse", "Baden"],
+      "armour": ["Eifel", "Rhineland"],
+      "garrison": ["Warsaw", "Krakow", "Lodz", "Poznan", "Lublin"] },
+    { "from": 8, "to": 8, "posture": "attack", "declare": ["DEN"], "enemies": ["DEN"], "objectives": ["Jutland", "Zealand"], "force": 2 },
+    { "from": 9, "to": 99, "posture": "attack", "declare": ["NED", "BEL", "LUX"], "enemies": ["NED", "BEL", "LUX", "FRA", "UK"],
+      "objectives": ["Luxembourg", "Ardennes", "Sedan", "Holland", "Liege", "Somme", "Calais", "Brussels", "Antwerp", "Lille", "Flanders", "Champagne", "Paris", "Rouen", "Orleans", "Aube", "Burgundy", "Lyon", "Bordeaux", "Nantes"] }
+  ],
+  "ITA": [
+    { "from": 10, "to": 99, "posture": "attack", "declareWhenCollapsing": "FRA", "declare": ["FRA", "UK"], "enemies": ["FRA"], "objectives": ["Riviera", "Savoy"] }
+  ],
+  "FRA": [{ "from": 1, "to": 99, "posture": "defend" }],
+  "UK": [{ "from": 1, "to": 99, "posture": "defend" }],
+  "POL": [{ "from": 1, "to": 99, "posture": "defend" }],
+  "BEL": [{ "from": 1, "to": 99, "posture": "defend" }],
+  "NED": [{ "from": 1, "to": 99, "posture": "defend" }]
+}

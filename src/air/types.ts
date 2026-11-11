@@ -110,6 +110,8 @@ export interface Squadron {
   bombed: boolean;
   bombsHit: number;
   slot: number;
+  /** Weave amplitude in radians, for escorts holding station on slower bombers. */
+  weave: number;
   nav: { x: number; y: number; alt: number; spd: number; g: number };
   bingo: boolean;
   surprisedT: number;

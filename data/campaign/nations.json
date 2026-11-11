@@ -1,0 +1,259 @@
+{
+  "_about": "Nations on the prototype map. quality scales how well a nation's army fights in 1939-40 (training, doctrine, command). air is relative air strength. resilience is how much of its capital, territory and army a nation can lose before it asks for terms. align is its place on the alignment track in September 1939. blitz gives a nation's fast troops extra reach and punch in the first two turns of a new offensive. slowCommand makes attacks weaker and counter-attacks late. seaSupply lets an army be supplied through any friendly port.",
+  "GER": {
+    "name": "Germany",
+    "adj": "German",
+    "color": "#59616b",
+    "quality": 1.25,
+    "air": 100,
+    "resilience": 0.8,
+    "align": "axis",
+    "blitz": true
+  },
+  "ITA": {
+    "name": "Italy",
+    "adj": "Italian",
+    "color": "#5f8f63",
+    "quality": 0.75,
+    "air": 40,
+    "resilience": 0.6,
+    "align": "axis"
+  },
+  "SVK": {
+    "name": "Slovakia",
+    "adj": "Slovak",
+    "color": "#8f96a0",
+    "quality": 0.7,
+    "air": 2,
+    "resilience": 0.5,
+    "align": "axis_cobelligerent"
+  },
+  "UK": {
+    "name": "United Kingdom",
+    "adj": "British",
+    "color": "#b5574a",
+    "quality": 1.05,
+    "air": 60,
+    "resilience": 0.9,
+    "align": "allies",
+    "seaSupply": true
+  },
+  "FRA": {
+    "name": "France",
+    "adj": "French",
+    "color": "#4f76b8",
+    "quality": 0.95,
+    "air": 40,
+    "resilience": 0.62,
+    "align": "allies",
+    "slowCommand": true
+  },
+  "POL": {
+    "name": "Poland",
+    "adj": "Polish",
+    "color": "#c97f86",
+    "quality": 0.9,
+    "air": 12,
+    "resilience": 0.6,
+    "align": "allies"
+  },
+  "BEL": {
+    "name": "Belgium",
+    "adj": "Belgian",
+    "color": "#c7a93f",
+    "quality": 0.85,
+    "air": 5,
+    "resilience": 0.55,
+    "align": "independent"
+  },
+  "NED": {
+    "name": "Netherlands",
+    "adj": "Dutch",
+    "color": "#d98d3c",
+    "quality": 0.75,
+    "air": 4,
+    "resilience": 0.4,
+    "align": "independent"
+  },
+  "LUX": {
+    "name": "Luxembourg",
+    "adj": "Luxembourg",
+    "color": "#9c8cc4",
+    "quality": 0.5,
+    "air": 0,
+    "resilience": 0.1,
+    "align": "independent"
+  },
+  "DEN": {
+    "name": "Denmark",
+    "adj": "Danish",
+    "color": "#b96f8f",
+    "quality": 0.6,
+    "air": 1,
+    "resilience": 0.2,
+    "align": "independent"
+  },
+  "NOR": {
+    "name": "Norway",
+    "adj": "Norwegian",
+    "color": "#7f9fb5",
+    "quality": 0.7,
+    "air": 1,
+    "resilience": 0.6,
+    "align": "independent"
+  },
+  "SWE": {
+    "name": "Sweden",
+    "adj": "Swedish",
+    "color": "#d6c36a",
+    "quality": 0.85,
+    "air": 6,
+    "resilience": 0.7,
+    "align": "independent"
+  },
+  "FIN": {
+    "name": "Finland",
+    "adj": "Finnish",
+    "color": "#a9c4d6",
+    "quality": 1.1,
+    "air": 3,
+    "resilience": 0.8,
+    "align": "independent"
+  },
+  "EST": {
+    "name": "Estonia",
+    "adj": "Estonian",
+    "color": "#b8b29c",
+    "quality": 0.7,
+    "air": 0,
+    "resilience": 0.3,
+    "align": "independent"
+  },
+  "LAT": {
+    "name": "Latvia",
+    "adj": "Latvian",
+    "color": "#a8a48f",
+    "quality": 0.7,
+    "air": 0,
+    "resilience": 0.3,
+    "align": "independent"
+  },
+  "LIT": {
+    "name": "Lithuania",
+    "adj": "Lithuanian",
+    "color": "#c2bda6",
+    "quality": 0.7,
+    "air": 0,
+    "resilience": 0.3,
+    "align": "independent"
+  },
+  "SOV": {
+    "name": "Soviet Union",
+    "adj": "Soviet",
+    "color": "#a3483c",
+    "quality": 0.7,
+    "air": 70,
+    "resilience": 0.95,
+    "align": "independent"
+  },
+  "IRL": {
+    "name": "Ireland",
+    "adj": "Irish",
+    "color": "#86b08b",
+    "quality": 0.6,
+    "air": 0,
+    "resilience": 0.5,
+    "align": "independent"
+  },
+  "SUI": {
+    "name": "Switzerland",
+    "adj": "Swiss",
+    "color": "#cfa9a4",
+    "quality": 1.0,
+    "air": 3,
+    "resilience": 0.8,
+    "align": "independent"
+  },
+  "ESP": {
+    "name": "Spain",
+    "adj": "Spanish",
+    "color": "#cdb77a",
+    "quality": 0.75,
+    "air": 8,
+    "resilience": 0.6,
+    "align": "leaning_axis"
+  },
+  "POR": {
+    "name": "Portugal",
+    "adj": "Portuguese",
+    "color": "#8fae8a",
+    "quality": 0.6,
+    "air": 1,
+    "resilience": 0.5,
+    "align": "independent"
+  },
+  "HUN": {
+    "name": "Hungary",
+    "adj": "Hungarian",
+    "color": "#b89a6b",
+    "quality": 0.75,
+    "air": 5,
+    "resilience": 0.6,
+    "align": "leaning_axis"
+  },
+  "ROM": {
+    "name": "Romania",
+    "adj": "Romanian",
+    "color": "#c9bf63",
+    "quality": 0.7,
+    "air": 6,
+    "resilience": 0.6,
+    "align": "independent"
+  },
+  "YUG": {
+    "name": "Yugoslavia",
+    "adj": "Yugoslav",
+    "color": "#8fa6c2",
+    "quality": 0.7,
+    "air": 5,
+    "resilience": 0.5,
+    "align": "independent"
+  },
+  "BUL": {
+    "name": "Bulgaria",
+    "adj": "Bulgarian",
+    "color": "#9bb38c",
+    "quality": 0.7,
+    "air": 2,
+    "resilience": 0.5,
+    "align": "independent"
+  },
+  "GRE": {
+    "name": "Greece",
+    "adj": "Greek",
+    "color": "#7fb0cf",
+    "quality": 0.85,
+    "air": 2,
+    "resilience": 0.6,
+    "align": "independent"
+  },
+  "TUR": {
+    "name": "Turkey",
+    "adj": "Turkish",
+    "color": "#c4a58d",
+    "quality": 0.75,
+    "air": 4,
+    "resilience": 0.7,
+    "align": "leaning_allies"
+  },
+  "VIC": {
+    "name": "Vichy France",
+    "adj": "Vichy French",
+    "color": "#8ea2c4",
+    "quality": 0.8,
+    "air": 10,
+    "resilience": 0.5,
+    "align": "independent",
+    "dormant": true
+  }
+}
