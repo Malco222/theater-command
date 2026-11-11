@@ -8,7 +8,7 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 
 **The campaign prototype** (open `dist/play.html` after a build)
 
-- Europe from Ireland to the Urals in 224 regions, generated from real coastlines (Natural Earth, public domain).
+- Europe from Ireland to Smolensk and from Norway to Turkey in 224 regions, generated from real coastlines (Natural Earth, public domain). The map does not reach Moscow yet.
 - 27 nations with their September 1939 armies as corps on the map, reinforcements by month, and replacement pools fed by industry.
 - Monthly turns starting September 1939. Each corps gets four moves a month; fast troops in a fresh offensive get more.
 - Supply traced from each nation's own capital, industry and depots. Armies that are cut off fight at half strength and waste away.
