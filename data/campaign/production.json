@@ -1,0 +1,61 @@
+{
+  "_about": "The war economy. Each nation earns production points every month: baseIncome plus one point per factory it holds at home, and occupiedIncome of a point per factory on occupied ground. A nation at peace earns peaceIncome of that. Losses are made good first, at replacementCost points per division's worth of men and equipment. What is left can be spent on new formations and fortifications, which take months to arrive. aiBank is the most a computer-run nation keeps in hand before and after it starts building.",
+  "baseIncome": 2,
+  "occupiedIncome": 0.5,
+  "peaceIncome": 0.5,
+  "replacementCost": 4,
+  "aiBank": [
+    48,
+    96
+  ],
+  "aiReserve": 16,
+  "builds": {
+    "inf": {
+      "label": "Infantry corps",
+      "divs": 3,
+      "cost": 48,
+      "months": 5,
+      "blurb": "The backbone of every army. Holds ground well, marches on foot."
+    },
+    "mtn": {
+      "label": "Mountain corps",
+      "divs": 2,
+      "cost": 34,
+      "months": 5,
+      "blurb": "At home in mountains, where other troops are slowed."
+    },
+    "mot": {
+      "label": "Motorized corps",
+      "divs": 2,
+      "cost": 50,
+      "months": 6,
+      "blurb": "Infantry on trucks. Keeps up with the tanks and holds what they take."
+    },
+    "arm": {
+      "label": "Armoured corps",
+      "divs": 2,
+      "cost": 66,
+      "months": 7,
+      "blurb": "The breakthrough arm. Strongest in attack on open ground, weak in cities."
+    }
+  },
+  "fort": {
+    "cost": [
+      0,
+      24,
+      40,
+      60
+    ],
+    "months": 4
+  },
+  "firstCorpsNumber": {
+    "GER": 51,
+    "FRA": 31,
+    "UK": 4,
+    "_default": 11
+  },
+  "armourName": {
+    "GER": "Panzer",
+    "_default": "Armoured"
+  }
+}

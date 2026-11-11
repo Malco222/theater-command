@@ -44,13 +44,30 @@ export interface Nation {
   alive: boolean;
   dormant: boolean;
   capital: number;
-  /** Divisions' worth of replacements waiting to be sent to the front. */
-  pool: number;
+  /** Production points in hand. Losses are made good from these first; the rest can be spent on new formations. */
+  pp: number;
+  /** New formations and works on order. */
+  queue: Build[];
+  /** Number the next new corps will carry. */
+  corpsNo: number;
   armyPeak: number;
   /** Turn each current offensive began, by enemy. */
   offStart: Record<string, number>;
   lastFight: Record<string, number>;
   fellOn?: { turn: number; week: number; to: string };
+}
+
+export interface Build {
+  id: number;
+  what: 'corps' | 'fort';
+  kind?: Kind;
+  divs?: number;
+  name: string;
+  region: number;
+  /** Turn it was ordered and turn it arrives. */
+  ordered: number;
+  eta: number;
+  cost: number;
 }
 
 export interface Corps {
@@ -153,6 +170,7 @@ export interface Game {
   byName: Record<string, Region>;
   corps: Corps[];
   nextCorps: number;
+  nextBuild: number;
   human: string | null;
   reports: BattleReport[];
   headlines: Headline[];

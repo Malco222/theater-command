@@ -6,10 +6,13 @@ import {
   allied, armySize, atWar, collapseScore, createGame, ensureSupply, hostileUnits, limitAttackers, men, weather,
 } from '../game';
 import {
-  beginHuman, canOrder, candidates, current, declarable, endHuman, humanUp, orderAttack, orderDeclare, orderEvacuate,
-  orderMove, orderRail, previewAttack, reach, runTurnAI, stepAI,
+  beginHuman, canOrder, candidates, declarable, endHuman, humanUp, orderAttack, orderBuildCorps, orderBuildFort,
+  orderCancelBuild, orderDeclare, orderEvacuate, orderMove, orderRail, orderShip, previewAttack, reach, runTurnAI,
+  shipTargets, stepAI,
 } from '../turn';
 import { phaseFor } from '../ai';
+import { PRODUCTION, fortCost, income, isHome } from '../economy';
+import { loadGame, peekSave, saveGame } from '../save';
 import { KIND, type BattleReport, type Corps, type Game, type Kind, type Region } from '../types';
 import { turnToDate } from '../../core/ticket';
 
@@ -18,7 +21,10 @@ const ui = {
   sel: -1,
   picked: new Set<number>(),
   rail: false,
-  tab: 'region' as 'region' | 'reel' | 'battles' | 'powers',
+  ship: false,
+  /** False until a game has been started or resumed, so the title screen never overwrites a saved game. */
+  live: false,
+  tab: 'region' as 'region' | 'build' | 'reel' | 'battles' | 'powers',
   view: { x: 380, y: 300, w: 620 },
   unread: 0,
   seenReports: 0,
@@ -131,6 +137,10 @@ function refresh(): void {
   const picked = pickedCorps();
   if (ui.rail && picked.length) {
     for (const r of railTargets(picked[0])) marks += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
+  } else if (ui.ship && picked.length) {
+    const ports = new Set<number>();
+    for (const c of picked) for (const r of shipTargets(g, c)) ports.add(r.id);
+    for (const id of ports) marks += `<path class="mk rail" d="${pathOf(g.regions[id].polys)}"/>`;
   } else {
     const goes = new Map<number, boolean>();
     for (const c of picked) for (const [id, rc] of reach(g, c)) if (id !== c.reg) goes.set(id, (goes.get(id) ?? false) || rc.attack);
@@ -165,6 +175,24 @@ function refresh(): void {
   drawTabs();
   drawPane();
   $('#hint').textContent = hintText();
+  queueSave();
+}
+
+// ---- Saved games: the campaign is kept in this browser so it can be picked up later -------
+
+const SAVE_KEY = 'theater-command-save-v1';
+let saveTimer = 0;
+
+function queueSave(): void {
+  if (!ui.live || saveTimer) return;
+  saveTimer = window.setTimeout(() => {
+    saveTimer = 0;
+    try { localStorage.setItem(SAVE_KEY, saveGame(g)); } catch { /* storage is off or full: the game still plays */ }
+  }, 500);
+}
+
+function readSave(): string | null {
+  try { return localStorage.getItem(SAVE_KEY); } catch { return null; }
 }
 
 const sumDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
@@ -186,7 +214,9 @@ function railTargets(c: Corps): Region[] {
 function hintText(): string {
   if (!g.human) return '';
   if (!humanUp(g)) return '';
+  if (ui.tab === 'build') return 'Planning production: click one of your own home regions to raise troops or build works there.';
   if (ui.rail) return 'Rail move: click any blue region. It takes the whole month.';
+  if (ui.ship) return 'Sea transport: click any blue port. It takes the whole month.';
   if (pickedCorps().length) return 'Click a green region to march there, or a red one to plan an attack.';
   const ready = g.corps.some((c) => c.nat === g.human && c.ap > 0 && c.kind !== 'fort');
   return ready ? 'Click one of your armies (gold outline) to give it orders. End the month when you are done.' : 'All of your armies have used their month. End the month to continue.';
@@ -197,7 +227,8 @@ function drawBar(): void {
   const w = weather(g);
   const who = me ? (g.nations[me].alive ? `Your orders: ${natName(me)}` : `${natName(me)} has fallen`) : 'Watching history unfold: every nation on its 1939 plan';
   const when = me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
-  $('#when').innerHTML = `${when}<small>${esc(who)}${me ? ` · ${esc(w.text)}` : ''}</small>`;
+  const pts = me && g.nations[me].alive ? ` · ${num(Math.floor(g.nations[me].pp))} production pts` : '';
+  $('#when').innerHTML = `${when}<small>${esc(who)}${pts}${me ? ` · ${esc(w.text)}` : ''}</small>`;
   let b = '';
   if (me && humanUp(g)) {
     if (declarable(g).length) b += `<button class="btn warn" data-act="declare">Declare war</button>`;
@@ -212,7 +243,8 @@ function drawBar(): void {
 function drawTabs(): void {
   const newB = g.reports.length - ui.seenReports;
   const t = (id: string, label: string, n = 0) => `<button class="tab${ui.tab === id ? ' on' : ''}" data-act="tab" data-tab="${id}">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
-  $('#tabs').innerHTML = t('region', 'Region') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
+  const build = g.human && g.nations[g.human].alive ? t('build', 'Build') : '';
+  $('#tabs').innerHTML = t('region', 'Region') + build + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
 }
 
 function advice(): string {
@@ -228,7 +260,7 @@ function advice(): string {
 
 function scopeNote(): string {
   if (!g.nations.FRA.fellOn && g.turn < 13) return '';
-  return `<div class="note"><b>This is as far as the first prototype's story goes.</b> It covers the land war from September 1939 to the summer of 1940. The war at sea and in the air, production, research and diplomacy come in later phases. Next on the roadmap is the Battle of Britain.</div>`;
+  return `<div class="note"><b>This is as far as the first prototype's story goes.</b> It covers the land war from September 1939 to the summer of 1940. Production and sea transport are in; the war at sea and in the air, research and diplomacy come in later phases. Next on the roadmap is the Battle of Britain.</div>`;
 }
 
 function corpsRow(c: Corps, mine: boolean): string {
@@ -250,7 +282,9 @@ function corpsRow(c: Corps, mine: boolean): string {
 
 function drawPane(): void {
   const pane = $('#pane');
+  if (ui.tab === 'build' && !(g.human && g.nations[g.human].alive)) ui.tab = 'region';
   if (ui.tab === 'region') pane.innerHTML = regionPane();
+  else if (ui.tab === 'build') pane.innerHTML = buildPane();
   else if (ui.tab === 'reel') pane.innerHTML = reelPane();
   else if (ui.tab === 'battles') pane.innerHTML = battlesPane();
   else pane.innerHTML = powersPane();
@@ -259,7 +293,7 @@ function drawPane(): void {
 function regionPane(): string {
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li></ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li>${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -274,8 +308,9 @@ function regionPane(): string {
   const picked = pickedCorps();
   if (picked.length) {
     const canRail = picked.some((c) => c.ap >= 4);
+    const canShip = picked.some((c) => shipTargets(g, c).length > 0);
     const canEvac = picked.some((c) => g.nations[c.nat].seaSupply && r.port && r.owner !== c.nat);
-    acts = `<div class="acts">${canRail ? `<button class="btn small${ui.rail ? ' on' : ''}" data-act="rail">Rail move</button>` : ''}${canEvac ? '<button class="btn small" data-act="evac">Evacuate by sea</button>' : ''}<button class="btn small" data-act="unpick">Stand down</button></div>`;
+    acts = `<div class="acts">${canRail ? `<button class="btn small${ui.rail ? ' on' : ''}" data-act="rail">Rail move</button>` : ''}${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${canEvac ? '<button class="btn small" data-act="evac" title="An emergency lift home. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>' : ''}<button class="btn small" data-act="unpick">Stand down</button></div>`;
   } else if (mineHere.some((c) => c.ap > 0)) {
     acts = `<div class="acts"><button class="btn small" data-act="pickall">Select all here</button></div>`;
   }
@@ -284,6 +319,60 @@ function regionPane(): string {
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
     <h3>Forces here</h3>${acts}${units}${ui.sel >= 0 && me ? advice() : ''}`;
+}
+
+/** Where a new corps would form up: the selected region if it is home ground, otherwise the capital. */
+function raiseAt(): Region | null {
+  const me = g.human!;
+  if (ui.sel >= 0 && isHome(g, me, g.regions[ui.sel])) return g.regions[ui.sel];
+  const cap = g.nations[me].capital;
+  if (cap >= 0 && isHome(g, me, g.regions[cap])) return g.regions[cap];
+  return g.regions.find((r) => isHome(g, me, r) && r.fac > 0) ?? g.regions.find((r) => isHome(g, me, r)) ?? null;
+}
+
+function buildPane(): string {
+  const me = g.human!;
+  const n = g.nations[me];
+  const mine = humanUp(g);
+  const have = Math.floor(n.pp);
+  const inc = income(g, me);
+  const at = raiseAt();
+  const picked = ui.sel >= 0 && at !== null && at.id === ui.sel;
+  let out = `<h2>War production</h2><p class="sub">Your factories earn production points every month. Losses in the field are made good first, at ${PRODUCTION.replacementCost} points a division. What is left is yours to spend.</p>
+    <div class="facts"><div class="fact"><span>In hand</span><b>${num(have)}</b></div><div class="fact"><span>Each month</span><b>+${num(inc)}</b></div><div class="fact"><span>On order</span><b>${n.queue.length}</b></div></div>`;
+  if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> Industry runs at half speed until the nation is at war.</div>`;
+
+  out += `<h3>Raise a new corps</h3>`;
+  if (!at) out += `<div class="empty">There is no home ground left to raise troops on.</div>`;
+  else {
+    out += `<p class="sub" style="margin:0 0 7px">Forms up at <b style="color:var(--ink)">${esc(at.name)}</b>. ${picked ? '' : 'Click one of your own home regions on the map to raise it there instead.'}</p>`;
+    for (const [kind, b] of Object.entries(PRODUCTION.builds)) {
+      const ok = mine && have >= b.cost;
+      const label = kind === 'arm' ? `${PRODUCTION.armourName[me] ?? PRODUCTION.armourName._default} corps` : b.label;
+      out += `<button class="buy" data-act="build" data-kind="${kind}" ${ok ? '' : 'disabled'}>${icon({ nat: me, kind } as Corps)}<span class="grow"><b>${esc(label)}</b><small>${b.divs} divisions · ready in ${b.months} months</small><small>${esc(b.blurb)}</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${b.cost}<small>pts</small></span></button>`;
+    }
+  }
+
+  out += `<h3>Fortify</h3>`;
+  const sel = ui.sel >= 0 ? g.regions[ui.sel] : null;
+  if (!sel || !isHome(g, me, sel)) out += `<div class="empty">Click one of your own home regions on the map to fortify it.</div>`;
+  else {
+    const cost = fortCost(g, me, sel);
+    if (cost === null) out += `<div class="empty">${esc(sel.name)} is already fortified as heavily as it can be.</div>`;
+    else {
+      const lv = (sel.fort?.lv ?? 0) + n.queue.filter((b) => b.what === 'fort' && b.region === sel.id).length + 1;
+      out += `<button class="buy" data-act="fortify" ${mine && have >= cost ? '' : 'disabled'}><span class="grow"><b>Fortify ${esc(sel.name)} to level ${lv}</b><small>Ready in ${PRODUCTION.fort.months} months · faces every direction</small><small>Defenders behind works fight far harder. A line only helps if the enemy has to come through it.</small></span><span class="cost${have >= cost ? '' : ' short'}">${cost}<small>pts</small></span></button>`;
+    }
+  }
+
+  out += `<h3>On order</h3>`;
+  if (!n.queue.length) out += `<div class="empty">Nothing on order.</div>`;
+  for (const b of [...n.queue].sort((a, c) => a.eta - c.eta)) {
+    const left = b.eta - g.turn;
+    const where = g.regions[b.region]?.name ?? '';
+    out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>${b.what === 'corps' ? `Forming at ${esc(where)} · ` : ''}ready ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${b.cost}<small>paid</small></span>`}</div>`;
+  }
+  return out;
 }
 
 function reelPane(): string {
@@ -346,7 +435,11 @@ function openModal(m: typeof ui.modal): void {
   veil.classList.add('open');
   const card = $('#card');
   if (m.kind === 'start') card.innerHTML = startCard();
-  else if (m.kind === 'report') card.innerHTML = reportCard(g.reports[m.id - 1]);
+  else if (m.kind === 'report') {
+    const rep = g.reports.find((r) => r.id === m.id);
+    if (!rep) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = reportCard(rep);
+  }
   else if (m.kind === 'attack') card.innerHTML = attackCard();
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
@@ -355,16 +448,19 @@ function openModal(m: typeof ui.modal): void {
 
 function startCard(): string {
   const side = (id: string | null, name: string, blurb: string, wide = false) => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}"><b>${name}</b><span>${blurb}</span></button>`;
+  const saved = peekSave(readSave() ?? '');
+  const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `Watching history, ${date(saved.turn)}`}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
     <div class="body"><p class="lead">It is <b>1 September 1939</b>. This is the strategy layer of the game: a map of Europe in 224 regions, monthly turns, and battles settled from a <b>Battle Ticket</b>. Pick a side, or watch the computer play out history's plan.</p>
     <div class="sides">
+      ${resume}
       ${side(null, 'Watch history unfold', 'Every nation follows its 1939 to 1940 plan. Press Play and watch Poland, then the West.', true)}
       ${side('GER', 'Germany', 'On the attack from the first day. The hardest plan to pull off on schedule.')}
       ${side('FRA', 'France', 'The Maginot Line, a large army, and a slow command. Can you keep Paris?')}
       ${side('UK', 'United Kingdom', 'A small expeditionary force and the sea at your back.')}
       ${side('POL', 'Poland', 'Outnumbered and nearly surrounded. Hold as long as you can.')}
     </div>
-    <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
+    <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
 
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea' };
@@ -430,15 +526,34 @@ function declareCard(): string {
 
 // ---- Running the game ---------------------------------------------------------------------
 
-function newGame(human: string | null): void {
+function newGame(human: string | null, seed?: number): void {
   stopAuto();
-  g = createGame(1939, human);
-  ui.sel = -1; ui.picked.clear(); ui.rail = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = 0; ui.flash = [];
+  g = createGame(seed ?? (Date.now() % 900000) + 1, human);
+  ui.live = true;
+  ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = 0; ui.flash = [];
   drawStatic();
   const focus = human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: human === 'GER' ? 640 : 600 };
   applyView();
   if (human) advanceToHuman(false); else { ui.unread = g.headlines.length; refresh(); }
+}
+
+/** Picks up the campaign saved in this browser. Returns false if there is none that can be read. */
+function continueGame(): boolean {
+  const loaded = loadGame(readSave() ?? '');
+  if (!loaded) return false;
+  stopAuto();
+  g = loaded;
+  ui.live = true;
+  ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = g.reports.length; ui.flash = [];
+  drawStatic();
+  const me = g.human;
+  const cap = me ? g.nations[me].capital : -1;
+  const focus = cap >= 0 ? g.regions[cap] : g.byName['Paris'];
+  ui.view = { x: focus.x - 300, y: focus.y - 230, w: 620 };
+  applyView();
+  if (me && !humanUp(g)) advanceToHuman(false); else refresh();
+  return true;
 }
 
 /** Lets the computer play until it is the player's month again. */
@@ -453,7 +568,7 @@ function advanceToHuman(show: boolean): void {
   if (humanUp(g)) beginHuman(g);
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
   ui.unread += g.headlines.length - hFrom;
-  ui.sel = -1; ui.picked.clear(); ui.rail = false;
+  ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false;
   refresh();
   if (g.human && !g.nations[g.human].alive) {
     const lost = g.human;
@@ -504,6 +619,7 @@ function onClick(e: MouseEvent): void {
   const id = Number(t.dataset.id);
   switch (act) {
     case 'start': openModal(null); newGame(t.dataset.nat || null); break;
+    case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
     case 'new': stopAuto(); openModal({ kind: 'start' }); break;
     case 'close': openModal(null); refresh(); break;
     case 'tab':
@@ -522,11 +638,15 @@ function onClick(e: MouseEvent): void {
     case 'end': endHuman(g); advanceToHuman(true); break;
     case 'pick': {
       if (ui.picked.has(id)) ui.picked.delete(id); else ui.picked.add(id);
-      ui.rail = false; refresh(); break;
+      ui.rail = ui.ship = false; refresh(); break;
     }
     case 'pickall': selectRegion(ui.sel); refresh(); break;
-    case 'unpick': ui.picked.clear(); ui.rail = false; refresh(); break;
-    case 'rail': ui.rail = !ui.rail; refresh(); break;
+    case 'unpick': ui.picked.clear(); ui.rail = ui.ship = false; refresh(); break;
+    case 'rail': ui.rail = !ui.rail; ui.ship = false; refresh(); break;
+    case 'ship': ui.ship = !ui.ship; ui.rail = false; refresh(); break;
+    case 'build': { const at = raiseAt(); if (at) orderBuildCorps(g, t.dataset.kind as Kind, at.id); refresh(); break; }
+    case 'fortify': if (ui.sel >= 0) orderBuildFort(g, ui.sel); refresh(); break;
+    case 'cancelbuild': orderCancelBuild(g, id); refresh(); break;
     case 'evac': {
       for (const c of pickedCorps()) orderEvacuate(g, c);
       ui.picked.clear(); refresh(); break;
@@ -561,19 +681,26 @@ function onClick(e: MouseEvent): void {
 
 function selectRegion(id: number): void {
   ui.sel = id;
-  ui.rail = false;
+  ui.rail = ui.ship = false;
   ui.picked = new Set(humanUp(g) ? g.regions[id].units.filter((c) => canOrder(g, c) && c.ap > 0).map((c) => c.id) : []);
   ui.tab = 'region';
 }
 
 function onRegion(id: number): void {
   const r = g.regions[id];
-  const picked = pickedCorps();
   ui.flash = [];
-  if (picked.length && ui.rail) {
-    for (const c of picked) orderRail(g, c, id);
+  // While planning production the map only chooses where to build. No army moves by accident.
+  if (ui.tab === 'build') {
+    ui.sel = id; ui.picked.clear(); ui.rail = ui.ship = false;
+    refresh();
+    return;
+  }
+  const picked = pickedCorps();
+  if (picked.length && (ui.rail || ui.ship)) {
+    for (const c of picked) { if (ui.rail) orderRail(g, c, id); else orderShip(g, c, id); }
     selectRegion(id);
     ui.picked.clear();
+    ui.tab = 'region';
     refresh();
     return;
   }
@@ -694,4 +821,4 @@ refresh();
 openModal({ kind: 'start' });
 
 // A handle for automated checks and for curious players in the browser console.
-(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion };
+(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, continueGame, save: () => saveGame(g) };

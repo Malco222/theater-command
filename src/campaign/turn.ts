@@ -1,11 +1,12 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
+import { KIND, STACK, type BattleReport, type Build, type Corps, type Game, type Kind, type Region } from './types';
 import {
   allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hostileUnits, limitAttackers,
-  moveCorps, moveCost, railMove, resolveBattle, sovietEvent, startPhase, type Assessment,
+  moveCorps, moveCost, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
 } from './game';
+import { cancelBuild, orderCorps, orderFort } from './economy';
 import { runAI } from './ai';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -119,6 +120,42 @@ export function orderAttack(g: Game, corps: Corps[], target: Region): BattleRepo
 
 export function orderRail(g: Game, c: Corps, to: number): boolean {
   return canOrder(g, c) && railMove(g, c, g.regions[to]);
+}
+
+/** Friendly ports this corps could be shipped to this month. */
+export function shipTargets(g: Game, c: Corps): Region[] {
+  const from = g.regions[c.reg];
+  if (!g.nations[c.nat].seaSupply || !from.port || c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return [];
+  return g.regions.filter((r) => r.port && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && friendlyUnits(g, r, c.nat).length < STACK);
+}
+
+export function orderShip(g: Game, c: Corps, to: number): boolean {
+  return canOrder(g, c) && shipMove(g, c, g.regions[to]);
+}
+
+export function orderBuildCorps(g: Game, kind: Kind, region: number): Build | null {
+  return humanUp(g) ? orderCorps(g, g.human!, kind, region) : null;
+}
+
+export function orderBuildFort(g: Game, region: number): Build | null {
+  return humanUp(g) ? orderFort(g, g.human!, region) : null;
+}
+
+export function orderCancelBuild(g: Game, id: number): boolean {
+  return humanUp(g) && cancelBuild(g, g.human!, id);
+}
+
+/** Ends the player's month and lets the computer play until the player is up again. Returns false if the player's nation has fallen. */
+export function passMonth(g: Game): boolean {
+  if (humanUp(g)) endHuman(g);
+  let guard = 0;
+  while (!humanUp(g) && guard++ < 80) {
+    if (g.human === null || !g.nations[g.human].alive) return false;
+    stepAI(g);
+  }
+  if (!humanUp(g)) return false;
+  beginHuman(g);
+  return true;
 }
 
 export function orderEvacuate(g: Game, c: Corps): boolean {

@@ -8,6 +8,7 @@ import setup from '../../data/campaign/setup-1939.json';
 import { Rng } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
+import { PRODUCTION, canBuildYet, deliver, firstCorpsNumber, income } from './economy';
 import {
   FORT_MUL, KIND, MEN_PER_DIV, STACK, TERRAIN_DEF,
   type BattleReport, type Corps, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit,
@@ -34,12 +35,12 @@ export function createGame(seed: number, human: string | null): Game {
     nations[id] = {
       id, name: d.name, adj: d.adj, color: d.color, quality: d.quality, air: d.air, resilience: d.resilience, align: d.align,
       blitz: !!d.blitz, slowCommand: !!d.slowCommand, seaSupply: !!d.seaSupply,
-      atWar: [], alive: !d.dormant, dormant: !!d.dormant, capital: cap ? cap.id : -1, pool: 0, armyPeak: 0, offStart: {}, lastFight: {},
+      atWar: [], alive: !d.dormant, dormant: !!d.dormant, capital: cap ? cap.id : -1, pp: 0, queue: [], corpsNo: firstCorpsNumber(id), armyPeak: 0, offStart: {}, lastFight: {},
     };
   }
   const order = [...ORDER, ...Object.keys(nations).filter((n) => !ORDER.includes(n))];
   const g: Game = {
-    seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], nextCorps: 1, human,
+    seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], nextCorps: 1, nextBuild: 1, human,
     reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, capDist: {}, week: 1,
     links: md.links, width: md.width, height: md.height, land: md.land,
   };
@@ -561,6 +562,17 @@ export function capitulate(g: Game, nat: string, by: string): void {
   for (const n of Object.values(g.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g, n.id, by);
 }
 
+/** Sea transport: a nation that commands the sea can ship a corps from one friendly port to another. It takes the whole month. */
+export function shipMove(g: Game, c: Corps, to: Region): boolean {
+  const from = g.regions[c.reg];
+  if (!g.nations[c.nat].seaSupply || c.kind === 'fort' || c.ap < Math.min(4, c.apMax) || !from.port || !to.port || to.id === from.id) return false;
+  if (!allied(g, c.nat, to.ctrl) || hostileUnits(g, to, c.nat).length || friendlyUnits(g, to, c.nat).length >= STACK) return false;
+  place(g, c, to);
+  c.ap = 0;
+  g.week = 2;
+  return true;
+}
+
 /** Lifts a corps off the Continent from a port. */
 export function evacuate(g: Game, c: Corps): boolean {
   const r = g.regions[c.reg];
@@ -585,13 +597,15 @@ export function startPhase(g: Game, nat: string): void {
     addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
   }
   computeSupply(g);
-  n.pool += industry(g, nat) * 0.25 + 0.5;
+  // The month's production comes in. Losses are made good first.
+  n.pp += income(g, nat);
+  const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
   for (const c of g.corps.filter((c) => c.nat === nat)) {
     if (c.supplied) {
       const need = (1 - c.str) * c.divs;
-      const give = Math.min(need, 0.2 * c.divs, n.pool);
-      if (give > 0) { c.str += give / c.divs; n.pool -= give; }
+      const give = Math.min(need, 0.2 * c.divs, n.pp / perDiv);
+      if (give > 0) { c.str += give / c.divs; n.pp -= give * perDiv; }
       c.org = Math.min(1, c.org + (c.fought ? 0.25 : 0.45));
     } else {
       c.org -= 0.4;
@@ -605,7 +619,8 @@ export function startPhase(g: Game, nat: string): void {
     c.fought = false;
     c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + (c.trait === 'panzer' ? 1 : 0);
   }
-  n.pool = Math.min(n.pool, 12);
+  deliver(g, nat);
+  if (nat !== g.human) n.pp = Math.min(n.pp, PRODUCTION.aiBank[canBuildYet(g, nat) ? 1 : 0]);
   n.armyPeak = Math.max(n.armyPeak, armySize(g, nat));
   if (tempo) g.flags[`tempo:${nat}:${g.turn}`] = 1;
   checkCollapse(g, nat, n.atWar[0] ?? nat);

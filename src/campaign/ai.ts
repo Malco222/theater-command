@@ -4,6 +4,7 @@
 // the player uses, so history can come out differently.
 
 import plan from '../../data/campaign/plan-historical.json';
+import { aiProduction } from './economy';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage,
@@ -23,6 +24,11 @@ export function phaseFor(g: Game, nat: string): PlanPhase | null {
 
 /** Runs one nation's month. */
 export function runAI(g: Game, nat: string): void {
+  campaign(g, nat);
+  aiProduction(g, nat);
+}
+
+function campaign(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!n.alive) return;
   const ph = phaseFor(g, nat);
