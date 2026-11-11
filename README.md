@@ -8,8 +8,8 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 
 **The campaign prototype** (open `dist/play.html` after a build)
 
-- Europe from Ireland to Smolensk and from Norway to Turkey in 224 regions, generated from real coastlines (Natural Earth, public domain). The map does not reach Moscow yet.
-- 27 nations with their September 1939 armies as corps on the map, reinforcements by month, and replacement pools fed by industry.
+- Europe from Ireland to the Volga and from Norway to the Caucasus in 291 regions, generated from real coastlines (Natural Earth, public domain). Moscow, Stalingrad, the Crimea, Turkey and the northern edge of the Middle East are on the map.
+- 29 nations with their September 1939 armies as corps on the map, reinforcements by month, and replacement pools fed by industry.
 - Monthly turns starting September 1939. Each corps gets four moves a month; fast troops in a fresh offensive get more.
 - Supply traced from each nation's own capital, industry and depots. Armies that are cut off fight at half strength and waste away.
 - Battles settled at once from a Battle Ticket (forces, terrain, forts, supply, air, commanders, tempo, direction of attack) with the framework's victory levels. Fortifications only count against the direction they face, so the Maginot Line can be outflanked.
@@ -31,7 +31,7 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 - The gray-box air battle screen (the other half of Phase 1). The flight model, scenario data and pilot logic exist; the battle loop and the command screen do not.
 - War at sea, strategic air war and research. Norway is not invaded because there is no naval layer yet. Sea transport is an abstraction: nothing can intercept it yet.
 - The rest of diplomacy: changing your own nation's side, treaties, espionage, and computer-run nations that court neutrals themselves. Today the computer follows history's events and the drift of the war.
-- The campaigns after the summer of 1940 (the Balkans, Barbarossa). The map and the alignment track keep running, but no plan is written for them yet.
+- The campaigns after the summer of 1940 (the Balkans, Barbarossa). The map now reaches far enough east and the alignment track keeps running, but no plan is written for them yet, and the Soviet army is only its 1939 garrisons.
 - Graphics. This is deliberately a staff map. The Total War and Company of Heroes level of presentation arrives with the Unreal Engine 5 build.
 - Borders are approximate: regions are grown from seed points, not traced from 1939 maps.
 

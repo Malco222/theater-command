@@ -483,7 +483,7 @@ function startCard(): string {
   const saved = peekSave(readSave() ?? '');
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `Watching history, ${date(saved.turn)}`}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
-    <div class="body"><p class="lead">It is <b>1 September 1939</b>. This is the strategy layer of the game: a map of Europe in 224 regions, monthly turns, and battles settled from a <b>Battle Ticket</b>. Pick a side, or watch the computer play out history's plan.</p>
+    <div class="body"><p class="lead">It is <b>1 September 1939</b>. This is the strategy layer of the game: a map of Europe in ${g.regions.length} regions, monthly turns, and battles settled from a <b>Battle Ticket</b>. Pick a side, or watch the computer play out history's plan.</p>
     <div class="sides">
       ${resume}
       ${side(null, 'Watch history unfold', 'Every nation follows its 1939 to 1940 plan. Press Play and watch Poland, then the West.', true)}
@@ -767,7 +767,7 @@ function applyView(): void {
   const svg = $('#map');
   const a = svg.clientHeight / Math.max(1, svg.clientWidth);
   const v = ui.view;
-  v.w = Math.max(150, Math.min(1500, v.w));
+  v.w = Math.max(150, Math.min(2100, v.w));
   const h = v.w * a;
   v.x = Math.max(-200, Math.min(g.width + 200 - v.w, v.x));
   v.y = Math.max(-200, Math.min(g.height + 200 - h, v.y));
@@ -783,7 +783,7 @@ function zoomBy(f: number, cx?: number, cy?: number): void {
   const px = cx === undefined ? 0.5 : (cx - rect.left) / rect.width;
   const py = cy === undefined ? 0.5 : (cy - rect.top) / rect.height;
   const mx = v.x + px * v.w, my = v.y + py * v.w * a;
-  v.w = Math.max(150, Math.min(1500, v.w * f));
+  v.w = Math.max(150, Math.min(2100, v.w * f));
   v.x = mx - px * v.w; v.y = my - py * v.w * a;
   applyView();
 }

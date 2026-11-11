@@ -246,6 +246,24 @@
     "resilience": 0.7,
     "align": "leaning_allies"
   },
+  "IRQ": {
+    "name": "Iraq",
+    "adj": "Iraqi",
+    "color": "#b59a6a",
+    "quality": 0.55,
+    "air": 1,
+    "resilience": 0.4,
+    "align": "leaning_allies"
+  },
+  "IRN": {
+    "name": "Iran",
+    "adj": "Iranian",
+    "color": "#8fae9a",
+    "quality": 0.55,
+    "air": 1,
+    "resilience": 0.4,
+    "align": "independent"
+  },
   "VIC": {
     "name": "Vichy France",
     "adj": "Vichy French",

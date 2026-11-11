@@ -144,7 +144,20 @@
     ["GRE", "Macedonia Army", "inf", 3, "Salonika", { "hold": 1 }],
     ["GRE", "Athens garrison", "inf", 1, "Athens", { "hold": 1 }],
     ["TUR", "1st Army", "inf", 4, "Istanbul", { "hold": 1 }],
-    ["TUR", "2nd Army", "inf", 3, "Bursa", { "hold": 1 }]
+    ["TUR", "2nd Army", "inf", 3, "Bursa", { "hold": 1 }],
+    ["TUR", "3rd Army", "inf", 3, "Erzurum", { "hold": 1 }],
+    ["TUR", "Ankara garrison", "inf", 2, "Ankara", { "hold": 1 }],
+    ["SOV", "Moscow Military District", "inf", 5, "Moscow", { "hold": 1 }],
+    ["SOV", "Moscow tank reserve", "arm", 2, "Tula", { "hold": 1 }],
+    ["SOV", "Orel Military District", "inf", 3, "Orel", { "hold": 1 }],
+    ["SOV", "Kharkov Military District", "inf", 4, "Kharkov", { "hold": 1 }],
+    ["SOV", "North Caucasus Military District", "inf", 3, "Rostov", { "hold": 1 }],
+    ["SOV", "Transcaucasus Military District", "mtn", 4, "Tbilisi", { "hold": 1 }],
+    ["SOV", "Volga Military District", "inf", 3, "Saratov", { "hold": 1 }],
+    ["SOV", "Crimea garrison", "inf", 1, "Crimea", { "hold": 1 }],
+    ["FRA", "Army of the Levant", "inf", 2, "Syria", { "hold": 1 }],
+    ["IRQ", "Iraqi Army", "inf", 1, "Iraq", { "hold": 1 }],
+    ["IRN", "Iranian Army", "inf", 2, "Iran", { "hold": 1 }]
   ],
   "reinforcements": [
     [1, "UK", "I Corps (BEF)", "inf", 3, "Lille", { "gen": "John Dill", "dyle": "Brussels", "xp": 0.2 }],

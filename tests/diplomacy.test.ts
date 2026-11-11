@@ -37,7 +37,7 @@ describe('the alignment track in September 1939', () => {
   });
   it('neutrals that lean toward a bloc trade with its major powers', () => {
     expect(tradePartners(g, 'GER').map((n) => n.id).sort()).toEqual(['ESP', 'HUN']);
-    expect(tradePartners(g, 'UK').map((n) => n.id)).toEqual(['TUR']);
+    expect(tradePartners(g, 'UK').map((n) => n.id).sort()).toEqual(['IRQ', 'TUR']);
     expect(tradePartners(g, 'SVK')).toEqual([]);
     const before = income(g, 'GER');
     g.nations.ESP.align = 'independent';

@@ -6,7 +6,7 @@ import polygonClipping from 'polygon-clipping';
 import { loadLand, clipToBox, simplifyRing, ringArea } from './geo-common.mjs';
 import { REGIONS, LINKS } from '../data/campaign/regions.mjs';
 
-const W = -11, E = 33.5, S = 35.3, N = 61.6;
+const W = -11, E = 47, S = 35.3, N = 61.6;
 const SCALE = 40, KX = Math.cos((50 * Math.PI) / 180);
 const proj = ([lon, lat]) => [(lon - W) * KX * SCALE, (N - lat) * SCALE];
 const width = (E - W) * KX * SCALE, height = (N - S) * SCALE;
