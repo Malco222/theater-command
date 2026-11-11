@@ -1,22 +1,28 @@
 {
-  "_about": "What each AI nation sets out to do in Historical mode, by turn (turn 1 is September 1939). These are intentions, not results: the armies still have to win the battles. declare lists nations the AI declares war on that turn. posture is attack, defend or redeploy. objectives are worked through in order.",
+  "_about": "What each AI nation sets out to do in Historical mode, by turn (turn 1 is September 1939). These are intentions, not results: the armies still have to win the battles. declare lists nations the AI declares war on that turn. posture is attack, defend or redeploy. objectives are worked through in order. axis is the line the tanks are massed along. haltOrder is ground the plan leaves alone in its first month (the stop short of Dunkirk, and Paris until the second phase). staging keeps a few corps at a jumping-off point. minOdds lets a nation attack at worse odds than a careful staff would accept. declareWhenCollapsing waits until that nation is breaking, or has fallen.",
   "GER": [
-    { "from": 1, "to": 2, "posture": "attack", "enemies": ["POL"],
-      "objectives": ["Danzig Corridor", "Polish Silesia", "Lodz", "Krakow", "Poznan", "Warsaw", "Lublin", "Przemysl", "Kielce", "Pomorze", "Mlawa"] },
-    { "from": 3, "to": 7, "posture": "redeploy",
-      "assembly": ["Eifel", "Rhineland", "Westphalia", "Frankfurt", "Saar", "Ruhr", "Bremen", "Hesse", "Baden"],
-      "armour": ["Eifel", "Rhineland"],
-      "garrison": ["Warsaw", "Krakow", "Lodz", "Poznan", "Lublin"] },
-    { "from": 8, "to": 8, "posture": "attack", "declare": ["DEN"], "enemies": ["DEN"], "objectives": ["Jutland", "Zealand"], "force": 2 },
-    { "from": 9, "to": 99, "posture": "attack", "declare": ["NED", "BEL", "LUX"], "enemies": ["NED", "BEL", "LUX", "FRA", "UK"],
-      "objectives": ["Luxembourg", "Ardennes", "Sedan", "Holland", "Liege", "Somme", "Calais", "Brussels", "Antwerp", "Lille", "Flanders", "Champagne", "Paris", "Rouen", "Orleans", "Aube", "Burgundy", "Lyon", "Bordeaux", "Nantes"] }
+    {"from": 1, "to": 2, "posture": "attack", "enemies": ["POL"], "objectives": ["Danzig Corridor", "Polish Silesia", "Lodz", "Krakow", "Poznan", "Warsaw", "Lublin", "Przemysl", "Kielce", "Pomorze", "Mlawa"], "name": "Case White"},
+    {"from": 3, "to": 7, "posture": "redeploy", "assembly": ["Eifel", "Rhineland", "Westphalia", "Frankfurt", "Saar", "Ruhr", "Bremen", "Hesse", "Baden"], "armour": ["Eifel", "Rhineland", "Frankfurt"], "garrison": ["Warsaw", "Krakow", "Lodz", "Poznan", "Lublin"], "staging": {"Schleswig-Holstein": 2}},
+    {"from": 8, "to": 8, "posture": "attack", "declare": ["DEN"], "enemies": ["DEN"], "objectives": ["Jutland", "Zealand"], "force": 2, "name": "Weser Exercise (Denmark)"},
+    {"from": 9, "to": 9, "name": "Case Yellow", "posture": "attack", "declare": ["NED", "BEL", "LUX"], "enemies": ["NED", "BEL", "LUX", "FRA", "UK"], "axis": ["Luxembourg", "Ardennes", "Sedan", "Champagne", "Somme", "Calais"], "haltOrder": ["Flanders", "Paris"], "objectives": ["Luxembourg", "Ardennes", "Sedan", "Champagne", "Somme", "Calais", "Holland", "Liege", "Brussels", "Antwerp", "Lille", "Rotterdam"]},
+    {"from": 10, "to": 99, "name": "Case Red", "posture": "attack", "enemies": ["NED", "BEL", "LUX", "FRA", "UK"], "axis": ["Paris", "Orleans", "Lyon"], "objectives": ["Paris", "Brussels", "Flanders", "Calais", "Rouen", "Orleans", "Aube", "Burgundy", "Lyon", "Nantes", "Bordeaux"]}
   ],
   "ITA": [
-    { "from": 10, "to": 99, "posture": "attack", "declareWhenCollapsing": "FRA", "declare": ["FRA", "UK"], "enemies": ["FRA"], "objectives": ["Riviera", "Savoy"] }
+    {"from": 9, "to": 99, "posture": "attack", "declareWhenCollapsing": "FRA", "collapseAt": 0.07, "declare": ["FRA", "UK"], "enemies": ["FRA"], "objectives": ["Riviera", "Savoy"], "minOdds": 0.9}
   ],
-  "FRA": [{ "from": 1, "to": 99, "posture": "defend" }],
-  "UK": [{ "from": 1, "to": 99, "posture": "defend" }],
-  "POL": [{ "from": 1, "to": 99, "posture": "defend" }],
-  "BEL": [{ "from": 1, "to": 99, "posture": "defend" }],
-  "NED": [{ "from": 1, "to": 99, "posture": "defend" }]
+  "FRA": [
+    {"from": 1, "to": 99, "posture": "defend"}
+  ],
+  "UK": [
+    {"from": 1, "to": 99, "posture": "defend"}
+  ],
+  "POL": [
+    {"from": 1, "to": 99, "posture": "defend"}
+  ],
+  "BEL": [
+    {"from": 1, "to": 99, "posture": "defend"}
+  ],
+  "NED": [
+    {"from": 1, "to": 99, "posture": "defend"}
+  ]
 }

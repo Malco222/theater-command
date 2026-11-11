@@ -24,6 +24,8 @@ export interface Region {
   nb: number[];
   polys: [number, number][][][];
   units: Corps[];
+  /** Turn this region last changed hands. */
+  since: number;
 }
 
 export interface Nation {
@@ -65,6 +67,8 @@ export interface Corps {
   reg: number;
   /** Weeks of action left this month. */
   ap: number;
+  /** Action points this corps started the month with. */
+  apMax: number;
   general: string | null;
   trait: 'panzer' | 'attacker' | 'defender' | null;
   hold: boolean;
@@ -81,7 +85,7 @@ export interface ReportUnit {
   divs: number;
   men: number;
   lost: number;
-  fate: '' | 'retreated' | 'surrendered' | 'destroyed' | 'advanced';
+  fate: '' | 'retreated' | 'surrendered' | 'destroyed' | 'advanced' | 'evacuated';
 }
 
 export interface BattleReport {
@@ -116,16 +120,24 @@ export interface Headline {
 }
 
 export interface PlanPhase {
+  name?: string;
   from: number;
   to: number;
   posture: 'attack' | 'defend' | 'redeploy';
   enemies?: string[];
   declare?: string[];
   declareWhenCollapsing?: string;
+  collapseAt?: number;
   objectives?: string[];
+  /** The line the armoured thrust follows. */
+  axis?: string[];
+  /** Ground the plan leaves alone in its first month. */
+  haltOrder?: string[];
   assembly?: string[];
   armour?: string[];
   garrison?: string[];
+  staging?: Record<string, number>;
+  minOdds?: number;
   force?: number;
 }
 
@@ -169,4 +181,4 @@ export const KIND: Record<Kind, { label: string; atk: number; def: number; move:
 
 export const TERRAIN_DEF: Record<Terrain, number> = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35 };
 export const FORT_MUL = [1, 1.3, 1.7, 2.6];
-export const STACK = 4;
+export const STACK = 5;

@@ -54,7 +54,7 @@
     "color": "#c97f86",
     "quality": 0.9,
     "air": 12,
-    "resilience": 0.6,
+    "resilience": 0.85,
     "align": "allies"
   },
   "BEL": {
