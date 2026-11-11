@@ -180,6 +180,16 @@ button.buy:hover { border-color: var(--brass); }
 .cost small { display: block; font-family: var(--body); font-size: 10px; font-weight: 400; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-top: 2px; }
 .cost.short { color: var(--ink-3); }
 .sidebtn.resume { border-color: var(--brass); background: #2a2616; }
+.trackhead { display: flex; justify-content: space-between; font-family: var(--head); font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin: 12px 0 6px; }
+.trk { display: grid; grid-template-columns: 14px 1fr auto auto; gap: 3px 8px; align-items: center; margin-bottom: 10px; }
+.trk b { font-size: 13.5px; font-weight: 600; }
+.trk small { color: var(--ink-3); font-size: 11.5px; white-space: nowrap; }
+.trk .btn { grid-column: 4; }
+.trk .track { grid-column: 1 / 5; }
+.track { position: relative; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #5d83bf 0%, #47525e 38%, #47525e 62%, #b0584a 100%); }
+.track .t { position: absolute; top: -2px; width: 1px; height: 12px; background: rgba(236, 231, 216, .38); }
+.track .t.mid { background: rgba(236, 231, 216, .75); }
+.track .dot { position: absolute; top: -3px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--brass); border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--brass); }
 .sides { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
 .sidebtn { text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 10px 12px; }
 .sidebtn:hover { border-color: var(--brass); }

@@ -1,0 +1,75 @@
+{
+  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold.",
+  "leanAt": 30,
+  "backAt": 20,
+  "joinAt": 70,
+  "pull": 0.08,
+  "momentumPer": 30,
+  "stepEvery": 2,
+  "leaders": { "allies": "UK", "axis": "GER" },
+  "majors": ["GER", "ITA", "UK", "FRA", "SOV"],
+  "pcIncome": { "_major": 3, "_minor": 1 },
+  "pcCap": 30,
+  "court": { "cost": 6, "opinion": 12, "home": 6 },
+  "tradeIncome": 1,
+  "resist": { "SOV": 0.3, "SUI": 0.5, "IRL": 0.6, "SWE": 0.7 },
+  "home": {
+    "HUN": 40, "ESP": 35, "TUR": -35, "ROM": 0, "BUL": 15, "YUG": -5, "GRE": -20, "FIN": 5,
+    "SWE": 0, "SUI": 0, "IRL": 0, "POR": -10, "NOR": -15, "DEN": -5, "BEL": -20, "NED": -15, "LUX": -10,
+    "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0, "VIC": 10
+  },
+  "bandwagon": {
+    "_default": 2, "HUN": 3, "ROM": 3, "BUL": 3, "ESP": 2.5, "FIN": 2, "YUG": 1.5, "TUR": 1, "SWE": 1, "POR": 1,
+    "GRE": 0.5, "SUI": 0.5, "IRL": 0.5, "VIC": 1.5, "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0
+  },
+  "events": [
+    {
+      "id": "baltic", "from": 10, "to": 14,
+      "if": ["alive:SOV", "peace:SOV,GER", "fallen:POL"],
+      "annex": { "by": "SOV", "nations": ["EST", "LAT", "LIT"] },
+      "spawn": [["SOV", "8th Army", "inf", 3, "Latvia"], ["SOV", "11th Army", "inf", 3, "Lithuania"]],
+      "text": "The Soviet Union occupies the Baltic states under the secret terms of its pact with Germany."
+    },
+    {
+      "id": "bessarabia", "from": 10, "to": 14,
+      "if": ["alive:SOV", "peace:SOV,GER", "fallen:POL", "alive:ROM", "atPeace:ROM", "notInBloc:ROM", "holds:ROM,Bessarabia"],
+      "cede": { "from": "ROM", "to": "SOV", "regions": ["Bessarabia", "Bukovina"] },
+      "spawn": [["SOV", "9th Army", "inf", 3, "Bessarabia"]],
+      "opinion": { "ROM": 35 },
+      "text": "Moscow hands Romania an ultimatum. Bessarabia and northern Bukovina pass to the Soviet Union, and Bucharest looks to Berlin for protection."
+    },
+    {
+      "id": "finland", "from": 13, "to": 18,
+      "if": ["alive:GER", "momentum>=:0.5", "alive:FIN", "atPeace:FIN", "notInBloc:FIN", "flag:event:baltic"],
+      "opinion": { "FIN": 15 },
+      "text": "Alarmed by the fate of the Baltic states, Finland grants German troops the right of transit."
+    },
+    {
+      "id": "vienna", "from": 12, "to": 16,
+      "if": ["alive:GER", "momentum>=:0.5", "alive:HUN", "alive:ROM", "atPeace:HUN", "atPeace:ROM", "step>=:HUN,1", "holds:ROM,Transylvania"],
+      "cede": { "from": "ROM", "to": "HUN", "regions": ["Transylvania"] },
+      "opinion": { "HUN": 10, "ROM": -10 },
+      "text": "Germany and Italy settle the Hungarian claim on Romania at Vienna. Northern Transylvania goes to Hungary."
+    },
+    {
+      "id": "antonescu", "from": 13, "to": 18,
+      "if": ["alive:GER", "momentum>=:0.5", "alive:ROM", "atPeace:ROM", "notInBloc:ROM", "flag:event:bessarabia"],
+      "opinion": { "ROM": 25 },
+      "text": "King Carol abdicates. General Antonescu takes power in Romania and invites a German military mission."
+    },
+    {
+      "id": "tripartite", "from": 15, "to": 20,
+      "if": ["alive:GER", "momentum>=:0.5"],
+      "opinion": { "HUN": 15, "ROM": 15 },
+      "join": { "bloc": "axis", "nations": ["HUN", "ROM"], "minOpinion": 45 },
+      "text": "Berlin invites the states of the Danube to sign the Tripartite Pact."
+    },
+    {
+      "id": "bulgaria", "from": 19, "to": 24,
+      "if": ["alive:GER", "momentum>=:0.5", "inBloc:ROM,axis", "alive:BUL", "atPeace:BUL"],
+      "opinion": { "BUL": 20 },
+      "join": { "bloc": "axis", "nations": ["BUL"], "minOpinion": 45 },
+      "text": "German troops gather on the Danube and Sofia is pressed to choose a side."
+    }
+  ]
+}

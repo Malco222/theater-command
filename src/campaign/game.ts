@@ -9,6 +9,7 @@ import { Rng } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { PRODUCTION, canBuildYet, deliver, firstCorpsNumber, income } from './economy';
+import { DIPLOMACY, homeOpinion, pcIncome } from './diplomacy';
 import {
   FORT_MUL, KIND, MEN_PER_DIV, STACK, TERRAIN_DEF,
   type BattleReport, type Corps, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit,
@@ -35,7 +36,8 @@ export function createGame(seed: number, human: string | null): Game {
     nations[id] = {
       id, name: d.name, adj: d.adj, color: d.color, quality: d.quality, air: d.air, resilience: d.resilience, align: d.align,
       blitz: !!d.blitz, slowCommand: !!d.slowCommand, seaSupply: !!d.seaSupply,
-      atWar: [], alive: !d.dormant, dormant: !!d.dormant, capital: cap ? cap.id : -1, pp: 0, queue: [], corpsNo: firstCorpsNumber(id), armyPeak: 0, offStart: {}, lastFight: {},
+      atWar: [], alive: !d.dormant, dormant: !!d.dormant, capital: cap ? cap.id : -1, pp: 0, queue: [], corpsNo: firstCorpsNumber(id),
+      opinion: homeOpinion(id, d.align), home: homeOpinion(id, d.align), pc: 0, armyPeak: 0, offStart: {}, lastFight: {},
     };
   }
   const order = [...ORDER, ...Object.keys(nations).filter((n) => !ORDER.includes(n))];
@@ -115,7 +117,10 @@ export function declareWar(g: Game, a: string, b: string): void {
   A.offStart[b] = g.turn;
   // A neutral that is attacked joins the other side.
   const ba = bloc(A);
-  if (bloc(B) === null && ba) B.align = ba === 'axis' ? 'allies' : 'axis_cobelligerent';
+  if (bloc(B) === null && ba) {
+    B.align = ba === 'axis' ? 'allies' : 'axis_cobelligerent';
+    B.opinion = B.home = ba === 'axis' ? -100 : 100;
+  }
   headline(g, 'war', `${A.name} declares war on ${B.name}.`, a);
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
@@ -321,12 +326,15 @@ function reportUnit(c: Corps): ReportUnit {
   return { name: c.name, nat: c.nat, kind: c.kind, divs: c.divs, men: men(c), lost: 0, fate: '' };
 }
 
-function removeCorps(g: Game, c: Corps): void {
+export function removeCorps(g: Game, c: Corps): void {
   c.dead = true;
   const r = g.regions[c.reg];
   r.units.splice(r.units.indexOf(c), 1);
   g.corps.splice(g.corps.indexOf(c), 1);
 }
+
+/** Puts a corps down in another region without a march: rail, ship, or an order from the capital. */
+export function relocate(g: Game, c: Corps, to: Region): void { place(g, c, to); }
 
 function place(g: Game, c: Corps, to: Region): void {
   const r = g.regions[c.reg];
@@ -599,6 +607,7 @@ export function startPhase(g: Game, nat: string): void {
   computeSupply(g);
   // The month's production comes in. Losses are made good first.
   n.pp += income(g, nat);
+  n.pc = Math.min(DIPLOMACY.pcCap, n.pc + pcIncome(nat));
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
   for (const c of g.corps.filter((c) => c.nat === nat)) {

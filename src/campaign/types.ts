@@ -50,6 +50,11 @@ export interface Nation {
   queue: Build[];
   /** Number the next new corps will carry. */
   corpsNo: number;
+  /** Public opinion, from -100 (wants the Allies) to +100 (wants the Axis), and the leaning it drifts back to. */
+  opinion: number;
+  home: number;
+  /** Political capital: what a government can spend on diplomacy. */
+  pc: number;
   armyPeak: number;
   /** Turn each current offensive began, by enemy. */
   offStart: Record<string, number>;

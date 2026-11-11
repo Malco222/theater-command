@@ -8,13 +8,17 @@ import {
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { runAI } from './ai';
+import { court, monthlyDiplomacy } from './diplomacy';
 
 export const current = (g: Game): string => g.order[g.phase];
 
 function closePhase(g: Game, nat: string): void {
   if (nat === 'GER') sovietEvent(g);
   g.phase++;
-  if (g.phase >= g.order.length) { g.phase = 0; g.turn++; }
+  if (g.phase >= g.order.length) {
+    g.phase = 0; g.turn++; g.week = 1;
+    monthlyDiplomacy(g);
+  }
 }
 
 /** Plays one computer-run nation's month. */
@@ -183,6 +187,11 @@ export function orderDeclare(g: Game, on: string): boolean {
   declareWar(g, g.human, on);
   ensureSupply(g);
   return true;
+}
+
+/** Spends the player's political capital to pull a neutral toward the player's bloc. */
+export function orderCourt(g: Game, target: string): boolean {
+  return humanUp(g) && court(g, g.human!, target);
 }
 
 export { KIND };

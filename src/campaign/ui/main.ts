@@ -7,13 +7,15 @@ import {
 } from '../game';
 import {
   beginHuman, canOrder, candidates, declarable, endHuman, humanUp, orderAttack, orderBuildCorps, orderBuildFort,
-  orderCancelBuild, orderDeclare, orderEvacuate, orderMove, orderRail, orderShip, previewAttack, reach, runTurnAI,
+  orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderMove, orderRail, orderShip, previewAttack, reach, runTurnAI,
   shipTargets, stepAI,
 } from '../turn';
 import { phaseFor } from '../ai';
 import { PRODUCTION, fortCost, income, isHome } from '../economy';
 import { loadGame, peekSave, saveGame } from '../save';
-import { KIND, type BattleReport, type Corps, type Game, type Kind, type Region } from '../types';
+import { DIPLOMACY, TRACK_LABEL, canCourt, courtable, momentum, pcIncome, receptive, step, tradePartners } from '../diplomacy';
+import { bloc } from '../game';
+import { KIND, type BattleReport, type Corps, type Game, type Kind, type Nation, type Region } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -260,7 +262,7 @@ function advice(): string {
 
 function scopeNote(): string {
   if (!g.nations.FRA.fellOn && g.turn < 13) return '';
-  return `<div class="note"><b>This is as far as the first prototype's story goes.</b> It covers the land war from September 1939 to the summer of 1940. Production and sea transport are in; the war at sea and in the air, research and diplomacy come in later phases. Next on the roadmap is the Battle of Britain.</div>`;
+  return `<div class="note"><b>This is as far as the first prototype's story goes.</b> It covers the land war from September 1939 to the summer of 1940. Production, sea transport and the first layer of diplomacy are in; the war at sea and in the air, research and the later campaigns come in later phases. Next on the roadmap is the Battle of Britain.</div>`;
 }
 
 function corpsRow(c: Corps, mine: boolean): string {
@@ -293,7 +295,7 @@ function drawPane(): void {
 function regionPane(): string {
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li>${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li>${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -422,7 +424,37 @@ function powersPane(): string {
       out += `<div class="nat" style="opacity:.7"><span class="chip" style="background:${n.color}"></span><b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}</small><div class="will"><small>Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}</small></div></div>`;
     }
   }
-  out += `<h3>Neutral</h3><p class="sub">${neutral.map((n) => `<span class="chip" style="background:${n.color}"></span> ${esc(n.name)}`).join(' &nbsp; ')}</p>`;
+  out += trackPane(neutral);
+  return out;
+}
+
+/** The alignment track: where every country at peace stands between the two blocs, and which way it is drifting. */
+function trackPane(list: Nation[]): string {
+  const me = g.human && g.nations[g.human].alive ? g.nations[g.human] : null;
+  const mine = me ? bloc(me) : null;
+  const m = momentum(g);
+  const wind = Math.abs(m) < 0.15 ? 'Neither side has the upper hand, so neutrals are sitting tight.' : `${m > 0 ? 'The Axis is' : 'The Allies are'} winning, and neutrals ${Math.abs(m) > 0.6 ? 'are bending' : 'are starting to bend'} that way.`;
+  let out = `<h3>The alignment track</h3><p class="sub">Every country stands somewhere between the two blocs. The dot is its public opinion. ${wind}</p>`;
+  if (me && mine) {
+    const partners = tradePartners(g, me.id).length;
+    out += `<div class="facts"><div class="fact"><span>Political capital</span><b>${Math.floor(me.pc)}</b></div><div class="fact"><span>Each month</span><b>+${pcIncome(me.id)}</b></div><div class="fact"><span>Trade partners</span><b>${partners}</b></div></div>
+      <p class="sub" style="margin-top:6px">Courting a neutral costs ${DIPLOMACY.court.cost} and pulls it toward ${mine === 'axis' ? 'the Axis' : 'the Allies'}. A country that leans your way trades with you; one that is fully won over joins your bloc.</p>`;
+  }
+  out += `<div class="trackhead"><span>◂ Allies</span><span>Independent</span><span>Axis ▸</span></div>`;
+  const rows = list.filter((n) => Math.abs(step(n)) <= 1 || !n.atWar.length).sort((a, b) => a.opinion - b.opinion);
+  for (const n of rows) {
+    const pos = 50 + Math.max(-100, Math.min(100, n.opinion)) / 2;
+    let btn = '';
+    if (me && mine && courtable(n) && humanUp(g)) {
+      const c = canCourt(g, me.id, n.id);
+      const k = receptive(n, mine);
+      const word = k >= 1.3 ? 'Receptive' : k >= 0.8 ? 'Open to offers' : k >= 0.5 ? 'Wary' : 'Very hard to move';
+      btn = `<button class="btn small" data-act="court" data-nat="${n.id}" ${c.ok ? '' : 'disabled'} title="${esc(c.ok ? word : c.why)}">Court</button>`;
+    }
+    out += `<div class="trk"><span class="chip" style="background:${n.color}"></span><b>${esc(n.name)}</b><small>${TRACK_LABEL[n.align]}</small>${btn}
+      <div class="track"><i class="t" style="left:15%"></i><i class="t" style="left:35%"></i><i class="t mid" style="left:50%"></i><i class="t" style="left:65%"></i><i class="t" style="left:85%"></i><i class="dot" style="left:${pos.toFixed(1)}%"></i></div></div>`;
+  }
+  out += `<p class="sub" style="margin-top:8px">The inner marks are where a country starts to lean; the outer marks are where it asks to join.</p>`;
   return out;
 }
 
@@ -647,6 +679,7 @@ function onClick(e: MouseEvent): void {
     case 'build': { const at = raiseAt(); if (at) orderBuildCorps(g, t.dataset.kind as Kind, at.id); refresh(); break; }
     case 'fortify': if (ui.sel >= 0) orderBuildFort(g, ui.sel); refresh(); break;
     case 'cancelbuild': orderCancelBuild(g, id); refresh(); break;
+    case 'court': { const h = g.headlines.length; orderCourt(g, t.dataset.nat!); ui.unread += g.headlines.length - h; refresh(); break; }
     case 'evac': {
       for (const c of pickedCorps()) orderEvacuate(g, c);
       ui.picked.clear(); refresh(); break;

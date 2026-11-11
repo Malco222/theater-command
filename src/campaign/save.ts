@@ -40,7 +40,8 @@ export function loadGame(text: string): Game | null {
   g.turn = d.turn; g.phase = d.phase; g.week = d.week; g.order = d.order;
   g.nextCorps = d.nextCorps; g.nextBuild = d.nextBuild; g.flags = d.flags;
   g.rng = new Rng(d.rng);
-  g.nations = d.nations;
+  // A save from an older build may lack fields added since; the fresh game fills them in.
+  for (const [id, n] of Object.entries(d.nations as Record<string, any>)) g.nations[id] = { ...g.nations[id], ...n };
   g.headlines = d.headlines;
   g.reports = d.reports;
   g.regions.forEach((r, i) => {

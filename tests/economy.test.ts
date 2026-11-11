@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { PRODUCTION, cancelBuild, income, orderCorps, orderFort } from '../src/campaign/economy';
 import { loadGame, peekSave, saveGame } from '../src/campaign/save';
+import { DIPLOMACY, tradePartners } from '../src/campaign/diplomacy';
 import { beginHuman, humanUp, orderBuildCorps, orderShip, passMonth, runTurnAI, shipTargets, stepAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
@@ -19,9 +20,10 @@ describe('production', () => {
   it('a nation at war earns more than the same nation at peace', () => {
     const g = createGame(1, null);
     expect(income(g, 'GER')).toBeGreaterThan(20);
-    const ita = income(g, 'ITA');
+    const trade = tradePartners(g, 'ITA').length * DIPLOMACY.tradeIncome;
+    const ita = income(g, 'ITA') - trade;
     g.nations.ITA.atWar.push('FRA');
-    expect(income(g, 'ITA')).toBeCloseTo(ita / PRODUCTION.peaceIncome, 5);
+    expect(income(g, 'ITA') - trade).toBeCloseTo(ita / PRODUCTION.peaceIncome, 5);
   });
 
   it('a corps is paid for at once and arrives when its months are up', () => {

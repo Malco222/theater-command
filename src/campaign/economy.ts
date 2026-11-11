@@ -6,6 +6,7 @@ import data from '../../data/campaign/production.json';
 import setup from '../../data/campaign/setup-1939.json';
 import { STACK, type Build, type Game, type Kind, type Region } from './types';
 import { addCorps, allied, headline } from './game';
+import { DIPLOMACY, tradePartners } from './diplomacy';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -25,7 +26,9 @@ export function income(g: Game, nat: string): number {
   const n = g.nations[nat];
   let fac = 0;
   for (const r of g.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
-  return (PRODUCTION.baseIncome + fac) * (n.atWar.length ? 1 : PRODUCTION.peaceIncome);
+  // Neutrals that lean toward a bloc trade with its major powers.
+  const trade = tradePartners(g, nat).length * DIPLOMACY.tradeIncome;
+  return (PRODUCTION.baseIncome + fac) * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade;
 }
 
 /** Last month in which this nation still has pre-war mobilisation arriving. */
