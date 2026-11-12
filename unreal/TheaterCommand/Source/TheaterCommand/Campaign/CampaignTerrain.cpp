@@ -301,8 +301,14 @@ void FCampaignTerrain::Build(const FCampaignMapData& Data)
 		}
 	}
 
-	// 7. Distance to the nearest border between two nations, for the colour wash.
-	BorderDistance.Init(1.0e6f, Count);
+	MeasureFrontiers(Data);
+
+	UE_LOG(LogTheater, Log, TEXT("Terrain: %d x %d grid points built in %.2f s"), NX, NY, FPlatformTime::Seconds() - StartTime);
+}
+
+void FCampaignTerrain::MeasureFrontiers(const FCampaignMapData& Data)
+{
+	BorderDistance.Init(1.0e6f, NX * NY);
 	auto OwnerOf = [&](int32 Idx) -> const FString*
 	{
 		const int16 Id = Region[Idx];
@@ -333,8 +339,6 @@ void FCampaignTerrain::Build(const FCampaignMapData& Data)
 		}
 	}
 	SpreadDistance(BorderDistance);
-
-	UE_LOG(LogTheater, Log, TEXT("Terrain: %d x %d grid points built in %.2f s"), NX, NY, FPlatformTime::Seconds() - StartTime);
 }
 
 void FCampaignTerrain::SpreadDistance(TArray<float>& Field) const

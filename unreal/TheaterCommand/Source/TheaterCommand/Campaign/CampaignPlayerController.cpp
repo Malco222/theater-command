@@ -2,8 +2,11 @@
 
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignCameraPawn.h"
+#include "Campaign/CampaignGameMode.h"
 #include "Campaign/CampaignMapActor.h"
+#include "Campaign/CampaignSession.h"
 #include "Components/InputComponent.h"
+#include "Engine/World.h"
 #include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
@@ -14,6 +17,13 @@ ACampaignPlayerController::ACampaignPlayerController()
 	bEnableClickEvents = false;
 	bEnableMouseOverEvents = false;
 	PrimaryActorTick.bCanEverTick = true;
+}
+
+FCampaignSession* ACampaignPlayerController::GetSession() const
+{
+	const ACampaignGameMode* Mode = GetWorld() ? GetWorld()->GetAuthGameMode<ACampaignGameMode>() : nullptr;
+	FCampaignSession* Session = Mode ? Mode->GetSession() : nullptr;
+	return Session && Session->IsRunning() ? Session : nullptr;
 }
 
 void ACampaignPlayerController::BeginPlay()
@@ -48,7 +58,8 @@ void ACampaignPlayerController::SetupInputComponent()
 	Super::SetupInputComponent();
 	InputComponent->BindKey(EKeys::MouseScrollUp, IE_Pressed, this, &ACampaignPlayerController::WheelUp);
 	InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &ACampaignPlayerController::WheelDown);
-	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::ClearSelection);
+	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::Escape);
+	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EndMonth);
 }
 
 void ACampaignPlayerController::WheelUp()
@@ -67,9 +78,17 @@ void ACampaignPlayerController::WheelDown()
 	}
 }
 
-void ACampaignPlayerController::ClearSelection()
+void ACampaignPlayerController::Escape()
 {
-	SelectRegion(INDEX_NONE);
+	// Esc backs out one step: first the army in hand, then the territory.
+	if (ArmyRegion != INDEX_NONE)
+	{
+		PutDownArmy();
+	}
+	else
+	{
+		SelectRegion(INDEX_NONE);
+	}
 }
 
 bool ACampaignPlayerController::PointerOnTable(FVector& OutWorld) const
@@ -138,14 +157,42 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
-	// Right button held: turn and tilt the view.
-	if (IsInputKeyDown(EKeys::RightMouseButton))
+	// What the pointer is over.
+	FVector PointerWorld;
+	const bool bOnTable = bHaveMouse && PointerOnTable(PointerWorld);
+	const int32 PointedRegion = bOnTable ? Map->RegionAtWorld(PointerWorld) : INDEX_NONE;
+
+	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
+	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
 	{
-		Eye->RotateBy(static_cast<float>(MouseDelta.X) * 0.3f);
-		Eye->TiltBy(static_cast<float>(-MouseDelta.Y) * 0.2f);
+		bRightHeld = true;
+		bTurning = false;
+		RightPressPosition = Mouse;
+	}
+	if (bRightHeld && IsInputKeyDown(EKeys::RightMouseButton) && bHaveMouse)
+	{
+		if (!bTurning && FVector2D::Distance(Mouse, RightPressPosition) > 6.0)
+		{
+			bTurning = true;
+		}
+		if (bTurning)
+		{
+			Eye->RotateBy(static_cast<float>(MouseDelta.X) * 0.3f);
+			Eye->TiltBy(static_cast<float>(-MouseDelta.Y) * 0.2f);
+		}
+	}
+	if (bRightHeld && !IsInputKeyDown(EKeys::RightMouseButton))
+	{
+		if (!bTurning && ArmyRegion != INDEX_NONE && PointedRegion != INDEX_NONE)
+		{
+			OrderTo(PointedRegion);
+		}
+		bRightHeld = false;
+		bTurning = false;
 	}
 
-	// Left button: a press and release picks a territory; a press and drag pulls the map along under the pointer.
+	// Left button: a press and release picks a territory, and the army there if it is the player's; a press and
+	// drag pulls the map along under the pointer.
 	if (WasInputKeyJustPressed(EKeys::LeftMouseButton) && bHaveMouse)
 	{
 		bLeftHeld = true;
@@ -173,18 +220,24 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		if (!bDragging)
 		{
-			FVector Hit;
-			SelectRegion(PointerOnTable(Hit) ? Map->RegionAtWorld(Hit) : INDEX_NONE);
+			SelectRegion(PointedRegion);
+			if (!PickUpArmyIn(PointedRegion))
+			{
+				PutDownArmy();
+			}
 		}
 		bLeftHeld = false;
 		bDragging = false;
 	}
 
-	// Whatever the pointer rests on is lit faintly.
-	if (!bDragging && !IsInputKeyDown(EKeys::RightMouseButton))
+	// Whatever the pointer rests on is lit faintly, and with an army in hand the road to it is drawn.
+	if (!bScripted && !bDragging && !bTurning)
 	{
-		FVector Hit;
-		Map->SetHoveredRegion(bHaveMouse && PointerOnTable(Hit) ? Map->RegionAtWorld(Hit) : INDEX_NONE);
+		Map->SetHoveredRegion(PointedRegion);
+		if (ArmyRegion != INDEX_NONE)
+		{
+			ShowRouteTo(PointedRegion);
+		}
 	}
 
 	Map->UpdateForCamera(Eye->GetDistance(), Eye->GetYaw());
@@ -201,6 +254,258 @@ void ACampaignPlayerController::SelectRegion(int32 RegionId)
 	}
 	Map->SetSelectedRegion(RegionId);
 	RefreshRegionPanel(RegionId);
+}
+
+bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || RegionId == INDEX_NONE)
+	{
+		return false;
+	}
+	const FCampaignView& View = Session->GetView();
+	TArray<int32> Orderable;
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		if (Unit.Region == RegionId && Unit.Nation == View.Human && Unit.bCanOrder)
+		{
+			Orderable.Add(Unit.Id);
+		}
+	}
+	if (Orderable.Num() == 0)
+	{
+		return false;
+	}
+	ArmyRegion = RegionId;
+	PickedCorps = MoveTemp(Orderable);
+	RefreshOrders();
+	return true;
+}
+
+void ACampaignPlayerController::PutDownArmy()
+{
+	if (ArmyRegion == INDEX_NONE)
+	{
+		return;
+	}
+	ArmyRegion = INDEX_NONE;
+	PickedCorps.Reset();
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::ToggleCorps(int32 CorpsId)
+{
+	if (ArmyRegion == INDEX_NONE)
+	{
+		return;
+	}
+	if (PickedCorps.Contains(CorpsId))
+	{
+		PickedCorps.Remove(CorpsId);
+	}
+	else
+	{
+		PickedCorps.Add(CorpsId);
+	}
+	RefreshOrders();
+}
+
+const FReachRegion* ACampaignPlayerController::FindReach(int32 RegionId) const
+{
+	return Reach.FindByPredicate([RegionId](const FReachRegion& R) { return R.Region == RegionId; });
+}
+
+void ACampaignPlayerController::RefreshOrders()
+{
+	FCampaignSession* Session = GetSession();
+	++Tray.Revision;
+	Tray.bVisible = false;
+	Tray.Cards.Reset();
+	Reach.Reset();
+	RouteTarget = INDEX_NONE;
+
+	if (RingedPiece.IsValid())
+	{
+		RingedPiece->SetSelected(false);
+	}
+	RingedPiece.Reset();
+
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	Map->SetRoute(FVector::ZeroVector, TArray<int32>());
+
+	if (ArmyRegion == INDEX_NONE)
+	{
+		Map->SetReach(Reach);
+		return;
+	}
+
+	// The army in hand, as the rules see it now.
+	const FCampaignView& View = Session->GetView();
+	const FCampaignNation* Nation = Map->GetData().FindNation(View.Human);
+	FString General;
+	int32 Divisions = 0, CorpsCount = 0;
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		if (Unit.Region != ArmyRegion || Unit.Nation != View.Human)
+		{
+			continue;
+		}
+		FTrayCard Card;
+		Card.CorpsId = Unit.Id;
+		Card.Name = FText::FromString(Unit.Name);
+		Card.Kind = FText::FromString(FCampaignMapData::CorpsKindLabel(Unit.Kind));
+		Card.Divisions = Unit.Divisions;
+		Card.Strength = Unit.Strength;
+		Card.Moves = Unit.Moves;
+		Card.MovesMax = Unit.MovesMax;
+		Card.bCanOrder = Unit.bCanOrder;
+		Card.bPicked = PickedCorps.Contains(Unit.Id);
+		Tray.Cards.Add(Card);
+		Divisions += Unit.Divisions;
+		++CorpsCount;
+		if (General.IsEmpty() && !Unit.General.IsEmpty())
+		{
+			General = Unit.General;
+		}
+	}
+	PickedCorps.RemoveAll([this](int32 Id) { return !Tray.Cards.ContainsByPredicate([Id](const FTrayCard& C) { return C.CorpsId == Id && C.bCanOrder; }); });
+	if (Tray.Cards.Num() == 0)
+	{
+		ArmyRegion = INDEX_NONE;
+		Map->SetReach(Reach);
+		return;
+	}
+
+	const FString Adjective = Nation && !Nation->Adjective.IsEmpty() ? Nation->Adjective : View.Human;
+	const FString Where = Map->GetData().Regions.IsValidIndex(ArmyRegion) ? Map->GetData().Regions[ArmyRegion].Name : FString();
+	Tray.bVisible = true;
+	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
+	Tray.Title = FText::FromString(General.IsEmpty() ? FString::Printf(TEXT("%s army"), *Adjective) : General);
+	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s army at %s  ·  %d corps, %d division%s"),
+		*Adjective, *Where, CorpsCount, Divisions, Divisions == 1 ? TEXT("") : TEXT("s")));
+
+	Reach = Session->Reach(PickedCorps);
+	Map->SetReach(Reach);
+
+	RingedPiece = Map->FindPiece(ArmyRegion, View.Human);
+	if (RingedPiece.IsValid())
+	{
+		RingedPiece->SetSelected(true);
+	}
+}
+
+void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
+{
+	if (RegionId == RouteTarget || !Map.IsValid())
+	{
+		return;
+	}
+	RouteTarget = RegionId;
+	TArray<int32> Road;
+	// Follow the way back from the region pointed at to where the army stands.
+	for (const FReachRegion* Step = FindReach(RegionId); Step && Road.Num() < 32; Step = FindReach(Step->Previous))
+	{
+		Road.Insert(Step->Region, 0);
+		if (Step->Previous == ArmyRegion)
+		{
+			break;
+		}
+	}
+	const FVector From = RingedPiece.IsValid() ? RingedPiece->GetRestLocation() : FVector::ZeroVector;
+	Map->SetRoute(From, RingedPiece.IsValid() ? Road : TArray<int32>());
+}
+
+void ACampaignPlayerController::OrderTo(int32 RegionId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || ArmyRegion == INDEX_NONE || RegionId == ArmyRegion)
+	{
+		return;
+	}
+	if (PickedCorps.Num() == 0)
+	{
+		Notify(TEXT("Every corps of this army has been told to stay behind."));
+		return;
+	}
+	const FReachRegion* Target = FindReach(RegionId);
+	if (!Target)
+	{
+		Notify(TEXT("They cannot get there this month."));
+		return;
+	}
+	if (Target->bAttack)
+	{
+		Notify(TEXT("That is an attack. Battles come in with the real rules; this is the stand-in."));
+		return;
+	}
+
+	const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId);
+	if (Marches.Num() == 0)
+	{
+		Notify(TEXT("They cannot get there this month."));
+		return;
+	}
+	const FCampaignView& View = Session->GetView();
+	Map->SetHolders(View.RegionHolder);
+	Map->ShowArmies(View, Marches);
+
+	// The army in hand is now the corps that marched, where they have arrived.
+	PickedCorps.Reset();
+	for (const FCorpsMove& March : Marches)
+	{
+		PickedCorps.Add(March.CorpsId);
+	}
+	ArmyRegion = RegionId;
+	RefreshOrders();
+	SelectRegion(RegionId);
+}
+
+void ACampaignPlayerController::EndMonth()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	const TArray<FString> Notes = Session->EndMonth();
+	const FCampaignView& View = Session->GetView();
+	Map->SetHolders(View.RegionHolder);
+	Map->ShowArmies(View, TArray<FCorpsMove>());
+	RefreshOrders();
+	RefreshRegionPanel(Map->GetSelectedRegion());
+	Notify(Notes.Num() > 0 ? FString::Printf(TEXT("%s.  %s"), *View.Date, *Notes[0]) : View.Date);
+}
+
+void ACampaignPlayerController::Notify(const FString& Text)
+{
+	NoticeText = Text;
+	NoticeUntil = FPlatformTime::Seconds() + 5.0;
+}
+
+FText ACampaignPlayerController::GetNotice() const
+{
+	return FPlatformTime::Seconds() < NoticeUntil ? FText::FromString(NoticeText) : FText::GetEmpty();
+}
+
+FText ACampaignPlayerController::GetDateText() const
+{
+	const FCampaignSession* Session = GetSession();
+	return FText::FromString(Session ? Session->GetView().Date : FString(TEXT("September 1939")));
+}
+
+FText ACampaignPlayerController::GetRulesNote() const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session)
+	{
+		return FText::FromString(TEXT("The rules did not start"));
+	}
+	return Session->GetView().Rules == TEXT("stand-in")
+		? FText::FromString(TEXT("Stand-in rules: armies march, nothing fights yet"))
+		: FText::GetEmpty();
 }
 
 void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
@@ -262,7 +567,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			Header += FString::Printf(TEXT(", under %s"), *Piece->GetGeneral());
 		}
 		ForceLines.Add(Header);
-		for (const FCampaignCorps& Unit : Piece->GetCorps())
+		for (const FViewCorps& Unit : Piece->GetCorps())
 		{
 			ForceLines.Add(FString::Printf(TEXT("      %s  (%s, %d)"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind), Unit.Divisions));
 		}

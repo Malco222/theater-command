@@ -75,6 +75,13 @@ public:
 
 	static bool PointInRing(const TArray<FVector2D>& Ring, double X, double Y);
 
+	/**
+	 * Where a campaign data file is. The data lives in one place, the repository's own data/ and
+	 * src/generated/ folders, which the browser prototype and its tests also read. A packaged game
+	 * cannot reach outside its own folder, so a copy in Content/Data/Campaign wins when it exists.
+	 */
+	static FString ResolveDataFile(const FString& FileName, const FString& RepoRelativeDir);
+
 	static FString TerrainLabel(const FString& Terrain);
 	static FString CorpsKindLabel(const FString& Kind);
 

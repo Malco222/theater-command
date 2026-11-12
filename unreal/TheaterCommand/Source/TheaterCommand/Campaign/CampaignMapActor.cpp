@@ -11,57 +11,57 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "ProceduralMeshComponent.h"
 
+/** Geometry on its way into one section of a procedural mesh. */
+struct FCampaignMeshBuffers
+{
+	TArray<FVector> Vertices;
+	TArray<int32> Triangles;
+	TArray<FVector> Normals;
+	TArray<FVector2D> UVs;
+	TArray<FColor> Colors;
+	TArray<FProcMeshTangent> Tangents;
+
+	int32 AddVertex(const FVector& Position, const FVector& Normal, const FColor& Color, const FVector2D& UV = FVector2D::ZeroVector, const FVector& Tangent = FVector(0.0, 1.0, 0.0))
+	{
+		Vertices.Add(Position);
+		Normals.Add(Normal);
+		Colors.Add(Color);
+		UVs.Add(UV);
+		Tangents.Emplace(Tangent, false);
+		return Vertices.Num() - 1;
+	}
+
+	/** Adds a triangle wound so that its face looks up, whichever order the corners came in. */
+	void AddTriangleFacingUp(int32 A, int32 B, int32 C)
+	{
+		const FVector FaceNormal = (Vertices[B] - Vertices[C]) ^ (Vertices[A] - Vertices[C]);
+		Triangles.Add(A);
+		if (FaceNormal.Z >= 0.0)
+		{
+			Triangles.Add(B);
+			Triangles.Add(C);
+		}
+		else
+		{
+			Triangles.Add(C);
+			Triangles.Add(B);
+		}
+	}
+
+	bool Commit(UProceduralMeshComponent* Mesh, int32 Section, UMaterialInterface* Material) const
+	{
+		if (Triangles.Num() == 0)
+		{
+			return false;
+		}
+		Mesh->CreateMeshSection(Section, Vertices, Triangles, Normals, UVs, Colors, Tangents, false);
+		Mesh->SetMaterial(Section, Material);
+		return true;
+	}
+};
+
 namespace
 {
-	/** Geometry on its way into one section of a procedural mesh. */
-	struct FMeshBuffers
-	{
-		TArray<FVector> Vertices;
-		TArray<int32> Triangles;
-		TArray<FVector> Normals;
-		TArray<FVector2D> UVs;
-		TArray<FColor> Colors;
-		TArray<FProcMeshTangent> Tangents;
-
-		int32 AddVertex(const FVector& Position, const FVector& Normal, const FColor& Color, const FVector2D& UV = FVector2D::ZeroVector, const FVector& Tangent = FVector(0.0, 1.0, 0.0))
-		{
-			Vertices.Add(Position);
-			Normals.Add(Normal);
-			Colors.Add(Color);
-			UVs.Add(UV);
-			Tangents.Emplace(Tangent, false);
-			return Vertices.Num() - 1;
-		}
-
-		/** Adds a triangle wound so that its face looks up, whichever order the corners came in. */
-		void AddTriangleFacingUp(int32 A, int32 B, int32 C)
-		{
-			const FVector FaceNormal = (Vertices[B] - Vertices[C]) ^ (Vertices[A] - Vertices[C]);
-			Triangles.Add(A);
-			if (FaceNormal.Z >= 0.0)
-			{
-				Triangles.Add(B);
-				Triangles.Add(C);
-			}
-			else
-			{
-				Triangles.Add(C);
-				Triangles.Add(B);
-			}
-		}
-
-		bool Commit(UProceduralMeshComponent* Mesh, int32 Section, UMaterialInterface* Material) const
-		{
-			if (Triangles.Num() == 0)
-			{
-				return false;
-			}
-			Mesh->CreateMeshSection(Section, Vertices, Triangles, Normals, UVs, Colors, Tangents, false);
-			Mesh->SetMaterial(Section, Material);
-			return true;
-		}
-	};
-
 	FLinearColor FromHex(const TCHAR* Hex)
 	{
 		return FLinearColor(FColor::FromHex(Hex)); // sRGB in, linear out
@@ -109,6 +109,7 @@ ACampaignMapActor::ACampaignMapActor()
 	SeaMesh = MakeMesh(TEXT("Sea"), false);
 	BorderMesh = MakeMesh(TEXT("Borders"), false);
 	HighlightMesh = MakeMesh(TEXT("Highlight"), false);
+	OrdersMesh = MakeMesh(TEXT("Orders"), false);
 
 	auto MakeMarkers = [this](const TCHAR* Name)
 	{
@@ -142,7 +143,6 @@ bool ACampaignMapActor::BuildMap()
 	BuildTable();
 	BuildTownMarkers();
 	BuildLabels();
-	SpawnArmies();
 
 	UE_LOG(LogTheater, Log, TEXT("Campaign table built in %.2f s: %d labels, %d army pieces"),
 		FPlatformTime::Seconds() - StartTime, Labels.Num(), Pieces.Num());
@@ -367,7 +367,7 @@ void ACampaignMapActor::BuildTerrainMesh()
 			const int32 J1 = FMath::Min(CJ + ChunkCells, NY - 1);
 			const int32 Stride = I1 - CI + 1;
 			Remap.Init(INDEX_NONE, Stride * (J1 - CJ + 1));
-			FMeshBuffers Buffers;
+			FCampaignMeshBuffers Buffers;
 
 			auto VertexAt = [&](int32 I, int32 J)
 			{
@@ -423,7 +423,7 @@ void ACampaignMapActor::BuildSeaMesh()
 	const FLinearColor Deep = FromHex(TEXT("15304A"));
 	const FLinearColor Shallow = FromHex(TEXT("356E80"));
 
-	FMeshBuffers Buffers;
+	FCampaignMeshBuffers Buffers;
 	Buffers.Vertices.Reserve(NX * NY);
 	for (int32 J = 0; J < NY; ++J)
 	{
@@ -457,7 +457,7 @@ void ACampaignMapActor::BuildBorders()
 	const FColor RegionInk = FromHex(TEXT("4A4236")).ToFColor(true);
 	const double Lift = 0.13;
 
-	FMeshBuffers Buffers;
+	FCampaignMeshBuffers Buffers;
 	int32 NationalCount = 0, RegionCount = 0;
 
 	for (const FCampaignRegion& Region : Data.Regions)
@@ -713,66 +713,256 @@ void ACampaignMapActor::BuildLabels()
 	}
 }
 
-void ACampaignMapActor::SpawnArmies()
+FVector ACampaignMapActor::ArmySpot(int32 RegionId, int32 Slot) const
+{
+	const FCampaignRegion& Region = Data.Regions[RegionId];
+	FVector2D Spot = Region.Center + FVector2D(5.5 + 9.0 * Slot, -4.5);
+	if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
+	{
+		Spot = Region.Center + FVector2D(-5.5 - 9.0 * Slot, -4.5);
+		if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
+		{
+			Spot = Slot == 0 ? Region.Centroid : Region.Center + FVector2D(0.0, -6.0 * Slot);
+		}
+	}
+	return SurfacePoint(Spot.X, Spot.Y, 0.0);
+}
+
+AArmyPiece* ACampaignMapActor::FindPiece(int32 RegionId, const FString& Nation) const
+{
+	const TObjectPtr<AArmyPiece>* Found = PieceByKey.Find(FString::Printf(TEXT("%d|%s"), RegionId, *Nation));
+	return Found ? Found->Get() : nullptr;
+}
+
+AArmyPiece* ACampaignMapActor::FindPieceOfCorps(int32 CorpsId) const
 {
 	for (AArmyPiece* Piece : Pieces)
 	{
-		if (Piece)
+		if (Piece && Piece->HasCorps(CorpsId))
 		{
-			Piece->Destroy();
+			return Piece;
 		}
 	}
-	Pieces.Reset();
+	return nullptr;
+}
 
+void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches)
+{
 	UWorld* World = GetWorld();
-	if (!World)
+	if (!World || !Data.IsLoaded())
 	{
 		return;
 	}
 
+	// Where every corps' piece stood before this change, for the ones that are about to march.
+	TMap<int32, FVector> Before;
+	for (const AArmyPiece* Piece : Pieces)
+	{
+		if (Piece)
+		{
+			for (const FViewCorps& Unit : Piece->GetCorps())
+			{
+				Before.Add(Unit.Id, Piece->GetRestLocation());
+			}
+		}
+	}
+	TSet<FString> KeysBefore;
+	PieceByKey.GetKeys(KeysBefore);
+
 	// One piece for each nation's force in a region, however many corps it holds.
 	TArray<FString> Order;
-	TMap<FString, TArray<FCampaignCorps>> Groups;
-	for (const FCampaignCorps& Unit : Data.Corps)
+	TMap<FString, TArray<FViewCorps>> Groups;
+	TMap<int32, TArray<FString>> NationsIn;
+	for (const FViewCorps& Unit : View.Corps)
 	{
-		const FString Key = FString::Printf(TEXT("%d|%s"), Unit.RegionId, *Unit.Nation);
+		if (!Data.Regions.IsValidIndex(Unit.Region))
+		{
+			continue;
+		}
+		const FString Key = FString::Printf(TEXT("%d|%s"), Unit.Region, *Unit.Nation);
 		if (!Groups.Contains(Key))
 		{
 			Order.Add(Key);
+			NationsIn.FindOrAdd(Unit.Region).Add(Unit.Nation);
 		}
 		Groups.FindOrAdd(Key).Add(Unit);
 	}
 
-	TMap<int32, int32> PiecesInRegion;
+	// Take away the pieces of armies that are no longer there.
+	for (auto It = PieceByKey.CreateIterator(); It; ++It)
+	{
+		if (!Groups.Contains(It.Key()))
+		{
+			if (It.Value())
+			{
+				It.Value()->Destroy();
+			}
+			It.RemoveCurrent();
+		}
+	}
+
+	Pieces.Reset();
 	for (const FString& Key : Order)
 	{
-		const TArray<FCampaignCorps>& Group = Groups[Key];
-		const FCampaignRegion& Region = Data.Regions[Group[0].RegionId];
+		const TArray<FViewCorps>& Group = Groups[Key];
 		const FCampaignNation* Nation = Data.FindNation(Group[0].Nation);
 		if (!Nation)
 		{
 			continue;
 		}
+		TArray<FString>& Present = NationsIn[Group[0].Region];
+		Present.Sort();
+		const FVector Spot = ArmySpot(Group[0].Region, Present.IndexOfByKey(Group[0].Nation));
 
-		// Stand the piece beside the town, not on top of its name; a second nation's piece stands further along.
-		const int32 Slot = PiecesInRegion.FindOrAdd(Region.Id)++;
-		FVector2D Spot = Region.Center + FVector2D(5.5 + 9.0 * Slot, -4.5);
-		if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
+		TObjectPtr<AArmyPiece>& Piece = PieceByKey.FindOrAdd(Key);
+		if (!Piece)
 		{
-			Spot = Region.Center + FVector2D(-5.5 - 9.0 * Slot, -4.5);
-			if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
-			{
-				Spot = Slot == 0 ? Region.Centroid : Region.Center + FVector2D(0.0, -6.0 * Slot);
-			}
+			Piece = World->SpawnActor<AArmyPiece>(Spot, FRotator(0.0f, FMath::Abs(LastPieceYaw) < 1.0e6f ? LastPieceYaw : 0.0f, 0.0f));
 		}
-
-		AArmyPiece* Piece = World->SpawnActor<AArmyPiece>(SurfacePoint(Spot.X, Spot.Y, 0.0), FRotator::ZeroRotator);
 		if (Piece)
 		{
-			Piece->Build(this, *Nation, Region.Id, Group);
+			Piece->SetArmy(this, *Nation, Group[0].Region, Group);
+			Piece->SetRestLocation(Spot);
 			Pieces.Add(Piece);
 		}
 	}
+
+	// Carry the corps that have just moved along the road they took. Corps that arrive together travel as one piece.
+	TMap<AArmyPiece*, TArray<const FCorpsMove*>> Arrivals;
+	for (const FCorpsMove& March : Marches)
+	{
+		if (AArmyPiece* Piece = FindPieceOfCorps(March.CorpsId))
+		{
+			Arrivals.FindOrAdd(Piece).Add(&March);
+		}
+	}
+	for (const auto& Arrival : Arrivals)
+	{
+		AArmyPiece* Piece = Arrival.Key;
+		const FCorpsMove& Lead = *Arrival.Value[0];
+		const FVector* From = Before.Find(Lead.CorpsId);
+		if (!From)
+		{
+			continue;
+		}
+		TArray<FVector> Road;
+		Road.Add(*From);
+		for (int32 i = 0; i + 1 < Lead.Path.Num(); ++i)
+		{
+			if (Data.Regions.IsValidIndex(Lead.Path[i]))
+			{
+				Road.Add(ArmySpot(Lead.Path[i], 0));
+			}
+		}
+		Road.Add(Piece->GetRestLocation());
+
+		const FString Key = FString::Printf(TEXT("%d|%s"), Piece->GetRegionId(), *Piece->GetNationTag());
+		if (!KeysBefore.Contains(Key))
+		{
+			// Nobody of theirs was there before: the piece itself makes the march.
+			Piece->MarchAlong(Road, false);
+		}
+		else if (const FCampaignNation* Nation = Data.FindNation(Piece->GetNationTag()))
+		{
+			// They are joining an army already there: a piece of their own makes the march and is taken off on arrival.
+			TArray<FViewCorps> Travellers;
+			for (const FCorpsMove* March : Arrival.Value)
+			{
+				if (const FViewCorps* Unit = View.FindCorps(March->CorpsId))
+				{
+					Travellers.Add(*Unit);
+				}
+			}
+			if (AArmyPiece* Courier = World->SpawnActor<AArmyPiece>(*From, Piece->GetActorRotation()))
+			{
+				Courier->SetArmy(this, *Nation, Piece->GetRegionId(), Travellers);
+				Courier->MarchAlong(Road, true);
+			}
+		}
+	}
+}
+
+void ACampaignMapActor::SetHolders(const TArray<FString>& Holders)
+{
+	bool bChanged = false;
+	for (int32 i = 0; i < Data.Regions.Num() && i < Holders.Num(); ++i)
+	{
+		if (!Holders[i].IsEmpty() && Data.Regions[i].Owner != Holders[i])
+		{
+			Data.Regions[i].Owner = Holders[i];
+			bChanged = true;
+		}
+	}
+	if (bChanged)
+	{
+		// Ground has changed hands: repaint it and redraw the frontiers.
+		Terrain.MeasureFrontiers(Data);
+		ComputeVertexColors();
+		BuildTerrainMesh();
+		BuildBorders();
+	}
+}
+
+void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach)
+{
+	OrdersMesh->ClearMeshSection(0);
+	if (Reach.Num() == 0)
+	{
+		return;
+	}
+	// Ground the army can march to is lightened a little; ground it could attack is marked in red and ringed.
+	FCampaignMeshBuffers Buffers;
+	const FLinearColor March(0.8f, 1.0f, 0.82f, 0.13f);
+	const FLinearColor Attack(0.9f, 0.06f, 0.03f, 0.42f);
+	const FColor AttackRing = FLinearColor(1.0f, 0.25f, 0.18f, 0.9f).ToFColor(false);
+	for (const FReachRegion& Entry : Reach)
+	{
+		AppendRegionFill(Buffers, Entry.Region, Entry.bAttack ? Attack : March);
+		if (Entry.bAttack && Data.Regions.IsValidIndex(Entry.Region))
+		{
+			for (const TArray<FVector2D>& Ring : Data.Regions[Entry.Region].Polygons)
+			{
+				AppendRibbon(Buffers, Ring, 0.34, 0.26, AttackRing, true);
+			}
+		}
+	}
+	Buffers.Commit(OrdersMesh, 0, HighlightMaterial);
+}
+
+void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& Regions)
+{
+	OrdersMesh->ClearMeshSection(1);
+	if (Regions.Num() == 0)
+	{
+		return;
+	}
+	TArray<FVector2D> Points;
+	Points.Add(WorldToMap(FromWorld));
+	for (int32 RegionId : Regions)
+	{
+		if (Data.Regions.IsValidIndex(RegionId))
+		{
+			Points.Add(WorldToMap(ArmySpot(RegionId, 0)));
+		}
+	}
+	if (Points.Num() < 2)
+	{
+		return;
+	}
+	FCampaignMeshBuffers Buffers;
+	const FColor Gold = FLinearColor(1.0f, 0.83f, 0.45f, 0.95f).ToFColor(false);
+	AppendRibbon(Buffers, Points, 0.5, 0.34, Gold, false);
+
+	// An arrowhead where the road ends.
+	const FVector2D End = Points.Last();
+	const FVector2D Dir = (End - Points[Points.Num() - 2]).GetSafeNormal();
+	const FVector2D Side(Dir.Y, -Dir.X);
+	const FVector2D Tip = End + Dir * 2.6, Left = End + Side * 1.7, Right = End - Side * 1.7;
+	const int32 A = Buffers.AddVertex(SurfacePoint(Tip.X, Tip.Y, 0.36), FVector::UpVector, Gold);
+	const int32 B = Buffers.AddVertex(SurfacePoint(Left.X, Left.Y, 0.36), FVector::UpVector, Gold);
+	const int32 C = Buffers.AddVertex(SurfacePoint(Right.X, Right.Y, 0.36), FVector::UpVector, Gold);
+	Buffers.AddTriangleFacingUp(A, B, C);
+	Buffers.Commit(OrdersMesh, 1, HighlightMaterial);
 }
 
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw)
@@ -839,91 +1029,104 @@ void ACampaignMapActor::RebuildHighlight()
 	}
 }
 
+void ACampaignMapActor::AppendRegionFill(FCampaignMeshBuffers& Buffers, int32 RegionId, const FLinearColor& Fill) const
+{
+	if (!Data.Regions.IsValidIndex(RegionId))
+	{
+		return;
+	}
+	// A glow over the region's ground: the terrain's own triangles, lifted a hair, fading out at the region's edge.
+	const FCampaignRegion& Region = Data.Regions[RegionId];
+	const double Cell = Terrain.Cell;
+	const int32 I0 = FMath::Clamp(FMath::FloorToInt32(Region.Bounds.Min.X / Cell) - 2, 0, Terrain.NX - 2);
+	const int32 I1 = FMath::Clamp(FMath::CeilToInt32(Region.Bounds.Max.X / Cell) + 2, 0, Terrain.NX - 2);
+	const int32 J0 = FMath::Clamp(FMath::FloorToInt32(Region.Bounds.Min.Y / Cell) - 2, 0, Terrain.NY - 2);
+	const int32 J1 = FMath::Clamp(FMath::CeilToInt32(Region.Bounds.Max.Y / Cell) + 2, 0, Terrain.NY - 2);
+	const int32 Stride = I1 - I0 + 2;
+	TArray<int32> Remap;
+	Remap.Init(INDEX_NONE, Stride * (J1 - J0 + 2));
+
+	auto Mine = [&](int32 I, int32 J) { return Terrain.Region[Terrain.Index(I, J)] == RegionId; };
+	auto VertexAt = [&](int32 I, int32 J)
+	{
+		int32& Slot = Remap[(J - J0) * Stride + (I - I0)];
+		if (Slot == INDEX_NONE)
+		{
+			FLinearColor C = Fill;
+			C.A = Mine(I, J) ? Fill.A : 0.0f;
+			const double X = FMath::Min(I * Cell, Data.Width), Y = FMath::Min(J * Cell, Data.Height);
+			Slot = Buffers.AddVertex(SurfacePoint(X, Y, 0.16), FVector::UpVector, C.ToFColor(false));
+		}
+		return Slot;
+	};
+	for (int32 J = J0; J <= J1; ++J)
+	{
+		for (int32 I = I0; I <= I1; ++I)
+		{
+			if (!(Mine(I, J) || Mine(I + 1, J) || Mine(I, J + 1) || Mine(I + 1, J + 1)))
+			{
+				continue;
+			}
+			const int32 A = VertexAt(I, J), B = VertexAt(I + 1, J), C = VertexAt(I, J + 1), D = VertexAt(I + 1, J + 1);
+			Buffers.Triangles.Append({ A, C, B, B, C, D });
+		}
+	}
+}
+
+void ACampaignMapActor::AppendRibbon(FCampaignMeshBuffers& Buffers, const TArray<FVector2D>& Points, double HalfWidth, double Lift, const FColor& Ink, bool bClosed) const
+{
+	const int32 Count = Points.Num();
+	const int32 Edges = bClosed ? Count : Count - 1;
+	for (int32 i = 0; i < Edges; ++i)
+	{
+		const FVector2D A = Points[i];
+		const FVector2D B = Points[(i + 1) % Count];
+		const double Length = FVector2D::Distance(A, B);
+		if (Length < 0.05)
+		{
+			continue;
+		}
+		const FVector2D Dir = (B - A) / Length;
+		const FVector2D Side(Dir.Y, -Dir.X);
+		// Laid over the relief a short step at a time; the ends run on a little so that consecutive pieces meet at corners.
+		const int32 Steps = FMath::Max(1, FMath::CeilToInt32(Length / 1.4));
+		int32 PrevLeft = INDEX_NONE, PrevRight = INDEX_NONE;
+		for (int32 k = 0; k <= Steps; ++k)
+		{
+			const double T = k == 0 ? -HalfWidth * 0.6 : (k == Steps ? Length + HalfWidth * 0.6 : Length * k / Steps);
+			const FVector2D P = A + Dir * T;
+			const FVector2D L = P + Side * HalfWidth;
+			const FVector2D R = P - Side * HalfWidth;
+			const int32 Left = Buffers.AddVertex(SurfacePoint(L.X, L.Y, Lift), FVector::UpVector, Ink);
+			const int32 Right = Buffers.AddVertex(SurfacePoint(R.X, R.Y, Lift), FVector::UpVector, Ink);
+			if (PrevLeft != INDEX_NONE)
+			{
+				Buffers.AddTriangleFacingUp(PrevLeft, PrevRight, Left);
+				Buffers.AddTriangleFacingUp(PrevRight, Left, Right);
+			}
+			PrevLeft = Left;
+			PrevRight = Right;
+		}
+	}
+}
+
 void ACampaignMapActor::AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection)
 {
 	if (!Data.Regions.IsValidIndex(RegionId))
 	{
 		return;
 	}
-	const FCampaignRegion& Region = Data.Regions[RegionId];
-	const double Cell = Terrain.Cell;
-
-	// A glow over the region's ground: the terrain's own triangles, lifted a hair, fading out at the region's edge.
 	{
-		FMeshBuffers Buffers;
-		const int32 I0 = FMath::Clamp(FMath::FloorToInt32(Region.Bounds.Min.X / Cell) - 2, 0, Terrain.NX - 2);
-		const int32 I1 = FMath::Clamp(FMath::CeilToInt32(Region.Bounds.Max.X / Cell) + 2, 0, Terrain.NX - 2);
-		const int32 J0 = FMath::Clamp(FMath::FloorToInt32(Region.Bounds.Min.Y / Cell) - 2, 0, Terrain.NY - 2);
-		const int32 J1 = FMath::Clamp(FMath::CeilToInt32(Region.Bounds.Max.Y / Cell) + 2, 0, Terrain.NY - 2);
-		const int32 Stride = I1 - I0 + 2;
-		TArray<int32> Remap;
-		Remap.Init(INDEX_NONE, Stride * (J1 - J0 + 2));
-
-		auto Mine = [&](int32 I, int32 J) { return Terrain.Region[Terrain.Index(I, J)] == RegionId; };
-		auto VertexAt = [&](int32 I, int32 J)
-		{
-			int32& Slot = Remap[(J - J0) * Stride + (I - I0)];
-			if (Slot == INDEX_NONE)
-			{
-				FLinearColor C = Fill;
-				C.A = Mine(I, J) ? Fill.A : 0.0f;
-				const double X = FMath::Min(I * Cell, Data.Width), Y = FMath::Min(J * Cell, Data.Height);
-				Slot = Buffers.AddVertex(SurfacePoint(X, Y, 0.16), FVector::UpVector, C.ToFColor(false));
-			}
-			return Slot;
-		};
-		for (int32 J = J0; J <= J1; ++J)
-		{
-			for (int32 I = I0; I <= I1; ++I)
-			{
-				if (!(Mine(I, J) || Mine(I + 1, J) || Mine(I, J + 1) || Mine(I + 1, J + 1)))
-				{
-					continue;
-				}
-				const int32 A = VertexAt(I, J), B = VertexAt(I + 1, J), C = VertexAt(I, J + 1), D = VertexAt(I + 1, J + 1);
-				Buffers.Triangles.Append({ A, C, B, B, C, D });
-			}
-		}
+		FCampaignMeshBuffers Buffers;
+		AppendRegionFill(Buffers, RegionId, Fill);
 		Buffers.Commit(HighlightMesh, FirstSection, HighlightMaterial);
 	}
-
-	// A bright line round its outline.
 	{
-		FMeshBuffers Buffers;
-		const FColor Ink = Outline.ToFColor(false);
-		const double HalfWidth = 0.42, Lift = 0.24;
-		for (const TArray<FVector2D>& Ring : Region.Polygons)
+		// A bright line round its outline.
+		FCampaignMeshBuffers Buffers;
+		for (const TArray<FVector2D>& Ring : Data.Regions[RegionId].Polygons)
 		{
-			for (int32 i = 0, n = Ring.Num(); i < n; ++i)
-			{
-				const FVector2D A = Ring[i];
-				const FVector2D B = Ring[(i + 1) % n];
-				const double Length = FVector2D::Distance(A, B);
-				if (Length < 0.05)
-				{
-					continue;
-				}
-				const FVector2D Dir = (B - A) / Length;
-				const FVector2D Side(Dir.Y, -Dir.X);
-				const int32 Steps = FMath::Max(1, FMath::CeilToInt32(Length / 1.4));
-				int32 PrevLeft = INDEX_NONE, PrevRight = INDEX_NONE;
-				for (int32 k = 0; k <= Steps; ++k)
-				{
-					const double T = k == 0 ? -HalfWidth * 0.6 : (k == Steps ? Length + HalfWidth * 0.6 : Length * k / Steps);
-					const FVector2D P = A + Dir * T;
-					const FVector2D L = P + Side * HalfWidth;
-					const FVector2D R = P - Side * HalfWidth;
-					const int32 Left = Buffers.AddVertex(SurfacePoint(L.X, L.Y, Lift), FVector::UpVector, Ink);
-					const int32 Right = Buffers.AddVertex(SurfacePoint(R.X, R.Y, Lift), FVector::UpVector, Ink);
-					if (PrevLeft != INDEX_NONE)
-					{
-						Buffers.AddTriangleFacingUp(PrevLeft, PrevRight, Left);
-						Buffers.AddTriangleFacingUp(PrevRight, Left, Right);
-					}
-					PrevLeft = Left;
-					PrevRight = Right;
-				}
-			}
+			AppendRibbon(Buffers, Ring, 0.42, 0.24, Outline.ToFColor(false), true);
 		}
 		Buffers.Commit(HighlightMesh, FirstSection + 1, HighlightMaterial);
 	}

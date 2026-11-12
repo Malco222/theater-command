@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Campaign/CampaignMapData.h"
 #include "Campaign/CampaignTerrain.h"
+#include "Campaign/CampaignView.h"
 #include "CampaignMapActor.generated.h"
 
 class UProceduralMeshComponent;
@@ -14,6 +15,7 @@ class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UStaticMesh;
 class AArmyPiece;
+struct FCampaignMeshBuffers;
 
 /**
  * The campaign table: Europe as a relief model set into a table, with the
@@ -51,6 +53,27 @@ public:
 	int32 GetSelectedRegion() const { return SelectedRegion; }
 	void SetHoveredRegion(int32 RegionId);
 
+	/** Says who holds each region now, and repaints the table if ground has changed hands. */
+	void SetHolders(const TArray<FString>& Holders);
+
+	/**
+	 * Stands the armies on the table as the rules say they are. Marches are corps that have just moved:
+	 * their pieces are picked up and carried along the road they took.
+	 */
+	void ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches);
+
+	/** The piece that holds this corps, if it is on the table. */
+	AArmyPiece* FindPieceOfCorps(int32 CorpsId) const;
+
+	/** The given nation's piece in a region, if it has one there. */
+	AArmyPiece* FindPiece(int32 RegionId, const FString& Nation) const;
+
+	/** Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it. */
+	void SetReach(const TArray<FReachRegion>& Reach);
+
+	/** Draws the road an army would take, from where it stands through the regions given. An empty list clears it. */
+	void SetRoute(const FVector& FromWorld, const TArray<int32>& Regions);
+
 	/** Called as the camera moves: decides which lettering is worth showing and turns the standards to face the viewer. */
 	void UpdateForCamera(float CameraDistance, float CameraYaw);
 
@@ -79,9 +102,13 @@ private:
 	void BuildTable();
 	void BuildLabels();
 	void BuildTownMarkers();
-	void SpawnArmies();
 	void RebuildHighlight();
 	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection);
+	void AppendRegionFill(FCampaignMeshBuffers& Buffers, int32 RegionId, const FLinearColor& Fill) const;
+	void AppendRibbon(FCampaignMeshBuffers& Buffers, const TArray<FVector2D>& Points, double HalfWidth, double Lift, const FColor& Ink, bool bClosed) const;
+
+	/** Where a nation's piece stands in a region: beside the town, not on its name; a second nation's piece stands further along. */
+	FVector ArmySpot(int32 RegionId, int32 Slot) const;
 
 	/** Spacing is extra room between letters, as a fraction of their height. */
 	UTextRenderComponent* AddLabel(const FString& Text, const FVector2D& MapPos, float SizeUnits, const FColor& Color, int32 Tier, float Spacing = 0.0f);
@@ -101,6 +128,10 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UProceduralMeshComponent> HighlightMesh;
+
+	/** What is drawn for an army that has been picked up: where it can go, and the road to where the pointer is. */
+	UPROPERTY(VisibleAnywhere, Category = "Campaign")
+	TObjectPtr<UProceduralMeshComponent> OrdersMesh;
 
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UInstancedStaticMeshComponent> TownMarkers;
@@ -143,6 +174,10 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AArmyPiece>> Pieces;
+
+	/** The same pieces by "region|nation". */
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<AArmyPiece>> PieceByKey;
 
 	/** Which lettering tier each label belongs to: 0 always, 1 only from far off, 2 only close up. */
 	TArray<int32> LabelTiers;

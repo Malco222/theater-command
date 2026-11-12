@@ -6,6 +6,8 @@
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignPhotographer.h"
 #include "Campaign/CampaignPlayerController.h"
+#include "Campaign/CampaignSession.h"
+#include "TheaterCommand.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/GameUserSettings.h"
@@ -87,9 +89,23 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		return;
 	}
 	World->SpawnActor<ACampaignEnvironment>(FVector::ZeroVector, FRotator::ZeroRotator);
-	if (ACampaignMapActor* Table = World->SpawnActor<ACampaignMapActor>(FVector::ZeroVector, FRotator::ZeroRotator))
+	Table = World->SpawnActor<ACampaignMapActor>(FVector::ZeroVector, FRotator::ZeroRotator);
+	if (Table && Table->BuildMap())
 	{
-		Table->BuildMap();
+		// Start the campaign. The player leads Germany unless the command line says otherwise ("-TheaterNation=FRA").
+		FString Human = TEXT("GER");
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterNation="), Human);
+		Session = MakeShared<FCampaignSession>();
+		FString Error;
+		if (Session->Start(Human, Error))
+		{
+			Table->SetHolders(Session->GetView().RegionHolder);
+			Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
+		}
+		else
+		{
+			UE_LOG(LogTheater, Error, TEXT("The campaign could not start: %s"), *Error);
+		}
 	}
 
 	// "-TheaterShots=<folder>" on the command line takes a set of pictures of the table and quits.

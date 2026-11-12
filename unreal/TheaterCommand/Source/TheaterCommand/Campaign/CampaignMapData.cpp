@@ -11,23 +11,6 @@
 
 namespace
 {
-	/**
-	 * Campaign data lives in one place: the repository's own data/ and
-	 * src/generated/ folders, which the browser prototype and its tests also
-	 * read. A packaged game cannot reach outside its own folder, so a copy in
-	 * Content/Data/Campaign wins when it exists.
-	 */
-	FString ResolveDataFile(const FString& FileName, const FString& RepoRelativeDir)
-	{
-		const FString Packaged = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data/Campaign"), FileName);
-		if (IFileManager::Get().FileExists(*Packaged))
-		{
-			return Packaged;
-		}
-		const FString Repo = FPaths::Combine(FPaths::ProjectDir(), TEXT("../.."), RepoRelativeDir, FileName);
-		return FPaths::ConvertRelativePathToFull(Repo);
-	}
-
 	bool ReadJsonFile(const FString& Path, TSharedPtr<FJsonObject>& OutObject, FString& OutError)
 	{
 		FString Text;
@@ -90,6 +73,17 @@ namespace
 		}
 		return FVector2D(Cx / (3.0 * Area), Cy / (3.0 * Area));
 	}
+}
+
+FString FCampaignMapData::ResolveDataFile(const FString& FileName, const FString& RepoRelativeDir)
+{
+	const FString Packaged = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data/Campaign"), FileName);
+	if (IFileManager::Get().FileExists(*Packaged))
+	{
+		return Packaged;
+	}
+	const FString Repo = FPaths::Combine(FPaths::ProjectDir(), TEXT("../.."), RepoRelativeDir, FileName);
+	return FPaths::ConvertRelativePathToFull(Repo);
 }
 
 bool FCampaignMapData::Load(FString& OutError)

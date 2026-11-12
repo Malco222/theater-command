@@ -34,6 +34,9 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		{ TEXT("6-mediterranean"), TEXT("Sicily"), 0.5f, 0.0f, 0.0f, TEXT("Malta") },
 		{ TEXT("7-eastern-frontier"), TEXT("Lwow"), 0.42f, 35.0f, 0.0f, TEXT("") },
 		{ TEXT("8-channel-low"), TEXT("Calais"), 0.12f, -30.0f, 6.0f, TEXT("") },
+		{ TEXT("9-army-in-hand"), TEXT("Berlin"), 0.4f, 0.0f, 0.0f, TEXT("Farther Pomerania"), TEXT("Farther Pomerania"), TEXT("Hamburg") },
+		{ TEXT("10-army-on-the-march"), TEXT("Berlin"), 0.4f, 0.0f, 0.0f, TEXT(""), TEXT("Farther Pomerania"), TEXT(""), TEXT("Hamburg") },
+		{ TEXT("11-next-month"), TEXT("Berlin"), 0.4f, 0.0f, 0.0f, TEXT("Hamburg"), TEXT("Hamburg"), TEXT(""), TEXT(""), 1 },
 	};
 	bStarted = true;
 	UE_LOG(LogTheater, Display, TEXT("Photographer: %d pictures to take, into %s"), Shots.Num(), *Folder);
@@ -57,8 +60,23 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	Eye->SetHeading(Shot.Yaw, Shot.Tilt);
 	Eye->GoTo(Table->MapToWorld(At.X, At.Y), Shot.Zoom, true);
 
+	Controller->SetScripted(true);
+	Table->SetHoveredRegion(INDEX_NONE);
+	for (int32 i = 0; i < Shot.Months; ++i)
+	{
+		Controller->EndMonth();
+	}
 	const int32* Pick = Data.RegionByName.Find(Shot.Select);
 	Controller->SelectRegion(Pick ? *Pick : INDEX_NONE);
+	Controller->PutDownArmy();
+	if (const int32* Army = Data.RegionByName.Find(Shot.Army))
+	{
+		Controller->PickUpArmyIn(*Army);
+	}
+	if (const int32* Route = Data.RegionByName.Find(Shot.Route))
+	{
+		Controller->ShowRouteTo(*Route);
+	}
 }
 
 void ACampaignPhotographer::Tick(float DeltaSeconds)
@@ -93,6 +111,18 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 	Clock += DeltaSeconds;
 	++Frames;
 
+	// An army ordered off just before the picture is caught in the air.
+	if (!bMarched && Clock >= 2.45f && !Shots[Current].March.IsEmpty())
+	{
+		bMarched = true;
+		ACampaignPlayerController* Controller = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController());
+		const int32* To = Controller && Controller->GetMap() ? Controller->GetMap()->GetData().RegionByName.Find(Shots[Current].March) : nullptr;
+		if (To)
+		{
+			Controller->OrderTo(*To);
+		}
+	}
+
 	// Give the picture three seconds to settle, then take it.
 	if (!bTaken && Clock >= 3.0f)
 	{
@@ -123,6 +153,7 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		Clock = 0.0f;
 		Frames = 0;
 		bTaken = false;
+		bMarched = false;
 		Arrange(Shots[Current]);
 	}
 }

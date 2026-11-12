@@ -32,6 +32,10 @@ private:
 		float Yaw = 0.0f;
 		float Tilt = 0.0f;
 		FString Select; // pick this region, so its panel is in the picture
+		FString Army; // pick up the player's army in this region
+		FString Route; // show the road to this region
+		FString March; // order the army there just before the picture, to catch it in the air
+		int32 Months = 0; // end this many months first
 	};
 
 	void Arrange(const FShot& Shot);
@@ -43,5 +47,6 @@ private:
 	float WarmUp = 0.0f;
 	int32 Frames = 0;
 	bool bTaken = false;
+	bool bMarched = false;
 	bool bStarted = false;
 };

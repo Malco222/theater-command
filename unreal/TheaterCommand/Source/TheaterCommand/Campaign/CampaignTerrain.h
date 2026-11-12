@@ -20,6 +20,9 @@ class FCampaignTerrain
 public:
 	void Build(const FCampaignMapData& Data);
 
+	/** Works out how far every point is from a border between two nations. Run again when ground changes hands. */
+	void MeasureFrontiers(const FCampaignMapData& Data);
+
 	int32 Index(int32 I, int32 J) const { return J * NX + I; }
 
 	/** Height at any point of the map, in map units. */

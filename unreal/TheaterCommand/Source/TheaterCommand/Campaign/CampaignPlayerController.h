@@ -2,10 +2,13 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "Campaign/CampaignView.h"
 #include "CampaignPlayerController.generated.h"
 
 class ACampaignMapActor;
 class ACampaignCameraPawn;
+class AArmyPiece;
+class FCampaignSession;
 
 /** What the panel shows about the territory the player has clicked. Worked out once, when the selection changes. */
 struct FRegionPanelInfo
@@ -18,9 +21,34 @@ struct FRegionPanelInfo
 	FText Forces;
 };
 
+/** One corps of a picked-up army, as a card in the tray. */
+struct FTrayCard
+{
+	int32 CorpsId = INDEX_NONE;
+	FText Name;
+	FText Kind;
+	int32 Divisions = 0;
+	float Strength = 1.0f;
+	int32 Moves = 0;
+	int32 MovesMax = 0;
+	bool bPicked = false; // going with the army, or left behind
+	bool bCanOrder = false;
+};
+
+/** The army the player has picked up: its general, and its corps as cards. */
+struct FArmyTray
+{
+	bool bVisible = false;
+	FText Title;
+	FText Subtitle;
+	FLinearColor Color = FLinearColor::Gray;
+	TArray<FTrayCard> Cards;
+	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
+};
+
 /**
  * The player's hands on the campaign table: moving the view, pointing at
- * territories and picking them.
+ * territories, picking up armies and giving them their orders.
  */
 UCLASS()
 class THEATERCOMMAND_API ACampaignPlayerController : public APlayerController
@@ -35,29 +63,72 @@ public:
 	virtual void SetupInputComponent() override;
 
 	const FRegionPanelInfo& GetRegionPanel() const { return RegionPanel; }
+	const FArmyTray& GetArmyTray() const { return Tray; }
 	ACampaignMapActor* GetMap() const { return Map.Get(); }
+	FCampaignSession* GetSession() const;
+
+	FText GetDateText() const;
+	FText GetRulesNote() const;
+	/** A line of news for the player, shown for a few seconds. Empty when there is none. */
+	FText GetNotice() const;
 
 	/** Selects a territory, or none with INDEX_NONE. */
 	void SelectRegion(int32 RegionId);
 
+	/** Picks up the player's army in a region, if there is one that can be given orders. */
+	bool PickUpArmyIn(int32 RegionId);
+	void PutDownArmy();
+
+	/** Leaves a corps of the picked-up army behind, or takes it along again. */
+	void ToggleCorps(int32 CorpsId);
+
+	/** Shows the road the picked-up army would take to a region. */
+	void ShowRouteTo(int32 RegionId);
+
+	/** Orders the picked-up army to a region. */
+	void OrderTo(int32 RegionId);
+
+	void EndMonth();
+
+	/** While a script is driving (the development photographer), the pointer does not light or route anything. */
+	void SetScripted(bool bInScripted) { bScripted = bInScripted; }
+
 private:
 	void WheelUp();
 	void WheelDown();
-	void ClearSelection();
+	void Escape();
 
 	/** Where on the table the pointer is, allowing for the height of the ground. */
 	bool PointerOnTable(FVector& OutWorld) const;
 
 	void RefreshRegionPanel(int32 RegionId);
+	void RefreshOrders();
+	void Notify(const FString& Text);
+	const FReachRegion* FindReach(int32 RegionId) const;
 
 	TWeakObjectPtr<ACampaignMapActor> Map;
 	FRegionPanelInfo RegionPanel;
+	FArmyTray Tray;
+
+	/** The army in hand: the region it stands in and the corps that will go when it is ordered. */
+	int32 ArmyRegion = INDEX_NONE;
+	TArray<int32> PickedCorps;
+	TArray<FReachRegion> Reach;
+	int32 RouteTarget = INDEX_NONE;
+	TWeakObjectPtr<AArmyPiece> RingedPiece;
+
+	FString NoticeText;
+	double NoticeUntil = 0.0;
 
 	bool bLeftHeld = false;
 	bool bDragging = false;
+	bool bRightHeld = false;
+	bool bTurning = false;
 	bool bHaveLastMouse = false;
+	bool bScripted = false;
 	int32 SizedForWidth = 0;
 	int32 SizedForHeight = 0;
 	FVector2D PressPosition = FVector2D::ZeroVector;
+	FVector2D RightPressPosition = FVector2D::ZeroVector;
 	FVector2D LastMouse = FVector2D::ZeroVector;
 };

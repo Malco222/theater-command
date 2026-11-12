@@ -23,6 +23,12 @@ public class TheaterCommand : ModuleRules
 			"UMG"
 		});
 
+		// The game's rules are JavaScript, run by the JavaScript engine that comes with macOS.
+		if (Target.Platform == UnrealTargetPlatform.Mac)
+		{
+			PublicFrameworks.Add("JavaScriptCore");
+		}
+
 		// Only for the development photographer, which reports how long a frame takes to draw.
 		PrivateDependencyModuleNames.AddRange(new string[] { "RenderCore", "RHI" });
 	}
