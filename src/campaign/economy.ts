@@ -4,6 +4,7 @@
 
 import data from '../../data/campaign/production.json';
 import budgetData from '../../data/campaign/budget.json';
+import arsenalData from '../../data/campaign/arsenal.json';
 import setup from '../../data/campaign/setup-1939.json';
 import { STACK, type Build, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
 import { addCorps, allied, headline } from './game';
@@ -12,6 +13,7 @@ import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
 import { fallenOf, inherit, raisedXp, revivable } from './stories';
+import { deliverArsenal, worksUpkeep } from './arsenal';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -23,6 +25,36 @@ export const PRODUCTION = data as unknown as {
   firstCorpsNumber: Record<string, number>;
   armourName: Record<string, string>;
 };
+
+/**
+ * What a corps of this kind costs to raise, or undefined if it cannot be ordered. The four classic corps can be
+ * raised in any game; the kinds the arsenal adds, such as artillery, only in the grand campaign.
+ */
+export function specOf(g: Game, kind: string): BuildSpec | undefined {
+  return PRODUCTION.builds[kind] ?? (budgeted(g) ? (arsenalData.land as Record<string, BuildSpec>)[kind] : undefined);
+}
+
+/** Every kind of corps that can be ordered in this game, lightest first. */
+export function corpsKinds(g: Game): Kind[] {
+  const kinds = [...Object.keys(PRODUCTION.builds), ...(budgeted(g) ? Object.keys(arsenalData.land) : [])] as Kind[];
+  return kinds.sort((a, b) => needsOf(g, a) - needsOf(g, b) || (specOf(g, a)!.cost - specOf(g, b)!.cost));
+}
+
+/** How many factories a province must have for a corps of this kind to be raised there. None in a historical scenario. */
+export const needsOf = (g: Game, kind: string): number => (budgeted(g) ? (arsenalData.needs as Record<string, number>)[kind] ?? 0 : 0);
+
+/** True if this nation can raise a corps of this kind in this region: home ground, with the industry heavier equipment needs. */
+export const canRaiseKind = (g: Game, nat: string, r: Region | undefined, kind: string): boolean => !!r && canRaise(g, nat, r) && r.fac >= needsOf(g, kind);
+
+/** Where a new corps of this kind would form: the region asked for if it will do, else the capital, else the home province with the most industry. -1 if nowhere. */
+export function raiseSite(g: Game, nat: string, kind: string, want = -1): number {
+  if (canRaiseKind(g, nat, g.regions[want], kind)) return want;
+  const cap = g.nations[nat].capital;
+  if (canRaiseKind(g, nat, g.regions[cap], kind)) return cap;
+  let best = -1;
+  for (const r of g.regions) if (canRaiseKind(g, nat, r, kind) && (best < 0 || r.fac > g.regions[best].fac)) best = r.id;
+  return best;
+}
 
 export const firstCorpsNumber = (nat: string): number => PRODUCTION.firstCorpsNumber[nat] ?? PRODUCTION.firstCorpsNumber._default;
 
@@ -84,7 +116,7 @@ export interface Ledger {
   provinces: ({ id: number; name: string } & Yield)[];
 }
 
-const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorized troops', arm: 'Armour', fort: 'Fortress troops' };
+const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorized troops', art: 'Artillery', arm: 'Armour', fort: 'Fortress troops' };
 const SHIP_LABEL: Record<ShipClass, string> = { bb: 'Battleships', cv: 'Carriers', ca: 'Cruisers', dd: 'Destroyers', ss: 'Submarines' };
 
 /** What it costs each month to keep one corps of this kind and size in being. */
@@ -117,6 +149,8 @@ export function upkeep(g: Game, nat: string): LedgerLine[] {
   for (const f of g.airFleets) if (f.nat === nat) { ftr += f.ftr; bmr += f.bmr; }
   if (ftr > 0) out.push({ key: 'air:ftr', label: 'Fighters', amount: ftr * BUDGET.upkeep.air.ftr * peace, count: ftr });
   if (bmr > 0) out.push({ key: 'air:bmr', label: 'Bombers', amount: bmr * BUDGET.upkeep.air.bmr * peace, count: bmr });
+  // Guns and airfields are manned whether the nation is at war or not.
+  out.push(...worksUpkeep(g, nat));
   return out;
 }
 
@@ -226,7 +260,7 @@ function roman(n: number): string {
 
 function corpsName(nat: string, kind: Kind, no: number): string {
   const arm = PRODUCTION.armourName[nat] ?? PRODUCTION.armourName._default;
-  const word = kind === 'arm' ? `${arm} ` : kind === 'mot' ? 'Motorized ' : kind === 'mtn' ? 'Mountain ' : '';
+  const word = kind === 'arm' ? `${arm} ` : kind === 'mot' ? 'Motorized ' : kind === 'mtn' ? 'Mountain ' : kind === 'art' ? 'Artillery ' : '';
   return `${roman(no)} ${word}Corps`;
 }
 
@@ -241,9 +275,9 @@ export const canRaise = (g: Game, nat: string, r: Region): boolean => isHome(g, 
  */
 export function orderCorps(g: Game, nat: string, kind: Kind, region: number, revive?: number): Build | null {
   const n = g.nations[nat];
-  const spec = PRODUCTION.builds[kind];
+  const spec = specOf(g, kind);
   const r = g.regions[region];
-  if (!n.alive || !spec || !r || !canRaise(g, nat, r) || n.pp < spec.cost) return null;
+  if (!n.alive || !spec || !r || !canRaiseKind(g, nat, r, kind) || n.pp < spec.cost) return null;
   const old = revive !== undefined ? revivable(g, nat, kind).find((f) => f.id === revive) : undefined;
   if (revive !== undefined && !old) return null;
   n.pp -= spec.cost;
@@ -292,6 +326,7 @@ export function deliver(g: Game, nat: string): void {
   n.queue = n.queue.filter((b) => b.eta > g.turn);
   for (const b of due) {
     const r = g.regions[b.region];
+    if (b.what === 'air' || b.what === 'ship' || b.what === 'work') { deliverArsenal(g, nat, b); continue; }
     if (b.what === 'fort') {
       if (!isHome(g, nat, r)) continue; // the ground was lost before the works were finished
       const vs = new Set(r.fort?.vs ?? []);
@@ -326,12 +361,17 @@ export function aiProduction(g: Game, nat: string): void {
   // In the grand campaign a staff orders nothing its treasury could not keep in the field afterwards.
   const keep = (b: Build): number => (b.what === 'corps' ? corpsUpkeep(b.kind!, b.divs!) : 0);
   let spare = budgeted(g) ? income(g, nat) - upkeepTotal(g, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
-  while (n.queue.length < 2) {
-    const kind: Kind = home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
+  // Works on order (the grand campaign's guns and airfields) do not hold up the raising of troops.
+  while (n.queue.filter((b) => b.what === 'corps' || b.what === 'fort').length < 2) {
+    let kind: Kind = home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
+    // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
+    // nation's greatest industrial province; a nation with no such province raises infantry instead.
+    let at = budgeted(g) ? raiseSite(g, nat, kind, cap.id) : cap.id;
+    if (at < 0) { kind = 'inf'; at = cap.id; }
     if (n.pp < PRODUCTION.builds[kind].cost + PRODUCTION.aiReserve) break;
     const cost = corpsUpkeep(kind, PRODUCTION.builds[kind].divs);
     if (spare < cost * BUDGET.debt.aiMargin) break;
-    if (!orderCorps(g, nat, kind, cap.id)) break;
+    if (!orderCorps(g, nat, kind, at)) break;
     spare -= cost;
   }
 }

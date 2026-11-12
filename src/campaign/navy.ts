@@ -110,6 +110,20 @@ function addFleet(g: Game, row: FleetRow): Fleet {
   return f;
 }
 
+/** A new squadron with no ships yet, in a home port: the grand campaign's arsenal fills it. */
+export function foundFleet(g: Game, nat: string, r: Region, name: string): Fleet {
+  const taken = (x: string): boolean => g.fleets.some((f) => f.name === x);
+  let unique = name;
+  for (let k = 2; taken(unique); k++) unique = `${name} ${k}`;
+  const sea = r.seas[0];
+  const f: Fleet = {
+    id: g.nextFleet++, nat, name: unique, ships: none(), lost: none(), base: r.id, port: r.name, home: sea, zone: sea, stance: 'port',
+    station: sea, duty: 'patrol', tied: false, ready: 1, admiral: null, fought: 0,
+  };
+  g.fleets.push(f);
+  return f;
+}
+
 /** On the first day of the war the navies already at war are at their stations. */
 export function openingStations(g: Game): void {
   for (const f of g.fleets) if (g.nations[f.nat].atWar.length && f.duty !== 'port') { f.zone = f.station; f.stance = f.duty; }

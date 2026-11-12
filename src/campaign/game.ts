@@ -16,6 +16,7 @@ import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
+import arsenalData from '../../data/campaign/arsenal.json';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 
@@ -440,6 +441,10 @@ export function corpsBase(g: Game, c: Corps): number {
 const HELD_LOSS = 0.6;
 /** How much stronger troops defend from trenches they have had a month to dig. */
 export const DUG_IN = 1.25;
+/** What artillery does in a land battle (the grand campaign's arsenal). */
+export const GUNS = (arsenalData as unknown as { guns: { soften: number; softenMost: number; thicken: number; thickenMost: number } }).guns;
+/** The weight of guns in a force: its artillery divisions, at the strength they stand at. */
+const gunsIn = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'art' ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
 
 export const men = (c: Corps): number => Math.round(c.divs * c.str * MEN_PER_DIV);
 
@@ -490,6 +495,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // Defenders with nowhere to fall back to: every way out is enemy ground or the attack itself.
   const pocket = defenders.length > 0 && !target.nb.some((j) => !sources.has(j) && allied(g, defenders[0].nat, g.regions[j].ctrl) && !hostileUnits(g, g.regions[j], defenders[0].nat).length);
   let cmdA = 0, cmdD = 0, rawA = 0, rawD = 0, trap = false, proudA = 1, proudD = 1;
+  // Massed guns: in the attack they break up works and trenches, in the defence they thicken the line they stand in.
+  // Only the grand campaign raises artillery, so a battle without any is worked out exactly as it always was.
+  const gunsA = gunsIn(attackers), gunsD = gunsIn(defenders);
+  const soften = gunsA ? Math.min(GUNS.softenMost, GUNS.soften * gunsA) : 0;
+  const thicken = gunsD ? Math.min(GUNS.thickenMost, GUNS.thicken * gunsD) : 0;
   for (const c of attackers) {
     let p = corpsBase(g, c) * KIND[c.kind].atk;
     if (c.kind === 'arm') {
@@ -506,7 +516,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (line.mul < 1) { p *= line.mul; longest = Math.max(longest, line.length); lineMul = Math.min(lineMul, line.mul); }
     if (frozen(g, c.nat, target)) { p *= 1 - (1 - EASTERN.winter.attack) * cmdWinter(g, c); cold = true; }
     const from = g.regions[c.reg];
-    if (target.fort && target.fort.vs.includes(from.owner)) { p /= FORT_MUL[target.fort.lv]; fortFaced++; }
+    if (target.fort && target.fort.vs.includes(from.owner)) { p /= soften ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - soften) : FORT_MUL[target.fort.lv]; fortFaced++; }
     // The player's honoured corps, a corps fighting for the place it was raised in, and one that has its old enemy in front of it.
     const proud = storyAttack(g, c, target, defenders);
     if (proud !== 1) { p *= proud; proudA = Math.max(proudA, proud); }
@@ -519,7 +529,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   let D = 0, thin = 1;
   for (const d of defenders) {
     let p = corpsBase(g, d) * KIND[d.kind].def * TERRAIN_DEF[target.terrain];
-    if (d.dug) { p *= DUG_IN; dugIn++; }
+    if (d.dug) { p *= soften ? 1 + (DUG_IN - 1) * (1 - soften) : DUG_IN; dugIn++; }
+    if (thicken && d.kind !== 'art') p *= 1 + thicken;
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
     if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') { p *= DESERT.open; turned = true; }
     const dl = lineStrength(g, d).mul;
@@ -548,6 +559,14 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (target.fort) {
     lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
+  if (soften || thicken) lines.push({
+    label: 'Artillery',
+    value: soften && thicken ? 'Massed guns on both sides' : soften ? 'Massed guns support the attack' : 'Massed guns stand in the defence',
+    effect: [
+      soften ? (target.fort && fortFaced) || dugIn ? `The bombardment takes ${Math.round(soften * 100)}% off the worth of the ${target.fort && fortFaced ? (dugIn ? 'works and trenches' : 'works') : 'trenches'}` : 'There are no works or trenches here for the guns to break' : '',
+      thicken ? `${soften ? 'the' : 'The'} other defenders fight ${Math.round(thicken * 100)}% stronger under their own guns` : '',
+    ].filter(Boolean).join('; '),
+  });
   if (dugIn) lines.push({ label: 'Dug in', value: dugIn === defenders.length ? 'The defenders have had a month to entrench' : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });

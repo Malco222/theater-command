@@ -1,7 +1,7 @@
 import type { Rng } from '../core/rng';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 
-export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort';
+export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art';
 export type Terrain = 'plains' | 'forest' | 'hills' | 'mountain' | 'marsh' | 'urban' | 'desert';
 export type Align = 'allies' | 'allies_cobelligerent' | 'leaning_allies' | 'independent' | 'leaning_axis' | 'axis_cobelligerent' | 'axis';
 
@@ -93,9 +93,13 @@ export interface Lab {
 
 export interface Build {
   id: number;
-  what: 'corps' | 'fort';
+  /** A corps, a level of fortification, or from the arsenal: aircraft, ships, or a work built in a province. */
+  what: 'corps' | 'fort' | 'air' | 'ship' | 'work';
   kind?: Kind;
   divs?: number;
+  /** For the arsenal: which aircraft ('ftr', 'bmr'), ship class ('dd', 'tp' and so on) or work ('factory', 'yard', 'aa', 'field'), and how many. */
+  item?: string;
+  count?: number;
   name: string;
   region: number;
   /** Turn it was ordered and turn it arrives. */
@@ -599,6 +603,8 @@ export interface AirFleet extends Storied {
   moved: number;
   /** Aircraft lost since the war began. */
   lost: { ftr: number; bmr: number };
+  /** Wings bought from the arsenal in the grand campaign, kept on top of the strength the staff allots. */
+  extra?: { ftr: number; bmr: number };
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -705,6 +711,8 @@ export const KIND: Record<Kind, { label: string; atk: number; def: number; move:
   cav: { label: 'Cavalry', atk: 8, def: 8, move: 1, mobile: true },
   mtn: { label: 'Mountain', atk: 9, def: 15, move: 2, mobile: false },
   fort: { label: 'Fortress', atk: 1, def: 15, move: 99, mobile: false },
+  // Massed guns, raised only in the grand campaign: see the artillery rule in the battle assessment.
+  art: { label: 'Artillery', atk: 14, def: 8, move: 2, mobile: false },
 };
 
 export const TERRAIN_DEF: Record<Terrain, number> = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };

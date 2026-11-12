@@ -8,6 +8,7 @@ import { atWar, computeSupply, createGame, openTheatres } from './game';
 import { seat } from './commanders';
 import { FIELDS } from './research';
 import { newStories } from './stories';
+import { restoreWorks } from './arsenal';
 import mapData from '../generated/campaign-map.json';
 import type { Corps, Game, General } from './types';
 
@@ -88,6 +89,8 @@ export function loadGame(text: string): Game | null {
   // What the calendar has changed on the map itself: theatres that have opened, and harbours built off open beaches.
   openTheatres(g);
   for (const k of Object.keys(g.flags)) if (k.startsWith('harbour:') && g.regions[+k.slice(8)]) g.regions[+k.slice(8)].port = true;
+  // And what the player's treasury has built on it: the factories added since the game began.
+  restoreWorks(g);
   // A save from an older build may lack fields added since; the fresh game fills them in.
   for (const [id, n] of Object.entries(d.nations as Record<string, any>)) g.nations[id] = { ...g.nations[id], ...n };
   // A save from before research: the design teams are taken to have kept to history's schedule so far.
