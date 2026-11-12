@@ -14,7 +14,8 @@ import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { storyAir, storyEdge } from './stories';
 import { groundRules } from './ground';
-import { bombFactories, bombRail, onNet, railBombChance, railCut, ruinChance } from './rails';
+import { bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
+import { bombingFor, seat } from './difficulty';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Game, Region, Ships } from './types';
 
 type Sched = [number, number, number][];
@@ -689,8 +690,9 @@ export function airAI(g: Game, nat: string): void {
   const mine = airFleetsOf(g, nat);
   for (const f of mine) { f.mission = 'support'; f.target = -1; }
   if (!n.alive || !n.atWar.length) return;
-  // In free play history's air plan does not apply: the air fleets support the armies.
-  if (g.flags.open === 1) return;
+  // In free play history's air plan does not apply: the air fleets support the armies, and on the harder levels
+  // part of a rival's bomber force goes for the player's factories and railways.
+  if (g.flags.open === 1) { raidPlayer(g, nat, mine); return; }
   for (const ph of AIR.plan) {
     if (ph.nat !== nat || g.turn < ph.from || g.turn > ph.to || !atWar(g, nat, ph.against)) continue;
     for (const o of ph.orders) {
@@ -702,6 +704,40 @@ export function airAI(g: Game, nat: string): void {
       setMission(g, f, o.mission, target);
     }
   }
+}
+
+/**
+ * The harder levels of the grand campaign: a rival's air staff sends part of its bomber force against the player's
+ * factories and railway junctions. Each fleet looks for its best target, by day where its escort keeps the losses
+ * down and by night where it cannot, and the fleets with the best targets go, never more than the level's share of
+ * them, so that the armies keep their support.
+ */
+function raidPlayer(g: Game, nat: string, mine: AirFleet[]): void {
+  const B = bombingFor(g, nat);
+  const you = seat(g);
+  if (!B || you === null || !atWar(g, nat, you)) return;
+  const withBombers = mine.filter((f) => f.bmr > 0);
+  const most = Math.max(1, Math.floor(withBombers.length * B.share + 1e-9));
+  const picks: { f: AirFleet; m: AirMission; t: number; v: number }[] = [];
+  for (const f of withBombers) {
+    if (f.bmr < B.least || f.ready < 0.5) continue;
+    let best: { f: AirFleet; m: AirMission; t: number; v: number } | null = null;
+    for (const r of g.regions) {
+      if (r.ctrl !== you || (r.fac <= 0 && railsAt(r.id).length < 3) || whyNotMission(g, f, 'bomb', r.id)) continue;
+      for (const m of ['bomb', 'night'] as AirMission[]) {
+        const a = assessAir(g, [f], m, r.id);
+        if (a.why) continue;
+        const fc = forecastAir(g, a, m, r.id);
+        if (fc.bomberLoss > B.loss) continue;
+        // Factories stopped for the month, a factory wrecked until it is rebuilt, and a junction cut until it is relaid.
+        const v = fc.cut * r.fac + 3 * (fc.ruin ?? 0) + B.rail * (fc.rail ?? 0) * railsAt(r.id).length - 2 * fc.bomberLoss;
+        if (v > 0.15 && (!best || v > best.v)) best = { f, m, t: r.id, v };
+      }
+    }
+    if (best) picks.push(best);
+  }
+  picks.sort((a, b) => b.v - a.v || a.f.id - b.f.id);
+  for (const p of picks.slice(0, most)) setMission(g, p.f, p.m, p.t);
 }
 
 /** What history's plan has this nation's air fleets doing this month, if anything. */

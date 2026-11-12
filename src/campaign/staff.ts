@@ -10,7 +10,9 @@ import openData from '../../data/campaign/open.json';
 import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { holds } from './diplomacy';
+import { concertFor, landingsFor, nerveOf, seat } from './difficulty';
 import { startEngineers } from './engineers';
+import { NAVY } from './navy';
 import { EASTERN, allied, atWar, collapseScore, corpsBase, frozen, weather } from './game';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -69,7 +71,9 @@ const draw = (g: Game, ...key: (string | number)[]): number => hashString(`${g.s
 export function temper(g: Game, nat: string): Temper {
   const t = { attackAt: 99, persist: 0.85, minOdds: 1.4, ...OPEN.temper._default, ...OPEN.temper[nat] } as Temper;
   const mood = 1 + OPEN.mood * (2 * draw(g, nat, 'mood') - 1);
-  return { attackAt: t.attackAt * mood, persist: t.persist * mood, minOdds: t.minOdds };
+  // The level of the campaign steadies or stiffens the nerve of the player's rivals: at the fair level, neither.
+  const lv = nerveOf(g, nat);
+  return { attackAt: t.attackAt * mood * lv.nerve, persist: t.persist * mood * lv.nerve, minOdds: t.minOdds * lv.odds };
 }
 
 /** A stretch of country where this nation's side is in touch with an enemy: who is there, how strong, and the way in. */
@@ -350,6 +354,18 @@ function setOn(g: Game, nat: string, f: Front, turn: number, where = ''): void {
   for (const e of f.enemies) { if (turn) g.flags[onKey(nat, e, where)] = turn; else delete g.flags[onKey(nat, e, where)]; }
 }
 
+/**
+ * On the hardest level the player's rivals time their blows together: while an ally of this nation has an offensive
+ * under way against the player, it opens its own against him at a smaller ratio than it would alone. 1 otherwise.
+ */
+export function inConcert(g: Game, nat: string, f: Pick<Front, 'enemies'>): number {
+  const k = concertFor(g, nat);
+  const you = seat(g);
+  if (k === 1 || you === null || !f.enemies.includes(you)) return 1;
+  for (const a of Object.keys(g.nations)) if (a !== nat && g.nations[a].alive && allied(g, a, nat) && flag(g, onKey(a, you, ''))) return k;
+  return 1;
+}
+
 /** One of the staff's own conditions, or one that reads as in diplomacy.json. */
 function cond(g: Game, nat: string, c: string, real: Front[]): boolean {
   const [key, rest = ''] = c.split(/:(.*)/s);
@@ -410,7 +426,7 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       const fresh = g.turn - since < 2 || (pushed && f.enemies.some((e) => flag(g, `st:pushed:${nat}:${e}`)));
       if (fresh || (f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt))) setOn(g, nat, f, since);
       else { setOn(g, nat, f, 0); for (const e of f.enemies) g.flags[`st:rest:${nat}:${e}`] = g.turn + OPEN.rest; }
-    } else if (f.ratio >= T.attackAt && f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}`))) {
+    } else if (f.ratio >= T.attackAt * inConcert(g, nat, f) && f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}`))) {
       setOn(g, nat, f, g.turn);
       g.flags[`st:gain:${nat}`] = g.turn;
     }
@@ -545,12 +561,62 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   // With the enemy a few marches from the capital, the staff keeps a force in it whatever else is going on.
   const cap = n.capital >= 0 ? g.regions[n.capital] : null;
   if (cap && cap.ctrl === nat && nearEnemy(g, nat, cap, OPEN.guardWithin)) phase.staging = { ...(phase.staging ?? {}), [cap.name]: OPEN.guard };
+  // On the hardest level a rival with shipping keeps a force by the quay for a descent on the player's coast.
+  const quay = seaBase(g, nat);
+  if (quay) phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, landingsFor(g, nat)!.force) };
   // A force kept ready for a stroke still to come.
   for (const op of list) {
     if (!op.staging || flag(g, `st:done:${nat}:${op.id}`) || g.turn > (op.to ?? 999)) continue;
     phase.staging = { ...(phase.staging ?? {}), ...op.staging };
   }
   return phase;
+}
+
+/**
+ * The harbour a rival's staff keeps its landing force at, on the level that has it land on the player's coasts:
+ * a home port of its own, in touch with the capital by land, and the one with the shortest crossing to a harbour
+ * the player holds. The choice is kept while it still serves and looked at again every half year.
+ */
+export function seaBase(g: Game, nat: string): Region | null {
+  const L = landingsFor(g, nat);
+  const you = seat(g);
+  const n = g.nations[nat];
+  if (!L || you === null || !n.alive || n.sealift <= 0 || !atWar(g, nat, you) || n.capital < 0) return null;
+  const key = `st:quay:${nat}`, at = `st:quayAt:${nat}`;
+  const kept = g.regions[flag(g, key) - 1];
+  if (kept && kept.ctrl === nat && g.turn - flag(g, at) < 6) return kept;
+  // Home ground in touch with the capital.
+  const seen = new Uint8Array(g.regions.length);
+  const q = [n.capital];
+  seen[n.capital] = 1;
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!seen[j] && g.regions[j].ctrl === nat) { seen[j] = 1; q.push(j); }
+  const shores = g.regions.filter((r) => r.ctrl === you && r.port && r.seas.length > 0);
+  let best: Region | null = null, bd = Infinity;
+  for (const id of q) {
+    const r = g.regions[id];
+    if (!r.port || r.owner !== nat || r.overseas) continue;
+    // Seas between this quay and the nearest of the player's harbours, by the shortest way round.
+    const d = seaHops(g, r.seas, shores);
+    if (d < bd) { bd = d; best = r; }
+  }
+  if (!best || bd > NAVY.landing.range) { delete g.flags[key]; return null; }
+  g.flags[key] = best.id + 1;
+  g.flags[at] = g.turn;
+  return best;
+}
+
+/** How many seas lie between a coast and the nearest of some shores: 1 when they share a sea. */
+function seaHops(g: Game, from: number[], shores: Region[]): number {
+  const want = new Uint8Array(g.seas.length);
+  for (const r of shores) for (const z of r.seas) want[z] = 1;
+  const d = new Int16Array(g.seas.length).fill(-1);
+  const q = [...from];
+  for (const z of from) d[z] = 1;
+  for (let i = 0; i < q.length; i++) {
+    if (want[q[i]]) return d[q[i]];
+    for (const j of g.seas[q[i]].adj) if (d[j] < 0) { d[j] = d[q[i]] + 1; q.push(j); }
+  }
+  return Infinity;
 }
 
 /** What follows a declaration the staff has just made: a neutral that marches of its own accord takes its side. */

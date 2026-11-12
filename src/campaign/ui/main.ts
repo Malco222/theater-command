@@ -18,6 +18,7 @@ import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSa
 import { CROSSINGS, ENGINEERING, RIVERS, blocked, bridgeDown, noCrossing, riverNotes, whyBlocked } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { RAILWAYS, RAIL_LINKS, railCut, railNote } from '../rails';
+import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
   AIR, MISSION, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, cover, crowding, forecastAir, isOffensive,
   km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
@@ -83,6 +84,8 @@ const ui = {
   /** The country and the year picked for a grand campaign. An empty country watches. */
   gcNat: 'GER',
   gcYear: 1939,
+  /** The level picked for it: Cadet to Field Marshal. */
+  gcLevel: DIFFICULTY.start,
 };
 
 const $ = (s: string): HTMLElement => document.querySelector(s) as HTMLElement;
@@ -622,7 +625,9 @@ function drawBar(): void {
   const eve = onEve(g);
   const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? ' · free play' : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
   const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
-  $('#when').innerHTML = `${when}<small>${esc(who)}${me ? ` · ${esc(w.text)}` : ''}</small>`;
+  // The level of a grand campaign is always in sight beside the date: a click shows what it does and lets it be changed.
+  const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign. Click to see what it does, or to change it.">${pips(levelIndex(g))}${esc(levelOf(g).name)}</button>` : '';
+  $('#when').innerHTML = `${when}${rank}<small>${esc(who)}${me ? ` · ${esc(w.text)}` : ''}</small>`;
   $('#purse').innerHTML = me && g.nations[me].alive && !eve ? purse(me) : '';
   let b = '';
   if (passing) b += `<button class="btn go" data-act="skip" title="Play the rest of the month at once">Skip ▸▸</button>`;
@@ -1177,7 +1182,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -2352,6 +2357,7 @@ function openModal(m: typeof ui.modal): void {
   else if (m.kind === 'attack') card.innerHTML = attackCard();
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
+  else if (m.kind === 'level') card.innerHTML = levelCard();
   else if (m.kind === 'ledger') {
     const nat = m.nat || g.human;
     if (!nat || !g.nations[nat]) { ui.modal = null; veil.classList.remove('open'); return; }
@@ -2405,23 +2411,43 @@ function grandPick(): { nat: string; year: GrandYear; text: string } {
 }
 
 function rememberPick(): void {
-  try { localStorage.setItem('tc-grand', `${ui.gcNat}:${ui.gcYear}`); } catch { /* the pick is only a convenience */ }
+  try { localStorage.setItem('tc-grand', `${ui.gcNat}:${ui.gcYear}:${ui.gcLevel}`); } catch { /* the pick is only a convenience */ }
 }
 
 function recallPick(): void {
   try {
-    const [nat, year] = (localStorage.getItem('tc-grand') ?? '').split(':');
+    const [nat, year, level] = (localStorage.getItem('tc-grand') ?? '').split(':');
     if (year) { ui.gcNat = nat; ui.gcYear = Number(year) || 1939; }
+    if (level && DIFFICULTY.levels.some((l) => l.id === level)) ui.gcLevel = level;
   } catch { /* nothing kept */ }
 }
 
 const startHead = (title: string): string => `<header><div class="kick">Grand strategy · 1939 to 1945</div><h2>${title}</h2></header>`;
 const STEPS = `<ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol>`;
 
+const levelById = (id: string): Level => DIFFICULTY.levels.find((l) => l.id === id) ?? DIFFICULTY.levels[FAIR];
+/** A level's badge of rank: one pip for the easiest, five for the hardest. */
+const pips = (k: number): string => `<span class="pips" aria-hidden="true">${'<i></i>'.repeat(k + 1)}</span>`;
+
+/** The five levels side by side, the chosen one lit, and under them what the chosen one does. */
+function levelPicker(chosen: string, act: string, full = false): string {
+  const on = levelById(chosen);
+  return `<div class="gclevels">${DIFFICULTY.levels.map((l, k) => `<button class="gclevel${l.id === on.id ? ' on' : ''}" data-act="${act}" data-level="${l.id}" aria-pressed="${l.id === on.id}">${pips(k)}<b>${esc(l.name)}</b>${k === FAIR ? '<span>The fair fight</span>' : k < FAIR ? '<span>Easier</span>' : '<span>Harder</span>'}</button>`).join('')}</div>
+    <div class="gclevelnote"><p>${esc(on.blurb)}</p><ul>${on.lines.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>${full ? '<small>Battles are worked out the same way at every level. A level changes what each side can afford and how the rival staffs think, never the dice.</small>' : ''}</div>`;
+}
+
+/** The level of the campaign under way, with the chance to change it. */
+function levelCard(): string {
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The grand campaign</div><h2>How hard a war</h2></header>
+    <div class="body"><p class="lead">This campaign is being fought at <b>${esc(levelOf(g).name)}</b>. You can change the level in any month, and it takes hold at once.</p>
+    ${levelPicker(levelOf(g).id, 'setlevel', true)}</div>
+    <footer><button class="btn go" data-act="close">Close</button></footer>`;
+}
+
 function startCard(): string {
   if (ui.menu === 'scenarios') return scenarioCard();
   const saved = peekSave(readSave() ?? '');
-  const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `${saved.open ? 'Watching a war nobody has seen' : 'Watching history'}, ${date(saved.turn)}`}${saved.human && saved.open ? ', grand campaign' : ''}. Saved in this browser.</span></button>` : '';
+  const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `${saved.open ? 'Watching a war nobody has seen' : 'Watching history'}, ${date(saved.turn)}`}${saved.human && saved.open ? `, grand campaign${saved.level !== null && DIFFICULTY.levels[saved.level] ? `, ${esc(DIFFICULTY.levels[saved.level].name)}` : ''}` : ''}. Saved in this browser.</span></button>` : '';
   const pick = grandPick();
   const years = grandYears(pick.nat);
   const tile = (id: string, name: string): string => `<button class="gcnat${id === pick.nat ? ' on' : ''}" data-act="gcnat" data-nat="${id}" aria-pressed="${id === pick.nat}">${id ? flagIcon(id, g.nations[id].color, 54) : '<span class="gcwatch">◉</span>'}<b>${esc(name)}</b></button>`;
@@ -2433,9 +2459,10 @@ function startCard(): string {
     <div class="gcnats">${GRAND.nations.map((n) => tile(n.id, g.nations[n.id].name)).join('')}${tile('', 'Watch')}</div>
     <h3>Choose the year you take over</h3>
     <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>
-    <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
+    ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}` : ''}
+    <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)}` : ''}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
       <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
-      <button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button>${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
+      <button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button>${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
     <h3>Historical scenarios</h3>
     <div class="sides"><button class="sidebtn wide" data-act="menu" data-menu="scenarios"><b>Play a turning point of the war</b><span>Fourteen shorter campaigns, from the Battle of Britain and Barbarossa to D-Day and Operation Bagration. Each starts at a turning point with the other nations following history's plan, or you can sit back and watch history unfold.</span></button></div>
     ${STEPS}</div>`;
@@ -2771,7 +2798,7 @@ function declareCard(): string {
 // ---- Running the game ---------------------------------------------------------------------
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function newGame(human: string | null, seed?: number, from = 1, view = ''): void {
+function newGame(human: string | null, seed?: number, from = 1, view = '', level: string = DIFFICULTY.start): void {
   stopAuto();
   dropPassing();
   g = createGame(seed ?? (Date.now() % 900000) + 1, from > 1 ? null : human);
@@ -2781,6 +2808,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = ''): void
   while (g.turn < from) runTurnAI(g);
   if (grand && from > 1) startOpen(g);
   g.human = human;
+  // The level the player chose for his grand campaign. With nobody at the table every nation plays the fair game.
+  if (grand && human) setLevel(g, level);
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
   if (human) openGoals(g, human, from);
@@ -3057,10 +3086,10 @@ function onClick(e: MouseEvent): void {
   const id = Number(t.dataset.id);
   ui.msg = '';
   switch (act) {
-    case 'start': if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || ''); break;
+    case 'start': if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start); break;
     case 'menu': ui.menu = t.dataset.menu === 'scenarios' ? 'scenarios' : 'grand'; openModal({ kind: 'start' }); break;
-    case 'gcnat': case 'gcyear': {
-      if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else ui.gcYear = Number(t.dataset.year) || 1939;
+    case 'gcnat': case 'gcyear': case 'gclevel': {
+      if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else if (act === 'gclevel') ui.gcLevel = t.dataset.level ?? DIFFICULTY.start; else ui.gcYear = Number(t.dataset.year) || 1939;
       // Repainting the card must not throw the reader back to its top.
       const keep = $('#card').scrollTop;
       openModal({ kind: 'start' });
@@ -3279,6 +3308,8 @@ function onClick(e: MouseEvent): void {
     }
     case 'showmap': openModal(null); ui.sel = id; ui.tab = 'region'; focusOn([id]); refresh(); break;
     case 'declare': openModal({ kind: 'declare' }); break;
+    case 'level': openModal({ kind: 'level' }); break;
+    case 'setlevel': { if (g.human && setLevel(g, t.dataset.level ?? '')) { const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; } break; }
     case 'dodeclare': { const h = g.headlines.length; orderDeclare(g, t.dataset.nat!); ui.unread += g.headlines.length - h; openModal(null); refresh(); break; }
     case 'atkpick': {
       const m = ui.modal!;
