@@ -18,7 +18,8 @@ import {
 
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
 interface FleetRow { nat: string; name: string; from?: number; base: string | null; port: string; home: string; zone: string; duty: Stance; tied?: boolean; admiral?: string; ships: Partial<Ships> }
-interface Route { id: string; name: string; to: string; zones: string[]; share: number; tons: number }
+/** A convoy route. 'base' is a fortress on the route whose own submarines and aircraft hunt the convoys while an enemy holds it. */
+interface Route { id: string; name: string; to: string; zones: string[]; share: number; tons: number; base?: { region: string; raid: number; starved: number } }
 
 export const NAVY = data as unknown as {
   classes: Record<ShipClass, ClassSpec>;
@@ -531,6 +532,11 @@ export function convoyWar(g: Game, nat: string): void {
         if (p > 0) { guard += p; escorts.push(f); }
       }
     }
+    if (route.base) {
+      // An enemy fortress astride the route hunts the convoys for as long as it holds out, and harder while it is itself fed.
+      const b = g.byName[route.base.region];
+      if (b && atWar(g, b.ctrl, nat)) raid += route.base.raid * quality(g, b.ctrl) * (g.supply[b.ctrl] && !g.supply[b.ctrl][b.id] ? route.base.starved : 1);
+    }
     for (const z of zones) guard += airOver(g, z, nat) * NAVY.convoy.air;
     // Radar and direction finding tell the escorts where the raiders are.
     const G = guard * NAVY.convoy.escortWorth * techMul(g, nat, 'radar');
@@ -549,7 +555,7 @@ export function convoyWar(g: Game, nat: string): void {
         f.ships.dd -= k; f.lost.dd += k; escortsLost += k;
       }
     }
-    g.convoys[route.id] = { turn: g.turn, raid, guard, tons, total: (g.convoys[route.id]?.total ?? 0) + tons, share: route.share * L, subsLost, escortsLost };
+    g.convoys[route.id] = { turn: g.turn, raid, guard, tons, total: (g.convoys[route.id]?.total ?? 0) + tons, share: route.share * L, loss: L, subsLost, escortsLost };
     // The monthly figures are news only to the nations fighting over the route.
     if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat))) {
       headline(g, 'info', `${cap(route.name)}: ${tons.toLocaleString('en-US')} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? 'submarine' : 'submarines'} destroyed` : ''}.`, nat);
@@ -679,9 +685,9 @@ function landedLately(g: Game, z: number, nat: string): boolean {
   return false;
 }
 
-/** True when the enemy stands on this nation's own soil on this sea's coast. */
+/** True when the enemy stands on this nation's own soil on this sea's coast. A colony overseas is not the homeland: the battle fleet is not risked for it unasked. */
 function invadedHere(g: Game, z: number, nat: string): boolean {
-  return g.seas[z].coast.some((id) => g.regions[id].owner === nat && atWar(g, nat, g.regions[id].ctrl));
+  return g.seas[z].coast.some((id) => g.regions[id].owner === nat && !g.regions[id].overseas && atWar(g, nat, g.regions[id].ctrl));
 }
 
 /** Orders for one computer-run nation's fleets. Named orders from the plan come first. */

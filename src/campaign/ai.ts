@@ -4,6 +4,7 @@
 // the player uses, so history can come out differently.
 
 import plan from '../../data/campaign/plan-historical.json';
+import theatreData from '../../data/campaign/theatres.json';
 import { airAI } from './air';
 import { aiProduction } from './economy';
 import { NAVY, landCorps, navalAI, surpriseOn } from './navy';
@@ -20,11 +21,47 @@ function phases(nat: string): PlanPhase[] {
   return Array.isArray(p) ? p : [];
 }
 
+/** A war fought overseas to its own plan. See data/campaign/theatres.json. */
+interface Theatre { name: string; regions: string[]; plans: Record<string, PlanPhase[]> }
+const THEATRES = Object.entries(theatreData as unknown as Record<string, Theatre | string>).filter((e): e is [string, Theatre] => typeof e[1] !== 'string').map((e) => e[1]);
+const theatreIds = new WeakMap<Game, Set<number>[]>();
+
+/** The regions of each theatre, by number. */
+function theatreRegions(g: Game): Set<number>[] {
+  let ids = theatreIds.get(g);
+  if (!ids) theatreIds.set(g, (ids = THEATRES.map((t) => new Set(t.regions.map((nm) => g.byName[nm]?.id ?? -1)))));
+  return ids;
+}
+
+/** The theatre a corps is fighting in, if its nation has a plan of its own there. */
+function theatreOf(g: Game, c: Corps): number {
+  const ids = theatreRegions(g);
+  for (let k = 0; k < THEATRES.length; k++) if (THEATRES[k].plans[c.nat] && ids[k].has(c.reg)) return k;
+  return -1;
+}
+
+/** While a theatre's army is being run, the regions that are its business. Null while the main plan runs. */
+let scope: Set<number> | null = null;
+/** True while a plan has told the army being run to make no local counter-attacks. */
+let quiet = false;
+
 /** Months after losing a region in which the local commanders will still counter-attack it on their own. */
 const COUNTER_WINDOW = 2;
 
 export function phaseFor(g: Game, nat: string): PlanPhase | null {
   return phases(nat).find((p) => g.turn >= p.from && g.turn <= p.to) ?? null;
+}
+
+/** What history's plan asks of a nation this month in each theatre overseas where it has troops: the phase, or null for "stand on the defensive". */
+export function theatrePhases(g: Game, nat: string): { theatre: string; phase: PlanPhase | null }[] {
+  const ids = theatreRegions(g);
+  const out: { theatre: string; phase: PlanPhase | null }[] = [];
+  THEATRES.forEach((T, k) => {
+    const list = T.plans[nat];
+    if (!list || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
+    out.push({ theatre: T.name, phase: list.find((p) => g.turn >= p.from && g.turn <= p.to) ?? null });
+  });
+  return out;
 }
 
 /** Runs one nation's month. */
@@ -36,6 +73,55 @@ export function runAI(g: Game, nat: string): void {
 function campaign(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!n.alive) return;
+  // An army overseas fights its own war to its own plan. It stands aside while the main plan is
+  // carried out, and the main army stands aside in its turn.
+  const away = g.corps.filter((c) => c.nat === nat && !c.hold && theatreOf(g, c) >= 0);
+  for (const c of away) c.hold = true;
+  try { mainCampaign(g, nat); } finally { for (const c of away) c.hold = false; }
+  if (n.alive) overseas(g, nat);
+}
+
+/** Runs a nation's corps in each overseas theatre by that theatre's plan. */
+function overseas(g: Game, nat: string): void {
+  const n = g.nations[nat];
+  if (!n.atWar.length) return;
+  const ids = theatreRegions(g);
+  THEATRES.forEach((T, k) => {
+    const phases = T.plans[nat];
+    if (!phases || !n.alive || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
+    const ph = phases.find((p) => g.turn >= p.from && g.turn <= p.to) ?? null;
+    if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
+    const rest = g.corps.filter((c) => c.nat === nat && !c.hold && !ids[k].has(c.reg));
+    for (const c of rest) c.hold = true;
+    scope = ids[k];
+    quiet = !!ph?.quiet;
+    try {
+      // Whoever the plan has named so far, and anyone at war with this nation who is on the theatre's ground.
+      const enemies = new Set<string>();
+      for (const p of phases) if (p.from <= g.turn) for (const e of p.enemies ?? []) if (n.atWar.includes(e)) enemies.add(e);
+      for (const id of ids[k]) { const r = g.regions[id]; if (n.atWar.includes(r.ctrl)) enemies.add(r.ctrl); }
+      if (ph?.posture === 'attack' && enemies.size) {
+        const only = ph.targets ? new Set(ph.targets) : null;
+        // Nothing outside the theatre, and nothing the plan has not named, draws this army on.
+        const halt = new Set(ph.siege ?? []), edge = new Set(ph.siege ?? []);
+        for (const r of g.regions) {
+          if (!ids[k].has(r.id)) { halt.add(r.name); edge.add(r.name); }
+          else if (only && !only.has(r.name)) halt.add(r.name);
+        }
+        offensive(g, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only);
+        // With the month's fighting done the rest of the army closes up to wherever the enemy now stands.
+        if (n.alive) { advance(g, nat, enemies, 0, null, edge); defend(g, nat, false); }
+      } else defend(g, nat);
+    } finally {
+      scope = null;
+      quiet = false;
+      for (const c of rest) c.hold = false;
+    }
+  });
+}
+
+function mainCampaign(g: Game, nat: string): void {
+  const n = g.nations[nat];
   const planned = phaseFor(g, nat);
   // Some phases wait on someone else's war: Germany's allies only march east if Germany does.
   const ph = planned?.ifAtWar && !atWar(g, planned.ifAtWar[0], planned.ifAtWar[1]) ? null : planned;
@@ -267,7 +353,8 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
   const full = (r: Region): boolean => friendlyUnits(g, r, nat).length >= STACK;
   const q: number[] = [];
   for (const r of g.regions) {
-    if (r.ctrl !== nat) continue; // an army closes up to its own front, not to an ally's
+    // An army closes up to its own front, not to an ally's. Overseas the allies share one front.
+    if (scope ? !scope.has(r.id) || !allied(g, nat, r.ctrl) : r.ctrl !== nat) continue;
     let open = false, walled = false;
     for (const j of r.nb) {
       const t = g.regions[j];
@@ -311,7 +398,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
       }
       continue;
     }
-    if (wave <= 1 && c.ap >= 4 && dist[c.reg] >= 3 && dist[c.reg] < 1e9) {
+    if (!scope && wave <= 1 && c.ap >= 4 && dist[c.reg] >= 3 && dist[c.reg] < 1e9) {
       // Far behind the front: go by rail to the nearest railhead that has been in friendly hands a while.
       // Only a railhead the trains can actually reach: a front across the sea is no use to a corps on this shore.
       const byRail = hops(g, c.reg, (r) => allied(g, nat, r.ctrl));
@@ -411,13 +498,14 @@ function defPower(g: Game, c: Corps, r: Region): number {
 function defend(g: Game, nat: string, line = true): void {
   ensureSupply(g);
   const n = g.nations[nat];
-  if (n.seaSupply) evacuations(g, nat);
+  if (n.seaSupply && !scope) evacuations(g, nat);
 
   // Where is the danger, and how well is each place held?
   const N = g.regions.length;
   const threat = new Float32Array(N), held = new Float32Array(N);
   // What this nation has to hold: its own country, and whatever it has taken and occupies.
-  const mine = (r: Region): boolean => r.ctrl === nat || (r.owner === nat && allied(g, nat, r.ctrl));
+  // Overseas, the allies hold one front between them and each looks to all of it.
+  const mine = (r: Region): boolean => (scope ? scope.has(r.id) && allied(g, nat, r.ctrl) : r.ctrl === nat || (r.owner === nat && allied(g, nat, r.ctrl)));
   for (const r of g.regions) {
     if (!mine(r)) continue;
     for (const j of r.nb) {
@@ -474,7 +562,8 @@ function defend(g: Game, nat: string, line = true): void {
     }
     if (!to) continue;
     const before = c.reg;
-    if (!n.slowCommand && d[to.id] > 2 && c.ap >= 4) railMove(g, c, to);
+    // There are no railways in the desert: overseas, everything marches.
+    if (!scope && !n.slowCommand && d[to.id] > 2 && c.ap >= 4) railMove(g, c, to);
     else walkToward(g, c, to);
     if (c.reg !== before) { held[here.id] -= spared; held[to.id] += defPower(g, c, to); }
   }
@@ -482,11 +571,13 @@ function defend(g: Game, nat: string, line = true): void {
   // Counter-attack where the odds are clearly good. A counter-attack answers a fresh loss: ground
   // the enemy has held for months is a matter for a planned offensive, not for the local commander.
   for (const r of g.regions) {
-    if (!n.alive) return;
+    if (!n.alive || quiet) return;
+    if (scope && !scope.has(r.id)) continue;
     if (!atWar(g, nat, r.ctrl) || !lost(r) || late(r) || g.turn - r.since > COUNTER_WINDOW || !hostileUnits(g, r, nat).length) continue;
     // Troops that have already fought this month are in no state to be thrown straight into another attack.
     const pool = limitAttackers(g, g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && g.regions[c.reg].nb.includes(r.id)), r);
-    if (pool.length && assess(g, pool, r).odds >= 1.8) resolveBattle(g, pool, r);
+    // Overseas a local counter-stroke sends two corps in to hold what it wins: the rest keep the door open behind them.
+    if (pool.length && assess(g, pool, r).odds >= 1.8) resolveBattle(g, pool, r, scope ? { occupy: 2 } : {});
   }
 }
 
@@ -508,6 +599,7 @@ function walkToward(g: Game, c: Corps, to: Region): void {
 /** An expeditionary corps goes home when it is cut off, broken, or its host is collapsing. */
 function wantsOut(g: Game, c: Corps): boolean {
   if (g.regions[c.reg].owner === c.nat || c.dead) return false;
+  if (theatreOf(g, c) >= 0) return false; // an army overseas with a plan of its own is there to stay
 
   // The host is the biggest continental ally. If it has fallen, there is nothing left to stay for.
   let host: string | null = null, size = 0;

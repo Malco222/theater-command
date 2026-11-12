@@ -5,7 +5,7 @@
 import mapData from '../generated/campaign-map.json';
 import nationsData from '../../data/campaign/nations.json';
 import setup from '../../data/campaign/setup-1939.json';
-import { Rng } from '../core/rng';
+import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { PRODUCTION, canBuildYet, deliver, firstCorpsNumber, income } from './economy';
@@ -15,12 +15,18 @@ import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import eastData from '../../data/campaign/east.json';
+import desertData from '../../data/campaign/desert.json';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
   deepOwners: string[]; mud: number[]; lineDefence: number; stepFresh: number; stepConverted: number; convertAfter: number; badWeather: number;
   bands: [number, number][]; drag: [number, number][]; roads: number; winter: { months: number[]; attack: number; defence: number; attrition: number; rest: number; hardy: string[] };
   mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; works?: [number, string, number][] }>;
+};
+/** Rules for campaigning in the desert. See data/campaign/desert.json. */
+export const DESERT = desertData as unknown as {
+  terrain: string; step: number; port: number; ports: Record<string, number>; bands: [number, number][]; lineDefence: number; open: number; stores: number; retreat: [number, number]; replace: number; drag: [number, number][];
+  route: { id: string; feeds: string[]; perTenth: number };
 };
 import {
   FORT_MUL, KIND, MEN_PER_DIV, STACK, TERRAIN_DEF,
@@ -34,9 +40,10 @@ export function createGame(seed: number, human: string | null): Game {
   const md = mapData as any;
   const regions: Region[] = md.regions.map((r: any): Region => ({
     id: r.id, name: r.name, owner: r.owner, ctrl: r.owner, terrain: r.terrain, vp: r.vp, fac: r.fac,
-    cap: !!r.flags.cap, port: !!r.flags.port || !!r.flags.depot,
+    // A depot on the coast is a harbour too. One inland feeds an army but takes no ships.
+    cap: !!r.flags.cap, port: !!r.flags.port || (!!r.flags.depot && (r.seas ?? []).length > 0),
     fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1) } : null,
-    vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil,
+    vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil, overseas: !!r.flags.col,
     x: r.x, y: r.y, nb: r.nb, polys: r.polys, units: [], seas: r.seas ?? [], since: 0, prev: null,
   }));
   const byName: Record<string, Region> = {};
@@ -177,11 +184,22 @@ function reactionMoves(g: Game, aggressor: string, victim: string): void {
 export const hostileUnits = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => atWar(g, u.nat, nat));
 export const friendlyUnits = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => allied(g, u.nat, nat));
 
+/** The army at home and on the Continent, in divisions. Troops in the colonies are not there to defend the homeland, and do not count. */
 export function armySize(g: Game, nat: string): number {
+  let s = 0;
+  for (const c of g.corps) if (c.nat === nat && !g.regions[c.reg].overseas) s += c.divs * c.str;
+  return s;
+}
+
+/** Every division a nation has in the field, wherever it stands. */
+export function fieldArmy(g: Game, nat: string): number {
   let s = 0;
   for (const c of g.corps) if (c.nat === nat) s += c.divs * c.str;
   return s;
 }
+
+/** True where the desert's supply rules apply: desert ground, and the overseas coast that feeds it. */
+export const inDesert = (r: Region): boolean => r.overseas || r.terrain === DESERT.terrain;
 
 export function industry(g: Game, nat: string): number {
   let s = 0;
@@ -214,6 +232,16 @@ export function frozen(g: Game, nat: string, r: Region): boolean {
  * the front through country already held is an ordinary march.
  */
 export function lineDrag(g: Game, c: Corps, to: Region): number {
+  if (to.terrain === DESERT.terrain) {
+    // In the desert the same holds for everyone: the further from the port, the shorter each bound.
+    if (allied(g, c.nat, to.ctrl) && to.since < g.turn) return 0;
+    ensureSupply(g);
+    const reach = g.reach[c.nat];
+    if (!reach) return 0;
+    const length = allied(g, c.nat, to.ctrl) ? reach[to.id] : reach[c.reg] + DESERT.step;
+    for (const [max, extra] of DESERT.drag) if (length <= max) return extra;
+    return 0;
+  }
   if (!EASTERN.deepOwners.includes(to.owner) || EASTERN.deepOwners.includes(c.nat)) return 0;
   if (allied(g, c.nat, to.ctrl) && to.since < g.turn) return 0;
   ensureSupply(g);
@@ -232,7 +260,8 @@ export function lineDrag(g: Game, c: Corps, to: Region): number {
 /** How strong an attack is at the end of this corps' supply line: 1 at the frontier, less deep inside the Soviet Union. */
 export function lineStrength(g: Game, c: Corps): { mul: number; length: number } {
   const length = g.reach[c.nat]?.[c.reg] ?? 0;
-  for (const [max, mul] of EASTERN.bands) if (length <= max) return { mul: cmdLine(g, c, mul), length };
+  // In the desert the line is counted from the nearest working port, and has its own scale.
+  for (const [max, mul] of inDesert(g.regions[c.reg]) ? DESERT.bands : EASTERN.bands) if (length <= max) return { mul: cmdLine(g, c, mul), length };
   return { mul: 1, length };
 }
 
@@ -251,17 +280,36 @@ export function moveCost(g: Game, c: Corps, to: Region): number {
 
 export function computeSupply(g: Game): void {
   const active = new Set(g.corps.map((c) => c.nat));
+  // The seas each nation's supply ships can still use, worked out once: an ally's overseas ports feed its friends too.
+  const lanes = new Map<string, Uint8Array | null>();
+  const lanesOf = (id: string): Uint8Array | null => {
+    if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g, id) : null); }
+    return lanes.get(id)!;
+  };
   for (const id of active) {
-    const n = g.nations[id];
     const ok = new Uint8Array(g.regions.length);
     const q: number[] = [];
+    // Where the supply comes from, and in the desert how much of a head start each base gives.
+    const head = new Float32Array(g.regions.length).fill(-1);
+    const sunk = convoyDrag(g, id);
     // A nation with ships can also be fed through any friendly port its supply ships can still reach.
-    const open = n.seaSupply || n.sealift > 0 ? openSeas(g, id) : null;
+    const open = lanesOf(id);
     for (const r of g.regions) {
       if (!allied(g, id, r.ctrl)) continue;
       // An army is fed from its own country: its capital, its big industrial regions, its depots.
       const home = r.ctrl === id && r.owner === id;
-      if ((home && (r.cap || r.fac >= 3 || g.flags['depot:' + r.id])) || (open && r.port && r.seas.some((z) => open[z]))) { ok[r.id] = 1; q.push(r.id); }
+      const depot = home && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]);
+      let quay = !!open && r.port && r.seas.some((z) => open[z]);
+      // Overseas, an ally's working port feeds the troops who came to fight beside him.
+      if (!quay && r.overseas && r.port && r.ctrl !== id) { const theirs = lanesOf(r.ctrl); quay = !!theirs && r.seas.some((z) => theirs[z]); }
+      // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
+      if (r.overseas && r.port && r.fort) {
+        if (quay) g.flags[`stores:${r.id}`] = g.turn;
+        else if (g.turn - (g.flags[`stores:${r.id}`] ?? -99) <= DESERT.stores) quay = true;
+      }
+      if (!depot && !quay) continue;
+      ok[r.id] = 1; q.push(r.id);
+      head[r.id] = depot || !r.overseas ? 0 : (DESERT.ports[r.name] ?? DESERT.port) + sunk;
     }
     for (let i = 0; i < q.length; i++) {
       for (const j of g.regions[q[i]].nb) {
@@ -271,10 +319,38 @@ export function computeSupply(g: Game): void {
     }
     g.supply[id] = ok;
     g.reach[id] = reachInto(g, id, ok);
+    desertLines(g, ok, head, g.reach[id]);
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
   g.supplyDirty = false;
+}
+
+/** How much longer the desert supply line has grown for a nation fed across the sea, from the cargoes sunk on the way last month. */
+export function convoyDrag(g: Game, id: string): number {
+  if (!DESERT.route.feeds.includes(id)) return 0;
+  const m = g.convoys[DESERT.route.id];
+  return m && g.turn - m.turn <= 1 ? DESERT.route.perTenth * 10 * (m.loss ?? 0) : 0;
+}
+
+/**
+ * The length of the supply line in the desert and along the overseas coast: counted from the
+ * nearest working base, a step for every region of desert on the way. Written into the same
+ * table as the line inside the Soviet Union; the two never overlap.
+ */
+function desertLines(g: Game, ok: Uint8Array, head: Float32Array, out: Float32Array): void {
+  const d = new Float32Array(g.regions.length).fill(1e6);
+  const q: number[] = [];
+  for (let i = 0; i < head.length; i++) if (head[i] >= 0) { d[i] = head[i]; q.push(i); }
+  for (let i = 0; i < q.length; i++) {
+    const a = q[i];
+    for (const j of g.regions[a].nb) {
+      if (!ok[j]) continue;
+      const far = d[a] + (g.regions[j].terrain === DESERT.terrain ? DESERT.step : 0);
+      if (far < d[j] - 1e-6) { d[j] = far; q.push(j); }
+    }
+  }
+  for (const r of g.regions) if (inDesert(r) && ok[r.id] && d[r.id] < 1e6) out[r.id] = d[r.id];
 }
 
 /**
@@ -365,7 +441,12 @@ export interface Assessment {
 }
 
 /** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
-export interface AttackOpts { sea?: number; surprise?: boolean }
+export interface AttackOpts {
+  sea?: number;
+  surprise?: boolean;
+  /** The most corps that follow up into the ground won. The rest stay where they attacked from. */
+  occupy?: number;
+}
 
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
 export function assess(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): Assessment {
@@ -375,6 +456,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const lines: TicketLine[] = [];
   const aN = new Set(attackers.map((c) => c.nat)), dN = new Set(defenders.map((c) => c.nat));
   const defHasArmor = defenders.some((d) => d.kind === 'arm');
+  // Open desert has no flanks: infantry on foot outside prepared works can be driven round by anything on wheels or tracks.
+  const openDesert = target.terrain === DESERT.terrain && !target.fort && attackers.some((c) => KIND[c.kind].mobile);
+  let turned = false;
   const tempo = [...dN].some((d) => freshOffensive(g, attNat, d)) || freshOffensive(g, attNat, target.ctrl);
   let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, longest = 0, lineMul = 1, cold = false, coldDef = false;
   const sources = new Set<number>();
@@ -409,8 +493,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   for (const d of defenders) {
     let p = corpsBase(g, d) * KIND[d.kind].def * TERRAIN_DEF[target.terrain];
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
+    if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') { p *= DESERT.open; turned = true; }
     const dl = lineStrength(g, d).mul;
-    if (dl < 1) { p *= 1 - (1 - dl) * EASTERN.lineDefence; thin = Math.min(thin, 1 - (1 - dl) * EASTERN.lineDefence); }
+    const share = inDesert(target) ? DESERT.lineDefence : EASTERN.lineDefence;
+    if (dl < 1) { p *= 1 - (1 - dl) * share; thin = Math.min(thin, 1 - (1 - dl) * share); }
     const lead = cmdDefence(g, d);
     rawD += p;
     cmdD += p * lead;
@@ -455,7 +541,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     ? { label: 'Landing', value: 'From the sea, on the day war is declared', effect: 'The defenders are caught unready: the landing fights at full strength' }
     : { label: 'Landing', value: 'From the sea, against a defended shore', effect: `Attack cut to ${Math.round(opts.sea * 100)}%` });
   if (trap) lines.push({ label: 'Encirclement', value: 'The defenders have no line of retreat', effect: 'A general who knows how to close a pocket hits 15% harder' });
-  if (lineMul < 1) lines.push({ label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
+  if (lineMul < 1) lines.push(attackers.some((c) => inDesert(g.regions[c.reg]))
+    ? { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of desert from the nearest working port`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until a port nearer the front is working` }
+    : { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
+  if (turned) lines.push({ label: 'Open desert', value: 'Infantry on foot with no works to anchor on, against tanks and lorried troops', effect: `Foot infantry defends at ${Math.round(DESERT.open * 100)}%` });
   if (cold) lines.push({ label: 'Winter', value: 'Attackers without winter equipment', effect: `Attack cut to ${Math.round(EASTERN.winter.attack * 100)}%` });
   if (thin < 1) lines.push({ label: 'Supply line', value: 'Defenders at the end of a long supply line', effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
   if (coldDef) lines.push({ label: 'Winter', value: 'Defenders without winter equipment', effect: `Defence cut to ${Math.round(EASTERN.winter.defence * 100)}%` });
@@ -498,7 +587,11 @@ function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<number>): Re
     if (banned.has(j) || !allied(g, c.nat, r.ctrl) || hostileUnits(g, r, c.nat).length) continue;
     if (friendlyUnits(g, r, c.nat).length >= STACK + 2) continue;
     const abroad = g.nations[c.nat].seaSupply && r.owner !== c.nat;
-    const s = (abroad ? (r.port ? 0 : 3) : d ? d[j] : 0) + (g.supply[c.nat]?.[j] ? 0 : 6) + r.units.length * 0.3;
+    // In the desert an army falls back along its own supply line, toward the port that feeds it.
+    // It also keeps out of a dead end: a place with one way out, or none, is a trap for a beaten force.
+    const ways = inDesert(r) ? r.nb.filter((k) => k !== from.id && !banned.has(k) && allied(g, c.nat, g.regions[k].ctrl)).length : 2;
+    const back = (inDesert(r) ? g.reach[c.nat]?.[j] ?? 0 : abroad ? (r.port ? 0 : 3) : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
+    const s = back + (g.supply[c.nat]?.[j] ? 0 : 6) + r.units.length * 0.3;
     if (s < bs) { bs = s; best = r; }
   }
   return best;
@@ -516,7 +609,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   }
   const week = Math.max(...attackers.map((c) => weekOf(c, 1)));
   g.week = week;
-  const R = a.odds * g.rng.range(0.8, 1.2);
+  // Battles overseas roll their own dice, so that a fight in the desert never changes the luck of the war in Europe.
+  const dice = target.overseas ? new Rng(hashString(`land:${g.seed}:${g.turn}:${target.id}:${attNat}:${g.flags.battles ?? 0}`)) : g.rng;
+  const R = a.odds * dice.range(0.8, 1.2);
   const attU = attackers.map(reportUnit), defU = defenders.map(reportUnit);
   const attGens = attackers.map((c) => generalOf(g, c)), defGens = defenders.map((c) => generalOf(g, c));
   const mobile = attackers.some((c) => KIND[c.kind].mobile);
@@ -535,9 +630,11 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const win = R >= 1.2;
   // Troops who hold their ground come out of the fight in better shape than troops driven off it.
   const stood = win ? 1 : HELD_LOSS;
+  // Men on foot driven out of open desert by a mobile enemy do not all get away.
+  const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
   defenders.forEach((c, i) => {
     const before = men(c);
-    c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * stood * cmdLoss(g, c));
+    c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c));
     c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
@@ -573,7 +670,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     for (const { c, i } of order) {
       // A force that came by sea all goes ashore together.
       const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
-      if (moved >= STACK || (moved > 0 && c.ap < cost)) { c.ap = Math.max(0, c.ap - 1); continue; }
+      if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost)) { c.ap = Math.max(0, c.ap - 1); continue; }
       place(g, c, target);
       c.ap = Math.max(0, c.ap - cost);
       attU[i].fate = 'advanced';
@@ -612,6 +709,8 @@ export function capture(g: Game, r: Region, nat: string): void {
   r.prev = old;
   g.supplyDirty = true;
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
+  // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
+  else if (r.overseas && r.port && r.vp > 0 && atWar(g, nat, old)) headline(g, 'battle', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
   checkCollapse(g, old, nat);
 }
 
@@ -632,17 +731,30 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   return true;
 }
 
-/** Rail move: anywhere through friendly territory, for the whole month. */
-export function railMove(g: Game, c: Corps, to: Region): boolean {
-  if (c.kind === 'fort' || c.ap < 4 || !allied(g, c.nat, to.ctrl) || friendlyUnits(g, to, c.nat).length >= STACK) return false;
+/** Where a corps could go by rail this month: any friendly region joined to its own by friendly track. No railway crosses the desert. */
+export function railReach(g: Game, c: Corps): Set<number> {
+  const out = new Set<number>();
+  if (c.kind === 'fort' || c.ap < 4 || g.regions[c.reg].terrain === DESERT.terrain) return out;
   const seen = new Uint8Array(g.regions.length);
   const q = [c.reg];
   seen[c.reg] = 1;
   for (let i = 0; i < q.length; i++) {
-    if (q[i] === to.id) { place(g, c, to); c.ap = 0; return true; }
-    for (const j of g.regions[q[i]].nb) if (!seen[j] && allied(g, c.nat, g.regions[j].ctrl)) { seen[j] = 1; q.push(j); }
+    for (const j of g.regions[q[i]].nb) {
+      const r = g.regions[j];
+      if (seen[j] || !allied(g, c.nat, r.ctrl) || r.terrain === DESERT.terrain) continue;
+      seen[j] = 1; q.push(j); out.add(j);
+    }
   }
-  return false;
+  return out;
+}
+
+/** Rail move: anywhere through friendly territory, for the whole month. */
+export function railMove(g: Game, c: Corps, to: Region): boolean {
+  if (c.kind === 'fort' || c.ap < 4 || !allied(g, c.nat, to.ctrl) || friendlyUnits(g, to, c.nat).length >= STACK) return false;
+  if (to.id !== c.reg && !railReach(g, c).has(to.id)) return false;
+  place(g, c, to);
+  c.ap = 0;
+  return true;
 }
 
 export function collapseScore(g: Game, nat: string): number {
@@ -650,7 +762,8 @@ export function collapseScore(g: Game, nat: string): number {
   if (n.capital < 0) return 0;
   const capLost = !allied(g, nat, g.regions[n.capital].ctrl) ? 1 : 0;
   let vp = 0, held = 0;
-  for (const r of g.regions) if (r.owner === nat) { vp += r.vp; if (allied(g, nat, r.ctrl)) held += r.vp; }
+  // The colonies are fought over like any other ground, but a nation stands or falls by its home country.
+  for (const r of g.regions) if (r.owner === nat && !r.overseas) { vp += r.vp; if (allied(g, nat, r.ctrl)) held += r.vp; }
   const army = n.armyPeak > 0 ? clamp(armySize(g, nat) / n.armyPeak, 0, 1) : 1;
   return 0.45 * capLost + 0.35 * (vp ? 1 - held / vp : 0) + 0.2 * (1 - army);
 }
@@ -678,7 +791,12 @@ export function capitulate(g: Game, nat: string, by: string): void {
   if (!X.alive) return;
   X.alive = false;
   X.fellOn = { turn: g.turn, week: g.week, to: by };
-  for (const c of g.corps.filter((c) => c.nat === nat)) removeCorps(g, c);
+  for (const c of g.corps.filter((c) => c.nat === nat)) {
+    const at = g.regions[c.reg];
+    // The Army of Africa stays at its posts and answers to the new government.
+    if (nat === 'FRA' && at.vichy && at.overseas && at.ctrl === 'FRA') { c.nat = 'VIC'; c.hold = true; continue; }
+    removeCorps(g, c);
+  }
   fleetsOnFall(g, nat);
   airOnFall(g, nat);
   const pact = g.nations.SOV.alive && !atWar(g, 'SOV', by);
@@ -778,6 +896,24 @@ function mobilise(g: Game, nat: string): void {
   }
 }
 
+/**
+ * Formations history sent overseas. Unlike the home mobilisation they need a friendly port to
+ * land at: one that has been lost, or is full, puts the sailing off, and after half a year it is cancelled.
+ */
+function expeditions(g: Game, nat: string): void {
+  ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
+    if (row[1] !== nat || g.turn < row[0] || g.flags[`sent:${i}`]) return;
+    const o = row[6] ?? {};
+    if (g.turn - row[0] > 6 || (o.war && !atWar(g, o.war[0], o.war[1]))) { if (g.turn - row[0] > 6) g.flags[`sent:${i}`] = 1; return; }
+    const reg = g.byName[row[5]];
+    if (!reg || !allied(g, nat, reg.ctrl) || friendlyUnits(g, reg, nat).length >= STACK) return;
+    g.flags[`sent:${i}`] = 1;
+    const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, o);
+    if (o.gen) headline(g, 'event', `${o.gen} lands at ${reg.name} with the ${c.name}.`, nat, reg.id);
+    else if (nat === g.human) headline(g, 'info', `${c.name} has landed at ${reg.name}.`, nat, reg.id);
+  });
+}
+
 export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!n.alive) return;
@@ -788,6 +924,7 @@ export function startPhase(g: Game, nat: string): void {
     if (!reg || !allied(g, nat, reg.ctrl)) continue;
     addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
   }
+  expeditions(g, nat);
   mobilise(g, nat);
   monthlyCommand(g, nat);
   navalUpkeep(g, nat);
@@ -802,7 +939,8 @@ export function startPhase(g: Game, nat: string): void {
   const army = g.corps.filter((c) => c.nat === nat);
   // Men, tanks and rest reach a corps only as well as its supply line allows. The depots can
   // send out only so many trained men a month, and what there is is shared along the front.
-  const want = army.map((c) => (c.supplied ? Math.min((1 - c.str) * c.divs, 0.2 * c.divs * lineStrength(g, c).mul) : 0));
+  // Overseas, every man and tank has to come by sea first: the drafts arrive slower.
+  const want = army.map((c) => (c.supplied ? Math.min((1 - c.str) * c.divs, 0.2 * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;
   army.forEach((c, i) => {

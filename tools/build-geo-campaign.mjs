@@ -7,7 +7,7 @@ import { loadLand, clipToBox, simplifyRing, ringArea } from './geo-common.mjs';
 import { REGIONS, LINKS, ROADS, NO_BORDER } from '../data/campaign/regions.mjs';
 import { buildSeas } from './geo-seas.mjs';
 
-const W = -11, E = 47, S = 35.3, N = 71.4;
+const W = -11, E = 47, S = 28.6, N = 71.4;
 const SCALE = 40, KX = Math.cos((50 * Math.PI) / 180);
 const proj = ([lon, lat]) => [(lon - W) * KX * SCALE, (N - lat) * SCALE];
 const width = (E - W) * KX * SCALE, height = (N - S) * SCALE;

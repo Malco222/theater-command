@@ -9,7 +9,7 @@
     "battle": "A patrolling fleet offers battle when it is at least 'seek' times as strong as the enemy in its sea. Raiding surface ships are brought to action with chance catchRaider. A fleet outnumbered by evadeAt or more slips away to port with chance evade.",
     "intercept": "Troopships crossing a sea where enemy ships or aircraft are at work lose men: up to 'loss' of a corps when the enemy is unopposed. 'sea' is how hard a convoy is to find.",
     "landing": "A corps landing on a defended coast fights at 'assault' strength; in the month war is declared the defenders are caught unready and it fights at 'surprise' strength and cannot be intercepted. range is how many seas a landing force can cross. Enemy fleets in harbour on those seas or the next ones put to sea against an invasion at 'sortie' of their strength. No landing can be made under a sky the enemy's fighters still hold, unless it is a surprise.",
-    "convoys": "Routes that feed a nation by sea. The share of the cargo lost is raiders / (raiders + escorts x escortWorth + ocean); 'share' of the nation's production rides on the route, and 'tons' is the shipping sunk in a month if nothing got through.",
+    "convoys": "Routes that feed a nation by sea. The share of the cargo lost is raiders / (raiders + escorts x escortWorth + ocean); 'share' of the nation's production rides on the route, and 'tons' is the shipping sunk in a month if nothing got through. 'base' is a fortress astride the route: while an enemy of the route's owner holds it, its own submarines and aircraft hunt the convoys with strength 'raid', or 'starved' of that when it is cut off itself. What is sunk on the Libya route also lengthens the supply line of the armies in the desert: see desert.json.",
     "ore": "Swedish iron ore reaches Germany across the Baltic when it is free of ice, and down the Norwegian coast from Narvik when it is not. If neither way is open, Germany loses 'share' of her production.",
     "fleets": "The navies of 1 September 1939. base is the region of the home port (null for a base off the map, with 'home' naming the sea it opens on) and port its name. zone is the sea the fleet is stationed in and duty what it does there. 'from' brings a fleet into being later in the war.",
     "building": "Ships that join a fleet every month over a span of turns.",
@@ -33,15 +33,16 @@
   "admiral": {"perLevel": 0.04, "maxLevel": 5, "lostWithFlagship": 0.25},
   "convoy": {"escortWorth": 1.5, "ocean": 40, "air": 0.3, "patrolRaid": 0.5, "subBase": 0.012, "subHunt": 0.06, "escortLoss": 0.004},
   "convoys": [
-    {"id": "atlantic", "name": "the Atlantic convoys", "to": "UK", "zones": ["wapp", "natl", "irish"], "share": 0.5, "tons": 1200000}
+    {"id": "atlantic", "name": "the Atlantic convoys", "to": "UK", "zones": ["wapp", "natl", "irish"], "share": 0.5, "tons": 1200000},
+    {"id": "libya", "name": "the Libya convoys", "to": "ITA", "zones": ["central"], "share": 0.03, "tons": 120000, "base": {"region": "Malta", "raid": 8, "starved": 0.4}}
   ],
   "ore": {"to": "GER", "source": "Norrbotten", "share": 0.08, "iceMonths": [12, 1, 2, 3, 4], "winterPort": "Narvik", "summerZones": ["bothnia", "baltic"]},
   "fleets": [
     {"nat": "UK", "name": "Home Fleet", "base": "Highlands", "port": "Scapa Flow", "home": "nsea", "zone": "nsea", "duty": "patrol", "admiral": "Charles Forbes", "ships": {"bb": 7, "cv": 2, "ca": 12, "dd": 24, "ss": 0}},
     {"nat": "UK", "name": "Western Approaches Command", "base": "Cornwall", "port": "Plymouth", "home": "wapp", "zone": "wapp", "duty": "patrol", "tied": true, "admiral": "Martin Dunbar-Nasmith", "ships": {"bb": 0, "cv": 0, "ca": 3, "dd": 36, "ss": 0}},
     {"nat": "UK", "name": "Dover Command", "base": "Kent", "port": "Dover", "home": "channel", "zone": "channel", "duty": "patrol", "tied": true, "admiral": "Bertram Ramsay", "ships": {"bb": 0, "cv": 0, "ca": 2, "dd": 18, "ss": 0}},
-    {"nat": "UK", "name": "Mediterranean Fleet", "base": null, "port": "Alexandria", "home": "emed", "zone": "emed", "duty": "patrol", "admiral": "Andrew Cunningham", "ships": {"bb": 3, "cv": 1, "ca": 7, "dd": 22, "ss": 8}},
-    {"nat": "UK", "name": "Force H", "from": 11, "base": null, "port": "Gibraltar", "home": "iberia", "zone": "iberia", "duty": "patrol", "admiral": "James Somerville", "ships": {"bb": 2, "cv": 1, "ca": 2, "dd": 9, "ss": 0}},
+    {"nat": "UK", "name": "Mediterranean Fleet", "base": "Alexandria", "port": "Alexandria", "home": "emed", "zone": "emed", "duty": "patrol", "admiral": "Andrew Cunningham", "ships": {"bb": 3, "cv": 1, "ca": 7, "dd": 22, "ss": 8}},
+    {"nat": "UK", "name": "Force H", "from": 11, "base": "Gibraltar", "port": "Gibraltar", "home": "iberia", "zone": "iberia", "duty": "patrol", "admiral": "James Somerville", "ships": {"bb": 2, "cv": 1, "ca": 2, "dd": 9, "ss": 0}},
 
     {"nat": "GER", "name": "Battle Fleet", "base": "Bremen", "port": "Wilhelmshaven", "home": "nsea", "zone": "nsea", "duty": "port", "admiral": "Wilhelm Marschall", "ships": {"bb": 2, "cv": 0, "ca": 8, "dd": 20, "ss": 0}},
     {"nat": "GER", "name": "U-boat Arm", "base": "Bremen", "port": "Wilhelmshaven", "home": "nsea", "zone": "wapp", "duty": "raid", "admiral": "Karl Donitz", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 27}},

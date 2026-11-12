@@ -7,7 +7,11 @@ import { Rng } from '../core/rng';
 import { computeSupply, createGame } from './game';
 import { seat } from './commanders';
 import { FIELDS } from './research';
+import mapData from '../generated/campaign-map.json';
 import type { Corps, Game, General } from './types';
+
+/** A save is laid over the map it was played on, region by region. */
+const MAP_REGIONS = (mapData as any).regions.length as number;
 
 export const SAVE_VERSION = 1;
 const KEEP_REPORTS = 200;
@@ -34,8 +38,16 @@ export function saveGame(g: Game): string {
 export function peekSave(text: string): { human: string | null; turn: number } | null {
   try {
     const d = JSON.parse(text);
-    return d && d.v === SAVE_VERSION ? { human: d.human ?? null, turn: d.turn } : null;
+    return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && d.regions.length === MAP_REGIONS ? { human: d.human ?? null, turn: d.turn } : null;
   } catch { return null; }
+}
+
+/** True for a campaign saved on an earlier, smaller map: it reads as a save but cannot be continued on this one. */
+export function staleSave(text: string): boolean {
+  try {
+    const d = JSON.parse(text);
+    return !!d && d.v === SAVE_VERSION && Array.isArray(d.regions) && d.regions.length !== MAP_REGIONS;
+  } catch { return false; }
 }
 
 export function loadGame(text: string): Game | null {

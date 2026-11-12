@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
 import { PRODUCTION, cancelBuild, income, orderCorps, orderFort } from '../src/campaign/economy';
-import { loadGame, peekSave, saveGame } from '../src/campaign/save';
+import { loadGame, peekSave, saveGame, staleSave } from '../src/campaign/save';
 import { DIPLOMACY, tradePartners } from '../src/campaign/diplomacy';
 import { beginHuman, humanUp, orderBuildCorps, orderShip, passMonth, runTurnAI, shipTargets, stepAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -147,5 +147,18 @@ describe('saved games', () => {
     expect(loadGame('not a save')).toBeNull();
     expect(loadGame('{"v":99}')).toBeNull();
     expect(peekSave('{}')).toBeNull();
+  });
+
+  it('knows a campaign saved on an earlier, smaller map and does not offer to continue it', () => {
+    const g = createGame(4, null);
+    const good = saveGame(g);
+    expect(staleSave(good)).toBe(false);
+    const old = JSON.parse(good);
+    old.regions = old.regions.slice(0, 315);
+    const text = JSON.stringify(old);
+    expect(staleSave(text)).toBe(true);
+    expect(peekSave(text)).toBeNull();
+    expect(loadGame(text)).toBeNull();
+    expect(staleSave('not a save')).toBe(false);
   });
 });

@@ -14,32 +14,29 @@
     {"id": "baltic", "air": 0.8, "name": "Baltic Sea", "at": [55.8, 18.2]},
     {"id": "bothnia", "air": 0.8, "name": "Gulf of Bothnia", "at": [62.0, 19.6], "label": [62.0, 19.3]},
     {"id": "finland", "air": 1, "name": "Gulf of Finland", "at": [59.9, 27.4], "label": [59.93, 26.9], "narrow": true},
-    {"id": "wmed", "air": 0.6, "name": "Western Mediterranean", "at": [39.6, 5.2], "label": [38.3, 4.9]},
+    {"id": "wmed", "air": 0.6, "name": "Western Mediterranean", "at": [39.6, 5.2], "label": [38.3, 4.9], "waters": [[36.0, -3.2]]},
     {"id": "tyrr", "air": 0.8, "name": "Tyrrhenian Sea", "at": [40.0, 12.3]},
     {"id": "adriatic", "air": 1, "name": "Adriatic Sea", "at": [43.3, 15.0], "narrow": true},
     {"id": "ionian", "air": 0.6, "name": "Ionian Sea", "at": [37.3, 18.3]},
     {"id": "aegean", "air": 0.8, "name": "Aegean Sea", "at": [37.9, 25.0], "label": [38.9, 25.25], "narrow": true, "waters": [[40.7, 28.2]]},
-    {"id": "emed", "air": 0.5, "name": "Eastern Mediterranean", "at": [35.8, 31.0]},
-    {"id": "black", "air": 0.6, "name": "Black Sea", "at": [43.3, 34.5], "waters": [[46.0, 36.6]]}
+    {"id": "emed", "air": 0.5, "name": "Eastern Mediterranean", "at": [33.6, 31.6]},
+    {"id": "black", "air": 0.6, "name": "Black Sea", "at": [43.3, 34.5], "waters": [[46.0, 36.6]]},
+    {"id": "central", "air": 0.8, "name": "Central Mediterranean", "at": [35.4, 13.4], "label": [34.3, 14.6]},
+    {"id": "libyan", "air": 0.6, "name": "Libyan Sea", "at": [33.6, 23.6]}
   ],
   "adjacent": [
     ["natl", "wapp"], ["natl", "irish"], ["natl", "nsea"], ["natl", "norw"],
     ["wapp", "irish"], ["wapp", "channel"], ["wapp", "biscay"], ["wapp", "iberia"],
-    ["biscay", "iberia"],
-    ["channel", "nsea"],
-    ["nsea", "norw"], ["nsea", "skag"],
-    ["norw", "barents"],
-    ["skag", "baltic"],
-    ["baltic", "bothnia"], ["baltic", "finland"],
-    ["iberia", "wmed"],
-    ["wmed", "tyrr"], ["wmed", "ionian"],
-    ["tyrr", "ionian"],
-    ["ionian", "adriatic"], ["ionian", "aegean"], ["ionian", "emed"],
-    ["aegean", "emed"], ["aegean", "black"]
+    ["biscay", "iberia"], ["channel", "nsea"], ["nsea", "norw"], ["nsea", "skag"],
+    ["norw", "barents"], ["skag", "baltic"], ["baltic", "bothnia"], ["baltic", "finland"],
+    ["iberia", "wmed"], ["wmed", "tyrr"], ["tyrr", "ionian"], ["ionian", "adriatic"],
+    ["ionian", "aegean"], ["aegean", "emed"], ["aegean", "black"], ["wmed", "central"],
+    ["tyrr", "central"], ["ionian", "central"], ["central", "libyan"], ["ionian", "libyan"],
+    ["libyan", "aegean"], ["libyan", "emed"]
   ],
   "gates": [
     {"between": ["skag", "baltic"], "name": "the Danish straits", "region": "Zealand"},
-    {"between": ["iberia", "wmed"], "name": "the Strait of Gibraltar", "nation": "UK"},
+    {"between": ["iberia", "wmed"], "name": "the Strait of Gibraltar", "region": "Gibraltar"},
     {"between": ["aegean", "black"], "name": "the Turkish straits", "region": "Istanbul", "closed": true}
   ]
 }

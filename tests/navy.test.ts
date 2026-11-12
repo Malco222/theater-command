@@ -28,7 +28,7 @@ const seasOf = (g: Game, region: string): string[] => g.byName[region].seas.map(
 describe('the seas', () => {
   it('every port stands on a sea, and the seas join up both ways', () => {
     const g = createGame(1, null);
-    expect(g.seas.length).toBe(20);
+    expect(g.seas.length).toBe(22);
     for (const r of g.regions) if (r.port) expect(r.seas.length, r.name).toBeGreaterThan(0);
     for (const z of g.seas) {
       expect(z.coast.length, z.name).toBeGreaterThan(0);
@@ -41,6 +41,15 @@ describe('the seas', () => {
     expect(seasOf(g, 'Crimea')).toContain('black');
     expect(seasOf(g, 'Kent')).toEqual(['channel']);
     expect(g.byName['Berlin'].seas).toEqual([]);
+    expect(seasOf(g, 'Malta')).toEqual(['central']);
+    expect(seasOf(g, 'Tripoli')).toEqual(['central']);
+    expect(seasOf(g, 'Tobruk')).toEqual(['libyan']);
+    expect(seasOf(g, 'Alexandria')).toEqual(['emed']);
+    expect(seasOf(g, 'Crete').sort()).toEqual(['aegean', 'libyan']);
+    expect(seasOf(g, 'Gibraltar').sort()).toEqual(['iberia', 'wmed']);
+    // Italy to Libya is one sea, past Malta. Gibraltar to Alexandria is four.
+    expect(seasOf(g, 'Sicily')).toContain('central');
+    expect(g.seas[zoneOf(g, 'wmed')].adj.map((j) => g.seas[j].key)).not.toContain('ionian');
   });
 
   it('a point on the chart knows which sea it is in', () => {

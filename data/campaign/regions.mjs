@@ -1,11 +1,13 @@
-// The prototype map of Europe, from Ireland to the Volga and the Caucasus. Each line is one region: a seed point and what is there.
+// The prototype map of Europe and the Mediterranean, from Ireland to the Volga and from the North Cape to the Western Desert. Each line is one region: a seed point and what is there.
 // The build step (tools/build-geo-campaign.mjs) grows a region around every seed and
 // clips it to the coastline, so borders here are approximate. The full game replaces
 // this with the real 1939 region borders.
 //
 // [name, lat, lon, owner, terrain, victory points, factories, flags]
 // flags: cap = capital, port, fort: [level, 'nation the works face'...], vichy = unoccupied
-// zone if France falls, sov = Soviet zone under the 1939 pact, oil.
+// zone if France falls, sov = Soviet zone under the 1939 pact, oil, depot = a base that feeds
+// an army on its own, col = overseas ground: it is fought over like any other, but losing it
+// does not bring the home country nearer to surrender.
 export const REGIONS = [
   // Germany (with Austria and the Bohemia-Moravia protectorate, as in September 1939)
   ['Berlin', 52.52, 13.4, 'GER', 'urban', 6, 4, { cap: 1 }],
@@ -337,6 +339,70 @@ export const REGIONS = [
   ['Mezen', 65.8, 44.4, 'SOV', 'forest', 0, 0, {}],
   ['Kola', 67.0, 37.6, 'SOV', 'forest', 0, 0, {}],
   ['Dalarna', 61.0, 14.2, 'SWE', 'forest', 0, 0, {}],
+  // ---- The Mediterranean, North Africa and the Levant (added after the first 315 regions, so earlier numbers do not move) ----
+  // French North Africa: stays with Vichy when France falls
+  ['Casablanca', 33.3, -7.3, 'FRA', 'plains', 1, 0, { port: 1, vichy: 1, col: 1 }],
+  ['Fez', 34.0, -4.9, 'FRA', 'hills', 0, 0, { vichy: 1, col: 1 }],
+  ['Marrakech', 31.6, -7.9, 'FRA', 'mountain', 0, 0, { vichy: 1, col: 1 }],
+  ['Oran', 35.4, -0.6, 'FRA', 'plains', 1, 0, { port: 1, vichy: 1, col: 1 }],
+  ['Algiers', 36.4, 3.0, 'FRA', 'hills', 1, 0, { port: 1, vichy: 1, depot: 1, col: 1 }],
+  ['Constantine', 36.2, 6.6, 'FRA', 'mountain', 0, 0, { port: 1, vichy: 1, col: 1 }],
+  ['Colomb-Bechar', 31.6, -2.2, 'FRA', 'desert', 0, 0, { vichy: 1, col: 1 }],
+  ['Laghouat', 33.8, 2.9, 'FRA', 'desert', 0, 0, { vichy: 1, col: 1 }],
+  ['Ouargla', 31.9, 5.3, 'FRA', 'desert', 0, 0, { vichy: 1, col: 1 }],
+  ['Biskra', 34.6, 5.9, 'FRA', 'desert', 0, 0, { vichy: 1, col: 1 }],
+  ['Tunis', 36.6, 9.8, 'FRA', 'plains', 1, 0, { port: 1, vichy: 1, col: 1 }],
+  ['Sfax', 34.9, 10.2, 'FRA', 'plains', 0, 0, { port: 1, vichy: 1, col: 1 }],
+  ['Mareth', 33.3, 10.0, 'FRA', 'desert', 0, 0, { vichy: 1, fort: [1, 'ITA'], col: 1 }],
+  ['Spanish Morocco', 35.1, -4.9, 'ESP', 'mountain', 0, 0, { port: 1 }],
+  ['Cadiz', 36.6, -5.9, 'ESP', 'plains', 0, 0, { port: 1 }],
+  ['Malaga', 36.8, -4.5, 'ESP', 'mountain', 0, 0, { port: 1 }],
+  ['Gibraltar', 36.16, -5.36, 'UK', 'mountain', 1, 0, { port: 1, fort: [3, 'ESP', 'GER', 'ITA'], col: 1 }],
+  // Italian Libya
+  ['Tripoli', 32.6, 13.1, 'ITA', 'plains', 1, 0, { port: 1, col: 1 }],
+  ['Nalut', 31.6, 11.4, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['Misrata', 32.1, 14.9, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['Sirte', 31.0, 16.6, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['Hon', 29.2, 15.9, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['El Agheila', 30.1, 19.0, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['Agedabia', 30.8, 20.4, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['Benghazi', 32.0, 20.4, 'ITA', 'plains', 1, 0, { port: 1, col: 1 }],
+  ['Derna', 32.5, 22.3, 'ITA', 'hills', 0, 0, { col: 1 }],
+  ['Mechili', 31.5, 22.5, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['Tobruk', 31.95, 23.9, 'ITA', 'desert', 1, 0, { port: 1, fort: [2, 'ITA'], col: 1 }],
+  ['Bir Hakeim', 31.1, 24.0, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['Bardia', 31.7, 25.0, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['Jalo', 29.1, 21.5, 'ITA', 'desert', 0, 0, { col: 1 }],
+  ['Jarabub', 29.8, 24.4, 'ITA', 'desert', 0, 0, { col: 1 }],
+  // Egypt and the Levant under British arms
+  ['Sidi Barrani', 31.4, 26.0, 'UK', 'desert', 0, 0, { col: 1 }],
+  ['Mersa Matruh', 31.1, 27.3, 'UK', 'desert', 0, 0, { col: 1 }],
+  // El Alamein: the sea on one side, the Qattara Depression on the other. The one position in the desert that cannot be turned.
+  ['El Alamein', 30.6, 28.8, 'UK', 'desert', 0, 0, { fort: [1, 'UK'], col: 1 }],
+  ['Alexandria', 30.9, 30.0, 'UK', 'urban', 2, 0, { port: 1, col: 1 }],
+  // Cairo: the base that is fed round the Cape and up the Red Sea, whatever happens in the Mediterranean.
+  ['Cairo', 30.0, 31.2, 'UK', 'urban', 2, 0, { depot: 1, col: 1 }],
+  ['Port Said', 31.0, 32.2, 'UK', 'plains', 0, 0, { port: 1, col: 1 }],
+  ['Suez', 30.35, 32.3, 'UK', 'desert', 1, 0, { col: 1 }],
+  ['Siwa', 29.2, 25.6, 'UK', 'desert', 0, 0, { col: 1 }],
+  ['Qattara Depression', 29.6, 27.6, 'UK', 'marsh', 0, 0, { col: 1 }],
+  ['Faiyum', 29.2, 30.6, 'UK', 'desert', 0, 0, { col: 1 }],
+  ['Sinai', 29.9, 33.9, 'UK', 'desert', 0, 0, { col: 1 }],
+  ['Palestine', 31.8, 35.0, 'UK', 'hills', 1, 0, { port: 1, col: 1 }],
+  ['Transjordan', 31.2, 36.6, 'UK', 'desert', 0, 0, { col: 1 }],
+  ['Cyprus', 35.0, 33.2, 'UK', 'hills', 0, 0, { port: 1, col: 1 }],
+  ['Malta', 35.9, 14.45, 'UK', 'urban', 1, 0, { port: 1, fort: [2, 'ITA', 'GER'], col: 1 }],
+  // The French Levant, Iraq and Iran
+  ['Lebanon', 33.9, 35.8, 'FRA', 'mountain', 0, 0, { port: 1, vichy: 1, col: 1 }],
+  ['Damascus', 33.4, 36.6, 'FRA', 'hills', 1, 0, { vichy: 1, col: 1 }],
+  ['Palmyra', 34.6, 38.4, 'FRA', 'desert', 0, 0, { vichy: 1, col: 1 }],
+  ['Deir ez-Zor', 35.3, 40.1, 'FRA', 'desert', 0, 0, { vichy: 1, col: 1 }],
+  ['Baghdad', 33.3, 44.3, 'IRQ', 'plains', 1, 0, {}],
+  ['Rutbah', 32.9, 40.8, 'IRQ', 'desert', 0, 0, {}],
+  ['Kermanshah', 34.4, 46.6, 'IRN', 'mountain', 0, 0, {}],
+  // Islands
+  ['Crete', 35.25, 24.9, 'GRE', 'mountain', 0, 0, { port: 1 }],
+  ['Rhodes', 36.2, 27.95, 'ITA', 'hills', 0, 0, { port: 1, col: 1 }],
 ];
 
 // Short crossings that armies can use without a fleet.
@@ -353,10 +419,28 @@ export const LINKS = [
 export const ROADS = [
   ['Trondheim', 'Nordland'],
   ['Narvik', 'Finnmark'],
+  ['Antalya', 'Adana'],
+  ['Palestine', 'Lebanon'],
 ];
 
 // And the opposite: borders the map-maker finds that are not there, because the line between
 // two regions touches both shores of a bay.
 export const NO_BORDER = [
   ['Kola', 'Belomorsk'],
+  // The Qattara Depression: salt marsh no army can cross, which is what makes El Alamein a gate.
+  ['Qattara Depression', 'El Alamein'],
+  ['Qattara Depression', 'Cairo'],
+  ['Qattara Depression', 'Faiyum'],
+  ['Qattara Depression', 'Alexandria'],
+  // The Gulf of Suez and the canal: Sinai is reached through the canal zone, not across the water.
+  ['Faiyum', 'Sinai'],
+  ['Cairo', 'Sinai'],
+  // The oases of the deep desert are the ends of tracks, not ways round: the sand seas between them stop an army.
+  ['Jalo', 'Jarabub'],
+  ['Jalo', 'Mechili'],
+  ['Jarabub', 'Siwa'],
+  ['Jarabub', 'Sidi Barrani'],
+  ['Jarabub', 'Mechili'],
+  ['Siwa', 'Sidi Barrani'],
+  ['Hon', 'El Agheila'],
 ];

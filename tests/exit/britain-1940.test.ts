@@ -91,7 +91,8 @@ describe('Phase 2 exit test: the Battle of Britain on the historical plan', () =
   it('London is bombed and Britain is never invaded', () => {
     for (const { g } of runs) {
       expect(g.nations.UK.alive).toBe(true);
-      for (const r of g.regions) if (r.owner === 'UK') expect(r.ctrl, r.name).toBe('UK');
+      // The home islands: Egypt's frontier is another campaign (tests/exit/desert-1940.test.ts).
+      for (const r of g.regions) if (r.owner === 'UK' && !r.overseas) expect(r.ctrl, r.name).toBe('UK');
       const london = g.airReports.filter((r) => r.place === 'London');
       expect(london.length).toBeGreaterThanOrEqual(4);
       for (const r of london) expect(r.result).toMatch(/^The bombing stopped \d+% of London's output/);

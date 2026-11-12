@@ -1,0 +1,36 @@
+{
+  "_about": "Campaigning in the Western Desert. There is one road, no water and nothing to live on, so an army is only as strong as the port behind it. In every region of desert a corps' supply line is counted from the nearest working base: a depot, or a port its ships can still reach. 'ports' gives each overseas port's capacity as a head start on that count (0 is a great harbour, a small one starts as if it were already 'port' regions away). Every region of desert on the way adds 'step'. 'bands' turn the length of the line into attack strength: [longest line, value]. 'lineDefence' is how much of that loss also applies in defence. Replacements and rest reach a corps only as well as its line allows. 'open' is what foot infantry is worth in defence in open desert against an attack that includes tanks or lorried troops, unless it stands in prepared works: there are no flanks to anchor on and no way to march clear. 'route' is the convoy route that feeds an army through those ports: for every tenth of its cargo sunk, the line of the nations it feeds grows by 'perTenth'. 'stores' is how many months a fortified port overseas goes on feeding its garrison after the sea behind it is closed. 'retreat' multiplies the losses of foot troops driven out of open desert by a mobile enemy: [in a close win, in a decisive one]. 'replace' is the share of the usual monthly replacements that reaches a corps overseas, since every man and tank has to come by sea first. 'drag' is the extra movement cost of pushing on into desert that is the enemy's, or was until this month, by the length the supply line would then have: [longest line, extra cost].",
+  "terrain": "desert",
+  "step": 1,
+  "port": 2,
+  "ports": {
+    "Tripoli": 0,
+    "Alexandria": 0,
+    "Port Said": 0,
+    "Benghazi": 2,
+    "Tobruk": 2
+  },
+  "bands": [
+    [2, 1],
+    [3, 0.95],
+    [4, 0.9],
+    [5, 0.8],
+    [6, 0.7],
+    [999, 0.6]
+  ],
+  "lineDefence": 0.5,
+  "open": 0.65,
+  "stores": 2,
+  "retreat": [1.25, 1.6],
+  "replace": 0.35,
+  "drag": [
+    [5, 0],
+    [7, 1],
+    [999, 2]
+  ],
+  "route": {
+    "id": "libya",
+    "feeds": ["ITA", "GER"],
+    "perTenth": 0.5
+  }
+}

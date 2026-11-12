@@ -25,7 +25,7 @@ describe('the campaign map', () => {
     }
   });
   it('only islands are cut off from their neighbours', () => {
-    expect(g.regions.filter((r) => !r.nb.length).map((r) => r.name).sort()).toEqual(['Corsica', 'Sardinia']);
+    expect(g.regions.filter((r) => !r.nb.length).map((r) => r.name).sort()).toEqual(['Corsica', 'Crete', 'Cyprus', 'Malta', 'Rhodes', 'Sardinia']);
   });
   it('every nation with an army has a capital on the map', () => {
     for (const n of Object.values(g.nations)) if (!n.dormant) expect(n.capital, n.name).toBeGreaterThanOrEqual(0);
@@ -47,5 +47,37 @@ describe('the campaign map', () => {
     expect(hops('Istanbul', 'Batumi')).toBeGreaterThan(3);
     expect(g.byName['Syria'].owner).toBe('FRA');
     expect(g.byName['Syria'].nb.map((i) => g.regions[i].owner)).toContain('TUR');
+  });
+  it('the desert road runs from Tripoli to the Nile, and El Alamein is its gate', () => {
+    expect(hops('Tripoli', 'Alexandria')).toBeGreaterThanOrEqual(9);
+    expect(hops('Tripoli', 'Benghazi')).toBeGreaterThanOrEqual(5);
+    expect(hops('Tobruk', 'Alexandria')).toBe(5);
+    // Nothing west of El Alamein touches the delta except El Alamein itself.
+    const delta = ['Alexandria', 'Cairo', 'Faiyum', 'Port Said', 'Suez'].map((n) => g.byName[n].id);
+    for (const r of g.regions) {
+      if (delta.includes(r.id) || r.name === 'El Alamein' || r.name === 'Sinai') continue;
+      for (const j of r.nb) expect(delta, `${r.name} and ${g.regions[j].name}`).not.toContain(j);
+    }
+    expect(g.byName['Qattara Depression'].nb.map((i) => g.regions[i].name).sort()).toEqual(['Mersa Matruh', 'Siwa']);
+    expect(g.byName['Qattara Depression'].terrain).toBe('marsh');
+    expect(g.byName['Tobruk'].terrain).toBe('desert');
+  });
+  it('North Africa, the Levant and the islands belong to the right flags in 1939', () => {
+    const owner = (n: string) => g.byName[n].owner;
+    for (const n of ['Tripoli', 'Benghazi', 'Tobruk', 'Bardia', 'Rhodes']) expect(owner(n), n).toBe('ITA');
+    for (const n of ['Sidi Barrani', 'Alexandria', 'Cairo', 'Suez', 'Palestine', 'Malta', 'Cyprus', 'Gibraltar']) expect(owner(n), n).toBe('UK');
+    for (const n of ['Casablanca', 'Algiers', 'Tunis', 'Lebanon', 'Damascus']) expect(owner(n), n).toBe('FRA');
+    expect(owner('Crete')).toBe('GRE');
+    expect(owner('Baghdad')).toBe('IRQ');
+    expect(g.byName['Gibraltar'].nb.map((i) => g.regions[i].name)).toEqual(['Cadiz']);
+    expect(hops('Tunis', 'Tripoli')).toBeGreaterThan(1);
+    expect(hops('Cairo', 'Baghdad')).toBeGreaterThan(3);
+    expect(hops('Palestine', 'Syria')).toBe(2);
+  });
+  it('adding the south moved nothing in the north', () => {
+    expect(g.byName['Berlin'].id).toBe(createGame(1, null).byName['Berlin'].id);
+    expect(g.regions.length).toBe(371);
+    expect(g.byName['Casablanca'].id).toBe(315);
+    expect(g.byName['Rhodes'].id).toBe(370);
   });
 });

@@ -1,5 +1,5 @@
 {
-  "_about": "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen names the general in command, and trait is what he is known for (panzer, attacker or defender; commanders.json turns the label into his level, skills and traits); hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded.",
+  "_about": "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen names the general in command, and trait is what he is known for (panzer, attacker or defender; commanders.json turns the label into his level, skills and traits); hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded. 'reinforcements' are [month, nation, ...] and form up at home. 'expeditions' are the same, but go overseas: they land only at a port still in friendly hands (a sailing is put off while it is not, and cancelled after half a year), and 'war' names two nations that must be at war for the troops to be sent at all.",
   "corps": [
     ["GER", "XIX Corps", "arm", 2, "Farther Pomerania", {"gen": "Heinz Guderian", "trait": "panzer", "xp": 0.4}],
     ["GER", "II Corps", "inf", 3, "Grenzmark", {"xp": 0.3}],
@@ -154,7 +154,24 @@
     ["SOV", "Karelian garrison", "inf", 2, "Petrozavodsk", {"hold": 1}],
     ["FRA", "Army of the Levant", "inf", 2, "Syria", {"hold": 1}],
     ["IRQ", "Iraqi Army", "inf", 1, "Iraq", {"hold": 1}],
-    ["IRN", "Iranian Army", "inf", 2, "Iran", {"hold": 1}]
+    ["IRN", "Iranian Army", "inf", 2, "Iran", {"hold": 1}],
+    ["ITA", "XXI Corps, 10th Army", "inf", 2, "Bardia", {"gen": "Mario Berti", "xp": 0.05}],
+    ["ITA", "XXIII Corps, 10th Army", "inf", 2, "Bardia", {"xp": 0.05}],
+    ["ITA", "Libyan Group", "mot", 1, "Tobruk", {"xp": 0.05}],
+    ["ITA", "Tobruk garrison", "inf", 1, "Tobruk", {"hold": 1, "xp": 0.05}],
+    ["ITA", "XX Corps, 10th Army", "inf", 2, "Benghazi", {"xp": 0.05}],
+    ["ITA", "5th Army", "inf", 3, "Nalut", {"hold": 1, "xp": 0.05}],
+    ["ITA", "Aegean Command", "inf", 1, "Rhodes", {"hold": 1}],
+    ["UK", "7th Armoured Division", "arm", 1, "Mersa Matruh", {"gen": "Richard O'Connor", "trait": "attacker", "xp": 0.4}],
+    ["UK", "4th Indian Division", "inf", 1, "Mersa Matruh", {"xp": 0.35}],
+    ["UK", "British Troops in Egypt", "inf", 1, "Cairo", {"hold": 1}],
+    ["UK", "Alexandria garrison", "inf", 1, "Alexandria", {"hold": 1}],
+    ["UK", "Palestine garrison", "inf", 1, "Palestine", {"hold": 1}],
+    ["UK", "Malta garrison", "inf", 1, "Malta", {"hold": 1, "xp": 0.2}],
+    ["UK", "Gibraltar garrison", "fort", 1, "Gibraltar", {"hold": 1}],
+    ["FRA", "Army of Africa", "inf", 3, "Algiers", {"hold": 1}],
+    ["FRA", "Tunisia Command", "inf", 3, "Mareth", {"hold": 1}],
+    ["FRA", "Morocco Command", "inf", 2, "Casablanca", {"hold": 1}]
   ],
   "reinforcements": [
     [1, "UK", "I Corps (BEF)", "inf", 3, "Lille", {"gen": "John Dill", "dyle": "Brussels", "xp": 0.2}],
@@ -244,5 +261,20 @@
     [28, "SOV", "39th Army", "inf", 3, "Kalinin", {}],
     [28, "SOV", "59th Army", "inf", 3, "Vologda", {}],
     [28, "SOV", "2nd Guards Cavalry Corps", "cav", 2, "Tula", {"xp": 0.3}]
+  ],
+  "expeditions": [
+    [13, "UK", "6th Australian Division", "inf", 1, "Alexandria", {"xp": 0.2, "war": ["UK", "ITA"]}],
+    [17, "UK", "2nd Armoured Division", "arm", 1, "Alexandria", {"xp": 0, "war": ["UK", "ITA"]}],
+    [18, "UK", "Tobruk garrison (9th Australian Division)", "inf", 3, "Tobruk", {"hold": 1, "xp": 0.25, "war": ["UK", "ITA"]}],
+    [24, "UK", "XIII Corps, Eighth Army", "inf", 2, "Alexandria", {"xp": 0.3, "war": ["UK", "ITA"]}],
+    [26, "UK", "XXX Corps, Eighth Army", "arm", 2, "Alexandria", {"xp": 0.15, "war": ["UK", "ITA"]}],
+    [17, "ITA", "Ariete Armoured Division", "arm", 1, "Tripoli", {"hold": 1, "xp": 0.1, "war": ["UK", "ITA"]}],
+    [18, "ITA", "Trento Motorized Division", "mot", 1, "Tripoli", {"hold": 1, "xp": 0.1, "war": ["UK", "ITA"]}],
+    [19, "ITA", "Brescia and Pavia Divisions", "inf", 1, "Tripoli", {"xp": 0.1, "war": ["UK", "ITA"]}],
+    [23, "ITA", "Bologna and Savona Divisions", "inf", 1, "Tripoli", {"xp": 0.1, "war": ["UK", "ITA"]}],
+    [24, "ITA", "Trieste Motorized Division", "mot", 1, "Tripoli", {"xp": 0.1, "war": ["UK", "ITA"]}],
+    [18, "GER", "5th Light Division", "arm", 1, "Tripoli", {"gen": "Erwin Rommel", "trait": "panzer", "hold": 1, "xp": 0.4, "war": ["UK", "ITA"]}],
+    [20, "GER", "15th Panzer Division", "arm", 1, "Tripoli", {"xp": 0.4, "war": ["UK", "ITA"]}],
+    [24, "GER", "90th Light Division", "mot", 1, "Tripoli", {"xp": 0.3, "war": ["UK", "ITA"]}]
   ]
 }

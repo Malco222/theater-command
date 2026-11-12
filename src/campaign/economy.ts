@@ -63,12 +63,15 @@ function corpsName(nat: string, kind: Kind, no: number): string {
 
 export const isHome = (g: Game, nat: string, r: Region): boolean => r.owner === nat && r.ctrl === nat;
 
+/** Where new formations can be raised: at home, not in the colonies. Troops for overseas are raised at home and shipped. */
+export const canRaise = (g: Game, nat: string, r: Region): boolean => isHome(g, nat, r) && !r.overseas;
+
 /** Orders a new corps. The points are paid now; the corps arrives in a few months. */
 export function orderCorps(g: Game, nat: string, kind: Kind, region: number): Build | null {
   const n = g.nations[nat];
   const spec = PRODUCTION.builds[kind];
   const r = g.regions[region];
-  if (!n.alive || !spec || !r || !isHome(g, nat, r) || n.pp < spec.cost) return null;
+  if (!n.alive || !spec || !r || !canRaise(g, nat, r) || n.pp < spec.cost) return null;
   n.pp -= spec.cost;
   const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name: corpsName(nat, kind, n.corpsNo++), region, ordered: g.turn, eta: g.turn + spec.months, cost: spec.cost };
   n.queue.push(b);
@@ -123,7 +126,7 @@ export function deliver(g: Game, nat: string): void {
       if (nat === g.human) headline(g, 'info', `The new fortifications at ${r.name} are finished.`, nat, r.id);
       continue;
     }
-    const room = (x: Region): boolean => isHome(g, nat, x) && x.units.filter((u) => allied(g, u.nat, nat)).length < STACK;
+    const room = (x: Region): boolean => canRaise(g, nat, x) && x.units.filter((u) => allied(g, u.nat, nat)).length < STACK;
     let at: Region | null = room(r) ? r : null;
     if (!at && n.capital >= 0 && room(g.regions[n.capital])) at = g.regions[n.capital];
     if (!at) at = g.regions.find((x) => room(x) && x.fac > 0) ?? g.regions.find(room) ?? null;

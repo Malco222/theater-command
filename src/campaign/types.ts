@@ -2,7 +2,7 @@ import type { Rng } from '../core/rng';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 
 export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort';
-export type Terrain = 'plains' | 'forest' | 'hills' | 'mountain' | 'marsh' | 'urban';
+export type Terrain = 'plains' | 'forest' | 'hills' | 'mountain' | 'marsh' | 'urban' | 'desert';
 export type Align = 'allies' | 'allies_cobelligerent' | 'leaning_allies' | 'independent' | 'leaning_axis' | 'axis_cobelligerent' | 'axis';
 
 export interface Region {
@@ -19,6 +19,8 @@ export interface Region {
   vichy: boolean;
   sov: boolean;
   oil: boolean;
+  /** Overseas ground: fought over like any other, but it does not count toward the home country's will to fight on. */
+  overseas: boolean;
   x: number;
   y: number;
   nb: number[];
@@ -308,6 +310,8 @@ export interface ConvoyMonth {
   total: number;
   /** Share of the receiving nation's production lost with it. */
   share: number;
+  /** Share of the cargo on the route that was sunk. */
+  loss?: number;
   subsLost: number;
   escortsLost: number;
 }
@@ -355,6 +359,8 @@ export interface PlanPhase {
   ifAtWar?: [string, string];
   /** Corps sent across the sea, each to the first place on its list it can reach: an enemy coast is assaulted, a friendly port reinforced. */
   landings?: { corps: string; to: string[]; minOdds?: number }[];
+  /** Stand on the defensive without local counter-attacks: the plan is saving the army for a later stroke. */
+  quiet?: boolean;
   /** Orders for named fleets while the phase lasts. */
   fleets?: { fleet: string; zone: string; stance: Stance }[];
 }
@@ -500,6 +506,6 @@ export const KIND: Record<Kind, { label: string; atk: number; def: number; move:
   fort: { label: 'Fortress', atk: 1, def: 15, move: 99, mobile: false },
 };
 
-export const TERRAIN_DEF: Record<Terrain, number> = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35 };
+export const TERRAIN_DEF: Record<Terrain, number> = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };
 export const FORT_MUL = [1, 1.3, 1.7, 2.6];
 export const STACK = 5;

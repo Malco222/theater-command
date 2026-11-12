@@ -47,7 +47,8 @@ describe('the supply line', () => {
   it('is at full strength at home and thins out deep inside the Soviet Union', () => {
     const g = war[OCTOBER_41];
     const ger = g.corps.filter((c) => c.nat === 'GER');
-    const home = ger.filter((c) => g.regions[c.reg].owner !== 'SOV');
+    // Corps overseas (the Afrika Korps in Libya) hang on a sea line of their own; see tests/desert.test.ts.
+    const home = ger.filter((c) => g.regions[c.reg].owner !== 'SOV' && !g.regions[c.reg].overseas);
     const deep = ger.filter((c) => g.regions[c.reg].owner === 'SOV');
     expect(deep.length).toBeGreaterThan(10);
     for (const c of home) expect(lineStrength(g, c).mul).toBe(1);

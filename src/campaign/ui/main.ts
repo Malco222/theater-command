@@ -3,7 +3,7 @@
 // only draws the state of the game and turns clicks into orders.
 
 import {
-  allied, armySize, atWar, collapseScore, createGame, ensureSupply, frozen, hostileUnits, limitAttackers, lineStrength, men, weather,
+  DESERT, allied, atWar, collapseScore, convoyDrag, createGame, ensureSupply, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, weather,
 } from '../game';
 import {
   beginHuman, canOrder, candidates, declarable, endHuman, humanUp, landTargets, orderAttack, orderBuildCorps, orderBuildFort,
@@ -17,10 +17,10 @@ import {
 import {
   NAVY, SEA_BORDERS, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
 } from '../navy';
-import { phaseFor } from '../ai';
-import { PRODUCTION, fortCost, income, isHome } from '../economy';
+import { phaseFor, theatrePhases } from '../ai';
+import { PRODUCTION, canRaise, fortCost, income, isHome } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
-import { loadGame, peekSave, saveGame } from '../save';
+import { loadGame, peekSave, saveGame, staleSave } from '../save';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
 import { DIPLOMACY, TRACK_LABEL, canCourt, courtable, momentum, pcIncome, receptive, step, tradePartners } from '../diplomacy';
 import { bloc } from '../game';
@@ -351,12 +351,7 @@ function pickedCorps(): Corps[] {
 }
 
 function railTargets(c: Corps): Region[] {
-  if (c.ap < 4) return [];
-  const seen = new Set<number>([c.reg]);
-  const q = [c.reg];
-  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!seen.has(j) && allied(g, c.nat, g.regions[j].ctrl)) { seen.add(j); q.push(j); }
-  seen.delete(c.reg);
-  return [...seen].map((id) => g.regions[id]);
+  return [...railReach(g, c)].map((id) => g.regions[id]);
 }
 
 function hintText(): string {
@@ -417,12 +412,32 @@ function drawTabs(): void {
 function advice(): string {
   const me = g.human;
   if (!me || !g.nations[me].alive) return '';
-  const ph = phaseFor(g, me);
-  if (!ph) return '';
   const list = (a?: string[]) => (a ?? []).slice(0, 7).join(', ');
-  if (ph.posture === 'attack') return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> ${ph.declare?.length ? `Declare war on ${ph.declare.map(natName).join(', ')}. ` : ''}Objectives, in order: ${esc(list(ph.objectives))}.${ph.landings?.length ? ` From the sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''} You are free to do something else.</div>`;
-  if (ph.posture === 'redeploy') return `<div class="note"><b>History's plan this month.</b> Move the army west by rail and wait for spring. Assembly areas: ${esc(list(ph.assembly))}.</div>`;
-  return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> Hold the line and keep a reserve near the capital.${ph.landings?.length ? ` By sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''}</div>`;
+  // Only what is still to do: wars not yet declared, objectives still in enemy hands.
+  const todo = (a?: string[]) => (a ?? []).filter((nm) => { const r = g.byName[nm]; return r && atWar(g, me, r.ctrl); });
+  const main = (): string => {
+    const ph = phaseFor(g, me);
+    if (!ph) return '';
+    if (ph.posture === 'attack') {
+      const declare = (ph.declare ?? []).filter((e) => g.nations[e].alive && !atWar(g, me, e));
+      const left = ph.declare?.length && !declare.length ? todo(ph.objectives) : ph.objectives ?? [];
+      if (!left.length && !declare.length) return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> The plan at home is carried out. Hold what you have.</div>`;
+      const aims = left.length ? `Objectives, in order: ${esc(list(left))}.` : '';
+      return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> ${declare.length ? `Declare war on ${declare.map(natName).join(', ')}. ` : ''}${aims}${ph.landings?.length ? ` From the sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''} You are free to do something else.</div>`;
+    }
+    if (ph.posture === 'redeploy') return `<div class="note"><b>History's plan this month.</b> Move the army west by rail and wait for spring. Assembly areas: ${esc(list(ph.assembly))}.</div>`;
+    return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> Hold the line and keep a reserve near the capital.${ph.landings?.length ? ` By sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''}</div>`;
+  };
+  // An army overseas has a plan of its own.
+  const away = theatrePhases(g, me).map(({ theatre, phase: ph }) => {
+    const head = `<b>History's plan in ${esc(theatre)}${ph?.name ? `: ${esc(ph.name)}` : ''}.</b>`;
+    if (ph?.posture === 'attack') {
+      const left = todo(ph.objectives);
+      return `<div class="note">${head} ${left.length ? `Objectives, in order: ${esc(list(left))}.` : 'Its objectives are taken.'}${ph.siege?.length ? ` Do not storm ${esc(list(ph.siege))}: starve it out.` : ''} You are free to do something else.</div>`;
+    }
+    return `<div class="note">${head} ${ph?.quiet ? 'Stand on the defensive and risk nothing: the army is being saved for a later stroke.' : 'Stand on the defensive and build up.'}</div>`;
+  }).join('');
+  return main() + away;
 }
 
 function scopeNote(): string {
@@ -437,7 +452,9 @@ function corpsRow(c: Corps, mine: boolean): string {
   if (!c.supplied) tags.push('<span class="tag bad">Cut off</span>');
   if (c.fought) tags.push('<span class="tag">Fought this month</span>');
   const line = lineStrength(g, c);
-  if (line.mul < 1) tags.push(`<span class="tag bad">Long supply line: attacks at ${Math.round(line.mul * 100)}%</span>`);
+  if (line.mul < 1) tags.push(inDesert(g.regions[c.reg])
+    ? `<span class="tag bad" title="Counted from the nearest working port, a step for every region of desert. Take a port nearer the front, or fall back toward one.">${Math.round(line.length)} regions from port: attacks at ${Math.round(line.mul * 100)}%</span>`
+    : `<span class="tag bad">Long supply line: attacks at ${Math.round(line.mul * 100)}%</span>`);
   if (frozen(g, c.nat, g.regions[c.reg])) tags.push('<span class="tag bad">No winter kit</span>');
   const gen = generalOf(g, c);
   for (const t of gen?.traits ?? []) {
@@ -477,7 +494,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -495,7 +512,7 @@ function regionPane(): string {
   let acts = '';
   const picked = pickedCorps();
   if (picked.length) {
-    const canRail = picked.some((c) => c.ap >= 4);
+    const canRail = picked.some((c) => railReach(g, c).size > 0);
     const canShip = picked.some((c) => shipTargets(g, c).length > 0);
     const canEvac = picked.some((c) => g.nations[c.nat].seaSupply && r.port && r.owner !== c.nat);
     acts = `<div class="acts">${canRail ? `<button class="btn small${ui.rail ? ' on' : ''}" data-act="rail">Rail move</button>` : ''}${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${lands.length ? `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Land these corps on an enemy coast.">Invade by sea</button>` : ''}${canEvac ? '<button class="btn small" data-act="evac" title="An emergency lift home. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>' : ''}${picked.length === 1 ? (picked[0].general !== null ? `<button class="btn small" data-act="general" data-id="${picked[0].general}">General's record</button>` : `<button class="btn small" data-act="appoint" data-id="${picked[0].id}">Appoint a general</button>`) : ''}<button class="btn small" data-act="unpick">Stand down</button></div>`;
@@ -513,10 +530,10 @@ function regionPane(): string {
 /** Where a new corps would form up: the selected region if it is home ground, otherwise the capital. */
 function raiseAt(): Region | null {
   const me = g.human!;
-  if (ui.sel >= 0 && isHome(g, me, g.regions[ui.sel])) return g.regions[ui.sel];
+  if (ui.sel >= 0 && canRaise(g, me, g.regions[ui.sel])) return g.regions[ui.sel];
   const cap = g.nations[me].capital;
-  if (cap >= 0 && isHome(g, me, g.regions[cap])) return g.regions[cap];
-  return g.regions.find((r) => isHome(g, me, r) && r.fac > 0) ?? g.regions.find((r) => isHome(g, me, r)) ?? null;
+  if (cap >= 0 && canRaise(g, me, g.regions[cap])) return g.regions[cap];
+  return g.regions.find((r) => canRaise(g, me, r) && r.fac > 0) ?? g.regions.find((r) => canRaise(g, me, r)) ?? null;
 }
 
 function buildPane(): string {
@@ -606,7 +623,7 @@ function labSummary(nat: string): string {
 
 function researchPane(): string {
   const me = g.human && g.nations[g.human].alive ? g.human : null;
-  const majors = Object.values(g.nations).filter((n) => n.lab && n.alive && n.id !== me).sort((a, b) => armySize(g, b.id) - armySize(g, a.id));
+  const majors = Object.values(g.nations).filter((n) => n.lab && n.alive && n.id !== me).sort((a, b) => fieldArmy(g, b.id) - fieldArmy(g, a.id));
   const others = majors.map((n) => `<h3>${esc(n.name)}${doctrineOf(n.id) ? ` · ${esc(doctrineOf(n.id))}` : ''}</h3>${labSummary(n.id)}`).join('');
   if (!me || !g.nations[me].lab) {
     return `<h2>Research</h2><p class="sub">The weapons of every great power improve as the war goes on, each new design arriving in the month history brought it into service. ${me ? `${esc(natName(me))} has no design offices of its own and buys its weapons abroad.` : 'A power that pushes one branch hard gets its designs early; one that neglects a branch falls behind.'}</p>${others}`;
@@ -813,7 +830,7 @@ function powersPane(): string {
   for (const n of at.sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || b.armyPeak - a.armyPeak)) {
     if (n.alive) {
       const will = Math.max(0, 1 - collapseScore(g, n.id) / n.resilience);
-      out += `<div class="nat"><span class="chip" style="background:${n.color}"></span><b>${esc(n.name)}</b><small>${num(armySize(g, n.id))} divisions</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
+      out += `<div class="nat"><span class="chip" style="background:${n.color}"></span><b>${esc(n.name)}</b><small>${num(fieldArmy(g, n.id))} divisions</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
     } else {
       out += `<div class="nat" style="opacity:.7"><span class="chip" style="background:${n.color}"></span><b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}</small><div class="will"><small>Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}</small></div></div>`;
     }
@@ -883,6 +900,18 @@ function fleetOrders(f: Fleet): string {
     <p class="sub" style="margin:8px 0 6px">Fleet strength ${num(fleetPower(g, f))}. It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${ui.stance === 'raid' ? 'raid shipping' : 'patrol'} there.</p>${rows}</div>`;
 }
 
+/** What a route that feeds an army overseas means for that army this month. */
+function desertNote(route: (typeof NAVY.convoys)[number]): string {
+  if (route.id !== DESERT.route.id) return '';
+  const extra = convoyDrag(g, route.to);
+  const line = extra > 0.05 ? `Cargoes sunk make the Axis supply line in Libya ${extra.toFixed(1)} regions longer this month.` : 'The Axis army in Libya is getting what it is sent.';
+  const b = route.base ? g.byName[route.base.region] : null;
+  if (!b) return ` ${line}`;
+  if (!atWar(g, b.ctrl, route.to)) return ` ${line} ${esc(b.name)} no longer threatens the route.`;
+  const starved = !!g.supply[b.ctrl] && !g.supply[b.ctrl][b.id];
+  return ` ${line} ${esc(b.name)} is hunting the convoys${starved ? ', but is itself cut off and short of everything' : ''}. In Axis hands the route would be safe.`;
+}
+
 /** The convoy war and the ore traffic, for whoever has a stake in them. */
 function seaNotes(): string {
   const me = g.human && g.nations[g.human].alive ? g.human : null;
@@ -892,7 +921,7 @@ function seaNotes(): string {
     if (!m || (me && me !== route.to && !atWar(g, me, route.to))) continue;
     const share = m.raid + m.guard > 0 ? m.raid / (m.raid + m.guard * NAVY.convoy.escortWorth) : 0;
     out += `<div class="note"><b>${esc(capital(route.name))}.</b> ${num(m.tons)} tons of shipping sunk ${m.turn === g.turn ? 'this month' : 'last month'}, cutting ${g.nations[route.to].adj} production by ${(m.share * 100).toFixed(m.share < 0.095 ? 1 : 0)}%. ${m.subsLost} submarine${m.subsLost === 1 ? '' : 's'} and ${m.escortsLost} escort${m.escortsLost === 1 ? '' : 's'} lost. ${num(m.total)} tons since the war began.
-      <div class="oddsbar" title="Raiders against escorts"><i style="width:${Math.round(share * 100)}%;background:var(--red)"></i><i style="flex:1;background:#6f9fd0"></i></div><span style="font-size:11.5px">Raiders ${num(m.raid)} against escorts ${num(m.guard)}. More escorts and patrolling fleets on the route cut the losses.</span></div>`;
+      <div class="oddsbar" title="Raiders against escorts"><i style="width:${Math.round(share * 100)}%;background:var(--red)"></i><i style="flex:1;background:#6f9fd0"></i></div><span style="font-size:11.5px">Raiders ${num(m.raid)} against escorts ${num(m.guard)}. More escorts and patrolling fleets on the route cut the losses.${desertNote(route)}</span></div>`;
   }
   const ore = oreRoute(g);
   const to = NAVY.ore.to;
@@ -1252,8 +1281,8 @@ function startCard(): string {
   const saved = peekSave(readSave() ?? '');
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `Watching history, ${date(saved.turn)}`}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
-    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe in ${g.regions.length} regions and ${g.seas.length} seas, monthly turns, armies, fleets and air fleets, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan.</p>
-    ${resume ? `<div class="sides">${resume}</div>` : ''}
+    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe, North Africa and the Middle East in ${g.regions.length} regions and ${g.seas.length} seas, monthly turns, armies, fleets and air fleets, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan.</p>
+    ${resume ? `<div class="sides">${resume}</div>` : staleSave(readSave() ?? '') ? '<div class="note">The campaign saved in this browser was played on the earlier, smaller map, before North Africa was added, and cannot be continued in this version. Starting a new game replaces it.</div>' : ''}
     <h3>September 1939 · The war begins</h3>
     <div class="sides">
       ${side(null, 'Watch history unfold', 'Every nation follows its plan. Press Play and watch Poland, then the West, then the East.', true)}
@@ -1267,6 +1296,12 @@ function startCard(): string {
       ${side(null, 'Watch the Battle of Britain', 'France has fallen. The computer flies history\'s plan: the Channel, the airfields, London, then the night Blitz.', true, 11)}
       ${side('GER', 'Germany', 'Five air fleets and a summer of flying weather. History split its effort and lost. Can you win the sky over Kent?', false, 11)}
       ${side('UK', 'United Kingdom', 'Radar, four fighter groups and the Channel. Keep Fighter Command in being until the autumn.', false, 11)}
+    </div>
+    <h3>September 1940 · The desert war</h3>
+    <div class="sides">
+      ${side(null, 'Watch the desert war', 'One road, no water, and a front that swings a thousand kilometres each way: Egypt, Operation Compass, Rommel, Tobruk.', true, 13)}
+      ${side('UK', 'United Kingdom', 'Two divisions against an army. Throw the Italians out of Egypt, then decide how far from Alexandria you dare to chase them.', false, 13)}
+      ${side('ITA', 'Italy', 'A large army on foot, a long way from Tripoli. Take Egypt before the British tanks find your open flank.', false, 13)}
     </div>
     <h3>June 1941 · Barbarossa</h3>
     <div class="sides">
@@ -1336,7 +1371,7 @@ function declareCard(): string {
   const list = declarable(g);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy</div><h2>Declare war</h2></header>
     <div class="body"><p class="lead">A neutral that is attacked joins the other side, and its friends may march to help it at once.</p>
-    ${list.map((id) => `<button class="pickrow" data-act="dodeclare" data-nat="${id}"><span class="chip" style="background:${g.nations[id].color}"></span><span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(armySize(g, id))} divisions</span></span></button>`).join('')}</div>
+    ${list.map((id) => `<button class="pickrow" data-act="dodeclare" data-nat="${id}"><span class="chip" style="background:${g.nations[id].color}"></span><span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(fieldArmy(g, id))} divisions</span></span></button>`).join('')}</div>
     <footer><button class="btn" data-act="close">Not now</button></footer>`;
 }
 
@@ -1353,10 +1388,10 @@ function newGame(human: string | null, seed?: number, from = 1): void {
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = from > 1 ? g.seaReports.length : 0;
   ui.air = -1; ui.airMode = ''; ui.seenAir = from > 1 ? g.airReports.length : 0;
   drawStatic();
-  const britain = from === 11;
+  const britain = from === 11, desert = from === 13;
   if (britain) ui.tab = 'air';
-  const focus = britain ? g.byName['Calais'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
-  ui.view = { x: focus.x - 300, y: focus.y - 230, w: human === 'GER' || from > 1 ? 640 : 600 };
+  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
+  ui.view = { x: focus.x - 300, y: focus.y - 230, w: desert ? 580 : human === 'GER' || from > 1 ? 640 : 600 };
   applyView();
   if (human) advanceToHuman(from > 1 && human !== 'GER'); else { ui.unread = from > 1 ? 0 : g.headlines.length; refresh(); }
 }
@@ -1740,7 +1775,8 @@ function applyView(): void {
   v.w = Math.max(150, Math.min(2100, v.w));
   const h = v.w * a;
   v.x = Math.max(-200, Math.min(g.width + 200 - v.w, v.x));
-  v.y = Math.max(-200, Math.min(g.height + 200 - h, v.y));
+  // The map ends in the Sahara: there is nothing to scroll to below it.
+  v.y = Math.max(-200, Math.min(g.height - h, v.y));
   svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`);
   svg.classList.toggle('near', v.w < 600);
 }

@@ -83,6 +83,12 @@ export function appoint(g: Game, gen: General, c: Corps | null): void {
 
 /** Seats the named commander a starting corps comes with. The label is the one used in setup-1939.json. */
 export function seat(g: Game, c: Corps, name: string, label?: string | null): General {
+  // A man already on the list is not invented twice: he takes the new command, unless a player has him busy elsewhere.
+  const known = g.generals.find((x) => x.nat === c.nat && x.name === name);
+  if (known) {
+    if (serving(known) && known.status === 'active' && (c.nat !== g.human || known.corps < 0)) appoint(g, known, c);
+    return known;
+  }
   const l = COMMAND.legacy[label ?? 'none'] ?? COMMAND.legacy.none;
   const gen = newGeneral(g, c.nat, name, { level: l.level, skills: l.skills, traits: l.traits, historical: true });
   appoint(g, gen, c);

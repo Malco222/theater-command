@@ -1,6 +1,6 @@
 # Theater Command 1939-1945 (working title)
 
-A grand strategy game of the Second World War in Europe: a turn-based campaign map on top, real-time battles underneath, joined by one contract called the Battle Ticket. The design framework (v9) is the source of truth for what the game is.
+A grand strategy game of the Second World War in Europe and the Mediterranean: a turn-based campaign map on top, real-time battles underneath, joined by one contract called the Battle Ticket. The design framework (v9) is the source of truth for what the game is.
 
 This repository holds **Phase 1** of the framework's roadmap: the campaign rules and auto-resolve on a simple browser map, built so the same rules and data can be carried into the Unreal Engine 5 build in Phase 2.
 
@@ -8,8 +8,8 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 
 **The campaign prototype** (open `dist/play.html` after a build)
 
-- Europe from Ireland to the Volga and from Norway to the Caucasus in 315 regions and 20 seas, generated from real coastlines (Natural Earth, public domain). Moscow, Stalingrad, the Crimea, Turkey and the northern edge of the Middle East are on the map.
-- 29 nations with their September 1939 armies as corps on the map, reinforcements by month, and replacement pools fed by industry.
+- Europe, North Africa and the Middle East from Ireland to the Volga and from Norway to the Sahara in 371 regions and 22 seas, generated from real coastlines (Natural Earth, public domain). Moscow, Stalingrad, the Crimea and Turkey are on the map, and so are French North Africa, Libya, Egypt and the Suez Canal, the Levant, Iraq, Gibraltar, Malta, Crete, Cyprus and Rhodes.
+- 30 nations with their September 1939 armies as corps on the map, reinforcements by month, and replacement pools fed by industry.
 - Monthly turns starting September 1939. Each corps gets four moves a month; fast troops in a fresh offensive get more.
 - Supply traced from each nation's own capital, industry and depots. Armies that are cut off fight at half strength and waste away.
 - Battles settled at once from a Battle Ticket (forces, terrain, forts, supply, air, commanders, tempo, direction of attack) with the framework's victory levels. Fortifications only count against the direction they face, so the Maginot Line can be outflanked.
@@ -28,6 +28,11 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 - Norway, April 1940. Germany declares war on Denmark and Norway and lands at Oslo, Bergen, Trondheim and Narvik under cover of its Battle Fleet; the Home Fleet comes out to meet it and an Allied expedition goes ashore, then leaves when France is in danger.
 - The convoy war. German submarines and raiders sink shipping on the Atlantic routes every month, and every ton lost cuts British production. Escorts, patrolling fleets and air cover cut the losses and sink U-boats. The U-boat arm grows on history's schedule.
 - Swedish iron ore reaches Germany across the Baltic in summer and through Narvik when the Gulf of Bothnia freezes. In the winter months it arrives only while Narvik is in hands that are not at war with Germany, and losing it costs German industry.
+- The war overseas. North Africa, the Levant and the island bases are colonies, and the rules treat them that way. A nation stands or falls by its home country, so losing Libya does not bring Italy nearer to asking for terms, and troops overseas are not counted in the army that defends the homeland. New corps are raised at home and sent out; history's expeditions (the Australians, the Afrika Korps, the Eighth Army's two corps) arrive in the month they did, at a friendly port, and only if the war they were sent for is being fought. When France falls the Army of Africa stays at its posts under Vichy. Battles overseas roll their own dice, so a fight in the desert never changes the luck of the war in Europe.
+- The desert. There is one road, no water and nothing to live on, so an army in North Africa is only as strong as the port behind it. Every corps' supply line is counted from the nearest working port, a step for every region of desert: Tripoli and Alexandria are great harbours, Benghazi and Tobruk small ones that start as if two regions out. The longer the line, the weaker the attack, the thinner the defence, the slower the replacements and the shorter each bound forward into enemy ground. An ally's port feeds the corps who came to fight beside him. A fortified port keeps two months of stores after the sea behind it is closed, which is what lets Tobruk stand a siege. No railway crosses the desert. All of it is data (`data/campaign/desert.json`).
+- Open desert. Infantry on foot outside prepared works has no flank to anchor on: against an attack that includes tanks or lorried troops it defends at 65%, and when it is driven off it loses more men than troops who can drive away. The Battle Ticket says so.
+- The Libya convoys. Every man, tank and litre of fuel for the Axis army in Africa crosses the Central Mediterranean. Malta hunts those convoys for as long as it holds out, harder while it is itself supplied, and every tenth of the cargo sunk makes the Axis supply line in Libya half a region longer. With Malta in Axis hands the route is safe.
+- The desert war on history's plan (`data/campaign/theatres.json`). An army overseas is run by a plan of its own, separate from its nation's plan in Europe: the Italians cross into Egypt in September 1940 and stop at Sidi Barrani, Operation Compass throws them back across Cyrenaica that winter, Rommel lands at Tripoli in February 1941 and wins it all back in the spring while Tobruk holds out behind him, and Operation Crusader lifts the siege at the end of the year.
 - Saved games. The whole campaign, including the exact state of the random number stream, is written to the browser as you play, and the start screen offers to continue it. A loaded game plays out exactly as the unsaved one would have.
 - Diplomacy on the framework's seven-step alignment track. Every neutral has a public opinion that drifts back to its own leaning and bends toward whoever is winning the war. A country that leans toward a bloc trades with it; one that is fully won over joins it. Players spend political capital to court neutrals, and moves that match public opinion go further.
 - History as events (`data/campaign/diplomacy.json`): the Soviet occupation of the Baltic states and Bessarabia, the Vienna Award, the Tripartite Pact. Each fires once, in its window, and only if its conditions still hold. If France does not fall, the Danube states do not join the Axis.
@@ -40,7 +45,7 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 - Computer generals who bring reserves up behind a spearhead, garrison what they have taken, leave a besieged city alone when the plan says to starve it out, counter-attack ground they have just lost, and close any gap in a line they are standing on.
 - Generals. The real commanders of 1939 start the war at the head of their corps, and others wait for a command. A general gains experience from every battle, and each level brings a skill point for one of four skills: offense, defense, logistics and leadership. Traits are earned from how he actually fights: three victories that end in surrender make an encirclement master, three positions held against a stronger attacker make an iron defender, three costly failed assaults make a butcher. Generals can be wounded, captured or killed, and unknown officers make their names in battle and rise from the ranks. The player assigns, relieves, promotes and dismisses them and spends their skill points; the computer does the same for its own. Everything a general adds is shown on the Battle Ticket. All of it is data (`data/campaign/commanders.json`).
 - Research and doctrine. The five great powers each have eight design teams, one to a branch: tanks, infantry weapons and guns, army doctrine, fighters, bombers, the navy, radar and signals, and war production. Research runs on history's clock: a branch with one team gets every new design in the month history got it, from the 50 mm Panzer III and the Spitfire Mk V to the Panther, the Lancaster and the T-34/85. A second or third team brings a branch's designs forward, a branch with no team stands still, and extra teams can be founded with production points. What counts in battle is how far a branch is ahead of or behind its own history: each design in service early is worth 5 to 8 percent to the corps, fleets, fighters, bombers or factories that use it until history catches up, and each one missed costs the same. Doctrine is each army's own: Blitzkrieg, Deep Battle, Superior Firepower, Methodical Battle, War of Rapid Decision. The computer leaves one team on every branch, so its nations fight exactly as they did. The Research tab shows every branch as a strip of the whole war, with history's dates, the designers' progress and today marked on it. All of it is data (`data/campaign/research.json`).
-- Play Germany, France, the United Kingdom or Poland from September 1939, Germany or the United Kingdom from July 1940 with the Battle of Britain about to begin, or Germany or the Soviet Union from June 1941. You can also watch history unfold from any of the three dates.
+- Play Germany, France, the United Kingdom or Poland from September 1939, Germany or the United Kingdom from July 1940 with the Battle of Britain about to begin, the United Kingdom or Italy from September 1940 with the Italian army on the Egyptian frontier, or Germany or the Soviet Union from June 1941. You can also watch history unfold from any of the four dates.
 
 **The exit tests** from the framework run as automated tests, with every nation on the historical plan across 20 different seeds.
 
@@ -49,9 +54,10 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 
 - "Played historically, the Luftwaffe fails to win air superiority by mid-September" (the Phase 2 test, run early against the campaign rules): on history's plan the sky over Kent, Hampshire and London is never won, and it is never close. From July to November 1940 Fighter Command loses about 1,000 to 1,200 fighters and 520 to 620 pilots and ends as strong as it began; the Luftwaffe loses about 1,800 to 2,100 aircraft. History's figures to the end of October were 1,023 fighters, 544 pilots and 1,887 aircraft. Britain is not invaded.
 - The what-if is tested as well. A player who brings all five air fleets within reach of Kent, spreads them over the airfields of Calais, Flanders, Lille, the Somme and Rouen, rests them for a month and then goes for No. 11 Group's airfields month after month wins the sky over Kent in September or October. The two western air fleets alone never do, and neither does everything crammed into Calais. Once the sky is won the troopships can cross, and the Royal Navy still sinks part of the force on the way.
+- "The desert war" (part of the Phase 3 Mediterranean test, run early against the campaign rules): the Italians reach Sidi Barrani in the autumn of 1940 and stop; by February 1941 the British hold Tobruk, Benghazi and Agedabia and more than half the Italian army in Libya is gone; by May the Axis is back on the Egyptian frontier with Tobruk still British behind it; the siege lasts through October; by the end of December 1941 Tobruk is relieved and the frontier cleared. Egypt never falls and Malta holds. The general who led a panzer division in France is the same man who lands at Tripoli.
 - Research moves that balance, and that is tested too. A Britain that put second teams on fighters and radar in 1939 keeps its sky even against all five air fleets. A Germany that put three teams on fighters in 1939 has the Bf 109F in the summer of 1940 and the Fw 190 by October, and wins the sky over Kent with the two western air fleets alone.
 
-Where 1941 still differs from history: Odessa falls a month or two early, Rostov is never reached, Soviet losses are lower than the real ones, and Finland, Hungary and Slovakia declare war but only defend.
+Where 1941 still differs from history: Odessa falls a month or two early, Rostov is never reached, Soviet losses are lower than the real ones, and Finland, Hungary and Slovakia declare war but only defend. In the desert, Operation Crusader goes better for the British than it did: in about two wars in three they run on to Agedabia or El Agheila with the Axis army badly cut down, and Rommel's counter-stroke of January 1942 seldom wins much of it back. Britain sends nobody to Greece in the spring of 1941, because the Balkans campaign is not in the game yet, and Rommel still wins.
 
 **The flight model** for the air battle (`src/air/flight.ts`) reproduces the documented speed, climb and turn of the Spitfire, Hurricane, Bf 109, Bf 110, Do 17 and He 111 from their physical data, and is covered by tests.
 
@@ -60,9 +66,10 @@ Where 1941 still differs from history: Odessa falls a month or two early, Rostov
 - The gray-box air battle screen (the other half of Phase 1). The flight model, scenario data and pilot logic exist; the battle loop and the command screen do not.
 - The rest of the war in the air. The computer flies air offensives only where history's plan has one, which today means Germany against Britain in 1940 and 1941: it does not fly a British night offensive against Germany, does not react to a player's air offensive by moving its fighter groups, and never attempts Sea Lion itself. Support for the armies still comes from each nation's air rating, not from where its air fleets stand. There are no aircraft types, no carrier aircraft and no air transport.
 - The rest of research: the computer never changes its research priorities, there is no retooling cost when a new design enters production, no captured or Lend-Lease equipment, no stolen technology, and none of the framework's superweapon projects. The United States and Japan are not in the game yet, so Carrier Warfare and Strategic Bombing are not yet doctrines of their own.
-- The rest of the war at sea: building warships to order (today new ships arrive on history's schedule), carrier strikes and port raids, mines, and the Mediterranean and North African campaigns the Italian and British fleets are there to fight over. Sea battles are settled at once from fleet strength; there is no tactical naval battle.
+- The rest of the war at sea: building warships to order (today new ships arrive on history's schedule), carrier strikes and port raids, and mines. Sea battles are settled at once from fleet strength; there is no tactical naval battle.
+- The rest of the Mediterranean: Italy's attack on Greece, the Balkans campaign of April 1941 and Crete, the fighting in Syria and Iraq, East Africa, and the Malta convoys. Malta's garrison is supplied like any other port and its bite on the Libya convoys is one number; there are no air fleets in the Mediterranean yet, so there is no air siege of the island, and the computer never tries to take it. The computer's fleets do not fight for the Libya route.
 - The rest of diplomacy: changing your own nation's side, treaties, espionage, and computer-run nations that court neutrals themselves. Today the computer follows history's events and the drift of the war.
-- The Balkans campaign of April 1941, Italy's part in the east, and everything after the spring of 1942. History's plans stop there; the game goes on, but computer-run nations only hold their lines.
+- Italy's part in the east, and everything after the spring of 1942: Gazala, El Alamein and Torch are not planned yet. History's plans stop there; the game goes on, but computer-run nations only hold their lines.
 - The rest of the commander system: skills and traits for admirals and air commanders (today they gain levels from their battles, and an admiral can be lost with his flagship), command limits, rivalries and politics between generals, and staff college. Generals lead single corps today, because the prototype has no armies above the corps yet.
 - Graphics. This is deliberately a staff map. The Total War and Company of Heroes level of presentation arrives with the Unreal Engine 5 build.
 - Borders are approximate: regions are grown from seed points, not traced from 1939 maps.
@@ -71,7 +78,7 @@ Where 1941 still differs from history: Odessa falls a month or two early, Rostov
 
 ```
 npm install
-npm test            # flight model, war economy, research, diplomacy, eastern front rules, generals, the war at sea, the war in the air, saved games and the three exit tests
+npm test            # flight model, war economy, research, diplomacy, eastern front and desert rules, generals, the war at sea, the war in the air, saved games and the four exit tests
 npm run build       # writes dist/play.html, a single file you can open in a browser
 npm run history     # prints a full computer-vs-computer war; add "sweep 20" to compare seeds
 npm run geo         # regenerates the maps from data/campaign/regions.mjs
@@ -81,7 +88,7 @@ npm run geo         # regenerates the maps from data/campaign/regions.mjs
 
 | Path | What it is |
 | --- | --- |
-| `data/` | Moddable data: nations, regions, seas, starting armies, fleets and air fleets, the historical plans, the eastern front rules, generals, research, aircraft |
+| `data/` | Moddable data: nations, regions, seas, starting armies, fleets and air fleets, the historical plans in Europe and overseas, the eastern front and desert rules, generals, research, aircraft |
 | `src/core/` | Shared deterministic core: seeded random numbers, maths, the Battle Ticket contract |
 | `src/campaign/game.ts` | Campaign rules: war, movement, supply, weather, battles, mobilisation, capitulation |
 | `src/campaign/economy.ts` | Production points, replacements, new corps and fortifications |
@@ -95,7 +102,7 @@ npm run geo         # regenerates the maps from data/campaign/regions.mjs
 | `src/campaign/turn.ts` | The monthly turn and the player's orders |
 | `src/campaign/ui/` | The campaign screen |
 | `src/air/` | Flight model and air battle groundwork |
-| `tests/` | Rule tests: flight model, war economy, research, the war at sea, the war in the air, saved games, diplomacy, the eastern front, generals |
+| `tests/` | Rule tests: flight model, war economy, research, the war at sea, the war in the air, saved games, diplomacy, the eastern front, the desert and the colonies, generals |
 | `tests/exit/` | The framework's exit tests |
 | `tools/` | Map generation and the history runner |
 
@@ -103,6 +110,6 @@ Everything in the simulation is deterministic: the same seed and the same orders
 
 ## Roadmap (from the framework)
 
-1. **Phase 1, now.** Campaign rules and auto-resolve in a browser map (done, and now deepening with production, saved games, diplomacy, the eastern front of 1941, generals, the war at sea and the war in the air), and a gray-box air battle with 300 aircraft (paused).
+1. **Phase 1, now.** Campaign rules and auto-resolve in a browser map (done, and now deepening with production, saved games, diplomacy, the eastern front of 1941, generals, the war at sea, the war in the air, research, and the Mediterranean and North Africa), and a gray-box air battle with 300 aircraft (paused).
 2. **Phase 2.** The Battle of Britain as a vertical slice in Unreal Engine 5: one campaign turn, one playable air battle, the full Battle Ticket loop, on licensed or commissioned art. Its campaign half (radar, airfields, the aircraft and pilot pipeline, Dowding's groups under Park and Leigh-Mallory, the Channel battles and Sea Lion as a what-if) is already playable on the browser map, and its exit test passes there.
 3. **Later phases.** Land battles, the war at sea, the full campaign systems, the other theatres.

@@ -18,8 +18,7 @@
     "quality": 0.75,
     "air": 40,
     "resilience": 0.6,
-    "align": "axis"
-  },
+    "align": "axis", "sealift": 3},
   "SVK": {
     "name": "Slovakia",
     "adj": "Slovak",
