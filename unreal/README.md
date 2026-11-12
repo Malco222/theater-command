@@ -93,7 +93,7 @@ The music is one original piece, "Leave Pass": an up-tempo swing number for a 19
 
 Some of what is on screen is a placeholder for the real thing:
 
-- **Army pieces** are plain blocks. Sculpted miniatures will replace them.
+- **Army pieces** carry simple figures made in code (`Campaign/CampaignMiniatures.cpp`): riflemen, a tank for armour, a field gun for artillery, a lorry for motorized troops, a horseman, a bunker, moulded in the nation's colour like the pieces of a board game. Sculpted miniatures can replace them.
 - **Borders** are the prototype's approximate ones, grown from each territory's chief town.
 
 ## For whoever works on the code

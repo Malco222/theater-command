@@ -15,13 +15,14 @@ class UProceduralMeshComponent;
 
 /**
  * One nation's force in one region, standing on the table as a single piece:
- * a stack of counters, one for each corps, under the nation's flag of the
- * period, with the army's strength on a plate beneath it.
+ * a stack of counters, one for each corps, with figures standing on it for the
+ * kinds of troops it holds (riflemen, a tank, a lorry, a horseman, a bunker),
+ * under the nation's flag of the period with the army's strength on a plate.
  *
- * The shapes are plain blocks for now. They are stand-ins for sculpted
- * miniatures, and everything that uses a piece (where it stands, whose it is,
- * who leads it, how it is picked up and marched) will carry over unchanged
- * when the real models arrive.
+ * The figures are simple ones made in code (CampaignMiniatures.h), the kind a
+ * board game is sold with. Sculpted miniatures can replace them, and everything
+ * that uses a piece (where it stands, whose it is, who leads it, how it is
+ * picked up and marched) will carry over unchanged when they do.
  */
 UCLASS()
 class THEATERCOMMAND_API AArmyPiece : public AActor
@@ -83,6 +84,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> SelectionRing;
 
+	/** The piece itself, in one mesh: its counters, the figures standing on them, the pole and the strength plate. */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Body;
+
 	/** The cloth of the standard: the nation's flag of the period. */
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> Cloth;
@@ -112,6 +117,8 @@ private:
 	bool bHovered = false;
 
 	// The pole and the colours, in the piece's own space, for telling whether the pointer is on them.
+	FVector PoleFoot = FVector::ZeroVector;
+	double BodyTop = 100.0;
 	double PoleTop = 200.0;
 	double BaseRadius = 60.0;
 	FVector FlagCenter = FVector::ZeroVector;

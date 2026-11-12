@@ -239,6 +239,7 @@ void ACampaignMapActor::LoadMaterials()
 		return Instance;
 	};
 	InkMaterial = MakeSurface(0.8f, 0.2f, 0.0f, 0.0f);
+	PieceMaterial = MakeSurface(0.5f, 0.38f, 0.0f, 0.0f); // smooth and a little shiny, like moulded plastic
 
 	// The land and the sea take their colour from pictures painted in PaintGround.
 	LandMaterial = UMaterialInstanceDynamic::Create(Load(TEXT("/Game/Campaign/Materials/M_Land.M_Land")), this);

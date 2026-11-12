@@ -94,6 +94,9 @@ public:
 	/** The cloth a nation's standards are cut from: its flag, readable from either side. Null if the flag material is missing. */
 	UMaterialInterface* GetFlagMaterial(const FString& Tag);
 
+	/** The paint the pieces are moulded in: each point of a piece carries its own colour. */
+	UMaterialInterface* GetPieceMaterial() const { return PieceMaterial; }
+
 	/** Half the size of the map in world units, for keeping the camera over the table. */
 	FVector2D GetWorldHalfExtent() const;
 
@@ -171,6 +174,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> InkMaterial;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> PieceMaterial;
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> SolidMaterials;

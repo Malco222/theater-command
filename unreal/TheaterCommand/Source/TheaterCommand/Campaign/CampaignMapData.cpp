@@ -347,6 +347,7 @@ FString FCampaignMapData::CorpsKindLabel(const FString& Kind)
 	if (Kind == TEXT("inf")) return TEXT("infantry");
 	if (Kind == TEXT("mot")) return TEXT("motorized");
 	if (Kind == TEXT("arm")) return TEXT("armoured");
+	if (Kind == TEXT("art")) return TEXT("artillery");
 	if (Kind == TEXT("cav")) return TEXT("cavalry");
 	if (Kind == TEXT("mtn")) return TEXT("mountain");
 	if (Kind == TEXT("fort")) return TEXT("fortress");
