@@ -11,3 +11,6 @@ DerivedDataCache/
 *.xcodeproj
 *.sln
 .DS_Store
+
+# Build tools fetched for this machine (Node.js), not part of the game.
+.tools/
