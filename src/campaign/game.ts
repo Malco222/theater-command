@@ -24,6 +24,7 @@ export const EASTERN = eastData as unknown as {
   deepOwners: string[]; mud: number[]; lineDefence: number; stepFresh: number; stepConverted: number; convertAfter: number; badWeather: number;
   bands: [number, number][]; drag: [number, number][]; roads: number; winter: { months: number[]; attack: number; defence: number; attrition: number; rest: number; hardy: string[] };
   mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; works?: [number, string, number][] }>;
+  works?: [number, string, number, string[], string, { taken?: boolean; port?: boolean; vs?: string[] }?][];
 };
 /** Rules for campaigning in the desert. See data/campaign/desert.json. */
 export const DESERT = desertData as unknown as {
@@ -1183,14 +1184,14 @@ function expeditions(g: Game, nat: string): void {
 const worksDue = (g: Game, t: { opens?: number }): boolean => t.opens === undefined || (g.flags.open !== 1 && g.turn >= t.opens);
 
 /**
- * Field works in the desert, by history's calendar: in the month named, whoever of the nations listed holds the
+ * Field works in the desert, and on the eastern front where history is followed, by history's calendar: in the month named, whoever of the nations listed holds the
  * place digs it in to that level, or strips its defences down to it. The works face the open desert: an attack
  * from ground of the same colony meets them. Works marked 'taken' are a beachhead's: they are dug as the month
  * closes by a holder who won the place in that month, where the others are dug as his month opens.
  */
 function desertWorks(g: Game, nat: string, closing = false): void {
   // A theatre outside the desert can list works of its own in theatres.json: they are dug the same way.
-  const rows: [number, string, number, string[], string, { taken?: boolean; port?: boolean; vs?: string[] }?][] = [...(DESERT.works ?? []), ...THEATRE_LIST.flatMap((t) => (worksDue(g, t) ? t.works ?? [] : []))];
+  const rows: [number, string, number, string[], string, { taken?: boolean; port?: boolean; vs?: string[] }?][] = [...(DESERT.works ?? []), ...(g.flags.open !== 1 ? EASTERN.works ?? [] : []), ...THEATRE_LIST.flatMap((t) => (worksDue(g, t) ? t.works ?? [] : []))];
   for (const [when, place, lv, holders, news, o] of rows) {
     const r = g.byName[place];
     if (closing && !o?.taken) continue;

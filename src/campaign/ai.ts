@@ -62,6 +62,8 @@ let leaving: PlanPhase['withdraw'] | null = null;
 let entrusted = new Set<number>();
 /** Enemy garrisons the theatre plan leaves to others: nobody attacks them, closes up to them or stays to watch them. */
 let masked = new Set<number>();
+/** Set while a plan keeps its army to the letter of its orders: the only places it may step into or win back. */
+let bound: Set<string> | null = null;
 /** Corps the plan in force keeps massed at a named place: the line is put in order without them. */
 let massed = new Set<number>();
 /** Ground the plan in force is giving up: the corps there march out and nobody is sent back in. */
@@ -71,6 +73,11 @@ let given = new Set<number>();
 const aside = (g: Game, r: Region, nat: string): boolean => r.theatre >= 0 && !!THEATRES[r.theatre] && apart(g, r.theatre, nat);
 /** An army run by a theatre's plan stays on that theatre's ground: it neither marches out of it nor takes a short cut round it. */
 const within = (r: Region): boolean => !scope || scope.has(r.id);
+/**
+ * True for ground an army may step into or win back unbidden. A plan that keeps its army to the letter of its
+ * orders was written against history's enemy: where a player holds the ground instead, the army answers him freely.
+ */
+const allowed = (g: Game, r: Region): boolean => !bound || bound.has(r.name) || r.ctrl === g.human;
 
 /** Months after losing a region in which the local commanders will still counter-attack it on their own. */
 const COUNTER_WINDOW = 2;
@@ -214,7 +221,8 @@ function mainCampaign(g: Game, nat: string): void {
   given = new Set((ph?.abandon ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined));
   quiet = !!ph?.quiet;
   single = ph?.renew === false;
-  try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; }
+  bound = ph?.strict ? new Set(ph.targets ?? []) : null;
+  try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; bound = null; }
 }
 
 /**
@@ -790,7 +798,7 @@ function defend(g: Game, nat: string, line = true): void {
     // has told to stand quiet stays where it is: it is being saved for a set-piece battle, not a scramble.
     if (!(scope && quiet)) {
       const others = friendlyUnits(g, here, nat).length > 1 || threat[here.id] === 0;
-      const gap = here.nb.map((j) => g.regions[j]).find((r) => atWar(g, nat, r.ctrl) && lost(r) && !late(r) && !hostileUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4));
+      const gap = here.nb.map((j) => g.regions[j]).find((r) => atWar(g, nat, r.ctrl) && lost(r) && !late(r) && !hostileUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4) && (allowed(g, r) || forsaken(g, nat, r)));
       if (gap && others && moveCorps(g, c, gap)) continue;
     }
     // An army standing on the defensive keeps a continuous line: an empty place in it is an open door, and a
@@ -836,7 +844,7 @@ function defend(g: Game, nat: string, line = true): void {
   for (const r of g.regions) {
     if (!n.alive || quiet) return;
     if (scope && !scope.has(r.id)) continue;
-    if (!atWar(g, nat, r.ctrl) || !lost(r) || late(r) || g.turn - r.since > COUNTER_WINDOW || !hostileUnits(g, r, nat).length) continue;
+    if (!atWar(g, nat, r.ctrl) || !lost(r) || late(r) || g.turn - r.since > COUNTER_WINDOW || !hostileUnits(g, r, nat).length || !allowed(g, r)) continue;
     // Troops that have already fought this month are in no state to be thrown straight into another attack.
     // In free play the force a staff keeps at a place stays there: it is not thrown into a counter-attack next door.
     const kept = isOpen(g) ? massed : null;
@@ -844,6 +852,22 @@ function defend(g: Game, nat: string, line = true): void {
     // Overseas a local counter-stroke sends two corps in to hold what it wins: the rest keep the door open behind them.
     if (pool.length && assess(g, pool, r).odds >= 1.8) resolveBattle(g, pool, r, scope ? { occupy: 2 } : {});
   }
+}
+
+/**
+ * True for ground the enemy has abandoned altogether: an island of his behind the front with none of his troops
+ * anywhere on it. An army kept strictly to its orders may still walk in and take such a place back.
+ */
+function forsaken(g: Game, nat: string, r: Region): boolean {
+  const seen = new Set([r.id]);
+  const q = [r.id];
+  for (let i = 0; i < q.length; i++) {
+    if (q.length > 12) return false; // too big to be an island: this is the enemy's country, not a pocket he left
+    const x = g.regions[q[i]];
+    if (hostileUnits(g, x, nat).length) return false;
+    for (const j of x.nb) if (!seen.has(j) && atWar(g, nat, g.regions[j].ctrl)) { seen.add(j); q.push(j); }
+  }
+  return true;
 }
 
 function walkToward(g: Game, c: Corps, to: Region): void {
