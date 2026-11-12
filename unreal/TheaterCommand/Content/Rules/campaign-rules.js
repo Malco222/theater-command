@@ -9487,6 +9487,30 @@
         nick: c.nick ?? null,
         honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ["#b08d57", "#f2ead6"] }))
       })),
+      // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
+      fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({
+        id: f.id,
+        nat: f.nat,
+        name: f.name,
+        zone: f.zone,
+        base: f.base,
+        port: f.port,
+        stance: f.stance,
+        bb: f.ships.bb,
+        cv: f.ships.cv,
+        ca: f.ships.ca,
+        dd: f.ships.dd,
+        ss: f.ships.ss
+      })),
+      air: s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => ({
+        id: f.id,
+        nat: f.nat,
+        name: f.name,
+        base: f.base,
+        ftr: Math.round(f.ftr),
+        bmr: Math.round(f.bmr),
+        mission: f.mission
+      })),
       nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
         name: n.name,
         adj: n.adj,

@@ -110,6 +110,9 @@ public:
 
 	const TArray<TObjectPtr<AArmyPiece>>& GetPieces() const { return Pieces; }
 
+	/** Lays the fleets on their seas (or by their harbours) and the air fleets over their airfields. */
+	void ShowFleets(const FCampaignView& View);
+
 private:
 	void LoadMaterials();
 	void PaintGround();
@@ -247,6 +250,13 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AArmyPiece>> Pieces;
+
+	/** The fleets and the air fleets, each as a piece, by the number the rules know it by. */
+	UPROPERTY(Transient)
+	TMap<int32, TObjectPtr<AArmyPiece>> FleetPieces;
+
+	UPROPERTY(Transient)
+	TMap<int32, TObjectPtr<AArmyPiece>> AirPieces;
 
 	/** The same pieces by "region|nation". */
 	UPROPERTY(Transient)

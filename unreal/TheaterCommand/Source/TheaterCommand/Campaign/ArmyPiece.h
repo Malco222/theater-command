@@ -37,6 +37,11 @@ public:
 	/** Says what the piece stands for. It is rebuilt only if that has changed. */
 	void SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 InRegionId, const TArray<FViewCorps>& InCorps);
 
+	/** Makes the piece a fleet lying on the sea, or an air fleet over its airfield, instead of an army. */
+	void SetFleet(ACampaignMapActor* Map, const FCampaignNation& Nation, const FViewFleet& InFleet);
+	void SetAirFleet(ACampaignMapActor* Map, const FCampaignNation& Nation, const FViewAirFleet& InWing);
+	bool IsArmy() const { return What == 0; }
+
 	/** Where the piece stands when it is not on the march. It goes there at once unless it is marching. */
 	void SetRestLocation(const FVector& Location);
 	const FVector& GetRestLocation() const { return RestLocation; }
@@ -103,6 +108,9 @@ private:
 	int32 Men = 0;
 	TArray<FViewCorps> Corps;
 	FString Signature; // what the piece was last built from, to tell when it must be rebuilt
+	int32 What = 0; // 0 an army, 1 a fleet, 2 an air fleet
+	FViewFleet Fleet;
+	FViewAirFleet Wing;
 
 	FVector RestLocation = FVector::ZeroVector;
 	TArray<FVector> Route;

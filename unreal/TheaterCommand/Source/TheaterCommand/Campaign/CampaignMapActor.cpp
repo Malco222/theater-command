@@ -1212,6 +1212,116 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 			}
 		}
 	}
+
+	// The fleets and the air fleets are part of the same picture.
+	ShowFleets(View);
+}
+
+void ACampaignMapActor::ShowFleets(const FCampaignView& View)
+{
+	UWorld* World = GetWorld();
+	if (!World || !Data.IsLoaded())
+	{
+		return;
+	}
+	const FRotator Facing(0.0f, LastPieceYaw, 0.0f);
+
+	// ---- Fleets. One at sea lies in the middle of its sea; one in harbour lies off the coast of its base.
+	TSet<int32> Afloat;
+	TMap<FIntPoint, int32> Crowd; // how many pieces are already at a place: (1, sea) or (2, base)
+	for (const FViewFleet& Fleet : View.Fleets)
+	{
+		const FCampaignNation* Nation = Data.FindNation(Fleet.Nation);
+		if (!Nation || !Data.Seas.IsValidIndex(Fleet.Zone))
+		{
+			continue;
+		}
+		const FVector2D Sea = Data.Seas[Fleet.Zone].Center;
+		FVector2D At = Sea;
+		const bool bInHarbour = Fleet.Stance == TEXT("port") && Data.Regions.IsValidIndex(Fleet.Base);
+		int32& Others = Crowd.FindOrAdd(bInHarbour ? FIntPoint(2, Fleet.Base) : FIntPoint(1, Fleet.Zone));
+		if (bInHarbour)
+		{
+			// Out from the port toward its sea until the water is reached, and a little beyond.
+			const FVector2D Port = Data.Regions[Fleet.Base].Center;
+			const FVector2D Out = (Sea - Port).GetSafeNormal();
+			At = Port;
+			for (int32 Step = 0; Step < 80 && Terrain.CoverageAt(At.X, At.Y) > 0.35f; ++Step)
+			{
+				At += Out * 1.5;
+			}
+			At += Out * 6.0 + FVector2D(-Out.Y, Out.X) * (Others * 11.0);
+		}
+		else
+		{
+			// Several fleets in one sea lie in a ring round its middle.
+			const double Angle = Others * 2.1 + Fleet.Zone;
+			At += FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (Others > 0 ? 16.0 : 0.0);
+		}
+		++Others;
+		TObjectPtr<AArmyPiece>& Piece = FleetPieces.FindOrAdd(Fleet.Id);
+		if (!Piece)
+		{
+			Piece = World->SpawnActor<AArmyPiece>(MapToWorld(At.X, At.Y), Facing);
+		}
+		if (Piece)
+		{
+			Piece->SetFleet(this, *Nation, Fleet);
+			Piece->SetRestLocation(MapToWorld(At.X, At.Y, 0.02));
+			Afloat.Add(Fleet.Id);
+		}
+	}
+	for (auto It = FleetPieces.CreateIterator(); It; ++It)
+	{
+		if (!Afloat.Contains(It.Key()))
+		{
+			if (It.Value())
+			{
+				It.Value()->Destroy();
+			}
+			It.RemoveCurrent();
+		}
+	}
+
+	// ---- Air fleets, each over its airfields: to the south-west of the town, where the army does not stand.
+	TSet<int32> Flying;
+	for (const FViewAirFleet& Wing : View.AirFleets)
+	{
+		const FCampaignNation* Nation = Data.FindNation(Wing.Nation);
+		if (!Nation || !Data.Regions.IsValidIndex(Wing.Base))
+		{
+			continue;
+		}
+		int32& Others = Crowd.FindOrAdd(FIntPoint(3, Wing.Base));
+		FVector2D At = Data.Regions[Wing.Base].Center + FVector2D(-10.0 - 11.0 * Others, 8.0);
+		if (Data.FindRegionAt(At.X, At.Y) != Wing.Base)
+		{
+			At = Data.Regions[Wing.Base].Center + FVector2D(10.0 + 11.0 * Others, 9.0);
+		}
+		++Others;
+		TObjectPtr<AArmyPiece>& Piece = AirPieces.FindOrAdd(Wing.Id);
+		if (!Piece)
+		{
+			Piece = World->SpawnActor<AArmyPiece>(SurfacePoint(At.X, At.Y, 0.0), Facing);
+		}
+		if (Piece)
+		{
+			Piece->SetAirFleet(this, *Nation, Wing);
+			Piece->SetRestLocation(SurfacePoint(At.X, At.Y, 0.0));
+			Flying.Add(Wing.Id);
+		}
+	}
+	for (auto It = AirPieces.CreateIterator(); It; ++It)
+	{
+		if (!Flying.Contains(It.Key()))
+		{
+			if (It.Value())
+			{
+				It.Value()->Destroy();
+			}
+			It.RemoveCurrent();
+		}
+	}
 }
 
 void ACampaignMapActor::SetHolders(const TArray<FString>& Holders)
@@ -1376,6 +1486,20 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			if (Piece)
 			{
 				Piece->SetActorRotation(FRotator(0.0f, CameraYaw, 0.0f));
+			}
+		}
+		for (const auto& Pair : FleetPieces)
+		{
+			if (Pair.Value)
+			{
+				Pair.Value->SetActorRotation(FRotator(0.0f, CameraYaw, 0.0f));
+			}
+		}
+		for (const auto& Pair : AirPieces)
+		{
+			if (Pair.Value)
+			{
+				Pair.Value->SetActorRotation(FRotator(0.0f, CameraYaw, 0.0f));
 			}
 		}
 	}

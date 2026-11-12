@@ -337,6 +337,44 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
 
+	const TArray<TSharedPtr<FJsonValue>>* Fleets = nullptr;
+	if (Object->TryGetArrayField(TEXT("fleets"), Fleets))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Fleets)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FViewFleet& Fleet = Out.Fleets.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("id"), Fleet.Id);
+			Entry->TryGetStringField(TEXT("nat"), Fleet.Nation);
+			Entry->TryGetStringField(TEXT("name"), Fleet.Name);
+			Entry->TryGetNumberField(TEXT("zone"), Fleet.Zone);
+			Entry->TryGetNumberField(TEXT("base"), Fleet.Base);
+			Entry->TryGetStringField(TEXT("port"), Fleet.Port);
+			Entry->TryGetStringField(TEXT("stance"), Fleet.Stance);
+			Entry->TryGetNumberField(TEXT("bb"), Fleet.Battleships);
+			Entry->TryGetNumberField(TEXT("cv"), Fleet.Carriers);
+			Entry->TryGetNumberField(TEXT("ca"), Fleet.Cruisers);
+			Entry->TryGetNumberField(TEXT("dd"), Fleet.Destroyers);
+			Entry->TryGetNumberField(TEXT("ss"), Fleet.Submarines);
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* AirFleets = nullptr;
+	if (Object->TryGetArrayField(TEXT("air"), AirFleets))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *AirFleets)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FViewAirFleet& Fleet = Out.AirFleets.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("id"), Fleet.Id);
+			Entry->TryGetStringField(TEXT("nat"), Fleet.Nation);
+			Entry->TryGetStringField(TEXT("name"), Fleet.Name);
+			Entry->TryGetNumberField(TEXT("base"), Fleet.Base);
+			Entry->TryGetNumberField(TEXT("ftr"), Fleet.Fighters);
+			Entry->TryGetNumberField(TEXT("bmr"), Fleet.Bombers);
+			Entry->TryGetStringField(TEXT("mission"), Fleet.Mission);
+		}
+	}
+
 	const TArray<TSharedPtr<FJsonValue>>* Regions = nullptr;
 	if (Object->TryGetArrayField(TEXT("regions"), Regions))
 	{

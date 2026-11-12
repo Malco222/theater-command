@@ -102,6 +102,31 @@ struct FLedger
 	int32 Revision = 0;
 };
 
+/** A fleet: whose, where, what it is doing, and its ships by class. */
+struct FViewFleet
+{
+	int32 Id = INDEX_NONE;
+	FString Nation;
+	FString Name;
+	int32 Zone = INDEX_NONE; // the sea it is in
+	int32 Base = INDEX_NONE; // the region of its home port, or INDEX_NONE when that is off the map
+	FString Port;
+	FString Stance; // patrol, raid or port
+	int32 Battleships = 0, Carriers = 0, Cruisers = 0, Destroyers = 0, Submarines = 0;
+	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
+};
+
+/** An air fleet on its airfields. */
+struct FViewAirFleet
+{
+	int32 Id = INDEX_NONE;
+	FString Nation;
+	FString Name;
+	int32 Base = INDEX_NONE;
+	int32 Fighters = 0, Bombers = 0;
+	FString Mission;
+};
+
 struct FCampaignView
 {
 	FString Rules; // "stand-in" until the real rules are bundled in
@@ -118,6 +143,8 @@ struct FCampaignView
 	TArray<FViewCorps> Corps;
 	FTreasury Treasury;
 	TArray<FString> Declarable; // the countries the player could declare war on this month
+	TArray<FViewFleet> Fleets;
+	TArray<FViewAirFleet> AirFleets;
 
 	const FViewCorps* FindCorps(int32 Id) const
 	{

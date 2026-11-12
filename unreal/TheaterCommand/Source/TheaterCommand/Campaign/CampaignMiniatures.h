@@ -35,6 +35,31 @@ struct FMiniatureMesh
 	/** A ball, or an egg if Size is not the same each way. */
 	void Ball(const FVector& Center, const FVector& Size, const FLinearColor& Colour, int32 Rings = 6, int32 Sides = 10);
 
+	/** A flat shape with upright sides: an outline (in the figure's own plan, x forward, y to its right) raised from Foot to Top. */
+	void Slab(const FVector& Where, double Scale, double Turn, const TArray<FVector2D>& Outline, double Foot, double Top, const FLinearColor& Colour);
+
+	// ---- Ships and aircraft. A ship lies on the water at Where, bows along Turn; an aeroplane flies above its stand.
+
+	void Battleship(const FVector& Where, double Length, const FLinearColor& Nation, double Turn = 0.0);
+	void Cruiser(const FVector& Where, double Length, const FLinearColor& Nation, double Turn = 0.0);
+	void Destroyer(const FVector& Where, double Length, const FLinearColor& Nation, double Turn = 0.0);
+	void Carrier(const FVector& Where, double Length, const FLinearColor& Nation, double Turn = 0.0);
+	void Submarine(const FVector& Where, double Length, const FLinearColor& Nation, double Turn = 0.0);
+	void Aeroplane(const FVector& Where, double Span, bool bBomber, const FLinearColor& Nation, const FString& Tag, double Turn = 0.0);
+
+	/**
+	 * A nation's wartime aircraft marking, lying flat with its middle at Where: the RAF's roundel, the American
+	 * star, the Soviet red star, the Japanese red disc, the German straight-armed cross, and the rest. A nation
+	 * with no marking drawn here gets a plain pale disc.
+	 */
+	void WingMarking(const FVector& Where, double Radius, const FString& Tag, double Turn = 0.0);
+
+	/** A fleet: up to three ships for the classes it has most worth showing, lying together. Unit is one map unit. */
+	void Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& Nation);
+
+	/** An air fleet: a fighter and a bomber (whichever it has) over a patch of airfield. */
+	void AirFleet(int32 Fighters, int32 Bombers, double Unit, const FLinearColor& Nation, const FString& Tag);
+
 	// ---- Scenery for the table.
 
 	/** A house: four walls and a pitched roof, its ridge along its length. */
@@ -64,7 +89,14 @@ struct FMiniatureMesh
 	 * The figures for a force of these kinds of corps (inf, arm, art, mot, cav, mtn, fort), set out on a round base
 	 * of the radius given: armour to the fore, the foot behind and beside it. Top is the height of the base.
 	 */
-	void Force(const TArray<FString>& Kinds, double BaseRadius, double Top, double Unit, const FLinearColor& Nation);
+	void Force(const TArray<FString>& Kinds, double BaseRadius, double Top, double Unit, const FLinearColor& Nation, const FString& Tag);
+
+	/**
+	 * What a nation's soldiers wore and what its vehicles were painted in the war years: German field grey and
+	 * tank grey, American olive drab, British khaki, and so on. A nation not listed wears a plain khaki.
+	 */
+	static FLinearColor UniformColour(const FString& Tag);
+	static FLinearColor VehicleColour(const FString& Tag);
 
 private:
 	int32 Add(const FVector& Position, const FVector& Normal, const FColor& Colour);

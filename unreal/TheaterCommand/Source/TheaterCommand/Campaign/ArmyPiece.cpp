@@ -70,6 +70,36 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	}
 }
 
+void AArmyPiece::SetFleet(ACampaignMapActor* Map, const FCampaignNation& Nation, const FViewFleet& InFleet)
+{
+	What = 1;
+	RegionId = INDEX_NONE;
+	NationTag = Nation.Tag;
+	Fleet = InFleet;
+	const FString NewSignature = FString::Printf(TEXT("%s|fleet|%d|%d|%d|%d|%d|%d"), *Nation.Tag, InFleet.Id,
+		InFleet.Battleships, InFleet.Carriers, InFleet.Cruisers, InFleet.Destroyers, InFleet.Submarines);
+	if (NewSignature != Signature)
+	{
+		Signature = NewSignature;
+		Rebuild(Map, Nation);
+	}
+}
+
+void AArmyPiece::SetAirFleet(ACampaignMapActor* Map, const FCampaignNation& Nation, const FViewAirFleet& InWing)
+{
+	What = 2;
+	RegionId = INDEX_NONE;
+	NationTag = Nation.Tag;
+	Wing = InWing;
+	// Rebuilt when its strength changes by a round fifty, not for every machine lost.
+	const FString NewSignature = FString::Printf(TEXT("%s|air|%d|%d|%d"), *Nation.Tag, InWing.Id, InWing.Fighters / 50, InWing.Bombers / 50);
+	if (NewSignature != Signature)
+	{
+		Signature = NewSignature;
+		Rebuild(Map, Nation);
+	}
+}
+
 void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 {
 	for (UStaticMeshComponent* Part : Parts)
@@ -126,29 +156,55 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	const FLinearColor IronPaint(FColor::FromHex(TEXT("1C1C1F")));
 	const FLinearColor BrassPaint(FColor::FromHex(TEXT("C9A227")));
 
-	// A counter for each corps, stacked: the taller the stack, the bigger the army.
-	const int32 Counters = FMath::Clamp(Corps.Num(), 1, 7);
-	const double CounterHeight = 0.5 * U, CounterGap = 0.1 * U, CounterWidth = 8.6 * U;
+	double CounterWidth = 8.6 * U;
 	double Top = 0.14 * U;
-	for (int32 i = 0; i < Counters; ++i)
+	double Size = 1.0;
+	FString Figure;
+	if (What == 1)
 	{
-		Model.Pillar(FVector(0.0, 0.0, Top), CounterWidth * 0.5, CounterWidth * 0.5 - 0.08 * U, CounterHeight, i % 2 == 0 ? Colour : Dark, 30);
-		Top += CounterHeight + CounterGap;
+		// A fleet: its ships lie on the water, with no base under them.
+		Top = 0.02 * U;
+		CounterWidth = 9.5 * U;
+		Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour);
+		Size = FMath::Clamp(0.8 + 0.012 * Fleet.Ships(), 0.9, 1.7);
+		Figure = FString::Printf(TEXT("%d ships"), Fleet.Ships());
+		SelectionRing->SetVisibility(false);
 	}
-	Top -= CounterGap;
-
-	// On the counters stand figures for the kinds of troops the army holds: riflemen, armour, lorries, horse.
-	TArray<FString> Kinds;
-	for (const FViewCorps& Unit : Corps)
+	else if (What == 2)
 	{
-		Kinds.Add(Unit.Kind);
+		// An air fleet: its aircraft over a patch of airfield.
+		Model.AirFleet(Wing.Fighters, Wing.Bombers, U, Colour, NationTag);
+		Top = 0.2 * U;
+		Size = FMath::Clamp(0.8 + (Wing.Fighters + Wing.Bombers) / 2500.0, 0.9, 1.6);
+		Figure = FText::AsNumber(Wing.Fighters + Wing.Bombers).ToString();
 	}
-	Model.Force(Kinds, CounterWidth * 0.5, Top, U, Colour);
+	else
+	{
+		// A counter for each corps, stacked: the taller the stack, the bigger the army.
+		const int32 Counters = FMath::Clamp(Corps.Num(), 1, 7);
+		const double CounterHeight = 0.5 * U, CounterGap = 0.1 * U;
+		for (int32 i = 0; i < Counters; ++i)
+		{
+			Model.Pillar(FVector(0.0, 0.0, Top), CounterWidth * 0.5, CounterWidth * 0.5 - 0.08 * U, CounterHeight, i % 2 == 0 ? Colour : Dark, 30);
+			Top += CounterHeight + CounterGap;
+		}
+		Top -= CounterGap;
 
-	// The standard: a pole at the back of the base, the nation's flag of the period, and a brass finial. The
-	// bigger the army, the bigger its flag; and its strength is written, in thousands of men, on a dark plate
-	// under the flag.
-	const double Size = FMath::Clamp(0.82 + 0.26 * FMath::Sqrt(Men / 30000.0), 0.9, 2.0);
+		// On the counters stand figures for the kinds of troops the army holds: riflemen, armour, lorries, horse.
+		TArray<FString> Kinds;
+		for (const FViewCorps& Unit : Corps)
+		{
+			Kinds.Add(Unit.Kind);
+		}
+		Model.Force(Kinds, CounterWidth * 0.5, Top, U, Colour, NationTag);
+
+		// The bigger the army, the bigger its flag; and its strength is written, in thousands of men, on a dark
+		// plate under the flag.
+		Size = FMath::Clamp(0.82 + 0.26 * FMath::Sqrt(Men / 30000.0), 0.9, 2.0);
+		Figure = Men >= 995000 ? FString::Printf(TEXT("%.1fM"), Men / 1000000.0) : FString::Printf(TEXT("%dk"), FMath::Max(1, FMath::RoundToInt32(Men / 1000.0)));
+	}
+
+	// The standard: a pole at the back of the base, the nation's flag of the period, and a brass finial.
 	const double FlagWidth = 6.6 * U * Size, FlagHeight = FlagWidth / 1.5;
 	const double PoleHeight = 9.0 * U + FlagHeight;
 	const FVector Pole(CounterWidth * 0.32, -CounterWidth * 0.3, 0.0); // behind the figures, and to the left, so the flag flies over the piece
@@ -213,9 +269,8 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	FlagRadius = FlagWidth * 0.55;
 
 	// The strength plate, hung from the pole under the flag, edged in brass.
-	const FString Figure = Men >= 995000 ? FString::Printf(TEXT("%.1fM"), Men / 1000000.0) : FString::Printf(TEXT("%dk"), FMath::Max(1, FMath::RoundToInt32(Men / 1000.0)));
 	const double PlateHeight = FMath::Min(FlagHeight * 0.42, 2.7 * U);
-	const double PlateWidth = PlateHeight * (0.95 + 0.52 * Figure.Len());
+	const double PlateWidth = PlateHeight * (0.95 + 0.5 * Figure.Len());
 	const FVector PlateAt = Pole + FVector(0.0, Hoist + PlateWidth * 0.5, FlagAt.Z - FlagHeight * 0.5 - 0.35 * U - PlateHeight * 0.5);
 	Model.Box(PlateAt, FVector(0.2 * U, PlateWidth, PlateHeight), FLinearColor(FColor::FromHex(TEXT("15130F"))));
 	Model.Box(PlateAt + FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), BrassPaint);
