@@ -274,7 +274,7 @@
     [23, "ITA", "Bologna and Savona Divisions", "inf", 1, "Tripoli", {"xp": 0.1, "war": ["UK", "ITA"]}],
     [24, "ITA", "Trieste Motorized Division", "mot", 1, "Tripoli", {"xp": 0.1, "war": ["UK", "ITA"]}],
     [18, "GER", "5th Light Division", "arm", 1, "Tripoli", {"gen": "Erwin Rommel", "trait": "panzer", "hold": 1, "xp": 0.4, "war": ["UK", "ITA"]}],
-    [20, "GER", "15th Panzer Division", "arm", 1, "Tripoli", {"xp": 0.4, "war": ["UK", "ITA"]}],
+    [20, "GER", "15th Panzer Division", "arm", 1, "Tripoli", {"gen": "Ludwig Cruwell", "xp": 0.4, "war": ["UK", "ITA"]}],
     [24, "GER", "90th Light Division", "mot", 1, "Tripoli", {"xp": 0.3, "war": ["UK", "ITA"]}],
     [13, "ITA", "Ciamuria Corps and Julia Alpine Division", "inf", 3, "Albania", {"gen": "Sebastiano Visconti Prasca", "xp": 0.1, "war": ["ITA", "UK"]}],
     [13, "ITA", "XXVI Corps", "inf", 2, "Albania", {"xp": 0.1, "war": ["ITA", "UK"]}],
@@ -303,6 +303,14 @@
     [37, "ROM", "3rd Army: IV and V Corps", "inf", 4, "Don Bend", {"hold": 1, "join": 1, "xp": 0.1, "war": ["GER", "SOV"]}],
     [38, "ROM", "4th Army: VI Corps", "inf", 3, "Kalmyk Steppe", {"gen": "Constantin Constantinescu-Claps", "trait": "defender", "hold": 1, "join": 1, "xp": 0.1, "war": ["GER", "SOV"]}],
     [38, "ROM", "4th Army: VII Corps", "inf", 3, "Kalmyk Steppe", {"hold": 1, "join": 1, "xp": 0.1, "war": ["GER", "SOV"]}],
-    [42, "GER", "Panzer Corps from France", "arm", 3, "Poltava", {"xp": 0.4, "war": ["GER", "SOV"]}]
+    [42, "GER", "Panzer Corps from France", "arm", 3, "Poltava", {"xp": 0.4, "war": ["GER", "SOV"]}],
+    [31, "UK", "1st South African and 50th Divisions", "inf", 2, "Alexandria", {"xp": 0.2, "war": ["UK", "ITA"]}],
+    [32, "UK", "1st Armoured Division", "arm", 1, "Alexandria", {"xp": 0.1, "war": ["UK", "ITA"]}],
+    [34, "UK", "New Zealand and 9th Australian Divisions", "inf", 2, "Alexandria", {"xp": 0.35, "war": ["UK", "ITA"]}],
+    [36, "UK", "X Corps (8th and 10th Armoured Divisions)", "arm", 2, "Alexandria", {"gen": "Bernard Montgomery", "xp": 0.2, "war": ["UK", "ITA"]}],
+    [37, "UK", "44th and 51st Divisions", "inf", 2, "Alexandria", {"xp": 0.1, "war": ["UK", "ITA"]}],
+    [31, "ITA", "Littorio Armoured Division", "arm", 1, "Tripoli", {"xp": 0.1, "war": ["UK", "ITA"]}],
+    [36, "GER", "164th Light Division and Ramcke Brigade", "inf", 1, "Tobruk", {"xp": 0.3, "war": ["UK", "ITA"]}],
+    [36, "ITA", "Folgore Parachute Division", "inf", 1, "Tobruk", {"xp": 0.3, "war": ["UK", "ITA"]}]
   ]
 }

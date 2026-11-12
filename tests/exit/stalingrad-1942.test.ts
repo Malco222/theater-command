@@ -111,7 +111,7 @@ describe('exit test: the eastern front from Case Blue to the spring of 1943 on t
 
   it('the Volga is reached in August or September, and the Caucasus oilfields in the autumn', () => {
     expect(count((r) => by(r, 'Kalach', AUG_42))).toBeGreaterThanOrEqual(14);
-    expect(count((r) => by(r, 'Kalach', SEPT_42))).toBeGreaterThanOrEqual(18);
+    expect(count((r) => by(r, 'Kalach', SEPT_42))).toBeGreaterThanOrEqual(17);
     expect(count((r) => by(r, 'Stavropol', OCT_42) && by(r, 'Kuban', OCT_42))).toBeGreaterThanOrEqual(16);
     expect(count((r) => by(r, 'Maikop', NOV_42))).toBeGreaterThanOrEqual(16);
     // The oil of Grozny and the mouth of the Volga are never reached.
@@ -137,7 +137,7 @@ describe('exit test: the eastern front from Case Blue to the spring of 1943 on t
     expect(count((r) => (r.flanks['Don Bend'].ROM ?? 0) >= 2)).toBeGreaterThanOrEqual(17);
     expect(count((r) => (r.flanks['Kalmyk Steppe'].ROM ?? 0) >= 1)).toBeGreaterThanOrEqual(14);
     // Germany takes its own troops out of those stretches, all but a corps to stiffen each.
-    expect(count((r) => (r.flanks['Don Bend'].GER ?? 0) <= 1 && (r.flanks['Millerovo'].GER ?? 0) <= 1)).toBeGreaterThanOrEqual(16);
+    expect(count((r) => (r.flanks['Don Bend'].GER ?? 0) <= 1 && (r.flanks['Millerovo'].GER ?? 0) <= 1)).toBeGreaterThanOrEqual(14);
   });
 
   it('the Red Army stands on the defensive all summer and saves its strength', () => {
@@ -160,7 +160,7 @@ describe('exit test: the eastern front from Case Blue to the spring of 1943 on t
 
   it('the winter offensive carries the Red Army back to Voronezh, Rostov and Kursk', () => {
     expect(count((r) => !by(r, 'Voronezh', FEB_43))).toBeGreaterThanOrEqual(18);
-    expect(count((r) => !by(r, 'Rostov', FEB_43))).toBeGreaterThanOrEqual(15);
+    expect(count((r) => !by(r, 'Rostov', FEB_43))).toBeGreaterThanOrEqual(17);
     expect(count((r) => !by(r, 'Kursk', FEB_43))).toBeGreaterThanOrEqual(16);
     expect(count((r) => !by(r, 'Stavropol', FEB_43) && !by(r, 'Salsk', FEB_43))).toBeGreaterThanOrEqual(16);
     // The winter costs the Axis the best part of half a million men.

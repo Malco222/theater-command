@@ -392,6 +392,11 @@ export interface PlanPhase {
    * nearest home first so that the ones behind find room, and no reserves are sent back into it.
    */
   abandon?: string[];
+  /**
+   * In a side theatre, where several phases may cover the same months: this one is the plan only while the enemy
+   * holds every place named here. The first phase in the list whose month and conditions fit is the one followed.
+   */
+  ifLost?: string[];
   /** Orders for named fleets while the phase lasts. */
   fleets?: { fleet: string; zone: string; stance: Stance }[];
 }

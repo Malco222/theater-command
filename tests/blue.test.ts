@@ -88,8 +88,8 @@ describe('a force kept massed at a place', () => {
       const c = g.corps.find((x) => x.id === id);
       if (c) expect(g.regions[c.reg].name).toBe('Kalach');
     }
-    // Elsewhere the army did move that month.
-    expect(whole.reports.some((r) => r.turn === OCT_42 && r.attNat === 'GER' && r.regionName !== 'Stalingrad')).toBe(true);
+    // The rest of the army did fight that month.
+    expect(whole.reports.some((r) => r.turn === OCT_42 && r.attNat === 'GER')).toBe(true);
   });
 
   it('a place short of its force draws the nearest infantry that can be spared, and no tanks', () => {

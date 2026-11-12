@@ -28,6 +28,7 @@ export const EASTERN = eastData as unknown as {
 export const DESERT = desertData as unknown as {
   terrain: string; step: number; port: number; ports: Record<string, number>; bands: [number, number][]; lineDefence: number; open: number; stores: number; retreat: [number, number]; replace: number; drag: [number, number][];
   route: { id: string; feeds: string[]; perTenth: number };
+  works?: [number, string, number, string[], string][];
 };
 import {
   FORT_MUL, KIND, MEN_PER_DIV, STACK, TERRAIN_DEF,
@@ -979,6 +980,20 @@ function expeditions(g: Game, nat: string): void {
 }
 
 /**
+ * Field works in the desert, by history's calendar: in the month named, whoever of the nations listed holds the
+ * place digs it in to that level, or strips its defences down to it. The works face the open desert: an attack
+ * from ground of the same colony meets them.
+ */
+function desertWorks(g: Game, nat: string): void {
+  for (const [when, place, lv, holders, news] of DESERT.works ?? []) {
+    const r = g.byName[place];
+    if (when !== g.turn || !r || r.ctrl !== nat || !holders.includes(nat) || (r.fort?.lv ?? 0) === lv) continue;
+    r.fort = lv > 0 ? { lv, vs: r.fort?.vs ?? [r.owner] } : null;
+    headline(g, 'event', news, nat, r.id);
+  }
+}
+
+/**
  * An army newly cut off from its supply is news the month it happens, whoever closed the ring. It is
  * told once: again only if the army is relieved and then cut off a second time.
  */
@@ -1015,6 +1030,7 @@ export function startPhase(g: Game, nat: string): void {
     addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
   }
   expeditions(g, nat);
+  desertWorks(g, nat);
   mobilise(g, nat);
   monthlyCommand(g, nat);
   navalUpkeep(g, nat);

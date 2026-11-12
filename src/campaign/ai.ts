@@ -22,7 +22,7 @@ function phases(nat: string): PlanPhase[] {
 }
 
 /** A war fought overseas to its own plan. See data/campaign/theatres.json. */
-interface Theatre { name: string; regions: string[]; plans: Record<string, PlanPhase[]> }
+interface Theatre { name: string; regions: string[]; plans: Record<string, PlanPhase[]>; bases?: Record<string, string> }
 const THEATRES = Object.entries(theatreData as unknown as Record<string, Theatre | string>).filter((e): e is [string, Theatre] => typeof e[1] !== 'string').map((e) => e[1]);
 const theatreIds = new WeakMap<Game, Set<number>[]>();
 
@@ -61,20 +61,26 @@ const within = (r: Region): boolean => !scope || scope.has(r.id);
 /** Months after losing a region in which the local commanders will still counter-attack it on their own. */
 const COUNTER_WINDOW = 2;
 
+/** The phase of a theatre's plan in force this month: the first in the list whose months and conditions fit. */
+function theatrePhase(g: Game, nat: string, list: PlanPhase[]): PlanPhase | null {
+  const ours = (nm: string): boolean => { const r = g.byName[nm]; return !!r && allied(g, nat, r.ctrl); };
+  const ph = list.find((p) => g.turn >= p.from && g.turn <= p.to && (p.ifLost ?? []).every((nm) => !ours(nm))) ?? null;
+  // A phase that waits on someone else's war is no plan at all until that war has come.
+  return ph?.ifAtWar && !atWar(g, ph.ifAtWar[0], ph.ifAtWar[1]) ? null : ph;
+}
+
 export function phaseFor(g: Game, nat: string): PlanPhase | null {
   return phases(nat).find((p) => g.turn >= p.from && g.turn <= p.to) ?? null;
 }
 
 /** What history's plan asks of a nation this month in each theatre overseas where it has troops: the phase, or null for "stand on the defensive". */
-export function theatrePhases(g: Game, nat: string): { theatre: string; phase: PlanPhase | null }[] {
+export function theatrePhases(g: Game, nat: string): { theatre: string; phase: PlanPhase | null; base: string | null }[] {
   const ids = theatreRegions(g);
-  const out: { theatre: string; phase: PlanPhase | null }[] = [];
+  const out: { theatre: string; phase: PlanPhase | null; base: string | null }[] = [];
   THEATRES.forEach((T, k) => {
     const list = T.plans[nat];
     if (!list || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
-    const ph = list.find((p) => g.turn >= p.from && g.turn <= p.to) ?? null;
-    // A phase that waits on someone else's war is no plan at all until that war has come.
-    out.push({ theatre: T.name, phase: ph?.ifAtWar && !atWar(g, ph.ifAtWar[0], ph.ifAtWar[1]) ? null : ph });
+    out.push({ theatre: T.name, phase: theatrePhase(g, nat, list), base: T.bases?.[nat] ?? null });
   });
   return out;
 }
@@ -103,9 +109,8 @@ function overseas(g: Game, nat: string): void {
   THEATRES.forEach((T, k) => {
     const phases = T.plans[nat];
     if (!phases || !n.alive || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
-    const planned = phases.find((p) => g.turn >= p.from && g.turn <= p.to) ?? null;
-    // Some phases wait on someone else's war, as in the main plan.
-    const ph = planned?.ifAtWar && !atWar(g, planned.ifAtWar[0], planned.ifAtWar[1]) ? null : planned;
+    // Some phases wait on someone else's war, as in the main plan, or on how the theatre's own war has gone.
+    const ph = theatrePhase(g, nat, phases);
     if (ph?.declare) for (const e of ph.declare) declareWar(g, nat, e);
     if (!n.alive || !n.atWar.length) return;
     if (ph?.landings) landings(g, nat, ph, ids[k]);
@@ -115,7 +120,13 @@ function overseas(g: Game, nat: string): void {
     scope = ids[k];
     quiet = !!ph?.quiet;
     leaving = ph?.withdraw ?? null;
+    given = new Set((ph?.abandon ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined && ids[k].has(id)));
     try {
+      // The plan's standing orders come first: the force it keeps at a place stays, and ground it gives up is left,
+      // the army falling back along the road to the base that feeds it.
+      hold(g, nat, ph);
+      const base = g.byName[T.bases?.[nat] ?? ''];
+      if (base) fallBack(g, nat, base.id);
       // Whoever the plan has named so far, and anyone at war with this nation who is on the theatre's ground.
       const enemies = new Set<string>();
       for (const p of phases) if (p.from <= g.turn) for (const e of p.enemies ?? []) if (n.atWar.includes(e)) enemies.add(e);
@@ -128,14 +139,16 @@ function overseas(g: Game, nat: string): void {
           if (!ids[k].has(r.id)) { halt.add(r.name); edge.add(r.name); }
           else if (only && !only.has(r.name)) halt.add(r.name);
         }
-        offensive(g, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only);
+        offensive(g, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
         // With the month's fighting done the rest of the army closes up to wherever the enemy now stands.
-        if (n.alive) { advance(g, nat, enemies, 0, null, edge); defend(g, nat, false); }
-      } else defend(g, nat);
+        if (n.alive) { advance(g, nat, enemies, 0, null, edge); mass(g, nat, ph); defend(g, nat, false); }
+      } else { gather(g, nat, ph); mass(g, nat, ph); defend(g, nat); }
     } finally {
       scope = null;
       quiet = false;
       leaving = null;
+      given = new Set();
+      massed = new Set();
       for (const c of rest) c.hold = false;
     }
   });
@@ -256,15 +269,30 @@ function mass(g: Game, nat: string, ph: PlanPhase | null): void {
  * Gives up the ground the plan has written off: every corps standing on it marches toward home by the shortest
  * road over friendly country, as far as the month allows. Those nearest home go first and leave room behind them.
  */
-function fallBack(g: Game, nat: string): void {
-  const cap = g.nations[nat].capital;
-  if (!given.size || cap < 0) return;
-  const home = hops(g, cap, (r) => allied(g, nat, r.ctrl));
+function fallBack(g: Game, nat: string, cap = g.nations[nat].capital): void {
+  if (!given.size || cap < 0 || !allied(g, nat, g.regions[cap].ctrl)) return;
+  const home = hops(g, cap, (r) => allied(g, nat, r.ctrl) && within(r));
   const leaving = g.corps
     .filter((c) => c.nat === nat && c.kind !== 'fort' && !c.hold && given.has(c.reg) && home[c.reg] > 0)
     .sort((a, b) => home[a.reg] - home[b.reg]);
-  for (const c of leaving) {
-    for (let step = 0; step < 6 && c.ap > 0 && given.has(c.reg); step++) {
+  // Where the one road home is full of the nation's own troops, one of them goes a stage further to make room.
+  const makeRoom = (r: Region, depth = 0): boolean => {
+    if (friendlyUnits(g, r, nat).length < STACK) return true;
+    if (depth > 3) return false;
+    const movers = r.units.filter((u) => u.nat === nat && !u.hold && u.kind !== 'fort' && u.ap > 0);
+    const nexts = r.nb.map((j) => g.regions[j]).filter((x) => allied(g, nat, x.ctrl) && home[x.id] >= 0 && home[x.id] < home[r.id]).sort((a, b) => friendlyUnits(g, a, nat).length - friendlyUnits(g, b, nat).length);
+    for (const x of nexts) {
+      if (!movers.length || !makeRoom(x, depth + 1)) continue;
+      for (const u of movers) if (u.ap >= Math.min(moveCost(g, u, x), 4) && moveCorps(g, u, x)) return true;
+    }
+    return false;
+  };
+  leaving.forEach((c, i) => {
+    // An army overseas has one road home and little room on it: whoever gets off the ground being given up first
+    // goes a stage further if those still coming behind would not all fit where he stands.
+    const behind = scope ? leaving.length - 1 - i : 0;
+    for (let step = 0; step < 6 && c.ap > 0; step++) {
+      if (!given.has(c.reg) && (!scope || friendlyUnits(g, g.regions[c.reg], nat).length + behind <= STACK)) break;
       let to: Region | null = null;
       for (const j of g.regions[c.reg].nb) {
         const r = g.regions[j];
@@ -273,9 +301,10 @@ function fallBack(g: Game, nat: string): void {
         const worse = (x: Region): number => (given.has(x.id) ? 10 : 0) + friendlyUnits(g, x, nat).length;
         if (!to || worse(r) < worse(to)) to = r;
       }
+      if (!to) to = g.regions[c.reg].nb.map((j) => g.regions[j]).find((r) => allied(g, nat, r.ctrl) && home[r.id] >= 0 && home[r.id] < home[c.reg] && makeRoom(r)) ?? null;
       if (!to || c.ap < Math.min(moveCost(g, c, to), 4) || !moveCorps(g, c, to)) break;
     }
-  }
+  });
 }
 
 /**
@@ -294,7 +323,7 @@ function gather(g: Game, nat: string, ph: PlanPhase | null): void {
     for (let guard = 0; guard < want && fast(r).length < want; guard++) {
       if (crowd(r) >= STACK) {
         const foot = r.units.find((u) => u.nat === nat && !u.hold && u.kind !== 'fort' && !KIND[u.kind].mobile && u.ap > 0);
-        const next = r.nb.map((j) => g.regions[j]).filter((x) => x.ctrl === nat && !at.has(x.id) && crowd(x) < STACK).sort((a, b) => crowd(a) - crowd(b))[0];
+        const next = r.nb.map((j) => g.regions[j]).filter((x) => x.ctrl === nat && within(x) && !at.has(x.id) && crowd(x) < STACK).sort((a, b) => crowd(a) - crowd(b))[0];
         if (!foot || !next || !moveCorps(g, foot, next)) break;
       }
       const d = hops(g, r.id, (x) => allied(g, nat, x.ctrl));
@@ -302,10 +331,14 @@ function gather(g: Game, nat: string, ph: PlanPhase | null): void {
         const here = g.regions[c.reg];
         return here.units.filter((u) => u.nat === nat && u.kind !== 'fort').length >= 3 || !here.nb.some((j) => hostileUnits(g, g.regions[j], nat).length > 0);
       };
+      // The main army comes by rail from anywhere on its own fronts. An army overseas has no railway: its fast
+      // troops march, from as far as a month's marching reaches, and only over its own theatre's ground.
       const c = g.corps
-        .filter((x) => x.nat === nat && !x.hold && KIND[x.kind].mobile && x.ap >= 4 && !at.has(x.reg) && d[x.reg] > 0 && !aside(g.regions[x.reg], nat) && spare(x))
-        .sort((a, b) => crowd(g.regions[b.reg]) - crowd(g.regions[a.reg]) || d[a.reg] - d[b.reg])[0];
-      if (!c || !railMove(g, c, r)) break;
+        .filter((x) => x.nat === nat && !x.hold && KIND[x.kind].mobile && !at.has(x.reg) && d[x.reg] > 0 && spare(x)
+          && (scope ? scope.has(x.reg) && x.ap >= d[x.reg] && d[x.reg] <= 4 : x.ap >= 4 && !aside(g.regions[x.reg], nat)))
+        .sort((a, b) => (scope ? atkPower(g, b) - atkPower(g, a) : 0) || crowd(g.regions[b.reg]) - crowd(g.regions[a.reg]) || d[a.reg] - d[b.reg])[0];
+      if (!c) break;
+      if (scope) { walkToward(g, c, r); if (c.reg !== r.id) break; } else if (!railMove(g, c, r)) break;
     }
     fast(r).forEach((u) => massed.add(u.id));
   }
@@ -688,8 +721,9 @@ function defend(g: Game, nat: string, line = true): void {
     const here = g.regions[c.reg];
     if (!mine(here)) continue; // abroad on an ally's ground: stand where the plan put it
 
-    // Step back into ground the enemy has left empty behind his spearheads.
-    {
+    // Step back into ground the enemy has left empty behind his spearheads. An army overseas that its plan
+    // has told to stand quiet stays where it is: it is being saved for a set-piece battle, not a scramble.
+    if (!(scope && quiet)) {
       const others = friendlyUnits(g, here, nat).length > 1 || threat[here.id] === 0;
       const gap = here.nb.map((j) => g.regions[j]).find((r) => atWar(g, nat, r.ctrl) && lost(r) && !late(r) && !hostileUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4));
       if (gap && others && moveCorps(g, c, gap)) continue;
