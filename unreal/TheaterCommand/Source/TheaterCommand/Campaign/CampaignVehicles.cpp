@@ -1028,12 +1028,388 @@ namespace VehicleParts
 		B.Tube(T + 0.58, Off + 0.2, 1.82, T + 0.95, Off + 0.2, 1.82, 0.04, Dark, 6);
 	}
 
+	// ------------------------------------------------------------------------ guns, half-tracks, lorries
+
+	/** The paint for a model that is the same for several nations (a lorry, an old field gun): set before it is built. */
+	static FLinearColor NationPaint = Hex(TEXT("60664A"));
+	static FString NationTag;
+
+	/** A wheel on an axle across the vehicle: a tyre, a painted wheel inside it, a hub. For lorries and guns. */
+	static void RoadWheel(const FBuild& B, double F, double R, double Radius, double Wide, bool bSpoked)
+	{
+		const double Hand = R >= 0.0 ? 1.0 : -1.0;
+		const double In = R - Hand * Wide * 0.5, Out = R + Hand * Wide * 0.5;
+		B.Tube(F, In, Radius, F, Out, Radius, Radius, Tyre, 16);
+		B.M.Disc(FBuild::At(F, Out + Hand * 0.015, Radius), FVector(0.0, -Hand, 0.0), Radius * (bSpoked ? 0.9 : 0.62), bSpoked ? B.Shade : B.Paint, 16);
+		if (bSpoked)
+		{
+			// Spokes: a dozen, from the hub to the rim.
+			for (int32 K = 0; K < 12; ++K)
+			{
+				const double Angle = K * UE_DOUBLE_TWO_PI / 12.0;
+				B.Tube(F, Out + Hand * 0.03, Radius, F + FMath::Cos(Angle) * Radius * 0.88, Out + Hand * 0.03, Radius + FMath::Sin(Angle) * Radius * 0.88, 0.022, B.Paint, 4);
+			}
+		}
+		B.Tube(F, Out, Radius, F, Out + Hand * 0.07, Radius, Radius * 0.2, B.Shade, 8);
+	}
+
+	/** What makes one field gun different from another. */
+	struct FGunSpec
+	{
+		FLinearColor Paint;
+		/** The wheels: radius, how far each is from the middle, and whether they are spoked (otherwise on tyres). */
+		double WheelR = 0.5, Track = 0.8;
+		bool bSpoked = false;
+		/** The barrel: how far the muzzle is ahead of the trunnions, the breech behind them, how thick, how high, how far raised; a muzzle brake. */
+		double Ahead = 2.0, Behind = 0.6, Bore = 0.06, High = 1.05, Raised = 8.0;
+		bool bBrake = false;
+		/** The cylinder of the recoil gear: above the barrel, or below it; and how long. */
+		bool bAbove = false;
+		double Recoil = 1.2;
+		/** The shield: half its width, its foot and its top. */
+		double Shield = 0.9, ShieldFoot = 0.45, ShieldTop = 1.55;
+		/** The trail: two legs spread behind, or one; its length. A round platform under the wheels (the 25-pounder's). */
+		bool bSplit = true;
+		double Trail = 3.0;
+		bool bPlatform = false;
+	};
+
+	/** A field gun on its carriage, its barrel pointing forward, set so that the middle of the whole is at the origin. */
+	static void FieldPiece(FMiniatureMesh& M, const FGunSpec& G)
+	{
+		const FBuild B(M, G.Paint);
+		const FLinearColor Dark = B.Shade;
+		const double X = (G.Trail - G.Ahead) * 0.5; // where the axle stands
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			RoadWheel(B, X, Hand * G.Track, G.WheelR, G.bSpoked ? 0.1 : 0.2, G.bSpoked);
+		}
+		B.Tube(X, -G.Track, G.WheelR, X, G.Track, G.WheelR, 0.06, Dark, 8);
+		if (G.bPlatform)
+		{
+			B.Drum(X, 0.0, 0.0, 0.8, 0.05, Dark, 18);
+		}
+		// The saddle on the axle that carries the cradle.
+		B.Side({ { X - 0.3, G.WheelR - 0.1 }, { X + 0.3, G.WheelR - 0.1 }, { X + 0.18, G.High }, { X - 0.18, G.High } }, -0.2, 0.2, G.Paint);
+		// The barrel, raised a little: breech ring and block, the tube tapering to the muzzle, the brake.
+		const double Slope = FMath::Tan(FMath::DegreesToRadians(G.Raised));
+		auto Along = [&](double D) { return FVector2D(X + D, G.High + D * Slope); };
+		const FVector2D Breech = Along(-G.Behind), Mid = Along(G.Ahead * 0.35), Muzzle = Along(G.Ahead);
+		B.Tube(Breech.X, 0.0, Breech.Y, Mid.X, 0.0, Mid.Y, G.Bore * 1.5, G.Paint, 10);
+		B.Tube(Mid.X, 0.0, Mid.Y, Muzzle.X, 0.0, Muzzle.Y, G.Bore * 1.15, G.Paint, 10);
+		B.Plate(Breech.X - 0.05, 0.0, Breech.Y, 0.3, G.Bore * 5.0, G.Bore * 5.0, Dark, -G.Raised);
+		if (G.bBrake)
+		{
+			const FVector2D A = Along(G.Ahead - 0.02), C = Along(G.Ahead + 0.3);
+			B.Tube(A.X, 0.0, A.Y, C.X, 0.0, C.Y, G.Bore * 2.1, Dark, 10);
+		}
+		const FVector2D Tip = Along(G.Ahead + (G.bBrake ? 0.3 : 0.0)), Lip = Along(G.Ahead + (G.bBrake ? 0.32 : 0.02));
+		B.Tube(Tip.X, 0.0, Tip.Y, Lip.X, 0.0, Lip.Y, G.Bore * 0.8, Pitch, 8);
+		// The cradle under the barrel and the cylinder of the recoil gear.
+		const double Lift = G.bAbove ? G.Bore * 2.6 : -G.Bore * 2.6;
+		const FVector2D R0 = Along(-0.3), R1 = Along(G.Recoil);
+		B.Tube(R0.X, 0.0, R0.Y + Lift, R1.X, 0.0, R1.Y + Lift, G.Bore * 1.3, Dark, 8);
+		// The shield: a lower plate leaning back, an upper one leaning back further; a slot for the barrel.
+		const double Fore = X + 0.32, Waist = (G.ShieldFoot + G.ShieldTop) * 0.55;
+		B.M.Stack(FVector::ZeroVector, 1.0, 0.0,
+			{ { { Fore + 0.03, -G.Shield }, { Fore + 0.03, G.Shield }, { Fore, G.Shield }, { Fore, -G.Shield } }, { { Fore - 0.05, -G.Shield }, { Fore - 0.05, G.Shield }, { Fore - 0.08, G.Shield }, { Fore - 0.08, -G.Shield } },
+				{ { Fore - 0.22, -G.Shield * 0.94 }, { Fore - 0.22, G.Shield * 0.94 }, { Fore - 0.25, G.Shield * 0.94 }, { Fore - 0.25, -G.Shield * 0.94 } } },
+			{ G.ShieldFoot, Waist, G.ShieldTop }, G.Paint, false);
+		B.Plate(Fore + 0.02, 0.0, G.High + 0.32 * Slope, 0.06, G.Bore * 5.0, G.Bore * 6.0, Pitch);
+		// The sight on the left, and the handwheels.
+		B.Plate(X - 0.15, -0.3, G.High + 0.22, 0.08, 0.06, 0.2, Dark);
+		B.Tube(X - 0.3, -0.36, G.High - 0.1, X - 0.3, -0.42, G.High - 0.1, 0.11, Dark, 8);
+		// The trail, with a spade at the end of each leg.
+		if (G.bSplit)
+		{
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				B.Tube(X - 0.1, Hand * 0.24, G.WheelR - 0.05, X - G.Trail, Hand * 0.95, 0.12, 0.075, G.Paint, 8);
+				B.Plate(X - G.Trail - 0.02, Hand * 0.95, 0.14, 0.06, 0.36, 0.3, Dark);
+			}
+		}
+		else
+		{
+			B.M.Stack(FVector::ZeroVector, 1.0, 0.0,
+				{ { { X - 0.1, -0.3 }, { X - 0.1, 0.3 }, { X - G.Trail, 0.14 }, { X - G.Trail, -0.14 } }, { { X - 0.1, -0.3 }, { X - 0.1, 0.3 }, { X - G.Trail * 0.6, 0.2 }, { X - G.Trail * 0.6, -0.2 } } },
+				{ 0.08, G.WheelR + 0.05 }, G.Paint, false);
+			B.Plate(X - G.Trail - 0.02, 0.0, 0.16, 0.06, 0.5, 0.34, Dark);
+		}
+	}
+
+	/** 10.5 cm leichte Feldhaubitze 18, the German field howitzer: big spoked wheels, split trail, the recoil cylinder over the barrel. */
+	static void LeFH18(FMiniatureMesh& M)
+	{
+		FGunSpec G;
+		G.Paint = Hex(TEXT("51575C"));
+		G.WheelR = 0.65; G.Track = 0.8; G.bSpoked = true;
+		G.Ahead = 2.3; G.Behind = 0.65; G.Bore = 0.07; G.High = 1.18; G.Raised = 10.0;
+		G.bAbove = true; G.Recoil = 1.3;
+		G.Shield = 0.95; G.ShieldFoot = 0.5; G.ShieldTop = 1.75;
+		G.Trail = 3.2;
+		FieldPiece(M, G);
+	}
+
+	/** Ordnance QF 25-pounder, the British field gun: low on tyres, a box trail, a muzzle brake, and the round platform it turns on. */
+	static void TwentyFivePounder(FMiniatureMesh& M)
+	{
+		FGunSpec G;
+		G.Paint = Hex(TEXT("666B47"));
+		G.WheelR = 0.45; G.Track = 0.82;
+		G.Ahead = 1.9; G.Behind = 0.6; G.Bore = 0.058; G.High = 1.02; G.Raised = 8.0;
+		G.bBrake = true; G.Recoil = 1.1;
+		G.Shield = 0.9; G.ShieldFoot = 0.4; G.ShieldTop = 1.55;
+		G.bSplit = false; G.Trail = 2.6; G.bPlatform = true;
+		FieldPiece(M, G);
+	}
+
+	/** 105 mm Howitzer M2A1, the American field howitzer: a short thick barrel, tyres, a split trail. */
+	static void Howitzer105(FMiniatureMesh& M)
+	{
+		FGunSpec G;
+		G.Paint = Hex(TEXT("5B6046"));
+		G.WheelR = 0.5; G.Track = 0.92;
+		G.Ahead = 1.7; G.Behind = 0.65; G.Bore = 0.072; G.High = 1.12; G.Raised = 10.0;
+		G.bAbove = true; G.Recoil = 1.0;
+		G.Shield = 1.0; G.ShieldFoot = 0.45; G.ShieldTop = 1.6;
+		G.Trail = 3.0;
+		FieldPiece(M, G);
+	}
+
+	/** 76 mm divisional gun ZiS-3, the Soviet field gun: a long thin barrel with a muzzle brake, low, on tubular legs. */
+	static void ZiS3(FMiniatureMesh& M)
+	{
+		FGunSpec G;
+		G.Paint = Hex(TEXT("4F5E3E"));
+		G.WheelR = 0.47; G.Track = 0.72;
+		G.Ahead = 2.75; G.Behind = 0.7; G.Bore = 0.046; G.High = 0.98; G.Raised = 6.0;
+		G.bBrake = true; G.Recoil = 1.3;
+		G.Shield = 0.82; G.ShieldFoot = 0.4; G.ShieldTop = 1.38;
+		G.Trail = 2.9;
+		FieldPiece(M, G);
+	}
+
+	/** Canon de 75 modele 1897, the French seventy-five, used by many armies: wooden wheels, one trail, the long recoil cylinder under the barrel. */
+	static void SeventyFive(FMiniatureMesh& M)
+	{
+		FGunSpec G;
+		G.Paint = NationPaint;
+		G.WheelR = 0.67; G.Track = 0.76; G.bSpoked = true;
+		G.Ahead = 1.95; G.Behind = 0.75; G.Bore = 0.048; G.High = 1.06; G.Raised = 8.0;
+		G.Recoil = 1.7;
+		G.Shield = 0.75; G.ShieldFoot = 0.45; G.ShieldTop = 1.55;
+		G.bSplit = false; G.Trail = 2.4;
+		FieldPiece(M, G);
+	}
+
+	/** The tops of helmets showing over the side of an open vehicle: the men riding in it. */
+	static void Riders(const FBuild& B, const FString& Tag, double From, double To, double Half, double Up, int32 Rows)
+	{
+		const FLinearColor Steel = FMiniatureMesh::UniformColour(Tag) * 0.7f;
+		for (int32 K = 0; K < Rows; ++K)
+		{
+			const double F = Rows > 1 ? FMath::Lerp(From, To, static_cast<double>(K) / (Rows - 1)) : From;
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				B.M.Ball(FBuild::At(F, Hand * Half, Up), FVector(0.27, 0.25, 0.2), Steel, 3, 8);
+				B.M.Ball(FBuild::At(F, Hand * Half, Up - 0.16), FVector(0.4, 0.44, 0.3), FMiniatureMesh::UniformColour(Tag), 3, 8);
+			}
+		}
+	}
+
+	/**
+	 * Sd.Kfz. 251, the German armoured half-track: 5.8 m long, 2.1 wide, 1.75 high. Wheels in front, tracks on
+	 * overlapping wheels behind, and an open-topped body of flat plates that lean out to the waist and in above it.
+	 */
+	static void Hanomag(FMiniatureMesh& M)
+	{
+		const FBuild B(M, Hex(TEXT("51575C")));
+		const FLinearColor Grey = B.Paint, Dark = B.Shade;
+
+		FGear G;
+		G.Right = 0.82;
+		G.Width = 0.28;
+		G.Link = 0.14;
+		G.FrontX = 0.75; G.FrontUp = 0.5; G.FrontR = 0.3;
+		G.RearX = -2.3; G.RearUp = 0.42; G.RearR = 0.27;
+		G.Teeth = 12;
+		G.WheelR = 0.28;
+		G.bInterleaved = true;
+		G.Wheels = { -1.8, -1.42, -1.04, -0.66, -0.28, 0.1 };
+		B.Gear(G);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			RoadWheel(B, 2.05, Hand * 0.88, 0.45, 0.2, false);
+			// Mudguards: over the front wheels, then running back over the tracks.
+			B.Plate(2.05, Hand * 0.88, 0.97, 0.75, 0.3, 0.03, Dark);
+			B.Plate(2.55, Hand * 0.88, 0.86, 0.36, 0.3, 0.03, Dark, 38.0);
+			B.Plate(1.55, Hand * 0.88, 0.86, 0.36, 0.3, 0.03, Dark, -38.0);
+			B.Plate(-0.8, Hand * 0.92, 0.82, 3.6, 0.34, 0.03, Dark);
+			B.Lamp(2.5, Hand * 0.62, 1.12, 0.07);
+			// The cross on each side.
+			B.Mark(-0.9, Hand * 1.0, 1.02, 0.17, TEXT("GER"), 0.0, Hand * 0.9, -0.42);
+		}
+		B.Tube(2.05, -0.8, 0.45, 2.05, 0.8, 0.45, 0.05, Dark, 6);
+		// The bonnet: narrow at the nose, its top sloping up to the driver's plate.
+		B.Layers({ { { 2.8, -0.42 }, { 2.8, 0.42 }, { 0.95, 0.8 }, { 0.95, -0.8 } }, { { 2.9, -0.5 }, { 2.9, 0.5 }, { 0.95, 1.0 }, { 0.95, -1.0 } }, { { 2.6, -0.36 }, { 2.6, 0.36 }, { 0.95, 0.8 }, { 0.95, -0.8 } } },
+			{ 0.62, 1.05, 1.38 }, Grey, false);
+		B.Plate(2.92, 0.0, 0.9, 0.03, 0.6, 0.3, Dark);
+		// The body: floor, waist and top, the plates leaning out and then in; open above.
+		B.Layers({ { { 0.95, -0.8 }, { 0.95, 0.8 }, { -2.85, 0.8 }, { -2.85, -0.8 } }, { { 1.0, -1.02 }, { 1.0, 1.02 }, { -2.95, 1.02 }, { -2.95, -1.02 } }, { { 0.55, -0.84 }, { 0.55, 0.84 }, { -2.75, 0.84 }, { -2.75, -0.84 } } },
+			{ 0.75, 1.22, 1.75 }, Grey, false);
+		B.Plate(-1.25, 0.0, 1.752, 2.8, 1.5, 0.012, Pitch);
+		// The driver's visors in the sloped front plate; the machine gun with its shield over the cab.
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			B.Plate(0.79, Hand * 0.42, 1.5, 0.03, 0.4, 0.1, Pitch, 40.0);
+		}
+		B.Plate(0.3, 0.0, 1.95, 0.04, 0.6, 0.4, Dark, 12.0);
+		B.Tube(0.1, 0.0, 1.93, 1.15, 0.0, 1.98, 0.022, GunSteel, 5);
+		B.Plate(0.05, 0.0, 1.9, 0.3, 0.06, 0.1, GunSteel);
+		// The doors in the back, and stowage boxes on the mudguards.
+		B.Plate(-2.9, 0.0, 1.2, 0.03, 0.9, 0.8, Dark);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			B.Plate(-0.4, Hand * 1.0, 0.92, 0.8, 0.2, 0.18, Dark);
+		}
+		Riders(B, TEXT("GER"), -0.4, -2.3, 0.45, 1.82, 4);
+		B.Aerial(0.4, 0.8, 1.7, 1.8);
+	}
+
+	/**
+	 * Half-track M3, the American armoured carrier: 6.18 m long, 2.22 wide, 2.26 high. A lorry's bonnet and
+	 * front wheels, a short track behind on small bogie wheels, and a square open-topped armoured box.
+	 */
+	static void M3Halftrack(FMiniatureMesh& M)
+	{
+		const FBuild B(M, Hex(TEXT("5B6046")));
+		const FLinearColor Olive = B.Paint, Dark = B.Shade;
+
+		FGear G;
+		G.Right = 0.93;
+		G.Width = 0.3;
+		G.Link = 0.12;
+		G.FrontX = 0.05; G.FrontUp = 0.56; G.FrontR = 0.33;
+		G.RearX = -2.3; G.RearUp = 0.5; G.RearR = 0.3;
+		G.Teeth = 14;
+		G.WheelR = 0.16;
+		G.Wheels = { -1.7, -1.34, -0.96, -0.6 };
+		G.Rollers = { -1.15 };
+		G.RollerUp = 0.83;
+		G.RollerR = 0.08;
+		B.Gear(G);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			RoadWheel(B, 2.1, Hand * 0.9, 0.48, 0.22, false);
+			B.Plate(2.1, Hand * 0.9, 1.03, 0.8, 0.34, 0.03, Dark);
+			B.Plate(2.62, Hand * 0.9, 0.92, 0.36, 0.34, 0.03, Dark, 38.0);
+			B.Plate(1.58, Hand * 0.9, 0.92, 0.36, 0.34, 0.03, Dark, -38.0);
+			B.Lamp(2.55, Hand * 0.9, 1.2, 0.08);
+			// The bogie frame, and the white star on each door.
+			B.Side({ { -1.5, 0.3 }, { -0.8, 0.3 }, { -1.05, 0.7 }, { -1.25, 0.7 } }, Hand * 1.07, Hand * 1.11, Dark);
+			B.Mark(0.75, Hand * 1.116, 1.38, 0.2, TEXT("USA-ARMY"), 0.0, Hand, 0.0);
+		}
+		B.Tube(2.1, -0.85, 0.48, 2.1, 0.85, 0.48, 0.05, Dark, 6);
+		// The roller on the front bumper, for climbing out of ditches.
+		B.Tube(3.02, -0.6, 0.72, 3.02, 0.6, 0.72, 0.15, Dark, 10);
+		B.Plate(2.85, 0.0, 0.62, 0.1, 1.9, 0.12, Dark);
+		// The bonnet, with the armoured shutters over the radiator and louvres in its sides.
+		B.Side({ { 1.3, 0.9 }, { 2.85, 0.9 }, { 2.9, 1.45 }, { 2.75, 1.56 }, { 1.3, 1.62 } }, -0.6, 0.6, Olive);
+		for (int32 K = 0; K < 5; ++K)
+		{
+			B.Plate(2.915, 0.0, 1.0 + K * 0.1, 0.02, 1.0, 0.06, Dark);
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				B.Plate(1.75 + K * 0.2, Hand * 0.61, 1.3, 0.06, 0.02, 0.36, Pitch);
+			}
+		}
+		B.Mark(2.05, 0.0, 1.6, 0.3, TEXT("USA-ARMY"), 0.04, 0.0, 1.0);
+		// The armoured box: cab and body in one, open above; the windscreen plate propped over the cab.
+		B.Side({ { 1.3, 0.9 }, { 1.3, 1.75 }, { -2.9, 1.75 }, { -2.9, 0.9 } }, -1.11, 1.11, Olive);
+		B.Plate(-0.95, 0.0, 1.752, 3.6, 1.9, 0.012, Pitch);
+		B.Plate(1.32, 0.0, 1.95, 0.04, 2.0, 0.42, Olive, 20.0);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			B.Plate(1.345, Hand * 0.5, 1.96, 0.02, 0.6, 0.12, Pitch, 20.0);
+			// Racks of mines along the sides, and the fuel cans.
+			B.Plate(-1.2, Hand * 1.16, 1.2, 2.2, 0.1, 0.3, Dark);
+		}
+		// The heavy machine gun on its ring over the cab.
+		B.Drum(0.75, 0.45, 1.75, 0.42, 0.2, Dark, 12);
+		B.Plate(0.75, 0.45, 2.08, 0.5, 0.08, 0.1, GunSteel);
+		B.Tube(0.95, 0.45, 2.09, 2.0, 0.45, 2.12, 0.02, GunSteel, 5);
+		B.Tube(0.75, 0.45, 1.95, 0.75, 0.45, 2.06, 0.025, GunSteel, 5);
+		Riders(B, TEXT("USA"), -0.4, -2.4, 0.6, 1.83, 4);
+		B.Aerial(1.1, -1.0, 1.75, 1.8);
+	}
+
+	/**
+	 * A three-ton army lorry of the war, of the kind every nation built (Opel Blitz, Bedford, ZIS-5, GMC):
+	 * about 6 m long, 2.2 wide, 2.6 high over the canvas. Painted for whichever nation it is asked for.
+	 */
+	static void Truck(FMiniatureMesh& M)
+	{
+		const FBuild B(M, NationPaint);
+		const FLinearColor Body = B.Paint, Dark = B.Shade;
+		const FLinearColor Tilt = NationTag == TEXT("GER") ? Hex(TEXT("6E705E")) : Hex(TEXT("8A8261"));
+
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			RoadWheel(B, 1.95, Hand * 0.86, 0.43, 0.2, false);
+			RoadWheel(B, -1.55, Hand * 0.8, 0.43, 0.42, false);
+			// Mudguards over the front wheels, each with a lamp.
+			B.Plate(1.95, Hand * 0.86, 0.94, 0.7, 0.3, 0.03, Dark);
+			B.Plate(2.45, Hand * 0.86, 0.84, 0.34, 0.3, 0.03, Dark, 38.0);
+			B.Plate(1.47, Hand * 0.86, 0.84, 0.34, 0.3, 0.03, Dark, -38.0);
+			B.Lamp(2.5, Hand * 0.74, 1.12, 0.09);
+			// The running board under each door, and the door's window.
+			B.Plate(0.8, Hand * 1.0, 0.62, 1.0, 0.24, 0.03, Dark);
+			B.Plate(0.72, Hand * 0.96, 1.85, 0.6, 0.02, 0.36, Pitch);
+		}
+		// The frame, the axles, and the bumper.
+		B.Plate(-0.2, 0.0, 0.62, 5.8, 0.8, 0.14, Dark);
+		B.Tube(1.95, -0.8, 0.43, 1.95, 0.8, 0.43, 0.05, Dark, 6);
+		B.Tube(-1.55, -0.7, 0.43, -1.55, 0.7, 0.43, 0.07, Dark, 6);
+		B.Plate(2.95, 0.0, 0.66, 0.08, 1.9, 0.14, Dark);
+		// The bonnet with its radiator grille; the cab with its windscreen.
+		B.Side({ { 1.3, 0.75 }, { 2.82, 0.75 }, { 2.86, 1.38 }, { 2.7, 1.5 }, { 1.3, 1.62 } }, -0.5, 0.5, Body);
+		B.Plate(2.87, 0.0, 1.1, 0.02, 0.7, 0.6, Pitch);
+		for (int32 K = 0; K < 6; ++K)
+		{
+			B.Plate(2.885, -0.3 + K * 0.12, 1.1, 0.02, 0.03, 0.58, Dark);
+		}
+		B.Side({ { 0.2, 0.75 }, { 1.3, 0.75 }, { 1.3, 1.62 }, { 1.12, 2.16 }, { 0.2, 2.2 } }, -0.95, 0.95, Body);
+		B.Plate(1.225, 0.0, 1.9, 0.02, 1.6, 0.42, Pitch, 18.0);
+		// The load bed with its planked sides, and the canvas tilt over its hoops.
+		B.Side({ { 0.1, 0.9 }, { 0.1, 1.5 }, { -2.95, 1.5 }, { -2.95, 0.9 } }, -1.08, 1.08, Body);
+		for (int32 K = 0; K < 5; ++K)
+		{
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				B.Plate(-0.25 - K * 0.6, Hand * 1.09, 1.2, 0.07, 0.03, 0.56, Dark);
+			}
+		}
+		B.Layers({ Lozenge(-2.95, 0.1, 1.08, 0.06, 2), Lozenge(-2.95, 0.1, 1.08, 0.06, 2), Lozenge(-2.93, 0.08, 0.9, 0.06, 2), Lozenge(-2.9, 0.05, 0.55, 0.06, 2) }, { 1.5, 2.15, 2.45, 2.58 }, Tilt, true);
+		// The spare wheel behind the cab on the left, and the fuel tank under the bed on the right.
+		B.Tube(0.0, -1.0, 1.05, 0.0, -1.16, 1.05, 0.42, Tyre, 14);
+		B.Tube(-0.2, 0.9, 0.72, -1.0, 0.9, 0.72, 0.17, Dark, 10);
+		if (NationTag == TEXT("USA"))
+		{
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				B.Mark(0.75, Hand * 0.957, 1.3, 0.2, TEXT("USA-ARMY"), 0.0, Hand, 0.0);
+			}
+		}
+	}
+
 	struct FModel
 	{
 		const TCHAR* Name;
 		void (*Build)(FMiniatureMesh&);
 		const TCHAR* Title;
 		const TCHAR* Nation;
+		/** Whether it is built in the paint of whichever nation asks ("Truck:SOV"). */
+		bool bAnyNation = false;
 	};
 	static const FModel Models[] = {
 		{ TEXT("PanzerIV"), &PanzerIV, TEXT("Panzer IV  -  5.92 m long, 2.68 m high"), TEXT("GER") },
@@ -1045,6 +1421,14 @@ namespace VehicleParts
 		{ TEXT("M13"), &M13, TEXT("M13/40  -  4.92 m long, 2.37 m high"), TEXT("ITA") },
 		{ TEXT("Type97"), &Type97, TEXT("Type 97 Chi-Ha  -  5.50 m long, 2.23 m high"), TEXT("JAP") },
 		{ TEXT("7TP"), &SevenTP, TEXT("7TP  -  4.60 m long, 2.30 m high"), TEXT("POL") },
+		{ TEXT("Hanomag"), &Hanomag, TEXT("Sd.Kfz. 251 half-track  -  5.80 m long, 1.75 m high"), TEXT("GER") },
+		{ TEXT("M3Halftrack"), &M3Halftrack, TEXT("M3 half-track  -  6.18 m long, 2.26 m high"), TEXT("USA") },
+		{ TEXT("Truck"), &Truck, TEXT("Three-ton lorry  -  6.0 m long, 2.6 m high"), TEXT("GER"), true },
+		{ TEXT("leFH18"), &LeFH18, TEXT("10.5 cm leFH 18 howitzer  -  barrel 2.94 m"), TEXT("GER") },
+		{ TEXT("25pdr"), &TwentyFivePounder, TEXT("25-pounder field gun  -  barrel 2.47 m"), TEXT("UK") },
+		{ TEXT("Howitzer105"), &Howitzer105, TEXT("105 mm M2A1 howitzer  -  barrel 2.36 m"), TEXT("USA") },
+		{ TEXT("ZiS3"), &ZiS3, TEXT("76 mm ZiS-3 field gun  -  barrel 3.46 m"), TEXT("SOV") },
+		{ TEXT("Gun75"), &SeventyFive, TEXT("75 mm mle 1897 field gun  -  barrel 2.70 m"), TEXT("FRA"), true },
 	};
 }
 
@@ -1054,15 +1438,20 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 	FMiniatureMesh* Model = Built.Find(Name);
 	if (!Model)
 	{
+		// "Truck:SOV" is the lorry in Soviet paint: the part before the colon is the model.
+		FString Kind = Name, Whose;
+		Name.Split(TEXT(":"), &Kind, &Whose);
 		for (const VehicleParts::FModel& Known : VehicleParts::Models)
 		{
-			if (Name == Known.Name)
+			if (Kind == Known.Name)
 			{
 				FMiniatureMesh Fresh;
 				// The dust of the road on the tracks and the lower hull.
 				Fresh.DustFoot = 0.0;
 				Fresh.DustTop = 1.25;
 				Fresh.DustAmount = 0.5f;
+				VehicleParts::NationTag = Whose.IsEmpty() ? FString(Known.Nation) : Whose;
+				VehicleParts::NationPaint = VehicleColour(VehicleParts::NationTag);
 				Known.Build(Fresh);
 				UE_LOG(LogTheater, Log, TEXT("Model %s built: %d points, %d triangles"), *Name, Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
 				Model = &Built.Add(Name, MoveTemp(Fresh));
@@ -1090,9 +1479,11 @@ TArray<FString> FMiniatureMesh::VehicleNames()
 
 FString FMiniatureMesh::VehicleTitle(const FString& Name)
 {
+	FString Kind = Name;
+	Name.Split(TEXT(":"), &Kind, nullptr);
 	for (const VehicleParts::FModel& Known : VehicleParts::Models)
 	{
-		if (Name == Known.Name)
+		if (Kind == Known.Name)
 		{
 			return Known.Title;
 		}
@@ -1102,9 +1493,14 @@ FString FMiniatureMesh::VehicleTitle(const FString& Name)
 
 FString FMiniatureMesh::VehicleNation(const FString& Name)
 {
+	FString Kind = Name, Whose;
+	if (Name.Split(TEXT(":"), &Kind, &Whose))
+	{
+		return Whose;
+	}
 	for (const VehicleParts::FModel& Known : VehicleParts::Models)
 	{
-		if (Name == Known.Name)
+		if (Kind == Known.Name)
 		{
 			return Known.Nation;
 		}
@@ -1125,6 +1521,22 @@ FString FMiniatureMesh::MainTankOf(const FString& Tag)
 	if (Tag == TEXT("POL")) return TEXT("7TP");
 	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return TEXT("Matilda");
 	return FString();
+}
+
+FString FMiniatureMesh::MainGunOf(const FString& Tag)
+{
+	if (Tag == TEXT("GER")) return TEXT("leFH18");
+	if (Tag == TEXT("SOV")) return TEXT("ZiS3");
+	if (Tag == TEXT("USA")) return TEXT("Howitzer105");
+	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return TEXT("25pdr");
+	return TEXT("Gun75:") + Tag;
+}
+
+FString FMiniatureMesh::MainCarrierOf(const FString& Tag)
+{
+	if (Tag == TEXT("GER")) return TEXT("Hanomag");
+	if (Tag == TEXT("USA")) return TEXT("M3Halftrack");
+	return TEXT("Truck:") + Tag;
 }
 
 bool FMiniatureMesh::MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn)

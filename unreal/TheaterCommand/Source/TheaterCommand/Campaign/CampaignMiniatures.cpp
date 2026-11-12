@@ -1113,8 +1113,18 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 				Tank(Where, Metre * 2.3, Vehicles, Turn);
 			}
 			break;
-		case 1: FieldGun(Where, Metre * 2.0, Vehicles, Turn); break;
-		case 2: Lorry(Where, Metre * 2.4, Vehicles, Turn); break;
+		case 1:
+			if (!Vehicle(MainGunOf(Tag), Where, Metre, Turn))
+			{
+				FieldGun(Where, Metre * 2.0, Vehicles, Turn);
+			}
+			break;
+		case 2:
+			if (!Vehicle(MainCarrierOf(Tag), Where, Metre, Turn))
+			{
+				Lorry(Where, Metre * 2.4, Vehicles, Turn);
+			}
+			break;
 		default: Bunker(Where, Metre * 2.0, Nation, Turn); break;
 		}
 	}

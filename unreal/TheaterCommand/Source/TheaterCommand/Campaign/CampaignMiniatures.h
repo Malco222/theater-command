@@ -79,6 +79,10 @@ struct FMiniatureMesh
 	static int32 Year;
 	bool MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn = 0.0);
 
+	/** The field gun a nation's artillery is known by, and what its motorised troops ride in: names for Vehicle(). */
+	static FString MainGunOf(const FString& Tag);
+	static FString MainCarrierOf(const FString& Tag);
+
 	/**
 	 * A nation's infantryman, 1.75 m tall when Metre is a real metre: his helmet, uniform, boots, kit and rifle
 	 * as his army wore them. Any nation can be asked for; one with nothing special drawn wears a plain kit in

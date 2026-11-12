@@ -894,8 +894,8 @@ void ACampaignMapActor::BuildParade()
 	{
 		const FVector Spot = Middle + FVector(-(K - (Names.Num() - 1) * 0.5) * Apart, 0.0, 0.0);
 		// "Soldier:GER" is a nation's infantryman, facing out from the wall; anything else is a vehicle.
-		FString Whose;
-		if (Names[K].Split(TEXT(":"), nullptr, &Whose))
+		FString Kind, Whose;
+		if (Names[K].Split(TEXT(":"), &Kind, &Whose) && Kind == TEXT("Soldier"))
 		{
 			Model.Soldier(Whose, Spot, Metre, 90.0);
 			Model.Soldier(Whose, Spot + FVector(-1.3 * Metre, 0.0, 0.0), Metre, 35.0);
