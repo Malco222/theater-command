@@ -8,7 +8,12 @@
     "Alexandria": 0,
     "Port Said": 0,
     "Benghazi": 2,
-    "Tobruk": 2
+    "Tobruk": 2,
+    "Tunis": 0,
+    "Algiers": 0,
+    "Oran": 0,
+    "Casablanca": 0,
+    "Constantine": 1
   },
   "bands": [
     [2, 1],

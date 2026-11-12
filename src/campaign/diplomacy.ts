@@ -7,7 +7,9 @@
 import data from '../../data/campaign/diplomacy.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, bloc, declareWar, headline, relocate, removeCorps } from './game';
+import { addCorps, atWar, bloc, declareWar, headline, relocate, removeCorps } from './game';
+import { fleetsOnFall } from './navy';
+import { airOnFall } from './air';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -18,6 +20,13 @@ export interface DiploEvent {
   join?: { bloc: 'allies' | 'axis'; nations: string[]; minOpinion: number };
   /** Pairs that go to war when the event fires: the first of each declares on the second. */
   war?: [string, string][];
+  /** Countries that have stood aside until now and enter the story here, at this place on the alignment track. */
+  wake?: { nations: string[]; align: Align };
+  /**
+   * A country that ends, its ground shared out. Each share is [who takes it, the regions]: the first taker on the
+   * list still in the war gets every named region the country still holds. Ground someone else already holds stays theirs.
+   */
+  partition?: { nation: string; shares: [string[], string[]][] };
 }
 
 export const DIPLOMACY = data as unknown as {
@@ -165,6 +174,11 @@ export function holds(g: Game, cond: string): boolean {
     case 'momentum<=': return momentum(g) <= Number(a[0]);
     case 'holds': return g.byName[a[1]]?.ctrl === a[0] && g.byName[a[1]]?.owner === a[0];
     case 'flag': return !!g.flags[rest];
+    case 'war': return !!N(a[0]) && !!N(a[1]) && atWar(g, a[0], a[1]);
+    case 'dormant': return !!N(a[0])?.dormant;
+    // "anyHeld:allies,Oran,Algiers": some place on the list is in the hands of that bloc.
+    case 'allHeld': return a.slice(1).every((nm) => { const r = g.byName[nm]; return !!r && !!N(r.ctrl) && bloc(N(r.ctrl)!) === a[0]; });
+    case 'anyHeld': return a.slice(1).some((nm) => { const r = g.byName[nm]; return !!r && !!N(r.ctrl) && bloc(N(r.ctrl)!) === a[0]; });
     default: return false; // an unknown condition never holds, so a typo cannot fire an event
   }
 }
@@ -189,7 +203,7 @@ function transfer(g: Game, r: Region, to: string): void {
 }
 
 function fire(g: Game, e: DiploEvent): boolean {
-  let did = false;
+  let did = false, told = false;
   if (e.annex) {
     for (const id of e.annex.nations) {
       const n = g.nations[id];
@@ -212,6 +226,21 @@ function fire(g: Game, e: DiploEvent): boolean {
     }
     if (!did) return false;
   }
+  if (e.wake) {
+    for (const id of e.wake.nations) {
+      const n = g.nations[id];
+      if (!n || !n.dormant) continue;
+      n.alive = true; n.dormant = false;
+      n.align = e.wake.align;
+      n.opinion = n.home = homeOpinion(id, n.align);
+      did = true;
+    }
+    if (!did) return false;
+    g.supplyDirty = true;
+    // The news of who has come in is told before the declarations that follow from it.
+    headline(g, 'event', e.text, e.wake.nations[0]);
+    told = true;
+  }
   if (e.war) {
     for (const [a, b] of e.war) {
       const A = g.nations[a], B = g.nations[b];
@@ -221,11 +250,39 @@ function fire(g: Game, e: DiploEvent): boolean {
     }
     if (!did) return false;
   }
+  if (e.partition) {
+    const X = g.nations[e.partition.nation];
+    if (!X?.alive) return false;
+    const first = (list: string[]): string | undefined => list.find((id) => g.nations[id]?.alive && g.nations[id].atWar.length > 0);
+    for (const c of g.corps.filter((c) => c.nat === X.id)) removeCorps(g, c);
+    fleetsOnFall(g, X.id);
+    airOnFall(g, X.id);
+    let heir: string | undefined;
+    for (const [takers, names] of e.partition.shares) {
+      const to = first(takers);
+      if (!to) continue;
+      heir ??= to;
+      for (const nm of names) {
+        const r = g.byName[nm];
+        if (r && r.ctrl === X.id) { r.ctrl = to; r.cap = false; r.since = g.turn; }
+      }
+    }
+    if (!heir) return false;
+    // Anything the terms forgot goes with the rest.
+    for (const r of g.regions) if (r.ctrl === X.id) { r.ctrl = heir; r.cap = false; r.since = g.turn; }
+    X.alive = false;
+    X.align = 'independent'; // its ground is nobody's ally's now: whoever holds a piece holds it as a conquest
+    X.fellOn = { turn: g.turn, week: g.week, to: heir };
+    for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((x) => x !== X.id);
+    X.atWar = [];
+    g.supplyDirty = true;
+    did = true;
+  }
   for (const row of e.spawn ?? []) {
     const r = g.byName[row[4]];
     if (r && r.ctrl === row[0] && r.units.length < STACK) addCorps(g, row[0], row[1], row[2] as any, row[3], r.id, { hold: 1 });
   }
-  headline(g, 'event', e.text, e.annex?.by ?? e.cede?.to ?? e.join?.nations[0]);
+  if (!told) headline(g, 'event', e.text, e.annex?.by ?? e.cede?.to ?? e.join?.nations[0] ?? e.partition?.nation);
   for (const [id, d] of Object.entries(e.opinion ?? {})) {
     const n = g.nations[id];
     if (!n || !courtable(n)) continue;

@@ -56,7 +56,16 @@ export function loadGame(text: string): Game | null {
   if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
   const g = createGame(d.seed, d.human ?? null);
   if (d.regions.length !== g.regions.length) return null; // saved on a different map
-  g.turn = d.turn; g.phase = d.phase; g.week = d.week; g.order = d.order;
+  // A save from before a country was added to the game: it takes its place in the order of play, and the month goes on from where it was.
+  const order: string[] = [...d.order];
+  let phase: number = d.phase;
+  g.order.forEach((id, k) => {
+    if (order.includes(id)) return;
+    const at = k > 0 && order.includes(g.order[k - 1]) ? order.indexOf(g.order[k - 1]) + 1 : order.length;
+    order.splice(at, 0, id);
+    if (at <= phase) phase++;
+  });
+  g.turn = d.turn; g.phase = phase; g.week = d.week; g.order = order;
   g.nextCorps = d.nextCorps; g.nextBuild = d.nextBuild; g.flags = d.flags;
   g.rng = new Rng(d.rng);
   // A save from an older build may lack fields added since; the fresh game fills them in.

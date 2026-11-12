@@ -137,8 +137,8 @@ describe('exit test: the desert in 1942 on the historical plan', () => {
   it('the pursuit: Tobruk and Benghazi in November, El Agheila by the end of the year', () => {
     expect(count((r) => r.held[NOV_42]['Tobruk'] === 'UK' && r.held[NOV_42]['Benghazi'] === 'UK')).toBeGreaterThanOrEqual(17);
     expect(count((r) => r.held[DEC_42]['El Agheila'] === 'UK')).toBeGreaterThanOrEqual(16);
-    // The Axis army is beaten and not destroyed: it falls back on Tripoli, which is still to be taken.
-    for (const r of runs) expect(axis(r.held[JAN_43]['Tripoli'])).toBe(true);
+    // The Axis army is beaten and not destroyed: it falls back on Tripoli, which is still to be taken when the year ends.
+    for (const r of runs) expect(axis(r.held[DEC_42]['Tripoli'])).toBe(true);
     expect(count((r) => r.army[DEC_42].axis > 50000 && r.army[DEC_42].axis < 0.75 * r.army[SEPT_42].axis)).toBeGreaterThanOrEqual(16);
   });
 

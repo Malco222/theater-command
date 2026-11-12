@@ -54,6 +54,8 @@ export interface Nation {
   atWar: string[];
   alive: boolean;
   dormant: boolean;
+  /** A homeland off the map: the sea its convoys come in by (a zone key) and the factories it has there. */
+  offmap: { sea: string; industry: number } | null;
   capital: number;
   /** Production points in hand. Losses are made good from these first; the rest can be spent on new formations. */
   pp: number;
@@ -397,6 +399,8 @@ export interface PlanPhase {
    * holds every place named here. The first phase in the list whose month and conditions fit is the one followed.
    */
   ifLost?: string[];
+  /** In a side theatre: the place this phase falls back on when it gives ground up, in place of the theatre's usual base. */
+  base?: string;
   /** Orders for named fleets while the phase lasts. */
   fleets?: { fleet: string; zone: string; stance: Stance }[];
 }

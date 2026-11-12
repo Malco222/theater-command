@@ -31,7 +31,7 @@ const play = (g: Game, nat: string): void => { until(g, nat); stepAI(g); };
 const axis = (nat: string): boolean => nat === 'GER' || nat === 'ITA';
 const field = (r: Region, ok: (nat: string) => boolean): Corps[] => r.units.filter((u) => ok(u.nat) && u.kind !== 'fort' && !u.hold);
 const british = (r: Region): Corps[] => field(r, (n) => n === 'UK');
-const desert = (g: Game, nat: string): PlanPhase | null => theatrePhases(g, nat).find((x) => x.theatre === 'the Western Desert')?.phase ?? null;
+const desert = (g: Game, nat: string): PlanPhase | null => theatrePhases(g, nat).find((x) => x.theatre === 'North Africa')?.phase ?? null;
 const news = (g: Game, from: number, what: RegExp): number => g.headlines.slice(from).filter((h) => what.test(h.text)).length;
 
 describe('a plan that depends on how the war has gone', () => {

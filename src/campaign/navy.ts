@@ -178,6 +178,9 @@ export function openSeas(g: Game, nat: string): Uint8Array {
   const start = (z: number): void => { if (!shut[z] && !open[z]) { open[z] = 1; q.push(z); } };
   for (const r of g.regions) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
   for (const f of g.fleets) if (f.nat === nat && f.base < 0) start(f.home); // a base off the map is a home port too
+  // So is the sea a country off the map sends its convoys in by.
+  const off = g.nations[nat]?.offmap;
+  if (off && g.nations[nat].alive && zoneOf(g, off.sea) >= 0) start(zoneOf(g, off.sea));
   for (let i = 0; i < q.length; i++) for (const j of g.seas[q[i]].adj) if (!open[j] && !shut[j] && canPass(g, q[i], j, nat)) { open[j] = 1; q.push(j); }
   return open;
 }

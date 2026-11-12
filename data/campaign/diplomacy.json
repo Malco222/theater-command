@@ -1,5 +1,5 @@
 {
-  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold.",
+  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all). An event with nothing but a text is a piece of news.",
   "leanAt": 30,
   "backAt": 20,
   "joinAt": 70,
@@ -81,6 +81,33 @@
       "if": ["alive:ITA", "alive:SOV", "inBloc:ITA,axis", "flag:war:GER:SOV"],
       "war": [["ITA", "SOV"]],
       "text": "Rome follows Berlin into the war in the east and promises an Italian army for the Russian front."
+    },
+    {
+      "id": "pearl-harbor", "from": 28, "to": 90,
+      "if": ["alive:GER", "dormant:USA"],
+      "wake": { "nations": ["USA"], "align": "allies" },
+      "war": [["USA", "GER"], ["USA", "ITA"]],
+      "text": "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it."
+    },
+    {
+      "id": "darlan", "from": 14, "to": 99,
+      "if": ["alive:VIC", "anyHeld:allies,Casablanca,Fez,Marrakech,Oran,Algiers,Constantine"],
+      "partition": {
+        "nation": "VIC",
+        "shares": [
+          [["USA", "UK"], ["Casablanca", "Fez", "Marrakech", "Colomb-Bechar", "Oran"]],
+          [["UK", "USA"], ["Algiers", "Constantine", "Laghouat", "Biskra", "Ouargla", "Syria", "Lebanon", "Damascus", "Palmyra", "Deir ez-Zor"]],
+          [["GER", "ITA"], ["Tunis", "Lyon", "Auvergne", "Limousin", "Toulouse", "Languedoc", "Marseille"]],
+          [["ITA", "GER"], ["Sfax", "Mareth", "Riviera", "Savoy", "Corsica"]]
+        ]
+      },
+      "spawn": [["GER", "Division von Broich", "inf", 1, "Tunis"], ["ITA", "Superga Division", "inf", 1, "Sfax"], ["ITA", "Saharan Group", "inf", 1, "Mareth"]],
+      "text": "After three days of fighting Admiral Darlan orders a ceasefire, and French North Africa comes over to the Allies. Germany and Italy occupy the rest of France, and Axis troops fly into Tunis."
+    },
+    {
+      "id": "africa-cleared", "from": 40, "to": 99,
+      "if": ["flag:event:darlan", "allHeld:allies,Tunis,Sfax,Mareth,Tripoli"],
+      "text": "The last Axis troops in Africa have laid down their arms. General Alexander signals London: \"We are masters of the North African shores.\""
     }
   ]
 }

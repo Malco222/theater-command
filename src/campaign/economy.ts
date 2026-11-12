@@ -29,6 +29,8 @@ export function income(g: Game, nat: string): number {
   const n = g.nations[nat];
   let fac = 0;
   for (const r of g.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
+  // A country whose homeland is off the map has its factories there, out of any enemy's reach.
+  fac += n.offmap?.industry ?? 0;
   // Neutrals that lean toward a bloc trade with its major powers.
   const trade = tradePartners(g, nat).length * DIPLOMACY.tradeIncome;
   // What comes by sea can be sunk on the way: cargoes on the convoy routes, ore from the north.

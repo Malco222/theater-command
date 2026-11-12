@@ -343,7 +343,7 @@ describe('a plan of its own', () => {
     const g = desertWar();
     g.turn = 13;
     const [ita] = theatrePhases(g, 'ITA');
-    expect(ita.theatre).toBe('the Western Desert');
+    expect(ita.theatre).toBe('North Africa');
     expect(ita.phase).toMatchObject({ name: 'The invasion of Egypt', posture: 'attack', objectives: ['Sidi Barrani'] });
     // The British wait: no local counter-attacks until Operation Compass is ready.
     expect(theatrePhases(g, 'UK')[0].phase).toMatchObject({ posture: 'defend', quiet: true });

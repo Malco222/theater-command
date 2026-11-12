@@ -80,7 +80,8 @@ export function theatrePhases(g: Game, nat: string): { theatre: string; phase: P
   THEATRES.forEach((T, k) => {
     const list = T.plans[nat];
     if (!list || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
-    out.push({ theatre: T.name, phase: theatrePhase(g, nat, list), base: T.bases?.[nat] ?? null });
+    const phase = theatrePhase(g, nat, list);
+    out.push({ theatre: T.name, phase, base: phase?.base ?? T.bases?.[nat] ?? null });
   });
   return out;
 }
@@ -125,7 +126,7 @@ function overseas(g: Game, nat: string): void {
       // The plan's standing orders come first: the force it keeps at a place stays, and ground it gives up is left,
       // the army falling back along the road to the base that feeds it.
       hold(g, nat, ph);
-      const base = g.byName[T.bases?.[nat] ?? ''];
+      const base = g.byName[ph?.base ?? T.bases?.[nat] ?? ''];
       if (base) fallBack(g, nat, base.id);
       // Whoever the plan has named so far, and anyone at war with this nation who is on the theatre's ground.
       const enemies = new Set<string>();
@@ -459,6 +460,8 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
       const cand = new Map<number, Corps[]>();
       for (const c of g.corps) {
         if (c.nat !== nat || c.hold || c.kind === 'fort' || c.ap <= 0 || weekOf(c, 1) > wave) continue;
+        // An army overseas has no reserves to spare: the force its plan keeps at a place holds it, and joins no attack elsewhere.
+        if (scope && massed.has(c.id)) continue;
         // Early in the month the fast troops are kept for the main thrust if they can get to it.
         const kept = door !== null && wave <= 2 && KIND[c.kind].mobile && !massed.has(c.id) && door[c.reg] >= 0 && door[c.reg] <= c.ap;
         for (const j of g.regions[c.reg].nb) {

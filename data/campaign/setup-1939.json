@@ -311,6 +311,18 @@
     [37, "UK", "44th and 51st Divisions", "inf", 2, "Alexandria", {"xp": 0.1, "war": ["UK", "ITA"]}],
     [31, "ITA", "Littorio Armoured Division", "arm", 1, "Tripoli", {"xp": 0.1, "war": ["UK", "ITA"]}],
     [36, "GER", "164th Light Division and Ramcke Brigade", "inf", 1, "Tobruk", {"xp": 0.3, "war": ["UK", "ITA"]}],
-    [36, "ITA", "Folgore Parachute Division", "inf", 1, "Tobruk", {"xp": 0.3, "war": ["UK", "ITA"]}]
+    [36, "ITA", "Folgore Parachute Division", "inf", 1, "Tobruk", {"xp": 0.3, "war": ["UK", "ITA"]}],
+    [39, "UK", "First Army: 78th Division", "inf", 1, "Gibraltar", {"gen": "Kenneth Anderson", "trait": "defender", "xp": 0.2, "war": ["UK", "GER"]}],
+    [39, "USA", "II Corps (1st Infantry and 1st Armored Divisions)", "mot", 2, "Gibraltar", {"gen": "Lloyd Fredendall", "xp": 0.05, "war": ["USA", "GER"]}],
+    [39, "USA", "Western Task Force (2nd Armored and 9th Infantry Divisions)", "mot", 2, "Gibraltar", {"gen": "George S. Patton", "trait": "attacker", "xp": 0.05, "war": ["USA", "GER"]}],
+    [41, "UK", "First Army: 6th Armoured Division", "arm", 1, "Algiers", {"xp": 0.1, "war": ["UK", "GER"]}],
+    [41, "UK", "French XIX Corps", "inf", 2, "Constantine", {"xp": 0.05, "war": ["UK", "GER"]}],
+    [42, "USA", "34th Infantry Division", "inf", 1, "Oran", {"xp": 0.05, "war": ["USA", "GER"]}],
+    [42, "UK", "First Army: V Corps", "inf", 2, "Algiers", {"xp": 0.15, "war": ["UK", "GER"]}],
+    [40, "GER", "10th Panzer Division", "arm", 1, "Tunis", {"gen": "Hans-Jurgen von Arnim", "trait": "defender", "xp": 0.4, "war": ["GER", "USA"]}],
+    [41, "GER", "334th Infantry Division", "inf", 1, "Tunis", {"xp": 0.2, "war": ["GER", "USA"]}],
+    [41, "GER", "Hermann Goring Division", "mot", 1, "Tunis", {"xp": 0.3, "war": ["GER", "USA"]}],
+    [42, "ITA", "Pistoia and La Spezia Divisions", "inf", 2, "Tunis", {"gen": "Giovanni Messe", "xp": 0.15, "war": ["ITA", "USA"]}],
+    [39, "USA", "3rd Infantry Division", "inf", 1, "Gibraltar", {"xp": 0.05, "war": ["USA", "GER"]}]
   ]
 }

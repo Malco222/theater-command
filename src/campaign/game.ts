@@ -35,7 +35,7 @@ import {
   type BattleReport, type Corps, type Field, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit,
 } from './types';
 
-const ORDER = ['GER', 'ITA', 'SVK', 'HUN', 'SOV', 'POL', 'FRA', 'UK', 'BEL', 'NED', 'LUX', 'DEN', 'NOR'];
+const ORDER = ['GER', 'ITA', 'SVK', 'HUN', 'SOV', 'POL', 'FRA', 'UK', 'USA', 'BEL', 'NED', 'LUX', 'DEN', 'NOR'];
 const EAST = new Set(['POL', 'SOV', 'LIT', 'LAT', 'EST', 'ROM', 'FIN']);
 
 export function createGame(seed: number, human: string | null): Game {
@@ -60,7 +60,7 @@ export function createGame(seed: number, human: string | null): Game {
     nations[id] = {
       id, name: d.name, adj: d.adj, color: d.color, quality: d.quality, air: d.air, resilience: d.resilience, align: d.align,
       blitz: !!d.blitz, slowCommand: !!d.slowCommand, maxAttack: d.maxAttack ?? 0, seaSupply: !!d.seaSupply, sealift: d.sealift ?? 0,
-      atWar: [], alive: !d.dormant, dormant: !!d.dormant, capital: cap ? cap.id : -1, pp: 0, queue: [], corpsNo: firstCorpsNumber(id),
+      atWar: [], alive: !d.dormant, dormant: !!d.dormant, offmap: d.offmap ?? null, capital: cap ? cap.id : -1, pp: 0, queue: [], corpsNo: firstCorpsNumber(id),
       opinion: homeOpinion(id, d.align), home: homeOpinion(id, d.align), pc: 0, armyPeak: 0, offStart: {}, lastFight: {}, lab: null,
     };
   }
@@ -110,6 +110,11 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
   reg.units.push(c);
   if (o.gen) seat(g, c, o.gen, o.trait);
   return c;
+}
+
+/** A country's name as it reads in a sentence: "the United States", "Germany". */
+export function theName(n: Nation, start = false): string {
+  return /^(United|Soviet|Netherlands)/.test(n.name) ? `${start ? 'The' : 'the'} ${n.name}` : n.name;
 }
 
 export function headline(g: Game, kind: Headline['kind'], text: string, nat?: string, region?: number): void {
@@ -163,7 +168,7 @@ export function declareWar(g: Game, a: string, b: string): void {
     B.align = ba === 'axis' ? 'allies' : 'axis_cobelligerent';
     B.opinion = B.home = ba === 'axis' ? -100 : 100;
   }
-  headline(g, 'war', `${A.name} declares war on ${B.name}.`, a);
+  headline(g, 'war', `${theName(A, true)} declares war on ${theName(B)}.`, a);
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
     for (const c of g.corps) if (c.nat === a && KIND[c.kind].mobile && g.order[g.phase] === a) { c.ap += 1; c.apMax += 1; }
@@ -436,7 +441,8 @@ function airOf(g: Game, nats: Set<string>, enemies: Set<string>): number {
   let s = 0;
   for (const id of nats) s += g.nations[id].air;
   for (const n of Object.values(g.nations)) {
-    if (!n.alive || nats.has(n.id)) continue;
+    // An ally at war with the same enemy lends a share of its air force, if it has airfields on the map to fly from.
+    if (!n.alive || nats.has(n.id) || n.capital < 0) continue;
     if ([...nats].some((a) => allied(g, a, n.id)) && [...enemies].some((e) => atWar(g, n.id, e))) s += n.air * 0.25;
   }
   return s;
