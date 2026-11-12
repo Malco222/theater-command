@@ -102,9 +102,26 @@ export interface Build {
   ordered: number;
   eta: number;
   cost: number;
+  /** A corps raised again under the name of one that was destroyed: that formation's place on the memorial wall. */
+  revive?: number;
 }
 
-export interface Corps {
+/** One line of a unit's diary: the month, what happened, where (a region, or a sea for a fleet), and a number that goes with it. */
+export type DiaryLine = [turn: number, what: string, where: number, n?: number];
+
+/** What every unit carries with it through the war: its record, its diary, its honours and the name the army gives it. */
+export interface Storied {
+  /** What it has done: the counters its honours are earned from. Only what has happened is written down. See stories.json. */
+  rec?: Record<string, number>;
+  /** Its diary, oldest first. */
+  log?: DiaryLine[];
+  /** The honours it carries: ids on the roll of honour. */
+  hon?: number[];
+  /** The name the army knows it by, once it has earned one. */
+  nick?: string;
+}
+
+export interface Corps extends Storied {
   id: number;
   nat: string;
   name: string;
@@ -137,6 +154,18 @@ export interface Corps {
   digs?: boolean;
   /** The corps is entrenched: it spent its last month where it stood, under orders to dig in. Lost the moment it leaves the ground. */
   dug?: boolean;
+  /** The month it was raised: the first month of the war for the armies that began it. */
+  born?: number;
+  /** The region it was raised in, if that was its own country's ground: home. */
+  home?: number;
+  /** The player's standing order to take no drafts, so that the veterans are not thinned out with green men. No computer nation sets it. */
+  lean?: boolean;
+  /** Sent home on a bond tour or to the training schools: out of the line until this month. */
+  leave?: number;
+  /** The rivalry it is part of: an id on the list of rivalries. */
+  rival?: number;
+  /** The destroyed formation whose name and colours it carries: that formation's place on the memorial wall. */
+  heir?: number;
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */
@@ -265,7 +294,7 @@ export interface Admiral {
   xp: number;
 }
 
-export interface Fleet {
+export interface Fleet extends Storied {
   id: number;
   nat: string;
   name: string;
@@ -339,10 +368,117 @@ export interface Headline {
   turn: number;
   week: number;
   text: string;
-  /** 'goal' is news of the player's own campaign goals: nothing in the war writes it. */
-  kind: 'war' | 'fall' | 'battle' | 'event' | 'info' | 'goal';
+  /** 'goal' is news of the player's own campaign goals: nothing in the war writes it. 'honour' is a unit's citation, and 'letter' a note from the front. */
+  kind: 'war' | 'fall' | 'battle' | 'event' | 'info' | 'goal' | 'honour' | 'letter';
   nat?: string;
   region?: number;
+  /** For an honour, its id on the roll. For a letter, who wrote it and the corps it came from. */
+  award?: number;
+  by?: string;
+  unit?: number;
+}
+
+export type UnitKind = 'corps' | 'air' | 'fleet';
+/** What the player has done with an honour: nothing yet (the unit carries it at the front), a bond tour at home, or instructors for the schools. */
+export type Cash = 'bonds' | 'school';
+
+/** One entry on the roll of honour. */
+export interface Award {
+  id: number;
+  turn: number;
+  /** Which honour: an id in stories.json. */
+  hon: string;
+  kind: UnitKind;
+  /** The unit's id, and its name and nation on the day. */
+  unit: number;
+  name: string;
+  nat: string;
+  /** Where it was earned: a region, or a sea for a fleet. -1 if nowhere in particular. */
+  at: number;
+  /** A number the citation quotes, such as months under siege. */
+  n?: number;
+  /** The other side of a rivalry, by name. */
+  rival?: string;
+  /** No unit of its nation had earned this honour before. */
+  first?: boolean;
+  /** Earned by a formation that was destroyed, and carried now as a ribbon by the one raised in its name. */
+  old?: boolean;
+  /** What the player did with the fame, and when. */
+  cash?: Cash;
+  cashed?: number;
+  /** The player has seen the citation. */
+  seen?: boolean;
+}
+
+/** A formation on the memorial wall. */
+export interface Fallen extends Storied {
+  id: number;
+  nat: string;
+  name: string;
+  kind: Kind;
+  divs: number;
+  /** When and where it was lost, how, and to whom. */
+  turn: number;
+  reg: number;
+  how: 'destroyed' | 'surrendered' | 'starved';
+  by: string;
+  born: number;
+  home: number;
+  xp: number;
+  /** The general who was with it at the end. */
+  general?: string;
+  /** The corps raised again in its name, once there is one. */
+  heir?: number;
+}
+
+/** Two corps that keep meeting: one of the player's and one of the enemy's. */
+export interface Rivalry {
+  id: number;
+  mine: number;
+  theirs: number;
+  mineName: string;
+  theirsName: string;
+  theirsNat: string;
+  /** When and where it was first noticed, and where the two first met. */
+  since: number;
+  at: number;
+  first: number;
+  met: number;
+  won: number;
+  lost: number;
+  /** How it ended, and when: the player's corps destroyed the other, was destroyed by it, or one of them was lost elsewhere. */
+  over?: 'won' | 'lost' | 'gone';
+  ended?: number;
+}
+
+/** Everything the unit stories keep that does not sit on a unit. */
+export interface Stories {
+  awards: Award[];
+  fallen: Fallen[];
+  rivals: Rivalry[];
+  /** How often one of the player's corps has met an enemy corps, 'mine:theirs', and where they first met. */
+  meets: Record<string, [number, number]>;
+  /** Instructor postings each nation has made: every one trains its later drafts a little better. */
+  schools: Record<string, number>;
+  /** Moments of the month that someone may write home about. The weightiest become letters when the player's month opens. */
+  mail: Moment[];
+  /** How many letters of each kind have been written, so that the same one is not sent twice running. */
+  told: Record<string, number>;
+}
+
+/** Something that happened to one of the player's units: how much it matters, what it was, to whom and where. */
+export interface Moment {
+  w: number;
+  m: string;
+  /** The unit's id and its name on the day. */
+  id: number;
+  unit: string;
+  reg: number;
+  /** Words for the letter to quote: the general, the enemy, a rival, a title, a number. */
+  gen?: string;
+  foe?: string;
+  x?: string;
+  n?: number;
 }
 
 export interface PlanPhase {
@@ -437,7 +573,7 @@ export interface AirLeader {
   xp: number;
 }
 
-export interface AirFleet {
+export interface AirFleet extends Storied {
   id: number;
   nat: string;
   name: string;
@@ -547,6 +683,8 @@ export interface Game {
   sky: Record<number, { nat: string; turn: number }>;
   /** The share of a nation's production stopped by bombing and strikes on its coastal trade, and the month it happened. */
   raids: Record<string, { turn: number; share: number }>;
+  /** The roll of honour, the memorial wall, rivalries and the rest of what the unit stories keep. */
+  stories: Stories;
   links: [number, number][];
   width: number;
   height: number;

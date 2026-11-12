@@ -7,6 +7,7 @@ import { Rng } from '../core/rng';
 import { atWar, computeSupply, createGame, openTheatres } from './game';
 import { seat } from './commanders';
 import { FIELDS } from './research';
+import { newStories } from './stories';
 import mapData from '../generated/campaign-map.json';
 import type { Corps, Game, General } from './types';
 
@@ -37,6 +38,7 @@ export function saveGame(g: Game): string {
     generals: g.generals,
     fleets: g.fleets, nextFleet: g.nextFleet, seaReports: g.seaReports.slice(-KEEP_SEA), convoys: g.convoys,
     airFleets: g.airFleets, nextAir: g.nextAir, airReports: g.airReports.slice(-KEEP_SEA), airPool: g.airPool, sky: g.sky, raids: g.raids,
+    stories: g.stories,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -132,6 +134,8 @@ export function loadGame(text: string): Game | null {
     }
   }
   if (Array.isArray(d.airFleets)) { g.airFleets = d.airFleets; g.nextAir = d.nextAir; g.airReports = d.airReports ?? []; g.airPool = d.airPool ?? {}; g.sky = d.sky ?? {}; g.raids = d.raids ?? {}; }
+  // A save from before the units kept records: the roll of honour starts empty and fills from here on.
+  g.stories = { ...newStories(), ...(d.stories ?? {}) };
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.convoys = d.convoys ?? {}; }
   // The supply picture is restored exactly as it stood, so the loaded game plays on identically.
   const fed = g.corps.map((c) => c.supplied);

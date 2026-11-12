@@ -9,6 +9,7 @@ import {
   beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
   previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
+  orderCash, orderDrafts, orderSeen,
 } from '../turn';
 import {
   AIR, MISSION, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, cover, crowding, forecastAir, isOffensive,
@@ -23,10 +24,11 @@ import { fronts, isOpen, startOpen } from '../staff';
 import { PRODUCTION, canRaise, fortCost, income, isHome } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame, staleSave } from '../save';
-import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
+import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, rankOf, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
+import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc } from '../game';
-import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type BattleReport, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
+import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type Game, type General, type Kind, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -60,7 +62,7 @@ const ui = {
   msg: '',
   /** False until a game has been started or resumed, so the title screen never overwrites a saved game. */
   live: false,
-  tab: 'region' as 'region' | 'build' | 'research' | 'generals' | 'navy' | 'air' | 'reel' | 'battles' | 'powers',
+  tab: 'region' as 'region' | 'build' | 'research' | 'generals' | 'honours' | 'navy' | 'air' | 'reel' | 'battles' | 'powers',
   view: { x: 380, y: 300, w: 620 },
   unread: 0,
   seenReports: 0,
@@ -515,7 +517,7 @@ function drawTabs(): void {
   const build = me ? t('build', 'Build') : '';
   // Generals with no corps, when there is a corps for them: a decision waiting for the player.
   const idle = me && vacant(g, me).length ? waiting(g, me).length : 0;
-  $('#tabs').innerHTML = t('region', 'Region') + build + t('research', 'Research') + t('generals', 'Generals', idle) + t('navy', 'Navy') + t('air', 'Air') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
+  $('#tabs').innerHTML = t('region', 'Region') + build + t('research', 'Research') + t('generals', 'Generals', idle) + t('honours', 'Honours', unseen(g).length) + t('navy', 'Navy') + t('air', 'Air') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
 }
 
 /** Free play: nobody hands the player a plan. The note says so, and gives his own staff's reading of each front. */
@@ -628,6 +630,7 @@ function corpsRow(c: Corps, mine: boolean): string {
     const d = COMMAND.traits[t];
     if (d) tags.push(`<span class="tag ${d.good ? 'good' : 'bad'}" title="${esc(d.effect)}">${esc(d.label)}</span>`);
   }
+  tags.push(...storyTags(c));
   if (c.airborne) tags.push(`<span class="tag good" title="Parachute and glider troops. Once a month they can be flown from a friendly coast to an enemy one across a single sea, with no ships and whoever holds the water. They fight there at ${Math.round(NAVY.landing.airborne * 100)}%, without heavy weapons, and not under a sky the enemy's fighters hold.">Airborne</span>`);
   if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
   if (c.yields && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_BACK)}">Falls back if attacked</span>`);
@@ -635,11 +638,11 @@ function corpsRow(c: Corps, mine: boolean): string {
   else if (c.digs && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_DIG)}">Digging in: ready next month if it stays put</span>`);
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const el = mine && c.kind !== 'fort' ? 'button' : 'div';
-  return `<${el} class="corps${pick ? ' pick' : ''}" ${el === 'button' ? `data-act="pick" data-id="${c.id}"` : ''}>
-    ${icon(c)}<span class="nm">${esc(c.name)}${gen ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(gen.name)} <span class="lvl" title="Level ${gen.level} general">${gen.level}</span></span>` : ''}</span>${pips}
+  return `<div class="unit"><${el} class="corps${pick ? ' pick' : ''}" ${el === 'button' ? `data-act="pick" data-id="${c.id}"` : ''}>
+    ${icon(c)}<span class="nm">${esc(c.name)}${c.nick ? ` <i class="nick">${esc(c.nick)}</i>` : ''}${gen ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(gen.name)} <span class="lvl" title="Level ${gen.level} general">${gen.level}</span></span>` : ''}</span>${pips}
     <span class="meta">${g.nations[c.nat].adj} ${k.label.toLowerCase()} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span>
     <span class="bars"><span>Strength</span><span class="meter"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span><span>Cohesion</span><span class="meter"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span></span>
-    ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>`;
+    ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${recStrip('corps', c)}</div>`;
 }
 
 // ---- The army tray: the general and his units, laid out as cards along the foot of the map ----
@@ -666,9 +669,10 @@ function unitCard(c: Corps, mine: boolean): string {
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const gen = generalOf(g, c);
   const flags = `${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="Entrenched: defends 25% stronger until it leaves this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to entrench: the trenches are ready next month if it stays put">Digging</span>' : ''}`;
-  return `<${el} class="ucard${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${gen ? ` · ${esc(gen.name)}` : ''}">
+  return `<${el} class="ucard${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''}">
     <span class="utop">${icon(c)}${pips}</span><b>${esc(c.name)}</b>
     <span class="um">${c.divs} ${KIND[c.kind].label.toLowerCase()} div${c.divs > 1 ? 's' : ''}${gen ? ` · ${esc(surname(gen.name))}` : ''}</span>
+    <span class="um vet">${esc(grade(c.xp))}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 5)}</span>
     <span class="meter" title="Strength ${Math.round(c.str * 100)}%"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span>
     <span class="meter" title="Cohesion ${Math.round(c.org * 100)}%"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span>${flags ? `<span class="tags">${flags}</span>` : ''}</${el}>`;
 }
@@ -686,7 +690,7 @@ function drawTray(): void {
   const initials = who ? initialsOf(who.name) : '';
   const others = [...new Set(r.units.filter((c) => c.nat !== a.nat).map((c) => c.nat))];
   const head = who
-    ? `<button class="tgen" data-act="general" data-id="${who.id}" title="Open this general's record"><span class="seal" style="background:${n.color}">${esc(initials)}</span><span class="grow"><b>${esc(who.name)}</b><small>${esc(n.adj)} army at ${esc(r.name)} · level ${who.level} general</small>${who.traits.length ? `<span class="tags">${traitTags(who)}</span>` : ''}</span></button>`
+    ? `<button class="tgen" data-act="general" data-id="${who.id}" title="Open this general's record"><span class="seal" style="background:${n.color}">${esc(initials)}</span><span class="grow"><b>${esc(who.name)}</b><small>${esc(n.adj)} army at ${esc(r.name)} · ${esc(rankOf(who))}, level ${who.level}</small>${who.traits.length ? `<span class="tags">${traitTags(who)}</span>` : ''}</span></button>`
     : `<div class="tgen"><span class="seal none" style="background:${n.color}"></span><span class="grow"><b>${esc(n.adj)} army at ${esc(r.name)}</b><small>No general in command</small></span></div>`;
   const tally = `<div class="ttally"><b>${num(sumDivs(cs))}</b><small>divisions</small><b>${Math.round(fitness(cs) * 100)}%</b><small>strength</small>${others.length ? `<small class="also">Also here: ${others.map((o) => esc(g.nations[o].adj)).join(', ')}</small>` : ''}</div>`;
   // The standing order for the day the enemy comes: the whole army in the tray takes it together.
@@ -804,6 +808,7 @@ function drawPane(): void {
   else if (ui.tab === 'build') pane.innerHTML = buildPane();
   else if (ui.tab === 'research') pane.innerHTML = researchPane();
   else if (ui.tab === 'generals') pane.innerHTML = generalsPane();
+  else if (ui.tab === 'honours') pane.innerHTML = honoursPane();
   else if (ui.tab === 'navy') pane.innerHTML = navyPane();
   else if (ui.tab === 'air') pane.innerHTML = airPane();
   else if (ui.tab === 'reel') pane.innerHTML = reelPane();
@@ -832,6 +837,8 @@ function alertList(): Alert[] {
   const stars = g.generals.filter((x) => x.nat === me && x.points > 0 && serving(x)).length;
   if (stars) out.push({ kind: 'generals', text: `${stars} general${stars === 1 ? ' has' : 's have'} skill points to spend`, tab: 'generals' });
   if (n.lab && teamsFree(n.lab) > 0) out.push({ kind: 'research', text: 'A design team has no work', tab: 'research' });
+  const cited = unseen(g).length;
+  if (cited) out.push({ kind: 'honours', text: `${cited} honour${cited === 1 ? '' : 's'} earned: read the citation${cited === 1 ? '' : 's'}` });
   return out;
 }
 
@@ -841,6 +848,7 @@ const alertButtons = (): string => alertList().map((a) => `<button class="alert 
 function followAlert(kind: string): void {
   const a = alertList().find((x) => x.kind === kind);
   if (!a) return;
+  if (kind === 'honours') { const next = unseen(g)[0]; if (next) openModal({ kind: 'award', id: next.id }); return; }
   if (a.tab) { ui.tab = a.tab as typeof ui.tab; ui.rail = ui.ship = ui.land = ui.rebase = false; refresh(); return; }
   const regs = a.regs ?? [];
   if (!regs.length) return;
@@ -930,7 +938,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -995,6 +1003,15 @@ function buildPane(): string {
       const ok = mine && have >= b.cost;
       const label = kind === 'arm' ? `${PRODUCTION.armourName[me] ?? PRODUCTION.armourName._default} corps` : b.label;
       out += `<button class="buy" data-act="build" data-kind="${kind}" ${ok ? '' : 'disabled'}>${icon({ nat: me, kind } as Corps)}<span class="grow"><b>${esc(label)}</b><small>${b.divs} divisions · ready in ${b.months} months</small><small>${esc(b.blurb)}</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${b.cost}<small>pts</small></span></button>`;
+    }
+  }
+
+  const lostOnes = Object.keys(PRODUCTION.builds).flatMap((kind) => revivable(g, me, kind)).sort((a, b) => b.turn - a.turn).slice(0, 6);
+  if (at && lostOnes.length) {
+    out += `<h3>Raise a lost corps again</h3><p class="sub" style="margin:0 0 7px">A formation on the memorial wall can be raised again under its old name. It costs what any new corps costs, and it carries the old colours, the name the army gave it and part of what the old corps knew.</p>`;
+    for (const f of lostOnes) {
+      const b = PRODUCTION.builds[f.kind];
+      out += `<button class="buy" data-act="revive" data-id="${f.id}" ${mine && have >= b.cost ? '' : 'disabled'}>${icon({ nat: me, kind: f.kind } as Corps)}<span class="grow"><b>${esc(f.name)}${f.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}</b><small>${fallenLine(f)} ${ribbons(f)}</small><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(at.name)}</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${b.cost}<small>pts</small></span></button>`;
     }
   }
 
@@ -1104,7 +1121,7 @@ function traitTags(x: General): string {
 function genRow(x: General, act = 'general', extra = '', off = ''): string {
   const pts = x.nat === g.human && x.points > 0 && serving(x) ? `<span class="tag pts">${x.points} skill point${x.points > 1 ? 's' : ''}</span>` : '';
   const whose = x.nat === g.human ? '' : `${g.nations[x.nat].adj} · `;
-  return `<button class="gen${serving(x) ? '' : ' gone'}" data-act="${act}" data-id="${x.id}" ${extra} ${off ? `disabled title="${esc(off)}"` : ''}><span class="lv">${x.level}</span><span class="grow"><b>${esc(x.name)}</b><small>${whose}${genWhere(x)}</small>${x.traits.length || pts ? `<span class="tags">${pts}${traitTags(x)}</span>` : ''}</span></button>`;
+  return `<button class="gen${serving(x) ? '' : ' gone'}" data-act="${act}" data-id="${x.id}" ${extra} ${off ? `disabled title="${esc(off)}"` : ''}><span class="lv">${x.level}</span><span class="grow"><b>${esc(x.name)}</b><small>${whose}${esc(rankOf(x))} · ${genWhere(x)}</small>${x.traits.length || pts ? `<span class="tags">${pts}${traitTags(x)}</span>` : ''}</span></button>`;
 }
 
 function generalsPane(): string {
@@ -1165,7 +1182,7 @@ function generalCard(x: General): string {
   const foot = m.confirm
     ? `<button class="btn" data-act="keep" data-id="${x.id}">Keep him</button><button class="btn go" data-act="sack" data-id="${x.id}">Dismiss him</button>`
     : `${mine && serving(x) ? `<button class="btn" data-act="sack" data-id="${x.id}">Dismiss</button>` : ''}${mine && x.status === 'active' && c ? `<button class="btn" data-act="relieve" data-id="${x.id}" title="Take him off his corps and put him back on the list">Relieve of command</button>` : ''}${c ? `<button class="btn" data-act="showmap" data-id="${c.reg}">Show on map</button>` : ''}<button class="btn go" data-act="close">Close</button>`;
-  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${n.adj} army · General · ${x.historical ? 'Historical' : 'Rose from the ranks'}</div><h2>${esc(x.name)}</h2></header>
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${n.adj} army · ${esc(rankOf(x))} · ${x.historical ? 'Historical' : 'Rose from the ranks'}</div><h2>${esc(x.name)}</h2></header>
     <div class="body">
       <div class="record"><div class="lvbig"><b>${x.level}</b><span>LEVEL</span></div><div class="who"><b>${state}</b>
         <div class="xp"><i style="width:${need === Infinity ? 100 : Math.round((x.xp / need) * 100)}%"></i></div>
@@ -1173,6 +1190,7 @@ function generalCard(x: General): string {
       <h3>Traits</h3>${traits ? `<ul class="traits">${traits}</ul>` : '<div class="empty">None yet. Traits are earned from how a general fights: closing pockets, holding against the odds, costly assaults.</div>'}
       <h3>Skills</h3>${skills}
       <div class="tally">Battles ${x.rec.battles} · Won ${x.rec.won}${x.rec.wounds ? ` · Wounded ${times(x.rec.wounds)}` : ''}</div>
+      ${rankLadder(x)}
       ${orders}${confirm}
     </div><footer>${foot}</footer>`;
 }
@@ -1191,6 +1209,320 @@ function appointCard(c: Corps): string {
     </div><footer><button class="btn go" data-act="close">Close</button></footer>`;
 }
 
+// ---- Unit stories: ribbons, service records, honours and the memorial wall -------------------
+
+type AnyUnit = (Corps | AirFleet | Fleet) & Storied;
+
+const andList = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+const serviceOf = (kind: UnitKind): string => (kind === 'corps' ? 'army' : kind === 'air' ? 'air force' : 'navy');
+const placeOf = (kind: UnitKind, at: number): string => (at < 0 ? '' : kind === 'fleet' ? g.seas[at]?.name ?? '' : g.regions[at]?.name ?? '');
+
+/** What has become of an honour, in a few words. */
+function awardState(a: Award): string {
+  if (a.old) return 'carried from the corps that bore the name before';
+  if (a.cash === 'bonds') return `sent home on a bond tour, ${date(a.cashed ?? a.turn)}`;
+  if (a.cash === 'school') return `its veterans went to the schools, ${date(a.cashed ?? a.turn)}`;
+  return 'carried at the front';
+}
+
+/** One honour as a ribbon: two colours, as on a medal bar. Faded once the fame has been spent at home. */
+function ribbonOf(a: Award, big = false): string {
+  const d = honourDef(a.hon);
+  if (!d) return '';
+  return `<i class="rib${big ? ' big' : ''}${a.old ? ' old' : a.cash ? ' home' : ''}" style="--a:${d.ribbon[0]};--b:${d.ribbon[1]}" title="${esc(awardTitle(g, a))}, ${date(a.turn)}: ${esc(awardState(a))}"></i>`;
+}
+
+/** A unit's ribbons in a row, newest last. */
+function ribbons(u: Storied, most = 8): string {
+  const hs = honoursOf(g, u);
+  if (!hs.length) return '';
+  return `<span class="ribs">${hs.slice(-most).map((a) => ribbonOf(a)).join('')}${hs.length > most ? `<small>+${hs.length - most}</small>` : ''}</span>`;
+}
+
+/** What an honour adds in battle while it is carried at the front. */
+function edgeText(a: Award): string {
+  const e = honourDef(a.hon)?.edge;
+  const pc = (v: number): number => Math.round(v * 100);
+  const parts: string[] = [];
+  if (e?.attack) parts.push(`attacks ${pc(e.attack)}% stronger`);
+  if (e?.defence) parts.push(`defends ${pc(e.defence)}% stronger`);
+  if (e?.all) parts.push(`fights ${pc(e.all)}% stronger`);
+  return parts.length ? andList(parts) : '';
+}
+
+/** The tags a corps wears for its story: its designation, leave at home, drafts refused, an old enemy, a home in enemy hands. */
+function storyTags(c: Corps): string[] {
+  const out: string[] = [];
+  const mine = c.nat === g.human;
+  if (isGuards(g, c)) out.push(`<span class="tag hon" title="Named in the order of the day: the highest honour a formation can earn.">${esc(designation(c.nat))}</span>`);
+  if (c.leave !== undefined) out.push(`<span class="tag" title="At home with its fame. It cannot be given orders until it is back.">At home until ${date(c.leave)}</span>`);
+  if (c.lean && mine) out.push('<span class="tag" title="This corps takes no drafts. It stays as small as its losses leave it, and keeps what it knows.">Veterans only</span>');
+  const r = rivalryOf(g, c.rival);
+  if (r && !r.over && mine) out.push(`<span class="tag hon" title="The two have met ${r.met} times. This corps fights ${Math.round(STORIES.rivals.edge * 100)}% harder in any battle its old enemy is in.">Old enemy: ${esc(r.theirsName)}</span>`);
+  if (mine && c.rec?.exile && c.home !== undefined) out.push(`<span class="tag bad" title="The place this corps was raised in is in enemy hands.">${esc(g.regions[c.home].name)} lost</span>`);
+  return out;
+}
+
+/** A unit's record in one line. */
+function statLine(kind: UnitKind, u: AnyUnit): string {
+  const v = (k: string): number => u.rec?.[k] ?? 0;
+  if (kind === 'corps') {
+    const c = u as Corps;
+    if (c.kind === 'fort') return v('battles') ? `${v('battles')} ${v('battles') === 1 ? 'battle' : 'battles'}, ${v('won')} won` : 'No battles yet';
+    return `${grade(c.xp)} · ${v('battles') ? `${v('battles')} ${v('battles') === 1 ? 'battle' : 'battles'}, ${v('won')} won` : 'no battles yet'}`;
+  }
+  if (kind === 'air') {
+    const ops = v('flown') + v('defended');
+    return ops ? `${ops} ${ops === 1 ? 'operation' : 'operations'}${v('missions') ? ` · ${v('missions')} bombing missions` : ''}` : 'No operations yet';
+  }
+  const parts: string[] = [];
+  if (v('actions')) parts.push(`${v('actions')} ${v('actions') === 1 ? 'action' : 'actions'} won`);
+  if (v('tons')) parts.push(`${num(v('tons'))} tons sunk`);
+  if (v('escort')) parts.push(`${v('escort')} months on escort`);
+  return parts.length ? parts.join(' · ') : 'No actions yet';
+}
+
+/** The strip under a unit's row: its ribbons, its record in a line, and the way in to the whole of it. */
+function recStrip(kind: UnitKind, u: AnyUnit): string {
+  return `<button class="recstrip" data-act="record" data-type="${kind}" data-id="${u.id}" title="Open the service record of ${esc(u.name)}">${ribbons(u, 6)}<span class="grow">${esc(statLine(kind, u))}</span><b>Record ›</b></button>`;
+}
+
+/** How and where a formation on the memorial wall was lost. */
+function fallenLine(f: Fallen): string {
+  const how = f.how === 'destroyed' ? 'Destroyed' : f.how === 'surrendered' ? 'Laid down its arms' : 'Starved out';
+  return `${how} at ${esc(g.regions[f.reg]?.name ?? 'the front')}, ${date(f.turn)}`;
+}
+
+/** The ranks of a general's army, with the one he holds picked out. */
+function rankLadder(x: General): string {
+  const rows = COMMAND.ranks[x.nat] ?? COMMAND.ranks._default;
+  return `<h3>Rank</h3><div class="ladder">${rows.map(([from, title], i) => {
+    const next = rows[i + 1]?.[0] ?? Infinity;
+    return `<span class="${x.level >= from ? 'got' : ''}${x.level >= from && x.level < next ? ' here' : ''}"><b>${esc(title)}</b><small>${x.level >= from ? 'Held' : `At level ${from}`}</small></span>`;
+  }).join('')}</div>`;
+}
+
+/** One honour set out in full on a record: ribbon, name, when and where, and what became of it. */
+function honourBlock(a: Award, open: boolean): string {
+  const d = honourDef(a.hon);
+  const el = open ? 'button' : 'div';
+  const todo = open && a.nat === g.human && !a.cash && !a.old && !d?.last;
+  const edge = !a.cash && !a.old ? edgeText(a) : '';
+  return `<${el} class="hon" ${open ? `data-act="award" data-id="${a.id}"` : ''}>${ribbonOf(a, true)}<span class="grow"><b>${esc(awardTitle(g, a))}</b><small>${esc(d?.name ?? '')} · ${date(a.turn)}${a.first ? ` · first of the ${esc(g.nations[a.nat].adj)} ${serviceOf(a.kind)}` : ''}</small><small>${capital(esc(awardState(a)))}${edge ? `: ${edge}` : ''}</small></span>${todo ? '<span class="go">Decide ›</span>' : open ? '<span class="go">Citation ›</span>' : ''}</${el}>`;
+}
+
+const STAT_LABELS: Record<UnitKind, [string, string][]> = {
+  corps: [['battles', 'Battles'], ['won', 'Won'], ['taken', 'Regions taken'], ['stormed', 'Breakthroughs'], ['stood', 'Stood against odds'], ['pris', 'Prisoners taken'], ['lost', 'Men lost'], ['caps', 'Capitals entered'], ['landings', 'Landings'], ['drops', 'Airborne drops'], ['cut', 'Months cut off'], ['winter', 'Winter battles'], ['desert', 'Desert battles'], ['scores', 'Old scores settled']],
+  air: [['flown', 'Operations flown'], ['missions', 'Bombing missions'], ['nights', 'Night raids'], ['skies', 'Skies won'], ['kills', 'Enemy aircraft downed'], ['sunk', 'Ships sunk'], ['defended', 'Raids met'], ['saved', 'Raiders shot down']],
+  fleet: [['actions', 'Actions won'], ['capital', 'Capital ships sunk'], ['tons', 'Tons of shipping sunk'], ['escort', 'Months on escort']],
+};
+
+function statGrid(kind: UnitKind, u: Storied, always: number): string {
+  const cells = STAT_LABELS[kind].filter(([k], i) => i < always || (u.rec?.[k] ?? 0) > 0).map(([k, label]) => `<div class="fact"><span>${label}</span><b>${num(u.rec?.[k] ?? 0)}</b></div>`);
+  return cells.length ? `<div class="facts">${cells.join('')}</div>` : '';
+}
+
+function diaryBlock(u: { log?: DiaryLine[] }, shape: { kind?: unknown; ships?: unknown; ftr?: unknown }): string {
+  const log = u.log ?? [];
+  if (!log.length) return '<div class="empty">Nothing written yet.</div>';
+  let out = '<div class="reel diary">', t = -1;
+  for (let i = log.length - 1; i >= 0; i--) {
+    const line = log[i];
+    if (line[0] !== t) { t = line[0]; out += `<div class="mo">${date(t)}</div>`; }
+    out += `<p class="${line[1] === 'honour' ? 'honour' : ''}">${esc(diaryText(g, shape, line))}</p>`;
+  }
+  return out + '</div>';
+}
+
+/** The letters written about a unit. Air fleets and fleets are filed under their own numbers. */
+function lettersOf(kind: UnitKind, id: number): Game['headlines'] {
+  const key = kind === 'corps' ? id : kind === 'air' ? -id : -1000 - id;
+  return g.headlines.filter((h) => h.kind === 'letter' && h.unit === key);
+}
+
+/** A unit's whole story: what it is, what it has earned, what it has done, and what the player can decide about it. */
+function unitRecordCard(kind: UnitKind, u: AnyUnit): string {
+  const n = g.nations[u.nat];
+  const mine = u.nat === g.human;
+  const up = mine && humanUp(g);
+  const hs = honoursOf(g, u);
+  const v = (k: string): number => u.rec?.[k] ?? 0;
+  let badge: string, who: string, extra = '', where = -1;
+  if (kind === 'corps') {
+    const c = u as Corps;
+    where = c.reg;
+    const gen = generalOf(g, c);
+    const guards = isGuards(g, c);
+    badge = `<div class="lvbig"><b>${Math.round(c.xp * 100)}</b><span>${esc(grade(c.xp).toUpperCase())}</span></div>`;
+    who = `<b>${n.adj} ${KIND[c.kind].label.toLowerCase()}${guards ? ` · ${esc(designation(c.nat))}` : ''} · ${c.divs} division${c.divs > 1 ? 's' : ''}</b>
+      <small>${c.leave !== undefined ? `At home in ${esc(g.regions[c.reg].name)} until ${date(c.leave)}` : `At ${esc(g.regions[c.reg].name)}`}${gen ? ` · ${esc(rankOf(gen))} ${esc(gen.name)}` : ''}</small>
+      <small>Raised ${c.heir !== undefined ? 'again ' : ''}${date(c.born ?? 1)}${c.home !== undefined ? ` at ${esc(g.regions[c.home].name)}` : ''} · ${stat(g, c, 'service')} months in service</small>`;
+    // Home ground.
+    if (c.home !== undefined && mine && c.kind !== 'fort') {
+      const home = g.regions[c.home];
+      extra += `<div class="note"><b>Home: ${esc(home.name)}.</b> ${c.rec?.exile ? `It is in enemy hands. The corps attacks ${Math.round(STORIES.home.attack * 100)}% stronger to win it back, and will take heart the day it is freed.` : `The corps defends it ${Math.round(STORIES.home.defence * 100)}% stronger than any other ground. If it falls to the enemy the corps loses heart.`}</div>`;
+    }
+    // An old enemy.
+    const all = g.stories.rivals.filter((r) => r.mine === c.id);
+    for (const r of all.slice(-2)) {
+      const adj = g.nations[r.theirsNat]?.adj ?? '';
+      extra += r.over
+        ? `<div class="note"><b>Old enemy: ${esc(adj)} ${esc(r.theirsName)}.</b> ${r.over === 'won' ? `Destroyed by this corps in ${date(r.ended ?? r.since)}, after ${r.met} meetings.` : r.over === 'lost' ? `It had the better of this corps in the end, ${date(r.ended ?? r.since)}.` : `Lost elsewhere in ${date(r.ended ?? r.since)}. The score was never settled.`}</div>`
+        : `<div class="note"><b>Old enemy: ${esc(adj)} ${esc(r.theirsName)}.</b> They first met at ${esc(g.regions[r.first]?.name ?? 'the front')} and have met ${r.met} times${r.won + r.lost ? `; since the men began to keep count, ${r.won} won and ${r.lost} lost` : ''}. This corps fights ${Math.round(STORIES.rivals.edge * 100)}% harder in any battle the other is in. Destroy it in battle and the corps gains cohesion, experience, an honour, and ${STORIES.rivals.pc} political capital for you.</div>`;
+    }
+    // Replacements.
+    if (mine && c.kind !== 'fort') {
+      const t = Math.round(training(g, c.nat) * 100);
+      extra += `<h3>Replacements</h3><p class="sub" style="margin:0 0 7px">Drafts bring a corps back to strength, but men who have never been under fire thin out what it knows. Drafts reach the front at experience ${t} (${esc(grade(t / 100).toLowerCase())}); this corps stands at ${Math.round(c.xp * 100)}. A corps kept to veterans only stays as small as its losses leave it and keeps its edge.</p>
+        <div class="seg"><button class="btn small${c.lean ? '' : ' on'}" data-act="drafts" data-id="${c.id}" data-v="take" ${up ? '' : 'disabled'}>Take drafts</button><button class="btn small${c.lean ? ' on' : ''}" data-act="drafts" data-id="${c.id}" data-v="lean" ${up ? '' : 'disabled'}>Veterans only</button></div>`;
+    }
+  } else if (kind === 'air') {
+    const f = u as AirFleet;
+    where = f.base;
+    const ops = v('flown') + v('defended');
+    badge = `<div class="lvbig"><b>${ops}</b><span>${ops === 1 ? 'OPERATION' : 'OPERATIONS'}</span></div>`;
+    const need = honourDef('tour')?.needs[1] ?? 25;
+    who = `<b>${n.adj} air fleet · ${esc(craft(f.ftr, f.bmr))}</b><small>Based at ${esc(g.regions[f.base].name)}${f.leader ? ` · ${esc(f.leader.name)}` : ''}</small>
+      ${f.bmr > 0 && !hs.some((a) => a.hon === 'tour') ? `<small>Tour of duty: ${Math.min(need, v('missions'))} of ${need} bombing missions flown</small><div class="xp"><i style="width:${Math.min(100, Math.round((v('missions') / need) * 100))}%"></i></div>` : ''}`;
+  } else {
+    const f = u as Fleet;
+    badge = `<div class="lvbig"><b>${v('actions')}</b><span>${v('actions') === 1 ? 'ACTION WON' : 'ACTIONS WON'}</span></div>`;
+    who = `<b>${n.adj} fleet · ${esc(shipList(f.ships))}</b><small>${whereFleet(f)}${f.admiral ? ` · ${esc(f.admiral.name)}` : ''}</small>`;
+  }
+  const letters = lettersOf(kind, u.id);
+  const waiting = hs.filter((a) => mine && !a.cash && !a.old && !honourDef(a.hon)?.last).length;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${n.adj} ${serviceOf(kind)} · Service record</div><h2>${esc(u.name)}</h2>${u.nick ? `<div class="aka">${esc(capital(u.nick))}</div>` : ''}</header>
+    <div class="body">
+      <div class="record">${badge}<div class="who">${who}</div></div>
+      <h3>Honours</h3>${hs.length ? `${hs.map((a) => honourBlock(a, true)).join('')}${waiting ? `<p class="sub">An honour carried at the front makes the unit fight harder. Open one to send its heroes home instead: on a bond tour, or to the schools as instructors.</p>` : ''}` : `<div class="empty">None yet. Honours are earned from the record: ${kind === 'corps' ? 'breakthroughs, stands against the odds, capitals entered, sieges outlasted, long service' : kind === 'air' ? 'a full tour of twenty-five bombing missions, a sky won, raids broken up, ships sunk' : 'a great ship sunk in a fleet action, a year on convoy escort, tonnage sunk on the trade routes'}.</div>`}
+      <h3>Record</h3>${statGrid(kind, u, kind === 'corps' ? 3 : 1)}
+      ${extra}
+      <h3>Diary</h3>${diaryBlock(u, u)}
+      ${letters.length ? `<h3>Letters</h3>${letters.slice(-4).reverse().map(letterBlock).join('')}` : ''}
+    </div><footer>${where >= 0 ? `<button class="btn" data-act="showmap" data-id="${where}">Show on map</button>` : ''}<button class="btn go" data-act="close">Close</button></footer>`;
+}
+
+/** A formation on the memorial wall. */
+function fallenCard(f: Fallen): string {
+  const n = g.nations[f.nat];
+  const mine = f.nat === g.human;
+  const hs = honoursOf(g, f);
+  const by = g.nations[f.by];
+  const heir = f.heir !== undefined ? g.corps.find((c) => c.id === f.heir) : undefined;
+  const queued = n.queue.some((b) => b.revive === f.id);
+  const at = mine ? raiseAt() : null;
+  const b = PRODUCTION.builds[f.kind];
+  const have = Math.floor(n.pp);
+  let again = '';
+  if (heir) again = `<div class="note"><b>Raised again.</b> A new ${esc(f.name)} carries the old colours. <button class="link" data-act="record" data-type="corps" data-id="${heir.id}">Its record ›</button></div>`;
+  else if (f.heir !== undefined) again = '<div class="note"><b>Raised again, and lost again.</b> The name has been carried twice.</div>';
+  else if (queued) again = '<div class="note"><b>Being raised again.</b> A new corps is forming under the old name.</div>';
+  else if (mine && b && at) again = `<h3>Raise it again</h3><button class="buy" data-act="revive" data-id="${f.id}" ${humanUp(g) && have >= b.cost ? '' : 'disabled'}>${icon({ nat: f.nat, kind: f.kind } as Corps)}<span class="grow"><b>Raise ${esc(f.name)} again</b><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(at.name)}</small><small>The new corps carries the old colours${f.nick ? ', the name the army gave it' : ''} and ${Math.round(STORIES.legacy.xp * 100)}% of what the old corps knew above a green one.</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${b.cost}<small>pts</small></span></button>`;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Memorial wall · ${n.adj} army</div><h2>${esc(f.name)}</h2>${f.nick ? `<div class="aka">${esc(capital(f.nick))}</div>` : ''}</header>
+    <div class="body">
+      <p class="lead"><b>${fallenLine(f)}</b>${by && by.id !== f.nat ? `, ${f.how === 'destroyed' ? 'by' : f.how === 'surrendered' ? 'to' : 'cut off by'} the ${esc(by.adj)} army` : ''}. ${f.divs} ${KIND[f.kind].label.toLowerCase()} division${f.divs > 1 ? 's' : ''}, raised ${date(f.born)}${f.home >= 0 ? ` at ${esc(g.regions[f.home].name)}` : ''}; ${esc(grade(f.xp).toLowerCase())} troops at the end.${f.general ? ` ${esc(f.general)} was with it.` : ''}</p>
+      ${hs.length ? `<h3>Honours</h3>${hs.map((a) => honourBlock(a, true)).join('')}` : ''}
+      <h3>Record</h3>${statGrid('corps', f, 3)}
+      ${again}
+      ${f.log?.length ? `<h3>Diary</h3>${diaryBlock(f, { kind: f.kind })}` : ''}
+    </div><footer><button class="btn" data-act="showmap" data-id="${f.reg}">Show on map</button><button class="btn go" data-act="close">Close</button></footer>`;
+}
+
+/** The citation for an honour, and the choice that comes with it: keep the fame at the front, or spend it at home. */
+function awardCard(a: Award): string {
+  const d = honourDef(a.hon);
+  const n = g.nations[a.nat];
+  const mine = a.nat === g.human;
+  const u = unitOf(g, a.kind, a.unit);
+  const up = humanUp(g);
+  const C = STORIES.cash, fame = fameOf(a);
+  const edge = edgeText(a);
+  const where = a.kind === 'fleet' ? -1 : a.at >= 0 ? a.at : a.kind === 'corps' && u ? (u as Corps).reg : a.kind === 'air' && u ? (u as AirFleet).base : -1;
+  const away = a.kind === 'corps'
+    ? `The corps goes home for ${C.months} months and cannot be given orders.`
+    : `Its best crews go home, and the ${a.kind === 'air' ? 'air fleet' : 'fleet'} loses ${Math.round(C.ready * 100)} points of readiness.`;
+  let choice = '';
+  if (d?.last) choice = '<div class="note"><b>A last honour.</b> It is carried on the memorial wall, and by any corps raised again in the name.</div>';
+  else if (a.old) choice = '<div class="note"><b>Carried from the old corps.</b> The formation that bore this name before earned it. The new one wears the ribbon, and has its own name to make.</div>';
+  else if (!mine) choice = '';
+  else if (!u) choice = '<div class="note"><b>The unit that earned this honour is gone.</b> It is written on the memorial wall.</div>';
+  else if (a.cash) choice = `<div class="note"><b>${a.cash === 'bonds' ? 'Sent home on a bond tour' : 'Its veterans went to the schools'}, ${date(a.cashed ?? a.turn)}.</b> The ribbon stays on the colours. The edge it gave at the front has been spent at home.</div>`;
+  else {
+    const opt = (how: Cash, head: string, blurb: string): string => {
+      const why = whyNotCash(g, a, how) || (up ? '' : 'Wait for your turn.');
+      return `<button class="buy choice" data-act="cash" data-id="${a.id}" data-how="${how}" ${why ? `disabled title="${esc(why)}"` : ''}><span class="grow"><b>${head}</b><small class="gain">${esc(capital(cashWorth(g, a, how)))}</small><small>${blurb}</small>${why && up ? `<small class="why">${esc(why)}</small>` : ''}</span></button>`;
+    };
+    const lose = a.kind === 'corps' ? ` It also gives up ${Math.round(C.schoolXp * fame * 100)} points of its own experience with the men who leave.` : '';
+    choice = `<h3>What will you do with the fame?</h3>
+      <div class="buy choice pick"><span class="grow"><b>Keep it at the front</b><small class="gain">${edge ? capital(`${esc(u.name)} ${edge}`) : 'The honour stays on the colours'}</small><small>This is how things stand now, and you can change your mind in any later month. Honours add up, to at most ${Math.round(STORIES.edgeCap * 100)}% for one unit.</small></span></div>
+      ${opt('bonds', 'Send it home on a bond tour', `The heroes are paraded through the cities and the country digs into its pockets. ${away} The honour stops giving its edge.${n.pc >= DIPLOMACY.pcCap ? ' Your political capital is already as high as it can go, so only the production points would count.' : ''}`)}
+      ${opt('school', 'Send its veterans to the schools', `The men who did it teach the next drafts how. ${away}${lose} The honour stops giving its edge.`)}`;
+  }
+  const more = unseen(g).filter((x) => x.id !== a.id).length;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${mine ? 'Honour' : `${n.adj} honour`} · ${date(a.turn)}${a.first ? ` · first of the ${n.adj} ${serviceOf(a.kind)}` : ''}</div><h2>${esc(awardTitle(g, a))}</h2></header>
+    <div class="body">
+      <div class="cite">${ribbonOf(a, true)}<div><b>${esc(a.name)}</b>${u?.nick ? ` <i class="nick">${esc(u.nick)}</i>` : ''}<small>${esc(d?.name ?? '')}${placeOf(a.kind, a.at) ? ` · ${esc(placeOf(a.kind, a.at))}` : ''}</small></div></div>
+      <p class="lead citation">${esc(citation(g, a))}</p>
+      ${d?.real ? `<div class="note real"><b>In the real war.</b> ${esc(d.real)}</div>` : ''}
+      ${choice}
+    </div><footer>${u ? `<button class="btn" data-act="record" data-type="${a.kind}" data-id="${a.unit}">Service record</button>` : ''}${where >= 0 ? `<button class="btn" data-act="showmap" data-id="${where}">Show on map</button>` : ''}<button class="btn go" data-act="nextaward">${more ? `Next honour (${more})` : 'Close'}</button></footer>`;
+}
+
+/** The Honours tab: the player's honoured units, their old enemies, the memorial wall, and the roll of honour of the war. */
+function honoursPane(): string {
+  const me = g.human;
+  const S = g.stories;
+  const unitRow = (kind: UnitKind, u: AnyUnit, whose = false): string => {
+    const at = kind === 'corps' ? esc(g.regions[(u as Corps).reg].name) : kind === 'air' ? esc(g.regions[(u as AirFleet).base].name) : esc(g.seas[(u as Fleet).zone]?.name ?? (u as Fleet).port);
+    return `<button class="gen" data-act="record" data-type="${kind}" data-id="${u.id}"><span class="grow"><b>${esc(u.name)}${u.nick ? ` <i class="nick">${esc(u.nick)}</i>` : ''}</b><small>${whose ? `${g.nations[u.nat].adj} · ` : ''}${esc(statLine(kind, u))} · ${at}</small></span>${ribbons(u, 6)}</button>`;
+  };
+  const wallRow = (f: Fallen, whose = false): string => `<button class="gen gone" data-act="fallen" data-id="${f.id}"><span class="grow"><b>${esc(f.name)}${f.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}</b><small>${whose ? `${g.nations[f.nat].adj} · ` : ''}${fallenLine(f)}${f.heir !== undefined ? ' · raised again' : ''}</small></span>${ribbons(f, 6)}</button>`;
+  const rollRow = (a: Award): string => `<button class="gen" data-act="award" data-id="${a.id}">${ribbonOf(a, true)}<span class="grow"><b>${esc(a.name)}</b><small>${g.nations[a.nat].adj} · ${esc(awardTitle(g, a))} · ${date(a.turn)}</small></span></button>`;
+  const units = (nat: string | null): [UnitKind, AnyUnit][] => [
+    ...g.corps.filter((c) => !c.dead && (!nat || c.nat === nat) && c.hon?.length).map((c): [UnitKind, AnyUnit] => ['corps', c]),
+    ...g.airFleets.filter((f) => (!nat || f.nat === nat) && f.hon?.length).map((f): [UnitKind, AnyUnit] => ['air', f]),
+    ...g.fleets.filter((f) => (!nat || f.nat === nat) && f.hon?.length).map((f): [UnitKind, AnyUnit] => ['fleet', f]),
+  ].sort((x, y) => (y[1].hon?.length ?? 0) - (x[1].hon?.length ?? 0));
+
+  if (!me) {
+    const roll = S.awards.filter((a) => !a.old).slice(-40).reverse();
+    const famous = units(null).slice(0, 12);
+    const wall = S.fallen.slice(-25).reverse();
+    return `<h2>Honours of the war</h2><p class="sub">Every unit keeps a record of what it has done, and when it has done enough it is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Open any of them to read its story.</p>
+      <div class="facts"><div class="fact"><span>Honours given</span><b>${S.awards.filter((a) => !a.old).length}</b></div><div class="fact"><span>Units honoured</span><b>${units(null).length}</b></div><div class="fact"><span>On the wall</span><b>${S.fallen.length}</b></div></div>
+      <h3>The most honoured units</h3>${famous.length ? famous.map(([k, u]) => unitRow(k, u, true)).join('') : '<div class="empty">No unit has made a name yet.</div>'}
+      <h3>Roll of honour</h3>${roll.length ? roll.map(rollRow).join('') : '<div class="empty">No honours yet.</div>'}
+      <h3>Memorial wall</h3>${wall.length ? wall.map((f) => wallRow(f, true)).join('') : '<div class="empty">No formation has been destroyed yet.</div>'}`;
+  }
+
+  const mine = units(me);
+  const held = S.awards.filter((a) => a.nat === me && !a.old);
+  const waiting = unseen(g);
+  const wall = S.fallen.filter((f) => f.nat === me).reverse();
+  const feuds = S.rivals.filter((r) => !r.over);
+  const settled = S.rivals.filter((r) => r.over === 'won');
+  const schools = S.schools[me] ?? 0;
+  const t = Math.round(training(g, me) * 100);
+  const others = S.awards.filter((a) => a.nat !== me && !a.old && (a.first || fameOf(a) >= 3)).slice(-12).reverse();
+  let out = `<h2>Honours</h2><p class="sub">Every unit keeps a record of what it has done. When it has done enough it is honoured, and what you do with the fame is yours to decide: keep it at the front, where the honour makes the unit fight harder, or send its heroes home to sell war bonds or train the next drafts.</p>
+    <div class="facts"><div class="fact"><span>Honours held</span><b>${held.length}</b></div><div class="fact"><span>Cadres at the schools</span><b>${schools} / ${STORIES.veterans.maxSchools}</b></div><div class="fact"><span>On the wall</span><b>${wall.length}</b></div></div>
+    <p class="sub">Drafts reach the front at experience ${t} (${esc(grade(t / 100).toLowerCase())}), and a new corps starts at ${Math.round(raisedXp(g, me) * 100)}. Every cadre of veterans sent to the schools raises both.</p>`;
+  if (waiting.length) out += `<div class="note"><b>${waiting.length} ${waiting.length === 1 ? 'citation is' : 'citations are'} waiting to be read.</b> <button class="btn small" data-act="nextaward" style="margin-left:6px">Read ${waiting.length === 1 ? 'it' : 'them'}</button></div>`;
+  out += `<h3>Your honoured units</h3>${mine.length ? mine.map(([k, u]) => unitRow(k, u)).join('') : '<div class="empty">None yet. Honours are earned from the record: breakthroughs, stands against the odds, capitals entered, sieges outlasted, long service, a full tour of bombing missions. Every unit has a <b>Record</b> strip under its name; open it to see how it stands.</div>'}`;
+  if (feuds.length || settled.length) {
+    out += '<h3>Old enemies</h3>';
+    for (const r of [...feuds, ...settled.slice(-3)]) {
+      const c = g.corps.find((x) => x.id === r.mine && !x.dead);
+      const adj = g.nations[r.theirsNat]?.adj ?? '';
+      const text = r.over ? `Settled ${date(r.ended ?? r.since)} after ${r.met} meetings` : `Met ${r.met} times, first at ${esc(g.regions[r.first]?.name ?? 'the front')}${r.won + r.lost ? ` · ${r.won} won, ${r.lost} lost since` : ''}`;
+      out += `<${c ? 'button' : 'div'} class="gen${r.over ? ' gone' : ''}" ${c ? `data-act="record" data-type="corps" data-id="${c.id}"` : ''}><span class="grow"><b>${esc(r.mineName)} <span style="font-weight:400;color:var(--ink-3)">against</span> ${esc(adj)} ${esc(r.theirsName)}</b><small>${text}</small></span></${c ? 'button' : 'div'}>`;
+    }
+  }
+  out += `<h3>Memorial wall</h3>${wall.length ? `${wall.slice(0, 30).map((f) => wallRow(f)).join('')}<p class="sub">A formation on the wall can be raised again under its old name from <b>Build</b>. It carries the old colours and part of what the old corps knew.</p>` : '<div class="empty">No formation of yours has been destroyed.</div>'}`;
+  out += `<h3>Honours of the other armies</h3>${others.length ? others.map(rollRow).join('') : '<div class="empty">None of note yet.</div>'}`;
+  return out;
+}
+
 function reelPane(): string {
   if (!g.headlines.length) return '<div class="empty">No news yet.</div>';
   let out = '<h2>Newsreel</h2><div class="reel">';
@@ -1198,7 +1530,7 @@ function reelPane(): string {
   for (let i = g.headlines.length - 1; i >= 0; i--) {
     const h = g.headlines[i];
     if (h.turn !== t) { t = h.turn; out += `<div class="mo">${date(t)}</div>`; }
-    out += `<p class="${h.kind}"><span class="wk">Week ${h.week}</span>${esc(h.text)}</p>`;
+    out += h.kind === 'letter' ? letterBlock(h) : `<p class="${h.kind}"><span class="wk">Week ${h.week}</span>${esc(h.text)}</p>`;
   }
   return out + '</div>';
 }
@@ -1322,10 +1654,10 @@ function fleetRow(f: Fleet, mine: boolean, whose = false): string {
   const lost = shipCount(f.lost);
   const el = mine ? 'button' : 'div';
   return `<${el} class="corps fleet${mine && ui.fleet === f.id ? ' pick' : ''}" ${mine ? `data-act="fleet" data-id="${f.id}"` : ''}>
-    ${hullIcon(f)}<span class="nm">${esc(f.name)}${adm}</span><span></span>
+    ${hullIcon(f)}<span class="nm">${esc(f.name)}${f.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${adm}</span><span></span>
     <span class="meta">${whose ? `${g.nations[f.nat].adj} · ` : ''}${whereFleet(f)}</span>
     <span class="meta">${esc(capital(shipList(f.ships)))}${lost ? ` · lost so far: ${esc(shipList(f.lost))}` : ''}</span>
-    <span class="bars"><span>Readiness</span><span class="meter"><i class="${f.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(f.ready * 100)}%"></i></span></span></${el}>`;
+    <span class="bars"><span>Readiness</span><span class="meter"><i class="${f.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(f.ready * 100)}%"></i></span></span></${el}>${recStrip('fleet', f)}`;
 }
 
 /** The orders the player can give the fleet that is picked. */
@@ -1519,11 +1851,11 @@ function airRow(f: AirFleet, mine: boolean, whose = false): string {
   const lost = f.lost.ftr + f.lost.bmr;
   const el = mine ? 'button' : 'div';
   return `<${el} class="corps fleet${mine && ui.air === f.id ? ' pick' : ''}" ${mine ? `data-act="airfleet" data-id="${f.id}"` : ''}>
-    ${planeIcon(f)}<span class="nm">${esc(f.name)}${ldr}</span><span></span>
+    ${planeIcon(f)}<span class="nm">${esc(f.name)}${f.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${ldr}</span><span></span>
     <span class="meta">${whose ? `${g.nations[f.nat].adj} · ` : ''}${esc(g.regions[f.base].name)}, ${esc(missionText(f))}</span>
     <span class="meta">${esc(capital(craft(f.ftr, f.bmr)))}${lost ? ` · lost so far: ${esc(craft(f.lost.ftr, f.lost.bmr))}` : ''}</span>
     <span class="bars"><span>Readiness</span><span class="meter"><i class="${f.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(f.ready * 100)}%"></i></span></span>
-    ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>`;
+    ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${recStrip('air', f)}`;
 }
 
 /** The orders the player can give the air fleet that is picked. */
@@ -1716,6 +2048,22 @@ function openModal(m: typeof ui.modal): void {
     const c = g.corps.find((k) => k.id === m.corps);
     if (!c) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = appointCard(c);
+  }
+  else if (m.kind === 'unit') {
+    const u = unitOf(g, m.type, m.id);
+    if (!u) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = unitRecordCard(m.type, u);
+  }
+  else if (m.kind === 'fallen') {
+    const f = fallenOf(g, m.id);
+    if (!f) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = fallenCard(f);
+  }
+  else if (m.kind === 'award') {
+    const a = awardOf(g, m.id);
+    if (!a) { ui.modal = null; veil.classList.remove('open'); return; }
+    orderSeen(g, a.id);
+    card.innerHTML = awardCard(a);
   }
   card.scrollTop = 0;
 }
@@ -1935,13 +2283,26 @@ function attackCard(): string {
 /** The news that changes the war, a declaration or a fall, set out as a card of its own. */
 function eventCard(h: Game['headlines'][number]): string {
   const n = h.nat ? g.nations[h.nat] : undefined;
+  if (h.kind === 'honour') {
+    const a = h.award ? awardOf(g, h.award) : undefined;
+    const mine = !!a && a.nat === g.human;
+    return `<div class="evcard honour" style="--side:${n?.color ?? 'var(--brass)'}"><span class="ek">${mine ? 'Honour' : `${esc(n?.adj ?? '')} honour`} · ${date(h.turn).split(' ')[0]}${a ? ` ${ribbonOf(a)}` : ''}</span><p>${esc(h.text)}</p>${a && mine ? `<button class="btn small" data-act="award" data-id="${a.id}">${a.cash || a.kind === 'corps' && !unitOf(g, a.kind, a.unit) ? 'Read the citation' : 'Read the citation and decide'}</button>` : h.region !== undefined ? `<button class="btn small" data-act="showmap" data-id="${h.region}">Show on map</button>` : ''}</div>`;
+  }
   return `<div class="evcard ${h.kind}" style="--side:${n?.color ?? 'var(--brass)'}"><span class="ek">${h.kind === 'war' ? 'War' : h.kind === 'goal' ? 'Campaign goal' : 'Fallen'} · ${date(h.turn).split(' ')[0]}, week ${h.week}</span><p>${esc(h.text)}</p>${h.region !== undefined ? `<button class="btn small" data-act="showmap" data-id="${h.region}">Show on map</button>` : ''}</div>`;
+}
+
+/** A letter from the front, set apart from the news: somebody wrote it by hand. */
+function letterBlock(h: Game['headlines'][number]): string {
+  return `<blockquote class="letter"><p>${esc(h.text)}</p><cite>${esc(h.by ?? 'A soldier')}${h.unit !== undefined && h.unit >= 0 && g.corps.some((c) => c.id === h.unit) ? ` <button class="link" data-act="record" data-type="corps" data-id="${h.unit}">Record ›</button>` : ''}</cite></blockquote>`;
 }
 
 function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: number): string {
   const hs = g.headlines.slice(from);
-  const big = hs.filter((h) => h.kind === 'war' || h.kind === 'fall' || h.kind === 'goal');
-  const rest = hs.filter((h) => !big.includes(h));
+  // The player's own honours are cards; another army's are a line of news.
+  const cited = (h: Game['headlines'][number]): boolean => h.kind === 'honour' && h.nat === g.human;
+  const big = hs.filter((h) => h.kind === 'war' || h.kind === 'fall' || h.kind === 'goal' || cited(h));
+  const letters = hs.filter((h) => h.kind === 'letter');
+  const rest = hs.filter((h) => !big.includes(h) && h.kind !== 'letter');
   const me = g.human;
   const reps = g.reports.slice(repFrom).filter((r) => me && (r.attackers.some((u) => u.nat === me) || r.defenders.some((u) => u.nat === me)));
   const seas = g.seaReports.slice(seaFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
@@ -1949,6 +2310,7 @@ function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: numbe
   const all = g.reports.length - repFrom + (g.seaReports.length - seaFrom) + (g.airReports.length - airFrom);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Dispatches</div><h2>${date(g.turn)}</h2></header>
     <div class="body">${big.length ? `<div class="evcards">${big.map(eventCard).join('')}</div>` : ''}${rest.length ? `<div class="reel">${rest.map((h) => `<p class="${h.kind}"><span class="wk">${date(h.turn).split(' ')[0]} wk ${h.week}</span>${esc(h.text)}</p>`).join('')}</div>` : hs.length ? '' : '<p class="lead">A quiet month. No news of note.</p>'}
+    ${letters.length ? `<h3>Letters from the front</h3>${letters.map(letterBlock).join('')}` : ''}
     ${reps.length || seas.length || airs.length ? `<h3>Battles your forces fought</h3>${airs.map(airBrow).join('')}${seas.map(seaRow).join('')}${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
     ${all ? `<p class="sub" style="margin-top:10px">${all} battle${all > 1 ? 's were' : ' was'} fought across the map. They are filed under Battles.</p>` : ''}</div>
     <footer><button class="btn go" data-act="close">${me && humanUp(g) ? 'Give orders' : 'Continue'}</button></footer>`;
@@ -1972,6 +2334,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = ''): void
   if (view === 'open') startOpen(g);
   while (g.turn < from) runTurnAI(g);
   g.human = human;
+  // Honours earned before the player took over are his to carry; their citations are old news.
+  if (from > 1) takeOver(g);
   if (human) openGoals(g, human, from);
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = from > 1 ? g.reports.length : 0; ui.flash = [];
@@ -2249,6 +2613,30 @@ function onClick(e: MouseEvent): void {
     case 'new': stopAuto(); endPassing(); openModal({ kind: 'start' }); break;
     case 'skip': endPassing(); break;
     case 'alert': followAlert(t.dataset.kind!); break;
+    case 'record': openModal({ kind: 'unit', type: t.dataset.type as UnitKind, id }); break;
+    case 'fallen': openModal({ kind: 'fallen', id }); break;
+    case 'award': openModal({ kind: 'award', id }); refresh(); break;
+    case 'nextaward': { const next = unseen(g)[0]; openModal(next ? { kind: 'award', id: next.id } : null); refresh(); break; }
+    case 'cash': {
+      const a = awardOf(g, id);
+      if (a && orderCash(g, id, t.dataset.how as Cash)) { ui.picked.clear(); queueSave(); }
+      refresh();
+      openModal({ kind: 'award', id });
+      break;
+    }
+    case 'drafts': {
+      const c = g.corps.find((x) => x.id === id);
+      if (c && orderDrafts(g, c, t.dataset.v === 'take')) queueSave();
+      refresh();
+      openModal({ kind: 'unit', type: 'corps', id });
+      break;
+    }
+    case 'revive': {
+      const f = fallenOf(g, id), at = raiseAt();
+      if (f && at && orderBuildCorps(g, f.kind, at.id, f.id)) { ui.msg = `${f.name} will be raised again at ${at.name}.`; queueSave(); if (ui.modal?.kind === 'fallen') openModal(null); }
+      refresh();
+      break;
+    }
     case 'watchpref': { try { localStorage.setItem('tc-watch', watchPref() ? '0' : '1'); } catch { /* storage is off: the choice lasts as long as the default */ } refresh(); break; }
     case 'close': openModal(null); refresh(); break;
     case 'tab':

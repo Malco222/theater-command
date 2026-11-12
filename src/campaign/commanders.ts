@@ -38,6 +38,7 @@ export const COMMAND = data as unknown as {
   rise: { chance: number; share: number };
   sack: { org: number; pc: number; popularLevel: number; popularWins: number };
   promote: { pc: number };
+  ranks: Record<string, [number, string][]>;
   legacy: Record<string, { level: number; skills: SkillSet; traits: string[] }>;
   roster: Record<string, [number, string, number, SkillSet, string[]][]>;
   names: Record<string, { first: string[]; last: string[] }>;
@@ -195,6 +196,14 @@ export const xpToNext = (gen: General): number => (gen.level >= COMMAND.maxLevel
 /** Generals the newsreel cares about: the player's own, the real ones, and anyone who has made a name. */
 const notable = (g: Game, gen: General): boolean => gen.nat === g.human || gen.historical || gen.level >= 5;
 
+/** What a general is called: his rank goes up with his level. */
+export function rankOf(gen: { nat: string; level: number }): string {
+  const rows = COMMAND.ranks[gen.nat] ?? COMMAND.ranks._default;
+  let out = rows[0][1];
+  for (const [from, title] of rows) if (gen.level >= from) out = title;
+  return out;
+}
+
 export function gainXp(g: Game, gen: General, amount: number): void {
   if (gen.level >= COMMAND.maxLevel) return;
   let mul = 1;
@@ -202,9 +211,13 @@ export function gainXp(g: Game, gen: General, amount: number): void {
   gen.xp += Math.round(amount * mul);
   while (gen.xp >= xpToNext(gen)) {
     gen.xp -= xpToNext(gen);
+    const was = rankOf(gen);
     gen.level++;
     gen.points++;
     if (gen.nat === g.human) headline(g, 'info', `${gen.name} reaches level ${gen.level} and has a skill point to spend.`, gen.nat);
+    // A general who has grown into the next rank is promoted, and the army hears of it.
+    const now = rankOf(gen);
+    if (now !== was && notable(g, gen)) headline(g, 'info', `${gen.name} is promoted to ${now}.`, gen.nat);
   }
   if (gen.level >= COMMAND.maxLevel) gen.xp = 0;
   if (gen.nat !== g.human) autoSpend(gen);

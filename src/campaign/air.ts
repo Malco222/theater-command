@@ -11,6 +11,7 @@ import type { TicketLine, VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline } from './game';
 import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
+import { storyAir, storyEdge } from './stories';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Game, Region, Ships } from './types';
 
 type Sched = [number, number, number][];
@@ -112,7 +113,7 @@ export function crowding(g: Game, f: AirFleet): number {
 
 const leaderMul = (f: AirFleet): number => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
 /** What one of a fleet's aircraft is worth in a fight. */
-const worth = (g: Game, f: AirFleet): number => spec(f.nat).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters');
+const worth = (g: Game, f: AirFleet): number => spec(f.nat).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * storyEdge(g, f);
 
 /** Who holds the sky over a region, if anyone has won it lately. */
 export function skyOver(g: Game, region: number): string | null {
@@ -505,7 +506,7 @@ function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFle
   const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : 1) * techMul(g, nat, 'bombers');
 
   // What the bombers did.
-  let result = '', value = 0, ground = 0;
+  let result = '', value = 0, ground = 0, shipsSunk = 0;
   if (m === 'superiority') {
     const A = AIR.damage.airfields;
     const hit = g.airFleets.filter((f) => f.base === target && atWar(g, f.nat, nat));
@@ -557,6 +558,7 @@ function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFle
     }
     for (const [victim, s] of Object.entries(hurt)) raid(g, nat, victim, s);
     const worst = Object.entries(hurt).sort((x, y) => y[1] - x[1])[0];
+    shipsSunk = shipCount(sunk);
     value += shipCount(sunk) * 30 + (worst ? worst[1] * 3000 : 0);
     result = [shipCount(sunk) ? `${cap(shipList(sunk))} sunk.` : '', worst ? `Merchant shipping losses cost ${g.nations[worst[0]].name} ${(worst[1] * 100).toFixed(1)}% of a month's production.` : ''].filter(Boolean).join(' ') || 'The bombers found little to hit.';
   }
@@ -598,6 +600,7 @@ function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFle
     attNat: nat, defNat, att, def, lines: a.lines, odds: a.Dpow > 0 ? a.Epow / a.Dpow : 9, level, won, sky, hold, result,
   };
   g.airReports.push(rep);
+  storyAir(g, m, target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost });
 
   const who = list(fleets.filter((f) => a.att.some((x) => x.f === f)).map((f) => f.name));
   const cost = `${planes(aLost, 'aircraft').replace('aircrafts', 'aircraft')} lost`;

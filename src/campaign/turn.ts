@@ -1,7 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type AirFleet, type AirMission, type BattleReport, type Build, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Posture, type Region, type Skill, type Stance } from './types';
+import { KIND, STACK, type AirFleet, type AirMission, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
 import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
@@ -13,6 +13,7 @@ import { cancelBuild, orderCorps, orderFort } from './economy';
 import { foundBureau, setTeams } from './research';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy } from './diplomacy';
+import { awardOf, cashHonour } from './stories';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -150,7 +151,8 @@ export function runTurnAI(g: Game): void {
 // ---- The player's orders -----------------------------------------------------------------
 
 export function canOrder(g: Game, c: Corps): boolean {
-  return !c.dead && c.nat === g.human && current(g) === c.nat && c.kind !== 'fort';
+  // A corps sent home on a bond tour or to the schools takes no orders until it is back.
+  return !c.dead && c.nat === g.human && current(g) === c.nat && c.kind !== 'fort' && c.leave === undefined;
 }
 
 export interface Reach { cost: number; prev: number; attack: boolean }
@@ -309,8 +311,26 @@ export function previewAirOrder(g: Game, id: number, mission: AirMission, target
   return f ? previewAir(g, f, mission, target) : null;
 }
 
-export function orderBuildCorps(g: Game, kind: Kind, region: number): Build | null {
-  return humanUp(g) ? orderCorps(g, g.human!, kind, region) : null;
+export function orderBuildCorps(g: Game, kind: Kind, region: number, revive?: number): Build | null {
+  return humanUp(g) ? orderCorps(g, g.human!, kind, region, revive) : null;
+}
+
+/** Cashes in one of the player's honours: its heroes go home on a bond tour, or to the schools as instructors. */
+export function orderCash(g: Game, award: number, how: Cash): boolean {
+  return humanUp(g) && cashHonour(g, award, how);
+}
+
+/** The player has read a citation. */
+export function orderSeen(g: Game, award: number): void {
+  const a = awardOf(g, award);
+  if (a && a.nat === g.human) a.seen = true;
+}
+
+/** The player's standing order for a corps: take drafts as they come, or keep the veterans together and take none. */
+export function orderDrafts(g: Game, c: Corps, take: boolean): boolean {
+  if (c.dead || c.nat !== g.human || c.kind === 'fort') return false;
+  if (take) delete c.lean; else c.lean = true;
+  return true;
 }
 
 export function orderBuildFort(g: Game, region: number): Build | null {

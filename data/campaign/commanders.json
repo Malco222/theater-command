@@ -10,6 +10,7 @@
     "rise": "A corps with no general that wins decisively or holds against the odds may throw up an officer who makes his name: chance per battle, while the nation has fewer generals than 'share' of its corps.",
     "sack": "Sacking a general with at least 'popularLevel' levels or 'popularWins' wins costs his corps 'org' cohesion and the government 'pc' political capital.",
     "promote": "Political capital it costs the player to promote an unknown officer to command a corps.",
+    "ranks": "What a general is called at each level: [from level, rank]. '_default' is used for a nation with no list of its own. A general who rises into a new rank is promoted, and the newsreel says so.",
     "legacy": "How the three starting labels in setup-1939.json ('panzer', 'attacker', 'defender') become a general's level, skills and traits.",
     "roster": "Generals who are not tied to a starting corps: [first month available, name, level, skills, traits]. They wait for a command; the computer gives them one.",
     "names": "First names and family names for officers who rise from the ranks. These are invented people."
@@ -40,6 +41,17 @@
   "rise": { "chance": 0.2, "share": 0.4 },
   "sack": { "org": 0.15, "pc": 5, "popularLevel": 4, "popularWins": 5 },
   "promote": { "pc": 6 },
+  "ranks": {
+    "_default": [[1, "Major General"], [3, "Lieutenant General"], [6, "General"], [9, "Field Marshal"]],
+    "GER": [[1, "Generalleutnant"], [3, "General"], [6, "Generaloberst"], [9, "Generalfeldmarschall"]],
+    "UK": [[1, "Major-General"], [3, "Lieutenant-General"], [6, "General"], [9, "Field Marshal"]],
+    "USA": [[1, "Major General"], [3, "Lieutenant General"], [6, "General"], [9, "General of the Army"]],
+    "SOV": [[1, "Lieutenant General"], [3, "Colonel General"], [6, "General of the Army"], [9, "Marshal of the Soviet Union"]],
+    "FRA": [[1, "Général de division"], [3, "Général de corps d'armée"], [6, "Général d'armée"], [9, "Maréchal de France"]],
+    "ITA": [[1, "Generale di divisione"], [3, "Generale di corpo d'armata"], [6, "Generale d'armata"], [9, "Maresciallo d'Italia"]],
+    "POL": [[1, "Generał brygady"], [3, "Generał dywizji"], [6, "Generał broni"], [9, "Marszałek Polski"]],
+    "FIN": [[1, "Major General"], [3, "Lieutenant General"], [6, "General"], [9, "Marshal of Finland"]]
+  },
   "legacy": {
     "panzer": { "level": 3, "skills": { "offense": 2 }, "traits": ["panzer_leader"] },
     "attacker": { "level": 3, "skills": { "offense": 2 }, "traits": ["hard_charger"] },
