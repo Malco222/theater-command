@@ -240,6 +240,7 @@ function mount(): void {
         </svg>
         <div class="hint" id="hint"></div>
         <div class="passing" id="passing"></div>
+        <div class="alerts" id="alerts"></div>
         <div class="tray" id="tray"></div>
         <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Air fleet</span></div>
         <div class="zoom"><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
@@ -252,6 +253,7 @@ function mount(): void {
     </div>
     <div class="veil" id="veil"><div class="card" id="card"></div></div>`;
   document.addEventListener('click', onClick);
+  document.addEventListener('keydown', onKey);
   wireMap();
   window.addEventListener('resize', applyView);
 }
@@ -366,6 +368,7 @@ function refresh(): void {
   drawPane();
   drawTray();
   $('#hint').textContent = hintText();
+  $('#alerts').innerHTML = alertButtons();
   const pass = $('#passing');
   if (passing) {
     const n = passing.nat ? g.nations[passing.nat] : null;
@@ -729,6 +732,49 @@ function drawPane(): void {
   else pane.innerHTML = powersPane();
 }
 
+// ---- What wants the player's attention this month --------------------------------------------
+
+interface Alert { kind: string; text: string; /** Regions to visit in turn, for an alert about places. */ regs?: number[]; tab?: string }
+
+function alertList(): Alert[] {
+  const me = g.human;
+  if (!me || !humanUp(g) || onEve(g) || passing) return [];
+  const n = g.nations[me];
+  const out: Alert[] = [];
+  const cut = [...new Set(g.corps.filter((c) => c.nat === me && !c.dead && !c.supplied).map((c) => c.reg))];
+  if (cut.length) out.push({ kind: 'cut', text: `${cut.length} ${cut.length === 1 ? 'army is' : 'armies are'} cut off from supply`, regs: cut });
+  if (n.atWar.length) {
+    const idle = g.regions.filter((r) => r.units.some((c) => canOrder(g, c) && c.ap >= c.apMax && !c.fought) && r.nb.some((j) => atWar(g, me, g.regions[j].ctrl))).map((r) => r.id);
+    if (idle.length) out.push({ kind: 'front', text: `${idle.length} ${idle.length === 1 ? 'army' : 'armies'} at the front ${idle.length === 1 ? 'has' : 'have'} not moved`, regs: idle });
+  }
+  const cheapest = Math.min(...Object.values(PRODUCTION.builds).map((b) => b.cost));
+  if (Math.floor(n.pp) >= cheapest) out.push({ kind: 'build', text: `${num(Math.floor(n.pp))} production points to spend`, tab: 'build' });
+  const stars = g.generals.filter((x) => x.nat === me && x.points > 0 && serving(x)).length;
+  if (stars) out.push({ kind: 'generals', text: `${stars} general${stars === 1 ? ' has' : 's have'} skill points to spend`, tab: 'generals' });
+  if (n.lab && teamsFree(n.lab) > 0) out.push({ kind: 'research', text: 'A design team has no work', tab: 'research' });
+  return out;
+}
+
+const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}">${esc(a.text)}</button>`).join('');
+
+/** Goes where an alert points: the next place on its list, or the tab that deals with it. */
+function followAlert(kind: string): void {
+  const a = alertList().find((x) => x.kind === kind);
+  if (!a) return;
+  if (a.tab) { ui.tab = a.tab as typeof ui.tab; ui.rail = ui.ship = ui.land = ui.rebase = false; refresh(); return; }
+  const regs = a.regs ?? [];
+  if (!regs.length) return;
+  const at = regs.indexOf(ui.sel);
+  const id = regs[(at + 1) % regs.length];
+  ui.tab = 'region';
+  selectRegion(id);
+  refresh();
+  const svg = $('#map');
+  const tall = svg.clientHeight / Math.max(1, svg.clientWidth);
+  const w = Math.min(ui.view.w, 700);
+  glide({ x: g.regions[id].x - w / 2, y: g.regions[id].y - (w * tall) / 2, w });
+}
+
 /** The player's short and long campaign, with what each one asks for ticked off as it is done. */
 function goalsBlock(): string {
   const me = g.human;
@@ -803,7 +849,7 @@ function provinceMuster(r: Region): string {
 function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
-    return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
+    return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
       <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
@@ -2092,6 +2138,7 @@ function onClick(e: MouseEvent): void {
     case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
     case 'new': stopAuto(); endPassing(); openModal({ kind: 'start' }); break;
     case 'skip': endPassing(); break;
+    case 'alert': followAlert(t.dataset.kind!); break;
     case 'watchpref': { try { localStorage.setItem('tc-watch', watchPref() ? '0' : '1'); } catch { /* storage is off: the choice lasts as long as the default */ } refresh(); break; }
     case 'close': openModal(null); refresh(); break;
     case 'tab':
@@ -2246,6 +2293,21 @@ function onClick(e: MouseEvent): void {
       break;
     }
   }
+}
+
+/** The keyboard: Escape backs out of whatever is open, Enter ends the month, Space skips the watching. */
+function onKey(e: KeyboardEvent): void {
+  const el = e.target as HTMLElement | null;
+  if (e.ctrlKey || e.metaKey || e.altKey || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+  if (e.key === 'Escape') {
+    if (ui.modal) { if (ui.modal.kind !== 'start' || ui.live) { openModal(null); refresh(); } }
+    else if (ui.picked.size || ui.sel >= 0) { ui.picked.clear(); ui.sel = -1; ui.rail = ui.ship = ui.land = false; ui.msg = ''; refresh(); }
+    return;
+  }
+  // A key pressed on a button belongs to that button.
+  if (el && el.tagName === 'BUTTON') return;
+  if (e.key === ' ' && passing) { e.preventDefault(); endPassing(); }
+  else if (e.key === 'Enter' && !ui.modal && !passing && g.human && humanUp(g)) { e.preventDefault(); ($('#barbtns').querySelector('[data-act="end"]') as HTMLElement | null)?.click(); }
 }
 
 function selectRegion(id: number): void {
