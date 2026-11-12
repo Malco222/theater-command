@@ -1,7 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type AirFleet, type AirMission, type BattleReport, type Build, type Corps, type Fleet, type Game, type General, type Kind, type Region, type Skill, type Stance } from './types';
+import { KIND, STACK, type AirFleet, type AirMission, type BattleReport, type Build, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
 import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
@@ -10,6 +10,7 @@ import {
   moveCorps, moveCost, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
+import { foundBureau, setTeams } from './research';
 import { runAI } from './ai';
 import { court, monthlyDiplomacy } from './diplomacy';
 
@@ -215,6 +216,16 @@ export function orderBuildFort(g: Game, region: number): Build | null {
 
 export function orderCancelBuild(g: Game, id: number): boolean {
   return humanUp(g) && cancelBuild(g, g.human!, id);
+}
+
+/** Puts this many of the player's design teams on a branch of research. */
+export function orderTeams(g: Game, field: Field, teams: number): boolean {
+  return humanUp(g) && setTeams(g, g.human!, field, teams);
+}
+
+/** Founds a new design team for the player, paid for from production. */
+export function orderBureau(g: Game): boolean {
+  return humanUp(g) && foundBureau(g, g.human!);
 }
 
 /** Ends the player's month and lets the computer play until the player is up again. Returns false if the player's nation has fallen. */

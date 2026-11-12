@@ -168,6 +168,35 @@ describe('the what-if: a different Luftwaffe plan', () => {
   });
 });
 
+describe('the what-if: different research', () => {
+  /** History to the end of June 1940, with one power's design teams moved on the first day of the war. */
+  function withTeams(seed: number, nat: string, teams: Record<string, number>): Game {
+    const g = createGame(seed, null);
+    Object.assign(g.nations[nat].lab!.teams, teams);
+    for (let t = 1; t < JULY; t++) runTurnAI(g);
+    g.human = 'GER';
+    beginHuman(g);
+    return g;
+  }
+
+  it('a Britain that doubled its fighter and radar teams in 1939 keeps its sky even against every air fleet', () => {
+    for (const seed of [1, 2]) {
+      const g = withTeams(seed, 'UK', { fighters: 2, radar: 2, armour: 0, doctrine: 0 });
+      const all = { 'Luftflotte 2': 'Calais', 'Luftflotte 3': 'Flanders', 'Luftflotte 1': 'Lille', 'Luftflotte 4': 'Somme', 'Luftflotte 5': 'Rouen' };
+      expect(againstKent(seed, all, NOVEMBER, g), `seed ${seed}`).toBe(0);
+    }
+  });
+
+  it('a Germany that put three teams on fighters in 1939 wins it with the two western air fleets alone', () => {
+    for (const seed of [1, 2]) {
+      const g = withTeams(seed, 'GER', { fighters: 3, navy: 0, radar: 0 });
+      const won = againstKent(seed, { 'Luftflotte 2': 'Calais', 'Luftflotte 3': 'Flanders' }, NOVEMBER, g);
+      expect(won, `seed ${seed}`).toBeGreaterThanOrEqual(SEPTEMBER);
+      expect(won, `seed ${seed}`).toBeLessThanOrEqual(NOVEMBER);
+    }
+  });
+});
+
 describe('Operation Sea Lion waits on the air battle', () => {
   const EVERYTHING = { 'Luftflotte 2': 'Calais', 'Luftflotte 3': 'Flanders', 'Luftflotte 1': 'Lille', 'Luftflotte 4': 'Somme', 'Luftflotte 5': 'Rouen' };
 
@@ -193,7 +222,7 @@ describe('Operation Sea Lion waits on the air battle', () => {
     const dover = g.fleets.find((f) => f.name === 'Dover Command')!;
     const coming = sortieAgainst(g, 'GER', [channel]);
     // Dover Command from its harbour on the Channel, and the fleets on the seas either side of it.
-    expect(coming).toBeGreaterThan(fleetPower(dover) * 0.5);
+    expect(coming).toBeGreaterThan(fleetPower(g, dover) * 0.5);
     expect(coming).toBeGreaterThan(40);
     // Against a coast with no fighters over it, that alone makes a crossing very costly.
     const corps = addCorps(g, 'GER', 'Sea Lion Corps', 'inf', 3, 'Calais', {});

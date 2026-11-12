@@ -9,6 +9,7 @@ import { addCorps, allied, headline } from './game';
 import { DIPLOMACY, tradePartners } from './diplomacy';
 import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
+import { techMul } from './research';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -31,7 +32,8 @@ export function income(g: Game, nat: string): number {
   // Neutrals that lean toward a bloc trade with its major powers.
   const trade = tradePartners(g, nat).length * DIPLOMACY.tradeIncome;
   // What comes by sea can be sunk on the way: cargoes on the convoy routes, ore from the north.
-  return ((PRODUCTION.baseIncome + fac) * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat));
+  // And the factories turn out more, or less, as the nation's production methods run ahead of or behind their time.
+  return ((PRODUCTION.baseIncome + fac) * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry');
 }
 
 /** Last month in which this nation still has pre-war mobilisation arriving. */

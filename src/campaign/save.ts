@@ -6,6 +6,7 @@
 import { Rng } from '../core/rng';
 import { computeSupply, createGame } from './game';
 import { seat } from './commanders';
+import { FIELDS } from './research';
 import type { Corps, Game, General } from './types';
 
 export const SAVE_VERSION = 1;
@@ -48,6 +49,14 @@ export function loadGame(text: string): Game | null {
   g.rng = new Rng(d.rng);
   // A save from an older build may lack fields added since; the fresh game fills them in.
   for (const [id, n] of Object.entries(d.nations as Record<string, any>)) g.nations[id] = { ...g.nations[id], ...n };
+  // A save from before research: the design teams are taken to have kept to history's schedule so far.
+  for (const [id, n] of Object.entries(d.nations as Record<string, any>)) {
+    const lab = g.nations[id]?.lab;
+    if (!lab || n.lab !== undefined) continue;
+    const at = d.order.indexOf(id);
+    lab.months = Math.max(0, at >= 0 && at <= d.phase ? d.turn : d.turn - 1);
+    for (const f of FIELDS) lab.clock[f] = lab.months;
+  }
   g.headlines = d.headlines;
   g.reports = d.reports;
   g.regions.forEach((r, i) => {

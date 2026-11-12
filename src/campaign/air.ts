@@ -9,6 +9,7 @@ import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 import { allied, atWar, headline } from './game';
+import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Game, Region, Ships } from './types';
 
@@ -106,7 +107,7 @@ export function crowding(g: Game, f: AirFleet): number {
 
 const leaderMul = (f: AirFleet): number => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
 /** What one of a fleet's aircraft is worth in a fight. */
-const worth = (f: AirFleet): number => spec(f.nat).quality * leaderMul(f) * (0.5 + 0.5 * f.ready);
+const worth = (g: Game, f: AirFleet): number => spec(f.nat).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters');
 
 /** Who holds the sky over a region, if anyone has won it lately. */
 export function skyOver(g: Game, region: number): string | null {
@@ -362,7 +363,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (a.ftr <= 0 && a.bmr <= 0) continue;
     out.att.push(a);
     out.E += a.ftr;
-    out.Epow += a.ftr * worth(f);
+    out.Epow += a.ftr * worth(g, f);
     out.B += a.bmr;
   }
   if (!out.att.length) { out.why = 'Nothing can reach the target.'; return out; }
@@ -387,7 +388,8 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (w <= 0) continue;
     out.def.push({ f, d, w });
     out.D += f.ftr * w;
-    out.Dpow += f.ftr * w * worth(f);
+    // Fighters over their own ground are only as good as the radar and controllers that put them onto the raid.
+    out.Dpow += f.ftr * w * worth(g, f) * techMul(g, f.nat, 'radar');
   }
   const guns = out.B * C.bomberDefence;
   const I = C.intensity[m];
@@ -426,6 +428,11 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     out.lines.push(out.radar
       ? { label: 'Radar', value: `${cap(out.radar.name)} gives warning`, effect: 'Every defending fighter in reach gets up in time, and fewer aircraft are caught on the ground' }
       : { label: 'Radar', value: 'No radar warning', effect: `Only ${Math.round(AIR.radar.without * 100)}% of the defending fighters meet the raids` });
+  }
+  const kitA = techNotes(g, out.att.map((a) => a.f.nat), out.B > 0 ? ['fighters', 'bombers'] : ['fighters']), kitD = techNotes(g, out.def.map((x) => x.f.nat), ['fighters', 'radar']);
+  if (kitA.length || kitD.length) {
+    const up = (k: number): string => `${k > 0 ? 'up' : 'down'} ${Math.abs(k)}%`;
+    out.lines.push({ label: 'Equipment', value: [...kitA, ...kitD].map((x) => x.text).join('; '), effect: [...kitA.map((x) => `Attacker ${up(x.pct)}`), ...kitD.map((x) => `Defender ${up(x.pct)}`)].join(', ') });
   }
   const names = (fs: AirFleet[]): string => list(fs.filter((f) => f.leader).map((f) => `${f.leader!.name}${f.leader!.level > 1 ? ` (level ${f.leader!.level})` : ''}`)) || 'no commander named';
   out.lines.push({ label: 'Commanders', value: `${names(out.att.map((a) => a.f))} against ${names(out.def.map((x) => x.f))}` });
@@ -488,7 +495,7 @@ function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFle
     bomber(x.f, att[i], a.B > 0 ? bLoss * (x.bmr / a.B) : 0);
   });
   const lostB = att.reduce((s, x) => s + x.lostBmr, 0);
-  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : 1);
+  const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : 1) * techMul(g, nat, 'bombers');
 
   // What the bombers did.
   let result = '', value = 0, ground = 0;
@@ -551,7 +558,7 @@ function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFle
   let sky = false, hold = 0;
   if (m === 'superiority') {
     const Eafter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
-    const EpowAfter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd * worth(x.f), 0);
+    const EpowAfter = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd * worth(g, x.f), 0);
     const lostBy: Record<string, number> = {};
     def.forEach((s) => { lostBy[s.nat] = (lostBy[s.nat] ?? 0) + s.lostFtr; });
     let Dnext = 0;
@@ -561,7 +568,7 @@ function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFle
       const can = Math.min(p.ftr + (built ? built[1] : 0), p.pilots + (trained ? trained[1] : 0));
       const lost = lostBy[x.f.nat] ?? 0;
       const back = lost > 0 ? Math.min(lost, can) * (def[i].lostFtr / lost) : 0;
-      Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth(x.f);
+      Dnext += Math.min(x.f.est.ftr, x.f.ftr + back) * x.w * worth(g, x.f) * techMul(g, x.f.nat, 'radar');
     });
     hold = Dnext > 0 ? EpowAfter / Dnext : 99;
     sky = Eafter >= AIR.sky.least && hold >= AIR.sky.win;
@@ -663,7 +670,7 @@ export function airDeliveries(g: Game, nat: string): { ftr: number; bmr: number;
  * `nation` is the share of the victim's whole production stopped by bombing.
  */
 export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number): { odds: number; bomberLoss: number; cut: number; nation: number } {
-  const through = a.B * (1 - a.bomberLoss) * (m === 'night' ? AIR.combat.night.accuracy : 1);
+  const through = a.B * (1 - a.bomberLoss) * (m === 'night' ? AIR.combat.night.accuracy : 1) * techMul(g, a.att[0]?.f.nat ?? '', 'bombers');
   const odds = a.Dpow > 0 ? a.Epow / a.Dpow : 9;
   let cut = 0, nation = 0;
   if (m === 'superiority') {

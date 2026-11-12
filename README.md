@@ -39,6 +39,7 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 - Staffs that learn. The Red Army of 1941 can bring only eight corps into one battle and does not renew a failed assault in the same month. Defenders who hold their ground lose fewer men than those who are driven off it.
 - Computer generals who bring reserves up behind a spearhead, garrison what they have taken, leave a besieged city alone when the plan says to starve it out, counter-attack ground they have just lost, and close any gap in a line they are standing on.
 - Generals. The real commanders of 1939 start the war at the head of their corps, and others wait for a command. A general gains experience from every battle, and each level brings a skill point for one of four skills: offense, defense, logistics and leadership. Traits are earned from how he actually fights: three victories that end in surrender make an encirclement master, three positions held against a stronger attacker make an iron defender, three costly failed assaults make a butcher. Generals can be wounded, captured or killed, and unknown officers make their names in battle and rise from the ranks. The player assigns, relieves, promotes and dismisses them and spends their skill points; the computer does the same for its own. Everything a general adds is shown on the Battle Ticket. All of it is data (`data/campaign/commanders.json`).
+- Research and doctrine. The five great powers each have eight design teams, one to a branch: tanks, infantry weapons and guns, army doctrine, fighters, bombers, the navy, radar and signals, and war production. Research runs on history's clock: a branch with one team gets every new design in the month history got it, from the 50 mm Panzer III and the Spitfire Mk V to the Panther, the Lancaster and the T-34/85. A second or third team brings a branch's designs forward, a branch with no team stands still, and extra teams can be founded with production points. What counts in battle is how far a branch is ahead of or behind its own history: each design in service early is worth 5 to 8 percent to the corps, fleets, fighters, bombers or factories that use it until history catches up, and each one missed costs the same. Doctrine is each army's own: Blitzkrieg, Deep Battle, Superior Firepower, Methodical Battle, War of Rapid Decision. The computer leaves one team on every branch, so its nations fight exactly as they did. The Research tab shows every branch as a strip of the whole war, with history's dates, the designers' progress and today marked on it. All of it is data (`data/campaign/research.json`).
 - Play Germany, France, the United Kingdom or Poland from September 1939, Germany or the United Kingdom from July 1940 with the Battle of Britain about to begin, or Germany or the Soviet Union from June 1941. You can also watch history unfold from any of the three dates.
 
 **The exit tests** from the framework run as automated tests, with every nation on the historical plan across 20 different seeds.
@@ -48,6 +49,7 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 
 - "Played historically, the Luftwaffe fails to win air superiority by mid-September" (the Phase 2 test, run early against the campaign rules): on history's plan the sky over Kent, Hampshire and London is never won, and it is never close. From July to November 1940 Fighter Command loses about 1,000 to 1,200 fighters and 520 to 620 pilots and ends as strong as it began; the Luftwaffe loses about 1,800 to 2,100 aircraft. History's figures to the end of October were 1,023 fighters, 544 pilots and 1,887 aircraft. Britain is not invaded.
 - The what-if is tested as well. A player who brings all five air fleets within reach of Kent, spreads them over the airfields of Calais, Flanders, Lille, the Somme and Rouen, rests them for a month and then goes for No. 11 Group's airfields month after month wins the sky over Kent in September or October. The two western air fleets alone never do, and neither does everything crammed into Calais. Once the sky is won the troopships can cross, and the Royal Navy still sinks part of the force on the way.
+- Research moves that balance, and that is tested too. A Britain that put second teams on fighters and radar in 1939 keeps its sky even against all five air fleets. A Germany that put three teams on fighters in 1939 has the Bf 109F in the summer of 1940 and the Fw 190 by October, and wins the sky over Kent with the two western air fleets alone.
 
 Where 1941 still differs from history: Odessa falls a month or two early, Rostov is never reached, Soviet losses are lower than the real ones, and Finland, Hungary and Slovakia declare war but only defend.
 
@@ -57,7 +59,7 @@ Where 1941 still differs from history: Odessa falls a month or two early, Rostov
 
 - The gray-box air battle screen (the other half of Phase 1). The flight model, scenario data and pilot logic exist; the battle loop and the command screen do not.
 - The rest of the war in the air. The computer flies air offensives only where history's plan has one, which today means Germany against Britain in 1940 and 1941: it does not fly a British night offensive against Germany, does not react to a player's air offensive by moving its fighter groups, and never attempts Sea Lion itself. Support for the armies still comes from each nation's air rating, not from where its air fleets stand. There are no aircraft types, no carrier aircraft and no air transport.
-- Research.
+- The rest of research: the computer never changes its research priorities, there is no retooling cost when a new design enters production, no captured or Lend-Lease equipment, no stolen technology, and none of the framework's superweapon projects. The United States and Japan are not in the game yet, so Carrier Warfare and Strategic Bombing are not yet doctrines of their own.
 - The rest of the war at sea: building warships to order (today new ships arrive on history's schedule), carrier strikes and port raids, mines, and the Mediterranean and North African campaigns the Italian and British fleets are there to fight over. Sea battles are settled at once from fleet strength; there is no tactical naval battle.
 - The rest of diplomacy: changing your own nation's side, treaties, espionage, and computer-run nations that court neutrals themselves. Today the computer follows history's events and the drift of the war.
 - The Balkans campaign of April 1941, Italy's part in the east, and everything after the spring of 1942. History's plans stop there; the game goes on, but computer-run nations only hold their lines.
@@ -69,7 +71,7 @@ Where 1941 still differs from history: Odessa falls a month or two early, Rostov
 
 ```
 npm install
-npm test            # flight model, war economy, diplomacy, eastern front rules, generals, the war at sea, the war in the air, saved games and the three exit tests
+npm test            # flight model, war economy, research, diplomacy, eastern front rules, generals, the war at sea, the war in the air, saved games and the three exit tests
 npm run build       # writes dist/play.html, a single file you can open in a browser
 npm run history     # prints a full computer-vs-computer war; add "sweep 20" to compare seeds
 npm run geo         # regenerates the maps from data/campaign/regions.mjs
@@ -79,10 +81,11 @@ npm run geo         # regenerates the maps from data/campaign/regions.mjs
 
 | Path | What it is |
 | --- | --- |
-| `data/` | Moddable data: nations, regions, seas, starting armies, fleets and air fleets, the historical plans, the eastern front rules, generals, aircraft |
+| `data/` | Moddable data: nations, regions, seas, starting armies, fleets and air fleets, the historical plans, the eastern front rules, generals, research, aircraft |
 | `src/core/` | Shared deterministic core: seeded random numbers, maths, the Battle Ticket contract |
 | `src/campaign/game.ts` | Campaign rules: war, movement, supply, weather, battles, mobilisation, capitulation |
 | `src/campaign/economy.ts` | Production points, replacements, new corps and fortifications |
+| `src/campaign/research.ts` | Research and doctrine: design teams, history's clock, what a lead is worth |
 | `src/campaign/diplomacy.ts` | The alignment track, courting, and history's events |
 | `src/campaign/navy.ts` | The war at sea: fleets, sea control, fleet actions, convoys, troopships and landings |
 | `src/campaign/air.ts` | The war in the air: air fleets, range, radar, missions, the sky, bombing and strikes |
@@ -92,7 +95,7 @@ npm run geo         # regenerates the maps from data/campaign/regions.mjs
 | `src/campaign/turn.ts` | The monthly turn and the player's orders |
 | `src/campaign/ui/` | The campaign screen |
 | `src/air/` | Flight model and air battle groundwork |
-| `tests/` | Rule tests: flight model, war economy, the war at sea, the war in the air, saved games, diplomacy, the eastern front, generals |
+| `tests/` | Rule tests: flight model, war economy, research, the war at sea, the war in the air, saved games, diplomacy, the eastern front, generals |
 | `tests/exit/` | The framework's exit tests |
 | `tools/` | Map generation and the history runner |
 

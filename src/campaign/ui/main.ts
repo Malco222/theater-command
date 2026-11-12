@@ -7,7 +7,7 @@ import {
 } from '../game';
 import {
   beginHuman, canOrder, candidates, declarable, endHuman, humanUp, landTargets, orderAttack, orderBuildCorps, orderBuildFort,
-  orderAir, orderAirBase, orderAssign, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill,
+  orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderTeams,
   previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI,
 } from '../turn';
 import {
@@ -19,11 +19,12 @@ import {
 } from '../navy';
 import { phaseFor } from '../ai';
 import { PRODUCTION, fortCost, income, isHome } from '../economy';
+import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame } from '../save';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
 import { DIPLOMACY, TRACK_LABEL, canCourt, courtable, momentum, pcIncome, receptive, step, tradePartners } from '../diplomacy';
 import { bloc } from '../game';
-import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type BattleReport, type Corps, type Fleet, type Game, type General, type Kind, type Nation, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
+import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type BattleReport, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Nation, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -53,7 +54,7 @@ const ui = {
   msg: '',
   /** False until a game has been started or resumed, so the title screen never overwrites a saved game. */
   live: false,
-  tab: 'region' as 'region' | 'build' | 'generals' | 'navy' | 'air' | 'reel' | 'battles' | 'powers',
+  tab: 'region' as 'region' | 'build' | 'research' | 'generals' | 'navy' | 'air' | 'reel' | 'battles' | 'powers',
   view: { x: 380, y: 300, w: 620 },
   unread: 0,
   seenReports: 0,
@@ -363,6 +364,7 @@ function hintText(): string {
   if (!humanUp(g)) return '';
   if (ui.msg) return ui.msg;
   if (ui.tab === 'build') return 'Planning production: click one of your own home regions to raise troops or build works there.';
+  if (ui.tab === 'research') return g.human && g.nations[g.human].lab ? 'Research: use − and + to move design teams between branches. The new pace starts next month.' : '';
   if (ui.tab === 'navy') {
     const f = myFleet();
     if (f && ui.rebase) return `New base for the ${f.name}: click any blue port. The fleet spends the month in harbour there.`;
@@ -409,7 +411,7 @@ function drawTabs(): void {
   const build = me ? t('build', 'Build') : '';
   // Generals with no corps, when there is a corps for them: a decision waiting for the player.
   const idle = me && vacant(g, me).length ? waiting(g, me).length : 0;
-  $('#tabs').innerHTML = t('region', 'Region') + build + t('generals', 'Generals', idle) + t('navy', 'Navy') + t('air', 'Air') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
+  $('#tabs').innerHTML = t('region', 'Region') + build + t('research', 'Research') + t('generals', 'Generals', idle) + t('navy', 'Navy') + t('air', 'Air') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
 }
 
 function advice(): string {
@@ -425,7 +427,7 @@ function advice(): string {
 
 function scopeNote(): string {
   if (g.turn < STORY_ENDS) return '';
-  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the spring of 1942. You can play on, but the computer's nations will only hold what they have. Research, shipbuilding and the later campaigns come in later phases.</div>`;
+  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the spring of 1942. You can play on, but the computer's nations will only hold what they have. Shipbuilding and the later campaigns come in later phases.</div>`;
 }
 
 function corpsRow(c: Corps, mine: boolean): string {
@@ -462,6 +464,7 @@ function drawPane(): void {
   if (ui.tab === 'build' && !(g.human && g.nations[g.human].alive)) ui.tab = 'region';
   if (ui.tab === 'region') pane.innerHTML = regionPane();
   else if (ui.tab === 'build') pane.innerHTML = buildPane();
+  else if (ui.tab === 'research') pane.innerHTML = researchPane();
   else if (ui.tab === 'generals') pane.innerHTML = generalsPane();
   else if (ui.tab === 'navy') pane.innerHTML = navyPane();
   else if (ui.tab === 'air') pane.innerHTML = airPane();
@@ -474,7 +477,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -558,6 +561,69 @@ function buildPane(): string {
     const where = g.regions[b.region]?.name ?? '';
     out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>${b.what === 'corps' ? `Forming at ${esc(where)} · ` : ''}ready ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${b.cost}<small>paid</small></span>`}</div>`;
   }
+  return out;
+}
+
+// ---- Research -----------------------------------------------------------------------------
+
+/** The last month the research timelines run to: December 1945. */
+const WAR_ENDS = 76;
+const PACE = ['Nobody at work: this branch stands still', 'One team: keeps to history\'s schedule', 'Two teams: half as fast again', 'Three teams: nearly twice the pace'];
+
+/** One branch as a strip of the whole war: history's dates as marks, the designers' progress as a gold bar, today as a white line. */
+function labTrack(nat: string, f: Field): string {
+  const lab = g.nations[nat].lab!;
+  const pos = (t: number): string => `${(Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS * 100).toFixed(1)}%`;
+  const ticks = stepsOf(nat, f).filter((st) => st.at > 0).map((st) => `<i class="${st.at <= lab.clock[f] ? 'got' : ''}" style="left:${pos(st.at)}" title="${esc(st.name)}: ${date(st.at)} in history"></i>`).join('');
+  return `<div class="labtrack"><span class="fill" style="width:${pos(lab.clock[f])}"></span>${ticks}<span class="now" style="left:${pos(lab.months)}" title="History today: ${date(Math.max(1, lab.months))}"></span></div>`;
+}
+
+function labRow(nat: string, f: Field, mine: boolean): string {
+  const lab = g.nations[nat].lab!;
+  const spec = RESEARCH.fields[f];
+  const cur = inService(nat, lab, f), next = nextStep(nat, lab, f);
+  const ahead = Math.round(monthsAhead(lab, f));
+  const tag = ahead > 0 ? `<span class="tag good">${ahead} month${ahead === 1 ? '' : 's'} ahead</span>` : ahead < 0 ? `<span class="tag bad">${-ahead} month${ahead === -1 ? '' : 's'} behind</span>` : `<span class="tag">On history's schedule</span>`;
+  const eta = arrival(g, nat, f);
+  const k = lead(g, nat, f);
+  const pct = Math.round(spec.per * k * 100);
+  const n = lab.teams[f];
+  const free = teamsFree(lab);
+  let out = `<div class="lab"><div class="lab-h"><b>${esc(f === 'doctrine' ? `${spec.label}: ${doctrineOf(nat)}` : spec.label)}</b>${tag}</div>
+    <div class="lab-now">In service: <b>${esc(cur?.name ?? 'nothing yet')}</b></div>
+    <div class="lab-next">${next ? `Next: ${esc(next.name)}. History had it in ${date(next.at)}; ${eta === null ? 'at this pace it never comes' : `yours is due ${date(eta)}`}.` : 'The designers have nothing further on the drawing board.'}</div>
+    ${labTrack(nat, f)}`;
+  if (k) out += `<div class="lab-fx ${k > 0 ? 'good' : 'bad'}">${esc(spec.who)}: ${pct > 0 ? '+' : ''}${pct}% while these designs are ${Math.abs(k) === 1 ? 'a generation' : `${Math.abs(k)} generations`} ${k > 0 ? 'ahead of' : 'behind'} history.</div>`;
+  out += `<div class="lab-t"><button class="btn small" data-act="teams" data-field="${f}" data-n="${n - 1}" ${mine && n > 0 ? '' : 'disabled'} aria-label="One team fewer on ${esc(spec.label)}">−</button><span class="teampips">${Array.from({ length: MAX_TEAMS }, (_, i) => `<i class="${i < n ? 'on' : ''}"></i>`).join('')}</span><button class="btn small" data-act="teams" data-field="${f}" data-n="${n + 1}" ${mine && n < MAX_TEAMS && free > 0 ? '' : 'disabled'} aria-label="One team more on ${esc(spec.label)}">+</button><small>${PACE[n]}</small></div></div>`;
+  return out;
+}
+
+/** What one power has in service, branch by branch. */
+function labSummary(nat: string): string {
+  const lab = g.nations[nat].lab!;
+  return `<table class="ticket">${FIELDS.map((f) => `<tr><td>${esc(RESEARCH.fields[f].label)}</td><td>${esc(inService(nat, lab, f)?.name ?? '')}</td></tr>`).join('')}</table>`;
+}
+
+function researchPane(): string {
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  const majors = Object.values(g.nations).filter((n) => n.lab && n.alive && n.id !== me).sort((a, b) => armySize(g, b.id) - armySize(g, a.id));
+  const others = majors.map((n) => `<h3>${esc(n.name)}${doctrineOf(n.id) ? ` · ${esc(doctrineOf(n.id))}` : ''}</h3>${labSummary(n.id)}`).join('');
+  if (!me || !g.nations[me].lab) {
+    return `<h2>Research</h2><p class="sub">The weapons of every great power improve as the war goes on, each new design arriving in the month history brought it into service. ${me ? `${esc(natName(me))} has no design offices of its own and buys its weapons abroad.` : 'A power that pushes one branch hard gets its designs early; one that neglects a branch falls behind.'}</p>${others}`;
+  }
+  const n = g.nations[me], lab = n.lab!;
+  const mine = humanUp(g);
+  const free = teamsFree(lab);
+  const cost = bureauCost(n);
+  let out = `<h2>Research</h2><p class="sub">Every design team keeps one branch of the armed forces on history's schedule. Put a second team on a branch and its next designs arrive early; take the team away and the branch falls behind. In battle a design counts for as long as it is ahead of its time.</p>
+    <div class="facts"><div class="fact"><span>Design teams</span><b>${teamsTotal(lab)}</b></div><div class="fact"><span>Unassigned</span><b>${free}</b></div><div class="fact"><span>Doctrine</span><b style="font-size:13px">${esc(doctrineOf(me))}</b></div></div>
+    <div class="trackkey"><span><i class="k fill"></i>Your designers</span><span><i class="k now"></i>History today</span><span><i class="k tick"></i>A design's date in history</span></div>`;
+  if (free > 0) out += `<div class="note"><b>${free} design team${free === 1 ? ' is' : 's are'} idle.</b> Put ${free === 1 ? 'it' : 'them'} to work with a + button below.</div>`;
+  for (const f of FIELDS) out += labRow(me, f, mine);
+  out += `<h3>More design teams</h3>`;
+  out += cost === null ? `<div class="empty">The nation has all the design teams its engineers can staff.</div>`
+    : `<button class="buy" data-act="bureau" ${mine && n.pp >= cost ? '' : 'disabled'}><span class="grow"><b>Found a new design team</b><small>One more team to put on any branch, for the rest of the war.</small><small>Paid for from production: ${num(Math.floor(n.pp))} points in hand.</small></span><span class="cost${n.pp >= cost ? '' : ' short'}">${cost}<small>pts</small></span></button>`;
+  if (others) out += `<h3 style="margin-top:20px">What the other powers have in service</h3>${others.replace(/<h3>/g, '<h3 style="margin-top:10px">')}`;
   return out;
 }
 
@@ -814,7 +880,7 @@ function fleetOrders(f: Fleet): string {
   }).join('');
   return `<div class="orders">
     <div class="acts"><button class="btn small${ui.stance === 'patrol' ? ' on' : ''}" data-act="stance" data-stance="patrol" title="Hold the sea: bring enemy fleets to battle, guard convoys and troopships.">Patrol</button><button class="btn small${ui.stance === 'raid' ? ' on' : ''}" data-act="stance" data-stance="raid" title="Hunt merchant ships and keep clear of the enemy's fleet.">Raid shipping</button><button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="A fleet in harbour refits quickly.">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button></div>
-    <p class="sub" style="margin:8px 0 6px">Fleet strength ${num(fleetPower(f))}. It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${ui.stance === 'raid' ? 'raid shipping' : 'patrol'} there.</p>${rows}</div>`;
+    <p class="sub" style="margin:8px 0 6px">Fleet strength ${num(fleetPower(g, f))}. It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${ui.stance === 'raid' ? 'raid shipping' : 'patrol'} there.</p>${rows}</div>`;
 }
 
 /** The convoy war and the ore traffic, for whoever has a stake in them. */
@@ -840,7 +906,7 @@ function seaNotes(): string {
 function navyPane(): string {
   const me = g.human && g.nations[g.human].alive ? g.human : null;
   const afloat = (f: Fleet): boolean => shipCount(f.ships) > 0;
-  const size = (a: Fleet, b: Fleet): number => fleetPower(b) - fleetPower(a);
+  const size = (a: Fleet, b: Fleet): number => fleetPower(g, b) - fleetPower(g, a);
   let out = '';
   if (me) {
     const mine = fleetsOf(g, me).filter(afloat);
@@ -859,7 +925,7 @@ function navyPane(): string {
   }
   out += `<h2>The war at sea</h2><p class="sub">A fleet holds a sea by patrolling it. Where one side is much the stronger, that sea is closed to the other's troopships and supply ships. Click any sea on the map to see who holds it.</p>${seaNotes()}`;
   const war = g.fleets.filter((f) => afloat(f) && g.nations[f.nat].atWar.length > 0);
-  const nats = [...new Set(war.map((f) => f.nat))].sort((a, b) => war.filter((f) => f.nat === b).reduce((t, f) => t + fleetPower(f), 0) - war.filter((f) => f.nat === a).reduce((t, f) => t + fleetPower(f), 0));
+  const nats = [...new Set(war.map((f) => f.nat))].sort((a, b) => war.filter((f) => f.nat === b).reduce((t, f) => t + fleetPower(g, f), 0) - war.filter((f) => f.nat === a).reduce((t, f) => t + fleetPower(g, f), 0));
   for (const nat of nats) out += `<h3>${esc(natName(nat))}</h3>${war.filter((f) => f.nat === nat).map((f) => fleetRow(f, false)).join('')}`;
   const peace = g.fleets.filter((f) => afloat(f) && !g.nations[f.nat].atWar.length).sort(size);
   if (peace.length) out += `<h3>Navies at peace</h3>${peace.map((f) => fleetRow(f, false, true)).join('')}`;
@@ -1208,7 +1274,7 @@ function startCard(): string {
       ${side('GER', 'Germany', 'Three army groups on the frontier. Reach Moscow before the snow, or outrun your supplies trying.', false, 22)}
       ${side('SOV', 'Soviet Union', 'The frontier armies are about to be hit. Trade space for time until the reserves and the winter arrive.', false, 22)}
     </div>
-    <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
+    <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
 
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea' };
@@ -1528,6 +1594,8 @@ function onClick(e: MouseEvent): void {
     case 'build': { const at = raiseAt(); if (at) orderBuildCorps(g, t.dataset.kind as Kind, at.id); refresh(); break; }
     case 'fortify': if (ui.sel >= 0) orderBuildFort(g, ui.sel); refresh(); break;
     case 'cancelbuild': orderCancelBuild(g, id); refresh(); break;
+    case 'teams': orderTeams(g, t.dataset.field as Field, Number(t.dataset.n)); refresh(); break;
+    case 'bureau': orderBureau(g); refresh(); break;
     case 'court': { const h = g.headlines.length; orderCourt(g, t.dataset.nat!); ui.unread += g.headlines.length - h; refresh(); break; }
     case 'evac': {
       for (const c of pickedCorps()) orderEvacuate(g, c);

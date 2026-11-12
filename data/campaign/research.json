@@ -1,0 +1,78 @@
+{
+  "_about": {
+    "idea": "Research runs on history's clock. Each major power has design teams, one to a branch at the start. A branch with one team gets every new design in the month history got it. A second or third team makes the branch's clock run faster ('speed' is months of progress per month for 0, 1, 2 and 3 teams), so its designs arrive early; a branch with no team stands still and falls behind.",
+    "effect": "What counts in battle is how far a branch is ahead of or behind its own history, in designs: each design in service that history did not yet have is worth 'per' of strength for that branch, each design history had and the nation lacks costs the same, up to 'maxLead' designs either way. A nation that keeps one team on every branch fights exactly as it did, which is how the computer runs every nation.",
+    "bureau": "A nation can found extra design teams with production points. 'cost' is the price of the first, second and third.",
+    "nations": "For each major power: 'tree' is the name of its army doctrine; then for every branch its designs in order, each with the month history brought it into service (year-month; anything before September 1939 is in service when the war begins). French entries after June 1940 are the designs France had on the drawing board when it fell."
+  },
+  "speed": [0, 1, 1.5, 1.85],
+  "maxLead": 3,
+  "bureau": { "cost": [60, 100, 150] },
+  "fields": {
+    "armour": { "label": "Tanks", "noun": "tanks", "per": 0.08, "who": "Armoured and motorized corps", "news": "New tanks reach the divisions" },
+    "infantry": { "label": "Infantry weapons and guns", "noun": "infantry weapons", "per": 0.06, "who": "Infantry, mountain, cavalry and fortress corps", "news": "New weapons reach the infantry" },
+    "doctrine": { "label": "Army doctrine", "noun": "army doctrine", "per": 0.05, "who": "Every corps in the attack", "news": "The army changes the way it fights" },
+    "fighters": { "label": "Fighters", "noun": "fighters", "per": 0.08, "who": "Every fighter in an air battle", "news": "A new fighter enters service" },
+    "bombers": { "label": "Bombers", "noun": "bombers", "per": 0.08, "who": "What the bombers that get through destroy", "news": "New with the bomber force" },
+    "navy": { "label": "Navy", "noun": "ships", "per": 0.08, "who": "Every fleet in battle, and the raiders and escorts on the convoy routes", "news": "New with the fleet" },
+    "radar": { "label": "Radar and signals", "noun": "radar", "per": 0.06, "who": "Fighters defending their own sky, and the watch over the convoy routes", "news": "New for the signals service" },
+    "industry": { "label": "War production", "noun": "war production", "per": 0.05, "who": "The production points earned every month", "news": "A change in war production" }
+  },
+  "nations": {
+    "GER": {
+      "tree": "Blitzkrieg",
+      "armour": [["1939-08", "Panzer III and IV with short guns"], ["1940-07", "Panzer III with the 50 mm gun"], ["1942-03", "Panzer IV with the long 75 mm gun"], ["1942-09", "Tiger"], ["1943-07", "Panther"], ["1944-07", "King Tiger"]],
+      "infantry": [["1939-08", "Karabiner 98k, MG 34 and the 37 mm anti-tank gun"], ["1941-04", "50 mm Pak 38 anti-tank gun"], ["1942-05", "MG 42 and the 75 mm Pak 40"], ["1943-09", "Panzerfaust and Panzerschreck"], ["1944-07", "Sturmgewehr 44 assault rifle"]],
+      "doctrine": [["1939-08", "Panzer divisions: tanks, infantry and guns in one formation"], ["1940-05", "Panzer groups: the tanks massed under one command"], ["1941-10", "Panzer armies"], ["1943-02", "Mobile defence: give ground, then strike the flank"], ["1944-03", "Battle groups thrown in as fire brigades"]],
+      "fighters": [["1939-08", "Messerschmitt Bf 109E"], ["1941-03", "Messerschmitt Bf 109F"], ["1941-09", "Focke-Wulf Fw 190A"], ["1942-06", "Messerschmitt Bf 109G"], ["1944-09", "Focke-Wulf Fw 190D"]],
+      "bombers": [["1939-08", "Heinkel He 111, Dornier Do 17 and the Ju 87 Stuka"], ["1940-04", "Junkers Ju 88"], ["1941-06", "Dornier Do 217"], ["1943-08", "Fritz X and Hs 293 guided bombs"]],
+      "navy": [["1939-08", "Type VII U-boats"], ["1940-09", "Wolf packs directed by radio"], ["1941-05", "Type IXC long-range U-boats"], ["1942-04", "Supply U-boats, the milk cows"], ["1943-09", "Acoustic homing torpedoes"], ["1944-03", "The schnorkel"]],
+      "radar": [["1939-08", "Freya early-warning radar"], ["1940-08", "Würzburg radar to direct guns and fighters"], ["1941-07", "The Kammhuber Line of night-fighter boxes"], ["1942-03", "Lichtenstein radar in night fighters"], ["1943-10", "Naxos radar detectors"]],
+      "industry": [["1939-08", "The Four-Year Plan"], ["1940-03", "Todt's Ministry of Armaments and Munitions"], ["1942-04", "Speer's Central Planning"], ["1943-02", "Total war mobilisation"], ["1944-03", "The Fighter Staff and dispersed factories"]]
+    },
+    "UK": {
+      "tree": "Superior Firepower",
+      "armour": [["1939-08", "Matilda II and the cruiser tanks"], ["1941-06", "Crusader and Valentine"], ["1942-10", "Sherman and Churchill"], ["1944-06", "Cromwell and the Sherman Firefly"], ["1945-03", "Comet"]],
+      "infantry": [["1939-08", "Lee-Enfield, Bren gun and the 2-pounder anti-tank gun"], ["1940-04", "25-pounder field gun"], ["1942-05", "6-pounder anti-tank gun"], ["1943-07", "17-pounder gun and the PIAT"], ["1944-08", "Discarding-sabot shot"]],
+      "doctrine": [["1939-08", "The methodical battle of 1918"], ["1941-03", "Battle drill, and tank brigades with the infantry"], ["1942-10", "Every gun in the corps on one target"], ["1943-03", "Army and air force planning as one"], ["1944-06", "The combined assault from the sea"]],
+      "fighters": [["1939-08", "Hurricane and Spitfire Mk I"], ["1940-08", "Spitfire Mk II"], ["1941-02", "Spitfire Mk V"], ["1942-07", "Spitfire Mk IX"], ["1944-01", "Spitfire Mk XIV and Tempest"]],
+      "bombers": [["1939-08", "Wellington, Whitley and Hampden"], ["1941-02", "Stirling and Halifax heavy bombers"], ["1942-03", "Lancaster"], ["1942-08", "Mosquito and the Pathfinder Force"], ["1944-06", "Tallboy earthquake bombs"]],
+      "navy": [["1939-08", "ASDIC and the convoy system"], ["1940-04", "Flower-class corvettes"], ["1941-07", "Escort groups and ship-borne direction finding"], ["1942-06", "River-class frigates and the Hedgehog"], ["1943-03", "Support groups and escort carriers"], ["1944-01", "Squid mortar and Loch-class frigates"]],
+      "radar": [["1939-08", "Chain Home"], ["1940-02", "Chain Home Low"], ["1941-01", "Ground-controlled interception and radar in night fighters"], ["1942-01", "Centimetric radar at sea"], ["1943-01", "H2S and Oboe bombing aids"]],
+      "industry": [["1939-08", "The shadow factories"], ["1940-05", "Ministry of Aircraft Production"], ["1941-03", "Lend-Lease"], ["1941-12", "Women conscripted for war work"], ["1943-06", "The whole nation mobilised"]]
+    },
+    "FRA": {
+      "tree": "Methodical Battle",
+      "armour": [["1939-08", "Char B1 bis and Somua S35"], ["1940-07", "Somua S40"], ["1941-05", "Char B1 ter"], ["1942-06", "Char G1"]],
+      "infantry": [["1939-08", "MAS-36 rifle, FM 24/29 and the 25 mm anti-tank gun"], ["1940-03", "47 mm anti-tank gun"], ["1941-01", "MAS-40 self-loading rifle"], ["1942-04", "75 mm anti-tank gun"]],
+      "doctrine": [["1939-08", "The methodical battle"], ["1940-01", "Armoured divisions"], ["1941-03", "Armour massed for the counter-stroke"], ["1942-03", "Tanks and aircraft under one command"]],
+      "fighters": [["1939-08", "Morane-Saulnier MS.406 and Curtiss H-75"], ["1940-05", "Dewoitine D.520"], ["1940-11", "Arsenal VG-33"], ["1941-09", "Dewoitine D.551"]],
+      "bombers": [["1939-08", "Bloch MB.210 and Amiot 143"], ["1940-03", "LeO 451 and Breguet 693"], ["1940-10", "Amiot 354"], ["1941-10", "Bloch MB.175 in number"]],
+      "navy": [["1939-08", "Dunkerque-class fast battleships"], ["1940-07", "Battleship Richelieu"], ["1941-06", "British ASDIC in French escorts"], ["1942-06", "Battleship Jean Bart"]],
+      "radar": [["1939-08", "Sound locators and observer posts"], ["1940-03", "Electromagnetic detection barriers"], ["1941-01", "British radar sets built under licence"], ["1942-03", "Radar-directed fighters"]],
+      "industry": [["1939-08", "The nationalised arms industry and Dautry's Ministry of Armaments"], ["1940-06", "American aircraft and machine tools"], ["1941-06", "Industry fully mobilised for war"], ["1942-09", "Mass production"]]
+    },
+    "ITA": {
+      "tree": "War of Rapid Decision",
+      "armour": [["1939-08", "L3 tankettes and the M11/39"], ["1940-12", "M13/40"], ["1942-01", "M14/41 and the Semovente 75/18"], ["1943-06", "P26/40 heavy tank"]],
+      "infantry": [["1939-08", "Carcano rifle, Breda 30 and the 47/32 gun"], ["1941-06", "Beretta MAB 38 in the line"], ["1942-04", "90/53 gun on lorries"], ["1943-04", "75/32 and 75/46 guns"]],
+      "doctrine": [["1939-08", "Two-regiment binary divisions"], ["1941-08", "The Mobile Army Corps"], ["1942-06", "Mixed battle groups"]],
+      "fighters": [["1939-08", "Fiat CR.42 and G.50"], ["1940-09", "Macchi C.200 Saetta"], ["1941-11", "Macchi C.202 Folgore"], ["1943-04", "Macchi C.205 and Fiat G.55"]],
+      "bombers": [["1939-08", "Savoia-Marchetti SM.79"], ["1940-08", "SM.79 torpedo bombers"], ["1941-03", "CANT Z.1007bis"], ["1942-06", "Piaggio P.108"]],
+      "navy": [["1939-08", "Zara-class cruisers and a large submarine fleet"], ["1940-08", "Littorio-class battleships"], ["1941-12", "Human torpedoes of the Decima MAS"], ["1942-10", "Gabbiano-class corvettes"]],
+      "radar": [["1939-08", "Sound locators"], ["1941-07", "German radar sets on Italian soil"], ["1942-09", "Gufo naval radar"]],
+      "industry": [["1939-08", "Autarky"], ["1940-05", "The war production commissariat"], ["1941-02", "German coal and machine tools"], ["1943-02", "Ministry of War Production"]]
+    },
+    "SOV": {
+      "tree": "Deep Battle",
+      "armour": [["1939-08", "T-26 and BT light tanks"], ["1940-12", "T-34 and KV-1"], ["1942-12", "KV-1S and SU-122"], ["1943-07", "SU-152 heavy assault gun"], ["1944-03", "T-34/85 and IS-2"]],
+      "infantry": [["1939-08", "Mosin-Nagant, Maxim gun and the 45 mm gun"], ["1941-07", "PPSh submachine gun and Katyusha rockets"], ["1942-02", "ZiS-3 divisional gun"], ["1943-06", "57 mm ZiS-2 and the PPS-43"], ["1944-05", "100 mm BS-3 gun"]],
+      "doctrine": [["1939-08", "Deep battle on paper, the officer corps thinned by the purges"], ["1940-05", "The lessons of the Winter War"], ["1941-12", "Guards units and shock armies"], ["1942-05", "Tank armies"], ["1942-11", "Deep operations by whole fronts"], ["1943-04", "Artillery breakthrough corps"], ["1944-06", "Deep battle mastered"]],
+      "fighters": [["1939-08", "Polikarpov I-16 and I-153"], ["1941-03", "Yak-1, LaGG-3 and MiG-3"], ["1942-10", "La-5 and Yak-9"], ["1943-07", "La-5FN"], ["1944-07", "Yak-3 and La-7"]],
+      "bombers": [["1939-08", "Tupolev SB and Ilyushin DB-3"], ["1941-06", "Il-2 Sturmovik and Pe-2"], ["1942-10", "Two-seat Il-2 with a rear gunner"], ["1944-03", "Tupolev Tu-2"]],
+      "navy": [["1939-08", "Kirov-class cruisers and a large submarine fleet"], ["1941-02", "K-class cruiser submarines"], ["1942-08", "Lend-Lease minesweepers and sonar"], ["1943-08", "Radar aboard the fleet"]],
+      "radar": [["1939-08", "Sound locators and observer posts"], ["1940-07", "RUS-2 Redut radar"], ["1942-01", "Gun-laying radar from Britain"], ["1944-01", "P-3 radar and fighter control"]],
+      "industry": [["1939-08", "The Third Five-Year Plan"], ["1940-06", "The seven-day working week"], ["1942-03", "Factories rebuilt beyond the Urals"], ["1942-10", "Tank building on the conveyor at Tankograd"], ["1943-06", "Lend-Lease lorries and machine tools"]]
+    }
+  }
+}

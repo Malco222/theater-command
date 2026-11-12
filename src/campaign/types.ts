@@ -67,6 +67,22 @@ export interface Nation {
   offStart: Record<string, number>;
   lastFight: Record<string, number>;
   fellOn?: { turn: number; week: number; to: string };
+  /** The nation's design teams and how far each branch of research has come. Null for a nation that buys its weapons abroad. */
+  lab: Lab | null;
+}
+
+/** The branches of research. */
+export type Field = 'armour' | 'infantry' | 'doctrine' | 'fighters' | 'bombers' | 'navy' | 'radar' | 'industry';
+
+export interface Lab {
+  /** Design teams at work on each branch. */
+  teams: Record<Field, number>;
+  /** How far each branch has come, in months of history's clock counted from August 1939. */
+  clock: Record<Field, number>;
+  /** Months the teams have been at work: where history's own clock stands for this nation. */
+  months: number;
+  /** Teams founded since the war began, on top of the one per branch the nation started with. */
+  founded: number;
 }
 
 export interface Build {

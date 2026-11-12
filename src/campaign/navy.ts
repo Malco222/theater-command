@@ -10,6 +10,7 @@ import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, skyDenies, skyOver } from './air';
 import { COMMAND } from './commanders';
+import { techMul, techNotes } from './research';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, type Assessment } from './game';
 import {
   STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type ShipClass, type Ships, type Stance,
@@ -43,7 +44,7 @@ export const CLASSES: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 export const SEA_BORDERS = (mapData as any).seas.borders as [number, number][][];
 const SURFACE: ShipClass[] = ['bb', 'cv', 'ca', 'dd'];
 const none = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
-const quality = (nat: string): number => NAVY.quality[nat] ?? NAVY.quality._default;
+const quality = (g: Game, nat: string): number => (NAVY.quality[nat] ?? NAVY.quality._default) * techMul(g, nat, 'navy');
 /** The sea has its own dice, so that a naval battle never changes how a land battle falls out. */
 const seaRng = (g: Game, key: string): Rng => new Rng(hashString(`sea:${g.seed}:${g.turn}:${key}`));
 const cap = (s: string): string => s[0].toUpperCase() + s.slice(1);
@@ -118,10 +119,10 @@ const fit = (f: Fleet): number => 0.5 + 0.5 * f.ready;
 const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel * (f.admiral.level - 1) : 0);
 
 /** A fleet's weight in a fleet action. */
-export function fleetPower(f: Fleet): number {
+export function fleetPower(g: Game, f: Fleet): number {
   let p = 0;
   for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power;
-  return p * quality(f.nat) * fit(f) * admiralMul(f);
+  return p * quality(g, f.nat) * fit(f) * admiralMul(f);
 }
 
 /** Air strength over a sea from the coasts one side holds: this nation's friends, or (hostile) its enemies. */
@@ -147,7 +148,7 @@ export interface SeaBalance { ships: number; air: number; total: number }
 /** One side's strength in a sea: its fleets at sea there, and its aircraft within reach. */
 export function seaSide(g: Game, z: number, nat: string, hostile: boolean): SeaBalance {
   let ships = 0;
-  for (const f of g.fleets) if (f.zone === z && atSea(f) && (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat))) ships += fleetPower(f);
+  for (const f of g.fleets) if (f.zone === z && atSea(f) && (hostile ? atWar(g, f.nat, nat) : allied(g, f.nat, nat))) ships += fleetPower(g, f);
   const air = airOver(g, z, nat, hostile) * NAVY.air.weight;
   return { ships, air, total: ships + air };
 }
@@ -307,8 +308,8 @@ export function sortieAgainst(g: Game, nat: string, path: number[]): number {
   let s = 0;
   for (const f of g.fleets) {
     if (!atWar(g, f.nat, nat) || !surfaceShips(f)) continue;
-    if (atSea(f)) { if (!path.includes(f.zone) && near.has(f.zone)) s += fleetPower(f); continue; }
-    if ((f.base >= 0 ? g.regions[f.base].seas : [f.home]).some((z) => near.has(z))) s += fleetPower(f);
+    if (atSea(f)) { if (!path.includes(f.zone) && near.has(f.zone)) s += fleetPower(g, f); continue; }
+    if ((f.base >= 0 ? g.regions[f.base].seas : [f.home]).some((z) => near.has(z))) s += fleetPower(g, f);
   }
   return s * NAVY.landing.sortie;
 }
@@ -521,17 +522,18 @@ export function convoyWar(g: Game, nat: string): void {
       if (atWar(g, f.nat, nat)) {
         let p = 0;
         for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-        p *= quality(f.nat) * fit(f) * (f.stance === 'raid' ? 1 : NAVY.convoy.patrolRaid);
+        p *= quality(g, f.nat) * fit(f) * (f.stance === 'raid' ? 1 : NAVY.convoy.patrolRaid);
         if (p > 0) { raid += p; raiders.push(f); }
       } else if (allied(g, f.nat, nat) && f.stance === 'patrol') {
         let p = 0;
         for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort;
-        p *= quality(f.nat) * fit(f);
+        p *= quality(g, f.nat) * fit(f);
         if (p > 0) { guard += p; escorts.push(f); }
       }
     }
     for (const z of zones) guard += airOver(g, z, nat) * NAVY.convoy.air;
-    const G = guard * NAVY.convoy.escortWorth;
+    // Radar and direction finding tell the escorts where the raiders are.
+    const G = guard * NAVY.convoy.escortWorth * techMul(g, nat, 'radar');
     const L = raid > 0 ? raid / (raid + G + NAVY.convoy.ocean) : 0;
     const tons = Math.round((route.tons * L) / 1000) * 1000;
     let subsLost = 0, escortsLost = 0;
@@ -602,7 +604,7 @@ function afterAction(g: Game, f: Fleet, side: SeaSide, won: boolean, rng: Rng): 
 export function seaBattles(g: Game, nat: string): SeaReport[] {
   const out: SeaReport[] = [];
   if (!g.nations[nat]?.alive) return out;
-  const sum = (fs: Fleet[]): number => fs.reduce((s, f) => s + fleetPower(f), 0);
+  const sum = (fs: Fleet[]): number => fs.reduce((s, f) => s + fleetPower(g, f), 0);
   for (const zone of g.seas) {
     const z = zone.id;
     const foes = g.fleets.filter((f) => f.zone === z && atSea(f) && atWar(g, f.nat, nat) && shipCount(f.ships) > 0);
@@ -637,6 +639,8 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     if (airA > 0.5 || airD > 0.5) lines.push({ label: 'Air', value: airA > airD ? 'The attacker has the stronger air cover from the coast' : airD > airA ? 'The defender has the stronger air cover from the coast' : 'Even', effect: `Worth ${Math.round(airA)} to the attacker and ${Math.round(airD)} to the defender` });
     const flag = (fs: Fleet[]): string => fs.filter((f) => f.admiral).map((f) => `${f.admiral!.name}${f.admiral!.level > 1 ? ` (level ${f.admiral!.level})` : ''}`).join(', ') || 'no admiral named';
     lines.push({ label: 'Admirals', value: `${flag(mine)} against ${flag(met)}` });
+    const kitA = techNotes(g, mine.map((f) => f.nat), ['navy']), kitD = techNotes(g, met.map((f) => f.nat), ['navy']);
+    if (kitA.length || kitD.length) lines.push({ label: 'Equipment', value: [...kitA, ...kitD].map((x) => x.text).join('; '), effect: [...kitA.map((x) => `Attacker ${x.pct > 0 ? 'up' : 'down'} ${Math.abs(x.pct)}%`), ...kitD.map((x) => `Defender ${x.pct > 0 ? 'up' : 'down'} ${Math.abs(x.pct)}%`)].join(', ') });
     const worn = [...mine, ...met].filter((f) => f.ready < 0.8);
     if (worn.length) lines.push({ label: 'Readiness', value: `${worn.map((f) => f.name).join(', ')} not fully fit for sea`, effect: 'A fleet in need of refit fights below its strength' });
     mine.forEach((f, i) => afterAction(g, f, att[i], won, rng));
@@ -692,7 +696,7 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     // A worn fleet stays in harbour until it is fit for sea again.
     if (f.ready < 0.5 || (!atSea(f) && f.ready < NAVY.ready.sortieAt)) { home(); continue; }
     if (f.duty === 'raid') { if (!sail(g, f, f.station, 'raid')) home(); continue; }
-    const mine = fleetPower(f);
+    const mine = fleetPower(g, f);
     const reach = fleetReach(g, f);
     // A fleet hunts on its own beat and the seas next to it. It goes further only to meet a landing or an invasion.
     const beat = new Set([f.station, ...g.seas[f.station].adj]);
@@ -705,7 +709,7 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       if (airOver(g, z, nat, true) - airOver(g, z, nat, false) > NAVY.air.avoid && !invaded) continue;
       // Enemy surface ships that could be brought to battle here. Submarines are no quarry for a battle fleet.
       let quarry = 0;
-      for (const x of g.fleets) if (x.zone === z && atSea(x) && surfaceShips(x) > 0 && atWar(g, x.nat, nat)) quarry += fleetPower(x);
+      for (const x of g.fleets) if (x.zone === z && atSea(x) && surfaceShips(x) > 0 && atWar(g, x.nat, nat)) quarry += fleetPower(g, x);
       let v = 0;
       if (f.duty === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry; // an enemy fleet that can be beaten
       if (landedLately(g, z, nat) && own >= e.total) v += 30; // cut the sea lane behind an enemy landing

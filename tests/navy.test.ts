@@ -83,7 +83,7 @@ describe('who holds a sea', () => {
     // The German surface fleet waits in port, and Italy is not yet at war.
     expect(fleet(g, 'Battle Fleet').stance).toBe('port');
     expect(fleet(g, '1st Squadron').stance).toBe('port');
-    expect(fleetPower(home)).toBeGreaterThan(2 * fleetPower(fleet(g, 'Battle Fleet')));
+    expect(fleetPower(g, home)).toBeGreaterThan(2 * fleetPower(g, fleet(g, 'Battle Fleet')));
   });
 
   it('aircraft on the coasts close narrow waters, and a strong fleet opens them again', () => {
@@ -172,7 +172,7 @@ describe('fleet actions', () => {
     expect(home.admiral!.level).toBe(1);
     // A fleet's strength, ship for ship and with readiness taken out: what is left is the admiral.
     const weight = (f: Fleet): number => Object.entries(f.ships).reduce((s, [c, n]) => s + n * NAVY.classes[c as 'bb'].power, 0);
-    const lead = (f: Fleet): number => fleetPower(f) / (weight(f) * NAVY.quality[f.nat] * (0.5 + 0.5 * f.ready));
+    const lead = (f: Fleet): number => fleetPower(g, f) / (weight(f) * NAVY.quality[f.nat] * (0.5 + 0.5 * f.ready));
     expect(lead(home)).toBeCloseTo(1, 6);
     seaBattles(g, 'UK');
     g.turn++;

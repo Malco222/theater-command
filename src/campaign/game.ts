@@ -12,6 +12,7 @@ import { PRODUCTION, canBuildYet, deliver, firstCorpsNumber, income } from './ec
 import { DIPLOMACY, homeOpinion, pcIncome } from './diplomacy';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
+import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import eastData from '../../data/campaign/east.json';
 
@@ -23,7 +24,7 @@ export const EASTERN = eastData as unknown as {
 };
 import {
   FORT_MUL, KIND, MEN_PER_DIV, STACK, TERRAIN_DEF,
-  type BattleReport, type Corps, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit,
+  type BattleReport, type Corps, type Field, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit,
 } from './types';
 
 const ORDER = ['GER', 'ITA', 'SVK', 'HUN', 'SOV', 'POL', 'FRA', 'UK', 'BEL', 'NED', 'LUX', 'DEN', 'NOR'];
@@ -48,7 +49,7 @@ export function createGame(seed: number, human: string | null): Game {
       id, name: d.name, adj: d.adj, color: d.color, quality: d.quality, air: d.air, resilience: d.resilience, align: d.align,
       blitz: !!d.blitz, slowCommand: !!d.slowCommand, maxAttack: d.maxAttack ?? 0, seaSupply: !!d.seaSupply, sealift: d.sealift ?? 0,
       atWar: [], alive: !d.dormant, dormant: !!d.dormant, capital: cap ? cap.id : -1, pp: 0, queue: [], corpsNo: firstCorpsNumber(id),
-      opinion: homeOpinion(id, d.align), home: homeOpinion(id, d.align), pc: 0, armyPeak: 0, offStart: {}, lastFight: {},
+      opinion: homeOpinion(id, d.align), home: homeOpinion(id, d.align), pc: 0, armyPeak: 0, offStart: {}, lastFight: {}, lab: null,
     };
   }
   const order = [...ORDER, ...Object.keys(nations).filter((n) => !ORDER.includes(n))];
@@ -62,6 +63,7 @@ export function createGame(seed: number, human: string | null): Game {
   for (const row of (setup as any).corps) addCorps(g, row[0], row[1], row[2], row[3], row[4], row[5] ?? {});
   setupNavy(g);
   setupAir(g);
+  setupResearch(g);
   // Depots: home regions that can feed an army even when cut off from the capital.
   (md.regions as any[]).forEach((r) => { if (r.flags.depot) g.flags['depot:' + r.id] = 1; });
   for (const n of Object.values(nations)) {
@@ -334,7 +336,9 @@ export function weekOf(c: Corps, cost: number): number {
 }
 
 export function corpsBase(g: Game, c: Corps): number {
-  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp) * (c.supplied ? 1 : cmdCutOff(g, c));
+  // Tanks and lorries, or rifles and guns: a corps is as good as the designs it has been issued.
+  const kit = techMul(g, c.nat, c.kind === 'arm' || c.kind === 'mot' ? 'armour' : 'infantry');
+  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp) * (c.supplied ? 1 : cmdCutOff(g, c)) * kit;
 }
 
 /** Share of the usual losses a defender takes when the attack is beaten off. */
@@ -388,6 +392,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (pocket && lead > cmdAttack(g, c, false)) trap = true;
     if (tempo && KIND[c.kind].mobile) p *= 1.2;
     if (g.nations[c.nat].slowCommand) p *= 0.85;
+    p *= techMul(g, c.nat, 'doctrine');
     if (opts.sea !== undefined) p *= opts.sea;
     const line = lineStrength(g, c);
     if (line.mul < 1) { p *= line.mul; longest = Math.max(longest, line.length); lineMul = Math.min(lineMul, line.mul); }
@@ -435,6 +440,16 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const up = rawA > 0 ? Math.round((cmdA / rawA - 1) * 100) : 0, dup = rawD > 0 ? Math.round((cmdD / rawD - 1) * 100) : 0;
     const fx = [up ? `Attack ${up > 0 ? 'up' : 'down'} ${Math.abs(up)}%` : '', dup ? `defence ${dup > 0 ? 'up' : 'down'} ${Math.abs(dup)}%` : ''].filter(Boolean).join(', ');
     lines.push({ label: 'Commanders', value: `${gens || 'No general named'} against ${dgens || 'no general named'}`, effect: fx ? fx[0].toUpperCase() + fx.slice(1) : undefined });
+  }
+  // Designs ahead of or behind their time, on either side.
+  const kitOf = (cs: Corps[]): Field[] => [...new Set(cs.map((c): Field => (c.kind === 'arm' || c.kind === 'mot' ? 'armour' : 'infantry')))];
+  const kitA = [...techNotes(g, aN, kitOf(attackers)), ...techNotes(g, aN, ['doctrine'])], kitD = techNotes(g, dN, kitOf(defenders));
+  if (kitA.length || kitD.length) {
+    const up = (k: number): string => `${k > 0 ? 'up' : 'down'} ${Math.abs(k)}%`;
+    lines.push({
+      label: 'Equipment', value: [...kitA, ...kitD].map((x) => x.text).join('; '),
+      effect: [...kitA.map((x) => `Attack ${up(x.pct)}`), ...kitD.map((x) => `Defence ${up(x.pct)}`)].join(', '),
+    });
   }
   if (opts.sea !== undefined) lines.push(opts.surprise
     ? { label: 'Landing', value: 'From the sea, on the day war is declared', effect: 'The defenders are caught unready: the landing fights at full strength' }
@@ -777,6 +792,7 @@ export function startPhase(g: Game, nat: string): void {
   monthlyCommand(g, nat);
   navalUpkeep(g, nat);
   airUpkeep(g, nat);
+  researchTick(g, nat);
   computeSupply(g);
   // The month's production comes in. Losses are made good first.
   n.pp += income(g, nat);
