@@ -18,13 +18,17 @@
 //   TC.previewAttack([corpsId, ...], regionId) -> the odds and the Battle Ticket, or null
 //   TC.attack([corpsId, ...], regionId) -> { report, note, view }
 //   TC.endMonth()                       -> { steps, headlines, events, fallen, view }
+//   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
+//   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
 import { allied, atWar, createGame, men } from '../../../src/campaign/game';
 import {
   beginEve, beginHuman, canOrder, candidates, current, endEve, endHuman, humanUp, onEve, orderAttack, orderMove,
   postureOf, previewAttack, reach, runTurnAI, stepAI,
 } from '../../../src/campaign/turn';
-import { generalOf } from '../../../src/campaign/commanders';
+import { generalOf, rankOf } from '../../../src/campaign/commanders';
+import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat } from '../../../src/campaign/stories';
+import { KIND } from '../../../src/campaign/types';
 import { GOALS, GOAL_KEYS, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
@@ -70,6 +74,9 @@ function view() {
       id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
       canOrder: up && canOrder(s, c), supplied: c.supplied, men: men(c),
+      // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
+      xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
+      honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
     })),
     nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
       name: n.name, adj: n.adj, alive: n.alive, standing: standingOf(s, n.id), atWar: n.atWar,
@@ -290,11 +297,76 @@ function endMonth() {
     runOthers(s, steps);
     fallen = arrive(s);
   }
-  const headlines = s.headlines.slice(h0).map((h) => ({ kind: h.kind, text: h.text, nat: h.nat ?? null, turn: h.turn, week: h.week }));
-  // The few lines worth telling first: declarations of war, countries falling, and events.
-  const first = headlines.filter((h) => h.kind === 'war' || h.kind === 'fall' || h.kind === 'event' || h.kind === 'goal');
+  const headlines = s.headlines.slice(h0).map((h) => ({
+    kind: h.kind,
+    // A letter from the front is signed by whoever wrote it.
+    text: h.kind === 'letter' ? `\u201C${h.text}\u201D${h.by ? `  ${h.by}${h.unit !== undefined ? `, ${s.corps.find((c) => c.id === h.unit)?.name ?? ''}` : ''}` : ''}` : h.text,
+    nat: h.nat ?? null, turn: h.turn, week: h.week,
+  }));
+  // The few lines worth telling first: declarations of war, countries falling, events, honours won and letters home.
+  const weight: Record<string, number> = { fall: 0, war: 1, goal: 2, honour: 3, event: 4, letter: 5 };
+  const first = headlines.filter((h) => h.kind in weight).sort((a, b) => weight[a.kind] - weight[b.kind]);
   const events = (first.length ? first : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
   return { steps, headlines, events, fallen, view: view() };
 }
 
-(globalThis as Record<string, unknown>).TC = { starts, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+const dateOf = (turn: number): string => turnToDate(turn).label;
+
+/** One corps' service record: what it is, where it came from, the honours it carries and its diary, newest first. */
+function record(id: number) {
+  const s = game();
+  const c = s.corps.find((x) => x.id === id);
+  if (!c) return null;
+  const n = s.nations[c.nat];
+  const gen = generalOf(s, c);
+  const mine = c.nat === s.human;
+  const notes: string[] = [];
+  if (c.home !== undefined && mine && c.kind !== 'fort') {
+    const home = s.regions[c.home];
+    notes.push(c.rec?.exile
+      ? `Home: ${home.name}. It is in enemy hands. The corps attacks ${Math.round(STORIES.home.attack * 100)}% stronger to win it back.`
+      : `Home: ${home.name}. The corps defends it ${Math.round(STORIES.home.defence * 100)}% stronger than any other ground.`);
+  }
+  for (const r of s.stories.rivals.filter((x) => x.mine === c.id).slice(-2)) {
+    const adj = s.nations[r.theirsNat]?.adj ?? '';
+    notes.push(r.over
+      ? `Old enemy: ${adj} ${r.theirsName}. ${r.over === 'won' ? `Destroyed by this corps in ${dateOf(r.ended ?? r.since)}, after ${r.met} meetings.` : r.over === 'lost' ? `It had the better of this corps in the end, ${dateOf(r.ended ?? r.since)}.` : `Lost elsewhere in ${dateOf(r.ended ?? r.since)}.`}`
+      : `Old enemy: ${adj} ${r.theirsName}. They first met at ${s.regions[r.first]?.name ?? 'the front'} and have met ${r.met} times.`);
+  }
+  return {
+    id: c.id,
+    name: c.name,
+    nick: c.nick ?? null,
+    what: `${n.adj} ${KIND[c.kind].label.toLowerCase()}${isGuards(s, c) ? ` \u00B7 ${designation(c.nat)}` : ''} \u00B7 ${c.divs} division${c.divs > 1 ? 's' : ''} \u00B7 ${men(c).toLocaleString('en')} men`,
+    where: `At ${s.regions[c.reg].name}${gen ? ` \u00B7 ${rankOf(gen)} ${gen.name}` : ''}`,
+    raised: `Raised ${c.heir !== undefined ? 'again ' : ''}${dateOf(c.born ?? 1)}${c.home !== undefined ? ` at ${s.regions[c.home].name}` : ''} \u00B7 ${stat(s, c, 'service')} months in service`,
+    xp: Math.round(c.xp * 100),
+    grade: grade(c.xp),
+    notes,
+    honours: honoursOf(s, c).map((a) => ({
+      title: awardTitle(s, a), name: honourDef(a.hon)?.name ?? '', citation: citation(s, a), date: dateOf(a.turn),
+      ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'], old: !!a.old,
+    })),
+    diary: (c.log ?? []).slice(-14).reverse().map((line) => ({ date: dateOf(line[0]), text: diaryText(s, c, line) })),
+  };
+}
+
+/** The roll of honour and the memorial wall: the player's nation's, or everybody's when nobody is being led. */
+function roll() {
+  const s = game();
+  const me = s.human;
+  const ours = <T extends { nat: string }>(list: T[]): T[] => (me ? list.filter((x) => x.nat === me) : list);
+  return {
+    awards: ours(s.stories.awards).filter((a) => !a.old).slice(-40).reverse().map((a) => ({
+      id: a.id, title: awardTitle(s, a), name: honourDef(a.hon)?.name ?? '', unit: a.name, nat: a.nat, kind: a.kind,
+      citation: citation(s, a), date: dateOf(a.turn), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'], fame: fameOf(a),
+    })),
+    fallen: ours(s.stories.fallen).slice(-40).reverse().map((f) => ({
+      name: f.name, nat: f.nat, date: dateOf(f.turn), where: s.regions[f.reg]?.name ?? '', how: f.how,
+      by: s.nations[f.by]?.adj ?? f.by, general: f.general ?? null, honours: honoursOf(s, f).map((a) => awardTitle(s, a)),
+    })),
+  };
+}
+
+(globalThis as Record<string, unknown>).TC = {
+  record, roll, starts, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

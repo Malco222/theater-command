@@ -175,9 +175,55 @@ namespace
 						]
 					]
 
-					// The month's news, for a while after the month turns.
+					// The top right corner: the buttons, and under them the month's news for a while after the month turns.
 					+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(24.0f)
 					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 12.0f)
+						[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenRoll(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("HONOURS"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMenu(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth()
+								[
+								SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 11.0f)).IsFocusable(false)
+								.OnClicked_Lambda([this]()
+								{
+									if (Controller.IsValid())
+									{
+										if (Controller->IsWatching())
+										{
+											Controller->SkipWatching();
+										}
+										else
+										{
+											Controller->EndMonth();
+										}
+									}
+									return FReply::Handled();
+								})
+								[
+									SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+									.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->IsWatching() ? TEXT("SKIP  (Space)") : TEXT("END THE MONTH")); })
+								]
+								]
+						]
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
 						SNew(SBox).WidthOverride(400.0f)
 						.Visibility_Lambda([this]()
 						{
@@ -199,9 +245,10 @@ namespace
 							]
 						]
 					]
+					]
 
-					// Along the bottom: the territory panel, the army tray, and the End Month button.
-					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Bottom).Padding(24.0f)
+					// Along the bottom: the territory panel and the army tray.
+					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Bottom).Padding(24.0f)
 					[
 						SNew(SHorizontalBox)
 
@@ -303,58 +350,17 @@ namespace
 							]
 						]
 
-						+ SHorizontalBox::Slot().FillWidth(1.0f)
-						[
-							SNew(SSpacer)
-						]
+					]
 
-						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+					// The reminder of the controls. With an army in hand the tray says what to do, and takes the room.
+					+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(24.0f)
+					[
+						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 9.0f))
+						.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 						[
-							SNew(SVerticalBox)
-							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
-							[
-								SNew(SHorizontalBox)
-								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
-								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
-									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMenu(); } return FReply::Handled(); })
-									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
-									]
-								]
-								+ SHorizontalBox::Slot().AutoWidth()
-								[
-								SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 11.0f)).IsFocusable(false)
-								.OnClicked_Lambda([this]()
-								{
-									if (Controller.IsValid())
-									{
-										if (Controller->IsWatching())
-										{
-											Controller->SkipWatching();
-										}
-										else
-										{
-											Controller->EndMonth();
-										}
-									}
-									return FReply::Handled();
-								})
-								[
-									SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
-									.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->IsWatching() ? TEXT("SKIP  (Space)") : TEXT("END THE MONTH")); })
-								]
-								]
-							]
-							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
-							[
-								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 9.0f)).Visibility(EVisibility::HitTestInvisible)
-								[
-									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick: pick up an army or a territory    Right-click: send the army    Enter: end the month    M: music")))
-									.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
-								]
-							]
+							SNew(STextBlock)
+							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick: pick up an army or a territory    Right-click: send the army    Enter: end the month    M: music")))
+							.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
 						]
 					]
 
@@ -487,6 +493,53 @@ namespace
 						]
 					]
 
+					// A page over the table: a unit's service record, or the roll of honour.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetDocument().bValid ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(820.0f).MaxDesiredHeight(780.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(34.0f, 24.0f, 22.0f, 24.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 24)).ColorAndOpacity(Cream).AutoWrapText(true)
+										.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetDocument().Title) : FText::GetEmpty(); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+									[
+										SAssignNew(PageRibbons, SBox)
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 12.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
+										.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetDocument().Subtitle) : FText::GetEmpty(); })
+									]
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
+									[
+										SNew(SScrollBox)
+										+ SScrollBox::Slot().Padding(0.0f, 0.0f, 14.0f, 0.0f)
+										[
+											SAssignNew(PageSections, SVerticalBox)
+										]
+									]
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 18.0f, 12.0f, 0.0f)
+									[
+										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseDocument(); } return FReply::Handled(); })
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Cream)
+										]
+									]
+								]
+							]
+						]
+					]
+
 					// The opening screen: where to begin and as whom.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
@@ -571,6 +624,26 @@ namespace
 		virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+			// Lay out the page (a service record or the roll of honour) when it changes.
+			if (Controller.IsValid() && PageSections.IsValid() && Controller->GetDocumentRevision() != ShownPage)
+			{
+				ShownPage = Controller->GetDocumentRevision();
+				const FDocumentPage& Page = Controller->GetDocument();
+				PageRibbons->SetContent(MakeRibbons(Page.Ribbons, 12));
+				PageSections->ClearChildren();
+				for (const FDocumentSection& Section : Page.Sections)
+				{
+					PageSections->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Section.Heading.ToUpper())).Font(Font(TEXT("Bold"), 10, 220)).ColorAndOpacity(Brass)
+					];
+					PageSections->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 18.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Section.Body)).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true).LineHeightPercentage(1.25f)
+					];
+				}
+			}
+
 			// Lay out the opening screen's choices when they change.
 			if (Controller.IsValid() && Starts.IsValid() && Controller->GetOpening().Revision != ShownOpening)
 			{
@@ -671,7 +744,7 @@ namespace
 					: FString::Printf(TEXT("Moves %d of %d"), Card.Moves, Card.MovesMax));
 			const float Strength = FMath::Clamp(Card.Strength, 0.0f, 1.0f);
 
-			return SNew(SBox).WidthOverride(158.0f)
+			TSharedRef<SWidget> CardBody = SNew(SBox).WidthOverride(172.0f)
 				[
 					SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(11.0f, 8.0f, 11.0f, 9.0f))
 					.IsFocusable(false).IsEnabled(Card.bCanOrder)
@@ -689,10 +762,30 @@ namespace
 						[
 							SNew(STextBlock).Text(Card.Name).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Ink)
 						]
+						// The name the army gives it, once it has earned one.
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(BrightBrass)
+							.Text(FText::FromString(FString::Printf(TEXT("\u201C%s\u201D"), *Card.Nickname.ToString())))
+							.Visibility(Card.Nickname.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible)
+						]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 						[
 							SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
 							.Text(FText::FromString(FString::Printf(TEXT("%s, %d division%s"), *Card.Kind.ToString(), Card.Divisions, Card.Divisions == 1 ? TEXT("") : TEXT("s"))))
+						]
+						// How seasoned it is, and a ribbon for each honour it carries.
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(Card.Grade).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								MakeRibbons(Card.Honours, 5)
+							]
 						]
 						// How much of the corps is left.
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
@@ -716,6 +809,47 @@ namespace
 						]
 					]
 				];
+
+			// The card, and under it the way to the corps' service record.
+			return SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					CardBody
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(8.0f, 3.0f)).IsFocusable(false).HAlign(HAlign_Center)
+					.OnClicked_Lambda([this, Id = Card.CorpsId]()
+					{
+						if (Controller.IsValid())
+						{
+							Controller->OpenRecord(Id);
+						}
+						return FReply::Handled();
+					})
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("SERVICE RECORD"))).Font(Font(TEXT("Bold"), 8, 160)).ColorAndOpacity(Muted)
+					]
+				];
+		}
+
+		/** A unit's honours as a row of small two-coloured ribbons. */
+		TSharedRef<SWidget> MakeRibbons(const TArray<FHonourRibbon>& Honours, int32 Most)
+		{
+			TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+			for (int32 i = 0; i < Honours.Num() && i < Most; ++i)
+			{
+				Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 3.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(16.0f).HeightOverride(8.0f).ToolTipText(FText::FromString(Honours[i].Title))
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(Honours[i].First))]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(Honours[i].Second))]
+					]
+				];
+			}
+			return Row;
 		}
 
 		TWeakObjectPtr<ACampaignPlayerController> Controller;
@@ -732,6 +866,9 @@ namespace
 		FSlateBrush DeepScrimBrush;
 		TSharedPtr<SVerticalBox> Starts;
 		int32 ShownOpening = -1;
+		TSharedPtr<SVerticalBox> PageSections;
+		TSharedPtr<SBox> PageRibbons;
+		int32 ShownPage = -1;
 	};
 }
 

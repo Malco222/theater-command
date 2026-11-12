@@ -227,6 +227,33 @@ bool FCampaignSession::CallRules(const FString& Function, const FString& Argumen
 	return FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ResultJson), OutObject) && OutObject.IsValid();
 }
 
+namespace
+{
+	/** Honours as the rules list them: a title and the two colours of a ribbon. */
+	TArray<FHonourRibbon> ReadRibbons(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
+	{
+		TArray<FHonourRibbon> Out;
+		const TArray<TSharedPtr<FJsonValue>>* Honours = nullptr;
+		if (Object->TryGetArrayField(Field, Honours))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Honours)
+			{
+				const TSharedPtr<FJsonObject> Honour = Value->AsObject();
+				FHonourRibbon Ribbon;
+				Honour->TryGetStringField(TEXT("title"), Ribbon.Title);
+				TArray<FString> Colours;
+				if (Honour->TryGetStringArrayField(TEXT("ribbon"), Colours) && Colours.Num() >= 2)
+				{
+					Ribbon.First = FColor::FromHex(Colours[0]);
+					Ribbon.Second = FColor::FromHex(Colours[1]);
+				}
+				Out.Add(MoveTemp(Ribbon));
+			}
+		}
+		return Out;
+	}
+}
+
 FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 {
 	FCampaignView Out;
@@ -283,6 +310,10 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			C.Moves = Unit->GetIntegerField(TEXT("ap"));
 			C.MovesMax = Unit->GetIntegerField(TEXT("apMax"));
 			Unit->TryGetBoolField(TEXT("canOrder"), C.bCanOrder);
+			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
+			Unit->TryGetStringField(TEXT("grade"), C.Grade);
+			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
+			C.Honours = ReadRibbons(Unit, TEXT("honours"));
 			Out.Corps.Add(MoveTemp(C));
 		}
 	}
@@ -491,4 +522,125 @@ FMonthResult FCampaignSession::EndMonth()
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen);
 	TakeView(Object);
 	return Out;
+}
+
+FDocumentPage FCampaignSession::Record(int32 CorpsId)
+{
+	FDocumentPage Page;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("record"), FString::Printf(TEXT("[%d]"), CorpsId), Object))
+	{
+		return Page; // also what the stand-in rules come to: they keep no records
+	}
+	FString Name, Nick, What, Where, Raised, Grade;
+	int32 Experience = 0;
+	Object->TryGetStringField(TEXT("name"), Name);
+	Object->TryGetStringField(TEXT("nick"), Nick);
+	Object->TryGetStringField(TEXT("what"), What);
+	Object->TryGetStringField(TEXT("where"), Where);
+	Object->TryGetStringField(TEXT("raised"), Raised);
+	Object->TryGetStringField(TEXT("grade"), Grade);
+	Object->TryGetNumberField(TEXT("xp"), Experience);
+
+	Page.bValid = true;
+	Page.Title = Nick.IsEmpty() ? Name : FString::Printf(TEXT("%s, \u201C%s\u201D"), *Name, *Nick);
+	Page.Subtitle = FString::Printf(TEXT("%s\n%s\n%s\n%s, experience %d of 100"), *What, *Where, *Raised, *Grade, Experience);
+	Page.Ribbons = ReadRibbons(Object, TEXT("honours"));
+
+	TArray<FString> Notes;
+	if (Object->TryGetStringArrayField(TEXT("notes"), Notes) && Notes.Num() > 0)
+	{
+		Page.Sections.Add({ TEXT("Ties"), FString::Join(Notes, TEXT("\n\n")) });
+	}
+
+	TArray<FString> Honours;
+	const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+	if (Object->TryGetArrayField(TEXT("honours"), List))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *List)
+		{
+			const TSharedPtr<FJsonObject> Honour = Value->AsObject();
+			FString Title, Kind, Citation, Date;
+			Honour->TryGetStringField(TEXT("title"), Title);
+			Honour->TryGetStringField(TEXT("name"), Kind);
+			Honour->TryGetStringField(TEXT("citation"), Citation);
+			Honour->TryGetStringField(TEXT("date"), Date);
+			Honours.Add(FString::Printf(TEXT("%s  \u00B7  %s, %s\n%s"), *Title, *Kind, *Date, *Citation));
+		}
+	}
+	Page.Sections.Add({ TEXT("Honours"), Honours.Num() > 0 ? FString::Join(Honours, TEXT("\n\n")) : FString(TEXT("None yet.")) });
+
+	TArray<FString> Diary;
+	if (Object->TryGetArrayField(TEXT("diary"), List))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *List)
+		{
+			const TSharedPtr<FJsonObject> Line = Value->AsObject();
+			FString Date, Text;
+			Line->TryGetStringField(TEXT("date"), Date);
+			Line->TryGetStringField(TEXT("text"), Text);
+			Diary.Add(FString::Printf(TEXT("%s:  %s"), *Date, *Text));
+		}
+	}
+	Page.Sections.Add({ TEXT("Diary, newest first"), Diary.Num() > 0 ? FString::Join(Diary, TEXT("\n")) : FString(TEXT("Nothing written yet.")) });
+	return Page;
+}
+
+FDocumentPage FCampaignSession::Roll()
+{
+	FDocumentPage Page;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("roll"), TEXT("[]"), Object))
+	{
+		return Page;
+	}
+	Page.bValid = true;
+	Page.Title = TEXT("The roll of honour");
+
+	TArray<FString> Awards;
+	const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+	if (Object->TryGetArrayField(TEXT("awards"), List))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *List)
+		{
+			const TSharedPtr<FJsonObject> Award = Value->AsObject();
+			FString Title, Unit, Citation, Date;
+			Award->TryGetStringField(TEXT("title"), Title);
+			Award->TryGetStringField(TEXT("unit"), Unit);
+			Award->TryGetStringField(TEXT("citation"), Citation);
+			Award->TryGetStringField(TEXT("date"), Date);
+			Awards.Add(FString::Printf(TEXT("%s  \u00B7  %s, %s\n%s"), *Unit, *Title, *Date, *Citation));
+		}
+	}
+	Page.Subtitle = FString::Printf(TEXT("%d honour%s won so far. The newest come first."), Awards.Num(), Awards.Num() == 1 ? TEXT("") : TEXT("s"));
+	Page.Sections.Add({ TEXT("Honours"), Awards.Num() > 0 ? FString::Join(Awards, TEXT("\n\n")) : FString(TEXT("No unit has been honoured yet. Take a capital, break a line, hold out under siege.")) });
+
+	TArray<FString> Fallen;
+	if (Object->TryGetArrayField(TEXT("fallen"), List))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *List)
+		{
+			const TSharedPtr<FJsonObject> Unit = Value->AsObject();
+			FString Name, Date, Where, How, By, General;
+			Unit->TryGetStringField(TEXT("name"), Name);
+			Unit->TryGetStringField(TEXT("date"), Date);
+			Unit->TryGetStringField(TEXT("where"), Where);
+			Unit->TryGetStringField(TEXT("how"), How);
+			Unit->TryGetStringField(TEXT("by"), By);
+			Unit->TryGetStringField(TEXT("general"), General);
+			FString Line = FString::Printf(TEXT("%s  \u00B7  %s at %s, %s, by %s forces"), *Name, *How, *Where, *Date, *By);
+			if (!General.IsEmpty())
+			{
+				Line += FString::Printf(TEXT("  \u00B7  %s was with it at the end"), *General);
+			}
+			TArray<FString> Carried;
+			if (Unit->TryGetStringArrayField(TEXT("honours"), Carried) && Carried.Num() > 0)
+			{
+				Line += FString::Printf(TEXT("\nIt carried: %s"), *FString::Join(Carried, TEXT(", ")));
+			}
+			Fallen.Add(Line);
+		}
+	}
+	Page.Sections.Add({ TEXT("The memorial wall"), Fallen.Num() > 0 ? FString::Join(Fallen, TEXT("\n\n")) : FString(TEXT("No corps has been lost.")) });
+	return Page;
 }

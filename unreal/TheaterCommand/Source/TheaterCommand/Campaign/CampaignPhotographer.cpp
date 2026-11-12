@@ -89,6 +89,28 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.bKeep = Shot.bConfirm = Shot.bClose = Shot.bWatch = true;
 	}
 
+	// "-TheaterStart=5,0" begins from another place on the opening screen (here the sixth group, its first side) and
+	// takes the pictures that show what units have made of themselves by then.
+	FString Start;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterStart="), Start, false)) // false: the comma is part of the value
+	{
+		FString Group, Side;
+		if (Start.Split(TEXT(","), &Group, &Side))
+		{
+			StartGroup = FCString::Atoi(*Group);
+			StartSide = FCString::Atoi(*Side);
+		}
+		Shots.Reset();
+		Add(TEXT("20-honours-on-the-standards"), TEXT("Masuria"), 0.2f, -10.0f, 4.0f).Army = TEXT("Masuria");
+		Add(TEXT("21-army-with-stories"), TEXT("Masuria"), 0.36f).Army = TEXT("Masuria");
+		{
+			FShot& Shot = Add(TEXT("22-service-record"), TEXT("Masuria"), 0.36f);
+			Shot.Army = TEXT("Masuria");
+			Shot.bRecord = true;
+		}
+		Add(TEXT("23-roll-of-honour"), TEXT("Masuria"), 0.36f).bRoll = true;
+	}
+
 	// "-TheaterQuick" takes two pictures only, for trying a setting out.
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterQuick")))
 	{
@@ -111,7 +133,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	// The first picture after the opening screen begins a campaign through it, as Germany in September 1939.
 	if (!Shot.bOpening && !Controller->GetSession())
 	{
-		Controller->BeginCampaign(0, 0);
+		Controller->BeginCampaign(StartGroup, StartSide);
 	}
 	const FCampaignMapData& Data = Table->GetData();
 	FVector2D At(Data.Width * 0.5, Data.Height * 0.5);
@@ -134,6 +156,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		return;
 	}
 	Controller->CloseMenu();
+	Controller->CloseDocument();
 	if (!Shot.bKeep)
 	{
 		Controller->CloseFaceOff();
@@ -173,6 +196,27 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (const int32* Target = Data.RegionByName.Find(Shot.Attack))
 	{
 		Controller->OrderTo(*Target);
+	}
+	if (Shot.bRecord)
+	{
+		// The corps of the army in hand that has the most to tell.
+		int32 Best = INDEX_NONE, Most = -1;
+		for (const FTrayCard& Card : Controller->GetArmyTray().Cards)
+		{
+			if (Card.Honours.Num() > Most)
+			{
+				Most = Card.Honours.Num();
+				Best = Card.CorpsId;
+			}
+		}
+		if (Best != INDEX_NONE)
+		{
+			Controller->OpenRecord(Best);
+		}
+	}
+	if (Shot.bRoll)
+	{
+		Controller->OpenRoll();
 	}
 }
 

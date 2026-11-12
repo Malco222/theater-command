@@ -51,6 +51,12 @@ public:
 	/** Sends the given corps in. The battle is settled at once by the rules. */
 	FAttackResult Attack(const TArray<int32>& CorpsIds, int32 RegionId);
 
+	/** One corps' service record: what it is, its honours with their citations, and its diary. */
+	FDocumentPage Record(int32 CorpsId);
+
+	/** The roll of honour and the memorial wall. */
+	FDocumentPage Roll();
+
 	/** Ends the player's month and plays every other nation's. Returns what happened, nation by nation. */
 	FMonthResult EndMonth();
 

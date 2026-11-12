@@ -119,6 +119,7 @@ void ACampaignPlayerController::EnterCampaign()
 	// A clean table: nothing in hand, nothing picked, no old news.
 	Opening.bVisible = false;
 	FaceOff = FFaceOff();
+	CloseDocument();
 	bWatching = false;
 	ArmyRegion = INDEX_NONE;
 	PickedCorps.Reset();
@@ -214,6 +215,38 @@ void ACampaignPlayerController::WheelDown()
 	}
 }
 
+void ACampaignPlayerController::OpenRecord(int32 CorpsId)
+{
+	if (FCampaignSession* Session = GetSession())
+	{
+		Document = Session->Record(CorpsId);
+		++DocumentRevision;
+		if (!Document.bValid)
+		{
+			Notify(TEXT("No record is kept of that corps."));
+		}
+	}
+}
+
+void ACampaignPlayerController::OpenRoll()
+{
+	if (bWatching || FaceOff.bVisible || Opening.bVisible)
+	{
+		return;
+	}
+	if (FCampaignSession* Session = GetSession())
+	{
+		Document = Session->Roll();
+		++DocumentRevision;
+	}
+}
+
+void ACampaignPlayerController::CloseDocument()
+{
+	Document = FDocumentPage();
+	++DocumentRevision;
+}
+
 void ACampaignPlayerController::ToggleMusic()
 {
 	if (ACampaignGameMode* Mode = GetMode())
@@ -233,7 +266,11 @@ void ACampaignPlayerController::SpaceBar()
 void ACampaignPlayerController::Escape()
 {
 	// Esc backs out one step: the watching, the face-off, the army in hand, then the territory.
-	if (Opening.bVisible)
+	if (Document.bValid)
+	{
+		CloseDocument();
+	}
+	else if (Opening.bVisible)
 	{
 		CloseMenu();
 	}
@@ -331,7 +368,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible || Opening.bVisible;
+	const bool bBusy = bWatching || FaceOff.bVisible || Opening.bVisible || Document.bValid;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
@@ -534,6 +571,9 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.MovesMax = Unit.MovesMax;
 		Card.bCanOrder = Unit.bCanOrder;
 		Card.bPicked = PickedCorps.Contains(Unit.Id);
+		Card.Nickname = FText::FromString(Unit.Nickname);
+		Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
+		Card.Honours = Unit.Honours;
 		Tray.Cards.Add(Card);
 		Divisions += Unit.Divisions;
 		++CorpsCount;

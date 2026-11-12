@@ -42,6 +42,8 @@ private:
 		bool bWatch = false; // end the month and watch the other nations move
 		bool bOpening = false; // leave the opening screen up for this picture
 		bool bMenu = false; // open the menu over the campaign
+		bool bRecord = false; // open the service record of the first corps of the army in hand
+		bool bRoll = false; // open the roll of honour
 		int32 Months = 0; // end this many months first
 	};
 
@@ -56,4 +58,6 @@ private:
 	bool bTaken = false;
 	bool bMarched = false;
 	bool bStarted = false;
+	int32 StartGroup = 0;
+	int32 StartSide = 0;
 };

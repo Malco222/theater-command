@@ -33,6 +33,9 @@ struct FTrayCard
 	int32 MovesMax = 0;
 	bool bPicked = false; // going with the army, or left behind
 	bool bCanOrder = false;
+	FText Nickname; // empty until the corps has earned one
+	FText Grade; // "Veteran, 65"
+	TArray<FHonourRibbon> Honours;
 };
 
 /** The army the player has picked up: its general, and its corps as cards. */
@@ -117,6 +120,13 @@ public:
 	const FArmyTray& GetArmyTray() const { return Tray; }
 	const FFaceOff& GetFaceOff() const { return FaceOff; }
 	const FOpening& GetOpening() const { return Opening; }
+
+	/** A page shown over the table: a unit's service record or the roll of honour. Revision goes up when it changes. */
+	const FDocumentPage& GetDocument() const { return Document; }
+	int32 GetDocumentRevision() const { return DocumentRevision; }
+	void OpenRecord(int32 CorpsId);
+	void OpenRoll();
+	void CloseDocument();
 
 	/** Starts the campaign chosen on the opening screen. */
 	void BeginCampaign(int32 GroupIndex, int32 SideIndex);
@@ -211,6 +221,8 @@ private:
 
 	FFaceOff FaceOff;
 	FOpening Opening;
+	FDocumentPage Document;
+	int32 DocumentRevision = 0;
 	TArray<FStartGroup> StartGroups;
 
 	FString NoticeText;

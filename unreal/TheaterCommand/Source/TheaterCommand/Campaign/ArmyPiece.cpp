@@ -52,6 +52,13 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		}
 		NewSignature += FString::Printf(TEXT("|%d"), Unit.Id);
 	}
+	// The standard carries a streamer for every honour its corps have won.
+	int32 HonourCount = 0;
+	for (const FViewCorps& Unit : Corps)
+	{
+		HonourCount += Unit.Honours.Num();
+	}
+	NewSignature += FString::Printf(TEXT("|%dh"), HonourCount);
 	// The standard shows the army's strength to the nearest thousand, so it is remade when that changes.
 	NewSignature += FString::Printf(TEXT("|%dk"), FMath::RoundToInt32(Men / 1000.0f));
 	if (NewSignature != Signature)
@@ -125,6 +132,26 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	AddPart(Cube, FlagCenter + FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
 	AddPart(Cube, FlagCenter - FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
 	AddPart(Sphere, FVector(0.0, 0.0, Top + PoleHeight + 0.4 * U), FVector(1.1 * U, 1.1 * U, 1.1 * U), Brass);
+
+	// Honours: a two-coloured streamer for each, one under another below the colours.
+	int32 Streamer = 0;
+	const double StreamerLength = 3.4 * U, StreamerDepth = 0.62 * U;
+	for (const FViewCorps& Unit : Corps)
+	{
+		for (const FHonourRibbon& Honour : Unit.Honours)
+		{
+			if (Streamer >= 6)
+			{
+				break;
+			}
+			const double Z = FlagCenter.Z - FlagHeight * 0.5 - 0.5 * U - Streamer * (StreamerDepth + 0.16 * U);
+			AddPart(Cube, FVector(0.0, 0.2 * U + StreamerLength * 0.25, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
+				Map->GetSolidMaterial(FLinearColor(Honour.First), 0.6f, 0.0f, 0.6f))->SetCastShadow(false);
+			AddPart(Cube, FVector(0.0, 0.2 * U + StreamerLength * 0.75, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
+				Map->GetSolidMaterial(FLinearColor(Honour.Second), 0.6f, 0.0f, 0.6f))->SetCastShadow(false);
+			++Streamer;
+		}
+	}
 
 	// The figure. Pieces are turned so that the viewer looks along their +X, so the lettering faces back along -X.
 	const FString Figure = Men >= 995000 ? FString::Printf(TEXT("%.1fM"), Men / 1000000.0) : FString::Printf(TEXT("%dk"), FMath::Max(1, FMath::RoundToInt32(Men / 1000.0)));

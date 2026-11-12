@@ -8,6 +8,14 @@
  * never works anything out for itself.
  */
 
+/** An honour a unit carries, as it is shown: what is written on the colours, and the two colours of its ribbon. */
+struct FHonourRibbon
+{
+	FString Title;
+	FColor First = FColor(176, 141, 87);
+	FColor Second = FColor(242, 234, 214);
+};
+
 struct FViewCorps
 {
 	int32 Id = INDEX_NONE;
@@ -24,6 +32,10 @@ struct FViewCorps
 	int32 Moves = 0; // weeks of action left this month
 	int32 MovesMax = 0;
 	bool bCanOrder = false; // the player may give this corps orders right now
+	int32 Experience = 0; // 0 to 100
+	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
+	FString Nickname; // the name the army gives it, once it has earned one
+	TArray<FHonourRibbon> Honours;
 };
 
 struct FCampaignView
@@ -147,4 +159,21 @@ struct FStartGroup
 	int32 From = 1; // the month the player takes over; 1 is September 1939
 	FString ViewMode; // "open" for free play
 	TArray<FStartSide> Sides;
+};
+
+/** A heading and what stands under it, for a page of text shown to the player. */
+struct FDocumentSection
+{
+	FString Heading;
+	FString Body;
+};
+
+/** A page shown over the table: a unit's service record, or the roll of honour. */
+struct FDocumentPage
+{
+	bool bValid = false;
+	FString Title;
+	FString Subtitle;
+	TArray<FHonourRibbon> Ribbons;
+	TArray<FDocumentSection> Sections;
 };

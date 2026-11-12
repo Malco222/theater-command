@@ -18,6 +18,8 @@ Double-click **Play Theater Command.command** in this folder. A Terminal window 
 | Put the army down | Esc |
 | End the month | Enter, or the button at the bottom right. The other nations' moves are played out quickly; Space skips |
 | Music on or off | M |
+| A corps' story | The Service Record button under its card |
+| The roll of honour | The Honours button, top right |
 | Change campaign | The Menu button. The campaign saves itself every month and when you leave |
 | Quit | Cmd+Q |
 
@@ -33,7 +35,9 @@ Each army's standard carries its strength in thousands of men, and is bigger the
 
 What you can do today: choose a campaign and a side, pick up an army, see where it could go, march it, attack with it (face-off screen, odds, the Battle Ticket, then the result with each corps's losses), watch ground change hands and the frontier move, end the month, watch the other nations' months, and read the month's dispatches. If your country falls the war goes on and you can keep watching it.
 
-What the rules can do that the 3D game does not show yet: moving by rail and by sea, landings, fleets and air fleets, building and recruiting, research, diplomacy and generals' skills. The browser prototype has screens for all of these; they come across one at a time.
+**Unit stories.** Every corps keeps a record. Its card in the army tray shows the name the army has given it, how seasoned it is and a ribbon for each honour; the Service Record button under the card opens its honours with their citations and its diary. Honours fly as two-coloured streamers under the army's standard on the map. The Honours button opens the roll of honour and the memorial wall, and honours won and letters from the front arrive with the month's dispatches.
+
+What the rules can do that the 3D game does not show yet: sending an honoured unit home on a bond tour or as instructors, choosing which corps take drafts, raising a lost corps again under its old name, moving by rail and by sea, landings, fleets and air fleets, building and recruiting, research, diplomacy and generals' skills. The browser prototype has screens for all of these; they come across one at a time.
 
 ## How it is put together
 
