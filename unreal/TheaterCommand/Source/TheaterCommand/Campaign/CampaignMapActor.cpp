@@ -1117,6 +1117,27 @@ void ACampaignMapActor::BuildWorks()
 			Model.Box(Foot + FVector(0.0, 2.0 * U, 0.2 * U), FVector(2.4, 0.12, 0.12) * U, Scorch, 12.0, -10.0);
 		}
 	}
+	// Country too steep for tanks is marked with a pair of snow-capped peaks, so it can be told at a glance.
+	{
+		const FLinearColor Rock(FColor::FromHex(TEXT("6F6A62"))), Snow(FColor::FromHex(TEXT("ECEEF0")));
+		for (const int32 RegionId : Land.Steep)
+		{
+			if (!Data.Regions.IsValidIndex(RegionId))
+			{
+				continue;
+			}
+			const FVector2D Spot = Data.Regions[RegionId].Center + FVector2D(4.0, 5.0);
+			const FVector Foot = SurfacePoint(Spot.X, Spot.Y, 0.02);
+			const FVector Peaks[2] = { Foot, Foot + FVector(0.9 * U, 1.5 * U, 0.0) };
+			const double Heights[2] = { 3.0 * U, 2.2 * U };
+			for (int32 Peak = 0; Peak < 2; ++Peak)
+			{
+				const double Height = Heights[Peak], Radius = Height * 0.48;
+				Model.Pillar(Peaks[Peak], Radius, 0.0, Height, Rock, 7);
+				Model.Pillar(Peaks[Peak] + FVector(0.0, 0.0, Height * 0.62), Radius * 0.385, 0.0, Height * 0.385, Snow, 7);
+			}
+		}
+	}
 	if (Model.Vertices.Num() > 0)
 	{
 		WorksMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
