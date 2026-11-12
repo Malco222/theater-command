@@ -10,6 +10,7 @@ import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { BUDGET, PRODUCTION, budgeted, canBuildYet, deliver, firstCorpsNumber, income, upkeepTotal } from './economy';
 import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
+import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
@@ -133,7 +134,11 @@ export function headline(g: Game, kind: Headline['kind'], text: string, nat?: st
 
 // ---- Who stands where ---------------------------------------------------------------
 
-export function bloc(n: Nation): 'allies' | 'axis' | null {
+/** The alliance a nation belongs to: one of the two blocs, or the League of smaller nations that stands apart from both. */
+export type Bloc = 'allies' | 'axis' | 'league';
+
+export function bloc(n: Nation): Bloc | null {
+  if (n.league) return 'league';
   if (n.align === 'allies' || n.align === 'allies_cobelligerent') return 'allies';
   if (n.align === 'axis' || n.align === 'axis_cobelligerent') return 'axis';
   return null;
@@ -164,6 +169,8 @@ export function declareWar(g: Game, a: string, b: string): void {
   // country outside both blocs the neutral world takes note. Both are read off before anything changes.
   const sneak = wouldSurprise(g, a, b);
   const shock = alarmed(g, a, b);
+  // A country outside every alliance that is struck down is a fright to its friends: the month such pacts are made.
+  if (g.flags.open === 1 && bloc(B) === null) g.flags[`shock:${b}`] = g.turn;
   setWar(g, a, b);
   if (sneak) g.flags[`sneak:${a}:${b}`] = g.turn;
   A.offStart[b] = g.turn;
@@ -177,13 +184,24 @@ export function declareWar(g: Game, a: string, b: string): void {
       g.supplyDirty = true;
     }
   }
-  // A neutral that is attacked joins the other side.
+  // A neutral that is attacked joins the other side. A small country in the player's hands chooses for itself.
   const ba = bloc(A);
-  if (bloc(B) === null && ba) {
+  if (bloc(B) === null && ba && ba !== 'league' && !ownPath(g, b)) {
     B.align = ba === 'axis' ? 'allies' : 'axis_cobelligerent';
     B.opinion = B.home = ba === 'axis' ? -100 : 100;
   }
   headline(g, 'war', `${theName(A, true)} declares war on ${theName(B)}.`, a);
+  // War on one member of the League is war on them all.
+  if (B.league && !A.league) {
+    const stood: string[] = [];
+    for (const m of Object.values(g.nations)) {
+      if (!m.league || !m.alive || m.id === b || atWar(g, m.id, a)) continue;
+      setWar(g, m.id, a);
+      g.flags[`war:${m.id}:${a}`] = g.turn;
+      stood.push(m.name);
+    }
+    if (stood.length) headline(g, 'war', `The League stands by ${B.name}: ${stood.length === 1 ? stood[0] : `${stood.slice(0, -1).join(', ')} and ${stood[stood.length - 1]}`} ${stood.length === 1 ? 'is' : 'are'} at war with ${theName(A)} too.`, b);
+  }
   if (A.blitz && !g.flags[`tempo:${a}:${g.turn}`]) {
     g.flags[`tempo:${a}:${g.turn}`] = 1;
     for (const c of g.corps) if (c.nat === a && KIND[c.kind].mobile && g.order[g.phase] === a) { c.ap += 1; c.apMax += 1; }
@@ -948,7 +966,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   storyBattle(g, rep, target, a.odds, attackers, defenders, { sea: opts.sea, air: opts.air, capital: enemyCapital });
   if (prisoners >= 40000) {
     const who = new Set(defU.filter((u) => u.fate === 'surrendered' || u.fate === 'destroyed').map((u) => u.nat));
-    const adj = who.size === 1 ? g.nations[[...who][0]].adj : bloc(g.nations[defNat]) === 'allies' ? 'Allied' : 'Axis';
+    const adj = who.size === 1 ? g.nations[[...who][0]].adj : bloc(g.nations[defNat]) === 'allies' ? 'Allied' : bloc(g.nations[defNat]) === 'league' ? 'League' : 'Axis';
     headline(g, 'battle', `${prisoners.toLocaleString('en-US')} ${adj} troops surrender at ${target.name}.`, defNat, target.id);
   }
   for (const d of affected) checkCollapse(g, d, attNat);

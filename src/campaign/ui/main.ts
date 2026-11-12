@@ -13,7 +13,9 @@ import {
   previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare,
+  leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
 } from '../turn';
+import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
 import { ARSENAL, canStation, factoriesBuilt, workLevel, yardLevel, type Hull, type Offer } from '../arsenal';
 import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
 import { CROSSINGS, ENGINEERING, RIVERS, blocked, bridgeDown, noCrossing, riverNotes, whyBlocked } from '../rivers';
@@ -116,15 +118,21 @@ const viewer = (): string | null => (g.human && g.nations[g.human]?.alive ? g.hu
  * What a nation is to the player: one word for the badge, and the class that colours it. With nobody at the
  * controls there are no friends or enemies, so the word is the side the nation is on.
  */
-function relationWord(nat: string): { kind: Standing | 'axis' | 'allies'; word: string } {
+function relationWord(nat: string): { kind: Standing | 'axis' | 'allies' | 'league'; word: string } {
   const me = viewer();
+  const side = bloc(g.nations[nat]);
   if (me) {
     const kind = standing(g, me, nat);
+    // A member of the League that is neither the player's ally nor his enemy is no ordinary neutral: say so.
+    if (kind === 'neutral' && side === 'league') return { kind: 'league', word: 'League' };
     return { kind, word: kind === 'own' ? 'Yours' : kind === 'ally' ? 'Ally' : kind === 'enemy' ? 'Enemy' : 'Neutral' };
   }
-  const side = bloc(g.nations[nat]);
-  return side ? { kind: side, word: side === 'axis' ? 'Axis' : 'Allies' } : { kind: 'neutral', word: 'Neutral' };
+  return side ? { kind: side, word: side === 'axis' ? 'Axis' : side === 'league' ? 'League' : 'Allies' } : { kind: 'neutral', word: 'Neutral' };
 }
+
+/** Where a nation stands, in a word or two and as a phrase: on the track between the blocs, or in the League. */
+const standLabel = (n: Nation): string => (n.league ? 'League member' : TRACK_LABEL[n.align]);
+const standPhrase = (n: Nation): string => (n.league ? `a member of ${LEAGUE.name}` : TRACK_PHRASE[n.align]);
 
 /** The banner at the head of the region panel: whose ground this is to the player, in a word and a sentence. */
 function standingNote(r: Region): string {
@@ -135,12 +143,12 @@ function standingNote(r: Region): string {
   const foes = n.atWar.filter((x) => x !== me && g.nations[x]?.alive);
   const wars = foes.length ? `At war with ${nameList(foes)}.` : 'Not at war with anyone.';
   let line: string;
-  if (!me) line = `${N} is ${TRACK_PHRASE[n.align]}. ${wars}`;
+  if (!me) line = `${N} is ${standPhrase(n)}. ${wars}`;
   else if (kind === 'own') line = o === me ? 'Your own ground.' : 'Held by your troops.';
   else if (kind === 'enemy') line = `${N} is at war with you.${foes.length ? ` Also at war with ${nameList(foes)}.` : ''}`;
   else if (kind === 'ally') line = n.atWar.some((x) => g.nations[me].atWar.includes(x)) ? `${N} is on your side and fighting the same enemy.` : `${N} is on your side. ${wars}`;
-  else if (bloc(n)) line = foes.length ? `${N} is ${TRACK_PHRASE[n.align]}, but not at war with you. ${wars}` : `${N} is ${TRACK_PHRASE[n.align]}, but is not at war with anyone.`;
-  else line = `${N} is ${TRACK_PHRASE[n.align]}. ${wars}`;
+  else if (bloc(n)) line = foes.length ? `${N} is ${standPhrase(n)}, but not at war with you. ${wars}` : `${N} is ${standPhrase(n)}, but is not at war with anyone.`;
+  else line = `${N} is ${standPhrase(n)}. ${wars}`;
   // Occupied ground: say where the nation it was taken from stands as well.
   if (o !== h && g.nations[o]) {
     const O = upFirst(theName(o));
@@ -354,7 +362,7 @@ function mount(): void {
         <div class="passing" id="passing"></div>
         <div class="alerts" id="alerts"></div>
         <div class="tray" id="tray"></div>
-        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Air fleet</span></div>
+        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Air fleet</span></div>
         <div class="zoom"><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
       </div>
@@ -450,7 +458,8 @@ function refresh(): void {
   let occ = '';
   for (const r of g.regions) {
     const n = g.nations[r.ctrl];
-    (regs[r.id] as SVGPathElement).setAttribute('fill', mix(n.color, '#e9e2cf', n.atWar.length ? 0.4 : 0.63));
+    // The League shows in one colour of its own, as the third alliance it is.
+    (regs[r.id] as SVGPathElement).setAttribute('fill', mix(n.league ? LEAGUE.color : n.color, '#e9e2cf', n.atWar.length ? 0.4 : n.league ? 0.5 : 0.63));
     if (r.ctrl !== r.owner) occ += `<path class="occ" d="${pathOf(r.polys)}"/>`;
   }
   $('#occ').innerHTML = occ;
@@ -500,6 +509,7 @@ function refresh(): void {
   else if (ui.sea >= 0 && ui.tab === 'region') marks += `<circle class="mk seasel" cx="${g.seas[ui.sea].x}" cy="${g.seas[ui.sea].y + 9}" r="33"/>`;
   $('#marks').innerHTML = marks;
   ($('#legwar') as HTMLElement).hidden = !marks.includes('mk war');
+  ($('#legleague') as HTMLElement).hidden = !leagueMembers(g).length;
   $('#rails').innerHTML = railMarks();
   $('#bridges').innerHTML = bridgeMarks();
   $('#fleets').innerHTML = airBaseMarks() + fleetMarks();
@@ -638,6 +648,8 @@ function drawBar(): void {
   let b = '';
   if (passing) b += `<button class="btn go" data-act="skip" title="Play the rest of the month at once">Skip ▸▸</button>`;
   else if (me && humanUp(g)) {
+    // A small country chooses its own path: the card is one click away, and flagged while it stands alone under attack.
+    if (!eve && paths(g).length) { const alone = !bloc(g.nations[me]) && g.nations[me].atWar.length > 0; b += `<button class="btn${alone ? ' flag' : ''}" data-act="path" title="${alone ? 'You are at war and stand alone. See who would take you in.' : 'Join the Axis, join the Allies, stand alone, or found a League of your own.'}">Your path${alone ? '<i class="dotn"></i>' : ''}</button>`; }
     if (declarable(g).length) b += `<button class="btn warn" data-act="declare">Declare war</button>`;
     b += `<button class="btn go" data-act="end">${eve ? 'Finish deployment ▸' : 'End month ▸'}</button>`;
   } else {
@@ -1194,7 +1206,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -1938,14 +1950,93 @@ function powersPane(): string {
       out += `<div class="nat" style="opacity:.7">${chip(n.id)}<b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}</small><div class="will"><small>Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}</small></div></div>`;
     }
   }
+  out += leaguePane();
   out += trackPane(neutral);
   return out;
+}
+
+/** One country's answer to an invitation, with the button that sends it when the player may. */
+function inviteRow(x: { nat: string; ok: boolean; why: string }, act: string, label: string, can: boolean, extra = ''): string {
+  return `<div class="lgrow${x.ok ? '' : ' no'}">${chip(x.nat)}<span class="grow"><b>${esc(natName(x.nat))}</b><small>${esc(x.why)}</small></span>${x.ok ? `<button class="btn small" data-act="${act}" data-nat="${x.nat}" ${extra} ${can ? '' : 'disabled'}>${label}</button>` : '<small class="stand">Would refuse</small>'}</div>`;
+}
+
+/** The countries a member of the League may invite, willing ones first. */
+function inviteList(): string {
+  const me = g.nations[g.human!];
+  const list = leagueInvites(g);
+  const yes = list.filter((x) => x.ok), no = list.filter((x) => !x.ok);
+  const can = (id: string): boolean => whyNotLeagueInvite(g, id) === null;
+  return `<div class="facts"><div class="fact"><span>Political capital</span><b>${Math.floor(me.pc)}</b></div><div class="fact"><span>Each month</span><b>+${pcIncome(me.id)}</b></div><div class="fact"><span>An invitation</span><b>${LEAGUE.invite.cost}</b></div></div>
+    ${yes.length ? `<div class="lgrows">${yes.map((x) => inviteRow(x, 'leagueinvite', `Invite · ${LEAGUE.invite.cost}`, can(x.nat))).join('')}</div>` : '<p class="sub">No country is ready to join today. A country says yes when it is a friend of a member or has a nation at war on its border.</p>'}
+    ${no.length ? `<details class="lgno"><summary>${no.length} ${no.length === 1 ? 'country' : 'countries'} would refuse today</summary><div class="lgrows">${no.map((x) => inviteRow(x, '', '', false)).join('')}</div></details>` : ''}`;
+}
+
+/** The League on the Powers screen: who belongs to it, and for a member in the player's hands, whom to invite. */
+function leaguePane(): string {
+  if (!isOpen(g)) return '';
+  const members = leagueMembers(g);
+  const me = g.human && g.nations[g.human].alive ? g.nations[g.human] : null;
+  const mine = !!me?.league;
+  if (!leagueFounded(g)) {
+    return me && paths(g).length ? `<h3 class="lgh"><i></i>A third alliance</h3><p class="sub">No League exists yet. As a small country you could found one with a willing neighbour: an alliance apart from the Axis and the Allies whose members defend one another.</p><button class="btn small" data-act="path">Your path ▸</button>` : '';
+  }
+  let out = `<h3 class="lgh"><i></i>${esc(upFirst(LEAGUE.full))}</h3><p class="sub">A third alliance, of smaller nations, that belongs to neither the Axis nor the Allies. Founded ${date(g.flags['league:born'])}. War on one member is war on them all.</p>`;
+  if (!members.length) return out + '<p class="sub">Every member has fallen. The League is history.</p>';
+  for (const n of members) out += `<div class="nat lg">${chip(n.id)}<b>${esc(n.name)}${n.id === g.human ? ' <span class="tag good">You</span>' : ''}</b><small>${num(fieldArmy(g, n.id))} divisions</small><div class="will"><small>${n.atWar.length ? `At war with ${n.atWar.map(natName).join(', ')}` : 'At peace'} · member since ${date(g.flags[`league:${n.id}`] ?? g.flags['league:born'])}</small></div></div>`;
+  if (mine && humanUp(g)) out += `<h3>Invite a country</h3>${inviteList()}`;
+  else if (me && paths(g).some((o) => o.id === 'join' && o.ok)) out += `<button class="btn small" data-act="path">Ask to join ▸</button>`;
+  return out;
+}
+
+const PATH_TEXT: Record<PathId, { title: string; text: string }> = {
+  axis: { title: 'Join the Axis', text: 'Germany\'s side. Axis armies may cross your land and yours theirs, you share their supply lines, and you can go to war beside them. You are at war with nobody until you declare it or the Allies do.' },
+  allies: { title: 'Join the Allies', text: 'Britain\'s side. Allied armies may cross your land and yours theirs, you share their supply lines, and you can go to war beside them. You are at war with nobody until you declare it or the Axis does.' },
+  alone: { title: 'Stand alone', text: 'You are at nobody\'s side and nobody\'s quarrel is yours. If you are attacked you fight alone, unless you choose a side then.' },
+  found: { title: 'Found the League', text: 'A third alliance, of smaller nations, apart from the Axis and the Allies. Its members are allies of one another, and war on one is war on them all. Pick the country that founds it with you; as a member you can invite more.' },
+  join: { title: 'Join the League', text: 'The third alliance, of smaller nations, apart from the Axis and the Allies. Its members are allies of one another, and war on one is war on them all.' },
+};
+
+/** The card where a small country in the player's hands chooses its path. 'ask' is a path waiting for the player's yes. */
+function pathCard(ask: string): string {
+  const me = g.nations[g.human!];
+  const opts = paths(g);
+  const mine = bloc(me);
+  const can = humanUp(g);
+  const members = leagueMembers(g).filter((n) => n.id !== me.id);
+  const foes = me.atWar.filter((x) => g.nations[x]?.alive);
+  const where = mine === 'league' ? `a member of ${LEAGUE.name}${members.length ? `, with ${listOf(members.map((n) => n.name))}` : ''}` : mine ? `a member of ${mine === 'axis' ? 'the Axis' : 'the Allies'}` : standPhrase(me);
+  const row = (o: PathOption): string => {
+    const T = PATH_TEXT[o.id];
+    let text = T.text, body = '';
+    if (o.id === 'alone' && !o.now && o.ok) text = `Step back to strict neutrality: you stop leaning toward ${step(me) > 0 ? 'the Axis' : 'the Allies'}, and answer to nobody.`;
+    if (o.id === 'join' && members.length) text += ` Its members today: ${listOf(members.map((n) => n.name))}.`;
+    if (o.id === 'found' && o.ok) {
+      const list = leaguePartners(g);
+      const yes = list.filter((x) => x.ok), no = list.filter((x) => !x.ok);
+      body = `<div class="lgrows">${yes.map((x) => inviteRow(x, 'takepath', 'Found it together', can, 'data-path="found"')).join('')}</div>${no.length ? `<details class="lgno"><summary>${no.length} ${no.length === 1 ? 'country' : 'countries'} would refuse today</summary><div class="lgrows">${no.map((x) => inviteRow(x, '', '', false)).join('')}</div></details>` : ''}`;
+    }
+    if (o.now && o.id === 'join' && can) body = `<h4>Invite a country</h4>${inviteList()}`;
+    const final = o.id === 'axis' || o.id === 'allies' || o.id === 'join';
+    const btn = o.now ? '<span class="tag good">Your path today</span>'
+      : !o.ok ? `<small class="pathno">${esc(o.why)}</small>`
+        : o.id === 'found' ? ''
+          : ask === o.id ? `<span class="pathask"><b>${final ? 'An alliance, once joined, is not left.' : 'Are you sure?'}</b><button class="btn warn" data-act="takepath" data-path="${o.id}" ${can ? '' : 'disabled'}>Yes, ${T.title[0].toLowerCase()}${T.title.slice(1)}</button><button class="btn" data-act="path">No</button></span>`
+            : `<button class="btn" data-act="path" data-ask="${o.id}" ${can ? '' : 'disabled'}>${T.title} ▸</button>`;
+    const title = !o.now ? T.title : o.id === 'join' ? upFirst(LEAGUE.full) : o.id === 'axis' ? 'The Axis' : o.id === 'allies' ? 'The Allies' : T.title;
+    return `<div class="pathrow ${o.id}${o.now ? ' now' : ''}${o.ok || o.now ? '' : ' off'}"><div class="pathhead"><b>${esc(title)}</b>${btn}</div>${o.ok || o.now ? `<p>${esc(text)}</p>` : ''}${body}</div>`;
+  };
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Your country's path · ${date(g.turn)}</div><h2>${flagIcon(me.id, me.color, 34, 'inh')} Where ${esc(theName(me.id))} stands</h2></header>
+    <div class="body path"><p class="lead">${esc(upFirst(theName(me.id)))} is ${esc(where)}.${foes.length ? ` You are at war with ${esc(nameList(foes))}.` : ' You are at peace.'} A small country chooses its own path, and nobody chooses it for you: no treaty signs your land away, and no courting moves you.</p>
+    ${opts.map(row).join('')}</div>
+    <footer><button class="btn go" data-act="close">Close</button></footer>`;
 }
 
 /** The alignment track: where every country at peace stands between the two blocs, and which way it is drifting. */
 function trackPane(list: Nation[]): string {
   const me = g.human && g.nations[g.human].alive ? g.nations[g.human] : null;
-  const mine = me ? bloc(me) : null;
+  const side = me ? bloc(me) : null;
+  // Only the two blocs court neutrals: the League invites, and a country alone has nobody to court for.
+  const mine = side === 'axis' || side === 'allies' ? side : null;
   const m = momentum(g);
   const wind = Math.abs(m) < 0.15 ? 'Neither side has the upper hand, so neutrals are sitting tight.' : `${m > 0 ? 'The Axis is' : 'The Allies are'} winning, and neutrals ${Math.abs(m) > 0.6 ? 'are bending' : 'are starting to bend'} that way.`;
   let out = `<h3>The alignment track</h3><p class="sub">Every country stands somewhere between the two blocs. The dot is its public opinion. ${wind}</p>`;
@@ -1955,7 +2046,7 @@ function trackPane(list: Nation[]): string {
       <p class="sub" style="margin-top:6px">Courting a neutral costs ${DIPLOMACY.court.cost} and pulls it toward ${mine === 'axis' ? 'the Axis' : 'the Allies'}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${money(DIPLOMACY.tradeIncome)} a month to your treasury` : ''}; one that is fully won over joins your bloc.</p>`;
   }
   out += `<div class="trackhead"><span>◂ Allies</span><span>Independent</span><span>Axis ▸</span></div>`;
-  const rows = list.filter((n) => Math.abs(step(n)) <= 1 || !n.atWar.length).sort((a, b) => a.opinion - b.opinion);
+  const rows = list.filter((n) => !n.league && !ownPath(g, n.id) && (Math.abs(step(n)) <= 1 || !n.atWar.length)).sort((a, b) => a.opinion - b.opinion);
   for (const n of rows) {
     const pos = 50 + Math.max(-100, Math.min(100, n.opinion)) / 2;
     let btn = '';
@@ -1966,7 +2057,7 @@ function trackPane(list: Nation[]): string {
       btn = `<button class="btn small" data-act="court" data-nat="${n.id}" ${c.ok ? '' : 'disabled'} title="${esc(c.ok ? word : c.why)}">Court</button>`;
     }
     const frs = friendsOf(n.id).filter((f) => g.nations[f.nat]?.alive);
-    out += `<div class="trk"${frs.length ? ` title="Friends of ${esc(n.name)}: ${esc(frs.map((f) => `${natName(f.nat)} (${f.why})`).join('; '))}"` : ''}>${chip(n.id)}<b>${esc(n.name)}</b><small>${TRACK_LABEL[n.align]}</small>${btn}${frs.length ? `<small class="frs">Friends: ${esc(listOf(frs.map((f) => natName(f.nat))))}</small>` : ''}
+    out += `<div class="trk"${frs.length ? ` title="Friends of ${esc(n.name)}: ${esc(frs.map((f) => `${natName(f.nat)} (${f.why})`).join('; '))}"` : ''}>${chip(n.id)}<b>${esc(n.name)}</b><small>${standLabel(n)}</small>${btn}${frs.length ? `<small class="frs">Friends: ${esc(listOf(frs.map((f) => natName(f.nat))))}</small>` : ''}
       <div class="track"><i class="t" style="left:15%"></i><i class="t" style="left:35%"></i><i class="t mid" style="left:50%"></i><i class="t" style="left:65%"></i><i class="t" style="left:85%"></i><i class="dot" style="left:${pos.toFixed(1)}%"></i></div></div>`;
   }
   out += `<p class="sub" style="margin-top:8px">The inner marks are where a country starts to lean; the outer marks are where it asks to join.</p>`;
@@ -2375,6 +2466,10 @@ function openModal(m: typeof ui.modal): void {
     card.innerHTML = invadeCard(m.on, m.target ?? -1);
   }
   else if (m.kind === 'level') card.innerHTML = levelCard();
+  else if (m.kind === 'path') {
+    if (!paths(g).length) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = pathCard(m.ask ?? '');
+  }
   else if (m.kind === 'ledger') {
     const nat = m.nat || g.human;
     if (!nat || !g.nations[nat]) { ui.modal = null; veil.classList.remove('open'); return; }
@@ -2412,7 +2507,7 @@ function openModal(m: typeof ui.modal): void {
 // ---- The start screen: the grand campaign at the front door, the historical scenarios behind it ----
 
 interface GrandYear { year: number; turn: number; date: string; text: string }
-const GRAND = grandData as unknown as { years: GrandYear[]; nations: { id: string; years: Record<string, string> }[]; watch: Record<string, string> };
+const GRAND = grandData as unknown as { years: GrandYear[]; nations: { id: string; small?: boolean; years: Record<string, string> }[]; watch: Record<string, string> };
 
 /** The years a country can begin a grand campaign in. Nobody at the controls can begin in any. */
 const grandYears = (nat: string): number[] => (nat ? Object.keys(GRAND.nations.find((n) => n.id === nat)?.years ?? {}).map(Number) : GRAND.years.map((y) => y.year));
@@ -2467,18 +2562,22 @@ function startCard(): string {
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `${saved.open ? 'Watching a war nobody has seen' : 'Watching history'}, ${date(saved.turn)}`}${saved.human && saved.open ? `, grand campaign${saved.level !== null && DIFFICULTY.levels[saved.level] ? `, ${esc(DIFFICULTY.levels[saved.level].name)}` : ''}` : ''}. Saved in this browser.</span></button>` : '';
   const pick = grandPick();
   const years = grandYears(pick.nat);
-  const tile = (id: string, name: string): string => `<button class="gcnat${id === pick.nat ? ' on' : ''}" data-act="gcnat" data-nat="${id}" aria-pressed="${id === pick.nat}">${id ? flagIcon(id, g.nations[id].color, 54) : '<span class="gcwatch">◉</span>'}<b>${esc(name)}</b></button>`;
+  const tile = (id: string, name: string, size = 54): string => `<button class="gcnat${id === pick.nat ? ' on' : ''}" data-act="gcnat" data-nat="${id}" aria-pressed="${id === pick.nat}">${id ? flagIcon(id, g.nations[id].color, size) : '<span class="gcwatch">◉</span>'}<b>${esc(name)}</b></button>`;
+  const smallPick = GRAND.nations.some((n) => n.small && n.id === pick.nat);
   const goals = pick.nat && pick.year.turn === 1 ? GOAL_KEYS.map((key) => { const goal = GOALS[pick.nat]?.[key]; return goal ? `<span class="sgoal"><i>${key === 'short' ? 'Short campaign' : 'Long campaign'}</i>${esc(goal.text)}</span>` : ''; }).join('') : '';
   return `${startHead('Theater Command')}
     <div class="body"><p class="lead">Pick a country and a year, then <b>make your own history</b>. From the day you take over nobody follows the history books: you decide where your armies, fleets and air fleets go, and so does the staff of every other nation.</p>
     ${resume ? `<div class="sides">${resume}</div>` : staleSave(readSave() ?? '') ? '<div class="note">The campaign saved in this browser was played on an earlier, smaller map and cannot be continued in this version. Starting a new game replaces it.</div>' : ''}
     <h3>The grand campaign · choose your country</h3>
-    <div class="gcnats">${GRAND.nations.map((n) => tile(n.id, g.nations[n.id].name)).join('')}${tile('', 'Watch')}</div>
+    <div class="gcnats">${GRAND.nations.filter((n) => !n.small).map((n) => tile(n.id, g.nations[n.id].name)).join('')}${tile('', 'Watch')}</div>
+    <h3>Or a smaller nation · choose your own path</h3>
+    <div class="gcnats small">${GRAND.nations.filter((n) => n.small).map((n) => tile(n.id, g.nations[n.id].name, 38)).join('')}</div>
+    <p class="gcsmallnote">A small country decides where it stands: join the Axis, join the Allies, stand alone, or found a League of smaller nations with its neighbours.</p>
     <h3>Choose the year you take over</h3>
     <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>
     ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}` : ''}
     <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)}` : ''}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
-      <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
+      <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}${smallPick ? ' Open <b>Your path</b> on the top bar to choose where you stand.' : ''}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
       <button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button>${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
     <h3>Historical scenarios</h3>
     <div class="sides"><button class="sidebtn wide" data-act="menu" data-menu="scenarios"><b>Play a turning point of the war</b><span>Fourteen shorter campaigns, from the Battle of Britain and Barbarossa to D-Day and Operation Bagration. Each starts at a turning point with the other nations following history's plan, or you can sit back and watch history unfold.</span></button></div>
@@ -2817,10 +2916,11 @@ function invadeCard(on: string, target: number): string {
   const r = target >= 0 ? g.regions[target] : null;
   const mine = bloc(g.nations[me]);
   const blocOf = (b: 'allies' | 'axis'): string => (b === 'axis' ? 'the Axis' : 'the Allies');
-  const friendRows = f.friends.map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(natName(x.nat))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(TRACK_LABEL[g.nations[x.nat].align])}</small></div>`).join('');
+  const friendRows = f.friends.map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(natName(x.nat))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(standLabel(g.nations[x.nat]))}</small></div>`).join('');
   const what: string[] = [];
   const The = esc(upFirst(theName(on)));
   what.push(f.joins ? `<b>${The} joins ${blocOf(f.joins)}</b> the moment it is attacked, and its ${num(fieldArmy(g, on))} divisions fight for them.` : `<b>${The}</b> and its ${num(fieldArmy(g, on))} divisions are at war with you from today.`);
+  if (f.league.length) what.push(`<b>The League stands by it.</b> ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${esc(listOf(f.league.map(natName)))} ${f.league.length === 1 ? 'goes' : 'go'} to war with you the same day, with ${num(f.league.reduce((sum, id) => sum + fieldArmy(g, id), 0))} divisions between them.`);
   if (f.trade) what.push(`<b>Its trade ends.</b> ${The} trades with you today, worth ${money(DIPLOMACY.tradeIncome)} a month to your treasury.`);
   if (f.sneak > 1) what.push(`<b>Surprise.</b> It is at peace and not expecting you: this month your attacks on its ground are <b>${Math.round((f.sneak - 1) * 100)}% stronger</b>. Next month the bonus is gone.`);
   else what.push('No surprise: it is already at war with your side and its army is ready.');
@@ -2835,10 +2935,11 @@ function invadeCard(on: string, target: number): string {
       what.push(`<b>${esc(upFirst(theName(a.nat)))}</b> <b>${how}</b>${a.trade ? `, and <b>stops trading with you</b> (${money(DIPLOMACY.tradeIncome)} a month lost)` : ''}.`);
     }
     if (!moved.length) what.push('Nobody changes sides over this one attack, but the next may tip them.');
-  } else if (f.joins === null && bloc(n) !== null) what.push(`${The} already belongs to ${blocOf(bloc(n)!)}: the neutral world expects this war and takes no fright at it.`);
+  } else if (f.joins === null && bloc(n) === 'league') what.push('The neutrals on the track between the blocs take no side in a quarrel with the League.');
+  else if (f.joins === null && bloc(n) !== null) what.push(`${The} already belongs to ${blocOf(bloc(n) as 'allies' | 'axis')}: the neutral world expects this war and takes no fright at it.`);
   else if (!mine) what.push('Your country belongs to neither bloc, so the neutrals have no side to turn away from. They will remember it all the same.');
   const at = TRACK.indexOf(n.align) - 3;
-  const stands = at === 0 ? 'is neutral and at peace with you' : Math.abs(at) === 1 ? `is neutral, leans toward ${blocOf(at > 0 ? 'axis' : 'allies')}, and is at peace with you` : `is ${esc(TRACK_PHRASE[n.align])}, but at peace with you`;
+  const stands = n.league ? `is a member of ${LEAGUE.name} and at peace with you` : at === 0 ? 'is neutral and at peace with you' : Math.abs(at) === 1 ? `is neutral, leans toward ${blocOf(at > 0 ? 'axis' : 'allies')}, and is at peace with you` : `is ${esc(TRACK_PHRASE[n.align])}, but at peace with you`;
   const lead = r
     ? `Your army is about to cross the frontier into <b>${esc(r.name)}</b>. ${The} ${stands}. Marching in means war.`
     : `${The} ${stands}.`;
@@ -2853,7 +2954,7 @@ function declareCard(): string {
   const list = declarable(g);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy</div><h2>Declare war</h2></header>
     <div class="body"><p class="lead">A neutral that is attacked joins the other side, and its friends may march to help it at once.</p>
-    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(fieldArmy(g, id))} divisions · ${esc(TRACK_LABEL[g.nations[id].align])}${friendsOf(id).some((f) => g.nations[f.nat]?.alive) ? ` · friends: ${esc(listOf(friendsOf(id).filter((f) => g.nations[f.nat]?.alive).map((f) => natName(f.nat))))}` : ''}</span></span></button>`).join('')}
+    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(fieldArmy(g, id))} divisions · ${esc(standLabel(g.nations[id]))}${friendsOf(id).some((f) => g.nations[f.nat]?.alive) ? ` · friends: ${esc(listOf(friendsOf(id).filter((f) => g.nations[f.nat]?.alive).map((f) => natName(f.nat))))}` : ''}</span></span></button>`).join('')}
     <p class="sub" style="margin-top:8px">Pick a country to see what declaring war on it would mean. Nothing happens until you confirm.</p></div>
     <footer><button class="btn" data-act="close">Not now</button></footer>`;
 }
@@ -3374,6 +3475,18 @@ function onClick(e: MouseEvent): void {
     case 'level': openModal({ kind: 'level' }); break;
     case 'setlevel': { if (g.human && setLevel(g, t.dataset.level ?? '')) { const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; } break; }
     case 'askdeclare': openModal({ kind: 'invade', on: t.dataset.nat!, target: -1 }); break;
+    case 'path': openModal({ kind: 'path', ask: t.dataset.ask ?? '' }); break;
+    case 'takepath': {
+      const h = g.headlines.length;
+      if (orderPath(g, t.dataset.path as PathId, t.dataset.nat || undefined)) { ui.unread += g.headlines.length - h; refresh(); openModal({ kind: 'path' }); }
+      break;
+    }
+    case 'leagueinvite': {
+      const h = g.headlines.length;
+      const keep = $('#card').scrollTop;
+      if (orderLeagueInvite(g, t.dataset.nat!)) { ui.unread += g.headlines.length - h; refresh(); if (ui.modal?.kind === 'path') { openModal({ kind: 'path' }); $('#card').scrollTop = keep; } }
+      break;
+    }
     case 'dodeclare': {
       const h = g.headlines.length;
       const to = Number(t.dataset.target ?? -1);
