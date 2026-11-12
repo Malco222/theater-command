@@ -16,10 +16,12 @@ Double-click **Play Theater Command.command** in this folder. A Terminal window 
 | Attack | Right-click red ground. The two armies are drawn up on a face-off screen with the odds; send them in or call it off |
 | Leave a corps behind | Click its card in the tray at the bottom |
 | Put the army down | Esc |
-| End the month | Enter, or the button at the bottom right. The other nations' moves are played out; Space skips |
+| End the month | Enter, or the button at the bottom right. The other nations' moves are played out quickly; Space skips |
+| Music on or off | M |
+| Change campaign | The Menu button. The campaign saves itself every month and when you leave |
 | Quit | Cmd+Q |
 
-To lead another nation, start the game from Terminal with `-TheaterNation=FRA` (or `UK`, `POL`) added. A proper opening screen will replace this.
+The game opens on a screen that offers every place a campaign can begin, from September 1939 to January 1944, with free play and watching, and offers to continue the campaign you left.
 
 ## What is here today
 
@@ -27,9 +29,11 @@ The campaign table for September 1939: Europe, North Africa and the Middle East 
 
 **It runs on the real rules.** The campaign rules worked out and tested in the browser prototype are the ones deciding everything here: where an army can march, what an attack comes to, what the other nations do with their month. So a war played here goes the way it goes there.
 
-What you can do today: pick up an army, see where it could go, march it, attack with it (face-off screen, odds, the Battle Ticket, then the result with each corps's losses), watch ground change hands and the frontier move, end the month, watch the other nations' months, and read the month's dispatches. If your country falls the war goes on and you can keep watching it.
+Each army's standard carries its strength in thousands of men, and is bigger the bigger the army.
 
-What the rules can do that the 3D game does not show yet: moving by rail and by sea, landings, fleets and air fleets, building and recruiting, research, diplomacy, generals' skills, saved games, the later starting dates and free play. The browser prototype has screens for all of these; they come across one at a time.
+What you can do today: choose a campaign and a side, pick up an army, see where it could go, march it, attack with it (face-off screen, odds, the Battle Ticket, then the result with each corps's losses), watch ground change hands and the frontier move, end the month, watch the other nations' months, and read the month's dispatches. If your country falls the war goes on and you can keep watching it.
+
+What the rules can do that the 3D game does not show yet: moving by rail and by sea, landings, fleets and air fleets, building and recruiting, research, diplomacy and generals' skills. The browser prototype has screens for all of these; they come across one at a time.
 
 ## How it is put together
 
@@ -60,6 +64,10 @@ Three rules shape the code:
 - **One set of rules.** The rules are not rewritten in C++. The prototype's TypeScript is bundled into a single JavaScript file and run inside the game by a JavaScript engine (the one that comes with macOS today; a portable one for Windows later). Everything crosses that boundary as JSON: the game asks by name (`start`, `view`, `reach`, `move`, `previewAttack`, `attack`, `endMonth`) and draws what comes back. So the 3D game cannot drift from the tested rules.
 - **The table is built, not placed.** The level is empty. Everything on it is made from the data when the game starts, so nothing has to be arranged by hand in the editor and nothing large sits in the repository.
 
+## Music
+
+The music is one original piece, "The Map Room", written as notes in `Tools/make_music.mjs` and played by a small synthesiser in the same file, so nothing in it is borrowed from any recording, film or game. `Tools/build_music.sh` makes it and brings it into Unreal; the launcher does this the first time. The result is about 17 MB and can always be remade, so it is not kept in the repository. It is a synthesiser, not an orchestra: recorded music can replace it later without anything else changing.
+
 ## Stand-ins
 
 Some of what is on screen is a placeholder for the real thing:
@@ -75,6 +83,7 @@ From `TheaterCommand/`:
 ```
 ./Tools/build.sh             # compile the C++
 ./Tools/build_rules.sh       # bundle the rules again, after the prototype's rules or data change (needs Node.js)
+./Tools/build_music.sh       # make the music and bring it into Unreal (needs Node.js)
 ./Tools/build_content.sh     # remake the few binary assets, after changing build_content.py
 ./Tools/take_pictures.sh     # run the game, take the photographer's set of pictures, print frame rates
 ```

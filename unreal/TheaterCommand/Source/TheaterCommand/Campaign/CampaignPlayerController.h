@@ -192,6 +192,7 @@ private:
 	void WatchNextStep();
 	void FinishMonth();
 	void SpaceBar();
+	void ToggleMusic();
 	void RefreshOpening(bool bShow);
 	void EnterCampaign();
 	class ACampaignGameMode* GetMode() const;

@@ -24,6 +24,12 @@ fi
 # Bring the rules up to date with the browser version's, when the tools to do it are here.
 ./Tools/build_rules.sh > /tmp/theater-command-rules.log 2>&1 || true
 
+# Make the music the first time (it is not kept in the repository). It takes about half a minute.
+if [ ! -f Content/Campaign/Music/Theme.uasset ]; then
+  echo "Making the music (first time only)..."
+  ./Tools/build_music.sh > /tmp/theater-command-music.log 2>&1 || true
+fi
+
 echo "Starting Theater Command..."
 "$ENGINE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" "$PWD/TheaterCommand.uproject" -game -windowed > /tmp/theater-command-game.log 2>&1 &
 disown

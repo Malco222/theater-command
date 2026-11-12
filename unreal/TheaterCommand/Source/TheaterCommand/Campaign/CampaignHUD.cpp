@@ -351,7 +351,7 @@ namespace
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 9.0f)).Visibility(EVisibility::HitTestInvisible)
 								[
 									SNew(STextBlock)
-									.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick: pick up an army or a territory    Right-click: send the army    Enter: end the month")))
+									.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick: pick up an army or a territory    Right-click: send the army    Enter: end the month    M: music")))
 									.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
 								]
 							]

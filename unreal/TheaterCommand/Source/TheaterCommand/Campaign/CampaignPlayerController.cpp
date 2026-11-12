@@ -195,6 +195,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::Escape);
 	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EndMonth);
 	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceBar);
+	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ACampaignPlayerController::ToggleMusic);
 }
 
 void ACampaignPlayerController::WheelUp()
@@ -210,6 +211,17 @@ void ACampaignPlayerController::WheelDown()
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 	{
 		Eye->ZoomBy(1.0f);
+	}
+}
+
+void ACampaignPlayerController::ToggleMusic()
+{
+	if (ACampaignGameMode* Mode = GetMode())
+	{
+		if (Mode->HasMusic())
+		{
+			Notify(Mode->ToggleMusic() ? TEXT("Music on.") : TEXT("Music off. Press M to bring it back."), 3.0);
+		}
 	}
 }
 

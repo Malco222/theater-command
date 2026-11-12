@@ -14,3 +14,6 @@ DerivedDataCache/
 
 # Build tools fetched for this machine (Node.js), not part of the game.
 .tools/
+
+# The music is made by Tools/build_music.sh and is too large to keep here.
+TheaterCommand/Content/Campaign/Music/

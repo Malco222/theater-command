@@ -6,6 +6,7 @@
 
 class FCampaignSession;
 class ACampaignMapActor;
+class UAudioComponent;
 
 /**
  * Sets the campaign up when the game starts: lays the table, lights it, and
@@ -21,6 +22,11 @@ public:
 	ACampaignGameMode();
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+	virtual void BeginPlay() override;
+
+	/** Turns the music off, or on again. Returns true if it is now playing. */
+	bool ToggleMusic();
+	bool HasMusic() const { return Music != nullptr; }
 
 	/** The campaign being played: the rules, and the latest picture of the war. */
 	FCampaignSession* GetSession() const { return Session.Get(); }
@@ -45,4 +51,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<ACampaignMapActor> Table;
+
+	/** The campaign's music, playing on a loop. */
+	UPROPERTY(Transient)
+	TObjectPtr<UAudioComponent> Music;
+	bool bMusicOn = true;
 };
