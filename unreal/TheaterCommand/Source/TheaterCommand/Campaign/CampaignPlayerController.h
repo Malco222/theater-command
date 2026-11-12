@@ -133,6 +133,7 @@ struct FWarPrompt
 {
 	bool bVisible = false;
 	FString Tag; // the country war would be declared on
+	FString Name; // its name as it reads in a sentence
 	int32 Region = INDEX_NONE; // where the army in hand was being sent, to carry on there once war is declared
 	FText Title;
 	FText Body;
@@ -194,7 +195,7 @@ public:
 	 * Asks the player whether to declare war on the country that holds a territory. Returns false, asking
 	 * nothing, if that country is not one he is at peace with and could go to war with this month.
 	 */
-	bool OfferWar(int32 RegionId);
+	bool OfferWar(int32 RegionId, bool bMarching = true);
 
 	/** The same question about the country whose territory is selected, asked from the territory panel. */
 	void OfferWarOnSelected();

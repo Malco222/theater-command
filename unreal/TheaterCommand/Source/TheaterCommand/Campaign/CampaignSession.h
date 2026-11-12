@@ -50,6 +50,8 @@ public:
 	const FCampaignView& GetView() const { return View; }
 
 	/** Where the given corps could go this month. */
+	/** What declaring war on a country would mean, for the question asked first. RegionId is where the army in hand was going, or INDEX_NONE. */
+	FWarPlan PlanWar(const FString& Nation, int32 RegionId);
 	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds);
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */

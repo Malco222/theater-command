@@ -162,6 +162,18 @@ struct FReachRegion
 	int32 Cost = 0;
 	int32 Previous = INDEX_NONE; // the region it would be entered from
 	bool bAttack = false; // enemy-held: going there means a battle
+	FString War; // the country at peace that holds it: going there means declaring war on it first
+	bool IsWar() const { return !War.IsEmpty(); }
+};
+
+/** What declaring war on a country would mean, in the words the question is asked in. */
+struct FWarPlan
+{
+	bool bOk = false;
+	FString Name; // the country as it reads in a sentence: "the Netherlands"
+	FString Lead; // where the country stands today
+	FString Friends; // who its friends are
+	TArray<FString> Lines; // what follows from saying yes
 };
 
 /** One line of a Battle Ticket: something the campaign map says, and what that does in the battle. */

@@ -549,6 +549,7 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds)
 			R.Cost = Entry->GetIntegerField(TEXT("cost"));
 			R.Previous = Entry->GetIntegerField(TEXT("prev"));
 			Entry->TryGetBoolField(TEXT("attack"), R.bAttack);
+			Entry->TryGetStringField(TEXT("war"), R.War);
 			Out.Add(R);
 		}
 	}
@@ -869,6 +870,21 @@ TArray<FCorpsMove> FCampaignSession::Ship(const TArray<int32>& CorpsIds, int32 R
 	TArray<FCorpsMove> Out = ReadMoves(Object);
 	TakeView(Object);
 	return Out;
+}
+
+FWarPlan FCampaignSession::PlanWar(const FString& Nation, int32 RegionId)
+{
+	FWarPlan Plan;
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("warPlan"), FString::Printf(TEXT("[\"%s\",%d]"), *Nation, RegionId), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), Plan.bOk);
+		Object->TryGetStringField(TEXT("name"), Plan.Name);
+		Object->TryGetStringField(TEXT("lead"), Plan.Lead);
+		Object->TryGetStringField(TEXT("friends"), Plan.Friends);
+		Object->TryGetStringArrayField(TEXT("lines"), Plan.Lines);
+	}
+	return Plan;
 }
 
 FLandingPlan FCampaignSession::PlanLanding(const TArray<int32>& CorpsIds, int32 RegionId)

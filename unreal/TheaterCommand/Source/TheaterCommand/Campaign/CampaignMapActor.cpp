@@ -1768,14 +1768,17 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 	const FLinearColor March = bByRail ? FLinearColor(0.62f, 0.8f, 1.0f, 0.2f) : FLinearColor(0.8f, 1.0f, 0.82f, 0.13f);
 	const FLinearColor Attack(0.9f, 0.06f, 0.03f, 0.42f);
 	const FColor AttackRing = FLinearColor(1.0f, 0.25f, 0.18f, 0.9f).ToFColor(false);
+	// Ground across a frontier at peace is amber: the army can go there, but only by declaring war.
+	const FLinearColor War(1.0f, 0.55f, 0.0f, 0.5f);
+	const FColor WarRing = FLinearColor(1.0f, 0.72f, 0.16f, 0.9f).ToFColor(false);
 	for (const FReachRegion& Entry : Reach)
 	{
-		AppendRegionFill(Buffers, Entry.Region, Entry.bAttack ? Attack : March);
-		if (Entry.bAttack && Data.Regions.IsValidIndex(Entry.Region))
+		AppendRegionFill(Buffers, Entry.Region, Entry.IsWar() ? War : Entry.bAttack ? Attack : March);
+		if ((Entry.bAttack || Entry.IsWar()) && Data.Regions.IsValidIndex(Entry.Region))
 		{
 			for (const TArray<FVector2D>& Ring : Data.Regions[Entry.Region].Polygons)
 			{
-				AppendRibbon(Buffers, Ring, 0.34, 0.26, AttackRing, true);
+				AppendRibbon(Buffers, Ring, 0.34, 0.26, Entry.IsWar() ? WarRing : AttackRing, true);
 			}
 		}
 	}

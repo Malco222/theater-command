@@ -1074,9 +1074,9 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 	{
 		const FString Name = Map->GetData().Regions[RegionId].Name;
 		Tray.PendingButton = FText::FromString(FString::Printf(TEXT("%s %s"),
-			bBySea ? (Target->bAttack ? TEXT("LAND AT") : TEXT("BY SEA TO")) : bByRail ? TEXT("BY RAIL TO") : (Target->bAttack ? TEXT("ATTACK") : TEXT("MARCH TO")), *Name.ToUpper()));
+			bBySea ? (Target->bAttack ? TEXT("LAND AT") : TEXT("BY SEA TO")) : bByRail ? TEXT("BY RAIL TO") : Target->IsWar() ? TEXT("INVADE") : (Target->bAttack ? TEXT("ATTACK") : TEXT("MARCH TO")), *Name.ToUpper()));
 		Tray.Hint = FText::FromString(FString::Printf(TEXT("Click %s again, or press the button above, to %s. Click anywhere else to think again."),
-			*Name, Target->bAttack ? TEXT("draw up the attack") : TEXT("send them")));
+			*Name, Target->IsWar() ? TEXT("be asked whether you mean war") : Target->bAttack ? TEXT("draw up the attack") : TEXT("send them")));
 	}
 	else
 	{
@@ -1103,7 +1103,13 @@ void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
 		return;
 	}
 	const FReachRegion* Target = (bOnTable && RegionId != INDEX_NONE && RegionId != ArmyRegion) ? FindReach(RegionId) : nullptr;
-	if (Target && !Target->bAttack)
+	if (Target && Target->IsWar())
+	{
+		// Set down across a frontier at peace: the flag goes back, and the game asks whether he means war.
+		Piece->ReturnToRest();
+		OfferWar(RegionId);
+	}
+	else if (Target && !Target->bAttack)
 	{
 		// Set down on ground it can reach: it goes there, settling from where the hand let go.
 		const FVector From = Piece->GetActorLocation();
@@ -1144,10 +1150,7 @@ void ACampaignPlayerController::SelectRegion(int32 RegionId)
 
 void ACampaignPlayerController::OfferWarOnSelected()
 {
-	if (OfferWar(SelectedRegion))
-	{
-		WarPrompt.Region = INDEX_NONE; // asked from the panel: no army is on its way there
-	}
+	OfferWar(SelectedRegion, false); // asked from the panel: no army is on its way there
 }
 
 bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
@@ -1428,8 +1431,13 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		SelectRegion(RegionId);
 		return;
 	}
-	if (!Target && OfferWar(RegionId))
+	if ((!Target || Target->IsWar()) && OfferWar(RegionId))
 	{
+		return;
+	}
+	if (Target && Target->IsWar())
+	{
+		Notify(TEXT("War cannot be declared on them this month."));
 		return;
 	}
 	if (!Target)
@@ -1485,7 +1493,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	SelectRegion(RegionId);
 }
 
-bool ACampaignPlayerController::OfferWar(int32 RegionId)
+bool ACampaignPlayerController::OfferWar(int32 RegionId, bool bMarching)
 {
 	FCampaignSession* Session = GetSession();
 	if (!Session || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(RegionId))
@@ -1503,11 +1511,34 @@ bool ACampaignPlayerController::OfferWar(int32 RegionId)
 	WarPrompt = FWarPrompt();
 	WarPrompt.bVisible = true;
 	WarPrompt.Tag = Tag;
-	WarPrompt.Region = ArmyRegion != INDEX_NONE ? RegionId : INDEX_NONE;
+	// An army in hand that stands on the frontier goes on there once war is declared.
+	const FReachRegion* Across = bMarching && ArmyRegion != INDEX_NONE ? FindReach(RegionId) : nullptr;
+	WarPrompt.Region = Across && Across->IsWar() ? RegionId : INDEX_NONE;
 	WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Declare war on %s?"), *Name));
-	WarPrompt.Body = FText::FromString(FString::Printf(
-		TEXT("%s is at peace with you. If you declare war, its army will fight you from this month, and it will throw in its lot with your enemies. ")
-		TEXT("Your armies on its border can attack as soon as war is declared.\n\nThis cannot be taken back."), *Name));
+	// What it would mean, as the rules foresee it: where the country stands, its friends, and what follows.
+	const FWarPlan Plan = Session->PlanWar(Tag, WarPrompt.Region);
+	if (Plan.bOk)
+	{
+		WarPrompt.Name = Plan.Name;
+		WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Declare war on %s?"), *Plan.Name));
+		FString Body = Plan.Lead + TEXT("\n\n") + Plan.Friends + TEXT("\n\nWhat follows if you say yes:");
+		for (const FString& Line : Plan.Lines)
+		{
+			Body += TEXT("\n\u2022  ") + Line;
+		}
+		Body += TEXT("\n\nThis cannot be taken back. Say no, and your army stays where it is.");
+		WarPrompt.Body = FText::FromString(Body);
+	}
+	else
+	{
+		WarPrompt.Body = FText::FromString(FString::Printf(
+			TEXT("%s is at peace with you. If you declare war, its army will fight you from this month, and it will throw in its lot with your enemies. ")
+			TEXT("Your armies on its border can attack as soon as war is declared.\n\nThis cannot be taken back."), *Name));
+	}
+	if (WarPrompt.Region != INDEX_NONE)
+	{
+		WarPrompt.Confirm = FText::FromString(TEXT("DECLARE WAR AND MARCH"));
+	}
 	return true;
 }
 
@@ -1547,7 +1578,7 @@ void ACampaignPlayerController::ConfirmWar()
 		return;
 	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(Asked.Tag) : nullptr;
-	const FString Name = Nation ? Nation->Name : Asked.Tag;
+	const FString Name = !Asked.Name.IsEmpty() ? Asked.Name : Nation ? Nation->Name : Asked.Tag;
 	if (!Session->Declare(Asked.Tag))
 	{
 		Notify(FString::Printf(TEXT("War could not be declared on %s this month."), *Name));
@@ -1558,7 +1589,8 @@ void ACampaignPlayerController::ConfirmWar()
 	RefreshOrders();
 	Notify(FString::Printf(TEXT("War is declared on %s."), *Name), 6.0);
 	CampaignSounds::Play(this, TEXT("siren"), 0.5f);
-	if (Asked.Region != INDEX_NONE && ArmyRegion != INDEX_NONE && FindReach(Asked.Region))
+	const FReachRegion* Onward = Asked.Region != INDEX_NONE && ArmyRegion != INDEX_NONE ? FindReach(Asked.Region) : nullptr;
+	if (Onward && !Onward->IsWar())
 	{
 		// The army that was being sent there goes on: against a defended place that means the face-off.
 		OrderTo(Asked.Region);

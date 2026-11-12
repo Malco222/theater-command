@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0739807 2026-11-12. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 892cf5f 2026-11-12. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1447,6 +1447,32 @@
         if: ["alive:HUN", "war:HUN,SOV", "allHeld:allies,Debrecen", "allHeld:axis,Budapest"],
         text: "The ring has closed round Budapest. Two Soviet fronts have met west of the city on the Danube, and some seventy thousand German and Hungarian soldiers and nearly a million civilians are shut in. The Soviet officers sent forward under a white flag with terms did not come back alive."
       }
+    ]
+  };
+
+  // ../../data/campaign/relations.json
+  var relations_default = {
+    _note: "Friendships between countries, and what a surprise attack is worth and costs. The grand campaign only. 'sneak.attack' multiplies the attacks of a nation, in the month it declares war, on the ground of a country that was at peace with it and with all its allies until that day: the defenders are caught unready. It is the same for every nation, the computer's included. 'wary' is the price the player pays for attacking a country that belongs to neither bloc: every neutral still at peace moves 'all.opinion' points of public opinion away from the player's bloc, and 'all.home' points of the leaning it drifts back to, so part of the damage is lasting. Friends of the victim move by 'friend' instead. A neutral that was leaning the player's way may step back and stop trading, and one already doubtful may start to lean toward the other bloc and in time join it. Countries that are hard to move in diplomacy (resist in diplomacy.json) are as hard to alarm. 'groups' are circles of countries that stand together, each with a name and the reason, as it reads after 'friends:'. 'pairs' are single friendships: [one, the other, the reason]. Friendship is mutual.",
+    sneak: { attack: 1.15 },
+    wary: { all: { opinion: 8, home: 2 }, friend: { opinion: 25, home: 10 } },
+    groups: [
+      { id: "nordic", name: "the Nordic countries", why: "Nordic neighbours who have kept the peace among themselves for a century", nations: ["NOR", "SWE", "DEN", "FIN"] },
+      { id: "baltic", name: "the Baltic states", why: "the three Baltic republics, bound by their entente of 1934", nations: ["EST", "LAT", "LIT"] },
+      { id: "low", name: "the Low Countries", why: "the Low Countries, neighbours and partners in trade", nations: ["BEL", "NED", "LUX"] },
+      { id: "balkan", name: "the Balkan Entente", why: "partners in the Balkan Pact of 1934", nations: ["YUG", "GRE", "ROM", "TUR"] },
+      { id: "iberia", name: "the Iberian neighbours", why: "bound by the Iberian treaty of friendship of 1939", nations: ["ESP", "POR"] }
+    ],
+    pairs: [
+      ["UK", "POR", "the oldest alliance in Europe, kept since 1373"],
+      ["UK", "GRE", "Britain guaranteed Greek independence in April 1939"],
+      ["UK", "TUR", "the treaty of mutual aid of October 1939"],
+      ["FRA", "TUR", "the treaty of mutual aid of October 1939"],
+      ["FRA", "BEL", "comrades in arms of the last war"],
+      ["POL", "ROM", "allies since their treaty of 1921"],
+      ["POL", "HUN", "an old friendship between the two peoples"],
+      ["HUN", "ITA", "friends since their treaty of 1927"],
+      ["BUL", "GER", "comrades in arms of the last war"],
+      ["IRL", "USA", "ties of family across the Atlantic"]
     ]
   };
 
@@ -5214,6 +5240,15 @@
   // ../../src/campaign/diplomacy.ts
   var DIPLOMACY = diplomacy_default;
   var TRACK = ["allies", "allies_cobelligerent", "leaning_allies", "independent", "leaning_axis", "axis_cobelligerent", "axis"];
+  var TRACK_PHRASE = {
+    allies: "a member of the Allies",
+    allies_cobelligerent: "fighting alongside the Allies",
+    leaning_allies: "neutral, and leaning toward the Allies",
+    independent: "neutral",
+    leaning_axis: "neutral, and leaning toward the Axis",
+    axis_cobelligerent: "fighting alongside the Axis",
+    axis: "a member of the Axis"
+  };
   var step = (n) => TRACK.indexOf(n.align) - 3;
   var sideOf2 = (b) => b === "axis" ? 1 : -1;
   var clamp2 = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -5242,6 +5277,88 @@
   }
   var courtable = (n) => n.alive && !n.dormant && !n.atWar.length && Math.abs(step(n)) <= 1;
   var blocName = (s) => s > 0 ? "the Axis" : "the Allies";
+  var RELATIONS = relations_default;
+  function friendsOf(nat) {
+    const out = /* @__PURE__ */ new Map();
+    for (const gp of RELATIONS.groups) if (gp.nations.includes(nat)) {
+      for (const id of gp.nations) if (id !== nat && !out.has(id)) out.set(id, gp.why);
+    }
+    for (const [a, b, why] of RELATIONS.pairs) {
+      if (a === nat && !out.has(b)) out.set(b, why);
+      if (b === nat && !out.has(a)) out.set(a, why);
+    }
+    return [...out].map(([id, why]) => ({ nat: id, why }));
+  }
+  var sneakOn = (g2, by, on) => g2.flags.open === 1 && g2.flags[`sneak:${by}:${on}`] === g2.turn;
+  function wouldSurprise(g2, by, on) {
+    const B = g2.nations[on];
+    return g2.flags.open === 1 && !!B && !B.atWar.some((x) => x === by || allied(g2, x, by));
+  }
+  function wouldStand(g2, n, opinion) {
+    if (!courtable(n)) return n.align;
+    const last = g2.flags[`step:${n.id}`];
+    if (last !== void 0 && g2.turn - last < DIPLOMACY.stepEvery) return n.align;
+    const s = step(n), side2 = Math.sign(opinion);
+    if (s === 0 && Math.abs(opinion) >= DIPLOMACY.leanAt) return TRACK[side2 + 3];
+    if (s !== 0 && opinion * s < DIPLOMACY.backAt) return "independent";
+    if (s !== 0 && opinion * s >= DIPLOMACY.joinAt) {
+      const b = s > 0 ? "axis" : "allies";
+      const leader = g2.nations[DIPLOMACY.leaders[b]];
+      if (leader?.alive && bloc(leader) === b) return TRACK[3 * s + 3];
+    }
+    return n.align;
+  }
+  function alarmed(g2, by, on) {
+    const A = g2.nations[by], B = g2.nations[on];
+    const b = A ? bloc(A) : null;
+    if (g2.flags.open !== 1 || by !== g2.human || !A || !B || !b || bloc(B) !== null) return [];
+    const friends = new Map(friendsOf(on).map((f) => [f.nat, f.why]));
+    const out = [];
+    for (const n of Object.values(g2.nations)) {
+      if (n.id === by || n.id === on || !courtable(n)) continue;
+      const why = friends.get(n.id);
+      const w = why !== void 0 ? RELATIONS.wary.friend : RELATIONS.wary.all;
+      const k = -sideOf2(b) * (DIPLOMACY.resist[n.id] ?? 1);
+      const opinion = clamp2(n.opinion + w.opinion * k, -100, 100);
+      const to = wouldStand(g2, n, opinion);
+      out.push({
+        nat: n.id,
+        friend: why !== void 0,
+        why: why ?? "",
+        opinion,
+        home: clamp2(n.home + w.home * k, -100, 100),
+        from: n.align,
+        to,
+        trade: DIPLOMACY.majors.includes(by) && step(n) === sideOf2(b) && TRACK.indexOf(to) - 3 !== sideOf2(b)
+      });
+    }
+    const rank = (a) => a.friend ? 0 : a.from !== a.to ? 1 : 2;
+    return out.sort((x, y) => rank(x) - rank(y) || g2.nations[x.nat].name.localeCompare(g2.nations[y.nat].name));
+  }
+  function alarm(g2, list2, on) {
+    if (!list2.length) return;
+    const friends = list2.filter((a) => a.friend).map((a) => g2.nations[a.nat].name);
+    const names = friends.length <= 1 ? friends.join("") : `${friends.slice(0, -1).join(", ")} and ${friends[friends.length - 1]}`;
+    headline(g2, "event", friends.length ? `The attack on ${g2.nations[on].name} alarms the neutral world, and its friends most of all: ${names}.` : `The attack on ${g2.nations[on].name} alarms the neutral world.`, on);
+    for (const a of list2) {
+      const n = g2.nations[a.nat];
+      n.opinion = a.opinion;
+      n.home = a.home;
+      settle(g2, n);
+    }
+  }
+  function warForecast(g2, by, on) {
+    const A = g2.nations[by], B = g2.nations[on];
+    const ba = A ? bloc(A) : null;
+    return {
+      on,
+      joins: B && bloc(B) === null && ba ? ba === "axis" ? "allies" : "axis" : null,
+      sneak: wouldSurprise(g2, by, on) ? RELATIONS.sneak.attack : 1,
+      friends: friendsOf(on).filter((f) => g2.nations[f.nat]?.alive),
+      alarm: alarmed(g2, by, on),
+      trade: g2.flags.open === 1 && tradePartners(g2, by).some((n) => n.id === on)
+    };
+  }
   function setAlign(g2, n, s) {
     n.align = TRACK[s + 3];
     g2.flags[`step:${n.id}`] = g2.turn;
@@ -6949,7 +7066,10 @@
   function declareWar(g2, a, b) {
     const A = g2.nations[a], B = g2.nations[b];
     if (!A.alive || !B.alive || atWar(g2, a, b) || allied(g2, a, b)) return;
+    const sneak = wouldSurprise(g2, a, b);
+    const shock = alarmed(g2, a, b);
     setWar(g2, a, b);
+    if (sneak) g2.flags[`sneak:${a}:${b}`] = g2.turn;
     A.offStart[b] = g2.turn;
     g2.flags[`war:${a}:${b}`] = g2.turn;
     if (A.align === "leaning_axis" || A.align === "leaning_allies") {
@@ -6975,6 +7095,7 @@
     }
     g2.supplyDirty = true;
     reactionMoves(g2, a, b);
+    alarm(g2, shock, b);
   }
   function reactionMoves(g2, aggressor, victim) {
     let moved = 0;
@@ -6994,6 +7115,11 @@
   function armySize(g2, nat) {
     let s = 0;
     for (const c of g2.corps) if (c.nat === nat && !g2.regions[c.reg].overseas) s += c.divs * c.str;
+    return s;
+  }
+  function fieldArmy(g2, nat) {
+    let s = 0;
+    for (const c of g2.corps) if (c.nat === nat) s += c.divs * c.str;
     return s;
   }
   var inDesert = (r) => r.overseas || r.terrain === DESERT.terrain;
@@ -7226,7 +7352,7 @@
     const wide = groundRules(g2);
     const land2 = opts.sea === void 0;
     const armsA = wide ? combinedArms(g2, land2 ? attackers2.filter((c) => !noCrossing(g2, c.kind, c.reg, target.id)) : attackers2, target, false) : null, armsD = wide ? combinedArms(g2, defenders, target, true) : null;
-    let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0;
+    let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false;
     let roadA = 0, railA = 1, roadD = 0, railD = 1;
     const rivers = /* @__PURE__ */ new Set();
     const sap = wide ? sappers(attackers2.filter((c) => !land2 || !blocked(g2, c, target))) : 0;
@@ -7272,6 +7398,10 @@
       const lead2 = cmdAttack(g2, c, pocket);
       if (pocket && lead2 > cmdAttack(g2, c, false)) trap = true;
       if (tempo && KIND[c.kind].mobile) p *= 1.2;
+      if (wide && sneakOn(g2, c.nat, target.ctrl)) {
+        p *= RELATIONS.sneak.attack;
+        sneaked = true;
+      }
       if (g2.nations[c.nat].slowCommand) p *= 0.85;
       p *= techMul(g2, c.nat, "doctrine");
       if (opts.sea !== void 0) p *= opts.sea;
@@ -7455,6 +7585,7 @@
     if (thin < 1) lines.push({ label: "Supply line", value: "Defenders at the end of a long supply line", effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
     if (coldDef) lines.push({ label: "Winter", value: "Defenders without winter equipment", effect: `Defence cut to ${Math.round(EASTERN.winter.defence * 100)}%` });
     if (tempo) lines.push({ label: "Tempo", value: "New offensive", effect: "Fast troops hit 20% harder in the first two turns" });
+    if (sneaked) lines.push({ label: "Surprise", value: "War was declared this month on a country at peace", effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
     if (armorShock) lines.push({ label: "Armor", value: "Tanks against a defence without armor", effect: "Tank attack up 25%" });
     if (armorStuck) lines.push({ label: "Armor", value: "Tanks in close country", effect: "Tank attack cut to 60%" });
     if (flank > 1) lines.push({ label: "Direction", value: `Attack from ${sources.size} sides`, effect: `Attack up ${Math.round((flank - 1) * 100)}%` });
@@ -10124,6 +10255,23 @@
     }
     return [...out];
   }
+  function invasions(g2, cs) {
+    const out = /* @__PURE__ */ new Map();
+    if (!humanUp(g2) || onEve(g2)) return out;
+    const can = new Set(declarable(g2));
+    if (!can.size) return out;
+    for (const c of cs) {
+      if (!canOrder(g2, c) || c.ap <= 0) continue;
+      for (const j of g2.regions[c.reg].nb) {
+        const r = g2.regions[j];
+        if (can.has(r.ctrl) && !blocked(g2, c, r, c.reg)) out.set(j, r.ctrl);
+      }
+    }
+    return out;
+  }
+  function previewDeclare(g2, on) {
+    return g2.human && declarable(g2).includes(on) ? warForecast(g2, g2.human, on) : null;
+  }
   function orderDeclare(g2, on) {
     if (!g2.human || current(g2) !== g2.human || !declarable(g2).includes(on)) return false;
     declareWar(g2, g2.human, on);
@@ -10911,13 +11059,19 @@
     const s = game();
     const merged = /* @__PURE__ */ new Map();
     if (humanUp(s)) {
-      for (const c of corpsById(s, ids)) {
+      const cs = corpsById(s, ids);
+      for (const c of cs) {
         for (const [id, r] of reach2(s, c)) {
           if (id === c.reg) continue;
           const old = merged.get(id);
           if (!old || r.cost < old.cost) merged.set(id, { id, cost: r.cost, attack: r.attack || !!old?.attack, prev: r.prev });
           else if (r.attack) old.attack = true;
         }
+      }
+      for (const [id, on] of invasions(s, cs)) {
+        if (merged.has(id)) continue;
+        const from = cs.find((c) => s.regions[c.reg].nb.includes(id));
+        merged.set(id, { id, cost: 0, attack: false, prev: from ? from.reg : -1, war: on });
       }
     }
     return { regions: [...merged.values()] };
@@ -11316,6 +11470,52 @@
     const s = game();
     return { ok: humanUp(s) && orderDeclare(s, on), view: view() };
   }
+  var theName2 = (s, id) => {
+    const nm = s.nations[id]?.name ?? id;
+    return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm;
+  };
+  var upFirst = (t) => t ? t[0].toUpperCase() + t.slice(1) : t;
+  var listOf2 = (names) => names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  function warPlan(on, target = -1) {
+    const s = game();
+    const f = previewDeclare(s, on);
+    const n = s.nations[on];
+    if (!f || !n || !s.human) return { ok: false, name: "", lead: "", friends: "", lines: [] };
+    const mine = bloc(s.nations[s.human]);
+    const blocOf = (b) => b === "axis" ? "the Axis" : "the Allies";
+    const The = upFirst(theName2(s, on));
+    const trade = shown(DIPLOMACY.tradeIncome).toLocaleString("en-US");
+    const divs = fieldArmy(s, on).toLocaleString("en-US");
+    const lines = [];
+    lines.push(f.joins ? `${The} joins ${blocOf(f.joins)} the moment it is attacked, and its ${divs} divisions fight for them.` : `${The} and its ${divs} divisions are at war with you from today.`);
+    if (f.trade) lines.push(`Its trade ends. ${The} trades with you today, worth ${trade} a month to your treasury.`);
+    if (f.sneak > 1) lines.push(`Surprise. It is at peace and not expecting you: this month your attacks on its ground are ${Math.round((f.sneak - 1) * 100)}% stronger. Next month the bonus is gone.`);
+    else if (n.atWar.some((x) => x === s.human || allied(s, x, s.human))) lines.push("No surprise: it is already at war with your side and its army is ready.");
+    else lines.push("No surprise: its army is watching the frontier and is ready for you.");
+    const moved = f.alarm.filter((a) => a.from !== a.to);
+    const friends = f.alarm.filter((a) => a.friend);
+    const other = mine === "axis" ? "the Allies" : "the Axis", own = mine === "axis" ? "the Axis" : "the Allies";
+    if (f.alarm.length) {
+      if (friends.length) lines.push(`Its friends turn against you. Public opinion in ${listOf2(friends.map((a) => theName2(s, a.nat)))} swings hard toward ${other}, and part of that never comes back.`);
+      const rest = f.alarm.length - friends.length;
+      if (rest > 0) lines.push(`The neutral world grows wary. ${rest} other ${rest === 1 ? "neutral moves" : "neutrals move"} a little away from ${own}. Every attack on a neutral adds to it.`);
+      for (const a of moved) {
+        const was = TRACK.indexOf(a.from) - 3, now = TRACK.indexOf(a.to) - 3;
+        const how = now === 0 ? `no longer leans toward ${blocOf(was > 0 ? "axis" : "allies")}` : Math.abs(now) === 1 ? `begins to lean toward ${blocOf(now > 0 ? "axis" : "allies")}` : `throws in its lot with ${blocOf(now > 0 ? "axis" : "allies")}`;
+        lines.push(`${upFirst(theName2(s, a.nat))} ${how}${a.trade ? `, and stops trading with you (${trade} a month lost)` : ""}.`);
+      }
+      if (!moved.length) lines.push("Nobody changes sides over this one attack, but the next may tip them.");
+    } else if (f.joins === null && bloc(n) !== null) lines.push(`${The} already belongs to ${blocOf(bloc(n))}: the neutral world expects this war and takes no fright at it.`);
+    else if (!mine) lines.push("Your country belongs to neither bloc, so the neutrals have no side to turn away from. They will remember it all the same.");
+    const at = TRACK.indexOf(n.align) - 3;
+    const stands = at === 0 ? "is neutral and at peace with you" : Math.abs(at) === 1 ? `is neutral, leans toward ${blocOf(at > 0 ? "axis" : "allies")}, and is at peace with you` : `is ${TRACK_PHRASE[n.align]}, but at peace with you`;
+    const r = target >= 0 ? s.regions[target] : null;
+    const lead2 = r ? `Your army is about to cross the frontier into ${r.name}. ${The} ${stands}. Marching in means war.` : `${The} ${stands}.`;
+    const ties = /* @__PURE__ */ new Map();
+    for (const x of f.friends) ties.set(x.why, [...ties.get(x.why) ?? [], theName2(s, x.nat)]);
+    const friendsLine = f.friends.length ? `Its friends: ${[...ties].map(([why, who]) => `${listOf2(who)} (${why})`).join("; ")}.` : `${The} has no close friends among the nations.`;
+    return { ok: true, name: theName2(s, on), lead: lead2, friends: friendsLine, lines };
+  }
   var dateOf = (turn) => turnToDate(turn).label;
   function record(id) {
     const s = game();
@@ -11402,6 +11602,7 @@
     fortify,
     cancel,
     declare,
+    warPlan,
     ledger: ledger2,
     arsenal,
     order,

@@ -30,14 +30,17 @@
 //   TC.order(key, regionId)             -> { ok, name, view }: places one of those orders
 //   TC.ledger()                         -> the player's books: money in by source, upkeep by arm, what is left, every province's yield, what is on order
 //   TC.declare(nation)                  -> { ok, view }: the player declares war. view.declare lists who it can be declared on
+//   TC.warPlan(nation, regionId?)       -> { ok, lead, friends, lines }: what declaring war would mean, for the question asked first
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { allied, atWar, createGame, men, railReach as railReachOf } from '../../../src/campaign/game';
+import { allied, atWar, bloc, createGame, fieldArmy, men, railReach as railReachOf } from '../../../src/campaign/game';
+import { DIPLOMACY, TRACK, TRACK_PHRASE } from '../../../src/campaign/diplomacy';
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
+  invasions, previewDeclare,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
@@ -400,15 +403,22 @@ function load(text: string) {
 /** Where a picked-up army could go: anywhere any one of its corps could, and what it could attack. */
 function reachOf(ids: number[]) {
   const s = game();
-  const merged = new Map<number, { id: number; cost: number; attack: boolean; prev: number }>();
+  const merged = new Map<number, { id: number; cost: number; attack: boolean; prev: number; war?: string }>();
   if (humanUp(s)) {
-    for (const c of corpsById(s, ids)) {
+    const cs = corpsById(s, ids);
+    for (const c of cs) {
       for (const [id, r] of reach(s, c)) {
         if (id === c.reg) continue;
         const old = merged.get(id);
         if (!old || r.cost < old.cost) merged.set(id, { id, cost: r.cost, attack: r.attack || !!old?.attack, prev: r.prev });
         else if (r.attack) old.attack = true;
       }
+    }
+    // Ground across a neutral frontier: the army can go there only by declaring war, and the game asks first.
+    for (const [id, on] of invasions(s, cs)) {
+      if (merged.has(id)) continue;
+      const from = cs.find((c) => s.regions[c.reg].nb.includes(id));
+      merged.set(id, { id, cost: 0, attack: false, prev: from ? from.reg : -1, war: on });
     }
   }
   return { regions: [...merged.values()] };
@@ -837,6 +847,59 @@ function declare(on: string) {
   return { ok: humanUp(s) && orderDeclare(s, on), view: view() };
 }
 
+/** A nation's name as it reads inside a sentence: "the United Kingdom", "Germany". */
+const theName = (s: Game, id: string): string => { const nm = s.nations[id]?.name ?? id; return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm; };
+const upFirst = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
+const listOf = (names: string[]): string => (names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
+/**
+ * What declaring war on a country would mean, in the words the question is asked in: where it stands, who its
+ * friends are, and what follows from saying yes. Nothing is changed. With a region, the army in hand is on its way there.
+ */
+function warPlan(on: string, target = -1) {
+  const s = game();
+  const f = previewDeclare(s, on);
+  const n = s.nations[on];
+  if (!f || !n || !s.human) return { ok: false, name: '', lead: '', friends: '', lines: [] as string[] };
+  const mine = bloc(s.nations[s.human]);
+  const blocOf = (b: 'allies' | 'axis'): string => (b === 'axis' ? 'the Axis' : 'the Allies');
+  const The = upFirst(theName(s, on));
+  const trade = shown(DIPLOMACY.tradeIncome).toLocaleString('en-US');
+  const divs = fieldArmy(s, on).toLocaleString('en-US');
+  const lines: string[] = [];
+  lines.push(f.joins ? `${The} joins ${blocOf(f.joins)} the moment it is attacked, and its ${divs} divisions fight for them.` : `${The} and its ${divs} divisions are at war with you from today.`);
+  if (f.trade) lines.push(`Its trade ends. ${The} trades with you today, worth ${trade} a month to your treasury.`);
+  if (f.sneak > 1) lines.push(`Surprise. It is at peace and not expecting you: this month your attacks on its ground are ${Math.round((f.sneak - 1) * 100)}% stronger. Next month the bonus is gone.`);
+  else if (n.atWar.some((x) => x === s.human || allied(s, x, s.human!))) lines.push('No surprise: it is already at war with your side and its army is ready.');
+  else lines.push('No surprise: its army is watching the frontier and is ready for you.');
+  const moved = f.alarm.filter((a) => a.from !== a.to);
+  const friends = f.alarm.filter((a) => a.friend);
+  const other = mine === 'axis' ? 'the Allies' : 'the Axis', own = mine === 'axis' ? 'the Axis' : 'the Allies';
+  if (f.alarm.length) {
+    if (friends.length) lines.push(`Its friends turn against you. Public opinion in ${listOf(friends.map((a) => theName(s, a.nat)))} swings hard toward ${other}, and part of that never comes back.`);
+    const rest = f.alarm.length - friends.length;
+    if (rest > 0) lines.push(`The neutral world grows wary. ${rest} other ${rest === 1 ? 'neutral moves' : 'neutrals move'} a little away from ${own}. Every attack on a neutral adds to it.`);
+    for (const a of moved) {
+      const was = TRACK.indexOf(a.from) - 3, now = TRACK.indexOf(a.to) - 3;
+      const how = now === 0 ? `no longer leans toward ${blocOf(was > 0 ? 'axis' : 'allies')}` : Math.abs(now) === 1 ? `begins to lean toward ${blocOf(now > 0 ? 'axis' : 'allies')}` : `throws in its lot with ${blocOf(now > 0 ? 'axis' : 'allies')}`;
+      lines.push(`${upFirst(theName(s, a.nat))} ${how}${a.trade ? `, and stops trading with you (${trade} a month lost)` : ''}.`);
+    }
+    if (!moved.length) lines.push('Nobody changes sides over this one attack, but the next may tip them.');
+  } else if (f.joins === null && bloc(n) !== null) lines.push(`${The} already belongs to ${blocOf(bloc(n)!)}: the neutral world expects this war and takes no fright at it.`);
+  else if (!mine) lines.push('Your country belongs to neither bloc, so the neutrals have no side to turn away from. They will remember it all the same.');
+  const at = TRACK.indexOf(n.align) - 3;
+  const stands = at === 0 ? 'is neutral and at peace with you' : Math.abs(at) === 1 ? `is neutral, leans toward ${blocOf(at > 0 ? 'axis' : 'allies')}, and is at peace with you` : `is ${TRACK_PHRASE[n.align]}, but at peace with you`;
+  const r = target >= 0 ? s.regions[target] : null;
+  const lead = r ? `Your army is about to cross the frontier into ${r.name}. ${The} ${stands}. Marching in means war.` : `${The} ${stands}.`;
+  // Friends that share a tie are named together, with the tie said once.
+  const ties = new Map<string, string[]>();
+  for (const x of f.friends) ties.set(x.why, [...(ties.get(x.why) ?? []), theName(s, x.nat)]);
+  const friendsLine = f.friends.length
+    ? `Its friends: ${[...ties].map(([why, who]) => `${listOf(who)} (${why})`).join('; ')}.`
+    : `${The} has no close friends among the nations.`;
+  return { ok: true, name: theName(s, on), lead, friends: friendsLine, lines };
+}
+
 const dateOf = (turn: number): string => turnToDate(turn).label;
 
 /** One corps' service record: what it is, where it came from, the honours it carries and its diary, newest first. */
@@ -896,4 +959,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

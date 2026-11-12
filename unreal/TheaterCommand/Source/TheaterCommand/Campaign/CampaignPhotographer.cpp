@@ -121,15 +121,20 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.Drop = TEXT("Mecklenburg");
 	}
 	{
-		// A flag carried onto the ground of a country at peace: the game asks before any war begins.
-		FShot& Shot = Add(TEXT("13d-declare-war"), TEXT("Jutland"), 0.4f);
-		Shot.Army = TEXT("Hamburg");
-		Shot.Carry = TEXT("Jutland");
-		Shot.Drop = TEXT("Jutland");
+		// An army on a frontier at peace: the ground across it is amber, because going there means war.
+		FShot& Shot = Add(TEXT("13d-neutral-frontier"), TEXT("Gelderland"), 0.45f);
+		Shot.Army = TEXT("Westphalia");
+		Shot.Carry = TEXT("Gelderland");
+	}
+	{
+		// The flag is set down there: the game says what would follow, and asks before any war begins.
+		FShot& Shot = Add(TEXT("13d2-declare-war"), TEXT("Gelderland"), 0.45f);
+		Shot.bKeep = true;
+		Shot.Drop = TEXT("Gelderland");
 	}
 	{
 		// The answer is yes: war is declared, and the army goes on against the place it was sent to.
-		FShot& Shot = Add(TEXT("13e-war-declared"), TEXT("Jutland"), 0.4f);
+		FShot& Shot = Add(TEXT("13e-war-declared"), TEXT("Gelderland"), 0.45f);
 		Shot.bKeep = true;
 		Shot.bWar = true;
 	}
@@ -254,6 +259,20 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 				Shot.bWar = true;
 			}
 		}
+		if (GrandNation == TEXT("GER"))
+		{
+			// A neutral frontier in the grand campaign: the ground across it in amber, and the question with its surprise.
+			{
+				FShot& Shot = Add(TEXT("36-neutral-frontier"), TEXT("Gelderland"), 0.45f);
+				Shot.Army = TEXT("Westphalia");
+				Shot.Carry = TEXT("Gelderland");
+			}
+			{
+				FShot& Shot = Add(TEXT("36b-war-asked"), TEXT("Gelderland"), 0.45f);
+				Shot.bKeep = true;
+				Shot.Drop = TEXT("Gelderland");
+			}
+		}
 		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
 	}
 
@@ -302,6 +321,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	}
 	bStarted = true;
 	UE_LOG(LogTheater, Display, TEXT("Photographer: %d pictures to take, into %s"), Shots.Num(), *Folder);
+	if (Shots.Num() == 0)
+	{
+		// Nothing was asked for that exists: leave, instead of sitting there for ever.
+		bStarted = false;
+		UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
+	}
 }
 
 void ACampaignPhotographer::Arrange(const FShot& Shot)
