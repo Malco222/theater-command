@@ -678,6 +678,12 @@ export interface Game {
   supply: Record<string, Uint8Array>;
   /** How long each nation's supply line is in every region deep inside the Soviet Union. Rebuilt with supply. */
   reach: Record<string, Float32Array>;
+  /**
+   * The grand campaign: how many provinces of road lie between each province a nation draws supply in and its
+   * nearest working railway (0 on it, -1 where it draws none). Emptied whenever supply is redrawn and filled
+   * nation by nation as it is asked for (railheads() in rails.ts); never saved.
+   */
+  railhead: Record<string, Int16Array>;
   capDist: Record<string, Int16Array>;
   week: number;
   seas: SeaZone[];

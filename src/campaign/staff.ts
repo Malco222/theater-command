@@ -57,6 +57,8 @@ export function startOpen(g: Game): Game {
     g.flags['st:gain:GER'] = 1;
   }
   startEngineers(g);
+  // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
+  g.supplyDirty = true;
   return g;
 }
 

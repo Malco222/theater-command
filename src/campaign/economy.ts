@@ -15,6 +15,7 @@ import { techMul } from './research';
 import { fallenOf, inherit, raisedXp, revivable } from './stories';
 import { deliverArsenal, worksUpkeep } from './arsenal';
 import { barredKind } from './ground';
+import { workingFactories } from './rails';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -83,7 +84,9 @@ export interface Yield { land: number; port: number; oil: number; fac: number; c
 /** What a province gives the nation that holds it. Conquered ground and colonies give less than the home country. */
 export function provinceYield(g: Game, r: Region, nat: string = r.ctrl): Yield {
   const own = r.owner === nat;
-  const fac = own ? r.fac : r.fac * PRODUCTION.occupiedIncome;
+  // A factory wrecked by bombing earns nothing until engineers rebuild it (the grand campaign only).
+  const works = workingFactories(g, r);
+  const fac = own ? works : works * PRODUCTION.occupiedIncome;
   if (!budgeted(g)) return { land: 0, port: 0, oil: 0, fac, capital: 0, total: fac };
   const k = !own ? BUDGET.occupied : r.overseas ? BUDGET.overseas : 1;
   const land = BUDGET.land[r.terrain] * k;
@@ -167,7 +170,7 @@ export function ledger(g: Game, nat: string): Ledger {
     const y = provinceYield(g, r, nat);
     provinces.push({ id: r.id, name: r.name, ...y });
     held++;
-    if (r.owner === nat) { facHome += y.fac; nHome += r.fac; } else { facOcc += y.fac; nOcc += r.fac; }
+    if (r.owner === nat) { facHome += y.fac; nHome += workingFactories(g, r); } else { facOcc += y.fac; nOcc += workingFactories(g, r); }
     land += y.land; ports += y.port; oil += y.oil; capital += y.capital;
     if (y.port) nPorts++;
     if (y.oil) nOil++;

@@ -20,6 +20,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot } from './ground';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
+import { railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 
@@ -72,7 +73,7 @@ export function createGame(seed: number, human: string | null): Game {
   const order = [...ORDER, ...Object.keys(nations).filter((n) => !ORDER.includes(n))];
   const g: Game = {
     seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], generals: [], nextCorps: 1, nextBuild: 1, human,
-    reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, capDist: {}, week: 1,
+    reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, railhead: {}, capDist: {}, week: 1,
     seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], convoys: {},
     airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {}, stories: newStories(),
     links: md.links, width: md.width, height: md.height, land: md.land,
@@ -315,6 +316,7 @@ export function computeSupply(g: Game): void {
   };
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
   const shippers = (id: string): string[] => withShips.filter((a) => a !== id && allied(g, id, a));
+  const wide = groundRules(g);
   for (const id of active) {
     const ok = new Uint8Array(g.regions.length);
     const q: number[] = [];
@@ -339,7 +341,8 @@ export function computeSupply(g: Game): void {
         else if (g.turn - (g.flags[`stores:${r.id}`] ?? -99) <= DESERT.stores) quay = true;
       }
       if (!depot && !quay) continue;
-      ok[r.id] = 1; q.push(r.id);
+      // In the grand campaign the table also remembers where the stores are: the railheads are counted from there.
+      ok[r.id] = wide ? 2 : 1; q.push(r.id);
       head[r.id] = depot || !r.overseas ? 0 : (DESERT.ports[r.name] ?? DESERT.port) + sunk;
     }
     for (let i = 0; i < q.length; i++) {
@@ -355,6 +358,7 @@ export function computeSupply(g: Game): void {
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
   g.supplyDirty = false;
+  resetRailheads(g);
 }
 
 /** How much longer the desert supply line has grown for a nation fed across the sea, from the cargoes sunk on the way last month. */
@@ -402,7 +406,8 @@ function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
     for (const j of g.regions[a].nb) {
       const r = g.regions[j];
       if (!ok[j] || !deep(r)) continue;
-      const step = (g.turn - r.since >= EASTERN.convertAfter ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+      // In the grand campaign a line the defenders tore up is not relaid by time alone: engineers must do it.
+      const step = (g.turn - r.since >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
       if (d[a] + step < d[j] - 1e-6) { d[j] = d[a] + step; q.push(j); }
     }
   }
@@ -519,6 +524,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
   const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide ? combinedArms(g, defenders, target, true) : null;
   let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0;
+  // Armies that have outrun their railhead: how far the worst of them is from it, and what it is worth there.
+  let roadA = 0, railA = 1, roadD = 0, railD = 1;
   const rivers = new Set<string>();
   // Engineers in the assault breach the works, clear lanes through the mines and put the infantry over a bridgeless river.
   const sap = wide ? sappers(attackers.filter((c) => !land || !blocked(g, c, target))) : 0;
@@ -553,6 +560,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (opts.sea !== undefined) p *= opts.sea;
     const line = lineStrength(g, c);
     if (line.mul < 1) { p *= line.mul; longest = Math.max(longest, line.length); lineMul = Math.min(lineMul, line.mul); }
+    if (wide) {
+      const head = railheadOf(g, c);
+      if (head.attack < 1) { p *= head.attack; roadA = Math.max(roadA, head.road); railA = Math.min(railA, head.attack); }
+    }
     if (frozen(g, c.nat, target)) { p *= 1 - (1 - EASTERN.winter.attack) * cmdWinter(g, c); cold = true; }
     const from = g.regions[c.reg];
     // What the guns and the engineers between them leave of the works. With neither, the works count in full, as they always did.
@@ -582,6 +593,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const dl = lineStrength(g, d).mul;
     const share = inDesert(target) ? DESERT.lineDefence : EASTERN.lineDefence;
     if (dl < 1) { p *= 1 - (1 - dl) * share; thin = Math.min(thin, 1 - (1 - dl) * share); }
+    if (wide) {
+      const head = railheadOf(g, d);
+      if (head.defence < 1) { p *= head.defence; roadD = Math.max(roadD, head.road); railD = Math.min(railD, head.defence); }
+    }
     const proud = storyDefence(g, d, target, attackers);
     if (proud !== 1) { p *= proud; proudD = Math.max(proudD, proud); }
     const lead = cmdDefence(g, d);
@@ -690,6 +705,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (lineMul < 1) lines.push(attackers.some((c) => inDesert(g.regions[c.reg]))
     ? { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of desert from the nearest working port`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until a port nearer the front is working` }
     : { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
+  if (railA < 1) lines.push({ label: 'Railhead', value: `Attackers as far as ${roadA} provinces by road beyond their nearest working railway`, effect: `Attack cut to as little as ${Math.round(railA * 100)}% until engineers bring the line forward` });
+  if (railD < 1) lines.push({ label: 'Railhead', value: `Defenders as far as ${roadD} provinces by road beyond their nearest working railway`, effect: `Defence cut to as little as ${Math.round(railD * 100)}% until their line is relaid` });
   if (turned) lines.push({ label: 'Open desert', value: 'Infantry on foot with no works to anchor on, against tanks and lorried troops', effect: `Foot infantry defends at ${Math.round(DESERT.open * 100)}%` });
   if (cold) lines.push({ label: 'Winter', value: 'Attackers without winter equipment', effect: `Attack cut to ${Math.round(EASTERN.winter.attack * 100)}%` });
   if (thin < 1) lines.push({ label: 'Supply line', value: 'Defenders at the end of a long supply line', effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
@@ -941,7 +958,7 @@ export function capture(g: Game, r: Region, nat: string): void {
   if (groundRules(g)) {
     // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
     liftMines(g, r);
-    if (atWar(g, nat, old)) bridgesOnCapture(g, r, nat);
+    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat); railOnCapture(g, r, nat, old); }
   }
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
@@ -976,18 +993,29 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   return true;
 }
 
-/** Where a corps could go by rail this month: any friendly region joined to its own by friendly track. No railway crosses the desert. */
+/**
+ * Where a corps could go by rail this month: any friendly region joined to its own by friendly track. No railway
+ * crosses the desert. In the grand campaign the trains keep to the lines on the map, and none runs into, out of
+ * or through a province whose line is cut; only engineers can be carried to the break itself.
+ */
 export function railReach(g: Game, c: Corps): Set<number> {
   const out = new Set<number>();
   if (c.kind === 'fort' || c.ap < 4 || g.regions[c.reg].terrain === DESERT.terrain) return out;
+  const net = groundRules(g);
+  if (net && railCut(g, c.reg)) return out;
   const seen = new Uint8Array(g.regions.length);
   const q = [c.reg];
   seen[c.reg] = 1;
   for (let i = 0; i < q.length; i++) {
-    for (const j of g.regions[q[i]].nb) {
+    for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
       const r = g.regions[j];
       if (seen[j] || !allied(g, c.nat, r.ctrl) || r.terrain === DESERT.terrain) continue;
       if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
+      if (net && railCut(g, j)) {
+        // Engineers alone ride the works train to the break itself. Nothing goes on through it.
+        if (c.kind === 'eng') { seen[j] = 1; out.add(j); }
+        continue;
+      }
       seen[j] = 1; q.push(j);
       if (!barred(g, c, r)) out.add(j); // the trains run through the high passes, but tanks are not unloaded there
     }

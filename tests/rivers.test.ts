@@ -401,14 +401,14 @@ describe('engineers', () => {
     expect(g.nations.GER.queue.some((b) => b.what === 'corps' && b.kind === 'eng')).toBe(true);
   });
 
-  it('are offered four jobs where they stand, with the reason a job cannot be started', () => {
+  it('are offered their jobs where they stand, with the reason a job cannot be started', () => {
     const g = grand(3, 'GER');
     const sap = engineersOf(g, 'GER')[0];
     expect(g.regions[sap.reg].name).toBe('Berlin');
     const jobs = engineerJobs(g, sap);
-    expect(jobs.map((j) => j.key)).toEqual(['bridge', 'works', 'mines', 'demolish']);
-    expect(jobs.map((j) => j.why)).toEqual(['Every bridge here is standing.', null, null, 'There are no fortifications here to demolish.']);
-    expect(jobs[1].label).toBe('Build field works');
+    expect(jobs.map((j) => j.key)).toEqual(['bridge', 'rail', 'plant', 'works', 'mines', 'demolish']);
+    expect(jobs.map((j) => j.why)).toEqual(['Every bridge here is standing.', 'The railway here is working.', 'Every factory here is at work.', null, null, 'There are no fortifications here to demolish.']);
+    expect(jobs[3].label).toBe('Build field works');
     // Away from the rivers there are no bridges to rebuild.
     const dresden = clear(g.regions.find((r) => r.ctrl === 'GER' && r.owner === 'GER' && !crossingsAt(r.id).length)!);
     const away = corps(g, 'GER', 'eng', dresden, 1);
@@ -691,7 +691,7 @@ describe('the computer players', () => {
       for (const k of Object.keys(g.flags)) if (k.startsWith('mine:')) { expect(g.flags[k]).toBeGreaterThanOrEqual(1); expect(g.flags[k]).toBeLessThanOrEqual(ENGINEERING.mines.most); expect(g.regions[+k.slice(5)]).toBeDefined(); }
       for (const c of g.corps) {
         if (c.dead) continue;
-        if (c.job) { expect(c.kind, c.name).toBe('eng'); expect(['bridge', 'works', 'mines', 'demolish']).toContain(c.job.what); }
+        if (c.job) { expect(c.kind, c.name).toBe('eng'); expect(['bridge', 'rail', 'plant', 'works', 'mines', 'demolish']).toContain(c.job.what); }
       }
       for (const nat of Object.keys(g.nations)) expect(engineersOf(g, nat).length, nat).toBeLessThanOrEqual(Math.max(ENGINEERING.ai.most, ENGINEERING.start.corps));
     }

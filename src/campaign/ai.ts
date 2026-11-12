@@ -9,13 +9,14 @@ import { airAI } from './air';
 import { aiProduction } from './economy';
 import { aiArsenal } from './arsenal';
 import { blocked, blowBridges } from './rivers';
+import { groundRules } from './ground';
 import { aiBridges, aiEngineers } from './engineers';
 import { landCorps, landingOpts, navalAI } from './navy';
 import { afterDeclaring, decide, isOpen, staffPhase, theatreStaff } from './staff';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage, havensOf,
-  hostileUnits, limitAttackers, moveCorps, moveCost, railMove, resolveBattle, shipMove, weekOf,
+  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, railMove, railReach, resolveBattle, shipMove, weekOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -396,7 +397,7 @@ function gather(g: Game, nat: string, ph: PlanPhase | null): void {
           && (scope ? scope.has(x.reg) && x.ap >= d[x.reg] && d[x.reg] <= 4 : x.ap >= 4 && !aside(g, g.regions[x.reg], nat)))
         .sort((a, b) => (scope ? atkPower(g, b) - atkPower(g, a) : 0) || crowd(g.regions[b.reg]) - crowd(g.regions[a.reg]) || d[a.reg] - d[b.reg])[0];
       if (!c) break;
-      if (scope) { walkToward(g, c, r); if (c.reg !== r.id) break; } else if (!railMove(g, c, r)) break;
+      if (scope) { walkToward(g, c, r); if (c.reg !== r.id) break; } else if (!railToward(g, c, r)) break;
     }
     fast(r).forEach((u) => massed.add(u.id));
   }
@@ -662,7 +663,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
         if (u >= STACK || blocked(g, c, r)) continue;
         if (dist[r.id] < bd || u < bu) { to = r; bd = dist[r.id]; bu = u; }
       }
-      if (to && railMove(g, c, to)) { made++; continue; }
+      if (to && railToward(g, c, to)) { made++; continue; }
     }
     for (let step = 0; step < 6 && c.ap > 0; step++) {
       const here = c.reg;
@@ -701,7 +702,7 @@ function redeploy(g: Game, nat: string, ph: PlanPhase, enemies: Set<string>): vo
     if (!r || r.ctrl !== nat || r.units.some((u) => u.nat === nat && u.hold)) continue;
     const c = nearest(free().filter((c) => c.kind === 'inf'), r);
     if (!c) continue;
-    if (c.reg !== r.id && !railMove(g, c, r)) continue;
+    if (c.reg !== r.id && (!railToward(g, c, r) || c.reg !== r.id)) continue;
     c.hold = true;
   }
   // Small forces kept at a jumping-off point for a later operation.
@@ -713,7 +714,7 @@ function redeploy(g: Game, nat: string, ph: PlanPhase, enemies: Set<string>): vo
     there.forEach((u) => staged.add(u.id));
     for (let k = there.length; k < count; k++) {
       const c = nearest(free().filter((c) => c.kind === 'inf' && !staged.has(c.id)), r);
-      if (!c || !railMove(g, c, r)) break;
+      if (!c || !railToward(g, c, r)) break;
       staged.add(c.id);
     }
   }
@@ -738,7 +739,7 @@ function redeploy(g: Game, nat: string, ph: PlanPhase, enemies: Set<string>): vo
         if (u < bu) { bu = u; to = r; }
       }
     }
-    if (to) railMove(g, c, to);
+    if (to) railToward(g, c, to);
   }
 }
 
@@ -843,7 +844,7 @@ function defend(g: Game, nat: string, line = true): void {
     if (!to) continue;
     const before = c.reg;
     // There are no railways in the desert: overseas, everything marches.
-    if (!scope && !n.slowCommand && d[to.id] > 2 && c.ap >= 4) railMove(g, c, to);
+    if (!scope && !n.slowCommand && d[to.id] > 2 && c.ap >= 4) railToward(g, c, to);
     else walkToward(g, c, to);
     if (c.reg !== before) { held[here.id] -= spared; held[to.id] += defPower(g, c, to); }
   }
@@ -877,6 +878,25 @@ function forsaken(g: Game, nat: string, r: Region): boolean {
     for (const j of x.nb) if (!seen.has(j) && atWar(g, nat, g.regions[j].ctrl)) { seen.add(j); q.push(j); }
   }
   return true;
+}
+
+/**
+ * By rail to a region. In the grand campaign, where the line may be cut on the way, as near to it as the trains
+ * still run: the corps marches on from the end of the line next month.
+ */
+function railToward(g: Game, c: Corps, to: Region): boolean {
+  if (railMove(g, c, to)) return true;
+  if (!groundRules(g) || c.ap < 4) return false;
+  const reach = railReach(g, c);
+  if (!reach.size) return false;
+  const d = hops(g, to.id, (r) => allied(g, c.nat, r.ctrl));
+  let best: Region | null = null, bd = d[c.reg] < 0 ? 1e9 : d[c.reg];
+  for (const id of reach) {
+    const r = g.regions[id];
+    if (d[id] < 0 || d[id] >= bd || !hasRoom(g, r, c)) continue;
+    best = r; bd = d[id];
+  }
+  return !!best && railMove(g, c, best);
 }
 
 function walkToward(g: Game, c: Corps, to: Region): void {

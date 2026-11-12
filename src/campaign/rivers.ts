@@ -38,7 +38,7 @@ export const ENGINEERING = data as unknown as {
 export const RIVERS = (riverData as unknown as { rivers: River[] }).rivers;
 export const CROSSINGS: Crossing[] = (riverData as unknown as { crossings: number[][] }).crossings.map(([a, b, river, x, y]) => ({ a, b, river, x, y }));
 
-const pair = (a: number, b: number): string => (a < b ? `${a}:${b}` : `${b}:${a}`);
+const pair = (a: number, b: number): number => (a < b ? a * 4096 + b : b * 4096 + a);
 const BY = new Map(CROSSINGS.map((c) => [pair(c.a, c.b), c]));
 const AT = new Map<number, Crossing[]>();
 for (const c of CROSSINGS) for (const r of [c.a, c.b]) (AT.get(r) ?? AT.set(r, []).get(r)!).push(c);
@@ -52,7 +52,8 @@ export const riverName = (c: Crossing): string => RIVERS[c.river].name;
 /** The region on the other bank. */
 export const farBank = (c: Crossing, from: number): number => (c.a === from ? c.b : c.a);
 
-const flag = (c: Crossing): string => `br:${c.a}:${c.b}`;
+const FLAGS = new Map(CROSSINGS.map((c) => [c, `br:${c.a}:${c.b}`]));
+const flag = (c: Crossing): string => FLAGS.get(c) ?? `br:${c.a}:${c.b}`;
 /** Whether the bridges of a crossing are down. Always standing outside the grand campaign. */
 export const bridgeDown = (g: Game, c: Crossing): boolean => g.flags[flag(c)] !== undefined;
 /** The month the bridges of a crossing were blown, or undefined while they stand. */
@@ -79,11 +80,14 @@ export function whyBlocked(g: Game, c: Corps, to: Region, from = c.reg): string 
   return `The bridges over the ${riverName(x)} between ${g.regions[from].name} and ${to.name} are down. ${c.name} cannot cross until engineers rebuild them.`;
 }
 
+// The railways cross by the same bridges, so the supply picture is drawn afresh whenever one goes down or up.
 function rebuild(g: Game, c: Crossing): void {
   delete g.flags[flag(c)];
+  g.supplyDirty = true;
 }
 function blow(g: Game, c: Crossing): void {
   g.flags[flag(c)] = g.turn;
+  g.supplyDirty = true;
 }
 
 /** Rebuilds every bridge that is down on a region's rivers. Returns the crossings rebuilt. */

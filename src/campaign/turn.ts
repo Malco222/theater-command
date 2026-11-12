@@ -13,6 +13,7 @@ import { cancelBuild, orderCorps, orderFort } from './economy';
 import { offers, orderOffer, type Offer } from './arsenal';
 import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
 import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './engineers';
+import { tearUp, whyNotCutRail } from './rails';
 import { foundBureau, setTeams } from './research';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy } from './diplomacy';
@@ -265,6 +266,17 @@ export function whyNotBlowBridges(g: Game, from: number, to: number): string | n
 export function orderBlowBridges(g: Game, from: number, to: number): boolean {
   const x = crossingOf(from, to);
   return !!x && g.human !== null && humanUp(g) && blowBridges(g, g.human, x, from);
+}
+
+/** Why the player cannot tear up the railway of a province, or null if they can (the grand campaign). */
+export function whyNotCutRailway(g: Game, region: number): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotCutRail(g, g.human, region);
+}
+
+/** The player's order to tear up the railway of a province their troops stand in. Only engineers can relay it. */
+export function orderCutRailway(g: Game, region: number): boolean {
+  return g.human !== null && humanUp(g) && tearUp(g, g.human, region);
 }
 
 export function orderRail(g: Game, c: Corps, to: number): boolean {

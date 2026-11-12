@@ -9,6 +9,7 @@ import { seat } from './commanders';
 import { FIELDS } from './research';
 import { newStories } from './stories';
 import { restoreWorks } from './arsenal';
+import { resetRailheads } from './rails';
 import mapData from '../generated/campaign-map.json';
 import type { Corps, Game, General } from './types';
 
@@ -145,7 +146,11 @@ export function loadGame(text: string): Game | null {
   computeSupply(g);
   g.corps.forEach((c, i) => { c.supplied = fed[i]; });
   // On a map that has grown since, the saved picture is a region short: it is drawn afresh the first time it is asked for.
-  if (!grown) for (const [k, v] of Object.entries((d.supply ?? {}) as Record<string, string>)) g.supply[k] = Uint8Array.from(v, (ch) => (ch === '1' ? 1 : 0));
+  if (!grown) for (const [k, v] of Object.entries((d.supply ?? {}) as Record<string, string>)) g.supply[k] = Uint8Array.from(v, (ch) => (ch === '2' ? 2 : ch === '1' ? 1 : 0));
+  // The railheads are counted from the picture as it stood.
+  resetRailheads(g);
   g.supplyDirty = grown || !!d.dirty;
+  // A grand campaign saved before the railways were laid has no depots marked in its picture: it is drawn afresh.
+  if (g.flags.open === 1 && !Object.values(g.supply).some((t) => t.includes(2))) g.supplyDirty = true;
   return g;
 }

@@ -1,22 +1,26 @@
 // Engineers: the corps that builds, repairs, mines and breaches.
 //
 // An engineer corps is raised like any other in the grand campaign. Given a month where it stands, it rebuilds
-// the bridges that are down on that province's rivers, raises field works, lays minefields and booby traps, or
-// demolishes fortifications. Sent in with an assault, it breaches the enemy's works, clears lanes through his
-// mines and gets infantry over a river whose bridges are down. Nothing that is broken mends itself: without
-// engineers on the spot a blown bridge stays blown.
+// the bridges that are down on that province's rivers, relays a railway that has been cut, puts a bombed factory
+// back to work, raises field works, lays minefields and booby traps, or demolishes fortifications. Sent in with
+// an assault, it breaches the enemy's works, clears lanes through his mines and gets infantry over a river whose
+// bridges are down. Nothing that is broken mends itself: without engineers on the spot a blown bridge stays
+// blown, a cut line stays cut and a wrecked factory stays a ruin.
 //
 // Both interfaces offer the same jobs from jobsFor() and give them with orderJob().
 
 import arsenalData from '../../data/campaign/arsenal.json';
 import { STACK, type Corps, type Game, type Region } from './types';
 import { groundRules } from './ground';
-import { ENGINEERING, bridgeDown, crossingsAt, farBank, rebuildAt, riverName, type Crossing } from './rivers';
-import { addCorps, allied, atWar, friendlyUnits, hasRoom, headline, hostileUnits, moveCorps, railMove, railReach } from './game';
+import { ENGINEERING, bridgeDown, crossingsAt, downBetween, farBank, rebuildAt, riverName, type Crossing } from './rivers';
+import { addCorps, allied, atWar, ensureSupply, friendlyUnits, hasRoom, headline, hostileUnits, moveCorps, railMove, railReach } from './game';
 import { orderCorps, raiseSite } from './economy';
+import { mendRail, onNet, railCut, railheads, railsAt, rebuildFactory, ruinedAt } from './rails';
 
-export type JobKind = 'bridge' | 'works' | 'mines' | 'demolish';
-export const JOBS: JobKind[] = ['bridge', 'works', 'mines', 'demolish'];
+export type JobKind = 'bridge' | 'rail' | 'plant' | 'works' | 'mines' | 'demolish';
+export const JOBS: JobKind[] = ['bridge', 'rail', 'plant', 'works', 'mines', 'demolish'];
+/** Repairs: one corps to a job in a province, since two cannot relay the same track. */
+const REPAIRS: Partial<Record<JobKind, string>> = { bridge: 'rebuilding the bridges', rail: 'relaying the railway', plant: 'rebuilding a factory' };
 
 /** One thing an engineer corps could do where it stands, and the reason if it cannot start it now. */
 export interface JobOffer { key: JobKind; label: string; blurb: string; why: string | null }
@@ -40,8 +44,10 @@ function whyNot(g: Game, c: Corps, key: JobKind): string | null {
   if (c.job) return `${c.name} already has work in hand.`;
   if (!allied(g, c.nat, r.ctrl)) return `${r.name} is not in friendly hands.`;
   if (key === 'bridge' && !crossingsAt(r.id).some((x) => bridgeDown(g, x))) return crossingsAt(r.id).length ? 'Every bridge here is standing.' : 'No great river runs past this province.';
-  const other = key === 'bridge' ? r.units.find((u) => u !== c && !u.dead && u.job?.what === 'bridge' && u.job.reg === r.id) : undefined;
-  if (other) return `${other.name} is already rebuilding the bridges here.`;
+  if (key === 'rail' && !railCut(g, r.id)) return onNet(r.id) ? 'The railway here is working.' : 'No railway runs through this province.';
+  if (key === 'plant' && !ruinedAt(g, r)) return r.fac > 0 ? 'Every factory here is at work.' : 'There are no factories here.';
+  const other = REPAIRS[key] && (key !== 'plant' || ruinedAt(g, r) <= 1) ? r.units.find((u) => u !== c && !u.dead && u.job?.what === key && u.job.reg === r.id) : undefined;
+  if (other) return `${other.name} is already ${REPAIRS[key]} here.`;
   if (key === 'works' && (r.fort?.lv ?? 0) >= E.works.most) return `The works here are at level ${r.fort?.lv ?? 0}: as strong as field engineers can make them. Heavier fortifications are ordered from the treasury.`;
   if (key === 'mines' && minesAt(g, r) >= E.mines.most) return 'The minefields here are as thick as they can be laid.';
   if (key === 'demolish' && !r.fort) return 'There are no fortifications here to demolish.';
@@ -74,7 +80,8 @@ export function cancelJob(g: Game, c: Corps): boolean {
 export function jobLine(g: Game, c: Corps): string {
   if (!c.job) return '';
   const r = g.regions[c.job.reg];
-  const what = c.job.what === 'bridge' ? `rebuilding the bridges at ${r.name}` : c.job.what === 'works' ? `building field works at ${r.name}` : c.job.what === 'mines' ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
+  const what = c.job.what === 'bridge' ? `rebuilding the bridges at ${r.name}` : c.job.what === 'rail' ? `relaying the railway at ${r.name}` : c.job.what === 'plant' ? `rebuilding a factory at ${r.name}`
+    : c.job.what === 'works' ? `building field works at ${r.name}` : c.job.what === 'mines' ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
   return `${what[0].toUpperCase()}${what.slice(1)}: done when next month begins`;
 }
 
@@ -100,6 +107,10 @@ export function engineersMonth(g: Game, nat: string): void {
     if (job.what === 'bridge') {
       const done = rebuildAt(g, r.id);
       if (done.length && mine) headline(g, 'info', `${c.name} has rebuilt the ${done.length > 1 ? 'bridges' : `bridges over the ${riverName(done[0])}`} at ${r.name}. Tanks, lorries and guns can cross again.`, nat, r.id);
+    } else if (job.what === 'rail') {
+      if (mendRail(g, r.id) && mine) headline(g, 'info', `${c.name} has relaid the railway at ${r.name}. The trains run again.`, nat, r.id);
+    } else if (job.what === 'plant') {
+      if (rebuildFactory(g, r) && mine) { const left = ruinedAt(g, r); headline(g, 'info', `${c.name} has put a bombed factory at ${r.name} back to work${left ? `: ${left} still ${left > 1 ? 'lie' : 'lies'} in ruins` : ''}.`, nat, r.id); }
     } else if (job.what === 'works') {
       if ((r.fort?.lv ?? 0) < ENGINEERING.works.most) {
         r.fort = { lv: (r.fort?.lv ?? 0) + 1, vs: facing(g, r) };
@@ -139,15 +150,19 @@ export function startEngineers(g: Game): void {
 /** True while this nation's staff has an offensive under way against that enemy (the staff's own mark, see staff.ts). */
 const marching = (g: Game, nat: string, enemy: string): boolean => (g.flags[`st:on:${nat}:${enemy}`] ?? 0) > 0;
 
-/** A bank where bridges are down that this nation wants up again: the crossings in question, and how much it matters. */
-interface Site { reg: number; score: number; spans: Crossing[] }
+/** Repair work this nation wants done in a province, and how much it matters. For bridges, the crossings in question. */
+interface Site { reg: number; score: number; what: JobKind; spans: Crossing[] }
 
 function wanted(g: Game, nat: string): Site[] {
   const out: Site[] = [];
+  // The railheads are only counted when some line of this nation's is cut.
+  let head: Int16Array | null = null;
+  if (g.regions.some((r) => railCut(g, r.id) && allied(g, nat, r.ctrl))) { ensureSupply(g); head = railheads(g, nat); }
+  const troops = (r: Region): boolean => r.units.some((u) => u.nat === nat && u.kind !== 'eng');
   for (const r of g.regions) {
     if (!allied(g, nat, r.ctrl)) continue;
-    const site: Site = { reg: r.id, score: 0, spans: [] };
-    const own = r.units.some((u) => u.nat === nat && u.kind !== 'eng');
+    const site: Site = { reg: r.id, score: 0, what: 'bridge', spans: [] };
+    const own = troops(r);
     for (const x of crossingsAt(r.id)) {
       if (!bridgeDown(g, x)) continue;
       const far = g.regions[farBank(x, r.id)];
@@ -158,6 +173,13 @@ function wanted(g: Game, nat: string): Site[] {
       site.score = Math.max(site.score, score);
     }
     if (site.spans.length) out.push(site);
+    // A cut line at the end of the working net: relaying it brings the railhead a province forward. One further
+    // out waits its turn. It matters most where the army stands on it or next to it.
+    if (head && railCut(g, r.id) && (head[r.id] === 0 || railsAt(r.id).some((j) => head[j] === 0 && !railCut(g, j) && !downBetween(g, r.id, j)))) {
+      out.push({ reg: r.id, score: own || r.nb.some((j) => troops(g.regions[j])) ? 3 : 2, what: 'rail', spans: [] });
+    }
+    // A factory of its own that bombing has left in ruins.
+    if (r.ctrl === nat && ruinedAt(g, r)) out.push({ reg: r.id, score: 1, what: 'plant', spans: [] });
   }
   return out.sort((p, q) => q.score - p.score || p.reg - q.reg);
 }
@@ -184,50 +206,55 @@ function march(g: Game, c: Corps, goals: Set<number>): number {
 }
 
 /**
- * A computer nation's engineers: to the bridges it wants up again first (one corps to a crossing), by rail or
- * by road; with none to see to, they dig in and mine where they stand next to the enemy. The staff leaves them alone.
+ * A computer nation's engineers: to the repairs it wants most (one corps to a crossing, a cut line or a ruined
+ * factory), by rail or by road; with none to see to, they dig in and mine where they stand next to the enemy.
+ * The staff leaves them alone.
  */
 export function aiEngineers(g: Game, nat: string): void {
   if (!groundRules(g) || nat === g.human || !g.nations[nat].alive) return;
   const mine = g.corps.filter((c) => c.nat === nat && c.kind === 'eng' && !c.dead);
   const sites = wanted(g, nat);
-  // The crossings somebody is already rebuilding, from either bank.
+  // The crossings somebody is already rebuilding, from either bank, and the other repairs already in hand.
   const covered = new Set<Crossing>();
-  const cover = (reg: number): void => { for (const x of crossingsAt(reg)) if (bridgeDown(g, x)) covered.add(x); };
-  const open = (s: Site): boolean => s.spans.some((x) => !covered.has(x));
-  for (const c of mine) if (c.job?.what === 'bridge') cover(c.job.reg);
+  const taken = new Set<string>();
+  const cover = (reg: number, what: JobKind): void => {
+    if (what === 'bridge') { for (const x of crossingsAt(reg)) if (bridgeDown(g, x)) covered.add(x); } else taken.add(`${what}:${reg}`);
+  };
+  const open = (s: Site): boolean => (s.what === 'bridge' ? s.spans.some((x) => !covered.has(x)) : !taken.has(`${s.what}:${s.reg}`));
+  for (const c of mine) if (c.job && REPAIRS[c.job.what as JobKind]) cover(c.job.reg, c.job.what as JobKind);
   for (const c of mine) {
     c.hold = true;
     if (c.job) continue;
-    const here = sites.find((s) => s.reg === c.reg);
-    if (here && open(here) && orderJob(g, c, 'bridge')) { cover(c.reg); continue; }
+    const here = sites.find((s) => s.reg === c.reg && open(s));
+    if (here && orderJob(g, c, here.what)) { cover(c.reg, here.what); continue; }
     if (c.ap > 0) {
       const todo = sites.filter((s) => open(s) && hasRoom(g, g.regions[s.reg], c));
       if (todo.length) {
-        // By rail to where the bridges are down, and to work on the day they arrive. Where no railway runs
-        // yet, by road toward the nearest of them.
+        // By rail to where the work is, and to work on the day they arrive. Where no railway runs yet, by road
+        // toward the nearest of it.
         const reach = railReach(g, c);
         const site = todo.find((s) => reach.has(s.reg));
         const goal = site && railMove(g, c, g.regions[site.reg]) ? site.reg : march(g, c, new Set(todo.map((s) => s.reg)));
         if (goal >= 0) {
-          cover(goal);
-          if (c.reg === goal) orderJob(g, c, 'bridge');
+          const job = (site && site.reg === goal ? site : todo.find((s) => s.reg === goal))!;
+          cover(goal, job.what);
+          if (c.reg === goal) orderJob(g, c, job.what);
           continue;
         }
       }
     }
-    // With no bridge to see to, engineers who stand next to the enemy dig in, then mine the roads.
+    // With no repairs to see to, engineers who stand next to the enemy dig in, then mine the roads.
     const at = g.regions[c.reg];
     if (at.ctrl === nat && at.nb.some((j) => hostileUnits(g, g.regions[j], nat).length > 0)) {
       if (!orderJob(g, c, 'works')) orderJob(g, c, 'mines');
     }
   }
-  // More bridges down than engineers to see to them: another corps is raised, as far as the treasury allows.
+  // More repairs waiting than engineers to see to them: another corps is raised, as far as the treasury allows.
   const n = g.nations[nat];
   const spec = (arsenalData.land as Record<string, { cost: number }>).eng;
   const coming = n.queue.filter((b) => b.what === 'corps' && b.kind === 'eng').length;
   const idle = mine.filter((c) => !c.job).length;
-  const waiting = new Set(sites.flatMap((s) => s.spans).filter((x) => !covered.has(x))).size;
+  const waiting = new Set(sites.filter((s) => s.what === 'bridge').flatMap((s) => s.spans).filter((x) => !covered.has(x))).size + sites.filter((s) => s.what !== 'bridge' && open(s)).length;
   if (waiting > idle + coming && mine.length + coming < ENGINEERING.ai.most && n.pp >= spec.cost + ENGINEERING.ai.reserve) {
     const at = raiseSite(g, nat, 'eng', n.capital);
     if (at >= 0) orderCorps(g, nat, 'eng', at);
