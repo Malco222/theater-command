@@ -17,7 +17,7 @@ import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './eng
 import { tearUp, whyNotCutRail } from './rails';
 import { foundBureau, setTeams } from './research';
 import { phaseFor, runAI } from './ai';
-import { court, monthlyDiplomacy } from './diplomacy';
+import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
 import { awardOf, cashHonour } from './stories';
 import EVE from '../../data/campaign/eve.json';
 
@@ -503,6 +503,31 @@ export function declarable(g: Game): string[] {
     }
   }
   return [...out];
+}
+
+/**
+ * Ground the player's corps can march into only by declaring war: the land of a country he is at peace with, next
+ * to where one of the corps stands. Each region is given with the country that holds it. Either interface shows
+ * the declaration prompt (previewDeclare) when a corps is sent there, and nothing moves unless the player says yes.
+ */
+export function invasions(g: Game, cs: Corps[]): Map<number, string> {
+  const out = new Map<number, string>();
+  if (!humanUp(g) || onEve(g)) return out;
+  const can = new Set(declarable(g));
+  if (!can.size) return out;
+  for (const c of cs) {
+    if (!canOrder(g, c) || c.ap <= 0) continue;
+    for (const j of g.regions[c.reg].nb) {
+      const r = g.regions[j];
+      if (can.has(r.ctrl) && !blocked(g, c, r, c.reg)) out.set(j, r.ctrl);
+    }
+  }
+  return out;
+}
+
+/** What declaring war on a country would mean: who it joins, whether the blow is a surprise, its friends, and how the neutrals take it. */
+export function previewDeclare(g: Game, on: string): WarForecast | null {
+  return g.human && declarable(g).includes(on) ? warForecast(g, g.human, on) : null;
 }
 
 export function orderDeclare(g: Game, on: string): boolean {

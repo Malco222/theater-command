@@ -1,0 +1,24 @@
+{
+  "_note": "Friendships between countries, and what a surprise attack is worth and costs. The grand campaign only. 'sneak.attack' multiplies the attacks of a nation, in the month it declares war, on the ground of a country that was at peace with it and with all its allies until that day: the defenders are caught unready. It is the same for every nation, the computer's included. 'wary' is the price the player pays for attacking a country that belongs to neither bloc: every neutral still at peace moves 'all.opinion' points of public opinion away from the player's bloc, and 'all.home' points of the leaning it drifts back to, so part of the damage is lasting. Friends of the victim move by 'friend' instead. A neutral that was leaning the player's way may step back and stop trading, and one already doubtful may start to lean toward the other bloc and in time join it. Countries that are hard to move in diplomacy (resist in diplomacy.json) are as hard to alarm. 'groups' are circles of countries that stand together, each with a name and the reason, as it reads after 'friends:'. 'pairs' are single friendships: [one, the other, the reason]. Friendship is mutual.",
+  "sneak": { "attack": 1.15 },
+  "wary": { "all": { "opinion": 8, "home": 2 }, "friend": { "opinion": 25, "home": 10 } },
+  "groups": [
+    { "id": "nordic", "name": "the Nordic countries", "why": "Nordic neighbours who have kept the peace among themselves for a century", "nations": ["NOR", "SWE", "DEN", "FIN"] },
+    { "id": "baltic", "name": "the Baltic states", "why": "the three Baltic republics, bound by their entente of 1934", "nations": ["EST", "LAT", "LIT"] },
+    { "id": "low", "name": "the Low Countries", "why": "the Low Countries, neighbours and partners in trade", "nations": ["BEL", "NED", "LUX"] },
+    { "id": "balkan", "name": "the Balkan Entente", "why": "partners in the Balkan Pact of 1934", "nations": ["YUG", "GRE", "ROM", "TUR"] },
+    { "id": "iberia", "name": "the Iberian neighbours", "why": "bound by the Iberian treaty of friendship of 1939", "nations": ["ESP", "POR"] }
+  ],
+  "pairs": [
+    ["UK", "POR", "the oldest alliance in Europe, kept since 1373"],
+    ["UK", "GRE", "Britain guaranteed Greek independence in April 1939"],
+    ["UK", "TUR", "the treaty of mutual aid of October 1939"],
+    ["FRA", "TUR", "the treaty of mutual aid of October 1939"],
+    ["FRA", "BEL", "comrades in arms of the last war"],
+    ["POL", "ROM", "allies since their treaty of 1921"],
+    ["POL", "HUN", "an old friendship between the two peoples"],
+    ["HUN", "ITA", "friends since their treaty of 1927"],
+    ["BUL", "GER", "comrades in arms of the last war"],
+    ["IRL", "USA", "ties of family across the Atlantic"]
+  ]
+}
