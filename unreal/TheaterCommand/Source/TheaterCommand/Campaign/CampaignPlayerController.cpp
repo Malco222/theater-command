@@ -131,6 +131,7 @@ void ACampaignPlayerController::LoadGrandNations()
 		Out.Standing = FText::FromString(Nation.Standing);
 		Out.Strength = FText::FromString(FString::Printf(TEXT("%d corps, %d %s"), Nation.Corps, Nation.Regions, Nation.Regions == 1 ? TEXT("territory") : TEXT("territories")));
 		Out.bMajor = Nation.bMajor;
+		Out.bSmall = Nation.bSmall;
 		bAmerica |= Nation.Nation == TEXT("USA");
 		if (Nation.Nation == Chosen)
 		{
@@ -509,6 +510,7 @@ void ACampaignPlayerController::OpenLedger()
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
 	CloseDiplomacy();
+	CloseResearch();
 	const int32 Revision = Ledger.Revision + 1;
 	Ledger = Session->Ledger();
 	Ledger.Revision = Revision;
@@ -526,6 +528,64 @@ void ACampaignPlayerController::CloseLedger()
 	bLedgerOpen = false;
 }
 
+void ACampaignPlayerController::OpenResearch()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
+	{
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	CloseArsenal();
+	CloseLedger();
+	CloseDiplomacy();
+	const int32 Revision = Research.Revision + 1;
+	Research = Session->Research();
+	Research.Revision = Revision;
+	bResearchOpen = Research.bValid;
+}
+
+void ACampaignPlayerController::CloseResearch()
+{
+	bResearchOpen = false;
+}
+
+void ACampaignPlayerController::SetResearchTeams(const FString& Field, int32 Teams)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bResearchOpen)
+	{
+		return;
+	}
+	if (Session->SetTeams(Field, Teams))
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	}
+	const int32 Revision = Research.Revision + 1;
+	Research = Session->Research();
+	Research.Revision = Revision;
+	bResearchOpen = Research.bValid;
+}
+
+void ACampaignPlayerController::FoundResearchBureau()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bResearchOpen)
+	{
+		return;
+	}
+	if (Session->FoundBureau())
+	{
+		CampaignSounds::Play(this, TEXT("coins"), 0.6f);
+		Notify(TEXT("A new design team is founded. Put it on a branch with a + button."), 6.0);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>()); // the treasury has paid for it
+	}
+	const int32 Revision = Research.Revision + 1;
+	Research = Session->Research();
+	Research.Revision = Revision;
+	bResearchOpen = Research.bValid;
+}
+
 void ACampaignPlayerController::OpenDiplomacy()
 {
 	FCampaignSession* Session = GetSession();
@@ -536,6 +596,8 @@ void ACampaignPlayerController::OpenDiplomacy()
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
 	CloseLedger();
+	CloseResearch();
+	PathAsked.Reset();
 	const int32 Revision = Diplomacy.Revision + 1;
 	Diplomacy = Session->Diplomacy();
 	Diplomacy.Revision = Revision;
@@ -560,6 +622,64 @@ void ACampaignPlayerController::CourtNation(const FString& Tag)
 	{
 		CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
 		// A country that is won over changes sides: the table is set out again as it now stands.
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 8.0);
+	}
+	const int32 Revision = Diplomacy.Revision + 1;
+	Diplomacy = Session->Diplomacy();
+	Diplomacy.Revision = Revision;
+	bDiplomacyOpen = Diplomacy.bValid;
+}
+
+void ACampaignPlayerController::PressPath(const FString& Id, const FString& Partner)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bDiplomacyOpen)
+	{
+		return;
+	}
+	const FString Key = Partner.IsEmpty() ? Id : Id + TEXT(":") + Partner;
+	if (Id.IsEmpty() || PathAsked != Key)
+	{
+		// The first press only asks: an alliance, once joined, is not left.
+		PathAsked = Id.IsEmpty() ? FString() : Key;
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+		++Diplomacy.Revision;
+		return;
+	}
+	PathAsked.Reset();
+	FString Note;
+	if (Session->TakePath(Id, Partner, Note))
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+		CampaignSounds::PlayLater(this, TEXT("bell"), 0.5f, 0.5f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		RefreshOrders();
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 9.0);
+	}
+	const int32 Revision = Diplomacy.Revision + 1;
+	Diplomacy = Session->Diplomacy();
+	Diplomacy.Revision = Revision;
+	bDiplomacyOpen = Diplomacy.bValid;
+}
+
+void ACampaignPlayerController::InviteToLeague(const FString& Tag)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bDiplomacyOpen)
+	{
+		return;
+	}
+	FString Note;
+	if (Session->InviteToLeague(Tag, Note))
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	}
 	if (!Note.IsEmpty())
@@ -600,6 +720,7 @@ void ACampaignPlayerController::OpenArsenal()
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseLedger();
 	CloseDiplomacy();
+	CloseResearch();
 	// The province in mind is the one selected, if it is the player's own; works are built there and corps form there.
 	const FCampaignView& View = Session->GetView();
 	const bool bMine = View.RegionHolder.IsValidIndex(SelectedRegion) && View.RegionHolder[SelectedRegion] == View.Human;
@@ -737,6 +858,10 @@ void ACampaignPlayerController::Escape()
 	{
 		CloseDiplomacy();
 	}
+	else if (bResearchOpen)
+	{
+		CloseResearch();
+	}
 	else if (WarPrompt.bVisible)
 	{
 		CloseWarPrompt();
@@ -847,7 +972,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen;
+	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
@@ -1708,7 +1833,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 				Map->SetLand(Session->Land());
 			}
 		}
-		Map->SetHolders(View.RegionHolder);
+		Map->SetHolders(View.RegionHolder, View.League);
 		Map->ShowArmies(View, Marches, CarriedFrom);
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
 	}

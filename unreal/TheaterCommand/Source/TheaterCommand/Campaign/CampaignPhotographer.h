@@ -49,6 +49,9 @@ private:
 		bool bSea = false; // switch the army in hand to going by sea
 	bool bLedger = false; // open the ledger
 	bool bDiplomacy = false; // open the foreign office
+	bool bResearch = false; // open the design offices, and put a second team on armour
+	FString Path; // in the foreign office: press this path ("found:DEN" names the partner)
+	int32 PathPresses = 1; // once asks, twice takes it
 	bool bArsenal = false; // open the arsenal, and order an artillery corps from it
 	bool bWar = false; // answer yes to the question about declaring war
 	FString Click; // click this region, as the mouse would

@@ -109,6 +109,21 @@ public:
 	/** Spends political capital to court a neutral. OutNote says what came of it. */
 	bool Court(const FString& Nation, FString& OutNote);
 
+	/** The design offices: every branch, the teams on it, and the other powers' designs. */
+	FResearch Research();
+
+	/** Puts this many design teams on a branch. */
+	bool SetTeams(const FString& Field, int32 Teams);
+
+	/** Founds one more design team, paid for from the treasury. */
+	bool FoundBureau();
+
+	/** The player's small country takes a path: axis, allies, alone, found (with a partner) or join. OutNote says what came of it. */
+	bool TakePath(const FString& Id, const FString& Partner, FString& OutNote);
+
+	/** The player, a member of the League, invites a willing country into it. */
+	bool InviteToLeague(const FString& Nation, FString& OutNote);
+
 	/** The player declares war on a country he is at peace with. */
 	bool Declare(const FString& Nation);
 

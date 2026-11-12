@@ -180,6 +180,7 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 		Entry->TryGetStringField(TEXT("blurb"), Nation.Blurb);
 		Entry->TryGetStringField(TEXT("standing"), Nation.Standing);
 		Entry->TryGetBoolField(TEXT("major"), Nation.bMajor);
+		Entry->TryGetBoolField(TEXT("small"), Nation.bSmall);
 		Entry->TryGetNumberField(TEXT("corps"), Nation.Corps);
 		Entry->TryGetNumberField(TEXT("regions"), Nation.Regions);
 	}
@@ -353,6 +354,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetStringField(TEXT("level"), Out.Level);
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
+	Object->TryGetStringArrayField(TEXT("league"), Out.League);
 	for (const TPair<const TCHAR*, TArray<int32>*>& List : { TPair<const TCHAR*, TArray<int32>*>(TEXT("down"), &Out.BridgesDown), TPair<const TCHAR*, TArray<int32>*>(TEXT("cut"), &Out.RailsCut) })
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
@@ -1387,7 +1389,219 @@ FDiplomacy FCampaignSession::Diplomacy()
 			Entry->TryGetBoolField(TEXT("war"), Row.bWar);
 		}
 	}
+	const TSharedPtr<FJsonObject>* League = nullptr;
+	if (Object->TryGetObjectField(TEXT("league"), League))
+	{
+		(*League)->TryGetBoolField(TEXT("founded"), Out.bLeague);
+		(*League)->TryGetStringField(TEXT("full"), Out.LeagueName);
+		(*League)->TryGetStringField(TEXT("since"), Out.LeagueSince);
+		const TArray<TSharedPtr<FJsonValue>>* Members = nullptr;
+		if ((*League)->TryGetArrayField(TEXT("members"), Members))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Members)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FDiplomacyPower& Member = Out.Members.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("nat"), Member.Tag);
+				Entry->TryGetStringField(TEXT("name"), Member.Name);
+				Entry->TryGetStringField(TEXT("note"), Member.Note);
+				Entry->TryGetNumberField(TEXT("divs"), Member.Divisions);
+				Entry->TryGetBoolField(TEXT("war"), Member.bWar);
+				bool bYou = false;
+				Entry->TryGetBoolField(TEXT("you"), bYou);
+				Member.Side = bYou ? TEXT("own") : TEXT("other");
+			}
+		}
+	}
+	const TSharedPtr<FJsonObject>* Path = nullptr;
+	if (Object->TryGetObjectField(TEXT("path"), Path))
+	{
+		(*Path)->TryGetStringField(TEXT("lead"), Out.PathLead);
+		(*Path)->TryGetNumberField(TEXT("inviteCost"), Out.InviteCost);
+		const TArray<TSharedPtr<FJsonValue>>* Options = nullptr;
+		if ((*Path)->TryGetArrayField(TEXT("options"), Options))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Options)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FPathOption& Option = Out.Paths.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("id"), Option.Id);
+				Entry->TryGetStringField(TEXT("title"), Option.Title);
+				Entry->TryGetStringField(TEXT("text"), Option.Text);
+				Entry->TryGetStringField(TEXT("why"), Option.Why);
+				Entry->TryGetBoolField(TEXT("ok"), Option.bOk);
+				Entry->TryGetBoolField(TEXT("now"), Option.bNow);
+				Entry->TryGetBoolField(TEXT("final"), Option.bFinal);
+			}
+		}
+		for (const TPair<const TCHAR*, TArray<FLeagueAnswer>*>& List : { TPair<const TCHAR*, TArray<FLeagueAnswer>*>(TEXT("partners"), &Out.Founders), TPair<const TCHAR*, TArray<FLeagueAnswer>*>(TEXT("invites"), &Out.Invites) })
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Answers = nullptr;
+			if ((*Path)->TryGetArrayField(List.Key, Answers))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Answers)
+				{
+					const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+					FLeagueAnswer& Answer = List.Value->AddDefaulted_GetRef();
+					Entry->TryGetStringField(TEXT("nat"), Answer.Tag);
+					Entry->TryGetStringField(TEXT("name"), Answer.Name);
+					Entry->TryGetStringField(TEXT("why"), Answer.Why);
+					Entry->TryGetBoolField(TEXT("ok"), Answer.bOk);
+					Answer.bCan = Answer.bOk;
+					Entry->TryGetBoolField(TEXT("can"), Answer.bCan);
+				}
+			}
+		}
+	}
 	return Out;
+}
+
+FResearch FCampaignSession::Research()
+{
+	FResearch Out;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("research"), TEXT("[]"), Object) || !Object.IsValid())
+	{
+		return Out;
+	}
+	Out.bValid = Object->TryGetStringField(TEXT("nation"), Out.Nation);
+	Object->TryGetStringField(TEXT("date"), Out.Date);
+	Object->TryGetBoolField(TEXT("up"), Out.bUp);
+	Object->TryGetBoolField(TEXT("own"), Out.bOwn);
+	Object->TryGetStringField(TEXT("doctrine"), Out.Doctrine);
+	Object->TryGetStringField(TEXT("note"), Out.Note);
+	Object->TryGetNumberField(TEXT("teams"), Out.Teams);
+	Object->TryGetNumberField(TEXT("free"), Out.Free);
+	Object->TryGetNumberField(TEXT("money"), Out.Money);
+	const TSharedPtr<FJsonObject>* Bureau = nullptr;
+	if (Object->TryGetObjectField(TEXT("bureau"), Bureau))
+	{
+		Out.bBureau = true;
+		(*Bureau)->TryGetNumberField(TEXT("cost"), Out.BureauCost);
+		(*Bureau)->TryGetBoolField(TEXT("can"), Out.bBureauCan);
+		(*Bureau)->TryGetStringField(TEXT("why"), Out.BureauWhy);
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Fields = nullptr;
+	if (Object->TryGetArrayField(TEXT("fields"), Fields))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Fields)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FResearchField& Field = Out.Fields.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("id"), Field.Id);
+			Entry->TryGetStringField(TEXT("label"), Field.Label);
+			Entry->TryGetStringField(TEXT("pace"), Field.Pace);
+			Entry->TryGetStringField(TEXT("now"), Field.Now);
+			Entry->TryGetStringField(TEXT("next"), Field.Next);
+			Entry->TryGetStringField(TEXT("effect"), Field.Effect);
+			Entry->TryGetStringField(TEXT("work"), Field.Work);
+			Entry->TryGetNumberField(TEXT("ahead"), Field.Ahead);
+			Entry->TryGetNumberField(TEXT("teams"), Field.Teams);
+			Entry->TryGetNumberField(TEXT("max"), Field.Max);
+			Entry->TryGetBoolField(TEXT("good"), Field.bGood);
+			Entry->TryGetBoolField(TEXT("more"), Field.bMore);
+			Entry->TryGetBoolField(TEXT("fewer"), Field.bFewer);
+			double Fill = 0.0, Today = 0.0;
+			Entry->TryGetNumberField(TEXT("fill"), Fill);
+			Entry->TryGetNumberField(TEXT("today"), Today);
+			Field.Fill = static_cast<float>(Fill);
+			Field.Today = static_cast<float>(Today);
+			const TArray<TSharedPtr<FJsonValue>>* Marks = nullptr;
+			if (Entry->TryGetArrayField(TEXT("marks"), Marks))
+			{
+				for (const TSharedPtr<FJsonValue>& MarkValue : *Marks)
+				{
+					const TSharedPtr<FJsonObject> MarkEntry = MarkValue->AsObject();
+					FResearchMark& Mark = Field.Marks.AddDefaulted_GetRef();
+					double At = 0.0;
+					MarkEntry->TryGetNumberField(TEXT("at"), At);
+					Mark.At = static_cast<float>(At);
+					MarkEntry->TryGetBoolField(TEXT("got"), Mark.bGot);
+					MarkEntry->TryGetStringField(TEXT("name"), Mark.Name);
+				}
+			}
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Others = nullptr;
+	if (Object->TryGetArrayField(TEXT("others"), Others))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Others)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FResearchPower& Power = Out.Others.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Power.Tag);
+			Entry->TryGetStringField(TEXT("name"), Power.Name);
+			Entry->TryGetStringField(TEXT("doctrine"), Power.Doctrine);
+			const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
+			if (Entry->TryGetArrayField(TEXT("lines"), Lines))
+			{
+				for (const TSharedPtr<FJsonValue>& LineValue : *Lines)
+				{
+					const TSharedPtr<FJsonObject> Line = LineValue->AsObject();
+					FString Label, Design;
+					Line->TryGetStringField(TEXT("label"), Label);
+					Line->TryGetStringField(TEXT("name"), Design);
+					Power.Labels.Add(Label);
+					Power.Designs.Add(Design);
+				}
+			}
+		}
+	}
+	return Out;
+}
+
+bool FCampaignSession::SetTeams(const FString& Field, int32 Teams)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("teams"), FString::Printf(TEXT("[%s,%d]"), *JsonQuote(Field), Teams), Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	TakeView(Object);
+	return bOk;
+}
+
+bool FCampaignSession::FoundBureau()
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("bureau"), TEXT("[]"), Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	TakeView(Object);
+	return bOk;
+}
+
+bool FCampaignSession::TakePath(const FString& Id, const FString& Partner, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("path"), FString::Printf(TEXT("[%s,%s]"), *JsonQuote(Id), *JsonQuote(Partner)), Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	Object->TryGetStringField(TEXT("note"), OutNote);
+	TakeView(Object);
+	return bOk;
+}
+
+bool FCampaignSession::InviteToLeague(const FString& Nation, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("invite"), FString::Printf(TEXT("[%s]"), *JsonQuote(Nation)), Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	Object->TryGetStringField(TEXT("note"), OutNote);
+	TakeView(Object);
+	return bOk;
 }
 
 bool FCampaignSession::Court(const FString& Nation, FString& OutNote)

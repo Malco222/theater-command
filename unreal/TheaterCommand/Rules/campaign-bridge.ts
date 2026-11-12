@@ -37,12 +37,16 @@
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
 import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, men, railReach as railReachOf } from '../../../src/campaign/game';
+import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
+import type { Field } from '../../../src/campaign/types';
+import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
-  invasions, previewDeclare, orderCourt,
+  orderBureau, orderTeams,
+  invasions, previewDeclare, orderCourt, leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
@@ -123,6 +127,8 @@ function view() {
     air: s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => ({
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
     })),
+    // The members of the League, the third alliance: their ground is shown in its own colour.
+    league: leagueMembers(s).map((n) => n.id),
     nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
       name: n.name, adj: n.adj, alive: n.alive, standing: standingOf(s, n.id), atWar: n.atWar,
     }])),
@@ -279,7 +285,7 @@ function starts() {
 /** The grand campaign as the shared data sets it out: the days on offer, and a word to each great power for each. */
 const GRAND = grandData as unknown as {
   years: { year: number; turn: number; date: string; text: string }[];
-  nations: { id: string; years: Record<string, string> }[];
+  nations: { id: string; small?: boolean; years: Record<string, string> }[];
 };
 
 /** History played by the computer up to a month, kept as saved text so that it is only played once. */
@@ -323,14 +329,17 @@ function grand(from = 1, seed = 1939) {
   const h = grandGame(from, seed, null);
   const year = String(GRAND.years.find((y) => y.turn === from)?.year ?? '');
   const order = GRAND.nations.map((n) => n.id);
+  // The small countries whose path is their own to choose: led like any other, with a word about each in 1939.
+  const smallOnes = new Set(GRAND.nations.filter((n) => n.small).map((n) => n.id));
   const nations = Object.entries(h.nations)
-    .filter(([nat, n]) => n.alive && (!order.includes(nat) || GRAND.nations.find((x) => x.id === nat)!.years[year] !== undefined))
+    .filter(([nat, n]) => n.alive && (!order.includes(nat) || smallOnes.has(nat) || GRAND.nations.find((x) => x.id === nat)!.years[year] !== undefined))
     .map(([nat, n]) => {
       const foes = Object.keys(h.nations).filter((other) => other !== nat && h.nations[other].alive && atWar(h, nat, other));
       return {
         nat,
         name: n.name,
-        major: order.includes(nat),
+        major: order.includes(nat) && !smallOnes.has(nat),
+        small: smallOnes.has(nat),
         blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? '',
         standing: foes.length ? `At war with ${listNames(foes.map((f) => h.nations[f].name))}` : 'At peace',
         corps: h.corps.filter((c) => c.nat === nat).length,
@@ -338,7 +347,7 @@ function grand(from = 1, seed = 1939) {
       };
     })
     .filter((n) => n.corps > 0 || n.regions > 0)
-    .sort((a, b) => (a.major === b.major ? (a.major ? order.indexOf(a.nat) - order.indexOf(b.nat) : a.name.localeCompare(b.name)) : a.major ? -1 : 1));
+    .sort((a, b) => (a.major === b.major ? (a.major ? order.indexOf(a.nat) - order.indexOf(b.nat) : a.small === b.small ? a.name.localeCompare(b.name) : a.small ? -1 : 1) : a.major ? -1 : 1));
   return { from, nations };
 }
 
@@ -870,6 +879,7 @@ function warPlan(on: string, target = -1) {
   const divs = fieldArmy(s, on).toLocaleString('en-US');
   const lines: string[] = [];
   lines.push(f.joins ? `${The} joins ${blocOf(f.joins)} the moment it is attacked, and its ${divs} divisions fight for them.` : `${The} and its ${divs} divisions are at war with you from today.`);
+  if (f.league.length) lines.push(`The League stands by it. ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${listOf(f.league.map((x) => theName(s, x)))} ${f.league.length === 1 ? 'goes' : 'go'} to war with you the same day, with ${f.league.reduce((sum, id) => sum + fieldArmy(s, id), 0).toLocaleString('en-US')} divisions between them.`);
   if (f.trade) lines.push(`Its trade ends. ${The} trades with you today, worth ${trade} a month to your treasury.`);
   if (f.sneak > 1) lines.push(`Surprise. It is at peace and not expecting you: this month your attacks on its ground are ${Math.round((f.sneak - 1) * 100)}% stronger. Next month the bonus is gone.`);
   else if (n.atWar.some((x) => x === s.human || allied(s, x, s.human!))) lines.push('No surprise: it is already at war with your side and its army is ready.');
@@ -887,10 +897,11 @@ function warPlan(on: string, target = -1) {
       lines.push(`${upFirst(theName(s, a.nat))} ${how}${a.trade ? `, and stops trading with you (${trade} a month lost)` : ''}.`);
     }
     if (!moved.length) lines.push('Nobody changes sides over this one attack, but the next may tip them.');
-  } else if (f.joins === null && bloc(n) !== null) lines.push(`${The} already belongs to ${blocOf(bloc(n)!)}: the neutral world expects this war and takes no fright at it.`);
+  } else if (f.joins === null && bloc(n) === 'league') lines.push('The neutrals on the track between the blocs take no side in a quarrel with the League.');
+  else if (f.joins === null && bloc(n) !== null) lines.push(`${The} already belongs to ${blocOf(bloc(n) as 'allies' | 'axis')}: the neutral world expects this war and takes no fright at it.`);
   else if (!mine) lines.push('Your country belongs to neither bloc, so the neutrals have no side to turn away from. They will remember it all the same.');
   const at = TRACK.indexOf(n.align) - 3;
-  const stands = at === 0 ? 'is neutral and at peace with you' : Math.abs(at) === 1 ? `is neutral, leans toward ${blocOf(at > 0 ? 'axis' : 'allies')}, and is at peace with you` : `is ${TRACK_PHRASE[n.align]}, but at peace with you`;
+  const stands = n.league ? `is a member of ${LEAGUE.name} and at peace with you` : at === 0 ? 'is neutral and at peace with you' : Math.abs(at) === 1 ? `is neutral, leans toward ${blocOf(at > 0 ? 'axis' : 'allies')}, and is at peace with you` : `is ${TRACK_PHRASE[n.align]}, but at peace with you`;
   const r = target >= 0 ? s.regions[target] : null;
   const lead = r ? `Your army is about to cross the frontier into ${r.name}. ${The} ${stands}. Marching in means war.` : `${The} ${stands}.`;
   // Friends that share a tie are named together, with the tie said once.
@@ -927,10 +938,10 @@ function diplomacy() {
       note: n.alive ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : `Fell in ${turnToDate(n.fellOn!.turn).label}: asked ${theName(s, n.fellOn!.to)} for terms`,
       war: can.has(n.id),
     }));
-  const rows = all.filter((n) => n.alive && !n.atWar.length && n.id !== me.id).sort((a, b) => a.opinion - b.opinion).map((n) => {
-    const open = !!mine && courtable(n);
+  const rows = all.filter((n) => n.alive && !n.atWar.length && !n.league && n.id !== me.id).sort((a, b) => a.opinion - b.opinion).map((n) => {
+    const open = (mine === 'axis' || mine === 'allies') && courtable(n);
     const c = open ? canCourt(s, me.id, n.id) : { ok: false, why: '' };
-    const k = open ? receptive(n, mine!) : 0;
+    const k = open ? receptive(n, mine as 'axis' | 'allies') : 0;
     const frs = friendsOf(n.id).filter((f) => s.nations[f.nat]?.alive);
     return {
       nat: n.id, name: n.name, label: TRACK_LABEL[n.align], step: step(n), opinion: Math.round(n.opinion),
@@ -942,17 +953,155 @@ function diplomacy() {
       war: can.has(n.id),
     };
   });
-  const side = mine === 'axis' ? 'the Axis' : mine === 'allies' ? 'the Allies' : '';
+  const side = mine === 'axis' ? 'the Axis' : mine === 'allies' ? 'the Allies' : mine === 'league' ? LEAGUE.name : '';
+  // The League, once it exists: its members, and who stands with whom.
+  const born = s.flags['league:born'];
+  const members = leagueMembers(s);
+  const league = {
+    founded: leagueFounded(s), full: upFirst(LEAGUE.full),
+    since: born !== undefined ? turnToDate(born).label : '',
+    members: members.map((n) => ({
+      nat: n.id, name: n.name, you: n.id === me.id, divs: fieldArmy(s, n.id),
+      note: `${n.atWar.length ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : 'At peace'}, member since ${turnToDate(s.flags[`league:${n.id}`] ?? born ?? s.turn).label}`,
+      war: can.has(n.id),
+    })),
+  };
+  // A small country in the player's hands chooses its own path.
+  const opts = paths(s);
+  const others = members.filter((n) => n.id !== me.id);
+  const foes = me.atWar.filter((x) => s.nations[x]?.alive);
+  const at = step(me);
+  const where = mine === 'league' ? `a member of ${LEAGUE.name}${others.length ? `, with ${listOf(others.map((n) => theName(s, n.id)))}` : ''}`
+    : mine ? `a member of ${mine === 'axis' ? 'the Axis' : 'the Allies'}` : TRACK_PHRASE[me.align];
+  const path = {
+    open: opts.length > 0,
+    lead: opts.length ? `${upFirst(theName(s, me.id))} is ${where}. ${foes.length ? `You are at war with ${listOf(foes.map((x) => theName(s, x)))}.` : 'You are at peace.'} A small country chooses its own path, and nobody chooses it for you: no treaty signs your land away, and no courting moves you.` : '',
+    options: opts.map((o) => {
+      const T = PATH_TEXT[o.id];
+      let text = T.text;
+      if (o.id === 'alone' && !o.now && o.ok) text = `Step back to strict neutrality: you stop leaning toward ${at > 0 ? 'the Axis' : 'the Allies'}, and answer to nobody.`;
+      if (o.id === 'join' && others.length) text += ` Its members today: ${listOf(others.map((n) => theName(s, n.id)))}.`;
+      return {
+        id: o.id, ok: o.ok && up, now: o.now, why: o.ok && !up ? 'Not in your month.' : o.why,
+        title: !o.now ? T.title : o.id === 'join' ? upFirst(LEAGUE.full) : o.id === 'axis' ? 'The Axis' : o.id === 'allies' ? 'The Allies' : T.title,
+        text: o.ok || o.now ? text : '',
+        final: o.id === 'axis' || o.id === 'allies' || o.id === 'join',
+      };
+    }),
+    partners: opts.some((o) => o.id === 'found' && o.ok) ? leaguePartners(s).map((x) => ({ nat: x.nat, name: s.nations[x.nat].name, ok: x.ok && up, why: x.why })) : [],
+    invites: me.league ? leagueInvites(s).map((x) => ({ nat: x.nat, name: s.nations[x.nat].name, ok: x.ok, why: x.ok ? (whyNotLeagueInvite(s, x.nat) ?? x.why) : x.why, can: x.ok && whyNotLeagueInvite(s, x.nat) === null })) : [],
+    inviteCost: LEAGUE.invite.cost,
+  };
   const worth = shown(DIPLOMACY.tradeIncome).toLocaleString('en-US');
   return {
     nation: me.name, date: turnToDate(s.turn).label, bloc: side, up,
     capital: Math.floor(me.pc), income: pcIncome(me.id), cap: DIPLOMACY.pcCap, partners: partners.size, cost: DIPLOMACY.court.cost,
     wind,
-    help: mine
+    help: mine === 'league' ? 'The League courts nobody: it wins members by invitation, and only those who feel the danger say yes.' : mine
       ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth} a month to your treasury` : ''}; one that is fully won over joins your side.`
       : 'Your country belongs to neither bloc, so it has nobody to win the neutrals over to.',
-    powers, rows,
+    powers, rows, league, path,
   };
+}
+
+/** The last month the research strips show, as the browser game draws them. */
+const WAR_ENDS = 76;
+const PACE = ['Nobody at work: this branch stands still', 'One team: keeps to history\'s schedule', 'Two teams: half as fast again', 'Three teams: nearly twice the pace'];
+
+/**
+ * The design offices: every branch of the armed forces with what is in service, what comes next and when, how far
+ * ahead of history's clock or behind it the designers are, and the teams at work on it. The other powers' designs
+ * in service follow. A country with no design offices of its own gets only those.
+ */
+function research() {
+  const s = game();
+  const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+  if (!me) return null;
+  const up = humanUp(s) && !onEve(s);
+  const when = (t: number): string => turnToDate(Math.max(1, t)).label;
+  const others = Object.values(s.nations).filter((n) => n.lab && n.alive && n.id !== me.id)
+    .sort((a, b) => fieldArmy(s, b.id) - fieldArmy(s, a.id))
+    .map((n) => ({
+      nat: n.id, name: n.name, doctrine: doctrineOf(n.id),
+      lines: FIELDS.map((f) => ({ label: RESEARCH.fields[f].label, name: inService(n.id, n.lab!, f)?.name ?? '' })).filter((l) => l.name),
+    }));
+  const lab = me.lab;
+  if (!lab) {
+    return {
+      nation: me.name, date: turnToDate(s.turn).label, up, own: false, teams: 0, free: 0, doctrine: '', money: inHand(me.pp),
+      note: `${me.name} has no design offices of its own and buys its weapons abroad. The weapons of every great power improve as the war goes on, each new design arriving in the month history brought it into service.`,
+      bureau: null, fields: [], others,
+    };
+  }
+  const free = teamsFree(lab);
+  const cost = bureauCost(me);
+  const fields = FIELDS.map((f: Field) => {
+    const spec = RESEARCH.fields[f];
+    const cur = inService(me.id, lab, f), next = nextStep(me.id, lab, f);
+    const ahead = Math.round(monthsAhead(lab, f));
+    const eta = arrival(s, me.id, f);
+    const k = lead(s, me.id, f);
+    const pct = Math.round(spec.per * k * 100);
+    const n = lab.teams[f];
+    const at = (t: number): number => Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS;
+    return {
+      id: f, label: f === 'doctrine' ? `${spec.label}: ${doctrineOf(me.id)}` : spec.label,
+      ahead, pace: ahead > 0 ? `${ahead} month${ahead === 1 ? '' : 's'} ahead` : ahead < 0 ? `${-ahead} month${ahead === -1 ? '' : 's'} behind` : 'On history\'s schedule',
+      now: cur?.name ?? 'nothing yet',
+      next: next ? `Next: ${next.name}. History had it in ${when(next.at)}; ${eta === null ? 'at this pace it never comes' : `yours is due ${when(eta)}`}.` : 'The designers have nothing further on the drawing board.',
+      effect: k ? `${spec.who}: ${pct > 0 ? '+' : ''}${pct}% while these designs are ${Math.abs(k) === 1 ? 'a generation' : `${Math.abs(k)} generations`} ${k > 0 ? 'ahead of' : 'behind'} history.` : '',
+      good: k > 0,
+      teams: n, max: MAX_TEAMS, work: PACE[n] ?? '',
+      more: up && n < MAX_TEAMS && free > 0, fewer: up && n > 0,
+      fill: at(lab.clock[f]), today: at(lab.months),
+      marks: stepsOf(me.id, f).filter((st) => st.at > 0).map((st) => ({ at: at(st.at), got: st.at <= lab.clock[f], name: `${st.name}: ${when(st.at)} in history` })),
+    };
+  });
+  return {
+    nation: me.name, date: turnToDate(s.turn).label, up, own: true, teams: teamsTotal(lab), free, doctrine: doctrineOf(me.id), money: inHand(me.pp),
+    note: 'Every design team keeps one branch of the armed forces on history\'s schedule. Put a second team on a branch and its next designs arrive early; take the team away and the branch falls behind. In battle a design counts for as long as it is ahead of its time.',
+    bureau: cost === null ? null : { cost: shown(cost), can: up && me.pp >= cost, why: !up ? 'It is not your month.' : me.pp < cost ? `Needs ${shown(cost).toLocaleString('en-US')}; the treasury has ${inHand(me.pp).toLocaleString('en-US')}.` : '' },
+    fields, others,
+  };
+}
+
+/** Puts this many design teams on a branch of the player's research. */
+function teams(field: string, n: number) {
+  const s = game();
+  return { ok: orderTeams(s, field as Field, n), view: view() };
+}
+
+/** Founds one more design team for the player, paid for from the treasury. */
+function bureau() {
+  const s = game();
+  return { ok: orderBureau(s), view: view() };
+}
+
+const PATH_TEXT: Record<PathId, { title: string; text: string }> = {
+  axis: { title: 'Join the Axis', text: 'Germany\'s side. Axis armies may cross your land and yours theirs, you share their supply lines, and you can go to war beside them. You are at war with nobody until you declare it or the Allies do.' },
+  allies: { title: 'Join the Allies', text: 'Britain\'s side. Allied armies may cross your land and yours theirs, you share their supply lines, and you can go to war beside them. You are at war with nobody until you declare it or the Axis does.' },
+  alone: { title: 'Stand alone', text: 'You are at nobody\'s side and nobody\'s quarrel is yours. If you are attacked you fight alone, unless you choose a side then.' },
+  found: { title: 'Found the League', text: 'A third alliance, of smaller nations, apart from the Axis and the Allies. Its members are allies of one another, and war on one is war on them all. Pick the country that founds it with you; as a member you can invite more.' },
+  join: { title: 'Join the League', text: 'The third alliance, of smaller nations, apart from the Axis and the Allies. Its members are allies of one another, and war on one is war on them all.' },
+};
+
+/** The player's small country takes a path: joins a bloc, stands alone, founds the League with a partner, or joins it. */
+function takePathOf(id: string, partner = '') {
+  const s = game();
+  const h0 = s.headlines.length;
+  const ok = orderPath(s, id as PathId, partner || undefined);
+  const news = s.headlines.slice(h0).map((h) => h.text);
+  return { ok, note: !ok ? 'That path cannot be taken today.' : news.length ? news.join(' ') : 'It is done.', view: view() };
+}
+
+/** The player, a member of the League, invites a willing country into it. */
+function inviteNation(nat: string) {
+  const s = game();
+  const h0 = s.headlines.length;
+  const why = whyNotLeagueInvite(s, nat);
+  const ok = orderLeagueInvite(s, nat);
+  const news = s.headlines.slice(h0).map((h) => h.text);
+  return { ok, note: !ok ? why ?? 'They would not join today.' : news.length ? news.join(' ') : `${upFirst(theName(s, nat))} joins ${LEAGUE.name}.`, view: view() };
 }
 
 /** Spends the player's political capital to pull a neutral toward his bloc, and says what came of it. */
@@ -1026,4 +1175,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, research, teams, bureau, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

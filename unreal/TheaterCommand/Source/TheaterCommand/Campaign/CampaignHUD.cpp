@@ -69,6 +69,7 @@ namespace
 			PanelBrush = FSlateRoundedBoxBrush(PanelFill, 6.0f, Brass.CopyWithNewOpacity(0.7f), 1.0f);
 			ChipBrush = FSlateRoundedBoxBrush(FLinearColor::White, 3.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), 1.0f);
 			BarBrush = FSlateRoundedBoxBrush(FLinearColor::White, 1.5f);
+			CardBrush = FSlateRoundedBoxBrush(CardFill, 5.0f, Faint.CopyWithNewOpacity(0.55f), 1.0f);
 			DotBrush = FSlateRoundedBoxBrush(FLinearColor::White, 6.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.7f), 1.0f);
 			PickedCard = MakeButtonStyle(CardFill, CardHover, Brass, 1.5f);
 			LeftCard = MakeButtonStyle(CardFill.CopyWithNewOpacity(0.7f), CardHover, Faint.CopyWithNewOpacity(0.6f), 1.0f);
@@ -223,6 +224,15 @@ namespace
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenArsenal(); } return FReply::Handled(); })
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("ARSENAL"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									.ToolTipText(FText::FromString(TEXT("The design offices: put design teams on the branches whose new weapons you want early.")))
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenResearch(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("RESEARCH"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
 									]
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
@@ -752,6 +762,88 @@ namespace
 						]
 					]
 
+					// The design offices: every branch of the armed forces, and the teams at work on it.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsResearchOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(1220.0f).HeightOverride(800.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 22.0f, 26.0f, 22.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
+										[
+											SNew(SBox).WidthOverride(72.0f).HeightOverride(48.0f)
+											[
+												SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() && Controller->GetSession() ? Controller->GetLedgerNationTag() : FString()); })
+											]
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+										[
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
+											[
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 240)).ColorAndOpacity(Brass)
+												.Text_Lambda([this]()
+												{
+													const FResearch* Labs = Controller.IsValid() ? &Controller->GetResearch() : nullptr;
+													return Labs ? FText::FromString(FString::Printf(TEXT("THE DESIGN OFFICES  \u00B7  %s  \u00B7  %s"), *Labs->Nation.ToUpper(), *Labs->Date.ToUpper())) : FText::GetEmpty();
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 26))
+												.ColorAndOpacity_Lambda([this]() { return FSlateColor(Controller.IsValid() && Controller->GetResearch().Free > 0 ? BrightBrass : Cream); })
+												.Text_Lambda([this]()
+												{
+													const FResearch* Labs = Controller.IsValid() ? &Controller->GetResearch() : nullptr;
+													if (!Labs || !Labs->bOwn)
+													{
+														return FText::FromString(TEXT("No design offices of its own"));
+													}
+													return FText::FromString(Labs->Free > 0
+														? FString::Printf(TEXT("%d design teams, %d idle"), Labs->Teams, Labs->Free)
+														: FString::Printf(TEXT("%d design teams, all at work"), Labs->Teams));
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+												.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetResearch().Note) : FText::GetEmpty(); })
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(20.0f, 9.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseResearch(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+											]
+										]
+									]
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(1.75f).Padding(0.0f, 0.0f, 22.0f, 0.0f)
+										[
+											SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 10.0f, 0.0f)[SAssignNew(ResearchFields, SVerticalBox)]
+										]
+										+ SHorizontalBox::Slot().FillWidth(0.75f)
+										[
+											SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(ResearchOthers, SVerticalBox)]
+										]
+									]
+								]
+							]
+						]
+					]
+
 					// The foreign office: the powers at war, and every country at peace on the track between the blocs.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
@@ -813,7 +905,7 @@ namespace
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 18.0f, 0.0f, 0.0f)
 									[
 										SNew(SHorizontalBox)
-										+ SHorizontalBox::Slot().FillWidth(0.8f).Padding(0.0f, 0.0f, 26.0f, 0.0f)
+										+ SHorizontalBox::Slot().FillWidth(0.95f).Padding(0.0f, 0.0f, 26.0f, 0.0f)
 										[
 											SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 10.0f, 0.0f)[SAssignNew(DiplomacyPowers, SVerticalBox)]
 										]
@@ -1111,6 +1203,13 @@ namespace
 				LayOutArsenal(Controller->GetArsenal());
 			}
 
+			// Set the design offices out when they are opened, and again whenever a team is moved.
+			if (Controller.IsValid() && ResearchFields.IsValid() && Controller->IsResearchOpen() && Controller->GetResearch().Revision != ShownResearch)
+			{
+				ShownResearch = Controller->GetResearch().Revision;
+				LayOutResearch(Controller->GetResearch());
+			}
+
 			// Set the foreign office out when it is opened, and again after every move made there.
 			if (Controller.IsValid() && DiplomacyRows.IsValid() && Controller->IsDiplomacyOpen() && Controller->GetDiplomacy().Revision != ShownDiplomacy)
 			{
@@ -1362,10 +1461,223 @@ namespace
 			}
 		}
 
+		/** Something set at one point along a strip: a mark, or the line for today. */
+		TSharedRef<SWidget> AlongStrip(float At, float Width, float Height, const FLinearColor& Ink, const FString& Tip)
+		{
+			const float Where = FMath::Clamp(At, 0.0f, 1.0f);
+			return SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(FMath::Max(Where, 0.0001f))[SNew(SSpacer)]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).WidthOverride(Width).HeightOverride(Height).ToolTipText(FText::FromString(Tip))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Ink)]
+				]
+				+ SHorizontalBox::Slot().FillWidth(FMath::Max(1.0f - Where, 0.0001f))[SNew(SSpacer)];
+		}
+
+		/** One branch of the design offices: what is in service, what comes next, the strip of the war, and the teams on it. */
+		TSharedRef<SWidget> MakeResearchField(const FResearchField& Field)
+		{
+			const FLinearColor PaceInk = Field.Ahead > 0 ? Gain : Field.Ahead < 0 ? Alarm : Muted;
+			// The strip: the whole war from left to right, the designers' progress filled in, history's dates as marks, today as a white line.
+			TSharedRef<SOverlay> Strip = SNew(SOverlay)
+				+ SOverlay::Slot().VAlign(VAlign_Center)
+				[
+					SNew(SBox).HeightOverride(6.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.09f))]
+				]
+				+ SOverlay::Slot().VAlign(VAlign_Center)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(FMath::Clamp(Field.Fill, 0.0001f, 1.0f))
+					[
+						SNew(SBox).HeightOverride(6.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Brass)]
+					]
+					+ SHorizontalBox::Slot().FillWidth(FMath::Clamp(1.0f - Field.Fill, 0.0001f, 1.0f))[SNew(SSpacer)]
+				];
+			for (const FResearchMark& Mark : Field.Marks)
+			{
+				Strip->AddSlot().VAlign(VAlign_Center)[AlongStrip(Mark.At, 3.0f, 12.0f, Mark.bGot ? BrightBrass : FLinearColor(1.0f, 1.0f, 1.0f, 0.4f), Mark.Name)];
+			}
+			Strip->AddSlot().VAlign(VAlign_Center)[AlongStrip(Field.Today, 2.0f, 18.0f, FLinearColor::White, TEXT("History today"))];
+
+			TSharedRef<SHorizontalBox> Pips = SNew(SHorizontalBox);
+			for (int32 Pip = 0; Pip < Field.Max; ++Pip)
+			{
+				Pips->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 4.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(14.0f).HeightOverride(14.0f)[SNew(SBorder).BorderImage(&DotBrush).BorderBackgroundColor(Pip < Field.Teams ? BrightBrass : FLinearColor(1.0f, 1.0f, 1.0f, 0.12f))]
+				];
+			}
+			TSharedRef<SVerticalBox> Card = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(Field.Label)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Field.Pace.ToUpper())).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(PaceInk)
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("In service: ") + Field.Now)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(BrightBrass).AutoWrapText(true)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Field.Next)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 2.0f)
+				[
+					SNew(SBox).HeightOverride(20.0f)[Strip]
+				];
+			if (!Field.Effect.IsEmpty())
+			{
+				Card->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Field.Effect)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Field.bGood ? Gain : Alarm).AutoWrapText(true)
+				];
+			}
+			Card->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					OfficeButton(TEXT("\u2212"), BrightBrass, Field.bFewer, TEXT("Take a team off this branch."), [this, Id = Field.Id, N = Field.Teams - 1]() { if (Controller.IsValid()) { Controller->SetResearchTeams(Id, N); } })
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 4.0f, 0.0f)[Pips]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+				[
+					OfficeButton(TEXT("+"), BrightBrass, Field.bMore, TEXT("Put another team on this branch. It needs an idle team."), [this, Id = Field.Id, N = Field.Teams + 1]() { if (Controller.IsValid()) { Controller->SetResearchTeams(Id, N); } })
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(FText::FromString(Field.Work)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Field.Teams == 0 ? Alarm : Muted).AutoWrapText(true)
+				]
+			];
+			return SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(12.0f, 9.0f, 12.0f, 10.0f))[Card];
+		}
+
+		/** The design offices: the branches two abreast, and beside them more teams to found and what the other powers have. */
+		void LayOutResearch(const FResearch& Labs)
+		{
+			ResearchFields->ClearChildren();
+			if (Labs.bOwn)
+			{
+				ResearchFields->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("Each strip is the whole war. The brass bar is how far your designers have come, the marks are each design's date in history, and the white line is today.")))
+				];
+			}
+			for (int32 First = 0; First < Labs.Fields.Num(); First += 2)
+			{
+				TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+				for (int32 Column = 0; Column < 2; ++Column)
+				{
+					const int32 Index = First + Column;
+					Row->AddSlot().FillWidth(1.0f).Padding(0.0f, 0.0f, Column == 0 ? 10.0f : 0.0f, 0.0f)
+					[
+						Labs.Fields.IsValidIndex(Index) ? MakeResearchField(Labs.Fields[Index]) : StaticCastSharedRef<SWidget>(SNew(SSpacer))
+					];
+				}
+				ResearchFields->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)[Row];
+			}
+			if (!Labs.bOwn)
+			{
+				ResearchFields->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("A power that pushes one branch hard gets its designs early; one that neglects a branch falls behind. What the great powers have in service today is listed on the right.")))
+				];
+			}
+
+			ResearchOthers->ClearChildren();
+			if (Labs.bOwn)
+			{
+				ResearchOthers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("MORE DESIGN TEAMS"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+				];
+				if (!Labs.bBureau)
+				{
+					ResearchOthers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("The nation has all the design teams its engineers can staff."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
+					];
+				}
+				else
+				{
+					TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("Found a new design team"))).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(Labs.bBureauCan ? Cream : Faint)
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s from the treasury"), *Cash(Labs.BureauCost)))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Labs.bBureauCan ? BrightBrass : Alarm)
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+							.Text(FText::FromString(Labs.BureauWhy.IsEmpty() ? FString(TEXT("One more team to put on any branch, for the rest of the war.")) : Labs.BureauWhy))
+						];
+					ResearchOthers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 16.0f)
+					[
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 7.0f, 11.0f, 8.0f)).IsFocusable(false).IsEnabled(Labs.bBureauCan)
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->FoundResearchBureau(); } return FReply::Handled(); })
+						[
+							Words
+						]
+					];
+				}
+			}
+			ResearchOthers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("WHAT THE OTHER POWERS HAVE IN SERVICE"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass).AutoWrapText(true)
+			];
+			for (const FResearchPower& Power : Labs.Others)
+			{
+				ResearchOthers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(27.0f).HeightOverride(18.0f)[SNew(SImage).Image(FlagBrush(Power.Tag))]
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(Power.Doctrine.IsEmpty() ? Power.Name : Power.Name + TEXT("  \u00B7  ") + Power.Doctrine)).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
+					]
+				];
+				for (int32 Line = 0; Line < Power.Labels.Num() && Line < Power.Designs.Num(); ++Line)
+				{
+					ResearchOthers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 1.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth()
+						[
+							SNew(SBox).WidthOverride(100.0f)[SNew(STextBlock).Text(FText::FromString(Power.Labels[Line].Replace(TEXT("Infantry weapons and guns"), TEXT("Infantry")).Replace(TEXT("Radar and signals"), TEXT("Radar")).Replace(TEXT("War production"), TEXT("Production")).Replace(TEXT("Army doctrine"), TEXT("Doctrine")))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Faint)]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Power.Designs[Line])).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+						]
+					];
+				}
+				ResearchOthers->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(12.0f)];
+			}
+		}
+
 		static FText DiplomacySummary(const FDiplomacy& Office)
 		{
-			FString Line = FString::Printf(TEXT("%d more each month, up to %d.  %d trade partner%s.  %s"),
-				Office.Income, Office.Cap, Office.Partners, Office.Partners == 1 ? TEXT("") : TEXT("s"), *Office.Wind);
+			FString Line = FString::Printf(TEXT("%d more each month, up to %d.  "), Office.Income, Office.Cap);
+			if (Office.Bloc.Contains(TEXT("Axis")) || Office.Bloc.Contains(TEXT("Allies")))
+			{
+				Line += FString::Printf(TEXT("%d trade partner%s.  "), Office.Partners, Office.Partners == 1 ? TEXT("") : TEXT("s"));
+			}
+			Line += Office.Wind;
 			if (!Office.bUp)
 			{
 				Line += TEXT("  It is not your month, so nothing can be done here now.");
@@ -1430,12 +1742,232 @@ namespace
 				];
 		}
 
+		/** A country asked into the League: its flag, its name and its reason, and the button that asks it. */
+		TSharedRef<SWidget> LeagueRow(const FLeagueAnswer& Answer, const TCHAR* Label, const FLinearColor& Ink, bool bEnabled, TFunction<void()> Pressed)
+		{
+			return SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 8.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(27.0f).HeightOverride(18.0f)[SNew(SImage).Image(FlagBrush(Answer.Tag))]
+				]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Answer.Name)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Answer.Why)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted).AutoWrapText(true)
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					OfficeButton(Label, Ink, bEnabled, Answer.Why, Pressed)
+				];
+		}
+
 		/** The foreign office: the powers at war down the left, the countries at peace on their track down the right. */
 		void LayOutDiplomacy(const FDiplomacy& Office)
 		{
 			const float Mine = Office.Bloc.Contains(TEXT("Axis")) ? 1.0f : Office.Bloc.Contains(TEXT("Allies")) ? -1.0f : 0.0f;
 
 			DiplomacyPowers->ClearChildren();
+			const FLinearColor Teal = FLinearColor(FColor::FromHex(TEXT("5CC4B6")));
+			const FString Asked = Controller.IsValid() ? Controller->GetPathAsked() : FString();
+
+			// A small country's own path: join a bloc, stand alone, or found or join the League.
+			if (Office.Paths.Num() > 0)
+			{
+				DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("YOUR COUNTRY'S PATH"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+				];
+				DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Office.PathLead)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+				];
+				for (const FPathOption& Option : Office.Paths)
+				{
+					const bool bLeagueWay = Option.Id == TEXT("found") || Option.Id == TEXT("join");
+					const FLinearColor Ink = Option.bNow ? (bLeagueWay ? Teal : BrightBrass) : Option.bOk ? Cream : Faint;
+					TSharedRef<SVerticalBox> Card = SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(FText::FromString(Option.Title)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Ink)
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Text(FText::FromString(Option.bNow ? TEXT("YOUR PATH TODAY") : TEXT(""))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Gain)
+							]
+						];
+					if (!Option.Text.IsEmpty())
+					{
+						Card->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Option.Text)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+						];
+					}
+					if (!Option.bOk && !Option.bNow && !Option.Why.IsEmpty())
+					{
+						Card->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Option.Why)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
+						];
+					}
+					if (Option.bOk && !Option.bNow && Option.Id != TEXT("found"))
+					{
+						// Two presses: the first asks, the second takes the path.
+						if (Asked == Option.Id)
+						{
+							Card->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Option.bFinal ? TEXT("An alliance, once joined, is not left. Are you sure?") : TEXT("Are you sure?"))).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Alarm).AutoWrapText(true)
+							];
+							Card->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
+								[
+									OfficeButton(*(TEXT("YES, ") + Option.Title.ToUpper()), BrightBrass, true, FString(), [this, Id = Option.Id]() { if (Controller.IsValid()) { Controller->PressPath(Id); } })
+								]
+								+ SHorizontalBox::Slot().AutoWidth()
+								[
+									OfficeButton(TEXT("NO"), Muted, true, FString(), [this]() { if (Controller.IsValid()) { Controller->PressPath(FString()); } })
+								]
+							];
+						}
+						else
+						{
+							Card->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
+								OfficeButton(*Option.Title.ToUpper(), BrightBrass, true, FString(), [this, Id = Option.Id]() { if (Controller.IsValid()) { Controller->PressPath(Id); } })
+							];
+						}
+					}
+					if (Option.Id == TEXT("found") && Option.bOk)
+					{
+						// The countries that would found it with the player: willing ones first, each with its reason.
+						int32 Refusing = 0;
+						for (const FLeagueAnswer& Answer : Office.Founders)
+						{
+							if (!Answer.bOk)
+							{
+								++Refusing;
+								continue;
+							}
+							const bool bAsked = Asked == TEXT("found:") + Answer.Tag;
+							Card->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)[LeagueRow(Answer, bAsked ? TEXT("YES, FOUND IT") : TEXT("FOUND IT TOGETHER"), bAsked ? Teal : BrightBrass, true,
+								[this, Tag = Answer.Tag]() { if (Controller.IsValid()) { Controller->PressPath(TEXT("found"), Tag); } })];
+						}
+						if (Refusing > 0)
+						{
+							Card->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
+								.Text(FText::FromString(FString::Printf(TEXT("%d other %s would refuse today: they lean toward a bloc, or see no danger yet."), Refusing, Refusing == 1 ? TEXT("country") : TEXT("countries"))))
+							];
+						}
+					}
+					if (Option.Id == TEXT("join") && Option.bNow && Office.Invites.Num() > 0)
+					{
+						Card->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(Brass)
+							.Text(FText::FromString(FString::Printf(TEXT("INVITE A COUNTRY  \u00B7  %d POLITICAL CAPITAL EACH"), Office.InviteCost)))
+						];
+						int32 Refusing = 0;
+						for (const FLeagueAnswer& Answer : Office.Invites)
+						{
+							if (!Answer.bOk)
+							{
+								++Refusing;
+								continue;
+							}
+							Card->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)[LeagueRow(Answer, TEXT("INVITE"), BrightBrass, Answer.bCan,
+								[this, Tag = Answer.Tag]() { if (Controller.IsValid()) { Controller->InviteToLeague(Tag); } })];
+						}
+						if (Refusing > 0)
+						{
+							Card->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
+								.Text(FText::FromString(FString::Printf(TEXT("%d other %s would refuse today."), Refusing, Refusing == 1 ? TEXT("country") : TEXT("countries"))))
+							];
+						}
+					}
+					DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+					[
+						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(11.0f, 8.0f, 11.0f, 9.0f))[Card]
+					];
+				}
+				DiplomacyPowers->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(10.0f)];
+			}
+
+			// The League, once it has been founded: its members stand by one another.
+			if (Office.bLeague)
+			{
+				DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Office.LeagueName.ToUpper())).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Teal)
+				];
+				DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+					.Text(FText::FromString(FString::Printf(TEXT("A third alliance, of smaller nations, that belongs to neither the Axis nor the Allies. Founded %s. War on one member is war on them all. Its ground is teal on the map."), *Office.LeagueSince)))
+				];
+				if (Office.Members.Num() == 0)
+				{
+					DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("None of its members is left."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint)
+					];
+				}
+				for (const FDiplomacyPower& Member : Office.Members)
+				{
+					TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(36.0f).HeightOverride(24.0f)[SNew(SImage).Image(FlagBrush(Member.Tag))]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().FillWidth(1.0f)
+								[
+									SNew(STextBlock).Text(FText::FromString(Member.Name)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Member.Side == TEXT("own") ? BrightBrass : Teal)
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+									.Text(FText::FromString(FString::Printf(TEXT("%s%d division%s"), Member.Side == TEXT("own") ? TEXT("You  \u00B7  ") : TEXT(""), Member.Divisions, Member.Divisions == 1 ? TEXT("") : TEXT("s"))))
+								]
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Member.Note)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+							]
+						];
+					if (Member.bWar)
+					{
+						Row->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+						[
+							OfficeButton(TEXT("WAR"), Alarm, true, FString::Printf(TEXT("See what declaring war on %s would mean: the whole League stands by it. Nothing happens until you confirm."), *Member.Name),
+								[this, Tag = Member.Tag]() { if (Controller.IsValid()) { Controller->AskWarOn(Tag); } })
+						];
+					}
+					DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)[Row];
+				}
+				DiplomacyPowers->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(10.0f)];
+			}
+
 			DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
 			[
 				SNew(STextBlock).Text(FText::FromString(TEXT("THE POWERS AT WAR"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
@@ -1467,7 +1999,7 @@ namespace
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
 							SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
-							.Text(FText::FromString(Power.bAlive ? FString::Printf(TEXT("%s  \u00B7  %d division%s"), Standing, Power.Divisions, Power.Divisions == 1 ? TEXT("") : TEXT("s")) : FString(TEXT("Fallen"))))
+							.Text(FText::FromString(Power.bAlive ? FString::Printf(TEXT("%d division%s"), Power.Divisions, Power.Divisions == 1 ? TEXT("") : TEXT("s")) : FString(TEXT("Fallen"))))
 						]
 					];
 				if (Power.bAlive)
@@ -1484,7 +2016,7 @@ namespace
 				}
 				Words->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Power.Note)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Power.bAlive ? Muted : Faint).AutoWrapText(true)
+					SNew(STextBlock).Text(FText::FromString(Power.bAlive ? FString::Printf(TEXT("%s. %s"), Standing, *Power.Note) : Power.Note)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Power.bAlive ? Muted : Faint).AutoWrapText(true)
 				];
 				TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
@@ -1835,6 +2367,13 @@ namespace
 					SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s"), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
 					.Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted).AutoWrapText(true)
 				];
+				if (Nation.bSmall && !Nation.Blurb.IsEmpty())
+				{
+					Words->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.1f)
+					];
+				}
 			}
 			return SNew(SButton).ButtonStyle(bChosen ? &ChosenCard : &PlainButton).IsFocusable(false)
 				.ContentPadding(Nation.bMajor ? FMargin(13.0f, 11.0f, 13.0f, 12.0f) : FMargin(10.0f, 7.0f, 10.0f, 8.0f))
@@ -1940,13 +2479,23 @@ namespace
 					return;
 				}
 
-				TArray<TSharedRef<SWidget>> Great, Rest;
+				TArray<TSharedRef<SWidget>> Great, Small, Rest;
 				for (int32 Index = 0; Index < Opening.Nations.Num(); ++Index)
 				{
-					(Opening.Nations[Index].bMajor ? Great : Rest).Add(MakeNation(Opening.Nations[Index], Index, Index == Opening.NationIndex));
+					(Opening.Nations[Index].bMajor ? Great : Opening.Nations[Index].bSmall ? Small : Rest).Add(MakeNation(Opening.Nations[Index], Index, Index == Opening.NationIndex));
 				}
 				Starts->AddSlot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 8.0f)[Heading(TEXT("THE GREAT POWERS"))];
 				AddGrid(Great, 3);
+				if (Small.Num() > 0)
+				{
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 2.0f)[Heading(TEXT("SMALL COUNTRIES, WITH A PATH OF THEIR OWN"))];
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
+						.Text(FText::FromString(TEXT("A small country chooses for itself: join the Axis, join the Allies, stand alone, or found a League of its own with a willing neighbour. Open DIPLOMACY in the game to choose.")))
+					];
+					AddGrid(Small, 4);
+				}
 				if (Rest.Num() > 0)
 				{
 					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[Heading(TEXT("OTHER COUNTRIES"))];
@@ -2247,6 +2796,7 @@ namespace
 		FSlateBrush ChipBrush;
 		FSlateBrush BarBrush;
 		FSlateBrush DotBrush;
+		FSlateBrush CardBrush;
 		FButtonStyle PickedCard;
 		FButtonStyle LeftCard;
 		FButtonStyle EndMonthStyle;
@@ -2262,6 +2812,9 @@ namespace
 		FButtonStyle PlateButton;
 		TSharedPtr<SHorizontalBox> ArsenalColumns;
 		int32 ShownArsenal = -1;
+		TSharedPtr<SVerticalBox> ResearchFields;
+		TSharedPtr<SVerticalBox> ResearchOthers;
+		int32 ShownResearch = -1;
 		TSharedPtr<SVerticalBox> DiplomacyPowers;
 		TSharedPtr<SVerticalBox> DiplomacyHead;
 		TSharedPtr<SVerticalBox> DiplomacyRows;

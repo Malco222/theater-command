@@ -96,6 +96,7 @@ struct FOpeningNation
 	FText Standing; // "At peace", or who it is at war with
 	FText Strength; // "28 corps, 36 territories"
 	bool bMajor = false;
+	bool bSmall = false; // a small country whose path is its own to choose
 };
 
 struct FOpeningGroup
@@ -303,12 +304,24 @@ public:
 	void OpenLedger();
 	void CloseLedger();
 
+	/** The design offices: the teams at work on each branch of the armed forces. */
+	const FResearch& GetResearch() const { return Research; }
+	bool IsResearchOpen() const { return bResearchOpen; }
+	void OpenResearch();
+	void CloseResearch();
+	void SetResearchTeams(const FString& Field, int32 Teams);
+	void FoundResearchBureau();
+
 	/** The foreign office: the powers at war, the countries at peace, courting them and declaring war. */
 	const FDiplomacy& GetDiplomacy() const { return Diplomacy; }
 	bool IsDiplomacyOpen() const { return bDiplomacyOpen; }
 	void OpenDiplomacy();
 	void CloseDiplomacy();
 	void CourtNation(const FString& Tag);
+	/** A small country's path. The first press asks; the second, on the same path, takes it. Founding the League names the partner. */
+	void PressPath(const FString& Id, const FString& Partner = FString());
+	const FString& GetPathAsked() const { return PathAsked; }
+	void InviteToLeague(const FString& Tag);
 	/** Asked from the foreign office: the question about declaring war on a country, with no army on its way. */
 	void AskWarOn(const FString& Tag);
 
@@ -414,6 +427,9 @@ private:
 	bool bLedgerOpen = false;
 	FDiplomacy Diplomacy;
 	bool bDiplomacyOpen = false;
+	FResearch Research;
+	bool bResearchOpen = false;
+	FString PathAsked; // the path waiting for the player's yes, with its partner: "found:DEN"
 	FArsenal Arsenal;
 	bool bArsenalOpen = false;
 	FOpening Opening;

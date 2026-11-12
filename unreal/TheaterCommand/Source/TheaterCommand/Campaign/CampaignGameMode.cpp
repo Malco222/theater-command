@@ -162,7 +162,7 @@ void ACampaignGameMode::LayOutWar()
 	{
 		// The rivers and railways the rules know are laid on the table, then the war as it stands.
 		Table->SetLand(Session->Land());
-		Table->SetHolders(Session->GetView().RegionHolder);
+		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League);
 		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
 		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
 	}
@@ -182,7 +182,10 @@ bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FS
 
 FString ACampaignGameMode::SaveFile()
 {
-	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), TEXT("campaign.json"));
+	// A run that only takes pictures keeps its own save, so that it never writes over the player's campaign.
+	FString Shots;
+	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), bPictures ? TEXT("campaign-pictures.json") : TEXT("campaign.json"));
 }
 
 void ACampaignGameMode::SaveCampaign()

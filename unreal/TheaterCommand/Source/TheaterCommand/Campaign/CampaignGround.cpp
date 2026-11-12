@@ -183,6 +183,11 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 	{
 		const FCampaignNation* Nation = Data.FindNation(Region.Owner);
 		RegionTint[Region.Id] = Nation ? FLinearColor(Nation->Color) : Unclaimed;
+		if (Nation && Data.League.Contains(Region.Owner))
+		{
+			// A member of the League: its ground is the League's teal, with a trace of the country's own colour.
+			RegionTint[Region.Id] = FMath::Lerp(FLinearColor(Nation->Color), FLinearColor(FColor::FromHex(TEXT("1FA8A6"))), 0.9f);
+		}
 	}
 	for (int32 J = J0; J <= J1; ++J)
 	{

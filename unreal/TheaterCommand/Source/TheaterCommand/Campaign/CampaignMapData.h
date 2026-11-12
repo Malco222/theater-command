@@ -90,6 +90,7 @@ public:
 	TArray<TArray<FVector2D>> Land; // every landmass, including land no region claims
 	TArray<FCampaignRegion> Regions;
 	TMap<FString, FCampaignNation> Nations;
+	TSet<FString> League; // the members of the League, the third alliance: their ground is painted in its colour
 	TArray<FCampaignCorps> Corps;
 	TArray<FCampaignSeaZone> Seas;
 	TMap<FString, int32> RegionByName;

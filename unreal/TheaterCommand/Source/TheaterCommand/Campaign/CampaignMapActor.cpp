@@ -1722,18 +1722,38 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 	}
 }
 
-void ACampaignMapActor::SetHolders(const TArray<FString>& Holders)
+void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<FString>& League)
 {
+	// Countries that have joined or left the League since the table was last painted: their ground changes colour.
+	const TSet<FString> Members(League);
+	TSet<FString> Turned;
+	for (const FString& Tag : Members)
+	{
+		if (!Data.League.Contains(Tag))
+		{
+			Turned.Add(Tag);
+		}
+	}
+	for (const FString& Tag : Data.League)
+	{
+		if (!Members.Contains(Tag))
+		{
+			Turned.Add(Tag);
+		}
+	}
+	Data.League = Members;
+
 	FBox2D Changed(ForceInit);
 	for (int32 i = 0; i < Data.Regions.Num() && i < Holders.Num(); ++i)
 	{
-		if (!Holders[i].IsEmpty() && Data.Regions[i].Owner != Holders[i])
+		const bool bNewHolder = !Holders[i].IsEmpty() && Data.Regions[i].Owner != Holders[i];
+		if (bNewHolder)
 		{
 			Data.Regions[i].Owner = Holders[i];
-			if (Data.Regions[i].Bounds.bIsValid)
-			{
-				Changed += Data.Regions[i].Bounds;
-			}
+		}
+		if ((bNewHolder || Turned.Contains(Data.Regions[i].Owner)) && Data.Regions[i].Bounds.bIsValid)
+		{
+			Changed += Data.Regions[i].Bounds;
 		}
 	}
 	if (!Changed.bIsValid)

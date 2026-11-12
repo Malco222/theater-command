@@ -143,6 +143,7 @@ struct FCampaignView
 	TArray<FViewCorps> Corps;
 	FTreasury Treasury;
 	TArray<FString> Declarable; // the countries the player could declare war on this month
+	TArray<FString> League; // the members of the League, the third alliance
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown
 	TArray<int32> RailsCut; // regions whose railway is cut
@@ -295,6 +296,7 @@ struct FGrandNation
 	FString Blurb; // a word about a great power; empty for the rest
 	FString Standing; // "At peace", or who it is at war with
 	bool bMajor = false;
+	bool bSmall = false; // a small country whose path is its own to choose
 	int32 Corps = 0;
 	int32 Regions = 0;
 };
@@ -384,6 +386,89 @@ struct FDiplomacyRow
 	bool bWar = false; // the player could declare war on it this month
 };
 
+/** A design's date in history, as a mark along a branch's strip of the war. */
+struct FResearchMark
+{
+	float At = 0.0f; // 0 at September 1939, 1 at the end of the strip
+	bool bGot = false; // the designers have it
+	FString Name; // "Tiger: August 1942 in history"
+};
+
+/** One branch of the armed forces in the design offices. */
+struct FResearchField
+{
+	FString Id; // armour, infantry, doctrine, fighters, bombers, navy, radar, industry
+	FString Label;
+	FString Pace; // "3 months ahead"
+	FString Now; // the design in service
+	FString Next; // what comes next, and when
+	FString Effect; // what being ahead or behind is worth in battle; empty when level with history
+	FString Work; // what this many teams means
+	int32 Ahead = 0; // months ahead of history, negative when behind
+	int32 Teams = 0;
+	int32 Max = 0;
+	bool bGood = false;
+	bool bMore = false; // another team can be put on it
+	bool bFewer = false; // a team can be taken off it
+	float Fill = 0.0f; // how far the designers have come along the strip
+	float Today = 0.0f; // where history's own clock stands
+	TArray<FResearchMark> Marks;
+};
+
+/** Another power's designs in service. */
+struct FResearchPower
+{
+	FString Tag;
+	FString Name;
+	FString Doctrine;
+	TArray<FString> Labels;
+	TArray<FString> Designs;
+};
+
+/** The design offices of the player's nation, and what the other powers have in service. */
+struct FResearch
+{
+	bool bValid = false;
+	bool bUp = false;
+	bool bOwn = false; // the nation does its own research
+	FString Nation;
+	FString Date;
+	FString Doctrine;
+	FString Note;
+	int32 Teams = 0;
+	int32 Free = 0;
+	int32 Money = 0;
+	bool bBureau = false; // another design team can still be founded
+	bool bBureauCan = false; // and the treasury can pay for it now
+	int32 BureauCost = 0;
+	FString BureauWhy;
+	TArray<FResearchField> Fields;
+	TArray<FResearchPower> Others;
+	int32 Revision = 0;
+};
+
+/** One of the paths open to a small country in the player's hands. */
+struct FPathOption
+{
+	FString Id; // axis, allies, alone, found or join
+	FString Title;
+	FString Text;
+	FString Why; // why it cannot be taken, or where the country stands on it
+	bool bOk = false;
+	bool bNow = false; // the path the country is on today
+	bool bFinal = false; // an alliance, once joined, is not left
+};
+
+/** A country asked into the League: to found it with the player, or to join it. */
+struct FLeagueAnswer
+{
+	FString Tag;
+	FString Name;
+	FString Why;
+	bool bOk = false; // it would say yes
+	bool bCan = false; // and the player can ask it today
+};
+
 /** The foreign office: political capital, the powers at war, and every country at peace on the track. */
 struct FDiplomacy
 {
@@ -401,6 +486,17 @@ struct FDiplomacy
 	int32 Cost = 0;
 	TArray<FDiplomacyPower> Powers;
 	TArray<FDiplomacyRow> Rows;
+	// The League, once it exists.
+	bool bLeague = false;
+	FString LeagueName;
+	FString LeagueSince;
+	TArray<FDiplomacyPower> Members; // Side is "own" for the player
+	// A small country's own path: empty for a great power.
+	FString PathLead;
+	TArray<FPathOption> Paths;
+	TArray<FLeagueAnswer> Founders; // who would found the League with the player
+	TArray<FLeagueAnswer> Invites; // who the player, a member, could invite
+	int32 InviteCost = 0;
 	int32 Revision = 0;
 };
 

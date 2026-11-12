@@ -59,7 +59,7 @@ public:
 	void SetHoveredRegion(int32 RegionId);
 
 	/** Says who holds each region now, and repaints the table if ground has changed hands. */
-	void SetHolders(const TArray<FString>& Holders);
+	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League = TArray<FString>());
 
 	/**
 	 * Stands the armies on the table as the rules say they are. Marches are corps that have just moved:

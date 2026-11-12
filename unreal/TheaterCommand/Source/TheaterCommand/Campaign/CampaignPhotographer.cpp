@@ -111,14 +111,15 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	}
 	{
 		// The flag picked up by hand and carried: held over ground it can reach, then let go there.
-		FShot& Shot = Add(TEXT("13b-flag-in-the-hand"), TEXT("Mecklenburg"), 0.3f);
-		Shot.Army = TEXT("Hamburg");
-		Shot.Carry = TEXT("Mecklenburg");
+		// (The Hamburg garrison has marched by now, so this is the corps in the Eifel.)
+		FShot& Shot = Add(TEXT("13b-flag-in-the-hand"), TEXT("Rhineland"), 0.3f);
+		Shot.Army = TEXT("Eifel");
+		Shot.Carry = TEXT("Rhineland");
 	}
 	{
-		FShot& Shot = Add(TEXT("13c-flag-set-down"), TEXT("Mecklenburg"), 0.3f);
+		FShot& Shot = Add(TEXT("13c-flag-set-down"), TEXT("Rhineland"), 0.3f);
 		Shot.bKeep = true;
-		Shot.Drop = TEXT("Mecklenburg");
+		Shot.Drop = TEXT("Rhineland");
 	}
 	{
 		// An army on a frontier at peace: the ground across it is amber, because going there means war.
@@ -206,6 +207,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("31-grand-capital"), TEXT("@capital"), 0.45f).Select = TEXT("@capital");
 		Add(TEXT("31b-ledger"), TEXT("@capital"), 0.45f).bLedger = true;
 		Add(TEXT("31e-diplomacy"), TEXT("@capital"), 0.45f).bDiplomacy = true;
+		Add(TEXT("31f-research"), TEXT("@capital"), 0.45f).bResearch = true;
 		{
 			FShot& Shot = Add(TEXT("31c-arsenal"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");
@@ -259,6 +261,22 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 				Shot.bKeep = true;
 				Shot.bWar = true;
 			}
+		}
+		if (GrandNation == TEXT("SWE"))
+		{
+			// A small country's own path: asked about founding the League with Denmark, the League founded, and its ground on the map.
+			{
+				FShot& Shot = Add(TEXT("38-path-asked"), TEXT("@capital"), 0.45f);
+				Shot.bDiplomacy = true;
+				Shot.Path = TEXT("found:DEN");
+			}
+			{
+				FShot& Shot = Add(TEXT("38b-league-founded"), TEXT("@capital"), 0.45f);
+				Shot.bDiplomacy = true;
+				Shot.Path = TEXT("found:DEN");
+				Shot.PathPresses = 2;
+			}
+			Add(TEXT("38c-league-on-the-map"), TEXT("Jutland"), 0.8f);
 		}
 		if (GrandNation == TEXT("GER"))
 		{
@@ -421,6 +439,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	Controller->CloseDocument();
 	Controller->CloseLedger();
 	Controller->CloseDiplomacy();
+	Controller->CloseResearch();
 	Controller->CloseArsenal();
 	if (!Shot.bKeep)
 	{
@@ -536,9 +555,24 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	{
 		Controller->OpenRoll();
 	}
+	if (Shot.bResearch)
+	{
+		Controller->OpenResearch();
+		Controller->SetResearchTeams(TEXT("infantry"), 0);
+		Controller->SetResearchTeams(TEXT("armour"), 2);
+	}
 	if (Shot.bDiplomacy)
 	{
 		Controller->OpenDiplomacy();
+		if (!Shot.Path.IsEmpty())
+		{
+			FString Id = Shot.Path, Partner;
+			Shot.Path.Split(TEXT(":"), &Id, &Partner);
+			for (int32 Press = 0; Press < Shot.PathPresses; ++Press)
+			{
+				Controller->PressPath(Id, Partner);
+			}
+		}
 	}
 	if (Shot.bLedger)
 	{
