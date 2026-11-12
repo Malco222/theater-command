@@ -19,11 +19,142 @@ ACampaignPlayerController::ACampaignPlayerController()
 	PrimaryActorTick.bCanEverTick = true;
 }
 
+ACampaignGameMode* ACampaignPlayerController::GetMode() const
+{
+	return GetWorld() ? GetWorld()->GetAuthGameMode<ACampaignGameMode>() : nullptr;
+}
+
 FCampaignSession* ACampaignPlayerController::GetSession() const
 {
-	const ACampaignGameMode* Mode = GetWorld() ? GetWorld()->GetAuthGameMode<ACampaignGameMode>() : nullptr;
+	const ACampaignGameMode* Mode = GetMode();
 	FCampaignSession* Session = Mode ? Mode->GetSession() : nullptr;
 	return Session && Session->IsRunning() ? Session : nullptr;
+}
+
+void ACampaignPlayerController::RefreshOpening(bool bShow)
+{
+	ACampaignGameMode* Mode = GetMode();
+	FCampaignSession* Rules = Mode ? Mode->GetSession() : nullptr;
+	if (!Rules || !Map.IsValid())
+	{
+		return;
+	}
+	if (StartGroups.Num() == 0)
+	{
+		StartGroups = Rules->Starts();
+	}
+	Opening.Groups.Reset();
+	for (const FStartGroup& Group : StartGroups)
+	{
+		FOpeningGroup& Out = Opening.Groups.AddDefaulted_GetRef();
+		Out.Title = FText::FromString(Group.Title);
+		for (const FStartSide& Side : Group.Sides)
+		{
+			FOpeningSide& Choice = Out.Sides.AddDefaulted_GetRef();
+			Choice.Name = FText::FromString(Side.Name);
+			Choice.Blurb = FText::FromString(Side.Blurb);
+			Choice.Aims = FText::FromString(FString::Join(Side.Aims, TEXT("\n")));
+			Choice.bWatch = Side.Nation.IsEmpty();
+			const FCampaignNation* Nation = Map->GetData().FindNation(Side.Nation);
+			Choice.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor(0.35f, 0.33f, 0.3f);
+		}
+	}
+	Opening.SavedLine = FText::FromString(Mode->DescribeSavedCampaign());
+	Opening.bCanReturn = Rules->IsRunning();
+	Opening.bVisible = bShow;
+	++Opening.Revision;
+}
+
+void ACampaignPlayerController::BeginCampaign(int32 GroupIndex, int32 SideIndex)
+{
+	ACampaignGameMode* Mode = GetMode();
+	if (!Mode || !StartGroups.IsValidIndex(GroupIndex) || !StartGroups[GroupIndex].Sides.IsValidIndex(SideIndex))
+	{
+		return;
+	}
+	const FStartGroup& Group = StartGroups[GroupIndex];
+	if (Mode->StartCampaign(Group.Sides[SideIndex].Nation, Group.From, Group.ViewMode))
+	{
+		EnterCampaign();
+	}
+}
+
+void ACampaignPlayerController::ContinueCampaign()
+{
+	ACampaignGameMode* Mode = GetMode();
+	if (Mode && Mode->ContinueCampaign())
+	{
+		EnterCampaign();
+	}
+}
+
+void ACampaignPlayerController::OpenMenu()
+{
+	if (bWatching || FaceOff.bVisible)
+	{
+		return;
+	}
+	if (ACampaignGameMode* Mode = GetMode())
+	{
+		Mode->SaveCampaign();
+	}
+	RefreshOpening(true);
+}
+
+void ACampaignPlayerController::CloseMenu()
+{
+	if (Opening.bCanReturn)
+	{
+		Opening.bVisible = false;
+	}
+}
+
+void ACampaignPlayerController::EnterCampaign()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	// A clean table: nothing in hand, nothing picked, no old news.
+	Opening.bVisible = false;
+	FaceOff = FFaceOff();
+	bWatching = false;
+	ArmyRegion = INDEX_NONE;
+	PickedCorps.Reset();
+	RefreshOrders();
+	SelectRegion(INDEX_NONE);
+	DispatchText.Reset();
+	DispatchUntil = 0.0;
+
+	// Open on the player's capital, or stay where the view is when nobody is being led.
+	const FCampaignView& View = Session->GetView();
+	const FCampaignMapData& Data = Map->GetData();
+	const FCampaignNation* Nation = Data.FindNation(View.Human);
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		for (const FCampaignRegion& Region : Data.Regions)
+		{
+			if (Region.bCapital && Region.Owner == View.Human)
+			{
+				Eye->GoTo(Map->MapToWorld(Region.Center.X, Region.Center.Y), 0.5f);
+				break;
+			}
+		}
+	}
+	Notify(Nation
+		? FString::Printf(TEXT("%s. You lead %s.%s"), *View.Date, *Nation->Name, View.bEve ? TEXT(" Place your army, then end the month.") : TEXT(""))
+		: FString::Printf(TEXT("%s. End the month to watch the war."), *View.Date), 7.0);
+}
+
+void ACampaignPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Leaving the game keeps the campaign.
+	if (ACampaignGameMode* Mode = GetMode())
+	{
+		Mode->SaveCampaign();
+	}
+	Super::EndPlay(EndPlayReason);
 }
 
 void ACampaignPlayerController::BeginPlay()
@@ -51,6 +182,9 @@ void ACampaignPlayerController::BeginPlay()
 			Eye->GoTo(Map->MapToWorld(At.X + 60.0, At.Y + 10.0), 0.56f, true);
 		}
 	}
+
+	// The opening screen asks which campaign to play, unless one was started from the command line.
+	RefreshOpening(GetSession() == nullptr);
 }
 
 void ACampaignPlayerController::SetupInputComponent()
@@ -87,7 +221,11 @@ void ACampaignPlayerController::SpaceBar()
 void ACampaignPlayerController::Escape()
 {
 	// Esc backs out one step: the watching, the face-off, the army in hand, then the territory.
-	if (bWatching)
+	if (Opening.bVisible)
+	{
+		CloseMenu();
+	}
+	else if (bWatching)
 	{
 		SkipWatching();
 	}
@@ -181,7 +319,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible;
+	const bool bBusy = bWatching || FaceOff.bVisible || Opening.bVisible;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
@@ -649,7 +787,7 @@ void ACampaignPlayerController::CloseFaceOff()
 void ACampaignPlayerController::EndMonth()
 {
 	FCampaignSession* Session = GetSession();
-	if (!Session || !Map.IsValid() || bWatching || FaceOff.bVisible)
+	if (!Session || !Map.IsValid() || bWatching || FaceOff.bVisible || Opening.bVisible)
 	{
 		return;
 	}
@@ -663,9 +801,13 @@ void ACampaignPlayerController::EndMonth()
 	}
 	if (Month.Steps.Num() > 0 && (!bScripted || bAlwaysWatch))
 	{
-		// Other nations did things: go and look at each in turn.
+		// Other nations did things: go and look at each in turn, quickly.
 		bWatching = true;
 		WatchNext = 0.0;
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			Eye->SetHurry(true);
+		}
 	}
 	else
 	{
@@ -709,8 +851,10 @@ void ACampaignPlayerController::WatchNextStep()
 			Eye->GoTo(Map->MapToWorld(Middle.X, Middle.Y), FMath::Clamp(WatchReturnZoom, 0.42f, 0.6f));
 		}
 	}
-	const double Pause = Step.bMine ? 2.6 : 1.9;
-	Notify(Step.Note, Pause + 0.4);
+	// Brian asked for this to go by very fast: about half a second a nation, a little longer when it is
+	// the player's own ground or troops that were hit.
+	const double Pause = Step.bMine ? 1.1 : 0.5;
+	Notify(Step.Note, Pause + 0.3);
 	WatchNext = FPlatformTime::Seconds() + Pause;
 }
 
@@ -726,6 +870,10 @@ void ACampaignPlayerController::FinishMonth()
 {
 	FCampaignSession* Session = GetSession();
 	bWatching = false;
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		Eye->SetHurry(false);
+	}
 	if (!Session || !Map.IsValid())
 	{
 		return;
@@ -741,6 +889,12 @@ void ACampaignPlayerController::FinishMonth()
 	}
 	RefreshOrders();
 	RefreshRegionPanel(Map->GetSelectedRegion());
+
+	// The campaign is kept every month, so it can be continued another day.
+	if (ACampaignGameMode* Mode = GetMode())
+	{
+		Mode->SaveCampaign();
+	}
 
 	// The month's news stays up for a while.
 	TArray<FString> Lines;
@@ -789,15 +943,22 @@ FText ACampaignPlayerController::GetRulesNote() const
 	const FCampaignSession* Session = GetSession();
 	if (!Session)
 	{
-		return FText::FromString(TEXT("The rules did not start"));
+		const ACampaignGameMode* Mode = GetMode();
+		const bool bReady = Mode && Mode->GetSession() && Mode->GetSession()->IsReady();
+		return FText::FromString(bReady ? TEXT("Choose a campaign") : TEXT("The rules did not start"));
 	}
 	const FCampaignView& View = Session->GetView();
 	if (View.Human.IsEmpty())
 	{
-		return FText::FromString(TEXT("Your country has fallen. The war goes on without you."));
+		return FText::FromString(!View.Fallen.IsEmpty() ? TEXT("Your country has fallen. The war goes on without you.")
+			: View.bOpen ? TEXT("Watching a war nobody has seen") : TEXT("Watching history unfold"));
 	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(View.Human) : nullptr;
 	FString Note = FString::Printf(TEXT("You lead %s"), Nation ? *Nation->Name : *View.Human);
+	if (View.bOpen)
+	{
+		Note += TEXT("  \u00B7  free play");
+	}
 	if (View.bEve)
 	{
 		Note += TEXT("  \u00B7  the eve of war: place your army, then end the month");

@@ -5266,6 +5266,12 @@
   // ../../src/campaign/staff.ts
   var OPEN = open_default;
   var isOpen = (g2) => g2.flags.open === 1;
+  function startOpen(g2) {
+    g2.flags.open = 1;
+    g2.flags["st:on:GER:POL"] = 1;
+    g2.flags["st:gain:GER"] = 1;
+    return g2;
+  }
   var draw2 = (g2, ...key) => hashString(`${g2.seed}:${key.join(":")}`) / 4294967296;
   function temper(g2, nat) {
     const t = { attackAt: 99, persist: 0.85, minOdds: 1.4, ...OPEN.temper._default, ...OPEN.temper[nat] };
@@ -6612,6 +6618,10 @@
   function humanUp(g2) {
     return g2.human !== null && current(g2) === g2.human && g2.nations[g2.human].alive;
   }
+  function runTurnAI(g2) {
+    const t = g2.turn;
+    while (g2.turn === t) stepAI(g2);
+  }
   function canOrder(g2, c) {
     return !c.dead && c.nat === g2.human && current(g2) === c.nat && c.kind !== "fort";
   }
@@ -6775,8 +6785,294 @@
     return out;
   }
 
+  // ../../src/campaign/save.ts
+  var MAP_REGIONS = campaign_map_default.regions.length;
+  var CARVED = { Cassino: "Abruzzo", Anzio: "Rome" };
+  var fits = (saved) => saved === MAP_REGIONS || saved < MAP_REGIONS && campaign_map_default.regions.slice(saved).every((r) => r.name in CARVED);
+  var SAVE_VERSION = 1;
+  var KEEP_REPORTS = 200;
+  var KEEP_SEA = 80;
+  function saveGame(g2) {
+    return JSON.stringify({
+      v: SAVE_VERSION,
+      seed: g2.seed,
+      human: g2.human,
+      turn: g2.turn,
+      phase: g2.phase,
+      week: g2.week,
+      order: g2.order,
+      nextCorps: g2.nextCorps,
+      nextBuild: g2.nextBuild,
+      flags: g2.flags,
+      rng: g2.rng.state,
+      dirty: g2.supplyDirty,
+      supply: Object.fromEntries(Object.entries(g2.supply).map(([k, v]) => [k, Array.from(v).join("")])),
+      nations: g2.nations,
+      // The order corps stand in within a region is kept too: battles and retreats take them in that order.
+      regions: g2.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id)]),
+      corps: g2.corps,
+      generals: g2.generals,
+      fleets: g2.fleets,
+      nextFleet: g2.nextFleet,
+      seaReports: g2.seaReports.slice(-KEEP_SEA),
+      convoys: g2.convoys,
+      airFleets: g2.airFleets,
+      nextAir: g2.nextAir,
+      airReports: g2.airReports.slice(-KEEP_SEA),
+      airPool: g2.airPool,
+      sky: g2.sky,
+      raids: g2.raids,
+      headlines: g2.headlines,
+      reports: g2.reports.slice(-KEEP_REPORTS)
+    });
+  }
+  function peekSave(text) {
+    try {
+      const d = JSON.parse(text);
+      return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && fits(d.regions.length) ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1 } : null;
+    } catch {
+      return null;
+    }
+  }
+  function loadGame(text) {
+    let d;
+    try {
+      d = JSON.parse(text);
+    } catch {
+      return null;
+    }
+    if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
+    if (!fits(d.regions.length)) return null;
+    const g2 = createGame(d.seed, d.human ?? null);
+    const saved = d.regions.length;
+    const grown = saved < g2.regions.length;
+    for (let i = saved; i < g2.regions.length; i++) {
+      const [owner, ctrl, , fort, since, prev] = d.regions[g2.byName[CARVED[g2.regions[i].name]].id];
+      d.regions.push([owner, ctrl, 0, fort ? { ...fort, vs: [...fort.vs ?? []] } : fort, since, prev, []]);
+    }
+    const order = [...d.order];
+    let phase = d.phase;
+    g2.order.forEach((id, k) => {
+      if (order.includes(id)) return;
+      const at = k > 0 && order.includes(g2.order[k - 1]) ? order.indexOf(g2.order[k - 1]) + 1 : order.length;
+      order.splice(at, 0, id);
+      if (at <= phase) phase++;
+    });
+    g2.turn = d.turn;
+    g2.phase = phase;
+    g2.week = d.week;
+    g2.order = order;
+    g2.nextCorps = d.nextCorps;
+    g2.nextBuild = d.nextBuild;
+    g2.flags = d.flags;
+    g2.rng = new Rng(d.rng);
+    for (const [id, n] of Object.entries(d.nations)) g2.nations[id] = { ...g2.nations[id], ...n };
+    for (const [id, n] of Object.entries(d.nations)) {
+      const lab = g2.nations[id]?.lab;
+      if (!lab || n.lab !== void 0) continue;
+      const at = d.order.indexOf(id);
+      lab.months = Math.max(0, at >= 0 && at <= d.phase ? d.turn : d.turn - 1);
+      for (const f of FIELDS) lab.clock[f] = lab.months;
+    }
+    g2.headlines = d.headlines;
+    g2.reports = d.reports;
+    g2.regions.forEach((r, i) => {
+      const [owner, ctrl, cap3, fort, since, prev] = d.regions[i];
+      r.owner = owner;
+      r.ctrl = ctrl;
+      r.cap = !!cap3;
+      r.fort = fort;
+      r.since = since;
+      r.prev = prev ?? null;
+      r.units = [];
+    });
+    g2.corps = d.corps;
+    const byId = new Map(g2.corps.map((c) => [c.id, c]));
+    g2.regions.forEach((r, i) => {
+      const ids = d.regions[i][6];
+      if (ids) for (const id of ids) {
+        const c = byId.get(id);
+        if (c && c.reg === r.id) {
+          r.units.push(c);
+          byId.delete(id);
+        }
+      }
+    });
+    for (const c of g2.corps) if (byId.has(c.id)) g2.regions[c.reg].units.push(c);
+    for (let i = saved; i < g2.regions.length; i++) {
+      const r = g2.regions[i], parent = g2.byName[CARVED[r.name]];
+      const free = parent.units.filter((c) => c.nat === r.ctrl && !c.hold && c.kind !== "fort");
+      if (free.length < 2 || !r.nb.some((j) => atWar(g2, r.ctrl, g2.regions[j].ctrl))) continue;
+      parent.units.splice(parent.units.indexOf(free[0]), 1);
+      free[0].reg = r.id;
+      r.units.push(free[0]);
+    }
+    if (Array.isArray(d.generals)) g2.generals = d.generals;
+    else {
+      g2.generals = [];
+      for (const c of g2.corps) {
+        const name = c.general, label = c.trait;
+        c.general = null;
+        delete c.trait;
+        if (typeof name === "string") seat(g2, c, name, label);
+      }
+    }
+    if (Array.isArray(d.airFleets)) {
+      g2.airFleets = d.airFleets;
+      g2.nextAir = d.nextAir;
+      g2.airReports = d.airReports ?? [];
+      g2.airPool = d.airPool ?? {};
+      g2.sky = d.sky ?? {};
+      g2.raids = d.raids ?? {};
+    }
+    if (Array.isArray(d.fleets)) {
+      g2.fleets = d.fleets;
+      g2.nextFleet = d.nextFleet;
+      g2.seaReports = d.seaReports ?? [];
+      g2.convoys = d.convoys ?? {};
+    }
+    const fed = g2.corps.map((c) => c.supplied);
+    computeSupply(g2);
+    g2.corps.forEach((c, i) => {
+      c.supplied = fed[i];
+    });
+    if (!grown) for (const [k, v] of Object.entries(d.supply ?? {})) g2.supply[k] = Uint8Array.from(v, (ch) => ch === "1" ? 1 : 0);
+    g2.supplyDirty = grown || !!d.dirty;
+    return g2;
+  }
+
+  // Rules/starts.ts
+  var STARTS = [
+    {
+      title: "September 1939 · The war begins",
+      from: 1,
+      view: "",
+      sides: [
+        { nat: "GER", name: "Germany", blurb: "On the attack from the first day. The hardest plan to pull off on schedule." },
+        { nat: "FRA", name: "France", blurb: "The Maginot Line, a large army, and a slow command. Can you keep Paris?" },
+        { nat: "UK", name: "United Kingdom", blurb: "A small army, the largest navy in the world, and convoys to keep alive." },
+        { nat: "POL", name: "Poland", blurb: "Outnumbered and nearly surrounded. You place your army on the eve of war, then hold as long as you can." },
+        { nat: null, name: "Watch history unfold", blurb: "Every nation follows its plan. End the month and watch Poland, then the West, then the East." }
+      ]
+    },
+    {
+      title: "September 1939 · Free play: make your own history",
+      from: 1,
+      view: "open",
+      sides: [
+        { nat: "GER", name: "Germany", blurb: "At war with Poland, Britain and France. Where you go next, and when, is up to you." },
+        { nat: "UK", name: "United Kingdom", blurb: "Nobody knows what Germany will do this time. Neither do you." },
+        { nat: "FRA", name: "France", blurb: "The blow may fall in the spring, in a year, or somewhere else first. Be ready, or strike first." },
+        { nat: "POL", name: "Poland", blurb: "The first month is the one history wrote. Survive it and the rest is yours." },
+        { nat: "ITA", name: "Italy", blurb: "Neutral, with an army in Libya and Albania. Pick your moment and your side of the Mediterranean." },
+        { nat: "SOV", name: "Soviet Union", blurb: "At peace behind a pact. Build the Red Army and wait, or march before Germany does." },
+        { nat: null, name: "Watch a war nobody has seen", blurb: "The war begins as it did. After that no nation follows history: each one's staff decides for itself, and no two wars come out the same." }
+      ]
+    },
+    {
+      title: "July 1940 · The Battle of Britain",
+      from: 11,
+      view: "",
+      sides: [
+        { nat: "GER", name: "Germany", blurb: "Five air fleets and a summer of flying weather. History split its effort and lost. Can you win the sky over Kent?" },
+        { nat: "UK", name: "United Kingdom", blurb: "Radar, four fighter groups and the Channel. Keep Fighter Command in being until the autumn." },
+        { nat: null, name: "Watch the Battle of Britain", blurb: "France has fallen. The computer flies history's plan: the Channel, the airfields, London, then the night Blitz." }
+      ]
+    },
+    {
+      title: "September 1940 · The desert war",
+      from: 13,
+      view: "",
+      sides: [
+        { nat: "UK", name: "United Kingdom", blurb: "Two divisions against an army. Throw the Italians out of Egypt, then decide how far from Alexandria you dare to chase them." },
+        { nat: "ITA", name: "Italy", blurb: "A large army on foot, a long way from Tripoli. Take Egypt before the British tanks find your open flank." },
+        { nat: null, name: "Watch the desert war", blurb: "One road, no water, and a front that swings a thousand kilometres each way: Egypt, Operation Compass, Rommel, Tobruk." }
+      ]
+    },
+    {
+      title: "October 1940 · Greece and the Balkans",
+      from: 14,
+      view: "",
+      sides: [
+        { nat: "GRE", name: "Greece", blurb: "A small army that knows its mountains. Hold the Italians in Epirus all winter, then decide what can be saved when Germany comes." },
+        { nat: "ITA", name: "Italy", blurb: "Mussolini expects Athens in two weeks. You have a mountain wall in front of you, and an army in Libya that needs the same replacements." },
+        { nat: null, name: "Watch the Balkans", blurb: "Italy marches into the Greek mountains in the autumn rain. In April the panzers come through Bulgaria, and in May the parachutes open over Crete." }
+      ]
+    },
+    {
+      title: "June 1941 · Barbarossa",
+      from: 22,
+      view: "",
+      sides: [
+        { nat: "GER", name: "Germany", blurb: "Three army groups on the frontier. Reach Moscow before the snow, or outrun your supplies trying." },
+        { nat: "SOV", name: "Soviet Union", blurb: "The frontier armies are about to be hit. Trade space for time until the reserves and the winter arrive." },
+        { nat: null, name: "Watch Barbarossa unfold", blurb: "The computer plays the first 21 months, then the invasion of the Soviet Union and the first winter." }
+      ]
+    },
+    {
+      title: "May 1942 · Gazala and El Alamein",
+      from: 33,
+      view: "",
+      sides: [
+        { nat: "UK", name: "United Kingdom", blurb: "Rommel strikes at the Gazala line as you take over, and Tobruk is not the fortress it was. Save the army, hold El Alamein, and strike back when the armour arrives." },
+        { nat: "ITA", name: "Italy", blurb: "Most of the Axis army in Africa is yours, and so is the convoy route that feeds it. Tobruk is in reach. Decide how far past it you dare to go." },
+        { nat: null, name: "Watch the desert in 1942", blurb: "The computer plays the first 32 months, then Gazala, the fall of Tobruk, the stand at El Alamein and the long pursuit back across Libya." }
+      ]
+    },
+    {
+      title: "June 1942 · Case Blue and Stalingrad",
+      from: 34,
+      view: "",
+      sides: [
+        { nat: "GER", name: "Germany", blurb: "Your tanks are gathered in the south and your allies will hold the Don behind you. The oil and the Volga are both in reach. Decide how much of the army goes into the city." },
+        { nat: "SOV", name: "Soviet Union", blurb: "Give ground all summer and save the army. Hold Stalingrad, watch who is guarding the Don, and strike when the snow comes." },
+        { nat: null, name: "Watch the road to Stalingrad", blurb: "The computer plays the first 33 months, then the drive for the Don, the Volga and the Caucasus oil, and the winter that turned the war." }
+      ]
+    },
+    {
+      title: "November 1942 · Torch and Tunisia",
+      from: 39,
+      view: "",
+      sides: [
+        { nat: "UK", name: "United Kingdom", blurb: "Montgomery is chasing Rommel across Libya, and a second army waits at Gibraltar beside the Americans. Get it ashore in Algeria, try for Tunis before the Germans do, and close the trap from both ends." },
+        { nat: "ITA", name: "Italy", blurb: "Your army is falling back from El Alamein and a new enemy is about to land behind it. Hold Tunisia, bring the army home to it, and keep the sea road to Sicily open for as long as you can." },
+        { nat: null, name: "Watch Torch and Tunisia", blurb: "The computer plays the first 38 months, then the American and British landings in Morocco and Algeria, the race for Tunis, Kasserine, the Mareth Line and the end in Africa." }
+      ]
+    },
+    {
+      title: "July 1943 · Kursk and the Dnieper",
+      from: 47,
+      view: "",
+      sides: [
+        { nat: "GER", name: "Germany", blurb: "Your tanks are gathered on both shoulders of the Kursk salient, and the Red Army has had three months to dig in there. Strike or hold them back: either way the weight is about to fall on Orel and Kharkov, and the Dnieper is a long way behind you." },
+        { nat: "SOV", name: "Soviet Union", blurb: "You know where the blow will fall and you have dug in to meet it. Break the panzers on the lines round Kursk, then send the reserve fronts at Orel and Kharkov and do not stop until you are over the Dnieper." },
+        { nat: null, name: "Watch Kursk and the road to the Dnieper", blurb: "The computer plays the first 46 months, then the last German summer offensive in the east, the Soviet strokes at Orel and Kharkov, the race for the Dnieper and the freeing of Kiev." }
+      ]
+    },
+    {
+      title: "July 1943 · Sicily and Italy",
+      from: 47,
+      view: "italy",
+      sides: [
+        { nat: "UK", name: "United Kingdom", blurb: "Two armies wait at Malta and your air force has spent a month over Sicily. Keep the sky, put the Eighth Army ashore, and follow it across the strait before the Germans have dug in across the mountains." },
+        { nat: "ITA", name: "Italy", blurb: "Africa is gone, the army has lost heart and the invasion fleet is gathering at Malta. If Sicily falls the King will dismiss Mussolini, and an armistice follows. Hold the island and Italy stays in the war." },
+        { nat: null, name: "Watch Sicily and Italy", blurb: "The computer plays the first 46 months, then the landing in Sicily, the fall of Mussolini, the Italian armistice, Salerno and Naples, and the German winter line across the mountains south of Rome." }
+      ]
+    },
+    {
+      title: "January 1944 · Anzio and the road to Rome",
+      from: 53,
+      view: "italy",
+      sides: [
+        { nat: "UK", name: "United Kingdom", blurb: "The Eighth Army holds the Adriatic end of a front that has not moved since October, and the Americans are about to land behind it at Anzio. Monte Cassino bars the one good road to Rome. Decide when to break yourself against it, and when to wait for the spring." },
+        { nat: null, name: "Watch Anzio, Cassino and Rome", blurb: "The computer plays the first 52 months, then the landing at Anzio, the four battles for Monte Cassino, the fall of Rome in June, the pursuit to Florence and the autumn battles on the Gothic Line." }
+      ]
+    }
+  ];
+
   // Rules/campaign-bridge.ts
   var g = null;
+  var fallenNation = null;
   function game() {
     if (!g) throw new Error("No campaign has been started");
     return g;
@@ -6800,6 +7096,8 @@
       current: current(s),
       humanUp: up,
       eve: onEve(s),
+      open: isOpen(s),
+      fallen: fallenNation,
       regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
       corps: s.corps.filter((c) => !c.dead).map((c) => ({
         id: c.id,
@@ -6870,17 +7168,59 @@
     if (s.human) judgeGoals(s, s.human);
     const lost = s.human && !s.nations[s.human].alive ? s.human : null;
     if (lost) {
+      fallenNation = lost;
       s.human = null;
       while (s.phase > 0) stepAI(s);
     }
     if (humanUp(s)) beginHuman(s);
     return lost;
   }
+  function starts() {
+    return {
+      groups: STARTS.map((group) => ({
+        ...group,
+        sides: group.sides.map((side) => ({
+          ...side,
+          aims: side.nat && group.from === 1 ? GOAL_KEYS.map((key) => {
+            const goal = GOALS[side.nat]?.[key];
+            return goal ? `${key === "short" ? "Short campaign" : "Long campaign"}: ${goal.text}` : "";
+          }).filter(Boolean) : []
+        }))
+      }))
+    };
+  }
   function start(options) {
-    const human = options?.human ?? "GER";
-    g = createGame(options?.seed ?? 1939, human);
-    if (human) openGoals(g, human, 1);
-    if (!(human && beginEve(g))) {
+    const human = options?.human === void 0 ? "GER" : options.human;
+    const from = options?.from ?? 1;
+    fallenNation = null;
+    g = createGame(options?.seed ?? 1939, from > 1 ? null : human);
+    if (options?.view === "open") startOpen(g);
+    while (g.turn < from) runTurnAI(g);
+    g.human = human;
+    if (human) {
+      openGoals(g, human, from);
+      if (!(from === 1 && beginEve(g))) {
+        runOthers(g, null);
+        arrive(g);
+      }
+    }
+    return view();
+  }
+  function save() {
+    return { text: saveGame(game()) };
+  }
+  function peek(text) {
+    const p = peekSave(text);
+    if (!p) return null;
+    const sample = g ?? createGame(1, null);
+    return { human: p.human, name: p.human ? sample.nations[p.human]?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
+  }
+  function load(text) {
+    const loaded = loadGame(text);
+    if (!loaded) return null;
+    g = loaded;
+    fallenNation = null;
+    if (g.human && !humanUp(g)) {
       runOthers(g, null);
       arrive(g);
     }
@@ -6969,5 +7309,5 @@
     const events = (first.length ? first : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
     return { steps, headlines, events, fallen, view: view() };
   }
-  globalThis.TC = { start, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  globalThis.TC = { starts, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
 })();

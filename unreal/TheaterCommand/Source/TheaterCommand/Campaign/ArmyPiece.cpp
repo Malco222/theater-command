@@ -2,6 +2,7 @@
 
 #include "Campaign/CampaignMapActor.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
@@ -38,17 +39,21 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	NationTag = Nation.Tag;
 	Corps = InCorps;
 	Divisions = 0;
+	Men = 0;
 	General.Reset();
 	FString NewSignature = Nation.Tag;
 	for (const FViewCorps& Unit : Corps)
 	{
 		Divisions += Unit.Divisions;
+		Men += Unit.Men;
 		if (General.IsEmpty() && !Unit.General.IsEmpty())
 		{
 			General = Unit.General; // the first general named is the senior one
 		}
 		NewSignature += FString::Printf(TEXT("|%d"), Unit.Id);
 	}
+	// The standard shows the army's strength to the nearest thousand, so it is remade when that changes.
+	NewSignature += FString::Printf(TEXT("|%dk"), FMath::RoundToInt32(Men / 1000.0f));
 	if (NewSignature != Signature)
 	{
 		Signature = NewSignature;
@@ -68,6 +73,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Parts.Reset();
 	const bool bWasSelected = SelectionRing && SelectionRing->IsVisible();
 	SelectionRing = nullptr;
+	if (StrengthLabel)
+	{
+		StrengthLabel->DestroyComponent();
+		StrengthLabel = nullptr;
+	}
 
 	UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -103,14 +113,40 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Top += CounterHeight + CounterGap;
 	}
 
-	// The standard: a pole, the nation's colours with a band across them, and a brass finial.
-	const double PoleHeight = 12.5 * U;
+	// The standard: a pole, the nation's colours, and a brass finial. The bigger the army, the bigger its
+	// standard, and its strength is written across it in thousands of men.
+	const double Size = FMath::Clamp(0.82 + 0.26 * FMath::Sqrt(Men / 30000.0), 0.9, 2.0);
+	const double FlagWidth = 6.6 * U * Size, FlagHeight = 4.3 * U * Size;
+	const double PoleHeight = 9.0 * U + FlagHeight;
 	AddPart(Cylinder, FVector(0.0, 0.0, Top + PoleHeight * 0.5), FVector(0.42 * U, 0.42 * U, PoleHeight), Iron);
-	const double FlagWidth = 6.4 * U, FlagHeight = 4.2 * U;
 	const FVector FlagCenter(0.0, FlagWidth * 0.5 + 0.2 * U, Top + PoleHeight - FlagHeight * 0.5 - 0.3 * U);
 	AddPart(Cube, FlagCenter, FVector(0.16 * U, FlagWidth, FlagHeight), Banner);
-	AddPart(Cube, FlagCenter, FVector(0.2 * U, FlagWidth, FlagHeight * 0.26), BannerBand);
+	// A band along the top and the bottom of the colours, leaving the middle clear for the figure.
+	AddPart(Cube, FlagCenter + FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
+	AddPart(Cube, FlagCenter - FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
 	AddPart(Sphere, FVector(0.0, 0.0, Top + PoleHeight + 0.4 * U), FVector(1.1 * U, 1.1 * U, 1.1 * U), Brass);
+
+	// The figure. Pieces are turned so that the viewer looks along their +X, so the lettering faces back along -X.
+	const FString Figure = Men >= 995000 ? FString::Printf(TEXT("%.1fM"), Men / 1000000.0) : FString::Printf(TEXT("%dk"), FMath::Max(1, FMath::RoundToInt32(Men / 1000.0)));
+	const bool bPaleColours = Colour.GetLuminance() > 0.3f;
+	StrengthLabel = NewObject<UTextRenderComponent>(this);
+	StrengthLabel->SetupAttachment(Root);
+	StrengthLabel->SetText(FText::FromString(Figure));
+	StrengthLabel->SetWorldSize(static_cast<float>(FlagHeight * (Figure.Len() > 3 ? 0.5 : 0.62)));
+	StrengthLabel->SetTextRenderColor(FColor::FromHex(bPaleColours ? TEXT("14110E") : TEXT("F4F0E4")));
+	// The side of the standard that faces the viewer is often the side away from the lamp, so the figure
+	// is drawn in lettering that does not take the light: it reads the same from every side.
+	if (UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/UnlitText.UnlitText")))
+	{
+		StrengthLabel->SetTextMaterial(Unlit);
+	}
+	StrengthLabel->SetHorizontalAlignment(EHTA_Center);
+	StrengthLabel->SetVerticalAlignment(EVRTA_TextCenter);
+	StrengthLabel->SetCastShadow(false);
+	StrengthLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	StrengthLabel->SetRelativeLocation(FlagCenter - FVector(0.14 * U, 0.0, 0.0));
+	StrengthLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
+	StrengthLabel->RegisterComponent();
 }
 
 void AArmyPiece::SetSelected(bool bInSelected)

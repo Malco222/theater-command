@@ -25,7 +25,22 @@ public:
 	/** The campaign being played: the rules, and the latest picture of the war. */
 	FCampaignSession* GetSession() const { return Session.Get(); }
 
+	/** Starts a new campaign and lays its armies on the table. Human is empty to watch. */
+	bool StartCampaign(const FString& Human, int32 From, const FString& ViewMode);
+
+	/** Picks up the campaign saved on this computer. */
+	bool ContinueCampaign();
+
+	/** Writes the campaign to this computer, so it can be continued another day. */
+	void SaveCampaign();
+
+	/** A line about the campaign saved on this computer, or empty if there is none. */
+	FString DescribeSavedCampaign();
+
 private:
+	void LayOutWar();
+	static FString SaveFile();
+
 	TSharedPtr<FCampaignSession> Session;
 
 	UPROPERTY(Transient)

@@ -17,6 +17,7 @@ struct FViewCorps
 	FString General; // empty when the corps has no named commander
 	FString Posture; // stand, dig, back
 	int32 Divisions = 0;
+	int32 Men = 0;
 	float Strength = 1.0f; // 0..1: men and equipment left
 	float Cohesion = 1.0f; // 0..1
 	int32 Region = INDEX_NONE;
@@ -34,6 +35,8 @@ struct FCampaignView
 	FString Current; // whose month it is
 	bool bHumanUp = false;
 	bool bEve = false; // the player is placing an army on the eve of war: marches at home only, no month passes
+	bool bOpen = false; // free play: no nation follows history's plan
+	FString Fallen; // the player's nation, once it has been beaten
 	TArray<FString> RegionHolder; // by region id: the nation that holds it now
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)
 	TArray<FViewCorps> Corps;
@@ -126,4 +129,22 @@ struct FMonthResult
 	TArray<FMonthStep> Steps;
 	TArray<FString> Headlines; // the month's news, most important first
 	FString Fallen; // the player's nation, if it has just been beaten
+};
+
+/** One way into a campaign: a nation to lead (or nobody, to watch), with a line about what lies ahead. */
+struct FStartSide
+{
+	FString Nation; // empty to watch
+	FString Name;
+	FString Blurb;
+	TArray<FString> Aims; // the short and the long campaign, for the starts that have them
+};
+
+/** A point in the war a campaign can begin at, and the sides that can be taken there. */
+struct FStartGroup
+{
+	FString Title;
+	int32 From = 1; // the month the player takes over; 1 is September 1939
+	FString ViewMode; // "open" for free play
+	TArray<FStartSide> Sides;
 };

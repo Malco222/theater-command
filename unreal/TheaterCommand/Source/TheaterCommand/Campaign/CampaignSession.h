@@ -17,8 +17,24 @@ public:
 	FCampaignSession();
 	~FCampaignSession();
 
-	/** Starts a new campaign with the player leading the given nation. */
-	bool Start(const FString& Human, FString& OutError);
+	/** Starts the rules engine and loads the rules. No campaign is under way yet. */
+	bool Prepare(FString& OutError);
+	bool IsReady() const { return bReady; }
+
+	/** The points in the war a campaign can begin at. */
+	TArray<FStartGroup> Starts();
+
+	/** Starts a new campaign. Human is the nation the player leads, or empty to watch. From is the month to take over in. */
+	bool Begin(const FString& Human, int32 From, const FString& ViewMode, FString& OutError);
+
+	/** The whole campaign as text, to be written to a file. Empty if there is no campaign. */
+	FString Save();
+
+	/** One line about a saved campaign ("Germany, October 1939"), or empty if the text is not a campaign that can be continued. */
+	FString DescribeSave(const FString& SaveText);
+
+	/** Picks a saved campaign up where it was left. */
+	bool Load(const FString& SaveText);
 
 	bool IsRunning() const { return bRunning; }
 	const FCampaignView& GetView() const { return View; }
@@ -49,5 +65,6 @@ private:
 
 	TUniquePtr<FRulesHost> Host;
 	FCampaignView View;
+	bool bReady = false;
 	bool bRunning = false;
 };

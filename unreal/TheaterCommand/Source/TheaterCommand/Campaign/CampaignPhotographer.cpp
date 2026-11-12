@@ -38,6 +38,8 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		return Shot;
 	};
 	Shots.Reset();
+	// The opening screen, as the game starts.
+	Add(TEXT("00-opening-screen"), TEXT("Frankfurt"), 0.56f).bOpening = true;
 	// The table.
 	Add(TEXT("01-whole-map"), TEXT(""), 0.97f);
 	Add(TEXT("02-opening-view"), TEXT("Frankfurt"), 0.56f);
@@ -75,6 +77,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		FShot& Shot = Add(TEXT("14-next-month"), TEXT("Warsaw"), 0.5f);
 		Shot.Months = 1;
 	}
+	Add(TEXT("14b-menu-with-save"), TEXT("Warsaw"), 0.5f).bMenu = true;
 	{
 		// Attack again, then end the month and catch the other nations' month being played out.
 		FShot& Shot = Add(TEXT("15-attack-again"), TEXT("Pomorze"), 0.34f);
@@ -90,7 +93,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterQuick")))
 	{
 		const TArray<FShot> All = Shots;
-		Shots = { All[1], All[3], All[7] };
+		Shots = { All[2], All[4], All[8] };
 	}
 	bStarted = true;
 	UE_LOG(LogTheater, Display, TEXT("Photographer: %d pictures to take, into %s"), Shots.Num(), *Folder);
@@ -105,6 +108,11 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	{
 		return;
 	}
+	// The first picture after the opening screen begins a campaign through it, as Germany in September 1939.
+	if (!Shot.bOpening && !Controller->GetSession())
+	{
+		Controller->BeginCampaign(0, 0);
+	}
 	const FCampaignMapData& Data = Table->GetData();
 	FVector2D At(Data.Width * 0.5, Data.Height * 0.5);
 	if (const int32* Id = Data.RegionByName.Find(Shot.Region))
@@ -116,6 +124,16 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 
 	Controller->SetScripted(true);
 	Table->SetHoveredRegion(INDEX_NONE);
+	if (Shot.bOpening)
+	{
+		return;
+	}
+	if (Shot.bMenu)
+	{
+		Controller->OpenMenu();
+		return;
+	}
+	Controller->CloseMenu();
 	if (!Shot.bKeep)
 	{
 		Controller->CloseFaceOff();

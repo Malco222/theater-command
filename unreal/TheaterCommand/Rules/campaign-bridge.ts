@@ -7,7 +7,11 @@
 //
 // The Unreal side calls these by name through a global object, TC:
 //
-//   TC.start({ human, seed })           -> view
+//   TC.starts()                         -> { groups: [{ title, from, view, sides: [{ nat, name, blurb, aims }] }] }
+//   TC.start({ human, from, view, seed }) -> view
+//   TC.save()                           -> { text }: the whole campaign as text
+//   TC.peek(text)                       -> { human, name, date, open } for a saved campaign, or null
+//   TC.load(text)                       -> view, or null if the save cannot be read
 //   TC.view()                           -> view
 //   TC.reach([corpsId, ...])            -> { regions: [{ id, cost, attack, prev }] }
 //   TC.move([corpsId, ...], regionId)   -> { moved: [{ id, path }], view }
@@ -18,14 +22,19 @@
 import { allied, atWar, createGame, men } from '../../../src/campaign/game';
 import {
   beginEve, beginHuman, canOrder, candidates, current, endEve, endHuman, humanUp, onEve, orderAttack, orderMove,
-  postureOf, previewAttack, reach, stepAI,
+  postureOf, previewAttack, reach, runTurnAI, stepAI,
 } from '../../../src/campaign/turn';
 import { generalOf } from '../../../src/campaign/commanders';
-import { judgeGoals, openGoals } from '../../../src/campaign/goals';
+import { GOALS, GOAL_KEYS, judgeGoals, openGoals } from '../../../src/campaign/goals';
+import { isOpen, startOpen } from '../../../src/campaign/staff';
+import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
+import { STARTS } from './starts';
 import { turnToDate } from '../../../src/core/ticket';
 import type { BattleReport, Corps, Game } from '../../../src/campaign/types';
 
 let g: Game | null = null;
+/** The player's nation, once it has been beaten. The war goes on with nobody at the controls. */
+let fallenNation: string | null = null;
 
 function game(): Game {
   if (!g) throw new Error('No campaign has been started');
@@ -54,6 +63,8 @@ function view() {
     current: current(s),
     humanUp: up,
     eve: onEve(s),
+    open: isOpen(s),
+    fallen: fallenNation,
     regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
     corps: s.corps.filter((c) => !c.dead).map((c) => ({
       id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, str: c.str, org: c.org, reg: c.reg,
@@ -117,6 +128,7 @@ function arrive(s: Game): string | null {
   const lost = s.human && !s.nations[s.human].alive ? s.human : null;
   if (lost) {
     // The month the country fell in is played out to its end. The war goes on without the player.
+    fallenNation = lost;
     s.human = null;
     while (s.phase > 0) stepAI(s);
   }
@@ -124,12 +136,63 @@ function arrive(s: Game): string | null {
   return lost;
 }
 
-function start(options?: { human?: string | null; seed?: number }) {
-  const human = options?.human ?? 'GER';
-  g = createGame(options?.seed ?? 1939, human);
-  if (human) openGoals(g, human, 1);
-  // A country that is attacked before its first month comes round places its army on the eve of war.
-  if (!(human && beginEve(g))) {
+/** The places a campaign can begin, with each playable nation's aims for the campaigns that start in September 1939. */
+function starts() {
+  return {
+    groups: STARTS.map((group) => ({
+      ...group,
+      sides: group.sides.map((side) => ({
+        ...side,
+        aims: side.nat && group.from === 1
+          ? GOAL_KEYS.map((key) => {
+            const goal = GOALS[side.nat!]?.[key];
+            return goal ? `${key === 'short' ? 'Short campaign' : 'Long campaign'}: ${goal.text}` : '';
+          }).filter(Boolean)
+          : [],
+      })),
+    })),
+  };
+}
+
+/** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
+function start(options?: { human?: string | null; from?: number; view?: string; seed?: number }) {
+  const human = options?.human === undefined ? 'GER' : options.human;
+  const from = options?.from ?? 1;
+  fallenNation = null;
+  g = createGame(options?.seed ?? 1939, from > 1 ? null : human);
+  if (options?.view === 'open') startOpen(g);
+  while (g.turn < from) runTurnAI(g);
+  g.human = human;
+  if (human) {
+    openGoals(g, human, from);
+    // A country that is attacked before its first month comes round places its army on the eve of war.
+    if (!(from === 1 && beginEve(g))) {
+      runOthers(g, null);
+      arrive(g);
+    }
+  }
+  return view();
+}
+
+/** The whole campaign as text, to be kept and picked up again later. */
+function save() {
+  return { text: saveGame(game()) };
+}
+
+/** A line about a saved campaign for the opening screen, without loading it. */
+function peek(text: string) {
+  const p = peekSave(text);
+  if (!p) return null;
+  const sample = g ?? createGame(1, null);
+  return { human: p.human, name: p.human ? sample.nations[p.human]?.name ?? p.human : null, date: turnToDate(p.turn).label, open: p.open };
+}
+
+function load(text: string) {
+  const loaded = loadGame(text);
+  if (!loaded) return null;
+  g = loaded;
+  fallenNation = null;
+  if (g.human && !humanUp(g)) {
     runOthers(g, null);
     arrive(g);
   }
@@ -234,4 +297,4 @@ function endMonth() {
   return { steps, headlines, events, fallen, view: view() };
 }
 
-(globalThis as Record<string, unknown>).TC = { start, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+(globalThis as Record<string, unknown>).TC = { starts, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

@@ -22,8 +22,42 @@ namespace
 FCampaignSession::FCampaignSession() = default;
 FCampaignSession::~FCampaignSession() = default;
 
-bool FCampaignSession::Start(const FString& Human, FString& OutError)
+namespace
 {
+	/** Text as a JSON string, quotes and all, for handing to the rules as an argument. */
+	FString JsonQuote(const FString& Text)
+	{
+		FString Out;
+		Out.Reserve(Text.Len() + Text.Len() / 8 + 2);
+		Out.AppendChar(TEXT('"'));
+		for (const TCHAR Ch : Text)
+		{
+			switch (Ch)
+			{
+			case TEXT('"'): Out += TEXT("\\\""); break;
+			case TEXT('\\'): Out += TEXT("\\\\"); break;
+			case TEXT('\n'): Out += TEXT("\\n"); break;
+			case TEXT('\r'): Out += TEXT("\\r"); break;
+			case TEXT('\t'): Out += TEXT("\\t"); break;
+			default:
+				if (Ch < 0x20)
+				{
+					Out += FString::Printf(TEXT("\\u%04x"), static_cast<uint32>(Ch));
+				}
+				else
+				{
+					Out.AppendChar(Ch);
+				}
+			}
+		}
+		Out.AppendChar(TEXT('"'));
+		return Out;
+	}
+}
+
+bool FCampaignSession::Prepare(FString& OutError)
+{
+	bReady = false;
 	bRunning = false;
 	Host = MakeUnique<FRulesHost>();
 	if (!Host->IsAvailable())
@@ -56,9 +90,57 @@ bool FCampaignSession::Start(const FString& Human, FString& OutError)
 	{
 		return false;
 	}
+	bReady = true;
+	return true;
+}
 
+TArray<FStartGroup> FCampaignSession::Starts()
+{
+	TArray<FStartGroup> Out;
+	FString Json, Error;
+	TSharedPtr<FJsonObject> Object;
+	if (!bReady || !Host->Call(TEXT("starts"), TEXT("[]"), Json, Error)
+		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
+	{
+		// Rules that do not offer a choice (the stand-in): one way in.
+		FStartGroup& Group = Out.AddDefaulted_GetRef();
+		Group.Title = TEXT("September 1939");
+		FStartSide& Side = Group.Sides.AddDefaulted_GetRef();
+		Side.Nation = TEXT("GER");
+		Side.Name = TEXT("Germany");
+		return Out;
+	}
+	for (const TSharedPtr<FJsonValue>& GroupValue : Object->GetArrayField(TEXT("groups")))
+	{
+		const TSharedPtr<FJsonObject> GroupObject = GroupValue->AsObject();
+		FStartGroup& Group = Out.AddDefaulted_GetRef();
+		GroupObject->TryGetStringField(TEXT("title"), Group.Title);
+		GroupObject->TryGetNumberField(TEXT("from"), Group.From);
+		GroupObject->TryGetStringField(TEXT("view"), Group.ViewMode);
+		for (const TSharedPtr<FJsonValue>& SideValue : GroupObject->GetArrayField(TEXT("sides")))
+		{
+			const TSharedPtr<FJsonObject> SideObject = SideValue->AsObject();
+			FStartSide& Side = Group.Sides.AddDefaulted_GetRef();
+			SideObject->TryGetStringField(TEXT("nat"), Side.Nation); // null to watch
+			SideObject->TryGetStringField(TEXT("name"), Side.Name);
+			SideObject->TryGetStringField(TEXT("blurb"), Side.Blurb);
+			SideObject->TryGetStringArrayField(TEXT("aims"), Side.Aims);
+		}
+	}
+	return Out;
+}
+
+bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, FString& OutError)
+{
+	bRunning = false;
+	if (!bReady && !Prepare(OutError))
+	{
+		return false;
+	}
+	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s}]"),
+		Human.IsEmpty() ? TEXT("null") : *JsonQuote(Human), From, *JsonQuote(ViewMode));
 	FString ViewJson;
-	if (!Host->Call(TEXT("start"), FString::Printf(TEXT("[{\"human\":\"%s\"}]"), *Human), ViewJson, OutError))
+	if (!Host->Call(TEXT("start"), Arguments, ViewJson, OutError))
 	{
 		return false;
 	}
@@ -71,7 +153,61 @@ bool FCampaignSession::Start(const FString& Human, FString& OutError)
 	View = ParseView(Object);
 	bRunning = true;
 	UE_LOG(LogTheater, Display, TEXT("Campaign started on the %s rules: %s, %d corps, the player leads %s"),
-		*View.Rules, *View.Date, View.Corps.Num(), *View.Human);
+		*View.Rules, *View.Date, View.Corps.Num(), View.Human.IsEmpty() ? TEXT("nobody") : *View.Human);
+	OnViewChanged.Broadcast();
+	return true;
+}
+
+FString FCampaignSession::Save()
+{
+	FString Json, Error;
+	if (!bRunning || !Host->Call(TEXT("save"), TEXT("[]"), Json, Error))
+	{
+		return FString();
+	}
+	TSharedPtr<FJsonObject> Object;
+	FString Text;
+	if (FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) && Object.IsValid())
+	{
+		Object->TryGetStringField(TEXT("text"), Text);
+	}
+	return Text;
+}
+
+FString FCampaignSession::DescribeSave(const FString& SaveText)
+{
+	FString Json, Error;
+	TSharedPtr<FJsonObject> Object;
+	if (!bReady || SaveText.IsEmpty() || !Host->Call(TEXT("peek"), FString::Printf(TEXT("[%s]"), *JsonQuote(SaveText)), Json, Error)
+		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
+	{
+		return FString();
+	}
+	FString Name, Date;
+	bool bFreePlay = false;
+	Object->TryGetStringField(TEXT("name"), Name);
+	Object->TryGetStringField(TEXT("date"), Date);
+	Object->TryGetBoolField(TEXT("open"), bFreePlay);
+	const FString Who = Name.IsEmpty() ? FString(bFreePlay ? TEXT("Watching a free-play war") : TEXT("Watching history")) : Name;
+	return FString::Printf(TEXT("%s, %s%s"), *Who, *Date, !Name.IsEmpty() && bFreePlay ? TEXT(", free play") : TEXT(""));
+}
+
+bool FCampaignSession::Load(const FString& SaveText)
+{
+	FString Json, Error;
+	TSharedPtr<FJsonObject> Object;
+	if (!bReady || SaveText.IsEmpty() || !Host->Call(TEXT("load"), FString::Printf(TEXT("[%s]"), *JsonQuote(SaveText)), Json, Error)
+		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
+	{
+		if (!Error.IsEmpty())
+		{
+			UE_LOG(LogTheater, Error, TEXT("Rules: %s"), *Error);
+		}
+		return false;
+	}
+	View = ParseView(Object);
+	bRunning = true;
+	UE_LOG(LogTheater, Display, TEXT("Campaign continued: %s, the player leads %s"), *View.Date, View.Human.IsEmpty() ? TEXT("nobody") : *View.Human);
 	OnViewChanged.Broadcast();
 	return true;
 }
@@ -101,6 +237,8 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetStringField(TEXT("current"), Out.Current);
 	Object->TryGetBoolField(TEXT("humanUp"), Out.bHumanUp);
 	Object->TryGetBoolField(TEXT("eve"), Out.bEve);
+	Object->TryGetBoolField(TEXT("open"), Out.bOpen);
+	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
 
 	const TArray<TSharedPtr<FJsonValue>>* Regions = nullptr;
 	if (Object->TryGetArrayField(TEXT("regions"), Regions))
@@ -135,6 +273,11 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetStringField(TEXT("posture"), C.Posture);
 			C.Divisions = Unit->GetIntegerField(TEXT("divs"));
 			C.Strength = static_cast<float>(Unit->GetNumberField(TEXT("str")));
+			// Rules that do not count heads (the stand-in) are taken at a full division's strength.
+			if (!Unit->TryGetNumberField(TEXT("men"), C.Men))
+			{
+				C.Men = FMath::RoundToInt32(C.Divisions * C.Strength * 15000.0f);
+			}
 			C.Cohesion = static_cast<float>(Unit->GetNumberField(TEXT("org")));
 			C.Region = Unit->GetIntegerField(TEXT("reg"));
 			C.Moves = Unit->GetIntegerField(TEXT("ap"));

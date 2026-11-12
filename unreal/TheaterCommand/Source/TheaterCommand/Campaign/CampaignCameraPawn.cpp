@@ -133,8 +133,8 @@ void ACampaignCameraPawn::Tick(float DeltaSeconds)
 	TargetFocus.X = FMath::Clamp(TargetFocus.X, -HalfExtent.X, HalfExtent.X);
 	TargetFocus.Y = FMath::Clamp(TargetFocus.Y, -HalfExtent.Y, HalfExtent.Y);
 
-	Focus = FMath::VInterpTo(Focus, TargetFocus, DeltaSeconds, 9.0f);
-	Zoom = FMath::FInterpTo(Zoom, TargetZoom, DeltaSeconds, 8.0f);
+	Focus = FMath::VInterpTo(Focus, TargetFocus, DeltaSeconds, bHurry ? 26.0f : 9.0f);
+	Zoom = FMath::FInterpTo(Zoom, TargetZoom, DeltaSeconds, bHurry ? 20.0f : 8.0f);
 	Yaw = FMath::FInterpTo(Yaw, TargetYaw, DeltaSeconds, 9.0f);
 	Tilt = FMath::FInterpTo(Tilt, TargetTilt, DeltaSeconds, 9.0f);
 	ApplyView();

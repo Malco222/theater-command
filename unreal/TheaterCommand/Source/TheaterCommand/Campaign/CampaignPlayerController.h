@@ -46,6 +46,32 @@ struct FArmyTray
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
 };
 
+/** One choice on the opening screen. */
+struct FOpeningSide
+{
+	FText Name;
+	FText Blurb;
+	FText Aims;
+	FLinearColor Color = FLinearColor::Gray;
+	bool bWatch = false;
+};
+
+struct FOpeningGroup
+{
+	FText Title;
+	TArray<FOpeningSide> Sides;
+};
+
+/** The opening screen: where a campaign can begin and as whom, and the campaign saved on this computer if there is one. */
+struct FOpening
+{
+	bool bVisible = false;
+	bool bCanReturn = false; // a campaign is under way behind the screen, so it can simply be closed
+	TArray<FOpeningGroup> Groups;
+	FText SavedLine; // empty when there is nothing to continue
+	int32 Revision = 0;
+};
+
 /** The two armies drawn up against each other before an attack and, once it is fought, what the battle came to. */
 struct FFaceOff
 {
@@ -83,12 +109,26 @@ public:
 	ACampaignPlayerController();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void PlayerTick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
 
 	const FRegionPanelInfo& GetRegionPanel() const { return RegionPanel; }
 	const FArmyTray& GetArmyTray() const { return Tray; }
 	const FFaceOff& GetFaceOff() const { return FaceOff; }
+	const FOpening& GetOpening() const { return Opening; }
+
+	/** Starts the campaign chosen on the opening screen. */
+	void BeginCampaign(int32 GroupIndex, int32 SideIndex);
+
+	/** Picks up the campaign saved on this computer. */
+	void ContinueCampaign();
+
+	/** Saves the campaign and shows the opening screen over it. */
+	void OpenMenu();
+
+	/** Goes back from the opening screen to the campaign under way. */
+	void CloseMenu();
 
 	/** The month's news, shown for a while after the month turns. */
 	FText GetDispatches() const;
@@ -152,6 +192,9 @@ private:
 	void WatchNextStep();
 	void FinishMonth();
 	void SpaceBar();
+	void RefreshOpening(bool bShow);
+	void EnterCampaign();
+	class ACampaignGameMode* GetMode() const;
 	const FReachRegion* FindReach(int32 RegionId) const;
 
 	TWeakObjectPtr<ACampaignMapActor> Map;
@@ -166,6 +209,8 @@ private:
 	TWeakObjectPtr<AArmyPiece> RingedPiece;
 
 	FFaceOff FaceOff;
+	FOpening Opening;
+	TArray<FStartGroup> StartGroups;
 
 	FString NoticeText;
 	double NoticeUntil = 0.0;

@@ -40,6 +40,8 @@ private:
 		bool bConfirm = false; // send the attack on the face-off in
 		bool bClose = false; // close the face-off
 		bool bWatch = false; // end the month and watch the other nations move
+		bool bOpening = false; // leave the opening screen up for this picture
+		bool bMenu = false; // open the menu over the campaign
 		int32 Months = 0; // end this many months first
 	};
 

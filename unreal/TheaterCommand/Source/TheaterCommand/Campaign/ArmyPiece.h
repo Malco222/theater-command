@@ -10,6 +10,7 @@ class ACampaignMapActor;
 class UStaticMesh;
 class UStaticMeshComponent;
 class UMaterialInterface;
+class UTextRenderComponent;
 
 /**
  * One nation's force in one region, standing on the table as a single piece:
@@ -48,6 +49,7 @@ public:
 	const FString& GetNationTag() const { return NationTag; }
 	const FString& GetGeneral() const { return General; }
 	int32 GetDivisions() const { return Divisions; }
+	int32 GetMen() const { return Men; }
 	const TArray<FViewCorps>& GetCorps() const { return Corps; }
 	bool HasCorps(int32 CorpsId) const;
 
@@ -64,10 +66,15 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> SelectionRing;
 
+	/** The army's strength, written on its standard. */
+	UPROPERTY(Transient)
+	TObjectPtr<UTextRenderComponent> StrengthLabel;
+
 	int32 RegionId = INDEX_NONE;
 	FString NationTag;
 	FString General;
 	int32 Divisions = 0;
+	int32 Men = 0;
 	TArray<FViewCorps> Corps;
 	FString Signature; // what the piece was last built from, to tell when it must be rebuilt
 

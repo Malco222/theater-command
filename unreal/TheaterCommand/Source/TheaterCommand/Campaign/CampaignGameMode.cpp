@@ -13,6 +13,8 @@
 #include "GameFramework/GameUserSettings.h"
 #include "HAL/IConsoleManager.h"
 #include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Misc/Parse.h"
 
 ACampaignGameMode::ACampaignGameMode()
@@ -94,19 +96,17 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 	Table = World->SpawnActor<ACampaignMapActor>(FVector::ZeroVector, FRotator::ZeroRotator);
 	if (Table && Table->BuildMap())
 	{
-		// Start the campaign. The player leads Germany unless the command line says otherwise ("-TheaterNation=FRA").
-		FString Human = TEXT("GER");
-		FParse::Value(FCommandLine::Get(), TEXT("TheaterNation="), Human);
 		Session = MakeShared<FCampaignSession>();
 		FString Error;
-		if (Session->Start(Human, Error))
+		if (!Session->Prepare(Error))
 		{
-			Table->SetHolders(Session->GetView().RegionHolder);
-			Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
+			UE_LOG(LogTheater, Error, TEXT("The rules could not be started: %s"), *Error);
 		}
-		else
+		// Normally the opening screen asks which campaign to play. "-TheaterNation=FRA" on the command line skips it.
+		FString Human;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterNation="), Human))
 		{
-			UE_LOG(LogTheater, Error, TEXT("The campaign could not start: %s"), *Error);
+			StartCampaign(Human, 1, FString());
 		}
 	}
 
@@ -119,4 +119,64 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 			Photographer->Begin(ShotFolder);
 		}
 	}
+}
+
+void ACampaignGameMode::LayOutWar()
+{
+	if (Table && Session.IsValid() && Session->IsRunning())
+	{
+		Table->SetHolders(Session->GetView().RegionHolder);
+		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
+	}
+}
+
+bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FString& ViewMode)
+{
+	FString Error;
+	if (!Session.IsValid() || !Session->Begin(Human, From, ViewMode, Error))
+	{
+		UE_LOG(LogTheater, Error, TEXT("The campaign could not start: %s"), *Error);
+		return false;
+	}
+	LayOutWar();
+	return true;
+}
+
+FString ACampaignGameMode::SaveFile()
+{
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), TEXT("campaign.json"));
+}
+
+void ACampaignGameMode::SaveCampaign()
+{
+	if (!Session.IsValid() || !Session->IsRunning())
+	{
+		return;
+	}
+	const FString Text = Session->Save();
+	if (!Text.IsEmpty())
+	{
+		FFileHelper::SaveStringToFile(Text, *SaveFile(), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
+	}
+}
+
+FString ACampaignGameMode::DescribeSavedCampaign()
+{
+	FString Text;
+	if (!Session.IsValid() || !FFileHelper::LoadFileToString(Text, *SaveFile()))
+	{
+		return FString();
+	}
+	return Session->DescribeSave(Text);
+}
+
+bool ACampaignGameMode::ContinueCampaign()
+{
+	FString Text;
+	if (!Session.IsValid() || !FFileHelper::LoadFileToString(Text, *SaveFile()) || !Session->Load(Text))
+	{
+		return false;
+	}
+	LayOutWar();
+	return true;
 }

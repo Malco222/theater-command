@@ -10,6 +10,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SDPIScaler.h"
+#include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSpacer.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SCompoundWidget.h"
@@ -80,6 +81,7 @@ namespace
 				return Controller.IsValid() ? &Controller->GetFaceOff() : nullptr;
 			};
 			ScrimBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 0.0f);
+			DeepScrimBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.72f), 0.0f);
 			PlainButton = MakeButtonStyle(CardFill, CardHover, Faint, 1.0f);
 
 			// One side of the face-off: whose army it is, who leads it, how strong it is, and its corps.
@@ -311,6 +313,17 @@ namespace
 							SNew(SVerticalBox)
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMenu(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth()
+								[
 								SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 11.0f)).IsFocusable(false)
 								.OnClicked_Lambda([this]()
 								{
@@ -330,6 +343,7 @@ namespace
 								[
 									SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
 									.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->IsWatching() ? TEXT("SKIP  (Space)") : TEXT("END THE MONTH")); })
+								]
 								]
 							]
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
@@ -472,6 +486,82 @@ namespace
 							]
 						]
 					]
+
+					// The opening screen: where to begin and as whom.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(1000.0f).MaxDesiredHeight(790.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 26.0f, 26.0f, 26.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Font(TEXT("Bold"), 30, 420)).ColorAndOpacity(Cream)
+									]
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 2.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("1939 TO 1945"))).Font(Font(TEXT("Bold"), 12, 520)).ColorAndOpacity(Brass)
+									]
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 10.0f, 10.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted)
+										.Text(FText::FromString(TEXT("Choose where to begin and whom to lead. The campaign saves itself every month.")))
+									]
+
+									// The campaign saved on this computer, and the way back to the one under way.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 16.0f, 10.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bCanReturn ? EVisibility::Visible : EVisibility::Collapsed; })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseMenu(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("BACK TO THE WAR"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(24.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]()
+											{
+												return Controller.IsValid() && !Controller->GetOpening().bCanReturn && !Controller->GetOpening().SavedLine.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed;
+											})
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ContinueCampaign(); } return FReply::Handled(); })
+											[
+												SNew(SVerticalBox)
+												+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+												[
+													SNew(STextBlock).Text(FText::FromString(TEXT("CONTINUE YOUR CAMPAIGN"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(BrightBrass)
+												]
+												+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 2.0f, 0.0f, 0.0f)
+												[
+													SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream)
+													.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetOpening().SavedLine : FText::GetEmpty(); })
+												]
+											]
+										]
+									]
+
+									// Every place a campaign can begin.
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									[
+										SNew(SScrollBox)
+										+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+										[
+											SAssignNew(Starts, SVerticalBox)
+										]
+									]
+								]
+							]
+						]
+					]
 				]
 			];
 
@@ -481,6 +571,37 @@ namespace
 		virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+			// Lay out the opening screen's choices when they change.
+			if (Controller.IsValid() && Starts.IsValid() && Controller->GetOpening().Revision != ShownOpening)
+			{
+				ShownOpening = Controller->GetOpening().Revision;
+				Starts->ClearChildren();
+				const TArray<FOpeningGroup>& Groups = Controller->GetOpening().Groups;
+				for (int32 GroupIndex = 0; GroupIndex < Groups.Num(); ++GroupIndex)
+				{
+					Starts->AddSlot().AutoHeight().Padding(0.0f, GroupIndex == 0 ? 0.0f : 20.0f, 0.0f, 8.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Groups[GroupIndex].Title.ToString().ToUpper())).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+					];
+					// Two columns of choices.
+					TSharedRef<SVerticalBox> Left = SNew(SVerticalBox);
+					TSharedRef<SVerticalBox> Right = SNew(SVerticalBox);
+					for (int32 SideIndex = 0; SideIndex < Groups[GroupIndex].Sides.Num(); ++SideIndex)
+					{
+						(SideIndex % 2 == 0 ? Left : Right)->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+						[
+							MakeStart(Groups[GroupIndex].Sides[SideIndex], GroupIndex, SideIndex)
+						];
+					}
+					Starts->AddSlot().AutoHeight()
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 8.0f, 0.0f)[Left]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)[Right]
+					];
+				}
+			}
+
 			// Deal the cards again whenever the army in hand has changed.
 			if (Controller.IsValid() && Cards.IsValid() && Controller->GetArmyTray().Revision != ShownRevision)
 			{
@@ -497,6 +618,50 @@ namespace
 		}
 
 	private:
+		/** One choice on the opening screen: a nation to lead or a war to watch, and what lies ahead. */
+		TSharedRef<SWidget> MakeStart(const FOpeningSide& Side, int32 GroupIndex, int32 SideIndex)
+		{
+			TSharedRef<SVerticalBox> Body = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(22.0f).HeightOverride(14.0f)
+						[
+							SNew(SBorder).BorderImage(&ChipBrush).BorderBackgroundColor(Side.Color)
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(Side.Name).Font(Font(TEXT("Bold"), 14)).ColorAndOpacity(Cream)
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(Side.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
+				];
+			if (!Side.Aims.IsEmpty())
+			{
+				Body->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(Side.Aims).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true).LineHeightPercentage(1.15f)
+				];
+			}
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 10.0f, 14.0f, 12.0f)).IsFocusable(false)
+				.OnClicked_Lambda([this, GroupIndex, SideIndex]()
+				{
+					if (Controller.IsValid())
+					{
+						Controller->BeginCampaign(GroupIndex, SideIndex);
+					}
+					return FReply::Handled();
+				})
+				[
+					Body
+				];
+		}
+
 		TSharedRef<SWidget> MakeCard(const FTrayCard& Card)
 		{
 			const bool bGoing = Card.bPicked && Card.bCanOrder;
@@ -564,6 +729,9 @@ namespace
 		FButtonStyle EndMonthStyle;
 		FButtonStyle PlainButton;
 		FSlateBrush ScrimBrush;
+		FSlateBrush DeepScrimBrush;
+		TSharedPtr<SVerticalBox> Starts;
+		int32 ShownOpening = -1;
 	};
 }
 

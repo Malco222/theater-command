@@ -43,6 +43,9 @@ public:
 	/** Sets the compass direction the view faces and any extra tilt. Takes effect at the next GoTo or eases in. */
 	void SetHeading(float YawDegrees, float TiltDegrees = 0.0f);
 
+	/** While hurried the view travels several times faster, for following the other nations' month. */
+	void SetHurry(bool bInHurry) { bHurry = bInHurry; }
+
 	/** Sends the view to a place on the table. Zoom is 0 (closest) to 1 (furthest); negative leaves it alone. */
 	void GoTo(const FVector& WorldFocus, float InZoom = -1.0f, bool bImmediately = false);
 
@@ -84,4 +87,5 @@ private:
 	float TargetYaw = 0.0f;
 	float Tilt = 0.0f;
 	float TargetTilt = 0.0f;
+	bool bHurry = false;
 };
