@@ -1,0 +1,99 @@
+#pragma once
+
+#include "CoreMinimal.h"
+
+/**
+ * The campaign map as plain data, read from the same JSON files the browser
+ * prototype uses (the repository's data/ and src/generated/ folders). Nothing
+ * here knows about rendering: it is the "what is where" that every view of the
+ * campaign shares.
+ *
+ * Map units are the prototype's: x runs east, y runs south, and the whole map
+ * is Width x Height units (about 1491 x 1712).
+ */
+
+struct FCampaignNation
+{
+	FString Tag;
+	FString Name;
+	FString Adjective;
+	FColor Color = FColor(128, 128, 128); // sRGB, as written in nations.json
+	FString Alignment;
+};
+
+struct FCampaignRegion
+{
+	int32 Id = INDEX_NONE;
+	FString Name;
+	FString Owner; // nation tag
+	FString Terrain; // plains, hills, forest, mountain, urban, desert, marsh
+	int32 VictoryPoints = 0;
+	int32 Factories = 0;
+	bool bCapital = false;
+	bool bPort = false;
+	bool bOil = false;
+	bool bOre = false;
+	bool bDepot = false;
+	bool bColony = false;
+	int32 FortLevel = 0;
+	FVector2D Center = FVector2D::ZeroVector; // the region's seed point (its chief town)
+	FVector2D Centroid = FVector2D::ZeroVector; // middle of its largest piece of land
+	TArray<TArray<FVector2D>> Polygons; // outer rings only; the map has no holes
+	TArray<int32> Neighbors;
+	FBox2D Bounds = FBox2D(ForceInit);
+	double Area = 0.0;
+};
+
+struct FCampaignCorps
+{
+	FString Nation;
+	FString Name;
+	FString Kind; // inf, mot, arm, cav, mtn, fort
+	int32 Divisions = 0;
+	int32 RegionId = INDEX_NONE;
+	FString General;
+};
+
+struct FCampaignSeaZone
+{
+	FString Name;
+	FVector2D Center = FVector2D::ZeroVector;
+};
+
+class FCampaignMapData
+{
+public:
+	/** Reads the map, the nations and the September 1939 armies. Returns false and says why if a file is missing or malformed. */
+	bool Load(FString& OutError);
+
+	bool IsLoaded() const { return bLoaded; }
+
+	const FCampaignNation* FindNation(const FString& Tag) const { return Nations.Find(Tag); }
+
+	/** The region whose land contains this point, or INDEX_NONE for sea and unclaimed land. */
+	int32 FindRegionAt(double X, double Y) const;
+
+	static bool PointInRing(const TArray<FVector2D>& Ring, double X, double Y);
+
+	static FString TerrainLabel(const FString& Terrain);
+	static FString CorpsKindLabel(const FString& Kind);
+
+	double Width = 0.0;
+	double Height = 0.0;
+	TArray<TArray<FVector2D>> Land; // every landmass, including land no region claims
+	TArray<FCampaignRegion> Regions;
+	TMap<FString, FCampaignNation> Nations;
+	TArray<FCampaignCorps> Corps;
+	TArray<FCampaignSeaZone> Seas;
+	TMap<FString, int32> RegionByName;
+
+	/** Where the files were read from, for the log. */
+	FString SourceDescription;
+
+private:
+	bool LoadMap(const FString& Path, FString& OutError);
+	bool LoadNations(const FString& Path, FString& OutError);
+	bool LoadSetup(const FString& Path, FString& OutError);
+
+	bool bLoaded = false;
+};
