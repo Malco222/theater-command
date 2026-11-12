@@ -14,8 +14,12 @@ import {
   TRAITS, alertNation, costMul, eliteCount, eliteIn, eliteOf, eliteRule, openTraits, priceOf, traitAttack, traitDefence, traitDrafts,
   traitFleet, traitMoney, traitNames, traitRule, traitSeaLoss, traitSealift, traitsMonth, traitsOf, whyNoElite,
 } from '../src/campaign/traits';
+import { TECH } from '../src/campaign/tech';
 import { runTurnAI } from '../src/campaign/turn';
 import { KIND, type Corps, type Game } from '../src/campaign/types';
+
+// These tests measure the abilities alone: what the technology tree adds on top of them is tested in tech.test.ts.
+for (const t of TECH.techs) for (const k of ['attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'sealift', 'field']) delete (t as any)[k];
 
 const grand = (human: string | null = null, seed = 3): Game => startOpen(createGame(seed, human));
 const history = (human: string | null = null, seed = 3): Game => createGame(seed, human);
@@ -92,7 +96,7 @@ describe('the historical scenarios', () => {
     expect(g.nations.NOR.sealift).toBe(0);
     openTraits(g);
     expect(g.nations.NOR.sealift).toBe(0);
-    expect(assess(g, [tank], g.byName['Lodz']).lines.some((l) => l.label === 'National abilities')).toBe(false);
+    expect(assess(g, [tank], g.byName['Lodz']).lines.some((l) => l.label === 'Abilities and technology')).toBe(false);
   });
 });
 
@@ -112,7 +116,7 @@ describe('in battle', () => {
     const g = grand('GER');
     const tank = g.corps.find((c) => c.nat === 'GER' && c.kind === 'arm' && g.regions[c.reg].nb.includes(g.byName['Lodz'].id))!;
     const a = assess(g, [tank], g.byName['Lodz']);
-    const line = a.lines.find((l) => l.label === 'National abilities')!;
+    const line = a.lines.find((l) => l.label === 'Abilities and technology')!;
     expect(line.value).toBe('Attacking: Armoured spearheads. Defending: The cipher bureau');
     expect(line.effect).toBe('Attack up as much as 15% for the corps it covers, defence up as much as 5% for the corps it covers');
     expect(traitNames(g, [tank], g.byName['Lodz'], 'attack')).toEqual(['Armoured spearheads']);
@@ -120,7 +124,7 @@ describe('in battle', () => {
     const h = history('GER');
     const same = h.corps.find((c) => c.id === tank.id)!;
     const b = assess(h, [same], h.byName['Lodz']);
-    expect(b.lines.some((l) => l.label === 'National abilities')).toBe(false);
+    expect(b.lines.some((l) => l.label === 'Abilities and technology')).toBe(false);
   });
 
   it('knows the season and the year', () => {

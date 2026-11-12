@@ -8,6 +8,7 @@
 import data from '../../data/campaign/research.json';
 import type { Field, Game, Lab, Nation } from './types';
 import { headline } from './game';
+import { treeLevel, treeNotes } from './tech';
 
 export interface Step { at: number; name: string }
 interface FieldSpec { label: string; noun: string; per: number; who: string; news: string }
@@ -69,9 +70,12 @@ export function lead(g: Game, nat: string, f: Field): number {
   return Math.max(-RESEARCH.maxLead, Math.min(RESEARCH.maxLead, count(steps, lab.clock[f]) - count(steps, lab.months)));
 }
 
-/** What a branch's lead or lag is worth: 1 for a nation on history's schedule. */
+/**
+ * What a branch's lead or lag is worth: 1 for a nation on history's schedule. In the grand campaign every
+ * technology of the tree that raises the branch counts as one more design ahead.
+ */
 export function techMul(g: Game, nat: string, f: Field): number {
-  const k = lead(g, nat, f);
+  const k = lead(g, nat, f) + treeLevel(g, nat, f);
   return k === 0 ? 1 : 1 + RESEARCH.fields[f].per * k;
 }
 
@@ -108,6 +112,8 @@ export const teamsFree = (lab: Lab): number => teamsTotal(lab) - teamsUsed(lab);
 /** Puts this many design teams on a branch. Teams taken off a branch are free to go elsewhere. */
 export function setTeams(g: Game, nat: string, f: Field, teams: number): boolean {
   const lab = g.nations[nat]?.lab;
+  // The grand campaign steers research through the technology tree instead.
+  if (g.flags.open === 1) return false;
   if (!lab || !FIELDS.includes(f) || !Number.isInteger(teams) || teams < 0 || teams > MAX_TEAMS) return false;
   if (teamsUsed(lab) - lab.teams[f] + teams > teamsTotal(lab)) return false;
   lab.teams[f] = teams;
@@ -123,6 +129,7 @@ export function bureauCost(n: Nation): number | null {
 export function foundBureau(g: Game, nat: string): boolean {
   const n = g.nations[nat];
   const cost = n ? bureauCost(n) : null;
+  if (g.flags.open === 1) return false;
   if (!n || !n.alive || !n.lab || cost === null || n.pp < cost) return false;
   n.pp -= cost;
   n.lab.founded++;
@@ -141,7 +148,8 @@ export function researchTick(g: Game, nat: string): void {
     const steps = stepsOf(nat, f);
     const before = lab.clock[f];
     lab.clock[f] = before + speedOf(lab, f);
-    if (nat !== g.human) continue;
+    // In the grand campaign the player's research is the technology tree, and it reports its own news.
+    if (nat !== g.human || g.flags.open === 1) continue;
     const spec = RESEARCH.fields[f];
     for (const s of steps) {
       if (s.at > before && s.at <= lab.clock[f]) {
@@ -157,7 +165,8 @@ export function researchTick(g: Game, nat: string): void {
 /** One side's equipment, for a battle ticket: which of these branches are ahead of or behind their time, and by how much. */
 export function techNotes(g: Game, nats: Iterable<string>, fields: Field[]): { text: string; pct: number }[] {
   const out: { text: string; pct: number }[] = [];
-  for (const nat of new Set(nats)) {
+  const who = [...new Set(nats)];
+  for (const nat of who) {
     for (const f of fields) {
       const k = lead(g, nat, f);
       if (!k) continue;
@@ -165,5 +174,5 @@ export function techNotes(g: Game, nats: Iterable<string>, fields: Field[]): { t
       out.push({ text: `${g.nations[nat].adj} ${RESEARCH.fields[f].noun} ${gen} ${k > 0 ? 'ahead of' : 'behind'} history`, pct: Math.round(RESEARCH.fields[f].per * k * 100) });
     }
   }
-  return out;
+  return g.flags.open === 1 ? [...out, ...treeNotes(g, who, fields)] : out;
 }

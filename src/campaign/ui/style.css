@@ -776,3 +776,78 @@ svg.flag.inh { vertical-align: -3px; margin-right: 4px; }
 .starred { position: relative; display: inline-flex; }
 .starred > i { position: absolute; right: -3px; top: -6px; font-style: normal; font-size: 12px; color: var(--brass); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
 @media (max-width: 760px) { .wideonly { display: none; } }
+
+/* The technology tree (the grand campaign): a lane for each branch, a column for each step. */
+.bsign { flex: none; fill: none; stroke: var(--brass); stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+.tlock { display: inline-block; vertical-align: -1px; margin-right: 5px; color: var(--ink-3); }
+.tbar { display: block; height: 4px; margin-top: 5px; background: var(--panel-3); border-radius: 2px; overflow: hidden; }
+.tbar i { display: block; height: 100%; min-width: 3px; background: var(--brass); }
+.buy.techrow { align-items: flex-start; }
+.buy.techrow .bsign { margin-top: 2px; }
+.buy.techrow .cost { font-size: 13px; white-space: nowrap; }
+.buy.techrow:not([disabled]):hover, .buy.offer.held:hover, .rcard.held:hover { border-color: var(--brass); }
+.buy.offer.held > svg, .buy.offer.held .cost, .rcard.held > svg, .rcard.held .cost { opacity: .5; }
+.techtable th { text-align: center; padding: 2px 4px; }
+.techtable td { text-align: center; font-family: var(--head); font-size: 15px; }
+.techtable td:first-child { text-align: left; font-family: var(--body); font-size: 12.5px; white-space: nowrap; }
+.techtable td small { color: var(--ink-3); font-size: 11px; }
+.techtable td svg { vertical-align: -3px; }
+.card.techcard { width: min(1080px, 100%); }
+.card.techcard header .sub { margin-top: 4px; max-width: 760px; }
+.card .body.techbody { padding: 8px 0 0; }
+.techscroll { overflow-x: auto; padding: 0 18px 14px; }
+.techgrid { position: relative; min-width: 700px; }
+.techlines { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.techlines path { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.techlines path.cross { stroke-dasharray: 4 4; }
+.techlines path.open { stroke: #8d7541; }
+.techlines path.hot { stroke: var(--brass); stroke-width: 2.25; }
+.tcols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); column-gap: 34px; }
+.teras { margin-bottom: 4px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.teras b { font-family: var(--head); font-size: 15px; color: var(--brass); margin-right: 4px; letter-spacing: .04em; }
+.tlane { position: relative; padding: 8px 0 10px; border-top: 1px solid var(--line); }
+.tlanehead { display: flex; align-items: center; gap: 7px; margin-bottom: 7px; }
+.tlanehead b { font-family: var(--head); font-size: 18px; letter-spacing: .08em; text-transform: uppercase; }
+.tlanehead small { color: var(--ink-3); font-size: 12px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tlanehead span { font-family: var(--head); font-size: 14px; color: var(--ink-2); white-space: nowrap; }
+.tcol { display: flex; flex-direction: column; justify-content: center; gap: 6px; min-width: 0; }
+.tnode { position: relative; display: block; width: 100%; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px 7px; min-height: 46px; }
+.tnode b { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.2; }
+.tnode small { display: block; font-size: 11px; color: var(--ink-2); line-height: 1.25; margin-top: 1px; }
+.tnode .tick { font-style: normal; color: var(--brass); margin-right: 5px; }
+.tnode:hover { border-color: var(--ink-2); }
+.tnode.done { background: #2a2618; border-color: #8d7541; }
+.tnode.done small { color: #c9b27a; }
+.tnode.work { border-color: var(--brass); }
+.tnode.work small { color: var(--ink); }
+.tnode.ready { border-color: var(--ink-3); }
+.tnode.ready small { color: #b8dcb2; }
+.tnode.ready.early { border-color: var(--line); }
+.tnode.ready.early small { color: #d9c08a; }
+.tnode.locked { background: var(--panel); border-style: dashed; }
+.tnode.locked b { color: var(--ink-2); }
+.tnode.locked small { color: var(--ink-3); }
+.tnode.sel { border-color: var(--brass); box-shadow: 0 0 0 2px var(--brass); }
+.card footer.techfoot { position: sticky; bottom: 0; display: block; background: var(--panel); padding: 10px 18px 12px; box-shadow: 0 -8px 18px rgba(0, 0, 0, .35); }
+.techsel { display: flex; gap: 14px; align-items: flex-start; }
+.techsel .grow { flex: 1; min-width: 0; }
+.techsel .grow > b { font-family: var(--head); font-size: 20px; letter-spacing: .02em; }
+.techsel p { margin: 2px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.techsel p.rule { color: var(--ink); font-weight: 600; }
+.techsel small { display: block; font-size: 11.5px; color: var(--ink-3); margin-top: 3px; }
+.techsel small.whyno { color: #f0b3a5; }
+.tneeds span { margin-left: 6px; white-space: nowrap; }
+.tneeds span.got { color: #b8dcb2; }
+.tneeds span.not { color: #f0b3a5; }
+.techacts { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; }
+@media (max-width: 760px) {
+  .techscroll { padding: 0 12px 12px; }
+  .techgrid { min-width: 640px; }
+  .tcols { column-gap: 22px; }
+  .card footer.techfoot { padding: 8px 12px 10px; }
+  .techsel { gap: 8px; }
+  .techsel p.flavor { display: none; }
+  .techsel .grow > b { font-size: 17px; }
+  .tlanehead small { display: none; }
+  .tlanehead span { margin-left: auto; }
+}

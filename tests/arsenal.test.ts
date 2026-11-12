@@ -6,6 +6,7 @@ import arsenal from '../data/campaign/arsenal.json';
 import budget from '../data/campaign/budget.json';
 import { AIR, airUpkeep, assessAir, crowding, forecastAir } from '../src/campaign/air';
 import { ARSENAL, aiArsenal, canStation, factoriesBuilt, isCity, offers, orderOffer, workLevel, yardLevel, type Offer } from '../src/campaign/arsenal';
+import { techOf } from '../src/campaign/tech';
 import { BUDGET, PRODUCTION, cancelBuild, canRaiseKind, deliver, income, isHome, ledger, needsOf, orderCorps, raiseSite, upkeepTotal } from '../src/campaign/economy';
 import { DUG_IN, GUNS, addCorps, assess, createGame } from '../src/campaign/game';
 import { fleetsOf, shipCount } from '../src/campaign/navy';
@@ -109,6 +110,8 @@ describe('heavy equipment needs industry', () => {
     const nat = Object.keys(g.nations).find((id) => g.nations[id].alive && g.regions.some((r) => isHome(g, id, r)) && !g.regions.some((r) => isHome(g, id, r) && r.fac >= ARSENAL.needs.arm))!;
     expect(nat).toBeDefined();
     rich(g, nat);
+    // The tank arm is researched: only the industry is missing.
+    if (!techOf(g, nat)!.done.includes('tanks')) techOf(g, nat)!.done.push('tanks');
     const o = offer(g, nat, 'corps:arm');
     expect(o.at).toBe(-1);
     expect(o.why).toMatch(/factor/);
@@ -418,7 +421,7 @@ describe('ordering', () => {
   it('lists the same offers for both interfaces, each with a price, a place and a reason when it cannot be had', () => {
     const g = grand(3, 'GER');
     const list = arsenalOffers(g, g.byName['Hamburg'].id);
-    expect(list.map((o) => o.key)).toEqual(['elite', 'corps:mtn', 'corps:inf', 'corps:art', 'corps:mot', 'corps:arm', 'corps:eng', 'air:ftr', 'air:bmr', 'ship:dd', 'ship:ss', 'ship:tp', 'ship:ca', 'ship:cv', 'ship:bb', 'work:factory', 'work:yard', 'work:aa', 'work:field', 'work:fort']);
+    expect(list.map((o) => o.key)).toEqual(['elite', 'corps:mtn', 'corps:inf', 'corps:art', 'corps:mot', 'corps:arm', 'corps:eng', 'para', 'air:ftr', 'air:bmr', 'ship:dd', 'ship:ss', 'ship:tp', 'ship:ca', 'ship:cv', 'ship:bb', 'work:factory', 'work:yard', 'work:aa', 'work:field', 'work:fort']);
     for (const o of list) {
       expect(o.label.length, o.key).toBeGreaterThan(3);
       expect(o.blurb.length, o.key).toBeGreaterThan(20);
@@ -427,7 +430,9 @@ describe('ordering', () => {
       expect(['army', 'air', 'navy', 'works']).toContain(o.group);
       // Germany begins the war with an empty treasury: everything it could build is out of reach for want of money alone.
       // (Its special formation, the heavy tanks, waits for its year: national abilities have their own tests.)
-      if (o.why !== null && o.key !== 'work:yard' && o.key !== 'elite') expect(o.poor, o.key).toBe(true);
+      // (And carriers wait on a technology: the tree has its own tests too.)
+      if (o.why !== null && o.key !== 'work:yard' && o.key !== 'elite' && !o.tech) expect(o.poor, o.key).toBe(true);
+      if (o.tech) expect(o.key).toBe('ship:cv');
     }
     expect(arsenalOffers(createGame(3, null))).toEqual([]);
   });

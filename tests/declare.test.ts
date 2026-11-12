@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { DIPLOMACY, RELATIONS, alarmed, friendsOf, sneakOn, step, tradePartners, warForecast, wouldSurprise } from '../src/campaign/diplomacy';
 import { income, ledger } from '../src/campaign/economy';
 import { addCorps, assess, atWar, bloc, createGame, declareWar } from '../src/campaign/game';
+import { techMul } from '../src/campaign/research';
 import { startOpen } from '../src/campaign/staff';
 import { declarable, humanUp, invasions, onEve, orderDeclare, passMonth, previewDeclare, reach } from '../src/campaign/turn';
 import { KIND, type Corps, type Game, type Kind } from '../src/campaign/types';
@@ -260,7 +261,8 @@ describe('declaring war', () => {
     expect(g.nations['HUN'].align).toBe('independent');
     expect(tradePartners(g, 'GER').map((n) => n.id)).not.toContain('HUN');
     // A friendly neutral's trade is worth as much as a factory each month: that much is gone, and the ledger shows it.
-    expect(cash - income(g, 'GER')).toBeCloseTo(DIPLOMACY.tradeIncome, 6);
+    // (Germany's machine tools raise everything it earns by a twentieth, trade included.)
+    expect(cash - income(g, 'GER')).toBeCloseTo(DIPLOMACY.tradeIncome * techMul(g, 'GER', 'industry'), 6);
     const line = ledger(g, 'GER').income.find((l) => l.key === 'trade')!;
     expect(line.count).toBe(tradePartners(g, 'GER').length);
     expect(line.amount).toBeCloseTo(line.count! * DIPLOMACY.tradeIncome, 6);

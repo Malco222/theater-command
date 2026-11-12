@@ -1,0 +1,107 @@
+{
+  "_about": {
+    "idea": "The technology tree of the grand campaign. Five branches, four steps deep. A nation's research teams each work on one technology at a time; a technology takes 'months' of one team's work, can be started once everything in 'needs' is researched, and takes 'early' longer for every year it is begun before its 'year'. The historical scenarios do not use the tree: there, research runs on history's clock (research.json).",
+    "effects": "'field' raises one of the eight branches of research.json by a level for good, worth that branch's 'per' wherever the branch counts (tanks, infantry weapons, doctrine, fighters, bombers, navy, radar, war production). 'unlock' lists the orders that cannot be placed without the technology ('corps:arm', 'corps:mot', 'ship:cv', 'para'). 'slots' adds research teams. 'winterKit' ends the eastern winter's penalty for the nation's troops. 'sealift' adds shipping for that many more corps a month. 'attack', 'defence' with 'when', 'drafts', 'cost', 'fleet' and 'seaLoss' work exactly as they do for a national ability in traits.json.",
+    "start": "What each nation has researched when the war begins. A campaign begun in a later year gives every nation the months of research in between, chosen as its own staff would.",
+    "slots": "Research teams each nation begins with.",
+    "units": "Formations the tree unlocks beyond the ordinary kinds: 'para' is an airborne corps, raised like infantry, 'most' at once in the field and on order.",
+    "ai": "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open). 'order' is each nation's preference among the branches."
+  },
+  "months": [0, 5, 8, 11, 14],
+  "early": 0.5,
+  "slots": { "_default": 1, "GER": 2, "UK": 2, "FRA": 2, "SOV": 2, "ITA": 2, "USA": 2 },
+  "branches": [
+    { "id": "land", "label": "Land", "text": "Tanks, guns and the infantry's weapons." },
+    { "id": "air", "label": "Air", "text": "Fighters, bombers and the radar that guides them." },
+    { "id": "naval", "label": "Naval", "text": "Fleets, convoys and landings from the sea." },
+    { "id": "industry", "label": "Industry", "text": "Factories, manpower and the laboratories themselves." },
+    { "id": "doctrine", "label": "Doctrine", "text": "How the army is taught to fight." }
+  ],
+  "eras": ["", "Before the war", "1940 to 1941", "1942 to 1943", "1944 to 1945"],
+  "techs": [
+    { "id": "antitank", "branch": "land", "tier": 1, "year": 1939, "needs": [], "name": "Anti-tank guns", "text": "Light, low guns that travel with the infantry and can stop a tank at close range.", "field": "infantry" },
+    { "id": "tanks", "branch": "land", "tier": 1, "year": 1939, "needs": [], "name": "Tank arm", "text": "Tanks gathered into divisions of their own, with the workshops, fuel columns and radio sets that keep them moving.", "unlock": ["corps:arm"] },
+    { "id": "motor", "branch": "land", "tier": 1, "year": 1939, "needs": [], "name": "Motorised infantry", "text": "Infantry carried in lorries, able to keep up with the tanks and hold what they take.", "unlock": ["corps:mot"] },
+    { "id": "mediums", "branch": "land", "tier": 2, "year": 1941, "needs": ["tanks"], "name": "Medium tanks", "text": "A tank with a gun that can fight other tanks and armour the light guns of 1939 cannot pierce.", "field": "armour" },
+    { "id": "heavyguns", "branch": "land", "tier": 2, "year": 1940, "needs": [], "name": "Heavy artillery", "text": "Long-range guns and heavy howitzers, worked to a single fire plan.", "attack": 1.15, "defence": 1.15, "when": { "kinds": ["art"] } },
+    { "id": "smg", "branch": "land", "tier": 2, "year": 1940, "needs": ["antitank"], "name": "Submachine guns and mortars", "text": "Firepower a platoon can carry: more automatic weapons, and mortars of its own.", "field": "infantry" },
+    { "id": "heavies", "branch": "land", "tier": 3, "year": 1942, "needs": ["mediums"], "name": "Heavy tanks", "text": "Thick armour and a gun that outranges anything it meets, at the price of weight, fuel and factory hours.", "field": "armour" },
+    { "id": "rockets", "branch": "land", "tier": 3, "year": 1942, "needs": ["heavyguns"], "name": "Rocket artillery", "text": "Batteries of rockets on lorries: a whole regiment's weight of fire in half a minute, then gone before the reply.", "attack": 1.15, "when": { "kinds": ["art"] } },
+    { "id": "tankdestroyers", "branch": "land", "tier": 3, "year": 1943, "needs": ["mediums", "antitank"], "name": "Tank destroyers", "text": "Heavy guns on tracks: cheap to build, hard to see and deadly from ambush.", "defence": 1.1, "when": { "kinds": ["arm", "mot"] } },
+    { "id": "assaultrifles", "branch": "land", "tier": 4, "year": 1944, "needs": ["smg"], "name": "Assault rifles", "text": "One weapon with the reach of a rifle and the fire of a machine pistol, in every rifleman's hands.", "field": "infantry" },
+    { "id": "latetanks", "branch": "land", "tier": 4, "year": 1944, "needs": ["heavies"], "name": "Late-war armour", "text": "Sloped plate, a long gun and wide tracks in one design, built in thousands.", "field": "armour" },
+
+    { "id": "monoplanes", "branch": "air", "tier": 1, "year": 1939, "needs": [], "name": "Monoplane fighters", "text": "All-metal fighters with enclosed cockpits, retracting wheels and a battery of guns in the wings.", "field": "fighters" },
+    { "id": "mediumbombers", "branch": "air", "tier": 1, "year": 1939, "needs": [], "name": "Medium bombers", "text": "Fast twin-engined bombers with trained navigators and a proper bombsight.", "field": "bombers" },
+    { "id": "earlywarning", "branch": "air", "tier": 2, "year": 1940, "needs": [], "name": "Early-warning radar", "text": "A chain of stations that sees a raid forming up while it is still far out.", "field": "radar" },
+    { "id": "groundattack", "branch": "air", "tier": 2, "year": 1940, "needs": ["mediumbombers"], "name": "Close air support", "text": "Dive bombers and fighter-bombers on call to the spearheads, with air force officers riding in the lead columns.", "attack": 1.05, "when": { "mobile": true } },
+    { "id": "escorts", "branch": "air", "tier": 3, "year": 1942, "needs": ["monoplanes"], "name": "Long-range fighters", "text": "Drop tanks and thrifty engines take the fighters all the way to the target and back.", "field": "fighters" },
+    { "id": "heavybombers", "branch": "air", "tier": 3, "year": 1942, "needs": ["mediumbombers"], "name": "Four-engined bombers", "text": "Heavy bombers that carry tons where the mediums carried hundredweights.", "field": "bombers" },
+    { "id": "gci", "branch": "air", "tier": 3, "year": 1942, "needs": ["earlywarning"], "name": "Fighter control", "text": "Controllers on the ground steer each fighter onto its target by radar, by day or by night.", "field": "radar" },
+    { "id": "jets", "branch": "air", "tier": 4, "year": 1944, "needs": ["escorts"], "name": "Jet fighters", "text": "No propeller, and a hundred miles an hour faster than anything else in the sky.", "field": "fighters" },
+    { "id": "guided", "branch": "air", "tier": 4, "year": 1944, "needs": ["heavybombers"], "name": "Guided weapons", "text": "Bombs steered onto the target by radio after they leave the aircraft.", "field": "bombers" },
+
+    { "id": "sonar", "branch": "naval", "tier": 1, "year": 1939, "needs": [], "name": "Sonar and convoys", "text": "Escorts that can hear a submerged boat, and merchant ships sailing together under their guard.", "seaLoss": 0.9 },
+    { "id": "fleetsubs", "branch": "naval", "tier": 1, "year": 1939, "needs": [], "name": "Ocean-going submarines", "text": "Boats with the range to hunt far out on the trade routes, built to one standard pattern.", "cost": { "what": ["ship:ss"], "mul": 0.8 } },
+    { "id": "carriers", "branch": "naval", "tier": 2, "year": 1940, "needs": [], "name": "Carrier aviation", "text": "Deck landing, folding wings and the trained crews to fly aircraft from a ship at sea.", "unlock": ["ship:cv"] },
+    { "id": "landingcraft", "branch": "naval", "tier": 2, "year": 1941, "needs": [], "name": "Landing craft", "text": "Flat-bottomed craft with bow ramps that put men and tanks straight onto an open beach.", "sealift": 1, "attack": 1.15, "when": { "landing": true } },
+    { "id": "firecontrol", "branch": "naval", "tier": 3, "year": 1942, "needs": ["earlywarning"], "name": "Radar gunnery", "text": "The guns find their range by radar, in darkness and through smoke.", "field": "navy" },
+    { "id": "escortgroups", "branch": "naval", "tier": 3, "year": 1943, "needs": ["sonar"], "name": "Escort groups", "text": "Escorts trained to hunt as teams, with small carriers to close the gap in mid-ocean.", "seaLoss": 0.8 },
+    { "id": "fastbuild", "branch": "naval", "tier": 3, "year": 1942, "needs": ["machinetools"], "name": "Prefabricated ships", "text": "Hulls welded together from sections built inland, launched in weeks.", "cost": { "what": ["ship:dd", "ship:ss", "ship:tp", "ship:ca", "ship:cv", "ship:bb"], "mul": 0.85 } },
+    { "id": "taskforces", "branch": "naval", "tier": 4, "year": 1944, "needs": ["carriers", "firecontrol"], "name": "Carrier task forces", "text": "Fast carriers, battleships and their screen sailing and fighting as one body.", "field": "navy" },
+
+    { "id": "machinetools", "branch": "industry", "tier": 1, "year": 1939, "needs": [], "name": "Machine tools", "text": "Modern lathes, presses and gauges, and the skilled hands to set them.", "field": "industry" },
+    { "id": "institutes", "branch": "industry", "tier": 1, "year": 1939, "months": 6, "needs": [], "name": "Research institutes", "text": "Scientists and engineers brought together from the universities and set to war work.", "slots": 1 },
+    { "id": "assembly", "branch": "industry", "tier": 2, "year": 1940, "needs": ["machinetools"], "name": "Assembly lines", "text": "Tanks, lorries and aircraft built on a moving line from standard parts.", "cost": { "what": ["corps:arm", "corps:mot", "air:ftr", "air:bmr"], "mul": 0.9 } },
+    { "id": "mobilise", "branch": "industry", "tier": 2, "year": 1940, "needs": [], "name": "General mobilisation", "text": "Every class called up in its turn, with the depots and instructors to turn recruits into replacements.", "drafts": 1.2 },
+    { "id": "synthetics", "branch": "industry", "tier": 2, "year": 1941, "needs": [], "name": "Synthetic fuel and rubber", "text": "Petrol from coal and rubber from the chemical works, so the factories do not wait on cargoes.", "field": "industry" },
+    { "id": "warplan", "branch": "industry", "tier": 3, "year": 1942, "needs": ["assembly"], "name": "War economy", "text": "One central plan for steel, labour and machine tools, and nothing made that the war does not need.", "field": "industry" },
+    { "id": "labs", "branch": "industry", "tier": 3, "year": 1942, "months": 12, "needs": ["institutes"], "name": "Central laboratories", "text": "The institutes joined under one directorate with first call on money and men.", "slots": 1 },
+    { "id": "massprod", "branch": "industry", "tier": 4, "year": 1944, "needs": ["warplan"], "name": "Mass production", "text": "Simplified designs turned out round the clock by factories that make one thing only.", "field": "industry", "cost": { "what": ["corps:inf"], "mul": 0.9 } },
+
+    { "id": "staff", "branch": "doctrine", "tier": 1, "year": 1939, "needs": [], "name": "Staff colleges", "text": "Officers trained to one method, so that an order means the same thing to everyone who reads it.", "field": "doctrine" },
+    { "id": "depth", "branch": "doctrine", "tier": 2, "year": 1940, "needs": [], "name": "Defence in depth", "text": "Belt behind belt of positions, with reserves placed to strike back at whatever breaks in.", "defence": 1.15, "when": { "works": true } },
+    { "id": "mobile", "branch": "doctrine", "tier": 2, "year": 1940, "needs": ["tanks", "motor"], "name": "Mobile warfare", "text": "The fast troops massed at one point, sent through and kept moving, with the infantry to follow.", "attack": 1.1, "when": { "mobile": true } },
+    { "id": "mountain", "branch": "doctrine", "tier": 2, "year": 1940, "needs": [], "name": "Mountain warfare", "text": "Pack guns, mule trains and men who can climb with a full load.", "attack": 1.1, "defence": 1.1, "when": { "kinds": ["mtn"], "terrain": ["mountain", "hills"] } },
+    { "id": "airborne", "branch": "doctrine", "tier": 2, "year": 1940, "needs": ["staff"], "name": "Airborne forces", "text": "Parachute and glider troops, and the transport aircraft to deliver them behind an enemy coast.", "unlock": ["para"] },
+    { "id": "winterkit", "branch": "doctrine", "tier": 3, "year": 1942, "needs": [], "name": "Winter equipment", "text": "Padded uniforms, felt boots, oils that do not freeze and engines that start in the cold.", "winterKit": true },
+    { "id": "combined", "branch": "doctrine", "tier": 3, "year": 1942, "needs": ["mobile", "staff"], "name": "Battle groups", "text": "Tanks, infantry, guns and engineers put together for the task in hand under whoever is on the spot.", "field": "doctrine" },
+    { "id": "amphibious", "branch": "doctrine", "tier": 3, "year": 1943, "needs": ["landingcraft"], "name": "Amphibious assault", "text": "Navy, army and air force rehearsed to one timetable, from the bombardment to the beach.", "attack": 1.2, "when": { "landing": true } },
+    { "id": "deep", "branch": "doctrine", "tier": 4, "year": 1944, "needs": ["combined"], "name": "Deep operations", "text": "Whole armies fed through a breach one behind another, aimed at what lies far behind the front.", "field": "doctrine" }
+  ],
+  "start": {
+    "GER": ["tanks", "motor", "monoplanes", "mediumbombers", "staff", "airborne", "machinetools", "fleetsubs"],
+    "UK": ["tanks", "motor", "monoplanes", "sonar", "carriers", "earlywarning", "machinetools"],
+    "FRA": ["tanks", "motor", "antitank", "heavyguns"],
+    "SOV": ["tanks", "motor", "heavyguns", "mobilise", "winterkit"],
+    "ITA": ["tanks", "motor", "mediumbombers", "fleetsubs"],
+    "USA": ["tanks", "motor", "monoplanes", "mediumbombers", "carriers", "machinetools", "assembly"],
+    "POL": ["antitank"],
+    "BEL": ["antitank"],
+    "NED": ["sonar"],
+    "NOR": ["sonar"],
+    "SWE": ["antitank", "machinetools"],
+    "FIN": ["antitank", "winterkit"],
+    "ESP": ["antitank"],
+    "HUN": ["motor"],
+    "SUI": ["mountain", "machinetools"],
+    "YUG": ["mountain"],
+    "GRE": ["mountain"]
+  },
+  "units": {
+    "para": { "label": "Airborne corps", "word": "Airborne", "divs": 2, "cost": 44, "months": 6, "most": 2, "blurb": "Parachute and glider troops. Once a month they can be dropped on an enemy coast across one sea with no ships at all, as long as the enemy's fighters do not hold the sky there. They land without heavy weapons, so pick a weakly held target." }
+  },
+  "ai": {
+    "tier": 10, "branch": 6, "early": 30, "teams": 14, "later": 100,
+    "skip": { "_all": ["airborne", "carriers"] },
+    "order": {
+      "_default": ["land", "industry", "doctrine", "air", "naval"],
+      "GER": ["land", "doctrine", "air", "industry", "naval"],
+      "UK": ["naval", "air", "industry", "land", "doctrine"],
+      "FRA": ["land", "doctrine", "industry", "air", "naval"],
+      "SOV": ["industry", "land", "doctrine", "air", "naval"],
+      "ITA": ["naval", "air", "land", "industry", "doctrine"],
+      "USA": ["industry", "air", "naval", "land", "doctrine"]
+    }
+  }
+}

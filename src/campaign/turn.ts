@@ -16,6 +16,7 @@ import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
 import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './engineers';
 import { tearUp, whyNotCutRail } from './rails';
 import { foundBureau, setTeams } from './research';
+import { startResearch, stopResearch, techView, whyNotResearch, type TechView } from './tech';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
@@ -415,6 +416,31 @@ export function orderBuildFort(g: Game, region: number): Build | null {
 
 export function orderCancelBuild(g: Game, id: number): boolean {
   return humanUp(g) && cancelBuild(g, g.human!, id);
+}
+
+/**
+ * The technology tree as the player's nation sees it (the grand campaign): every technology with its branch and
+ * step, what it does in words, what it needs, whether it is researched, in work, open or locked, and why it
+ * cannot be started now. Null in a historical scenario, or with nobody at the controls.
+ */
+export function techTree(g: Game): TechView | null {
+  return g.human ? techView(g, g.human) : null;
+}
+
+/** Why the player cannot begin this technology now, or null when a free research team can start on it. */
+export function whyNotOrderResearch(g: Game, id: string): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  return whyNotResearch(g, g.human, id);
+}
+
+/** Puts one of the player's free research teams to work on a technology. */
+export function orderResearch(g: Game, id: string): boolean {
+  return humanUp(g) && startResearch(g, g.human!, id);
+}
+
+/** Takes the player's team off a technology. The work done on it is lost. */
+export function orderStopResearch(g: Game, id: string): boolean {
+  return humanUp(g) && stopResearch(g, g.human!, id);
 }
 
 /** Puts this many of the player's design teams on a branch of research. */
