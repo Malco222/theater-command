@@ -15,6 +15,7 @@ class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UStaticMesh;
 class AArmyPiece;
+class UTexture2D;
 struct FCampaignMeshBuffers;
 
 /**
@@ -85,6 +86,12 @@ public:
 
 	/** One shared material per colour, so a hundred pieces of one nation cost one material. */
 	UMaterialInstanceDynamic* GetSolidMaterial(const FLinearColor& Color, float Roughness, float Metallic, float Glow = 0.0f);
+
+	/** A nation's flag of the period, as a picture. Painted the first time it is asked for. */
+	UTexture2D* GetFlagTexture(const FString& Tag);
+
+	/** The cloth a nation's standards are cut from: its flag, readable from either side. Null if the flag material is missing. */
+	UMaterialInterface* GetFlagMaterial(const FString& Tag);
 
 	/** Half the size of the map in world units, for keeping the camera over the table. */
 	FVector2D GetWorldHalfExtent() const;
@@ -167,6 +174,15 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> SolidMaterials;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> FlagMaterial;
+
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UTexture2D>> FlagTextures;
+
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> FlagMaterials;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMesh> CubeMesh;

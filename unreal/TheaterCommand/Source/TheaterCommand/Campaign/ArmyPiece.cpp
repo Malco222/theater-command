@@ -5,6 +5,7 @@
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "ProceduralMeshComponent.h"
 
 AArmyPiece::AArmyPiece()
 {
@@ -79,6 +80,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	}
 	Parts.Reset();
 	SelectionRing = nullptr;
+	if (Cloth)
+	{
+		Cloth->DestroyComponent();
+		Cloth = nullptr;
+	}
 	if (StrengthLabel)
 	{
 		StrengthLabel->DestroyComponent();
@@ -119,24 +125,79 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Top += CounterHeight + CounterGap;
 	}
 
-	// The standard: a pole, the nation's colours, and a brass finial. The bigger the army, the bigger its
-	// standard, and its strength is written across it in thousands of men.
+	// The standard: a pole, the nation's flag of the period, and a brass finial. The bigger the army, the bigger
+	// its flag; and its strength is written, in thousands of men, on a dark plate under the flag.
 	const double Size = FMath::Clamp(0.82 + 0.26 * FMath::Sqrt(Men / 30000.0), 0.9, 2.0);
-	const double FlagWidth = 6.6 * U * Size, FlagHeight = 4.3 * U * Size;
+	const double FlagWidth = 6.6 * U * Size, FlagHeight = FlagWidth / 1.5;
 	const double PoleHeight = 9.0 * U + FlagHeight;
 	AddPart(Cylinder, FVector(0.0, 0.0, Top + PoleHeight * 0.5), FVector(0.42 * U, 0.42 * U, PoleHeight), Iron);
-	const FVector FlagAt(0.0, FlagWidth * 0.5 + 0.2 * U, Top + PoleHeight - FlagHeight * 0.5 - 0.3 * U);
-	AddPart(Cube, FlagAt, FVector(0.16 * U, FlagWidth, FlagHeight), Banner);
-	// A band along the top and the bottom of the colours, leaving the middle clear for the figure.
-	AddPart(Cube, FlagAt + FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
-	AddPart(Cube, FlagAt - FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
+	const double Hoist = 0.2 * U; // where the cloth begins, just clear of the pole
+	const FVector FlagAt(0.0, Hoist + FlagWidth * 0.5, Top + PoleHeight - FlagHeight * 0.5 - 0.3 * U);
+	if (UMaterialInterface* Colours = Map->GetFlagMaterial(Nation.Tag))
+	{
+		// The cloth is a sheet with a slow ripple in it that grows toward the free end, as a flag hangs in a light
+		// air. Pieces are turned so that the viewer looks along their +X: the cloth faces back along -X, the pole
+		// on the viewer's left, which is the side a flag is read from.
+		const int32 Across = 18, Down = 6;
+		const double Ripple = 0.045 * FlagWidth, Waves = 1.3, Droop = 0.035 * FlagHeight;
+		const double Phase = (RegionId * 37 % 100) * 0.0628; // no two neighbours hang alike
+		TArray<FVector> Vertices;
+		TArray<FVector> Normals;
+		TArray<FVector2D> UVs;
+		TArray<FProcMeshTangent> Tangents;
+		TArray<int32> Triangles;
+		for (int32 J = 0; J <= Down; ++J)
+		{
+			for (int32 I = 0; I <= Across; ++I)
+			{
+				const double S = static_cast<double>(I) / Across, T = static_cast<double>(J) / Down;
+				const double Angle = UE_DOUBLE_TWO_PI * Waves * S + Phase + 0.8 * T;
+				Vertices.Add(FVector(Ripple * S * FMath::Sin(Angle), Hoist + S * FlagWidth, FlagAt.Z + FlagHeight * (0.5 - T) - Droop * S * S));
+				const FVector Along(Ripple * (FMath::Sin(Angle) + S * UE_DOUBLE_TWO_PI * Waves * FMath::Cos(Angle)), FlagWidth, -2.0 * Droop * S);
+				const FVector Downward(Ripple * S * 0.8 * FMath::Cos(Angle), 0.0, -FlagHeight);
+				Normals.Add((Along ^ Downward).GetSafeNormal());
+				Tangents.Add(FProcMeshTangent(Along.GetSafeNormal(), false));
+				UVs.Add(FVector2D(S, T));
+			}
+		}
+		for (int32 J = 0; J < Down; ++J)
+		{
+			for (int32 I = 0; I < Across; ++I)
+			{
+				const int32 A = J * (Across + 1) + I, B = A + 1, C = A + Across + 1, D = C + 1;
+				Triangles.Append({ A, C, B, B, C, D });
+			}
+		}
+		Cloth = NewObject<UProceduralMeshComponent>(this);
+		Cloth->SetupAttachment(Root);
+		Cloth->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Cloth->RegisterComponent();
+		Cloth->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UVs, TArray<FLinearColor>(), Tangents, false);
+		Cloth->SetMaterial(0, Colours);
+	}
+	else
+	{
+		// No flag material: a plain banner in the nation's colour, with a paler band top and bottom.
+		AddPart(Cube, FlagAt, FVector(0.16 * U, FlagWidth, FlagHeight), Banner);
+		AddPart(Cube, FlagAt + FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
+		AddPart(Cube, FlagAt - FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
+	}
 	AddPart(Sphere, FVector(0.0, 0.0, Top + PoleHeight + 0.4 * U), FVector(1.1 * U, 1.1 * U, 1.1 * U), Brass);
 	PoleTop = Top + PoleHeight;
 	BaseRadius = CounterWidth * 0.5;
 	FlagCenter = FlagAt;
 	FlagRadius = FlagWidth * 0.55;
 
-	// Honours: a two-coloured streamer for each, one under another below the colours.
+	// The strength plate, hung from the pole under the flag, edged in brass.
+	const FString Figure = Men >= 995000 ? FString::Printf(TEXT("%.1fM"), Men / 1000000.0) : FString::Printf(TEXT("%dk"), FMath::Max(1, FMath::RoundToInt32(Men / 1000.0)));
+	const double PlateHeight = FMath::Min(FlagHeight * 0.42, 2.7 * U);
+	const double PlateWidth = PlateHeight * (0.95 + 0.52 * Figure.Len());
+	const FVector PlateAt(0.0, Hoist + PlateWidth * 0.5, FlagAt.Z - FlagHeight * 0.5 - 0.35 * U - PlateHeight * 0.5);
+	AddPart(Cube, PlateAt, FVector(0.2 * U, PlateWidth, PlateHeight), Map->GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("15130F"))), 0.55f, 0.0f, 0.08f));
+	AddPart(Cube, PlateAt + FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), Brass)->SetCastShadow(false);
+	AddPart(Cube, PlateAt - FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), Brass)->SetCastShadow(false);
+
+	// Honours: a two-coloured streamer for each, one under another below the plate.
 	int32 Streamer = 0;
 	const double StreamerLength = 3.4 * U, StreamerDepth = 0.62 * U;
 	for (const FViewCorps& Unit : Corps)
@@ -147,24 +208,22 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			{
 				break;
 			}
-			const double Z = FlagAt.Z - FlagHeight * 0.5 - 0.5 * U - Streamer * (StreamerDepth + 0.16 * U);
-			AddPart(Cube, FVector(0.0, 0.2 * U + StreamerLength * 0.25, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
+			const double Z = PlateAt.Z - PlateHeight * 0.5 - 0.6 * U - Streamer * (StreamerDepth + 0.16 * U);
+			AddPart(Cube, FVector(0.0, Hoist + StreamerLength * 0.25, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
 				Map->GetSolidMaterial(FLinearColor(Honour.First), 0.6f, 0.0f, 0.6f))->SetCastShadow(false);
-			AddPart(Cube, FVector(0.0, 0.2 * U + StreamerLength * 0.75, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
+			AddPart(Cube, FVector(0.0, Hoist + StreamerLength * 0.75, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
 				Map->GetSolidMaterial(FLinearColor(Honour.Second), 0.6f, 0.0f, 0.6f))->SetCastShadow(false);
 			++Streamer;
 		}
 	}
 
-	// The figure. Pieces are turned so that the viewer looks along their +X, so the lettering faces back along -X.
-	const FString Figure = Men >= 995000 ? FString::Printf(TEXT("%.1fM"), Men / 1000000.0) : FString::Printf(TEXT("%dk"), FMath::Max(1, FMath::RoundToInt32(Men / 1000.0)));
-	const bool bPaleColours = Colour.GetLuminance() > 0.3f;
+	// The figure. The lettering faces back along -X, toward the viewer.
 	StrengthLabel = NewObject<UTextRenderComponent>(this);
 	StrengthLabel->SetupAttachment(Root);
 	StrengthLabel->SetText(FText::FromString(Figure));
-	StrengthLabel->SetWorldSize(static_cast<float>(FlagHeight * (Figure.Len() > 3 ? 0.5 : 0.62)));
-	StrengthLabel->SetTextRenderColor(FColor::FromHex(bPaleColours ? TEXT("14110E") : TEXT("F4F0E4")));
-	// The side of the standard that faces the viewer is often the side away from the lamp, so the figure
+	StrengthLabel->SetWorldSize(static_cast<float>(PlateHeight * 0.86));
+	StrengthLabel->SetTextRenderColor(FColor::FromHex(TEXT("F4F0E4")));
+	// The side of the plate that faces the viewer is often the side away from the lamp, so the figure
 	// is drawn in lettering that does not take the light: it reads the same from every side.
 	if (UMaterialInterface* Unlit = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/EngineMaterials/UnlitText.UnlitText")))
 	{
@@ -174,7 +233,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	StrengthLabel->SetVerticalAlignment(EVRTA_TextCenter);
 	StrengthLabel->SetCastShadow(false);
 	StrengthLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	StrengthLabel->SetRelativeLocation(FlagAt - FVector(0.14 * U, 0.0, 0.0));
+	StrengthLabel->SetRelativeLocation(PlateAt - FVector(0.16 * U, 0.0, 0.0));
 	StrengthLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
 	StrengthLabel->RegisterComponent();
 }

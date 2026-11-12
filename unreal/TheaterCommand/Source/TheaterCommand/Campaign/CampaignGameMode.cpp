@@ -1,5 +1,8 @@
 #include "Campaign/CampaignGameMode.h"
 
+#include "Campaign/CampaignFlags.h"
+#include "ImageUtils.h"
+
 #include "Campaign/CampaignCameraPawn.h"
 #include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignHUD.h"
@@ -111,6 +114,34 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		{
 			StartCampaign(Human, 1, FString());
 		}
+	}
+
+	// "-TheaterFlags=<file.png>" on the command line saves every flag on one sheet, for checking them.
+	FString FlagSheet;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFlags="), FlagSheet))
+	{
+		TArray<FString> Tags = CampaignFlags::KnownTags();
+		Tags.Sort();
+		const int32 PerRow = 7, Gap = 16, W = CampaignFlags::SizeX * 3 / 4, H = CampaignFlags::SizeY; // shown three by two
+		const int32 SheetRows = (Tags.Num() + PerRow - 1) / PerRow;
+		const int32 SheetW = PerRow * (W + Gap) + Gap, SheetH = SheetRows * (H + Gap) + Gap;
+		TArray<FColor> Sheet;
+		Sheet.Init(FColor(70, 70, 70), SheetW * SheetH);
+		for (int32 Index = 0; Index < Tags.Num(); ++Index)
+		{
+			TArray<FLinearColor> Pixels;
+			CampaignFlags::Paint(Tags[Index], FLinearColor::Gray, Pixels);
+			const int32 X0 = Gap + (Index % PerRow) * (W + Gap), Y0 = Gap + (Index / PerRow) * (H + Gap);
+			for (int32 Y = 0; Y < H; ++Y)
+			{
+				for (int32 X = 0; X < W; ++X)
+				{
+					Sheet[(Y0 + Y) * SheetW + X0 + X] = Pixels[Y * CampaignFlags::SizeX + X * CampaignFlags::SizeX / W].ToFColor(true);
+				}
+			}
+		}
+		FImageUtils::SaveImageByExtension(*FlagSheet, FImageView(Sheet.GetData(), SheetW, SheetH));
+		UE_LOG(LogTheater, Display, TEXT("Flags: %s on %s"), *FString::Join(Tags, TEXT(" ")), *FlagSheet);
 	}
 
 	// "-TheaterShots=<folder>" on the command line takes a set of pictures of the table and quits.

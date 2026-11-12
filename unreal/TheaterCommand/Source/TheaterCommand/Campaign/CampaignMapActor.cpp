@@ -1,11 +1,13 @@
 #include "Campaign/CampaignMapActor.h"
 
 #include "Campaign/ArmyPiece.h"
+#include "Campaign/CampaignFlags.h"
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -233,6 +235,12 @@ void ACampaignMapActor::LoadMaterials()
 	SurfaceMaterial = Load(SurfaceMaterialPath);
 	SolidMaterial = Load(SolidMaterialPath);
 	HighlightMaterial = Load(HighlightMaterialPath);
+	// Without the flag material the standards fall back to plain colours, so it is not an error for it to be missing.
+	FlagMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Flag.M_Flag"));
+	if (!FlagMaterial)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("The flag material is missing, so standards are plain. Run Tools/build_content.sh to create it."));
+	}
 
 	auto MakeSurface = [this](float Roughness, float Specular, float Grain, float Tooth)
 	{
@@ -264,6 +272,39 @@ UMaterialInstanceDynamic* ACampaignMapActor::GetSolidMaterial(const FLinearColor
 	Instance->SetScalarParameterValue(TEXT("Metallic"), Metallic);
 	Instance->SetScalarParameterValue(TEXT("Glow"), Glow);
 	SolidMaterials.Add(Key, Instance);
+	return Instance;
+}
+
+UTexture2D* ACampaignMapActor::GetFlagTexture(const FString& Tag)
+{
+	if (TObjectPtr<UTexture2D>* Found = FlagTextures.Find(Tag))
+	{
+		return *Found;
+	}
+	const FCampaignNation* Nation = Data.FindNation(Tag);
+	TArray<FLinearColor> Pixels;
+	if (!CampaignFlags::Paint(Tag, Nation ? FLinearColor(Nation->Color) : FLinearColor(0.4f, 0.4f, 0.4f), Pixels))
+	{
+		UE_LOG(LogTheater, Display, TEXT("No flag is drawn yet for %s; its standards carry its colour."), *Tag);
+	}
+	UTexture2D* Texture = CampaignFlags::MakeTexture(Pixels, MakeUniqueObjectName(this, UTexture2D::StaticClass(), *FString::Printf(TEXT("Flag_%s"), *Tag)));
+	FlagTextures.Add(Tag, Texture);
+	return Texture;
+}
+
+UMaterialInterface* ACampaignMapActor::GetFlagMaterial(const FString& Tag)
+{
+	if (!FlagMaterial)
+	{
+		return nullptr;
+	}
+	if (TObjectPtr<UMaterialInstanceDynamic>* Found = FlagMaterials.Find(Tag))
+	{
+		return *Found;
+	}
+	UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(FlagMaterial, this);
+	Instance->SetTextureParameterValue(TEXT("Flag"), GetFlagTexture(Tag));
+	FlagMaterials.Add(Tag, Instance);
 	return Instance;
 }
 

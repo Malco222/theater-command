@@ -4,8 +4,8 @@ three small materials and one empty level.
 
 Everything else on the campaign table is built in C++ from the campaign data
 when the game starts, so these assets are tiny and rarely change. Run it with
-Tools/build_content.sh after changing this file. It is safe to run again: it
-replaces what it made before.
+Tools/build_content.sh after changing this file. It makes what is missing and
+leaves the rest alone; TC_REBUILD=all (or a material's name) remakes them.
 """
 import unreal
 
@@ -150,6 +150,24 @@ def build_highlight():
     finish(m)
 
 
+def build_flag():
+    """A nation's flag on the cloth of a standard. The picture is painted in C++ and handed in as 'Flag'.
+    The cloth shows from both sides and, like the old plain banners, carries a little light of its own so it reads in shadow."""
+    m = new_material("M_Flag")
+    m.set_editor_property("two_sided", True)
+    picture = node(m, unreal.MaterialExpressionTextureSampleParameter2D, -700, 0,
+                   parameter_name="Flag",
+                   texture=unreal.load_asset("/Engine/EngineResources/DefaultTexture"),
+                   sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    to_property(picture, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+    glow = node(m, unreal.MaterialExpressionMultiply, -350, 300)
+    connect(picture, "RGB", glow, "A")
+    connect(scalar(m, "Glow", 0.5, -700, 350), "", glow, "B")
+    to_property(glow, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    to_property(scalar(m, "Roughness", 0.75, -700, 500), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    finish(m)
+
+
 def build_level():
     """An empty level. The game mode lays the table when play begins."""
     if eal.does_asset_exist(LEVEL):
@@ -162,8 +180,14 @@ def build_level():
     unreal.log(f"Theater Command: wrote {LEVEL}")
 
 
-build_map_surface()
-build_solid()
-build_highlight()
+# Each asset is left alone if it is already there, so adding one does not rewrite the others.
+# Set TC_REBUILD=all to remake everything, or to a material's name to remake that one.
+import os
+REBUILD = os.environ.get("TC_REBUILD", "")
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag)):
+    if REBUILD in ("all", name) or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
+        build()
+    else:
+        unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")
 build_level()
 unreal.log("Theater Command: content built")

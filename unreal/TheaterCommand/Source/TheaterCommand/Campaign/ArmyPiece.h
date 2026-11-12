@@ -11,10 +11,12 @@ class UStaticMesh;
 class UStaticMeshComponent;
 class UMaterialInterface;
 class UTextRenderComponent;
+class UProceduralMeshComponent;
 
 /**
  * One nation's force in one region, standing on the table as a single piece:
- * a stack of counters, one for each corps, under the nation's standard.
+ * a stack of counters, one for each corps, under the nation's flag of the
+ * period, with the army's strength on a plate beneath it.
  *
  * The shapes are plain blocks for now. They are stand-ins for sculpted
  * miniatures, and everything that uses a piece (where it stands, whose it is,
@@ -81,7 +83,11 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UStaticMeshComponent> SelectionRing;
 
-	/** The army's strength, written on its standard. */
+	/** The cloth of the standard: the nation's flag of the period. */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Cloth;
+
+	/** The army's strength, written on a plate under its colours. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTextRenderComponent> StrengthLabel;
 

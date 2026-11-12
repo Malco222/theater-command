@@ -30,7 +30,7 @@ The game opens on a screen that offers every place a campaign can begin, from Se
 
 ## What is here today
 
-The campaign table for September 1939: Europe, North Africa and the Middle East as a relief model set into a table, 373 territories painted in their nations' colours, frontiers inked in, towns, seas and nations lettered, and every army standing on it as a piece (a counter for each corps, under the nation's standard). Click a territory to see whose it is, whether it is friend or enemy, what it is worth and who is standing on it.
+The campaign table for September 1939: Europe, North Africa and the Middle East as a relief model set into a table, 373 territories painted in their nations' colours, frontiers inked in, towns, seas and nations lettered, and every army standing on it as a piece (a counter for each corps, under the flag its nation flew in 1939-45, with the army's strength in thousands of men on a plate beneath). The flags are painted in code (`Campaign/CampaignFlags.cpp`), about fifty of them so far; Germany flies the black, white and red with the iron cross. Click a territory to see whose it is, whether it is friend or enemy, what it is worth and who is standing on it.
 
 **It runs on the real rules.** The campaign rules worked out and tested in the browser prototype are the ones deciding everything here: where an army can march, what an attack comes to, what the other nations do with their month. So a war played here goes the way it goes there.
 
