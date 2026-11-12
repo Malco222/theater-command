@@ -5,6 +5,7 @@
 // The numbers and the events live in data/campaign/diplomacy.json.
 
 import data from '../../data/campaign/diplomacy.json';
+import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
 import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps } from './game';
@@ -148,6 +149,133 @@ export function court(g: Game, by: string, target: string): boolean {
 }
 
 const blocName = (s: number): string => (s > 0 ? 'the Axis' : 'the Allies');
+
+// ---- Friendships, surprise and wary neutrals (the grand campaign) -------------------------------------------
+
+export const RELATIONS = relationsData as unknown as {
+  sneak: { attack: number };
+  wary: { all: { opinion: number; home: number }; friend: { opinion: number; home: number } };
+  groups: { id: string; name: string; why: string; nations: string[] }[];
+  pairs: [string, string, string][];
+};
+
+export interface Friend { nat: string; why: string }
+
+/** The countries that count this one a friend, and why: its circle of neighbours first, then its single friendships. */
+export function friendsOf(nat: string): Friend[] {
+  const out = new Map<string, string>();
+  for (const gp of RELATIONS.groups) if (gp.nations.includes(nat)) for (const id of gp.nations) if (id !== nat && !out.has(id)) out.set(id, gp.why);
+  for (const [a, b, why] of RELATIONS.pairs) {
+    if (a === nat && !out.has(b)) out.set(b, why);
+    if (b === nat && !out.has(a)) out.set(a, why);
+  }
+  return [...out].map(([id, why]) => ({ nat: id, why }));
+}
+
+/** True while a nation's attacks on another's ground count as a surprise: the month it declared war on a country at peace with its side. */
+export const sneakOn = (g: Game, by: string, on: string): boolean => g.flags.open === 1 && g.flags[`sneak:${by}:${on}`] === g.turn;
+
+/** Whether a declaration of war today would catch the other country unready: it is at peace with the declarer and with all his allies. */
+export function wouldSurprise(g: Game, by: string, on: string): boolean {
+  const B = g.nations[on];
+  return g.flags.open === 1 && !!B && !B.atWar.some((x) => x === by || allied(g, x, by));
+}
+
+/** One neutral's answer to an attack on a country outside both blocs: how its opinion moves and where that leaves it. */
+export interface Alarm {
+  nat: string;
+  /** A friend of the country attacked, and the tie between them. */
+  friend: boolean; why: string;
+  opinion: number; home: number;
+  from: Align; to: Align;
+  /** True when it traded with the aggressor until now and will stop. */
+  trade: boolean;
+}
+
+/** Where a neutral would stand on the track with this opinion, taking at most one step, as settle() would move it. */
+function wouldStand(g: Game, n: Nation, opinion: number): Align {
+  if (!courtable(n)) return n.align;
+  const last = g.flags[`step:${n.id}`];
+  if (last !== undefined && g.turn - last < DIPLOMACY.stepEvery) return n.align;
+  const s = step(n), side = Math.sign(opinion);
+  if (s === 0 && Math.abs(opinion) >= DIPLOMACY.leanAt) return TRACK[side + 3];
+  if (s !== 0 && opinion * s < DIPLOMACY.backAt) return 'independent';
+  if (s !== 0 && opinion * s >= DIPLOMACY.joinAt) {
+    const b = s > 0 ? 'axis' : 'allies';
+    const leader = g.nations[DIPLOMACY.leaders[b]];
+    if (leader?.alive && bloc(leader) === b) return TRACK[3 * s + 3];
+  }
+  return n.align;
+}
+
+/**
+ * What the neutral world would make of the player attacking a country that belongs to neither bloc. Nothing is changed.
+ * Only the player pays this price: the computer's own invasions are already counted in how opinion drifts with the war.
+ * Friends of the victim come first, then anyone whose place on the track would change, then the rest.
+ */
+export function alarmed(g: Game, by: string, on: string): Alarm[] {
+  const A = g.nations[by], B = g.nations[on];
+  const b = A ? bloc(A) : null;
+  if (g.flags.open !== 1 || by !== g.human || !A || !B || !b || bloc(B) !== null) return [];
+  const friends = new Map(friendsOf(on).map((f) => [f.nat, f.why]));
+  const out: Alarm[] = [];
+  for (const n of Object.values(g.nations)) {
+    if (n.id === by || n.id === on || !courtable(n)) continue;
+    const why = friends.get(n.id);
+    const w = why !== undefined ? RELATIONS.wary.friend : RELATIONS.wary.all;
+    const k = -sideOf(b) * (DIPLOMACY.resist[n.id] ?? 1);
+    const opinion = clamp(n.opinion + w.opinion * k, -100, 100);
+    const to = wouldStand(g, n, opinion);
+    out.push({
+      nat: n.id, friend: why !== undefined, why: why ?? '', opinion, home: clamp(n.home + w.home * k, -100, 100), from: n.align, to,
+      trade: DIPLOMACY.majors.includes(by) && step(n) === sideOf(b) && TRACK.indexOf(to) - 3 !== sideOf(b),
+    });
+  }
+  const rank = (a: Alarm): number => (a.friend ? 0 : a.from !== a.to ? 1 : 2);
+  return out.sort((x, y) => rank(x) - rank(y) || g.nations[x.nat].name.localeCompare(g.nations[y.nat].name));
+}
+
+/** Carries out what alarmed() foresaw, once the war is declared. */
+export function alarm(g: Game, list: Alarm[], on: string): void {
+  if (!list.length) return;
+  const friends = list.filter((a) => a.friend).map((a) => g.nations[a.nat].name);
+  const names = friends.length <= 1 ? friends.join('') : `${friends.slice(0, -1).join(', ')} and ${friends[friends.length - 1]}`;
+  headline(g, 'event', friends.length
+    ? `The attack on ${g.nations[on].name} alarms the neutral world, and its friends most of all: ${names}.`
+    : `The attack on ${g.nations[on].name} alarms the neutral world.`, on);
+  for (const a of list) {
+    const n = g.nations[a.nat];
+    n.opinion = a.opinion;
+    n.home = a.home;
+    settle(g, n);
+  }
+}
+
+/** What declaring war would mean, for the prompt that asks the player whether he means it. Nothing is changed. */
+export interface WarForecast {
+  on: string;
+  /** The bloc the country will join once it is attacked, if it joins one. */
+  joins: 'allies' | 'axis' | null;
+  /** What this month's attacks on its ground are worth if the blow is a surprise: 1 when it is not. */
+  sneak: number;
+  friends: Friend[];
+  alarm: Alarm[];
+  /** True when the country trades with the declarer today: that income ends with the peace. */
+  trade: boolean;
+}
+
+export function warForecast(g: Game, by: string, on: string): WarForecast {
+  const A = g.nations[by], B = g.nations[on];
+  const ba = A ? bloc(A) : null;
+  return {
+    on,
+    joins: B && bloc(B) === null && ba ? (ba === 'axis' ? 'allies' : 'axis') : null,
+    sneak: wouldSurprise(g, by, on) ? RELATIONS.sneak.attack : 1,
+    friends: friendsOf(on).filter((f) => g.nations[f.nat]?.alive),
+    alarm: alarmed(g, by, on),
+    trade: g.flags.open === 1 && tradePartners(g, by).some((n) => n.id === on),
+  };
+}
 
 function setAlign(g: Game, n: Nation, s: number): void {
   n.align = TRACK[s + 3];

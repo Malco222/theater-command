@@ -9,7 +9,7 @@ import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { BUDGET, PRODUCTION, budgeted, canBuildYet, deliver, firstCorpsNumber, income, upkeepTotal } from './economy';
-import { DIPLOMACY, homeOpinion, pcIncome } from './diplomacy';
+import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, pcIncome, sneakOn, wouldSurprise } from './diplomacy';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
@@ -160,7 +160,12 @@ function setWar(g: Game, a: string, b: string): void {
 export function declareWar(g: Game, a: string, b: string): void {
   const A = g.nations[a], B = g.nations[b];
   if (!A.alive || !B.alive || atWar(g, a, b) || allied(g, a, b)) return;
+  // The grand campaign: a blow against a country at peace is a surprise this month, and when the player strikes a
+  // country outside both blocs the neutral world takes note. Both are read off before anything changes.
+  const sneak = wouldSurprise(g, a, b);
+  const shock = alarmed(g, a, b);
   setWar(g, a, b);
+  if (sneak) g.flags[`sneak:${a}:${b}`] = g.turn;
   A.offStart[b] = g.turn;
   g.flags[`war:${a}:${b}`] = g.turn;
   // A neutral that leans toward a bloc and attacks that bloc's enemy becomes its co-belligerent.
@@ -185,6 +190,7 @@ export function declareWar(g: Game, a: string, b: string): void {
   }
   g.supplyDirty = true;
   reactionMoves(g, a, b);
+  alarm(g, shock, b);
 }
 
 /** Armies with standing orders to go to a neighbour's aid march the day that neighbour is attacked. */
@@ -524,7 +530,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const land = opts.sea === undefined;
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
   const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide ? combinedArms(g, defenders, target, true) : null;
-  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0;
+  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false;
   // Armies that have outrun their railhead: how far the worst of them is from it, and what it is worth there.
   let roadA = 0, railA = 1, roadD = 0, railD = 1;
   const rivers = new Set<string>();
@@ -556,6 +562,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const lead = cmdAttack(g, c, pocket);
     if (pocket && lead > cmdAttack(g, c, false)) trap = true;
     if (tempo && KIND[c.kind].mobile) p *= 1.2;
+    // The month war is declared on a country at peace, its defenders are caught unready (the grand campaign).
+    if (wide && sneakOn(g, c.nat, target.ctrl)) { p *= RELATIONS.sneak.attack; sneaked = true; }
     if (g.nations[c.nat].slowCommand) p *= 0.85;
     p *= techMul(g, c.nat, 'doctrine');
     if (opts.sea !== undefined) p *= opts.sea;
@@ -713,6 +721,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (thin < 1) lines.push({ label: 'Supply line', value: 'Defenders at the end of a long supply line', effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
   if (coldDef) lines.push({ label: 'Winter', value: 'Defenders without winter equipment', effect: `Defence cut to ${Math.round(EASTERN.winter.defence * 100)}%` });
   if (tempo) lines.push({ label: 'Tempo', value: 'New offensive', effect: 'Fast troops hit 20% harder in the first two turns' });
+  if (sneaked) lines.push({ label: 'Surprise', value: 'War was declared this month on a country at peace', effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
   if (armorShock) lines.push({ label: 'Armor', value: 'Tanks against a defence without armor', effect: 'Tank attack up 25%' });
   if (armorStuck) lines.push({ label: 'Armor', value: 'Tanks in close country', effect: 'Tank attack cut to 60%' });
   if (flank > 1) lines.push({ label: 'Direction', value: `Attack from ${sources.size} sides`, effect: `Attack up ${Math.round((flank - 1) * 100)}%` });
