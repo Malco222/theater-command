@@ -326,7 +326,8 @@ export interface Headline {
   turn: number;
   week: number;
   text: string;
-  kind: 'war' | 'fall' | 'battle' | 'event' | 'info';
+  /** 'goal' is news of the player's own campaign goals: nothing in the war writes it. */
+  kind: 'war' | 'fall' | 'battle' | 'event' | 'info' | 'goal';
   nat?: string;
   region?: number;
 }

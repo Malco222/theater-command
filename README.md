@@ -14,6 +14,8 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 - Armies as pieces. Each nation's force in a region stands on the map as one piece: its colours on a standard, its senior general's name over it, a bar under it for the strength it has left. Click one of yours to pick it up: a tray along the bottom of the map shows the general and the army's corps as cards, and a click on a card leaves that corps behind. Right-click a region to march there or to plan an attack on it; the road the army would take is drawn as the pointer passes over, and the piece is seen to march. On a touch screen a tap or a press-and-hold does the same.
 - The face-off. Before an attack the two armies are drawn up against each other: each side's general, men, divisions and corps as cards, the ground between them, and a balance bar with a mark for the strength it takes to carry the position. Click your corps to send them in or hold them back, then auto-resolve or withdraw. The result comes back on the same screen with each corps's losses and what became of it. Fighting the battle yourself is the 3D build's job; the button is there and switched off.
 - The province. A selected region shows what it holds as four slots (industry, works, harbour, airfields). On your own home ground the works slot is a button that builds the next level of fortification, and a row of cards raises new corps on the spot; whatever is forming there is listed under them. The rules are the war economy's own: this is the Build tab's orders given where the troops will appear.
+- The other nations' month, watched. When the player ends the month the map travels to each nation that takes ground or fights a battle, says in a line what it did, and moves on; a Skip button plays the rest at once, and the opening screen has a switch to turn the watching off. The dispatches that follow put declarations of war, fallen capitals and capitulations on cards of their own, above the rest of the news.
+- Campaign goals. Every nation a person can play has a short campaign and a long one (`data/campaign/goals.json`): cities to hold, nations to beat, and a date. Germany's short campaign is what history's Germany did, Warsaw, Oslo and Paris by the end of 1940; Poland's is to last longer than five weeks. The goals are shown on the nation-pick screen for the September 1939 starts, ticked off on the opening screen as the war goes on, and announced in the dispatches when they are won or lost. They judge the war and never change it: no computer nation knows about them. A campaign that opens later leaves out goals whose date has gone by.
 - Supply traced from each nation's own capital, industry and depots. Armies that are cut off fight at half strength and waste away.
 - Battles settled at once from a Battle Ticket (forces, terrain, forts, supply, air, commanders, tempo, direction of attack) with the framework's victory levels. Fortifications only count against the direction they face, so the Maginot Line can be outflanked.
 - Nations ask for terms when they have lost too much of their capital, territory and army. France's fall creates Vichy; eastern Poland goes to the Soviet Union under the 1939 pact; sea-supplied armies can be lifted off from a port.
@@ -122,6 +124,7 @@ Where free play stops short: the computer makes no landings from the sea of its 
 - The rest of free play: seaborne invasions planned by the computer, alliances the computer makes and breaks for itself, peace short of capitulation, and a staff for the air and the sea.
 - The rest of the United States: it is an army in North Africa and an industry off the map, and no more. It cannot be played, builds nothing, sends no Lend-Lease, and its neutrality before Pearl Harbor is not modelled. Japan and the Pacific are not in the game.
 - The rest of the commander system: skills and traits for admirals and air commanders (today they gain levels from their battles, and an admiral can be lost with his flagship), command limits, rivalries and politics between generals, and staff college. Generals lead single corps today, because the prototype has no armies above the corps yet.
+- The rest of the campaign screen: a choice for the defender when the computer attacks (stand or fall back), buildings a province can be given beyond fortifications, armies above the corps with one general over several corps, and a peace conference when a long campaign is won.
 - Graphics. This is deliberately a staff map. The Total War and Company of Heroes level of presentation arrives with the Unreal Engine 5 build.
 - Borders are approximate: regions are grown from seed points, not traced from 1939 maps.
 
@@ -129,7 +132,7 @@ Where free play stops short: the computer makes no landings from the sea of its 
 
 ```
 npm install
-npm test            # flight model, war economy, research, diplomacy, eastern front, desert and Balkans rules, generals, the war at sea, the war in the air, the plans' orders of 1942 at home and overseas, the United States, Torch and Tunisia, Kursk and the Dnieper, Sicily and Italy, free play, saved games and the eleven exit tests
+npm test            # flight model, war economy, research, diplomacy, eastern front, desert and Balkans rules, generals, the war at sea, the war in the air, the plans' orders of 1942 at home and overseas, the United States, Torch and Tunisia, Kursk and the Dnieper, Sicily and Italy, free play, campaign goals, saved games and the eleven exit tests
 npm run build       # writes dist/play.html, a single file you can open in a browser
 npm run history     # prints a full computer-vs-computer war; add "sweep 20" to compare seeds
 npm run geo         # regenerates the maps from data/campaign/regions.mjs
@@ -147,6 +150,7 @@ npm run geo         # regenerates the maps from data/campaign/regions.mjs
 | `src/campaign/diplomacy.ts` | The alignment track, courting, and history's events |
 | `src/campaign/navy.ts` | The war at sea: fleets, sea control, fleet actions, convoys, troopships and landings |
 | `src/campaign/air.ts` | The war in the air: air fleets, range, radar, missions, the sky, bombing and strikes |
+| `src/campaign/goals.ts` | Campaign goals: the short and the long campaign of each playable nation, and how they are judged |
 | `src/campaign/commanders.ts` | Generals: experience, skills, traits, wounds and capture, promotion |
 | `src/campaign/save.ts` | Saved games |
 | `src/campaign/ai.ts` | The computer's generals |

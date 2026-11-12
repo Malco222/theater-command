@@ -18,6 +18,7 @@ import {
   NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
 } from '../navy';
 import { phaseFor, theatrePhases } from '../ai';
+import { GOALS, GOAL_KEYS, goalChecks, goalState, judgeGoals, openGoals } from '../goals';
 import { fronts, isOpen, startOpen } from '../staff';
 import { PRODUCTION, canRaise, fortCost, income, isHome } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
@@ -238,6 +239,7 @@ function mount(): void {
           <g id="seas"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="labels"></g><g id="fleets"></g><g id="units"></g><g id="route"></g><g id="ghost"></g>
         </svg>
         <div class="hint" id="hint"></div>
+        <div class="passing" id="passing"></div>
         <div class="tray" id="tray"></div>
         <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Air fleet</span></div>
         <div class="zoom"><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
@@ -364,6 +366,12 @@ function refresh(): void {
   drawPane();
   drawTray();
   $('#hint').textContent = hintText();
+  const pass = $('#passing');
+  if (passing) {
+    const n = passing.nat ? g.nations[passing.nat] : null;
+    pass.innerHTML = `<div class="prow">${n ? `<span class="chip" style="background:${n.color}"></span><b>${esc(natName(passing.nat))}</b>` : '<b>The month goes on</b>'}<span class="grow">${esc(passing.note || 'The other nations give their orders.')}</span><button class="btn small" data-act="skip">Skip ▸▸</button></div><div class="pbar"><i style="width:${Math.round(100 * Math.min(1, passing.done / Math.max(1, passing.total)))}%"></i></div>`;
+    pass.classList.add('open');
+  } else { pass.classList.remove('open'); pass.innerHTML = ''; }
   queueSave();
 }
 
@@ -427,12 +435,13 @@ function drawBar(): void {
   const me = g.human;
   const w = weather(g);
   const eve = onEve(g);
-  const who = me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? ' · free play' : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
+  const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? ' · free play' : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
   const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
   const pts = me && g.nations[me].alive ? ` · ${num(Math.floor(g.nations[me].pp))} production pts` : '';
   $('#when').innerHTML = `${when}<small>${esc(who)}${pts}${me ? ` · ${esc(w.text)}` : ''}</small>`;
   let b = '';
-  if (me && humanUp(g)) {
+  if (passing) b += `<button class="btn go" data-act="skip" title="Play the rest of the month at once">Skip ▸▸</button>`;
+  else if (me && humanUp(g)) {
     if (declarable(g).length) b += `<button class="btn warn" data-act="declare">Declare war</button>`;
     b += `<button class="btn go" data-act="end">${eve ? 'Finish deployment ▸' : 'End month ▸'}</button>`;
   } else {
@@ -720,6 +729,20 @@ function drawPane(): void {
   else pane.innerHTML = powersPane();
 }
 
+/** The player's short and long campaign, with what each one asks for ticked off as it is done. */
+function goalsBlock(): string {
+  const me = g.human;
+  if (!me || !GOALS[me]) return '';
+  const rows = GOAL_KEYS.map((key) => {
+    const goal = GOALS[me]![key];
+    const st = goalState(g, key);
+    if (!goal || st === 'out') return '';
+    const when = goal.until !== undefined ? `decided when ${date(goal.until + 1)} opens` : `by the end of ${date(goal.by!)}`;
+    return `<div class="goal ${st}"><span class="gk">${key === 'short' ? 'Short campaign' : 'Long campaign'} · ${when}</span><b>${esc(goal.title)}${st === 'won' ? ' <span class="tag good">Won</span>' : st === 'lost' ? ' <span class="tag bad">Lost</span>' : ''}</b><small>${esc(goal.text)}</small><span class="gchecks">${goalChecks(g, me, goal).map((c) => `<span class="${c.done ? 'done' : ''}">${c.done ? '✓' : '○'} ${esc(c.label)}</span>`).join('')}</span></div>`;
+  }).join('');
+  return rows ? `<h3>Campaign goals</h3>${rows}` : '';
+}
+
 // ---- The province: what a region holds, laid out as slots, and what can be raised or built there ----
 
 const GLYPH = {
@@ -780,7 +803,7 @@ function provinceMuster(r: Region): string {
 function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
-    return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
+    return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
       <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
@@ -1569,7 +1592,8 @@ function openModal(m: typeof ui.modal): void {
 }
 
 function startCard(): string {
-  const side = (id: string | null, name: string, blurb: string, wide = false, from = 1, view = '') => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}" data-from="${from}" data-view="${view}"><b>${name}</b><span>${blurb}</span></button>`;
+  const aims = (id: string | null, from: number): string => (id && from === 1 ? GOAL_KEYS.map((key) => { const goal = GOALS[id]?.[key]; return goal ? `<span class="sgoal"><i>${key === 'short' ? 'Short campaign' : 'Long campaign'}</i>${esc(goal.text)}</span>` : ''; }).join('') : '');
+  const side = (id: string | null, name: string, blurb: string, wide = false, from = 1, view = '') => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}" data-from="${from}" data-view="${view}"><b>${name}</b><span>${blurb}</span>${aims(id, from)}</button>`;
   const saved = peekSave(readSave() ?? '');
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `${saved.open ? 'Watching a free-play war' : 'Watching history'}, ${date(saved.turn)}`}${saved.human && saved.open ? ', free play' : ''}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
@@ -1769,15 +1793,23 @@ function attackCard(): string {
     <footer><button class="btn" data-act="close" title="Call the attack off. Nothing is spent.">Withdraw</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="attack" ${a ? '' : 'disabled'} title="Settle the battle at once from the Battle Ticket">Auto-resolve</button></footer>`;
 }
 
+/** The news that changes the war, a declaration or a fall, set out as a card of its own. */
+function eventCard(h: Game['headlines'][number]): string {
+  const n = h.nat ? g.nations[h.nat] : undefined;
+  return `<div class="evcard ${h.kind}" style="--side:${n?.color ?? 'var(--brass)'}"><span class="ek">${h.kind === 'war' ? 'War' : h.kind === 'goal' ? 'Campaign goal' : 'Fallen'} · ${date(h.turn).split(' ')[0]}, week ${h.week}</span><p>${esc(h.text)}</p>${h.region !== undefined ? `<button class="btn small" data-act="showmap" data-id="${h.region}">Show on map</button>` : ''}</div>`;
+}
+
 function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: number): string {
   const hs = g.headlines.slice(from);
+  const big = hs.filter((h) => h.kind === 'war' || h.kind === 'fall' || h.kind === 'goal');
+  const rest = hs.filter((h) => !big.includes(h));
   const me = g.human;
   const reps = g.reports.slice(repFrom).filter((r) => me && (r.attackers.some((u) => u.nat === me) || r.defenders.some((u) => u.nat === me)));
   const seas = g.seaReports.slice(seaFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
   const airs = g.airReports.slice(airFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
   const all = g.reports.length - repFrom + (g.seaReports.length - seaFrom) + (g.airReports.length - airFrom);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Dispatches</div><h2>${date(g.turn)}</h2></header>
-    <div class="body">${hs.length ? `<div class="reel">${hs.map((h) => `<p class="${h.kind}"><span class="wk">${date(h.turn).split(' ')[0]} wk ${h.week}</span>${esc(h.text)}</p>`).join('')}</div>` : '<p class="lead">A quiet month. No news of note.</p>'}
+    <div class="body">${big.length ? `<div class="evcards">${big.map(eventCard).join('')}</div>` : ''}${rest.length ? `<div class="reel">${rest.map((h) => `<p class="${h.kind}"><span class="wk">${date(h.turn).split(' ')[0]} wk ${h.week}</span>${esc(h.text)}</p>`).join('')}</div>` : hs.length ? '' : '<p class="lead">A quiet month. No news of note.</p>'}
     ${reps.length || seas.length || airs.length ? `<h3>Battles your forces fought</h3>${airs.map(airBrow).join('')}${seas.map(seaRow).join('')}${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
     ${all ? `<p class="sub" style="margin-top:10px">${all} battle${all > 1 ? 's were' : ' was'} fought across the map. They are filed under Battles.</p>` : ''}</div>
     <footer><button class="btn go" data-act="close">${me && humanUp(g) ? 'Give orders' : 'Continue'}</button></footer>`;
@@ -1796,10 +1828,12 @@ function declareCard(): string {
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
 function newGame(human: string | null, seed?: number, from = 1, view = ''): void {
   stopAuto();
+  dropPassing();
   g = createGame(seed ?? (Date.now() % 900000) + 1, from > 1 ? null : human);
   if (view === 'open') startOpen(g);
   while (g.turn < from) runTurnAI(g);
   g.human = human;
+  if (human) openGoals(g, human, from);
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = from > 1 ? g.reports.length : 0; ui.flash = [];
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = from > 1 ? g.seaReports.length : 0;
@@ -1821,6 +1855,7 @@ function continueGame(): boolean {
   const loaded = loadGame(readSave() ?? '');
   if (!loaded) return false;
   stopAuto();
+  dropPassing();
   g = loaded;
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = g.reports.length; ui.flash = [];
@@ -1837,14 +1872,93 @@ function continueGame(): boolean {
 }
 
 /** Lets the computer play until it is the player's month again. */
-function advanceToHuman(show: boolean, since?: { h: number; r: number; s: number; a: number }): void {
-  const hFrom = since?.h ?? g.headlines.length, rFrom = since?.r ?? g.reports.length, sFrom = since?.s ?? g.seaReports.length, aFrom = since?.a ?? g.airReports.length;
+type Since = { h: number; r: number; s: number; a: number };
+
+/** The other nations' months being played out in front of the player, one nation at a time. */
+let passing: { since: Since; before: string[]; show: boolean; view: { x: number; y: number; w: number }; timer: number; nat: string; note: string; done: number; total: number } | null = null;
+/** How long the map rests on a nation that has done something, in milliseconds. */
+const WATCH_PAUSE = 700;
+
+function watchPref(): boolean {
+  try { return localStorage.getItem('tc-watch') !== '0'; } catch { return true; }
+}
+
+function advanceToHuman(show: boolean, since?: Since): void {
+  const from: Since = since ?? { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length };
   const before = g.regions.map((r) => r.ctrl);
+  if (show && g.human && watchPref() && !humanUp(g)) {
+    passing = { since: from, before, show, view: { ...ui.view }, timer: 0, nat: '', note: '', done: 0, total: g.order.length - 1 };
+    ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = ''; ui.airMode = ''; ui.flash = [];
+    refresh();
+    passStep();
+    return;
+  }
+  runOthers();
+  arrive(show, from, before);
+}
+
+/** Every computer nation's month until the player is up again, or has fallen. */
+function runOthers(): void {
   let guard = 0;
   while (!humanUp(g) && guard++ < 80) {
     if (g.human && !g.nations[g.human].alive) break;
     stepAI(g);
   }
+}
+
+const some = (names: string[]): string => (names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`);
+
+/** Plays computer nations until one of them has done something worth seeing, shows it, and waits a moment. */
+function passStep(): void {
+  const p = passing;
+  if (!p) return;
+  p.timer = 0;
+  for (let guard = 0; guard < 80; guard++) {
+    if (humanUp(g) || !g.human || !g.nations[g.human].alive) break;
+    const ctrl = g.regions.map((r) => r.ctrl);
+    const r0 = g.reports.length;
+    const nat = stepAI(g);
+    p.done++;
+    const taken = g.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
+    const reps = g.reports.slice(r0);
+    if (!taken.length && !reps.length) continue;
+    const won = reps.filter((r) => r.taken).map((r) => r.regionName);
+    const held = reps.filter((r) => !r.taken).map((r) => r.regionName);
+    const walked = taken.filter((id) => !reps.some((r) => r.taken && r.region === id)).map((id) => g.regions[id].name);
+    const said = [won.length ? `took ${some(won)}` : '', walked.length ? `moved into ${some(walked)}` : '', held.length ? `${won.length || walked.length ? 'and were' : 'were'} thrown back at ${some(held)}` : ''].filter(Boolean);
+    p.nat = nat;
+    p.note = `${g.nations[nat].adj} forces ${said.join(', ')}.`;
+    ui.flash = taken;
+    const mine = reps.some((r) => r.defNat === g.human || r.defenders.some((u) => u.nat === g.human)) || taken.some((id) => p.before[id] === g.human);
+    refresh();
+    glide(viewFor([...new Set([...taken, ...reps.map((r) => r.region)])]));
+    p.timer = window.setTimeout(passStep, WATCH_PAUSE + (mine ? 500 : 0) + Math.min(400, 100 * (reps.length - 1)));
+    return;
+  }
+  endPassing();
+}
+
+/** The watching is over, or cut short: whatever is left is played at once and the player's month opens. */
+function endPassing(): void {
+  const p = passing;
+  if (!p) return;
+  clearTimeout(p.timer);
+  passing = null;
+  runOthers();
+  glide(p.view, 260);
+  arrive(p.show, p.since, p.before);
+}
+
+/** Drops a watched month without finishing it: a new game is about to replace this one. */
+function dropPassing(): void {
+  if (passing) clearTimeout(passing.timer);
+  passing = null;
+  glideToken++;
+}
+
+function arrive(show: boolean, from: Since, before: string[]): void {
+  const hFrom = from.h, rFrom = from.r, sFrom = from.s, aFrom = from.a;
+  if (g.human) judgeGoals(g, g.human);
   const lost = g.human && !g.nations[g.human].alive ? g.human : null;
   if (lost) {
     // The month the country fell in is played out to its end, so the watcher's calendar starts on a month's last day.
@@ -1880,14 +1994,38 @@ function nextMonth(): void {
   if (g.turn > (isOpen(g) ? FREE_ENDS : STORY_ENDS)) stopAuto();
 }
 
-function focusOn(ids: number[]): void {
+/** The view that takes in these regions with some room round them. */
+function viewFor(ids: number[]): { x: number; y: number; w: number } {
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const id of ids) { const r = g.regions[id]; x0 = Math.min(x0, r.x); y0 = Math.min(y0, r.y); x1 = Math.max(x1, r.x); y1 = Math.max(y1, r.y); }
   const svg = $('#map');
   const a = svg.clientHeight / Math.max(1, svg.clientWidth);
   const w = Math.max(420, x1 - x0 + 260, (y1 - y0 + 240) / a);
-  ui.view = { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - (w * a) / 2, w };
+  return { x: (x0 + x1) / 2 - w / 2, y: (y0 + y1) / 2 - (w * a) / 2, w };
+}
+
+function focusOn(ids: number[]): void {
+  glideToken++;
+  ui.view = viewFor(ids);
   applyView();
+}
+
+let glideToken = 0;
+
+/** Moves the map to a new view smoothly, as a camera would travel, instead of jumping there. */
+function glide(to: { x: number; y: number; w: number }, ms = 340): void {
+  const from = { ...ui.view };
+  const token = ++glideToken;
+  const t0 = performance.now();
+  const step = (now: number): void => {
+    if (token !== glideToken) return;
+    const k = Math.min(1, (now - t0) / ms);
+    const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2;
+    ui.view = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e, w: from.w + (to.w - from.w) * e };
+    applyView();
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 function focusOnPoint(x: number, y: number): void {
@@ -1952,7 +2090,9 @@ function onClick(e: MouseEvent): void {
   switch (act) {
     case 'start': openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || ''); break;
     case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
-    case 'new': stopAuto(); openModal({ kind: 'start' }); break;
+    case 'new': stopAuto(); endPassing(); openModal({ kind: 'start' }); break;
+    case 'skip': endPassing(); break;
+    case 'watchpref': { try { localStorage.setItem('tc-watch', watchPref() ? '0' : '1'); } catch { /* storage is off: the choice lasts as long as the default */ } refresh(); break; }
     case 'close': openModal(null); refresh(); break;
     case 'tab':
       ui.tab = t.dataset.tab as typeof ui.tab;
@@ -1971,7 +2111,7 @@ function onClick(e: MouseEvent): void {
     case 'end': {
       // The player's own fleet actions are fought as the month closes, so the dispatches start from here.
       const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length };
-      if (onEve(g)) endEve(g); else endHuman(g);
+      if (onEve(g)) endEve(g); else { judgeGoals(g, g.human!); endHuman(g); }
       advanceToHuman(true, since);
       break;
     }

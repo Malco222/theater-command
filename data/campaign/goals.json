@@ -1,0 +1,29 @@
+{
+  "_about": "Campaign goals: what winning means for each nation a person can play. Every nation has a short campaign and a long one. 'hold' lists cities that must be in the nation's own hands or an ally's. 'beaten' lists nations that must have capitulated. 'by' is the last month in which the goal can be reached (months count from 1 = September 1939, so 16 is December 1940 and 76 is December 1945): the goal is won the moment everything holds, and lost when that month has gone by. 'until' makes it a goal of endurance instead: nothing is decided until the month after it opens, and the goal is won if everything still holds then. The player's nation must still be in the war in every case. Goals judge the war and never change it: no computer nation knows about them.",
+  "nations": {
+    "GER": {
+      "short": { "title": "Master of the continent", "text": "Hold Warsaw, Oslo and Paris by the end of 1940, as history's Germany did.", "hold": ["Berlin", "Warsaw", "Oslo", "Paris"], "by": 16 },
+      "long": { "title": "The war history lost", "text": "Beat the Soviet Union by the end of 1945 with Berlin and Paris still yours.", "hold": ["Berlin", "Paris"], "beaten": ["SOV"], "by": 76 }
+    },
+    "UK": {
+      "short": { "title": "Alone", "text": "London and Cairo are still British when 1942 opens.", "hold": ["London", "Cairo"], "until": 28 },
+      "long": { "title": "Victory in Europe", "text": "Beat Germany by the end of 1945 with London still yours.", "hold": ["London"], "beaten": ["GER"], "by": 76 }
+    },
+    "FRA": {
+      "short": { "title": "They shall not pass", "text": "Paris is still French when 1941 opens. History's France asked for an armistice in June 1940.", "hold": ["Paris"], "until": 16 },
+      "long": { "title": "Victory in Europe", "text": "Beat Germany by the end of 1945 with Paris still yours.", "hold": ["Paris"], "beaten": ["GER"], "by": 76 }
+    },
+    "POL": {
+      "short": { "title": "Longer than five weeks", "text": "Poland is still in the war when November 1939 opens. History's Poland was beaten in five weeks.", "until": 2 },
+      "long": { "title": "Warsaw holds", "text": "Warsaw is still Polish when 1940 opens.", "hold": ["Warsaw"], "until": 4 }
+    },
+    "ITA": {
+      "short": { "title": "Mare Nostrum", "text": "Hold Rome, Tripoli, Athens and Cairo by the end of 1942.", "hold": ["Rome", "Tripoli", "Athens", "Cairo"], "by": 40 },
+      "long": { "title": "A place in the sun", "text": "Rome, Tripoli, Athens, Cairo and Malta are in Axis hands when 1946 opens.", "hold": ["Rome", "Tripoli", "Athens", "Cairo", "Malta"], "until": 76 }
+    },
+    "SOV": {
+      "short": { "title": "Not one step back", "text": "Moscow, Leningrad and Stalingrad are still Soviet when 1943 opens.", "hold": ["Moscow", "Leningrad", "Stalingrad"], "until": 40 },
+      "long": { "title": "To Berlin", "text": "Berlin is in Allied hands by the end of 1945, with Moscow still yours.", "hold": ["Moscow", "Berlin"], "by": 76 }
+    }
+  }
+}
