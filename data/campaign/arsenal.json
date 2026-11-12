@@ -1,0 +1,36 @@
+{
+  "_about": "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided.",
+  "land": {
+    "art": { "label": "Artillery corps", "divs": 2, "cost": 40, "months": 5, "blurb": "Massed guns. Breaks fortified lines and trenches in the attack, and thickens any defence it stands in. Slow, and weak if caught alone." }
+  },
+  "needs": { "inf": 0, "mtn": 0, "cav": 0, "mot": 1, "art": 1, "arm": 2 },
+  "air": {
+    "ftr": { "label": "Fighter wing", "count": 100, "cost": 12, "months": 3, "factories": 2, "blurb": "A hundred fighters with their pilots. Fighters left on defence go up against every raid within their range, and escort your own bombers." },
+    "bmr": { "label": "Bomber wing", "count": 100, "cost": 18, "months": 4, "factories": 3, "blurb": "A hundred bombers. They support the armies, bomb enemy industry and airfields, and strike at shipping." }
+  },
+  "ships": {
+    "dd": { "label": "Destroyer flotilla", "count": 4, "cost": 10, "months": 8, "yard": 1, "blurb": "Four destroyers. The escorts that keep convoys alive and hunt submarines, and the screen of every battle fleet." },
+    "ss": { "label": "Submarine flotilla", "count": 4, "cost": 8, "months": 7, "yard": 1, "blurb": "Four submarines. Sent raiding, they sink the cargoes an enemy across the sea lives on." },
+    "tp": { "label": "Troopships", "count": 1, "cost": 14, "months": 6, "yard": 1, "blurb": "Shipping to carry one more corps across the sea each month, for transport or for a landing." },
+    "ca": { "label": "Cruiser", "count": 1, "cost": 12, "months": 14, "yard": 2, "blurb": "One cruiser. A raider on the trade routes and the workhorse of a fleet that has to be everywhere." },
+    "cv": { "label": "Aircraft carrier", "count": 1, "cost": 36, "months": 22, "yard": 3, "blurb": "One carrier. Its aircraft find the enemy first, cover convoys far from land and count for much in a fleet action." },
+    "bb": { "label": "Battleship", "count": 1, "cost": 40, "months": 26, "yard": 3, "blurb": "One battleship. Nothing else afloat can stand against it in a gun action, and nothing takes longer to build." }
+  },
+  "lift": { "most": 4 },
+  "works": {
+    "factory": { "label": "Factory", "cost": 30, "step": 5, "months": 8, "most": { "city": 3, "town": 2 }, "blurb": "One more factory: more income every month, and heavier equipment can be raised where there is industry." },
+    "yard": { "label": "Shipyard", "cost": [0, 20, 30, 45], "months": 8, "blurb": "Slipways and docks. Level 1 builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships." },
+    "aa": { "label": "Anti-aircraft guns", "cost": [0, 8, 12, 18], "months": 2, "upkeep": 0.05, "cut": 0.15, "flak": 0.012, "blurb": "Heavy guns round the factories. Each level stops part of the bombing of this province and brings down more of the bombers." },
+    "field": { "label": "Airfields", "cost": [0, 10, 15, 22], "months": 3, "upkeep": 0.04, "holds": 500, "blurb": "Runways, hangars and control rooms. An air fleet can be founded here for fighter patrols, and each level lets more aircraft fly from the province." }
+  },
+  "yards": {
+    "Hamburg": 3, "Bremen": 3, "Stettin": 1, "Konigsberg": 1,
+    "Clydeside": 3, "Northumbria": 3, "Ulster": 3, "Lancashire": 2, "London": 2, "Hampshire": 2,
+    "Brittany": 3, "Nantes": 2, "Marseille": 2, "Rouen": 1,
+    "Liguria": 3, "Naples": 2, "Apulia": 2, "Friuli": 2,
+    "Leningrad": 3, "Nikolaev": 3, "Crimea": 1, "Murmansk": 1, "Arkhangelsk": 1,
+    "Rotterdam": 2, "Holland": 2, "Antwerp": 1, "Zealand": 2, "Oslo": 1, "Cadiz": 2, "Catalonia": 1, "Athens": 1, "Danzig Corridor": 1
+  },
+  "guns": { "soften": 0.15, "softenMost": 0.6, "thicken": 0.05, "thickenMost": 0.2 },
+  "ai": { "aaAfterRaid": true }
+}

@@ -5,6 +5,7 @@
 // data/campaign/air.json.
 
 import data from '../../data/campaign/air.json';
+import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
@@ -108,8 +109,19 @@ export function cover(d: number, range: number): number {
 /** How much of a fleet can fly from where it is based: all of it, unless more aircraft share the region's airfields than they can serve. */
 export function crowding(g: Game, f: AirFleet): number {
   const there = g.airFleets.reduce((s, x) => s + (x.base === f.base ? x.ftr + x.bmr : 0), 0);
-  return there > AIR.airfields.holds ? AIR.airfields.holds / there : 1;
+  // Airfields built since the game began (the grand campaign's arsenal) each serve more aircraft.
+  const built = g.flags[`wk:field:${f.base}`];
+  const holds = built ? AIR.airfields.holds + built * WORKS.field.holds : AIR.airfields.holds;
+  return there > holds ? holds / there : 1;
 }
+
+/** How many aircraft the airfields of a region can serve. */
+export const airfieldsHold = (g: Game, region: number): number => AIR.airfields.holds + (g.flags[`wk:field:${region}`] ?? 0) * WORKS.field.holds;
+
+/** The level of anti-aircraft guns round a region's industry: 0 unless some have been built there. */
+export const gunsAt = (g: Game, region: number): number => g.flags[`wk:aa:${region}`] ?? 0;
+
+const WORKS = (arsenalData as unknown as { works: { aa: { cut: number; flak: number }; field: { holds: number } } }).works;
 
 const leaderMul = (f: AirFleet): number => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
 /** What one of a fleet's aircraft is worth in a fight. */
@@ -180,6 +192,19 @@ function addAir(g: Game, r: FleetRow): AirFleet | null {
     id: g.nextAir++, nat: r.nat, name: r.name, base: base.id,
     ftr: r.start ? r.start[0] : e[1], bmr: r.start ? r.start[1] : e[2], est: { ftr: e[1], bmr: e[2] },
     mission: 'support', target: -1, ready: 1, leader: r.leader ? { name: r.leader, level: 1, xp: 0 } : null, moved: 0, lost: { ftr: 0, bmr: 0 },
+  };
+  g.airFleets.push(f);
+  return f;
+}
+
+/** A new air fleet with no aircraft yet, on airfields the nation holds: the grand campaign's arsenal fills it. */
+export function foundAirFleet(g: Game, nat: string, r: Region, name: string): AirFleet {
+  const taken = (x: string): boolean => g.airFleets.some((f) => f.name === x);
+  let unique = name;
+  for (let k = 2; taken(unique); k++) unique = `${name} ${k}`;
+  const f: AirFleet = {
+    id: g.nextAir++, nat, name: unique, base: r.id, ftr: 0, bmr: 0, est: { ftr: 0, bmr: 0 },
+    mission: 'support', target: -1, ready: 1, leader: null, moved: 0, lost: { ftr: 0, bmr: 0 },
   };
   g.airFleets.push(f);
   return f;
@@ -276,7 +301,8 @@ export function airUpkeep(g: Game, nat: string): void {
     // The staff moves strength between fleets by changing what each is kept at.
     const r = AIR.fleets.find((x) => x.nat === nat && x.name === f.name);
     const e = r ? row(r.est, g.turn) : null;
-    if (e) f.est = { ftr: e[1], bmr: e[2] };
+    // Wings bought from the arsenal are kept on top of what the staff allots.
+    if (e) f.est = f.extra ? { ftr: e[1] + f.extra.ftr, bmr: e[2] + f.extra.bmr } : { ftr: e[1], bmr: e[2] };
     if (f.ftr > f.est.ftr) { const s = f.ftr - f.est.ftr; f.ftr -= s; p.ftr += s; p.pilots += s; }
     if (f.bmr > f.est.bmr) { const s = f.bmr - f.est.bmr; f.bmr -= s; p.bmr += s; }
   }
@@ -351,6 +377,8 @@ export interface AirAssess {
   radar: Chain | null;
   /** Share of the bombers expected to be lost. */
   bomberLoss: number;
+  /** The level of anti-aircraft guns round the industry being bombed. */
+  aa: number;
   lines: TicketLine[];
 }
 
@@ -360,7 +388,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const sea = m === 'strike', night = m === 'night';
   const nat = fleets[0]?.nat ?? '';
   const place = sea ? `the ${g.seas[target]?.name ?? 'sea'}` : g.regions[target]?.name ?? '';
-  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, lines: [] };
+  const out: AirAssess = { why: null, place, att: [], def: [], E: 0, Epow: 0, B: 0, D: 0, Dpow: 0, radar: null, bomberLoss: 0, aa: 0, lines: [] };
   if (!fleets.length) { out.why = 'No air fleet has these orders.'; return out; }
   for (const f of fleets) {
     const d = sea ? seaKm(g, f.base, target) : km(g, f.base, target);
@@ -402,6 +430,9 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const guns = out.B * C.bomberDefence;
   const I = C.intensity[m];
   out.bomberLoss = out.B > 0 ? Math.min(C.maxBomberLoss, C.bombers * I * (out.Dpow / Math.max(1, out.Dpow + out.Epow + guns)) + (night ? C.night.flak : C.flak) * I) : 0;
+  // Guns round the factories bring down more of the bombers that come for them.
+  out.aa = m === 'bomb' || night ? gunsAt(g, target) : 0;
+  if (out.aa && out.B > 0) out.bomberLoss = Math.min(C.maxBomberLoss, out.bomberLoss + out.aa * WORKS.aa.flak * I);
 
   // The Battle Ticket.
   const af = out.att.reduce((s, a) => s + a.f.ftr, 0);
@@ -432,6 +463,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
       effect: `${list(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? 'its' : 'their'} aircraft from there`,
     });
   }
+  if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring the factories of ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   if (df > 0 || out.radar) {
     out.lines.push(out.radar
       ? { label: 'Radar', value: `${cap(out.radar.name)} gives warning`, effect: 'Every defending fighter in reach gets up in time, and fewer aircraft are caught on the ground' }
@@ -531,7 +563,8 @@ function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFle
     const N = AIR.damage.industry;
     const r = g.regions[target];
     const total = g.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
-    const cut = Math.min(N.max, through / N.scale);
+    const open = Math.min(N.max, through / N.scale);
+    const cut = a.aa ? open * (1 - a.aa * WORKS.aa.cut) : open;
     const nation = total > 0 ? cut * (r.fac / total) : 0;
     raid(g, nat, r.ctrl, nation);
     value += cut * 1000;
@@ -695,6 +728,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     const r = g.regions[target];
     const total = g.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
     cut = Math.min(AIR.damage.industry.max, through / AIR.damage.industry.scale);
+    if (a.aa) cut *= 1 - a.aa * WORKS.aa.cut;
     nation = total > 0 ? cut * (r.fac / total) : 0;
   } else if (m === 'strike') {
     cut = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through / (through + AIR.damage.shipping.scale)));

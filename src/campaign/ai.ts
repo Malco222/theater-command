@@ -7,6 +7,7 @@ import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { airAI } from './air';
 import { aiProduction } from './economy';
+import { aiArsenal } from './arsenal';
 import { landCorps, landingOpts, navalAI } from './navy';
 import { afterDeclaring, decide, isOpen, staffPhase, theatreStaff } from './staff';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -121,6 +122,7 @@ export function theatrePhases(g: Game, nat: string): { theatre: string; phase: P
 export function runAI(g: Game, nat: string): void {
   campaign(g, nat);
   aiProduction(g, nat);
+  aiArsenal(g, nat);
 }
 
 function campaign(g: Game, nat: string): void {

@@ -10,6 +10,7 @@ import {
   endPhase, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
+import { offers, orderOffer, type Offer } from './arsenal';
 import { foundBureau, setTeams } from './research';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy } from './diplomacy';
@@ -331,6 +332,20 @@ export function orderDrafts(g: Game, c: Corps, take: boolean): boolean {
   if (c.dead || c.nat !== g.human || c.kind === 'fort') return false;
   if (take) delete c.lean; else c.lean = true;
   return true;
+}
+
+/**
+ * Everything the player's nation could order from its arsenal, with one province in mind (the one picked on the
+ * map, or -1): corps, aircraft, ships and works, each with its price, its upkeep, where it would go and, when it
+ * cannot be ordered, why not. Both interfaces draw their build screens from this one list.
+ */
+export function arsenalOffers(g: Game, region = -1): Offer[] {
+  return g.human ? offers(g, g.human, region) : [];
+}
+
+/** Places one of those orders: the key of the offer ('corps:arm', 'air:ftr', 'ship:dd', 'work:aa') and the province in mind. */
+export function orderArsenal(g: Game, key: string, region = -1): Build | null {
+  return humanUp(g) ? orderOffer(g, g.human!, key, region) : null;
 }
 
 export function orderBuildFort(g: Game, region: number): Build | null {
