@@ -599,7 +599,7 @@ function drawTray(): void {
   const mine = a.nat === g.human && humanUp(g);
   const who = leaderOf(cs);
   const n = g.nations[a.nat];
-  const initials = who ? who.name.replace(/\s*\(.*\)\s*$/, '').split(/\s+/).map((w) => w[0]).filter((ch) => /[A-Z]/.test(ch)).slice(-2).join('') : '';
+  const initials = who ? initialsOf(who.name) : '';
   const others = [...new Set(r.units.filter((c) => c.nat !== a.nat).map((c) => c.nat))];
   const head = who
     ? `<button class="tgen" data-act="general" data-id="${who.id}" title="Open this general's record"><span class="seal" style="background:${n.color}">${esc(initials)}</span><span class="grow"><b>${esc(who.name)}</b><small>${esc(n.adj)} army at ${esc(r.name)} · level ${who.level} general</small>${who.traits.length ? `<span class="tags">${traitTags(who)}</span>` : ''}</span></button>`
@@ -1475,6 +1475,7 @@ function openModal(m: typeof ui.modal): void {
   if (!m) { veil.classList.remove('open'); return; }
   veil.classList.add('open');
   const card = $('#card');
+  card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'report');
   if (m.kind === 'start') card.innerHTML = startCard();
   else if (m.kind === 'report') {
     const rep = g.reports.find((r) => r.id === m.id);
@@ -1591,45 +1592,123 @@ function startCard(): string {
     <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
 
+
+// ---- The face-off: two armies drawn up against each other, before the battle and after it ----
+
+interface Side {
+  nats: string[];
+  /** 'attacking' or 'defending'. */
+  role: string;
+  /** The senior general, null when the army has none, left out when nobody recorded it. */
+  who?: General | null;
+  men: number;
+  corps: number;
+  divs: number;
+  cards: string;
+  /** A line under the numbers, such as the losses. */
+  under?: string;
+}
+
+const adjs = (nats: string[]): string => nats.map((n) => g.nations[n].adj).join(' and ');
+const initialsOf = (name: string): string => name.replace(/\s*\(.*\)\s*$/, '').split(/\s+/).map((w) => w[0]).filter((ch) => /[A-Z]/.test(ch)).slice(-2).join('');
+
+/** One army in a face-off: its colours, who leads it, what it brings, and its corps as cards. */
+function sidePanel(o: Side, cls: string): string {
+  const n = g.nations[o.nats[0]];
+  const head = o.who
+    ? `<span class="seal" style="background:${n.color}">${esc(initialsOf(o.who.name))}</span><span class="grow"><b>${esc(o.who.name)}</b><small>${esc(adjs(o.nats))} army ${o.role} · level ${o.who.level} general</small>${o.who.traits.length ? `<span class="tags">${traitTags(o.who)}</span>` : ''}</span>`
+    : `<span class="seal none" style="background:${n.color}"></span><span class="grow"><b>${esc(adjs(o.nats))} army</b><small>${o.role[0].toUpperCase() + o.role.slice(1)}${o.who === null && o.corps ? ' · no general in command' : ''}</small></span>`;
+  return `<div class="fside ${cls}" style="--side:${n.color}"><div class="fhead">${head}</div>
+    <div class="fnum"><span><b>${num(o.men)}</b><small>men</small></span><span><b>${num(o.divs)}</b><small>division${o.divs === 1 ? '' : 's'}</small></span><span><b>${o.corps}</b><small>corps</small></span></div>${o.under ?? ''}
+    <div class="fcards">${o.cards}</div></div>`;
+}
+
+/** A corps in a face-off. One the player may send or hold back is a button. */
+function battleCard(c: Corps, opts: { act?: boolean; on?: boolean; note?: string; from?: boolean } = {}): string {
+  const el = opts.act ? 'button' : 'div';
+  const gen = generalOf(g, c);
+  const where = opts.from ? ` · ${esc(g.regions[c.reg].name)}` : gen ? ` · ${esc(surname(gen.name))}` : '';
+  return `<${el} class="ucard${opts.act ? (opts.on ? ' pick' : ' out') : ''}" ${opts.act ? `data-act="atkpick" data-id="${c.id}"` : ''} title="${esc(c.name)}${gen ? ` · ${esc(gen.name)}` : ''} · ${num(men(c))} men${opts.from ? ` · from ${esc(g.regions[c.reg].name)}, ${c.ap} move${c.ap === 1 ? '' : 's'} left` : ''}">
+    <span class="utop">${icon(c)}${gen ? `<span class="lvl" title="${esc(gen.name)}, level ${gen.level} general">${gen.level}</span>` : ''}</span><b>${esc(c.name)}</b>
+    <span class="um">${c.divs} ${KIND[c.kind].label.toLowerCase()} div${c.divs > 1 ? 's' : ''}${where}</span>
+    <span class="meter" title="Strength ${Math.round(c.str * 100)}%"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span>
+    <span class="meter" title="Cohesion ${Math.round(c.org * 100)}%"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span>${opts.note ? `<span class="tags"><span class="tag bad">${esc(opts.note)}</span></span>` : ''}</${el}>`;
+}
+
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea' };
+
+/** A corps after the battle: what it lost and what became of it. */
+function fateCard(u: BattleReport['attackers'][number], won: boolean): string {
+  const left = u.men > 0 ? Math.max(0, 1 - u.lost / u.men) : 0;
+  const gone = u.fate === 'surrendered' || u.fate === 'destroyed';
+  const fate = u.fate === '' && !won ? 'fell back' : FATE[u.fate];
+  return `<div class="ucard${gone ? ' gone' : ''}" title="${esc(u.name)} · ${num(u.men)} men, lost ${num(u.lost)}">
+    <span class="utop"><svg width="34" height="24" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[u.nat].color}"/>${symbol(u.kind, 24, 15)}</svg></span><b>${esc(u.name)}</b>
+    <span class="um">${u.divs} ${KIND[u.kind].label.toLowerCase()} div${u.divs > 1 ? 's' : ''} · lost ${num(u.lost)}</span>
+    <span class="meter" title="${Math.round(left * 100)}% of its men left"><i class="${left < 0.5 ? 'low' : ''}" style="width:${Math.round(left * 100)}%"></i></span>
+    <span class="tags"><span class="tag ${gone || u.fate === 'retreated' ? 'bad' : u.fate === 'advanced' ? 'good' : ''}">${fate}</span></span></div>`;
+}
+
+const ticketBlock = (title: string, lines: BattleReport['lines']): string => `<h3>${title}</h3><table class="ticket">${lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
 
 function reportCard(r: BattleReport): string {
   const v = verdictFor(r);
-  const side = (us: BattleReport['attackers'], lost: number) => `<div class="big">${num(us.reduce((s, u) => s + u.men, 0))}</div><small>men in ${us.length} corps · lost ${num(lost)}</small>`;
-  const list = (us: BattleReport['attackers']) => `<ul class="ulist">${us.map((u) => `<li><span>${esc(u.name)} <span style="color:var(--ink-3)">(${g.nations[u.nat].adj})</span></span><span>${FATE[u.fate]}</span></li>`).join('')}</ul>`;
-  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · ${date(r.turn)}, week ${r.week}</div><h2>Battle of ${esc(r.regionName)}</h2></header>
+  const side = (us: BattleReport['attackers'], lost: number, role: string, won: boolean): Side => {
+    const total = us.reduce((s, u) => s + u.men, 0);
+    const share = total > 0 ? Math.min(1, lost / total) : 0;
+    return {
+      nats: [...new Set(us.map((u) => u.nat))], role, men: total, corps: us.length, divs: us.reduce((s, u) => s + u.divs, 0),
+      under: `<div class="floss"><span class="meter"><i class="low" style="width:${Math.round(share * 100)}%"></i></span><small>Lost ${num(lost)} men, ${Math.round(share * 100)}% of those engaged</small></div>`,
+      cards: us.map((u) => fateCard(u, won)).join(''),
+    };
+  };
+  const share = r.aPower / Math.max(1e-9, r.aPower + r.dPower);
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle result · ${date(r.turn)}, week ${r.week}</div><h2>Battle of ${esc(r.regionName)}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
       <div class="sub">${r.taken ? `${esc(r.regionName)} was taken.` : `The attack on ${esc(r.regionName)} was thrown back.`} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.</div>
-      <div class="vs"><div><h4><span class="chip" style="background:${g.nations[r.attNat].color}"></span> ${natName(r.attNat)} attacking</h4>${side(r.attackers, r.attLost)}</div><div class="mid">vs</div><div class="r"><h4>${natName(r.defNat)} defending <span class="chip" style="background:${g.nations[r.defNat].color}"></span></h4>${side(r.defenders, r.defLost)}</div></div>
-      <h3>What the campaign map fed into the battle</h3>
-      <table class="ticket">${r.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>
-      <h3>Attackers</h3>${list(r.attackers)}<h3>Defenders</h3>${list(r.defenders)}
+      <div class="faceoff">${sidePanel(side(r.attackers, r.attLost, 'attacking', r.taken), 'att')}<div class="fmid"><span class="vsmark">VS</span></div>${sidePanel(side(r.defenders, r.defLost, 'defending', !r.taken), 'def')}</div>
+      <div class="balance"><div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[r.attNat].color}"></i><i style="flex:1;background:${g.nations[r.defNat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1"></span></div>
+        <div class="ends"><span>${esc(g.nations[r.attNat].adj)} strength on the day</span><span>${esc(g.nations[r.defNat].adj)} strength on the day</span></div></div>
+      ${ticketBlock('What the campaign map fed into the battle', r.lines)}
       <div class="note" style="margin-top:14px"><b>Auto-resolved.</b> In the full game you can choose to fight this battle yourself in 3D. The same ticket goes in and the same kind of result comes back, so the campaign never needs to know which one happened.</div>
-    </div><footer><button class="btn" data-act="showmap" data-id="${r.region}">Show on map</button><button class="btn go" data-act="close">Close</button></footer>`;
+    </div><footer><button class="btn" data-act="showmap" data-id="${r.region}">Show on map</button><button class="btn go" data-act="close">Continue</button></footer>`;
 }
 
 function attackCard(): string {
   const m = ui.modal!;
   const target = g.regions[m.target];
+  const me = g.human!;
   const cands = candidates(g, target);
   const chosen = limitAttackers(g, cands.filter((c) => m.chosen.has(c.id)), target);
   const inSet = new Set(chosen.map((c) => c.id));
   const a = previewAttack(g, chosen, target);
+  const foes = a ? a.defenders : hostileUnits(g, target, me);
+  const why = (c: Corps): string => (m.chosen.has(c.id) && !inSet.has(c.id) ? (g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? 'Staff at its limit' : 'No room on the roads') : '');
+  const ours: Side = {
+    nats: [me], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: sumDivs(chosen),
+    cards: cands.map((c) => battleCard(c, { act: true, on: inSet.has(c.id), note: why(c), from: true })).join(''),
+    under: `<small class="fhelp">${cands.length > 1 ? 'Click a corps to send it in or hold it back.' : 'The one corps in reach.'}</small>`,
+  };
+  const theirs: Side = {
+    nats: [...new Set(foes.map((c) => c.nat))], role: 'defending', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0), corps: foes.length, divs: sumDivs(foes),
+    cards: foes.map((c) => battleCard(c)).join(''),
+    under: target.fort ? `<small class="fhelp">Dug in behind level ${target.fort.lv} fortifications${target.fort.vs.includes(me) ? '' : ', which do not face you'}.</small>` : '',
+  };
   let body = '';
   if (a) {
     const p = Math.max(0, Math.min(1, (1.2 - 1.2 / a.odds) / 0.4));
     const share = a.A / (a.A + a.D);
     const word = p >= 0.95 ? 'Victory is all but certain' : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : 'This attack will fail';
-    body = `<div class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}" style="font-size:24px">${word}</div>
-      <div class="oddsbar"><i style="width:${Math.round(share * 100)}%;background:${g.nations[g.human!].color}"></i><i style="flex:1;background:${g.nations[a.defenders[0].nat].color}"></i></div>
-      <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${Math.round(p * 100)}% chance to take ${esc(target.name)} · it needs roughly 1.2 to 1 on the day</div>
-      <h3>Battle Ticket</h3><table class="ticket">${a.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
+    body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${Math.round(p * 100)}% chance to take ${esc(target.name)}</span></div>
+      <div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1 on the day"></span></div>
+      <div class="ends"><span>Your strength on the day</span><span>The white mark is what it takes: about 1.2 to 1</span><span>Theirs</span></div></div>
+      ${ticketBlock('What the campaign map feeds into this battle', a.lines)}`;
   } else body = '<div class="empty">Choose at least one corps to attack with.</div>';
-  const rows = cands.map((c) => `<button class="pickrow${inSet.has(c.id) ? ' pick' : ''}" data-act="atkpick" data-id="${c.id}">${icon(c)}<span class="grow"><b>${esc(c.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[c.reg].name)} · ${c.divs} divisions · ${c.ap} move${c.ap > 1 ? 's' : ''} left${m.chosen.has(c.id) && !inSet.has(c.id) ? (g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? ' · more than the staff can handle in one battle' : ' · no room on the roads') : ''}</span></span></button>`).join('');
-  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Plan of attack · ${date(g.turn)}</div><h2>Attack on ${esc(target.name)}</h2></header>
-    <div class="body">${body}<h3>Your corps in reach</h3>${rows}</div>
-    <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="attack" ${a ? '' : 'disabled'}>Attack</button></footer>`;
+  const ground = `${target.terrain[0].toUpperCase() + target.terrain.slice(1)}`;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The armies meet · ${date(g.turn)}</div><h2>Battle for ${esc(target.name)}</h2></header>
+    <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def')}</div>${body}</div>
+    <footer><button class="btn" data-act="close" title="Call the attack off. Nothing is spent.">Withdraw</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="attack" ${a ? '' : 'disabled'} title="Settle the battle at once from the Battle Ticket">Auto-resolve</button></footer>`;
 }
 
 function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: number): string {

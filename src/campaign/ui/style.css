@@ -262,6 +262,44 @@ table.ticket td.fx { color: #e9c987; }
 .ulist { font-size: 12.5px; margin: 0; padding: 0; list-style: none; }
 .ulist li { padding: 2px 0; display: flex; justify-content: space-between; gap: 8px; }
 .ulist li span:last-child { color: var(--ink-3); white-space: nowrap; }
+.card.wide { width: min(960px, 100%); }
+.faceoff { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: stretch; margin: 4px 0 12px; }
+.fside { background: var(--panel-2); border: 1px solid var(--line); border-top: 3px solid var(--side, var(--line)); border-radius: 5px; padding: 10px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.fhead { display: flex; gap: 9px; align-items: center; min-width: 0; }
+.fhead .grow { min-width: 0; }
+.fhead b { display: block; font-family: var(--head); font-size: 19px; letter-spacing: .03em; line-height: 1.1; }
+.fhead small { display: block; font-size: 11.5px; color: var(--ink-2); }
+.fhead .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.fnum { display: flex; gap: 16px; align-items: baseline; flex-wrap: wrap; }
+.fnum span { display: inline-flex; gap: 5px; align-items: baseline; }
+.fnum b { font-family: var(--head); font-size: 24px; font-weight: 700; line-height: 1; }
+.fnum small { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.fhelp { font-size: 11.5px; color: var(--ink-3); }
+.floss { display: grid; gap: 3px; }
+.floss small { font-size: 11.5px; color: var(--ink-2); }
+.fcards { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 3px; }
+.fcards .ucard { flex: 0 0 122px; }
+.fcards .ucard .um { white-space: normal; line-height: 1.25; }
+.fside.def .fhead { flex-direction: row-reverse; text-align: right; }
+.fside.def .fhead .tags, .fside.def .fnum, .fside.def .fcards { justify-content: flex-end; }
+.fside.def .fhelp { text-align: right; }
+.ucard.out { opacity: .45; }
+.ucard.out:hover { opacity: .8; }
+.ucard.gone { opacity: .6; }
+.ucard .lvl { font-family: var(--head); font-size: 12px; font-weight: 700; background: var(--brass); color: var(--brass-ink); border-radius: 3px; padding: 0 4px; line-height: 16px; }
+.fmid { display: grid; align-content: center; justify-items: center; gap: 4px; font-family: var(--head); color: var(--ink-3); padding: 0 2px; }
+.fmid .vsmark { font-size: 22px; font-weight: 700; letter-spacing: .06em; color: var(--brass); }
+.fmid small { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+.balance { margin: 4px 0 2px; }
+.balance .bhead { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; flex-wrap: wrap; margin-bottom: 6px; }
+.balance .bhead .verdict { font-size: 24px; }
+.balance .bhead .sub { font-size: 12.5px; color: var(--ink-2); }
+.balance .btrack { position: relative; padding: 3px 0; }
+.balance .bal { height: 14px; border-radius: 7px; overflow: hidden; display: flex; background: var(--panel-3); box-shadow: 0 0 0 1px rgba(244, 238, 218, .28); }
+.balance .bal i { display: block; height: 100%; }
+.balance .bal i + i { border-left: 2px solid rgba(12, 15, 18, .9); }
+.balance .need { position: absolute; top: 0; bottom: 0; width: 3px; margin-left: -1px; background: #f4eeda; border-radius: 1px; box-shadow: 0 0 0 1px rgba(0, 0, 0, .6); }
+.balance .ends { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
 .oddsbar { height: 10px; border-radius: 5px; background: var(--panel-3); overflow: hidden; margin: 6px 0 4px; display: flex; }
 .oddsbar i { display: block; height: 100%; }
 .pickrow { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 5px; background: var(--panel-2); width: 100%; text-align: left; }
@@ -341,6 +379,12 @@ button.gen:hover { border-color: var(--ink-3); }
   .brand small, .legend { display: none; }
   .tray { right: 10px; bottom: 6px; padding: 6px; gap: 6px; }
   .tray.open ~ .zoom { display: none; }
+  .faceoff { grid-template-columns: minmax(0, 1fr); }
+  .fmid { grid-auto-flow: column; gap: 10px; }
+  .fside.def .fhead { flex-direction: row; text-align: left; }
+  .fside.def .fhead .tags, .fside.def .fnum, .fside.def .fcards { justify-content: flex-start; }
+  .fside.def .fhelp { text-align: left; }
+  .fcards .ucard { flex: 1 1 122px; }
   .tgen { flex-basis: 170px; }
   .ttally { display: none; }
   .ucard { flex-basis: 104px; }
