@@ -1649,6 +1649,39 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(TEXT("Choose a country above to lead it."))).Font(Font(TEXT("Italic"), 13)).ColorAndOpacity(Muted)
 					];
 				}
+				// How hard the war is to be: five levels named for ranks, the chosen one lit, with what it changes beside them.
+				TSharedRef<SHorizontalBox> Difficulty = SNew(SHorizontalBox);
+				if (Opening.Levels.Num() > 0)
+				{
+					TSharedRef<SHorizontalBox> Ranks = SNew(SHorizontalBox);
+					for (int32 LevelIndex = 0; LevelIndex < Opening.Levels.Num(); ++LevelIndex)
+					{
+						const FGrandLevel& Level = Opening.Levels[LevelIndex];
+						const bool bPicked = LevelIndex == Opening.LevelIndex;
+						Ranks->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(bPicked ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(10.0f, 5.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(Level.Blurb + TEXT("\n") + FString::Join(Level.Lines, TEXT("\n"))))
+							.OnClicked_Lambda([this, LevelIndex]() { if (Controller.IsValid()) { Controller->PickLevel(LevelIndex); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(Level.Name.ToUpper())).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(bPicked ? BrightBrass : Muted)
+							]
+						];
+					}
+					const FString Says = Opening.Levels.IsValidIndex(Opening.LevelIndex) ? Opening.Levels[Opening.LevelIndex].Blurb : FString();
+					Difficulty->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("DIFFICULTY"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+					];
+					Difficulty->AddSlot().AutoWidth().VAlign(VAlign_Center)
+					[
+						Ranks
+					];
+					Difficulty->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+					];
+				}
 				Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 9.0f)).IsFocusable(false)
@@ -1670,7 +1703,18 @@ namespace
 						]
 					];
 				}
-				OpeningFoot->SetContent(SNew(SBorder).BorderImage(&FootBrush).Padding(FMargin(16.0f, 12.0f))[Foot]);
+				OpeningFoot->SetContent(SNew(SBorder).BorderImage(&FootBrush).Padding(FMargin(16.0f, 10.0f, 16.0f, 12.0f))
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+					[
+						Difficulty
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						Foot
+					]
+				]);
 				OpeningFoot->SetVisibility(EVisibility::Visible);
 				return;
 			}

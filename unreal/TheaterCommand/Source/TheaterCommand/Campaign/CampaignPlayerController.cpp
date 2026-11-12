@@ -85,6 +85,12 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 		Out.Note = FText::FromString(Year.Note);
 		Out.From = Year.From;
 	}
+	// How hard it can be made; the fair level is offered unless another was picked before.
+	Opening.Levels = Rules->GrandLevels();
+	if (!Opening.Levels.IsValidIndex(Opening.LevelIndex))
+	{
+		Opening.LevelIndex = Opening.Levels.IndexOfByPredicate([Rules](const FGrandLevel& Level) { return Level.Id == Rules->FairLevel(); });
+	}
 	if (Opening.Years.Num() == 0)
 	{
 		Opening.Tab = 1;
@@ -173,6 +179,16 @@ void ACampaignPlayerController::PickGrandNation(const FString& Tag)
 	PickGrandNation(Opening.Nations.IndexOfByPredicate([&Tag](const FOpeningNation& Nation) { return Nation.Tag == Tag; }));
 }
 
+void ACampaignPlayerController::PickLevel(int32 Index)
+{
+	if (Opening.Levels.IsValidIndex(Index) && Index != Opening.LevelIndex)
+	{
+		Opening.LevelIndex = Index;
+		++Opening.Revision;
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	}
+}
+
 void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 {
 	ACampaignGameMode* Mode = GetMode();
@@ -181,7 +197,8 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 		return;
 	}
 	const FString Human = bWatch ? FString() : Opening.Nations[Opening.NationIndex].Tag;
-	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed))
+	const FString Level = Opening.Levels.IsValidIndex(Opening.LevelIndex) ? Opening.Levels[Opening.LevelIndex].Id : FString();
+	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed, Level))
 	{
 		EnterCampaign();
 		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
@@ -1813,7 +1830,7 @@ FText ACampaignPlayerController::GetRulesNote() const
 	FString Note = FString::Printf(TEXT("You lead %s"), Nation ? *Nation->Name : *View.Human);
 	if (View.bOpen)
 	{
-		Note += TEXT("  \u00B7  free play");
+		Note += View.Level.IsEmpty() ? FString(TEXT("  \u00B7  free play")) : TEXT("  \u00B7  ") + View.Level;
 	}
 	if (View.bEve)
 	{

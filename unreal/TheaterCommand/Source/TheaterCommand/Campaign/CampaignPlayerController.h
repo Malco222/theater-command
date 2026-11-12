@@ -116,6 +116,9 @@ struct FOpening
 	TArray<FOpeningNation> Nations;
 	int32 NationIndex = INDEX_NONE; // the country chosen, if one is
 	FText GrandNote; // a word about who is missing from the list, if anyone is
+	// How hard the war is to be: the levels, easiest first, and the one chosen.
+	TArray<FGrandLevel> Levels;
+	int32 LevelIndex = INDEX_NONE;
 	bool bWorking = false; // history is being played up to the day chosen; the list of countries follows
 
 	// The scenarios: single campaigns in which the other nations keep to history's plan.
@@ -263,6 +266,9 @@ public:
 
 	/** Orders something in the selected territory: a kind of corps to raise, or "fort". */
 	void ProvinceAction(const FString& Action);
+
+	/** On the opening screen: chooses how hard the grand campaign is to be. */
+	void PickLevel(int32 Index);
 
 	/** Shows a fleet or an air fleet in the panel, with the orders it can be given. */
 	void ShowForce(bool bFleet, int32 Id);

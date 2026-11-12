@@ -143,6 +143,7 @@ struct FCampaignView
 	TArray<FViewCorps> Corps;
 	FTreasury Treasury;
 	TArray<FString> Declarable; // the countries the player could declare war on this month
+	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown
 	TArray<int32> RailsCut; // regions whose railway is cut
 	TArray<FViewFleet> Fleets;
@@ -257,6 +258,15 @@ struct FStartGroup
 };
 
 /** A day the grand campaign can be taken over on. */
+/** How hard a grand campaign can be made. */
+struct FGrandLevel
+{
+	FString Id; // "colonel"
+	FString Name; // "Colonel"
+	FString Blurb;
+	TArray<FString> Lines; // what it changes
+};
+
 struct FGrandYear
 {
 	FString Year; // "1939"

@@ -27,11 +27,15 @@ public:
 	/** The days the grand campaign can be taken over on. Empty with rules that have no grand campaign. */
 	const TArray<FGrandYear>& GrandYears() const { return Years; }
 
+	/** The levels of difficulty a grand campaign can be played at, easiest first, and the one it starts on unless another is chosen. */
+	const TArray<FGrandLevel>& GrandLevels() const { return Levels; }
+	const FString& FairLevel() const { return DefaultLevel; }
+
 	/** Who can be led in the grand campaign from a month. History is played up to it the first time this is asked. */
 	TArray<FGrandNation> GrandNations(int32 From, int32 Seed);
 
 	/** Starts a new campaign. Human is the nation the player leads, or empty to watch. From is the month to take over in. */
-	bool Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError);
+	bool Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level = FString());
 
 	/** The whole campaign as text, to be written to a file. Empty if there is no campaign. */
 	FString Save();
@@ -117,4 +121,6 @@ private:
 	bool bReady = false;
 	bool bRunning = false;
 	TArray<FGrandYear> Years;
+	TArray<FGrandLevel> Levels;
+	FString DefaultLevel;
 };

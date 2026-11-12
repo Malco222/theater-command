@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a0a6414 2026-11-12. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0739807 2026-11-12. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2668,7 +2668,7 @@
     const rng = new Rng(hashString(`command:${g2.seed}:${luck}`));
     const X = COMMAND.xp;
     const decisive = rep.level === "Decisive victory" || rep.level === "Heroic victory";
-    const side = (cs, gens, us, attacking) => cs.forEach((c, i) => {
+    const side2 = (cs, gens, us, attacking) => cs.forEach((c, i) => {
       const won = attacking ? rep.taken : !rep.taken;
       const againstOdds = attacking ? preOdds < COMMAND.closeOdds : preOdds >= 1;
       const gen = gens[i];
@@ -2703,8 +2703,8 @@
       earn(g2, gen, c);
       hazard(g2, gen, c, lossFrac, rng, rep);
     });
-    side(attackers2, attGens, rep.attackers, true);
-    side(defenders, defGens, rep.defenders, false);
+    side2(attackers2, attGens, rep.attackers, true);
+    side2(defenders, defGens, rep.defenders, false);
   }
   function monthlyCommand(g2, nat) {
     for (const [from, name, level, skills, traits] of COMMAND.roster[nat] ?? []) {
@@ -3715,6 +3715,101 @@
     };
   }
 
+  // ../../data/campaign/difficulty.json
+  var difficulty_default = {
+    _note: "Campaign difficulty, the grand campaign only. Five levels named for ranks. 'start' is the level a campaign begins on unless another is chosen: at it every number here is 1 and nothing is switched on, so the war is exactly the one the game was balanced for. A level never touches the battle arithmetic: an attack is worth the same at every level, and so is every die. What a level changes is what each side can afford and how the computer's staffs think. 'you' applies to the player's nation; 'rival' to every computer-run nation that is not on the player's side (the player's own allies always play at the fair level). income multiplies the month's earnings. drafts multiplies how fast replacements reach a worn corps and how many trained men the depots can send out in a month. nerve multiplies the strength ratio at which a rival staff opens an offensive and the ratio below which it calls one off (above 1 more cautious, below 1 bolder), and odds the odds it wants before a single attack. bombing: a rival's air staff sends bomber fleets against the player's factories and railways: 'share' of its fleets with bombers at most, each with 'least' bombers or more, and only where it expects to lose no more than 'loss' of them; 'rail' is what a cut railway is worth to it beside a factory province's output. A factory on ground the player has only occupied is as good a target as one in his own country: trial wars showed that raids on occupied industry and the junctions behind the front hurt him most. landings: a rival with shipping keeps 'force' corps at a port and puts them ashore on a coast of the player's with a harbour: any unguarded shore, or a guarded one at 'odds' or better, when the crossing risks no more than 'risk' of the force and no more than 'near' times its own divisions stand within a march of the beach. It waits 'every' months between descents, goes in a month with a chance of 'chance', and afterwards feeds a harbour it holds across the sea with the same force. concert: while an ally of its own has an offensive under way against the player, a rival opens one too at this share of its usual ratio. 'lines' is what the picker tells the player.",
+    start: "colonel",
+    levels: [
+      {
+        id: "cadet",
+        name: "Cadet",
+        blurb: "For learning the ropes. The treasury is generous, the ranks refill quickly, and rival staffs are slow to move.",
+        you: { income: 1.3, drafts: 1.3 },
+        rival: { income: 0.85, drafts: 0.8, nerve: 1.25, odds: 1.1 },
+        lines: ["Your income is 30% higher and your replacements arrive 30% faster", "Rival nations earn 15% less and refill their ranks more slowly", "Rival staffs wait for much better odds before they attack"]
+      },
+      {
+        id: "captain",
+        name: "Captain",
+        blurb: "A gentler war. A little more money and men for you, and rivals who think twice.",
+        you: { income: 1.15, drafts: 1.15 },
+        rival: { income: 1, drafts: 0.9, nerve: 1.1, odds: 1.05 },
+        lines: ["Your income is 15% higher and your replacements arrive 15% faster", "Rival nations refill their ranks a little more slowly", "Rival staffs wait for somewhat better odds before they attack"]
+      },
+      {
+        id: "colonel",
+        name: "Colonel",
+        blurb: "The fair fight. Every nation plays by the same rules, with nothing added and nothing taken away.",
+        you: { income: 1, drafts: 1 },
+        rival: { income: 1, drafts: 1, nerve: 1, odds: 1 },
+        lines: ["No bonuses for anyone: the war as the game was balanced", "Rival air fleets fly for their armies and leave your factories alone", "Rival staffs land from the sea only where history planned it"]
+      },
+      {
+        id: "general",
+        name: "General",
+        blurb: "A harder war. Rivals have deeper pockets, attack sooner, and send their bombers after your factories and railways.",
+        you: { income: 1, drafts: 1 },
+        rival: { income: 1.2, drafts: 1.25, nerve: 0.9, odds: 1 },
+        bombing: { share: 0.5, least: 80, loss: 0.12, rail: 0.25 },
+        lines: ["Rival nations earn 20% more and refill their ranks 25% faster", "Rival staffs open their offensives sooner", "Rival bombers raid your factories and cut your railways"]
+      },
+      {
+        id: "marshal",
+        name: "Field Marshal",
+        blurb: "The hardest war. Rivals are rich, bold and work together: bombers over your cities, landings on your coasts, and offensives timed to fall at once.",
+        you: { income: 1, drafts: 1 },
+        rival: { income: 1.4, drafts: 1.5, nerve: 0.8, odds: 0.95 },
+        bombing: { share: 0.67, least: 60, loss: 0.18, rail: 0.25 },
+        landings: { force: 2, odds: 1.5, risk: 0.2, near: 2, every: 4, chance: 0.6 },
+        concert: 0.8,
+        lines: ["Rival nations earn 40% more and refill their ranks 50% faster", "Rival bombers raid your factories and cut your railways", "Rivals with shipping land on any coast you leave thinly held", "When one rival attacks you, its allies join in"]
+      }
+    ]
+  };
+
+  // ../../src/campaign/difficulty.ts
+  var DIFFICULTY = difficulty_default;
+  var FAIR = Math.max(0, DIFFICULTY.levels.findIndex((l) => l.id === DIFFICULTY.start));
+  var asIf = /* @__PURE__ */ new WeakMap();
+  var seat2 = (g2) => g2.human ?? asIf.get(g2) ?? null;
+  var levelIndex = (g2) => g2.flags.open === 1 ? g2.flags.level ?? FAIR : FAIR;
+  var levelOf = (g2) => DIFFICULTY.levels[levelIndex(g2)] ?? DIFFICULTY.levels[FAIR];
+  function whyNotLevel(g2, id) {
+    if (g2.flags.open !== 1) return "A historical scenario is always played as history fought it. Difficulty belongs to the grand campaign.";
+    const k = typeof id === "number" ? id : DIFFICULTY.levels.findIndex((l) => l.id === id);
+    return DIFFICULTY.levels[k] ? null : "There is no such level.";
+  }
+  function setLevel(g2, id) {
+    if (whyNotLevel(g2, id)) return false;
+    const k = typeof id === "number" ? id : DIFFICULTY.levels.findIndex((l) => l.id === id);
+    if (k === FAIR) delete g2.flags.level;
+    else g2.flags.level = k;
+    return true;
+  }
+  var camp = (g2, id) => {
+    const n = g2.nations[id];
+    if (!n) return null;
+    return bloc(n) ?? (n.align === "leaning_axis" ? "axis" : n.align === "leaning_allies" ? "allies" : null);
+  };
+  var friend = (g2, nat, me) => nat === me || allied(g2, nat, me) || camp(g2, nat) !== null && camp(g2, nat) === camp(g2, me);
+  function rival(g2, nat) {
+    if (g2.flags.open !== 1 || g2.flags.level === void 0) return false;
+    const me = seat2(g2);
+    return me !== null && !friend(g2, nat, me);
+  }
+  var side = (g2, nat) => {
+    if (g2.flags.open !== 1 || g2.flags.level === void 0) return null;
+    const me = seat2(g2);
+    if (me === null) return null;
+    return nat === me ? levelOf(g2).you : friend(g2, nat, me) ? null : levelOf(g2).rival;
+  };
+  var incomeMul = (g2, nat) => side(g2, nat)?.income ?? 1;
+  var draftsMul = (g2, nat) => side(g2, nat)?.drafts ?? 1;
+  var nerveOf = (g2, nat) => rival(g2, nat) ? levelOf(g2).rival : { nerve: 1, odds: 1 };
+  var bombingFor = (g2, nat) => rival(g2, nat) ? levelOf(g2).bombing ?? null : null;
+  var landingsFor = (g2, nat) => rival(g2, nat) ? levelOf(g2).landings ?? null : null;
+  var concertFor = (g2, nat) => rival(g2, nat) ? levelOf(g2).concert ?? 1 : 1;
+
   // ../../src/campaign/air.ts
   var AIR = air_default;
   var MISSION = {
@@ -4136,23 +4231,23 @@
     const eLoss = C.fighters * I * clash * 2 * (1 - share) * C.escortShare * luck();
     const bLoss = a.B * Math.min(C.maxBomberLoss, a.bomberLoss * luck());
     const saved = (home) => sea ? (AIR.pilots.home + AIR.pilots.away) / 2 : home ? AIR.pilots.home : AIR.pilots.away;
-    const down = (f, side, n, home) => {
+    const down = (f, side2, n, home) => {
       const k = Math.min(f.ftr, rng.roll(Math.max(0, n)));
       if (!k) return;
       const p = airPool(g2, f.nat);
       const back = rng.roll(k * saved(home));
       f.ftr -= k;
       f.lost.ftr += k;
-      side.lostFtr += k;
+      side2.lostFtr += k;
       p.lostFtr += k;
       p.pilots += back;
       p.lostPilots += k - back;
     };
-    const bomber = (f, side, n) => {
+    const bomber = (f, side2, n) => {
       const k = Math.min(f.bmr, rng.roll(Math.max(0, n)));
       f.bmr -= k;
       f.lost.bmr += k;
-      side.lostBmr += k;
+      side2.lostBmr += k;
       airPool(g2, f.nat).lostBmr += k;
     };
     a.def.forEach((x, i) => down(x.f, def[i], a.D > 0 ? dLoss * (x.f.ftr * x.w / a.D) : 0, true));
@@ -4180,10 +4275,10 @@
         p.lostFtr += gf;
         p.lostBmr += gb;
         p.pilots += gf;
-        const side = def.find((s) => s.fleet === f.name && s.nat === f.nat);
-        if (side) {
-          side.lostFtr += gf;
-          side.lostBmr += gb;
+        const side2 = def.find((s) => s.fleet === f.name && s.nat === f.nat);
+        if (side2) {
+          side2.lostFtr += gf;
+          side2.lostBmr += gb;
         }
         ground += gf + gb;
         value += cut * 300;
@@ -4328,7 +4423,10 @@
       f.target = -1;
     }
     if (!n.alive || !n.atWar.length) return;
-    if (g2.flags.open === 1) return;
+    if (g2.flags.open === 1) {
+      raidPlayer(g2, nat, mine);
+      return;
+    }
     for (const ph of AIR.plan) {
       if (ph.nat !== nat || g2.turn < ph.from || g2.turn > ph.to || !atWar(g2, nat, ph.against)) continue;
       for (const o of ph.orders) {
@@ -4342,6 +4440,51 @@
         setMission(g2, f, o.mission, target);
       }
     }
+  }
+  function raidPlayer(g2, nat, mine) {
+    const B = bombingFor(g2, nat);
+    const you = seat2(g2);
+    if (!B || you === null || !atWar(g2, nat, you)) return;
+    const withBombers = mine.filter((f) => f.bmr > 0);
+    const most = Math.max(1, Math.floor(withBombers.length * B.share + 1e-9));
+    const picks = [];
+    for (const f of withBombers) {
+      if (f.bmr < B.least || f.ready < 0.5) continue;
+      let best = null;
+      for (const r of g2.regions) {
+        if (r.ctrl !== you || r.fac <= 0 && railsAt(r.id).length < 3 || whyNotMission(g2, f, "bomb", r.id)) continue;
+        for (const m of ["bomb", "night"]) {
+          const a = assessAir(g2, [f], m, r.id);
+          if (a.why) continue;
+          const fc = forecastAir(g2, a, m, r.id);
+          if (fc.bomberLoss > B.loss) continue;
+          const v = fc.cut * r.fac + 3 * (fc.ruin ?? 0) + B.rail * (fc.rail ?? 0) * railsAt(r.id).length - 2 * fc.bomberLoss;
+          if (v > 0.15 && (!best || v > best.v)) best = { f, m, t: r.id, v };
+        }
+      }
+      if (best) picks.push(best);
+    }
+    picks.sort((a, b) => b.v - a.v || a.f.id - b.f.id);
+    for (const p of picks.slice(0, most)) setMission(g2, p.f, p.m, p.t);
+  }
+  function forecastAir(g2, a, m, target) {
+    const through = a.B * (1 - a.bomberLoss) * (m === "night" ? AIR.combat.night.accuracy : 1) * techMul(g2, a.att[0]?.f.nat ?? "", "bombers");
+    const odds = a.Dpow > 0 ? a.Epow / a.Dpow : 9;
+    let cut = 0, nation = 0;
+    if (m === "superiority") {
+      const based = g2.airFleets.some((f) => f.base === target && atWar(g2, f.nat, a.att[0]?.f.nat ?? ""));
+      cut = based ? Math.min(AIR.damage.airfields.max, through / AIR.damage.airfields.scale) : 0;
+    } else if (m === "bomb" || m === "night") {
+      const r = g2.regions[target];
+      const total = g2.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
+      cut = Math.min(AIR.damage.industry.max, through / AIR.damage.industry.scale);
+      if (a.aa) cut *= 1 - a.aa * WORKS.aa.cut;
+      nation = total > 0 ? cut * (r.fac / total) : 0;
+      if (groundRules(g2)) return { odds, bomberLoss: a.bomberLoss, cut: r.fac > 0 ? cut : 0, nation, rail: railBombChance(g2, target, through, a.aa ? a.aa * WORKS.aa.cut : 0), ruin: ruinChance(g2, r, cut) };
+    } else if (m === "strike") {
+      cut = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through / (through + AIR.damage.shipping.scale)));
+    }
+    return { odds, bomberLoss: a.bomberLoss, cut, nation };
   }
 
   // ../../src/campaign/navy.ts
@@ -4641,6 +4784,38 @@
     });
     return 1 - safe;
   }
+  function planLanding(g2, cs, to) {
+    const why = whyNotLand(g2, cs, to);
+    if (why) return { why, surprise: false, path: [], risk: 0, defended: false, assess: null, sky: false, sortie: 0 };
+    const nat = cs[0].nat;
+    const defended = hostileUnits(g2, to, nat).length > 0;
+    const sky = skyOver(g2, to.id);
+    if (airborne(cs)) {
+      return {
+        why: null,
+        surprise: false,
+        path: [],
+        risk: 0,
+        defended,
+        air: true,
+        sky: sky !== null && allied(g2, sky, nat),
+        sortie: 0,
+        assess: defended ? assess(g2, cs, to, landingOpts(g2, cs, to)) : null
+      };
+    }
+    const surprise = surpriseOn(g2, nat, to);
+    const path = seaPath(g2, nat, g2.regions[cs[0].reg], to, { max: NAVY.landing.range, surprise });
+    return {
+      why: null,
+      surprise,
+      path,
+      risk: surprise ? 0 : landingRisk(g2, nat, path, to),
+      defended,
+      sky: sky !== null && allied(g2, sky, nat),
+      sortie: surprise ? 0 : sortieAgainst(g2, nat, path),
+      assess: defended ? assess(g2, cs, to, { sea: surprise ? NAVY.landing.surprise : assaultStrength(g2, nat), surprise }) : null
+    };
+  }
   function landCorps(g2, cs, to) {
     const why = whyNotLand(g2, cs, to);
     if (why) return { ok: false, why };
@@ -4670,6 +4845,11 @@
     if (air) headline(g2, "battle", taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id);
     else headline(g2, "battle", taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id);
     return { ok: true, taken, lostAtSea, report, surprise, air };
+  }
+  function landingTargets(g2, cs) {
+    if (!cs.length) return [];
+    if (!airborne(cs) && (g2.nations[cs[0].nat].sealift <= 0 || !g2.regions[cs[0].reg].port)) return [];
+    return g2.regions.filter((r) => r.seas.length > 0 && whyNotLand(g2, cs, r) === null);
   }
   function fleetReach(g2, f) {
     const d = new Int16Array(g2.seas.length).fill(-1);
@@ -4869,12 +5049,12 @@
     return Math.min(0.9, s);
   }
   var sideOf = (f) => ({ nat: f.nat, fleet: f.name, admiral: f.admiral?.name ?? null, ships: { ...f.ships }, sunk: none() });
-  function afterAction(g2, f, side, won, rng) {
+  function afterAction(g2, f, side2, won, rng) {
     f.fought = g2.turn;
     f.ready = Math.max(0, f.ready - (won ? NAVY.ready.won : NAVY.ready.lost));
     const a = f.admiral;
     if (!a) return;
-    if (!won && side.sunk.bb + side.sunk.cv > 0 && rng.chance(NAVY.admiral.lostWithFlagship)) {
+    if (!won && side2.sunk.bb + side2.sunk.cv > 0 && rng.chance(NAVY.admiral.lostWithFlagship)) {
       headline(g2, "event", `Admiral ${a.name} is lost with his flagship.`, f.nat);
       const pool = COMMAND.names[f.nat];
       f.admiral = pool ? { name: `${rng.pick(pool.first)} ${rng.pick(pool.last)}`, level: 1, xp: 0 } : null;
@@ -5072,10 +5252,10 @@
     const last = g2.flags[`step:${n.id}`];
     if (last !== void 0 && g2.turn - last < DIPLOMACY.stepEvery) return;
     const s = step(n);
-    const side = Math.sign(n.opinion);
+    const side2 = Math.sign(n.opinion);
     if (s === 0 && Math.abs(n.opinion) >= DIPLOMACY.leanAt) {
-      setAlign(g2, n, side);
-      headline(g2, "event", `${n.name} leans toward ${blocName(side)}: trade and treaties, but not at war.`, n.id);
+      setAlign(g2, n, side2);
+      headline(g2, "event", `${n.name} leans toward ${blocName(side2)}: trade and treaties, but not at war.`, n.id);
     } else if (s !== 0 && n.opinion * s < DIPLOMACY.backAt) {
       setAlign(g2, n, 0);
       headline(g2, "event", `${n.name} steps back from ${blocName(s)} to strict neutrality.`, n.id);
@@ -5737,17 +5917,18 @@
     }
     provinces.sort((a, b) => b.total - a.total || a.id - b.id);
     const away = n.offmap?.industry ?? 0;
-    const seat2 = budget ? n.offmap ? BUDGET.capital : capital : PRODUCTION.baseIncome;
+    const seat3 = budget ? n.offmap ? BUDGET.capital : capital : PRODUCTION.baseIncome;
     const partners = tradePartners(g2, nat).length;
     const trade = partners * DIPLOMACY.tradeIncome;
     const peace = n.atWar.length ? 1 : PRODUCTION.peaceIncome;
     const sea = seaIncomeLoss(g2, nat), air = airIncomeLoss(g2, nat), tech = techMul(g2, nat, "industry");
-    const before = seat2 + facHome + facOcc + away + land2 + ports + oil;
+    const before = seat3 + facHome + facOcc + away + land2 + ports + oil;
     const atPeace = before * peace + trade;
     const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
-    const gross = budget ? afterAir * tech : income(g2, nat);
+    const hard = budget ? incomeMul(g2, nat) : 1;
+    const gross = budget ? afterAir * tech * hard : income(g2, nat);
     const lines = [
-      { key: "capital", label: budget ? "The capital and the state" : "The state", amount: seat2 },
+      { key: "capital", label: budget ? "The capital and the state" : "The state", amount: seat3 },
       { key: "factories", label: "Factories at home", amount: facHome, count: nHome },
       { key: "occupied", label: "Factories on occupied ground", amount: facOcc, count: nOcc },
       { key: "homeland", label: "Industry in the homeland, beyond the map", amount: away, count: away },
@@ -5760,7 +5941,8 @@
       { key: "peace", label: "At peace: industry at half speed", amount: before * (peace - 1) },
       { key: "sea", label: "Cargoes sunk at sea", amount: afterSea - atPeace },
       { key: "air", label: "Bombing of industry", amount: afterAir - afterSea },
-      { key: "tech", label: tech >= 1 ? "Better production methods" : "Production methods behind the times", amount: afterAir * (tech - 1) }
+      { key: "tech", label: tech >= 1 ? "Better production methods" : "Production methods behind the times", amount: afterAir * (tech - 1) },
+      { key: "level", label: `Difficulty: ${levelOf(g2).name}`, amount: afterAir * tech * (hard - 1) }
     ];
     const costs = upkeep(g2, nat);
     const upkeepTotal2 = costs.reduce((s, l) => s + l.amount, 0);
@@ -5783,16 +5965,16 @@
   function income(g2, nat) {
     const n = g2.nations[nat];
     if (budgeted(g2)) {
-      let sum = 0, seat2 = n.offmap ? BUDGET.capital : 0;
+      let sum = 0, seat3 = n.offmap ? BUDGET.capital : 0;
       for (const r of g2.regions) {
         if (r.ctrl !== nat) continue;
         const y = provinceYield(g2, r, nat);
         sum += y.land + y.port + y.oil + y.fac;
-        seat2 += y.capital;
+        seat3 += y.capital;
       }
-      sum += seat2 + (n.offmap?.industry ?? 0);
+      sum += seat3 + (n.offmap?.industry ?? 0);
       const trade2 = tradePartners(g2, nat).length * DIPLOMACY.tradeIncome;
-      return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade2) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry");
+      return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade2) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry") * incomeMul(g2, nat);
     }
     let fac = 0;
     for (const r of g2.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
@@ -6771,10 +6953,10 @@
     A.offStart[b] = g2.turn;
     g2.flags[`war:${a}:${b}`] = g2.turn;
     if (A.align === "leaning_axis" || A.align === "leaning_allies") {
-      const side = A.align === "leaning_axis" ? "axis" : "allies";
-      if (B.atWar.some((x) => x !== a && bloc(g2.nations[x]) === side)) {
-        A.align = side === "axis" ? "axis_cobelligerent" : "allies_cobelligerent";
-        A.opinion = A.home = side === "axis" ? 100 : -100;
+      const side2 = A.align === "leaning_axis" ? "axis" : "allies";
+      if (B.atWar.some((x) => x !== a && bloc(g2.nations[x]) === side2)) {
+        A.align = side2 === "axis" ? "axis_cobelligerent" : "allies_cobelligerent";
+        A.opinion = A.home = side2 === "axis" ? 100 : -100;
         g2.supplyDirty = true;
       }
     }
@@ -7952,9 +8134,10 @@
     const perDiv = PRODUCTION.replacementCost;
     const tempo = freshOffensive(g2, nat);
     const army = g2.corps.filter((c) => c.nat === nat);
-    const want = army.map((c) => c.supplied && !(c.lean && nat === g2.human) ? Math.min((1 - c.str) * c.divs, 0.2 * c.divs * lineStrength(g2, c).mul * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
+    const drafts = draftsMul(g2, nat);
+    const want = army.map((c) => c.supplied && !(c.lean && nat === g2.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * c.divs * lineStrength(g2, c).mul * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
     const asked = want.reduce((s, x) => s + x, 0);
-    const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, PRODUCTION.manpower * Math.max(n.armyPeak, armySize(g2, nat)) / asked) : 0;
+    const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g2, nat)) / asked) : 0;
     const starved = /* @__PURE__ */ new Map();
     army.forEach((c, i) => {
       if (c.supplied) {
@@ -8257,7 +8440,8 @@
   function temper(g2, nat) {
     const t = { attackAt: 99, persist: 0.85, minOdds: 1.4, ...OPEN.temper._default, ...OPEN.temper[nat] };
     const mood = 1 + OPEN.mood * (2 * draw2(g2, nat, "mood") - 1);
-    return { attackAt: t.attackAt * mood, persist: t.persist * mood, minOdds: t.minOdds };
+    const lv = nerveOf(g2, nat);
+    return { attackAt: t.attackAt * mood * lv.nerve, persist: t.persist * mood * lv.nerve, minOdds: t.minOdds * lv.odds };
   }
   var atkP = (g2, c) => corpsBase(g2, c) * KIND[c.kind].atk * (g2.nations[c.nat].slowCommand ? 0.85 : 1);
   var defP = (g2, c, r) => corpsBase(g2, c) * KIND[c.kind].def * TERRAIN_DEF[r.terrain];
@@ -8265,27 +8449,27 @@
     const N = g2.regions.length;
     const foe = (id) => atWar(g2, nat, id) || !!o.extra?.has(id);
     const inPlay = (r) => o.scope ? o.scope.has(r.id) : !o.skip?.(r);
-    const side = new Int8Array(N);
-    for (const r of g2.regions) if (inPlay(r)) side[r.id] = foe(r.ctrl) ? 2 : allied(g2, nat, r.ctrl) ? 1 : 0;
+    const side2 = new Int8Array(N);
+    for (const r of g2.regions) if (inPlay(r)) side2[r.id] = foe(r.ctrl) ? 2 : allied(g2, nat, r.ctrl) ? 1 : 0;
     const label = new Int16Array(N).fill(-1);
     let groups = 0;
     for (const r of g2.regions) {
-      if (!side[r.id] || label[r.id] >= 0) continue;
+      if (!side2[r.id] || label[r.id] >= 0) continue;
       const q = [r.id];
       label[r.id] = groups;
-      for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (label[j] < 0 && side[j] === side[r.id]) {
+      for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (label[j] < 0 && side2[j] === side2[r.id]) {
         label[j] = groups;
         q.push(j);
       }
       groups++;
     }
     const manned = new Uint8Array(groups);
-    for (const c of g2.corps) if (c.nat === nat && !c.dead && side[c.reg] === 1) manned[label[c.reg]] = 1;
+    for (const c of g2.corps) if (c.nat === nat && !c.dead && side2[c.reg] === 1) manned[label[c.reg]] = 1;
     const found = /* @__PURE__ */ new Map();
     for (const r of g2.regions) {
-      if (side[r.id] !== 2) continue;
+      if (side2[r.id] !== 2) continue;
       for (const j of r.nb) {
-        if (side[j] !== 1 || !manned[label[j]]) continue;
+        if (side2[j] !== 1 || !manned[label[j]]) continue;
         const host = g2.regions[j].ctrl;
         if (host !== nat && !atWar(g2, host, r.ctrl)) continue;
         let f = found.get(label[r.id]);
@@ -8309,7 +8493,7 @@
       const depth = new Int16Array(N).fill(-1);
       const q = soft.length ? [...soft] : [...edge2];
       for (const id of q) depth[id] = 1;
-      for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (depth[j] < 0 && label[j] === comp && side[j] === 2) {
+      for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (depth[j] < 0 && label[j] === comp && side2[j] === 2) {
         depth[j] = depth[q[i]] + 1;
         q.push(j);
       }
@@ -8338,14 +8522,14 @@
       const close = new Uint8Array(N);
       for (const id of ours) {
         close[id] = 1;
-        for (const j of g2.regions[id].nb) if (side[j] === 1) close[j] = 1;
+        for (const j of g2.regions[id].nb) if (side2[j] === 1) close[j] = 1;
       }
       const fights = (id) => id === nat || [...enemies].some((e) => atWar(g2, id, e));
       let atk = 0, fixed = 0;
       const deep = edge2.filter((id) => EASTERN.deepOwners.includes(g2.regions[id].owner)).length * 2 >= edge2.length;
       const season = deep && !EASTERN.winter.hardy.includes(nat) ? wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1 : 1;
       for (const c of g2.corps) {
-        if (c.dead || side[c.reg] !== 1 || !f.areas.has(label[c.reg]) || !allied(g2, nat, c.nat) || !fights(c.nat)) continue;
+        if (c.dead || side2[c.reg] !== 1 || !f.areas.has(label[c.reg]) || !allied(g2, nat, c.nat) || !fights(c.nat)) continue;
         const r = g2.regions[c.reg];
         if (c.kind === "fort" || c.hold) {
           if (f.ours.has(c.reg)) fixed += defP(g2, c, r) * (r.fort ? FORT_MUL[r.fort.lv] : 1);
@@ -8496,6 +8680,13 @@
       else delete g2.flags[onKey(nat, e, where)];
     }
   }
+  function inConcert(g2, nat, f) {
+    const k = concertFor(g2, nat);
+    const you = seat2(g2);
+    if (k === 1 || you === null || !f.enemies.includes(you)) return 1;
+    for (const a of Object.keys(g2.nations)) if (a !== nat && g2.nations[a].alive && allied(g2, a, nat) && flag2(g2, onKey(a, you, ""))) return k;
+    return 1;
+  }
   function cond(g2, nat, c, real) {
     const [key2, rest = ""] = c.split(/:(.*)/s);
     const a = rest.split(",");
@@ -8538,7 +8729,7 @@
           setOn(g2, nat, f, 0);
           for (const e of f.enemies) g2.flags[`st:rest:${nat}:${e}`] = g2.turn + OPEN.rest;
         }
-      } else if (f.ratio >= T.attackAt && f.enemies.every((e) => g2.turn >= flag2(g2, `st:rest:${nat}:${e}`))) {
+      } else if (f.ratio >= T.attackAt * inConcert(g2, nat, f) && f.enemies.every((e) => g2.turn >= flag2(g2, `st:rest:${nat}:${e}`))) {
         setOn(g2, nat, f, g2.turn);
         g2.flags[`st:gain:${nat}`] = g2.turn;
       }
@@ -8667,11 +8858,62 @@
     } else if (went) phase.name = went.name;
     const cap4 = n.capital >= 0 ? g2.regions[n.capital] : null;
     if (cap4 && cap4.ctrl === nat && nearEnemy(g2, nat, cap4, OPEN.guardWithin)) phase.staging = { ...phase.staging ?? {}, [cap4.name]: OPEN.guard };
+    const quay = seaBase(g2, nat);
+    if (quay) phase.staging = { ...phase.staging ?? {}, [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, landingsFor(g2, nat).force) };
     for (const op of list2) {
       if (!op.staging || flag2(g2, `st:done:${nat}:${op.id}`) || g2.turn > (op.to ?? 999)) continue;
       phase.staging = { ...phase.staging ?? {}, ...op.staging };
     }
     return phase;
+  }
+  function seaBase(g2, nat) {
+    const L = landingsFor(g2, nat);
+    const you = seat2(g2);
+    const n = g2.nations[nat];
+    if (!L || you === null || !n.alive || n.sealift <= 0 || !atWar(g2, nat, you) || n.capital < 0) return null;
+    const key2 = `st:quay:${nat}`, at = `st:quayAt:${nat}`;
+    const kept = g2.regions[flag2(g2, key2) - 1];
+    if (kept && kept.ctrl === nat && g2.turn - flag2(g2, at) < 6) return kept;
+    const seen = new Uint8Array(g2.regions.length);
+    const q = [n.capital];
+    seen[n.capital] = 1;
+    for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (!seen[j] && g2.regions[j].ctrl === nat) {
+      seen[j] = 1;
+      q.push(j);
+    }
+    const shores = g2.regions.filter((r) => r.ctrl === you && r.port && r.seas.length > 0);
+    let best = null, bd = Infinity;
+    for (const id of q) {
+      const r = g2.regions[id];
+      if (!r.port || r.owner !== nat || r.overseas) continue;
+      const d = seaHops(g2, r.seas, shores);
+      if (d < bd) {
+        bd = d;
+        best = r;
+      }
+    }
+    if (!best || bd > NAVY.landing.range) {
+      delete g2.flags[key2];
+      return null;
+    }
+    g2.flags[key2] = best.id + 1;
+    g2.flags[at] = g2.turn;
+    return best;
+  }
+  function seaHops(g2, from, shores) {
+    const want = new Uint8Array(g2.seas.length);
+    for (const r of shores) for (const z of r.seas) want[z] = 1;
+    const d = new Int16Array(g2.seas.length).fill(-1);
+    const q = [...from];
+    for (const z of from) d[z] = 1;
+    for (let i = 0; i < q.length; i++) {
+      if (want[q[i]]) return d[q[i]];
+      for (const j of g2.seas[q[i]].adj) if (d[j] < 0) {
+        d[j] = d[q[i]] + 1;
+        q.push(j);
+      }
+    }
+    return Infinity;
   }
   function afterDeclaring(g2, nat) {
     const list2 = ops(nat);
@@ -8883,6 +9125,7 @@
     airAI(g2, nat);
     if (!n.atWar.length && !(open && ph?.posture === "redeploy")) return;
     if (ph?.landings) landings(g2, nat, ph);
+    if (open) descent(g2, nat);
     if (ph?.release) {
       for (const c of g2.corps) if (c.nat === nat && c.hold && c.kind !== "fort" && ph.release.includes(g2.regions[c.reg].name)) c.hold = false;
     }
@@ -9082,6 +9325,52 @@
         }
       }
     }
+  }
+  function descent(g2, nat) {
+    const L = landingsFor(g2, nat);
+    const you = seat2(g2);
+    if (!L || you === null) return;
+    const quay = seaBase(g2, nat);
+    if (!quay) return;
+    const ready = quay.units.filter((u) => u.nat === nat && !u.dead && u.kind !== "fort" && u.kind !== "eng" && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= Math.min(4, u.apMax)).sort((a, b) => atkPower(g2, b) - atkPower(g2, a) || a.id - b.id);
+    const force2 = ready.slice(0, Math.min(L.force, liftLeft(g2, nat)));
+    if (force2.length < L.force) return;
+    const went = (k) => {
+      for (const c of force2) c.hold = false;
+      g2.flags[`st:seaNext:${nat}`] = g2.turn + k;
+    };
+    if (g2.turn < (g2.flags[`st:seaNext:${nat}`] ?? 0)) return;
+    const lodged = g2.regions[(g2.flags[`st:lodged:${nat}`] ?? 0) - 1];
+    if (lodged && lodged.ctrl === nat && lodged.port && lodged.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl))) {
+      let sent = 0;
+      for (const c of force2) if (friendlyUnits(g2, lodged, nat).length < STACK && shipMove(g2, c, lodged)) sent++;
+      if (sent) {
+        went(2);
+        return;
+      }
+    }
+    if (hashString(`descent:${g2.seed}:${g2.turn}:${nat}`) / 4294967296 >= L.chance) return;
+    const men2 = force2.reduce((s, c) => s + c.divs * c.str, 0);
+    let best = null, bv = 0;
+    for (const r of landingTargets(g2, force2)) {
+      if (r.ctrl !== you || !r.port) continue;
+      const plan = planLanding(g2, force2, r);
+      if (plan.why || plan.risk > L.risk) continue;
+      if (plan.defended && (!plan.assess || plan.assess.odds < L.odds)) continue;
+      let near = 0;
+      for (const j of [r.id, ...r.nb]) for (const u of hostileUnits(g2, g2.regions[j], nat)) if (u.kind !== "fort") near += u.divs * u.str;
+      if (near > L.near * men2) continue;
+      const v = (2 + r.vp + r.fac + (r.cap ? 6 : 0) + (r.owner !== you ? 2 : 0)) * (plan.defended ? 1 : 1.5) - 10 * plan.risk - 0.2 * near;
+      if (!best || v > bv) {
+        best = r;
+        bv = v;
+      }
+    }
+    if (!best) return;
+    const res = landCorps(g2, force2, best);
+    if (!res.ok) return;
+    went(L.every);
+    if (res.taken) g2.flags[`st:lodged:${nat}`] = best.id + 1;
   }
   function hops(g2, from, pass) {
     const d = new Int16Array(g2.regions.length).fill(-1);
@@ -9640,6 +9929,14 @@
     g2.phase = 0;
     g2.week = 1;
   }
+  var levelNow = (g2) => levelOf(g2);
+  function whyNotSetLevel(g2, id) {
+    if (g2.human === null) return "Nobody is playing this war.";
+    return whyNotLevel(g2, id);
+  }
+  function orderLevel(g2, id) {
+    return whyNotSetLevel(g2, id) === null && setLevel(g2, id);
+  }
   function humanUp(g2) {
     return g2.human !== null && current(g2) === g2.human && g2.nations[g2.human].alive;
   }
@@ -9969,7 +10266,7 @@
   function peekSave(text) {
     try {
       const d = JSON.parse(text);
-      return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && fits(d.regions.length) ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1 } : null;
+      return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && fits(d.regions.length) ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1, level: d.flags?.open === 1 ? d.flags?.level ?? FAIR : null } : null;
     } catch {
       return null;
     }
@@ -10307,6 +10604,7 @@
       humanUp: up,
       eve: onEve(s),
       open: isOpen(s),
+      level: isOpen(s) && s.human ? levelNow(s).name : "",
       fallen: fallenNation,
       // The player's treasury: production points in hand, what the factories earn a month, and what is on order.
       treasury: s.human ? treasuryOf(s, s.human) : null,
@@ -10492,12 +10790,15 @@
   function starts() {
     return {
       years: GRAND.years.map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ""), from: y.turn, note: y.text })),
+      // How hard a grand campaign can be made, easiest first, and the level it is on unless another is chosen.
+      levels: DIFFICULTY.levels.map((l) => ({ id: l.id, name: l.name, blurb: l.blurb, lines: l.lines })),
+      level: DIFFICULTY.start,
       groups: STARTS.map((group) => ({
         ...group,
-        sides: group.sides.map((side) => ({
-          ...side,
-          aims: side.nat && group.from === 1 ? GOAL_KEYS.map((key2) => {
-            const goal = GOALS[side.nat]?.[key2];
+        sides: group.sides.map((side2) => ({
+          ...side2,
+          aims: side2.nat && group.from === 1 ? GOAL_KEYS.map((key2) => {
+            const goal = GOALS[side2.nat]?.[key2];
             return goal ? `${key2 === "short" ? "Short campaign" : "Long campaign"}: ${goal.text}` : "";
           }).filter(Boolean) : []
         }))
@@ -10565,6 +10866,7 @@
       while (g.turn < from) runTurnAI(g);
     }
     g.human = human;
+    if (human && options?.level) orderLevel(g, options.level);
     if (from > 1) takeOver(g);
     if (human) {
       openGoals(g, human, from);

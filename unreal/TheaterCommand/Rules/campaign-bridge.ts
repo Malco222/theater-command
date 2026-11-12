@@ -37,7 +37,7 @@ import { allied, atWar, createGame, men, railReach as railReachOf } from '../../
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
-  orderAir, orderAirBase, orderFleet,
+  orderAir, orderAirBase, orderFleet, levelNow, orderLevel,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
@@ -54,6 +54,7 @@ import { RAIL_LINKS, railCut, railNote } from '../../../src/campaign/rails';
 import { fleetReach } from '../../../src/campaign/navy';
 import { MISSION, airBases, airTargets } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
+import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -91,6 +92,7 @@ function view() {
     humanUp: up,
     eve: onEve(s),
     open: isOpen(s),
+    level: isOpen(s) && s.human ? levelNow(s).name : '',
     fallen: fallenNation,
     // The player's treasury: production points in hand, what the factories earn a month, and what is on order.
     treasury: s.human ? treasuryOf(s, s.human) : null,
@@ -251,6 +253,9 @@ function arrive(s: Game): string | null {
 function starts() {
   return {
     years: GRAND.years.map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ''), from: y.turn, note: y.text })),
+    // How hard a grand campaign can be made, easiest first, and the level it is on unless another is chosen.
+    levels: DIFFICULTY.levels.map((l) => ({ id: l.id, name: l.name, blurb: l.blurb, lines: l.lines })),
+    level: DIFFICULTY.start,
     groups: STARTS.map((group) => ({
       ...group,
       sides: group.sides.map((side) => ({
@@ -339,7 +344,7 @@ function listNames(names: string[]): string {
 }
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function start(options?: { human?: string | null; from?: number; view?: string; seed?: number }) {
+function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string }) {
   const human = options?.human === undefined ? 'GER' : options.human;
   const from = options?.from ?? 1;
   const seed = options?.seed ?? 1939;
@@ -352,6 +357,8 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
     while (g.turn < from) runTurnAI(g);
   }
   g.human = human;
+  // How hard the war is to be (the grand campaign only): set once the player has his seat.
+  if (human && options?.level) orderLevel(g, options.level);
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
   if (human) {

@@ -124,6 +124,21 @@ TArray<FStartGroup> FCampaignSession::Starts()
 			YearObject->TryGetNumberField(TEXT("from"), Year.From);
 		}
 	}
+	Levels.Reset();
+	Object->TryGetStringField(TEXT("level"), DefaultLevel);
+	const TArray<TSharedPtr<FJsonValue>>* LevelValues = nullptr;
+	if (Object->TryGetArrayField(TEXT("levels"), LevelValues))
+	{
+		for (const TSharedPtr<FJsonValue>& LevelValue : *LevelValues)
+		{
+			const TSharedPtr<FJsonObject> LevelObject = LevelValue->AsObject();
+			FGrandLevel& Level = Levels.AddDefaulted_GetRef();
+			LevelObject->TryGetStringField(TEXT("id"), Level.Id);
+			LevelObject->TryGetStringField(TEXT("name"), Level.Name);
+			LevelObject->TryGetStringField(TEXT("blurb"), Level.Blurb);
+			LevelObject->TryGetStringArrayField(TEXT("lines"), Level.Lines);
+		}
+	}
 	for (const TSharedPtr<FJsonValue>& GroupValue : Object->GetArrayField(TEXT("groups")))
 	{
 		const TSharedPtr<FJsonObject> GroupObject = GroupValue->AsObject();
@@ -172,15 +187,16 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 	return Out;
 }
 
-bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError)
+bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level)
 {
 	bRunning = false;
 	if (!bReady && !Prepare(OutError))
 	{
 		return false;
 	}
-	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d}]"),
-		Human.IsEmpty() ? TEXT("null") : *JsonQuote(Human), From, *JsonQuote(ViewMode), Seed);
+	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d%s}]"),
+		Human.IsEmpty() ? TEXT("null") : *JsonQuote(Human), From, *JsonQuote(ViewMode), Seed,
+		Level.IsEmpty() ? TEXT("") : *(TEXT(",\"level\":") + JsonQuote(Level)));
 	FString ViewJson;
 	if (!Host->Call(TEXT("start"), Arguments, ViewJson, OutError))
 	{
@@ -334,6 +350,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("humanUp"), Out.bHumanUp);
 	Object->TryGetBoolField(TEXT("eve"), Out.bEve);
 	Object->TryGetBoolField(TEXT("open"), Out.bOpen);
+	Object->TryGetStringField(TEXT("level"), Out.Level);
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
 	for (const TPair<const TCHAR*, TArray<int32>*>& List : { TPair<const TCHAR*, TArray<int32>*>(TEXT("down"), &Out.BridgesDown), TPair<const TCHAR*, TArray<int32>*>(TEXT("cut"), &Out.RailsCut) })
