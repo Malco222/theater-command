@@ -110,6 +110,11 @@ public:
 
 	const TArray<TObjectPtr<AArmyPiece>>& GetPieces() const { return Pieces; }
 
+	/** The models set out for inspection ("-TheaterParade=Kiev"): whether there are any, and where one stands on the map (or the middle of them all). */
+	bool HasParade() const { return ParadeSpots.Num() > 0; }
+	FVector2D ParadeSpot(int32 Index) const;
+	float ParadeHeight() const { return ParadeLevel; }
+
 	/** Lays the fleets on their seas (or by their harbours) and the air fleets over their airfields. */
 	void ShowFleets(const FCampaignView& View);
 
@@ -125,6 +130,11 @@ private:
 	void BuildTable();
 	void BuildLabels();
 	void BuildTowns();
+
+	/** For looking closely at the models ("-TheaterParade=Ardennes"): sets them out in a row, large, on a board over the region named. */
+	void BuildParade();
+	TArray<FVector2D> ParadeSpots;
+	float ParadeLevel = 0.0f;
 	void BuildTrees();
 	void RebuildHighlight();
 	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection);

@@ -29,6 +29,7 @@ private:
 		FString Name;
 		FString Region; // look at this region; empty for the middle of the map
 		float Zoom = 0.6f;
+		float Lens = 0.0f;
 		float Yaw = 0.0f;
 		float Tilt = 0.0f;
 		FString Select; // pick this region, so its panel is in the picture

@@ -57,7 +57,12 @@ float ACampaignCameraPawn::GetPitch() const
 {
 	// Close in, look across the table; far out, look down on it.
 	const float Base = FMath::Lerp(-40.0f, -74.0f, FMath::Pow(Zoom, 0.85f));
-	return FMath::Clamp(Base + Tilt, -88.0f, -22.0f);
+	return FMath::Clamp(Base + Tilt, -88.0f, FlattestPitch);
+}
+
+void ACampaignCameraPawn::SetLens(float FieldOfViewDegrees)
+{
+	Camera->SetFieldOfView(FieldOfViewDegrees);
 }
 
 float ACampaignCameraPawn::GetHorizontalFov() const
@@ -106,7 +111,7 @@ void ACampaignCameraPawn::TiltBy(float Degrees)
 void ACampaignCameraPawn::SetHeading(float YawDegrees, float TiltDegrees)
 {
 	TargetYaw = YawDegrees;
-	TargetTilt = FMath::Clamp(TiltDegrees, -30.0f, 30.0f);
+	TargetTilt = FMath::Clamp(TiltDegrees, -30.0f, 90.0f);
 }
 
 void ACampaignCameraPawn::GoTo(const FVector& WorldFocus, float InZoom, bool bImmediately)
@@ -143,7 +148,7 @@ void ACampaignCameraPawn::Tick(float DeltaSeconds)
 void ACampaignCameraPawn::ApplyView()
 {
 	const float Distance = GetDistance();
-	SetActorLocation(Focus);
+	SetActorLocation(Focus + FVector(0.0, 0.0, FocusHeight));
 	Arm->TargetArmLength = Distance;
 	Arm->SetWorldRotation(FRotator(GetPitch(), Yaw, 0.0f));
 

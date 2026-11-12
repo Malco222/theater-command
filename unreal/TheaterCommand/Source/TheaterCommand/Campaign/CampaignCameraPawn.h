@@ -59,6 +59,11 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Camera")
 	float MinDistance = 1800.0f;
 
+	/** How high above the table the point being looked at is, and the flattest the view may go (degrees below level). Changed only for looking at models. */
+	float FocusHeight = 0.0f;
+	void SetLens(float FieldOfViewDegrees);
+	float FlattestPitch = -22.0f;
+
 	UPROPERTY(EditAnywhere, Category = "Camera")
 	float MaxDistance = 30000.0f;
 

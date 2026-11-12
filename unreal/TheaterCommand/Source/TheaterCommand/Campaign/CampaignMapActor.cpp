@@ -141,6 +141,7 @@ bool ACampaignMapActor::BuildMap()
 	BuildBorders();
 	BuildTable();
 	BuildTowns();
+	BuildParade();
 	BuildTrees();
 	BuildLabels();
 
@@ -821,6 +822,100 @@ void ACampaignMapActor::BuildTowns()
 	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points"), Count, Model.Vertices.Num());
 }
 
+FVector2D ACampaignMapActor::ParadeSpot(int32 Index) const
+{
+	if (ParadeSpots.IsValidIndex(Index))
+	{
+		return ParadeSpots[Index];
+	}
+	FVector2D Middle = FVector2D::ZeroVector;
+	for (const FVector2D& Spot : ParadeSpots)
+	{
+		Middle += Spot / ParadeSpots.Num();
+	}
+	return Middle;
+}
+
+void ACampaignMapActor::BuildParade()
+{
+	FString Where;
+	if (!FParse::Value(FCommandLine::Get(), TEXT("TheaterParade="), Where, false))
+	{
+		return;
+	}
+	const int32* Id = Data.RegionByName.Find(Where);
+	if (!Id)
+	{
+		UE_LOG(LogTheater, Warning, TEXT("Parade: no region called %s"), *Where);
+		return;
+	}
+	// The models stand in line ahead on a plain board, all to one scale, in front of a wall ruled at every
+	// half metre, with a man of 1.75 m by each: so each can be looked at closely, measured, and compared with
+	// the next. "-TheaterModels=PanzerIV,T34" chooses which; all of them otherwise.
+	TArray<FString> Names = FMiniatureMesh::VehicleNames();
+	FString Wanted;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterModels="), Wanted, false))
+	{
+		Wanted.ParseIntoArray(Names, TEXT(","));
+	}
+	const FVector2D Centre = Data.Regions[*Id].Center;
+	const double Metre = 22.0, Apart = 9.0 * Metre;
+	const FVector Middle = SurfacePoint(Centre.X, Centre.Y, 0.0) + FVector(0.0, 0.0, 80.0);
+	ParadeLevel = Middle.Z - GetActorLocation().Z + 1.3 * Metre;
+	const double Long = Apart * Names.Num() + 30.0 * Metre;
+	FMiniatureMesh Model;
+	const FLinearColor Board(FColor::FromHex(TEXT("B9AD8F"))), Wall(FColor::FromHex(TEXT("D9D3C2"))), Ink(FColor::FromHex(TEXT("3A3A3A"))), Red(FColor::FromHex(TEXT("A02020")));
+	Model.Box(Middle - FVector(0.0, 400.0 * Metre, 4.0), FVector(Long * 3.0, 860.0 * Metre, 8.0), Board);
+	// The wall behind (toward +Y, so a view turned a quarter-circle looks square at it), ruled in half metres, the whole metres heavier.
+	const double WallAt = 3.2 * Metre;
+	Model.Box(Middle + FVector(0.0, WallAt + 2.0, 10.0 * Metre), FVector(Long * 3.0, 4.0, 20.0 * Metre), Wall);
+	auto Write = [this, &Middle, WallAt, Metre](const FString& Text, double Along, double Up, double Size)
+	{
+		UTextRenderComponent* Label = NewObject<UTextRenderComponent>(this);
+		Label->SetupAttachment(Root);
+		Label->SetText(FText::FromString(Text));
+		Label->SetWorldSize(Size * Metre);
+		Label->SetTextRenderColor(FColor(40, 40, 40));
+		Label->SetHorizontalAlignment(EHTA_Center);
+		Label->SetVerticalAlignment(EVRTA_TextCenter);
+		Label->SetCastShadow(false);
+		Label->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		// Upright on the wall, facing out from it.
+		Label->SetRelativeRotation(FMatrix(FVector(0.0, -1.0, 0.0), FVector(1.0, 0.0, 0.0), FVector(0.0, 0.0, 1.0), FVector::ZeroVector).Rotator());
+		Label->SetWorldLocation(Middle + FVector(Along, WallAt - 1.0, Up * Metre));
+		Label->RegisterComponent();
+	};
+	for (int32 Half = 1; Half <= 7; ++Half)
+	{
+		const bool bWhole = Half % 2 == 0;
+		Model.Box(Middle + FVector(0.0, WallAt - 0.3, Half * 0.5 * Metre), FVector(Long, 0.6, (bWhole ? 0.05 : 0.02) * Metre), bWhole ? Ink : FLinearColor(0.35f, 0.35f, 0.35f));
+	}
+	for (int32 K = 0; K < Names.Num(); ++K)
+	{
+		const FVector Spot = Middle + FVector(-(K - (Names.Num() - 1) * 0.5) * Apart, 0.0, 0.0);
+		if (!Model.Vehicle(Names[K], Spot, Metre, 0.0))
+		{
+			UE_LOG(LogTheater, Warning, TEXT("Parade: no model called %s"), *Names[K]);
+		}
+		Write(FMiniatureMesh::VehicleTitle(Names[K]), Spot.X - Middle.X, 3.6, 0.42);
+		for (int32 Whole = 1; Whole <= 3; ++Whole)
+		{
+			Write(FString::Printf(TEXT("%d m"), Whole), Spot.X - Middle.X + 4.1 * Metre, Whole + 0.2, 0.3);
+		}
+		// The man, a little ahead of the nose and in line with the middle of the vehicle; and a post beside him
+		// marked red at 1.75 m, the height of his head.
+		Model.Rifleman(Spot + FVector(-4.0 * Metre, 0.0, 0.0), Metre * 1.75, FLinearColor(FColor::FromHex(TEXT("77735A"))), 90.0);
+		Write(TEXT("soldier 1.75 m"), Spot.X - Middle.X - 4.0 * Metre, 2.2, 0.22);
+		ParadeSpots.Add(WorldToMap(Spot));
+	}
+	UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this);
+	Mesh->SetupAttachment(Root);
+	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh->RegisterComponent();
+	Mesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+	Mesh->SetMaterial(0, SceneryMaterial);
+}
+
 void ACampaignMapActor::BuildTrees()
 {
 	for (UProceduralMeshComponent* Mesh : TreeMeshes)
@@ -1073,9 +1168,9 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
 	UWorld* World = GetWorld();
-	if (!World || !Data.IsLoaded())
+	if (!World || !Data.IsLoaded() || HasParade())
 	{
-		return;
+		return; // (with the models out for inspection, the armies stay in their box)
 	}
 
 	// Where every corps' piece stood before this change, for the ones that are about to march.

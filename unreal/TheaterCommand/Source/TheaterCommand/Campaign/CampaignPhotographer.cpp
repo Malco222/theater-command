@@ -229,8 +229,9 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			if (Parts.Num() > 0)
 			{
 				const float Zoom = Parts.IsValidIndex(1) ? FCString::Atof(*Parts[1]) : 0.3f;
-				Add(*FString::Printf(TEXT("look-%s-%s"), *Parts[0].Replace(TEXT(" "), TEXT("-")), Parts.IsValidIndex(1) ? *Parts[1] : TEXT("0.3")), *Parts[0], Zoom,
-					Parts.IsValidIndex(2) ? FCString::Atof(*Parts[2]) : 0.0f, Parts.IsValidIndex(3) ? FCString::Atof(*Parts[3]) : 0.0f);
+				Add(*FString::Printf(TEXT("look%d-%s-%s"), Shots.Num() + 1, *Parts[0].Replace(TEXT(" "), TEXT("-")).Replace(TEXT("@"), TEXT("")), Parts.IsValidIndex(1) ? *Parts[1] : TEXT("0.3")), *Parts[0], Zoom,
+					Parts.IsValidIndex(2) ? FCString::Atof(*Parts[2]) : 0.0f, Parts.IsValidIndex(3) ? FCString::Atof(*Parts[3]) : 0.0f)
+					.Lens = Parts.IsValidIndex(4) ? FCString::Atof(*Parts[4]) : 0.0f; // a fifth part is the width of the view in degrees: small for a long lens
 			}
 		}
 	}
@@ -298,6 +299,22 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			{
 				At = Region.Center;
 			}
+		}
+	}
+	// "@parade" is the middle of the board the models are set out on for inspection; "@parade2" is the third model
+	// on it. For these the view goes much closer than the game allows, with everything sharp and nothing over it.
+	if (Shot.Region.StartsWith(TEXT("@parade")) && Table->HasParade())
+	{
+		const FString Which = Shot.Region.Mid(7);
+		At = Table->ParadeSpot(Which.IsEmpty() ? INDEX_NONE : FCString::Atoi(*Which));
+		Eye->MinDistance = 300.0f;
+		Eye->MiniatureStrength = 1.0f;
+		Eye->FocusHeight = Table->ParadeHeight();
+		Eye->FlattestPitch = 0.0f;
+		Eye->SetLens(Shot.Lens > 0.0f ? Shot.Lens : 42.0f);
+		if (GEngine && GEngine->GameViewport)
+		{
+			GEngine->GameViewport->RemoveAllViewportWidgets();
 		}
 	}
 	Eye->SetHeading(Shot.Yaw, Shot.Tilt);

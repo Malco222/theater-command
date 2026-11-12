@@ -1,4 +1,5 @@
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/CampaignMiniatureParts.h"
 
 namespace
 {
@@ -17,33 +18,26 @@ namespace
 		return FLinearColor(Nation.R * Depth, Nation.G * Depth, Nation.B * Depth, 1.0f);
 	}
 
-	/** A point of a figure, set out from where the figure stands and turned with it. */
-	struct FPlacing
-	{
-		FVector Where;
-		double Scale;
-		double Cos, Sin;
-
-		FPlacing(const FVector& InWhere, double InScale, double TurnDegrees)
-			: Where(InWhere), Scale(InScale), Cos(FMath::Cos(FMath::DegreesToRadians(TurnDegrees))), Sin(FMath::Sin(FMath::DegreesToRadians(TurnDegrees)))
-		{
-		}
-
-		/** Forward is toward the figure's front, Right to its right, Up above the ground. */
-		FVector At(double Forward, double Right, double Up) const
-		{
-			// A figure that is not turned faces along -X.
-			const double X = -Forward, Y = Right;
-			return Where + FVector(X * Cos - Y * Sin, X * Sin + Y * Cos, Up) * Scale;
-		}
-	};
+	using FPlacing = MiniatureParts::FPlacing;
 }
 
 int32 FMiniatureMesh::Add(const FVector& Position, const FVector& Normal, const FColor& Colour)
 {
 	Vertices.Add(Position);
 	Normals.Add(Normal);
-	Colors.Add(Colour);
+	if (DustTop > DustFoot && Position.Z < DustTop)
+	{
+		// The dust of the road: thickest at the ground, gone by the height it is told to stop at.
+		const float Much = FMath::Clamp(static_cast<float>((DustTop - Position.Z) / (DustTop - DustFoot)), 0.0f, 1.0f) * DustAmount;
+		Colors.Add(FColor(
+			static_cast<uint8>(FMath::Lerp(static_cast<float>(Colour.R), static_cast<float>(Dust.R), Much)),
+			static_cast<uint8>(FMath::Lerp(static_cast<float>(Colour.G), static_cast<float>(Dust.G), Much)),
+			static_cast<uint8>(FMath::Lerp(static_cast<float>(Colour.B), static_cast<float>(Dust.B), Much)), Colour.A));
+	}
+	else
+	{
+		Colors.Add(Colour);
+	}
 	return Vertices.Num() - 1;
 }
 
@@ -189,6 +183,245 @@ void FMiniatureMesh::Ball(const FVector& Center, const FVector& Size, const FLin
 				Face(B, D, C, Out);
 			}
 		}
+	}
+}
+
+// ---------------------------------------------------------------------------- shapes for real vehicles
+
+void FMiniatureMesh::Profile(const FVector& Where, double Scale, double Turn, const TArray<FVector2D>& SideOutline, double Right0, double Right1, const FLinearColor& Colour)
+{
+	const FPlacing P(Where, Scale, Turn);
+	const FColor Paint = Colour.ToFColor(true);
+	const int32 Count = SideOutline.Num();
+	FVector2D Middle = FVector2D::ZeroVector;
+	for (const FVector2D& Point : SideOutline)
+	{
+		Middle += Point / Count;
+	}
+	const FVector Across = (P.At(0.0, 1.0, 0.0) - P.At(0.0, 0.0, 0.0)).GetSafeNormal();
+	// The two flat sides, each a fan round its middle; then the skin between them.
+	for (int32 Side = 0; Side < 2; ++Side)
+	{
+		const double Right = Side ? Right1 : Right0;
+		const FVector Out = Side ? Across : -Across;
+		const int32 Centre = Add(P.At(Middle.X, Right, Middle.Y), Out, Paint);
+		TArray<int32> Rim;
+		for (const FVector2D& Point : SideOutline)
+		{
+			Rim.Add(Add(P.At(Point.X, Right, Point.Y), Out, Paint));
+		}
+		for (int32 K = 0; K < Count; ++K)
+		{
+			Face(Centre, Rim[K], Rim[(K + 1) % Count], Out);
+		}
+	}
+	const FVector Heart = P.At(Middle.X, (Right0 + Right1) * 0.5, Middle.Y);
+	for (int32 K = 0; K < Count; ++K)
+	{
+		const FVector2D A = SideOutline[K], B = SideOutline[(K + 1) % Count];
+		const FVector A0 = P.At(A.X, Right0, A.Y), A1 = P.At(A.X, Right1, A.Y), B0 = P.At(B.X, Right0, B.Y), B1 = P.At(B.X, Right1, B.Y);
+		FVector Out = ((B0 - A0) ^ (A1 - A0)).GetSafeNormal();
+		if ((Out | ((A0 + B1) * 0.5 - Heart)) < 0.0)
+		{
+			Out = -Out;
+		}
+		Quad(A0, B0, B1, A1, Out, Paint);
+	}
+}
+
+void FMiniatureMesh::Loft(const FVector& Where, double Scale, double Turn, const TArray<FVector2D>& Foot, double FootHeight, const TArray<FVector2D>& Head, double HeadHeight, const FLinearColor& Colour)
+{
+	const FPlacing P(Where, Scale, Turn);
+	const FColor Paint = Colour.ToFColor(true);
+	const int32 Count = FMath::Min(Foot.Num(), Head.Num());
+	FVector2D FootMiddle = FVector2D::ZeroVector, HeadMiddle = FVector2D::ZeroVector;
+	for (int32 K = 0; K < Count; ++K)
+	{
+		FootMiddle += Foot[K] / Count;
+		HeadMiddle += Head[K] / Count;
+	}
+	const FVector Heart = P.At((FootMiddle.X + HeadMiddle.X) * 0.5, (FootMiddle.Y + HeadMiddle.Y) * 0.5, (FootHeight + HeadHeight) * 0.5);
+	// The roof (and the floor, which is seldom seen), then the sides.
+	for (int32 Layer = 0; Layer < 2; ++Layer)
+	{
+		const TArray<FVector2D>& Plan = Layer ? Head : Foot;
+		const FVector2D Middle = Layer ? HeadMiddle : FootMiddle;
+		const double Height = Layer ? HeadHeight : FootHeight;
+		const FVector Out = Layer ? FVector::UpVector : -FVector::UpVector;
+		const int32 Centre = Add(P.At(Middle.X, Middle.Y, Height), Out, Paint);
+		TArray<int32> Rim;
+		for (int32 K = 0; K < Count; ++K)
+		{
+			Rim.Add(Add(P.At(Plan[K].X, Plan[K].Y, Height), Out, Paint));
+		}
+		for (int32 K = 0; K < Count; ++K)
+		{
+			Face(Centre, Rim[K], Rim[(K + 1) % Count], Out);
+		}
+	}
+	for (int32 K = 0; K < Count; ++K)
+	{
+		const int32 N = (K + 1) % Count;
+		const FVector A0 = P.At(Foot[K].X, Foot[K].Y, FootHeight), B0 = P.At(Foot[N].X, Foot[N].Y, FootHeight);
+		const FVector A1 = P.At(Head[K].X, Head[K].Y, HeadHeight), B1 = P.At(Head[N].X, Head[N].Y, HeadHeight);
+		FVector Out = ((B0 - A0) ^ (A1 - A0)).GetSafeNormal();
+		if ((Out | ((A0 + B1) * 0.5 - Heart)) < 0.0)
+		{
+			Out = -Out;
+		}
+		Quad(A0, B0, B1, A1, Out, Paint);
+	}
+}
+
+void FMiniatureMesh::Stack(const FVector& Where, double Scale, double Turn, const TArray<TArray<FVector2D>>& Plans, const TArray<double>& Heights, const FLinearColor& Colour, bool bSmooth)
+{
+	const FPlacing P(Where, Scale, Turn);
+	const FColor Paint = Colour.ToFColor(true);
+	const int32 Layers = FMath::Min(Plans.Num(), Heights.Num());
+	if (Layers < 2)
+	{
+		return;
+	}
+	const int32 Count = Plans[0].Num();
+	TArray<FVector2D> Middles;
+	for (int32 L = 0; L < Layers; ++L)
+	{
+		FVector2D Middle = FVector2D::ZeroVector;
+		for (const FVector2D& Point : Plans[L])
+		{
+			Middle += Point / Count;
+		}
+		Middles.Add(Middle);
+	}
+	// The floor and the roof.
+	for (int32 End = 0; End < 2; ++End)
+	{
+		const int32 L = End ? Layers - 1 : 0;
+		const FVector Out = End ? FVector::UpVector : -FVector::UpVector;
+		const int32 Centre = Add(P.At(Middles[L].X, Middles[L].Y, Heights[L]), Out, Paint);
+		TArray<int32> Rim;
+		for (int32 K = 0; K < Count; ++K)
+		{
+			Rim.Add(Add(P.At(Plans[L][K].X, Plans[L][K].Y, Heights[L]), Out, Paint));
+		}
+		for (int32 K = 0; K < Count; ++K)
+		{
+			Face(Centre, Rim[K], Rim[(K + 1) % Count], Out);
+		}
+	}
+	if (!bSmooth)
+	{
+		// Flat plates, each with its own edge: welded armour.
+		for (int32 L = 0; L + 1 < Layers; ++L)
+		{
+			const FVector Heart = P.At((Middles[L].X + Middles[L + 1].X) * 0.5, (Middles[L].Y + Middles[L + 1].Y) * 0.5, (Heights[L] + Heights[L + 1]) * 0.5);
+			for (int32 K = 0; K < Count; ++K)
+			{
+				const int32 N = (K + 1) % Count;
+				const FVector A0 = P.At(Plans[L][K].X, Plans[L][K].Y, Heights[L]), B0 = P.At(Plans[L][N].X, Plans[L][N].Y, Heights[L]);
+				const FVector A1 = P.At(Plans[L + 1][K].X, Plans[L + 1][K].Y, Heights[L + 1]), B1 = P.At(Plans[L + 1][N].X, Plans[L + 1][N].Y, Heights[L + 1]);
+				FVector Out = ((B0 - A0) ^ (A1 - A0)).GetSafeNormal();
+				if ((Out | ((A0 + B1) * 0.5 - Heart)) < 0.0)
+				{
+					Out = -Out;
+				}
+				Quad(A0, B0, B1, A1, Out, Paint);
+			}
+		}
+		return;
+	}
+	// One rounded skin, lit as a curve: cast armour.
+	TArray<int32> Shell;
+	for (int32 L = 0; L < Layers; ++L)
+	{
+		const int32 Lower = FMath::Max(L - 1, 0), Upper = FMath::Min(L + 1, Layers - 1);
+		const double Rise = Heights[Upper] - Heights[Lower];
+		for (int32 K = 0; K < Count; ++K)
+		{
+			const FVector2D Here = Plans[L][K];
+			const FVector2D Along = (Plans[L][(K + 1) % Count] - Plans[L][(K + Count - 1) % Count]).GetSafeNormal();
+			FVector2D Out(Along.Y, -Along.X);
+			if ((Out | (Here - Middles[L])) < 0.0)
+			{
+				Out = -Out;
+			}
+			const double Spread = (Plans[Upper][K] - Middles[Upper]).Size() - (Plans[Lower][K] - Middles[Lower]).Size();
+			Shell.Add(Add(P.At(Here.X, Here.Y, Heights[L]), P.Toward(Out.X * Rise, Out.Y * Rise, -Spread), Paint));
+		}
+	}
+	for (int32 L = 0; L + 1 < Layers; ++L)
+	{
+		for (int32 K = 0; K < Count; ++K)
+		{
+			const int32 A = Shell[L * Count + K], B = Shell[L * Count + (K + 1) % Count], C = Shell[(L + 1) * Count + K], D = Shell[(L + 1) * Count + (K + 1) % Count];
+			const FVector Out = Normals[A] + Normals[D];
+			Face(A, B, C, Out);
+			Face(B, D, C, Out);
+		}
+	}
+}
+
+void FMiniatureMesh::Disc(const FVector& Center, const FVector& Facing, double Radius, const FLinearColor& Colour, int32 Sides)
+{
+	const FVector Out = Facing.GetSafeNormal();
+	FVector Side, Other;
+	Out.FindBestAxisVectors(Side, Other);
+	const FColor Paint = Colour.ToFColor(true);
+	const int32 Middle = Add(Center, Out, Paint);
+	int32 Previous = INDEX_NONE;
+	for (int32 K = 0; K <= Sides; ++K)
+	{
+		const double Angle = UE_DOUBLE_TWO_PI * K / Sides;
+		const int32 Rim = Add(Center + (Side * FMath::Cos(Angle) + Other * FMath::Sin(Angle)) * Radius, Out, Paint);
+		if (Previous != INDEX_NONE)
+		{
+			Face(Middle, Previous, Rim, Out);
+		}
+		Previous = Rim;
+	}
+}
+
+void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing)
+{
+	// Drawn lying flat, then stood up against the surface: its top toward the sky (or toward the front, on a roof).
+	FMiniatureMesh Flat;
+	Flat.WingMarking(FVector::ZeroVector, Radius, Tag, 0.0);
+	const FVector Out = Facing.GetSafeNormal();
+	FVector Top = FVector::UpVector - Out * Out.Z;
+	Top = Top.SizeSquared() < 1.0e-4 ? FVector(-1.0, 0.0, 0.0) : Top.GetSafeNormal();
+	const FVector Side = Top ^ Out;
+	const int32 First = Vertices.Num();
+	for (int32 K = 0; K < Flat.Vertices.Num(); ++K)
+	{
+		const FVector V = Flat.Vertices[K], N = Flat.Normals[K];
+		Vertices.Add(Where + Top * -V.X + Side * V.Y + Out * V.Z);
+		Normals.Add((Top * -N.X + Side * N.Y + Out * N.Z).GetSafeNormal());
+		Colors.Add(Flat.Colors[K]);
+	}
+	for (const int32 Index : Flat.Triangles)
+	{
+		Triangles.Add(First + Index);
+	}
+}
+
+void FMiniatureMesh::Stamp(const FMiniatureMesh& Model, const FVector& Where, double Scale, double Turn)
+{
+	const double Cos = FMath::Cos(FMath::DegreesToRadians(Turn)), Sin = FMath::Sin(FMath::DegreesToRadians(Turn));
+	const int32 First = Vertices.Num();
+	Vertices.Reserve(First + Model.Vertices.Num());
+	Normals.Reserve(First + Model.Vertices.Num());
+	Colors.Reserve(First + Model.Vertices.Num());
+	for (int32 K = 0; K < Model.Vertices.Num(); ++K)
+	{
+		const FVector V = Model.Vertices[K], N = Model.Normals[K];
+		Vertices.Add(Where + FVector(V.X * Cos - V.Y * Sin, V.X * Sin + V.Y * Cos, V.Z) * Scale);
+		Normals.Add(FVector(N.X * Cos - N.Y * Sin, N.X * Sin + N.Y * Cos, N.Z));
+		Colors.Add(Model.Colors[K]);
+	}
+	Triangles.Reserve(Triangles.Num() + Model.Triangles.Num());
+	for (const int32 Index : Model.Triangles)
+	{
+		Triangles.Add(First + Index);
 	}
 }
 
@@ -377,6 +610,22 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 		Disc(1.0, Paint(TEXT("1B2A5C")));
 		Star(0.95, White);
 		Disc(0.2, Red); // the red centre, carried until the spring of 1942
+	}
+	else if (Tag == TEXT("USA-ARMY"))
+	{
+		Star(1.0, White); // the plain white star of the army's vehicles
+	}
+	else if (Tag == TEXT("UK-FLASH"))
+	{
+		// The red, white and red recognition flash of British tanks.
+		Bar(-0.62, -1.0, 0.62, -0.34, Red);
+		Bar(-0.62, -0.34, 0.62, 0.34, White);
+		Bar(-0.62, 0.34, 0.62, 1.0, Red);
+		++Layer;
+	}
+	else if (Tag == TEXT("SOV-ARMY"))
+	{
+		Star(1.0, Paint(TEXT("B01818")));
 	}
 	else if (Tag == TEXT("SOV"))
 	{
@@ -829,7 +1078,14 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 		const double Turn = bPair ? (K ? 20.0 : -20.0) : -24.0;
 		switch (Heavy[K])
 		{
-		case 0: Tank(Where, Size, Vehicles, Turn); break;
+		case 0:
+			// The nation's own tank if it is modelled (a real metre is drawn so that a six-metre tank is as long as
+			// the plain one was), or the plain one in the nation's paint.
+			if (!MainTank(Where, Size * 0.43, Tag, Turn))
+			{
+				Tank(Where, Size, Vehicles, Turn);
+			}
+			break;
 		case 1: FieldGun(Where, Size * 1.05, Vehicles, Turn); break;
 		case 2: Lorry(Where, Size, Vehicles, Turn); break;
 		default: Bunker(Where, Size * 1.15, Nation, Turn); break;

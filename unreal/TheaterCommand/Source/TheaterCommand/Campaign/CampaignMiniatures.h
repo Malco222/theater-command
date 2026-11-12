@@ -38,6 +38,50 @@ struct FMiniatureMesh
 	/** A flat shape with upright sides: an outline (in the figure's own plan, x forward, y to its right) raised from Foot to Top. */
 	void Slab(const FVector& Where, double Scale, double Turn, const TArray<FVector2D>& Outline, double Foot, double Top, const FLinearColor& Colour);
 
+	// ---- Shapes for building real vehicles from their measurements. Each is set out from Where, turned by Turn,
+	// with the vehicle's own x forward, y to its right and z up, in units of Scale (a metre of the real thing).
+
+	/** A side view pushed through the vehicle's width: an outline in (forward, up), from Right0 to Right1 across. */
+	void Profile(const FVector& Where, double Scale, double Turn, const TArray<FVector2D>& SideOutline, double Right0, double Right1, const FLinearColor& Colour);
+
+	/** A shape that changes from one plan to another as it rises: two outlines of the same number of points, in (forward, right), at two heights. */
+	void Loft(const FVector& Where, double Scale, double Turn, const TArray<FVector2D>& Foot, double FootHeight, const TArray<FVector2D>& Head, double HeadHeight, const FLinearColor& Colour);
+
+	/**
+	 * A shape built up in layers: a plan outline (forward, right) at each height, all of the same number of
+	 * points. Flat-sided for welded plate; bSmooth rounds it into one skin, for cast armour.
+	 */
+	void Stack(const FVector& Where, double Scale, double Turn, const TArray<TArray<FVector2D>>& Plans, const TArray<double>& Heights, const FLinearColor& Colour, bool bSmooth);
+
+	/** A flat disc facing the way given: the face of a wheel, the lens of a lamp. */
+	void Disc(const FVector& Center, const FVector& Facing, double Radius, const FLinearColor& Colour, int32 Sides = 12);
+
+	/** A national marking (as WingMarking) painted on a surface that faces the way given: the side of a hull, a turret roof. */
+	void Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing);
+
+	/** Copies a finished model into this mesh, at a place, to a size, turned. */
+	void Stamp(const FMiniatureMesh& Model, const FVector& Where, double Scale, double Turn);
+
+	/**
+	 * A real vehicle, built from its measurements: "PanzerIV", "T34", "Sherman", "Matilda". Metre is the size
+	 * of a real metre on the table, so everything set out with the same Metre is in scale with everything
+	 * else. False if there is no model of that name.
+	 */
+	bool Vehicle(const FString& Name, const FVector& Where, double Metre, double Turn = 0.0);
+
+	/** The tank a nation's armour is known by, or nothing if none is modelled yet for it. */
+	static FString MainTankOf(const FString& Tag);
+	bool MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn = 0.0);
+
+	/** Every vehicle there is a model of; and a line about one, with its real length and height. */
+	static TArray<FString> VehicleNames();
+	static FString VehicleTitle(const FString& Name);
+
+	/** Dust: anything added below DustTop is tinted toward Dust, most at DustFoot. Off while DustTop is not above DustFoot. */
+	double DustFoot = 0.0, DustTop = 0.0;
+	float DustAmount = 0.0f;
+	FColor Dust = FColor(138, 122, 92);
+
 	// ---- Ships and aircraft. A ship lies on the water at Where, bows along Turn; an aeroplane flies above its stand.
 
 	void Battleship(const FVector& Where, double Length, const FLinearColor& Nation, double Turn = 0.0);
@@ -98,7 +142,7 @@ struct FMiniatureMesh
 	static FLinearColor UniformColour(const FString& Tag);
 	static FLinearColor VehicleColour(const FString& Tag);
 
-private:
+	// ---- The bare makings, for the files that build models.
 	int32 Add(const FVector& Position, const FVector& Normal, const FColor& Colour);
 	void Face(int32 A, int32 B, int32 C, const FVector& Outward);
 	void Quad(const FVector& A, const FVector& B, const FVector& C, const FVector& D, const FVector& Outward, const FColor& Colour);
