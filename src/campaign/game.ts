@@ -14,6 +14,7 @@ import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
+import { techTick, winterReady } from './tech';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
@@ -269,7 +270,7 @@ export function weather(g: Game): { mud: boolean; winter: boolean; text: string 
 
 /** True when this corps is campaigning on Soviet ground in winter without the equipment for it. */
 export function frozen(g: Game, nat: string, r: Region): boolean {
-  return weather(g).winter && EASTERN.deepOwners.includes(r.owner) && !EASTERN.winter.hardy.includes(nat);
+  return weather(g).winter && EASTERN.deepOwners.includes(r.owner) && !EASTERN.winter.hardy.includes(nat) && !winterReady(g, nat);
 }
 
 /**
@@ -747,7 +748,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const a = giftA !== 1 ? traitNames(g, attackers, target, 'attack', !land) : [], d = giftD !== 1 ? traitNames(g, defenders, target, 'defence') : [];
     const say = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
     lines.push({
-      label: 'National abilities', value: [a.length ? `Attacking: ${say(a)}` : '', d.length ? `Defending: ${say(d)}` : ''].filter(Boolean).join('. '),
+      label: 'Abilities and technology', value: [a.length ? `Attacking: ${say(a)}` : '', d.length ? `Defending: ${say(d)}` : ''].filter(Boolean).join('. '),
       effect: [giftA !== 1 ? `Attack up as much as ${Math.round((giftA - 1) * 100)}% for the corps it covers` : '', giftD !== 1 ? `${giftA !== 1 ? 'defence' : 'Defence'} up as much as ${Math.round((giftD - 1) * 100)}% for the corps it covers` : ''].filter(Boolean).join(', '),
     });
   }
@@ -1449,6 +1450,7 @@ export function startPhase(g: Game, nat: string): void {
   navalUpkeep(g, nat);
   airUpkeep(g, nat);
   researchTick(g, nat);
+  techTick(g, nat);
   computeSupply(g);
   cutOffNews(g);
   // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good

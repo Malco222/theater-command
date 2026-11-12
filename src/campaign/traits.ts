@@ -7,6 +7,7 @@ import { turnToDate } from '../core/ticket';
 import { allied, atWar, headline } from './game';
 import { provinceYield } from './economy';
 import type { LedgerLine } from './economy';
+import { techTraits } from './tech';
 import type { Corps, Game, Kind, Region, Terrain } from './types';
 import { KIND } from './types';
 
@@ -121,15 +122,21 @@ function holds(g: Game, w: When | undefined, c: Corps, target: Region, landing: 
 function edge(g: Game, c: Corps, target: Region, landing: boolean, side: 'attack' | 'defence', names?: Set<string>): number {
   if (!traitRules(g)) return 1;
   const row = TRAITS.nations[c.nat];
-  if (!row) return 1;
   let m = 1;
-  for (const t of row.traits) {
+  if (row) for (const t of row.traits) {
     const x = t[side];
     if (x === undefined || t.builtin || !holds(g, t.when, c, target, landing)) continue;
     m *= x;
     names?.add(t.name);
   }
-  const u = c.elite && row.unit && row.unit.id === c.elite ? row.unit : null;
+  // What the nation has researched counts the same way: mobile warfare, heavy artillery, landing craft.
+  for (const t of techTraits(g, c.nat)) {
+    const x = t[side];
+    if (x === undefined || !holds(g, t.when, c, target, landing)) continue;
+    m *= x;
+    names?.add(t.name);
+  }
+  const u = c.elite && row?.unit && row.unit.id === c.elite ? row.unit : null;
   const x = u?.[side];
   if (u && x !== undefined && holds(g, u.when, c, target, landing)) { m *= x; names?.add(u.label); }
   return m;
@@ -195,6 +202,7 @@ const product = (g: Game, nat: string, pick: (t: Trait) => number | undefined): 
   if (!traitRules(g)) return 1;
   let m = 1;
   for (const t of traitsOf(nat)) { const x = t.builtin ? undefined : pick(t); if (x !== undefined) m *= x; }
+  for (const t of techTraits(g, nat)) { const x = pick(t); if (x !== undefined) m *= x; }
   return m;
 };
 

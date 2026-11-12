@@ -11,6 +11,7 @@ import { STACK } from './types';
 import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps } from './game';
 import { leagueMonth, ownPath, standsWith } from './league';
 import { alertNation, traitsMonth } from './traits';
+import { techMonth } from './tech';
 import { fleetsOnFall } from './navy';
 import { airOnFall } from './air';
 
@@ -561,6 +562,7 @@ export function monthlyDiplomacy(g: Game): void {
   // The grand campaign: now and then a circle of small countries founds the League, or another joins it.
   leagueMonth(g);
   traitsMonth(g);
+  techMonth(g);
   // In free play history's calendar only says when an event may first happen: if its conditions come true later
   // than they did, it happens later.
   const open = g.flags.open === 1;

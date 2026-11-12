@@ -77,6 +77,15 @@ export interface Nation {
   lab: Lab | null;
   /** A member of the League, the third alliance of smaller nations (the grand campaign). It stands off the track between the two blocs. */
   league?: boolean;
+  /** The technology tree (the grand campaign): what the nation has researched and what its teams are working on. */
+  tech?: TechState;
+}
+
+export interface TechState {
+  /** Technologies researched, in the order they were finished. */
+  done: string[];
+  /** One entry for each research team at work: the technology, the months still to go and the months it was begun with. */
+  work: { id: string; left: number; of: number }[];
 }
 
 /** The branches of research. */
@@ -112,6 +121,8 @@ export interface Build {
   revive?: number;
   /** One of the nation's special formations (the grand campaign): the id of its unit in traits.json. */
   elite?: string;
+  /** An airborne corps, unlocked by the technology tree (the grand campaign). */
+  airborne?: boolean;
 }
 
 /** One line of a unit's diary: the month, what happened, where (a region, or a sea for a fleet), and a number that goes with it. */

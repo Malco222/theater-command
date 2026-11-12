@@ -7,7 +7,8 @@
 
 import data from '../../data/campaign/arsenal.json';
 import { airFleetsOf, airPool, foundAirFleet } from './air';
-import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCorps, orderElite, orderFort, raiseSite, specOf, type LedgerLine } from './economy';
+import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, type LedgerLine } from './economy';
+import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { headline } from './game';
 import { NAVY, fleetsOf, foundFleet, shipCount } from './navy';
@@ -133,7 +134,7 @@ const liftBought = (g: Game, nat: string): number => (g.flags[`wk:tp:${nat}`] ??
 // ---- The offers -------------------------------------------------------------------------------------
 
 export interface Offer {
-  /** What it is: 'corps:inf', 'air:ftr', 'ship:dd', 'work:aa', 'work:fort'. Pass it to orderOffer. */
+  /** What it is: 'corps:inf', 'air:ftr', 'ship:dd', 'work:aa', 'work:fort', 'elite' (the special formation), 'para' (an airborne corps). Pass it to orderOffer. */
   key: string;
   group: 'army' | 'air' | 'navy' | 'works';
   label: string;
@@ -152,6 +153,8 @@ export interface Offer {
   why: string | null;
   /** True when money is the only thing in the way. */
   poor: boolean;
+  /** The id of the technology the nation must research before it can place this order (the grand campaign), or absent. */
+  tech?: string;
 }
 
 const POOR = 'The treasury cannot cover it.';
@@ -169,13 +172,15 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   const out: Omit<Offer, 'poor'>[] = [];
   const poor = (cost: number): string | null => (n.pp < cost ? POOR : null);
   const r = g.regions[sel] as Region | undefined;
+  // What the technology tree still holds back (the grand campaign): the order is listed, and says what it waits on.
+  const gate = (key: string): { why: string; tech: string } | null => { const t = locked(g, nat, key); return t ? { why: `Needs the technology ${t.name}. Open Research to begin it.`, tech: t.id } : null; };
 
   // The nation's own special formation (the grand campaign): raised like a corps of its kind, a few at a time. It heads the list.
   const u = budgeted(g) ? eliteOf(nat) : null;
   if (u) {
     const need = needsOf(g, u.kind);
     const at = raiseSite(g, nat, u.kind, sel);
-    const no = whyNoElite(g, nat);
+    const no = gate(`corps:${u.kind}`)?.why ?? whyNoElite(g, nat);
     out.push({
       key: 'elite', group: 'army', label: u.label, blurb: `${u.text} ${eliteRule(u)}`, size: plural(u.divs, 'division'), cost: u.cost, months: u.months,
       upkeep: corpsUpkeep(u.kind, u.divs), at,
@@ -189,11 +194,27 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const at = raiseSite(g, nat, kind, sel);
     const where = at >= 0 ? g.regions[at].name : '';
     const cost = corpsCost(g, nat, kind);
+    const held = gate(`corps:${kind}`);
     out.push({
       key: `corps:${kind}`, group: 'army', label: spec.label, blurb: spec.blurb, size: plural(spec.divs, 'division'), cost, months: spec.months,
       upkeep: budgeted(g) ? corpsUpkeep(kind, spec.divs) : 0, at,
       note: at < 0 ? '' : `Forms up at ${where}${need && at !== sel && r && canRaise(g, nat, r) ? `: ${r.name} has not the ${plural(need, 'factory', 'factories')} this needs` : ''}.`,
-      why: at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : poor(cost),
+      why: held?.why ?? (at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : poor(cost)),
+      ...(held ? { tech: held.tech } : {}),
+    });
+  }
+  // Airborne troops, once the tree has given the nation its airborne forces (the grand campaign).
+  if (budgeted(g)) {
+    const p = TECH.units.para;
+    const at = raiseSite(g, nat, 'inf', sel);
+    const held = gate('para');
+    const cost = priceOf(g, nat, 'para', p.cost);
+    out.push({
+      key: 'para', group: 'army', label: p.label, blurb: p.blurb, size: plural(p.divs, 'division'), cost, months: p.months,
+      upkeep: corpsUpkeep('inf', p.divs), at,
+      note: at < 0 ? '' : `Forms up at ${g.regions[at].name}. ${paraCount(g, nat)} of ${p.most} in the field or on order.`,
+      why: held?.why ?? whyNoPara(g, nat) ?? (at < 0 ? 'There is no home ground left to raise troops on.' : poor(cost)),
+      ...(held ? { tech: held.tech } : {}),
     });
   }
   if (!budgeted(g)) {
@@ -223,11 +244,13 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const full = hull === 'tp' && liftBought(g, nat) >= ARSENAL.lift.most;
     const cost = priceOf(g, nat, `ship:${hull}`, spec.cost);
     const one = hull === 'tp' ? '' : NAVY.classes[hull].one, many = hull === 'tp' ? '' : NAVY.classes[hull].many;
+    const held = gate(`ship:${hull}`);
     out.push({
+      ...(held ? { tech: held.tech } : {}),
       key: `ship:${hull}`, group: 'navy', label: spec.label, blurb: spec.blurb, size: hull === 'tp' ? 'lift for one more corps a month' : plural(spec.count, one, many), cost, months: spec.months,
       upkeep: hull === 'tp' ? 0 : spec.count * BUDGET.upkeep.ships[hull], at,
       note: at < 0 ? '' : hull === 'tp' ? `Built at ${g.regions[at].name}.` : fleet ? `Laid down at ${g.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g.regions[at].name}. Forms a new squadron there.`,
-      why: at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost),
+      why: held?.why ?? (at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost)),
     });
   }
 
@@ -277,6 +300,7 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   if (!n.alive || !o || o.why !== null || o.at < 0 || n.pp < o.cost) return null;
   const [group, item] = key.split(':');
   if (group === 'elite') return orderElite(g, nat, o.at);
+  if (group === 'para') return orderPara(g, nat, o.at);
   if (group === 'corps') return orderCorps(g, nat, item as Kind, o.at);
   if (key === 'work:fort') return orderFort(g, nat, o.at);
   const r = g.regions[o.at];

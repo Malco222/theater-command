@@ -8,6 +8,7 @@
 
 import { deterred } from './league';
 import { openTraits } from './traits';
+import { openTech } from './tech';
 import openData from '../../data/campaign/open.json';
 import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
@@ -62,6 +63,7 @@ export function startOpen(g: Game): Game {
   }
   startEngineers(g);
   openTraits(g);
+  openTech(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
   g.supplyDirty = true;
   return g;

@@ -18,6 +18,7 @@ import { barredKind } from './ground';
 import { workingFactories } from './rails';
 import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
+import { TECH, locked, whyNoPara } from './tech';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -297,6 +298,8 @@ export function orderCorps(g: Game, nat: string, kind: Kind, region: number, rev
   const r = g.regions[region];
   const cost = corpsCost(g, nat, kind);
   if (!n.alive || !spec || !r || !canRaiseKind(g, nat, r, kind) || n.pp < cost) return null;
+  // In the grand campaign tanks and lorried infantry wait on the technology that makes them.
+  if (locked(g, nat, `corps:${kind}`)) return null;
   const old = revive !== undefined ? revivable(g, nat, kind).find((f) => f.id === revive) : undefined;
   if (revive !== undefined && !old) return null;
   n.pp -= cost;
@@ -314,11 +317,29 @@ export function orderElite(g: Game, nat: string, region: number): Build | null {
   const n = g.nations[nat];
   const u = eliteOf(nat);
   const r = g.regions[region];
-  if (!n.alive || !u || whyNoElite(g, nat) !== null || !r || !canRaiseKind(g, nat, r, u.kind) || n.pp < u.cost) return null;
+  if (!n.alive || !u || whyNoElite(g, nat) !== null || locked(g, nat, `corps:${u.kind}`) || !r || !canRaiseKind(g, nat, r, u.kind) || n.pp < u.cost) return null;
   n.pp -= u.cost;
   const no = (g.flags[`elite:${nat}`] ?? 0) + 1;
   g.flags[`elite:${nat}`] = no;
   const b: Build = { id: g.nextBuild++, what: 'corps', kind: u.kind, divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost: u.cost, elite: u.id };
+  n.queue.push(b);
+  return b;
+}
+
+/**
+ * Orders an airborne corps (the grand campaign), once the technology tree has given the nation airborne forces.
+ * It is raised like infantry and goes into action by air.
+ */
+export function orderPara(g: Game, nat: string, region: number): Build | null {
+  const n = g.nations[nat];
+  const u = TECH.units.para;
+  const r = g.regions[region];
+  const cost = priceOf(g, nat, 'para', u.cost);
+  if (!n.alive || whyNoPara(g, nat) !== null || !r || !canRaiseKind(g, nat, r, 'inf') || n.pp < cost) return null;
+  n.pp -= cost;
+  const no = (g.flags[`para:${nat}`] ?? 0) + 1;
+  g.flags[`para:${nat}`] = no;
+  const b: Build = { id: g.nextBuild++, what: 'corps', kind: 'inf', divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost, airborne: true };
   n.queue.push(b);
   return b;
 }
@@ -349,6 +370,7 @@ export function cancelBuild(g: Game, nat: string, id: number): boolean {
   if (i < 0 || n.queue[i].ordered !== g.turn) return false;
   n.pp += n.queue[i].cost;
   if (n.queue[i].elite) g.flags[`elite:${nat}`] = (g.flags[`elite:${nat}`] ?? 1) - 1;
+  else if (n.queue[i].airborne) g.flags[`para:${nat}`] = (g.flags[`para:${nat}`] ?? 1) - 1;
   else if (n.queue[i].what === 'corps' && n.queue[i].revive === undefined) n.corpsNo--;
   n.queue.splice(i, 1);
   return true;
@@ -379,7 +401,7 @@ export function deliver(g: Game, nat: string): void {
     if (!at) at = g.regions.find((x) => room(x) && x.fac > 0) ?? g.regions.find(room) ?? null;
     if (!at) continue; // nowhere left to form up
     // The player's new corps are as well trained as the instructors he has sent home can make them.
-    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: nat === g.human ? raisedXp(g, nat) : 0.05 });
+    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: nat === g.human ? raisedXp(g, nat) : 0.05, airborne: b.airborne });
     c.org = 0.7;
     if (b.elite) c.elite = b.elite;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;
@@ -404,7 +426,7 @@ export function aiProduction(g: Game, nat: string): void {
   const slots = (): number => n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || b.what === 'fort').length;
   // The nation's special formation comes first when it can be had (the grand campaign): one on order at a time.
   const u = budgeted(g) ? eliteOf(nat) : null;
-  if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g, nat) === null) {
+  if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g, nat) === null && !locked(g, nat, `corps:${u.kind}`)) {
     const at = raiseSite(g, nat, u.kind, cap.id), cost = corpsUpkeep(u.kind, u.divs);
     // A staff never holds more than its bank allows, so a costly formation is ordered as soon as the bank is full.
     const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
@@ -415,7 +437,8 @@ export function aiProduction(g: Game, nat: string): void {
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
     // nation's greatest industrial province; a nation with no such province raises infantry instead.
     let at = budgeted(g) ? raiseSite(g, nat, kind, cap.id) : cap.id;
-    if (at < 0) { kind = 'inf'; at = cap.id; }
+    // A nation that has not researched the tank arm raises infantry instead.
+    if (at < 0 || locked(g, nat, `corps:${kind}`)) { kind = 'inf'; at = cap.id; }
     if (n.pp < corpsCost(g, nat, kind) + PRODUCTION.aiReserve) break;
     const cost = corpsUpkeep(kind, PRODUCTION.builds[kind].divs);
     if (spare < cost * BUDGET.debt.aiMargin) break;
