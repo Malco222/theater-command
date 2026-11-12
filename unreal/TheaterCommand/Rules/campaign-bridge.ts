@@ -188,17 +188,23 @@ function starts() {
 }
 
 /** History played by the computer up to a month, kept as saved text so that it is only played once. */
-const histories = new Map<string, string>();
+const histories = new Map<number, string>();
+let historySeed = -1;
 
 function historyTo(from: number, seed: number): Game {
-  const key = `${from}:${seed}`;
-  let text = histories.get(key);
+  if (seed !== historySeed) {
+    histories.clear(); // new dice, a new history
+    historySeed = seed;
+  }
+  let text = histories.get(from);
   if (!text) {
-    const h = createGame(seed, null);
+    // Carry on from the latest month already played, if there is one before this.
+    let latest = 0;
+    for (const month of histories.keys()) if (month < from && month > latest) latest = month;
+    const h = (latest ? loadGame(histories.get(latest)!) : null) ?? createGame(seed, null);
     while (h.turn < from) runTurnAI(h);
     text = saveGame(h);
-    histories.clear(); // one is enough to keep: the player is choosing a country for one day
-    histories.set(key, text);
+    histories.set(from, text);
   }
   const loaded = loadGame(text);
   if (!loaded) throw new Error('History could not be read back');

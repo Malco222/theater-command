@@ -1,11 +1,14 @@
 #include "Campaign/CampaignHUD.h"
 
+#include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignPlayerController.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
 #include "Styling/CoreStyle.h"
 #include "Styling/SlateTypes.h"
+#include "Engine/Texture2D.h"
+#include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
@@ -83,6 +86,9 @@ namespace
 			ScrimBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 0.0f);
 			DeepScrimBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.72f), 0.0f);
 			PlainButton = MakeButtonStyle(CardFill, CardHover, Faint, 1.0f);
+			ChosenCard = MakeButtonStyle(FLinearColor(0.12f, 0.09f, 0.045f, 0.98f), FLinearColor(0.17f, 0.125f, 0.065f, 0.98f), BrightBrass, 2.0f);
+			FootBrush = FSlateRoundedBoxBrush(FLinearColor(0.03f, 0.026f, 0.021f, 0.98f), 5.0f, Brass.CopyWithNewOpacity(0.8f), 1.0f);
+			WatchBrush = FSlateRoundedBoxBrush(FLinearColor(0.16f, 0.15f, 0.13f, 1.0f), 2.0f, Faint, 1.0f);
 
 			// One side of the face-off: whose army it is, who leads it, how strong it is, and its corps.
 			auto Side = [this, Face](bool bOurs, EHorizontalAlignment Align) -> TSharedRef<SWidget>
@@ -94,10 +100,9 @@ namespace
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
 						[
-							SNew(SBox).WidthOverride(26.0f).HeightOverride(17.0f)
+							SNew(SBox).WidthOverride(42.0f).HeightOverride(28.0f)
 							[
-								SNew(SBorder).BorderImage(&ChipBrush)
-								.BorderBackgroundColor_Lambda([Face, bOurs]() { const FFaceOff* F = Face(); return FSlateColor(F ? (bOurs ? F->OurColor : F->TheirColor) : FLinearColor::Gray); })
+								SNew(SImage).Image_Lambda([this, Face, bOurs]() { const FFaceOff* F = Face(); return FlagBrush(F ? (bOurs ? F->OurTag : F->TheirTag) : FString()); })
 							]
 						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -284,10 +289,9 @@ namespace
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
 										[
-											SNew(SBox).WidthOverride(22.0f).HeightOverride(14.0f)
+											SNew(SBox).WidthOverride(27.0f).HeightOverride(18.0f)
 											[
-												SNew(SBorder).BorderImage(&ChipBrush)
-												.BorderBackgroundColor_Lambda([Region]() { const FRegionPanelInfo* Info = Region(); return FSlateColor(Info ? Info->OwnerColor : FLinearColor::Gray); })
+												SNew(SImage).Image_Lambda([this, Region]() { const FRegionPanelInfo* Info = Region(); return FlagBrush(Info ? Info->OwnerTag : FString()); })
 											]
 										]
 										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -336,10 +340,9 @@ namespace
 									SNew(SHorizontalBox)
 									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 									[
-										SNew(SBox).WidthOverride(26.0f).HeightOverride(17.0f)
+										SNew(SBox).WidthOverride(36.0f).HeightOverride(24.0f)
 										[
-											SNew(SBorder).BorderImage(&ChipBrush)
-											.BorderBackgroundColor_Lambda([Tray]() { const FArmyTray* Info = Tray(); return FSlateColor(Info ? Info->Color : FLinearColor::Gray); })
+											SNew(SImage).Image_Lambda([this, Tray]() { const FArmyTray* Info = Tray(); return FlagBrush(Info ? Info->Tag : FString()); })
 										]
 									]
 									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
@@ -566,9 +569,9 @@ namespace
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetOpening().bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
-							SNew(SBox).WidthOverride(1000.0f).MaxDesiredHeight(790.0f)
+							SNew(SBox).WidthOverride(1080.0f).HeightOverride(820.0f)
 							[
-								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 26.0f, 26.0f, 26.0f))
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(36.0f, 22.0f, 26.0f, 22.0f))
 								[
 									SNew(SVerticalBox)
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
@@ -579,14 +582,9 @@ namespace
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("1939 TO 1945"))).Font(Font(TEXT("Bold"), 12, 520)).ColorAndOpacity(Brass)
 									]
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 10.0f, 10.0f, 0.0f)
-									[
-										SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted)
-										.Text(FText::FromString(TEXT("Choose where to begin and whom to lead. The campaign saves itself every month.")))
-									]
 
 									// The campaign saved on this computer, and the way back to the one under way.
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 16.0f, 10.0f, 0.0f)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 12.0f, 10.0f, 0.0f)
 									[
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
@@ -621,14 +619,24 @@ namespace
 										]
 									]
 
-									// Every place a campaign can begin.
-									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									// The two pages: the grand campaign, and the historical scenarios.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 14.0f, 10.0f, 0.0f)
+									[
+										SAssignNew(OpeningTabs, SHorizontalBox)
+									]
+									// What the page offers.
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
 									[
 										SNew(SScrollBox)
 										+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
 										[
 											SAssignNew(Starts, SVerticalBox)
 										]
+									]
+									// The country chosen for the grand campaign, and the word to begin.
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 10.0f, 0.0f)
+									[
+										SAssignNew(OpeningFoot, SBox)
 									]
 								]
 							]
@@ -749,31 +757,7 @@ namespace
 			if (Controller.IsValid() && Starts.IsValid() && Controller->GetOpening().Revision != ShownOpening)
 			{
 				ShownOpening = Controller->GetOpening().Revision;
-				Starts->ClearChildren();
-				const TArray<FOpeningGroup>& Groups = Controller->GetOpening().Groups;
-				for (int32 GroupIndex = 0; GroupIndex < Groups.Num(); ++GroupIndex)
-				{
-					Starts->AddSlot().AutoHeight().Padding(0.0f, GroupIndex == 0 ? 0.0f : 20.0f, 0.0f, 8.0f)
-					[
-						SNew(STextBlock).Text(FText::FromString(Groups[GroupIndex].Title.ToString().ToUpper())).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
-					];
-					// Two columns of choices.
-					TSharedRef<SVerticalBox> Left = SNew(SVerticalBox);
-					TSharedRef<SVerticalBox> Right = SNew(SVerticalBox);
-					for (int32 SideIndex = 0; SideIndex < Groups[GroupIndex].Sides.Num(); ++SideIndex)
-					{
-						(SideIndex % 2 == 0 ? Left : Right)->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
-						[
-							MakeStart(Groups[GroupIndex].Sides[SideIndex], GroupIndex, SideIndex)
-						];
-					}
-					Starts->AddSlot().AutoHeight()
-					[
-						SNew(SHorizontalBox)
-						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 8.0f, 0.0f)[Left]
-						+ SHorizontalBox::Slot().FillWidth(1.0f)[Right]
-					];
-				}
+				LayOutOpening(Controller->GetOpening());
 			}
 
 			// Deal the cards again whenever the army in hand has changed.
@@ -846,6 +830,290 @@ namespace
 		}
 
 	private:
+		/** A nation's flag as a brush for the panels. A nation with no tag gets a plain dark chip. */
+		const FSlateBrush* FlagBrush(const FString& Tag)
+		{
+			if (Tag.IsEmpty())
+			{
+				return &WatchBrush;
+			}
+			if (const TSharedPtr<FSlateBrush>* Found = FlagBrushes.Find(Tag))
+			{
+				return Found->Get();
+			}
+			ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
+			UTexture2D* Picture = Table ? Table->GetFlagTexture(Tag) : nullptr;
+			if (!Picture)
+			{
+				return &WatchBrush; // not ready yet: ask again next time
+			}
+			TSharedPtr<FSlateBrush> Brush = MakeShared<FSlateBrush>();
+			Brush->SetResourceObject(Picture);
+			Brush->ImageSize = FVector2D(96.0f, 64.0f);
+			Brush->DrawAs = ESlateBrushDrawType::Image;
+			FlagBrushes.Add(Tag, Brush);
+			return Brush.Get();
+		}
+
+		TSharedRef<SWidget> MakeFlag(const FString& Tag, float Width)
+		{
+			return SNew(SBox).WidthOverride(Width).HeightOverride(Width / 1.5f)
+			[
+				SNew(SImage).Image(FlagBrush(Tag))
+			];
+		}
+
+		/** Lays widgets out in rows of so many columns, each column the same width. */
+		void AddGrid(const TArray<TSharedRef<SWidget>>& Cells, int32 Columns)
+		{
+			for (int32 First = 0; First < Cells.Num(); First += Columns)
+			{
+				TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+				for (int32 Column = 0; Column < Columns; ++Column)
+				{
+					const int32 Index = First + Column;
+					Row->AddSlot().FillWidth(1.0f).Padding(0.0f, 0.0f, Column == Columns - 1 ? 0.0f : 8.0f, 0.0f)
+					[
+						Cells.IsValidIndex(Index) ? Cells[Index] : StaticCastSharedRef<SWidget>(SNew(SSpacer))
+					];
+				}
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)[Row];
+			}
+		}
+
+		/** One country on the grand campaign's page. The great powers get a card with a word about them; the rest a line. */
+		TSharedRef<SWidget> MakeNation(const FOpeningNation& Nation, int32 Index, bool bChosen)
+		{
+			TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Bold"), Nation.bMajor ? 14 : 12)).ColorAndOpacity(Cream)
+				];
+			if (Nation.bMajor)
+			{
+				Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(Nation.Standing).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Brass).AutoWrapText(true)
+				];
+				Words->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(Nation.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
+				];
+				Words->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(Nation.Strength).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Faint)
+				];
+			}
+			else
+			{
+				Words->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s"), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
+					.Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted).AutoWrapText(true)
+				];
+			}
+			return SNew(SButton).ButtonStyle(bChosen ? &ChosenCard : &PlainButton).IsFocusable(false)
+				.ContentPadding(Nation.bMajor ? FMargin(13.0f, 11.0f, 13.0f, 12.0f) : FMargin(10.0f, 7.0f, 10.0f, 8.0f))
+				.OnClicked_Lambda([this, Index]()
+				{
+					if (Controller.IsValid())
+					{
+						Controller->PickGrandNation(Index);
+					}
+					return FReply::Handled();
+				})
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, Nation.bMajor ? 12.0f : 9.0f, 0.0f)
+					[
+						MakeFlag(Nation.Tag, Nation.bMajor ? 60.0f : 36.0f)
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						Words
+					]
+				];
+		}
+
+		/** The opening screen's two pages, and what stands on the one showing. */
+		void LayOutOpening(const FOpening& Opening)
+		{
+			auto Heading = [](const FString& Text)
+			{
+				return SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass);
+			};
+
+			// The tabs.
+			OpeningTabs->ClearChildren();
+			if (Opening.Years.Num() > 0)
+			{
+				const TCHAR* Names[] = { TEXT("THE GRAND CAMPAIGN"), TEXT("HISTORICAL SCENARIOS") };
+				for (int32 Tab = 0; Tab < 2; ++Tab)
+				{
+					const bool bOn = Opening.Tab == Tab;
+					OpeningTabs->AddSlot().AutoWidth().Padding(5.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(26.0f, 8.0f)).IsFocusable(false)
+						.OnClicked_Lambda([this, Tab]() { if (Controller.IsValid()) { Controller->ShowOpeningTab(Tab); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(FText::FromString(Names[Tab])).Font(Font(TEXT("Bold"), 12, 200)).ColorAndOpacity(bOn ? BrightBrass : Muted)
+						]
+					];
+				}
+			}
+
+			Starts->ClearChildren();
+			OpeningFoot->SetContent(SNullWidget::NullWidget);
+			OpeningFoot->SetVisibility(EVisibility::Collapsed);
+
+			if (Opening.Tab == 0 && Opening.Years.Num() > 0)
+			{
+				// ---- The grand campaign: a day to take over on, and a country.
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("Pick a country and the year you take it over. History is played up to that day. After it nothing is written: every nation makes its own decisions, and the war is yours to shape.")))
+				];
+				TSharedRef<SHorizontalBox> YearRow = SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
+					[
+						Heading(TEXT("TAKE OVER IN"))
+					];
+				for (int32 Index = 0; Index < Opening.Years.Num(); ++Index)
+				{
+					const bool bOn = Index == Opening.YearIndex;
+					YearRow->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(18.0f, 6.0f)).IsFocusable(false)
+						.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PickGrandYear(Index); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Opening.Years[Index].Year).Font(Font(TEXT("Bold"), 14, 60)).ColorAndOpacity(bOn ? BrightBrass : Muted)
+						]
+					];
+				}
+				Starts->AddSlot().AutoHeight()[YearRow];
+				const FOpeningYear& Year = Opening.Years[FMath::Clamp(Opening.YearIndex, 0, Opening.Years.Num() - 1)];
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(Year.Title).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(Cream)
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f)
+					[
+						SNew(STextBlock).Text(Year.Note).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+					]
+				];
+
+				if (Opening.bWorking)
+				{
+					Starts->AddSlot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 70.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Italic"), 15)).ColorAndOpacity(Cream)
+						.Text(FText::FromString(FString::Printf(TEXT("History is being played up to %s. This takes a few seconds."), *Year.Title.ToString())))
+					];
+					return;
+				}
+
+				TArray<TSharedRef<SWidget>> Great, Rest;
+				for (int32 Index = 0; Index < Opening.Nations.Num(); ++Index)
+				{
+					(Opening.Nations[Index].bMajor ? Great : Rest).Add(MakeNation(Opening.Nations[Index], Index, Index == Opening.NationIndex));
+				}
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 8.0f)[Heading(TEXT("THE GREAT POWERS"))];
+				AddGrid(Great, 3);
+				if (Rest.Num() > 0)
+				{
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 8.0f)[Heading(TEXT("OTHER COUNTRIES"))];
+					AddGrid(Rest, 4);
+				}
+				if (!Opening.GrandNote.IsEmpty())
+				{
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 4.0f)
+					[
+						SNew(STextBlock).Text(Opening.GrandNote).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
+					];
+				}
+
+				// The foot of the page: the country chosen, and the word to begin.
+				const bool bChosen = Opening.Nations.IsValidIndex(Opening.NationIndex);
+				TSharedRef<SHorizontalBox> Foot = SNew(SHorizontalBox);
+				if (bChosen)
+				{
+					const FOpeningNation& Nation = Opening.Nations[Opening.NationIndex];
+					Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
+					[
+						MakeFlag(Nation.Tag, 96.0f)
+					];
+					Foot->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(Nation.Name).Font(Font(TEXT("Regular"), 22)).ColorAndOpacity(Cream)
+						]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass).AutoWrapText(true)
+							.Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s  ·  %s"), *Year.Title.ToString(), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
+						]
+					];
+				}
+				else
+				{
+					Foot->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("Choose a country above to lead it."))).Font(Font(TEXT("Italic"), 13)).ColorAndOpacity(Muted)
+					];
+				}
+				Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 9.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(TEXT("Nobody leads: every nation decides for itself, and you watch the war play out.")))
+					.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->BeginGrandCampaign(true); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("JUST WATCH"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Muted)
+					]
+				];
+				if (bChosen)
+				{
+					Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(26.0f, 12.0f)).IsFocusable(false)
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->BeginGrandCampaign(false); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Font(Font(TEXT("Bold"), 14, 200)).ColorAndOpacity(BrightBrass)
+							.Text(FText::FromString(FString::Printf(TEXT("BEGIN AS %s"), *Opening.Nations[Opening.NationIndex].Name.ToString().ToUpper())))
+						]
+					];
+				}
+				OpeningFoot->SetContent(SNew(SBorder).BorderImage(&FootBrush).Padding(FMargin(16.0f, 12.0f))[Foot]);
+				OpeningFoot->SetVisibility(EVisibility::Visible);
+				return;
+			}
+
+			// ---- The scenarios: single campaigns in which the other nations keep to history's plan.
+			Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)
+			[
+				SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+				.Text(FText::FromString(TEXT("Single campaigns from the war as it was fought. You lead one side; the other nations keep to history's plan. Or watch one play out.")))
+			];
+			for (int32 GroupIndex = 0; GroupIndex < Opening.Groups.Num(); ++GroupIndex)
+			{
+				Starts->AddSlot().AutoHeight().Padding(0.0f, GroupIndex == 0 ? 0.0f : 14.0f, 0.0f, 8.0f)
+				[
+					Heading(Opening.Groups[GroupIndex].Title.ToString().ToUpper())
+				];
+				TArray<TSharedRef<SWidget>> Cells;
+				for (int32 SideIndex = 0; SideIndex < Opening.Groups[GroupIndex].Sides.Num(); ++SideIndex)
+				{
+					Cells.Add(MakeStart(Opening.Groups[GroupIndex].Sides[SideIndex], GroupIndex, SideIndex));
+				}
+				AddGrid(Cells, 2);
+			}
+		}
+
 		/** One choice on the opening screen: a nation to lead or a war to watch, and what lies ahead. */
 		TSharedRef<SWidget> MakeStart(const FOpeningSide& Side, int32 GroupIndex, int32 SideIndex)
 		{
@@ -853,12 +1121,9 @@ namespace
 				+ SVerticalBox::Slot().AutoHeight()
 				[
 					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 					[
-						SNew(SBox).WidthOverride(22.0f).HeightOverride(14.0f)
-						[
-							SNew(SBorder).BorderImage(&ChipBrush).BorderBackgroundColor(Side.Color)
-						]
+						MakeFlag(Side.Tag, 36.0f)
 					]
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 					[
@@ -1020,6 +1285,12 @@ namespace
 		FSlateBrush ScrimBrush;
 		FSlateBrush DeepScrimBrush;
 		TSharedPtr<SVerticalBox> Starts;
+		TSharedPtr<SHorizontalBox> OpeningTabs;
+		TSharedPtr<SBox> OpeningFoot;
+		FSlateBrush FootBrush;
+		FSlateBrush WatchBrush;
+		FButtonStyle ChosenCard;
+		TMap<FString, TSharedPtr<FSlateBrush>> FlagBrushes;
 		int32 ShownOpening = -1;
 		TSharedPtr<SVerticalBox> ProvinceBox;
 		TSharedPtr<SHorizontalBox> TrayOrders;

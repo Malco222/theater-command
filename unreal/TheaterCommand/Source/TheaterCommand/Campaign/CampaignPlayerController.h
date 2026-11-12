@@ -17,6 +17,7 @@ struct FRegionPanelInfo
 	FText Name;
 	FText OwnerLine;
 	FLinearColor OwnerColor = FLinearColor::Gray;
+	FString OwnerTag; // whose flag to show
 	FText Details;
 	FText Forces;
 	// What the player can do here, on home ground: raise corps, build works, and what is already forming.
@@ -51,6 +52,7 @@ struct FArmyTray
 	FText Title;
 	FText Subtitle;
 	FLinearColor Color = FLinearColor::Gray;
+	FString Tag; // whose flag to show
 	TArray<FTrayCard> Cards;
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
@@ -66,7 +68,28 @@ struct FOpeningSide
 	FText Blurb;
 	FText Aims;
 	FLinearColor Color = FLinearColor::Gray;
+	FString Tag; // whose flag to show; empty to watch
 	bool bWatch = false;
+};
+
+/** A day the grand campaign can be taken over on. */
+struct FOpeningYear
+{
+	FText Year;
+	FText Title;
+	FText Note;
+	int32 From = 1;
+};
+
+/** A country that can be led in the grand campaign. */
+struct FOpeningNation
+{
+	FString Tag;
+	FText Name;
+	FText Blurb;
+	FText Standing; // "At peace", or who it is at war with
+	FText Strength; // "28 corps, 36 territories"
+	bool bMajor = false;
 };
 
 struct FOpeningGroup
@@ -80,6 +103,17 @@ struct FOpening
 {
 	bool bVisible = false;
 	bool bCanReturn = false; // a campaign is under way behind the screen, so it can simply be closed
+
+	// The grand campaign: any country, taken over on one of a few days, and free to make its own history after.
+	int32 Tab = 0; // 0: the grand campaign, 1: the historical scenarios
+	TArray<FOpeningYear> Years;
+	int32 YearIndex = 0;
+	TArray<FOpeningNation> Nations;
+	int32 NationIndex = INDEX_NONE; // the country chosen, if one is
+	FText GrandNote; // a word about who is missing from the list, if anyone is
+	bool bWorking = false; // history is being played up to the day chosen; the list of countries follows
+
+	// The scenarios: single campaigns in which the other nations keep to history's plan.
 	TArray<FOpeningGroup> Groups;
 	FText SavedLine; // empty when there is nothing to continue
 	int32 Revision = 0;
@@ -96,6 +130,8 @@ struct FFaceOff
 	FText TheirName;
 	FLinearColor OurColor = FLinearColor::Gray;
 	FLinearColor TheirColor = FLinearColor::Gray;
+	FString OurTag; // whose flags to show
+	FString TheirTag;
 	FText OurGeneral;
 	FText TheirGeneral;
 	FText OurStrength;
@@ -138,8 +174,25 @@ public:
 	void OpenRoll();
 	void CloseDocument();
 
-	/** Starts the campaign chosen on the opening screen. */
+	/** Starts the scenario chosen on the opening screen. */
 	void BeginCampaign(int32 GroupIndex, int32 SideIndex);
+
+	/** The opening screen's two pages: 0 is the grand campaign, 1 the historical scenarios. */
+	void ShowOpeningTab(int32 Tab);
+
+	/**
+	 * Chooses the day the grand campaign is taken over on, and works out who can be led from it. For a later
+	 * year that means playing history up to it, which takes a few seconds: the screen says so first, unless
+	 * bAtOnce asks for the answer before returning (scripts do).
+	 */
+	void PickGrandYear(int32 Index, bool bAtOnce = false);
+
+	/** Chooses a country for the grand campaign, by its place in the list or by its tag. */
+	void PickGrandNation(int32 Index);
+	void PickGrandNation(const FString& Tag);
+
+	/** Starts the grand campaign as the country chosen, or with nobody leading. */
+	void BeginGrandCampaign(bool bWatch);
 
 	/** Picks up the campaign saved on this computer. */
 	void ContinueCampaign();
@@ -275,6 +328,11 @@ private:
 	FDocumentPage Document;
 	int32 DocumentRevision = 0;
 	TArray<FStartGroup> StartGroups;
+	TArray<FGrandNation> GrandNations;
+	int32 GrandSeed = 1939; // the dice for the campaign about to be chosen
+	int32 WorkingFrames = 0;
+	void LoadGrandNations();
+	static int32 NewSeed();
 
 	FString NoticeText;
 	double NoticeUntil = 0.0;

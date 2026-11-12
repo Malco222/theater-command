@@ -46,6 +46,9 @@ private:
 		bool bRoll = false; // open the roll of honour
 		bool bRail = false;
 	FString Click; // click this region, as the mouse would
+	int32 OpeningTab = -1; // on the opening screen: show this page
+	int32 OpeningYear = -1; // and choose this day for the grand campaign
+	FString OpeningNation; // and this country
 	FString Carry; // hang the army in hand over this region, as if dragged there
 	FString Drop; // let go of it over this region // switch the army in hand to going by rail
 		FString Order; // order this in the selected territory: a kind of corps, or "fort"
@@ -63,6 +66,8 @@ private:
 	bool bTaken = false;
 	bool bMarched = false;
 	bool bStarted = false;
+	FString GrandNation; // "-TheaterGrand=SOV,2": begin the grand campaign as this country, in the year at this place in the list
+	int32 GrandYear = 0;
 	int32 StartGroup = 0;
 	int32 StartSide = 0;
 };

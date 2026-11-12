@@ -3,6 +3,7 @@
 #include "Campaign/CampaignCameraPawn.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignPlayerController.h"
+#include "Campaign/CampaignSession.h"
 #include "TheaterCommand.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -38,8 +39,25 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		return Shot;
 	};
 	Shots.Reset();
-	// The opening screen, as the game starts.
-	Add(TEXT("00-opening-screen"), TEXT("Frankfurt"), 0.56f).bOpening = true;
+	// The opening screen, as the game starts: the grand campaign, with a country chosen; a later year; the scenarios.
+	{
+		FShot& Shot = Add(TEXT("00-opening-screen"), TEXT("Frankfurt"), 0.56f);
+		Shot.bOpening = true;
+		Shot.OpeningTab = 0;
+		Shot.OpeningYear = 0;
+		Shot.OpeningNation = TEXT("GER");
+	}
+	{
+		FShot& Shot = Add(TEXT("00b-opening-1941"), TEXT("Frankfurt"), 0.56f);
+		Shot.bOpening = true;
+		Shot.OpeningYear = 2;
+		Shot.OpeningNation = TEXT("SOV");
+	}
+	{
+		FShot& Shot = Add(TEXT("00c-opening-scenarios"), TEXT("Frankfurt"), 0.56f);
+		Shot.bOpening = true;
+		Shot.OpeningTab = 1;
+	}
 	// The table.
 	Add(TEXT("01-whole-map"), TEXT(""), 0.97f);
 	Add(TEXT("02-opening-view"), TEXT("Frankfurt"), 0.56f);
@@ -129,7 +147,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.bKeep = Shot.bConfirm = Shot.bClose = Shot.bWatch = true;
 	}
 
-	// "-TheaterStart=5,0" begins from another place on the opening screen (here the sixth group, its first side) and
+	// "-TheaterStart=4,0" begins from another scenario on the opening screen (here the fifth, its first side) and
 	// takes the pictures that show what units have made of themselves by then.
 	FString Start;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterStart="), Start, false)) // false: the comma is part of the value
@@ -149,6 +167,26 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.bRecord = true;
 		}
 		Add(TEXT("23-roll-of-honour"), TEXT("Masuria"), 0.36f).bRoll = true;
+	}
+
+	// "-TheaterGrand=SOV,2" begins the grand campaign as a country (here the Soviet Union) in one of its years
+	// (here the third on the list, 1941), and looks at the whole table and then at that country's capital.
+	FString Grand;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterGrand="), Grand, false))
+	{
+		FString Year;
+		if (Grand.Split(TEXT(","), &GrandNation, &Year))
+		{
+			GrandYear = FCString::Atoi(*Year);
+		}
+		else
+		{
+			GrandNation = Grand;
+		}
+		Shots.Reset();
+		Add(TEXT("30-grand-whole-map"), TEXT(""), 0.97f);
+		Add(TEXT("31-grand-capital"), TEXT("@capital"), 0.45f);
+		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
 	}
 
 	// "-TheaterOnly=13b,13c" takes only the pictures whose names begin with one of these.
@@ -188,13 +226,33 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	// The first picture after the opening screen begins a campaign through it, as Germany in September 1939.
 	if (!Shot.bOpening && !Controller->GetSession())
 	{
-		Controller->BeginCampaign(StartGroup, StartSide);
+		if (GrandNation.IsEmpty())
+		{
+			Controller->BeginCampaign(StartGroup, StartSide);
+		}
+		else
+		{
+			Controller->ShowOpeningTab(0);
+			Controller->PickGrandYear(GrandYear, true);
+			Controller->PickGrandNation(GrandNation);
+			Controller->BeginGrandCampaign(false);
+		}
 	}
 	const FCampaignMapData& Data = Table->GetData();
 	FVector2D At(Data.Width * 0.5, Data.Height * 0.5);
 	if (const int32* Id = Data.RegionByName.Find(Shot.Region))
 	{
 		At = Data.Regions[*Id].Center;
+	}
+	else if (Shot.Region == TEXT("@capital") && Controller->GetSession())
+	{
+		for (const FCampaignRegion& Region : Data.Regions)
+		{
+			if (Region.bCapital && Region.Owner == Controller->GetSession()->GetView().Human)
+			{
+				At = Region.Center;
+			}
+		}
 	}
 	Eye->SetHeading(Shot.Yaw, Shot.Tilt);
 	Eye->GoTo(Table->MapToWorld(At.X, At.Y), Shot.Zoom, true);
@@ -203,6 +261,18 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	Table->SetHoveredRegion(INDEX_NONE);
 	if (Shot.bOpening)
 	{
+		if (Shot.OpeningTab >= 0)
+		{
+			Controller->ShowOpeningTab(Shot.OpeningTab);
+		}
+		if (Shot.OpeningYear >= 0)
+		{
+			Controller->PickGrandYear(Shot.OpeningYear, true);
+		}
+		if (!Shot.OpeningNation.IsEmpty())
+		{
+			Controller->PickGrandNation(Shot.OpeningNation);
+		}
 		return;
 	}
 	if (Shot.bMenu)

@@ -8857,15 +8857,20 @@
     };
   }
   var histories = /* @__PURE__ */ new Map();
+  var historySeed = -1;
   function historyTo(from, seed) {
-    const key = `${from}:${seed}`;
-    let text = histories.get(key);
+    if (seed !== historySeed) {
+      histories.clear();
+      historySeed = seed;
+    }
+    let text = histories.get(from);
     if (!text) {
-      const h = createGame(seed, null);
+      let latest = 0;
+      for (const month of histories.keys()) if (month < from && month > latest) latest = month;
+      const h = (latest ? loadGame(histories.get(latest)) : null) ?? createGame(seed, null);
       while (h.turn < from) runTurnAI(h);
       text = saveGame(h);
-      histories.clear();
-      histories.set(key, text);
+      histories.set(from, text);
     }
     const loaded = loadGame(text);
     if (!loaded) throw new Error("History could not be read back");

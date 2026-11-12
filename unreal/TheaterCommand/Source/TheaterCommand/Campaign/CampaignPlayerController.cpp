@@ -10,6 +10,8 @@
 #include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 ACampaignPlayerController::ACampaignPlayerController()
 {
@@ -29,6 +31,17 @@ FCampaignSession* ACampaignPlayerController::GetSession() const
 	const ACampaignGameMode* Mode = GetMode();
 	FCampaignSession* Session = Mode ? Mode->GetSession() : nullptr;
 	return Session && Session->IsRunning() ? Session : nullptr;
+}
+
+int32 ACampaignPlayerController::NewSeed()
+{
+	// The development photographer wants the same war every time; a player wants a new one.
+	FString Folder;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Folder))
+	{
+		return 1939;
+	}
+	return static_cast<int32>((FDateTime::Now().GetTicks() / ETimespan::TicksPerMillisecond) % 900000) + 1;
 }
 
 void ACampaignPlayerController::RefreshOpening(bool bShow)
@@ -55,14 +68,122 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 			Choice.Blurb = FText::FromString(Side.Blurb);
 			Choice.Aims = FText::FromString(FString::Join(Side.Aims, TEXT("\n")));
 			Choice.bWatch = Side.Nation.IsEmpty();
+			Choice.Tag = Side.Nation;
 			const FCampaignNation* Nation = Map->GetData().FindNation(Side.Nation);
 			Choice.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor(0.35f, 0.33f, 0.3f);
 		}
 	}
+
+	// The grand campaign's days. Rules without one (the stand-in) leave the scenarios as the only page.
+	Opening.Years.Reset();
+	for (const FGrandYear& Year : Rules->GrandYears())
+	{
+		FOpeningYear& Out = Opening.Years.AddDefaulted_GetRef();
+		Out.Year = FText::FromString(Year.Year);
+		Out.Title = FText::FromString(Year.Title);
+		Out.Note = FText::FromString(Year.Note);
+		Out.From = Year.From;
+	}
+	if (Opening.Years.Num() == 0)
+	{
+		Opening.Tab = 1;
+	}
+	else if (bShow && !Opening.bVisible)
+	{
+		// Each time the screen opens, a new war is on offer: new dice, and the list of countries read afresh.
+		GrandSeed = NewSeed();
+		Opening.YearIndex = FMath::Clamp(Opening.YearIndex, 0, Opening.Years.Num() - 1);
+		LoadGrandNations();
+	}
+
 	Opening.SavedLine = FText::FromString(Mode->DescribeSavedCampaign());
 	Opening.bCanReturn = Rules->IsRunning();
 	Opening.bVisible = bShow;
 	++Opening.Revision;
+}
+
+void ACampaignPlayerController::LoadGrandNations()
+{
+	ACampaignGameMode* Mode = GetMode();
+	FCampaignSession* Rules = Mode ? Mode->GetSession() : nullptr;
+	if (!Rules || !Opening.Years.IsValidIndex(Opening.YearIndex))
+	{
+		return;
+	}
+	const FString Chosen = Opening.Nations.IsValidIndex(Opening.NationIndex) ? Opening.Nations[Opening.NationIndex].Tag : FString();
+	GrandNations = Rules->GrandNations(Opening.Years[Opening.YearIndex].From, GrandSeed);
+	Opening.Nations.Reset();
+	Opening.NationIndex = INDEX_NONE;
+	bool bAmerica = false;
+	for (const FGrandNation& Nation : GrandNations)
+	{
+		FOpeningNation& Out = Opening.Nations.AddDefaulted_GetRef();
+		Out.Tag = Nation.Nation;
+		Out.Name = FText::FromString(Nation.Name);
+		Out.Blurb = FText::FromString(Nation.Blurb);
+		Out.Standing = FText::FromString(Nation.Standing);
+		Out.Strength = FText::FromString(FString::Printf(TEXT("%d corps, %d %s"), Nation.Corps, Nation.Regions, Nation.Regions == 1 ? TEXT("territory") : TEXT("territories")));
+		Out.bMajor = Nation.bMajor;
+		bAmerica |= Nation.Nation == TEXT("USA");
+		if (Nation.Nation == Chosen)
+		{
+			Opening.NationIndex = Opening.Nations.Num() - 1; // the same country stays chosen when the year changes
+		}
+	}
+	Opening.GrandNote = bAmerica ? FText::GetEmpty() : FText::FromString(
+		TEXT("The United States has no army on this map yet on this day, so it is not on the list; it can be led from 1943. When the world map is in, it will be here from the first day."));
+}
+
+void ACampaignPlayerController::ShowOpeningTab(int32 Tab)
+{
+	Opening.Tab = Opening.Years.Num() == 0 ? 1 : FMath::Clamp(Tab, 0, 1);
+	++Opening.Revision;
+}
+
+void ACampaignPlayerController::PickGrandYear(int32 Index, bool bAtOnce)
+{
+	if (!Opening.Years.IsValidIndex(Index) || (Index == Opening.YearIndex && !Opening.bWorking))
+	{
+		return;
+	}
+	Opening.YearIndex = Index;
+	++Opening.Revision;
+	if (bAtOnce || Opening.Years[Index].From <= 1)
+	{
+		Opening.bWorking = false;
+		LoadGrandNations();
+	}
+	else
+	{
+		// Say that history is being played before playing it: the screen is drawn first, the work done after.
+		Opening.bWorking = true;
+		WorkingFrames = 0;
+	}
+}
+
+void ACampaignPlayerController::PickGrandNation(int32 Index)
+{
+	Opening.NationIndex = Opening.Nations.IsValidIndex(Index) ? Index : INDEX_NONE;
+	++Opening.Revision;
+}
+
+void ACampaignPlayerController::PickGrandNation(const FString& Tag)
+{
+	PickGrandNation(Opening.Nations.IndexOfByPredicate([&Tag](const FOpeningNation& Nation) { return Nation.Tag == Tag; }));
+}
+
+void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
+{
+	ACampaignGameMode* Mode = GetMode();
+	if (!Mode || Opening.bWorking || !Opening.Years.IsValidIndex(Opening.YearIndex) || (!bWatch && !Opening.Nations.IsValidIndex(Opening.NationIndex)))
+	{
+		return;
+	}
+	const FString Human = bWatch ? FString() : Opening.Nations[Opening.NationIndex].Tag;
+	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed))
+	{
+		EnterCampaign();
+	}
 }
 
 void ACampaignPlayerController::BeginCampaign(int32 GroupIndex, int32 SideIndex)
@@ -73,7 +194,7 @@ void ACampaignPlayerController::BeginCampaign(int32 GroupIndex, int32 SideIndex)
 		return;
 	}
 	const FStartGroup& Group = StartGroups[GroupIndex];
-	if (Mode->StartCampaign(Group.Sides[SideIndex].Nation, Group.From, Group.ViewMode))
+	if (Mode->StartCampaign(Group.Sides[SideIndex].Nation, Group.From, Group.ViewMode, NewSeed()))
 	{
 		EnterCampaign();
 	}
@@ -388,6 +509,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	if (!Eye || !Map.IsValid())
 	{
 		return;
+	}
+
+	// History being played for the opening screen: the screen has said so for a few frames; now do it.
+	if (Opening.bWorking && ++WorkingFrames >= 3)
+	{
+		Opening.bWorking = false;
+		LoadGrandNations();
+		++Opening.Revision;
 	}
 
 	// Keys: W A S D or the arrows slide the view, Q and E turn it, + and - zoom.
@@ -887,6 +1016,7 @@ void ACampaignPlayerController::RefreshOrders()
 	const FString Where = Map->GetData().Regions.IsValidIndex(ArmyRegion) ? Map->GetData().Regions[ArmyRegion].Name : FString();
 	Tray.bVisible = true;
 	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
+	Tray.Tag = View.Human;
 	Tray.Title = FText::FromString(General.IsEmpty() ? FString::Printf(TEXT("%s army"), *Adjective) : General);
 	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s army at %s  ·  %d corps, %d division%s"),
 		*Adjective, *Where, CorpsCount, Divisions, Divisions == 1 ? TEXT("") : TEXT("s")));
@@ -1111,6 +1241,8 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 	FaceOff.TheirName = FText::FromString(Theirs ? Theirs->Name : TheirTag);
 	FaceOff.OurColor = Ours ? FLinearColor(Ours->Color) : FLinearColor::Gray;
 	FaceOff.TheirColor = Theirs ? FLinearColor(Theirs->Color) : FLinearColor::Gray;
+	FaceOff.OurTag = View.Human;
+	FaceOff.TheirTag = TheirTag;
 	const FString OurGeneral = SeniorGeneral(Preview.Attackers), TheirGeneral = SeniorGeneral(Preview.Defenders);
 	FaceOff.OurGeneral = FText::FromString(OurGeneral.IsEmpty() ? FString(TEXT("No general named")) : OurGeneral);
 	FaceOff.TheirGeneral = FText::FromString(TheirGeneral.IsEmpty() ? FString(TEXT("No general named")) : TheirGeneral);
@@ -1383,6 +1515,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 	RegionPanel.bVisible = true;
 	RegionPanel.Name = FText::FromString(Region.Name);
 	RegionPanel.OwnerColor = Owner ? FLinearColor(Owner->Color) : FLinearColor::Gray;
+	RegionPanel.OwnerTag = Region.Owner;
 
 	FString OwnerLine = Owner ? Owner->Name : Region.Owner;
 	if (const FCampaignSession* Session = GetSession())
