@@ -94,6 +94,9 @@ describe('twelve wars with no plan', () => {
     for (const w of wars) for (const key of Object.keys(w.g.flags)) {
       if (!key.startsWith('war:')) continue;
       const [, a, b] = key.split(':');
+      // A member of the League stands on neither side: it goes to war with whoever attacks one of its own.
+      const inLeague = (id: string): boolean => { const since = w.g.flags[`league:${id}`]; return since !== undefined && since <= w.g.flags[key]; };
+      if (inLeague(a) || inLeague(b)) continue;
       const axis = ['GER', 'ITA', 'ROM', 'HUN', 'SVK', 'BUL', 'FIN'], allies = ['UK', 'FRA', 'POL', 'USA'];
       expect(axis.includes(a) && axis.includes(b), key).toBe(false);
       expect(allies.includes(a) && allies.includes(b), key).toBe(false);

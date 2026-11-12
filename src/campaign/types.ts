@@ -110,6 +110,8 @@ export interface Build {
   cost: number;
   /** A corps raised again under the name of one that was destroyed: that formation's place on the memorial wall. */
   revive?: number;
+  /** One of the nation's special formations (the grand campaign): the id of its unit in traits.json. */
+  elite?: string;
 }
 
 /** One line of a unit's diary: the month, what happened, where (a region, or a sea for a fleet), and a number that goes with it. */
@@ -174,6 +176,8 @@ export interface Corps extends Storied {
   rival?: number;
   /** The destroyed formation whose name and colours it carries: that formation's place on the memorial wall. */
   heir?: number;
+  /** One of its nation's special formations (the grand campaign): the id of the unit in traits.json. */
+  elite?: string;
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */

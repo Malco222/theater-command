@@ -14,6 +14,7 @@ import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, type Assessment } from './game';
+import { traitFleet, traitSeaLoss } from './traits';
 import {
   STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type ShipClass, type Ships, type Stance,
 } from './types';
@@ -139,7 +140,7 @@ const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel 
 export function fleetPower(g: Game, f: Fleet): number {
   let p = 0;
   for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power;
-  return p * quality(g, f.nat) * fit(f) * admiralMul(f) * storyEdge(g, f);
+  return p * quality(g, f.nat) * fit(f) * admiralMul(f) * storyEdge(g, f) * traitFleet(g, f.nat);
 }
 
 /** Air strength over a sea from the coasts one side holds: this nation's friends, or (hostile) its enemies. */
@@ -650,7 +651,8 @@ export function seaIncomeLoss(g: Game, nat: string): number {
     if (m && g.turn - m.turn <= 1) s += m.share;
   }
   if (nat === NAVY.ore.to && oreRoute(g) === 'cut') s += NAVY.ore.share;
-  return Math.min(0.9, s);
+  // A nation that reads the raiders' signals steers its convoys round them (the grand campaign).
+  return Math.min(0.9, s) * traitSeaLoss(g, nat);
 }
 
 // ---- Fleet actions ----------------------------------------------------------------------------------

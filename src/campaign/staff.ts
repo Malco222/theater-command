@@ -7,6 +7,7 @@
 // Historical mode. The numbers and the list of choices live in data/campaign/open.json.
 
 import { deterred } from './league';
+import { openTraits } from './traits';
 import openData from '../../data/campaign/open.json';
 import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
@@ -60,6 +61,7 @@ export function startOpen(g: Game): Game {
     g.flags['st:gain:GER'] = 1;
   }
   startEngineers(g);
+  openTraits(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
   g.supplyDirty = true;
   return g;

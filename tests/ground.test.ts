@@ -1,17 +1,24 @@
 // The grand campaign's ground rules: every arm has ground that suits it and ground that does not, the steepest
 // mountains are closed to tanks altogether, and tanks and infantry are worth more together than apart.
 // The historical scenarios use none of it.
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import ground from '../data/campaign/ground.json';
 import { canRaiseKind } from '../src/campaign/economy';
 import { addCorps, assess, createGame, limitAttackers, moveCorps, moveCost, railMove, railReach } from '../src/campaign/game';
 import { GROUND, barred, combinedArms, groundAttack, groundDefence, groundEffects, groundMarch, groundNotes, groundRules, groundSays, steep, whyBarred } from '../src/campaign/ground';
 import { whyNotShip } from '../src/campaign/navy';
 import { startOpen } from '../src/campaign/staff';
+import { TRAITS } from '../src/campaign/traits';
 import { reach, runTurnAI } from '../src/campaign/turn';
 import { KIND, TERRAIN_DEF, type Corps, type Game, type Kind, type Region, type Terrain } from '../src/campaign/types';
 
 const grand = (seed = 3, human: string | null = null): Game => startOpen(createGame(seed, human));
+// The ground is measured here with every nation fighting alike: Germany's tanks have an edge of their own in open
+// country, and national abilities have their own tests.
+const rows = { ...TRAITS.nations };
+beforeAll(() => { for (const id of Object.keys(TRAITS.nations)) delete TRAITS.nations[id]; });
+afterAll(() => { Object.assign(TRAITS.nations, rows); });
+
 /** A Polish province with Polish troops in it, next to German home ground. */
 const front = (g: Game): { target: Region; from: Region } => {
   const target = g.regions.find((r) => r.ctrl === 'POL' && !r.fort && r.units.some((c) => c.nat === 'POL') && r.nb.some((j) => g.regions[j].ctrl === 'GER' && g.regions[j].owner === 'GER'))!;

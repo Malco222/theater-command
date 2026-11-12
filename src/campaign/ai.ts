@@ -1021,6 +1021,8 @@ function evacuations(g: Game, nat: string): void {
     }
     if (!goal) return;
     const force = limitAttackers(g, trapped.filter((c) => g.regions[c.reg].nb.includes(goal!.id)), goal);
+    // Nobody who can get at the port (tanks below a mountain, a river with its bridges down): there is no way out this month.
+    if (!force.length) return;
     if (hostileUnits(g, goal, nat).length) {
       if (assess(g, force, goal).odds < 1) return;
       if (!resolveBattle(g, force, goal).taken) return;

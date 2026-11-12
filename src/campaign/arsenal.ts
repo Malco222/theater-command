@@ -7,7 +7,8 @@
 
 import data from '../../data/campaign/arsenal.json';
 import { airFleetsOf, airPool, foundAirFleet } from './air';
-import { BUDGET, PRODUCTION, budgeted, canRaise, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCorps, orderFort, raiseSite, specOf, type LedgerLine } from './economy';
+import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCorps, orderElite, orderFort, raiseSite, specOf, type LedgerLine } from './economy';
+import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { headline } from './game';
 import { NAVY, fleetsOf, foundFleet, shipCount } from './navy';
 import type { AirFleet, Build, Fleet, Game, Kind, Region, ShipClass } from './types';
@@ -169,16 +170,30 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   const poor = (cost: number): string | null => (n.pp < cost ? POOR : null);
   const r = g.regions[sel] as Region | undefined;
 
+  // The nation's own special formation (the grand campaign): raised like a corps of its kind, a few at a time. It heads the list.
+  const u = budgeted(g) ? eliteOf(nat) : null;
+  if (u) {
+    const need = needsOf(g, u.kind);
+    const at = raiseSite(g, nat, u.kind, sel);
+    const no = whyNoElite(g, nat);
+    out.push({
+      key: 'elite', group: 'army', label: u.label, blurb: `${u.text} ${eliteRule(u)}`, size: plural(u.divs, 'division'), cost: u.cost, months: u.months,
+      upkeep: corpsUpkeep(u.kind, u.divs), at,
+      note: at < 0 ? '' : `Forms up at ${g.regions[at].name}. ${eliteCount(g, nat)} of ${u.most} in the field or on order.`,
+      why: no ?? (at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : poor(u.cost)),
+    });
+  }
   for (const kind of corpsKinds(g)) {
     const spec = specOf(g, kind)!;
     const need = needsOf(g, kind);
     const at = raiseSite(g, nat, kind, sel);
     const where = at >= 0 ? g.regions[at].name : '';
+    const cost = corpsCost(g, nat, kind);
     out.push({
-      key: `corps:${kind}`, group: 'army', label: spec.label, blurb: spec.blurb, size: plural(spec.divs, 'division'), cost: spec.cost, months: spec.months,
+      key: `corps:${kind}`, group: 'army', label: spec.label, blurb: spec.blurb, size: plural(spec.divs, 'division'), cost, months: spec.months,
       upkeep: budgeted(g) ? corpsUpkeep(kind, spec.divs) : 0, at,
       note: at < 0 ? '' : `Forms up at ${where}${need && at !== sel && r && canRaise(g, nat, r) ? `: ${r.name} has not the ${plural(need, 'factory', 'factories')} this needs` : ''}.`,
-      why: at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : poor(spec.cost),
+      why: at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : poor(cost),
     });
   }
   if (!budgeted(g)) {
@@ -192,11 +207,12 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const built = industry(g, nat, spec.factories);
     const at = built ? stationSite(g, nat, sel) : -1;
     const joins = at >= 0 ? fleetAt(g, nat, at) : null;
+    const cost = priceOf(g, nat, `air:${wing}`, spec.cost);
     out.push({
-      key: `air:${wing}`, group: 'air', label: spec.label, blurb: spec.blurb, size: `${spec.count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost: spec.cost, months: spec.months,
+      key: `air:${wing}`, group: 'air', label: spec.label, blurb: spec.blurb, size: `${spec.count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost, months: spec.months,
       upkeep: spec.count * BUDGET.upkeep.air[wing], at,
       note: at < 0 ? '' : joins ? `Joins ${joins.name} at ${g.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g.regions[at].name}.`,
-      why: !built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(spec.cost),
+      why: !built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost),
     });
   }
 
@@ -205,12 +221,13 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const at = slipSite(g, nat, spec.yard, sel);
     const fleet = at >= 0 && hull !== 'tp' ? joinsFleet(g, nat, hull, at) : null;
     const full = hull === 'tp' && liftBought(g, nat) >= ARSENAL.lift.most;
+    const cost = priceOf(g, nat, `ship:${hull}`, spec.cost);
     const one = hull === 'tp' ? '' : NAVY.classes[hull].one, many = hull === 'tp' ? '' : NAVY.classes[hull].many;
     out.push({
-      key: `ship:${hull}`, group: 'navy', label: spec.label, blurb: spec.blurb, size: hull === 'tp' ? 'lift for one more corps a month' : plural(spec.count, one, many), cost: spec.cost, months: spec.months,
+      key: `ship:${hull}`, group: 'navy', label: spec.label, blurb: spec.blurb, size: hull === 'tp' ? 'lift for one more corps a month' : plural(spec.count, one, many), cost, months: spec.months,
       upkeep: hull === 'tp' ? 0 : spec.count * BUDGET.upkeep.ships[hull], at,
       note: at < 0 ? '' : hull === 'tp' ? `Built at ${g.regions[at].name}.` : fleet ? `Laid down at ${g.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g.regions[at].name}. Forms a new squadron there.`,
-      why: at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(spec.cost),
+      why: at < 0 ? `Needs a shipyard of level ${spec.yard} in one of your home ports.` : full ? 'The nation has all the troopships its ports can handle.' : poor(cost),
     });
   }
 
@@ -228,7 +245,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   const NONE = { yard: 'no shipyard', aa: 'no guns', field: 'only rough landing grounds' };
   const level = (what: 'yard' | 'aa' | 'field', spec: LevelSpec, now: number, upkeep: number, why: string | null): void => {
     const next = now + (r ? queued(g, nat, what, r.id) : 0) + 1;
-    const cost = spec.cost[Math.min(TOP, next)];
+    const cost = priceOf(g, nat, `work:${what}`, spec.cost[Math.min(TOP, next)]);
     out.push({
       key: `work:${what}`, group: 'works', label: spec.label, blurb: spec.blurb, size: `level ${Math.min(TOP, next)}`, cost, months: spec.months, upkeep, at: r ? r.id : -1,
       note: r ? `${r.name} has ${now ? `level ${now}` : NONE[what]}${next - 1 > now ? `, level ${next - 1} building` : ''}.` : '',
@@ -241,7 +258,7 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   {
     const cost = r ? fortCost(g, nat, r) : null;
     if (r && cost !== null) out.push(fortOffer(g, nat, r, cost, poor(cost)));
-    else out.push({ key: 'work:fort', group: 'works', label: 'Fortifications', blurb: FORT_BLURB, size: '', cost: PRODUCTION.fort.cost[1], months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: '', why: !r ? pick : !isHome(g, nat, r) ? 'Fortifications are built on home ground.' : `${r.name} is fortified as heavily as it can be.` });
+    else out.push({ key: 'work:fort', group: 'works', label: 'Fortifications', blurb: FORT_BLURB, size: '', cost: priceOf(g, nat, 'work:fort', PRODUCTION.fort.cost[1]), months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: '', why: !r ? pick : !isHome(g, nat, r) ? 'Fortifications are built on home ground.' : `${r.name} is fortified as heavily as it can be.` });
   }
   return out;
 }
@@ -259,6 +276,7 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   const o = offers(g, nat, sel).find((x) => x.key === key);
   if (!n.alive || !o || o.why !== null || o.at < 0 || n.pp < o.cost) return null;
   const [group, item] = key.split(':');
+  if (group === 'elite') return orderElite(g, nat, o.at);
   if (group === 'corps') return orderCorps(g, nat, item as Kind, o.at);
   if (key === 'work:fort') return orderFort(g, nat, o.at);
   const r = g.regions[o.at];
