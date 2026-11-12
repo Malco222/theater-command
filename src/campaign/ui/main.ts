@@ -24,7 +24,7 @@ import { PRODUCTION, canRaise, fortCost, income, isHome } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame, staleSave } from '../save';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
-import { DIPLOMACY, TRACK_LABEL, canCourt, courtable, momentum, pcIncome, receptive, step, tradePartners } from '../diplomacy';
+import { DIPLOMACY, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc } from '../game';
 import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type BattleReport, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
@@ -71,6 +71,58 @@ const $ = (s: string): HTMLElement => document.querySelector(s) as HTMLElement;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 const natName = (id: string): string => g.nations[id]?.name ?? id;
+/** A nation's name as it reads inside a sentence: "the United Kingdom", "Germany". */
+const theName = (id: string): string => { const nm = natName(id); return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm; };
+const upFirst = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
+/** "Germany", "Germany and Italy", "Germany, Italy, Hungary and 2 more". */
+function nameList(ids: string[], most = 3): string {
+  const names = ids.slice(0, most).map(theName);
+  if (ids.length > most) names.push(`${ids.length - most} more`);
+  return names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** The nation the player is running, while it is still in the war: the one whose friends and enemies the map is read by. */
+const viewer = (): string | null => (g.human && g.nations[g.human]?.alive ? g.human : null);
+
+/**
+ * What a nation is to the player: one word for the badge, and the class that colours it. With nobody at the
+ * controls there are no friends or enemies, so the word is the side the nation is on.
+ */
+function relationWord(nat: string): { kind: Standing | 'axis' | 'allies'; word: string } {
+  const me = viewer();
+  if (me) {
+    const kind = standing(g, me, nat);
+    return { kind, word: kind === 'own' ? 'Yours' : kind === 'ally' ? 'Ally' : kind === 'enemy' ? 'Enemy' : 'Neutral' };
+  }
+  const side = bloc(g.nations[nat]);
+  return side ? { kind: side, word: side === 'axis' ? 'Axis' : 'Allies' } : { kind: 'neutral', word: 'Neutral' };
+}
+
+/** The banner at the head of the region panel: whose ground this is to the player, in a word and a sentence. */
+function standingNote(r: Region): string {
+  const me = viewer();
+  const h = r.ctrl, o = r.owner, n = g.nations[h];
+  const { kind, word } = relationWord(h);
+  const N = upFirst(theName(h));
+  const foes = n.atWar.filter((x) => x !== me && g.nations[x]?.alive);
+  const wars = foes.length ? `At war with ${nameList(foes)}.` : 'Not at war with anyone.';
+  let line: string;
+  if (!me) line = `${N} is ${TRACK_PHRASE[n.align]}. ${wars}`;
+  else if (kind === 'own') line = o === me ? 'Your own ground.' : 'Held by your troops.';
+  else if (kind === 'enemy') line = `${N} is at war with you.${foes.length ? ` Also at war with ${nameList(foes)}.` : ''}`;
+  else if (kind === 'ally') line = n.atWar.some((x) => g.nations[me].atWar.includes(x)) ? `${N} is on your side and fighting the same enemy.` : `${N} is on your side. ${wars}`;
+  else if (bloc(n)) line = foes.length ? `${N} is ${TRACK_PHRASE[n.align]}, but not at war with you. ${wars}` : `${N} is ${TRACK_PHRASE[n.align]}, but is not at war with anyone.`;
+  else line = `${N} is ${TRACK_PHRASE[n.align]}. ${wars}`;
+  // Occupied ground: say where the nation it was taken from stands as well.
+  if (o !== h && g.nations[o]) {
+    const O = upFirst(theName(o));
+    if (!g.nations[o].alive) line += ` ${O}, whose ground this was, has fallen.`;
+    else if (me && o !== me) { const k = standing(g, me, o); line += ` ${O}, whose ground this is, is ${k === 'ally' ? 'your ally' : k === 'enemy' ? 'your enemy too' : 'neutral'}.`; }
+    else if (me) line += ' This is your own ground, in their hands.';
+    else line += ` The ground is ${g.nations[o].adj}.`;
+  }
+  return `<div class="rel ${kind}" style="--side:${n.color}"><b>${word}</b><span>${esc(line)}</span></div>`;
+}
 const date = (t: number): string => turnToDate(t).label;
 const capital = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
 /** Enemy coasts the picked corps could land on, worked out once each time the screen is drawn. */
@@ -903,7 +955,7 @@ function regionPane(): string {
     acts = `<div class="acts"><button class="btn small" data-act="pickall">Select all here</button></div>`;
   }
   const units = r.units.length ? [...r.units].sort((a, b) => (a.nat === me ? 0 : 1) - (b.nat === me ? 0 : 1)).map((c) => corpsRow(c, canOrder(g, c))).join('') : '<div class="empty">No armies here.</div>';
-  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>
+  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
     ${provinceSlots(r)}
@@ -2532,7 +2584,8 @@ function wireMap(): void {
     const here = [...armies].map(([nat, cs]) => { const who = leaderOf(cs); return `<br>${esc(g.nations[nat].adj)} army${who ? ` under ${esc(surname(who.name))}` : ''}: ${cs.length} corps, ${num(sumDivs(cs))} divisions`; }).join('');
     const way = routeShown === r.id ? routeTo(r.id) : null;
     const order = way ? `<br><span class="tipgo">${way.attack ? 'Right-click to plan an attack' : `Right-click to march: ${way.cost} of ${way.ap} moves`}</span>` : '';
-    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)}${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${here}${order}`;
+    const rel = relationWord(r.ctrl);
+    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${here}${order}`;
     }
     tip.style.display = 'block';
     const wrap = $('#mapwrap').getBoundingClientRect();

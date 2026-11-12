@@ -7,7 +7,7 @@
 import data from '../../data/campaign/diplomacy.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, atWar, bloc, declareWar, headline, relocate, removeCorps } from './game';
+import { addCorps, allied, atWar, bloc, declareWar, headline, relocate, removeCorps } from './game';
 import { fleetsOnFall } from './navy';
 import { airOnFall } from './air';
 
@@ -47,6 +47,26 @@ export const TRACK: Align[] = ['allies', 'allies_cobelligerent', 'leaning_allies
 export const TRACK_LABEL: Record<Align, string> = {
   allies: 'Allied member', allies_cobelligerent: 'Allied co-belligerent', leaning_allies: 'Leaning Allies', independent: 'Independent',
   leaning_axis: 'Leaning Axis', axis_cobelligerent: 'Axis co-belligerent', axis: 'Axis member',
+};
+
+/** How a nation stands to the one looking at it: its own, an ally, an enemy, or neither. */
+export type Standing = 'own' | 'ally' | 'enemy' | 'neutral';
+
+/**
+ * Where a nation stands for the one looking at it. An enemy is anyone the viewer is at war with, whatever bloc it
+ * belongs to. An ally is a member or co-belligerent of the viewer's own bloc. Everyone else is neutral to the viewer:
+ * that includes a member of the other bloc it is not yet at war with, as Italy is to Britain in 1939.
+ */
+export function standing(g: Game, viewer: string, nat: string): Standing {
+  if (viewer === nat) return 'own';
+  if (atWar(g, viewer, nat)) return 'enemy';
+  return allied(g, viewer, nat) ? 'ally' : 'neutral';
+}
+
+/** A nation's place on the track as it reads in a sentence: "Finland is fighting alongside the Axis". */
+export const TRACK_PHRASE: Record<Align, string> = {
+  allies: 'a member of the Allies', allies_cobelligerent: 'fighting alongside the Allies', leaning_allies: 'neutral, and leaning toward the Allies',
+  independent: 'neutral', leaning_axis: 'neutral, and leaning toward the Axis', axis_cobelligerent: 'fighting alongside the Axis', axis: 'a member of the Axis',
 };
 
 /** Where a nation stands on the track: -3 Allied member ... 0 independent ... +3 Axis member. */

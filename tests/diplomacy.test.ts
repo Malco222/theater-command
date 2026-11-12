@@ -1,7 +1,7 @@
 // Diplomacy: the alignment track, courting, and history's events as data.
 import { describe, expect, it } from 'vitest';
-import { allied, createGame } from '../src/campaign/game';
-import { DIPLOMACY, canCourt, court, holds, momentum, monthlyDiplomacy, receptive, step, tradePartners } from '../src/campaign/diplomacy';
+import { allied, createGame, declareWar } from '../src/campaign/game';
+import { DIPLOMACY, TRACK, TRACK_PHRASE, canCourt, court, holds, momentum, monthlyDiplomacy, receptive, standing, step, tradePartners } from '../src/campaign/diplomacy';
 import { income } from '../src/campaign/economy';
 import { beginHuman, humanUp, orderCourt, passMonth, runTurnAI, stepAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
@@ -153,5 +153,49 @@ describe('courting neutrals', () => {
     expect(g.nations.UK.pc).toBe(start + DIPLOMACY.pcIncome._major);
     for (let i = 0; i < 14; i++) passMonth(g);
     expect(g.nations.UK.pc).toBeLessThanOrEqual(DIPLOMACY.pcCap);
+  });
+});
+
+describe('friend, enemy or neutral', () => {
+  it('reads every nation from where the player stands', () => {
+    const g = createGame(1, 'UK');
+    expect(standing(g, 'UK', 'UK')).toBe('own');
+    // France and Poland are in the war on Britain's side, and Germany is the enemy.
+    expect(standing(g, 'UK', 'FRA')).toBe('ally');
+    expect(standing(g, 'UK', 'POL')).toBe('ally');
+    expect(standing(g, 'UK', 'GER')).toBe('enemy');
+    // Countries outside the war are neutral, whichever way they lean.
+    for (const nat of ['SWE', 'SOV', 'BEL', 'HUN', 'USA']) expect(standing(g, 'UK', nat)).toBe('neutral');
+    // The same map read from Berlin.
+    expect(standing(g, 'GER', 'POL')).toBe('enemy');
+    expect(standing(g, 'GER', 'SVK')).toBe('ally');
+    expect(standing(g, 'GER', 'SOV')).toBe('neutral');
+  });
+
+  it('counts a member of the other bloc as neutral until there is a war with it', () => {
+    const g = createGame(1, 'UK');
+    // Italy is an Axis member in September 1939 and at war with nobody.
+    expect(g.nations.ITA.align).toBe('axis');
+    expect(standing(g, 'UK', 'ITA')).toBe('neutral');
+    expect(standing(g, 'GER', 'ITA')).toBe('ally');
+    declareWar(g, 'ITA', 'UK');
+    expect(standing(g, 'UK', 'ITA')).toBe('enemy');
+    expect(standing(g, 'ITA', 'UK')).toBe('enemy');
+  });
+
+  it('follows a country that changes sides or is drawn in', () => {
+    const g = createGame(1, 'UK');
+    // Belgium invaded joins the Allies; the Soviet Union attacked by Germany fights the same enemy.
+    g.nations.BEL.align = 'allies';
+    expect(standing(g, 'UK', 'BEL')).toBe('ally');
+    g.nations.SOV.align = 'allies_cobelligerent';
+    expect(standing(g, 'UK', 'SOV')).toBe('ally');
+    expect(standing(g, 'GER', 'SOV')).toBe('neutral');
+    declareWar(g, 'GER', 'SOV');
+    expect(standing(g, 'GER', 'SOV')).toBe('enemy');
+  });
+
+  it('has a phrase for every place on the alignment track', () => {
+    for (const a of TRACK) expect(TRACK_PHRASE[a].length).toBeGreaterThan(0);
   });
 });

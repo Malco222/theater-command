@@ -230,6 +230,22 @@ button.corps:hover { border-color: var(--ink-3); }
 .corps .nm { font-weight: 600; font-size: 13.5px; line-height: 1.2; }
 .corps .meta { font-size: 11.5px; color: var(--ink-2); grid-column: 2 / 4; }
 .corps .tags { grid-column: 2 / 4; display: flex; gap: 5px; flex-wrap: wrap; margin-top: 2px; }
+/* Whose ground this is to the player: yours, an ally's, an enemy's or a neutral's. */
+.rel { display: flex; gap: 9px; align-items: baseline; margin-top: 8px; padding: 7px 10px; border-radius: 4px; border-left: 3px solid var(--line); background: var(--panel-2); font-size: 12.5px; line-height: 1.4; color: var(--ink-2); }
+.rel b { flex: none; font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink); }
+.rel.own { border-left-color: var(--brass); }
+.rel.own b { color: var(--brass); }
+.rel.ally { border-left-color: #5caa60; background: #1d3223; }
+.rel.ally b { color: #b8dcb2; }
+.rel.enemy { border-left-color: #cf5a41; background: #3b1f19; }
+.rel.enemy b { color: #f0b3a5; }
+.rel.neutral { border-left-color: #8a95a5; }
+.rel.neutral b { color: #c9d1dc; }
+.rel.axis, .rel.allies { border-left-color: var(--side, var(--line)); }
+.tiprel { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; padding: 0 4px; border-radius: 3px; background: var(--panel-3); color: var(--ink-2); }
+.tiprel.own { background: var(--brass); color: var(--brass-ink); }
+.tiprel.ally { background: #24402a; color: #b8dcb2; }
+.tiprel.enemy { background: #4a241c; color: #f0b3a5; }
 .tag { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 5px; border-radius: 3px; background: var(--panel-3); color: var(--ink-2); }
 .tag.bad { background: #4a241c; color: #f0b3a5; }
 .tag.good { background: #24402a; color: #b8dcb2; }
