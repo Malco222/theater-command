@@ -175,6 +175,17 @@ FVector ACampaignMapActor::SurfacePoint(double X, double Y, double Lift) const
 	return MapToWorld(X, Y, Ground + Lift);
 }
 
+FVector ACampaignMapActor::SurfacePointOver(double X, double Y, double Lift) const
+{
+	const double Reach = 0.8;
+	double Ground = FMath::Max(static_cast<double>(Terrain.HeightAt(X, Y)), 0.0);
+	for (const FVector2D& Step : { FVector2D(Reach, 0.0), FVector2D(-Reach, 0.0), FVector2D(0.0, Reach), FVector2D(0.0, -Reach) })
+	{
+		Ground = FMath::Max(Ground, static_cast<double>(Terrain.HeightAt(X + Step.X, Y + Step.Y)));
+	}
+	return MapToWorld(X, Y, Ground + Lift);
+}
+
 int32 ACampaignMapActor::RegionAtWorld(const FVector& World) const
 {
 	if (!Data.IsLoaded())
@@ -344,8 +355,11 @@ void ACampaignMapActor::PaintVertices(int32 I0, int32 J0, int32 I1, int32 J1)
 			const float H = Terrain.Height[Idx];
 			const FVector2f Slope = Terrain.GradientAt(I, J);
 			const float Steepness = FMath::Clamp(Slope.Size() * 0.9f, 0.0f, 1.0f);
-			C = FMath::Lerp(C, Rock, 0.7f * FMath::SmoothStep(1.6f, 4.2f, H + Steepness));
-			C = FMath::Lerp(C, Snow, 0.9f * FMath::SmoothStep(5.0f, 6.6f, H) * (1.0f - 0.6f * Steepness));
+			// Steep ground is rock whatever its height; high flat ground (a plateau) keeps its nation's colour.
+			const float RockAmount = 0.72f * FMath::SmoothStep(0.16f, 0.62f, Steepness) * FMath::SmoothStep(0.7f, 2.2f, H)
+				+ 0.3f * FMath::SmoothStep(3.6f, 5.4f, H);
+			C = FMath::Lerp(C, Rock, FMath::Min(RockAmount, 0.85f));
+			C = FMath::Lerp(C, Snow, 0.9f * FMath::SmoothStep(5.0f, 6.6f, H) * (1.0f - 0.5f * Steepness));
 
 			// A narrow strip of sand along the shore.
 			C = FMath::Lerp(C, Sand, 0.45f * (1.0f - FMath::SmoothStep(0.2f, 1.8f, Terrain.ShoreDistance[Idx])));
@@ -451,9 +465,16 @@ void ACampaignMapActor::BuildSeaMesh()
 		{
 			const double X = FMath::Min(I * Step, Data.Width);
 			const double Y = FMath::Min(J * Step, Data.Height);
-			// The water pales toward every coast, the way a chart shows shoal water.
+			// The water pales toward every coast, the way a chart shows shoal water. Where the real depth
+			// is known the shading follows it: the North Sea and the Baltic lie pale on their shelf, the
+			// Atlantic and the deep basins of the Mediterranean dark.
 			const float OffShore = -Terrain.ShoreAt(X, Y);
-			const float Depth = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp(OffShore / 9.0f, 0.0f, 1.0f));
+			float Depth = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp(OffShore / 9.0f, 0.0f, 1.0f));
+			if (Terrain.HasElevation())
+			{
+				const float Fathomed = FMath::Clamp(FMath::Pow(FMath::Max(-Terrain.MetresAt(X, Y), 0.0f) / 3200.0f, 0.42f), 0.0f, 1.0f);
+				Depth = FMath::Min(Depth, 0.25f + 0.75f * Fathomed) * FMath::Lerp(0.55f, 1.0f, Fathomed);
+			}
 			const FLinearColor C = FMath::Lerp(Shallow, Deep, FMath::Pow(Depth, 0.7f));
 			Buffers.AddVertex(MapToWorld(X, Y, 0.0), FVector::UpVector, C.ToFColor(true), FVector2D(X / Data.Width, Y / Data.Height));
 		}
@@ -525,8 +546,8 @@ void ACampaignMapActor::BuildBorders()
 					const FVector2D P = A + Dir * T;
 					const FVector2D L = P + Side * HalfWidth;
 					const FVector2D R = P - Side * HalfWidth;
-					const int32 Left = Buffers.AddVertex(SurfacePoint(L.X, L.Y, Lift), FVector::UpVector, Ink);
-					const int32 Right = Buffers.AddVertex(SurfacePoint(R.X, R.Y, Lift), FVector::UpVector, Ink);
+					const int32 Left = Buffers.AddVertex(SurfacePointOver(L.X, L.Y, Lift), FVector::UpVector, Ink);
+					const int32 Right = Buffers.AddVertex(SurfacePointOver(R.X, R.Y, Lift), FVector::UpVector, Ink);
 					if (PrevLeft != INDEX_NONE)
 					{
 						Buffers.AddTriangleFacingUp(PrevLeft, PrevRight, Left);
@@ -1144,8 +1165,8 @@ void ACampaignMapActor::AppendRibbon(FCampaignMeshBuffers& Buffers, const TArray
 			const FVector2D P = A + Dir * T;
 			const FVector2D L = P + Side * HalfWidth;
 			const FVector2D R = P - Side * HalfWidth;
-			const int32 Left = Buffers.AddVertex(SurfacePoint(L.X, L.Y, Lift), FVector::UpVector, Ink);
-			const int32 Right = Buffers.AddVertex(SurfacePoint(R.X, R.Y, Lift), FVector::UpVector, Ink);
+			const int32 Left = Buffers.AddVertex(SurfacePointOver(L.X, L.Y, Lift), FVector::UpVector, Ink);
+			const int32 Right = Buffers.AddVertex(SurfacePointOver(R.X, R.Y, Lift), FVector::UpVector, Ink);
 			if (PrevLeft != INDEX_NONE)
 			{
 				Buffers.AddTriangleFacingUp(PrevLeft, PrevRight, Left);

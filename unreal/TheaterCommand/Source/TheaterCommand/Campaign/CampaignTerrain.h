@@ -11,9 +11,11 @@ class FCampaignMapData;
  * It is the shape only. Colour, borders and everything drawn on top are the
  * map actor's business. Heights are in map units with the sea at zero.
  *
- * The relief is invented from each region's terrain for now (mountains where
- * the data says mountains). The same grid can be filled from real elevation
- * data later without anything else changing.
+ * The relief is the real one: the land is modelled from NOAA's ETOPO 2022
+ * elevation data (Content/Data/Campaign/elevation.bin, made by
+ * Tools/make_elevation.mjs), with the heights exaggerated the way a relief
+ * map's are. If that file is missing the relief is invented instead from each
+ * region's kind of country, mountains where the data says mountains.
  */
 class FCampaignTerrain
 {
@@ -33,6 +35,12 @@ public:
 
 	/** Distance to the shoreline in map units: positive on land, negative at sea. */
 	float ShoreAt(double X, double Y) const { return Sample(ShoreDistance, X, Y); }
+
+	/** True when the land was modelled from real elevation data. */
+	bool HasElevation() const { return ElevationWidth > 0; }
+
+	/** The real height of the ground or depth of the sea at a point, in metres. Zero when there is no elevation data. */
+	float MetresAt(double X, double Y) const;
 
 	/** Slope of the ground at a grid point, as (dh/dx, dh/dy) in map units. */
 	FVector2f GradientAt(int32 I, int32 J) const;
@@ -59,4 +67,10 @@ private:
 	void SpreadDistance(TArray<float>& Field) const;
 
 	float Sample(const TArray<float>& Field, double X, double Y) const;
+	void LoadElevation();
+
+	// Real heights in metres, one for every whole map unit.
+	TArray<int16> Elevation;
+	int32 ElevationWidth = 0;
+	int32 ElevationHeight = 0;
 };

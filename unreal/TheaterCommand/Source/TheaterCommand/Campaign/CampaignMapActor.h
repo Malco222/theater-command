@@ -47,6 +47,9 @@ public:
 	/** A point on the surface of the table: on the ground over land, on the water over sea. */
 	FVector SurfacePoint(double X, double Y, double Lift = 0.0) const;
 
+	/** The same, but clear of every bump within a short reach: for lines drawn over rough ground, which a ridge would otherwise cut. */
+	FVector SurfacePointOver(double X, double Y, double Lift) const;
+
 	int32 RegionAtWorld(const FVector& World) const;
 
 	void SetSelectedRegion(int32 RegionId);

@@ -64,6 +64,10 @@ Three rules shape the code:
 - **One set of rules.** The rules are not rewritten in C++. The prototype's TypeScript is bundled into a single JavaScript file and run inside the game by a JavaScript engine (the one that comes with macOS today; a portable one for Windows later). Everything crosses that boundary as JSON: the game asks by name (`start`, `view`, `reach`, `move`, `previewAttack`, `attack`, `endMonth`) and draws what comes back. So the 3D game cannot drift from the tested rules.
 - **The table is built, not placed.** The level is empty. Everything on it is made from the data when the game starts, so nothing has to be arranged by hand in the editor and nothing large sits in the repository.
 
+## The land and the sea
+
+The relief is the real one. The land is modelled from NOAA's ETOPO 2022 elevation data (NOAA National Centers for Environmental Information, public domain, doi:10.25921/fd45-gt74), with heights exaggerated the way a relief map's are, and the sea is shaded by its real depth: pale over the shelves of the North Sea and the Baltic, dark over the Atlantic and the deep basins of the Mediterranean. `Tools/make_elevation.mjs` turns NOAA's grid into `Content/Data/Campaign/elevation.bin`, laid out in the campaign map's own projection; the header of that script gives the address the data was fetched from.
+
 ## Music
 
 The music is one original piece, "The Map Room", written as notes in `Tools/make_music.mjs` and played by a small synthesiser in the same file, so nothing in it is borrowed from any recording, film or game. `Tools/build_music.sh` makes it and brings it into Unreal; the launcher does this the first time. The result is about 17 MB and can always be remade, so it is not kept in the repository. It is a synthesiser, not an orchestra: recorded music can replace it later without anything else changing.
@@ -72,7 +76,6 @@ The music is one original piece, "The Map Room", written as notes in `Tools/make
 
 Some of what is on screen is a placeholder for the real thing:
 
-- **Relief** is invented from each territory's terrain type. Real elevation data will replace it, so the Alps and the Carpathians are where they belong.
 - **Army pieces** are plain blocks. Sculpted miniatures will replace them.
 - **Borders** are the prototype's approximate ones, grown from each territory's chief town.
 
@@ -84,6 +87,7 @@ From `TheaterCommand/`:
 ./Tools/build.sh             # compile the C++
 ./Tools/build_rules.sh       # bundle the rules again, after the prototype's rules or data change (needs Node.js)
 ./Tools/build_music.sh       # make the music and bring it into Unreal (needs Node.js)
+node Tools/make_elevation.mjs <etopo.dods> Content/Data/Campaign/elevation.bin   # remake the height map from NOAA's data
 ./Tools/build_content.sh     # remake the few binary assets, after changing build_content.py
 ./Tools/take_pictures.sh     # run the game, take the photographer's set of pictures, print frame rates
 ```

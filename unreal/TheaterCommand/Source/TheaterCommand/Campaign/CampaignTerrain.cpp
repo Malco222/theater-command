@@ -2,6 +2,8 @@
 
 #include "Campaign/CampaignMapData.h"
 #include "TheaterCommand.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -136,9 +138,51 @@ void FCampaignTerrain::Smooth(TArray<float>& Field, int32 Columns, int32 Rows, i
 	}
 }
 
+void FCampaignTerrain::LoadElevation()
+{
+	Elevation.Reset();
+	ElevationWidth = ElevationHeight = 0;
+	TArray<uint8> Bytes;
+	const FString Path = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data/Campaign/elevation.bin"));
+	if (!FFileHelper::LoadFileToArray(Bytes, *Path, FILEREAD_Silent) || Bytes.Num() < 12 || FMemory::Memcmp(Bytes.GetData(), "TCE1", 4) != 0)
+	{
+		UE_LOG(LogTheater, Display, TEXT("No elevation data at %s: the relief will be invented from each region's kind of country."), *Path);
+		return;
+	}
+	uint32 FileWidth = 0, FileHeight = 0;
+	FMemory::Memcpy(&FileWidth, Bytes.GetData() + 4, 4);
+	FMemory::Memcpy(&FileHeight, Bytes.GetData() + 8, 4);
+	if (FileWidth == 0 || FileHeight == 0 || static_cast<int64>(Bytes.Num()) < 12 + static_cast<int64>(FileWidth) * FileHeight * 2)
+	{
+		return;
+	}
+	ElevationWidth = static_cast<int32>(FileWidth);
+	ElevationHeight = static_cast<int32>(FileHeight);
+	Elevation.SetNumUninitialized(ElevationWidth * ElevationHeight);
+	FMemory::Memcpy(Elevation.GetData(), Bytes.GetData() + 12, Elevation.Num() * sizeof(int16));
+}
+
+float FCampaignTerrain::MetresAt(double X, double Y) const
+{
+	if (ElevationWidth <= 1)
+	{
+		return 0.0f;
+	}
+	const double Gx = FMath::Clamp(X, 0.0, static_cast<double>(ElevationWidth - 1));
+	const double Gy = FMath::Clamp(Y, 0.0, static_cast<double>(ElevationHeight - 1));
+	const int32 X0 = FMath::Min(FMath::FloorToInt32(Gx), ElevationWidth - 2);
+	const int32 Y0 = FMath::Min(FMath::FloorToInt32(Gy), ElevationHeight - 2);
+	const float Fx = static_cast<float>(Gx - X0), Fy = static_cast<float>(Gy - Y0);
+	const int16* Row0 = Elevation.GetData() + Y0 * ElevationWidth + X0;
+	const int16* Row1 = Row0 + ElevationWidth;
+	return FMath::Lerp(FMath::Lerp(static_cast<float>(Row0[0]), static_cast<float>(Row0[1]), Fx),
+		FMath::Lerp(static_cast<float>(Row1[0]), static_cast<float>(Row1[1]), Fx), Fy);
+}
+
 void FCampaignTerrain::Build(const FCampaignMapData& Data)
 {
 	const double StartTime = FPlatformTime::Seconds();
+	LoadElevation();
 
 	NX = FMath::CeilToInt32(Data.Width / Cell) + 1;
 	NY = FMath::CeilToInt32(Data.Height / Cell) + 1;
@@ -278,7 +322,20 @@ void FCampaignTerrain::Build(const FCampaignMapData& Data)
 			const int32 Idx = Index(I, J);
 			const float C = Coverage[Idx];
 			float H;
-			if (C >= 0.5f)
+			if (C >= 0.5f && HasElevation())
+			{
+				// The real ground. Heights are raised the way a relief map raises them: low hills more than
+				// in proportion, so that they can be seen at all, and the great ranges less, so that they
+				// do not tower over the pieces. 2,500 metres stands about five and a half map units high.
+				const FVector2D P(I * Cell, J * Cell);
+				const float Metres = FMath::Max(MetresAt(P.X, P.Y), 0.0f);
+				const float Lift = 5.6f * FMath::Pow(Metres / 2500.0f, 0.78f);
+				// A little tooth on the slopes, more of it the higher the country, so they do not look moulded in glass.
+				const float Tooth = (0.05f + 0.045f * Lift) * Fbm(P * 0.23, 3);
+				H = ShelfHeight * FMath::SmoothStep(0.5f, 0.92f, C)
+					+ FMath::Max(Lift + Tooth, 0.0f) * FMath::SmoothStep(0.2f, 2.6f, ShoreDistance[Idx]);
+			}
+			else if (C >= 0.5f)
 			{
 				H = ShelfHeight * FMath::SmoothStep(0.5f, 0.92f, C);
 				const float Fade = FMath::SmoothStep(1.0f, 8.0f, ShoreDistance[Idx]);
