@@ -63,7 +63,10 @@ public:
 	 * Stands the armies on the table as the rules say they are. Marches are corps that have just moved:
 	 * their pieces are picked up and carried along the road they took.
 	 */
-	void ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches);
+	void ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr);
+
+	/** The piece a line from Origin along Direction passes through, nearest first. */
+	AArmyPiece* PieceAtRay(const FVector& Origin, const FVector& Direction) const;
 
 	/** The piece that holds this corps, if it is on the table. */
 	AArmyPiece* FindPieceOfCorps(int32 CorpsId) const;

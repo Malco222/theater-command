@@ -189,8 +189,11 @@ public:
 	/** Shows the road the picked-up army would take to a region. */
 	void ShowRouteTo(int32 RegionId);
 
-	/** Orders the picked-up army to a region. */
-	void OrderTo(int32 RegionId);
+	/**
+	 * Orders the picked-up army to a region. CarriedFrom is where the player's hand set the piece down, when it
+	 * was dragged there: the piece then settles straight onto its place.
+	 */
+	void OrderTo(int32 RegionId, const FVector* CarriedFrom = nullptr);
 
 	/** Sends the attack shown on the face-off in. */
 	void ConfirmAttack();
@@ -205,6 +208,14 @@ public:
 
 	/** Cuts short the watching of the other nations' month. */
 	void SkipWatching();
+
+	/**
+	 * The hand on a flag, as three steps a script can take too: take hold of the player's army in a region,
+	 * hang it over another, and let go of it there.
+	 */
+	bool HoldArmyIn(int32 RegionId);
+	void CarryHeldOver(int32 RegionId);
+	void DropHeldOver(int32 RegionId);
 
 	/** While a script is driving (the development photographer), the pointer does not light or route anything. */
 	void SetScripted(bool bInScripted) { bScripted = bInScripted; }
@@ -221,7 +232,11 @@ private:
 	void RefreshOrders();
 	void Notify(const FString& Text, double Seconds = 5.0);
 	void OpenFaceOff(int32 RegionId);
-	void ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches);
+	void ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr);
+	bool CanPickUp(const AArmyPiece* Piece) const;
+	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);
+	bool Hold(AArmyPiece* Piece);
+	void DropArmy(int32 RegionId, bool bOnTable);
 	void WatchNextStep();
 	void FinishMonth();
 	void SpaceBar();
@@ -241,6 +256,8 @@ private:
 	TArray<FReachRegion> Reach;
 	int32 RouteTarget = INDEX_NONE;
 	TWeakObjectPtr<AArmyPiece> RingedPiece;
+	TWeakObjectPtr<AArmyPiece> HoverPiece; // the piece the pointer rests on, if it can be picked up
+	TWeakObjectPtr<AArmyPiece> HeldPiece; // the piece the left button went down on
 
 	FFaceOff FaceOff;
 	FOpening Opening;

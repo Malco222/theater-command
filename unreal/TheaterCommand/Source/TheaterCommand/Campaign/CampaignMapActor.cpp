@@ -787,7 +787,23 @@ AArmyPiece* ACampaignMapActor::FindPieceOfCorps(int32 CorpsId) const
 	return nullptr;
 }
 
-void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches)
+AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& Direction) const
+{
+	AArmyPiece* Best = nullptr;
+	double Nearest = TNumericLimits<double>::Max();
+	for (AArmyPiece* Piece : Pieces)
+	{
+		double Distance = 0.0;
+		if (Piece && Piece->HitByRay(Origin, Direction, Distance) && Distance < Nearest)
+		{
+			Nearest = Distance;
+			Best = Piece;
+		}
+	}
+	return Best;
+}
+
+void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
 	UWorld* World = GetWorld();
 	if (!World || !Data.IsLoaded())
@@ -887,12 +903,20 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 			continue;
 		}
 		TArray<FVector> Road;
-		Road.Add(*From);
-		for (int32 i = 0; i + 1 < Lead.Path.Num(); ++i)
+		if (CarriedFrom)
 		{
-			if (Data.Regions.IsValidIndex(Lead.Path[i]))
+			// The player carried it here by hand: it only has to settle onto its place.
+			Road.Add(*CarriedFrom);
+		}
+		else
+		{
+			Road.Add(*From);
+			for (int32 i = 0; i + 1 < Lead.Path.Num(); ++i)
 			{
-				Road.Add(ArmySpot(Lead.Path[i], 0));
+				if (Data.Regions.IsValidIndex(Lead.Path[i]))
+				{
+					Road.Add(ArmySpot(Lead.Path[i], 0));
+				}
 			}
 		}
 		Road.Add(Piece->GetRestLocation());
@@ -901,7 +925,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		if (!KeysBefore.Contains(Key))
 		{
 			// Nobody of theirs was there before: the piece itself makes the march.
-			Piece->MarchAlong(Road, false);
+			Piece->MarchAlong(Road, false, CarriedFrom == nullptr);
 		}
 		else if (const FCampaignNation* Nation = Data.FindNation(Piece->GetNationTag()))
 		{
@@ -914,10 +938,10 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 					Travellers.Add(*Unit);
 				}
 			}
-			if (AArmyPiece* Courier = World->SpawnActor<AArmyPiece>(*From, Piece->GetActorRotation()))
+			if (AArmyPiece* Courier = World->SpawnActor<AArmyPiece>(CarriedFrom ? *CarriedFrom : *From, Piece->GetActorRotation()))
 			{
 				Courier->SetArmy(this, *Nation, Piece->GetRegionId(), Travellers);
-				Courier->MarchAlong(Road, true);
+				Courier->MarchAlong(Road, true, CarriedFrom == nullptr);
 			}
 		}
 	}

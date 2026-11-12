@@ -362,7 +362,7 @@ namespace
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 8.0f, 0.0f)
 								[
 									SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint)
-									.Text(FText::FromString(TEXT("Right-click a territory to send them there. Click a card to leave that corps behind.")))
+									.Text(FText::FromString(TEXT("Click lightened ground to send them there, or drag the flag to it. Click a card to leave that corps behind.")))
 								]
 							]
 						]
@@ -376,7 +376,7 @@ namespace
 						.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick: pick up an army or a territory    Right-click: send the army    Enter: end the month    M: music")))
+							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army, then click or drag it where it should go    Enter: end the month    M: music")))
 							.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
 						]
 					]

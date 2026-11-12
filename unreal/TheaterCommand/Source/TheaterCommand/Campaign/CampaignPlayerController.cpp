@@ -427,10 +427,18 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
-	// What the pointer is over.
+	// What the pointer is over: a piece if it is on one (its counters, pole or colours), and the ground behind it.
 	FVector PointerWorld;
 	const bool bOnTable = bHaveMouse && PointerOnTable(PointerWorld);
 	const int32 PointedRegion = bOnTable ? Map->RegionAtWorld(PointerWorld) : INDEX_NONE;
+	AArmyPiece* PointedPiece = nullptr;
+	{
+		FVector RayOrigin, RayDirection;
+		if (bHaveMouse && !bScripted && DeprojectMousePositionToWorld(RayOrigin, RayDirection))
+		{
+			PointedPiece = Map->PieceAtRay(RayOrigin, RayDirection);
+		}
+	}
 
 	// The other nations' month plays itself out, a nation at a time.
 	if (bWatching && FPlatformTime::Seconds() >= WatchNext)
@@ -468,13 +476,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bTurning = false;
 	}
 
-	// Left button: a press and release picks a territory, and the army there if it is the player's; a press and
-	// drag pulls the map along under the pointer.
+	// Left button. On one of the player's flags: a press picks the army up and shows how far it can go; dragging
+	// carries the flag, and letting go over ground it can reach sends it there. Anywhere else: a click picks a
+	// territory (or, with an army in hand, sends the army there if it can reach it), and a drag pulls the map along.
 	if (WasInputKeyJustPressed(EKeys::LeftMouseButton) && bHaveMouse)
 	{
 		bLeftHeld = true;
 		bDragging = false;
 		PressPosition = Mouse;
+		HeldPiece.Reset();
+		if (!bBusy)
+		{
+			Hold(PointedPiece);
+		}
 	}
 	if (bLeftHeld && IsInputKeyDown(EKeys::LeftMouseButton) && bHaveMouse)
 	{
@@ -482,7 +496,26 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		{
 			bDragging = true;
 		}
-		if (bDragging && ViewWidth > 0)
+		if (bDragging && HeldPiece.IsValid())
+		{
+			// The flag is in the hand: it follows the pointer over the table, and the table slides along when the
+			// hand comes to the edge of the view, so an army can be carried farther than the screen shows.
+			if (bOnTable)
+			{
+				HeldPiece->Carry(PointerWorld);
+			}
+			if (ViewWidth > 0 && ViewHeight > 0)
+			{
+				const double Margin = 0.045 * ViewHeight;
+				FVector2D Push = FVector2D::ZeroVector;
+				if (Mouse.X < Margin) Push.X -= 1.0;
+				if (Mouse.X > ViewWidth - Margin) Push.X += 1.0;
+				if (Mouse.Y < Margin) Push.Y += 1.0;
+				if (Mouse.Y > ViewHeight - Margin) Push.Y -= 1.0;
+				Eye->Pan(Push * 0.8, DeltaTime);
+			}
+		}
+		else if (bDragging && ViewWidth > 0)
 		{
 			// How much table one pixel covers at the point being looked at.
 			const double PerPixel = 2.0 * Eye->GetDistance() * FMath::Tan(FMath::DegreesToRadians(Eye->GetHorizontalFov() * 0.5)) / ViewWidth;
@@ -495,20 +528,41 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	if (bLeftHeld && !IsInputKeyDown(EKeys::LeftMouseButton))
 	{
-		if (!bDragging && !bBusy)
+		if (HeldPiece.IsValid())
 		{
-			SelectRegion(PointedRegion);
-			if (!PickUpArmyIn(PointedRegion))
+			if (bDragging)
 			{
-				PutDownArmy();
+				DropArmy(PointedRegion, bOnTable);
 			}
+			// A plain click on the flag has already picked the army up.
+		}
+		else if (!bDragging && !bBusy)
+		{
+			ClickOnTable(PointedPiece, PointedRegion);
 		}
 		bLeftHeld = false;
 		bDragging = false;
+		HeldPiece.Reset();
 	}
 
+	// A flag the pointer rests on shows it can be picked up.
+	AArmyPiece* Offered = (!bBusy && !HeldPiece.IsValid() && CanPickUp(PointedPiece)) ? PointedPiece : nullptr;
+	if (HoverPiece.Get() != Offered)
+	{
+		if (HoverPiece.IsValid())
+		{
+			HoverPiece->SetHovered(false);
+		}
+		HoverPiece = Offered;
+		if (Offered)
+		{
+			Offered->SetHovered(true);
+		}
+	}
+	CurrentMouseCursor = HeldPiece.IsValid() && bDragging ? EMouseCursor::GrabHandClosed : (Offered ? EMouseCursor::GrabHand : EMouseCursor::Default);
+
 	// Whatever the pointer rests on is lit faintly, and with an army in hand the road to it is drawn.
-	if (!bScripted && !bDragging && !bTurning)
+	if (!bScripted && !bTurning && (!bDragging || HeldPiece.IsValid()))
 	{
 		Map->SetHoveredRegion(bBusy ? INDEX_NONE : PointedRegion);
 		if (ArmyRegion != INDEX_NONE && !bBusy)
@@ -521,6 +575,112 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 
 	LastMouse = Mouse;
 	bHaveLastMouse = bHaveMouse;
+}
+
+bool ACampaignPlayerController::CanPickUp(const AArmyPiece* Piece) const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Piece || !Session || Piece->GetNationTag() != Session->GetView().Human)
+	{
+		return false;
+	}
+	// One of the player's, with at least one corps that can be given orders this month.
+	for (const FViewCorps& Unit : Session->GetView().Corps)
+	{
+		if (Unit.Region == Piece->GetRegionId() && Unit.Nation == Piece->GetNationTag() && Unit.bCanOrder)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ACampaignPlayerController::Hold(AArmyPiece* Piece)
+{
+	if (!CanPickUp(Piece))
+	{
+		return false;
+	}
+	const int32 RegionId = Piece->GetRegionId();
+	SelectRegion(RegionId);
+	if (!PickUpArmyIn(RegionId))
+	{
+		return false;
+	}
+	HeldPiece = RingedPiece.IsValid() ? RingedPiece.Get() : Piece;
+	return true;
+}
+
+bool ACampaignPlayerController::HoldArmyIn(int32 RegionId)
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Map.IsValid() && Hold(Map->FindPiece(RegionId, Session->GetView().Human));
+}
+
+void ACampaignPlayerController::CarryHeldOver(int32 RegionId)
+{
+	if (HeldPiece.IsValid() && Map.IsValid() && Map->GetData().Regions.IsValidIndex(RegionId))
+	{
+		const FVector2D At = Map->GetData().Regions[RegionId].Center;
+		HeldPiece->Carry(Map->SurfacePoint(At.X, At.Y));
+		Map->SetHoveredRegion(RegionId);
+		ShowRouteTo(RegionId);
+	}
+}
+
+void ACampaignPlayerController::DropHeldOver(int32 RegionId)
+{
+	DropArmy(RegionId, true);
+	HeldPiece.Reset();
+}
+
+void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
+{
+	// A click on somebody's flag is a click on the ground it stands on.
+	const int32 Target = Piece ? Piece->GetRegionId() : RegionId;
+
+	// With an army in hand, a click on ground it can reach sends it there.
+	if (ArmyRegion != INDEX_NONE && Target != INDEX_NONE && Target != ArmyRegion && FindReach(Target))
+	{
+		OrderTo(Target);
+		return;
+	}
+	SelectRegion(Target);
+	if (!PickUpArmyIn(Target))
+	{
+		PutDownArmy();
+	}
+}
+
+void ACampaignPlayerController::DropArmy(int32 RegionId, bool bOnTable)
+{
+	AArmyPiece* Piece = HeldPiece.Get();
+	if (!Piece)
+	{
+		return;
+	}
+	const FReachRegion* Target = (bOnTable && RegionId != INDEX_NONE && RegionId != ArmyRegion) ? FindReach(RegionId) : nullptr;
+	if (Target && !Target->bAttack)
+	{
+		// Set down on ground it can reach: it goes there, settling from where the hand let go.
+		const FVector From = Piece->GetActorLocation();
+		OrderTo(RegionId, &From);
+	}
+	else if (Target)
+	{
+		// Set down on the enemy: the face-off decides whether the attack goes in. The flag goes back meanwhile.
+		Piece->ReturnToRest();
+		OrderTo(RegionId);
+	}
+	else if (RegionId != ArmyRegion && RegionId != INDEX_NONE)
+	{
+		Notify(TEXT("They cannot get there this month. Lightened ground is where they can go."));
+	}
+	// Whatever is left of the army where it started goes back to its place.
+	if (HeldPiece.IsValid())
+	{
+		HeldPiece->ReturnToRest();
+	}
 }
 
 void ACampaignPlayerController::SelectRegion(int32 RegionId)
@@ -730,7 +890,7 @@ void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
 	Map->SetRoute(From, RingedPiece.IsValid() ? Road : TArray<int32>());
 }
 
-void ACampaignPlayerController::OrderTo(int32 RegionId)
+void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFrom)
 {
 	FCampaignSession* Session = GetSession();
 	if (!Session || !Map.IsValid() || ArmyRegion == INDEX_NONE || RegionId == ArmyRegion)
@@ -756,7 +916,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId)
 			Notify(TEXT("No corps could go: there is no room there, or they have already used their month."));
 			return;
 		}
-		ShowWar(Session->GetView(), Trains);
+		ShowWar(Session->GetView(), Trains, CarriedFrom);
 		PickedCorps.Reset();
 		for (const FCorpsMove& Train : Trains)
 		{
@@ -780,7 +940,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId)
 		Notify(TEXT("They cannot get there this month."));
 		return;
 	}
-	ShowWar(Session->GetView(), Marches);
+	ShowWar(Session->GetView(), Marches, CarriedFrom);
 
 	// The army in hand is now the corps that marched, where they have arrived.
 	PickedCorps.Reset();
@@ -793,12 +953,12 @@ void ACampaignPlayerController::OrderTo(int32 RegionId)
 	SelectRegion(RegionId);
 }
 
-void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches)
+void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)
 {
 	if (Map.IsValid())
 	{
 		Map->SetHolders(View.RegionHolder);
-		Map->ShowArmies(View, Marches);
+		Map->ShowArmies(View, Marches, CarriedFrom);
 	}
 }
 

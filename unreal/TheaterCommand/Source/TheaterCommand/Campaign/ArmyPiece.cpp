@@ -78,7 +78,6 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		}
 	}
 	Parts.Reset();
-	const bool bWasSelected = SelectionRing && SelectionRing->IsVisible();
 	SelectionRing = nullptr;
 	if (StrengthLabel)
 	{
@@ -108,7 +107,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	// The ring that shows when the piece is picked up: a thin bright disc a little wider than the base.
 	SelectionRing = AddPart(Cylinder, FVector(0.0, 0.0, 0.06 * U), FVector(10.2 * U, 10.2 * U, 0.12 * U), Glow);
 	SelectionRing->SetCastShadow(false);
-	SelectionRing->SetVisibility(bWasSelected);
+	ShowRing();
 
 	// A counter for each corps, stacked: the taller the stack, the bigger the army.
 	const int32 Counters = FMath::Clamp(Corps.Num(), 1, 7);
@@ -126,12 +125,16 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	const double FlagWidth = 6.6 * U * Size, FlagHeight = 4.3 * U * Size;
 	const double PoleHeight = 9.0 * U + FlagHeight;
 	AddPart(Cylinder, FVector(0.0, 0.0, Top + PoleHeight * 0.5), FVector(0.42 * U, 0.42 * U, PoleHeight), Iron);
-	const FVector FlagCenter(0.0, FlagWidth * 0.5 + 0.2 * U, Top + PoleHeight - FlagHeight * 0.5 - 0.3 * U);
-	AddPart(Cube, FlagCenter, FVector(0.16 * U, FlagWidth, FlagHeight), Banner);
+	const FVector FlagAt(0.0, FlagWidth * 0.5 + 0.2 * U, Top + PoleHeight - FlagHeight * 0.5 - 0.3 * U);
+	AddPart(Cube, FlagAt, FVector(0.16 * U, FlagWidth, FlagHeight), Banner);
 	// A band along the top and the bottom of the colours, leaving the middle clear for the figure.
-	AddPart(Cube, FlagCenter + FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
-	AddPart(Cube, FlagCenter - FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
+	AddPart(Cube, FlagAt + FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
+	AddPart(Cube, FlagAt - FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
 	AddPart(Sphere, FVector(0.0, 0.0, Top + PoleHeight + 0.4 * U), FVector(1.1 * U, 1.1 * U, 1.1 * U), Brass);
+	PoleTop = Top + PoleHeight;
+	BaseRadius = CounterWidth * 0.5;
+	FlagCenter = FlagAt;
+	FlagRadius = FlagWidth * 0.55;
 
 	// Honours: a two-coloured streamer for each, one under another below the colours.
 	int32 Streamer = 0;
@@ -144,7 +147,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			{
 				break;
 			}
-			const double Z = FlagCenter.Z - FlagHeight * 0.5 - 0.5 * U - Streamer * (StreamerDepth + 0.16 * U);
+			const double Z = FlagAt.Z - FlagHeight * 0.5 - 0.5 * U - Streamer * (StreamerDepth + 0.16 * U);
 			AddPart(Cube, FVector(0.0, 0.2 * U + StreamerLength * 0.25, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
 				Map->GetSolidMaterial(FLinearColor(Honour.First), 0.6f, 0.0f, 0.6f))->SetCastShadow(false);
 			AddPart(Cube, FVector(0.0, 0.2 * U + StreamerLength * 0.75, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
@@ -171,17 +174,39 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	StrengthLabel->SetVerticalAlignment(EVRTA_TextCenter);
 	StrengthLabel->SetCastShadow(false);
 	StrengthLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	StrengthLabel->SetRelativeLocation(FlagCenter - FVector(0.14 * U, 0.0, 0.0));
+	StrengthLabel->SetRelativeLocation(FlagAt - FVector(0.14 * U, 0.0, 0.0));
 	StrengthLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
 	StrengthLabel->RegisterComponent();
 }
 
-void AArmyPiece::SetSelected(bool bInSelected)
+void AArmyPiece::ShowRing()
 {
 	if (SelectionRing)
 	{
-		SelectionRing->SetVisibility(bInSelected);
+		SelectionRing->SetVisibility(bSelected || bHovered);
 	}
+}
+
+FVector AArmyPiece::HomeLocation() const
+{
+	// A piece in the hand is held a little off the table.
+	return RestLocation + FVector(0.0, 0.0, bSelected ? LiftHeight * 0.3 : 0.0);
+}
+
+void AArmyPiece::SetSelected(bool bInSelected)
+{
+	bSelected = bInSelected;
+	ShowRing();
+	if (!bMarching)
+	{
+		SetActorLocation(HomeLocation());
+	}
+}
+
+void AArmyPiece::SetHovered(bool bInHovered)
+{
+	bHovered = bInHovered;
+	ShowRing();
 }
 
 void AArmyPiece::SetRestLocation(const FVector& Location)
@@ -189,11 +214,47 @@ void AArmyPiece::SetRestLocation(const FVector& Location)
 	RestLocation = Location;
 	if (!bMarching)
 	{
-		SetActorLocation(Location);
+		SetActorLocation(HomeLocation());
 	}
 }
 
-void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnArrival)
+bool AArmyPiece::HitByRay(const FVector& Origin, const FVector& Direction, double& OutDistance) const
+{
+	const FVector End = Origin + Direction * 200000.0;
+	const FTransform& Place = GetActorTransform();
+	auto Near = [&](const FVector& A, const FVector& B, double Radius) -> bool
+	{
+		FVector OnRay, OnPart;
+		FMath::SegmentDistToSegmentSafe(Origin, End, A, B, OnRay, OnPart);
+		if (FVector::DistSquared(OnRay, OnPart) > Radius * Radius)
+		{
+			return false;
+		}
+		OutDistance = FVector::Dist(Origin, OnRay);
+		return true;
+	};
+	// The colours first (they are what the eye goes to), then the pole and the stack of counters.
+	const FVector Flag = Place.TransformPosition(FlagCenter);
+	return Near(Flag, Flag, FlagRadius)
+		|| Near(Place.TransformPosition(FVector::ZeroVector), Place.TransformPosition(FVector(0.0, 0.0, PoleTop)), BaseRadius);
+}
+
+void AArmyPiece::Carry(const FVector& GroundPoint)
+{
+	bMarching = false;
+	SetActorTickEnabled(false);
+	SetActorLocation(GroundPoint + FVector(0.0, 0.0, LiftHeight));
+}
+
+void AArmyPiece::ReturnToRest()
+{
+	if (!bMarching && !GetActorLocation().Equals(HomeLocation(), 1.0))
+	{
+		MarchAlong({ GetActorLocation(), RestLocation }, false, false);
+	}
+}
+
+void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnArrival, bool bLifted)
 {
 	if (Waypoints.Num() < 2)
 	{
@@ -212,8 +273,9 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 		Length += FVector::Dist(Route[i - 1], Route[i]);
 		RouteMarks.Add(Length);
 	}
-	// A short hop takes most of a second; a long march not much more than two.
-	MarchTime = FMath::Clamp(0.55 + Length / 5200.0, 0.75, 2.4);
+	// A short hop takes most of a second; a long march not much more than two. Setting down from the hand is quick.
+	bLiftOnMarch = bLifted;
+	MarchTime = bLifted ? FMath::Clamp(0.55 + Length / 5200.0, 0.75, 2.4) : FMath::Clamp(0.22 + Length / 9000.0, 0.28, 0.7);
 	MarchClock = 0.0;
 	bMarching = true;
 	bRemoveOnArrival = bInRemoveOnArrival;
@@ -244,7 +306,12 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	const double Span = FMath::Max(RouteMarks[Segment] - RouteMarks[Segment - 1], 1.0e-3);
 	FVector Position = FMath::Lerp(Route[Segment - 1], Route[Segment], (Target - RouteMarks[Segment - 1]) / Span);
 	// Picked up, carried, set down.
-	Position.Z += LiftHeight * FMath::Pow(FMath::Sin(Progress * UE_DOUBLE_PI), 0.55);
+	if (bLiftOnMarch)
+	{
+		Position.Z += LiftHeight * FMath::Pow(FMath::Sin(Progress * UE_DOUBLE_PI), 0.55);
+	}
+	// A piece that is still in the hand when it arrives comes to rest a little off the table.
+	Position += (HomeLocation() - RestLocation) * Eased;
 	SetActorLocation(Position);
 
 	if (Progress >= 1.0)
@@ -257,7 +324,7 @@ void AArmyPiece::Tick(float DeltaSeconds)
 		}
 		else
 		{
-			SetActorLocation(RestLocation);
+			SetActorLocation(HomeLocation());
 		}
 	}
 }

@@ -38,12 +38,27 @@ public:
 	void SetRestLocation(const FVector& Location);
 	const FVector& GetRestLocation() const { return RestLocation; }
 
-	/** Lifts the piece, carries it along the points given, and sets it down at the last. */
-	void MarchAlong(const TArray<FVector>& Waypoints, bool bRemoveOnArrival);
+	/**
+	 * Lifts the piece, carries it along the points given, and sets it down at the last. With bLifted false it is
+	 * not lifted on the way: it glides straight there, as a piece does that is already in the hand.
+	 */
+	void MarchAlong(const TArray<FVector>& Waypoints, bool bRemoveOnArrival, bool bLifted = true);
 	bool IsMarching() const { return bMarching; }
 
-	/** A picked-up piece shows a bright ring under its base. */
+	/** A picked-up piece shows a bright ring under its base and is held a little off the table. */
 	void SetSelected(bool bInSelected);
+
+	/** A piece the pointer rests on shows the ring too, to say it can be picked up. */
+	void SetHovered(bool bInHovered);
+
+	/** True if a line from Origin along Direction passes through the piece: its counters, its pole or its colours. */
+	bool HitByRay(const FVector& Origin, const FVector& Direction, double& OutDistance) const;
+
+	/** Carries the piece in the hand: it hangs over this point of the table. */
+	void Carry(const FVector& GroundPoint);
+
+	/** Puts a carried piece back where it stands. */
+	void ReturnToRest();
 
 	int32 GetRegionId() const { return RegionId; }
 	const FString& GetNationTag() const { return NationTag; }
@@ -86,4 +101,16 @@ private:
 	double LiftHeight = 40.0;
 	bool bMarching = false;
 	bool bRemoveOnArrival = false;
+	bool bLiftOnMarch = true;
+	bool bSelected = false;
+	bool bHovered = false;
+
+	// The pole and the colours, in the piece's own space, for telling whether the pointer is on them.
+	double PoleTop = 200.0;
+	double BaseRadius = 60.0;
+	FVector FlagCenter = FVector::ZeroVector;
+	double FlagRadius = 60.0;
+
+	void ShowRing();
+	FVector HomeLocation() const;
 };

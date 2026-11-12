@@ -74,6 +74,17 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.March = TEXT("Magdeburg");
 	}
 	{
+		// The flag picked up by hand and carried: held over ground it can reach, then let go there.
+		FShot& Shot = Add(TEXT("13b-flag-in-the-hand"), TEXT("Mecklenburg"), 0.3f);
+		Shot.Army = TEXT("Hamburg");
+		Shot.Carry = TEXT("Mecklenburg");
+	}
+	{
+		FShot& Shot = Add(TEXT("13c-flag-set-down"), TEXT("Mecklenburg"), 0.3f);
+		Shot.bKeep = true;
+		Shot.Drop = TEXT("Mecklenburg");
+	}
+	{
 		FShot& Shot = Add(TEXT("14-next-month"), TEXT("Warsaw"), 0.5f);
 		Shot.Months = 1;
 	}
@@ -122,11 +133,26 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("23-roll-of-honour"), TEXT("Masuria"), 0.36f).bRoll = true;
 	}
 
+	// "-TheaterOnly=13b,13c" takes only the pictures whose names begin with one of these.
+	FString Only;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterOnly="), Only, false))
+	{
+		TArray<FString> Wanted;
+		Only.ParseIntoArray(Wanted, TEXT(","));
+		Shots.RemoveAll([&Wanted](const FShot& Shot)
+		{
+			return !Wanted.ContainsByPredicate([&Shot](const FString& Prefix) { return Shot.Name.StartsWith(Prefix); });
+		});
+	}
+
 	// "-TheaterQuick" takes two pictures only, for trying a setting out.
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterQuick")))
 	{
 		const TArray<FShot> All = Shots;
-		Shots = { All[2], All[4], All[8] };
+		if (All.Num() > 8)
+		{
+			Shots = { All[2], All[4], All[8] };
+		}
 	}
 	bStarted = true;
 	UE_LOG(LogTheater, Display, TEXT("Photographer: %d pictures to take, into %s"), Shots.Num(), *Folder);
@@ -198,7 +224,20 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	}
 	if (const int32* Army = Data.RegionByName.Find(Shot.Army))
 	{
-		Controller->PickUpArmyIn(*Army);
+		if (Shot.Carry.IsEmpty())
+		{
+			Controller->PickUpArmyIn(*Army);
+		}
+		else if (const int32* Over = Data.RegionByName.Find(Shot.Carry))
+		{
+			const bool bHeld = Controller->HoldArmyIn(*Army);
+			Controller->CarryHeldOver(*Over);
+			UE_LOG(LogTheater, Display, TEXT("Photographer: flag in %s %s, carried over %s"), *Shot.Army, bHeld ? TEXT("taken in hand") : TEXT("NOT taken"), *Shot.Carry);
+		}
+	}
+	if (const int32* Drop = Data.RegionByName.Find(Shot.Drop))
+	{
+		Controller->DropHeldOver(*Drop);
 	}
 	if (const int32* Route = Data.RegionByName.Find(Shot.Route))
 	{
