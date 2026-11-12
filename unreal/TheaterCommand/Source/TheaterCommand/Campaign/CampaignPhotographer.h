@@ -46,6 +46,7 @@ private:
 		bool bRecord = false; // open the service record of the first corps of the army in hand
 		bool bRoll = false; // open the roll of honour
 		bool bRail = false;
+		bool bSea = false; // switch the army in hand to going by sea
 	bool bLedger = false; // open the ledger
 	bool bArsenal = false; // open the arsenal, and order an artillery corps from it
 	bool bWar = false; // answer yes to the question about declaring war

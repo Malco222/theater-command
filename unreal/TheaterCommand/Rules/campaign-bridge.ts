@@ -37,7 +37,7 @@ import { allied, atWar, createGame, men, railReach as railReachOf } from '../../
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
-  orderAir, orderAirBase, orderFleet, levelNow, orderLevel,
+  orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
@@ -51,7 +51,7 @@ import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { CROSSINGS, RIVERS, bridgeDown, riverNotes } from '../../../src/campaign/rivers';
 import { RAIL_LINKS, railCut, railNote } from '../../../src/campaign/rails';
-import { fleetReach } from '../../../src/campaign/navy';
+import { fleetReach, landingTargets, whyNotShip } from '../../../src/campaign/navy';
 import { MISSION, airBases, airTargets } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
@@ -523,6 +523,59 @@ function rail(ids: number[], to: number) {
   return { moved, view: view() };
 }
 
+/** Where the chosen corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on. */
+function seaReach(ids: number[]) {
+  const s = game();
+  const ports = new Set<number>();
+  let beaches: number[] = [];
+  if (humanUp(s) && !onEve(s)) {
+    const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+    for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
+    beaches = landingTargets(s, cs).map((r) => r.id);
+  }
+  return { ports: [...ports], beaches };
+}
+
+/** Ships the chosen corps to a friendly port. */
+function ship(ids: number[], to: number) {
+  const s = game();
+  const moved: { id: number; path: number[] }[] = [];
+  for (const c of corpsById(s, ids)) if (c.reg !== to && orderShip(s, c, to)) moved.push({ id: c.id, path: [to] });
+  return { moved, view: view() };
+}
+
+/** What a landing on an enemy coast would meet, before the order is given. */
+function landingPlan(ids: number[], to: number) {
+  const s = game();
+  const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+  const p = previewLanding(s, cs, to);
+  const lines: string[] = [];
+  if (!p.why) {
+    lines.push(p.air ? 'The force goes in by air.' : p.surprise ? 'War was declared this month: the defenders are caught unready, and no fleet can stop the crossing.'
+      : p.risk > 0.005 ? `The crossing is dangerous: about ${Math.round(p.risk * 100)} in 100 of the men could be lost to enemy ships and aircraft on the way.` : 'The crossing is safe.');
+    if (p.sortie > 0 && !p.surprise && !p.air) lines.push('Enemy warships within reach will put to sea against it.');
+    lines.push(p.sky ? 'You hold the sky over the beach.' : 'You do not hold the sky over the beach.');
+    lines.push(p.defended ? `The coast is defended: the troops must fight their way ashore${p.assess ? `, at odds of ${p.assess.odds.toFixed(1)} to 1` : ''}.` : 'The coast is undefended: they land unopposed.');
+  }
+  return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines };
+}
+
+/** Lands the chosen corps on an enemy coast. */
+function landOn(ids: number[], to: number) {
+  const s = game();
+  const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+  const before = new Map(cs.map((c) => [c.id, c.reg] as const));
+  const r = orderLand(s, cs, to);
+  const moved = cs.filter((c) => !c.dead && c.reg !== before.get(c.id)).map((c) => ({ id: c.id, path: [c.reg] }));
+  const bits: string[] = [];
+  if (r.ok) {
+    bits.push(r.taken ? `The landing at ${s.regions[to].name} has succeeded: the troops are ashore.` : `The landing at ${s.regions[to].name} was thrown back into the sea.`);
+    if (r.lostAtSea && r.lostAtSea >= 100) bits.push(`${r.lostAtSea.toLocaleString('en-US')} men were lost on the crossing.`);
+    if (r.report) bits.push(battleNote(s, r.report));
+  }
+  return { ok: r.ok, taken: !!r.taken, note: r.ok ? bits.join(' ') : r.why ?? 'The landing could not be made.', moved, view: view() };
+}
+
 /** What a territory holds, and what the player can raise or build there this month. */
 function province(id: number) {
   const s = game();
@@ -843,4 +896,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, work, force, forceOrder, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

@@ -61,6 +61,7 @@ struct FArmyTray
 	TArray<FTrayCard> Cards;
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
+	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast
 	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
 	FText Hint; // what to do next, in a line
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
@@ -135,6 +136,9 @@ struct FWarPrompt
 	int32 Region = INDEX_NONE; // where the army in hand was being sent, to carry on there once war is declared
 	FText Title;
 	FText Body;
+	// The same question is put before a landing from the sea: then this is true, and the button says so.
+	bool bLanding = false;
+	FText Confirm = FText::FromString(TEXT("DECLARE WAR"));
 };
 
 /** The two armies drawn up against each other before an attack and, once it is fought, what the battle came to. */
@@ -266,6 +270,9 @@ public:
 
 	/** Orders something in the selected territory: a kind of corps to raise, or "fort". */
 	void ProvinceAction(const FString& Action);
+
+	/** Switches the army in hand between marching and going by sea. */
+	void ToggleSea();
 
 	/** On the opening screen: chooses how hard the grand campaign is to be. */
 	void PickLevel(int32 Index);
@@ -425,6 +432,7 @@ private:
 	bool bScripted = false;
 	bool bAlwaysWatch = false;
 	bool bByRail = false;
+	bool bBySea = false;
 	int32 PanelRevision = 0;
 	int32 SelectedRegion = INDEX_NONE;
 	int32 SizedForWidth = 0;

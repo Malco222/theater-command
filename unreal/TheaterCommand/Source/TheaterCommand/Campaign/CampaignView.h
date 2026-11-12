@@ -343,6 +343,23 @@ struct FArsenal
 };
 
 /** What a territory holds, and what the player can do there. */
+/** What a landing on an enemy coast would meet, and afterwards how it went. */
+struct FLandingPlan
+{
+	bool bOk = false;
+	FString Why; // why it cannot be made, if it cannot
+	FString Name; // the coast
+	TArray<FString> Lines; // the crossing, the sky, the defenders
+};
+
+struct FLandingResult
+{
+	bool bOk = false;
+	bool bTaken = false;
+	FString Note;
+	TArray<FCorpsMove> Moved;
+};
+
 /** A fleet or an air fleet, for the panel that opens when it is clicked. */
 struct FForcePanel
 {

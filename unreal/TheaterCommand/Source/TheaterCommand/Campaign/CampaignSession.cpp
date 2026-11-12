@@ -837,6 +837,69 @@ TArray<FCorpsMove> FCampaignSession::Rail(const TArray<int32>& CorpsIds, int32 R
 	return Out;
 }
 
+void FCampaignSession::SeaReach(const TArray<int32>& CorpsIds, TArray<int32>& OutPorts, TArray<int32>& OutBeaches)
+{
+	OutPorts.Reset();
+	OutBeaches.Reset();
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("seaReach"), FString::Printf(TEXT("[[%s]]"), *IdList(CorpsIds)), Object))
+	{
+		return;
+	}
+	for (const TPair<const TCHAR*, TArray<int32>*>& List : { TPair<const TCHAR*, TArray<int32>*>(TEXT("ports"), &OutPorts), TPair<const TCHAR*, TArray<int32>*>(TEXT("beaches"), &OutBeaches) })
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (Object->TryGetArrayField(List.Key, Values))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Values)
+			{
+				List.Value->Add(FMath::RoundToInt32(Value->AsNumber()));
+			}
+		}
+	}
+}
+
+TArray<FCorpsMove> FCampaignSession::Ship(const TArray<int32>& CorpsIds, int32 RegionId)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("ship"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		return TArray<FCorpsMove>();
+	}
+	TArray<FCorpsMove> Out = ReadMoves(Object);
+	TakeView(Object);
+	return Out;
+}
+
+FLandingPlan FCampaignSession::PlanLanding(const TArray<int32>& CorpsIds, int32 RegionId)
+{
+	FLandingPlan Plan;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("landingPlan"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), Plan.bOk);
+		Object->TryGetStringField(TEXT("why"), Plan.Why);
+		Object->TryGetStringField(TEXT("name"), Plan.Name);
+		Object->TryGetStringArrayField(TEXT("lines"), Plan.Lines);
+	}
+	return Plan;
+}
+
+FLandingResult FCampaignSession::Land(const TArray<int32>& CorpsIds, int32 RegionId)
+{
+	FLandingResult Result;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("landOn"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), Result.bOk);
+		Object->TryGetBoolField(TEXT("taken"), Result.bTaken);
+		Object->TryGetStringField(TEXT("note"), Result.Note);
+		Result.Moved = ReadMoves(Object);
+		TakeView(Object);
+	}
+	return Result;
+}
+
 FProvinceInfo FCampaignSession::Province(int32 RegionId)
 {
 	FProvinceInfo Info;

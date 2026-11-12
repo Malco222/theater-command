@@ -377,11 +377,28 @@ void ACampaignPlayerController::ToggleRail()
 		return;
 	}
 	bByRail = !bByRail;
+	bBySea = false;
 	RefreshOrders();
 	if (bByRail)
 	{
 		Notify(Reach.Num() > 0 ? TEXT("By rail: right-click any ground tinted blue. It takes the corps' whole month.")
 			: TEXT("None of these corps can go by rail this month: it takes a whole month's moves."), 5.0);
+	}
+}
+
+void ACampaignPlayerController::ToggleSea()
+{
+	if (ArmyRegion == INDEX_NONE)
+	{
+		return;
+	}
+	bBySea = !bBySea;
+	bByRail = false;
+	RefreshOrders();
+	if (bBySea)
+	{
+		Notify(Reach.Num() > 0 ? TEXT("By sea: ground tinted blue is a friendly port they can be shipped to, or an enemy coast they can land on. It takes the corps' whole month.")
+			: TEXT("None of these corps can go by sea this month: they must stand in a port, with their whole month before them, and there must be shipping."), 6.0);
 	}
 }
 
@@ -1047,14 +1064,17 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 {
 	PendingTarget = RegionId;
 	Tray.PendingButton = FText::GetEmpty();
-	Tray.Hint = FText::FromString(bByRail
+	Tray.Hint = FText::FromString(bBySea
+		? TEXT("Click a port or a coast tinted blue, then click it again to send them by sea. Esc, or a click on their flag, puts them down.")
+		: bByRail
 		? TEXT("Click ground tinted blue, then click it again to send them by rail. Esc, or a click on their flag, puts them down.")
 		: TEXT("Click where they should go, then click it again to send them. Or drag the flag there. Esc, or a click on their flag, puts them down."));
 	const FReachRegion* Target = FindReach(RegionId);
 	if (Target && Map.IsValid() && Map->GetData().Regions.IsValidIndex(RegionId))
 	{
 		const FString Name = Map->GetData().Regions[RegionId].Name;
-		Tray.PendingButton = FText::FromString(FString::Printf(TEXT("%s %s"), bByRail ? TEXT("BY RAIL TO") : (Target->bAttack ? TEXT("ATTACK") : TEXT("MARCH TO")), *Name.ToUpper()));
+		Tray.PendingButton = FText::FromString(FString::Printf(TEXT("%s %s"),
+			bBySea ? (Target->bAttack ? TEXT("LAND AT") : TEXT("BY SEA TO")) : bByRail ? TEXT("BY RAIL TO") : (Target->bAttack ? TEXT("ATTACK") : TEXT("MARCH TO")), *Name.ToUpper()));
 		Tray.Hint = FText::FromString(FString::Printf(TEXT("Click %s again, or press the button above, to %s. Click anywhere else to think again."),
 			*Name, Target->bAttack ? TEXT("draw up the attack") : TEXT("send them")));
 	}
@@ -1215,6 +1235,7 @@ void ACampaignPlayerController::RefreshOrders()
 	if (ArmyRegion == INDEX_NONE)
 	{
 		bByRail = false;
+		bBySea = false;
 		Map->SetReach(Reach);
 		return;
 	}
@@ -1280,8 +1301,29 @@ void ACampaignPlayerController::RefreshOrders()
 		}
 	}
 	Tray.bByRail = bByRail;
+	Tray.bBySea = bBySea;
 
-	if (bByRail)
+	if (bBySea)
+	{
+		TArray<int32> Ports, Beaches;
+		Session->SeaReach(PickedCorps, Ports, Beaches);
+		for (int32 RegionId : Ports)
+		{
+			FReachRegion Entry;
+			Entry.Region = RegionId;
+			Entry.Previous = ArmyRegion;
+			Reach.Add(Entry);
+		}
+		for (int32 RegionId : Beaches)
+		{
+			FReachRegion Entry;
+			Entry.Region = RegionId;
+			Entry.Previous = ArmyRegion;
+			Entry.bAttack = true; // a landing
+			Reach.Add(Entry);
+		}
+	}
+	else if (bByRail)
 	{
 		for (int32 RegionId : Session->RailReach(PickedCorps))
 		{
@@ -1295,7 +1337,7 @@ void ACampaignPlayerController::RefreshOrders()
 	{
 		Reach = Session->Reach(PickedCorps);
 	}
-	Map->SetReach(Reach, bByRail);
+	Map->SetReach(Reach, bByRail || bBySea);
 
 	RingedPiece = Map->FindPiece(ArmyRegion, View.Human);
 	if (RingedPiece.IsValid())
@@ -1345,6 +1387,47 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		return;
 	}
 	const FReachRegion* Target = FindReach(RegionId);
+	if (bBySea && Target)
+	{
+		if (Target->bAttack)
+		{
+			// A landing: say what it will meet, and ask.
+			const FLandingPlan Plan = Session->PlanLanding(PickedCorps, RegionId);
+			if (!Plan.bOk)
+			{
+				Notify(Plan.Why.IsEmpty() ? TEXT("They cannot land there.") : Plan.Why, 5.0);
+				return;
+			}
+			WarPrompt = FWarPrompt();
+			WarPrompt.bVisible = true;
+			WarPrompt.bLanding = true;
+			WarPrompt.Region = RegionId;
+			WarPrompt.Tag = Session->GetView().Human;
+			WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Land at %s?"), *Plan.Name));
+			WarPrompt.Body = FText::FromString(FString::Join(Plan.Lines, TEXT("\n")) + TEXT("\n\nOnce they sail it cannot be taken back."));
+			WarPrompt.Confirm = FText::FromString(TEXT("SEND THEM IN"));
+			return;
+		}
+		const TArray<FCorpsMove> Convoys = Session->Ship(PickedCorps, RegionId);
+		if (Convoys.Num() == 0)
+		{
+			Notify(TEXT("No corps could sail: there is no room there, or no shipping left this month."));
+			return;
+		}
+		ShowWar(Session->GetView(), Convoys, CarriedFrom);
+		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+		CampaignSounds::Play(this, TEXT("ship_horn"), 0.4f);
+		PickedCorps.Reset();
+		for (const FCorpsMove& Convoy : Convoys)
+		{
+			PickedCorps.Add(Convoy.CorpsId);
+		}
+		ArmyRegion = RegionId;
+		bBySea = false;
+		RefreshOrders();
+		SelectRegion(RegionId);
+		return;
+	}
 	if (!Target && OfferWar(RegionId))
 	{
 		return;
@@ -1437,6 +1520,32 @@ void ACampaignPlayerController::ConfirmWar()
 	}
 	const FWarPrompt Asked = WarPrompt;
 	WarPrompt = FWarPrompt();
+	if (Asked.bLanding)
+	{
+		// The landing goes in.
+		CampaignSounds::Play(this, TEXT("ship_guns"), 0.6f);
+		CampaignSounds::PlayLater(this, TEXT("battle"), 0.8f, 0.7f);
+		const FLandingResult Result = Session->Land(PickedCorps, Asked.Region);
+		ShowWar(Session->GetView(), Result.Moved);
+		if (Result.bOk)
+		{
+			CampaignSounds::PlayLater(this, Result.bTaken ? TEXT("victory") : TEXT("defeat"), 3.2f, 0.6f);
+		}
+		if (Result.Moved.Num() > 0)
+		{
+			PickedCorps.Reset();
+			for (const FCorpsMove& Ashore : Result.Moved)
+			{
+				PickedCorps.Add(Ashore.CorpsId);
+			}
+			ArmyRegion = Asked.Region;
+		}
+		bBySea = false;
+		RefreshOrders();
+		SelectRegion(Result.bTaken ? Asked.Region : ArmyRegion);
+		Notify(Result.Note, 9.0);
+		return;
+	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(Asked.Tag) : nullptr;
 	const FString Name = Nation ? Nation->Name : Asked.Tag;
 	if (!Session->Declare(Asked.Tag))

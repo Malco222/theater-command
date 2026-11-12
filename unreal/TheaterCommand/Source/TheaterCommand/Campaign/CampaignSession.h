@@ -70,6 +70,12 @@ public:
 	/** Sends the given corps by rail. Returns the ones that went. */
 	TArray<FCorpsMove> Rail(const TArray<int32>& CorpsIds, int32 RegionId);
 
+	/** Where these corps could go by sea this month: friendly ports to be shipped to, and enemy coasts to land on. */
+	void SeaReach(const TArray<int32>& CorpsIds, TArray<int32>& OutPorts, TArray<int32>& OutBeaches);
+	TArray<FCorpsMove> Ship(const TArray<int32>& CorpsIds, int32 RegionId);
+	FLandingPlan PlanLanding(const TArray<int32>& CorpsIds, int32 RegionId);
+	FLandingResult Land(const TArray<int32>& CorpsIds, int32 RegionId);
+
 	/** What a territory holds, and what the player can raise or build there. */
 	FProvinceInfo Province(int32 RegionId);
 

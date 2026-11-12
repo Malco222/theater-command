@@ -10047,6 +10047,13 @@
   function orderRail(g2, c, to) {
     return canOrder(g2, c) && railMove(g2, c, g2.regions[to]);
   }
+  function previewLanding(g2, cs, to) {
+    return planLanding(g2, cs, g2.regions[to]);
+  }
+  function orderLand(g2, cs, to) {
+    if (!cs.length || onEve(g2) || !cs.every((c) => canOrder(g2, c))) return { ok: false, why: "Those corps cannot be given orders now." };
+    return landCorps(g2, cs, g2.regions[to]);
+  }
   var myFleet = (g2, id) => {
     const f = g2.fleets.find((x) => x.id === id);
     return f && f.nat === g2.human && current(g2) === f.nat ? f : null;
@@ -10054,6 +10061,9 @@
   function orderFleet(g2, id, zone, stance2) {
     const f = myFleet(g2, id);
     return !!f && sail(g2, f, zone, stance2);
+  }
+  function orderShip(g2, c, to) {
+    return canOrder(g2, c) && shipMove(g2, c, g2.regions[to]);
   }
   var myAir = (g2, id) => {
     const f = g2.airFleets.find((x) => x.id === id);
@@ -11007,6 +11017,50 @@
     for (const c of corpsById(s, ids)) if (c.reg !== to && orderRail(s, c, to)) moved.push({ id: c.id, path: [to] });
     return { moved, view: view() };
   }
+  function seaReach(ids) {
+    const s = game();
+    const ports = /* @__PURE__ */ new Set();
+    let beaches = [];
+    if (humanUp(s) && !onEve(s)) {
+      const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+      for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
+      beaches = landingTargets(s, cs).map((r) => r.id);
+    }
+    return { ports: [...ports], beaches };
+  }
+  function ship(ids, to) {
+    const s = game();
+    const moved = [];
+    for (const c of corpsById(s, ids)) if (c.reg !== to && orderShip(s, c, to)) moved.push({ id: c.id, path: [to] });
+    return { moved, view: view() };
+  }
+  function landingPlan(ids, to) {
+    const s = game();
+    const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+    const p = previewLanding(s, cs, to);
+    const lines = [];
+    if (!p.why) {
+      lines.push(p.air ? "The force goes in by air." : p.surprise ? "War was declared this month: the defenders are caught unready, and no fleet can stop the crossing." : p.risk > 5e-3 ? `The crossing is dangerous: about ${Math.round(p.risk * 100)} in 100 of the men could be lost to enemy ships and aircraft on the way.` : "The crossing is safe.");
+      if (p.sortie > 0 && !p.surprise && !p.air) lines.push("Enemy warships within reach will put to sea against it.");
+      lines.push(p.sky ? "You hold the sky over the beach." : "You do not hold the sky over the beach.");
+      lines.push(p.defended ? `The coast is defended: the troops must fight their way ashore${p.assess ? `, at odds of ${p.assess.odds.toFixed(1)} to 1` : ""}.` : "The coast is undefended: they land unopposed.");
+    }
+    return { ok: !p.why, why: p.why ?? "", name: s.regions[to].name, lines };
+  }
+  function landOn(ids, to) {
+    const s = game();
+    const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+    const before = new Map(cs.map((c) => [c.id, c.reg]));
+    const r = orderLand(s, cs, to);
+    const moved = cs.filter((c) => !c.dead && c.reg !== before.get(c.id)).map((c) => ({ id: c.id, path: [c.reg] }));
+    const bits = [];
+    if (r.ok) {
+      bits.push(r.taken ? `The landing at ${s.regions[to].name} has succeeded: the troops are ashore.` : `The landing at ${s.regions[to].name} was thrown back into the sea.`);
+      if (r.lostAtSea && r.lostAtSea >= 100) bits.push(`${r.lostAtSea.toLocaleString("en-US")} men were lost on the crossing.`);
+      if (r.report) bits.push(battleNote(s, r.report));
+    }
+    return { ok: r.ok, taken: !!r.taken, note: r.ok ? bits.join(" ") : r.why ?? "The landing could not be made.", moved, view: view() };
+  }
   function province(id) {
     const s = game();
     const r = s.regions[id];
@@ -11334,6 +11388,10 @@
     work,
     force,
     forceOrder,
+    seaReach,
+    ship,
+    landingPlan,
+    landOn,
     record,
     roll,
     stance,

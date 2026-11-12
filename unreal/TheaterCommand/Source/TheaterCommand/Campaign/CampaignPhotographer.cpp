@@ -235,6 +235,25 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Force = TEXT("air:1");
 			Shot.Order = TEXT("air:1:bomb:38");
 		}
+		if (GrandNation == TEXT("UK"))
+		{
+			// An army sent by sea: where it can go, the question before a landing, and the landing made.
+			{
+				FShot& Shot = Add(TEXT("35-by-sea"), TEXT("Hamburg"), 0.62f);
+				Shot.Army = TEXT("London");
+				Shot.bSea = true;
+			}
+			{
+				FShot& Shot = Add(TEXT("35b-landing-asked"), TEXT("Hamburg"), 0.5f);
+				Shot.bKeep = true;
+				Shot.Attack = TEXT("Hamburg");
+			}
+			{
+				FShot& Shot = Add(TEXT("35c-landing-made"), TEXT("Hamburg"), 0.4f);
+				Shot.bKeep = true;
+				Shot.bWar = true;
+			}
+		}
 		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
 	}
 
@@ -444,6 +463,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (const int32* Route = Data.RegionByName.Find(Shot.Route))
 	{
 		Controller->ShowRouteTo(*Route);
+	}
+	if (Shot.bSea)
+	{
+		Controller->ToggleSea();
 	}
 	if (const int32* Target = Data.RegionByName.Find(Shot.Attack))
 	{
