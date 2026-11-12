@@ -887,6 +887,70 @@ bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FS
 	return bOk;
 }
 
+FArsenal FCampaignSession::Arsenal(int32 RegionId)
+{
+	FArsenal Out;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("arsenal"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	{
+		return Out;
+	}
+	Out.bValid = true;
+	Object->TryGetBoolField(TEXT("budget"), Out.bBudget);
+	Object->TryGetNumberField(TEXT("money"), Out.Money);
+	Object->TryGetStringField(TEXT("region"), Out.Region);
+	const TArray<TSharedPtr<FJsonValue>>* Offers = nullptr;
+	if (Object->TryGetArrayField(TEXT("offers"), Offers))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Offers)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FArsenalOffer& Offer = Out.Offers.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("key"), Offer.Key);
+			Entry->TryGetStringField(TEXT("group"), Offer.Group);
+			Entry->TryGetStringField(TEXT("label"), Offer.Label);
+			Entry->TryGetStringField(TEXT("blurb"), Offer.Blurb);
+			Entry->TryGetStringField(TEXT("size"), Offer.Size);
+			Entry->TryGetStringField(TEXT("note"), Offer.Note);
+			Entry->TryGetStringField(TEXT("why"), Offer.Why); // null when it can be ordered
+			Entry->TryGetNumberField(TEXT("cost"), Offer.Cost);
+			Entry->TryGetNumberField(TEXT("upkeep"), Offer.Upkeep);
+			Entry->TryGetNumberField(TEXT("months"), Offer.Months);
+			Entry->TryGetBoolField(TEXT("poor"), Offer.bPoor);
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Orders = nullptr;
+	if (Object->TryGetArrayField(TEXT("orders"), Orders))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Orders)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FLedgerLine& Line = Out.Orders.AddDefaulted_GetRef();
+			FString Name, Where, Due;
+			Entry->TryGetStringField(TEXT("name"), Name);
+			Entry->TryGetStringField(TEXT("where"), Where);
+			Entry->TryGetStringField(TEXT("due"), Due);
+			Entry->TryGetNumberField(TEXT("cost"), Line.Amount);
+			Line.Label = Where.IsEmpty() ? FString::Printf(TEXT("%s, due %s"), *Name, *Due) : FString::Printf(TEXT("%s, %s, due %s"), *Name, *Where, *Due);
+		}
+	}
+	return Out;
+}
+
+bool FCampaignSession::OrderArsenal(const FString& Key, int32 RegionId, FString& OutName)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("order"), FString::Printf(TEXT("[%s,%d]"), *JsonQuote(Key), RegionId), Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	Object->TryGetStringField(TEXT("name"), OutName);
+	TakeView(Object);
+	return bOk;
+}
+
 FLedger FCampaignSession::Ledger()
 {
 	FLedger Out;

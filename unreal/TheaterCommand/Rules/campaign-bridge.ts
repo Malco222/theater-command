@@ -26,6 +26,8 @@
 //   TC.raise(kind, regionId)            -> { ok, view }: orders a new corps
 //   TC.fortify(regionId)                -> { ok, view }: orders the next level of fortification
 //   TC.cancel(buildId)                  -> { ok, view }: takes back an order placed this month
+//   TC.arsenal(regionId)                -> everything the player can order with that province in mind: corps, aircraft, ships and works
+//   TC.order(key, regionId)             -> { ok, name, view }: places one of those orders
 //   TC.ledger()                         -> the player's books: money in by source, upkeep by arm, what is left, every province's yield, what is on order
 //   TC.declare(nation)                  -> { ok, view }: the player declares war. view.declare lists who it can be declared on
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
@@ -33,7 +35,7 @@
 
 import { allied, atWar, createGame, men, railReach as railReachOf } from '../../../src/campaign/game';
 import {
-  beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderDeclare,
+  arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
 } from '../../../src/campaign/turn';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, provinceYield } from '../../../src/campaign/economy';
@@ -560,6 +562,35 @@ function cancel(id: number) {
   return { ok: orderCancelBuild(s, id), view: view() };
 }
 
+/**
+ * The arsenal: everything the player's nation can order, with one province in mind (-1 for none). The list
+ * is the rules' own (arsenalOffers), so both versions of the game offer the same things at the same prices.
+ */
+function arsenal(region = -1) {
+  const s = game();
+  const me = s.human;
+  if (!me) return null;
+  const up = humanUp(s) && !onEve(s);
+  return {
+    budget: budgeted(s),
+    money: inHand(s.nations[me].pp),
+    region: s.regions[region]?.name ?? '',
+    offers: arsenalOffers(s, region).map((o) => ({
+      key: o.key, group: o.group, label: o.label, blurb: o.blurb, size: o.size, months: o.months,
+      cost: shown(o.cost), upkeep: shown(o.upkeep), at: o.at, where: s.regions[o.at]?.name ?? '', note: o.note,
+      why: up ? o.why : 'It is not your month.', poor: o.poor,
+    })),
+    orders: s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) })),
+  };
+}
+
+/** Places an order from the arsenal. */
+function order(key: string, region = -1) {
+  const s = game();
+  const built = orderArsenal(s, key, region);
+  return { ok: !!built, name: built?.name ?? '', view: view() };
+}
+
 /** The player declares war on a country he is at peace with. */
 function declare(on: string) {
   const s = game();
@@ -625,4 +656,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

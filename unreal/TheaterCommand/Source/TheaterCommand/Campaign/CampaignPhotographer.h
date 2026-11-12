@@ -46,6 +46,7 @@ private:
 		bool bRoll = false; // open the roll of honour
 		bool bRail = false;
 	bool bLedger = false; // open the ledger
+	bool bArsenal = false; // open the arsenal, and order an artillery corps from it
 	bool bWar = false; // answer yes to the question about declaring war
 	FString Click; // click this region, as the mouse would
 	int32 OpeningTab = -1; // on the opening screen: show this page

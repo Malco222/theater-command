@@ -444,6 +444,7 @@ void ACampaignPlayerController::OpenLedger()
 	{
 		return;
 	}
+	CloseArsenal();
 	const int32 Revision = Ledger.Revision + 1;
 	Ledger = Session->Ledger();
 	Ledger.Revision = Revision;
@@ -459,6 +460,53 @@ FString ACampaignPlayerController::GetLedgerNationTag() const
 void ACampaignPlayerController::CloseLedger()
 {
 	bLedgerOpen = false;
+}
+
+void ACampaignPlayerController::OpenArsenal()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
+	{
+		return;
+	}
+	CloseLedger();
+	// The province in mind is the one selected, if it is the player's own; works are built there and corps form there.
+	const FCampaignView& View = Session->GetView();
+	const bool bMine = View.RegionHolder.IsValidIndex(SelectedRegion) && View.RegionHolder[SelectedRegion] == View.Human;
+	const int32 Revision = Arsenal.Revision + 1;
+	Arsenal = Session->Arsenal(bMine ? SelectedRegion : INDEX_NONE);
+	Arsenal.Revision = Revision;
+	bArsenalOpen = Arsenal.bValid;
+}
+
+void ACampaignPlayerController::CloseArsenal()
+{
+	bArsenalOpen = false;
+}
+
+void ACampaignPlayerController::OrderFromArsenal(const FString& Key)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bArsenalOpen)
+	{
+		return;
+	}
+	const FCampaignView& View = Session->GetView();
+	const bool bMine = View.RegionHolder.IsValidIndex(SelectedRegion) && View.RegionHolder[SelectedRegion] == View.Human;
+	FString Name;
+	if (Session->OrderArsenal(Key, bMine ? SelectedRegion : INDEX_NONE, Name))
+	{
+		Notify(FString::Printf(TEXT("Ordered: %s."), *Name), 5.0);
+	}
+	else
+	{
+		Notify(TEXT("That could not be ordered."), 4.0);
+	}
+	// The prices, the treasury and what is on order have all moved: read the arsenal again.
+	const int32 Revision = Arsenal.Revision + 1;
+	Arsenal = Session->Arsenal(bMine ? SelectedRegion : INDEX_NONE);
+	Arsenal.Revision = Revision;
+	RefreshRegionPanel(SelectedRegion);
 }
 
 void ACampaignPlayerController::ShowProvince(int32 RegionId)
@@ -539,6 +587,10 @@ void ACampaignPlayerController::Escape()
 	else if (bWatching)
 	{
 		SkipWatching();
+	}
+	else if (bArsenalOpen)
+	{
+		CloseArsenal();
 	}
 	else if (bLedgerOpen)
 	{
@@ -654,7 +706,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen;
+	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)

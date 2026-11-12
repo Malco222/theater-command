@@ -195,7 +195,7 @@ namespace
 					]
 
 					// News for the player, for a few seconds at a time.
-					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(24.0f, 30.0f)
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(24.0f, 84.0f, 24.0f, 0.0f)
 					[
 						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(22.0f, 10.0f))
 						.Visibility_Lambda([this]()
@@ -215,6 +215,15 @@ namespace
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 12.0f)
 						[
 								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									.ToolTipText(FText::FromString(TEXT("Order corps, aircraft, ships, factories and other works.")))
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenArsenal(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("ARSENAL"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+									]
+								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
 									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
@@ -590,6 +599,61 @@ namespace
 						]
 					]
 
+					// The arsenal: everything that can be ordered.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsArsenalOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(1320.0f).HeightOverride(800.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(28.0f, 20.0f, 24.0f, 20.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+										[
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("THE ARSENAL"))).Font(Font(TEXT("Bold"), 11, 240)).ColorAndOpacity(Brass)
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 24))
+												.ColorAndOpacity_Lambda([this]() { return FSlateColor(Controller.IsValid() && Controller->GetArsenal().Money < 0 ? Alarm : Cream); })
+												.Text_Lambda([this]()
+												{
+													return Controller.IsValid() ? FText::FromString(FString::Printf(TEXT("%s in the treasury to spend"), *Cash(Controller->GetArsenal().Money))) : FText::GetEmpty();
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+												.Text_Lambda([this]() { return Controller.IsValid() ? ArsenalSummary(Controller->GetArsenal()) : FText::GetEmpty(); })
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(20.0f, 9.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseArsenal(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+											]
+										]
+									]
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									[
+										SAssignNew(ArsenalColumns, SHorizontalBox)
+									]
+								]
+							]
+						]
+					]
+
 					// The ledger: the country's books.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
@@ -941,6 +1005,13 @@ namespace
 				}
 			}
 
+			// Set the arsenal out when it is opened, and again after every order.
+			if (Controller.IsValid() && ArsenalColumns.IsValid() && Controller->IsArsenalOpen() && Controller->GetArsenal().Revision != ShownArsenal)
+			{
+				ShownArsenal = Controller->GetArsenal().Revision;
+				LayOutArsenal(Controller->GetArsenal());
+			}
+
 			// Write the ledger out when it is opened.
 			if (Controller.IsValid() && LedgerIn.IsValid() && Controller->IsLedgerOpen() && Controller->GetLedger().Revision != ShownLedger)
 			{
@@ -1050,6 +1121,135 @@ namespace
 				Line += TEXT(" More goes out than comes in: the treasury is shrinking.");
 			}
 			return FText::FromString(Line);
+		}
+
+		static FText ArsenalSummary(const FArsenal& Stock)
+		{
+			FString Line = Stock.Region.IsEmpty()
+				? FString(TEXT("No province of yours is selected, so works cannot be built: close this, click one of your territories, and open the arsenal again. Corps, aircraft and ships go where the notes say."))
+				: FString::Printf(TEXT("With %s in mind: works are built there, and new corps form up there if it has the industry they need."), *Stock.Region);
+			if (!Stock.bBudget)
+			{
+				Line += TEXT(" Aircraft, ships, factories and the other works are part of the grand campaign; a historical scenario offers corps and fortifications only.");
+			}
+			return FText::FromString(Line);
+		}
+
+		/** One thing on offer: what it is and what you get, what it costs now and each month after, how long it takes, and where it goes. */
+		TSharedRef<SWidget> MakeOffer(const FArsenalOffer& Offer)
+		{
+			const bool bCan = Offer.Why.IsEmpty();
+			FString Terms = FString::Printf(TEXT("%s  \u00B7  %d month%s"), *Cash(Offer.Cost), Offer.Months, Offer.Months == 1 ? TEXT("") : TEXT("s"));
+			if (Offer.Upkeep > 0)
+			{
+				Terms += FString::Printf(TEXT("  \u00B7  then %s a month"), *Cash(Offer.Upkeep));
+			}
+			TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(bCan ? Cream : Faint).AutoWrapText(true)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().Padding(8.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Offer.Size.Len() <= 16 ? Offer.Size : FString())).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bCan ? Muted : Faint)
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Terms)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(bCan ? BrightBrass : (Offer.bPoor ? Alarm : Faint))
+				];
+			// A long description of what is delivered goes on the line below instead of beside the name.
+			const FString Where = Offer.Size.Len() > 16 ? Offer.Size.Left(1).ToUpper() + Offer.Size.Mid(1) + TEXT(". ") + Offer.Note : Offer.Note;
+			if (!Where.IsEmpty())
+			{
+				Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Where)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bCan ? Muted : Faint).AutoWrapText(true)
+				];
+			}
+			if (!bCan)
+			{
+				Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Offer.Why)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Offer.bPoor ? Alarm : Muted).AutoWrapText(true)
+				];
+			}
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 7.0f, 11.0f, 8.0f)).IsFocusable(false).IsEnabled(bCan)
+				.ToolTipText(FText::FromString(Offer.Blurb))
+				.OnClicked_Lambda([this, Key = Offer.Key]()
+				{
+					if (Controller.IsValid())
+					{
+						Controller->OrderFromArsenal(Key);
+					}
+					return FReply::Handled();
+				})
+				[
+					Words
+				];
+		}
+
+		/** The arsenal in four columns: the army, the air force, the navy, and works for the province in mind. */
+		void LayOutArsenal(const FArsenal& Stock)
+		{
+			ArsenalColumns->ClearChildren();
+			const TCHAR* Groups[][2] = { { TEXT("army"), TEXT("THE ARMY") }, { TEXT("air"), TEXT("THE AIR FORCE") }, { TEXT("navy"), TEXT("THE NAVY") }, { TEXT("works"), TEXT("WORKS") } };
+			for (int32 Column = 0; Column < 4; ++Column)
+			{
+				TSharedRef<SVerticalBox> List = SNew(SVerticalBox);
+				FString Title = Groups[Column][1];
+				if (Column == 3 && !Stock.Region.IsEmpty())
+				{
+					Title = FString::Printf(TEXT("WORKS AT %s"), *Stock.Region.ToUpper());
+				}
+				List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Title)).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+				];
+				int32 Count = 0;
+				for (const FArsenalOffer& Offer : Stock.Offers)
+				{
+					if (Offer.Group == Groups[Column][0])
+					{
+						List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[MakeOffer(Offer)];
+						++Count;
+					}
+				}
+				if (Count == 0)
+				{
+					List->AddSlot().AutoHeight()
+					[
+						SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
+						.Text(FText::FromString(Column == 3 && Stock.Region.IsEmpty() ? TEXT("Select one of your own territories first.") : TEXT("Nothing on offer here in this campaign.")))
+					];
+				}
+				// What is already on order goes under the army's column, where there is room.
+				if (Column == 0)
+				{
+					List->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 8.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("ON ORDER"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+					];
+					if (Stock.Orders.Num() == 0)
+					{
+						List->AddSlot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("Nothing yet. Click anything that is lit to order it."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
+						];
+					}
+					for (const FLedgerLine& Line : Stock.Orders)
+					{
+						List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)[LedgerRow(Line.Label, FString(), Cash(Line.Amount), Muted)];
+					}
+				}
+				ArsenalColumns->AddSlot().FillWidth(1.0f).Padding(0.0f, 0.0f, Column == 3 ? 0.0f : 16.0f, 0.0f)
+				[
+					SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 8.0f, 0.0f)[List]
+				];
+			}
 		}
 
 		/** One line of the books: what, how many, how much. */
@@ -1665,6 +1865,8 @@ namespace
 		FSlateBrush WatchBrush;
 		FButtonStyle ChosenCard;
 		FButtonStyle PlateButton;
+		TSharedPtr<SHorizontalBox> ArsenalColumns;
+		int32 ShownArsenal = -1;
 		TSharedPtr<SVerticalBox> LedgerIn;
 		TSharedPtr<SVerticalBox> LedgerOut;
 		TSharedPtr<SVerticalBox> LedgerProvinces;

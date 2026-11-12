@@ -200,6 +200,17 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("30-grand-whole-map"), TEXT(""), 0.97f);
 		Add(TEXT("31-grand-capital"), TEXT("@capital"), 0.45f).Select = TEXT("@capital");
 		Add(TEXT("31b-ledger"), TEXT("@capital"), 0.45f).bLedger = true;
+		{
+			FShot& Shot = Add(TEXT("31c-arsenal"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.bArsenal = true;
+		}
+		{
+			FShot& Shot = Add(TEXT("31d-arsenal-ordered"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.bArsenal = true;
+			Shot.Order = TEXT("corps:art");
+		}
 		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
 	}
 
@@ -318,6 +329,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	Controller->CloseMenu();
 	Controller->CloseDocument();
 	Controller->CloseLedger();
+	Controller->CloseArsenal();
 	if (!Shot.bKeep)
 	{
 		Controller->CloseWarPrompt();
@@ -391,7 +403,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	{
 		Controller->OrderTo(*Target);
 	}
-	if (!Shot.Order.IsEmpty())
+	if (!Shot.Order.IsEmpty() && !Shot.bArsenal)
 	{
 		Controller->ProvinceAction(Shot.Order);
 	}
@@ -423,6 +435,14 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (Shot.bLedger)
 	{
 		Controller->OpenLedger();
+	}
+	if (Shot.bArsenal)
+	{
+		Controller->OpenArsenal();
+		if (!Shot.Order.IsEmpty())
+		{
+			Controller->OrderFromArsenal(Shot.Order);
+		}
 	}
 }
 

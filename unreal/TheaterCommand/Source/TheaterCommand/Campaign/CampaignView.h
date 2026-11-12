@@ -275,6 +275,34 @@ struct FProvinceOption
 	bool bEnabled = false;
 };
 
+/** One thing the arsenal offers: a corps, a wing of aircraft, ships, or a work for a province. */
+struct FArsenalOffer
+{
+	FString Key; // "corps:arm", "air:ftr", "ship:dd", "work:aa": what to pass back to order it
+	FString Group; // army, air, navy or works
+	FString Label;
+	FString Blurb;
+	FString Size; // "2 divisions", "100 fighters", "level 2"
+	FString Note; // where it goes and what it joins
+	FString Why; // why it cannot be ordered now; empty when it can
+	int32 Cost = 0;
+	int32 Upkeep = 0; // each month once delivered
+	int32 Months = 0;
+	bool bPoor = false; // money is the only thing in the way
+};
+
+/** Everything the player's nation can order, with one province in mind. */
+struct FArsenal
+{
+	bool bValid = false;
+	bool bBudget = false;
+	int32 Money = 0;
+	FString Region; // the province in mind; empty for none
+	TArray<FArsenalOffer> Offers;
+	TArray<FLedgerLine> Orders; // what is already on order
+	int32 Revision = 0;
+};
+
 /** What a territory holds, and what the player can do there. */
 struct FProvinceInfo
 {

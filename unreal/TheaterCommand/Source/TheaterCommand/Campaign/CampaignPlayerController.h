@@ -281,6 +281,13 @@ public:
 	void OpenLedger();
 	void CloseLedger();
 
+	/** The arsenal: everything that can be ordered, with the territory that is selected in mind. */
+	const FArsenal& GetArsenal() const { return Arsenal; }
+	bool IsArsenalOpen() const { return bArsenalOpen; }
+	void OpenArsenal();
+	void CloseArsenal();
+	void OrderFromArsenal(const FString& Key);
+
 	/** Closes the ledger and looks at one of its provinces on the table. */
 	void ShowProvince(int32 RegionId);
 
@@ -370,6 +377,8 @@ private:
 	FWarPrompt WarPrompt;
 	FLedger Ledger;
 	bool bLedgerOpen = false;
+	FArsenal Arsenal;
+	bool bArsenalOpen = false;
 	FOpening Opening;
 	FDocumentPage Document;
 	int32 DocumentRevision = 0;

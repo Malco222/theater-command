@@ -75,6 +75,12 @@ public:
 	/** Takes back an order placed this month. */
 	bool CancelOrder(int32 OrderId);
 
+	/** Everything the player can order, with a province in mind (INDEX_NONE for none). */
+	FArsenal Arsenal(int32 RegionId);
+
+	/** Places an order from the arsenal. OutName is what was ordered. */
+	bool OrderArsenal(const FString& Key, int32 RegionId, FString& OutName);
+
 	/** The player's books for this month. */
 	FLedger Ledger();
 
