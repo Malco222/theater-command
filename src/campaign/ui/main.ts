@@ -720,11 +720,68 @@ function drawPane(): void {
   else pane.innerHTML = powersPane();
 }
 
+// ---- The province: what a region holds, laid out as slots, and what can be raised or built there ----
+
+const GLYPH = {
+  factory: '<path d="M1.5 16.5V8l5.5 3V8l5.5 3V8l5 2.6V2.5h3.5v14Z"/>',
+  works: '<path d="M3 16.5V5h4v3.2h3V5h4v3.2h3V5h4v11.5Z"/>',
+  harbour: '<path class="line" d="M12 6.2V16M7.5 9.3h9M4.5 11.5c.8 3.3 4 4.6 7.5 4.6s6.7-1.3 7.5-4.6"/><circle class="line" cx="12" cy="4.2" r="1.9"/>',
+};
+const slotIcon = (body: string, box = '0 0 24 18'): string => `<svg class="sglyph" width="30" height="22" viewBox="${box}">${body}</svg>`;
+const pipsOf = (have: number, coming: number, of: number): string => `<span class="lvpips">${Array.from({ length: of }, (_, i) => `<i class="${i < have ? 'on' : i < have + coming ? 'due' : ''}"></i>`).join('')}</span>`;
+
+/** A region's holdings as four slots: industry, works, harbour and airfield. On the player's home ground the works slot is a button. */
+function provinceSlots(r: Region): string {
+  const me = g.human;
+  const mine = !!me && humanUp(g) && isHome(g, me, r);
+  const occupied = r.ctrl !== r.owner;
+  const industry = `<div class="slot${r.fac ? ' has' : ''}">${slotIcon(GLYPH.factory)}<b>Industry</b><small>${r.fac ? `${r.fac} factor${r.fac === 1 ? 'y' : 'ies'}${occupied ? `, worth ${Math.round(PRODUCTION.occupiedIncome * 100)}% under occupation` : ''}` : 'No industry'}</small></div>`;
+  const lv = r.fort?.lv ?? 0;
+  const queued = me ? g.nations[me].queue.filter((b) => b.what === 'fort' && b.region === r.id).length : 0;
+  const cost = mine ? fortCost(g, me!, r) : null;
+  const have = me ? Math.floor(g.nations[me].pp) : 0;
+  const state = `${lv ? `Level ${lv}` : 'No works'}${queued ? `, level ${lv + queued} building` : ''}`;
+  const works = cost !== null
+    ? `<button class="slot act${lv ? ' has' : ''}" data-act="fortify" ${have >= cost ? '' : 'disabled'} title="Defenders behind works fight far harder. Ready in ${PRODUCTION.fort.months} months, and the works face every direction.">${slotIcon(GLYPH.works)}<b>Works</b>${pipsOf(lv, queued, 3)}<small>${state}</small><small class="do">Build level ${lv + queued + 1} · ${cost} pts</small></button>`
+    : `<div class="slot${lv ? ' has' : ''}">${slotIcon(GLYPH.works)}<b>Works</b>${pipsOf(lv, queued, 3)}<small>${state}${mine && lv + queued >= 3 ? ', as strong as they can be' : ''}</small></div>`;
+  const harbour = `<div class="slot${r.port ? ' has' : ''}">${slotIcon(GLYPH.harbour)}<b>Harbour</b><small>${r.port ? 'A port: troops and supplies can come and go by sea' : r.seas.length ? 'A coast with no port' : 'Inland'}</small></div>`;
+  const wings = g.airFleets.filter((f) => f.base === r.id && f.ftr + f.bmr > 0);
+  const field = `<div class="slot${wings.length ? ' has' : ''}">${slotIcon(`<path d="${PLANE}"/>`, '-10.5 -9.5 21 19.5')}<b>Airfields</b><small>${wings.length ? `${wings.length} air fleet${wings.length > 1 ? 's' : ''}, ${num(wings.reduce((t, f) => t + f.ftr + f.bmr, 0))} aircraft` : 'No air fleet based here'}</small></div>`;
+  return `<h3>The province</h3><div class="slots">${industry}${works}${harbour}${field}</div>`;
+}
+
+/** What the player can raise in this region, and what is already forming there. */
+function provinceMuster(r: Region): string {
+  const me = g.human;
+  if (!me || !g.nations[me].alive) return '';
+  const n = g.nations[me];
+  const mine = humanUp(g);
+  const have = Math.floor(n.pp);
+  let out = '';
+  if (canRaise(g, me, r)) {
+    out += `<h3>Raise troops here <span class="inhand">${num(have)} pts in hand</span></h3><div class="recruit">`;
+    for (const [kind, b] of Object.entries(PRODUCTION.builds)) {
+      const label = kind === 'arm' ? `${PRODUCTION.armourName[me] ?? PRODUCTION.armourName._default} corps` : b.label;
+      out += `<button class="rcard" data-act="build" data-kind="${kind}" ${mine && have >= b.cost ? '' : 'disabled'} title="${esc(label)}: ${esc(b.blurb)}">${icon({ nat: me, kind } as Corps)}<b>${esc(label.replace(/ corps$/i, ''))}</b><small>${b.divs} divs · ${b.months} months</small><span class="cost${have >= b.cost ? '' : ' short'}">${b.cost}<small>pts</small></span></button>`;
+    }
+    out += '</div>';
+  }
+  const here = n.queue.filter((b) => b.region === r.id).sort((a, c) => a.eta - c.eta);
+  if (here.length) {
+    out += `<h3>Forming here</h3>`;
+    for (const b of here) {
+      const left = b.eta - g.turn;
+      out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>Ready ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${b.cost}<small>paid</small></span>`}</div>`;
+    }
+  }
+  return out;
+}
+
 function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -754,8 +811,9 @@ function regionPane(): string {
   return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
+    ${provinceSlots(r)}
     <h3>Forces here</h3>${acts}${units}
-    ${based.length ? `<h3>On the airfields</h3>${based.map((f) => airRow(f, false, true)).join('')}` : ''}${ui.sel >= 0 && me ? advice() : ''}`;
+    ${based.length ? `<h3>On the airfields</h3>${based.map((f) => airRow(f, false, true)).join('')}` : ''}${provinceMuster(r)}${ui.sel >= 0 && me ? advice() : ''}`;
 }
 
 /** Where a new corps would form up: the selected region if it is home ground, otherwise the capital. */

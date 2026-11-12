@@ -217,6 +217,32 @@ button.corps:hover { border-color: var(--ink-3); }
 .meter i { display: block; height: 100%; background: var(--green); }
 .meter i.org { background: #6f9fd0; }
 .meter i.low { background: var(--red); }
+.slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.slot { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; color: inherit; min-width: 0; opacity: .62; }
+.slot.has, .slot.act { opacity: 1; }
+.slot .sglyph { grid-row: 1 / span 3; align-self: start; margin-top: 2px; fill: var(--ink-3); }
+.slot.has .sglyph { fill: var(--brass); }
+.slot .sglyph .line { fill: none; stroke: var(--ink-3); stroke-width: 1.8; stroke-linecap: round; }
+.slot.has .sglyph .line { stroke: var(--brass); }
+.slot b { font-family: var(--head); font-size: 14px; font-weight: 600; letter-spacing: .04em; }
+.slot small { grid-column: 2 / 4; font-size: 11px; color: var(--ink-2); line-height: 1.3; }
+.slot small.do { color: var(--brass); font-weight: 600; margin-top: 2px; }
+.slot.act:not([disabled]):hover { border-color: var(--brass); }
+.slot.act[disabled] { cursor: default; }
+.slot.act[disabled] small.do { color: var(--ink-3); }
+.lvpips { display: inline-flex; gap: 3px; }
+.lvpips i { width: 8px; height: 8px; border-radius: 2px; background: var(--panel-3); border: 1px solid var(--line); display: block; }
+.lvpips i.on { background: var(--brass); border-color: var(--brass); }
+.lvpips i.due { border-color: var(--brass); }
+.inhand { float: right; font-family: var(--body); font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--brass); }
+.recruit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.rcard { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; column-gap: 8px; align-items: center; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; color: inherit; min-width: 0; }
+.rcard:not([disabled]):hover { border-color: var(--brass); }
+.rcard[disabled] { opacity: .5; cursor: default; }
+.rcard svg { grid-row: 1 / span 2; }
+.rcard b { font-size: 12.5px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rcard small { grid-column: 2; font-size: 11px; color: var(--ink-2); }
+.rcard .cost { grid-column: 3; grid-row: 1 / span 2; font-size: 17px; }
 .acts { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 2px; }
 .empty { color: var(--ink-3); font-size: 13px; padding: 6px 0; }
 
