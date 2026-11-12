@@ -44,6 +44,8 @@ function theatreOf(g: Game, c: Corps): number {
 let scope: Set<number> | null = null;
 /** True while a plan has told the army being run to make no local counter-attacks. */
 let quiet = false;
+/** True while the plan in force allows each place one assault a month: what fails is not tried again until the next. */
+let single = false;
 /** Set while the army being run has orders to leave the theatre once the front there has gone. */
 let leaving: PlanPhase['withdraw'] | null = null;
 /** Sectors the plan in force has handed over to an ally whose troops have arrived: the nation's own corps leave them, all but one. */
@@ -120,6 +122,7 @@ function overseas(g: Game, nat: string): void {
     for (const c of rest) c.hold = true;
     scope = ids[k];
     quiet = !!ph?.quiet;
+    single = ph?.renew === false;
     leaving = ph?.withdraw ?? null;
     given = new Set((ph?.abandon ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined && ids[k].has(id)));
     try {
@@ -147,6 +150,7 @@ function overseas(g: Game, nat: string): void {
     } finally {
       scope = null;
       quiet = false;
+      single = false;
       leaving = null;
       given = new Set();
       massed = new Set();
@@ -177,7 +181,8 @@ function mainCampaign(g: Game, nat: string): void {
   entrusted = handedOver(g, nat, ph);
   given = new Set((ph?.abandon ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined));
   quiet = !!ph?.quiet;
-  try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; }
+  single = ph?.renew === false;
+  try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; }
 }
 
 /** The sectors of the front the plan has entrusted to an ally, where at least two of that ally's corps now stand. */
@@ -507,8 +512,8 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
       let taken: boolean;
       if (best.battle) {
         taken = resolveBattle(g, best.corps, best.target).taken;
-        // A slow command does not get a second assault organised in the same month.
-        if (!taken && g.nations[nat].slowCommand) failed.add(best.target.id);
+        // A slow command does not get a second assault organised in the same month, and some plans allow only one.
+        if (!taken && (g.nations[nat].slowCommand || single)) failed.add(best.target.id);
       }
       else { taken = moveCorps(g, best.corps[0], best.target); if (!taken) failed.add(best.target.id); }
       if (taken && g.nations[nat].alive) support(g, nat, best.target);

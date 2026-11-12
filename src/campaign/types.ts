@@ -376,6 +376,8 @@ export interface PlanPhase {
   withdraw?: { when: string[] };
   /** Stand on the defensive without local counter-attacks: the plan is saving the army for a later stroke. */
   quiet?: boolean;
+  /** False for a plan that allows each place one assault a month: an attack that fails is not renewed until the next. */
+  renew?: boolean;
   /** Places the plan wants at a price of their own: the least odds at which each is attacked, in place of minOdds. */
   oddsFor?: Record<string, number>;
   /**

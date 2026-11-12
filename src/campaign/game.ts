@@ -1028,7 +1028,8 @@ function cutOffNews(g: Game): void {
 export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!n.alive) return;
-  for (const row of (setup as any).reinforcements) {
+  // Reinforcements from the pre-war mobilisation, and the armies and fronts formed later from men already under arms.
+  for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
     if (row[0] !== g.turn || row[1] !== nat) continue;
     let reg = g.byName[row[5]];
     if (!allied(g, nat, reg.ctrl)) reg = g.regions[n.capital];

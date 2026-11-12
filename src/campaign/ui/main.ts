@@ -28,8 +28,8 @@ import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, typ
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
-/** The month after the last one the historical plans cover: June 1943. */
-const STORY_ENDS = 46;
+/** The month after the last one the historical plans cover: January 1944. */
+const STORY_ENDS = 53;
 const ui = {
   sel: -1,
   picked: new Set<number>(),
@@ -428,13 +428,17 @@ function advice(): string {
       ? `Bring your tanks and lorried troops up for the stroke to come: ${esc(fast.map(([nm, k]) => `${k} corps at ${nm}`).join(', '))}. March infantry out if there is no room.`
       : `Take the tanks out of the quiet parts of the line and gather them by rail for the summer: ${esc(fast.map(([nm, k]) => `${k} corps at ${nm}`).join(', '))}.`);
     const keep = ph.posture === 'redeploy' ? [] : Object.entries(ph.staging ?? {}).filter(([nm]) => held(nm));
-    if (keep.length) out.push(`Keep ${esc(keep.map(([nm, k]) => `${k} corps at ${nm}`).join(' and '))}.`);
+    if (keep.length) {
+      const each = keep.map(([nm, k]) => `${k} corps at ${nm}`);
+      out.push(`Keep ${esc(each.length <= 2 ? each.join(' and ') : `${each.slice(0, -1).join(', ')} and ${each[each.length - 1]}`)}.`);
+    }
     const lent = Object.entries(ph.entrust ?? {}).flatMap(([ally, places]) => places.filter((nm) => held(nm) && g.byName[nm].units.filter((u) => u.nat === ally).length >= 2));
     if (lent.length) out.push(`Your allies now hold ${esc(list(lent))}: history left one corps to stiffen each and sent the rest on.`);
     const out2 = (ph.abandon ?? []).filter((nm) => held(nm) && g.byName[nm].units.some((u) => u.nat === me && u.kind !== 'fort'));
     if (out2.length) out.push(`Give up ${esc(list(out2))}: march the corps there back toward ${away && base ? esc(base) : 'home'} before the road behind them is cut.`);
     const dear = Object.entries(ph.oddsFor ?? {}).filter(([nm, o]) => o < (ph.minOdds ?? 1.3) && !held(nm)).map(([nm]) => nm);
     if (dear.length) out.push(`History threw its army at ${esc(list(dear))} against the odds. You need not.`);
+    if (ph.posture === 'attack' && ph.renew === false) out.push('History made this assault once and did not send the army in again when it was held.');
     return out.length ? ` ${out.join(' ')}` : '';
   };
   const main = (): string => {
@@ -472,7 +476,7 @@ function advice(): string {
 
 function scopeNote(): string {
   if (g.turn < STORY_ENDS) return '';
-  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the spring of 1943. You can play on, but the computer's nations will only hold what they have. Shipbuilding and the later campaigns come in later phases.</div>`;
+  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the end of 1943. You can play on, but the computer's nations will only hold what they have. Shipbuilding and the later campaigns come in later phases.</div>`;
 }
 
 function corpsRow(c: Corps, mine: boolean): string {
@@ -1367,6 +1371,12 @@ function startCard(): string {
       ${side('UK', 'United Kingdom', 'Montgomery is chasing Rommel across Libya, and a second army waits at Gibraltar beside the Americans. Get it ashore in Algeria, try for Tunis before the Germans do, and close the trap from both ends.', false, 39)}
       ${side('ITA', 'Italy', 'Your army is falling back from El Alamein and a new enemy is about to land behind it. Hold Tunisia, bring the army home to it, and keep the sea road to Sicily open for as long as you can.', false, 39)}
     </div>
+    <h3>July 1943 · Kursk and the Dnieper</h3>
+    <div class="sides">
+      ${side(null, 'Watch Kursk and the road to the Dnieper', 'The computer plays the first 46 months, then the last German summer offensive in the east, the Soviet strokes at Orel and Kharkov, the race for the Dnieper and the freeing of Kiev.', true, 47)}
+      ${side('GER', 'Germany', 'Your tanks are gathered on both shoulders of the Kursk salient, and the Red Army has had three months to dig in there. Strike or hold them back: either way the weight is about to fall on Orel and Kharkov, and the Dnieper is a long way behind you.', false, 47)}
+      ${side('SOV', 'Soviet Union', 'You know where the blow will fall and you have dug in to meet it. Break the panzers on the lines round Kursk, then send the reserve fronts at Orel and Kharkov and do not stop until you are over the Dnieper.', false, 47)}
+    </div>
     <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
 
@@ -1446,9 +1456,9 @@ function newGame(human: string | null, seed?: number, from = 1): void {
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = from > 1 ? g.seaReports.length : 0;
   ui.air = -1; ui.airMode = ''; ui.seenAir = from > 1 ? g.airReports.length : 0;
   drawStatic();
-  const britain = from === 11, desert = from === 13 || from === 33, balkans = from === 14, blue = from === 34, torch = from === 39;
+  const britain = from === 11, desert = from === 13 || from === 33, balkans = from === 14, blue = from === 34, torch = from === 39, kursk = from === 47;
   if (britain) ui.tab = 'air';
-  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : torch ? g.byName['Constantine'] : balkans ? g.byName['Thessaly'] : blue ? g.byName[human === 'SOV' ? 'Stalingrad' : 'Kharkov'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
+  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : torch ? g.byName['Constantine'] : balkans ? g.byName['Thessaly'] : blue ? g.byName[human === 'SOV' ? 'Stalingrad' : 'Kharkov'] : kursk ? g.byName['Kursk'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
   ui.view = { x: focus.x - (torch ? 420 : 300), y: focus.y - (torch ? 250 : 230), w: torch ? 760 : desert || balkans ? 580 : human === 'GER' || from > 1 ? 640 : 600 };
   applyView();
   // A country that is attacked before its first month comes round places its army on the eve of war.

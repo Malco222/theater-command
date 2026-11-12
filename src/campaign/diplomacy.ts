@@ -27,6 +27,8 @@ export interface DiploEvent {
    * list still in the war gets every named region the country still holds. Ground someone else already holds stays theirs.
    */
   partition?: { nation: string; shares: [string[], string[]][] };
+  /** Countries whose armies are remade: from now on these ratings stand in place of the ones they began the war with. */
+  reform?: Record<string, Partial<Pick<Nation, 'quality' | 'air' | 'slowCommand' | 'maxAttack'>>>;
 }
 
 export const DIPLOMACY = data as unknown as {
@@ -277,6 +279,16 @@ function fire(g: Game, e: DiploEvent): boolean {
     X.atWar = [];
     g.supplyDirty = true;
     did = true;
+  }
+  if (e.reform) {
+    let any = false;
+    for (const [id, to] of Object.entries(e.reform)) {
+      const n = g.nations[id];
+      if (!n?.alive) continue;
+      Object.assign(n, to);
+      any = true;
+    }
+    if (!any) return false;
   }
   for (const row of e.spawn ?? []) {
     const r = g.byName[row[4]];
