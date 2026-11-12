@@ -83,7 +83,7 @@ The relief is the real one. The land is modelled from NOAA's ETOPO 2022 elevatio
 
 ## Music
 
-The music is one original piece, "The Map Room", written as notes in `Tools/make_music.mjs` and played by a small synthesiser in the same file, so nothing in it is borrowed from any recording, film or game. `Tools/build_music.sh` makes it and brings it into Unreal; the launcher does this the first time. The result is about 17 MB and can always be remade, so it is not kept in the repository. It is a synthesiser, not an orchestra: recorded music can replace it later without anything else changing.
+The music is one original piece, "Leave Pass": an up-tempo swing number for a 1940s dance band (walking bass, ride cymbal, rhythm guitar, a saxophone section, brass, and a clarinet chorus), about two and a half minutes on a loop. It is written as notes in `Tools/make_music.mjs` and played by a small synthesiser in the same file, so nothing in it is borrowed from any recording, film or game; the chords under the tune are the common property of the style. `Tools/build_music.sh` makes it and brings it into Unreal; the launcher does this the first time and whenever the piece has been rewritten. The result is about 20 MB and can always be remade, so it is not kept in the repository. It is a synthesiser, not a band: recorded music can replace it later without anything else changing. The slower piece it replaced, "The Map Room", is kept in `Tools/make_music_map_room.mjs`.
 
 ## Stand-ins
 

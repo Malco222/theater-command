@@ -24,9 +24,11 @@ fi
 # Bring the rules up to date with the browser version's, when the tools to do it are here.
 ./Tools/build_rules.sh > /tmp/theater-command-rules.log 2>&1 || true
 
-# Make the music the first time (it is not kept in the repository). It takes about half a minute.
-if [ ! -f Content/Campaign/Music/Theme.uasset ]; then
-  echo "Making the music (first time only)..."
+# Make the music the first time, and again whenever the piece has been rewritten (it is not kept in the
+# repository). It takes about half a minute.
+PIECE="$(shasum Tools/make_music.mjs | cut -d' ' -f1)"
+if [ ! -f Content/Campaign/Music/Theme.uasset ] || [ "$(cat Saved/Music/made-from.txt 2> /dev/null)" != "$PIECE" ]; then
+  echo "Making the music (only when it is new)..."
   ./Tools/build_music.sh > /tmp/theater-command-music.log 2>&1 || true
 fi
 

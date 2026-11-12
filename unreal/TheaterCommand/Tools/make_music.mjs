@@ -1,25 +1,33 @@
 // Writes the campaign's music: an original piece, composed here as notes and played by a small
 // synthesiser, so nothing is borrowed from any recording, film or game.
 //
-// "The Map Room": slow, in D minor, about two and a half minutes, made to loop without a seam.
-// A low drone and distant drums, a horn theme, strings and a quiet snare under its second
-// statement, a climb, and a return to the drone it began on.
+// "Leave Pass": an up-tempo swing number for a dance band of the 1940s, in B flat, about two and a
+// half minutes, made to loop without a seam. A four-bar vamp from the rhythm section, then three
+// choruses of thirty-two bars: the saxophones state the tune with the brass punching between their
+// phrases; a clarinet takes a chorus over a quiet riff; and the whole band shouts the tune out.
+//
+// The tune and its arrangement are written for this game. The chords under it are the common
+// property of the style (a turnaround in the home key, and a bridge that walks round the cycle of
+// dominants), as a twelve-bar blues is.
 //
 //   node Tools/make_music.mjs <out.wav>
 //
-// It is a synthesiser, not an orchestra: the piece sets a mood and can be replaced by recorded
-// music later without anything else changing.
+// It is a synthesiser, not a band: it sets the mood, and can be replaced by recorded music later
+// without anything else changing. The slower piece it replaced is kept in make_music_map_room.mjs.
 
 import fs from 'node:fs';
 
 const SR = 44100;
-const BPM = 56;
+const BPM = 166;
 const BEAT = 60 / BPM;
 const BAR = 4 * BEAT;
-const BARS = 36;
-const TAIL = 6; // seconds of echo after the last bar, folded back onto the beginning so the loop has no seam
+const SWING = 0.64; // where the second quaver of a beat falls: 0.5 is straight, 0.667 a full triplet
+const INTRO = 4;
+const CHORUS = 32;
+const BARS = INTRO + 3 * CHORUS;
+const TAIL = 2.5; // seconds of echo after the last bar, folded back onto the beginning so the loop has no seam
 const N = Math.round(BARS * BAR * SR);
-const NT = N + TAIL * SR;
+const NT = N + Math.round(TAIL * SR);
 
 const dryL = new Float32Array(NT);
 const dryR = new Float32Array(NT);
@@ -27,12 +35,11 @@ const dryR = new Float32Array(NT);
 // ---- Notes --------------------------------------------------------------------------------
 
 const STEP = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-function hz(name) {
+function midi(name) {
   const m = /^([A-G])([#b]?)(-?\d)$/.exec(name);
-  const midi = 12 * (Number(m[3]) + 1) + STEP[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
-  return 440 * 2 ** ((midi - 69) / 12);
+  return 12 * (Number(m[3]) + 1) + STEP[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0);
 }
-const up = (name, octaves = 1) => name.replace(/-?\d$/, (d) => String(Number(d) + octaves));
+const hz = (m) => 440 * 2 ** ((m - 69) / 12);
 
 // A sawtooth with its corners rounded off (polyBLEP), so high notes do not hiss.
 function saw(phase, dt) {
@@ -42,11 +49,12 @@ function saw(phase, dt) {
   return v;
 }
 
-let seed = 1939;
-function noise() { // the same hiss every time, so the piece is the same every time it is made
+let seed = 1942;
+function rnd() { // the same numbers every time, so the piece is the same every time it is made
   seed = (seed * 1664525 + 1013904223) >>> 0;
-  return seed / 2147483648 - 1;
+  return seed / 4294967296;
 }
+const noise = () => rnd() * 2 - 1;
 
 function add(i, v, pan) {
   if (i < 0 || i >= NT) return;
@@ -56,241 +64,434 @@ function add(i, v, pan) {
 
 const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
+/** When a beat of a bar sounds. Quavers off the beat are played late: that is the swing. */
+function at(bar, beat = 0) {
+  const whole = Math.floor(beat + 1e-9), part = beat - whole;
+  const swung = Math.abs(part - 0.5) < 1e-6 ? SWING : part;
+  return (bar * 4 + whole + swung) * BEAT;
+}
+/** How long a note lasts that starts on a beat and is so many beats long, allowing for the swing at both ends. */
+const span = (bar, beat, beats) => at(bar, beat + beats) - at(bar, beat);
+
 // ---- Instruments --------------------------------------------------------------------------
 
-/** Sustained strings: several slightly mistuned saws, filtered soft, swelling in and dying away. */
-function strings(start, dur, note, vol, pan = 0, o = {}) {
-  const f = hz(note);
-  const attack = o.attack ?? 0.9, release = o.release ?? 1.4, bright = o.bright ?? 1;
-  const tunes = [-0.006, 0.0, 0.0055, -0.0025];
-  const phases = tunes.map((_, k) => (k * 0.37 + f * 0.013) % 1);
+/**
+ * A reed or a brass voice: a saw through a filter that opens as the note speaks. `o.bright` sets how far it
+ * opens, `o.reed` mixes in the hollow sound of a reed, `o.scoop` slides up into the note, `o.fall` lets it drop
+ * away at the end, as a brass section does off a short note.
+ */
+function wind(start, dur, m, vol, pan, o = {}) {
+  const f = hz(m);
+  const attack = o.attack ?? 0.022, release = o.release ?? 0.07, bright = o.bright ?? 1, reed = o.reed ?? 0;
+  const scoop = o.scoop ?? 0.012, fall = o.fall ?? 0;
   const i0 = Math.round(start * SR), len = Math.round((dur + release) * SR);
-  let a = 0, b = 0;
+  let phase = (m * 0.137) % 1, a = 0, b = 0;
   for (let i = 0; i < len; i++) {
     const t = i / SR;
-    const env = smooth(t / attack) * (t < dur ? 1 : 1 - smooth((t - dur) / release));
-    const wob = 1 + 0.0025 * Math.sin(2 * Math.PI * 5.1 * t + f); // a little bow vibrato
-    let s = 0;
-    for (let k = 0; k < tunes.length; k++) {
-      const dt = f * (1 + tunes[k]) * wob / SR;
-      phases[k] += dt; if (phases[k] >= 1) phases[k] -= 1;
-      s += saw(phases[k], dt);
-    }
-    const cut = Math.min(0.6, (900 + 2800 * bright * env + f * 2.6) / SR * 2 * Math.PI);
-    a += cut * (s * 0.25 - a); b += cut * (a - b);
-    add(i0 + i, b * env * vol, pan + 0.25 * Math.sin(k0(i)));
-  }
-}
-const k0 = (i) => i / SR * 0.21; // a slow drift across the room
-
-/** A horn: one saw and its fundamental, opening as it speaks, with vibrato once the note has settled. */
-function horn(start, dur, note, vol, pan = -0.15) {
-  const f = hz(note);
-  const attack = 0.1, release = 0.35;
-  const i0 = Math.round(start * SR), len = Math.round((dur + release) * SR);
-  let phase = 0, a = 0, b = 0;
-  for (let i = 0; i < len; i++) {
-    const t = i / SR;
-    const env = smooth(t / attack) * (t < dur ? 1 - 0.18 * smooth(t / Math.max(dur, 0.01)) : 0.82 * (1 - smooth((t - dur) / release)));
-    const vib = 1 + 0.004 * smooth((t - 0.35) / 0.5) * Math.sin(2 * Math.PI * 4.8 * t);
-    const dt = f * vib / SR;
+    const held = t < dur;
+    const env = smooth(t / attack) * (held ? 1 - 0.12 * smooth(t / Math.max(dur, 0.05)) : 0.88 * (1 - smooth((t - dur) / release)));
+    const vib = 1 + 0.0045 * smooth((t - 0.16) / 0.25) * Math.sin(2 * Math.PI * 5.6 * t + m);
+    const slide = 1 - scoop * (1 - smooth(t / 0.05)) - (held ? 0 : fall * smooth((t - dur) / release));
+    const dt = f * vib * slide / SR;
     phase += dt; if (phase >= 1) phase -= 1;
-    const s = 0.55 * saw(phase, dt) + 0.6 * Math.sin(2 * Math.PI * phase);
-    const cut = Math.min(0.55, (650 + 2400 * env * env + f * 1.6) / SR * 2 * Math.PI);
+    let half = phase + 0.5; if (half >= 1) half -= 1;
+    const s = saw(phase, dt) - reed * saw(half, dt) + 0.35 * Math.sin(2 * Math.PI * phase);
+    const cut = Math.min(0.7, (500 + (1500 + 3800 * bright) * env * env + f * 1.2) / SR * 2 * Math.PI);
     a += cut * (s - a); b += cut * (a - b);
     add(i0 + i, b * env * vol, pan);
   }
 }
 
-/** Low strings played short: the marching figure under the theme. */
-function pluck(start, note, vol, pan = 0.3, len = 0.42) {
-  const f = hz(note);
-  const i0 = Math.round(start * SR), n = Math.round(len * SR);
-  let p1 = 0, p2 = 0.4, a = 0, b = 0;
+/** A string bass, plucked: a round low note with a little thump at the front. */
+function bass(start, m, vol, len = 0.36) {
+  const f = hz(m);
+  const i0 = Math.round(start * SR), n = Math.round((len + 0.08) * SR);
+  let phase = 0;
   for (let i = 0; i < n; i++) {
     const t = i / SR;
-    const env = smooth(t / 0.012) * Math.exp(-t / 0.16);
-    const d1 = f / SR, d2 = f * 1.004 / SR;
+    const env = smooth(t / 0.006) * Math.exp(-t / (len * 0.62)) * (t < len ? 1 : 1 - smooth((t - len) / 0.08));
+    phase += f * (1 + 0.03 * Math.exp(-t / 0.012)) / SR;
+    const tone = 0.8 * Math.sin(2 * Math.PI * phase) + 0.62 * Math.sin(4 * Math.PI * phase) * Math.exp(-t / 0.24) + 0.3 * Math.sin(6 * Math.PI * phase) * Math.exp(-t / 0.12);
+    add(i0 + i, tone * env * vol, 0.05);
+  }
+}
+
+/** A piano note: struck, bright for a moment, and dying away. */
+function piano(start, m, vol, pan, len = 0.3) {
+  const f = hz(m);
+  const i0 = Math.round(start * SR), n = Math.round((len + 0.12) * SR);
+  let p1 = 0, p2 = 0.3, a = 0, b = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    const env = smooth(t / 0.004) * Math.exp(-t / 0.28) * (t < len ? 1 : 1 - smooth((t - len) / 0.12));
+    const d1 = f / SR, d2 = f * 1.0025 / SR;
     p1 += d1; if (p1 >= 1) p1 -= 1;
     p2 += d2; if (p2 >= 1) p2 -= 1;
-    const s = saw(p1, d1) + saw(p2, d2);
-    const cut = Math.min(0.5, (520 + 2300 * env) / SR * 2 * Math.PI);
-    a += cut * (s * 0.5 - a); b += cut * (a - b);
+    const s = 0.5 * (saw(p1, d1) + saw(p2, d2)) + 0.5 * Math.sin(2 * Math.PI * p1);
+    const cut = Math.min(0.7, (700 + 5200 * Math.exp(-t / 0.07) + f) / SR * 2 * Math.PI);
+    a += cut * (s - a); b += cut * (a - b);
     add(i0 + i, b * env * vol, pan);
   }
 }
 
-/** A kettledrum: a note that falls as it is struck, and the thump of the stick. */
-function timpani(start, note, vol, pan = 0.05) {
-  const f = hz(note);
-  const i0 = Math.round(start * SR), n = Math.round(2.6 * SR);
-  let phase = 0, lp = 0;
+/** The rhythm guitar: a chord struck short and dry on every beat. */
+function chunk(start, notes, vol) {
+  notes.forEach((m, k) => {
+    const f = hz(m);
+    const i0 = Math.round((start + k * 0.004) * SR), n = Math.round(0.11 * SR);
+    let p = 0, a = 0;
+    for (let i = 0; i < n; i++) {
+      const t = i / SR;
+      const env = smooth(t / 0.003) * Math.exp(-t / 0.032);
+      const d = f / SR; p += d; if (p >= 1) p -= 1;
+      a += 0.35 * (saw(p, d) - a);
+      add(i0 + i, a * env * vol, -0.35);
+    }
+  });
+}
+
+/** The ride cymbal: a bright ping that rings on. */
+function ride(start, vol) {
+  const i0 = Math.round(start * SR), n = Math.round(0.42 * SR);
+  let lo = 0, last = 0;
   for (let i = 0; i < n; i++) {
     const t = i / SR;
-    phase += f * (1 + 0.5 * Math.exp(-t / 0.018)) / SR;
-    const tone = Math.sin(2 * Math.PI * phase) + 0.32 * Math.sin(4 * Math.PI * phase + 0.4) * Math.exp(-t / 0.3);
-    lp += 0.05 * (noise() - lp);
-    add(i0 + i, (tone * Math.exp(-t / 0.75) * smooth(t / 0.004) + lp * 3.2 * Math.exp(-t / 0.045)) * vol * 0.7, pan);
+    const w = noise();
+    lo += 0.45 * (w - lo);
+    const hiss = (w - lo) * 0.6 + (w - last) * 0.25; last = w; // only the top of the noise
+    const ping = Math.sin(2 * Math.PI * 5230 * t) + 0.7 * Math.sin(2 * Math.PI * 7410 * t + 1) + 0.5 * Math.sin(2 * Math.PI * 3940 * t + 2);
+    add(i0 + i, (hiss * Math.exp(-t / 0.16) + 0.22 * ping * Math.exp(-t / 0.05)) * smooth(t / 0.002) * vol, 0.32);
   }
 }
 
-/** A snare drum, far off. */
-function snare(start, vol, pan = 0.35) {
-  const i0 = Math.round(start * SR), n = Math.round(0.3 * SR);
+/** The hi-hat closing on the off beats. */
+function hat(start, vol) {
+  const i0 = Math.round(start * SR), n = Math.round(0.06 * SR);
+  let lo = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    const w = noise();
+    lo += 0.5 * (w - lo);
+    add(i0 + i, (w - lo) * Math.exp(-t / 0.014) * vol, -0.3);
+  }
+}
+
+/** The bass drum, played softly on every beat, and harder under the band's accents. */
+function kick(start, vol) {
+  const i0 = Math.round(start * SR), n = Math.round(0.22 * SR);
+  let phase = 0;
+  for (let i = 0; i < n; i++) {
+    const t = i / SR;
+    phase += (52 + 60 * Math.exp(-t / 0.02)) / SR;
+    add(i0 + i, Math.sin(2 * Math.PI * phase) * smooth(t / 0.003) * Math.exp(-t / 0.07) * vol, 0);
+  }
+}
+
+/** The snare drum. */
+function snare(start, vol) {
+  const i0 = Math.round(start * SR), n = Math.round(0.2 * SR);
   let lo = 0, hi = 0;
   for (let i = 0; i < n; i++) {
     const t = i / SR;
     const w = noise();
-    lo += 0.55 * (w - lo); hi += 0.1 * (w - hi); // keep the band between the two
-    const body = Math.sin(2 * Math.PI * 185 * t) * Math.exp(-t / 0.04);
-    add(i0 + i, ((lo - hi) * Math.exp(-t / 0.075) + 0.35 * body) * vol, pan);
+    lo += 0.6 * (w - lo); hi += 0.12 * (w - hi);
+    const body = Math.sin(2 * Math.PI * 196 * t) * Math.exp(-t / 0.03);
+    add(i0 + i, ((lo - hi) * Math.exp(-t / 0.055) + 0.4 * body) * vol, 0.12);
   }
 }
 
-/** The floor under everything: a soft, very low held note. */
-function drone(start, dur, note, vol) {
-  const f = hz(note);
-  const i0 = Math.round(start * SR), len = Math.round((dur + 3) * SR);
-  let phase = 0, p2 = 0.3, a = 0;
-  for (let i = 0; i < len; i++) {
-    const t = i / SR;
-    const env = smooth(t / 3) * (t < dur ? 1 : 1 - smooth((t - dur) / 3));
-    phase += f / SR; if (phase >= 1) phase -= 1;
-    const d2 = f * 2.003 / SR; p2 += d2; if (p2 >= 1) p2 -= 1;
-    a += 0.03 * (saw(p2, d2) - a);
-    const swell = 0.85 + 0.15 * Math.sin(2 * Math.PI * t / 9.5);
-    add(i0 + i, (Math.sin(2 * Math.PI * phase) + 0.5 * a) * env * swell * vol, 0);
-  }
-}
+// ---- The chords ---------------------------------------------------------------------------
 
-// ---- The piece ----------------------------------------------------------------------------
-
-const at = (bar, beat = 0) => bar * BAR + beat * BEAT;
-
-const CHORDS = {
-  Dm5: { pad: ['D3', 'A3', 'D4'], bass: 'D2', figure: ['D2', 'D2', 'A2', 'D2', 'D3', 'D2', 'A2', 'D2'] },
-  Dm: { pad: ['D3', 'A3', 'D4', 'F4'], bass: 'D2', figure: ['D2', 'D2', 'A2', 'D2', 'F3', 'D2', 'A2', 'D2'] },
-  Bb: { pad: ['Bb2', 'F3', 'Bb3', 'D4'], bass: 'Bb1', figure: ['Bb1', 'Bb1', 'F2', 'Bb1', 'D3', 'Bb1', 'F2', 'Bb1'] },
-  Gm: { pad: ['G2', 'D3', 'G3', 'Bb3'], bass: 'G1', figure: ['G1', 'G1', 'D2', 'G1', 'Bb2', 'G1', 'D2', 'G1'] },
-  A: { pad: ['A2', 'E3', 'A3', 'C#4'], bass: 'A1', figure: ['A1', 'A1', 'E2', 'A1', 'C#3', 'A1', 'E2', 'A1'] },
-  As: { pad: ['A2', 'E3', 'A3', 'D4'], bass: 'A1', figure: ['A1', 'A1', 'E2', 'A1', 'D3', 'A1', 'E2', 'A1'] },
-  F: { pad: ['F2', 'C3', 'F3', 'A3'], bass: 'F1', figure: ['F1', 'F1', 'C2', 'F1', 'A2', 'F1', 'C2', 'F1'] },
-  C: { pad: ['C3', 'G3', 'C4', 'E4'], bass: 'C2', figure: ['C2', 'C2', 'G2', 'C2', 'E3', 'C2', 'G2', 'C2'] },
+// Each chord: its root (for the bass), and the notes in it, as steps above C.
+const CHORD = {
+  Bb6: { root: 'Bb1', tones: [10, 2, 5, 7], scale: [10, 0, 2, 5, 7] },
+  Bb7: { root: 'Bb1', tones: [10, 2, 5, 8], scale: [10, 0, 2, 3, 5, 7, 8] },
+  Eb6: { root: 'Eb2', tones: [3, 7, 10, 0], scale: [3, 5, 7, 10, 0] },
+  Ebm6: { root: 'Eb2', tones: [3, 6, 10, 0], scale: [3, 5, 6, 10, 0] },
+  G7: { root: 'G1', tones: [7, 11, 2, 5], scale: [7, 9, 11, 0, 2, 4, 5] },
+  Cm7: { root: 'C2', tones: [0, 3, 7, 10], scale: [0, 2, 3, 5, 7, 9, 10] },
+  F7: { root: 'F1', tones: [5, 9, 0, 3], scale: [5, 7, 9, 10, 0, 2, 3] },
+  D7: { root: 'D2', tones: [2, 6, 9, 0], scale: [2, 4, 6, 7, 9, 11, 0] },
+  C7: { root: 'C2', tones: [0, 4, 7, 10], scale: [0, 2, 4, 5, 7, 9, 10] },
 };
 
-// One chord to a bar.
-const HARMONY = [
-  'Dm5', 'Dm5', 'Dm5', 'Dm5', 'Dm', 'Dm', 'Dm', 'Dm', // the room
-  'Dm', 'Dm', 'Bb', 'Bb', 'Gm', 'Gm', 'A', 'A', // the theme
-  'Dm', 'Bb', 'F', 'C', 'Dm', 'Bb', 'A', 'A', // the theme again, with strings and the drum
-  'Dm', 'Gm', 'Bb', 'A', 'Dm', 'Gm', 'As', 'A', // the climb
-  'Dm5', 'Dm5', 'Dm5', 'Dm5', // back to the room
-];
+// Eight bars of the tune's first strain, with its two endings, and the eight bars of the bridge.
+const HEAD = [['Bb6'], ['G7'], ['Cm7'], ['F7'], ['Bb6', 'Bb7'], ['Eb6', 'Ebm6']];
+const A_TURN = [...HEAD, ['Bb6', 'G7'], ['Cm7', 'F7']];
+const A_HOME = [...HEAD, ['Bb6', 'F7'], ['Bb6']];
+const A_LAST = [...HEAD, ['Bb6', 'F7'], ['Bb6', 'F7']];
+const BRIDGE = [['D7'], ['D7'], ['G7'], ['G7'], ['C7'], ['C7'], ['F7'], ['F7']];
+const ONE_CHORUS = [...A_TURN, ...A_HOME, ...BRIDGE, ...A_LAST];
+const CHART = [['Bb6'], ['G7'], ['Cm7'], ['F7'], ...ONE_CHORUS, ...ONE_CHORUS, ...ONE_CHORUS];
 
-// How loud each bar's strings are: quiet, swelling to the climb, and away again.
-const LEVEL = [
-  0.3, 0.34, 0.38, 0.42, 0.46, 0.5, 0.52, 0.52,
-  0.5, 0.52, 0.55, 0.56, 0.58, 0.6, 0.62, 0.6,
-  0.66, 0.68, 0.72, 0.74, 0.76, 0.78, 0.82, 0.8,
-  0.9, 0.94, 0.98, 1.0, 1.0, 1.0, 0.96, 0.84,
-  0.56, 0.46, 0.38, 0.32,
-];
+/** The chord sounding at a beat of a bar. */
+function chordAt(bar, beat) {
+  const row = CHART[((bar % BARS) + BARS) % BARS];
+  return CHORD[row[row.length === 2 && beat >= 2 ? 1 : 0]];
+}
 
-HARMONY.forEach((name, bar) => {
-  const chord = CHORDS[name];
-  const level = LEVEL[bar];
-  chord.pad.forEach((note, k) => strings(at(bar), BAR, note, 0.1 * level, [-0.45, 0.4, -0.15, 0.2][k % 4], { bright: 0.5 + 0.6 * level }));
-  strings(at(bar), BAR, chord.bass, 0.07 * level, 0, { attack: 0.6, bright: 0.5 });
-  // High strings join for the second statement and the climb.
-  if (bar >= 16 && bar < 32) {
-    chord.pad.slice(-2).forEach((note, k) => strings(at(bar), BAR, up(note), 0.05 * level, k ? 0.5 : -0.5, { attack: 1.2, bright: 1.1 }));
-  }
-  // The marching figure in the low strings.
-  if (bar >= 16 && bar < 32) {
-    chord.figure.forEach((note, k) => pluck(at(bar, k * 0.5), note, (k % 2 ? 0.075 : 0.11) * level, 0.3));
-  }
-});
+/** The nearest note of a chord (or of its scale) at or below a pitch, or strictly below it. */
+function below(m, set, strictly) {
+  for (let p = strictly ? m - 1 : m; p > m - 13; p--) if (set.includes(((p % 12) + 12) % 12)) return p;
+  return m;
+}
+function above(m, set, strictly) {
+  for (let p = strictly ? m + 1 : m; p < m + 13; p++) if (set.includes(((p % 12) + 12) % 12)) return p;
+  return m;
+}
 
-// The floor.
-// Kept an octave above the lowest D: small speakers cannot sound the lower one, and it only eats the room for the rest.
-drone(0, BARS * BAR - 3, 'D2', 0.045);
-drone(at(4), at(28) - at(4), 'A2', 0.018);
+// ---- The rhythm section, all the way through ---------------------------------------------------
 
-// The theme: [bar, beat, length in beats, note].
-const THEME_ONE = [
-  [8, 0, 2, 'D4'], [8, 2, 1, 'F4'], [8, 3, 1, 'E4'],
-  [9, 0, 3, 'D4'], [9, 3, 1, 'A3'],
-  [10, 0, 2, 'Bb3'], [10, 2, 1, 'D4'], [10, 3, 1, 'F4'],
-  [11, 0, 1.5, 'F4'], [11, 1.5, 0.5, 'E4'], [11, 2, 2, 'D4'],
-  [12, 0, 2, 'G4'], [12, 2, 1, 'F4'], [12, 3, 1, 'D4'],
-  [13, 0, 3, 'Bb4'], [13, 3, 1, 'A4'],
-  [14, 0, 2, 'A4'], [14, 2, 1, 'G4'], [14, 3, 1, 'E4'],
-  [15, 0, 2, 'E4'], [15, 2, 2, 'C#4'],
-];
-const THEME_TWO = [
-  [16, 0, 2, 'A4'], [16, 2, 2, 'D5'],
-  [17, 0, 1.5, 'D5'], [17, 1.5, 0.5, 'C5'], [17, 2, 2, 'Bb4'],
-  [18, 0, 2, 'A4'], [18, 2, 1, 'C5'], [18, 3, 1, 'F5'],
-  [19, 0, 3, 'E5'], [19, 3, 1, 'D5'],
-  [20, 0, 2, 'D5'], [20, 2, 1, 'F5'], [20, 3, 1, 'E5'],
-  [21, 0, 3, 'D5'], [21, 3, 1, 'Bb4'],
-  [22, 0, 2, 'A4'], [22, 2, 1, 'C#5'], [22, 3, 1, 'E5'],
-  [23, 0, 2, 'E5'], [23, 2, 2, 'C#5'],
-];
-const CLIMB = [
-  [24, 0, 2, 'F5'], [24, 2, 1, 'E5'], [24, 3, 1, 'D5'],
-  [25, 0, 3, 'G5'], [25, 3, 1, 'F5'],
-  [26, 0, 2, 'F5'], [26, 2, 1, 'D5'], [26, 3, 1, 'Bb4'],
-  [27, 0, 2, 'A4'], [27, 2, 2, 'C#5'],
-  [28, 0, 2, 'D5'], [28, 2, 2, 'F5'],
-  [29, 0, 2, 'G5'], [29, 2, 2, 'Bb5'],
-  [30, 0, 4, 'A5'],
-  [31, 0, 2, 'A5'], [31, 2, 2, 'E5'],
-];
-const RETURN = [[32, 0, 4, 'D5'], [33, 0, 4, 'A4'], [34, 0, 7, 'D4']];
+const loud = (bar) => (bar < INTRO ? 0.8 : bar < INTRO + CHORUS ? 0.9 : bar < INTRO + 2 * CHORUS ? 0.78 : 1.12);
 
-const legato = (beats) => beats * BEAT * 0.96;
-THEME_ONE.forEach(([bar, beat, len, note]) => horn(at(bar, beat), legato(len), note, 0.27));
-THEME_TWO.forEach(([bar, beat, len, note]) => {
-  horn(at(bar, beat), legato(len), up(note, -1), 0.22);
-  strings(at(bar, beat), legato(len), note, 0.13, -0.2, { attack: 0.25, release: 0.5, bright: 1.3 });
-});
-CLIMB.forEach(([bar, beat, len, note]) => {
-  horn(at(bar, beat), legato(len), up(note, -1), 0.27);
-  strings(at(bar, beat), legato(len), note, 0.17, -0.2, { attack: 0.2, release: 0.5, bright: 1.5 });
-  strings(at(bar, beat), legato(len), up(note, -1), 0.07, 0.25, { attack: 0.2, release: 0.5, bright: 1.2 });
-});
-RETURN.forEach(([bar, beat, len, note], k) => horn(at(bar, beat), legato(len), note, [0.18, 0.13, 0.09][k]));
-
-// Drums. Kettledrums mark the bars, more often as the piece builds; the snare marches under the second statement and the climb.
+// The bass walks: the root on the first beat, notes of the chord after it, and a step into the next chord.
+let lastBass = midi('Bb1');
 for (let bar = 0; bar < BARS; bar++) {
-  const root = CHORDS[HARMONY[bar]].bass;
-  const low = /1$/.test(root) ? up(root) : root; // keep the drums in the octave where they sound like drums
-  if (bar < 8) { if (bar % 2 === 0) timpani(at(bar), 'D2', 0.2 + 0.02 * bar); }
-  else if (bar < 16) timpani(at(bar), low, 0.26);
-  else if (bar < 24) { timpani(at(bar), low, 0.3); timpani(at(bar, 2), low, 0.2); }
-  else if (bar < 32) { timpani(at(bar), low, 0.38); timpani(at(bar, 2), low, 0.27); if (bar % 2) timpani(at(bar, 3.5), low, 0.2); }
-  else if (bar === 32) timpani(at(bar), 'D2', 0.34);
-  else if (bar === 34) timpani(at(bar), 'D2', 0.2);
-
-  if (bar >= 16 && bar < 32) {
-    const loud = bar < 24 ? 0.05 + 0.004 * (bar - 16) : 0.085 + 0.004 * (bar - 24);
-    // One bar of the march: beats, and how hard each is struck.
-    [[0, 1], [0.75, 0.45], [1, 0.8], [1.5, 0.5], [2, 0.95], [2.75, 0.45], [3, 0.8], [3.25, 0.4], [3.5, 0.55], [3.75, 0.5]]
-      .forEach(([beat, hit]) => snare(at(bar, beat), loud * hit));
+  for (let beat = 0; beat < 4; beat++) {
+    const chord = chordAt(bar, beat);
+    const root = midi(chord.root);
+    const next = chordAt(beat === 3 ? bar + 1 : bar, beat === 3 ? 0 : beat + 1);
+    const changing = next !== chord || beat === 3;
+    let note;
+    if (beat === 0 || (beat === 2 && chordAt(bar, 0) !== chord)) note = root;
+    else if (changing) {
+      // Lean into the next chord's root from a semitone above or below, whichever is nearer.
+      const target = midi(next.root);
+      note = lastBass >= target ? target + 1 : target - 1;
+      if (Math.abs(note - lastBass) > 7) note += note < lastBass ? 12 : -12;
+    } else {
+      // Step to the next note of the chord, up or down, turning round at the ends of the instrument.
+      const up = lastBass < midi('E2') ? true : lastBass > midi('C3') ? false : rnd() < 0.6;
+      note = up ? above(lastBass, chord.tones, true) : below(lastBass, chord.tones, true);
+    }
+    while (note < midi('E1')) note += 12;
+    while (note > midi('F3')) note -= 12;
+    bass(at(bar, beat), note, (beat % 2 === 0 ? 0.33 : 0.29) * loud(bar), BEAT * 0.92);
+    lastBass = note;
   }
 }
-// A roll on the kettledrum into the return.
-for (let k = 0; k < 8; k++) timpani(at(31, 3) + k * BEAT / 8, 'A2', 0.12 + 0.025 * k);
+
+// The drums: the ride cymbal's "ding, ding-a ding", the hi-hat on two and four, a soft bass drum under it all.
+for (let bar = 0; bar < BARS; bar++) {
+  const level = loud(bar);
+  const shout = bar >= INTRO + 2 * CHORUS;
+  for (let beat = 0; beat < 4; beat++) {
+    ride(at(bar, beat), (beat % 2 ? 0.19 : 0.145) * level);
+    if (beat % 2) { ride(at(bar, beat + 0.5), 0.09 * level); hat(at(bar, beat), 0.18 * level); }
+    kick(at(bar, beat), (shout ? 0.17 : 0.11) * level);
+    if (shout && beat % 2) snare(at(bar, beat), 0.11);
+  }
+  // A light tap now and then, and a fill to turn each eight bars round.
+  if (bar % 2 === 1 && !shout) snare(at(bar, 3.5), 0.035 * level);
+  const inChorus = bar - INTRO;
+  if (bar === INTRO - 1 || (inChorus >= 0 && inChorus % 8 === 7)) {
+    [[2, 0.07], [2.5, 0.05], [3, 0.09], [3.33, 0.06], [3.67, 0.11]].forEach(([beat, hit]) => snare(at(bar) + beat * BEAT, hit * level * (shout ? 1.5 : 1)));
+    kick(at(bar + 1, 0), 0.22 * level);
+  }
+}
+
+// Guitar on every beat and the piano's short chords between the band's phrases.
+for (let bar = 0; bar < BARS; bar++) {
+  const level = loud(bar);
+  for (let beat = 0; beat < 4; beat++) {
+    const chord = chordAt(bar, beat);
+    const top = below(midi('G4'), chord.tones, false);
+    const voicing = [top, below(top, chord.tones, true)];
+    voicing.push(below(voicing[1], chord.tones, true), below(voicing[1] - 3, chord.tones, true));
+    chunk(at(bar, beat), voicing, (beat % 2 ? 0.1 : 0.075) * level);
+  }
+  // The pianist's left hand is the bass player's business; the right hand answers on the off beats.
+  const pattern = bar % 4 === 0 ? [0, 1.5] : bar % 4 === 1 ? [2.5] : bar % 4 === 2 ? [0.5, 2] : [1.5, 3.5];
+  for (const beat of pattern) {
+    const chord = chordAt(bar, beat);
+    const top = below(midi('D5'), chord.tones, false);
+    [top, below(top, chord.tones, true), below(top - 5, chord.tones, true)].forEach((m, k) => piano(at(bar, beat), m, 0.12 * level, 0.25 - k * 0.05, 0.16));
+  }
+}
+
+// ---- The tune -----------------------------------------------------------------------------
+
+// Each note: [bar within the eight, beat, length in beats, pitch]. Quavers off the beat swing.
+const TUNE_HEAD = [
+  [0, 0.5, 0.5, 'F4'], [0, 1, 0.5, 'G4'], [0, 1.5, 0.5, 'Bb4'], [0, 2, 1.5, 'D5'], [0, 3.5, 0.5, 'Bb4'],
+  [1, 0, 1, 'B4'], [1, 1.5, 0.5, 'D5'], [1, 2, 1, 'F5'], [1, 3, 0.5, 'D5'], [1, 3.5, 0.5, 'B4'],
+  [2, 0, 1.5, 'C5'], [2, 1.5, 0.5, 'Eb5'], [2, 2, 1, 'G5'], [2, 3, 1, 'Eb5'],
+  [3, 0, 0.5, 'F5'], [3, 0.5, 0.5, 'Eb5'], [3, 1, 0.5, 'C5'], [3, 1.5, 0.5, 'A4'], [3, 2, 1.5, 'F4'],
+  [4, 0.5, 0.5, 'F4'], [4, 1, 0.5, 'G4'], [4, 1.5, 0.5, 'Bb4'], [4, 2, 1, 'D5'], [4, 3, 1, 'Ab4'],
+  [5, 0, 1.5, 'G4'], [5, 1.5, 0.5, 'Bb4'], [5, 2, 1.5, 'Gb4'], [5, 3.5, 0.5, 'Eb4'],
+];
+const TUNE_TURN = [
+  [6, 0, 1, 'F4'], [6, 1, 0.5, 'D4'], [6, 1.5, 0.5, 'F4'], [6, 2, 1, 'G4'], [6, 3, 1, 'B4'],
+  [7, 0, 1, 'C5'], [7, 1, 0.5, 'Bb4'], [7, 1.5, 0.5, 'G4'], [7, 2, 1.5, 'A4'],
+];
+const TUNE_HOME = [
+  [6, 0, 1, 'F4'], [6, 1, 0.5, 'D4'], [6, 1.5, 0.5, 'F4'], [6, 2, 1, 'Bb4'], [6, 3, 0.5, 'A4'], [6, 3.5, 2.5, 'Bb4'],
+];
+const TUNE_BRIDGE = [
+  [0, 0, 0.5, 'F#5'], [0, 1.5, 1.5, 'A5'], [0, 3.5, 0.5, 'F#5'],
+  [1, 0, 1, 'D5'], [1, 1.5, 0.5, 'C5'], [1, 2, 1.5, 'A4'],
+  [2, 0, 0.5, 'B4'], [2, 1.5, 1.5, 'D5'], [2, 3.5, 0.5, 'B4'],
+  [3, 0, 1, 'G4'], [3, 1.5, 0.5, 'F5'], [3, 2, 1.5, 'D5'],
+  [4, 0, 0.5, 'E5'], [4, 1.5, 1.5, 'G5'], [4, 3.5, 0.5, 'E5'],
+  [5, 0, 1, 'C5'], [5, 1.5, 0.5, 'Bb4'], [5, 2, 1.5, 'G4'],
+  [6, 0, 0.5, 'A4'], [6, 1, 0.5, 'C5'], [6, 1.5, 0.5, 'Eb5'], [6, 2, 1, 'F5'], [6, 3, 0.5, 'Eb5'], [6, 3.5, 0.5, 'C5'],
+  [7, 0, 1, 'A4'], [7, 1, 0.5, 'F4'], [7, 1.5, 0.5, 'Eb4'], [7, 2, 1.5, 'F4'],
+];
+
+/** How long to hold a written note: short ones are clipped, as a section tongues them, long ones nearly full. */
+const held = (bar, beat, beats) => span(bar, beat, beats) * (beats <= 0.5 ? 0.78 : 0.9);
+
+/**
+ * A section plays a line in close harmony: the tune on top, three notes of the chord under it, and the lowest
+ * voice doubling the tune an octave down. `shift` moves it by octaves; `voice` says what the players sound like.
+ */
+function section(first, line, shift, vol, pans, voice) {
+  for (const [bar, beat, beats, name] of line) {
+    const lead = midi(name) + 12 * shift;
+    const chord = chordAt(first + bar, beat);
+    const second = below(lead, chord.tones, true), third = below(second, chord.tones, true), fourth = below(third, chord.tones, true);
+    const dur = held(first + bar, beat, beats);
+    const when = at(first + bar, beat) + 0.008;
+    const accent = Math.abs((beat % 1) - 0.5) < 1e-6 ? 1.12 : 1; // the off-beat notes are leaned on
+    [lead, second, third, fourth, lead - 12].forEach((m, k) => wind(when + k * 0.003, dur, m, vol * accent * (k === 0 ? 1.25 : k === 4 ? 0.9 : 0.8), pans[k], voice));
+  }
+}
+
+/** The brass punch a chord: short, bright, falling away. */
+function punch(bar, beat, vol, top = 'F5') {
+  const chord = chordAt(bar, beat);
+  let m = below(midi(top), chord.tones, false);
+  for (let k = 0; k < 5; k++) {
+    wind(at(bar, beat) + k * 0.002, 0.11, m, vol * (k === 0 ? 1.15 : 0.85), [0.5, 0.2, 0.62, 0.34, 0.45][k], { bright: 1.5, attack: 0.01, release: 0.12, fall: 0.1 });
+    m = below(m, chord.tones, true);
+  }
+  kick(at(bar, beat), 0.17);
+  snare(at(bar, beat), 0.075);
+}
+
+const SAX = { reed: 0.55, bright: 0.55, scoop: 0.018 };
+const BRASS = { bright: 1.25, attack: 0.014, scoop: 0.008, release: 0.09 };
+const SAX_PANS = [-0.45, -0.25, -0.6, -0.35, -0.5];
+const BRASS_PANS = [0.5, 0.25, 0.62, 0.38, 0.45];
+
+/** Where the brass answer the saxophones in the first strain: between the phrases of the tune. */
+const ANSWERS = [[1, 2.5], [3, 3.5], [5, 3], [7, 3.5]];
+
+// Chorus one: the saxophones have the tune, the brass punch between their phrases and take the bridge.
+{
+  const c = INTRO;
+  section(c, [...TUNE_HEAD, ...TUNE_TURN], 0, 0.125, SAX_PANS, SAX);
+  section(c + 8, [...TUNE_HEAD, ...TUNE_HOME], 0, 0.125, SAX_PANS, SAX);
+  section(c + 16, TUNE_BRIDGE, 0, 0.1, BRASS_PANS, BRASS);
+  section(c + 24, [...TUNE_HEAD, ...TUNE_HOME], 0, 0.13, SAX_PANS, SAX);
+  for (const first of [c, c + 8, c + 24]) ANSWERS.slice(0, 3).forEach(([bar, beat]) => punch(first + bar, beat, 0.075));
+  // Under the bridge the saxophones hold the two notes that make each chord what it is.
+  for (let bar = 0; bar < 8; bar++) {
+    const chord = chordAt(c + 16 + bar, 0);
+    const third = above(midi('F3'), [chord.tones[1]], false), seventh = above(third, [chord.tones[3]], true);
+    [third, seventh].forEach((m, k) => wind(at(c + 16 + bar), BAR * 0.94, m, 0.07, k ? -0.3 : -0.55, { ...SAX, attack: 0.08 }));
+  }
+}
+
+// Chorus two: a clarinet makes up its own tune over the chords, and the saxophones keep a quiet riff going.
+{
+  const c = INTRO + CHORUS;
+  const CLARINET = { reed: 1, bright: 0.85, scoop: 0.02, attack: 0.018 };
+  let pitch = midi('F5'), rising = true;
+  for (let bar = 0; bar < CHORUS; bar++) {
+    const lastOfEight = bar % 8 === 7;
+    for (let half = 0; half < 2; half++) {
+      const beat0 = half * 2;
+      // A long note to end each eight bars, and a breath after it.
+      if (lastOfEight) {
+        if (half === 0) {
+          const end = below(pitch + 2, chordAt(c + bar, 0).tones, false);
+          wind(at(c + bar, 0), span(c + bar, 0, 2.5) * 0.9, end, 0.22, 0.1, CLARINET);
+          pitch = end;
+        }
+        continue;
+      }
+      // Otherwise two beats at a time: a run of quavers, a longer note and two quavers, three off the beat, one held note, or a rest.
+      const pick = rnd();
+      const cell = pick < 0.36 ? [[0, 0.5], [0.5, 0.5], [1, 0.5], [1.5, 0.5]]
+        : pick < 0.56 ? [[0, 1], [1, 0.5], [1.5, 0.5]]
+        : pick < 0.72 ? [[0.5, 0.5], [1, 0.5], [1.5, 0.5]]
+        : pick < 0.86 ? [[0, 1.5], [1.5, 0.5]]
+        : [];
+      for (const [offset, beats] of cell) {
+        const beat = beat0 + offset;
+        const chord = chordAt(c + bar, beat);
+        if (pitch > midi('D6')) rising = false;
+        if (pitch < midi('C5')) rising = true;
+        if (rnd() < 0.22) rising = !rising;
+        // Notes on the beat are notes of the chord; the ones between pass through its scale. Now and then a leap.
+        const onBeat = offset % 1 === 0;
+        const set = onBeat ? chord.tones : chord.scale;
+        let next = rising ? above(pitch, set, true) : below(pitch, set, true);
+        if (rnd() < 0.18) next = rising ? above(next, chord.tones, true) : below(next, chord.tones, true);
+        pitch = next;
+        wind(at(c + bar, beat) + 0.006, held(c + bar, beat, beats), pitch, (onBeat ? 0.19 : 0.22), 0.1, CLARINET);
+      }
+    }
+  }
+  // The riff: three soft chords from the saxophones, the same shape every two bars, moved to fit the chord.
+  for (let bar = 0; bar < CHORUS; bar++) {
+    if (bar >= 16 && bar < 24) {
+      // Under the bridge, long notes instead.
+      const chord = chordAt(c + bar, 0);
+      const third = above(midi('F3'), [chord.tones[1]], false), seventh = above(third, [chord.tones[3]], true);
+      [third, seventh].forEach((m, k) => wind(at(c + bar), BAR * 0.94, m, 0.045, k ? -0.3 : -0.55, { ...SAX, attack: 0.08 }));
+      continue;
+    }
+    const hits = bar % 2 === 0 ? [[0, 0.5], [1.5, 0.5], [2.5, 1]] : [[1, 0.5], [2.5, 0.5]];
+    for (const [beat, beats] of hits) {
+      const chord = chordAt(c + bar, beat);
+      let m = below(midi('C5'), chord.tones, false);
+      for (let k = 0; k < 4; k++) {
+        wind(at(c + bar, beat) + 0.01, held(c + bar, beat, beats), m, 0.04, SAX_PANS[k], SAX);
+        m = below(m, chord.tones, true);
+      }
+    }
+  }
+}
+
+// Chorus three: the whole band. Brass on the tune an octave up, saxophones under them, and everybody on the accents.
+{
+  const c = INTRO + 2 * CHORUS;
+  const SHOUT = { ...BRASS, bright: 1.6 };
+  for (const [first, ending] of [[c, TUNE_TURN], [c + 8, TUNE_HOME], [c + 24, TUNE_HOME]]) {
+    section(first, [...TUNE_HEAD, ...ending], 1, 0.1, BRASS_PANS, SHOUT);
+    section(first, [...TUNE_HEAD, ...ending], 0, 0.105, SAX_PANS, SAX);
+    ANSWERS.forEach(([bar, beat]) => { kick(at(first + bar, beat), 0.2); snare(at(first + bar, beat), 0.11); });
+  }
+  // The bridge: brass state it, saxophones an octave below them.
+  section(c + 16, TUNE_BRIDGE, 0, 0.115, BRASS_PANS, SHOUT);
+  section(c + 16, TUNE_BRIDGE, -1, 0.095, SAX_PANS, SAX);
+  // The last bar hands the tune back to the rhythm section, which is where the loop begins again.
+  punch(c + 31, 2.5, 0.095, 'A5');
+}
+
+// The vamp the piece opens on (and returns to each time round): the saxophones hint at the riff.
+for (let bar = 0; bar < INTRO; bar++) {
+  const hits = bar % 2 === 0 ? [[1.5, 0.5], [2.5, 1]] : [[1, 0.5], [2.5, 0.5]];
+  for (const [beat, beats] of hits) {
+    const chord = chordAt(bar, beat);
+    let m = below(midi('C5'), chord.tones, false);
+    for (let k = 0; k < 4; k++) {
+      wind(at(bar, beat) + 0.01, held(bar, beat, beats), m, 0.045, SAX_PANS[k], SAX);
+      m = below(m, chord.tones, true);
+    }
+  }
+}
 
 // ---- The room: echo, the fold for the loop, and the level -----------------------------------
 
-/** A hall: eight echoes in parallel and four diffusers in series (the long-published Freeverb layout). */
+/** A dance hall: eight echoes in parallel and four diffusers in series (the long-published Freeverb layout), kept short. */
 function hall(input, spread) {
   const out = new Float32Array(input.length);
   const combs = [1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617].map((d) => ({ buf: new Float32Array(d + spread), i: 0, store: 0 }));
   const passes = [556, 441, 341, 225].map((d) => ({ buf: new Float32Array(d + spread), i: 0 }));
-  const feedback = 0.9, damp = 0.32;
+  const feedback = 0.8, damp = 0.4;
   for (let n = 0; n < input.length; n++) {
     const x = input[n] * 0.03;
     let y = 0;
@@ -317,16 +518,18 @@ const wetR = hall(dryR, 23);
 const outL = new Float32Array(N);
 const outR = new Float32Array(N);
 for (let i = 0; i < NT; i++) {
-  const l = dryL[i] * 0.8 + wetL[i] * 0.9;
-  const r = dryR[i] * 0.8 + wetR[i] * 0.9;
+  const l = dryL[i] * 0.9 + wetL[i] * 0.42;
+  const r = dryR[i] * 0.9 + wetR[i] * 0.42;
   // What rings on after the last bar is laid over the first bars, so the end runs into the beginning.
   outL[i % N] += l;
   outR[i % N] += r;
 }
 
+// The loudest moments are eased down rather than cut off, so the band can be loud without clipping.
 let peak = 0;
 for (let i = 0; i < N; i++) peak = Math.max(peak, Math.abs(outL[i]), Math.abs(outR[i]));
-const gain = 0.86 / peak;
+const drive = 1.9 / peak;
+const ease = (v) => Math.tanh(v * drive) / Math.tanh(drive);
 
 const header = Buffer.alloc(44);
 header.write('RIFF', 0); header.writeUInt32LE(36 + N * 4, 4); header.write('WAVE', 8);
@@ -335,20 +538,22 @@ header.writeUInt32LE(SR, 24); header.writeUInt32LE(SR * 4, 28); header.writeUInt
 header.write('data', 36); header.writeUInt32LE(N * 4, 40);
 const pcm = Buffer.alloc(N * 4);
 for (let i = 0; i < N; i++) {
-  pcm.writeInt16LE(Math.round(Math.max(-1, Math.min(1, outL[i] * gain)) * 32767), i * 4);
-  pcm.writeInt16LE(Math.round(Math.max(-1, Math.min(1, outR[i] * gain)) * 32767), i * 4 + 2);
+  outL[i] = ease(outL[i]) * 0.9;
+  outR[i] = ease(outR[i]) * 0.9;
+  pcm.writeInt16LE(Math.round(outL[i] * 32767), i * 4);
+  pcm.writeInt16LE(Math.round(outR[i] * 32767), i * 4 + 2);
 }
 
 const out = process.argv[2] ?? 'theme.wav';
 fs.mkdirSync(new URL('.', new URL(out, `file://${process.cwd()}/`)), { recursive: true });
 fs.writeFileSync(out, Buffer.concat([header, pcm]));
 
-// How loud each section came out, as a check that the shape is the one intended.
-const sections = [['the room', 0, 8], ['the theme', 8, 16], ['theme with strings', 16, 24], ['the climb', 24, 32], ['the return', 32, 36]];
-const report = sections.map(([name, from, to]) => {
+// How loud each part came out, as a check that the shape is the one intended.
+const parts = [['the vamp', 0, INTRO], ['saxophones', INTRO, INTRO + CHORUS], ['clarinet', INTRO + CHORUS, INTRO + 2 * CHORUS], ['the whole band', INTRO + 2 * CHORUS, BARS]];
+const report = parts.map(([name, from, to]) => {
   let sum = 0;
   const a = Math.round(from * BAR * SR), b = Math.min(N, Math.round(to * BAR * SR));
-  for (let i = a; i < b; i++) sum += (outL[i] * gain) ** 2 + (outR[i] * gain) ** 2;
+  for (let i = a; i < b; i++) sum += outL[i] ** 2 + outR[i] ** 2;
   return `${name} ${(10 * Math.log10(sum / (2 * (b - a)))).toFixed(1)} dB`;
 });
-console.log(`${out}: ${(N / SR).toFixed(1)} s, peak before levelling ${peak.toFixed(2)}; ${report.join(', ')}`);
+console.log(`${out}: ${(N / SR).toFixed(1)} s at ${BPM} beats a minute, peak before levelling ${peak.toFixed(2)}; ${report.join(', ')}`);
