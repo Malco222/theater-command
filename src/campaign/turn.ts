@@ -11,6 +11,7 @@ import {
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { offers, orderOffer, type Offer } from './arsenal';
+import { barred } from './ground';
 import { foundBureau, setTeams } from './research';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy } from './diplomacy';
@@ -172,6 +173,7 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
       const r = g.regions[j];
       const friendly = allied(g, c.nat, r.ctrl);
       if (!friendly && (onEve(g) || !atWar(g, c.nat, r.ctrl))) continue; // on the eve of war nobody crosses a frontier
+      if (barred(g, c, r)) continue; // tanks and the steepest ground
       const step = moveCost(g, c, r);
       const left = c.ap - ca;
       if (left <= 0 || left < Math.min(step, 4)) continue;

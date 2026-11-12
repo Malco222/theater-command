@@ -1,0 +1,45 @@
+{
+  "_note": "How the ground suits each arm, on top of the classic battle rules, and what tanks and infantry do for each other. The grand campaign only: the historical scenarios are settled by the classic rules alone. attack and defence are multipliers by unit kind and terrain; march is extra moves to enter that terrain on the advance (not along roads through ground held since before the month began).",
+  "attack": {
+    "arm": { "forest": 0.8, "hills": 0.9 },
+    "mot": { "mountain": 0.75, "marsh": 0.8, "forest": 0.9 },
+    "art": { "mountain": 0.8, "marsh": 0.8 },
+    "cav": { "urban": 0.7 },
+    "mtn": { "mountain": 1.3, "hills": 1.15 }
+  },
+  "defence": {
+    "arm": { "mountain": 0.75, "marsh": 0.75, "forest": 0.85 },
+    "mot": { "mountain": 0.9, "marsh": 0.9 },
+    "cav": { "urban": 0.85 },
+    "mtn": { "mountain": 1.25, "hills": 1.1 }
+  },
+  "march": {
+    "arm": { "mountain": 1, "forest": 1, "marsh": 1 },
+    "mot": { "mountain": 1, "marsh": 1 },
+    "art": { "mountain": 1, "marsh": 1 }
+  },
+  "steep": {
+    "regions": ["Graubunden", "Tyrol", "Alto Adige", "Savoy", "Nordland", "Narvik", "Sukhumi", "Montenegro", "Epirus", "Van"],
+    "barred": ["arm"],
+    "attack": { "mot": 0.7, "art": 0.7 },
+    "march": { "mot": 1, "art": 1 }
+  },
+  "says": {
+    "plains": "Open country: the best ground there is for tanks",
+    "desert": "Open desert: tank country, with nothing to hide behind",
+    "forest": "Forest: tanks cannot manoeuvre among the trees",
+    "hills": "Hill country: slow going for armour, good ground for mountain troops",
+    "mountain": "Mountains: made for mountain troops, hard on anything with wheels or tracks",
+    "marsh": "Marsh: the ground will not bear tanks, lorries or guns",
+    "urban": "City streets: a fight for infantry, and no place for horses",
+    "steep": "High mountains: too steep for tanks, and little better for lorries and guns"
+  },
+  "arms": {
+    "foot": ["inf", "mtn", "mot", "cav"],
+    "perTank": 3,
+    "infantry": 0.15,
+    "armour": 0.1,
+    "alone": { "urban": 0.75, "forest": 0.85 },
+    "defence": { "infantry": 0.08, "alone": { "urban": 0.8, "forest": 0.85 } }
+  }
+}

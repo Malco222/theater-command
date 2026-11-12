@@ -12,6 +12,7 @@ import { AIR, skyDenies, skyOver } from './air';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
+import { whyBarred } from './ground';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, type Assessment } from './game';
 import {
   STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type ShipClass, type Ships, type Stance,
@@ -273,6 +274,8 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
   if (!from.port || !to.port || to.id === from.id) return 'Troops are shipped from one port to another.';
   if (!allied(g, c.nat, to.ctrl) || hostileUnits(g, to, c.nat).length) return `${to.name} is not in friendly hands.`;
+  const steep = whyBarred(g, c, to);
+  if (steep) return steep;
   if (friendlyUnits(g, to, c.nat).length >= STACK) return `${to.name} has no room for another corps.`;
   if (liftLeft(g, c.nat) < 1) return 'All the shipping is in use this month.';
   if (!seaPath(g, c.nat, from, to)) return 'The enemy holds the sea between.';
@@ -298,6 +301,7 @@ export const surpriseOn = (g: Game, nat: string, to: Region): boolean => g.flags
 export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!cs.length) return 'No corps chosen.';
   const nat = cs[0].nat, n = g.nations[nat], from = g.regions[cs[0].reg];
+  for (const c of cs) { const steep = whyBarred(g, c, to); if (steep) return steep; }
   if (airborne(cs)) {
     if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'An airborne force takes off from one place.';
     if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';

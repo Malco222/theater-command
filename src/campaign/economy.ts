@@ -14,6 +14,7 @@ import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
 import { fallenOf, inherit, raisedXp, revivable } from './stories';
 import { deliverArsenal, worksUpkeep } from './arsenal';
+import { barredKind } from './ground';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -44,7 +45,7 @@ export function corpsKinds(g: Game): Kind[] {
 export const needsOf = (g: Game, kind: string): number => (budgeted(g) ? (arsenalData.needs as Record<string, number>)[kind] ?? 0 : 0);
 
 /** True if this nation can raise a corps of this kind in this region: home ground, with the industry heavier equipment needs. */
-export const canRaiseKind = (g: Game, nat: string, r: Region | undefined, kind: string): boolean => !!r && canRaise(g, nat, r) && r.fac >= needsOf(g, kind);
+export const canRaiseKind = (g: Game, nat: string, r: Region | undefined, kind: string): boolean => !!r && canRaise(g, nat, r) && r.fac >= needsOf(g, kind) && !barredKind(g, kind as Kind, r);
 
 /** Where a new corps of this kind would form: the region asked for if it will do, else the capital, else the home province with the most industry. -1 if nowhere. */
 export function raiseSite(g: Game, nat: string, kind: string, want = -1): number {

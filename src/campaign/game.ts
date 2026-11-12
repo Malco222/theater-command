@@ -17,6 +17,7 @@ import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupN
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot } from './ground';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 
@@ -283,7 +284,10 @@ export function lineStrength(g: Game, c: Corps): { mul: number; length: number }
 
 export function moveCost(g: Game, c: Corps, to: Region): number {
   // Marching through country that has been friendly since before this month is quick for anyone.
-  let cost = allied(g, c.nat, to.ctrl) && to.since < g.turn ? 1 : KIND[c.kind].move;
+  const road = allied(g, c.nat, to.ctrl) && to.since < g.turn;
+  let cost = road ? 1 : KIND[c.kind].move;
+  // Off the roads every arm has ground it cannot cross quickly (the grand campaign's ground rules).
+  if (!road) cost += groundMarch(g, c.kind, to);
   if (to.terrain === 'mountain' && c.kind !== 'mtn') cost += 1;
   if (to.terrain === 'marsh') cost += 1;
   if (weather(g).mud && EAST.has(to.owner)) cost += 1;
@@ -419,6 +423,7 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
   const most = corps.length ? g.nations[corps[0].nat].maxAttack || 99 : 99;
   for (const c of [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk)) {
     if (out.length >= most) break;
+    if (barred(g, c, target)) continue; // tanks have no way up the steepest ground
     if ((used[c.reg] ?? 0) >= cap) continue;
     used[c.reg] = (used[c.reg] ?? 0) + 1;
     out.push(c);
@@ -500,8 +505,19 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const gunsA = gunsIn(attackers), gunsD = gunsIn(defenders);
   const soften = gunsA ? Math.min(GUNS.softenMost, GUNS.soften * gunsA) : 0;
   const thicken = gunsD ? Math.min(GUNS.thickenMost, GUNS.thicken * gunsD) : 0;
+  // The grand campaign's ground rules: each arm on the ground that suits it or does not, and tanks and infantry
+  // worth more together than apart. A historical scenario has none of this and is worked out as it always was.
+  const wide = groundRules(g);
+  const armsA = wide ? combinedArms(g, attackers, target, false) : null, armsD = wide ? combinedArms(g, defenders, target, true) : null;
+  let tooSteep = 0;
   for (const c of attackers) {
+    if (wide && barred(g, c, target)) { tooSteep++; continue; }
     let p = corpsBase(g, c) * KIND[c.kind].atk;
+    if (wide) {
+      const suits = groundAttack(g, c.kind, target);
+      if (suits !== 1) p *= suits;
+      if (armsA) p *= c.kind === 'arm' ? armsA.armour : isFoot(c) ? armsA.infantry : 1;
+    }
     if (c.kind === 'arm') {
       if (target.terrain === 'mountain' || target.terrain === 'urban' || target.terrain === 'marsh') { p *= 0.6; armorStuck = true; }
       else if (!defHasArmor) { p *= 1.25; armorShock = true; }
@@ -529,6 +545,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   let D = 0, thin = 1;
   for (const d of defenders) {
     let p = corpsBase(g, d) * KIND[d.kind].def * TERRAIN_DEF[target.terrain];
+    if (wide) {
+      const suits = groundDefence(g, d.kind, target);
+      if (suits !== 1) p *= suits;
+      if (armsD) p *= d.kind === 'arm' ? armsD.armour : isFoot(d, true) ? armsD.infantry : 1;
+    }
     if (d.dug) { p *= soften ? 1 + (DUG_IN - 1) * (1 - soften) : DUG_IN; dugIn++; }
     if (thicken && d.kind !== 'art') p *= 1 + thicken;
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
@@ -556,6 +577,31 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const sum = (cs: Corps[]) => cs.reduce((s, c) => s + men(c), 0).toLocaleString('en-US');
   lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length} corps, ${sum(defenders)} men` });
   lines.push({ label: 'Terrain', value: target.terrain[0].toUpperCase() + target.terrain.slice(1), effect: TERRAIN_DEF[target.terrain] > 1 ? `Defenders fight ${Math.round((TERRAIN_DEF[target.terrain] - 1) * 100)}% stronger` : 'Open ground, no help to the defender' });
+  if (wide) {
+    const a = groundLine(g, attackers.filter((c) => !barred(g, c, target)), target, false), d = groundLine(g, defenders, target, true);
+    const fx = [tooSteep ? `${tooSteep === 1 ? 'one armoured corps' : `${tooSteep} armoured corps`} cannot climb here and ${tooSteep === 1 ? 'takes' : 'take'} no part` : '', a, d].filter(Boolean).join('; ');
+    if (fx) lines.push({ label: 'Ground', value: groundSays(g, target), effect: fx[0].toUpperCase() + fx.slice(1) });
+    const pc = (m: number): number => Math.round(Math.abs(m - 1) * 100);
+    if (armsA) {
+      const lone = armsA.alone < 1, close = target.terrain === 'urban' ? 'city streets' : 'forest';
+      const together = armsA.foot > 0;
+      const tank = armsA.armour !== 1 ? `tank attack ${armsA.armour > 1 ? 'up' : 'down'} ${pc(armsA.armour)}%` : '';
+      const foot = together ? `infantry attack up ${pc(armsA.infantry)}%` : '';
+      const fx2 = [foot, tank].filter(Boolean).join(', ');
+      lines.push({
+        label: 'Combined arms',
+        value: !together ? (lone ? `Tanks attacking into ${close} with no infantry beside them` : 'Tanks attacking without infantry')
+          : armsA.cover < 1 ? 'Tanks and infantry attack together, but the infantry is too thin to cover all the armour'
+          : armsA.share < 1 ? 'Tanks and infantry attack together, with tanks enough for part of the infantry' : 'Tanks and infantry attack together',
+        effect: fx2 ? fx2[0].toUpperCase() + fx2.slice(1) : 'Infantry with the tanks would make both stronger',
+      });
+    }
+    if (armsD && (armsD.foot > 0 || armsD.alone < 1)) lines.push({
+      label: 'Combined arms',
+      value: armsD.foot > 0 ? 'The defenders have tanks in reserve behind their infantry' : `Tanks holding ${target.terrain === 'urban' ? 'city streets' : 'forest'} with no infantry`,
+      effect: [armsD.foot > 0 ? `Infantry defence up ${pc(armsD.infantry)}%` : '', armsD.alone < 1 ? `${armsD.foot > 0 ? 'tank' : 'Tank'} defence down ${pc(armsD.alone)}%` : ''].filter(Boolean).join(', '),
+    });
+  }
   if (target.fort) {
     lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
@@ -643,7 +689,7 @@ function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<number>): Re
   for (const j of from.nb) {
     const r = g.regions[j];
     if (banned.has(j) || !allied(g, c.nat, r.ctrl) || hostileUnits(g, r, c.nat).length) continue;
-    if (friendlyUnits(g, r, c.nat).length >= STACK + 2) continue;
+    if (friendlyUnits(g, r, c.nat).length >= STACK + 2 || barred(g, c, r)) continue;
     const abroad = g.nations[c.nat].seaSupply && r.owner !== c.nat;
     // In the desert an army falls back along its own supply line, toward the port that feeds it.
     // It also keeps out of a dead end: a place with one way out, or none, is a trap for a beaten force.
@@ -662,7 +708,7 @@ function moveIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   for (const { c, i } of order) {
     // A force that came by sea all goes ashore together.
     const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
-    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost)) { c.ap = Math.max(0, c.ap - 1); continue; }
+    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || barred(g, c, target)) { c.ap = Math.max(0, c.ap - 1); continue; }
     place(g, c, target);
     c.ap = Math.max(0, c.ap - cost);
     attU[i].fate = 'advanced';
@@ -857,7 +903,7 @@ export function capture(g: Game, r: Region, nat: string): void {
 /** Moves one corps one region. Returns false if the move is not allowed. */
 export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   const from = g.regions[c.reg];
-  if (!from.nb.includes(to.id) || c.kind === 'fort') return false;
+  if (!from.nb.includes(to.id) || c.kind === 'fort' || barred(g, c, to)) return false;
   const cost = moveCost(g, c, to);
   if (c.ap < Math.min(cost, 4) || c.ap <= 0) return false;
   const friendly = allied(g, c.nat, to.ctrl);
@@ -882,7 +928,8 @@ export function railReach(g: Game, c: Corps): Set<number> {
     for (const j of g.regions[q[i]].nb) {
       const r = g.regions[j];
       if (seen[j] || !allied(g, c.nat, r.ctrl) || r.terrain === DESERT.terrain) continue;
-      seen[j] = 1; q.push(j); out.add(j);
+      seen[j] = 1; q.push(j);
+      if (!barred(g, c, r)) out.add(j); // the trains run through the high passes, but tanks are not unloaded there
     }
   }
   return out;
@@ -890,7 +937,7 @@ export function railReach(g: Game, c: Corps): Set<number> {
 
 /** Rail move: anywhere through friendly territory, for the whole month. */
 export function railMove(g: Game, c: Corps, to: Region): boolean {
-  if (c.kind === 'fort' || c.ap < 4 || !allied(g, c.nat, to.ctrl) || friendlyUnits(g, to, c.nat).length >= STACK) return false;
+  if (c.kind === 'fort' || c.ap < 4 || !allied(g, c.nat, to.ctrl) || friendlyUnits(g, to, c.nat).length >= STACK || barred(g, c, to)) return false;
   if (to.id !== c.reg && !railReach(g, c).has(to.id)) return false;
   place(g, c, to);
   c.ap = 0;
