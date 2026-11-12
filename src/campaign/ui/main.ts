@@ -8,7 +8,7 @@ import {
 import {
   beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderTeams,
-  previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI,
+  previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
 } from '../turn';
 import {
   AIR, MISSION, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, cover, crowding, forecastAir, isOffensive,
@@ -74,6 +74,15 @@ const date = (t: number): string => turnToDate(t).label;
 const capital = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
 /** Enemy coasts the picked corps could land on, worked out once each time the screen is drawn. */
 let lands: Region[] = [];
+/** What each picked corps can reach this month, kept from the last redraw for drawing its route under the cursor. */
+let reaches: { from: number; ap: number; map: Map<number, Reach> }[] = [];
+/** The army whose general and units the tray shows. */
+let trayArmy: { reg: number; nat: string } | null = null;
+/** The piece kept off the map while a copy of it is still being slid along its road, and the march being drawn. */
+let marchHide: { reg: number; nat: string } | null = null;
+let marchToken = 0;
+/** The region whose route is drawn under the cursor. */
+let routeShown = -1;
 
 function mix(a: string, b: string, t: number): string {
   const p = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
@@ -100,6 +109,23 @@ function symbol(kind: Kind, w: number, h: number): string {
     case 'fort': return `<path class="sym" d="M${w * 0.3} ${h * 0.75}V${h * 0.3}H${w * 0.42}V${h * 0.45}H${w * 0.58}V${h * 0.3}H${w * 0.7}V${h * 0.75}Z"/>`;
   }
 }
+
+/** The general an army on the map marches under: the most senior of those commanding its corps. */
+function leaderOf(cs: Corps[]): General | null {
+  let best: General | null = null, size = 0;
+  for (const c of cs) {
+    const x = generalOf(g, c);
+    if (!x) continue;
+    const s = c.divs * c.str;
+    if (!best || x.level > best.level || (x.level === best.level && s > size)) { best = x; size = s; }
+  }
+  return best;
+}
+
+/** The name a general goes by on the map: his surname. */
+const surname = (name: string): string => name.replace(/\s*\(.*\)\s*$/, '').trim().split(/\s+/).pop() ?? name;
+/** The share of its full strength an army still has. */
+const fitness = (cs: Corps[]): number => { const full = cs.reduce((n, c) => n + c.divs, 0); return full > 0 ? sumDivs(cs) / full : 0; };
 
 function icon(c: Corps): string {
   return `<svg width="34" height="24" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[c.nat].color}"/>${symbol(c.kind, 24, 15)}</svg>`;
@@ -209,9 +235,10 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="labels"></g><g id="fleets"></g><g id="units"></g>
+          <g id="seas"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="labels"></g><g id="fleets"></g><g id="units"></g><g id="route"></g><g id="ghost"></g>
         </svg>
         <div class="hint" id="hint"></div>
+        <div class="tray" id="tray"></div>
         <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Air fleet</span></div>
         <div class="zoom"><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
@@ -245,7 +272,7 @@ function drawLabels(): void {
     const busy = r.units.length > 0;
     const star = r.cap ? `<path class="capmark" transform="translate(${r.x - (busy ? 16.5 : 0)} ${r.y - (busy ? 3 : 7)}) scale(1.15)" d="M0-3.2L.9-1 3.2-1 1.4.5 2 2.8 0 1.4-2 2.8-1.4.5-3.2-1-.9-1Z"/>` : '';
     const fort = r.fort ? `<path class="fortmark" transform="translate(${r.x + (busy ? 17 : 0)} ${r.y + (busy ? 3 : -7)})" d="M-3 2.5V-2.5H-1.2V-.8H1.2V-2.5H3V2.5"/>` : '';
-    return `${star}${fort}<text class="lbl${r.cap ? ' cap' : ''}" x="${r.x}" y="${r.y + (busy ? 23 : 3)}">${esc(r.name)}</text>`;
+    return `${star}${fort}<text class="lbl${r.cap ? ' cap' : ''}" x="${r.x}" y="${r.y + (busy ? 26.5 : 3)}">${esc(r.name)}</text>`;
   }).join('');
 }
 
@@ -272,6 +299,10 @@ function refresh(): void {
   // Where the picked corps can go.
   let marks = '';
   const picked = pickedCorps();
+  reaches = [];
+  $('#route').innerHTML = '';
+  routeShown = -1;
+  trayArmy = armyShown();
   lands = picked.length && (g.regions[picked[0].reg].port || byAir(picked)) && g.nations[picked[0].nat].atWar.length ? landTargets(g, picked) : [];
   if (!lands.length) ui.land = false;
   const fl = ui.tab === 'navy' ? myFleet() : null;
@@ -292,7 +323,7 @@ function refresh(): void {
     for (const id of ports) marks += `<path class="mk rail" d="${pathOf(g.regions[id].polys)}"/>`;
   } else {
     const goes = new Map<number, boolean>();
-    for (const c of picked) for (const [id, rc] of reach(g, c)) if (id !== c.reg) goes.set(id, (goes.get(id) ?? false) || rc.attack);
+    for (const c of picked) { const m = reach(g, c); reaches.push({ from: c.reg, ap: c.ap, map: m }); for (const [id, rc] of m) if (id !== c.reg) goes.set(id, (goes.get(id) ?? false) || rc.attack); }
     for (const [id, attack] of goes) marks += `<path class="mk ${attack ? 'hit' : 'move'}" d="${pathOf(g.regions[id].polys)}"/>`;
   }
   if (ui.sel >= 0) marks += `<path class="mk sel" d="${pathOf(g.regions[ui.sel].polys)}"/>`;
@@ -300,7 +331,8 @@ function refresh(): void {
   $('#marks').innerHTML = marks;
   $('#fleets').innerHTML = airBaseMarks() + fleetMarks();
 
-  // Counters.
+  // Armies. Each nation's force in a region is one piece on the map: its colours on a standard with the branch
+  // of its strongest corps, its commander's name over it, and under it a bar for the strength it has left.
   let units = '';
   for (const r of g.regions) {
     if (!r.units.length) continue;
@@ -312,10 +344,15 @@ function refresh(): void {
       const lead = [...cs].sort((a, b) => KIND[b.kind].atk * b.divs - KIND[a.kind].atk * a.divs)[0];
       const ready = myTurn && nat === me && cs.some((c) => c.ap > 0 && c.kind !== 'fort');
       const spent = myTurn && nat === me && !ready;
+      const chosen = r.id === ui.sel && (cs.some((c) => ui.picked.has(c.id)) || (trayArmy?.reg === r.id && trayArmy.nat === nat));
+      const who = leaderOf(cs);
+      const fit = fitness(cs);
       const x = r.x - 11 + k * 4.5, y = r.y - 7 - k * 4;
-      units += `<g class="ctr${ready ? ' ready' : ''}${spent ? ' spent' : ''}" transform="translate(${x} ${y})">
+      units += `<g class="ctr army${ready ? ' ready' : ''}${spent ? ' spent' : ''}${chosen ? ' chosen' : ''}${who ? ' led' : ''}" data-reg="${r.id}" data-nat="${nat}" transform="translate(${x} ${y})"${marchHide && marchHide.reg === r.id && marchHide.nat === nat ? ' style="visibility:hidden"' : ''}>
+        <ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>
         <rect class="box" width="22" height="14" rx="1.4" fill="${g.nations[nat].color}"/>${symbol(lead.kind, 22, 14)}
-        ${k === 0 ? `<text x="11" y="21.5">${num(sumDivs(cs))}</text><text class="size" x="11" y="-1.6">${cs.length > 1 ? 'XXXX' : 'XXX'}</text>` : ''}
+        ${k === 0 ? `<rect class="strbg" x="0" y="15.2" width="22" height="2.2" rx=".6"/><rect class="str${fit < 0.5 ? ' low' : fit < 0.75 ? ' mid' : ''}" x="0" y="15.2" width="${(22 * Math.min(1, fit)).toFixed(1)}" height="2.2" rx=".6"/>
+        <text x="11" y="24.6">${num(sumDivs(cs))}</text><text class="size" x="11" y="-1.6">${cs.length > 1 ? 'XXXX' : 'XXX'}</text>${who ? `<text class="cmdr" x="11" y="-2">${esc(surname(who.name))}</text>` : ''}` : ''}
         ${k === 0 && r.units.length > 1 ? `<circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${r.units.length}</text>` : ''}</g>`;
     });
   }
@@ -325,6 +362,7 @@ function refresh(): void {
   drawBar();
   drawTabs();
   drawPane();
+  drawTray();
   $('#hint').textContent = hintText();
   queueSave();
 }
@@ -380,9 +418,9 @@ function hintText(): string {
   if (ui.land) return byAir(pickedCorps()) ? 'Airborne assault: click a red coast to see the odds.' : 'Landing from the sea: click a red coast to see the odds.';
   if (ui.rail) return 'Rail move: click any blue region. It takes the whole month.';
   if (ui.ship) return 'Sea transport: click any blue port. It takes the whole month.';
-  if (pickedCorps().length) return 'Click a green region to march there, or a red one to plan an attack.';
+  if (pickedCorps().length) return 'Right-click a green region to march there, or a red one to plan an attack. On a touch screen, tap it, or press and hold.';
   const ready = g.corps.some((c) => c.nat === g.human && c.ap > 0 && c.kind !== 'fort');
-  return ready ? 'Click one of your armies (gold outline) to give it orders. End the month when you are done.' : 'All of your armies have used their month. End the month to continue.';
+  return ready ? 'Click one of your armies (gold outline) to pick it up. End the month when you are done.' : 'All of your armies have used their month. End the month to continue.';
 }
 
 function drawBar(): void {
@@ -522,6 +560,145 @@ function corpsRow(c: Corps, mine: boolean): string {
     <span class="meta">${g.nations[c.nat].adj} ${k.label.toLowerCase()} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span>
     <span class="bars"><span>Strength</span><span class="meter"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span><span>Cohesion</span><span class="meter"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span></span>
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>`;
+}
+
+// ---- The army tray: the general and his units, laid out as cards along the foot of the map ----
+
+/** The army the tray shows for the selected region: the player's own if he has one there, otherwise the largest. */
+function armyShown(): { reg: number; nat: string } | null {
+  if (ui.sel < 0 || ui.tab !== 'region') return null;
+  const r = g.regions[ui.sel];
+  if (!r.units.length) return null;
+  const size = new Map<string, number>();
+  for (const c of r.units) size.set(c.nat, (size.get(c.nat) ?? 0) + c.divs * c.str);
+  const me = g.human;
+  return { reg: r.id, nat: me && size.has(me) ? me : [...size].sort((a, b) => b[1] - a[1])[0][0] };
+}
+
+/** One corps of the army as a card. The player's own are buttons: a click leaves the corps behind or takes it along. */
+function unitCard(c: Corps, mine: boolean): string {
+  const can = mine && c.kind !== 'fort';
+  const el = can ? 'button' : 'div';
+  const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
+  const gen = generalOf(g, c);
+  const flags = `${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}`;
+  return `<${el} class="ucard${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${gen ? ` · ${esc(gen.name)}` : ''}">
+    <span class="utop">${icon(c)}${pips}</span><b>${esc(c.name)}</b>
+    <span class="um">${c.divs} ${KIND[c.kind].label.toLowerCase()} div${c.divs > 1 ? 's' : ''}${gen ? ` · ${esc(surname(gen.name))}` : ''}</span>
+    <span class="meter" title="Strength ${Math.round(c.str * 100)}%"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span>
+    <span class="meter" title="Cohesion ${Math.round(c.org * 100)}%"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span>${flags ? `<span class="tags">${flags}</span>` : ''}</${el}>`;
+}
+
+function drawTray(): void {
+  const el = $('#tray');
+  const a = trayArmy;
+  if (!a) { el.classList.remove('open'); el.innerHTML = ''; return; }
+  const r = g.regions[a.reg];
+  const last = (c: Corps): number => (c.kind === 'fort' ? 1 : 0);
+  const cs = r.units.filter((c) => c.nat === a.nat).sort((x, y) => last(x) - last(y) || y.divs * y.str - x.divs * x.str);
+  const mine = a.nat === g.human && humanUp(g);
+  const who = leaderOf(cs);
+  const n = g.nations[a.nat];
+  const initials = who ? who.name.replace(/\s*\(.*\)\s*$/, '').split(/\s+/).map((w) => w[0]).filter((ch) => /[A-Z]/.test(ch)).slice(-2).join('') : '';
+  const others = [...new Set(r.units.filter((c) => c.nat !== a.nat).map((c) => c.nat))];
+  const head = who
+    ? `<button class="tgen" data-act="general" data-id="${who.id}" title="Open this general's record"><span class="seal" style="background:${n.color}">${esc(initials)}</span><span class="grow"><b>${esc(who.name)}</b><small>${esc(n.adj)} army at ${esc(r.name)} · level ${who.level} general</small>${who.traits.length ? `<span class="tags">${traitTags(who)}</span>` : ''}</span></button>`
+    : `<div class="tgen"><span class="seal none" style="background:${n.color}"></span><span class="grow"><b>${esc(n.adj)} army at ${esc(r.name)}</b><small>No general in command</small></span></div>`;
+  const tally = `<div class="ttally"><b>${num(sumDivs(cs))}</b><small>divisions</small><b>${Math.round(fitness(cs) * 100)}%</b><small>strength</small>${others.length ? `<small class="also">Also here: ${others.map((o) => esc(g.nations[o].adj)).join(', ')}</small>` : ''}</div>`;
+  el.innerHTML = `${head}${tally}<div class="cards">${cs.map((c) => unitCard(c, mine)).join('')}</div>`;
+  el.classList.add('open');
+}
+
+// ---- Orders on the map: the road an army would take, and the march along it ------------------
+
+/** The road the picked army would take to a region: the centres of the regions on the way, from where it stands. */
+function routeTo(id: number): { pts: [number, number][]; cost: number; ap: number; attack: boolean } | null {
+  let best: { pts: [number, number][]; cost: number; ap: number; attack: boolean } | null = null;
+  for (const rc of reaches) {
+    const end = rc.map.get(id);
+    if (!end || id === rc.from) continue;
+    const ids: number[] = [];
+    for (let at = id; at >= 0 && at !== rc.from; at = rc.map.get(at)?.prev ?? -1) ids.unshift(at);
+    ids.unshift(rc.from);
+    // The slowest corps sets the pace: its road is the one shown.
+    if (!best || end.cost > best.cost) best = { pts: ids.map((k) => [g.regions[k].x, g.regions[k].y]), cost: end.cost, ap: rc.ap, attack: end.attack };
+  }
+  return best;
+}
+
+/** Draws that road on the map while the cursor is over a region the picked army can reach. */
+function drawRoute(id: number): void {
+  if (id === routeShown) return;
+  routeShown = id;
+  const way = id >= 0 && !ui.rail && !ui.ship && !ui.land && ui.tab === 'region' ? routeTo(id) : null;
+  if (!way) { $('#route').innerHTML = ''; return; }
+  const [ax, ay] = way.pts[way.pts.length - 2], [bx, by] = way.pts[way.pts.length - 1];
+  const turn = Math.atan2(by - ay, bx - ax) * 180 / Math.PI;
+  const cls = way.attack ? ' strike' : '';
+  $('#route').innerHTML = `<path class="road under" d="M${way.pts.map((p) => `${p[0]} ${p[1]}`).join('L')}"/><path class="road${cls}" d="M${way.pts.map((p) => `${p[0]} ${p[1]}`).join('L')}"/>
+    <path class="roadhead${cls}" transform="translate(${bx} ${by}) rotate(${turn.toFixed(1)})" d="M4 0L-5 -4.6L-2.6 0L-5 4.6Z"/>`;
+}
+
+/** Slides a copy of the piece along the road it took, so the eye can follow the move. */
+function march(pts: [number, number][], nat: string, kind: Kind, to: number): void {
+  const ghost = $('#ghost');
+  const done = (): void => {
+    ghost.innerHTML = '';
+    marchHide = null;
+    const real = document.querySelector<SVGGElement>(`#units .army[data-reg="${to}"][data-nat="${nat}"]`);
+    if (real) real.style.visibility = '';
+  };
+  if (pts.length < 2 || typeof requestAnimationFrame !== 'function') { done(); return; }
+  ghost.innerHTML = `<g class="ctr army chosen"><ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/><rect class="box" width="22" height="14" rx="1.4" fill="${g.nations[nat].color}"/>${symbol(kind, 22, 14)}</g>`;
+  const piece = ghost.firstElementChild as SVGGElement;
+  const legs = pts.length - 1, total = Math.min(720, 190 * legs + 140);
+  const t0 = performance.now();
+  const token = ++marchToken;
+  const step = (now: number): void => {
+    if (token !== marchToken) return;
+    const f = Math.min(1, (now - t0) / total);
+    const e = f < 0.5 ? 2 * f * f : 1 - 2 * (1 - f) * (1 - f);
+    const at = e * legs, i = Math.min(legs - 1, Math.floor(at)), u = at - i;
+    piece.setAttribute('transform', `translate(${(pts[i][0] + (pts[i + 1][0] - pts[i][0]) * u - 11).toFixed(1)} ${(pts[i][1] + (pts[i + 1][1] - pts[i][1]) * u - 7).toFixed(1)})`);
+    if (f < 1) requestAnimationFrame(step); else done();
+  };
+  step(t0);
+  requestAnimationFrame(step);
+}
+
+/**
+ * Gives the picked corps their order at a region: a march there, or the plan of an attack on it.
+ * False if there is no such order to give, and the click means something else.
+ */
+function orderAt(id: number): boolean {
+  const picked = pickedCorps();
+  if (!picked.length || id === ui.sel || ui.land || ui.rail || ui.ship || ui.tab === 'build' || ui.tab === 'navy' || ui.tab === 'air') return false;
+  const r = g.regions[id];
+  if (hostileUnits(g, r, g.human!).length) {
+    const near = picked.filter((c) => g.regions[c.reg].nb.includes(id));
+    if (!near.length) return false;
+    openModal({ kind: 'attack', target: id, chosen: new Set(near.map((c) => c.id)) });
+    return true;
+  }
+  if (!atWar(g, g.human!, r.ctrl) && !allied(g, g.human!, r.ctrl)) return false;
+  const h = g.headlines.length;
+  const before = g.regions.map((x) => x.ctrl);
+  const way = routeTo(id);
+  const lead = [...picked].sort((a, b) => KIND[b.kind].atk * b.divs - KIND[a.kind].atk * a.divs)[0];
+  const nat = lead.nat, kind = lead.kind;
+  let moved = 0;
+  for (const c of picked) if (orderMove(g, c, id) > 0) moved++;
+  if (!moved) return false;
+  ui.unread += g.headlines.length - h;
+  ui.flash = g.regions.filter((x, i) => x.ctrl !== before[i]).map((x) => x.id);
+  ui.sel = id;
+  ui.picked = new Set(picked.filter((c) => c.reg === id && c.ap > 0).map((c) => c.id));
+  ui.tab = 'region';
+  const arrived = picked.some((c) => c.reg === id);
+  marchHide = arrived && way ? { reg: id, nat } : null;
+  refresh();
+  if (arrived && way) march(way.pts, nat, kind, id);
+  return true;
 }
 
 let paneKey = '';
@@ -1851,26 +2028,8 @@ function onRegion(id: number): void {
     refresh();
     return;
   }
-  if (picked.length && id !== ui.sel) {
-    if (hostileUnits(g, r, g.human!).length) {
-      const near = picked.filter((c) => g.regions[c.reg].nb.includes(id));
-      if (near.length) { openModal({ kind: 'attack', target: id, chosen: new Set(near.map((c) => c.id)) }); return; }
-    } else if (atWar(g, g.human!, r.ctrl) || allied(g, g.human!, r.ctrl)) {
-      const h = g.headlines.length;
-      const before = g.regions.map((x) => x.ctrl);
-      let moved = 0;
-      for (const c of picked) if (orderMove(g, c, id) > 0) moved++;
-      if (moved) {
-        ui.unread += g.headlines.length - h;
-        ui.flash = g.regions.filter((x, i) => x.ctrl !== before[i]).map((x) => x.id);
-        ui.sel = id;
-        ui.picked = new Set(picked.filter((c) => c.reg === id && c.ap > 0).map((c) => c.id));
-        ui.tab = 'region';
-        refresh();
-        return;
-      }
-    }
-  }
+  // A click on another of the player's armies picks that one up: sending this one to join it takes a right-click.
+  if (picked.length && id !== ui.sel && !r.units.some((c) => canOrder(g, c) && c.ap > 0) && orderAt(id)) return;
   selectRegion(id);
   refresh();
 }
@@ -1888,6 +2047,7 @@ function applyView(): void {
   v.y = Math.max(-200, Math.min(g.height - h, v.y));
   svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`);
   svg.classList.toggle('near', v.w < 600);
+  svg.classList.toggle('mid', v.w < 760);
 }
 
 function zoomBy(f: number, cx?: number, cy?: number): void {
@@ -1908,7 +2068,29 @@ function wireMap(): void {
   const pts = new Map<number, { x: number; y: number }>();
   let start: { x: number; y: number; vx: number; vy: number } | null = null;
   let moved = false, pinch = 0;
+  // On a touch screen there is no right button: pressing and holding a region gives the order instead.
+  let hold = 0, held = false;
+  const regionAt = (x: number, y: number): number => {
+    const el = document.elementFromPoint(x, y)?.closest('.reg') as HTMLElement | null;
+    return el ? Number(el.dataset.id) : -1;
+  };
+  svg.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const id = regionAt(e.clientX, e.clientY);
+    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderAt(id) && pickedCorps().length && id !== ui.sel) { ui.msg = `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
+  });
   svg.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    held = false;
+    clearTimeout(hold);
+    if (e.pointerType !== 'mouse') {
+      const x = e.clientX, y = e.clientY;
+      hold = window.setTimeout(() => {
+        if (moved || pts.size !== 1 || !humanUp(g)) return;
+        const id = regionAt(x, y);
+        if (id >= 0 && orderAt(id)) held = true;
+      }, 520);
+    }
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { svg.setPointerCapture(e.pointerId); } catch { /* not all browsers */ }
     if (pts.size === 1) { start = { x: e.clientX, y: e.clientY, vx: ui.view.x, vy: ui.view.y }; moved = false; }
@@ -1926,7 +2108,7 @@ function wireMap(): void {
     }
     if (pts.size === 1 && start) {
       const dx = e.clientX - start.x, dy = e.clientY - start.y;
-      if (Math.abs(dx) + Math.abs(dy) > 5) { moved = true; svg.classList.add('drag'); }
+      if (Math.abs(dx) + Math.abs(dy) > 5) { moved = true; clearTimeout(hold); svg.classList.add('drag'); }
       if (moved) { const k = ui.view.w / rect.width; ui.view.x = start.vx - dx * k; ui.view.y = start.vy - dy * k; applyView(); }
       return;
     }
@@ -1934,6 +2116,7 @@ function wireMap(): void {
     const el = (e.target as Element).closest?.('[data-id]') as HTMLElement | null;
     const tip = $('#tip');
     if (e.pointerType !== 'mouse') { tip.style.display = 'none'; return; }
+    drawRoute(el && el.classList.contains('reg') ? Number(el.dataset.id) : -1);
     if (!el) {
       const p = mapPoint(e.clientX, e.clientY);
       const z = seaAt(p.x, p.y);
@@ -1943,8 +2126,12 @@ function wireMap(): void {
       tip.innerHTML = `<b>${esc(g.seas[z].name)}</b><br>${by.size ? [...by].map(([nat, n]) => `${g.nations[nat].adj}: ${n} ships`).join(' · ') : 'No fleet at sea here'}`;
     } else {
     const r = g.regions[Number(el.dataset.id)];
-    const divs = sumDivs(r.units);
-    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)}${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${r.units.length ? `<br>${r.units.length} corps, ${num(divs)} divisions` : ''}`;
+    const armies = new Map<string, Corps[]>();
+    for (const c of r.units) (armies.get(c.nat) ?? armies.set(c.nat, []).get(c.nat)!).push(c);
+    const here = [...armies].map(([nat, cs]) => { const who = leaderOf(cs); return `<br>${esc(g.nations[nat].adj)} army${who ? ` under ${esc(surname(who.name))}` : ''}: ${cs.length} corps, ${num(sumDivs(cs))} divisions`; }).join('');
+    const way = routeShown === r.id ? routeTo(r.id) : null;
+    const order = way ? `<br><span class="tipgo">${way.attack ? 'Right-click to plan an attack' : `Right-click to march: ${way.cost} of ${way.ap} moves`}</span>` : '';
+    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)}${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${here}${order}`;
     }
     tip.style.display = 'block';
     const wrap = $('#mapwrap').getBoundingClientRect();
@@ -1954,8 +2141,9 @@ function wireMap(): void {
   const up = (e: PointerEvent) => {
     const was = pts.size;
     pts.delete(e.pointerId);
+    clearTimeout(hold);
     svg.classList.remove('drag');
-    if (was === 1 && !moved && e.type === 'pointerup') {
+    if (was === 1 && !moved && !held && e.type === 'pointerup') {
       $('#tip').style.display = 'none';
       const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-id]') as HTMLElement | null;
       if (el && el.classList.contains('reg')) onRegion(Number(el.dataset.id));
@@ -1970,7 +2158,7 @@ function wireMap(): void {
   };
   svg.addEventListener('pointerup', up);
   svg.addEventListener('pointercancel', up);
-  svg.addEventListener('pointerleave', () => { $('#tip').style.display = 'none'; });
+  svg.addEventListener('pointerleave', () => { $('#tip').style.display = 'none'; drawRoute(-1); });
   svg.addEventListener('wheel', (e) => { e.preventDefault(); zoomBy(Math.exp(e.deltaY * 0.0016), e.clientX, e.clientY); }, { passive: false });
 }
 

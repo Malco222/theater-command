@@ -76,6 +76,25 @@ svg#map.near .lbl { opacity: 1; }
 .ctr.ready rect.box { stroke: var(--brass); stroke-width: 1.5; }
 .ctr.spent { opacity: .78; }
 .ctr .more { fill: #15181b; }
+/* Armies as pieces: a standard on a base, the commander's name over it, a bar for the strength left. */
+.ctr .base { opacity: .55; stroke: #15181b; stroke-width: .5; }
+.ctr .pole { stroke: #15181b; stroke-width: 1.2; stroke-linecap: round; fill: none; }
+.ctr .strbg { fill: #15181b; opacity: .8; }
+.ctr .str { fill: #6fbf73; }
+.ctr .str.mid { fill: #d8a548; }
+.ctr .str.low { fill: #cf5a41; }
+.ctr .cmdr { font-size: 5.8px; font-weight: 600; letter-spacing: .02em; display: none; }
+svg#map.mid .ctr.led .cmdr, .ctr.led.chosen .cmdr { display: block; }
+svg#map.mid .ctr.led .size, .ctr.led.chosen .size { display: none; }
+.ctr.chosen .base { opacity: 1; stroke: #fff6d8; stroke-width: 1.5; }
+.ctr.chosen rect.box { stroke: #fff6d8; stroke-width: 1.6; }
+#route, #ghost { pointer-events: none; }
+.road { fill: none; stroke: #f4eeda; stroke-width: 2; stroke-dasharray: 5 3.5; stroke-linecap: round; stroke-linejoin: round; }
+.road.under { stroke: #15181b; stroke-width: 3.6; stroke-dasharray: none; opacity: .55; }
+.road.strike { stroke: #f2a08e; }
+.roadhead { fill: #f4eeda; stroke: #15181b; stroke-width: .6; stroke-linejoin: round; }
+.roadhead.strike { fill: #e2725b; }
+.tipgo { color: var(--brass); }
 .ctr .moret { fill: #f4eeda; stroke: none; font-size: 5.5px; }
 
 .seaborder { fill: none; stroke: rgba(52, 80, 97, .42); stroke-width: .8; stroke-dasharray: 5 4; pointer-events: none; }
@@ -111,6 +130,31 @@ svg.ctr .hull { stroke: #15181b; stroke-width: .8; stroke-linejoin: round; }
 .tip b { font-family: var(--head); font-size: 15px; letter-spacing: .04em; }
 .hint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); background: rgba(18, 22, 27, .92); border: 1px solid var(--brass); color: var(--ink); border-radius: 4px; padding: 6px 12px; font-size: 13px; max-width: min(560px, calc(100% - 20px)); text-align: center; }
 .hint:empty { display: none; }
+/* The army tray: the general and his units as cards along the foot of the map. */
+.tray { position: absolute; left: 10px; right: 54px; bottom: 10px; display: none; gap: 10px; align-items: stretch; background: rgba(18, 22, 27, .95); border: 1px solid var(--line); border-top: 2px solid var(--brass); border-radius: 5px; padding: 8px; z-index: 4; }
+.tray.open { display: flex; }
+.tray.open ~ .legend { display: none; }
+.tgen { display: flex; gap: 9px; align-items: center; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px; color: inherit; flex: 0 1 250px; min-width: 0; }
+button.tgen:hover { border-color: var(--ink-3); }
+.tgen .grow { min-width: 0; }
+.tgen b { display: block; font-family: var(--head); font-size: 17px; letter-spacing: .03em; line-height: 1.1; }
+.tgen small { display: block; font-size: 11.5px; color: var(--ink-2); }
+.tgen .tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.seal { flex: 0 0 42px; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; font-family: var(--head); font-weight: 700; font-size: 17px; color: #f4eeda; border: 2px solid var(--brass); text-shadow: 0 1px 1px rgba(0, 0, 0, .7); }
+.seal.none { border-color: var(--line); opacity: .7; }
+.ttally { display: grid; grid-template-columns: auto auto; gap: 0 6px; align-content: center; align-items: baseline; flex: 0 0 auto; padding: 0 2px; }
+.ttally b { font-family: var(--head); font-size: 19px; text-align: right; }
+.ttally small { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.ttally .also { grid-column: 1 / 3; text-transform: none; letter-spacing: 0; margin-top: 2px; }
+.cards { display: flex; gap: 6px; overflow-x: auto; flex: 1 1 auto; min-width: 0; padding-top: 4px; scrollbar-width: thin; }
+.ucard { flex: 0 0 124px; display: grid; gap: 3px; align-content: start; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 6px 7px; color: inherit; min-width: 0; }
+button.ucard:hover { border-color: var(--ink-3); }
+.ucard.pick { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass); transform: translateY(-3px); }
+.ucard.spent { opacity: .7; }
+.ucard .utop { display: flex; align-items: center; justify-content: space-between; }
+.ucard b { font-size: 12px; font-weight: 600; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ucard .um { font-size: 10.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ucard .tags { display: flex; gap: 3px; flex-wrap: wrap; }
 
 /* ---- Research ---- */
 .lab { border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2); padding: 8px 9px; margin-top: 8px; }
@@ -295,6 +339,11 @@ button.gen:hover { border-color: var(--ink-3); }
   .side { border-left: 0; border-top: 1px solid var(--line); }
   .bar { gap: 8px; padding: 7px 16px; flex-wrap: wrap; }
   .brand small, .legend { display: none; }
+  .tray { right: 10px; bottom: 6px; padding: 6px; gap: 6px; }
+  .tray.open ~ .zoom { display: none; }
+  .tgen { flex-basis: 170px; }
+  .ttally { display: none; }
+  .ucard { flex-basis: 104px; }
   .brand { font-size: 14px; }
   .when { font-size: 18px; }
   .when small { max-width: 60vw; }
