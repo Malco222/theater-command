@@ -7,7 +7,7 @@ import {
 } from '../game';
 import {
   beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort,
-  orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderTeams,
+  orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams,
   previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
 } from '../turn';
 import {
@@ -565,6 +565,7 @@ function corpsRow(c: Corps, mine: boolean): string {
   }
   if (c.airborne) tags.push(`<span class="tag good" title="Parachute and glider troops. Once a month they can be flown from a friendly coast to an enemy one across a single sea, with no ships and whoever holds the water. They fight there at ${Math.round(NAVY.landing.airborne * 100)}%, without heavy weapons, and not under a sky the enemy's fighters hold.">Airborne</span>`);
   if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
+  if (c.yields && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_BACK)}">Falls back if attacked</span>`);
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const el = mine && c.kind !== 'fort' ? 'button' : 'div';
   return `<${el} class="corps${pick ? ' pick' : ''}" ${el === 'button' ? `data-act="pick" data-id="${c.id}"` : ''}>
@@ -575,6 +576,9 @@ function corpsRow(c: Corps, mine: boolean): string {
 }
 
 // ---- The army tray: the general and his units, laid out as cards along the foot of the map ----
+
+const STANCE_STAND = 'Stand and fight wherever they are attacked.';
+const STANCE_BACK = 'Give ground instead of fighting when the enemy comes on with odds of 1.2 to 1 or better, which is what it takes to carry a position. The troops slip away whole to the ground behind them, at a cost in cohesion and the region itself. Caught again in the same month, they stand. Fortress troops always stand, and nobody gives up their own capital without a fight.';
 
 /** The army the tray shows for the selected region: the player's own if he has one there, otherwise the largest. */
 function armyShown(): { reg: number; nat: string } | null {
@@ -593,7 +597,7 @@ function unitCard(c: Corps, mine: boolean): string {
   const el = can ? 'button' : 'div';
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const gen = generalOf(g, c);
-  const flags = `${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}`;
+  const flags = `${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}`;
   return `<${el} class="ucard${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${gen ? ` · ${esc(gen.name)}` : ''}">
     <span class="utop">${icon(c)}${pips}</span><b>${esc(c.name)}</b>
     <span class="um">${c.divs} ${KIND[c.kind].label.toLowerCase()} div${c.divs > 1 ? 's' : ''}${gen ? ` · ${esc(surname(gen.name))}` : ''}</span>
@@ -617,7 +621,13 @@ function drawTray(): void {
     ? `<button class="tgen" data-act="general" data-id="${who.id}" title="Open this general's record"><span class="seal" style="background:${n.color}">${esc(initials)}</span><span class="grow"><b>${esc(who.name)}</b><small>${esc(n.adj)} army at ${esc(r.name)} · level ${who.level} general</small>${who.traits.length ? `<span class="tags">${traitTags(who)}</span>` : ''}</span></button>`
     : `<div class="tgen"><span class="seal none" style="background:${n.color}"></span><span class="grow"><b>${esc(n.adj)} army at ${esc(r.name)}</b><small>No general in command</small></span></div>`;
   const tally = `<div class="ttally"><b>${num(sumDivs(cs))}</b><small>divisions</small><b>${Math.round(fitness(cs) * 100)}%</b><small>strength</small>${others.length ? `<small class="also">Also here: ${others.map((o) => esc(g.nations[o].adj)).join(', ')}</small>` : ''}</div>`;
-  el.innerHTML = `${head}${tally}<div class="cards">${cs.map((c) => unitCard(c, mine)).join('')}</div>`;
+  // The standing order for the day the enemy comes: the whole army in the tray takes it together.
+  const field = cs.filter((c) => c.kind !== 'fort');
+  const back = field.filter((c) => c.yields).length;
+  const stance = mine && field.length
+    ? `<div class="tstance" role="group" aria-label="Orders if this army is attacked"><small>If attacked${back > 0 && back < field.length ? ' · mixed' : ''}</small><button class="${back === 0 ? 'on' : ''}" data-act="ifattacked" data-v="0" title="${esc(STANCE_STAND)}">Stand</button><button class="${back === field.length ? 'on' : ''}" data-act="ifattacked" data-v="1" title="${esc(STANCE_BACK)}">Fall back</button></div>`
+    : '';
+  el.innerHTML = `${head}${tally}${stance}<div class="cards">${cs.map((c) => unitCard(c, mine)).join('')}</div>`;
   el.classList.add('open');
 }
 
@@ -1125,6 +1135,8 @@ function reelPane(): string {
 function verdictFor(rep: BattleReport): { text: string; cls: string } {
   const me = g.human;
   const defSide = me !== null && rep.defenders.some((u) => u.nat === me) && !rep.attackers.some((u) => u.nat === me);
+  // Ground given up under orders is neither a victory nor a defeat for the troops who left it.
+  if (rep.yielded) return defSide ? { text: 'Fell back', cls: '' } : { text: 'Taken unopposed', cls: 'win' };
   if (!defSide) return { text: rep.level, cls: rep.taken ? 'win' : 'loss' };
   // Seen from the defender's side of the hill.
   const flip: Record<string, string> = {
@@ -1763,7 +1775,7 @@ function battleCard(c: Corps, opts: { act?: boolean; on?: boolean; note?: string
     <span class="meter" title="Cohesion ${Math.round(c.org * 100)}%"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span>${opts.note ? `<span class="tags"><span class="tag bad">${esc(opts.note)}</span></span>` : ''}</${el}>`;
 }
 
-const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea' };
+const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea', yielded: 'gave ground under orders' };
 
 /** A corps after the battle: what it lost and what became of it. */
 function fateCard(u: BattleReport['attackers'][number], won: boolean): string {
@@ -1791,15 +1803,15 @@ function reportCard(r: BattleReport): string {
     };
   };
   const share = r.aPower / Math.max(1e-9, r.aPower + r.dPower);
-  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle result · ${date(r.turn)}, week ${r.week}</div><h2>Battle of ${esc(r.regionName)}</h2></header>
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${r.yielded ? 'Ground given up' : 'Battle result'} · ${date(r.turn)}, week ${r.week}</div><h2>${r.yielded ? `${esc(r.regionName)} given up` : `Battle of ${esc(r.regionName)}`}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
-      <div class="sub">${r.taken ? `${esc(r.regionName)} was taken.` : `The attack on ${esc(r.regionName)} was thrown back.`} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.</div>
+      <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${r.taken ? `${esc(r.regionName)} was taken.` : `The attack on ${esc(r.regionName)} was thrown back.`} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
       <div class="faceoff">${sidePanel(side(r.attackers, r.attLost, 'attacking', r.taken), 'att')}<div class="fmid"><span class="vsmark">VS</span></div>${sidePanel(side(r.defenders, r.defLost, 'defending', !r.taken), 'def')}</div>
       <div class="balance"><div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[r.attNat].color}"></i><i style="flex:1;background:${g.nations[r.defNat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1"></span></div>
         <div class="ends"><span>${esc(g.nations[r.attNat].adj)} strength on the day</span><span>${esc(g.nations[r.defNat].adj)} strength on the day</span></div></div>
       ${ticketBlock('What the campaign map fed into the battle', r.lines)}
-      <div class="note" style="margin-top:14px"><b>Auto-resolved.</b> In the full game you can choose to fight this battle yourself in 3D. The same ticket goes in and the same kind of result comes back, so the campaign never needs to know which one happened.</div>
+      ${r.yielded ? '<div class="note" style="margin-top:14px"><b>No battle was fought.</b> Troops ordered to fall back keep their strength and lose some cohesion and the ground. They stand if they are caught again before their own month comes round.</div>' : '<div class="note" style="margin-top:14px"><b>Auto-resolved.</b> In the full game you can choose to fight this battle yourself in 3D. The same ticket goes in and the same kind of result comes back, so the campaign never needs to know which one happened.</div>'}
     </div><footer><button class="btn" data-act="showmap" data-id="${r.region}">Show on map</button><button class="btn go" data-act="close">Continue</button></footer>`;
 }
 
@@ -2167,6 +2179,16 @@ function onClick(e: MouseEvent): void {
       ui.rail = ui.ship = ui.land = false; refresh(); break;
     }
     case 'pickall': selectRegion(ui.sel); refresh(); break;
+    case 'ifattacked': {
+      const a = trayArmy;
+      if (!a || a.nat !== g.human) break;
+      const back = t.dataset.v === '1';
+      const told = g.regions[a.reg].units.filter((c) => c.nat === a.nat && orderStance(g, c, back)).length;
+      if (told) ui.msg = back
+        ? `The army at ${g.regions[a.reg].name} will give ground if the enemy attacks with the odds to carry the position.`
+        : `The army at ${g.regions[a.reg].name} will stand and fight where it is.`;
+      refresh(); break;
+    }
     case 'unpick': ui.picked.clear(); ui.rail = ui.ship = ui.land = false; refresh(); break;
     case 'rail': ui.rail = !ui.rail; ui.ship = ui.land = false; refresh(); break;
     case 'ship': ui.ship = !ui.ship; ui.rail = ui.land = false; refresh(); break;

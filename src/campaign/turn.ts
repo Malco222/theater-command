@@ -167,6 +167,13 @@ export function orderAttack(g: Game, corps: Corps[], target: Region): BattleRepo
   return resolveBattle(g, ok, target);
 }
 
+/** The player's standing order for a corps that is attacked: stand and fight, or give ground when the blow would break it. */
+export function orderStance(g: Game, c: Corps, yields: boolean): boolean {
+  if (!canOrder(g, c)) return false;
+  if (yields) c.yields = true; else delete c.yields;
+  return true;
+}
+
 export function orderRail(g: Game, c: Corps, to: number): boolean {
   return canOrder(g, c) && railMove(g, c, g.regions[to]);
 }

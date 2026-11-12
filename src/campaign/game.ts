@@ -617,8 +617,86 @@ function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<number>): Re
   return best;
 }
 
+/** The winners move in, fastest first. */
+function moveIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, attU: ReportUnit[]): void {
+  const order = attackers.map((c, i) => ({ c, i })).sort((x, y) => KIND[x.c.kind].move - KIND[y.c.kind].move || corpsBase(g, y.c) - corpsBase(g, x.c));
+  let moved = 0;
+  for (const { c, i } of order) {
+    // A force that came by sea all goes ashore together.
+    const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
+    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost)) { c.ap = Math.max(0, c.ap - 1); continue; }
+    place(g, c, target);
+    c.ap = Math.max(0, c.ap - cost);
+    attU[i].fate = 'advanced';
+    moved++;
+  }
+}
+
+/** The odds at which troops under orders to give ground do so: the odds that carry a position. */
+export const YIELD_ODDS = 1.2;
+/** What slipping away costs a corps in cohesion. */
+const YIELD_ORG = 0.15;
+
+/**
+ * Troops the player has ordered to give ground rather than be broken on it. When a blow that would carry the
+ * position is about to land they slip away to the best ground behind them, whole but shaken. A corps does this
+ * once a month: caught again before its own month comes round, it stands. Fortress troops never leave their works,
+ * and a capital defended by its own army is never given up this way.
+ */
+function giveWay(g: Game, a: Assessment, attackers: Corps[], target: Region): ReportUnit[] {
+  const gone: ReportUnit[] = [];
+  if (a.odds < YIELD_ODDS) return gone;
+  // Nobody gives up their own capital without a fight, whatever the standing order says.
+  if (target.cap && a.defenders.some((c) => c.nat === target.owner)) return gone;
+  const banned = new Set(attackers.map((c) => c.reg));
+  for (const c of [...a.defenders]) {
+    if (!c.yields || c.gaveWay) continue;
+    const to = retreatTarget(g, c, target, banned);
+    if (!to) continue;
+    const unit = reportUnit(c);
+    place(g, c, to);
+    c.ap = 0;
+    c.gaveWay = true;
+    c.org = clamp(c.org - YIELD_ORG, 0, 1);
+    unit.fate = 'yielded';
+    gone.push(unit);
+  }
+  return gone;
+}
+
+/** The attackers take ground the defenders have given up without a fight. It is filed with the battles so the player can see what happened. */
+function walkIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a: Assessment, gone: ReportUnit[]): BattleReport {
+  const attNat = attackers[0].nat;
+  const AN = g.nations[attNat];
+  // The offensive is counted as under way all the same: the attackers came on and the ground changed hands.
+  for (const d of new Set(gone.map((u) => u.nat))) {
+    if (AN.lastFight[d] === undefined || g.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== undefined && g.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g.turn;
+    AN.lastFight[d] = g.turn;
+  }
+  const week = Math.max(...attackers.map((c) => weekOf(c, 1)));
+  g.week = week;
+  const attU = attackers.map(reportUnit);
+  moveIn(g, attackers, target, opts, attU);
+  capture(g, target, attNat);
+  g.flags.battles = Math.max(g.flags.battles ?? 0, g.reports.length) + 1;
+  const rep: BattleReport = {
+    id: g.flags.battles, turn: g.turn, week, region: target.id, regionName: target.name, attNat, defNat: gone[0].nat,
+    attackers: attU, defenders: gone, lines: [...a.lines, { label: 'Orders', value: 'The defenders gave ground before the attack', effect: 'No battle was fought' }],
+    aPower: a.A, dPower: a.D, odds: a.odds, level: 'Close victory', taken: true, attLost: 0, defLost: 0, prisoners: 0, yielded: true,
+  };
+  g.reports.push(rep);
+  for (const d of new Set(gone.map((u) => u.nat))) checkCollapse(g, d, attNat);
+  return rep;
+}
+
 export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): BattleReport {
-  const a = assess(g, attackers, target, opts);
+  let a = assess(g, attackers, target, opts);
+  const gone = giveWay(g, a, attackers, target);
+  if (gone.length) {
+    if (!hostileUnits(g, target, attackers[0].nat).length) return walkIn(g, attackers, target, opts, a, gone);
+    // Whoever stayed behind, in the works or under other orders, fights alone.
+    a = assess(g, attackers, target, opts);
+  }
   const defenders = a.defenders;
   const attNat = attackers[0].nat;
   const defNat = defenders[0]?.nat ?? target.ctrl;
@@ -686,18 +764,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
         removeCorps(g, c);
       }
     });
-    // The winners move in, fastest first.
-    const order = attackers.map((c, i) => ({ c, i })).sort((x, y) => KIND[x.c.kind].move - KIND[y.c.kind].move || corpsBase(g, y.c) - corpsBase(g, x.c));
-    let moved = 0;
-    for (const { c, i } of order) {
-      // A force that came by sea all goes ashore together.
-      const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
-      if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost)) { c.ap = Math.max(0, c.ap - 1); continue; }
-      place(g, c, target);
-      c.ap = Math.max(0, c.ap - cost);
-      attU[i].fate = 'advanced';
-      moved++;
-    }
+    moveIn(g, attackers, target, opts, attU);
     capture(g, target, attNat);
   } else {
     for (const c of attackers) c.ap = Math.max(0, c.ap - 1);
@@ -706,7 +773,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   g.flags.battles = Math.max(g.flags.battles ?? 0, g.reports.length) + 1;
   const rep: BattleReport = {
     id: g.flags.battles, turn: g.turn, week, region: target.id, regionName: target.name, attNat, defNat,
-    attackers: attU, defenders: defU, lines: a.lines, aPower: a.A, dPower: a.D, odds: R, level, taken: win,
+    attackers: attU, defenders: gone.length ? [...defU, ...gone] : defU, lines: a.lines, aPower: a.A, dPower: a.D, odds: R, level, taken: win,
     attLost, defLost, prisoners,
   };
   g.reports.push(rep);
@@ -1124,6 +1191,7 @@ export function startPhase(g: Game, nat: string): void {
       }
     }
     c.fought = false;
+    if (c.gaveWay) delete c.gaveWay;
     c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c);
   });
   for (const [reg, lost] of starved) {

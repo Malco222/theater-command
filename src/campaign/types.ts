@@ -129,6 +129,10 @@ export interface Corps {
   dead: boolean;
   /** Airborne troops: they can take a coast across one sea from the air, with no ships and no sea lane. */
   airborne?: boolean;
+  /** The player's standing order to give ground rather than be broken on it. No computer nation sets it. */
+  yields?: boolean;
+  /** The corps has already given ground this month, and will stand if it is attacked again. */
+  gaveWay?: boolean;
 }
 
 export type Skill = 'offense' | 'defense' | 'logistics' | 'leadership';
@@ -187,7 +191,7 @@ export interface ReportUnit {
   divs: number;
   men: number;
   lost: number;
-  fate: '' | 'retreated' | 'surrendered' | 'destroyed' | 'advanced' | 'evacuated';
+  fate: '' | 'retreated' | 'surrendered' | 'destroyed' | 'advanced' | 'evacuated' | 'yielded';
 }
 
 export interface BattleReport {
@@ -210,6 +214,8 @@ export interface BattleReport {
   attLost: number;
   defLost: number;
   prisoners: number;
+  /** No battle was fought: the defenders were under orders to give ground and fell back before the attack. */
+  yielded?: boolean;
 }
 
 // ---- The war at sea ---------------------------------------------------------------------

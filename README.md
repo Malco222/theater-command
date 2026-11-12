@@ -17,6 +17,7 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 - The other nations' month, watched. When the player ends the month the map travels to each nation that takes ground or fights a battle, says in a line what it did, and moves on; a Skip button plays the rest at once, and the opening screen has a switch to turn the watching off. The dispatches that follow put declarations of war, fallen capitals and capitulations on cards of their own, above the rest of the news.
 - Campaign goals. Every nation a person can play has a short campaign and a long one (`data/campaign/goals.json`): cities to hold, nations to beat, and a date. Germany's short campaign is what history's Germany did, Warsaw, Oslo and Paris by the end of 1940; Poland's is to last longer than five weeks. The goals are shown on the nation-pick screen for the September 1939 starts, ticked off on the opening screen as the war goes on, and announced in the dispatches when they are won or lost. They judge the war and never change it: no computer nation knows about them. A campaign that opens later leaves out goals whose date has gone by.
 - Alerts and keys. A column of alerts on the map says what wants attention this month (armies at the front that have not moved, armies cut off from supply, production points unspent, generals with skill points, an idle design team), and a click on one goes there. Enter ends the month, Escape backs out of whatever is open, and Space skips the watching.
+- Stand or fall back. Every army of yours carries a standing order for the day the enemy comes, set with two buttons in the army tray. An army told to stand fights where it is. An army told to fall back gives ground when the attack arrives with odds of 1.2 to 1 or better: it slips away whole to the ground behind it, loses some cohesion and the region, and no battle is fought. It does this once a month (caught again, it stands), fortress troops always stand, and nobody gives up their own capital this way. The ground given up is filed with the battles as "Fell back". The order is the player's alone: no computer nation uses it, so history's wars are unchanged.
 - Supply traced from each nation's own capital, industry and depots. Armies that are cut off fight at half strength and waste away.
 - Battles settled at once from a Battle Ticket (forces, terrain, forts, supply, air, commanders, tempo, direction of attack) with the framework's victory levels. Fortifications only count against the direction they face, so the Maginot Line can be outflanked.
 - Nations ask for terms when they have lost too much of their capital, territory and army. France's fall creates Vichy; eastern Poland goes to the Soviet Union under the 1939 pact; sea-supplied armies can be lifted off from a port.
@@ -125,7 +126,7 @@ Where free play stops short: the computer makes no landings from the sea of its 
 - The rest of free play: seaborne invasions planned by the computer, alliances the computer makes and breaks for itself, peace short of capitulation, and a staff for the air and the sea.
 - The rest of the United States: it is an army in North Africa and an industry off the map, and no more. It cannot be played, builds nothing, sends no Lend-Lease, and its neutrality before Pearl Harbor is not modelled. Japan and the Pacific are not in the game.
 - The rest of the commander system: skills and traits for admirals and air commanders (today they gain levels from their battles, and an admiral can be lost with his flagship), command limits, rivalries and politics between generals, and staff college. Generals lead single corps today, because the prototype has no armies above the corps yet.
-- The rest of the campaign screen: a choice for the defender when the computer attacks (stand or fall back), buildings a province can be given beyond fortifications, armies above the corps with one general over several corps, and a peace conference when a long campaign is won.
+- The rest of the campaign screen: buildings a province can be given beyond fortifications, armies above the corps with one general over several corps, and a peace conference when a long campaign is won.
 - Graphics. This is deliberately a staff map. The Total War and Company of Heroes level of presentation arrives with the Unreal Engine 5 build.
 - Borders are approximate: regions are grown from seed points, not traced from 1939 maps.
 
@@ -133,7 +134,7 @@ Where free play stops short: the computer makes no landings from the sea of its 
 
 ```
 npm install
-npm test            # flight model, war economy, research, diplomacy, eastern front, desert and Balkans rules, generals, the war at sea, the war in the air, the plans' orders of 1942 at home and overseas, the United States, Torch and Tunisia, Kursk and the Dnieper, Sicily and Italy, free play, campaign goals, saved games and the eleven exit tests
+npm test            # flight model, war economy, research, diplomacy, eastern front, desert and Balkans rules, generals, the war at sea, the war in the air, the plans' orders of 1942 at home and overseas, the United States, Torch and Tunisia, Kursk and the Dnieper, Sicily and Italy, free play, campaign goals, the order to stand or fall back, saved games and the eleven exit tests
 npm run build       # writes dist/play.html, a single file you can open in a browser
 npm run history     # prints a full computer-vs-computer war; add "sweep 20" to compare seeds
 npm run geo         # regenerates the maps from data/campaign/regions.mjs
@@ -159,7 +160,7 @@ npm run geo         # regenerates the maps from data/campaign/regions.mjs
 | `src/campaign/turn.ts` | The monthly turn and the player's orders |
 | `src/campaign/ui/` | The campaign screen |
 | `src/air/` | Flight model and air battle groundwork |
-| `tests/` | Rule tests: flight model, war economy, research, the war at sea, the war in the air, saved games, diplomacy, the eastern front, the desert and the colonies, the Balkans and airborne troops, the eve of war, the orders a plan can give at home and overseas, the United States, Torch and Tunisia, Kursk and the Dnieper, Sicily and Italy, free play, generals |
+| `tests/` | Rule tests: flight model, war economy, research, the war at sea, the war in the air, saved games, diplomacy, the eastern front, the desert and the colonies, the Balkans and airborne troops, the eve of war, the orders a plan can give at home and overseas, the United States, Torch and Tunisia, Kursk and the Dnieper, Sicily and Italy, free play, campaign goals, the order to stand or fall back, generals |
 | `tests/exit/` | The framework's exit tests |
 | `tools/` | Map generation and the history runner |
 
