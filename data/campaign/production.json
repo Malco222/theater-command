@@ -1,9 +1,10 @@
 {
-  "_about": "The war economy. Each nation earns production points every month: baseIncome plus one point per factory it holds at home, and occupiedIncome of a point per factory on occupied ground. A nation at peace earns peaceIncome of that. Losses are made good first, at replacementCost points per division's worth of men and equipment. What is left can be spent on new formations and fortifications, which take months to arrive. aiBank is the most a computer-run nation keeps in hand before and after it starts building.",
+  "_about": "The war economy. Each nation earns production points every month: baseIncome plus one point per factory it holds at home, and occupiedIncome of a point per factory on occupied ground. A nation at peace earns peaceIncome of that. Losses are made good first, at replacementCost points per division's worth of men and equipment, and no faster than 'manpower': the share of the army's full size that the depots can send out as trained replacements in a month. What is left can be spent on new formations and fortifications, which take months to arrive. aiBank is the most a computer-run nation keeps in hand before and after it starts building.",
   "baseIncome": 2,
   "occupiedIncome": 0.5,
   "peaceIncome": 0.5,
   "replacementCost": 4,
+  "manpower": 0.03,
   "aiBank": [
     48,
     96
@@ -49,7 +50,7 @@
     "months": 4
   },
   "firstCorpsNumber": {
-    "GER": 51,
+    "GER": 61,
     "FRA": 31,
     "UK": 4,
     "_default": 11

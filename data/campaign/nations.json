@@ -1,5 +1,5 @@
 {
-  "_about": "Nations on the prototype map. quality scales how well a nation's army fights in 1939-40 (training, doctrine, command). air is relative air strength. resilience is how much of its capital, territory and army a nation can lose before it asks for terms. align is its place on the alignment track in September 1939. blitz gives a nation's fast troops extra reach and punch in the first two turns of a new offensive. slowCommand makes attacks weaker and counter-attacks late. seaSupply lets an army be supplied through any friendly port.",
+  "_about": "Nations on the prototype map. quality scales how well a nation's army fights in 1939-40 (training, doctrine, command). air is relative air strength. resilience is how much of its capital, territory and army a nation can lose before it asks for terms. align is its place on the alignment track in September 1939. blitz gives a nation's fast troops extra reach and punch in the first two turns of a new offensive. slowCommand makes attacks weaker and counter-attacks late, and a failed assault is not renewed the same month. maxAttack is the most corps a nation's staffs can bring into one battle. seaSupply lets an army be supplied through any friendly port.",
   "GER": {
     "name": "Germany",
     "adj": "German",
@@ -154,7 +154,9 @@
     "quality": 0.7,
     "air": 70,
     "resilience": 0.95,
-    "align": "independent"
+    "align": "independent",
+    "slowCommand": true,
+    "maxAttack": 8
   },
   "IRL": {
     "name": "Ireland",

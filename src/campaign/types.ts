@@ -24,8 +24,9 @@ export interface Region {
   nb: number[];
   polys: [number, number][][][];
   units: Corps[];
-  /** Turn this region last changed hands. */
+  /** Turn this region last changed hands, and who held it before. */
   since: number;
+  prev: string | null;
 }
 
 export interface Nation {
@@ -39,6 +40,8 @@ export interface Nation {
   align: Align;
   blitz: boolean;
   slowCommand: boolean;
+  /** The most corps this nation's staffs can bring into one battle. 0 means no limit. */
+  maxAttack: number;
   seaSupply: boolean;
   atWar: string[];
   alive: boolean;
@@ -158,9 +161,19 @@ export interface PlanPhase {
   assembly?: string[];
   armour?: string[];
   garrison?: string[];
+  /** Garrisons in these places are stood down and join the field army. */
+  release?: string[];
   staging?: Record<string, number>;
   minOdds?: number;
   force?: number;
+  /** Places the plan means to starve out rather than storm: never assaulted while the phase lasts. */
+  siege?: string[];
+  /** A limited offensive: only places the plan has named as objectives so far are attacked. */
+  limited?: boolean;
+  /** A single stroke: only these places are attacked, whatever else is in reach. */
+  targets?: string[];
+  /** The phase only applies while these two nations are at war with each other. */
+  ifAtWar?: [string, string];
 }
 
 export interface Game {
@@ -183,6 +196,8 @@ export interface Game {
   supplyDirty: boolean;
   /** Regions each nation can draw supply in, rebuilt when the map changes. */
   supply: Record<string, Uint8Array>;
+  /** How long each nation's supply line is in every region deep inside the Soviet Union. Rebuilt with supply. */
+  reach: Record<string, Float32Array>;
   capDist: Record<string, Int16Array>;
   week: number;
   links: [number, number][];

@@ -3,7 +3,7 @@
 // only draws the state of the game and turns clicks into orders.
 
 import {
-  allied, armySize, atWar, collapseScore, createGame, ensureSupply, hostileUnits, limitAttackers, men, weather,
+  allied, armySize, atWar, collapseScore, createGame, ensureSupply, frozen, hostileUnits, limitAttackers, lineStrength, men, weather,
 } from '../game';
 import {
   beginHuman, canOrder, candidates, declarable, endHuman, humanUp, orderAttack, orderBuildCorps, orderBuildFort,
@@ -19,6 +19,8 @@ import { KIND, type BattleReport, type Corps, type Game, type Kind, type Nation,
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
+/** The month after the last one the historical plans cover: April 1942. */
+const STORY_ENDS = 32;
 const ui = {
   sel: -1,
   picked: new Set<number>(),
@@ -227,7 +229,7 @@ function hintText(): string {
 function drawBar(): void {
   const me = g.human;
   const w = weather(g);
-  const who = me ? (g.nations[me].alive ? `Your orders: ${natName(me)}` : `${natName(me)} has fallen`) : 'Watching history unfold: every nation on its 1939 plan';
+  const who = me ? (g.nations[me].alive ? `Your orders: ${natName(me)}` : `${natName(me)} has fallen`) : 'Watching history unfold: every nation on its historical plan';
   const when = me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
   const pts = me && g.nations[me].alive ? ` · ${num(Math.floor(g.nations[me].pp))} production pts` : '';
   $('#when').innerHTML = `${when}<small>${esc(who)}${pts}${me ? ` · ${esc(w.text)}` : ''}</small>`;
@@ -261,8 +263,8 @@ function advice(): string {
 }
 
 function scopeNote(): string {
-  if (!g.nations.FRA.fellOn && g.turn < 13) return '';
-  return `<div class="note"><b>This is as far as the first prototype's story goes.</b> It covers the land war from September 1939 to the summer of 1940. Production, sea transport and the first layer of diplomacy are in; the war at sea and in the air, research and the later campaigns come in later phases. Next on the roadmap is the Battle of Britain.</div>`;
+  if (g.turn < STORY_ENDS) return '';
+  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the spring of 1942. You can play on, but the computer's nations will only hold what they have. The war at sea and in the air, research and the later campaigns come in later phases.</div>`;
 }
 
 function corpsRow(c: Corps, mine: boolean): string {
@@ -271,6 +273,9 @@ function corpsRow(c: Corps, mine: boolean): string {
   const tags: string[] = [];
   if (!c.supplied) tags.push('<span class="tag bad">Cut off</span>');
   if (c.fought) tags.push('<span class="tag">Fought this month</span>');
+  const line = lineStrength(g, c);
+  if (line.mul < 1) tags.push(`<span class="tag bad">Long supply line: attacks at ${Math.round(line.mul * 100)}%</span>`);
+  if (frozen(g, c.nat, g.regions[c.reg])) tags.push('<span class="tag bad">No winter kit</span>');
   if (c.trait) tags.push(`<span class="tag good">${c.trait === 'panzer' ? 'Fast breakthrough' : c.trait === 'attacker' ? 'Strong in attack' : 'Strong in defence'}</span>`);
   if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
@@ -295,7 +300,7 @@ function drawPane(): void {
 function regionPane(): string {
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li>${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -340,7 +345,7 @@ function buildPane(): string {
   const inc = income(g, me);
   const at = raiseAt();
   const picked = ui.sel >= 0 && at !== null && at.id === ui.sel;
-  let out = `<h2>War production</h2><p class="sub">Your factories earn production points every month. Losses in the field are made good first, at ${PRODUCTION.replacementCost} points a division. What is left is yours to spend.</p>
+  let out = `<h2>War production</h2><p class="sub">Your factories earn production points every month. Losses in the field are made good first, at ${PRODUCTION.replacementCost} points a division, as fast as the depots can train men: about ${Math.round(PRODUCTION.manpower * 100)}% of the army a month. What is left is yours to spend.</p>
     <div class="facts"><div class="fact"><span>In hand</span><b>${num(have)}</b></div><div class="fact"><span>Each month</span><b>+${num(inc)}</b></div><div class="fact"><span>On order</span><b>${n.queue.length}</b></div></div>`;
   if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> Industry runs at half speed until the nation is at war.</div>`;
 
@@ -479,18 +484,25 @@ function openModal(m: typeof ui.modal): void {
 }
 
 function startCard(): string {
-  const side = (id: string | null, name: string, blurb: string, wide = false) => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}"><b>${name}</b><span>${blurb}</span></button>`;
+  const side = (id: string | null, name: string, blurb: string, wide = false, from = 1) => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}" data-from="${from}"><b>${name}</b><span>${blurb}</span></button>`;
   const saved = peekSave(readSave() ?? '');
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `Watching history, ${date(saved.turn)}`}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
-    <div class="body"><p class="lead">It is <b>1 September 1939</b>. This is the strategy layer of the game: a map of Europe in ${g.regions.length} regions, monthly turns, and battles settled from a <b>Battle Ticket</b>. Pick a side, or watch the computer play out history's plan.</p>
+    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe in ${g.regions.length} regions, monthly turns, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan.</p>
+    ${resume ? `<div class="sides">${resume}</div>` : ''}
+    <h3>September 1939 · The war begins</h3>
     <div class="sides">
-      ${resume}
-      ${side(null, 'Watch history unfold', 'Every nation follows its 1939 to 1940 plan. Press Play and watch Poland, then the West.', true)}
+      ${side(null, 'Watch history unfold', 'Every nation follows its plan. Press Play and watch Poland, then the West, then the East.', true)}
       ${side('GER', 'Germany', 'On the attack from the first day. The hardest plan to pull off on schedule.')}
       ${side('FRA', 'France', 'The Maginot Line, a large army, and a slow command. Can you keep Paris?')}
       ${side('UK', 'United Kingdom', 'A small expeditionary force and the sea at your back.')}
       ${side('POL', 'Poland', 'Outnumbered and nearly surrounded. Hold as long as you can.')}
+    </div>
+    <h3>June 1941 · Barbarossa</h3>
+    <div class="sides">
+      ${side(null, 'Watch Barbarossa unfold', 'The computer plays the first 21 months, then the invasion of the Soviet Union and the first winter.', true, 22)}
+      ${side('GER', 'Germany', 'Three army groups on the frontier. Reach Moscow before the snow, or outrun your supplies trying.', false, 22)}
+      ${side('SOV', 'Soviet Union', 'The frontier armies are about to be hit. Trade space for time until the reserves and the winter arrive.', false, 22)}
     </div>
     <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
@@ -530,7 +542,7 @@ function attackCard(): string {
       <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${Math.round(p * 100)}% chance to take ${esc(target.name)} · it needs roughly 1.2 to 1 on the day</div>
       <h3>Battle Ticket</h3><table class="ticket">${a.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
   } else body = '<div class="empty">Choose at least one corps to attack with.</div>';
-  const rows = cands.map((c) => `<button class="pickrow${inSet.has(c.id) ? ' pick' : ''}" data-act="atkpick" data-id="${c.id}">${icon(c)}<span class="grow"><b>${esc(c.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[c.reg].name)} · ${c.divs} divisions · ${c.ap} move${c.ap > 1 ? 's' : ''} left${m.chosen.has(c.id) && !inSet.has(c.id) ? ' · no room on the roads' : ''}</span></span></button>`).join('');
+  const rows = cands.map((c) => `<button class="pickrow${inSet.has(c.id) ? ' pick' : ''}" data-act="atkpick" data-id="${c.id}">${icon(c)}<span class="grow"><b>${esc(c.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[c.reg].name)} · ${c.divs} divisions · ${c.ap} move${c.ap > 1 ? 's' : ''} left${m.chosen.has(c.id) && !inSet.has(c.id) ? (g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? ' · more than the staff can handle in one battle' : ' · no room on the roads') : ''}</span></span></button>`).join('');
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Plan of attack · ${date(g.turn)}</div><h2>Attack on ${esc(target.name)}</h2></header>
     <div class="body">${body}<h3>Your corps in reach</h3>${rows}</div>
     <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="attack" ${a ? '' : 'disabled'}>Attack</button></footer>`;
@@ -558,16 +570,19 @@ function declareCard(): string {
 
 // ---- Running the game ---------------------------------------------------------------------
 
-function newGame(human: string | null, seed?: number): void {
+/** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
+function newGame(human: string | null, seed?: number, from = 1): void {
   stopAuto();
-  g = createGame(seed ?? (Date.now() % 900000) + 1, human);
+  g = createGame(seed ?? (Date.now() % 900000) + 1, from > 1 ? null : human);
+  while (g.turn < from) runTurnAI(g);
+  g.human = human;
   ui.live = true;
-  ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = 0; ui.flash = [];
+  ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = from > 1 ? g.reports.length : 0; ui.flash = [];
   drawStatic();
-  const focus = human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
-  ui.view = { x: focus.x - 300, y: focus.y - 230, w: human === 'GER' ? 640 : 600 };
+  const focus = from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
+  ui.view = { x: focus.x - 300, y: focus.y - 230, w: human === 'GER' || from > 1 ? 640 : 600 };
   applyView();
-  if (human) advanceToHuman(false); else { ui.unread = g.headlines.length; refresh(); }
+  if (human) advanceToHuman(from > 1 && human !== 'GER'); else { ui.unread = from > 1 ? 0 : g.headlines.length; refresh(); }
 }
 
 /** Picks up the campaign saved in this browser. Returns false if there is none that can be read. */
@@ -625,7 +640,7 @@ function nextMonth(): void {
   if (hot.size) focusOn([...hot]);
   if (ui.tab === 'reel') ui.unread = 0;
   refresh();
-  if (g.turn > 14) stopAuto();
+  if (g.turn > STORY_ENDS) stopAuto();
 }
 
 function focusOn(ids: number[]): void {
@@ -650,7 +665,7 @@ function onClick(e: MouseEvent): void {
   const act = t.dataset.act!;
   const id = Number(t.dataset.id);
   switch (act) {
-    case 'start': openModal(null); newGame(t.dataset.nat || null); break;
+    case 'start': openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1)); break;
     case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
     case 'new': stopAuto(); openModal({ kind: 'start' }); break;
     case 'close': openModal(null); refresh(); break;

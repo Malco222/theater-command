@@ -20,9 +20,21 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 - Saved games. The whole campaign, including the exact state of the random number stream, is written to the browser as you play, and the start screen offers to continue it. A loaded game plays out exactly as the unsaved one would have.
 - Diplomacy on the framework's seven-step alignment track. Every neutral has a public opinion that drifts back to its own leaning and bends toward whoever is winning the war. A country that leans toward a bloc trades with it; one that is fully won over joins it. Players spend political capital to court neutrals, and moves that match public opinion go further.
 - History as events (`data/campaign/diplomacy.json`): the Soviet occupation of the Baltic states and Bessarabia, the Vienna Award, the Tripartite Pact. Each fires once, in its window, and only if its conditions still hold. If France does not fall, the Danube states do not join the Axis.
-- Play Germany, France, the United Kingdom or Poland, or watch history unfold.
+- The eastern front of 1941. Germany's plan runs from the build-up in Poland through Barbarossa, Smolensk, Kiev and the drive on Moscow to the winter line; Romania marches with it, and Finland, Hungary and Slovakia declare war. The Soviet plan holds, then strikes back in December.
+- Supply that thins out with distance. Inside the Soviet Union every army's supply line is measured from its railheads: the longer it is, the weaker its attacks, the thinner its defence, the slower its replacements and the more each step forward costs. Captured railways are converted over a few months. All of it is data (`data/campaign/east.json`).
+- Mud and winter. Mud in November, March and April slows every army in the east. From December to February armies without winter equipment fight and march badly on Soviet ground and lose men to the cold. The Red Army and the Finns do not.
+- The Red Army's mobilisation. From the month it is attacked the Soviet Union raises new rifle corps every month, and defence lines are dug around Leningrad and then Moscow.
+- Limited manpower. However rich the treasury, an army gets back only about three men in a hundred of its peak strength each month, shared along the front.
+- Staffs that learn. The Red Army of 1941 can bring only eight corps into one battle and does not renew a failed assault in the same month. Defenders who hold their ground lose fewer men than those who are driven off it.
+- Computer generals who bring reserves up behind a spearhead, garrison what they have taken, leave a besieged city alone when the plan says to starve it out, and counter-attack ground they have just lost.
+- Play Germany, France, the United Kingdom or Poland from September 1939, or start in June 1941 as Germany or the Soviet Union. You can also watch history unfold from either date.
 
-**The exit test** from the framework ("France falls in about six weeks") runs as an automated test. With every nation on the historical plan, across 20 different seeds, Poland falls in three to four weeks and France five to six weeks after the May 1940 attack, with most of the British Expeditionary Force lifted off first.
+**The exit tests** from the framework run as automated tests, with every nation on the historical plan across 20 different seeds.
+
+- "France falls in about six weeks": Poland falls in about four weeks and France about six weeks after the May 1940 attack, with most of the British Expeditionary Force lifted off first.
+- "A believable Barbarossa" (the Phase 3 test, run early against the campaign rules): Minsk falls in June 1941, Smolensk in July, Kiev in September and Kharkov in October. Moscow and Leningrad hold. In December the Red Army strikes back and wins ground, and the German army is hurt but not broken. Through March 1942 Germany loses 0.6 to 1.0 million men and the Soviet Union 2.5 to 3.3 million.
+
+Where 1941 still differs from history: Odessa falls a month or two early, Rostov is never reached, Soviet losses are lower than the real ones, and Finland, Hungary and Slovakia declare war but only defend.
 
 **The flight model** for the air battle (`src/air/flight.ts`) reproduces the documented speed, climb and turn of the Spitfire, Hurricane, Bf 109, Bf 110, Do 17 and He 111 from their physical data, and is covered by tests.
 
@@ -31,7 +43,8 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 - The gray-box air battle screen (the other half of Phase 1). The flight model, scenario data and pilot logic exist; the battle loop and the command screen do not.
 - War at sea, strategic air war and research. Norway is not invaded because there is no naval layer yet. Sea transport is an abstraction: nothing can intercept it yet.
 - The rest of diplomacy: changing your own nation's side, treaties, espionage, and computer-run nations that court neutrals themselves. Today the computer follows history's events and the drift of the war.
-- The campaigns after the summer of 1940 (the Balkans, Barbarossa). The map now reaches far enough east and the alignment track keeps running, but no plan is written for them yet, and the Soviet army is only its 1939 garrisons.
+- The Balkans campaign of April 1941, Italy's part in the east, and everything after the spring of 1942. History's plans stop there; the game goes on, but computer-run nations only hold their lines.
+- Generals who level up and earn traits. A few corps carry a named general today, but he does not change.
 - Graphics. This is deliberately a staff map. The Total War and Company of Heroes level of presentation arrives with the Unreal Engine 5 build.
 - Borders are approximate: regions are grown from seed points, not traced from 1939 maps.
 
@@ -39,7 +52,7 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 
 ```
 npm install
-npm test            # flight model, war economy, diplomacy, saved games and the 1939-40 exit test
+npm test            # flight model, war economy, diplomacy, eastern front rules, saved games and both exit tests
 npm run build       # writes dist/play.html, a single file you can open in a browser
 npm run history     # prints a full computer-vs-computer war; add "sweep 20" to compare seeds
 npm run geo         # regenerates the maps from data/campaign/regions.mjs
@@ -49,9 +62,9 @@ npm run geo         # regenerates the maps from data/campaign/regions.mjs
 
 | Path | What it is |
 | --- | --- |
-| `data/` | Moddable data: nations, regions, starting armies, the historical plan, aircraft |
+| `data/` | Moddable data: nations, regions, starting armies, the historical plan, the eastern front rules, aircraft |
 | `src/core/` | Shared deterministic core: seeded random numbers, maths, the Battle Ticket contract |
-| `src/campaign/game.ts` | Campaign rules: war, movement, supply, battles, capitulation |
+| `src/campaign/game.ts` | Campaign rules: war, movement, supply, weather, battles, mobilisation, capitulation |
 | `src/campaign/economy.ts` | Production points, replacements, new corps and fortifications |
 | `src/campaign/diplomacy.ts` | The alignment track, courting, and history's events |
 | `src/campaign/save.ts` | Saved games |
@@ -59,7 +72,7 @@ npm run geo         # regenerates the maps from data/campaign/regions.mjs
 | `src/campaign/turn.ts` | The monthly turn and the player's orders |
 | `src/campaign/ui/` | The campaign screen |
 | `src/air/` | Flight model and air battle groundwork |
-| `tests/` | Rule tests: flight model, war economy, sea transport, saved games, diplomacy |
+| `tests/` | Rule tests: flight model, war economy, sea transport, saved games, diplomacy, the eastern front |
 | `tests/exit/` | The framework's exit tests |
 | `tools/` | Map generation and the history runner |
 
@@ -67,6 +80,6 @@ Everything in the simulation is deterministic: the same seed and the same orders
 
 ## Roadmap (from the framework)
 
-1. **Phase 1, now.** Campaign rules and auto-resolve in a browser map (done, and now deepening with production, sea transport, saved games and diplomacy), and a gray-box air battle with 300 aircraft (paused).
+1. **Phase 1, now.** Campaign rules and auto-resolve in a browser map (done, and now deepening with production, sea transport, saved games, diplomacy and the eastern front of 1941), and a gray-box air battle with 300 aircraft (paused).
 2. **Phase 2.** The Battle of Britain as a vertical slice in Unreal Engine 5: one campaign turn, one playable air battle, the full Battle Ticket loop, on licensed or commissioned art.
 3. **Later phases.** Land battles, the war at sea, the full campaign systems, the other theatres.

@@ -5,7 +5,15 @@
     {"from": 3, "to": 7, "posture": "redeploy", "assembly": ["Eifel", "Rhineland", "Westphalia", "Frankfurt", "Saar", "Ruhr", "Bremen", "Hesse", "Baden"], "armour": ["Eifel", "Rhineland", "Frankfurt"], "garrison": ["Warsaw", "Krakow", "Lodz", "Poznan", "Lublin"], "staging": {"Schleswig-Holstein": 2}},
     {"from": 8, "to": 8, "posture": "attack", "declare": ["DEN"], "enemies": ["DEN"], "objectives": ["Jutland", "Zealand"], "force": 2, "name": "Weser Exercise (Denmark)"},
     {"from": 9, "to": 9, "name": "Case Yellow", "posture": "attack", "declare": ["NED", "BEL", "LUX"], "enemies": ["NED", "BEL", "LUX", "FRA", "UK"], "axis": ["Luxembourg", "Ardennes", "Sedan", "Champagne", "Somme", "Calais"], "haltOrder": ["Flanders", "Paris"], "objectives": ["Luxembourg", "Ardennes", "Sedan", "Champagne", "Somme", "Calais", "Holland", "Liege", "Brussels", "Antwerp", "Lille", "Rotterdam"]},
-    {"from": 10, "to": 99, "name": "Case Red", "posture": "attack", "enemies": ["NED", "BEL", "LUX", "FRA", "UK"], "axis": ["Paris", "Orleans", "Lyon"], "objectives": ["Paris", "Brussels", "Flanders", "Calais", "Rouen", "Orleans", "Aube", "Burgundy", "Lyon", "Nantes", "Bordeaux"]}
+    {"from": 10, "to": 11, "name": "Case Red", "posture": "attack", "enemies": ["NED", "BEL", "LUX", "FRA", "UK"], "axis": ["Paris", "Orleans", "Lyon"], "objectives": ["Paris", "Brussels", "Flanders", "Calais", "Rouen", "Orleans", "Aube", "Burgundy", "Lyon", "Nantes", "Bordeaux"]},
+    {"from": 12, "to": 21, "name": "Build-up in the east", "posture": "redeploy", "assembly": ["Memel", "Masuria", "Konigsberg", "Elbing", "Mlawa", "Warsaw", "Lublin", "Przemysl", "Krakow", "Kielce", "Lodz", "Moldavia"], "armour": ["Masuria", "Warsaw", "Lublin"], "garrison": ["Paris", "Calais", "Rouen", "Brittany", "Bordeaux", "Brussels", "Holland", "Zealand", "Nantes", "Cotentin"], "release": ["Saar", "Eifel", "Baden", "Rhineland", "Warsaw", "Krakow", "Lodz", "Poznan", "Lublin"]},
+    {"from": 22, "to": 22, "name": "Barbarossa", "posture": "attack", "declare": ["SOV"], "enemies": ["SOV"], "axis": ["Bialystok", "Polesie", "Minsk", "Mogilev", "Smolensk"], "haltOrder": ["Kiev"], "objectives": ["Bialystok", "Brest", "Lwow", "Lithuania", "Wilno", "Volhynia", "Polesie", "Minsk", "Latvia", "Courland", "Zhitomir", "Vitebsk", "Mogilev", "Smolensk", "Estonia", "Pskov", "Vinnitsa", "Bessarabia"]},
+    {"from": 23, "to": 23, "name": "Smolensk", "posture": "attack", "enemies": ["SOV"], "axis": ["Minsk", "Mogilev", "Smolensk"], "objectives": ["Smolensk", "Mogilev", "Vitebsk", "Polotsk", "Pskov", "Zhitomir", "Vinnitsa", "Estonia", "Minsk", "Bessarabia", "Bukovina"], "limited": true},
+    {"from": 24, "to": 24, "name": "The flanks", "posture": "attack", "enemies": ["SOV"], "axis": ["Vinnitsa", "Uman", "Kirovograd", "Dnepropetrovsk"], "objectives": ["Uman", "Kirovograd", "Gomel", "Novgorod", "Nikolaev", "Dnepropetrovsk", "Estonia", "Odessa"], "limited": true},
+    {"from": 25, "to": 25, "name": "Kiev", "posture": "attack", "enemies": ["SOV"], "axis": ["Chernigov", "Poltava", "Kiev", "Sumy"], "objectives": ["Kiev", "Chernigov", "Poltava", "Sumy", "Zaporozhye"], "limited": true},
+    {"from": 26, "to": 27, "name": "Typhoon", "posture": "attack", "enemies": ["SOV"], "axis": ["Vyazma", "Bryansk", "Kaluga", "Kalinin", "Moscow"], "objectives": ["Vyazma", "Bryansk", "Moscow", "Kaluga", "Kalinin", "Orel", "Kharkov", "Tula", "Stalino", "Kursk", "Rzhev", "Crimea", "Rostov", "Tikhvin"], "limited": true, "minOdds": 1.0},
+    {"from": 28, "to": 28, "name": "The last push on Moscow", "posture": "attack", "enemies": ["SOV"], "axis": ["Tula", "Moscow"], "targets": ["Moscow", "Tula", "Tikhvin", "Rostov"], "minOdds": 0.5},
+    {"from": 29, "to": 99, "name": "Winter line", "posture": "defend"}
   ],
   "ITA": [
     {"from": 9, "to": 99, "posture": "attack", "declareWhenCollapsing": "FRA", "collapseAt": 0.07, "declare": ["FRA", "UK"], "enemies": ["FRA"], "objectives": ["Riviera", "Savoy"], "minOdds": 0.9}
@@ -24,5 +32,23 @@
   ],
   "NED": [
     {"from": 1, "to": 99, "posture": "defend"}
+  ],
+  "SOV": [
+    {"from": 1, "to": 27, "posture": "defend"},
+    {"from": 28, "to": 28, "name": "Moscow counter-offensive", "posture": "attack", "enemies": ["GER"], "minOdds": 0.9, "limited": true, "objectives": ["Kalinin", "Kaluga", "Tula", "Moscow", "Tikhvin", "Rostov", "Orel"]},
+    {"from": 29, "to": 30, "name": "General winter offensive", "posture": "attack", "enemies": ["GER"], "minOdds": 1.2, "limited": true, "objectives": ["Rzhev", "Vyazma", "Bryansk", "Kursk", "Kharkov", "Stalino", "Crimea"]},
+    {"from": 31, "to": 99, "posture": "defend"}
+  ],
+  "ROM": [
+    {"from": 22, "to": 99, "name": "With Germany into Russia", "posture": "attack", "ifAtWar": ["GER", "SOV"], "declare": ["SOV"], "enemies": ["SOV"], "objectives": ["Bessarabia", "Bukovina", "Odessa"], "minOdds": 1.3}
+  ],
+  "HUN": [
+    {"from": 22, "to": 99, "posture": "defend", "ifAtWar": ["GER", "SOV"], "declare": ["SOV"]}
+  ],
+  "SVK": [
+    {"from": 22, "to": 99, "posture": "defend", "ifAtWar": ["GER", "SOV"], "declare": ["SOV"]}
+  ],
+  "FIN": [
+    {"from": 22, "to": 99, "posture": "defend", "ifAtWar": ["GER", "SOV"], "declare": ["SOV"]}
   ]
 }

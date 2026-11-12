@@ -11,7 +11,7 @@ import { DIPLOMACY, tradePartners } from './diplomacy';
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
 export const PRODUCTION = data as unknown as {
-  baseIncome: number; occupiedIncome: number; peaceIncome: number; replacementCost: number;
+  baseIncome: number; occupiedIncome: number; peaceIncome: number; replacementCost: number; manpower: number;
   aiBank: [number, number]; aiReserve: number;
   builds: Record<string, BuildSpec>;
   fort: { cost: number[]; months: number };

@@ -16,7 +16,7 @@ export function saveGame(g: Game): string {
     nextCorps: g.nextCorps, nextBuild: g.nextBuild, flags: g.flags, rng: g.rng.state,
     dirty: g.supplyDirty, supply: Object.fromEntries(Object.entries(g.supply).map(([k, v]) => [k, Array.from(v).join('')])),
     nations: g.nations,
-    regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since]),
+    regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev]),
     corps: g.corps,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
@@ -45,8 +45,8 @@ export function loadGame(text: string): Game | null {
   g.headlines = d.headlines;
   g.reports = d.reports;
   g.regions.forEach((r, i) => {
-    const [owner, ctrl, cap, fort, since] = d.regions[i];
-    r.owner = owner; r.ctrl = ctrl; r.cap = !!cap; r.fort = fort; r.since = since; r.units = [];
+    const [owner, ctrl, cap, fort, since, prev] = d.regions[i];
+    r.owner = owner; r.ctrl = ctrl; r.cap = !!cap; r.fort = fort; r.since = since; r.prev = prev ?? null; r.units = [];
   });
   g.corps = d.corps as Corps[];
   for (const c of g.corps) g.regions[c.reg].units.push(c);

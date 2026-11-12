@@ -31,7 +31,9 @@ export function runAI(g: Game, nat: string): void {
 function campaign(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!n.alive) return;
-  const ph = phaseFor(g, nat);
+  const planned = phaseFor(g, nat);
+  // Some phases wait on someone else's war: Germany's allies only march east if Germany does.
+  const ph = planned?.ifAtWar && !atWar(g, planned.ifAtWar[0], planned.ifAtWar[1]) ? null : planned;
   if (ph?.declare) {
     let go = true;
     if (ph.declareWhenCollapsing) {
@@ -41,15 +43,21 @@ function campaign(g: Game, nat: string): void {
     if (go) for (const e of ph.declare) declareWar(g, nat, e);
   }
   if (!n.atWar.length) return;
+  if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
   const posture = ph?.posture ?? 'defend';
   if (posture === 'defend') { defend(g, nat); return; }
   const enemies = enemySet(g, nat);
   const follow = posture === 'attack' && !ph!.force;
-  const halt = new Set(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []);
-  offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt);
+  const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
+  const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g, nat)) : null;
+  offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt, only);
   if (!n.alive) return;
   if (posture === 'redeploy') redeploy(g, nat, ph!, enemies);
-  else if (follow) advance(g, nat, enemies, 0, null);
+  else if (follow) {
+    advance(g, nat, enemies, 0, null, halt);
+    // With the month's attacks made, whoever still has marching time shores up the thin places.
+    if (n.alive) defend(g, nat);
+  }
 }
 
 /** Enemies this nation is actively campaigning against: everyone named in its plan so far, plus any invader. */
@@ -102,7 +110,7 @@ function doorstep(g: Game, nat: string, goal: Region | null): Int16Array | null 
   return d;
 }
 
-function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>): void {
+function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null): void {
   const failed = new Set<number>();
   const axis = new Set(axisList);
   // In the first month the armoured thrust takes its objectives in order; after that the whole line is open.
@@ -137,7 +145,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
         const kept = door !== null && wave <= 2 && KIND[c.kind].mobile && door[c.reg] >= 0 && door[c.reg] <= c.ap;
         for (const j of g.regions[c.reg].nb) {
           const r = g.regions[j];
-          if (failed.has(j) || halt.has(r.name) || !enemies.has(r.ctrl) || !atWar(g, nat, r.ctrl) || notYet(r.name)) continue;
+          if (failed.has(j) || halt.has(r.name) || (only && !only.has(r.name)) || !enemies.has(r.ctrl) || !atWar(g, nat, r.ctrl) || notYet(r.name)) continue;
           if (kept && !axis.has(r.name)) continue;
           let list = cand.get(j);
           if (!list) cand.set(j, (list = []));
@@ -176,12 +184,16 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
       }
       if (!best) break;
       let taken: boolean;
-      if (best.battle) taken = resolveBattle(g, best.corps, best.target).taken;
+      if (best.battle) {
+        taken = resolveBattle(g, best.corps, best.target).taken;
+        // A slow command does not get a second assault organised in the same month.
+        if (!taken && g.nations[nat].slowCommand) failed.add(best.target.id);
+      }
       else { taken = moveCorps(g, best.corps[0], best.target); if (!taken) failed.add(best.target.id); }
       if (taken && g.nations[nat].alive) support(g, nat, best.target);
     }
     // Nothing left to hit this week: close up to the front, then look again.
-    if (!follow || !g.nations[nat].alive || !advance(g, nat, enemies, wave, doorstep(g, nat, axisGoal()))) break;
+    if (!follow || !g.nations[nat].alive || !advance(g, nat, enemies, wave, doorstep(g, nat, axisGoal()), halt)) break;
    }
   }
 }
@@ -203,23 +215,29 @@ function support(g: Game, nat: string, at: Region): void {
 }
 
 /** Brings the rest of the army up to the front. With a week given, only as far as that week allows. Returns how many moves were made. */
-function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door: Int16Array | null): number {
+function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door: Int16Array | null, halt: Set<string>): number {
   let made = 0;
   const N = g.regions.length;
   const dist = new Float32Array(N).fill(1e9);
+  const atFront = new Uint8Array(N);
+  const full = (r: Region): boolean => friendlyUnits(g, r, nat).length >= STACK;
   const q: number[] = [];
   for (const r of g.regions) {
     if (r.ctrl !== nat) continue; // an army closes up to its own front, not to an ally's
     let open = false, walled = false;
     for (const j of r.nb) {
       const t = g.regions[j];
-      if (!enemies.has(t.ctrl) || !atWar(g, nat, t.ctrl)) continue;
+      if (!enemies.has(t.ctrl) || !atWar(g, nat, t.ctrl) || halt.has(t.name)) continue; // a sector under a halt order draws no one
       if (t.fort && t.fort.vs.includes(r.owner) && t.fort.lv >= 2) walled = true; else open = true;
     }
-    if (open || walled) { dist[r.id] = open ? 0 : 4; q.push(r.id); }
+    if (open) atFront[r.id] = 1;
+    // A stretch of front already packed with troops needs no more: the columns behind look further along.
+    if ((open || walled) && !full(r)) { dist[r.id] = open ? 0 : 4; q.push(r.id); }
   }
   for (let i = 0; i < q.length; i++) {
     const a = q[i];
+    // A region packed with troops cannot be marched through: the columns behind it go round.
+    if (full(g.regions[a])) continue;
     for (const j of g.regions[a].nb) {
       if (!allied(g, nat, g.regions[j].ctrl)) continue;
       if (dist[a] + 1 < dist[j]) { dist[j] = dist[a] + 1; q.push(j); }
@@ -228,7 +246,13 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
   const movers = g.corps
     .filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0)
     .sort((a, b) => KIND[a.kind].move - KIND[b.kind].move);
+  // Two corps stay to screen any place that faces the enemy, even where the plan has called a halt.
+  const screen = (c: Corps): boolean => {
+    const here = g.regions[c.reg];
+    return friendlyUnits(g, here, nat).length <= 2 && here.nb.some((j) => hostileUnits(g, g.regions[j], nat).length > 0);
+  };
   for (const c of movers) {
+    if (screen(c)) continue;
     if (door && KIND[c.kind].mobile && door[c.reg] > 0) {
       // Fast troops close up on the main thrust's next objective.
       for (let step = 0; step < 6 && c.ap > 0 && door[c.reg] > 0; step++) {
@@ -256,7 +280,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
     }
     for (let step = 0; step < 6 && c.ap > 0; step++) {
       const here = c.reg;
-      if (dist[here] === 0 || dist[here] >= 1e9) break;
+      if (atFront[here] || dist[here] >= 1e9) break;
       let to: Region | null = null, bd = dist[here], bu = 99;
       for (const j of g.regions[here].nb) {
         const r = g.regions[j];
@@ -346,8 +370,10 @@ function defend(g: Game, nat: string): void {
   // Where is the danger, and how well is each place held?
   const N = g.regions.length;
   const threat = new Float32Array(N), held = new Float32Array(N);
+  // What this nation has to hold: its own country, and whatever it has taken and occupies.
+  const mine = (r: Region): boolean => r.ctrl === nat || (r.owner === nat && allied(g, nat, r.ctrl));
   for (const r of g.regions) {
-    if (r.owner !== nat || !allied(g, nat, r.ctrl)) continue;
+    if (!mine(r)) continue;
     for (const j of r.nb) {
       const e = g.regions[j];
       if (!atWar(g, nat, e.ctrl)) continue;
@@ -359,27 +385,34 @@ function defend(g: Game, nat: string): void {
   const importance = (r: Region): number => 1 + 0.5 * r.vp + (r.cap ? 4 : 0);
   const need = (r: Region): number => importance(r) * Math.max(0, 1.3 * threat[r.id] - held[r.id]);
 
+  // Ground worth fighting to get back: the nation's own, its allies', and what it held until the enemy took it.
+  const lost = (r: Region): boolean => allied(g, nat, r.owner) || r.prev === nat;
   // A slow command needs a month to organise any answer to ground it has just lost.
   const late = (r: Region): boolean => n.slowCommand && r.since >= g.turn;
   const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== 'fort' && c.ap > 0);
   for (const c of movers) {
     if (c.dead || c.ap <= 0) continue;
     const here = g.regions[c.reg];
-    if (here.owner !== nat) continue; // abroad on an ally's ground: stand where the plan put it
+    if (!mine(here)) continue; // abroad on an ally's ground: stand where the plan put it
 
     // Step back into ground the enemy has left empty behind his spearheads.
     {
       const others = friendlyUnits(g, here, nat).length > 1 || threat[here.id] === 0;
-      const gap = here.nb.map((j) => g.regions[j]).find((r) => atWar(g, nat, r.ctrl) && allied(g, nat, r.owner) && !late(r) && !hostileUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4));
+      const gap = here.nb.map((j) => g.regions[j]).find((r) => atWar(g, nat, r.ctrl) && lost(r) && !late(r) && !hostileUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4));
       if (gap && others && moveCorps(g, c, gap)) continue;
     }
-    if (threat[here.id] > 0) continue; // already in the line
+    let spared = 0;
+    if (threat[here.id] > 0) {
+      // In the line. It can be spared only if the place stays well held without it.
+      spared = defPower(g, c, here);
+      if (friendlyUnits(g, here, nat).length <= 2 || held[here.id] - spared < 1.6 * threat[here.id]) continue;
+    }
 
     // A reserve: go where the line is thinnest for what it protects.
     const d = hops(g, here.id, (r) => allied(g, nat, r.ctrl));
     let to: Region | null = null, bs = 0;
     for (const r of g.regions) {
-      if (r.owner !== nat || d[r.id] <= 0 || !allied(g, nat, r.ctrl) || friendlyUnits(g, r, nat).length >= STACK) continue;
+      if (!mine(r) || d[r.id] <= 0 || friendlyUnits(g, r, nat).length >= STACK) continue;
       const s = need(r) / (1 + 0.5 * d[r.id]);
       if (s > bs) { bs = s; to = r; }
     }
@@ -387,20 +420,22 @@ function defend(g: Game, nat: string): void {
     const before = c.reg;
     if (!n.slowCommand && d[to.id] > 2 && c.ap >= 4) railMove(g, c, to);
     else walkToward(g, c, to);
-    if (c.reg !== before) held[to.id] += defPower(g, c, to);
+    if (c.reg !== before) { held[here.id] -= spared; held[to.id] += defPower(g, c, to); }
   }
 
   // Counter-attack where the odds are clearly good.
   for (const r of g.regions) {
     if (!n.alive) return;
-    if (!atWar(g, nat, r.ctrl) || !allied(g, nat, r.owner) || late(r) || !hostileUnits(g, r, nat).length) continue;
-    const pool = limitAttackers(g, g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && c.org >= 0.6 && g.regions[c.reg].nb.includes(r.id)), r);
+    if (!atWar(g, nat, r.ctrl) || !lost(r) || late(r) || !hostileUnits(g, r, nat).length) continue;
+    // Troops that have already fought this month are in no state to be thrown straight into another attack.
+    const pool = limitAttackers(g, g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && g.regions[c.reg].nb.includes(r.id)), r);
     if (pool.length && assess(g, pool, r).odds >= 1.8) resolveBattle(g, pool, r);
   }
 }
 
 function walkToward(g: Game, c: Corps, to: Region): void {
-  const d = hops(g, to.id, (r) => allied(g, c.nat, r.ctrl));
+  // The way there, going round any region too packed with troops to march through.
+  const d = hops(g, to.id, (r) => allied(g, c.nat, r.ctrl) && (r.id === c.reg || friendlyUnits(g, r, c.nat).length < STACK));
   for (let step = 0; step < 6 && c.ap > 0 && c.reg !== to.id; step++) {
     let next: Region | null = null;
     for (const j of g.regions[c.reg].nb) {

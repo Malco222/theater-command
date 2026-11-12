@@ -10,6 +10,14 @@ import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { PRODUCTION, canBuildYet, deliver, firstCorpsNumber, income } from './economy';
 import { DIPLOMACY, homeOpinion, pcIncome } from './diplomacy';
+import eastData from '../../data/campaign/east.json';
+
+/** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
+export const EASTERN = eastData as unknown as {
+  deepOwners: string[]; mud: number[]; lineDefence: number; stepFresh: number; stepConverted: number; convertAfter: number; badWeather: number;
+  bands: [number, number][]; drag: [number, number][]; roads: number; winter: { months: number[]; attack: number; defence: number; attrition: number; rest: number; hardy: string[] };
+  mobilisation: Record<string, { perMonth: number[]; after: number; divs: number; kind: Kind; xp: number; name: string; works?: [number, string, number][] }>;
+};
 import {
   FORT_MUL, KIND, MEN_PER_DIV, STACK, TERRAIN_DEF,
   type BattleReport, type Corps, type Game, type Headline, type Kind, type Nation, type Region, type ReportUnit,
@@ -25,7 +33,7 @@ export function createGame(seed: number, human: string | null): Game {
     cap: !!r.flags.cap, port: !!r.flags.port || !!r.flags.depot,
     fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1) } : null,
     vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil,
-    x: r.x, y: r.y, nb: r.nb, polys: r.polys, units: [], since: 0,
+    x: r.x, y: r.y, nb: r.nb, polys: r.polys, units: [], since: 0, prev: null,
   }));
   const byName: Record<string, Region> = {};
   for (const r of regions) byName[r.name] = r;
@@ -35,7 +43,7 @@ export function createGame(seed: number, human: string | null): Game {
     const cap = regions.find((r) => r.owner === id && r.cap);
     nations[id] = {
       id, name: d.name, adj: d.adj, color: d.color, quality: d.quality, air: d.air, resilience: d.resilience, align: d.align,
-      blitz: !!d.blitz, slowCommand: !!d.slowCommand, seaSupply: !!d.seaSupply,
+      blitz: !!d.blitz, slowCommand: !!d.slowCommand, maxAttack: d.maxAttack ?? 0, seaSupply: !!d.seaSupply,
       atWar: [], alive: !d.dormant, dormant: !!d.dormant, capital: cap ? cap.id : -1, pp: 0, queue: [], corpsNo: firstCorpsNumber(id),
       opinion: homeOpinion(id, d.align), home: homeOpinion(id, d.align), pc: 0, armyPeak: 0, offStart: {}, lastFight: {},
     };
@@ -43,7 +51,7 @@ export function createGame(seed: number, human: string | null): Game {
   const order = [...ORDER, ...Object.keys(nations).filter((n) => !ORDER.includes(n))];
   const g: Game = {
     seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], nextCorps: 1, nextBuild: 1, human,
-    reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, capDist: {}, week: 1,
+    reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, capDist: {}, week: 1,
     links: md.links, width: md.width, height: md.height, land: md.land,
   };
   for (const row of (setup as any).corps) addCorps(g, row[0], row[1], row[2], row[3], row[4], row[5] ?? {});
@@ -115,6 +123,15 @@ export function declareWar(g: Game, a: string, b: string): void {
   if (!A.alive || !B.alive || atWar(g, a, b) || allied(g, a, b)) return;
   setWar(g, a, b);
   A.offStart[b] = g.turn;
+  // A neutral that leans toward a bloc and attacks that bloc's enemy becomes its co-belligerent.
+  if (A.align === 'leaning_axis' || A.align === 'leaning_allies') {
+    const side = A.align === 'leaning_axis' ? 'axis' : 'allies';
+    if (B.atWar.some((x) => x !== a && bloc(g.nations[x]) === side)) {
+      A.align = side === 'axis' ? 'axis_cobelligerent' : 'allies_cobelligerent';
+      A.opinion = A.home = side === 'axis' ? 100 : -100;
+      g.supplyDirty = true;
+    }
+  }
   // A neutral that is attacked joins the other side.
   const ba = bloc(A);
   if (bloc(B) === null && ba) {
@@ -167,11 +184,44 @@ export function freshOffensive(g: Game, nat: string, enemy?: string): boolean {
   return list.some((e) => n.offStart[e] !== undefined && g.turn - n.offStart[e] <= 1);
 }
 
-export function weather(g: Game): { mud: boolean; text: string } {
+export function weather(g: Game): { mud: boolean; winter: boolean; text: string } {
   const m = turnToDate(g.turn).month;
-  if (m === 9 || m === 10 || m === 2 || m === 3) return { mud: true, text: 'Mud in the east slows every army there.' };
-  if (m === 11 || m === 0 || m === 1) return { mud: false, text: 'Winter.' };
-  return { mud: false, text: 'Clear campaigning weather.' };
+  if (EASTERN.mud.includes(m)) return { mud: true, winter: false, text: 'Mud in the east slows every army there.' };
+  if (EASTERN.winter.months.includes(m)) return { mud: false, winter: true, text: 'Winter in the east: armies without winter kit fight and march badly there.' };
+  return { mud: false, winter: false, text: 'Clear campaigning weather.' };
+}
+
+/** True when this corps is campaigning on Soviet ground in winter without the equipment for it. */
+export function frozen(g: Game, nat: string, r: Region): boolean {
+  return weather(g).winter && EASTERN.deepOwners.includes(r.owner) && !EASTERN.winter.hardy.includes(nat);
+}
+
+/**
+ * Extra movement cost for pushing on beyond the railheads: fuel and shells arrive slower than the
+ * tanks can drive. It is paid on enemy ground and ground taken this month; marching up behind
+ * the front through country already held is an ordinary march.
+ */
+export function lineDrag(g: Game, c: Corps, to: Region): number {
+  if (!EASTERN.deepOwners.includes(to.owner) || EASTERN.deepOwners.includes(c.nat)) return 0;
+  if (allied(g, c.nat, to.ctrl) && to.since < g.turn) return 0;
+  ensureSupply(g);
+  const reach = g.reach[c.nat];
+  if (!reach) return EASTERN.roads;
+  let length = reach[to.id];
+  const roads = EASTERN.roads;
+  if (!allied(g, c.nat, to.ctrl)) {
+    const w = weather(g);
+    length = reach[c.reg] + EASTERN.stepFresh * (w.mud || w.winter ? EASTERN.badWeather : 1);
+  }
+  for (const [max, extra] of EASTERN.drag) if (length <= max) return roads + extra;
+  return roads;
+}
+
+/** How strong an attack is at the end of this corps' supply line: 1 at the frontier, less deep inside the Soviet Union. */
+export function lineStrength(g: Game, c: Corps): { mul: number; length: number } {
+  const length = g.reach[c.nat]?.[c.reg] ?? 0;
+  for (const [max, mul] of EASTERN.bands) if (length <= max) return { mul, length };
+  return { mul: 1, length };
 }
 
 export function moveCost(g: Game, c: Corps, to: Region): number {
@@ -180,6 +230,8 @@ export function moveCost(g: Game, c: Corps, to: Region): number {
   if (to.terrain === 'mountain' && c.kind !== 'mtn') cost += 1;
   if (to.terrain === 'marsh') cost += 1;
   if (weather(g).mud && EAST.has(to.owner)) cost += 1;
+  if (frozen(g, c.nat, to)) cost += 1;
+  cost += lineDrag(g, c, to);
   return cost;
 }
 
@@ -205,10 +257,37 @@ export function computeSupply(g: Game): void {
       }
     }
     g.supply[id] = ok;
+    g.reach[id] = reachInto(g, id, ok);
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
   g.supplyDirty = false;
+}
+
+/**
+ * The length of a nation's supply line in every region it can reach inside the Soviet Union,
+ * counted from the frontier railheads. Regions held long enough to relay the track count for less.
+ */
+function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
+  const d = new Float32Array(g.regions.length);
+  if (EASTERN.deepOwners.includes(id)) return d; // at home on their own railways
+  const deep = (r: Region): boolean => EASTERN.deepOwners.includes(r.owner);
+  const w = weather(g);
+  const bad = w.mud || w.winter ? EASTERN.badWeather : 1;
+  d.fill(1e6);
+  const q: number[] = [];
+  for (const r of g.regions) if (ok[r.id] && !deep(r)) { d[r.id] = 0; q.push(r.id); }
+  for (let i = 0; i < q.length; i++) {
+    const a = q[i];
+    for (const j of g.regions[a].nb) {
+      const r = g.regions[j];
+      if (!ok[j] || !deep(r)) continue;
+      const step = (g.turn - r.since >= EASTERN.convertAfter ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+      if (d[a] + step < d[j] - 1e-6) { d[j] = d[a] + step; q.push(j); }
+    }
+  }
+  for (let i = 0; i < d.length; i++) if (d[i] >= 1e6) d[i] = 0;
+  return d;
 }
 
 export function ensureSupply(g: Game): void {
@@ -227,7 +306,10 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
   const cap = frontage(target);
   const used: Record<number, number> = {};
   const out: Corps[] = [];
+  // A staff that cannot yet run a big battle brings fewer corps into it, however many stand ready.
+  const most = corps.length ? g.nations[corps[0].nat].maxAttack || 99 : 99;
   for (const c of [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk)) {
+    if (out.length >= most) break;
     if ((used[c.reg] ?? 0) >= cap) continue;
     used[c.reg] = (used[c.reg] ?? 0) + 1;
     out.push(c);
@@ -243,6 +325,9 @@ export function weekOf(c: Corps, cost: number): number {
 export function corpsBase(g: Game, c: Corps): number {
   return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp) * (c.supplied ? 1 : 0.5);
 }
+
+/** Share of the usual losses a defender takes when the attack is beaten off. */
+const HELD_LOSS = 0.6;
 
 export const men = (c: Corps): number => Math.round(c.divs * c.str * MEN_PER_DIV);
 
@@ -273,7 +358,7 @@ export function assess(g: Game, attackers: Corps[], target: Region): Assessment 
   const aN = new Set(attackers.map((c) => c.nat)), dN = new Set(defenders.map((c) => c.nat));
   const defHasArmor = defenders.some((d) => d.kind === 'arm');
   const tempo = [...dN].some((d) => freshOffensive(g, attNat, d)) || freshOffensive(g, attNat, target.ctrl);
-  let A = 0, fortFaced = 0, armorShock = false, armorStuck = false;
+  let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, longest = 0, lineMul = 1, cold = false, coldDef = false;
   const sources = new Set<number>();
   for (const c of attackers) {
     let p = corpsBase(g, c) * KIND[c.kind].atk;
@@ -284,6 +369,9 @@ export function assess(g: Game, attackers: Corps[], target: Region): Assessment 
     if (c.trait === 'attacker' || c.trait === 'panzer') p *= 1.1;
     if (tempo && KIND[c.kind].mobile) p *= 1.2;
     if (g.nations[c.nat].slowCommand) p *= 0.85;
+    const line = lineStrength(g, c);
+    if (line.mul < 1) { p *= line.mul; longest = Math.max(longest, line.length); lineMul = Math.min(lineMul, line.mul); }
+    if (frozen(g, c.nat, target)) { p *= EASTERN.winter.attack; cold = true; }
     const from = g.regions[c.reg];
     if (target.fort && target.fort.vs.includes(from.owner)) { p /= FORT_MUL[target.fort.lv]; fortFaced++; }
     sources.add(c.reg);
@@ -291,10 +379,13 @@ export function assess(g: Game, attackers: Corps[], target: Region): Assessment 
   }
   const flank = Math.min(1.3, 1 + 0.1 * (sources.size - 1));
   A *= flank;
-  let D = 0;
+  let D = 0, thin = 1;
   for (const d of defenders) {
     let p = corpsBase(g, d) * KIND[d.kind].def * TERRAIN_DEF[target.terrain];
     if (d.trait === 'defender') p *= 1.1;
+    if (frozen(g, d.nat, target)) { p *= EASTERN.winter.defence; coldDef = true; }
+    const dl = lineStrength(g, d).mul;
+    if (dl < 1) { p *= 1 - (1 - dl) * EASTERN.lineDefence; thin = Math.min(thin, 1 - (1 - dl) * EASTERN.lineDefence); }
     D += p;
   }
   const aAir = airOf(g, aN, dN), dAir = airOf(g, dN, aN);
@@ -315,6 +406,10 @@ export function assess(g: Game, attackers: Corps[], target: Region): Assessment 
   const gens = attackers.filter((c) => c.general).map((c) => c.general);
   const dgens = defenders.filter((c) => c.general).map((c) => c.general);
   if (gens.length || dgens.length) lines.push({ label: 'Commanders', value: `${gens.join(', ') || 'none named'} against ${dgens.join(', ') || 'none named'}` });
+  if (lineMul < 1) lines.push({ label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
+  if (cold) lines.push({ label: 'Winter', value: 'Attackers without winter equipment', effect: `Attack cut to ${Math.round(EASTERN.winter.attack * 100)}%` });
+  if (thin < 1) lines.push({ label: 'Supply line', value: 'Defenders at the end of a long supply line', effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
+  if (coldDef) lines.push({ label: 'Winter', value: 'Defenders without winter equipment', effect: `Defence cut to ${Math.round(EASTERN.winter.defence * 100)}%` });
   if (tempo) lines.push({ label: 'Tempo', value: 'New offensive', effect: 'Fast troops hit 20% harder in the first two turns' });
   if (armorShock) lines.push({ label: 'Armor', value: 'Tanks against a defence without armor', effect: 'Tank attack up 25%' });
   if (armorStuck) lines.push({ label: 'Armor', value: 'Tanks in close country', effect: 'Tank attack cut to 60%' });
@@ -386,10 +481,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region): Batt
     attLost += attU[i].lost;
   });
   const win = R >= 1.2;
+  // Troops who hold their ground come out of the fight in better shape than troops driven off it.
+  const stood = win ? 1 : HELD_LOSS;
   defenders.forEach((c, i) => {
     const before = men(c);
-    c.str *= 1 - defFrac * (win && mobile ? 1.3 : 1);
-    c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75), 0, 1);
+    c.str *= 1 - defFrac * (win && mobile ? 1.3 : 1) * stood;
+    c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood, 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
     defU[i].lost = before - men(c);
@@ -456,6 +553,7 @@ export function capture(g: Game, r: Region, nat: string): void {
   const owner = g.nations[r.owner];
   r.ctrl = owner.alive && allied(g, nat, r.owner) ? r.owner : nat;
   r.since = g.turn;
+  r.prev = old;
   g.supplyDirty = true;
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
   checkCollapse(g, old, nat);
@@ -594,6 +692,40 @@ export function evacuate(g: Game, c: Corps): boolean {
 
 // ---- The start of a nation's month ---------------------------------------------------
 
+const ordinal = (n: number): string => `${n}${n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd', 'th', 'th', 'th', 'th', 'th', 'th'][n % 10]}`;
+
+/** A nation with a mobilisation plan raises a wave of new corps every month once it is at war. */
+function mobilise(g: Game, nat: string): void {
+  const plan = EASTERN.mobilisation[nat];
+  const n = g.nations[nat];
+  if (!plan || !n.atWar.length) return;
+  const key = `mobilised:${nat}`;
+  if (g.flags[key] === undefined) g.flags[key] = g.turn;
+  const month = g.turn - g.flags[key];
+  const count = plan.perMonth[month] ?? plan.after;
+  const enemyNear = (r: Region): boolean => r.nb.some((j) => atWar(g, nat, g.regions[j].ctrl));
+  for (let k = 0; k < count; k++) {
+    // Form up in the industrial towns still held, emptiest first, away from the fighting.
+    let best: Region | null = null, bs = 1e9;
+    for (const r of g.regions) {
+      if (r.owner !== nat || r.ctrl !== nat || r.fac < 1 || r.units.length >= STACK || enemyNear(r)) continue;
+      const s = r.units.length * 10 - r.fac - (r.cap ? 3 : 0);
+      if (s < bs) { bs = s; best = r; }
+    }
+    if (!best) break;
+    const c = addCorps(g, nat, `${ordinal(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
+    c.org = 0.7;
+  }
+  if (count > 0 && month === 0) headline(g, 'event', `${n.name} orders general mobilisation.`, nat);
+  // Behind the front, the people dig: anti-tank ditches and gun lines around the great cities.
+  for (const [when, place, lv] of plan.works ?? []) {
+    const r = g.byName[place];
+    if (when !== month || !r || r.ctrl !== nat || (r.fort?.lv ?? 0) >= lv) continue;
+    r.fort = { lv, vs: r.fort?.vs ?? [nat] };
+    headline(g, 'event', `Defence lines are dug around ${r.name}.`, nat, r.id);
+  }
+}
+
 export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!n.alive) return;
@@ -604,30 +736,40 @@ export function startPhase(g: Game, nat: string): void {
     if (!reg || !allied(g, nat, reg.ctrl)) continue;
     addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
   }
+  mobilise(g, nat);
   computeSupply(g);
   // The month's production comes in. Losses are made good first.
   n.pp += income(g, nat);
   n.pc = Math.min(DIPLOMACY.pcCap, n.pc + pcIncome(nat));
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
-  for (const c of g.corps.filter((c) => c.nat === nat)) {
+  const army = g.corps.filter((c) => c.nat === nat);
+  // Men, tanks and rest reach a corps only as well as its supply line allows. The depots can
+  // send out only so many trained men a month, and what there is is shared along the front.
+  const want = army.map((c) => (c.supplied ? Math.min((1 - c.str) * c.divs, 0.2 * c.divs * lineStrength(g, c).mul) : 0));
+  const asked = want.reduce((s, x) => s + x, 0);
+  const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;
+  army.forEach((c, i) => {
     if (c.supplied) {
-      const need = (1 - c.str) * c.divs;
-      const give = Math.min(need, 0.2 * c.divs, n.pp / perDiv);
+      const give = want[i] * share;
       if (give > 0) { c.str += give / c.divs; n.pp -= give * perDiv; }
-      c.org = Math.min(1, c.org + (c.fought ? 0.25 : 0.45));
+      // A Russian winter without winter clothing costs men to frostbite and leaves little rest.
+      const cold = frozen(g, nat, g.regions[c.reg]);
+      if (cold) c.str *= 1 - EASTERN.winter.attrition;
+      c.org = Math.min(1, c.org + (c.fought ? 0.25 : 0.45) * lineStrength(g, c).mul * (cold ? EASTERN.winter.rest : 1));
     } else {
       c.org -= 0.4;
       c.str *= 0.85;
       if (c.org <= 0) {
         if (men(c) > 30000) headline(g, 'battle', `Cut off and out of supply, ${c.name} lays down its arms at ${g.regions[c.reg].name}.`, nat, c.reg);
         removeCorps(g, c);
-        continue;
+        return;
       }
     }
     c.fought = false;
     c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + (c.trait === 'panzer' ? 1 : 0);
-  }
+  });
+  n.pp = Math.max(0, n.pp);
   deliver(g, nat);
   if (nat !== g.human) n.pp = Math.min(n.pp, PRODUCTION.aiBank[canBuildYet(g, nat) ? 1 : 0]);
   n.armyPeak = Math.max(n.armyPeak, armySize(g, nat));
