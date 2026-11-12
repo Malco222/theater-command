@@ -859,7 +859,21 @@ void ACampaignMapActor::BuildParade()
 		Wanted.ParseIntoArray(Names, TEXT(","));
 	}
 	const FVector2D Centre = Data.Regions[*Id].Center;
-	const double Metre = 22.0, Apart = 12.0 * Metre;
+	// "-TheaterModels=aircraft" is every aircraft.
+	if (Wanted == TEXT("aircraft"))
+	{
+		Names = FMiniatureMesh::AircraftNames();
+	}
+	// Each model has the room it needs in the row.
+	TArray<double> Along;
+	double Row = 0.0;
+	for (const FString& Name : Names)
+	{
+		const double Room = Name.StartsWith(TEXT("Soldier:")) ? 6.0 : FMiniatureMesh::VehicleRoom(Name);
+		Along.Add(Row + Room * 0.5);
+		Row += Room;
+	}
+	const double Metre = 22.0, Apart = Row / FMath::Max(Names.Num(), 1) * Metre;
 	const FVector Middle = SurfacePoint(Centre.X, Centre.Y, 0.0) + FVector(0.0, 0.0, 80.0);
 	ParadeLevel = Middle.Z - GetActorLocation().Z + 1.3 * Metre;
 	const double Long = Apart * Names.Num() + 30.0 * Metre;
@@ -892,7 +906,7 @@ void ACampaignMapActor::BuildParade()
 	}
 	for (int32 K = 0; K < Names.Num(); ++K)
 	{
-		const FVector Spot = Middle + FVector(-(K - (Names.Num() - 1) * 0.5) * Apart, 0.0, 0.0);
+		const FVector Spot = Middle + FVector(-(Along[K] - Row * 0.5) * Metre, 0.0, 0.0);
 		// "Soldier:GER" is a nation's infantryman, facing out from the wall; anything else is a vehicle.
 		FString Kind, Whose;
 		if (Names[K].Split(TEXT(":"), &Kind, &Whose) && Kind == TEXT("Soldier"))
@@ -905,6 +919,19 @@ void ACampaignMapActor::BuildParade()
 			const FString* People = Peoples.Find(Whose);
 			Write(People ? *People : Whose, Spot.X - Middle.X, 2.25, 0.3);
 			ParadeSpots.Add(WorldToMap(Spot));
+			continue;
+		}
+		const double Aloft = FMiniatureMesh::VehicleAloft(Names[K]);
+		if (Aloft > 0.0)
+		{
+			// An aircraft flies over the board on a stand, well out from the wall, with a man under its nose for scale.
+			const double Out = FMiniatureMesh::VehicleRoom(Names[K]) * 0.5 - 1.0;
+			const FVector Flying = Spot + FVector(0.0, -Out * Metre, Aloft * Metre);
+			Model.Vehicle(Names[K], Flying, Metre, 0.0);
+			Model.Rod(Spot + FVector(0.0, -Out * Metre, 0.0), Flying, 0.08 * Metre, Ink, 6);
+			Model.Soldier(FMiniatureMesh::VehicleNation(Names[K]), Spot + FVector(-FMiniatureMesh::VehicleRoom(Names[K]) * 0.32 * Metre, -Out * Metre, 0.0), Metre, 60.0);
+			Write(FMiniatureMesh::VehicleTitle(Names[K]), Spot.X - Middle.X, 9.5, 0.9);
+			ParadeSpots.Add(WorldToMap(Flying));
 			continue;
 		}
 		if (!Model.Vehicle(Names[K], Spot, Metre, 0.0))

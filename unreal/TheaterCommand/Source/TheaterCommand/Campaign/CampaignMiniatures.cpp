@@ -406,21 +406,33 @@ void FMiniatureMesh::Disc(const FVector& Center, const FVector& Facing, double R
 	}
 }
 
-void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing)
+void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing, double Curve)
 {
 	// Drawn lying flat, then stood up against the surface: its top toward the sky (or toward the front, on a roof).
 	FMiniatureMesh Flat;
 	Flat.WingMarking(FVector::ZeroVector, Radius, Tag, 0.0);
 	const FVector Out = Facing.GetSafeNormal();
-	FVector Top = FVector::UpVector - Out * Out.Z;
-	Top = Top.SizeSquared() < 1.0e-4 ? FVector(-1.0, 0.0, 0.0) : Top.GetSafeNormal();
+	// On a wall its top is toward the sky; on a roof or a wing (or under one) its top is toward the front.
+	const FVector Skyward = FMath::Abs(Out.Z) > 0.8 ? FVector(-1.0, 0.0, 0.0) : FVector::UpVector;
+	const FVector Top = (Skyward - Out * (Skyward | Out)).GetSafeNormal();
 	const FVector Side = Top ^ Out;
 	const int32 First = Vertices.Num();
 	for (int32 K = 0; K < Flat.Vertices.Num(); ++K)
 	{
 		const FVector V = Flat.Vertices[K], N = Flat.Normals[K];
-		Vertices.Add(Where + Top * -V.X + Side * V.Y + Out * V.Z);
-		Normals.Add((Top * -N.X + Side * N.Y + Out * N.Z).GetSafeNormal());
+		if (Curve > 0.0)
+		{
+			// Bent round a barrel whose axis runs along the marking's width: up the marking is round the barrel.
+			const double Angle = -V.X / Curve;
+			const FVector Outward = Out * FMath::Cos(Angle) + Top * FMath::Sin(Angle);
+			Vertices.Add(Where - Out * Curve + Outward * (Curve + V.Z) + Side * V.Y);
+			Normals.Add(Outward);
+		}
+		else
+		{
+			Vertices.Add(Where + Top * -V.X + Side * V.Y + Out * V.Z);
+			Normals.Add((Top * -N.X + Side * N.Y + Out * N.Z).GetSafeNormal());
+		}
 		Colors.Add(Flat.Colors[K]);
 	}
 	for (const int32 Index : Flat.Triangles)
@@ -648,6 +660,39 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 		Bar(-0.62, 0.34, 0.62, 1.0, Red);
 		++Layer;
 	}
+	else if (Tag == TEXT("USA-BAR"))
+	{
+		// The star and bar carried from 1943: a white star on a blue disc, a white bar each side, edged in blue.
+		const FLinearColor Navy = Paint(TEXT("1B2A5C"));
+		Bar(-0.3, -2.05, 0.3, 2.05, Navy);
+		++Layer;
+		Bar(-0.24, -1.98, 0.24, 1.98, White);
+		++Layer;
+		Disc(1.0, Navy);
+		Star(0.95, White);
+	}
+	else if (Tag == TEXT("UK-A1"))
+	{
+		// The fuselage roundel of 1940, with its yellow outer ring.
+		Disc(1.0, Yellow);
+		Disc(0.8, Blue);
+		Disc(0.52, White);
+		Disc(0.26, Red);
+	}
+	else if (Tag == TEXT("UK-B"))
+	{
+		// The roundel of the upper wings: red on blue, with no white to catch the eye from above.
+		Disc(1.0, Blue);
+		Disc(0.42, Red);
+	}
+	else if (Tag == TEXT("UK-FIN"))
+	{
+		// The fin flash: red toward the nose, white, blue.
+		Bar(-0.75, -1.0, 0.75, -0.34, Blue);
+		Bar(-0.75, -0.34, 0.75, 0.34, White);
+		Bar(-0.75, 0.34, 0.75, 1.0, Red);
+		++Layer;
+	}
 	else if (Tag == TEXT("WHITE-DISC"))
 	{
 		Disc(1.0, White); // the plain white disc painted on tanks for friendly aircraft to see
@@ -660,6 +705,10 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 	{
 		Star(1.0, White);
 		Star(0.8, Paint(TEXT("CC0000")));
+	}
+	else if (Tag == TEXT("JAP-PLAIN"))
+	{
+		Disc(1.0, Paint(TEXT("BC002D"))); // the sun disc with no white edge, as on the pale grey fighters
 	}
 	else if (Tag == TEXT("JAP") || Tag == TEXT("JPN"))
 	{
@@ -804,18 +853,27 @@ void FMiniatureMesh::AirFleet(int32 Fighters, int32 Bombers, double Unit, const 
 	// A patch of airfield: mown grass with a runway across it.
 	Pillar(FVector(0.0, 0.0, 0.05 * Unit), 5.0 * Unit, 4.9 * Unit, 0.14 * Unit, FLinearColor(FColor::FromHex(TEXT("70804F"))), 28);
 	Box(FVector(0.0, 0.0, 0.2 * Unit), FVector(1.2, 9.0, 0.03) * Unit, FLinearColor(FColor::FromHex(TEXT("8E8A80"))), 28.0);
-	// The aircraft fly over it on thin stands: a bomber higher and behind, a fighter lower and to the fore.
+	// The aircraft fly over it on thin stands, to the same scale as the soldiers and tanks on the army pieces
+	// (a real metre is the same size on both): a bomber higher and behind, a fighter lower and to the fore.
+	// A nation with no model of its own yet flies a plain machine of a likely size.
+	const double Metre = 4.3 * Unit / 3.7;
 	if (Bombers > 0)
 	{
-		const FVector At(1.2 * Unit, (Fighters > 0 ? 1.6 : 0.0) * Unit, 4.4 * Unit);
-		Rod(FVector(At.X, At.Y, 0.2 * Unit), At, 0.05 * Unit, Gunmetal, 5);
-		Aeroplane(At, 9.0 * Unit, true, Nation, Tag, 68.0);
+		const FVector At(4.0 * Unit, (Fighters > 0 ? 3.0 : 0.0) * Unit, 9.5 * Unit);
+		Rod(FVector(At.X, At.Y, 0.2 * Unit), At, 0.06 * Unit, Gunmetal, 5);
+		if (!Vehicle(MainBomberOf(Tag), At, Metre, 68.0))
+		{
+			Aeroplane(At, 22.0 * Metre, true, Nation, Tag, 68.0);
+		}
 	}
 	if (Fighters > 0)
 	{
-		const FVector At(-1.6 * Unit, (Bombers > 0 ? -2.2 : 0.0) * Unit, 2.6 * Unit);
+		const FVector At(-2.0 * Unit, (Bombers > 0 ? -3.5 : 0.0) * Unit, 4.2 * Unit);
 		Rod(FVector(At.X, At.Y, 0.2 * Unit), At, 0.05 * Unit, Gunmetal, 5);
-		Aeroplane(At, 6.4 * Unit, false, Nation, Tag, 62.0);
+		if (!Vehicle(MainFighterOf(Tag), At, Metre, 62.0))
+		{
+			Aeroplane(At, 10.5 * Metre, false, Nation, Tag, 62.0);
+		}
 	}
 }
 

@@ -59,8 +59,12 @@ struct FMiniatureMesh
 	/** A flat disc facing the way given: the face of a wheel, the lens of a lamp. */
 	void Disc(const FVector& Center, const FVector& Facing, double Radius, const FLinearColor& Colour, int32 Sides = 12);
 
-	/** A national marking (as WingMarking) painted on a surface that faces the way given: the side of a hull, a turret roof. */
-	void Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing);
+	/**
+	 * A national marking (as WingMarking) painted on a surface that faces the way given: the side of a hull, a
+	 * turret roof. Curve wraps it round a surface that is rounded top to bottom, such as the side of a
+	 * fuselage: it is the radius of that roundness.
+	 */
+	void Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing, double Curve = 0.0);
 
 	/** Copies a finished model into this mesh, at a place, to a size, turned. */
 	void Stamp(const FMiniatureMesh& Model, const FVector& Where, double Scale, double Turn);
@@ -94,6 +98,14 @@ struct FMiniatureMesh
 	static TArray<FString> VehicleNames();
 	static FString VehicleTitle(const FString& Name);
 	static FString VehicleNation(const FString& Name);
+	static TArray<FString> AircraftNames();
+	/** How much room a model needs in a row, in metres; and how high an aircraft is shown flying (0 for things on the ground). */
+	static double VehicleRoom(const FString& Name);
+	static double VehicleAloft(const FString& Name);
+
+	/** The fighter and the bomber a nation's air force is known by: names for Vehicle(). Nothing if none is modelled. */
+	static FString MainFighterOf(const FString& Tag);
+	static FString MainBomberOf(const FString& Tag);
 
 	/** Dust: anything added below DustTop is tinted toward Dust, most at DustFoot. Off while DustTop is not above DustFoot. */
 	double DustFoot = 0.0, DustTop = 0.0;

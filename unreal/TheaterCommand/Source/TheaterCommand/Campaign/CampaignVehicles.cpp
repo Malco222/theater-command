@@ -1402,15 +1402,7 @@ namespace VehicleParts
 		}
 	}
 
-	struct FModel
-	{
-		const TCHAR* Name;
-		void (*Build)(FMiniatureMesh&);
-		const TCHAR* Title;
-		const TCHAR* Nation;
-		/** Whether it is built in the paint of whichever nation asks ("Truck:SOV"). */
-		bool bAnyNation = false;
-	};
+	using FModel = MiniatureParts::FModel;
 	static const FModel Models[] = {
 		{ TEXT("PanzerIV"), &PanzerIV, TEXT("Panzer IV  -  5.92 m long, 2.68 m high"), TEXT("GER") },
 		{ TEXT("T34"), &T34, TEXT("T-34  -  5.92 m long, 2.45 m high"), TEXT("SOV") },
@@ -1430,6 +1422,32 @@ namespace VehicleParts
 		{ TEXT("ZiS3"), &ZiS3, TEXT("76 mm ZiS-3 field gun  -  barrel 3.46 m"), TEXT("SOV") },
 		{ TEXT("Gun75"), &SeventyFive, TEXT("75 mm mle 1897 field gun  -  barrel 2.70 m"), TEXT("FRA"), true },
 	};
+
+	/** A model of this name, among the vehicles and guns here and the aircraft. */
+	static const FModel* Find(const FString& Kind)
+	{
+		for (const FModel& Known : Models)
+		{
+			if (Kind == Known.Name)
+			{
+				return &Known;
+			}
+		}
+		for (const FModel& Known : MiniatureParts::AircraftModels())
+		{
+			if (Kind == Known.Name)
+			{
+				return &Known;
+			}
+		}
+		return nullptr;
+	}
+}
+
+FString& MiniatureParts::NationWanted()
+{
+	static FString Tag;
+	return Tag;
 }
 
 bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double Metre, double Turn)
@@ -1441,27 +1459,25 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 		// "Truck:SOV" is the lorry in Soviet paint: the part before the colon is the model.
 		FString Kind = Name, Whose;
 		Name.Split(TEXT(":"), &Kind, &Whose);
-		for (const VehicleParts::FModel& Known : VehicleParts::Models)
+		const VehicleParts::FModel* Known = VehicleParts::Find(Kind);
+		if (!Known)
 		{
-			if (Kind == Known.Name)
-			{
-				FMiniatureMesh Fresh;
-				// The dust of the road on the tracks and the lower hull.
-				Fresh.DustFoot = 0.0;
-				Fresh.DustTop = 1.25;
-				Fresh.DustAmount = 0.5f;
-				VehicleParts::NationTag = Whose.IsEmpty() ? FString(Known.Nation) : Whose;
-				VehicleParts::NationPaint = VehicleColour(VehicleParts::NationTag);
-				Known.Build(Fresh);
-				UE_LOG(LogTheater, Log, TEXT("Model %s built: %d points, %d triangles"), *Name, Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
-				Model = &Built.Add(Name, MoveTemp(Fresh));
-				break;
-			}
+			return false;
 		}
-	}
-	if (!Model)
-	{
-		return false;
+		FMiniatureMesh Fresh;
+		if (Known->Aloft <= 0.0)
+		{
+			// The dust of the road on the tracks and the lower hull.
+			Fresh.DustFoot = 0.0;
+			Fresh.DustTop = 1.25;
+			Fresh.DustAmount = 0.5f;
+		}
+		VehicleParts::NationTag = Whose.IsEmpty() ? FString(Known->Nation) : Whose;
+		MiniatureParts::NationWanted() = VehicleParts::NationTag;
+		VehicleParts::NationPaint = VehicleColour(VehicleParts::NationTag);
+		Known->Build(Fresh);
+		UE_LOG(LogTheater, Log, TEXT("Model %s built: %d points, %d triangles"), *Name, Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
+		Model = &Built.Add(Name, MoveTemp(Fresh));
 	}
 	Stamp(*Model, Where, Metre, Turn);
 	return true;
@@ -1472,40 +1488,55 @@ TArray<FString> FMiniatureMesh::VehicleNames()
 	TArray<FString> Names;
 	for (const VehicleParts::FModel& Known : VehicleParts::Models)
 	{
-		Names.Add(Known.Name);
+		Names.Add(Known.bAnyNation ? FString(Known.Name) + TEXT(":") + Known.Nation : FString(Known.Name));
 	}
 	return Names;
 }
 
-FString FMiniatureMesh::VehicleTitle(const FString& Name)
+TArray<FString> FMiniatureMesh::AircraftNames()
+{
+	TArray<FString> Names;
+	for (const VehicleParts::FModel& Known : MiniatureParts::AircraftModels())
+	{
+		Names.Add(Known.bAnyNation ? FString(Known.Name) + TEXT(":") + Known.Nation : FString(Known.Name));
+	}
+	return Names;
+}
+
+static const VehicleParts::FModel* ModelCalled(const FString& Name)
 {
 	FString Kind = Name;
 	Name.Split(TEXT(":"), &Kind, nullptr);
-	for (const VehicleParts::FModel& Known : VehicleParts::Models)
-	{
-		if (Kind == Known.Name)
-		{
-			return Known.Title;
-		}
-	}
-	return Name;
+	return VehicleParts::Find(Kind);
+}
+
+FString FMiniatureMesh::VehicleTitle(const FString& Name)
+{
+	const VehicleParts::FModel* Known = ModelCalled(Name);
+	return Known ? FString(Known->Title) : Name;
 }
 
 FString FMiniatureMesh::VehicleNation(const FString& Name)
 {
-	FString Kind = Name, Whose;
-	if (Name.Split(TEXT(":"), &Kind, &Whose))
+	FString Whose;
+	if (Name.Split(TEXT(":"), nullptr, &Whose))
 	{
 		return Whose;
 	}
-	for (const VehicleParts::FModel& Known : VehicleParts::Models)
-	{
-		if (Kind == Known.Name)
-		{
-			return Known.Nation;
-		}
-	}
-	return FString();
+	const VehicleParts::FModel* Known = ModelCalled(Name);
+	return Known ? FString(Known->Nation) : FString();
+}
+
+double FMiniatureMesh::VehicleRoom(const FString& Name)
+{
+	const VehicleParts::FModel* Known = ModelCalled(Name);
+	return Known ? Known->Room : 12.0;
+}
+
+double FMiniatureMesh::VehicleAloft(const FString& Name)
+{
+	const VehicleParts::FModel* Known = ModelCalled(Name);
+	return Known ? Known->Aloft : 0.0;
 }
 
 int32 FMiniatureMesh::Year = 1939;

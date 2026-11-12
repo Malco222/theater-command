@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+struct FMiniatureMesh;
+
 /** Shared by the files that build the miniatures. */
 namespace MiniatureParts
 {
@@ -32,4 +34,25 @@ namespace MiniatureParts
 			return FVector(X * Cos - Y * Sin, X * Sin + Y * Cos, Up).GetSafeNormal();
 		}
 	};
+
+	/** A model that can be asked for by name. */
+	struct FModel
+	{
+		const TCHAR* Name;
+		void (*Build)(struct ::FMiniatureMesh&);
+		/** A line about it, with its real measurements; and whose it is. */
+		const TCHAR* Title;
+		const TCHAR* Nation;
+		/** Whether it is built in the paint of whichever nation asks ("Truck:SOV"). */
+		bool bAnyNation = false;
+		/** How much room it needs in a row, in metres; and how high it flies, for an aircraft (0 for anything that stands on the ground). */
+		double Room = 12.0;
+		double Aloft = 0.0;
+	};
+
+	/** The nation a model that is the same for several nations is being built for ("Truck:SOV", "Bomber:ITA"). */
+	FString& NationWanted();
+
+	/** The aircraft (CampaignAircraft.cpp). */
+	TConstArrayView<FModel> AircraftModels();
 }

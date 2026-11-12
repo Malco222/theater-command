@@ -311,6 +311,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		Eye->MiniatureStrength = 1.0f;
 		Eye->FocusHeight = Table->ParadeHeight();
 		Eye->FlattestPitch = 0.0f;
+		Eye->SetBounds(FVector2D(1.0e7, 1.0e7)); // the board may run off the edge of the map
 		Eye->SetLens(Shot.Lens > 0.0f ? Shot.Lens : 42.0f);
 		if (GEngine && GEngine->GameViewport)
 		{
