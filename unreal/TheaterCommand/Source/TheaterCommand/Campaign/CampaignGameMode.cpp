@@ -44,6 +44,8 @@ namespace
 		// The table is one very large model that is not yet in the form Unreal's shadow system likes best,
 		// and from high above it says so on screen. The shadows are right; the note is switched off.
 		SetRenderSetting(TEXT("r.Shadow.Virtual.AllowScreenOverflowMessages"), 0);
+		// The upscaler one step below its costliest setting: the picture is the same to the eye and the frame is quicker.
+		SetRenderSetting(TEXT("sg.AntiAliasingQuality"), 2);
 	}
 
 	/** Opens the game in a window that suits the screen it is on, unless the command line asks for a size ("-TheaterWindow=1600x1000"). */

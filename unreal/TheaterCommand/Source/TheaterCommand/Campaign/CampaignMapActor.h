@@ -189,5 +189,6 @@ private:
 	int32 SelectedRegion = INDEX_NONE;
 	int32 HoveredRegion = INDEX_NONE;
 	int32 LabelState = -1;
-	float LastPieceYaw = TNumericLimits<float>::Max();
+	float LastPieceYaw = 0.0f;
+	bool bFacingSet = false;
 };

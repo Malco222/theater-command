@@ -8,6 +8,8 @@
 #include "EngineUtils.h"
 #include "HAL/FileManager.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "RenderTimer.h"
 #include "RHI.h"
@@ -38,6 +40,11 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		{ TEXT("10-army-on-the-march"), TEXT("Berlin"), 0.4f, 0.0f, 0.0f, TEXT(""), TEXT("Farther Pomerania"), TEXT(""), TEXT("Hamburg") },
 		{ TEXT("11-next-month"), TEXT("Berlin"), 0.4f, 0.0f, 0.0f, TEXT("Hamburg"), TEXT("Hamburg"), TEXT(""), TEXT(""), 1 },
 	};
+	// "-TheaterQuick" takes two pictures only, for trying a setting out.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterQuick")))
+	{
+		Shots = { Shots[1], Shots[3], Shots[7] };
+	}
 	bStarted = true;
 	UE_LOG(LogTheater, Display, TEXT("Photographer: %d pictures to take, into %s"), Shots.Num(), *Folder);
 }

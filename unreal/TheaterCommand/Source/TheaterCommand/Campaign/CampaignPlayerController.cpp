@@ -503,9 +503,14 @@ FText ACampaignPlayerController::GetRulesNote() const
 	{
 		return FText::FromString(TEXT("The rules did not start"));
 	}
-	return Session->GetView().Rules == TEXT("stand-in")
-		? FText::FromString(TEXT("Stand-in rules: armies march, nothing fights yet"))
-		: FText::GetEmpty();
+	const FCampaignView& View = Session->GetView();
+	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(View.Human) : nullptr;
+	FString Note = FString::Printf(TEXT("You lead %s"), Nation ? *Nation->Name : *View.Human);
+	if (View.Rules == TEXT("stand-in"))
+	{
+		Note += TEXT("  \u00B7  stand-in rules: armies march, nothing fights yet");
+	}
+	return FText::FromString(Note);
 }
 
 void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)

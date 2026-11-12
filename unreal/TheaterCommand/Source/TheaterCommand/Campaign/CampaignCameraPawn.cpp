@@ -87,7 +87,10 @@ void ACampaignCameraPawn::PanWorld(const FVector& Delta)
 
 void ACampaignCameraPawn::ZoomBy(float Steps)
 {
-	TargetZoom = FMath::Clamp(TargetZoom + Steps * 0.045f, 0.0f, 1.0f);
+	// A trackpad sends scroll events in bursts of dozens. However many arrive, the zoom being asked for is
+	// never allowed to get more than a fifth of the whole range ahead of where the view has got to.
+	const float Asked = FMath::Clamp(TargetZoom + Steps * 0.045f, 0.0f, 1.0f);
+	TargetZoom = FMath::Clamp(Asked, Zoom - 0.2f, Zoom + 0.2f);
 }
 
 void ACampaignCameraPawn::RotateBy(float Degrees)

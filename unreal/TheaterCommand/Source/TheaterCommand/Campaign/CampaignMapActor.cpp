@@ -9,6 +9,8 @@
 #include "Engine/World.h"
 #include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "ProceduralMeshComponent.h"
 
 /** Geometry on its way into one section of a procedural mesh. */
@@ -133,6 +135,11 @@ bool ACampaignMapActor::BuildMap()
 		UE_LOG(LogTheater, Error, TEXT("The campaign map could not be built: %s"), *Error);
 		return false;
 	}
+
+	// The land does not cast shadows of its own: its relief is already shaded into its paint, and having
+	// a model this large cast shadows every frame costs about a seventh of the frame for no visible gain.
+	// The pieces and town markers still cast theirs onto it. "-TheaterLandShadows" turns it back on to compare.
+	TerrainMesh->SetCastShadow(FParse::Param(FCommandLine::Get(), TEXT("TheaterLandShadows")));
 
 	LoadMaterials();
 	Terrain.Build(Data);
@@ -817,7 +824,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		TObjectPtr<AArmyPiece>& Piece = PieceByKey.FindOrAdd(Key);
 		if (!Piece)
 		{
-			Piece = World->SpawnActor<AArmyPiece>(Spot, FRotator(0.0f, FMath::Abs(LastPieceYaw) < 1.0e6f ? LastPieceYaw : 0.0f, 0.0f));
+			Piece = World->SpawnActor<AArmyPiece>(Spot, FRotator(0.0f, LastPieceYaw, 0.0f));
 		}
 		if (Piece)
 		{
@@ -984,10 +991,20 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw)
 		}
 	}
 
-	// Standards turn to face whoever is looking at the table.
-	if (FMath::Abs(FRotator::NormalizeAxis(CameraYaw - LastPieceYaw)) > 0.5f)
+	// Standards turn to face whoever is looking at the table, and the lettering turns to read the right way up.
+	if (!bFacingSet || FMath::Abs(FRotator::NormalizeAxis(CameraYaw - LastPieceYaw)) > 0.5f)
 	{
+		bFacingSet = true;
 		LastPieceYaw = CameraYaw;
+		const FMatrix Flat(FVector(0.0, 0.0, 1.0), FVector(0.0, -1.0, 0.0), FVector(1.0, 0.0, 0.0), FVector::ZeroVector);
+		const FQuat Turned = FQuat(FVector::UpVector, FMath::DegreesToRadians(CameraYaw)) * Flat.ToQuat();
+		for (UTextRenderComponent* Label : Labels)
+		{
+			if (Label)
+			{
+				Label->SetRelativeRotation(Turned);
+			}
+		}
 		for (AArmyPiece* Piece : Pieces)
 		{
 			if (Piece)
