@@ -418,7 +418,7 @@ namespace
 						.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army. Click where it should go, twice, or drag the flag there    Esc: put it down    Enter: end the month    M: music")))
+							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army. Click where it should go, twice, or drag the flag there    Esc: put it down    Enter: end the month    M: music    N: sounds")))
 							.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
 						]
 					]

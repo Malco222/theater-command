@@ -32,6 +32,13 @@ if [ ! -f Content/Campaign/Music/Theme.uasset ] || [ "$(cat Saved/Music/made-fro
   ./Tools/build_music.sh > /tmp/theater-command-music.log 2>&1 || true
 fi
 
+# The sound effects the same way: made the first time, and again when they have been rewritten.
+EFFECTS="$(shasum Tools/make_sounds.mjs | cut -d' ' -f1)"
+if [ ! -d Content/Campaign/Sounds ] || [ "$(cat Saved/Sounds/made-from.txt 2> /dev/null)" != "$EFFECTS" ]; then
+  echo "Making the sound effects (only when they are new)..."
+  ./Tools/build_sounds.sh > /tmp/theater-command-sounds.log 2>&1 || true
+fi
+
 echo "Starting Theater Command..."
 "$ENGINE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" "$PWD/TheaterCommand.uproject" -game -windowed > /tmp/theater-command-game.log 2>&1 &
 disown

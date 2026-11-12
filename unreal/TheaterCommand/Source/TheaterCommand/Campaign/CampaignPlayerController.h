@@ -353,6 +353,7 @@ private:
 	void FinishMonth();
 	void SpaceBar();
 	void ToggleMusic();
+	void ToggleEffects();
 	void RefreshOpening(bool bShow);
 	void EnterCampaign();
 	class ACampaignGameMode* GetMode() const;

@@ -1,4 +1,5 @@
 #include "Campaign/CampaignPlayerController.h"
+#include "Campaign/CampaignSounds.h"
 
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignCameraPawn.h"
@@ -183,6 +184,7 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed))
 	{
 		EnterCampaign();
+		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
 	}
 }
 
@@ -318,6 +320,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EndMonth);
 	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceBar);
 	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ACampaignPlayerController::ToggleMusic);
+	InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ACampaignPlayerController::ToggleEffects);
 }
 
 void ACampaignPlayerController::WheelUp()
@@ -444,6 +447,7 @@ void ACampaignPlayerController::OpenLedger()
 	{
 		return;
 	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
 	const int32 Revision = Ledger.Revision + 1;
 	Ledger = Session->Ledger();
@@ -469,6 +473,7 @@ void ACampaignPlayerController::OpenArsenal()
 	{
 		return;
 	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseLedger();
 	// The province in mind is the one selected, if it is the player's own; works are built there and corps form there.
 	const FCampaignView& View = Session->GetView();
@@ -497,6 +502,8 @@ void ACampaignPlayerController::OrderFromArsenal(const FString& Key)
 	if (Session->OrderArsenal(Key, bMine ? SelectedRegion : INDEX_NONE, Name))
 	{
 		Notify(FString::Printf(TEXT("Ordered: %s."), *Name), 5.0);
+		CampaignSounds::Play(this, TEXT("coins"), 0.6f);
+		CampaignSounds::PlayLater(this, CampaignSounds::OfOrder(Key), 0.35f, 0.35f);
 	}
 	else
 	{
@@ -566,6 +573,11 @@ void ACampaignPlayerController::ToggleMusic()
 			Notify(Mode->ToggleMusic() ? TEXT("Music on.") : TEXT("Music off. Press M to bring it back."), 3.0);
 		}
 	}
+}
+
+void ACampaignPlayerController::ToggleEffects()
+{
+	Notify(CampaignSounds::Toggle() ? TEXT("Sound effects on.") : TEXT("Sound effects off. Press N to bring them back."), 3.0);
 }
 
 void ACampaignPlayerController::SpaceBar()
@@ -878,6 +890,15 @@ bool ACampaignPlayerController::Hold(AArmyPiece* Piece)
 		{
 			return false;
 		}
+		// The army answers: boots, hooves, lorries or tracks.
+		TArray<FString> Kinds;
+		for (const FViewCorps& Unit : Piece->GetCorps())
+		{
+			Kinds.Add(Unit.Kind);
+		}
+		const FCampaignSession* Session = GetSession();
+		const TCHAR* Stir = CampaignSounds::OfArmy(Kinds, Session ? Session->GetView().Human : FString());
+		CampaignSounds::Play(this, Stir, FCString::Strcmp(Stir, TEXT("marching")) == 0 || FCString::Strcmp(Stir, TEXT("horses")) == 0 ? 0.6f : 0.3f);
 	}
 	HeldPiece = RingedPiece.IsValid() ? RingedPiece.Get() : Piece;
 	return true;
@@ -1262,6 +1283,8 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 			return;
 		}
 		ShowWar(Session->GetView(), Trains, CarriedFrom);
+		CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+		CampaignSounds::Play(this, TEXT("truck_engine"), 0.25f, 0.8f);
 		PickedCorps.Reset();
 		for (const FCorpsMove& Train : Trains)
 		{
@@ -1286,6 +1309,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 		return;
 	}
 	ShowWar(Session->GetView(), Marches, CarriedFrom);
+	CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
 
 	// The army in hand is now the corps that marched, where they have arrived.
 	PickedCorps.Reset();
@@ -1344,6 +1368,7 @@ void ACampaignPlayerController::ConfirmWar()
 	ShowWar(Session->GetView(), TArray<FCorpsMove>());
 	RefreshOrders();
 	Notify(FString::Printf(TEXT("War is declared on %s."), *Name), 6.0);
+	CampaignSounds::Play(this, TEXT("siren"), 0.5f);
 	if (Asked.Region != INDEX_NONE && ArmyRegion != INDEX_NONE && FindReach(Asked.Region))
 	{
 		// The army that was being sent there goes on: against a defended place that means the face-off.
@@ -1433,6 +1458,10 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 		return;
 	}
 	const FAttackPreview Preview = Session->PreviewAttack(PickedCorps, RegionId);
+	if (Preview.bValid && Preview.Attackers.Num() > 0)
+	{
+		CampaignSounds::Play(this, TEXT("drums"), 0.6f); // the two sides are drawn up
+	}
 	if (!Preview.bValid || Preview.Attackers.Num() == 0)
 	{
 		Notify(TEXT("None of the corps in hand stands next to that ground with a move left to attack it."));
@@ -1494,6 +1523,14 @@ void ACampaignPlayerController::ConfirmAttack()
 		return;
 	}
 
+	// The fight is heard, and then how it went.
+	CampaignSounds::Play(this, TEXT("battle"), 0.8f);
+	if (!Result.bYielded)
+	{
+		CampaignSounds::PlayLater(this, TEXT("field_gun"), 0.9f, 0.5f);
+	}
+	CampaignSounds::PlayLater(this, Result.bTaken ? TEXT("victory") : TEXT("defeat"), 2.8f, 0.6f);
+
 	FaceOff.bResolved = true;
 	FaceOff.ResultTitle = FText::FromString(Result.bYielded ? FString(TEXT("They fell back without a fight")) : Result.Level);
 	const FString Outcome = Result.bTaken ? TEXT("The ground is yours.") : TEXT("The attack was held. The ground is still theirs.");
@@ -1534,6 +1571,7 @@ void ACampaignPlayerController::EndMonth()
 		return;
 	}
 	PutDownArmy();
+	CampaignSounds::Play(this, TEXT("bell"), 0.5f);
 	Month = Session->EndMonth();
 	WatchIndex = 0;
 	if (const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
@@ -1595,6 +1633,10 @@ void ACampaignPlayerController::WatchNextStep()
 	}
 	// Brian asked for this to go by very fast: about half a second a nation, a little longer when it is
 	// the player's own ground or troops that were hit.
+	if (Step.bMine)
+	{
+		CampaignSounds::Play(this, TEXT("explosion"), 0.3f);
+	}
 	const double Pause = Step.bMine ? 1.1 : 0.5;
 	Notify(Step.Note, Pause + 0.3);
 	WatchNext = FPlatformTime::Seconds() + Pause;
