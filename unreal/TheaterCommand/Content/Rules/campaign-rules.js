@@ -11161,7 +11161,12 @@
       // Bridges that are down (by their place in the list of crossings) and provinces whose railway is cut.
       down: groundRules(s) ? CROSSINGS.map((c, i) => bridgeDown(s, c) ? i : -1).filter((i) => i >= 0) : [],
       cut: groundRules(s) ? s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id) : [],
-      regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
+      // Each region: who holds it, and the works built there since the war began that the table shows as models:
+      // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
+      regions: s.regions.map((r) => {
+        const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, "aa", r.id), workLevel(s, "field", r.id)];
+        return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
+      }),
       corps: s.corps.filter((c) => !c.dead).map((c) => ({
         id: c.id,
         nat: c.nat,

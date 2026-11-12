@@ -302,7 +302,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	{
 		Shots.Reset();
 		Add(TEXT("40-works"), *WorksAt, 0.16f).bWorks = true;
-		Add(TEXT("40b-works-close"), *WorksAt, 0.07f, 30.0f, 6.0f).bWorks = true;
+		Add(TEXT("40b-works-close"), *WorksAt, 0.1f, 200.0f, 8.0f).bWorks = true;
 	}
 
 	// "-TheaterLook=Ardennes:0.1:20:4;Tobruk:0.2" takes one picture of each place named instead: a region,
