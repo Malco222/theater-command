@@ -534,6 +534,166 @@ namespace AircraftParts
 		}
 	}
 
+	/**
+	 * Focke-Wulf Fw 190A, the German fighter from 1942: span 10.5 m, length 8.95 m. A big round engine in a
+	 * close cowling, a clear hood set well back, a wide undercarriage, square-cut wings; in greys.
+	 */
+	static void Fw190(FMiniatureMesh& M)
+	{
+		FFighter F;
+		F.Hull = { { 3.45, 0.0, 0.04, 0.04 }, { 3.15, 0.0, 0.2, 0.2 }, { 3.1, 0.0, 0.5, 0.5 }, { 2.85, 0.0, 0.62, 0.62 }, { 1.9, 0.0, 0.62, 0.64 }, { 0.8, 0.02, 0.5, 0.62 }, { -0.6, 0.05, 0.42, 0.58 }, { -2.8, 0.12, 0.24, 0.4 }, { -5.0, 0.22, 0.06, 0.16 }, { -5.5, 0.25, 0.02, 0.08 } };
+		F.Hood = { { 0.75, 0.6, 0.22, 0.05 }, { 0.25, 0.8, 0.27, 0.19 }, { -0.7, 0.78, 0.25, 0.16 }, { -1.75, 0.52, 0.14, 0.03 } };
+		F.Wing = { { 0.0, 1.35, -0.95, -0.5, 0.36 }, { 0.5, 1.35, -0.95, -0.48, 0.35 }, { 4.6, 0.7, -0.45, -0.12, 0.15 }, { 5.15, 0.5, -0.35, -0.07, 0.08 }, { 5.25, 0.3, -0.25, -0.06, 0.01 } };
+		F.Tail = { { 0.0, -4.4, -5.2, 0.35, 0.1 }, { 1.65, -4.65, -5.15, 0.35, 0.06 }, { 1.83, -4.85, -5.1, 0.35, 0.01 } };
+		F.Fin = { { 0.0, -4.0, -5.5, 0.3, 0.12 }, { 0.0, -4.6, -5.6, 1.1, 0.09 }, { 0.0, -4.95, -5.5, 1.6, 0.05 }, { 0.0, -5.15, -5.4, 1.7, 0.01 } };
+		F.Coat = { Hex(TEXT("5A6066")), Hex(TEXT("767C80")), Hex(TEXT("A9B8BE")), 1.8 };
+		F.Nose = Hex(TEXT("2A2D30"));
+		F.Boss = Hex(TEXT("2A2D30"));
+		F.NoseBack = 2.95;
+		F.Screw = 1.65;
+		Fighter(M, F);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			Gun(M, 1.0, Hand * 0.9, -0.36, 1.6, Hand * 0.9, -0.36, 0.028);
+			Gun(M, 0.85, Hand * 2.3, -0.26, 1.3, Hand * 2.3, -0.26, 0.028);
+		}
+		M.Rod(At(-1.3, 0.0, 0.72), At(-1.5, 0.0, 1.15), 0.015, Frame, 4);
+		SideMarks(M, F.Hull, F.Square, -2.2, 0.33, TEXT("GER"));
+		WingMarks(M, F.Wing, 3.2, 0.15, 0.42, TEXT("GER"), TEXT("GER"), true, true);
+	}
+
+	/**
+	 * Hawker Hurricane Mk I, the British fighter of 1939-40: span 12.2 m, length 9.84 m. A humped back behind
+	 * a framed hood, thick round-tipped wings, a radiator under the belly.
+	 */
+	static void Hurricane(FMiniatureMesh& M)
+	{
+		FFighter F;
+		F.Hull = { { 3.45, 0.0, 0.04, 0.04 }, { 3.05, 0.0, 0.3, 0.3 }, { 3.0, -0.02, 0.36, 0.44 }, { 1.8, 0.0, 0.44, 0.56 }, { 0.5, 0.08, 0.45, 0.62 }, { -0.8, 0.1, 0.42, 0.6 }, { -3.0, 0.16, 0.22, 0.38 }, { -5.4, 0.26, 0.06, 0.2 }, { -6.39, 0.3, 0.02, 0.1 } };
+		F.Hood = { { 0.9, 0.66, 0.22, 0.05 }, { 0.4, 0.9, 0.28, 0.2 }, { -0.6, 0.9, 0.28, 0.2 }, { -1.5, 0.68, 0.2, 0.05 } };
+		F.Wing = { { 0.0, 1.6, -1.1, -0.5, 0.48 }, { 1.4, 1.5, -1.2, -0.44, 0.46 }, { 5.2, 0.78, -0.58, -0.03, 0.2 }, { 5.8, 0.45, -0.34, 0.03, 0.11 }, { 6.05, 0.15, -0.16, 0.05, 0.05 }, { 6.095, 0.0, -0.08, 0.06, 0.01 } };
+		F.Tail = { { 0.0, -5.0, -6.0, 0.36, 0.11 }, { 1.4, -5.25, -5.95, 0.36, 0.07 }, { 1.68, -5.55, -5.85, 0.36, 0.01 } };
+		F.Fin = { { 0.0, -4.7, -6.35, 0.36, 0.12 }, { 0.0, -5.2, -6.5, 1.1, 0.09 }, { 0.0, -5.6, -6.45, 1.55, 0.05 }, { 0.0, -5.9, -6.3, 1.68, 0.01 } };
+		F.Coat = { Hex(TEXT("4A5237")), Hex(TEXT("7A6748")), Hex(TEXT("B5C4A8")), 2.1 };
+		F.Nose = F.Coat.Upper;
+		F.Boss = Black;
+		F.Screw = 1.7;
+		Fighter(M, F);
+		M.Box(At(-0.3, 0.0, -0.62), FVector(1.1, 0.6, 0.24), F.Coat.Under);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			for (int32 K = 0; K < 4; ++K)
+			{
+				M.Box(At(1.14 - K * 0.02, Hand * (2.2 + K * 0.24), -0.26), FVector(0.06, 0.1, 0.07), Hex(TEXT("A02020")));
+			}
+			Mark(M, -5.7, Hand * 0.05, 0.95, 0.22, TEXT("UK-FIN"), 0.0, Hand, 0.0);
+		}
+		M.Rod(At(-1.8, 0.0, 0.72), At(-1.95, 0.0, 1.2), 0.015, Frame, 4);
+		SideMarks(M, F.Hull, F.Square, -2.6, 0.36, TEXT("UK-A1"));
+		WingMarks(M, F.Wing, 3.9, 0.05, 0.66, TEXT("UK-B"), TEXT("UK"), true, true);
+	}
+
+	/**
+	 * Curtiss P-40 Warhawk, the American fighter of 1941-42: span 11.4 m, length 9.66 m. A deep radiator under
+	 * the nose, a long pointed spinner, olive drab above and grey beneath, with the star of those years.
+	 */
+	static void Warhawk(FMiniatureMesh& M)
+	{
+		FFighter F;
+		F.Hull = { { 3.6, 0.0, 0.04, 0.04 }, { 3.15, 0.0, 0.3, 0.3 }, { 3.1, -0.12, 0.38, 0.56 }, { 2.2, -0.1, 0.42, 0.62 }, { 1.0, 0.0, 0.44, 0.6 }, { -0.4, 0.06, 0.43, 0.6 }, { -2.8, 0.15, 0.22, 0.38 }, { -5.2, 0.27, 0.06, 0.2 }, { -6.06, 0.3, 0.02, 0.1 } };
+		F.Square = 2.2;
+		F.Hood = { { 0.5, 0.62, 0.24, 0.05 }, { 0.0, 0.84, 0.29, 0.21 }, { -0.9, 0.82, 0.28, 0.19 }, { -2.0, 0.6, 0.18, 0.04 } };
+		F.Wing = { { 0.0, 1.35, -1.15, -0.5, 0.4 }, { 0.6, 1.35, -1.15, -0.47, 0.39 }, { 5.2, 0.62, -0.52, -0.06, 0.16 }, { 5.6, 0.4, -0.4, -0.03, 0.08 }, { 5.685, 0.2, -0.3, -0.02, 0.01 } };
+		F.Tail = { { 0.0, -4.9, -5.8, 0.34, 0.11 }, { 1.7, -5.2, -5.75, 0.34, 0.06 }, { 1.95, -5.45, -5.7, 0.34, 0.01 } };
+		F.Fin = { { 0.0, -4.5, -6.05, 0.34, 0.12 }, { 0.0, -5.05, -6.15, 1.1, 0.09 }, { 0.0, -5.4, -6.1, 1.55, 0.05 }, { 0.0, -5.65, -5.95, 1.65, 0.01 } };
+		F.Coat = { Hex(TEXT("4F5236")), Hex(TEXT("4F5236")), Hex(TEXT("84878A")), 0.0 };
+		F.Nose = F.Coat.Upper;
+		F.Boss = Hex(TEXT("4F5236"));
+		F.Screw = 1.68;
+		Fighter(M, F);
+		// The mouth of the radiator under the nose.
+		M.Disc(At(3.12, 0.0, -0.42), FVector(-1.0, 0.0, 0.0), 0.24, Black, 10);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			for (int32 K = 0; K < 3; ++K)
+			{
+				Gun(M, 0.85, Hand * (2.0 + K * 0.2), -0.3, 1.15, Hand * (2.0 + K * 0.2), -0.3, 0.02);
+			}
+		}
+		M.Rod(At(-2.2, 0.0, 0.6), At(-2.35, 0.0, 1.1), 0.015, Frame, 4);
+		SideMarks(M, F.Hull, F.Square, -2.5, 0.3, TEXT("USA"));
+		WingMarks(M, F.Wing, 3.8, 0.0, 0.52, TEXT("USA"), TEXT("USA"), false, false);
+	}
+
+	/**
+	 * Junkers Ju 87B, the Stuka dive bomber of 1939-41: span 13.8 m, length 11.1 m. Wings cranked like a
+	 * gull's upside down, fixed wheels in big spats, a long glasshouse for pilot and gunner, a bomb under the belly.
+	 */
+	static void Stuka(FMiniatureMesh& M)
+	{
+		FFighter F;
+		F.Hull = { { 4.6, 0.0, 0.04, 0.04 }, { 4.1, 0.0, 0.3, 0.3 }, { 4.05, -0.1, 0.42, 0.6 }, { 2.8, -0.05, 0.45, 0.62 }, { 1.5, 0.02, 0.45, 0.62 }, { -0.5, 0.08, 0.42, 0.6 }, { -3.5, 0.2, 0.22, 0.36 }, { -5.8, 0.3, 0.08, 0.2 }, { -6.5, 0.34, 0.03, 0.1 } };
+		F.Square = 2.4;
+		F.Hood = { { 1.6, 0.66, 0.24, 0.05 }, { 1.0, 0.92, 0.3, 0.22 }, { -1.2, 0.9, 0.3, 0.2 }, { -2.4, 0.66, 0.18, 0.04 } };
+		F.Wing = { { 0.0, 1.9, -1.3, -0.55, 0.5 }, { 1.35, 1.75, -1.3, -0.98, 0.46 }, { 6.2, 0.92, -0.62, -0.2, 0.18 }, { 6.75, 0.55, -0.42, -0.14, 0.09 }, { 6.9, 0.2, -0.25, -0.13, 0.01 } };
+		F.Tail = { { 0.0, -5.2, -6.3, 0.72, 0.12 }, { 2.3, -5.5, -6.2, 0.72, 0.07 }, { 2.5, -5.7, -6.1, 0.72, 0.01 } };
+		F.Fin = { { 0.0, -4.9, -6.55, 0.4, 0.14 }, { 0.0, -5.4, -6.65, 1.4, 0.1 }, { 0.0, -5.8, -6.55, 2.0, 0.05 }, { 0.0, -6.0, -6.4, 2.1, 0.01 } };
+		F.Coat = { Hex(TEXT("3E4638")), Hex(TEXT("56604A")), Hex(TEXT("8FB0BF")), 2.6 };
+		F.Nose = F.Coat.Upper;
+		F.Boss = Hex(TEXT("3A4034"));
+		F.Screw = 1.7;
+		Fighter(M, F);
+		const FLinearColor Green = F.Coat.Upper, Blue = F.Coat.Under;
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			// The fixed undercarriage at the crank of each wing: a leg in a fairing, and the wheel in its spat.
+			M.Limb(At(0.75, Hand * 1.35, -1.0), At(0.85, Hand * 1.35, -1.9), 0.2, 0.17, Green, 8);
+			M.Ball(At(0.75, Hand * 1.35, -2.05), FVector(1.25, 0.36, 0.62), Green, 5, 10);
+			M.Rod(At(0.8, Hand * 1.35 - 0.1, -2.2), At(0.8, Hand * 1.35 + 0.1, -2.2), 0.3, Tyre, 10);
+			// The struts under the tailplane, and the dive brakes under the wings.
+			M.Rod(At(-5.7, Hand * 1.2, 0.68), At(-5.75, Hand * 0.1, 0.25), 0.025, Green, 4);
+			M.Box(At(0.4, Hand * 2.6, -0.82), FVector(0.12, 1.3, 0.05), Blue);
+			Gun(M, 1.5, Hand * 2.0, -0.78, 1.95, Hand * 2.0, -0.78, 0.02);
+		}
+		// The bomb on its crutch under the belly; the gunner's machine gun; the aerial mast.
+		Skin(M, Body({ { 1.3, -0.95, 0.03, 0.03 }, { 0.95, -0.95, 0.22, 0.22 }, { -0.3, -0.95, 0.22, 0.22 }, { -1.1, -0.95, 0.05, 0.05 } }, 2.0, 10), [](const FVector&, const FVector&, int32) { return Hex(TEXT("3A3D38")); });
+		Gun(M, -2.3, 0.0, 0.98, -3.1, 0.0, 1.25);
+		M.Rod(At(-0.4, 0.0, 1.1), At(-0.55, 0.0, 1.6), 0.015, Frame, 4);
+		SideMarks(M, F.Hull, F.Square, -3.0, 0.36, TEXT("GER"));
+		WingMarks(M, F.Wing, 4.6, 0.15, 0.55, TEXT("GER"), TEXT("GER"), true, true);
+	}
+
+	/**
+	 * Ilyushin Il-2, the Soviet armoured ground-attack machine: span 14.6 m, length 11.6 m. A long nose, a
+	 * hood for pilot and gunner, wings swept back a little outboard, pods under them for the wheels.
+	 */
+	static void Sturmovik(FMiniatureMesh& M)
+	{
+		FFighter F;
+		F.Hull = { { 4.5, 0.0, 0.04, 0.04 }, { 4.0, 0.0, 0.3, 0.3 }, { 3.95, -0.05, 0.42, 0.52 }, { 2.6, -0.05, 0.5, 0.62 }, { 1.0, 0.0, 0.5, 0.66 }, { -0.8, 0.06, 0.46, 0.62 }, { -3.6, 0.18, 0.24, 0.38 }, { -6.2, 0.3, 0.07, 0.18 }, { -7.1, 0.33, 0.02, 0.08 } };
+		F.Square = 2.3;
+		F.Hood = { { 1.5, 0.68, 0.24, 0.05 }, { 0.9, 0.92, 0.28, 0.2 }, { -1.0, 0.9, 0.28, 0.18 }, { -2.0, 0.66, 0.18, 0.04 } };
+		F.Wing = { { 0.0, 1.9, -1.4, -0.56, 0.5 }, { 1.6, 1.9, -1.4, -0.5, 0.48 }, { 6.5, 0.55, -0.78, -0.06, 0.18 }, { 7.15, 0.15, -0.52, -0.01, 0.08 }, { 7.3, -0.1, -0.4, 0.0, 0.01 } };
+		F.Tail = { { 0.0, -5.9, -7.0, 0.42, 0.12 }, { 2.25, -6.2, -6.9, 0.42, 0.07 }, { 2.45, -6.4, -6.8, 0.42, 0.01 } };
+		F.Fin = { { 0.0, -5.6, -7.15, 0.38, 0.12 }, { 0.0, -6.1, -7.25, 1.3, 0.09 }, { 0.0, -6.5, -7.15, 1.8, 0.05 }, { 0.0, -6.7, -7.0, 1.9, 0.01 } };
+		F.Coat = { Hex(TEXT("4F5E3E")), Hex(TEXT("2C2F2A")), Hex(TEXT("8FB0BF")), 2.6 };
+		F.Nose = F.Coat.Upper;
+		F.Boss = Hex(TEXT("4F5E3E"));
+		F.Screw = 1.7;
+		Fighter(M, F);
+		const FCoat Coat = F.Coat;
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			// The pod under each wing that the wheel folds back into, and the cannon outboard of it.
+			Skin(M, Body({ { 2.3, -0.78, 0.03, 0.03 }, { 1.7, -0.82, 0.25, 0.22 }, { 0.2, -0.82, 0.25, 0.22 }, { -0.7, -0.72, 0.05, 0.05 } }, 2.0, 10, Hand * 1.6), [&Coat](const FVector& Place, const FVector& Facing, int32) { return Coat(Place, Facing); });
+			Gun(M, 1.6, Hand * 2.3, -0.4, 2.5, Hand * 2.3, -0.4, 0.03);
+			Mark(M, -6.6, Hand * 0.05, 1.05, 0.26, TEXT("SOV"), 0.0, Hand, 0.0);
+			Mark(M, 0.2, Hand * 4.6, WingSkin(F.Wing, 4.6, false), 0.55, TEXT("SOV"), 0.0, 0.0, -1.0);
+		}
+		Gun(M, -1.95, 0.0, 0.95, -2.8, 0.0, 1.2);
+		SideMarks(M, F.Hull, F.Square, -3.3, 0.36, TEXT("SOV"));
+	}
+
 	/** A fighter for a nation with none of its own drawn yet: a plain radial-engined monoplane in that nation's colours and markings. */
 	static void PlainFighter(FMiniatureMesh& M)
 	{
@@ -729,6 +889,11 @@ namespace AircraftParts
 		{ TEXT("Bf109"), &Bf109, TEXT("Messerschmitt Bf 109E  -  span 9.9 m, length 8.6 m"), TEXT("GER"), false, 14.0, 3.0 },
 		{ TEXT("Spitfire"), &Spitfire, TEXT("Spitfire Mk I  -  span 11.2 m, length 9.1 m"), TEXT("UK"), false, 15.0, 3.0 },
 		{ TEXT("Mustang"), &Mustang, TEXT("P-51D Mustang  -  span 11.3 m, length 9.8 m"), TEXT("USA"), false, 15.0, 3.0 },
+		{ TEXT("Fw190"), &Fw190, TEXT("Focke-Wulf Fw 190A  -  span 10.5 m, length 9.0 m"), TEXT("GER"), false, 14.0, 3.0 },
+		{ TEXT("Hurricane"), &Hurricane, TEXT("Hurricane Mk I  -  span 12.2 m, length 9.8 m"), TEXT("UK"), false, 16.0, 3.0 },
+		{ TEXT("Warhawk"), &Warhawk, TEXT("P-40 Warhawk  -  span 11.4 m, length 9.7 m"), TEXT("USA"), false, 15.0, 3.0 },
+		{ TEXT("Stuka"), &Stuka, TEXT("Ju 87 Stuka  -  span 13.8 m, length 11.1 m"), TEXT("GER"), false, 18.0, 4.0 },
+		{ TEXT("Sturmovik"), &Sturmovik, TEXT("Il-2 Sturmovik  -  span 14.6 m, length 11.6 m"), TEXT("SOV"), false, 19.0, 4.0 },
 		{ TEXT("Zero"), &Zero, TEXT("A6M2 Zero  -  span 12.0 m, length 9.1 m"), TEXT("JAP"), false, 15.0, 3.0 },
 		{ TEXT("Yak"), &Yak, TEXT("Yak-1  -  span 10.0 m, length 8.5 m"), TEXT("SOV"), false, 14.0, 3.0 },
 		{ TEXT("He111"), &He111, TEXT("Heinkel He 111  -  span 22.6 m, length 16.4 m"), TEXT("GER"), false, 28.0, 4.0 },
@@ -745,9 +910,10 @@ TConstArrayView<MiniatureParts::FModel> MiniatureParts::AircraftModels()
 
 FString FMiniatureMesh::MainFighterOf(const FString& Tag)
 {
-	if (Tag == TEXT("GER")) return TEXT("Bf109");
-	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return TEXT("Spitfire");
-	if (Tag == TEXT("USA")) return TEXT("Mustang");
+	// Each air force flies what it flew that year.
+	if (Tag == TEXT("GER")) return Year >= 1942 ? TEXT("Fw190") : TEXT("Bf109");
+	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Year >= 1941 ? TEXT("Spitfire") : TEXT("Hurricane");
+	if (Tag == TEXT("USA")) return Year >= 1943 ? TEXT("Mustang") : TEXT("Warhawk");
 	if (Tag == TEXT("SOV")) return TEXT("Yak");
 	if (Tag == TEXT("JAP") || Tag == TEXT("JPN")) return TEXT("Zero");
 	return TEXT("Fighter:") + Tag;
@@ -756,7 +922,8 @@ FString FMiniatureMesh::MainFighterOf(const FString& Tag)
 FString FMiniatureMesh::MainBomberOf(const FString& Tag)
 {
 	if (Tag == TEXT("USA")) return TEXT("B17");
-	if (Tag == TEXT("GER")) return TEXT("He111");
-	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return TEXT("Lancaster");
+	if (Tag == TEXT("GER")) return Year >= 1941 ? TEXT("He111") : TEXT("Stuka");
+	if (Tag == TEXT("SOV")) return Year >= 1942 ? TEXT("Sturmovik") : TEXT("Bomber:SOV");
+	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Year >= 1942 ? TEXT("Lancaster") : TEXT("Bomber:UK");
 	return TEXT("Bomber:") + Tag;
 }

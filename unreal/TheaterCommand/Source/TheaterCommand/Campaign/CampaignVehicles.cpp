@@ -408,7 +408,7 @@ namespace VehicleParts
 	 * Armour sloped on every side, five big road wheels with the track lying on top of them, the driving
 	 * wheel at the back, wide tracks, a small turret set well forward.
 	 */
-	static void T34(FMiniatureMesh& M)
+	static void T34With(FMiniatureMesh& M, bool bLate)
 	{
 		const FBuild B(M, Hex(TEXT("4F5E3E")));
 		const FLinearColor Green = B.Paint, Dark = B.Shade;
@@ -456,6 +456,26 @@ namespace VehicleParts
 		B.Tube(-2.685, 0.0, 1.235, -2.716, 0.0, 1.26, 0.28, Dark, 12);
 
 		// The turret: welded plate, narrow in front, its sides leaning in, the rear overhanging a little.
+		if (bLate)
+		{
+			// The T-34-85 of 1944: a bigger cast turret for three men, a commander's cupola, and the long 85 mm gun.
+			const double T = 0.85;
+			B.Layers({ Oval(T, 0.0, 1.05, 1.05, 0.93, 14), Oval(T, 0.0, 1.08, 1.1, 0.95, 14), Oval(T, 0.0, 0.98, 1.02, 0.86, 14), Oval(T, 0.0, 0.8, 0.86, 0.7, 14) }, { 1.52, 1.75, 2.25, 2.4 }, Green, true);
+			B.Drum(T - 0.3, -0.35, 2.4, 0.32, 0.22, Green, 12);
+			B.Drum(T - 0.3, -0.35, 2.62, 0.26, 0.03, Dark, 12);
+			B.Plate(T - 0.2, 0.38, 2.42, 0.5, 0.45, 0.035, Dark);
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				B.Drum(T - 0.75, Hand * 0.3, 2.4, 0.13, 0.08, Dark, 8);
+				B.Mark(T - 0.1, Hand * 0.935, 2.0, 0.2, TEXT("SOV-ARMY"), 0.0, Hand * 0.97, 0.22);
+			}
+			B.Tube(T + 1.0, -0.36, 1.95, T + 1.0, 0.36, 1.95, 0.24, Dark, 10);
+			B.Tube(T + 1.1, 0.0, 1.95, T + 1.6, 0.0, 1.955, 0.11, Green, 10);
+			B.Tube(T + 1.6, 0.0, 1.955, 5.1, 0.0, 1.97, 0.06, Green, 10);
+			B.Tube(5.07, 0.0, 1.97, 5.105, 0.0, 1.97, 0.04, Pitch, 8);
+			B.Tube(T + 1.05, 0.28, 1.92, T + 1.35, 0.28, 1.92, 0.022, GunSteel, 5);
+			return;
+		}
 		const double T = 1.0;
 		B.Layers({ { { T + 0.95, 0.42 }, { T + 0.95, -0.42 }, { T + 0.3, -0.86 }, { T - 0.5, -0.86 }, { T - 0.9, -0.5 }, { T - 0.9, 0.5 }, { T - 0.5, 0.86 }, { T + 0.3, 0.86 } },
 			{ { T + 0.8, 0.34 }, { T + 0.8, -0.34 }, { T + 0.28, -0.62 }, { T - 0.42, -0.62 }, { T - 0.74, -0.38 }, { T - 0.74, 0.38 }, { T - 0.42, 0.62 }, { T + 0.28, 0.62 } } },
@@ -475,6 +495,16 @@ namespace VehicleParts
 		{
 			B.Mark(T - 0.1, Hand * 0.752, 1.91, 0.2, TEXT("SOV-ARMY"), 0.0, Hand * 0.956, 0.294);
 		}
+	}
+
+	static void T34(FMiniatureMesh& M)
+	{
+		T34With(M, false);
+	}
+
+	static void T34Late(FMiniatureMesh& M)
+	{
+		T34With(M, true);
 	}
 
 	// ------------------------------------------------------------------------ Sherman
@@ -744,6 +774,75 @@ namespace VehicleParts
 		B.Tube(5.27, 0.0, 2.18, 5.295, 0.0, 2.18, 0.06, Pitch, 8);
 		B.Tube(T + 1.12, 0.6, 2.17, T + 1.4, 0.6, 2.17, 0.025, GunSteel, 5);
 		B.Aerial(-2.2, 1.45, 1.78, 2.0);
+	}
+
+	// ------------------------------------------------------------------------ Panther
+
+	/**
+	 * Panzerkampfwagen V Panther: hull 6.87 m long (8.66 over the gun), 3.27 wide, 2.99 high. A long sloped
+	 * front plate, overlapping road wheels, sloped sides above the tracks, a narrow turret with a rounded gun
+	 * shield, and the very long 75 mm gun.
+	 */
+	static void Panther(FMiniatureMesh& M)
+	{
+		const FBuild B(M, Hex(TEXT("9C8A58")));
+		const FLinearColor Sand = B.Paint, Dark = B.Shade;
+		const FLinearColor Leaf = Hex(TEXT("5A6240")), Earth = Hex(TEXT("6E4A34"));
+
+		FGear G;
+		G.Right = 1.3;
+		G.Width = 0.66;
+		G.Link = 0.15;
+		G.FrontX = 3.0; G.FrontUp = 0.74; G.FrontR = 0.4;
+		G.RearX = -3.05; G.RearUp = 0.62; G.RearR = 0.32;
+		G.Teeth = 17;
+		G.WheelR = 0.43;
+		G.bInterleaved = true;
+		for (int32 K = 0; K < 8; ++K)
+		{
+			G.Wheels.Add(-2.25 + K * 0.61);
+		}
+		B.Gear(G);
+
+		// The tub, and the upper hull: the long front plate, sides leaning in over the tracks, the tail plate leaning out.
+		B.Side({ { 2.9, 0.48 }, { 3.43, 0.95 }, { 3.35, 1.1 }, { -3.3, 1.1 }, { -3.43, 0.9 }, { -3.1, 0.5 } }, -0.96, 0.96, Sand);
+		B.Layers({ { { 3.38, -1.6 }, { 3.38, 1.6 }, { -3.3, 1.6 }, { -3.3, -1.6 } }, { { 2.25, -1.28 }, { 2.25, 1.28 }, { -3.45, 1.28 }, { -3.45, -1.28 } } }, { 1.05, 1.85 }, Sand, false);
+		// Stripes of green and red-brown over the sand.
+		B.Plate(-1.6, 0.0, 1.855, 0.5, 2.5, 0.012, Leaf);
+		B.Plate(-2.6, 0.2, 1.855, 0.4, 2.4, 0.012, Earth);
+		B.Plate(1.2, -0.3, 1.855, 0.4, 2.3, 0.012, Earth);
+		// The machine gun in its ball on the front plate; the driver's visor; lamps; the hatches.
+		B.BallGun(2.85, 0.6, 1.42, 0.34);
+		B.Plate(2.72, -0.6, 1.53, 0.3, 0.4, 0.04, Dark, 35.0);
+		B.Lamp(2.95, -1.25, 1.42, 0.08);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			B.Drum(1.75, Hand * 0.65, 1.85, 0.25, 0.035, Dark, 12);
+			// The skirts over the upper run of the tracks, and the cross.
+			B.Plate(-0.2, Hand * 1.64, 1.02, 5.6, 0.03, 0.42, Dark);
+			B.Mark(0.4, Hand * 1.47, 1.5, 0.21, TEXT("GER"), 0.0, Hand * 0.93, 0.37);
+			// The fans' grilles on the engine deck, the stowage boxes at the tail, the twin exhausts.
+			B.Drum(-2.4, Hand * 0.78, 1.85, 0.36, 0.04, Dark, 14);
+			B.Plate(-1.75, Hand * 0.78, 1.865, 0.4, 0.7, 0.03, Dark);
+			B.Plate(-3.56, Hand * 1.05, 1.3, 0.3, 0.5, 0.7, Dark);
+			B.Tube(-3.5, Hand * 0.3, 1.0, -3.6, Hand * 0.3, 1.75, 0.07, Rust, 8);
+		}
+		// The turret: narrow in front, its sides leaning in; the rounded shield; the cupola; and the long gun.
+		const double T = 0.2;
+		B.Layers({ { { T + 1.0, 0.75 }, { T + 1.0, -0.75 }, { T + 0.2, -1.12 }, { T - 1.2, -0.95 }, { T - 1.35, 0.0 }, { T - 1.2, 0.95 }, { T + 0.2, 1.12 } },
+			{ { T + 0.95, 0.6 }, { T + 0.95, -0.6 }, { T + 0.2, -0.88 }, { T - 1.1, -0.75 }, { T - 1.22, 0.0 }, { T - 1.1, 0.75 }, { T + 0.2, 0.88 } } }, { 1.85, 2.62 }, Sand, false);
+		B.Tube(T + 1.0, -0.72, 2.2, T + 1.0, 0.72, 2.2, 0.33, Dark, 12);
+		B.Drum(T - 0.6, -0.42, 2.62, 0.36, 0.26, Sand, 14);
+		B.Drum(T - 0.6, -0.42, 2.88, 0.29, 0.05, Dark, 14);
+		B.Plate(T - 1.36, 0.0, 2.2, 0.06, 0.5, 0.4, Dark);
+		B.Tube(T + 1.2, 0.0, 2.2, T + 1.9, 0.0, 2.2, 0.13, Sand, 10);
+		B.Tube(T + 1.9, 0.0, 2.2, 4.95, 0.0, 2.21, 0.066, Sand, 10);
+		B.Tube(4.9, 0.0, 2.21, 5.08, 0.0, 2.21, 0.11, Dark, 10);
+		B.Tube(5.08, 0.0, 2.21, 5.14, 0.0, 2.21, 0.075, Sand, 8);
+		B.Tube(5.14, 0.0, 2.21, 5.22, 0.0, 2.21, 0.1, Dark, 10);
+		B.Tube(5.2, 0.0, 2.21, 5.225, 0.0, 2.21, 0.05, Pitch, 8);
+		B.Tube(T + 1.2, 0.5, 2.2, T + 1.45, 0.5, 2.2, 0.025, GunSteel, 5);
+		B.Aerial(-2.9, -1.1, 1.85, 2.0);
 	}
 
 	// ------------------------------------------------------------------------ Char B1 bis
@@ -1430,6 +1529,8 @@ namespace VehicleParts
 		{ TEXT("Sherman"), &Sherman, TEXT("M4 Sherman  -  5.84 m long, 2.74 m high"), TEXT("USA") },
 		{ TEXT("Matilda"), &Matilda, TEXT("Matilda II  -  5.61 m long, 2.52 m high"), TEXT("UK") },
 		{ TEXT("Tiger"), &Tiger, TEXT("Tiger I  -  6.32 m long, 3.00 m high"), TEXT("GER") },
+		{ TEXT("Panther"), &Panther, TEXT("Panther  -  6.87 m long, 2.99 m high"), TEXT("GER") },
+		{ TEXT("T34-85"), &T34Late, TEXT("T-34-85  -  6.10 m long, 2.72 m high"), TEXT("SOV") },
 		{ TEXT("CharB1"), &CharB1, TEXT("Char B1 bis  -  6.37 m long, 2.79 m high"), TEXT("FRA") },
 		{ TEXT("M13"), &M13, TEXT("M13/40  -  4.92 m long, 2.37 m high"), TEXT("ITA") },
 		{ TEXT("Type97"), &Type97, TEXT("Type 97 Chi-Ha  -  5.50 m long, 2.23 m high"), TEXT("JAP") },
@@ -1585,8 +1686,8 @@ int32 FMiniatureMesh::Year = 1939;
 
 FString FMiniatureMesh::MainTankOf(const FString& Tag)
 {
-	if (Tag == TEXT("GER")) return Year >= 1943 ? TEXT("Tiger") : TEXT("PanzerIV");
-	if (Tag == TEXT("SOV")) return TEXT("T34");
+	if (Tag == TEXT("GER")) return Year >= 1944 ? TEXT("Panther") : Year >= 1943 ? TEXT("Tiger") : TEXT("PanzerIV");
+	if (Tag == TEXT("SOV")) return Year >= 1944 ? TEXT("T34-85") : TEXT("T34");
 	if (Tag == TEXT("USA")) return TEXT("Sherman");
 	if (Tag == TEXT("FRA") || Tag == TEXT("VIC") || Tag == TEXT("FFR")) return TEXT("CharB1");
 	if (Tag == TEXT("ITA")) return TEXT("M13");
