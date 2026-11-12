@@ -28,7 +28,7 @@ Double-click **Play Theater Command.command** in this folder. A Terminal window 
 | Change campaign | The Menu button. The campaign saves itself every month and when you leave |
 | Quit | Cmd+Q |
 
-The game opens on **the grand campaign**: pick any country still standing and the year you take it over (1939 to 1944). History is played up to that day; after it no nation follows history's plan, and the war is yours to shape. Choosing a later year takes a few seconds while that history is played. The second page, **Historical scenarios**, holds single campaigns from the war as it was fought (the Battle of Britain, Barbarossa, Overlord and the rest), where the other nations keep to history's plan. The screen also offers to continue the campaign you left.
+The game opens on **the grand campaign**: pick any country still standing and the year you take it over (September 1939, or January 1940, 1941 or 1942: the same days as the browser version, from the shared `data/campaign/grand.json`). History is played up to that day; after it no nation follows history's plan, and the war is yours to shape. Choosing a later year takes a few seconds while that history is played. 1943 and 1944 are played as scenarios instead. The second page, **Historical scenarios**, holds single campaigns from the war as it was fought (the Battle of Britain, Barbarossa, Overlord and the rest), where the other nations keep to history's plan. The screen also offers to continue the campaign you left.
 
 ## What is here today
 

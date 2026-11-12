@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0c71183 2026-11-12. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 17a015c 2026-11-12. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -6821,8 +6821,10 @@
   var isOpen = (g2) => g2.flags.open === 1;
   function startOpen(g2) {
     g2.flags.open = 1;
-    g2.flags["st:on:GER:POL"] = 1;
-    g2.flags["st:gain:GER"] = 1;
+    if (g2.turn === 1) {
+      g2.flags["st:on:GER:POL"] = 1;
+      g2.flags["st:gain:GER"] = 1;
+    }
     return g2;
   }
   var draw2 = (g2, ...key) => hashString(`${g2.seed}:${key.join(":")}`) / 4294967296;
@@ -8585,25 +8587,6 @@
   }
 
   // Rules/starts.ts
-  var GRAND_YEARS = [
-    { year: "1939", title: "September 1939", from: 1, note: "Germany has attacked Poland, and Britain and France have declared war. Everything after that is still to be decided." },
-    { year: "1940", title: "May 1940", from: 9, note: "Poland has fallen and Norway is being fought over. The armies in the West have watched each other all winter." },
-    { year: "1941", title: "June 1941", from: 22, note: "France has fallen and Britain fights on. Three German army groups stand on the Soviet frontier." },
-    { year: "1942", title: "June 1942", from: 34, note: "The United States is in the war. Germany gathers its tanks in the south of Russia, and Rommel is at the gates of Tobruk." },
-    { year: "1943", title: "July 1943", from: 47, note: "Stalingrad and Africa are lost to the Axis. The tanks face each other round Kursk, and an invasion fleet waits at Malta." },
-    { year: "1944", title: "June 1944", from: 58, note: "The Allies are about to land in France, and four Soviet fronts are ready in Byelorussia." }
-  ];
-  var GRAND_BLURBS = {
-    GER: "The best army in Europe, and enemies gathering on every side. Where it strikes next, and when, is up to you.",
-    UK: "A small army, the largest navy in the world, and an empire to hold together. Outlast them, then come back.",
-    FRA: "A large army behind strong works, and a slow command. Hold the line, or do what history did not.",
-    SOV: "Endless country, endless men, and an army still learning its trade. Bide your time, or march first.",
-    USA: "The greatest industry on earth, an ocean away from the war. Its armies come by convoy.",
-    ITA: "An army spread from the Alps to Africa, and a sea to make your own. Pick your moment and your side.",
-    JAP: "An empire of islands with a great fleet and a long war in China. Strike before the oil runs out.",
-    CHN: "A vast country, half of it lost, with an army that will not give in. Hold on, and wear the invader down.",
-    POL: "Outnumbered and nearly surrounded. Hold on long enough and the rest of the war is yours to write."
-  };
   var STARTS = [
     {
       title: "September 1939 · The war begins, as history planned it",
@@ -8748,6 +8731,54 @@
     }
   ];
 
+  // ../../data/campaign/grand.json
+  var grand_default = {
+    _about: "The grand campaign: the game's front door. The player picks a country and a year. History is played to the first day of that year (September for 1939), and from then on nobody follows it: the player and every computer-run nation's staff decide for themselves, by the free-play rules in open.json. 'years' lists the start dates on offer (the month number counts from September 1939 as 1) with a line on how the war stands. 'nations' lists the countries that can be picked, in the order shown, each with the years it can start in and what the player is taking on. 'watch' is the same with nobody at the controls. Years after 1942 are not offered: with nobody holding it to history's calendar the Red Army of 1943 ends the war in a year, so those years are played as historical scenarios instead.",
+    years: [
+      { year: 1939, turn: 1, date: "1 September 1939", text: "German troops have crossed the Polish frontier this morning, and Britain and France have given Poland their word. Everything after the first shots is unwritten." },
+      { year: 1940, turn: 5, date: "1 January 1940", text: "Poland is beaten and divided. In the west the armies have faced each other all winter without fighting, and nobody knows where the blow will fall in the spring, or whose it will be." },
+      { year: 1941, turn: 17, date: "1 January 1941", text: "France has fallen and Britain fights on alone. The Italians are in trouble in the desert and in Albania. Germany and the Soviet Union are still at peace, and each is watching the other." },
+      { year: 1942, turn: 29, date: "1 January 1942", text: "The German army stands frozen in front of Moscow and the Red Army has begun to strike back. The United States came into the war three weeks ago." }
+    ],
+    nations: [
+      { id: "GER", years: {
+        "1939": "At war with Poland, Britain and France. Where you go next, and when, is up to you.",
+        "1940": "Poland is yours and the western front is quiet. Strike through the Low Countries in the spring, look north to Norway first, or wait and build.",
+        "1941": "Master of the continent from the Pyrenees to the Bug. Britain is unbeaten, your ally needs rescuing in Africa, and the pact with Moscow lasts only as long as you both want it to.",
+        "1942": "The drive on Moscow has failed in the snow and the army is worn out. Hold through the winter, then decide where the summer's blow will fall: Moscow again, or the oil of the Caucasus."
+      } },
+      { id: "UK", years: {
+        "1939": "A small army, the largest navy in the world, and an ally with a frontier to hold. Nobody knows what Germany will do this time.",
+        "1940": "The expeditionary force is in France and the fleet commands the North Sea. Decide how much of your army the continent gets before the storm breaks.",
+        "1941": "Alone. The invasion did not come, the bombers come every night, and in the desert your small army is chasing an Italian one many times its size.",
+        "1942": "You have two great allies at last. Hold Egypt and the convoy routes, and decide where the way back into Europe begins."
+      } },
+      { id: "FRA", years: {
+        "1939": "The Maginot Line, a large army and a slow command. Be ready when the blow comes, or strike first while Germany is busy in Poland.",
+        "1940": "The army has stood on the frontier all winter. The Line covers Alsace and Lorraine. The Belgian frontier and the Ardennes are yours to worry about."
+      } },
+      { id: "SOV", years: {
+        "1939": "At peace behind a pact. Build the Red Army and wait, or march before Germany does.",
+        "1940": "The pact has given you eastern Poland and time. Use it: the army is large, half trained, and strung out along a new frontier.",
+        "1941": "Germany holds Europe and her army has nothing else to do. You have a year at most, perhaps only months. Decide where the Red Army stands when the day comes.",
+        "1942": "Moscow is saved and the counter-offensive is rolling. The factories are beyond the Urals now. Push while the frost lasts, then get ready for the summer."
+      } },
+      { id: "ITA", years: {
+        "1939": "Neutral, with an army in Libya and Albania. Pick your moment and your side of the Mediterranean.",
+        "1940": "Still neutral, with both sides watching you. If France begins to fall, that is the moment to move. If it does not, staying out may be worth more.",
+        "1941": "At war and losing it: beaten in the desert, stuck in the Greek mountains, the fleet hit in its own harbour. Hold Tripoli until help comes, or find another way out.",
+        "1942": "The army is back at the gates of Cyrenaica and the convoys to Tripoli are getting through. Malta is still British, and it sits on your supply line."
+      } },
+      { id: "POL", years: {
+        "1939": "Outnumbered and nearly surrounded. You place your army on the eve of war. The first month is the one history wrote: survive it and the rest is yours."
+      } }
+    ],
+    watch: {
+      "1939": "The war begins as it did. After that no nation follows history: each one's staff decides for itself, and no two wars come out the same.",
+      later: "The computer plays history to the first day of the year. After that each nation's staff decides for itself, and no two wars come out the same."
+    }
+  };
+
   // Rules/campaign-bridge.ts
   var g = null;
   var fallenNation = null;
@@ -8883,7 +8914,7 @@
   }
   function starts() {
     return {
-      years: GRAND_YEARS,
+      years: GRAND.years.map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ""), from: y.turn, note: y.text })),
       groups: STARTS.map((group) => ({
         ...group,
         sides: group.sides.map((side) => ({
@@ -8896,6 +8927,7 @@
       }))
     };
   }
+  var GRAND = grand_default;
   var histories = /* @__PURE__ */ new Map();
   var historySeed = -1;
   function historyTo(from, seed) {
@@ -8918,20 +8950,19 @@
   }
   function grandGame(from, seed, human) {
     if (from <= 1) return startOpen(createGame(seed, human));
-    const h = historyTo(from, seed);
-    h.flags.open = 1;
-    return h;
+    return startOpen(historyTo(from, seed));
   }
   function grand(from = 1, seed = 1939) {
     const h = grandGame(from, seed, null);
-    const order = Object.keys(GRAND_BLURBS);
-    const nations = Object.entries(h.nations).filter(([, n]) => n.alive).map(([nat, n]) => {
+    const year = String(GRAND.years.find((y) => y.turn === from)?.year ?? "");
+    const order = GRAND.nations.map((n) => n.id);
+    const nations = Object.entries(h.nations).filter(([nat, n]) => n.alive && (!order.includes(nat) || GRAND.nations.find((x) => x.id === nat).years[year] !== void 0)).map(([nat, n]) => {
       const foes = Object.keys(h.nations).filter((other) => other !== nat && h.nations[other].alive && atWar(h, nat, other));
       return {
         nat,
         name: n.name,
         major: order.includes(nat),
-        blurb: GRAND_BLURBS[nat] ?? "",
+        blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? "",
         standing: foes.length ? `At war with ${listNames(foes.map((f) => h.nations[f].name))}` : "At peace",
         corps: h.corps.filter((c) => c.nat === nat).length,
         regions: h.regions.filter((r) => r.ctrl === nat).length

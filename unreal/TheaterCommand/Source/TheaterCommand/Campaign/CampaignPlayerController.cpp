@@ -131,7 +131,7 @@ void ACampaignPlayerController::LoadGrandNations()
 		}
 	}
 	Opening.GrandNote = bAmerica ? FText::GetEmpty() : FText::FromString(
-		TEXT("The United States has no army on this map yet on this day, so it is not on the list; it can be led from 1943. When the world map is in, it will be here from the first day."));
+		TEXT("The United States is not on this map yet, so it is not on the list. When the world map is in, it will be here from the first day."));
 }
 
 void ACampaignPlayerController::ShowOpeningTab(int32 Tab)

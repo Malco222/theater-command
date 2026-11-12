@@ -42,7 +42,8 @@ import { KIND } from '../../../src/campaign/types';
 import { GOALS, GOAL_KEYS, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
-import { GRAND_BLURBS, GRAND_YEARS, STARTS } from './starts';
+import { STARTS } from './starts';
+import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
 import type { BattleReport, Build, Corps, Game, Kind, Posture } from '../../../src/campaign/types';
 
@@ -174,7 +175,7 @@ function arrive(s: Game): string | null {
 /** The places a campaign can begin, with each playable nation's aims for the campaigns that start in September 1939. */
 function starts() {
   return {
-    years: GRAND_YEARS,
+    years: GRAND.years.map((y) => ({ year: String(y.year), title: y.date.replace(/^1 /, ''), from: y.turn, note: y.text })),
     groups: STARTS.map((group) => ({
       ...group,
       sides: group.sides.map((side) => ({
@@ -189,6 +190,12 @@ function starts() {
     })),
   };
 }
+
+/** The grand campaign as the shared data sets it out: the days on offer, and a word to each great power for each. */
+const GRAND = grandData as unknown as {
+  years: { year: number; turn: number; date: string; text: string }[];
+  nations: { id: string; years: Record<string, string> }[];
+};
 
 /** History played by the computer up to a month, kept as saved text so that it is only played once. */
 const histories = new Map<number, string>();
@@ -219,24 +226,27 @@ function grandGame(from: number, seed: number, human: string | null): Game {
   // September 1939 is free play from the first day. A later year is history up to the day the player takes
   // over, and from that day no nation follows history's plan: each one's staff decides for itself.
   if (from <= 1) return startOpen(createGame(seed, human));
-  const h = historyTo(from, seed);
-  h.flags.open = 1;
-  return h;
+  return startOpen(historyTo(from, seed));
 }
 
-/** Who can be led in the grand campaign from a month: every country still standing, the great powers first. */
+/**
+ * Who can be led in the grand campaign from a month: every country still standing. The great powers named in
+ * the shared data come first, each with the data's word about what the player is taking on that year, and
+ * are offered only in the years the data gives them. Every other country is offered whenever it is still there.
+ */
 function grand(from = 1, seed = 1939) {
   const h = grandGame(from, seed, null);
-  const order = Object.keys(GRAND_BLURBS);
+  const year = String(GRAND.years.find((y) => y.turn === from)?.year ?? '');
+  const order = GRAND.nations.map((n) => n.id);
   const nations = Object.entries(h.nations)
-    .filter(([, n]) => n.alive)
+    .filter(([nat, n]) => n.alive && (!order.includes(nat) || GRAND.nations.find((x) => x.id === nat)!.years[year] !== undefined))
     .map(([nat, n]) => {
       const foes = Object.keys(h.nations).filter((other) => other !== nat && h.nations[other].alive && atWar(h, nat, other));
       return {
         nat,
         name: n.name,
         major: order.includes(nat),
-        blurb: GRAND_BLURBS[nat] ?? '',
+        blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? '',
         standing: foes.length ? `At war with ${listNames(foes.map((f) => h.nations[f].name))}` : 'At peace',
         corps: h.corps.filter((c) => c.nat === nat).length,
         regions: h.regions.filter((r) => r.ctrl === nat).length,

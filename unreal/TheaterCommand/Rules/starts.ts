@@ -1,38 +1,12 @@
-// Where a campaign can begin, and as whom.
+// The historical scenarios: single campaigns in which the computer's nations keep to history's plan.
 //
-// The grand campaign comes first: the player picks any country and the year to take it over. History is
-// played up to that day, and from it no nation follows history's plan. GRAND_YEARS lists the days on offer
-// and GRAND_BLURBS says a word about each great power; the countries themselves are read from the war as
-// it stands on the day, so a new nation in the data is on the list without a change here.
+// The list and its wording are the browser prototype's (src/campaign/ui/main.ts), set down here as data
+// so the Unreal game can show the same choices. `from` is the month the player takes over (1 is September
+// 1939): for a later start the computer plays history up to it. `view` is 'italy', 'west' or 'east' to
+// open on that front.
 //
-// The scenarios after it are the browser prototype's opening screen (src/campaign/ui/main.ts), set down
-// here as data: single campaigns in which the computer's nations keep to history's plan. `from` is the
-// month the player takes over (1 is September 1939): for a later start the computer plays history up to
-// it. `view` is 'open' for free play, and 'italy', 'west' or 'east' to open on that front.
-
-export interface GrandYear { year: string; title: string; from: number; note: string }
-
-export const GRAND_YEARS: GrandYear[] = [
-  { year: '1939', title: 'September 1939', from: 1, note: 'Germany has attacked Poland, and Britain and France have declared war. Everything after that is still to be decided.' },
-  { year: '1940', title: 'May 1940', from: 9, note: 'Poland has fallen and Norway is being fought over. The armies in the West have watched each other all winter.' },
-  { year: '1941', title: 'June 1941', from: 22, note: 'France has fallen and Britain fights on. Three German army groups stand on the Soviet frontier.' },
-  { year: '1942', title: 'June 1942', from: 34, note: 'The United States is in the war. Germany gathers its tanks in the south of Russia, and Rommel is at the gates of Tobruk.' },
-  { year: '1943', title: 'July 1943', from: 47, note: 'Stalingrad and Africa are lost to the Axis. The tanks face each other round Kursk, and an invasion fleet waits at Malta.' },
-  { year: '1944', title: 'June 1944', from: 58, note: 'The Allies are about to land in France, and four Soviet fronts are ready in Byelorussia.' },
-];
-
-/** The great powers, in the order they are offered, with a word about each that holds in any year. */
-export const GRAND_BLURBS: Record<string, string> = {
-  GER: 'The best army in Europe, and enemies gathering on every side. Where it strikes next, and when, is up to you.',
-  UK: 'A small army, the largest navy in the world, and an empire to hold together. Outlast them, then come back.',
-  FRA: 'A large army behind strong works, and a slow command. Hold the line, or do what history did not.',
-  SOV: 'Endless country, endless men, and an army still learning its trade. Bide your time, or march first.',
-  USA: 'The greatest industry on earth, an ocean away from the war. Its armies come by convoy.',
-  ITA: 'An army spread from the Alps to Africa, and a sea to make your own. Pick your moment and your side.',
-  JAP: 'An empire of islands with a great fleet and a long war in China. Strike before the oil runs out.',
-  CHN: 'A vast country, half of it lost, with an army that will not give in. Hold on, and wear the invader down.',
-  POL: 'Outnumbered and nearly surrounded. Hold on long enough and the rest of the war is yours to write.',
-};
+// The grand campaign, which comes before these on the opening screen, is not here: its years and its
+// words are the shared data in data/campaign/grand.json, read by campaign-bridge.ts.
 
 export interface Side { nat: string | null; name: string; blurb: string }
 export interface StartGroup { title: string; from: number; view: string; sides: Side[] }

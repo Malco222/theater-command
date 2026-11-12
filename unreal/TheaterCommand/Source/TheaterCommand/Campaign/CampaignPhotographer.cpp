@@ -183,7 +183,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	}
 
 	// "-TheaterGrand=SOV,2" begins the grand campaign as a country (here the Soviet Union) in one of its years
-	// (here the third on the list, 1941), and looks at the whole table and then at that country's capital.
+	// (here the third on the list, January 1941), and looks at the whole table and then at that country's capital.
 	FString Grand;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterGrand="), Grand, false))
 	{
