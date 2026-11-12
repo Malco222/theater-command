@@ -29,6 +29,9 @@ namespace VehicleParts
 	static const FLinearColor Glass = Hex(TEXT("D8D4B8"));
 	static const FLinearColor Pitch = Hex(TEXT("161616"));
 
+	/** Set while a model is being built for the army pieces, where it is seen small: fewer links in its tracks, plainer wheels. */
+	static bool bPlain = false;
+
 	/** The track, wheels and rollers of one vehicle, the same on both sides. */
 	struct FGear
 	{
@@ -175,7 +178,7 @@ namespace VehicleParts
 			{
 				Around += (Band[(K + 1) % Band.Num()] - Band[K]).Size();
 			}
-			const int32 Links = FMath::Max(8, FMath::RoundToInt32(Around / G.Link));
+			const int32 Links = FMath::Max(8, FMath::RoundToInt32(Around / (G.Link * (bPlain ? 2.6 : 1.0))));
 			const double Step = Around / Links;
 			TArray<FVector2D> Loop;
 			double Gone = 0.0, Next = 0.0;
@@ -215,9 +218,13 @@ namespace VehicleParts
 				auto Wheel = [&](double X, double U, double Radius, bool bTyre, int32 Sides, double Inset = 0.0)
 				{
 					const double Front = Face - Hand * Inset;
-					M.Rod(At(X, Back, U), At(X, Front, U), Radius, bTyre ? Tyre : Shade, Sides);
-					M.Disc(At(X, Front + Hand * 0.02, U), FVector(0.0, -Hand, 0.0), Radius * (bTyre ? 0.74 : 0.82), Paint, Sides);
-					M.Rod(At(X, Front, U), At(X, Front + Hand * 0.06, U), Radius * 0.26, Shade, 6);
+					const int32 Round = bPlain ? FMath::Min(Sides, 8) : Sides;
+					M.Rod(At(X, Back, U), At(X, Front, U), Radius, bTyre ? Tyre : Shade, Round);
+					M.Disc(At(X, Front + Hand * 0.02, U), FVector(0.0, -Hand, 0.0), Radius * (bTyre ? 0.74 : 0.82), Paint, Round);
+					if (!bPlain)
+					{
+						M.Rod(At(X, Front, U), At(X, Front + Hand * 0.06, U), Radius * 0.26, Shade, 6);
+					}
 				};
 				for (int32 K = 0; K < G.Wheels.Num(); ++K)
 				{
@@ -1472,9 +1479,10 @@ FString& MiniatureParts::NationWanted()
 	return Tag;
 }
 
-bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double Metre, double Turn)
+bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double Metre, double Turn, bool bFine)
 {
-	static TMap<FString, FMiniatureMesh> Built;
+	static TMap<FString, FMiniatureMesh> BuiltFine, BuiltPlain;
+	TMap<FString, FMiniatureMesh>& Built = bFine ? BuiltFine : BuiltPlain;
 	FMiniatureMesh* Model = Built.Find(Name);
 	if (!Model)
 	{
@@ -1497,8 +1505,10 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 		VehicleParts::NationTag = Whose.IsEmpty() ? FString(Known->Nation) : Whose;
 		MiniatureParts::NationWanted() = VehicleParts::NationTag;
 		VehicleParts::NationPaint = VehicleColour(VehicleParts::NationTag);
+		VehicleParts::bPlain = !bFine;
 		Known->Build(Fresh);
-		UE_LOG(LogTheater, Log, TEXT("Model %s built: %d points, %d triangles"), *Name, Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
+		VehicleParts::bPlain = false;
+		UE_LOG(LogTheater, Log, TEXT("Model %s%s built: %d points, %d triangles"), *Name, bFine ? TEXT("") : TEXT(" (plain)"), Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
 		Model = &Built.Add(Name, MoveTemp(Fresh));
 	}
 	Stamp(*Model, Where, Metre, Turn);
@@ -1602,8 +1612,8 @@ FString FMiniatureMesh::MainCarrierOf(const FString& Tag)
 	return TEXT("Truck:") + Tag;
 }
 
-bool FMiniatureMesh::MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn)
+bool FMiniatureMesh::MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn, bool bFine)
 {
 	const FString Name = MainTankOf(Tag);
-	return !Name.IsEmpty() && Vehicle(Name, Where, Metre, Turn);
+	return !Name.IsEmpty() && Vehicle(Name, Where, Metre, Turn, bFine);
 }

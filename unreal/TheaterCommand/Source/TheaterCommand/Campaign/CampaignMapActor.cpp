@@ -1823,6 +1823,31 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	// The land's tiles: fine near what the eye looks at, coarse far from it.
 	UpdateLand(CameraDistance, CameraFocus, false);
 
+	// Pieces cast shadows only near what the eye is looking at, and not at all from far off.
+	{
+		const double ShadowReach = CameraDistance * 1.1 + 500.0;
+		const bool bAny = CameraDistance < 7000.0f;
+		auto Shade = [&](AArmyPiece* Piece)
+		{
+			if (Piece)
+			{
+				Piece->SetShadows(bAny && FVector::DistSquared2D(Piece->GetActorLocation(), CameraFocus) < ShadowReach * ShadowReach);
+			}
+		};
+		for (AArmyPiece* Piece : Pieces)
+		{
+			Shade(Piece);
+		}
+		for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : FleetPieces)
+		{
+			Shade(Pair.Value);
+		}
+		for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : AirPieces)
+		{
+			Shade(Pair.Value);
+		}
+	}
+
 	// Trees are drawn only close to: in the squares of country round what the eye is looking at.
 	const bool bNear = CameraDistance < 11500.0f;
 	const double Reach = CameraDistance * 1.25 + TreeSquare * 0.75;

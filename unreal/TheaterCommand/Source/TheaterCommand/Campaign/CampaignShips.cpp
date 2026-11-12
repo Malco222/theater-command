@@ -581,7 +581,7 @@ namespace ShipParts
 		}
 		// The air group ranged aft, wings touching: the navy's own fighters, to the scale of the ship.
 		const FString Plane = FMiniatureMesh::MainFighterOf(Tag);
-		for (int32 Row = 0; Row < 3; ++Row)
+		for (int32 Row = 0; Row < 2; ++Row)
 		{
 			for (int32 K = 0; K < 2; ++K)
 			{

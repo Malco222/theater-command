@@ -475,3 +475,15 @@ void AArmyPiece::Tick(float DeltaSeconds)
 		}
 	}
 }
+
+void AArmyPiece::SetShadows(bool bCast)
+{
+	if (bCast != bCastsShadows)
+	{
+		bCastsShadows = bCast;
+		if (Body)
+		{
+			Body->SetCastShadow(bCast);
+		}
+	}
+}

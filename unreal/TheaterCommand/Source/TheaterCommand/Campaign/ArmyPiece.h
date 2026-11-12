@@ -42,6 +42,10 @@ public:
 	void SetAirFleet(ACampaignMapActor* Map, const FCampaignNation& Nation, const FViewAirFleet& InWing);
 	bool IsArmy() const { return What == 0; }
 	bool IsFleet() const { return What == 1; }
+
+	/** Whether the figures and base cast shadows. Turned off for pieces far from what the eye is looking at: their shadows cost a great deal and cannot be seen. */
+	void SetShadows(bool bCast);
+	bool bCastsShadows = true;
 	/** The number the rules know a fleet or an air fleet by. */
 	int32 GetForceId() const { return What == 1 ? Fleet.Id : (What == 2 ? Wing.Id : INDEX_NONE); }
 

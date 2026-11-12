@@ -157,7 +157,7 @@ namespace SoldierParts
 	static void Helmet(FMiniatureMesh& M, const FVector& Base, double Front, double Back, double Half, double High,
 		TFunctionRef<double(double Forward, double Sideways)> Drop, TFunctionRef<double(double Forward, double Sideways)> Flare, const FLinearColor& Colour, bool bFine)
 	{
-		const int32 Sides = bFine ? 14 : 10, Bowl = bFine ? 5 : 3, Skirt = bFine ? 2 : 1;
+		const int32 Sides = bFine ? 14 : 8, Bowl = bFine ? 5 : 2, Skirt = bFine ? 2 : 1;
 		const int32 Rings = Bowl + Skirt + 1;
 		const FColor Paint = Colour.ToFColor(true);
 		TArray<FVector> Points;
@@ -216,7 +216,7 @@ namespace SoldierParts
 				}
 				M.Face(B, D, C, Out);
 				// The underside of the brim, so it is not seen through from below.
-				if (J >= Bowl)
+				if (J >= Bowl && bFine)
 				{
 					M.Face(A, B, C, -Out);
 					M.Face(B, D, C, -Out);
@@ -225,7 +225,9 @@ namespace SoldierParts
 		}
 	}
 
-	static TArray<FVector2D> Oval(double X, double Front, double Back, double Half, int32 Sides = 12)
+	static int32 OvalSides = 12;
+
+	static TArray<FVector2D> Oval(double X, double Front, double Back, double Half, int32 Sides = OvalSides)
 	{
 		TArray<FVector2D> Plan;
 		for (int32 K = 0; K < Sides; ++K)
@@ -284,7 +286,8 @@ namespace SoldierParts
 	 */
 	static void Build(FMiniatureMesh& M, const FKit& K, bool bFine, int32 Pose)
 	{
-		const int32 Round = bFine ? 8 : 6;
+		const int32 Round = bFine ? 8 : 5;
+		OvalSides = bFine ? 12 : 7;
 		const FLinearColor Flesh = Hex(TEXT("C49A78")), Steel = Hex(TEXT("2E2F31")), Walnut = Hex(TEXT("5E4128"));
 
 		// ---- Legs, the left a little forward. Tall boots come to the knee; otherwise the calf is wrapped or gaitered.
@@ -303,7 +306,7 @@ namespace SoldierParts
 		for (int32 Which = 0; Which < 2; ++Which)
 		{
 			const FLeg& Leg = Legs[Which];
-			M.Limb(Leg.Hip, Leg.Knee, 0.096, 0.07, K.Trousers, Round);
+			M.Limb(Leg.Hip, Leg.Knee, 0.096, 0.07, K.Trousers, Round, bFine);
 			if (bFine)
 			{
 				M.Ball(Leg.Knee, FVector(0.14, 0.14, 0.14), K.Trousers, 4, 8);
@@ -311,18 +314,25 @@ namespace SoldierParts
 			if (K.bTallBoots)
 			{
 				const FVector Top = FMath::Lerp(Leg.Knee, Leg.Ankle, 0.12);
-				M.Limb(Leg.Knee, Top, 0.07, 0.066, K.Trousers, Round);
-				M.Limb(Top, Leg.Ankle, 0.07, 0.054, K.Boots, Round);
+				M.Limb(Leg.Knee, Top, 0.07, 0.066, K.Trousers, Round, bFine);
+				M.Limb(Top, Leg.Ankle, 0.07, 0.054, K.Boots, Round, bFine);
 			}
 			else
 			{
 				const FVector Calf = FMath::Lerp(Leg.Knee, Leg.Ankle, 0.5);
-				M.Limb(Leg.Knee, Calf, 0.07, 0.06, K.Trousers, Round);
-				M.Limb(Calf, Leg.Ankle, 0.062, 0.05, K.Lower, Round);
+				M.Limb(Leg.Knee, Calf, 0.07, 0.06, K.Trousers, Round, bFine);
+				M.Limb(Calf, Leg.Ankle, 0.062, 0.05, K.Lower, Round, bFine);
 			}
 			// The boot: heel under the ankle, toe forward.
-			M.Ball(Leg.Ankle + FVector(-0.075, 0.0, -0.04), FVector(0.285, 0.105, 0.105), K.Boots, 5, 10);
-			M.Box(Leg.Ankle + FVector(0.035, 0.0, -0.07), FVector(0.07, 0.085, 0.04), K.Boots * 0.8f);
+			if (bFine)
+			{
+				M.Ball(Leg.Ankle + FVector(-0.075, 0.0, -0.04), FVector(0.285, 0.105, 0.105), K.Boots, 5, 10);
+				M.Box(Leg.Ankle + FVector(0.035, 0.0, -0.07), FVector(0.07, 0.085, 0.04), K.Boots * 0.8f);
+			}
+			else
+			{
+				M.Box(Leg.Ankle + FVector(-0.07, 0.0, -0.04), FVector(0.27, 0.1, 0.1), K.Boots);
+			}
 		}
 
 		// ---- The body: the skirt of the tunic, hips, waist, chest, shoulders.
@@ -330,8 +340,15 @@ namespace SoldierParts
 			{ Oval(0.0, 0.115, 0.125, 0.18), Oval(0.0, 0.118, 0.128, 0.178), Oval(0.005, 0.1, 0.105, 0.155), Oval(0.01, 0.128, 0.115, 0.188), Oval(0.0, 0.11, 0.112, 0.205), Oval(0.0, 0.07, 0.08, 0.12) },
 			{ 0.84, 0.98, 1.08, 1.28, 1.41, 1.47 }, K.Tunic, true);
 		// The belt.
-		M.Stack(FVector::ZeroVector, 1.0, 0.0, { Oval(0.005, 0.108, 0.113, 0.163), Oval(0.005, 0.108, 0.113, 0.163) }, { 1.05, 1.1 }, K.Straps, true);
-		if (K.bChestPouches)
+		if (bFine)
+		{
+			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Oval(0.005, 0.108, 0.113, 0.163), Oval(0.005, 0.108, 0.113, 0.163) }, { 1.05, 1.1 }, K.Straps, true);
+		}
+		if (!bFine)
+		{
+			// (in the ranks his pouches are not drawn)
+		}
+		else if (K.bChestPouches)
 		{
 			for (const double Hand : { -1.0, 1.0 })
 			{
@@ -347,8 +364,8 @@ namespace SoldierParts
 		}
 
 		// ---- Neck and head.
-		M.Limb(At(0.0, 0.0, 1.45), At(0.012, 0.0, 1.54), 0.055, 0.05, Flesh, Round);
-		M.Ball(At(0.015, 0.0, 1.635), FVector(0.195, 0.158, 0.23), Flesh, 6, 10);
+		M.Limb(At(0.0, 0.0, 1.45), At(0.012, 0.0, 1.54), 0.055, 0.05, Flesh, Round, bFine);
+		M.Ball(At(0.015, 0.0, 1.635), FVector(0.195, 0.158, 0.23), Flesh, bFine ? 6 : 4, bFine ? 10 : 6);
 		if (bFine)
 		{
 			// A face: the nose, the eyes under the brow, the mouth, the jaw; and the ears.
@@ -382,19 +399,22 @@ namespace SoldierParts
 		const FVector RightHand = At(0.15, 0.1, 1.05), LeftHand = At(0.2, -0.13, 1.32);
 		const FVector RightShoulder = At(0.0, 0.2, 1.385), LeftShoulder = At(0.0, -0.2, 1.385);
 		const FVector RightElbow = At(-0.04, 0.27, 1.12), LeftElbow = At(0.1, -0.275, 1.14);
-		M.Ball(RightShoulder, FVector(0.118, 0.118, 0.118), K.Tunic, 4, 8);
-		M.Ball(LeftShoulder, FVector(0.118, 0.118, 0.118), K.Tunic, 4, 8);
+		if (bFine)
+		{
+			M.Ball(RightShoulder, FVector(0.118, 0.118, 0.118), K.Tunic, 4, 8);
+			M.Ball(LeftShoulder, FVector(0.118, 0.118, 0.118), K.Tunic, 4, 8);
+		}
 		if (bFine)
 		{
 			M.Ball(RightElbow, FVector(0.098, 0.098, 0.098), K.Tunic, 4, 8);
 			M.Ball(LeftElbow, FVector(0.098, 0.098, 0.098), K.Tunic, 4, 8);
 		}
-		M.Limb(RightShoulder, RightElbow, 0.058, 0.048, K.Tunic, Round);
-		M.Limb(RightElbow, RightHand, 0.048, 0.036, K.Tunic, Round);
-		M.Limb(LeftShoulder, LeftElbow, 0.058, 0.048, K.Tunic, Round);
-		M.Limb(LeftElbow, LeftHand, 0.048, 0.036, K.Tunic, Round);
-		M.Ball(RightHand, FVector(0.085, 0.085, 0.085), Flesh, 4, 8);
-		M.Ball(LeftHand, FVector(0.085, 0.085, 0.085), Flesh, 4, 8);
+		M.Limb(RightShoulder, RightElbow, 0.058, 0.048, K.Tunic, Round, bFine);
+		M.Limb(RightElbow, RightHand, 0.048, 0.036, K.Tunic, Round, bFine);
+		M.Limb(LeftShoulder, LeftElbow, 0.058, 0.048, K.Tunic, Round, bFine);
+		M.Limb(LeftElbow, LeftHand, 0.048, 0.036, K.Tunic, Round, bFine);
+		M.Ball(RightHand, FVector(0.085, 0.085, 0.085), Flesh, bFine ? 4 : 2, bFine ? 8 : 5);
+		M.Ball(LeftHand, FVector(0.085, 0.085, 0.085), Flesh, bFine ? 4 : 2, bFine ? 8 : 5);
 
 		// ---- The rifle, through both hands: butt low on the right, muzzle up past the left shoulder.
 		const FVector Along = (LeftHand - RightHand).GetSafeNormal();
@@ -407,9 +427,9 @@ namespace SoldierParts
 		}
 		else
 		{
-			M.Limb(Butt, RightHand, 0.045, 0.028, Walnut, 6);
-			M.Limb(RightHand, RightHand + Along * (K.Rifle * 0.5), 0.028, 0.02, Walnut, 6);
-			M.Rod(RightHand + Along * 0.05, Muzzle, 0.011, Steel, 5);
+			M.Limb(Butt, RightHand, 0.045, 0.028, Walnut, bFine ? 6 : 4, bFine);
+			M.Limb(RightHand, RightHand + Along * (K.Rifle * 0.5), 0.028, 0.02, Walnut, bFine ? 6 : 4, bFine);
+			M.Limb(RightHand + Along * 0.05, Muzzle, 0.011, 0.011, Steel, bFine ? 5 : 3, bFine);
 			if (K.bBayonet)
 			{
 				M.Rod(Muzzle, Muzzle + Along * 0.4, 0.006, Hex(TEXT("9A9A98")), 4);
@@ -420,16 +440,22 @@ namespace SoldierParts
 		if (K.bPack)
 		{
 			M.Box(At(-0.175, 0.0, 1.25), FVector(0.12, 0.3, 0.32), K.Pack);
-			M.Rod(At(-0.175, -0.16, 1.43), At(-0.175, 0.16, 1.43), 0.045, K.Pack * 0.9f, 8);
+			if (bFine)
+			{
+				M.Rod(At(-0.175, -0.16, 1.43), At(-0.175, 0.16, 1.43), 0.045, K.Pack * 0.9f, 8);
+			}
 		}
 		if (K.bCanister)
 		{
 			// The gas-mask canister slung across the small of the back, the bread bag and the water bottle on the right hip.
-			M.Rod(At(-0.15, -0.15, 1.0), At(-0.17, 0.12, 1.03), 0.06, K.HelmetPaint, 8);
-			M.Box(At(-0.09, 0.16, 0.97), FVector(0.14, 0.07, 0.17), Hex(TEXT("6E6A52")));
-			M.Ball(At(-0.13, 0.2, 0.96), FVector(0.1, 0.07, 0.15), Hex(TEXT("4A3A2A")), 4, 8);
-			// The entrenching tool on the left hip.
-			M.Box(At(-0.05, -0.19, 0.9), FVector(0.03, 0.02, 0.3), K.Straps);
+			M.Limb(At(-0.15, -0.15, 1.0), At(-0.17, 0.12, 1.03), 0.06, 0.06, K.HelmetPaint, bFine ? 8 : 5, true);
+			if (bFine)
+			{
+				M.Box(At(-0.09, 0.16, 0.97), FVector(0.14, 0.07, 0.17), Hex(TEXT("6E6A52")));
+				M.Ball(At(-0.13, 0.2, 0.96), FVector(0.1, 0.07, 0.15), Hex(TEXT("4A3A2A")), 4, 8);
+				// The entrenching tool on the left hip.
+				M.Box(At(-0.05, -0.19, 0.9), FVector(0.03, 0.02, 0.3), K.Straps);
+			}
 		}
 		if (K.bRoll)
 		{
@@ -437,14 +463,14 @@ namespace SoldierParts
 			const FVector Middle = At(0.0, 0.0, 1.21);
 			const FVector Slant = (At(0.0, -0.2, 1.46) - At(0.0, 0.2, 0.96)).GetSafeNormal(), Fore = At(1.0, 0.0, 0.0);
 			FVector Previous = FVector::ZeroVector;
-			const int32 Turns = 10;
+			const int32 Turns = bFine ? 10 : 6;
 			for (int32 Step = 0; Step <= Turns; ++Step)
 			{
 				const double Angle = UE_DOUBLE_TWO_PI * Step / Turns;
 				const FVector Here = Middle + Slant * (FMath::Cos(Angle) * 0.33) + Fore * (FMath::Sin(Angle) * 0.165);
 				if (Step > 0)
 				{
-					M.Limb(Previous, Here, 0.048, 0.048, K.Pack, 6);
+					M.Limb(Previous, Here, 0.048, 0.048, K.Pack, bFine ? 6 : 4, bFine);
 				}
 				Previous = Here;
 			}

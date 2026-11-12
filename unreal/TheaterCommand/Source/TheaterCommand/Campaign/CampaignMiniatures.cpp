@@ -116,7 +116,7 @@ void FMiniatureMesh::Rod(const FVector& From, const FVector& To, double Radius, 
 	}
 }
 
-void FMiniatureMesh::Limb(const FVector& From, const FVector& To, double FromRadius, double ToRadius, const FLinearColor& Colour, int32 Sides)
+void FMiniatureMesh::Limb(const FVector& From, const FVector& To, double FromRadius, double ToRadius, const FLinearColor& Colour, int32 Sides, bool bEnds)
 {
 	const FVector Axis = (To - From).GetSafeNormal();
 	FVector Side, Other;
@@ -137,8 +137,11 @@ void FMiniatureMesh::Limb(const FVector& From, const FVector& To, double FromRad
 		Face(Foot[K], Foot[K + 1], Top[K], Normals[Foot[K]]);
 		Face(Foot[K + 1], Top[K + 1], Top[K], Normals[Foot[K]]);
 	}
-	Disc(From, -Axis, FromRadius, Colour, Sides);
-	Disc(To, Axis, ToRadius, Colour, Sides);
+	if (bEnds)
+	{
+		Disc(From, -Axis, FromRadius, Colour, Sides);
+		Disc(To, Axis, ToRadius, Colour, Sides);
+	}
 }
 
 void FMiniatureMesh::Pillar(const FVector& Base, double FootRadius, double TopRadius, double Height, const FLinearColor& Colour, int32 Sides)
@@ -1152,7 +1155,7 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 	else if (Guns > 0) Heavy = 1;
 	else if (Motor > 0) Heavy = 2;
 	else if (Fort > 0) Heavy = 3;
-	else if (Sappers > 0) Heavy = 4;
+	else if (Sappers > 0 && Foot + Mountain + Horse == 0) Heavy = 4; // engineers alone stand by their bridging gear
 	const bool bHeavy = Heavy != INDEX_NONE;
 	if (bHeavy)
 	{
@@ -1163,19 +1166,19 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 		{
 		case 0:
 			// The nation's own tank if there is a model of it, or a plain one of the same size in the nation's paint.
-			if (!MainTank(Where, Metre, Tag, Turn))
+			if (!MainTank(Where, Metre, Tag, Turn, false))
 			{
 				Tank(Where, Metre * 2.3, Vehicles, Turn);
 			}
 			break;
 		case 1:
-			if (!Vehicle(MainGunOf(Tag), Where, Metre, Turn))
+			if (!Vehicle(MainGunOf(Tag), Where, Metre, Turn, false))
 			{
 				FieldGun(Where, Metre * 2.0, Vehicles, Turn);
 			}
 			break;
 		case 2:
-			if (!Vehicle(MainCarrierOf(Tag), Where, Metre, Turn))
+			if (!Vehicle(MainCarrierOf(Tag), Where, Metre, Turn, false))
 			{
 				Lorry(Where, Metre * 2.4, Vehicles, Turn);
 			}

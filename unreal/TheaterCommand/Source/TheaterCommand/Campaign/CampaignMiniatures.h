@@ -33,7 +33,7 @@ struct FMiniatureMesh
 	void Rod(const FVector& From, const FVector& To, double Radius, const FLinearColor& Colour, int32 Sides = 6);
 
 	/** A rod that tapers from one end to the other: an arm, a leg, a rifle's stock. */
-	void Limb(const FVector& From, const FVector& To, double FromRadius, double ToRadius, const FLinearColor& Colour, int32 Sides = 8);
+	void Limb(const FVector& From, const FVector& To, double FromRadius, double ToRadius, const FLinearColor& Colour, int32 Sides = 8, bool bEnds = true);
 
 	/** A ball, or an egg if Size is not the same each way. */
 	void Ball(const FVector& Center, const FVector& Size, const FLinearColor& Colour, int32 Rings = 6, int32 Sides = 10);
@@ -74,14 +74,14 @@ struct FMiniatureMesh
 	 * of a real metre on the table, so everything set out with the same Metre is in scale with everything
 	 * else. False if there is no model of that name.
 	 */
-	bool Vehicle(const FString& Name, const FVector& Where, double Metre, double Turn = 0.0);
+	bool Vehicle(const FString& Name, const FVector& Where, double Metre, double Turn = 0.0, bool bFine = true);
 
 	/** The tank a nation's armour is known by, or nothing if none is modelled yet for it. */
 	static FString MainTankOf(const FString& Tag);
 
 	/** The year the campaign has reached: an army's tanks are those its nation had by then (the Tiger from 1943). */
 	static int32 Year;
-	bool MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn = 0.0);
+	bool MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn = 0.0, bool bFine = true);
 
 	/** The field gun a nation's artillery is known by, and what its motorised troops ride in: names for Vehicle(). */
 	static FString MainGunOf(const FString& Tag);
