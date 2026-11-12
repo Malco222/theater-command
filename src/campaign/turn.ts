@@ -1,7 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type AirFleet, type AirMission, type BattleReport, type Build, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Region, type Skill, type Stance } from './types';
+import { KIND, STACK, type AirFleet, type AirMission, type BattleReport, type Build, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
 import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
@@ -13,6 +13,7 @@ import { cancelBuild, orderCorps, orderFort } from './economy';
 import { foundBureau, setTeams } from './research';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy } from './diplomacy';
+import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
 
@@ -45,7 +46,20 @@ export function beginHuman(g: Game): void {
 }
 
 export function endHuman(g: Game): void {
+  entrench(g, current(g));
   closePhase(g, current(g));
+}
+
+/**
+ * Troops under orders to dig in who spent the whole month where they stood are entrenched from now on. Anyone
+ * who marched, went by rail or attacked is not, and has to sit a month out before the trenches are ready again.
+ */
+function entrench(g: Game, nat: string): void {
+  for (const c of g.corps) {
+    if (c.nat !== nat || c.dead) continue;
+    if (c.digs && c.kind !== 'fort' && c.ap >= c.apMax && !c.fought) c.dug = true;
+    else if (c.dug) delete c.dug;
+  }
 }
 
 // ---- The eve of war ------------------------------------------------------------------------
@@ -77,9 +91,44 @@ export function beginEve(g: Game): boolean {
   return true;
 }
 
+export interface EvePlan { title: string; advice: string[]; place: [string, number][] }
+
+/** What the staff advises on the eve of war, if the player's nation has such advice and the eve is not over. */
+export function evePlan(g: Game): EvePlan | null {
+  if (!onEve(g) || !g.human) return null;
+  return (EVE as unknown as Record<string, EvePlan | undefined>)[g.human] ?? null;
+}
+
+/**
+ * Places the army as the staff advises, by rail, strongest corps first. Only corps that have not moved yet can go,
+ * so it does the most when it is the first thing done. Returns how many corps it moved.
+ */
+export function orderEvePlan(g: Game): number {
+  const plan = evePlan(g);
+  if (!plan) return 0;
+  const army = g.corps.filter((c) => canOrder(g, c)).sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id);
+  const want = new Map<number, number>();
+  let k = 0;
+  for (const [name, n] of plan.place) {
+    const r = g.byName[name];
+    for (let i = 0; i < n && k < army.length; i++, k++) if (r) want.set(army[k].id, r.id);
+  }
+  let moved = 0;
+  // Several passes: a corps can only go where there is room, and some have to leave first.
+  for (let pass = 0; pass < 6; pass++) {
+    for (const c of army) {
+      const to = want.get(c.id);
+      if (to !== undefined && c.reg !== to && orderRail(g, c, to)) moved++;
+    }
+  }
+  return moved;
+}
+
 /** Ends the eve of war: the month begins with whoever moves first. */
 export function endEve(g: Game): void {
   if (!onEve(g)) return;
+  // An army left in the positions it held all summer has had time to dig them.
+  entrench(g, g.human!);
   g.flags.eve = 0;
   g.phase = 0;
   g.week = 1;
@@ -167,12 +216,19 @@ export function orderAttack(g: Game, corps: Corps[], target: Region): BattleRepo
   return resolveBattle(g, ok, target);
 }
 
-/** The player's standing order for a corps that is attacked: stand and fight, or give ground when the blow would break it. */
-export function orderStance(g: Game, c: Corps, yields: boolean): boolean {
+/**
+ * The player's standing order for a corps that is attacked: stand and fight, dig in where it is, or give ground
+ * when the blow would break it. Digging takes a month spent on the spot, so the order pays from the month after.
+ */
+export function orderStance(g: Game, c: Corps, posture: Posture): boolean {
   if (!canOrder(g, c)) return false;
-  if (yields) c.yields = true; else delete c.yields;
+  if (posture === 'back') c.yields = true; else delete c.yields;
+  if (posture === 'dig') c.digs = true; else { delete c.digs; delete c.dug; }
   return true;
 }
+
+/** The standing order a corps is under. */
+export const postureOf = (c: Corps): Posture => (c.yields ? 'back' : c.digs ? 'dig' : 'stand');
 
 export function orderRail(g: Game, c: Corps, to: number): boolean {
   return canOrder(g, c) && railMove(g, c, g.regions[to]);

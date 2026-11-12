@@ -1,0 +1,29 @@
+{
+  "_about": "What a nation's staff advises on the eve of war, for a player whose country is attacked before its first month comes round. 'place' is the deployment the staff would make by rail: so many corps to each place, strongest corps first. 'advice' is what the staff says beside it. The staff only places the army; the orders each army is given are the player's to choose, and the player is free to do something else altogether.",
+  "POL": {
+    "title": "Fall back on Warsaw",
+    "advice": [
+      "An army strung out along the frontier is cut to pieces in a month. Bring the strongest corps into Warsaw by rail, five to a region, and stand the rest behind it.",
+      "Then give each army its orders. Troops told to dig in fight from trenches once they have sat a month where they are. Troops told to fall back give ground when they are outmatched, and reach the capital whole instead of being broken where they stand.",
+      "Keep out of the eastern provinces. Once the front breaks the Red Army crosses the border under its pact with Germany, and troops left there are lost."
+    ],
+    "place": [
+      [
+        "Warsaw",
+        5
+      ],
+      [
+        "Lublin",
+        5
+      ],
+      [
+        "Kielce",
+        5
+      ],
+      [
+        "Przemysl",
+        3
+      ]
+    ]
+  }
+}

@@ -19,6 +19,8 @@ export interface Goal {
   by?: number;
   /** A goal of endurance: decided when the month after this one opens. */
   until?: number;
+  /** A goal of holding out: the nation is still in the war after this many weeks of it, four to a month. */
+  outlast?: number;
 }
 
 export type GoalKey = 'short' | 'long';
@@ -30,7 +32,20 @@ export const GOALS = data.nations as unknown as Record<string, Partial<Record<Go
 const CODE: Record<number, GoalState> = { 1: 'won', 2: 'lost', 3: 'out' };
 
 /** The last month that counts toward a goal. */
-export const goalEnds = (goal: Goal): number => goal.by ?? goal.until ?? 0;
+export const goalEnds = (goal: Goal): number => goal.by ?? goal.until ?? (goal.outlast !== undefined ? Math.ceil(goal.outlast / 4) : 0);
+
+/** Weeks of war a nation has come through: every nation that moves before it has had its month when its own comes round. */
+function weeksThrough(g: Game, nat: string): number {
+  // On the eve of war nobody has moved yet, whatever the order of play says.
+  const moved = g.flags.eve !== 1 && g.phase >= g.order.indexOf(nat);
+  return (g.turn - 1) * 4 + (moved ? 4 : 0);
+}
+
+/** The week of the war in which a beaten nation fell, counting four to a month. */
+export function weeksLasted(g: Game, nat: string): number | null {
+  const f = g.nations[nat]?.fellOn;
+  return f ? (f.turn - 1) * 4 + f.week : null;
+}
 
 export function goalState(g: Game, key: GoalKey): GoalState {
   return CODE[g.flags[`goal:${key}`]] ?? 'open';
@@ -47,11 +62,21 @@ export function goalChecks(g: Game, nat: string, goal: Goal): { label: string; d
     const n = g.nations[id];
     out.push({ label: `${n?.name ?? id} beaten`, done: !!n && !n.alive && !n.dormant });
   }
+  if (goal.outlast !== undefined) {
+    const fell = weeksLasted(g, nat);
+    out.push({ label: `More than ${goal.outlast} weeks in the war`, done: fell !== null ? fell > goal.outlast : weeksThrough(g, nat) >= goal.outlast });
+  }
   if (!out.length) out.push({ label: `${g.nations[nat].name} still in the war`, done: g.nations[nat].alive });
   return out;
 }
 
 const met = (g: Game, nat: string, goal: Goal): boolean => g.nations[nat].alive && goalChecks(g, nat, goal).every((c) => c.done);
+
+/** How long a goal gives, in words for the goals panel. */
+export function goalWhen(goal: Goal, date: (turn: number) => string): string {
+  if (goal.outlast !== undefined) return `decided by how long you hold out`;
+  return goal.until !== undefined ? `decided when ${date(goal.until + 1)} opens` : `by the end of ${date(goal.by!)}`;
+}
 
 /**
  * Called once when a campaign opens in month `from`. A goal whose time has already gone by is not in play, and
@@ -74,7 +99,13 @@ export function judgeGoals(g: Game, nat: string): { key: GoalKey; goal: Goal; wo
     if (!goal || goalState(g, key) !== 'open') continue;
     const ok = met(g, nat, goal);
     let won: boolean | null = null;
-    if (!g.nations[nat].alive) won = false;
+    if (goal.outlast !== undefined) {
+      // A nation that goes down fighting can still have held out long enough: what counts is the week it fell.
+      const fell = weeksLasted(g, nat);
+      if (fell !== null) won = fell > goal.outlast && (goal.hold ?? []).length === 0;
+      else if (g.nations[nat].alive && weeksThrough(g, nat) >= goal.outlast) won = ok;
+    }
+    else if (!g.nations[nat].alive) won = false;
     else if (goal.until !== undefined) { if (g.turn > goal.until) won = ok; }
     // What stands when the month after the last one opens still counts: an ally may have finished the job.
     else if (ok && g.turn <= goalEnds(goal) + 1) won = true;
@@ -82,6 +113,11 @@ export function judgeGoals(g: Game, nat: string): { key: GoalKey; goal: Goal; wo
     if (won === null) continue;
     g.flags[`goal:${key}`] = won ? 1 : 2;
     headline(g, 'goal', `${g.nations[nat].name}'s ${key} campaign is ${won ? 'won' : 'lost'}: ${goal.title}.`, nat);
+    // A goal settled by a nation's fall is dated to the week it fell.
+    const fell = g.nations[nat].fellOn;
+    if (fell && !g.nations[nat].alive) Object.assign(g.headlines[g.headlines.length - 1], { turn: fell.turn, week: fell.week });
+    // A goal won by lasting is dated to the last week the nation came through.
+    else if (goal.outlast !== undefined) Object.assign(g.headlines[g.headlines.length - 1], { turn: Math.max(1, weeksThrough(g, nat) / 4), week: 4 });
     out.push({ key, goal, won });
   }
   return out;

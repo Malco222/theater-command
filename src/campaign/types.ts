@@ -133,7 +133,14 @@ export interface Corps {
   yields?: boolean;
   /** The corps has already given ground this month, and will stand if it is attacked again. */
   gaveWay?: boolean;
+  /** The player's standing order to entrench. No computer nation sets it. */
+  digs?: boolean;
+  /** The corps is entrenched: it spent its last month where it stood, under orders to dig in. Lost the moment it leaves the ground. */
+  dug?: boolean;
 }
+
+/** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */
+export type Posture = 'stand' | 'dig' | 'back';
 
 export type Skill = 'offense' | 'defense' | 'logistics' | 'leadership';
 

@@ -6,8 +6,8 @@ import {
   DESERT, allied, atWar, collapseScore, convoyDrag, createGame, ensureSupply, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, weather,
 } from '../game';
 import {
-  beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort,
-  orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams,
+  beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
+  orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
   previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
 } from '../turn';
 import {
@@ -18,7 +18,7 @@ import {
   NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
 } from '../navy';
 import { phaseFor, theatrePhases } from '../ai';
-import { GOALS, GOAL_KEYS, goalChecks, goalState, judgeGoals, openGoals } from '../goals';
+import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
 import { fronts, isOpen, startOpen } from '../staff';
 import { PRODUCTION, canRaise, fortCost, income, isHome } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
@@ -26,7 +26,7 @@ import { loadGame, peekSave, saveGame, staleSave } from '../save';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
 import { DIPLOMACY, TRACK_LABEL, canCourt, courtable, momentum, pcIncome, receptive, step, tradePartners } from '../diplomacy';
 import { bloc } from '../game';
-import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type BattleReport, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Nation, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
+import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type BattleReport, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -410,7 +410,7 @@ function hintText(): string {
   if (!g.human) return '';
   if (!humanUp(g)) return '';
   if (ui.msg) return ui.msg;
-  if (onEve(g)) return `The eve of war. ${natName(eveAttacker(g) ?? 'GER')} strikes before your first month comes round: place your army now, by road or by rail, then finish. No month passes.`;
+  if (onEve(g)) return `The eve of war. ${natName(eveAttacker(g) ?? 'GER')} strikes before your first month comes round: place your army now, by road or by rail, give each army its orders for the day it is attacked, then finish. No month passes.`;
   if (ui.tab === 'build') return 'Planning production: click one of your own home regions to raise troops or build works there.';
   if (ui.tab === 'research') return g.human && g.nations[g.human].lab ? 'Research: use − and + to move design teams between branches. The new pace starts next month.' : '';
   if (ui.tab === 'navy') {
@@ -477,9 +477,19 @@ function freeAdvice(me: string): string {
   return `<div class="note"><b>Free play: there is no plan to follow.</b> You decide who to fight and when. So does every other nation: its staff weighs its fronts each month and makes up its own mind, so this war will not go the way history did. ${body}</div>`;
 }
 
+/** The staff's advice on the eve of war: what to do with the army before the blow falls, and a button that does the placing. */
+function eveAdvice(): string {
+  const plan = evePlan(g);
+  if (!plan) return '';
+  const where = plan.place.map(([name, n]) => `${n} corps at ${name}`);
+  return `<div class="note eve"><b>Your staff's advice: ${esc(plan.title)}.</b><ul>${plan.advice.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>
+    <button class="btn small" data-act="eveplan" title="Sends the army by rail, strongest corps first: ${esc(where.join(', '))}. Corps you have already moved stay where you put them. The orders each army is given are left to you.">Place the army as the staff advises</button></div>`;
+}
+
 function advice(): string {
   const me = g.human;
   if (!me || !g.nations[me].alive) return '';
+  if (onEve(g)) return eveAdvice();
   if (isOpen(g)) return freeAdvice(me);
   const list = (a?: string[]) => (a ?? []).slice(0, 7).join(', ');
   // Only what is still to do: wars not yet declared, objectives still in enemy hands.
@@ -566,6 +576,8 @@ function corpsRow(c: Corps, mine: boolean): string {
   if (c.airborne) tags.push(`<span class="tag good" title="Parachute and glider troops. Once a month they can be flown from a friendly coast to an enemy one across a single sea, with no ships and whoever holds the water. They fight there at ${Math.round(NAVY.landing.airborne * 100)}%, without heavy weapons, and not under a sky the enemy's fighters hold.">Airborne</span>`);
   if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
   if (c.yields && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_BACK)}">Falls back if attacked</span>`);
+  if (c.dug) tags.push(`<span class="tag good" title="${esc(STANCE_DIG)}">Dug in</span>`);
+  else if (c.digs && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_DIG)}">Digging in: ready next month if it stays put</span>`);
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const el = mine && c.kind !== 'fort' ? 'button' : 'div';
   return `<${el} class="corps${pick ? ' pick' : ''}" ${el === 'button' ? `data-act="pick" data-id="${c.id}"` : ''}>
@@ -578,6 +590,7 @@ function corpsRow(c: Corps, mine: boolean): string {
 // ---- The army tray: the general and his units, laid out as cards along the foot of the map ----
 
 const STANCE_STAND = 'Stand and fight wherever they are attacked.';
+const STANCE_DIG = 'Entrench. An army that spends a whole month where it stands, without marching or attacking, fights from trenches from then on and defends 25% stronger. It keeps them for as long as it stays put, and loses them the moment it leaves the ground.';
 const STANCE_BACK = 'Give ground instead of fighting when the enemy comes on with odds of 1.2 to 1 or better, which is what it takes to carry a position. The troops slip away whole to the ground behind them, at a cost in cohesion and the region itself. Caught again in the same month, they stand. Fortress troops always stand, and nobody gives up their own capital without a fight.';
 
 /** The army the tray shows for the selected region: the player's own if he has one there, otherwise the largest. */
@@ -597,7 +610,7 @@ function unitCard(c: Corps, mine: boolean): string {
   const el = can ? 'button' : 'div';
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const gen = generalOf(g, c);
-  const flags = `${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}`;
+  const flags = `${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="Entrenched: defends 25% stronger until it leaves this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to entrench: the trenches are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${gen ? ` · ${esc(gen.name)}` : ''}">
     <span class="utop">${icon(c)}${pips}</span><b>${esc(c.name)}</b>
     <span class="um">${c.divs} ${KIND[c.kind].label.toLowerCase()} div${c.divs > 1 ? 's' : ''}${gen ? ` · ${esc(surname(gen.name))}` : ''}</span>
@@ -623,9 +636,10 @@ function drawTray(): void {
   const tally = `<div class="ttally"><b>${num(sumDivs(cs))}</b><small>divisions</small><b>${Math.round(fitness(cs) * 100)}%</b><small>strength</small>${others.length ? `<small class="also">Also here: ${others.map((o) => esc(g.nations[o].adj)).join(', ')}</small>` : ''}</div>`;
   // The standing order for the day the enemy comes: the whole army in the tray takes it together.
   const field = cs.filter((c) => c.kind !== 'fort');
-  const back = field.filter((c) => c.yields).length;
+  const under = new Set(field.map(postureOf));
+  const all = (p: Posture): string => (under.size === 1 && under.has(p) ? 'on' : '');
   const stance = mine && field.length
-    ? `<div class="tstance" role="group" aria-label="Orders if this army is attacked"><small>If attacked${back > 0 && back < field.length ? ' · mixed' : ''}</small><button class="${back === 0 ? 'on' : ''}" data-act="ifattacked" data-v="0" title="${esc(STANCE_STAND)}">Stand</button><button class="${back === field.length ? 'on' : ''}" data-act="ifattacked" data-v="1" title="${esc(STANCE_BACK)}">Fall back</button></div>`
+    ? `<div class="tstance" role="group" aria-label="Orders if this army is attacked"><small>If attacked${under.size > 1 ? ' · mixed' : ''}</small><button class="${all('stand')}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_STAND)}">Stand</button><button class="${all('dig')}" data-act="ifattacked" data-v="dig" title="${esc(STANCE_DIG)}">Dig in</button><button class="${all('back')}" data-act="ifattacked" data-v="back" title="${esc(STANCE_BACK)}">Fall back</button></div>`
     : '';
   el.innerHTML = `${head}${tally}${stance}<div class="cards">${cs.map((c) => unitCard(c, mine)).join('')}</div>`;
   el.classList.add('open');
@@ -754,7 +768,8 @@ function alertList(): Alert[] {
   const cut = [...new Set(g.corps.filter((c) => c.nat === me && !c.dead && !c.supplied).map((c) => c.reg))];
   if (cut.length) out.push({ kind: 'cut', text: `${cut.length} ${cut.length === 1 ? 'army is' : 'armies are'} cut off from supply`, regs: cut });
   if (n.atWar.length) {
-    const idle = g.regions.filter((r) => r.units.some((c) => canOrder(g, c) && c.ap >= c.apMax && !c.fought) && r.nb.some((j) => atWar(g, me, g.regions[j].ctrl))).map((r) => r.id);
+    // An army under orders to dig in is doing its work by staying where it is.
+    const idle = g.regions.filter((r) => r.units.some((c) => canOrder(g, c) && c.ap >= c.apMax && !c.fought && !c.digs) && r.nb.some((j) => atWar(g, me, g.regions[j].ctrl))).map((r) => r.id);
     if (idle.length) out.push({ kind: 'front', text: `${idle.length} ${idle.length === 1 ? 'army' : 'armies'} at the front ${idle.length === 1 ? 'has' : 'have'} not moved`, regs: idle });
   }
   const cheapest = Math.min(...Object.values(PRODUCTION.builds).map((b) => b.cost));
@@ -793,7 +808,7 @@ function goalsBlock(): string {
     const goal = GOALS[me]![key];
     const st = goalState(g, key);
     if (!goal || st === 'out') return '';
-    const when = goal.until !== undefined ? `decided when ${date(goal.until + 1)} opens` : `by the end of ${date(goal.by!)}`;
+    const when = goalWhen(goal, date);
     return `<div class="goal ${st}"><span class="gk">${key === 'short' ? 'Short campaign' : 'Long campaign'} · ${when}</span><b>${esc(goal.title)}${st === 'won' ? ' <span class="tag good">Won</span>' : st === 'lost' ? ' <span class="tag bad">Lost</span>' : ''}</b><small>${esc(goal.text)}</small><span class="gchecks">${goalChecks(g, me, goal).map((c) => `<span class="${c.done ? 'done' : ''}">${c.done ? '✓' : '○'} ${esc(c.label)}</span>`).join('')}</span></div>`;
   }).join('');
   return rows ? `<h3>Campaign goals</h3>${rows}` : '';
@@ -870,6 +885,7 @@ function regionPane(): string {
   if (r.port) tags.push('<span class="tag">Port</span>');
   if (r.seas.length) tags.push(`<span class="tag">Coast: ${r.seas.map((z) => esc(g.seas[z].name)).join(', ')}</span>`);
   if (r.fort) tags.push(`<span class="tag">Fortified, level ${r.fort.lv}, facing ${r.fort.vs.map((v) => g.nations[v]?.adj ?? v).join(' and ')} ground</span>`);
+  if (me === 'POL' && r.sov && r.ctrl === 'POL' && !g.flags.sovietMove && g.turn <= 3) tags.push('<span class="tag bad" title="Once Poland\'s front breaks, the Red Army crosses the border under its pact with Germany and takes this province. Troops left here are lost.">East of the pact line</span>');
   if (me && g.nations[me].alive && allied(g, me, r.ctrl)) tags.push(g.supply[me]?.[r.id] ? '<span class="tag good">In your supply net</span>' : '<span class="tag bad">No supply line to here</span>');
   const sky = skyOver(g, r.id);
   if (sky) tags.push(`<span class="tag ${me && allied(g, me, sky) ? 'good' : 'bad'}">The ${g.nations[sky].adj} air force holds the sky here</span>`);
@@ -1960,8 +1976,16 @@ function runOthers(): void {
   let guard = 0;
   while (!humanUp(g) && guard++ < 80) {
     if (g.human && !g.nations[g.human].alive) break;
-    stepAI(g);
+    stepOther();
   }
+}
+
+/** One computer nation's month. A goal that asks what stands when a month opens is judged the moment it opens. */
+function stepOther(): string {
+  const month = g.turn;
+  const nat = stepAI(g);
+  if (g.human && g.turn !== month) judgeGoals(g, g.human);
+  return nat;
 }
 
 const some = (names: string[]): string => (names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`);
@@ -1975,7 +1999,7 @@ function passStep(): void {
     if (humanUp(g) || !g.human || !g.nations[g.human].alive) break;
     const ctrl = g.regions.map((r) => r.ctrl);
     const r0 = g.reports.length;
-    const nat = stepAI(g);
+    const nat = stepOther();
     p.done++;
     const taken = g.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
     const reps = g.reports.slice(r0);
@@ -2030,7 +2054,12 @@ function arrive(show: boolean, from: Since, before: string[]): void {
   refresh();
   if (lost) {
     openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
-    $('#card').querySelector('.kick')!.textContent = `${natName(lost)} has fallen. The war goes on without you.`;
+    // A nation whose goals are about holding out is told how long it held.
+    const weeks = Object.values(GOALS[lost] ?? {}).some((x) => x?.outlast !== undefined) ? weeksLasted(g, lost) : null;
+    const nth = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth'];
+    $('#card').querySelector('.kick')!.textContent = weeks !== null && nth[weeks]
+      ? `${natName(lost)} has fallen in the ${nth[weeks]} week of the war. The war goes on without you.`
+      : `${natName(lost)} has fallen. The war goes on without you.`;
     return;
   }
   if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
@@ -2179,14 +2208,25 @@ function onClick(e: MouseEvent): void {
       ui.rail = ui.ship = ui.land = false; refresh(); break;
     }
     case 'pickall': selectRegion(ui.sel); refresh(); break;
+    case 'eveplan': {
+      const moved = orderEvePlan(g);
+      ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = false;
+      ui.msg = moved
+        ? `${moved} corps sent by rail as the staff advised. Now give each army its orders: click an army, then Stand, Dig in or Fall back.`
+        : 'The army is already where the staff wants it, or has made its move for the eve.';
+      refresh(); break;
+    }
     case 'ifattacked': {
       const a = trayArmy;
       if (!a || a.nat !== g.human) break;
-      const back = t.dataset.v === '1';
-      const told = g.regions[a.reg].units.filter((c) => c.nat === a.nat && orderStance(g, c, back)).length;
-      if (told) ui.msg = back
-        ? `The army at ${g.regions[a.reg].name} will give ground if the enemy attacks with the odds to carry the position.`
-        : `The army at ${g.regions[a.reg].name} will stand and fight where it is.`;
+      const posture = t.dataset.v as Posture;
+      const at = g.regions[a.reg].name;
+      const told = g.regions[a.reg].units.filter((c) => c.nat === a.nat && orderStance(g, c, posture)).length;
+      if (told) ui.msg = posture === 'back'
+        ? `The army at ${at} will give ground if the enemy attacks with the odds to carry the position.`
+        : posture === 'dig'
+          ? `The army at ${at} is digging in. Leave it where it is this month and it fights from trenches from the next.`
+          : `The army at ${at} will stand and fight where it is.`;
       refresh(); break;
     }
     case 'unpick': ui.picked.clear(); ui.rail = ui.ship = ui.land = false; refresh(); break;

@@ -2,8 +2,8 @@
 // never change it, so a war with nobody at the controls carries no trace of them.
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/campaign/game';
-import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, judgeGoals, openGoals } from '../src/campaign/goals';
-import { runTurnAI } from '../src/campaign/turn';
+import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, judgeGoals, openGoals, weeksLasted } from '../src/campaign/goals';
+import { beginEve, runTurnAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
 const JAN_41 = 17;
@@ -27,9 +27,10 @@ describe('the goals as written', () => {
         expect(goal, `${nat} ${key}`).toBeDefined();
         for (const name of goal.hold ?? []) expect(g.byName[name], `${nat} ${key}: ${name}`).toBeDefined();
         for (const id of goal.beaten ?? []) expect(g.nations[id], `${nat} ${key}: ${id}`).toBeDefined();
-        expect((goal.by === undefined) !== (goal.until === undefined), `${nat} ${key}`).toBe(true);
+        expect([goal.by, goal.until, goal.outlast].filter((x) => x !== undefined).length, `${nat} ${key}`).toBe(1);
       }
-      expect(goalEnds(pair.short!), nat).toBeLessThan(goalEnds(pair.long!));
+      expect(goalEnds(pair.short!), nat).toBeLessThanOrEqual(goalEnds(pair.long!));
+      expect(pair.short!.outlast ?? goalEnds(pair.short!), nat).toBeLessThan(pair.long!.outlast ?? goalEnds(pair.long!));
     }
   });
 
@@ -72,10 +73,49 @@ describe('judging a war', () => {
   });
 
   it('counts a goal of endurance when its month has gone by', () => {
-    const g = history(5, 3);
-    const alive = g.nations.POL.alive;
-    const decided = judgeGoals(g, 'POL');
-    expect(decided.find((d) => d.key === 'short')?.won).toBe(alive);
+    const g = structuredClone(war);
+    // London and Cairo are British all through history's 1941: the goal is decided when 1942 opens, not before.
+    g.turn = 28;
+    expect(judgeGoals(g, 'UK')).toEqual([]);
+    g.turn = 29;
+    expect(judgeGoals(g, 'UK').map((d) => [d.key, d.won])).toEqual([['short', true]]);
+  });
+});
+
+describe('holding out', () => {
+  it('gives history\'s Poland neither goal: it is beaten in the fourth week', () => {
+    const g = structuredClone(war);
+    expect(weeksLasted(g, 'POL')).toBe(4);
+    expect(judgeGoals(g, 'POL').map((d) => [d.key, d.won])).toEqual([['short', false], ['long', false]]);
+  });
+
+  it('counts the week a nation fell, so going down fighting later than history is a goal won', () => {
+    const fiveWeeks = structuredClone(war);
+    fiveWeeks.nations.POL.fellOn = { turn: 2, week: 1, to: 'GER' };
+    expect(judgeGoals(fiveWeeks, 'POL').map((d) => [d.key, d.won])).toEqual([['short', true], ['long', false]]);
+    const sixWeeks = structuredClone(war);
+    sixWeeks.nations.POL.fellOn = { turn: 2, week: 2, to: 'GER' };
+    expect(judgeGoals(sixWeeks, 'POL').map((d) => [d.key, d.won])).toEqual([['short', true], ['long', true]]);
+    // Both are dated to the week Poland fell.
+    expect(sixWeeks.headlines.slice(-2).map((h) => [h.kind, h.turn, h.week])).toEqual([['goal', 2, 2], ['goal', 2, 2]]);
+  });
+
+  it('decides nothing on the eve of war, and gives a nation still standing its weeks when its own month comes round', () => {
+    const g = createGame(1, 'POL');
+    beginEve(g);
+    expect(judgeGoals(g, 'POL')).toEqual([]);
+    // Germany's September has been played and Poland is still there: four weeks, not yet five.
+    g.flags.eve = 0;
+    g.phase = g.order.indexOf('POL');
+    expect(judgeGoals(g, 'POL').map((d) => [d.key, d.won])).toEqual([['short', true]]);
+    // The news is dated to the last week Poland came through, not to the week the count was made.
+    expect(g.headlines.at(-1)).toMatchObject({ kind: 'goal', turn: 1, week: 4 });
+    // The month turns over: the fifth week has not been fought until Germany has moved again.
+    g.turn = 2;
+    g.phase = 0;
+    expect(judgeGoals(g, 'POL')).toEqual([]);
+    g.phase = g.order.indexOf('POL');
+    expect(judgeGoals(g, 'POL').map((d) => [d.key, d.won])).toEqual([['long', true]]);
   });
 });
 

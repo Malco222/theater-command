@@ -2,8 +2,8 @@
 // give. Troops under it slip away whole when a blow that would carry the position is about to land, once a
 // month, and a war nobody plays never sees it.
 import { describe, expect, it } from 'vitest';
-import { YIELD_ODDS, assess, createGame, limitAttackers, resolveBattle } from '../src/campaign/game';
-import { beginEve, beginHuman, endEve, humanUp, orderStance, runTurnAI, stepAI } from '../src/campaign/turn';
+import { DUG_IN, YIELD_ODDS, assess, createGame, limitAttackers, resolveBattle } from '../src/campaign/game';
+import { beginEve, beginHuman, endEve, endHuman, humanUp, orderEvePlan, orderMove, orderRail, orderStance, postureOf, runTurnAI, stepAI } from '../src/campaign/turn';
 import { loadGame, saveGame } from '../src/campaign/save';
 import type { Corps, Game, Region } from '../src/campaign/types';
 
@@ -26,11 +26,11 @@ describe('the order to fall back', () => {
     const g = eve();
     const pole = field(g, g.byName['Lodz'], 'POL')[0];
     const german = g.corps.find((c) => c.nat === 'GER' && c.kind !== 'fort')!;
-    expect(orderStance(g, german, true)).toBe(false);
+    expect(orderStance(g, german, 'back')).toBe(false);
     expect(german.yields).toBeUndefined();
-    expect(orderStance(g, pole, true)).toBe(true);
+    expect(orderStance(g, pole, 'back')).toBe(true);
     expect(pole.yields).toBe(true);
-    expect(orderStance(g, pole, false)).toBe(true);
+    expect(orderStance(g, pole, 'stand')).toBe(true);
     expect(pole.yields).toBeUndefined();
   });
 
@@ -38,7 +38,7 @@ describe('the order to fall back', () => {
     const g = eve();
     const lodz = g.byName['Lodz'];
     const poles = field(g, lodz, 'POL');
-    for (const c of poles) orderStance(g, c, true);
+    for (const c of poles) orderStance(g, c, 'back');
     endEve(g);
     const before = poles.map((c) => ({ str: c.str, org: c.org }));
     const germans = germansRound(g, lodz);
@@ -71,7 +71,7 @@ describe('the order to fall back', () => {
     const g = eve();
     const lodz = g.byName['Lodz'];
     const pole = field(g, lodz, 'POL')[0];
-    orderStance(g, pole, true);
+    orderStance(g, pole, 'back');
     endEve(g);
     resolveBattle(g, germansRound(g, lodz), lodz);
     const refuge = g.regions[pole.reg];
@@ -95,7 +95,7 @@ describe('the order to fall back', () => {
     const g = eve();
     const lodz = g.byName['Lodz'];
     const pole = field(g, lodz, 'POL')[0];
-    orderStance(g, pole, true);
+    orderStance(g, pole, 'back');
     endEve(g);
     // The weakest corps in reach, sent in alone.
     const one = [germansRound(g, lodz).sort((x, y) => assess(g, [x], lodz).odds - assess(g, [y], lodz).odds)[0]];
@@ -111,7 +111,7 @@ describe('the order to fall back', () => {
     const poznan = g.byName['Poznan'];
     const [stays, goes] = field(g, poznan, 'POL');
     expect(goes).toBeDefined();
-    orderStance(g, goes, true);
+    orderStance(g, goes, 'back');
     endEve(g);
     const str = goes.str;
     const rep = resolveBattle(g, germansRound(g, poznan), poznan);
@@ -129,7 +129,7 @@ describe('the order to fall back', () => {
     const g = eve();
     const warsaw = g.byName['Warsaw'];
     const poles = field(g, warsaw, 'POL');
-    for (const c of poles) orderStance(g, c, true);
+    for (const c of poles) orderStance(g, c, 'back');
     endEve(g);
     // Everything Germany has, brought up to the gates for the purpose of the test.
     const germans = g.corps.filter((c) => c.nat === 'GER' && c.kind !== 'fort').slice(0, 12);
@@ -146,7 +146,7 @@ describe('the order to fall back', () => {
   it('is kept in a saved game', () => {
     const g = eve();
     const pole = field(g, g.byName['Lodz'], 'POL')[0];
-    orderStance(g, pole, true);
+    orderStance(g, pole, 'back');
     const back = loadGame(saveGame(g))!;
     expect(back.corps.find((c) => c.id === pole.id)!.yields).toBe(true);
   });
@@ -154,7 +154,96 @@ describe('the order to fall back', () => {
   it('never appears in a war nobody plays', () => {
     const g = createGame(2, null);
     while (g.turn < 5) runTurnAI(g);
-    expect(g.corps.some((c) => c.yields || c.gaveWay)).toBe(false);
+    expect(g.corps.some((c) => c.yields || c.gaveWay || c.digs || c.dug)).toBe(false);
     expect(g.reports.some((r) => r.yielded || r.defenders.some((u) => u.fate === 'yielded'))).toBe(false);
+    expect(g.reports.some((r) => r.lines.some((l) => l.label === 'Dug in'))).toBe(false);
+  });
+});
+
+describe('the order to dig in', () => {
+  it('is one of three an army can be under, and they exclude each other', () => {
+    const g = eve();
+    const pole = field(g, g.byName['Lodz'], 'POL')[0];
+    expect(postureOf(pole)).toBe('stand');
+    orderStance(g, pole, 'dig');
+    expect(postureOf(pole)).toBe('dig');
+    orderStance(g, pole, 'back');
+    expect(postureOf(pole)).toBe('back');
+    expect(pole.digs).toBeUndefined();
+    orderStance(g, pole, 'dig');
+    expect(pole.yields).toBeUndefined();
+    orderStance(g, pole, 'stand');
+    expect(postureOf(pole)).toBe('stand');
+    expect(pole.digs).toBeUndefined();
+  });
+
+  it('makes an army that stayed where it stood a quarter stronger in defence, and says so on the ticket', () => {
+    const g = eve();
+    const lodz = g.byName['Lodz'];
+    const pole = field(g, lodz, 'POL')[0];
+    orderStance(g, pole, 'dig');
+    // The order alone digs nothing: it is the month spent on the spot that does.
+    expect(pole.dug).toBeUndefined();
+    endEve(g);
+    expect(pole.dug).toBe(true);
+    const germans = germansRound(g, lodz);
+    const dug = assess(g, germans, lodz);
+    expect(dug.lines.find((l) => l.label === 'Dug in')?.effect).toContain('25%');
+    delete pole.dug;
+    const plain = assess(g, germans, lodz);
+    expect(plain.lines.some((l) => l.label === 'Dug in')).toBe(false);
+    expect(plain.odds / dug.odds).toBeCloseTo(DUG_IN, 6);
+    expect(plain.A).toBeCloseTo(dug.A, 6);
+  });
+
+  it('takes a month on the spot: troops who came by rail have no trenches until they have sat one out', () => {
+    const g = eve();
+    orderEvePlan(g);
+    const garrison = field(g, g.byName['Warsaw'], 'POL');
+    expect(garrison.length).toBe(5);
+    for (const c of garrison) orderStance(g, c, 'dig');
+    endEve(g);
+    // All five came in by rail on the eve: Germany's September finds them above ground.
+    expect(garrison.filter((c) => c.dug).length).toBe(0);
+    for (let guard = 0; !humanUp(g) && g.nations.POL.alive && guard < 80; guard++) stepAI(g);
+    expect(humanUp(g)).toBe(true);
+    beginHuman(g);
+    endHuman(g);
+    for (const c of garrison) expect(c.dug, c.name).toBe(true);
+  });
+
+  it('leaves the trenches behind when the army moves, retreats or is given other orders', () => {
+    const g = eve();
+    const [a, b, c] = ['Lodz', 'Kielce', 'Lublin'].map((n) => field(g, g.byName[n], 'POL')[0]);
+    for (const x of [a, b, c]) orderStance(g, x, 'dig');
+    endEve(g);
+    expect([a, b, c].map((x) => x.dug)).toEqual([true, true, true]);
+    // Beaten out of its position, an army loses the trenches it dug there.
+    const lodz = g.byName['Lodz'];
+    const rep = resolveBattle(g, germansRound(g, lodz), lodz);
+    expect(rep.taken).toBe(true);
+    expect(a.dug).toBeUndefined();
+    // So does one that marches away, or goes by rail, or is told to do something else.
+    g.phase = g.order.indexOf('POL');
+    beginHuman(g);
+    expect(b.dug).toBe(true);
+    orderStance(g, b, 'stand');
+    expect(b.dug).toBeUndefined();
+    expect(orderRail(g, c, g.byName['Przemysl'].id) || orderMove(g, c, g.byName['Przemysl'].id) > 0).toBe(true);
+    expect(c.dug).toBeUndefined();
+    // Still under orders to dig, it has to sit a month before the new trenches are ready.
+    expect(c.digs).toBe(true);
+    endHuman(g);
+    expect(c.dug).toBeUndefined();
+  });
+
+  it('is kept in a saved game', () => {
+    const g = eve();
+    const pole = field(g, g.byName['Lodz'], 'POL')[0];
+    orderStance(g, pole, 'dig');
+    endEve(g);
+    const back = loadGame(saveGame(g))!.corps.find((c) => c.id === pole.id)!;
+    expect(back.digs).toBe(true);
+    expect(back.dug).toBe(true);
   });
 });

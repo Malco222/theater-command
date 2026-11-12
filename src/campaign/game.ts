@@ -434,6 +434,8 @@ export function corpsBase(g: Game, c: Corps): number {
 
 /** Share of the usual losses a defender takes when the attack is beaten off. */
 const HELD_LOSS = 0.6;
+/** How much stronger troops defend from trenches they have had a month to dig. */
+export const DUG_IN = 1.25;
 
 export const men = (c: Corps): number => Math.round(c.divs * c.str * MEN_PER_DIV);
 
@@ -478,7 +480,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const openDesert = target.terrain === DESERT.terrain && !target.fort && attackers.some((c) => KIND[c.kind].mobile);
   let turned = false;
   const tempo = [...dN].some((d) => freshOffensive(g, attNat, d)) || freshOffensive(g, attNat, target.ctrl);
-  let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, longest = 0, lineMul = 1, cold = false, coldDef = false;
+  let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, longest = 0, lineMul = 1, cold = false, coldDef = false, dugIn = 0;
   const sources = new Set<number>();
   for (const c of attackers) sources.add(c.reg);
   // Defenders with nowhere to fall back to: every way out is enemy ground or the attack itself.
@@ -510,6 +512,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   let D = 0, thin = 1;
   for (const d of defenders) {
     let p = corpsBase(g, d) * KIND[d.kind].def * TERRAIN_DEF[target.terrain];
+    if (d.dug) { p *= DUG_IN; dugIn++; }
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
     if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') { p *= DESERT.open; turned = true; }
     const dl = lineStrength(g, d).mul;
@@ -536,6 +539,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (target.fort) {
     lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
+  if (dugIn) lines.push({ label: 'Dug in', value: dugIn === defenders.length ? 'The defenders have had a month to entrench' : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });
   lines.push({ label: 'Air', value: skyWon ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * 30)}%` : undefined });
@@ -596,6 +600,8 @@ function place(g: Game, c: Corps, to: Region): void {
   r.units.splice(r.units.indexOf(c), 1);
   c.reg = to.id;
   to.units.push(c);
+  // Trenches stay where they were dug.
+  if (c.dug) delete c.dug;
 }
 
 function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<number>): Region | null {

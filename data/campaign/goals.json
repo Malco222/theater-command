@@ -1,5 +1,5 @@
 {
-  "_about": "Campaign goals: what winning means for each nation a person can play. Every nation has a short campaign and a long one. 'hold' lists cities that must be in the nation's own hands or an ally's. 'beaten' lists nations that must have capitulated. 'by' is the last month in which the goal can be reached (months count from 1 = September 1939, so 16 is December 1940 and 76 is December 1945): the goal is won the moment everything holds, and lost when that month has gone by. 'until' makes it a goal of endurance instead: nothing is decided until the month after it opens, and the goal is won if everything still holds then. The player's nation must still be in the war in every case. Goals judge the war and never change it: no computer nation knows about them.",
+  "_about": "Campaign goals: what winning means for each nation a person can play. Every nation has a short campaign and a long one. 'hold' lists cities that must be in the nation's own hands or an ally's. 'beaten' lists nations that must have capitulated. 'by' is the last month in which the goal can be reached (months count from 1 = September 1939, so 16 is December 1940 and 76 is December 1945): the goal is won the moment everything holds, and lost when that month has gone by. 'until' makes it a goal of endurance instead: nothing is decided until the month after it opens, and the goal is won if everything still holds then. 'outlast' makes it a goal of holding out: the nation is still in the war after that many weeks of it, four to a month, and a nation that goes down fighting later than that has won it all the same. Except for 'outlast', the player's nation must still be in the war. Goals judge the war and never change it: no computer nation knows about them.",
   "nations": {
     "GER": {
       "short": { "title": "Master of the continent", "text": "Hold Warsaw, Oslo and Paris by the end of 1940, as history's Germany did.", "hold": ["Berlin", "Warsaw", "Oslo", "Paris"], "by": 16 },
@@ -14,8 +14,8 @@
       "long": { "title": "Victory in Europe", "text": "Beat Germany by the end of 1945 with Paris still yours.", "hold": ["Paris"], "beaten": ["GER"], "by": 76 }
     },
     "POL": {
-      "short": { "title": "Longer than five weeks", "text": "Poland is still in the war when November 1939 opens. History's Poland was beaten in five weeks.", "until": 2 },
-      "long": { "title": "Warsaw holds", "text": "Warsaw is still Polish when 1940 opens.", "hold": ["Warsaw"], "until": 4 }
+      "short": { "title": "Through September", "text": "Poland is still in the war when October 1939 opens. History's Warsaw surrendered on 28 September.", "outlast": 4 },
+      "long": { "title": "Longer than five weeks", "text": "Poland is still fighting in the sixth week of the war. History's last Polish army laid down its arms after five.", "outlast": 5 }
     },
     "ITA": {
       "short": { "title": "Mare Nostrum", "text": "Hold Rome, Tripoli, Athens and Cairo by the end of 1942.", "hold": ["Rome", "Tripoli", "Athens", "Cairo"], "by": 40 },
