@@ -203,6 +203,27 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
 	}
 
+	// "-TheaterLook=Ardennes:0.1:20:4;Tobruk:0.2" takes one picture of each place named instead: a region,
+	// then how far out (0 close, 1 far), which way the view is turned, and how far it is tipped.
+	FString Look;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLook="), Look, false))
+	{
+		Shots.Reset();
+		TArray<FString> Places;
+		Look.ParseIntoArray(Places, TEXT(";"));
+		for (const FString& Place : Places)
+		{
+			TArray<FString> Parts;
+			Place.ParseIntoArray(Parts, TEXT(":"));
+			if (Parts.Num() > 0)
+			{
+				const float Zoom = Parts.IsValidIndex(1) ? FCString::Atof(*Parts[1]) : 0.3f;
+				Add(*FString::Printf(TEXT("look-%s-%s"), *Parts[0].Replace(TEXT(" "), TEXT("-")), Parts.IsValidIndex(1) ? *Parts[1] : TEXT("0.3")), *Parts[0], Zoom,
+					Parts.IsValidIndex(2) ? FCString::Atof(*Parts[2]) : 0.0f, Parts.IsValidIndex(3) ? FCString::Atof(*Parts[3]) : 0.0f);
+			}
+		}
+	}
+
 	// "-TheaterOnly=13b,13c" takes only the pictures whose names begin with one of these.
 	FString Only;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterOnly="), Only, false))

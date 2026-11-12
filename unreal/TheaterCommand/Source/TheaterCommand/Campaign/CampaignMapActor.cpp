@@ -2,6 +2,7 @@
 
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignFlags.h"
+#include "Campaign/CampaignTextures.h"
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -71,18 +72,6 @@ namespace
 		return FLinearColor(FColor::FromHex(Hex)); // sRGB in, linear out
 	}
 
-	/** The colour of the bare ground for each kind of country, before any nation is painted over it. */
-	FLinearColor GroundColor(const FString& Terrain)
-	{
-		if (Terrain == TEXT("forest")) return FromHex(TEXT("6C7F55"));
-		if (Terrain == TEXT("hills")) return FromHex(TEXT("A39670"));
-		if (Terrain == TEXT("mountain")) return FromHex(TEXT("8D8676"));
-		if (Terrain == TEXT("urban")) return FromHex(TEXT("9C9488"));
-		if (Terrain == TEXT("desert")) return FromHex(TEXT("D3BC86"));
-		if (Terrain == TEXT("marsh")) return FromHex(TEXT("7C8F78"));
-		return FromHex(TEXT("A8A777")); // plains
-	}
-
 	const TCHAR* SurfaceMaterialPath = TEXT("/Game/Campaign/Materials/M_MapSurface.M_MapSurface");
 	const TCHAR* SolidMaterialPath = TEXT("/Game/Campaign/Materials/M_Solid.M_Solid");
 	const TCHAR* HighlightMaterialPath = TEXT("/Game/Campaign/Materials/M_Highlight.M_Highlight");
@@ -145,9 +134,7 @@ bool ACampaignMapActor::BuildMap()
 
 	LoadMaterials();
 	Terrain.Build(Data);
-	PrepareGround();
-	VertexColors.SetNumUninitialized(Terrain.NX * Terrain.NY);
-	PaintVertices(0, 0, Terrain.NX - 1, Terrain.NY - 1);
+	PaintGround();
 	BuildTerrainMesh();
 	BuildSeaMesh();
 	BuildBorders();
@@ -251,9 +238,11 @@ void ACampaignMapActor::LoadMaterials()
 		Instance->SetScalarParameterValue(TEXT("Tooth"), Tooth);
 		return Instance;
 	};
-	LandMaterial = MakeSurface(0.92f, 0.22f, 0.16f, 0.4f); // matt, like painted plaster
-	SeaMaterial = MakeSurface(0.14f, 0.75f, 0.05f, 0.0f); // glossy and smooth, like poured resin
 	InkMaterial = MakeSurface(0.8f, 0.2f, 0.0f, 0.0f);
+
+	// The land and the sea take their colour from pictures painted in PaintGround.
+	LandMaterial = UMaterialInstanceDynamic::Create(Load(TEXT("/Game/Campaign/Materials/M_Land.M_Land")), this);
+	SeaMaterial = UMaterialInstanceDynamic::Create(Load(TEXT("/Game/Campaign/Materials/M_Sea.M_Sea")), this);
 
 	CubeMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	CylinderMesh = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
@@ -315,111 +304,40 @@ namespace
 	constexpr int32 ChunkCells = 96;
 }
 
-void ACampaignMapActor::PrepareGround()
+void ACampaignMapActor::PaintGround()
 {
-	const int32 NX = Terrain.NX, NY = Terrain.NY, Count = NX * NY;
+	const double StartTime = FPlatformTime::Seconds();
+	Paint.Build(Data, Terrain, VerticalScale);
 
-	// The ground colour of each kind of country, softened across region boundaries.
-	TArray<FLinearColor> RegionGround;
-	RegionGround.SetNum(Data.Regions.Num());
-	for (const FCampaignRegion& Region : Data.Regions)
-	{
-		RegionGround[Region.Id] = GroundColor(Region.Terrain);
-	}
-	const FLinearColor Unclaimed = FromHex(TEXT("A49C86"));
-	GroundR.SetNumUninitialized(Count);
-	GroundG.SetNumUninitialized(Count);
-	GroundB.SetNumUninitialized(Count);
-	for (int32 Idx = 0; Idx < Count; ++Idx)
-	{
-		const int16 Id = Terrain.Region[Idx];
-		const FLinearColor& C = Id >= 0 ? RegionGround[Id] : Unclaimed;
-		GroundR[Idx] = C.R;
-		GroundG[Idx] = C.G;
-		GroundB[Idx] = C.B;
-	}
-	const int32 Soften = FMath::RoundToInt32(4.0 / Terrain.Cell);
-	FCampaignTerrain::Smooth(GroundR, NX, NY, Soften, 2);
-	FCampaignTerrain::Smooth(GroundG, NX, NY, Soften, 2);
-	FCampaignTerrain::Smooth(GroundB, NX, NY, Soften, 2);
-	PlainsLightness = GroundColor(TEXT("plains")).GetLuminance();
+	// The pictures the land's colour comes from: one pixel for every point of the terrain.
+	GroundPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Ground, true, false, TEXT("TableGround"));
+	TintPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Tint, true, false, TEXT("TableTint"));
+	ReliefPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Relief, false, false, TEXT("TableRelief"));
+	MasksPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Masks, false, false, TEXT("TableMasks"));
+	WaterPicture = CampaignTextures::Create(Paint.WaterNX, Paint.WaterNY, Paint.Water, true, false, TEXT("TableWater"));
 
-	// How each point stands against the ground around it: crests come out lighter, valley floors darker.
-	Surround = Terrain.Height;
-	FCampaignTerrain::Smooth(Surround, NX, NY, FMath::RoundToInt32(5.0 / Terrain.Cell), 2);
-}
+	// The fine detail that repeats over it: grass, tree-tops, rock and sand, and the ripples on the water.
+	TArray<FColor> Pixels;
+	CampaignTextures::MakeGroundDetail(Pixels);
+	DetailPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableDetail"));
+	CampaignTextures::MakeGroundBumps(Pixels);
+	BumpsPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableBumps"));
+	CampaignTextures::MakeWaterBumps(Pixels);
+	RipplesPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableRipples"));
 
-void ACampaignMapActor::PaintVertices(int32 I0, int32 J0, int32 I1, int32 J1)
-{
-	// Each nation's colour, looked up once per region.
-	const FLinearColor Unclaimed = FromHex(TEXT("A49C86"));
-	TArray<FLinearColor> RegionTint;
-	RegionTint.SetNum(Data.Regions.Num());
-	for (const FCampaignRegion& Region : Data.Regions)
-	{
-		const FCampaignNation* Nation = Data.FindNation(Region.Owner);
-		RegionTint[Region.Id] = Nation ? FLinearColor(Nation->Color) : Unclaimed;
-	}
+	LandMaterial->SetTextureParameterValue(TEXT("Ground"), GroundPicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Tint"), TintPicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Relief"), ReliefPicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Masks"), MasksPicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Detail"), DetailPicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Bumps"), BumpsPicture);
+	LandMaterial->SetVectorParameterValue(TEXT("RockColour"), FCampaignGround::RockColour());
+	LandMaterial->SetVectorParameterValue(TEXT("SnowColour"), FCampaignGround::SnowColour());
+	LandMaterial->SetVectorParameterValue(TEXT("SandColour"), FCampaignGround::SandColour());
+	SeaMaterial->SetTextureParameterValue(TEXT("Water"), WaterPicture);
+	SeaMaterial->SetTextureParameterValue(TEXT("Ripples"), RipplesPicture);
 
-	// The direction the lamp shines from, in map terms (x east, y south, z up): low in the west-south-west.
-	// The relief is shaded into the paint as well as lit by the lamp, the way a printed relief map is,
-	// so that gentle country still reads as country.
-	const FVector3f ToLamp = FVector3f(-0.80f, 0.30f, 0.52f).GetSafeNormal();
-	const float Exaggerate = 1.8f;
-
-	const FLinearColor Rock = FromHex(TEXT("857D70"));
-	const FLinearColor Snow = FromHex(TEXT("F2F0EA"));
-	const FLinearColor Sand = FromHex(TEXT("D9CBA4"));
-
-	for (int32 J = J0; J <= J1; ++J)
-	{
-		for (int32 I = I0; I <= I1; ++I)
-		{
-			const int32 Idx = Terrain.Index(I, J);
-			const FLinearColor Ground(GroundR[Idx], GroundG[Idx], GroundB[Idx]);
-			FLinearColor C = Ground;
-
-			// The nation's colour is painted over the ground. The kind of country shows through as light
-			// and dark (forest darker, desert paler) and as a trace of its own colour; along the frontier
-			// the paint is laid on thick.
-			const int16 Id = Terrain.Region[Idx];
-			if (Id >= 0)
-			{
-				const FLinearColor& Tint = RegionTint[Id];
-				const float Lightness = FMath::Lerp(1.0f, Ground.GetLuminance() / PlainsLightness, 0.55f);
-				const FLinearColor Painted = FMath::Lerp(Tint * Lightness, Ground, 0.2f);
-				const float Edge = 1.0f - FMath::SmoothStep(0.6f, 4.5f, Terrain.BorderDistance[Idx] * static_cast<float>(Terrain.Cell));
-				C = FMath::Lerp(Painted, Tint * 0.8f, 0.6f * Edge);
-			}
-
-			// High ground turns to bare rock, and the highest crests to snow.
-			const float H = Terrain.Height[Idx];
-			const FVector2f Slope = Terrain.GradientAt(I, J);
-			const float Steepness = FMath::Clamp(Slope.Size() * 0.9f, 0.0f, 1.0f);
-			// Steep ground is rock whatever its height; high flat ground (a plateau) keeps its nation's colour.
-			const float RockAmount = 0.72f * FMath::SmoothStep(0.16f, 0.62f, Steepness) * FMath::SmoothStep(0.7f, 2.2f, H)
-				+ 0.3f * FMath::SmoothStep(3.6f, 5.4f, H);
-			C = FMath::Lerp(C, Rock, FMath::Min(RockAmount, 0.85f));
-			C = FMath::Lerp(C, Snow, 0.9f * FMath::SmoothStep(5.0f, 6.6f, H) * (1.0f - 0.5f * Steepness));
-
-			// A narrow strip of sand along the shore.
-			C = FMath::Lerp(C, Sand, 0.45f * (1.0f - FMath::SmoothStep(0.2f, 1.8f, Terrain.ShoreDistance[Idx])));
-
-			// Shaded relief.
-			const FVector3f Normal = FVector3f(-Slope.X * Exaggerate, -Slope.Y * Exaggerate, 1.0f).GetSafeNormal();
-			const float Lit = FMath::Clamp(FVector3f::DotProduct(Normal, ToLamp) / ToLamp.Z, 0.35f, 1.45f);
-			const float Standing = FMath::Clamp(1.0f + (H - Surround[Idx]) * 0.16f, 0.72f, 1.18f);
-			const float Shade = FMath::Lerp(1.0f, Lit, 0.5f) * Standing;
-
-			// A little unevenness, so that large areas do not look printed.
-			const float Grain = 1.0f + 0.03f * FMath::PerlinNoise2D(FVector2D(I * 0.61, J * 0.61));
-			C.R *= Shade * Grain;
-			C.G *= Shade * Grain;
-			C.B *= Shade * Grain;
-			C.A = 1.0f;
-			VertexColors[Idx] = C.GetClamped().ToFColor(true);
-		}
-	}
+	UE_LOG(LogTheater, Log, TEXT("Ground: %d x %d pixels of paint and three detail pictures made in %.2f s"), Paint.NX, Paint.NY, FPlatformTime::Seconds() - StartTime);
 }
 
 void ACampaignMapActor::BuildTerrainMesh()
@@ -459,8 +377,9 @@ void ACampaignMapActor::BuildTerrainChunk(int32 ChunkX, int32 ChunkY)
 			const FVector2f Slope = Terrain.GradientAt(I, J) * VerticalScale;
 			const FVector Normal = FVector(Slope.Y, -Slope.X, 1.0).GetSafeNormal();
 			const FVector Tangent = FVector(0.0, 1.0, Slope.X).GetSafeNormal();
-			Slot = Buffers.AddVertex(MapToWorld(X, Y, Terrain.Height[Idx]), Normal, VertexColors[Idx],
-				FVector2D(X / Data.Width, Y / Data.Height), Tangent);
+			// The paint has one pixel for every grid point: this point's is at the middle of pixel (I, J).
+			Slot = Buffers.AddVertex(MapToWorld(X, Y, Terrain.Height[Idx]), Normal, FColor::White,
+				FVector2D((I + 0.5) / Terrain.NX, (J + 0.5) / Terrain.NY), Tangent);
 		}
 		return Slot;
 	};
@@ -492,39 +411,25 @@ void ACampaignMapActor::BuildSeaMesh()
 {
 	SeaMesh->ClearAllMeshSections();
 
-	const double Step = 3.0;
-	const int32 NX = FMath::CeilToInt32(Data.Width / Step) + 1;
-	const int32 NY = FMath::CeilToInt32(Data.Height / Step) + 1;
-	const FLinearColor Deep = FromHex(TEXT("15304A"));
-	const FLinearColor Shallow = FromHex(TEXT("356E80"));
-
+	// One flat sheet. Its colour is a picture (pale over the shoals, dark over the deeps), so it needs no
+	// more points than its corners; a few more are given so that it is lit evenly from corner to corner.
+	const int32 Across = 12, Down = 12;
 	FCampaignMeshBuffers Buffers;
-	Buffers.Vertices.Reserve(NX * NY);
-	for (int32 J = 0; J < NY; ++J)
+	for (int32 J = 0; J <= Down; ++J)
 	{
-		for (int32 I = 0; I < NX; ++I)
+		for (int32 I = 0; I <= Across; ++I)
 		{
-			const double X = FMath::Min(I * Step, Data.Width);
-			const double Y = FMath::Min(J * Step, Data.Height);
-			// The water pales toward every coast, the way a chart shows shoal water. Where the real depth
-			// is known the shading follows it: the North Sea and the Baltic lie pale on their shelf, the
-			// Atlantic and the deep basins of the Mediterranean dark.
-			const float OffShore = -Terrain.ShoreAt(X, Y);
-			float Depth = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp(OffShore / 9.0f, 0.0f, 1.0f));
-			if (Terrain.HasElevation())
-			{
-				const float Fathomed = FMath::Clamp(FMath::Pow(FMath::Max(-Terrain.MetresAt(X, Y), 0.0f) / 3200.0f, 0.42f), 0.0f, 1.0f);
-				Depth = FMath::Min(Depth, 0.25f + 0.75f * Fathomed) * FMath::Lerp(0.55f, 1.0f, Fathomed);
-			}
-			const FLinearColor C = FMath::Lerp(Shallow, Deep, FMath::Pow(Depth, 0.7f));
-			Buffers.AddVertex(MapToWorld(X, Y, 0.0), FVector::UpVector, C.ToFColor(true), FVector2D(X / Data.Width, Y / Data.Height));
+			const double X = Data.Width * I / Across, Y = Data.Height * J / Down;
+			// The water's picture has a pixel every WaterStep map units, the first at the map's corner.
+			const FVector2D UV((X / Paint.WaterStep + 0.5) / Paint.WaterNX, (Y / Paint.WaterStep + 0.5) / Paint.WaterNY);
+			Buffers.AddVertex(MapToWorld(X, Y, 0.0), FVector::UpVector, FColor::White, UV);
 		}
 	}
-	for (int32 J = 0; J < NY - 1; ++J)
+	for (int32 J = 0; J < Down; ++J)
 	{
-		for (int32 I = 0; I < NX - 1; ++I)
+		for (int32 I = 0; I < Across; ++I)
 		{
-			const int32 A = J * NX + I, B = A + 1, C = A + NX, D = C + 1;
+			const int32 A = J * (Across + 1) + I, B = A + 1, C = A + Across + 1, D = C + 1;
 			Buffers.Triangles.Append({ A, C, B, B, C, D });
 		}
 	}
@@ -1015,14 +920,9 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders)
 	const int32 I1 = FMath::Clamp(FMath::CeilToInt32((Changed.Max.X + Margin) / Terrain.Cell), 0, Terrain.NX - 1);
 	const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Changed.Min.Y - Margin) / Terrain.Cell), 0, Terrain.NY - 1);
 	const int32 J1 = FMath::Clamp(FMath::CeilToInt32((Changed.Max.Y + Margin) / Terrain.Cell), 0, Terrain.NY - 1);
-	PaintVertices(I0, J0, I1, J1);
-	for (int32 ChunkY = FMath::Max(J0 - 1, 0) / ChunkCells; ChunkY <= FMath::Min(J1 / ChunkCells, ChunksY - 1); ++ChunkY)
-	{
-		for (int32 ChunkX = FMath::Max(I0 - 1, 0) / ChunkCells; ChunkX <= FMath::Min(I1 / ChunkCells, ChunksX - 1); ++ChunkX)
-		{
-			BuildTerrainChunk(ChunkX, ChunkY);
-		}
-	}
+	// Only the nations' paint changes: the land itself is left as it is.
+	Paint.PaintTint(Data, Terrain, I0, J0, I1, J1);
+	CampaignTextures::Update(TintPicture, Paint.Tint);
 	BuildBorders();
 }
 
@@ -1091,6 +991,15 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw)
 {
+	// From far off the map is read by its nations' colours, so the woods are laid on thinly; close up they
+	// are laid on thick, and the country reads as country.
+	const float Woods = FMath::Lerp(0.7f, 0.26f, FMath::SmoothStep(6000.0f, 17000.0f, CameraDistance));
+	if (LandMaterial && FMath::Abs(Woods - WoodsShown) > 0.01f)
+	{
+		WoodsShown = Woods;
+		LandMaterial->SetScalarParameterValue(TEXT("WoodsStrength"), Woods);
+	}
+
 	// Lettering: nations from far off, every region's name close up, capitals and seas always.
 	const int32 State = CameraDistance > 12500.0f ? 0 : (CameraDistance > 8500.0f ? 1 : 2);
 	if (State != LabelState)

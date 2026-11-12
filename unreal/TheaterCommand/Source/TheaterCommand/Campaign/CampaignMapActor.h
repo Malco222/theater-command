@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Campaign/CampaignMapData.h"
+#include "Campaign/CampaignGround.h"
 #include "Campaign/CampaignTerrain.h"
 #include "Campaign/CampaignView.h"
 #include "CampaignMapActor.generated.h"
@@ -108,8 +109,7 @@ public:
 
 private:
 	void LoadMaterials();
-	void PrepareGround();
-	void PaintVertices(int32 I0, int32 J0, int32 I1, int32 J1);
+	void PaintGround();
 	void BuildTerrainMesh();
 	void BuildTerrainChunk(int32 ChunkX, int32 ChunkY);
 	void BuildSeaMesh();
@@ -178,6 +178,31 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInterface> FlagMaterial;
 
+	// The paint of the table as pictures (see CampaignGround.h), and the fine detail laid over it.
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> GroundPicture;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> TintPicture;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ReliefPicture;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> MasksPicture;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> WaterPicture;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> DetailPicture;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> BumpsPicture;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> RipplesPicture;
+
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<UTexture2D>> FlagTextures;
 
@@ -208,12 +233,8 @@ private:
 
 	FCampaignMapData Data;
 	FCampaignTerrain Terrain;
-	TArray<FColor> VertexColors;
-
-	// What the paint is mixed from that never changes: the colour of the bare ground at every point, and how
-	// each point stands against the ground around it. Kept so that repainting after a conquest is quick.
-	TArray<float> GroundR, GroundG, GroundB, Surround;
-	float PlainsLightness = 1.0f;
+	float WoodsShown = -1.0f; // how thickly the woods are laid on at the moment
+	FCampaignGround Paint; // the table's colours, as pictures
 	int32 ChunksX = 0;
 	int32 ChunksY = 0;
 

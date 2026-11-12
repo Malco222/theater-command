@@ -168,6 +168,185 @@ def build_flag():
     finish(m)
 
 
+# ---- Helpers for the larger materials: small sums written the way they are said ----------------
+
+def _feed(material, target, pin, value):
+    """Connects something to a pin of a node. A number is set as the pin's constant; a (node, output) pair or a node is wired."""
+    if isinstance(value, (int, float)):
+        target.set_editor_property("const_" + pin.lower(), float(value))
+        return
+    source, output = value if isinstance(value, tuple) else (value, "")
+    connect(source, output, target, pin)
+
+
+def lerp(material, a, b, alpha, x=0, y=0):
+    n = node(material, unreal.MaterialExpressionLinearInterpolate, x, y)
+    _feed(material, n, "A", a)
+    _feed(material, n, "B", b)
+    _feed(material, n, "Alpha", alpha)
+    return n
+
+
+def times(material, a, b, x=0, y=0):
+    n = node(material, unreal.MaterialExpressionMultiply, x, y)
+    _feed(material, n, "A", a)
+    _feed(material, n, "B", b)
+    return n
+
+
+def plus(material, a, b, x=0, y=0):
+    n = node(material, unreal.MaterialExpressionAdd, x, y)
+    _feed(material, n, "A", a)
+    _feed(material, n, "B", b)
+    return n
+
+
+def pair(material, a, b, x=0, y=0):
+    """Two numbers side by side, as one value with two parts."""
+    n = node(material, unreal.MaterialExpressionAppendVector, x, y)
+    connect(*(a if isinstance(a, tuple) else (a, "")), n, "A")
+    connect(*(b if isinstance(b, tuple) else (b, "")), n, "B")
+    return n
+
+
+def one_in(material, kind, source, x=0, y=0):
+    n = node(material, kind, x, y)
+    connect(*(source if isinstance(source, tuple) else (source, "")), n, "")
+    return n
+
+
+def leaning(material, sample, first, second, x=0, y=0):
+    """Two channels of a picture that hold which way a surface leans, from 0..1 back to -1..1."""
+    both = pair(material, (sample, first), (sample, second), x, y)
+    return plus(material, times(material, both, 2.0, x + 200, y), -1.0, x + 400, y)
+
+
+def sampler_for(texture):
+    """The way a material must be told to read a picture, which depends on how the picture is stored."""
+    settings = texture.get_editor_property("compression_settings")
+    srgb = texture.get_editor_property("srgb")
+    T, S = unreal.TextureCompressionSettings, unreal.MaterialSamplerType
+    if settings == T.TC_NORMALMAP:
+        return S.SAMPLERTYPE_NORMAL
+    if settings == T.TC_MASKS:
+        return S.SAMPLERTYPE_MASKS
+    if settings == T.TC_GRAYSCALE:
+        return S.SAMPLERTYPE_GRAYSCALE if srgb else S.SAMPLERTYPE_LINEAR_GRAYSCALE
+    if settings == T.TC_ALPHA:
+        return S.SAMPLERTYPE_ALPHA
+    return S.SAMPLERTYPE_COLOR if srgb else S.SAMPLERTYPE_LINEAR_COLOR
+
+
+def stand_in(numbers):
+    """A picture of the engine's to stand in for one the game paints when it starts: one that holds colours, or one that holds plain numbers."""
+    wanted = (unreal.MaterialSamplerType.SAMPLERTYPE_MASKS, unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR) if numbers \
+        else (unreal.MaterialSamplerType.SAMPLERTYPE_COLOR,)
+    for path in ("/Engine/EngineMaterials/T_Default_Material_Grid_M", "/Engine/EngineMaterials/T_Default_MacroVariation",
+                 "/Engine/EngineResources/DefaultTexture", "/Engine/MapTemplates/TilingNoise05", "/Engine/EngineResources/WhiteSquareTexture"):
+        texture = unreal.load_asset(path)
+        if texture is not None and sampler_for(texture) in wanted:
+            return texture
+    raise RuntimeError("no stand-in picture of the right kind was found among the engine's own")
+
+
+def picture(material, name, uv, x, y, numbers=False):
+    """A picture the game hands in by name when it starts."""
+    texture = stand_in(numbers)
+    n = node(material, unreal.MaterialExpressionTextureSampleParameter2D, x, y,
+             parameter_name=name, texture=texture, sampler_type=sampler_for(texture))
+    if uv is not None:
+        connect(uv, "", n, "UVs")
+    return n
+
+
+def build_land():
+    """The land. Its colour comes from pictures the game paints when it starts (CampaignGround.cpp), one pixel
+    for every point of the terrain: the bare ground, the nations' paint, the lie of the land and where rock,
+    snow and sand show through. Over that goes fine detail that repeats: grass, tree-tops, rock, sand."""
+    m = new_material("M_Land")
+    m.set_editor_property("tangent_space_normal", False)  # the picture says which way the ground leans in the world
+    uv = node(m, unreal.MaterialExpressionTextureCoordinate, -3000, 0)
+    ground = picture(m, "Ground", uv, -2600, -500)
+    tint = picture(m, "Tint", uv, -2600, -250)
+    relief = picture(m, "Relief", uv, -2600, 0, numbers=True)
+    masks = picture(m, "Masks", uv, -2600, 250, numbers=True)
+
+    # The nation's paint over the bare ground, then rock, snow and sand over that.
+    c = lerp(m, (ground, "RGB"), (tint, "RGB"), scalar(m, "Politics", 1.0, -2300, -700), -2000, -400)
+    # Woods are a dark green cloth laid over the paint, thick enough to read as woods on any nation's colour.
+    wooded = (ground, "A")
+    c = lerp(m, c, vector(m, "WoodsColour", (0.075, 0.13, 0.055, 1.0), -2000, -900),
+             times(m, wooded, scalar(m, "WoodsStrength", 0.62, -2300, -900), -2000, -700), -1900, -500)
+    c = lerp(m, c, vector(m, "RockColour", (0.235, 0.205, 0.162, 1.0), -2000, -150), (masks, "R"), -1700, -400)
+    c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), (masks, "G"), -1400, -400)
+    c = lerp(m, c, vector(m, "SandColour", (0.694, 0.597, 0.371, 1.0), -1400, -150), (masks, "B"), -1100, -400)
+
+    # The detail, at two sizes so that its repeat does not show. Which kind shows where: grass by default,
+    # tree-tops where it is wooded, rock where rock shows, sand on the shore and in the desert, nothing on snow.
+    sandy = one_in(m, unreal.MaterialExpressionSaturate, plus(m, (masks, "B"), (masks, "A"), -2300, 500), -2100, 500)
+
+    def kind_of_ground(sample, x, y):
+        v = lerp(m, (sample, "R"), (sample, "G"), wooded, x, y)
+        v = lerp(m, v, (sample, "B"), (masks, "R"), x + 200, y)
+        v = lerp(m, v, (sample, "A"), sandy, x + 400, y)
+        return lerp(m, v, 0.5, (masks, "G"), x + 600, y)
+
+    fine_uv = world_uv(m, "DetailTiling", 0.0052, -3000, 700)
+    coarse_uv = world_uv(m, "DetailTilingCoarse", 0.00137, -3000, 1000)
+    fine = picture(m, "Detail", fine_uv, -2300, 700, numbers=True)
+    coarse = picture(m, "Detail", coarse_uv, -2300, 1000, numbers=True)
+    near = times(m, kind_of_ground(fine, -2000, 700), 2.0, -1200, 700)
+    far = lerp(m, 1.0, times(m, kind_of_ground(coarse, -2000, 1000), 2.0, -1200, 1000), scalar(m, "DetailCoarse", 0.45, -1200, 1150), -1000, 1000)
+    detail = lerp(m, 1.0, times(m, near, far, -800, 850), scalar(m, "DetailStrength", 0.8, -800, 1000), -600, 850)
+
+    # Shaded as a printed relief map is, on top of whatever the lamp does.
+    shade = times(m, (relief, "B"), 2.0, -1100, 100)
+    c = times(m, times(m, c, detail, -400, -400), shade, -200, -400)
+    to_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    # Which way the surface leans: the ground itself, and the tree-tops and the rock on it.
+    bumps = picture(m, "Bumps", fine_uv, -2300, 1400, numbers=True)
+    trees = times(m, times(m, leaning(m, bumps, "R", "G", -2000, 1400), wooded, -1400, 1400), scalar(m, "TreeBump", 0.55, -1600, 1550), -1200, 1400)
+    crags = times(m, times(m, leaning(m, bumps, "B", "A", -2000, 1700), (masks, "R"), -1400, 1700), scalar(m, "RockBump", 0.5, -1600, 1850), -1200, 1700)
+    lean = plus(m, plus(m, leaning(m, relief, "R", "G", -2000, 2000), trees, -1000, 1500), crags, -800, 1500)
+    squared = node(m, unreal.MaterialExpressionDotProduct, -600, 1500)
+    connect(lean, "", squared, "A")
+    connect(lean, "", squared, "B")
+    upward = one_in(m, unreal.MaterialExpressionSquareRoot,
+                    one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, squared, -1.0, -400, 1500), 1.0, -250, 1500), -100, 1500), 50, 1500)
+    normal = one_in(m, unreal.MaterialExpressionNormalize, pair(m, lean, upward, 200, 1500), 400, 1500)
+    to_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
+
+    to_property(scalar(m, "Roughness", 0.92, -200, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.22, -200, 300), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
+def build_sea():
+    """The sea: its colour from a picture the game paints (pale over the shoals, dark over the deeps), glossy
+    like poured resin, with two sets of small ripples sliding across each other so that the lamp glints and moves on it."""
+    m = new_material("M_Sea")
+    uv = node(m, unreal.MaterialExpressionTextureCoordinate, -1800, 0)
+    water = picture(m, "Water", uv, -1400, 0)
+    to_property(water, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    first_uv = node(m, unreal.MaterialExpressionPanner, -1400, 400, speed_x=0.011, speed_y=0.006)
+    connect(world_uv(m, "RippleTiling", 0.0095, -2200, 400), "", first_uv, "Coordinate")
+    second_uv = node(m, unreal.MaterialExpressionPanner, -1400, 700, speed_x=-0.007, speed_y=0.009)
+    connect(world_uv(m, "RippleTilingSecond", 0.0061, -2200, 700), "", second_uv, "Coordinate")
+    first = picture(m, "Ripples", first_uv, -1100, 400, numbers=True)
+    second = picture(m, "Ripples", second_uv, -1100, 700, numbers=True)
+    lean = times(m, plus(m, leaning(m, first, "R", "G", -800, 400), leaning(m, second, "B", "A", -800, 700), -200, 550),
+                 scalar(m, "RippleStrength", 0.07, -400, 800), 0, 550)
+    up = node(m, unreal.MaterialExpressionConstant, 0, 750, r=1.0)
+    normal = one_in(m, unreal.MaterialExpressionNormalize, pair(m, lean, up, 200, 550), 400, 550)
+    to_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
+
+    to_property(scalar(m, "Roughness", 0.16, -400, 100), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(scalar(m, "Specular", 0.75, -400, 200), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
 def build_level():
     """An empty level. The game mode lays the table when play begins."""
     if eal.does_asset_exist(LEVEL):
@@ -184,7 +363,7 @@ def build_level():
 # Set TC_REBUILD=all to remake everything, or to a material's name to remake that one.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea)):
     if REBUILD in ("all", name) or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:
