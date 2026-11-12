@@ -23,7 +23,7 @@ function phases(nat: string): PlanPhase[] {
 }
 
 /** A war fought overseas to its own plan. See data/campaign/theatres.json. */
-interface Theatre { name: string; regions: string[]; plans: Record<string, PlanPhase[]>; bases?: Record<string, string>; open?: boolean }
+interface Theatre { name: string; regions: string[]; plans: Record<string, PlanPhase[]>; bases?: Record<string, string>; open?: boolean; opens?: number }
 const THEATRES = Object.entries(theatreData as unknown as Record<string, Theatre | string>).filter((e): e is [string, Theatre] => typeof e[1] !== 'string').map((e) => e[1]);
 const theatreIds = new WeakMap<Game, Set<number>[]>();
 
@@ -39,7 +39,9 @@ function theatreRegions(g: Game): Set<number>[] {
  * In Historical mode that is wherever history gave the nation a plan there. In free play only a theatre across the
  * sea keeps an army staff of its own, for the nations with a base there: wars on the Continent are the main staff's.
  */
-const apart = (g: Game, k: number, nat: string): boolean => (isOpen(g) ? !!THEATRES[k].open && !!(THEATRES[k].plans[nat] || THEATRES[k].bases?.[nat]) : !!THEATRES[k].plans[nat]);
+const apart = (g: Game, k: number, nat: string): boolean => (isOpen(g) ? !!THEATRES[k].open && !!(THEATRES[k].plans[nat] || THEATRES[k].bases?.[nat]) : !!THEATRES[k].plans[nat] && begun(g, k));
+/** A theatre with an opening month ('opens') is part of the main fronts until that month comes. */
+const begun = (g: Game, k: number): boolean => g.turn >= (THEATRES[k].opens ?? 0);
 
 /** The theatre a corps is fighting in, if its nation has a plan of its own there. */
 function theatreOf(g: Game, c: Corps): number {
@@ -58,6 +60,8 @@ let single = false;
 let leaving: PlanPhase['withdraw'] | null = null;
 /** Sectors the plan in force has handed over to an ally whose troops have arrived: the nation's own corps leave them, all but one. */
 let entrusted = new Set<number>();
+/** Enemy garrisons the theatre plan leaves to others: nobody attacks them, closes up to them or stays to watch them. */
+let masked = new Set<number>();
 /** Corps the plan in force keeps massed at a named place: the line is put in order without them. */
 let massed = new Set<number>();
 /** Ground the plan in force is giving up: the corps there march out and nobody is sent back in. */
@@ -97,7 +101,7 @@ export function theatrePhases(g: Game, nat: string): { theatre: string; phase: P
   if (isOpen(g)) return out;
   THEATRES.forEach((T, k) => {
     const list = T.plans[nat];
-    if (!list || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
+    if (!list || !begun(g, k) || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
     const phase = theatrePhase(g, nat, list);
     // A garrison standing where a campaign will one day be fought has no orders from it yet.
     if (!phase && list.every((p) => p.from > g.turn)) return;
@@ -130,7 +134,7 @@ function overseas(g: Game, nat: string): void {
   THEATRES.forEach((T, k) => {
     const open = isOpen(g);
     const phases = open ? [] : T.plans[nat];
-    if (!(open ? apart(g, k, nat) : phases) || !n.alive || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
+    if (!(open ? apart(g, k, nat) : phases && begun(g, k)) || !n.alive || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
     // Some phases wait on someone else's war, as in the main plan, or on how the theatre's own war has gone.
     // In free play the army's own staff weighs up the theatre instead.
     const ph = open ? theatreStaff(g, nat, ids[k], k) : theatrePhase(g, nat, phases);
@@ -145,6 +149,8 @@ function overseas(g: Game, nat: string): void {
     single = ph?.renew === false;
     leaving = ph?.withdraw ?? null;
     given = new Set((ph?.abandon ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined && ids[k].has(id)));
+    entrusted = handedOver(g, nat, ph);
+    masked = new Set((ph?.mask ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined));
     try {
       // The plan's standing orders come first: the force it keeps at a place stays, and ground it gives up is left,
       // the army falling back along the road to the base that feeds it.
@@ -158,7 +164,7 @@ function overseas(g: Game, nat: string): void {
       if (ph?.posture === 'attack' && enemies.size) {
         const only = ph.targets ? new Set(ph.targets) : null;
         // Nothing outside the theatre, and nothing the plan has not named, draws this army on.
-        const halt = new Set(ph.siege ?? []), edge = new Set(ph.siege ?? []);
+        const halt = new Set([...(ph.siege ?? []), ...(ph.mask ?? [])]), edge = new Set(halt);
         for (const r of g.regions) {
           if (!ids[k].has(r.id)) { halt.add(r.name); edge.add(r.name); }
           else if (only && !only.has(r.name)) halt.add(r.name);
@@ -173,6 +179,8 @@ function overseas(g: Game, nat: string): void {
       single = false;
       leaving = null;
       given = new Set();
+      entrusted = new Set();
+      masked = new Set();
       massed = new Set();
       for (const c of rest) c.hold = false;
     }
@@ -209,14 +217,18 @@ function mainCampaign(g: Game, nat: string): void {
   try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; }
 }
 
-/** The sectors of the front the plan has entrusted to an ally, where at least two of that ally's corps now stand. */
+/**
+ * The sectors of the front the plan has entrusted to an ally, where at least two of that ally's corps now stand.
+ * In a theatre the allies came ashore side by side and the boundary between them was drawn before they sailed:
+ * there the ally's sector is his from the day it is in friendly hands.
+ */
 function handedOver(g: Game, nat: string, ph: PlanPhase | null): Set<number> {
   const out = new Set<number>();
   for (const [ally, places] of Object.entries(ph?.entrust ?? {})) {
     if (!allied(g, nat, ally)) continue;
     for (const name of places) {
       const r = g.byName[name];
-      if (r && allied(g, nat, r.ctrl) && r.units.filter((u) => u.nat === ally).length >= 2) out.add(r.id);
+      if (r && allied(g, nat, r.ctrl) && (scope || r.units.filter((u) => u.nat === ally).length >= 2)) out.add(r.id);
     }
   }
   return out;
@@ -604,7 +616,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
   // Two corps stay to screen any place that faces the enemy, even where the plan has called a halt.
   const screen = (c: Corps): boolean => {
     const here = g.regions[c.reg];
-    return friendlyUnits(g, here, nat).length <= 2 && here.nb.some((j) => hostileUnits(g, g.regions[j], nat).length > 0);
+    return friendlyUnits(g, here, nat).length <= 2 && here.nb.some((j) => !masked.has(j) && hostileUnits(g, g.regions[j], nat).length > 0);
   };
   for (const c of movers) {
     if (screen(c) || massed.has(c.id)) continue;
@@ -735,7 +747,7 @@ function defend(g: Game, nat: string, line = true): void {
     if (!mine(r)) continue;
     for (const j of r.nb) {
       const e = g.regions[j];
-      if (!atWar(g, nat, e.ctrl)) continue;
+      if (!atWar(g, nat, e.ctrl) || masked.has(j)) continue; // a garrison the plan leaves to others threatens nobody
       const foes = hostileUnits(g, e, nat).filter((u) => u.kind !== 'fort').map((u) => atkPower(g, u)).sort((a, b) => b - a);
       for (const p of foes.slice(0, frontage(r))) threat[r.id] += p;
     }
@@ -794,7 +806,8 @@ function defend(g: Game, nat: string, line = true): void {
     let spared = 0;
     if (entrusted.has(here.id)) {
       // An ally has taken this stretch over: one corps stays to stiffen him, the rest are free for the plan's own business.
-      if (here.units.filter((u) => u.nat === nat && u.kind !== 'fort').length <= 1) continue;
+      // In a theatre nobody stays: the army goes back inside its own boundary.
+      if (!scope && here.units.filter((u) => u.nat === nat && u.kind !== 'fort').length <= 1) continue;
       spared = defPower(g, c, here);
     } else if (threat[here.id] > 0) {
       // In the line. It can be spared only if the place stays well held without it.

@@ -10,6 +10,7 @@ import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { AIR, skyDenies, skyOver } from './air';
 import { COMMAND } from './commanders';
+import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, type Assessment } from './game';
 import {
@@ -123,7 +124,7 @@ const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel 
 export function fleetPower(g: Game, f: Fleet): number {
   let p = 0;
   for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power;
-  return p * quality(g, f.nat) * fit(f) * admiralMul(f);
+  return p * quality(g, f.nat) * fit(f) * admiralMul(f) * storyEdge(g, f);
 }
 
 /** Air strength over a sea from the coasts one side holds: this nation's friends, or (hostile) its enemies. */
@@ -605,6 +606,7 @@ export function convoyWar(g: Game, nat: string): void {
       }
     }
     g.convoys[route.id] = { turn: g.turn, raid, guard, tons, total: (g.convoys[route.id]?.total ?? 0) + tons, share: route.share * L, loss: L, subsLost, escortsLost };
+    storyConvoy(g, raiders, escorts, tons, raid > 0);
     // The monthly figures are news only to the nations fighting over the route.
     if (tons > 0 && g.human && (g.human === nat || atWar(g, g.human, nat))) {
       headline(g, 'info', `${cap(route.name)}: ${tons.toLocaleString('en-US')} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? 'submarine' : 'submarines'} destroyed` : ''}.`, nat);
@@ -712,6 +714,7 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     out.push(rep);
     const win = won ? mine : met, lose = won ? met : mine;
     const ws = total(won ? att : def), ls = total(won ? def : att);
+    storySea(g, z, win, lose, ls.bb + ls.cv, shipCount(ls), shipCount(ws));
     headline(g, 'battle', `${cap(names(win))} ${win.length === 1 ? 'defeats' : 'defeat'} ${names(lose)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ''}.`, win[0].nat);
   }
   return out;

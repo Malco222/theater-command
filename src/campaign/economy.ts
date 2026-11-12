@@ -10,6 +10,7 @@ import { DIPLOMACY, tradePartners } from './diplomacy';
 import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
+import { fallenOf, inherit, raisedXp, revivable } from './stories';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -68,14 +69,20 @@ export const isHome = (g: Game, nat: string, r: Region): boolean => r.owner === 
 /** Where new formations can be raised: at home, not in the colonies. Troops for overseas are raised at home and shipped. */
 export const canRaise = (g: Game, nat: string, r: Region): boolean => isHome(g, nat, r) && !r.overseas;
 
-/** Orders a new corps. The points are paid now; the corps arrives in a few months. */
-export function orderCorps(g: Game, nat: string, kind: Kind, region: number): Build | null {
+/**
+ * Orders a new corps. The points are paid now; the corps arrives in a few months. 'revive' names a destroyed
+ * formation on the memorial wall: the new corps is raised under its name and carries its colours.
+ */
+export function orderCorps(g: Game, nat: string, kind: Kind, region: number, revive?: number): Build | null {
   const n = g.nations[nat];
   const spec = PRODUCTION.builds[kind];
   const r = g.regions[region];
   if (!n.alive || !spec || !r || !canRaise(g, nat, r) || n.pp < spec.cost) return null;
+  const old = revive !== undefined ? revivable(g, nat, kind).find((f) => f.id === revive) : undefined;
+  if (revive !== undefined && !old) return null;
   n.pp -= spec.cost;
-  const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name: corpsName(nat, kind, n.corpsNo++), region, ordered: g.turn, eta: g.turn + spec.months, cost: spec.cost };
+  const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name: old ? old.name : corpsName(nat, kind, n.corpsNo++), region, ordered: g.turn, eta: g.turn + spec.months, cost: spec.cost };
+  if (old) b.revive = old.id;
   n.queue.push(b);
   return b;
 }
@@ -105,7 +112,7 @@ export function cancelBuild(g: Game, nat: string, id: number): boolean {
   const i = n.queue.findIndex((b) => b.id === id);
   if (i < 0 || n.queue[i].ordered !== g.turn) return false;
   n.pp += n.queue[i].cost;
-  if (n.queue[i].what === 'corps') n.corpsNo--;
+  if (n.queue[i].what === 'corps' && n.queue[i].revive === undefined) n.corpsNo--;
   n.queue.splice(i, 1);
   return true;
 }
@@ -133,9 +140,12 @@ export function deliver(g: Game, nat: string): void {
     if (!at && n.capital >= 0 && room(g.regions[n.capital])) at = g.regions[n.capital];
     if (!at) at = g.regions.find((x) => room(x) && x.fac > 0) ?? g.regions.find(room) ?? null;
     if (!at) continue; // nowhere left to form up
-    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: 0.05 });
+    // The player's new corps are as well trained as the instructors he has sent home can make them.
+    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: nat === g.human ? raisedXp(g, nat) : 0.05 });
     c.org = 0.7;
-    if (nat === g.human) headline(g, 'info', `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
+    const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;
+    if (old && old.heir === undefined) inherit(g, c, old.id);
+    if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
   }
 }
 

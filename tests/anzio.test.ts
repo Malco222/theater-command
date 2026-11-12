@@ -230,7 +230,7 @@ describe('history\'s plan for Italy in 1944', () => {
     expect(['GER', 'UK', 'USA'].map((nat) => phase(at(APR_44), nat))).toEqual(['The Gustav Line and the beachhead', 'The Eighth Army moves west', 'The beachhead']);
     expect(['GER', 'UK', 'USA'].map((nat) => phase(at(MAY_44), nat))).toEqual(['The Gustav Line and the beachhead', 'Operation Diadem', 'Operation Diadem']);
     expect(['GER', 'UK', 'USA'].map((nat) => phase(at(JUNE_44), nat))).toEqual(['The retreat north of Rome', 'Up the Adriatic', 'The road to Rome']);
-    expect(['GER', 'UK', 'USA'].map((nat) => phase(at(AUG_44), nat))).toEqual(['The Gothic Line', 'Ancona', 'To the Arno']);
+    expect(['GER', 'UK', 'USA'].map((nat) => phase(at(AUG_44), nat))).toEqual(['The Gothic Line', 'Ancona', 'To the Arno, and Operation Dragoon']);
   });
 
   it('there is no counter-attack without a beachhead to attack', () => {

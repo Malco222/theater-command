@@ -1,0 +1,293 @@
+{
+  "_about": {
+    "what": "Unit stories: the record every corps, air fleet and fleet keeps, the honours it can earn, what the player can do with a unit's fame, how experience is kept and lost, home ties, rivalries, the memorial wall and letters from the front.",
+    "rule": "Every unit of every nation keeps a record and can earn honours, so the whole war has names in it. Nothing here changes a number for a computer-run nation: the bonuses, the loss of experience to green drafts, home ties and rivalries apply only to the player's own units. History's wars therefore play out exactly as they did before these rules were written.",
+    "grades": "What a unit's experience (0 to 1) is called: [from, name].",
+    "veterans": "The player's corps take in drafts trained to 'green' experience, plus 'perSchool' for every instructor posting the player has made (to 'maxSchools'). Drafts count for 'dilute' of their numbers when the corps' experience is averaged. A new corps the player raises starts at 'raised' plus the same school bonus.",
+    "edgeCap": "The most all of a unit's honours together can add to its attack or to its defence.",
+    "log": "Lines of diary kept for each of the player's units, and for each of everybody else's.",
+    "cash": "What sending an honoured unit home brings. A bond tour pays 'bondsPp' production points and 'bondsPc' political capital for each point of the honour's fame. Instructors raise the training of every later draft by one step per point of fame, and cost the corps 'schoolXp' experience per point. A corps is out of the line for 'months'. An air fleet or a fleet gives up 'ready' of its readiness instead, and an air fleet's instructors add 'pilots' trained pilots per point of fame.",
+    "home": "A corps of the player's defends the region it was raised in 'defence' stronger and attacks to free it 'attack' harder. When the enemy takes that region the corps loses 'lostOrg' cohesion; when it is freed the corps gains 'freedOrg'.",
+    "rivals": "A corps of the player's that has met the same enemy corps 'meets' times has a rival. It fights 'edge' harder whenever that corps is in the battle. If the rival is destroyed in a battle it takes part in, it gains 'org' cohesion and 'xp' experience and the government 'pc' political capital.",
+    "legacy": "A destroyed corps raised again under its old name starts with 'xp' of the experience the old corps had above a green one, and carries the old honours as ribbons.",
+    "tour": "An air fleet that spends a month bombing, by day or night or against shipping, is taken to have flown 'perMonth' missions.",
+    "lastStand": "A corps destroyed after at least this many months cut off is given a last honour on the memorial wall.",
+    "designation": "What a nation calls a formation that has earned the 'guards' honour. '_default' for the rest.",
+    "honours": "Each honour: who can earn it ('for': corps, air or fleet), the counter and count that earn it ('needs', and 'also' for a second), 'each' if it is earned again every time the counter passes another multiple, what is written on the colours ('title': {place} and {year} are filled in), the lasting edge it gives a unit of the player's that stays at the front ('edge': shares added to attack and defence; for air fleets and fleets one share on its fighting strength), how much it is worth if cashed in ('fame'), names the army might give the unit ('nick'), the citation ('cite'), and the real event it echoes ('real'). 'tour' marks the long-service honours whose natural end is a posting home. 'last' marks the honour given on the memorial wall.",
+    "counters": "Corps: battles, won, stormed (attacks won decisively), stood (positions held against an attacker at least as strong), taken (regions taken), caps (enemy capitals it marched into), pris (prisoners taken, its share), relieved (times back in supply after two months or more cut off), winter (battles won in the eastern winter), desert (battles won in the desert), landings (assaults from the sea won), drops (assaults from the air won), freed (times it helped free its own home region), scores (rivals destroyed), honours (honours held), service (months since it was raised). Air fleets: missions (bombing missions flown), saved (enemy aircraft destroyed over their own ground), skies (skies won over enemy ground), sunk (warships sunk), nights (months of night bombing). Fleets: capital (enemy battleships and carriers sunk in actions won), escort (months guarding a convoy route under attack), tons (tons of shipping sunk as a raider).",
+    "letters": "Short notes from the player's units after the moments that matter, by moment. Each is [who writes, text]. An empty 'who' picks a soldier at random from 'voices'. At most 'perMonth' are written in a month."
+  },
+  "grades": [[0, "Green"], [0.2, "Trained"], [0.4, "Seasoned"], [0.6, "Veteran"], [0.8, "Elite"]],
+  "veterans": { "dilute": 0.8, "green": 0.15, "raised": 0.05, "perSchool": 0.015, "maxSchools": 12 },
+  "edgeCap": 0.12,
+  "log": { "own": 30, "other": 10 },
+  "cash": { "months": 2, "bondsPp": 5, "bondsPc": 1, "schoolXp": 0.08, "ready": 0.25, "pilots": 40 },
+  "home": { "defence": 0.1, "attack": 0.1, "lostOrg": 0.1, "freedOrg": 0.15 },
+  "rivals": { "meets": 3, "edge": 0.05, "org": 0.2, "xp": 0.1, "pc": 2 },
+  "legacy": { "xp": 0.5 },
+  "tour": { "perMonth": 5 },
+  "lastStand": 2,
+  "generalXp": 150,
+  "designation": { "_default": "Elite", "SOV": "Guards" },
+  "voices": ["A rifleman", "A sergeant", "A gunner", "A signaller", "A stretcher-bearer", "A company commander", "A driver", "A sapper", "A corporal"],
+  "lettersPerMonth": 2,
+  "honours": [
+    {
+      "id": "colours", "for": "corps", "name": "Battle honour", "title": "{place} {year}", "needs": ["caps", 1], "each": true,
+      "edge": { "attack": 0.02, "defence": 0.02 }, "fame": 2, "ribbon": ["#7a1f1f", "#d9b65a"],
+      "cite": "{unit} fought its way into {place}, the enemy's capital. The name goes on its colours.",
+      "real": "Armies have sewn the names of their victories on to their colours for three hundred years. In 1945 the Soviet formations that stormed the German capital were given 'Berlin' as part of their titles."
+    },
+    {
+      "id": "spearhead", "for": "corps", "name": "Spearhead", "title": "Spearhead", "needs": ["stormed", 5],
+      "edge": { "attack": 0.05 }, "fame": 2, "ribbon": ["#20304f", "#c9c9c9"],
+      "nick": ["the Arrowhead", "the Flying Column", "the Vanguard", "the Iron Fist", "the Thunderbolts", "the Gallopers", "the Battering Ram", "the Greyhounds", "the Storm Riders", "the Hammer of {place}", "the Lions of {place}", "the Victors of {place}", "the {place} Express"],
+      "cite": "Five times {unit} has broken clean through the enemy's line. The fifth was at {place}.",
+      "real": "In 1940 the German 7th Panzer Division moved so fast across France that its own high command lost track of it. Friend and enemy alike took to calling it the Ghost Division."
+    },
+    {
+      "id": "rock", "for": "corps", "name": "Rock", "title": "Held {place}", "needs": ["stood", 2],
+      "edge": { "defence": 0.05 }, "fame": 2, "ribbon": ["#4a4a3a", "#e6e0c8"],
+      "nick": ["the Rock of {place}", "the Anvil", "the Stone Wall", "the Immovables", "the Bolt on the Door", "the Doorkeepers of {place}", "the Wall of {place}", "the Shield of {place}", "the Stubborn Men of {place}"],
+      "cite": "Twice now {unit} has stood its ground against an enemy at least as strong. At {place} the line did not move.",
+      "real": "The American 3rd Infantry Division has been the Rock of the Marne since July 1918, when it held its ground on that river while the line on both sides of it gave way."
+    },
+    {
+      "id": "unbroken", "for": "corps", "name": "Unbroken", "title": "Siege of {place}", "needs": ["relieved", 1],
+      "edge": { "defence": 0.04 }, "fame": 2, "ribbon": ["#5b3a1e", "#f0d9a0"],
+      "nick": ["the Rats of {place}", "the Castaways of {place}", "the Orphans of {place}", "the Unbroken"],
+      "cite": "Cut off at {place} for {n} months, {unit} held out until the road was opened again.",
+      "real": "In 1941 German radio sneered that the garrison of Tobruk was caught like rats in a trap. The Australians holding the port took the name for themselves: the Rats of Tobruk."
+    },
+    {
+      "id": "net", "for": "corps", "name": "Encirclers", "title": "The ring at {place}", "needs": ["pris", 60000],
+      "edge": { "attack": 0.03 }, "fame": 2, "ribbon": ["#1f4a2e", "#d9d9d9"],
+      "nick": ["the Net", "the Hunters", "the Closing Door", "the Pincers", "the Jaws", "the Ring Makers", "the Trappers of {place}"],
+      "cite": "{unit} has now taken more than sixty thousand prisoners. The last of them laid down their arms at {place}.",
+      "real": "At Kiev in September 1941 two German panzer groups met more than a hundred miles east of the city. More than half a million men were inside the ring."
+    },
+    {
+      "id": "winter", "for": "corps", "name": "Winter soldiers", "title": "Winter {year}", "needs": ["winter", 3],
+      "edge": { "defence": 0.03 }, "fame": 1, "ribbon": ["#e8eef2", "#5b7d9a"],
+      "nick": ["the Winter Men", "the Snowshoes", "the White Smocks", "the Frost Guard", "the Ice Walkers", "the Wolves of {place}", "the Snowmen of {place}"],
+      "cite": "{unit} has won three battles in the eastern winter. The last was at {place}.",
+      "real": "The Finnish army fought the Winter War of 1939 on skis, in white smocks, at forty degrees of frost. It held off an enemy many times its size for a hundred and five days."
+    },
+    {
+      "id": "desert", "for": "corps", "name": "Desert hands", "title": "Desert {year}", "needs": ["desert", 4],
+      "edge": { "attack": 0.03 }, "fame": 1, "ribbon": ["#c9a15a", "#7a4a1e"],
+      "nick": ["the Scorpions", "the Dust Devils", "the Sand Foxes", "the Well Diggers", "the Mirage", "the Camel Corps", "the Jackals of {place}"],
+      "cite": "{unit} has won four battles in the desert and knows its tracks and wells. The last was at {place}.",
+      "real": "The British 7th Armoured Division took the jerboa, the desert rat, as its badge in 1940 and wore it from Egypt to Tunis, and in the end to Berlin."
+    },
+    {
+      "id": "firstwave", "for": "corps", "name": "First wave", "title": "Landing at {place}", "needs": ["landings", 1],
+      "edge": { "attack": 0.03 }, "fame": 2, "ribbon": ["#1e4f7a", "#f0e6c8"],
+      "nick": ["the First Wave", "the Wet Boots", "the Breakers", "the Tide", "the Surf Riders", "the Beachmasters", "the Shore Party"],
+      "cite": "{unit} went ashore at {place} under fire and stayed ashore.",
+      "real": "The American 1st Infantry Division, the Big Red One, went ashore in the first wave in North Africa, in Sicily and on Omaha Beach."
+    },
+    {
+      "id": "fromthesky", "for": "corps", "name": "From the sky", "title": "Drop at {place}", "needs": ["drops", 1],
+      "edge": { "defence": 0.03 }, "fame": 2, "ribbon": ["#6a1f3a", "#9cc3e0"],
+      "nick": ["the Sky Men", "the Silk Battalions", "the Night Arrivals", "the Thunder from Above"],
+      "cite": "{unit} came down on {place} by parachute and glider and held it until the army reached them.",
+      "real": "In Tunisia the German paratroops who fought the British 1st Parachute Brigade called its men the Red Devils, for their maroon berets. The British kept the name."
+    },
+    {
+      "id": "oldguard", "for": "corps", "name": "Long service", "title": "Long service", "needs": ["service", 24], "also": ["battles", 12], "tour": true,
+      "edge": { "attack": 0.03, "defence": 0.03 }, "fame": 2, "ribbon": ["#2e2e2e", "#b08d2e"],
+      "nick": ["the Old Guard", "the Greybeards", "the First In", "the Long Marchers", "the Old Sweats", "the Evergreens", "the Originals", "the Old Firm"],
+      "cite": "{unit} has been in the field for two years and has fought twelve battles. Few of the men who started with it are still in the ranks.",
+      "real": "The British 50th Division fought in France in 1940, in the desert, in Sicily and on Gold Beach. At the end of 1944, used up, it was brought home to train the men who would replace it."
+    },
+    {
+      "id": "guards", "for": "corps", "name": "Named in the order of the day", "title": "{designation}", "needs": ["honours", 2],
+      "edge": { "attack": 0.02, "defence": 0.02 }, "fame": 3, "ribbon": ["#8a1f1f", "#f0c040"],
+      "cite": "{unit} now carries two honours. From today it is counted among the {designation} formations of the {adj} army.",
+      "real": "From September 1941 the Red Army renamed the formations that had most distinguished themselves as Guards. After Stalingrad the 62nd Army, which had held the city, became the 8th Guards Army."
+    },
+    {
+      "id": "score", "for": "corps", "name": "Old score settled", "title": "Settled with {rival}", "needs": ["scores", 1], "each": true,
+      "edge": { "attack": 0.02 }, "fame": 1, "ribbon": ["#3a2a4f", "#c8b8e0"],
+      "cite": "{unit} and {rival} had met again and again. At {place} it ended.",
+      "real": "In the desert the same formations met again and again for two years, up and down one coast road, until each side knew the other's habits and its commanders by name."
+    },
+    {
+      "id": "homecoming", "for": "corps", "name": "Homecoming", "title": "Freed {place}", "needs": ["freed", 1],
+      "edge": { "defence": 0.03 }, "fame": 2, "ribbon": ["#1e5a3a", "#f0f0f0"],
+      "cite": "{unit} was raised in {place}. Today it took the place back.",
+      "real": "In August 1944 the French 2nd Armoured Division, formed in exile in Africa, was sent ahead of the Allied armies so that French soldiers would be the first into Paris."
+    },
+    {
+      "id": "laststand", "for": "corps", "name": "Last stand", "title": "{place} {year}", "needs": ["never", 1], "last": true,
+      "fame": 2, "ribbon": ["#111111", "#b8b8b8"],
+      "cite": "Cut off at {place} for {n} months, {unit} fought on until it had nothing left to fight with.",
+      "real": "At Westerplatte in September 1939 some two hundred Polish soldiers were expected to hold for twelve hours. They held for seven days."
+    },
+    {
+      "id": "tour", "for": "air", "name": "Tour of duty", "title": "Twenty-five missions", "needs": ["missions", 25], "tour": true,
+      "edge": { "all": 0.04 }, "fame": 2, "ribbon": ["#1e3a6a", "#e0c060"],
+      "nick": ["the Twenty-Fivers", "the Old Hands", "the Lucky Ones", "the Homeward Bound"],
+      "cite": "The first crews of {unit} have flown their twenty-fifth mission and finished their tour.",
+      "real": "In May 1943 the crew of the B-17 Memphis Belle became one of the first in the American Eighth Air Force to finish a tour of twenty-five missions over Europe, and the first to fly their bomber home. They spent the summer touring American cities to sell war bonds."
+    },
+    {
+      "id": "few", "for": "air", "name": "Defenders of the sky", "title": "Defence of {place}", "needs": ["saved", 250],
+      "edge": { "all": 0.05 }, "fame": 3, "ribbon": ["#4a6a8a", "#f0f0f0"],
+      "nick": ["the Shield", "the Watch on {place}", "the Roof", "the Sentries"],
+      "cite": "The fighters of {unit} have brought down two hundred and fifty raiders over their own ground.",
+      "real": "In the summer of 1940 some three thousand airmen of Fighter Command stood between Britain and invasion. Churchill called them the Few."
+    },
+    {
+      "id": "skies", "for": "air", "name": "Master of the sky", "title": "Sky over {place}", "needs": ["skies", 1],
+      "edge": { "all": 0.03 }, "fame": 2, "ribbon": ["#6a9ac0", "#20304f"],
+      "cite": "{unit} has driven the enemy's fighters from the sky over {place}.",
+      "real": "By the spring of 1944 American long-range fighters had broken the German day fighter force over its own country. On D-Day the Allies flew some fourteen thousand sorties and the Luftwaffe a few hundred."
+    },
+    {
+      "id": "shipkillers", "for": "air", "name": "Ship killers", "title": "Ship killers", "needs": ["sunk", 4],
+      "edge": { "all": 0.03 }, "fame": 2, "ribbon": ["#1e4f5a", "#d0d0d0"],
+      "nick": ["the Ship Killers", "the Gannets", "the Sea Hawks"],
+      "cite": "The crews of {unit} have sent four warships to the bottom.",
+      "real": "In November 1940 twenty-one Swordfish biplanes from one British carrier put three Italian battleships out of action at Taranto in a single night."
+    },
+    {
+      "id": "night", "for": "air", "name": "Night force", "title": "Night force", "needs": ["nights", 5],
+      "edge": { "all": 0.03 }, "fame": 1, "ribbon": ["#101828", "#8a8ab0"],
+      "nick": ["the Owls", "the Night Shift", "the Lamplighters"],
+      "cite": "{unit} has bombed by night for five months and can find its targets in the dark.",
+      "real": "Bomber Command's Pathfinder Force, formed in August 1942, flew ahead of the main force to find and mark the target in the dark. Its crews signed on for a longer tour than anyone else flew."
+    },
+    {
+      "id": "seavictory", "for": "fleet", "name": "Battle honour", "title": "{place} {year}", "needs": ["capital", 1], "each": true,
+      "edge": { "all": 0.04 }, "fame": 3, "ribbon": ["#12305a", "#f0f0f0"],
+      "cite": "{unit} brought an enemy fleet to action in the {place} and sank one of its great ships.",
+      "real": "In May 1941 the Royal Navy hunted the battleship Bismarck across the North Atlantic and sank her some three hundred miles off Brest. The ships that took part carry the battle honour 'Bismarck 1941'."
+    },
+    {
+      "id": "escort", "for": "fleet", "name": "Shepherds", "title": "Convoy escort", "needs": ["escort", 12], "tour": true,
+      "edge": { "all": 0.03 }, "fame": 2, "ribbon": ["#3a5a6a", "#e8e0c0"],
+      "nick": ["the Shepherds", "the Sheepdogs", "the Long Watch"],
+      "cite": "{unit} has brought the convoys through for twelve months under attack.",
+      "real": "Captain Frederic Walker's 2nd Support Group sank six U-boats on a single patrol early in 1944. Liverpool turned out to cheer the sloops home."
+    },
+    {
+      "id": "tonnage", "for": "fleet", "name": "Tonnage", "title": "Tonnage war", "needs": ["tons", 2000000],
+      "edge": { "all": 0.03 }, "fame": 2, "ribbon": ["#2a2a2a", "#9ab0a0"],
+      "nick": ["the Grey Wolves", "the Pack", "the Tonnage Kings"],
+      "cite": "The boats of {unit} have sunk two million tons of shipping.",
+      "real": "Otto Kretschmer of U-99 sank more than a quarter of a million tons of shipping before he was captured in March 1941. No submarine commander of the war sank more."
+    }
+  ],
+  "letters": {
+    "victory": [
+      ["", "We went through them at {place} like a door coming off its hinges. I have not slept and I do not want to. Nobody here can quite believe it."],
+      ["", "{place} is ours. By noon the road was full of their lorries pointing the wrong way, and the colonel was laughing out loud, which none of us had seen before."],
+      ["", "Tell Father the map on the kitchen wall wants a new pin. We are in {place}, and still going."],
+      ["", "It went the way the plan said, which never happens. {place} by nightfall, and hot food waiting when we got there."]
+    ],
+    "costly": [
+      ["", "We took the ground at {place}, and it cost us more than I can write down. There are a great many empty places at the cook's lorry tonight."],
+      ["A corporal", "They are calling {place} a success. My section went in eleven strong and I am now the senior man in it."],
+      ["", "Do not believe what the newspaper says about {place}. Or believe it, but know what was paid."],
+      ["A company commander", "The company was read the roll after {place}. It did not take long."]
+    ],
+    "defeat": [
+      ["", "We are out of {place} and walking. Nobody says the word retreat. We say we are going back to a better line, and we keep our eyes on the road."],
+      ["A sergeant", "Lost {place} today. We held as long as there was anything to hold with. I carried the lieutenant's map case out, as he could not."],
+      ["", "The {enemy} guns found us at {place} before we had dug a foot down. We will have to do better than that, and we know it."]
+    ],
+    "held": [
+      ["", "They came at {place} three times today and three times went back. The sergeant says we are too stubborn to know we were beaten."],
+      ["", "Still here. {place} is still ours. I mean to say the same tomorrow."],
+      ["", "We counted them coming up the slope at {place} and then stopped counting. They did not get in. I do not fully know why."],
+      ["", "Whoever writes the history of {place} should put in that the cooks fought too."]
+    ],
+    "cut": [
+      ["", "The road behind us is cut. Rations are halved from tonight, and the post may not get out, so I am writing this small."],
+      ["", "No lorries have come up for four days and we all know what that means. {general} walked the line this evening and spoke to every post."],
+      ["", "We are an island now, at {place}. The wireless says help is coming. The wireless has said so before."]
+    ],
+    "relief": [
+      ["", "They got through to us this morning. A dusty man from the relieving column asked what day it was, and so did we."],
+      ["", "The road is open. First up it came bread, and second the post: eleven letters from you at once. I read them in order."],
+      ["", "{n} months shut in at {place}, and today the ring broke. We are thin and filthy and we would not change places with anyone."]
+    ],
+    "capital": [
+      ["", "I am writing this at a table in {place}, in a café with the chairs still set out. I never thought to see it, and never like this."],
+      ["", "We marched into {place} today. The streets were empty and the clocks were all still going."],
+      ["", "Keep this letter. It is written in {place}, on the day we took it."]
+    ],
+    "winter": [
+      ["A gunner", "The oil froze in the guns at {place} and we fought with what still worked. I have your scarf on under everything."],
+      ["", "It is a cold here that has a sound. We took {place} all the same, mostly to get under its roofs."]
+    ],
+    "desert": [
+      ["A driver", "Sand in the tea, in the rifle bolts, in this letter. We chased them forty miles past {place} and found we had outrun our own water."],
+      ["", "There is nothing at {place} but a well and a name on the map, and two armies have now fought for it."]
+    ],
+    "landing": [
+      ["", "The ramp went down at {place} and I remember nothing after that until I was lying behind a wall with a rifle that was not mine. We are ashore, and we are staying."],
+      ["", "Wet to the neck, and seasick all the night before, but we have a mile of {place} and the guns are coming in over the beach now."]
+    ],
+    "honour": [
+      ["", "They read out an order of the day about us this morning. {general} said we had made a name, and that our job now is to carry it."],
+      ["A sergeant", "We are to have '{title}' on the colours. The new men asked what it was like. Nobody who was there said very much."],
+      ["", "There was an extra ration tonight and a speech. The old hands pretend not to care about honours. They care a great deal."]
+    ],
+    "nick": [
+      ["", "The whole army calls us {nick} now. I do not know who started it. We have stopped arguing."],
+      ["", "A war correspondent came up the line and wrote us down as {nick}. It has stuck. The sergeant-major says it is a great deal better than what he calls us."],
+      ["", "Somebody has painted {nick} on the side of the cookhouse lorry. Nobody has been told to scrub it off."]
+    ],
+    "homeLost": [
+      ["", "They told us tonight that {home} has fallen. Half this company comes from there. Nobody said a word at supper."],
+      ["", "{home} is in {enemy} hands. I do not know where you are, or if this will ever reach you. I am writing it anyway."]
+    ],
+    "homeFreed": [
+      ["", "{home} is free. Some of the men have asked for leave and been told there is none, and that we may march through it soon enough."],
+      ["", "We heard about {home} on the wireless and the whole battery shouted. Write to me. Tell me who is still in the street."]
+    ],
+    "rival": [
+      ["", "It is {rival} in front of us again. Third time. We know their patrols by now, and I dare say they know ours."],
+      ["A sergeant", "Prisoners taken at {place} turned out to be from {rival}, the same crowd as before. Somebody over there has it in for us."]
+    ],
+    "score": [
+      ["", "{rival} is finished. We met them first at {first} and we were there at the end. One or two of the older men were quiet about it afterwards."],
+      ["", "We have settled with {rival} at last. I would like to say I feel nothing about it but relief. That would not be quite true."]
+    ],
+    "fallen": [
+      ["The last entry in the war diary", "Ammunition gone. The wounded cannot be moved. All ranks did what was asked of them. Closing down now."],
+      ["The last entry in the war diary", "To whoever finds this book: we held {place} for as long as we had the means. Please see that the names in the back of it reach home."],
+      ["The last signal", "The position cannot be held any longer. The colours have been burned so that nobody else will have them."]
+    ],
+    "bonds": [
+      ["", "We are going home. Not for good: they want us for parades, to shake hands and to be looked at. I shall be the one at your door with a kitbag."],
+      ["", "Two months of clean sheets and brass bands, they say, and then back. The men are polishing things that have not been polished since the war began."]
+    ],
+    "school": [
+      ["A sergeant", "The orders say instructors. So I am to stand at a blackboard and tell boys of eighteen what {place} was like. I will tell them part of it."],
+      ["", "Half the old hands are posted to the training depots. It is the right thing, and the company will not be the same."]
+    ],
+    "back": [
+      ["", "Back with the army after two months at home. The front has hardly moved. I find I had missed these men more than I knew."]
+    ],
+    "drafts": [
+      ["A sergeant", "The drafts came up today, two hundred of them, very clean. We shall have to teach them everything, and there is not much time to do it."],
+      ["", "Hardly a face left in this platoon that was here when we started. The new ones are keen. That was true of us too."]
+    ],
+    "tour": [
+      ["A navigator", "Twenty-five. We landed, and nobody in the aircraft spoke until the engines had stopped. Then the ground crew were all over us."],
+      ["A tail gunner", "Finished the tour today. They painted the last bomb on her nose while we stood and watched. I do not know what to do with my hands."]
+    ],
+    "air": [
+      ["A pilot", "Four times up today. I counted the chairs in the mess tonight and then wished I had not."],
+      ["A fitter", "Every aircraft that came back had holes in it, and every one will fly tomorrow. We have not been to bed."]
+    ],
+    "sea": [
+      ["A signalman", "We watched her go down from the bridge. Nobody cheered. There will be a signal from the flagship and a line in the papers, and that will be that."],
+      ["A stoker", "I was below for the whole of it and saw nothing. They tell me we won. The ship is still shaking, or I am."]
+    ]
+  }
+}
