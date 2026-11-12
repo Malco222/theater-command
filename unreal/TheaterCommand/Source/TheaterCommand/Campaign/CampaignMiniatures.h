@@ -81,6 +81,10 @@ struct FMiniatureMesh
 
 	/** The year the campaign has reached: an army's tanks are those its nation had by then (the Tiger from 1943). */
 	static int32 Year;
+	/** By nation, the year its own designers have reached for tanks (X), fighters (Y) and bombers (Z): research moves it. */
+	static TMap<FString, FIntVector> DesignYears;
+	/** The year that counts for a nation's models of one branch (0 tanks, 1 fighters, 2 bombers): its own designers' if it has any. */
+	static int32 YearOf(const FString& Tag, int32 Branch);
 	bool MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn = 0.0, bool bFine = true);
 
 	/** The field gun a nation's artillery is known by, and what its motorised troops ride in: names for Vehicle(). */

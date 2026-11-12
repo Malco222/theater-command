@@ -511,6 +511,7 @@ void ACampaignPlayerController::OpenLedger()
 	CloseArsenal();
 	CloseDiplomacy();
 	CloseResearch();
+	CloseGenerals();
 	const int32 Revision = Ledger.Revision + 1;
 	Ledger = Session->Ledger();
 	Ledger.Revision = Revision;
@@ -528,6 +529,117 @@ void ACampaignPlayerController::CloseLedger()
 	bLedgerOpen = false;
 }
 
+void ACampaignPlayerController::OpenGenerals()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
+	{
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	CloseArsenal();
+	CloseLedger();
+	CloseDiplomacy();
+	CloseResearch();
+	const int32 Revision = Staff.Revision + 1;
+	Staff = Session->Generals();
+	Staff.Revision = Revision;
+	bGeneralsOpen = Staff.bValid;
+}
+
+void ACampaignPlayerController::CloseGenerals()
+{
+	bGeneralsOpen = false;
+}
+
+void ACampaignPlayerController::RefreshGenerals(bool bArmiesChanged)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session)
+	{
+		return;
+	}
+	if (bArmiesChanged)
+	{
+		// The army in hand and the territory panel name their generals: set them out again.
+		RefreshOrders();
+		RefreshRegionPanel(SelectedRegion);
+	}
+	const int32 Revision = Staff.Revision + 1;
+	Staff = Session->Generals();
+	Staff.Revision = Revision;
+	bGeneralsOpen = Staff.bValid;
+}
+
+void ACampaignPlayerController::AssignGeneral(int32 GeneralId, int32 CorpsId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bGeneralsOpen)
+	{
+		return;
+	}
+	const bool bOk = Session->AssignGeneral(GeneralId, CorpsId);
+	if (bOk)
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+	}
+	else
+	{
+		Notify(TEXT("He cannot take that command this month."));
+	}
+	RefreshGenerals(bOk);
+}
+
+void ACampaignPlayerController::PromoteOfficer(int32 CorpsId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bGeneralsOpen)
+	{
+		return;
+	}
+	FString Name;
+	const bool bOk = Session->PromoteOfficer(CorpsId, Name);
+	if (bOk)
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+		Notify(FString::Printf(TEXT("%s is promoted from the ranks to command the corps."), *Name), 6.0);
+	}
+	else
+	{
+		Notify(TEXT("No officer could be promoted there this month."));
+	}
+	RefreshGenerals(bOk);
+}
+
+void ACampaignPlayerController::RelieveGeneral(int32 GeneralId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bGeneralsOpen)
+	{
+		return;
+	}
+	const bool bOk = Session->RelieveGeneral(GeneralId);
+	if (bOk)
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	}
+	RefreshGenerals(bOk);
+}
+
+void ACampaignPlayerController::SpendSkill(int32 GeneralId, const FString& Skill)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bGeneralsOpen)
+	{
+		return;
+	}
+	if (Session->SpendSkill(GeneralId, Skill))
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	}
+	RefreshGenerals(false);
+}
+
 void ACampaignPlayerController::OpenResearch()
 {
 	FCampaignSession* Session = GetSession();
@@ -539,6 +651,7 @@ void ACampaignPlayerController::OpenResearch()
 	CloseArsenal();
 	CloseLedger();
 	CloseDiplomacy();
+	CloseGenerals();
 	const int32 Revision = Research.Revision + 1;
 	Research = Session->Research();
 	Research.Revision = Revision;
@@ -597,6 +710,7 @@ void ACampaignPlayerController::OpenDiplomacy()
 	CloseArsenal();
 	CloseLedger();
 	CloseResearch();
+	CloseGenerals();
 	PathAsked.Reset();
 	const int32 Revision = Diplomacy.Revision + 1;
 	Diplomacy = Session->Diplomacy();
@@ -721,6 +835,7 @@ void ACampaignPlayerController::OpenArsenal()
 	CloseLedger();
 	CloseDiplomacy();
 	CloseResearch();
+	CloseGenerals();
 	// The province in mind is the one selected, if it is the player's own; works are built there and corps form there.
 	const FCampaignView& View = Session->GetView();
 	const bool bMine = View.RegionHolder.IsValidIndex(SelectedRegion) && View.RegionHolder[SelectedRegion] == View.Human;
@@ -862,6 +977,10 @@ void ACampaignPlayerController::Escape()
 	{
 		CloseResearch();
 	}
+	else if (bGeneralsOpen)
+	{
+		CloseGenerals();
+	}
 	else if (WarPrompt.bVisible)
 	{
 		CloseWarPrompt();
@@ -972,7 +1091,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen;
+	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
@@ -1836,6 +1955,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->SetHolders(View.RegionHolder, View.League);
 		Map->ShowArmies(View, Marches, CarriedFrom);
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
+		Map->ShowBuildings(View.RegionWorks);
 	}
 }
 

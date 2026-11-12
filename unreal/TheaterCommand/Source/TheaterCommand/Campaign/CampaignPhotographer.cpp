@@ -208,6 +208,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("31b-ledger"), TEXT("@capital"), 0.45f).bLedger = true;
 		Add(TEXT("31e-diplomacy"), TEXT("@capital"), 0.45f).bDiplomacy = true;
 		Add(TEXT("31f-research"), TEXT("@capital"), 0.45f).bResearch = true;
+		Add(TEXT("31g-generals"), TEXT("@capital"), 0.45f).bGenerals = true;
 		{
 			FShot& Shot = Add(TEXT("31c-arsenal"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");
@@ -293,6 +294,15 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			}
 		}
 		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
+	}
+
+	// "-TheaterWorksAt=Hamburg" takes two pictures of that region with a full set of works standing in it.
+	FString WorksAt;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterWorksAt="), WorksAt, false))
+	{
+		Shots.Reset();
+		Add(TEXT("40-works"), *WorksAt, 0.16f).bWorks = true;
+		Add(TEXT("40b-works-close"), *WorksAt, 0.07f, 30.0f, 6.0f).bWorks = true;
 	}
 
 	// "-TheaterLook=Ardennes:0.1:20:4;Tobruk:0.2" takes one picture of each place named instead: a region,
@@ -440,6 +450,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	Controller->CloseLedger();
 	Controller->CloseDiplomacy();
 	Controller->CloseResearch();
+	Controller->CloseGenerals();
 	Controller->CloseArsenal();
 	if (!Shot.bKeep)
 	{
@@ -554,6 +565,29 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (Shot.bRoll)
 	{
 		Controller->OpenRoll();
+	}
+	if (Shot.bWorks)
+	{
+		// For looking at the models: every kind of works in the region the picture is of, as if they had been built.
+		TArray<FIntVector4> Works;
+		Works.Init(FIntVector4(0, 0, 0, 0), Data.Regions.Num());
+		if (const int32* Here = Data.RegionByName.Find(Shot.Region))
+		{
+			Works[*Here] = FIntVector4(3, 3, 3, 2);
+		}
+		Table->ShowBuildings(Works);
+	}
+	if (Shot.bGenerals)
+	{
+		Controller->OpenGenerals();
+		for (const FVacantCorps& Corps : Controller->GetGenerals().Vacant)
+		{
+			if (Corps.BestId != INDEX_NONE)
+			{
+				Controller->AssignGeneral(Corps.BestId, Corps.Corps);
+				break;
+			}
+		}
 	}
 	if (Shot.bResearch)
 	{

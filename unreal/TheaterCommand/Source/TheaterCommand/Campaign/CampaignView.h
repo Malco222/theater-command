@@ -140,10 +140,12 @@ struct FCampaignView
 	FString Fallen; // the player's nation, once it has been beaten
 	TArray<FString> RegionHolder; // by region id: the nation that holds it now
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)
+	TArray<FIntVector4> RegionWorks; // by region id: factories built since the war began, shipyard level, anti-aircraft level, airfield level
 	TArray<FViewCorps> Corps;
 	FTreasury Treasury;
 	TArray<FString> Declarable; // the countries the player could declare war on this month
 	TArray<FString> League; // the members of the League, the third alliance
+	TMap<FString, FIntVector> DesignYears; // by nation: the year its tank, fighter and bomber designs have reached
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown
 	TArray<int32> RailsCut; // regions whose railway is cut
@@ -384,6 +386,65 @@ struct FDiplomacyRow
 	bool bCanCourt = false; // and the player can afford to this month
 	bool bTrades = false; // it trades with the player today
 	bool bWar = false; // the player could declare war on it this month
+};
+
+/** One of a general's four skills. */
+struct FGeneralSkill
+{
+	FString Id; // offense, defense, logistics or leadership
+	FString Label;
+	FString Blurb;
+	int32 Value = 0;
+	int32 Max = 0;
+	bool bMore = false; // he has a point to spend and room for it here
+};
+
+/** One of the player's generals: in command, waiting for one, or recovering from wounds. */
+struct FGeneralEntry
+{
+	int32 Id = INDEX_NONE;
+	FString Name;
+	FString Rank;
+	FString Where; // "Commands XIX Corps (armor, 2 divisions) at Farther Pomerania", or "Waiting for a command"
+	FString Record;
+	int32 Level = 0;
+	int32 Points = 0; // skill points not yet spent
+	float Progress = 0.0f; // toward the next level, 0 to 1
+	bool bCommands = false;
+	bool bWaiting = false;
+	bool bRelieve = false; // he can be taken off his corps this month
+	TArray<FGeneralSkill> Skills;
+	TArray<FString> Traits; // "Panzer leader: ..."
+	TArray<bool> TraitGood;
+};
+
+/** A corps with no general, and what can be done about it. */
+struct FVacantCorps
+{
+	int32 Corps = INDEX_NONE;
+	FString Name;
+	FString Line; // "Infantry, 4 divisions, at Saar"
+	int32 BestId = INDEX_NONE; // the waiting general who suits it best, if one may take it this month
+	FString BestName;
+	bool bPromote = false; // an officer can be promoted from its ranks now
+	FString WhyPromote;
+};
+
+/** The generals of the player's nation. */
+struct FGeneralStaff
+{
+	bool bValid = false;
+	bool bUp = false;
+	FString Nation;
+	FString Date;
+	FString Note;
+	int32 Capital = 0;
+	int32 PromoteCost = 0;
+	int32 Commanding = 0;
+	int32 Waiting = 0;
+	TArray<FGeneralEntry> Generals;
+	TArray<FVacantCorps> Vacant;
+	int32 Revision = 0;
 };
 
 /** A design's date in history, as a mark along a branch's strip of the war. */

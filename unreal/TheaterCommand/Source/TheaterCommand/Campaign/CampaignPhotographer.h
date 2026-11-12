@@ -49,6 +49,8 @@ private:
 		bool bSea = false; // switch the army in hand to going by sea
 	bool bLedger = false; // open the ledger
 	bool bDiplomacy = false; // open the foreign office
+	bool bWorks = false; // stand a full set of works in the region looked at: factories, a shipyard, guns and an airfield
+	bool bGenerals = false; // open the generals' list, and give the first corps without one the man who suits it
 	bool bResearch = false; // open the design offices, and put a second team on armour
 	FString Path; // in the foreign office: press this path ("found:DEN" names the partner)
 	int32 PathPresses = 1; // once asks, twice takes it

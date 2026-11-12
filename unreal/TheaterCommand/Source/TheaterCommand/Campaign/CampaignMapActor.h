@@ -119,6 +119,12 @@ public:
 	void SetLand(const FLandFeatures& InLand);
 	bool HasLand() const { return bLandLaid; }
 
+	/**
+	 * Stands the works of each province on the table as models: factories built since the war began, shipyards,
+	 * anti-aircraft guns and airfields. Does nothing if nothing has changed.
+	 */
+	void ShowBuildings(const TArray<FIntVector4>& Works);
+
 	/** Shows which bridges are down and which railways are cut. Does nothing if nothing has changed. */
 	void ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut);
 
@@ -180,6 +186,9 @@ private:
 	TObjectPtr<UProceduralMeshComponent> RailMesh;
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> WorksMesh;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> BuildingsMesh;
+	TArray<FIntVector4> ShownBuildings;
 	FLandFeatures Land;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> WaterMaterial;

@@ -105,6 +105,7 @@ ACampaignMapActor::ACampaignMapActor()
 	RiverMesh = MakeMesh(TEXT("Rivers"), false);
 	RailMesh = MakeMesh(TEXT("Railways"), false);
 	WorksMesh = MakeMesh(TEXT("Works"), false);
+	BuildingsMesh = MakeMesh(TEXT("Buildings"), false);
 	HighlightMesh = MakeMesh(TEXT("Highlight"), false);
 	OrdersMesh = MakeMesh(TEXT("Orders"), false);
 
@@ -741,6 +742,188 @@ void ACampaignMapActor::SetLand(const FLandFeatures& InLand)
 	BuildWaterways();
 	BuildRailways();
 	BuildWorks();
+}
+
+void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
+{
+	if (!BuildingsMesh || !Data.IsLoaded() || Works == ShownBuildings)
+	{
+		return;
+	}
+	ShownBuildings = Works;
+	BuildingsMesh->ClearAllMeshSections();
+
+	const FLinearColor Brick(FColor::FromHex(TEXT("7A5547"))), Soot(FColor::FromHex(TEXT("3B3532"))), Pane(FColor::FromHex(TEXT("8FA6A8")));
+	const FLinearColor Apron(FColor::FromHex(TEXT("A9A69C"))), Girder(FColor::FromHex(TEXT("4A4F55"))), RedLead(FColor::FromHex(TEXT("8A3B2A")));
+	const FLinearColor Sandbag(FColor::FromHex(TEXT("B9A77C"))), GunPaint(FColor::FromHex(TEXT("3E4640"))), Tin(FColor::FromHex(TEXT("7E8A84")));
+	const FLinearColor Turf(FColor::FromHex(TEXT("6E7F4E"))), Orange(FColor::FromHex(TEXT("D9772B"))), Timber(FColor::FromHex(TEXT("6B5236")));
+
+	FMiniatureMesh Model;
+	const double Unit = UnitScale * 2.1; // the size the towns are built to
+	int32 Count = 0;
+	for (int32 Id = 0; Id < Works.Num() && Id < Data.Regions.Num(); ++Id)
+	{
+		const FIntVector4& Built = Works[Id];
+		if (Built.X <= 0 && Built.Y <= 0 && Built.Z <= 0 && Built.W <= 0)
+		{
+			continue;
+		}
+		const FCampaignRegion& Region = Data.Regions[Id];
+		const FVector2D Middle = Region.Center;
+		// A spot out from the town on a bearing, inside the province if one can be found.
+		auto SpotOn = [this, &Region, &Middle, Id](double Bearing, bool bWantSea, FVector2D& OutSpot) -> bool
+		{
+			for (const double Reach : { 11.0, 8.0, 14.0, 6.0 })
+			{
+				const FVector2D Way(FMath::Cos(Bearing), FMath::Sin(Bearing));
+				const FVector2D Spot = Middle + Way * Reach;
+				if (Data.FindRegionAt(Spot.X, Spot.Y) != Id)
+				{
+					continue;
+				}
+				const FVector2D Beyond = Middle + Way * (Reach + 9.0);
+				if (bWantSea && Terrain.HeightAt(Beyond.X, Beyond.Y) > 0.0f)
+				{
+					continue; // a shipyard wants the water in front of it
+				}
+				OutSpot = Spot;
+				return true;
+			}
+			return false;
+		};
+		auto Place = [&SpotOn, &Middle](double Preferred, bool bWantSea, FVector2D& OutSpot, double& OutBearing) -> bool
+		{
+			for (int32 Try = 0; Try < 12; ++Try)
+			{
+				// Preferred first, then round the compass either side of it.
+				const double Bearing = Preferred + ((Try + 1) / 2) * (Try % 2 == 0 ? 1.0 : -1.0) * (PI / 6.0);
+				if (SpotOn(Bearing, bWantSea, OutSpot))
+				{
+					OutBearing = Bearing;
+					return true;
+				}
+			}
+			if (bWantSea)
+			{
+				return false;
+			}
+			OutSpot = Middle + FVector2D(FMath::Cos(Preferred), FMath::Sin(Preferred)) * 6.0;
+			OutBearing = Preferred;
+			return true;
+		};
+		// Which way a bearing on the map points on the table, in degrees, for turning a model to face it.
+		auto Facing = [this, &Middle](const FVector2D& Spot) -> double
+		{
+			const FVector Way = MapToWorld(Spot.X, Spot.Y, 0.0) - MapToWorld(Middle.X, Middle.Y, 0.0);
+			return FMath::RadiansToDegrees(FMath::Atan2(Way.Y, Way.X));
+		};
+		auto Ahead = [](double Turn, double Along, double Across) -> FVector
+		{
+			const double R = FMath::DegreesToRadians(Turn);
+			return FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, 0.0);
+		};
+
+		FVector2D Spot;
+		double Bearing = 0.0;
+		// Factories built since the war began: a works with a saw-tooth roof and tall chimneys, one bay for each.
+		if (Built.X > 0 && Place(-0.6, false, Spot, Bearing))
+		{
+			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
+			const double Turn = Facing(Spot) + 90.0;
+			const int32 Bays = FMath::Clamp(Built.X, 1, 4);
+			for (int32 Bay = 0; Bay < Bays; ++Bay)
+			{
+				const FVector Foot = At + Ahead(Turn, 0.0, (Bay - (Bays - 1) * 0.5) * 0.72 * Unit);
+				Model.Box(Foot + FVector(0.0, 0.0, 0.26 * Unit), FVector(1.9, 0.7, 0.52) * Unit, Brick, Turn);
+				// The saw-tooth: a row of north lights along the roof.
+				for (int32 Tooth = 0; Tooth < 4; ++Tooth)
+				{
+					const FVector Ridge = Foot + Ahead(Turn, (Tooth - 1.5) * 0.46 * Unit, 0.0) + FVector(0.0, 0.0, 0.6 * Unit);
+					Model.Box(Ridge, FVector(0.34, 0.7, 0.05) * Unit, Soot, Turn, 28.0);
+					Model.Box(Ridge + Ahead(Turn, 0.17 * Unit, 0.0) + FVector(0.0, 0.0, 0.0), FVector(0.03, 0.66, 0.2) * Unit, Pane, Turn);
+				}
+			}
+			for (int32 Stack = 0; Stack < FMath::Min(Bays + 1, 3); ++Stack)
+			{
+				const FVector Foot = At + Ahead(Turn, -1.15 * Unit, (Stack - 1) * 0.5 * Unit);
+				Model.Pillar(Foot, 0.12 * Unit, 0.08 * Unit, 1.7 * Unit, Brick, 8);
+				Model.Pillar(Foot + FVector(0.0, 0.0, 1.7 * Unit), 0.09 * Unit, 0.09 * Unit, 0.06 * Unit, Soot, 8);
+			}
+			++Count;
+		}
+		// A shipyard: slipways running down to the water, a hull on each, and a gantry crane over them.
+		if (Built.Y > 0 && Place(2.4, true, Spot, Bearing))
+		{
+			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
+			const double Turn = Facing(Spot);
+			const int32 Slips = FMath::Clamp(Built.Y, 1, 3);
+			for (int32 Slip = 0; Slip < Slips; ++Slip)
+			{
+				const FVector Foot = At + Ahead(Turn, 0.0, (Slip - (Slips - 1) * 0.5) * 0.62 * Unit);
+				Model.Box(Foot + FVector(0.0, 0.0, 0.05 * Unit), FVector(2.4, 0.46, 0.1) * Unit, Apron, Turn);
+				// The hull on the slip, in red lead, stern to the water.
+				Model.Box(Foot + FVector(0.0, 0.0, 0.25 * Unit), FVector(1.7, 0.3, 0.3) * Unit, RedLead, Turn);
+				Model.Box(Foot + Ahead(Turn, -1.0 * Unit, 0.0) + FVector(0.0, 0.0, 0.25 * Unit), FVector(0.4, 0.2, 0.3) * Unit, RedLead, Turn + 0.0);
+				Model.Box(Foot + Ahead(Turn, 0.2 * Unit, 0.0) + FVector(0.0, 0.0, 0.47 * Unit), FVector(0.5, 0.22, 0.14) * Unit, Girder, Turn);
+			}
+			// The gantry: two legs either side, a beam across, and a jib.
+			const double Half = (Slips * 0.62 + 0.3) * 0.5 * Unit;
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Model.Box(At + Ahead(Turn, -0.2 * Unit, Side * Half) + FVector(0.0, 0.0, 0.6 * Unit), FVector(0.1, 0.1, 1.2) * Unit, Girder, Turn);
+			}
+			Model.Box(At + Ahead(Turn, -0.2 * Unit, 0.0) + FVector(0.0, 0.0, 1.22 * Unit), FVector(0.14, 2.0 * Half / Unit + 0.2, 0.1) * Unit, Girder, Turn);
+			Model.Rod(At + Ahead(Turn, -0.2 * Unit, 0.0) + FVector(0.0, 0.0, 1.27 * Unit), At + Ahead(Turn, 0.9 * Unit, 0.0) + FVector(0.0, 0.0, 1.7 * Unit), 0.035 * Unit, Girder);
+			Model.House(At + Ahead(Turn, -1.7 * Unit, 0.0), 1.2 * Unit, 0.6 * Unit, 0.36 * Unit, 0.16 * Unit, Brick, Soot, Turn + 90.0);
+			++Count;
+		}
+		// Anti-aircraft guns: a sandbagged pit for each level, its barrel up at the sky.
+		if (Built.Z > 0 && Place(0.9, false, Spot, Bearing))
+		{
+			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
+			const double Turn = Facing(Spot);
+			const int32 Guns = FMath::Clamp(Built.Z, 1, 4);
+			for (int32 Pit = 0; Pit < Guns; ++Pit)
+			{
+				const FVector Foot = At + Ahead(Turn, 0.0, (Pit - (Guns - 1) * 0.5) * 0.7 * Unit);
+				Model.Pillar(Foot, 0.3 * Unit, 0.27 * Unit, 0.13 * Unit, Sandbag, 10);
+				Model.Pillar(Foot + FVector(0.0, 0.0, 0.13 * Unit), 0.2 * Unit, 0.2 * Unit, 0.01 * Unit, Soot, 10);
+				Model.Pillar(Foot + FVector(0.0, 0.0, 0.1 * Unit), 0.07 * Unit, 0.05 * Unit, 0.2 * Unit, GunPaint, 6);
+				const FVector Breech = Foot + FVector(0.0, 0.0, 0.3 * Unit);
+				const FVector Up = (Ahead(Turn + Pit * 37.0, 0.45, 0.0) + FVector(0.0, 0.0, 0.89)).GetSafeNormal();
+				Model.Rod(Breech - Up * 0.08 * Unit, Breech + Up * 0.55 * Unit, 0.028 * Unit, GunPaint);
+				Model.Box(Breech, FVector(0.16, 0.12, 0.1) * Unit, GunPaint, Turn + Pit * 37.0);
+			}
+			++Count;
+		}
+		// An airfield: a mown field with a runway (two for a big one), a hangar and a windsock.
+		if (Built.W > 0 && Place(-2.2, false, Spot, Bearing))
+		{
+			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
+			const double Turn = Facing(Spot) + 90.0;
+			Model.Box(At + FVector(0.0, 0.0, 0.01 * Unit), FVector(3.4, 1.9, 0.02) * Unit, Turf, Turn);
+			Model.Box(At + FVector(0.0, 0.0, 0.025 * Unit), FVector(3.2, 0.32, 0.02) * Unit, Apron, Turn);
+			if (Built.W >= 2)
+			{
+				Model.Box(At + FVector(0.0, 0.0, 0.028 * Unit), FVector(2.4, 0.28, 0.02) * Unit, Apron, Turn + 62.0);
+			}
+			for (int32 Hangar = 0; Hangar < FMath::Clamp(Built.W, 1, 3); ++Hangar)
+			{
+				const FVector Foot = At + Ahead(Turn, (Hangar - 1) * 0.85 * Unit, 0.72 * Unit);
+				Model.House(Foot, 0.7 * Unit, 0.55 * Unit, 0.22 * Unit, 0.14 * Unit, Tin, Girder, Turn + 90.0);
+			}
+			const FVector Pole = At + Ahead(Turn, 1.5 * Unit, -0.7 * Unit);
+			Model.Pillar(Pole, 0.02 * Unit, 0.02 * Unit, 0.5 * Unit, Timber, 5);
+			Model.Rod(Pole + FVector(0.0, 0.0, 0.5 * Unit), Pole + Ahead(Turn, 0.26 * Unit, 0.06 * Unit) + FVector(0.0, 0.0, 0.46 * Unit), 0.035 * Unit, Orange);
+			++Count;
+		}
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		BuildingsMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		BuildingsMesh->SetMaterial(0, SceneryMaterial);
+	}
+	UE_LOG(LogTheater, Log, TEXT("Works on the table: %d, in %d points"), Count, Model.Vertices.Num());
 }
 
 void ACampaignMapActor::ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut)
@@ -1475,6 +1658,7 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 	}
 	// The first month is September 1939.
 	FMiniatureMesh::Year = 1939 + (FMath::Max(View.Turn, 1) + 7) / 12;
+	FMiniatureMesh::DesignYears = View.DesignYears;
 
 	// Where every corps' piece stood before this change, for the ones that are about to march.
 	TMap<int32, FVector> Before;

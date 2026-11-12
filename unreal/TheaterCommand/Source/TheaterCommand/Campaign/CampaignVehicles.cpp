@@ -1683,11 +1683,22 @@ double FMiniatureMesh::VehicleAloft(const FString& Name)
 }
 
 int32 FMiniatureMesh::Year = 1939;
+TMap<FString, FIntVector> FMiniatureMesh::DesignYears;
+
+int32 FMiniatureMesh::YearOf(const FString& Tag, int32 Branch)
+{
+	if (const FIntVector* Own = DesignYears.Find(Tag))
+	{
+		return Branch == 0 ? Own->X : Branch == 1 ? Own->Y : Own->Z;
+	}
+	return Year;
+}
 
 FString FMiniatureMesh::MainTankOf(const FString& Tag)
 {
-	if (Tag == TEXT("GER")) return Year >= 1944 ? TEXT("Panther") : Year >= 1943 ? TEXT("Tiger") : TEXT("PanzerIV");
-	if (Tag == TEXT("SOV")) return Year >= 1944 ? TEXT("T34-85") : TEXT("T34");
+	const int32 Reached = YearOf(Tag, 0);
+	if (Tag == TEXT("GER")) return Reached >= 1944 ? TEXT("Panther") : Reached >= 1943 ? TEXT("Tiger") : TEXT("PanzerIV");
+	if (Tag == TEXT("SOV")) return Reached >= 1944 ? TEXT("T34-85") : TEXT("T34");
 	if (Tag == TEXT("USA")) return TEXT("Sherman");
 	if (Tag == TEXT("FRA") || Tag == TEXT("VIC") || Tag == TEXT("FFR")) return TEXT("CharB1");
 	if (Tag == TEXT("ITA")) return TEXT("M13");

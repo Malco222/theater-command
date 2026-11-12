@@ -165,6 +165,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League);
 		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
 		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
+		Table->ShowBuildings(Session->GetView().RegionWorks);
 	}
 }
 

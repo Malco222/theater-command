@@ -355,6 +355,18 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
 	Object->TryGetStringArrayField(TEXT("league"), Out.League);
+	const TSharedPtr<FJsonObject>* Designs = nullptr;
+	if (Object->TryGetObjectField(TEXT("designs"), Designs))
+	{
+		for (const TPair<FString, TSharedPtr<FJsonValue>>& Entry : (*Designs)->Values)
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Years = nullptr;
+			if (Entry.Value.IsValid() && Entry.Value->TryGetArray(Years) && Years->Num() >= 3)
+			{
+				Out.DesignYears.Add(Entry.Key, FIntVector(static_cast<int32>((*Years)[0]->AsNumber()), static_cast<int32>((*Years)[1]->AsNumber()), static_cast<int32>((*Years)[2]->AsNumber())));
+			}
+		}
+	}
 	for (const TPair<const TCHAR*, TArray<int32>*>& List : { TPair<const TCHAR*, TArray<int32>*>(TEXT("down"), &Out.BridgesDown), TPair<const TCHAR*, TArray<int32>*>(TEXT("cut"), &Out.RailsCut) })
 	{
 		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
@@ -410,6 +422,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	{
 		Out.RegionHolder.SetNum(Regions->Num());
 		Out.RegionStanding.SetNum(Regions->Num());
+		Out.RegionWorks.Init(FIntVector4(0, 0, 0, 0), Regions->Num());
 		for (const TSharedPtr<FJsonValue>& Value : *Regions)
 		{
 			const TSharedPtr<FJsonObject> Region = Value->AsObject();
@@ -418,6 +431,11 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			{
 				Out.RegionHolder[Id] = Region->GetStringField(TEXT("ctrl"));
 				Region->TryGetStringField(TEXT("stand"), Out.RegionStanding[Id]);
+				const TArray<TSharedPtr<FJsonValue>>* Built = nullptr;
+				if (Region->TryGetArrayField(TEXT("w"), Built) && Built->Num() >= 4)
+				{
+					Out.RegionWorks[Id] = FIntVector4(static_cast<int32>((*Built)[0]->AsNumber()), static_cast<int32>((*Built)[1]->AsNumber()), static_cast<int32>((*Built)[2]->AsNumber()), static_cast<int32>((*Built)[3]->AsNumber()));
+				}
 			}
 		}
 	}
@@ -1454,6 +1472,151 @@ FDiplomacy FCampaignSession::Diplomacy()
 		}
 	}
 	return Out;
+}
+
+FGeneralStaff FCampaignSession::Generals()
+{
+	FGeneralStaff Out;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("generals"), TEXT("[]"), Object) || !Object.IsValid())
+	{
+		return Out;
+	}
+	Out.bValid = Object->TryGetStringField(TEXT("nation"), Out.Nation);
+	Object->TryGetStringField(TEXT("date"), Out.Date);
+	Object->TryGetStringField(TEXT("note"), Out.Note);
+	Object->TryGetBoolField(TEXT("up"), Out.bUp);
+	Object->TryGetNumberField(TEXT("capital"), Out.Capital);
+	Object->TryGetNumberField(TEXT("promoteCost"), Out.PromoteCost);
+	Object->TryGetNumberField(TEXT("commanding"), Out.Commanding);
+	Object->TryGetNumberField(TEXT("waiting"), Out.Waiting);
+	const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+	if (Object->TryGetArrayField(TEXT("generals"), List))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *List)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FGeneralEntry& General = Out.Generals.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("id"), General.Id);
+			Entry->TryGetStringField(TEXT("name"), General.Name);
+			Entry->TryGetStringField(TEXT("rank"), General.Rank);
+			Entry->TryGetStringField(TEXT("where"), General.Where);
+			Entry->TryGetStringField(TEXT("record"), General.Record);
+			Entry->TryGetNumberField(TEXT("level"), General.Level);
+			Entry->TryGetNumberField(TEXT("points"), General.Points);
+			double Progress = 0.0;
+			Entry->TryGetNumberField(TEXT("progress"), Progress);
+			General.Progress = static_cast<float>(Progress);
+			Entry->TryGetBoolField(TEXT("commands"), General.bCommands);
+			Entry->TryGetBoolField(TEXT("waiting"), General.bWaiting);
+			Entry->TryGetBoolField(TEXT("relieve"), General.bRelieve);
+			const TArray<TSharedPtr<FJsonValue>>* Skills = nullptr;
+			if (Entry->TryGetArrayField(TEXT("skills"), Skills))
+			{
+				for (const TSharedPtr<FJsonValue>& SkillValue : *Skills)
+				{
+					const TSharedPtr<FJsonObject> SkillEntry = SkillValue->AsObject();
+					FGeneralSkill& Skill = General.Skills.AddDefaulted_GetRef();
+					SkillEntry->TryGetStringField(TEXT("id"), Skill.Id);
+					SkillEntry->TryGetStringField(TEXT("label"), Skill.Label);
+					SkillEntry->TryGetStringField(TEXT("blurb"), Skill.Blurb);
+					SkillEntry->TryGetNumberField(TEXT("value"), Skill.Value);
+					SkillEntry->TryGetNumberField(TEXT("max"), Skill.Max);
+					SkillEntry->TryGetBoolField(TEXT("more"), Skill.bMore);
+				}
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Traits = nullptr;
+			if (Entry->TryGetArrayField(TEXT("traits"), Traits))
+			{
+				for (const TSharedPtr<FJsonValue>& TraitValue : *Traits)
+				{
+					const TSharedPtr<FJsonObject> TraitEntry = TraitValue->AsObject();
+					FString Label, Effect;
+					bool bGood = true;
+					TraitEntry->TryGetStringField(TEXT("label"), Label);
+					TraitEntry->TryGetStringField(TEXT("effect"), Effect);
+					TraitEntry->TryGetBoolField(TEXT("good"), bGood);
+					General.Traits.Add(Effect.IsEmpty() ? Label : Label + TEXT(": ") + Effect);
+					General.TraitGood.Add(bGood);
+				}
+			}
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Vacant = nullptr;
+	if (Object->TryGetArrayField(TEXT("vacant"), Vacant))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Vacant)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FVacantCorps& Corps = Out.Vacant.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("corps"), Corps.Corps);
+			Entry->TryGetStringField(TEXT("name"), Corps.Name);
+			Entry->TryGetStringField(TEXT("line"), Corps.Line);
+			Entry->TryGetBoolField(TEXT("promote"), Corps.bPromote);
+			Entry->TryGetStringField(TEXT("whyPromote"), Corps.WhyPromote);
+			const TSharedPtr<FJsonObject>* Best = nullptr;
+			if (Entry->TryGetObjectField(TEXT("best"), Best))
+			{
+				FString Rank, Name;
+				int32 Level = 0;
+				(*Best)->TryGetNumberField(TEXT("id"), Corps.BestId);
+				(*Best)->TryGetStringField(TEXT("rank"), Rank);
+				(*Best)->TryGetStringField(TEXT("name"), Name);
+				(*Best)->TryGetNumberField(TEXT("level"), Level);
+				Corps.BestName = FString::Printf(TEXT("%s, level %d"), *Name, Level);
+			}
+		}
+	}
+	return Out;
+}
+
+bool FCampaignSession::AssignGeneral(int32 GeneralId, int32 CorpsId)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("assign"), FString::Printf(TEXT("[%d,%d]"), GeneralId, CorpsId), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		TakeView(Object);
+	}
+	return bOk;
+}
+
+bool FCampaignSession::PromoteOfficer(int32 CorpsId, FString& OutName)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("promote"), FString::Printf(TEXT("[%d]"), CorpsId), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("name"), OutName);
+		TakeView(Object);
+	}
+	return bOk;
+}
+
+bool FCampaignSession::RelieveGeneral(int32 GeneralId)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("relieve"), FString::Printf(TEXT("[%d]"), GeneralId), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		TakeView(Object);
+	}
+	return bOk;
+}
+
+bool FCampaignSession::SpendSkill(int32 GeneralId, const FString& Skill)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("skill"), FString::Printf(TEXT("[%d,%s]"), GeneralId, *JsonQuote(Skill)), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		TakeView(Object);
+	}
+	return bOk;
 }
 
 FResearch FCampaignSession::Research()

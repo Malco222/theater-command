@@ -109,6 +109,13 @@ public:
 	/** Spends political capital to court a neutral. OutNote says what came of it. */
 	bool Court(const FString& Nation, FString& OutNote);
 
+	/** The generals of the player's nation, and the corps that have none. */
+	FGeneralStaff Generals();
+	bool AssignGeneral(int32 GeneralId, int32 CorpsId);
+	bool PromoteOfficer(int32 CorpsId, FString& OutName);
+	bool RelieveGeneral(int32 GeneralId);
+	bool SpendSkill(int32 GeneralId, const FString& Skill);
+
 	/** The design offices: every branch, the teams on it, and the other powers' designs. */
 	FResearch Research();
 

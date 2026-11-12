@@ -2834,6 +2834,12 @@
     if (gen.level >= COMMAND.maxLevel) gen.xp = 0;
     if (gen.nat !== g2.human) autoSpend(gen);
   }
+  function spendPoint(gen, skill) {
+    if (gen.points < 1 || gen.skills[skill] >= COMMAND.skillMax || !serving(gen)) return false;
+    gen.skills[skill]++;
+    gen.points--;
+    return true;
+  }
   function autoSpend(gen) {
     while (gen.points > 0) {
       const w = {
@@ -3004,6 +3010,43 @@
       appoint(g2, gen, best);
       gen.moved = g2.turn;
     }
+  }
+  function whyNotAssign(g2, gen, c) {
+    if (gen.status !== "active") return gen.status === "wounded" ? "He is recovering from his wounds." : "He is no longer serving.";
+    if (gen.nat !== c.nat) return "He serves another nation.";
+    if (c.dead || c.kind === "fort") return "This formation takes no general.";
+    if (gen.corps === c.id) return "He already commands this corps.";
+    if (gen.moved === g2.turn) return "He took up a new command this month already.";
+    return "";
+  }
+  function assignGeneral(g2, gen, c) {
+    if (whyNotAssign(g2, gen, c)) return false;
+    appoint(g2, gen, c);
+    gen.moved = g2.turn;
+    return true;
+  }
+  function relieve(g2, gen) {
+    if (gen.status !== "active" || gen.corps < 0) return false;
+    appoint(g2, gen, null);
+    return true;
+  }
+  function whyNotPromote(g2, c) {
+    if (c.general !== null) return "The corps already has a general.";
+    if (c.dead || c.kind === "fort") return "This formation takes no general.";
+    if (!COMMAND.names[c.nat]) return "There is no officer ready to step up.";
+    if (g2.nations[c.nat].pc < COMMAND.promote.pc) return `It takes ${COMMAND.promote.pc} political capital to promote a man over his seniors.`;
+    return "";
+  }
+  function promote(g2, c) {
+    if (whyNotPromote(g2, c)) return null;
+    const rng = new Rng(hashString(`promote:${g2.seed}:${g2.turn}:${c.id}:${g2.generals.length}`));
+    const name = inventName(g2, c.nat, rng);
+    if (!name) return null;
+    g2.nations[c.nat].pc -= COMMAND.promote.pc;
+    const gen = newGeneral(g2, c.nat, name, { historical: false, traits: ["rising_star"] });
+    appoint(g2, gen, c);
+    gen.moved = g2.turn;
+    return gen;
   }
 
   // ../../src/campaign/stories.ts
@@ -10511,6 +10554,27 @@
   function orderBureau(g2) {
     return humanUp(g2) && foundBureau(g2, g2.human);
   }
+  var myGeneral = (g2, id) => {
+    const gen = g2.generals[id];
+    return gen && gen.nat === g2.human && current(g2) === gen.nat ? gen : null;
+  };
+  function orderAssign(g2, general, corps) {
+    const gen = myGeneral(g2, general);
+    const c = g2.corps.find((x) => x.id === corps);
+    return !!gen && !!c && c.nat === g2.human && assignGeneral(g2, gen, c);
+  }
+  function orderRelieve(g2, general) {
+    const gen = myGeneral(g2, general);
+    return !!gen && relieve(g2, gen);
+  }
+  function orderPromote(g2, corps) {
+    const c = g2.corps.find((x) => x.id === corps);
+    return c && canOrder(g2, c) ? promote(g2, c) : null;
+  }
+  function orderSkill(g2, general, skill) {
+    const gen = myGeneral(g2, general);
+    return !!gen && spendPoint(gen, skill);
+  }
   function declarable(g2) {
     const me = g2.human;
     if (!me || !g2.nations[me].alive || onEve(g2)) return [];
@@ -11144,6 +11208,12 @@
         bmr: Math.round(f.bmr),
         mission: f.mission
       })),
+      // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
+      // branch fields its later models early, and one that neglects it keeps the old ones longer.
+      designs: Object.fromEntries(Object.values(s.nations).filter((n) => n.lab && n.alive).map((n) => [
+        n.id,
+        ["armour", "fighters", "bombers"].map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab.clock[f] - n.lab.months)) + 7) / 12))
+      ])),
       // The members of the League, the third alliance: their ground is shown in its own colour.
       league: leagueMembers(s).map((n) => n.id),
       nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
@@ -12036,6 +12106,76 @@
     const s = game();
     return { ok: orderBureau(s), view: view() };
   }
+  function generals() {
+    const s = game();
+    const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+    if (!me) return null;
+    const up = humanUp(s) && !onEve(s);
+    const corpsLine = (c) => `${c.name} (${KIND[c.kind].label.toLowerCase()}, ${c.divs} division${c.divs === 1 ? "" : "s"}) at ${s.regions[c.reg].name}`;
+    const mine = s.generals.filter((x) => x.nat === me.id && (x.status === "active" || x.status === "wounded"));
+    const list2 = mine.sort((a, b) => (a.corps >= 0 ? 0 : 1) - (b.corps >= 0 ? 0 : 1) || b.level - a.level || a.id - b.id).map((x) => {
+      const c = corpsOf(s, x);
+      const next = xpToNext(x);
+      return {
+        id: x.id,
+        name: x.name,
+        rank: rankOf(x),
+        level: x.level,
+        points: up ? x.points : 0,
+        progress: Number.isFinite(next) && next > 0 ? Math.max(0, Math.min(1, x.xp / next)) : 1,
+        where: x.status === "wounded" ? `Wounded: fit again in ${turnToDate(x.backOn).label}` : c ? `Commands ${corpsLine(c)}` : "Waiting for a command",
+        commands: !!c,
+        waiting: x.status === "active" && !c,
+        record: x.rec.battles ? `${x.rec.battles} battle${x.rec.battles === 1 ? "" : "s"}, ${x.rec.won} won${x.rec.wounds ? `, wounded ${x.rec.wounds === 1 ? "once" : `${x.rec.wounds} times`}` : ""}` : "No battles yet",
+        skills: SKILLS.map((k) => ({ id: k, label: COMMAND.skills[k].label, value: x.skills[k], max: COMMAND.skillMax, blurb: COMMAND.skills[k].blurb, more: up && x.points > 0 && x.skills[k] < COMMAND.skillMax })),
+        traits: x.traits.map((t) => COMMAND.traits[t]).filter(Boolean).map((t) => ({ label: t.label, good: t.good, effect: t.effect })),
+        relieve: up && x.status === "active" && !!c
+      };
+    });
+    const free2 = waiting(s, me.id);
+    const empty = vacant(s, me.id).filter((c) => !c.dead).sort((a, b) => b.divs - a.divs || a.id - b.id).map((c) => {
+      const able = free2.filter((x) => !whyNotAssign(s, x, c)).sort((a, b) => fit(s, b, c) - fit(s, a, c) || b.level - a.level);
+      const best = able[0];
+      const why = whyNotPromote(s, c);
+      return {
+        corps: c.id,
+        name: c.name,
+        line: `${KIND[c.kind].label}, ${c.divs} division${c.divs === 1 ? "" : "s"}, at ${s.regions[c.reg].name}`,
+        best: best && up ? { id: best.id, name: best.name, rank: rankOf(best), level: best.level } : null,
+        promote: up && !why && canOrder(s, c),
+        whyPromote: why || (!up ? "It is not your month." : canOrder(s, c) ? "" : "This corps cannot be given orders this month.")
+      };
+    });
+    return {
+      nation: me.name,
+      date: turnToDate(s.turn).label,
+      up,
+      capital: Math.floor(me.pc),
+      promoteCost: COMMAND.promote.pc,
+      commanding: list2.filter((x) => x.commands).length,
+      waiting: free2.length,
+      note: `A corps with no general fights by the book. Give it one who is waiting, or promote an unknown officer from its ranks for ${COMMAND.promote.pc} political capital: he starts at level 1 and learns faster than the old guard. Generals gain experience in battle, and each new level gives a skill point to spend.`,
+      generals: list2,
+      vacant: empty
+    };
+  }
+  function assign(general, corps) {
+    const s = game();
+    return { ok: humanUp(s) && orderAssign(s, general, corps), view: view() };
+  }
+  function promoteIn(corps) {
+    const s = game();
+    const gen = humanUp(s) ? orderPromote(s, corps) : null;
+    return { ok: !!gen, name: gen ? `${rankOf(gen)} ${gen.name}` : "", view: view() };
+  }
+  function relieveOf(general) {
+    const s = game();
+    return { ok: humanUp(s) && orderRelieve(s, general), view: view() };
+  }
+  function skillUp(general, skill) {
+    const s = game();
+    return { ok: humanUp(s) && orderSkill(s, general, skill), view: view() };
+  }
   var PATH_TEXT = {
     axis: { title: "Join the Axis", text: "Germany's side. Axis armies may cross your land and yours theirs, you share their supply lines, and you can go to war beside them. You are at war with nobody until you declare it or the Allies do." },
     allies: { title: "Join the Allies", text: "Britain's side. Allied armies may cross your land and yours theirs, you share their supply lines, and you can go to war beside them. You are at war with nobody until you declare it or the Axis does." },
@@ -12162,6 +12302,11 @@
     research,
     teams,
     bureau,
+    generals,
+    assign,
+    promote: promoteIn,
+    relieve: relieveOf,
+    skill: skillUp,
     ledger: ledger2,
     arsenal,
     order,

@@ -910,10 +910,11 @@ TConstArrayView<MiniatureParts::FModel> MiniatureParts::AircraftModels()
 
 FString FMiniatureMesh::MainFighterOf(const FString& Tag)
 {
-	// Each air force flies what it flew that year.
-	if (Tag == TEXT("GER")) return Year >= 1942 ? TEXT("Fw190") : TEXT("Bf109");
-	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Year >= 1941 ? TEXT("Spitfire") : TEXT("Hurricane");
-	if (Tag == TEXT("USA")) return Year >= 1943 ? TEXT("Mustang") : TEXT("Warhawk");
+	// Each air force flies what its designers have brought into service: history's year, moved by research.
+	const int32 Reached = YearOf(Tag, 1);
+	if (Tag == TEXT("GER")) return Reached >= 1942 ? TEXT("Fw190") : TEXT("Bf109");
+	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1941 ? TEXT("Spitfire") : TEXT("Hurricane");
+	if (Tag == TEXT("USA")) return Reached >= 1943 ? TEXT("Mustang") : TEXT("Warhawk");
 	if (Tag == TEXT("SOV")) return TEXT("Yak");
 	if (Tag == TEXT("JAP") || Tag == TEXT("JPN")) return TEXT("Zero");
 	return TEXT("Fighter:") + Tag;
@@ -921,9 +922,10 @@ FString FMiniatureMesh::MainFighterOf(const FString& Tag)
 
 FString FMiniatureMesh::MainBomberOf(const FString& Tag)
 {
+	const int32 Reached = YearOf(Tag, 2);
 	if (Tag == TEXT("USA")) return TEXT("B17");
-	if (Tag == TEXT("GER")) return Year >= 1941 ? TEXT("He111") : TEXT("Stuka");
-	if (Tag == TEXT("SOV")) return Year >= 1942 ? TEXT("Sturmovik") : TEXT("Bomber:SOV");
-	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Year >= 1942 ? TEXT("Lancaster") : TEXT("Bomber:UK");
+	if (Tag == TEXT("GER")) return Reached >= 1941 ? TEXT("He111") : TEXT("Stuka");
+	if (Tag == TEXT("SOV")) return Reached >= 1942 ? TEXT("Sturmovik") : TEXT("Bomber:SOV");
+	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return Reached >= 1942 ? TEXT("Lancaster") : TEXT("Bomber:UK");
 	return TEXT("Bomber:") + Tag;
 }

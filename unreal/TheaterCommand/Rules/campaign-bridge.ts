@@ -38,20 +38,21 @@
 
 import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, men, railReach as railReachOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
-import type { Field } from '../../../src/campaign/types';
+import type { Field, Skill } from '../../../src/campaign/types';
+import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
-  orderBureau, orderTeams,
+  orderBureau, orderTeams, orderAssign, orderPromote, orderRelieve, orderSkill,
   invasions, previewDeclare, orderCourt, leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, provinceYield } from '../../../src/campaign/economy';
-import { generalOf, rankOf } from '../../../src/campaign/commanders';
+import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND } from '../../../src/campaign/types';
 import { GOALS, GOAL_KEYS, judgeGoals, openGoals } from '../../../src/campaign/goals';
@@ -110,7 +111,12 @@ function view() {
     // Bridges that are down (by their place in the list of crossings) and provinces whose railway is cut.
     down: groundRules(s) ? CROSSINGS.map((c, i) => (bridgeDown(s, c) ? i : -1)).filter((i) => i >= 0) : [],
     cut: groundRules(s) ? s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id) : [],
-    regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
+    // Each region: who holds it, and the works built there since the war began that the table shows as models:
+    // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
+    regions: s.regions.map((r) => {
+      const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, 'aa', r.id), workLevel(s, 'field', r.id)];
+      return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
+    }),
     corps: s.corps.filter((c) => !c.dead).map((c) => ({
       id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
@@ -127,6 +133,10 @@ function view() {
     air: s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => ({
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
     })),
+    // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
+    // branch fields its later models early, and one that neglects it keeps the old ones longer.
+    designs: Object.fromEntries(Object.values(s.nations).filter((n) => n.lab && n.alive).map((n) => [n.id,
+      (['armour', 'fighters', 'bombers'] as const).map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab!.clock[f] - n.lab!.months)) + 7) / 12))])),
     // The members of the League, the third alliance: their ground is shown in its own colour.
     league: leagueMembers(s).map((n) => n.id),
     nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
@@ -1077,6 +1087,78 @@ function bureau() {
   return { ok: orderBureau(s), view: view() };
 }
 
+/**
+ * The generals of the player's nation: those in command and those waiting for one, each with his rank, skills,
+ * traits and record, and the corps that have no general, with the best man waiting for each.
+ */
+function generals() {
+  const s = game();
+  const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+  if (!me) return null;
+  const up = humanUp(s) && !onEve(s);
+  const corpsLine = (c: Corps): string => `${c.name} (${KIND[c.kind].label.toLowerCase()}, ${c.divs} division${c.divs === 1 ? '' : 's'}) at ${s.regions[c.reg].name}`;
+  const mine = s.generals.filter((x) => x.nat === me.id && (x.status === 'active' || x.status === 'wounded'));
+  const list = mine.sort((a, b) => (a.corps >= 0 ? 0 : 1) - (b.corps >= 0 ? 0 : 1) || b.level - a.level || a.id - b.id).map((x) => {
+    const c = corpsOf(s, x);
+    const next = xpToNext(x);
+    return {
+      id: x.id, name: x.name, rank: rankOf(x), level: x.level, points: up ? x.points : 0,
+      progress: Number.isFinite(next) && next > 0 ? Math.max(0, Math.min(1, x.xp / next)) : 1,
+      where: x.status === 'wounded' ? `Wounded: fit again in ${turnToDate(x.backOn).label}` : c ? `Commands ${corpsLine(c)}` : 'Waiting for a command',
+      commands: !!c, waiting: x.status === 'active' && !c,
+      record: x.rec.battles ? `${x.rec.battles} battle${x.rec.battles === 1 ? '' : 's'}, ${x.rec.won} won${x.rec.wounds ? `, wounded ${x.rec.wounds === 1 ? 'once' : `${x.rec.wounds} times`}` : ''}` : 'No battles yet',
+      skills: SKILLS.map((k) => ({ id: k, label: COMMAND.skills[k].label, value: x.skills[k], max: COMMAND.skillMax, blurb: COMMAND.skills[k].blurb, more: up && x.points > 0 && x.skills[k] < COMMAND.skillMax })),
+      traits: x.traits.map((t) => COMMAND.traits[t]).filter(Boolean).map((t) => ({ label: t.label, good: t.good, effect: t.effect })),
+      relieve: up && x.status === 'active' && !!c,
+    };
+  });
+  const free = waiting(s, me.id);
+  const empty = vacant(s, me.id).filter((c) => !c.dead)
+    .sort((a, b) => b.divs - a.divs || a.id - b.id)
+    .map((c) => {
+      // The man on the list who suits this corps best, if any may take it this month.
+      const able = free.filter((x) => !whyNotAssign(s, x, c)).sort((a, b) => fit(s, b, c) - fit(s, a, c) || b.level - a.level);
+      const best = able[0];
+      const why = whyNotPromote(s, c);
+      return {
+        corps: c.id, name: c.name, line: `${KIND[c.kind].label}, ${c.divs} division${c.divs === 1 ? '' : 's'}, at ${s.regions[c.reg].name}`,
+        best: best && up ? { id: best.id, name: best.name, rank: rankOf(best), level: best.level } : null,
+        promote: up && !why && canOrder(s, c), whyPromote: why || (!up ? 'It is not your month.' : canOrder(s, c) ? '' : 'This corps cannot be given orders this month.'),
+      };
+    });
+  return {
+    nation: me.name, date: turnToDate(s.turn).label, up, capital: Math.floor(me.pc), promoteCost: COMMAND.promote.pc,
+    commanding: list.filter((x) => x.commands).length, waiting: free.length,
+    note: `A corps with no general fights by the book. Give it one who is waiting, or promote an unknown officer from its ranks for ${COMMAND.promote.pc} political capital: he starts at level 1 and learns faster than the old guard. Generals gain experience in battle, and each new level gives a skill point to spend.`,
+    generals: list, vacant: empty,
+  };
+}
+
+/** Gives one of the player's waiting generals a corps. */
+function assign(general: number, corps: number) {
+  const s = game();
+  return { ok: humanUp(s) && orderAssign(s, general, corps), view: view() };
+}
+
+/** Promotes an unknown officer to command one of the player's corps. */
+function promoteIn(corps: number) {
+  const s = game();
+  const gen = humanUp(s) ? orderPromote(s, corps) : null;
+  return { ok: !!gen, name: gen ? `${rankOf(gen)} ${gen.name}` : '', view: view() };
+}
+
+/** Takes one of the player's generals off his corps and puts him back on the list. */
+function relieveOf(general: number) {
+  const s = game();
+  return { ok: humanUp(s) && orderRelieve(s, general), view: view() };
+}
+
+/** Spends one of a general's skill points. */
+function skillUp(general: number, skill: string) {
+  const s = game();
+  return { ok: humanUp(s) && orderSkill(s, general, skill as Skill), view: view() };
+}
+
 const PATH_TEXT: Record<PathId, { title: string; text: string }> = {
   axis: { title: 'Join the Axis', text: 'Germany\'s side. Axis armies may cross your land and yours theirs, you share their supply lines, and you can go to war beside them. You are at war with nobody until you declare it or the Allies do.' },
   allies: { title: 'Join the Allies', text: 'Britain\'s side. Allied armies may cross your land and yours theirs, you share their supply lines, and you can go to war beside them. You are at war with nobody until you declare it or the Axis does.' },
@@ -1175,4 +1257,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, research, teams, bureau, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, research, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

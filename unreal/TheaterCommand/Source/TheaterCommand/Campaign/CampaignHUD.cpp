@@ -229,6 +229,15 @@ namespace
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
 									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									.ToolTipText(FText::FromString(TEXT("Your generals: who commands what, who is waiting for a command, and the corps that have nobody.")))
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGenerals(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("GENERALS"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("The design offices: put design teams on the branches whose new weapons you want early.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenResearch(); } return FReply::Handled(); })
 									[
@@ -762,6 +771,85 @@ namespace
 						]
 					]
 
+					// The generals: who commands what, who waits, and the corps that have nobody.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsGeneralsOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(1220.0f).HeightOverride(800.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 22.0f, 26.0f, 22.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
+										[
+											SNew(SBox).WidthOverride(72.0f).HeightOverride(48.0f)
+											[
+												SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() && Controller->GetSession() ? Controller->GetLedgerNationTag() : FString()); })
+											]
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+										[
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
+											[
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 240)).ColorAndOpacity(Brass)
+												.Text_Lambda([this]()
+												{
+													const FGeneralStaff* List = Controller.IsValid() ? &Controller->GetGenerals() : nullptr;
+													return List ? FText::FromString(FString::Printf(TEXT("THE GENERALS  \u00B7  %s  \u00B7  %s"), *List->Nation.ToUpper(), *List->Date.ToUpper())) : FText::GetEmpty();
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 26)).ColorAndOpacity(Cream)
+												.Text_Lambda([this]()
+												{
+													const FGeneralStaff* List = Controller.IsValid() ? &Controller->GetGenerals() : nullptr;
+													return List ? FText::FromString(FString::Printf(TEXT("%d in command, %d waiting, %d corps without a general"), List->Commanding, List->Waiting, List->Vacant.Num())) : FText::GetEmpty();
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+												.Text_Lambda([this]()
+												{
+													const FGeneralStaff* List = Controller.IsValid() ? &Controller->GetGenerals() : nullptr;
+													return List ? FText::FromString(List->Note + FString::Printf(TEXT(" You have %d political capital."), List->Capital)) : FText::GetEmpty();
+												})
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(20.0f, 9.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseGenerals(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+											]
+										]
+									]
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(1.6f).Padding(0.0f, 0.0f, 22.0f, 0.0f)
+										[
+											SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 10.0f, 0.0f)[SAssignNew(GeneralsList, SVerticalBox)]
+										]
+										+ SHorizontalBox::Slot().FillWidth(0.9f)
+										[
+											SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(GeneralsVacant, SVerticalBox)]
+										]
+									]
+								]
+							]
+						]
+					]
+
 					// The design offices: every branch of the armed forces, and the teams at work on it.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
@@ -1203,6 +1291,13 @@ namespace
 				LayOutArsenal(Controller->GetArsenal());
 			}
 
+			// Set the generals out when their list is opened, and again after every appointment.
+			if (Controller.IsValid() && GeneralsList.IsValid() && Controller->IsGeneralsOpen() && Controller->GetGenerals().Revision != ShownGenerals)
+			{
+				ShownGenerals = Controller->GetGenerals().Revision;
+				LayOutGenerals(Controller->GetGenerals());
+			}
+
 			// Set the design offices out when they are opened, and again whenever a team is moved.
 			if (Controller.IsValid() && ResearchFields.IsValid() && Controller->IsResearchOpen() && Controller->GetResearch().Revision != ShownResearch)
 			{
@@ -1458,6 +1553,198 @@ namespace
 				[
 					SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 8.0f, 0.0f)[List]
 				];
+			}
+		}
+
+		/** One general: his rank and level, where he is, his four skills, his traits and his record. */
+		TSharedRef<SWidget> MakeGeneral(const FGeneralEntry& General)
+		{
+			const FLinearColor NameInk = General.bCommands ? Cream : General.bWaiting ? BrightBrass : Muted;
+			TSharedRef<SVerticalBox> Card = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(General.Name)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(NameInk).AutoWrapText(true)
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  LEVEL %d"), *General.Rank.ToUpper(), General.Level))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Brass)
+					]
+				]
+				// How far he is toward his next level.
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).HeightOverride(3.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(FMath::Clamp(General.Progress, 0.0001f, 1.0f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Brass)]
+						+ SHorizontalBox::Slot().FillWidth(FMath::Clamp(1.0f - General.Progress, 0.0001f, 1.0f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.08f))]
+					]
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(General.Where)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(General.bWaiting ? BrightBrass : Cream).AutoWrapText(true)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(General.Record)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+				];
+			// His four skills, each as pips, with a + when he has a point to spend.
+			TSharedRef<SVerticalBox> Skills = SNew(SVerticalBox);
+			for (int32 First = 0; First < General.Skills.Num(); First += 2)
+			{
+				TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+				for (int32 Column = 0; Column < 2; ++Column)
+				{
+					if (!General.Skills.IsValidIndex(First + Column))
+					{
+						Row->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
+						continue;
+					}
+					const FGeneralSkill& Skill = General.Skills[First + Column];
+					TSharedRef<SHorizontalBox> Pips = SNew(SHorizontalBox);
+					for (int32 Pip = 0; Pip < Skill.Max; ++Pip)
+					{
+						Pips->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 3.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(9.0f).HeightOverride(9.0f)[SNew(SBorder).BorderImage(&DotBrush).BorderBackgroundColor(Pip < Skill.Value ? BrightBrass : FLinearColor(1.0f, 1.0f, 1.0f, 0.12f))]
+						];
+					}
+					TSharedRef<SHorizontalBox> Cell = SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(SBox).WidthOverride(74.0f).ToolTipText(FText::FromString(Skill.Blurb))
+							[
+								SNew(STextBlock).Text(FText::FromString(Skill.Label)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+							]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Pips];
+					if (Skill.bMore)
+					{
+						Cell->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f, 0.0f, 0.0f)
+						[
+							OfficeButton(TEXT("+"), BrightBrass, true, Skill.Blurb, [this, Id = General.Id, Key = Skill.Id]() { if (Controller.IsValid()) { Controller->SpendSkill(Id, Key); } })
+						];
+					}
+					Row->AddSlot().FillWidth(1.0f)[Cell];
+				}
+				Skills->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 3.0f)[Row];
+			}
+			Card->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)[Skills];
+			if (General.Points > 0)
+			{
+				Card->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Gain)
+					.Text(FText::FromString(FString::Printf(TEXT("%d skill point%s to spend: press a +."), General.Points, General.Points == 1 ? TEXT("") : TEXT("s"))))
+				];
+			}
+			for (int32 Trait = 0; Trait < General.Traits.Num(); ++Trait)
+			{
+				Card->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(General.Traits[Trait])).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(General.TraitGood.IsValidIndex(Trait) && !General.TraitGood[Trait] ? Alarm : Gain).AutoWrapText(true)
+				];
+			}
+			if (General.bRelieve)
+			{
+				Card->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					OfficeButton(TEXT("RELIEVE"), Muted, true, TEXT("Take him off his corps and put him back on the list, with no hard feelings. He can be given another command."),
+						[this, Id = General.Id]() { if (Controller.IsValid()) { Controller->RelieveGeneral(Id); } })
+				];
+			}
+			return SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(12.0f, 9.0f, 12.0f, 10.0f))[Card];
+		}
+
+		/** The generals two abreast, those waiting for a command first; beside them the corps that have nobody. */
+		void LayOutGenerals(const FGeneralStaff& List)
+		{
+			GeneralsList->ClearChildren();
+			auto AddGroup = [this, &List](const TCHAR* Title, bool bWaiting)
+			{
+				TArray<const FGeneralEntry*> Group;
+				for (const FGeneralEntry& General : List.Generals)
+				{
+					if (General.bWaiting == bWaiting)
+					{
+						Group.Add(&General);
+					}
+				}
+				if (Group.Num() == 0)
+				{
+					return;
+				}
+				GeneralsList->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Title)).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+				];
+				for (int32 First = 0; First < Group.Num(); First += 2)
+				{
+					TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+					for (int32 Column = 0; Column < 2; ++Column)
+					{
+						Row->AddSlot().FillWidth(1.0f).Padding(0.0f, 0.0f, Column == 0 ? 10.0f : 0.0f, 0.0f)
+						[
+							Group.IsValidIndex(First + Column) ? MakeGeneral(*Group[First + Column]) : StaticCastSharedRef<SWidget>(SNew(SSpacer))
+						];
+					}
+					GeneralsList->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)[Row];
+				}
+				GeneralsList->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(8.0f)];
+			};
+			AddGroup(TEXT("WAITING FOR A COMMAND"), true);
+			AddGroup(TEXT("IN COMMAND, AND THE WOUNDED"), false);
+			if (List.Generals.Num() == 0)
+			{
+				GeneralsList->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("The nation has no generals yet. Promote an officer from a corps on the right."))).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+				];
+			}
+
+			GeneralsVacant->ClearChildren();
+			GeneralsVacant->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("CORPS WITHOUT A GENERAL"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+			];
+			if (List.Vacant.Num() == 0)
+			{
+				GeneralsVacant->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("Every corps has its general."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint)
+				];
+			}
+			for (const FVacantCorps& Corps : List.Vacant)
+			{
+				TSharedRef<SVerticalBox> Card = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Corps.Name)).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Corps.Line)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+					];
+				TSharedRef<SVerticalBox> Buttons = SNew(SVerticalBox);
+				if (Corps.BestId != INDEX_NONE)
+				{
+					Buttons->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 0.0f, 0.0f, 4.0f)
+					[
+						OfficeButton(*(TEXT("APPOINT ") + Corps.BestName.ToUpper()), BrightBrass, true, TEXT("The general on the waiting list who suits this corps best takes command of it."),
+							[this, General = Corps.BestId, Id = Corps.Corps]() { if (Controller.IsValid()) { Controller->AssignGeneral(General, Id); } })
+					];
+				}
+				Buttons->AddSlot().AutoHeight().HAlign(HAlign_Left)
+				[
+					OfficeButton(*FString::Printf(TEXT("PROMOTE AN OFFICER  \u00B7  %d CAPITAL"), List.PromoteCost), BrightBrass, Corps.bPromote,
+						Corps.bPromote ? FString(TEXT("An unknown officer of this corps takes command at level 1. He is a rising star and learns faster than the old guard.")) : Corps.WhyPromote,
+						[this, Id = Corps.Corps]() { if (Controller.IsValid()) { Controller->PromoteOfficer(Id); } })
+				];
+				Card->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)[Buttons];
+				GeneralsVacant->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)[Card];
 			}
 		}
 
@@ -2812,6 +3099,9 @@ namespace
 		FButtonStyle PlateButton;
 		TSharedPtr<SHorizontalBox> ArsenalColumns;
 		int32 ShownArsenal = -1;
+		TSharedPtr<SVerticalBox> GeneralsList;
+		TSharedPtr<SVerticalBox> GeneralsVacant;
+		int32 ShownGenerals = -1;
 		TSharedPtr<SVerticalBox> ResearchFields;
 		TSharedPtr<SVerticalBox> ResearchOthers;
 		int32 ShownResearch = -1;

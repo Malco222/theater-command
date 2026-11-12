@@ -304,6 +304,16 @@ public:
 	void OpenLedger();
 	void CloseLedger();
 
+	/** The generals: who commands what, who is waiting, and the corps that have nobody. */
+	const FGeneralStaff& GetGenerals() const { return Staff; }
+	bool IsGeneralsOpen() const { return bGeneralsOpen; }
+	void OpenGenerals();
+	void CloseGenerals();
+	void AssignGeneral(int32 GeneralId, int32 CorpsId);
+	void PromoteOfficer(int32 CorpsId);
+	void RelieveGeneral(int32 GeneralId);
+	void SpendSkill(int32 GeneralId, const FString& Skill);
+
 	/** The design offices: the teams at work on each branch of the armed forces. */
 	const FResearch& GetResearch() const { return Research; }
 	bool IsResearchOpen() const { return bResearchOpen; }
@@ -429,6 +439,9 @@ private:
 	bool bDiplomacyOpen = false;
 	FResearch Research;
 	bool bResearchOpen = false;
+	FGeneralStaff Staff;
+	bool bGeneralsOpen = false;
+	void RefreshGenerals(bool bArmiesChanged);
 	FString PathAsked; // the path waiting for the player's yes, with its partner: "found:DEN"
 	FArsenal Arsenal;
 	bool bArsenalOpen = false;
