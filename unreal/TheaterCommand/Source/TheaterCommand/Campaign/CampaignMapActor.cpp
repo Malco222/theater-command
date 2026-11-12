@@ -246,7 +246,16 @@ void ACampaignMapActor::LoadMaterials()
 		return Instance;
 	};
 	InkMaterial = MakeSurface(0.8f, 0.2f, 0.0f, 0.0f);
-	PieceMaterial = MakeSurface(0.5f, 0.38f, 0.0f, 0.0f); // smooth and a little shiny, like moulded plastic
+	// The pieces: painted metal and cloth, not bare plastic. A fine grain in the paint and a slight tooth to the
+	// surface catch the lamp, at a scale that suits things the size of a model.
+	PieceMaterial = MakeSurface(0.56f, 0.4f, 0.1f, 0.3f);
+	PieceMaterial->SetScalarParameterValue(TEXT("GrainTilingCoarse"), 0.012f);
+	PieceMaterial->SetScalarParameterValue(TEXT("GrainTilingFine"), 0.06f);
+	PieceMaterial->SetScalarParameterValue(TEXT("ToothTiling"), 0.09f);
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
+	{
+		PieceMaterial = MakeSurface(0.5f, 0.38f, 0.0f, 0.0f); // as it was: smooth and a little shiny, like moulded plastic
+	}
 	SceneryMaterial = MakeSurface(0.85f, 0.2f, 0.0f, 0.0f);
 
 	// The land and the sea take their colour from pictures painted in PaintGround.

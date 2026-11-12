@@ -38,6 +38,21 @@ ACampaignCameraPawn::ACampaignCameraPawn()
 	Look.VignetteIntensity = 0.5f;
 	Look.bOverride_BloomIntensity = true;
 	Look.BloomIntensity = 0.25f;
+	// The grade of the picture: a little more colour and contrast, the lit side warm and the shadows cool,
+	// as a photograph of a model under a lamp comes out.
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
+	{
+		Look.bOverride_ColorSaturation = true;
+		Look.ColorSaturation = FVector4(1.07, 1.07, 1.07, 1.0);
+		Look.bOverride_ColorContrast = true;
+		Look.ColorContrast = FVector4(1.05, 1.05, 1.05, 1.0);
+		Look.bOverride_ColorGainHighlights = true;
+		Look.ColorGainHighlights = FVector4(1.03, 1.0, 0.96, 1.0);
+		Look.bOverride_ColorGainShadows = true;
+		Look.ColorGainShadows = FVector4(0.96, 0.99, 1.05, 1.0);
+		Look.bOverride_FilmToe = true;
+		Look.FilmToe = 0.6f;
+	}
 	Look.bOverride_MotionBlurAmount = true;
 	Look.MotionBlurAmount = 0.0f;
 	Look.bOverride_DepthOfFieldFocalDistance = true;
