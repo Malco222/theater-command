@@ -106,7 +106,8 @@
     { "nat": "SOV", "name": "Western District Air Force", "base": "Minsk", "leader": "Ivan Kopets", "est": [[1, 600, 450], [18, 900, 700]] },
     { "nat": "SOV", "name": "Kiev District Air Force", "base": "Kiev", "leader": "Yevgeny Ptukhin", "est": [[1, 700, 500], [18, 1000, 800]] },
     { "nat": "SOV", "name": "Odessa District Air Force", "base": "Odessa", "leader": "Fyodor Michugin", "est": [[1, 300, 200], [18, 400, 300]] },
-    { "nat": "SOV", "name": "Moscow Air Defence", "base": "Moscow", "leader": "Mikhail Gromadin", "est": [[1, 300, 0], [22, 500, 0]] }
+    { "nat": "SOV", "name": "Moscow Air Defence", "base": "Moscow", "leader": "Mikhail Gromadin", "est": [[1, 300, 0], [22, 500, 0]] },
+    { "nat": "UK", "name": "Mediterranean Air Command", "base": "Malta", "from": 46, "leader": "Arthur Tedder", "est": [[46, 500, 400]] }
   ],
   "plan": [
     { "nat": "GER", "from": 11, "to": 11, "name": "The Channel battles", "against": "UK", "orders": [
@@ -134,6 +135,15 @@
       { "fleet": "Luftflotte 1", "base": ["Konigsberg"], "mission": "support" },
       { "fleet": "Luftflotte 2", "base": ["Warsaw"], "mission": "support" },
       { "fleet": "Luftflotte 4", "base": ["Krakow", "Lublin"], "mission": "support" }
+    ] },
+    { "nat": "UK", "from": 46, "to": 48, "name": "The air offensive against Sicily", "against": "ITA", "orders": [
+      { "fleet": "Mediterranean Air Command", "base": ["Malta"], "mission": "superiority", "region": "Sicily" }
+    ] },
+    { "nat": "UK", "from": 49, "to": 49, "name": "The air forces cover the landings in Italy", "against": "GER", "orders": [
+      { "fleet": "Mediterranean Air Command", "base": ["Sicily"], "mission": "support" }
+    ] },
+    { "nat": "UK", "from": 50, "to": 99, "name": "The air forces move up to Foggia", "against": "GER", "orders": [
+      { "fleet": "Mediterranean Air Command", "base": ["Apulia", "Naples"], "mission": "support" }
     ] }
   ]
 }

@@ -44,7 +44,10 @@
   "UK": [
     {"from": 1, "to": 7, "posture": "defend"},
     {"from": 8, "to": 10, "posture": "defend", "name": "Expedition to Norway", "ifAtWar": ["GER", "NOR"], "landings": [{"corps": "North Western Expeditionary Force", "to": ["Narvik", "Finnmark", "Trondheim"]}]},
-    {"from": 11, "to": 99, "posture": "defend"}
+    {"from": 11, "to": 46, "posture": "defend"},
+    {"from": 47, "to": 48, "posture": "defend", "fleets": [{"fleet": "Mediterranean Fleet", "zone": "central", "stance": "patrol"}]},
+    {"from": 49, "to": 49, "posture": "defend", "fleets": [{"fleet": "Mediterranean Fleet", "zone": "tyrr", "stance": "patrol"}]},
+    {"from": 50, "to": 99, "posture": "defend"}
   ],
   "POL": [
     {"from": 1, "to": 99, "posture": "defend"}

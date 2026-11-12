@@ -46,8 +46,11 @@ describe('a theatre on the mainland', () => {
     const balkans = g.byName['Athens'].theatre;
     expect(balkans).toBeGreaterThanOrEqual(0);
     for (const n of ['Albania', 'Epirus', 'Salonika', 'Crete', 'Belgrade', 'Croatia', 'Macedonia', 'Sofia', 'Plovdiv', 'Banat', 'Transdanubia']) expect(g.byName[n].theatre, n).toBe(balkans);
-    for (const n of ['Rome', 'Budapest', 'Bucharest', 'Styria', 'Friuli', 'Berlin', 'London']) expect(g.byName[n].theatre, n).toBe(-1);
+    for (const n of ['Lombardy', 'Budapest', 'Bucharest', 'Styria', 'Friuli', 'Berlin', 'London']) expect(g.byName[n].theatre, n).toBe(-1);
     expect(g.byName['Tobruk'].theatre).not.toBe(balkans);
+    // Rome and the south of Italy are the ground of another campaign, that of 1943.
+    expect(g.byName['Rome'].theatre).not.toBe(balkans);
+    expect(theatreName(g.byName['Rome'])).toBe('Italy');
     expect(theatreName(g.byName['Athens'])).toBe('the Balkans');
     expect(theatreName(g.byName['Berlin'])).toBeNull();
     // A saved game is laid over the same map, so the theatre survives a save.

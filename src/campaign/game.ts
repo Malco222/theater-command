@@ -924,7 +924,7 @@ function mobilise(g: Game, nat: string): void {
   }
 }
 
-const THEATRE_LIST = Object.values(theatreData as Record<string, any>).filter((x) => typeof x !== 'string') as { name: string; havens?: string[] }[];
+const THEATRE_LIST = Object.values(theatreData as Record<string, any>).filter((x) => typeof x !== 'string') as { name: string; havens?: string[]; works?: [number, string, number, string[], string][] }[];
 
 /** The name of the side theatre a region belongs to, as data/campaign/theatres.json gives it. */
 export function theatreName(r: Region): string | null {
@@ -943,6 +943,22 @@ export function refuge(g: Game, c: Corps, from: Region): Region {
     if (r && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && friendlyUnits(g, r, c.nat).length < STACK && seaOpenAt(g, c.nat, r)) return r;
   }
   return g.regions[g.nations[c.nat].capital];
+}
+
+/**
+ * A formation put together from an army already overseas ('from' names its theatre) takes its divisions out of
+ * that army: the largest corps there give them up, and a corps left with none is struck off. Garrisons are not touched.
+ */
+function draw(g: Game, nat: string, theatre: string, divs: number): void {
+  const k = THEATRE_LIST.findIndex((t) => t.name === theatre);
+  for (let need = divs; k >= 0 && need > 0;) {
+    const c = g.corps.filter((x) => x.nat === nat && !x.dead && !x.hold && x.kind !== 'fort' && g.regions[x.reg].theatre === k).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
+    if (!c) break;
+    const take = Math.min(need, c.divs);
+    if (take >= c.divs) removeCorps(g, c); else c.divs -= take;
+    need -= take;
+  }
+  g.supplyDirty = true;
 }
 
 /**
@@ -971,6 +987,7 @@ function expeditions(g: Game, nat: string): void {
     if (!reg || !allied(g, nat, reg.ctrl) || (!o.join && friendlyUnits(g, reg, nat).length >= STACK)) return;
     g.flags[`sent:${i}`] = 1;
     const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, o);
+    if (o.from) draw(g, o.of ?? nat, o.from, row[4]);
     if (o.until) g.flags[`lent:${i}`] = c.id;
     const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? '' : 'the ';
     if (o.gen) headline(g, 'event', `${o.gen} ${reg.port ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
@@ -991,7 +1008,8 @@ function expeditions(g: Game, nat: string): void {
  * from ground of the same colony meets them.
  */
 function desertWorks(g: Game, nat: string): void {
-  for (const [when, place, lv, holders, news] of DESERT.works ?? []) {
+  // A theatre outside the desert can list works of its own in theatres.json: they are dug the same way.
+  for (const [when, place, lv, holders, news] of [...(DESERT.works ?? []), ...THEATRE_LIST.flatMap((t) => t.works ?? [])]) {
     const r = g.byName[place];
     if (when !== g.turn || !r || r.ctrl !== nat || !holders.includes(nat) || (r.fort?.lv ?? 0) === lv) continue;
     r.fort = lv > 0 ? { lv, vs: r.fort?.vs ?? [r.owner] } : null;

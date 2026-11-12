@@ -83,6 +83,8 @@ export function theatrePhases(g: Game, nat: string): { theatre: string; phase: P
     const list = T.plans[nat];
     if (!list || !g.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
     const phase = theatrePhase(g, nat, list);
+    // A garrison standing where a campaign will one day be fought has no orders from it yet.
+    if (!phase && list.every((p) => p.from > g.turn)) return;
     out.push({ theatre: T.name, phase, base: phase?.base ?? T.bases?.[nat] ?? null });
   });
   return out;

@@ -15,7 +15,7 @@ import {
   km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
 } from '../air';
 import {
-  NAVY, SEA_BORDERS, airborne as byAir, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
+  NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
 } from '../navy';
 import { phaseFor, theatrePhases } from '../ai';
 import { PRODUCTION, canRaise, fortCost, income, isHome } from '../economy';
@@ -1066,7 +1066,7 @@ function landingCard(): string {
       const word = p >= 0.95 ? 'Victory is all but certain' : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : air ? 'This assault will fail' : 'This landing will fail';
       odds = `<div class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}" style="font-size:24px">${word}</div>
         <div class="oddsbar"><i style="width:${Math.round(share * 100)}%;background:${g.nations[g.human!].color}"></i><i style="flex:1;background:${g.nations[a.defenders[0].nat].color}"></i></div>
-        <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${Math.round(p * 100)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(NAVY.landing.assault * 100)}%`}</div>`;
+        <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${Math.round(p * 100)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`;
     }
     body = `${odds}
       ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>`}
@@ -1315,7 +1315,7 @@ function openModal(m: typeof ui.modal): void {
 }
 
 function startCard(): string {
-  const side = (id: string | null, name: string, blurb: string, wide = false, from = 1) => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}" data-from="${from}"><b>${name}</b><span>${blurb}</span></button>`;
+  const side = (id: string | null, name: string, blurb: string, wide = false, from = 1, view = '') => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}" data-from="${from}" data-view="${view}"><b>${name}</b><span>${blurb}</span></button>`;
   const saved = peekSave(readSave() ?? '');
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `Watching history, ${date(saved.turn)}`}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
@@ -1376,6 +1376,12 @@ function startCard(): string {
       ${side(null, 'Watch Kursk and the road to the Dnieper', 'The computer plays the first 46 months, then the last German summer offensive in the east, the Soviet strokes at Orel and Kharkov, the race for the Dnieper and the freeing of Kiev.', true, 47)}
       ${side('GER', 'Germany', 'Your tanks are gathered on both shoulders of the Kursk salient, and the Red Army has had three months to dig in there. Strike or hold them back: either way the weight is about to fall on Orel and Kharkov, and the Dnieper is a long way behind you.', false, 47)}
       ${side('SOV', 'Soviet Union', 'You know where the blow will fall and you have dug in to meet it. Break the panzers on the lines round Kursk, then send the reserve fronts at Orel and Kharkov and do not stop until you are over the Dnieper.', false, 47)}
+    </div>
+    <h3>July 1943 · Sicily and Italy</h3>
+    <div class="sides">
+      ${side(null, 'Watch Sicily and Italy', 'The computer plays the first 46 months, then the landing in Sicily, the fall of Mussolini, the Italian armistice, Salerno and Naples, and the German winter line across the mountains south of Rome.', true, 47, 'italy')}
+      ${side('UK', 'United Kingdom', 'Two armies wait at Malta and your air force has spent a month over Sicily. Keep the sky, put the Eighth Army ashore, and follow it across the strait before the Germans have dug in across the mountains.', false, 47, 'italy')}
+      ${side('ITA', 'Italy', 'Africa is gone, the army has lost heart and the invasion fleet is gathering at Malta. If Sicily falls the King will dismiss Mussolini, and an armistice follows. Hold the island and Italy stays in the war.', false, 47, 'italy')}
     </div>
     <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
@@ -1446,7 +1452,7 @@ function declareCard(): string {
 // ---- Running the game ---------------------------------------------------------------------
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function newGame(human: string | null, seed?: number, from = 1): void {
+function newGame(human: string | null, seed?: number, from = 1, view = ''): void {
   stopAuto();
   g = createGame(seed ?? (Date.now() % 900000) + 1, from > 1 ? null : human);
   while (g.turn < from) runTurnAI(g);
@@ -1456,9 +1462,10 @@ function newGame(human: string | null, seed?: number, from = 1): void {
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = from > 1 ? g.seaReports.length : 0;
   ui.air = -1; ui.airMode = ''; ui.seenAir = from > 1 ? g.airReports.length : 0;
   drawStatic();
-  const britain = from === 11, desert = from === 13 || from === 33, balkans = from === 14, blue = from === 34, torch = from === 39, kursk = from === 47;
+  const italy = view === 'italy';
+  const britain = from === 11, desert = from === 13 || from === 33, balkans = from === 14, blue = from === 34, torch = from === 39, kursk = from === 47 && !italy;
   if (britain) ui.tab = 'air';
-  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : torch ? g.byName['Constantine'] : balkans ? g.byName['Thessaly'] : blue ? g.byName[human === 'SOV' ? 'Stalingrad' : 'Kharkov'] : kursk ? g.byName['Kursk'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
+  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : torch ? g.byName['Constantine'] : balkans ? g.byName['Thessaly'] : blue ? g.byName[human === 'SOV' ? 'Stalingrad' : 'Kharkov'] : kursk ? g.byName['Kursk'] : italy ? g.byName['Calabria'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
   ui.view = { x: focus.x - (torch ? 420 : 300), y: focus.y - (torch ? 250 : 230), w: torch ? 760 : desert || balkans ? 580 : human === 'GER' || from > 1 ? 640 : 600 };
   applyView();
   // A country that is attacked before its first month comes round places its army on the eve of war.
@@ -1600,7 +1607,7 @@ function onClick(e: MouseEvent): void {
   const id = Number(t.dataset.id);
   ui.msg = '';
   switch (act) {
-    case 'start': openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1)); break;
+    case 'start': openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || ''); break;
     case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
     case 'new': stopAuto(); openModal({ kind: 'start' }); break;
     case 'close': openModal(null); refresh(); break;

@@ -29,7 +29,7 @@ export const NAVY = data as unknown as {
   battle: { seek: number; catchRaider: number; evadeAt: number; evade: number };
   ready: { port: number; sea: number; mend: number; floor: number; lost: number; won: number; sortieAt: number };
   intercept: { loss: number; sea: number };
-  landing: { assault: number; surprise: number; range: number; sortie: number; airborne: number };
+  landing: { assault: number; surprise: number; range: number; sortie: number; airborne: number; craft?: [number, string[], number][] };
   range: number;
   admiral: { perLevel: number; maxLevel: number; lostWithFlagship: number };
   convoy: { escortWorth: number; ocean: number; air: number; patrolRaid: number; subBase: number; subHunt: number; escortLoss: number };
@@ -311,11 +311,21 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
 export const airborne = (cs: Corps[]): boolean => cs.length > 0 && cs.every((c) => !!c.airborne);
 const dropKey = (g: Game, nat: string): string => `drop:${nat}:${g.turn}`;
 
+/**
+ * The share of its strength a nation's troops keep when they fight their way off a beach: more for one that has
+ * landing ships built for the work and the naval gunfire to cover them, from the month it has them.
+ */
+export function assaultStrength(g: Game, nat: string): number {
+  let s = NAVY.landing.assault;
+  for (const [from, nats, to] of NAVY.landing.craft ?? []) if (g.turn >= from && nats.includes(nat)) s = Math.max(s, to);
+  return s;
+}
+
 /** How a force would fight its way ashore: from landing craft, or from the air. */
 export function landingOpts(g: Game, cs: Corps[], to: Region): { sea: number; surprise: boolean; air?: boolean } {
   if (airborne(cs)) return { sea: NAVY.landing.airborne, surprise: false, air: true };
   const surprise = surpriseOn(g, cs[0].nat, to);
-  return { sea: surprise ? NAVY.landing.surprise : NAVY.landing.assault, surprise };
+  return { sea: surprise ? NAVY.landing.surprise : assaultStrength(g, cs[0].nat), surprise };
 }
 
 export interface LandingPlan {
@@ -378,7 +388,7 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
   return {
     why: null, surprise, path, risk: surprise ? 0 : landingRisk(g, nat, path, to), defended,
     sky: sky !== null && allied(g, sky, nat), sortie: surprise ? 0 : sortieAgainst(g, nat, path),
-    assess: defended ? assess(g, cs, to, { sea: surprise ? NAVY.landing.surprise : NAVY.landing.assault, surprise }) : null,
+    assess: defended ? assess(g, cs, to, { sea: surprise ? NAVY.landing.surprise : assaultStrength(g, nat), surprise }) : null,
   };
 }
 

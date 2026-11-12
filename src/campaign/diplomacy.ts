@@ -176,6 +176,8 @@ export function holds(g: Game, cond: string): boolean {
     case 'momentum<=': return momentum(g) <= Number(a[0]);
     case 'holds': return g.byName[a[1]]?.ctrl === a[0] && g.byName[a[1]]?.owner === a[0];
     case 'flag': return !!g.flags[rest];
+    // 'since:event:x,2': that flag was raised at least two months ago.
+    case 'since': return !!g.flags[a[0]] && g.turn - g.flags[a[0]] >= Number(a[1] ?? 1);
     case 'war': return !!N(a[0]) && !!N(a[1]) && atWar(g, a[0], a[1]);
     case 'dormant': return !!N(a[0])?.dormant;
     // "anyHeld:allies,Oran,Algiers": some place on the list is in the hands of that bloc.

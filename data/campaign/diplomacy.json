@@ -1,5 +1,5 @@
 {
-  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all). 'reform' remakes a nation's armed forces from that month on: for each nation named, the new quality of its troops, strength of its air force, whether its command is still slow, and how many corps it can put into one attack. An event with nothing but a text is a piece of news.",
+  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all), and 'since:event:id,n' (that event happened at least n months ago). 'reform' remakes a nation's armed forces from that month on: for each nation named, the new quality of its troops, strength of its air force, whether its command is still slow, and how many corps it can put into one attack. An event with nothing but a text is a piece of news.",
   "leanAt": 30,
   "backAt": 20,
   "joinAt": 70,
@@ -114,6 +114,23 @@
       "if": ["alive:SOV", "war:SOV,GER"],
       "reform": { "SOV": { "quality": 0.8, "slowCommand": false, "maxAttack": 14, "air": 100 } },
       "text": "Two years of war have remade the Red Army. Its generals now handle tank armies and whole fronts in a single operation, and the factories beyond the Urals send them more tanks, guns and aircraft than Germany can build."
+    },
+    {
+      "id": "italy-loses-heart", "from": 47, "to": 70,
+      "if": ["alive:ITA", "war:ITA,UK", "anyHeld:allies,Tunis"],
+      "reform": { "ITA": { "quality": 0.45 } },
+      "text": "With Africa lost, a quarter of a million men gone into captivity at Tunis and the bombers over Sicily and Rome, the Italian army has no heart left for this war. Its divisions will not fight as they did."
+    },
+    {
+      "id": "mussolini-falls", "from": 48, "to": 70,
+      "if": ["alive:ITA", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
+      "text": "The Fascist Grand Council has voted against Mussolini. The King has dismissed him and had him arrested, and Marshal Badoglio forms a government. \"The war goes on,\" says Rome, and nobody believes it."
+    },
+    {
+      "id": "italian-armistice", "from": 49, "to": 70,
+      "if": ["alive:ITA", "since:event:mussolini-falls,1", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
+      "partition": { "nation": "ITA", "shares": [[["GER", "UK", "USA"], ["Rome"]], [["UK", "USA", "GER"], ["Sardinia", "Corsica"]]] },
+      "text": "Italy has signed an armistice with the Allies and is out of the war. German troops disarm the Italian army, seize Rome and take over Italy's garrisons from the Riviera to Rhodes. Sardinia and Corsica are given up."
     }
   ]
 }
