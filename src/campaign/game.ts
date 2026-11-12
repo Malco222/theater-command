@@ -21,6 +21,7 @@ import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMa
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
+import { draftsMul } from './difficulty';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 
@@ -1425,9 +1426,11 @@ export function startPhase(g: Game, nat: string): void {
   // send out only so many trained men a month, and what there is is shared along the front.
   // Overseas, every man and tank has to come by sea first: the drafts arrive slower.
   // A corps the player has told to keep its veterans together asks for no drafts.
-  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) ? Math.min((1 - c.str) * c.divs, 0.2 * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
+  // The level of the campaign quickens or slows the drafts, for the player or for his rivals: at the fair level, not at all.
+  const drafts = draftsMul(g, nat);
+  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
-  const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;
+  const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;
   // Corps starved into surrender this month, by where they stood: an army lost together is one piece of news.
   const starved = new Map<number, { names: string[]; men: number }>();
   army.forEach((c, i) => {

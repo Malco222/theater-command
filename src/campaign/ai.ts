@@ -11,8 +11,10 @@ import { aiArsenal } from './arsenal';
 import { blocked, blowBridges } from './rivers';
 import { groundRules } from './ground';
 import { aiBridges, aiEngineers } from './engineers';
-import { landCorps, landingOpts, navalAI } from './navy';
-import { afterDeclaring, decide, isOpen, staffPhase, theatreStaff } from './staff';
+import { landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding } from './navy';
+import { afterDeclaring, decide, isOpen, seaBase, staffPhase, theatreStaff } from './staff';
+import { landingsFor, seat } from './difficulty';
+import { hashString } from '../core/rng';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage, havensOf,
@@ -224,6 +226,7 @@ function mainCampaign(g: Game, nat: string): void {
   // A nation at peace gives its army no orders, unless its staff is bringing it up for a war of its own choosing.
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;
   if (ph?.landings) landings(g, nat, ph);
+  if (open) descent(g, nat);
   if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
   const posture = ph?.posture ?? 'defend';
   entrusted = handedOver(g, nat, ph);
@@ -451,6 +454,54 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
       if (ok) { for (const x of force) { x.hold = false; g.flags[`exp:${x.id}`] = ph.to; } break; }
     }
   }
+}
+
+/**
+ * The hardest level of the grand campaign: a rival with shipping sends the force it keeps by the quay across the
+ * sea. A harbour it already holds on the player's shore is fed first. Otherwise it looks for a harbour of the
+ * player's it can take: an unguarded one, or a guarded one at good odds, with a crossing that is not too dangerous
+ * and no army standing next door that would throw it straight back into the sea.
+ */
+function descent(g: Game, nat: string): void {
+  const L = landingsFor(g, nat);
+  const you = seat(g);
+  if (!L || you === null) return;
+  const quay = seaBase(g, nat);
+  if (!quay) return;
+  const ready = quay.units
+    .filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= Math.min(4, u.apMax))
+    .sort((a, b) => atkPower(g, b) - atkPower(g, a) || a.id - b.id);
+  const force = ready.slice(0, Math.min(L.force, liftLeft(g, nat)));
+  if (force.length < L.force) return;
+  const went = (k: number): void => { for (const c of force) c.hold = false; g.flags[`st:seaNext:${nat}`] = g.turn + k; };
+  if (g.turn < (g.flags[`st:seaNext:${nat}`] ?? 0)) return;
+  // The men already ashore come first: while their harbour is still a front, the next lift goes to them.
+  const lodged = g.regions[(g.flags[`st:lodged:${nat}`] ?? 0) - 1];
+  if (lodged && lodged.ctrl === nat && lodged.port && lodged.nb.some((j) => atWar(g, nat, g.regions[j].ctrl))) {
+    let sent = 0;
+    for (const c of force) if (friendlyUnits(g, lodged, nat).length < STACK && shipMove(g, c, lodged)) sent++;
+    if (sent) { went(2); return; }
+  }
+  if (hashString(`descent:${g.seed}:${g.turn}:${nat}`) / 4294967296 >= L.chance) return;
+  const men = force.reduce((s, c) => s + c.divs * c.str, 0);
+  let best: Region | null = null, bv = 0;
+  for (const r of landingTargets(g, force)) {
+    if (r.ctrl !== you || !r.port) continue;
+    const plan = planLanding(g, force, r);
+    if (plan.why || plan.risk > L.risk) continue;
+    if (plan.defended && (!plan.assess || plan.assess.odds < L.odds)) continue;
+    // The army within a march of the beach.
+    let near = 0;
+    for (const j of [r.id, ...r.nb]) for (const u of hostileUnits(g, g.regions[j], nat)) if (u.kind !== 'fort') near += u.divs * u.str;
+    if (near > L.near * men) continue;
+    const v = (2 + r.vp + r.fac + (r.cap ? 6 : 0) + (r.owner !== you ? 2 : 0)) * (plan.defended ? 1 : 1.5) - 10 * plan.risk - 0.2 * near;
+    if (!best || v > bv) { best = r; bv = v; }
+  }
+  if (!best) return;
+  const res = landCorps(g, force, best);
+  if (!res.ok) return;
+  went(L.every);
+  if (res.taken) g.flags[`st:lodged:${nat}`] = best.id + 1;
 }
 
 // ---- Attack ---------------------------------------------------------------------------

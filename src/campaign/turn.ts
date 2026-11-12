@@ -4,6 +4,7 @@
 import { KIND, STACK, type AirFleet, type AirMission, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
 import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
+import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hasRoom, hostileUnits, limitAttackers,
@@ -139,6 +140,21 @@ export function endEve(g: Game): void {
   g.flags.eve = 0;
   g.phase = 0;
   g.week = 1;
+}
+
+/** The levels a grand campaign can be played at, easiest first, and the one this game is on. */
+export const levels = (): Level[] => DIFFICULTY.levels;
+export const levelNow = (g: Game): Level => levelOf(g);
+
+/** Why the player cannot put the campaign on this level, or null if he can. */
+export function whyNotSetLevel(g: Game, id: string): string | null {
+  if (g.human === null) return 'Nobody is playing this war.';
+  return whyNotLevel(g, id);
+}
+
+/** Puts the campaign on another level. It can be done in any month and takes hold at once. */
+export function orderLevel(g: Game, id: string): boolean {
+  return whyNotSetLevel(g, id) === null && setLevel(g, id);
 }
 
 /** True when the nation up next is the player's and still in the war. */

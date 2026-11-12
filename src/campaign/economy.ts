@@ -16,6 +16,7 @@ import { fallenOf, inherit, raisedXp, revivable } from './stories';
 import { deliverArsenal, worksUpkeep } from './arsenal';
 import { barredKind } from './ground';
 import { workingFactories } from './rails';
+import { incomeMul, levelOf } from './difficulty';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -186,7 +187,8 @@ export function ledger(g: Game, nat: string): Ledger {
   const before = seat + facHome + facOcc + away + land + ports + oil;
   const atPeace = before * peace + trade;
   const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
-  const gross = budget ? afterAir * tech : income(g, nat);
+  const hard = budget ? incomeMul(g, nat) : 1;
+  const gross = budget ? afterAir * tech * hard : income(g, nat);
   const lines: LedgerLine[] = [
     { key: 'capital', label: budget ? 'The capital and the state' : 'The state', amount: seat },
     { key: 'factories', label: 'Factories at home', amount: facHome, count: nHome },
@@ -202,6 +204,7 @@ export function ledger(g: Game, nat: string): Ledger {
     { key: 'sea', label: 'Cargoes sunk at sea', amount: afterSea - atPeace },
     { key: 'air', label: 'Bombing of industry', amount: afterAir - afterSea },
     { key: 'tech', label: tech >= 1 ? 'Better production methods' : 'Production methods behind the times', amount: afterAir * (tech - 1) },
+    { key: 'level', label: `Difficulty: ${levelOf(g).name}`, amount: afterAir * tech * (hard - 1) },
   ];
   const costs = upkeep(g, nat);
   const upkeepTotal = costs.reduce((s, l) => s + l.amount, 0);
@@ -228,7 +231,8 @@ export function income(g: Game, nat: string): number {
     }
     sum += seat + (n.offmap?.industry ?? 0);
     const trade = tradePartners(g, nat).length * DIPLOMACY.tradeIncome;
-    return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry');
+    // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
+    return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat);
   }
   let fac = 0;
   for (const r of g.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;

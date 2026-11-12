@@ -10,6 +10,7 @@ import { FIELDS } from './research';
 import { newStories } from './stories';
 import { restoreWorks } from './arsenal';
 import { resetRailheads } from './rails';
+import { FAIR } from './difficulty';
 import mapData from '../generated/campaign-map.json';
 import type { Corps, Game, General } from './types';
 
@@ -47,10 +48,10 @@ export function saveGame(g: Game): string {
 }
 
 /** A one-line description of a save, for the start screen, without loading the whole game. */
-export function peekSave(text: string): { human: string | null; turn: number; open: boolean } | null {
+export function peekSave(text: string): { human: string | null; turn: number; open: boolean; level: number | null } | null {
   try {
     const d = JSON.parse(text);
-    return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && fits(d.regions.length) ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1 } : null;
+    return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && fits(d.regions.length) ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1, level: d.flags?.open === 1 ? d.flags?.level ?? FAIR : null } : null;
   } catch { return null; }
 }
 
