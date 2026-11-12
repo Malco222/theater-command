@@ -1,0 +1,13 @@
+# Unreal Engine build products and caches. Never commit these: they are large,
+# machine-specific, and Unreal rebuilds them on its own.
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+.vscode/
+.idea/
+*.xcworkspace
+*.xcodeproj
+*.sln
+.DS_Store
