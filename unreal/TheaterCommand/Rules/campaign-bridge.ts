@@ -40,6 +40,7 @@ import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, men, railRea
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
+import { hasTech, idleTeams, techOf } from '../../../src/campaign/tech';
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
@@ -47,7 +48,7 @@ import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
-  orderBureau, orderTeams, orderAssign, orderPromote, orderRelieve, orderSkill,
+  orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
   invasions, previewDeclare, orderCourt, leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
@@ -136,8 +137,20 @@ function view() {
     })),
     // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
     // branch fields its later models early, and one that neglects it keeps the old ones longer.
-    designs: Object.fromEntries(Object.values(s.nations).filter((n) => n.lab && n.alive).map((n) => [n.id,
-      (['armour', 'fighters', 'bombers'] as const).map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab!.clock[f] - n.lab!.months)) + 7) / 12))])),
+    designs: Object.fromEntries(Object.values(s.nations).filter((n) => n.alive && (n.lab || techOf(s, n.id))).map((n) => {
+      const year = 1939 + Math.floor((Math.max(1, s.turn) + 7) / 12);
+      if (techOf(s, n.id)) {
+        // The grand campaign: the technology tree decides. No medium tanks, no later tank; heavy tanks bring the
+        // heavy models as soon as they are researched, and so with long-range fighters and four-engined bombers.
+        const armour = !hasTech(s, n.id, 'mediums') ? 1939 : !hasTech(s, n.id, 'heavies') ? Math.min(year, 1942) : Math.max(year, 1943);
+        const fighters = hasTech(s, n.id, 'escorts') ? Math.max(year, 1943) : Math.min(year, 1941);
+        const bombers = hasTech(s, n.id, 'heavybombers') ? Math.max(year, 1942) : Math.min(year, 1941);
+        return [n.id, [armour, fighters, bombers]];
+      }
+      return [n.id, (['armour', 'fighters', 'bombers'] as const).map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab!.clock[f] - n.lab!.months)) + 7) / 12))];
+    })),
+    // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
+    idle: s.human ? idleTeams(s, s.human) : 0,
     // The members of the League, the third alliance: their ground is shown in its own colour.
     league: leagueMembers(s).map((n) => n.id),
     nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
@@ -1094,6 +1107,46 @@ function research() {
   };
 }
 
+/**
+ * The technology tree of the grand campaign as the player's nation sees it: every technology with its branch and
+ * step, what it does, what it needs, where it stands, and why it cannot be started now. ok is false in a
+ * historical scenario, where research runs on history's clock and research() is the screen to show.
+ */
+function tech() {
+  const s = game();
+  const t = techTree(s);
+  const me = s.human ? s.nations[s.human] : null;
+  if (!t || !me) return { ok: false };
+  const up = humanUp(s) && !onEve(s);
+  return {
+    ok: true, nation: me.name, date: turnToDate(s.turn).label, up,
+    teams: t.teams, busy: t.busy, idle: Math.max(0, t.teams - t.busy), done: t.done, total: t.total,
+    eras: t.eras,
+    branches: t.branches,
+    nodes: t.nodes.map((n) => ({
+      id: n.id, branch: n.branch, tier: n.tier, name: n.name, text: n.text, rule: n.rule, state: n.state,
+      months: n.months, left: n.left, of: n.of,
+      needs: n.needs.filter((x) => !x.done).map((x) => x.name),
+      can: up && n.state === 'ready' && n.why === null,
+      why: n.state === 'ready' ? (!up ? 'It is not your month.' : n.why ?? '') : '',
+      stop: up && n.state === 'work',
+    })),
+  };
+}
+
+/** Puts one of the player's free research teams to work on a technology. */
+function techStart(id: string) {
+  const s = game();
+  const why = whyNotOrderResearch(s, id);
+  return { ok: orderResearch(s, id), why: why ?? '', view: view() };
+}
+
+/** Takes the player's team off a technology. The work done on it is lost. */
+function techStop(id: string) {
+  const s = game();
+  return { ok: orderStopResearch(s, id), view: view() };
+}
+
 /** Puts this many design teams on a branch of the player's research. */
 function teams(field: string, n: number) {
   const s = game();
@@ -1276,4 +1329,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, abilities, research, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

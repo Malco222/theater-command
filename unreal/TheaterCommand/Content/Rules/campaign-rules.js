@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b1dcb5c 2026-11-12. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bc5cc15 2026-11-12. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -788,9 +788,9 @@
   function turnToDate(turn) {
     const idx = 8 + (turn - 1);
     const year = 1939 + Math.floor(idx / 12);
-    const month = idx % 12;
+    const month2 = idx % 12;
     const names = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    return { year, month, label: `${names[month]} ${year}` };
+    return { year, month: month2, label: `${names[month2]} ${year}` };
   }
 
   // ../../data/campaign/production.json
@@ -1830,6 +1830,559 @@
     }
   };
 
+  // ../../data/campaign/tech.json
+  var tech_default = {
+    _about: {
+      idea: "The technology tree of the grand campaign. Five branches, four steps deep. A nation's research teams each work on one technology at a time; a technology takes 'months' of one team's work, can be started once everything in 'needs' is researched, and takes 'early' longer for every year it is begun before its 'year'. The historical scenarios do not use the tree: there, research runs on history's clock (research.json).",
+      effects: "'field' raises one of the eight branches of research.json by a level for good, worth that branch's 'per' wherever the branch counts (tanks, infantry weapons, doctrine, fighters, bombers, navy, radar, war production). 'unlock' lists the orders that cannot be placed without the technology ('corps:arm', 'corps:mot', 'ship:cv', 'para'). 'slots' adds research teams. 'winterKit' ends the eastern winter's penalty for the nation's troops. 'sealift' adds shipping for that many more corps a month. 'attack', 'defence' with 'when', 'drafts', 'cost', 'fleet' and 'seaLoss' work exactly as they do for a national ability in traits.json.",
+      start: "What each nation has researched when the war begins. A campaign begun in a later year gives every nation the months of research in between, chosen as its own staff would.",
+      slots: "Research teams each nation begins with.",
+      units: "Formations the tree unlocks beyond the ordinary kinds: 'para' is an airborne corps, raised like infantry, 'most' at once in the field and on order.",
+      ai: "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open). 'order' is each nation's preference among the branches."
+    },
+    months: [0, 5, 8, 11, 14],
+    early: 0.5,
+    slots: { _default: 1, GER: 2, UK: 2, FRA: 2, SOV: 2, ITA: 2, USA: 2 },
+    branches: [
+      { id: "land", label: "Land", text: "Tanks, guns and the infantry's weapons." },
+      { id: "air", label: "Air", text: "Fighters, bombers and the radar that guides them." },
+      { id: "naval", label: "Naval", text: "Fleets, convoys and landings from the sea." },
+      { id: "industry", label: "Industry", text: "Factories, manpower and the laboratories themselves." },
+      { id: "doctrine", label: "Doctrine", text: "How the army is taught to fight." }
+    ],
+    eras: ["", "Before the war", "1940 to 1941", "1942 to 1943", "1944 to 1945"],
+    techs: [
+      { id: "antitank", branch: "land", tier: 1, year: 1939, needs: [], name: "Anti-tank guns", text: "Light, low guns that travel with the infantry and can stop a tank at close range.", field: "infantry" },
+      { id: "tanks", branch: "land", tier: 1, year: 1939, needs: [], name: "Tank arm", text: "Tanks gathered into divisions of their own, with the workshops, fuel columns and radio sets that keep them moving.", unlock: ["corps:arm"] },
+      { id: "motor", branch: "land", tier: 1, year: 1939, needs: [], name: "Motorised infantry", text: "Infantry carried in lorries, able to keep up with the tanks and hold what they take.", unlock: ["corps:mot"] },
+      { id: "mediums", branch: "land", tier: 2, year: 1941, needs: ["tanks"], name: "Medium tanks", text: "A tank with a gun that can fight other tanks and armour the light guns of 1939 cannot pierce.", field: "armour" },
+      { id: "heavyguns", branch: "land", tier: 2, year: 1940, needs: [], name: "Heavy artillery", text: "Long-range guns and heavy howitzers, worked to a single fire plan.", attack: 1.15, defence: 1.15, when: { kinds: ["art"] } },
+      { id: "smg", branch: "land", tier: 2, year: 1940, needs: ["antitank"], name: "Submachine guns and mortars", text: "Firepower a platoon can carry: more automatic weapons, and mortars of its own.", field: "infantry" },
+      { id: "heavies", branch: "land", tier: 3, year: 1942, needs: ["mediums"], name: "Heavy tanks", text: "Thick armour and a gun that outranges anything it meets, at the price of weight, fuel and factory hours.", field: "armour" },
+      { id: "rockets", branch: "land", tier: 3, year: 1942, needs: ["heavyguns"], name: "Rocket artillery", text: "Batteries of rockets on lorries: a whole regiment's weight of fire in half a minute, then gone before the reply.", attack: 1.15, when: { kinds: ["art"] } },
+      { id: "tankdestroyers", branch: "land", tier: 3, year: 1943, needs: ["mediums", "antitank"], name: "Tank destroyers", text: "Heavy guns on tracks: cheap to build, hard to see and deadly from ambush.", defence: 1.1, when: { kinds: ["arm", "mot"] } },
+      { id: "assaultrifles", branch: "land", tier: 4, year: 1944, needs: ["smg"], name: "Assault rifles", text: "One weapon with the reach of a rifle and the fire of a machine pistol, in every rifleman's hands.", field: "infantry" },
+      { id: "latetanks", branch: "land", tier: 4, year: 1944, needs: ["heavies"], name: "Late-war armour", text: "Sloped plate, a long gun and wide tracks in one design, built in thousands.", field: "armour" },
+      { id: "monoplanes", branch: "air", tier: 1, year: 1939, needs: [], name: "Monoplane fighters", text: "All-metal fighters with enclosed cockpits, retracting wheels and a battery of guns in the wings.", field: "fighters" },
+      { id: "mediumbombers", branch: "air", tier: 1, year: 1939, needs: [], name: "Medium bombers", text: "Fast twin-engined bombers with trained navigators and a proper bombsight.", field: "bombers" },
+      { id: "earlywarning", branch: "air", tier: 2, year: 1940, needs: [], name: "Early-warning radar", text: "A chain of stations that sees a raid forming up while it is still far out.", field: "radar" },
+      { id: "groundattack", branch: "air", tier: 2, year: 1940, needs: ["mediumbombers"], name: "Close air support", text: "Dive bombers and fighter-bombers on call to the spearheads, with air force officers riding in the lead columns.", attack: 1.05, when: { mobile: true } },
+      { id: "escorts", branch: "air", tier: 3, year: 1942, needs: ["monoplanes"], name: "Long-range fighters", text: "Drop tanks and thrifty engines take the fighters all the way to the target and back.", field: "fighters" },
+      { id: "heavybombers", branch: "air", tier: 3, year: 1942, needs: ["mediumbombers"], name: "Four-engined bombers", text: "Heavy bombers that carry tons where the mediums carried hundredweights.", field: "bombers" },
+      { id: "gci", branch: "air", tier: 3, year: 1942, needs: ["earlywarning"], name: "Fighter control", text: "Controllers on the ground steer each fighter onto its target by radar, by day or by night.", field: "radar" },
+      { id: "jets", branch: "air", tier: 4, year: 1944, needs: ["escorts"], name: "Jet fighters", text: "No propeller, and a hundred miles an hour faster than anything else in the sky.", field: "fighters" },
+      { id: "guided", branch: "air", tier: 4, year: 1944, needs: ["heavybombers"], name: "Guided weapons", text: "Bombs steered onto the target by radio after they leave the aircraft.", field: "bombers" },
+      { id: "sonar", branch: "naval", tier: 1, year: 1939, needs: [], name: "Sonar and convoys", text: "Escorts that can hear a submerged boat, and merchant ships sailing together under their guard.", seaLoss: 0.9 },
+      { id: "fleetsubs", branch: "naval", tier: 1, year: 1939, needs: [], name: "Ocean-going submarines", text: "Boats with the range to hunt far out on the trade routes, built to one standard pattern.", cost: { what: ["ship:ss"], mul: 0.8 } },
+      { id: "carriers", branch: "naval", tier: 2, year: 1940, needs: [], name: "Carrier aviation", text: "Deck landing, folding wings and the trained crews to fly aircraft from a ship at sea.", unlock: ["ship:cv"] },
+      { id: "landingcraft", branch: "naval", tier: 2, year: 1941, needs: [], name: "Landing craft", text: "Flat-bottomed craft with bow ramps that put men and tanks straight onto an open beach.", sealift: 1, attack: 1.15, when: { landing: true } },
+      { id: "firecontrol", branch: "naval", tier: 3, year: 1942, needs: ["earlywarning"], name: "Radar gunnery", text: "The guns find their range by radar, in darkness and through smoke.", field: "navy" },
+      { id: "escortgroups", branch: "naval", tier: 3, year: 1943, needs: ["sonar"], name: "Escort groups", text: "Escorts trained to hunt as teams, with small carriers to close the gap in mid-ocean.", seaLoss: 0.8 },
+      { id: "fastbuild", branch: "naval", tier: 3, year: 1942, needs: ["machinetools"], name: "Prefabricated ships", text: "Hulls welded together from sections built inland, launched in weeks.", cost: { what: ["ship:dd", "ship:ss", "ship:tp", "ship:ca", "ship:cv", "ship:bb"], mul: 0.85 } },
+      { id: "taskforces", branch: "naval", tier: 4, year: 1944, needs: ["carriers", "firecontrol"], name: "Carrier task forces", text: "Fast carriers, battleships and their screen sailing and fighting as one body.", field: "navy" },
+      { id: "machinetools", branch: "industry", tier: 1, year: 1939, needs: [], name: "Machine tools", text: "Modern lathes, presses and gauges, and the skilled hands to set them.", field: "industry" },
+      { id: "institutes", branch: "industry", tier: 1, year: 1939, months: 6, needs: [], name: "Research institutes", text: "Scientists and engineers brought together from the universities and set to war work.", slots: 1 },
+      { id: "assembly", branch: "industry", tier: 2, year: 1940, needs: ["machinetools"], name: "Assembly lines", text: "Tanks, lorries and aircraft built on a moving line from standard parts.", cost: { what: ["corps:arm", "corps:mot", "air:ftr", "air:bmr"], mul: 0.9 } },
+      { id: "mobilise", branch: "industry", tier: 2, year: 1940, needs: [], name: "General mobilisation", text: "Every class called up in its turn, with the depots and instructors to turn recruits into replacements.", drafts: 1.2 },
+      { id: "synthetics", branch: "industry", tier: 2, year: 1941, needs: [], name: "Synthetic fuel and rubber", text: "Petrol from coal and rubber from the chemical works, so the factories do not wait on cargoes.", field: "industry" },
+      { id: "warplan", branch: "industry", tier: 3, year: 1942, needs: ["assembly"], name: "War economy", text: "One central plan for steel, labour and machine tools, and nothing made that the war does not need.", field: "industry" },
+      { id: "labs", branch: "industry", tier: 3, year: 1942, months: 12, needs: ["institutes"], name: "Central laboratories", text: "The institutes joined under one directorate with first call on money and men.", slots: 1 },
+      { id: "massprod", branch: "industry", tier: 4, year: 1944, needs: ["warplan"], name: "Mass production", text: "Simplified designs turned out round the clock by factories that make one thing only.", field: "industry", cost: { what: ["corps:inf"], mul: 0.9 } },
+      { id: "staff", branch: "doctrine", tier: 1, year: 1939, needs: [], name: "Staff colleges", text: "Officers trained to one method, so that an order means the same thing to everyone who reads it.", field: "doctrine" },
+      { id: "depth", branch: "doctrine", tier: 2, year: 1940, needs: [], name: "Defence in depth", text: "Belt behind belt of positions, with reserves placed to strike back at whatever breaks in.", defence: 1.15, when: { works: true } },
+      { id: "mobile", branch: "doctrine", tier: 2, year: 1940, needs: ["tanks", "motor"], name: "Mobile warfare", text: "The fast troops massed at one point, sent through and kept moving, with the infantry to follow.", attack: 1.1, when: { mobile: true } },
+      { id: "mountain", branch: "doctrine", tier: 2, year: 1940, needs: [], name: "Mountain warfare", text: "Pack guns, mule trains and men who can climb with a full load.", attack: 1.1, defence: 1.1, when: { kinds: ["mtn"], terrain: ["mountain", "hills"] } },
+      { id: "airborne", branch: "doctrine", tier: 2, year: 1940, needs: ["staff"], name: "Airborne forces", text: "Parachute and glider troops, and the transport aircraft to deliver them behind an enemy coast.", unlock: ["para"] },
+      { id: "winterkit", branch: "doctrine", tier: 3, year: 1942, needs: [], name: "Winter equipment", text: "Padded uniforms, felt boots, oils that do not freeze and engines that start in the cold.", winterKit: true },
+      { id: "combined", branch: "doctrine", tier: 3, year: 1942, needs: ["mobile", "staff"], name: "Battle groups", text: "Tanks, infantry, guns and engineers put together for the task in hand under whoever is on the spot.", field: "doctrine" },
+      { id: "amphibious", branch: "doctrine", tier: 3, year: 1943, needs: ["landingcraft"], name: "Amphibious assault", text: "Navy, army and air force rehearsed to one timetable, from the bombardment to the beach.", attack: 1.2, when: { landing: true } },
+      { id: "deep", branch: "doctrine", tier: 4, year: 1944, needs: ["combined"], name: "Deep operations", text: "Whole armies fed through a breach one behind another, aimed at what lies far behind the front.", field: "doctrine" }
+    ],
+    start: {
+      GER: ["tanks", "motor", "monoplanes", "mediumbombers", "staff", "airborne", "machinetools", "fleetsubs"],
+      UK: ["tanks", "motor", "monoplanes", "sonar", "carriers", "earlywarning", "machinetools"],
+      FRA: ["tanks", "motor", "antitank", "heavyguns"],
+      SOV: ["tanks", "motor", "heavyguns", "mobilise", "winterkit"],
+      ITA: ["tanks", "motor", "mediumbombers", "fleetsubs"],
+      USA: ["tanks", "motor", "monoplanes", "mediumbombers", "carriers", "machinetools", "assembly"],
+      POL: ["antitank"],
+      BEL: ["antitank"],
+      NED: ["sonar"],
+      NOR: ["sonar"],
+      SWE: ["antitank", "machinetools"],
+      FIN: ["antitank", "winterkit"],
+      ESP: ["antitank"],
+      HUN: ["motor"],
+      SUI: ["mountain", "machinetools"],
+      YUG: ["mountain"],
+      GRE: ["mountain"]
+    },
+    units: {
+      para: { label: "Airborne corps", word: "Airborne", divs: 2, cost: 44, months: 6, most: 2, blurb: "Parachute and glider troops. Once a month they can be dropped on an enemy coast across one sea with no ships at all, as long as the enemy's fighters do not hold the sky there. They land without heavy weapons, so pick a weakly held target." }
+    },
+    ai: {
+      tier: 10,
+      branch: 6,
+      early: 30,
+      teams: 14,
+      later: 100,
+      skip: { _all: ["airborne", "carriers"] },
+      order: {
+        _default: ["land", "industry", "doctrine", "air", "naval"],
+        GER: ["land", "doctrine", "air", "industry", "naval"],
+        UK: ["naval", "air", "industry", "land", "doctrine"],
+        FRA: ["land", "doctrine", "industry", "air", "naval"],
+        SOV: ["industry", "land", "doctrine", "air", "naval"],
+        ITA: ["naval", "air", "land", "industry", "doctrine"],
+        USA: ["industry", "air", "naval", "land", "doctrine"]
+      }
+    }
+  };
+
+  // ../../data/campaign/research.json
+  var research_default = {
+    _about: {
+      idea: "Research runs on history's clock. Each major power has design teams, one to a branch at the start. A branch with one team gets every new design in the month history got it. A second or third team makes the branch's clock run faster ('speed' is months of progress per month for 0, 1, 2 and 3 teams), so its designs arrive early; a branch with no team stands still and falls behind.",
+      effect: "What counts in battle is how far a branch is ahead of or behind its own history, in designs: each design in service that history did not yet have is worth 'per' of strength for that branch, each design history had and the nation lacks costs the same, up to 'maxLead' designs either way. A nation that keeps one team on every branch fights exactly as it did, which is how the computer runs every nation.",
+      bureau: "A nation can found extra design teams with production points. 'cost' is the price of the first, second and third.",
+      nations: "For each major power: 'tree' is the name of its army doctrine; then for every branch its designs in order, each with the month history brought it into service (year-month; anything before September 1939 is in service when the war begins). French entries after June 1940 are the designs France had on the drawing board when it fell."
+    },
+    speed: [0, 1, 1.5, 1.85],
+    maxLead: 3,
+    bureau: { cost: [60, 100, 150] },
+    fields: {
+      armour: { label: "Tanks", noun: "tanks", per: 0.08, who: "Armoured and motorized corps", news: "New tanks reach the divisions" },
+      infantry: { label: "Infantry weapons and guns", noun: "infantry weapons", per: 0.06, who: "Infantry, mountain, cavalry and fortress corps", news: "New weapons reach the infantry" },
+      doctrine: { label: "Army doctrine", noun: "army doctrine", per: 0.05, who: "Every corps in the attack", news: "The army changes the way it fights" },
+      fighters: { label: "Fighters", noun: "fighters", per: 0.08, who: "Every fighter in an air battle", news: "A new fighter enters service" },
+      bombers: { label: "Bombers", noun: "bombers", per: 0.08, who: "What the bombers that get through destroy", news: "New with the bomber force" },
+      navy: { label: "Navy", noun: "ships", per: 0.08, who: "Every fleet in battle, and the raiders and escorts on the convoy routes", news: "New with the fleet" },
+      radar: { label: "Radar and signals", noun: "radar", per: 0.06, who: "Fighters defending their own sky, and the watch over the convoy routes", news: "New for the signals service" },
+      industry: { label: "War production", noun: "war production", per: 0.05, who: "The production points earned every month", news: "A change in war production" }
+    },
+    nations: {
+      GER: {
+        tree: "Blitzkrieg",
+        armour: [["1939-08", "Panzer III and IV with short guns"], ["1940-07", "Panzer III with the 50 mm gun"], ["1942-03", "Panzer IV with the long 75 mm gun"], ["1942-09", "Tiger"], ["1943-07", "Panther"], ["1944-07", "King Tiger"]],
+        infantry: [["1939-08", "Karabiner 98k, MG 34 and the 37 mm anti-tank gun"], ["1941-04", "50 mm Pak 38 anti-tank gun"], ["1942-05", "MG 42 and the 75 mm Pak 40"], ["1943-09", "Panzerfaust and Panzerschreck"], ["1944-07", "Sturmgewehr 44 assault rifle"]],
+        doctrine: [["1939-08", "Panzer divisions: tanks, infantry and guns in one formation"], ["1940-05", "Panzer groups: the tanks massed under one command"], ["1941-10", "Panzer armies"], ["1943-02", "Mobile defence: give ground, then strike the flank"], ["1944-03", "Battle groups thrown in as fire brigades"]],
+        fighters: [["1939-08", "Messerschmitt Bf 109E"], ["1941-03", "Messerschmitt Bf 109F"], ["1941-09", "Focke-Wulf Fw 190A"], ["1942-06", "Messerschmitt Bf 109G"], ["1944-09", "Focke-Wulf Fw 190D"]],
+        bombers: [["1939-08", "Heinkel He 111, Dornier Do 17 and the Ju 87 Stuka"], ["1940-04", "Junkers Ju 88"], ["1941-06", "Dornier Do 217"], ["1943-08", "Fritz X and Hs 293 guided bombs"]],
+        navy: [["1939-08", "Type VII U-boats"], ["1940-09", "Wolf packs directed by radio"], ["1941-05", "Type IXC long-range U-boats"], ["1942-04", "Supply U-boats, the milk cows"], ["1943-09", "Acoustic homing torpedoes"], ["1944-03", "The schnorkel"]],
+        radar: [["1939-08", "Freya early-warning radar"], ["1940-08", "Würzburg radar to direct guns and fighters"], ["1941-07", "The Kammhuber Line of night-fighter boxes"], ["1942-03", "Lichtenstein radar in night fighters"], ["1943-10", "Naxos radar detectors"]],
+        industry: [["1939-08", "The Four-Year Plan"], ["1940-03", "Todt's Ministry of Armaments and Munitions"], ["1942-04", "Speer's Central Planning"], ["1943-02", "Total war mobilisation"], ["1944-03", "The Fighter Staff and dispersed factories"]]
+      },
+      UK: {
+        tree: "Superior Firepower",
+        armour: [["1939-08", "Matilda II and the cruiser tanks"], ["1941-06", "Crusader and Valentine"], ["1942-10", "Sherman and Churchill"], ["1944-06", "Cromwell and the Sherman Firefly"], ["1945-03", "Comet"]],
+        infantry: [["1939-08", "Lee-Enfield, Bren gun and the 2-pounder anti-tank gun"], ["1940-04", "25-pounder field gun"], ["1942-05", "6-pounder anti-tank gun"], ["1943-07", "17-pounder gun and the PIAT"], ["1944-08", "Discarding-sabot shot"]],
+        doctrine: [["1939-08", "The methodical battle of 1918"], ["1941-03", "Battle drill, and tank brigades with the infantry"], ["1942-10", "Every gun in the corps on one target"], ["1943-03", "Army and air force planning as one"], ["1944-06", "The combined assault from the sea"]],
+        fighters: [["1939-08", "Hurricane and Spitfire Mk I"], ["1940-08", "Spitfire Mk II"], ["1941-02", "Spitfire Mk V"], ["1942-07", "Spitfire Mk IX"], ["1944-01", "Spitfire Mk XIV and Tempest"]],
+        bombers: [["1939-08", "Wellington, Whitley and Hampden"], ["1941-02", "Stirling and Halifax heavy bombers"], ["1942-03", "Lancaster"], ["1942-08", "Mosquito and the Pathfinder Force"], ["1944-06", "Tallboy earthquake bombs"]],
+        navy: [["1939-08", "ASDIC and the convoy system"], ["1940-04", "Flower-class corvettes"], ["1941-07", "Escort groups and ship-borne direction finding"], ["1942-06", "River-class frigates and the Hedgehog"], ["1943-03", "Support groups and escort carriers"], ["1944-01", "Squid mortar and Loch-class frigates"]],
+        radar: [["1939-08", "Chain Home"], ["1940-02", "Chain Home Low"], ["1941-01", "Ground-controlled interception and radar in night fighters"], ["1942-01", "Centimetric radar at sea"], ["1943-01", "H2S and Oboe bombing aids"]],
+        industry: [["1939-08", "The shadow factories"], ["1940-05", "Ministry of Aircraft Production"], ["1941-03", "Lend-Lease"], ["1941-12", "Women conscripted for war work"], ["1943-06", "The whole nation mobilised"]]
+      },
+      FRA: {
+        tree: "Methodical Battle",
+        armour: [["1939-08", "Char B1 bis and Somua S35"], ["1940-07", "Somua S40"], ["1941-05", "Char B1 ter"], ["1942-06", "Char G1"]],
+        infantry: [["1939-08", "MAS-36 rifle, FM 24/29 and the 25 mm anti-tank gun"], ["1940-03", "47 mm anti-tank gun"], ["1941-01", "MAS-40 self-loading rifle"], ["1942-04", "75 mm anti-tank gun"]],
+        doctrine: [["1939-08", "The methodical battle"], ["1940-01", "Armoured divisions"], ["1941-03", "Armour massed for the counter-stroke"], ["1942-03", "Tanks and aircraft under one command"]],
+        fighters: [["1939-08", "Morane-Saulnier MS.406 and Curtiss H-75"], ["1940-05", "Dewoitine D.520"], ["1940-11", "Arsenal VG-33"], ["1941-09", "Dewoitine D.551"]],
+        bombers: [["1939-08", "Bloch MB.210 and Amiot 143"], ["1940-03", "LeO 451 and Breguet 693"], ["1940-10", "Amiot 354"], ["1941-10", "Bloch MB.175 in number"]],
+        navy: [["1939-08", "Dunkerque-class fast battleships"], ["1940-07", "Battleship Richelieu"], ["1941-06", "British ASDIC in French escorts"], ["1942-06", "Battleship Jean Bart"]],
+        radar: [["1939-08", "Sound locators and observer posts"], ["1940-03", "Electromagnetic detection barriers"], ["1941-01", "British radar sets built under licence"], ["1942-03", "Radar-directed fighters"]],
+        industry: [["1939-08", "The nationalised arms industry and Dautry's Ministry of Armaments"], ["1940-06", "American aircraft and machine tools"], ["1941-06", "Industry fully mobilised for war"], ["1942-09", "Mass production"]]
+      },
+      ITA: {
+        tree: "War of Rapid Decision",
+        armour: [["1939-08", "L3 tankettes and the M11/39"], ["1940-12", "M13/40"], ["1942-01", "M14/41 and the Semovente 75/18"], ["1943-06", "P26/40 heavy tank"]],
+        infantry: [["1939-08", "Carcano rifle, Breda 30 and the 47/32 gun"], ["1941-06", "Beretta MAB 38 in the line"], ["1942-04", "90/53 gun on lorries"], ["1943-04", "75/32 and 75/46 guns"]],
+        doctrine: [["1939-08", "Two-regiment binary divisions"], ["1941-08", "The Mobile Army Corps"], ["1942-06", "Mixed battle groups"]],
+        fighters: [["1939-08", "Fiat CR.42 and G.50"], ["1940-09", "Macchi C.200 Saetta"], ["1941-11", "Macchi C.202 Folgore"], ["1943-04", "Macchi C.205 and Fiat G.55"]],
+        bombers: [["1939-08", "Savoia-Marchetti SM.79"], ["1940-08", "SM.79 torpedo bombers"], ["1941-03", "CANT Z.1007bis"], ["1942-06", "Piaggio P.108"]],
+        navy: [["1939-08", "Zara-class cruisers and a large submarine fleet"], ["1940-08", "Littorio-class battleships"], ["1941-12", "Human torpedoes of the Decima MAS"], ["1942-10", "Gabbiano-class corvettes"]],
+        radar: [["1939-08", "Sound locators"], ["1941-07", "German radar sets on Italian soil"], ["1942-09", "Gufo naval radar"]],
+        industry: [["1939-08", "Autarky"], ["1940-05", "The war production commissariat"], ["1941-02", "German coal and machine tools"], ["1943-02", "Ministry of War Production"]]
+      },
+      SOV: {
+        tree: "Deep Battle",
+        armour: [["1939-08", "T-26 and BT light tanks"], ["1940-12", "T-34 and KV-1"], ["1942-12", "KV-1S and SU-122"], ["1943-07", "SU-152 heavy assault gun"], ["1944-03", "T-34/85 and IS-2"]],
+        infantry: [["1939-08", "Mosin-Nagant, Maxim gun and the 45 mm gun"], ["1941-07", "PPSh submachine gun and Katyusha rockets"], ["1942-02", "ZiS-3 divisional gun"], ["1943-06", "57 mm ZiS-2 and the PPS-43"], ["1944-05", "100 mm BS-3 gun"]],
+        doctrine: [["1939-08", "Deep battle on paper, the officer corps thinned by the purges"], ["1940-05", "The lessons of the Winter War"], ["1941-12", "Guards units and shock armies"], ["1942-05", "Tank armies"], ["1942-11", "Deep operations by whole fronts"], ["1943-04", "Artillery breakthrough corps"], ["1944-06", "Deep battle mastered"]],
+        fighters: [["1939-08", "Polikarpov I-16 and I-153"], ["1941-03", "Yak-1, LaGG-3 and MiG-3"], ["1942-10", "La-5 and Yak-9"], ["1943-07", "La-5FN"], ["1944-07", "Yak-3 and La-7"]],
+        bombers: [["1939-08", "Tupolev SB and Ilyushin DB-3"], ["1941-06", "Il-2 Sturmovik and Pe-2"], ["1942-10", "Two-seat Il-2 with a rear gunner"], ["1944-03", "Tupolev Tu-2"]],
+        navy: [["1939-08", "Kirov-class cruisers and a large submarine fleet"], ["1941-02", "K-class cruiser submarines"], ["1942-08", "Lend-Lease minesweepers and sonar"], ["1943-08", "Radar aboard the fleet"]],
+        radar: [["1939-08", "Sound locators and observer posts"], ["1940-07", "RUS-2 Redut radar"], ["1942-01", "Gun-laying radar from Britain"], ["1944-01", "P-3 radar and fighter control"]],
+        industry: [["1939-08", "The Third Five-Year Plan"], ["1940-06", "The seven-day working week"], ["1942-03", "Factories rebuilt beyond the Urals"], ["1942-10", "Tank building on the conveyor at Tankograd"], ["1943-06", "Lend-Lease lorries and machine tools"]]
+      }
+    }
+  };
+
+  // ../../src/campaign/research.ts
+  var FIELDS = ["armour", "infantry", "doctrine", "fighters", "bombers", "navy", "radar", "industry"];
+  var RESEARCH = research_default;
+  var turnOf = (ym) => {
+    const [y, m] = ym.split("-").map(Number);
+    return (y - 1939) * 12 + m - 8;
+  };
+  var STEPS = {};
+  for (const [nat, d] of Object.entries(RESEARCH.nations)) {
+    STEPS[nat] = {};
+    for (const f of FIELDS) STEPS[nat][f] = d[f].map(([ym, name]) => ({ at: turnOf(ym), name }));
+  }
+  var MAX_TEAMS = RESEARCH.speed.length - 1;
+  var researches = (nat) => nat in STEPS;
+  var stepsOf = (nat, f) => STEPS[nat]?.[f] ?? [];
+  var doctrineOf = (nat) => RESEARCH.nations[nat]?.tree ?? "";
+  var each = (v) => Object.fromEntries(FIELDS.map((f) => [f, v()]));
+  function newLab() {
+    return { teams: each(() => 1), clock: each(() => 0), months: 0, founded: 0 };
+  }
+  function setupResearch(g2) {
+    for (const n of Object.values(g2.nations)) n.lab = researches(n.id) ? newLab() : null;
+  }
+  var count = (steps, clock) => {
+    let k = 0;
+    for (const s of steps) if (s.at <= clock) k++;
+    return k;
+  };
+  function lead(g2, nat, f) {
+    const lab = g2.nations[nat]?.lab;
+    if (!lab) return 0;
+    const steps = stepsOf(nat, f);
+    return Math.max(-RESEARCH.maxLead, Math.min(RESEARCH.maxLead, count(steps, lab.clock[f]) - count(steps, lab.months)));
+  }
+  function techMul(g2, nat, f) {
+    const k = lead(g2, nat, f) + treeLevel(g2, nat, f);
+    return k === 0 ? 1 : 1 + RESEARCH.fields[f].per * k;
+  }
+  function inService(nat, lab, f) {
+    let cur = null;
+    for (const s of stepsOf(nat, f)) if (s.at <= lab.clock[f]) cur = s;
+    return cur;
+  }
+  function nextStep(nat, lab, f) {
+    return stepsOf(nat, f).find((s) => s.at > lab.clock[f]) ?? null;
+  }
+  var speedOf = (lab, f) => RESEARCH.speed[Math.min(MAX_TEAMS, lab.teams[f])] ?? 0;
+  function arrival(g2, nat, f) {
+    const lab = g2.nations[nat]?.lab;
+    if (!lab) return null;
+    const next = nextStep(nat, lab, f), v = speedOf(lab, f);
+    if (!next || v <= 0) return null;
+    return lab.months + Math.max(1, Math.ceil((next.at - lab.clock[f]) / v - 1e-9));
+  }
+  var monthsAhead = (lab, f) => lab.clock[f] - lab.months;
+  var teamsTotal = (lab) => FIELDS.length + lab.founded;
+  var teamsUsed = (lab) => FIELDS.reduce((s, f) => s + lab.teams[f], 0);
+  var teamsFree = (lab) => teamsTotal(lab) - teamsUsed(lab);
+  function setTeams(g2, nat, f, teams2) {
+    const lab = g2.nations[nat]?.lab;
+    if (g2.flags.open === 1) return false;
+    if (!lab || !FIELDS.includes(f) || !Number.isInteger(teams2) || teams2 < 0 || teams2 > MAX_TEAMS) return false;
+    if (teamsUsed(lab) - lab.teams[f] + teams2 > teamsTotal(lab)) return false;
+    lab.teams[f] = teams2;
+    return true;
+  }
+  function bureauCost(n) {
+    return n.lab ? RESEARCH.bureau.cost[n.lab.founded] ?? null : null;
+  }
+  function foundBureau(g2, nat) {
+    const n = g2.nations[nat];
+    const cost = n ? bureauCost(n) : null;
+    if (g2.flags.open === 1) return false;
+    if (!n || !n.alive || !n.lab || cost === null || n.pp < cost) return false;
+    n.pp -= cost;
+    n.lab.founded++;
+    return true;
+  }
+  var plural = (k, one) => `${k} ${one}${k === 1 ? "" : "s"}`;
+  function researchTick(g2, nat) {
+    const lab = g2.nations[nat]?.lab;
+    if (!lab) return;
+    const was = lab.months;
+    lab.months++;
+    for (const f of FIELDS) {
+      const steps = stepsOf(nat, f);
+      const before = lab.clock[f];
+      lab.clock[f] = before + speedOf(lab, f);
+      if (nat !== g2.human || g2.flags.open === 1) continue;
+      const spec2 = RESEARCH.fields[f];
+      for (const s of steps) {
+        if (s.at > before && s.at <= lab.clock[f]) {
+          const early = s.at - lab.months;
+          headline(g2, "info", `${spec2.news}: ${s.name}${early > 0 ? `, ${plural(early, "month")} ahead of history` : early < 0 ? `, ${plural(-early, "month")} later than in history` : ""}.`, nat);
+        } else if (s.at > was && s.at <= lab.months && s.at > lab.clock[f]) {
+          headline(g2, "info", `${spec2.label} falling behind: by now history had ${s.name}.`, nat);
+        }
+      }
+    }
+  }
+  function techNotes(g2, nats, fields) {
+    const out = [];
+    const who = [...new Set(nats)];
+    for (const nat of who) {
+      for (const f of fields) {
+        const k = lead(g2, nat, f);
+        if (!k) continue;
+        const gen = Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`;
+        out.push({ text: `${g2.nations[nat].adj} ${RESEARCH.fields[f].noun} ${gen} ${k > 0 ? "ahead of" : "behind"} history`, pct: Math.round(RESEARCH.fields[f].per * k * 100) });
+      }
+    }
+    return g2.flags.open === 1 ? [...out, ...treeNotes(g2, who, fields)] : out;
+  }
+
+  // ../../src/campaign/tech.ts
+  var TECH = tech_default;
+  var BY_ID = {};
+  var GATE = {};
+  for (const t of TECH.techs) {
+    BY_ID[t.id] = t;
+    for (const k of t.unlock ?? []) GATE[k] = t;
+  }
+  var techRules = (g2) => g2.flags.open === 1;
+  var yearOf = (turn) => turnToDate(Math.max(1, turn)).year;
+  var fresh = (nat) => ({ done: (TECH.start[nat] ?? []).filter((id) => id in BY_ID), work: [] });
+  function techOf(g2, nat) {
+    if (!techRules(g2)) return null;
+    const n = g2.nations[nat];
+    if (!n) return null;
+    if (!g2.flags["tech:open"]) openTech(g2);
+    return n.tech ?? (n.tech = fresh(nat));
+  }
+  var NOTHING = { src: null, n: 0, level: {}, traits: [], open: /* @__PURE__ */ new Set(), winter: false, slots: 0 };
+  var cache = /* @__PURE__ */ new WeakMap();
+  function sum(g2, nat) {
+    const t = techOf(g2, nat);
+    if (!t) return NOTHING;
+    const n = g2.nations[nat];
+    const had = cache.get(n);
+    if (had && had.src === t.done && had.n === t.done.length) return had;
+    const d = { src: t.done, n: t.done.length, level: {}, traits: [], open: /* @__PURE__ */ new Set(), winter: false, slots: 0 };
+    for (const id of t.done) {
+      const x = BY_ID[id];
+      if (!x) continue;
+      if (x.field) d.level[x.field] = (d.level[x.field] ?? 0) + 1;
+      for (const k of x.unlock ?? []) d.open.add(k);
+      if (x.winterKit) d.winter = true;
+      d.slots += x.slots ?? 0;
+      if (x.attack !== void 0 || x.defence !== void 0 || x.drafts !== void 0 || x.cost || x.fleet !== void 0 || x.seaLoss !== void 0) {
+        d.traits.push({ id: `tech:${x.id}`, name: x.name, text: x.text, attack: x.attack, defence: x.defence, when: x.when, drafts: x.drafts, cost: x.cost, fleet: x.fleet, seaLoss: x.seaLoss });
+      }
+    }
+    cache.set(n, d);
+    return d;
+  }
+  var treeLevel = (g2, nat, f) => g2.flags.open === 1 ? sum(g2, nat).level[f] ?? 0 : 0;
+  var techTraits = (g2, nat) => sum(g2, nat).traits;
+  function locked(g2, nat, key2) {
+    const t = GATE[key2];
+    return t && techRules(g2) && !sum(g2, nat).open.has(key2) ? t : null;
+  }
+  var winterReady = (g2, nat) => g2.flags.open === 1 && sum(g2, nat).winter;
+  function teamsOf(g2, nat) {
+    if (!techRules(g2)) return 0;
+    return (TECH.slots[nat] ?? TECH.slots._default) + sum(g2, nat).slots + (g2.nations[nat].lab?.founded ?? 0);
+  }
+  var hasTech = (g2, nat, id) => !!techOf(g2, nat)?.done.includes(id);
+  function monthsFor(t, turn) {
+    const base = t.months ?? TECH.months[t.tier];
+    return Math.ceil(base * (1 + TECH.early * Math.max(0, t.year - yearOf(turn))) - 1e-9);
+  }
+  var and = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  function whyNotResearch(g2, nat, id) {
+    const s = techOf(g2, nat), t = BY_ID[id];
+    if (!s) return "The technology tree belongs to the grand campaign.";
+    if (!t) return "There is no such technology.";
+    if (!g2.nations[nat].alive) return "The nation is out of the war.";
+    if (s.done.includes(id)) return "Already researched.";
+    if (s.work.some((w) => w.id === id)) return "A team is already at work on it.";
+    const lacks = t.needs.filter((x) => !s.done.includes(x));
+    if (lacks.length) return `Needs ${and(lacks.map((x) => BY_ID[x]?.name ?? x))} first.`;
+    if (s.work.length >= teamsOf(g2, nat)) return "Every research team is busy. Wait for one to finish, or stop a project.";
+    return null;
+  }
+  function startResearch(g2, nat, id) {
+    if (whyNotResearch(g2, nat, id) !== null) return false;
+    const of = monthsFor(BY_ID[id], g2.turn);
+    techOf(g2, nat).work.push({ id, left: of, of });
+    return true;
+  }
+  function stopResearch(g2, nat, id) {
+    const s = techOf(g2, nat);
+    const i = s ? s.work.findIndex((w) => w.id === id) : -1;
+    if (!s || i < 0) return false;
+    s.work.splice(i, 1);
+    return true;
+  }
+  function finish(g2, n, id, quiet2) {
+    const s = n.tech, t = BY_ID[id];
+    if (!t || s.done.includes(id)) return;
+    s.done.push(id);
+    if (t.sealift) n.sealift += t.sealift;
+    if (!quiet2 && n.id === g2.human) headline(g2, "info", `Research complete: ${t.name}. ${techRule(t)} A research team is free for new work.`, n.id);
+  }
+  function staffPick(g2, nat, turn = g2.turn) {
+    const s = techOf(g2, nat);
+    if (!s) return null;
+    const A = TECH.ai, order2 = A.order[nat] ?? A.order._default, year = yearOf(turn);
+    const skip = (id) => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
+    let best = null, low = Infinity;
+    for (const t of TECH.techs) {
+      if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
+      const place2 = order2.indexOf(t.branch);
+      const score = t.tier * A.tier + (place2 < 0 ? order2.length : place2) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0);
+      if (score < low) {
+        low = score;
+        best = t;
+      }
+    }
+    return best ? best.id : null;
+  }
+  function month(g2, n, turn, staffed, quiet2) {
+    const s = n.tech;
+    const due = [];
+    for (const w of s.work) {
+      w.left -= 1;
+      if (w.left <= 1e-9) due.push(w.id);
+    }
+    if (due.length) {
+      s.work = s.work.filter((w) => w.left > 1e-9);
+      for (const id of due) finish(g2, n, id, quiet2);
+    }
+    if (!staffed) return;
+    while (s.work.length < teamsOf(g2, n.id)) {
+      const id = staffPick(g2, n.id, turn);
+      if (!id) break;
+      const of = monthsFor(BY_ID[id], turn);
+      s.work.push({ id, left: of, of });
+    }
+  }
+  function openTech(g2) {
+    if (!techRules(g2) || g2.flags["tech:open"]) return;
+    g2.flags["tech:open"] = 1;
+    const all = Object.values(g2.nations);
+    for (const n of all) {
+      n.tech ?? (n.tech = fresh(n.id));
+      if (n.lab) for (const f of Object.keys(n.lab.teams)) n.lab.teams[f] = 1;
+    }
+    for (let turn = 1; turn < g2.turn; turn++) for (const n of all) if (n.alive || n.dormant) month(g2, n, turn, true, true);
+    for (const n of all) if (n.alive && n.id !== g2.human) month0(g2, n);
+  }
+  function month0(g2, n) {
+    const s = n.tech;
+    while (s.work.length < teamsOf(g2, n.id)) {
+      const id = staffPick(g2, n.id);
+      if (!id) break;
+      const of = monthsFor(BY_ID[id], g2.turn);
+      s.work.push({ id, left: of, of });
+    }
+  }
+  function techTick(g2, nat) {
+    const s = techOf(g2, nat);
+    const n = g2.nations[nat];
+    if (!s || !n.alive) return;
+    month(g2, n, g2.turn, nat !== g2.human, false);
+  }
+  function techMonth(g2) {
+    if (!techRules(g2)) return;
+    for (const n of Object.values(g2.nations)) if (!n.alive && n.dormant && techOf(g2, n.id)) month(g2, n, g2.turn, true, true);
+  }
+  function paraCount(g2, nat) {
+    let k = g2.nations[nat].queue.filter((b) => b.airborne).length;
+    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.airborne) k++;
+    return k;
+  }
+  function whyNoPara(g2, nat) {
+    if (!techRules(g2)) return "Airborne corps are raised in the grand campaign.";
+    const need = locked(g2, nat, "para");
+    if (need) return `Needs the technology ${need.name}.`;
+    const most = TECH.units.para.most;
+    if (paraCount(g2, nat) >= most) return `The transport aircraft can serve ${most} airborne corps at once, in the field and on order.`;
+    return null;
+  }
+  var pct = (x) => `${Math.round(x * 100)}%`;
+  var FIELD_RULE = {
+    armour: (p) => `Armoured and motorised corps fight ${p} harder.`,
+    infantry: (p) => `Every corps that is not armoured or motorised fights ${p} harder.`,
+    doctrine: (p) => `Every corps attacks ${p} harder.`,
+    fighters: (p) => `Fighters fight ${p} harder.`,
+    bombers: (p) => `Bombers that get through do ${p} more damage.`,
+    navy: (p) => `Fleets, raiders and convoy escorts fight ${p} harder.`,
+    radar: (p) => `Fighters over their own sky and the escorts on the convoy routes are worth ${p} more.`,
+    industry: (p) => `Earnings up ${p}.`
+  };
+  var UNLOCK_RULE = {
+    "corps:arm": "Armoured corps can be raised.",
+    "corps:mot": "Motorised corps can be raised.",
+    "ship:cv": "Aircraft carriers can be laid down.",
+    para: "Airborne corps can be raised."
+  };
+  function techRule(t) {
+    const out = [];
+    for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
+    if (t.field) out.push(FIELD_RULE[t.field](pct(RESEARCH.fields[t.field].per)));
+    const rest = traitRule({ id: t.id, name: t.name, text: t.text, attack: t.attack, defence: t.defence, when: t.when, drafts: t.drafts, cost: t.cost, sealift: t.sealift, fleet: t.fleet, seaLoss: t.seaLoss });
+    if (rest) out.push(rest);
+    if (t.slots) out.push(t.slots === 1 ? "One more research team." : `${t.slots} more research teams.`);
+    if (t.winterKit) out.push("Its troops no longer march and fight worse in the eastern winter.");
+    return out.join(" ");
+  }
+  function techView(g2, nat) {
+    const s = techOf(g2, nat);
+    if (!s) return null;
+    const nodes = TECH.techs.map((t) => {
+      const w = s.work.find((x) => x.id === t.id);
+      const done = s.done.includes(t.id);
+      const open = t.needs.every((x) => s.done.includes(x));
+      return {
+        id: t.id,
+        branch: t.branch,
+        tier: t.tier,
+        name: t.name,
+        text: t.text,
+        rule: techRule(t),
+        year: t.year,
+        needs: t.needs.map((x) => ({ id: x, name: BY_ID[x]?.name ?? x, done: s.done.includes(x) })),
+        state: done ? "done" : w ? "work" : open ? "ready" : "locked",
+        months: monthsFor(t, g2.turn),
+        base: t.months ?? TECH.months[t.tier],
+        left: w ? Math.max(1, Math.ceil(w.left - 1e-9)) : 0,
+        of: w ? w.of : 0,
+        why: whyNotResearch(g2, nat, t.id)
+      };
+    });
+    return {
+      nat,
+      teams: teamsOf(g2, nat),
+      busy: s.work.length,
+      done: nodes.filter((x) => x.state === "done").length,
+      total: nodes.length,
+      branches: TECH.branches.map((b) => ({ ...b, done: nodes.filter((x) => x.branch === b.id && x.state === "done").length, total: nodes.filter((x) => x.branch === b.id).length })),
+      eras: TECH.eras,
+      nodes
+    };
+  }
+  function idleTeams(g2, nat) {
+    const s = techOf(g2, nat);
+    if (!s || !g2.nations[nat].alive) return 0;
+    const free2 = teamsOf(g2, nat) - s.work.length;
+    return free2 > 0 && staffPick(g2, nat) ? free2 : 0;
+  }
+  function treeNotes(g2, nats, fields) {
+    const out = [];
+    if (g2.flags.open !== 1) return out;
+    for (const nat of new Set(nats)) {
+      for (const f of fields) {
+        const k = treeLevel(g2, nat, f);
+        if (!k) continue;
+        out.push({ text: `${g2.nations[nat].adj} ${RESEARCH.fields[f].noun}: ${k === 1 ? "one technology" : `${k} technologies`} researched`, pct: Math.round(RESEARCH.fields[f].per * k * 100) });
+      }
+    }
+    return out;
+  }
+
   // ../../src/campaign/traits.ts
   var TRAITS = traits_default;
   var traitRules = (g2) => g2.flags.open === 1;
@@ -1864,15 +2417,20 @@
   function edge(g2, c, target, landing, side2, names) {
     if (!traitRules(g2)) return 1;
     const row2 = TRAITS.nations[c.nat];
-    if (!row2) return 1;
     let m = 1;
-    for (const t of row2.traits) {
+    if (row2) for (const t of row2.traits) {
       const x2 = t[side2];
       if (x2 === void 0 || t.builtin || !holds(g2, t.when, c, target, landing)) continue;
       m *= x2;
       names?.add(t.name);
     }
-    const u = c.elite && row2.unit && row2.unit.id === c.elite ? row2.unit : null;
+    for (const t of techTraits(g2, c.nat)) {
+      const x2 = t[side2];
+      if (x2 === void 0 || !holds(g2, t.when, c, target, landing)) continue;
+      m *= x2;
+      names?.add(t.name);
+    }
+    const u = c.elite && row2?.unit && row2.unit.id === c.elite ? row2.unit : null;
     const x = u?.[side2];
     if (u && x !== void 0 && holds(g2, u.when, c, target, landing)) {
       m *= x;
@@ -1927,6 +2485,10 @@
     let m = 1;
     for (const t of traitsOf(nat)) {
       const x = t.builtin ? void 0 : pick(t);
+      if (x !== void 0) m *= x;
+    }
+    for (const t of techTraits(g2, nat)) {
+      const x = pick(t);
       if (x !== void 0) m *= x;
     }
     return m;
@@ -1998,7 +2560,7 @@
       }
     }
   }
-  var pct = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
+  var pct2 = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
   var KIND_WORD = { inf: "infantry", mot: "motorised troops", arm: "tanks", cav: "cavalry", mtn: "mountain troops", fort: "fortress troops", art: "artillery", eng: "engineers" };
   var DIV_WORD = { inf: "infantry", mot: "motorised", arm: "armoured", cav: "cavalry", mtn: "mountain", art: "artillery", eng: "engineer" };
   var ORDER_WORD = {
@@ -2038,7 +2600,7 @@
   function fightWords(x, who) {
     const a = x.attack, d = x.defence;
     if (a === void 0 && d === void 0) return "";
-    const head = a !== void 0 && d !== void 0 ? a === d ? `Attack and defence up ${pct(a)}` : `Attack up ${pct(a)}, defence up ${pct(d)}` : a !== void 0 ? `Attack up ${pct(a)}` : `Defence up ${pct(d)}`;
+    const head = a !== void 0 && d !== void 0 ? a === d ? `Attack and defence up ${pct2(a)}` : `Attack up ${pct2(a)}, defence up ${pct2(d)}` : a !== void 0 ? `Attack up ${pct2(a)}` : `Defence up ${pct2(d)}`;
     return `${head}${whenWords(x.when, who)}.`;
   }
   function traitRule(t, scale = 100) {
@@ -2048,16 +2610,16 @@
     if (fight2) out.push(fight2);
     const at = t.incomeAt === "peace" ? " while at peace" : t.incomeAt === "war" ? " while at war" : "";
     if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString("en-US")} a month${at}.`);
-    if (t.incomeMul) out.push(`Earnings up ${pct(t.incomeMul)}${at}.`);
+    if (t.incomeMul) out.push(`Earnings up ${pct2(t.incomeMul)}${at}.`);
     if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? "double" : `${t.oil} times as much`}.`);
     if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);
-    if (t.drafts) out.push(`Losses are made good ${pct(t.drafts)} ${t.drafts > 1 ? "faster" : "slower"}.`);
-    if (t.cost) out.push(`${list(t.cost.what.map((k) => ORDER_WORD[k] ?? k)).replace(/^./, (ch) => ch.toUpperCase())} cost ${pct(t.cost.mul)} ${t.cost.mul < 1 ? "less" : "more"}.`);
+    if (t.drafts) out.push(`Losses are made good ${pct2(t.drafts)} ${t.drafts > 1 ? "faster" : "slower"}.`);
+    if (t.cost) out.push(`${list(t.cost.what.map((k) => ORDER_WORD[k] ?? k)).replace(/^./, (ch) => ch.toUpperCase())} cost ${pct2(t.cost.mul)} ${t.cost.mul < 1 ? "less" : "more"}.`);
     if (t.sealift) out.push(`Shipping for ${t.sealift === 1 ? "one more corps" : `${t.sealift} more corps`} a month.`);
     if (t.alert) out.push("No enemy gets the surprise of the first month against it.");
     if (t.partisans) out.push(`Enemy corps on its occupied mountains, hills and forests lose ${Math.round(t.partisans * 100)}% of their strength a month.`);
-    if (t.fleet) out.push(`Fleets fight ${pct(t.fleet)} harder.`);
-    if (t.seaLoss) out.push(`Convoy losses down ${pct(t.seaLoss)}.`);
+    if (t.fleet) out.push(`Fleets fight ${pct2(t.fleet)} harder.`);
+    if (t.seaLoss) out.push(`Convoy losses down ${pct2(t.seaLoss)}.`);
     return out.join(" ");
   }
   function eliteRule(u) {
@@ -2310,197 +2872,6 @@
       ] }
     ]
   };
-
-  // ../../data/campaign/research.json
-  var research_default = {
-    _about: {
-      idea: "Research runs on history's clock. Each major power has design teams, one to a branch at the start. A branch with one team gets every new design in the month history got it. A second or third team makes the branch's clock run faster ('speed' is months of progress per month for 0, 1, 2 and 3 teams), so its designs arrive early; a branch with no team stands still and falls behind.",
-      effect: "What counts in battle is how far a branch is ahead of or behind its own history, in designs: each design in service that history did not yet have is worth 'per' of strength for that branch, each design history had and the nation lacks costs the same, up to 'maxLead' designs either way. A nation that keeps one team on every branch fights exactly as it did, which is how the computer runs every nation.",
-      bureau: "A nation can found extra design teams with production points. 'cost' is the price of the first, second and third.",
-      nations: "For each major power: 'tree' is the name of its army doctrine; then for every branch its designs in order, each with the month history brought it into service (year-month; anything before September 1939 is in service when the war begins). French entries after June 1940 are the designs France had on the drawing board when it fell."
-    },
-    speed: [0, 1, 1.5, 1.85],
-    maxLead: 3,
-    bureau: { cost: [60, 100, 150] },
-    fields: {
-      armour: { label: "Tanks", noun: "tanks", per: 0.08, who: "Armoured and motorized corps", news: "New tanks reach the divisions" },
-      infantry: { label: "Infantry weapons and guns", noun: "infantry weapons", per: 0.06, who: "Infantry, mountain, cavalry and fortress corps", news: "New weapons reach the infantry" },
-      doctrine: { label: "Army doctrine", noun: "army doctrine", per: 0.05, who: "Every corps in the attack", news: "The army changes the way it fights" },
-      fighters: { label: "Fighters", noun: "fighters", per: 0.08, who: "Every fighter in an air battle", news: "A new fighter enters service" },
-      bombers: { label: "Bombers", noun: "bombers", per: 0.08, who: "What the bombers that get through destroy", news: "New with the bomber force" },
-      navy: { label: "Navy", noun: "ships", per: 0.08, who: "Every fleet in battle, and the raiders and escorts on the convoy routes", news: "New with the fleet" },
-      radar: { label: "Radar and signals", noun: "radar", per: 0.06, who: "Fighters defending their own sky, and the watch over the convoy routes", news: "New for the signals service" },
-      industry: { label: "War production", noun: "war production", per: 0.05, who: "The production points earned every month", news: "A change in war production" }
-    },
-    nations: {
-      GER: {
-        tree: "Blitzkrieg",
-        armour: [["1939-08", "Panzer III and IV with short guns"], ["1940-07", "Panzer III with the 50 mm gun"], ["1942-03", "Panzer IV with the long 75 mm gun"], ["1942-09", "Tiger"], ["1943-07", "Panther"], ["1944-07", "King Tiger"]],
-        infantry: [["1939-08", "Karabiner 98k, MG 34 and the 37 mm anti-tank gun"], ["1941-04", "50 mm Pak 38 anti-tank gun"], ["1942-05", "MG 42 and the 75 mm Pak 40"], ["1943-09", "Panzerfaust and Panzerschreck"], ["1944-07", "Sturmgewehr 44 assault rifle"]],
-        doctrine: [["1939-08", "Panzer divisions: tanks, infantry and guns in one formation"], ["1940-05", "Panzer groups: the tanks massed under one command"], ["1941-10", "Panzer armies"], ["1943-02", "Mobile defence: give ground, then strike the flank"], ["1944-03", "Battle groups thrown in as fire brigades"]],
-        fighters: [["1939-08", "Messerschmitt Bf 109E"], ["1941-03", "Messerschmitt Bf 109F"], ["1941-09", "Focke-Wulf Fw 190A"], ["1942-06", "Messerschmitt Bf 109G"], ["1944-09", "Focke-Wulf Fw 190D"]],
-        bombers: [["1939-08", "Heinkel He 111, Dornier Do 17 and the Ju 87 Stuka"], ["1940-04", "Junkers Ju 88"], ["1941-06", "Dornier Do 217"], ["1943-08", "Fritz X and Hs 293 guided bombs"]],
-        navy: [["1939-08", "Type VII U-boats"], ["1940-09", "Wolf packs directed by radio"], ["1941-05", "Type IXC long-range U-boats"], ["1942-04", "Supply U-boats, the milk cows"], ["1943-09", "Acoustic homing torpedoes"], ["1944-03", "The schnorkel"]],
-        radar: [["1939-08", "Freya early-warning radar"], ["1940-08", "Würzburg radar to direct guns and fighters"], ["1941-07", "The Kammhuber Line of night-fighter boxes"], ["1942-03", "Lichtenstein radar in night fighters"], ["1943-10", "Naxos radar detectors"]],
-        industry: [["1939-08", "The Four-Year Plan"], ["1940-03", "Todt's Ministry of Armaments and Munitions"], ["1942-04", "Speer's Central Planning"], ["1943-02", "Total war mobilisation"], ["1944-03", "The Fighter Staff and dispersed factories"]]
-      },
-      UK: {
-        tree: "Superior Firepower",
-        armour: [["1939-08", "Matilda II and the cruiser tanks"], ["1941-06", "Crusader and Valentine"], ["1942-10", "Sherman and Churchill"], ["1944-06", "Cromwell and the Sherman Firefly"], ["1945-03", "Comet"]],
-        infantry: [["1939-08", "Lee-Enfield, Bren gun and the 2-pounder anti-tank gun"], ["1940-04", "25-pounder field gun"], ["1942-05", "6-pounder anti-tank gun"], ["1943-07", "17-pounder gun and the PIAT"], ["1944-08", "Discarding-sabot shot"]],
-        doctrine: [["1939-08", "The methodical battle of 1918"], ["1941-03", "Battle drill, and tank brigades with the infantry"], ["1942-10", "Every gun in the corps on one target"], ["1943-03", "Army and air force planning as one"], ["1944-06", "The combined assault from the sea"]],
-        fighters: [["1939-08", "Hurricane and Spitfire Mk I"], ["1940-08", "Spitfire Mk II"], ["1941-02", "Spitfire Mk V"], ["1942-07", "Spitfire Mk IX"], ["1944-01", "Spitfire Mk XIV and Tempest"]],
-        bombers: [["1939-08", "Wellington, Whitley and Hampden"], ["1941-02", "Stirling and Halifax heavy bombers"], ["1942-03", "Lancaster"], ["1942-08", "Mosquito and the Pathfinder Force"], ["1944-06", "Tallboy earthquake bombs"]],
-        navy: [["1939-08", "ASDIC and the convoy system"], ["1940-04", "Flower-class corvettes"], ["1941-07", "Escort groups and ship-borne direction finding"], ["1942-06", "River-class frigates and the Hedgehog"], ["1943-03", "Support groups and escort carriers"], ["1944-01", "Squid mortar and Loch-class frigates"]],
-        radar: [["1939-08", "Chain Home"], ["1940-02", "Chain Home Low"], ["1941-01", "Ground-controlled interception and radar in night fighters"], ["1942-01", "Centimetric radar at sea"], ["1943-01", "H2S and Oboe bombing aids"]],
-        industry: [["1939-08", "The shadow factories"], ["1940-05", "Ministry of Aircraft Production"], ["1941-03", "Lend-Lease"], ["1941-12", "Women conscripted for war work"], ["1943-06", "The whole nation mobilised"]]
-      },
-      FRA: {
-        tree: "Methodical Battle",
-        armour: [["1939-08", "Char B1 bis and Somua S35"], ["1940-07", "Somua S40"], ["1941-05", "Char B1 ter"], ["1942-06", "Char G1"]],
-        infantry: [["1939-08", "MAS-36 rifle, FM 24/29 and the 25 mm anti-tank gun"], ["1940-03", "47 mm anti-tank gun"], ["1941-01", "MAS-40 self-loading rifle"], ["1942-04", "75 mm anti-tank gun"]],
-        doctrine: [["1939-08", "The methodical battle"], ["1940-01", "Armoured divisions"], ["1941-03", "Armour massed for the counter-stroke"], ["1942-03", "Tanks and aircraft under one command"]],
-        fighters: [["1939-08", "Morane-Saulnier MS.406 and Curtiss H-75"], ["1940-05", "Dewoitine D.520"], ["1940-11", "Arsenal VG-33"], ["1941-09", "Dewoitine D.551"]],
-        bombers: [["1939-08", "Bloch MB.210 and Amiot 143"], ["1940-03", "LeO 451 and Breguet 693"], ["1940-10", "Amiot 354"], ["1941-10", "Bloch MB.175 in number"]],
-        navy: [["1939-08", "Dunkerque-class fast battleships"], ["1940-07", "Battleship Richelieu"], ["1941-06", "British ASDIC in French escorts"], ["1942-06", "Battleship Jean Bart"]],
-        radar: [["1939-08", "Sound locators and observer posts"], ["1940-03", "Electromagnetic detection barriers"], ["1941-01", "British radar sets built under licence"], ["1942-03", "Radar-directed fighters"]],
-        industry: [["1939-08", "The nationalised arms industry and Dautry's Ministry of Armaments"], ["1940-06", "American aircraft and machine tools"], ["1941-06", "Industry fully mobilised for war"], ["1942-09", "Mass production"]]
-      },
-      ITA: {
-        tree: "War of Rapid Decision",
-        armour: [["1939-08", "L3 tankettes and the M11/39"], ["1940-12", "M13/40"], ["1942-01", "M14/41 and the Semovente 75/18"], ["1943-06", "P26/40 heavy tank"]],
-        infantry: [["1939-08", "Carcano rifle, Breda 30 and the 47/32 gun"], ["1941-06", "Beretta MAB 38 in the line"], ["1942-04", "90/53 gun on lorries"], ["1943-04", "75/32 and 75/46 guns"]],
-        doctrine: [["1939-08", "Two-regiment binary divisions"], ["1941-08", "The Mobile Army Corps"], ["1942-06", "Mixed battle groups"]],
-        fighters: [["1939-08", "Fiat CR.42 and G.50"], ["1940-09", "Macchi C.200 Saetta"], ["1941-11", "Macchi C.202 Folgore"], ["1943-04", "Macchi C.205 and Fiat G.55"]],
-        bombers: [["1939-08", "Savoia-Marchetti SM.79"], ["1940-08", "SM.79 torpedo bombers"], ["1941-03", "CANT Z.1007bis"], ["1942-06", "Piaggio P.108"]],
-        navy: [["1939-08", "Zara-class cruisers and a large submarine fleet"], ["1940-08", "Littorio-class battleships"], ["1941-12", "Human torpedoes of the Decima MAS"], ["1942-10", "Gabbiano-class corvettes"]],
-        radar: [["1939-08", "Sound locators"], ["1941-07", "German radar sets on Italian soil"], ["1942-09", "Gufo naval radar"]],
-        industry: [["1939-08", "Autarky"], ["1940-05", "The war production commissariat"], ["1941-02", "German coal and machine tools"], ["1943-02", "Ministry of War Production"]]
-      },
-      SOV: {
-        tree: "Deep Battle",
-        armour: [["1939-08", "T-26 and BT light tanks"], ["1940-12", "T-34 and KV-1"], ["1942-12", "KV-1S and SU-122"], ["1943-07", "SU-152 heavy assault gun"], ["1944-03", "T-34/85 and IS-2"]],
-        infantry: [["1939-08", "Mosin-Nagant, Maxim gun and the 45 mm gun"], ["1941-07", "PPSh submachine gun and Katyusha rockets"], ["1942-02", "ZiS-3 divisional gun"], ["1943-06", "57 mm ZiS-2 and the PPS-43"], ["1944-05", "100 mm BS-3 gun"]],
-        doctrine: [["1939-08", "Deep battle on paper, the officer corps thinned by the purges"], ["1940-05", "The lessons of the Winter War"], ["1941-12", "Guards units and shock armies"], ["1942-05", "Tank armies"], ["1942-11", "Deep operations by whole fronts"], ["1943-04", "Artillery breakthrough corps"], ["1944-06", "Deep battle mastered"]],
-        fighters: [["1939-08", "Polikarpov I-16 and I-153"], ["1941-03", "Yak-1, LaGG-3 and MiG-3"], ["1942-10", "La-5 and Yak-9"], ["1943-07", "La-5FN"], ["1944-07", "Yak-3 and La-7"]],
-        bombers: [["1939-08", "Tupolev SB and Ilyushin DB-3"], ["1941-06", "Il-2 Sturmovik and Pe-2"], ["1942-10", "Two-seat Il-2 with a rear gunner"], ["1944-03", "Tupolev Tu-2"]],
-        navy: [["1939-08", "Kirov-class cruisers and a large submarine fleet"], ["1941-02", "K-class cruiser submarines"], ["1942-08", "Lend-Lease minesweepers and sonar"], ["1943-08", "Radar aboard the fleet"]],
-        radar: [["1939-08", "Sound locators and observer posts"], ["1940-07", "RUS-2 Redut radar"], ["1942-01", "Gun-laying radar from Britain"], ["1944-01", "P-3 radar and fighter control"]],
-        industry: [["1939-08", "The Third Five-Year Plan"], ["1940-06", "The seven-day working week"], ["1942-03", "Factories rebuilt beyond the Urals"], ["1942-10", "Tank building on the conveyor at Tankograd"], ["1943-06", "Lend-Lease lorries and machine tools"]]
-      }
-    }
-  };
-
-  // ../../src/campaign/research.ts
-  var FIELDS = ["armour", "infantry", "doctrine", "fighters", "bombers", "navy", "radar", "industry"];
-  var RESEARCH = research_default;
-  var turnOf = (ym) => {
-    const [y, m] = ym.split("-").map(Number);
-    return (y - 1939) * 12 + m - 8;
-  };
-  var STEPS = {};
-  for (const [nat, d] of Object.entries(RESEARCH.nations)) {
-    STEPS[nat] = {};
-    for (const f of FIELDS) STEPS[nat][f] = d[f].map(([ym, name]) => ({ at: turnOf(ym), name }));
-  }
-  var MAX_TEAMS = RESEARCH.speed.length - 1;
-  var researches = (nat) => nat in STEPS;
-  var stepsOf = (nat, f) => STEPS[nat]?.[f] ?? [];
-  var doctrineOf = (nat) => RESEARCH.nations[nat]?.tree ?? "";
-  var each = (v) => Object.fromEntries(FIELDS.map((f) => [f, v()]));
-  function newLab() {
-    return { teams: each(() => 1), clock: each(() => 0), months: 0, founded: 0 };
-  }
-  function setupResearch(g2) {
-    for (const n of Object.values(g2.nations)) n.lab = researches(n.id) ? newLab() : null;
-  }
-  var count = (steps, clock) => {
-    let k = 0;
-    for (const s of steps) if (s.at <= clock) k++;
-    return k;
-  };
-  function lead(g2, nat, f) {
-    const lab = g2.nations[nat]?.lab;
-    if (!lab) return 0;
-    const steps = stepsOf(nat, f);
-    return Math.max(-RESEARCH.maxLead, Math.min(RESEARCH.maxLead, count(steps, lab.clock[f]) - count(steps, lab.months)));
-  }
-  function techMul(g2, nat, f) {
-    const k = lead(g2, nat, f);
-    return k === 0 ? 1 : 1 + RESEARCH.fields[f].per * k;
-  }
-  function inService(nat, lab, f) {
-    let cur = null;
-    for (const s of stepsOf(nat, f)) if (s.at <= lab.clock[f]) cur = s;
-    return cur;
-  }
-  function nextStep(nat, lab, f) {
-    return stepsOf(nat, f).find((s) => s.at > lab.clock[f]) ?? null;
-  }
-  var speedOf = (lab, f) => RESEARCH.speed[Math.min(MAX_TEAMS, lab.teams[f])] ?? 0;
-  function arrival(g2, nat, f) {
-    const lab = g2.nations[nat]?.lab;
-    if (!lab) return null;
-    const next = nextStep(nat, lab, f), v = speedOf(lab, f);
-    if (!next || v <= 0) return null;
-    return lab.months + Math.max(1, Math.ceil((next.at - lab.clock[f]) / v - 1e-9));
-  }
-  var monthsAhead = (lab, f) => lab.clock[f] - lab.months;
-  var teamsTotal = (lab) => FIELDS.length + lab.founded;
-  var teamsUsed = (lab) => FIELDS.reduce((s, f) => s + lab.teams[f], 0);
-  var teamsFree = (lab) => teamsTotal(lab) - teamsUsed(lab);
-  function setTeams(g2, nat, f, teams2) {
-    const lab = g2.nations[nat]?.lab;
-    if (!lab || !FIELDS.includes(f) || !Number.isInteger(teams2) || teams2 < 0 || teams2 > MAX_TEAMS) return false;
-    if (teamsUsed(lab) - lab.teams[f] + teams2 > teamsTotal(lab)) return false;
-    lab.teams[f] = teams2;
-    return true;
-  }
-  function bureauCost(n) {
-    return n.lab ? RESEARCH.bureau.cost[n.lab.founded] ?? null : null;
-  }
-  function foundBureau(g2, nat) {
-    const n = g2.nations[nat];
-    const cost = n ? bureauCost(n) : null;
-    if (!n || !n.alive || !n.lab || cost === null || n.pp < cost) return false;
-    n.pp -= cost;
-    n.lab.founded++;
-    return true;
-  }
-  var plural = (k, one) => `${k} ${one}${k === 1 ? "" : "s"}`;
-  function researchTick(g2, nat) {
-    const lab = g2.nations[nat]?.lab;
-    if (!lab) return;
-    const was = lab.months;
-    lab.months++;
-    for (const f of FIELDS) {
-      const steps = stepsOf(nat, f);
-      const before = lab.clock[f];
-      lab.clock[f] = before + speedOf(lab, f);
-      if (nat !== g2.human) continue;
-      const spec2 = RESEARCH.fields[f];
-      for (const s of steps) {
-        if (s.at > before && s.at <= lab.clock[f]) {
-          const early = s.at - lab.months;
-          headline(g2, "info", `${spec2.news}: ${s.name}${early > 0 ? `, ${plural(early, "month")} ahead of history` : early < 0 ? `, ${plural(-early, "month")} later than in history` : ""}.`, nat);
-        } else if (s.at > was && s.at <= lab.months && s.at > lab.clock[f]) {
-          headline(g2, "info", `${spec2.label} falling behind: by now history had ${s.name}.`, nat);
-        }
-      }
-    }
-  }
-  function techNotes(g2, nats, fields) {
-    const out = [];
-    for (const nat of new Set(nats)) {
-      for (const f of fields) {
-        const k = lead(g2, nat, f);
-        if (!k) continue;
-        const gen = Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`;
-        out.push({ text: `${g2.nations[nat].adj} ${RESEARCH.fields[f].noun} ${gen} ${k > 0 ? "ahead of" : "behind"} history`, pct: Math.round(RESEARCH.fields[f].per * k * 100) });
-      }
-    }
-    return out;
-  }
 
   // ../../data/campaign/stories.json
   var stories_default = {
@@ -3909,9 +4280,9 @@
     const w = add * STORIES.veterans.dilute;
     const was = c.xp;
     c.xp = (c.xp * before + training(g2, c.nat) * w) / (before + w);
-    const fresh = add / (before + add);
-    if (fresh >= 0.2 && was >= 0.4) {
-      note(g2, c, "drafts", c.reg, Math.round(fresh * 100));
+    const fresh2 = add / (before + add);
+    if (fresh2 >= 0.2 && was >= 0.4) {
+      note(g2, c, "drafts", c.reg, Math.round(fresh2 * 100));
       moment(g2, 2, "drafts", c, c.reg);
     }
   }
@@ -4100,7 +4471,7 @@
     if (!groundRules(g2)) return 0;
     return (GROUND.march[kind]?.[r.terrain] ?? 0) + (STEEP.has(r.name) ? GROUND.steep.march[kind] ?? 0 : 0);
   }
-  var pct2 = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
+  var pct3 = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
   var NAME = { inf: "infantry", mot: "motorized troops", arm: "tanks", cav: "cavalry", mtn: "mountain troops", fort: "fortress troops", art: "artillery", eng: "engineers" };
   var KINDS = Object.keys(KIND);
   var groundSays = (g2, r) => groundRules(g2) ? GROUND.says[steep(g2, r) ? "steep" : r.terrain] : "";
@@ -4137,7 +4508,7 @@
       if (seen.has(c.kind)) continue;
       seen.add(c.kind);
       const m = defending ? groundDefence(g2, c.kind, r) : groundAttack(g2, c.kind, r);
-      if (m !== 1) bits.push(`${NAME[c.kind]} ${defending ? "defend" : "attack"} ${pct2(m)} ${m > 1 ? "stronger" : "weaker"}`);
+      if (m !== 1) bits.push(`${NAME[c.kind]} ${defending ? "defend" : "attack"} ${pct3(m)} ${m > 1 ? "stronger" : "weaker"}`);
     }
     return bits.join(", ");
   }
@@ -4871,11 +5242,11 @@
     if (night) out.lines.push({ label: "Night", value: "Flown in darkness", effect: "Few fighters find the bombers, and only about a third of the bombs find the target" });
     else if (af > 0) {
       const far = out.att.filter((a) => a.f.ftr > 0).sort((a, b) => a.esc - b.esc)[0];
-      const pct3 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
+      const pct4 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
       out.lines.push({
         label: "Range",
-        value: pct3 >= 100 ? "The target is well inside fighter range" : pct3 > 0 ? `The fighters are at ${pct3}% effect over the target` : "The target is beyond fighter range",
-        effect: pct3 >= 100 ? void 0 : pct3 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
+        value: pct4 >= 100 ? "The target is well inside fighter range" : pct4 > 0 ? `The fighters are at ${pct4}% effect over the target` : "The target is beyond fighter range",
+        effect: pct4 >= 100 ? void 0 : pct4 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
       });
     } else if (out.B > 0) out.lines.push({ label: "Range", value: "No escort", effect: "The bombers go alone" });
     const packed = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => crowding(g2, f) < 1);
@@ -5766,7 +6137,7 @@
   function seaBattles(g2, nat) {
     const out = [];
     if (!g2.nations[nat]?.alive) return out;
-    const sum = (fs) => fs.reduce((s, f) => s + fleetPower(g2, f), 0);
+    const sum2 = (fs) => fs.reduce((s, f) => s + fleetPower(g2, f), 0);
     for (const zone of g2.seas) {
       const z = zone.id;
       const foes = g2.fleets.filter((f) => f.zone === z && atSea(f) && atWar(g2, f.nat, nat) && shipCount(f.ships) > 0);
@@ -5777,7 +6148,7 @@
       const met2 = foes.filter((f) => surfaceShips(f) > 0 && (f.stance === "patrol" || rng.chance(NAVY.battle.catchRaider)));
       if (!met2.length) continue;
       const airA = airOver(g2, z, nat) * NAVY.air.weight, airD = airOver(g2, z, nat, true) * NAVY.air.weight;
-      const A = sum(mine) + airA, D = Math.max(1, sum(met2) + airD);
+      const A = sum2(mine) + airA, D = Math.max(1, sum2(met2) + airD);
       if (A < NAVY.battle.seek * D) continue;
       const names = (fs) => {
         const l = fs.map((f) => `the ${f.name}`);
@@ -5806,7 +6177,7 @@
       };
       const ships = (fs) => fs.reduce((s, x) => s + shipCount(x.ships), 0);
       const lines = [
-        { label: "Forces", value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(sum(mine))} against ${Math.round(sum(met2))} before the battle` }
+        { label: "Forces", value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(sum2(mine))} against ${Math.round(sum2(met2))} before the battle` }
       ];
       if (airA > 0.5 || airD > 0.5) lines.push({ label: "Air", value: airA > airD ? "The attacker has the stronger air cover from the coast" : airD > airA ? "The defender has the stronger air cover from the coast" : "Even", effect: `Worth ${Math.round(airA)} to the attacker and ${Math.round(airD)} to the defender` });
       const flag3 = (fs) => fs.filter((f) => f.admiral).map((f) => `${f.admiral.name}${f.admiral.level > 1 ? ` (level ${f.admiral.level})` : ""}`).join(", ") || "no admiral named";
@@ -6362,6 +6733,7 @@
     }
     leagueMonth(g2);
     traitsMonth(g2);
+    techMonth(g2);
     const open = g2.flags.open === 1;
     for (const e of DIPLOMACY.events) {
       if (e.mode && e.mode === "open" !== open) continue;
@@ -6446,11 +6818,15 @@
     const out = [];
     const poor = (cost) => n.pp < cost ? POOR : null;
     const r = g2.regions[sel];
+    const gate = (key2) => {
+      const t = locked(g2, nat, key2);
+      return t ? { why: `Needs the technology ${t.name}. Open Research to begin it.`, tech: t.id } : null;
+    };
     const u = budgeted(g2) ? eliteOf(nat) : null;
     if (u) {
       const need = needsOf(g2, u.kind);
       const at = raiseSite(g2, nat, u.kind, sel);
-      const no = whyNoElite(g2, nat);
+      const no = gate(`corps:${u.kind}`)?.why ?? whyNoElite(g2, nat);
       out.push({
         key: "elite",
         group: "army",
@@ -6471,6 +6847,7 @@
       const at = raiseSite(g2, nat, kind, sel);
       const where = at >= 0 ? g2.regions[at].name : "";
       const cost = corpsCost(g2, nat, kind);
+      const held = gate(`corps:${kind}`);
       out.push({
         key: `corps:${kind}`,
         group: "army",
@@ -6482,7 +6859,28 @@
         upkeep: budgeted(g2) ? corpsUpkeep(kind, spec2.divs) : 0,
         at,
         note: at < 0 ? "" : `Forms up at ${where}${need && at !== sel && r && canRaise(g2, nat, r) ? `: ${r.name} has not the ${plural2(need, "factory", "factories")} this needs` : ""}.`,
-        why: at < 0 ? need ? `Needs a home province with ${plural2(need, "factory", "factories")}. Build factories in a city first.` : "There is no home ground left to raise troops on." : poor(cost)
+        why: held?.why ?? (at < 0 ? need ? `Needs a home province with ${plural2(need, "factory", "factories")}. Build factories in a city first.` : "There is no home ground left to raise troops on." : poor(cost)),
+        ...held ? { tech: held.tech } : {}
+      });
+    }
+    if (budgeted(g2)) {
+      const p = TECH.units.para;
+      const at = raiseSite(g2, nat, "inf", sel);
+      const held = gate("para");
+      const cost = priceOf(g2, nat, "para", p.cost);
+      out.push({
+        key: "para",
+        group: "army",
+        label: p.label,
+        blurb: p.blurb,
+        size: plural2(p.divs, "division"),
+        cost,
+        months: p.months,
+        upkeep: corpsUpkeep("inf", p.divs),
+        at,
+        note: at < 0 ? "" : `Forms up at ${g2.regions[at].name}. ${paraCount(g2, nat)} of ${p.most} in the field or on order.`,
+        why: held?.why ?? whyNoPara(g2, nat) ?? (at < 0 ? "There is no home ground left to raise troops on." : poor(cost)),
+        ...held ? { tech: held.tech } : {}
       });
     }
     if (!budgeted(g2)) {
@@ -6517,7 +6915,9 @@
       const full = hull === "tp" && liftBought(g2, nat) >= ARSENAL.lift.most;
       const cost = priceOf(g2, nat, `ship:${hull}`, spec2.cost);
       const one = hull === "tp" ? "" : NAVY.classes[hull].one, many = hull === "tp" ? "" : NAVY.classes[hull].many;
+      const held = gate(`ship:${hull}`);
       out.push({
+        ...held ? { tech: held.tech } : {},
         key: `ship:${hull}`,
         group: "navy",
         label: spec2.label,
@@ -6528,7 +6928,7 @@
         upkeep: hull === "tp" ? 0 : spec2.count * BUDGET.upkeep.ships[hull],
         at,
         note: at < 0 ? "" : hull === "tp" ? `Built at ${g2.regions[at].name}.` : fleet ? `Laid down at ${g2.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g2.regions[at].name}. Forms a new squadron there.`,
-        why: at < 0 ? `Needs a shipyard of level ${spec2.yard} in one of your home ports.` : full ? "The nation has all the troopships its ports can handle." : poor(cost)
+        why: held?.why ?? (at < 0 ? `Needs a shipyard of level ${spec2.yard} in one of your home ports.` : full ? "The nation has all the troopships its ports can handle." : poor(cost))
       });
     }
     const W = ARSENAL.works;
@@ -6580,6 +6980,7 @@
     if (!n.alive || !o || o.why !== null || o.at < 0 || n.pp < o.cost) return null;
     const [group, item] = key2.split(":");
     if (group === "elite") return orderElite(g2, nat, o.at);
+    if (group === "para") return orderPara(g2, nat, o.at);
     if (group === "corps") return orderCorps(g2, nat, item, o.at);
     if (key2 === "work:fort") return orderFort(g2, nat, o.at);
     const r = g2.regions[o.at];
@@ -6778,13 +7179,13 @@
     const partners = tradePartners(g2, nat).length;
     const trade = partners * DIPLOMACY.tradeIncome;
     const peace = n.atWar.length ? 1 : PRODUCTION.peaceIncome;
-    const sea = seaIncomeLoss(g2, nat), air = airIncomeLoss(g2, nat), tech = techMul(g2, nat, "industry");
+    const sea = seaIncomeLoss(g2, nat), air = airIncomeLoss(g2, nat), tech2 = techMul(g2, nat, "industry");
     const before = seat3 + facHome + facOcc + away + land2 + ports + oil;
     const gift = traitMoney(g2, nat);
     const atPeace = before * peace + trade + gift.flat;
     const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
     const hard = budget ? incomeMul(g2, nat) : 1;
-    const gross = budget ? afterAir * tech * hard * gift.mul : income(g2, nat);
+    const gross = budget ? afterAir * tech2 * hard * gift.mul : income(g2, nat);
     const lines = [
       { key: "capital", label: budget ? "The capital and the state" : "The state", amount: seat3 },
       { key: "factories", label: "Factories at home", amount: facHome, count: nHome },
@@ -6800,9 +7201,9 @@
       { key: "peace", label: "At peace: industry at half speed", amount: before * (peace - 1) },
       { key: "sea", label: "Cargoes sunk at sea", amount: afterSea - atPeace },
       { key: "air", label: "Bombing of industry", amount: afterAir - afterSea },
-      { key: "tech", label: tech >= 1 ? "Better production methods" : "Production methods behind the times", amount: afterAir * (tech - 1) },
-      { key: "level", label: `Difficulty: ${levelOf(g2).name}`, amount: afterAir * tech * (hard - 1) },
-      { key: "trait", label: gift.mulBy, amount: afterAir * tech * hard * (gift.mul - 1) }
+      { key: "tech", label: tech2 >= 1 ? "Better production methods" : "Production methods behind the times", amount: afterAir * (tech2 - 1) },
+      { key: "level", label: `Difficulty: ${levelOf(g2).name}`, amount: afterAir * tech2 * (hard - 1) },
+      { key: "trait", label: gift.mulBy, amount: afterAir * tech2 * hard * (gift.mul - 1) }
     ];
     const costs = upkeep(g2, nat);
     const upkeepTotal2 = costs.reduce((s, l) => s + l.amount, 0);
@@ -6825,17 +7226,17 @@
   function income(g2, nat) {
     const n = g2.nations[nat];
     if (budgeted(g2)) {
-      let sum = 0, seat3 = n.offmap ? BUDGET.capital : 0;
+      let sum2 = 0, seat3 = n.offmap ? BUDGET.capital : 0;
       for (const r of g2.regions) {
         if (r.ctrl !== nat) continue;
         const y = provinceYield(g2, r, nat);
-        sum += y.land + y.port + y.oil + y.fac;
+        sum2 += y.land + y.port + y.oil + y.fac;
         seat3 += y.capital;
       }
-      sum += seat3 + (n.offmap?.industry ?? 0);
+      sum2 += seat3 + (n.offmap?.industry ?? 0);
       const trade2 = tradePartners(g2, nat).length * DIPLOMACY.tradeIncome;
       const gift = traitMoney(g2, nat);
-      return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade2 + gift.flat) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry") * incomeMul(g2, nat) * gift.mul;
+      return (sum2 * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade2 + gift.flat) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry") * incomeMul(g2, nat) * gift.mul;
     }
     let fac = 0;
     for (const r of g2.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
@@ -6874,6 +7275,7 @@
     const r = g2.regions[region];
     const cost = corpsCost(g2, nat, kind);
     if (!n.alive || !spec2 || !r || !canRaiseKind(g2, nat, r, kind) || n.pp < cost) return null;
+    if (locked(g2, nat, `corps:${kind}`)) return null;
     const old = revive !== void 0 ? revivable(g2, nat, kind).find((f) => f.id === revive) : void 0;
     if (revive !== void 0 && !old) return null;
     n.pp -= cost;
@@ -6886,11 +7288,24 @@
     const n = g2.nations[nat];
     const u = eliteOf(nat);
     const r = g2.regions[region];
-    if (!n.alive || !u || whyNoElite(g2, nat) !== null || !r || !canRaiseKind(g2, nat, r, u.kind) || n.pp < u.cost) return null;
+    if (!n.alive || !u || whyNoElite(g2, nat) !== null || locked(g2, nat, `corps:${u.kind}`) || !r || !canRaiseKind(g2, nat, r, u.kind) || n.pp < u.cost) return null;
     n.pp -= u.cost;
     const no = (g2.flags[`elite:${nat}`] ?? 0) + 1;
     g2.flags[`elite:${nat}`] = no;
     const b = { id: g2.nextBuild++, what: "corps", kind: u.kind, divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g2.turn, eta: g2.turn + u.months, cost: u.cost, elite: u.id };
+    n.queue.push(b);
+    return b;
+  }
+  function orderPara(g2, nat, region) {
+    const n = g2.nations[nat];
+    const u = TECH.units.para;
+    const r = g2.regions[region];
+    const cost = priceOf(g2, nat, "para", u.cost);
+    if (!n.alive || whyNoPara(g2, nat) !== null || !r || !canRaiseKind(g2, nat, r, "inf") || n.pp < cost) return null;
+    n.pp -= cost;
+    const no = (g2.flags[`para:${nat}`] ?? 0) + 1;
+    g2.flags[`para:${nat}`] = no;
+    const b = { id: g2.nextBuild++, what: "corps", kind: "inf", divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g2.turn, eta: g2.turn + u.months, cost, airborne: true };
     n.queue.push(b);
     return b;
   }
@@ -6916,6 +7331,7 @@
     if (i < 0 || n.queue[i].ordered !== g2.turn) return false;
     n.pp += n.queue[i].cost;
     if (n.queue[i].elite) g2.flags[`elite:${nat}`] = (g2.flags[`elite:${nat}`] ?? 1) - 1;
+    else if (n.queue[i].airborne) g2.flags[`para:${nat}`] = (g2.flags[`para:${nat}`] ?? 1) - 1;
     else if (n.queue[i].what === "corps" && n.queue[i].revive === void 0) n.corpsNo--;
     n.queue.splice(i, 1);
     return true;
@@ -6946,7 +7362,7 @@
       if (!at && n.capital >= 0 && room2(g2.regions[n.capital])) at = g2.regions[n.capital];
       if (!at) at = g2.regions.find((x) => room2(x) && x.fac > 0) ?? g2.regions.find(room2) ?? null;
       if (!at) continue;
-      const c = addCorps(g2, nat, b.name, b.kind, b.divs, at.id, { xp: nat === g2.human ? raisedXp(g2, nat) : 0.05 });
+      const c = addCorps(g2, nat, b.name, b.kind, b.divs, at.id, { xp: nat === g2.human ? raisedXp(g2, nat) : 0.05, airborne: b.airborne });
       c.org = 0.7;
       if (b.elite) c.elite = b.elite;
       const old = b.revive !== void 0 ? fallenOf(g2, b.revive) : void 0;
@@ -6965,7 +7381,7 @@
     let spare = budgeted(g2) ? income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
     const slots = () => n.queue.filter((b) => b.what === "corps" && b.kind !== "eng" || b.what === "fort").length;
     const u = budgeted(g2) ? eliteOf(nat) : null;
-    if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g2, nat) === null) {
+    if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g2, nat) === null && !locked(g2, nat, `corps:${u.kind}`)) {
       const at = raiseSite(g2, nat, u.kind, cap4.id), cost = corpsUpkeep(u.kind, u.divs);
       const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
       if (at >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && orderElite(g2, nat, at)) spare -= cost;
@@ -6973,7 +7389,7 @@
     while (slots() < 2) {
       let kind = home >= 20 && n.corpsNo % 3 === 2 ? "arm" : "inf";
       let at = budgeted(g2) ? raiseSite(g2, nat, kind, cap4.id) : cap4.id;
-      if (at < 0) {
+      if (at < 0 || locked(g2, nat, `corps:${kind}`)) {
         kind = "inf";
         at = cap4.id;
       }
@@ -7914,7 +8330,7 @@
     return { mud: false, winter: false, text: "Clear campaigning weather." };
   }
   function frozen(g2, nat, r) {
-    return weather(g2).winter && EASTERN.deepOwners.includes(r.owner) && !EASTERN.winter.hardy.includes(nat);
+    return weather(g2).winter && EASTERN.deepOwners.includes(r.owner) && !EASTERN.winter.hardy.includes(nat) && !winterReady(g2, nat);
   }
   function lineDrag(g2, c, to) {
     if (to.terrain === DESERT.terrain) {
@@ -8285,8 +8701,8 @@
     A *= 1 + 0.3 * airEdge;
     D *= 1 - 0.2 * airEdge;
     D = Math.max(D, 0.01);
-    const sum = (cs) => cs.reduce((s, c) => s + men(c), 0).toLocaleString("en-US");
-    lines.push({ label: "Forces", value: `${attackers2.length} corps, ${sum(attackers2)} men, against ${defenders.length} corps, ${sum(defenders)} men` });
+    const sum2 = (cs) => cs.reduce((s, c) => s + men(c), 0).toLocaleString("en-US");
+    lines.push({ label: "Forces", value: `${attackers2.length} corps, ${sum2(attackers2)} men, against ${defenders.length} corps, ${sum2(defenders)} men` });
     lines.push({ label: "Terrain", value: target.terrain[0].toUpperCase() + target.terrain.slice(1), effect: TERRAIN_DEF[target.terrain] > 1 ? `Defenders fight ${Math.round((TERRAIN_DEF[target.terrain] - 1) * 100)}% stronger` : "Open ground, no help to the defender" });
     if (wide) {
       const a = groundLine(g2, attackers2.filter((c) => !barred(g2, c, target)), target, false), d = groundLine(g2, defenders, target, true);
@@ -8381,7 +8797,7 @@
       const a = giftA !== 1 ? traitNames(g2, attackers2, target, "attack", !land2) : [], d = giftD !== 1 ? traitNames(g2, defenders, target, "defence") : [];
       const say = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
       lines.push({
-        label: "National abilities",
+        label: "Abilities and technology",
         value: [a.length ? `Attacking: ${say(a)}` : "", d.length ? `Defending: ${say(d)}` : ""].filter(Boolean).join(". "),
         effect: [giftA !== 1 ? `Attack up as much as ${Math.round((giftA - 1) * 100)}% for the corps it covers` : "", giftD !== 1 ? `${giftA !== 1 ? "defence" : "Defence"} up as much as ${Math.round((giftD - 1) * 100)}% for the corps it covers` : ""].filter(Boolean).join(", ")
       });
@@ -8838,8 +9254,8 @@
     if (!plan || !n.atWar.length) return;
     const key2 = `mobilised:${nat}`;
     if (g2.flags[key2] === void 0) g2.flags[key2] = g2.turn;
-    const month = g2.turn - g2.flags[key2];
-    const count2 = plan.perMonth[month] ?? plan.after;
+    const month2 = g2.turn - g2.flags[key2];
+    const count2 = plan.perMonth[month2] ?? plan.after;
     const enemyNear = (r) => r.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl));
     for (let k = 0; k < count2; k++) {
       let best = null, bs = 1e9;
@@ -8855,7 +9271,7 @@
       const c = addCorps(g2, nat, `${ordinal(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
       c.org = 0.7;
     }
-    if (count2 > 0 && month === 0) headline(g2, "event", `${n.name} orders general mobilisation.`, nat);
+    if (count2 > 0 && month2 === 0) headline(g2, "event", `${n.name} orders general mobilisation.`, nat);
     const close = (r) => {
       const seen = /* @__PURE__ */ new Set([r.id]);
       let ring = [r.id];
@@ -8872,7 +9288,7 @@
     };
     for (const [when, place2, lv] of plan.works ?? []) {
       const r = g2.byName[place2];
-      const due = when === month || g2.flags.open === 1 && month >= 1 && month < when && !!r && close(r);
+      const due = when === month2 || g2.flags.open === 1 && month2 >= 1 && month2 < when && !!r && close(r);
       if (!due || !r || r.ctrl !== nat || (r.fort?.lv ?? 0) >= lv) continue;
       r.fort = { lv, vs: r.fort?.vs ?? [nat] };
       headline(g2, "event", `Defence lines are dug around ${r.name}.`, nat, r.id);
@@ -9027,9 +9443,9 @@
     }
     for (const [reg, ring] of rings) {
       const key2 = `cut:${reg}`;
-      const fresh = (g2.flags[key2] ?? -99) < g2.turn - 1;
+      const fresh2 = (g2.flags[key2] ?? -99) < g2.turn - 1;
       g2.flags[key2] = g2.turn;
-      if (!fresh || ring.corps < 3 || ring.men < 6e4) continue;
+      if (!fresh2 || ring.corps < 3 || ring.men < 6e4) continue;
       g2.flags[`ring:${reg}`] = g2.turn;
       const who = Object.keys(ring.by).sort((a, b) => ring.by[b] - ring.by[a]);
       const adj = who.map((id) => g2.nations[id].adj).join(" and ");
@@ -9056,6 +9472,7 @@
     navalUpkeep(g2, nat);
     airUpkeep(g2, nat);
     researchTick(g2, nat);
+    techTick(g2, nat);
     computeSupply(g2);
     cutOffNews(g2);
     const earned = income(g2, nat);
@@ -9366,6 +9783,7 @@
     }
     startEngineers(g2);
     openTraits(g2);
+    openTech(g2);
     g2.supplyDirty = true;
     return g2;
   }
@@ -9505,11 +9923,11 @@
     const open = [];
     const doors = f.edge.filter((id) => f.depth[id] === 1);
     const push = (id) => {
-      let sum = 0;
+      let sum2 = 0;
       for (const j of g2.regions[id].nb) if (allied(g2, nat, g2.regions[j].ctrl)) {
-        for (const u of g2.regions[j].units) if (u.nat === nat && u.kind !== "fort" && !u.dead) sum += atkP(g2, u);
+        for (const u of g2.regions[j].units) if (u.nat === nat && u.kind !== "fort" && !u.dead) sum2 += atkP(g2, u);
       }
-      return sum;
+      return sum2;
     };
     const force2 = placed ? doors.map(push) : [];
     const floor = OPEN.foothold * Math.max(0, ...force2);
@@ -9656,8 +10074,8 @@
     for (const f of real) {
       const since = onSince(g2, nat, f);
       if (since) {
-        const fresh = g2.turn - since < 2 || pushed && f.enemies.some((e) => flag2(g2, `st:pushed:${nat}:${e}`));
-        if (fresh || f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt)) setOn(g2, nat, f, since);
+        const fresh2 = g2.turn - since < 2 || pushed && f.enemies.some((e) => flag2(g2, `st:pushed:${nat}:${e}`));
+        if (fresh2 || f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt)) setOn(g2, nat, f, since);
         else {
           setOn(g2, nat, f, 0);
           for (const e of f.enemies) g2.flags[`st:rest:${nat}:${e}`] = g2.turn + OPEN.rest;
@@ -10626,7 +11044,7 @@
           seen.add(j);
           next.push(j);
           const foes = hostileUnits(g2, g2.regions[j], nat).filter((u) => u.kind !== "fort").map((u) => atkPower(g2, u)).sort((a, b) => b - a);
-          worst = Math.max(worst, foes.slice(0, frontage(cap4)).reduce((sum, p) => sum + p, 0));
+          worst = Math.max(worst, foes.slice(0, frontage(cap4)).reduce((sum2, p) => sum2 + p, 0));
         }
         ring = next;
       }
@@ -11025,6 +11443,19 @@
   }
   function orderCancelBuild(g2, id) {
     return humanUp(g2) && cancelBuild(g2, g2.human, id);
+  }
+  function techTree(g2) {
+    return g2.human ? techView(g2, g2.human) : null;
+  }
+  function whyNotOrderResearch(g2, id) {
+    if (!g2.human) return "Nobody is at the controls.";
+    return whyNotResearch(g2, g2.human, id);
+  }
+  function orderResearch(g2, id) {
+    return humanUp(g2) && startResearch(g2, g2.human, id);
+  }
+  function orderStopResearch(g2, id) {
+    return humanUp(g2) && stopResearch(g2, g2.human, id);
   }
   function orderTeams(g2, field, teams2) {
     return humanUp(g2) && setTeams(g2, g2.human, field, teams2);
@@ -11694,10 +12125,18 @@
       })),
       // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
       // branch fields its later models early, and one that neglects it keeps the old ones longer.
-      designs: Object.fromEntries(Object.values(s.nations).filter((n) => n.lab && n.alive).map((n) => [
-        n.id,
-        ["armour", "fighters", "bombers"].map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab.clock[f] - n.lab.months)) + 7) / 12))
-      ])),
+      designs: Object.fromEntries(Object.values(s.nations).filter((n) => n.alive && (n.lab || techOf(s, n.id))).map((n) => {
+        const year = 1939 + Math.floor((Math.max(1, s.turn) + 7) / 12);
+        if (techOf(s, n.id)) {
+          const armour = !hasTech(s, n.id, "mediums") ? 1939 : !hasTech(s, n.id, "heavies") ? Math.min(year, 1942) : Math.max(year, 1943);
+          const fighters = hasTech(s, n.id, "escorts") ? Math.max(year, 1943) : Math.min(year, 1941);
+          const bombers = hasTech(s, n.id, "heavybombers") ? Math.max(year, 1942) : Math.min(year, 1941);
+          return [n.id, [armour, fighters, bombers]];
+        }
+        return [n.id, ["armour", "fighters", "bombers"].map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab.clock[f] - n.lab.months)) + 7) / 12))];
+      })),
+      // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
+      idle: s.human ? idleTeams(s, s.human) : 0,
       // The members of the League, the third alliance: their ground is shown in its own colour.
       league: leagueMembers(s).map((n) => n.id),
       nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
@@ -11760,7 +12199,7 @@
         home: s.regions[p.id].owner === me
       })),
       orders,
-      onOrder: orders.reduce((sum, o) => sum + o.cost, 0)
+      onOrder: orders.reduce((sum2, o) => sum2 + o.cost, 0)
     };
   }
   function orderLine(s, b) {
@@ -11782,9 +12221,9 @@
     {
       const ctrl = s.regions.map((r) => r.ctrl);
       const r0 = s.reports.length;
-      const month = s.turn;
+      const month2 = s.turn;
       const nat = stepAI(s);
-      if (s.human && s.turn !== month) judgeGoals(s, s.human);
+      if (s.human && s.turn !== month2) judgeGoals(s, s.human);
       if (!steps) return;
       const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
       const reps = s.reports.slice(r0);
@@ -11856,7 +12295,7 @@
     let text = histories.get(from);
     if (!text) {
       let latest = 0;
-      for (const month of histories.keys()) if (month < from && month > latest) latest = month;
+      for (const month2 of histories.keys()) if (month2 < from && month2 > latest) latest = month2;
       const h = (latest ? loadGame(histories.get(latest)) : null) ?? createGame(seed, null);
       while (h.turn < from) runTurnAI(h);
       text = saveGame(h);
@@ -12014,8 +12453,8 @@
     const steps = [];
     let fallen = null;
     if (!s.human) {
-      const month = s.turn;
-      for (let guard = 0; guard < 80 && s.turn === month; guard++) stepOne(s, steps);
+      const month2 = s.turn;
+      for (let guard = 0; guard < 80 && s.turn === month2; guard++) stepOne(s, steps);
     } else {
       if (onEve(s)) endEve(s);
       else {
@@ -12374,7 +12813,7 @@
     const divs = fieldArmy(s, on).toLocaleString("en-US");
     const lines = [];
     lines.push(f.joins ? `${The} joins ${blocOf(f.joins)} the moment it is attacked, and its ${divs} divisions fight for them.` : `${The} and its ${divs} divisions are at war with you from today.`);
-    if (f.league.length) lines.push(`The League stands by it. ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${listOf3(f.league.map((x) => theName2(s, x)))} ${f.league.length === 1 ? "goes" : "go"} to war with you the same day, with ${f.league.reduce((sum, id) => sum + fieldArmy(s, id), 0).toLocaleString("en-US")} divisions between them.`);
+    if (f.league.length) lines.push(`The League stands by it. ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${listOf3(f.league.map((x) => theName2(s, x)))} ${f.league.length === 1 ? "goes" : "go"} to war with you the same day, with ${f.league.reduce((sum2, id) => sum2 + fieldArmy(s, id), 0).toLocaleString("en-US")} divisions between them.`);
     if (f.trade) lines.push(`Its trade ends. ${The} trades with you today, worth ${trade} a month to your treasury.`);
     if (f.sneak > 1) lines.push(`Surprise. It is at peace and not expecting you: this month your attacks on its ground are ${Math.round((f.sneak - 1) * 100)}% stronger. Next month the bonus is gone.`);
     else if (f.ready === "war") lines.push("No surprise: it is already at war with your side and its army is ready.");
@@ -12559,7 +12998,7 @@
       const ahead = Math.round(monthsAhead(lab, f));
       const eta = arrival(s, me.id, f);
       const k = lead(s, me.id, f);
-      const pct3 = Math.round(spec2.per * k * 100);
+      const pct4 = Math.round(spec2.per * k * 100);
       const n = lab.teams[f];
       const at = (t) => Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS;
       return {
@@ -12569,7 +13008,7 @@
         pace: ahead > 0 ? `${ahead} month${ahead === 1 ? "" : "s"} ahead` : ahead < 0 ? `${-ahead} month${ahead === -1 ? "" : "s"} behind` : "On history's schedule",
         now: cur?.name ?? "nothing yet",
         next: next ? `Next: ${next.name}. History had it in ${when(next.at)}; ${eta === null ? "at this pace it never comes" : `yours is due ${when(eta)}`}.` : "The designers have nothing further on the drawing board.",
-        effect: k ? `${spec2.who}: ${pct3 > 0 ? "+" : ""}${pct3}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
+        effect: k ? `${spec2.who}: ${pct4 > 0 ? "+" : ""}${pct4}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
         good: k > 0,
         teams: n,
         max: MAX_TEAMS,
@@ -12595,6 +13034,51 @@
       fields,
       others
     };
+  }
+  function tech() {
+    const s = game();
+    const t = techTree(s);
+    const me = s.human ? s.nations[s.human] : null;
+    if (!t || !me) return { ok: false };
+    const up = humanUp(s) && !onEve(s);
+    return {
+      ok: true,
+      nation: me.name,
+      date: turnToDate(s.turn).label,
+      up,
+      teams: t.teams,
+      busy: t.busy,
+      idle: Math.max(0, t.teams - t.busy),
+      done: t.done,
+      total: t.total,
+      eras: t.eras,
+      branches: t.branches,
+      nodes: t.nodes.map((n) => ({
+        id: n.id,
+        branch: n.branch,
+        tier: n.tier,
+        name: n.name,
+        text: n.text,
+        rule: n.rule,
+        state: n.state,
+        months: n.months,
+        left: n.left,
+        of: n.of,
+        needs: n.needs.filter((x) => !x.done).map((x) => x.name),
+        can: up && n.state === "ready" && n.why === null,
+        why: n.state === "ready" ? !up ? "It is not your month." : n.why ?? "" : "",
+        stop: up && n.state === "work"
+      }))
+    };
+  }
+  function techStart(id) {
+    const s = game();
+    const why = whyNotOrderResearch(s, id);
+    return { ok: orderResearch(s, id), why: why ?? "", view: view() };
+  }
+  function techStop(id) {
+    const s = game();
+    return { ok: orderStopResearch(s, id), view: view() };
   }
   function teams(field, n) {
     const s = game();
@@ -12799,6 +13283,9 @@
     invite: inviteNation,
     abilities,
     research,
+    tech,
+    techStart,
+    techStop,
     teams,
     bureau,
     generals,

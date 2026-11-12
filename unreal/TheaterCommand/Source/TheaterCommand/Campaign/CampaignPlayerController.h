@@ -324,6 +324,10 @@ public:
 	void OpenResearch();
 	void CloseResearch();
 	void SetResearchTeams(const FString& Field, int32 Teams);
+	void StartTech(const FString& Id);
+	void StopTech(const FString& Id);
+	/** Research teams of the player's with nothing to do, for the badge on the button. */
+	int32 GetIdleTeams() const;
 	void FoundResearchBureau();
 
 	/** The foreign office: the powers at war, the countries at peace, courting them and declaring war. */

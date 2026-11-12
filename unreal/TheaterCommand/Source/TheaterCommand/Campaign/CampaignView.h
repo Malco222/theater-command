@@ -146,6 +146,7 @@ struct FCampaignView
 	FTreasury Treasury;
 	TArray<FString> Declarable; // the countries the player could declare war on this month
 	TArray<FString> League; // the members of the League, the third alliance
+	int32 IdleTeams = 0; // research teams of the player's with nothing to do
 	TMap<FString, FIntVector> DesignYears; // by nation: the year its tank, fighter and bomber designs have reached
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown
@@ -478,6 +479,34 @@ struct FResearchField
 	TArray<FResearchMark> Marks;
 };
 
+/** One technology of the grand campaign's tree. */
+struct FTechNode
+{
+	FString Id;
+	FString Branch; // land, air, naval, industry or doctrine
+	int32 Tier = 1; // 1 to 4
+	FString Name;
+	FString Text; // what it is
+	FString Rule; // what it does
+	FString State; // done, work, ready or locked
+	FString Needs; // the technologies it still waits on, in a line
+	FString Why; // why a free team cannot begin it now
+	int32 Months = 0; // a team's work if begun now
+	int32 Left = 0; // for one in work: months still to go
+	int32 Of = 0; // and the months it was begun with
+	bool bCan = false;
+	bool bStop = false;
+};
+
+struct FTechBranch
+{
+	FString Id;
+	FString Label;
+	FString Text;
+	int32 Done = 0;
+	int32 Total = 0;
+};
+
 /** Another power's designs in service. */
 struct FResearchPower
 {
@@ -507,6 +536,14 @@ struct FResearch
 	FString BureauWhy;
 	TArray<FResearchField> Fields;
 	TArray<FResearchPower> Others;
+	// The grand campaign: the technology tree takes the place of the branches above.
+	bool bTree = false;
+	int32 Busy = 0;
+	int32 Done = 0;
+	int32 Total = 0;
+	TArray<FString> Eras; // the name of each step of the tree, by tier
+	TArray<FTechBranch> Branches;
+	TArray<FTechNode> Nodes;
 	int32 Revision = 0;
 };
 

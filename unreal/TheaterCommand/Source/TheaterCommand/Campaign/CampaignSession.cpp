@@ -356,6 +356,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
 	Object->TryGetStringArrayField(TEXT("league"), Out.League);
+	Object->TryGetNumberField(TEXT("idle"), Out.IdleTeams);
 	const TSharedPtr<FJsonObject>* Designs = nullptr;
 	if (Object->TryGetObjectField(TEXT("designs"), Designs))
 	{
@@ -1634,10 +1635,92 @@ bool FCampaignSession::SpendSkill(int32 GeneralId, const FString& Skill)
 	return bOk;
 }
 
+bool FCampaignSession::StartTech(const FString& Id, FString& OutWhy)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("techStart"), FString::Printf(TEXT("[%s]"), *JsonQuote(Id)), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("why"), OutWhy);
+		TakeView(Object);
+	}
+	return bOk;
+}
+
+bool FCampaignSession::StopTech(const FString& Id)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("techStop"), FString::Printf(TEXT("[%s]"), *JsonQuote(Id)), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		TakeView(Object);
+	}
+	return bOk;
+}
+
 FResearch FCampaignSession::Research()
 {
 	FResearch Out;
 	TSharedPtr<FJsonObject> Object;
+	// The grand campaign has a technology tree; a historical scenario keeps history's clock and its design teams.
+	bool bTree = false;
+	if (CallRules(TEXT("tech"), TEXT("[]"), Object) && Object.IsValid() && Object->TryGetBoolField(TEXT("ok"), bTree) && bTree)
+	{
+		Out.bValid = Out.bTree = Out.bOwn = true;
+		Object->TryGetStringField(TEXT("nation"), Out.Nation);
+		Object->TryGetStringField(TEXT("date"), Out.Date);
+		Object->TryGetBoolField(TEXT("up"), Out.bUp);
+		Object->TryGetNumberField(TEXT("teams"), Out.Teams);
+		Object->TryGetNumberField(TEXT("busy"), Out.Busy);
+		Object->TryGetNumberField(TEXT("idle"), Out.Free);
+		Object->TryGetNumberField(TEXT("done"), Out.Done);
+		Object->TryGetNumberField(TEXT("total"), Out.Total);
+		Object->TryGetStringArrayField(TEXT("eras"), Out.Eras);
+		Out.Note = TEXT("Each research team works on one technology at a time, and a team with nothing to do stays idle until you give it work. A technology begun before its time takes longer. Rest the mouse on one to read what it is.");
+		const TArray<TSharedPtr<FJsonValue>>* Branches = nullptr;
+		if (Object->TryGetArrayField(TEXT("branches"), Branches))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Branches)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FTechBranch& Branch = Out.Branches.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("id"), Branch.Id);
+				Entry->TryGetStringField(TEXT("label"), Branch.Label);
+				Entry->TryGetStringField(TEXT("text"), Branch.Text);
+				Entry->TryGetNumberField(TEXT("done"), Branch.Done);
+				Entry->TryGetNumberField(TEXT("total"), Branch.Total);
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Nodes = nullptr;
+		if (Object->TryGetArrayField(TEXT("nodes"), Nodes))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Nodes)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FTechNode& Node = Out.Nodes.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("id"), Node.Id);
+				Entry->TryGetStringField(TEXT("branch"), Node.Branch);
+				Entry->TryGetNumberField(TEXT("tier"), Node.Tier);
+				Entry->TryGetStringField(TEXT("name"), Node.Name);
+				Entry->TryGetStringField(TEXT("text"), Node.Text);
+				Entry->TryGetStringField(TEXT("rule"), Node.Rule);
+				Entry->TryGetStringField(TEXT("state"), Node.State);
+				Entry->TryGetStringField(TEXT("why"), Node.Why);
+				Entry->TryGetNumberField(TEXT("months"), Node.Months);
+				Entry->TryGetNumberField(TEXT("left"), Node.Left);
+				Entry->TryGetNumberField(TEXT("of"), Node.Of);
+				Entry->TryGetBoolField(TEXT("can"), Node.bCan);
+				Entry->TryGetBoolField(TEXT("stop"), Node.bStop);
+				TArray<FString> Needs;
+				Entry->TryGetStringArrayField(TEXT("needs"), Needs);
+				Node.Needs = FString::Join(Needs, TEXT(", "));
+			}
+		}
+		return Out;
+	}
+	Object.Reset();
 	if (!CallRules(TEXT("research"), TEXT("[]"), Object) || !Object.IsValid())
 	{
 		return Out;

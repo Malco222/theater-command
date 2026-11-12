@@ -219,7 +219,7 @@ namespace
 								SNew(SHorizontalBox)
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("Order corps, aircraft, ships, factories and other works.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenArsenal(); } return FReply::Handled(); })
 									[
@@ -228,7 +228,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("Your generals: who commands what, who is waiting for a command, and the corps that have nobody.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGenerals(); } return FReply::Handled(); })
 									[
@@ -237,16 +237,23 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("The design offices: put design teams on the branches whose new weapons you want early.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenResearch(); } return FReply::Handled(); })
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("RESEARCH"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+										// Research teams never choose their own work: the button says when some stand idle.
+										SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 180))
+										.ColorAndOpacity_Lambda([this]() { return FSlateColor(Controller.IsValid() && Controller->GetIdleTeams() > 0 ? BrightBrass : Muted); })
+										.Text_Lambda([this]()
+										{
+											const int32 Idle = Controller.IsValid() ? Controller->GetIdleTeams() : 0;
+											return FText::FromString(Idle > 0 ? FString::Printf(TEXT("RESEARCH  \u00B7  %d IDLE"), Idle) : FString(TEXT("RESEARCH")));
+										})
 									]
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("The foreign office: who is at war, where every neutral stands, courting them, and declaring war.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenDiplomacy(); } return FReply::Handled(); })
 									[
@@ -255,7 +262,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 11.0f)).IsFocusable(false)
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenLedger(); } return FReply::Handled(); })
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("LEDGER"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
@@ -263,7 +270,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 11.0f)).IsFocusable(false)
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenRoll(); } return FReply::Handled(); })
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("HONOURS"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
@@ -271,7 +278,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("How to play: the table, a month, moving and attacking, and what every button is for.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGuide(); } return FReply::Handled(); })
 									[
@@ -280,7 +287,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 11.0f)).IsFocusable(false)
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMenu(); } return FReply::Handled(); })
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
@@ -890,7 +897,7 @@ namespace
 												.Text_Lambda([this]()
 												{
 													const FResearch* Labs = Controller.IsValid() ? &Controller->GetResearch() : nullptr;
-													return Labs ? FText::FromString(FString::Printf(TEXT("THE DESIGN OFFICES  \u00B7  %s  \u00B7  %s"), *Labs->Nation.ToUpper(), *Labs->Date.ToUpper())) : FText::GetEmpty();
+													return Labs ? FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), Labs->bTree ? TEXT("THE LABORATORIES") : TEXT("THE DESIGN OFFICES"), *Labs->Nation.ToUpper(), *Labs->Date.ToUpper())) : FText::GetEmpty();
 												})
 											]
 											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
@@ -903,6 +910,12 @@ namespace
 													if (!Labs || !Labs->bOwn)
 													{
 														return FText::FromString(TEXT("No design offices of its own"));
+													}
+													if (Labs->bTree)
+													{
+														return FText::FromString(Labs->Free > 0
+															? FString::Printf(TEXT("%d research team%s, %d idle  \u00B7  %d of %d technologies"), Labs->Teams, Labs->Teams == 1 ? TEXT("") : TEXT("s"), Labs->Free, Labs->Done, Labs->Total)
+															: FString::Printf(TEXT("%d research team%s, all at work  \u00B7  %d of %d technologies"), Labs->Teams, Labs->Teams == 1 ? TEXT("") : TEXT("s"), Labs->Done, Labs->Total));
 													}
 													return FText::FromString(Labs->Free > 0
 														? FString::Printf(TEXT("%d design teams, %d idle"), Labs->Teams, Labs->Free)
@@ -933,7 +946,9 @@ namespace
 										]
 										+ SHorizontalBox::Slot().FillWidth(0.75f)
 										[
-											SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(ResearchOthers, SVerticalBox)]
+											SNew(SScrollBox)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetResearch().bTree ? EVisibility::Collapsed : EVisibility::Visible; })
+											+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(ResearchOthers, SVerticalBox)]
 										]
 									]
 								]
@@ -1856,8 +1871,132 @@ namespace
 		}
 
 		/** The design offices: the branches two abreast, and beside them more teams to found and what the other powers have. */
+		/** One technology of the tree: its name, where it stands, what it does, and the button that starts or stops it. */
+		TSharedRef<SWidget> MakeTech(const FTechNode& Node)
+		{
+			const bool bDone = Node.State == TEXT("done"), bWork = Node.State == TEXT("work"), bReady = Node.State == TEXT("ready");
+			const FLinearColor Ink = bDone ? Gain : bWork ? BrightBrass : bReady ? Cream : Faint;
+			FString Stands;
+			if (bDone)
+			{
+				Stands = TEXT("Researched");
+			}
+			else if (bWork)
+			{
+				Stands = FString::Printf(TEXT("In work: %d month%s to go"), Node.Left, Node.Left == 1 ? TEXT("") : TEXT("s"));
+			}
+			else if (bReady)
+			{
+				Stands = FString::Printf(TEXT("%d month%s of a team's work"), Node.Months, Node.Months == 1 ? TEXT("") : TEXT("s"));
+			}
+			else
+			{
+				Stands = TEXT("Needs ") + Node.Needs;
+			}
+			TSharedRef<SVerticalBox> Card = SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(Node.Name)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Ink).AutoWrapText(true)
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Stands)).Font(Font(bWork ? TEXT("Bold") : TEXT("Regular"), 9)).ColorAndOpacity(bWork ? BrightBrass : Muted).AutoWrapText(true)
+				];
+			if (bWork && Node.Of > 0)
+			{
+				const float Share = FMath::Clamp(1.0f - static_cast<float>(Node.Left) / Node.Of, 0.0f, 1.0f);
+				Card->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).HeightOverride(3.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(FMath::Max(Share, 0.0001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(BrightBrass)]
+						+ SHorizontalBox::Slot().FillWidth(FMath::Max(1.0f - Share, 0.0001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.1f))]
+					]
+				];
+			}
+			Card->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(Node.Rule)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bDone ? Muted : Faint).AutoWrapText(true)
+			];
+			if (Node.bCan)
+			{
+				Card->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 4.0f, 0.0f, 0.0f)
+				[
+					OfficeButton(TEXT("RESEARCH"), BrightBrass, true, TEXT("Put a free research team to work on this."), [this, Id = Node.Id]() { if (Controller.IsValid()) { Controller->StartTech(Id); } })
+				];
+			}
+			else if (bReady && !Node.Why.IsEmpty())
+			{
+				Card->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Node.Why)).Font(Font(TEXT("Italic"), 9)).ColorAndOpacity(Faint).AutoWrapText(true)
+				];
+			}
+			if (Node.bStop)
+			{
+				Card->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 4.0f, 0.0f, 0.0f)
+				[
+					OfficeButton(TEXT("STOP"), Muted, true, TEXT("Take the team off this. The work done on it is lost."), [this, Id = Node.Id]() { if (Controller.IsValid()) { Controller->StopTech(Id); } })
+				];
+			}
+			return SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(9.0f, 6.0f, 9.0f, 7.0f))
+				.ToolTipText(FText::FromString(Node.Text + TEXT("\n") + Node.Rule))
+				[
+					Card
+				];
+		}
+
+		/** The technology tree: a column for each branch, and down each column the four steps of the war. */
+		void LayOutTech(const FResearch& Labs)
+		{
+			ResearchFields->ClearChildren();
+			ResearchOthers->ClearChildren();
+			TSharedRef<SHorizontalBox> Columns = SNew(SHorizontalBox);
+			for (int32 Column = 0; Column < Labs.Branches.Num(); ++Column)
+			{
+				const FTechBranch& Branch = Labs.Branches[Column];
+				TSharedRef<SVerticalBox> List = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d OF %d"), *Branch.Label.ToUpper(), Branch.Done, Branch.Total))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 6.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Branch.Text)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+					];
+				for (int32 Tier = 1; Tier <= 4; ++Tier)
+				{
+					bool bHeaded = false;
+					for (const FTechNode& Node : Labs.Nodes)
+					{
+						if (Node.Branch != Branch.Id || Node.Tier != Tier)
+						{
+							continue;
+						}
+						if (!bHeaded)
+						{
+							bHeaded = true;
+							List->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 4.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Labs.Eras.IsValidIndex(Tier) ? Labs.Eras[Tier].ToUpper() : FString())).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Faint)
+							];
+						}
+						List->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)[MakeTech(Node)];
+					}
+				}
+				Columns->AddSlot().FillWidth(1.0f).Padding(0.0f, 0.0f, Column == Labs.Branches.Num() - 1 ? 0.0f : 10.0f, 0.0f)[List];
+			}
+			ResearchFields->AddSlot().AutoHeight()[Columns];
+		}
+
 		void LayOutResearch(const FResearch& Labs)
 		{
+			if (Labs.bTree)
+			{
+				LayOutTech(Labs);
+				return;
+			}
 			ResearchFields->ClearChildren();
 			if (Labs.bOwn)
 			{

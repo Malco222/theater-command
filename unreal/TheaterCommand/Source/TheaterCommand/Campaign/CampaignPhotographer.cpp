@@ -597,8 +597,15 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (Shot.bResearch)
 	{
 		Controller->OpenResearch();
-		Controller->SetResearchTeams(TEXT("infantry"), 0);
-		Controller->SetResearchTeams(TEXT("armour"), 2);
+		if (Controller->GetResearch().bTree)
+		{
+			Controller->StartTech(TEXT("mediums")); // the grand campaign: a team is put to work on a technology
+		}
+		else
+		{
+			Controller->SetResearchTeams(TEXT("infantry"), 0);
+			Controller->SetResearchTeams(TEXT("armour"), 2);
+		}
 	}
 	if (Shot.bDiplomacy)
 	{

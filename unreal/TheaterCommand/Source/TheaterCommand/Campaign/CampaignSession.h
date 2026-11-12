@@ -122,6 +122,10 @@ public:
 	/** The design offices: every branch, the teams on it, and the other powers' designs. */
 	FResearch Research();
 
+	/** The grand campaign's tree: puts a free team to work on a technology (OutWhy says why not), or takes it off. */
+	bool StartTech(const FString& Id, FString& OutWhy);
+	bool StopTech(const FString& Id);
+
 	/** Puts this many design teams on a branch. */
 	bool SetTeams(const FString& Field, int32 Teams);
 

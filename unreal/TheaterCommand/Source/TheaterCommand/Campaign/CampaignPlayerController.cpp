@@ -682,6 +682,51 @@ void ACampaignPlayerController::SetResearchTeams(const FString& Field, int32 Tea
 	bResearchOpen = Research.bValid;
 }
 
+void ACampaignPlayerController::StartTech(const FString& Id)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bResearchOpen)
+	{
+		return;
+	}
+	FString Why;
+	if (Session->StartTech(Id, Why))
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+	}
+	else if (!Why.IsEmpty())
+	{
+		Notify(Why, 6.0);
+	}
+	const int32 Revision = Research.Revision + 1;
+	Research = Session->Research();
+	Research.Revision = Revision;
+	bResearchOpen = Research.bValid;
+}
+
+void ACampaignPlayerController::StopTech(const FString& Id)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bResearchOpen)
+	{
+		return;
+	}
+	if (Session->StopTech(Id))
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	}
+	const int32 Revision = Research.Revision + 1;
+	Research = Session->Research();
+	Research.Revision = Revision;
+	bResearchOpen = Research.bValid;
+}
+
+int32 ACampaignPlayerController::GetIdleTeams() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Session->GetView().bHumanUp ? Session->GetView().IdleTeams : 0;
+}
+
 void ACampaignPlayerController::FoundResearchBureau()
 {
 	FCampaignSession* Session = GetSession();
@@ -966,7 +1011,8 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("Every province you hold pays into your treasury each month. The treasury is at the top left: click it, or LEDGER, for the books.\n")
 		TEXT("The ARSENAL sells corps, aircraft, ships and works such as factories, shipyards, airfields and anti-aircraft guns. Click one of your own territories first, so the game knows where to build. Works you build stand on the map."));
 	Add(TEXT("RESEARCH AND GENERALS"),
-		TEXT("RESEARCH shows your design teams. A branch with one team keeps to history's dates. A second team brings its next designs early, and the new tanks and aircraft then appear on your pieces.\n")
+		TEXT("RESEARCH is where your research teams get their work. In the grand campaign it is a tree of technologies: pick one for each idle team, because a team never chooses for itself, and the button at the top says when some are idle. ")
+		TEXT("Some technologies unlock orders in the arsenal, and medium and heavy tanks, long-range fighters and heavy bombers change the models on your pieces. In a historical scenario research keeps to history's dates, and you move design teams between branches instead.\n")
 		TEXT("GENERALS lists your commanders. Give a waiting general a corps, promote an officer from the ranks, and spend the skill points your generals earn in battle. A corps with no general fights by the book."));
 	Add(TEXT("RIVERS, RAILWAYS AND ENGINEERS"),
 		TEXT("The great rivers are crossed at bridges. Blow the bridges and nothing on wheels or tracks can cross until engineers rebuild them. ")
