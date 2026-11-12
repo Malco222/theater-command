@@ -113,8 +113,10 @@ public:
 private:
 	void LoadMaterials();
 	void PaintGround();
-	void BuildTerrainMesh();
-	void BuildTerrainChunk(int32 ChunkX, int32 ChunkY);
+	void PrepareLand();
+	void UpdateLand(float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce);
+	UProceduralMeshComponent* BuildLandTile(int32 Level, int32 TileX, int32 TileY);
+	bool LandTileHasLand(int32 Level, int32 TileX, int32 TileY) const;
 	void BuildSeaMesh();
 	void BuildBorders();
 	void BuildTable();
@@ -257,8 +259,22 @@ private:
 	FCampaignTerrain Terrain;
 	float WoodsShown = -1.0f; // how thickly the woods are laid on at the moment
 	FCampaignGround Paint; // the table's colours, as pictures
-	int32 ChunksX = 0;
-	int32 ChunksY = 0;
+	// The land's mesh is cut into square tiles, each the same number of quads across. Near the eye the tiles are
+	// small and their quads fine; far off one tile covers the ground of four, sixteen or more, with quads to
+	// match. The colour comes from pictures and is as fine as ever at any distance; only the shape coarsens.
+	// A tile's key packs its level (0 the finest) and its place among the tiles of that level.
+	static uint64 LandKey(int32 Level, int32 TileX, int32 TileY) { return (static_cast<uint64>(Level) << 48) | (static_cast<uint64>(TileX) << 24) | static_cast<uint64>(TileY); }
+	TMap<uint64, TObjectPtr<UProceduralMeshComponent>> LandTiles; // the tiles standing on the table now
+	TArray<TArray<float>> LandHeights; // the heights at each level: level 1 has every second point of level 0, and so on
+	TArray<TArray<float>> LandCover; // the most land anywhere near each of those points, for telling which tiles are all sea
+	TArray<FIntPoint> LandSizes; // how many points each level has, across and down
+	int32 LandTopLevel = 0;
+	bool bLandShadows = false;
+
+	/** The tiles and the spare meshes, kept where the engine can see them. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> LandMeshes;
+	TArray<UProceduralMeshComponent*> SpareLandMeshes;
 
 	int32 SelectedRegion = INDEX_NONE;
 	int32 HoveredRegion = INDEX_NONE;

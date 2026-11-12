@@ -131,12 +131,12 @@ bool ACampaignMapActor::BuildMap()
 	// The land does not cast shadows of its own: its relief is already shaded into its paint, and having
 	// a model this large cast shadows every frame costs about a seventh of the frame for no visible gain.
 	// The pieces and town markers still cast theirs onto it. "-TheaterLandShadows" turns it back on to compare.
-	TerrainMesh->SetCastShadow(FParse::Param(FCommandLine::Get(), TEXT("TheaterLandShadows")));
+	bLandShadows = FParse::Param(FCommandLine::Get(), TEXT("TheaterLandShadows"));
 
 	LoadMaterials();
 	Terrain.Build(Data);
 	PaintGround();
-	BuildTerrainMesh();
+	PrepareLand();
 	BuildSeaMesh();
 	BuildBorders();
 	BuildTable();
@@ -303,9 +303,8 @@ UMaterialInterface* ACampaignMapActor::GetFlagMaterial(const FString& Tag)
 
 namespace
 {
-	// The land is cut into square pieces of this many grid cells, so that a change to part of the map
-	// only means rebuilding the pieces it touches.
-	constexpr int32 ChunkCells = 96;
+	// Each tile of the land is this many quads across, whatever its level.
+	constexpr int32 TileQuads = 64;
 }
 
 void ACampaignMapActor::PaintGround()
@@ -344,70 +343,287 @@ void ACampaignMapActor::PaintGround()
 	UE_LOG(LogTheater, Log, TEXT("Ground: %d x %d pixels of paint and three detail pictures made in %.2f s"), Paint.NX, Paint.NY, FPlatformTime::Seconds() - StartTime);
 }
 
-void ACampaignMapActor::BuildTerrainMesh()
+void ACampaignMapActor::PrepareLand()
 {
 	TerrainMesh->ClearAllMeshSections();
-	ChunksX = FMath::DivideAndRoundUp(Terrain.NX - 1, ChunkCells);
-	ChunksY = FMath::DivideAndRoundUp(Terrain.NY - 1, ChunkCells);
-	for (int32 ChunkY = 0; ChunkY < ChunksY; ++ChunkY)
+	for (UProceduralMeshComponent* Mesh : LandMeshes)
 	{
-		for (int32 ChunkX = 0; ChunkX < ChunksX; ++ChunkX)
+		if (Mesh)
 		{
-			BuildTerrainChunk(ChunkX, ChunkY);
+			Mesh->DestroyComponent();
 		}
 	}
-	UE_LOG(LogTheater, Log, TEXT("Land: %d x %d pieces"), ChunksX, ChunksY);
+	LandMeshes.Reset();
+	SpareLandMeshes.Reset();
+	LandTiles.Reset();
+
+	// The heights at every level. Each coarser level keeps every second point of the one below, each the
+	// average of itself and its neighbours there, so that far-off ground is smooth and not a jagged sample.
+	// Alongside, the most land near each point, so that a tile that is all open sea can be left out.
+	LandHeights.Reset();
+	LandCover.Reset();
+	LandSizes.Reset();
+	LandHeights.Add(Terrain.Height);
+	LandCover.Add(Terrain.Coverage);
+	LandSizes.Add(FIntPoint(Terrain.NX, Terrain.NY));
+	const double Longest = FMath::Max(Data.Width, Data.Height);
+	LandTopLevel = 0;
+	while (TileQuads * Terrain.Cell * (1 << LandTopLevel) < Longest * 0.5 && LandTopLevel < 12)
+	{
+		++LandTopLevel;
+	}
+	for (int32 Level = 1; Level <= LandTopLevel; ++Level)
+	{
+		const FIntPoint Fine = LandSizes[Level - 1];
+		const FIntPoint Coarse((Fine.X - 1) / 2 + 1, (Fine.Y - 1) / 2 + 1);
+		const TArray<float>& FineHeights = LandHeights[Level - 1];
+		const TArray<float>& FineCover = LandCover[Level - 1];
+		TArray<float> Heights, Cover;
+		Heights.SetNumUninitialized(Coarse.X * Coarse.Y);
+		Cover.SetNumUninitialized(Coarse.X * Coarse.Y);
+		for (int32 J = 0; J < Coarse.Y; ++J)
+		{
+			for (int32 I = 0; I < Coarse.X; ++I)
+			{
+				float Sum = 0.0f, Weight = 0.0f, Most = 0.0f;
+				for (int32 DJ = -1; DJ <= 1; ++DJ)
+				{
+					for (int32 DI = -1; DI <= 1; ++DI)
+					{
+						const int32 FI = FMath::Clamp(I * 2 + DI, 0, Fine.X - 1), FJ = FMath::Clamp(J * 2 + DJ, 0, Fine.Y - 1);
+						const float W = (DI == 0 ? 2.0f : 1.0f) * (DJ == 0 ? 2.0f : 1.0f);
+						Sum += FineHeights[FJ * Fine.X + FI] * W;
+						Weight += W;
+						Most = FMath::Max(Most, FineCover[FJ * Fine.X + FI]);
+					}
+				}
+				Heights[J * Coarse.X + I] = Sum / Weight;
+				Cover[J * Coarse.X + I] = Most;
+			}
+		}
+		LandHeights.Add(MoveTemp(Heights));
+		LandCover.Add(MoveTemp(Cover));
+		LandSizes.Add(Coarse);
+	}
+	UE_LOG(LogTheater, Log, TEXT("Land: %d levels of tiles, the finest %.0f map units across and the coarsest %.0f"),
+		LandTopLevel + 1, TileQuads * Terrain.Cell, TileQuads * Terrain.Cell * (1 << LandTopLevel));
+
+	// Stand the table's first tiles up at once, for the view the game opens on.
+	UpdateLand(12000.0f, FVector::ZeroVector, true);
 }
 
-void ACampaignMapActor::BuildTerrainChunk(int32 ChunkX, int32 ChunkY)
+bool ACampaignMapActor::LandTileHasLand(int32 Level, int32 TileX, int32 TileY) const
 {
-	const int32 Section = ChunkY * ChunksX + ChunkX;
-	const int32 CI = ChunkX * ChunkCells, CJ = ChunkY * ChunkCells;
-	const int32 I1 = FMath::Min(CI + ChunkCells, Terrain.NX - 1);
-	const int32 J1 = FMath::Min(CJ + ChunkCells, Terrain.NY - 1);
-	const int32 Stride = I1 - CI + 1;
-	TArray<int32> Remap;
-	Remap.Init(INDEX_NONE, Stride * (J1 - CJ + 1));
-	FCampaignMeshBuffers Buffers;
+	const FIntPoint Size = LandSizes[Level];
+	const TArray<float>& Cover = LandCover[Level];
+	const int32 I0 = TileX * TileQuads, J0 = TileY * TileQuads;
+	if (I0 >= Size.X - 1 || J0 >= Size.Y - 1)
+	{
+		return false; // off the edge of the map
+	}
+	const int32 I1 = FMath::Min(I0 + TileQuads, Size.X - 1), J1 = FMath::Min(J0 + TileQuads, Size.Y - 1);
+	for (int32 J = J0; J <= J1; ++J)
+	{
+		for (int32 I = I0; I <= I1; ++I)
+		{
+			if (Cover[J * Size.X + I] >= 0.3f)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
 
+UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(int32 Level, int32 TileX, int32 TileY)
+{
+	const FIntPoint Size = LandSizes[Level];
+	const TArray<float>& Heights = LandHeights[Level];
+	const TArray<float>& Cover = LandCover[Level];
+	const int32 Step = 1 << Level; // how many of the finest grid's points one quad of this tile spans
+	const int32 I0 = TileX * TileQuads, J0 = TileY * TileQuads;
+	const int32 I1 = FMath::Min(I0 + TileQuads, Size.X - 1), J1 = FMath::Min(J0 + TileQuads, Size.Y - 1);
+	const int32 Stride = I1 - I0 + 1;
+
+	FCampaignMeshBuffers Buffers;
+	TArray<int32> Remap;
+	Remap.Init(INDEX_NONE, Stride * (J1 - J0 + 1));
+	auto PointAt = [&](int32 I, int32 J, double Drop)
+	{
+		const double X = FMath::Min(I * Step * Terrain.Cell, Data.Width), Y = FMath::Min(J * Step * Terrain.Cell, Data.Height);
+		// The paint has one pixel for every point of the finest grid: this point's is at the middle of its pixel.
+		const FVector2D UV((FMath::Min(I * Step, Terrain.NX - 1) + 0.5) / Terrain.NX, (FMath::Min(J * Step, Terrain.NY - 1) + 0.5) / Terrain.NY);
+		return Buffers.AddVertex(MapToWorld(X, Y, Heights[J * Size.X + I] - Drop), FVector::UpVector, FColor::White, UV);
+	};
 	auto VertexAt = [&](int32 I, int32 J)
 	{
-		int32& Slot = Remap[(J - CJ) * Stride + (I - CI)];
+		int32& Slot = Remap[(J - J0) * Stride + (I - I0)];
 		if (Slot == INDEX_NONE)
 		{
-			const int32 Idx = Terrain.Index(I, J);
-			const double X = FMath::Min(I * Terrain.Cell, Data.Width);
-			const double Y = FMath::Min(J * Terrain.Cell, Data.Height);
-			const FVector2f Slope = Terrain.GradientAt(I, J) * VerticalScale;
-			const FVector Normal = FVector(Slope.Y, -Slope.X, 1.0).GetSafeNormal();
-			const FVector Tangent = FVector(0.0, 1.0, Slope.X).GetSafeNormal();
-			// The paint has one pixel for every grid point: this point's is at the middle of pixel (I, J).
-			Slot = Buffers.AddVertex(MapToWorld(X, Y, Terrain.Height[Idx]), Normal, FColor::White,
-				FVector2D((I + 0.5) / Terrain.NX, (J + 0.5) / Terrain.NY), Tangent);
+			Slot = PointAt(I, J, 0.0);
 		}
 		return Slot;
 	};
-
-	for (int32 J = CJ; J < J1; ++J)
+	auto HasQuad = [&](int32 I, int32 J)
 	{
-		for (int32 I = CI; I < I1; ++I)
+		if (I < I0 || J < J0 || I >= I1 || J >= J1)
 		{
-			// Sea bed well away from any shore is never seen: leave it out.
-			const float Most = FMath::Max(
-				FMath::Max(Terrain.Coverage[Terrain.Index(I, J)], Terrain.Coverage[Terrain.Index(I + 1, J)]),
-				FMath::Max(Terrain.Coverage[Terrain.Index(I, J + 1)], Terrain.Coverage[Terrain.Index(I + 1, J + 1)]));
-			if (Most < 0.3f)
+			return false;
+		}
+		// Sea bed well away from any shore is never seen: leave it out.
+		return FMath::Max(FMath::Max(Cover[J * Size.X + I], Cover[J * Size.X + I + 1]), FMath::Max(Cover[(J + 1) * Size.X + I], Cover[(J + 1) * Size.X + I + 1])) >= 0.3f;
+	};
+	// A skirt hangs from the tile's edge, so that where a fine tile meets a coarse one no daylight shows between them.
+	const double SkirtDrop = 0.9 * Step * Terrain.Cell;
+	auto Skirt = [&](int32 IA, int32 JA, int32 IB, int32 JB)
+	{
+		const int32 A = VertexAt(IA, JA), B = VertexAt(IB, JB);
+		const int32 LowA = PointAt(IA, JA, SkirtDrop), LowB = PointAt(IB, JB, SkirtDrop);
+		Buffers.Triangles.Append({ A, LowA, B, B, LowA, LowB, A, B, LowA, B, LowB, LowA }); // both ways round: it is seen from either side
+	};
+	for (int32 J = J0; J < J1; ++J)
+	{
+		for (int32 I = I0; I < I1; ++I)
+		{
+			if (!HasQuad(I, J))
 			{
 				continue;
 			}
 			const int32 A = VertexAt(I, J), B = VertexAt(I + 1, J), C = VertexAt(I, J + 1), D = VertexAt(I + 1, J + 1);
 			Buffers.Triangles.Append({ A, C, B, B, C, D });
+			if (J == J0) Skirt(I, J, I + 1, J);
+			if (J == J1 - 1) Skirt(I, J + 1, I + 1, J + 1);
+			if (I == I0) Skirt(I, J, I, J + 1);
+			if (I == I1 - 1) Skirt(I + 1, J, I + 1, J + 1);
+		}
+	}
+	if (Buffers.Triangles.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	UProceduralMeshComponent* Mesh = SpareLandMeshes.Num() > 0 ? SpareLandMeshes.Pop() : nullptr;
+	if (!Mesh)
+	{
+		Mesh = NewObject<UProceduralMeshComponent>(this);
+		Mesh->SetupAttachment(Root);
+		Mesh->bUseAsyncCooking = false;
+		Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mesh->SetCastShadow(bLandShadows);
+		Mesh->RegisterComponent();
+		LandMeshes.Add(Mesh);
+	}
+	Buffers.Commit(Mesh, 0, LandMaterial);
+	Mesh->SetVisibility(true);
+	return Mesh;
+}
+
+void ACampaignMapActor::UpdateLand(float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce)
+{
+	if (LandHeights.Num() == 0)
+	{
+		return;
+	}
+	// Which tiles the view wants: starting from the coarsest, a tile is cut into its four quarters for as long
+	// as it is large for how far off it is. "How far off" is the eye's distance from what it looks at, and the
+	// tile's distance from that point along the table.
+	const double TileUnits = TileQuads * Terrain.Cell * UnitScale; // the side of a finest tile, in the world
+	const FVector2D Focus(CameraFocus.X, CameraFocus.Y);
+	TArray<uint64> Wanted;
+	TArray<FIntVector> Stack;
+	const int32 TopSide = 1 << LandTopLevel;
+	const int32 RootsX = FMath::DivideAndRoundUp(FMath::DivideAndRoundUp(Terrain.NX - 1, TileQuads), TopSide);
+	const int32 RootsY = FMath::DivideAndRoundUp(FMath::DivideAndRoundUp(Terrain.NY - 1, TileQuads), TopSide);
+	for (int32 Y = 0; Y < RootsY; ++Y)
+	{
+		for (int32 X = 0; X < RootsX; ++X)
+		{
+			Stack.Add(FIntVector(X, Y, LandTopLevel));
+		}
+	}
+	while (Stack.Num() > 0)
+	{
+		const FIntVector Tile = Stack.Pop();
+		const int32 Level = Tile.Z;
+		if (!LandTileHasLand(Level, Tile.X, Tile.Y))
+		{
+			continue;
+		}
+		const double Side = TileUnits * (1 << Level);
+		// The tile's box on the table, in the world: north is +X and east is +Y, and the map's corner is its north-west.
+		const FVector NorthWest = MapToWorld(Tile.X * Side / UnitScale, Tile.Y * Side / UnitScale);
+		const FBox2D Box(FVector2D(NorthWest.X - Side, NorthWest.Y), FVector2D(NorthWest.X, NorthWest.Y + Side));
+		const double Away = FMath::Sqrt(Box.ComputeSquaredDistanceToPoint(Focus));
+		const double Distance = CameraDistance * 0.6 + Away;
+		if (Level > 0 && Side > 0.28 * Distance)
+		{
+			for (int32 Quarter = 0; Quarter < 4; ++Quarter)
+			{
+				Stack.Add(FIntVector(Tile.X * 2 + (Quarter & 1), Tile.Y * 2 + (Quarter >> 1), Level - 1));
+			}
+		}
+		else
+		{
+			Wanted.Add(LandKey(Level, Tile.X, Tile.Y));
 		}
 	}
 
-	if (!Buffers.Commit(TerrainMesh, Section, LandMaterial))
+	// Stand up the tiles that are wanted and not there yet: all of them when asked, otherwise a few each frame,
+	// so that sweeping across the table never stalls.
+	int32 Budget = bAllAtOnce ? MAX_int32 : 5;
+	TSet<uint64> Missing;
+	for (const uint64 Key : Wanted)
 	{
-		TerrainMesh->ClearMeshSection(Section);
+		if (LandTiles.Contains(Key))
+		{
+			continue;
+		}
+		if (Budget > 0)
+		{
+			--Budget;
+			const int32 Level = static_cast<int32>(Key >> 48), TileX = static_cast<int32>((Key >> 24) & 0xFFFFFF), TileY = static_cast<int32>(Key & 0xFFFFFF);
+			LandTiles.Add(Key, BuildLandTile(Level, TileX, TileY)); // null for a tile with nothing in it: remembered, so it is not tried again
+		}
+		else
+		{
+			Missing.Add(Key);
+		}
+	}
+
+	// Take away the tiles that are no longer wanted, but only once whatever replaces them is standing: a tile
+	// stays for as long as any wanted tile over the same ground (finer or coarser) is still to come.
+	const TSet<uint64> WantedSet(Wanted);
+	for (auto It = LandTiles.CreateIterator(); It; ++It)
+	{
+		if (WantedSet.Contains(It.Key()))
+		{
+			continue;
+		}
+		const int32 Level = static_cast<int32>(It.Key() >> 48), TileX = static_cast<int32>((It.Key() >> 24) & 0xFFFFFF), TileY = static_cast<int32>(It.Key() & 0xFFFFFF);
+		bool bStillNeeded = false;
+		for (const uint64 Other : Missing)
+		{
+			const int32 OtherLevel = static_cast<int32>(Other >> 48), OtherX = static_cast<int32>((Other >> 24) & 0xFFFFFF), OtherY = static_cast<int32>(Other & 0xFFFFFF);
+			const int32 Shift = FMath::Abs(Level - OtherLevel);
+			const bool bOver = Level >= OtherLevel
+				? (OtherX >> Shift) == TileX && (OtherY >> Shift) == TileY
+				: (TileX >> Shift) == OtherX && (TileY >> Shift) == OtherY;
+			if (bOver)
+			{
+				bStillNeeded = true;
+				break;
+			}
+		}
+		if (!bStillNeeded)
+		{
+			if (UProceduralMeshComponent* Mesh = It.Value())
+			{
+				Mesh->SetVisibility(false);
+				Mesh->ClearAllMeshSections();
+				SpareLandMeshes.Add(Mesh);
+			}
+			It.RemoveCurrent();
+		}
 	}
 }
 
@@ -1096,6 +1312,9 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
+	// The land's tiles: fine near what the eye looks at, coarse far from it.
+	UpdateLand(CameraDistance, CameraFocus, false);
+
 	// Trees are drawn only close to: in the squares of country round what the eye is looking at.
 	const bool bNear = CameraDistance < 11500.0f;
 	const double Reach = CameraDistance * 1.25 + TreeSquare * 0.75;
