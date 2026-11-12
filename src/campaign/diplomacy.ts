@@ -10,6 +10,7 @@ import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
 import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps } from './game';
 import { leagueMonth, ownPath, standsWith } from './league';
+import { alertNation, traitsMonth } from './traits';
 import { fleetsOnFall } from './navy';
 import { airOnFall } from './air';
 
@@ -180,7 +181,8 @@ export const sneakOn = (g: Game, by: string, on: string): boolean => g.flags.ope
 /** Whether a declaration of war today would catch the other country unready: it is at peace with the declarer and with all his allies. */
 export function wouldSurprise(g: Game, by: string, on: string): boolean {
   const B = g.nations[on];
-  return g.flags.open === 1 && !!B && !B.atWar.some((x) => x === by || allied(g, x, by));
+  // A nation whose codebreakers read the other side's signals is never caught unready.
+  return g.flags.open === 1 && !!B && !alertNation(g, on) && !B.atWar.some((x) => x === by || allied(g, x, by));
 }
 
 /** One neutral's answer to an attack on a country outside both blocs: how its opinion moves and where that leaves it. */
@@ -260,6 +262,12 @@ export interface WarForecast {
   joins: 'allies' | 'axis' | null;
   /** What this month's attacks on its ground are worth if the blow is a surprise: 1 when it is not. */
   sneak: number;
+  /**
+   * Why the blow is no surprise, or null when it is one: 'war' (the country is already at war with the declarer's
+   * side), 'alert' (its codebreakers read the other side's signals: a national ability) or 'watch' (it is at peace,
+   * but this game has no rule of surprise: a historical scenario, where every army watches its frontier).
+   */
+  ready: 'war' | 'alert' | 'watch' | null;
   friends: Friend[];
   alarm: Alarm[];
   /** True when the country trades with the declarer today: that income ends with the peace. */
@@ -271,10 +279,13 @@ export interface WarForecast {
 export function warForecast(g: Game, by: string, on: string): WarForecast {
   const A = g.nations[by], B = g.nations[on];
   const ba = A ? bloc(A) : null;
+  const sneak = wouldSurprise(g, by, on);
+  const fighting = !!B && B.atWar.some((x) => x === by || allied(g, x, by));
   return {
     on,
+    ready: sneak ? null : fighting ? 'war' : alertNation(g, on) ? 'alert' : 'watch',
     joins: B && bloc(B) === null && ba && ba !== 'league' && !ownPath(g, on) ? (ba === 'axis' ? 'allies' : 'axis') : null,
-    sneak: wouldSurprise(g, by, on) ? RELATIONS.sneak.attack : 1,
+    sneak: sneak ? RELATIONS.sneak.attack : 1,
     friends: friendsOf(on).filter((f) => g.nations[f.nat]?.alive),
     alarm: alarmed(g, by, on),
     trade: g.flags.open === 1 && tradePartners(g, by).some((n) => n.id === on),
@@ -549,6 +560,7 @@ export function monthlyDiplomacy(g: Game): void {
   }
   // The grand campaign: now and then a circle of small countries founds the League, or another joins it.
   leagueMonth(g);
+  traitsMonth(g);
   // In free play history's calendar only says when an event may first happen: if its conditions come true later
   // than they did, it happens later.
   const open = g.flags.open === 1;

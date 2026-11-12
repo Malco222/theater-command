@@ -17,6 +17,7 @@ import { deliverArsenal, worksUpkeep } from './arsenal';
 import { barredKind } from './ground';
 import { workingFactories } from './rails';
 import { incomeMul, levelOf } from './difficulty';
+import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -43,6 +44,9 @@ export function corpsKinds(g: Game): Kind[] {
   // The fighting arms by the industry they need and their price, and the engineers after them.
   return kinds.sort((a, b) => Number(a === 'eng') - Number(b === 'eng') || needsOf(g, a) - needsOf(g, b) || (specOf(g, a)!.cost - specOf(g, b)!.cost));
 }
+
+/** What a corps of this kind costs this nation: the list price, less what its own abilities take off (the grand campaign). */
+export const corpsCost = (g: Game, nat: string, kind: string): number => priceOf(g, nat, `corps:${kind}`, specOf(g, kind)?.cost ?? 0);
 
 /** How many factories a province must have for a corps of this kind to be raised there. None in a historical scenario. */
 export const needsOf = (g: Game, kind: string): number => (budgeted(g) ? (arsenalData.needs as Record<string, number>)[kind] ?? 0 : 0);
@@ -185,10 +189,12 @@ export function ledger(g: Game, nat: string): Ledger {
   const peace = n.atWar.length ? 1 : PRODUCTION.peaceIncome;
   const sea = seaIncomeLoss(g, nat), air = airIncomeLoss(g, nat), tech = techMul(g, nat, 'industry');
   const before = seat + facHome + facOcc + away + land + ports + oil;
-  const atPeace = before * peace + trade;
+  // What the nation's own abilities earn it (the grand campaign): banks, ore, a merchant fleet, factories moved out of reach.
+  const gift = traitMoney(g, nat);
+  const atPeace = before * peace + trade + gift.flat;
   const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
   const hard = budget ? incomeMul(g, nat) : 1;
-  const gross = budget ? afterAir * tech * hard : income(g, nat);
+  const gross = budget ? afterAir * tech * hard * gift.mul : income(g, nat);
   const lines: LedgerLine[] = [
     { key: 'capital', label: budget ? 'The capital and the state' : 'The state', amount: seat },
     { key: 'factories', label: 'Factories at home', amount: facHome, count: nHome },
@@ -198,6 +204,7 @@ export function ledger(g: Game, nat: string): Ledger {
     { key: 'ports', label: 'Harbours', amount: ports, count: nPorts },
     { key: 'oil', label: 'Oilfields', amount: oil, count: nOil },
     { key: 'trade', label: 'Trade with friendly neutrals', amount: trade, count: partners },
+    ...gift.lines,
   ];
   const changes: LedgerLine[] = [
     { key: 'peace', label: 'At peace: industry at half speed', amount: before * (peace - 1) },
@@ -205,6 +212,7 @@ export function ledger(g: Game, nat: string): Ledger {
     { key: 'air', label: 'Bombing of industry', amount: afterAir - afterSea },
     { key: 'tech', label: tech >= 1 ? 'Better production methods' : 'Production methods behind the times', amount: afterAir * (tech - 1) },
     { key: 'level', label: `Difficulty: ${levelOf(g).name}`, amount: afterAir * tech * (hard - 1) },
+    { key: 'trait', label: gift.mulBy, amount: afterAir * tech * hard * (gift.mul - 1) },
   ];
   const costs = upkeep(g, nat);
   const upkeepTotal = costs.reduce((s, l) => s + l.amount, 0);
@@ -232,7 +240,8 @@ export function income(g: Game, nat: string): number {
     sum += seat + (n.offmap?.industry ?? 0);
     const trade = tradePartners(g, nat).length * DIPLOMACY.tradeIncome;
     // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
-    return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat);
+    const gift = traitMoney(g, nat);
+    return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul;
   }
   let fac = 0;
   for (const r of g.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
@@ -286,12 +295,30 @@ export function orderCorps(g: Game, nat: string, kind: Kind, region: number, rev
   const n = g.nations[nat];
   const spec = specOf(g, kind);
   const r = g.regions[region];
-  if (!n.alive || !spec || !r || !canRaiseKind(g, nat, r, kind) || n.pp < spec.cost) return null;
+  const cost = corpsCost(g, nat, kind);
+  if (!n.alive || !spec || !r || !canRaiseKind(g, nat, r, kind) || n.pp < cost) return null;
   const old = revive !== undefined ? revivable(g, nat, kind).find((f) => f.id === revive) : undefined;
   if (revive !== undefined && !old) return null;
-  n.pp -= spec.cost;
-  const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name: old ? old.name : corpsName(nat, kind, n.corpsNo++), region, ordered: g.turn, eta: g.turn + spec.months, cost: spec.cost };
+  n.pp -= cost;
+  const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name: old ? old.name : corpsName(nat, kind, n.corpsNo++), region, ordered: g.turn, eta: g.turn + spec.months, cost };
   if (old) b.revive = old.id;
+  n.queue.push(b);
+  return b;
+}
+
+/**
+ * Orders one of the nation's special formations (the grand campaign): the Guards, the Alpine corps, the heavy tanks.
+ * It is raised like any corps of its kind and counts against the number the nation can keep at once.
+ */
+export function orderElite(g: Game, nat: string, region: number): Build | null {
+  const n = g.nations[nat];
+  const u = eliteOf(nat);
+  const r = g.regions[region];
+  if (!n.alive || !u || whyNoElite(g, nat) !== null || !r || !canRaiseKind(g, nat, r, u.kind) || n.pp < u.cost) return null;
+  n.pp -= u.cost;
+  const no = (g.flags[`elite:${nat}`] ?? 0) + 1;
+  g.flags[`elite:${nat}`] = no;
+  const b: Build = { id: g.nextBuild++, what: 'corps', kind: u.kind, divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost: u.cost, elite: u.id };
   n.queue.push(b);
   return b;
 }
@@ -301,7 +328,7 @@ export function fortCost(g: Game, nat: string, r: Region): number | null {
   if (!isHome(g, nat, r)) return null;
   const queued = g.nations[nat].queue.filter((b) => b.what === 'fort' && b.region === r.id).length;
   const next = (r.fort?.lv ?? 0) + queued + 1;
-  return next > 3 ? null : PRODUCTION.fort.cost[next];
+  return next > 3 ? null : priceOf(g, nat, 'work:fort', PRODUCTION.fort.cost[next]);
 }
 
 export function orderFort(g: Game, nat: string, region: number): Build | null {
@@ -321,7 +348,8 @@ export function cancelBuild(g: Game, nat: string, id: number): boolean {
   const i = n.queue.findIndex((b) => b.id === id);
   if (i < 0 || n.queue[i].ordered !== g.turn) return false;
   n.pp += n.queue[i].cost;
-  if (n.queue[i].what === 'corps' && n.queue[i].revive === undefined) n.corpsNo--;
+  if (n.queue[i].elite) g.flags[`elite:${nat}`] = (g.flags[`elite:${nat}`] ?? 1) - 1;
+  else if (n.queue[i].what === 'corps' && n.queue[i].revive === undefined) n.corpsNo--;
   n.queue.splice(i, 1);
   return true;
 }
@@ -353,6 +381,7 @@ export function deliver(g: Game, nat: string): void {
     // The player's new corps are as well trained as the instructors he has sent home can make them.
     const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: nat === g.human ? raisedXp(g, nat) : 0.05 });
     c.org = 0.7;
+    if (b.elite) c.elite = b.elite;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;
     if (old && old.heir === undefined) inherit(g, c, old.id);
     if (nat === g.human) headline(g, 'info', old ? `${b.name} is raised again at ${at.name}, ${g.turn - old.turn} months after it was lost at ${g.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
@@ -372,13 +401,22 @@ export function aiProduction(g: Game, nat: string): void {
   let spare = budgeted(g) ? income(g, nat) - upkeepTotal(g, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
   // Works on order (the grand campaign's guns and airfields) do not hold up the raising of troops.
   // Engineers are ordered by their own rule (the grand campaign) and do not take a place in the army's programme.
-  while (n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || b.what === 'fort').length < 2) {
+  const slots = (): number => n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || b.what === 'fort').length;
+  // The nation's special formation comes first when it can be had (the grand campaign): one on order at a time.
+  const u = budgeted(g) ? eliteOf(nat) : null;
+  if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g, nat) === null) {
+    const at = raiseSite(g, nat, u.kind, cap.id), cost = corpsUpkeep(u.kind, u.divs);
+    // A staff never holds more than its bank allows, so a costly formation is ordered as soon as the bank is full.
+    const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
+    if (at >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && orderElite(g, nat, at)) spare -= cost;
+  }
+  while (slots() < 2) {
     let kind: Kind = home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
     // nation's greatest industrial province; a nation with no such province raises infantry instead.
     let at = budgeted(g) ? raiseSite(g, nat, kind, cap.id) : cap.id;
     if (at < 0) { kind = 'inf'; at = cap.id; }
-    if (n.pp < PRODUCTION.builds[kind].cost + PRODUCTION.aiReserve) break;
+    if (n.pp < corpsCost(g, nat, kind) + PRODUCTION.aiReserve) break;
     const cost = corpsUpkeep(kind, PRODUCTION.builds[kind].divs);
     if (spare < cost * BUDGET.debt.aiMargin) break;
     if (!orderCorps(g, nat, kind, at)) break;

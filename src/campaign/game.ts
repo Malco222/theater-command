@@ -23,6 +23,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { draftsMul } from './difficulty';
+import { traitAttack, traitDefence, traitDrafts, traitNames } from './traits';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 
@@ -548,7 +549,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const land = opts.sea === undefined;
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
   const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide ? combinedArms(g, defenders, target, true) : null;
-  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false;
+  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1;
   // Armies that have outrun their railhead: how far the worst of them is from it, and what it is worth there.
   let roadA = 0, railA = 1, roadD = 0, railD = 1;
   const rivers = new Set<string>();
@@ -582,6 +583,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (tempo && KIND[c.kind].mobile) p *= 1.2;
     // The month war is declared on a country at peace, its defenders are caught unready (the grand campaign).
     if (wide && sneakOn(g, c.nat, target.ctrl)) { p *= RELATIONS.sneak.attack; sneaked = true; }
+    // What its nation does best, and what it is itself if it is one of the nation's special formations (the grand campaign).
+    if (wide) { const gift = traitAttack(g, c, target, !land); if (gift !== 1) { p *= gift; giftA = Math.max(giftA, gift); } }
     if (g.nations[c.nat].slowCommand) p *= 0.85;
     p *= techMul(g, c.nat, 'doctrine');
     if (opts.sea !== undefined) p *= opts.sea;
@@ -624,6 +627,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       const head = railheadOf(g, d);
       if (head.defence < 1) { p *= head.defence; roadD = Math.max(roadD, head.road); railD = Math.min(railD, head.defence); }
     }
+    if (wide) { const gift = traitDefence(g, d, target); if (gift !== 1) { p *= gift; giftD = Math.max(giftD, gift); } }
     const proud = storyDefence(g, d, target, attackers);
     if (proud !== 1) { p *= proud; proudD = Math.max(proudD, proud); }
     const lead = cmdDefence(g, d);
@@ -739,6 +743,14 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (thin < 1) lines.push({ label: 'Supply line', value: 'Defenders at the end of a long supply line', effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
   if (coldDef) lines.push({ label: 'Winter', value: 'Defenders without winter equipment', effect: `Defence cut to ${Math.round(EASTERN.winter.defence * 100)}%` });
   if (tempo) lines.push({ label: 'Tempo', value: 'New offensive', effect: 'Fast troops hit 20% harder in the first two turns' });
+  if (giftA !== 1 || giftD !== 1) {
+    const a = giftA !== 1 ? traitNames(g, attackers, target, 'attack', !land) : [], d = giftD !== 1 ? traitNames(g, defenders, target, 'defence') : [];
+    const say = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+    lines.push({
+      label: 'National abilities', value: [a.length ? `Attacking: ${say(a)}` : '', d.length ? `Defending: ${say(d)}` : ''].filter(Boolean).join('. '),
+      effect: [giftA !== 1 ? `Attack up as much as ${Math.round((giftA - 1) * 100)}% for the corps it covers` : '', giftD !== 1 ? `${giftA !== 1 ? 'defence' : 'Defence'} up as much as ${Math.round((giftD - 1) * 100)}% for the corps it covers` : ''].filter(Boolean).join(', '),
+    });
+  }
   if (sneaked) lines.push({ label: 'Surprise', value: 'War was declared this month on a country at peace', effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
   if (armorShock) lines.push({ label: 'Armor', value: 'Tanks against a defence without armor', effect: 'Tank attack up 25%' });
   if (armorStuck) lines.push({ label: 'Armor', value: 'Tanks in close country', effect: 'Tank attack cut to 60%' });
@@ -1454,7 +1466,7 @@ export function startPhase(g: Game, nat: string): void {
   // Overseas, every man and tank has to come by sea first: the drafts arrive slower.
   // A corps the player has told to keep its veterans together asks for no drafts.
   // The level of the campaign quickens or slows the drafts, for the player or for his rivals: at the fair level, not at all.
-  const drafts = draftsMul(g, nat);
+  const drafts = draftsMul(g, nat) * traitDrafts(g, nat);
   const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;

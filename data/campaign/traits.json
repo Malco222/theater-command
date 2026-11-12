@@ -1,0 +1,161 @@
+{
+  "_about": "National abilities and special units: what makes each country fight, build and earn in its own way. One row per nation, read by every version of the game. They apply in the grand campaign only; a historical scenario is worked out as it always was. A trait has an id, a name and a line of history ('text'), and any of these effects. In battle: 'attack' and 'defence' multiply the strength of the nation's corps when everything in 'when' holds: 'kinds' (only corps of these kinds), 'mobile' (only tanks, motorised troops and cavalry), 'terrain' (the battlefield is one of these), 'winter' (the months listed under 'winter' below, January being 0: December to March), 'home' (the battlefield is the nation's own country), 'works' (the battlefield is fortified), 'landing' (the attack comes from the sea), 'from' and 'until' (years, inclusive). In the books: 'income' adds production points every month and 'incomeMul' multiplies the month's earnings, only at peace or only at war when 'incomeAt' says so; 'oil' multiplies what the home oilfields earn; 'relocate' is the share of the factories in home provinces held by an enemy that go on working out of reach. 'drafts' multiplies how fast losses are made good. 'cost' makes the listed orders cheaper or dearer ('corps:inf', 'work:fort', 'ship:dd', 'air:bmr' and so on). 'sealift' is shipping for that many more corps a month. 'alert' means nobody catches the nation by surprise in the month war is declared. 'partisans' is the share of its strength an enemy corps loses each month it stands on the nation's occupied ground in the terrain listed under 'partisanGround'. 'fleet' multiplies the fighting power of its fleets, and 'seaLoss' multiplies what the convoy war costs it. 'builtin' marks a trait the rules of every game already carry: it is listed so the player can read it, adds nothing, and says what it does in its own 'rule'. A 'unit' is the nation's special formation, ordered from the arsenal like any corps: its 'kind', 'divs', 'cost' and 'months', the first year it can be raised ('from'), how many the nation can keep at once ('most'), how many of its corps of that kind already are such formations when the campaign starts ('starts'), and its own 'attack' and 'defence' under its own 'when'. 'word' goes into its name: III Guards Corps. Costs are in production points (shown times a hundred).",
+  "winter": [11, 0, 1, 2],
+  "partisanGround": ["mountain", "hills", "forest"],
+  "ai": { "reserve": 16 },
+  "nations": {
+    "GER": {
+      "traits": [
+        { "id": "tempo", "name": "Lightning war", "builtin": true, "text": "Tanks, motorised infantry and dive bombers trained to strike together and keep moving, and a staff that plans a deep opening thrust.", "rule": "Attack up 20% for tanks, motorised troops and cavalry in the first two months against a new enemy, and one more move in the month war is declared." },
+        { "id": "panzer", "name": "Armoured spearheads", "text": "Tanks massed in their own divisions with radios in every vehicle, and lorried infantry trained to keep up with them.", "attack": 1.15, "when": { "kinds": ["arm", "mot"], "terrain": ["plains", "desert"] } },
+        { "id": "uboats", "name": "The submarine arm", "text": "Yards that turn out ocean-going submarines in series for the war on shipping.", "cost": { "what": ["ship:ss"], "mul": 0.75 } }
+      ],
+      "unit": { "id": "heavy", "label": "Heavy tank corps", "word": "Heavy Tank", "kind": "arm", "divs": 2, "cost": 88, "months": 8, "from": 1942, "most": 2, "attack": 1.25, "defence": 1.3, "text": "Battalions of heavy tanks with thick armour and a long high-velocity gun, gathered into a corps of their own. Few, costly, and very hard to stop or to shift." }
+    },
+    "UK": {
+      "traits": [
+        { "id": "radar", "name": "The radar chain", "builtin": true, "text": "A chain of radar stations along the coast and controllers who put the fighters onto each raid, working from the first day of the war.", "rule": "Fighters over home ground meet every raid at full strength. Air forces without a radar chain fight at 70%." },
+        { "id": "navy", "name": "The Royal Navy", "text": "The largest fleet in the world, with centuries of practice in fighting at sea.", "fleet": 1.1, "cost": { "what": ["ship:dd", "ship:ca", "ship:bb", "ship:cv"], "mul": 0.85 } },
+        { "id": "signals", "name": "Signals intelligence", "text": "Codebreakers who read the enemy's naval ciphers, so that convoys can be steered round the waiting submarines.", "seaLoss": 0.8 }
+      ],
+      "unit": { "id": "dominion", "label": "Commonwealth corps", "word": "Commonwealth", "kind": "inf", "divs": 3, "cost": 46, "months": 4, "most": 3, "attack": 1.12, "defence": 1.12, "text": "Volunteer divisions from Canada, Australia, New Zealand, India and South Africa. Hardy infantry, raised quickly, with a name for getting the hard jobs." }
+    },
+    "FRA": {
+      "traits": [
+        { "id": "forts", "name": "The fortress line", "text": "A generation of engineers who built the strongest line of forts in Europe, and troops trained to fight from them.", "defence": 1.1, "when": { "works": true }, "cost": { "what": ["work:fort"], "mul": 0.75 } },
+        { "id": "chars", "name": "Thick-skinned tanks", "text": "In 1940 the French heavy tank carries armour that most anti-tank guns of the day cannot pierce.", "defence": 1.15, "when": { "kinds": ["arm"], "until": 1941 } }
+      ],
+      "unit": { "id": "africa", "label": "Colonial corps", "word": "Colonial", "kind": "inf", "divs": 3, "cost": 46, "months": 4, "most": 2, "attack": 1.2, "defence": 1.1, "when": { "terrain": ["mountain", "hills", "desert"] }, "text": "Mountain riflemen and legionaries from North Africa. Light on their feet in the hills and the desert, where heavier troops are slow." }
+    },
+    "SOV": {
+      "traits": [
+        { "id": "winter", "name": "At home in the winter", "builtin": true, "text": "Soviet troops are clothed and equipped for the eastern winter. An invader without winter kit is not.", "rule": "No winter penalty on Soviet ground from December to February, when an invader attacks at 70% and defends at 85%." },
+        { "id": "reserves", "name": "Reserves without end", "text": "A vast population and a system that calls up class after class.", "drafts": 1.25, "cost": { "what": ["corps:inf"], "mul": 0.9 } },
+        { "id": "urals", "name": "Factories to the east", "text": "Whole factories are loaded onto trains ahead of the enemy and set up again beyond the Urals, out of reach.", "relocate": 0.25 }
+      ],
+      "unit": { "id": "guards", "label": "Guards corps", "word": "Guards", "kind": "inf", "divs": 3, "cost": 58, "months": 5, "from": 1942, "most": 3, "attack": 1.15, "defence": 1.15, "text": "Formations that earned the Guards title in battle: picked men, the best equipment and first call on replacements." }
+    },
+    "ITA": {
+      "traits": [
+        { "id": "fast", "name": "Fast light infantry", "text": "Light infantry on bicycles, motorcycles and trucks, with a tradition of moving at the double.", "cost": { "what": ["corps:mot"], "mul": 0.8 } },
+        { "id": "craft", "name": "Flotillas of light craft", "text": "Torpedo boats, submarines and raiders built for a narrow sea.", "cost": { "what": ["ship:dd", "ship:ss"], "mul": 0.8 } }
+      ],
+      "unit": { "id": "alpine", "label": "Alpine corps", "word": "Alpine", "kind": "mtn", "divs": 2, "cost": 36, "months": 5, "most": 3, "starts": 1, "attack": 1.25, "defence": 1.25, "when": { "terrain": ["mountain", "hills"] }, "text": "Mountain troops recruited valley by valley in the Alps, the best soldiers Italy has. At their best on high ground." }
+    },
+    "USA": {
+      "traits": [
+        { "id": "arsenal", "name": "Arsenal of democracy", "text": "The largest industry on earth, turned over to war.", "incomeMul": 1.15, "incomeAt": "war" },
+        { "id": "bombers", "name": "The heavy bomber force", "text": "Four-engined bombers built by the thousand for daylight raids on industry.", "cost": { "what": ["air:bmr"], "mul": 0.75 } }
+      ],
+      "unit": { "id": "marines", "label": "Marine corps", "word": "Marine", "kind": "inf", "divs": 2, "cost": 40, "months": 5, "most": 2, "attack": 1.3, "when": { "landing": true }, "text": "Assault troops trained and equipped to land on a defended shore. Nobody does it better." }
+    },
+    "POL": {
+      "traits": [
+        { "id": "cipher", "name": "The cipher bureau", "text": "Polish mathematicians have read the German cipher machine since 1932. Nobody catches Poland by surprise, and its armies know what is coming.", "alert": true, "defence": 1.05, "when": { "home": true } }
+      ],
+      "unit": { "id": "lancers", "label": "Cavalry brigade group", "word": "Cavalry", "kind": "cav", "divs": 2, "cost": 30, "months": 4, "most": 3, "starts": 1, "attack": 1.25, "defence": 1.3, "text": "Mounted brigades that ride to the battle and fight on foot with anti-tank guns and machine guns. Fast across country and hard to pin down." }
+    },
+    "FIN": {
+      "traits": [
+        { "id": "winterwar", "name": "The winter war", "text": "An army that lives in the snow, defending its own forests against an invader who does not.", "defence": 1.25, "when": { "winter": true, "home": true } },
+        { "id": "motti", "name": "Forest fighters", "text": "Small columns that cut a road-bound enemy into pieces among the trees and deal with each piece in turn.", "attack": 1.15, "when": { "terrain": ["forest"] } }
+      ],
+      "unit": { "id": "ski", "label": "Ski corps", "word": "Ski", "kind": "inf", "divs": 2, "cost": 30, "months": 4, "most": 3, "attack": 1.3, "defence": 1.2, "when": { "winter": true }, "text": "Light infantry on skis in white smocks, moving across country no vehicle can cross. In the winter months nothing on foot can catch them." }
+    },
+    "SUI": {
+      "traits": [
+        { "id": "redoubt", "name": "The mountain fortress", "text": "The plan is to give up the plain and hold the high Alps, with every pass mined and covered by guns.", "defence": 1.3, "when": { "home": true, "terrain": ["mountain", "hills"] } },
+        { "id": "banks", "name": "The banking haven", "text": "While Switzerland is at peace, the money of a continent at war passes through its banks.", "income": 1, "incomeAt": "peace" },
+        { "id": "militia", "name": "A nation in arms", "text": "Every man keeps his rifle at home and reports within hours.", "cost": { "what": ["corps:inf", "corps:mtn"], "mul": 0.8 } }
+      ]
+    },
+    "SWE": {
+      "traits": [
+        { "id": "ore", "name": "Iron ore exports", "text": "The richest iron ore in Europe, and every power at war wants it. It pays while Sweden is at peace.", "income": 1.2, "incomeAt": "peace" },
+        { "id": "neutral", "name": "Armed neutrality", "text": "A country that has decided to make itself too costly to invade.", "defence": 1.15, "when": { "home": true } },
+        { "id": "guns", "name": "The gun works", "text": "One of the best gun makers in the world. Its anti-aircraft and field guns are bought by both sides.", "cost": { "what": ["corps:art", "work:aa"], "mul": 0.75 } }
+      ]
+    },
+    "NOR": {
+      "traits": [
+        { "id": "merchant", "name": "The merchant fleet", "text": "One of the largest merchant fleets in the world, with crews in every ocean. It earns in peace and in war, and it can carry an army.", "income": 0.8, "sealift": 2 },
+        { "id": "fjords", "name": "Fjord and mountain", "text": "A long, steep country with few roads, where a handful of men can hold a valley.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills", "forest"] } }
+      ]
+    },
+    "DEN": {
+      "traits": [
+        { "id": "sound", "name": "Gate of the Baltic", "text": "Every ship between the Baltic and the North Sea passes Danish waters, and Danish farms feed half of northern Europe. It pays while Denmark is at peace.", "income": 0.6, "incomeAt": "peace" },
+        { "id": "seafarers", "name": "A seafaring nation", "text": "Shipping lines and yards out of all proportion to the size of the country.", "sealift": 1, "cost": { "what": ["ship:dd", "ship:tp"], "mul": 0.8 } }
+      ]
+    },
+    "NED": {
+      "traits": [
+        { "id": "waterline", "name": "The water line", "text": "Sluices that can put the low country under water in front of an invader.", "defence": 1.2, "when": { "home": true } },
+        { "id": "indies", "name": "The East Indies trade", "text": "Oil, rubber and tin from the East Indies, out of any European enemy's reach.", "income": 1 }
+      ]
+    },
+    "BEL": {
+      "traits": [
+        { "id": "belts", "name": "The fortress belts", "text": "Rings of modern forts round Liege, Namur and Antwerp, and gunners who know every yard in front of them.", "defence": 1.1, "when": { "home": true, "works": true }, "cost": { "what": ["work:fort"], "mul": 0.75 } },
+        { "id": "congo", "name": "Riches of the Congo", "text": "Copper, rubber and rare ores from the Congo, out of any European enemy's reach.", "income": 1 }
+      ],
+      "unit": { "id": "ardennes", "label": "Ardennes rifle corps", "word": "Ardennes Rifle", "kind": "inf", "divs": 2, "cost": 30, "months": 4, "most": 2, "attack": 1.15, "defence": 1.3, "when": { "terrain": ["forest", "hills"] }, "text": "Light infantry raised in the wooded hills of the Ardennes to delay an invader there. Stubborn among the trees." }
+    },
+    "ESP": {
+      "traits": [
+        { "id": "veterans", "name": "Veterans of the civil war", "text": "Three years of war at home ended in the spring of 1939. For a few years yet the army is full of men who have seen it all.", "attack": 1.1, "defence": 1.1, "when": { "until": 1942 } },
+        { "id": "pyrenees", "name": "The wall of the Pyrenees", "text": "A mountain frontier with a handful of passes.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain"] } }
+      ],
+      "unit": { "id": "legion", "label": "Legion corps", "word": "Legion", "kind": "inf", "divs": 2, "cost": 32, "months": 4, "most": 2, "attack": 1.2, "defence": 1.1, "text": "The professionals of the army of Africa: long-service volunteers used as shock troops." }
+    },
+    "POR": {
+      "traits": [
+        { "id": "wolfram", "name": "Wolfram exports", "text": "Tungsten ore that both sides must have for armour-piercing shot and machine tools. It pays while Portugal is at peace.", "income": 0.6, "incomeAt": "peace" },
+        { "id": "islands", "name": "The Atlantic islands", "text": "The Azores and Madeira: harbours in mid-ocean and the shipping that serves them.", "sealift": 1 }
+      ]
+    },
+    "HUN": {
+      "traits": [
+        { "id": "granary", "name": "Granary of the Danube", "text": "The wheat of the great plain feeds central Europe in peace and in war.", "income": 0.6 }
+      ],
+      "unit": { "id": "rapid", "label": "Rapid corps", "word": "Rapid", "kind": "mot", "divs": 2, "cost": 40, "months": 5, "most": 2, "attack": 1.15, "text": "Motorised rifle and cavalry brigades grouped into one fast corps, the best-equipped part of a small army." }
+    },
+    "ROM": {
+      "traits": [
+        { "id": "oil", "name": "The oil of Ploesti", "text": "The largest oilfields in Europe outside the Soviet Union, and every power at war wants what they pump.", "oil": 2 },
+        { "id": "hunters", "name": "Mountain hunters", "text": "Picked mountain brigades from the Carpathians.", "attack": 1.15, "defence": 1.15, "when": { "kinds": ["mtn"], "terrain": ["mountain", "hills"] } }
+      ]
+    },
+    "YUG": {
+      "traits": [
+        { "id": "partisans", "name": "Partisan war", "text": "A conquered Yugoslavia does not stay quiet. Every month an enemy corps standing in its occupied mountains, hills and forests loses part of its strength to raids and ambushes.", "partisans": 0.04 },
+        { "id": "highlands", "name": "Mountain country", "text": "Poor roads, high ridges and a people used to fighting from them.", "defence": 1.15, "when": { "home": true, "terrain": ["mountain", "hills"] } }
+      ]
+    },
+    "BUL": {
+      "traits": [
+        { "id": "peasants", "name": "A peasant army", "text": "Sturdy conscripts who need little and march far.", "cost": { "what": ["corps:inf"], "mul": 0.8 } },
+        { "id": "balkan", "name": "Balkan infantry", "text": "Infantry with a long record of hard fighting in the mountains of the Balkans.", "attack": 1.1, "when": { "kinds": ["inf", "mtn"], "terrain": ["mountain", "hills"] } }
+      ]
+    },
+    "GRE": {
+      "traits": [
+        { "id": "line", "name": "The mountain line", "text": "Concrete works in the passes of the north and an army that knows its own mountains.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills"] } },
+        { "id": "shipping", "name": "The merchant marine", "text": "Greek shipowners run one of the great merchant fleets. It earns in peace and in war, and it can carry an army.", "income": 0.5, "sealift": 2 }
+      ],
+      "unit": { "id": "evzones", "label": "Evzone corps", "word": "Evzone", "kind": "mtn", "divs": 2, "cost": 30, "months": 4, "most": 2, "starts": 1, "attack": 1.2, "defence": 1.2, "when": { "terrain": ["mountain", "hills"] }, "text": "The picked light infantry of the Greek army, mountain men who attack uphill." }
+    },
+    "TUR": {
+      "traits": [
+        { "id": "straits", "name": "Keeper of the Straits", "text": "The only way between the Black Sea and the Mediterranean runs past Istanbul, and both sides pay court to whoever holds it. It pays while Turkey is at peace.", "income": 1, "incomeAt": "peace" },
+        { "id": "anatolia", "name": "The depth of Anatolia", "text": "A high, roadless plateau that swallows an invader's supply columns.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills"] } }
+      ]
+    },
+    "IRL": {
+      "traits": [
+        { "id": "emergency", "name": "The Emergency", "text": "A neutrality kept carefully between two great powers at war, with cattle and food sold across the Irish Sea. It pays while Ireland is at peace.", "income": 0.5, "incomeAt": "peace" },
+        { "id": "volunteers", "name": "The volunteer tradition", "text": "A small army backed by a countryside that has fought an occupier before.", "defence": 1.2, "when": { "home": true }, "cost": { "what": ["corps:inf"], "mul": 0.8 } }
+      ]
+    }
+  }
+}

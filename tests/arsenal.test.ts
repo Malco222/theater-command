@@ -418,7 +418,7 @@ describe('ordering', () => {
   it('lists the same offers for both interfaces, each with a price, a place and a reason when it cannot be had', () => {
     const g = grand(3, 'GER');
     const list = arsenalOffers(g, g.byName['Hamburg'].id);
-    expect(list.map((o) => o.key)).toEqual(['corps:mtn', 'corps:inf', 'corps:art', 'corps:mot', 'corps:arm', 'corps:eng', 'air:ftr', 'air:bmr', 'ship:dd', 'ship:ss', 'ship:tp', 'ship:ca', 'ship:cv', 'ship:bb', 'work:factory', 'work:yard', 'work:aa', 'work:field', 'work:fort']);
+    expect(list.map((o) => o.key)).toEqual(['elite', 'corps:mtn', 'corps:inf', 'corps:art', 'corps:mot', 'corps:arm', 'corps:eng', 'air:ftr', 'air:bmr', 'ship:dd', 'ship:ss', 'ship:tp', 'ship:ca', 'ship:cv', 'ship:bb', 'work:factory', 'work:yard', 'work:aa', 'work:field', 'work:fort']);
     for (const o of list) {
       expect(o.label.length, o.key).toBeGreaterThan(3);
       expect(o.blurb.length, o.key).toBeGreaterThan(20);
@@ -426,7 +426,8 @@ describe('ordering', () => {
       expect(o.months, o.key).toBeGreaterThan(0);
       expect(['army', 'air', 'navy', 'works']).toContain(o.group);
       // Germany begins the war with an empty treasury: everything it could build is out of reach for want of money alone.
-      if (o.why !== null && o.key !== 'work:yard') expect(o.poor, o.key).toBe(true);
+      // (Its special formation, the heavy tanks, waits for its year: national abilities have their own tests.)
+      if (o.why !== null && o.key !== 'work:yard' && o.key !== 'elite') expect(o.poor, o.key).toBe(true);
     }
     expect(arsenalOffers(createGame(3, null))).toEqual([]);
   });

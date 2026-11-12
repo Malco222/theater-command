@@ -753,3 +753,26 @@ svg.flag.inh { vertical-align: -3px; margin-right: 4px; }
   .purse { padding: 3px 8px 4px; }
   .purse b { font-size: 17px; }
 }
+
+/* National abilities: a nation's list on the picker and in its card, and the row of flags to read the others. */
+.traits { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 5px; }
+.traits li { font-size: 12.5px; color: var(--ink-2); line-height: 1.35; padding-left: 10px; border-left: 2px solid var(--line); }
+.traits li b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+.traits li b i { color: var(--brass); font-style: normal; }
+.traits li em { font-style: normal; }
+.traits li.unit { border-left-color: var(--brass); }
+.traits.full { gap: 9px; margin-top: 10px; }
+.traits.full li { font-size: 13px; padding: 8px 11px; background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--line); border-radius: 5px; }
+.traits.full li.unit { border-left-color: var(--brass); }
+.traits.full li b { display: block; font-family: var(--head); font-size: 16px; letter-spacing: .03em; margin: 0 0 2px; }
+.traits.full li span { display: block; }
+.traits.full li em { display: block; color: var(--ink); margin-top: 3px; }
+.gctraits { margin: 8px 0 10px; }
+.gctraits h5 { font-family: var(--head); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--brass); margin: 0; font-weight: 600; }
+.trnats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.trnat { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; font: inherit; font-size: 12px; color: var(--ink-2); background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.trnat:hover { color: var(--ink); border-color: var(--brass); }
+.trnat.on { color: var(--ink); border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass); }
+.starred { position: relative; display: inline-flex; }
+.starred > i { position: absolute; right: -3px; top: -6px; font-style: normal; font-size: 12px; color: var(--brass); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+@media (max-width: 760px) { .wideonly { display: none; } }
