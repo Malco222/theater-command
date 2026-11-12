@@ -970,9 +970,9 @@ namespace VehicleParts
 	 * two bogies, a boxy fighting compartment forward, and a turret with a long thin 37 mm gun and a box on
 	 * its back for the wireless.
 	 */
-	static void SevenTP(FMiniatureMesh& M)
+	static void LightTankIn(FMiniatureMesh& M, const FLinearColor& Paint, bool bPolish)
 	{
-		const FBuild B(M, Hex(TEXT("6A6C4C")));
+		const FBuild B(M, Paint);
 		const FLinearColor Olive = B.Paint, Dark = B.Shade;
 		const FLinearColor Sandy = Hex(TEXT("A89868")), Umber = Hex(TEXT("4E3E2E"));
 
@@ -1004,10 +1004,13 @@ namespace VehicleParts
 		// The fighting compartment, and the engine deck sloping away behind it.
 		B.Side({ { 1.35, 1.05 }, { 1.2, 1.52 }, { -0.35, 1.52 }, { -0.4, 1.05 } }, -1.02, 1.02, Olive);
 		B.Side({ { -0.4, 1.05 }, { -0.4, 1.38 }, { -2.1, 1.22 }, { -2.25, 1.05 } }, -0.98, 0.98, Olive);
-		// The three colours of the Polish camouflage, in broad patches.
-		B.Plate(-1.2, 0.3, 1.33, 0.9, 1.1, 0.012, Sandy, 5.4);
-		B.Plate(0.5, 1.03, 1.3, 0.8, 0.012, 0.4, Umber);
-		B.Plate(0.4, -1.03, 1.3, 0.9, 0.012, 0.4, Sandy);
+		if (bPolish)
+		{
+			// The three colours of the Polish camouflage, in broad patches.
+			B.Plate(-1.2, 0.3, 1.33, 0.9, 1.1, 0.012, Sandy, 5.4);
+			B.Plate(0.5, 1.03, 1.3, 0.8, 0.012, 0.4, Umber);
+			B.Plate(0.4, -1.03, 1.3, 0.9, 0.012, 0.4, Sandy);
+		}
 		// The driver's hatch in the front plate; the louvres over the engine; the silencer across the tail.
 		B.Plate(1.3, 0.4, 1.3, 0.05, 0.5, 0.36, Dark);
 		B.Plate(1.33, 0.4, 1.36, 0.02, 0.3, 0.035, Pitch);
@@ -1028,11 +1031,22 @@ namespace VehicleParts
 		B.Tube(T + 0.58, Off + 0.2, 1.82, T + 0.95, Off + 0.2, 1.82, 0.04, Dark, 6);
 	}
 
+	static void SevenTP(FMiniatureMesh& M)
+	{
+		LightTankIn(M, Hex(TEXT("6A6C4C")), true);
+	}
+
 	// ------------------------------------------------------------------------ guns, half-tracks, lorries
 
 	/** The paint for a model that is the same for several nations (a lorry, an old field gun): set before it is built. */
 	static FLinearColor NationPaint = Hex(TEXT("60664A"));
 	static FString NationTag;
+
+	/** A light tank of the Vickers six-ton kind, which a dozen armies bought or copied, in the paint of whichever nation asks. */
+	static void LightTank(FMiniatureMesh& M)
+	{
+		LightTankIn(M, NationPaint, false);
+	}
 
 	/** A wheel on an axle across the vehicle: a tyre, a painted wheel inside it, a hub. For lorries and guns. */
 	static void RoadWheel(const FBuild& B, double F, double R, double Radius, double Wide, bool bSpoked)
@@ -1413,6 +1427,7 @@ namespace VehicleParts
 		{ TEXT("M13"), &M13, TEXT("M13/40  -  4.92 m long, 2.37 m high"), TEXT("ITA") },
 		{ TEXT("Type97"), &Type97, TEXT("Type 97 Chi-Ha  -  5.50 m long, 2.23 m high"), TEXT("JAP") },
 		{ TEXT("7TP"), &SevenTP, TEXT("7TP  -  4.60 m long, 2.30 m high"), TEXT("POL") },
+		{ TEXT("LightTank"), &LightTank, TEXT("Light tank (Vickers six-ton type)  -  4.60 m long, 2.30 m high"), TEXT("ROM"), true },
 		{ TEXT("Hanomag"), &Hanomag, TEXT("Sd.Kfz. 251 half-track  -  5.80 m long, 1.75 m high"), TEXT("GER") },
 		{ TEXT("M3Halftrack"), &M3Halftrack, TEXT("M3 half-track  -  6.18 m long, 2.26 m high"), TEXT("USA") },
 		{ TEXT("Truck"), &Truck, TEXT("Three-ton lorry  -  6.0 m long, 2.6 m high"), TEXT("GER"), true },
@@ -1568,7 +1583,7 @@ FString FMiniatureMesh::MainTankOf(const FString& Tag)
 	if (Tag == TEXT("JAP") || Tag == TEXT("JPN")) return TEXT("Type97");
 	if (Tag == TEXT("POL")) return TEXT("7TP");
 	if (Tag == TEXT("UK") || Tag == TEXT("CAN") || Tag == TEXT("AUS") || Tag == TEXT("NZL") || Tag == TEXT("SAF") || Tag == TEXT("IND")) return TEXT("Matilda");
-	return FString();
+	return TEXT("LightTank:") + Tag;
 }
 
 FString FMiniatureMesh::MainGunOf(const FString& Tag)

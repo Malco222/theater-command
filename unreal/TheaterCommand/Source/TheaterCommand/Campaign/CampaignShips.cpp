@@ -127,10 +127,29 @@ namespace ShipParts
 			return DeckAt(H, X) + 0.05;
 		}
 
-		/** A house on the deck: from one distance forward to another, so wide, so high, standing at a level. */
+		/** A house on the deck: from one distance forward to another, so wide, so high, standing at a level. Its corners are rounded, as plating is. */
 		void House(double X0, double X1, double Half, double Z, double High, const FLinearColor& Colour) const
 		{
-			M.Box(At((X0 + X1) * 0.5, 0.0, Z + High * 0.5), FVector(FMath::Abs(X1 - X0), Half * 2.0, High), Colour);
+			const double Fore = FMath::Max(X0, X1), Rear = FMath::Min(X0, X1);
+			const double Corner = FMath::Min3(Half * 0.6, (Fore - Rear) * 0.3, 3.0);
+			TArray<FVector2D> Plan;
+			const FVector2D Middles[4] = { { Fore - Corner, Half - Corner }, { Rear + Corner, Half - Corner }, { Rear + Corner, -Half + Corner }, { Fore - Corner, -Half + Corner } };
+			for (int32 Quarter = 0; Quarter < 4; ++Quarter)
+			{
+				for (int32 K = 0; K <= 3; ++K)
+				{
+					const double Angle = (Quarter + K / 3.0) * UE_DOUBLE_HALF_PI;
+					Plan.Add(Middles[Quarter] + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Corner);
+				}
+			}
+			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Plan, Plan }, { Z, Z + High }, Colour, true);
+		}
+
+		/** A crane, for boats and aircraft: a post and a jib. */
+		void Crane(double X, double Side, double Z, double High) const
+		{
+			M.Rod(At(X, Side, Z), At(X, Side, Z + High), 0.35, L.Upper, 6);
+			M.Rod(At(X, Side, Z + High), At(X - High * 0.9, Side * 0.5, Z + High * 0.7), 0.2, L.Upper, 5);
 		}
 
 		/** A funnel: oval, leaning back a little, with a dark cap. */
@@ -290,6 +309,25 @@ namespace ShipParts
 			for (const double X : { Front - 16.0, (Front + Back) * 0.5 + 10.0, Back + 22.0 })
 			{
 				Y.LightGun(X, Hand * Wide * 0.5, X > Front - 10.0 || X < Back + 10.0 ? Y.Deck(X) : Z0 + 3.2);
+			}
+		}
+		// A catapult on the quarterdeck with the ship's floatplane on it, and the crane that lifts it back aboard.
+		const double Tail = -C.H.Length * 0.43;
+		M.Box(At(Tail, 0.0, Y.Deck(Tail) + 0.6), FVector(18.0, 2.0, 1.2), L.Upper);
+		M.Vehicle(FMiniatureMesh::MainFighterOf(MiniatureParts::NationWanted()), At(Tail + 2.0, 0.0, Y.Deck(Tail) + 2.6), 1.0, 0.0);
+		Y.Crane(Tail - 12.0, 0.0, Y.Deck(Tail - 12.0), 12.0);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			Y.Crane((Front + Back) * 0.5 + 4.0, Hand * Wide * 0.42, Z0 + 6.2, 9.0);
+			// Searchlights on the funnel platforms, and rows of light guns along the upper deck.
+			for (const double X : C.Funnels)
+			{
+				M.Pillar(At(X + 5.0, Hand * Wide * 0.26, Z0 + 6.2), 0.9, 0.9, 2.2, L.Upper, 8);
+				M.Ball(At(X + 5.0, Hand * Wide * 0.26, Z0 + 9.2), FVector(1.6, 1.6, 1.6), Steel, 3, 8);
+			}
+			for (int32 K = 0; K < 6; ++K)
+			{
+				Y.LightGun(FMath::Lerp(Front - 6.0, Back + 6.0, K / 5.0), Hand * Wide * 0.5, Z0 + 3.2);
 			}
 		}
 		// The ensign staff at the stern and the jack staff at the bow; anchors and their cables on the forecastle.
