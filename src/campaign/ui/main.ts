@@ -23,7 +23,7 @@ import {
 import { phaseFor, theatrePhases } from '../ai';
 import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
 import { fronts, isOpen, startOpen } from '../staff';
-import { PRODUCTION, canRaise, fortCost, income, isHome } from '../economy';
+import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, isHome, ledger, provinceYield, type Ledger, type LedgerLine } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame, staleSave } from '../save';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, rankOf, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
@@ -81,6 +81,12 @@ const ui = {
 const $ = (s: string): HTMLElement => document.querySelector(s) as HTMLElement;
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
+/** Money as the interface shows it: a price or what is in hand, rounded down so nothing is promised that is not there. */
+const money = (pp: number): string => Math.floor(pp * BUDGET.scale + 1e-6).toLocaleString('en-US');
+/** A flow of money in the books, rounded to the nearest whole number, with the sign written out when asked. */
+const cash = (pp: number, signed = false): string => { const v = Math.round(pp * BUDGET.scale); return `${v < 0 ? '−' : signed && v > 0 ? '+' : ''}${Math.abs(v).toLocaleString('en-US')}`; };
+/** What is in the treasury: rounded down in credit, so it never shows more than can be spent, and as a debt when it is one. */
+const inHand = (pp: number): string => (pp >= 0 ? money(pp) : cash(pp));
 const natName = (id: string): string => g.nations[id]?.name ?? id;
 /** A nation's name as it reads inside a sentence: "the United Kingdom", "Germany". */
 const theName = (id: string): string => { const nm = natName(id); return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm; };
@@ -316,6 +322,7 @@ function mount(): void {
     <div class="bar">
       <div class="brand">Theater Command<small>1939 to 1945 · campaign prototype</small></div>
       <div class="when" id="when"></div>
+      <span id="purse"></span>
       <span class="spacer"></span>
       <span id="barbtns" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"></span>
     </div>
@@ -521,14 +528,24 @@ function hintText(): string {
   return ready ? 'Click one of your armies (gold outline) to pick it up. End the month when you are done.' : 'All of your armies have used their month. End the month to continue.';
 }
 
+/** The treasury, always in sight on the top bar: what is in hand and what the month will add or take. Click for the ledger. */
+function purse(me: string): string {
+  const L = ledger(g, me);
+  const red = L.treasury < 0;
+  const tip = L.budget
+    ? `Income ${cash(L.gross)} a month, upkeep ${cash(L.upkeepTotal)}. ${red ? 'The treasury is in debt: no replacements, no new orders, and the armies suffer for it. ' : ''}Click to open the ledger.`
+    : `Income ${cash(L.gross)} a month. Click to open the ledger.`;
+  return `<button class="purse${red ? ' debt' : ''}" data-act="ledger" title="${esc(tip)}"><span class="pl">Treasury</span><b>${inHand(L.treasury)}</b><i class="${L.net >= 0 ? 'up' : 'down'}">${cash(L.net, true)} a month</i></button>`;
+}
+
 function drawBar(): void {
   const me = g.human;
   const w = weather(g);
   const eve = onEve(g);
   const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? ' · free play' : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
   const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
-  const pts = me && g.nations[me].alive ? ` · ${num(Math.floor(g.nations[me].pp))} production pts` : '';
-  $('#when').innerHTML = `${when}<small>${esc(who)}${pts}${me ? ` · ${esc(w.text)}` : ''}</small>`;
+  $('#when').innerHTML = `${when}<small>${esc(who)}${me ? ` · ${esc(w.text)}` : ''}</small>`;
+  $('#purse').innerHTML = me && g.nations[me].alive && !eve ? purse(me) : '';
   let b = '';
   if (passing) b += `<button class="btn go" data-act="skip" title="Play the rest of the month at once">Skip ▸▸</button>`;
   else if (me && humanUp(g)) {
@@ -864,7 +881,8 @@ function alertList(): Alert[] {
     if (idle.length) out.push({ kind: 'front', text: `${idle.length} ${idle.length === 1 ? 'army' : 'armies'} at the front ${idle.length === 1 ? 'has' : 'have'} not moved`, regs: idle });
   }
   const cheapest = Math.min(...Object.values(PRODUCTION.builds).map((b) => b.cost));
-  if (Math.floor(n.pp) >= cheapest) out.push({ kind: 'build', text: `${num(Math.floor(n.pp))} production points to spend`, tab: 'build' });
+  if (n.pp < 0) out.push({ kind: 'debt', text: 'The treasury is in debt: open the ledger' });
+  if (Math.floor(n.pp) >= cheapest) out.push({ kind: 'build', text: `${money(n.pp)} in the treasury to spend`, tab: 'build' });
   const stars = g.generals.filter((x) => x.nat === me && x.points > 0 && serving(x)).length;
   if (stars) out.push({ kind: 'generals', text: `${stars} general${stars === 1 ? ' has' : 's have'} skill points to spend`, tab: 'generals' });
   if (n.lab && teamsFree(n.lab) > 0) out.push({ kind: 'research', text: 'A design team has no work', tab: 'research' });
@@ -880,6 +898,7 @@ function followAlert(kind: string): void {
   const a = alertList().find((x) => x.kind === kind);
   if (!a) return;
   if (kind === 'honours') { const next = unseen(g)[0]; if (next) openModal({ kind: 'award', id: next.id }); return; }
+  if (kind === 'debt') { openModal({ kind: 'ledger' }); return; }
   if (a.tab) { ui.tab = a.tab as typeof ui.tab; ui.rail = ui.ship = ui.land = ui.rebase = false; refresh(); return; }
   const regs = a.regs ?? [];
   if (!regs.length) return;
@@ -930,7 +949,7 @@ function provinceSlots(r: Region): string {
   const have = me ? Math.floor(g.nations[me].pp) : 0;
   const state = `${lv ? `Level ${lv}` : 'No works'}${queued ? `, level ${lv + queued} building` : ''}`;
   const works = cost !== null
-    ? `<button class="slot act${lv ? ' has' : ''}" data-act="fortify" ${have >= cost ? '' : 'disabled'} title="Defenders behind works fight far harder. Ready in ${PRODUCTION.fort.months} months, and the works face every direction.">${slotIcon(GLYPH.works)}<b>Works</b>${pipsOf(lv, queued, 3)}<small>${state}</small><small class="do">Build level ${lv + queued + 1} · ${cost} pts</small></button>`
+    ? `<button class="slot act${lv ? ' has' : ''}" data-act="fortify" ${have >= cost ? '' : 'disabled'} title="Defenders behind works fight far harder. Ready in ${PRODUCTION.fort.months} months, and the works face every direction.">${slotIcon(GLYPH.works)}<b>Works</b>${pipsOf(lv, queued, 3)}<small>${state}</small><small class="do">Build level ${lv + queued + 1} · ${money(cost)}</small></button>`
     : `<div class="slot${lv ? ' has' : ''}">${slotIcon(GLYPH.works)}<b>Works</b>${pipsOf(lv, queued, 3)}<small>${state}${mine && lv + queued >= 3 ? ', as strong as they can be' : ''}</small></div>`;
   const harbour = `<div class="slot${r.port ? ' has' : ''}">${slotIcon(GLYPH.harbour)}<b>Harbour</b><small>${r.port ? 'A port: troops and supplies can come and go by sea' : r.seas.length ? 'A coast with no port' : 'Inland'}</small></div>`;
   const wings = g.airFleets.filter((f) => f.base === r.id && f.ftr + f.bmr > 0);
@@ -947,10 +966,10 @@ function provinceMuster(r: Region): string {
   const have = Math.floor(n.pp);
   let out = '';
   if (canRaise(g, me, r)) {
-    out += `<h3>Raise troops here <span class="inhand">${num(have)} pts in hand</span></h3><div class="recruit">`;
+    out += `<h3>Raise troops here <span class="inhand">${money(n.pp)} in the treasury</span></h3><div class="recruit">`;
     for (const [kind, b] of Object.entries(PRODUCTION.builds)) {
       const label = kind === 'arm' ? `${PRODUCTION.armourName[me] ?? PRODUCTION.armourName._default} corps` : b.label;
-      out += `<button class="rcard" data-act="build" data-kind="${kind}" ${mine && have >= b.cost ? '' : 'disabled'} title="${esc(label)}: ${esc(b.blurb)}">${icon({ nat: me, kind } as Corps)}<b>${esc(label.replace(/ corps$/i, ''))}</b><small>${b.divs} divs · ${b.months} months</small><span class="cost${have >= b.cost ? '' : ' short'}">${b.cost}<small>pts</small></span></button>`;
+      out += `<button class="rcard" data-act="build" data-kind="${kind}" ${mine && have >= b.cost ? '' : 'disabled'} title="${esc(label)}: ${esc(b.blurb)}${keepNote(kind as Kind, b.divs)}">${icon({ nat: me, kind } as Corps)}<b>${esc(label.replace(/ corps$/i, ''))}</b><small>${b.divs} divs · ${b.months} months</small><span class="cost${have >= b.cost ? '' : ' short'}">${money(b.cost)}</span></button>`;
     }
     out += '</div>';
   }
@@ -959,17 +978,37 @@ function provinceMuster(r: Region): string {
     out += `<h3>Forming here</h3>`;
     for (const b of here) {
       const left = b.eta - g.turn;
-      out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>Ready ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${b.cost}<small>paid</small></span>`}</div>`;
+      out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>Ready ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${money(b.cost)}<small>paid</small></span>`}</div>`;
     }
   }
   return out;
+}
+
+/** What a new corps will go on costing once it is raised, for the buttons that order one. Nothing in a historical scenario. */
+const keepNote = (kind: Kind, divs: number): string => (budgeted(g) ? ` Upkeep ${cash(corpsUpkeep(kind, divs) * (g.human && !g.nations[g.human].atWar.length ? BUDGET.upkeep.peace : 1))} a month.` : '');
+
+/** What a province is worth each month to whoever holds it, and what it would be worth to the player. */
+function provinceWorth(r: Region): string {
+  const me = g.human;
+  const y = provinceYield(g, r);
+  if (y.total <= 0) return '';
+  const parts: string[] = [];
+  if (y.land) parts.push(`land ${cash(y.land)}`);
+  if (y.port) parts.push(`harbour ${cash(y.port)}`);
+  if (y.oil) parts.push(`oil ${cash(y.oil)}`);
+  if (y.fac) parts.push(`${r.fac} factor${r.fac === 1 ? 'y' : 'ies'} ${cash(y.fac)}`);
+  if (y.capital) parts.push(`the capital ${cash(y.capital)}`);
+  const mine = !!me && r.ctrl === me;
+  const taken = me && !mine && g.nations[me].alive ? provinceYield(g, r, me) : null;
+  const less = r.ctrl !== r.owner ? 'Occupied ground pays half.' : r.overseas && budgeted(g) ? 'Overseas ground pays half.' : '';
+  return `<button class="worth" data-act="ledger" data-nat="${r.ctrl}" title="Open the ledger of ${esc(natName(r.ctrl))}"><span>${mine ? 'Pays into your treasury each month' : `Worth to ${esc(natName(r.ctrl))} each month`}</span><b>${cash(y.total)}</b><small>${parts.join(' · ')}${less ? ` · ${less}` : ''}${taken && taken.total > 0 ? ` In your hands it would pay ${cash(taken.total)}.` : ''}</small></button>`;
 }
 
 function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys new corps and works. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -1000,7 +1039,7 @@ function regionPane(): string {
   return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
-    ${provinceSlots(r)}
+    ${provinceWorth(r)}${provinceSlots(r)}
     <h3>Forces here</h3>${acts}${units}
     ${based.length ? `<h3>On the airfields</h3>${based.map((f) => airRow(f, false, true)).join('')}` : ''}${provinceMuster(r)}${ui.sel >= 0 && me ? advice() : ''}`;
 }
@@ -1019,12 +1058,17 @@ function buildPane(): string {
   const n = g.nations[me];
   const mine = humanUp(g);
   const have = Math.floor(n.pp);
-  const inc = income(g, me);
+  const L = ledger(g, me);
   const at = raiseAt();
   const picked = ui.sel >= 0 && at !== null && at.id === ui.sel;
-  let out = `<h2>War production</h2><p class="sub">Your factories earn production points every month. Losses in the field are made good first, at ${PRODUCTION.replacementCost} points a division, as fast as the depots can train men: about ${Math.round(PRODUCTION.manpower * 100)}% of the army a month. What is left is yours to spend.</p>
-    <div class="facts"><div class="fact"><span>In hand</span><b>${num(have)}</b></div><div class="fact"><span>Each month</span><b>+${num(inc)}</b></div><div class="fact"><span>On order</span><b>${n.queue.length}</b></div></div>`;
-  if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> Industry runs at half speed until the nation is at war.</div>`;
+  const perDiv = cash(PRODUCTION.replacementCost), depots = Math.round(PRODUCTION.manpower * 100);
+  let out = `<h2>War production</h2><p class="sub">${L.budget
+    ? `Every province you hold pays into the treasury, and every corps, ship and aircraft draws its upkeep from it. Losses in the field are made good next, at ${perDiv} a division, as fast as the depots can train men: about ${depots}% of the army a month. What is left is yours to spend.`
+    : `Your factories pay into the treasury every month. Losses in the field are made good first, at ${perDiv} a division, as fast as the depots can train men: about ${depots}% of the army a month. What is left is yours to spend.`}</p>
+    <div class="facts"><div class="fact"><span>In the treasury</span><b${L.treasury < 0 ? ' style="color:var(--red)"' : ''}>${inHand(L.treasury)}</b></div><div class="fact"><span>${L.budget ? 'After upkeep, a month' : 'Each month'}</span><b${L.net < 0 ? ' style="color:var(--red)"' : ''}>${cash(L.net, true)}</b></div><div class="fact"><span>On order</span><b>${n.queue.length}</b></div></div>
+    <div class="acts"><button class="btn small" data-act="ledger">Open the ledger</button></div>`;
+  if (L.treasury < 0) out += `<div class="note"><b>The treasury is in debt.</b> Nothing new can be ordered and no replacements go out until the books balance. Unpaid troops rest badly and men drift away.</div>`;
+  if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> Industry runs at half speed until the nation is at war${L.budget ? ', and the forces cost half as much to keep' : ''}.</div>`;
 
   out += `<h3>Raise a new corps</h3>`;
   if (!at) out += `<div class="empty">There is no home ground left to raise troops on.</div>`;
@@ -1033,7 +1077,7 @@ function buildPane(): string {
     for (const [kind, b] of Object.entries(PRODUCTION.builds)) {
       const ok = mine && have >= b.cost;
       const label = kind === 'arm' ? `${PRODUCTION.armourName[me] ?? PRODUCTION.armourName._default} corps` : b.label;
-      out += `<button class="buy" data-act="build" data-kind="${kind}" ${ok ? '' : 'disabled'}>${icon({ nat: me, kind } as Corps)}<span class="grow"><b>${esc(label)}</b><small>${b.divs} divisions · ready in ${b.months} months</small><small>${esc(b.blurb)}</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${b.cost}<small>pts</small></span></button>`;
+      out += `<button class="buy" data-act="build" data-kind="${kind}" ${ok ? '' : 'disabled'}>${icon({ nat: me, kind } as Corps)}<span class="grow"><b>${esc(label)}</b><small>${b.divs} divisions · ready in ${b.months} months</small><small>${esc(b.blurb)}${keepNote(kind as Kind, b.divs)}</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${money(b.cost)}</span></button>`;
     }
   }
 
@@ -1042,7 +1086,7 @@ function buildPane(): string {
     out += `<h3>Raise a lost corps again</h3><p class="sub" style="margin:0 0 7px">A formation on the memorial wall can be raised again under its old name. It costs what any new corps costs, and it carries the old colours, the name the army gave it and part of what the old corps knew.</p>`;
     for (const f of lostOnes) {
       const b = PRODUCTION.builds[f.kind];
-      out += `<button class="buy" data-act="revive" data-id="${f.id}" ${mine && have >= b.cost ? '' : 'disabled'}>${icon({ nat: me, kind: f.kind } as Corps)}<span class="grow"><b>${esc(f.name)}${f.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}</b><small>${fallenLine(f)} ${ribbons(f)}</small><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(at.name)}</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${b.cost}<small>pts</small></span></button>`;
+      out += `<button class="buy" data-act="revive" data-id="${f.id}" ${mine && have >= b.cost ? '' : 'disabled'}>${icon({ nat: me, kind: f.kind } as Corps)}<span class="grow"><b>${esc(f.name)}${f.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}</b><small>${fallenLine(f)} ${ribbons(f)}</small><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(at.name)}</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${money(b.cost)}</span></button>`;
     }
   }
 
@@ -1054,7 +1098,7 @@ function buildPane(): string {
     if (cost === null) out += `<div class="empty">${esc(sel.name)} is already fortified as heavily as it can be.</div>`;
     else {
       const lv = (sel.fort?.lv ?? 0) + n.queue.filter((b) => b.what === 'fort' && b.region === sel.id).length + 1;
-      out += `<button class="buy" data-act="fortify" ${mine && have >= cost ? '' : 'disabled'}><span class="grow"><b>Fortify ${esc(sel.name)} to level ${lv}</b><small>Ready in ${PRODUCTION.fort.months} months · faces every direction</small><small>Defenders behind works fight far harder. A line only helps if the enemy has to come through it.</small></span><span class="cost${have >= cost ? '' : ' short'}">${cost}<small>pts</small></span></button>`;
+      out += `<button class="buy" data-act="fortify" ${mine && have >= cost ? '' : 'disabled'}><span class="grow"><b>Fortify ${esc(sel.name)} to level ${lv}</b><small>Ready in ${PRODUCTION.fort.months} months · faces every direction</small><small>Defenders behind works fight far harder. A line only helps if the enemy has to come through it.</small></span><span class="cost${have >= cost ? '' : ' short'}">${money(cost)}</span></button>`;
     }
   }
 
@@ -1063,7 +1107,7 @@ function buildPane(): string {
   for (const b of [...n.queue].sort((a, c) => a.eta - c.eta)) {
     const left = b.eta - g.turn;
     const where = g.regions[b.region]?.name ?? '';
-    out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>${b.what === 'corps' ? `Forming at ${esc(where)} · ` : ''}ready ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${b.cost}<small>paid</small></span>`}</div>`;
+    out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>${b.what === 'corps' ? `Forming at ${esc(where)} · ` : ''}ready ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${money(b.cost)}<small>paid</small></span>`}</div>`;
   }
   return out;
 }
@@ -1126,7 +1170,7 @@ function researchPane(): string {
   for (const f of FIELDS) out += labRow(me, f, mine);
   out += `<h3>More design teams</h3>`;
   out += cost === null ? `<div class="empty">The nation has all the design teams its engineers can staff.</div>`
-    : `<button class="buy" data-act="bureau" ${mine && n.pp >= cost ? '' : 'disabled'}><span class="grow"><b>Found a new design team</b><small>One more team to put on any branch, for the rest of the war.</small><small>Paid for from production: ${num(Math.floor(n.pp))} points in hand.</small></span><span class="cost${n.pp >= cost ? '' : ' short'}">${cost}<small>pts</small></span></button>`;
+    : `<button class="buy" data-act="bureau" ${mine && n.pp >= cost ? '' : 'disabled'}><span class="grow"><b>Found a new design team</b><small>One more team to put on any branch, for the rest of the war.</small><small>Paid for from the treasury: ${money(n.pp)} in hand.</small></span><span class="cost${n.pp >= cost ? '' : ' short'}">${money(cost)}</span></button>`;
   if (others) out += `<h3 style="margin-top:20px">What the other powers have in service</h3>${others.replace(/<h3>/g, '<h3 style="margin-top:10px">')}`;
   return out;
 }
@@ -1448,7 +1492,7 @@ function fallenCard(f: Fallen): string {
   if (heir) again = `<div class="note"><b>Raised again.</b> A new ${esc(f.name)} carries the old colours. <button class="link" data-act="record" data-type="corps" data-id="${heir.id}">Its record ›</button></div>`;
   else if (f.heir !== undefined) again = '<div class="note"><b>Raised again, and lost again.</b> The name has been carried twice.</div>';
   else if (queued) again = '<div class="note"><b>Being raised again.</b> A new corps is forming under the old name.</div>';
-  else if (mine && b && at) again = `<h3>Raise it again</h3><button class="buy" data-act="revive" data-id="${f.id}" ${humanUp(g) && have >= b.cost ? '' : 'disabled'}>${icon({ nat: f.nat, kind: f.kind } as Corps)}<span class="grow"><b>Raise ${esc(f.name)} again</b><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(at.name)}</small><small>The new corps carries the old colours${f.nick ? ', the name the army gave it' : ''} and ${Math.round(STORIES.legacy.xp * 100)}% of what the old corps knew above a green one.</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${b.cost}<small>pts</small></span></button>`;
+  else if (mine && b && at) again = `<h3>Raise it again</h3><button class="buy" data-act="revive" data-id="${f.id}" ${humanUp(g) && have >= b.cost ? '' : 'disabled'}>${icon({ nat: f.nat, kind: f.kind } as Corps)}<span class="grow"><b>Raise ${esc(f.name)} again</b><small>${b.divs} divisions · ready in ${b.months} months · forms up at ${esc(at.name)}</small><small>The new corps carries the old colours${f.nick ? ', the name the army gave it' : ''} and ${Math.round(STORIES.legacy.xp * 100)}% of what the old corps knew above a green one.</small></span><span class="cost${have >= b.cost ? '' : ' short'}">${money(b.cost)}</span></button>`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Memorial wall · ${n.adj} army</div><h2>${esc(f.name)}</h2>${f.nick ? `<div class="aka">${esc(capital(f.nick))}</div>` : ''}</header>
     <div class="body">
       <p class="lead"><b>${fallenLine(f)}</b>${by && by.id !== f.nat ? `, ${f.how === 'destroyed' ? 'by' : f.how === 'surrendered' ? 'to' : 'cut off by'} the ${esc(by.adj)} army` : ''}. ${f.divs} ${KIND[f.kind].label.toLowerCase()} division${f.divs > 1 ? 's' : ''}, raised ${date(f.born)}${f.home >= 0 ? ` at ${esc(g.regions[f.home].name)}` : ''}; ${esc(grade(f.xp).toLowerCase())} troops at the end.${f.general ? ` ${esc(f.general)} was with it.` : ''}</p>
@@ -2048,7 +2092,7 @@ function openModal(m: typeof ui.modal): void {
   if (!m) { veil.classList.remove('open'); return; }
   veil.classList.add('open');
   const card = $('#card');
-  card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'report');
+  card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'report' || m.kind === 'ledger');
   if (m.kind === 'start') card.innerHTML = startCard();
   else if (m.kind === 'report') {
     const rep = g.reports.find((r) => r.id === m.id);
@@ -2070,6 +2114,11 @@ function openModal(m: typeof ui.modal): void {
   else if (m.kind === 'attack') card.innerHTML = attackCard();
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
+  else if (m.kind === 'ledger') {
+    const nat = m.nat || g.human;
+    if (!nat || !g.nations[nat]) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = ledgerCard(nat);
+  }
   else if (m.kind === 'general') {
     const x = g.generals[m.id];
     if (!x) { ui.modal = null; veil.classList.remove('open'); return; }
@@ -2403,6 +2452,68 @@ function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: numbe
     <footer><button class="btn go" data-act="close">${me && humanUp(g) ? 'Give orders' : 'Continue'}</button></footer>`;
 }
 
+// ---- The ledger: where the money comes from, what the forces cost, and what every province pays ----
+
+const ARM_OF = (key: string): 'army' | 'navy' | 'air' => (key.startsWith('corps:') ? 'army' : key.startsWith('ships:') ? 'navy' : 'air');
+const ARM_NAME = { army: 'Army', navy: 'Navy', air: 'Air force' } as const;
+
+function ledgerRows(lines: LedgerLine[], sign: 1 | -1, unit: (l: LedgerLine) => string): string {
+  return lines.map((l) => `<tr${sign < 0 ? ' class="sub"' : ''}><td>${esc(l.label)}${unit(l) ? ` <small>${unit(l)}</small>` : ''}</td><td class="${l.amount * sign < 0 ? 'neg' : ''}">${cash(l.amount * sign, sign < 0 || l.amount < 0)}</td></tr>`).join('');
+}
+
+function ledgerCard(nat: string): string {
+  const n = g.nations[nat];
+  const L: Ledger = ledger(g, nat);
+  const mine = nat === g.human;
+  const by: Record<'army' | 'navy' | 'air', number> = { army: 0, navy: 0, air: 0 };
+  for (const l of L.upkeep) by[ARM_OF(l.key)] += l.amount;
+  // The picture: one bar for the month's income, cut into what each arm takes and what is left to spend.
+  const whole = Math.max(L.gross, L.upkeepTotal, 1e-9);
+  const pct = (x: number): string => `${Math.max(0, (x / whole) * 100).toFixed(1)}%`;
+  const share = (x: number): string => `${Math.round((x / Math.max(L.gross, 1e-9)) * 100)}%`;
+  const left = Math.max(0, L.net);
+  const bar = L.budget
+    ? `<div class="lbar" role="img" aria-label="Of each month's income the army takes ${share(by.army)}, the navy ${share(by.navy)}, the air force ${share(by.air)}, and ${share(left)} is left to spend.">${(['army', 'navy', 'air'] as const).map((k) => (by[k] > 0 ? `<i class="${k}" style="width:${pct(by[k])}" title="${ARM_NAME[k]}: ${cash(by[k])} a month"></i>` : '')).join('')}${left > 0 ? `<i class="free" style="width:${pct(left)}" title="Left to spend: ${cash(left)} a month"></i>` : ''}</div>
+      <div class="lkey">${(['army', 'navy', 'air'] as const).map((k) => `<span><i class="${k}"></i>${ARM_NAME[k]} ${cash(by[k])} <small>${share(by[k])}</small></span>`).join('')}<span><i class="free"></i>${L.net >= 0 ? `Left to spend ${cash(left)} <small>${share(left)}</small>` : `Short by ${cash(-L.net)} a month`}</span></div>`
+    : '';
+  const unitIn = (l: LedgerLine): string => (l.count === undefined ? '' : l.key === 'land' ? `${l.count} province${l.count === 1 ? '' : 's'}` : l.key === 'trade' ? `${l.count} partner${l.count === 1 ? '' : 's'}` : l.key === 'capital' ? '' : `${num(l.count)}`);
+  const unitOut = (l: LedgerLine): string => (l.count === undefined ? '' : l.key.startsWith('corps:') ? `${num(l.count)} division${l.count === 1 ? '' : 's'}` : l.key.startsWith('air:') ? `${num(l.count)} aircraft` : `${num(l.count)}`);
+  const moneyIn = `<table class="ltab">${ledgerRows(L.income, 1, unitIn)}${ledgerRows(L.changes, 1, () => '')}<tr class="sum"><td>Income each month</td><td>${cash(L.gross, true)}</td></tr></table>`;
+  const arms = (['army', 'navy', 'air'] as const).filter((k) => by[k] > 0).map((k) => `<tr class="arm"><td><i class="dot ${k}"></i>${ARM_NAME[k]}</td><td>${cash(-by[k], true)}</td></tr>${ledgerRows(L.upkeep.filter((l) => ARM_OF(l.key) === k), -1, unitOut)}`).join('');
+  const moneyOut = L.budget
+    ? `<table class="ltab">${arms || '<tr><td>No forces under arms</td><td>0</td></tr>'}<tr class="sum"><td>Upkeep each month</td><td>${cash(-L.upkeepTotal, true)}</td></tr></table>${n.atWar.length ? '' : `<p class="sub" style="margin-top:6px">At peace the forces are on a peacetime footing and cost ${Math.round(BUDGET.upkeep.peace * 100)}% of this in war.</p>`}`
+    : `<p class="sub">In a historical scenario the forces are kept by the state as history kept them: no upkeep is charged, so that history's timetable holds. In the grand campaign every corps, ship and aircraft draws its keep from the treasury.</p>`;
+  const all = !!ui.modal?.all;
+  const shown = all ? L.provinces : L.provinces.slice(0, 10);
+  const prov = shown.map((p) => {
+    const r = g.regions[p.id];
+    const bits: string[] = [];
+    if (p.capital) bits.push(`capital ${cash(p.capital)}`);
+    if (p.fac) bits.push(`${r.fac} factor${r.fac === 1 ? 'y' : 'ies'} ${cash(p.fac)}`);
+    if (p.oil) bits.push(`oil ${cash(p.oil)}`);
+    if (p.port) bits.push(`harbour ${cash(p.port)}`);
+    if (p.land) bits.push(`${r.terrain} ${cash(p.land)}`);
+    return `<button class="lprov" data-act="ledgergo" data-id="${p.id}" title="Show ${esc(p.name)} on the map"><span class="grow"><b>${esc(p.name)}</b>${r.owner !== nat ? ' <span class="tag">Occupied</span>' : r.overseas ? ' <span class="tag">Overseas</span>' : ''}<small>${bits.join(' · ')}</small></span><span class="lbarx"><i style="width:${Math.max(2, (p.total / Math.max(L.provinces[0]?.total ?? 1, 1e-9)) * 100).toFixed(0)}%"></i></span><b class="amt">${cash(p.total)}</b></button>`;
+  }).join('');
+  const debt = L.treasury < 0
+    ? `<div class="note" style="border-left-color:var(--red)"><b>In debt.</b> While the treasury is empty no replacements go out and nothing new can be ordered. Unpaid troops recover up to ${Math.round(BUDGET.debt.rest * 100)}% less cohesion each month and up to ${Math.round(BUDGET.debt.desert * 100)}% of every corps drifts away, worse the deeper the debt. Creditors stop lending at ${BUDGET.debt.floor} months of income.</div>`
+    : '';
+  const story = L.budget
+    ? `Think of it as a household budget. Every province is a pay cheque, large or small. The armed forces are the standing bills, due every month whether they fight or not. What is left after the bills replaces losses first and then buys new forces, and a new corps is not only its price: it is another bill every month after.`
+    : `Every month the factories pay in, losses in the field are made good, and what is left buys new corps and works.`;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The ledger · ${date(g.turn)}</div><h2>${flagIcon(nat, n.color, 34, 'inh')} ${esc(mine ? 'Your treasury' : `The treasury of ${natName(nat)}`)}</h2></header>
+    <div class="body ledger">
+      <div class="lfacts"><div class="lfact"><span>In the treasury</span><b class="${L.treasury < 0 ? 'neg' : ''}">${inHand(L.treasury)}</b></div><div class="lfact"><span>Income a month</span><b>${cash(L.gross, true)}</b></div><div class="lfact"><span>Upkeep a month</span><b>${L.budget ? cash(-L.upkeepTotal, true) : '0'}</b></div><div class="lfact net"><span>${L.net >= 0 ? 'Left to spend a month' : 'Short each month'}</span><b class="${L.net < 0 ? 'neg' : 'pos'}">${cash(L.net, true)}</b></div></div>
+      ${bar}${debt}
+      <p class="sub">${story}</p>
+      <div class="lcols"><div><h3>Money in</h3>${moneyIn}</div><div><h3>Money out</h3>${moneyOut}</div></div>
+      <h3>What the provinces pay <span class="inhand">${L.provinces.length} held · richest first</span></h3>
+      <div class="lprovs">${prov || '<div class="empty">No provinces held.</div>'}</div>
+      ${L.provinces.length > 10 ? `<div class="acts"><button class="btn small" data-act="ledgerall">${all ? 'Show the ten richest' : `Show all ${L.provinces.length} provinces`}</button></div>` : ''}
+    </div>
+    <footer>${mine ? '<button class="btn" data-act="ledgerbuild">Raise forces</button>' : ''}<button class="btn go" data-act="close">Close</button></footer>`;
+}
+
 function declareCard(): string {
   const list = declarable(g);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy</div><h2>Declare war</h2></header>
@@ -2714,6 +2825,10 @@ function onClick(e: MouseEvent): void {
     case 'new': stopAuto(); endPassing(); ui.menu = 'grand'; openModal({ kind: 'start' }); break;
     case 'skip': endPassing(); break;
     case 'alert': followAlert(t.dataset.kind!); break;
+    case 'ledger': openModal({ kind: 'ledger', nat: t.dataset.nat || g.human || '' }); break;
+    case 'ledgerall': { const top = $('#card').scrollTop; openModal({ ...ui.modal!, all: !ui.modal?.all }); $('#card').scrollTop = top; break; }
+    case 'ledgergo': { openModal(null); ui.tab = 'region'; selectRegion(id); refresh(); focusOn([id]); break; }
+    case 'ledgerbuild': openModal(null); ui.tab = 'build'; refresh(); break;
     case 'record': openModal({ kind: 'unit', type: t.dataset.type as UnitKind, id }); break;
     case 'fallen': openModal({ kind: 'fallen', id }); break;
     case 'award': openModal({ kind: 'award', id }); refresh(); break;

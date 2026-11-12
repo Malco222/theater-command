@@ -1,0 +1,46 @@
+{
+  "_about": "The budget: where a nation's money comes from and what its armed forces cost to keep. These rules are in force in the grand campaign; the historical scenarios keep the simpler arithmetic of production.json so that history's timetable holds. 'scale' is how the interface shows money: one production point is shown as that many, so that a province's yield reads as a whole number. 'land' is what a province gives each month by its ground, before anything is built on it; 'port' and 'oil' are added for a harbour and an oilfield; 'capital' is what the seat of government brings in for as long as it is held. A factory gives one point at home (production.json). 'occupied' and 'overseas' are the shares of land, port and oil yields that reach the treasury from conquered ground and from colonies. 'upkeep' is the monthly cost of keeping forces in being: corps by the division at full strength, ships by the hull, aircraft by the machine; 'peace' is the share of it a nation at peace pays. 'debt' is what happens when the treasury is empty: 'floor' is how many months of income a nation can owe before its creditors stop lending, 'rest' the share of the monthly rest unpaid corps lose at that point, 'desert' the share of each corps that melts away a month, and 'aiMargin' how many months of a new formation's upkeep a computer-run nation wants to see in its monthly surplus before it orders one.",
+  "scale": 100,
+  "capital": 2,
+  "land": {
+    "urban": 0.3,
+    "plains": 0.18,
+    "forest": 0.12,
+    "hills": 0.1,
+    "marsh": 0.06,
+    "mountain": 0.06,
+    "desert": 0.03
+  },
+  "port": 0.12,
+  "oil": 1.5,
+  "occupied": 0.5,
+  "overseas": 0.5,
+  "upkeep": {
+    "corps": {
+      "inf": 0.04,
+      "mtn": 0.04,
+      "cav": 0.04,
+      "fort": 0.025,
+      "mot": 0.06,
+      "arm": 0.1
+    },
+    "ships": {
+      "bb": 0.08,
+      "cv": 0.08,
+      "ca": 0.03,
+      "dd": 0.008,
+      "ss": 0.005
+    },
+    "air": {
+      "ftr": 0.0006,
+      "bmr": 0.001
+    },
+    "peace": 0.5
+  },
+  "debt": {
+    "floor": 3,
+    "rest": 0.5,
+    "desert": 0.03,
+    "aiMargin": 1
+  }
+}

@@ -9,6 +9,7 @@
 // nothing here draws on the dice of the land war. History's wars play out as they did.
 
 import data from '../../data/campaign/stories.json';
+import budget from '../../data/campaign/budget.json';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { clamp } from '../core/math';
@@ -693,7 +694,7 @@ export function whyNotCash(g: Game, a: Award, how: Cash): string {
 /** What cashing an honour in would bring, in words, for the card. */
 export function cashWorth(g: Game, a: Award, how: Cash): string {
   const C = STORIES.cash, fame = fameOf(a);
-  if (how === 'bonds') return `+${C.bondsPp * fame} production points and +${C.bondsPc * fame} political capital`;
+  if (how === 'bonds') return `+${(C.bondsPp * fame * budget.scale).toLocaleString('en-US')} for the treasury and +${C.bondsPc * fame} political capital`;
   const steps = Math.min(fame, STORIES.veterans.maxSchools - (g.stories.schools[a.nat] ?? 0));
   const better = `every later draft and new corps is trained ${Math.round(STORIES.veterans.perSchool * steps * 100)} points better`;
   return a.kind === 'air' ? `${C.pilots * fame} more trained pilots at once, and ${better}` : better;
@@ -714,7 +715,7 @@ export function cashHonour(g: Game, id: number, how: Cash): boolean {
   if (how === 'bonds') {
     n.pp += C.bondsPp * fame;
     n.pc = Math.min(DIPLOMACY.pcCap, n.pc + C.bondsPc * fame);
-    gain = `The bond drive brings in ${C.bondsPp * fame} production points and ${C.bondsPc * fame} political capital.`;
+    gain = `The bond drive brings in ${(C.bondsPp * fame * budget.scale).toLocaleString('en-US')} for the treasury and ${C.bondsPc * fame} political capital.`;
   } else {
     g.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g.stories.schools[a.nat] ?? 0) + fame);
     if (a.kind === 'air') { const p = g.airPool[a.nat]; if (p) p.pilots += C.pilots * fame; }

@@ -578,3 +578,61 @@ button.hon:hover { border-color: var(--brass); }
   .sidebtn.wide { grid-column: auto; }
   .ladder { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* The treasury on the top bar, and the ledger behind it */
+.purse { display: grid; grid-template-columns: auto auto; column-gap: 8px; align-items: baseline; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px 5px; color: inherit; line-height: 1.1; cursor: pointer; }
+.purse:hover { border-color: var(--brass); }
+.purse .pl { grid-column: 1 / 3; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.purse b { font-family: var(--head); font-size: 20px; font-weight: 700; color: var(--brass); }
+.purse i { font-style: normal; font-size: 11.5px; white-space: nowrap; }
+.purse i.up { color: var(--green); }
+.purse i.down, .purse.debt b { color: var(--red); }
+.purse.debt { border-color: var(--red); }
+.alert.debt { border-right-color: var(--red); }
+.alerts.inpane .alert.debt { border-left-color: var(--red); }
+.worth { display: grid; grid-template-columns: 1fr auto; column-gap: 10px; align-items: baseline; width: 100%; text-align: left; margin-top: 8px; padding: 6px 9px; background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: 0 4px 4px 0; color: inherit; cursor: pointer; }
+.worth:hover { border-color: var(--brass); }
+.worth span { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.worth b { font-family: var(--head); font-size: 18px; font-weight: 700; color: var(--brass); }
+.worth small { grid-column: 1 / 3; font-size: 11.5px; color: var(--ink-2); line-height: 1.35; margin-top: 1px; }
+svg.flag.inh { vertical-align: -3px; margin-right: 4px; }
+.ledger .lfacts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.ledger .lfact { background: var(--panel-2); border-radius: 4px; padding: 8px 10px; }
+.ledger .lfact span { display: block; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.ledger .lfact b { font-family: var(--head); font-size: 26px; font-weight: 700; line-height: 1.1; }
+.ledger .lfact.net { box-shadow: inset 0 0 0 1px var(--brass); }
+.ledger .pos { color: var(--green); }
+.ledger .neg { color: var(--red); }
+.lbar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; margin-top: 12px; background: var(--panel-2); }
+.lbar i { display: block; height: 100%; min-width: 2px; }
+.lbar i + i { border-left: 1px solid var(--panel); }
+.army { background: #b5694a; } .navy { background: #4f86b3; } .air { background: #9a86c2; } .free { background: var(--green); }
+.lkey { display: flex; gap: 6px 16px; flex-wrap: wrap; margin-top: 6px; font-size: 12px; color: var(--ink-2); }
+.lkey i, .ltab i.dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.lkey small { color: var(--ink-3); }
+.lcols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+.ltab { width: 100%; border-collapse: collapse; font-size: 13px; }
+.ltab td { padding: 3.5px 0; border-bottom: 1px solid var(--line); }
+.ltab td:last-child { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 10px; }
+.ltab td small { color: var(--ink-3); font-size: 11.5px; }
+.ltab tr.arm td { font-weight: 600; padding-top: 7px; }
+.ltab tr.sub td:first-child { padding-left: 16px; }
+.ltab tr.sub td { color: var(--ink-2); }
+.ltab tr.sub td.neg { color: #d98b78; }
+.ltab tr.sum td { border-bottom: 0; border-top: 2px solid var(--ink-3); font-family: var(--head); font-size: 17px; font-weight: 700; padding-top: 5px; }
+.lprovs { display: grid; gap: 3px; }
+.lprov { display: grid; grid-template-columns: minmax(0, 1fr) 110px 64px; column-gap: 10px; align-items: center; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 5px 9px; color: inherit; cursor: pointer; }
+.lprov:hover { border-color: var(--brass); }
+.lprov b { font-size: 13px; font-weight: 600; }
+.lprov small { display: block; font-size: 11.5px; color: var(--ink-2); }
+.lprov .lbarx { height: 8px; background: var(--panel); border-radius: 2px; overflow: hidden; }
+.lprov .lbarx i { display: block; height: 100%; background: var(--brass); }
+.lprov .amt { font-family: var(--head); font-size: 17px; font-weight: 700; color: var(--brass); text-align: right; }
+@media (max-width: 760px) {
+  .ledger .lfacts { grid-template-columns: 1fr 1fr; }
+  .lcols { grid-template-columns: 1fr; }
+  .lprov { grid-template-columns: minmax(0, 1fr) 56px; }
+  .lprov .lbarx { display: none; }
+  .purse { padding: 3px 8px 4px; }
+  .purse b { font-size: 17px; }
+}
