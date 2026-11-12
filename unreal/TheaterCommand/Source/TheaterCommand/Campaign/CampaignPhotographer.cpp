@@ -223,6 +223,18 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Select = TEXT("Neumark");
 			Shot.Order = TEXT("work:cutrail");
 		}
+		// A fleet and an air fleet, each with the orders it can be given; and one given.
+		Add(TEXT("34-fleet-orders"), TEXT("@fleet4"), 0.25f).Force = TEXT("fleet:5");
+		{
+			FShot& Shot = Add(TEXT("34b-fleet-sails"), TEXT("@fleet4"), 0.25f);
+			Shot.Force = TEXT("fleet:5");
+			Shot.Order = TEXT("fleet:5:6:patrol");
+		}
+		{
+			FShot& Shot = Add(TEXT("34c-air-orders"), TEXT("Berlin"), 0.25f);
+			Shot.Force = TEXT("air:1");
+			Shot.Order = TEXT("air:1:bomb:38");
+		}
 		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
 	}
 
@@ -436,6 +448,14 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (const int32* Target = Data.RegionByName.Find(Shot.Attack))
 	{
 		Controller->OrderTo(*Target);
+	}
+	if (!Shot.Force.IsEmpty())
+	{
+		FString Kind, Number;
+		if (Shot.Force.Split(TEXT(":"), &Kind, &Number))
+		{
+			Controller->ShowForce(Kind == TEXT("fleet"), FCString::Atoi(*Number));
+		}
 	}
 	if (!Shot.Order.IsEmpty() && !Shot.bArsenal)
 	{

@@ -3717,6 +3717,14 @@
 
   // ../../src/campaign/air.ts
   var AIR = air_default;
+  var MISSION = {
+    support: { label: "Support the armies", what: "Flies for the armies and defends its own sky." },
+    superiority: { label: "Win the sky", what: "Fighters and bombers go for the enemy air force and its airfields over one region." },
+    bomb: { label: "Bomb industry", what: "Bombers attack the factories of one region by day, with fighters if it is in their range." },
+    night: { label: "Bomb by night", what: "Bombers attack by night: few are lost, and few bombs find the factories." },
+    strike: { label: "Strike shipping", what: "Bombers hunt warships and merchant ships in one sea." },
+    rest: { label: "Rest and refit", what: "Stands down to refit. It gets replacements first and does not fly." }
+  };
   var OFFENSIVE = ["superiority", "bomb", "night", "strike"];
   var isOffensive = (m) => OFFENSIVE.includes(m);
   var SURFACE = ["bb", "cv", "ca", "dd"];
@@ -3858,6 +3866,7 @@
     if (km(g2, f.base, r.id) > AIR.ferry) return "Too far to move in one month.";
     return null;
   }
+  var airBases = (g2, f) => g2.regions.filter((r) => whyNotBase(g2, f, r) === null);
   function rebaseAir(g2, f, r) {
     if (whyNotBase(g2, f, r)) return false;
     f.base = r.id;
@@ -3893,6 +3902,11 @@
     if (d > R.bmrRange) return "It is beyond its bombers.";
     if (r.fac > 0 || onNet(target) && !railCut(g2, target) && groundRules(g2)) return null;
     return !groundRules(g2) ? "There is no industry there to bomb." : onNet(target) ? "There is no industry there, and its railway is already cut." : "There is no industry or railway there to bomb.";
+  }
+  function airTargets(g2, f, m) {
+    if (!isOffensive(m)) return [];
+    const all = m === "strike" ? g2.seas.map((z) => z.id) : g2.regions.map((r) => r.id);
+    return all.filter((t) => whyNotMission(g2, f, m, t) === null);
   }
   function setMission(g2, f, m, target = -1) {
     if (whyNotMission(g2, f, m, target)) return false;
@@ -8380,10 +8394,10 @@
       }
       return sum;
     };
-    const force = placed ? doors.map(push) : [];
-    const floor = OPEN.foothold * Math.max(0, ...force);
+    const force2 = placed ? doors.map(push) : [];
+    const floor = OPEN.foothold * Math.max(0, ...force2);
     doors.forEach((id, k) => {
-      if (!placed || force[k] >= floor) {
+      if (!placed || force2[k] >= floor) {
         cost[id] = step2(g2.regions[id]);
         open.push(id);
       }
@@ -9047,20 +9061,20 @@
       const from = g2.regions[c.reg];
       const waiting2 = from.port && (within2 ? within2.has(from.id) && allied(g2, nat, from.ctrl) && !L.to.includes(from.name) : from.owner === nat);
       if (!waiting2) continue;
-      const force = [c, ...(L.with ?? []).map((nm) => g2.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x) => !!x)];
+      const force2 = [c, ...(L.with ?? []).map((nm) => g2.corps.find((x) => x.nat === nat && x.name === nm && !x.dead && x.reg === c.reg)).filter((x) => !!x)];
       for (const name of L.to) {
         const to = g2.byName[name];
         if (!to) continue;
         let ok = false;
-        if (allied(g2, nat, to.ctrl)) ok = to.owner !== nat && force.map((x) => shipMove(g2, x, to)).some(Boolean);
+        if (allied(g2, nat, to.ctrl)) ok = to.owner !== nat && force2.map((x) => shipMove(g2, x, to)).some(Boolean);
         else if (atWar(g2, nat, to.ctrl)) {
-          if (hostileUnits(g2, to, nat).length && assess(g2, force, to, landingOpts(g2, force, to)).odds < (L.minOdds ?? 1.2)) continue;
-          const res = landCorps(g2, force, to);
+          if (hostileUnits(g2, to, nat).length && assess(g2, force2, to, landingOpts(g2, force2, to)).odds < (L.minOdds ?? 1.2)) continue;
+          const res = landCorps(g2, force2, to);
           ok = res.ok && !!res.taken;
           if (res.ok && !res.taken) break;
         }
         if (ok) {
-          for (const x of force) {
+          for (const x of force2) {
             x.hold = false;
             g2.flags[`exp:${x.id}`] = ph.to;
           }
@@ -9551,11 +9565,11 @@
         }
       }
       if (!goal) return;
-      const force = limitAttackers(g2, trapped.filter((c) => g2.regions[c.reg].nb.includes(goal.id)), goal);
+      const force2 = limitAttackers(g2, trapped.filter((c) => g2.regions[c.reg].nb.includes(goal.id)), goal);
       if (hostileUnits(g2, goal, nat).length) {
-        if (assess(g2, force, goal).odds < 1) return;
-        if (!resolveBattle(g2, force, goal).taken) return;
-      } else if (!moveCorps(g2, force[0], goal)) return;
+        if (assess(g2, force2, goal).odds < 1) return;
+        if (!resolveBattle(g2, force2, goal).taken) return;
+      } else if (!moveCorps(g2, force2[0], goal)) return;
       for (const c of trapped) {
         if (c.dead) continue;
         if (c.reg !== goal.id && g2.regions[c.reg].nb.includes(goal.id)) moveCorps(g2, c, goal);
@@ -9735,6 +9749,26 @@
   }
   function orderRail(g2, c, to) {
     return canOrder(g2, c) && railMove(g2, c, g2.regions[to]);
+  }
+  var myFleet = (g2, id) => {
+    const f = g2.fleets.find((x) => x.id === id);
+    return f && f.nat === g2.human && current(g2) === f.nat ? f : null;
+  };
+  function orderFleet(g2, id, zone, stance2) {
+    const f = myFleet(g2, id);
+    return !!f && sail(g2, f, zone, stance2);
+  }
+  var myAir = (g2, id) => {
+    const f = g2.airFleets.find((x) => x.id === id);
+    return f && f.nat === g2.human && current(g2) === f.nat ? f : null;
+  };
+  function orderAir(g2, id, mission, target = -1) {
+    const f = myAir(g2, id);
+    return !!f && setMission(g2, f, mission, target);
+  }
+  function orderAirBase(g2, id, region) {
+    const f = myAir(g2, id);
+    return !!f && rebaseAir(g2, f, g2.regions[region]);
   }
   function orderBuildCorps(g2, kind, region, revive) {
     return humanUp(g2) ? orderCorps(g2, g2.human, kind, region, revive) : null;
@@ -10789,6 +10823,83 @@
     }
     return { ok, note: note2, view: view() };
   }
+  function force(kind, id) {
+    const s = game();
+    const up = humanUp(s) && !onEve(s);
+    const notNow = up ? "" : "It is not your month.";
+    const options = [];
+    if (kind === "fleet") {
+      const f2 = s.fleets.find((x) => x.id === id);
+      if (!f2) return null;
+      const parts = [];
+      const count2 = (n, one, many) => {
+        if (n > 0) parts.push(`${n} ${n === 1 ? one : many}`);
+      };
+      count2(f2.ships.bb, "battleship", "battleships");
+      count2(f2.ships.cv, "carrier", "carriers");
+      count2(f2.ships.ca, "cruiser", "cruisers");
+      count2(f2.ships.dd, "destroyer", "destroyers");
+      count2(f2.ships.ss, "submarine", "submarines");
+      const sea = s.seas[f2.zone]?.name ?? "the sea";
+      const doing2 = f2.stance === "port" ? `In harbour at ${f2.port}.` : f2.stance === "raid" ? `Raiding shipping in the ${sea}.` : `On patrol in the ${sea}.`;
+      const mine2 = f2.nat === s.human;
+      if (mine2) {
+        const reach3 = fleetReach(s, f2).slice().sort((a, b) => a === f2.zone ? -1 : b === f2.zone ? 1 : 0);
+        for (const z of reach3) {
+          const here = f2.zone === z && f2.stance === "patrol";
+          options.push({ key: `fleet:${id}:${z}:patrol`, label: `Patrol the ${s.seas[z].name}`, detail: "Seeks out enemy warships there and guards the convoys.", ok: up && !here, why: here ? "It is doing so now." : notNow });
+        }
+        for (const z of reach3) {
+          const here = f2.zone === z && f2.stance === "raid";
+          options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: "Goes for merchant ships and avoids a fight with the enemy fleet.", ok: up && !here, why: here ? "It is doing so now." : notNow });
+        }
+        options.push({ key: `fleet:${id}:${f2.home}:port`, label: `Return to harbour at ${f2.port}`, detail: "Safe from the enemy fleet, and takes no part at sea.", ok: up && f2.stance !== "port", why: f2.stance === "port" ? "It is in harbour now." : notNow });
+      }
+      return { name: f2.name, nat: f2.nat, mine: mine2, lines: [parts.join(", ") || "No ships left", doing2], options };
+    }
+    const f = s.airFleets.find((x) => x.id === id);
+    if (!f) return null;
+    const base = s.regions[f.base];
+    const targetName = (m, t) => m === "strike" ? `the ${s.seas[t]?.name ?? "sea"}` : s.regions[t]?.name ?? "";
+    const doing = `${MISSION[f.mission].label}${f.target >= 0 ? `: ${targetName(f.mission, f.target)}` : ""}.`;
+    const mine = f.nat === s.human;
+    if (mine) {
+      for (const m of ["support", "rest"]) {
+        options.push({ key: `air:${id}:${m}:-1`, label: MISSION[m].label, detail: MISSION[m].what, ok: up && f.mission !== m, why: f.mission === m ? "It is doing so now." : notNow });
+      }
+      const far = (m, t) => {
+        const p = m === "strike" ? s.seas[t] : s.regions[t];
+        return Math.hypot(p.x - base.x, p.y - base.y);
+      };
+      for (const m of ["superiority", "bomb", "night", "strike"]) {
+        const targets2 = airTargets(s, f, m).sort((a, b) => far(m, a) - far(m, b)).slice(0, m === "strike" ? 3 : 5);
+        for (const t of targets2) {
+          const now = f.mission === m && f.target === t;
+          options.push({ key: `air:${id}:${m}:${t}`, label: `${MISSION[m].label}: ${targetName(m, t)}`, detail: MISSION[m].what, ok: up && !now, why: now ? "It is doing so now." : notNow });
+        }
+      }
+      const bases = airBases(s, f).sort((a, b) => Math.hypot(a.x - base.x, a.y - base.y) - Math.hypot(b.x - base.x, b.y - base.y)).slice(0, 5);
+      for (const r of bases) {
+        options.push({ key: `airbase:${id}:${r.id}`, label: `Move to airfields in ${r.name}`, detail: "Settling in costs it some readiness for a month.", ok: up, why: notNow });
+      }
+    }
+    return {
+      name: f.name,
+      nat: f.nat,
+      mine,
+      lines: [`${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers`, `Based in ${base?.name ?? "the field"}.`, doing],
+      options
+    };
+  }
+  function forceOrder(key2) {
+    const s = game();
+    const [what, id, a, b] = key2.split(":");
+    let ok = false;
+    if (what === "fleet") ok = orderFleet(s, Number(id), Number(a), b);
+    else if (what === "air") ok = orderAir(s, Number(id), a, Number(b));
+    else if (what === "airbase") ok = orderAirBase(s, Number(id), Number(a));
+    return { ok, note: ok ? "The order is given." : "That order cannot be given now.", view: view() };
+  }
   function land() {
     const s = game();
     const steepNames = new Set(GROUND.steep.regions);
@@ -10919,6 +11030,8 @@
   globalThis.TC = {
     land,
     work,
+    force,
+    forceOrder,
     record,
     roll,
     stance,

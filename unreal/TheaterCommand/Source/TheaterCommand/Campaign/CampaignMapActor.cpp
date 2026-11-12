@@ -1424,7 +1424,7 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 {
 	AArmyPiece* Best = nullptr;
 	double Nearest = TNumericLimits<double>::Max();
-	for (AArmyPiece* Piece : Pieces)
+	auto Try = [&](AArmyPiece* Piece)
 	{
 		double Distance = 0.0;
 		if (Piece && Piece->HitByRay(Origin, Direction, Distance) && Distance < Nearest)
@@ -1432,6 +1432,19 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 			Nearest = Distance;
 			Best = Piece;
 		}
+	};
+	for (AArmyPiece* Piece : Pieces)
+	{
+		Try(Piece);
+	}
+	// Fleets and air fleets can be pointed at too.
+	for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : FleetPieces)
+	{
+		Try(Pair.Value);
+	}
+	for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : AirPieces)
+	{
+		Try(Pair.Value);
 	}
 	return Best;
 }

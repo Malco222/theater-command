@@ -921,7 +921,7 @@ namespace
 				{
 					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("PROVINCE"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+						SNew(STextBlock).Text(Info.OptionsTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
 					];
 					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 					[

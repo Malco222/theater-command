@@ -56,6 +56,7 @@ private:
 	FString Carry; // hang the army in hand over this region, as if dragged there
 	FString Drop; // let go of it over this region // switch the army in hand to going by rail
 		FString Order; // order this in the selected territory: a kind of corps, or "fort"
+		FString Force; // open the panel of this fleet or air fleet: "fleet:5", "air:1"
 		int32 Months = 0; // end this many months first
 	};
 

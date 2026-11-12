@@ -78,6 +78,10 @@ public:
 	/** Everything the player can order, with a province in mind (INDEX_NONE for none). */
 	FArsenal Arsenal(int32 RegionId);
 
+	/** A fleet ("fleet") or an air fleet ("air") and the orders it can be given; and giving it one of them. */
+	FForcePanel Force(const FString& Kind, int32 Id);
+	bool OrderForce(const FString& Key, FString& OutNote);
+
 	/** Rivers, crossings, railways and steep country, as the rules have them. Empty with the stand-in rules. */
 	FLandFeatures Land();
 

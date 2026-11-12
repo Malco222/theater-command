@@ -973,6 +973,50 @@ bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FS
 	return bOk;
 }
 
+FForcePanel FCampaignSession::Force(const FString& Kind, int32 Id)
+{
+	FForcePanel Out;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("force"), FString::Printf(TEXT("[%s,%d]"), *JsonQuote(Kind), Id), Object))
+	{
+		return Out;
+	}
+	Out.bValid = Object->TryGetStringField(TEXT("name"), Out.Name);
+	Object->TryGetStringField(TEXT("nat"), Out.Nation);
+	Object->TryGetBoolField(TEXT("mine"), Out.bMine);
+	Object->TryGetStringArrayField(TEXT("lines"), Out.Lines);
+	const TArray<TSharedPtr<FJsonValue>>* Options = nullptr;
+	if (Object->TryGetArrayField(TEXT("options"), Options))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Options)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FProvinceOption Option;
+			Entry->TryGetStringField(TEXT("key"), Option.Action);
+			Entry->TryGetStringField(TEXT("label"), Option.Label);
+			Entry->TryGetStringField(TEXT("detail"), Option.Detail);
+			Entry->TryGetStringField(TEXT("why"), Option.Why);
+			Entry->TryGetBoolField(TEXT("ok"), Option.bEnabled);
+			Out.Options.Add(MoveTemp(Option));
+		}
+	}
+	return Out;
+}
+
+bool FCampaignSession::OrderForce(const FString& Key, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("forceOrder"), FString::Printf(TEXT("[%s]"), *JsonQuote(Key)), Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	Object->TryGetStringField(TEXT("note"), OutNote);
+	TakeView(Object);
+	return bOk;
+}
+
 FLandFeatures FCampaignSession::Land()
 {
 	FLandFeatures Out;

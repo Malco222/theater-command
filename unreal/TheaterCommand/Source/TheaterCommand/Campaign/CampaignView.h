@@ -333,6 +333,17 @@ struct FArsenal
 };
 
 /** What a territory holds, and what the player can do there. */
+/** A fleet or an air fleet, for the panel that opens when it is clicked. */
+struct FForcePanel
+{
+	bool bValid = false;
+	FString Name;
+	FString Nation;
+	bool bMine = false;
+	TArray<FString> Lines; // what it has, where it is, what it is doing
+	TArray<FProvinceOption> Options; // the orders it can be given
+};
+
 /** A river: its name and its course, in map units, from source to mouth. */
 struct FLandRiver
 {

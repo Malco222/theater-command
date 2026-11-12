@@ -370,6 +370,24 @@ void ACampaignPlayerController::ToggleRail()
 
 void ACampaignPlayerController::ProvinceAction(const FString& Action)
 {
+	// An order to a fleet or an air fleet, from its panel.
+	if (Action.StartsWith(TEXT("fleet:")) || Action.StartsWith(TEXT("air:")) || Action.StartsWith(TEXT("airbase:")))
+	{
+		if (FCampaignSession* Navy = GetSession())
+		{
+			FString Said;
+			const bool bGiven = Navy->OrderForce(Action, Said);
+			ShowWar(Navy->GetView(), TArray<FCorpsMove>());
+			ShowForce(bShownFleet, ShownForce);
+			Notify(Said, 4.0);
+			if (bGiven)
+			{
+				CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
+				CampaignSounds::PlayLater(this, Action.StartsWith(TEXT("fleet:")) ? TEXT("ship_guns") : (Action.Contains(TEXT(":bomb:")) || Action.Contains(TEXT(":night:")) ? TEXT("bomber_drone") : TEXT("fighter_pass")), 0.3f, 0.3f);
+			}
+		}
+		return;
+	}
 	FCampaignSession* Session = GetSession();
 	if (!Session || !Map.IsValid() || Map->GetSelectedRegion() == INDEX_NONE)
 	{
@@ -867,9 +885,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 bool ACampaignPlayerController::CanPickUp(const AArmyPiece* Piece) const
 {
 	const FCampaignSession* Session = GetSession();
-	if (!Piece || !Session || Piece->GetNationTag() != Session->GetView().Human)
+	if (!Piece || !Session || !Piece->IsArmy() || Piece->GetNationTag() != Session->GetView().Human)
 	{
-		return false;
+		return false; // (fleets and air fleets are given their orders from their panel, not carried)
 	}
 	// One of the player's, with at least one corps that can be given orders this month.
 	for (const FViewCorps& Unit : Session->GetView().Corps)
@@ -934,8 +952,46 @@ void ACampaignPlayerController::DropHeldOver(int32 RegionId)
 	HeldPiece.Reset();
 }
 
+void ACampaignPlayerController::ShowForce(bool bFleet, int32 Id)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	const FForcePanel Force = Session->Force(bFleet ? TEXT("fleet") : TEXT("air"), Id);
+	if (!Force.bValid)
+	{
+		return;
+	}
+	// Whatever army was in hand is put down, and no territory is being looked at: the panel is this force's.
+	PutDownArmy();
+	SelectRegion(INDEX_NONE);
+	ShownForce = Id;
+	bShownFleet = bFleet;
+	RegionPanel = FRegionPanelInfo();
+	RegionPanel.Revision = ++PanelRevision;
+	RegionPanel.bVisible = true;
+	RegionPanel.Name = FText::FromString(Force.Name);
+	RegionPanel.OwnerTag = Force.Nation;
+	const FCampaignNation* Nation = Map->GetData().FindNation(Force.Nation);
+	RegionPanel.OwnerLine = FText::FromString((Nation ? Nation->Name : Force.Nation) + (Force.bMine ? TEXT("  \u00B7  Yours") : TEXT("")));
+	RegionPanel.Details = FText::FromString(bFleet ? TEXT("Fleet") : TEXT("Air fleet"));
+	RegionPanel.Forces = FText::FromString(FString::Join(Force.Lines, TEXT("\n")));
+	RegionPanel.OptionsTitle = FText::FromString(TEXT("ORDERS"));
+	RegionPanel.Holdings = FText::FromString(Force.bMine ? (Force.Options.Num() > 0 ? TEXT("What it can be told to do this month:") : TEXT("")) : TEXT("Not yours to command."));
+	RegionPanel.Options = Force.Options;
+}
+
 void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 {
+	// A fleet or an air fleet: look at it, and at what it can be told to do.
+	if (Piece && !Piece->IsArmy() && Piece->GetForceId() != INDEX_NONE)
+	{
+		ShowForce(Piece->IsFleet(), Piece->GetForceId());
+		CampaignSounds::Play(this, Piece->IsFleet() ? TEXT("ship_horn") : TEXT("fighter_pass"), 0.35f);
+		return;
+	}
 	// A click on somebody's flag is a click on the ground it stands on.
 	const int32 Target = Piece ? Piece->GetRegionId() : RegionId;
 

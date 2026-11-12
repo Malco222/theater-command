@@ -27,6 +27,8 @@ struct FRegionPanelInfo
 	FText Holdings;
 	FText ProvinceNote;
 	TArray<FProvinceOption> Options;
+	/** The heading over those: "PROVINCE", or "ORDERS" for a fleet or an air fleet. */
+	FText OptionsTitle = FText::FromString(TEXT("PROVINCE"));
 	TArray<FOrderLine> Forming;
 	int32 Revision = 0;
 };
@@ -262,6 +264,9 @@ public:
 	/** Orders something in the selected territory: a kind of corps to raise, or "fort". */
 	void ProvinceAction(const FString& Action);
 
+	/** Shows a fleet or an air fleet in the panel, with the orders it can be given. */
+	void ShowForce(bool bFleet, int32 Id);
+
 	/** Takes back an order placed this month. */
 	void CancelOrder(int32 OrderId);
 
@@ -354,6 +359,9 @@ private:
 	void SpaceBar();
 	void ToggleMusic();
 	void ToggleEffects();
+	int32 ShownForce = INDEX_NONE;
+	bool bShownFleet = false;
+
 	void RefreshOpening(bool bShow);
 	void EnterCampaign();
 	class ACampaignGameMode* GetMode() const;

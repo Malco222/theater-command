@@ -37,6 +37,7 @@ import { allied, atWar, createGame, men, railReach as railReachOf } from '../../
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
+  orderAir, orderAirBase, orderFleet,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
@@ -50,6 +51,9 @@ import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { CROSSINGS, RIVERS, bridgeDown, riverNotes } from '../../../src/campaign/rivers';
 import { RAIL_LINKS, railCut, railNote } from '../../../src/campaign/rails';
+import { fleetReach } from '../../../src/campaign/navy';
+import { MISSION, airBases, airTargets } from '../../../src/campaign/air';
+import type { AirMission, Stance } from '../../../src/campaign/types';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -628,6 +632,87 @@ function work(key: string, region: number) {
   return { ok, note, view: view() };
 }
 
+interface ForceOption { key: string; label: string; detail: string; ok: boolean; why: string }
+
+/**
+ * A fleet or an air fleet, for the panel that opens when it is clicked: what it is, where it is and what it
+ * is doing, and (when it is the player's and it is his month) the orders it can be given.
+ */
+function force(kind: string, id: number) {
+  const s = game();
+  const up = humanUp(s) && !onEve(s);
+  const notNow = up ? '' : 'It is not your month.';
+  const options: ForceOption[] = [];
+  if (kind === 'fleet') {
+    const f = s.fleets.find((x) => x.id === id);
+    if (!f) return null;
+    const parts: string[] = [];
+    const count = (n: number, one: string, many: string) => { if (n > 0) parts.push(`${n} ${n === 1 ? one : many}`); };
+    count(f.ships.bb, 'battleship', 'battleships');
+    count(f.ships.cv, 'carrier', 'carriers');
+    count(f.ships.ca, 'cruiser', 'cruisers');
+    count(f.ships.dd, 'destroyer', 'destroyers');
+    count(f.ships.ss, 'submarine', 'submarines');
+    const sea = s.seas[f.zone]?.name ?? 'the sea';
+    const doing = f.stance === 'port' ? `In harbour at ${f.port}.` : f.stance === 'raid' ? `Raiding shipping in the ${sea}.` : `On patrol in the ${sea}.`;
+    const mine = f.nat === s.human;
+    if (mine) {
+      const reach = fleetReach(s, f).slice().sort((a, b) => (a === f.zone ? -1 : b === f.zone ? 1 : 0));
+      for (const z of reach) {
+        const here = f.zone === z && f.stance === 'patrol';
+        options.push({ key: `fleet:${id}:${z}:patrol`, label: `Patrol the ${s.seas[z].name}`, detail: 'Seeks out enemy warships there and guards the convoys.', ok: up && !here, why: here ? 'It is doing so now.' : notNow });
+      }
+      for (const z of reach) {
+        const here = f.zone === z && f.stance === 'raid';
+        options.push({ key: `fleet:${id}:${z}:raid`, label: `Raid shipping in the ${s.seas[z].name}`, detail: 'Goes for merchant ships and avoids a fight with the enemy fleet.', ok: up && !here, why: here ? 'It is doing so now.' : notNow });
+      }
+      options.push({ key: `fleet:${id}:${f.home}:port`, label: `Return to harbour at ${f.port}`, detail: 'Safe from the enemy fleet, and takes no part at sea.', ok: up && f.stance !== 'port', why: f.stance === 'port' ? 'It is in harbour now.' : notNow });
+    }
+    return { name: f.name, nat: f.nat, mine, lines: [parts.join(', ') || 'No ships left', doing], options };
+  }
+  const f = s.airFleets.find((x) => x.id === id);
+  if (!f) return null;
+  const base = s.regions[f.base];
+  const targetName = (m: AirMission, t: number) => (m === 'strike' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
+  const doing = `${MISSION[f.mission].label}${f.target >= 0 ? `: ${targetName(f.mission, f.target)}` : ''}.`;
+  const mine = f.nat === s.human;
+  if (mine) {
+    for (const m of ['support', 'rest'] as AirMission[]) {
+      options.push({ key: `air:${id}:${m}:-1`, label: MISSION[m].label, detail: MISSION[m].what, ok: up && f.mission !== m, why: f.mission === m ? 'It is doing so now.' : notNow });
+    }
+    const far = (m: AirMission, t: number) => {
+      const p = m === 'strike' ? s.seas[t] : s.regions[t];
+      return Math.hypot(p.x - base.x, p.y - base.y);
+    };
+    for (const m of ['superiority', 'bomb', 'night', 'strike'] as AirMission[]) {
+      const targets = airTargets(s, f, m).sort((a, b) => far(m, a) - far(m, b)).slice(0, m === 'strike' ? 3 : 5);
+      for (const t of targets) {
+        const now = f.mission === m && f.target === t;
+        options.push({ key: `air:${id}:${m}:${t}`, label: `${MISSION[m].label}: ${targetName(m, t)}`, detail: MISSION[m].what, ok: up && !now, why: now ? 'It is doing so now.' : notNow });
+      }
+    }
+    const bases = airBases(s, f).sort((a, b) => Math.hypot(a.x - base.x, a.y - base.y) - Math.hypot(b.x - base.x, b.y - base.y)).slice(0, 5);
+    for (const r of bases) {
+      options.push({ key: `airbase:${id}:${r.id}`, label: `Move to airfields in ${r.name}`, detail: 'Settling in costs it some readiness for a month.', ok: up, why: notNow });
+    }
+  }
+  return {
+    name: f.name, nat: f.nat, mine,
+    lines: [`${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers`, `Based in ${base?.name ?? 'the field'}.`, doing], options,
+  };
+}
+
+/** Gives a fleet or an air fleet one of the orders its panel offered. */
+function forceOrder(key: string) {
+  const s = game();
+  const [what, id, a, b] = key.split(':');
+  let ok = false;
+  if (what === 'fleet') ok = orderFleet(s, Number(id), Number(a), b as Stance);
+  else if (what === 'air') ok = orderAir(s, Number(id), a as AirMission, Number(b));
+  else if (what === 'airbase') ok = orderAirBase(s, Number(id), Number(a));
+  return { ok, note: ok ? 'The order is given.' : 'That order cannot be given now.', view: view() };
+}
+
 /** The rivers, their crossings, the railways and the steep country: geography that does not change. */
 function land() {
   const s = game();
@@ -751,4 +836,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, work, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
