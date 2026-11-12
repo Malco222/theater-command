@@ -14,6 +14,8 @@ import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
 import { fallenOf, inherit, raisedXp, revivable } from './stories';
 import { deliverArsenal, worksUpkeep } from './arsenal';
+import { barredKind } from './ground';
+import { workingFactories } from './rails';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -37,14 +39,15 @@ export function specOf(g: Game, kind: string): BuildSpec | undefined {
 /** Every kind of corps that can be ordered in this game, lightest first. */
 export function corpsKinds(g: Game): Kind[] {
   const kinds = [...Object.keys(PRODUCTION.builds), ...(budgeted(g) ? Object.keys(arsenalData.land) : [])] as Kind[];
-  return kinds.sort((a, b) => needsOf(g, a) - needsOf(g, b) || (specOf(g, a)!.cost - specOf(g, b)!.cost));
+  // The fighting arms by the industry they need and their price, and the engineers after them.
+  return kinds.sort((a, b) => Number(a === 'eng') - Number(b === 'eng') || needsOf(g, a) - needsOf(g, b) || (specOf(g, a)!.cost - specOf(g, b)!.cost));
 }
 
 /** How many factories a province must have for a corps of this kind to be raised there. None in a historical scenario. */
 export const needsOf = (g: Game, kind: string): number => (budgeted(g) ? (arsenalData.needs as Record<string, number>)[kind] ?? 0 : 0);
 
 /** True if this nation can raise a corps of this kind in this region: home ground, with the industry heavier equipment needs. */
-export const canRaiseKind = (g: Game, nat: string, r: Region | undefined, kind: string): boolean => !!r && canRaise(g, nat, r) && r.fac >= needsOf(g, kind);
+export const canRaiseKind = (g: Game, nat: string, r: Region | undefined, kind: string): boolean => !!r && canRaise(g, nat, r) && r.fac >= needsOf(g, kind) && !barredKind(g, kind as Kind, r);
 
 /** Where a new corps of this kind would form: the region asked for if it will do, else the capital, else the home province with the most industry. -1 if nowhere. */
 export function raiseSite(g: Game, nat: string, kind: string, want = -1): number {
@@ -81,7 +84,9 @@ export interface Yield { land: number; port: number; oil: number; fac: number; c
 /** What a province gives the nation that holds it. Conquered ground and colonies give less than the home country. */
 export function provinceYield(g: Game, r: Region, nat: string = r.ctrl): Yield {
   const own = r.owner === nat;
-  const fac = own ? r.fac : r.fac * PRODUCTION.occupiedIncome;
+  // A factory wrecked by bombing earns nothing until engineers rebuild it (the grand campaign only).
+  const works = workingFactories(g, r);
+  const fac = own ? works : works * PRODUCTION.occupiedIncome;
   if (!budgeted(g)) return { land: 0, port: 0, oil: 0, fac, capital: 0, total: fac };
   const k = !own ? BUDGET.occupied : r.overseas ? BUDGET.overseas : 1;
   const land = BUDGET.land[r.terrain] * k;
@@ -116,7 +121,7 @@ export interface Ledger {
   provinces: ({ id: number; name: string } & Yield)[];
 }
 
-const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorized troops', art: 'Artillery', arm: 'Armour', fort: 'Fortress troops' };
+const KIND_LABEL: Record<Kind, string> = { inf: 'Infantry', mtn: 'Mountain troops', cav: 'Cavalry', mot: 'Motorized troops', art: 'Artillery', eng: 'Engineers', arm: 'Armour', fort: 'Fortress troops' };
 const SHIP_LABEL: Record<ShipClass, string> = { bb: 'Battleships', cv: 'Carriers', ca: 'Cruisers', dd: 'Destroyers', ss: 'Submarines' };
 
 /** What it costs each month to keep one corps of this kind and size in being. */
@@ -165,7 +170,7 @@ export function ledger(g: Game, nat: string): Ledger {
     const y = provinceYield(g, r, nat);
     provinces.push({ id: r.id, name: r.name, ...y });
     held++;
-    if (r.owner === nat) { facHome += y.fac; nHome += r.fac; } else { facOcc += y.fac; nOcc += r.fac; }
+    if (r.owner === nat) { facHome += y.fac; nHome += workingFactories(g, r); } else { facOcc += y.fac; nOcc += workingFactories(g, r); }
     land += y.land; ports += y.port; oil += y.oil; capital += y.capital;
     if (y.port) nPorts++;
     if (y.oil) nOil++;
@@ -260,7 +265,7 @@ function roman(n: number): string {
 
 function corpsName(nat: string, kind: Kind, no: number): string {
   const arm = PRODUCTION.armourName[nat] ?? PRODUCTION.armourName._default;
-  const word = kind === 'arm' ? `${arm} ` : kind === 'mot' ? 'Motorized ' : kind === 'mtn' ? 'Mountain ' : kind === 'art' ? 'Artillery ' : '';
+  const word = kind === 'arm' ? `${arm} ` : kind === 'mot' ? 'Motorized ' : kind === 'mtn' ? 'Mountain ' : kind === 'art' ? 'Artillery ' : kind === 'eng' ? 'Engineer ' : '';
   return `${roman(no)} ${word}Corps`;
 }
 
@@ -362,7 +367,8 @@ export function aiProduction(g: Game, nat: string): void {
   const keep = (b: Build): number => (b.what === 'corps' ? corpsUpkeep(b.kind!, b.divs!) : 0);
   let spare = budgeted(g) ? income(g, nat) - upkeepTotal(g, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
   // Works on order (the grand campaign's guns and airfields) do not hold up the raising of troops.
-  while (n.queue.filter((b) => b.what === 'corps' || b.what === 'fort').length < 2) {
+  // Engineers are ordered by their own rule (the grand campaign) and do not take a place in the army's programme.
+  while (n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || b.what === 'fort').length < 2) {
     let kind: Kind = home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
     // nation's greatest industrial province; a nation with no such province raises infantry instead.

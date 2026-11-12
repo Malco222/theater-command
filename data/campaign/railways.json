@@ -1,0 +1,7 @@
+{
+  "_note": "Railways, and the damage bombing leaves behind. The grand campaign only. The net itself is laid by tools/build-rails.mjs from data/campaign/rails.mjs. A province's railway is either working or cut: no train runs into, out of or through a province whose line is cut, and it stays cut until engineers relay it. wreck is the chance that troops driven out of a province tear up its track as they go: chance while they still have troops next door, unguarded when nobody is near, and fastCaptor is what tanks and lorried troops arriving first take off it. railhead is what an army is worth by how many provinces of road lie between it and the nearest working railway that leads back to a depot or a supplied port: [furthest, attack, defence]. Inside the Soviet Union an invader's line is counted from the frontier instead (east.json), and there a cut line simply stays unconverted. bomb is the chance a raid cuts the line of the province it bombs: bombers that get through divided by scale, most at best. ruin is lasting damage to factories: a raid that stops more than 'over' of a province's output has 'chance' times that share of wrecking one factory outright, as far as 'most' of the province's factories; a wrecked factory earns nothing until engineers rebuild it.",
+  "wreck": { "chance": 0.4, "unguarded": 0.15, "fastCaptor": -0.2 },
+  "railhead": [[2, 1, 1], [4, 0.85, 0.92], [99, 0.7, 0.85]],
+  "bomb": { "scale": 900, "most": 0.85 },
+  "ruin": { "over": 0.08, "chance": 2, "most": 0.5 }
+}

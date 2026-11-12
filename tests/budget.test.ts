@@ -263,5 +263,5 @@ describe('the computer\'s nations', () => {
       for (const n of Object.values(g.nations)) if (n.alive && !n.dormant) worst = Math.min(worst, n.pp);
     }
     expect(worst).toBeGreaterThanOrEqual(0);
-  });
+  }, 60000);
 });

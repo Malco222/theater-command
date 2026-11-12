@@ -10,6 +10,7 @@ import openData from '../../data/campaign/open.json';
 import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { holds } from './diplomacy';
+import { startEngineers } from './engineers';
 import { EASTERN, allied, atWar, collapseScore, corpsBase, frozen, weather } from './game';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -55,6 +56,9 @@ export function startOpen(g: Game): Game {
     g.flags['st:on:GER:POL'] = 1;
     g.flags['st:gain:GER'] = 1;
   }
+  startEngineers(g);
+  // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
+  g.supplyDirty = true;
   return g;
 }
 

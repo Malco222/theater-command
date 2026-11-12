@@ -60,6 +60,25 @@ svg#map.drag { cursor: grabbing; }
 .mk.move { stroke: #2f6b39; stroke-width: 1.6; stroke-dasharray: 4 2.5; fill: rgba(92, 170, 96, .28); }
 .mk.hit { stroke: #a22d18; stroke-width: 2; fill: rgba(207, 90, 65, .34); }
 .mk.rail { stroke: #2b4f7a; stroke-width: 1.4; stroke-dasharray: 1.5 2; fill: rgba(78, 126, 190, .25); }
+.mk.nogo { stroke: #3a2f25; stroke-width: 1.3; stroke-dasharray: 2 2.2; fill: rgba(40, 32, 26, .38); }
+.steepmark { fill: none; stroke: var(--map-ink); stroke-width: .95; stroke-linejoin: round; pointer-events: none; }
+.railbed { fill: none; stroke: #26221f; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; opacity: .78; }
+.railtie { fill: none; stroke: #f1e9d4; stroke-width: .8; stroke-dasharray: 2.1 2.1; stroke-linejoin: round; pointer-events: none; opacity: .92; }
+.railcutbed { fill: none; stroke: rgba(20, 14, 12, .55); stroke-width: 2.1; stroke-linecap: round; pointer-events: none; }
+.railcut { fill: none; stroke: #ee6a4f; stroke-width: 1.3; stroke-dasharray: .8 2.1; stroke-linecap: round; pointer-events: none; }
+svg#map:not(.near) .railbed { opacity: .5; stroke-width: 1.7; }
+svg#map:not(.near) .railtie { opacity: .6; stroke-width: .9; stroke-dasharray: 3 3; }
+.rivercase { fill: none; stroke: rgba(236, 240, 238, .5); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.river { fill: none; stroke: #3f7fae; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.rivlbl { font-family: var(--head); font-style: italic; font-size: 5.4px; letter-spacing: .16em; fill: #2c5878; text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: rgba(233, 226, 207, .75); stroke-width: 1.3px; opacity: 0; }
+svg#map.near .rivlbl { opacity: 1; }
+#bridges { pointer-events: none; }
+.bridge .road { fill: #f4ecd6; stroke: none; }
+.bridge .deck { fill: none; stroke: var(--map-ink); stroke-width: .8; stroke-linecap: round; }
+.bridge .wing { fill: none; stroke: var(--map-ink); stroke-width: .6; stroke-linecap: round; }
+.bridge.down .deck, .bridge.down .wing { stroke: #a22d18; }
+.bridge.down .gap { fill: none; stroke: #c22a12; stroke-width: 1.1; stroke-linecap: round; }
+.bridge.down .deck, .bridge.down .wing { stroke-width: 1; }
 .flash { animation: flash 2.2s ease-out forwards; pointer-events: none; fill: #fff3c4; opacity: 0; }
 @keyframes flash { 0% { opacity: .9; } 100% { opacity: 0; } }
 .lbl { font-family: var(--head); font-size: 6.6px; fill: var(--map-ink); text-anchor: middle; pointer-events: none; paint-order: stroke; stroke: rgba(233, 226, 207, .8); stroke-width: 1.6px; letter-spacing: .04em; opacity: 0; }
@@ -228,6 +247,23 @@ h3 { font-family: var(--head); font-size: 13px; font-weight: 600; letter-spacing
 .note.eve ul { margin: 6px 0 8px; padding-left: 18px; display: grid; gap: 5px; }
 .note.eve .btn { margin-top: 2px; }
 .note b { color: var(--ink); }
+.ground { display: flex; gap: 8px; align-items: flex-start; margin-top: 9px; padding: 7px 9px; background: var(--panel-2); border-radius: 4px; font-size: 12.5px; color: var(--ink-2); }
+.ground svg { flex: none; width: 20px; height: 14px; margin-top: 2px; fill: none; stroke: var(--ink-2); stroke-width: 1; stroke-linejoin: round; }
+.ground.steep svg { stroke: var(--brass); }
+.ground b { color: var(--ink); font-weight: 600; }
+.ground ul { margin: 5px 0 0; padding-left: 16px; display: grid; gap: 3px; }
+.rivers { display: grid; gap: 6px; margin-top: 9px; }
+.rrow { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; align-items: center; padding: 7px 9px; background: var(--panel-2); border-left: 3px solid #6f93a8; border-radius: 4px; font-size: 12.5px; color: var(--ink-2); }
+.rrow span { grid-column: 1; }
+.rrow b { color: var(--ink); font-weight: 600; }
+.rrow small { grid-column: 1; font-size: 12px; line-height: 1.35; }
+.rrow .btn { grid-column: 2; grid-row: 1 / span 2; }
+.rrow.down { border-left-color: var(--red); }
+.rrow.down b { color: #f0b3a5; }
+.rrow.mined { border-left-color: var(--brass); }
+.rrow.rail { border-left-color: #8a8272; }
+.jobs { margin-top: 12px; }
+.jobs h3 { margin-bottom: 4px; }
 .corps { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 9px; align-items: center; padding: 8px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 6px; background: var(--panel-2); width: 100%; text-align: left; }
 button.corps:hover { border-color: var(--ink-3); }
 .corps.pick { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass); }

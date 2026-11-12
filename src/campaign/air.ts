@@ -13,6 +13,8 @@ import { allied, atWar, headline } from './game';
 import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { storyAir, storyEdge } from './stories';
+import { groundRules } from './ground';
+import { bombFactories, bombRail, onNet, railBombChance, railCut, ruinChance } from './rails';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Game, Region, Ships } from './types';
 
 type Sched = [number, number, number][];
@@ -258,7 +260,9 @@ export function whyNotMission(g: Game, f: AirFleet, m: AirMission, target: numbe
   if (m === 'superiority') return (f.ftr > 0 && d <= R.ftrRange) || (f.bmr > 0 && d <= R.bmrRange) ? null : 'It is out of range.';
   if (!f.bmr) return 'It has no bombers.';
   if (d > R.bmrRange) return 'It is beyond its bombers.';
-  return r.fac > 0 ? null : 'There is no industry there to bomb.';
+  // In the grand campaign the rail yards and junctions are a target too.
+  if (r.fac > 0 || (onNet(target) && !railCut(g, target) && groundRules(g))) return null;
+  return !groundRules(g) ? 'There is no industry there to bomb.' : onNet(target) ? 'There is no industry there, and its railway is already cut.' : 'There is no industry or railway there to bomb.';
 }
 
 /** Everything a fleet could be sent against on this mission: region ids, or sea ids for a strike. */
@@ -568,7 +572,13 @@ function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFle
     const nation = total > 0 ? cut * (r.fac / total) : 0;
     raid(g, nat, r.ctrl, nation);
     value += cut * 1000;
-    result = `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.`;
+    result = r.fac > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.` : '';
+    // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
+    // junctions may cut the province's railway. Both stay as they are until engineers come.
+    if (bombFactories(g, nat, r, cut)) { value += 300; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
+    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0)) { value += 300; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
+    else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : 'No bombers got through.';
+    result = result.trim();
   } else {
     const S = AIR.damage.shipping;
     const zone = g.seas[target];
@@ -717,7 +727,7 @@ export function airDeliveries(g: Game, nat: string): { ftr: number; bmr: number;
  * `cut` is readiness lost by the groups based there (superiority), the region's output stopped (bombing) or the share of ships sunk (strike);
  * `nation` is the share of the victim's whole production stopped by bombing.
  */
-export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number): { odds: number; bomberLoss: number; cut: number; nation: number } {
+export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number): { odds: number; bomberLoss: number; cut: number; nation: number; rail?: number; ruin?: number } {
   const through = a.B * (1 - a.bomberLoss) * (m === 'night' ? AIR.combat.night.accuracy : 1) * techMul(g, a.att[0]?.f.nat ?? '', 'bombers');
   const odds = a.Dpow > 0 ? a.Epow / a.Dpow : 9;
   let cut = 0, nation = 0;
@@ -730,6 +740,8 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     cut = Math.min(AIR.damage.industry.max, through / AIR.damage.industry.scale);
     if (a.aa) cut *= 1 - a.aa * WORKS.aa.cut;
     nation = total > 0 ? cut * (r.fac / total) : 0;
+    // The grand campaign: the chance of cutting the province's railway, and of wrecking a factory outright.
+    if (groundRules(g)) return { odds, bomberLoss: a.bomberLoss, cut: r.fac > 0 ? cut : 0, nation, rail: railBombChance(g, target, through, a.aa ? a.aa * WORKS.aa.cut : 0), ruin: ruinChance(g, r, cut) };
   } else if (m === 'strike') {
     cut = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through / (through + AIR.damage.shipping.scale)));
   }

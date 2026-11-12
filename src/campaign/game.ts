@@ -17,6 +17,10 @@ import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupN
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot } from './ground';
+import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
+import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
+import { railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 
@@ -69,7 +73,7 @@ export function createGame(seed: number, human: string | null): Game {
   const order = [...ORDER, ...Object.keys(nations).filter((n) => !ORDER.includes(n))];
   const g: Game = {
     seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], generals: [], nextCorps: 1, nextBuild: 1, human,
-    reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, capDist: {}, week: 1,
+    reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, railhead: {}, capDist: {}, week: 1,
     seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], convoys: {},
     airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {}, stories: newStories(),
     links: md.links, width: md.width, height: md.height, land: md.land,
@@ -281,9 +285,17 @@ export function lineStrength(g: Game, c: Corps): { mul: number; length: number }
   return { mul: 1, length };
 }
 
-export function moveCost(g: Game, c: Corps, to: Region): number {
+export function moveCost(g: Game, c: Corps, to: Region, from = c.reg): number {
   // Marching through country that has been friendly since before this month is quick for anyone.
-  let cost = allied(g, c.nat, to.ctrl) && to.since < g.turn ? 1 : KIND[c.kind].move;
+  const road = allied(g, c.nat, to.ctrl) && to.since < g.turn;
+  let cost = road ? 1 : KIND[c.kind].move;
+  // Off the roads every arm has ground it cannot cross quickly (the grand campaign's ground rules).
+  if (!road) cost += groundMarch(g, c.kind, to);
+  if (groundRules(g)) {
+    // A river whose bridges are down is crossed in boats, and an enemy's minefields are felt for yard by yard.
+    if (downBetween(g, from, to.id)) cost += ENGINEERING.blown.march;
+    if (!allied(g, c.nat, to.ctrl) && minesAt(g, to)) cost += ENGINEERING.mines.march;
+  }
   if (to.terrain === 'mountain' && c.kind !== 'mtn') cost += 1;
   if (to.terrain === 'marsh') cost += 1;
   if (weather(g).mud && EAST.has(to.owner)) cost += 1;
@@ -304,6 +316,7 @@ export function computeSupply(g: Game): void {
   };
   const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
   const shippers = (id: string): string[] => withShips.filter((a) => a !== id && allied(g, id, a));
+  const wide = groundRules(g);
   for (const id of active) {
     const ok = new Uint8Array(g.regions.length);
     const q: number[] = [];
@@ -328,7 +341,8 @@ export function computeSupply(g: Game): void {
         else if (g.turn - (g.flags[`stores:${r.id}`] ?? -99) <= DESERT.stores) quay = true;
       }
       if (!depot && !quay) continue;
-      ok[r.id] = 1; q.push(r.id);
+      // In the grand campaign the table also remembers where the stores are: the railheads are counted from there.
+      ok[r.id] = wide ? 2 : 1; q.push(r.id);
       head[r.id] = depot || !r.overseas ? 0 : (DESERT.ports[r.name] ?? DESERT.port) + sunk;
     }
     for (let i = 0; i < q.length; i++) {
@@ -344,6 +358,7 @@ export function computeSupply(g: Game): void {
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
   g.supplyDirty = false;
+  resetRailheads(g);
 }
 
 /** How much longer the desert supply line has grown for a nation fed across the sea, from the cargoes sunk on the way last month. */
@@ -391,7 +406,8 @@ function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
     for (const j of g.regions[a].nb) {
       const r = g.regions[j];
       if (!ok[j] || !deep(r)) continue;
-      const step = (g.turn - r.since >= EASTERN.convertAfter ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+      // In the grand campaign a line the defenders tore up is not relaid by time alone: engineers must do it.
+      const step = (g.turn - r.since >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
       if (d[a] + step < d[j] - 1e-6) { d[j] = d[a] + step; q.push(j); }
     }
   }
@@ -419,6 +435,7 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
   const most = corps.length ? g.nations[corps[0].nat].maxAttack || 99 : 99;
   for (const c of [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk)) {
     if (out.length >= most) break;
+    if (blocked(g, c, target)) continue; // tanks have no way up the steepest ground, and nothing on wheels crosses a river whose bridges are down
     if ((used[c.reg] ?? 0) >= cap) continue;
     used[c.reg] = (used[c.reg] ?? 0) + 1;
     out.push(c);
@@ -500,8 +517,37 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const gunsA = gunsIn(attackers), gunsD = gunsIn(defenders);
   const soften = gunsA ? Math.min(GUNS.softenMost, GUNS.soften * gunsA) : 0;
   const thicken = gunsD ? Math.min(GUNS.thickenMost, GUNS.thicken * gunsD) : 0;
+  // The grand campaign's ground rules: each arm on the ground that suits it or does not, and tanks and infantry
+  // worth more together than apart. A historical scenario has none of this and is worked out as it always was.
+  const wide = groundRules(g);
+  const land = opts.sea === undefined;
+  // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
+  const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide ? combinedArms(g, defenders, target, true) : null;
+  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0;
+  // Armies that have outrun their railhead: how far the worst of them is from it, and what it is worth there.
+  let roadA = 0, railA = 1, roadD = 0, railD = 1;
+  const rivers = new Set<string>();
+  // Engineers in the assault breach the works, clear lanes through the mines and put the infantry over a bridgeless river.
+  const sap = wide ? sappers(attackers.filter((c) => !land || !blocked(g, c, target))) : 0;
+  const breach = sap ? Math.min(ENGINEERING.breach.most, ENGINEERING.breach.perDiv * sap) : 0;
+  const mineLv = wide ? minesAt(g, target) : 0;
+  const mined = mineLv ? 1 - ENGINEERING.mines.attack * mineLv * (1 - Math.min(1, sap)) : 1;
   for (const c of attackers) {
+    if (wide && barred(g, c, target)) { tooSteep++; continue; }
+    if (wide && land && noCrossing(g, c.kind, c.reg, target.id)) { noBridge++; continue; }
     let p = corpsBase(g, c) * KIND[c.kind].atk;
+    if (wide) {
+      const suits = groundAttack(g, c.kind, target);
+      if (suits !== 1) p *= suits;
+      if (armsA) p *= c.kind === 'arm' ? armsA.armour : isFoot(c) ? armsA.infantry : 1;
+      const x = land ? riverBetween(g, c.reg, target.id) : null;
+      if (x) {
+        rivers.add(riverName(x));
+        if (bridgeDown(g, x)) { p *= sap ? ENGINEERING.blown.withEngineers : ENGINEERING.blown.attack; inBoats++; }
+        else { p *= ENGINEERING.river.attack; overBridges++; }
+      }
+      if (mined !== 1) p *= mined;
+    }
     if (c.kind === 'arm') {
       if (target.terrain === 'mountain' || target.terrain === 'urban' || target.terrain === 'marsh') { p *= 0.6; armorStuck = true; }
       else if (!defHasArmor) { p *= 1.25; armorShock = true; }
@@ -514,9 +560,15 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (opts.sea !== undefined) p *= opts.sea;
     const line = lineStrength(g, c);
     if (line.mul < 1) { p *= line.mul; longest = Math.max(longest, line.length); lineMul = Math.min(lineMul, line.mul); }
+    if (wide) {
+      const head = railheadOf(g, c);
+      if (head.attack < 1) { p *= head.attack; roadA = Math.max(roadA, head.road); railA = Math.min(railA, head.attack); }
+    }
     if (frozen(g, c.nat, target)) { p *= 1 - (1 - EASTERN.winter.attack) * cmdWinter(g, c); cold = true; }
     const from = g.regions[c.reg];
-    if (target.fort && target.fort.vs.includes(from.owner)) { p /= soften ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - soften) : FORT_MUL[target.fort.lv]; fortFaced++; }
+    // What the guns and the engineers between them leave of the works. With neither, the works count in full, as they always did.
+    const eased = breach ? 1 - (1 - soften) * (1 - breach) : soften;
+    if (target.fort && target.fort.vs.includes(from.owner)) { p /= eased ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - eased) : FORT_MUL[target.fort.lv]; fortFaced++; }
     // The player's honoured corps, a corps fighting for the place it was raised in, and one that has its old enemy in front of it.
     const proud = storyAttack(g, c, target, defenders);
     if (proud !== 1) { p *= proud; proudA = Math.max(proudA, proud); }
@@ -529,6 +581,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   let D = 0, thin = 1;
   for (const d of defenders) {
     let p = corpsBase(g, d) * KIND[d.kind].def * TERRAIN_DEF[target.terrain];
+    if (wide) {
+      const suits = groundDefence(g, d.kind, target);
+      if (suits !== 1) p *= suits;
+      if (armsD) p *= d.kind === 'arm' ? armsD.armour : isFoot(d, true) ? armsD.infantry : 1;
+    }
     if (d.dug) { p *= soften ? 1 + (DUG_IN - 1) * (1 - soften) : DUG_IN; dugIn++; }
     if (thicken && d.kind !== 'art') p *= 1 + thicken;
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
@@ -536,6 +593,10 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     const dl = lineStrength(g, d).mul;
     const share = inDesert(target) ? DESERT.lineDefence : EASTERN.lineDefence;
     if (dl < 1) { p *= 1 - (1 - dl) * share; thin = Math.min(thin, 1 - (1 - dl) * share); }
+    if (wide) {
+      const head = railheadOf(g, d);
+      if (head.defence < 1) { p *= head.defence; roadD = Math.max(roadD, head.road); railD = Math.min(railD, head.defence); }
+    }
     const proud = storyDefence(g, d, target, attackers);
     if (proud !== 1) { p *= proud; proudD = Math.max(proudD, proud); }
     const lead = cmdDefence(g, d);
@@ -556,6 +617,50 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const sum = (cs: Corps[]) => cs.reduce((s, c) => s + men(c), 0).toLocaleString('en-US');
   lines.push({ label: 'Forces', value: `${attackers.length} corps, ${sum(attackers)} men, against ${defenders.length} corps, ${sum(defenders)} men` });
   lines.push({ label: 'Terrain', value: target.terrain[0].toUpperCase() + target.terrain.slice(1), effect: TERRAIN_DEF[target.terrain] > 1 ? `Defenders fight ${Math.round((TERRAIN_DEF[target.terrain] - 1) * 100)}% stronger` : 'Open ground, no help to the defender' });
+  if (wide) {
+    const a = groundLine(g, attackers.filter((c) => !barred(g, c, target)), target, false), d = groundLine(g, defenders, target, true);
+    const fx = [tooSteep ? `${tooSteep === 1 ? 'one armoured corps' : `${tooSteep} armoured corps`} cannot climb here and ${tooSteep === 1 ? 'takes' : 'take'} no part` : '', a, d].filter(Boolean).join('; ');
+    if (fx) lines.push({ label: 'Ground', value: groundSays(g, target), effect: fx[0].toUpperCase() + fx.slice(1) });
+    const pc = (m: number): number => Math.round(Math.abs(m - 1) * 100);
+    if (armsA) {
+      const lone = armsA.alone < 1, close = target.terrain === 'urban' ? 'city streets' : 'forest';
+      const together = armsA.foot > 0;
+      const tank = armsA.armour !== 1 ? `tank attack ${armsA.armour > 1 ? 'up' : 'down'} ${pc(armsA.armour)}%` : '';
+      const foot = together ? `infantry attack up ${pc(armsA.infantry)}%` : '';
+      const fx2 = [foot, tank].filter(Boolean).join(', ');
+      lines.push({
+        label: 'Combined arms',
+        value: !together ? (lone ? `Tanks attacking into ${close} with no infantry beside them` : 'Tanks attacking without infantry')
+          : armsA.cover < 1 ? 'Tanks and infantry attack together, but the infantry is too thin to cover all the armour'
+          : armsA.share < 1 ? 'Tanks and infantry attack together, with tanks enough for part of the infantry' : 'Tanks and infantry attack together',
+        effect: fx2 ? fx2[0].toUpperCase() + fx2.slice(1) : 'Infantry with the tanks would make both stronger',
+      });
+    }
+    if (armsD && (armsD.foot > 0 || armsD.alone < 1)) lines.push({
+      label: 'Combined arms',
+      value: armsD.foot > 0 ? 'The defenders have tanks in reserve behind their infantry' : `Tanks holding ${target.terrain === 'urban' ? 'city streets' : 'forest'} with no infantry`,
+      effect: [armsD.foot > 0 ? `Infantry defence up ${pc(armsD.infantry)}%` : '', armsD.alone < 1 ? `${armsD.foot > 0 ? 'tank' : 'Tank'} defence down ${pc(armsD.alone)}%` : ''].filter(Boolean).join(', '),
+    });
+  }
+  if (wide && (rivers.size || noBridge)) {
+    const name = rivers.size ? [...rivers].join(' and the ') : riverName(riverBetween(g, attackers.find((c) => noCrossing(g, c.kind, c.reg, target.id))!.reg, target.id)!);
+    const crossing = overBridges + inBoats, all = attackers.length - tooSteep;
+    const fx = [
+      overBridges ? `over the bridges the attack is cut to ${Math.round(ENGINEERING.river.attack * 100)}%` : '',
+      inBoats ? `infantry crossing in boats fights at ${Math.round((sap ? ENGINEERING.blown.withEngineers : ENGINEERING.blown.attack) * 100)}%${sap ? ', with engineers to get it over' : ''}` : '',
+      noBridge ? `${noBridge === 1 ? 'one corps of tanks, lorries or guns' : `${noBridge} corps of tanks, lorries or guns`} cannot cross and ${noBridge === 1 ? 'takes' : 'take'} no part` : '',
+    ].filter(Boolean).join('; ');
+    lines.push({
+      label: 'River',
+      value: inBoats || noBridge ? `The bridges over the ${name} are down` : crossing < all ? `${crossing} of the ${all} attacking corps cross the ${name}` : `The attack crosses the ${name}`,
+      effect: fx[0].toUpperCase() + fx.slice(1),
+    });
+  }
+  if (mineLv) lines.push({
+    label: 'Minefields', value: mineLv > 1 ? 'Two belts of mines and booby traps on every road in' : 'Mines and booby traps on every road in',
+    effect: mined === 1 ? 'The engineers clear lanes: the mines cost the attack nothing' : `Attack cut to ${Math.round(mined * 100)}%${sap ? ', the engineers clearing what lanes they can' : ''}`,
+  });
+  if (breach && target.fort && fortFaced) lines.push({ label: 'Engineers', value: 'Assault engineers go in with the attack', effect: `They breach the works: the fortifications count for ${Math.round(breach * 100)}% less` });
   if (target.fort) {
     lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
@@ -600,6 +705,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (lineMul < 1) lines.push(attackers.some((c) => inDesert(g.regions[c.reg]))
     ? { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of desert from the nearest working port`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until a port nearer the front is working` }
     : { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
+  if (railA < 1) lines.push({ label: 'Railhead', value: `Attackers as far as ${roadA} provinces by road beyond their nearest working railway`, effect: `Attack cut to as little as ${Math.round(railA * 100)}% until engineers bring the line forward` });
+  if (railD < 1) lines.push({ label: 'Railhead', value: `Defenders as far as ${roadD} provinces by road beyond their nearest working railway`, effect: `Defence cut to as little as ${Math.round(railD * 100)}% until their line is relaid` });
   if (turned) lines.push({ label: 'Open desert', value: 'Infantry on foot with no works to anchor on, against tanks and lorried troops', effect: `Foot infantry defends at ${Math.round(DESERT.open * 100)}%` });
   if (cold) lines.push({ label: 'Winter', value: 'Attackers without winter equipment', effect: `Attack cut to ${Math.round(EASTERN.winter.attack * 100)}%` });
   if (thin < 1) lines.push({ label: 'Supply line', value: 'Defenders at the end of a long supply line', effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
@@ -643,7 +750,7 @@ function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<number>): Re
   for (const j of from.nb) {
     const r = g.regions[j];
     if (banned.has(j) || !allied(g, c.nat, r.ctrl) || hostileUnits(g, r, c.nat).length) continue;
-    if (friendlyUnits(g, r, c.nat).length >= STACK + 2) continue;
+    if (friendlyUnits(g, r, c.nat).length >= STACK + 2 || barred(g, c, r)) continue;
     const abroad = g.nations[c.nat].seaSupply && r.owner !== c.nat;
     // In the desert an army falls back along its own supply line, toward the port that feeds it.
     // It also keeps out of a dead end: a place with one way out, or none, is a trap for a beaten force.
@@ -662,7 +769,7 @@ function moveIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   for (const { c, i } of order) {
     // A force that came by sea all goes ashore together.
     const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
-    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost)) { c.ap = Math.max(0, c.ap - 1); continue; }
+    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || (opts.sea === undefined ? blocked(g, c, target) : barred(g, c, target))) { c.ap = Math.max(0, c.ap - 1); continue; }
     place(g, c, target);
     c.ap = Math.max(0, c.ap - cost);
     attU[i].fate = 'advanced';
@@ -848,22 +955,37 @@ export function capture(g: Game, r: Region, nat: string): void {
   r.since = g.turn;
   r.prev = old;
   g.supplyDirty = true;
+  if (groundRules(g)) {
+    // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
+    liftMines(g, r);
+    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat); railOnCapture(g, r, nat, old); }
+  }
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
   else if (r.overseas && r.port && r.vp > 0 && atWar(g, nat, old)) headline(g, 'battle', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
   checkCollapse(g, old, nat);
 }
 
+/**
+ * Room for this corps in a region. Engineers work among the other troops: they are not counted against the
+ * corps a province holds, and it takes two engineer corps at most.
+ */
+export function hasRoom(g: Game, to: Region, c: Corps): boolean {
+  const here = friendlyUnits(g, to, c.nat);
+  const eng = here.filter((u) => u.kind === 'eng').length;
+  return c.kind === 'eng' ? eng < 2 : here.length - eng < STACK;
+}
+
 /** Moves one corps one region. Returns false if the move is not allowed. */
 export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   const from = g.regions[c.reg];
-  if (!from.nb.includes(to.id) || c.kind === 'fort') return false;
+  if (!from.nb.includes(to.id) || c.kind === 'fort' || blocked(g, c, to)) return false;
   const cost = moveCost(g, c, to);
   if (c.ap < Math.min(cost, 4) || c.ap <= 0) return false;
   const friendly = allied(g, c.nat, to.ctrl);
   if (!friendly && !atWar(g, c.nat, to.ctrl)) return false;
   if (hostileUnits(g, to, c.nat).length) return false;
-  if (friendlyUnits(g, to, c.nat).length >= STACK) return false;
+  if (!hasRoom(g, to, c)) return false;
   g.week = weekOf(c, cost);
   place(g, c, to);
   c.ap = Math.max(0, c.ap - cost);
@@ -871,18 +993,31 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   return true;
 }
 
-/** Where a corps could go by rail this month: any friendly region joined to its own by friendly track. No railway crosses the desert. */
+/**
+ * Where a corps could go by rail this month: any friendly region joined to its own by friendly track. No railway
+ * crosses the desert. In the grand campaign the trains keep to the lines on the map, and none runs into, out of
+ * or through a province whose line is cut; only engineers can be carried to the break itself.
+ */
 export function railReach(g: Game, c: Corps): Set<number> {
   const out = new Set<number>();
   if (c.kind === 'fort' || c.ap < 4 || g.regions[c.reg].terrain === DESERT.terrain) return out;
+  const net = groundRules(g);
+  if (net && railCut(g, c.reg)) return out;
   const seen = new Uint8Array(g.regions.length);
   const q = [c.reg];
   seen[c.reg] = 1;
   for (let i = 0; i < q.length; i++) {
-    for (const j of g.regions[q[i]].nb) {
+    for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
       const r = g.regions[j];
       if (seen[j] || !allied(g, c.nat, r.ctrl) || r.terrain === DESERT.terrain) continue;
-      seen[j] = 1; q.push(j); out.add(j);
+      if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
+      if (net && railCut(g, j)) {
+        // Engineers alone ride the works train to the break itself. Nothing goes on through it.
+        if (c.kind === 'eng') { seen[j] = 1; out.add(j); }
+        continue;
+      }
+      seen[j] = 1; q.push(j);
+      if (!barred(g, c, r)) out.add(j); // the trains run through the high passes, but tanks are not unloaded there
     }
   }
   return out;
@@ -890,7 +1025,7 @@ export function railReach(g: Game, c: Corps): Set<number> {
 
 /** Rail move: anywhere through friendly territory, for the whole month. */
 export function railMove(g: Game, c: Corps, to: Region): boolean {
-  if (c.kind === 'fort' || c.ap < 4 || !allied(g, c.nat, to.ctrl) || friendlyUnits(g, to, c.nat).length >= STACK) return false;
+  if (c.kind === 'fort' || c.ap < 4 || !allied(g, c.nat, to.ctrl) || !hasRoom(g, to, c) || barred(g, c, to)) return false;
   if (to.id !== c.reg && !railReach(g, c).has(to.id)) return false;
   place(g, c, to);
   c.ap = 0;
@@ -1348,6 +1483,7 @@ export function startPhase(g: Game, nat: string): void {
     }
   }
   deliver(g, nat);
+  engineersMonth(g, nat);
   if (nat !== g.human) n.pp = Math.min(n.pp, PRODUCTION.aiBank[canBuildYet(g, nat) ? 1 : 0]);
   n.armyPeak = Math.max(n.armyPeak, armySize(g, nat));
   if (tempo) g.flags[`tempo:${nat}:${g.turn}`] = 1;

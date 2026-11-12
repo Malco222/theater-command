@@ -11,9 +11,13 @@ import {
   beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
   previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
-  orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal,
+  orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
 } from '../turn';
 import { ARSENAL, canStation, factoriesBuilt, workLevel, yardLevel, type Hull, type Offer } from '../arsenal';
+import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSays, steep } from '../ground';
+import { CROSSINGS, ENGINEERING, RIVERS, blocked, bridgeDown, noCrossing, riverNotes, whyBlocked } from '../rivers';
+import { jobLine, minesAt, type JobKind } from '../engineers';
+import { RAILWAYS, RAIL_LINKS, railCut, railNote } from '../rails';
 import {
   AIR, MISSION, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, cover, crowding, forecastAir, isOffensive,
   km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
@@ -181,6 +185,8 @@ function symbol(kind: Kind, w: number, h: number): string {
     case 'mtn': return X + `<path class="symf" d="M${w / 2 - 3} ${h}L${w / 2} ${h - 4.5}L${w / 2 + 3} ${h}Z"/>`;
     case 'fort': return `<path class="sym" d="M${w * 0.3} ${h * 0.75}V${h * 0.3}H${w * 0.42}V${h * 0.45}H${w * 0.58}V${h * 0.3}H${w * 0.7}V${h * 0.75}Z"/>`;
     case 'art': return `<circle class="symf" cx="${w / 2}" cy="${h / 2}" r="${h * 0.24}"/>`;
+    // Engineers: a bridge span on its piers.
+    case 'eng': return `<path class="sym" d="M${w * 0.22} ${h * 0.72}V${h * 0.32}H${w * 0.78}V${h * 0.72}M${w / 2} ${h * 0.32}V${h * 0.6}"/>`;
   }
 }
 
@@ -199,6 +205,7 @@ function badge(kind: Kind): string {
     case 'mtn': s = `<path class="bsymf" d="M${w / 2 - 2.6} ${h - 1.2}L${w / 2} 1.2L${w / 2 + 2.6} ${h - 1.2}Z"/>`; break;
     case 'fort': s = `<path class="bsym" d="M2 ${h - 1.3}V1.7H3.6V2.9H5.4V1.7H7V${h - 1.3}Z"/>`; break;
     case 'art': s = `<circle class="bsymf" cx="${w / 2}" cy="${h / 2}" r="1.7"/>`; break;
+    case 'eng': s = `<path class="bsym" d="M2 ${h - 1.4}V2H${w - 2}V${h - 1.4}M${w / 2} 2V${h - 2.2}"/>`; break;
   }
   return `<g class="badge" transform="translate(14.4 8.2)"><rect width="${w}" height="${h}" rx="1"/>${s}</g>`;
 }
@@ -233,6 +240,8 @@ function icon(c: Corps): string {
 // ---- Fleet symbols: a warship in profile, or a submarine for a flotilla with no surface ships
 
 const HULL = 'M-12 .5L-10 4H10L12.5 .5H6V-2H3V-4.5H-1V-2H-6V.5Z';
+/** A pair of peaks: the mark of ground too steep for tanks. */
+const PEAKS = 'M-5.2 2.8L-1.6-3.6 1 .6 2.6-1.6 5.2 2.8Z';
 const SUB = 'M-11 2.2Q-11 4.2-8 4.2H8Q11.5 4.2 11.5 2.2Q11.5 .2 8 .2H2.5V-3H-1.5V.2H-8Q-11 .2-11 2.2Z';
 
 function hullIcon(f: Fleet): string {
@@ -335,13 +344,13 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="labels"></g><g id="fleets"></g><g id="units"></g><g id="route"></g><g id="ghost"></g>
+          <g id="seas"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="labels"></g><g id="bridges"></g><g id="fleets"></g><g id="units"></g><g id="route"></g><g id="ghost"></g>
         </svg>
         <div class="hint" id="hint"></div>
         <div class="passing" id="passing"></div>
         <div class="alerts" id="alerts"></div>
         <div class="tray" id="tray"></div>
-        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Air fleet</span></div>
+        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Air fleet</span></div>
         <div class="zoom"><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
       </div>
@@ -368,6 +377,51 @@ function drawStatic(): void {
     }).join('');
   $('#land').innerHTML = `<path class="land" d="${pathOf(g.land)}"/>`;
   $('#regs').innerHTML = g.regions.map((r) => `<path class="reg" data-id="${r.id}" d="${pathOf(r.polys)}"/>`).join('');
+  // The great rivers, each a smooth line with its name set along its middle reach.
+  $('#rivers').innerHTML = RIVERS.map((rv) => {
+    const p = rv.pts;
+    let d = `M${p[0][0]} ${p[0][1]}`;
+    for (let i = 0; i < p.length - 1; i++) {
+      const a = p[i - 1] ?? p[i], b = p[i], c = p[i + 1], e = p[i + 2] ?? c;
+      d += `C${(b[0] + (c[0] - a[0]) / 6).toFixed(1)} ${(b[1] + (c[1] - a[1]) / 6).toFixed(1)} ${(c[0] - (e[0] - b[0]) / 6).toFixed(1)} ${(c[1] - (e[1] - b[1]) / 6).toFixed(1)} ${c[0]} ${c[1]}`;
+    }
+    // The name goes on the longest reach, turned to run along it and never upside down.
+    let k = 0, best = 0;
+    for (let i = 0; i < p.length - 1; i++) { const len = Math.hypot(p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1]); if (len > best) { best = len; k = i; } }
+    let ang = (Math.atan2(p[k + 1][1] - p[k][1], p[k + 1][0] - p[k][0]) * 180) / Math.PI;
+    if (ang > 90) ang -= 180; else if (ang < -90) ang += 180;
+    const mx = (p[k][0] + p[k + 1][0]) / 2, my = (p[k][1] + p[k + 1][1]) / 2;
+    return `<path class="rivercase" d="${d}"/><path class="river" d="${d}"/>${best > 26 ? `<text class="rivlbl" transform="translate(${mx.toFixed(1)} ${my.toFixed(1)}) rotate(${ang.toFixed(0)})" y="-2.2">${esc(rv.name)}</text>` : ''}`;
+  }).join('');
+}
+
+/**
+ * The railways (the grand campaign). Each line runs from one province's centre to the next by the point where it
+ * crosses the border, so each province owns its half: a province whose line is cut has its halves in broken red.
+ */
+function railMarks(): string {
+  if (!groundRules(g)) return '';
+  let ok = '', cut = '';
+  for (const l of RAIL_LINKS) {
+    const a = g.regions[l.a], b = g.regions[l.b];
+    const ha = `M${a.x} ${a.y}L${l.x} ${l.y}`, hb = `M${l.x} ${l.y}L${b.x} ${b.y}`;
+    if (railCut(g, l.a)) cut += ha; else ok += ha;
+    if (railCut(g, l.b)) cut += hb; else ok += hb;
+  }
+  return `<path class="railbed" d="${ok}"/><path class="railtie" d="${ok}"/>${cut ? `<path class="railcutbed" d="${cut}"/><path class="railcut" d="${cut}"/>` : ''}`;
+}
+
+/** The bridges over the rivers: a span where they stand, a broken one in red where they are down (the grand campaign). */
+function bridgeMarks(): string {
+  if (!groundRules(g)) return '';
+  return CROSSINGS.map((x) => {
+    const a = g.regions[x.a], b = g.regions[x.b];
+    const ang = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
+    const down = bridgeDown(g, x);
+    return `<g class="bridge${down ? ' down' : ''}" transform="translate(${x.x} ${x.y}) rotate(${ang.toFixed(0)})">${down
+      ? '<path class="deck" d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6"/><path class="wing" d="M-3.6 -1.2l-1.1 -1.1M-3.6 1.2l-1.1 1.1M3.6 -1.2l1.1 -1.1M3.6 1.2l1.1 1.1"/><path class="gap" d="M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3"/>'
+      : '<rect class="road" x="-3.6" y="-1.2" width="7.2" height="2.4"/><path class="deck" d="M-3.6 -1.2H3.6M-3.6 1.2H3.6"/><path class="wing" d="M-3.6 -1.2l-1.1 -1.1M-3.6 1.2l-1.1 1.1M3.6 -1.2l1.1 -1.1M3.6 1.2l1.1 1.1"/>'}</g>`;
+  }).join('');
 }
 
 function drawLabels(): void {
@@ -375,7 +429,9 @@ function drawLabels(): void {
     const busy = r.units.length > 0;
     const star = r.cap ? `<path class="capmark" transform="translate(${r.x - (busy ? 16.5 : 0)} ${r.y - (busy ? 3 : 7)}) scale(1.15)" d="M0-3.2L.9-1 3.2-1 1.4.5 2 2.8 0 1.4-2 2.8-1.4.5-3.2-1-.9-1Z"/>` : '';
     const fort = r.fort ? `<path class="fortmark" transform="translate(${r.x + (busy ? 17 : 0)} ${r.y + (busy ? 3 : -7)})" d="M-3 2.5V-2.5H-1.2V-.8H1.2V-2.5H3V2.5"/>` : '';
-    return `${star}${fort}<text class="lbl${r.cap ? ' cap' : ''}" x="${r.x}" y="${r.y + (busy ? 26.5 : 3)}">${esc(r.name)}</text>`;
+    // The steepest ground carries a pair of peaks: no tanks go there.
+    const high = steep(g, r) ? `<path class="steepmark" transform="translate(${r.x + (busy ? 17 : r.fort ? 9 : 0)} ${r.y + (busy ? (r.fort ? -6 : 3) : -7.5)})" d="${PEAKS}"/>` : '';
+    return `${star}${fort}${high}<text class="lbl${r.cap ? ' cap' : ''}" x="${r.x}" y="${r.y + (busy ? 26.5 : 3)}">${esc(r.name)}</text>`;
   }).join('');
 }
 
@@ -428,10 +484,17 @@ function refresh(): void {
     const goes = new Map<number, boolean>();
     for (const c of picked) { const m = reach(g, c); reaches.push({ from: c.reg, ap: c.ap, map: m }); for (const [id, rc] of m) if (id !== c.reg) goes.set(id, (goes.get(id) ?? false) || rc.attack); }
     for (const [id, attack] of goes) marks += `<path class="mk ${attack ? 'hit' : 'move'}" d="${pathOf(g.regions[id].polys)}"/>`;
+    // Ground the picked tanks cannot enter, where they stand next to it or to somewhere they can reach.
+    if (groundRules(g)) {
+      const near = new Set<number>([...goes.keys(), ...picked.map((c) => c.reg)]);
+      for (const r of g.regions) if (picked.some((c) => barred(g, c, r) || (g.regions[c.reg].nb.includes(r.id) && noCrossing(g, c.kind, c.reg, r.id))) && r.nb.some((j) => near.has(j))) marks += `<path class="mk nogo" d="${pathOf(r.polys)}"/>`;
+    }
   }
   if (ui.sel >= 0) marks += `<path class="mk sel" d="${pathOf(g.regions[ui.sel].polys)}"/>`;
   else if (ui.sea >= 0 && ui.tab === 'region') marks += `<circle class="mk seasel" cx="${g.seas[ui.sea].x}" cy="${g.seas[ui.sea].y + 9}" r="33"/>`;
   $('#marks').innerHTML = marks;
+  $('#rails').innerHTML = railMarks();
+  $('#bridges').innerHTML = bridgeMarks();
   $('#fleets').innerHTML = airBaseMarks() + fleetMarks();
 
   // Armies. Each nation's force in a region is one piece on the map: its colours on a standard with the branch
@@ -466,6 +529,10 @@ function refresh(): void {
   drawTabs();
   drawPane();
   drawTray();
+  ($('#legsteep') as HTMLElement).hidden = !groundRules(g);
+  ($('#legbridge') as HTMLElement).hidden = !groundRules(g) || !CROSSINGS.some((x) => bridgeDown(g, x));
+  ($('#legrail') as HTMLElement).hidden = !groundRules(g);
+  ($('#legrailcut') as HTMLElement).hidden = !groundRules(g) || !g.regions.some((r) => railCut(g, r.id));
   $('#hint').textContent = hintText();
   $('#alerts').innerHTML = alertButtons();
   const pass = $('#passing');
@@ -499,6 +566,12 @@ const sumDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str,
 function pickedCorps(): Corps[] {
   if (!humanUp(g)) return [];
   return g.corps.filter((c) => ui.picked.has(c.id) && canOrder(g, c) && c.ap > 0);
+}
+
+/** What an air mission does, with what the grand campaign adds to bombing. */
+function missionWhat(m: keyof typeof MISSION): string {
+  const more = groundRules(g) && (m === 'bomb' || m === 'night');
+  return MISSION[m].what + (more ? ' The bombs fall on the rail yards too and can cut the railway through the province, and a heavy raid can wreck a factory outright. A province with a railway and no industry can be bombed as well.' : '');
 }
 
 function railTargets(c: Corps): Region[] {
@@ -678,12 +751,21 @@ function corpsRow(c: Corps, mine: boolean): string {
     ? `<span class="tag bad" title="Counted from the nearest working port, a step for every region of desert. Take a port nearer the front, or fall back toward one.">${Math.round(line.length)} regions from port: attacks at ${Math.round(line.mul * 100)}%</span>`
     : `<span class="tag bad">Long supply line: attacks at ${Math.round(line.mul * 100)}%</span>`);
   if (frozen(g, c.nat, g.regions[c.reg])) tags.push('<span class="tag bad">No winter kit</span>');
+  if (groundRules(g) && c.kind !== 'fort') {
+    const here = g.regions[c.reg], d = groundDefence(g, c.kind, here), a = groundAttack(g, c.kind, here);
+    const pc = (m: number): string => `${Math.round(Math.abs(m - 1) * 100)}%`;
+    if (d > 1) tags.push(`<span class="tag good" title="Mountain troops are trained and equipped for this country. In mountains and hills they attack and defend more strongly than anyone else.">At home on this ground: defence up ${pc(d)}</span>`);
+    else if (d < 1) tags.push(`<span class="tag bad" title="This is poor country for ${esc(k.label.toLowerCase())}. Open ground suits them better.">Poor ground for ${c.kind === 'arm' ? 'tanks' : c.kind === 'mot' ? 'lorried troops' : 'cavalry'}: defence down ${pc(d)}</span>`);
+    else if (a < 1 && c.kind === 'cav') tags.push('<span class="tag bad">No ground for cavalry</span>');
+  }
   const gen = generalOf(g, c);
   for (const t of gen?.traits ?? []) {
     const d = COMMAND.traits[t];
     if (d) tags.push(`<span class="tag ${d.good ? 'good' : 'bad'}" title="${esc(d.effect)}">${esc(d.label)}</span>`);
   }
   tags.push(...storyTags(c));
+  if (c.job) tags.push(`<span class="tag good" title="${esc(jobLine(g, c))}">At work</span>`);
+  else if (c.kind === 'eng' && c.nat === g.human && groundRules(g)) tags.push('<span class="tag" title="Give it work from the list under the forces: bridges, railways, bombed factories, field works, minefields or demolition.">Engineers: ready for work</span>');
   if (c.airborne) tags.push(`<span class="tag good" title="Parachute and glider troops. Once a month they can be flown from a friendly coast to an enemy one across a single sea, with no ships and whoever holds the water. They fight there at ${Math.round(NAVY.landing.airborne * 100)}%, without heavy weapons, and not under a sky the enemy's fighters hold.">Airborne</span>`);
   if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
   if (c.yields && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_BACK)}">Falls back if attacked</span>`);
@@ -1095,7 +1177,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li><li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -1124,11 +1206,79 @@ function regionPane(): string {
   }
   const units = r.units.length ? [...r.units].sort((a, b) => (a.nat === me ? 0 : 1) - (b.nat === me ? 0 : 1)).map((c) => corpsRow(c, canOrder(g, c))).join('') : '<div class="empty">No armies here.</div>';
   return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${standingNote(r)}
-    <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}</b></div></div>
+    <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
-    ${provinceWorth(r)}${provinceSlots(r)}
-    <h3>Forces here</h3>${acts}${units}
+    ${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${provinceSlots(r)}
+    <h3>Forces here</h3>${acts}${units}${jobBlock(r)}
     ${based.length ? `<h3>On the airfields</h3>${based.map((f) => airRow(f, false, true)).join('')}` : ''}${provinceMuster(r)}${ui.sel >= 0 && me ? advice() : ''}`;
+}
+
+/** How this province's ground suits each arm (the grand campaign's ground rules). */
+function groundBlock(r: Region): string {
+  const says = groundSays(g, r);
+  if (!says) return '';
+  const notes = groundNotes(g, r);
+  return `<div class="ground${steep(g, r) ? ' steep' : ''}">${r.terrain === 'mountain' || r.terrain === 'hills' ? `<svg viewBox="-6 -4.6 12 8" aria-hidden="true"><path d="${PEAKS}"/></svg>` : ''}<div><b>${esc(says)}</b>${notes.length ? `<ul>${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}</div></div>`;
+}
+
+/** The rivers on this province's borders: which bridges stand, which are down, and the order to blow them. */
+function riverBlock(r: Region): string {
+  const notes = riverNotes(g, r.id);
+  const mines = minesAt(g, r);
+  if (!notes.length && !mines) return '';
+  const mine = humanUp(g);
+  const rows = notes.map((n) => {
+    const far = g.regions[n.far];
+    if (n.down) return `<div class="rrow down"><span><b>${esc(n.river)}</b>, toward ${esc(far.name)}</span><small>Bridges down since ${date(n.since ?? g.turn)}. Tanks, lorries and guns cannot cross, and infantry crosses in boats. Engineers on either bank can rebuild them.</small></div>`;
+    const why = mine ? whyNotBlowBridges(g, r.id, far.id) : 'It is not your month.';
+    const yours = g.human && allied(g, g.human, r.ctrl);
+    return `<div class="rrow"><span><b>${esc(n.river)}</b>, toward ${esc(far.name)}</span><small>Bridges standing. An attack across them is cut to ${Math.round(ENGINEERING.river.attack * 100)}%.</small>${yours ? `<button class="btn small" data-act="blow" data-from="${r.id}" data-to="${far.id}" ${why ? `disabled title="${esc(why)}"` : 'title="Blow the bridges. Nothing on wheels or tracks crosses here, in either direction, until engineers rebuild them."'}>Blow the bridges</button>` : ''}</div>`;
+  }).join('');
+  const mined = mines ? `<div class="rrow mined"><span><b>Minefields</b>${mines > 1 ? ', two belts' : ''}</span><small>Mines and booby traps on every road in: an attack on ${esc(r.name)} is cut by ${Math.round(ENGINEERING.mines.attack * mines * 100)}% and costs the enemy a move more to enter, unless his engineers clear lanes.</small></div>` : '';
+  return `<div class="rivers">${rows}${mined}</div>`;
+}
+
+/** The railway through this province: working or cut, how far the player's troops here are from their railhead, and the order to tear it up. */
+function railBlock(r: Region): string {
+  const n = railNote(g, r.id);
+  if (!n) return '';
+  const me = g.human;
+  const yours = !!me && g.nations[me].alive && allied(g, me, r.ctrl);
+  const pct = (m: number): number => Math.round((1 - m) * 100);
+  const rows: string[] = [];
+  if (n.line) {
+    const to = n.to.map((j) => g.regions[j].name);
+    const lines = to.length > 4 ? `${to.slice(0, 4).join(', ')} and ${to.length - 4} more` : to.join(', ');
+    if (n.cut) rows.push(`<div class="rrow down"><span><b>Railway cut</b></span><small>Torn up since ${date(n.since ?? g.turn)}. No train runs into, out of or through ${esc(r.name)} until engineers relay the track. Only engineers can be carried up to the break.</small></div>`);
+    else {
+      const why = whyNotCutRailway(g, r.id);
+      rows.push(`<div class="rrow rail"><span><b>Railway</b>, to ${esc(lines)}</span><small>The line is working.</small>${yours ? `<button class="btn small" data-act="cutrail" data-id="${r.id}" ${why ? `disabled title="${esc(why)}"` : 'title="Tear up the track. No train runs into, out of or through this province, for either side, until engineers relay it."'}>Tear up the railway</button>` : ''}</div>`);
+    }
+  } else if (r.terrain !== 'desert' && !r.overseas) rows.push('<div class="rrow rail"><span><b>No railway</b></span><small>No line runs to this province: everything here comes and goes by road or by sea.</small></div>');
+  if (yours && n.road > 0) {
+    const far = n.attack < 1;
+    rows.push(`<div class="rrow ${far ? 'down' : 'rail'}"><span><b>${n.road} ${n.road === 1 ? 'province' : 'provinces'} by road from your railhead</b></span><small>${far
+      ? `Your troops here have outrun their supplies: they attack ${pct(n.attack)}% weaker and defend ${pct(n.defence)}% weaker until engineers bring the working line nearer.`
+      : `Near enough to be fed in full. Beyond ${RAILWAYS.railhead[0][0]} provinces of road an army fights weaker.`}</small></div>`);
+  }
+  if (n.ruined) rows.push(`<div class="rrow down"><span><b>${n.ruined} of ${n.factories} ${n.factories === 1 ? 'factory' : 'factories'} in ruins</b></span><small>Wrecked by bombing. A ruined factory earns nothing until engineers rebuild it, one a month.</small></div>`);
+  return rows.length ? `<div class="rivers">${rows.join('')}</div>` : '';
+}
+
+/** The player's engineers in a province: what those at work are doing, and the jobs the first idle corps can be given. */
+function jobBlock(r: Region): string {
+  if (!groundRules(g) || !humanUp(g)) return '';
+  const mine = r.units.filter((c) => c.kind === 'eng' && canOrder(g, c));
+  if (!mine.length) return '';
+  const busy = mine.filter((c) => c.job).map((c) => {
+    const fresh = c.job!.eta === g.turn + 1;
+    return `<div class="note"><b>${esc(c.name)} is at work.</b> ${esc(jobLine(g, c))}.${fresh ? ` <button class="btn small" data-act="stopjob" data-id="${c.id}">Stop the work</button>` : ''}</div>`;
+  }).join('');
+  const c = mine.find((x) => !x.job);
+  if (!c) return `<div class="jobs">${busy}</div>`;
+  // What the corps can start now comes first, and what it cannot follows with the reason.
+  const offers = engineerJobs(g, c).map((o, i) => ({ o, i })).sort((p, q) => Number(!!p.o.why) - Number(!!q.o.why) || p.i - q.i).map((x) => x.o);
+  return `<div class="jobs">${busy}<h3>Work for ${esc(c.name)}</h3><p class="sub" style="margin:0 0 7px">A job takes the corps the rest of the month where it stands, and is done when your next month begins. Sent in with an attack instead, engineers breach fortifications, clear mines and get infantry over a river whose bridges are down.</p>${offers.map((o) => `<button class="buy offer" data-act="job" data-id="${c.id}" data-key="${o.key}" ${o.why ? 'disabled' : ''}><span class="grow"><b>${esc(o.label)}</b><small>${esc(o.blurb)}</small>${o.why ? `<small class="whyno">${esc(o.why)}</small>` : ''}</span></button>`).join('')}</div>`;
 }
 
 const SHELF = { army: 'Army', air: 'Air force', navy: 'Navy', works: 'Works' } as const;
@@ -2030,7 +2180,7 @@ function airOrders(f: AirFleet): string {
     const ok = !off || airTargets(g, f, m).length > 0;
     const why = !war ? 'The nation is at peace.' : m !== 'superiority' && !f.bmr ? 'It has no bombers.' : 'Nothing in reach to fly this against.';
     const on = off ? ui.airMode === m || (!ui.airMode && f.mission === m) : !ui.airMode && f.mission === m;
-    return `<button class="btn small${on ? ' on' : ''}" data-act="mission" data-mission="${m}" ${ok ? '' : 'disabled'} title="${esc(ok ? MISSION[m].what : why)}">${MISSION[m].label}</button>`;
+    return `<button class="btn small${on ? ' on' : ''}" data-act="mission" data-mission="${m}" ${ok ? '' : 'disabled'} title="${esc(ok ? missionWhat(m) : why)}">${MISSION[m].label}</button>`;
   };
   const moved = f.moved === g.turn;
   const btns = (['support', 'superiority', 'bomb', 'night', 'strike', 'rest'] as AirMission[]).map(btn).join('')
@@ -2050,9 +2200,9 @@ function airOrders(f: AirFleet): string {
       const on = f.mission === m && f.target === t;
       return `<button class="pickrow${on ? ' pick' : ''}" data-act="airtarget" data-target="${t}"><span class="grow"><b>${esc(name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${[`${num(d)} km`, esc2, ind].filter(Boolean).join(' · ')}</span></span>${on ? '<span class="tag good">Ordered</span>' : ''}</button>`;
     }).join('');
-    body = `<p class="sub" style="margin:8px 0 6px">${esc(MISSION[m].what)} Click a ${sea ? 'ringed sea' : 'red region'} on the map, or pick one of the nearest here, to see the odds before you commit.</p>${rows}${ts.length > 8 ? `<p class="sub">${ts.length - 8} more in reach: see the map.</p>` : ''}`;
+    body = `<p class="sub" style="margin:8px 0 6px">${esc(missionWhat(m))} Click a ${sea ? 'ringed sea' : 'red region'} on the map, or pick one of the nearest here, to see the odds before you commit.</p>${rows}${ts.length > 8 ? `<p class="sub">${ts.length - 8} more in reach: see the map.</p>` : ''}`;
   } else {
-    body = `<p class="sub" style="margin:8px 0 6px">${esc(capital(missionText(f)))}. ${esc(MISSION[f.mission].what)} ${f.ftr ? `Its fighters reach ${num(R.ftr)} km and are at full effect to ${num(R.ftr * AIR.range.fullAt)} km. ` : ''}${f.bmr ? `Its bombers reach ${num(R.bmr)} km. ` : ''}The rings on the map show both.</p>`;
+    body = `<p class="sub" style="margin:8px 0 6px">${esc(capital(missionText(f)))}. ${esc(missionWhat(f.mission))} ${f.ftr ? `Its fighters reach ${num(R.ftr)} km and are at full effect to ${num(R.ftr * AIR.range.fullAt)} km. ` : ''}${f.bmr ? `Its bombers reach ${num(R.bmr)} km. ` : ''}The rings on the map show both.</p>`;
   }
   return `<div class="orders"><div class="acts">${btns}</div>${body}</div>`;
 }
@@ -2141,7 +2291,7 @@ function airPlanCard(): string {
         <div class="sub">About ${lossPct}% of the bombers are likely to be lost. Warships caught at sea there could lose up to ${Math.round(fc.cut * 100)}% of their number, and merchant ships in these waters will be sunk.</div>`;
     } else {
       head = `<div class="verdict ${lossPct <= 10 ? 'win' : lossPct <= 25 ? '' : 'loss'}" style="font-size:24px">${lossPct <= 10 ? 'Light losses expected' : lossPct <= 25 ? 'The fighters will take a toll' : 'Heavy losses are likely'}</div>
-        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. The raids should stop about ${Math.round(fc.cut * 100)}% of ${esc(place)}'s output for a month: ${(fc.nation * 100).toFixed(1)}% of ${g.nations[g.regions[m.target].ctrl].adj} production.</div>`;
+        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. ${g.regions[m.target].fac > 0 ? `The raids should stop about ${Math.round(fc.cut * 100)}% of ${esc(place)}'s output for a month: ${(fc.nation * 100).toFixed(1)}% of ${g.nations[g.regions[m.target].ctrl].adj} production.` : `There is no industry at ${esc(place)}: the bombers go for its rail yards and junctions.`}${fc.rail ? ` There is about a ${Math.round(fc.rail * 100)}% chance of cutting the railway through ${esc(place)}, which stays cut until engineers relay it.` : ''}${fc.ruin ? ` There is about a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ''}</div>`;
     }
     const flying = a.att.map((x) => `<div class="pickrow pick">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[x.f.base].name)}, ${num(x.d)} km · ${esc(craft(mission === 'night' ? 0 : x.f.ftr, x.bmr > 0 ? x.f.bmr : 0))}${x.crowd < 1 ? ` · crowded airfields, ${Math.round(x.crowd * 100)}% can fly` : ''}</span></span></div>`).join('');
     const meeting = a.def.length ? a.def.map((x) => `<div class="pickrow">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${g.nations[x.f.nat].adj}, from ${esc(g.regions[x.f.base].name)} · ${num(x.f.ftr)} fighters, about ${num(x.f.ftr * x.w)} able to meet the raids</span></span></div>`).join('') : '<div class="empty">No enemy fighters are in reach.</div>';
@@ -2477,7 +2627,7 @@ function attackCard(): string {
   const inSet = new Set(chosen.map((c) => c.id));
   const a = previewAttack(g, chosen, target);
   const foes = a ? a.defenders : hostileUnits(g, target, me);
-  const why = (c: Corps): string => (m.chosen.has(c.id) && !inSet.has(c.id) ? (g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? 'Staff at its limit' : 'No room on the roads') : '');
+  const why = (c: Corps): string => (barred(g, c, target) ? 'Too steep for tanks' : blocked(g, c, target) ? 'Bridges down' : m.chosen.has(c.id) && !inSet.has(c.id) ? (g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? 'Staff at its limit' : 'No room on the roads') : '');
   const ours: Side = {
     nats: [me], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: sumDivs(chosen),
     cards: cands.map((c) => battleCard(c, { act: true, on: inSet.has(c.id), note: why(c), from: true })).join(''),
@@ -2497,8 +2647,12 @@ function attackCard(): string {
       <div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1 on the day"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is what it takes: about 1.2 to 1</span><span>Theirs</span></div></div>
       ${ticketBlock('What the campaign map feeds into this battle', a.lines)}`;
-  } else body = '<div class="empty">Choose at least one corps to attack with.</div>';
-  const ground = `${target.terrain[0].toUpperCase() + target.terrain.slice(1)}`;
+  } else body = cands.length && cands.every((c) => barred(g, c, target))
+    ? `<div class="empty">${esc(target.name)} is too steep for tanks. Bring infantry or mountain troops up beside it to attack.</div>`
+    : cands.length && cands.every((c) => blocked(g, c, target))
+    ? `<div class="empty">${esc(whyBlocked(g, cands[0], target) ?? '')} Infantry can still cross in boats.</div>`
+    : '<div class="empty">Choose at least one corps to attack with.</div>';
+  const ground = `${target.terrain[0].toUpperCase() + target.terrain.slice(1)}${steep(g, target) ? ', too steep for tanks' : ''}`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The armies meet · ${date(g.turn)}</div><h2>Battle for ${esc(target.name)}</h2></header>
     <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def')}</div>${body}</div>
     <footer><button class="btn" data-act="close" title="Call the attack off. Nothing is spent.">Withdraw</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="attack" ${a ? '' : 'disabled'} title="Settle the battle at once from the Battle Ticket">Auto-resolve</button></footer>`;
@@ -2973,6 +3127,27 @@ function onClick(e: MouseEvent): void {
       ui.rail = ui.ship = ui.land = false; refresh(); break;
     }
     case 'pickall': selectRegion(ui.sel); refresh(); break;
+    case 'job': {
+      const c = g.corps.find((x) => x.id === id);
+      if (c && orderEngineers(g, c, t.dataset.key as JobKind)) { ui.msg = `${c.name}: ${jobLine(g, c).replace(/^./, (ch) => ch.toLowerCase())}.`; queueSave(); }
+      refresh(); break;
+    }
+    case 'stopjob': {
+      const c = g.corps.find((x) => x.id === id);
+      if (c && orderStopWork(g, c)) { ui.msg = `${c.name} has stopped work and has its moves back.`; queueSave(); }
+      refresh(); break;
+    }
+    case 'blow': {
+      const from = Number(t.dataset.from), to = Number(t.dataset.to);
+      if (orderBlowBridges(g, from, to)) { ui.msg = `The bridges between ${g.regions[from].name} and ${g.regions[to].name} are blown.`; queueSave(); }
+      else ui.msg = whyNotBlowBridges(g, from, to) ?? '';
+      refresh(); break;
+    }
+    case 'cutrail': {
+      if (orderCutRailway(g, id)) { ui.msg = `The railway at ${g.regions[id].name} is torn up.`; queueSave(); }
+      else ui.msg = whyNotCutRailway(g, id) ?? '';
+      refresh(); break;
+    }
     case 'eveplan': {
       const moved = orderEvePlan(g);
       ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = false;
@@ -3250,7 +3425,7 @@ function wireMap(): void {
   svg.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     const id = regionAt(e.clientX, e.clientY);
-    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderAt(id) && pickedCorps().length && id !== ui.sel) { ui.msg = `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
+    if (id >= 0 && humanUp(g)) { ui.msg = ''; if (!orderAt(id) && pickedCorps().length && id !== ui.sel) { ui.msg = pickedCorps().map((c) => (g.regions[c.reg].nb.includes(id) ? whyBlocked(g, c, g.regions[id]) : barred(g, c, g.regions[id]) ? whyBlocked(g, c, g.regions[id]) : null)).find(Boolean) ?? `${g.regions[id].name} is out of reach for the army you have picked up this month.`; refresh(); } }
   });
   svg.addEventListener('pointerdown', (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -3305,7 +3480,7 @@ function wireMap(): void {
     const way = routeShown === r.id ? routeTo(r.id) : null;
     const order = way ? `<br><span class="tipgo">${way.attack ? 'Right-click to plan an attack' : `Right-click to march: ${way.cost} of ${way.ap} moves`}</span>` : '';
     const rel = relationWord(r.ctrl);
-    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${here}${order}`;
+    tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${here}${order}`;
     }
     tip.style.display = 'block';
     const wrap = $('#mapwrap').getBoundingClientRect();

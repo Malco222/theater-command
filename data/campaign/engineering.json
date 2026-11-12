@@ -1,0 +1,19 @@
+{
+  "_note": "Rivers, bridges, minefields and engineers (the railways they relay and the factories they rebuild are in railways.json). The grand campaign only. river.attack is what an attack across standing bridges is worth; blown is what happens while the bridges are down: who cannot cross at all, what infantry in boats is worth (more with engineers in the assault), and the extra moves it costs. blow is the chance that retreating troops blow the bridges behind them when the near bank is lost, and what changes it. breach is how much of a fortification's worth assault engineers take away. start is the engineers each great power begins the grand campaign with.",
+  "river": { "attack": 0.95 },
+  "blown": { "barred": ["arm", "mot", "art"], "attack": 0.7, "withEngineers": 0.85, "march": 1 },
+  "blow": { "chance": 0.65, "unguarded": 0.25, "engineers": 0.95, "fastCaptor": -0.35, "aiOdds": 1.5 },
+  "mines": { "most": 2, "attack": 0.12, "march": 1 },
+  "breach": { "perDiv": 0.25, "most": 0.5 },
+  "works": { "most": 2 },
+  "jobs": {
+    "bridge": { "label": "Rebuild the bridges", "blurb": "Every bridge that is down on this province's rivers is rebuilt by next month, and tanks, lorries and guns can cross again." },
+    "rail": { "label": "Relay the railway", "blurb": "The track torn up or bombed in this province is relaid by next month. Trains run through again, and the armies beyond are fed from a railhead that much nearer." },
+    "plant": { "label": "Rebuild a factory", "blurb": "One factory wrecked by bombing is put back to work by next month and earns again." },
+    "works": { "label": "Build field works", "blurb": "Trenches, wire and gun pits: the province's fortifications rise one level, as far as level 2. Heavier works are ordered from the treasury." },
+    "mines": { "label": "Lay minefields and traps", "blurb": "Mines and booby traps on every road in. Each level takes 12% off any attack on the province and costs the enemy a move to enter it, until his own engineers clear lanes. Two levels at most." },
+    "demolish": { "label": "Demolish the fortifications", "blurb": "The works here are blown up, one level a month, so that nobody can use them." }
+  },
+  "start": { "nations": ["GER", "SOV", "FRA", "UK", "ITA"], "corps": 2 },
+  "ai": { "most": 3, "reserve": 20 }
+}
