@@ -32,6 +32,9 @@ struct FMiniatureMesh
 	/** A rod from one point to another. */
 	void Rod(const FVector& From, const FVector& To, double Radius, const FLinearColor& Colour, int32 Sides = 6);
 
+	/** A rod that tapers from one end to the other: an arm, a leg, a rifle's stock. */
+	void Limb(const FVector& From, const FVector& To, double FromRadius, double ToRadius, const FLinearColor& Colour, int32 Sides = 8);
+
 	/** A ball, or an egg if Size is not the same each way. */
 	void Ball(const FVector& Center, const FVector& Size, const FLinearColor& Colour, int32 Rings = 6, int32 Sides = 10);
 
@@ -73,9 +76,17 @@ struct FMiniatureMesh
 	static FString MainTankOf(const FString& Tag);
 	bool MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn = 0.0);
 
+	/**
+	 * A nation's infantryman, 1.75 m tall when Metre is a real metre: his helmet, uniform, boots, kit and rifle
+	 * as his army wore them. Any nation can be asked for; one with nothing special drawn wears a plain kit in
+	 * its own colour.
+	 */
+	void Soldier(const FString& Tag, const FVector& Where, double Metre, double Turn = 0.0);
+
 	/** Every vehicle there is a model of; and a line about one, with its real length and height. */
 	static TArray<FString> VehicleNames();
 	static FString VehicleTitle(const FString& Name);
+	static FString VehicleNation(const FString& Name);
 
 	/** Dust: anything added below DustTop is tinted toward Dust, most at DustFoot. Off while DustTop is not above DustFoot. */
 	double DustFoot = 0.0, DustTop = 0.0;

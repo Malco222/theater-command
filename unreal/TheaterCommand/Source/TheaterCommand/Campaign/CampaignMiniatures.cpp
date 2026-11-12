@@ -116,6 +116,31 @@ void FMiniatureMesh::Rod(const FVector& From, const FVector& To, double Radius, 
 	}
 }
 
+void FMiniatureMesh::Limb(const FVector& From, const FVector& To, double FromRadius, double ToRadius, const FLinearColor& Colour, int32 Sides)
+{
+	const FVector Axis = (To - From).GetSafeNormal();
+	FVector Side, Other;
+	Axis.FindBestAxisVectors(Side, Other);
+	const FColor Paint = Colour.ToFColor(true);
+	const double Lean = (FromRadius - ToRadius) / FMath::Max((To - From).Size(), 1.0e-6);
+	TArray<int32> Foot, Top;
+	for (int32 K = 0; K <= Sides; ++K)
+	{
+		const double Angle = UE_DOUBLE_TWO_PI * K / Sides;
+		const FVector Out = Side * FMath::Cos(Angle) + Other * FMath::Sin(Angle);
+		const FVector Normal = (Out + Axis * Lean).GetSafeNormal();
+		Foot.Add(Add(From + Out * FromRadius, Normal, Paint));
+		Top.Add(Add(To + Out * ToRadius, Normal, Paint));
+	}
+	for (int32 K = 0; K < Sides; ++K)
+	{
+		Face(Foot[K], Foot[K + 1], Top[K], Normals[Foot[K]]);
+		Face(Foot[K + 1], Top[K + 1], Top[K], Normals[Foot[K]]);
+	}
+	Disc(From, -Axis, FromRadius, Colour, Sides);
+	Disc(To, Axis, ToRadius, Colour, Sides);
+}
+
 void FMiniatureMesh::Pillar(const FVector& Base, double FootRadius, double TopRadius, double Height, const FLinearColor& Colour, int32 Sides)
 {
 	const FColor Paint = Colour.ToFColor(true);

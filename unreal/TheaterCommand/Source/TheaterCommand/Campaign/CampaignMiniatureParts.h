@@ -20,15 +20,15 @@ namespace MiniatureParts
 		/** Forward is toward the figure's front, Right to its right, Up above the ground. */
 		FVector At(double Forward, double Right, double Up) const
 		{
-			// A figure that is not turned faces along -X.
-			const double X = -Forward, Y = Right;
+			// A figure that is not turned faces along -X, and so has -Y on its right hand.
+			const double X = -Forward, Y = -Right;
 			return Where + FVector(X * Cos - Y * Sin, X * Sin + Y * Cos, Up) * Scale;
 		}
 
 		/** A direction given the same way, as a unit vector. */
 		FVector Toward(double Forward, double Right, double Up) const
 		{
-			const double X = -Forward, Y = Right;
+			const double X = -Forward, Y = -Right;
 			return FVector(X * Cos - Y * Sin, X * Sin + Y * Cos, Up).GetSafeNormal();
 		}
 	};

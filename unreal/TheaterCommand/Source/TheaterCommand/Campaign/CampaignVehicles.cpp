@@ -59,7 +59,7 @@ namespace VehicleParts
 		/** A point of the vehicle: so far forward of its middle, so far to its right, so far above the ground. */
 		static FVector At(double F, double R, double U)
 		{
-			return FVector(-F, R, U);
+			return FVector(-F, -R, U);
 		}
 
 		/** A plate or a box lying fore and aft. Tip leans it so that it rises toward the back, as a sloped front plate does. */
@@ -116,7 +116,7 @@ namespace VehicleParts
 		/** A national marking on a surface that faces the way given (forward, right, up). */
 		void Mark(double F, double R, double U, double Radius, const TCHAR* Tag, double FaceF, double FaceR, double FaceU) const
 		{
-			M.Marking(At(F, R, U), Radius, Tag, FVector(-FaceF, FaceR, FaceU));
+			M.Marking(At(F, R, U), Radius, Tag, FVector(-FaceF, -FaceR, FaceU));
 		}
 
 		/** Both tracks, link by link, with their wheels. */
@@ -187,7 +187,7 @@ namespace VehicleParts
 			}
 
 			const FColor Inner = TrackEdge.ToFColor(true), Edge = TrackEdge.ToFColor(true);
-			const FVector Across(0.0, 1.0, 0.0);
+			const FVector Across(0.0, -1.0, 0.0);
 			for (const double Hand : { -1.0, 1.0 })
 			{
 				const double Mid = Hand * G.Right, R0 = Mid - G.Width * 0.5, R1 = Mid + G.Width * 0.5;
@@ -210,7 +210,7 @@ namespace VehicleParts
 				auto Wheel = [&](double X, double U, double Radius, bool bTyre, int32 Sides)
 				{
 					M.Rod(At(X, Back, U), At(X, Face, U), Radius, bTyre ? Tyre : Shade, Sides);
-					M.Disc(At(X, Face + Hand * 0.02, U), FVector(0.0, Hand, 0.0), Radius * (bTyre ? 0.74 : 0.82), Paint, Sides);
+					M.Disc(At(X, Face + Hand * 0.02, U), FVector(0.0, -Hand, 0.0), Radius * (bTyre ? 0.74 : 0.82), Paint, Sides);
 					M.Rod(At(X, Face, U), At(X, Face + Hand * 0.06, U), Radius * 0.26, Shade, 6);
 				};
 				for (const double X : G.Wheels)
@@ -311,7 +311,7 @@ namespace VehicleParts
 		for (const double X : { -0.9, -1.45 })
 		{
 			B.Tube(X, -1.2, 1.345, X, -1.36, 1.345, 0.235, Tyre, 16);
-			M.Disc(FBuild::At(X, -1.375, 1.345), FVector(0.0, -1.0, 0.0), 0.175, Grey, 16);
+			M.Disc(FBuild::At(X, -1.375, 1.345), FVector(0.0, 1.0, 0.0), 0.175, Grey, 16);
 		}
 		B.Plate(-0.3, 1.19, 1.36, 2.3, 0.07, 0.07, Timber);
 		B.Aerial(0.95, 1.2, 1.4, 2.0);
@@ -469,15 +469,13 @@ namespace VehicleParts
 			B.Plate(2.96, Hand * 0.62, 0.72, 0.1, 0.06, 0.16, Dark);
 		}
 		// The upper hull, out over the tracks: the sloped front, the flat roof, the engine deck falling away behind.
-		B.Side({ { 2.62, 1.22 }, { 1.62, 1.88 }, { -2.0, 1.88 }, { -2.88, 1.66 }, { -2.92, 1.1 }, { 2.5, 1.1 } }, -1.31, 1.31, Olive);
+		B.Side({ { 2.62, 1.22 }, { 1.91, 1.88 }, { -2.0, 1.88 }, { -2.88, 1.66 }, { -2.92, 1.1 }, { 2.5, 1.1 } }, -1.31, 1.31, Olive);
 		for (const double Hand : { -1.0, 1.0 })
 		{
-			// The hoods of the driver and his mate, standing out of the front plate, each with its hatch.
-			B.Side({ { 2.12, 1.52 }, { 2.16, 1.8 }, { 2.05, 1.9 }, { 1.5, 1.9 }, { 1.5, 1.6 } }, Hand * 0.55 - 0.3, Hand * 0.55 + 0.3, Olive);
-			B.Plate(1.8, Hand * 0.55, 1.915, 0.46, 0.5, 0.03, Dark);
-			B.Plate(2.175, Hand * 0.55, 1.74, 0.02, 0.3, 0.05, Pitch);
-			B.Plate(1.75, Hand * 0.55, 1.955, 0.1, 0.18, 0.06, Dark);
-			B.Lamp(2.47, Hand * 0.98, 1.44, 0.07);
+			// The hatches of the driver and his mate, let into the roof just behind the front plate, each with a periscope.
+			B.Layers({ VehicleParts::Oval(1.55, Hand * 0.6, 0.3, 0.3, 0.27, 12), VehicleParts::Oval(1.55, Hand * 0.6, 0.27, 0.27, 0.24, 12) }, { 1.88, 1.915 }, Dark, true);
+			B.Plate(1.72, Hand * 0.6, 1.94, 0.09, 0.16, 0.05, Dark);
+			B.Lamp(2.44, Hand * 0.98, 1.47, 0.07);
 			// The white star on each side.
 			B.Mark(-0.35, Hand * 1.316, 1.5, 0.27, TEXT("USA-ARMY"), 0.0, Hand, 0.0);
 			// Air cleaners on the tail plate.
@@ -485,34 +483,37 @@ namespace VehicleParts
 			// Fuel caps.
 			B.Drum(-1.2, Hand * 1.05, 1.88, 0.07, 0.03, Dark, 8);
 		}
-		B.BallGun(2.26, 0.55, 1.47, 0.36);
+		B.BallGun(2.28, 0.6, 1.55, 0.34);
 		// The engine doors on the slope of the deck, and the exhaust deflector under the tail.
 		B.Plate(-2.44, 0.0, 1.79, 0.74, 1.7, 0.03, Dark, -14.0);
 		B.Plate(-2.44, 0.0, 1.81, 0.02, 1.7, 0.012, Pitch, -14.0);
 		B.Plate(-2.96, 0.0, 0.98, 0.1, 1.3, 0.14, Rust);
-		// The white star on the deck, for friendly aircraft.
-		B.Mark(-1.55, 0.0, 1.884, 0.4, TEXT("USA-ARMY"), 0.0, 0.0, 1.0);
 
 		// The turret: one rounded casting, fuller behind where the wireless sits.
 		const double T = 0.3;
-		B.Layers({ Oval(T, 0.0, 0.92, 1.2, 0.93), Oval(T, 0.0, 0.99, 1.3, 1.0), Oval(T, 0.0, 0.93, 1.28, 0.95), Oval(T, 0.0, 0.8, 1.12, 0.82), Oval(T, 0.0, 0.62, 0.9, 0.64) },
-			{ 1.88, 2.02, 2.38, 2.56, 2.62 }, Olive, true);
+		B.Layers({ Oval(T, 0.0, 0.93, 1.2, 0.93, 20), Oval(T, 0.0, 0.97, 1.27, 0.98, 20), Oval(T, 0.0, 0.94, 1.25, 0.95, 20), Oval(T, 0.0, 0.84, 1.14, 0.86, 20), Oval(T, 0.0, 0.66, 0.94, 0.68, 20) },
+			{ 1.88, 1.99, 2.36, 2.53, 2.6 }, Olive, true);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			B.Mark(T - 0.15, Hand * 0.975, 2.18, 0.17, TEXT("USA-ARMY"), 0.0, Hand, 0.06);
+		}
 		// The gun shield and the 75 mm gun; the machine gun beside it.
-		B.Plate(T + 0.98, 0.0, 2.2, 0.2, 1.16, 0.6, Dark);
-		B.Plate(T + 1.1, 0.0, 2.2, 0.16, 0.5, 0.5, Olive);
-		B.Tube(T + 1.1, 0.0, 2.2, T + 1.55, 0.0, 2.2, 0.09, Olive, 10);
+		// (the shield is a rounded casting that follows the curve of the turret front, not a flat plate)
+		B.Tube(T + 0.7, -0.44, 2.2, T + 0.7, 0.44, 2.2, 0.3, Olive, 14);
+		B.Tube(T + 0.84, -0.2, 2.2, T + 0.84, 0.2, 2.2, 0.24, Dark, 12);
+		B.Tube(T + 1.0, 0.0, 2.2, T + 1.55, 0.0, 2.2, 0.09, Olive, 10);
 		B.Tube(T + 1.55, 0.0, 2.2, 2.9, 0.0, 2.21, 0.058, Olive, 10);
 		B.Tube(2.87, 0.0, 2.21, 2.905, 0.0, 2.21, 0.038, Pitch, 8);
 		B.Tube(T + 1.0, 0.4, 2.2, T + 1.3, 0.4, 2.2, 0.022, GunSteel, 5);
 		// The commander's hatch ring with its heavy machine gun; the loader's periscope; the ventilator; the aerial.
-		B.Drum(T - 0.25, 0.38, 2.62, 0.33, 0.1, Dark, 14);
-		B.Drum(T - 0.25, 0.38, 2.72, 0.27, 0.025, Olive, 14);
-		B.Plate(T - 0.25, 0.38, 2.75, 0.54, 0.02, 0.01, Pitch);
+		B.Drum(T - 0.25, 0.38, 2.6, 0.33, 0.1, Dark, 14);
+		B.Drum(T - 0.25, 0.38, 2.7, 0.27, 0.025, Olive, 14);
+		B.Plate(T - 0.25, 0.38, 2.73, 0.54, 0.02, 0.01, Pitch);
 		B.Tube(T + 0.08, 0.38, 2.7, T + 0.08, 0.38, 2.9, 0.025, GunSteel, 5);
 		B.Plate(T - 0.02, 0.38, 2.92, 0.5, 0.08, 0.1, GunSteel);
 		B.Tube(T + 0.2, 0.38, 2.93, T + 1.25, 0.38, 2.95, 0.02, GunSteel, 5);
-		B.Plate(T + 0.2, -0.42, 2.65, 0.12, 0.2, 0.06, Dark);
-		B.Drum(T + 0.55, 0.0, 2.6, 0.14, 0.05, Dark, 10);
+		B.Plate(T + 0.2, -0.42, 2.63, 0.12, 0.2, 0.06, Dark);
+		B.Drum(T + 0.5, 0.0, 2.6, 0.14, 0.04, Dark, 10);
 		B.Aerial(T - 0.95, -0.5, 2.56, 1.7);
 	}
 
@@ -591,12 +592,13 @@ namespace VehicleParts
 		const TCHAR* Name;
 		void (*Build)(FMiniatureMesh&);
 		const TCHAR* Title;
+		const TCHAR* Nation;
 	};
 	static const FModel Models[] = {
-		{ TEXT("PanzerIV"), &PanzerIV, TEXT("Panzer IV  -  5.92 m long, 2.68 m high") },
-		{ TEXT("T34"), &T34, TEXT("T-34  -  5.92 m long, 2.45 m high") },
-		{ TEXT("Sherman"), &Sherman, TEXT("M4 Sherman  -  5.84 m long, 2.74 m high") },
-		{ TEXT("Matilda"), &Matilda, TEXT("Matilda II  -  5.61 m long, 2.52 m high") },
+		{ TEXT("PanzerIV"), &PanzerIV, TEXT("Panzer IV  -  5.92 m long, 2.68 m high"), TEXT("GER") },
+		{ TEXT("T34"), &T34, TEXT("T-34  -  5.92 m long, 2.45 m high"), TEXT("SOV") },
+		{ TEXT("Sherman"), &Sherman, TEXT("M4 Sherman  -  5.84 m long, 2.74 m high"), TEXT("USA") },
+		{ TEXT("Matilda"), &Matilda, TEXT("Matilda II  -  5.61 m long, 2.52 m high"), TEXT("UK") },
 	};
 }
 
@@ -650,6 +652,18 @@ FString FMiniatureMesh::VehicleTitle(const FString& Name)
 		}
 	}
 	return Name;
+}
+
+FString FMiniatureMesh::VehicleNation(const FString& Name)
+{
+	for (const VehicleParts::FModel& Known : VehicleParts::Models)
+	{
+		if (Name == Known.Name)
+		{
+			return Known.Nation;
+		}
+	}
+	return FString();
 }
 
 FString FMiniatureMesh::MainTankOf(const FString& Tag)

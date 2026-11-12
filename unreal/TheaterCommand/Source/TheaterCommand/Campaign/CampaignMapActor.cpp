@@ -893,6 +893,20 @@ void ACampaignMapActor::BuildParade()
 	for (int32 K = 0; K < Names.Num(); ++K)
 	{
 		const FVector Spot = Middle + FVector(-(K - (Names.Num() - 1) * 0.5) * Apart, 0.0, 0.0);
+		// "Soldier:GER" is a nation's infantryman, facing out from the wall; anything else is a vehicle.
+		FString Whose;
+		if (Names[K].Split(TEXT(":"), nullptr, &Whose))
+		{
+			Model.Soldier(Whose, Spot, Metre, 90.0);
+			Model.Soldier(Whose, Spot + FVector(-1.3 * Metre, 0.0, 0.0), Metre, 35.0);
+			Model.Soldier(Whose, Spot + FVector(1.3 * Metre, 0.0, 0.0), Metre, 215.0);
+			static const TMap<FString, FString> Peoples = { { TEXT("GER"), TEXT("German") }, { TEXT("SOV"), TEXT("Soviet") }, { TEXT("USA"), TEXT("American") },
+				{ TEXT("UK"), TEXT("British") }, { TEXT("FRA"), TEXT("French") }, { TEXT("ITA"), TEXT("Italian") }, { TEXT("JAP"), TEXT("Japanese") }, { TEXT("POL"), TEXT("Polish") } };
+			const FString* People = Peoples.Find(Whose);
+			Write(People ? *People : Whose, Spot.X - Middle.X, 2.25, 0.3);
+			ParadeSpots.Add(WorldToMap(Spot));
+			continue;
+		}
 		if (!Model.Vehicle(Names[K], Spot, Metre, 0.0))
 		{
 			UE_LOG(LogTheater, Warning, TEXT("Parade: no model called %s"), *Names[K]);
@@ -904,7 +918,7 @@ void ACampaignMapActor::BuildParade()
 		}
 		// The man, a little ahead of the nose and in line with the middle of the vehicle; and a post beside him
 		// marked red at 1.75 m, the height of his head.
-		Model.Rifleman(Spot + FVector(-4.0 * Metre, 0.0, 0.0), Metre * 1.75, FLinearColor(FColor::FromHex(TEXT("77735A"))), 90.0);
+		Model.Soldier(FMiniatureMesh::VehicleNation(Names[K]), Spot + FVector(-4.0 * Metre, 0.0, 0.0), Metre, 0.0);
 		Write(TEXT("soldier 1.75 m"), Spot.X - Middle.X - 4.0 * Metre, 2.2, 0.22);
 		ParadeSpots.Add(WorldToMap(Spot));
 	}
