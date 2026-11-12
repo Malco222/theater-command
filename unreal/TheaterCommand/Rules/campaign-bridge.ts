@@ -69,19 +69,18 @@ function view() {
 const corpsById = (s: Game, ids: number[]): Corps[] =>
   ids.map((id) => s.corps.find((c) => c.id === id)).filter((c): c is Corps => !!c && !c.dead);
 
-/** Every computer nation's month until the player is up again, or has fallen. Each one that did something is noted. */
-function runOthers(s: Game, steps: unknown[] | null): void {
-  for (let guard = 0; guard < 80 && !humanUp(s); guard++) {
-    if (s.human && !s.nations[s.human].alive) break;
+/** One computer nation's month. If it did something worth seeing, that is noted. */
+function stepOne(s: Game, steps: unknown[] | null): void {
+  {
     const ctrl = s.regions.map((r) => r.ctrl);
     const r0 = s.reports.length;
     const month = s.turn;
     const nat = stepAI(s);
     if (s.human && s.turn !== month) judgeGoals(s, s.human);
-    if (!steps) continue;
+    if (!steps) return;
     const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
     const reps = s.reports.slice(r0);
-    if (!taken.length && !reps.length) continue;
+    if (!taken.length && !reps.length) return;
     const some = (names: string[]): string => (names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`);
     const won = reps.filter((r) => r.taken).map((r) => r.regionName);
     const held = reps.filter((r) => !r.taken).map((r) => r.regionName);
@@ -101,6 +100,14 @@ function runOthers(s: Game, steps: unknown[] | null): void {
       mine: reps.some((r) => r.defNat === s.human || r.defenders.some((u) => u.nat === s.human)) || taken.some((id) => ctrl[id] === s.human),
       view: view(),
     });
+  }
+}
+
+/** Every computer nation's month until the player is up again, or has fallen. */
+function runOthers(s: Game, steps: unknown[] | null): void {
+  for (let guard = 0; guard < 80 && !humanUp(s); guard++) {
+    if (s.human && !s.nations[s.human].alive) break;
+    stepOne(s, steps);
   }
 }
 
@@ -205,14 +212,21 @@ function attack(ids: number[], to: number) {
 function endMonth() {
   const s = game();
   const h0 = s.headlines.length;
-  if (onEve(s)) endEve(s);
-  else {
-    if (s.human) judgeGoals(s, s.human);
-    endHuman(s);
-  }
   const steps: unknown[] = [];
-  runOthers(s, steps);
-  const fallen = arrive(s);
+  let fallen: string | null = null;
+  if (!s.human) {
+    // Nobody at the controls (the player's country has fallen): one whole month of the war, every nation on the computer.
+    const month = s.turn;
+    for (let guard = 0; guard < 80 && s.turn === month; guard++) stepOne(s, steps);
+  } else {
+    if (onEve(s)) endEve(s);
+    else {
+      judgeGoals(s, s.human);
+      endHuman(s);
+    }
+    runOthers(s, steps);
+    fallen = arrive(s);
+  }
   const headlines = s.headlines.slice(h0).map((h) => ({ kind: h.kind, text: h.text, nat: h.nat ?? null, turn: h.turn, week: h.week }));
   // The few lines worth telling first: declarations of war, countries falling, and events.
   const first = headlines.filter((h) => h.kind === 'war' || h.kind === 'fall' || h.kind === 'event' || h.kind === 'goal');

@@ -68,7 +68,7 @@ bool FCampaignSession::Start(const FString& Human, FString& OutError)
 		OutError = TEXT("The rules did not return a picture of the war");
 		return false;
 	}
-	ReadView(Object);
+	View = ParseView(Object);
 	bRunning = true;
 	UE_LOG(LogTheater, Display, TEXT("Campaign started on the %s rules: %s, %d corps, the player leads %s"),
 		*View.Rules, *View.Date, View.Corps.Num(), *View.Human);
@@ -91,27 +91,30 @@ bool FCampaignSession::CallRules(const FString& Function, const FString& Argumen
 	return FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(ResultJson), OutObject) && OutObject.IsValid();
 }
 
-void FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
+FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 {
-	View = FCampaignView();
-	Object->TryGetStringField(TEXT("rules"), View.Rules);
-	View.Turn = Object->GetIntegerField(TEXT("turn"));
-	Object->TryGetStringField(TEXT("date"), View.Date);
-	Object->TryGetStringField(TEXT("human"), View.Human);
-	Object->TryGetStringField(TEXT("current"), View.Current);
-	Object->TryGetBoolField(TEXT("humanUp"), View.bHumanUp);
+	FCampaignView Out;
+	Object->TryGetStringField(TEXT("rules"), Out.Rules);
+	Out.Turn = Object->GetIntegerField(TEXT("turn"));
+	Object->TryGetStringField(TEXT("date"), Out.Date);
+	Object->TryGetStringField(TEXT("human"), Out.Human); // null once the player's nation has fallen
+	Object->TryGetStringField(TEXT("current"), Out.Current);
+	Object->TryGetBoolField(TEXT("humanUp"), Out.bHumanUp);
+	Object->TryGetBoolField(TEXT("eve"), Out.bEve);
 
 	const TArray<TSharedPtr<FJsonValue>>* Regions = nullptr;
 	if (Object->TryGetArrayField(TEXT("regions"), Regions))
 	{
-		View.RegionHolder.SetNum(Regions->Num());
+		Out.RegionHolder.SetNum(Regions->Num());
+		Out.RegionStanding.SetNum(Regions->Num());
 		for (const TSharedPtr<FJsonValue>& Value : *Regions)
 		{
 			const TSharedPtr<FJsonObject> Region = Value->AsObject();
 			const int32 Id = Region->GetIntegerField(TEXT("id"));
-			if (View.RegionHolder.IsValidIndex(Id))
+			if (Out.RegionHolder.IsValidIndex(Id))
 			{
-				View.RegionHolder[Id] = Region->GetStringField(TEXT("ctrl"));
+				Out.RegionHolder[Id] = Region->GetStringField(TEXT("ctrl"));
+				Region->TryGetStringField(TEXT("stand"), Out.RegionStanding[Id]);
 			}
 		}
 	}
@@ -119,7 +122,7 @@ void FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 	const TArray<TSharedPtr<FJsonValue>>* Corps = nullptr;
 	if (Object->TryGetArrayField(TEXT("corps"), Corps))
 	{
-		View.Corps.Reserve(Corps->Num());
+		Out.Corps.Reserve(Corps->Num());
 		for (const TSharedPtr<FJsonValue>& Value : *Corps)
 		{
 			const TSharedPtr<FJsonObject> Unit = Value->AsObject();
@@ -137,8 +140,67 @@ void FCampaignSession::ReadView(const TSharedPtr<FJsonObject>& Object)
 			C.Moves = Unit->GetIntegerField(TEXT("ap"));
 			C.MovesMax = Unit->GetIntegerField(TEXT("apMax"));
 			Unit->TryGetBoolField(TEXT("canOrder"), C.bCanOrder);
-			View.Corps.Add(MoveTemp(C));
+			Out.Corps.Add(MoveTemp(C));
 		}
+	}
+	return Out;
+}
+
+void FCampaignSession::TakeView(const TSharedPtr<FJsonObject>& Holder)
+{
+	const TSharedPtr<FJsonObject>* NewView = nullptr;
+	if (Holder.IsValid() && Holder->TryGetObjectField(TEXT("view"), NewView))
+	{
+		View = ParseView(*NewView);
+		OnViewChanged.Broadcast();
+	}
+}
+
+namespace
+{
+	TArray<FCorpsMove> ReadMoves(const TSharedPtr<FJsonObject>& Object)
+	{
+		TArray<FCorpsMove> Out;
+		const TArray<TSharedPtr<FJsonValue>>* Moved = nullptr;
+		if (Object->TryGetArrayField(TEXT("moved"), Moved))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Moved)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FCorpsMove M;
+				M.CorpsId = Entry->GetIntegerField(TEXT("id"));
+				for (const TSharedPtr<FJsonValue>& Step : Entry->GetArrayField(TEXT("path")))
+				{
+					M.Path.Add(FMath::RoundToInt32(Step->AsNumber()));
+				}
+				Out.Add(MoveTemp(M));
+			}
+		}
+		return Out;
+	}
+
+	TArray<FBattleUnit> ReadUnits(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
+	{
+		TArray<FBattleUnit> Out;
+		const TArray<TSharedPtr<FJsonValue>>* Units = nullptr;
+		if (Object->TryGetArrayField(Field, Units))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Units)
+			{
+				const TSharedPtr<FJsonObject> Unit = Value->AsObject();
+				FBattleUnit U;
+				Unit->TryGetStringField(TEXT("nat"), U.Nation);
+				Unit->TryGetStringField(TEXT("name"), U.Name);
+				Unit->TryGetStringField(TEXT("kind"), U.Kind);
+				Unit->TryGetStringField(TEXT("gen"), U.General);
+				Unit->TryGetStringField(TEXT("fate"), U.Fate);
+				Unit->TryGetNumberField(TEXT("divs"), U.Divisions);
+				Unit->TryGetNumberField(TEXT("men"), U.Men);
+				Unit->TryGetNumberField(TEXT("lost"), U.Lost);
+				Out.Add(MoveTemp(U));
+			}
+		}
+		return Out;
 	}
 }
 
@@ -169,43 +231,107 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds)
 
 TArray<FCorpsMove> FCampaignSession::Move(const TArray<int32>& CorpsIds, int32 RegionId)
 {
-	TArray<FCorpsMove> Out;
 	TSharedPtr<FJsonObject> Object;
 	if (CorpsIds.Num() == 0 || !CallRules(TEXT("move"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
 	{
-		return Out;
+		return TArray<FCorpsMove>();
 	}
-	const TArray<TSharedPtr<FJsonValue>>* Moved = nullptr;
-	if (Object->TryGetArrayField(TEXT("moved"), Moved))
-	{
-		for (const TSharedPtr<FJsonValue>& Value : *Moved)
-		{
-			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
-			FCorpsMove M;
-			M.CorpsId = Entry->GetIntegerField(TEXT("id"));
-			for (const TSharedPtr<FJsonValue>& Step : Entry->GetArrayField(TEXT("path")))
-			{
-				M.Path.Add(FMath::RoundToInt32(Step->AsNumber()));
-			}
-			Out.Add(MoveTemp(M));
-		}
-	}
-	const TSharedPtr<FJsonObject>* NewView = nullptr;
-	if (Object->TryGetObjectField(TEXT("view"), NewView))
-	{
-		ReadView(*NewView);
-		OnViewChanged.Broadcast();
-	}
+	TArray<FCorpsMove> Out = ReadMoves(Object);
+	TakeView(Object);
 	return Out;
 }
 
-TArray<FString> FCampaignSession::EndMonth()
+FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId)
 {
-	TArray<FString> Notes;
+	FAttackPreview Out;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("previewAttack"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		return Out; // also what comes back when the rules answer null: there is nobody there to attack
+	}
+	Out.bValid = true;
+	Out.Region = RegionId;
+	Out.Attack = static_cast<float>(Object->GetNumberField(TEXT("attack")));
+	Out.Defence = static_cast<float>(Object->GetNumberField(TEXT("defence")));
+	Out.Odds = static_cast<float>(Object->GetNumberField(TEXT("odds")));
+	const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
+	if (Object->TryGetArrayField(TEXT("lines"), Lines))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Lines)
+		{
+			const TSharedPtr<FJsonObject> Line = Value->AsObject();
+			FTicketLine L;
+			Line->TryGetStringField(TEXT("label"), L.Label);
+			Line->TryGetStringField(TEXT("value"), L.Value);
+			Line->TryGetStringField(TEXT("effect"), L.Effect);
+			Out.Lines.Add(MoveTemp(L));
+		}
+	}
+	Out.Attackers = ReadUnits(Object, TEXT("attackers"));
+	Out.Defenders = ReadUnits(Object, TEXT("defenders"));
+	return Out;
+}
+
+FAttackResult FCampaignSession::Attack(const TArray<int32>& CorpsIds, int32 RegionId)
+{
+	FAttackResult Out;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("attack"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		return Out;
+	}
+	const TSharedPtr<FJsonObject>* Report = nullptr;
+	if (Object->TryGetObjectField(TEXT("report"), Report)) // null when the rules would not let the attack go in
+	{
+		Out.bFought = true;
+		(*Report)->TryGetStringField(TEXT("level"), Out.Level);
+		(*Report)->TryGetBoolField(TEXT("taken"), Out.bTaken);
+		(*Report)->TryGetBoolField(TEXT("yielded"), Out.bYielded);
+		(*Report)->TryGetNumberField(TEXT("attLost"), Out.AttackerLost);
+		(*Report)->TryGetNumberField(TEXT("defLost"), Out.DefenderLost);
+		(*Report)->TryGetNumberField(TEXT("prisoners"), Out.Prisoners);
+		Out.Attackers = ReadUnits(*Report, TEXT("attackers"));
+		Out.Defenders = ReadUnits(*Report, TEXT("defenders"));
+	}
+	Object->TryGetStringField(TEXT("note"), Out.Note);
+	Out.Moved = ReadMoves(Object);
+	TakeView(Object);
+	return Out;
+}
+
+FMonthResult FCampaignSession::EndMonth()
+{
+	FMonthResult Out;
 	TSharedPtr<FJsonObject> Object;
 	if (!CallRules(TEXT("endMonth"), TEXT("[]"), Object))
 	{
-		return Notes;
+		return Out;
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Steps = nullptr;
+	if (Object->TryGetArrayField(TEXT("steps"), Steps))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Steps)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FMonthStep Step;
+			Entry->TryGetStringField(TEXT("nat"), Step.Nation);
+			Entry->TryGetStringField(TEXT("note"), Step.Note);
+			Entry->TryGetBoolField(TEXT("mine"), Step.bMine);
+			const TArray<TSharedPtr<FJsonValue>>* Focus = nullptr;
+			if (Entry->TryGetArrayField(TEXT("focus"), Focus))
+			{
+				for (const TSharedPtr<FJsonValue>& Region : *Focus)
+				{
+					Step.Focus.Add(FMath::RoundToInt32(Region->AsNumber()));
+				}
+			}
+			const TSharedPtr<FJsonObject>* StepView = nullptr;
+			if (Entry->TryGetObjectField(TEXT("view"), StepView))
+			{
+				Step.View = ParseView(*StepView);
+			}
+			Out.Steps.Add(MoveTemp(Step));
+		}
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Events = nullptr;
 	if (Object->TryGetArrayField(TEXT("events"), Events))
@@ -215,15 +341,11 @@ TArray<FString> FCampaignSession::EndMonth()
 			FString Text;
 			if (Value->AsObject()->TryGetStringField(TEXT("text"), Text))
 			{
-				Notes.Add(Text);
+				Out.Headlines.Add(Text);
 			}
 		}
 	}
-	const TSharedPtr<FJsonObject>* NewView = nullptr;
-	if (Object->TryGetObjectField(TEXT("view"), NewView))
-	{
-		ReadView(*NewView);
-		OnViewChanged.Broadcast();
-	}
-	return Notes;
+	Object->TryGetStringField(TEXT("fallen"), Out.Fallen);
+	TakeView(Object);
+	return Out;
 }

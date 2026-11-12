@@ -13,18 +13,23 @@ Double-click **Play Theater Command.command** in this folder. A Terminal window 
 | Turn the view | Hold the right button and drag, or use Q and E |
 | Pick up an army | Click one of yours (you lead Germany) |
 | Send it somewhere | Right-click a territory. Lightened ground is where it can march; red ground is an attack |
+| Attack | Right-click red ground. The two armies are drawn up on a face-off screen with the odds; send them in or call it off |
 | Leave a corps behind | Click its card in the tray at the bottom |
 | Put the army down | Esc |
-| End the month | Enter, or the button at the bottom right |
+| End the month | Enter, or the button at the bottom right. The other nations' moves are played out; Space skips |
 | Quit | Cmd+Q |
+
+To lead another nation, start the game from Terminal with `-TheaterNation=FRA` (or `UK`, `POL`) added. A proper opening screen will replace this.
 
 ## What is here today
 
-The campaign table for September 1939: Europe, North Africa and the Middle East as a relief model set into a table, 373 territories painted in their nations' colours, frontiers inked in, towns, seas and nations lettered, and every army of the 1939 setup standing on it as a piece (a counter for each corps, under the nation's standard). Click a territory to see whose it is, what it is worth and who is standing on it.
+The campaign table for September 1939: Europe, North Africa and the Middle East as a relief model set into a table, 373 territories painted in their nations' colours, frontiers inked in, towns, seas and nations lettered, and every army standing on it as a piece (a counter for each corps, under the nation's standard). Click a territory to see whose it is, whether it is friend or enemy, what it is worth and who is standing on it.
 
-You can pick up an army, see where it could go, send it there and watch the piece carried along the road, and end the month.
+**It runs on the real rules.** The campaign rules worked out and tested in the browser prototype are the ones deciding everything here: where an army can march, what an attack comes to, what the other nations do with their month. So a war played here goes the way it goes there.
 
-**The rules behind it are a stand-in for now.** The game's real rules are the browser prototype's own code, run inside Unreal (see below). Until that code is bundled in, a small stand-in answers in its place: armies march on their own ground, nothing fights, and ending the month only turns the calendar. The screen says so while the stand-in is in use.
+What you can do today: pick up an army, see where it could go, march it, attack with it (face-off screen, odds, the Battle Ticket, then the result with each corps's losses), watch ground change hands and the frontier move, end the month, watch the other nations' months, and read the month's dispatches. If your country falls the war goes on and you can keep watching it.
+
+What the rules can do that the 3D game does not show yet: moving by rail and by sea, landings, fleets and air fleets, building and recruiting, research, diplomacy, generals' skills, saved games, the later starting dates and free play. The browser prototype has screens for all of these; they come across one at a time.
 
 ## How it is put together
 
@@ -41,7 +46,9 @@ You can pick up an army, see where it could go, send it there and watch the piec
 | `.../CampaignEnvironment` | The lighting |
 | `.../CampaignView`, `.../CampaignSession` | The picture of the war the rules hand over, and the campaign in progress: questions asked of the rules and orders given to them |
 | `TheaterCommand/Source/TheaterCommand/Rules/RulesHost` | Runs the rules, which are JavaScript, inside the game |
-| `TheaterCommand/Content/Rules/` | The rules file the game loads: `campaign-rules.js` (the real ones, when bundled) or `stand-in-rules.js` |
+| `TheaterCommand/Rules/campaign-bridge.ts` | The doorway to the rules: a short TypeScript file that asks the prototype's rules and hands back plain pictures of the war |
+| `TheaterCommand/Content/Rules/campaign-rules.js` | The rules as the game runs them: the doorway and the prototype's `src/campaign`, bundled into one file by `Tools/build_rules.sh` |
+| `TheaterCommand/Content/Rules/stand-in-rules.js` | A simple stand-in the game falls back on if the real rules file is missing |
 | `.../CampaignGameMode` | Lays the table and starts the campaign when the game starts |
 | `.../CampaignPhotographer` | A development tool that takes a fixed set of pictures and quits (`-TheaterShots=<folder>`) |
 | `TheaterCommand/Tools/build_content.py` | Creates the few binary assets (three materials, one empty level) |
@@ -50,7 +57,7 @@ You can pick up an army, see where it could go, send it there and watch the piec
 Three rules shape the code:
 
 - **One source of truth.** The Unreal build reads the same `data/` and `src/generated/` files the browser prototype and its tests use. When the map or the armies change there, they change here.
-- **One set of rules.** The rules are not rewritten in C++. The prototype's TypeScript is bundled into a single JavaScript file and run inside the game by a JavaScript engine (the one that comes with macOS today; a portable one for Windows later). Everything crosses that boundary as JSON: the game asks by name (`start`, `view`, `reach`, `move`, `endMonth`) and draws what comes back. So the 3D game cannot drift from the tested rules.
+- **One set of rules.** The rules are not rewritten in C++. The prototype's TypeScript is bundled into a single JavaScript file and run inside the game by a JavaScript engine (the one that comes with macOS today; a portable one for Windows later). Everything crosses that boundary as JSON: the game asks by name (`start`, `view`, `reach`, `move`, `previewAttack`, `attack`, `endMonth`) and draws what comes back. So the 3D game cannot drift from the tested rules.
 - **The table is built, not placed.** The level is empty. Everything on it is made from the data when the game starts, so nothing has to be arranged by hand in the editor and nothing large sits in the repository.
 
 ## Stand-ins
@@ -67,6 +74,7 @@ From `TheaterCommand/`:
 
 ```
 ./Tools/build.sh             # compile the C++
+./Tools/build_rules.sh       # bundle the rules again, after the prototype's rules or data change (needs Node.js)
 ./Tools/build_content.sh     # remake the few binary assets, after changing build_content.py
 ./Tools/take_pictures.sh     # run the game, take the photographer's set of pictures, print frame rates
 ```

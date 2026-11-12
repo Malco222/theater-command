@@ -60,6 +60,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::MouseScrollDown, IE_Pressed, this, &ACampaignPlayerController::WheelDown);
 	InputComponent->BindKey(EKeys::Escape, IE_Pressed, this, &ACampaignPlayerController::Escape);
 	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EndMonth);
+	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceBar);
 }
 
 void ACampaignPlayerController::WheelUp()
@@ -78,10 +79,23 @@ void ACampaignPlayerController::WheelDown()
 	}
 }
 
+void ACampaignPlayerController::SpaceBar()
+{
+	SkipWatching();
+}
+
 void ACampaignPlayerController::Escape()
 {
-	// Esc backs out one step: first the army in hand, then the territory.
-	if (ArmyRegion != INDEX_NONE)
+	// Esc backs out one step: the watching, the face-off, the army in hand, then the territory.
+	if (bWatching)
+	{
+		SkipWatching();
+	}
+	else if (FaceOff.bVisible)
+	{
+		CloseFaceOff();
+	}
+	else if (ArmyRegion != INDEX_NONE)
 	{
 		PutDownArmy();
 	}
@@ -162,6 +176,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	const bool bOnTable = bHaveMouse && PointerOnTable(PointerWorld);
 	const int32 PointedRegion = bOnTable ? Map->RegionAtWorld(PointerWorld) : INDEX_NONE;
 
+	// The other nations' month plays itself out, a nation at a time.
+	if (bWatching && FPlatformTime::Seconds() >= WatchNext)
+	{
+		WatchNextStep();
+	}
+	const bool bBusy = bWatching || FaceOff.bVisible;
+
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
 	{
@@ -183,7 +204,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	if (bRightHeld && !IsInputKeyDown(EKeys::RightMouseButton))
 	{
-		if (!bTurning && ArmyRegion != INDEX_NONE && PointedRegion != INDEX_NONE)
+		if (!bTurning && !bBusy && ArmyRegion != INDEX_NONE && PointedRegion != INDEX_NONE)
 		{
 			OrderTo(PointedRegion);
 		}
@@ -218,7 +239,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	if (bLeftHeld && !IsInputKeyDown(EKeys::LeftMouseButton))
 	{
-		if (!bDragging)
+		if (!bDragging && !bBusy)
 		{
 			SelectRegion(PointedRegion);
 			if (!PickUpArmyIn(PointedRegion))
@@ -233,8 +254,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// Whatever the pointer rests on is lit faintly, and with an army in hand the road to it is drawn.
 	if (!bScripted && !bDragging && !bTurning)
 	{
-		Map->SetHoveredRegion(PointedRegion);
-		if (ArmyRegion != INDEX_NONE)
+		Map->SetHoveredRegion(bBusy ? INDEX_NONE : PointedRegion);
+		if (ArmyRegion != INDEX_NONE && !bBusy)
 		{
 			ShowRouteTo(PointedRegion);
 		}
@@ -438,7 +459,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId)
 	}
 	if (Target->bAttack)
 	{
-		Notify(TEXT("That is an attack. Battles come in with the real rules; this is the stand-in."));
+		OpenFaceOff(RegionId);
 		return;
 	}
 
@@ -448,9 +469,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId)
 		Notify(TEXT("They cannot get there this month."));
 		return;
 	}
-	const FCampaignView& View = Session->GetView();
-	Map->SetHolders(View.RegionHolder);
-	Map->ShowArmies(View, Marches);
+	ShowWar(Session->GetView(), Marches);
 
 	// The army in hand is now the corps that marched, where they have arrived.
 	PickedCorps.Reset();
@@ -463,26 +482,295 @@ void ACampaignPlayerController::OrderTo(int32 RegionId)
 	SelectRegion(RegionId);
 }
 
-void ACampaignPlayerController::EndMonth()
+void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches)
+{
+	if (Map.IsValid())
+	{
+		Map->SetHolders(View.RegionHolder);
+		Map->ShowArmies(View, Marches);
+	}
+}
+
+namespace
+{
+	FString Thousands(int32 Number)
+	{
+		return FText::AsNumber(Number).ToString();
+	}
+
+	/** The corps of one side of a battle, a line each. After the battle the line says what it cost and what became of them. */
+	FString ListUnits(const TArray<FBattleUnit>& Units, bool bAfter)
+	{
+		TArray<FString> Lines;
+		for (const FBattleUnit& Unit : Units)
+		{
+			FString Line = FString::Printf(TEXT("%s  \u00B7  %s, %d division%s"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind),
+				Unit.Divisions, Unit.Divisions == 1 ? TEXT("") : TEXT("s"));
+			if (bAfter)
+			{
+				Line += FString::Printf(TEXT("  \u00B7  lost %s"), *Thousands(Unit.Lost));
+				if (!Unit.Fate.IsEmpty())
+				{
+					Line += FString::Printf(TEXT(", %s"), *Unit.Fate);
+				}
+			}
+			else if (Unit.Men > 0)
+			{
+				Line += FString::Printf(TEXT("  \u00B7  %s men"), *Thousands(Unit.Men));
+			}
+			Lines.Add(Line);
+		}
+		return FString::Join(Lines, TEXT("\n"));
+	}
+
+	FString SeniorGeneral(const TArray<FBattleUnit>& Units)
+	{
+		for (const FBattleUnit& Unit : Units)
+		{
+			if (!Unit.General.IsEmpty())
+			{
+				return Unit.General;
+			}
+		}
+		return FString();
+	}
+
+	FString StrengthLine(const TArray<FBattleUnit>& Units)
+	{
+		int32 Divisions = 0, Men = 0;
+		for (const FBattleUnit& Unit : Units)
+		{
+			Divisions += Unit.Divisions;
+			Men += Unit.Men;
+		}
+		return FString::Printf(TEXT("%d corps  \u00B7  %d division%s  \u00B7  %s men"), Units.Num(), Divisions, Divisions == 1 ? TEXT("") : TEXT("s"), *Thousands(Men));
+	}
+}
+
+void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 {
 	FCampaignSession* Session = GetSession();
 	if (!Session || !Map.IsValid())
 	{
 		return;
 	}
-	const TArray<FString> Notes = Session->EndMonth();
+	const FAttackPreview Preview = Session->PreviewAttack(PickedCorps, RegionId);
+	if (!Preview.bValid || Preview.Attackers.Num() == 0)
+	{
+		Notify(TEXT("None of the corps in hand stands next to that ground with a move left to attack it."));
+		return;
+	}
+	const FCampaignMapData& Data = Map->GetData();
 	const FCampaignView& View = Session->GetView();
-	Map->SetHolders(View.RegionHolder);
-	Map->ShowArmies(View, TArray<FCorpsMove>());
-	RefreshOrders();
-	RefreshRegionPanel(Map->GetSelectedRegion());
-	Notify(Notes.Num() > 0 ? FString::Printf(TEXT("%s.  %s"), *View.Date, *Notes[0]) : View.Date);
+	const FCampaignNation* Ours = Data.FindNation(View.Human);
+	const FString TheirTag = Preview.Defenders.Num() > 0 ? Preview.Defenders[0].Nation : (View.RegionHolder.IsValidIndex(RegionId) ? View.RegionHolder[RegionId] : FString());
+	const FCampaignNation* Theirs = Data.FindNation(TheirTag);
+	const FString Place = Data.Regions.IsValidIndex(RegionId) ? Data.Regions[RegionId].Name : FString();
+
+	FaceOff = FFaceOff();
+	FaceOff.bVisible = true;
+	FaceOff.Region = RegionId;
+	FaceOff.Title = FText::FromString(FString::Printf(TEXT("The attack on %s"), *Place));
+	FaceOff.OurName = FText::FromString(Ours ? Ours->Name : View.Human);
+	FaceOff.TheirName = FText::FromString(Theirs ? Theirs->Name : TheirTag);
+	FaceOff.OurColor = Ours ? FLinearColor(Ours->Color) : FLinearColor::Gray;
+	FaceOff.TheirColor = Theirs ? FLinearColor(Theirs->Color) : FLinearColor::Gray;
+	const FString OurGeneral = SeniorGeneral(Preview.Attackers), TheirGeneral = SeniorGeneral(Preview.Defenders);
+	FaceOff.OurGeneral = FText::FromString(OurGeneral.IsEmpty() ? FString(TEXT("No general named")) : OurGeneral);
+	FaceOff.TheirGeneral = FText::FromString(TheirGeneral.IsEmpty() ? FString(TEXT("No general named")) : TheirGeneral);
+	FaceOff.OurStrength = FText::FromString(StrengthLine(Preview.Attackers));
+	FaceOff.TheirStrength = FText::FromString(StrengthLine(Preview.Defenders));
+	FaceOff.OurUnits = FText::FromString(ListUnits(Preview.Attackers, false));
+	FaceOff.TheirUnits = FText::FromString(ListUnits(Preview.Defenders, false));
+	FaceOff.Balance = Preview.Attack + Preview.Defence > 0.0f ? Preview.Attack / (Preview.Attack + Preview.Defence) : 0.5f;
+	FaceOff.OddsLine = FText::FromString(Preview.Odds >= 1.0f
+		? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), Preview.Odds)
+		: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f)));
+
+	// The Battle Ticket: what the campaign map says about this fight, and what each thing does in it.
+	TArray<FString> Lines;
+	for (const FTicketLine& Line : Preview.Lines)
+	{
+		Lines.Add(Line.Effect.IsEmpty()
+			? FString::Printf(TEXT("%s:  %s"), *Line.Label, *Line.Value)
+			: FString::Printf(TEXT("%s:  %s  \u2014  %s"), *Line.Label, *Line.Value, *Line.Effect));
+	}
+	FaceOff.Ticket = FText::FromString(FString::Join(Lines, TEXT("\n")));
 }
 
-void ACampaignPlayerController::Notify(const FString& Text)
+void ACampaignPlayerController::ConfirmAttack()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || !FaceOff.bVisible || FaceOff.bResolved)
+	{
+		return;
+	}
+	const int32 RegionId = FaceOff.Region;
+	const FAttackResult Result = Session->Attack(PickedCorps, RegionId);
+	if (!Result.bFought)
+	{
+		FaceOff.bVisible = false;
+		Notify(TEXT("The attack could not go in."));
+		return;
+	}
+
+	FaceOff.bResolved = true;
+	FaceOff.ResultTitle = FText::FromString(Result.bYielded ? FString(TEXT("They fell back without a fight")) : Result.Level);
+	const FString Outcome = Result.bTaken ? TEXT("The ground is yours.") : TEXT("The attack was held. The ground is still theirs.");
+	FString Cost = FString::Printf(TEXT("You lost %s men; they lost %s"), *Thousands(Result.AttackerLost), *Thousands(Result.DefenderLost));
+	if (Result.Prisoners > 0)
+	{
+		Cost += FString::Printf(TEXT(", %s of them taken prisoner"), *Thousands(Result.Prisoners));
+	}
+	FaceOff.ResultDetail = FText::FromString(Outcome + TEXT("  ") + Cost + TEXT("."));
+	FaceOff.OurUnits = FText::FromString(ListUnits(Result.Attackers, true));
+	FaceOff.TheirUnits = FText::FromString(ListUnits(Result.Defenders, true));
+
+	// Show the result on the table: ground repainted if it changed hands, and the corps that followed up carried in.
+	ShowWar(Session->GetView(), Result.Moved);
+	if (Result.Moved.Num() > 0)
+	{
+		PickedCorps.Reset();
+		for (const FCorpsMove& March : Result.Moved)
+		{
+			PickedCorps.Add(March.CorpsId);
+		}
+		ArmyRegion = RegionId;
+	}
+	RefreshOrders();
+	SelectRegion(RegionId);
+}
+
+void ACampaignPlayerController::CloseFaceOff()
+{
+	FaceOff.bVisible = false;
+}
+
+void ACampaignPlayerController::EndMonth()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || bWatching || FaceOff.bVisible)
+	{
+		return;
+	}
+	PutDownArmy();
+	Month = Session->EndMonth();
+	WatchIndex = 0;
+	if (const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		WatchReturnFocus = Eye->GetFocus();
+		WatchReturnZoom = Eye->GetZoom();
+	}
+	if (Month.Steps.Num() > 0 && (!bScripted || bAlwaysWatch))
+	{
+		// Other nations did things: go and look at each in turn.
+		bWatching = true;
+		WatchNext = 0.0;
+	}
+	else
+	{
+		FinishMonth();
+	}
+}
+
+void ACampaignPlayerController::EndMonthAndWatch()
+{
+	bAlwaysWatch = true;
+	EndMonth();
+	bAlwaysWatch = false;
+}
+
+void ACampaignPlayerController::WatchNextStep()
+{
+	if (!Month.Steps.IsValidIndex(WatchIndex))
+	{
+		FinishMonth();
+		return;
+	}
+	const FMonthStep& Step = Month.Steps[WatchIndex++];
+	ShowWar(Step.View, TArray<FCorpsMove>());
+
+	// Travel to where it happened.
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		FVector2D Middle = FVector2D::ZeroVector;
+		int32 Count = 0;
+		for (int32 RegionId : Step.Focus)
+		{
+			if (Map->GetData().Regions.IsValidIndex(RegionId))
+			{
+				Middle += Map->GetData().Regions[RegionId].Center;
+				++Count;
+			}
+		}
+		if (Count > 0)
+		{
+			Middle /= Count;
+			Eye->GoTo(Map->MapToWorld(Middle.X, Middle.Y), FMath::Clamp(WatchReturnZoom, 0.42f, 0.6f));
+		}
+	}
+	const double Pause = Step.bMine ? 2.6 : 1.9;
+	Notify(Step.Note, Pause + 0.4);
+	WatchNext = FPlatformTime::Seconds() + Pause;
+}
+
+void ACampaignPlayerController::SkipWatching()
+{
+	if (bWatching)
+	{
+		FinishMonth();
+	}
+}
+
+void ACampaignPlayerController::FinishMonth()
+{
+	FCampaignSession* Session = GetSession();
+	bWatching = false;
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	const FCampaignView& View = Session->GetView();
+	ShowWar(View, TArray<FCorpsMove>());
+	if (Month.Steps.Num() > 0)
+	{
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			Eye->GoTo(WatchReturnFocus, WatchReturnZoom);
+		}
+	}
+	RefreshOrders();
+	RefreshRegionPanel(Map->GetSelectedRegion());
+
+	// The month's news stays up for a while.
+	TArray<FString> Lines;
+	for (int32 i = 0; i < Month.Headlines.Num() && i < 7; ++i)
+	{
+		Lines.Add(Month.Headlines[i]);
+	}
+	DispatchText = FString::Join(Lines, TEXT("\n\n"));
+	DispatchUntil = FPlatformTime::Seconds() + 25.0;
+
+	if (!Month.Fallen.IsEmpty())
+	{
+		const FCampaignNation* Nation = Map->GetData().FindNation(Month.Fallen);
+		Notify(FString::Printf(TEXT("%s has fallen. The war goes on without you."), Nation ? *Nation->Name : *Month.Fallen), 12.0);
+	}
+	else
+	{
+		Notify(View.Human.IsEmpty() ? View.Date : FString::Printf(TEXT("%s. Your orders."), *View.Date), 4.0);
+	}
+}
+
+void ACampaignPlayerController::Notify(const FString& Text, double Seconds)
 {
 	NoticeText = Text;
-	NoticeUntil = FPlatformTime::Seconds() + 5.0;
+	NoticeUntil = FPlatformTime::Seconds() + Seconds;
+}
+
+FText ACampaignPlayerController::GetDispatches() const
+{
+	return !bWatching && FPlatformTime::Seconds() < DispatchUntil ? FText::FromString(DispatchText) : FText::GetEmpty();
 }
 
 FText ACampaignPlayerController::GetNotice() const
@@ -504,8 +792,16 @@ FText ACampaignPlayerController::GetRulesNote() const
 		return FText::FromString(TEXT("The rules did not start"));
 	}
 	const FCampaignView& View = Session->GetView();
+	if (View.Human.IsEmpty())
+	{
+		return FText::FromString(TEXT("Your country has fallen. The war goes on without you."));
+	}
 	const FCampaignNation* Nation = Map.IsValid() ? Map->GetData().FindNation(View.Human) : nullptr;
 	FString Note = FString::Printf(TEXT("You lead %s"), Nation ? *Nation->Name : *View.Human);
+	if (View.bEve)
+	{
+		Note += TEXT("  \u00B7  the eve of war: place your army, then end the month");
+	}
 	if (View.Rules == TEXT("stand-in"))
 	{
 		Note += TEXT("  \u00B7  stand-in rules: armies march, nothing fights yet");
@@ -529,6 +825,13 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 	RegionPanel.OwnerColor = Owner ? FLinearColor(Owner->Color) : FLinearColor::Gray;
 
 	FString OwnerLine = Owner ? Owner->Name : Region.Owner;
+	if (const FCampaignSession* Session = GetSession())
+	{
+		const TArray<FString>& Standing = Session->GetView().RegionStanding;
+		const FString Stand = Standing.IsValidIndex(RegionId) ? Standing[RegionId] : FString();
+		OwnerLine += Stand == TEXT("own") ? TEXT("  \u00B7  Yours") : Stand == TEXT("ally") ? TEXT("  \u00B7  Ally")
+			: Stand == TEXT("enemy") ? TEXT("  \u00B7  Enemy") : Stand == TEXT("neutral") ? TEXT("  \u00B7  Neutral") : TEXT("");
+	}
 	if (Region.bCapital)
 	{
 		OwnerLine += TEXT("  ·  Capital");

@@ -21,6 +21,9 @@ if ! ./Tools/build.sh > /tmp/theater-command-build.log 2>&1; then
   exit 1
 fi
 
+# Bring the rules up to date with the browser version's, when the tools to do it are here.
+./Tools/build_rules.sh > /tmp/theater-command-rules.log 2>&1 || true
+
 echo "Starting Theater Command..."
 "$ENGINE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" "$PWD/TheaterCommand.uproject" -game -windowed > /tmp/theater-command-game.log 2>&1 &
 disown

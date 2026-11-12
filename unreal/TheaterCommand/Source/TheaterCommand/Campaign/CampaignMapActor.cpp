@@ -143,7 +143,9 @@ bool ACampaignMapActor::BuildMap()
 
 	LoadMaterials();
 	Terrain.Build(Data);
-	ComputeVertexColors();
+	PrepareGround();
+	VertexColors.SetNumUninitialized(Terrain.NX * Terrain.NY);
+	PaintVertices(0, 0, Terrain.NX - 1, Terrain.NY - 1);
 	BuildTerrainMesh();
 	BuildSeaMesh();
 	BuildBorders();
@@ -254,7 +256,14 @@ UMaterialInstanceDynamic* ACampaignMapActor::GetSolidMaterial(const FLinearColor
 	return Instance;
 }
 
-void ACampaignMapActor::ComputeVertexColors()
+namespace
+{
+	// The land is cut into square pieces of this many grid cells, so that a change to part of the map
+	// only means rebuilding the pieces it touches.
+	constexpr int32 ChunkCells = 96;
+}
+
+void ACampaignMapActor::PrepareGround()
 {
 	const int32 NX = Terrain.NX, NY = Terrain.NY, Count = NX * NY;
 
@@ -266,25 +275,32 @@ void ACampaignMapActor::ComputeVertexColors()
 		RegionGround[Region.Id] = GroundColor(Region.Terrain);
 	}
 	const FLinearColor Unclaimed = FromHex(TEXT("A49C86"));
-	TArray<float> R, G, B;
-	R.SetNumUninitialized(Count);
-	G.SetNumUninitialized(Count);
-	B.SetNumUninitialized(Count);
+	GroundR.SetNumUninitialized(Count);
+	GroundG.SetNumUninitialized(Count);
+	GroundB.SetNumUninitialized(Count);
 	for (int32 Idx = 0; Idx < Count; ++Idx)
 	{
 		const int16 Id = Terrain.Region[Idx];
 		const FLinearColor& C = Id >= 0 ? RegionGround[Id] : Unclaimed;
-		R[Idx] = C.R;
-		G[Idx] = C.G;
-		B[Idx] = C.B;
+		GroundR[Idx] = C.R;
+		GroundG[Idx] = C.G;
+		GroundB[Idx] = C.B;
 	}
 	const int32 Soften = FMath::RoundToInt32(4.0 / Terrain.Cell);
-	FCampaignTerrain::Smooth(R, NX, NY, Soften, 2);
-	FCampaignTerrain::Smooth(G, NX, NY, Soften, 2);
-	FCampaignTerrain::Smooth(B, NX, NY, Soften, 2);
-	const float PlainsLightness = GroundColor(TEXT("plains")).GetLuminance();
+	FCampaignTerrain::Smooth(GroundR, NX, NY, Soften, 2);
+	FCampaignTerrain::Smooth(GroundG, NX, NY, Soften, 2);
+	FCampaignTerrain::Smooth(GroundB, NX, NY, Soften, 2);
+	PlainsLightness = GroundColor(TEXT("plains")).GetLuminance();
 
+	// How each point stands against the ground around it: crests come out lighter, valley floors darker.
+	Surround = Terrain.Height;
+	FCampaignTerrain::Smooth(Surround, NX, NY, FMath::RoundToInt32(5.0 / Terrain.Cell), 2);
+}
+
+void ACampaignMapActor::PaintVertices(int32 I0, int32 J0, int32 I1, int32 J1)
+{
 	// Each nation's colour, looked up once per region.
+	const FLinearColor Unclaimed = FromHex(TEXT("A49C86"));
 	TArray<FLinearColor> RegionTint;
 	RegionTint.SetNum(Data.Regions.Num());
 	for (const FCampaignRegion& Region : Data.Regions)
@@ -292,10 +308,6 @@ void ACampaignMapActor::ComputeVertexColors()
 		const FCampaignNation* Nation = Data.FindNation(Region.Owner);
 		RegionTint[Region.Id] = Nation ? FLinearColor(Nation->Color) : Unclaimed;
 	}
-
-	// How each point stands against the ground around it: crests come out lighter, valley floors darker.
-	TArray<float> Surround = Terrain.Height;
-	FCampaignTerrain::Smooth(Surround, NX, NY, FMath::RoundToInt32(5.0 / Terrain.Cell), 2);
 
 	// The direction the lamp shines from, in map terms (x east, y south, z up): low in the west-south-west.
 	// The relief is shaded into the paint as well as lit by the lamp, the way a printed relief map is,
@@ -307,13 +319,12 @@ void ACampaignMapActor::ComputeVertexColors()
 	const FLinearColor Snow = FromHex(TEXT("F2F0EA"));
 	const FLinearColor Sand = FromHex(TEXT("D9CBA4"));
 
-	VertexColors.SetNumUninitialized(Count);
-	for (int32 J = 0; J < NY; ++J)
+	for (int32 J = J0; J <= J1; ++J)
 	{
-		for (int32 I = 0; I < NX; ++I)
+		for (int32 I = I0; I <= I1; ++I)
 		{
 			const int32 Idx = Terrain.Index(I, J);
-			const FLinearColor Ground(R[Idx], G[Idx], B[Idx]);
+			const FLinearColor Ground(GroundR[Idx], GroundG[Idx], GroundB[Idx]);
 			FLinearColor C = Ground;
 
 			// The nation's colour is painted over the ground. The kind of country shows through as light
@@ -359,65 +370,67 @@ void ACampaignMapActor::ComputeVertexColors()
 void ACampaignMapActor::BuildTerrainMesh()
 {
 	TerrainMesh->ClearAllMeshSections();
-
-	const int32 NX = Terrain.NX, NY = Terrain.NY;
-	const int32 ChunkCells = 96;
-	int32 Section = 0;
-	int32 TriangleCount = 0;
-	TArray<int32> Remap;
-
-	for (int32 CJ = 0; CJ < NY - 1; CJ += ChunkCells)
+	ChunksX = FMath::DivideAndRoundUp(Terrain.NX - 1, ChunkCells);
+	ChunksY = FMath::DivideAndRoundUp(Terrain.NY - 1, ChunkCells);
+	for (int32 ChunkY = 0; ChunkY < ChunksY; ++ChunkY)
 	{
-		for (int32 CI = 0; CI < NX - 1; CI += ChunkCells)
+		for (int32 ChunkX = 0; ChunkX < ChunksX; ++ChunkX)
 		{
-			const int32 I1 = FMath::Min(CI + ChunkCells, NX - 1);
-			const int32 J1 = FMath::Min(CJ + ChunkCells, NY - 1);
-			const int32 Stride = I1 - CI + 1;
-			Remap.Init(INDEX_NONE, Stride * (J1 - CJ + 1));
-			FCampaignMeshBuffers Buffers;
-
-			auto VertexAt = [&](int32 I, int32 J)
-			{
-				int32& Slot = Remap[(J - CJ) * Stride + (I - CI)];
-				if (Slot == INDEX_NONE)
-				{
-					const int32 Idx = Terrain.Index(I, J);
-					const double X = FMath::Min(I * Terrain.Cell, Data.Width);
-					const double Y = FMath::Min(J * Terrain.Cell, Data.Height);
-					const FVector2f Slope = Terrain.GradientAt(I, J) * VerticalScale;
-					const FVector Normal = FVector(Slope.Y, -Slope.X, 1.0).GetSafeNormal();
-					const FVector Tangent = FVector(0.0, 1.0, Slope.X).GetSafeNormal();
-					Slot = Buffers.AddVertex(MapToWorld(X, Y, Terrain.Height[Idx]), Normal, VertexColors[Idx],
-						FVector2D(X / Data.Width, Y / Data.Height), Tangent);
-				}
-				return Slot;
-			};
-
-			for (int32 J = CJ; J < J1; ++J)
-			{
-				for (int32 I = CI; I < I1; ++I)
-				{
-					// Sea bed well away from any shore is never seen: leave it out.
-					const float Most = FMath::Max(
-						FMath::Max(Terrain.Coverage[Terrain.Index(I, J)], Terrain.Coverage[Terrain.Index(I + 1, J)]),
-						FMath::Max(Terrain.Coverage[Terrain.Index(I, J + 1)], Terrain.Coverage[Terrain.Index(I + 1, J + 1)]));
-					if (Most < 0.3f)
-					{
-						continue;
-					}
-					const int32 A = VertexAt(I, J), B = VertexAt(I + 1, J), C = VertexAt(I, J + 1), D = VertexAt(I + 1, J + 1);
-					Buffers.Triangles.Append({ A, C, B, B, C, D });
-				}
-			}
-
-			if (Buffers.Commit(TerrainMesh, Section, LandMaterial))
-			{
-				++Section;
-				TriangleCount += Buffers.Triangles.Num() / 3;
-			}
+			BuildTerrainChunk(ChunkX, ChunkY);
 		}
 	}
-	UE_LOG(LogTheater, Log, TEXT("Land: %d triangles in %d pieces"), TriangleCount, Section);
+	UE_LOG(LogTheater, Log, TEXT("Land: %d x %d pieces"), ChunksX, ChunksY);
+}
+
+void ACampaignMapActor::BuildTerrainChunk(int32 ChunkX, int32 ChunkY)
+{
+	const int32 Section = ChunkY * ChunksX + ChunkX;
+	const int32 CI = ChunkX * ChunkCells, CJ = ChunkY * ChunkCells;
+	const int32 I1 = FMath::Min(CI + ChunkCells, Terrain.NX - 1);
+	const int32 J1 = FMath::Min(CJ + ChunkCells, Terrain.NY - 1);
+	const int32 Stride = I1 - CI + 1;
+	TArray<int32> Remap;
+	Remap.Init(INDEX_NONE, Stride * (J1 - CJ + 1));
+	FCampaignMeshBuffers Buffers;
+
+	auto VertexAt = [&](int32 I, int32 J)
+	{
+		int32& Slot = Remap[(J - CJ) * Stride + (I - CI)];
+		if (Slot == INDEX_NONE)
+		{
+			const int32 Idx = Terrain.Index(I, J);
+			const double X = FMath::Min(I * Terrain.Cell, Data.Width);
+			const double Y = FMath::Min(J * Terrain.Cell, Data.Height);
+			const FVector2f Slope = Terrain.GradientAt(I, J) * VerticalScale;
+			const FVector Normal = FVector(Slope.Y, -Slope.X, 1.0).GetSafeNormal();
+			const FVector Tangent = FVector(0.0, 1.0, Slope.X).GetSafeNormal();
+			Slot = Buffers.AddVertex(MapToWorld(X, Y, Terrain.Height[Idx]), Normal, VertexColors[Idx],
+				FVector2D(X / Data.Width, Y / Data.Height), Tangent);
+		}
+		return Slot;
+	};
+
+	for (int32 J = CJ; J < J1; ++J)
+	{
+		for (int32 I = CI; I < I1; ++I)
+		{
+			// Sea bed well away from any shore is never seen: leave it out.
+			const float Most = FMath::Max(
+				FMath::Max(Terrain.Coverage[Terrain.Index(I, J)], Terrain.Coverage[Terrain.Index(I + 1, J)]),
+				FMath::Max(Terrain.Coverage[Terrain.Index(I, J + 1)], Terrain.Coverage[Terrain.Index(I + 1, J + 1)]));
+			if (Most < 0.3f)
+			{
+				continue;
+			}
+			const int32 A = VertexAt(I, J), B = VertexAt(I + 1, J), C = VertexAt(I, J + 1), D = VertexAt(I + 1, J + 1);
+			Buffers.Triangles.Append({ A, C, B, B, C, D });
+		}
+	}
+
+	if (!Buffers.Commit(TerrainMesh, Section, LandMaterial))
+	{
+		TerrainMesh->ClearMeshSection(Section);
+	}
 }
 
 void ACampaignMapActor::BuildSeaMesh()
@@ -891,23 +904,40 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 
 void ACampaignMapActor::SetHolders(const TArray<FString>& Holders)
 {
-	bool bChanged = false;
+	FBox2D Changed(ForceInit);
 	for (int32 i = 0; i < Data.Regions.Num() && i < Holders.Num(); ++i)
 	{
 		if (!Holders[i].IsEmpty() && Data.Regions[i].Owner != Holders[i])
 		{
 			Data.Regions[i].Owner = Holders[i];
-			bChanged = true;
+			if (Data.Regions[i].Bounds.bIsValid)
+			{
+				Changed += Data.Regions[i].Bounds;
+			}
 		}
 	}
-	if (bChanged)
+	if (!Changed.bIsValid)
 	{
-		// Ground has changed hands: repaint it and redraw the frontiers.
-		Terrain.MeasureFrontiers(Data);
-		ComputeVertexColors();
-		BuildTerrainMesh();
-		BuildBorders();
+		return;
 	}
+
+	// Ground has changed hands. Repaint it, with a margin for the band of thick paint along the new
+	// frontier, rebuild only the pieces of the land that touches, and redraw the frontier lines.
+	Terrain.MeasureFrontiers(Data);
+	const double Margin = 8.0;
+	const int32 I0 = FMath::Clamp(FMath::FloorToInt32((Changed.Min.X - Margin) / Terrain.Cell), 0, Terrain.NX - 1);
+	const int32 I1 = FMath::Clamp(FMath::CeilToInt32((Changed.Max.X + Margin) / Terrain.Cell), 0, Terrain.NX - 1);
+	const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Changed.Min.Y - Margin) / Terrain.Cell), 0, Terrain.NY - 1);
+	const int32 J1 = FMath::Clamp(FMath::CeilToInt32((Changed.Max.Y + Margin) / Terrain.Cell), 0, Terrain.NY - 1);
+	PaintVertices(I0, J0, I1, J1);
+	for (int32 ChunkY = FMath::Max(J0 - 1, 0) / ChunkCells; ChunkY <= FMath::Min(J1 / ChunkCells, ChunksY - 1); ++ChunkY)
+	{
+		for (int32 ChunkX = FMath::Max(I0 - 1, 0) / ChunkCells; ChunkX <= FMath::Min(I1 / ChunkCells, ChunksX - 1); ++ChunkX)
+		{
+			BuildTerrainChunk(ChunkX, ChunkY);
+		}
+	}
+	BuildBorders();
 }
 
 void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach)

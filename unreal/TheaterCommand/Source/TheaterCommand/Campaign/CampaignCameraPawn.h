@@ -46,6 +46,8 @@ public:
 	/** Sends the view to a place on the table. Zoom is 0 (closest) to 1 (furthest); negative leaves it alone. */
 	void GoTo(const FVector& WorldFocus, float InZoom = -1.0f, bool bImmediately = false);
 
+	const FVector& GetFocus() const { return TargetFocus; }
+	float GetZoom() const { return TargetZoom; }
 	float GetDistance() const;
 	float GetYaw() const { return Yaw; }
 	float GetPitch() const;

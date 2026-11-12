@@ -27,23 +27,70 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	Folder = FPaths::ConvertRelativePathToFull(InFolder);
 	IFileManager::Get().MakeDirectory(*Folder, true);
 
-	Shots = {
-		{ TEXT("1-whole-map"), TEXT(""), 0.97f, 0.0f, 0.0f, TEXT("") },
-		{ TEXT("2-opening-view"), TEXT("Frankfurt"), 0.56f, 0.0f, 0.0f, TEXT("") },
-		{ TEXT("3-poland-close"), TEXT("Warsaw"), 0.22f, -18.0f, 0.0f, TEXT("") },
-		{ TEXT("4-alps"), TEXT("Tyrol"), 0.2f, 25.0f, 4.0f, TEXT("") },
-		{ TEXT("5-paris-picked"), TEXT("Paris"), 0.36f, 0.0f, 0.0f, TEXT("Paris") },
-		{ TEXT("6-mediterranean"), TEXT("Sicily"), 0.5f, 0.0f, 0.0f, TEXT("Malta") },
-		{ TEXT("7-eastern-frontier"), TEXT("Lwow"), 0.42f, 35.0f, 0.0f, TEXT("") },
-		{ TEXT("8-channel-low"), TEXT("Calais"), 0.12f, -30.0f, 6.0f, TEXT("") },
-		{ TEXT("9-army-in-hand"), TEXT("Berlin"), 0.4f, 0.0f, 0.0f, TEXT("Farther Pomerania"), TEXT("Farther Pomerania"), TEXT("Hamburg") },
-		{ TEXT("10-army-on-the-march"), TEXT("Berlin"), 0.4f, 0.0f, 0.0f, TEXT(""), TEXT("Farther Pomerania"), TEXT(""), TEXT("Hamburg") },
-		{ TEXT("11-next-month"), TEXT("Berlin"), 0.4f, 0.0f, 0.0f, TEXT("Hamburg"), TEXT("Hamburg"), TEXT(""), TEXT(""), 1 },
+	auto Add = [this](const TCHAR* Name, const TCHAR* Region, float Zoom, float Yaw = 0.0f, float Tilt = 0.0f) -> FShot&
+	{
+		FShot& Shot = Shots.AddDefaulted_GetRef();
+		Shot.Name = Name;
+		Shot.Region = Region;
+		Shot.Zoom = Zoom;
+		Shot.Yaw = Yaw;
+		Shot.Tilt = Tilt;
+		return Shot;
 	};
+	Shots.Reset();
+	// The table.
+	Add(TEXT("01-whole-map"), TEXT(""), 0.97f);
+	Add(TEXT("02-opening-view"), TEXT("Frankfurt"), 0.56f);
+	Add(TEXT("03-poland-close"), TEXT("Warsaw"), 0.22f, -18.0f);
+	Add(TEXT("04-alps"), TEXT("Tyrol"), 0.2f, 25.0f, 4.0f);
+	Add(TEXT("05-paris-picked"), TEXT("Paris"), 0.36f).Select = TEXT("Paris");
+	Add(TEXT("06-mediterranean"), TEXT("Sicily"), 0.5f).Select = TEXT("Malta");
+	Add(TEXT("07-eastern-frontier"), TEXT("Lwow"), 0.42f, 35.0f);
+	Add(TEXT("08-channel-low"), TEXT("Calais"), 0.12f, -30.0f, 6.0f);
+	// The game: an army in hand, an attack, its result, a march, and the month after.
+	{
+		FShot& Shot = Add(TEXT("09-army-in-hand"), TEXT("Berlin"), 0.4f);
+		Shot.Select = Shot.Army = TEXT("Farther Pomerania");
+		Shot.Route = TEXT("Hamburg");
+	}
+	{
+		FShot& Shot = Add(TEXT("10-face-off"), TEXT("Pomorze"), 0.34f);
+		Shot.Army = TEXT("Farther Pomerania");
+		Shot.Attack = TEXT("Pomorze");
+	}
+	{
+		FShot& Shot = Add(TEXT("11-battle-result"), TEXT("Pomorze"), 0.34f);
+		Shot.bKeep = Shot.bConfirm = true;
+	}
+	{
+		FShot& Shot = Add(TEXT("12-ground-taken"), TEXT("Pomorze"), 0.34f);
+		Shot.bKeep = Shot.bClose = true;
+	}
+	{
+		FShot& Shot = Add(TEXT("13-army-on-the-march"), TEXT("Berlin"), 0.4f);
+		Shot.Army = TEXT("Neumark");
+		Shot.March = TEXT("Magdeburg");
+	}
+	{
+		FShot& Shot = Add(TEXT("14-next-month"), TEXT("Warsaw"), 0.5f);
+		Shot.Months = 1;
+	}
+	{
+		// Attack again, then end the month and catch the other nations' month being played out.
+		FShot& Shot = Add(TEXT("15-attack-again"), TEXT("Pomorze"), 0.34f);
+		Shot.Army = TEXT("Grenzmark");
+		Shot.Attack = TEXT("Pomorze");
+	}
+	{
+		FShot& Shot = Add(TEXT("16-watching-the-others"), TEXT("Pomorze"), 0.45f);
+		Shot.bKeep = Shot.bConfirm = Shot.bClose = Shot.bWatch = true;
+	}
+
 	// "-TheaterQuick" takes two pictures only, for trying a setting out.
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterQuick")))
 	{
-		Shots = { Shots[1], Shots[3], Shots[7] };
+		const TArray<FShot> All = Shots;
+		Shots = { All[1], All[3], All[7] };
 	}
 	bStarted = true;
 	UE_LOG(LogTheater, Display, TEXT("Photographer: %d pictures to take, into %s"), Shots.Num(), *Folder);
@@ -69,13 +116,34 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 
 	Controller->SetScripted(true);
 	Table->SetHoveredRegion(INDEX_NONE);
+	if (!Shot.bKeep)
+	{
+		Controller->CloseFaceOff();
+		Controller->PutDownArmy();
+	}
+	if (Shot.bConfirm)
+	{
+		Controller->ConfirmAttack();
+	}
+	if (Shot.bClose)
+	{
+		Controller->CloseFaceOff();
+	}
 	for (int32 i = 0; i < Shot.Months; ++i)
 	{
 		Controller->EndMonth();
 	}
-	const int32* Pick = Data.RegionByName.Find(Shot.Select);
-	Controller->SelectRegion(Pick ? *Pick : INDEX_NONE);
-	Controller->PutDownArmy();
+	if (Shot.bWatch)
+	{
+		Controller->PutDownArmy();
+		Controller->EndMonthAndWatch();
+		return; // the view now follows the action
+	}
+	if (!Shot.bKeep)
+	{
+		const int32* Pick = Data.RegionByName.Find(Shot.Select);
+		Controller->SelectRegion(Pick ? *Pick : INDEX_NONE);
+	}
 	if (const int32* Army = Data.RegionByName.Find(Shot.Army))
 	{
 		Controller->PickUpArmyIn(*Army);
@@ -83,6 +151,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (const int32* Route = Data.RegionByName.Find(Shot.Route))
 	{
 		Controller->ShowRouteTo(*Route);
+	}
+	if (const int32* Target = Data.RegionByName.Find(Shot.Attack))
+	{
+		Controller->OrderTo(*Target);
 	}
 }
 

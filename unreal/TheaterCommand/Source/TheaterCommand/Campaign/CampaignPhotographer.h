@@ -35,6 +35,11 @@ private:
 		FString Army; // pick up the player's army in this region
 		FString Route; // show the road to this region
 		FString March; // order the army there just before the picture, to catch it in the air
+		FString Attack; // order the army against this region, which opens the face-off
+		bool bKeep = false; // leave the army in hand and the face-off as the last picture left them
+		bool bConfirm = false; // send the attack on the face-off in
+		bool bClose = false; // close the face-off
+		bool bWatch = false; // end the month and watch the other nations move
 		int32 Months = 0; // end this many months first
 	};
 

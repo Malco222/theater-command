@@ -46,6 +46,30 @@ struct FArmyTray
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
 };
 
+/** The two armies drawn up against each other before an attack and, once it is fought, what the battle came to. */
+struct FFaceOff
+{
+	bool bVisible = false;
+	bool bResolved = false;
+	int32 Region = INDEX_NONE;
+	FText Title;
+	FText OurName;
+	FText TheirName;
+	FLinearColor OurColor = FLinearColor::Gray;
+	FLinearColor TheirColor = FLinearColor::Gray;
+	FText OurGeneral;
+	FText TheirGeneral;
+	FText OurStrength;
+	FText TheirStrength;
+	FText OurUnits;
+	FText TheirUnits;
+	float Balance = 0.5f; // the attackers' share of the strength on the field
+	FText OddsLine;
+	FText Ticket;
+	FText ResultTitle;
+	FText ResultDetail;
+};
+
 /**
  * The player's hands on the campaign table: moving the view, pointing at
  * territories, picking up armies and giving them their orders.
@@ -64,6 +88,13 @@ public:
 
 	const FRegionPanelInfo& GetRegionPanel() const { return RegionPanel; }
 	const FArmyTray& GetArmyTray() const { return Tray; }
+	const FFaceOff& GetFaceOff() const { return FaceOff; }
+
+	/** The month's news, shown for a while after the month turns. */
+	FText GetDispatches() const;
+
+	/** True while the other nations' months are being played out in front of the player. */
+	bool IsWatching() const { return bWatching; }
 	ACampaignMapActor* GetMap() const { return Map.Get(); }
 	FCampaignSession* GetSession() const;
 
@@ -88,7 +119,19 @@ public:
 	/** Orders the picked-up army to a region. */
 	void OrderTo(int32 RegionId);
 
+	/** Sends the attack shown on the face-off in. */
+	void ConfirmAttack();
+
+	/** Calls the attack off, or closes the result of one that has been fought. */
+	void CloseFaceOff();
+
 	void EndMonth();
+
+	/** Ends the month and plays the other nations' months out one at a time, even with a script driving. */
+	void EndMonthAndWatch();
+
+	/** Cuts short the watching of the other nations' month. */
+	void SkipWatching();
 
 	/** While a script is driving (the development photographer), the pointer does not light or route anything. */
 	void SetScripted(bool bInScripted) { bScripted = bInScripted; }
@@ -103,7 +146,12 @@ private:
 
 	void RefreshRegionPanel(int32 RegionId);
 	void RefreshOrders();
-	void Notify(const FString& Text);
+	void Notify(const FString& Text, double Seconds = 5.0);
+	void OpenFaceOff(int32 RegionId);
+	void ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches);
+	void WatchNextStep();
+	void FinishMonth();
+	void SpaceBar();
 	const FReachRegion* FindReach(int32 RegionId) const;
 
 	TWeakObjectPtr<ACampaignMapActor> Map;
@@ -117,8 +165,20 @@ private:
 	int32 RouteTarget = INDEX_NONE;
 	TWeakObjectPtr<AArmyPiece> RingedPiece;
 
+	FFaceOff FaceOff;
+
 	FString NoticeText;
 	double NoticeUntil = 0.0;
+	FString DispatchText;
+	double DispatchUntil = 0.0;
+
+	// The other nations' month, being played out one nation at a time.
+	bool bWatching = false;
+	FMonthResult Month;
+	int32 WatchIndex = 0;
+	double WatchNext = 0.0;
+	FVector WatchReturnFocus = FVector::ZeroVector;
+	float WatchReturnZoom = 0.5f;
 
 	bool bLeftHeld = false;
 	bool bDragging = false;
@@ -126,6 +186,7 @@ private:
 	bool bTurning = false;
 	bool bHaveLastMouse = false;
 	bool bScripted = false;
+	bool bAlwaysWatch = false;
 	int32 SizedForWidth = 0;
 	int32 SizedForHeight = 0;
 	FVector2D PressPosition = FVector2D::ZeroVector;

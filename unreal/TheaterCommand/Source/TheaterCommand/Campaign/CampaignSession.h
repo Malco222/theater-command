@@ -29,8 +29,14 @@ public:
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	TArray<FCorpsMove> Move(const TArray<int32>& CorpsIds, int32 RegionId);
 
-	/** Ends the player's month. Returns what there is to tell about the month that followed. */
-	TArray<FString> EndMonth();
+	/** The odds for the given corps attacking a region, with both armies and the Battle Ticket. */
+	FAttackPreview PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId);
+
+	/** Sends the given corps in. The battle is settled at once by the rules. */
+	FAttackResult Attack(const TArray<int32>& CorpsIds, int32 RegionId);
+
+	/** Ends the player's month and plays every other nation's. Returns what happened, nation by nation. */
+	FMonthResult EndMonth();
 
 	/** Fired whenever the picture of the war has changed. */
 	DECLARE_MULTICAST_DELEGATE(FOnViewChanged);
@@ -38,7 +44,8 @@ public:
 
 private:
 	bool CallRules(const FString& Function, const FString& ArgumentsJson, TSharedPtr<FJsonObject>& OutObject);
-	void ReadView(const TSharedPtr<FJsonObject>& Object);
+	static FCampaignView ParseView(const TSharedPtr<FJsonObject>& Object);
+	void TakeView(const TSharedPtr<FJsonObject>& Holder);
 
 	TUniquePtr<FRulesHost> Host;
 	FCampaignView View;
