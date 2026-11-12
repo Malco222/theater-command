@@ -1,5 +1,5 @@
 {
-  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. In free play (open.json) the window only says when an event may first happen, an event never brings a country at peace into a war, an event marked mode 'history' is left out (the nation decides that for itself), and one marked mode 'open' happens only there. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all), and 'since:event:id,n' (that event happened at least n months ago). 'reform' remakes a nation's armed forces from that month on: for each nation named, the new quality of its troops, strength of its air force, whether its command is still slow, and how many corps it can put into one attack. An event with nothing but a text is a piece of news. 'liberate' hands over ground an occupier has left: each named region he still holds with none of his troops in it passes to the first nation on the list still at war with him.",
+  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. In free play (open.json) the window only says when an event may first happen, an event never brings a country at peace into a war, an event marked mode 'history' is left out (the nation decides that for itself), and one marked mode 'open' happens only there. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all), and 'since:event:id,n' (that event happened at least n months ago). 'reform' remakes a nation's armed forces from that month on: for each nation named, the new quality of its troops, strength of its air force, whether its command is still slow, and how many corps it can put into one attack. An event with nothing but a text is a piece of news. 'liberate' hands over ground an occupier has left: each named region he still holds with none of his troops in it passes to the first nation on the list still at war with him. 'peace' ends the war between two nations: each hands back the other's ground and takes its troops home. A partition marked 'occupied' leaves each piece of the country to whoever has troops standing in it, and the shares divide the rest.",
   "leanAt": 30,
   "backAt": 20,
   "joinAt": 70,
@@ -212,6 +212,57 @@
       "id": "aachen", "from": 63, "to": 63, "mode": "history", "past": true,
       "if": ["flag:harbour:58", "allHeld:allies,Liege"],
       "text": "Aachen has surrendered to the US First Army after three weeks of fighting from house to house: the first German city to fall. Beyond it the West Wall still holds."
+    },
+    {
+      "id": "leningrad-relieved", "from": 54, "to": 70, "mode": "history", "past": true,
+      "if": ["war:GER,SOV", "allHeld:allies,Leningrad,Novgorod"],
+      "text": "The siege of Leningrad is over. After nearly nine hundred days the German guns have been driven out of range of the city, and Moscow fires a salute of 324 guns. More than half a million of its people died of hunger and cold."
+    },
+    {
+      "id": "crimea-freed", "from": 57, "to": 70, "mode": "history", "past": true,
+      "if": ["war:GER,SOV", "allHeld:allies,Crimea"],
+      "text": "Sevastopol has fallen and the Crimea is Soviet again. What is left of the German Seventeenth Army is taken off the beaches of Cape Chersonese under fire, or surrenders there."
+    },
+    {
+      "id": "minsk-freed", "from": 59, "to": 70, "mode": "history", "past": true,
+      "if": ["war:GER,SOV", "allHeld:allies,Minsk,Vitebsk"],
+      "text": "Minsk is free, and the tanks of two Soviet fronts have met west of it. Behind them the German Fourth Army is cut off in the forests: Army Group Centre has ceased to exist. It is the greatest defeat the German army has ever suffered."
+    },
+    {
+      "id": "warsaw-rising", "from": 60, "to": 60, "mode": "history",
+      "if": ["war:GER,SOV", "allHeld:allies,Lublin", "allHeld:axis,Warsaw"],
+      "text": "Warsaw has risen. With Soviet guns heard across the Vistula, the Polish Home Army has come out into the streets against the German garrison and holds much of the city centre."
+    },
+    {
+      "id": "romania-changes-sides", "from": 61, "to": 70, "mode": "history", "past": true,
+      "if": ["alive:ROM", "war:ROM,SOV", "allHeld:allies,Moldavia"],
+      "partition": {"nation": "ROM", "occupied": true, "shares": [[["SOV"], ["Bucharest", "Ploiesti", "Dobruja", "Oltenia", "Banat", "Moldavia", "Bessarabia", "Bukovina", "Transylvania"]]]},
+      "spawn": [["SOV", "Romanian 1st Army", "inf", 4, "Bucharest"], ["SOV", "Romanian 4th Army", "inf", 4, "Bucharest"]],
+      "text": "King Michael has had Marshal Antonescu arrested and Romania has changed sides. Its army turns its guns on the Germans, the Red Army drives for Bucharest and the oilfields of Ploiesti, and the German Sixth Army, destroyed once at Stalingrad, is cut off for the second time."
+    },
+    {
+      "id": "bulgaria-changes-sides", "from": 61, "to": 70, "mode": "history",
+      "if": ["alive:BUL", "flag:event:romania-changes-sides"],
+      "partition": {"nation": "BUL", "occupied": true, "shares": [[["SOV"], ["Sofia", "Plovdiv", "Varna"]]]},
+      "spawn": [["SOV", "Bulgarian 1st Army", "inf", 3, "Sofia"]],
+      "text": "The Soviet Union has declared war on Bulgaria and crossed the Danube without a shot fired. A new government in Sofia has declared war on Germany, and the Bulgarian army marches with the Red Army into Yugoslavia."
+    },
+    {
+      "id": "finland-armistice", "from": 61, "to": 70, "mode": "history",
+      "if": ["alive:FIN", "war:FIN,SOV", "allHeld:allies,Karelia"],
+      "cede": {"from": "FIN", "to": "SOV", "regions": ["Karelia", "Petsamo"]},
+      "peace": [["FIN", "SOV"]],
+      "text": "Finland is out of the war. Marshal Mannerheim, now President, has signed an armistice with Moscow: the frontier of 1940 is restored, Petsamo is given up, and the German troops in the north are to leave or be driven out."
+    },
+    {
+      "id": "warsaw-rising-crushed", "from": 62, "to": 62, "mode": "history",
+      "if": ["flag:event:warsaw-rising", "allHeld:axis,Warsaw"],
+      "text": "After sixty-three days the Warsaw rising is over. The Home Army has laid down its arms, some two hundred thousand of the city's people are dead, and what is left of Warsaw is being blown up street by street. The Red Army watched from across the river."
+    },
+    {
+      "id": "horthy", "from": 63, "to": 63, "mode": "history", "past": true,
+      "if": ["alive:HUN", "war:HUN,SOV", "allHeld:allies,Transylvania"],
+      "text": "Admiral Horthy has announced on Budapest radio that Hungary is asking for an armistice. Within hours German troops have seized the Castle and the Regent's son, and the Arrow Cross leader Szalasi is put in power. Hungary fights on to the end."
     }
   ]
 }

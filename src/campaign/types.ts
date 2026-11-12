@@ -381,6 +381,11 @@ export interface PlanPhase {
   limited?: boolean;
   /** A single stroke: only these places are attacked, whatever else is in reach. */
   targets?: string[];
+  /**
+   * An army kept to the letter of its orders: besides attacking only its targets, nobody steps into ground the
+   * enemy has left empty, or counter-attacks to win ground back, unless the place is one of them.
+   */
+  strict?: boolean;
   /** The phase only applies while these two nations are at war with each other. */
   ifAtWar?: [string, string];
   /** Corps sent across the sea, each to the first place on its list it can reach: an enemy coast is assaulted, a friendly port reinforced. */
