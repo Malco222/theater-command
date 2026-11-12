@@ -74,6 +74,9 @@ struct FMiniatureMesh
 
 	/** The tank a nation's armour is known by, or nothing if none is modelled yet for it. */
 	static FString MainTankOf(const FString& Tag);
+
+	/** The year the campaign has reached: an army's tanks are those its nation had by then (the Tiger from 1943). */
+	static int32 Year;
 	bool MainTank(const FVector& Where, double Metre, const FString& Tag, double Turn = 0.0);
 
 	/**

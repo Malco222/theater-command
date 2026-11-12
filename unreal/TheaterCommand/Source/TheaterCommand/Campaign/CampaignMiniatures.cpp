@@ -648,6 +648,10 @@ void FMiniatureMesh::WingMarking(const FVector& Where, double Radius, const FStr
 		Bar(-0.62, 0.34, 0.62, 1.0, Red);
 		++Layer;
 	}
+	else if (Tag == TEXT("WHITE-DISC"))
+	{
+		Disc(1.0, White); // the plain white disc painted on tanks for friendly aircraft to see
+	}
 	else if (Tag == TEXT("SOV-ARMY"))
 	{
 		Star(1.0, Paint(TEXT("B01818")));

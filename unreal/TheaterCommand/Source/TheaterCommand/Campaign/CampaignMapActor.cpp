@@ -859,7 +859,7 @@ void ACampaignMapActor::BuildParade()
 		Wanted.ParseIntoArray(Names, TEXT(","));
 	}
 	const FVector2D Centre = Data.Regions[*Id].Center;
-	const double Metre = 22.0, Apart = 9.0 * Metre;
+	const double Metre = 22.0, Apart = 12.0 * Metre;
 	const FVector Middle = SurfacePoint(Centre.X, Centre.Y, 0.0) + FVector(0.0, 0.0, 80.0);
 	ParadeLevel = Middle.Z - GetActorLocation().Z + 1.3 * Metre;
 	const double Long = Apart * Names.Num() + 30.0 * Metre;
@@ -1186,6 +1186,8 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 	{
 		return; // (with the models out for inspection, the armies stay in their box)
 	}
+	// The first month is September 1939.
+	FMiniatureMesh::Year = 1939 + (FMath::Max(View.Turn, 1) + 7) / 12;
 
 	// Where every corps' piece stood before this change, for the ones that are about to march.
 	TMap<int32, FVector> Before;
