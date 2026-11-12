@@ -376,7 +376,14 @@ void ACampaignPlayerController::ProvinceAction(const FString& Action)
 		return;
 	}
 	FString Note;
-	Session->OrderInProvince(Action, Map->GetSelectedRegion(), Note);
+	const bool bDone = Session->OrderInProvince(Action, Map->GetSelectedRegion(), Note);
+	if (bDone && Action.StartsWith(TEXT("work:")))
+	{
+		// The table shows it at once: the bridge down, the line cut; and it is heard.
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		RefreshOrders();
+		CampaignSounds::Play(this, Action.StartsWith(TEXT("work:blow")) ? TEXT("explosion") : TEXT("hammer"), 0.6f);
+	}
 	RefreshRegionPanel(Map->GetSelectedRegion());
 	Notify(Note, 5.0);
 }

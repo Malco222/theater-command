@@ -3590,6 +3590,23 @@
     return true;
   }
   var concerns2 = (g2, ...nats) => g2.human !== null && g2.nations[g2.human].alive && nats.includes(g2.human);
+  function whyNotCutRail(g2, nat, region) {
+    if (!groundRules(g2)) return "There are no railways to cut in this campaign.";
+    const r = g2.regions[region];
+    if (!r) return "Pick a province.";
+    if (!onNet(region)) return `No railway runs through ${r.name}.`;
+    if (railCut(g2, region)) return `The railway at ${r.name} is already cut.`;
+    if (!allied(g2, nat, r.ctrl)) return `${r.name} is not in friendly hands.`;
+    if (!r.units.some((u) => u.nat === nat && !u.dead)) return `There are no troops of yours at ${r.name} to tear up the track.`;
+    if (!g2.nations[nat].atWar.length) return "Nobody tears up their own railways in peacetime.";
+    return null;
+  }
+  function tearUp(g2, nat, region) {
+    if (whyNotCutRail(g2, nat, region) || !cutRail(g2, region)) return false;
+    const r = g2.regions[region];
+    if (concerns2(g2, nat)) headline(g2, "info", `${g2.nations[nat].adj} troops tear up the railway at ${r.name}. No train runs through until engineers relay it.`, nat, region);
+    return true;
+  }
   function wreckChance(g2, taken, by) {
     const W = RAILWAYS.wreck;
     const near = taken.nb.some((j) => g2.regions[j].units.some((u) => !u.dead && atWar(g2, u.nat, by)));
@@ -6017,6 +6034,7 @@
   };
 
   // ../../src/campaign/engineers.ts
+  var JOBS = ["bridge", "rail", "plant", "works", "mines", "demolish"];
   var REPAIRS = { bridge: "rebuilding the bridges", rail: "relaying the railway", plant: "rebuilding a factory" };
   var isEngineer = (c) => c.kind === "eng";
   var mineKey = (r) => `mine:${typeof r === "number" ? r : r.id}`;
@@ -6040,11 +6058,27 @@
     if (key2 === "demolish" && !r.fort) return "There are no fortifications here to demolish.";
     return null;
   }
+  function jobsFor(g2, c) {
+    if (!groundRules(g2) || !isEngineer(c) || c.dead) return [];
+    return JOBS.map((key2) => ({ key: key2, label: ENGINEERING.jobs[key2].label, blurb: ENGINEERING.jobs[key2].blurb, why: whyNot(g2, c, key2) }));
+  }
   function orderJob(g2, c, key2) {
     if (!groundRules(g2) || !isEngineer(c) || c.dead || whyNot(g2, c, key2)) return false;
     c.job = { what: key2, reg: c.reg, eta: g2.turn + 1, ap: c.ap };
     c.ap = 0;
     return true;
+  }
+  function cancelJob(g2, c) {
+    if (!c.job || c.job.eta !== g2.turn + 1 || c.job.reg !== c.reg) return false;
+    c.ap = c.job.ap ?? c.apMax;
+    delete c.job;
+    return true;
+  }
+  function jobLine(g2, c) {
+    if (!c.job) return "";
+    const r = g2.regions[c.job.reg];
+    const what = c.job.what === "bridge" ? `rebuilding the bridges at ${r.name}` : c.job.what === "rail" ? `relaying the railway at ${r.name}` : c.job.what === "plant" ? `rebuilding a factory at ${r.name}` : c.job.what === "works" ? `building field works at ${r.name}` : c.job.what === "mines" ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
+    return `${what[0].toUpperCase()}${what.slice(1)}: done when next month begins`;
   }
   function facing(g2, r) {
     const vs = new Set(r.fort?.vs ?? []);
@@ -9673,6 +9707,32 @@
     return true;
   }
   var postureOf = (c) => c.yields ? "back" : c.digs ? "dig" : "stand";
+  function engineerJobs(g2, c) {
+    return c.nat === g2.human ? jobsFor(g2, c) : [];
+  }
+  function orderEngineers(g2, c, job) {
+    return canOrder(g2, c) && orderJob(g2, c, job);
+  }
+  function orderStopWork(g2, c) {
+    return c.nat === g2.human && humanUp(g2) && cancelJob(g2, c);
+  }
+  function whyNotBlowBridges(g2, from, to) {
+    const x = crossingOf(from, to);
+    if (!x) return "There is no river between those two.";
+    if (g2.human === null || !humanUp(g2)) return "It is not your month.";
+    return whyNotBlow(g2, g2.human, x, from);
+  }
+  function orderBlowBridges(g2, from, to) {
+    const x = crossingOf(from, to);
+    return !!x && g2.human !== null && humanUp(g2) && blowBridges(g2, g2.human, x, from);
+  }
+  function whyNotCutRailway(g2, region) {
+    if (g2.human === null || !humanUp(g2)) return "It is not your month.";
+    return whyNotCutRail(g2, g2.human, region);
+  }
+  function orderCutRailway(g2, region) {
+    return g2.human !== null && humanUp(g2) && tearUp(g2, g2.human, region);
+  }
   function orderRail(g2, c, to) {
     return canOrder(g2, c) && railMove(g2, c, g2.regions[to]);
   }
@@ -10665,6 +10725,32 @@
       forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).map((b) => orderLine(s, b)) : [],
       // What kind of country it is for an army, the rivers on its borders and their bridges, and its railway
       // (all only in the grand campaign, where those rules apply).
+      // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
+      jobs: (() => {
+        const out = [];
+        if (!me || !groundRules(s)) return out;
+        for (const n2 of riverNotes(s, r.id)) {
+          if (n2.down) continue;
+          const why = whyNotBlowBridges(s, r.id, n2.far);
+          out.push({ key: `blow:${n2.far}`, label: `Blow the bridges over the ${n2.river}`, detail: `Toward ${s.regions[n2.far].name}. Wheels and tracks cannot cross until engineers rebuild them.`, ok: why === null, why: why ?? "" });
+        }
+        const rail2 = railNote(s, r.id);
+        if (rail2 && rail2.line && !rail2.cut) {
+          const why = whyNotCutRailway(s, r.id);
+          out.push({ key: "cutrail", label: "Tear up the railway", detail: "No trains run through here, for either side, until engineers relay it.", ok: why === null, why: why ?? "" });
+        }
+        for (const c of s.corps) {
+          if (c.dead || c.nat !== me || c.reg !== r.id || c.kind !== "eng") continue;
+          if (c.job) {
+            out.push({ key: `stop:${c.id}`, label: `${c.name}: stop work`, detail: jobLine(s, c), ok: up, why: up ? "" : "It is not your month." });
+            continue;
+          }
+          for (const job of engineerJobs(s, c)) {
+            out.push({ key: `job:${c.id}:${job.key}`, label: `${c.name}: ${job.label}`, detail: job.blurb, ok: up && !job.why, why: job.why ?? (up ? "" : "It is not your month.") });
+          }
+        }
+        return out;
+      })(),
       country: (() => {
         const lines = [];
         const says = groundSays(s, r);
@@ -10680,6 +10766,28 @@
         return lines;
       })()
     };
+  }
+  function work(key2, region) {
+    const s = game();
+    const [what, a, b] = key2.split(":");
+    let ok = false;
+    let note2 = "That cannot be done now.";
+    if (what === "blow") {
+      ok = orderBlowBridges(s, region, Number(a));
+      if (ok) note2 = "The bridges are blown.";
+    } else if (what === "cutrail") {
+      ok = orderCutRailway(s, region);
+      if (ok) note2 = "The railway is torn up.";
+    } else if (what === "job") {
+      const c = s.corps.find((x) => x.id === Number(a));
+      ok = !!c && orderEngineers(s, c, b);
+      if (ok && c) note2 = jobLine(s, c) + ".";
+    } else if (what === "stop") {
+      const c = s.corps.find((x) => x.id === Number(a));
+      ok = !!c && orderStopWork(s, c);
+      if (ok) note2 = "The engineers are taken off their work.";
+    }
+    return { ok, note: note2, view: view() };
   }
   function land() {
     const s = game();
@@ -10810,6 +10918,7 @@
   }
   globalThis.TC = {
     land,
+    work,
     record,
     roll,
     stance,

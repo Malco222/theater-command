@@ -37,7 +37,9 @@ import { allied, atWar, createGame, men, railReach as railReachOf } from '../../
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
+  engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
+import { jobLine, type JobKind } from '../../../src/campaign/engineers';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, provinceYield } from '../../../src/campaign/economy';
 import { generalOf, rankOf } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
@@ -558,6 +560,32 @@ function province(id: number) {
     forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).map((b) => orderLine(s, b)) : [],
     // What kind of country it is for an army, the rivers on its borders and their bridges, and its railway
     // (all only in the grand campaign, where those rules apply).
+    // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
+    jobs: (() => {
+      const out: { key: string; label: string; detail: string; ok: boolean; why: string }[] = [];
+      if (!me || !groundRules(s)) return out;
+      for (const n of riverNotes(s, r.id)) {
+        if (n.down) continue;
+        const why = whyNotBlowBridges(s, r.id, n.far);
+        out.push({ key: `blow:${n.far}`, label: `Blow the bridges over the ${n.river}`, detail: `Toward ${s.regions[n.far].name}. Wheels and tracks cannot cross until engineers rebuild them.`, ok: why === null, why: why ?? '' });
+      }
+      const rail = railNote(s, r.id);
+      if (rail && rail.line && !rail.cut) {
+        const why = whyNotCutRailway(s, r.id);
+        out.push({ key: 'cutrail', label: 'Tear up the railway', detail: 'No trains run through here, for either side, until engineers relay it.', ok: why === null, why: why ?? '' });
+      }
+      for (const c of s.corps) {
+        if (c.dead || c.nat !== me || c.reg !== r.id || c.kind !== 'eng') continue;
+        if (c.job) {
+          out.push({ key: `stop:${c.id}`, label: `${c.name}: stop work`, detail: jobLine(s, c), ok: up, why: up ? '' : 'It is not your month.' });
+          continue;
+        }
+        for (const job of engineerJobs(s, c)) {
+          out.push({ key: `job:${c.id}:${job.key}`, label: `${c.name}: ${job.label}`, detail: job.blurb, ok: up && !job.why, why: job.why ?? (up ? '' : 'It is not your month.') });
+        }
+      }
+      return out;
+    })(),
     country: (() => {
       const lines: string[] = [];
       const says = groundSays(s, r);
@@ -574,6 +602,30 @@ function province(id: number) {
       return lines;
     })(),
   };
+}
+
+/** Carries out one of the works a province offers (see province().jobs). */
+function work(key: string, region: number) {
+  const s = game();
+  const [what, a, b] = key.split(':');
+  let ok = false;
+  let note = 'That cannot be done now.';
+  if (what === 'blow') {
+    ok = orderBlowBridges(s, region, Number(a));
+    if (ok) note = 'The bridges are blown.';
+  } else if (what === 'cutrail') {
+    ok = orderCutRailway(s, region);
+    if (ok) note = 'The railway is torn up.';
+  } else if (what === 'job') {
+    const c = s.corps.find((x) => x.id === Number(a));
+    ok = !!c && orderEngineers(s, c, b as JobKind);
+    if (ok && c) note = jobLine(s, c) + '.';
+  } else if (what === 'stop') {
+    const c = s.corps.find((x) => x.id === Number(a));
+    ok = !!c && orderStopWork(s, c);
+    if (ok) note = 'The engineers are taken off their work.';
+  }
+  return { ok, note, view: view() };
 }
 
 /** The rivers, their crossings, the railways and the steep country: geography that does not change. */
@@ -699,4 +751,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

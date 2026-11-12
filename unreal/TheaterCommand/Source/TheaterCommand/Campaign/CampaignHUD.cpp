@@ -352,9 +352,17 @@ namespace
 										.Text_Lambda([Region]() { const FRegionPanelInfo* Info = Region(); return Info ? Info->Forces : FText::GetEmpty(); })
 									]
 									// On home ground: what the province holds, and what can be raised or built there.
+									// (It can be a long list, so it scrolls within a fixed height and never climbs over the date plate.)
 									+ SVerticalBox::Slot().AutoHeight()
 									[
-										SAssignNew(ProvinceBox, SVerticalBox)
+										SNew(SBox).MaxDesiredHeight(455.0f)
+										[
+											SNew(SScrollBox)
+											+ SScrollBox::Slot()
+											[
+												SAssignNew(ProvinceBox, SVerticalBox)
+											]
+										]
 									]
 								]
 							]

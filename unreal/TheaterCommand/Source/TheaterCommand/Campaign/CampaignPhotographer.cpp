@@ -211,6 +211,18 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.bArsenal = true;
 			Shot.Order = TEXT("corps:art");
 		}
+		// A province on a river with a railway through it: what its panel says, and a bridge blown.
+		Add(TEXT("33-river-province"), TEXT("Neumark"), 0.3f).Select = TEXT("Neumark");
+		{
+			FShot& Shot = Add(TEXT("33b-bridge-blown"), TEXT("Neumark"), 0.3f);
+			Shot.Select = TEXT("Neumark");
+			Shot.Order = TEXT("work:blow:24");
+		}
+		{
+			FShot& Shot = Add(TEXT("33c-railway-cut"), TEXT("Neumark"), 0.12f);
+			Shot.Select = TEXT("Neumark");
+			Shot.Order = TEXT("work:cutrail");
+		}
 		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
 	}
 

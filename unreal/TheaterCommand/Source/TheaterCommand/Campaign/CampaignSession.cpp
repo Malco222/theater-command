@@ -919,6 +919,24 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		Option.Detail = FString::Printf(TEXT("Costs %s  \u00B7  finished in %d months"), *FText::AsNumber(Cost).ToString(), Months);
 		Info.Options.Add(MoveTemp(Option));
 	}
+	// What can be done to the country itself: bridges, the railway, engineers' work.
+	const TArray<TSharedPtr<FJsonValue>>* Jobs = nullptr;
+	if (Object->TryGetArrayField(TEXT("jobs"), Jobs))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Jobs)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FProvinceOption Option;
+			FString Key;
+			Entry->TryGetStringField(TEXT("key"), Key);
+			Option.Action = TEXT("work:") + Key;
+			Entry->TryGetStringField(TEXT("label"), Option.Label);
+			Entry->TryGetStringField(TEXT("detail"), Option.Detail);
+			Entry->TryGetStringField(TEXT("why"), Option.Why);
+			Entry->TryGetBoolField(TEXT("ok"), Option.bEnabled);
+			Info.Options.Add(MoveTemp(Option));
+		}
+	}
 	Info.Forming = ReadOrders(Object, TEXT("forming"));
 	return Info;
 }
@@ -926,6 +944,19 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FString& OutNote)
 {
 	TSharedPtr<FJsonObject> Object;
+	if (Action.StartsWith(TEXT("work:")))
+	{
+		// A work on the country itself: a bridge blown, the railway torn up, engineers set to a task.
+		if (!CallRules(TEXT("work"), FString::Printf(TEXT("[%s,%d]"), *JsonQuote(Action.Mid(5)), RegionId), Object))
+		{
+			return false;
+		}
+		bool bDone = false;
+		Object->TryGetBoolField(TEXT("ok"), bDone);
+		Object->TryGetStringField(TEXT("note"), OutNote);
+		TakeView(Object);
+		return bDone;
+	}
 	const bool bFort = Action == TEXT("fort");
 	const FString Arguments = bFort ? FString::Printf(TEXT("[%d]"), RegionId) : FString::Printf(TEXT("[\"%s\",%d]"), *Action, RegionId);
 	if (!CallRules(bFort ? TEXT("fortify") : TEXT("raise"), Arguments, Object))

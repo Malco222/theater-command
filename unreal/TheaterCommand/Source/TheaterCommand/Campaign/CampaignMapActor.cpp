@@ -920,9 +920,15 @@ void ACampaignMapActor::BuildWorks()
 	{
 		if (Data.Regions.IsValidIndex(RegionId))
 		{
-			const FVector At = SurfacePointOver(Data.Regions[RegionId].Center.X, Data.Regions[RegionId].Center.Y, 0.3);
-			Model.Box(At, FVector(2.6, 0.4, 0.2) * U, Rust, 45.0);
-			Model.Box(At, FVector(2.6, 0.4, 0.2) * U, Rust, -45.0);
+			// (a little to one side of the town, on a post, so it stands clear of the houses and the lettering)
+			const FVector Foot = SurfacePointOver(Data.Regions[RegionId].Center.X - 3.0, Data.Regions[RegionId].Center.Y + 3.0, 0.1);
+			const FVector At = Foot + FVector(0.0, 0.0, 1.9 * U);
+			Model.Pillar(Foot, 0.12 * U, 0.12 * U, 1.9 * U, Shadow, 6);
+			Model.Box(At, FVector(0.3, 2.6, 0.45) * U, Rust, 0.0, 0.0);
+			Model.Box(At + FVector(0.0, 0.0, 0.0), FVector(0.32, 0.45, 2.6) * U, Rust, 0.0, 0.0);
+			// and the rails themselves lifted and bent beside it
+			Model.Box(Foot + FVector(0.0, 1.6 * U, 0.2 * U), FVector(2.4, 0.12, 0.12) * U, Scorch, 30.0, 14.0);
+			Model.Box(Foot + FVector(0.0, 2.0 * U, 0.2 * U), FVector(2.4, 0.12, 0.12) * U, Scorch, 12.0, -10.0);
 		}
 	}
 	if (Model.Vertices.Num() > 0)
@@ -930,6 +936,7 @@ void ACampaignMapActor::BuildWorks()
 		WorksMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		WorksMesh->SetMaterial(0, SceneryMaterial);
 	}
+	UE_LOG(LogTheater, Log, TEXT("Works: %d crossings (%d bridges down), %d railways cut"), Land.Crossings.Num(), ShownDown.Num(), ShownCut.Num());
 }
 
 UStaticMeshComponent* ACampaignMapActor::AddBlock(const FVector& CenterWorld, const FVector& SizeWorld, UMaterialInterface* Material)
