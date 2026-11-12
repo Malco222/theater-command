@@ -71,7 +71,12 @@
       [22, "Semyon Timoshenko", 3, { "defense": 1, "leadership": 1 }, []],
       [22, "Konstantin Rokossovsky", 3, { "offense": 1, "defense": 1 }, []],
       [22, "Ivan Konev", 2, { "offense": 1 }, []],
-      [23, "Andrei Yeremenko", 2, { "defense": 1 }, []]
+      [23, "Andrei Yeremenko", 2, { "defense": 1 }, []],
+      [53, "Leonid Govorov", 3, { "offense": 1, "defense": 1 }, []],
+      [53, "Rodion Malinovsky", 3, { "offense": 1, "logistics": 1 }, []],
+      [53, "Fyodor Tolbukhin", 3, { "offense": 1, "leadership": 1 }, []],
+      [58, "Ivan Bagramyan", 3, { "offense": 1, "defense": 1 }, []],
+      [58, "Ivan Chernyakhovsky", 3, { "offense": 2 }, ["hard_charger"]]
     ],
     "UK": [
       [1, "Lord Gort", 3, { "defense": 1, "leadership": 1 }, []],

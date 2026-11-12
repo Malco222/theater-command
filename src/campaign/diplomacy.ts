@@ -33,7 +33,9 @@ export interface DiploEvent {
    * A country that ends, its ground shared out. Each share is [who takes it, the regions]: the first taker on the
    * list still in the war gets every named region the country still holds. Ground someone else already holds stays theirs.
    */
-  partition?: { nation: string; shares: [string[], string[]][] };
+  partition?: { nation: string; shares: [string[], string[]][]; occupied?: boolean };
+  /** Pairs of nations that make peace: each hands back the other's ground and takes its troops home. */
+  peace?: [string, string][];
   /** Countries whose armies are remade: from now on these ratings stand in place of the ones they began the war with. */
   reform?: Record<string, Partial<Pick<Nation, 'quality' | 'air' | 'slowCommand' | 'maxAttack'>>>;
   /** News of something won in the month just ended: the dispatch is dated to that month's last week, not to the new one. */
@@ -252,12 +254,32 @@ function fire(g: Game, e: DiploEvent): boolean {
   if (e.cede) {
     for (const name of e.cede.regions) {
       const r = g.byName[name];
-      if (!r || r.owner !== e.cede.from || r.ctrl !== e.cede.from) continue;
+      // Ground the taker already holds by force of arms is signed over like the rest.
+      if (!r || r.owner !== e.cede.from || (r.ctrl !== e.cede.from && r.ctrl !== e.cede.to)) continue;
       transfer(g, r, e.cede.to);
       withdraw(g, e.cede.from, r);
       did = true;
     }
     if (!did) return false;
+  }
+  if (e.peace) {
+    let made = false;
+    for (const [a, b] of e.peace) {
+      const A = g.nations[a], B = g.nations[b];
+      if (!A?.alive || !B?.alive || !A.atWar.includes(b)) continue;
+      A.atWar = A.atWar.filter((x) => x !== b);
+      B.atWar = B.atWar.filter((x) => x !== a);
+      // Each goes home: ground of the one that the other still occupies is handed back, and nobody stays on the other's soil.
+      for (const r of g.regions) {
+        if ((r.owner === a && r.ctrl === b) || (r.owner === b && r.ctrl === a)) { r.ctrl = r.owner; r.since = g.turn; }
+        if (r.ctrl === a && r.units.some((u) => u.nat === b)) withdraw(g, b, r);
+        if (r.ctrl === b && r.units.some((u) => u.nat === a)) withdraw(g, a, r);
+      }
+      made = true;
+    }
+    if (!made && !did) return false;
+    g.supplyDirty = true;
+    did = true;
   }
   if (e.liberate) {
     const L = e.liberate;
@@ -303,6 +325,12 @@ function fire(g: Game, e: DiploEvent): boolean {
     for (const c of g.corps.filter((c) => c.nat === X.id)) removeCorps(g, c);
     fleetsOnFall(g, X.id);
     airOnFall(g, X.id);
+    // Where another army stands on the country's ground, that ground is its own to hold: the terms divide the rest.
+    if (e.partition.occupied) for (const r of g.regions) {
+      if (r.ctrl !== X.id) continue;
+      const guest = r.units.find((u) => u.kind !== 'fort' && g.nations[u.nat]?.alive && g.nations[u.nat].atWar.length > 0);
+      if (guest) { r.ctrl = guest.nat; r.cap = false; r.since = g.turn; }
+    }
     let heir: string | undefined;
     for (const [takers, names] of e.partition.shares) {
       const to = first(takers);
@@ -336,7 +364,17 @@ function fire(g: Game, e: DiploEvent): boolean {
   }
   for (const row of e.spawn ?? []) {
     const r = g.byName[row[4]];
-    if (r && r.ctrl === row[0] && r.units.length < STACK) addCorps(g, row[0], row[1], row[2] as any, row[3], r.id, { hold: 1 });
+    if (!r || r.ctrl !== row[0]) continue;
+    // A place packed with troops has no room for an army to form in: it forms at the nearest place behind it that has.
+    let at: Region | undefined;
+    const seen = new Set([r.id]);
+    for (let ring = [r], step = 0; ring.length && !at && step <= 3; step++) {
+      at = ring.find((x) => x.units.length < STACK);
+      const next: Region[] = [];
+      for (const x of ring) for (const j of x.nb) if (!seen.has(j) && g.regions[j].ctrl === row[0]) { seen.add(j); next.push(g.regions[j]); }
+      ring = next;
+    }
+    if (at) addCorps(g, row[0], row[1], row[2] as any, row[3], at.id, { hold: 1 });
   }
   if (!told) {
     headline(g, 'event', e.text, e.annex?.by ?? e.cede?.to ?? e.liberate?.to[0] ?? e.join?.nations[0] ?? e.partition?.nation);
