@@ -1,5 +1,5 @@
 {
-  "_about": "The grand campaign: the game's front door. The player picks a country and a year. History is played to the first day of that year (September for 1939), and from then on nobody follows it: the player and every computer-run nation's staff decide for themselves, by the free-play rules in open.json. 'years' lists the start dates on offer (the month number counts from September 1939 as 1) with a line on how the war stands. 'nations' lists the countries that can be picked, in the order shown, each with the years it can start in and what the player is taking on. 'watch' is the same with nobody at the controls. Years after 1942 are not offered: with nobody holding it to history's calendar the Red Army of 1943 ends the war in a year, so those years are played as historical scenarios instead.",
+  "_about": "The grand campaign: the game's front door. The player picks a country and a year. History is played to the first day of that year (September for 1939), and from then on nobody follows it: the player and every computer-run nation's staff decide for themselves, by the free-play rules in open.json. 'years' lists the start dates on offer (the month number counts from September 1939 as 1) with a line on how the war stands. 'nations' lists the countries that can be picked, in the order shown, each with the years it can start in and what the player is taking on. 'watch' is the same with nobody at the controls. Years after 1942 are not offered: with nobody holding it to history's calendar the Red Army of 1943 ends the war in a year, so those years are played as historical scenarios instead. A country marked 'small' is offered on a second row: a smaller nation that chooses its own path (league.json), from September 1939 only.",
   "years": [
     { "year": 1939, "turn": 1, "date": "1 September 1939", "text": "German troops have crossed the Polish frontier this morning, and Britain and France have given Poland their word. Everything after the first shots is unwritten." },
     { "year": 1940, "turn": 5, "date": "1 January 1940", "text": "Poland is beaten and divided. In the west the armies have faced each other all winter without fighting, and nobody knows where the blow will fall in the spring, or whose it will be." },
@@ -37,7 +37,23 @@
     } },
     { "id": "POL", "years": {
       "1939": "Outnumbered and nearly surrounded. You place your army on the eve of war. The first month is the one history wrote: survive it and the rest is yours."
-    } }
+    } },
+    { "id": "BEL", "small": true, "years": { "1939": "Twenty divisions behind the Albert Canal, and Germany next door. Stay neutral and hope, join the Allies before the blow falls, or look for friends among your neighbours." } },
+    { "id": "NED", "small": true, "years": { "1939": "Ten divisions, the water lines and a long frontier with Germany. You kept out of the last war. Nobody promises you will be left out of this one." } },
+    { "id": "DEN", "small": true, "years": { "1939": "Two divisions and a land frontier with Germany. You cannot stop an invasion alone, so your path is a matter of who your friends are." } },
+    { "id": "NOR", "small": true, "years": { "1939": "A long coast that both sides want, and five divisions to hold it. The Nordic countries are your natural friends." } },
+    { "id": "SWE", "small": true, "years": { "1939": "Iron ore that both sides need, and five divisions. Strict neutrality has served you well, and Stockholm is the natural seat of a Nordic league." } },
+    { "id": "FIN", "small": true, "years": { "1939": "Six divisions, the forests, and the Soviet Union on your border. Find friends before Moscow makes its demands." } },
+    { "id": "ESP", "small": true, "years": { "1939": "Worn out by civil war and leaning toward the Axis, with Gibraltar on your doorstep. Join them, stay out, or change course." } },
+    { "id": "POR", "small": true, "years": { "1939": "Britain's oldest ally and Spain's neighbour, with two divisions. The Atlantic is your shield." } },
+    { "id": "SUI", "small": true, "years": { "1939": "Six divisions in mountains where tanks cannot follow. Armed neutrality is your tradition, and nobody has broken it yet." } },
+    { "id": "HUN", "small": true, "years": { "1939": "Leaning toward the Axis, with claims on your neighbours' land. Germany is a powerful friend and a dangerous one." } },
+    { "id": "ROM", "small": true, "years": { "1939": "Oil that Germany needs and land that three neighbours covet. Ten divisions, with Moscow, Budapest and Sofia all waiting." } },
+    { "id": "YUG", "small": true, "years": { "1939": "Nine divisions between Italy, Germany and the Balkans. The Balkan Entente is your circle, and both blocs want you." } },
+    { "id": "BUL", "small": true, "years": { "1939": "Three divisions and old grievances against every neighbour. Germany was your comrade in the last war." } },
+    { "id": "GRE", "small": true, "years": { "1939": "Seven divisions in the mountains, a British guarantee, and Italy across the water in Albania." } },
+    { "id": "TUR", "small": true, "years": { "1939": "Twelve divisions astride the Straits, leaning toward the Allies. Everyone would like you on their side." } },
+    { "id": "IRL", "small": true, "years": { "1939": "One division and the Atlantic. Neutral, with Britain next door and family in America." } }
   ],
   "watch": {
     "1939": "The war begins as it did. After that no nation follows history: each one's staff decides for itself, and no two wars come out the same.",

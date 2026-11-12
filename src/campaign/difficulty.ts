@@ -47,7 +47,7 @@ export function setLevel(g: Game, id: string | number): boolean {
 }
 
 /** The camp a nation stands in or leans toward, if it has one. */
-const camp = (g: Game, id: string): 'allies' | 'axis' | null => {
+const camp = (g: Game, id: string): 'allies' | 'axis' | 'league' | null => {
   const n = g.nations[id];
   if (!n) return null;
   return bloc(n) ?? (n.align === 'leaning_axis' ? 'axis' : n.align === 'leaning_allies' ? 'allies' : null);

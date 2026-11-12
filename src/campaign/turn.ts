@@ -18,6 +18,7 @@ import { tearUp, whyNotCutRail } from './rails';
 import { foundBureau, setTeams } from './research';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
+import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
 import EVE from '../../data/campaign/eve.json';
 
@@ -528,6 +529,43 @@ export function invasions(g: Game, cs: Corps[]): Map<number, string> {
 /** What declaring war on a country would mean: who it joins, whether the blow is a surprise, its friends, and how the neutrals take it. */
 export function previewDeclare(g: Game, on: string): WarForecast | null {
   return g.human && declarable(g).includes(on) ? warForecast(g, g.human, on) : null;
+}
+
+// ---- A small country's path, and the League ------------------------------------------------------------------
+
+/**
+ * The paths open to a small country in the player's hands: join the Axis, join the Allies, stand alone, found the
+ * League or join it, each with whether it can be taken today and why not. Empty for a great power, for a watcher,
+ * and outside the grand campaign. Either interface shows them on one card.
+ */
+export function paths(g: Game): PathOption[] {
+  return g.human ? pathOptions(g, g.human) : [];
+}
+
+/** The countries the player could found the League with, each with its answer and the reason. */
+export function leaguePartners(g: Game): Invite[] {
+  return g.human && paths(g).length ? founders(g, g.human) : [];
+}
+
+/** Takes a path. Joining an alliance cannot be undone. Founding the League needs the partner who founds it with the player. */
+export function orderPath(g: Game, id: PathId, partner?: string): boolean {
+  return humanUp(g) && !onEve(g) && takePath(g, g.human!, id, partner);
+}
+
+/** The countries the player, as a member of the League, could invite, each with its answer and the reason. */
+export function leagueInvites(g: Game): Invite[] {
+  return g.human ? invites(g, g.human) : [];
+}
+
+/** Why the player cannot invite this country into the League today, or null if he can. */
+export function whyNotLeagueInvite(g: Game, target: string): string | null {
+  if (!g.human || !humanUp(g) || onEve(g)) return 'Not in your month.';
+  return whyNotInvite(g, g.human, target);
+}
+
+/** Invites a willing country into the League, for political capital. */
+export function orderLeagueInvite(g: Game, target: string): boolean {
+  return whyNotLeagueInvite(g, target) === null && invite(g, g.human!, target);
 }
 
 export function orderDeclare(g: Game, on: string): boolean {

@@ -6,6 +6,7 @@
 // What comes out is an ordinary plan phase, so the armies carry it out by the same rules as in
 // Historical mode. The numbers and the list of choices live in data/campaign/open.json.
 
+import { deterred } from './league';
 import openData from '../../data/campaign/open.json';
 import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
@@ -474,7 +475,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       if (op.ratio !== undefined) { const p = prospect(g, nat, op, skip); if (!p || p.ratio < 0.9 * op.ratio) continue; }
       // The blow has to be able to fall in season once the army is up.
       if (!op.side && op.season && ![0, 1, 2].some((late) => inSeason(g, op, g.turn + (op.prep ?? 0) + late))) continue;
-      if (draw(g, nat, op.id, g.turn) >= op.chance) continue;
+      // A staff thinks twice before a blow that would bring the whole League down on it.
+      if (draw(g, nat, op.id, g.turn) >= op.chance * deterred(g, nat, who)) continue;
       if (op.side || !(op.prep ?? 0)) {
         if (inSeason(g, op)) go(k);
       } else {

@@ -75,6 +75,8 @@ export interface Nation {
   fellOn?: { turn: number; week: number; to: string };
   /** The nation's design teams and how far each branch of research has come. Null for a nation that buys its weapons abroad. */
   lab: Lab | null;
+  /** A member of the League, the third alliance of smaller nations (the grand campaign). It stands off the track between the two blocs. */
+  league?: boolean;
 }
 
 /** The branches of research. */

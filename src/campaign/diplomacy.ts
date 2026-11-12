@@ -9,6 +9,7 @@ import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
 import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps } from './game';
+import { leagueMonth, ownPath, standsWith } from './league';
 import { fleetsOnFall } from './navy';
 import { airOnFall } from './air';
 
@@ -103,7 +104,7 @@ export function momentum(g: Game): number {
     if (!r.vp || r.ctrl === r.owner) continue;
     const holder = bloc(g.nations[r.ctrl]);
     if (!holder || holder === bloc(g.nations[r.owner])) continue;
-    if (holder === 'axis') axis += r.vp; else allies += r.vp;
+    if (holder === 'axis') axis += r.vp; else if (holder === 'allies') allies += r.vp;
   }
   return clamp((axis - allies) / DIPLOMACY.momentumPer, -1, 1);
 }
@@ -111,13 +112,13 @@ export function momentum(g: Game): number {
 /** Neutrals that lean toward this nation's bloc and trade with it. Only the major powers of a bloc benefit. */
 export function tradePartners(g: Game, nat: string): Nation[] {
   const b = bloc(g.nations[nat]);
-  if (!b || !DIPLOMACY.majors.includes(nat)) return [];
+  if (!b || b === 'league' || !DIPLOMACY.majors.includes(nat)) return [];
   const want = sideOf(b);
   return Object.values(g.nations).filter((n) => n.alive && !n.dormant && step(n) === want);
 }
 
 /** A neutral that can still be courted: alive, at peace and not yet a member of either bloc. */
-export const courtable = (n: Nation): boolean => n.alive && !n.dormant && !n.atWar.length && Math.abs(step(n)) <= 1;
+export const courtable = (n: Nation): boolean => n.alive && !n.dormant && !n.league && !n.atWar.length && Math.abs(step(n)) <= 1;
 
 /** How far one round of courting moves a neutral. Moves that match its public opinion go further. */
 export function receptive(target: Nation, b: 'allies' | 'axis'): number {
@@ -127,8 +128,9 @@ export function receptive(target: Nation, b: 'allies' | 'axis'): number {
 export function canCourt(g: Game, by: string, target: string): { ok: boolean; why: string } {
   const B = g.nations[by], T = g.nations[target];
   const b = B ? bloc(B) : null;
-  if (!B || !T || !B.alive || !b) return { ok: false, why: 'Only a member of a bloc can court neutrals.' };
-  if (by === target || !courtable(T)) return { ok: false, why: 'Not open to courting.' };
+  if (!B || !T || !B.alive || !b || b === 'league') return { ok: false, why: 'Only a member of the Axis or the Allies can court neutrals.' };
+  // A small country in the player's hands chooses its own path: nobody talks it round.
+  if (by === target || !courtable(T) || ownPath(g, target)) return { ok: false, why: 'Not open to courting.' };
   if (g.flags[`court:${by}:${target}`] === g.turn) return { ok: false, why: 'Already courted this month.' };
   if (B.pc < DIPLOMACY.court.cost) return { ok: false, why: `Needs ${DIPLOMACY.court.cost} political capital.` };
   return { ok: true, why: '' };
@@ -138,7 +140,7 @@ export function canCourt(g: Game, by: string, target: string): { ok: boolean; wh
 export function court(g: Game, by: string, target: string): boolean {
   if (!canCourt(g, by, target).ok) return false;
   const B = g.nations[by], T = g.nations[target];
-  const b = bloc(B)!;
+  const b = bloc(B) as 'allies' | 'axis';
   const k = receptive(T, b) * sideOf(b);
   B.pc -= DIPLOMACY.court.cost;
   T.opinion = clamp(T.opinion + DIPLOMACY.court.opinion * k, -100, 100);
@@ -216,7 +218,7 @@ function wouldStand(g: Game, n: Nation, opinion: number): Align {
 export function alarmed(g: Game, by: string, on: string): Alarm[] {
   const A = g.nations[by], B = g.nations[on];
   const b = A ? bloc(A) : null;
-  if (g.flags.open !== 1 || by !== g.human || !A || !B || !b || bloc(B) !== null) return [];
+  if (g.flags.open !== 1 || by !== g.human || !A || !B || !b || b === 'league' || bloc(B) !== null) return [];
   const friends = new Map(friendsOf(on).map((f) => [f.nat, f.why]));
   const out: Alarm[] = [];
   for (const n of Object.values(g.nations)) {
@@ -262,6 +264,8 @@ export interface WarForecast {
   alarm: Alarm[];
   /** True when the country trades with the declarer today: that income ends with the peace. */
   trade: boolean;
+  /** The other members of the League, when the country belongs to it: each goes to war with the declarer the same day. */
+  league: string[];
 }
 
 export function warForecast(g: Game, by: string, on: string): WarForecast {
@@ -269,11 +273,12 @@ export function warForecast(g: Game, by: string, on: string): WarForecast {
   const ba = A ? bloc(A) : null;
   return {
     on,
-    joins: B && bloc(B) === null && ba ? (ba === 'axis' ? 'allies' : 'axis') : null,
+    joins: B && bloc(B) === null && ba && ba !== 'league' && !ownPath(g, on) ? (ba === 'axis' ? 'allies' : 'axis') : null,
     sneak: wouldSurprise(g, by, on) ? RELATIONS.sneak.attack : 1,
     friends: friendsOf(on).filter((f) => g.nations[f.nat]?.alive),
     alarm: alarmed(g, by, on),
     trade: g.flags.open === 1 && tradePartners(g, by).some((n) => n.id === on),
+    league: standsWith(g, by, on),
   };
 }
 
@@ -370,7 +375,8 @@ function fire(g: Game, e: DiploEvent): boolean {
   if (e.annex) {
     for (const id of e.annex.nations) {
       const n = g.nations[id];
-      if (!n?.alive || n.atWar.length || bloc(n)) continue; // a country already in the war is no longer Moscow's to take
+      // A country already in the war is no longer Moscow's to take, nor one that stands in an alliance, nor the player's own.
+      if (!n?.alive || n.atWar.length || bloc(n) || ownPath(g, id)) continue;
       for (const c of g.corps.filter((c) => c.nat === id)) removeCorps(g, c);
       for (const r of g.regions) if (r.owner === id) transfer(g, r, e.annex.by);
       n.alive = false;
@@ -380,6 +386,13 @@ function fire(g: Game, e: DiploEvent): boolean {
     if (!did) return false;
   }
   if (e.cede) {
+    // No treaty signs away the ground of a small country in the player's hands: whoever wants it must come and take it.
+    if (ownPath(g, e.cede.from)) {
+      const to = g.nations[e.cede.to], lost = e.cede.regions.filter((nm) => g.byName[nm]?.owner === e.cede!.from);
+      if (!to?.alive || !lost.length) return false;
+      headline(g, 'event', `${to.name} demands ${lost.length === 1 ? lost[0] : `${lost.slice(0, -1).join(', ')} and ${lost[lost.length - 1]}`}. ${g.nations[e.cede.from].name} gives up nothing without a fight.`, e.cede.from);
+      return true;
+    }
     for (const name of e.cede.regions) {
       const r = g.byName[name];
       // Ground the taker already holds by force of arms is signed over like the rest.
@@ -510,7 +523,7 @@ function fire(g: Game, e: DiploEvent): boolean {
   }
   for (const [id, d] of Object.entries(e.opinion ?? {})) {
     const n = g.nations[id];
-    if (!n || !courtable(n)) continue;
+    if (!n || !courtable(n) || ownPath(g, id)) continue;
     n.opinion = clamp(n.opinion + d, -100, 100);
     n.home = clamp(n.home + d, -100, 100);
   }
@@ -518,7 +531,7 @@ function fire(g: Game, e: DiploEvent): boolean {
     const s = sideOf(e.join.bloc);
     for (const id of e.join.nations) {
       const n = g.nations[id];
-      if (n && courtable(n) && n.opinion * s >= e.join.minOpinion) joinBloc(g, n, e.join.bloc);
+      if (n && courtable(n) && !ownPath(g, id) && n.opinion * s >= e.join.minOpinion) joinBloc(g, n, e.join.bloc);
     }
   }
   return true;
@@ -528,11 +541,14 @@ function fire(g: Game, e: DiploEvent): boolean {
 export function monthlyDiplomacy(g: Game): void {
   const m = momentum(g);
   for (const n of Object.values(g.nations)) {
-    if (!courtable(n)) continue;
+    // A small country in the player's hands stays where its player puts it.
+    if (!courtable(n) || ownPath(g, n.id)) continue;
     const bw = DIPLOMACY.bandwagon[n.id] ?? DIPLOMACY.bandwagon._default;
     n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw, -100, 100);
     settle(g, n);
   }
+  // The grand campaign: now and then a circle of small countries founds the League, or another joins it.
+  leagueMonth(g);
   // In free play history's calendar only says when an event may first happen: if its conditions come true later
   // than they did, it happens later.
   const open = g.flags.open === 1;
