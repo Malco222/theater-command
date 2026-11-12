@@ -29,7 +29,7 @@ export const NAVY = data as unknown as {
   battle: { seek: number; catchRaider: number; evadeAt: number; evade: number };
   ready: { port: number; sea: number; mend: number; floor: number; lost: number; won: number; sortieAt: number };
   intercept: { loss: number; sea: number };
-  landing: { assault: number; surprise: number; range: number; sortie: number };
+  landing: { assault: number; surprise: number; range: number; sortie: number; airborne: number };
   range: number;
   admiral: { perLevel: number; maxLevel: number; lostWithFlagship: number };
   convoy: { escortWorth: number; ocean: number; air: number; patrolRaid: number; subBase: number; subHunt: number; escortLoss: number };
@@ -280,6 +280,16 @@ export const surpriseOn = (g: Game, nat: string, to: Region): boolean => g.flags
 export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (!cs.length) return 'No corps chosen.';
   const nat = cs[0].nat, n = g.nations[nat], from = g.regions[cs[0].reg];
+  if (airborne(cs)) {
+    if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'An airborne force takes off from one place.';
+    if (!allied(g, nat, from.ctrl)) return 'Airborne troops take off from friendly airfields.';
+    if (cs.some((c) => c.ap < Math.min(4, c.apMax))) return 'Only corps that have not moved this month can emplane.';
+    if (allied(g, nat, to.ctrl) || !atWar(g, nat, to.ctrl)) return `${to.name} is not enemy ground.`;
+    if (!from.seas.some((z) => to.seas.includes(z))) return `${to.name} is out of reach: the transport aircraft can cross one sea, from a coast on it to another.`;
+    if (g.flags[dropKey(g, nat)]) return 'The transport aircraft can carry one airborne assault a month.';
+    if (skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no transport aircraft can fly under them. Win the sky there first.`;
+    return null;
+  }
   if (n.sealift <= 0) return `${n.name} has no shipping for a landing.`;
   if (cs.some((c) => c.nat !== nat || c.reg !== from.id)) return 'A landing force sails from one port.';
   if (!from.port) return 'A landing force has to embark at a port.';
@@ -294,8 +304,21 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   return null;
 }
 
+/** True when a force is airborne troops and nothing else: it goes in by air, with no ships and no sea lane. */
+export const airborne = (cs: Corps[]): boolean => cs.length > 0 && cs.every((c) => !!c.airborne);
+const dropKey = (g: Game, nat: string): string => `drop:${nat}:${g.turn}`;
+
+/** How a force would fight its way ashore: from landing craft, or from the air. */
+export function landingOpts(g: Game, cs: Corps[], to: Region): { sea: number; surprise: boolean; air?: boolean } {
+  if (airborne(cs)) return { sea: NAVY.landing.airborne, surprise: false, air: true };
+  const surprise = surpriseOn(g, cs[0].nat, to);
+  return { sea: surprise ? NAVY.landing.surprise : NAVY.landing.assault, surprise };
+}
+
 export interface LandingPlan {
   why: string | null; surprise: boolean; path: number[]; risk: number; defended: boolean; assess: Assessment | null;
+  /** True when the force goes in by air. */
+  air?: boolean;
   /** True when the invader has won the sky over the beach. */
   sky: boolean;
   /** The strength of the enemy fleets that would put to sea against the landing. */
@@ -339,10 +362,16 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
   const why = whyNotLand(g, cs, to);
   if (why) return { why, surprise: false, path: [], risk: 0, defended: false, assess: null, sky: false, sortie: 0 };
   const nat = cs[0].nat;
-  const surprise = surpriseOn(g, nat, to);
-  const path = seaPath(g, nat, g.regions[cs[0].reg], to, { max: NAVY.landing.range, surprise })!;
   const defended = hostileUnits(g, to, nat).length > 0;
   const sky = skyOver(g, to.id);
+  if (airborne(cs)) {
+    return {
+      why: null, surprise: false, path: [], risk: 0, defended, air: true, sky: sky !== null && allied(g, sky, nat), sortie: 0,
+      assess: defended ? assess(g, cs, to, landingOpts(g, cs, to)) : null,
+    };
+  }
+  const surprise = surpriseOn(g, nat, to);
+  const path = seaPath(g, nat, g.regions[cs[0].reg], to, { max: NAVY.landing.range, surprise })!;
   return {
     why: null, surprise, path, risk: surprise ? 0 : landingRisk(g, nat, path, to), defended,
     sky: sky !== null && allied(g, sky, nat), sortie: surprise ? 0 : sortieAgainst(g, nat, path),
@@ -350,22 +379,27 @@ export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
   };
 }
 
-export interface Landing { ok: boolean; why?: string; taken?: boolean; lostAtSea?: number; report?: BattleReport | null; surprise?: boolean }
+export interface Landing { ok: boolean; why?: string; taken?: boolean; lostAtSea?: number; report?: BattleReport | null; surprise?: boolean; air?: boolean }
 
 /** Lands corps on an enemy coast. If it is defended they fight their way ashore, at a disadvantage unless the enemy is surprised. */
 export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
   const why = whyNotLand(g, cs, to);
   if (why) return { ok: false, why };
   const nat = cs[0].nat, from = g.regions[cs[0].reg];
-  const surprise = surpriseOn(g, nat, to);
-  const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise })!;
-  const lostAtSea = crossing(g, cs, path, surprise, to);
-  g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length;
-  for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
+  const air = airborne(cs);
+  const surprise = !air && surpriseOn(g, nat, to);
+  let lostAtSea = 0;
+  if (air) g.flags[dropKey(g, nat)] = 1;
+  else {
+    const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise })!;
+    lostAtSea = crossing(g, cs, path, surprise, to);
+    g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length;
+    for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
+  }
   let taken = true;
   let report: BattleReport | null = null;
   if (hostileUnits(g, to, nat).length) {
-    report = resolveBattle(g, cs, to, { sea: surprise ? NAVY.landing.surprise : NAVY.landing.assault, surprise });
+    report = resolveBattle(g, cs, to, landingOpts(g, cs, to));
     taken = report.taken;
   } else {
     g.week = 1;
@@ -374,13 +408,15 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
   }
   for (const c of cs) if (!c.dead) c.ap = 0;
   const adj = g.nations[nat].adj;
-  headline(g, 'battle', taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id);
-  return { ok: true, taken, lostAtSea, report, surprise };
+  if (air) headline(g, 'battle', taken ? `${adj} airborne troops take ${to.name} from the air.` : `A ${adj} airborne assault on ${to.name} is beaten off with heavy loss.`, nat, to.id);
+  else headline(g, 'battle', taken ? `${adj} troops land at ${to.name} from the sea.` : `A ${adj} landing at ${to.name} is thrown back into the sea.`, nat, to.id);
+  return { ok: true, taken, lostAtSea, report, surprise, air };
 }
 
 /** Enemy coasts a force embarked at this port could land on this month. */
 export function landingTargets(g: Game, cs: Corps[]): Region[] {
-  if (!cs.length || g.nations[cs[0].nat].sealift <= 0 || !g.regions[cs[0].reg].port) return [];
+  if (!cs.length) return [];
+  if (!airborne(cs) && (g.nations[cs[0].nat].sealift <= 0 || !g.regions[cs[0].reg].port)) return [];
   return g.regions.filter((r) => r.seas.length > 0 && whyNotLand(g, cs, r) === null);
 }
 

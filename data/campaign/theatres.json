@@ -1,5 +1,5 @@
 {
-  "_about": "Wars fought overseas to their own plan. A theatre is a list of regions. A computer-run nation with a plan here runs every corps it has standing in those regions by that plan, and the rest of its army by its main plan in plan-historical.json: neither takes orders meant for the other. Phases read as they do there (from, to, posture, enemies, objectives, targets, siege, release, minOdds), and 'quiet' means a defence that makes no local counter-attacks because the plan is saving the army for a later stroke. With no phase for the month the army stands on the defensive. As everywhere, the plan only sets intentions: the ground still has to be won.",
+  "_about": "Wars fought away from the main fronts, each to its own plan. A theatre is a list of regions. A computer-run nation with a plan here runs every corps it has standing in those regions by that plan, and the rest of its army by its main plan in plan-historical.json: neither takes orders meant for the other, and battles on a theatre's ground roll their own dice. Phases read as they do there (from, to, posture, enemies, declare, ifAtWar, objectives, targets, siege, release, landings, minOdds). 'quiet' means a defence that makes no local counter-attacks because the plan is saving the army for a later stroke. 'withdraw' is for an expedition on an ally's ground: once the enemy holds any place in 'when', its corps make for a port and are taken off. A theatre's 'havens' are where troops lifted off its coasts are taken, the first still in friendly hands with room, rather than all the way home; troops already in a haven stay there. With no phase for the month the army stands on the defensive. As everywhere, the plan only sets intentions: the ground still has to be won.",
   "desert": {
     "name": "the Western Desert",
     "regions": ["Tripoli", "Nalut", "Misrata", "Sirte", "Hon", "El Agheila", "Agedabia", "Benghazi", "Derna", "Mechili", "Tobruk", "Bir Hakeim", "Bardia", "Jalo", "Jarabub", "Sidi Barrani", "Mersa Matruh", "El Alamein", "Alexandria", "Cairo", "Port Said", "Suez", "Siwa", "Qattara Depression", "Faiyum"],
@@ -19,6 +19,26 @@
         { "name": "Fall back on Mersa Matruh", "from": 10, "to": 15, "posture": "defend", "quiet": true },
         { "name": "Operation Compass", "from": 16, "to": 18, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Sidi Barrani", "Bardia", "Tobruk", "Derna", "Mechili", "Benghazi", "Agedabia", "El Agheila"], "targets": ["Sidi Barrani", "Bardia", "Tobruk", "Derna", "Mechili", "Benghazi", "Agedabia", "El Agheila", "Bir Hakeim", "Mersa Matruh"], "minOdds": 1.3 },
         { "name": "Operation Crusader", "from": 27, "to": 28, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Sidi Barrani", "Bardia", "Tobruk", "Bir Hakeim", "Mechili", "Derna", "Benghazi", "Agedabia"], "targets": ["Sidi Barrani", "Bardia", "Tobruk", "Bir Hakeim", "Mechili", "Derna", "Benghazi", "Agedabia", "Mersa Matruh"], "minOdds": 1.3 }
+      ]
+    }
+  },
+  "balkans": {
+    "name": "the Balkans",
+    "havens": ["Crete"],
+    "_note": "Greece and Yugoslavia have no plan here: they defend their own countries by the main rules. Sofia, Plovdiv, Banat and Transdanubia are the German assembly areas in Bulgaria, Romania and Hungary.",
+    "regions": ["Albania", "Epirus", "Salonika", "Thessaly", "Athens", "Peloponnese", "Thrace", "Crete", "Belgrade", "Croatia", "Slovenia", "Bosnia", "Dalmatia", "Vojvodina", "Serbia", "Montenegro", "Macedonia", "Sofia", "Plovdiv", "Banat", "Transdanubia"],
+    "plans": {
+      "ITA": [
+        { "name": "The invasion of Greece", "from": 14, "to": 15, "posture": "attack", "ifAtWar": ["ITA", "UK"], "declare": ["GRE"], "enemies": ["GRE"], "objectives": ["Epirus"], "targets": ["Epirus"], "minOdds": 0.7 },
+        { "name": "The spring offensive", "from": 19, "to": 19, "posture": "attack", "enemies": ["GRE"], "objectives": ["Epirus"], "targets": ["Epirus"], "minOdds": 0.6 },
+        { "name": "With Germany into Greece and Yugoslavia", "from": 20, "to": 22, "posture": "attack", "ifAtWar": ["GER", "GRE"], "declare": ["YUG"], "enemies": ["GRE", "YUG", "UK"], "objectives": ["Epirus", "Montenegro", "Dalmatia"], "targets": ["Epirus", "Thessaly", "Peloponnese", "Montenegro", "Dalmatia", "Macedonia"], "minOdds": 1.2 }
+      ],
+      "GER": [
+        { "name": "Operation Marita", "from": 20, "to": 20, "posture": "attack", "ifAtWar": ["ITA", "GRE"], "declare": ["YUG", "GRE"], "enemies": ["YUG", "GRE", "UK"], "release": ["Sofia", "Plovdiv", "Banat", "Transdanubia"], "objectives": ["Belgrade", "Salonika", "Thessaly", "Athens", "Croatia"], "minOdds": 1.2 },
+        { "name": "Greece and Crete", "from": 21, "to": 24, "posture": "attack", "ifAtWar": ["GER", "UK"], "enemies": ["YUG", "GRE", "UK"], "release": ["Sofia", "Plovdiv", "Banat", "Transdanubia"], "objectives": ["Athens", "Thessaly", "Belgrade", "Salonika", "Peloponnese", "Epirus", "Croatia", "Macedonia", "Serbia", "Bosnia", "Dalmatia", "Montenegro", "Slovenia", "Vojvodina", "Thrace"], "landings": [{ "corps": "XI Air Corps", "to": ["Crete"], "minOdds": 1.2 }], "minOdds": 1.2 }
+      ],
+      "UK": [
+        { "name": "The expedition to Greece", "from": 15, "to": 30, "posture": "defend", "withdraw": { "when": ["Athens"] } }
       ]
     }
   }

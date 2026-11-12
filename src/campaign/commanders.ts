@@ -318,9 +318,9 @@ function hazard(g: Game, gen: General, c: Corps, lossFrac: number, rng: Rng, rep
  */
 export function afterBattle(
   g: Game, rep: BattleReport, target: Region, preOdds: number,
-  attackers: Corps[], attGens: (General | null)[], defenders: Corps[], defGens: (General | null)[],
+  attackers: Corps[], attGens: (General | null)[], defenders: Corps[], defGens: (General | null)[], luck: string = `${rep.id}`,
 ): void {
-  const rng = new Rng(hashString(`command:${g.seed}:${rep.id}`));
+  const rng = new Rng(hashString(`command:${g.seed}:${luck}`));
   const X = COMMAND.xp;
   const decisive = rep.level === 'Decisive victory' || rep.level === 'Heroic victory';
   const side = (cs: Corps[], gens: (General | null)[], us: ReportUnit[], attacking: boolean): void => cs.forEach((c, i) => {

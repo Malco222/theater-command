@@ -221,7 +221,7 @@ export const REGIONS = [
   ['Salonika', 40.8, 22.9, 'GRE', 'hills', 1, 0, { port: 1 }],
   ['Epirus', 39.6, 20.9, 'GRE', 'mountain', 0, 0, {}],
   ['Thessaly', 39.5, 22.3, 'GRE', 'hills', 0, 0, {}],
-  ['Peloponnese', 37.5, 22.2, 'GRE', 'mountain', 0, 0, {}],
+  ['Peloponnese', 37.5, 22.2, 'GRE', 'mountain', 0, 0, { port: 1 }],
   ['Thrace', 41.1, 25.5, 'GRE', 'hills', 0, 0, {}],
   ['Istanbul', 41.3, 27.7, 'TUR', 'hills', 3, 0, { cap: 1 }],
   ['Bursa', 40.2, 29.4, 'TUR', 'hills', 0, 0, {}],
@@ -401,7 +401,7 @@ export const REGIONS = [
   ['Rutbah', 32.9, 40.8, 'IRQ', 'desert', 0, 0, {}],
   ['Kermanshah', 34.4, 46.6, 'IRN', 'mountain', 0, 0, {}],
   // Islands
-  ['Crete', 35.25, 24.9, 'GRE', 'mountain', 0, 0, { port: 1 }],
+  ['Crete', 35.25, 24.9, 'GRE', 'hills', 0, 0, { port: 1 }],
   ['Rhodes', 36.2, 27.95, 'ITA', 'hills', 0, 0, { port: 1, col: 1 }],
 ];
 

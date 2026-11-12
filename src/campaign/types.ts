@@ -21,6 +21,8 @@ export interface Region {
   oil: boolean;
   /** Overseas ground: fought over like any other, but it does not count toward the home country's will to fight on. */
   overseas: boolean;
+  /** The side theatre this region belongs to (see data/campaign/theatres.json), or -1. Battles in a theatre roll their own dice. */
+  theatre: number;
   x: number;
   y: number;
   nb: number[];
@@ -123,6 +125,8 @@ export interface Corps {
   supplied: boolean;
   fought: boolean;
   dead: boolean;
+  /** Airborne troops: they can take a coast across one sea from the air, with no ships and no sea lane. */
+  airborne?: boolean;
 }
 
 export type Skill = 'offense' | 'defense' | 'logistics' | 'leadership';
@@ -358,7 +362,12 @@ export interface PlanPhase {
   /** The phase only applies while these two nations are at war with each other. */
   ifAtWar?: [string, string];
   /** Corps sent across the sea, each to the first place on its list it can reach: an enemy coast is assaulted, a friendly port reinforced. */
-  landings?: { corps: string; to: string[]; minOdds?: number }[];
+  landings?: { corps: string; with?: string[]; to: string[]; minOdds?: number }[];
+  /**
+   * An expedition on someone else's ground that leaves rather than be lost with it: once the enemy holds any of the
+   * places in 'when', its corps make for a port and are taken off, to one of the theatre's havens or else home.
+   */
+  withdraw?: { when: string[] };
   /** Stand on the defensive without local counter-attacks: the plan is saving the army for a later stroke. */
   quiet?: boolean;
   /** Orders for named fleets while the phase lasts. */

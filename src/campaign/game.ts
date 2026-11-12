@@ -16,6 +16,7 @@ import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import eastData from '../../data/campaign/east.json';
 import desertData from '../../data/campaign/desert.json';
+import theatreData from '../../data/campaign/theatres.json';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
 export const EASTERN = eastData as unknown as {
@@ -38,12 +39,15 @@ const EAST = new Set(['POL', 'SOV', 'LIT', 'LAT', 'EST', 'ROM', 'FIN']);
 
 export function createGame(seed: number, human: string | null): Game {
   const md = mapData as any;
+  // Which side theatre each region belongs to, in the order the theatres are listed.
+  const theatreOf = new Map<string, number>();
+  Object.entries(theatreData as Record<string, any>).filter((e) => typeof e[1] !== 'string').forEach(([, t], k) => { for (const nm of t.regions as string[]) theatreOf.set(nm, k); });
   const regions: Region[] = md.regions.map((r: any): Region => ({
     id: r.id, name: r.name, owner: r.owner, ctrl: r.owner, terrain: r.terrain, vp: r.vp, fac: r.fac,
     // A depot on the coast is a harbour too. One inland feeds an army but takes no ships.
     cap: !!r.flags.cap, port: !!r.flags.port || (!!r.flags.depot && (r.seas ?? []).length > 0),
     fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1) } : null,
-    vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil, overseas: !!r.flags.col,
+    vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil, overseas: !!r.flags.col, theatre: theatreOf.get(r.name) ?? -1,
     x: r.x, y: r.y, nb: r.nb, polys: r.polys, units: [], seas: r.seas ?? [], since: 0, prev: null,
   }));
   const byName: Record<string, Region> = {};
@@ -100,6 +104,7 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
     id: g.nextCorps++, nat, name, kind, divs, str: 1, org: 1, xp: o.xp ?? 0.15, reg: reg.id, ap: 4, apMax: 4,
     general: null, hold: !!o.hold, dyle: o.dyle ?? null, supplied: true, fought: false, dead: false,
   };
+  if (o.airborne) c.airborne = true;
   g.corps.push(c);
   reg.units.push(c);
   if (o.gen) seat(g, c, o.gen, o.trait);
@@ -286,6 +291,8 @@ export function computeSupply(g: Game): void {
     if (!lanes.has(id)) { const n = g.nations[id]; lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g, id) : null); }
     return lanes.get(id)!;
   };
+  const withShips = Object.values(g.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
+  const shippers = (id: string): string[] => withShips.filter((a) => a !== id && allied(g, id, a));
   for (const id of active) {
     const ok = new Uint8Array(g.regions.length);
     const q: number[] = [];
@@ -302,6 +309,8 @@ export function computeSupply(g: Game): void {
       let quay = !!open && r.port && r.seas.some((z) => open[z]);
       // Overseas, an ally's working port feeds the troops who came to fight beside him.
       if (!quay && r.overseas && r.port && r.ctrl !== id) { const theirs = lanesOf(r.ctrl); quay = !!theirs && r.seas.some((z) => theirs[z]); }
+      // In a side theatre the allies share their shipping: a port any of them can still reach feeds them all.
+      if (!quay && r.theatre >= 0 && r.port) quay = shippers(id).some((a) => { const theirs = lanesOf(a); return !!theirs && r.seas.some((z) => theirs[z]); });
       // A fortified port overseas keeps stores: with the sea behind it closed, it feeds its garrison a while longer.
       if (r.overseas && r.port && r.fort) {
         if (quay) g.flags[`stores:${r.id}`] = g.turn;
@@ -444,6 +453,8 @@ export interface Assessment {
 export interface AttackOpts {
   sea?: number;
   surprise?: boolean;
+  /** The landing comes from the air, not from ships. */
+  air?: boolean;
   /** The most corps that follow up into the ground won. The rest stay where they attacked from. */
   occupy?: number;
 }
@@ -537,9 +548,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       effect: [...kitA.map((x) => `Attack ${up(x.pct)}`), ...kitD.map((x) => `Defence ${up(x.pct)}`)].join(', '),
     });
   }
-  if (opts.sea !== undefined) lines.push(opts.surprise
-    ? { label: 'Landing', value: 'From the sea, on the day war is declared', effect: 'The defenders are caught unready: the landing fights at full strength' }
-    : { label: 'Landing', value: 'From the sea, against a defended shore', effect: `Attack cut to ${Math.round(opts.sea * 100)}%` });
+  if (opts.sea !== undefined) lines.push(opts.air
+    ? { label: 'Airborne assault', value: 'By parachute and glider, without heavy weapons', effect: `Attack cut to ${Math.round(opts.sea * 100)}%` }
+    : opts.surprise
+      ? { label: 'Landing', value: 'From the sea, on the day war is declared', effect: 'The defenders are caught unready: the landing fights at full strength' }
+      : { label: 'Landing', value: 'From the sea, against a defended shore', effect: `Attack cut to ${Math.round(opts.sea * 100)}%` });
   if (trap) lines.push({ label: 'Encirclement', value: 'The defenders have no line of retreat', effect: 'A general who knows how to close a pocket hits 15% harder' });
   if (lineMul < 1) lines.push(attackers.some((c) => inDesert(g.regions[c.reg]))
     ? { label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of desert from the nearest working port`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until a port nearer the front is working` }
@@ -609,8 +622,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   }
   const week = Math.max(...attackers.map((c) => weekOf(c, 1)));
   g.week = week;
-  // Battles overseas roll their own dice, so that a fight in the desert never changes the luck of the war in Europe.
-  const dice = target.overseas ? new Rng(hashString(`land:${g.seed}:${g.turn}:${target.id}:${attNat}:${g.flags.battles ?? 0}`)) : g.rng;
+  // Battles overseas and in a side theatre roll their own dice, so that a fight in the desert or the Balkans never changes the luck of the main fronts.
+  const aside = target.overseas || target.theatre >= 0;
+  const dice = aside ? new Rng(hashString(`land:${g.seed}:${g.turn}:${target.id}:${attNat}:${g.flags.battles ?? 0}`)) : g.rng;
   const R = a.odds * dice.range(0.8, 1.2);
   const attU = attackers.map(reportUnit), defU = defenders.map(reportUnit);
   const attGens = attackers.map((c) => generalOf(g, c)), defGens = defenders.map((c) => generalOf(g, c));
@@ -652,10 +666,11 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; }
       else if (c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target)) {
         // Backs to the sea: the navy takes off what it can.
-        place(g, c, g.regions[N.capital]);
+        const dest = refuge(g, c, target);
+        place(g, c, dest);
         c.str *= 0.75; c.org = 0.2; c.ap = 0;
         defU[i].fate = 'evacuated';
-        if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire.`, c.nat, target.id); }
+        if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${target.name} under fire${dest.cap ? '' : ` and taken to ${dest.name}`}.`, c.nat, target.id); }
       } else {
         const left = men(c);
         defU[i].fate = c.str < 0.15 ? 'destroyed' : 'surrendered';
@@ -688,7 +703,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     attLost, defLost, prisoners,
   };
   g.reports.push(rep);
-  afterBattle(g, rep, target, a.odds, attackers, attGens, defenders, defGens);
+  // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
+  if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
+  afterBattle(g, rep, target, a.odds, attackers, attGens, defenders, defGens, aside ? `aside:${rep.id}` : `${rep.id - (g.flags.asideBattles ?? 0)}`);
   if (prisoners >= 40000) {
     const who = new Set(defU.filter((u) => u.fate === 'surrendered' || u.fate === 'destroyed').map((u) => u.nat));
     const adj = who.size === 1 ? g.nations[[...who][0]].adj : bloc(g.nations[defNat]) === 'allies' ? 'Allied' : 'Axis';
@@ -849,14 +866,18 @@ export function shipMove(g: Game, c: Corps, to: Region): boolean {
   return shipCorps(g, c, to);
 }
 
-/** Lifts a corps off the Continent from a port. */
+/** Lifts a corps off the Continent from a port: to a haven of its theatre if there is one to go to, or else home. */
 export function evacuate(g: Game, c: Corps): boolean {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
   if (!N.seaSupply || !r.port || r.owner === c.nat || N.capital < 0 || !seaOpenAt(g, c.nat, r)) return false;
-  place(g, c, g.regions[N.capital]);
+  const dest = refuge(g, c, r);
+  place(g, c, dest);
   c.str *= 0.75; c.org = 0.3; c.ap = 0;
-  if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${r.name}.`, c.nat, r.id); }
+  if (!g.flags[`evac:${g.turn}`]) {
+    g.flags[`evac:${g.turn}`] = 1;
+    headline(g, 'event', dest.cap ? `${N.adj} troops are lifted off the beaches at ${r.name}.` : `${N.adj} troops are lifted off the beaches at ${r.name} and taken to ${dest.name}, without their heavy equipment.`, c.nat, r.id);
+  }
   return true;
 }
 
@@ -896,22 +917,64 @@ function mobilise(g: Game, nat: string): void {
   }
 }
 
+const THEATRE_LIST = Object.values(theatreData as Record<string, any>).filter((x) => typeof x !== 'string') as { name: string; havens?: string[] }[];
+
+/** The name of the side theatre a region belongs to, as data/campaign/theatres.json gives it. */
+export function theatreName(r: Region): string | null {
+  return r.theatre >= 0 ? THEATRE_LIST[r.theatre]?.name ?? null : null;
+}
+
+/** The places troops lifted off this region's coast are taken to before anywhere else: its theatre's havens. */
+export function havensOf(r: Region): string[] {
+  return r.theatre >= 0 ? THEATRE_LIST[r.theatre]?.havens ?? [] : [];
+}
+
+/** Where troops lifted off a coast are landed: a haven of the same theatre still in friendly hands, with room and ships able to reach it, or else home. */
+export function refuge(g: Game, c: Corps, from: Region): Region {
+  for (const nm of havensOf(from)) {
+    const r = g.byName[nm];
+    if (r && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && friendlyUnits(g, r, c.nat).length < STACK && seaOpenAt(g, c.nat, r)) return r;
+  }
+  return g.regions[g.nations[c.nat].capital];
+}
+
 /**
- * Formations history sent overseas. Unlike the home mobilisation they need a friendly port to
- * land at: one that has been lost, or is full, puts the sailing off, and after half a year it is cancelled.
+ * Formations history sent to a war away from the main fronts. Unlike the home mobilisation they need a
+ * friendly place to arrive at: one that has been lost, or is full, puts the move off, and after half a year
+ * it is cancelled. Formations only lent to a campaign ('until') go back to the main army when their time is up.
  */
 function expeditions(g: Game, nat: string): void {
+  const gone: Corps[] = [];
   ((setup as any).expeditions as any[] ?? []).forEach((row, i) => {
-    if (row[1] !== nat || g.turn < row[0] || g.flags[`sent:${i}`]) return;
+    if (row[1] !== nat || g.turn < row[0]) return;
     const o = row[6] ?? {};
-    if (g.turn - row[0] > 6 || (o.war && !atWar(g, o.war[0], o.war[1]))) { if (g.turn - row[0] > 6) g.flags[`sent:${i}`] = 1; return; }
+    if (g.flags[`sent:${i}`]) {
+      // The main army's order of battle already counts these formations: the campaign only had the loan of them.
+      const id = g.flags[`lent:${i}`];
+      if (o.until && g.turn >= o.until && id > 0) {
+        const c = g.corps.find((x) => x.id === id && x.nat === nat);
+        if (c) gone.push(c);
+        g.flags[`lent:${i}`] = -1;
+      }
+      return;
+    }
+    if (g.turn - row[0] > 6 || (o.war && !atWar(g, o.war[0], o.war[1])) || (o.until && g.turn >= o.until)) { if (g.turn - row[0] > 6) g.flags[`sent:${i}`] = 1; return; }
     const reg = g.byName[row[5]];
     if (!reg || !allied(g, nat, reg.ctrl) || friendlyUnits(g, reg, nat).length >= STACK) return;
     g.flags[`sent:${i}`] = 1;
     const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, o);
-    if (o.gen) headline(g, 'event', `${o.gen} lands at ${reg.name} with the ${c.name}.`, nat, reg.id);
-    else if (nat === g.human) headline(g, 'info', `${c.name} has landed at ${reg.name}.`, nat, reg.id);
+    if (o.until) g.flags[`lent:${i}`] = c.id;
+    const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? '' : 'the ';
+    if (o.gen) headline(g, 'event', `${o.gen} ${reg.port ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
+    else if (nat === g.human) headline(g, 'info', `${c.name} has ${reg.port ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
   });
+  if (gone.length) {
+    const where = theatreName(g.regions[gone[0].reg]);
+    const names = gone.map((c) => c.name);
+    for (const c of gone) removeCorps(g, c);
+    g.supplyDirty = true;
+    headline(g, 'event', `${g.nations[nat].adj} formations lent to the campaign${where ? ` in ${where}` : ''} leave for other fronts: ${names.join('; ')}.`, nat);
+  }
 }
 
 export function startPhase(g: Game, nat: string): void {

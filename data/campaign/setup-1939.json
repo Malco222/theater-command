@@ -1,5 +1,5 @@
 {
-  "_about": "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen names the general in command, and trait is what he is known for (panzer, attacker or defender; commanders.json turns the label into his level, skills and traits); hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded. 'reinforcements' are [month, nation, ...] and form up at home. 'expeditions' are the same, but go overseas: they land only at a port still in friendly hands (a sailing is put off while it is not, and cancelled after half a year), and 'war' names two nations that must be at war for the troops to be sent at all.",
+  "_about": "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen names the general in command, and trait is what he is known for (panzer, attacker or defender; commanders.json turns the label into his level, skills and traits); hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded. 'reinforcements' are [month, nation, ...] and form up at home. 'expeditions' are the same, but go to a war away from the main fronts: they arrive only at a place still in friendly hands with room for them (the move is put off while it is not, and cancelled after half a year), and 'war' names two nations that must be at war for the troops to be sent at all. 'until' marks formations only lent to a campaign: in that month they go back to the main army, whose order of battle already counts them. 'airborne' marks parachute and glider troops (see navy.json). Add new expeditions at the end of the list: saved games remember them by their place in it.",
   "corps": [
     ["GER", "XIX Corps", "arm", 2, "Farther Pomerania", {"gen": "Heinz Guderian", "trait": "panzer", "xp": 0.4}],
     ["GER", "II Corps", "inf", 3, "Grenzmark", {"xp": 0.3}],
@@ -275,6 +275,24 @@
     [24, "ITA", "Trieste Motorized Division", "mot", 1, "Tripoli", {"xp": 0.1, "war": ["UK", "ITA"]}],
     [18, "GER", "5th Light Division", "arm", 1, "Tripoli", {"gen": "Erwin Rommel", "trait": "panzer", "hold": 1, "xp": 0.4, "war": ["UK", "ITA"]}],
     [20, "GER", "15th Panzer Division", "arm", 1, "Tripoli", {"xp": 0.4, "war": ["UK", "ITA"]}],
-    [24, "GER", "90th Light Division", "mot", 1, "Tripoli", {"xp": 0.3, "war": ["UK", "ITA"]}]
+    [24, "GER", "90th Light Division", "mot", 1, "Tripoli", {"xp": 0.3, "war": ["UK", "ITA"]}],
+    [13, "ITA", "Ciamuria Corps and Julia Alpine Division", "inf", 3, "Albania", {"gen": "Sebastiano Visconti Prasca", "xp": 0.1, "war": ["ITA", "UK"]}],
+    [13, "ITA", "XXVI Corps", "inf", 2, "Albania", {"xp": 0.1, "war": ["ITA", "UK"]}],
+    [15, "ITA", "9th Army", "inf", 4, "Albania", {"xp": 0.05, "war": ["ITA", "GRE"]}],
+    [17, "ITA", "11th Army reserves", "inf", 4, "Albania", {"gen": "Ugo Cavallero", "xp": 0.05, "war": ["ITA", "GRE"]}],
+    [14, "GRE", "West Macedonia Army Section", "inf", 3, "Salonika", {"xp": 0.15, "war": ["GRE", "ITA"]}],
+    [14, "GRE", "I Corps", "inf", 2, "Epirus", {"gen": "Alexandros Papagos", "trait": "defender", "xp": 0.15, "war": ["GRE", "ITA"]}],
+    [15, "GRE", "II Corps", "inf", 2, "Thessaly", {"xp": 0.15, "war": ["GRE", "ITA"]}],
+    [16, "GRE", "III Corps", "inf", 2, "Thessaly", {"xp": 0.15, "war": ["GRE", "ITA"]}],
+    [15, "UK", "Creforce", "inf", 1, "Crete", {"gen": "Bernard Freyberg", "trait": "defender", "hold": 1, "xp": 0.2, "war": ["GRE", "ITA"]}],
+    [19, "UK", "W Force (New Zealand Division and 1st Armoured Brigade)", "inf", 2, "Thessaly", {"gen": "Henry Maitland Wilson", "hold": 1, "xp": 0.25, "war": ["GRE", "ITA"]}],
+    [19, "GER", "5th and 11th Panzer Divisions", "arm", 2, "Sofia", {"hold": 1, "xp": 0.4, "war": ["ITA", "GRE"], "until": 22}],
+    [19, "GER", "2nd and 9th Panzer Divisions", "arm", 2, "Sofia", {"hold": 1, "xp": 0.4, "war": ["ITA", "GRE"], "until": 22}],
+    [19, "GER", "5th and 6th Mountain Divisions", "mtn", 2, "Plovdiv", {"hold": 1, "xp": 0.35, "war": ["ITA", "GRE"]}],
+    [19, "GER", "50th, 72nd and 164th Infantry Divisions", "inf", 3, "Plovdiv", {"hold": 1, "xp": 0.3, "war": ["ITA", "GRE"]}],
+    [20, "GER", "Grossdeutschland motorized group", "mot", 1, "Banat", {"hold": 1, "xp": 0.4, "war": ["ITA", "GRE"], "until": 22}],
+    [20, "GER", "8th and 14th Panzer Divisions", "arm", 2, "Transdanubia", {"hold": 1, "xp": 0.35, "war": ["ITA", "GRE"], "until": 22}],
+    [20, "GER", "132nd and 183rd Infantry Divisions", "inf", 2, "Transdanubia", {"hold": 1, "xp": 0.2, "war": ["ITA", "GRE"]}],
+    [21, "GER", "XI Air Corps", "inf", 3, "Athens", {"gen": "Kurt Student", "trait": "attacker", "airborne": 1, "hold": 1, "xp": 0.7, "war": ["GER", "UK"]}]
   ]
 }

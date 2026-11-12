@@ -70,6 +70,11 @@
       "opinion": { "BUL": 20 },
       "join": { "bloc": "axis", "nations": ["BUL"], "minOpinion": 45 },
       "text": "German troops gather on the Danube and Sofia is pressed to choose a side."
+    },
+    {
+      "id": "belgrade-coup", "from": 20, "to": 20,
+      "if": ["alive:YUG", "atPeace:YUG", "notInBloc:YUG", "alive:GER", "alive:GRE", "flag:war:ITA:GRE"],
+      "text": "Officers in Belgrade overthrow the regent for leaning toward the Axis, and crowds cheer the young King. Berlin now counts Yugoslavia an enemy."
     }
   ]
 }
