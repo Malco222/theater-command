@@ -2,6 +2,8 @@
 // commander would see. All of the rules live in ../game, ../ai and ../turn; this file
 // only draws the state of the game and turns clicks into orders.
 
+import { flagDefs, flagIcon, flagUse } from './flags';
+import grandData from '../../../data/campaign/grand.json';
 import {
   DESERT, allied, atWar, collapseScore, convoyDrag, createGame, ensureSupply, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, weather,
 } from '../game';
@@ -69,6 +71,11 @@ const ui = {
   flash: [] as number[],
   auto: 0 as number,
   modal: null as null | { kind: string; [k: string]: any },
+  /** The start screen: the grand campaign's front door, or the list of historical scenarios behind it. */
+  menu: 'grand' as 'grand' | 'scenarios',
+  /** The country and the year picked for a grand campaign. An empty country watches. */
+  gcNat: 'GER',
+  gcYear: 1939,
 };
 
 const $ = (s: string): HTMLElement => document.querySelector(s) as HTMLElement;
@@ -167,6 +174,30 @@ function symbol(kind: Kind, w: number, h: number): string {
   }
 }
 
+/**
+ * The branch of an army's strongest corps, as a small plate on the corner of its flag. Infantry, the usual
+ * case, carries none, so that the flag is seen whole.
+ */
+function badge(kind: Kind): string {
+  const w = 9, h = 6.4;
+  let s = '';
+  switch (kind) {
+    case 'inf': return '';
+    case 'arm': s = `<ellipse class="bsym" cx="${w / 2}" cy="${h / 2}" rx="2.7" ry="1.6"/>`; break;
+    case 'mot': s = `<path class="bsym" d="M1.5 1.2L${w - 1.5} ${h - 2.2}M1.5 ${h - 2.2}L${w - 1.5} 1.2"/><circle class="bsymf" cx="2.9" cy="${h - 1}" r=".7"/><circle class="bsymf" cx="${w - 2.9}" cy="${h - 1}" r=".7"/>`; break;
+    case 'cav': s = `<path class="bsym" d="M1.5 ${h - 1.3}L${w - 1.5} 1.3"/>`; break;
+    case 'mtn': s = `<path class="bsymf" d="M${w / 2 - 2.6} ${h - 1.2}L${w / 2} 1.2L${w / 2 + 2.6} ${h - 1.2}Z"/>`; break;
+    case 'fort': s = `<path class="bsym" d="M2 ${h - 1.3}V1.7H3.6V2.9H5.4V1.7H7V${h - 1.3}Z"/>`; break;
+  }
+  return `<g class="badge" transform="translate(14.4 8.2)"><rect width="${w}" height="${h}" rx="1"/>${s}</g>`;
+}
+
+/** An army's standard: its nation's flag, edged, with the branch plate on its corner. */
+const standard = (nat: string, kind: Kind): string => `${flagUse(nat, g.nations[nat].color)}<rect class="box" width="22" height="14" rx=".7" fill="none"/>${badge(kind)}`;
+
+/** A nation's flag beside its name in a panel. */
+const chip = (nat: string): string => flagIcon(nat, g.nations[nat]?.color ?? '#888', 20, 'chip');
+
 /** The general an army on the map marches under: the most senior of those commanding its corps. */
 function leaderOf(cs: Corps[]): General | null {
   let best: General | null = null, size = 0;
@@ -220,7 +251,7 @@ function fleetMarks(): string {
     let x: number, y: number, small = false;
     if (where === 'p') { const r = g.regions[id]; x = r.x + 16 + i * 12; y = r.y + 12; small = true; }
     else { const z = g.seas[id]; x = z.x + (i - (rows.get(slot)! - 1) / 2) * 30; y = z.y + (where === 'h' ? 37 : 19); small = where === 'h'; }
-    out += `<g class="ctr flt${fs[0].stance === 'raid' ? ' raid' : ''}${small ? ' port' : ''}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})${small ? ' scale(.68)' : ''}">${picked ? '<circle class="fsel" r="17"/>' : ''}<path class="hull" d="${shape}" fill="${g.nations[fs[0].nat].color}"/><text x="0" y="11.5">${n}</text></g>`;
+    out += `<g class="ctr flt${fs[0].stance === 'raid' ? ' raid' : ''}${small ? ' port' : ''}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})${small ? ' scale(.68)' : ''}">${picked ? '<circle class="fsel" r="17"/>' : ''}<path class="hull" d="${shape}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(-5 -12.4)">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="11.5">${n}</text></g>`;
   }
   return out;
 }
@@ -259,7 +290,7 @@ function airBaseMarks(): string {
     used.set(base, i + 1);
     const n = fs.reduce((t, f) => t + f.ftr + f.bmr, 0);
     const picked = ui.tab === 'air' && fs.some((f) => f.id === ui.air);
-    out += `<g class="ctr flt air" transform="translate(${(r.x - 17 - i * 13).toFixed(1)} ${(r.y + 11).toFixed(1)}) scale(.62)">${picked ? '<circle class="fsel" r="17"/>' : ''}<path class="hull" d="${PLANE}" fill="${g.nations[fs[0].nat].color}"/><text x="0" y="17.5">${n}</text></g>`;
+    out += `<g class="ctr flt air" transform="translate(${(r.x - 17 - i * 13).toFixed(1)} ${(r.y + 11).toFixed(1)}) scale(.62)">${picked ? '<circle class="fsel" r="17"/>' : ''}<path class="hull" d="${PLANE}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(4.5 -12)">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="17.5">${n}</text></g>`;
   }
   return out;
 }
@@ -291,7 +322,7 @@ function mount(): void {
     <div class="main">
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
-          <defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
+          <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
           <g id="seas"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="labels"></g><g id="fleets"></g><g id="units"></g><g id="route"></g><g id="ghost"></g>
         </svg>
         <div class="hint" id="hint"></div>
@@ -410,7 +441,7 @@ function refresh(): void {
       const x = r.x - 11 + k * 4.5, y = r.y - 7 - k * 4;
       units += `<g class="ctr army${ready ? ' ready' : ''}${spent ? ' spent' : ''}${chosen ? ' chosen' : ''}${who ? ' led' : ''}" data-reg="${r.id}" data-nat="${nat}" transform="translate(${x} ${y})"${marchHide && marchHide.reg === r.id && marchHide.nat === nat ? ' style="visibility:hidden"' : ''}>
         <ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>
-        <rect class="box" width="22" height="14" rx="1.4" fill="${g.nations[nat].color}"/>${symbol(lead.kind, 22, 14)}
+        ${standard(nat, lead.kind)}
         ${k === 0 ? `<rect class="strbg" x="0" y="15.2" width="22" height="2.2" rx=".6"/><rect class="str${fit < 0.5 ? ' low' : fit < 0.75 ? ' mid' : ''}" x="0" y="15.2" width="${(22 * Math.min(1, fit)).toFixed(1)}" height="2.2" rx=".6"/>
         <text x="11" y="24.6">${num(sumDivs(cs))}</text><text class="size" x="11" y="-1.6">${cs.length > 1 ? 'XXXX' : 'XXX'}</text>${who ? `<text class="cmdr" x="11" y="-2">${esc(surname(who.name))}</text>` : ''}` : ''}
         ${k === 0 && r.units.length > 1 ? `<circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${r.units.length}</text>` : ''}</g>`;
@@ -428,7 +459,7 @@ function refresh(): void {
   const pass = $('#passing');
   if (passing) {
     const n = passing.nat ? g.nations[passing.nat] : null;
-    pass.innerHTML = `<div class="prow">${n ? `<span class="chip" style="background:${n.color}"></span><b>${esc(natName(passing.nat))}</b>` : '<b>The month goes on</b>'}<span class="grow">${esc(passing.note || 'The other nations give their orders.')}</span><button class="btn small" data-act="skip">Skip ▸▸</button></div><div class="pbar"><i style="width:${Math.round(100 * Math.min(1, passing.done / Math.max(1, passing.total)))}%"></i></div>`;
+    pass.innerHTML = `<div class="prow">${n ? `${chip(passing.nat)}<b>${esc(natName(passing.nat))}</b>` : '<b>The month goes on</b>'}<span class="grow">${esc(passing.note || 'The other nations give their orders.')}</span><button class="btn small" data-act="skip">Skip ▸▸</button></div><div class="pbar"><i style="width:${Math.round(100 * Math.min(1, passing.done / Math.max(1, passing.total)))}%"></i></div>`;
     pass.classList.add('open');
   } else { pass.classList.remove('open'); pass.innerHTML = ''; }
   queueSave();
@@ -744,7 +775,7 @@ function march(pts: [number, number][], nat: string, kind: Kind, to: number): vo
     if (real) real.style.visibility = '';
   };
   if (pts.length < 2 || typeof requestAnimationFrame !== 'function') { done(); return; }
-  ghost.innerHTML = `<g class="ctr army chosen"><ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/><rect class="box" width="22" height="14" rx="1.4" fill="${g.nations[nat].color}"/>${symbol(kind, 22, 14)}</g>`;
+  ghost.innerHTML = `<g class="ctr army chosen"><ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>${standard(nat, kind)}</g>`;
   const piece = ghost.firstElementChild as SVGGElement;
   const legs = pts.length - 1, total = Math.min(720, 190 * legs + 140);
   const t0 = performance.now();
@@ -1603,9 +1634,9 @@ function powersPane(): string {
   for (const n of at.sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || b.armyPeak - a.armyPeak)) {
     if (n.alive) {
       const will = Math.max(0, 1 - collapseScore(g, n.id) / n.resilience);
-      out += `<div class="nat"><span class="chip" style="background:${n.color}"></span><b>${esc(n.name)}</b><small>${num(fieldArmy(g, n.id))} divisions</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}</b><small>${num(fieldArmy(g, n.id))} divisions</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
     } else {
-      out += `<div class="nat" style="opacity:.7"><span class="chip" style="background:${n.color}"></span><b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}</small><div class="will"><small>Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}</small></div></div>`;
+      out += `<div class="nat" style="opacity:.7">${chip(n.id)}<b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}</small><div class="will"><small>Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}</small></div></div>`;
     }
   }
   out += trackPane(neutral);
@@ -1635,7 +1666,7 @@ function trackPane(list: Nation[]): string {
       const word = k >= 1.3 ? 'Receptive' : k >= 0.8 ? 'Open to offers' : k >= 0.5 ? 'Wary' : 'Very hard to move';
       btn = `<button class="btn small" data-act="court" data-nat="${n.id}" ${c.ok ? '' : 'disabled'} title="${esc(c.ok ? word : c.why)}">Court</button>`;
     }
-    out += `<div class="trk"><span class="chip" style="background:${n.color}"></span><b>${esc(n.name)}</b><small>${TRACK_LABEL[n.align]}</small>${btn}
+    out += `<div class="trk">${chip(n.id)}<b>${esc(n.name)}</b><small>${TRACK_LABEL[n.align]}</small>${btn}
       <div class="track"><i class="t" style="left:15%"></i><i class="t" style="left:35%"></i><i class="t mid" style="left:50%"></i><i class="t" style="left:65%"></i><i class="t" style="left:85%"></i><i class="dot" style="left:${pos.toFixed(1)}%"></i></div></div>`;
   }
   out += `<p class="sub" style="margin-top:8px">The inner marks are where a country starts to lean; the outer marks are where it asks to join.</p>`;
@@ -1772,7 +1803,7 @@ function seaReportCard(r: SeaReport): string {
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
       <div class="sub">The ${beaten} ships broke off and made for port. Final odds ${r.odds.toFixed(2)} to 1.</div>
-      <div class="vs"><div><h4><span class="chip" style="background:${g.nations[r.attNat].color}"></span> ${natName(r.attNat)} offering battle</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${natName(r.defNat)} <span class="chip" style="background:${g.nations[r.defNat].color}"></span></h4>${side(r.def)}</div></div>
+      <div class="vs"><div><h4>${chip(r.attNat)} ${natName(r.attNat)} offering battle</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${natName(r.defNat)} ${chip(r.defNat)}</h4>${side(r.def)}</div></div>
       <h3>What the campaign map fed into the battle</h3>
       <table class="ticket">${r.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>
       <h3>Offering battle</h3>${list(r.att)}<h3>Brought to battle</h3>${list(r.def)}
@@ -2001,7 +2032,7 @@ function airReportCard(r: AirReport): string {
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
       <div class="sub">${esc(r.result)}${sky}</div>
-      <div class="vs"><div><h4><span class="chip" style="background:${g.nations[r.attNat].color}"></span> ${natName(r.attNat)} attacking</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${r.defNat ? natName(r.defNat) : 'No defenders'} <span class="chip" style="background:${r.defNat ? g.nations[r.defNat].color : 'var(--panel-3)'}"></span></h4>${side(r.def)}</div></div>
+      <div class="vs"><div><h4>${chip(r.attNat)} ${natName(r.attNat)} attacking</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${r.defNat ? natName(r.defNat) : 'No defenders'} ${r.defNat ? chip(r.defNat) : ''}</h4>${side(r.def)}</div></div>
       <h3>What the campaign map fed into the battle</h3>
       ${ticketTable(r.lines)}
       <h3>Flying the mission</h3>${list(r.att)}<h3>Rising to meet them</h3>${list(r.def)}
@@ -2068,31 +2099,74 @@ function openModal(m: typeof ui.modal): void {
   card.scrollTop = 0;
 }
 
+// ---- The start screen: the grand campaign at the front door, the historical scenarios behind it ----
+
+interface GrandYear { year: number; turn: number; date: string; text: string }
+const GRAND = grandData as unknown as { years: GrandYear[]; nations: { id: string; years: Record<string, string> }[]; watch: Record<string, string> };
+
+/** The years a country can begin a grand campaign in. Nobody at the controls can begin in any. */
+const grandYears = (nat: string): number[] => (nat ? Object.keys(GRAND.nations.find((n) => n.id === nat)?.years ?? {}).map(Number) : GRAND.years.map((y) => y.year));
+
+/** Reads back the country and year picked last time, and keeps the pick to what is on offer. */
+function grandPick(): { nat: string; year: GrandYear; text: string } {
+  if (ui.gcNat && !GRAND.nations.some((n) => n.id === ui.gcNat)) ui.gcNat = 'GER';
+  const years = grandYears(ui.gcNat);
+  if (!years.includes(ui.gcYear)) ui.gcYear = years.filter((y) => y <= ui.gcYear).pop() ?? years[0];
+  const year = GRAND.years.find((y) => y.year === ui.gcYear) ?? GRAND.years[0];
+  const text = ui.gcNat ? GRAND.nations.find((n) => n.id === ui.gcNat)!.years[String(year.year)] : GRAND.watch[String(year.year)] ?? GRAND.watch.later;
+  return { nat: ui.gcNat, year, text };
+}
+
+function rememberPick(): void {
+  try { localStorage.setItem('tc-grand', `${ui.gcNat}:${ui.gcYear}`); } catch { /* the pick is only a convenience */ }
+}
+
+function recallPick(): void {
+  try {
+    const [nat, year] = (localStorage.getItem('tc-grand') ?? '').split(':');
+    if (year) { ui.gcNat = nat; ui.gcYear = Number(year) || 1939; }
+  } catch { /* nothing kept */ }
+}
+
+const startHead = (title: string): string => `<header><div class="kick">Grand strategy · 1939 to 1945</div><h2>${title}</h2></header>`;
+const STEPS = `<ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol>`;
+
 function startCard(): string {
-  const aims = (id: string | null, from: number): string => (id && from === 1 ? GOAL_KEYS.map((key) => { const goal = GOALS[id]?.[key]; return goal ? `<span class="sgoal"><i>${key === 'short' ? 'Short campaign' : 'Long campaign'}</i>${esc(goal.text)}</span>` : ''; }).join('') : '');
-  const side = (id: string | null, name: string, blurb: string, wide = false, from = 1, view = '') => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}" data-from="${from}" data-view="${view}"><b>${name}</b><span>${blurb}</span>${aims(id, from)}</button>`;
+  if (ui.menu === 'scenarios') return scenarioCard();
   const saved = peekSave(readSave() ?? '');
-  const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `${saved.open ? 'Watching a free-play war' : 'Watching history'}, ${date(saved.turn)}`}${saved.human && saved.open ? ', free play' : ''}. Saved in this browser.</span></button>` : '';
-  return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
-    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe, North Africa and the Middle East in ${g.regions.length} regions and ${g.seas.length} seas, monthly turns, armies, fleets and air fleets, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan. In <b>free play</b> nobody follows history: you and every other nation make your own.</p>
+  const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `${saved.open ? 'Watching a war nobody has seen' : 'Watching history'}, ${date(saved.turn)}`}${saved.human && saved.open ? ', grand campaign' : ''}. Saved in this browser.</span></button>` : '';
+  const pick = grandPick();
+  const years = grandYears(pick.nat);
+  const tile = (id: string, name: string): string => `<button class="gcnat${id === pick.nat ? ' on' : ''}" data-act="gcnat" data-nat="${id}" aria-pressed="${id === pick.nat}">${id ? flagIcon(id, g.nations[id].color, 54) : '<span class="gcwatch">◉</span>'}<b>${esc(name)}</b></button>`;
+  const goals = pick.nat && pick.year.turn === 1 ? GOAL_KEYS.map((key) => { const goal = GOALS[pick.nat]?.[key]; return goal ? `<span class="sgoal"><i>${key === 'short' ? 'Short campaign' : 'Long campaign'}</i>${esc(goal.text)}</span>` : ''; }).join('') : '';
+  return `${startHead('Theater Command')}
+    <div class="body"><p class="lead">Pick a country and a year, then <b>make your own history</b>. From the day you take over nobody follows the history books: you decide where your armies, fleets and air fleets go, and so does the staff of every other nation.</p>
     ${resume ? `<div class="sides">${resume}</div>` : staleSave(readSave() ?? '') ? '<div class="note">The campaign saved in this browser was played on an earlier, smaller map and cannot be continued in this version. Starting a new game replaces it.</div>' : ''}
-    <h3>September 1939 · The war begins</h3>
+    <h3>The grand campaign · choose your country</h3>
+    <div class="gcnats">${GRAND.nations.map((n) => tile(n.id, g.nations[n.id].name)).join('')}${tile('', 'Watch')}</div>
+    <h3>Choose the year you take over</h3>
+    <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>
+    <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
+      <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
+      <button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button>${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
+    <h3>Historical scenarios</h3>
+    <div class="sides"><button class="sidebtn wide" data-act="menu" data-menu="scenarios"><b>Play a turning point of the war</b><span>Fourteen shorter campaigns, from the Battle of Britain and Barbarossa to D-Day and Operation Bagration. Each starts at a turning point with the other nations following history's plan, or you can sit back and watch history unfold.</span></button></div>
+    ${STEPS}</div>`;
+}
+
+function scenarioCard(): string {
+  const aims = (id: string | null, from: number): string => (id && from === 1 ? GOAL_KEYS.map((key) => { const goal = GOALS[id]?.[key]; return goal ? `<span class="sgoal"><i>${key === 'short' ? 'Short campaign' : 'Long campaign'}</i>${esc(goal.text)}</span>` : ''; }).join('') : '');
+  const side = (id: string | null, name: string, blurb: string, wide = false, from = 1, view = '') => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}" data-from="${from}" data-view="${view}">${id ? `<b>${flagIcon(id, g.nations[id].color, 26)} ${name}</b>` : `<b>${name}</b>`}<span>${blurb}</span>${aims(id, from)}</button>`;
+  return `${startHead('Historical scenarios')}
+    <div class="body"><p class="lead"><button class="btn small" data-act="menu" data-menu="grand">◂ Back to the grand campaign</button></p>
+    <p class="lead">Each scenario starts at a turning point of the war. The computer plays history up to that day, and the nations you do not play go on following <b>history's plan</b>, so the war around you unfolds as it did unless you change it.</p>
+    <h3>September 1939 · The war as it was fought</h3>
     <div class="sides">
       ${side(null, 'Watch history unfold', 'Every nation follows its plan. Press Play and watch Poland, then the West, then the East.', true)}
       ${side('GER', 'Germany', 'On the attack from the first day. The hardest plan to pull off on schedule.')}
       ${side('FRA', 'France', 'The Maginot Line, a large army, and a slow command. Can you keep Paris?')}
       ${side('UK', 'United Kingdom', 'A small army, the largest navy in the world, and convoys to keep alive.')}
       ${side('POL', 'Poland', 'Outnumbered and nearly surrounded. You place your army on the eve of war, then hold as long as you can.')}
-    </div>
-    <h3>September 1939 · Free play: make your own history</h3>
-    <div class="sides">
-      ${side(null, 'Watch a war nobody has seen', 'The war begins as it did. After that no nation follows history: each one\'s staff decides for itself, and no two wars come out the same.', true, 1, 'open')}
-      ${side('GER', 'Germany', 'At war with Poland, Britain and France. Where you go next, and when, is up to you.', false, 1, 'open')}
-      ${side('UK', 'United Kingdom', 'Nobody knows what Germany will do this time. Neither do you.', false, 1, 'open')}
-      ${side('FRA', 'France', 'The blow may fall in the spring, in a year, or somewhere else first. Be ready, or strike first.', false, 1, 'open')}
-      ${side('POL', 'Poland', 'The first month is the one history wrote. Survive it and the rest is yours.', false, 1, 'open')}
-      ${side('ITA', 'Italy', 'Neutral, with an army in Libya and Albania. Pick your moment and your side of the Mediterranean.', false, 1, 'open')}
-      ${side('SOV', 'Soviet Union', 'At peace behind a pact. Build the Red Army and wait, or march before Germany does.', false, 1, 'open')}
     </div>
     <h3>July 1940 · The Battle of Britain</h3>
     <div class="sides">
@@ -2171,7 +2245,7 @@ function startCard(): string {
       ${side('SOV', 'Soviet Union', 'The landing in France is days away and the German tanks have gone south, where they expect you. Four fronts are ready in Byelorussia. Break the fortified places at Vitebsk and Mogilev, close the ring at Minsk, and see how far the summer will carry you.', false, 58, 'east')}
       ${side('GER', 'Germany', 'Army Group Centre holds a great bulge round Minsk, its tanks have been sent south, and the fortified places are to be held to the last man. The Allies are about to land in France. You have a few weeks to decide what can be saved.', false, 58, 'east')}
     </div>
-    <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
+    ${STEPS}</div>`;
 }
 
 
@@ -2333,7 +2407,7 @@ function declareCard(): string {
   const list = declarable(g);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy</div><h2>Declare war</h2></header>
     <div class="body"><p class="lead">A neutral that is attacked joins the other side, and its friends may march to help it at once.</p>
-    ${list.map((id) => `<button class="pickrow" data-act="dodeclare" data-nat="${id}"><span class="chip" style="background:${g.nations[id].color}"></span><span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(fieldArmy(g, id))} divisions</span></span></button>`).join('')}</div>
+    ${list.map((id) => `<button class="pickrow" data-act="dodeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(fieldArmy(g, id))} divisions</span></span></button>`).join('')}</div>
     <footer><button class="btn" data-act="close">Not now</button></footer>`;
 }
 
@@ -2344,8 +2418,11 @@ function newGame(human: string | null, seed?: number, from = 1, view = ''): void
   stopAuto();
   dropPassing();
   g = createGame(seed ?? (Date.now() % 900000) + 1, from > 1 ? null : human);
-  if (view === 'open') startOpen(g);
+  // A grand campaign: history is played to the day the player takes over, and from then on nobody follows it.
+  const grand = view === 'grand' || view === 'open';
+  if (grand && from === 1) startOpen(g);
   while (g.turn < from) runTurnAI(g);
+  if (grand && from > 1) startOpen(g);
   g.human = human;
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
@@ -2623,9 +2700,18 @@ function onClick(e: MouseEvent): void {
   const id = Number(t.dataset.id);
   ui.msg = '';
   switch (act) {
-    case 'start': openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || ''); break;
+    case 'start': if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || ''); break;
+    case 'menu': ui.menu = t.dataset.menu === 'scenarios' ? 'scenarios' : 'grand'; openModal({ kind: 'start' }); break;
+    case 'gcnat': case 'gcyear': {
+      if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else ui.gcYear = Number(t.dataset.year) || 1939;
+      // Repainting the card must not throw the reader back to its top.
+      const keep = $('#card').scrollTop;
+      openModal({ kind: 'start' });
+      $('#card').scrollTop = keep;
+      break;
+    }
     case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
-    case 'new': stopAuto(); endPassing(); openModal({ kind: 'start' }); break;
+    case 'new': stopAuto(); endPassing(); ui.menu = 'grand'; openModal({ kind: 'start' }); break;
     case 'skip': endPassing(); break;
     case 'alert': followAlert(t.dataset.kind!); break;
     case 'record': openModal({ kind: 'unit', type: t.dataset.type as UnitKind, id }); break;
@@ -3043,7 +3129,8 @@ mount();
 drawStatic();
 applyView();
 refresh();
+recallPick();
 openModal({ kind: 'start' });
 
 // A handle for automated checks and for curious players in the browser console.
-(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, continueGame, save: () => saveGame(g) };
+(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, applyView, continueGame, save: () => saveGame(g) };
