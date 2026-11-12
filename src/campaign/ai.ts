@@ -8,7 +8,8 @@ import theatreData from '../../data/campaign/theatres.json';
 import { airAI } from './air';
 import { aiProduction } from './economy';
 import { aiArsenal } from './arsenal';
-import { barred } from './ground';
+import { blocked, blowBridges } from './rivers';
+import { aiBridges, aiEngineers } from './engineers';
 import { landCorps, landingOpts, navalAI } from './navy';
 import { afterDeclaring, decide, isOpen, staffPhase, theatreStaff } from './staff';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -121,7 +122,11 @@ export function theatrePhases(g: Game, nat: string): { theatre: string; phase: P
 
 /** Runs one nation's month. */
 export function runAI(g: Game, nat: string): void {
+  // The engineers go to their work before the staff moves anyone.
+  aiEngineers(g, nat);
   campaign(g, nat);
+  // With the month's moves made, a defence on a river blows its bridges.
+  aiBridges(g, nat, (x, from) => blowBridges(g, nat, x, from));
   aiProduction(g, nat);
   aiArsenal(g, nat);
 }
@@ -349,7 +354,7 @@ function fallBack(g: Game, nat: string, cap = g.nations[nat].capital): void {
       let to: Region | null = null;
       for (const j of g.regions[c.reg].nb) {
         const r = g.regions[j];
-        if (!allied(g, nat, r.ctrl) || home[j] < 0 || home[j] >= home[c.reg] || friendlyUnits(g, r, nat).length >= STACK || barred(g, c, r)) continue;
+        if (!allied(g, nat, r.ctrl) || home[j] < 0 || home[j] >= home[c.reg] || friendlyUnits(g, r, nat).length >= STACK || blocked(g, c, r)) continue;
         // Out of the ground being given up if there is a way, and by the emptier road.
         const worse = (x: Region): number => (given.has(x.id) ? 10 : 0) + friendlyUnits(g, x, nat).length;
         if (!to || worse(r) < worse(to)) to = r;
@@ -522,7 +527,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           const r = g.regions[j];
           if (failed.has(j) || halt.has(r.name) || (only && !only.has(r.name)) || !enemies.has(r.ctrl) || !atWar(g, nat, r.ctrl) || notYet(r.name)) continue;
           if (kept && !axis.has(r.name)) continue;
-          if (barred(g, c, r)) continue; // no tanks up the steepest ground
+          if (blocked(g, c, r)) continue; // no tanks up the steepest ground
           let list = cand.get(j);
           if (!list) cand.set(j, (list = []));
           list.push(c);
@@ -638,7 +643,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
         let to: Region | null = null;
         for (const j of g.regions[c.reg].nb) {
           const r = g.regions[j];
-          if (door[j] < 0 || door[j] >= door[c.reg] || friendlyUnits(g, r, nat).length >= STACK || barred(g, c, r)) continue;
+          if (door[j] < 0 || door[j] >= door[c.reg] || friendlyUnits(g, r, nat).length >= STACK || blocked(g, c, r)) continue;
           if (!to || door[j] < door[to.id]) to = r;
         }
         if (!to || (wave > 0 && weekOf(c, moveCost(g, c, to)) > wave) || !moveCorps(g, c, to)) break;
@@ -654,7 +659,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
       for (const r of g.regions) {
         if (r.since >= g.turn || dist[r.id] > bd || byRail[r.id] < 0 || !allied(g, nat, r.ctrl)) continue;
         const u = friendlyUnits(g, r, nat).length;
-        if (u >= STACK || barred(g, c, r)) continue;
+        if (u >= STACK || blocked(g, c, r)) continue;
         if (dist[r.id] < bd || u < bu) { to = r; bd = dist[r.id]; bu = u; }
       }
       if (to && railMove(g, c, to)) { made++; continue; }
@@ -667,7 +672,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
         const r = g.regions[j];
         if (!allied(g, nat, r.ctrl) || dist[j] >= bd + (to ? 0.001 : 0)) continue;
         const u = friendlyUnits(g, r, nat).length;
-        if (u >= STACK || barred(g, c, r)) continue;
+        if (u >= STACK || blocked(g, c, r)) continue;
         if (dist[j] < bd || u < bu) { to = r; bd = dist[j]; bu = u; }
       }
       if (!to || (wave > 0 && weekOf(c, moveCost(g, c, to)) > wave) || !moveCorps(g, c, to)) break;
@@ -882,7 +887,7 @@ function walkToward(g: Game, c: Corps, to: Region): void {
     for (const j of g.regions[c.reg].nb) {
       if (d[j] < 0 || d[j] >= d[c.reg]) continue;
       const r = g.regions[j];
-      if (friendlyUnits(g, r, c.nat).length >= STACK || barred(g, c, r)) continue;
+      if (friendlyUnits(g, r, c.nat).length >= STACK || blocked(g, c, r)) continue;
       if (!next || d[j] < d[next.id]) next = r;
     }
     if (!next || !moveCorps(g, c, next)) return;

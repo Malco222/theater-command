@@ -5,7 +5,7 @@
   "description": "Theater Command 1939-1945 (working title). Phase 1 prototypes: campaign rules with auto-resolve on a browser map, and a gray-box air battle.",
   "type": "module",
   "scripts": {
-    "geo": "node tools/build-geo-air.mjs && node tools/build-geo-campaign.mjs",
+    "geo": "node tools/build-geo-air.mjs && node tools/build-geo-campaign.mjs && node tools/build-rivers.mjs",
     "build": "node build.mjs",
     "history": "esbuild tools/history.ts --bundle --platform=node --format=esm --outfile=dist/history.mjs --log-level=warning && node dist/history.mjs",
     "test": "vitest run",

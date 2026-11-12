@@ -6,12 +6,13 @@ import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, ty
 import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
-  allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hostileUnits, limitAttackers,
+  allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hasRoom, hostileUnits, limitAttackers,
   endPhase, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { offers, orderOffer, type Offer } from './arsenal';
-import { barred } from './ground';
+import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
+import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './engineers';
 import { foundBureau, setTeams } from './research';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy } from './diplomacy';
@@ -173,8 +174,8 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
       const r = g.regions[j];
       const friendly = allied(g, c.nat, r.ctrl);
       if (!friendly && (onEve(g) || !atWar(g, c.nat, r.ctrl))) continue; // on the eve of war nobody crosses a frontier
-      if (barred(g, c, r)) continue; // tanks and the steepest ground
-      const step = moveCost(g, c, r);
+      if (blocked(g, c, r, a)) continue; // tanks and the steepest ground, wheels and a river with its bridges down
+      const step = moveCost(g, c, r, a);
       const left = c.ap - ca;
       if (left <= 0 || left < Math.min(step, 4)) continue;
       const cost = ca + step;
@@ -182,7 +183,7 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
         if (a === c.reg && !out.has(j)) out.set(j, { cost: 1, prev: a, attack: true });
         continue;
       }
-      if (friendlyUnits(g, r, c.nat).length >= STACK) continue;
+      if (!hasRoom(g, r, c)) continue;
       const old = out.get(j);
       if (old && old.cost <= cost) continue;
       out.set(j, { cost, prev: a, attack: false });
@@ -236,6 +237,35 @@ export function orderStance(g: Game, c: Corps, posture: Posture): boolean {
 
 /** The standing order a corps is under. */
 export const postureOf = (c: Corps): Posture => (c.yields ? 'back' : c.digs ? 'dig' : 'stand');
+
+/** What the player's engineer corps could do where it stands this month (the grand campaign). */
+export function engineerJobs(g: Game, c: Corps): JobOffer[] {
+  return c.nat === g.human ? jobsFor(g, c) : [];
+}
+
+/** Sets one of the player's engineer corps to work for the month. */
+export function orderEngineers(g: Game, c: Corps, job: JobKind): boolean {
+  return canOrder(g, c) && orderJob(g, c, job);
+}
+
+/** Takes one of the player's engineer corps off the work it was given this month. */
+export function orderStopWork(g: Game, c: Corps): boolean {
+  return c.nat === g.human && humanUp(g) && cancelJob(g, c);
+}
+
+/** Why the player cannot blow the bridges between two regions from the first of them, or null if they can. */
+export function whyNotBlowBridges(g: Game, from: number, to: number): string | null {
+  const x = crossingOf(from, to);
+  if (!x) return 'There is no river between those two.';
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotBlow(g, g.human, x, from);
+}
+
+/** The player's order to blow the bridges between a region their troops stand in and its neighbour across the river. */
+export function orderBlowBridges(g: Game, from: number, to: number): boolean {
+  const x = crossingOf(from, to);
+  return !!x && g.human !== null && humanUp(g) && blowBridges(g, g.human, x, from);
+}
 
 export function orderRail(g: Game, c: Corps, to: number): boolean {
   return canOrder(g, c) && railMove(g, c, g.regions[to]);

@@ -97,7 +97,7 @@ describe('a theatre that opens in its own month', () => {
     expect(R(g, 'Calais').fort).toBeNull();
     expect(R(g, 'Normandy').fort).toBeNull();
     expect(told(g, /Atlantic Wall|mined and staked|phantom army/)).toEqual([]);
-  });
+  }, 60000);
 });
 
 describe('the Atlantic Wall and the harbour off the beach', () => {

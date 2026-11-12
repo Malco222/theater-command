@@ -64,7 +64,7 @@ export function groundMarch(g: Game, kind: Kind, r: Region): number {
 }
 
 const pct = (m: number): string => `${Math.round(Math.abs(m - 1) * 100)}%`;
-const NAME: Record<Kind, string> = { inf: 'infantry', mot: 'motorized troops', arm: 'tanks', cav: 'cavalry', mtn: 'mountain troops', fort: 'fortress troops', art: 'artillery' };
+const NAME: Record<Kind, string> = { inf: 'infantry', mot: 'motorized troops', arm: 'tanks', cav: 'cavalry', mtn: 'mountain troops', fort: 'fortress troops', art: 'artillery', eng: 'engineers' };
 const KINDS = Object.keys(KIND) as Kind[];
 const cap = (s: string): string => s[0].toUpperCase() + s.slice(1);
 

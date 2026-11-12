@@ -1,7 +1,7 @@
 import type { Rng } from '../core/rng';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
 
-export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art';
+export type Kind = 'inf' | 'mot' | 'arm' | 'cav' | 'mtn' | 'fort' | 'art' | 'eng';
 export type Terrain = 'plains' | 'forest' | 'hills' | 'mountain' | 'marsh' | 'urban' | 'desert';
 export type Align = 'allies' | 'allies_cobelligerent' | 'leaning_allies' | 'independent' | 'leaning_axis' | 'axis_cobelligerent' | 'axis';
 
@@ -166,6 +166,8 @@ export interface Corps extends Storied {
   lean?: boolean;
   /** Sent home on a bond tour or to the training schools: out of the line until this month. */
   leave?: number;
+  /** The work an engineer corps has in hand: what, where, and the month it is finished. Lost if the corps leaves the place. */
+  job?: { what: string; reg: number; eta: number; ap?: number };
   /** The rivalry it is part of: an id on the list of rivalries. */
   rival?: number;
   /** The destroyed formation whose name and colours it carries: that formation's place on the memorial wall. */
@@ -713,6 +715,8 @@ export const KIND: Record<Kind, { label: string; atk: number; def: number; move:
   fort: { label: 'Fortress', atk: 1, def: 15, move: 99, mobile: false },
   // Massed guns, raised only in the grand campaign: see the artillery rule in the battle assessment.
   art: { label: 'Artillery', atk: 14, def: 8, move: 2, mobile: false },
+  // Engineers, raised only in the grand campaign: they are there for what they build and breach, not for their rifles.
+  eng: { label: 'Engineers', atk: 4, def: 9, move: 2, mobile: false },
 };
 
 export const TERRAIN_DEF: Record<Terrain, number> = { plains: 1, forest: 1.2, hills: 1.25, mountain: 1.6, marsh: 1.3, urban: 1.35, desert: 1 };

@@ -18,6 +18,8 @@ import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFalle
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot } from './ground';
+import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
+import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import desertData from '../../data/campaign/desert.json';
 import theatreData from '../../data/campaign/theatres.json';
 
@@ -282,12 +284,17 @@ export function lineStrength(g: Game, c: Corps): { mul: number; length: number }
   return { mul: 1, length };
 }
 
-export function moveCost(g: Game, c: Corps, to: Region): number {
+export function moveCost(g: Game, c: Corps, to: Region, from = c.reg): number {
   // Marching through country that has been friendly since before this month is quick for anyone.
   const road = allied(g, c.nat, to.ctrl) && to.since < g.turn;
   let cost = road ? 1 : KIND[c.kind].move;
   // Off the roads every arm has ground it cannot cross quickly (the grand campaign's ground rules).
   if (!road) cost += groundMarch(g, c.kind, to);
+  if (groundRules(g)) {
+    // A river whose bridges are down is crossed in boats, and an enemy's minefields are felt for yard by yard.
+    if (downBetween(g, from, to.id)) cost += ENGINEERING.blown.march;
+    if (!allied(g, c.nat, to.ctrl) && minesAt(g, to)) cost += ENGINEERING.mines.march;
+  }
   if (to.terrain === 'mountain' && c.kind !== 'mtn') cost += 1;
   if (to.terrain === 'marsh') cost += 1;
   if (weather(g).mud && EAST.has(to.owner)) cost += 1;
@@ -423,7 +430,7 @@ export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[]
   const most = corps.length ? g.nations[corps[0].nat].maxAttack || 99 : 99;
   for (const c of [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk)) {
     if (out.length >= most) break;
-    if (barred(g, c, target)) continue; // tanks have no way up the steepest ground
+    if (blocked(g, c, target)) continue; // tanks have no way up the steepest ground, and nothing on wheels crosses a river whose bridges are down
     if ((used[c.reg] ?? 0) >= cap) continue;
     used[c.reg] = (used[c.reg] ?? 0) + 1;
     out.push(c);
@@ -508,15 +515,31 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   // The grand campaign's ground rules: each arm on the ground that suits it or does not, and tanks and infantry
   // worth more together than apart. A historical scenario has none of this and is worked out as it always was.
   const wide = groundRules(g);
-  const armsA = wide ? combinedArms(g, attackers, target, false) : null, armsD = wide ? combinedArms(g, defenders, target, true) : null;
-  let tooSteep = 0;
+  const land = opts.sea === undefined;
+  // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
+  const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide ? combinedArms(g, defenders, target, true) : null;
+  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0;
+  const rivers = new Set<string>();
+  // Engineers in the assault breach the works, clear lanes through the mines and put the infantry over a bridgeless river.
+  const sap = wide ? sappers(attackers.filter((c) => !land || !blocked(g, c, target))) : 0;
+  const breach = sap ? Math.min(ENGINEERING.breach.most, ENGINEERING.breach.perDiv * sap) : 0;
+  const mineLv = wide ? minesAt(g, target) : 0;
+  const mined = mineLv ? 1 - ENGINEERING.mines.attack * mineLv * (1 - Math.min(1, sap)) : 1;
   for (const c of attackers) {
     if (wide && barred(g, c, target)) { tooSteep++; continue; }
+    if (wide && land && noCrossing(g, c.kind, c.reg, target.id)) { noBridge++; continue; }
     let p = corpsBase(g, c) * KIND[c.kind].atk;
     if (wide) {
       const suits = groundAttack(g, c.kind, target);
       if (suits !== 1) p *= suits;
       if (armsA) p *= c.kind === 'arm' ? armsA.armour : isFoot(c) ? armsA.infantry : 1;
+      const x = land ? riverBetween(g, c.reg, target.id) : null;
+      if (x) {
+        rivers.add(riverName(x));
+        if (bridgeDown(g, x)) { p *= sap ? ENGINEERING.blown.withEngineers : ENGINEERING.blown.attack; inBoats++; }
+        else { p *= ENGINEERING.river.attack; overBridges++; }
+      }
+      if (mined !== 1) p *= mined;
     }
     if (c.kind === 'arm') {
       if (target.terrain === 'mountain' || target.terrain === 'urban' || target.terrain === 'marsh') { p *= 0.6; armorStuck = true; }
@@ -532,7 +555,9 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (line.mul < 1) { p *= line.mul; longest = Math.max(longest, line.length); lineMul = Math.min(lineMul, line.mul); }
     if (frozen(g, c.nat, target)) { p *= 1 - (1 - EASTERN.winter.attack) * cmdWinter(g, c); cold = true; }
     const from = g.regions[c.reg];
-    if (target.fort && target.fort.vs.includes(from.owner)) { p /= soften ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - soften) : FORT_MUL[target.fort.lv]; fortFaced++; }
+    // What the guns and the engineers between them leave of the works. With neither, the works count in full, as they always did.
+    const eased = breach ? 1 - (1 - soften) * (1 - breach) : soften;
+    if (target.fort && target.fort.vs.includes(from.owner)) { p /= eased ? 1 + (FORT_MUL[target.fort.lv] - 1) * (1 - eased) : FORT_MUL[target.fort.lv]; fortFaced++; }
     // The player's honoured corps, a corps fighting for the place it was raised in, and one that has its old enemy in front of it.
     const proud = storyAttack(g, c, target, defenders);
     if (proud !== 1) { p *= proud; proudA = Math.max(proudA, proud); }
@@ -602,6 +627,25 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       effect: [armsD.foot > 0 ? `Infantry defence up ${pc(armsD.infantry)}%` : '', armsD.alone < 1 ? `${armsD.foot > 0 ? 'tank' : 'Tank'} defence down ${pc(armsD.alone)}%` : ''].filter(Boolean).join(', '),
     });
   }
+  if (wide && (rivers.size || noBridge)) {
+    const name = rivers.size ? [...rivers].join(' and the ') : riverName(riverBetween(g, attackers.find((c) => noCrossing(g, c.kind, c.reg, target.id))!.reg, target.id)!);
+    const crossing = overBridges + inBoats, all = attackers.length - tooSteep;
+    const fx = [
+      overBridges ? `over the bridges the attack is cut to ${Math.round(ENGINEERING.river.attack * 100)}%` : '',
+      inBoats ? `infantry crossing in boats fights at ${Math.round((sap ? ENGINEERING.blown.withEngineers : ENGINEERING.blown.attack) * 100)}%${sap ? ', with engineers to get it over' : ''}` : '',
+      noBridge ? `${noBridge === 1 ? 'one corps of tanks, lorries or guns' : `${noBridge} corps of tanks, lorries or guns`} cannot cross and ${noBridge === 1 ? 'takes' : 'take'} no part` : '',
+    ].filter(Boolean).join('; ');
+    lines.push({
+      label: 'River',
+      value: inBoats || noBridge ? `The bridges over the ${name} are down` : crossing < all ? `${crossing} of the ${all} attacking corps cross the ${name}` : `The attack crosses the ${name}`,
+      effect: fx[0].toUpperCase() + fx.slice(1),
+    });
+  }
+  if (mineLv) lines.push({
+    label: 'Minefields', value: mineLv > 1 ? 'Two belts of mines and booby traps on every road in' : 'Mines and booby traps on every road in',
+    effect: mined === 1 ? 'The engineers clear lanes: the mines cost the attack nothing' : `Attack cut to ${Math.round(mined * 100)}%${sap ? ', the engineers clearing what lanes they can' : ''}`,
+  });
+  if (breach && target.fort && fortFaced) lines.push({ label: 'Engineers', value: 'Assault engineers go in with the attack', effect: `They breach the works: the fortifications count for ${Math.round(breach * 100)}% less` });
   if (target.fort) {
     lines.push({ label: 'Fortifications', value: `Level ${target.fort.lv}`, effect: fortFaced === attackers.length ? `Attacked head-on: the attack is cut to ${Math.round(100 / FORT_MUL[target.fort.lv])}% strength` : fortFaced > 0 ? 'Partly outflanked: only the corps attacking head-on are slowed' : 'Outflanked: the works face the other way' });
   }
@@ -708,7 +752,7 @@ function moveIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   for (const { c, i } of order) {
     // A force that came by sea all goes ashore together.
     const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
-    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || barred(g, c, target)) { c.ap = Math.max(0, c.ap - 1); continue; }
+    if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || (opts.sea === undefined ? blocked(g, c, target) : barred(g, c, target))) { c.ap = Math.max(0, c.ap - 1); continue; }
     place(g, c, target);
     c.ap = Math.max(0, c.ap - cost);
     attU[i].fate = 'advanced';
@@ -894,22 +938,37 @@ export function capture(g: Game, r: Region, nat: string): void {
   r.since = g.turn;
   r.prev = old;
   g.supplyDirty = true;
+  if (groundRules(g)) {
+    // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
+    liftMines(g, r);
+    if (atWar(g, nat, old)) bridgesOnCapture(g, r, nat);
+  }
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
   else if (r.overseas && r.port && r.vp > 0 && atWar(g, nat, old)) headline(g, 'battle', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
   checkCollapse(g, old, nat);
 }
 
+/**
+ * Room for this corps in a region. Engineers work among the other troops: they are not counted against the
+ * corps a province holds, and it takes two engineer corps at most.
+ */
+export function hasRoom(g: Game, to: Region, c: Corps): boolean {
+  const here = friendlyUnits(g, to, c.nat);
+  const eng = here.filter((u) => u.kind === 'eng').length;
+  return c.kind === 'eng' ? eng < 2 : here.length - eng < STACK;
+}
+
 /** Moves one corps one region. Returns false if the move is not allowed. */
 export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   const from = g.regions[c.reg];
-  if (!from.nb.includes(to.id) || c.kind === 'fort' || barred(g, c, to)) return false;
+  if (!from.nb.includes(to.id) || c.kind === 'fort' || blocked(g, c, to)) return false;
   const cost = moveCost(g, c, to);
   if (c.ap < Math.min(cost, 4) || c.ap <= 0) return false;
   const friendly = allied(g, c.nat, to.ctrl);
   if (!friendly && !atWar(g, c.nat, to.ctrl)) return false;
   if (hostileUnits(g, to, c.nat).length) return false;
-  if (friendlyUnits(g, to, c.nat).length >= STACK) return false;
+  if (!hasRoom(g, to, c)) return false;
   g.week = weekOf(c, cost);
   place(g, c, to);
   c.ap = Math.max(0, c.ap - cost);
@@ -928,6 +987,7 @@ export function railReach(g: Game, c: Corps): Set<number> {
     for (const j of g.regions[q[i]].nb) {
       const r = g.regions[j];
       if (seen[j] || !allied(g, c.nat, r.ctrl) || r.terrain === DESERT.terrain) continue;
+      if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
       seen[j] = 1; q.push(j);
       if (!barred(g, c, r)) out.add(j); // the trains run through the high passes, but tanks are not unloaded there
     }
@@ -937,7 +997,7 @@ export function railReach(g: Game, c: Corps): Set<number> {
 
 /** Rail move: anywhere through friendly territory, for the whole month. */
 export function railMove(g: Game, c: Corps, to: Region): boolean {
-  if (c.kind === 'fort' || c.ap < 4 || !allied(g, c.nat, to.ctrl) || friendlyUnits(g, to, c.nat).length >= STACK || barred(g, c, to)) return false;
+  if (c.kind === 'fort' || c.ap < 4 || !allied(g, c.nat, to.ctrl) || !hasRoom(g, to, c) || barred(g, c, to)) return false;
   if (to.id !== c.reg && !railReach(g, c).has(to.id)) return false;
   place(g, c, to);
   c.ap = 0;
@@ -1395,6 +1455,7 @@ export function startPhase(g: Game, nat: string): void {
     }
   }
   deliver(g, nat);
+  engineersMonth(g, nat);
   if (nat !== g.human) n.pp = Math.min(n.pp, PRODUCTION.aiBank[canBuildYet(g, nat) ? 1 : 0]);
   n.armyPeak = Math.max(n.armyPeak, armySize(g, nat));
   if (tempo) g.flags[`tempo:${nat}:${g.turn}`] = 1;
