@@ -118,7 +118,7 @@ describe('saved games', () => {
     const first = createGame(11, null);
     for (let t = 1; t <= 5; t++) runTurnAI(first);
     const text = saveGame(first);
-    expect(peekSave(text)).toEqual({ human: null, turn: 6 });
+    expect(peekSave(text)).toEqual({ human: null, turn: 6, open: false });
     const second = loadGame(text)!;
     expect(second).not.toBeNull();
     for (let t = 6; t <= 12; t++) runTurnAI(second);

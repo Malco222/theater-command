@@ -916,15 +916,27 @@ function mobilise(g: Game, nat: string): void {
   }
   if (count > 0 && month === 0) headline(g, 'event', `${n.name} orders general mobilisation.`, nat);
   // Behind the front, the people dig: anti-tank ditches and gun lines around the great cities.
+  // In free play nobody waits for history's calendar: the lines round a city are dug as soon as the enemy is three marches from it.
+  const close = (r: Region): boolean => {
+    const seen = new Set([r.id]);
+    let ring = [r.id];
+    for (let d = 0; d < 3; d++) {
+      const next: number[] = [];
+      for (const id of ring) for (const j of g.regions[id].nb) if (!seen.has(j)) { seen.add(j); next.push(j); if (atWar(g, nat, g.regions[j].ctrl)) return true; }
+      ring = next;
+    }
+    return false;
+  };
   for (const [when, place, lv] of plan.works ?? []) {
     const r = g.byName[place];
-    if (when !== month || !r || r.ctrl !== nat || (r.fort?.lv ?? 0) >= lv) continue;
+    const due = when === month || (g.flags.open === 1 && month >= 1 && month < when && !!r && close(r));
+    if (!due || !r || r.ctrl !== nat || (r.fort?.lv ?? 0) >= lv) continue;
     r.fort = { lv, vs: r.fort?.vs ?? [nat] };
     headline(g, 'event', `Defence lines are dug around ${r.name}.`, nat, r.id);
   }
 }
 
-const THEATRE_LIST = Object.values(theatreData as Record<string, any>).filter((x) => typeof x !== 'string') as { name: string; havens?: string[]; works?: [number, string, number, string[], string][] }[];
+const THEATRE_LIST = Object.values(theatreData as Record<string, any>).filter((x) => typeof x !== 'string') as { name: string; havens?: string[]; scripted?: boolean; works?: [number, string, number, string[], string][] }[];
 
 /** The name of the side theatre a region belongs to, as data/campaign/theatres.json gives it. */
 export function theatreName(r: Region): string | null {
@@ -981,8 +993,21 @@ function expeditions(g: Game, nat: string): void {
       }
       return;
     }
-    if (g.turn - row[0] > 6 || (o.war && !atWar(g, o.war[0], o.war[1])) || (o.until && g.turn >= o.until)) { if (g.turn - row[0] > 6) g.flags[`sent:${i}`] = 1; return; }
-    const reg = g.byName[row[5]];
+    let reg = g.byName[row[5]];
+    let due = row[0];
+    if (g.flags.open === 1) {
+      // Free play. An invasion force history put together for a landing of its own planning is nobody's to send.
+      // A formation raised for a war waits for that war, however late it comes, and then has its half year.
+      if (reg && reg.theatre >= 0 && THEATRE_LIST[reg.theatre]?.scripted) return;
+      if (o.war) {
+        if (!atWar(g, o.war[0], o.war[1])) return;
+        due = g.flags[`due:${i}`] ??= g.turn;
+      }
+      // A country's own army, raised on its own soil, forms up at the capital if the place meant for it is already lost.
+      const cap = g.nations[nat].capital;
+      if (reg && reg.owner === nat && !allied(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
+    }
+    if (g.turn - due > 6 || (o.war && !atWar(g, o.war[0], o.war[1])) || (o.until && g.turn >= o.until)) { if (g.turn - due > 6) g.flags[`sent:${i}`] = 1; return; }
     // Troops sent to take over a stretch of an ally's line ('join') go in whatever already stands there.
     if (!reg || !allied(g, nat, reg.ctrl) || (!o.join && friendlyUnits(g, reg, nat).length >= STACK)) return;
     g.flags[`sent:${i}`] = 1;

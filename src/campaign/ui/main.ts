@@ -18,6 +18,7 @@ import {
   NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
 } from '../navy';
 import { phaseFor, theatrePhases } from '../ai';
+import { fronts, isOpen, startOpen } from '../staff';
 import { PRODUCTION, canRaise, fortCost, income, isHome } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame, staleSave } from '../save';
@@ -30,6 +31,8 @@ import { turnToDate } from '../../core/ticket';
 let g: Game;
 /** The month after the last one the historical plans cover: January 1944. */
 const STORY_ENDS = 53;
+/** A free-play war has no story to run out of: left on Play, it is stopped at the end of 1947 so that it does not run for ever. */
+const FREE_ENDS = 100;
 const ui = {
   sel: -1,
   picked: new Set<number>(),
@@ -386,7 +389,7 @@ function drawBar(): void {
   const me = g.human;
   const w = weather(g);
   const eve = onEve(g);
-  const who = me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}`) : `${natName(me)} has fallen`) : 'Watching history unfold: every nation on its historical plan';
+  const who = me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? ' · free play' : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
   const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
   const pts = me && g.nations[me].alive ? ` · ${num(Math.floor(g.nations[me].pp))} production pts` : '';
   $('#when').innerHTML = `${when}<small>${esc(who)}${pts}${me ? ` · ${esc(w.text)}` : ''}</small>`;
@@ -411,9 +414,23 @@ function drawTabs(): void {
   $('#tabs').innerHTML = t('region', 'Region') + build + t('research', 'Research') + t('generals', 'Generals', idle) + t('navy', 'Navy') + t('air', 'Air') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
 }
 
+/** Free play: nobody hands the player a plan. The note says so, and gives his own staff's reading of each front. */
+function freeAdvice(me: string): string {
+  const word = (r: number): string => (r >= 1.6 ? 'strongly in your favour' : r >= 1.15 ? 'in your favour' : r >= 0.85 ? 'about even' : r >= 0.55 ? 'against you' : 'heavily against you');
+  const rows = fronts(g, me).sort((a, b) => b.ratio - a.ratio).slice(0, 4).map((f) => {
+    const who = f.enemies.slice(0, 3).map(natName).join(', ') + (f.enemies.length > 3 ? ' and others' : '');
+    return `<li>Against ${esc(who)}: the odds for an offensive are ${word(f.ratio)}, about ${f.ratio.toFixed(1)} to 1.</li>`;
+  });
+  const body = rows.length
+    ? `Your staff's reading of the fronts, counting your attack against their defence near the line with forts, terrain and season weighed in:<ul>${rows.join('')}</ul>Other nations' staffs open an offensive at about 1 to 1 if they are bold and 2 to 1 if they are cautious.`
+    : g.nations[me].atWar.length ? 'You are at war, but no enemy army stands on your borders.' : 'You are at peace. Build up, court your neighbours, and declare war when you choose, or never.';
+  return `<div class="note"><b>Free play: there is no plan to follow.</b> You decide who to fight and when. So does every other nation: its staff weighs its fronts each month and makes up its own mind, so this war will not go the way history did. ${body}</div>`;
+}
+
 function advice(): string {
   const me = g.human;
   if (!me || !g.nations[me].alive) return '';
+  if (isOpen(g)) return freeAdvice(me);
   const list = (a?: string[]) => (a ?? []).slice(0, 7).join(', ');
   // Only what is still to do: wars not yet declared, objectives still in enemy hands.
   const todo = (a?: string[]) => (a ?? []).filter((nm) => { const r = g.byName[nm]; return r && atWar(g, me, r.ctrl); });
@@ -475,6 +492,7 @@ function advice(): string {
 }
 
 function scopeNote(): string {
+  if (isOpen(g)) return g.human ? '' : `<div class="note"><b>Free play.</b> No nation is following history's plan. Each one's staff weighs its fronts every month and decides for itself whether to attack, hold or wait, so every war you watch comes out differently.</div>`;
   if (g.turn < STORY_ENDS) return '';
   return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the end of 1943. You can play on, but the computer's nations will only hold what they have. Shipbuilding and the later campaigns come in later phases.</div>`;
 }
@@ -1317,9 +1335,9 @@ function openModal(m: typeof ui.modal): void {
 function startCard(): string {
   const side = (id: string | null, name: string, blurb: string, wide = false, from = 1, view = '') => `<button class="sidebtn${wide ? ' wide' : ''}" data-act="start" data-nat="${id ?? ''}" data-from="${from}" data-view="${view}"><b>${name}</b><span>${blurb}</span></button>`;
   const saved = peekSave(readSave() ?? '');
-  const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `Watching history, ${date(saved.turn)}`}. Saved in this browser.</span></button>` : '';
+  const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `${saved.open ? 'Watching a free-play war' : 'Watching history'}, ${date(saved.turn)}`}${saved.human && saved.open ? ', free play' : ''}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
-    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe, North Africa and the Middle East in ${g.regions.length} regions and ${g.seas.length} seas, monthly turns, armies, fleets and air fleets, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan.</p>
+    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe, North Africa and the Middle East in ${g.regions.length} regions and ${g.seas.length} seas, monthly turns, armies, fleets and air fleets, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan. In <b>free play</b> nobody follows history: you and every other nation make your own.</p>
     ${resume ? `<div class="sides">${resume}</div>` : staleSave(readSave() ?? '') ? '<div class="note">The campaign saved in this browser was played on the earlier, smaller map, before North Africa was added, and cannot be continued in this version. Starting a new game replaces it.</div>' : ''}
     <h3>September 1939 · The war begins</h3>
     <div class="sides">
@@ -1328,6 +1346,16 @@ function startCard(): string {
       ${side('FRA', 'France', 'The Maginot Line, a large army, and a slow command. Can you keep Paris?')}
       ${side('UK', 'United Kingdom', 'A small army, the largest navy in the world, and convoys to keep alive.')}
       ${side('POL', 'Poland', 'Outnumbered and nearly surrounded. You place your army on the eve of war, then hold as long as you can.')}
+    </div>
+    <h3>September 1939 · Free play: make your own history</h3>
+    <div class="sides">
+      ${side(null, 'Watch a war nobody has seen', 'The war begins as it did. After that no nation follows history: each one\'s staff decides for itself, and no two wars come out the same.', true, 1, 'open')}
+      ${side('GER', 'Germany', 'At war with Poland, Britain and France. Where you go next, and when, is up to you.', false, 1, 'open')}
+      ${side('UK', 'United Kingdom', 'Nobody knows what Germany will do this time. Neither do you.', false, 1, 'open')}
+      ${side('FRA', 'France', 'The blow may fall in the spring, in a year, or somewhere else first. Be ready, or strike first.', false, 1, 'open')}
+      ${side('POL', 'Poland', 'The first month is the one history wrote. Survive it and the rest is yours.', false, 1, 'open')}
+      ${side('ITA', 'Italy', 'Neutral, with an army in Libya and Albania. Pick your moment and your side of the Mediterranean.', false, 1, 'open')}
+      ${side('SOV', 'Soviet Union', 'At peace behind a pact. Build the Red Army and wait, or march before Germany does.', false, 1, 'open')}
     </div>
     <h3>July 1940 · The Battle of Britain</h3>
     <div class="sides">
@@ -1455,6 +1483,7 @@ function declareCard(): string {
 function newGame(human: string | null, seed?: number, from = 1, view = ''): void {
   stopAuto();
   g = createGame(seed ?? (Date.now() % 900000) + 1, from > 1 ? null : human);
+  if (view === 'open') startOpen(g);
   while (g.turn < from) runTurnAI(g);
   g.human = human;
   ui.live = true;
@@ -1534,7 +1563,7 @@ function nextMonth(): void {
   if (hot.size) focusOn([...hot]);
   if (ui.tab === 'reel') ui.unread = 0;
   refresh();
-  if (g.turn > STORY_ENDS) stopAuto();
+  if (g.turn > (isOpen(g) ? FREE_ENDS : STORY_ENDS)) stopAuto();
 }
 
 function focusOn(ids: number[]): void {

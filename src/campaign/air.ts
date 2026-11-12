@@ -634,6 +634,8 @@ export function airAI(g: Game, nat: string): void {
   const mine = airFleetsOf(g, nat);
   for (const f of mine) { f.mission = 'support'; f.target = -1; }
   if (!n.alive || !n.atWar.length) return;
+  // In free play history's air plan does not apply: the air fleets support the armies.
+  if (g.flags.open === 1) return;
   for (const ph of AIR.plan) {
     if (ph.nat !== nat || g.turn < ph.from || g.turn > ph.to || !atWar(g, nat, ph.against)) continue;
     for (const o of ph.orders) {
@@ -649,6 +651,7 @@ export function airAI(g: Game, nat: string): void {
 
 /** What history's plan has this nation's air fleets doing this month, if anything. */
 export function airPlanFor(g: Game, nat: string, turn = g.turn): AirPlan | null {
+  if (g.flags.open === 1) return null;
   return AIR.plan.find((p) => p.nat === nat && turn >= p.from && turn <= p.to && atWar(g, nat, p.against)) ?? null;
 }
 

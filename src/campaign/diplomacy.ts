@@ -13,6 +13,8 @@ import { airOnFall } from './air';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
+  /** 'history': a decision history made for a nation, left to that nation in free play. 'open': only in free play. */
+  mode?: 'history' | 'open';
   annex?: { by: string; nations: string[] };
   cede?: { from: string; to: string; regions: string[] };
   spawn?: [string, string, string, number, string][];
@@ -249,6 +251,8 @@ function fire(g: Game, e: DiploEvent): boolean {
     for (const [a, b] of e.war) {
       const A = g.nations[a], B = g.nations[b];
       if (!A?.alive || !B?.alive || A.atWar.includes(b)) continue;
+      // In free play no event drags a country at peace into the war: that decision is its own.
+      if (g.flags.open === 1 && !B.atWar.length) continue;
       declareWar(g, a, b);
       did = did || A.atWar.includes(b);
     }
@@ -322,8 +326,12 @@ export function monthlyDiplomacy(g: Game): void {
     n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw, -100, 100);
     settle(g, n);
   }
+  // In free play history's calendar only says when an event may first happen: if its conditions come true later
+  // than they did, it happens later.
+  const open = g.flags.open === 1;
   for (const e of DIPLOMACY.events) {
-    if (g.flags[`event:${e.id}`] || g.turn < e.from || g.turn > e.to) continue;
+    if (e.mode && (e.mode === 'open') !== open) continue;
+    if (g.flags[`event:${e.id}`] || g.turn < e.from || (g.turn > e.to && !open)) continue;
     if (!(e.if ?? []).every((c) => holds(g, c))) continue;
     if (fire(g, e)) g.flags[`event:${e.id}`] = g.turn;
   }

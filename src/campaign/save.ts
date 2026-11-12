@@ -35,10 +35,10 @@ export function saveGame(g: Game): string {
 }
 
 /** A one-line description of a save, for the start screen, without loading the whole game. */
-export function peekSave(text: string): { human: string | null; turn: number } | null {
+export function peekSave(text: string): { human: string | null; turn: number; open: boolean } | null {
   try {
     const d = JSON.parse(text);
-    return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && d.regions.length === MAP_REGIONS ? { human: d.human ?? null, turn: d.turn } : null;
+    return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && d.regions.length === MAP_REGIONS ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1 } : null;
   } catch { return null; }
 }
 
