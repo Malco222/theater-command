@@ -45,11 +45,16 @@ const OPEN = openData as unknown as {
 /** True in a free-play war: the computer's nations make their own decisions. */
 export const isOpen = (g: Game): boolean => g.flags.open === 1;
 
-/** Turns a new game into a free-play war. History sets the start: Germany's attack on Poland is already under way. */
+/**
+ * Turns a game into a free-play war from this month on. In September 1939 history sets the start: Germany's
+ * attack on Poland is already under way. Later in the war each staff finds its fronts as history left them.
+ */
 export function startOpen(g: Game): Game {
   g.flags.open = 1;
-  g.flags['st:on:GER:POL'] = 1;
-  g.flags['st:gain:GER'] = 1;
+  if (g.turn === 1) {
+    g.flags['st:on:GER:POL'] = 1;
+    g.flags['st:gain:GER'] = 1;
+  }
   return g;
 }
 

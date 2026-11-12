@@ -76,6 +76,10 @@ svg#map.near .lbl { opacity: 1; }
 .ctr.ready rect.box { stroke: var(--brass); stroke-width: 1.5; }
 .ctr.spent { opacity: .78; }
 .ctr .more { fill: #15181b; }
+.ctr .badge rect { fill: #15181b; stroke: #f4eeda; stroke-width: .5; }
+.ctr .bsym { stroke: #f4eeda; stroke-width: .8; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.ctr .bsymf { fill: #f4eeda; stroke: none; }
+.ctr .jack rect { stroke: #15181b; stroke-width: .6; }
 /* Armies as pieces: a standard on a base, the commander's name over it, a bar for the strength left. */
 .ctr .base { opacity: .55; stroke: #15181b; stroke-width: .5; }
 .ctr .pole { stroke: #15181b; stroke-width: 1.2; stroke-linecap: round; fill: none; }
@@ -144,7 +148,7 @@ svg.ctr .hull { stroke: #15181b; stroke-width: .8; stroke-linejoin: round; }
 .passing .prow { display: flex; align-items: center; gap: 9px; padding: 7px 10px; font-size: 13px; }
 .passing .prow b { font-family: var(--head); font-size: 16px; letter-spacing: .04em; white-space: nowrap; }
 .passing .prow .grow { flex: 1; min-width: 0; color: var(--ink-2); }
-.passing .chip { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 auto; border: 1px solid rgba(0, 0, 0, .5); }
+.passing .chip { flex: 0 0 auto; }
 .passing .pbar { height: 3px; background: var(--panel-3); }
 .passing .pbar i { display: block; height: 100%; background: var(--brass); transition: width .25s; }
 /* The army tray: the general and his units as cards along the foot of the map. */
@@ -308,7 +312,7 @@ button.corps:hover { border-color: var(--ink-3); }
 .brow .res { font-family: var(--head); font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; grid-row: 1 / 3; grid-column: 2; align-self: center; text-align: right; }
 .win { color: #b8dcb2; } .loss { color: #f0b3a5; }
 .nat { display: grid; grid-template-columns: 14px 1fr auto; gap: 2px 8px; align-items: center; margin-bottom: 9px; }
-.chip { width: 14px; height: 14px; border-radius: 2px; border: 1px solid rgba(0, 0, 0, .5); display: inline-block; vertical-align: -2px; }
+svg.flag { display: inline-block; vertical-align: -2px; border-radius: 1.5px; flex: 0 0 auto; }
 .nat .will { grid-column: 2 / 4; }
 .nat small { color: var(--ink-3); font-size: 11.5px; }
 
@@ -418,6 +422,31 @@ button.buy:hover { border-color: var(--brass); }
 .gchecks .done { color: #b8dcb2; }
 .evcard.goal .ek { color: #b8dcb2; }
 .lead { font-size: 14px; color: var(--ink-2); margin: 0 0 8px; }
+/* The grand campaign's front door: a row of countries under their flags, a row of years, and what the pick means. */
+.gcnats { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 10px; }
+.gcnat { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; min-width: 0; }
+.gcnat b { font-family: var(--head); font-size: 13.5px; font-weight: 600; letter-spacing: .03em; line-height: 1.1; text-align: center; }
+.gcnat svg.flag { box-shadow: 0 1px 4px rgba(0, 0, 0, .5); }
+.gcnat .gcwatch { width: 54px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--ink-2); border: 1px dashed var(--line); border-radius: 3px; }
+.gcnat:hover, .gcyear:hover:not(:disabled) { border-color: var(--brass); }
+.gcnat.on, .gcyear.on { border-color: var(--brass); background: #2a2616; box-shadow: inset 0 0 0 1px var(--brass); }
+.gcyears { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
+.gcyear { display: flex; flex-direction: column; align-items: center; padding: 7px 4px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; }
+.gcyear b { font-family: var(--head); font-size: 22px; font-weight: 600; letter-spacing: .04em; line-height: 1.1; }
+.gcyear span { font-size: 11.5px; color: var(--ink-2); }
+.gcyear:disabled { opacity: .35; cursor: default; }
+.gcbrief { display: flex; gap: 14px; align-items: flex-start; margin-top: 10px; padding: 14px; background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: 5px; }
+.gcbrief > svg.flag { box-shadow: 0 2px 8px rgba(0, 0, 0, .55); margin-top: 3px; }
+.gcbrief .kick { font-family: var(--head); font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--brass); }
+.gcbrief h4 { font-family: var(--head); font-size: 26px; font-weight: 600; letter-spacing: .03em; margin: 0 0 6px; line-height: 1.1; }
+.gcbrief p { margin: 0 0 6px; font-size: 13px; color: var(--ink-2); }
+.gcbrief p.you { color: var(--ink); font-size: 14px; }
+.gcgoals { margin: 8px 0 2px; font-size: 12px; color: var(--ink-2); }
+.gcgoals .sgoal { display: block; line-height: 1.35; margin-top: 3px; }
+.gcgoals .sgoal i { font-style: normal; font-family: var(--head); font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--brass); margin-right: 6px; }
+.gcgo { margin-top: 10px; font-size: 16px; padding: 9px 18px; }
+.gcwait { display: block; margin-top: 6px; font-size: 11.5px; color: var(--ink-2); }
+.sidebtn b svg.flag { vertical-align: -1px; margin-right: 4px; }
 .lead b { color: var(--ink); }
 .steps { margin: 10px 0 0; padding-left: 18px; color: var(--ink-2); font-size: 13px; }
 .steps li { margin-bottom: 3px; }
@@ -544,6 +573,8 @@ button.hon:hover { border-color: var(--brass); }
   .btn { padding: 6px 9px; font-size: 14px; }
   .pane { padding: 10px 16px 18px; }
   .sides { grid-template-columns: 1fr; }
+  .gcnats { grid-template-columns: repeat(4, 1fr); }
+  .gcbrief { flex-direction: column; }
   .sidebtn.wide { grid-column: auto; }
   .ladder { grid-template-columns: repeat(2, 1fr); }
 }

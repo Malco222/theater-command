@@ -1,0 +1,46 @@
+{
+  "_about": "The grand campaign: the game's front door. The player picks a country and a year. History is played to the first day of that year (September for 1939), and from then on nobody follows it: the player and every computer-run nation's staff decide for themselves, by the free-play rules in open.json. 'years' lists the start dates on offer (the month number counts from September 1939 as 1) with a line on how the war stands. 'nations' lists the countries that can be picked, in the order shown, each with the years it can start in and what the player is taking on. 'watch' is the same with nobody at the controls. Years after 1942 are not offered: with nobody holding it to history's calendar the Red Army of 1943 ends the war in a year, so those years are played as historical scenarios instead.",
+  "years": [
+    { "year": 1939, "turn": 1, "date": "1 September 1939", "text": "German troops have crossed the Polish frontier this morning, and Britain and France have given Poland their word. Everything after the first shots is unwritten." },
+    { "year": 1940, "turn": 5, "date": "1 January 1940", "text": "Poland is beaten and divided. In the west the armies have faced each other all winter without fighting, and nobody knows where the blow will fall in the spring, or whose it will be." },
+    { "year": 1941, "turn": 17, "date": "1 January 1941", "text": "France has fallen and Britain fights on alone. The Italians are in trouble in the desert and in Albania. Germany and the Soviet Union are still at peace, and each is watching the other." },
+    { "year": 1942, "turn": 29, "date": "1 January 1942", "text": "The German army stands frozen in front of Moscow and the Red Army has begun to strike back. The United States came into the war three weeks ago." }
+  ],
+  "nations": [
+    { "id": "GER", "years": {
+      "1939": "At war with Poland, Britain and France. Where you go next, and when, is up to you.",
+      "1940": "Poland is yours and the western front is quiet. Strike through the Low Countries in the spring, look north to Norway first, or wait and build.",
+      "1941": "Master of the continent from the Pyrenees to the Bug. Britain is unbeaten, your ally needs rescuing in Africa, and the pact with Moscow lasts only as long as you both want it to.",
+      "1942": "The drive on Moscow has failed in the snow and the army is worn out. Hold through the winter, then decide where the summer's blow will fall: Moscow again, or the oil of the Caucasus."
+    } },
+    { "id": "UK", "years": {
+      "1939": "A small army, the largest navy in the world, and an ally with a frontier to hold. Nobody knows what Germany will do this time.",
+      "1940": "The expeditionary force is in France and the fleet commands the North Sea. Decide how much of your army the continent gets before the storm breaks.",
+      "1941": "Alone. The invasion did not come, the bombers come every night, and in the desert your small army is chasing an Italian one many times its size.",
+      "1942": "You have two great allies at last. Hold Egypt and the convoy routes, and decide where the way back into Europe begins."
+    } },
+    { "id": "FRA", "years": {
+      "1939": "The Maginot Line, a large army and a slow command. Be ready when the blow comes, or strike first while Germany is busy in Poland.",
+      "1940": "The army has stood on the frontier all winter. The Line covers Alsace and Lorraine. The Belgian frontier and the Ardennes are yours to worry about."
+    } },
+    { "id": "SOV", "years": {
+      "1939": "At peace behind a pact. Build the Red Army and wait, or march before Germany does.",
+      "1940": "The pact has given you eastern Poland and time. Use it: the army is large, half trained, and strung out along a new frontier.",
+      "1941": "Germany holds Europe and her army has nothing else to do. You have a year at most, perhaps only months. Decide where the Red Army stands when the day comes.",
+      "1942": "Moscow is saved and the counter-offensive is rolling. The factories are beyond the Urals now. Push while the frost lasts, then get ready for the summer."
+    } },
+    { "id": "ITA", "years": {
+      "1939": "Neutral, with an army in Libya and Albania. Pick your moment and your side of the Mediterranean.",
+      "1940": "Still neutral, with both sides watching you. If France begins to fall, that is the moment to move. If it does not, staying out may be worth more.",
+      "1941": "At war and losing it: beaten in the desert, stuck in the Greek mountains, the fleet hit in its own harbour. Hold Tripoli until help comes, or find another way out.",
+      "1942": "The army is back at the gates of Cyrenaica and the convoys to Tripoli are getting through. Malta is still British, and it sits on your supply line."
+    } },
+    { "id": "POL", "years": {
+      "1939": "Outnumbered and nearly surrounded. You place your army on the eve of war. The first month is the one history wrote: survive it and the rest is yours."
+    } }
+  ],
+  "watch": {
+    "1939": "The war begins as it did. After that no nation follows history: each one's staff decides for itself, and no two wars come out the same.",
+    "later": "The computer plays history to the first day of the year. After that each nation's staff decides for itself, and no two wars come out the same."
+  }
+}
