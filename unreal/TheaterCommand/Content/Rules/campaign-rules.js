@@ -7192,12 +7192,12 @@
     const list2 = ops(nat);
     const prep = list2[flag(g2, `st:op:${nat}`) - 1] ?? null;
     const went = g2.turn - flag(g2, `st:go:${nat}`) <= 1 && flag(g2, `st:go:${nat}`) ? list2[flag(g2, `st:goOp:${nat}`) - 1] ?? null : null;
-    const declare = went && flag(g2, `st:go:${nat}`) === g2.turn ? targets(g2, nat, went) : [];
-    const real = fronts(g2, nat, { extra: new Set(declare), skip });
-    const live = real.filter((f) => onSince(g2, nat, f) > 0 || f.enemies.some((e) => declare.includes(e)));
+    const declare2 = went && flag(g2, `st:go:${nat}`) === g2.turn ? targets(g2, nat, went) : [];
+    const real = fronts(g2, nat, { extra: new Set(declare2), skip });
+    const live = real.filter((f) => onSince(g2, nat, f) > 0 || f.enemies.some((e) => declare2.includes(e)));
     const main = live[0] ?? null;
     const phase = { name: "", from: g2.turn, to: g2.turn, posture: "defend" };
-    if (declare.length) phase.declare = declare;
+    if (declare2.length) phase.declare = declare2;
     if (went?.landings) {
       phase.landings = went.landings;
       phase.to = flag(g2, `st:go:${nat}`) + 6;
@@ -7229,7 +7229,7 @@
       }
     } else if (main) {
       phase.posture = "attack";
-      phase.name = went && declare.length ? went.name : `The offensive against ${g2.nations[main.key]?.name ?? main.key}`;
+      phase.name = went && declare2.length ? went.name : `The offensive against ${g2.nations[main.key]?.name ?? main.key}`;
       phase.from = onSince(g2, nat, main) || g2.turn;
       const way = axis(g2, nat, main, true);
       const opening = phase.from === g2.turn;
@@ -8285,6 +8285,44 @@
   function orderCancelBuild(g2, id) {
     return humanUp(g2) && cancelBuild(g2, g2.human, id);
   }
+  function declarable(g2) {
+    const me = g2.human;
+    if (!me || !g2.nations[me].alive || onEve(g2)) return [];
+    const out = /* @__PURE__ */ new Set();
+    const add = (o) => {
+      const N = g2.nations[o];
+      if (N && N.alive && !allied(g2, me, o) && !atWar(g2, me, o)) out.add(o);
+    };
+    for (const r of g2.regions) {
+      if (!allied(g2, me, r.ctrl)) continue;
+      for (const j of r.nb) add(g2.regions[j].ctrl);
+    }
+    if (g2.nations[me].sealift > 0) {
+      const depth = new Int16Array(g2.seas.length).fill(-1);
+      const q = [];
+      for (const r of g2.regions) if (r.port && r.ctrl === me) {
+        for (const z of r.seas) if (depth[z] < 0) {
+          depth[z] = 1;
+          q.push(z);
+        }
+      }
+      for (let i = 0; i < q.length; i++) {
+        for (const id of g2.seas[q[i]].coast) add(g2.regions[id].ctrl);
+        if (depth[q[i]] >= NAVY.landing.range) continue;
+        for (const j of g2.seas[q[i]].adj) if (depth[j] < 0 && canPass(g2, q[i], j, me)) {
+          depth[j] = depth[q[i]] + 1;
+          q.push(j);
+        }
+      }
+    }
+    return [...out];
+  }
+  function orderDeclare(g2, on) {
+    if (!g2.human || current(g2) !== g2.human || !declarable(g2).includes(on)) return false;
+    declareWar(g2, g2.human, on);
+    ensureSupply(g2);
+    return true;
+  }
 
   // ../../data/campaign/goals.json
   var goals_default = {
@@ -8745,6 +8783,8 @@
         pc: Math.floor(s.nations[s.human].pc),
         orders: s.nations[s.human].queue.map((b) => orderLine(s, b))
       } : null,
+      // The countries the player could declare war on this month: those at peace with him that he borders or can reach by sea.
+      declare: up ? declarable(s) : [],
       regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
       corps: s.corps.filter((c) => !c.dead).map((c) => ({
         id: c.id,
@@ -9117,6 +9157,10 @@
     const s = game();
     return { ok: orderCancelBuild(s, id), view: view() };
   }
+  function declare(on) {
+    const s = game();
+    return { ok: humanUp(s) && orderDeclare(s, on), view: view() };
+  }
   var dateOf = (turn) => turnToDate(turn).label;
   function record(id) {
     const s = game();
@@ -9194,6 +9238,7 @@
     raise,
     fortify,
     cancel,
+    declare,
     starts,
     grand,
     start,

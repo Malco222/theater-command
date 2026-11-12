@@ -26,12 +26,13 @@
 //   TC.raise(kind, regionId)            -> { ok, view }: orders a new corps
 //   TC.fortify(regionId)                -> { ok, view }: orders the next level of fortification
 //   TC.cancel(buildId)                  -> { ok, view }: takes back an order placed this month
+//   TC.declare(nation)                  -> { ok, view }: the player declares war. view.declare lists who it can be declared on
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
 import { allied, atWar, createGame, men, railReach as railReachOf } from '../../../src/campaign/game';
 import {
-  beginEve, beginHuman, canOrder, candidates, current, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps,
+  beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
 } from '../../../src/campaign/turn';
 import { PRODUCTION, canRaise, fortCost, income, isHome } from '../../../src/campaign/economy';
@@ -85,6 +86,8 @@ function view() {
       pc: Math.floor(s.nations[s.human].pc),
       orders: s.nations[s.human].queue.map((b) => orderLine(s, b)),
     } : null,
+    // The countries the player could declare war on this month: those at peace with him that he borders or can reach by sea.
+    declare: up ? declarable(s) : [],
     regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
     corps: s.corps.filter((c) => !c.dead).map((c) => ({
       id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, str: c.str, org: c.org, reg: c.reg,
@@ -486,6 +489,12 @@ function cancel(id: number) {
   return { ok: orderCancelBuild(s, id), view: view() };
 }
 
+/** The player declares war on a country he is at peace with. */
+function declare(on: string) {
+  const s = game();
+  return { ok: humanUp(s) && orderDeclare(s, on), view: view() };
+}
+
 const dateOf = (turn: number): string => turnToDate(turn).label;
 
 /** One corps' service record: what it is, where it came from, the honours it carries and its diary, newest first. */
@@ -545,4 +554,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  record, roll, stance, railReach, rail, province, raise, fortify, cancel, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

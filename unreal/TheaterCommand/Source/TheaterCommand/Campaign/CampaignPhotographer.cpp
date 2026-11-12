@@ -121,6 +121,19 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.Drop = TEXT("Mecklenburg");
 	}
 	{
+		// A flag carried onto the ground of a country at peace: the game asks before any war begins.
+		FShot& Shot = Add(TEXT("13d-declare-war"), TEXT("Jutland"), 0.4f);
+		Shot.Army = TEXT("Hamburg");
+		Shot.Carry = TEXT("Jutland");
+		Shot.Drop = TEXT("Jutland");
+	}
+	{
+		// The answer is yes: war is declared, and the army goes on against the place it was sent to.
+		FShot& Shot = Add(TEXT("13e-war-declared"), TEXT("Jutland"), 0.4f);
+		Shot.bKeep = true;
+		Shot.bWar = true;
+	}
+	{
 		FShot& Shot = Add(TEXT("14-next-month"), TEXT("Warsaw"), 0.5f);
 		Shot.Months = 1;
 	}
@@ -284,8 +297,13 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	Controller->CloseDocument();
 	if (!Shot.bKeep)
 	{
+		Controller->CloseWarPrompt();
 		Controller->CloseFaceOff();
 		Controller->PutDownArmy();
+	}
+	if (Shot.bWar)
+	{
+		Controller->ConfirmWar();
 	}
 	if (Shot.bConfirm)
 	{

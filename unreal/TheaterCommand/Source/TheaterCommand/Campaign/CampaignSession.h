@@ -75,6 +75,9 @@ public:
 	/** Takes back an order placed this month. */
 	bool CancelOrder(int32 OrderId);
 
+	/** The player declares war on a country he is at peace with. */
+	bool Declare(const FString& Nation);
+
 	/** One corps' service record: what it is, its honours with their citations, and its diary. */
 	FDocumentPage Record(int32 CorpsId);
 

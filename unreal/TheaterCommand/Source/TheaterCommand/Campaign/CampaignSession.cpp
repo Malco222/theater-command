@@ -335,6 +335,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("eve"), Out.bEve);
 	Object->TryGetBoolField(TEXT("open"), Out.bOpen);
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
+	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
 
 	const TArray<TSharedPtr<FJsonValue>>* Regions = nullptr;
 	if (Object->TryGetArrayField(TEXT("regions"), Regions))
@@ -843,6 +844,19 @@ bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FS
 	Object->TryGetStringField(TEXT("due"), Due);
 	TakeView(Object);
 	OutNote = bOk ? FString::Printf(TEXT("%s ordered. Due %s."), *Name, *Due) : FString(TEXT("That cannot be ordered now."));
+	return bOk;
+}
+
+bool FCampaignSession::Declare(const FString& Nation)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("declare"), FString::Printf(TEXT("[%s]"), *JsonQuote(Nation)), Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	TakeView(Object);
 	return bOk;
 }
 

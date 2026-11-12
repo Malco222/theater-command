@@ -20,6 +20,9 @@ struct FRegionPanelInfo
 	FString OwnerTag; // whose flag to show
 	FText Details;
 	FText Forces;
+	// A country at peace with the player that he could go to war with: its tag, and a word about it.
+	FString DeclareTag;
+	FText DiplomacyLine;
 	// What the player can do here, on home ground: raise corps, build works, and what is already forming.
 	FText Holdings;
 	FText ProvinceNote;
@@ -119,6 +122,16 @@ struct FOpening
 	int32 Revision = 0;
 };
 
+/** The question put to the player before he goes to war with a country he is at peace with. */
+struct FWarPrompt
+{
+	bool bVisible = false;
+	FString Tag; // the country war would be declared on
+	int32 Region = INDEX_NONE; // where the army in hand was being sent, to carry on there once war is declared
+	FText Title;
+	FText Body;
+};
+
 /** The two armies drawn up against each other before an attack and, once it is fought, what the battle came to. */
 struct FFaceOff
 {
@@ -166,6 +179,20 @@ public:
 	const FArmyTray& GetArmyTray() const { return Tray; }
 	const FFaceOff& GetFaceOff() const { return FaceOff; }
 	const FOpening& GetOpening() const { return Opening; }
+	const FWarPrompt& GetWarPrompt() const { return WarPrompt; }
+
+	/**
+	 * Asks the player whether to declare war on the country that holds a territory. Returns false, asking
+	 * nothing, if that country is not one he is at peace with and could go to war with this month.
+	 */
+	bool OfferWar(int32 RegionId);
+
+	/** The same question about the country whose territory is selected, asked from the territory panel. */
+	void OfferWarOnSelected();
+
+	/** Declares the war that was asked about, and sends the army in hand on if it was on its way there. */
+	void ConfirmWar();
+	void CloseWarPrompt();
 
 	/** A page shown over the table: a unit's service record or the roll of honour. Revision goes up when it changes. */
 	const FDocumentPage& GetDocument() const { return Document; }
@@ -324,6 +351,7 @@ private:
 	TWeakObjectPtr<AArmyPiece> HeldPiece; // the piece the left button went down on
 
 	FFaceOff FaceOff;
+	FWarPrompt WarPrompt;
 	FOpening Opening;
 	FDocumentPage Document;
 	int32 DocumentRevision = 0;
@@ -356,6 +384,7 @@ private:
 	bool bAlwaysWatch = false;
 	bool bByRail = false;
 	int32 PanelRevision = 0;
+	int32 SelectedRegion = INDEX_NONE;
 	int32 SizedForWidth = 0;
 	int32 SizedForHeight = 0;
 	FVector2D PressPosition = FVector2D::ZeroVector;

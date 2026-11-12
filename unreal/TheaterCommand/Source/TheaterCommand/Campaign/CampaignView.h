@@ -75,6 +75,7 @@ struct FCampaignView
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)
 	TArray<FViewCorps> Corps;
 	FTreasury Treasury;
+	TArray<FString> Declarable; // the countries the player could declare war on this month
 
 	const FViewCorps* FindCorps(int32 Id) const
 	{
