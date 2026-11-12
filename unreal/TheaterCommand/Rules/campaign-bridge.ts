@@ -30,17 +30,19 @@
 //   TC.order(key, regionId)             -> { ok, name, view }: places one of those orders
 //   TC.ledger()                         -> the player's books: money in by source, upkeep by arm, what is left, every province's yield, what is on order
 //   TC.declare(nation)                  -> { ok, view }: the player declares war. view.declare lists who it can be declared on
+//   TC.diplomacy()                     -> the foreign office: the powers at war, every country at peace on the track, political capital
+//   TC.court(nation)                    -> { ok, note, view }: courts a neutral
 //   TC.warPlan(nation, regionId?)       -> { ok, lead, friends, lines }: what declaring war would mean, for the question asked first
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { allied, atWar, bloc, createGame, fieldArmy, men, railReach as railReachOf } from '../../../src/campaign/game';
-import { DIPLOMACY, TRACK, TRACK_PHRASE } from '../../../src/campaign/diplomacy';
+import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, men, railReach as railReachOf } from '../../../src/campaign/game';
+import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
 import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
-  invasions, previewDeclare,
+  invasions, previewDeclare, orderCourt,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
@@ -900,6 +902,71 @@ function warPlan(on: string, target = -1) {
   return { ok: true, name: theName(s, on), lead, friends: friendsLine, lines };
 }
 
+/**
+ * The foreign office: who is at war and how much fight each has left, and where every country at peace stands
+ * between the two blocs, with what the player can do about each: court it, or declare war on it.
+ */
+function diplomacy() {
+  const s = game();
+  const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+  if (!me) return null;
+  const mine = bloc(me);
+  const up = humanUp(s) && !onEve(s);
+  const can = new Set(up ? declarable(s) : []);
+  const partners = new Set(tradePartners(s, me.id).map((n) => n.id));
+  const m = momentum(s);
+  const wind = Math.abs(m) < 0.15 ? 'Neither side has the upper hand, so neutrals are sitting tight.'
+    : `${m > 0 ? 'The Axis is' : 'The Allies are'} winning, and neutrals ${Math.abs(m) > 0.6 ? 'are bending' : 'are starting to bend'} that way.`;
+  const all = Object.values(s.nations).filter((n) => !n.dormant);
+  const powers = all.filter((n) => n.atWar.length || n.fellOn)
+    .sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || b.armyPeak - a.armyPeak)
+    .map((n) => ({
+      nat: n.id, name: n.name, alive: n.alive, divs: n.alive ? fieldArmy(s, n.id) : 0,
+      will: n.alive ? Math.max(0, Math.min(1, 1 - collapseScore(s, n.id) / n.resilience)) : 0,
+      side: n.id === me.id ? 'own' : atWar(s, me.id, n.id) ? 'enemy' : allied(s, me.id, n.id) ? 'ally' : 'other',
+      note: n.alive ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : `Fell in ${turnToDate(n.fellOn!.turn).label}: asked ${theName(s, n.fellOn!.to)} for terms`,
+      war: can.has(n.id),
+    }));
+  const rows = all.filter((n) => n.alive && !n.atWar.length && n.id !== me.id).sort((a, b) => a.opinion - b.opinion).map((n) => {
+    const open = !!mine && courtable(n);
+    const c = open ? canCourt(s, me.id, n.id) : { ok: false, why: '' };
+    const k = open ? receptive(n, mine!) : 0;
+    const frs = friendsOf(n.id).filter((f) => s.nations[f.nat]?.alive);
+    return {
+      nat: n.id, name: n.name, label: TRACK_LABEL[n.align], step: step(n), opinion: Math.round(n.opinion),
+      divs: fieldArmy(s, n.id),
+      court: open && up, canCourt: up && c.ok, why: open && up && !c.ok ? c.why : '',
+      word: !open ? '' : k >= 1.3 ? 'Receptive' : k >= 0.8 ? 'Open to offers' : k >= 0.5 ? 'Wary' : 'Very hard to move',
+      friends: frs.length ? `Friends: ${listOf(frs.map((f) => theName(s, f.nat)))}` : '',
+      trades: partners.has(n.id),
+      war: can.has(n.id),
+    };
+  });
+  const side = mine === 'axis' ? 'the Axis' : mine === 'allies' ? 'the Allies' : '';
+  const worth = shown(DIPLOMACY.tradeIncome).toLocaleString('en-US');
+  return {
+    nation: me.name, date: turnToDate(s.turn).label, bloc: side, up,
+    capital: Math.floor(me.pc), income: pcIncome(me.id), cap: DIPLOMACY.pcCap, partners: partners.size, cost: DIPLOMACY.court.cost,
+    wind,
+    help: mine
+      ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth} a month to your treasury` : ''}; one that is fully won over joins your side.`
+      : 'Your country belongs to neither bloc, so it has nobody to win the neutrals over to.',
+    powers, rows,
+  };
+}
+
+/** Spends the player's political capital to pull a neutral toward his bloc, and says what came of it. */
+function courtNation(nat: string) {
+  const s = game();
+  const h0 = s.headlines.length;
+  const before = s.nations[nat]?.opinion ?? 0;
+  const ok = orderCourt(s, nat);
+  const news = s.headlines.slice(h0).map((h) => h.text);
+  const moved = Math.round(Math.abs((s.nations[nat]?.opinion ?? 0) - before));
+  const note = !ok ? 'They could not be courted this month.' : news.length ? news.join(' ') : `Your envoys are heard in ${theName(s, nat)}: opinion there moves ${moved} point${moved === 1 ? '' : 's'} your way.`;
+  return { ok, note, view: view() };
+}
+
 const dateOf = (turn: number): string => turnToDate(turn).label;
 
 /** One corps' service record: what it is, where it came from, the honours it carries and its diary, newest first. */
@@ -959,4 +1026,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

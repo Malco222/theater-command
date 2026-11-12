@@ -205,6 +205,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("30-grand-whole-map"), TEXT(""), 0.97f);
 		Add(TEXT("31-grand-capital"), TEXT("@capital"), 0.45f).Select = TEXT("@capital");
 		Add(TEXT("31b-ledger"), TEXT("@capital"), 0.45f).bLedger = true;
+		Add(TEXT("31e-diplomacy"), TEXT("@capital"), 0.45f).bDiplomacy = true;
 		{
 			FShot& Shot = Add(TEXT("31c-arsenal"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");
@@ -419,6 +420,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	Controller->CloseMenu();
 	Controller->CloseDocument();
 	Controller->CloseLedger();
+	Controller->CloseDiplomacy();
 	Controller->CloseArsenal();
 	if (!Shot.bKeep)
 	{
@@ -533,6 +535,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (Shot.bRoll)
 	{
 		Controller->OpenRoll();
+	}
+	if (Shot.bDiplomacy)
+	{
+		Controller->OpenDiplomacy();
 	}
 	if (Shot.bLedger)
 	{

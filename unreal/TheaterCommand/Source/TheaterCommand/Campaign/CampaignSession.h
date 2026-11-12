@@ -103,6 +103,12 @@ public:
 	/** The player's books for this month. */
 	FLedger Ledger();
 
+	/** The foreign office: the powers at war and every country at peace, as the player sees them. */
+	FDiplomacy Diplomacy();
+
+	/** Spends political capital to court a neutral. OutNote says what came of it. */
+	bool Court(const FString& Nation, FString& OutNote);
+
 	/** The player declares war on a country he is at peace with. */
 	bool Declare(const FString& Nation);
 

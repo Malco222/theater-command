@@ -5240,6 +5240,15 @@
   // ../../src/campaign/diplomacy.ts
   var DIPLOMACY = diplomacy_default;
   var TRACK = ["allies", "allies_cobelligerent", "leaning_allies", "independent", "leaning_axis", "axis_cobelligerent", "axis"];
+  var TRACK_LABEL = {
+    allies: "Allied member",
+    allies_cobelligerent: "Allied co-belligerent",
+    leaning_allies: "Leaning Allies",
+    independent: "Independent",
+    leaning_axis: "Leaning Axis",
+    axis_cobelligerent: "Axis co-belligerent",
+    axis: "Axis member"
+  };
   var TRACK_PHRASE = {
     allies: "a member of the Allies",
     allies_cobelligerent: "fighting alongside the Allies",
@@ -5276,6 +5285,30 @@
     return Object.values(g2.nations).filter((n) => n.alive && !n.dormant && step(n) === want);
   }
   var courtable = (n) => n.alive && !n.dormant && !n.atWar.length && Math.abs(step(n)) <= 1;
+  function receptive(target, b) {
+    return clamp2(1 + target.home * sideOf2(b) / 60, 0.4, 1.6) * (DIPLOMACY.resist[target.id] ?? 1);
+  }
+  function canCourt(g2, by, target) {
+    const B = g2.nations[by], T = g2.nations[target];
+    const b = B ? bloc(B) : null;
+    if (!B || !T || !B.alive || !b) return { ok: false, why: "Only a member of a bloc can court neutrals." };
+    if (by === target || !courtable(T)) return { ok: false, why: "Not open to courting." };
+    if (g2.flags[`court:${by}:${target}`] === g2.turn) return { ok: false, why: "Already courted this month." };
+    if (B.pc < DIPLOMACY.court.cost) return { ok: false, why: `Needs ${DIPLOMACY.court.cost} political capital.` };
+    return { ok: true, why: "" };
+  }
+  function court(g2, by, target) {
+    if (!canCourt(g2, by, target).ok) return false;
+    const B = g2.nations[by], T = g2.nations[target];
+    const b = bloc(B);
+    const k = receptive(T, b) * sideOf2(b);
+    B.pc -= DIPLOMACY.court.cost;
+    T.opinion = clamp2(T.opinion + DIPLOMACY.court.opinion * k, -100, 100);
+    T.home = clamp2(T.home + DIPLOMACY.court.home * k, -100, 100);
+    g2.flags[`court:${by}:${target}`] = g2.turn;
+    settle(g2, T);
+    return true;
+  }
   var blocName = (s) => s > 0 ? "the Axis" : "the Allies";
   var RELATIONS = relations_default;
   function friendsOf(nat) {
@@ -10278,6 +10311,9 @@
     ensureSupply(g2);
     return true;
   }
+  function orderCourt(g2, target) {
+    return humanUp(g2) && court(g2, g2.human, target);
+  }
 
   // ../../data/campaign/goals.json
   var goals_default = {
@@ -11516,6 +11552,76 @@
     const friendsLine = f.friends.length ? `Its friends: ${[...ties].map(([why, who]) => `${listOf2(who)} (${why})`).join("; ")}.` : `${The} has no close friends among the nations.`;
     return { ok: true, name: theName2(s, on), lead: lead2, friends: friendsLine, lines };
   }
+  function diplomacy() {
+    const s = game();
+    const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+    if (!me) return null;
+    const mine = bloc(me);
+    const up = humanUp(s) && !onEve(s);
+    const can = new Set(up ? declarable(s) : []);
+    const partners = new Set(tradePartners(s, me.id).map((n) => n.id));
+    const m = momentum(s);
+    const wind = Math.abs(m) < 0.15 ? "Neither side has the upper hand, so neutrals are sitting tight." : `${m > 0 ? "The Axis is" : "The Allies are"} winning, and neutrals ${Math.abs(m) > 0.6 ? "are bending" : "are starting to bend"} that way.`;
+    const all = Object.values(s.nations).filter((n) => !n.dormant);
+    const powers = all.filter((n) => n.atWar.length || n.fellOn).sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || b.armyPeak - a.armyPeak).map((n) => ({
+      nat: n.id,
+      name: n.name,
+      alive: n.alive,
+      divs: n.alive ? fieldArmy(s, n.id) : 0,
+      will: n.alive ? Math.max(0, Math.min(1, 1 - collapseScore(s, n.id) / n.resilience)) : 0,
+      side: n.id === me.id ? "own" : atWar(s, me.id, n.id) ? "enemy" : allied(s, me.id, n.id) ? "ally" : "other",
+      note: n.alive ? `At war with ${listOf2(n.atWar.map((x) => theName2(s, x)))}` : `Fell in ${turnToDate(n.fellOn.turn).label}: asked ${theName2(s, n.fellOn.to)} for terms`,
+      war: can.has(n.id)
+    }));
+    const rows = all.filter((n) => n.alive && !n.atWar.length && n.id !== me.id).sort((a, b) => a.opinion - b.opinion).map((n) => {
+      const open = !!mine && courtable(n);
+      const c = open ? canCourt(s, me.id, n.id) : { ok: false, why: "" };
+      const k = open ? receptive(n, mine) : 0;
+      const frs = friendsOf(n.id).filter((f) => s.nations[f.nat]?.alive);
+      return {
+        nat: n.id,
+        name: n.name,
+        label: TRACK_LABEL[n.align],
+        step: step(n),
+        opinion: Math.round(n.opinion),
+        divs: fieldArmy(s, n.id),
+        court: open && up,
+        canCourt: up && c.ok,
+        why: open && up && !c.ok ? c.why : "",
+        word: !open ? "" : k >= 1.3 ? "Receptive" : k >= 0.8 ? "Open to offers" : k >= 0.5 ? "Wary" : "Very hard to move",
+        friends: frs.length ? `Friends: ${listOf2(frs.map((f) => theName2(s, f.nat)))}` : "",
+        trades: partners.has(n.id),
+        war: can.has(n.id)
+      };
+    });
+    const side2 = mine === "axis" ? "the Axis" : mine === "allies" ? "the Allies" : "";
+    const worth2 = shown(DIPLOMACY.tradeIncome).toLocaleString("en-US");
+    return {
+      nation: me.name,
+      date: turnToDate(s.turn).label,
+      bloc: side2,
+      up,
+      capital: Math.floor(me.pc),
+      income: pcIncome(me.id),
+      cap: DIPLOMACY.pcCap,
+      partners: partners.size,
+      cost: DIPLOMACY.court.cost,
+      wind,
+      help: mine ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side2}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth2} a month to your treasury` : ""}; one that is fully won over joins your side.` : "Your country belongs to neither bloc, so it has nobody to win the neutrals over to.",
+      powers,
+      rows
+    };
+  }
+  function courtNation(nat) {
+    const s = game();
+    const h0 = s.headlines.length;
+    const before = s.nations[nat]?.opinion ?? 0;
+    const ok = orderCourt(s, nat);
+    const news2 = s.headlines.slice(h0).map((h) => h.text);
+    const moved = Math.round(Math.abs((s.nations[nat]?.opinion ?? 0) - before));
+    const note2 = !ok ? "They could not be courted this month." : news2.length ? news2.join(" ") : `Your envoys are heard in ${theName2(s, nat)}: opinion there moves ${moved} point${moved === 1 ? "" : "s"} your way.`;
+    return { ok, note: note2, view: view() };
+  }
   var dateOf = (turn) => turnToDate(turn).label;
   function record(id) {
     const s = game();
@@ -11603,6 +11709,8 @@
     cancel,
     declare,
     warPlan,
+    diplomacy,
+    court: courtNation,
     ledger: ledger2,
     arsenal,
     order,

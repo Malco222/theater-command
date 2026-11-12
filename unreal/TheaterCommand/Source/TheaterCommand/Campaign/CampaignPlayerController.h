@@ -137,6 +137,7 @@ struct FWarPrompt
 	int32 Region = INDEX_NONE; // where the army in hand was being sent, to carry on there once war is declared
 	FText Title;
 	FText Body;
+	bool bFromOffice = false; // asked from the foreign office: go back there afterwards
 	// The same question is put before a landing from the sea: then this is true, and the button says so.
 	bool bLanding = false;
 	FText Confirm = FText::FromString(TEXT("DECLARE WAR"));
@@ -196,6 +197,8 @@ public:
 	 * nothing, if that country is not one he is at peace with and could go to war with this month.
 	 */
 	bool OfferWar(int32 RegionId, bool bMarching = true);
+	/** The same question, about a country by its tag. Region is where the army in hand goes on to afterwards, or INDEX_NONE. */
+	bool OfferWarOn(const FString& Tag, int32 Region);
 
 	/** The same question about the country whose territory is selected, asked from the territory panel. */
 	void OfferWarOnSelected();
@@ -300,6 +303,15 @@ public:
 	void OpenLedger();
 	void CloseLedger();
 
+	/** The foreign office: the powers at war, the countries at peace, courting them and declaring war. */
+	const FDiplomacy& GetDiplomacy() const { return Diplomacy; }
+	bool IsDiplomacyOpen() const { return bDiplomacyOpen; }
+	void OpenDiplomacy();
+	void CloseDiplomacy();
+	void CourtNation(const FString& Tag);
+	/** Asked from the foreign office: the question about declaring war on a country, with no army on its way. */
+	void AskWarOn(const FString& Tag);
+
 	/** The arsenal: everything that can be ordered, with the territory that is selected in mind. */
 	const FArsenal& GetArsenal() const { return Arsenal; }
 	bool IsArsenalOpen() const { return bArsenalOpen; }
@@ -400,6 +412,8 @@ private:
 	FWarPrompt WarPrompt;
 	FLedger Ledger;
 	bool bLedgerOpen = false;
+	FDiplomacy Diplomacy;
+	bool bDiplomacyOpen = false;
 	FArsenal Arsenal;
 	bool bArsenalOpen = false;
 	FOpening Opening;

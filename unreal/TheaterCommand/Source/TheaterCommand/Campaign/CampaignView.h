@@ -354,7 +354,56 @@ struct FArsenal
 	int32 Revision = 0;
 };
 
-/** What a territory holds, and what the player can do there. */
+/** One of the powers at war, as the foreign office lists it. */
+struct FDiplomacyPower
+{
+	FString Tag;
+	FString Name;
+	FString Side; // own, ally, enemy or other: how it stands to the player
+	FString Note; // who it is at war with, or when it fell
+	int32 Divisions = 0;
+	float Will = 0.0f; // how much fight it has left, 0 to 1
+	bool bAlive = true;
+	bool bWar = false; // the player could declare war on it this month
+};
+
+/** A country at peace, and where it stands between the two blocs. */
+struct FDiplomacyRow
+{
+	FString Tag;
+	FString Name;
+	FString Label; // "Leaning Axis"
+	FString Word; // how it would take to being courted
+	FString Why; // why it cannot be courted now, when it could otherwise
+	FString Friends;
+	int32 Opinion = 0; // -100 the Allies ... +100 the Axis
+	int32 Divisions = 0;
+	bool bCourt = false; // it is open to courting at all
+	bool bCanCourt = false; // and the player can afford to this month
+	bool bTrades = false; // it trades with the player today
+	bool bWar = false; // the player could declare war on it this month
+};
+
+/** The foreign office: political capital, the powers at war, and every country at peace on the track. */
+struct FDiplomacy
+{
+	bool bValid = false;
+	bool bUp = false; // it is the player's month
+	FString Nation;
+	FString Date;
+	FString Bloc; // "the Axis", "the Allies", or empty
+	FString Wind; // which way the neutrals are bending
+	FString Help; // what courting does
+	int32 Capital = 0;
+	int32 Income = 0;
+	int32 Cap = 0;
+	int32 Partners = 0;
+	int32 Cost = 0;
+	TArray<FDiplomacyPower> Powers;
+	TArray<FDiplomacyRow> Rows;
+	int32 Revision = 0;
+};
+
 /** What a landing on an enemy coast would meet, and afterwards how it went. */
 struct FLandingPlan
 {

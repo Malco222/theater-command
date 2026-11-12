@@ -876,7 +876,7 @@ FWarPlan FCampaignSession::PlanWar(const FString& Nation, int32 RegionId)
 {
 	FWarPlan Plan;
 	TSharedPtr<FJsonObject> Object;
-	if (CallRules(TEXT("warPlan"), FString::Printf(TEXT("[\"%s\",%d]"), *Nation, RegionId), Object))
+	if (CallRules(TEXT("warPlan"), FString::Printf(TEXT("[%s,%d]"), *JsonQuote(Nation), RegionId), Object))
 	{
 		Object->TryGetBoolField(TEXT("ok"), Plan.bOk);
 		Object->TryGetStringField(TEXT("name"), Plan.Name);
@@ -1326,6 +1326,82 @@ FLedger FCampaignSession::Ledger()
 		}
 	}
 	return Out;
+}
+
+FDiplomacy FCampaignSession::Diplomacy()
+{
+	FDiplomacy Out;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("diplomacy"), TEXT("[]"), Object) || !Object.IsValid())
+	{
+		return Out;
+	}
+	Out.bValid = Object->TryGetStringField(TEXT("nation"), Out.Nation);
+	Object->TryGetBoolField(TEXT("up"), Out.bUp);
+	Object->TryGetStringField(TEXT("date"), Out.Date);
+	Object->TryGetStringField(TEXT("bloc"), Out.Bloc);
+	Object->TryGetStringField(TEXT("wind"), Out.Wind);
+	Object->TryGetStringField(TEXT("help"), Out.Help);
+	Object->TryGetNumberField(TEXT("capital"), Out.Capital);
+	Object->TryGetNumberField(TEXT("income"), Out.Income);
+	Object->TryGetNumberField(TEXT("cap"), Out.Cap);
+	Object->TryGetNumberField(TEXT("partners"), Out.Partners);
+	Object->TryGetNumberField(TEXT("cost"), Out.Cost);
+	const TArray<TSharedPtr<FJsonValue>>* Powers = nullptr;
+	if (Object->TryGetArrayField(TEXT("powers"), Powers))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Powers)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FDiplomacyPower& Power = Out.Powers.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Power.Tag);
+			Entry->TryGetStringField(TEXT("name"), Power.Name);
+			Entry->TryGetStringField(TEXT("side"), Power.Side);
+			Entry->TryGetStringField(TEXT("note"), Power.Note);
+			Entry->TryGetNumberField(TEXT("divs"), Power.Divisions);
+			double Will = 0.0;
+			Entry->TryGetNumberField(TEXT("will"), Will);
+			Power.Will = static_cast<float>(Will);
+			Entry->TryGetBoolField(TEXT("alive"), Power.bAlive);
+			Entry->TryGetBoolField(TEXT("war"), Power.bWar);
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+	if (Object->TryGetArrayField(TEXT("rows"), Rows))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Rows)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FDiplomacyRow& Row = Out.Rows.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Row.Tag);
+			Entry->TryGetStringField(TEXT("name"), Row.Name);
+			Entry->TryGetStringField(TEXT("label"), Row.Label);
+			Entry->TryGetStringField(TEXT("word"), Row.Word);
+			Entry->TryGetStringField(TEXT("why"), Row.Why);
+			Entry->TryGetStringField(TEXT("friends"), Row.Friends);
+			Entry->TryGetNumberField(TEXT("opinion"), Row.Opinion);
+			Entry->TryGetNumberField(TEXT("divs"), Row.Divisions);
+			Entry->TryGetBoolField(TEXT("court"), Row.bCourt);
+			Entry->TryGetBoolField(TEXT("canCourt"), Row.bCanCourt);
+			Entry->TryGetBoolField(TEXT("trades"), Row.bTrades);
+			Entry->TryGetBoolField(TEXT("war"), Row.bWar);
+		}
+	}
+	return Out;
+}
+
+bool FCampaignSession::Court(const FString& Nation, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("court"), FString::Printf(TEXT("[%s]"), *JsonQuote(Nation)), Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	Object->TryGetStringField(TEXT("note"), OutNote);
+	TakeView(Object);
+	return bOk;
 }
 
 bool FCampaignSession::Declare(const FString& Nation)

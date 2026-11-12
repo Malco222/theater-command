@@ -508,6 +508,7 @@ void ACampaignPlayerController::OpenLedger()
 	}
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
+	CloseDiplomacy();
 	const int32 Revision = Ledger.Revision + 1;
 	Ledger = Session->Ledger();
 	Ledger.Revision = Revision;
@@ -525,6 +526,70 @@ void ACampaignPlayerController::CloseLedger()
 	bLedgerOpen = false;
 }
 
+void ACampaignPlayerController::OpenDiplomacy()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
+	{
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	CloseArsenal();
+	CloseLedger();
+	const int32 Revision = Diplomacy.Revision + 1;
+	Diplomacy = Session->Diplomacy();
+	Diplomacy.Revision = Revision;
+	bDiplomacyOpen = Diplomacy.bValid;
+}
+
+void ACampaignPlayerController::CloseDiplomacy()
+{
+	bDiplomacyOpen = false;
+}
+
+void ACampaignPlayerController::CourtNation(const FString& Tag)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bDiplomacyOpen)
+	{
+		return;
+	}
+	FString Note;
+	const bool bOk = Session->Court(Tag, Note);
+	if (bOk)
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+		// A country that is won over changes sides: the table is set out again as it now stands.
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 8.0);
+	}
+	const int32 Revision = Diplomacy.Revision + 1;
+	Diplomacy = Session->Diplomacy();
+	Diplomacy.Revision = Revision;
+	bDiplomacyOpen = Diplomacy.bValid;
+}
+
+void ACampaignPlayerController::AskWarOn(const FString& Tag)
+{
+	if (!bDiplomacyOpen)
+	{
+		return;
+	}
+	CloseDiplomacy();
+	if (OfferWarOn(Tag, INDEX_NONE))
+	{
+		WarPrompt.bFromOffice = true;
+	}
+	else
+	{
+		Notify(TEXT("War cannot be declared on them this month."));
+		OpenDiplomacy();
+	}
+}
+
 void ACampaignPlayerController::OpenArsenal()
 {
 	FCampaignSession* Session = GetSession();
@@ -534,6 +599,7 @@ void ACampaignPlayerController::OpenArsenal()
 	}
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseLedger();
+	CloseDiplomacy();
 	// The province in mind is the one selected, if it is the player's own; works are built there and corps form there.
 	const FCampaignView& View = Session->GetView();
 	const bool bMine = View.RegionHolder.IsValidIndex(SelectedRegion) && View.RegionHolder[SelectedRegion] == View.Human;
@@ -667,6 +733,10 @@ void ACampaignPlayerController::Escape()
 	{
 		CloseLedger();
 	}
+	else if (bDiplomacyOpen)
+	{
+		CloseDiplomacy();
+	}
 	else if (WarPrompt.bVisible)
 	{
 		CloseWarPrompt();
@@ -777,7 +847,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen;
+	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
@@ -1502,6 +1572,19 @@ bool ACampaignPlayerController::OfferWar(int32 RegionId, bool bMarching)
 	}
 	const FCampaignView& View = Session->GetView();
 	const FString Tag = View.RegionHolder.IsValidIndex(RegionId) ? View.RegionHolder[RegionId] : FString();
+	// An army in hand that stands on the frontier goes on there once war is declared.
+	const FReachRegion* Across = bMarching && ArmyRegion != INDEX_NONE ? FindReach(RegionId) : nullptr;
+	return OfferWarOn(Tag, Across && Across->IsWar() ? RegionId : INDEX_NONE);
+}
+
+bool ACampaignPlayerController::OfferWarOn(const FString& Tag, int32 Region)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return false;
+	}
+	const FCampaignView& View = Session->GetView();
 	if (Tag.IsEmpty() || Tag == View.Human || !View.Declarable.Contains(Tag))
 	{
 		return false;
@@ -1511,9 +1594,7 @@ bool ACampaignPlayerController::OfferWar(int32 RegionId, bool bMarching)
 	WarPrompt = FWarPrompt();
 	WarPrompt.bVisible = true;
 	WarPrompt.Tag = Tag;
-	// An army in hand that stands on the frontier goes on there once war is declared.
-	const FReachRegion* Across = bMarching && ArmyRegion != INDEX_NONE ? FindReach(RegionId) : nullptr;
-	WarPrompt.Region = Across && Across->IsWar() ? RegionId : INDEX_NONE;
+	WarPrompt.Region = Region;
 	WarPrompt.Title = FText::FromString(FString::Printf(TEXT("Declare war on %s?"), *Name));
 	// What it would mean, as the rules foresee it: where the country stands, its friends, and what follows.
 	const FWarPlan Plan = Session->PlanWar(Tag, WarPrompt.Region);
@@ -1526,7 +1607,7 @@ bool ACampaignPlayerController::OfferWar(int32 RegionId, bool bMarching)
 		{
 			Body += TEXT("\n\u2022  ") + Line;
 		}
-		Body += TEXT("\n\nThis cannot be taken back. Say no, and your army stays where it is.");
+		Body += Region != INDEX_NONE ? TEXT("\n\nThis cannot be taken back. Say no, and your army stays where it is.") : TEXT("\n\nThis cannot be taken back.");
 		WarPrompt.Body = FText::FromString(Body);
 	}
 	else
@@ -1599,11 +1680,20 @@ void ACampaignPlayerController::ConfirmWar()
 	{
 		RefreshRegionPanel(SelectedRegion);
 	}
+	if (Asked.bFromOffice && !FaceOff.bVisible)
+	{
+		OpenDiplomacy();
+	}
 }
 
 void ACampaignPlayerController::CloseWarPrompt()
 {
+	const bool bBack = WarPrompt.bFromOffice;
 	WarPrompt = FWarPrompt();
+	if (bBack)
+	{
+		OpenDiplomacy();
+	}
 }
 
 void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom)

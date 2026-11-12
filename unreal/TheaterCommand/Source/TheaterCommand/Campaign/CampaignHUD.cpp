@@ -69,6 +69,7 @@ namespace
 			PanelBrush = FSlateRoundedBoxBrush(PanelFill, 6.0f, Brass.CopyWithNewOpacity(0.7f), 1.0f);
 			ChipBrush = FSlateRoundedBoxBrush(FLinearColor::White, 3.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), 1.0f);
 			BarBrush = FSlateRoundedBoxBrush(FLinearColor::White, 1.5f);
+			DotBrush = FSlateRoundedBoxBrush(FLinearColor::White, 6.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.7f), 1.0f);
 			PickedCard = MakeButtonStyle(CardFill, CardHover, Brass, 1.5f);
 			LeftCard = MakeButtonStyle(CardFill.CopyWithNewOpacity(0.7f), CardHover, Faint.CopyWithNewOpacity(0.6f), 1.0f);
 			EndMonthStyle = MakeButtonStyle(FLinearColor(0.10f, 0.075f, 0.04f, 0.97f), FLinearColor(0.17f, 0.125f, 0.065f, 0.98f), Brass, 1.5f);
@@ -222,6 +223,15 @@ namespace
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenArsenal(); } return FReply::Handled(); })
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("ARSENAL"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									.ToolTipText(FText::FromString(TEXT("The foreign office: who is at war, where every neutral stands, courting them, and declaring war.")))
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenDiplomacy(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("DIPLOMACY"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
 									]
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
@@ -742,6 +752,86 @@ namespace
 						]
 					]
 
+					// The foreign office: the powers at war, and every country at peace on the track between the blocs.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsDiplomacyOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(1180.0f).HeightOverride(780.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 22.0f, 26.0f, 22.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
+										[
+											SNew(SBox).WidthOverride(72.0f).HeightOverride(48.0f)
+											[
+												SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() && Controller->GetSession() ? Controller->GetLedgerNationTag() : FString()); })
+											]
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+										[
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
+											[
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 240)).ColorAndOpacity(Brass)
+												.Text_Lambda([this]()
+												{
+													const FDiplomacy* Office = Controller.IsValid() ? &Controller->GetDiplomacy() : nullptr;
+													return Office ? FText::FromString(FString::Printf(TEXT("THE FOREIGN OFFICE  \u00B7  %s  \u00B7  %s"), *Office->Nation.ToUpper(), *Office->Date.ToUpper())) : FText::GetEmpty();
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 26)).ColorAndOpacity(Cream)
+												.Text_Lambda([this]()
+												{
+													const FDiplomacy* Office = Controller.IsValid() ? &Controller->GetDiplomacy() : nullptr;
+													return Office ? FText::FromString(FString::Printf(TEXT("%d political capital"), Office->Capital)) : FText::GetEmpty();
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+												.Text_Lambda([this]() { return Controller.IsValid() ? DiplomacySummary(Controller->GetDiplomacy()) : FText::GetEmpty(); })
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(20.0f, 9.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseDiplomacy(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+											]
+										]
+									]
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 18.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(0.8f).Padding(0.0f, 0.0f, 26.0f, 0.0f)
+										[
+											SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 10.0f, 0.0f)[SAssignNew(DiplomacyPowers, SVerticalBox)]
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.6f)
+										[
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()[SAssignNew(DiplomacyHead, SVerticalBox)]
+											+ SVerticalBox::Slot().FillHeight(1.0f)
+											[
+												SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(DiplomacyRows, SVerticalBox)]
+											]
+										]
+									]
+								]
+							]
+						]
+					]
+
 					// The question before a war: asked when an army is sent onto the ground of a country at peace.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
@@ -1021,6 +1111,13 @@ namespace
 				LayOutArsenal(Controller->GetArsenal());
 			}
 
+			// Set the foreign office out when it is opened, and again after every move made there.
+			if (Controller.IsValid() && DiplomacyRows.IsValid() && Controller->IsDiplomacyOpen() && Controller->GetDiplomacy().Revision != ShownDiplomacy)
+			{
+				ShownDiplomacy = Controller->GetDiplomacy().Revision;
+				LayOutDiplomacy(Controller->GetDiplomacy());
+			}
+
 			// Write the ledger out when it is opened.
 			if (Controller.IsValid() && LedgerIn.IsValid() && Controller->IsLedgerOpen() && Controller->GetLedger().Revision != ShownLedger)
 			{
@@ -1261,6 +1358,246 @@ namespace
 				ArsenalColumns->AddSlot().FillWidth(1.0f).Padding(0.0f, 0.0f, Column == 3 ? 0.0f : 16.0f, 0.0f)
 				[
 					SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 8.0f, 0.0f)[List]
+				];
+			}
+		}
+
+		static FText DiplomacySummary(const FDiplomacy& Office)
+		{
+			FString Line = FString::Printf(TEXT("%d more each month, up to %d.  %d trade partner%s.  %s"),
+				Office.Income, Office.Cap, Office.Partners, Office.Partners == 1 ? TEXT("") : TEXT("s"), *Office.Wind);
+			if (!Office.bUp)
+			{
+				Line += TEXT("  It is not your month, so nothing can be done here now.");
+			}
+			return FText::FromString(Line);
+		}
+
+		/** The track a country at peace stands on: the Allies at the left, the Axis at the right, and a dot where its opinion is. */
+		TSharedRef<SWidget> OpinionTrack(int32 Opinion, const FLinearColor& Dot)
+		{
+			const float Where = FMath::Clamp(0.5f + Opinion / 200.0f, 0.0f, 1.0f);
+			const FLinearColor Line(1.0f, 1.0f, 1.0f, 0.14f);
+			const FLinearColor Mark(1.0f, 1.0f, 1.0f, 0.32f);
+			auto Tick = [this, &Mark](float Height)
+			{
+				return SNew(SBox).WidthOverride(2.0f).HeightOverride(Height).VAlign(VAlign_Fill)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Mark)];
+			};
+			// The inner marks are where a country starts to lean; the outer marks are where it asks to join.
+			return SNew(SBox).HeightOverride(14.0f)
+			[
+				SNew(SOverlay)
+				+ SOverlay::Slot().VAlign(VAlign_Center)
+				[
+					SNew(SBox).HeightOverride(2.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Line)]
+				]
+				+ SOverlay::Slot().VAlign(VAlign_Center)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(0.15f)[SNew(SSpacer)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Tick(8.0f)]
+					+ SHorizontalBox::Slot().FillWidth(0.20f)[SNew(SSpacer)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Tick(8.0f)]
+					+ SHorizontalBox::Slot().FillWidth(0.15f)[SNew(SSpacer)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Tick(14.0f)]
+					+ SHorizontalBox::Slot().FillWidth(0.15f)[SNew(SSpacer)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Tick(8.0f)]
+					+ SHorizontalBox::Slot().FillWidth(0.20f)[SNew(SSpacer)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Tick(8.0f)]
+					+ SHorizontalBox::Slot().FillWidth(0.15f)[SNew(SSpacer)]
+				]
+				+ SOverlay::Slot().VAlign(VAlign_Center)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(FMath::Max(Where, 0.0001f))[SNew(SSpacer)]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(SBox).WidthOverride(12.0f).HeightOverride(12.0f)[SNew(SBorder).BorderImage(&DotBrush).BorderBackgroundColor(Dot)]
+					]
+					+ SHorizontalBox::Slot().FillWidth(FMath::Max(1.0f - Where, 0.0001f))[SNew(SSpacer)]
+				]
+			];
+		}
+
+		/** A small button on a row of the foreign office. */
+		TSharedRef<SWidget> OfficeButton(const TCHAR* Label, const FLinearColor& Ink, bool bEnabled, const FString& Tip, TFunction<void()> Pressed)
+		{
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false).IsEnabled(bEnabled)
+				.ToolTipText(FText::FromString(Tip))
+				.OnClicked_Lambda([Pressed]() { Pressed(); return FReply::Handled(); })
+				[
+					SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 10, 160)).ColorAndOpacity(bEnabled ? Ink : Faint)
+				];
+		}
+
+		/** The foreign office: the powers at war down the left, the countries at peace on their track down the right. */
+		void LayOutDiplomacy(const FDiplomacy& Office)
+		{
+			const float Mine = Office.Bloc.Contains(TEXT("Axis")) ? 1.0f : Office.Bloc.Contains(TEXT("Allies")) ? -1.0f : 0.0f;
+
+			DiplomacyPowers->ClearChildren();
+			DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("THE POWERS AT WAR"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+			];
+			DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)
+			[
+				SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+				.Text(FText::FromString(TEXT("The bar shows how much fight a nation has left. It drains as its capital, its territory and its army are lost.")))
+			];
+			if (Office.Powers.Num() == 0)
+			{
+				DiplomacyPowers->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("Nobody is at war."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint)
+				];
+			}
+			for (const FDiplomacyPower& Power : Office.Powers)
+			{
+				const FLinearColor Ink = !Power.bAlive ? Faint : Power.Side == TEXT("own") ? BrightBrass : Power.Side == TEXT("ally") ? Gain : Power.Side == TEXT("enemy") ? Alarm : Cream;
+				const TCHAR* Standing = Power.Side == TEXT("own") ? TEXT("You") : Power.Side == TEXT("ally") ? TEXT("Your ally") : Power.Side == TEXT("enemy") ? TEXT("Your enemy") : TEXT("At peace with you");
+				TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(Power.Name)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Ink)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+							.Text(FText::FromString(Power.bAlive ? FString::Printf(TEXT("%s  \u00B7  %d division%s"), Standing, Power.Divisions, Power.Divisions == 1 ? TEXT("") : TEXT("s")) : FString(TEXT("Fallen"))))
+						]
+					];
+				if (Power.bAlive)
+				{
+					Words->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).HeightOverride(5.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(FMath::Max(Power.Will, 0.0001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Power.Will < 0.35f ? Alarm : Ink)]
+							+ SHorizontalBox::Slot().FillWidth(FMath::Max(1.0f - Power.Will, 0.0001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.08f))]
+						]
+					];
+				}
+				Words->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Power.Note)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Power.bAlive ? Muted : Faint).AutoWrapText(true)
+				];
+				TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(36.0f).HeightOverride(24.0f)[SNew(SImage).Image(FlagBrush(Power.Tag)).ColorAndOpacity(Power.bAlive ? FLinearColor::White : FLinearColor(1.0f, 1.0f, 1.0f, 0.45f))]
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f)[Words];
+				if (Power.bWar)
+				{
+					Row->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+					[
+						OfficeButton(TEXT("WAR"), Alarm, true, FString::Printf(TEXT("See what declaring war on %s would mean. Nothing happens until you confirm."), *Power.Name),
+							[this, Tag = Power.Tag]() { if (Controller.IsValid()) { Controller->AskWarOn(Tag); } })
+					];
+				}
+				DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)[Row];
+			}
+
+			// The head of the track stays put while the countries scroll under it.
+			DiplomacyHead->ClearChildren();
+			DiplomacyHead->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+			[
+				SNew(STextBlock).Text(FText::FromString(TEXT("THE COUNTRIES AT PEACE"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+			];
+			DiplomacyHead->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 12.0f, 8.0f)
+			[
+				SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+				.Text(FText::FromString(TEXT("Every country stands somewhere between the two blocs. The dot is its public opinion: past the inner marks it leans and trades with that side, past the outer marks it joins. ") + Office.Help))
+			];
+			DiplomacyHead->AddSlot().AutoHeight().Padding(250.0f, 0.0f, 186.0f, 6.0f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Left)[SNew(STextBlock).Text(FText::FromString(TEXT("ALLIES"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Mine < 0.0f ? Gain : Mine > 0.0f ? Alarm : Muted)]
+				+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(TEXT("INDEPENDENT"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Faint)]
+				+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Right)[SNew(STextBlock).Text(FText::FromString(TEXT("AXIS"))).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Mine > 0.0f ? Gain : Mine < 0.0f ? Alarm : Muted)]
+			];
+
+			DiplomacyRows->ClearChildren();
+			if (Office.Rows.Num() == 0)
+			{
+				DiplomacyRows->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("No country is at peace any longer."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint)
+				];
+			}
+			for (const FDiplomacyRow& Entry : Office.Rows)
+			{
+				const float Toward = Entry.Opinion * Mine;
+				const FLinearColor Dot = Mine == 0.0f || FMath::Abs(Entry.Opinion) < 8 ? Cream : Toward > 0.0f ? Gain : Alarm;
+				FString Under = Entry.Label;
+				if (Entry.bTrades)
+				{
+					Under += TEXT("  \u00B7  trades with you");
+				}
+				TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Entry.Name)).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(Cream)
+					]
+					+ SVerticalBox::Slot().AutoHeight()
+					[
+						SNew(STextBlock).Text(FText::FromString(Under)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+					];
+				TSharedRef<SVerticalBox> Middle = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[OpinionTrack(Entry.Opinion, Dot)];
+				FString Small = FString::Printf(TEXT("%d division%s"), Entry.Divisions, Entry.Divisions == 1 ? TEXT("") : TEXT("s"));
+				if (!Entry.Word.IsEmpty())
+				{
+					Small += TEXT("  \u00B7  ") + Entry.Word;
+				}
+				if (!Entry.Friends.IsEmpty())
+				{
+					Small += TEXT("  \u00B7  ") + Entry.Friends;
+				}
+				Middle->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Small)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Faint).AutoWrapText(true)
+				];
+				TSharedRef<SHorizontalBox> Buttons = SNew(SHorizontalBox);
+				if (Entry.bCourt)
+				{
+					const FString Tip = Entry.bCanCourt
+						? FString::Printf(TEXT("Send envoys to %s for %d political capital. %s."), *Entry.Name, Office.Cost, *Entry.Word)
+						: Entry.Why;
+					Buttons->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
+					[
+						OfficeButton(TEXT("COURT"), BrightBrass, Entry.bCanCourt, Tip, [this, Tag = Entry.Tag]() { if (Controller.IsValid()) { Controller->CourtNation(Tag); } })
+					];
+				}
+				if (Entry.bWar)
+				{
+					Buttons->AddSlot().AutoWidth()
+					[
+						OfficeButton(TEXT("WAR"), Alarm, true, FString::Printf(TEXT("See what declaring war on %s would mean. Nothing happens until you confirm."), *Entry.Name),
+							[this, Tag = Entry.Tag]() { if (Controller.IsValid()) { Controller->AskWarOn(Tag); } })
+					];
+				}
+				DiplomacyRows->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 9.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(36.0f).HeightOverride(24.0f)[SNew(SImage).Image(FlagBrush(Entry.Tag))]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
+					[
+						SNew(SBox).WidthOverride(204.0f)[Words]
+					]
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top).Padding(0.0f, 2.0f, 12.0f, 0.0f)[Middle]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
+					[
+						SNew(SBox).WidthOverride(150.0f).HAlign(HAlign_Right)[Buttons]
+					]
 				];
 			}
 		}
@@ -1909,6 +2246,7 @@ namespace
 		FSlateBrush PanelBrush;
 		FSlateBrush ChipBrush;
 		FSlateBrush BarBrush;
+		FSlateBrush DotBrush;
 		FButtonStyle PickedCard;
 		FButtonStyle LeftCard;
 		FButtonStyle EndMonthStyle;
@@ -1924,6 +2262,10 @@ namespace
 		FButtonStyle PlateButton;
 		TSharedPtr<SHorizontalBox> ArsenalColumns;
 		int32 ShownArsenal = -1;
+		TSharedPtr<SVerticalBox> DiplomacyPowers;
+		TSharedPtr<SVerticalBox> DiplomacyHead;
+		TSharedPtr<SVerticalBox> DiplomacyRows;
+		int32 ShownDiplomacy = -1;
 		TSharedPtr<SVerticalBox> LedgerIn;
 		TSharedPtr<SVerticalBox> LedgerOut;
 		TSharedPtr<SVerticalBox> LedgerProvinces;
