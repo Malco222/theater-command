@@ -78,6 +78,9 @@ public:
 	/** Everything the player can order, with a province in mind (INDEX_NONE for none). */
 	FArsenal Arsenal(int32 RegionId);
 
+	/** Rivers, crossings, railways and steep country, as the rules have them. Empty with the stand-in rules. */
+	FLandFeatures Land();
+
 	/** Places an order from the arsenal. OutName is what was ordered. */
 	bool OrderArsenal(const FString& Key, int32 RegionId, FString& OutName);
 

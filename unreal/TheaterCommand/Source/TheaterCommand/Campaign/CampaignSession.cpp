@@ -336,6 +336,17 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("open"), Out.bOpen);
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
+	for (const TPair<const TCHAR*, TArray<int32>*>& List : { TPair<const TCHAR*, TArray<int32>*>(TEXT("down"), &Out.BridgesDown), TPair<const TCHAR*, TArray<int32>*>(TEXT("cut"), &Out.RailsCut) })
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (Object->TryGetArrayField(List.Key, Values))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Values)
+			{
+				List.Value->Add(static_cast<int32>(Value->AsNumber()));
+			}
+		}
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* Fleets = nullptr;
 	if (Object->TryGetArrayField(TEXT("fleets"), Fleets))
@@ -832,6 +843,12 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 	Holdings.Add(Works > 0 ? FString::Printf(TEXT("Fortified, level %d"), Works) : FString(TEXT("No works")));
 	Holdings.Add(bHarbour ? TEXT("Harbour") : TEXT("No harbour"));
 	Info.Holdings = FString::Join(Holdings, TEXT("   \u00B7   "));
+	// What kind of country it is for an army, its rivers and bridges, its railway.
+	TArray<FString> Country;
+	if (Object->TryGetStringArrayField(TEXT("country"), Country) && Country.Num() > 0)
+	{
+		Info.Holdings += TEXT("\n") + FString::Join(Country, TEXT("\n"));
+	}
 
 	// What the province gives whoever holds it each month.
 	const TSharedPtr<FJsonObject>* Yield = nullptr;
@@ -923,6 +940,84 @@ bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FS
 	TakeView(Object);
 	OutNote = bOk ? FString::Printf(TEXT("%s ordered. Due %s."), *Name, *Due) : FString(TEXT("That cannot be ordered now."));
 	return bOk;
+}
+
+FLandFeatures FCampaignSession::Land()
+{
+	FLandFeatures Out;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("land"), TEXT("[]"), Object))
+	{
+		return Out;
+	}
+	auto Numbers = [](const TSharedPtr<FJsonValue>& Value)
+	{
+		TArray<double> List;
+		for (const TSharedPtr<FJsonValue>& Entry : Value->AsArray())
+		{
+			List.Add(Entry->AsNumber());
+		}
+		return List;
+	};
+	const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+	if (Object->TryGetArrayField(TEXT("rivers"), Values))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FLandRiver& River = Out.Rivers.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("name"), River.Name);
+			const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
+			if (Entry->TryGetArrayField(TEXT("pts"), Points))
+			{
+				for (const TSharedPtr<FJsonValue>& Point : *Points)
+				{
+					const TArray<double> XY = Numbers(Point);
+					if (XY.Num() >= 2)
+					{
+						River.Course.Add(FVector2D(XY[0], XY[1]));
+					}
+				}
+			}
+		}
+	}
+	if (Object->TryGetArrayField(TEXT("crossings"), Values))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			const TArray<double> N = Numbers(Value);
+			if (N.Num() >= 5)
+			{
+				FLandCrossing& Crossing = Out.Crossings.AddDefaulted_GetRef();
+				Crossing.A = static_cast<int32>(N[0]);
+				Crossing.B = static_cast<int32>(N[1]);
+				Crossing.River = static_cast<int32>(N[2]);
+				Crossing.At = FVector2D(N[3], N[4]);
+			}
+		}
+	}
+	if (Object->TryGetArrayField(TEXT("rails"), Values))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			const TArray<double> N = Numbers(Value);
+			if (N.Num() >= 4)
+			{
+				FLandRail& Rail = Out.Rails.AddDefaulted_GetRef();
+				Rail.A = static_cast<int32>(N[0]);
+				Rail.B = static_cast<int32>(N[1]);
+				Rail.At = FVector2D(N[2], N[3]);
+			}
+		}
+	}
+	if (Object->TryGetArrayField(TEXT("steep"), Values))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Values)
+		{
+			Out.Steep.Add(static_cast<int32>(Value->AsNumber()));
+		}
+	}
+	return Out;
 }
 
 FArsenal FCampaignSession::Arsenal(int32 RegionId)

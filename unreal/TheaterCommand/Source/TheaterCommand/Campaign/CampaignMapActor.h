@@ -115,6 +115,13 @@ public:
 	FVector2D ParadeSpot(int32 Index) const;
 	float ParadeHeight() const { return ParadeLevel; }
 
+	/** Lays the rivers and railways the rules know on the table (once, when a campaign begins). */
+	void SetLand(const FLandFeatures& InLand);
+	bool HasLand() const { return bLandLaid; }
+
+	/** Shows which bridges are down and which railways are cut. Does nothing if nothing has changed. */
+	void ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut);
+
 	/** Where the fleet of this number lies, on the map (for the photographer: "@fleet2"). The middle of the map if there is none. */
 	FVector2D FleetSpot(int32 Index) const;
 
@@ -130,6 +137,9 @@ private:
 	bool LandTileHasLand(int32 Level, int32 TileX, int32 TileY) const;
 	void BuildSeaMesh();
 	void BuildBorders();
+	void BuildWaterways();
+	void BuildRailways();
+	void BuildWorks();
 	void BuildTable();
 	void BuildLabels();
 	void BuildTowns();
@@ -162,6 +172,20 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UProceduralMeshComponent> BorderMesh;
+
+	/** Rivers; railways; and the bridges and breaks in the line, which change as the war goes. */
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> RiverMesh;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> RailMesh;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WorksMesh;
+	FLandFeatures Land;
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WaterMaterial;
+	TArray<int32> ShownDown, ShownCut;
+	bool bWorksShown = false;
+	bool bLandLaid = false;
 
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<UProceduralMeshComponent> HighlightMesh;

@@ -45,6 +45,9 @@ import { KIND } from '../../../src/campaign/types';
 import { GOALS, GOAL_KEYS, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
+import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
+import { CROSSINGS, RIVERS, bridgeDown, riverNotes } from '../../../src/campaign/rivers';
+import { RAIL_LINKS, railCut, railNote } from '../../../src/campaign/rails';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -87,6 +90,9 @@ function view() {
     treasury: s.human ? treasuryOf(s, s.human) : null,
     // The countries the player could declare war on this month: those at peace with him that he borders or can reach by sea.
     declare: up ? declarable(s) : [],
+    // Bridges that are down (by their place in the list of crossings) and provinces whose railway is cut.
+    down: groundRules(s) ? CROSSINGS.map((c, i) => (bridgeDown(s, c) ? i : -1)).filter((i) => i >= 0) : [],
+    cut: groundRules(s) ? s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id) : [],
     regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
     corps: s.corps.filter((c) => !c.dead).map((c) => ({
       id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, str: c.str, org: c.org, reg: c.reg,
@@ -550,6 +556,35 @@ function province(id: number) {
       why: !up ? 'It is not your month.' : n && n.pp < cost ? `Needs ${shown(cost).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.` : '',
     } : null,
     forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).map((b) => orderLine(s, b)) : [],
+    // What kind of country it is for an army, the rivers on its borders and their bridges, and its railway
+    // (all only in the grand campaign, where those rules apply).
+    country: (() => {
+      const lines: string[] = [];
+      const says = groundSays(s, r);
+      if (says) lines.push(says);
+      for (const n of riverNotes(s, r.id)) {
+        lines.push(`The ${n.river} lies toward ${s.regions[n.far].name}: ${n.down ? 'the bridges are down' : 'the bridges stand'}.`);
+      }
+      const rail = railNote(s, r.id);
+      if (rail) {
+        lines.push(rail.line ? (rail.cut ? 'The railway here is cut.' : 'A railway runs through here.')
+          : rail.road > 0 ? `No railway: ${rail.road} province${rail.road === 1 ? '' : 's'} of road from the railhead.` : 'No railway.');
+        if (rail.ruined > 0) lines.push(`${rail.ruined} of its ${rail.factories} factories lie in ruins from bombing.`);
+      }
+      return lines;
+    })(),
+  };
+}
+
+/** The rivers, their crossings, the railways and the steep country: geography that does not change. */
+function land() {
+  const s = game();
+  const steepNames = new Set<string>(GROUND.steep.regions);
+  return {
+    rivers: RIVERS.map((r) => ({ name: r.name, pts: r.pts })),
+    crossings: CROSSINGS.map((c) => [c.a, c.b, c.river, c.x, c.y]),
+    rails: RAIL_LINKS.map((l) => [l.a, l.b, l.x, l.y]),
+    steep: s.regions.filter((r) => steepNames.has(r.name)).map((r) => r.id),
   };
 }
 
@@ -664,4 +699,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

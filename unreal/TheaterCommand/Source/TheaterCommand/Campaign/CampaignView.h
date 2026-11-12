@@ -143,6 +143,8 @@ struct FCampaignView
 	TArray<FViewCorps> Corps;
 	FTreasury Treasury;
 	TArray<FString> Declarable; // the countries the player could declare war on this month
+	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown
+	TArray<int32> RailsCut; // regions whose railway is cut
 	TArray<FViewFleet> Fleets;
 	TArray<FViewAirFleet> AirFleets;
 
@@ -331,6 +333,36 @@ struct FArsenal
 };
 
 /** What a territory holds, and what the player can do there. */
+/** A river: its name and its course, in map units, from source to mouth. */
+struct FLandRiver
+{
+	FString Name;
+	TArray<FVector2D> Course;
+};
+
+/** Where a road and railway cross a river between two regions. */
+struct FLandCrossing
+{
+	int32 A = INDEX_NONE, B = INDEX_NONE, River = INDEX_NONE;
+	FVector2D At = FVector2D::ZeroVector;
+};
+
+/** A railway between two regions, and the point where it crosses their border. */
+struct FLandRail
+{
+	int32 A = INDEX_NONE, B = INDEX_NONE;
+	FVector2D At = FVector2D::ZeroVector;
+};
+
+/** The geography the rules know and the map file does not: rivers, crossings, railways, steep country. */
+struct FLandFeatures
+{
+	TArray<FLandRiver> Rivers;
+	TArray<FLandCrossing> Crossings;
+	TArray<FLandRail> Rails;
+	TArray<int32> Steep;
+};
+
 struct FProvinceInfo
 {
 	bool bValid = false;

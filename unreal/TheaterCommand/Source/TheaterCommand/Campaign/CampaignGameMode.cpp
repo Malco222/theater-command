@@ -160,8 +160,11 @@ void ACampaignGameMode::LayOutWar()
 {
 	if (Table && Session.IsValid() && Session->IsRunning())
 	{
+		// The rivers and railways the rules know are laid on the table, then the war as it stands.
+		Table->SetLand(Session->Land());
 		Table->SetHolders(Session->GetView().RegionHolder);
 		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
+		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
 	}
 }
 

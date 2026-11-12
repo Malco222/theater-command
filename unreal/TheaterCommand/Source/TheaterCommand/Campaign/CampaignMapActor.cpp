@@ -102,6 +102,9 @@ ACampaignMapActor::ACampaignMapActor()
 	TerrainMesh = MakeMesh(TEXT("Terrain"), true);
 	SeaMesh = MakeMesh(TEXT("Sea"), false);
 	BorderMesh = MakeMesh(TEXT("Borders"), false);
+	RiverMesh = MakeMesh(TEXT("Rivers"), false);
+	RailMesh = MakeMesh(TEXT("Railways"), false);
+	WorksMesh = MakeMesh(TEXT("Works"), false);
 	HighlightMesh = MakeMesh(TEXT("Highlight"), false);
 	OrdersMesh = MakeMesh(TEXT("Orders"), false);
 
@@ -728,6 +731,205 @@ void ACampaignMapActor::BuildBorders()
 	}
 	Buffers.Commit(BorderMesh, 0, InkMaterial);
 	UE_LOG(LogTheater, Log, TEXT("Borders: %d frontier edges, %d region edges"), NationalCount, RegionCount);
+}
+
+void ACampaignMapActor::SetLand(const FLandFeatures& InLand)
+{
+	Land = InLand;
+	bLandLaid = true;
+	bWorksShown = false;
+	BuildWaterways();
+	BuildRailways();
+	BuildWorks();
+}
+
+void ACampaignMapActor::ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut)
+{
+	if (bWorksShown && BridgesDown == ShownDown && RailsCut == ShownCut)
+	{
+		return;
+	}
+	ShownDown = BridgesDown;
+	ShownCut = RailsCut;
+	BuildWorks();
+}
+
+void ACampaignMapActor::BuildWaterways()
+{
+	RiverMesh->ClearAllMeshSections();
+	// A river is a ribbon of water laid over the relief along its course: narrow at the source, broad at the
+	// mouth, its course rounded so it winds instead of turning corners, its banks a shade darker than midstream.
+	const FColor Midstream = FromHex(TEXT("3E86B4")).ToFColor(true), Bank = FromHex(TEXT("2B5F86")).ToFColor(true);
+	const double Lift = 0.1;
+	FCampaignMeshBuffers Buffers;
+	for (const FLandRiver& River : Land.Rivers)
+	{
+		const int32 Count = River.Course.Num();
+		if (Count < 2)
+		{
+			continue;
+		}
+		// A smooth curve through the points of the course, a short step at a time.
+		TArray<FVector2D> Path;
+		for (int32 K = 0; K + 1 < Count; ++K)
+		{
+			const FVector2D P0 = River.Course[FMath::Max(K - 1, 0)], P1 = River.Course[K], P2 = River.Course[K + 1], P3 = River.Course[FMath::Min(K + 2, Count - 1)];
+			const int32 Steps = FMath::Max(2, FMath::CeilToInt32(FVector2D::Distance(P1, P2) / 2.0));
+			for (int32 Step = 0; Step < Steps; ++Step)
+			{
+				const double T = static_cast<double>(Step) / Steps;
+				Path.Add(0.5 * ((2.0 * P1) + (-P0 + P2) * T + (2.0 * P0 - 5.0 * P1 + 4.0 * P2 - P3) * T * T + (-P0 + 3.0 * P1 - 3.0 * P2 + P3) * T * T * T));
+			}
+		}
+		Path.Add(River.Course.Last());
+		int32 Previous[3] = { INDEX_NONE, INDEX_NONE, INDEX_NONE };
+		for (int32 K = 0; K < Path.Num(); ++K)
+		{
+			const FVector2D Along = (Path[FMath::Min(K + 1, Path.Num() - 1)] - Path[FMath::Max(K - 1, 0)]).GetSafeNormal();
+			const FVector2D Side(Along.Y, -Along.X);
+			const double Half = FMath::Lerp(0.45, 1.25, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1)));
+			const FVector2D L = Path[K] + Side * Half, R = Path[K] - Side * Half;
+			// A river does not run over the sea: stop where the land does.
+			if (Terrain.HeightAt(Path[K].X, Path[K].Y) <= 0.0f && K > Path.Num() / 2)
+			{
+				break;
+			}
+			const int32 Here[3] = {
+				Buffers.AddVertex(SurfacePointOver(L.X, L.Y, Lift), FVector::UpVector, Bank),
+				Buffers.AddVertex(SurfacePointOver(Path[K].X, Path[K].Y, Lift), FVector::UpVector, Midstream),
+				Buffers.AddVertex(SurfacePointOver(R.X, R.Y, Lift), FVector::UpVector, Bank) };
+			if (Previous[0] != INDEX_NONE)
+			{
+				for (int32 Strip = 0; Strip < 2; ++Strip)
+				{
+					Buffers.AddTriangleFacingUp(Previous[Strip], Previous[Strip + 1], Here[Strip]);
+					Buffers.AddTriangleFacingUp(Previous[Strip + 1], Here[Strip], Here[Strip + 1]);
+				}
+			}
+			Previous[0] = Here[0];
+			Previous[1] = Here[1];
+			Previous[2] = Here[2];
+		}
+	}
+	if (!WaterMaterial)
+	{
+		WaterMaterial = UMaterialInstanceDynamic::Create(SurfaceMaterial, this);
+		WaterMaterial->SetScalarParameterValue(TEXT("Roughness"), 0.18f);
+		WaterMaterial->SetScalarParameterValue(TEXT("Specular"), 0.6f);
+		WaterMaterial->SetScalarParameterValue(TEXT("Grain"), 0.0f);
+		WaterMaterial->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
+	}
+	Buffers.Commit(RiverMesh, 0, WaterMaterial);
+	UE_LOG(LogTheater, Log, TEXT("Rivers: %d, in %d points"), Land.Rivers.Num(), Buffers.Vertices.Num());
+}
+
+void ACampaignMapActor::BuildRailways()
+{
+	RailMesh->ClearAllMeshSections();
+	// A railway runs from the middle of one region to the middle of the next through the point where it
+	// crosses their border: a dark line with sleepers across it, as railways are drawn on maps.
+	const FColor Iron = FromHex(TEXT("2E2A27")).ToFColor(true);
+	const double Lift = 0.16, Half = 0.17;
+	FCampaignMeshBuffers Buffers;
+	for (const FLandRail& Rail : Land.Rails)
+	{
+		if (!Data.Regions.IsValidIndex(Rail.A) || !Data.Regions.IsValidIndex(Rail.B))
+		{
+			continue;
+		}
+		const FVector2D Stops[3] = { Data.Regions[Rail.A].Center, Rail.At, Data.Regions[Rail.B].Center };
+		for (int32 Leg = 0; Leg < 2; ++Leg)
+		{
+			const FVector2D A = Stops[Leg], B = Stops[Leg + 1];
+			const double Length = FVector2D::Distance(A, B);
+			if (Length < 0.5)
+			{
+				continue;
+			}
+			const FVector2D Dir = (B - A) / Length, Side(Dir.Y, -Dir.X);
+			const int32 Steps = FMath::Max(1, FMath::CeilToInt32(Length / 1.6));
+			int32 PrevLeft = INDEX_NONE, PrevRight = INDEX_NONE;
+			for (int32 K = 0; K <= Steps; ++K)
+			{
+				const FVector2D P = A + Dir * (Length * K / Steps);
+				const int32 Left = Buffers.AddVertex(SurfacePointOver(P.X + Side.X * Half, P.Y + Side.Y * Half, Lift), FVector::UpVector, Iron);
+				const int32 Right = Buffers.AddVertex(SurfacePointOver(P.X - Side.X * Half, P.Y - Side.Y * Half, Lift), FVector::UpVector, Iron);
+				if (PrevLeft != INDEX_NONE)
+				{
+					Buffers.AddTriangleFacingUp(PrevLeft, PrevRight, Left);
+					Buffers.AddTriangleFacingUp(PrevRight, Left, Right);
+				}
+				PrevLeft = Left;
+				PrevRight = Right;
+				// A sleeper across the line at every step.
+				const FVector2D S0 = P + Side * 0.55, S1 = P - Side * 0.55, Back = Dir * 0.13;
+				const int32 T0 = Buffers.AddVertex(SurfacePointOver(S0.X - Back.X, S0.Y - Back.Y, Lift), FVector::UpVector, Iron);
+				const int32 T1 = Buffers.AddVertex(SurfacePointOver(S1.X - Back.X, S1.Y - Back.Y, Lift), FVector::UpVector, Iron);
+				const int32 T2 = Buffers.AddVertex(SurfacePointOver(S0.X + Back.X, S0.Y + Back.Y, Lift), FVector::UpVector, Iron);
+				const int32 T3 = Buffers.AddVertex(SurfacePointOver(S1.X + Back.X, S1.Y + Back.Y, Lift), FVector::UpVector, Iron);
+				Buffers.AddTriangleFacingUp(T0, T1, T2);
+				Buffers.AddTriangleFacingUp(T1, T2, T3);
+			}
+		}
+	}
+	Buffers.Commit(RailMesh, 0, InkMaterial);
+	UE_LOG(LogTheater, Log, TEXT("Railways: %d links, in %d points"), Land.Rails.Num(), Buffers.Vertices.Num());
+}
+
+void ACampaignMapActor::BuildWorks()
+{
+	WorksMesh->ClearAllMeshSections();
+	bWorksShown = true;
+	FMiniatureMesh Model;
+	const double U = UnitScale;
+	const FLinearColor Stone(FColor::FromHex(TEXT("8E887C"))), Shadow(FColor::FromHex(TEXT("5E5A52"))), Scorch(FColor::FromHex(TEXT("2A2623"))), Rust(FColor::FromHex(TEXT("8A3A2A")));
+	// A bridge at every crossing, lying along the road from one region to the other: three arches of stone.
+	// One that has been blown has lost its middle span.
+	for (int32 K = 0; K < Land.Crossings.Num(); ++K)
+	{
+		const FLandCrossing& Crossing = Land.Crossings[K];
+		if (!Data.Regions.IsValidIndex(Crossing.A) || !Data.Regions.IsValidIndex(Crossing.B))
+		{
+			continue;
+		}
+		const FVector2D Way = (Data.Regions[Crossing.B].Center - Data.Regions[Crossing.A].Center).GetSafeNormal();
+		const FVector A = MapToWorld(0.0, 0.0), B = MapToWorld(Way.X, Way.Y);
+		const double Turn = FMath::RadiansToDegrees(FMath::Atan2(B.Y - A.Y, B.X - A.X));
+		const FVector Middle = SurfacePointOver(Crossing.At.X, Crossing.At.Y, 0.12);
+		const FQuat Facing(FRotator(0.0, Turn, 0.0));
+		const bool bDown = ShownDown.Contains(K);
+		for (int32 Span = -1; Span <= 1; ++Span)
+		{
+			const FVector At = Middle + Facing.RotateVector(FVector(Span * 1.5 * U, 0.0, 0.0));
+			if (bDown && Span == 0)
+			{
+				// The fallen span: a broken slab in the water, scorched.
+				Model.Box(At + FVector(0.0, 0.0, 0.05 * U), FVector(1.2, 0.9, 0.12) * U, Scorch, Turn, 18.0);
+				continue;
+			}
+			Model.Box(At + FVector(0.0, 0.0, 0.42 * U), FVector(1.5, 1.0, 0.16) * U, Stone, Turn);
+			Model.Box(At + FVector(0.0, 0.0, 0.2 * U), FVector(0.34, 1.0, 0.4) * U, Shadow, Turn);
+			for (const double Edge : { -1.0, 1.0 })
+			{
+				Model.Box(At + Facing.RotateVector(FVector(0.0, Edge * 0.47 * U, 0.56 * U)), FVector(1.5, 0.06, 0.12) * U, Shadow, Turn);
+			}
+		}
+	}
+	// Where a railway is cut: a red bar across the line at the middle of the region.
+	for (const int32 RegionId : ShownCut)
+	{
+		if (Data.Regions.IsValidIndex(RegionId))
+		{
+			const FVector At = SurfacePointOver(Data.Regions[RegionId].Center.X, Data.Regions[RegionId].Center.Y, 0.3);
+			Model.Box(At, FVector(2.6, 0.4, 0.2) * U, Rust, 45.0);
+			Model.Box(At, FVector(2.6, 0.4, 0.2) * U, Rust, -45.0);
+		}
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		WorksMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		WorksMesh->SetMaterial(0, SceneryMaterial);
+	}
 }
 
 UStaticMeshComponent* ACampaignMapActor::AddBlock(const FVector& CenterWorld, const FVector& SizeWorld, UMaterialInterface* Material)

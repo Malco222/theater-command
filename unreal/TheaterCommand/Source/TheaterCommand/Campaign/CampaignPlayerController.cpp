@@ -1389,8 +1389,17 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 {
 	if (Map.IsValid())
 	{
+		if (!Map->HasLand())
+		{
+			// The rivers and railways the rules know, laid on the table the first time the war is shown.
+			if (FCampaignSession* Session = GetSession())
+			{
+				Map->SetLand(Session->Land());
+			}
+		}
 		Map->SetHolders(View.RegionHolder);
 		Map->ShowArmies(View, Marches, CarriedFrom);
+		Map->ShowWorks(View.BridgesDown, View.RailsCut);
 	}
 }
 
