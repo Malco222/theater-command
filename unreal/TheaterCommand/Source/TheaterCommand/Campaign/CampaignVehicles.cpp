@@ -40,6 +40,9 @@ namespace VehicleParts
 		/** The wheels the vehicle stands on: how far forward each is, and their radius. */
 		TArray<double> Wheels;
 		double WheelR = 0.25;
+		/** Whether the toothed wheel that drives the track is the front one (otherwise the back one), and how many teeth it has. */
+		bool bDriveFront = true;
+		int32 Teeth = 13;
 		/** The small wheels that carry the track back along the top, if it has them. */
 		TArray<double> Rollers;
 		double RollerUp = 0.9, RollerR = 0.1;
@@ -223,6 +226,28 @@ namespace VehicleParts
 				}
 				Wheel(G.FrontX, G.FrontUp, G.FrontR, false, 16);
 				Wheel(G.RearX, G.RearUp, G.RearR, false, 16);
+				// The ring of teeth on the driving wheel, standing through the outer edge of the track.
+				{
+					const double X = G.bDriveFront ? G.FrontX : G.RearX, U = G.bDriveFront ? G.FrontUp : G.RearUp, Radius = G.bDriveFront ? G.FrontR : G.RearR;
+					const FColor Bare = FLinearColor(0.07f, 0.065f, 0.06f).ToFColor(true);
+					for (const double Ring : { Mid + Hand * (G.Width * 0.5 + 0.012), Mid + Hand * G.Width * 0.18 })
+					{
+						const FVector Out(0.0, -Hand, 0.0);
+						const int32 Hub = M.Add(At(X, Ring, U), Out, Bare);
+						TArray<int32> Rim;
+						for (int32 K = 0; K < G.Teeth * 4; ++K)
+						{
+							const double Angle = UE_DOUBLE_TWO_PI * K / (G.Teeth * 4);
+							const double Reach = Radius + ((K % 4) < 2 ? 0.075 : -0.01);
+							Rim.Add(M.Add(At(X + FMath::Cos(Angle) * Reach, Ring, U + FMath::Sin(Angle) * Reach), Out, Bare));
+						}
+						for (int32 K = 0; K < Rim.Num(); ++K)
+						{
+							M.Face(Hub, Rim[K], Rim[(K + 1) % Rim.Num()], Out);
+							M.Face(Hub, Rim[K], Rim[(K + 1) % Rim.Num()], -Out);
+						}
+					}
+				}
 			}
 		}
 	};
@@ -235,6 +260,22 @@ namespace VehicleParts
 		{
 			const double C = FMath::Cos(K * UE_DOUBLE_TWO_PI / Sides), S = FMath::Sin(K * UE_DOUBLE_TWO_PI / Sides);
 			Plan.Add(FVector2D(X + C * (C >= 0.0 ? Front : Back), Y + S * Half));
+		}
+		return Plan;
+	}
+
+	/** A plan with rounded corners: from Rear to Front, Half wide each side of the middle. */
+	static TArray<FVector2D> Lozenge(double Rear, double Front, double Half, double Corner, int32 PerCorner = 4)
+	{
+		TArray<FVector2D> Plan;
+		const FVector2D Middles[4] = { { Front - Corner, Half - Corner }, { Rear + Corner, Half - Corner }, { Rear + Corner, -Half + Corner }, { Front - Corner, -Half + Corner } };
+		for (int32 Quarter = 0; Quarter < 4; ++Quarter)
+		{
+			for (int32 K = 0; K <= PerCorner; ++K)
+			{
+				const double Angle = (Quarter + static_cast<double>(K) / PerCorner) * UE_DOUBLE_HALF_PI;
+				Plan.Add(Middles[Quarter] + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Corner);
+			}
 		}
 		return Plan;
 	}
@@ -369,6 +410,8 @@ namespace VehicleParts
 		G.FrontX = 2.52; G.FrontUp = 0.6; G.FrontR = 0.25;
 		G.RearX = -2.5; G.RearUp = 0.62; G.RearR = 0.32;
 		G.WheelR = 0.415;
+		G.bDriveFront = false;
+		G.Teeth = 6; // (the T-34's driving wheel has rollers that catch the track's teeth, not a ring of its own)
 		G.Wheels = { -1.72, -0.86, 0.0, 0.86, 1.72 };
 		B.Gear(G);
 
@@ -427,13 +470,13 @@ namespace VehicleParts
 	// ------------------------------------------------------------------------ Sherman
 
 	/**
-	 * Medium Tank M4 Sherman, welded hull and 75 mm gun: 5.84 m long, 2.62 wide, 2.74 high.
-	 * A tall hull with a sloped front, the rounded gearbox cover across the nose, three two-wheeled bogies a
-	 * side with a roller on each, the driving wheel in front, and a rounded cast turret.
+	 * Medium Tank M4A1 Sherman, the cast-hull Sherman with the 75 mm gun: 5.84 m long, 2.62 wide, 2.74 high.
+	 * A tall hull cast in one rounded piece, the rounded gearbox cover across the nose, three two-wheeled
+	 * bogies a side with a roller on each, the toothed driving wheel in front, and a rounded cast turret.
 	 */
 	static void Sherman(FMiniatureMesh& M)
 	{
-		const FBuild B(M, Hex(TEXT("5A5B3C")));
+		const FBuild B(M, Hex(TEXT("5B6046")));
 		const FLinearColor Olive = B.Paint, Dark = B.Shade;
 
 		FGear G;
@@ -444,49 +487,53 @@ namespace VehicleParts
 		G.RearX = -2.4; G.RearUp = 0.55; G.RearR = 0.28;
 		G.WheelR = 0.254;
 		G.Wheels = { -1.8, -1.08, -0.36, 0.36, 1.08, 1.8 };
-		G.Rollers = { -1.44, 0.0, 1.44 };
+		G.Rollers = { -1.62, -0.18, 1.26 };
 		G.RollerUp = 0.9;
 		G.RollerR = 0.1;
 		B.Gear(G);
 		for (const double Hand : { -1.0, 1.0 })
 		{
-			// The three bogies: a casting that holds a pair of wheels on arms and carries the roller above them.
+			// The three bogies: a casting that holds a pair of wheels on arms, with an arm trailing back to the roller.
 			const double Out0 = Hand * (G.Right + G.Width * 0.4 + 0.02), Out1 = Hand * (G.Right + G.Width * 0.4 + 0.09);
 			for (const double X : { -1.44, 0.0, 1.44 })
 			{
-				B.Side({ { X - 0.2, 0.34 }, { X + 0.2, 0.34 }, { X + 0.1, 0.84 }, { X - 0.1, 0.84 } }, Out0, Out1, Dark);
+				B.Side({ { X - 0.2, 0.34 }, { X + 0.2, 0.34 }, { X + 0.13, 0.8 }, { X - 0.13, 0.8 } }, Out0, Out1, Dark);
 				B.Plate(X, (Out0 + Out1) * 0.5, 0.305, 0.76, 0.06, 0.09, Dark);
+				B.Plate(X - 0.12, (Out0 + Out1) * 0.5, 0.84, 0.36, 0.06, 0.07, Dark, -14.0);
 			}
 		}
 
-		// The lower hull, with the cast cover of the gearbox rounding the nose.
-		B.Side({ { 2.62, 1.22 }, { 2.86, 1.08 }, { 2.94, 0.82 }, { 2.74, 0.55 }, { 2.35, 0.43 }, { -2.7, 0.45 }, { -2.92, 0.8 }, { -2.92, 1.1 } }, -0.84, 0.84, Olive);
+		// The lower hull, with the one-piece cast cover of the gearbox across the nose.
+		B.Side({ { 2.62, 1.22 }, { 2.97, 0.72 }, { 2.86, 0.52 }, { 2.35, 0.43 }, { -2.7, 0.45 }, { -2.92, 0.8 }, { -2.92, 1.12 } }, -0.84, 0.84, Olive);
 		for (const double Hand : { -1.0, 1.0 })
 		{
-			// The flanges where the three parts of the cover bolt together, and the housings of the final drives.
-			B.Side({ { 2.66, 1.24 }, { 2.9, 1.09 }, { 2.985, 0.82 }, { 2.78, 0.53 }, { 2.4, 0.42 }, { 2.5, 0.8 } }, Hand * 0.3 - 0.03, Hand * 0.3 + 0.03, Dark);
+			// The housings of the final drives, and the towing lugs.
 			B.Tube(2.42, Hand * 0.84, 0.66, 2.42, Hand * 0.9, 0.66, 0.3, Olive, 12);
-			B.Plate(2.96, Hand * 0.62, 0.72, 0.1, 0.06, 0.16, Dark);
+			B.Plate(2.99, Hand * 0.62, 0.66, 0.1, 0.06, 0.16, Dark);
 		}
-		// The upper hull, out over the tracks: the sloped front, the flat roof, the engine deck falling away behind.
-		B.Side({ { 2.62, 1.22 }, { 1.91, 1.88 }, { -2.0, 1.88 }, { -2.88, 1.66 }, { -2.92, 1.1 }, { 2.5, 1.1 } }, -1.31, 1.31, Olive);
+		B.Mark(2.805, 0.0, 0.977, 0.25, TEXT("USA-ARMY"), 0.82, 0.0, 0.573);
+
+		// The upper hull: one rounded casting, out over the tracks, curving up from the nose to the roof.
+		B.Layers({ Lozenge(-2.92, 2.5, 1.31, 0.15), Lozenge(-2.93, 2.6, 1.31, 0.2), Lozenge(-2.93, 2.28, 1.31, 0.3), Lozenge(-2.91, 1.9, 1.28, 0.36),
+			Lozenge(-2.86, 1.62, 1.17, 0.42), Lozenge(-2.66, 1.36, 0.97, 0.42) }, { 1.1, 1.25, 1.55, 1.77, 1.87, 1.9 }, Olive, true);
 		for (const double Hand : { -1.0, 1.0 })
 		{
-			// The hatches of the driver and his mate, let into the roof just behind the front plate, each with a periscope.
-			B.Layers({ VehicleParts::Oval(1.55, Hand * 0.6, 0.3, 0.3, 0.27, 12), VehicleParts::Oval(1.55, Hand * 0.6, 0.27, 0.27, 0.24, 12) }, { 1.88, 1.915 }, Dark, true);
-			B.Plate(1.72, Hand * 0.6, 1.94, 0.09, 0.16, 0.05, Dark);
-			B.Lamp(2.44, Hand * 0.98, 1.47, 0.07);
-			// The white star on each side.
-			B.Mark(-0.35, Hand * 1.316, 1.5, 0.27, TEXT("USA-ARMY"), 0.0, Hand, 0.0);
-			// Air cleaners on the tail plate.
+			// The hoods of the driver and his mate, swelling out of the front, each with its hatch and periscope.
+			M.Ball(FBuild::At(1.78, Hand * 0.6, 1.79), FVector(0.78, 0.62, 0.4), Olive, 5, 10);
+			B.Drum(1.66, Hand * 0.6, 1.965, 0.23, 0.025, Dark, 12);
+			B.Plate(1.76, Hand * 0.6, 2.01, 0.08, 0.15, 0.05, Dark);
+			B.Lamp(2.4, Hand * 0.95, 1.56, 0.07);
+			// The white star on each side, and the extra plate welded on over the ammunition racks.
+			B.Mark(-0.45, Hand * 1.316, 1.42, 0.25, TEXT("USA-ARMY"), 0.0, Hand, 0.0);
+			B.Plate(0.75, Hand * 1.32, 1.45, 0.7, 0.03, 0.46, Olive);
+			// Air cleaners on the tail plate, and the fuel caps.
 			B.Drum(-3.0, Hand * 0.8, 1.2, 0.13, 0.36, Dark, 8);
-			// Fuel caps.
-			B.Drum(-1.2, Hand * 1.05, 1.88, 0.07, 0.03, Dark, 8);
+			B.Drum(-1.2, Hand * 0.8, 1.9, 0.07, 0.03, Dark, 8);
 		}
-		B.BallGun(2.28, 0.6, 1.55, 0.34);
-		// The engine doors on the slope of the deck, and the exhaust deflector under the tail.
-		B.Plate(-2.44, 0.0, 1.79, 0.74, 1.7, 0.03, Dark, -14.0);
-		B.Plate(-2.44, 0.0, 1.81, 0.02, 1.7, 0.012, Pitch, -14.0);
+		B.BallGun(2.3, 0.6, 1.5, 0.34);
+		// The engine doors on the deck, and the exhaust deflector under the tail.
+		B.Plate(-1.95, 0.0, 1.905, 1.0, 1.3, 0.02, Dark);
+		B.Plate(-1.95, 0.0, 1.92, 0.02, 1.3, 0.012, Pitch);
 		B.Plate(-2.96, 0.0, 0.98, 0.1, 1.3, 0.14, Rust);
 
 		// The turret: one rounded casting, fuller behind where the wireless sits.
@@ -495,16 +542,17 @@ namespace VehicleParts
 			{ 1.88, 1.99, 2.36, 2.53, 2.6 }, Olive, true);
 		for (const double Hand : { -1.0, 1.0 })
 		{
-			B.Mark(T - 0.15, Hand * 0.975, 2.18, 0.17, TEXT("USA-ARMY"), 0.0, Hand, 0.06);
+			B.Mark(T - 0.2, Hand * 0.975, 2.18, 0.2, TEXT("USA-ARMY"), 0.0, Hand, 0.06);
 		}
-		// The gun shield and the 75 mm gun; the machine gun beside it.
-		// (the shield is a rounded casting that follows the curve of the turret front, not a flat plate)
-		B.Tube(T + 0.7, -0.44, 2.2, T + 0.7, 0.44, 2.2, 0.3, Olive, 14);
-		B.Tube(T + 0.84, -0.2, 2.2, T + 0.84, 0.2, 2.2, 0.24, Dark, 12);
-		B.Tube(T + 1.0, 0.0, 2.2, T + 1.55, 0.0, 2.2, 0.09, Olive, 10);
-		B.Tube(T + 1.55, 0.0, 2.2, 2.9, 0.0, 2.21, 0.058, Olive, 10);
-		B.Tube(2.87, 0.0, 2.21, 2.905, 0.0, 2.21, 0.038, Pitch, 8);
-		B.Tube(T + 1.0, 0.4, 2.2, T + 1.3, 0.4, 2.2, 0.022, GunSteel, 5);
+		// The pistol port, a small hatch in the left of the turret.
+		M.Ball(FBuild::At(T - 0.62, -0.93, 2.2), FVector(0.3, 0.12, 0.26), Olive, 4, 8);
+		// The gun in its narrow rounded shield, and the machine gun beside it.
+		B.Tube(T + 0.7, -0.3, 2.2, T + 0.7, 0.3, 2.2, 0.3, Olive, 14);
+		B.Tube(T + 0.85, -0.16, 2.2, T + 0.85, 0.16, 2.2, 0.23, Dark, 12);
+		B.Tube(T + 1.0, 0.0, 2.2, T + 1.5, 0.0, 2.215, 0.09, Olive, 10);
+		B.Tube(T + 1.5, 0.0, 2.215, 2.9, 0.0, 2.26, 0.058, Olive, 10);
+		B.Tube(2.87, 0.0, 2.259, 2.905, 0.0, 2.26, 0.038, Pitch, 8);
+		B.Tube(T + 0.95, 0.42, 2.2, T + 1.2, 0.42, 2.2, 0.022, GunSteel, 5);
 		// The commander's hatch ring with its heavy machine gun; the loader's periscope; the ventilator; the aerial.
 		B.Drum(T - 0.25, 0.38, 2.6, 0.33, 0.1, Dark, 14);
 		B.Drum(T - 0.25, 0.38, 2.7, 0.27, 0.025, Olive, 14);
@@ -536,6 +584,7 @@ namespace VehicleParts
 		G.FrontX = 2.42; G.FrontUp = 0.6; G.FrontR = 0.3;
 		G.RearX = -2.42; G.RearUp = 0.58; G.RearR = 0.3;
 		G.WheelR = 0.13;
+		G.bDriveFront = false;
 		G.Wheels = { -1.9, -1.14, -0.38, 0.38, 1.14, 1.9 };
 		B.Gear(G);
 		for (const double Hand : { -1.0, 1.0 })
