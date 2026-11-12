@@ -346,7 +346,17 @@
     [49, "GER", "LI Mountain Corps (44th and 305th Divisions)", "mtn", 2, "Abruzzo", {"gen": "Heinrich von Vietinghoff", "trait": "defender", "join": 1, "xp": 0.2, "war": ["GER", "USA"]}],
     [50, "GER", "5th Mountain and 65th Divisions", "mtn", 2, "Abruzzo", {"join": 1, "xp": 0.2, "war": ["GER", "USA"]}],
     [49, "UK", "Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)", "inf", 2, "Malta", {"join": 1, "xp": 0.3, "from": "North Africa", "war": ["UK", "GER"]}],
-    [49, "USA", "Fifth Army: VI Corps (36th and 34th Infantry Divisions)", "inf", 2, "Malta", {"gen": "Mark Clark", "join": 1, "xp": 0.1, "from": "North Africa", "war": ["USA", "GER"]}],
-    [49, "USA", "Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)", "mot", 3, "Malta", {"gen": "Richard McCreery", "join": 1, "xp": 0.2, "from": "North Africa", "of": "UK", "war": ["USA", "GER"]}]
+    [49, "USA", "Fifth Army: VI Corps (36th and 45th Infantry Divisions)", "inf", 2, "Malta", {"gen": "Mark Clark", "join": 1, "xp": 0.1, "from": "North Africa", "war": ["USA", "GER"]}],
+    [49, "USA", "Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)", "mot", 3, "Malta", {"gen": "Richard McCreery", "join": 1, "xp": 0.2, "from": "North Africa", "of": "UK", "war": ["USA", "GER"]}],
+    [53, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", "inf", 1, "Naples", {"joins": "Fifth Army: VI Corps (36th and 45th Infantry Divisions)"}],
+    [53, "USA", "Fifth Army: II Corps (34th and 36th Infantry Divisions)", "inf", 2, "Naples", {"gen": "Geoffrey Keyes", "join": 1, "xp": 0.3, "from": ["Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)"], "war": ["USA", "GER"], "news": "Eisenhower, Montgomery, Bradley and Patton have left the Mediterranean for England, and seven veteran divisions have gone with them for the invasion of France. Alexander fights on in Italy with what is left."}],
+    [53, "USA", "Fifth Army: French Expeditionary Corps (2nd Moroccan and 3rd Algerian Divisions)", "mtn", 2, "Naples", {"gen": "Alphonse Juin", "trait": "attacker", "join": 1, "xp": 0.35, "war": ["USA", "GER"]}],
+    [53, "UK", "Eighth Army: XIII Corps (4th, 78th and 6th Armoured Divisions)", "inf", 3, "Naples", {"gen": "Oliver Leese", "join": 1, "xp": 0.4, "from": ["Eighth Army: XIII Corps (5th, 50th and 78th Divisions)"], "war": ["UK", "GER"]}],
+    [53, "UK", "Eighth Army: I Canadian Corps (1st Canadian Infantry and 5th Canadian Armoured Divisions)", "mot", 2, "Apulia", {"gen": "E. L. M. Burns", "join": 1, "xp": 0.35, "from": ["Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)"], "war": ["UK", "GER"]}],
+    [53, "UK", "Eighth Army: V Corps (8th and 10th Indian Divisions)", "inf", 2, "Apulia", {"gen": "Charles Allfrey", "join": 1, "xp": 0.3, "from": ["Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)"], "war": ["UK", "GER"]}],
+    [53, "GER", "I Parachute Corps (4th Parachute and 715th Divisions)", "mot", 2, "Rome", {"gen": "Alfred Schlemm", "join": 1, "xp": 0.25, "war": ["USA", "GER"]}],
+    [54, "GER", "14th Army: 114th Jager and 362nd Divisions", "inf", 2, "Rome", {"gen": "Eberhard von Mackensen", "join": 1, "xp": 0.2, "war": ["USA", "GER"]}],
+    [54, "USA", "Fifth Army: VI Corps (3rd and 45th Infantry, 1st Armored and British 1st and 56th Divisions)", "mot", 2, "Anzio", {"joins": "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)"}],
+    [54, "UK", "New Zealand Corps (2nd New Zealand and 4th Indian Divisions)", "inf", 2, "Naples", {"gen": "Bernard Freyberg", "join": 1, "xp": 0.45, "war": ["UK", "GER"]}]
   ]
 }

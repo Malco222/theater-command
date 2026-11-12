@@ -18,7 +18,7 @@ const MAY_43 = 45, JUNE_43 = 46, JULY_43 = 47, AUG_43 = 48, SEPT_43 = 49, OCT_43
 const XIII = 'Eighth Army: XIII Corps (5th, 50th and 78th Divisions)', XXX = 'Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)';
 const II = 'Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)', PROV = 'Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)';
 const V = 'Eighth Army: V Corps (1st Airborne and 8th Indian Divisions)';
-const VI = 'Fifth Army: VI Corps (36th and 34th Infantry Divisions)', X = 'Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)';
+const VI = 'Fifth Army: VI Corps (36th and 45th Infantry Divisions)', X = 'Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)';
 const HUBE = 'XIV Panzer Corps (Hermann Goring and 15th Panzergrenadier Divisions)', HERR = 'LXXVI Panzer Corps (26th Panzer, 29th Panzergrenadier and 1st Parachute Divisions)';
 const REARGUARD = '16th Panzer Division';
 const AIR_COMMAND = 'Mediterranean Air Command';

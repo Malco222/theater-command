@@ -965,6 +965,9 @@ function draw(g: Game, nat: string, theatre: string, divs: number): void {
  * Formations history sent to a war away from the main fronts. Unlike the home mobilisation they need a
  * friendly place to arrive at: one that has been lost, or is full, puts the move off, and after half a year
  * it is cancelled. Formations only lent to a campaign ('until') go back to the main army when their time is up.
+ * Divisions sent to strengthen a corps already at the front ('joins' names it) go into that corps wherever it
+ * stands: it keeps its general and what it has learned, and takes the new name. A formation made by breaking
+ * up others ('from' lists them by name) strikes those corps off as it forms.
  */
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
@@ -983,14 +986,32 @@ function expeditions(g: Game, nat: string): void {
     }
     if (g.turn - row[0] > 6 || (o.war && !atWar(g, o.war[0], o.war[1])) || (o.until && g.turn >= o.until)) { if (g.turn - row[0] > 6) g.flags[`sent:${i}`] = 1; return; }
     const reg = g.byName[row[5]];
+    const old = o.joins ? g.corps.find((x) => x.nat === nat && x.name === o.joins && !x.dead) : undefined;
+    if (old) {
+      g.flags[`sent:${i}`] = 1;
+      // The new divisions come at full strength; the corps they join is as rested as it was.
+      old.str = (old.str * old.divs + row[4]) / (old.divs + row[4]);
+      old.divs += row[4];
+      old.name = row[2];
+      old.kind = row[3];
+      g.supplyDirty = true;
+      if (o.news) headline(g, 'event', o.news, nat, old.reg);
+      return;
+    }
     // Troops sent to take over a stretch of an ally's line ('join') go in whatever already stands there.
     if (!reg || !allied(g, nat, reg.ctrl) || (!o.join && friendlyUnits(g, reg, nat).length >= STACK)) return;
     g.flags[`sent:${i}`] = 1;
+    if (Array.isArray(o.from)) {
+      for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
+      g.supplyDirty = true;
+    }
     const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, o);
-    if (o.from) draw(g, o.of ?? nat, o.from, row[4]);
+    if (o.from && !Array.isArray(o.from)) draw(g, o.of ?? nat, o.from, row[4]);
     if (o.until) g.flags[`lent:${i}`] = c.id;
     const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? '' : 'the ';
-    if (o.gen) headline(g, 'event', `${o.gen} ${reg.port ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
+    // A row that tells its own news says more than the bare arrival would.
+    if (o.news) headline(g, 'event', o.news, nat, reg.id);
+    else if (o.gen) headline(g, 'event', `${o.gen} ${reg.port ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
     else if (nat === g.human) headline(g, 'info', `${c.name} has ${reg.port ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
   });
   if (gone.length) {

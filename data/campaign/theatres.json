@@ -91,8 +91,12 @@
     "name": "Italy",
     "bases": {"GER": "Rome", "UK": "Sicily", "USA": "Sicily"},
     "_note": "Sicily, the islands and the peninsula as far as Tuscany, with Malta, where the invasion convoys gather. Italy has no plan here: it defends its own country by the main rules until the armistice (see diplomacy.json). The Allied phases marked ifLost Sicily keep the landing in Sicily on the table for as long as the island is in enemy hands, and the German phases marked ifLost Sicily are the retreat up the peninsula, which only begins once the island has gone.",
-    "regions": ["Malta", "Sicily", "Calabria", "Apulia", "Naples", "Abruzzo", "Rome", "Marche", "Tuscany", "Sardinia", "Corsica"],
-    "works": [[50, "Abruzzo", 2, ["GER"], "German engineers are fortifying the mountains across Italy south of Rome, from the Garigliano to the Sangro: the Gustav Line."]],
+    "regions": ["Malta", "Sicily", "Calabria", "Apulia", "Naples", "Cassino", "Anzio", "Abruzzo", "Rome", "Marche", "Tuscany", "Emilia", "Liguria", "Sardinia", "Corsica"],
+    "works": [
+      [50, "Abruzzo", 2, ["GER"], "German engineers are fortifying the mountains across Italy south of Rome, from the Garigliano to the Sangro: the Gustav Line."],
+      [50, "Cassino", 2, ["GER"], "The western end of the Gustav Line is anchored on Monte Cassino, above the one good road to Rome."],
+      [54, "Anzio", 2, ["USA", "UK"], "The beachhead at Anzio is dug in. Every yard of it is under German guns."]
+    ],
     "plans": {
       "UK": [
         {"name": "Operation Husky", "from": 47, "to": 48, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Sicily"], "targets": ["Sicily"], "minOdds": 1.2, "landings": [{"corps": "Eighth Army: XIII Corps (5th, 50th and 78th Divisions)", "with": ["Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)"], "to": ["Sicily"], "minOdds": 0.9}]},
@@ -104,13 +108,14 @@
       "USA": [
         {"name": "Operation Husky", "from": 47, "to": 48, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Sicily"], "targets": ["Sicily"], "minOdds": 1.2, "landings": [{"corps": "Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "with": ["Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)"], "to": ["Sicily"], "minOdds": 0.9}]},
         {"name": "Operation Husky", "from": 49, "to": 52, "ifLost": ["Sicily"], "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Sicily"], "targets": ["Sicily"], "minOdds": 1.2, "landings": [{"corps": "Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "with": ["Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)"], "to": ["Sicily"], "minOdds": 0.9}]},
-        {"name": "Operation Avalanche", "from": 49, "to": 49, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Naples", "Calabria"], "targets": ["Naples", "Calabria", "Apulia"], "minOdds": 1.2, "landings": [{"corps": "Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "with": ["Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)"], "to": ["Sicily"], "minOdds": 0.9}, {"corps": "Fifth Army: VI Corps (36th and 34th Infantry Divisions)", "with": ["Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)"], "to": ["Naples", "Apulia"], "minOdds": 1.0}]},
+        {"name": "Operation Avalanche", "from": 49, "to": 49, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Naples", "Calabria"], "targets": ["Naples", "Calabria", "Apulia"], "minOdds": 1.2, "landings": [{"corps": "Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)", "with": ["Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)"], "to": ["Sicily"], "minOdds": 0.9}, {"corps": "Fifth Army: VI Corps (36th and 45th Infantry Divisions)", "with": ["Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)"], "to": ["Naples", "Apulia"], "minOdds": 1.0}]},
         {"name": "Naples", "from": 50, "to": 50, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Naples", "Calabria", "Apulia"], "targets": ["Naples", "Calabria", "Apulia"], "minOdds": 1.2},
-        {"name": "The Winter Line", "from": 51, "to": 52, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Naples", "Abruzzo"], "targets": ["Calabria", "Apulia", "Naples", "Abruzzo"], "minOdds": 1.1, "renew": false}
+        {"name": "The Winter Line", "from": 51, "to": 52, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Naples", "Abruzzo"], "targets": ["Calabria", "Apulia", "Naples", "Abruzzo"], "minOdds": 1.1, "renew": false},
+        {"name": "Operation Shingle", "from": 53, "to": 53, "posture": "attack", "enemies": ["ITA", "GER"], "objectives": ["Cassino"], "targets": ["Cassino"], "minOdds": 0.15, "renew": false, "staging": {"Anzio": 1}, "landings": [{"corps": "Fifth Army: VI Corps (3rd and 45th Infantry and British 1st Divisions)", "to": ["Anzio"], "minOdds": 0.9}]}
       ],
       "GER": [
-        {"name": "Back to the Gustav Line", "from": 49, "to": 50, "ifLost": ["Sicily"], "posture": "defend", "quiet": true, "abandon": ["Sicily", "Calabria", "Apulia", "Naples"], "staging": {"Abruzzo": 5, "Rome": 2}},
-        {"name": "The Gustav Line", "from": 51, "to": 99, "ifLost": ["Sicily"], "posture": "defend", "quiet": true, "abandon": ["Sicily", "Calabria", "Apulia", "Naples"], "staging": {"Abruzzo": 5, "Rome": 2}},
+        {"name": "Back to the Gustav Line", "from": 49, "to": 50, "ifLost": ["Sicily"], "posture": "defend", "quiet": true, "abandon": ["Sicily", "Calabria", "Apulia", "Naples"], "staging": {"Cassino": 3, "Abruzzo": 2, "Rome": 2}},
+        {"name": "The Gustav Line", "from": 51, "to": 99, "ifLost": ["Sicily"], "posture": "defend", "quiet": true, "abandon": ["Sicily", "Calabria", "Apulia", "Naples"], "staging": {"Cassino": 3, "Abruzzo": 2, "Rome": 2}},
         {"name": "The Strait of Messina", "from": 47, "to": 99, "posture": "defend", "quiet": true}
       ]
     }

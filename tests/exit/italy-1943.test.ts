@@ -21,7 +21,7 @@ const NORTH = ['Rome', 'Tuscany', 'Marche', 'Lombardy', 'Liguria'];
 const AFRICA = ['Tunis', 'Algiers', 'Oran', 'Tripoli', 'Alexandria'];
 const EIGHTH = ['Eighth Army: XIII Corps (5th, 50th and 78th Divisions)', 'Eighth Army: XXX Corps (51st, 1st Canadian and 1st Airborne Divisions)'];
 const SEVENTH = ['Seventh Army: II Corps (1st, 9th and 45th Infantry Divisions)', 'Seventh Army: Provisional Corps (3rd Infantry, 2nd Armored and 82nd Airborne Divisions)'];
-const FIFTH = ['Fifth Army: VI Corps (36th and 34th Infantry Divisions)', 'Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)'];
+const FIFTH = ['Fifth Army: VI Corps (36th and 45th Infantry Divisions)', 'Fifth Army: X Corps (British 46th, 56th and 7th Armoured Divisions)'];
 
 interface Fight { turn: number; place: string; by: string; odds: number; taken: boolean; attLost: number; defLost: number }
 interface Month {
