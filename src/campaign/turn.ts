@@ -1,7 +1,8 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type BattleReport, type Build, type Corps, type Fleet, type Game, type General, type Kind, type Region, type Skill, type Stance } from './types';
+import { KIND, STACK, type AirFleet, type AirMission, type BattleReport, type Build, type Corps, type Fleet, type Game, type General, type Kind, type Region, type Skill, type Stance } from './types';
+import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
 import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -15,7 +16,8 @@ import { court, monthlyDiplomacy } from './diplomacy';
 export const current = (g: Game): string => g.order[g.phase];
 
 function closePhase(g: Game, nat: string): void {
-  // The month's fleet actions are fought once the nation's orders are all given.
+  // The month's air campaigns and fleet actions are fought once the nation's orders are all given.
+  airBattles(g, nat);
   seaBattles(g, nat);
   if (nat === 'GER') sovietEvent(g);
   g.phase++;
@@ -172,6 +174,35 @@ export function orderRebase(g: Game, id: number, region: number): boolean {
 
 export function orderShip(g: Game, c: Corps, to: number): boolean {
   return canOrder(g, c) && shipMove(g, c, g.regions[to]);
+}
+
+const myAir = (g: Game, id: number): AirFleet | null => {
+  const f = g.airFleets.find((x) => x.id === id);
+  return f && f.nat === g.human && current(g) === f.nat ? f : null;
+};
+
+/** Gives one of the player's air fleets its mission for the month: a region to fight over or bomb, or a sea to strike. */
+export function orderAir(g: Game, id: number, mission: AirMission, target = -1): boolean {
+  const f = myAir(g, id);
+  return !!f && setMission(g, f, mission, target);
+}
+
+/** Moves one of the player's air fleets to airfields in another friendly region. */
+export function orderAirBase(g: Game, id: number, region: number): boolean {
+  const f = myAir(g, id);
+  return !!f && rebaseAir(g, f, g.regions[region]);
+}
+
+/** Where one of the player's air fleets could be sent on a mission, and where it could be based. */
+export function airOptions(g: Game, id: number, mission: AirMission): { targets: number[]; bases: number[] } {
+  const f = myAir(g, id);
+  return f ? { targets: airTargets(g, f, mission), bases: airBases(g, f).map((r) => r.id) } : { targets: [], bases: [] };
+}
+
+/** The odds and the dangers of an air mission, before the order is given. */
+export function previewAirOrder(g: Game, id: number, mission: AirMission, target: number): AirAssess | null {
+  const f = g.airFleets.find((x) => x.id === id);
+  return f ? previewAir(g, f, mission, target) : null;
 }
 
 export function orderBuildCorps(g: Game, kind: Kind, region: number): Build | null {

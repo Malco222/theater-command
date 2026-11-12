@@ -8,6 +8,7 @@ import data from '../../data/campaign/navy.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
+import { AIR, skyDenies, skyOver } from './air';
 import { COMMAND } from './commanders';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, type Assessment } from './game';
 import {
@@ -26,7 +27,7 @@ export const NAVY = data as unknown as {
   battle: { seek: number; catchRaider: number; evadeAt: number; evade: number };
   ready: { port: number; sea: number; mend: number; floor: number; lost: number; won: number; sortieAt: number };
   intercept: { loss: number; sea: number };
-  landing: { assault: number; surprise: number; range: number };
+  landing: { assault: number; surprise: number; range: number; sortie: number };
   range: number;
   admiral: { perLevel: number; maxLevel: number; lostWithFlagship: number };
   convoy: { escortWorth: number; ocean: number; air: number; patrolRaid: number; subBase: number; subHunt: number; escortLoss: number };
@@ -133,7 +134,10 @@ export function airOver(g: Game, z: number, nat: string, hostile = false): numbe
     if (r.since >= g.turn) continue; // airfields taken this month are not yet in use
     const n = g.nations[r.ctrl];
     if (!n || !n.alive || !n.atWar.length) continue;
-    if (hostile ? atWar(g, r.ctrl, nat) : allied(g, r.ctrl, nat)) s += n.air;
+    // An enemy who has won the sky over this coast flies from it in strength, and its owner barely at all.
+    const sky = skyOver(g, id);
+    if (hostile ? atWar(g, r.ctrl, nat) : allied(g, r.ctrl, nat)) s += n.air * (sky ? AIR.sky.seaFoe : 1);
+    else if (sky && (hostile ? atWar(g, sky, nat) : allied(g, sky, nat))) s += g.nations[sky].air * AIR.sky.seaOwn;
   }
   return (s / zone.coast.length) * zone.air;
 }
@@ -228,9 +232,9 @@ const liftKey = (g: Game, nat: string): string => `lift:${nat}:${g.turn}`;
 export const liftLeft = (g: Game, nat: string): number => Math.max(0, g.nations[nat].sealift - (g.flags[liftKey(g, nat)] ?? 0));
 
 /** Takes corps across the given seas and returns the men lost to enemy ships and aircraft on the way. */
-function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean): number {
+function crossing(g: Game, cs: Corps[], path: number[], surprise: boolean, landingAt?: Region): number {
   if (surprise) return 0;
-  const p = crossingRisk(g, cs[0].nat, path);
+  const p = landingAt ? landingRisk(g, cs[0].nat, path, landingAt) : crossingRisk(g, cs[0].nat, path);
   if (p <= 0) return 0;
   let lost = 0;
   for (const c of cs) {
@@ -283,21 +287,63 @@ export function whyNotLand(g: Game, cs: Corps[], to: Region): string | null {
   if (cs.length > STACK) return `No more than ${STACK} corps can go ashore in one place.`;
   if (liftLeft(g, nat) < cs.length) return liftLeft(g, nat) ? `There is shipping for only ${liftLeft(g, nat)} more corps this month.` : 'All the shipping is in use this month.';
   if (!seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise: surpriseOn(g, nat, to) })) return 'No sea lane to that coast is open: it is too far, or the enemy holds the sea between.';
+  // Troopships cannot cross under an enemy sky. Only surprise, or winning the sky over the beach, gets them there.
+  if (!surpriseOn(g, nat, to) && skyDenies(g, nat, to.id)) return `${g.nations[to.ctrl].adj} fighters still hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.`;
   return null;
 }
 
-export interface LandingPlan { why: string | null; surprise: boolean; path: number[]; risk: number; defended: boolean; assess: Assessment | null }
+export interface LandingPlan {
+  why: string | null; surprise: boolean; path: number[]; risk: number; defended: boolean; assess: Assessment | null;
+  /** True when the invader has won the sky over the beach. */
+  sky: boolean;
+  /** The strength of the enemy fleets that would put to sea against the landing. */
+  sortie: number;
+}
+
+/** The enemy warships that put to sea against an invasion: those in harbour on the seas it crosses or the seas next to them, and those at sea next door. */
+export function sortieAgainst(g: Game, nat: string, path: number[]): number {
+  const near = new Set<number>(path);
+  for (const z of path) for (const j of g.seas[z].adj) near.add(j);
+  let s = 0;
+  for (const f of g.fleets) {
+    if (!atWar(g, f.nat, nat) || !surfaceShips(f)) continue;
+    if (atSea(f)) { if (!path.includes(f.zone) && near.has(f.zone)) s += fleetPower(f); continue; }
+    if ((f.base >= 0 ? g.regions[f.base].seas : [f.home]).some((z) => near.has(z))) s += fleetPower(f);
+  }
+  return s * NAVY.landing.sortie;
+}
+
+/**
+ * The share of a landing force likely to be caught at sea. It runs every danger ordinary shipping does, and off the beach
+ * it also meets the enemy fleets that come out against an invasion. An invader who has won the sky over the beach keeps most of them off.
+ */
+export function landingRisk(g: Game, nat: string, path: number[], to: Region): number {
+  const sortie = sortieAgainst(g, nat, path);
+  const sky = skyOver(g, to.id);
+  const held = sky !== null && allied(g, sky, nat);
+  let safe = 1;
+  path.forEach((z, i) => {
+    const e = seaSide(g, z, nat, true);
+    const last = i === path.length - 1;
+    let hunters = e.ships + e.air * 0.5 + (last ? sortie : 0);
+    if (last && held) hunters *= AIR.sky.seaFoe;
+    if (hunters > 0) safe *= 1 - hunters / (hunters + 2 * seaSide(g, z, nat, false).total + NAVY.intercept.sea);
+  });
+  return 1 - safe;
+}
 
 /** What a landing would meet: the seas to cross, the danger on the way, and the odds on the beach. Nothing is changed. */
 export function planLanding(g: Game, cs: Corps[], to: Region): LandingPlan {
   const why = whyNotLand(g, cs, to);
-  if (why) return { why, surprise: false, path: [], risk: 0, defended: false, assess: null };
+  if (why) return { why, surprise: false, path: [], risk: 0, defended: false, assess: null, sky: false, sortie: 0 };
   const nat = cs[0].nat;
   const surprise = surpriseOn(g, nat, to);
   const path = seaPath(g, nat, g.regions[cs[0].reg], to, { max: NAVY.landing.range, surprise })!;
   const defended = hostileUnits(g, to, nat).length > 0;
+  const sky = skyOver(g, to.id);
   return {
-    why: null, surprise, path, risk: surprise ? 0 : crossingRisk(g, nat, path), defended,
+    why: null, surprise, path, risk: surprise ? 0 : landingRisk(g, nat, path, to), defended,
+    sky: sky !== null && allied(g, sky, nat), sortie: surprise ? 0 : sortieAgainst(g, nat, path),
     assess: defended ? assess(g, cs, to, { sea: surprise ? NAVY.landing.surprise : NAVY.landing.assault, surprise }) : null,
   };
 }
@@ -311,7 +357,7 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
   const nat = cs[0].nat, from = g.regions[cs[0].reg];
   const surprise = surpriseOn(g, nat, to);
   const path = seaPath(g, nat, from, to, { max: NAVY.landing.range, surprise })!;
-  const lostAtSea = crossing(g, cs, path, surprise);
+  const lostAtSea = crossing(g, cs, path, surprise, to);
   g.flags[liftKey(g, nat)] = (g.flags[liftKey(g, nat)] ?? 0) + cs.length;
   for (const z of to.seas) g.flags[`landed:${z}:${nat}`] = g.turn;
   let taken = true;
@@ -390,7 +436,8 @@ export function rebase(g: Game, f: Fleet, r: Region): boolean {
   return true;
 }
 
-function sink(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = CLASSES): Ships {
+/** Sinks about this share of a fleet's ships, class by class, and returns what went down. */
+export function sinkShips(f: Fleet, frac: number, rng: Rng, list: ShipClass[] = CLASSES): Ships {
   const out = none();
   for (const c of list) {
     const k = Math.min(f.ships[c], rng.roll(f.ships[c] * frac * NAVY.classes[c].tough));
@@ -454,7 +501,7 @@ function airAttack(g: Game, f: Fleet): void {
   if (!surfaceShips(f)) return;
   const net = airOver(g, f.zone, f.nat, true) - airOver(g, f.zone, f.nat, false);
   if (net <= NAVY.air.safe) return;
-  const sunk = sink(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer), seaRng(g, `air:${f.id}`), SURFACE);
+  const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer), seaRng(g, `air:${f.id}`), SURFACE);
   f.ready = Math.max(0, f.ready - 0.1);
   if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of the ${f.name} in the ${g.seas[f.zone].name}.`, f.nat);
 }
@@ -580,8 +627,8 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     const won = R >= 1;
     const edge = won ? R : 1 / R;
     const hard = clamp(0.14 + 0.08 * edge, 0.18, 0.5), light = clamp(0.16 / edge, 0.03, 0.14);
-    mine.forEach((f, i) => { att[i].sunk = sink(f, won ? light : hard, rng); });
-    met.forEach((f, i) => { def[i].sunk = sink(f, won ? hard : light, rng); });
+    mine.forEach((f, i) => { att[i].sunk = sinkShips(f, won ? light : hard, rng); });
+    met.forEach((f, i) => { def[i].sunk = sinkShips(f, won ? hard : light, rng); });
     const total = (sides: SeaSide[]): Ships => { const t = none(); for (const s of sides) for (const c of CLASSES) t[c] += s.sunk[c]; return t; };
     const ships = (fs: SeaSide[]): number => fs.reduce((s, x) => s + shipCount(x.ships), 0);
     const lines: TicketLine[] = [

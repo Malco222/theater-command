@@ -7,9 +7,13 @@ import {
 } from '../game';
 import {
   beginHuman, canOrder, candidates, declarable, endHuman, humanUp, landTargets, orderAttack, orderBuildCorps, orderBuildFort,
-  orderAssign, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill,
-  previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI,
+  orderAir, orderAirBase, orderAssign, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill,
+  previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI,
 } from '../turn';
+import {
+  AIR, MISSION, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, cover, crowding, forecastAir, isOffensive,
+  km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
+} from '../air';
 import {
   NAVY, SEA_BORDERS, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
 } from '../navy';
@@ -19,7 +23,7 @@ import { loadGame, peekSave, saveGame } from '../save';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
 import { DIPLOMACY, TRACK_LABEL, canCourt, courtable, momentum, pcIncome, receptive, step, tradePartners } from '../diplomacy';
 import { bloc } from '../game';
-import { KIND, type BattleReport, type Corps, type Fleet, type Game, type General, type Kind, type Nation, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
+import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type BattleReport, type Corps, type Fleet, type Game, type General, type Kind, type Nation, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -40,11 +44,16 @@ const ui = {
   /** Choosing a new home port for that fleet. */
   rebase: false,
   seenSea: 0,
+  /** The air fleet being given orders under the Air tab. */
+  air: -1,
+  /** What a click on the map means for that air fleet: a new base, or a target for a mission. */
+  airMode: '' as '' | 'base' | AirMission,
+  seenAir: 0,
   /** A one-line answer to the last click, shown where the hint is. */
   msg: '',
   /** False until a game has been started or resumed, so the title screen never overwrites a saved game. */
   live: false,
-  tab: 'region' as 'region' | 'build' | 'generals' | 'navy' | 'reel' | 'battles' | 'powers',
+  tab: 'region' as 'region' | 'build' | 'generals' | 'navy' | 'air' | 'reel' | 'battles' | 'powers',
   view: { x: 380, y: 300, w: 620 },
   unread: 0,
   seenReports: 0,
@@ -129,6 +138,59 @@ function fleetMarks(): string {
   return out;
 }
 
+// ---- Air fleets: an aircraft seen from above, beside the region it is based in ---------------
+
+const PLANE = 'M0-8.5L1.6-3 9.5 1.2V3.2L1.6 1.6 1.1 6 3.6 8V9.2L0 8.2-3.6 9.2V8L-1.1 6-1.6 1.6-9.5 3.2V1.2L-1.6-3Z';
+
+function planeIcon(f: AirFleet): string {
+  return `<svg width="34" height="24" viewBox="-14 -10.5 28 21" class="ctr"><path class="hull" d="${PLANE}" fill="${g.nations[f.nat].color}"/></svg>`;
+}
+
+/** Air fleets at their bases, and a line from each one that is flying a mission to where it is flying it. */
+function airBaseMarks(): string {
+  let out = '';
+  for (const f of g.airFleets) {
+    if (!isOffensive(f.mission) || f.ftr + f.bmr <= 0) continue;
+    const b = g.regions[f.base];
+    const t = f.mission === 'strike' ? g.seas[f.target] : g.regions[f.target];
+    if (!t) continue;
+    const ty = f.mission === 'strike' ? t.y + 9 : t.y;
+    const c = g.nations[f.nat].color;
+    out += `<path class="airline under" d="M${b.x} ${b.y}L${t.x} ${ty}"/><path class="airline${f.mission === 'night' ? ' night' : ''}" d="M${b.x} ${b.y}L${t.x} ${ty}" stroke="${c}"/><circle class="airhit" cx="${t.x}" cy="${ty}" r="3.4" fill="${c}"/>`;
+  }
+  const groups = new Map<string, AirFleet[]>();
+  for (const f of g.airFleets) {
+    if (f.ftr + f.bmr <= 0) continue;
+    const key = `${f.base}:${f.nat}`;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(f);
+  }
+  const used = new Map<number, number>();
+  for (const [key, fs] of groups) {
+    const base = Number(key.split(':')[0]);
+    const r = g.regions[base];
+    const i = used.get(base) ?? 0;
+    used.set(base, i + 1);
+    const n = fs.reduce((t, f) => t + f.ftr + f.bmr, 0);
+    const picked = ui.tab === 'air' && fs.some((f) => f.id === ui.air);
+    out += `<g class="ctr flt air" transform="translate(${(r.x - 17 - i * 13).toFixed(1)} ${(r.y + 11).toFixed(1)}) scale(.62)">${picked ? '<circle class="fsel" r="17"/>' : ''}<path class="hull" d="${PLANE}" fill="${g.nations[fs[0].nat].color}"/><text x="0" y="17.5">${n}</text></g>`;
+  }
+  return out;
+}
+
+/** The reach of the picked air fleet, and where its next order could send it. */
+function airMarks(f: AirFleet): string {
+  const b = g.regions[f.base];
+  const R = airRange(f.nat);
+  const u = AIR.kmPerUnit;
+  let out = '';
+  if (ui.airMode === 'base') for (const r of airBases(g, f)) out += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
+  else if (ui.airMode === 'strike') for (const z of airTargets(g, f, 'strike')) out += `<circle class="mk sea${f.mission === 'strike' && f.target === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
+  else if (ui.airMode) for (const id of airTargets(g, f, ui.airMode)) out += `<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`;
+  if (f.bmr > 0) out += `<circle class="mk ring bmr" cx="${b.x}" cy="${b.y}" r="${(R.bmr / u).toFixed(1)}"/>`;
+  if (f.ftr > 0) out += `<circle class="mk ring ftr" cx="${b.x}" cy="${b.y}" r="${(R.ftr / u).toFixed(1)}"/><circle class="mk ring full" cx="${b.x}" cy="${b.y}" r="${((R.ftr * AIR.range.fullAt) / u).toFixed(1)}"/>`;
+  return out;
+}
+
 // ---- The page skeleton --------------------------------------------------------------------
 
 function mount(): void {
@@ -146,7 +208,7 @@ function mount(): void {
           <g id="seas"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="labels"></g><g id="fleets"></g><g id="units"></g>
         </svg>
         <div class="hint" id="hint"></div>
-        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span></div>
+        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Air fleet</span></div>
         <div class="zoom"><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
       </div>
@@ -198,7 +260,10 @@ function refresh(): void {
     if (r.ctrl !== r.owner) occ += `<path class="occ" d="${pathOf(r.polys)}"/>`;
   }
   $('#occ').innerHTML = occ;
-  $('#fx').innerHTML = ui.flash.map((id) => `<path class="flash" d="${pathOf(g.regions[id].polys)}"/>`).join('');
+  // Where an air force has won the sky, the region is ringed in its colour.
+  let skies = '';
+  for (const k of Object.keys(g.sky)) { const who = skyOver(g, +k); if (who) skies += `<path class="skywon" d="${pathOf(g.regions[+k].polys)}" stroke="${g.nations[who].color}"/>`; }
+  $('#fx').innerHTML = ui.flash.map((id) => `<path class="flash" d="${pathOf(g.regions[id].polys)}"/>`).join('') + skies;
 
   // Where the picked corps can go.
   let marks = '';
@@ -207,7 +272,10 @@ function refresh(): void {
   if (!lands.length) ui.land = false;
   const fl = ui.tab === 'navy' ? myFleet() : null;
   if (!fl) ui.rebase = false;
-  if (fl) {
+  const af = ui.tab === 'air' ? myAir() : null;
+  if (!af) ui.airMode = '';
+  if (af) marks += airMarks(af);
+  else if (fl) {
     if (ui.rebase) for (const r of baseTargets(g, fl)) marks += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
     else for (const z of fleetReach(g, fl)) marks += `<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
   } else if (ui.rail && picked.length) {
@@ -226,7 +294,7 @@ function refresh(): void {
   if (ui.sel >= 0) marks += `<path class="mk sel" d="${pathOf(g.regions[ui.sel].polys)}"/>`;
   else if (ui.sea >= 0 && ui.tab === 'region') marks += `<circle class="mk seasel" cx="${g.seas[ui.sea].x}" cy="${g.seas[ui.sea].y + 9}" r="33"/>`;
   $('#marks').innerHTML = marks;
-  $('#fleets').innerHTML = fleetMarks();
+  $('#fleets').innerHTML = airBaseMarks() + fleetMarks();
 
   // Counters.
   let units = '';
@@ -300,6 +368,14 @@ function hintText(): string {
     if (f && ui.rebase) return `New base for the ${f.name}: click any blue port. The fleet spends the month in harbour there.`;
     return f ? `Click a ringed sea to send the ${f.name} there.` : 'Pick one of your fleets in the list to give it orders.';
   }
+  if (ui.tab === 'air') {
+    const f = myAir();
+    if (!f) return 'Pick one of your air fleets in the list to give it orders.';
+    if (ui.airMode === 'base') return `New airfields for ${f.name}: click any blue region.`;
+    if (ui.airMode === 'strike') return `Click a ringed sea to send ${f.name} against the shipping there.`;
+    if (ui.airMode) return `${MISSION[ui.airMode].label}: click a red region to see the odds.`;
+    return `The rings show how far ${f.name} reaches: fighters inside the gold ring, bombers inside the pale one.`;
+  }
   if (ui.land) return 'Landing from the sea: click a red coast to see the odds.';
   if (ui.rail) return 'Rail move: click any blue region. It takes the whole month.';
   if (ui.ship) return 'Sea transport: click any blue port. It takes the whole month.';
@@ -327,13 +403,13 @@ function drawBar(): void {
 }
 
 function drawTabs(): void {
-  const newB = g.reports.length - ui.seenReports + Math.max(0, g.seaReports.length - ui.seenSea);
+  const newB = g.reports.length - ui.seenReports + Math.max(0, g.seaReports.length - ui.seenSea) + Math.max(0, g.airReports.length - ui.seenAir);
   const t = (id: string, label: string, n = 0) => `<button class="tab${ui.tab === id ? ' on' : ''}" data-act="tab" data-tab="${id}">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
   const me = g.human && g.nations[g.human].alive ? g.human : null;
   const build = me ? t('build', 'Build') : '';
   // Generals with no corps, when there is a corps for them: a decision waiting for the player.
   const idle = me && vacant(g, me).length ? waiting(g, me).length : 0;
-  $('#tabs').innerHTML = t('region', 'Region') + build + t('generals', 'Generals', idle) + t('navy', 'Navy') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
+  $('#tabs').innerHTML = t('region', 'Region') + build + t('generals', 'Generals', idle) + t('navy', 'Navy') + t('air', 'Air') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
 }
 
 function advice(): string {
@@ -349,7 +425,7 @@ function advice(): string {
 
 function scopeNote(): string {
   if (g.turn < STORY_ENDS) return '';
-  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the spring of 1942. You can play on, but the computer's nations will only hold what they have. The war in the air, research, shipbuilding and the later campaigns come in later phases.</div>`;
+  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the spring of 1942. You can play on, but the computer's nations will only hold what they have. Research, shipbuilding and the later campaigns come in later phases.</div>`;
 }
 
 function corpsRow(c: Corps, mine: boolean): string {
@@ -388,6 +464,7 @@ function drawPane(): void {
   else if (ui.tab === 'build') pane.innerHTML = buildPane();
   else if (ui.tab === 'generals') pane.innerHTML = generalsPane();
   else if (ui.tab === 'navy') pane.innerHTML = navyPane();
+  else if (ui.tab === 'air') pane.innerHTML = airPane();
   else if (ui.tab === 'reel') pane.innerHTML = reelPane();
   else if (ui.tab === 'battles') pane.innerHTML = battlesPane();
   else pane.innerHTML = powersPane();
@@ -397,7 +474,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -408,6 +485,9 @@ function regionPane(): string {
   if (r.seas.length) tags.push(`<span class="tag">Coast: ${r.seas.map((z) => esc(g.seas[z].name)).join(', ')}</span>`);
   if (r.fort) tags.push(`<span class="tag">Fortified, level ${r.fort.lv}, facing ${r.fort.vs.map((v) => g.nations[v]?.adj ?? v).join(' and ')} ground</span>`);
   if (me && g.nations[me].alive && allied(g, me, r.ctrl)) tags.push(g.supply[me]?.[r.id] ? '<span class="tag good">In your supply net</span>' : '<span class="tag bad">No supply line to here</span>');
+  const sky = skyOver(g, r.id);
+  if (sky) tags.push(`<span class="tag ${me && allied(g, me, sky) ? 'good' : 'bad'}">The ${g.nations[sky].adj} air force holds the sky here</span>`);
+  const based = g.airFleets.filter((f) => f.base === r.id && f.ftr + f.bmr > 0);
   const mineHere = r.units.filter((c) => canOrder(g, c));
   let acts = '';
   const picked = pickedCorps();
@@ -423,7 +503,8 @@ function regionPane(): string {
   return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
-    <h3>Forces here</h3>${acts}${units}${ui.sel >= 0 && me ? advice() : ''}`;
+    <h3>Forces here</h3>${acts}${units}
+    ${based.length ? `<h3>On the airfields</h3>${based.map((f) => airRow(f, false, true)).join('')}` : ''}${ui.sel >= 0 && me ? advice() : ''}`;
 }
 
 /** Where a new corps would form up: the selected region if it is home ground, otherwise the capital. */
@@ -625,18 +706,38 @@ function seaRow(r: SeaReport): string {
   return `<button class="brow" data-act="seareport" data-id="${r.id}"><b>${esc(r.zoneName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)} · fleet action, ${g.nations[r.attNat].adj} against ${g.nations[r.defNat].adj} ships</span></button>`;
 }
 
+function airVerdict(r: AirReport): { text: string; cls: string } {
+  const me = g.human;
+  const defSide = me !== null && r.def.some((u) => u.nat === me) && !r.att.some((u) => u.nat === me);
+  if (!defSide) return { text: r.level, cls: r.won ? 'win' : 'loss' };
+  const flip: Record<string, string> = { 'Decisive victory': 'Decisive defeat', 'Close victory': 'Close defeat', 'Close defeat': 'Close victory', 'Decisive defeat': 'Decisive victory' };
+  return { text: flip[r.level] ?? r.level, cls: r.won ? 'loss' : 'win' };
+}
+
+function airTitle(r: AirReport): string {
+  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
+}
+
+function airBrow(r: AirReport): string {
+  const v = airVerdict(r);
+  return `<button class="brow" data-act="airreport" data-id="${r.id}"><b>${esc(airTitle(r))}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)} · air campaign, ${g.nations[r.attNat].adj} against ${r.defNat ? g.nations[r.defNat].adj : 'enemy'} ${r.mission === 'strike' ? 'shipping' : r.mission === 'superiority' ? 'fighters' : 'industry'}</span></button>`;
+}
+
+function landRow(r: BattleReport): string {
+  const v = verdictFor(r);
+  return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week} · ${g.nations[r.attNat].adj} attack on ${g.nations[r.defNat].adj} forces</span></button>`;
+}
+
 function battlesPane(): string {
-  if (!g.reports.length && !g.seaReports.length) return '<h2>Battles</h2><div class="empty">No battles yet. Every battle is settled from its Battle Ticket and filed here.</div>';
-  let out = '<h2>Battles</h2><p class="sub">Open any battle, on land or at sea, to see its Battle Ticket: what the campaign map fed into the fight.</p><div style="height:8px"></div>';
-  // Newest first. A month's fleet actions are fought after its land battles.
-  let s = g.seaReports.length - 1;
-  for (let i = g.reports.length - 1, shown = 0; (i >= 0 || s >= 0) && shown < 90; shown++) {
-    if (s >= 0 && (i < 0 || g.seaReports[s].turn >= g.reports[i].turn)) { out += seaRow(g.seaReports[s--]); continue; }
-    const r = g.reports[i--];
-    const v = verdictFor(r);
-    out += `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week} · ${g.nations[r.attNat].adj} attack on ${g.nations[r.defNat].adj} forces</span></button>`;
-  }
-  return out;
+  if (!g.reports.length && !g.seaReports.length && !g.airReports.length) return '<h2>Battles</h2><div class="empty">No battles yet. Every battle is settled from its Battle Ticket and filed here.</div>';
+  // Newest first. Within a month the land battles are fought first, then the air campaigns, then the fleet actions.
+  const rows: { turn: number; rank: number; i: number; html: () => string }[] = [];
+  g.reports.forEach((r, i) => rows.push({ turn: r.turn, rank: 0, i, html: () => landRow(r) }));
+  g.airReports.forEach((r, i) => rows.push({ turn: r.turn, rank: 1, i, html: () => airBrow(r) }));
+  g.seaReports.forEach((r, i) => rows.push({ turn: r.turn, rank: 2, i, html: () => seaRow(r) }));
+  rows.sort((a, b) => b.turn - a.turn || b.rank - a.rank || b.i - a.i);
+  return '<h2>Battles</h2><p class="sub">Open any battle, on land, at sea or in the air, to see its Battle Ticket: what the campaign map fed into the fight.</p><div style="height:8px"></div>'
+    + rows.slice(0, 90).map((x) => x.html()).join('');
 }
 
 function powersPane(): string {
@@ -825,7 +926,7 @@ function landingCard(): string {
     const loss = Math.round(plan.risk * NAVY.intercept.loss * 100);
     const crossing = plan.surprise
       ? `War has only just been declared, so the enemy is caught unready: no fleet can stop the crossing this month, and the troops go ashore at full strength.`
-      : loss > 0 ? `Enemy ships and aircraft are at work on the way. Expect to lose about ${loss}% of the force at sea.` : 'No enemy ship or aircraft is in a position to stop the crossing.';
+      : loss > 0 ? `${plan.sortie >= 1 ? 'The enemy fleet will put to sea against the invasion' : 'Enemy ships and aircraft are at work on the way'}${plan.sky ? ', but your air force holds the sky over the beach and will keep most of it off the troopships' : ''}. Expect to lose about ${loss}% of the force at sea.` : 'No enemy ship or aircraft is in a position to stop the crossing.';
     let odds = `<div class="verdict win" style="font-size:24px">The coast is undefended</div><div class="sub">The force walks ashore and takes ${esc(target.name)}.</div>`;
     if (a) {
       const p = Math.max(0, Math.min(1, (1.2 - 1.2 / a.odds) / 0.4));
@@ -844,6 +945,198 @@ function landingCard(): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Landing from the sea · ${date(g.turn)}</div><h2>Landing at ${esc(target.name)}</h2></header>
     <div class="body">${body}</div>
     <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="doland" ${plan.why ? 'disabled' : ''}>Land the troops</button></footer>`;
+}
+
+// ---- The war in the air -------------------------------------------------------------------
+
+const craft = (ftr: number, bmr: number): string => [ftr ? `${num(ftr)} fighter${ftr === 1 ? '' : 's'}` : '', bmr ? `${num(bmr)} bomber${bmr === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ') || 'no aircraft';
+
+/** The player's air fleet being given orders, if it is still theirs to order. */
+function myAir(): AirFleet | null {
+  if (ui.air < 0 || !humanUp(g)) return null;
+  const f = g.airFleets.find((x) => x.id === ui.air);
+  return f && f.nat === g.human ? f : null;
+}
+
+function missionText(f: AirFleet): string {
+  const where = f.mission === 'strike' ? `the ${g.seas[f.target]?.name ?? 'sea'}` : g.regions[f.target]?.name ?? '';
+  switch (f.mission) {
+    case 'support': return 'supporting the armies and defending its sky';
+    case 'rest': return 'resting and refitting';
+    case 'superiority': return `fighting for the sky over ${where}`;
+    case 'bomb': return `bombing ${where} by day`;
+    case 'night': return `bombing ${where} by night`;
+    case 'strike': return `striking at shipping in ${where}`;
+  }
+}
+
+function airRow(f: AirFleet, mine: boolean, whose = false): string {
+  const ldr = f.leader ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(f.leader.name)} <span class="lvl" title="Level ${f.leader.level} air commander">${f.leader.level}</span></span>` : '';
+  const short = Math.max(0, f.est.ftr - f.ftr) + Math.max(0, f.est.bmr - f.bmr);
+  const crowd = crowding(g, f);
+  const tags: string[] = [];
+  if (crowd < 1) tags.push(`<span class="tag bad" title="More aircraft are based in ${esc(g.regions[f.base].name)} than its airfields can serve. Move a fleet to a neighbouring region.">Crowded airfields: flies ${Math.round(crowd * 100)}%</span>`);
+  if (short > (f.est.ftr + f.est.bmr) * 0.2) tags.push(`<span class="tag bad">${num(short)} aircraft short</span>`);
+  if (f.moved === g.turn) tags.push('<span class="tag">Moved this month</span>');
+  const lost = f.lost.ftr + f.lost.bmr;
+  const el = mine ? 'button' : 'div';
+  return `<${el} class="corps fleet${mine && ui.air === f.id ? ' pick' : ''}" ${mine ? `data-act="airfleet" data-id="${f.id}"` : ''}>
+    ${planeIcon(f)}<span class="nm">${esc(f.name)}${ldr}</span><span></span>
+    <span class="meta">${whose ? `${g.nations[f.nat].adj} · ` : ''}${esc(g.regions[f.base].name)}, ${esc(missionText(f))}</span>
+    <span class="meta">${esc(capital(craft(f.ftr, f.bmr)))}${lost ? ` · lost so far: ${esc(craft(f.lost.ftr, f.lost.bmr))}` : ''}</span>
+    <span class="bars"><span>Readiness</span><span class="meter"><i class="${f.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(f.ready * 100)}%"></i></span></span>
+    ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>`;
+}
+
+/** The orders the player can give the air fleet that is picked. */
+function airOrders(f: AirFleet): string {
+  const R = airRange(f.nat);
+  const war = g.nations[f.nat].atWar.length > 0;
+  const btn = (m: AirMission): string => {
+    const off = isOffensive(m);
+    const ok = !off || airTargets(g, f, m).length > 0;
+    const why = !war ? 'The nation is at peace.' : m !== 'superiority' && !f.bmr ? 'It has no bombers.' : 'Nothing in reach to fly this against.';
+    const on = off ? ui.airMode === m || (!ui.airMode && f.mission === m) : !ui.airMode && f.mission === m;
+    return `<button class="btn small${on ? ' on' : ''}" data-act="mission" data-mission="${m}" ${ok ? '' : 'disabled'} title="${esc(ok ? MISSION[m].what : why)}">${MISSION[m].label}</button>`;
+  };
+  const moved = f.moved === g.turn;
+  const btns = (['support', 'superiority', 'bomb', 'night', 'strike', 'rest'] as AirMission[]).map(btn).join('')
+    + `<button class="btn small${ui.airMode === 'base' ? ' on' : ''}" data-act="airbase" ${moved ? 'disabled' : ''} title="${moved ? 'It has already changed base this month.' : 'Move to airfields in another friendly region. Settling in costs readiness.'}">Change base</button>`;
+  let body: string;
+  if (ui.airMode === 'base') {
+    body = `<p class="sub" style="margin:8px 0 6px">Click any blue region on the map to move ${esc(f.name)} there. Settling in costs it ${Math.round(AIR.ready.move * 100)}% readiness, which a month of rest more than makes up. The airfields of one region serve about ${num(AIR.airfields.holds)} aircraft: pack in more and they cannot all fly.</p>`;
+  } else if (ui.airMode) {
+    const m = ui.airMode;
+    const sea = m === 'strike';
+    const ts = airTargets(g, f, m).map((t) => ({ t, d: sea ? seaKm(g, f.base, t) : airKm(g, f.base, t) })).sort((a, b) => a.d - b.d);
+    const rows = ts.slice(0, 8).map(({ t, d }) => {
+      const name = sea ? g.seas[t].name : g.regions[t].name;
+      const c = cover(d, R.ftr);
+      const esc2 = m === 'night' || !f.ftr ? '' : c >= 1 ? 'well inside fighter range' : c > 0 ? `fighters at ${Math.round(c * 100)}%` : 'beyond the fighters';
+      const ind = !sea && m !== 'superiority' ? `industry ${g.regions[t].fac}` : '';
+      const on = f.mission === m && f.target === t;
+      return `<button class="pickrow${on ? ' pick' : ''}" data-act="airtarget" data-target="${t}"><span class="grow"><b>${esc(name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${[`${num(d)} km`, esc2, ind].filter(Boolean).join(' · ')}</span></span>${on ? '<span class="tag good">Ordered</span>' : ''}</button>`;
+    }).join('');
+    body = `<p class="sub" style="margin:8px 0 6px">${esc(MISSION[m].what)} Click a ${sea ? 'ringed sea' : 'red region'} on the map, or pick one of the nearest here, to see the odds before you commit.</p>${rows}${ts.length > 8 ? `<p class="sub">${ts.length - 8} more in reach: see the map.</p>` : ''}`;
+  } else {
+    body = `<p class="sub" style="margin:8px 0 6px">${esc(capital(missionText(f)))}. ${esc(MISSION[f.mission].what)} ${f.ftr ? `Its fighters reach ${num(R.ftr)} km and are at full effect to ${num(R.ftr * AIR.range.fullAt)} km. ` : ''}${f.bmr ? `Its bombers reach ${num(R.bmr)} km. ` : ''}The rings on the map show both.</p>`;
+  }
+  return `<div class="orders"><div class="acts">${btns}</div>${body}</div>`;
+}
+
+function airOrderText(o: AirOrder): string {
+  const from = o.base?.length ? ` from ${o.base[0]}` : '';
+  const sea = o.sea ? g.seas.find((z) => z.key === o.sea)?.name ?? 'sea' : '';
+  const what = o.mission === 'superiority' ? `fights for the sky over ${o.region}` : o.mission === 'bomb' ? `bombs ${o.region} by day` : o.mission === 'night' ? `bombs ${o.region} by night` : o.mission === 'strike' ? `strikes at shipping in the ${sea}` : o.mission === 'rest' ? 'rests' : 'supports the armies';
+  return `${o.fleet}${from} ${what}.`;
+}
+
+function airPane(): string {
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  const size = (a: AirFleet, b: AirFleet): number => b.ftr + b.bmr - (a.ftr + a.bmr);
+  const held = g.regions.filter((r) => skyOver(g, r.id));
+  const skyNote = held.length ? `<div class="note"><b>The sky.</b> ${held.map((r) => `The ${g.nations[skyOver(g, r.id)!].adj} air force holds the sky over ${esc(r.name)}.`).join(' ')} An army attacking there has the air on its side, and on a coast the holder's aircraft command the sea. It has to be won again every month.</div>` : '';
+  const plan = (nat: string, mine: boolean): string => {
+    // A player sees the month he is about to play; a spectator the month that has just been flown.
+    const ph = airPlanFor(g, nat, mine ? g.turn : Math.max(1, g.turn - 1));
+    return ph ? `<div class="note"><b>${mine ? "History's plan this month" : `${esc(natName(nat))}, on history's plan`}: ${esc(ph.name)}.</b> ${esc(ph.orders.map(airOrderText).join(' '))}${mine ? ' You are free to do something else.' : ''}</div>` : '';
+  };
+  let out = '';
+  if (me) {
+    const n = g.nations[me];
+    const mine = airFleetsOf(g, me);
+    const p = airPool(g, me), d = airDeliveries(g, me);
+    const order = humanUp(g);
+    out += `<h2>The ${n.adj} air force</h2><p class="sub">An air fleet left alone supports the armies and defends the sky within reach of its fighters. Give it a mission and it flies a month-long air campaign, settled from a Battle Ticket when you end the month.</p>
+      <div class="facts"><div class="fact"><span>Fighters</span><b>${num(mine.reduce((t, f) => t + f.ftr, 0))}</b></div><div class="fact"><span>Bombers</span><b>${num(mine.reduce((t, f) => t + f.bmr, 0))}</b></div><div class="fact"><span>Spare pilots</span><b>${num(p.pilots)}</b></div></div>
+      <p class="sub" style="margin-top:6px">In reserve: ${craft(p.ftr, p.bmr)}. Each month the factories deliver ${craft(d.ftr, d.bmr)} and the flying schools ${num(d.pilots)} pilots. A new fighter needs a pilot, and resting fleets are made up first.${p.lostFtr + p.lostBmr ? ` Lost since the war began: ${craft(p.lostFtr, p.lostBmr)}, and ${num(p.lostPilots)} fighter pilots.` : ''}</p>`;
+    if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> The air force flies no missions until the nation is at war.</div>`;
+    out += plan(me, true);
+    const chain = AIR.radar.chains.find((c) => c.nat === me && c.from <= g.turn);
+    if (chain) out += `<div class="note"><b>${esc(capital(chain.name))}.</b> Radar warns of raids on your home ground: every fighter in reach gets up in time, and few aircraft are caught on the ground. An enemy without it meets raids with only ${Math.round(AIR.radar.without * 100)}% of his fighters.</div>`;
+    const cut = airIncomeLoss(g, me);
+    if (cut > 0) out += `<div class="note" style="border-left-color:var(--red)"><b>Under the bombs.</b> Bombing and attacks on coastal shipping stopped ${(cut * 100).toFixed(1)}% of your production this month.</div>`;
+    out += skyNote;
+    out += `<h3>Your air fleets</h3>${mine.length ? mine.map((f) => airRow(f, order) + (order && ui.air === f.id ? airOrders(f) : '')).join('') : '<div class="empty">No air fleets under your flag.</div>'}`;
+    const friends = g.airFleets.filter((f) => f.nat !== me && allied(g, f.nat, me)).sort(size);
+    const foes = g.airFleets.filter((f) => atWar(g, f.nat, me)).sort(size);
+    if (friends.length) out += `<h3>Allied air forces</h3>${friends.map((f) => airRow(f, false, true)).join('')}`;
+    if (foes.length) out += `<h3>Enemy air forces</h3>${foes.map((f) => airRow(f, false, true)).join('')}`;
+    return out;
+  }
+  out += `<h2>The war in the air</h2><p class="sub">Air fleets fly from the airfields of a region. Left alone they support the armies and defend their sky. Given a mission they fight a month-long campaign for the sky, against industry or against shipping, as far as their range allows. The lines on the map show who is flying against what.</p>`;
+  const war = g.airFleets.filter((f) => g.nations[f.nat].atWar.length > 0);
+  const nats = [...new Set(war.map((f) => f.nat))].sort((a, b) => war.filter((f) => f.nat === b).reduce((t, f) => t + f.ftr + f.bmr, 0) - war.filter((f) => f.nat === a).reduce((t, f) => t + f.ftr + f.bmr, 0));
+  for (const nat of nats) out += plan(nat, false);
+  out += skyNote;
+  for (const nat of nats) {
+    const p = airPool(g, nat);
+    out += `<h3>${esc(natName(nat))}</h3>${p.lostFtr + p.lostBmr ? `<p class="sub" style="margin:-2px 0 6px">Lost so far: ${craft(p.lostFtr, p.lostBmr)}, and ${num(p.lostPilots)} fighter pilots.</p>` : ''}${war.filter((f) => f.nat === nat).map((f) => airRow(f, false)).join('')}`;
+  }
+  const peace = g.airFleets.filter((f) => !g.nations[f.nat].atWar.length).sort(size);
+  if (peace.length) out += `<h3>Air forces at peace</h3>${peace.map((f) => airRow(f, false, true)).join('')}`;
+  return out;
+}
+
+const ticketTable = (lines: { label: string; value: string; effect?: string }[]): string => `<table class="ticket">${lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
+
+/** The look at an air mission before the order is given: the odds, the ticket, who flies and who will meet them. */
+function airPlanCard(): string {
+  const m = ui.modal!;
+  const f = g.airFleets.find((x) => x.id === m.fleet)!;
+  const mission = m.mission as AirMission;
+  const sea = mission === 'strike';
+  const place = sea ? `the ${g.seas[m.target].name}` : g.regions[m.target].name;
+  const title = mission === 'superiority' ? `The sky over ${place}` : mission === 'bomb' ? `Bombing ${place}` : mission === 'night' ? `Night raids on ${place}` : `Strikes on shipping in ${place}`;
+  const a = previewAirOrder(g, f.id, mission, m.target);
+  const why = whyNotMission(g, f, mission, m.target) ?? a?.why ?? (a ? null : 'Nothing can reach the target.');
+  let body: string;
+  if (why || !a) body = `<div class="empty">${esc(why ?? '')}</div>`;
+  else {
+    const fc = forecastAir(g, a, mission, m.target);
+    const lossPct = Math.round(fc.bomberLoss * 100);
+    const defNat = a.def[0]?.f.nat ?? (sea ? '' : g.regions[m.target].ctrl);
+    let head: string;
+    if (mission === 'superiority') {
+      const word = a.D <= 0 ? 'No fighters will come up' : fc.odds >= AIR.sky.win * 1.25 ? 'The sky is within reach' : fc.odds >= AIR.sky.win ? 'The sky can be won, at a price' : fc.odds >= 1.2 ? 'A hard fight that wears them down' : fc.odds >= 0.8 ? 'An even fight' : 'The defenders have the edge';
+      const share = a.Epow + a.Dpow > 0 ? a.Epow / (a.Epow + a.Dpow) : 1;
+      head = `<div class="verdict ${fc.odds >= AIR.sky.win ? 'win' : fc.odds >= 1.2 ? '' : 'loss'}" style="font-size:24px">${word}</div>
+        <div class="oddsbar"><i style="width:${Math.round(share * 100)}%;background:${g.nations[f.nat].color}"></i><i style="flex:1;background:${defNat ? g.nations[defNat].color : 'var(--panel-3)'}"></i></div>
+        <div class="sub">Fighter odds ${fc.odds.toFixed(2)} to 1 going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up once his losses are made good.${a.B > 0 ? ` About ${lossPct}% of the bombers are likely to be lost.` : ''}${fc.cut > 0 ? ` Those that get through should cut the readiness of the fighters based there by about ${Math.round(fc.cut * 100)}%, and that carries over to next month.` : ''}</div>`;
+    } else if (sea) {
+      head = `<div class="verdict ${lossPct <= 10 ? 'win' : lossPct <= 25 ? '' : 'loss'}" style="font-size:24px">${lossPct <= 10 ? 'Light opposition' : lossPct <= 25 ? 'The fighters will take a toll' : 'Heavy losses are likely'}</div>
+        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. Warships caught at sea there could lose up to ${Math.round(fc.cut * 100)}% of their number, and merchant ships in these waters will be sunk.</div>`;
+    } else {
+      head = `<div class="verdict ${lossPct <= 10 ? 'win' : lossPct <= 25 ? '' : 'loss'}" style="font-size:24px">${lossPct <= 10 ? 'Light losses expected' : lossPct <= 25 ? 'The fighters will take a toll' : 'Heavy losses are likely'}</div>
+        <div class="sub">About ${lossPct}% of the bombers are likely to be lost. The raids should stop about ${Math.round(fc.cut * 100)}% of ${esc(place)}'s output for a month: ${(fc.nation * 100).toFixed(1)}% of ${g.nations[g.regions[m.target].ctrl].adj} production.</div>`;
+    }
+    const flying = a.att.map((x) => `<div class="pickrow pick">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[x.f.base].name)}, ${num(x.d)} km · ${esc(craft(mission === 'night' ? 0 : x.f.ftr, x.bmr > 0 ? x.f.bmr : 0))}${x.crowd < 1 ? ` · crowded airfields, ${Math.round(x.crowd * 100)}% can fly` : ''}</span></span></div>`).join('');
+    const meeting = a.def.length ? a.def.map((x) => `<div class="pickrow">${planeIcon(x.f)}<span class="grow"><b>${esc(x.f.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${g.nations[x.f.nat].adj}, from ${esc(g.regions[x.f.base].name)} · ${num(x.f.ftr)} fighters, about ${num(x.f.ftr * x.w)} able to meet the raids</span></span></div>`).join('') : '<div class="empty">No enemy fighters are in reach.</div>';
+    body = `${head}<h3>Battle Ticket</h3>${ticketTable(a.lines)}<h3>Flying the mission</h3>${flying}<h3>Rising to meet them</h3>${meeting}
+      <div class="note"><b>Flown when you end the month.</b> Other fleets given the same mission against the same target fly it together. A fleet on a mission does not defend its own sky that month.</div>`;
+  }
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Air mission · ${esc(f.name)} · ${date(g.turn)}</div><h2>${esc(title)}</h2></header>
+    <div class="body">${body}</div>
+    <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="doair" ${why || !a ? 'disabled' : ''}>Give the order</button></footer>`;
+}
+
+function airReportCard(r: AirReport): string {
+  const v = airVerdict(r);
+  const sum = (ss: AirSide[], k: 'ftr' | 'bmr' | 'lostFtr' | 'lostBmr'): number => ss.reduce((n, x) => n + x[k], 0);
+  const side = (ss: AirSide[]): string => ss.length ? `<div class="big">${num(sum(ss, 'ftr') + sum(ss, 'bmr'))}</div><small>aircraft in ${ss.length} air fleet${ss.length > 1 ? 's' : ''} · lost ${num(sum(ss, 'lostFtr') + sum(ss, 'lostBmr'))}</small>` : '<div class="big">0</div><small>no fighters came up</small>';
+  const list = (ss: AirSide[]): string => ss.length ? `<ul class="ulist">${ss.map((x) => `<li><span>${esc(x.fleet)} <span style="color:var(--ink-3)">(${g.nations[x.nat].adj}${x.leader ? `, ${esc(x.leader)}` : ''})</span><br><span style="color:var(--ink-2)">${esc(capital(craft(x.ftr, x.bmr)))}</span></span><span>${x.lostFtr + x.lostBmr ? `lost ${esc(craft(x.lostFtr, x.lostBmr))}` : 'no losses'}</span></li>`).join('')}</ul>` : '<div class="empty">None.</div>';
+  const sky = r.mission === 'superiority' ? (r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${esc(r.place)}: its fighters ended the month with ${r.hold >= 9 ? 'no opposition left' : `${r.hold.toFixed(2)} times what the defenders could still put up`}.` : ` The attackers ended the month with ${r.hold.toFixed(2)} times the fighters the defenders could still put up. It takes ${AIR.sky.win} to win the sky.`) : '';
+  const what = r.mission === 'superiority' ? 'air superiority' : r.mission === 'bomb' ? 'day bombing' : r.mission === 'night' ? 'night bombing' : 'strikes on shipping';
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · air campaign, ${what} · ${date(r.turn)}</div><h2>${esc(airTitle(r))}</h2></header>
+    <div class="body">
+      <div class="verdict ${v.cls}">${v.text}</div>
+      <div class="sub">${esc(r.result)}${sky}</div>
+      <div class="vs"><div><h4><span class="chip" style="background:${g.nations[r.attNat].color}"></span> ${natName(r.attNat)} attacking</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${r.defNat ? natName(r.defNat) : 'No defenders'} <span class="chip" style="background:${r.defNat ? g.nations[r.defNat].color : 'var(--panel-3)'}"></span></h4>${side(r.def)}</div></div>
+      <h3>What the campaign map fed into the battle</h3>
+      ${ticketTable(r.lines)}
+      <h3>Flying the mission</h3>${list(r.att)}<h3>Rising to meet them</h3>${list(r.def)}
+      <div class="note" style="margin-top:14px"><b>Auto-resolved.</b> A month of air fighting is settled from its ticket. In the full game its big days can be flown as 3D air battles, with the same ticket going in and the same kind of result coming back.</div>
+    </div><footer><button class="btn" data-act="${r.zone >= 0 ? 'showsea' : 'showmap'}" data-id="${r.zone >= 0 ? r.zone : r.region}">Show on map</button><button class="btn go" data-act="close">Close</button></footer>`;
 }
 
 // ---- Modals -------------------------------------------------------------------------------
@@ -865,9 +1158,15 @@ function openModal(m: typeof ui.modal): void {
     if (!rep) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = seaReportCard(rep);
   }
+  else if (m.kind === 'airreport') {
+    const rep = g.airReports.find((r) => r.id === m.id);
+    if (!rep) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = airReportCard(rep);
+  }
+  else if (m.kind === 'airplan') card.innerHTML = airPlanCard();
   else if (m.kind === 'landing') card.innerHTML = landingCard();
   else if (m.kind === 'attack') card.innerHTML = attackCard();
-  else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length);
+  else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
   else if (m.kind === 'general') {
     const x = g.generals[m.id];
@@ -887,7 +1186,7 @@ function startCard(): string {
   const saved = peekSave(readSave() ?? '');
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `Watching history, ${date(saved.turn)}`}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
-    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe in ${g.regions.length} regions and ${g.seas.length} seas, monthly turns, armies and fleets, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan.</p>
+    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe in ${g.regions.length} regions and ${g.seas.length} seas, monthly turns, armies, fleets and air fleets, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan.</p>
     ${resume ? `<div class="sides">${resume}</div>` : ''}
     <h3>September 1939 · The war begins</h3>
     <div class="sides">
@@ -897,13 +1196,19 @@ function startCard(): string {
       ${side('UK', 'United Kingdom', 'A small army, the largest navy in the world, and convoys to keep alive.')}
       ${side('POL', 'Poland', 'Outnumbered and nearly surrounded. Hold as long as you can.')}
     </div>
+    <h3>July 1940 · The Battle of Britain</h3>
+    <div class="sides">
+      ${side(null, 'Watch the Battle of Britain', 'France has fallen. The computer flies history\'s plan: the Channel, the airfields, London, then the night Blitz.', true, 11)}
+      ${side('GER', 'Germany', 'Five air fleets and a summer of flying weather. History split its effort and lost. Can you win the sky over Kent?', false, 11)}
+      ${side('UK', 'United Kingdom', 'Radar, four fighter groups and the Channel. Keep Fighter Command in being until the autumn.', false, 11)}
+    </div>
     <h3>June 1941 · Barbarossa</h3>
     <div class="sides">
       ${side(null, 'Watch Barbarossa unfold', 'The computer plays the first 21 months, then the invasion of the Soviet Union and the first winter.', true, 22)}
       ${side('GER', 'Germany', 'Three army groups on the frontier. Reach Moscow before the snow, or outrun your supplies trying.', false, 22)}
       ${side('SOV', 'Soviet Union', 'The frontier armies are about to be hit. Trade space for time until the reserves and the winter arrive.', false, 22)}
     </div>
-    <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b> and send your fleets out under <b>Navy</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
+    <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
 
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea' };
@@ -947,15 +1252,16 @@ function attackCard(): string {
     <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="attack" ${a ? '' : 'disabled'}>Attack</button></footer>`;
 }
 
-function newsCard(from: number, repFrom: number, seaFrom: number): string {
+function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: number): string {
   const hs = g.headlines.slice(from);
   const me = g.human;
   const reps = g.reports.slice(repFrom).filter((r) => me && (r.attackers.some((u) => u.nat === me) || r.defenders.some((u) => u.nat === me)));
   const seas = g.seaReports.slice(seaFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
-  const all = g.reports.length - repFrom + (g.seaReports.length - seaFrom);
+  const airs = g.airReports.slice(airFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
+  const all = g.reports.length - repFrom + (g.seaReports.length - seaFrom) + (g.airReports.length - airFrom);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Dispatches</div><h2>${date(g.turn)}</h2></header>
     <div class="body">${hs.length ? `<div class="reel">${hs.map((h) => `<p class="${h.kind}"><span class="wk">${date(h.turn).split(' ')[0]} wk ${h.week}</span>${esc(h.text)}</p>`).join('')}</div>` : '<p class="lead">A quiet month. No news of note.</p>'}
-    ${reps.length || seas.length ? `<h3>Battles your forces fought</h3>${seas.map(seaRow).join('')}${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
+    ${reps.length || seas.length || airs.length ? `<h3>Battles your forces fought</h3>${airs.map(airBrow).join('')}${seas.map(seaRow).join('')}${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
     ${all ? `<p class="sub" style="margin-top:10px">${all} battle${all > 1 ? 's were' : ' was'} fought across the map. They are filed under Battles.</p>` : ''}</div>
     <footer><button class="btn go" data-act="close">${me && humanUp(g) ? 'Give orders' : 'Continue'}</button></footer>`;
 }
@@ -979,8 +1285,11 @@ function newGame(human: string | null, seed?: number, from = 1): void {
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = from > 1 ? g.reports.length : 0; ui.flash = [];
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = from > 1 ? g.seaReports.length : 0;
+  ui.air = -1; ui.airMode = ''; ui.seenAir = from > 1 ? g.airReports.length : 0;
   drawStatic();
-  const focus = from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
+  const britain = from === 11;
+  if (britain) ui.tab = 'air';
+  const focus = britain ? g.byName['Calais'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: human === 'GER' || from > 1 ? 640 : 600 };
   applyView();
   if (human) advanceToHuman(from > 1 && human !== 'GER'); else { ui.unread = from > 1 ? 0 : g.headlines.length; refresh(); }
@@ -995,6 +1304,7 @@ function continueGame(): boolean {
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = g.reports.length; ui.flash = [];
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = g.seaReports.length;
+  ui.air = -1; ui.airMode = ''; ui.seenAir = g.airReports.length;
   drawStatic();
   const me = g.human;
   const cap = me ? g.nations[me].capital : -1;
@@ -1006,8 +1316,8 @@ function continueGame(): boolean {
 }
 
 /** Lets the computer play until it is the player's month again. */
-function advanceToHuman(show: boolean, since?: { h: number; r: number; s: number }): void {
-  const hFrom = since?.h ?? g.headlines.length, rFrom = since?.r ?? g.reports.length, sFrom = since?.s ?? g.seaReports.length;
+function advanceToHuman(show: boolean, since?: { h: number; r: number; s: number; a: number }): void {
+  const hFrom = since?.h ?? g.headlines.length, rFrom = since?.r ?? g.reports.length, sFrom = since?.s ?? g.seaReports.length, aFrom = since?.a ?? g.airReports.length;
   const before = g.regions.map((r) => r.ctrl);
   let guard = 0;
   while (!humanUp(g) && guard++ < 80) {
@@ -1017,17 +1327,17 @@ function advanceToHuman(show: boolean, since?: { h: number; r: number; s: number
   if (humanUp(g)) beginHuman(g);
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
   ui.unread += g.headlines.length - hFrom;
-  ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = '';
+  ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = ''; ui.airMode = '';
   refresh();
   if (g.human && !g.nations[g.human].alive) {
     const lost = g.human;
     g.human = null;
     refresh();
-    openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom });
+    openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
     $('#card').querySelector('.kick')!.textContent = `${natName(lost)} has fallen. The war goes on without you.`;
     return;
   }
-  if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom });
+  if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
 }
 
 function nextMonth(): void {
@@ -1039,6 +1349,7 @@ function nextMonth(): void {
   // Follow the action.
   const hot = new Set<number>(ui.flash);
   for (const r of g.reports.slice(rFrom)) hot.add(r.region);
+  if (!hot.size) for (const r of g.airReports) if (r.turn === g.turn - 1 && r.region >= 0) hot.add(r.region);
   if (hot.size) focusOn([...hot]);
   if (ui.tab === 'reel') ui.unread = 0;
   refresh();
@@ -1080,6 +1391,16 @@ function myFleet(): Fleet | null {
 function onSea(z: number): void {
   ui.flash = [];
   ui.msg = '';
+  const af = ui.tab === 'air' ? myAir() : null;
+  if (af && ui.airMode) {
+    if (ui.airMode === 'strike') {
+      const why = whyNotMission(g, af, 'strike', z);
+      if (!why) { openModal({ kind: 'airplan', fleet: af.id, mission: 'strike', target: z }); return; }
+      ui.msg = `The ${g.seas[z].name}: ${why}`;
+    } else ui.msg = ui.airMode === 'base' ? 'Airfields are on land: click one of the blue regions.' : 'This mission needs a region: click one of the red ones.';
+    refresh();
+    return;
+  }
   const fl = ui.tab === 'navy' ? myFleet() : null;
   if (fl) {
     if (ui.rebase) ui.msg = 'A base has to be a port: click one of the blue regions.';
@@ -1112,8 +1433,8 @@ function onClick(e: MouseEvent): void {
     case 'tab':
       ui.tab = t.dataset.tab as typeof ui.tab;
       if (ui.tab === 'reel') ui.unread = 0;
-      if (ui.tab === 'battles') { ui.seenReports = g.reports.length; ui.seenSea = g.seaReports.length; }
-      ui.rail = ui.ship = ui.land = ui.rebase = false;
+      if (ui.tab === 'battles') { ui.seenReports = g.reports.length; ui.seenSea = g.seaReports.length; ui.seenAir = g.airReports.length; }
+      ui.rail = ui.ship = ui.land = ui.rebase = false; ui.airMode = '';
       refresh();
       break;
     case 'zin': zoomBy(0.7); break;
@@ -1125,7 +1446,7 @@ function onClick(e: MouseEvent): void {
       break;
     case 'end': {
       // The player's own fleet actions are fought as the month closes, so the dispatches start from here.
-      const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length };
+      const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length };
       endHuman(g);
       advanceToHuman(true, since);
       break;
@@ -1162,6 +1483,33 @@ function onClick(e: MouseEvent): void {
     case 'rebase': ui.rebase = !ui.rebase; refresh(); break;
     case 'showsea': openModal(null); ui.sea = id; ui.sel = -1; ui.picked.clear(); ui.tab = 'region'; focusOnPoint(g.seas[id].x, g.seas[id].y); refresh(); break;
     case 'seareport': openModal({ kind: 'seareport', id }); break;
+    case 'airfleet': {
+      ui.air = ui.air === id ? -1 : id;
+      ui.airMode = '';
+      const f = g.airFleets.find((x) => x.id === ui.air);
+      if (f) { ui.sel = -1; ui.sea = -1; ui.picked.clear(); }
+      refresh(); break;
+    }
+    case 'mission': {
+      const f = myAir();
+      const m = t.dataset.mission as AirMission;
+      if (!f) break;
+      if (isOffensive(m)) ui.airMode = ui.airMode === m ? '' : m;
+      else { orderAir(g, f.id, m); ui.airMode = ''; }
+      refresh(); break;
+    }
+    case 'airbase': ui.airMode = ui.airMode === 'base' ? '' : 'base'; refresh(); break;
+    case 'airtarget': {
+      const f = myAir();
+      if (f && ui.airMode && ui.airMode !== 'base') openModal({ kind: 'airplan', fleet: f.id, mission: ui.airMode, target: Number(t.dataset.target) });
+      break;
+    }
+    case 'doair': {
+      const m = ui.modal!;
+      if (orderAir(g, m.fleet, m.mission, m.target)) ui.airMode = ''; else ui.msg = 'That order could not be given.';
+      openModal(null); refresh(); break;
+    }
+    case 'airreport': openModal({ kind: 'airreport', id }); break;
     case 'doland': {
       const m = ui.modal!;
       const h = g.headlines.length;
@@ -1246,6 +1594,22 @@ function onRegion(id: number): void {
   const r = g.regions[id];
   ui.flash = [];
   ui.msg = '';
+  // Under the Air tab with a fleet picked and an order half given, a click on the map finishes it.
+  const af = ui.tab === 'air' ? myAir() : null;
+  if (af && ui.airMode) {
+    if (ui.airMode === 'base') {
+      const why = whyNotBase(g, af, r);
+      if (why) ui.msg = `${af.name} cannot move to ${r.name}. ${why}`;
+      else { orderAirBase(g, af.id, id); ui.airMode = ''; }
+    } else if (ui.airMode === 'strike') ui.msg = 'A strike on shipping needs a sea: click one of the ringed seas.';
+    else {
+      const why = whyNotMission(g, af, ui.airMode, id);
+      if (!why) { openModal({ kind: 'airplan', fleet: af.id, mission: ui.airMode, target: id }); return; }
+      ui.msg = `${r.name}: ${why}`;
+    }
+    refresh();
+    return;
+  }
   // Under the Navy tab with a fleet picked, a click on a port is a change of base.
   const fl = ui.tab === 'navy' ? myFleet() : null;
   if (fl && ui.rebase) {

@@ -7,6 +7,7 @@ import setup from '../../data/campaign/setup-1939.json';
 import { STACK, type Build, type Game, type Kind, type Region } from './types';
 import { addCorps, allied, headline } from './game';
 import { DIPLOMACY, tradePartners } from './diplomacy';
+import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
@@ -30,7 +31,7 @@ export function income(g: Game, nat: string): number {
   // Neutrals that lean toward a bloc trade with its major powers.
   const trade = tradePartners(g, nat).length * DIPLOMACY.tradeIncome;
   // What comes by sea can be sunk on the way: cargoes on the convoy routes, ore from the north.
-  return ((PRODUCTION.baseIncome + fac) * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade) * (1 - seaIncomeLoss(g, nat));
+  return ((PRODUCTION.baseIncome + fac) * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat));
 }
 
 /** Last month in which this nation still has pre-war mobilisation arriving. */

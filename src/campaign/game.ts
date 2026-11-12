@@ -11,6 +11,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { PRODUCTION, canBuildYet, deliver, firstCorpsNumber, income } from './economy';
 import { DIPLOMACY, homeOpinion, pcIncome } from './diplomacy';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
+import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import eastData from '../../data/campaign/east.json';
 
@@ -55,10 +56,12 @@ export function createGame(seed: number, human: string | null): Game {
     seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], generals: [], nextCorps: 1, nextBuild: 1, human,
     reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, capDist: {}, week: 1,
     seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], convoys: {},
+    airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {},
     links: md.links, width: md.width, height: md.height, land: md.land,
   };
   for (const row of (setup as any).corps) addCorps(g, row[0], row[1], row[2], row[3], row[4], row[5] ?? {});
   setupNavy(g);
+  setupAir(g);
   // Depots: home regions that can feed an army even when cut off from the capital.
   (md.regions as any[]).forEach((r) => { if (r.flags.depot) g.flags['depot:' + r.id] = 1; });
   for (const n of Object.values(nations)) {
@@ -409,7 +412,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     D += p * lead;
   }
   const aAir = airOf(g, aN, dN), dAir = airOf(g, dN, aN);
-  const airEdge = (aAir - dAir) / (aAir + dAir + 1);
+  let airEdge = (aAir - dAir) / (aAir + dAir + 1);
+  // Whoever has won the sky over this ground in the air war has it in the land battle too.
+  const sky = skyOver(g, target.id);
+  const skyWon = sky !== null && [...aN].some((n) => allied(g, n, sky));
+  if (skyWon) airEdge = Math.min(1, airEdge + AIR.sky.land);
   A *= 1 + 0.3 * airEdge;
   D *= 1 - 0.2 * airEdge;
   D = Math.max(D, 0.01);
@@ -422,7 +429,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   }
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });
-  lines.push({ label: 'Air', value: airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * 30)}%` : undefined });
+  lines.push({ label: 'Air', value: skyWon ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * 30)}%` : undefined });
   const gens = commandersIn(g, attackers), dgens = commandersIn(g, defenders);
   if (gens || dgens) {
     const up = rawA > 0 ? Math.round((cmdA / rawA - 1) * 100) : 0, dup = rawD > 0 ? Math.round((cmdD / rawD - 1) * 100) : 0;
@@ -658,6 +665,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
   X.fellOn = { turn: g.turn, week: g.week, to: by };
   for (const c of g.corps.filter((c) => c.nat === nat)) removeCorps(g, c);
   fleetsOnFall(g, nat);
+  airOnFall(g, nat);
   const pact = g.nations.SOV.alive && !atWar(g, 'SOV', by);
   for (const r of g.regions) {
     if (r.owner === nat) {
@@ -768,6 +776,7 @@ export function startPhase(g: Game, nat: string): void {
   mobilise(g, nat);
   monthlyCommand(g, nat);
   navalUpkeep(g, nat);
+  airUpkeep(g, nat);
   computeSupply(g);
   // The month's production comes in. Losses are made good first.
   n.pp += income(g, nat);

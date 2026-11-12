@@ -1,0 +1,139 @@
+{
+  "_about": {
+    "what": "The air war on the campaign map. An air fleet is a count of fighters and bombers at a base region under a named commander. Left alone it supports the armies and defends its own sky (that support is the Air line on every land Battle Ticket). Given orders it fights a month-long air campaign: winning the sky over a region, bombing industry by day or night, or striking shipping in a sea.",
+    "kmPerUnit": "Map units to kilometres. Ranges below are in kilometres, measured between region centres.",
+    "nations": "quality is how well an air force fights, plane for plane. ftrRange is how far its fighters can escort or intercept, bmrRange how far its bombers reach. A fighter is at full effect out to 'fullAt' of its range and falls to 'atLimit' at the limit; beyond that the bombers go alone.",
+    "radar": "A nation with a radar chain gets warning of raids on its own soil: all its fighters in reach get up in time, and fewer aircraft are caught on the ground. Without radar only 'without' of the defending fighters meet the raid.",
+    "production": "Aircraft built each month, as [from turn, fighters, bombers]. They go to a reserve and from there to fleets below establishment.",
+    "pilots": "Fighter pilots trained each month, as [from turn, pilots]. A fighter needs a pilot. 'home' is the share of pilots shot down over friendly ground who fly again; 'away' the share who get home from over enemy ground.",
+    "reserve": "The most the reserve holds: spare aircraft and spare pilots beyond this go elsewhere.",
+    "fleets": "est is the establishment over time, as [from turn, fighters, bombers]: the strength a fleet is kept at. When it drops, the surplus goes to the reserve for other fleets. start is the strength on the first day, if below establishment. from is the month the fleet forms, once its base is held.",
+    "combat": "fighters and bombers scale the month's losses. escortShare is how much of the defenders' effort falls on the escort rather than the bombers. bomberDefence is what a bomber's own guns are worth. flak is the share of bombers lost to guns alone. seaCover is how much of a fighter force can cover ships at sea. night: few fighters find the bombers and few bombs find the target.",
+    "damage": "airfields: bombers needed to cut a base's readiness by 1.0, the most one month can cut, and the share of bombers that destroys an aircraft on the ground. industry: bombers needed to stop a region's output for a month, and the most one month can stop. shipping: how hard a strike falls on ships at sea and on coastal trade.",
+    "airfields": "The airfields of one region serve 'holds' aircraft. When more are based there, every fleet in the region flies only that share of its aircraft.",
+    "sky": "The attacker wins the sky over a region when the fighters he has left outweigh, by 'win', the fighters the defender can still put up once his losses are made good. It lasts a month unless won again. land is what it is worth in a land battle there. On a coast, the side that holds the sky counts 'seaOwn' of its air strength over that sea and the other side only 'seaFoe' of its own.",
+    "ready": "How fit a fleet is to fly, 0 to 1. A fleet at readiness r fights at 0.5 + 0.5 r of its strength.",
+    "plan": "What computer-run air forces do in Historical mode, month by month. Each order names a fleet, the first base on its list it can use, and a mission. Fleets without orders support their armies and defend."
+  },
+  "kmPerUnit": 2.78,
+  "ferry": 1600,
+  "nations": {
+    "_default": { "quality": 0.7, "ftrRange": 220, "bmrRange": 700 },
+    "GER": { "quality": 1.1, "ftrRange": 200, "bmrRange": 900 },
+    "UK": { "quality": 1.05, "ftrRange": 220, "bmrRange": 1000 },
+    "FRA": { "quality": 0.85, "ftrRange": 220, "bmrRange": 700 },
+    "ITA": { "quality": 0.75, "ftrRange": 220, "bmrRange": 800 },
+    "POL": { "quality": 0.8, "ftrRange": 180, "bmrRange": 600 },
+    "SOV": { "quality": 0.6, "ftrRange": 200, "bmrRange": 800 }
+  },
+  "range": { "fullAt": 0.6, "atLimit": 0.5 },
+  "radar": {
+    "without": 0.7,
+    "chains": [
+      { "nat": "UK", "from": 1, "name": "Chain Home", "by": "Hugh Dowding", "ground": 0.3 },
+      { "nat": "GER", "from": 24, "name": "the Kammhuber Line", "by": "Josef Kammhuber", "ground": 0.5 }
+    ]
+  },
+  "production": {
+    "GER": [[1, 180, 280], [9, 250, 300], [16, 300, 320], [22, 360, 350]],
+    "UK": [[1, 110, 150], [6, 180, 200], [9, 320, 250], [10, 450, 300], [16, 400, 350]],
+    "FRA": [[1, 120, 60], [7, 250, 120]],
+    "ITA": [[1, 120, 100]],
+    "SOV": [[1, 250, 200], [22, 450, 350], [26, 700, 500]]
+  },
+  "pilots": {
+    "home": 0.5,
+    "away": 0.1,
+    "perMonth": {
+      "GER": [[1, 200], [12, 240]],
+      "UK": [[1, 80], [9, 160], [11, 260], [13, 300]],
+      "FRA": [[1, 80]],
+      "ITA": [[1, 90]],
+      "SOV": [[1, 250], [22, 450]]
+    }
+  },
+  "reserve": {
+    "_default": { "ftr": 150, "bmr": 150, "pilots": 100 },
+    "GER": { "ftr": 400, "bmr": 500, "pilots": 250 },
+    "UK": { "ftr": 300, "bmr": 250, "pilots": 200 },
+    "SOV": { "ftr": 600, "bmr": 500, "pilots": 400 }
+  },
+  "leader": { "perLevel": 0.04, "maxLevel": 5 },
+  "combat": {
+    "fighters": 0.55,
+    "bombers": 0.8,
+    "escortShare": 0.6,
+    "bomberDefence": 0.25,
+    "maxBomberLoss": 0.5,
+    "flak": 0.02,
+    "seaCover": 0.4,
+    "night": { "fighters": 0.03, "accuracy": 0.35, "flak": 0.01 },
+    "luck": 0.15,
+    "intensity": { "superiority": 1, "bomb": 1, "night": 0.7, "strike": 0.5 }
+  },
+  "damage": {
+    "airfields": { "scale": 2000, "max": 0.3, "ground": 0.04, "maxGround": 0.25 },
+    "industry": { "scale": 3000, "max": 0.3, "maxShare": 0.4 },
+    "shipping": { "scale": 2000, "sink": 0.25, "maxSink": 0.1, "coastal": 0.03, "tradeScale": 1500 }
+  },
+  "sky": { "win": 1.65, "least": 50, "lasts": 1, "land": 0.3, "seaOwn": 0.7, "seaFoe": 0.3 },
+  "airfields": { "holds": 1500 },
+  "ready": { "support": 0.15, "rest": 0.35, "flying": 0.1, "sortie": 0.1, "nightSortie": 0.05, "defend": 0.05, "move": 0.25, "floor": 0.3 },
+  "fleets": [
+    { "nat": "GER", "name": "Luftflotte 1", "base": "Berlin", "leader": "Alfred Keller", "est": [[1, 300, 500], [10, 80, 150], [20, 250, 450]] },
+    { "nat": "GER", "name": "Luftflotte 2", "base": "Westphalia", "leader": "Albert Kesselring", "est": [[1, 250, 450], [10, 650, 750], [20, 400, 550]] },
+    { "nat": "GER", "name": "Luftflotte 3", "base": "Frankfurt", "leader": "Hugo Sperrle", "est": [[1, 200, 300], [10, 330, 500], [20, 250, 400]] },
+    { "nat": "GER", "name": "Luftflotte 4", "base": "Vienna", "leader": "Alexander Lohr", "est": [[1, 150, 350], [10, 60, 100], [20, 300, 450]] },
+    { "nat": "GER", "name": "Luftflotte 5", "base": "Oslo", "from": 9, "leader": "Hans-Jurgen Stumpff", "est": [[9, 40, 120]] },
+
+    { "nat": "UK", "name": "No. 11 Group", "base": "Kent", "leader": "Keith Park", "start": [180, 0], "est": [[1, 220, 0], [9, 330, 0]] },
+    { "nat": "UK", "name": "No. 12 Group", "base": "East Anglia", "leader": "Trafford Leigh-Mallory", "start": [120, 0], "est": [[1, 140, 0], [9, 190, 0]] },
+    { "nat": "UK", "name": "No. 10 Group", "base": "Hampshire", "from": 10, "leader": "Quintin Brand", "start": [60, 0], "est": [[10, 100, 0]] },
+    { "nat": "UK", "name": "No. 13 Group", "base": "Northumbria", "leader": "Richard Saul", "start": [70, 0], "est": [[1, 100, 0]] },
+    { "nat": "UK", "name": "Bomber Command", "base": "Lincolnshire", "leader": "Charles Portal", "start": [0, 280], "est": [[1, 0, 300], [9, 0, 450], [22, 0, 600]] },
+
+    { "nat": "FRA", "name": "Northern Air Zone", "base": "Lille", "leader": "Francois d'Astier", "est": [[1, 300, 150]] },
+    { "nat": "FRA", "name": "Eastern Air Zone", "base": "Lorraine", "leader": "Marcel Tetu", "est": [[1, 250, 100]] },
+
+    { "nat": "ITA", "name": "1st Air Squadron", "base": "Lombardy", "est": [[1, 220, 280]] },
+    { "nat": "ITA", "name": "2nd Air Squadron", "base": "Sicily", "est": [[1, 150, 200]] },
+    { "nat": "ITA", "name": "4th Air Squadron", "base": "Apulia", "est": [[1, 100, 150]] },
+
+    { "nat": "POL", "name": "Pursuit Brigade", "base": "Warsaw", "leader": "Stefan Pawlikowski", "est": [[1, 150, 0]] },
+    { "nat": "POL", "name": "Bomber Brigade", "base": "Lublin", "leader": "Wladyslaw Heller", "est": [[1, 0, 120]] },
+
+    { "nat": "SOV", "name": "Leningrad District Air Force", "base": "Leningrad", "leader": "Aleksandr Novikov", "est": [[1, 500, 350], [18, 700, 500]] },
+    { "nat": "SOV", "name": "Western District Air Force", "base": "Minsk", "leader": "Ivan Kopets", "est": [[1, 600, 450], [18, 900, 700]] },
+    { "nat": "SOV", "name": "Kiev District Air Force", "base": "Kiev", "leader": "Yevgeny Ptukhin", "est": [[1, 700, 500], [18, 1000, 800]] },
+    { "nat": "SOV", "name": "Odessa District Air Force", "base": "Odessa", "leader": "Fyodor Michugin", "est": [[1, 300, 200], [18, 400, 300]] },
+    { "nat": "SOV", "name": "Moscow Air Defence", "base": "Moscow", "leader": "Mikhail Gromadin", "est": [[1, 300, 0], [22, 500, 0]] }
+  ],
+  "plan": [
+    { "nat": "GER", "from": 11, "to": 11, "name": "The Channel battles", "against": "UK", "orders": [
+      { "fleet": "Luftflotte 2", "base": ["Calais", "Flanders", "Somme"], "mission": "strike", "sea": "channel" },
+      { "fleet": "Luftflotte 3", "base": ["Cotentin", "Normandy", "Rouen"], "mission": "strike", "sea": "channel" }
+    ] },
+    { "nat": "GER", "from": 12, "to": 12, "name": "Eagle Attack", "against": "UK", "orders": [
+      { "fleet": "Luftflotte 2", "base": ["Calais", "Flanders", "Somme"], "mission": "superiority", "region": "Kent" },
+      { "fleet": "Luftflotte 3", "base": ["Cotentin", "Normandy", "Rouen"], "mission": "superiority", "region": "Hampshire" },
+      { "fleet": "Luftflotte 5", "base": ["Sorlandet", "Bergen"], "mission": "bomb", "region": "Northumbria" }
+    ] },
+    { "nat": "GER", "from": 13, "to": 13, "name": "London", "against": "UK", "orders": [
+      { "fleet": "Luftflotte 2", "base": ["Calais", "Flanders", "Somme"], "mission": "bomb", "region": "London" },
+      { "fleet": "Luftflotte 3", "base": ["Cotentin", "Normandy", "Rouen"], "mission": "night", "region": "London" }
+    ] },
+    { "nat": "GER", "from": 14, "to": 14, "name": "The last daylight battles", "against": "UK", "orders": [
+      { "fleet": "Luftflotte 2", "base": ["Calais", "Flanders", "Somme"], "mission": "superiority", "region": "Kent" },
+      { "fleet": "Luftflotte 3", "base": ["Cotentin", "Normandy", "Rouen"], "mission": "night", "region": "London" }
+    ] },
+    { "nat": "GER", "from": 15, "to": 20, "name": "The Blitz", "against": "UK", "orders": [
+      { "fleet": "Luftflotte 2", "base": ["Calais", "Flanders", "Somme"], "mission": "night", "region": "London" },
+      { "fleet": "Luftflotte 3", "base": ["Cotentin", "Normandy", "Rouen"], "mission": "night", "region": "Midlands" }
+    ] },
+    { "nat": "GER", "from": 21, "to": 99, "name": "The air fleets go east", "against": "SOV", "orders": [
+      { "fleet": "Luftflotte 1", "base": ["Konigsberg"], "mission": "support" },
+      { "fleet": "Luftflotte 2", "base": ["Warsaw"], "mission": "support" },
+      { "fleet": "Luftflotte 4", "base": ["Krakow", "Lublin"], "mission": "support" }
+    ] }
+  ]
+}

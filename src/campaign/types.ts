@@ -343,6 +343,88 @@ export interface PlanPhase {
   fleets?: { fleet: string; zone: string; stance: Stance }[];
 }
 
+// ---- The war in the air -----------------------------------------------------------------
+
+/**
+ * What an air fleet is doing this month. Left on support it flies for the armies and defends
+ * its own sky; the others are month-long air campaigns against a region or a sea.
+ */
+export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest';
+
+export interface AirLeader {
+  name: string;
+  level: number;
+  xp: number;
+}
+
+export interface AirFleet {
+  id: number;
+  nat: string;
+  name: string;
+  /** Region its airfields are in. */
+  base: number;
+  /** Fighters with pilots, and bombers. */
+  ftr: number;
+  bmr: number;
+  /** The strength it is kept at. */
+  est: { ftr: number; bmr: number };
+  mission: AirMission;
+  /** A region for superiority and bombing, a sea for a strike on shipping, -1 for none. */
+  target: number;
+  /** 0..1: how fit the fleet is to fly. */
+  ready: number;
+  leader: AirLeader | null;
+  /** Month it last changed base. */
+  moved: number;
+  /** Aircraft lost since the war began. */
+  lost: { ftr: number; bmr: number };
+}
+
+/** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
+export interface AirPool {
+  ftr: number;
+  bmr: number;
+  pilots: number;
+  lostFtr: number;
+  lostBmr: number;
+  lostPilots: number;
+}
+
+export interface AirSide {
+  nat: string;
+  fleet: string;
+  leader: string | null;
+  ftr: number;
+  bmr: number;
+  lostFtr: number;
+  lostBmr: number;
+}
+
+export interface AirReport {
+  id: number;
+  turn: number;
+  mission: AirMission;
+  /** The region fought over, or -1 for a strike at sea. */
+  region: number;
+  /** The sea struck, or -1. */
+  zone: number;
+  place: string;
+  attNat: string;
+  defNat: string;
+  att: AirSide[];
+  def: AirSide[];
+  lines: TicketLine[];
+  odds: number;
+  level: VictoryLevel;
+  won: boolean;
+  /** True when the attacker won the sky over the region. */
+  sky: boolean;
+  /** In a fight for the sky: the attacker's fighters left at the end against what the defender can still put up. */
+  hold: number;
+  /** What the bombers did, in a sentence. */
+  result: string;
+}
+
 export interface Game {
   seed: number;
   rng: Rng;
@@ -376,6 +458,15 @@ export interface Game {
   seaReports: SeaReport[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
+  airFleets: AirFleet[];
+  nextAir: number;
+  airReports: AirReport[];
+  /** Each nation's reserve of aircraft and pilots. */
+  airPool: Record<string, AirPool>;
+  /** Who has won the sky over a region, and in which month. */
+  sky: Record<number, { nat: string; turn: number }>;
+  /** The share of a nation's production stopped by bombing and strikes on its coastal trade, and the month it happened. */
+  raids: Record<string, { turn: number; share: number }>;
   links: [number, number][];
   width: number;
   height: number;

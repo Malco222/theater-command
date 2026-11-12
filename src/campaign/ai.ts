@@ -4,6 +4,7 @@
 // the player uses, so history can come out differently.
 
 import plan from '../../data/campaign/plan-historical.json';
+import { airAI } from './air';
 import { aiProduction } from './economy';
 import { NAVY, landCorps, navalAI, surpriseOn } from './navy';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -47,6 +48,7 @@ function campaign(g: Game, nat: string): void {
     if (go) for (const e of ph.declare) declareWar(g, nat, e);
   }
   navalAI(g, nat, ph?.fleets);
+  airAI(g, nat);
   if (!n.atWar.length) return;
   if (ph?.landings) landings(g, nat, ph);
   if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
