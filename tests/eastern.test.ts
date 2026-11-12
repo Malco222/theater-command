@@ -7,7 +7,7 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { runTurnAI } from '../src/campaign/turn';
 import type { Game } from '../src/campaign/types';
 
-const JUNE_41 = 22, AUGUST_41 = 24, OCTOBER_41 = 26, NOVEMBER_41 = 27, DECEMBER_41 = 28;
+const JUNE_41 = 22, AUGUST_41 = 24, OCTOBER_41 = 26, NOVEMBER_41 = 27, DECEMBER_41 = 28, MARCH_42 = 31;
 
 /** One war on the historical plan, remembered at the months the tests look at. */
 const war: Record<number, Game> = {};
@@ -28,6 +28,16 @@ describe('weather in the east', () => {
     expect(weather(g)).toMatchObject({ mud: false, winter: true });
     g.turn = JUNE_41;
     expect(weather(g)).toMatchObject({ mud: false, winter: false });
+  });
+
+  it('the thaw comes in April: in March the frozen ground still carries an army', () => {
+    // Each season is counted from the month after it sets in, as the autumn mud is: a month's orders are given at its start.
+    const g = createGame(1, null);
+    g.turn = MARCH_42;
+    expect(weather(g)).toMatchObject({ mud: false, winter: false });
+    g.turn = MARCH_42 + 1;
+    expect(weather(g)).toMatchObject({ mud: true, winter: false });
+    expect(EASTERN.mud).toEqual([10, 3]);
   });
 
   it('winter bites armies without winter kit, and only on Soviet ground', () => {

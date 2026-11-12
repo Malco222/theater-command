@@ -76,8 +76,19 @@ describe('the campaign map', () => {
   });
   it('adding the south moved nothing in the north', () => {
     expect(g.byName['Berlin'].id).toBe(createGame(1, null).byName['Berlin'].id);
-    expect(g.regions.length).toBe(371);
+    expect(g.regions.length).toBe(373);
     expect(g.byName['Casablanca'].id).toBe(315);
     expect(g.byName['Rhodes'].id).toBe(370);
+  });
+  it('the land bridge between the Don and the Volga is the only way to Stalingrad from the west', () => {
+    const near = (n: string): string[] => g.byName[n].nb.map((j) => g.regions[j].name).sort();
+    // The rivers are barriers: nobody steps from the Don bend straight into the city, or from Salsk onto the land bridge.
+    expect(near('Kalach')).toEqual(['Don Bend', 'Kalmyk Steppe', 'Stalingrad']);
+    expect(near('Stalingrad')).toEqual(['Astrakhan', 'Kalach', 'Kalmyk Steppe', 'Kamyshin']);
+    expect(near('Don Bend')).not.toContain('Stalingrad');
+    expect(near('Salsk')).not.toContain('Kalach');
+    // New places go on the end, so that saved games still find every older region where it was.
+    expect(g.byName['Kalach'].id).toBe(371);
+    expect(g.byName['Astrakhan'].id).toBe(372);
   });
 });

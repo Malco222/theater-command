@@ -417,18 +417,35 @@ function advice(): string {
   const list = (a?: string[]) => (a ?? []).slice(0, 7).join(', ');
   // Only what is still to do: wars not yet declared, objectives still in enemy hands.
   const todo = (a?: string[]) => (a ?? []).filter((nm) => { const r = g.byName[nm]; return r && atWar(g, me, r.ctrl); });
+  // The plan's standing orders beyond its objectives: forces to gather or keep in place, and sectors left to allies.
+  const orders = (ph: NonNullable<ReturnType<typeof phaseFor>>): string => {
+    const out: string[] = [];
+    const held = (nm: string): boolean => { const r = g.byName[nm]; return !!r && allied(g, me, r.ctrl); };
+    const fast = Object.entries(ph.concentrate ?? {}).filter(([nm]) => held(nm));
+    if (fast.length) out.push(`Take the tanks out of the quiet parts of the line and gather them by rail for the summer: ${esc(fast.map(([nm, k]) => `${k} corps at ${nm}`).join(', '))}.`);
+    const keep = ph.posture === 'redeploy' ? [] : Object.entries(ph.staging ?? {}).filter(([nm]) => held(nm));
+    if (keep.length) out.push(`Keep ${esc(keep.map(([nm, k]) => `${k} corps at ${nm}`).join(' and '))}.`);
+    const lent = Object.entries(ph.entrust ?? {}).flatMap(([ally, places]) => places.filter((nm) => held(nm) && g.byName[nm].units.filter((u) => u.nat === ally).length >= 2));
+    if (lent.length) out.push(`Your allies now hold ${esc(list(lent))}: history left one corps to stiffen each and sent the rest on.`);
+    const out2 = (ph.abandon ?? []).filter((nm) => held(nm) && g.byName[nm].units.some((u) => u.nat === me && u.kind !== 'fort'));
+    if (out2.length) out.push(`Give up ${esc(list(out2))}: march the corps there back toward home before the road behind them is cut.`);
+    const dear = Object.entries(ph.oddsFor ?? {}).filter(([nm, o]) => o < (ph.minOdds ?? 1.3) && !held(nm)).map(([nm]) => nm);
+    if (dear.length) out.push(`History threw its army at ${esc(list(dear))} against the odds. You need not.`);
+    return out.length ? ` ${out.join(' ')}` : '';
+  };
   const main = (): string => {
     const ph = phaseFor(g, me);
     if (!ph) return '';
     if (ph.posture === 'attack') {
       const declare = (ph.declare ?? []).filter((e) => g.nations[e].alive && !atWar(g, me, e));
-      const left = ph.declare?.length && !declare.length ? todo(ph.objectives) : ph.objectives ?? [];
-      if (!left.length && !declare.length) return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> The plan at home is carried out. Hold what you have.</div>`;
+      // Once the wars the plan calls for are on, only the objectives still in enemy hands are left to name.
+      const left = declare.length ? ph.objectives ?? [] : todo(ph.objectives);
+      if (!left.length && !declare.length) return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> The plan at home is carried out. Hold what you have.${orders(ph)}</div>`;
       const aims = left.length ? `Objectives, in order: ${esc(list(left))}.` : '';
-      return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> ${declare.length ? `Declare war on ${declare.map(natName).join(', ')}. ` : ''}${aims}${ph.landings?.length ? ` From the sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''} You are free to do something else.</div>`;
+      return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> ${declare.length ? `Declare war on ${declare.map(natName).join(', ')}. ` : ''}${aims}${ph.landings?.length ? ` From the sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''}${orders(ph)} You are free to do something else.</div>`;
     }
     if (ph.posture === 'redeploy') return `<div class="note"><b>History's plan this month.</b> Move the army west by rail and wait for spring. Assembly areas: ${esc(list(ph.assembly))}.</div>`;
-    return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> Hold the line and keep a reserve near the capital.${ph.landings?.length ? ` By sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''}</div>`;
+    return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> ${ph.quiet ? 'Stand on the defensive and risk nothing: the army is being saved for a later stroke.' : 'Hold the line and keep a reserve near the capital.'}${ph.landings?.length ? ` By sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''}${orders(ph)}</div>`;
   };
   // An army overseas has a plan of its own.
   const away = theatrePhases(g, me).map(({ theatre, phase: ph }) => {
@@ -1328,6 +1345,12 @@ function startCard(): string {
       ${side('GER', 'Germany', 'Three army groups on the frontier. Reach Moscow before the snow, or outrun your supplies trying.', false, 22)}
       ${side('SOV', 'Soviet Union', 'The frontier armies are about to be hit. Trade space for time until the reserves and the winter arrive.', false, 22)}
     </div>
+    <h3>June 1942 · Case Blue and Stalingrad</h3>
+    <div class="sides">
+      ${side(null, 'Watch the road to Stalingrad', 'The computer plays the first 33 months, then the drive for the Don, the Volga and the Caucasus oil, and the winter that turned the war.', true, 34)}
+      ${side('GER', 'Germany', 'Your tanks are gathered in the south and your allies will hold the Don behind you. The oil and the Volga are both in reach. Decide how much of the army goes into the city.', false, 34)}
+      ${side('SOV', 'Soviet Union', 'Give ground all summer and save the army. Hold Stalingrad, watch who is guarding the Don, and strike when the snow comes.', false, 34)}
+    </div>
     <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
 
@@ -1407,9 +1430,9 @@ function newGame(human: string | null, seed?: number, from = 1): void {
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = from > 1 ? g.seaReports.length : 0;
   ui.air = -1; ui.airMode = ''; ui.seenAir = from > 1 ? g.airReports.length : 0;
   drawStatic();
-  const britain = from === 11, desert = from === 13, balkans = from === 14;
+  const britain = from === 11, desert = from === 13, balkans = from === 14, blue = from === 34;
   if (britain) ui.tab = 'air';
-  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : balkans ? g.byName['Thessaly'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
+  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : balkans ? g.byName['Thessaly'] : blue ? g.byName[human === 'SOV' ? 'Stalingrad' : 'Kharkov'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: desert || balkans ? 580 : human === 'GER' || from > 1 ? 640 : 600 };
   applyView();
   // A country that is attacked before its first month comes round places its army on the eve of war.

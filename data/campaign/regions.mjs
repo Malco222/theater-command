@@ -403,6 +403,10 @@ export const REGIONS = [
   // Islands
   ['Crete', 35.25, 24.9, 'GRE', 'hills', 0, 0, { port: 1 }],
   ['Rhodes', 36.2, 27.95, 'ITA', 'hills', 0, 0, { port: 1, col: 1 }],
+  // Added for 1942. The land bridge between the Don and the Volga west of Stalingrad: the only way to the city from the west.
+  ['Kalach', 48.55, 43.55, 'SOV', 'plains', 0, 0, {}],
+  // The lower Volga below Stalingrad, as far as the map goes toward Astrakhan: the far end of the 1942 offensive, and where the southern arm of the counter-stroke formed up.
+  ['Astrakhan', 47.1, 46.5, 'SOV', 'plains', 1, 0, {}],
 ];
 
 // Short crossings that armies can use without a fleet.
@@ -435,6 +439,10 @@ export const NO_BORDER = [
   // The Gulf of Suez and the canal: Sinai is reached through the canal zone, not across the water.
   ['Faiyum', 'Sinai'],
   ['Cairo', 'Sinai'],
+  // The Don below its great bend is a wide river with few crossings: Stalingrad is reached from the west only over the
+  // land bridge at Kalach, and from the south across the Kalmyk steppe.
+  ['Don Bend', 'Stalingrad'],
+  ['Kalach', 'Salsk'],
   // The oases of the deep desert are the ends of tracks, not ways round: the sand seas between them stop an army.
   ['Jalo', 'Jarabub'],
   ['Jalo', 'Mechili'],

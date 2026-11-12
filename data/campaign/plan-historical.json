@@ -15,7 +15,18 @@
     {"from": 25, "to": 25, "name": "Kiev", "posture": "attack", "enemies": ["SOV"], "axis": ["Chernigov", "Poltava", "Kiev", "Sumy"], "objectives": ["Kiev", "Chernigov", "Poltava", "Sumy", "Zaporozhye"], "limited": true},
     {"from": 26, "to": 27, "name": "Typhoon", "posture": "attack", "enemies": ["SOV"], "axis": ["Vyazma", "Bryansk", "Kaluga", "Kalinin", "Moscow"], "objectives": ["Vyazma", "Bryansk", "Moscow", "Kaluga", "Kalinin", "Orel", "Kharkov", "Tula", "Stalino", "Kursk", "Rzhev", "Crimea", "Rostov", "Tikhvin"], "limited": true, "minOdds": 1.0},
     {"from": 28, "to": 28, "name": "The last push on Moscow", "posture": "attack", "enemies": ["SOV"], "axis": ["Tula", "Moscow"], "targets": ["Moscow", "Tula", "Tikhvin", "Rostov"], "minOdds": 0.5},
-    {"from": 29, "to": 99, "name": "Winter line", "posture": "defend"}
+    {"from": 29, "to": 30, "name": "Winter line", "posture": "defend"},
+    {"from": 31, "to": 33, "name": "Regrouping for the summer", "posture": "defend", "concentrate": {"Kursk": 2, "Kharkov": 3, "Stalino": 2}},
+    {"from": 34, "to": 34, "name": "Case Blue: Voronezh", "posture": "attack", "enemies": ["SOV"], "axis": ["Voronezh"], "objectives": ["Voronezh", "Crimea", "Voroshilovgrad", "Millerovo", "Stalino", "Kharkov", "Kursk"], "targets": ["Voronezh", "Crimea", "Voroshilovgrad", "Millerovo", "Stalino", "Kharkov", "Kursk"], "minOdds": 1.2},
+    {"from": 35, "to": 35, "name": "Case Blue: the Don and Rostov", "posture": "attack", "enemies": ["SOV"], "axis": ["Millerovo", "Rostov"], "objectives": ["Millerovo", "Voroshilovgrad", "Rostov", "Don Bend", "Voronezh", "Crimea"], "targets": ["Millerovo", "Voroshilovgrad", "Rostov", "Don Bend", "Voronezh", "Crimea", "Stalino"], "minOdds": 1.2},
+    {"from": 36, "to": 36, "name": "To the Volga and the Caucasus", "posture": "attack", "enemies": ["SOV"], "axis": ["Kalach", "Salsk", "Stavropol", "Maikop"], "objectives": ["Salsk", "Kalach", "Don Bend", "Stavropol", "Kuban", "Maikop", "Kalmyk Steppe", "Rostov"], "targets": ["Don Bend", "Kalach", "Rostov", "Salsk", "Kuban", "Stavropol", "Maikop", "Kalmyk Steppe", "Millerovo", "Voroshilovgrad"], "minOdds": 1.1, "oddsFor": {"Kalach": 1.0}, "staging": {"Don Bend": 5}, "entrust": {"HUN": ["Voronezh"], "ITA": ["Millerovo"], "ROM": ["Don Bend", "Kalmyk Steppe"]}},
+    {"from": 37, "to": 39, "name": "Stalingrad and the oilfields", "posture": "attack", "enemies": ["SOV"], "axis": ["Kalach", "Stavropol", "Maikop", "Terek"], "objectives": ["Stalingrad", "Kalach", "Maikop", "Kuban", "Stavropol", "Novorossiysk", "Terek", "Kalmyk Steppe", "Salsk"], "targets": ["Stalingrad", "Kalach", "Novorossiysk", "Terek", "Maikop", "Kalmyk Steppe", "Stavropol", "Kuban", "Salsk", "Don Bend"], "minOdds": 1.1, "oddsFor": {"Stalingrad": 0.45, "Kalach": 1.0}, "staging": {"Kalach": 5}, "entrust": {"HUN": ["Voronezh"], "ITA": ["Millerovo"], "ROM": ["Don Bend", "Kalmyk Steppe"]}},
+    {"from": 40, "to": 40, "name": "Holding the Volga", "posture": "defend", "staging": {"Kalach": 5, "Orel": 2}, "abandon": ["Terek"], "entrust": {"HUN": ["Voronezh"], "ITA": ["Millerovo"], "ROM": ["Don Bend", "Kalmyk Steppe"]}},
+    {"from": 41, "to": 41, "name": "Out of the Caucasus", "posture": "defend", "staging": {"Kalach": 5, "Orel": 2}, "abandon": ["Terek", "Stavropol", "Salsk"], "entrust": {"HUN": ["Voronezh"], "ITA": ["Millerovo"]}},
+    {"from": 42, "to": 42, "name": "Back to the Donets", "posture": "defend", "staging": {"Orel": 2, "Bryansk": 1}, "abandon": ["Terek", "Stavropol", "Salsk"], "concentrate": {"Poltava": 3, "Dnepropetrovsk": 2}},
+    {"from": 43, "to": 43, "name": "The backhand blow", "posture": "attack", "enemies": ["SOV"], "axis": ["Kharkov"], "objectives": ["Kharkov"], "targets": ["Kharkov", "Stalino", "Poltava", "Dnepropetrovsk", "Zaporozhye", "Sumy"], "minOdds": 1.2, "oddsFor": {"Kharkov": 1.0}, "quiet": true},
+    {"from": 44, "to": 46, "name": "The Donets line", "posture": "defend", "quiet": true},
+    {"from": 47, "to": 99, "posture": "defend"}
   ],
   "ITA": [
     {"from": 9, "to": 99, "posture": "attack", "declareWhenCollapsing": "FRA", "collapseAt": 0.07, "declare": ["FRA", "UK"], "enemies": ["FRA"], "objectives": ["Riviera", "Savoy"], "minOdds": 0.9}
@@ -41,7 +52,14 @@
     {"from": 1, "to": 27, "posture": "defend"},
     {"from": 28, "to": 28, "name": "Moscow counter-offensive", "posture": "attack", "enemies": ["GER"], "minOdds": 0.9, "limited": true, "objectives": ["Kalinin", "Kaluga", "Tula", "Moscow", "Tikhvin", "Rostov", "Orel"]},
     {"from": 29, "to": 30, "name": "General winter offensive", "posture": "attack", "enemies": ["GER"], "minOdds": 1.2, "limited": true, "objectives": ["Rzhev", "Vyazma", "Bryansk", "Kursk", "Kharkov", "Stalino", "Crimea"]},
-    {"from": 31, "to": 99, "posture": "defend"}
+    {"from": 31, "to": 32, "posture": "defend"},
+    {"from": 33, "to": 33, "name": "The Kharkov offensive", "posture": "attack", "enemies": ["GER"], "objectives": ["Kharkov"], "targets": ["Kharkov"], "minOdds": 0.5},
+    {"from": 34, "to": 38, "name": "Not a step back", "posture": "defend", "quiet": true},
+    {"from": 39, "to": 39, "name": "Operation Uranus", "posture": "attack", "enemies": ["GER"], "objectives": ["Don Bend", "Kalmyk Steppe"], "targets": ["Don Bend", "Kalmyk Steppe"], "minOdds": 1.0},
+    {"from": 40, "to": 40, "name": "Little Saturn", "posture": "attack", "enemies": ["GER"], "objectives": ["Millerovo", "Don Bend", "Kalmyk Steppe", "Salsk"], "targets": ["Millerovo", "Don Bend", "Kalmyk Steppe", "Salsk"], "minOdds": 1.1},
+    {"from": 41, "to": 41, "name": "The winter offensive", "posture": "attack", "enemies": ["GER"], "objectives": ["Kalach", "Millerovo", "Voronezh", "Terek", "Salsk", "Stavropol", "Maikop", "Don Bend", "Kalmyk Steppe"], "targets": ["Kalach", "Millerovo", "Voronezh", "Terek", "Salsk", "Stavropol", "Maikop", "Don Bend", "Kalmyk Steppe"], "minOdds": 1.2},
+    {"from": 42, "to": 42, "name": "To the Donets and Kharkov", "posture": "attack", "enemies": ["GER"], "objectives": ["Rostov", "Voroshilovgrad", "Kursk", "Kharkov", "Kuban", "Kalach", "Millerovo", "Voronezh", "Salsk", "Stavropol", "Maikop", "Terek"], "targets": ["Rostov", "Voroshilovgrad", "Kursk", "Kharkov", "Kuban", "Kalach", "Millerovo", "Voronezh", "Salsk", "Stavropol", "Maikop", "Terek", "Don Bend", "Kalmyk Steppe"], "minOdds": 1.2},
+    {"from": 43, "to": 99, "posture": "defend"}
   ],
   "ROM": [
     {"from": 22, "to": 99, "name": "With Germany into Russia", "posture": "attack", "ifAtWar": ["GER", "SOV"], "declare": ["SOV"], "enemies": ["SOV"], "objectives": ["Bessarabia", "Bukovina", "Odessa"], "minOdds": 1.3}

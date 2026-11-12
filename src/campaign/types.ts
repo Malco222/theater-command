@@ -350,6 +350,10 @@ export interface PlanPhase {
   garrison?: string[];
   /** Garrisons in these places are stood down and join the field army. */
   release?: string[];
+  /**
+   * Corps kept at a named place. In a redeployment they are railed there to wait; in an attack or a defence the nearest
+   * that can be spared march to it and stay. Such a force is infantry: once two corps are there, tanks are not held back.
+   */
   staging?: Record<string, number>;
   minOdds?: number;
   force?: number;
@@ -370,6 +374,24 @@ export interface PlanPhase {
   withdraw?: { when: string[] };
   /** Stand on the defensive without local counter-attacks: the plan is saving the army for a later stroke. */
   quiet?: boolean;
+  /** Places the plan wants at a price of their own: the least odds at which each is attacked, in place of minOdds. */
+  oddsFor?: Record<string, number>;
+  /**
+   * Sectors of the front handed over to an ally's troops, by ally. Once two of that ally's corps stand in such a
+   * place, the nation counts it as held: it sends no reserves there and takes its own corps out, all but one.
+   */
+  entrust?: Record<string, string[]>;
+  /**
+   * Fast troops gathered for the next offensive while the line stands on the defensive: place, and how many tank and
+   * lorried corps to have there. Each comes by rail out of a part of the line that keeps two corps without it, and
+   * infantry makes room for it where the place is full.
+   */
+  concentrate?: Record<string, number>;
+  /**
+   * Ground the plan gives up before the road home is cut. Corps standing there march out toward home, those
+   * nearest home first so that the ones behind find room, and no reserves are sent back into it.
+   */
+  abandon?: string[];
   /** Orders for named fleets while the phase lasts. */
   fleets?: { fleet: string; zone: string; stance: Stance }[];
 }

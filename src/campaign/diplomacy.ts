@@ -7,7 +7,7 @@
 import data from '../../data/campaign/diplomacy.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, bloc, headline, relocate, removeCorps } from './game';
+import { addCorps, bloc, declareWar, headline, relocate, removeCorps } from './game';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -16,6 +16,8 @@ export interface DiploEvent {
   spawn?: [string, string, string, number, string][];
   opinion?: Record<string, number>;
   join?: { bloc: 'allies' | 'axis'; nations: string[]; minOpinion: number };
+  /** Pairs that go to war when the event fires: the first of each declares on the second. */
+  war?: [string, string][];
 }
 
 export const DIPLOMACY = data as unknown as {
@@ -207,6 +209,15 @@ function fire(g: Game, e: DiploEvent): boolean {
       transfer(g, r, e.cede.to);
       withdraw(g, e.cede.from, r);
       did = true;
+    }
+    if (!did) return false;
+  }
+  if (e.war) {
+    for (const [a, b] of e.war) {
+      const A = g.nations[a], B = g.nations[b];
+      if (!A?.alive || !B?.alive || A.atWar.includes(b)) continue;
+      declareWar(g, a, b);
+      did = did || A.atWar.includes(b);
     }
     if (!did) return false;
   }

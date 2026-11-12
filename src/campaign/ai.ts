@@ -46,6 +46,12 @@ let scope: Set<number> | null = null;
 let quiet = false;
 /** Set while the army being run has orders to leave the theatre once the front there has gone. */
 let leaving: PlanPhase['withdraw'] | null = null;
+/** Sectors the plan in force has handed over to an ally whose troops have arrived: the nation's own corps leave them, all but one. */
+let entrusted = new Set<number>();
+/** Corps the plan in force keeps massed at a named place: the line is put in order without them. */
+let massed = new Set<number>();
+/** Ground the plan in force is giving up: the corps there march out and nobody is sent back in. */
+let given = new Set<number>();
 
 /** True for ground in a side theatre where this nation has a plan of its own: the army there looks after it, not the main plan. */
 const aside = (r: Region, nat: string): boolean => r.theatre >= 0 && !!THEATRES[r.theatre]?.plans[nat];
@@ -154,16 +160,41 @@ function mainCampaign(g: Game, nat: string): void {
   if (ph?.landings) landings(g, nat, ph);
   if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
   const posture = ph?.posture ?? 'defend';
-  if (posture === 'defend') { defend(g, nat); return; }
+  entrusted = handedOver(g, nat, ph);
+  given = new Set((ph?.abandon ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined));
+  quiet = !!ph?.quiet;
+  try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; }
+}
+
+/** The sectors of the front the plan has entrusted to an ally, where at least two of that ally's corps now stand. */
+function handedOver(g: Game, nat: string, ph: PlanPhase | null): Set<number> {
+  const out = new Set<number>();
+  for (const [ally, places] of Object.entries(ph?.entrust ?? {})) {
+    if (!allied(g, nat, ally)) continue;
+    for (const name of places) {
+      const r = g.byName[name];
+      if (r && allied(g, nat, r.ctrl) && r.units.filter((u) => u.nat === ally).length >= 2) out.add(r.id);
+    }
+  }
+  return out;
+}
+
+/** The month's operations on the main fronts, by the posture the plan calls for. */
+function fight(g: Game, nat: string, ph: PlanPhase | null, posture: string): void {
+  const n = g.nations[nat];
+  hold(g, nat, ph);
+  fallBack(g, nat);
+  if (posture === 'defend') { gather(g, nat, ph); mass(g, nat, ph); defend(g, nat); return; }
   const enemies = enemySet(g, nat);
   const follow = posture === 'attack' && !ph!.force;
   const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
   const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g, nat)) : null;
-  offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt, only);
+  offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
   if (!n.alive) return;
   if (posture === 'redeploy') redeploy(g, nat, ph!, enemies);
   else if (follow) {
     advance(g, nat, enemies, 0, null, halt);
+    mass(g, nat, ph);
     // With the month's attacks made, whoever still has marching time shores up the thin places.
     defend(g, nat, false);
     // Where the plan calls for it, troops who closed up to a great prize late in the month go straight in
@@ -173,6 +204,110 @@ function mainCampaign(g: Game, nat: string): void {
       offensive(g, nat, ph.lastPush, enemies, ph.minOdds ?? 1.3, [], true, false, halt, new Set(ph.lastPush));
       if (n.alive && g.reports.length > fights) defend(g, nat, false);
     }
+  }
+}
+
+/** The corps of this nation at a place that a plan could keep there: the foot first, then the fast troops. */
+function standing(g: Game, nat: string, r: Region): Corps[] {
+  const fast = (c: Corps): number => (KIND[c.kind].mobile ? 1 : 0);
+  return r.units.filter((u) => u.nat === nat && u.kind !== 'fort').sort((a, b) => fast(a) - fast(b));
+}
+
+/**
+ * Marks the force the plan keeps at each of its staging places, before the month's operations begin: those corps
+ * stand where they are. Tanks are only kept while fewer than two corps of infantry are there to hold the place.
+ */
+function hold(g: Game, nat: string, ph: PlanPhase | null): void {
+  if (!ph?.staging || ph.posture === 'redeploy') return;
+  for (const [name, count] of Object.entries(ph.staging)) {
+    const r = g.byName[name];
+    if (!r || !allied(g, nat, r.ctrl)) continue;
+    standing(g, nat, r).slice(0, count).forEach((u, k) => { if (!KIND[u.kind].mobile || k < 2) massed.add(u.id); });
+  }
+}
+
+/**
+ * Brings each staging place up to the force the plan wants there: while there are too few, the nearest corps of
+ * infantry that can be spared marches to join them. Nobody is taken from a place he holds alone.
+ */
+function mass(g: Game, nat: string, ph: PlanPhase | null): void {
+  if (!ph?.staging || ph.posture === 'redeploy') return;
+  const own = (r: Region): Corps[] => r.units.filter((u) => u.nat === nat && u.kind !== 'fort');
+  for (const [name, count] of Object.entries(ph.staging)) {
+    const r = g.byName[name];
+    if (!r || !allied(g, nat, r.ctrl)) continue;
+    let have = own(r).filter((u) => massed.has(u.id)).length;
+    if (have >= count) continue;
+    for (const u of standing(g, nat, r)) if (have < count && !massed.has(u.id) && (!KIND[u.kind].mobile || have < 2)) { massed.add(u.id); have++; }
+    const d = hops(g, r.id, (x) => allied(g, nat, x.ctrl));
+    const pool = g.corps
+      .filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && !KIND[c.kind].mobile && c.ap > 0 && !massed.has(c.id) && c.reg !== r.id && d[c.reg] > 0 && d[c.reg] <= 3 && own(g.regions[c.reg]).length >= 2)
+      .sort((a, b) => d[a.reg] - d[b.reg] || atkPower(g, b) - atkPower(g, a));
+    for (const c of pool) {
+      if (have >= count || friendlyUnits(g, r, nat).length >= STACK) break;
+      if (own(g.regions[c.reg]).length < 2) continue;
+      walkToward(g, c, r);
+      if (c.reg === r.id) { massed.add(c.id); have++; }
+    }
+  }
+}
+
+/**
+ * Gives up the ground the plan has written off: every corps standing on it marches toward home by the shortest
+ * road over friendly country, as far as the month allows. Those nearest home go first and leave room behind them.
+ */
+function fallBack(g: Game, nat: string): void {
+  const cap = g.nations[nat].capital;
+  if (!given.size || cap < 0) return;
+  const home = hops(g, cap, (r) => allied(g, nat, r.ctrl));
+  const leaving = g.corps
+    .filter((c) => c.nat === nat && c.kind !== 'fort' && !c.hold && given.has(c.reg) && home[c.reg] > 0)
+    .sort((a, b) => home[a.reg] - home[b.reg]);
+  for (const c of leaving) {
+    for (let step = 0; step < 6 && c.ap > 0 && given.has(c.reg); step++) {
+      let to: Region | null = null;
+      for (const j of g.regions[c.reg].nb) {
+        const r = g.regions[j];
+        if (!allied(g, nat, r.ctrl) || home[j] < 0 || home[j] >= home[c.reg] || friendlyUnits(g, r, nat).length >= STACK) continue;
+        // Out of the ground being given up if there is a way, and by the emptier road.
+        const worse = (x: Region): number => (given.has(x.id) ? 10 : 0) + friendlyUnits(g, x, nat).length;
+        if (!to || worse(r) < worse(to)) to = r;
+      }
+      if (!to || c.ap < Math.min(moveCost(g, c, to), 4) || !moveCorps(g, c, to)) break;
+    }
+  }
+}
+
+/**
+ * Before a great offensive the fast troops are taken out of the quiet parts of the line and brought together by
+ * rail where it will open. Nobody leaves a place that would be held by fewer than two corps without him, and
+ * a corps of infantry marches out to make room where the assembly area is full.
+ */
+function gather(g: Game, nat: string, ph: PlanPhase | null): void {
+  if (!ph?.concentrate) return;
+  const places = Object.keys(ph.concentrate).map((nm) => g.byName[nm]).filter((r) => r && allied(g, nat, r.ctrl));
+  const at = new Set(places.map((r) => r.id));
+  const fast = (r: Region): Corps[] => r.units.filter((u) => u.nat === nat && KIND[u.kind].mobile);
+  const crowd = (r: Region): number => friendlyUnits(g, r, nat).length;
+  for (const r of places) {
+    const want = ph.concentrate[r.name];
+    for (let guard = 0; guard < want && fast(r).length < want; guard++) {
+      if (crowd(r) >= STACK) {
+        const foot = r.units.find((u) => u.nat === nat && !u.hold && u.kind !== 'fort' && !KIND[u.kind].mobile && u.ap > 0);
+        const next = r.nb.map((j) => g.regions[j]).filter((x) => x.ctrl === nat && !at.has(x.id) && crowd(x) < STACK).sort((a, b) => crowd(a) - crowd(b))[0];
+        if (!foot || !next || !moveCorps(g, foot, next)) break;
+      }
+      const d = hops(g, r.id, (x) => allied(g, nat, x.ctrl));
+      const spare = (c: Corps): boolean => {
+        const here = g.regions[c.reg];
+        return here.units.filter((u) => u.nat === nat && u.kind !== 'fort').length >= 3 || !here.nb.some((j) => hostileUnits(g, g.regions[j], nat).length > 0);
+      };
+      const c = g.corps
+        .filter((x) => x.nat === nat && !x.hold && KIND[x.kind].mobile && x.ap >= 4 && !at.has(x.reg) && d[x.reg] > 0 && !aside(g.regions[x.reg], nat) && spare(x))
+        .sort((a, b) => crowd(g.regions[b.reg]) - crowd(g.regions[a.reg]) || d[a.reg] - d[b.reg])[0];
+      if (!c || !railMove(g, c, r)) break;
+    }
+    fast(r).forEach((u) => massed.add(u.id));
   }
 }
 
@@ -260,7 +395,7 @@ function doorstep(g: Game, nat: string, goal: Region | null): Int16Array | null 
   return d;
 }
 
-function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null): void {
+function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null, oddsFor: Record<string, number> = {}): void {
   const failed = new Set<number>();
   const axis = new Set(axisList);
   // In the first month the armoured thrust takes its objectives in order; after that the whole line is open.
@@ -292,7 +427,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
       for (const c of g.corps) {
         if (c.nat !== nat || c.hold || c.kind === 'fort' || c.ap <= 0 || weekOf(c, 1) > wave) continue;
         // Early in the month the fast troops are kept for the main thrust if they can get to it.
-        const kept = door !== null && wave <= 2 && KIND[c.kind].mobile && door[c.reg] >= 0 && door[c.reg] <= c.ap;
+        const kept = door !== null && wave <= 2 && KIND[c.kind].mobile && !massed.has(c.id) && door[c.reg] >= 0 && door[c.reg] <= c.ap;
         for (const j of g.regions[c.reg].nb) {
           const r = g.regions[j];
           if (failed.has(j) || halt.has(r.name) || (only && !only.has(r.name)) || !enemies.has(r.ctrl) || !atWar(g, nat, r.ctrl) || notYet(r.name)) continue;
@@ -327,7 +462,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
             odds = assess(g, pool.slice(0, k), target).odds;
             if (odds >= 2.6) { pick = pool.slice(0, k); break; }
           }
-          if (!pick) { if (odds < minOdds) continue; pick = pool; }
+          if (!pick) { if (odds < (oddsFor[target.name] ?? minOdds)) continue; pick = pool; }
           const score = value + Math.min(odds, 4);
           if (!best || score > best.score) best = { score, target, corps: pick, battle: true };
         }
@@ -375,6 +510,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
   for (const r of g.regions) {
     // An army closes up to its own front, not to an ally's. Overseas the allies share one front.
     if (scope ? !scope.has(r.id) || !allied(g, nat, r.ctrl) : r.ctrl !== nat) continue;
+    if (entrusted.has(r.id) || given.has(r.id)) continue; // an ally holds this stretch now, or the plan has written it off
     let open = false, walled = false;
     for (const j of r.nb) {
       const t = g.regions[j];
@@ -403,7 +539,7 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
     return friendlyUnits(g, here, nat).length <= 2 && here.nb.some((j) => hostileUnits(g, g.regions[j], nat).length > 0);
   };
   for (const c of movers) {
-    if (screen(c)) continue;
+    if (screen(c) || massed.has(c.id)) continue;
     if (door && KIND[c.kind].mobile && door[c.reg] > 0) {
       // Fast troops close up on the main thrust's next objective.
       for (let step = 0; step < 6 && c.ap > 0 && door[c.reg] > 0; step++) {
@@ -538,7 +674,9 @@ function defend(g: Game, nat: string, line = true): void {
     for (const u of friendlyUnits(g, r, nat)) held[r.id] += defPower(g, u, r);
   }
   const importance = (r: Region): number => 1 + 0.5 * r.vp + (r.cap ? 4 : 0);
-  const need = (r: Region): number => importance(r) * Math.max(0, 1.3 * threat[r.id] - held[r.id]);
+  // A sector handed over to an ally is his to hold: no reserves go there.
+  // Nor into ground the plan is giving up.
+  const need = (r: Region): number => (entrusted.has(r.id) || given.has(r.id) ? 0 : importance(r) * Math.max(0, 1.3 * threat[r.id] - held[r.id]));
 
   // Ground worth fighting to get back: the nation's own, its allies', and what it held until the enemy took it.
   const lost = (r: Region): boolean => allied(g, nat, r.owner) || r.prev === nat;
@@ -546,7 +684,7 @@ function defend(g: Game, nat: string, line = true): void {
   const late = (r: Region): boolean => n.slowCommand && r.since >= g.turn;
   const movers = g.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== 'fort' && c.ap > 0);
   for (const c of movers) {
-    if (c.dead || c.ap <= 0) continue;
+    if (c.dead || c.ap <= 0 || massed.has(c.id)) continue;
     const here = g.regions[c.reg];
     if (!mine(here)) continue; // abroad on an ally's ground: stand where the plan put it
 
@@ -560,14 +698,18 @@ function defend(g: Game, nat: string, line = true): void {
     // neighbour with three corps or more sends one to shut it. A slow command does not see the gap in time,
     // and an army on the attack accepts gaps behind its spearheads.
     if (line && !n.slowCommand && friendlyUnits(g, here, nat).length >= 3) {
-      const door = here.nb.map((j) => g.regions[j]).find((r) => mine(r) && threat[r.id] > 0 && !friendlyUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4));
+      const door = here.nb.map((j) => g.regions[j]).find((r) => mine(r) && !given.has(r.id) && threat[r.id] > 0 && !friendlyUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4));
       if (door) {
         const was = defPower(g, c, here);
         if (moveCorps(g, c, door)) { held[here.id] -= was; held[door.id] += defPower(g, c, door); continue; }
       }
     }
     let spared = 0;
-    if (threat[here.id] > 0) {
+    if (entrusted.has(here.id)) {
+      // An ally has taken this stretch over: one corps stays to stiffen him, the rest are free for the plan's own business.
+      if (here.units.filter((u) => u.nat === nat && u.kind !== 'fort').length <= 1) continue;
+      spared = defPower(g, c, here);
+    } else if (threat[here.id] > 0) {
       // In the line. It can be spared only if the place stays well held without it.
       spared = defPower(g, c, here);
       if (friendlyUnits(g, here, nat).length <= 2 || held[here.id] - spared < 1.6 * threat[here.id]) continue;

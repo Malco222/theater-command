@@ -960,7 +960,8 @@ function expeditions(g: Game, nat: string): void {
     }
     if (g.turn - row[0] > 6 || (o.war && !atWar(g, o.war[0], o.war[1])) || (o.until && g.turn >= o.until)) { if (g.turn - row[0] > 6) g.flags[`sent:${i}`] = 1; return; }
     const reg = g.byName[row[5]];
-    if (!reg || !allied(g, nat, reg.ctrl) || friendlyUnits(g, reg, nat).length >= STACK) return;
+    // Troops sent to take over a stretch of an ally's line ('join') go in whatever already stands there.
+    if (!reg || !allied(g, nat, reg.ctrl) || (!o.join && friendlyUnits(g, reg, nat).length >= STACK)) return;
     g.flags[`sent:${i}`] = 1;
     const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, o);
     if (o.until) g.flags[`lent:${i}`] = c.id;
@@ -974,6 +975,32 @@ function expeditions(g: Game, nat: string): void {
     for (const c of gone) removeCorps(g, c);
     g.supplyDirty = true;
     headline(g, 'event', `${g.nations[nat].adj} formations lent to the campaign${where ? ` in ${where}` : ''} leave for other fronts: ${names.join('; ')}.`, nat);
+  }
+}
+
+/**
+ * An army newly cut off from its supply is news the month it happens, whoever closed the ring. It is
+ * told once: again only if the army is relieved and then cut off a second time.
+ */
+function cutOffNews(g: Game): void {
+  const rings = new Map<number, { by: Record<string, number>; corps: number; men: number }>();
+  for (const c of g.corps) {
+    if (c.supplied || c.kind === 'fort') continue;
+    const ring = rings.get(c.reg) ?? { by: {}, corps: 0, men: 0 };
+    ring.by[c.nat] = (ring.by[c.nat] ?? 0) + 1;
+    ring.corps++;
+    ring.men += men(c);
+    rings.set(c.reg, ring);
+  }
+  for (const [reg, ring] of rings) {
+    const key = `cut:${reg}`;
+    const fresh = (g.flags[key] ?? -99) < g.turn - 1;
+    g.flags[key] = g.turn;
+    if (!fresh || ring.corps < 3 || ring.men < 60000) continue;
+    g.flags[`ring:${reg}`] = g.turn;
+    const who = Object.keys(ring.by).sort((a, b) => ring.by[b] - ring.by[a]);
+    const adj = who.map((id) => g.nations[id].adj).join(' and ');
+    headline(g, 'battle', `The ring closes at ${g.regions[reg].name}: ${ring.corps} ${adj} corps, ${ring.men.toLocaleString('en-US')} men, are cut off from all supply.`, who[0], reg);
   }
 }
 
@@ -994,6 +1021,7 @@ export function startPhase(g: Game, nat: string): void {
   airUpkeep(g, nat);
   researchTick(g, nat);
   computeSupply(g);
+  cutOffNews(g);
   // The month's production comes in. Losses are made good first.
   n.pp += income(g, nat);
   n.pc = Math.min(DIPLOMACY.pcCap, n.pc + pcIncome(nat));
@@ -1006,6 +1034,8 @@ export function startPhase(g: Game, nat: string): void {
   const want = army.map((c) => (c.supplied ? Math.min((1 - c.str) * c.divs, 0.2 * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;
+  // Corps starved into surrender this month, by where they stood: an army lost together is one piece of news.
+  const starved = new Map<number, { names: string[]; men: number }>();
   army.forEach((c, i) => {
     if (c.supplied) {
       const give = want[i] * share;
@@ -1019,7 +1049,10 @@ export function startPhase(g: Game, nat: string): void {
       c.org -= 0.4;
       c.str *= 0.85;
       if (c.org <= 0) {
-        if (men(c) > 30000) headline(g, 'battle', `Cut off and out of supply, ${c.name} lays down its arms at ${g.regions[c.reg].name}.`, nat, c.reg);
+        const lost = starved.get(c.reg) ?? { names: [], men: 0 };
+        lost.names.push(c.name);
+        lost.men += men(c);
+        starved.set(c.reg, lost);
         removeCorps(g, c);
         return;
       }
@@ -1027,6 +1060,13 @@ export function startPhase(g: Game, nat: string): void {
     c.fought = false;
     c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c);
   });
+  for (const [reg, lost] of starved) {
+    // Small parties are not news, unless they are the end of an army the newsreel has already said was surrounded.
+    if (lost.men <= 30000 && g.flags[`ring:${reg}`] === undefined) continue;
+    const place = g.regions[reg].name;
+    if (lost.names.length === 1) headline(g, 'battle', `Cut off and out of supply, ${lost.names[0]} lays down its arms at ${place}.`, nat, reg);
+    else headline(g, 'battle', `Cut off and out of supply, the ${n.adj} army at ${place} lays down its arms: ${lost.names.length} corps, ${lost.men.toLocaleString('en-US')} men.`, nat, reg);
+  }
   n.pp = Math.max(0, n.pp);
   deliver(g, nat);
   if (nat !== g.human) n.pp = Math.min(n.pp, PRODUCTION.aiBank[canBuildYet(g, nat) ? 1 : 0]);

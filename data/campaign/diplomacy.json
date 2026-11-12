@@ -75,6 +75,12 @@
       "id": "belgrade-coup", "from": 20, "to": 20,
       "if": ["alive:YUG", "atPeace:YUG", "notInBloc:YUG", "alive:GER", "alive:GRE", "flag:war:ITA:GRE"],
       "text": "Officers in Belgrade overthrow the regent for leaning toward the Axis, and crowds cheer the young King. Berlin now counts Yugoslavia an enemy."
+    },
+    {
+      "id": "italy-east", "from": 23, "to": 24,
+      "if": ["alive:ITA", "alive:SOV", "inBloc:ITA,axis", "flag:war:GER:SOV"],
+      "war": [["ITA", "SOV"]],
+      "text": "Rome follows Berlin into the war in the east and promises an Italian army for the Russian front."
     }
   ]
 }

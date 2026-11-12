@@ -293,6 +293,16 @@
     [20, "GER", "Grossdeutschland motorized group", "mot", 1, "Banat", {"hold": 1, "xp": 0.4, "war": ["ITA", "GRE"], "until": 22}],
     [20, "GER", "8th and 14th Panzer Divisions", "arm", 2, "Transdanubia", {"hold": 1, "xp": 0.35, "war": ["ITA", "GRE"], "until": 22}],
     [20, "GER", "132nd and 183rd Infantry Divisions", "inf", 2, "Transdanubia", {"hold": 1, "xp": 0.2, "war": ["ITA", "GRE"]}],
-    [21, "GER", "XI Air Corps", "inf", 3, "Athens", {"gen": "Kurt Student", "trait": "attacker", "airborne": 1, "hold": 1, "xp": 0.7, "war": ["GER", "UK"]}]
+    [21, "GER", "XI Air Corps", "inf", 3, "Athens", {"gen": "Kurt Student", "trait": "attacker", "airborne": 1, "hold": 1, "xp": 0.7, "war": ["GER", "UK"]}],
+    [35, "HUN", "2nd Army: III Corps", "inf", 3, "Voronezh", {"gen": "Gusztav Jany", "trait": "defender", "hold": 1, "join": 1, "until": 45, "xp": 0.05, "war": ["GER", "SOV"]}],
+    [35, "HUN", "2nd Army: IV and VII Corps", "inf", 4, "Voronezh", {"hold": 1, "join": 1, "until": 45, "xp": 0.05, "war": ["GER", "SOV"]}],
+    [36, "ITA", "8th Army: II Corps", "inf", 3, "Millerovo", {"gen": "Italo Gariboldi", "trait": "defender", "hold": 1, "join": 1, "until": 45, "xp": 0.1, "war": ["ITA", "SOV"]}],
+    [36, "ITA", "8th Army: XXXV Corps", "inf", 3, "Millerovo", {"hold": 1, "join": 1, "until": 45, "xp": 0.1, "war": ["ITA", "SOV"]}],
+    [36, "ITA", "Alpine Corps", "mtn", 3, "Millerovo", {"hold": 1, "join": 1, "until": 45, "xp": 0.2, "war": ["ITA", "SOV"]}],
+    [37, "ROM", "3rd Army: I and II Corps", "inf", 4, "Don Bend", {"gen": "Petre Dumitrescu", "trait": "defender", "hold": 1, "join": 1, "xp": 0.1, "war": ["GER", "SOV"]}],
+    [37, "ROM", "3rd Army: IV and V Corps", "inf", 4, "Don Bend", {"hold": 1, "join": 1, "xp": 0.1, "war": ["GER", "SOV"]}],
+    [38, "ROM", "4th Army: VI Corps", "inf", 3, "Kalmyk Steppe", {"gen": "Constantin Constantinescu-Claps", "trait": "defender", "hold": 1, "join": 1, "xp": 0.1, "war": ["GER", "SOV"]}],
+    [38, "ROM", "4th Army: VII Corps", "inf", 3, "Kalmyk Steppe", {"hold": 1, "join": 1, "xp": 0.1, "war": ["GER", "SOV"]}],
+    [42, "GER", "Panzer Corps from France", "arm", 3, "Poltava", {"xp": 0.4, "war": ["GER", "SOV"]}]
   ]
 }
