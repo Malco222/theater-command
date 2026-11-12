@@ -1210,6 +1210,18 @@ void ACampaignMapActor::BuildTrees()
 	const int32 PerSide = FMath::CeilToInt32(Square / Spacing);
 	const double U = UnitScale;
 	int32 Trees = 0;
+	// Where pieces stand in each region (its first three armies, and its airfield either side of the town): kept clear.
+	TArray<TArray<FVector2D>> Clearings;
+	Clearings.SetNum(Data.Regions.Num());
+	for (const FCampaignRegion& Region : Data.Regions)
+	{
+		for (int32 Slot = 0; Slot < 3; ++Slot)
+		{
+			Clearings[Region.Id].Add(WorldToMap(ArmySpot(Region.Id, Slot)));
+		}
+		Clearings[Region.Id].Add(Region.Center + FVector2D(-10.0, 8.0));
+		Clearings[Region.Id].Add(Region.Center + FVector2D(10.0, 9.0));
+	}
 	for (int32 SY = 0; SY < SquaresY; ++SY)
 	{
 		for (int32 SX = 0; SX < SquaresX; ++SX)
@@ -1237,6 +1249,11 @@ void ACampaignMapActor::BuildTrees()
 					// Not on top of a town.
 					const int32 RegionId = Terrain.Region[Terrain.Index(GI, GJ)];
 					if (RegionId >= 0 && FVector2D::Distance(Data.Regions[RegionId].Center, FVector2D(X, Y)) < 8.5)
+					{
+						continue;
+					}
+					// Nor where the armies of the region stand: a clearing for each of the first three, and one for its airfield.
+					if (RegionId >= 0 && Clearings[RegionId].ContainsByPredicate([X, Y](const FVector2D& Spot) { return FVector2D::DistSquared(Spot, FVector2D(X, Y)) < 6.2 * 6.2; }))
 					{
 						continue;
 					}
