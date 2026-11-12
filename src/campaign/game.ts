@@ -8,7 +8,7 @@ import setup from '../../data/campaign/setup-1939.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { PRODUCTION, canBuildYet, deliver, firstCorpsNumber, income } from './economy';
+import { BUDGET, PRODUCTION, budgeted, canBuildYet, deliver, firstCorpsNumber, income, upkeepTotal } from './economy';
 import { DIPLOMACY, homeOpinion, pcIncome } from './diplomacy';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
@@ -1257,8 +1257,12 @@ export function startPhase(g: Game, nat: string): void {
   researchTick(g, nat);
   computeSupply(g);
   cutOffNews(g);
-  // The month's production comes in. Losses are made good first.
-  n.pp += income(g, nat);
+  // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good
+  // from what is left. A treasury that is empty pays nobody: no drafts go out, the armies rest badly and men drift away.
+  const earned = income(g, nat);
+  n.pp += earned - upkeepTotal(g, nat);
+  const credit = BUDGET.debt.floor * Math.max(1, earned);
+  const owed = budgeted(g) && n.pp < 0 ? Math.min(1, -n.pp / credit) : 0;
   n.pc = Math.min(DIPLOMACY.pcCap, n.pc + pcIncome(nat));
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
@@ -1284,7 +1288,9 @@ export function startPhase(g: Game, nat: string): void {
       const cold = frozen(g, nat, g.regions[c.reg]);
       const bite = cold ? cmdWinter(g, c) : 0;
       if (cold) c.str *= 1 - EASTERN.winter.attrition * bite;
-      c.org = Math.min(1, c.org + (c.fought ? 0.25 : 0.45) * lineStrength(g, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c));
+      const rest = (c.fought ? 0.25 : 0.45) * lineStrength(g, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
+      c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
+      if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {
       c.org -= 0.4;
       c.str *= 0.85;
@@ -1309,7 +1315,19 @@ export function startPhase(g: Game, nat: string): void {
     if (lost.names.length === 1) headline(g, 'battle', `Cut off and out of supply, ${lost.names[0]} lays down its arms at ${place}.`, nat, reg);
     else headline(g, 'battle', `Cut off and out of supply, the ${n.adj} army at ${place} lays down its arms: ${lost.names.length} corps, ${lost.men.toLocaleString('en-US')} men.`, nat, reg);
   }
-  n.pp = Math.max(0, n.pp);
+  // Replacements can spend the treasury to the last point: a rounding error below nothing is not a debt.
+  n.pp = budgeted(g) ? (n.pp > -1e-9 ? Math.max(0, n.pp) : Math.max(-credit, n.pp)) : Math.max(0, n.pp);
+  if (budgeted(g)) {
+    // The first month in the red is news, and so is the month the books balance again.
+    const key = `debt:${nat}`;
+    if (n.pp < 0 && g.flags[key] === undefined) {
+      g.flags[key] = g.turn;
+      if (nat === g.human) headline(g, 'info', `The treasury is empty. Until the books balance again no replacements go out to the armies, nothing new can be ordered, and unpaid troops rest badly and begin to drift away. Open the ledger to see where the money goes.`, nat);
+    } else if (n.pp >= 0 && g.flags[key] !== undefined) {
+      delete g.flags[key];
+      if (nat === g.human) headline(g, 'info', `The books balance again: the treasury is out of debt.`, nat);
+    }
+  }
   deliver(g, nat);
   if (nat !== g.human) n.pp = Math.min(n.pp, PRODUCTION.aiBank[canBuildYet(g, nat) ? 1 : 0]);
   n.armyPeak = Math.max(n.armyPeak, armySize(g, nat));

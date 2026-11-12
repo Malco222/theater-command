@@ -325,7 +325,7 @@ describe('what the player does with the fame', () => {
     const pp = n.pp, fame = fameOf(a);
     expect(storyAttack(g, c, t, [])).toBeCloseTo(1.05, 6);
     expect(whyNotCash(g, a, 'bonds')).toBe('');
-    expect(cashWorth(g, a, 'bonds')).toBe(`+${STORIES.cash.bondsPp * fame} production points and +${STORIES.cash.bondsPc * fame} political capital`);
+    expect(cashWorth(g, a, 'bonds')).toBe(`+${(STORIES.cash.bondsPp * fame * 100).toLocaleString('en-US')} for the treasury and +${STORIES.cash.bondsPc * fame} political capital`);
     expect(orderCash(g, a.id, 'bonds')).toBe(true);
     expect(n.pp).toBeCloseTo(pp + STORIES.cash.bondsPp * fame, 6);
     expect(n.pc).toBe(STORIES.cash.bondsPc * fame);
