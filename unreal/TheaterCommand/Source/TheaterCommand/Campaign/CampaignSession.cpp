@@ -181,6 +181,7 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 		Entry->TryGetStringField(TEXT("standing"), Nation.Standing);
 		Entry->TryGetBoolField(TEXT("major"), Nation.bMajor);
 		Entry->TryGetBoolField(TEXT("small"), Nation.bSmall);
+		Entry->TryGetStringArrayField(TEXT("abilities"), Nation.Abilities);
 		Entry->TryGetNumberField(TEXT("corps"), Nation.Corps);
 		Entry->TryGetNumberField(TEXT("regions"), Nation.Regions);
 	}
@@ -468,6 +469,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			C.Nation = Unit->GetStringField(TEXT("nat"));
 			C.Name = Unit->GetStringField(TEXT("name"));
 			C.Kind = Unit->GetStringField(TEXT("kind"));
+			Unit->TryGetStringField(TEXT("elite"), C.Elite);
 			Unit->TryGetStringField(TEXT("gen"), C.General); // null when nobody is named
 			Unit->TryGetStringField(TEXT("posture"), C.Posture);
 			C.Divisions = Unit->GetIntegerField(TEXT("divs"));
@@ -1472,6 +1474,19 @@ FDiplomacy FCampaignSession::Diplomacy()
 		}
 	}
 	return Out;
+}
+
+TArray<FString> FCampaignSession::Abilities(bool& bOutActive)
+{
+	TArray<FString> Lines;
+	bOutActive = false;
+	TSharedPtr<FJsonObject> Object;
+	if (CallRules(TEXT("abilities"), TEXT("[]"), Object) && Object.IsValid())
+	{
+		Object->TryGetBoolField(TEXT("active"), bOutActive);
+		Object->TryGetStringArrayField(TEXT("lines"), Lines);
+	}
+	return Lines;
 }
 
 FGeneralStaff FCampaignSession::Generals()

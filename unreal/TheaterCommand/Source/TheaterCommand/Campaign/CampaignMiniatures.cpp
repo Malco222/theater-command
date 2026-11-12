@@ -1135,9 +1135,11 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 	const FLinearColor Nation = UniformColour(Tag) * 1.25f;
 	const FLinearColor Vehicles = VehicleColour(Tag) * 1.3f;
 	int32 Armour = 0, Guns = 0, Motor = 0, Horse = 0, Mountain = 0, Fort = 0, Foot = 0, Sappers = 0;
+	bool bHeavyTanks = false; // a heavy tank corps is among them
 	for (const FString& Kind : Kinds)
 	{
 		if (Kind == TEXT("arm")) ++Armour;
+		else if (Kind == TEXT("heavy")) { ++Armour; bHeavyTanks = true; }
 		else if (Kind == TEXT("art")) ++Guns;
 		else if (Kind == TEXT("mot")) ++Motor;
 		else if (Kind == TEXT("cav")) ++Horse;
@@ -1166,7 +1168,8 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 		{
 		case 0:
 			// The nation's own tank if there is a model of it, or a plain one of the same size in the nation's paint.
-			if (!MainTank(Where, Metre, Tag, Turn, false))
+			// (a heavy tank corps of a nation that has a heavy tank modelled shows that one)
+			if (!(bHeavyTanks && Tag == TEXT("GER") && Vehicle(TEXT("Tiger"), Where, Metre, Turn, false)) && !MainTank(Where, Metre, Tag, Turn, false))
 			{
 				Tank(Where, Metre * 2.3, Vehicles, Turn);
 			}

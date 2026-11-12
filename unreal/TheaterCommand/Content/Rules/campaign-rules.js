@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 36c818d 2026-11-12. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b1dcb5c 2026-11-12. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1667,6 +1667,405 @@
     return leagueMembers(g2).filter((m) => m.id !== on && !atWar(g2, m.id, by)).map((m) => m.id);
   }
 
+  // ../../data/campaign/traits.json
+  var traits_default = {
+    _about: "National abilities and special units: what makes each country fight, build and earn in its own way. One row per nation, read by every version of the game. They apply in the grand campaign only; a historical scenario is worked out as it always was. A trait has an id, a name and a line of history ('text'), and any of these effects. In battle: 'attack' and 'defence' multiply the strength of the nation's corps when everything in 'when' holds: 'kinds' (only corps of these kinds), 'mobile' (only tanks, motorised troops and cavalry), 'terrain' (the battlefield is one of these), 'winter' (the months listed under 'winter' below, January being 0: December to March), 'home' (the battlefield is the nation's own country), 'works' (the battlefield is fortified), 'landing' (the attack comes from the sea), 'from' and 'until' (years, inclusive). In the books: 'income' adds production points every month and 'incomeMul' multiplies the month's earnings, only at peace or only at war when 'incomeAt' says so; 'oil' multiplies what the home oilfields earn; 'relocate' is the share of the factories in home provinces held by an enemy that go on working out of reach. 'drafts' multiplies how fast losses are made good. 'cost' makes the listed orders cheaper or dearer ('corps:inf', 'work:fort', 'ship:dd', 'air:bmr' and so on). 'sealift' is shipping for that many more corps a month. 'alert' means nobody catches the nation by surprise in the month war is declared. 'partisans' is the share of its strength an enemy corps loses each month it stands on the nation's occupied ground in the terrain listed under 'partisanGround'. 'fleet' multiplies the fighting power of its fleets, and 'seaLoss' multiplies what the convoy war costs it. 'builtin' marks a trait the rules of every game already carry: it is listed so the player can read it, adds nothing, and says what it does in its own 'rule'. A 'unit' is the nation's special formation, ordered from the arsenal like any corps: its 'kind', 'divs', 'cost' and 'months', the first year it can be raised ('from'), how many the nation can keep at once ('most'), how many of its corps of that kind already are such formations when the campaign starts ('starts'), and its own 'attack' and 'defence' under its own 'when'. 'word' goes into its name: III Guards Corps. Costs are in production points (shown times a hundred).",
+    winter: [11, 0, 1, 2],
+    partisanGround: ["mountain", "hills", "forest"],
+    ai: { reserve: 16 },
+    nations: {
+      GER: {
+        traits: [
+          { id: "tempo", name: "Lightning war", builtin: true, text: "Tanks, motorised infantry and dive bombers trained to strike together and keep moving, and a staff that plans a deep opening thrust.", rule: "Attack up 20% for tanks, motorised troops and cavalry in the first two months against a new enemy, and one more move in the month war is declared." },
+          { id: "panzer", name: "Armoured spearheads", text: "Tanks massed in their own divisions with radios in every vehicle, and lorried infantry trained to keep up with them.", attack: 1.15, when: { kinds: ["arm", "mot"], terrain: ["plains", "desert"] } },
+          { id: "uboats", name: "The submarine arm", text: "Yards that turn out ocean-going submarines in series for the war on shipping.", cost: { what: ["ship:ss"], mul: 0.75 } }
+        ],
+        unit: { id: "heavy", label: "Heavy tank corps", word: "Heavy Tank", kind: "arm", divs: 2, cost: 88, months: 8, from: 1942, most: 2, attack: 1.25, defence: 1.3, text: "Battalions of heavy tanks with thick armour and a long high-velocity gun, gathered into a corps of their own. Few, costly, and very hard to stop or to shift." }
+      },
+      UK: {
+        traits: [
+          { id: "radar", name: "The radar chain", builtin: true, text: "A chain of radar stations along the coast and controllers who put the fighters onto each raid, working from the first day of the war.", rule: "Fighters over home ground meet every raid at full strength. Air forces without a radar chain fight at 70%." },
+          { id: "navy", name: "The Royal Navy", text: "The largest fleet in the world, with centuries of practice in fighting at sea.", fleet: 1.1, cost: { what: ["ship:dd", "ship:ca", "ship:bb", "ship:cv"], mul: 0.85 } },
+          { id: "signals", name: "Signals intelligence", text: "Codebreakers who read the enemy's naval ciphers, so that convoys can be steered round the waiting submarines.", seaLoss: 0.8 }
+        ],
+        unit: { id: "dominion", label: "Commonwealth corps", word: "Commonwealth", kind: "inf", divs: 3, cost: 46, months: 4, most: 3, attack: 1.12, defence: 1.12, text: "Volunteer divisions from Canada, Australia, New Zealand, India and South Africa. Hardy infantry, raised quickly, with a name for getting the hard jobs." }
+      },
+      FRA: {
+        traits: [
+          { id: "forts", name: "The fortress line", text: "A generation of engineers who built the strongest line of forts in Europe, and troops trained to fight from them.", defence: 1.1, when: { works: true }, cost: { what: ["work:fort"], mul: 0.75 } },
+          { id: "chars", name: "Thick-skinned tanks", text: "In 1940 the French heavy tank carries armour that most anti-tank guns of the day cannot pierce.", defence: 1.15, when: { kinds: ["arm"], until: 1941 } }
+        ],
+        unit: { id: "africa", label: "Colonial corps", word: "Colonial", kind: "inf", divs: 3, cost: 46, months: 4, most: 2, attack: 1.2, defence: 1.1, when: { terrain: ["mountain", "hills", "desert"] }, text: "Mountain riflemen and legionaries from North Africa. Light on their feet in the hills and the desert, where heavier troops are slow." }
+      },
+      SOV: {
+        traits: [
+          { id: "winter", name: "At home in the winter", builtin: true, text: "Soviet troops are clothed and equipped for the eastern winter. An invader without winter kit is not.", rule: "No winter penalty on Soviet ground from December to February, when an invader attacks at 70% and defends at 85%." },
+          { id: "reserves", name: "Reserves without end", text: "A vast population and a system that calls up class after class.", drafts: 1.25, cost: { what: ["corps:inf"], mul: 0.9 } },
+          { id: "urals", name: "Factories to the east", text: "Whole factories are loaded onto trains ahead of the enemy and set up again beyond the Urals, out of reach.", relocate: 0.25 }
+        ],
+        unit: { id: "guards", label: "Guards corps", word: "Guards", kind: "inf", divs: 3, cost: 58, months: 5, from: 1942, most: 3, attack: 1.15, defence: 1.15, text: "Formations that earned the Guards title in battle: picked men, the best equipment and first call on replacements." }
+      },
+      ITA: {
+        traits: [
+          { id: "fast", name: "Fast light infantry", text: "Light infantry on bicycles, motorcycles and trucks, with a tradition of moving at the double.", cost: { what: ["corps:mot"], mul: 0.8 } },
+          { id: "craft", name: "Flotillas of light craft", text: "Torpedo boats, submarines and raiders built for a narrow sea.", cost: { what: ["ship:dd", "ship:ss"], mul: 0.8 } }
+        ],
+        unit: { id: "alpine", label: "Alpine corps", word: "Alpine", kind: "mtn", divs: 2, cost: 36, months: 5, most: 3, starts: 1, attack: 1.25, defence: 1.25, when: { terrain: ["mountain", "hills"] }, text: "Mountain troops recruited valley by valley in the Alps, the best soldiers Italy has. At their best on high ground." }
+      },
+      USA: {
+        traits: [
+          { id: "arsenal", name: "Arsenal of democracy", text: "The largest industry on earth, turned over to war.", incomeMul: 1.15, incomeAt: "war" },
+          { id: "bombers", name: "The heavy bomber force", text: "Four-engined bombers built by the thousand for daylight raids on industry.", cost: { what: ["air:bmr"], mul: 0.75 } }
+        ],
+        unit: { id: "marines", label: "Marine corps", word: "Marine", kind: "inf", divs: 2, cost: 40, months: 5, most: 2, attack: 1.3, when: { landing: true }, text: "Assault troops trained and equipped to land on a defended shore. Nobody does it better." }
+      },
+      POL: {
+        traits: [
+          { id: "cipher", name: "The cipher bureau", text: "Polish mathematicians have read the German cipher machine since 1932. Nobody catches Poland by surprise, and its armies know what is coming.", alert: true, defence: 1.05, when: { home: true } }
+        ],
+        unit: { id: "lancers", label: "Cavalry brigade group", word: "Cavalry", kind: "cav", divs: 2, cost: 30, months: 4, most: 3, starts: 1, attack: 1.25, defence: 1.3, text: "Mounted brigades that ride to the battle and fight on foot with anti-tank guns and machine guns. Fast across country and hard to pin down." }
+      },
+      FIN: {
+        traits: [
+          { id: "winterwar", name: "The winter war", text: "An army that lives in the snow, defending its own forests against an invader who does not.", defence: 1.25, when: { winter: true, home: true } },
+          { id: "motti", name: "Forest fighters", text: "Small columns that cut a road-bound enemy into pieces among the trees and deal with each piece in turn.", attack: 1.15, when: { terrain: ["forest"] } }
+        ],
+        unit: { id: "ski", label: "Ski corps", word: "Ski", kind: "inf", divs: 2, cost: 30, months: 4, most: 3, attack: 1.3, defence: 1.2, when: { winter: true }, text: "Light infantry on skis in white smocks, moving across country no vehicle can cross. In the winter months nothing on foot can catch them." }
+      },
+      SUI: {
+        traits: [
+          { id: "redoubt", name: "The mountain fortress", text: "The plan is to give up the plain and hold the high Alps, with every pass mined and covered by guns.", defence: 1.3, when: { home: true, terrain: ["mountain", "hills"] } },
+          { id: "banks", name: "The banking haven", text: "While Switzerland is at peace, the money of a continent at war passes through its banks.", income: 1, incomeAt: "peace" },
+          { id: "militia", name: "A nation in arms", text: "Every man keeps his rifle at home and reports within hours.", cost: { what: ["corps:inf", "corps:mtn"], mul: 0.8 } }
+        ]
+      },
+      SWE: {
+        traits: [
+          { id: "ore", name: "Iron ore exports", text: "The richest iron ore in Europe, and every power at war wants it. It pays while Sweden is at peace.", income: 1.2, incomeAt: "peace" },
+          { id: "neutral", name: "Armed neutrality", text: "A country that has decided to make itself too costly to invade.", defence: 1.15, when: { home: true } },
+          { id: "guns", name: "The gun works", text: "One of the best gun makers in the world. Its anti-aircraft and field guns are bought by both sides.", cost: { what: ["corps:art", "work:aa"], mul: 0.75 } }
+        ]
+      },
+      NOR: {
+        traits: [
+          { id: "merchant", name: "The merchant fleet", text: "One of the largest merchant fleets in the world, with crews in every ocean. It earns in peace and in war, and it can carry an army.", income: 0.8, sealift: 2 },
+          { id: "fjords", name: "Fjord and mountain", text: "A long, steep country with few roads, where a handful of men can hold a valley.", defence: 1.2, when: { home: true, terrain: ["mountain", "hills", "forest"] } }
+        ]
+      },
+      DEN: {
+        traits: [
+          { id: "sound", name: "Gate of the Baltic", text: "Every ship between the Baltic and the North Sea passes Danish waters, and Danish farms feed half of northern Europe. It pays while Denmark is at peace.", income: 0.6, incomeAt: "peace" },
+          { id: "seafarers", name: "A seafaring nation", text: "Shipping lines and yards out of all proportion to the size of the country.", sealift: 1, cost: { what: ["ship:dd", "ship:tp"], mul: 0.8 } }
+        ]
+      },
+      NED: {
+        traits: [
+          { id: "waterline", name: "The water line", text: "Sluices that can put the low country under water in front of an invader.", defence: 1.2, when: { home: true } },
+          { id: "indies", name: "The East Indies trade", text: "Oil, rubber and tin from the East Indies, out of any European enemy's reach.", income: 1 }
+        ]
+      },
+      BEL: {
+        traits: [
+          { id: "belts", name: "The fortress belts", text: "Rings of modern forts round Liege, Namur and Antwerp, and gunners who know every yard in front of them.", defence: 1.1, when: { home: true, works: true }, cost: { what: ["work:fort"], mul: 0.75 } },
+          { id: "congo", name: "Riches of the Congo", text: "Copper, rubber and rare ores from the Congo, out of any European enemy's reach.", income: 1 }
+        ],
+        unit: { id: "ardennes", label: "Ardennes rifle corps", word: "Ardennes Rifle", kind: "inf", divs: 2, cost: 30, months: 4, most: 2, attack: 1.15, defence: 1.3, when: { terrain: ["forest", "hills"] }, text: "Light infantry raised in the wooded hills of the Ardennes to delay an invader there. Stubborn among the trees." }
+      },
+      ESP: {
+        traits: [
+          { id: "veterans", name: "Veterans of the civil war", text: "Three years of war at home ended in the spring of 1939. For a few years yet the army is full of men who have seen it all.", attack: 1.1, defence: 1.1, when: { until: 1942 } },
+          { id: "pyrenees", name: "The wall of the Pyrenees", text: "A mountain frontier with a handful of passes.", defence: 1.2, when: { home: true, terrain: ["mountain"] } }
+        ],
+        unit: { id: "legion", label: "Legion corps", word: "Legion", kind: "inf", divs: 2, cost: 32, months: 4, most: 2, attack: 1.2, defence: 1.1, text: "The professionals of the army of Africa: long-service volunteers used as shock troops." }
+      },
+      POR: {
+        traits: [
+          { id: "wolfram", name: "Wolfram exports", text: "Tungsten ore that both sides must have for armour-piercing shot and machine tools. It pays while Portugal is at peace.", income: 0.6, incomeAt: "peace" },
+          { id: "islands", name: "The Atlantic islands", text: "The Azores and Madeira: harbours in mid-ocean and the shipping that serves them.", sealift: 1 }
+        ]
+      },
+      HUN: {
+        traits: [
+          { id: "granary", name: "Granary of the Danube", text: "The wheat of the great plain feeds central Europe in peace and in war.", income: 0.6 }
+        ],
+        unit: { id: "rapid", label: "Rapid corps", word: "Rapid", kind: "mot", divs: 2, cost: 40, months: 5, most: 2, attack: 1.15, text: "Motorised rifle and cavalry brigades grouped into one fast corps, the best-equipped part of a small army." }
+      },
+      ROM: {
+        traits: [
+          { id: "oil", name: "The oil of Ploesti", text: "The largest oilfields in Europe outside the Soviet Union, and every power at war wants what they pump.", oil: 2 },
+          { id: "hunters", name: "Mountain hunters", text: "Picked mountain brigades from the Carpathians.", attack: 1.15, defence: 1.15, when: { kinds: ["mtn"], terrain: ["mountain", "hills"] } }
+        ]
+      },
+      YUG: {
+        traits: [
+          { id: "partisans", name: "Partisan war", text: "A conquered Yugoslavia does not stay quiet. Every month an enemy corps standing in its occupied mountains, hills and forests loses part of its strength to raids and ambushes.", partisans: 0.04 },
+          { id: "highlands", name: "Mountain country", text: "Poor roads, high ridges and a people used to fighting from them.", defence: 1.15, when: { home: true, terrain: ["mountain", "hills"] } }
+        ]
+      },
+      BUL: {
+        traits: [
+          { id: "peasants", name: "A peasant army", text: "Sturdy conscripts who need little and march far.", cost: { what: ["corps:inf"], mul: 0.8 } },
+          { id: "balkan", name: "Balkan infantry", text: "Infantry with a long record of hard fighting in the mountains of the Balkans.", attack: 1.1, when: { kinds: ["inf", "mtn"], terrain: ["mountain", "hills"] } }
+        ]
+      },
+      GRE: {
+        traits: [
+          { id: "line", name: "The mountain line", text: "Concrete works in the passes of the north and an army that knows its own mountains.", defence: 1.2, when: { home: true, terrain: ["mountain", "hills"] } },
+          { id: "shipping", name: "The merchant marine", text: "Greek shipowners run one of the great merchant fleets. It earns in peace and in war, and it can carry an army.", income: 0.5, sealift: 2 }
+        ],
+        unit: { id: "evzones", label: "Evzone corps", word: "Evzone", kind: "mtn", divs: 2, cost: 30, months: 4, most: 2, starts: 1, attack: 1.2, defence: 1.2, when: { terrain: ["mountain", "hills"] }, text: "The picked light infantry of the Greek army, mountain men who attack uphill." }
+      },
+      TUR: {
+        traits: [
+          { id: "straits", name: "Keeper of the Straits", text: "The only way between the Black Sea and the Mediterranean runs past Istanbul, and both sides pay court to whoever holds it. It pays while Turkey is at peace.", income: 1, incomeAt: "peace" },
+          { id: "anatolia", name: "The depth of Anatolia", text: "A high, roadless plateau that swallows an invader's supply columns.", defence: 1.2, when: { home: true, terrain: ["mountain", "hills"] } }
+        ]
+      },
+      IRL: {
+        traits: [
+          { id: "emergency", name: "The Emergency", text: "A neutrality kept carefully between two great powers at war, with cattle and food sold across the Irish Sea. It pays while Ireland is at peace.", income: 0.5, incomeAt: "peace" },
+          { id: "volunteers", name: "The volunteer tradition", text: "A small army backed by a countryside that has fought an occupier before.", defence: 1.2, when: { home: true }, cost: { what: ["corps:inf"], mul: 0.8 } }
+        ]
+      }
+    }
+  };
+
+  // ../../src/campaign/traits.ts
+  var TRAITS = traits_default;
+  var traitRules = (g2) => g2.flags.open === 1;
+  var traitsOf = (nat) => TRAITS.nations[nat]?.traits ?? [];
+  var eliteOf = (nat) => TRAITS.nations[nat]?.unit ?? null;
+  var sceneTurn = -1;
+  var scene = { year: 0, winter: false };
+  function sceneOf(g2) {
+    if (g2.turn !== sceneTurn) {
+      const d = turnToDate(g2.turn);
+      scene = { year: d.year, winter: TRAITS.winter.includes(d.month) };
+      sceneTurn = g2.turn;
+    }
+    return scene;
+  }
+  function holds(g2, w, c, target, landing) {
+    if (!w) return true;
+    if (w.kinds && !w.kinds.includes(c.kind)) return false;
+    if (w.mobile && !KIND[c.kind].mobile) return false;
+    if (w.terrain && !w.terrain.includes(target.terrain)) return false;
+    if (w.home && target.owner !== c.nat) return false;
+    if (w.works && !target.fort) return false;
+    if (w.landing && !landing) return false;
+    if (w.winter || w.from !== void 0 || w.until !== void 0) {
+      const s = sceneOf(g2);
+      if (w.winter && !s.winter) return false;
+      if (w.from !== void 0 && s.year < w.from) return false;
+      if (w.until !== void 0 && s.year > w.until) return false;
+    }
+    return true;
+  }
+  function edge(g2, c, target, landing, side2, names) {
+    if (!traitRules(g2)) return 1;
+    const row2 = TRAITS.nations[c.nat];
+    if (!row2) return 1;
+    let m = 1;
+    for (const t of row2.traits) {
+      const x2 = t[side2];
+      if (x2 === void 0 || t.builtin || !holds(g2, t.when, c, target, landing)) continue;
+      m *= x2;
+      names?.add(t.name);
+    }
+    const u = c.elite && row2.unit && row2.unit.id === c.elite ? row2.unit : null;
+    const x = u?.[side2];
+    if (u && x !== void 0 && holds(g2, u.when, c, target, landing)) {
+      m *= x;
+      names?.add(u.label);
+    }
+    return m;
+  }
+  var traitAttack = (g2, c, target, landing = false) => edge(g2, c, target, landing, "attack");
+  var traitDefence = (g2, c, target) => edge(g2, c, target, false, "defence");
+  function traitNames(g2, cs, target, side2, landing = false) {
+    const names = /* @__PURE__ */ new Set();
+    for (const c of cs) edge(g2, c, target, side2 === "attack" && landing, side2, names);
+    return [...names];
+  }
+  var NO_MONEY = { lines: [], flat: 0, mul: 1, mulBy: "" };
+  function traitMoney(g2, nat) {
+    const row2 = TRAITS.nations[nat];
+    if (!traitRules(g2) || !row2) return NO_MONEY;
+    const n = g2.nations[nat];
+    const out = { lines: [], flat: 0, mul: 1, mulBy: "" };
+    const add = (t, amount, count2) => {
+      if (amount <= 1e-9) return;
+      out.lines.push({ key: `trait:${t.id}`, label: t.name, amount, count: count2 });
+      out.flat += amount;
+    };
+    for (const t of row2.traits) {
+      if (t.builtin) continue;
+      const now = !t.incomeAt || t.incomeAt === "war" === n.atWar.length > 0;
+      if (t.income && now) add(t, t.income);
+      if (t.incomeMul && now) {
+        out.mul *= t.incomeMul;
+        out.mulBy = t.name;
+      }
+      if (t.oil) {
+        let oil = 0, wells = 0;
+        for (const r of g2.regions) if (r.ctrl === nat && r.owner === nat && r.oil) {
+          oil += provinceYield(g2, r, nat).oil;
+          wells++;
+        }
+        add(t, oil * (t.oil - 1), wells);
+      }
+      if (t.relocate) {
+        let fac = 0;
+        for (const r of g2.regions) if (r.owner === nat && r.ctrl !== nat && r.fac > 0 && atWar(g2, nat, r.ctrl)) fac += r.fac;
+        add(t, fac * t.relocate, fac);
+      }
+    }
+    return out;
+  }
+  var product = (g2, nat, pick) => {
+    if (!traitRules(g2)) return 1;
+    let m = 1;
+    for (const t of traitsOf(nat)) {
+      const x = t.builtin ? void 0 : pick(t);
+      if (x !== void 0) m *= x;
+    }
+    return m;
+  };
+  var traitDrafts = (g2, nat) => product(g2, nat, (t) => t.drafts);
+  var costMul = (g2, nat, key2) => product(g2, nat, (t) => t.cost?.what.includes(key2) ? t.cost.mul : void 0);
+  function priceOf(g2, nat, key2, list3) {
+    const m = costMul(g2, nat, key2);
+    return m === 1 ? list3 : Math.round(list3 * m * 10) / 10;
+  }
+  var traitFleet = (g2, nat) => product(g2, nat, (t) => t.fleet);
+  var traitSeaLoss = (g2, nat) => product(g2, nat, (t) => t.seaLoss);
+  var alertNation = (g2, nat) => traitRules(g2) && traitsOf(nat).some((t) => t.alert);
+  var traitSealift = (nat) => traitsOf(nat).reduce((s, t) => s + (t.builtin ? 0 : t.sealift ?? 0), 0);
+  function eliteCount(g2, nat) {
+    let k = g2.nations[nat].queue.filter((b) => b.elite).length;
+    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.elite) k++;
+    return k;
+  }
+  function whyNoElite(g2, nat) {
+    const u = eliteOf(nat);
+    if (!traitRules(g2) || !u) return "This nation has no special formation.";
+    if (u.from !== void 0 && sceneOf(g2).year < u.from) return `Not before ${u.from}.`;
+    if (eliteCount(g2, nat) >= u.most) return `The nation can keep ${u.most} of these at once, in the field and on order.`;
+    return null;
+  }
+  function openTraits(g2) {
+    if (!traitRules(g2) || g2.flags["traits:open"]) return;
+    g2.flags["traits:open"] = 1;
+    for (const [nat, row2] of Object.entries(TRAITS.nations)) {
+      const n = g2.nations[nat];
+      if (!n) continue;
+      n.sealift += traitSealift(nat);
+      const u = row2.unit;
+      if (!u?.starts) continue;
+      let left = u.starts;
+      for (const c of g2.corps) {
+        if (left <= 0) break;
+        if (c.nat === nat && !c.dead && c.kind === u.kind && !c.elite) {
+          c.elite = u.id;
+          left--;
+        }
+      }
+    }
+  }
+  function traitsMonth(g2) {
+    if (!traitRules(g2)) return;
+    for (const [nat, row2] of Object.entries(TRAITS.nations)) {
+      const t = row2.traits.find((x) => x.partisans);
+      const X = g2.nations[nat];
+      if (!t || !X) continue;
+      const victor = X.fellOn?.to;
+      const foe = (id) => X.alive ? atWar(g2, nat, id) : !!victor && (id === victor || allied(g2, id, victor));
+      let hit = 0, where = -1;
+      for (const r of g2.regions) {
+        if (r.owner !== nat || r.ctrl === nat || !TRAITS.partisanGround.includes(r.terrain) || !foe(r.ctrl)) continue;
+        for (const c of r.units) {
+          if (c.dead || !foe(c.nat) || c.str <= 0.3) continue;
+          c.str = Math.max(0.3, c.str - t.partisans);
+          if (c.nat === g2.human || nat === g2.human) {
+            hit++;
+            where = r.id;
+          }
+        }
+      }
+      if (hit && g2.turn % 6 === 0) {
+        const mine = nat === g2.human;
+        headline(g2, "info", mine ? `The partisans go on fighting in the occupied provinces: ${hit === 1 ? "one enemy corps" : `${hit} enemy corps`} lost men to raids and ambushes this month.` : `Partisans in occupied ${X.name} raid roads and depots: ${hit === 1 ? "one of your corps there" : `${hit} of your corps there`} lost men this month. The mountains, hills and forests are their country.`, g2.human ?? void 0, where);
+      }
+    }
+  }
+  var pct = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
+  var KIND_WORD = { inf: "infantry", mot: "motorised troops", arm: "tanks", cav: "cavalry", mtn: "mountain troops", fort: "fortress troops", art: "artillery", eng: "engineers" };
+  var DIV_WORD = { inf: "infantry", mot: "motorised", arm: "armoured", cav: "cavalry", mtn: "mountain", art: "artillery", eng: "engineer" };
+  var ORDER_WORD = {
+    "corps:inf": "infantry corps",
+    "corps:mtn": "mountain corps",
+    "corps:mot": "motorised corps",
+    "corps:arm": "armoured corps",
+    "corps:cav": "cavalry",
+    "corps:art": "artillery corps",
+    "corps:eng": "engineer corps",
+    "work:fort": "fortifications",
+    "work:aa": "anti-aircraft guns",
+    "ship:dd": "destroyers",
+    "ship:ss": "submarines",
+    "ship:ca": "cruisers",
+    "ship:bb": "battleships",
+    "ship:cv": "carriers",
+    "ship:tp": "troopships",
+    "air:ftr": "fighter wings",
+    "air:bmr": "bomber wings"
+  };
+  var list = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  function whenWords(w, who) {
+    if (!w) return "";
+    const out = [];
+    if (w.kinds) out.push(`for ${list(w.kinds.map((k) => KIND_WORD[k] ?? k))}`);
+    if (w.mobile) out.push("for tanks, motorised troops and cavalry");
+    if (w.landing) out.push("in a landing from the sea");
+    if (w.terrain) out.push(`in ${list(w.terrain.map((t) => t === "urban" ? "cities" : t === "mountain" ? "mountains" : t === "forest" ? "forest" : t))}`);
+    if (w.works) out.push("behind fortifications");
+    if (w.home) out.push(`on ${who} own ground`);
+    if (w.winter) out.push("from December to March");
+    if (w.from !== void 0) out.push(`from ${w.from}`);
+    if (w.until !== void 0) out.push(`until the end of ${w.until}`);
+    return out.length ? ` ${out.join(" ")}` : "";
+  }
+  function fightWords(x, who) {
+    const a = x.attack, d = x.defence;
+    if (a === void 0 && d === void 0) return "";
+    const head = a !== void 0 && d !== void 0 ? a === d ? `Attack and defence up ${pct(a)}` : `Attack up ${pct(a)}, defence up ${pct(d)}` : a !== void 0 ? `Attack up ${pct(a)}` : `Defence up ${pct(d)}`;
+    return `${head}${whenWords(x.when, who)}.`;
+  }
+  function traitRule(t, scale = 100) {
+    if (t.builtin) return t.rule ?? "Part of the rules of every campaign.";
+    const out = [];
+    const fight2 = fightWords(t, "its");
+    if (fight2) out.push(fight2);
+    const at = t.incomeAt === "peace" ? " while at peace" : t.incomeAt === "war" ? " while at war" : "";
+    if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString("en-US")} a month${at}.`);
+    if (t.incomeMul) out.push(`Earnings up ${pct(t.incomeMul)}${at}.`);
+    if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? "double" : `${t.oil} times as much`}.`);
+    if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);
+    if (t.drafts) out.push(`Losses are made good ${pct(t.drafts)} ${t.drafts > 1 ? "faster" : "slower"}.`);
+    if (t.cost) out.push(`${list(t.cost.what.map((k) => ORDER_WORD[k] ?? k)).replace(/^./, (ch) => ch.toUpperCase())} cost ${pct(t.cost.mul)} ${t.cost.mul < 1 ? "less" : "more"}.`);
+    if (t.sealift) out.push(`Shipping for ${t.sealift === 1 ? "one more corps" : `${t.sealift} more corps`} a month.`);
+    if (t.alert) out.push("No enemy gets the surprise of the first month against it.");
+    if (t.partisans) out.push(`Enemy corps on its occupied mountains, hills and forests lose ${Math.round(t.partisans * 100)}% of their strength a month.`);
+    if (t.fleet) out.push(`Fleets fight ${pct(t.fleet)} harder.`);
+    if (t.seaLoss) out.push(`Convoy losses down ${pct(t.seaLoss)}.`);
+    return out.join(" ");
+  }
+  function eliteRule(u) {
+    const fight2 = fightWords(u, "its");
+    const size = `${u.divs === 1 ? `One ${DIV_WORD[u.kind] ?? u.kind} division` : `${u.divs} ${DIV_WORD[u.kind] ?? u.kind} divisions`}.`;
+    return [size, fight2, u.from !== void 0 ? `Raised from ${u.from}.` : "", `At most ${u.most} at once.`].filter(Boolean).join(" ");
+  }
+
   // ../../data/campaign/navy.json
   var navy_default = {
     _about: {
@@ -3263,7 +3662,7 @@
       award(g2, kind, u, d, at, extra);
     }
   }
-  function edge(g2, u, key2) {
+  function edge2(g2, u, key2) {
     let e = 0;
     for (const id of u.hon ?? []) {
       const a = awardOf(g2, id);
@@ -3278,19 +3677,19 @@
   };
   function storyAttack(g2, c, target, defenders) {
     if (c.nat !== g2.human || c.kind === "fort") return 1;
-    let m = 1 + edge(g2, c, "attack");
+    let m = 1 + edge2(g2, c, "attack");
     if (c.home === target.id && target.owner === c.nat) m += STORIES.home.attack;
     if (rivalIn(g2, c, defenders)) m += STORIES.rivals.edge;
     return m;
   }
   function storyDefence(g2, c, target, attackers2) {
     if (c.nat !== g2.human || c.kind === "fort") return 1;
-    let m = 1 + edge(g2, c, "defence");
+    let m = 1 + edge2(g2, c, "defence");
     if (c.home === target.id) m += STORIES.home.defence;
     if (rivalIn(g2, c, attackers2)) m += STORIES.rivals.edge;
     return m;
   }
-  var storyEdge = (g2, f) => f.nat === g2.human ? 1 + edge(g2, f, "all") : 1;
+  var storyEdge = (g2, f) => f.nat === g2.human ? 1 + edge2(g2, f, "all") : 1;
   function moment(g2, w, m, c, reg, o = {}) {
     if (c.nat !== g2.human) return;
     const gen = "general" in c ? generalOf(g2, c) : null;
@@ -3701,7 +4100,7 @@
     if (!groundRules(g2)) return 0;
     return (GROUND.march[kind]?.[r.terrain] ?? 0) + (STEEP.has(r.name) ? GROUND.steep.march[kind] ?? 0 : 0);
   }
-  var pct = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
+  var pct2 = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
   var NAME = { inf: "infantry", mot: "motorized troops", arm: "tanks", cav: "cavalry", mtn: "mountain troops", fort: "fortress troops", art: "artillery", eng: "engineers" };
   var KINDS = Object.keys(KIND);
   var groundSays = (g2, r) => groundRules(g2) ? GROUND.says[steep(g2, r) ? "steep" : r.terrain] : "";
@@ -3738,7 +4137,7 @@
       if (seen.has(c.kind)) continue;
       seen.add(c.kind);
       const m = defending ? groundDefence(g2, c.kind, r) : groundAttack(g2, c.kind, r);
-      if (m !== 1) bits.push(`${NAME[c.kind]} ${defending ? "defend" : "attack"} ${pct(m)} ${m > 1 ? "stronger" : "weaker"}`);
+      if (m !== 1) bits.push(`${NAME[c.kind]} ${defending ? "defend" : "attack"} ${pct2(m)} ${m > 1 ? "stronger" : "weaker"}`);
     }
     return bits.join(", ");
   }
@@ -4128,7 +4527,7 @@
     for (const r of rows ?? []) if (r[0] <= turn) out = r;
     return out;
   };
-  var list = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var list2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var cap = (s) => s[0].toUpperCase() + s.slice(1);
   var planes = (n, one) => `${n.toLocaleString("en-US")} ${one}${n === 1 ? "" : "s"}`;
   var airFleetsOf = (g2, nat) => g2.airFleets.filter((f) => f.nat === nat);
@@ -4158,8 +4557,8 @@
   function crowding(g2, f) {
     const there = g2.airFleets.reduce((s, x) => s + (x.base === f.base ? x.ftr + x.bmr : 0), 0);
     const built = g2.flags[`wk:field:${f.base}`];
-    const holds2 = built ? AIR.airfields.holds + built * WORKS.field.holds : AIR.airfields.holds;
-    return there > holds2 ? holds2 / there : 1;
+    const holds3 = built ? AIR.airfields.holds + built * WORKS.field.holds : AIR.airfields.holds;
+    return there > holds3 ? holds3 / there : 1;
   }
   var gunsAt = (g2, region) => g2.flags[`wk:aa:${region}`] ?? 0;
   var WORKS = arsenal_default.works;
@@ -4472,11 +4871,11 @@
     if (night) out.lines.push({ label: "Night", value: "Flown in darkness", effect: "Few fighters find the bombers, and only about a third of the bombs find the target" });
     else if (af > 0) {
       const far = out.att.filter((a) => a.f.ftr > 0).sort((a, b) => a.esc - b.esc)[0];
-      const pct2 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
+      const pct3 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
       out.lines.push({
         label: "Range",
-        value: pct2 >= 100 ? "The target is well inside fighter range" : pct2 > 0 ? `The fighters are at ${pct2}% effect over the target` : "The target is beyond fighter range",
-        effect: pct2 >= 100 ? void 0 : pct2 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
+        value: pct3 >= 100 ? "The target is well inside fighter range" : pct3 > 0 ? `The fighters are at ${pct3}% effect over the target` : "The target is beyond fighter range",
+        effect: pct3 >= 100 ? void 0 : pct3 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
       });
     } else if (out.B > 0) out.lines.push({ label: "Range", value: "No escort", effect: "The bombers go alone" });
     const packed = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => crowding(g2, f) < 1);
@@ -4485,8 +4884,8 @@
       const least = Math.min(...packed.map((f) => crowding(g2, f)));
       out.lines.push({
         label: "Airfields",
-        value: `The airfields of ${list(bases)} are crowded`,
-        effect: `${list(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? "its" : "their"} aircraft from there`
+        value: `The airfields of ${list2(bases)} are crowded`,
+        effect: `${list2(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? "its" : "their"} aircraft from there`
       });
     }
     if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ring the factories of ${place2}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
@@ -4498,10 +4897,10 @@
       const up = (k) => `${k > 0 ? "up" : "down"} ${Math.abs(k)}%`;
       out.lines.push({ label: "Equipment", value: [...kitA, ...kitD].map((x) => x.text).join("; "), effect: [...kitA.map((x) => `Attacker ${up(x.pct)}`), ...kitD.map((x) => `Defender ${up(x.pct)}`)].join(", ") });
     }
-    const names = (fs) => list(fs.filter((f) => f.leader).map((f) => `${f.leader.name}${f.leader.level > 1 ? ` (level ${f.leader.level})` : ""}`)) || "no commander named";
+    const names = (fs) => list2(fs.filter((f) => f.leader).map((f) => `${f.leader.name}${f.leader.level > 1 ? ` (level ${f.leader.level})` : ""}`)) || "no commander named";
     out.lines.push({ label: "Commanders", value: `${names(out.att.map((a) => a.f))} against ${names(out.def.map((x) => x.f))}` });
     const worn = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => f.ready < 0.8);
-    if (worn.length) out.lines.push({ label: "Readiness", value: `${list(worn.map((f) => f.name))} not fully fit to fly`, effect: "A worn fleet fights below its strength" });
+    if (worn.length) out.lines.push({ label: "Readiness", value: `${list2(worn.map((f) => f.name))} not fully fit to fly`, effect: "A worn fleet fights below its strength" });
     return out;
   }
   function gainXp2(f, won) {
@@ -4581,7 +4980,7 @@
         ground += gf + gb;
         value += cut * 300;
       }
-      result = through <= 0 ? "" : hit.length ? `The airfields of ${list(hit.map((f) => f.name))} were bombed: readiness cut by ${Math.round(cut * 100)}%${ground ? ` and ${planes(ground, "aircraft").replace("aircrafts", "aircraft")} destroyed on the ground` : ""}.` : "The bombers found no airfields in use.";
+      result = through <= 0 ? "" : hit.length ? `The airfields of ${list2(hit.map((f) => f.name))} were bombed: readiness cut by ${Math.round(cut * 100)}%${ground ? ` and ${planes(ground, "aircraft").replace("aircrafts", "aircraft")} destroyed on the ground` : ""}.` : "The bombers found no airfields in use.";
     } else if (m === "bomb" || night) {
       const N = AIR.damage.industry;
       const r = g2.regions[target];
@@ -4683,7 +5082,7 @@
     };
     g2.airReports.push(rep);
     storyAir(g2, m, target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost });
-    const who = list(fleets.filter((f) => a.att.some((x) => x.f === f)).map((f) => f.name));
+    const who = list2(fleets.filter((f) => a.att.some((x) => x.f === f)).map((f) => f.name));
     const cost = `${planes(aLost, "aircraft").replace("aircrafts", "aircraft")} lost`;
     const adj = defNat ? g2.nations[defNat].adj : "enemy";
     const together = !!defNat && (nat === "UK" || nat === "USA") && ["UK", "USA"].every((x) => g2.nations[x]?.alive && g2.nations[x].atWar.includes(defNat));
@@ -4795,7 +5194,7 @@
   var seaRng = (g2, key2) => new Rng(hashString(`sea:${g2.seed}:${g2.turn}:${key2}`));
   var cap2 = (s) => s[0].toUpperCase() + s.slice(1);
   var zoneOf = (g2, key2) => g2.seas.findIndex((z) => z.key === key2);
-  var shipCount = (s, list2 = CLASSES) => list2.reduce((n, c) => n + s[c], 0);
+  var shipCount = (s, list3 = CLASSES) => list3.reduce((n, c) => n + s[c], 0);
   var surfaceShips = (f) => shipCount(f.ships, SURFACE2);
   var atSea = (f) => f.stance !== "port";
   var fleetsOf = (g2, nat) => g2.fleets.filter((f) => f.nat === nat);
@@ -4873,7 +5272,7 @@
   function fleetPower(g2, f) {
     let p = 0;
     for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power;
-    return p * quality(g2, f.nat) * fit2(f) * admiralMul(f) * storyEdge(g2, f);
+    return p * quality(g2, f.nat) * fit2(f) * admiralMul(f) * storyEdge(g2, f) * traitFleet(g2, f.nat);
   }
   function airOver(g2, z, nat, hostile = false) {
     const zone = g2.seas[z];
@@ -5196,9 +5595,9 @@
     g2.supplyDirty = true;
     return true;
   }
-  function sinkShips(f, frac, rng, list2 = CLASSES) {
+  function sinkShips(f, frac, rng, list3 = CLASSES) {
     const out = none();
-    for (const c of list2) {
+    for (const c of list3) {
       const k = Math.min(f.ships[c], rng.roll(f.ships[c] * frac * NAVY.classes[c].tough));
       f.ships[c] -= k;
       f.lost[c] += k;
@@ -5344,7 +5743,7 @@
       if (m && g2.turn - m.turn <= 1) s += m.share;
     }
     if (nat === NAVY.ore.to && oreRoute(g2) === "cut") s += NAVY.ore.share;
-    return Math.min(0.9, s);
+    return Math.min(0.9, s) * traitSeaLoss(g2, nat);
   }
   var sideOf = (f) => ({ nat: f.nat, fleet: f.name, admiral: f.admiral?.name ?? null, ships: { ...f.ships }, sunk: none() });
   function afterAction(g2, f, side2, won, rng) {
@@ -5392,8 +5791,8 @@
       const att = mine.map(sideOf), def = met2.map(sideOf);
       const R = A / D * rng.range(0.8, 1.2);
       const won = R >= 1;
-      const edge2 = won ? R : 1 / R;
-      const hard = clamp(0.14 + 0.08 * edge2, 0.18, 0.5), light = clamp(0.16 / edge2, 0.03, 0.14);
+      const edge3 = won ? R : 1 / R;
+      const hard = clamp(0.14 + 0.08 * edge3, 0.18, 0.5), light = clamp(0.16 / edge3, 0.03, 0.14);
       mine.forEach((f, i) => {
         att[i].sunk = sinkShips(f, won ? light : hard, rng);
       });
@@ -5419,7 +5818,7 @@
       mine.forEach((f, i) => afterAction(g2, f, att[i], won, rng));
       met2.forEach((f, i) => afterAction(g2, f, def[i], !won, rng));
       for (const f of won ? met2 : mine) sail(g2, f, f.home, "port");
-      const level = won ? edge2 >= 2 ? "Decisive victory" : "Close victory" : edge2 >= 2 ? "Decisive defeat" : "Close defeat";
+      const level = won ? edge3 >= 2 ? "Decisive victory" : "Close victory" : edge3 >= 2 ? "Decisive defeat" : "Close defeat";
       g2.flags.seaBattles = (g2.flags.seaBattles ?? 0) + 1;
       const rep = {
         id: g2.flags.seaBattles,
@@ -5597,7 +5996,7 @@
   var sneakOn = (g2, by, on) => g2.flags.open === 1 && g2.flags[`sneak:${by}:${on}`] === g2.turn;
   function wouldSurprise(g2, by, on) {
     const B = g2.nations[on];
-    return g2.flags.open === 1 && !!B && !B.atWar.some((x) => x === by || allied(g2, x, by));
+    return g2.flags.open === 1 && !!B && !alertNation(g2, on) && !B.atWar.some((x) => x === by || allied(g2, x, by));
   }
   function wouldStand(g2, n, opinion) {
     if (!courtable(n)) return n.align;
@@ -5640,12 +6039,12 @@
     const rank = (a) => a.friend ? 0 : a.from !== a.to ? 1 : 2;
     return out.sort((x, y) => rank(x) - rank(y) || g2.nations[x.nat].name.localeCompare(g2.nations[y.nat].name));
   }
-  function alarm(g2, list2, on) {
-    if (!list2.length) return;
-    const friends = list2.filter((a) => a.friend).map((a) => g2.nations[a.nat].name);
+  function alarm(g2, list3, on) {
+    if (!list3.length) return;
+    const friends = list3.filter((a) => a.friend).map((a) => g2.nations[a.nat].name);
     const names = friends.length <= 1 ? friends.join("") : `${friends.slice(0, -1).join(", ")} and ${friends[friends.length - 1]}`;
     headline(g2, "event", friends.length ? `The attack on ${g2.nations[on].name} alarms the neutral world, and its friends most of all: ${names}.` : `The attack on ${g2.nations[on].name} alarms the neutral world.`, on);
-    for (const a of list2) {
+    for (const a of list3) {
       const n = g2.nations[a.nat];
       n.opinion = a.opinion;
       n.home = a.home;
@@ -5655,10 +6054,13 @@
   function warForecast(g2, by, on) {
     const A = g2.nations[by], B = g2.nations[on];
     const ba = A ? bloc(A) : null;
+    const sneak = wouldSurprise(g2, by, on);
+    const fighting = !!B && B.atWar.some((x) => x === by || allied(g2, x, by));
     return {
       on,
+      ready: sneak ? null : fighting ? "war" : alertNation(g2, on) ? "alert" : "watch",
       joins: B && bloc(B) === null && ba && ba !== "league" && !ownPath(g2, on) ? ba === "axis" ? "allies" : "axis" : null,
-      sneak: wouldSurprise(g2, by, on) ? RELATIONS.sneak.attack : 1,
+      sneak: sneak ? RELATIONS.sneak.attack : 1,
       friends: friendsOf(on).filter((f) => g2.nations[f.nat]?.alive),
       alarm: alarmed(g2, by, on),
       trade: g2.flags.open === 1 && tradePartners(g2, by).some((n) => n.id === on),
@@ -5694,7 +6096,7 @@
     headline(g2, "war", `${n.name} joins ${blocName(sideOf2(b))}.`, n.id);
     return true;
   }
-  function holds(g2, cond2) {
+  function holds2(g2, cond2) {
     const i = cond2.indexOf(":");
     const key2 = i < 0 ? cond2 : cond2.slice(0, i);
     const rest = i < 0 ? "" : cond2.slice(i + 1);
@@ -5864,7 +6266,7 @@
     if (e.partition) {
       const X = g2.nations[e.partition.nation];
       if (!X?.alive) return false;
-      const first = (list2) => list2.find((id) => g2.nations[id]?.alive && g2.nations[id].atWar.length > 0);
+      const first = (list3) => list3.find((id) => g2.nations[id]?.alive && g2.nations[id].atWar.length > 0);
       for (const c of g2.corps.filter((c2) => c2.nat === X.id)) removeCorps(g2, c);
       fleetsOnFall(g2, X.id);
       airOnFall(g2, X.id);
@@ -5959,11 +6361,12 @@
       settle(g2, n);
     }
     leagueMonth(g2);
+    traitsMonth(g2);
     const open = g2.flags.open === 1;
     for (const e of DIPLOMACY.events) {
       if (e.mode && e.mode === "open" !== open) continue;
       if (g2.flags[`event:${e.id}`] || g2.turn < e.from || g2.turn > e.to && !open) continue;
-      if (!(e.if ?? []).every((c) => holds(g2, c))) continue;
+      if (!(e.if ?? []).every((c) => holds2(g2, c))) continue;
       if (fire(g2, e)) g2.flags[`event:${e.id}`] = g2.turn;
     }
   }
@@ -6043,23 +6446,43 @@
     const out = [];
     const poor = (cost) => n.pp < cost ? POOR : null;
     const r = g2.regions[sel];
+    const u = budgeted(g2) ? eliteOf(nat) : null;
+    if (u) {
+      const need = needsOf(g2, u.kind);
+      const at = raiseSite(g2, nat, u.kind, sel);
+      const no = whyNoElite(g2, nat);
+      out.push({
+        key: "elite",
+        group: "army",
+        label: u.label,
+        blurb: `${u.text} ${eliteRule(u)}`,
+        size: plural2(u.divs, "division"),
+        cost: u.cost,
+        months: u.months,
+        upkeep: corpsUpkeep(u.kind, u.divs),
+        at,
+        note: at < 0 ? "" : `Forms up at ${g2.regions[at].name}. ${eliteCount(g2, nat)} of ${u.most} in the field or on order.`,
+        why: no ?? (at < 0 ? need ? `Needs a home province with ${plural2(need, "factory", "factories")}. Build factories in a city first.` : "There is no home ground left to raise troops on." : poor(u.cost))
+      });
+    }
     for (const kind of corpsKinds(g2)) {
       const spec2 = specOf(g2, kind);
       const need = needsOf(g2, kind);
       const at = raiseSite(g2, nat, kind, sel);
       const where = at >= 0 ? g2.regions[at].name : "";
+      const cost = corpsCost(g2, nat, kind);
       out.push({
         key: `corps:${kind}`,
         group: "army",
         label: spec2.label,
         blurb: spec2.blurb,
         size: plural2(spec2.divs, "division"),
-        cost: spec2.cost,
+        cost,
         months: spec2.months,
         upkeep: budgeted(g2) ? corpsUpkeep(kind, spec2.divs) : 0,
         at,
         note: at < 0 ? "" : `Forms up at ${where}${need && at !== sel && r && canRaise(g2, nat, r) ? `: ${r.name} has not the ${plural2(need, "factory", "factories")} this needs` : ""}.`,
-        why: at < 0 ? need ? `Needs a home province with ${plural2(need, "factory", "factories")}. Build factories in a city first.` : "There is no home ground left to raise troops on." : poor(spec2.cost)
+        why: at < 0 ? need ? `Needs a home province with ${plural2(need, "factory", "factories")}. Build factories in a city first.` : "There is no home ground left to raise troops on." : poor(cost)
       });
     }
     if (!budgeted(g2)) {
@@ -6072,18 +6495,19 @@
       const built = industry(g2, nat, spec2.factories);
       const at = built ? stationSite(g2, nat, sel) : -1;
       const joins = at >= 0 ? fleetAt(g2, nat, at) : null;
+      const cost = priceOf(g2, nat, `air:${wing}`, spec2.cost);
       out.push({
         key: `air:${wing}`,
         group: "air",
         label: spec2.label,
         blurb: spec2.blurb,
         size: `${spec2.count} ${wing === "ftr" ? "fighters" : "bombers"}`,
-        cost: spec2.cost,
+        cost,
         months: spec2.months,
         upkeep: spec2.count * BUDGET.upkeep.air[wing],
         at,
         note: at < 0 ? "" : joins ? `Joins ${joins.name} at ${g2.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g2.regions[at].name}.`,
-        why: !built ? `Needs an aircraft industry: a home province with ${spec2.factories} factories.` : at < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(spec2.cost)
+        why: !built ? `Needs an aircraft industry: a home province with ${spec2.factories} factories.` : at < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(cost)
       });
     }
     for (const hull of ["dd", "ss", "tp", "ca", "cv", "bb"]) {
@@ -6091,6 +6515,7 @@
       const at = slipSite(g2, nat, spec2.yard, sel);
       const fleet = at >= 0 && hull !== "tp" ? joinsFleet(g2, nat, hull, at) : null;
       const full = hull === "tp" && liftBought(g2, nat) >= ARSENAL.lift.most;
+      const cost = priceOf(g2, nat, `ship:${hull}`, spec2.cost);
       const one = hull === "tp" ? "" : NAVY.classes[hull].one, many = hull === "tp" ? "" : NAVY.classes[hull].many;
       out.push({
         key: `ship:${hull}`,
@@ -6098,12 +6523,12 @@
         label: spec2.label,
         blurb: spec2.blurb,
         size: hull === "tp" ? "lift for one more corps a month" : plural2(spec2.count, one, many),
-        cost: spec2.cost,
+        cost,
         months: spec2.months,
         upkeep: hull === "tp" ? 0 : spec2.count * BUDGET.upkeep.ships[hull],
         at,
         note: at < 0 ? "" : hull === "tp" ? `Built at ${g2.regions[at].name}.` : fleet ? `Laid down at ${g2.regions[at].name}. Joins the ${fleet.name}.` : `Laid down at ${g2.regions[at].name}. Forms a new squadron there.`,
-        why: at < 0 ? `Needs a shipyard of level ${spec2.yard} in one of your home ports.` : full ? "The nation has all the troopships its ports can handle." : poor(spec2.cost)
+        why: at < 0 ? `Needs a shipyard of level ${spec2.yard} in one of your home ports.` : full ? "The nation has all the troopships its ports can handle." : poor(cost)
       });
     }
     const W = ARSENAL.works;
@@ -6119,7 +6544,7 @@
     const NONE2 = { yard: "no shipyard", aa: "no guns", field: "only rough landing grounds" };
     const level = (what, spec2, now, upkeep2, why) => {
       const next = now + (r ? queued(g2, nat, what, r.id) : 0) + 1;
-      const cost = spec2.cost[Math.min(TOP, next)];
+      const cost = priceOf(g2, nat, `work:${what}`, spec2.cost[Math.min(TOP, next)]);
       out.push({
         key: `work:${what}`,
         group: "works",
@@ -6140,7 +6565,7 @@
     {
       const cost = r ? fortCost(g2, nat, r) : null;
       if (r && cost !== null) out.push(fortOffer(g2, nat, r, cost, poor(cost)));
-      else out.push({ key: "work:fort", group: "works", label: "Fortifications", blurb: FORT_BLURB, size: "", cost: PRODUCTION.fort.cost[1], months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: "", why: !r ? pick : !isHome(g2, nat, r) ? "Fortifications are built on home ground." : `${r.name} is fortified as heavily as it can be.` });
+      else out.push({ key: "work:fort", group: "works", label: "Fortifications", blurb: FORT_BLURB, size: "", cost: priceOf(g2, nat, "work:fort", PRODUCTION.fort.cost[1]), months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: "", why: !r ? pick : !isHome(g2, nat, r) ? "Fortifications are built on home ground." : `${r.name} is fortified as heavily as it can be.` });
     }
     return out;
   }
@@ -6154,6 +6579,7 @@
     const o = offers(g2, nat, sel).find((x) => x.key === key2);
     if (!n.alive || !o || o.why !== null || o.at < 0 || n.pp < o.cost) return null;
     const [group, item] = key2.split(":");
+    if (group === "elite") return orderElite(g2, nat, o.at);
     if (group === "corps") return orderCorps(g2, nat, item, o.at);
     if (key2 === "work:fort") return orderFort(g2, nat, o.at);
     const r = g2.regions[o.at];
@@ -6260,6 +6686,7 @@
     const kinds = [...Object.keys(PRODUCTION.builds), ...budgeted(g2) ? Object.keys(arsenal_default.land) : []];
     return kinds.sort((a, b) => Number(a === "eng") - Number(b === "eng") || needsOf(g2, a) - needsOf(g2, b) || specOf(g2, a).cost - specOf(g2, b).cost);
   }
+  var corpsCost = (g2, nat, kind) => priceOf(g2, nat, `corps:${kind}`, specOf(g2, kind)?.cost ?? 0);
   var needsOf = (g2, kind) => budgeted(g2) ? arsenal_default.needs[kind] ?? 0 : 0;
   var canRaiseKind = (g2, nat, r, kind) => !!r && canRaise(g2, nat, r) && r.fac >= needsOf(g2, kind) && !barredKind(g2, kind, r);
   function raiseSite(g2, nat, kind, want = -1) {
@@ -6353,10 +6780,11 @@
     const peace = n.atWar.length ? 1 : PRODUCTION.peaceIncome;
     const sea = seaIncomeLoss(g2, nat), air = airIncomeLoss(g2, nat), tech = techMul(g2, nat, "industry");
     const before = seat3 + facHome + facOcc + away + land2 + ports + oil;
-    const atPeace = before * peace + trade;
+    const gift = traitMoney(g2, nat);
+    const atPeace = before * peace + trade + gift.flat;
     const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
     const hard = budget ? incomeMul(g2, nat) : 1;
-    const gross = budget ? afterAir * tech * hard : income(g2, nat);
+    const gross = budget ? afterAir * tech * hard * gift.mul : income(g2, nat);
     const lines = [
       { key: "capital", label: budget ? "The capital and the state" : "The state", amount: seat3 },
       { key: "factories", label: "Factories at home", amount: facHome, count: nHome },
@@ -6365,14 +6793,16 @@
       { key: "land", label: "Towns, farms and land", amount: land2, count: held },
       { key: "ports", label: "Harbours", amount: ports, count: nPorts },
       { key: "oil", label: "Oilfields", amount: oil, count: nOil },
-      { key: "trade", label: "Trade with friendly neutrals", amount: trade, count: partners }
+      { key: "trade", label: "Trade with friendly neutrals", amount: trade, count: partners },
+      ...gift.lines
     ];
     const changes = [
       { key: "peace", label: "At peace: industry at half speed", amount: before * (peace - 1) },
       { key: "sea", label: "Cargoes sunk at sea", amount: afterSea - atPeace },
       { key: "air", label: "Bombing of industry", amount: afterAir - afterSea },
       { key: "tech", label: tech >= 1 ? "Better production methods" : "Production methods behind the times", amount: afterAir * (tech - 1) },
-      { key: "level", label: `Difficulty: ${levelOf(g2).name}`, amount: afterAir * tech * (hard - 1) }
+      { key: "level", label: `Difficulty: ${levelOf(g2).name}`, amount: afterAir * tech * (hard - 1) },
+      { key: "trait", label: gift.mulBy, amount: afterAir * tech * hard * (gift.mul - 1) }
     ];
     const costs = upkeep(g2, nat);
     const upkeepTotal2 = costs.reduce((s, l) => s + l.amount, 0);
@@ -6404,7 +6834,8 @@
       }
       sum += seat3 + (n.offmap?.industry ?? 0);
       const trade2 = tradePartners(g2, nat).length * DIPLOMACY.tradeIncome;
-      return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade2) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry") * incomeMul(g2, nat);
+      const gift = traitMoney(g2, nat);
+      return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade2 + gift.flat) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry") * incomeMul(g2, nat) * gift.mul;
     }
     let fac = 0;
     for (const r of g2.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
@@ -6441,12 +6872,25 @@
     const n = g2.nations[nat];
     const spec2 = specOf(g2, kind);
     const r = g2.regions[region];
-    if (!n.alive || !spec2 || !r || !canRaiseKind(g2, nat, r, kind) || n.pp < spec2.cost) return null;
+    const cost = corpsCost(g2, nat, kind);
+    if (!n.alive || !spec2 || !r || !canRaiseKind(g2, nat, r, kind) || n.pp < cost) return null;
     const old = revive !== void 0 ? revivable(g2, nat, kind).find((f) => f.id === revive) : void 0;
     if (revive !== void 0 && !old) return null;
-    n.pp -= spec2.cost;
-    const b = { id: g2.nextBuild++, what: "corps", kind, divs: spec2.divs, name: old ? old.name : corpsName(nat, kind, n.corpsNo++), region, ordered: g2.turn, eta: g2.turn + spec2.months, cost: spec2.cost };
+    n.pp -= cost;
+    const b = { id: g2.nextBuild++, what: "corps", kind, divs: spec2.divs, name: old ? old.name : corpsName(nat, kind, n.corpsNo++), region, ordered: g2.turn, eta: g2.turn + spec2.months, cost };
     if (old) b.revive = old.id;
+    n.queue.push(b);
+    return b;
+  }
+  function orderElite(g2, nat, region) {
+    const n = g2.nations[nat];
+    const u = eliteOf(nat);
+    const r = g2.regions[region];
+    if (!n.alive || !u || whyNoElite(g2, nat) !== null || !r || !canRaiseKind(g2, nat, r, u.kind) || n.pp < u.cost) return null;
+    n.pp -= u.cost;
+    const no = (g2.flags[`elite:${nat}`] ?? 0) + 1;
+    g2.flags[`elite:${nat}`] = no;
+    const b = { id: g2.nextBuild++, what: "corps", kind: u.kind, divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g2.turn, eta: g2.turn + u.months, cost: u.cost, elite: u.id };
     n.queue.push(b);
     return b;
   }
@@ -6454,7 +6898,7 @@
     if (!isHome(g2, nat, r)) return null;
     const queued2 = g2.nations[nat].queue.filter((b) => b.what === "fort" && b.region === r.id).length;
     const next = (r.fort?.lv ?? 0) + queued2 + 1;
-    return next > 3 ? null : PRODUCTION.fort.cost[next];
+    return next > 3 ? null : priceOf(g2, nat, "work:fort", PRODUCTION.fort.cost[next]);
   }
   function orderFort(g2, nat, region) {
     const n = g2.nations[nat];
@@ -6471,7 +6915,8 @@
     const i = n.queue.findIndex((b) => b.id === id);
     if (i < 0 || n.queue[i].ordered !== g2.turn) return false;
     n.pp += n.queue[i].cost;
-    if (n.queue[i].what === "corps" && n.queue[i].revive === void 0) n.corpsNo--;
+    if (n.queue[i].elite) g2.flags[`elite:${nat}`] = (g2.flags[`elite:${nat}`] ?? 1) - 1;
+    else if (n.queue[i].what === "corps" && n.queue[i].revive === void 0) n.corpsNo--;
     n.queue.splice(i, 1);
     return true;
   }
@@ -6503,6 +6948,7 @@
       if (!at) continue;
       const c = addCorps(g2, nat, b.name, b.kind, b.divs, at.id, { xp: nat === g2.human ? raisedXp(g2, nat) : 0.05 });
       c.org = 0.7;
+      if (b.elite) c.elite = b.elite;
       const old = b.revive !== void 0 ? fallenOf(g2, b.revive) : void 0;
       if (old && old.heir === void 0) inherit(g2, c, old.id);
       if (nat === g2.human) headline(g2, "info", old ? `${b.name} is raised again at ${at.name}, ${g2.turn - old.turn} months after it was lost at ${g2.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
@@ -6517,14 +6963,21 @@
     for (const r of g2.regions) if (isHome(g2, nat, r)) home += r.fac;
     const keep = (b) => b.what === "corps" ? corpsUpkeep(b.kind, b.divs) : 0;
     let spare = budgeted(g2) ? income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
-    while (n.queue.filter((b) => b.what === "corps" && b.kind !== "eng" || b.what === "fort").length < 2) {
+    const slots = () => n.queue.filter((b) => b.what === "corps" && b.kind !== "eng" || b.what === "fort").length;
+    const u = budgeted(g2) ? eliteOf(nat) : null;
+    if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g2, nat) === null) {
+      const at = raiseSite(g2, nat, u.kind, cap4.id), cost = corpsUpkeep(u.kind, u.divs);
+      const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
+      if (at >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && orderElite(g2, nat, at)) spare -= cost;
+    }
+    while (slots() < 2) {
       let kind = home >= 20 && n.corpsNo % 3 === 2 ? "arm" : "inf";
       let at = budgeted(g2) ? raiseSite(g2, nat, kind, cap4.id) : cap4.id;
       if (at < 0) {
         kind = "inf";
         at = cap4.id;
       }
-      if (n.pp < PRODUCTION.builds[kind].cost + PRODUCTION.aiReserve) break;
+      if (n.pp < corpsCost(g2, nat, kind) + PRODUCTION.aiReserve) break;
       const cost = corpsUpkeep(kind, PRODUCTION.builds[kind].divs);
       if (spare < cost * BUDGET.debt.aiMargin) break;
       if (!orderCorps(g2, nat, kind, at)) break;
@@ -7451,8 +7904,8 @@
   function freshOffensive(g2, nat, enemy) {
     const n = g2.nations[nat];
     if (!n.blitz) return false;
-    const list2 = enemy ? [enemy] : n.atWar;
-    return list2.some((e) => n.offStart[e] !== void 0 && g2.turn - n.offStart[e] <= 1);
+    const list3 = enemy ? [enemy] : n.atWar;
+    return list3.some((e) => n.offStart[e] !== void 0 && g2.turn - n.offStart[e] <= 1);
   }
   function weather(g2) {
     const m = turnToDate(g2.turn).month;
@@ -7677,7 +8130,7 @@
     const wide = groundRules(g2);
     const land2 = opts.sea === void 0;
     const armsA = wide ? combinedArms(g2, land2 ? attackers2.filter((c) => !noCrossing(g2, c.kind, c.reg, target.id)) : attackers2, target, false) : null, armsD = wide ? combinedArms(g2, defenders, target, true) : null;
-    let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false;
+    let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1;
     let roadA = 0, railA = 1, roadD = 0, railD = 1;
     const rivers = /* @__PURE__ */ new Set();
     const sap = wide ? sappers(attackers2.filter((c) => !land2 || !blocked(g2, c, target))) : 0;
@@ -7726,6 +8179,13 @@
       if (wide && sneakOn(g2, c.nat, target.ctrl)) {
         p *= RELATIONS.sneak.attack;
         sneaked = true;
+      }
+      if (wide) {
+        const gift = traitAttack(g2, c, target, !land2);
+        if (gift !== 1) {
+          p *= gift;
+          giftA = Math.max(giftA, gift);
+        }
       }
       if (g2.nations[c.nat].slowCommand) p *= 0.85;
       p *= techMul(g2, c.nat, "doctrine");
@@ -7798,6 +8258,13 @@
           p *= head.defence;
           roadD = Math.max(roadD, head.road);
           railD = Math.min(railD, head.defence);
+        }
+      }
+      if (wide) {
+        const gift = traitDefence(g2, d, target);
+        if (gift !== 1) {
+          p *= gift;
+          giftD = Math.max(giftD, gift);
         }
       }
       const proud = storyDefence(g2, d, target, attackers2);
@@ -7910,6 +8377,15 @@
     if (thin < 1) lines.push({ label: "Supply line", value: "Defenders at the end of a long supply line", effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
     if (coldDef) lines.push({ label: "Winter", value: "Defenders without winter equipment", effect: `Defence cut to ${Math.round(EASTERN.winter.defence * 100)}%` });
     if (tempo) lines.push({ label: "Tempo", value: "New offensive", effect: "Fast troops hit 20% harder in the first two turns" });
+    if (giftA !== 1 || giftD !== 1) {
+      const a = giftA !== 1 ? traitNames(g2, attackers2, target, "attack", !land2) : [], d = giftD !== 1 ? traitNames(g2, defenders, target, "defence") : [];
+      const say = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+      lines.push({
+        label: "National abilities",
+        value: [a.length ? `Attacking: ${say(a)}` : "", d.length ? `Defending: ${say(d)}` : ""].filter(Boolean).join(". "),
+        effect: [giftA !== 1 ? `Attack up as much as ${Math.round((giftA - 1) * 100)}% for the corps it covers` : "", giftD !== 1 ? `${giftA !== 1 ? "defence" : "Defence"} up as much as ${Math.round((giftD - 1) * 100)}% for the corps it covers` : ""].filter(Boolean).join(", ")
+      });
+    }
     if (sneaked) lines.push({ label: "Surprise", value: "War was declared this month on a country at peace", effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
     if (armorShock) lines.push({ label: "Armor", value: "Tanks against a defence without armor", effect: "Tank attack up 25%" });
     if (armorStuck) lines.push({ label: "Armor", value: "Tanks in close country", effect: "Tank attack cut to 60%" });
@@ -8590,7 +9066,7 @@
     const perDiv = PRODUCTION.replacementCost;
     const tempo = freshOffensive(g2, nat);
     const army = g2.corps.filter((c) => c.nat === nat);
-    const drafts = draftsMul(g2, nat);
+    const drafts = draftsMul(g2, nat) * traitDrafts(g2, nat);
     const want = army.map((c) => c.supplied && !(c.lean && nat === g2.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * c.divs * lineStrength(g2, c).mul * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
     const asked2 = want.reduce((s, x) => s + x, 0);
     const share = asked2 > 0 ? Math.min(1, n.pp / perDiv / asked2, PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g2, nat)) / asked2) : 0;
@@ -8889,6 +9365,7 @@
       g2.flags["st:gain:GER"] = 1;
     }
     startEngineers(g2);
+    openTraits(g2);
     g2.supplyDirty = true;
     return g2;
   }
@@ -8944,10 +9421,10 @@
         for (const j of e.nb) if (f.ours.has(j)) best = Math.min(best, e.fort.vs.includes(g2.regions[j].owner) ? FORT_MUL[e.fort.lv] : 1);
         return best === 99 ? 1 : best;
       };
-      const edge2 = [...f.edge];
-      const soft = edge2.filter((id) => works(g2.regions[id]) < 1.5);
+      const edge3 = [...f.edge];
+      const soft = edge3.filter((id) => works(g2.regions[id]) < 1.5);
       const depth = new Int16Array(N).fill(-1);
-      const q = soft.length ? [...soft] : [...edge2];
+      const q = soft.length ? [...soft] : [...edge3];
       for (const id of q) depth[id] = 1;
       for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (depth[j] < 0 && label[j] === comp && side2[j] === 2) {
         depth[j] = depth[q[i]] + 1;
@@ -8971,7 +9448,7 @@
           if (!still && d <= 2) threat += atkP(g2, u) * (d === 1 ? 1 : 0.6) * (cold ? EASTERN.winter.attack : 1);
         }
       }
-      for (const id of edge2) if (depth[id] > 2) {
+      for (const id of edge3) if (depth[id] > 2) {
         for (const u of g2.regions[id].units) if (foe(u.nat) && !u.hold && u.kind !== "fort") threat += atkP(g2, u) * 0.6;
       }
       const ours = [...f.ours];
@@ -8982,7 +9459,7 @@
       }
       const fights = (id) => id === nat || [...enemies].some((e) => atWar(g2, id, e));
       let atk = 0, fixed = 0;
-      const deep = edge2.filter((id) => EASTERN.deepOwners.includes(g2.regions[id].owner)).length * 2 >= edge2.length;
+      const deep = edge3.filter((id) => EASTERN.deepOwners.includes(g2.regions[id].owner)).length * 2 >= edge3.length;
       const season = deep && !EASTERN.winter.hardy.includes(nat) ? wx.winter ? EASTERN.winter.attack : wx.mud ? 0.8 : 1 : 1;
       for (const c of g2.corps) {
         if (c.dead || side2[c.reg] !== 1 || !f.areas.has(label[c.reg]) || !allied(g2, nat, c.nat) || !fights(c.nat)) continue;
@@ -8993,13 +9470,13 @@
         }
         atk += atkP(g2, c) * season;
       }
-      const key2 = Object.keys(share).sort((a, b) => share[b] - share[a])[0] ?? g2.regions[edge2[0]].ctrl;
+      const key2 = Object.keys(share).sort((a, b) => share[b] - share[a])[0] ?? g2.regions[edge3[0]].ctrl;
       const mine = g2.nations[nat].air, his = g2.nations[key2]?.air ?? 0;
       const airEdge = (mine - his) / (mine + his + 1);
       atk *= 1 + 0.3 * airEdge;
       def *= 1 - 0.2 * airEdge;
       if (!soft.length) def *= OPEN.headOn;
-      out.push({ key: key2, enemies: [...enemies], ours, edge: edge2, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat, fixed, ratio: 0 });
+      out.push({ key: key2, enemies: [...enemies], ours, edge: edge3, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat, fixed, ratio: 0 });
     }
     for (const f of out) {
       let kept = 0;
@@ -9155,7 +9632,7 @@
       return !!n && (n.alive ? collapseScore(g2, a[0]) >= Number(a[1]) : !!n.fellOn);
     }
     if (key2 === "month") return a.map(Number).includes(turnToDate(g2.turn).month + 1);
-    return holds(g2, c);
+    return holds2(g2, c);
   }
   var targets = (g2, nat, op) => (op.declare ?? []).filter((e) => g2.nations[e]?.alive && !g2.nations[e].dormant && !allied(g2, nat, e) && !atWar(g2, nat, e));
   function prospect(g2, nat, op, skip) {
@@ -9190,11 +9667,11 @@
         g2.flags[`st:gain:${nat}`] = g2.turn;
       }
     }
-    const list2 = ops(nat);
+    const list3 = ops(nat);
     const busy = real.some((f) => onSince(g2, nat, f) && !cond(g2, nat, "quiet", [f]) && g2.turn - flag2(g2, `st:gain:${nat}`) <= 1);
     let cur = flag2(g2, `st:op:${nat}`);
     const go = (k) => {
-      const op = list2[k];
+      const op = list3[k];
       const who = targets(g2, nat, op);
       g2.flags[`st:done:${nat}:${op.id}`] = g2.turn;
       g2.flags[`st:go:${nat}`] = g2.turn;
@@ -9210,7 +9687,7 @@
       }
     };
     if (cur) {
-      const op = list2[cur - 1];
+      const op = list3[cur - 1];
       const p = op ? prospect(g2, nat, op, skip) : null;
       const still = !!op && (op.if ?? []).filter((c) => c !== "quiet").every((c) => cond(g2, nat, c, real));
       if (!op || !p || !still || op.ratio !== void 0 && p.ratio < 0.8 * op.ratio) {
@@ -9223,8 +9700,8 @@
       }
     }
     if (!cur) {
-      for (let k = 0; k < list2.length; k++) {
-        const op = list2[k];
+      for (let k = 0; k < list3.length; k++) {
+        const op = list3[k];
         if (flag2(g2, `st:done:${nat}:${op.id}`) || g2.turn < (op.from ?? 1) || g2.turn > (op.to ?? 999) || g2.turn < flag2(g2, `st:cool:${nat}:${op.id}`)) continue;
         if (!op.side && busy) continue;
         if (!(op.if ?? []).every((c) => cond(g2, nat, c, real))) continue;
@@ -9264,9 +9741,9 @@
     const n = g2.nations[nat];
     if (!n.alive || n.dormant) return null;
     const T = temper(g2, nat);
-    const list2 = ops(nat);
-    const prep = list2[flag2(g2, `st:op:${nat}`) - 1] ?? null;
-    const went = g2.turn - flag2(g2, `st:go:${nat}`) <= 1 && flag2(g2, `st:go:${nat}`) ? list2[flag2(g2, `st:goOp:${nat}`) - 1] ?? null : null;
+    const list3 = ops(nat);
+    const prep = list3[flag2(g2, `st:op:${nat}`) - 1] ?? null;
+    const went = g2.turn - flag2(g2, `st:go:${nat}`) <= 1 && flag2(g2, `st:go:${nat}`) ? list3[flag2(g2, `st:goOp:${nat}`) - 1] ?? null : null;
     const declare2 = went && flag2(g2, `st:go:${nat}`) === g2.turn ? targets(g2, nat, went) : [];
     const real = fronts(g2, nat, { extra: new Set(declare2), skip });
     const live = real.filter((f) => onSince(g2, nat, f) > 0 || f.enemies.some((e) => declare2.includes(e)));
@@ -9316,7 +9793,7 @@
     if (cap4 && cap4.ctrl === nat && nearEnemy(g2, nat, cap4, OPEN.guardWithin)) phase.staging = { ...phase.staging ?? {}, [cap4.name]: OPEN.guard };
     const quay = seaBase(g2, nat);
     if (quay) phase.staging = { ...phase.staging ?? {}, [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, landingsFor(g2, nat).force) };
-    for (const op of list2) {
+    for (const op of list3) {
       if (!op.staging || flag2(g2, `st:done:${nat}:${op.id}`) || g2.turn > (op.to ?? 999)) continue;
       phase.staging = { ...phase.staging ?? {}, ...op.staging };
     }
@@ -9372,8 +9849,8 @@
     return Infinity;
   }
   function afterDeclaring(g2, nat) {
-    const list2 = ops(nat);
-    const op = flag2(g2, `st:go:${nat}`) === g2.turn ? list2[flag2(g2, `st:goOp:${nat}`) - 1] : null;
+    const list3 = ops(nat);
+    const op = flag2(g2, `st:go:${nat}`) === g2.turn ? list3[flag2(g2, `st:goOp:${nat}`) - 1] : null;
     const n = g2.nations[nat];
     if (!op?.join || !n.alive || n.align === "allies" || n.align === "axis") return;
     const others = n.atWar.some((e) => {
@@ -9459,12 +9936,12 @@
   var within = (r) => !scope || scope.has(r.id);
   var allowed = (g2, r) => !bound2 || bound2.has(r.name) || r.ctrl === g2.human;
   var COUNTER_WINDOW = 2;
-  function theatrePhase(g2, nat, list2) {
+  function theatrePhase(g2, nat, list3) {
     const ours = (nm) => {
       const r = g2.byName[nm];
       return !!r && allied(g2, nat, r.ctrl);
     };
-    const ph = list2.find((p) => g2.turn >= p.from && g2.turn <= p.to && (p.ifLost ?? []).every((nm) => !ours(nm))) ?? null;
+    const ph = list3.find((p) => g2.turn >= p.from && g2.turn <= p.to && (p.ifLost ?? []).every((nm) => !ours(nm))) ?? null;
     return ph?.ifAtWar && !atWar(g2, ph.ifAtWar[0], ph.ifAtWar[1]) ? null : ph;
   }
   function phaseFor(g2, nat) {
@@ -9531,16 +10008,16 @@
         }
         if (ph?.posture === "attack" && enemies.size) {
           const only = ph.targets ? new Set(ph.targets) : null;
-          const halt = /* @__PURE__ */ new Set([...ph.siege ?? [], ...ph.mask ?? []]), edge2 = new Set(halt);
+          const halt = /* @__PURE__ */ new Set([...ph.siege ?? [], ...ph.mask ?? []]), edge3 = new Set(halt);
           for (const r of g2.regions) {
             if (!ids[k].has(r.id)) {
               halt.add(r.name);
-              edge2.add(r.name);
+              edge3.add(r.name);
             } else if (only && !only.has(r.name)) halt.add(r.name);
           }
           offensive(g2, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
           if (n.alive) {
-            advance(g2, nat, enemies, 0, null, edge2);
+            advance(g2, nat, enemies, 0, null, edge3);
             mass(g2, nat, ph);
             defend(g2, nat, false);
           }
@@ -9750,8 +10227,8 @@
   }
   function objectivesFor(g2, nat) {
     if (isOpen(g2)) return phaseFor(g2, nat)?.objectives ?? [];
-    const list2 = phases(nat).filter((p) => p.from <= g2.turn).sort((a, b) => b.from - a.from);
-    return list2.flatMap((p) => p.objectives ?? []);
+    const list3 = phases(nat).filter((p) => p.from <= g2.turn).sort((a, b) => b.from - a.from);
+    return list3.flatMap((p) => p.objectives ?? []);
   }
   function landings(g2, nat, ph, within2) {
     for (const L of ph.landings ?? []) {
@@ -9901,9 +10378,9 @@
               if (failed.has(j) || halt.has(r.name) || only && !only.has(r.name) || !enemies.has(r.ctrl) || !atWar(g2, nat, r.ctrl) || notYet(r.name)) continue;
               if (kept && !axis2.has(r.name)) continue;
               if (blocked(g2, c, r)) continue;
-              let list2 = cand.get(j);
-              if (!list2) cand.set(j, list2 = []);
-              list2.push(c);
+              let list3 = cand.get(j);
+              if (!list3) cand.set(j, list3 = []);
+              list3.push(c);
             }
           }
           let best = null;
@@ -10063,10 +10540,10 @@
     const engaged = (c) => g2.regions[c.reg].nb.some((j) => enemies.has(g2.regions[j].ctrl) && atWar(g2, nat, g2.regions[j].ctrl));
     const free2 = () => g2.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== "fort" && c.ap >= 4 && !engaged(c));
     const room2 = (r) => allied(g2, nat, r.ctrl) && friendlyUnits(g2, r, nat).length < STACK;
-    const nearest = (list2, to) => {
+    const nearest = (list3, to) => {
       const d = hops(g2, to.id, (r) => allied(g2, nat, r.ctrl));
       let best = null, bd = 1e9;
-      for (const c of list2) if (d[c.reg] >= 0 && d[c.reg] < bd) {
+      for (const c of list3) if (d[c.reg] >= 0 && d[c.reg] < bd) {
         bd = d[c.reg];
         best = c;
       }
@@ -10311,6 +10788,7 @@
       }
       if (!goal) return;
       const force2 = limitAttackers(g2, trapped.filter((c) => g2.regions[c.reg].nb.includes(goal.id)), goal);
+      if (!force2.length) return;
       if (hostileUnits(g2, goal, nat).length) {
         if (assess(g2, force2, goal).odds < 1) return;
         if (!resolveBattle(g2, force2, goal).taken) return;
@@ -11172,6 +11650,7 @@
         nat: c.nat,
         name: c.name,
         kind: c.kind,
+        elite: c.elite ?? "",
         divs: c.divs,
         str: c.str,
         org: c.org,
@@ -11403,6 +11882,8 @@
         name: n.name,
         major: order2.includes(nat) && !smallOnes.has(nat),
         small: smallOnes.has(nat),
+        // What makes the country fight, build and earn in its own way, and its special formation, in words.
+        abilities: abilityLines(nat),
         blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? "",
         standing: foes.length ? `At war with ${listNames(foes.map((f) => h.nations[f].name))}` : "At peace",
         corps: h.corps.filter((c) => c.nat === nat).length,
@@ -11896,7 +12377,8 @@
     if (f.league.length) lines.push(`The League stands by it. ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${listOf3(f.league.map((x) => theName2(s, x)))} ${f.league.length === 1 ? "goes" : "go"} to war with you the same day, with ${f.league.reduce((sum, id) => sum + fieldArmy(s, id), 0).toLocaleString("en-US")} divisions between them.`);
     if (f.trade) lines.push(`Its trade ends. ${The} trades with you today, worth ${trade} a month to your treasury.`);
     if (f.sneak > 1) lines.push(`Surprise. It is at peace and not expecting you: this month your attacks on its ground are ${Math.round((f.sneak - 1) * 100)}% stronger. Next month the bonus is gone.`);
-    else if (n.atWar.some((x) => x === s.human || allied(s, x, s.human))) lines.push("No surprise: it is already at war with your side and its army is ready.");
+    else if (f.ready === "war") lines.push("No surprise: it is already at war with your side and its army is ready.");
+    else if (f.ready === "alert") lines.push(`No surprise: ${traitsOf(on).find((t) => t.alert)?.name.toLowerCase() ?? "its intelligence service"} has read the signs, and its army is ready.`);
     else lines.push("No surprise: its army is watching the frontier and is ready for you.");
     const moved = f.alarm.filter((a) => a.from !== a.to);
     const friends = f.alarm.filter((a) => a.friend);
@@ -11922,6 +12404,17 @@
     for (const x of f.friends) ties.set(x.why, [...ties.get(x.why) ?? [], theName2(s, x.nat)]);
     const friendsLine = f.friends.length ? `Its friends: ${[...ties].map(([why, who]) => `${listOf3(who)} (${why})`).join("; ")}.` : `${The} has no close friends among the nations.`;
     return { ok: true, name: theName2(s, on), lead: lead2, friends: friendsLine, lines };
+  }
+  function abilityLines(nat) {
+    const out = traitsOf(nat).map((t) => `${t.name}. ${traitRule(t, BUDGET.scale)}`);
+    const u = eliteOf(nat);
+    if (u) out.push(`Special formation, from the arsenal: ${u.label}. ${eliteRule(u)}`);
+    return out;
+  }
+  function abilities() {
+    const s = game();
+    const me = s.human ? s.nations[s.human] : null;
+    return { nation: me?.name ?? "", active: traitRules(s), lines: me ? abilityLines(me.id) : [] };
   }
   function diplomacy() {
     const s = game();
@@ -12066,7 +12559,7 @@
       const ahead = Math.round(monthsAhead(lab, f));
       const eta = arrival(s, me.id, f);
       const k = lead(s, me.id, f);
-      const pct2 = Math.round(spec2.per * k * 100);
+      const pct3 = Math.round(spec2.per * k * 100);
       const n = lab.teams[f];
       const at = (t) => Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS;
       return {
@@ -12076,7 +12569,7 @@
         pace: ahead > 0 ? `${ahead} month${ahead === 1 ? "" : "s"} ahead` : ahead < 0 ? `${-ahead} month${ahead === -1 ? "" : "s"} behind` : "On history's schedule",
         now: cur?.name ?? "nothing yet",
         next: next ? `Next: ${next.name}. History had it in ${when(next.at)}; ${eta === null ? "at this pace it never comes" : `yours is due ${when(eta)}`}.` : "The designers have nothing further on the drawing board.",
-        effect: k ? `${spec2.who}: ${pct2 > 0 ? "+" : ""}${pct2}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
+        effect: k ? `${spec2.who}: ${pct3 > 0 ? "+" : ""}${pct3}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
         good: k > 0,
         teams: n,
         max: MAX_TEAMS,
@@ -12118,7 +12611,7 @@
     const up = humanUp(s) && !onEve(s);
     const corpsLine = (c) => `${c.name} (${KIND[c.kind].label.toLowerCase()}, ${c.divs} division${c.divs === 1 ? "" : "s"}) at ${s.regions[c.reg].name}`;
     const mine = s.generals.filter((x) => x.nat === me.id && (x.status === "active" || x.status === "wounded"));
-    const list2 = mine.sort((a, b) => (a.corps >= 0 ? 0 : 1) - (b.corps >= 0 ? 0 : 1) || b.level - a.level || a.id - b.id).map((x) => {
+    const list3 = mine.sort((a, b) => (a.corps >= 0 ? 0 : 1) - (b.corps >= 0 ? 0 : 1) || b.level - a.level || a.id - b.id).map((x) => {
       const c = corpsOf(s, x);
       const next = xpToNext(x);
       return {
@@ -12157,10 +12650,10 @@
       up,
       capital: Math.floor(me.pc),
       promoteCost: COMMAND.promote.pc,
-      commanding: list2.filter((x) => x.commands).length,
+      commanding: list3.filter((x) => x.commands).length,
       waiting: free2.length,
       note: `A corps with no general fights by the book. Give it one who is waiting, or promote an unknown officer from its ranks for ${COMMAND.promote.pc} political capital: he starts at level 1 and learns faster than the old guard. Generals gain experience in battle, and each new level gives a skill point to spend.`,
-      generals: list2,
+      generals: list3,
       vacant: empty
     };
   }
@@ -12254,7 +12747,7 @@
   function roll() {
     const s = game();
     const me = s.human;
-    const ours = (list2) => me ? list2.filter((x) => x.nat === me) : list2;
+    const ours = (list3) => me ? list3.filter((x) => x.nat === me) : list3;
     return {
       awards: ours(s.stories.awards).filter((a) => !a.old).slice(-40).reverse().map((a) => ({
         id: a.id,
@@ -12304,6 +12797,7 @@
     court: courtNation,
     path: takePathOf,
     invite: inviteNation,
+    abilities,
     research,
     teams,
     bureau,

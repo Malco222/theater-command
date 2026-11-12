@@ -40,6 +40,7 @@ import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, men, railRea
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
+import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
 import {
@@ -118,7 +119,7 @@ function view() {
       return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
     }),
     corps: s.corps.filter((c) => !c.dead).map((c) => ({
-      id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, str: c.str, org: c.org, reg: c.reg,
+      id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
       canOrder: up && canOrder(s, c), supplied: c.supplied, men: men(c),
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
@@ -350,6 +351,8 @@ function grand(from = 1, seed = 1939) {
         name: n.name,
         major: order.includes(nat) && !smallOnes.has(nat),
         small: smallOnes.has(nat),
+        // What makes the country fight, build and earn in its own way, and its special formation, in words.
+        abilities: abilityLines(nat),
         blurb: GRAND.nations.find((x) => x.id === nat)?.years[year] ?? '',
         standing: foes.length ? `At war with ${listNames(foes.map((f) => h.nations[f].name))}` : 'At peace',
         corps: h.corps.filter((c) => c.nat === nat).length,
@@ -892,7 +895,8 @@ function warPlan(on: string, target = -1) {
   if (f.league.length) lines.push(`The League stands by it. ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${listOf(f.league.map((x) => theName(s, x)))} ${f.league.length === 1 ? 'goes' : 'go'} to war with you the same day, with ${f.league.reduce((sum, id) => sum + fieldArmy(s, id), 0).toLocaleString('en-US')} divisions between them.`);
   if (f.trade) lines.push(`Its trade ends. ${The} trades with you today, worth ${trade} a month to your treasury.`);
   if (f.sneak > 1) lines.push(`Surprise. It is at peace and not expecting you: this month your attacks on its ground are ${Math.round((f.sneak - 1) * 100)}% stronger. Next month the bonus is gone.`);
-  else if (n.atWar.some((x) => x === s.human || allied(s, x, s.human!))) lines.push('No surprise: it is already at war with your side and its army is ready.');
+  else if (f.ready === 'war') lines.push('No surprise: it is already at war with your side and its army is ready.');
+  else if (f.ready === 'alert') lines.push(`No surprise: ${traitsOf(on).find((t) => t.alert)?.name.toLowerCase() ?? 'its intelligence service'} has read the signs, and its army is ready.`);
   else lines.push('No surprise: its army is watching the frontier and is ready for you.');
   const moved = f.alarm.filter((a) => a.from !== a.to);
   const friends = f.alarm.filter((a) => a.friend);
@@ -921,6 +925,21 @@ function warPlan(on: string, target = -1) {
     ? `Its friends: ${[...ties].map(([why, who]) => `${listOf(who)} (${why})`).join('; ')}.`
     : `${The} has no close friends among the nations.`;
   return { ok: true, name: theName(s, on), lead, friends: friendsLine, lines };
+}
+
+/** A nation's abilities and its special formation, each as a line. */
+function abilityLines(nat: string): string[] {
+  const out = traitsOf(nat).map((t) => `${t.name}. ${traitRule(t, BUDGET.scale)}`);
+  const u = eliteOf(nat);
+  if (u) out.push(`Special formation, from the arsenal: ${u.label}. ${eliteRule(u)}`);
+  return out;
+}
+
+/** The abilities of the player's nation, for the page that says how to play. They count in the grand campaign only. */
+function abilities() {
+  const s = game();
+  const me = s.human ? s.nations[s.human] : null;
+  return { nation: me?.name ?? '', active: traitRules(s), lines: me ? abilityLines(me.id) : [] };
 }
 
 /**
@@ -1257,4 +1276,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, research, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, abilities, research, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

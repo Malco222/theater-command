@@ -22,6 +22,7 @@ struct FViewCorps
 	FString Nation;
 	FString Name;
 	FString Kind; // inf, mot, arm, cav, mtn, fort
+	FString Elite; // the special formation it is, if it is one: "heavy", "ski", "guards"
 	FString General; // empty when the corps has no named commander
 	FString Posture; // stand, dig, back
 	int32 Divisions = 0;
@@ -299,6 +300,7 @@ struct FGrandNation
 	FString Standing; // "At peace", or who it is at war with
 	bool bMajor = false;
 	bool bSmall = false; // a small country whose path is its own to choose
+	TArray<FString> Abilities; // what the country does in its own way, and its special formation, a line each
 	int32 Corps = 0;
 	int32 Regions = 0;
 };

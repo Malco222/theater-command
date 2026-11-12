@@ -2633,6 +2633,19 @@ namespace
 			}
 		}
 
+		/** The names of a country's abilities in a line: each ability's line begins with its name and a full stop. */
+		static FString AbilityNames(const TArray<FString>& Lines)
+		{
+			TArray<FString> Names;
+			for (const FString& Line : Lines)
+			{
+				FString Name = Line, Rest;
+				Line.Split(TEXT(". "), &Name, &Rest);
+				Names.Add(Name.Replace(TEXT("Special formation, from the arsenal: "), TEXT("special formation: ")));
+			}
+			return TEXT("Its own ways:  ") + FString::Join(Names, TEXT("  \u00B7  "));
+		}
+
 		/** One country on the grand campaign's page. The great powers get a card with a word about them; the rest a line. */
 		TSharedRef<SWidget> MakeNation(const FOpeningNation& Nation, int32 Index, bool bChosen)
 		{
@@ -2826,6 +2839,15 @@ namespace
 						[
 							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Brass).AutoWrapText(true)
 							.Text(FText::FromString(FString::Printf(TEXT("%s  ·  %s  ·  %s"), *Year.Title.ToString(), *Nation.Standing.ToString(), *Nation.Strength.ToString())))
+						]
+						// What the country does in its own way: its abilities and its special formation, by name.
+						// What each one does is said when the mouse rests on the line, and in the game's own guide.
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+							.Visibility(Nation.Abilities.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed)
+							.ToolTipText(FText::FromString(FString::Join(Nation.Abilities, TEXT("\n"))))
+							.Text(FText::FromString(AbilityNames(Nation.Abilities)))
 						]
 					];
 				}

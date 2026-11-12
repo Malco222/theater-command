@@ -194,7 +194,8 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		TArray<FString> Kinds;
 		for (const FViewCorps& Unit : Corps)
 		{
-			Kinds.Add(Unit.Kind);
+			// A heavy tank corps shows its heavy tanks, whatever the rest of the army drives.
+			Kinds.Add(Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy")) : Unit.Kind);
 		}
 		Model.Force(Kinds, CounterWidth * 0.5, Top, U, Colour, NationTag);
 

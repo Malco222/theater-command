@@ -132,6 +132,7 @@ void ACampaignPlayerController::LoadGrandNations()
 		Out.Strength = FText::FromString(FString::Printf(TEXT("%d corps, %d %s"), Nation.Corps, Nation.Regions, Nation.Regions == 1 ? TEXT("territory") : TEXT("territories")));
 		Out.bMajor = Nation.bMajor;
 		Out.bSmall = Nation.bSmall;
+		Out.Abilities = Nation.Abilities;
 		bAmerica |= Nation.Nation == TEXT("USA");
 		if (Nation.Nation == Chosen)
 		{
@@ -973,6 +974,22 @@ void ACampaignPlayerController::OpenGuide()
 	Add(TEXT("FLEETS AND AIR FLEETS"),
 		TEXT("Click a fleet or an air fleet to give it orders: where to patrol or raid, and what to bomb. ")
 		TEXT("A corps in a port can go BY SEA to a friendly port or land on an enemy coast. Before a landing the game tells you what it will meet, and asks."));
+	if (FCampaignSession* Session = GetSession())
+	{
+		// What the player's own country does in its own way, from the rules.
+		bool bActive = false;
+		const TArray<FString> Lines = Session->Abilities(bActive);
+		if (Lines.Num() > 0)
+		{
+			FDocumentSection& Section = Page.Sections.AddDefaulted_GetRef();
+			Section.Heading = TEXT("YOUR NATION'S ABILITIES");
+			Section.Body = FString::Join(Lines, TEXT("\n"));
+			if (!bActive)
+			{
+				Section.Body += TEXT("\nThese count in the grand campaign only: a historical scenario is fought as history fought it.");
+			}
+		}
+	}
 	Add(TEXT("SAVING, MUSIC AND SOUND"),
 		TEXT("The game saves itself every month and when you leave. MENU lets you continue or begin another campaign. M turns the music on and off, and N the sound effects."));
 	Document = Page;

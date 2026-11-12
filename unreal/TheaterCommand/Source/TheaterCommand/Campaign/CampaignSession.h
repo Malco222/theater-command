@@ -109,6 +109,9 @@ public:
 	/** Spends political capital to court a neutral. OutNote says what came of it. */
 	bool Court(const FString& Nation, FString& OutNote);
 
+	/** The abilities of the player's nation, a line each. bOutActive is false in a historical scenario, where they do not count. */
+	TArray<FString> Abilities(bool& bOutActive);
+
 	/** The generals of the player's nation, and the corps that have none. */
 	FGeneralStaff Generals();
 	bool AssignGeneral(int32 GeneralId, int32 CorpsId);
