@@ -1,6 +1,6 @@
 // The war economy, sea transport and saved games.
 import { describe, expect, it } from 'vitest';
-import { createGame } from '../src/campaign/game';
+import { addCorps, createGame, removeCorps } from '../src/campaign/game';
 import { PRODUCTION, cancelBuild, income, orderCorps, orderFort } from '../src/campaign/economy';
 import { loadGame, peekSave, saveGame, staleSave } from '../src/campaign/save';
 import { DIPLOMACY, tradePartners } from '../src/campaign/diplomacy';
@@ -160,5 +160,57 @@ describe('saved games', () => {
     expect(peekSave(text)).toBeNull();
     expect(loadGame(text)).toBeNull();
     expect(staleSave('not a save')).toBe(false);
+  });
+
+  it('continues a campaign saved before Cassino and Anzio were cut out of the map: each starts as the ground it was cut from stands', () => {
+    const g = createGame(4, null);
+    for (let t = 0; t < 2; t++) runTurnAI(g);
+    // The war as it would have been saved on the map of 373 regions: the Gustav Line dug in the Abruzzo with two
+    // German corps on it, Rome German behind it, and the British in Naples.
+    const abruzzo = g.byName['Abruzzo'], rome = g.byName['Rome'], naples = g.byName['Naples'];
+    for (const r of [abruzzo, rome, naples, g.byName['Cassino'], g.byName['Anzio']]) for (const c of [...r.units]) removeCorps(g, c);
+    abruzzo.ctrl = rome.ctrl = 'GER';
+    abruzzo.fort = { lv: 2, vs: ['ITA'] };
+    naples.ctrl = 'UK';
+    const first = addCorps(g, 'GER', 'First on the line', 'inf', 2, abruzzo.id, {});
+    const second = addCorps(g, 'GER', 'Second on the line', 'mtn', 2, abruzzo.id, {});
+    const old = JSON.parse(saveGame(g));
+    old.regions = old.regions.slice(0, 373);
+    for (const k of Object.keys(old.supply)) old.supply[k] = old.supply[k].slice(0, 373);
+    const text = JSON.stringify(old);
+    expect(staleSave(text)).toBe(false);
+    expect(peekSave(text)).toMatchObject({ turn: g.turn });
+    const h = loadGame(text)!;
+    expect(h.regions).toHaveLength(g.regions.length);
+    expect(h.byName['Cassino']).toMatchObject({ owner: 'ITA', ctrl: 'GER', fort: { lv: 2, vs: ['ITA'] } });
+    expect(h.byName['Anzio']).toMatchObject({ owner: 'ITA', ctrl: 'GER', units: [] });
+    expect(h.byName['Anzio'].fort ?? null).toBeNull();
+    // The works are its own from now on, not a share of its parent's.
+    expect(h.byName['Cassino'].fort).not.toBe(h.byName['Abruzzo'].fort);
+    // Cassino faces the British in Naples, so one of the two corps on the line takes post there. Anzio is behind it and stays empty.
+    expect(h.byName['Cassino'].units.map((c) => c.id)).toEqual([first.id]);
+    expect(h.byName['Abruzzo'].units.map((c) => c.id)).toEqual([second.id]);
+    expect(h.corps.find((c) => c.id === first.id)!.reg).toBe(h.byName['Cassino'].id);
+    // Everything else is where it was, and the war goes on.
+    expect(h.corps.length).toBe(g.corps.length);
+    for (const r of h.regions) if (r.id < 373) expect(r.ctrl).toBe(g.regions[r.id].ctrl);
+    expect(h.supplyDirty).toBe(true);
+    runTurnAI(h);
+    expect(h.turn).toBe(g.turn + 1);
+    for (const n of Object.keys(h.supply)) expect(h.supply[n]).toHaveLength(h.regions.length);
+  });
+
+  it('a lone garrison stays where it is: the carved place is held, but empty', () => {
+    const g = createGame(4, null);
+    const abruzzo = g.byName['Abruzzo'], naples = g.byName['Naples'];
+    for (const r of [abruzzo, naples, g.byName['Cassino']]) for (const c of [...r.units]) removeCorps(g, c);
+    abruzzo.ctrl = 'GER';
+    naples.ctrl = 'UK';
+    const only = addCorps(g, 'GER', 'Alone on the line', 'inf', 2, abruzzo.id, {});
+    const old = JSON.parse(saveGame(g));
+    old.regions = old.regions.slice(0, 373);
+    const h = loadGame(JSON.stringify(old))!;
+    expect(h.byName['Cassino']).toMatchObject({ ctrl: 'GER', units: [] });
+    expect(h.byName['Abruzzo'].units.map((c) => c.id)).toEqual([only.id]);
   });
 });

@@ -576,7 +576,8 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
   const q: number[] = [];
   for (const r of g.regions) {
     // An army closes up to its own front, not to an ally's. Overseas the allies share one front.
-    if (scope ? !scope.has(r.id) || !allied(g, nat, r.ctrl) : r.ctrl !== nat) continue;
+    // A side theatre where the nation has a plan of its own is no front of the main army's: nobody is railed there.
+    if (scope ? !scope.has(r.id) || !allied(g, nat, r.ctrl) : r.ctrl !== nat || aside(g, r, nat)) continue;
     if (entrusted.has(r.id) || given.has(r.id)) continue; // an ally holds this stretch now, or the plan has written it off
     let open = false, walled = false;
     for (const j of r.nb) {

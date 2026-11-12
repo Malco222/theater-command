@@ -31,6 +31,8 @@ export interface DiploEvent {
   partition?: { nation: string; shares: [string[], string[]][] };
   /** Countries whose armies are remade: from now on these ratings stand in place of the ones they began the war with. */
   reform?: Record<string, Partial<Pick<Nation, 'quality' | 'air' | 'slowCommand' | 'maxAttack'>>>;
+  /** News of something won in the month just ended: the dispatch is dated to that month's last week, not to the new one. */
+  past?: boolean;
 }
 
 export const DIPLOMACY = data as unknown as {
@@ -320,7 +322,10 @@ function fire(g: Game, e: DiploEvent): boolean {
     const r = g.byName[row[4]];
     if (r && r.ctrl === row[0] && r.units.length < STACK) addCorps(g, row[0], row[1], row[2] as any, row[3], r.id, { hold: 1 });
   }
-  if (!told) headline(g, 'event', e.text, e.annex?.by ?? e.cede?.to ?? e.join?.nations[0] ?? e.partition?.nation);
+  if (!told) {
+    headline(g, 'event', e.text, e.annex?.by ?? e.cede?.to ?? e.join?.nations[0] ?? e.partition?.nation);
+    if (e.past && g.turn > 1) Object.assign(g.headlines[g.headlines.length - 1], { turn: g.turn - 1, week: 4 });
+  }
   for (const [id, d] of Object.entries(e.opinion ?? {})) {
     const n = g.nations[id];
     if (!n || !courtable(n)) continue;

@@ -7,7 +7,7 @@ import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, se
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hostileUnits, limitAttackers,
-  moveCorps, moveCost, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
+  endPhase, moveCorps, moveCost, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { foundBureau, setTeams } from './research';
@@ -21,6 +21,7 @@ function closePhase(g: Game, nat: string): void {
   // The month's air campaigns and fleet actions are fought once the nation's orders are all given.
   airBattles(g, nat);
   seaBattles(g, nat);
+  endPhase(g, nat);
   if (nat === 'GER') sovietEvent(g);
   g.phase++;
   if (g.phase >= g.order.length) {

@@ -1009,7 +1009,7 @@ function mobilise(g: Game, nat: string): void {
   }
 }
 
-const THEATRE_LIST = Object.values(theatreData as Record<string, any>).filter((x) => typeof x !== 'string') as { name: string; havens?: string[]; scripted?: boolean; works?: [number, string, number, string[], string][] }[];
+const THEATRE_LIST = Object.values(theatreData as Record<string, any>).filter((x) => typeof x !== 'string') as { name: string; havens?: string[]; scripted?: boolean; works?: [number, string, number, string[], string, { taken?: boolean }?][] }[];
 
 /** The name of the side theatre a region belongs to, as data/campaign/theatres.json gives it. */
 export function theatreName(r: Region): string | null {
@@ -1050,6 +1050,9 @@ function draw(g: Game, nat: string, theatre: string, divs: number): void {
  * Formations history sent to a war away from the main fronts. Unlike the home mobilisation they need a
  * friendly place to arrive at: one that has been lost, or is full, puts the move off, and after half a year
  * it is cancelled. Formations only lent to a campaign ('until') go back to the main army when their time is up.
+ * Divisions sent to strengthen a corps already at the front ('joins' names it) go into that corps wherever it
+ * stands: it keeps its general and what it has learned, and takes the new name. A formation made by breaking
+ * up others ('from' lists them by name) strikes those corps off as it forms.
  */
 function expeditions(g: Game, nat: string): void {
   const gone: Corps[] = [];
@@ -1081,14 +1084,35 @@ function expeditions(g: Game, nat: string): void {
       if (reg && reg.owner === nat && !allied(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
     }
     if (g.turn - due > 6 || (o.war && !atWar(g, o.war[0], o.war[1])) || (o.until && g.turn >= o.until)) { if (g.turn - due > 6) g.flags[`sent:${i}`] = 1; return; }
+    const old = o.joins ? g.corps.find((x) => x.nat === nat && x.name === o.joins && !x.dead) : undefined;
+    if (old) {
+      g.flags[`sent:${i}`] = 1;
+      // Corps broken up to find the divisions are struck off, and a corps only lent to the campaign is remembered.
+      if (Array.isArray(o.from)) for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
+      if (o.until) g.flags[`lent:${i}`] = old.id;
+      // The new divisions come at full strength; the corps they join is as rested as it was.
+      old.str = (old.str * old.divs + row[4]) / (old.divs + row[4]);
+      old.divs += row[4];
+      old.name = row[2];
+      old.kind = row[3];
+      g.supplyDirty = true;
+      if (o.news) headline(g, 'event', o.news, nat, old.reg);
+      return;
+    }
     // Troops sent to take over a stretch of an ally's line ('join') go in whatever already stands there.
     if (!reg || !allied(g, nat, reg.ctrl) || (!o.join && friendlyUnits(g, reg, nat).length >= STACK)) return;
     g.flags[`sent:${i}`] = 1;
+    if (Array.isArray(o.from)) {
+      for (const x of g.corps.filter((x) => x.nat === nat && !x.dead && o.from.includes(x.name))) removeCorps(g, x);
+      g.supplyDirty = true;
+    }
     const c = addCorps(g, nat, row[2], row[3], row[4], reg.id, o);
-    if (o.from) draw(g, o.of ?? nat, o.from, row[4]);
+    if (o.from && !Array.isArray(o.from)) draw(g, o.of ?? nat, o.from, row[4]);
     if (o.until) g.flags[`lent:${i}`] = c.id;
     const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? '' : 'the ';
-    if (o.gen) headline(g, 'event', `${o.gen} ${reg.port ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
+    // A row that tells its own news says more than the bare arrival would.
+    if (o.news) headline(g, 'event', o.news, nat, reg.id);
+    else if (o.gen) headline(g, 'event', `${o.gen} ${reg.port ? 'lands at' : 'arrives in'} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
     else if (nat === g.human) headline(g, 'info', `${c.name} has ${reg.port ? 'landed at' : 'arrived in'} ${reg.name}.`, nat, reg.id);
   });
   if (gone.length) {
@@ -1103,12 +1127,15 @@ function expeditions(g: Game, nat: string): void {
 /**
  * Field works in the desert, by history's calendar: in the month named, whoever of the nations listed holds the
  * place digs it in to that level, or strips its defences down to it. The works face the open desert: an attack
- * from ground of the same colony meets them.
+ * from ground of the same colony meets them. Works marked 'taken' are a beachhead's: they are dug as the month
+ * closes by a holder who won the place in that month, where the others are dug as his month opens.
  */
-function desertWorks(g: Game, nat: string): void {
+function desertWorks(g: Game, nat: string, closing = false): void {
   // A theatre outside the desert can list works of its own in theatres.json: they are dug the same way.
-  for (const [when, place, lv, holders, news] of [...(DESERT.works ?? []), ...THEATRE_LIST.flatMap((t) => t.works ?? [])]) {
+  const rows: [number, string, number, string[], string, { taken?: boolean }?][] = [...(DESERT.works ?? []), ...THEATRE_LIST.flatMap((t) => t.works ?? [])];
+  for (const [when, place, lv, holders, news, o] of rows) {
     const r = g.byName[place];
+    if (closing && !o?.taken) continue;
     if (when !== g.turn || !r || r.ctrl !== nat || !holders.includes(nat) || (r.fort?.lv ?? 0) === lv) continue;
     r.fort = lv > 0 ? { lv, vs: r.fort?.vs ?? [r.owner] } : null;
     headline(g, 'event', news, nat, r.id);
@@ -1139,6 +1166,11 @@ function cutOffNews(g: Game): void {
     const adj = who.map((id) => g.nations[id].adj).join(' and ');
     headline(g, 'battle', `The ring closes at ${g.regions[reg].name}: ${ring.corps} ${adj} corps, ${ring.men.toLocaleString('en-US')} men, are cut off from all supply.`, who[0], reg);
   }
+}
+
+/** The last thing in a nation's month: a beachhead won in it is dug in before the enemy's turn comes round. */
+export function endPhase(g: Game, nat: string): void {
+  if (g.nations[nat].alive) desertWorks(g, nat, true);
 }
 
 export function startPhase(g: Game, nat: string): void {

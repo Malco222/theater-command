@@ -76,9 +76,12 @@ describe('the campaign map', () => {
   });
   it('adding the south moved nothing in the north', () => {
     expect(g.byName['Berlin'].id).toBe(createGame(1, null).byName['Berlin'].id);
-    expect(g.regions.length).toBe(373);
+    expect(g.regions.length).toBe(375);
     expect(g.byName['Casablanca'].id).toBe(315);
     expect(g.byName['Rhodes'].id).toBe(370);
+    // The two places the Italian campaign of 1944 turns on went on the end.
+    expect(g.byName['Cassino'].id).toBe(373);
+    expect(g.byName['Anzio'].id).toBe(374);
   });
   it('the land bridge between the Don and the Volga is the only way to Stalingrad from the west', () => {
     const near = (n: string): string[] => g.byName[n].nb.map((j) => g.regions[j].name).sort();

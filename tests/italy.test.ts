@@ -388,7 +388,10 @@ describe('back to the Gustav Line', () => {
     expect(R(g, 'Abruzzo').fort ?? null).toBeNull();
     play(g, 'GER');
     expect(R(g, 'Abruzzo').fort).toMatchObject({ lv: 2 });
-    expect(told(g, OCT_43).filter((t) => /Gustav Line/.test(t))).toHaveLength(1);
+    // The western end of it, above the road to Rome, is dug in the same month.
+    expect(R(g, 'Cassino').fort).toMatchObject({ lv: 2 });
+    expect(told(g, OCT_43).filter((t) => /from the Garigliano to the Sangro/.test(t))).toHaveLength(1);
+    expect(told(g, OCT_43).filter((t) => /anchored on Monte Cassino/.test(t))).toHaveLength(1);
   });
 
   it('is not dug if the Allies are already in those mountains', () => {
@@ -398,7 +401,9 @@ describe('back to the Gustav Line', () => {
     capture(g, R(g, 'Abruzzo'), 'UK');
     play(g, 'GER');
     expect(R(g, 'Abruzzo').fort ?? null).toBeNull();
-    expect(told(g, OCT_43).some((t) => /Gustav Line/.test(t))).toBe(false);
+    expect(told(g, OCT_43).some((t) => /from the Garigliano to the Sangro/.test(t))).toBe(false);
+    // Each stretch of the line stands on its own: Cassino is still German, and is still dug.
+    expect(R(g, 'Cassino').fort).toMatchObject({ lv: 2 });
   });
 
   it('an attack up the road from Naples meets the works head-on', () => {
