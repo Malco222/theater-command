@@ -16,7 +16,7 @@ import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Game, Region, S
 type Sched = [number, number, number][];
 interface NatSpec { quality: number; ftrRange: number; bmrRange: number }
 interface Chain { nat: string; from: number; name: string; by: string; ground: number }
-interface FleetRow { nat: string; name: string; base: string; from?: number; leader?: string; start?: [number, number]; est: Sched }
+interface FleetRow { nat: string; name: string; base: string; from?: number; leader?: string; start?: [number, number]; est: Sched; ftrRange?: number; scripted?: boolean }
 export interface AirOrder { fleet: string; base?: string[]; mission: AirMission; region?: string; sea?: string }
 export interface AirPlan { nat: string; from: number; to: number; name: string; against: string; orders: AirOrder[] }
 interface Reserve { ftr: number; bmr: number; pilots: number }
@@ -72,7 +72,12 @@ const cap = (s: string): string => s[0].toUpperCase() + s.slice(1);
 const planes = (n: number, one: string): string => `${n.toLocaleString('en-US')} ${one}${n === 1 ? '' : 's'}`;
 
 export const airFleetsOf = (g: Game, nat: string): AirFleet[] => g.airFleets.filter((f) => f.nat === nat);
-export const airRange = (nat: string): { ftr: number; bmr: number } => ({ ftr: spec(nat).ftrRange, bmr: spec(nat).bmrRange });
+/** How far one fleet reaches: its nation's ranges, unless the fleet has long-range fighters of its own ('ftrRange' on its row in air.json). */
+const reach = (f: { nat: string; name: string }): NatSpec => {
+  const own = AIR.fleets.find((x) => x.nat === f.nat && x.name === f.name)?.ftrRange;
+  return own ? { ...spec(f.nat), ftrRange: own } : spec(f.nat);
+};
+export const airRange = (f: { nat: string; name: string }): { ftr: number; bmr: number } => ({ ftr: reach(f).ftrRange, bmr: reach(f).bmrRange });
 
 export function airPool(g: Game, nat: string): AirPool {
   return (g.airPool[nat] ??= { ftr: 0, bmr: 0, pilots: 0, lostFtr: 0, lostBmr: 0, lostPilots: 0 });
@@ -122,7 +127,7 @@ export function fightersOver(g: Game, region: number, against: string): number {
   let n = 0;
   for (const f of g.airFleets) {
     if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, against) || !allied(g, f.nat, holder)) continue;
-    n += f.ftr * cover(km(g, f.base, region), spec(f.nat).ftrRange) * crowding(g, f);
+    n += f.ftr * cover(km(g, f.base, region), reach(f).ftrRange) * crowding(g, f);
   }
   return n;
 }
@@ -213,7 +218,7 @@ function shipping(g: Game, nat: string, z: number): boolean {
 export function whyNotMission(g: Game, f: AirFleet, m: AirMission, target: number): string | null {
   if (m === 'support' || m === 'rest') return null;
   if (!g.nations[f.nat].atWar.length) return 'The nation is at peace.';
-  const R = spec(f.nat);
+  const R = reach(f);
   if (m === 'strike') {
     if (!g.seas[target]) return 'Pick a sea.';
     if (!f.bmr) return 'It has no bombers.';
@@ -252,6 +257,8 @@ export function airUpkeep(g: Game, nat: string): void {
   if (!n?.alive) return;
   for (const r of AIR.fleets) {
     if (r.nat !== nat || (r.from ?? 1) <= 1 || g.turn < r.from! || g.flags[`air:${r.name}`]) continue;
+    // An air force history raised for an invasion of its own planning is nobody's to raise in free play.
+    if (r.scripted && g.flags.open === 1) continue;
     const base = g.byName[r.base];
     if (!base || base.ctrl !== nat || base.since >= g.turn) continue;
     const f = addAir(g, r);
@@ -356,7 +363,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   if (!fleets.length) { out.why = 'No air fleet has these orders.'; return out; }
   for (const f of fleets) {
     const d = sea ? seaKm(g, f.base, target) : km(g, f.base, target);
-    const R = spec(f.nat);
+    const R = reach(f);
     const esc = night ? 0 : cover(d, R.ftrRange);
     const crowd = crowding(g, f);
     const a = { f, d, esc, crowd, ftr: f.ftr * esc * crowd, bmr: d <= R.bmrRange ? f.bmr * crowd : 0 };
@@ -381,7 +388,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     if (f.ftr <= 0 || f.mission !== 'support' || !atWar(g, f.nat, nat)) continue;
     if (holder && !allied(g, f.nat, holder)) continue;
     const d = sea ? seaKm(g, f.base, target) : km(g, f.base, target);
-    let w = cover(d, spec(f.nat).ftrRange) * crowding(g, f);
+    let w = cover(d, reach(f).ftrRange) * crowding(g, f);
     if (sea) w *= C.seaCover;
     if (night) w *= C.night.fighters;
     if (!out.radar) w *= AIR.radar.without;
@@ -595,8 +602,10 @@ function fly(g: Game, nat: string, m: AirMission, target: number, fleets: AirFle
   const who = list(fleets.filter((f) => a.att.some((x) => x.f === f)).map((f) => f.name));
   const cost = `${planes(aLost, 'aircraft').replace('aircrafts', 'aircraft')} lost`;
   const adj = defNat ? g.nations[defNat].adj : 'enemy';
+  // Once the British and American air forces fight the same enemy side by side, the sky they win is the Allies'.
+  const together = !!defNat && (nat === 'UK' || nat === 'USA') && ['UK', 'USA'].every((x) => g.nations[x]?.alive && g.nations[x].atWar.includes(defNat));
   let text: string;
-  if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? `The ${g.nations[nat].adj} air force now holds the sky there.` : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
+  if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
   else if (sea) text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} at shipping in ${a.place}. ${result} ${cap(cost)}.`;
   else text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} ${a.place}${night ? ' by night' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   headline(g, 'battle', text, nat, sea ? undefined : target);

@@ -4,7 +4,7 @@
 // same war the unsaved one would have.
 
 import { Rng } from '../core/rng';
-import { atWar, computeSupply, createGame } from './game';
+import { atWar, computeSupply, createGame, openTheatres } from './game';
 import { seat } from './commanders';
 import { FIELDS } from './research';
 import mapData from '../generated/campaign-map.json';
@@ -83,6 +83,9 @@ export function loadGame(text: string): Game | null {
   g.turn = d.turn; g.phase = phase; g.week = d.week; g.order = order;
   g.nextCorps = d.nextCorps; g.nextBuild = d.nextBuild; g.flags = d.flags;
   g.rng = new Rng(d.rng);
+  // What the calendar has changed on the map itself: theatres that have opened, and harbours built off open beaches.
+  openTheatres(g);
+  for (const k of Object.keys(g.flags)) if (k.startsWith('harbour:') && g.regions[+k.slice(8)]) g.regions[+k.slice(8)].port = true;
   // A save from an older build may lack fields added since; the fresh game fills them in.
   for (const [id, n] of Object.entries(d.nations as Record<string, any>)) g.nations[id] = { ...g.nations[id], ...n };
   // A save from before research: the design teams are taken to have kept to history's schedule so far.

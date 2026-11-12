@@ -7,7 +7,7 @@
     "production": "Aircraft built each month, as [from turn, fighters, bombers]. They go to a reserve and from there to fleets below establishment.",
     "pilots": "Fighter pilots trained each month, as [from turn, pilots]. A fighter needs a pilot. 'home' is the share of pilots shot down over friendly ground who fly again; 'away' the share who get home from over enemy ground.",
     "reserve": "The most the reserve holds: spare aircraft and spare pilots beyond this go elsewhere.",
-    "fleets": "est is the establishment over time, as [from turn, fighters, bombers]: the strength a fleet is kept at. When it drops, the surplus goes to the reserve for other fleets. start is the strength on the first day, if below establishment. from is the month the fleet forms, once its base is held.",
+    "fleets": "est is the establishment over time, as [from turn, fighters, bombers]: the strength a fleet is kept at. When it drops, the surplus goes to the reserve for other fleets. start is the strength on the first day, if below establishment. from is the month the fleet forms, once its base is held. ftrRange gives one fleet's fighters a reach of their own, in place of its nation's: the long-range fighters of 1944. scripted marks an air force history raised for an invasion of its own planning: in free play it does not form.",
     "combat": "fighters and bombers scale the month's losses. escortShare is how much of the defenders' effort falls on the escort rather than the bombers. bomberDefence is what a bomber's own guns are worth. flak is the share of bombers lost to guns alone. seaCover is how much of a fighter force can cover ships at sea. night: few fighters find the bombers and few bombs find the target.",
     "damage": "airfields: bombers needed to cut a base's readiness by 1.0, the most one month can cut, and the share of bombers that destroys an aircraft on the ground. industry: bombers needed to stop a region's output for a month, and the most one month can stop. shipping: how hard a strike falls on ships at sea and on coastal trade.",
     "airfields": "The airfields of one region serve 'holds' aircraft. When more are based there, every fleet in the region flies only that share of its aircraft.",
@@ -107,7 +107,9 @@
     { "nat": "SOV", "name": "Kiev District Air Force", "base": "Kiev", "leader": "Yevgeny Ptukhin", "est": [[1, 700, 500], [18, 1000, 800]] },
     { "nat": "SOV", "name": "Odessa District Air Force", "base": "Odessa", "leader": "Fyodor Michugin", "est": [[1, 300, 200], [18, 400, 300]] },
     { "nat": "SOV", "name": "Moscow Air Defence", "base": "Moscow", "leader": "Mikhail Gromadin", "est": [[1, 300, 0], [22, 500, 0]] },
-    { "nat": "UK", "name": "Mediterranean Air Command", "base": "Malta", "from": 46, "leader": "Arthur Tedder", "est": [[46, 500, 400]] }
+    { "nat": "UK", "name": "Mediterranean Air Command", "base": "Malta", "from": 46, "leader": "Arthur Tedder", "est": [[46, 500, 400]] },
+    { "nat": "UK", "name": "Second Tactical Air Force", "base": "Hampshire", "from": 56, "leader": "Arthur Coningham", "ftrRange": 400, "scripted": true, "est": [[56, 1000, 500]] },
+    { "nat": "UK", "name": "US Ninth Air Force", "base": "West Country", "from": 56, "leader": "Lewis Brereton", "ftrRange": 600, "scripted": true, "est": [[56, 1000, 600]] }
   ],
   "plan": [
     { "nat": "GER", "from": 11, "to": 11, "name": "The Channel battles", "against": "UK", "orders": [
@@ -150,6 +152,14 @@
     ] },
     { "nat": "UK", "from": 58, "to": 99, "name": "The air forces follow the armies north", "against": "GER", "orders": [
       { "fleet": "Mediterranean Air Command", "base": ["Rome", "Naples", "Apulia"], "mission": "support" }
+    ] },
+    { "nat": "UK", "from": 57, "to": 58, "name": "The air offensive before Overlord", "against": "GER", "orders": [
+      { "fleet": "Second Tactical Air Force", "base": ["Hampshire"], "mission": "superiority", "region": "Normandy" },
+      { "fleet": "US Ninth Air Force", "base": ["West Country"], "mission": "superiority", "region": "Cotentin" }
+    ] },
+    { "nat": "UK", "from": 59, "to": 99, "name": "The tactical air forces cross to France", "against": "GER", "orders": [
+      { "fleet": "Second Tactical Air Force", "base": ["Brussels", "Rouen", "Normandy"], "mission": "support" },
+      { "fleet": "US Ninth Air Force", "base": ["Champagne", "Paris", "Maine", "Rennes", "Cotentin"], "mission": "support" }
     ] }
   ]
 }

@@ -1,5 +1,5 @@
 {
-  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. In free play (open.json) the window only says when an event may first happen, an event never brings a country at peace into a war, an event marked mode 'history' is left out (the nation decides that for itself), and one marked mode 'open' happens only there. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all), and 'since:event:id,n' (that event happened at least n months ago). 'reform' remakes a nation's armed forces from that month on: for each nation named, the new quality of its troops, strength of its air force, whether its command is still slow, and how many corps it can put into one attack. An event with nothing but a text is a piece of news.",
+  "_about": "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. In free play (open.json) the window only says when an event may first happen, an event never brings a country at peace into a war, an event marked mode 'history' is left out (the nation decides that for itself), and one marked mode 'open' happens only there. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all), and 'since:event:id,n' (that event happened at least n months ago). 'reform' remakes a nation's armed forces from that month on: for each nation named, the new quality of its troops, strength of its air force, whether its command is still slow, and how many corps it can put into one attack. An event with nothing but a text is a piece of news. 'liberate' hands over ground an occupier has left: each named region he still holds with none of his troops in it passes to the first nation on the list still at war with him.",
   "leanAt": 30,
   "backAt": 20,
   "joinAt": 70,
@@ -165,6 +165,53 @@
       "id": "rome-liberated", "from": 50, "to": 90, "past": true,
       "if": ["flag:event:italian-armistice", "allHeld:allies,Rome"],
       "text": "Rome is free: the first of the Axis capitals to fall. Allied columns drive past the Colosseum through cheering crowds."
+    },
+    {
+      "id": "fortitude", "from": 57, "to": 57, "mode": "history",
+      "if": ["war:GER,USA", "fallen:FRA"],
+      "text": "Across the Channel from Calais, Kent fills with tanks made of rubber and a phantom army under General Patton. German intelligence counts eighty Allied divisions in England where there are barely forty, and expects them at the Pas de Calais."
+    },
+    {
+      "id": "paris-liberated", "from": 58, "to": 90, "mode": "history", "past": true,
+      "if": ["fallen:FRA", "flag:harbour:58", "allHeld:allies,Paris"],
+      "text": "Paris is free. The city rose against its garrison, General Leclerc's French 2nd Armoured Division drove in to finish it, and General de Gaulle has walked down the Champs-Elysees to Notre-Dame through a million people."
+    },
+    {
+      "id": "brussels-liberated", "from": 58, "to": 90, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Brussels"],
+      "text": "Brussels is free. The Guards Armoured Division drove seventy-five miles in a day to reach it, and the crowds would not let the tanks through."
+    },
+    {
+      "id": "france-frees-itself", "from": 62, "to": 90, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Paris,Marseille"],
+      "liberate": {"from": "GER", "to": ["USA", "UK"], "regions": ["Paris", "Lille", "Calais", "Somme", "Rouen", "Normandy", "Cotentin", "Rennes", "Brittany", "Nantes", "Champagne", "Sedan", "Verdun", "Aube", "Burgundy", "Orleans", "Touraine", "Maine", "Berry", "Lyon", "Auvergne", "Limousin", "Poitou", "Bordeaux", "Gascony", "Toulouse", "Languedoc", "Marseille", "Riviera", "Savoy", "Jura"]},
+      "text": "Behind the retreating German armies the French Forces of the Interior take over town after town. South of the Loire and west of the Rhone, France has freed itself."
+    },
+    {
+      "id": "atlantic-pockets", "from": 64, "to": 90, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Paris,Marseille"],
+      "liberate": {"from": "GER", "to": ["USA", "UK"], "regions": ["Paris", "Lille", "Calais", "Somme", "Rouen", "Normandy", "Cotentin", "Rennes", "Brittany", "Nantes", "Champagne", "Sedan", "Verdun", "Aube", "Burgundy", "Orleans", "Touraine", "Maine", "Berry", "Lyon", "Auvergne", "Limousin", "Poitou", "Bordeaux", "Gascony", "Toulouse", "Languedoc", "Marseille", "Riviera", "Savoy", "Jura"]},
+      "text": "The German garrisons left behind on the Atlantic coast of France, cut off since the summer and watched by the French Forces of the Interior, hold nothing now but their own perimeters."
+    },
+    {
+      "id": "arnhem", "from": 63, "to": 63, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Brabant", "allHeld:axis,Gelderland"],
+      "text": "Operation Market Garden has failed at the last bridge. Three airborne divisions were dropped along a single road to the Rhine at Arnhem, and the tanks sent up it to join them did not arrive in time. The war will not be over by Christmas."
+    },
+    {
+      "id": "bulge", "from": 65, "to": 65, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Paris", "allHeld:axis,Ardennes"],
+      "text": "Out of the fog and snow of the Eifel two panzer armies have broken through the thin American line in the Ardennes. The front bends back fifty miles toward the Meuse: the newspapers are calling it the Bulge. At Bastogne the surrounded garrison was asked to surrender and answered in one word: Nuts."
+    },
+    {
+      "id": "bulge-closed", "from": 66, "to": 68, "mode": "history", "past": true,
+      "if": ["flag:event:bulge", "allHeld:allies,Ardennes"],
+      "text": "The Bulge is gone. The last German offensive in the West has cost the Reich its reserve of tanks and fuel, and the Ardennes are back in Allied hands."
+    },
+    {
+      "id": "aachen", "from": 63, "to": 63, "mode": "history", "past": true,
+      "if": ["flag:harbour:58", "allHeld:allies,Liege"],
+      "text": "Aachen has surrendered to the US First Army after three weeks of fighting from house to house: the first German city to fall. Beyond it the West Wall still holds."
     }
   ]
 }

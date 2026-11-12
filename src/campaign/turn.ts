@@ -7,7 +7,7 @@ import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, se
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hostileUnits, limitAttackers,
-  endPhase, moveCorps, moveCost, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
+  endPhase, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { foundBureau, setTeams } from './research';
@@ -26,6 +26,7 @@ function closePhase(g: Game, nat: string): void {
   g.phase++;
   if (g.phase >= g.order.length) {
     g.phase = 0; g.turn++; g.week = 1;
+    openTheatres(g);
     monthlyDiplomacy(g);
   }
 }

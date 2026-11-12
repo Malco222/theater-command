@@ -375,6 +375,8 @@ export interface PlanPhase {
   force?: number;
   /** Places the plan means to starve out rather than storm: never assaulted while the phase lasts. */
   siege?: string[];
+  /** In a theatre: enemy garrisons left to others. Nobody attacks them, closes up to them or stays to watch them. */
+  mask?: string[];
   /** A limited offensive: only places the plan has named as objectives so far are attacked. */
   limited?: boolean;
   /** A single stroke: only these places are attacked, whatever else is in reach. */

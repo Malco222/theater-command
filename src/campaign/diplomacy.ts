@@ -7,7 +7,7 @@
 import data from '../../data/campaign/diplomacy.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, declareWar, headline, relocate, removeCorps } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps } from './game';
 import { fleetsOnFall } from './navy';
 import { airOnFall } from './air';
 
@@ -17,6 +17,11 @@ export interface DiploEvent {
   mode?: 'history' | 'open';
   annex?: { by: string; nations: string[] };
   cede?: { from: string; to: string; regions: string[] };
+  /**
+   * Ground an occupier has left behind him: every named region 'from' still holds with none of his troops in it
+   * passes to the first of 'to' still at war with him. Places he still garrisons stay his.
+   */
+  liberate?: { from: string; to: string[]; regions: string[] };
   spawn?: [string, string, string, number, string][];
   opinion?: Record<string, number>;
   join?: { bloc: 'allies' | 'axis'; nations: string[]; minOpinion: number };
@@ -254,6 +259,17 @@ function fire(g: Game, e: DiploEvent): boolean {
     }
     if (!did) return false;
   }
+  if (e.liberate) {
+    const L = e.liberate;
+    const to = L.to.find((id) => g.nations[id]?.alive && atWar(g, id, L.from));
+    for (const name of L.regions) {
+      const r = g.byName[name];
+      if (!to || !r || r.ctrl !== L.from || r.units.some((u) => !allied(g, u.nat, to))) continue;
+      capture(g, r, to);
+      did = true;
+    }
+    if (!did) return false;
+  }
   if (e.wake) {
     for (const id of e.wake.nations) {
       const n = g.nations[id];
@@ -323,7 +339,7 @@ function fire(g: Game, e: DiploEvent): boolean {
     if (r && r.ctrl === row[0] && r.units.length < STACK) addCorps(g, row[0], row[1], row[2] as any, row[3], r.id, { hold: 1 });
   }
   if (!told) {
-    headline(g, 'event', e.text, e.annex?.by ?? e.cede?.to ?? e.join?.nations[0] ?? e.partition?.nation);
+    headline(g, 'event', e.text, e.annex?.by ?? e.cede?.to ?? e.liberate?.to[0] ?? e.join?.nations[0] ?? e.partition?.nation);
     if (e.past && g.turn > 1) Object.assign(g.headlines[g.headlines.length - 1], { turn: g.turn - 1, week: 4 });
   }
   for (const [id, d] of Object.entries(e.opinion ?? {})) {
