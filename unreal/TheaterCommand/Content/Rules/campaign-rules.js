@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b85d3aa 2026-11-12. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 0c71183 2026-11-12. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -873,7 +873,7 @@
 
   // ../../data/campaign/diplomacy.json
   var diplomacy_default = {
-    _about: "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. In free play (open.json) the window only says when an event may first happen, an event never brings a country at peace into a war, an event marked mode 'history' is left out (the nation decides that for itself), and one marked mode 'open' happens only there. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all), and 'since:event:id,n' (that event happened at least n months ago). 'reform' remakes a nation's armed forces from that month on: for each nation named, the new quality of its troops, strength of its air force, whether its command is still slow, and how many corps it can put into one attack. An event with nothing but a text is a piece of news. 'liberate' hands over ground an occupier has left: each named region he still holds with none of his troops in it passes to the first nation on the list still at war with him.",
+    _about: "Diplomacy. Every nation sits on a seven-step alignment track from Allied member to Axis member. A neutral's public opinion runs from -100 (Allies) to +100 (Axis). Each month it drifts back toward its 'home' leaning and is pushed by whoever is winning the war (momentum x bandwagon). At +/-leanAt it starts leaning (trade and treaties); at +/-joinAt it asks to join that bloc; below +/-backAt it steps back to neutrality. Players spend political capital to court neutrals; 'resist' makes some of them much harder to move. Events are history written as data: each fires once, in its window, only if its conditions still hold. In free play (open.json) the window only says when an event may first happen, an event never brings a country at peace into a war, an event marked mode 'history' is left out (the nation decides that for itself), and one marked mode 'open' happens only there. Besides annex, cede, war, spawn, opinion and join, an event can 'wake' a country that has stood aside until now (it enters at the given place on the track), and 'partition' one that ends: each share is [who takes it, the regions], the first taker on the list still in the war gets whatever of those regions the country still holds, and ground someone else already holds stays theirs. Conditions include 'war:A,B' (those two are at war), 'dormant:A' and 'anyHeld:bloc,place,place' (that bloc holds at least one of the places) and 'allHeld:bloc,place,place' (it holds them all), and 'since:event:id,n' (that event happened at least n months ago). 'reform' remakes a nation's armed forces from that month on: for each nation named, the new quality of its troops, strength of its air force, whether its command is still slow, and how many corps it can put into one attack. An event with nothing but a text is a piece of news. 'liberate' hands over ground an occupier has left: each named region he still holds with none of his troops in it passes to the first nation on the list still at war with him. 'peace' ends the war between two nations: each hands back the other's ground and takes its troops home. A partition marked 'occupied' leaves each piece of the country to whoever has troops standing in it, and the shares divide the rest.",
     leanAt: 30,
     backAt: 20,
     joinAt: 70,
@@ -1208,6 +1208,125 @@
         past: true,
         if: ["flag:harbour:58", "allHeld:allies,Liege"],
         text: "Aachen has surrendered to the US First Army after three weeks of fighting from house to house: the first German city to fall. Beyond it the West Wall still holds."
+      },
+      {
+        id: "leningrad-relieved",
+        from: 54,
+        to: 70,
+        mode: "history",
+        past: true,
+        if: ["war:GER,SOV", "allHeld:allies,Leningrad,Novgorod"],
+        text: "The siege of Leningrad is over. After nearly nine hundred days the German guns have been driven out of range of the city, and Moscow fires a salute of 324 guns. More than half a million of its people died of hunger and cold."
+      },
+      {
+        id: "crimea-freed",
+        from: 57,
+        to: 70,
+        mode: "history",
+        past: true,
+        if: ["war:GER,SOV", "allHeld:allies,Crimea"],
+        text: "Sevastopol has fallen and the Crimea is Soviet again. What is left of the German Seventeenth Army is taken off the beaches of Cape Chersonese under fire, or surrenders there."
+      },
+      {
+        id: "minsk-freed",
+        from: 59,
+        to: 70,
+        mode: "history",
+        past: true,
+        if: ["war:GER,SOV", "allHeld:allies,Minsk,Vitebsk"],
+        text: "Minsk is free, and the tanks of two Soviet fronts have met west of it. Behind them the German Fourth Army is cut off in the forests: Army Group Centre has ceased to exist. It is the greatest defeat the German army has ever suffered."
+      },
+      {
+        id: "lublin-freed",
+        from: 60,
+        to: 70,
+        mode: "history",
+        past: true,
+        if: ["war:GER,SOV", "allHeld:allies,Lublin"],
+        spawn: [["SOV", "Polish 1st Army", "inf", 4, "Lublin"]],
+        text: "The Red Army is over the Bug and in Lublin, and a Polish committee backed by Moscow has set itself up there as the country's government. The Polish 1st Army, raised in the Soviet Union, marches with it. Outside the city, at Majdanek, the soldiers have found a German death camp with its gas chambers still standing."
+      },
+      {
+        id: "warsaw-rising",
+        from: 60,
+        to: 60,
+        mode: "history",
+        if: ["war:GER,SOV", "allHeld:allies,Lublin", "allHeld:axis,Warsaw"],
+        text: "Warsaw has risen. With Soviet guns heard across the Vistula, the Polish Home Army has come out into the streets against the German garrison and holds much of the city centre."
+      },
+      {
+        id: "romania-changes-sides",
+        from: 61,
+        to: 70,
+        mode: "history",
+        past: true,
+        if: ["alive:ROM", "war:ROM,SOV", "allHeld:allies,Moldavia"],
+        partition: { nation: "ROM", occupied: true, shares: [[["SOV"], ["Bucharest", "Ploiesti", "Dobruja", "Oltenia", "Banat", "Moldavia", "Bessarabia", "Bukovina", "Transylvania"]]] },
+        spawn: [["SOV", "Romanian 1st Army", "inf", 4, "Bucharest"], ["SOV", "Romanian 4th Army", "inf", 4, "Bucharest"]],
+        text: "King Michael has had Marshal Antonescu arrested and Romania has changed sides. Its army turns its guns on the Germans, the Red Army drives for Bucharest and the oilfields of Ploiesti, and the German Sixth Army, destroyed once at Stalingrad, is cut off for the second time."
+      },
+      {
+        id: "bulgaria-changes-sides",
+        from: 61,
+        to: 70,
+        mode: "history",
+        if: ["alive:BUL", "flag:event:romania-changes-sides"],
+        partition: { nation: "BUL", occupied: true, shares: [[["SOV"], ["Sofia", "Plovdiv", "Varna"]]] },
+        spawn: [["SOV", "Bulgarian 1st Army", "inf", 3, "Sofia"]],
+        text: "The Soviet Union has declared war on Bulgaria and crossed the Danube without a shot fired. A new government in Sofia has declared war on Germany, and the Bulgarian army marches with the Red Army into Yugoslavia."
+      },
+      {
+        id: "finland-armistice",
+        from: 61,
+        to: 70,
+        mode: "history",
+        if: ["alive:FIN", "war:FIN,SOV", "allHeld:allies,Karelia"],
+        cede: { from: "FIN", to: "SOV", regions: ["Karelia", "Petsamo"] },
+        peace: [["FIN", "SOV"]],
+        text: "Finland is out of the war. Marshal Mannerheim, now President, has signed an armistice with Moscow: the frontier of 1940 is restored, Petsamo is given up, and the German troops in the north are to leave or be driven out."
+      },
+      {
+        id: "warsaw-rising-crushed",
+        from: 62,
+        to: 62,
+        mode: "history",
+        if: ["flag:event:warsaw-rising", "allHeld:axis,Warsaw"],
+        text: "After sixty-three days the Warsaw rising is over. The Home Army has laid down its arms, some two hundred thousand of the city's people are dead, and what is left of Warsaw is being blown up street by street. The Red Army watched from across the river."
+      },
+      {
+        id: "slovak-rising",
+        from: 61,
+        to: 61,
+        mode: "history",
+        if: ["alive:SVK", "war:GER,SOV", "allHeld:allies,Lwow"],
+        text: "Slovakia has risen. Part of the Slovak army and thousands of partisans hold the mountains round Banska Bystrica against the German divisions sent in to disarm them, and the Red Army is fighting its way toward them through the Dukla Pass."
+      },
+      {
+        id: "belgrade-freed",
+        from: 63,
+        to: 70,
+        mode: "history",
+        past: true,
+        if: ["war:GER,SOV", "allHeld:allies,Belgrade"],
+        text: "Belgrade is free. Tito's partisans and the tanks of the Red Army fought their way into the city together, and the German army group in Greece is marching north through the mountains to get out before the door shuts."
+      },
+      {
+        id: "horthy",
+        from: 63,
+        to: 63,
+        mode: "history",
+        past: true,
+        if: ["alive:HUN", "war:HUN,SOV", "allHeld:allies,Transylvania"],
+        text: "Admiral Horthy has announced on Budapest radio that Hungary is asking for an armistice. Within hours German troops have seized the Castle and the Regent's son, and the Arrow Cross leader Szalasi is put in power. Hungary fights on to the end."
+      },
+      {
+        id: "budapest-ring",
+        from: 65,
+        to: 70,
+        mode: "history",
+        past: true,
+        if: ["alive:HUN", "war:HUN,SOV", "allHeld:allies,Debrecen", "allHeld:axis,Budapest"],
+        text: "The ring has closed round Budapest. Two Soviet fronts have met west of the city on the Danube, and some seventy thousand German and Hungarian soldiers and nearly a million civilians are shut in. The Soviet officers sent forward under a white flag with terms did not come back alive."
       }
     ]
   };
@@ -2118,7 +2237,12 @@
         [22, "Semyon Timoshenko", 3, { defense: 1, leadership: 1 }, []],
         [22, "Konstantin Rokossovsky", 3, { offense: 1, defense: 1 }, []],
         [22, "Ivan Konev", 2, { offense: 1 }, []],
-        [23, "Andrei Yeremenko", 2, { defense: 1 }, []]
+        [23, "Andrei Yeremenko", 2, { defense: 1 }, []],
+        [53, "Leonid Govorov", 3, { offense: 1, defense: 1 }, []],
+        [53, "Rodion Malinovsky", 3, { offense: 1, logistics: 1 }, []],
+        [53, "Fyodor Tolbukhin", 3, { offense: 1, leadership: 1 }, []],
+        [58, "Ivan Bagramyan", 3, { offense: 1, defense: 1 }, []],
+        [58, "Ivan Chernyakhovsky", 3, { offense: 2 }, ["hard_charger"]]
       ],
       UK: [
         [1, "Lord Gort", 3, { defense: 1, leadership: 1 }, []],
@@ -3084,6 +3208,10 @@
       bump(f, "escort");
       earn2(g2, "fleet", f, f.zone);
     }
+  }
+  function takeOver(g2) {
+    for (const a of g2.stories.awards) a.seen = true;
+    g2.stories.mail = [];
   }
 
   // ../../src/campaign/air.ts
@@ -4473,12 +4601,33 @@
     if (e.cede) {
       for (const name of e.cede.regions) {
         const r = g2.byName[name];
-        if (!r || r.owner !== e.cede.from || r.ctrl !== e.cede.from) continue;
+        if (!r || r.owner !== e.cede.from || r.ctrl !== e.cede.from && r.ctrl !== e.cede.to) continue;
         transfer(g2, r, e.cede.to);
         withdraw(g2, e.cede.from, r);
         did = true;
       }
       if (!did) return false;
+    }
+    if (e.peace) {
+      let made = false;
+      for (const [a, b] of e.peace) {
+        const A = g2.nations[a], B = g2.nations[b];
+        if (!A?.alive || !B?.alive || !A.atWar.includes(b)) continue;
+        A.atWar = A.atWar.filter((x) => x !== b);
+        B.atWar = B.atWar.filter((x) => x !== a);
+        for (const r of g2.regions) {
+          if (r.owner === a && r.ctrl === b || r.owner === b && r.ctrl === a) {
+            r.ctrl = r.owner;
+            r.since = g2.turn;
+          }
+          if (r.ctrl === a && r.units.some((u) => u.nat === b)) withdraw(g2, b, r);
+          if (r.ctrl === b && r.units.some((u) => u.nat === a)) withdraw(g2, a, r);
+        }
+        made = true;
+      }
+      if (!made && !did) return false;
+      g2.supplyDirty = true;
+      did = true;
     }
     if (e.liberate) {
       const L = e.liberate;
@@ -4523,6 +4672,15 @@
       for (const c of g2.corps.filter((c2) => c2.nat === X.id)) removeCorps(g2, c);
       fleetsOnFall(g2, X.id);
       airOnFall(g2, X.id);
+      if (e.partition.occupied) for (const r of g2.regions) {
+        if (r.ctrl !== X.id) continue;
+        const guest = r.units.find((u) => u.kind !== "fort" && g2.nations[u.nat]?.alive && g2.nations[u.nat].atWar.length > 0);
+        if (guest) {
+          r.ctrl = guest.nat;
+          r.cap = false;
+          r.since = g2.turn;
+        }
+      }
       let heir;
       for (const [takers, names] of e.partition.shares) {
         const to = first(takers);
@@ -4563,7 +4721,19 @@
     }
     for (const row2 of e.spawn ?? []) {
       const r = g2.byName[row2[4]];
-      if (r && r.ctrl === row2[0] && r.units.length < STACK) addCorps(g2, row2[0], row2[1], row2[2], row2[3], r.id, { hold: 1 });
+      if (!r || r.ctrl !== row2[0]) continue;
+      let at;
+      const seen = /* @__PURE__ */ new Set([r.id]);
+      for (let ring = [r], step2 = 0; ring.length && !at && step2 <= 3; step2++) {
+        at = ring.find((x) => x.units.length < STACK);
+        const next = [];
+        for (const x of ring) for (const j of x.nb) if (!seen.has(j) && g2.regions[j].ctrl === row2[0]) {
+          seen.add(j);
+          next.push(g2.regions[j]);
+        }
+        ring = next;
+      }
+      if (at) addCorps(g2, row2[0], row2[1], row2[2], row2[3], at.id, { hold: 1 });
     }
     if (!told) {
       headline(g2, "event", e.text, e.annex?.by ?? e.cede?.to ?? e.liberate?.to[0] ?? e.join?.nations[0] ?? e.partition?.nation);
@@ -4719,7 +4889,7 @@
 
   // ../../data/campaign/east.json
   var east_default = {
-    _about: "Campaigning deep inside the Soviet Union. Soviet railways use a wider gauge and roads are few, so an invader's supply thins out the further it goes: every Soviet-owned region between a corps and the frontier railheads adds 'stepFresh' to its supply line, or 'stepConverted' once the region has been held for 'convertAfter' months and the track has been relaid. 'mud' lists the months (0 is January) when the roads dissolve. Mud and winter multiply the line by 'badWeather'. 'lineDefence' is how much of that loss of strength also applies in defence. 'bands' turn the length of the line into attack strength and 'drag' into extra movement cost: [longest line, value]. In the winter months, attackers from nations without winter equipment fight at 'winter.attack', defend at 'winter.defence', lose 'winter.attrition' of their men to the cold each month, get only 'winter.rest' of their usual rest, and move one step slower on Soviet ground. 'mobilisation' is the wave of new formations a nation raises once it is at war: corps per month, counted from the month the war began, then 'after' per month. 'roads' is the extra movement cost an invader pays for every Soviet-owned region: the distances are vast and the roads are poor. Replacements and rest also reach a corps only as well as its supply line allows. 'works' are the defence lines its people dig once the war has begun: [months into the war, place, level of the works].",
+    _about: `Campaigning deep inside the Soviet Union. Soviet railways use a wider gauge and roads are few, so an invader's supply thins out the further it goes: every Soviet-owned region between a corps and the frontier railheads adds 'stepFresh' to its supply line, or 'stepConverted' once the region has been held for 'convertAfter' months and the track has been relaid. 'mud' lists the months (0 is January) when the roads dissolve. Mud and winter multiply the line by 'badWeather'. 'lineDefence' is how much of that loss of strength also applies in defence. 'bands' turn the length of the line into attack strength and 'drag' into extra movement cost: [longest line, value]. In the winter months, attackers from nations without winter equipment fight at 'winter.attack', defend at 'winter.defence', lose 'winter.attrition' of their men to the cold each month, get only 'winter.rest' of their usual rest, and move one step slower on Soviet ground. 'mobilisation' is the wave of new formations a nation raises once it is at war: corps per month, counted from the month the war began, then 'after' per month. 'roads' is the extra movement cost an invader pays for every Soviet-owned region: the distances are vast and the roads are poor. Replacements and rest also reach a corps only as well as its supply line allows. 'works' are the defence lines its people dig once the war has begun: [months into the war, place, level of the works]. 'works' are dug by history's calendar, as in desert.json and theatres.json: [month, place, level, who must hold it, the news, and optionally {"vs": the owners of the ground an attack must come from to meet them, "port": true for a harbour that supplies the place by sea}]. They are not dug in free play.`,
     deepOwners: [
       "SOV"
     ],
@@ -4830,6 +5000,12 @@
         ]
       }
     },
+    works: [
+      [54, "Pskov", 2, ["GER"], "Army Group North has fallen back from Leningrad to the Panther line, the northern end of the East Wall: bunkers and wire along the Narva river, the shore of Lake Peipus, and round Pskov and Ostrov."],
+      [54, "Estonia", 2, ["GER"], "The Narva river is the northern anchor of the Panther line. The isthmus between the Gulf of Finland and Lake Peipus is thirty miles wide, and every yard of it is covered.", { vs: ["SOV"] }],
+      [62, "Courland", 1, ["GER"], "Army Group North is cut off in Courland with its back to the Baltic. Hitler will not have it brought out: the harbours of Libau and Windau keep it fed and armed by sea.", { port: true, vs: ["LAT", "LIT", "GER"] }],
+      [63, "Budapest", 2, ["HUN", "GER"], "Budapest is to be held to the last house. The Attila line, three belts of trenches and anti-tank ditches, covers Pest on the eastern bank, and the bridges over the Danube are mined.", { vs: ["HUN", "ROM", "YUG", "SVK"] }]
+    ],
     roads: 1,
     mud: [
       10,
@@ -5054,7 +5230,7 @@
           { name: "Operation Diadem", from: 57, to: 57, posture: "attack", enemies: ["ITA", "GER"], objectives: ["Cassino"], targets: ["Cassino"], minOdds: 0.5 },
           { name: "The road to Rome", from: 58, to: 58, posture: "attack", enemies: ["ITA", "GER"], objectives: ["Cassino", "Rome"], targets: ["Cassino", "Rome", "Anzio"], minOdds: 1 },
           { name: "To the Arno, and Operation Dragoon", from: 60, to: 60, posture: "attack", enemies: ["ITA", "GER"], objectives: ["Rome", "Tuscany"], targets: ["Cassino", "Rome", "Anzio", "Tuscany"], minOdds: 1.1, landings: [{ corps: "Seventh Army: VI Corps (3rd, 36th and 45th Infantry Divisions)", with: ["French Army B: II Corps (1st Free French, 3rd Algerian and 1st Armoured Divisions)"], to: ["Marseille"], minOdds: 0.9 }] },
-          { name: "To the Arno", from: 59, to: 60, posture: "attack", enemies: ["ITA", "GER"], objectives: ["Rome", "Tuscany"], targets: ["Cassino", "Rome", "Anzio", "Tuscany"], minOdds: 1.1 },
+          { name: "To the Arno", from: 59, to: 60, posture: "attack", enemies: ["ITA", "GER"], objectives: ["Rome", "Tuscany"], targets: ["Cassino", "Rome", "Anzio", "Tuscany"], minOdds: 1.6 },
           { name: "Closing up to the Gothic Line", from: 61, to: 61, posture: "attack", enemies: ["ITA", "GER"], objectives: ["Tuscany"], targets: ["Cassino", "Rome", "Anzio", "Tuscany"], minOdds: 1.1 },
           { name: "The drive for Bologna", from: 62, to: 62, posture: "attack", enemies: ["ITA", "GER"], objectives: ["Tuscany", "Emilia"], targets: ["Cassino", "Rome", "Anzio", "Tuscany", "Emilia"], minOdds: 1.1, oddsFor: { Emilia: 0.15 }, renew: false },
           { name: "Winter in the Apennines", from: 63, to: 64, posture: "defend", quiet: true }
@@ -6301,7 +6477,7 @@
   }
   var worksDue = (g2, t) => t.opens === void 0 || g2.flags.open !== 1 && g2.turn >= t.opens;
   function desertWorks(g2, nat, closing = false) {
-    const rows = [...DESERT.works ?? [], ...THEATRE_LIST.flatMap((t) => worksDue(g2, t) ? t.works ?? [] : [])];
+    const rows = [...DESERT.works ?? [], ...g2.flags.open !== 1 ? EASTERN.works ?? [] : [], ...THEATRE_LIST.flatMap((t) => worksDue(g2, t) ? t.works ?? [] : [])];
     for (const [when, place2, lv, holders, news2, o] of rows) {
       const r = g2.byName[place2];
       if (closing && !o?.taken) continue;
@@ -6438,7 +6614,7 @@
 
   // ../../data/campaign/plan-historical.json
   var plan_historical_default = {
-    _about: "What each AI nation sets out to do in Historical mode, by turn (turn 1 is September 1939). These are intentions, not results: the armies still have to win the battles. declare lists nations the AI declares war on that turn. posture is attack, defend or redeploy. objectives are worked through in order. axis is the line the tanks are massed along. haltOrder is ground the plan leaves alone in its first month (the stop short of Dunkirk, and Paris until the second phase). lastPush names prizes that troops who close up to them late in the month go straight in against, instead of waiting a month at the gates. staging keeps a few corps at a jumping-off point. landings sends named corps across the sea, each to the first place on its list it can get ashore: an enemy coast is assaulted (only at fair odds if it is defended), an ally's port is reinforced, and the corps stays overseas until the phase ends. fleets gives named fleets their orders for the phase. minOdds lets a nation attack at worse odds than a careful staff would accept. declareWhenCollapsing waits until that nation is breaking, or has fallen. renew set to false allows each place one assault a month: an attack that is held is not sent in again until the next month.",
+    _about: "What each AI nation sets out to do in Historical mode, by turn (turn 1 is September 1939). These are intentions, not results: the armies still have to win the battles. declare lists nations the AI declares war on that turn. posture is attack, defend or redeploy. objectives are worked through in order. axis is the line the tanks are massed along. haltOrder is ground the plan leaves alone in its first month (the stop short of Dunkirk, and Paris until the second phase). lastPush names prizes that troops who close up to them late in the month go straight in against, instead of waiting a month at the gates. staging keeps a few corps at a jumping-off point. landings sends named corps across the sea, each to the first place on its list it can get ashore: an enemy coast is assaulted (only at fair odds if it is defended), an ally's port is reinforced, and the corps stays overseas until the phase ends. fleets gives named fleets their orders for the phase. minOdds lets a nation attack at worse odds than a careful staff would accept. declareWhenCollapsing waits until that nation is breaking, or has fallen. renew set to false allows each place one assault a month: an attack that is held is not sent in again until the next month. strict keeps an army to the letter of its orders: it attacks only its targets, steps into no ground the enemy has left empty beyond them, and makes no counter-attack of its own. That is written against history's enemy: ground a player holds it steps into and wins back as freely as any other army.",
     GER: [
       { from: 1, to: 2, posture: "attack", enemies: ["POL"], objectives: ["Danzig Corridor", "Polish Silesia", "Lodz", "Krakow", "Poznan", "Warsaw", "Lublin", "Przemysl", "Kielce", "Pomorze", "Mlawa"], name: "Case White" },
       { from: 3, to: 7, posture: "redeploy", assembly: ["Eifel", "Rhineland", "Westphalia", "Frankfurt", "Saar", "Ruhr", "Bremen", "Hesse", "Baden"], armour: ["Eifel", "Rhineland", "Frankfurt"], garrison: ["Warsaw", "Krakow", "Lodz", "Poznan", "Lublin"], staging: { "Schleswig-Holstein": 2 } },
@@ -6481,7 +6657,18 @@
       { from: 50, to: 50, name: "The Dnieper line", posture: "defend", quiet: true, abandon: ["Kursk", "Orel", "Kharkov", "Sumy", "Poltava", "Stalino", "Voroshilovgrad", "Novorossiysk", "Bryansk"], staging: { Kiev: 3, Dnepropetrovsk: 3, Zaporozhye: 3, Kirovograd: 2, Crimea: 2 } },
       { from: 51, to: 51, name: "The Dnieper line", posture: "defend", quiet: true, abandon: ["Kursk", "Orel", "Kharkov", "Sumy", "Poltava", "Stalino", "Voroshilovgrad", "Novorossiysk", "Bryansk"], staging: { Kiev: 3, Dnepropetrovsk: 3, Zaporozhye: 3, Kirovograd: 2, Crimea: 2 }, concentrate: { Vinnitsa: 3 } },
       { from: 52, to: 52, name: "The Zhitomir counter-stroke", posture: "attack", enemies: ["SOV"], axis: ["Zhitomir"], objectives: ["Zhitomir"], targets: ["Zhitomir"], minOdds: 1.3, renew: false, quiet: true, abandon: ["Kursk", "Orel", "Kharkov", "Sumy", "Poltava", "Stalino", "Voroshilovgrad", "Novorossiysk", "Bryansk"], staging: { Dnepropetrovsk: 3, Zaporozhye: 3, Kirovograd: 2, Crimea: 2 } },
-      { from: 53, to: 99, posture: "defend" }
+      { from: 53, to: 53, name: "The winter battles", posture: "defend", quiet: true, strict: true },
+      { from: 54, to: 54, name: "The Panther line", posture: "defend", quiet: true, strict: true },
+      { from: 55, to: 55, name: "The retreat to the Dniester", posture: "defend", quiet: true, strict: true },
+      { from: 56, to: 56, name: "The retreat to the Dniester", posture: "defend", quiet: true, strict: true },
+      { from: 57, to: 57, name: "Waiting for the summer", posture: "defend", quiet: true, strict: true },
+      { from: 58, to: 58, name: "The fortified places", posture: "defend", quiet: true, strict: true, staging: { Vitebsk: 3, Mogilev: 4 } },
+      { from: 59, to: 59, name: "Army Group Centre is gone", posture: "defend", quiet: true, strict: true, abandon: ["Polotsk", "Polesie", "Wilno", "Pskov"] },
+      { from: 60, to: 60, name: "The Vistula line", posture: "defend", quiet: true, strict: true, abandon: ["Polotsk", "Polesie", "Wilno", "Pskov", "Brest", "Bialystok", "Lublin", "Lwow", "Przemysl", "Lithuania"], staging: { Warsaw: 3, Kielce: 2, Masuria: 2, Bessarabia: 3 } },
+      { from: 61, to: 61, name: "The Vistula line", posture: "defend", quiet: true, strict: true, abandon: ["Estonia"], staging: { Warsaw: 3, Kielce: 2, Masuria: 2 } },
+      { from: 62, to: 62, name: "Courland and the Carpathians", posture: "defend", quiet: true, strict: true, abandon: ["Estonia", "Latvia", "Memel"], staging: { Warsaw: 3, Kielce: 2, Masuria: 3, Courland: 4, Budapest: 2 } },
+      { from: 63, to: 63, name: "Budapest", posture: "defend", quiet: true, strict: true, staging: { Warsaw: 3, Kielce: 2, Masuria: 3, Courland: 4, Budapest: 3 } },
+      { from: 64, to: 99, name: "Budapest", posture: "defend", quiet: true, strict: true, staging: { Warsaw: 3, Kielce: 2, Masuria: 3, Courland: 4, Budapest: 3 } }
     ],
     ITA: [
       { from: 9, to: 99, posture: "attack", declareWhenCollapsing: "FRA", collapseAt: 0.07, declare: ["FRA", "UK"], enemies: ["FRA"], objectives: ["Riviera", "Savoy"], minOdds: 0.9 }
@@ -6519,15 +6706,28 @@
       { from: 42, to: 42, name: "To the Donets and Kharkov", posture: "attack", enemies: ["GER"], objectives: ["Rostov", "Voroshilovgrad", "Kursk", "Kharkov", "Kuban", "Kalach", "Millerovo", "Voronezh", "Salsk", "Stavropol", "Maikop", "Terek"], targets: ["Rostov", "Voroshilovgrad", "Kursk", "Kharkov", "Kuban", "Kalach", "Millerovo", "Voronezh", "Salsk", "Stavropol", "Maikop", "Terek", "Don Bend", "Kalmyk Steppe"], minOdds: 1.2 },
       { from: 43, to: 45, posture: "defend" },
       { from: 46, to: 46, name: "Digging in round Kursk", posture: "defend", quiet: true, staging: { Kursk: 8, Voronezh: 6 } },
-      { from: 47, to: 47, name: "Operation Kutuzov", posture: "attack", enemies: ["GER"], objectives: ["Orel", "Kursk"], targets: ["Orel", "Kursk"], minOdds: 1.2, release: ["Kursk", "Moscow"] },
-      { from: 48, to: 48, name: "Operation Rumyantsev", posture: "attack", enemies: ["GER"], objectives: ["Kharkov", "Orel", "Sumy", "Vyazma", "Rzhev"], targets: ["Kharkov", "Orel", "Sumy", "Vyazma", "Rzhev", "Kursk"], minOdds: 1.2 },
-      { from: 49, to: 49, name: "The race for the Dnieper", posture: "attack", enemies: ["GER"], objectives: ["Bryansk", "Smolensk", "Stalino", "Poltava", "Sumy", "Chernigov", "Novorossiysk", "Kharkov", "Orel", "Vyazma", "Rzhev", "Voroshilovgrad"], targets: ["Bryansk", "Smolensk", "Stalino", "Poltava", "Sumy", "Chernigov", "Novorossiysk", "Kharkov", "Orel", "Vyazma", "Rzhev", "Voroshilovgrad", "Kursk"], minOdds: 1.2 },
-      { from: 50, to: 50, name: "Across the Dnieper", posture: "attack", enemies: ["GER"], objectives: ["Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Novorossiysk", "Stalino", "Sumy", "Kharkov", "Orel", "Vyazma", "Rzhev"], targets: ["Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Novorossiysk", "Stalino", "Sumy", "Kharkov", "Orel", "Vyazma", "Rzhev", "Voroshilovgrad", "Kursk"], minOdds: 1.2 },
-      { from: 51, to: 52, name: "Kiev", posture: "attack", enemies: ["GER"], objectives: ["Kiev", "Gomel", "Zhitomir", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Novorossiysk", "Stalino", "Sumy", "Kharkov", "Orel", "Vyazma", "Rzhev"], targets: ["Kiev", "Gomel", "Zhitomir", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Novorossiysk", "Stalino", "Sumy", "Kharkov", "Orel", "Vyazma", "Rzhev", "Voroshilovgrad", "Kursk"], minOdds: 1.2, oddsFor: { Kiev: 1 } },
-      { from: 53, to: 99, posture: "defend" }
+      { from: 47, to: 47, name: "Operation Kutuzov", posture: "attack", enemies: ["GER"], objectives: ["Orel", "Kursk"], targets: ["Orel", "Kursk"], minOdds: 1.2, release: ["Kursk", "Moscow"], strict: true },
+      { from: 48, to: 48, name: "Operation Rumyantsev", posture: "attack", enemies: ["GER"], objectives: ["Kharkov", "Orel", "Sumy", "Vyazma", "Rzhev"], targets: ["Kharkov", "Orel", "Sumy", "Vyazma", "Rzhev", "Kursk"], minOdds: 1.2, strict: true },
+      { from: 49, to: 49, name: "The race for the Dnieper", posture: "attack", enemies: ["GER"], objectives: ["Bryansk", "Smolensk", "Stalino", "Poltava", "Sumy", "Chernigov", "Novorossiysk", "Kharkov", "Orel", "Vyazma", "Rzhev", "Voroshilovgrad"], targets: ["Bryansk", "Smolensk", "Stalino", "Poltava", "Sumy", "Chernigov", "Novorossiysk", "Kharkov", "Orel", "Vyazma", "Rzhev", "Voroshilovgrad", "Kursk"], minOdds: 1.2, strict: true },
+      { from: 50, to: 50, name: "Across the Dnieper", posture: "attack", enemies: ["GER"], objectives: ["Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Novorossiysk", "Stalino", "Sumy", "Kharkov", "Orel", "Vyazma", "Rzhev"], targets: ["Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Novorossiysk", "Stalino", "Sumy", "Kharkov", "Orel", "Vyazma", "Rzhev", "Voroshilovgrad", "Kursk"], minOdds: 1.2, strict: true },
+      { from: 51, to: 52, name: "Kiev", posture: "attack", enemies: ["GER"], objectives: ["Kiev", "Gomel", "Zhitomir", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Novorossiysk", "Stalino", "Sumy", "Kharkov", "Orel", "Vyazma", "Rzhev"], targets: ["Kiev", "Gomel", "Zhitomir", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Novorossiysk", "Stalino", "Sumy", "Kharkov", "Orel", "Vyazma", "Rzhev", "Voroshilovgrad", "Kursk"], minOdds: 1.2, oddsFor: { Kiev: 1 }, strict: true },
+      { from: 53, to: 53, name: "The relief of Leningrad, and Kirovograd", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true },
+      { from: 54, to: 54, name: "Rovno and Lutsk", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true },
+      { from: 55, to: 55, name: "The mud offensive", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true },
+      { from: 56, to: 56, name: "Odessa", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true },
+      { from: 57, to: 57, name: "The Crimea", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true },
+      { from: 58, to: 58, name: "Vyborg, and Operation Bagration", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK", "FIN"], objectives: ["Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true },
+      { from: 59, to: 59, name: "The destruction of Army Group Centre", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true },
+      { from: 60, to: 60, name: "To the Vistula, and Jassy", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true },
+      { from: 61, to: 61, name: "The Balkans and the Baltic", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Bessarabia", "Ploiesti", "Bucharest", "Dobruja", "Oltenia", "Estonia", "Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Bessarabia", "Ploiesti", "Bucharest", "Dobruja", "Oltenia", "Estonia", "Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true, release: ["Bucharest", "Sofia"] },
+      { from: 62, to: 62, name: "Riga, Memel, Debrecen and Belgrade", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Latvia", "Memel", "Transylvania", "Banat", "Debrecen", "Belgrade", "Bessarabia", "Ploiesti", "Bucharest", "Dobruja", "Oltenia", "Estonia", "Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Latvia", "Memel", "Transylvania", "Banat", "Debrecen", "Belgrade", "Bessarabia", "Ploiesti", "Bucharest", "Dobruja", "Oltenia", "Estonia", "Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true, release: ["Bucharest", "Sofia"] },
+      { from: 63, to: 63, name: "The road to Budapest", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Budapest", "Latvia", "Memel", "Transylvania", "Banat", "Debrecen", "Belgrade", "Bessarabia", "Ploiesti", "Bucharest", "Dobruja", "Oltenia", "Estonia", "Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Budapest", "Latvia", "Memel", "Transylvania", "Banat", "Debrecen", "Belgrade", "Bessarabia", "Ploiesti", "Bucharest", "Dobruja", "Oltenia", "Estonia", "Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true, oddsFor: { Budapest: 0.4 }, renew: false },
+      { from: 64, to: 64, name: "The siege of Budapest", posture: "attack", enemies: ["GER", "ROM", "HUN", "SVK"], objectives: ["Budapest", "Latvia", "Memel", "Transylvania", "Banat", "Debrecen", "Belgrade", "Bessarabia", "Ploiesti", "Bucharest", "Dobruja", "Oltenia", "Estonia", "Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], targets: ["Budapest", "Latvia", "Memel", "Transylvania", "Banat", "Debrecen", "Belgrade", "Bessarabia", "Ploiesti", "Bucharest", "Dobruja", "Oltenia", "Estonia", "Lithuania", "Moldavia", "Mogilev", "Polotsk", "Wilno", "Polesie", "Lwow", "Lublin", "Brest", "Pskov", "Bialystok", "Przemysl", "Vitebsk", "Minsk", "Karelia", "Crimea", "Odessa", "Uman", "Vinnitsa", "Nikolaev", "Bukovina", "Volhynia", "Novgorod", "Kirovograd", "Kiev", "Zhitomir", "Gomel", "Zaporozhye", "Dnepropetrovsk", "Smolensk", "Bryansk", "Chernigov", "Poltava", "Tikhvin", "Kalinin"], minOdds: 1.2, strict: true, oddsFor: { Budapest: 0.6 }, renew: false },
+      { from: 65, to: 99, name: "Gathering on the Vistula", posture: "defend", quiet: true, strict: true }
     ],
     ROM: [
-      { from: 22, to: 99, name: "With Germany into Russia", posture: "attack", ifAtWar: ["GER", "SOV"], declare: ["SOV"], enemies: ["SOV"], objectives: ["Bessarabia", "Bukovina", "Odessa"], minOdds: 1.3 }
+      { from: 22, to: 52, name: "With Germany into Russia", posture: "attack", ifAtWar: ["GER", "SOV"], declare: ["SOV"], enemies: ["SOV"], objectives: ["Bessarabia", "Bukovina", "Odessa"], minOdds: 1.3 },
+      { from: 53, to: 99, name: "Holding the Dniester and the Carpathians", posture: "defend", ifAtWar: ["GER", "SOV"], quiet: true, strict: true }
     ],
     HUN: [
       { from: 22, to: 99, posture: "defend", ifAtWar: ["GER", "SOV"], declare: ["SOV"] }
@@ -6536,7 +6736,7 @@
       { from: 22, to: 99, posture: "defend", ifAtWar: ["GER", "SOV"], declare: ["SOV"] }
     ],
     FIN: [
-      { from: 22, to: 99, posture: "defend", ifAtWar: ["GER", "SOV"], declare: ["SOV"] }
+      { from: 22, to: 60, posture: "defend", ifAtWar: ["GER", "SOV"], declare: ["SOV"] }
     ]
   };
 
@@ -7126,10 +7326,12 @@
   var leaving = null;
   var entrusted = /* @__PURE__ */ new Set();
   var masked = /* @__PURE__ */ new Set();
+  var bound2 = null;
   var massed = /* @__PURE__ */ new Set();
   var given = /* @__PURE__ */ new Set();
   var aside = (g2, r, nat) => r.theatre >= 0 && !!THEATRES[r.theatre] && apart(g2, r.theatre, nat);
   var within = (r) => !scope || scope.has(r.id);
+  var allowed = (g2, r) => !bound2 || bound2.has(r.name) || r.ctrl === g2.human;
   var COUNTER_WINDOW = 2;
   function theatrePhase(g2, nat, list2) {
     const ours = (nm) => {
@@ -7258,6 +7460,7 @@
     given = new Set((ph?.abandon ?? []).map((nm) => g2.byName[nm]?.id).filter((id) => id !== void 0));
     quiet = !!ph?.quiet;
     single = ph?.renew === false;
+    bound2 = ph?.strict ? new Set(ph.targets ?? []) : null;
     try {
       fight(g2, nat, ph, posture);
     } finally {
@@ -7266,6 +7469,7 @@
       given = /* @__PURE__ */ new Set();
       quiet = false;
       single = false;
+      bound2 = null;
     }
   }
   function handedOver(g2, nat, ph) {
@@ -7785,7 +7989,7 @@
       if (!mine(here)) continue;
       if (!(scope && quiet)) {
         const others = friendlyUnits(g2, here, nat).length > 1 || threat[here.id] === 0;
-        const gap = here.nb.map((j) => g2.regions[j]).find((r) => atWar(g2, nat, r.ctrl) && lost(r) && !late(r) && !hostileUnits(g2, r, nat).length && c.ap >= Math.min(moveCost(g2, c, r), 4));
+        const gap = here.nb.map((j) => g2.regions[j]).find((r) => atWar(g2, nat, r.ctrl) && lost(r) && !late(r) && !hostileUnits(g2, r, nat).length && c.ap >= Math.min(moveCost(g2, c, r), 4) && (allowed(g2, r) || forsaken(g2, nat, r)));
         if (gap && others && moveCorps(g2, c, gap)) continue;
       }
       if (line && !n.slowCommand && friendlyUnits(g2, here, nat).length >= 3) {
@@ -7829,11 +8033,25 @@
     for (const r of g2.regions) {
       if (!n.alive || quiet) return;
       if (scope && !scope.has(r.id)) continue;
-      if (!atWar(g2, nat, r.ctrl) || !lost(r) || late(r) || g2.turn - r.since > COUNTER_WINDOW || !hostileUnits(g2, r, nat).length) continue;
+      if (!atWar(g2, nat, r.ctrl) || !lost(r) || late(r) || g2.turn - r.since > COUNTER_WINDOW || !hostileUnits(g2, r, nat).length || !allowed(g2, r)) continue;
       const kept = isOpen(g2) ? massed : null;
       const pool = limitAttackers(g2, g2.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== "fort" && c.ap > 0 && !c.fought && c.org >= 0.6 && !kept?.has(c.id) && g2.regions[c.reg].nb.includes(r.id)), r);
       if (pool.length && assess(g2, pool, r).odds >= 1.8) resolveBattle(g2, pool, r, scope ? { occupy: 2 } : {});
     }
+  }
+  function forsaken(g2, nat, r) {
+    const seen = /* @__PURE__ */ new Set([r.id]);
+    const q = [r.id];
+    for (let i = 0; i < q.length; i++) {
+      if (q.length > 12) return false;
+      const x = g2.regions[q[i]];
+      if (hostileUnits(g2, x, nat).length) return false;
+      for (const j of x.nb) if (!seen.has(j) && atWar(g2, nat, g2.regions[j].ctrl)) {
+        seen.add(j);
+        q.push(j);
+      }
+    }
+    return true;
   }
   function walkToward(g2, c, to) {
     const d = hops(g2, to.id, (r) => allied(g2, c.nat, r.ctrl) && within(r) && (r.id === c.reg || friendlyUnits(g2, r, c.nat).length < STACK));
@@ -8329,9 +8547,28 @@
   }
 
   // Rules/starts.ts
+  var GRAND_YEARS = [
+    { year: "1939", title: "September 1939", from: 1, note: "Germany has attacked Poland, and Britain and France have declared war. Everything after that is still to be decided." },
+    { year: "1940", title: "May 1940", from: 9, note: "Poland has fallen and Norway is being fought over. The armies in the West have watched each other all winter." },
+    { year: "1941", title: "June 1941", from: 22, note: "France has fallen and Britain fights on. Three German army groups stand on the Soviet frontier." },
+    { year: "1942", title: "June 1942", from: 34, note: "The United States is in the war. Germany gathers its tanks in the south of Russia, and Rommel is at the gates of Tobruk." },
+    { year: "1943", title: "July 1943", from: 47, note: "Stalingrad and Africa are lost to the Axis. The tanks face each other round Kursk, and an invasion fleet waits at Malta." },
+    { year: "1944", title: "June 1944", from: 58, note: "The Allies are about to land in France, and four Soviet fronts are ready in Byelorussia." }
+  ];
+  var GRAND_BLURBS = {
+    GER: "The best army in Europe, and enemies gathering on every side. Where it strikes next, and when, is up to you.",
+    UK: "A small army, the largest navy in the world, and an empire to hold together. Outlast them, then come back.",
+    FRA: "A large army behind strong works, and a slow command. Hold the line, or do what history did not.",
+    SOV: "Endless country, endless men, and an army still learning its trade. Bide your time, or march first.",
+    USA: "The greatest industry on earth, an ocean away from the war. Its armies come by convoy.",
+    ITA: "An army spread from the Alps to Africa, and a sea to make your own. Pick your moment and your side.",
+    JAP: "An empire of islands with a great fleet and a long war in China. Strike before the oil runs out.",
+    CHN: "A vast country, half of it lost, with an army that will not give in. Hold on, and wear the invader down.",
+    POL: "Outnumbered and nearly surrounded. Hold on long enough and the rest of the war is yours to write."
+  };
   var STARTS = [
     {
-      title: "September 1939 · The war begins",
+      title: "September 1939 · The war begins, as history planned it",
       from: 1,
       view: "",
       sides: [
@@ -8340,20 +8577,6 @@
         { nat: "UK", name: "United Kingdom", blurb: "A small army, the largest navy in the world, and convoys to keep alive." },
         { nat: "POL", name: "Poland", blurb: "Outnumbered and nearly surrounded. You place your army on the eve of war, then hold as long as you can." },
         { nat: null, name: "Watch history unfold", blurb: "Every nation follows its plan. End the month and watch Poland, then the West, then the East." }
-      ]
-    },
-    {
-      title: "September 1939 · Free play: make your own history",
-      from: 1,
-      view: "open",
-      sides: [
-        { nat: "GER", name: "Germany", blurb: "At war with Poland, Britain and France. Where you go next, and when, is up to you." },
-        { nat: "UK", name: "United Kingdom", blurb: "Nobody knows what Germany will do this time. Neither do you." },
-        { nat: "FRA", name: "France", blurb: "The blow may fall in the spring, in a year, or somewhere else first. Be ready, or strike first." },
-        { nat: "POL", name: "Poland", blurb: "The first month is the one history wrote. Survive it and the rest is yours." },
-        { nat: "ITA", name: "Italy", blurb: "Neutral, with an army in Libya and Albania. Pick your moment and your side of the Mediterranean." },
-        { nat: "SOV", name: "Soviet Union", blurb: "At peace behind a pact. Build the Red Army and wait, or march before Germany does." },
-        { nat: null, name: "Watch a war nobody has seen", blurb: "The war begins as it did. After that no nation follows history: each one's staff decides for itself, and no two wars come out the same." }
       ]
     },
     {
@@ -8447,12 +8670,42 @@
       ]
     },
     {
+      title: "January 1944 · The eastern front, from Leningrad to the Danube",
+      from: 53,
+      view: "east",
+      sides: [
+        { nat: "SOV", name: "Soviet Union", blurb: "You have the men, the guns and the initiative on every part of the front. History freed Leningrad in January, the Ukraine by April, Minsk in July and Bucharest in August. Choose where each blow falls, and do not let the armies you cut off get away." },
+        { nat: "GER", name: "Germany", blurb: "A front of two thousand kilometres, too few divisions to hold it, and orders to give up nothing. Italy has to be held as well, and the landing in France is coming in the summer. Decide what to give up while it is still yours to give." },
+        { nat: null, name: "Watch the Red Army's year", blurb: "The computer plays the first 52 months, then the relief of Leningrad, the spring offensive through the mud of the Ukraine, the Crimea, the destruction of Army Group Centre in the summer, Romania and Finland leaving the war, and the road to Budapest." }
+      ]
+    },
+    {
       title: "January 1944 · Anzio and the road to Rome",
       from: 53,
       view: "italy",
       sides: [
         { nat: "UK", name: "United Kingdom", blurb: "The Eighth Army holds the Adriatic end of a front that has not moved since October, and the Americans are about to land behind it at Anzio. Monte Cassino bars the one good road to Rome. Decide when to break yourself against it, and when to wait for the spring." },
         { nat: null, name: "Watch Anzio, Cassino and Rome", blurb: "The computer plays the first 52 months, then the landing at Anzio, the four battles for Monte Cassino, the fall of Rome in June, the pursuit to Florence and the autumn battles on the Gothic Line." }
+      ]
+    },
+    {
+      title: "May 1944 · Overlord and the liberation of France",
+      from: 57,
+      view: "west",
+      sides: [
+        { nat: "UK", name: "United Kingdom", blurb: "Two corps wait on the quays in Hampshire and the Americans beside you have a beach of their own. Win the sky over Normandy in May, land in June, and hold the German armour on your front while the Americans break out. Then see how far a single road to Arnhem will take you." },
+        { nat: "GER", name: "Germany", blurb: "Some fifty divisions stand behind the Atlantic Wall and nobody can tell you which beach. The panzers can wait close to the coast or well back from it, not both. And every division kept in France is one the eastern front will not have when the Soviet summer offensive opens." },
+        { nat: null, name: "Watch D-Day and the drive to the Rhine", blurb: "The computer plays the first 56 months, then the air battle over the beaches, D-Day in June, the breakout and the liberation of Paris in August, Brussels and Antwerp, Market Garden, the West Wall, and the Ardennes offensive in December." }
+      ]
+    },
+    {
+      title: "June 1944 · Operation Bagration",
+      from: 58,
+      view: "east",
+      sides: [
+        { nat: "SOV", name: "Soviet Union", blurb: "The landing in France is days away and the German tanks have gone south, where they expect you. Four fronts are ready in Byelorussia. Break the fortified places at Vitebsk and Mogilev, close the ring at Minsk, and see how far the summer will carry you." },
+        { nat: "GER", name: "Germany", blurb: "Army Group Centre holds a great bulge round Minsk, its tanks have been sent south, and the fortified places are to be held to the last man. The Allies are about to land in France. You have a few weeks to decide what can be saved." },
+        { nat: null, name: "Watch Bagration", blurb: "The computer plays the first 57 months, then the blow that destroyed Army Group Centre: Vitebsk and Minsk in June, the Bug and the Vistula in July, the Warsaw rising, and Romania changing sides as the summer ends." }
       ]
     }
   ];
@@ -8590,6 +8843,7 @@
   }
   function starts() {
     return {
+      years: GRAND_YEARS,
       groups: STARTS.map((group) => ({
         ...group,
         sides: group.sides.map((side) => ({
@@ -8602,14 +8856,63 @@
       }))
     };
   }
+  var histories = /* @__PURE__ */ new Map();
+  function historyTo(from, seed) {
+    const key = `${from}:${seed}`;
+    let text = histories.get(key);
+    if (!text) {
+      const h = createGame(seed, null);
+      while (h.turn < from) runTurnAI(h);
+      text = saveGame(h);
+      histories.clear();
+      histories.set(key, text);
+    }
+    const loaded = loadGame(text);
+    if (!loaded) throw new Error("History could not be read back");
+    return loaded;
+  }
+  function grandGame(from, seed, human) {
+    if (from <= 1) return startOpen(createGame(seed, human));
+    const h = historyTo(from, seed);
+    h.flags.open = 1;
+    return h;
+  }
+  function grand(from = 1, seed = 1939) {
+    const h = grandGame(from, seed, null);
+    const order = Object.keys(GRAND_BLURBS);
+    const nations = Object.entries(h.nations).filter(([, n]) => n.alive).map(([nat, n]) => {
+      const foes = Object.keys(h.nations).filter((other) => other !== nat && h.nations[other].alive && atWar(h, nat, other));
+      return {
+        nat,
+        name: n.name,
+        major: order.includes(nat),
+        blurb: GRAND_BLURBS[nat] ?? "",
+        standing: foes.length ? `At war with ${listNames(foes.map((f) => h.nations[f].name))}` : "At peace",
+        corps: h.corps.filter((c) => c.nat === nat).length,
+        regions: h.regions.filter((r) => r.ctrl === nat).length
+      };
+    }).filter((n) => n.corps > 0 || n.regions > 0).sort((a, b) => a.major === b.major ? a.major ? order.indexOf(a.nat) - order.indexOf(b.nat) : a.name.localeCompare(b.name) : a.major ? -1 : 1);
+    return { from, nations };
+  }
+  function listNames(names) {
+    if (names.length <= 2) return names.join(" and ");
+    if (names.length > 4) return `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
+    return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  }
   function start(options) {
     const human = options?.human === void 0 ? "GER" : options.human;
     const from = options?.from ?? 1;
+    const seed = options?.seed ?? 1939;
     fallenNation = null;
-    g = createGame(options?.seed ?? 1939, from > 1 ? null : human);
-    if (options?.view === "open") startOpen(g);
-    while (g.turn < from) runTurnAI(g);
+    if (options?.view === "grand") {
+      g = grandGame(from, seed, human);
+    } else {
+      g = createGame(seed, from > 1 ? null : human);
+      if (options?.view === "open") startOpen(g);
+      while (g.turn < from) runTurnAI(g);
+    }
     g.human = human;
+    if (from > 1) takeOver(g);
     if (human) {
       openGoals(g, human, from);
       if (!(from === 1 && beginEve(g))) {
@@ -8887,6 +9190,7 @@
     fortify,
     cancel,
     starts,
+    grand,
     start,
     save,
     peek,

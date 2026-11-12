@@ -110,6 +110,20 @@ TArray<FStartGroup> FCampaignSession::Starts()
 		Side.Name = TEXT("Germany");
 		return Out;
 	}
+	Years.Reset();
+	const TArray<TSharedPtr<FJsonValue>>* YearValues = nullptr;
+	if (Object->TryGetArrayField(TEXT("years"), YearValues))
+	{
+		for (const TSharedPtr<FJsonValue>& YearValue : *YearValues)
+		{
+			const TSharedPtr<FJsonObject> YearObject = YearValue->AsObject();
+			FGrandYear& Year = Years.AddDefaulted_GetRef();
+			YearObject->TryGetStringField(TEXT("year"), Year.Year);
+			YearObject->TryGetStringField(TEXT("title"), Year.Title);
+			YearObject->TryGetStringField(TEXT("note"), Year.Note);
+			YearObject->TryGetNumberField(TEXT("from"), Year.From);
+		}
+	}
 	for (const TSharedPtr<FJsonValue>& GroupValue : Object->GetArrayField(TEXT("groups")))
 	{
 		const TSharedPtr<FJsonObject> GroupObject = GroupValue->AsObject();
@@ -130,15 +144,43 @@ TArray<FStartGroup> FCampaignSession::Starts()
 	return Out;
 }
 
-bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, FString& OutError)
+TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
+{
+	TArray<FGrandNation> Out;
+	FString Json, Error;
+	TSharedPtr<FJsonObject> Object;
+	const double Began = FPlatformTime::Seconds();
+	if (!bReady || !Host->Call(TEXT("grand"), FString::Printf(TEXT("[%d,%d]"), From, Seed), Json, Error)
+		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
+	{
+		UE_LOG(LogTheater, Warning, TEXT("The rules could not say who can be led from month %d: %s"), From, *Error);
+		return Out;
+	}
+	for (const TSharedPtr<FJsonValue>& Value : Object->GetArrayField(TEXT("nations")))
+	{
+		const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+		FGrandNation& Nation = Out.AddDefaulted_GetRef();
+		Entry->TryGetStringField(TEXT("nat"), Nation.Nation);
+		Entry->TryGetStringField(TEXT("name"), Nation.Name);
+		Entry->TryGetStringField(TEXT("blurb"), Nation.Blurb);
+		Entry->TryGetStringField(TEXT("standing"), Nation.Standing);
+		Entry->TryGetBoolField(TEXT("major"), Nation.bMajor);
+		Entry->TryGetNumberField(TEXT("corps"), Nation.Corps);
+		Entry->TryGetNumberField(TEXT("regions"), Nation.Regions);
+	}
+	UE_LOG(LogTheater, Display, TEXT("Grand campaign from month %d: %d countries can be led (worked out in %.0f ms)"), From, Out.Num(), (FPlatformTime::Seconds() - Began) * 1000.0);
+	return Out;
+}
+
+bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError)
 {
 	bRunning = false;
 	if (!bReady && !Prepare(OutError))
 	{
 		return false;
 	}
-	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s}]"),
-		Human.IsEmpty() ? TEXT("null") : *JsonQuote(Human), From, *JsonQuote(ViewMode));
+	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d}]"),
+		Human.IsEmpty() ? TEXT("null") : *JsonQuote(Human), From, *JsonQuote(ViewMode), Seed);
 	FString ViewJson;
 	if (!Host->Call(TEXT("start"), Arguments, ViewJson, OutError))
 	{

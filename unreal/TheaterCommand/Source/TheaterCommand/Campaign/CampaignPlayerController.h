@@ -54,6 +54,8 @@ struct FArmyTray
 	TArray<FTrayCard> Cards;
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
+	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
+	FText Hint; // what to do next, in a line
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
 };
 
@@ -195,6 +197,12 @@ public:
 	 */
 	void OrderTo(int32 RegionId, const FVector* CarriedFrom = nullptr);
 
+	/** A click on a territory, as the mouse makes it: for scripts. */
+	void ClickRegion(int32 RegionId) { ClickOnTable(nullptr, RegionId); }
+
+	/** Sends the army in hand to the place that was clicked once and is waiting for the word. */
+	void ConfirmPending();
+
 	/** Sends the attack shown on the face-off in. */
 	void ConfirmAttack();
 
@@ -236,6 +244,7 @@ private:
 	bool CanPickUp(const AArmyPiece* Piece) const;
 	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);
 	bool Hold(AArmyPiece* Piece);
+	void SetPending(int32 RegionId);
 	void DropArmy(int32 RegionId, bool bOnTable);
 	void WatchNextStep();
 	void FinishMonth();
@@ -255,6 +264,8 @@ private:
 	TArray<int32> PickedCorps;
 	TArray<FReachRegion> Reach;
 	int32 RouteTarget = INDEX_NONE;
+	int32 PendingTarget = INDEX_NONE; // ground clicked once with an army in hand: a second click, or the button, sends it there
+	bool bHeldWasInHand = false; // the flag pressed was already the army in hand, so a plain click on it puts it down
 	TWeakObjectPtr<AArmyPiece> RingedPiece;
 	TWeakObjectPtr<AArmyPiece> HoverPiece; // the piece the pointer rests on, if it can be picked up
 	TWeakObjectPtr<AArmyPiece> HeldPiece; // the piece the left button went down on

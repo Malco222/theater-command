@@ -31,8 +31,11 @@ public:
 	/** The campaign being played: the rules, and the latest picture of the war. */
 	FCampaignSession* GetSession() const { return Session.Get(); }
 
-	/** Starts a new campaign and lays its armies on the table. Human is empty to watch. */
-	bool StartCampaign(const FString& Human, int32 From, const FString& ViewMode);
+	/**
+	 * Starts a new campaign and lays its armies on the table. Human is empty to watch. Seed sets the dice:
+	 * the same seed gives the same war as long as the same orders are given.
+	 */
+	bool StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed = 1939);
 
 	/** Picks up the campaign saved on this computer. */
 	bool ContinueCampaign();

@@ -141,7 +141,8 @@ namespace
 					// The date plate.
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(24.0f)
 					[
-						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(20.0f, 12.0f, 26.0f, 14.0f)).Visibility(EVisibility::HitTestInvisible)
+						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(20.0f, 12.0f, 26.0f, 14.0f))
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the plate is not the map
 						[
 							SNew(SVerticalBox)
 							+ SVerticalBox::Slot().AutoHeight()
@@ -234,10 +235,11 @@ namespace
 						SNew(SBox).WidthOverride(400.0f)
 						.Visibility_Lambda([this]()
 						{
-							return Controller.IsValid() && !Controller->GetDispatches().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+							return Controller.IsValid() && !Controller->GetDispatches().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed;
 						})
 						[
 							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(20.0f, 14.0f, 20.0f, 16.0f))
+							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the news is not the map
 							[
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight()
@@ -361,8 +363,8 @@ namespace
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 8.0f, 0.0f)
 								[
-									SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Faint)
-									.Text(FText::FromString(TEXT("Click lightened ground to send them there, or drag the flag to it. Click a card to leave that corps behind.")))
+									SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted)
+									.Text_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? Info->Hint : FText::GetEmpty(); })
 								]
 							]
 						]
@@ -376,7 +378,7 @@ namespace
 						.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army, then click or drag it where it should go    Enter: end the month    M: music")))
+							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army. Click where it should go, twice, or drag the flag there    Esc: put it down    Enter: end the month    M: music")))
 							.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
 						]
 					]
@@ -813,6 +815,23 @@ namespace
 				TrayOrders->AddSlot().AutoWidth()
 				[
 					OrderButton(TEXT("BY RAIL"), Army.bByRail, [this]() { if (Controller.IsValid()) { Controller->ToggleRail(); } })
+				];
+				// The place clicked once and waiting for the word, and the way to let the army go.
+				TrayOrders->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
+				if (!Army.PendingButton.IsEmpty())
+				{
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 6.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(14.0f, 4.0f)).IsFocusable(false)
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ConfirmPending(); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Army.PendingButton).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(BrightBrass)
+						]
+					];
+				}
+				TrayOrders->AddSlot().AutoWidth().Padding(Army.PendingButton.IsEmpty() ? 22.0f : 0.0f, 0.0f, 8.0f, 0.0f)
+				[
+					OrderButton(TEXT("PUT DOWN"), false, [this]() { if (Controller.IsValid()) { Controller->PutDownArmy(); } })
 				];
 
 				Cards->ClearChildren();

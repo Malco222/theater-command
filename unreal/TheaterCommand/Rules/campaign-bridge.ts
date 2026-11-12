@@ -7,8 +7,9 @@
 //
 // The Unreal side calls these by name through a global object, TC:
 //
-//   TC.starts()                         -> { groups: [{ title, from, view, sides: [{ nat, name, blurb, aims }] }] }
-//   TC.start({ human, from, view, seed }) -> view
+//   TC.starts()                         -> { years: [{ year, title, from, note }], groups: [{ title, from, view, sides: [{ nat, name, blurb, aims }] }] }
+//   TC.grand(from, seed)                -> { from, nations: [{ nat, name, major, blurb, standing, corps, regions }] }: who can be led in the grand campaign from that month
+//   TC.start({ human, from, view, seed }) -> view. view 'grand' is the grand campaign: history up to `from`, and free play after it
 //   TC.save()                           -> { text }: the whole campaign as text
 //   TC.peek(text)                       -> { human, name, date, open } for a saved campaign, or null
 //   TC.load(text)                       -> view, or null if the save cannot be read
@@ -35,12 +36,12 @@ import {
 } from '../../../src/campaign/turn';
 import { PRODUCTION, canRaise, fortCost, income, isHome } from '../../../src/campaign/economy';
 import { generalOf, rankOf } from '../../../src/campaign/commanders';
-import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat } from '../../../src/campaign/stories';
+import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND } from '../../../src/campaign/types';
 import { GOALS, GOAL_KEYS, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
-import { STARTS } from './starts';
+import { GRAND_BLURBS, GRAND_YEARS, STARTS } from './starts';
 import { turnToDate } from '../../../src/core/ticket';
 import type { BattleReport, Build, Corps, Game, Kind, Posture } from '../../../src/campaign/types';
 
@@ -170,6 +171,7 @@ function arrive(s: Game): string | null {
 /** The places a campaign can begin, with each playable nation's aims for the campaigns that start in September 1939. */
 function starts() {
   return {
+    years: GRAND_YEARS,
     groups: STARTS.map((group) => ({
       ...group,
       sides: group.sides.map((side) => ({
@@ -185,15 +187,79 @@ function starts() {
   };
 }
 
+/** History played by the computer up to a month, kept as saved text so that it is only played once. */
+const histories = new Map<string, string>();
+
+function historyTo(from: number, seed: number): Game {
+  const key = `${from}:${seed}`;
+  let text = histories.get(key);
+  if (!text) {
+    const h = createGame(seed, null);
+    while (h.turn < from) runTurnAI(h);
+    text = saveGame(h);
+    histories.clear(); // one is enough to keep: the player is choosing a country for one day
+    histories.set(key, text);
+  }
+  const loaded = loadGame(text);
+  if (!loaded) throw new Error('History could not be read back');
+  return loaded;
+}
+
+/** The war as the grand campaign finds it on the first day of a month: history up to then, nobody at the controls. */
+function grandGame(from: number, seed: number, human: string | null): Game {
+  // September 1939 is free play from the first day. A later year is history up to the day the player takes
+  // over, and from that day no nation follows history's plan: each one's staff decides for itself.
+  if (from <= 1) return startOpen(createGame(seed, human));
+  const h = historyTo(from, seed);
+  h.flags.open = 1;
+  return h;
+}
+
+/** Who can be led in the grand campaign from a month: every country still standing, the great powers first. */
+function grand(from = 1, seed = 1939) {
+  const h = grandGame(from, seed, null);
+  const order = Object.keys(GRAND_BLURBS);
+  const nations = Object.entries(h.nations)
+    .filter(([, n]) => n.alive)
+    .map(([nat, n]) => {
+      const foes = Object.keys(h.nations).filter((other) => other !== nat && h.nations[other].alive && atWar(h, nat, other));
+      return {
+        nat,
+        name: n.name,
+        major: order.includes(nat),
+        blurb: GRAND_BLURBS[nat] ?? '',
+        standing: foes.length ? `At war with ${listNames(foes.map((f) => h.nations[f].name))}` : 'At peace',
+        corps: h.corps.filter((c) => c.nat === nat).length,
+        regions: h.regions.filter((r) => r.ctrl === nat).length,
+      };
+    })
+    .filter((n) => n.corps > 0 || n.regions > 0)
+    .sort((a, b) => (a.major === b.major ? (a.major ? order.indexOf(a.nat) - order.indexOf(b.nat) : a.name.localeCompare(b.name)) : a.major ? -1 : 1));
+  return { from, nations };
+}
+
+function listNames(names: string[]): string {
+  if (names.length <= 2) return names.join(' and ');
+  if (names.length > 4) return `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`;
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
 function start(options?: { human?: string | null; from?: number; view?: string; seed?: number }) {
   const human = options?.human === undefined ? 'GER' : options.human;
   const from = options?.from ?? 1;
+  const seed = options?.seed ?? 1939;
   fallenNation = null;
-  g = createGame(options?.seed ?? 1939, from > 1 ? null : human);
-  if (options?.view === 'open') startOpen(g);
-  while (g.turn < from) runTurnAI(g);
+  if (options?.view === 'grand') {
+    g = grandGame(from, seed, human);
+  } else {
+    g = createGame(seed, from > 1 ? null : human);
+    if (options?.view === 'open') startOpen(g);
+    while (g.turn < from) runTurnAI(g);
+  }
   g.human = human;
+  // Honours earned before the player took over are his to carry; their citations are old news.
+  if (from > 1) takeOver(g);
   if (human) {
     openGoals(g, human, from);
     // A country that is attacked before its first month comes round places its army on the eve of war.
@@ -473,4 +539,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  record, roll, stance, railReach, rail, province, raise, fortify, cancel, starts, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  record, roll, stance, railReach, rail, province, raise, fortify, cancel, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

@@ -108,11 +108,12 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 		{
 			UE_LOG(LogTheater, Error, TEXT("The rules could not be started: %s"), *Error);
 		}
-		// Normally the opening screen asks which campaign to play. "-TheaterNation=FRA" on the command line skips it.
+		// Normally the opening screen asks which campaign to play. "-TheaterNation=FRA" on the command line skips it
+		// and starts the grand campaign as that country in September 1939.
 		FString Human;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterNation="), Human))
 		{
-			StartCampaign(Human, 1, FString());
+			StartCampaign(Human, 1, TEXT("grand"));
 		}
 	}
 
@@ -164,10 +165,10 @@ void ACampaignGameMode::LayOutWar()
 	}
 }
 
-bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FString& ViewMode)
+bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed)
 {
 	FString Error;
-	if (!Session.IsValid() || !Session->Begin(Human, From, ViewMode, Error))
+	if (!Session.IsValid() || !Session->Begin(Human, From, ViewMode, Seed, Error))
 	{
 		UE_LOG(LogTheater, Error, TEXT("The campaign could not start: %s"), *Error);
 		return false;

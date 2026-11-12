@@ -24,8 +24,14 @@ public:
 	/** The points in the war a campaign can begin at. */
 	TArray<FStartGroup> Starts();
 
+	/** The days the grand campaign can be taken over on. Empty with rules that have no grand campaign. */
+	const TArray<FGrandYear>& GrandYears() const { return Years; }
+
+	/** Who can be led in the grand campaign from a month. History is played up to it the first time this is asked. */
+	TArray<FGrandNation> GrandNations(int32 From, int32 Seed);
+
 	/** Starts a new campaign. Human is the nation the player leads, or empty to watch. From is the month to take over in. */
-	bool Begin(const FString& Human, int32 From, const FString& ViewMode, FString& OutError);
+	bool Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError);
 
 	/** The whole campaign as text, to be written to a file. Empty if there is no campaign. */
 	FString Save();
@@ -91,4 +97,5 @@ private:
 	FCampaignView View;
 	bool bReady = false;
 	bool bRunning = false;
+	TArray<FGrandYear> Years;
 };

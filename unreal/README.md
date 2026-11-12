@@ -12,9 +12,10 @@ Double-click **Play Theater Command.command** in this folder. A Terminal window 
 | Zoom | Scroll (two fingers on a trackpad), or the + and - keys |
 | Turn the view | Hold the right button and drag, or use Q and E |
 | Pick up an army | Click its flag (or the ground it stands on). The piece lifts off the table and the ground it can reach this month lightens |
-| Send it somewhere | Click lightened ground and it goes there. Or hold the mouse button on the flag, carry it to where it should go, and let go. Right-click works too |
-| Attack | Click red ground, or drop the flag on it. The two armies are drawn up on a face-off screen with the odds; send them in or call it off |
-| Send it by rail | Click By Rail in the tray, then click ground tinted blue or drop the flag on it. It takes the corps' whole month |
+| Send it somewhere | Click lightened ground once to choose it, then click it again (or press the March To button in the tray) to send the army. Or hold the mouse button on the flag, carry it to where it should go, and let go. Right-click sends it at once |
+| Put it down again | Press Esc, click its flag or its own ground again, press Put Down in the tray, or click ground it cannot reach. A single click never moves anybody |
+| Attack | Click red ground twice, or drop the flag on it. The two armies are drawn up on a face-off screen with the odds; send them in or call it off |
+| Send it by rail | Click By Rail in the tray, then click ground tinted blue twice or drop the flag on it. It takes the corps' whole month |
 | Tell it what to do if attacked | Stand, Dig In or Fall Back in the tray |
 | Leave a corps behind | Click its card in the tray at the bottom |
 | Raise a new corps or fortify | Click one of your own territories; the panel lists what can be ordered there |

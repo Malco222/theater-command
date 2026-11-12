@@ -1,32 +1,50 @@
 // Where a campaign can begin, and as whom.
 //
-// The list and its wording are the browser prototype's opening screen (src/campaign/ui/main.ts), set
-// down here as data so the Unreal game can show the same choices. `from` is the month the player takes
-// over (1 is September 1939): for a later start the computer plays history up to it. `view` is 'open'
-// for free play, where no nation follows history's plan, and 'italy' to open on the Italian front.
+// The grand campaign comes first: the player picks any country and the year to take it over. History is
+// played up to that day, and from it no nation follows history's plan. GRAND_YEARS lists the days on offer
+// and GRAND_BLURBS says a word about each great power; the countries themselves are read from the war as
+// it stands on the day, so a new nation in the data is on the list without a change here.
+//
+// The scenarios after it are the browser prototype's opening screen (src/campaign/ui/main.ts), set down
+// here as data: single campaigns in which the computer's nations keep to history's plan. `from` is the
+// month the player takes over (1 is September 1939): for a later start the computer plays history up to
+// it. `view` is 'open' for free play, and 'italy', 'west' or 'east' to open on that front.
+
+export interface GrandYear { year: string; title: string; from: number; note: string }
+
+export const GRAND_YEARS: GrandYear[] = [
+  { year: '1939', title: 'September 1939', from: 1, note: 'Germany has attacked Poland, and Britain and France have declared war. Everything after that is still to be decided.' },
+  { year: '1940', title: 'May 1940', from: 9, note: 'Poland has fallen and Norway is being fought over. The armies in the West have watched each other all winter.' },
+  { year: '1941', title: 'June 1941', from: 22, note: 'France has fallen and Britain fights on. Three German army groups stand on the Soviet frontier.' },
+  { year: '1942', title: 'June 1942', from: 34, note: 'The United States is in the war. Germany gathers its tanks in the south of Russia, and Rommel is at the gates of Tobruk.' },
+  { year: '1943', title: 'July 1943', from: 47, note: 'Stalingrad and Africa are lost to the Axis. The tanks face each other round Kursk, and an invasion fleet waits at Malta.' },
+  { year: '1944', title: 'June 1944', from: 58, note: 'The Allies are about to land in France, and four Soviet fronts are ready in Byelorussia.' },
+];
+
+/** The great powers, in the order they are offered, with a word about each that holds in any year. */
+export const GRAND_BLURBS: Record<string, string> = {
+  GER: 'The best army in Europe, and enemies gathering on every side. Where it strikes next, and when, is up to you.',
+  UK: 'A small army, the largest navy in the world, and an empire to hold together. Outlast them, then come back.',
+  FRA: 'A large army behind strong works, and a slow command. Hold the line, or do what history did not.',
+  SOV: 'Endless country, endless men, and an army still learning its trade. Bide your time, or march first.',
+  USA: 'The greatest industry on earth, an ocean away from the war. Its armies come by convoy.',
+  ITA: 'An army spread from the Alps to Africa, and a sea to make your own. Pick your moment and your side.',
+  JAP: 'An empire of islands with a great fleet and a long war in China. Strike before the oil runs out.',
+  CHN: 'A vast country, half of it lost, with an army that will not give in. Hold on, and wear the invader down.',
+  POL: 'Outnumbered and nearly surrounded. Hold on long enough and the rest of the war is yours to write.',
+};
 
 export interface Side { nat: string | null; name: string; blurb: string }
 export interface StartGroup { title: string; from: number; view: string; sides: Side[] }
 
 export const STARTS: StartGroup[] = [
   {
-    title: 'September 1939 · The war begins', from: 1, view: '', sides: [
+    title: 'September 1939 · The war begins, as history planned it', from: 1, view: '', sides: [
       { nat: 'GER', name: 'Germany', blurb: 'On the attack from the first day. The hardest plan to pull off on schedule.' },
       { nat: 'FRA', name: 'France', blurb: 'The Maginot Line, a large army, and a slow command. Can you keep Paris?' },
       { nat: 'UK', name: 'United Kingdom', blurb: 'A small army, the largest navy in the world, and convoys to keep alive.' },
       { nat: 'POL', name: 'Poland', blurb: 'Outnumbered and nearly surrounded. You place your army on the eve of war, then hold as long as you can.' },
       { nat: null, name: 'Watch history unfold', blurb: 'Every nation follows its plan. End the month and watch Poland, then the West, then the East.' },
-    ],
-  },
-  {
-    title: 'September 1939 · Free play: make your own history', from: 1, view: 'open', sides: [
-      { nat: 'GER', name: 'Germany', blurb: 'At war with Poland, Britain and France. Where you go next, and when, is up to you.' },
-      { nat: 'UK', name: 'United Kingdom', blurb: 'Nobody knows what Germany will do this time. Neither do you.' },
-      { nat: 'FRA', name: 'France', blurb: 'The blow may fall in the spring, in a year, or somewhere else first. Be ready, or strike first.' },
-      { nat: 'POL', name: 'Poland', blurb: 'The first month is the one history wrote. Survive it and the rest is yours.' },
-      { nat: 'ITA', name: 'Italy', blurb: 'Neutral, with an army in Libya and Albania. Pick your moment and your side of the Mediterranean.' },
-      { nat: 'SOV', name: 'Soviet Union', blurb: 'At peace behind a pact. Build the Red Army and wait, or march before Germany does.' },
-      { nat: null, name: 'Watch a war nobody has seen', blurb: 'The war begins as it did. After that no nation follows history: each one\'s staff decides for itself, and no two wars come out the same.' },
     ],
   },
   {
@@ -93,9 +111,30 @@ export const STARTS: StartGroup[] = [
     ],
   },
   {
+    title: 'January 1944 · The eastern front, from Leningrad to the Danube', from: 53, view: 'east', sides: [
+      { nat: 'SOV', name: 'Soviet Union', blurb: 'You have the men, the guns and the initiative on every part of the front. History freed Leningrad in January, the Ukraine by April, Minsk in July and Bucharest in August. Choose where each blow falls, and do not let the armies you cut off get away.' },
+      { nat: 'GER', name: 'Germany', blurb: 'A front of two thousand kilometres, too few divisions to hold it, and orders to give up nothing. Italy has to be held as well, and the landing in France is coming in the summer. Decide what to give up while it is still yours to give.' },
+      { nat: null, name: 'Watch the Red Army\'s year', blurb: 'The computer plays the first 52 months, then the relief of Leningrad, the spring offensive through the mud of the Ukraine, the Crimea, the destruction of Army Group Centre in the summer, Romania and Finland leaving the war, and the road to Budapest.' },
+    ],
+  },
+  {
     title: 'January 1944 · Anzio and the road to Rome', from: 53, view: 'italy', sides: [
       { nat: 'UK', name: 'United Kingdom', blurb: 'The Eighth Army holds the Adriatic end of a front that has not moved since October, and the Americans are about to land behind it at Anzio. Monte Cassino bars the one good road to Rome. Decide when to break yourself against it, and when to wait for the spring.' },
       { nat: null, name: 'Watch Anzio, Cassino and Rome', blurb: 'The computer plays the first 52 months, then the landing at Anzio, the four battles for Monte Cassino, the fall of Rome in June, the pursuit to Florence and the autumn battles on the Gothic Line.' },
+    ],
+  },
+  {
+    title: 'May 1944 · Overlord and the liberation of France', from: 57, view: 'west', sides: [
+      { nat: 'UK', name: 'United Kingdom', blurb: 'Two corps wait on the quays in Hampshire and the Americans beside you have a beach of their own. Win the sky over Normandy in May, land in June, and hold the German armour on your front while the Americans break out. Then see how far a single road to Arnhem will take you.' },
+      { nat: 'GER', name: 'Germany', blurb: 'Some fifty divisions stand behind the Atlantic Wall and nobody can tell you which beach. The panzers can wait close to the coast or well back from it, not both. And every division kept in France is one the eastern front will not have when the Soviet summer offensive opens.' },
+      { nat: null, name: 'Watch D-Day and the drive to the Rhine', blurb: 'The computer plays the first 56 months, then the air battle over the beaches, D-Day in June, the breakout and the liberation of Paris in August, Brussels and Antwerp, Market Garden, the West Wall, and the Ardennes offensive in December.' },
+    ],
+  },
+  {
+    title: 'June 1944 · Operation Bagration', from: 58, view: 'east', sides: [
+      { nat: 'SOV', name: 'Soviet Union', blurb: 'The landing in France is days away and the German tanks have gone south, where they expect you. Four fronts are ready in Byelorussia. Break the fortified places at Vitebsk and Mogilev, close the ring at Minsk, and see how far the summer will carry you.' },
+      { nat: 'GER', name: 'Germany', blurb: 'Army Group Centre holds a great bulge round Minsk, its tanks have been sent south, and the fortified places are to be held to the last man. The Allies are about to land in France. You have a few weeks to decide what can be saved.' },
+      { nat: null, name: 'Watch Bagration', blurb: 'The computer plays the first 57 months, then the blow that destroyed Army Group Centre: Vitebsk and Minsk in June, the Bug and the Vistula in July, the Warsaw rising, and Romania changing sides as the summer ends.' },
     ],
   },
 ];

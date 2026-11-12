@@ -184,6 +184,27 @@ struct FStartGroup
 	TArray<FStartSide> Sides;
 };
 
+/** A day the grand campaign can be taken over on. */
+struct FGrandYear
+{
+	FString Year; // "1939"
+	FString Title; // "September 1939"
+	FString Note; // how the war stands that day
+	int32 From = 1;
+};
+
+/** A country that can be led in the grand campaign from a given day. */
+struct FGrandNation
+{
+	FString Nation;
+	FString Name;
+	FString Blurb; // a word about a great power; empty for the rest
+	FString Standing; // "At peace", or who it is at war with
+	bool bMajor = false;
+	int32 Corps = 0;
+	int32 Regions = 0;
+};
+
 /** A heading and what stands under it, for a page of text shown to the player. */
 struct FDocumentSection
 {

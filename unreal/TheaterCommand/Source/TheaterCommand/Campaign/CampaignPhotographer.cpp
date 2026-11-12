@@ -56,6 +56,24 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.Route = TEXT("Hamburg");
 	}
 	{
+		// A click on ground the army can reach only offers it: the tray asks for the word.
+		FShot& Shot = Add(TEXT("09b-clicked-once"), TEXT("Berlin"), 0.4f);
+		Shot.Select = Shot.Army = TEXT("Hamburg");
+		Shot.Click = TEXT("Mecklenburg");
+	}
+	{
+		// The second click on the same ground sends it.
+		FShot& Shot = Add(TEXT("09c-clicked-twice"), TEXT("Berlin"), 0.4f);
+		Shot.bKeep = true;
+		Shot.Click = TEXT("Mecklenburg");
+	}
+	{
+		// And a click on the army's own ground puts it down.
+		FShot& Shot = Add(TEXT("09d-put-down"), TEXT("Berlin"), 0.4f);
+		Shot.bKeep = true;
+		Shot.Click = TEXT("Mecklenburg");
+	}
+	{
 		FShot& Shot = Add(TEXT("10-face-off"), TEXT("Pomorze"), 0.34f);
 		Shot.Army = TEXT("Farther Pomerania");
 		Shot.Attack = TEXT("Pomorze");
@@ -234,6 +252,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			Controller->CarryHeldOver(*Over);
 			UE_LOG(LogTheater, Display, TEXT("Photographer: flag in %s %s, carried over %s"), *Shot.Army, bHeld ? TEXT("taken in hand") : TEXT("NOT taken"), *Shot.Carry);
 		}
+	}
+	if (const int32* Click = Data.RegionByName.Find(Shot.Click))
+	{
+		Controller->ClickRegion(*Click);
 	}
 	if (const int32* Drop = Data.RegionByName.Find(Shot.Drop))
 	{

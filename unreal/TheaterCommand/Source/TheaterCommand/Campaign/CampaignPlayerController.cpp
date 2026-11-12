@@ -485,9 +485,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bDragging = false;
 		PressPosition = Mouse;
 		HeldPiece.Reset();
+		bHeldWasInHand = false;
 		if (!bBusy)
 		{
-			Hold(PointedPiece);
+			const bool bAlreadyInHand = PointedPiece && ArmyRegion != INDEX_NONE && RingedPiece.Get() == PointedPiece;
+			bHeldWasInHand = Hold(PointedPiece) && bAlreadyInHand;
 		}
 	}
 	if (bLeftHeld && IsInputKeyDown(EKeys::LeftMouseButton) && bHaveMouse)
@@ -534,7 +536,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			{
 				DropArmy(PointedRegion, bOnTable);
 			}
-			// A plain click on the flag has already picked the army up.
+			else if (bHeldWasInHand)
+			{
+				// A plain click on the flag of the army already in hand puts it down again.
+				PutDownArmy();
+			}
+			// Otherwise a plain click on the flag has already picked the army up.
 		}
 		else if (!bDragging && !bBusy)
 		{
@@ -602,10 +609,14 @@ bool ACampaignPlayerController::Hold(AArmyPiece* Piece)
 		return false;
 	}
 	const int32 RegionId = Piece->GetRegionId();
-	SelectRegion(RegionId);
-	if (!PickUpArmyIn(RegionId))
+	// An army already in hand stays as it is: picking it up afresh would take back the corps told to stay behind.
+	if (ArmyRegion != RegionId || RingedPiece.Get() != Piece)
 	{
-		return false;
+		SelectRegion(RegionId);
+		if (!PickUpArmyIn(RegionId))
+		{
+			return false;
+		}
 	}
 	HeldPiece = RingedPiece.IsValid() ? RingedPiece.Get() : Piece;
 	return true;
@@ -639,16 +650,66 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 	// A click on somebody's flag is a click on the ground it stands on.
 	const int32 Target = Piece ? Piece->GetRegionId() : RegionId;
 
-	// With an army in hand, a click on ground it can reach sends it there.
 	if (ArmyRegion != INDEX_NONE && Target != INDEX_NONE && Target != ArmyRegion && FindReach(Target))
 	{
-		OrderTo(Target);
+		// With an army in hand, ground it can reach takes two clicks: the first looks at the place and offers it,
+		// the second sends the army. A click meant for something else never moves anybody.
+		if (PendingTarget == Target)
+		{
+			ConfirmPending();
+		}
+		else
+		{
+			SelectRegion(Target);
+			SetPending(Target);
+		}
 		return;
 	}
+	if (ArmyRegion != INDEX_NONE && Target == ArmyRegion)
+	{
+		// A click on the ground the army in hand stands on puts it down.
+		PutDownArmy();
+		SelectRegion(Target);
+		return;
+	}
+	// Anywhere else: look at that territory. If one of the player's armies is there it is picked up; if not,
+	// whatever was in hand is put down.
 	SelectRegion(Target);
 	if (!PickUpArmyIn(Target))
 	{
 		PutDownArmy();
+	}
+}
+
+void ACampaignPlayerController::SetPending(int32 RegionId)
+{
+	PendingTarget = RegionId;
+	Tray.PendingButton = FText::GetEmpty();
+	Tray.Hint = FText::FromString(bByRail
+		? TEXT("Click ground tinted blue, then click it again to send them by rail. Esc, or a click on their flag, puts them down.")
+		: TEXT("Click where they should go, then click it again to send them. Or drag the flag there. Esc, or a click on their flag, puts them down."));
+	const FReachRegion* Target = FindReach(RegionId);
+	if (Target && Map.IsValid() && Map->GetData().Regions.IsValidIndex(RegionId))
+	{
+		const FString Name = Map->GetData().Regions[RegionId].Name;
+		Tray.PendingButton = FText::FromString(FString::Printf(TEXT("%s %s"), bByRail ? TEXT("BY RAIL TO") : (Target->bAttack ? TEXT("ATTACK") : TEXT("MARCH TO")), *Name.ToUpper()));
+		Tray.Hint = FText::FromString(FString::Printf(TEXT("Click %s again, or press the button above, to %s. Click anywhere else to think again."),
+			*Name, Target->bAttack ? TEXT("draw up the attack") : TEXT("send them")));
+	}
+	else
+	{
+		PendingTarget = INDEX_NONE;
+	}
+	++Tray.Revision;
+}
+
+void ACampaignPlayerController::ConfirmPending()
+{
+	const int32 Target = PendingTarget;
+	if (Target != INDEX_NONE && ArmyRegion != INDEX_NONE)
+	{
+		SetPending(INDEX_NONE);
+		OrderTo(Target);
 	}
 }
 
@@ -760,6 +821,8 @@ void ACampaignPlayerController::RefreshOrders()
 	Tray.Cards.Reset();
 	Reach.Reset();
 	RouteTarget = INDEX_NONE;
+	PendingTarget = INDEX_NONE;
+	Tray.PendingButton = FText::GetEmpty();
 
 	if (RingedPiece.IsValid())
 	{
@@ -862,6 +925,8 @@ void ACampaignPlayerController::RefreshOrders()
 	{
 		RingedPiece->SetSelected(true);
 	}
+	SetPending(INDEX_NONE); // sets the line that says what to do next
+	--Tray.Revision; // already counted above
 }
 
 void ACampaignPlayerController::ShowRouteTo(int32 RegionId)

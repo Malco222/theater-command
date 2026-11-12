@@ -45,6 +45,7 @@ private:
 		bool bRecord = false; // open the service record of the first corps of the army in hand
 		bool bRoll = false; // open the roll of honour
 		bool bRail = false;
+	FString Click; // click this region, as the mouse would
 	FString Carry; // hang the army in hand over this region, as if dragged there
 	FString Drop; // let go of it over this region // switch the army in hand to going by rail
 		FString Order; // order this in the selected territory: a kind of corps, or "fort"
