@@ -4,7 +4,7 @@
 // same war the unsaved one would have.
 
 import { Rng } from '../core/rng';
-import { computeSupply, createGame } from './game';
+import { atWar, computeSupply, createGame } from './game';
 import { seat } from './commanders';
 import { FIELDS } from './research';
 import mapData from '../generated/campaign-map.json';
@@ -12,6 +12,14 @@ import type { Corps, Game, General } from './types';
 
 /** A save is laid over the map it was played on, region by region. */
 const MAP_REGIONS = (mapData as any).regions.length as number;
+/**
+ * Places added on the end of the map by cutting up ground that was already there, and the region each was cut
+ * from. A campaign saved before they existed can still be continued: each begins in the hands its parent is in.
+ */
+const CARVED: Record<string, string> = { Cassino: 'Abruzzo', Anzio: 'Rome' };
+/** True if a save with this many regions can be laid over today's map: every place it lacks was carved from one it has. */
+const fits = (saved: number): boolean => saved === MAP_REGIONS
+  || (saved < MAP_REGIONS && ((mapData as any).regions as { name: string }[]).slice(saved).every((r) => r.name in CARVED));
 
 export const SAVE_VERSION = 1;
 const KEEP_REPORTS = 200;
@@ -38,7 +46,7 @@ export function saveGame(g: Game): string {
 export function peekSave(text: string): { human: string | null; turn: number; open: boolean } | null {
   try {
     const d = JSON.parse(text);
-    return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && d.regions.length === MAP_REGIONS ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1 } : null;
+    return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && fits(d.regions.length) ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1 } : null;
   } catch { return null; }
 }
 
@@ -46,7 +54,7 @@ export function peekSave(text: string): { human: string | null; turn: number; op
 export function staleSave(text: string): boolean {
   try {
     const d = JSON.parse(text);
-    return !!d && d.v === SAVE_VERSION && Array.isArray(d.regions) && d.regions.length !== MAP_REGIONS;
+    return !!d && d.v === SAVE_VERSION && Array.isArray(d.regions) && !fits(d.regions.length);
   } catch { return false; }
 }
 
@@ -54,8 +62,15 @@ export function loadGame(text: string): Game | null {
   let d: any;
   try { d = JSON.parse(text); } catch { return null; }
   if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
+  if (!fits(d.regions.length)) return null; // saved on a different map
   const g = createGame(d.seed, d.human ?? null);
-  if (d.regions.length !== g.regions.length) return null; // saved on a different map
+  // A place carved out since the save was made starts as the ground it was cut from stands: same owner, same holder, same works.
+  const saved: number = d.regions.length;
+  const grown = saved < g.regions.length;
+  for (let i = saved; i < g.regions.length; i++) {
+    const [owner, ctrl, , fort, since, prev] = d.regions[g.byName[CARVED[g.regions[i].name]].id];
+    d.regions.push([owner, ctrl, 0, fort ? { ...fort, vs: [...(fort.vs ?? [])] } : fort, since, prev, []]);
+  }
   // A save from before a country was added to the game: it takes its place in the order of play, and the month goes on from where it was.
   const order: string[] = [...d.order];
   let phase: number = d.phase;
@@ -92,6 +107,16 @@ export function loadGame(text: string): Game | null {
   });
   // Anything a save from an older build did not list goes in as it comes.
   for (const c of g.corps) if (byId.has(c.id)) g.regions[c.reg].units.push(c);
+  // A carved place that finds itself in the front line is not left empty: if the ground it was cut from has two
+  // or more corps free to move, the first of them takes post there.
+  for (let i = saved; i < g.regions.length; i++) {
+    const r = g.regions[i], parent = g.byName[CARVED[r.name]];
+    const free = parent.units.filter((c) => c.nat === r.ctrl && !c.hold && c.kind !== 'fort');
+    if (free.length < 2 || !r.nb.some((j) => atWar(g, r.ctrl, g.regions[j].ctrl))) continue;
+    parent.units.splice(parent.units.indexOf(free[0]), 1);
+    free[0].reg = r.id;
+    r.units.push(free[0]);
+  }
   if (Array.isArray(d.generals)) g.generals = d.generals as General[];
   else {
     // A save from before generals were people: each corps carried only a name and a label.
@@ -109,7 +134,8 @@ export function loadGame(text: string): Game | null {
   const fed = g.corps.map((c) => c.supplied);
   computeSupply(g);
   g.corps.forEach((c, i) => { c.supplied = fed[i]; });
-  for (const [k, v] of Object.entries((d.supply ?? {}) as Record<string, string>)) g.supply[k] = Uint8Array.from(v, (ch) => (ch === '1' ? 1 : 0));
-  g.supplyDirty = !!d.dirty;
+  // On a map that has grown since, the saved picture is a region short: it is drawn afresh the first time it is asked for.
+  if (!grown) for (const [k, v] of Object.entries((d.supply ?? {}) as Record<string, string>)) g.supply[k] = Uint8Array.from(v, (ch) => (ch === '1' ? 1 : 0));
+  g.supplyDirty = grown || !!d.dirty;
   return g;
 }

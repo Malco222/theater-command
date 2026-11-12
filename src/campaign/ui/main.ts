@@ -30,8 +30,10 @@ import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, typ
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
-/** The month after the last one the historical plans cover: January 1944. */
-const STORY_ENDS = 53;
+/** The month after the last one the historical plans cover: January 1945. */
+const STORY_ENDS = 65;
+/** The first month in which only some fronts still follow history: January 1944. */
+const STORY_THINS = 53;
 /** A free-play war has no story to run out of: left on Play, it is stopped at the end of 1947 so that it does not run for ever. */
 const FREE_ENDS = 100;
 const ui = {
@@ -605,8 +607,9 @@ function advice(): string {
 
 function scopeNote(): string {
   if (isOpen(g)) return g.human ? '' : `<div class="note"><b>Free play.</b> No nation is following history's plan. Each one's staff weighs its fronts every month and decides for itself whether to attack, hold or wait, so every war you watch comes out differently.</div>`;
-  if (g.turn < STORY_ENDS) return '';
-  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the end of 1943. You can play on, but the computer's nations will only hold what they have. Shipbuilding and the later campaigns come in later phases.</div>`;
+  if (g.turn < STORY_THINS) return '';
+  if (g.turn < STORY_ENDS) return `<div class="note"><b>1944 is still being written.</b> History's plans cover every front to the end of 1943. For 1944 the Italian campaign is in: Anzio, Cassino, Rome and the Gothic Line. The eastern front and the invasion of France come next, and until they do the computer's nations only hold what they have there.</div>`;
+  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the end of 1943, and the Italian campaign to the end of 1944. You can play on, but the computer's nations will only hold what they have. Shipbuilding and the later campaigns come in later phases.</div>`;
 }
 
 function corpsRow(c: Corps, mine: boolean): string {
@@ -1724,7 +1727,7 @@ function startCard(): string {
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `${saved.open ? 'Watching a free-play war' : 'Watching history'}, ${date(saved.turn)}`}${saved.human && saved.open ? ', free play' : ''}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
     <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe, North Africa and the Middle East in ${g.regions.length} regions and ${g.seas.length} seas, monthly turns, armies, fleets and air fleets, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan. In <b>free play</b> nobody follows history: you and every other nation make your own.</p>
-    ${resume ? `<div class="sides">${resume}</div>` : staleSave(readSave() ?? '') ? '<div class="note">The campaign saved in this browser was played on the earlier, smaller map, before North Africa was added, and cannot be continued in this version. Starting a new game replaces it.</div>' : ''}
+    ${resume ? `<div class="sides">${resume}</div>` : staleSave(readSave() ?? '') ? '<div class="note">The campaign saved in this browser was played on an earlier, smaller map and cannot be continued in this version. Starting a new game replaces it.</div>' : ''}
     <h3>September 1939 · The war begins</h3>
     <div class="sides">
       ${side(null, 'Watch history unfold', 'Every nation follows its plan. Press Play and watch Poland, then the West, then the East.', true)}
@@ -1796,6 +1799,11 @@ function startCard(): string {
       ${side(null, 'Watch Sicily and Italy', 'The computer plays the first 46 months, then the landing in Sicily, the fall of Mussolini, the Italian armistice, Salerno and Naples, and the German winter line across the mountains south of Rome.', true, 47, 'italy')}
       ${side('UK', 'United Kingdom', 'Two armies wait at Malta and your air force has spent a month over Sicily. Keep the sky, put the Eighth Army ashore, and follow it across the strait before the Germans have dug in across the mountains.', false, 47, 'italy')}
       ${side('ITA', 'Italy', 'Africa is gone, the army has lost heart and the invasion fleet is gathering at Malta. If Sicily falls the King will dismiss Mussolini, and an armistice follows. Hold the island and Italy stays in the war.', false, 47, 'italy')}
+    </div>
+    <h3>January 1944 · Anzio and the road to Rome</h3>
+    <div class="sides">
+      ${side(null, 'Watch Anzio, Cassino and Rome', 'The computer plays the first 52 months, then the landing at Anzio, the four battles for Monte Cassino, the fall of Rome in June, the pursuit to Florence and the autumn battles on the Gothic Line.', true, 53, 'italy')}
+      ${side('UK', 'United Kingdom', 'The Eighth Army holds the Adriatic end of a front that has not moved since October, and the Americans are about to land behind it at Anzio. Monte Cassino bars the one good road to Rome. Decide when to break yourself against it, and when to wait for the spring.', false, 53, 'italy')}
     </div>
     <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
@@ -1968,8 +1976,10 @@ function newGame(human: string | null, seed?: number, from = 1, view = ''): void
   const italy = view === 'italy';
   const britain = from === 11, desert = from === 13 || from === 33, balkans = from === 14, blue = from === 34, torch = from === 39, kursk = from === 47 && !italy;
   if (britain) ui.tab = 'air';
-  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : torch ? g.byName['Constantine'] : balkans ? g.byName['Thessaly'] : blue ? g.byName[human === 'SOV' ? 'Stalingrad' : 'Kharkov'] : kursk ? g.byName['Kursk'] : italy ? g.byName['Calabria'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
+  const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : torch ? g.byName['Constantine'] : balkans ? g.byName['Thessaly'] : blue ? g.byName[human === 'SOV' ? 'Stalingrad' : 'Kharkov'] : kursk ? g.byName['Kursk'] : italy ? g.byName[from >= 53 ? 'Rome' : 'Calabria'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
   ui.view = { x: focus.x - (torch ? 420 : 300), y: focus.y - (torch ? 250 : 230), w: torch ? 760 : desert || balkans ? 580 : human === 'GER' || from > 1 ? 640 : 600 };
+  // Italy in 1944 is fought over a hundred miles of mountain: start close in.
+  if (italy && from >= 53) ui.view = { x: focus.x - 215, y: focus.y - 185, w: 440 };
   applyView();
   // A country that is attacked before its first month comes round places its army on the eve of war.
   if (human && from === 1 && beginEve(g)) refresh();

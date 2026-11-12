@@ -407,6 +407,10 @@ export const REGIONS = [
   ['Kalach', 48.55, 43.55, 'SOV', 'plains', 0, 0, {}],
   // The lower Volga below Stalingrad, as far as the map goes toward Astrakhan: the far end of the 1942 offensive, and where the southern arm of the counter-stroke formed up.
   ['Astrakhan', 47.1, 46.5, 'SOV', 'plains', 1, 0, {}],
+  // Added for 1944. The mountains between Naples and Rome where the road north runs under Monte Cassino: the western half of the Gustav Line.
+  ['Cassino', 41.49, 13.83, 'ITA', 'mountain', 0, 0, {}],
+  // The coast south of Rome, behind that line: the Anzio beachhead.
+  ['Anzio', 41.55, 12.75, 'ITA', 'plains', 0, 0, { port: 1 }],
 ];
 
 // Short crossings that armies can use without a fleet.
@@ -425,6 +429,12 @@ export const ROADS = [
   ['Narvik', 'Finnmark'],
   ['Antalya', 'Adana'],
   ['Palestine', 'Lebanon'],
+  // The Adriatic coast road from Foggia to Pescara, the Eighth Army's way north in 1943 and 1944.
+  ['Apulia', 'Abruzzo'],
+  // The Adriatic coast road on from Ancona through Pesaro to Rimini, where the Gothic Line met the sea.
+  ['Marche', 'Emilia'],
+  // And the Tyrrhenian coast road from Pisa to La Spezia, which the western end of the same line closed.
+  ['Tuscany', 'Liguria'],
 ];
 
 // And the opposite: borders the map-maker finds that are not there, because the line between

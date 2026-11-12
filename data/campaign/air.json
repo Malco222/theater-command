@@ -142,8 +142,14 @@
     { "nat": "UK", "from": 49, "to": 49, "name": "The air forces cover the landings in Italy", "against": "GER", "orders": [
       { "fleet": "Mediterranean Air Command", "base": ["Sicily"], "mission": "support" }
     ] },
-    { "nat": "UK", "from": 50, "to": 99, "name": "The air forces move up to Foggia", "against": "GER", "orders": [
+    { "nat": "UK", "from": 50, "to": 55, "name": "The air forces move up to Foggia", "against": "GER", "orders": [
       { "fleet": "Mediterranean Air Command", "base": ["Apulia", "Naples"], "mission": "support" }
+    ] },
+    { "nat": "UK", "from": 56, "to": 57, "name": "Operation Strangle", "against": "GER", "orders": [
+      { "fleet": "Mediterranean Air Command", "base": ["Naples", "Apulia"], "mission": "superiority", "region": "Cassino" }
+    ] },
+    { "nat": "UK", "from": 58, "to": 99, "name": "The air forces follow the armies north", "against": "GER", "orders": [
+      { "fleet": "Mediterranean Air Command", "base": ["Rome", "Naples", "Apulia"], "mission": "support" }
     ] }
   ]
 }

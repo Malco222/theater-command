@@ -137,6 +137,34 @@
       "if": ["alive:ITA", "since:event:mussolini-falls,1", "anyHeld:allies,Sicily,Sardinia,Calabria,Apulia,Naples,Rome"],
       "partition": { "nation": "ITA", "shares": [[["GER", "UK", "USA"], ["Rome"]], [["UK", "USA", "GER"], ["Sardinia", "Corsica"]]] },
       "text": "Italy has signed an armistice with the Allies and is out of the war. German troops disarm the Italian army, seize Rome and take over Italy's garrisons from the Riviera to Rhodes. Sardinia and Corsica are given up."
+    },
+    {
+      "id": "luftwaffe-1944", "from": 55, "to": 90,
+      "if": ["alive:GER", "war:GER,USA"],
+      "reform": {"GER": {"air": 45}},
+      "text": "The Luftwaffe has lost the daylight sky. Since American fighters began escorting the bombers all the way to Berlin its fighter arm has been losing pilots it cannot replace, and what is left is kept over the Reich. The armies at the front will fight without it."
+    },
+    {
+      "id": "allied-armies-1944", "from": 57, "to": 90,
+      "if": ["alive:UK", "war:GER,USA"],
+      "reform": {"USA": {"quality": 1.0, "air": 140}, "UK": {"air": 90}},
+      "text": "The Allied armies of 1944 are not those of 1942. The Americans have learned their trade in Tunisia, Sicily and Italy, and behind every attack now stand guns, tanks and fighter-bombers in numbers no German commander can match."
+    },
+    {
+      "id": "german-army-1944", "from": 57, "to": 90,
+      "if": ["alive:GER", "war:GER,SOV"],
+      "reform": {"GER": {"quality": 1.15}},
+      "text": "Nearly five years of war have worn the German army down. Its divisions are rebuilt with boys, older men and the half-recovered, short of lorries and fuel. They still fight with skill, but this is no longer the army of 1941."
+    },
+    {
+      "id": "gustav-line-broken", "from": 50, "to": 90, "past": true,
+      "if": ["flag:event:italian-armistice", "allHeld:allies,Cassino"],
+      "text": "The Gustav Line is broken. The ruins of the abbey on Monte Cassino are in Allied hands, and the road to Rome lies open."
+    },
+    {
+      "id": "rome-liberated", "from": 50, "to": 90, "past": true,
+      "if": ["flag:event:italian-armistice", "allHeld:allies,Rome"],
+      "text": "Rome is free: the first of the Axis capitals to fall. Allied columns drive past the Colosseum through cheering crowds."
     }
   ]
 }
