@@ -44,6 +44,8 @@ private:
 		bool bMenu = false; // open the menu over the campaign
 		bool bRecord = false; // open the service record of the first corps of the army in hand
 		bool bRoll = false; // open the roll of honour
+		bool bRail = false; // switch the army in hand to going by rail
+		FString Order; // order this in the selected territory: a kind of corps, or "fort"
 		int32 Months = 0; // end this many months first
 	};
 

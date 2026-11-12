@@ -19,6 +19,12 @@ struct FRegionPanelInfo
 	FLinearColor OwnerColor = FLinearColor::Gray;
 	FText Details;
 	FText Forces;
+	// What the player can do here, on home ground: raise corps, build works, and what is already forming.
+	FText Holdings;
+	FText ProvinceNote;
+	TArray<FProvinceOption> Options;
+	TArray<FOrderLine> Forming;
+	int32 Revision = 0;
 };
 
 /** One corps of a picked-up army, as a card in the tray. */
@@ -46,6 +52,8 @@ struct FArmyTray
 	FText Subtitle;
 	FLinearColor Color = FLinearColor::Gray;
 	TArray<FTrayCard> Cards;
+	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
+	bool bByRail = false; // the next order sends them by rail
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
 };
 
@@ -163,6 +171,21 @@ public:
 	/** Leaves a corps of the picked-up army behind, or takes it along again. */
 	void ToggleCorps(int32 CorpsId);
 
+	/** The standing order for the army in hand on the day the enemy comes: "stand", "dig" or "back". */
+	void SetStance(const FString& Posture);
+
+	/** Switches between marching and going by rail for the army in hand. */
+	void ToggleRail();
+
+	/** Orders something in the selected territory: a kind of corps to raise, or "fort". */
+	void ProvinceAction(const FString& Action);
+
+	/** Takes back an order placed this month. */
+	void CancelOrder(int32 OrderId);
+
+	/** The treasury in a line, for the date plate. */
+	FText GetTreasuryText() const;
+
 	/** Shows the road the picked-up army would take to a region. */
 	void ShowRouteTo(int32 RegionId);
 
@@ -245,6 +268,8 @@ private:
 	bool bHaveLastMouse = false;
 	bool bScripted = false;
 	bool bAlwaysWatch = false;
+	bool bByRail = false;
+	int32 PanelRevision = 0;
 	int32 SizedForWidth = 0;
 	int32 SizedForHeight = 0;
 	FVector2D PressPosition = FVector2D::ZeroVector;

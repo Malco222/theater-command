@@ -14,7 +14,10 @@ Double-click **Play Theater Command.command** in this folder. A Terminal window 
 | Pick up an army | Click one of yours (you lead Germany) |
 | Send it somewhere | Right-click a territory. Lightened ground is where it can march; red ground is an attack |
 | Attack | Right-click red ground. The two armies are drawn up on a face-off screen with the odds; send them in or call it off |
+| Send it by rail | Click By Rail in the tray, then right-click ground tinted blue. It takes the corps' whole month |
+| Tell it what to do if attacked | Stand, Dig In or Fall Back in the tray |
 | Leave a corps behind | Click its card in the tray at the bottom |
+| Raise a new corps or fortify | Click one of your own territories; the panel lists what can be ordered there |
 | Put the army down | Esc |
 | End the month | Enter, or the button at the bottom right. The other nations' moves are played out quickly; Space skips |
 | Music on or off | M |
@@ -37,7 +40,11 @@ What you can do today: choose a campaign and a side, pick up an army, see where 
 
 **Unit stories.** Every corps keeps a record. Its card in the army tray shows the name the army has given it, how seasoned it is and a ribbon for each honour; the Service Record button under the card opens its honours with their citations and its diary. Honours fly as two-coloured streamers under the army's standard on the map. The Honours button opens the roll of honour and the memorial wall, and honours won and letters from the front arrive with the month's dispatches.
 
-What the rules can do that the 3D game does not show yet: sending an honoured unit home on a bond tour or as instructors, choosing which corps take drafts, raising a lost corps again under its old name, moving by rail and by sea, landings, fleets and air fleets, building and recruiting, research, diplomacy and generals' skills. The browser prototype has screens for all of these; they come across one at a time.
+**Provinces and the treasury.** The date plate shows the production points in hand, what the factories earn each month and how much is on order. Click one of your own territories and its panel shows what it holds and what can be ordered there: new infantry, mountain, motorized and armoured corps, and the next level of fortification, each with its cost and how long it takes. An order can be taken back in the month it was placed.
+
+**Standing orders and the railway.** An army in hand can be told to stand, dig in or fall back if it is attacked, and can be sent by rail to any friendly ground the track reaches.
+
+What the rules can do that the 3D game does not show yet: sending an honoured unit home on a bond tour or as instructors, choosing which corps take drafts, raising a lost corps again under its old name, moving by sea, landings, fleets and air fleets, building and recruiting, research, diplomacy and generals' skills. The browser prototype has screens for all of these; they come across one at a time.
 
 ## How it is put together
 

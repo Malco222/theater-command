@@ -38,6 +38,28 @@ struct FViewCorps
 	TArray<FHonourRibbon> Honours;
 };
 
+/** Something the player has on order: a new corps forming up, or works being dug. */
+struct FOrderLine
+{
+	int32 Id = INDEX_NONE;
+	FString Name;
+	FString Where;
+	FString Due; // the month it arrives
+	int32 Months = 0; // months still to wait
+	int32 Cost = 0;
+	bool bCanCancel = false; // only in the month it was ordered
+};
+
+/** The player's treasury. */
+struct FTreasury
+{
+	bool bValid = false;
+	int32 Production = 0; // production points in hand
+	int32 Income = 0; // earned each month
+	int32 Political = 0; // political capital
+	TArray<FOrderLine> Orders;
+};
+
 struct FCampaignView
 {
 	FString Rules; // "stand-in" until the real rules are bundled in
@@ -52,6 +74,7 @@ struct FCampaignView
 	TArray<FString> RegionHolder; // by region id: the nation that holds it now
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)
 	TArray<FViewCorps> Corps;
+	FTreasury Treasury;
 
 	const FViewCorps* FindCorps(int32 Id) const
 	{
@@ -176,4 +199,26 @@ struct FDocumentPage
 	FString Subtitle;
 	TArray<FHonourRibbon> Ribbons;
 	TArray<FDocumentSection> Sections;
+};
+
+/** Something the player can order in a territory: a kind of corps to raise, or works to build. */
+struct FProvinceOption
+{
+	FString Action; // inf, mtn, mot, arm, or fort
+	FString Label;
+	FString Detail; // what it costs and how long it takes
+	FString Why; // why it cannot be ordered now, if it cannot
+	bool bEnabled = false;
+};
+
+/** What a territory holds, and what the player can do there. */
+struct FProvinceInfo
+{
+	bool bValid = false;
+	int32 Region = INDEX_NONE;
+	bool bHome = false;
+	FString Holdings; // industry, works, harbour, in a line
+	FString Note;
+	TArray<FProvinceOption> Options;
+	TArray<FOrderLine> Forming;
 };

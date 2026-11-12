@@ -51,6 +51,24 @@ public:
 	/** Sends the given corps in. The battle is settled at once by the rules. */
 	FAttackResult Attack(const TArray<int32>& CorpsIds, int32 RegionId);
 
+	/** The player's standing order for these corps on the day the enemy comes: "stand", "dig" or "back". */
+	void SetStance(const TArray<int32>& CorpsIds, const FString& Posture);
+
+	/** Where the given corps could go by rail this month. */
+	TArray<int32> RailReach(const TArray<int32>& CorpsIds);
+
+	/** Sends the given corps by rail. Returns the ones that went. */
+	TArray<FCorpsMove> Rail(const TArray<int32>& CorpsIds, int32 RegionId);
+
+	/** What a territory holds, and what the player can raise or build there. */
+	FProvinceInfo Province(int32 RegionId);
+
+	/** Orders something in a territory: a kind of corps ("inf", "mtn", "mot", "arm") or works ("fort"). OutNote says what was ordered. */
+	bool OrderInProvince(const FString& Action, int32 RegionId, FString& OutNote);
+
+	/** Takes back an order placed this month. */
+	bool CancelOrder(int32 OrderId);
+
 	/** One corps' service record: what it is, its honours with their citations, and its diary. */
 	FDocumentPage Record(int32 CorpsId);
 

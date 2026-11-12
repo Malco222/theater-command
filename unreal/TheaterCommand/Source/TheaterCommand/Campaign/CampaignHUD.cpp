@@ -158,6 +158,13 @@ namespace
 								SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Muted)
 								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetRulesNote() : FText::GetEmpty(); })
 							]
+							// The treasury: what is in hand, what comes in each month, what is on order.
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(BrightBrass)
+								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetTreasuryText() : FText::GetEmpty(); })
+								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetTreasuryText().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+							]
 						]
 					]
 
@@ -258,10 +265,11 @@ namespace
 							.Visibility_Lambda([Region]()
 							{
 								const FRegionPanelInfo* Info = Region();
-								return Info && Info->bVisible ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+								return Info && Info->bVisible ? EVisibility::Visible : EVisibility::Collapsed;
 							})
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(20.0f, 14.0f, 20.0f, 16.0f))
+								.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the panel is not the map
 								[
 									SNew(SVerticalBox)
 									+ SVerticalBox::Slot().AutoHeight()
@@ -300,6 +308,11 @@ namespace
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
 										.Text_Lambda([Region]() { const FRegionPanelInfo* Info = Region(); return Info ? Info->Forces : FText::GetEmpty(); })
 									]
+									// On home ground: what the province holds, and what can be raised or built there.
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SAssignNew(ProvinceBox, SVerticalBox)
+									]
 								]
 							]
 						]
@@ -337,6 +350,10 @@ namespace
 								[
 									SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
 									.Text_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? Info->Subtitle : FText::GetEmpty(); })
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 9.0f, 0.0f, 0.0f)
+								[
+									SAssignNew(TrayOrders, SHorizontalBox)
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 								[
@@ -624,6 +641,88 @@ namespace
 		virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+			// The province section of the territory panel.
+			if (Controller.IsValid() && ProvinceBox.IsValid() && Controller->GetRegionPanel().Revision != ShownProvince)
+			{
+				const FRegionPanelInfo& Info = Controller->GetRegionPanel();
+				ShownProvince = Info.Revision;
+				ProvinceBox->ClearChildren();
+				if (Info.Options.Num() > 0 || Info.Forming.Num() > 0 || !Info.ProvinceNote.IsEmpty())
+				{
+					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("PROVINCE"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+					];
+					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(Info.Holdings).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+					];
+					if (!Info.ProvinceNote.IsEmpty())
+					{
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.ProvinceNote).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
+						];
+					}
+					for (const FProvinceOption& Option : Info.Options)
+					{
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 6.0f)).IsFocusable(false).IsEnabled(Option.bEnabled)
+							.ToolTipText(FText::FromString(Option.Why))
+							.OnClicked_Lambda([this, Action = Option.Action]()
+							{
+								if (Controller.IsValid())
+								{
+									Controller->ProvinceAction(Action);
+								}
+								return FReply::Handled();
+							})
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(STextBlock).Text(FText::FromString(Option.Label)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Option.bEnabled ? Cream : Faint)
+								]
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Option.bEnabled ? Muted : Faint).AutoWrapText(true)
+									.Text(FText::FromString(Option.bEnabled || Option.Why.IsEmpty() ? Option.Detail : Option.Detail + TEXT("\n") + Option.Why))
+								]
+							]
+						];
+					}
+					for (const FOrderLine& Order : Info.Forming)
+					{
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(BrightBrass).AutoWrapText(true)
+								.Text(FText::FromString(FString::Printf(TEXT("On order: %s, due %s"), *Order.Name, *Order.Due)))
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+							[
+								SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(8.0f, 3.0f)).IsFocusable(false)
+								.Visibility(Order.bCanCancel ? EVisibility::Visible : EVisibility::Collapsed)
+								.OnClicked_Lambda([this, Id = Order.Id]()
+								{
+									if (Controller.IsValid())
+									{
+										Controller->CancelOrder(Id);
+									}
+									return FReply::Handled();
+								})
+								[
+									SNew(STextBlock).Text(FText::FromString(TEXT("TAKE BACK"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+								]
+							]
+						];
+					}
+				}
+			}
+
 			// Lay out the page (a service record or the roll of honour) when it changes.
 			if (Controller.IsValid() && PageSections.IsValid() && Controller->GetDocumentRevision() != ShownPage)
 			{
@@ -679,6 +778,43 @@ namespace
 			if (Controller.IsValid() && Cards.IsValid() && Controller->GetArmyTray().Revision != ShownRevision)
 			{
 				ShownRevision = Controller->GetArmyTray().Revision;
+
+				// The army's standing order for the day the enemy comes, and the railway.
+				TrayOrders->ClearChildren();
+				const FArmyTray& Army = Controller->GetArmyTray();
+				auto OrderButton = [this](const TCHAR* Label, bool bOn, TFunction<void()> Do)
+				{
+					return SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						.OnClicked_Lambda([Do]() { Do(); return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(bOn ? BrightBrass : Muted)
+						];
+				};
+				TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("If attacked:"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+				];
+				TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
+				[
+					OrderButton(TEXT("STAND"), Army.Posture == TEXT("stand"), [this]() { if (Controller.IsValid()) { Controller->SetStance(TEXT("stand")); } })
+				];
+				TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
+				[
+					OrderButton(TEXT("DIG IN"), Army.Posture == TEXT("dig"), [this]() { if (Controller.IsValid()) { Controller->SetStance(TEXT("dig")); } })
+				];
+				TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
+				[
+					OrderButton(TEXT("FALL BACK"), Army.Posture == TEXT("back"), [this]() { if (Controller.IsValid()) { Controller->SetStance(TEXT("back")); } })
+				];
+				TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("Travel:"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+				];
+				TrayOrders->AddSlot().AutoWidth()
+				[
+					OrderButton(TEXT("BY RAIL"), Army.bByRail, [this]() { if (Controller.IsValid()) { Controller->ToggleRail(); } })
+				];
+
 				Cards->ClearChildren();
 				for (const FTrayCard& Card : Controller->GetArmyTray().Cards)
 				{
@@ -866,6 +1002,9 @@ namespace
 		FSlateBrush DeepScrimBrush;
 		TSharedPtr<SVerticalBox> Starts;
 		int32 ShownOpening = -1;
+		TSharedPtr<SVerticalBox> ProvinceBox;
+		TSharedPtr<SHorizontalBox> TrayOrders;
+		int32 ShownProvince = -1;
 		TSharedPtr<SVerticalBox> PageSections;
 		TSharedPtr<SBox> PageRibbons;
 		int32 ShownPage = -1;

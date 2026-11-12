@@ -3972,12 +3972,12 @@
     }
     return q;
   }
-  function sail(g2, f, zone, stance) {
-    if (stance !== "port" && (!shipCount(f.ships) || !fleetReach(g2, f).includes(zone))) return false;
-    const to = stance === "port" ? f.home : zone;
-    if (f.zone !== to || f.stance !== stance) g2.supplyDirty = true;
+  function sail(g2, f, zone, stance2) {
+    if (stance2 !== "port" && (!shipCount(f.ships) || !fleetReach(g2, f).includes(zone))) return false;
+    const to = stance2 === "port" ? f.home : zone;
+    if (f.zone !== to || f.stance !== stance2) g2.supplyDirty = true;
     f.zone = to;
-    f.stance = stance;
+    f.stance = stance2;
     return true;
   }
   function canSailTo(g2, f, r) {
@@ -4648,6 +4648,31 @@
     if (old) b.revive = old.id;
     n.queue.push(b);
     return b;
+  }
+  function fortCost(g2, nat, r) {
+    if (!isHome(g2, nat, r)) return null;
+    const queued = g2.nations[nat].queue.filter((b) => b.what === "fort" && b.region === r.id).length;
+    const next = (r.fort?.lv ?? 0) + queued + 1;
+    return next > 3 ? null : PRODUCTION.fort.cost[next];
+  }
+  function orderFort(g2, nat, region) {
+    const n = g2.nations[nat];
+    const r = g2.regions[region];
+    const cost = r ? fortCost(g2, nat, r) : null;
+    if (!n.alive || cost === null || n.pp < cost) return null;
+    n.pp -= cost;
+    const b = { id: g2.nextBuild++, what: "fort", name: `Fortifications at ${r.name}`, region, ordered: g2.turn, eta: g2.turn + PRODUCTION.fort.months, cost };
+    n.queue.push(b);
+    return b;
+  }
+  function cancelBuild(g2, nat, id) {
+    const n = g2.nations[nat];
+    const i = n.queue.findIndex((b) => b.id === id);
+    if (i < 0 || n.queue[i].ordered !== g2.turn) return false;
+    n.pp += n.queue[i].cost;
+    if (n.queue[i].what === "corps" && n.queue[i].revive === void 0) n.corpsNo--;
+    n.queue.splice(i, 1);
+    return true;
   }
   function deliver(g2, nat) {
     const n = g2.nations[nat];
@@ -8018,7 +8043,30 @@
     if (!ok.length || !hostileUnits(g2, target, ok[0].nat).length) return null;
     return resolveBattle(g2, ok, target);
   }
+  function orderStance(g2, c, posture) {
+    if (!canOrder(g2, c)) return false;
+    if (posture === "back") c.yields = true;
+    else delete c.yields;
+    if (posture === "dig") c.digs = true;
+    else {
+      delete c.digs;
+      delete c.dug;
+    }
+    return true;
+  }
   var postureOf = (c) => c.yields ? "back" : c.digs ? "dig" : "stand";
+  function orderRail(g2, c, to) {
+    return canOrder(g2, c) && railMove(g2, c, g2.regions[to]);
+  }
+  function orderBuildCorps(g2, kind, region, revive) {
+    return humanUp(g2) ? orderCorps(g2, g2.human, kind, region, revive) : null;
+  }
+  function orderBuildFort(g2, region) {
+    return humanUp(g2) ? orderFort(g2, g2.human, region) : null;
+  }
+  function orderCancelBuild(g2, id) {
+    return humanUp(g2) && cancelBuild(g2, g2.human, id);
+  }
 
   // ../../data/campaign/goals.json
   var goals_default = {
@@ -8437,6 +8485,13 @@
       eve: onEve(s),
       open: isOpen(s),
       fallen: fallenNation,
+      // The player's treasury: production points in hand, what the factories earn a month, and what is on order.
+      treasury: s.human ? {
+        pp: Math.floor(s.nations[s.human].pp),
+        income: Math.round(income(s, s.human)),
+        pc: Math.floor(s.nations[s.human].pc),
+        orders: s.nations[s.human].queue.map((b) => orderLine(s, b))
+      } : null,
       regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
       corps: s.corps.filter((c) => !c.dead).map((c) => ({
         id: c.id,
@@ -8467,6 +8522,20 @@
         standing: standingOf(s, n.id),
         atWar: n.atWar
       }]))
+    };
+  }
+  function orderLine(s, b) {
+    const months = Math.max(0, b.eta - s.turn);
+    return {
+      id: b.id,
+      what: b.what,
+      name: b.name,
+      region: b.region,
+      where: s.regions[b.region]?.name ?? "",
+      due: turnToDate(b.eta).label,
+      months,
+      cost: b.cost,
+      canCancel: b.ordered === s.turn && humanUp(s)
     };
   }
   var corpsById = (s, ids) => ids.map((id) => s.corps.find((c) => c.id === id)).filter((c) => !!c && !c.dead);
@@ -8651,7 +8720,7 @@
     const headlines = s.headlines.slice(h0).map((h) => ({
       kind: h.kind,
       // A letter from the front is signed by whoever wrote it.
-      text: h.kind === "letter" ? `“${h.text}”${h.by ? `  ${h.by}${h.unit !== void 0 ? `, ${s.corps.find((c) => c.id === h.unit)?.name ?? ""}` : ""}` : ""}` : h.text,
+      text: h.kind === "letter" ? `“${h.text}”${h.by ? `  ${h.by}` : ""}` : h.text,
       nat: h.nat ?? null,
       turn: h.turn,
       week: h.week
@@ -8660,6 +8729,85 @@
     const first = headlines.filter((h) => h.kind in weight).sort((a, b) => weight[a.kind] - weight[b.kind]);
     const events = (first.length ? first : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
     return { steps, headlines, events, fallen, view: view() };
+  }
+  function stance(ids, posture) {
+    const s = game();
+    for (const c of corpsById(s, ids)) orderStance(s, c, posture);
+    return view();
+  }
+  function railReach2(ids) {
+    const s = game();
+    const out = /* @__PURE__ */ new Set();
+    if (humanUp(s)) {
+      for (const c of corpsById(s, ids)) if (canOrder(s, c)) for (const id of railReach(s, c)) out.add(id);
+    }
+    return { regions: [...out] };
+  }
+  function rail(ids, to) {
+    const s = game();
+    const moved = [];
+    for (const c of corpsById(s, ids)) if (c.reg !== to && orderRail(s, c, to)) moved.push({ id: c.id, path: [to] });
+    return { moved, view: view() };
+  }
+  function province(id) {
+    const s = game();
+    const r = s.regions[id];
+    const me = s.human;
+    if (!r) return null;
+    const up = !!me && humanUp(s) && !onEve(s);
+    const n = me ? s.nations[me] : null;
+    const home = !!me && isHome(s, me, r);
+    const raiseHere = !!me && canRaise(s, me, r);
+    const cost = me ? fortCost(s, me, r) : null;
+    const level = r.fort?.lv ?? 0;
+    return {
+      id: r.id,
+      name: r.name,
+      home,
+      industry: r.fac,
+      works: level,
+      worksFacing: r.fort?.vs.map((v) => s.nations[v]?.name ?? v) ?? [],
+      harbour: r.port,
+      capital: r.cap,
+      // New corps: what each kind is, what it costs, how long it takes, and whether it can be ordered now.
+      raise: raiseHere ? Object.keys(PRODUCTION.builds).map((kind) => {
+        const spec2 = PRODUCTION.builds[kind];
+        return {
+          kind,
+          label: spec2.label,
+          divs: spec2.divs,
+          cost: spec2.cost,
+          months: spec2.months,
+          blurb: spec2.blurb,
+          ok: up && !!n && n.pp >= spec2.cost,
+          why: !up ? "It is not your month." : n && n.pp < spec2.cost ? `Needs ${spec2.cost} production points; you have ${Math.floor(n.pp)}.` : ""
+        };
+      }) : [],
+      raiseNote: raiseHere ? "" : home ? "New corps are raised in the home country and sent out by sea." : "",
+      // Fortifications: the next level, if there is one.
+      fort: home && cost !== null ? {
+        level: level + 1,
+        cost,
+        months: PRODUCTION.fort.months,
+        ok: up && !!n && n.pp >= cost,
+        why: !up ? "It is not your month." : n && n.pp < cost ? `Needs ${cost} production points; you have ${Math.floor(n.pp)}.` : ""
+      } : null,
+      forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).map((b) => orderLine(s, b)) : []
+    };
+  }
+  function raise(kind, region) {
+    const s = game();
+    const b = orderBuildCorps(s, kind, region);
+    return { ok: !!b, name: b?.name ?? "", due: b ? turnToDate(b.eta).label : "", view: view() };
+  }
+  function fortify(region) {
+    const s = game();
+    const b = orderBuildFort(s, region);
+    return { ok: !!b, name: b?.name ?? "", due: b ? turnToDate(b.eta).label : "", view: view() };
+  }
+  function cancel(id) {
+    const s = game();
+    return { ok: orderCancelBuild(s, id), view: view() };
   }
   var dateOf = (turn) => turnToDate(turn).label;
   function record(id) {
@@ -8731,6 +8879,13 @@
   globalThis.TC = {
     record,
     roll,
+    stance,
+    railReach: railReach2,
+    rail,
+    province,
+    raise,
+    fortify,
+    cancel,
     starts,
     start,
     save,

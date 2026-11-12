@@ -72,7 +72,7 @@ public:
 	AArmyPiece* FindPiece(int32 RegionId, const FString& Nation) const;
 
 	/** Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it. */
-	void SetReach(const TArray<FReachRegion>& Reach);
+	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false);
 
 	/** Draws the road an army would take, from where it stands through the regions given. An empty list clears it. */
 	void SetRoute(const FVector& FromWorld, const TArray<int32>& Regions);

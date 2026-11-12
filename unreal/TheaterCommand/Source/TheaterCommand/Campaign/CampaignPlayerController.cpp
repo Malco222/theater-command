@@ -215,6 +215,75 @@ void ACampaignPlayerController::WheelDown()
 	}
 }
 
+void ACampaignPlayerController::SetStance(const FString& Posture)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || PickedCorps.Num() == 0)
+	{
+		return;
+	}
+	Session->SetStance(PickedCorps, Posture);
+	RefreshOrders();
+	Notify(Posture == TEXT("dig") ? TEXT("They will dig in. After a whole month on this ground they defend a quarter stronger.")
+		: Posture == TEXT("back") ? TEXT("They will fall back whole if they are attacked at odds they cannot hold.")
+		: TEXT("They will stand and fight where they are."), 4.0);
+}
+
+void ACampaignPlayerController::ToggleRail()
+{
+	if (ArmyRegion == INDEX_NONE)
+	{
+		return;
+	}
+	bByRail = !bByRail;
+	RefreshOrders();
+	if (bByRail)
+	{
+		Notify(Reach.Num() > 0 ? TEXT("By rail: right-click any ground tinted blue. It takes the corps' whole month.")
+			: TEXT("None of these corps can go by rail this month: it takes a whole month's moves."), 5.0);
+	}
+}
+
+void ACampaignPlayerController::ProvinceAction(const FString& Action)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || Map->GetSelectedRegion() == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	Session->OrderInProvince(Action, Map->GetSelectedRegion(), Note);
+	RefreshRegionPanel(Map->GetSelectedRegion());
+	Notify(Note, 5.0);
+}
+
+void ACampaignPlayerController::CancelOrder(int32 OrderId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	Notify(Session->CancelOrder(OrderId) ? TEXT("The order is taken back and the points returned.") : TEXT("An order can only be taken back in the month it was placed."), 4.0);
+	RefreshRegionPanel(Map->GetSelectedRegion());
+}
+
+FText ACampaignPlayerController::GetTreasuryText() const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || !Session->GetView().Treasury.bValid)
+	{
+		return FText::GetEmpty();
+	}
+	const FTreasury& Treasury = Session->GetView().Treasury;
+	FString Line = FString::Printf(TEXT("Production: %d in hand, +%d a month"), Treasury.Production, Treasury.Income);
+	if (Treasury.Orders.Num() > 0)
+	{
+		Line += FString::Printf(TEXT("  \u00B7  %d on order"), Treasury.Orders.Num());
+	}
+	return FText::FromString(Line);
+}
+
 void ACampaignPlayerController::OpenRecord(int32 CorpsId)
 {
 	if (FCampaignSession* Session = GetSession())
@@ -546,6 +615,7 @@ void ACampaignPlayerController::RefreshOrders()
 
 	if (ArmyRegion == INDEX_NONE)
 	{
+		bByRail = false;
 		Map->SetReach(Reach);
 		return;
 	}
@@ -598,8 +668,34 @@ void ACampaignPlayerController::RefreshOrders()
 	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s army at %s  ·  %d corps, %d division%s"),
 		*Adjective, *Where, CorpsCount, Divisions, Divisions == 1 ? TEXT("") : TEXT("s")));
 
-	Reach = Session->Reach(PickedCorps);
-	Map->SetReach(Reach);
+	// The standing order they are under, if they all share one.
+	Tray.Posture.Reset();
+	bool bFirst = true;
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		if (PickedCorps.Contains(Unit.Id))
+		{
+			Tray.Posture = bFirst ? Unit.Posture : (Tray.Posture == Unit.Posture ? Tray.Posture : FString());
+			bFirst = false;
+		}
+	}
+	Tray.bByRail = bByRail;
+
+	if (bByRail)
+	{
+		for (int32 RegionId : Session->RailReach(PickedCorps))
+		{
+			FReachRegion Entry;
+			Entry.Region = RegionId;
+			Entry.Previous = ArmyRegion;
+			Reach.Add(Entry);
+		}
+	}
+	else
+	{
+		Reach = Session->Reach(PickedCorps);
+	}
+	Map->SetReach(Reach, bByRail);
 
 	RingedPiece = Map->FindPiece(ArmyRegion, View.Human);
 	if (RingedPiece.IsValid())
@@ -615,6 +711,11 @@ void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
 		return;
 	}
 	RouteTarget = RegionId;
+	if (bByRail)
+	{
+		Map->SetRoute(FVector::ZeroVector, TArray<int32>());
+		return;
+	}
 	TArray<int32> Road;
 	// Follow the way back from the region pointed at to where the army stands.
 	for (const FReachRegion* Step = FindReach(RegionId); Step && Road.Num() < 32; Step = FindReach(Step->Previous))
@@ -644,7 +745,27 @@ void ACampaignPlayerController::OrderTo(int32 RegionId)
 	const FReachRegion* Target = FindReach(RegionId);
 	if (!Target)
 	{
-		Notify(TEXT("They cannot get there this month."));
+		Notify(bByRail ? TEXT("The railway does not reach there through friendly ground, or the corps have already used their month.") : TEXT("They cannot get there this month."));
+		return;
+	}
+	if (bByRail)
+	{
+		const TArray<FCorpsMove> Trains = Session->Rail(PickedCorps, RegionId);
+		if (Trains.Num() == 0)
+		{
+			Notify(TEXT("No corps could go: there is no room there, or they have already used their month."));
+			return;
+		}
+		ShowWar(Session->GetView(), Trains);
+		PickedCorps.Reset();
+		for (const FCorpsMove& Train : Trains)
+		{
+			PickedCorps.Add(Train.CorpsId);
+		}
+		ArmyRegion = RegionId;
+		bByRail = false;
+		RefreshOrders();
+		SelectRegion(RegionId);
 		return;
 	}
 	if (Target->bAttack)
@@ -1025,6 +1146,7 @@ FText ACampaignPlayerController::GetRulesNote() const
 void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 {
 	RegionPanel = FRegionPanelInfo();
+	RegionPanel.Revision = ++PanelRevision;
 	if (!Map.IsValid() || !Map->GetData().Regions.IsValidIndex(RegionId))
 	{
 		return;
@@ -1094,4 +1216,17 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 		}
 	}
 	RegionPanel.Forces = FText::FromString(ForceLines.Num() > 0 ? FString::Join(ForceLines, TEXT("\n")) : FString(TEXT("No troops here.")));
+
+	// On the player's own ground: what the province holds, and what can be raised or built there.
+	if (FCampaignSession* Session = GetSession())
+	{
+		const FProvinceInfo Province = Session->Province(RegionId);
+		if (Province.bValid && Province.bHome)
+		{
+			RegionPanel.Holdings = FText::FromString(Province.Holdings);
+			RegionPanel.ProvinceNote = FText::FromString(Province.Note);
+			RegionPanel.Options = Province.Options;
+			RegionPanel.Forming = Province.Forming;
+		}
+	}
 }

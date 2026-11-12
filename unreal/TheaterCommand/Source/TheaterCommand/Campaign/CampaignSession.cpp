@@ -229,6 +229,33 @@ bool FCampaignSession::CallRules(const FString& Function, const FString& Argumen
 
 namespace
 {
+	FOrderLine ReadOrder(const TSharedPtr<FJsonObject>& Object)
+	{
+		FOrderLine Line;
+		Object->TryGetNumberField(TEXT("id"), Line.Id);
+		Object->TryGetStringField(TEXT("name"), Line.Name);
+		Object->TryGetStringField(TEXT("where"), Line.Where);
+		Object->TryGetStringField(TEXT("due"), Line.Due);
+		Object->TryGetNumberField(TEXT("months"), Line.Months);
+		Object->TryGetNumberField(TEXT("cost"), Line.Cost);
+		Object->TryGetBoolField(TEXT("canCancel"), Line.bCanCancel);
+		return Line;
+	}
+
+	TArray<FOrderLine> ReadOrders(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
+	{
+		TArray<FOrderLine> Out;
+		const TArray<TSharedPtr<FJsonValue>>* Orders = nullptr;
+		if (Object->TryGetArrayField(Field, Orders))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Orders)
+			{
+				Out.Add(ReadOrder(Value->AsObject()));
+			}
+		}
+		return Out;
+	}
+
 	/** Honours as the rules list them: a title and the two colours of a ribbon. */
 	TArray<FHonourRibbon> ReadRibbons(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field)
 	{
@@ -282,6 +309,16 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				Region->TryGetStringField(TEXT("stand"), Out.RegionStanding[Id]);
 			}
 		}
+	}
+
+	const TSharedPtr<FJsonObject>* Treasury = nullptr;
+	if (Object->TryGetObjectField(TEXT("treasury"), Treasury)) // null when nobody is being led
+	{
+		Out.Treasury.bValid = true;
+		(*Treasury)->TryGetNumberField(TEXT("pp"), Out.Treasury.Production);
+		(*Treasury)->TryGetNumberField(TEXT("income"), Out.Treasury.Income);
+		(*Treasury)->TryGetNumberField(TEXT("pc"), Out.Treasury.Political);
+		Out.Treasury.Orders = ReadOrders(*Treasury, TEXT("orders"));
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* Corps = nullptr;
@@ -643,4 +680,139 @@ FDocumentPage FCampaignSession::Roll()
 	}
 	Page.Sections.Add({ TEXT("The memorial wall"), Fallen.Num() > 0 ? FString::Join(Fallen, TEXT("\n\n")) : FString(TEXT("No corps has been lost.")) });
 	return Page;
+}
+
+void FCampaignSession::SetStance(const TArray<int32>& CorpsIds, const FString& Posture)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("stance"), FString::Printf(TEXT("[[%s],\"%s\"]"), *IdList(CorpsIds), *Posture), Object))
+	{
+		View = ParseView(Object); // this call answers with the picture itself
+		OnViewChanged.Broadcast();
+	}
+}
+
+TArray<int32> FCampaignSession::RailReach(const TArray<int32>& CorpsIds)
+{
+	TArray<int32> Out;
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("railReach"), FString::Printf(TEXT("[[%s]]"), *IdList(CorpsIds)), Object))
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Regions = nullptr;
+		if (Object->TryGetArrayField(TEXT("regions"), Regions))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Regions)
+			{
+				Out.Add(FMath::RoundToInt32(Value->AsNumber()));
+			}
+		}
+	}
+	return Out;
+}
+
+TArray<FCorpsMove> FCampaignSession::Rail(const TArray<int32>& CorpsIds, int32 RegionId)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("rail"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	{
+		return TArray<FCorpsMove>();
+	}
+	TArray<FCorpsMove> Out = ReadMoves(Object);
+	TakeView(Object);
+	return Out;
+}
+
+FProvinceInfo FCampaignSession::Province(int32 RegionId)
+{
+	FProvinceInfo Info;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("province"), FString::Printf(TEXT("[%d]"), RegionId), Object))
+	{
+		return Info; // the stand-in rules have no provinces to manage
+	}
+	Info.bValid = true;
+	Info.Region = RegionId;
+	Object->TryGetBoolField(TEXT("home"), Info.bHome);
+	Object->TryGetStringField(TEXT("raiseNote"), Info.Note);
+
+	int32 Industry = 0, Works = 0;
+	bool bHarbour = false;
+	Object->TryGetNumberField(TEXT("industry"), Industry);
+	Object->TryGetNumberField(TEXT("works"), Works);
+	Object->TryGetBoolField(TEXT("harbour"), bHarbour);
+	TArray<FString> Holdings;
+	Holdings.Add(Industry > 0 ? FString::Printf(TEXT("Industry %d"), Industry) : FString(TEXT("No industry")));
+	Holdings.Add(Works > 0 ? FString::Printf(TEXT("Fortified, level %d"), Works) : FString(TEXT("No works")));
+	Holdings.Add(bHarbour ? TEXT("Harbour") : TEXT("No harbour"));
+	Info.Holdings = FString::Join(Holdings, TEXT("   \u00B7   "));
+
+	const TArray<TSharedPtr<FJsonValue>>* Raise = nullptr;
+	if (Object->TryGetArrayField(TEXT("raise"), Raise))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Raise)
+		{
+			const TSharedPtr<FJsonObject> Spec = Value->AsObject();
+			FProvinceOption Option;
+			int32 Cost = 0, Months = 0, Divisions = 0;
+			Spec->TryGetStringField(TEXT("kind"), Option.Action);
+			Spec->TryGetStringField(TEXT("label"), Option.Label);
+			Spec->TryGetNumberField(TEXT("cost"), Cost);
+			Spec->TryGetNumberField(TEXT("months"), Months);
+			Spec->TryGetNumberField(TEXT("divs"), Divisions);
+			Spec->TryGetBoolField(TEXT("ok"), Option.bEnabled);
+			Spec->TryGetStringField(TEXT("why"), Option.Why);
+			Option.Label = FString::Printf(TEXT("Raise: %s"), *Option.Label);
+			Option.Detail = FString::Printf(TEXT("%d divisions  \u00B7  %d points  \u00B7  ready in %d months"), Divisions, Cost, Months);
+			Info.Options.Add(MoveTemp(Option));
+		}
+	}
+	const TSharedPtr<FJsonObject>* Fort = nullptr;
+	if (Object->TryGetObjectField(TEXT("fort"), Fort))
+	{
+		FProvinceOption Option;
+		int32 Level = 0, Cost = 0, Months = 0;
+		(*Fort)->TryGetNumberField(TEXT("level"), Level);
+		(*Fort)->TryGetNumberField(TEXT("cost"), Cost);
+		(*Fort)->TryGetNumberField(TEXT("months"), Months);
+		(*Fort)->TryGetBoolField(TEXT("ok"), Option.bEnabled);
+		(*Fort)->TryGetStringField(TEXT("why"), Option.Why);
+		Option.Action = TEXT("fort");
+		Option.Label = FString::Printf(TEXT("Build: fortifications, level %d"), Level);
+		Option.Detail = FString::Printf(TEXT("%d points  \u00B7  finished in %d months"), Cost, Months);
+		Info.Options.Add(MoveTemp(Option));
+	}
+	Info.Forming = ReadOrders(Object, TEXT("forming"));
+	return Info;
+}
+
+bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	const bool bFort = Action == TEXT("fort");
+	const FString Arguments = bFort ? FString::Printf(TEXT("[%d]"), RegionId) : FString::Printf(TEXT("[\"%s\",%d]"), *Action, RegionId);
+	if (!CallRules(bFort ? TEXT("fortify") : TEXT("raise"), Arguments, Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	FString Name, Due;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	Object->TryGetStringField(TEXT("name"), Name);
+	Object->TryGetStringField(TEXT("due"), Due);
+	TakeView(Object);
+	OutNote = bOk ? FString::Printf(TEXT("%s ordered. Due %s."), *Name, *Due) : FString(TEXT("That cannot be ordered now."));
+	return bOk;
+}
+
+bool FCampaignSession::CancelOrder(int32 OrderId)
+{
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("cancel"), FString::Printf(TEXT("[%d]"), OrderId), Object))
+	{
+		return false;
+	}
+	bool bOk = false;
+	Object->TryGetBoolField(TEXT("ok"), bOk);
+	TakeView(Object);
+	return bOk;
 }

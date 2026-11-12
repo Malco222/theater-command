@@ -18,14 +18,22 @@
 //   TC.previewAttack([corpsId, ...], regionId) -> the odds and the Battle Ticket, or null
 //   TC.attack([corpsId, ...], regionId) -> { report, note, view }
 //   TC.endMonth()                       -> { steps, headlines, events, fallen, view }
+//   TC.stance([corpsId, ...], posture)  -> view: stand, dig in ('dig') or fall back ('back') when attacked
+//   TC.railReach([corpsId, ...])        -> { regions: [id, ...] } the picked corps could go to by rail
+//   TC.rail([corpsId, ...], regionId)   -> { moved, view }
+//   TC.province(regionId)               -> what a territory holds, and what the player can raise or build there
+//   TC.raise(kind, regionId)            -> { ok, view }: orders a new corps
+//   TC.fortify(regionId)                -> { ok, view }: orders the next level of fortification
+//   TC.cancel(buildId)                  -> { ok, view }: takes back an order placed this month
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { allied, atWar, createGame, men } from '../../../src/campaign/game';
+import { allied, atWar, createGame, men, railReach as railReachOf } from '../../../src/campaign/game';
 import {
-  beginEve, beginHuman, canOrder, candidates, current, endEve, endHuman, humanUp, onEve, orderAttack, orderMove,
-  postureOf, previewAttack, reach, runTurnAI, stepAI,
+  beginEve, beginHuman, canOrder, candidates, current, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps,
+  orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
 } from '../../../src/campaign/turn';
+import { PRODUCTION, canRaise, fortCost, income, isHome } from '../../../src/campaign/economy';
 import { generalOf, rankOf } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat } from '../../../src/campaign/stories';
 import { KIND } from '../../../src/campaign/types';
@@ -34,7 +42,7 @@ import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { STARTS } from './starts';
 import { turnToDate } from '../../../src/core/ticket';
-import type { BattleReport, Corps, Game } from '../../../src/campaign/types';
+import type { BattleReport, Build, Corps, Game, Kind, Posture } from '../../../src/campaign/types';
 
 let g: Game | null = null;
 /** The player's nation, once it has been beaten. The war goes on with nobody at the controls. */
@@ -69,6 +77,13 @@ function view() {
     eve: onEve(s),
     open: isOpen(s),
     fallen: fallenNation,
+    // The player's treasury: production points in hand, what the factories earn a month, and what is on order.
+    treasury: s.human ? {
+      pp: Math.floor(s.nations[s.human].pp),
+      income: Math.round(income(s, s.human)),
+      pc: Math.floor(s.nations[s.human].pc),
+      orders: s.nations[s.human].queue.map((b) => orderLine(s, b)),
+    } : null,
     regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
     corps: s.corps.filter((c) => !c.dead).map((c) => ({
       id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, str: c.str, org: c.org, reg: c.reg,
@@ -81,6 +96,15 @@ function view() {
     nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
       name: n.name, adj: n.adj, alive: n.alive, standing: standingOf(s, n.id), atWar: n.atWar,
     }])),
+  };
+}
+
+/** Something on order, as a line: what, where, when it is due, and whether the order can still be taken back. */
+function orderLine(s: Game, b: Build) {
+  const months = Math.max(0, b.eta - s.turn);
+  return {
+    id: b.id, what: b.what, name: b.name, region: b.region, where: s.regions[b.region]?.name ?? '',
+    due: turnToDate(b.eta).label, months, cost: b.cost, canCancel: b.ordered === s.turn && humanUp(s),
   };
 }
 
@@ -300,7 +324,7 @@ function endMonth() {
   const headlines = s.headlines.slice(h0).map((h) => ({
     kind: h.kind,
     // A letter from the front is signed by whoever wrote it.
-    text: h.kind === 'letter' ? `\u201C${h.text}\u201D${h.by ? `  ${h.by}${h.unit !== undefined ? `, ${s.corps.find((c) => c.id === h.unit)?.name ?? ''}` : ''}` : ''}` : h.text,
+    text: h.kind === 'letter' ? `\u201C${h.text}\u201D${h.by ? `  ${h.by}` : ''}` : h.text,
     nat: h.nat ?? null, turn: h.turn, week: h.week,
   }));
   // The few lines worth telling first: declarations of war, countries falling, events, honours won and letters home.
@@ -308,6 +332,86 @@ function endMonth() {
   const first = headlines.filter((h) => h.kind in weight).sort((a, b) => weight[a.kind] - weight[b.kind]);
   const events = (first.length ? first : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
   return { steps, headlines, events, fallen, view: view() };
+}
+
+/** The player's standing order for the picked corps on the day the enemy comes. */
+function stance(ids: number[], posture: Posture) {
+  const s = game();
+  for (const c of corpsById(s, ids)) orderStance(s, c, posture);
+  return view();
+}
+
+/** Where the picked corps could go by rail: anywhere any one of them could. */
+function railReach(ids: number[]) {
+  const s = game();
+  const out = new Set<number>();
+  if (humanUp(s)) for (const c of corpsById(s, ids)) if (canOrder(s, c)) for (const id of railReachOf(s, c)) out.add(id);
+  return { regions: [...out] };
+}
+
+function rail(ids: number[], to: number) {
+  const s = game();
+  const moved: { id: number; path: number[] }[] = [];
+  for (const c of corpsById(s, ids)) if (c.reg !== to && orderRail(s, c, to)) moved.push({ id: c.id, path: [to] });
+  return { moved, view: view() };
+}
+
+/** What a territory holds, and what the player can raise or build there this month. */
+function province(id: number) {
+  const s = game();
+  const r = s.regions[id];
+  const me = s.human;
+  if (!r) return null;
+  const up = !!me && humanUp(s) && !onEve(s);
+  const n = me ? s.nations[me] : null;
+  const home = !!me && isHome(s, me, r);
+  const raiseHere = !!me && canRaise(s, me, r);
+  const cost = me ? fortCost(s, me, r) : null;
+  const level = r.fort?.lv ?? 0;
+  return {
+    id: r.id,
+    name: r.name,
+    home,
+    industry: r.fac,
+    works: level,
+    worksFacing: r.fort?.vs.map((v) => s.nations[v]?.name ?? v) ?? [],
+    harbour: r.port,
+    capital: r.cap,
+    // New corps: what each kind is, what it costs, how long it takes, and whether it can be ordered now.
+    raise: raiseHere ? (Object.keys(PRODUCTION.builds) as Kind[]).map((kind) => {
+      const spec = PRODUCTION.builds[kind];
+      return {
+        kind, label: spec.label, divs: spec.divs, cost: spec.cost, months: spec.months, blurb: spec.blurb,
+        ok: up && !!n && n.pp >= spec.cost,
+        why: !up ? 'It is not your month.' : n && n.pp < spec.cost ? `Needs ${spec.cost} production points; you have ${Math.floor(n.pp)}.` : '',
+      };
+    }) : [],
+    raiseNote: raiseHere ? '' : home ? 'New corps are raised in the home country and sent out by sea.' : '',
+    // Fortifications: the next level, if there is one.
+    fort: home && cost !== null ? {
+      level: level + 1, cost, months: PRODUCTION.fort.months,
+      ok: up && !!n && n.pp >= cost,
+      why: !up ? 'It is not your month.' : n && n.pp < cost ? `Needs ${cost} production points; you have ${Math.floor(n.pp)}.` : '',
+    } : null,
+    forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).map((b) => orderLine(s, b)) : [],
+  };
+}
+
+function raise(kind: Kind, region: number) {
+  const s = game();
+  const b = orderBuildCorps(s, kind, region);
+  return { ok: !!b, name: b?.name ?? '', due: b ? turnToDate(b.eta).label : '', view: view() };
+}
+
+function fortify(region: number) {
+  const s = game();
+  const b = orderBuildFort(s, region);
+  return { ok: !!b, name: b?.name ?? '', due: b ? turnToDate(b.eta).label : '', view: view() };
+}
+
+function cancel(id: number) {
+  const s = game();
+  return { ok: orderCancelBuild(s, id), view: view() };
 }
 
 const dateOf = (turn: number): string => turnToDate(turn).label;
@@ -369,4 +473,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  record, roll, starts, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  record, roll, stance, railReach, rail, province, raise, fortify, cancel, starts, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

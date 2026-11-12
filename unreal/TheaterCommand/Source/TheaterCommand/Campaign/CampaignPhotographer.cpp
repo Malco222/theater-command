@@ -79,6 +79,17 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	}
 	Add(TEXT("14b-menu-with-save"), TEXT("Warsaw"), 0.5f).bMenu = true;
 	{
+		// A province of one's own: what it holds, what can be raised there, and something put on order.
+		FShot& Shot = Add(TEXT("14c-province"), TEXT("Berlin"), 0.4f);
+		Shot.Select = TEXT("Berlin");
+		Shot.Order = TEXT("mtn");
+	}
+	{
+		FShot& Shot = Add(TEXT("14d-by-rail"), TEXT("Saxony"), 0.5f);
+		Shot.Army = TEXT("Rhineland");
+		Shot.bRail = true;
+	}
+	{
 		// Attack again, then end the month and catch the other nations' month being played out.
 		FShot& Shot = Add(TEXT("15-attack-again"), TEXT("Pomorze"), 0.34f);
 		Shot.Army = TEXT("Grenzmark");
@@ -196,6 +207,14 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (const int32* Target = Data.RegionByName.Find(Shot.Attack))
 	{
 		Controller->OrderTo(*Target);
+	}
+	if (!Shot.Order.IsEmpty())
+	{
+		Controller->ProvinceAction(Shot.Order);
+	}
+	if (Shot.bRail)
+	{
+		Controller->ToggleRail();
 	}
 	if (Shot.bRecord)
 	{

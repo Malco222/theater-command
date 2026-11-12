@@ -961,7 +961,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders)
 	BuildBorders();
 }
 
-void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach)
+void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail)
 {
 	OrdersMesh->ClearMeshSection(0);
 	if (Reach.Num() == 0)
@@ -970,7 +970,8 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach)
 	}
 	// Ground the army can march to is lightened a little; ground it could attack is marked in red and ringed.
 	FCampaignMeshBuffers Buffers;
-	const FLinearColor March(0.8f, 1.0f, 0.82f, 0.13f);
+	// Ground that can be reached by rail is tinted the blue of a timetable instead.
+	const FLinearColor March = bByRail ? FLinearColor(0.62f, 0.8f, 1.0f, 0.2f) : FLinearColor(0.8f, 1.0f, 0.82f, 0.13f);
 	const FLinearColor Attack(0.9f, 0.06f, 0.03f, 0.42f);
 	const FColor AttackRing = FLinearColor(1.0f, 0.25f, 0.18f, 0.9f).ToFColor(false);
 	for (const FReachRegion& Entry : Reach)
