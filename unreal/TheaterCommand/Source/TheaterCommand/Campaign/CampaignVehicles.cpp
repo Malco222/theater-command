@@ -1440,6 +1440,13 @@ namespace VehicleParts
 				return &Known;
 			}
 		}
+		for (const FModel& Known : MiniatureParts::ShipModels())
+		{
+			if (Kind == Known.Name)
+			{
+				return &Known;
+			}
+		}
 		return nullptr;
 	}
 }
@@ -1465,7 +1472,7 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 			return false;
 		}
 		FMiniatureMesh Fresh;
-		if (Known->Aloft <= 0.0)
+		if (Known->Aloft <= 0.0 && Known->Room < 100.0)
 		{
 			// The dust of the road on the tracks and the lower hull.
 			Fresh.DustFoot = 0.0;
@@ -1489,6 +1496,16 @@ TArray<FString> FMiniatureMesh::VehicleNames()
 	for (const VehicleParts::FModel& Known : VehicleParts::Models)
 	{
 		Names.Add(Known.bAnyNation ? FString(Known.Name) + TEXT(":") + Known.Nation : FString(Known.Name));
+	}
+	return Names;
+}
+
+TArray<FString> FMiniatureMesh::ShipNames(const FString& Tag)
+{
+	TArray<FString> Names;
+	for (const VehicleParts::FModel& Known : MiniatureParts::ShipModels())
+	{
+		Names.Add(FString(Known.Name) + TEXT(":") + Tag);
 	}
 	return Names;
 }

@@ -115,6 +115,9 @@ public:
 	FVector2D ParadeSpot(int32 Index) const;
 	float ParadeHeight() const { return ParadeLevel; }
 
+	/** Where the fleet of this number lies, on the map (for the photographer: "@fleet2"). The middle of the map if there is none. */
+	FVector2D FleetSpot(int32 Index) const;
+
 	/** Lays the fleets on their seas (or by their harbours) and the air fleets over their airfields. */
 	void ShowFleets(const FCampaignView& View);
 

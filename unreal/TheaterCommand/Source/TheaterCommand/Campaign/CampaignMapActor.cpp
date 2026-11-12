@@ -822,6 +822,19 @@ void ACampaignMapActor::BuildTowns()
 	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points"), Count, Model.Vertices.Num());
 }
 
+FVector2D ACampaignMapActor::FleetSpot(int32 Index) const
+{
+	int32 Count = 0;
+	for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : FleetPieces)
+	{
+		if (Pair.Value && Count++ == Index)
+		{
+			return WorldToMap(Pair.Value->GetActorLocation());
+		}
+	}
+	return FVector2D(Data.Width * 0.5, Data.Height * 0.5);
+}
+
 FVector2D ACampaignMapActor::ParadeSpot(int32 Index) const
 {
 	if (ParadeSpots.IsValidIndex(Index))
@@ -859,11 +872,19 @@ void ACampaignMapActor::BuildParade()
 		Wanted.ParseIntoArray(Names, TEXT(","));
 	}
 	const FVector2D Centre = Data.Regions[*Id].Center;
-	// "-TheaterModels=aircraft" is every aircraft.
+	// "-TheaterModels=aircraft" is every aircraft; "ships:GER" is each class of warship as Germany's.
 	if (Wanted == TEXT("aircraft"))
 	{
 		Names = FMiniatureMesh::AircraftNames();
 	}
+	FString Navy;
+	if (Wanted.Split(TEXT(":"), nullptr, &Navy) && Wanted.StartsWith(TEXT("ships:")))
+	{
+		Names = FMiniatureMesh::ShipNames(Navy);
+	}
+	// "-TheaterParadeScale=0.1" draws everything a tenth the size, for ships.
+	double Shrink = 1.0;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterParadeScale="), Shrink);
 	// Each model has the room it needs in the row.
 	TArray<double> Along;
 	double Row = 0.0;
@@ -873,7 +894,7 @@ void ACampaignMapActor::BuildParade()
 		Along.Add(Row + Room * 0.5);
 		Row += Room;
 	}
-	const double Metre = 22.0, Apart = Row / FMath::Max(Names.Num(), 1) * Metre;
+	const double Metre = 22.0 * Shrink, Apart = Row / FMath::Max(Names.Num(), 1) * Metre;
 	const FVector Middle = SurfacePoint(Centre.X, Centre.Y, 0.0) + FVector(0.0, 0.0, 80.0);
 	ParadeLevel = Middle.Z - GetActorLocation().Z + 1.3 * Metre;
 	const double Long = Apart * Names.Num() + 30.0 * Metre;

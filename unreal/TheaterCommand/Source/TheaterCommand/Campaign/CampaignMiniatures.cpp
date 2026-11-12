@@ -818,33 +818,28 @@ void FMiniatureMesh::Aeroplane(const FVector& Where, double Span, bool bBomber, 
 	}
 }
 
-void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& Nation)
+void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& /*Nation*/, const FString& Tag)
 {
 	// The three kinds of ship most worth showing: the big ships first.
-	TArray<int32> Show; // 0 battleship, 1 carrier, 2 cruiser, 3 destroyer, 4 submarine
-	if (Battleships > 0) Show.Add(0);
-	if (Carriers > 0) Show.Add(1);
-	if (Cruisers > 0) Show.Add(2);
-	if (Destroyers > 0) Show.Add(3);
-	if (Submarines > 0) Show.Add(4);
+	TArray<const TCHAR*> Show;
+	if (Battleships > 0) Show.Add(TEXT("Battleship:"));
+	if (Carriers > 0) Show.Add(TEXT("Carrier:"));
+	if (Cruisers > 0) Show.Add(TEXT("Cruiser:"));
+	if (Destroyers > 0) Show.Add(TEXT("Destroyer:"));
+	if (Submarines > 0) Show.Add(TEXT("Submarine:"));
 	Show.SetNum(FMath::Min(Show.Num(), 3));
-	if (Show.Num() == 1 && Show[0] == 4)
+	if (Show.Num() == 1 && Submarines > 0)
 	{
-		Show.Add(4); // a submarine arm is a pack of boats
+		Show.Add(TEXT("Submarine:")); // a submarine arm is a pack of boats
 	}
-	// They lie in echelon, bows to the right as the eye sees them, the biggest nearest.
+	// The ships are in scale with one another: a real metre of ship is this much of the map, which makes a
+	// battleship about as long as two army pieces side by side. They lie in echelon, bows to the right as the
+	// eye sees them, the biggest nearest.
+	const double Metre = 0.066 * Unit;
 	for (int32 K = 0; K < Show.Num(); ++K)
 	{
-		const FVector Where((K - (Show.Num() - 1) * 0.5) * 3.2 * Unit, (K % 2 ? 1.6 : -1.2) * Unit, 0.02 * Unit);
-		const double Turn = 90.0 + (K - 1) * 4.0;
-		switch (Show[K])
-		{
-		case 0: Battleship(Where, 10.5 * Unit, Nation, Turn); break;
-		case 1: Carrier(Where, 10.5 * Unit, Nation, Turn); break;
-		case 2: Cruiser(Where, 8.5 * Unit, Nation, Turn); break;
-		case 3: Destroyer(Where, 6.2 * Unit, Nation, Turn); break;
-		default: Submarine(Where, 5.6 * Unit, Nation, Turn); break;
-		}
+		const FVector Where((K - (Show.Num() - 1) * 0.5) * 4.2 * Unit, (K % 2 ? 2.4 : -1.8) * Unit, 0.02 * Unit);
+		Vehicle(FString(Show[K]) + Tag, Where, Metre, -90.0 + (K - 1) * 4.0);
 	}
 }
 

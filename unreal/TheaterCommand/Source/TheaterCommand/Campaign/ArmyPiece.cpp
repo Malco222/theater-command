@@ -165,7 +165,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		// A fleet: its ships lie on the water, with no base under them.
 		Top = 0.02 * U;
 		CounterWidth = 9.5 * U;
-		Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour);
+		Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour, NationTag);
 		Size = FMath::Clamp(0.8 + 0.012 * Fleet.Ships(), 0.9, 1.7);
 		Figure = FString::Printf(TEXT("%d ships"), Fleet.Ships());
 		SelectionRing->SetVisibility(false);

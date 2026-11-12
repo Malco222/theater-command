@@ -318,6 +318,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			GEngine->GameViewport->RemoveAllViewportWidgets();
 		}
 	}
+	if (Shot.Region.StartsWith(TEXT("@fleet")))
+	{
+		At = Table->FleetSpot(FCString::Atoi(*Shot.Region.Mid(6)));
+	}
 	Eye->SetHeading(Shot.Yaw, Shot.Tilt);
 	Eye->GoTo(Table->MapToWorld(At.X, At.Y), Shot.Zoom, true);
 

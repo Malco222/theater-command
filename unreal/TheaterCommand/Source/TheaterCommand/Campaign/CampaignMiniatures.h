@@ -99,6 +99,7 @@ struct FMiniatureMesh
 	static FString VehicleTitle(const FString& Name);
 	static FString VehicleNation(const FString& Name);
 	static TArray<FString> AircraftNames();
+	static TArray<FString> ShipNames(const FString& Tag);
 	/** How much room a model needs in a row, in metres; and how high an aircraft is shown flying (0 for things on the ground). */
 	static double VehicleRoom(const FString& Name);
 	static double VehicleAloft(const FString& Name);
@@ -129,7 +130,7 @@ struct FMiniatureMesh
 	void WingMarking(const FVector& Where, double Radius, const FString& Tag, double Turn = 0.0);
 
 	/** A fleet: up to three ships for the classes it has most worth showing, lying together. Unit is one map unit. */
-	void Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& Nation);
+	void Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& Nation, const FString& Tag);
 
 	/** An air fleet: a fighter and a bomber (whichever it has) over a patch of airfield. */
 	void AirFleet(int32 Fighters, int32 Bombers, double Unit, const FLinearColor& Nation, const FString& Tag);
