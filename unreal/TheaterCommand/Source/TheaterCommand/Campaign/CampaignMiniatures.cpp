@@ -192,6 +192,94 @@ void FMiniatureMesh::Ball(const FVector& Center, const FVector& Size, const FLin
 	}
 }
 
+// ---------------------------------------------------------------------------- scenery
+
+void FMiniatureMesh::House(const FVector& Where, double Length, double Width, double WallHeight, double RoofHeight, const FLinearColor& Wall, const FLinearColor& Roof, double Turn)
+{
+	const double Cos = FMath::Cos(FMath::DegreesToRadians(Turn)), Sin = FMath::Sin(FMath::DegreesToRadians(Turn));
+	auto At = [&](double Along, double Across, double Up)
+	{
+		return Where + FVector(Along * Cos - Across * Sin, Along * Sin + Across * Cos, Up);
+	};
+	Box(Where + FVector(0.0, 0.0, WallHeight * 0.5), FVector(Length, Width, WallHeight), Wall, Turn);
+	// The roof overhangs the walls a little.
+	const double L = Length * 0.54, W = Width * 0.58;
+	const FColor Tiles = Roof.ToFColor(true);
+	const FVector RidgeA = At(-L, 0.0, WallHeight + RoofHeight), RidgeB = At(L, 0.0, WallHeight + RoofHeight);
+	const FVector Along = (RidgeB - RidgeA).GetSafeNormal();
+	const FVector Across = FVector(-Along.Y, Along.X, 0.0);
+	Quad(At(-L, W, WallHeight), At(L, W, WallHeight), RidgeB, RidgeA, Across * RoofHeight + FVector(0.0, 0.0, W), Tiles);
+	Quad(At(-L, -W, WallHeight), At(L, -W, WallHeight), RidgeB, RidgeA, -Across * RoofHeight + FVector(0.0, 0.0, W), Tiles);
+	const FColor Gable = Wall.ToFColor(true);
+	for (const double End : { -1.0, 1.0 })
+	{
+		const FVector Out = Along * End;
+		const int32 A = Add(At(End * L, W, WallHeight), Out, Gable), B = Add(At(End * L, -W, WallHeight), Out, Gable), C = Add(End < 0.0 ? RidgeA : RidgeB, Out, Gable);
+		Face(A, B, C, Out);
+	}
+}
+
+void FMiniatureMesh::Fir(const FVector& Where, double Height, double Radius, const FLinearColor& Leaf)
+{
+	Pillar(Where + FVector(0.0, 0.0, Height * 0.12), Radius, 0.0, Height * 0.88, Leaf, 6);
+}
+
+void FMiniatureMesh::Broadleaf(const FVector& Where, double Height, double Radius, const FLinearColor& Leaf)
+{
+	Ball(Where + FVector(0.0, 0.0, Height * 0.58), FVector(Radius * 2.0, Radius * 2.0, Height * 0.84), Leaf, 4, 6);
+}
+
+void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed)
+{
+	FRandomStream Random(Seed * 7919 + 13);
+	static const TCHAR* WallPaints[] = { TEXT("E6DCC4"), TEXT("D8C8A6"), TEXT("CEC6B6"), TEXT("E2D2AE"), TEXT("C9B79A") };
+	static const TCHAR* RoofPaints[] = { TEXT("9A4A32"), TEXT("7C3F2E"), TEXT("5E5A58"), TEXT("8B5A3C"), TEXT("A65B3A") };
+	const FLinearColor StoneWork(FColor::FromHex(TEXT("D9D2C0")));
+	const FLinearColor Copper(FColor::FromHex(TEXT("6FA08C")));
+	const FLinearColor Brick(FColor::FromHex(TEXT("7A5547")));
+	const FLinearColor Soot(FColor::FromHex(TEXT("3B3532")));
+
+	// The great building in the middle: a domed palace for a capital, a church with a tower for a city.
+	double Clear = 0.0;
+	if (bCapital)
+	{
+		Box(Where + FVector(0.0, 0.0, 0.45 * Unit), FVector(1.5, 2.3, 0.9) * Unit, StoneWork);
+		Pillar(Where + FVector(0.0, 0.0, 0.9 * Unit), 0.5 * Unit, 0.5 * Unit, 0.35 * Unit, StoneWork, 12);
+		Ball(Where + FVector(0.0, 0.0, 1.25 * Unit), FVector(1.0, 1.0, 0.9) * Unit, Copper, 5, 10);
+		Pillar(Where + FVector(0.0, 0.0, 1.65 * Unit), 0.06 * Unit, 0.0, 0.5 * Unit, FLinearColor(FColor::FromHex(TEXT("C9A227"))), 6);
+		Clear = 1.5 * Unit;
+	}
+	else if (bCity)
+	{
+		House(Where, 1.5 * Unit, 0.7 * Unit, 0.6 * Unit, 0.45 * Unit, StoneWork, FLinearColor(FColor::FromHex(TEXT("5E5A58"))), 0.0);
+		Box(Where + FVector(0.0, 0.95 * Unit, 0.7 * Unit), FVector(0.5, 0.5, 1.4) * Unit, StoneWork);
+		Pillar(Where + FVector(0.0, 0.95 * Unit, 1.4 * Unit), 0.36 * Unit, 0.0, 0.8 * Unit, FLinearColor(FColor::FromHex(TEXT("5E5A58"))), 4);
+		Clear = 1.2 * Unit;
+	}
+
+	// Houses round it, closer packed toward the middle, each turned its own way.
+	const double Spread = (0.9 + 0.36 * FMath::Sqrt(static_cast<double>(Houses))) * Unit;
+	for (int32 K = 0; K < Houses; ++K)
+	{
+		const double Angle = K * 2.39996 + Random.FRandRange(-0.3f, 0.3f); // the golden angle scatters them evenly
+		const double Distance = Clear + Spread * FMath::Sqrt((K + 0.6) / Houses);
+		const FVector At = Where + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * Distance;
+		const double Length = Random.FRandRange(0.62f, 0.95f) * Unit, Width = Random.FRandRange(0.42f, 0.58f) * Unit;
+		House(At, Length, Width, Random.FRandRange(0.3f, 0.5f) * Unit, Random.FRandRange(0.22f, 0.34f) * Unit,
+			FLinearColor(FColor::FromHex(WallPaints[Random.RandRange(0, 4)])), FLinearColor(FColor::FromHex(RoofPaints[Random.RandRange(0, 4)])), Random.FRandRange(0.0f, 180.0f));
+	}
+
+	// The works, out at the edge: a long shed with a chimney.
+	for (int32 K = 0; K < Works; ++K)
+	{
+		const double Angle = 0.9 + K * 2.1;
+		const FVector At = Where + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * (Clear + Spread + 0.9 * Unit);
+		const double Turn = FMath::RadiansToDegrees(Angle) + 90.0;
+		House(At, 1.5 * Unit, 0.8 * Unit, 0.5 * Unit, 0.22 * Unit, Brick, Soot, Turn);
+		Pillar(At + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * 0.6 * Unit, 0.13 * Unit, 0.09 * Unit, 1.5 * Unit, Brick, 7);
+	}
+}
+
 // ---------------------------------------------------------------------------- the figures
 
 void FMiniatureMesh::Rifleman(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn)

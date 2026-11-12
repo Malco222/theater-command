@@ -2,6 +2,7 @@
 
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignFlags.h"
+#include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignTextures.h"
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -139,7 +140,8 @@ bool ACampaignMapActor::BuildMap()
 	BuildSeaMesh();
 	BuildBorders();
 	BuildTable();
-	BuildTownMarkers();
+	BuildTowns();
+	BuildTrees();
 	BuildLabels();
 
 	UE_LOG(LogTheater, Log, TEXT("Campaign table built in %.2f s: %d labels, %d army pieces"),
@@ -240,6 +242,7 @@ void ACampaignMapActor::LoadMaterials()
 	};
 	InkMaterial = MakeSurface(0.8f, 0.2f, 0.0f, 0.0f);
 	PieceMaterial = MakeSurface(0.5f, 0.38f, 0.0f, 0.0f); // smooth and a little shiny, like moulded plastic
+	SceneryMaterial = MakeSurface(0.85f, 0.2f, 0.0f, 0.0f);
 
 	// The land and the sea take their colour from pictures painted in PaintGround.
 	LandMaterial = UMaterialInstanceDynamic::Create(Load(TEXT("/Game/Campaign/Materials/M_Land.M_Land")), this);
@@ -564,30 +567,130 @@ void ACampaignMapActor::BuildTable()
 	AddBlock(FVector(0.0, 0.0, -3.0 * U - 5.0 * U), FVector(2.0 * Half.X, 2.0 * Half.Y, 10.0 * U), Wood);
 }
 
-void ACampaignMapActor::BuildTownMarkers()
+void ACampaignMapActor::BuildTowns()
 {
 	TownMarkers->ClearInstances();
 	CapitalMarkers->ClearInstances();
-	TownMarkers->SetStaticMesh(CylinderMesh);
-	CapitalMarkers->SetStaticMesh(CylinderMesh);
-	TownMarkers->SetMaterial(0, GetSolidMaterial(FromHex(TEXT("2A2420")), 0.6f, 0.0f));
-	CapitalMarkers->SetMaterial(0, GetSolidMaterial(FromHex(TEXT("C9A227")), 0.3f, 1.0f));
+	if (!TownMesh)
+	{
+		TownMesh = NewObject<UProceduralMeshComponent>(this);
+		TownMesh->SetupAttachment(Root);
+		TownMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		TownMesh->RegisterComponent();
+	}
+	TownMesh->ClearAllMeshSections();
 
+	// Every town of note stands on the table as a cluster of houses: a few for a town, more for a city, a domed
+	// palace in the middle of a capital, and a works with a chimney for each pair of factories the province has.
+	FMiniatureMesh Model;
 	const double U = UnitScale;
+	int32 Count = 0;
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
-		const bool bTown = Region.bCapital || Region.Terrain == TEXT("urban") || Region.VictoryPoints >= 2;
+		const bool bCity = Region.Terrain == TEXT("urban");
+		const bool bTown = Region.bCapital || bCity || Region.VictoryPoints >= 2 || Region.Factories >= 2;
 		if (!bTown)
 		{
 			continue;
 		}
-		// The engine's cylinder is one metre across and one metre tall.
-		const double Diameter = (Region.bCapital ? 2.3 : 1.5) * U;
-		const double Height = (Region.bCapital ? 0.5 : 0.35) * U;
-		const FVector Location = SurfacePoint(Region.Center.X, Region.Center.Y, 0.0) + FVector(0.0, 0.0, Height * 0.5);
-		const FTransform Transform(FRotator::ZeroRotator, Location, FVector(Diameter / 100.0, Diameter / 100.0, Height / 100.0));
-		(Region.bCapital ? CapitalMarkers : TownMarkers)->AddInstance(Transform, true);
+		const int32 Houses = Region.bCapital ? 13 : (bCity ? 10 : 6);
+		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1, Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id);
+		++Count;
 	}
+	if (Model.Vertices.Num() > 0)
+	{
+		TownMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		TownMesh->SetMaterial(0, SceneryMaterial);
+	}
+	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points"), Count, Model.Vertices.Num());
+}
+
+void ACampaignMapActor::BuildTrees()
+{
+	for (UProceduralMeshComponent* Mesh : TreeMeshes)
+	{
+		if (Mesh)
+		{
+			Mesh->DestroyComponent();
+		}
+	}
+	TreeMeshes.Reset();
+	TreeCentres.Reset();
+	TreesShown.Reset();
+
+	// Trees stand wherever the paint says the ground is wooded: one to every couple of map units, each a little
+	// off its place, firs in the north and on high ground and broad-leaved trees elsewhere. They are kept in
+	// squares of country, and only the squares near the eye are drawn (UpdateForCamera): from far off the woods
+	// are the dark cloth of the paint, and close up they have trees standing in them.
+	const double Spacing = 2.1, Square = 130.0;
+	TreeSquare = Square * UnitScale;
+	const int32 SquaresX = FMath::CeilToInt32(Data.Width / Square), SquaresY = FMath::CeilToInt32(Data.Height / Square);
+	const int32 PerSide = FMath::CeilToInt32(Square / Spacing);
+	const double U = UnitScale;
+	int32 Trees = 0;
+	for (int32 SY = 0; SY < SquaresY; ++SY)
+	{
+		for (int32 SX = 0; SX < SquaresX; ++SX)
+		{
+			FMiniatureMesh Model;
+			FRandomStream Random(SY * 977 + SX * 131 + 5);
+			for (int32 J = 0; J < PerSide; ++J)
+			{
+				for (int32 I = 0; I < PerSide; ++I)
+				{
+					const double X = SX * Square + (I + Random.FRand()) * Spacing;
+					const double Y = SY * Square + (J + Random.FRand()) * Spacing;
+					const float Chance = Random.FRand(), Size = Random.FRandRange(0.75f, 1.25f), Shade = Random.FRandRange(0.8f, 1.15f);
+					if (X >= Data.Width || Y >= Data.Height)
+					{
+						continue;
+					}
+					const int32 GI = FMath::Clamp(FMath::RoundToInt32(X / Terrain.Cell), 0, Terrain.NX - 1);
+					const int32 GJ = FMath::Clamp(FMath::RoundToInt32(Y / Terrain.Cell), 0, Terrain.NY - 1);
+					const float Wooded = Paint.Ground[Terrain.Index(GI, GJ)].A / 255.0f;
+					if (Wooded < 0.35f || Chance > Wooded * 0.92f)
+					{
+						continue;
+					}
+					// Not on top of a town.
+					const int32 RegionId = Terrain.Region[Terrain.Index(GI, GJ)];
+					if (RegionId >= 0 && FVector2D::Distance(Data.Regions[RegionId].Center, FVector2D(X, Y)) < 8.5)
+					{
+						continue;
+					}
+					const float Height = Terrain.Height[Terrain.Index(GI, GJ)];
+					const FVector Foot = SurfacePoint(X, Y, 0.0);
+					// Firs toward the north (small y) and on high ground.
+					const bool bFir = Random.FRand() < FMath::Clamp(0.15 + (700.0 - Y) / 600.0 + Height * 0.35, 0.05, 0.92);
+					if (bFir)
+					{
+						Model.Fir(Foot, 1.9 * Size * U, 0.55 * Size * U, FLinearColor(0.035f * Shade, 0.085f * Shade, 0.045f * Shade));
+					}
+					else
+					{
+						Model.Broadleaf(Foot, 1.5 * Size * U, 0.7 * Size * U, FLinearColor(0.055f * Shade, 0.115f * Shade, 0.038f * Shade));
+					}
+					++Trees;
+				}
+			}
+			if (Model.Vertices.Num() == 0)
+			{
+				continue;
+			}
+			UProceduralMeshComponent* Mesh = NewObject<UProceduralMeshComponent>(this);
+			Mesh->SetupAttachment(Root);
+			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mesh->SetCastShadow(false); // thousands of small shadows cost more than they show
+			Mesh->RegisterComponent();
+			Mesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+			Mesh->SetMaterial(0, SceneryMaterial);
+			Mesh->SetVisibility(false);
+			TreeMeshes.Add(Mesh);
+			TreeCentres.Add(MapToWorld((SX + 0.5) * Square, (SY + 0.5) * Square));
+			TreesShown.Add(false);
+		}
+	}
+	UE_LOG(LogTheater, Log, TEXT("Trees: %d, in %d squares of country"), Trees, TreeMeshes.Num());
 }
 
 UTextRenderComponent* ACampaignMapActor::AddLabel(const FString& Text, const FVector2D& MapPos, float SizeUnits, const FColor& Color, int32 Tier, float Spacing)
@@ -704,10 +807,11 @@ void ACampaignMapActor::BuildLabels()
 FVector ACampaignMapActor::ArmySpot(int32 RegionId, int32 Slot) const
 {
 	const FCampaignRegion& Region = Data.Regions[RegionId];
-	FVector2D Spot = Region.Center + FVector2D(5.5 + 9.0 * Slot, -4.5);
+	// Beside the town, clear of its houses: to the north-east of it, or the north-west if that is over the border.
+	FVector2D Spot = Region.Center + FVector2D(9.0 + 11.0 * Slot, -7.0);
 	if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
 	{
-		Spot = Region.Center + FVector2D(-5.5 - 9.0 * Slot, -4.5);
+		Spot = Region.Center + FVector2D(-9.0 - 11.0 * Slot, -7.0);
 		if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
 		{
 			Spot = Slot == 0 ? Region.Centroid : Region.Center + FVector2D(0.0, -6.0 * Slot);
@@ -990,8 +1094,24 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 	Buffers.Commit(OrdersMesh, 1, HighlightMaterial);
 }
 
-void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw)
+void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
+	// Trees are drawn only close to: in the squares of country round what the eye is looking at.
+	const bool bNear = CameraDistance < 11500.0f;
+	const double Reach = CameraDistance * 1.25 + TreeSquare * 0.75;
+	for (int32 Index = 0; Index < TreeMeshes.Num(); ++Index)
+	{
+		const bool bShow = bNear && FVector::DistSquared2D(TreeCentres[Index], CameraFocus) < Reach * Reach;
+		if (bShow != TreesShown[Index])
+		{
+			TreesShown[Index] = bShow;
+			if (TreeMeshes[Index])
+			{
+				TreeMeshes[Index]->SetVisibility(bShow);
+			}
+		}
+	}
+
 	// From far off the map is read by its nations' colours, so the woods are laid on thinly; close up they
 	// are laid on thick, and the country reads as country.
 	const float Woods = FMath::Lerp(0.7f, 0.26f, FMath::SmoothStep(6000.0f, 17000.0f, CameraDistance));

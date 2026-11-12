@@ -35,6 +35,21 @@ struct FMiniatureMesh
 	/** A ball, or an egg if Size is not the same each way. */
 	void Ball(const FVector& Center, const FVector& Size, const FLinearColor& Colour, int32 Rings = 6, int32 Sides = 10);
 
+	// ---- Scenery for the table.
+
+	/** A house: four walls and a pitched roof, its ridge along its length. */
+	void House(const FVector& Where, double Length, double Width, double WallHeight, double RoofHeight, const FLinearColor& Wall, const FLinearColor& Roof, double Turn = 0.0);
+
+	/** A fir: a cone. A broad-leaved tree: a ball on a short trunk. */
+	void Fir(const FVector& Where, double Height, double Radius, const FLinearColor& Leaf);
+	void Broadleaf(const FVector& Where, double Height, double Radius, const FLinearColor& Leaf);
+
+	/**
+	 * A town standing on the table: a cluster of houses, more of them for a city, a great building with a dome
+	 * for a capital, a church for a city, and a works with a chimney for each pair of factories.
+	 */
+	void Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed);
+
 	// ---- The figures. Each stands at Where, turned by Turn degrees, in the nation's colour.
 
 	void Rifleman(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn = 0.0);

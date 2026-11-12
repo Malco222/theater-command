@@ -83,7 +83,7 @@ public:
 	void SetRoute(const FVector& FromWorld, const TArray<int32>& Regions);
 
 	/** Called as the camera moves: decides which lettering is worth showing and turns the standards to face the viewer. */
-	void UpdateForCamera(float CameraDistance, float CameraYaw);
+	void UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus);
 
 	/** One shared material per colour, so a hundred pieces of one nation cost one material. */
 	UMaterialInstanceDynamic* GetSolidMaterial(const FLinearColor& Color, float Roughness, float Metallic, float Glow = 0.0f);
@@ -119,7 +119,8 @@ private:
 	void BuildBorders();
 	void BuildTable();
 	void BuildLabels();
-	void BuildTownMarkers();
+	void BuildTowns();
+	void BuildTrees();
 	void RebuildHighlight();
 	void AddRegionOverlay(int32 RegionId, const FLinearColor& Fill, const FLinearColor& Outline, int32 FirstSection);
 	void AppendRegionFill(FCampaignMeshBuffers& Buffers, int32 RegionId, const FLinearColor& Fill) const;
@@ -177,6 +178,21 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> PieceMaterial;
+
+	/** Matt paint for the scenery: houses and trees. */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> SceneryMaterial;
+
+	/** The towns, all in one mesh. */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> TownMesh;
+
+	/** The trees, in squares of country so that only those near the eye are drawn. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UProceduralMeshComponent>> TreeMeshes;
+	TArray<FVector> TreeCentres; // the middle of each square, in the world
+	TArray<bool> TreesShown;
+	double TreeSquare = 0.0; // the side of a square, in the world
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<UMaterialInstanceDynamic>> SolidMaterials;

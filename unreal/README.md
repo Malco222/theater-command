@@ -96,6 +96,7 @@ The music is one original piece, "Leave Pass": an up-tempo swing number for a 19
 Some of what is on screen is a placeholder for the real thing:
 
 - **Army pieces** carry simple figures made in code (`Campaign/CampaignMiniatures.cpp`): riflemen, a tank for armour, a field gun for artillery, a lorry for motorized troops, a horseman, a bunker, moulded in the nation's colour like the pieces of a board game. Sculpted miniatures can replace them.
+- **Towns and trees** are made in code too: a cluster of houses for every town of note (a domed palace in a capital, a church in a city, a shed with a chimney for each pair of factories), and trees standing wherever the ground is wooded, drawn only near the eye.
 - **Borders** are the prototype's approximate ones, grown from each territory's chief town.
 
 ## For whoever works on the code

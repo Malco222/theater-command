@@ -839,7 +839,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
-	Map->UpdateForCamera(Eye->GetDistance(), Eye->GetYaw());
+	Map->UpdateForCamera(Eye->GetDistance(), Eye->GetYaw(), Eye->GetFocus());
 
 	LastMouse = Mouse;
 	bHaveLastMouse = bHaveMouse;
