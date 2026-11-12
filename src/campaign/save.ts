@@ -5,7 +5,8 @@
 
 import { Rng } from '../core/rng';
 import { computeSupply, createGame } from './game';
-import type { Corps, Game } from './types';
+import { seat } from './commanders';
+import type { Corps, Game, General } from './types';
 
 export const SAVE_VERSION = 1;
 const KEEP_REPORTS = 200;
@@ -18,6 +19,7 @@ export function saveGame(g: Game): string {
     nations: g.nations,
     regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev]),
     corps: g.corps,
+    generals: g.generals,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -50,6 +52,17 @@ export function loadGame(text: string): Game | null {
   });
   g.corps = d.corps as Corps[];
   for (const c of g.corps) g.regions[c.reg].units.push(c);
+  if (Array.isArray(d.generals)) g.generals = d.generals as General[];
+  else {
+    // A save from before generals were people: each corps carried only a name and a label.
+    g.generals = [];
+    for (const c of g.corps as any[]) {
+      const name = c.general, label = c.trait;
+      c.general = null;
+      delete c.trait;
+      if (typeof name === 'string') seat(g, c, name, label);
+    }
+  }
   // The supply picture is restored exactly as it stood, so the loaded game plays on identically.
   const fed = g.corps.map((c) => c.supplied);
   computeSupply(g);

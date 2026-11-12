@@ -1,7 +1,8 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type BattleReport, type Build, type Corps, type Game, type Kind, type Region } from './types';
+import { KIND, STACK, type BattleReport, type Build, type Corps, type Game, type General, type Kind, type Region, type Skill } from './types';
+import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hostileUnits, limitAttackers,
   moveCorps, moveCost, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
@@ -167,6 +168,41 @@ export function orderEvacuate(g: Game, c: Corps): boolean {
 }
 
 /** Nations the player could declare war on: neighbours by land that are not already friends or enemies. */
+// ---- The player's generals ----------------------------------------------------------------
+
+const myGeneral = (g: Game, id: number): General | null => {
+  const gen = g.generals[id];
+  return gen && gen.nat === g.human && current(g) === gen.nat ? gen : null;
+};
+
+/** Gives one of the player's generals a corps. */
+export function orderAssign(g: Game, general: number, corps: number): boolean {
+  const gen = myGeneral(g, general);
+  const c = g.corps.find((x) => x.id === corps);
+  return !!gen && !!c && c.nat === g.human && assignGeneral(g, gen, c);
+}
+
+export function orderRelieve(g: Game, general: number): boolean {
+  const gen = myGeneral(g, general);
+  return !!gen && relieve(g, gen);
+}
+
+export function orderSack(g: Game, general: number): boolean {
+  const gen = myGeneral(g, general);
+  return !!gen && sack(g, gen);
+}
+
+/** Promotes an unknown officer to command one of the player's corps. */
+export function orderPromote(g: Game, corps: number): General | null {
+  const c = g.corps.find((x) => x.id === corps);
+  return c && canOrder(g, c) ? promote(g, c) : null;
+}
+
+export function orderSkill(g: Game, general: number, skill: Skill): boolean {
+  const gen = myGeneral(g, general);
+  return !!gen && spendPoint(gen, skill);
+}
+
 export function declarable(g: Game): string[] {
   const me = g.human;
   if (!me || !g.nations[me].alive) return [];

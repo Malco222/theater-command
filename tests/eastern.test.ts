@@ -54,7 +54,9 @@ describe('the supply line', () => {
     const thin = deep.filter((c) => lineStrength(g, c).mul < 1);
     expect(thin.length).toBeGreaterThan(5);
     // The further from the frontier, the weaker: no corps with a longer line is better off.
-    const byLength = [...deep].sort((a, b) => lineStrength(g, a).length - lineStrength(g, b).length);
+    // (A general with a head for logistics softens it, so compare corps that have none.)
+    const byLength = deep.filter((c) => c.general === null).sort((a, b) => lineStrength(g, a).length - lineStrength(g, b).length);
+    expect(byLength.length).toBeGreaterThan(5);
     for (let i = 1; i < byLength.length; i++) {
       expect(lineStrength(g, byLength[i]).mul).toBeLessThanOrEqual(lineStrength(g, byLength[i - 1]).mul);
     }

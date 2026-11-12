@@ -27,12 +27,13 @@ This repository holds **Phase 1** of the framework's roadmap: the campaign rules
 - Limited manpower. However rich the treasury, an army gets back only about three men in a hundred of its peak strength each month, shared along the front.
 - Staffs that learn. The Red Army of 1941 can bring only eight corps into one battle and does not renew a failed assault in the same month. Defenders who hold their ground lose fewer men than those who are driven off it.
 - Computer generals who bring reserves up behind a spearhead, garrison what they have taken, leave a besieged city alone when the plan says to starve it out, and counter-attack ground they have just lost.
+- Generals. The real commanders of 1939 start the war at the head of their corps, and others wait for a command. A general gains experience from every battle, and each level brings a skill point for one of four skills: offense, defense, logistics and leadership. Traits are earned from how he actually fights: three victories that end in surrender make an encirclement master, three positions held against a stronger attacker make an iron defender, three costly failed assaults make a butcher. Generals can be wounded, captured or killed, and unknown officers make their names in battle and rise from the ranks. The player assigns, relieves, promotes and dismisses them and spends their skill points; the computer does the same for its own. Everything a general adds is shown on the Battle Ticket. All of it is data (`data/campaign/commanders.json`).
 - Play Germany, France, the United Kingdom or Poland from September 1939, or start in June 1941 as Germany or the Soviet Union. You can also watch history unfold from either date.
 
 **The exit tests** from the framework run as automated tests, with every nation on the historical plan across 20 different seeds.
 
 - "France falls in about six weeks": Poland falls in about four weeks and France about six weeks after the May 1940 attack, with most of the British Expeditionary Force lifted off first.
-- "A believable Barbarossa" (the Phase 3 test, run early against the campaign rules): Minsk falls in June 1941, Smolensk in July, Kiev in September and Kharkov in October. Moscow and Leningrad hold. In December the Red Army strikes back and wins ground, and the German army is hurt but not broken. Through March 1942 Germany loses 0.6 to 1.0 million men and the Soviet Union 2.5 to 3.3 million.
+- "A believable Barbarossa" (the Phase 3 test, run early against the campaign rules): Minsk falls in June 1941, Smolensk in July, Kiev in September and Kharkov in October. Moscow and Leningrad hold. In December the Red Army strikes back and wins ground, and the German army is hurt but not broken. Through March 1942 Germany loses roughly 0.5 to 1.0 million men and the Soviet Union 2.6 to 3.5 million.
 
 Where 1941 still differs from history: Odessa falls a month or two early, Rostov is never reached, Soviet losses are lower than the real ones, and Finland, Hungary and Slovakia declare war but only defend.
 
@@ -44,7 +45,7 @@ Where 1941 still differs from history: Odessa falls a month or two early, Rostov
 - War at sea, strategic air war and research. Norway is not invaded because there is no naval layer yet. Sea transport is an abstraction: nothing can intercept it yet.
 - The rest of diplomacy: changing your own nation's side, treaties, espionage, and computer-run nations that court neutrals themselves. Today the computer follows history's events and the drift of the war.
 - The Balkans campaign of April 1941, Italy's part in the east, and everything after the spring of 1942. History's plans stop there; the game goes on, but computer-run nations only hold their lines.
-- Generals who level up and earn traits. A few corps carry a named general today, but he does not change.
+- The rest of the commander system: admirals and air commanders (they arrive with the war at sea and in the air), command limits, rivalries and politics between generals, and staff college. Generals lead single corps today, because the prototype has no armies above the corps yet.
 - Graphics. This is deliberately a staff map. The Total War and Company of Heroes level of presentation arrives with the Unreal Engine 5 build.
 - Borders are approximate: regions are grown from seed points, not traced from 1939 maps.
 
@@ -52,7 +53,7 @@ Where 1941 still differs from history: Odessa falls a month or two early, Rostov
 
 ```
 npm install
-npm test            # flight model, war economy, diplomacy, eastern front rules, saved games and both exit tests
+npm test            # flight model, war economy, diplomacy, eastern front rules, generals, saved games and both exit tests
 npm run build       # writes dist/play.html, a single file you can open in a browser
 npm run history     # prints a full computer-vs-computer war; add "sweep 20" to compare seeds
 npm run geo         # regenerates the maps from data/campaign/regions.mjs
@@ -62,17 +63,18 @@ npm run geo         # regenerates the maps from data/campaign/regions.mjs
 
 | Path | What it is |
 | --- | --- |
-| `data/` | Moddable data: nations, regions, starting armies, the historical plan, the eastern front rules, aircraft |
+| `data/` | Moddable data: nations, regions, starting armies, the historical plan, the eastern front rules, generals, aircraft |
 | `src/core/` | Shared deterministic core: seeded random numbers, maths, the Battle Ticket contract |
 | `src/campaign/game.ts` | Campaign rules: war, movement, supply, weather, battles, mobilisation, capitulation |
 | `src/campaign/economy.ts` | Production points, replacements, new corps and fortifications |
 | `src/campaign/diplomacy.ts` | The alignment track, courting, and history's events |
+| `src/campaign/commanders.ts` | Generals: experience, skills, traits, wounds and capture, promotion |
 | `src/campaign/save.ts` | Saved games |
 | `src/campaign/ai.ts` | The computer's generals |
 | `src/campaign/turn.ts` | The monthly turn and the player's orders |
 | `src/campaign/ui/` | The campaign screen |
 | `src/air/` | Flight model and air battle groundwork |
-| `tests/` | Rule tests: flight model, war economy, sea transport, saved games, diplomacy, the eastern front |
+| `tests/` | Rule tests: flight model, war economy, sea transport, saved games, diplomacy, the eastern front, generals |
 | `tests/exit/` | The framework's exit tests |
 | `tools/` | Map generation and the history runner |
 
@@ -80,6 +82,6 @@ Everything in the simulation is deterministic: the same seed and the same orders
 
 ## Roadmap (from the framework)
 
-1. **Phase 1, now.** Campaign rules and auto-resolve in a browser map (done, and now deepening with production, sea transport, saved games, diplomacy and the eastern front of 1941), and a gray-box air battle with 300 aircraft (paused).
+1. **Phase 1, now.** Campaign rules and auto-resolve in a browser map (done, and now deepening with production, sea transport, saved games, diplomacy, the eastern front of 1941 and generals), and a gray-box air battle with 300 aircraft (paused).
 2. **Phase 2.** The Battle of Britain as a vertical slice in Unreal Engine 5: one campaign turn, one playable air battle, the full Battle Ticket loop, on licensed or commissioned art.
 3. **Later phases.** Land battles, the war at sea, the full campaign systems, the other theatres.

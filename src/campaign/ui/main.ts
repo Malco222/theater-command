@@ -7,15 +7,16 @@ import {
 } from '../game';
 import {
   beginHuman, canOrder, candidates, declarable, endHuman, humanUp, orderAttack, orderBuildCorps, orderBuildFort,
-  orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderMove, orderRail, orderShip, previewAttack, reach, runTurnAI,
+  orderAssign, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderMove, orderPromote, orderRail, orderRelieve, orderSack, orderShip, orderSkill, previewAttack, reach, runTurnAI,
   shipTargets, stepAI,
 } from '../turn';
 import { phaseFor } from '../ai';
 import { PRODUCTION, fortCost, income, isHome } from '../economy';
 import { loadGame, peekSave, saveGame } from '../save';
+import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
 import { DIPLOMACY, TRACK_LABEL, canCourt, courtable, momentum, pcIncome, receptive, step, tradePartners } from '../diplomacy';
 import { bloc } from '../game';
-import { KIND, type BattleReport, type Corps, type Game, type Kind, type Nation, type Region } from '../types';
+import { KIND, type BattleReport, type Corps, type Game, type General, type Kind, type Nation, type Region, type Skill } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -28,7 +29,7 @@ const ui = {
   ship: false,
   /** False until a game has been started or resumed, so the title screen never overwrites a saved game. */
   live: false,
-  tab: 'region' as 'region' | 'build' | 'reel' | 'battles' | 'powers',
+  tab: 'region' as 'region' | 'build' | 'generals' | 'reel' | 'battles' | 'powers',
   view: { x: 380, y: 300, w: 620 },
   unread: 0,
   seenReports: 0,
@@ -247,8 +248,11 @@ function drawBar(): void {
 function drawTabs(): void {
   const newB = g.reports.length - ui.seenReports;
   const t = (id: string, label: string, n = 0) => `<button class="tab${ui.tab === id ? ' on' : ''}" data-act="tab" data-tab="${id}">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
-  const build = g.human && g.nations[g.human].alive ? t('build', 'Build') : '';
-  $('#tabs').innerHTML = t('region', 'Region') + build + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  const build = me ? t('build', 'Build') : '';
+  // Generals with no corps, when there is a corps for them: a decision waiting for the player.
+  const idle = me && vacant(g, me).length ? waiting(g, me).length : 0;
+  $('#tabs').innerHTML = t('region', 'Region') + build + t('generals', 'Generals', idle) + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
 }
 
 function advice(): string {
@@ -276,12 +280,16 @@ function corpsRow(c: Corps, mine: boolean): string {
   const line = lineStrength(g, c);
   if (line.mul < 1) tags.push(`<span class="tag bad">Long supply line: attacks at ${Math.round(line.mul * 100)}%</span>`);
   if (frozen(g, c.nat, g.regions[c.reg])) tags.push('<span class="tag bad">No winter kit</span>');
-  if (c.trait) tags.push(`<span class="tag good">${c.trait === 'panzer' ? 'Fast breakthrough' : c.trait === 'attacker' ? 'Strong in attack' : 'Strong in defence'}</span>`);
+  const gen = generalOf(g, c);
+  for (const t of gen?.traits ?? []) {
+    const d = COMMAND.traits[t];
+    if (d) tags.push(`<span class="tag ${d.good ? 'good' : 'bad'}" title="${esc(d.effect)}">${esc(d.label)}</span>`);
+  }
   if (c.hold && !mine) tags.push('<span class="tag">Garrison</span>');
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const el = mine && c.kind !== 'fort' ? 'button' : 'div';
   return `<${el} class="corps${pick ? ' pick' : ''}" ${el === 'button' ? `data-act="pick" data-id="${c.id}"` : ''}>
-    ${icon(c)}<span class="nm">${esc(c.name)}${c.general ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(c.general)}</span>` : ''}</span>${pips}
+    ${icon(c)}<span class="nm">${esc(c.name)}${gen ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(gen.name)} <span class="lvl" title="Level ${gen.level} general">${gen.level}</span></span>` : ''}</span>${pips}
     <span class="meta">${g.nations[c.nat].adj} ${k.label.toLowerCase()} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span>
     <span class="bars"><span>Strength</span><span class="meter"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span><span>Cohesion</span><span class="meter"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span></span>
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>`;
@@ -292,6 +300,7 @@ function drawPane(): void {
   if (ui.tab === 'build' && !(g.human && g.nations[g.human].alive)) ui.tab = 'region';
   if (ui.tab === 'region') pane.innerHTML = regionPane();
   else if (ui.tab === 'build') pane.innerHTML = buildPane();
+  else if (ui.tab === 'generals') pane.innerHTML = generalsPane();
   else if (ui.tab === 'reel') pane.innerHTML = reelPane();
   else if (ui.tab === 'battles') pane.innerHTML = battlesPane();
   else pane.innerHTML = powersPane();
@@ -300,7 +309,7 @@ function drawPane(): void {
 function regionPane(): string {
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -317,7 +326,7 @@ function regionPane(): string {
     const canRail = picked.some((c) => c.ap >= 4);
     const canShip = picked.some((c) => shipTargets(g, c).length > 0);
     const canEvac = picked.some((c) => g.nations[c.nat].seaSupply && r.port && r.owner !== c.nat);
-    acts = `<div class="acts">${canRail ? `<button class="btn small${ui.rail ? ' on' : ''}" data-act="rail">Rail move</button>` : ''}${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${canEvac ? '<button class="btn small" data-act="evac" title="An emergency lift home. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>' : ''}<button class="btn small" data-act="unpick">Stand down</button></div>`;
+    acts = `<div class="acts">${canRail ? `<button class="btn small${ui.rail ? ' on' : ''}" data-act="rail">Rail move</button>` : ''}${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${canEvac ? '<button class="btn small" data-act="evac" title="An emergency lift home. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>' : ''}${picked.length === 1 ? (picked[0].general !== null ? `<button class="btn small" data-act="general" data-id="${picked[0].general}">General's record</button>` : `<button class="btn small" data-act="appoint" data-id="${picked[0].id}">Appoint a general</button>`) : ''}<button class="btn small" data-act="unpick">Stand down</button></div>`;
   } else if (mineHere.some((c) => c.ap > 0)) {
     acts = `<div class="acts"><button class="btn small" data-act="pickall">Select all here</button></div>`;
   }
@@ -380,6 +389,114 @@ function buildPane(): string {
     out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>${b.what === 'corps' ? `Forming at ${esc(where)} · ` : ''}ready ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${b.cost}<small>paid</small></span>`}</div>`;
   }
   return out;
+}
+
+// ---- Generals -----------------------------------------------------------------------------
+
+const GONE: Record<string, string> = { captured: 'Prisoner of war', dead: 'Killed in action', sacked: 'Dismissed' };
+
+function genWhere(x: General): string {
+  if (x.status === 'wounded') return `Wounded. Fit again in ${date(x.backOn)}`;
+  if (x.status !== 'active') return GONE[x.status];
+  const c = corpsOf(g, x);
+  return c ? `${esc(c.name)} · ${KIND[c.kind].label.toLowerCase()} · ${esc(g.regions[c.reg].name)}` : 'Waiting for a command';
+}
+
+function traitTags(x: General): string {
+  return x.traits.map((t) => {
+    const d = COMMAND.traits[t];
+    return d ? `<span class="tag ${d.good ? 'good' : 'bad'}" title="${esc(d.effect)}">${esc(d.label)}</span>` : '';
+  }).join('');
+}
+
+function genRow(x: General, act = 'general', extra = '', off = ''): string {
+  const pts = x.nat === g.human && x.points > 0 && serving(x) ? `<span class="tag pts">${x.points} skill point${x.points > 1 ? 's' : ''}</span>` : '';
+  const whose = x.nat === g.human ? '' : `${g.nations[x.nat].adj} · `;
+  return `<button class="gen${serving(x) ? '' : ' gone'}" data-act="${act}" data-id="${x.id}" ${extra} ${off ? `disabled title="${esc(off)}"` : ''}><span class="lv">${x.level}</span><span class="grow"><b>${esc(x.name)}</b><small>${whose}${genWhere(x)}</small>${x.traits.length || pts ? `<span class="tags">${pts}${traitTags(x)}</span>` : ''}</span></button>`;
+}
+
+function generalsPane(): string {
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  const rank = (a: General, b: General): number => b.level - a.level || b.rec.won - a.rec.won || a.id - b.id;
+  let out = '';
+  if (me) {
+    const mine = g.generals.filter((x) => x.nat === me);
+    const free = waiting(g, me);
+    const led = mine.filter((x) => x.status === 'active' && x.corps >= 0).sort(rank);
+    const gone = mine.filter((x) => x.status !== 'active').sort((a, b) => (serving(b) ? 1 : 0) - (serving(a) ? 1 : 0) || rank(a, b));
+    out += `<h2>Your generals</h2><p class="sub">Generals gain experience in battle, and every level brings a skill point to spend. Traits are earned from how a general actually fights. Open one to see his service record or give him a command.</p>
+      <div class="facts"><div class="fact"><span>In command</span><b>${led.length}</b></div><div class="fact"><span>Waiting</span><b>${free.length}</b></div><div class="fact"><span>Corps without</span><b>${vacant(g, me).length}</b></div></div>`;
+    if (free.length) out += `<h3>Waiting for a command</h3>${free.map((x) => genRow(x)).join('')}`;
+    out += `<h3>In command</h3>${led.length ? led.map((x) => genRow(x)).join('') : '<div class="empty">No corps has a general yet.</div>'}`;
+    if (gone.length) out += `<h3>Out of action</h3>${gone.map((x) => genRow(x)).join('')}`;
+    out += `<div class="note"><b>A corps with no general fights by the book.</b> Pick one of your corps on the map and press <b>Appoint a general</b> to give it one who is waiting, or to promote an unknown officer from its ranks for ${COMMAND.promote.pc} political capital.</div>`;
+  }
+  const others = g.generals.filter((x) => x.nat !== me && serving(x) && (x.rec.battles > 0 || x.level >= 3)).sort(rank).slice(0, me ? 8 : 40);
+  out += me ? '<h3>Other commanders of the war</h3>' : '<h2>Commanders of the war</h2><p class="sub">The generals who have made a name so far. They gain experience in battle, earn traits from how they fight, and can be wounded, captured or killed. Open one to see his service record.</p><div style="height:8px"></div>';
+  out += others.length ? others.map((x) => genRow(x)).join('') : '<div class="empty">No one has made a name yet.</div>';
+  return out;
+}
+
+/** A general's service record, and the decisions the player can take about him. */
+function generalCard(x: General): string {
+  const m = ui.modal!;
+  const n = g.nations[x.nat];
+  const mine = x.nat === g.human && humanUp(g);
+  const c = corpsOf(g, x);
+  const need = xpToNext(x);
+  const times = (k: number): string => (k === 1 ? 'once' : k === 2 ? 'twice' : `${k} times`);
+  const traits = x.traits.map((t) => {
+    const d = COMMAND.traits[t];
+    return d ? `<li class="${d.good ? 'plus' : 'minus'}"><b>${d.good ? '+' : '−'} ${esc(d.label)}</b><span>${esc(d.effect)}</span><small>${esc(d.earned)}</small></li>` : '';
+  }).join('');
+  const skills = SKILLS.map((k) => {
+    const d = COMMAND.skills[k], v = x.skills[k];
+    const can = mine && serving(x) && x.points > 0 && v < COMMAND.skillMax;
+    const dots = Array.from({ length: COMMAND.skillMax }, (_, i) => `<i class="${i < v ? '' : 'off'}"></i>`).join('');
+    return `<div class="skill"><b>${d.label}</b><span class="dots" title="${v} of ${COMMAND.skillMax}">${dots}</span>${can ? `<button class="btn small" data-act="skill" data-id="${x.id}" data-skill="${k}" title="Spend a skill point on ${d.label.toLowerCase()}">+ 1</button>` : '<span></span>'}<small>${esc(d.blurb)}</small></div>`;
+  }).join('');
+  let orders = '';
+  if (mine && x.status === 'active') {
+    const one = pickedCorps().length === 1 ? pickedCorps()[0] : null;
+    const open = vacant(g, x.nat).sort((a, b) => fit(g, x, b) - fit(g, x, a));
+    const list = [...(one && one.id !== x.corps && !open.includes(one) ? [one] : []), ...open].slice(0, 6);
+    const row = (t: Corps): string => {
+      const why = whyNotAssign(g, x, t);
+      const sitting = generalOf(g, t);
+      return `<button class="pickrow" data-act="assign" data-id="${x.id}" data-corps="${t.id}" ${why ? `disabled title="${esc(why)}"` : ''}>${icon(t)}<span class="grow"><b>${esc(t.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${KIND[t.kind].label} · ${t.divs} division${t.divs > 1 ? 's' : ''} · at ${esc(g.regions[t.reg].name)}${sitting ? ` · takes over from ${esc(sitting.name)}` : ''}</span></span></button>`;
+    };
+    if (x.moved === g.turn) orders = `<h3>${c ? 'Another command' : 'A command'}</h3><div class="empty">He took up a new command this month. He can be moved again next month.</div>`;
+    else orders = `<h3>${c ? 'Give him another command' : 'Give him a command'}</h3>${list.length ? list.map(row).join('') : '<div class="empty">Every corps has a general. Pick one corps on the map first to put him in another man\'s place.</div>'}`;
+  }
+  const state = x.status === 'active' ? (c ? `Assigned: ${esc(c.name)}, ${esc(g.regions[c.reg].name)}` : 'Waiting for a command') : genWhere(x);
+  const confirm = m.confirm ? `<div class="note" style="border-left-color:var(--red)"><b>Dismiss ${esc(x.name)} for good?</b> ${popular(x) ? `The army thinks well of him. ${c ? 'His corps will lose cohesion, and it' : 'It'} will cost ${COMMAND.sack.pc} political capital.` : 'He will not come back.'}</div>` : '';
+  const foot = m.confirm
+    ? `<button class="btn" data-act="keep" data-id="${x.id}">Keep him</button><button class="btn go" data-act="sack" data-id="${x.id}">Dismiss him</button>`
+    : `${mine && serving(x) ? `<button class="btn" data-act="sack" data-id="${x.id}">Dismiss</button>` : ''}${mine && x.status === 'active' && c ? `<button class="btn" data-act="relieve" data-id="${x.id}" title="Take him off his corps and put him back on the list">Relieve of command</button>` : ''}${c ? `<button class="btn" data-act="showmap" data-id="${c.reg}">Show on map</button>` : ''}<button class="btn go" data-act="close">Close</button>`;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${n.adj} army · General · ${x.historical ? 'Historical' : 'Rose from the ranks'}</div><h2>${esc(x.name)}</h2></header>
+    <div class="body">
+      <div class="record"><div class="lvbig"><b>${x.level}</b><span>LEVEL</span></div><div class="who"><b>${state}</b>
+        <div class="xp"><i style="width:${need === Infinity ? 100 : Math.round((x.xp / need) * 100)}%"></i></div>
+        <small>${need === Infinity ? 'At the highest level' : `XP ${num(x.xp)} / ${num(need)} · Next level brings a skill point`}${x.points > 0 && serving(x) ? ` · <b style="color:var(--brass)">${x.points} to spend</b>` : ''}</small></div></div>
+      <h3>Traits</h3>${traits ? `<ul class="traits">${traits}</ul>` : '<div class="empty">None yet. Traits are earned from how a general fights: closing pockets, holding against the odds, costly assaults.</div>'}
+      <h3>Skills</h3>${skills}
+      <div class="tally">Battles ${x.rec.battles} · Won ${x.rec.won}${x.rec.wounds ? ` · Wounded ${times(x.rec.wounds)}` : ''}</div>
+      ${orders}${confirm}
+    </div><footer>${foot}</footer>`;
+}
+
+/** Choosing a general for one corps: a man from the waiting list, or an unknown officer from its own ranks. */
+function appointCard(c: Corps): string {
+  const free = waiting(g, c.nat).sort((a, b) => fit(g, b, c) - fit(g, a, c) || b.level - a.level);
+  const why = whyNotPromote(g, c);
+  const pc = Math.floor(g.nations[c.nat].pc);
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Command</div><h2>A general for ${esc(c.name)}</h2></header>
+    <div class="body"><p class="lead">${g.nations[c.nat].adj} ${KIND[c.kind].label.toLowerCase()}, ${c.divs} division${c.divs > 1 ? 's' : ''}, at ${esc(g.regions[c.reg].name)}. A general adds his skills and traits to every battle this corps fights.</p>
+      <h3>Generals waiting for a command</h3>
+      ${free.length ? free.map((x) => genRow(x, 'assign', `data-corps="${c.id}"`, whyNotAssign(g, x, c))).join('') : '<div class="empty">No general is waiting for a command.</div>'}
+      <h3>Promote from the ranks</h3>
+      <button class="buy" data-act="promote" data-id="${c.id}" ${why ? `disabled title="${esc(why)}"` : ''}><span class="grow"><b>Promote an officer of this corps</b><small>An unknown officer takes command at level 1. He is a rising star and learns faster than the old guard.</small><small>You have ${pc} political capital.</small></span><span class="cost${why ? ' short' : ''}">${COMMAND.promote.pc}<small>capital</small></span></button>
+    </div><footer><button class="btn go" data-act="close">Close</button></footer>`;
 }
 
 function reelPane(): string {
@@ -480,6 +597,16 @@ function openModal(m: typeof ui.modal): void {
   else if (m.kind === 'attack') card.innerHTML = attackCard();
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
+  else if (m.kind === 'general') {
+    const x = g.generals[m.id];
+    if (!x) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = generalCard(x);
+  }
+  else if (m.kind === 'appoint') {
+    const c = g.corps.find((k) => k.id === m.corps);
+    if (!c) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = appointCard(c);
+  }
   card.scrollTop = 0;
 }
 
@@ -700,6 +827,27 @@ function onClick(e: MouseEvent): void {
       ui.picked.clear(); refresh(); break;
     }
     case 'report': openModal({ kind: 'report', id }); break;
+    case 'general': openModal({ kind: 'general', id }); break;
+    case 'appoint': openModal({ kind: 'appoint', corps: id }); break;
+    case 'assign': orderAssign(g, id, Number(t.dataset.corps)); refresh(); openModal({ kind: 'general', id }); break;
+    case 'relieve': orderRelieve(g, id); refresh(); openModal({ kind: 'general', id }); break;
+    case 'skill': orderSkill(g, id, t.dataset.skill as Skill); refresh(); openModal({ kind: 'general', id }); break;
+    case 'keep': openModal({ kind: 'general', id }); break;
+    case 'sack': {
+      if (!ui.modal?.confirm) { openModal({ kind: 'general', id, confirm: true }); break; }
+      const h = g.headlines.length;
+      orderSack(g, id);
+      ui.unread += g.headlines.length - h;
+      refresh();
+      openModal({ kind: 'general', id });
+      break;
+    }
+    case 'promote': {
+      const x = orderPromote(g, id);
+      refresh();
+      if (x) openModal({ kind: 'general', id: x.id });
+      break;
+    }
     case 'showmap': openModal(null); ui.sel = id; ui.tab = 'region'; focusOn([id]); refresh(); break;
     case 'declare': openModal({ kind: 'declare' }); break;
     case 'dodeclare': { const h = g.headlines.length; orderDeclare(g, t.dataset.nat!); ui.unread += g.headlines.length - h; openModal(null); refresh(); break; }

@@ -18,6 +18,9 @@ function phases(nat: string): PlanPhase[] {
   return Array.isArray(p) ? p : [];
 }
 
+/** Months after losing a region in which the local commanders will still counter-attack it on their own. */
+const COUNTER_WINDOW = 2;
+
 export function phaseFor(g: Game, nat: string): PlanPhase | null {
   return phases(nat).find((p) => g.turn >= p.from && g.turn <= p.to) ?? null;
 }
@@ -423,10 +426,11 @@ function defend(g: Game, nat: string): void {
     if (c.reg !== before) { held[here.id] -= spared; held[to.id] += defPower(g, c, to); }
   }
 
-  // Counter-attack where the odds are clearly good.
+  // Counter-attack where the odds are clearly good. A counter-attack answers a fresh loss: ground
+  // the enemy has held for months is a matter for a planned offensive, not for the local commander.
   for (const r of g.regions) {
     if (!n.alive) return;
-    if (!atWar(g, nat, r.ctrl) || !lost(r) || late(r) || !hostileUnits(g, r, nat).length) continue;
+    if (!atWar(g, nat, r.ctrl) || !lost(r) || late(r) || g.turn - r.since > COUNTER_WINDOW || !hostileUnits(g, r, nat).length) continue;
     // Troops that have already fought this month are in no state to be thrown straight into another attack.
     const pool = limitAttackers(g, g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && g.regions[c.reg].nb.includes(r.id)), r);
     if (pool.length && assess(g, pool, r).odds >= 1.8) resolveBattle(g, pool, r);

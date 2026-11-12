@@ -10,6 +10,7 @@ import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { PRODUCTION, canBuildYet, deliver, firstCorpsNumber, income } from './economy';
 import { DIPLOMACY, homeOpinion, pcIncome } from './diplomacy';
+import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import eastData from '../../data/campaign/east.json';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
@@ -50,7 +51,7 @@ export function createGame(seed: number, human: string | null): Game {
   }
   const order = [...ORDER, ...Object.keys(nations).filter((n) => !ORDER.includes(n))];
   const g: Game = {
-    seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], nextCorps: 1, nextBuild: 1, human,
+    seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], generals: [], nextCorps: 1, nextBuild: 1, human,
     reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, capDist: {}, week: 1,
     links: md.links, width: md.width, height: md.height, land: md.land,
   };
@@ -81,10 +82,11 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
   const reg = typeof region === 'number' ? g.regions[region] : g.byName[region];
   const c: Corps = {
     id: g.nextCorps++, nat, name, kind, divs, str: 1, org: 1, xp: o.xp ?? 0.15, reg: reg.id, ap: 4, apMax: 4,
-    general: o.gen ?? null, trait: o.trait ?? null, hold: !!o.hold, dyle: o.dyle ?? null, supplied: true, fought: false, dead: false,
+    general: null, hold: !!o.hold, dyle: o.dyle ?? null, supplied: true, fought: false, dead: false,
   };
   g.corps.push(c);
   reg.units.push(c);
+  if (o.gen) seat(g, c, o.gen, o.trait);
   return c;
 }
 
@@ -220,7 +222,7 @@ export function lineDrag(g: Game, c: Corps, to: Region): number {
 /** How strong an attack is at the end of this corps' supply line: 1 at the frontier, less deep inside the Soviet Union. */
 export function lineStrength(g: Game, c: Corps): { mul: number; length: number } {
   const length = g.reach[c.nat]?.[c.reg] ?? 0;
-  for (const [max, mul] of EASTERN.bands) if (length <= max) return { mul, length };
+  for (const [max, mul] of EASTERN.bands) if (length <= max) return { mul: cmdLine(g, c, mul), length };
   return { mul: 1, length };
 }
 
@@ -230,7 +232,7 @@ export function moveCost(g: Game, c: Corps, to: Region): number {
   if (to.terrain === 'mountain' && c.kind !== 'mtn') cost += 1;
   if (to.terrain === 'marsh') cost += 1;
   if (weather(g).mud && EAST.has(to.owner)) cost += 1;
-  if (frozen(g, c.nat, to)) cost += 1;
+  if (frozen(g, c.nat, to) && cmdWinter(g, c) >= 1) cost += 1;
   cost += lineDrag(g, c, to);
   return cost;
 }
@@ -323,7 +325,7 @@ export function weekOf(c: Corps, cost: number): number {
 }
 
 export function corpsBase(g: Game, c: Corps): number {
-  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp) * (c.supplied ? 1 : 0.5);
+  return c.divs * c.str * Math.sqrt(0.15 + 0.85 * c.org) * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp) * (c.supplied ? 1 : cmdCutOff(g, c));
 }
 
 /** Share of the usual losses a defender takes when the attack is beaten off. */
@@ -360,33 +362,41 @@ export function assess(g: Game, attackers: Corps[], target: Region): Assessment 
   const tempo = [...dN].some((d) => freshOffensive(g, attNat, d)) || freshOffensive(g, attNat, target.ctrl);
   let A = 0, fortFaced = 0, armorShock = false, armorStuck = false, longest = 0, lineMul = 1, cold = false, coldDef = false;
   const sources = new Set<number>();
+  for (const c of attackers) sources.add(c.reg);
+  // Defenders with nowhere to fall back to: every way out is enemy ground or the attack itself.
+  const pocket = defenders.length > 0 && !target.nb.some((j) => !sources.has(j) && allied(g, defenders[0].nat, g.regions[j].ctrl) && !hostileUnits(g, g.regions[j], defenders[0].nat).length);
+  let cmdA = 0, cmdD = 0, rawA = 0, rawD = 0, trap = false;
   for (const c of attackers) {
     let p = corpsBase(g, c) * KIND[c.kind].atk;
     if (c.kind === 'arm') {
       if (target.terrain === 'mountain' || target.terrain === 'urban' || target.terrain === 'marsh') { p *= 0.6; armorStuck = true; }
       else if (!defHasArmor) { p *= 1.25; armorShock = true; }
     }
-    if (c.trait === 'attacker' || c.trait === 'panzer') p *= 1.1;
+    const lead = cmdAttack(g, c, pocket);
+    if (pocket && lead > cmdAttack(g, c, false)) trap = true;
     if (tempo && KIND[c.kind].mobile) p *= 1.2;
     if (g.nations[c.nat].slowCommand) p *= 0.85;
     const line = lineStrength(g, c);
     if (line.mul < 1) { p *= line.mul; longest = Math.max(longest, line.length); lineMul = Math.min(lineMul, line.mul); }
-    if (frozen(g, c.nat, target)) { p *= EASTERN.winter.attack; cold = true; }
+    if (frozen(g, c.nat, target)) { p *= 1 - (1 - EASTERN.winter.attack) * cmdWinter(g, c); cold = true; }
     const from = g.regions[c.reg];
     if (target.fort && target.fort.vs.includes(from.owner)) { p /= FORT_MUL[target.fort.lv]; fortFaced++; }
-    sources.add(c.reg);
-    A += p;
+    rawA += p;
+    cmdA += p * lead;
+    A += p * lead;
   }
   const flank = Math.min(1.3, 1 + 0.1 * (sources.size - 1));
   A *= flank;
   let D = 0, thin = 1;
   for (const d of defenders) {
     let p = corpsBase(g, d) * KIND[d.kind].def * TERRAIN_DEF[target.terrain];
-    if (d.trait === 'defender') p *= 1.1;
-    if (frozen(g, d.nat, target)) { p *= EASTERN.winter.defence; coldDef = true; }
+    if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
     const dl = lineStrength(g, d).mul;
     if (dl < 1) { p *= 1 - (1 - dl) * EASTERN.lineDefence; thin = Math.min(thin, 1 - (1 - dl) * EASTERN.lineDefence); }
-    D += p;
+    const lead = cmdDefence(g, d);
+    rawD += p;
+    cmdD += p * lead;
+    D += p * lead;
   }
   const aAir = airOf(g, aN, dN), dAir = airOf(g, dN, aN);
   const airEdge = (aAir - dAir) / (aAir + dAir + 1);
@@ -403,9 +413,13 @@ export function assess(g: Game, attackers: Corps[], target: Region): Assessment 
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });
   lines.push({ label: 'Air', value: airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * 30)}%` : undefined });
-  const gens = attackers.filter((c) => c.general).map((c) => c.general);
-  const dgens = defenders.filter((c) => c.general).map((c) => c.general);
-  if (gens.length || dgens.length) lines.push({ label: 'Commanders', value: `${gens.join(', ') || 'none named'} against ${dgens.join(', ') || 'none named'}` });
+  const gens = commandersIn(g, attackers), dgens = commandersIn(g, defenders);
+  if (gens || dgens) {
+    const up = rawA > 0 ? Math.round((cmdA / rawA - 1) * 100) : 0, dup = rawD > 0 ? Math.round((cmdD / rawD - 1) * 100) : 0;
+    const fx = [up ? `Attack ${up > 0 ? 'up' : 'down'} ${Math.abs(up)}%` : '', dup ? `defence ${dup > 0 ? 'up' : 'down'} ${Math.abs(dup)}%` : ''].filter(Boolean).join(', ');
+    lines.push({ label: 'Commanders', value: `${gens || 'No general named'} against ${dgens || 'no general named'}`, effect: fx ? fx[0].toUpperCase() + fx.slice(1) : undefined });
+  }
+  if (trap) lines.push({ label: 'Encirclement', value: 'The defenders have no line of retreat', effect: 'A general who knows how to close a pocket hits 15% harder' });
   if (lineMul < 1) lines.push({ label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
   if (cold) lines.push({ label: 'Winter', value: 'Attackers without winter equipment', effect: `Attack cut to ${Math.round(EASTERN.winter.attack * 100)}%` });
   if (thin < 1) lines.push({ label: 'Supply line', value: 'Defenders at the end of a long supply line', effect: `Defence cut to as little as ${Math.round(thin * 100)}%` });
@@ -423,6 +437,8 @@ function reportUnit(c: Corps): ReportUnit {
 
 export function removeCorps(g: Game, c: Corps): void {
   c.dead = true;
+  const gen = generalOf(g, c);
+  if (gen) { gen.corps = -1; c.general = null; }
   const r = g.regions[c.reg];
   r.units.splice(r.units.indexOf(c), 1);
   g.corps.splice(g.corps.indexOf(c), 1);
@@ -467,14 +483,15 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region): Batt
   g.week = week;
   const R = a.odds * g.rng.range(0.8, 1.2);
   const attU = attackers.map(reportUnit), defU = defenders.map(reportUnit);
+  const attGens = attackers.map((c) => generalOf(g, c)), defGens = defenders.map((c) => generalOf(g, c));
   const mobile = attackers.some((c) => KIND[c.kind].mobile);
   const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
   const attFrac = clamp(0.14 / R, 0.02, 0.2);
   let attLost = 0, defLost = 0, prisoners = 0;
   attackers.forEach((c, i) => {
     const before = men(c);
-    c.str *= 1 - attFrac;
-    c.org = clamp(c.org - (0.1 + 0.08 / R), 0, 1);
+    c.str *= 1 - Math.min(0.6, attFrac * cmdLoss(g, c));
+    c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g, c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.05);
     c.fought = true;
     attU[i].lost = before - men(c);
@@ -485,8 +502,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region): Batt
   const stood = win ? 1 : HELD_LOSS;
   defenders.forEach((c, i) => {
     const before = men(c);
-    c.str *= 1 - defFrac * (win && mobile ? 1.3 : 1) * stood;
-    c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood, 0, 1);
+    c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * stood * cmdLoss(g, c));
+    c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
     defU[i].lost = before - men(c);
@@ -530,12 +547,15 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region): Batt
   } else {
     for (const c of attackers) c.ap = Math.max(0, c.ap - 1);
   }
+  // Battles are numbered through the whole war, so a saved game carries the count on.
+  g.flags.battles = Math.max(g.flags.battles ?? 0, g.reports.length) + 1;
   const rep: BattleReport = {
-    id: g.reports.length + 1, turn: g.turn, week, region: target.id, regionName: target.name, attNat, defNat,
+    id: g.flags.battles, turn: g.turn, week, region: target.id, regionName: target.name, attNat, defNat,
     attackers: attU, defenders: defU, lines: a.lines, aPower: a.A, dPower: a.D, odds: R, level, taken: win,
     attLost, defLost, prisoners,
   };
   g.reports.push(rep);
+  afterBattle(g, rep, target, a.odds, attackers, attGens, defenders, defGens);
   if (prisoners >= 40000) {
     const who = new Set(defU.filter((u) => u.fate === 'surrendered' || u.fate === 'destroyed').map((u) => u.nat));
     const adj = who.size === 1 ? g.nations[[...who][0]].adj : bloc(g.nations[defNat]) === 'allies' ? 'Allied' : 'Axis';
@@ -737,6 +757,7 @@ export function startPhase(g: Game, nat: string): void {
     addCorps(g, nat, row[2], row[3], row[4], reg.id, row[6] ?? {});
   }
   mobilise(g, nat);
+  monthlyCommand(g, nat);
   computeSupply(g);
   // The month's production comes in. Losses are made good first.
   n.pp += income(g, nat);
@@ -755,8 +776,9 @@ export function startPhase(g: Game, nat: string): void {
       if (give > 0) { c.str += give / c.divs; n.pp -= give * perDiv; }
       // A Russian winter without winter clothing costs men to frostbite and leaves little rest.
       const cold = frozen(g, nat, g.regions[c.reg]);
-      if (cold) c.str *= 1 - EASTERN.winter.attrition;
-      c.org = Math.min(1, c.org + (c.fought ? 0.25 : 0.45) * lineStrength(g, c).mul * (cold ? EASTERN.winter.rest : 1));
+      const bite = cold ? cmdWinter(g, c) : 0;
+      if (cold) c.str *= 1 - EASTERN.winter.attrition * bite;
+      c.org = Math.min(1, c.org + (c.fought ? 0.25 : 0.45) * lineStrength(g, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c));
     } else {
       c.org -= 0.4;
       c.str *= 0.85;
@@ -767,7 +789,7 @@ export function startPhase(g: Game, nat: string): void {
       }
     }
     c.fought = false;
-    c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + (c.trait === 'panzer' ? 1 : 0);
+    c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c);
   });
   n.pp = Math.max(0, n.pp);
   deliver(g, nat);

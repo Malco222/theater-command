@@ -1,5 +1,5 @@
 {
-  "_about": "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen and trait name a commander; hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded.",
+  "_about": "Starting armies for 1 September 1939 and the formations that arrive later. Each line is one corps: [nation, name, kind, divisions, region, options]. Kinds: inf, mot, arm, cav, mtn, fort. Options: gen names the general in command, and trait is what he is known for (panzer, attacker or defender; commanders.json turns the label into his level, skills and traits); hold keeps a corps in place as a garrison; xp is experience from 0 to 1. Corps names and commanders follow the historical order of battle; strengths are rounded.",
   "corps": [
     ["GER", "XIX Corps", "arm", 2, "Farther Pomerania", {"gen": "Heinz Guderian", "trait": "panzer", "xp": 0.4}],
     ["GER", "II Corps", "inf", 3, "Grenzmark", {"xp": 0.3}],

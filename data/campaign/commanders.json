@@ -1,0 +1,128 @@
+{
+  "_about": {
+    "what": "Generals: how they gain experience, what their skills and traits do, how they are lost, and who is on each nation's list.",
+    "levelXp": "Experience needed to go from each level to the next (index 1 is level 1 to 2). Every level brings one skill point.",
+    "xp": "Experience from one battle: for fighting it, for winning it, for a decisive or heroic win, for winning or holding against the odds, for holding at all, and for taking a capital.",
+    "skills": "Each point: offense adds this share to the corps' attack, defense to its defence. Logistics takes this share off the penalty of a long supply line and adds 'cutOff' to the half strength a cut-off corps fights at. Leadership takes 'steady' off the cohesion lost in battle and adds 'rally' to the cohesion regained each month.",
+    "traits": "attack and defence multiply the corps' strength; ap is extra weeks of movement a month; loss multiplies the corps' own losses; pocket multiplies attack against defenders with no line of retreat; winter is the share of the winter penalties still felt; xp multiplies experience gained. 'needs' is the record that earns it: [counter, count]. 'not' lists traits that rule it out. 'mobile' means it is only earned at the head of fast troops.",
+    "counters": "fast: decisive wins on the attack with fast troops. close: attacks won at pre-battle odds under closeOdds. enc: attacks won that ended with defenders surrendering. held: positions held against a stronger attacker. winter: battles fought on Soviet ground in winter without winter kit. costly: failed attacks that cost at least 'costly' of the corps. streak: defeats in a row.",
+    "hazard": "Chance a general is hit in a battle: base plus perLoss times the share of his corps lost. killedShare of those hits are fatal; the rest put him out for woundMonths. When his corps is destroyed or surrenders he is captured or killed with the chances under 'lost', and otherwise gets away.",
+    "rise": "A corps with no general that wins decisively or holds against the odds may throw up an officer who makes his name: chance per battle, while the nation has fewer generals than 'share' of its corps.",
+    "sack": "Sacking a general with at least 'popularLevel' levels or 'popularWins' wins costs his corps 'org' cohesion and the government 'pc' political capital.",
+    "promote": "Political capital it costs the player to promote an unknown officer to command a corps.",
+    "legacy": "How the three starting labels in setup-1939.json ('panzer', 'attacker', 'defender') become a general's level, skills and traits.",
+    "roster": "Generals who are not tied to a starting corps: [first month available, name, level, skills, traits]. They wait for a command; the computer gives them one.",
+    "names": "First names and family names for officers who rise from the ranks. These are invented people."
+  },
+  "maxLevel": 10,
+  "skillMax": 5,
+  "levelXp": [0, 600, 900, 1200, 1500, 1800, 2200, 2600, 3000, 3500],
+  "xp": { "fought": 100, "won": 100, "decisive": 50, "odds": 100, "held": 100, "capital": 150 },
+  "closeOdds": 1.5,
+  "costly": 0.15,
+  "skills": {
+    "offense": { "label": "Offense", "per": 0.02, "blurb": "Each point adds 2% to his corps' attack." },
+    "defense": { "label": "Defense", "per": 0.02, "blurb": "Each point adds 2% to his corps' defence." },
+    "logistics": { "label": "Logistics", "per": 0.05, "cutOff": 0.04, "blurb": "Each point takes 5% off the penalty of a long supply line, and his corps fights better when cut off." },
+    "leadership": { "label": "Leadership", "steady": 0.06, "rally": 0.06, "blurb": "Each point means 6% less cohesion lost in battle and 6% more regained each month." }
+  },
+  "traits": {
+    "panzer_leader": { "label": "Panzer leader", "good": true, "effect": "Fast troops under him move an extra week every month and attack 6% harder.", "earned": "Three decisive victories at the head of fast troops.", "attack": 1.06, "ap": 1, "needs": ["fast", 3], "not": ["hard_charger"], "mobile": true },
+    "hard_charger": { "label": "Hard charger", "good": true, "effect": "Presses an attack home: 6% harder in attack.", "earned": "Three attacks won when the odds were close.", "attack": 1.06, "needs": ["close", 3], "not": ["panzer_leader", "cautious"] },
+    "encirclement_master": { "label": "Encirclement master", "good": true, "effect": "Attacks 15% harder against defenders who have no line of retreat.", "earned": "Three victories that ended with the defenders laying down their arms.", "pocket": 1.15, "needs": ["enc", 3] },
+    "iron_defender": { "label": "Iron defender", "good": true, "effect": "His corps is 6% stronger in defence.", "earned": "Three positions held against a stronger attacker.", "defence": 1.06, "needs": ["held", 3], "not": ["cautious"] },
+    "winter_soldier": { "label": "Winter soldier", "good": true, "effect": "His corps feels only half of a Russian winter in battle and in men lost to the cold, and the snow does not slow its march.", "earned": "Three battles fought through a Russian winter without winter equipment.", "winter": 0.5, "needs": ["winter", 3] },
+    "rising_star": { "label": "Rising star", "good": true, "effect": "Promoted from the ranks on merit. Learns 25% faster.", "earned": "Made his name in battle, or was promoted over senior officers.", "xp": 1.25 },
+    "butcher": { "label": "Butcher", "good": false, "effect": "Attacks 5% harder, but his corps loses 25% more men doing it.", "earned": "Three failed assaults that cost his corps dearly.", "attack": 1.05, "loss": 1.25, "needs": ["costly", 3] },
+    "cautious": { "label": "Cautious", "good": false, "effect": "Attacks 4% weaker, but breaks off sooner: his corps loses 15% fewer men.", "earned": "Four defeats in a row.", "attack": 0.96, "loss": 0.85, "needs": ["streak", 4], "not": ["hard_charger", "iron_defender", "butcher", "panzer_leader"] }
+  },
+  "hazard": { "base": 0.004, "perLoss": 0.1, "killedShare": 0.2, "woundMonths": [2, 4], "lost": { "captured": 0.55, "killed": 0.15 } },
+  "rise": { "chance": 0.2, "share": 0.4 },
+  "sack": { "org": 0.15, "pc": 5, "popularLevel": 4, "popularWins": 5 },
+  "promote": { "pc": 6 },
+  "legacy": {
+    "panzer": { "level": 3, "skills": { "offense": 2 }, "traits": ["panzer_leader"] },
+    "attacker": { "level": 3, "skills": { "offense": 2 }, "traits": ["hard_charger"] },
+    "defender": { "level": 3, "skills": { "defense": 2 }, "traits": ["iron_defender"] },
+    "none": { "level": 2, "skills": { "leadership": 1 }, "traits": [] }
+  },
+  "roster": {
+    "GER": [
+      [1, "Gerd von Rundstedt", 4, { "offense": 1, "logistics": 1, "leadership": 1 }, []],
+      [1, "Fedor von Bock", 4, { "offense": 2, "leadership": 1 }, []],
+      [1, "Gunther von Kluge", 3, { "offense": 1, "defense": 1 }, []],
+      [9, "Erwin Rommel", 2, { "offense": 1 }, ["panzer_leader"]],
+      [22, "Walter Model", 3, { "defense": 2 }, ["iron_defender"]]
+    ],
+    "SOV": [
+      [22, "Georgy Zhukov", 5, { "offense": 2, "defense": 1, "leadership": 1 }, ["hard_charger"]],
+      [22, "Semyon Timoshenko", 3, { "defense": 1, "leadership": 1 }, []],
+      [22, "Konstantin Rokossovsky", 3, { "offense": 1, "defense": 1 }, []],
+      [22, "Ivan Konev", 2, { "offense": 1 }, []],
+      [23, "Andrei Yeremenko", 2, { "defense": 1 }, []]
+    ],
+    "UK": [
+      [1, "Lord Gort", 3, { "defense": 1, "leadership": 1 }, []],
+      [2, "Bernard Montgomery", 2, { "defense": 1 }, []],
+      [2, "Harold Alexander", 2, { "leadership": 1 }, []]
+    ],
+    "FRA": [
+      [1, "Gaston Billotte", 3, { "defense": 1, "leadership": 1 }, []],
+      [1, "Jean de Lattre de Tassigny", 2, { "defense": 1 }, []],
+      [9, "Charles de Gaulle", 2, { "offense": 1 }, []],
+      [10, "Maxime Weygand", 4, { "defense": 2, "leadership": 1 }, []]
+    ],
+    "POL": [
+      [1, "Stanislaw Maczek", 2, { "defense": 1 }, []],
+      [1, "Wladyslaw Anders", 1, {}, []]
+    ],
+    "ITA": [
+      [10, "Rodolfo Graziani", 3, { "logistics": 1, "leadership": 1 }, []],
+      [10, "Giovanni Messe", 2, { "offense": 1 }, []]
+    ],
+    "FIN": [
+      [1, "Carl Gustaf Mannerheim", 6, { "defense": 3, "leadership": 2 }, ["iron_defender"]]
+    ],
+    "ROM": [
+      [22, "Petre Dumitrescu", 2, { "offense": 1 }, []]
+    ]
+  },
+  "names": {
+    "GER": {
+      "first": ["Karl", "Hans", "Friedrich", "Wilhelm", "Otto", "Ernst", "Georg", "Kurt", "Walter", "Heinrich", "Paul", "Max", "Rudolf", "Erich"],
+      "last": ["Brandt", "Hartmann", "Vogel", "Lindner", "Kessler", "Albrecht", "Baumann", "Fischer", "Hofmann", "Jansen", "Kaufmann", "Lorenz", "Neumann", "Pfeiffer", "Reuter", "Seidel", "Thiele", "Wendt", "Ziegler", "Bergmann", "Engel", "Falk"]
+    },
+    "SOV": {
+      "first": ["Ivan", "Nikolai", "Alexei", "Mikhail", "Pavel", "Sergei", "Dmitri", "Fyodor", "Vasily", "Andrei", "Pyotr", "Grigory"],
+      "last": ["Volkov", "Morozov", "Lebedev", "Orlov", "Makarov", "Smirnov", "Fedorov", "Nikitin", "Tarasov", "Baranov", "Titov", "Komarov", "Frolov", "Danilov", "Melnikov", "Savin", "Borisov", "Yegorov", "Karpov", "Rybakov", "Sidorov", "Loginov", "Mironov"]
+    },
+    "UK": {
+      "first": ["Arthur", "Charles", "Edward", "George", "Henry", "James", "John", "Richard", "Thomas", "William", "Hugh", "Robert"],
+      "last": ["Ashworth", "Bellamy", "Dalton", "Ellery", "Fairfax", "Grantham", "Hadley", "Ingram", "Kirkwood", "Lyle", "Mercer", "Norwood", "Pembroke", "Radcliffe", "Sinclair", "Thornton", "Whitlock", "Yardley", "Holloway", "Prescott", "Langley"]
+    },
+    "FRA": {
+      "first": ["Jean", "Pierre", "Louis", "Henri", "Marcel", "Andre", "Georges", "Rene", "Paul", "Lucien", "Emile", "Jacques"],
+      "last": ["Marchand", "Delacroix", "Fournier", "Lambert", "Moreau", "Renaud", "Vasseur", "Bertin", "Chevalier", "Dufour", "Garnier", "Lefebvre", "Mercier", "Perrin", "Roussel", "Tessier", "Vidal", "Blanchet", "Faure", "Morel", "Picard", "Aubert"]
+    },
+    "ITA": {
+      "first": ["Giovanni", "Giuseppe", "Antonio", "Luigi", "Carlo", "Mario", "Pietro", "Enrico", "Vittorio", "Ugo", "Alberto", "Franco"],
+      "last": ["Bianchi", "Conti", "De Luca", "Ferraro", "Galli", "Lombardi", "Marchetti", "Moretti", "Pellegrini", "Rinaldi", "Santoro", "Valentini", "Barbieri", "Caruso", "Fabbri", "Gentile", "Leone", "Martini", "Orlando", "Sartori"]
+    },
+    "POL": {
+      "first": ["Jan", "Stanislaw", "Jozef", "Tadeusz", "Kazimierz", "Antoni", "Franciszek", "Henryk", "Zygmunt", "Marian", "Boleslaw", "Wladyslaw"],
+      "last": ["Kowalczyk", "Nowicki", "Zielinski", "Wisniewski", "Kaminski", "Lewandowski", "Wojcik", "Mazur", "Kaczmarek", "Piotrowski", "Grabowski", "Pawlak", "Michalski", "Krol", "Wrobel", "Jablonski", "Adamski", "Sikora", "Borkowski"]
+    },
+    "ROM": {
+      "first": ["Ion", "Gheorghe", "Nicolae", "Vasile", "Mihai", "Alexandru", "Dumitru", "Stefan"],
+      "last": ["Popescu", "Stoica", "Marin", "Georgescu", "Radu", "Munteanu", "Florea", "Barbu", "Negru", "Dragomir", "Lungu", "Ciobanu"]
+    },
+    "HUN": {
+      "first": ["Istvan", "Janos", "Laszlo", "Ferenc", "Gyula", "Bela", "Sandor", "Zoltan"],
+      "last": ["Kovacs", "Szabo", "Toth", "Varga", "Kiss", "Molnar", "Nemeth", "Farkas", "Balogh", "Papp", "Takacs", "Lakatos"]
+    },
+    "FIN": {
+      "first": ["Eino", "Vaino", "Toivo", "Lauri", "Aarne", "Paavo", "Kaarlo", "Erkki"],
+      "last": ["Virtanen", "Korhonen", "Makinen", "Nieminen", "Heikkinen", "Koskinen", "Jarvinen", "Lehtonen", "Salminen", "Laine", "Rantanen", "Ahonen"]
+    }
+  }
+}

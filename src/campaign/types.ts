@@ -94,13 +94,62 @@ export interface Corps {
   ap: number;
   /** Action points this corps started the month with. */
   apMax: number;
-  general: string | null;
-  trait: 'panzer' | 'attacker' | 'defender' | null;
+  /** Id of the general in command, if the corps has one. */
+  general: number | null;
   hold: boolean;
   dyle: string | null;
   supplied: boolean;
   fought: boolean;
   dead: boolean;
+}
+
+export type Skill = 'offense' | 'defense' | 'logistics' | 'leadership';
+
+/** A general's service record: what he has done, which is what his traits are earned from. */
+export interface ServiceRecord {
+  battles: number;
+  won: number;
+  attacks: number;
+  defences: number;
+  wounds: number;
+  /** Decisive wins at the head of fast troops. */
+  fast: number;
+  /** Attacks won when the odds were close. */
+  close: number;
+  /** Wins that ended with the defenders laying down their arms. */
+  enc: number;
+  /** Positions held against a stronger attacker. */
+  held: number;
+  /** Battles fought through a Russian winter without winter equipment. */
+  winter: number;
+  /** Failed assaults that cost his corps dearly. */
+  costly: number;
+  /** Defeats in a row. */
+  streak: number;
+}
+
+export interface General {
+  id: number;
+  nat: string;
+  name: string;
+  /** A real commander of the war, or an officer who rose from the ranks in this one. */
+  historical: boolean;
+  level: number;
+  /** Experience toward the next level. */
+  xp: number;
+  /** Skill points not yet spent. */
+  points: number;
+  skills: Record<Skill, number>;
+  traits: string[];
+  /** Id of the corps he commands, or -1 while he waits for a command. */
+  corps: number;
+  status: 'active' | 'wounded' | 'captured' | 'dead' | 'sacked';
+  /** Month a wounded general is fit again. */
+  backOn: number;
+  /** Month he joined the list, and the month he was last given a new command. */
+  joined: number;
+  moved: number;
+  rec: ServiceRecord;
 }
 
 export interface ReportUnit {
@@ -187,6 +236,8 @@ export interface Game {
   regions: Region[];
   byName: Record<string, Region>;
   corps: Corps[];
+  /** Every general of the war, by id. Generals who are killed, captured or sacked stay on the list. */
+  generals: General[];
   nextCorps: number;
   nextBuild: number;
   human: string | null;
