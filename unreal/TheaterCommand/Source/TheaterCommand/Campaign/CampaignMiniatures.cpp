@@ -1065,11 +1065,13 @@ FLinearColor FMiniatureMesh::VehicleColour(const FString& Tag)
 	return FLinearColor(FColor::FromHex(Found ? *Found : TEXT("60664A")));
 }
 
-void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, double Top, double Unit, const FLinearColor& /*NationColour*/, const FString& Tag)
+void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, double Top, double /*Unit*/, const FLinearColor& /*NationColour*/, const FString& Tag)
 {
-	// The figures wear what the nation's soldiers wore and its vehicles their wartime paint; the base under
-	// them keeps the nation's colour on the map, so the two together say whose they are.
-	// The figures darken the colour they are given a little, so it is handed to them a little light.
+	// Everything on the base is to one scale, the scale of the real things: a tank is as long beside a man as a
+	// real tank is. The base is taken to be a little over seven metres across: room for one tank, or a dozen men in ranks. The figures wear what the
+	// nation's soldiers wore and its vehicles their wartime paint; the base under them keeps the nation's colour
+	// on the map, so the two together say whose they are.
+	const double Metre = BaseRadius / 3.7;
 	const FLinearColor Nation = UniformColour(Tag) * 1.25f;
 	const FLinearColor Vehicles = VehicleColour(Tag) * 1.3f;
 	int32 Armour = 0, Guns = 0, Motor = 0, Horse = 0, Mountain = 0, Fort = 0, Foot = 0;
@@ -1083,73 +1085,78 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 		else if (Kind == TEXT("fort")) ++Fort;
 		else ++Foot;
 	}
-	const double R = BaseRadius;
-	auto On = [Top, R](double X, double Y) { return FVector(X * R, Y * R, Top); };
+	// A place on the base, in metres from its middle: so far toward the back, so far to the right as it is looked at.
+	auto On = [Top, Metre](double Back, double Right) { return FVector(Back * Metre, Right * Metre, Top); };
 
-	// The big things, at most two or the base is crowded: tanks before guns before lorries before bunkers.
-	// The figures are large for their base, as a board game's are, so that they read from across the table.
-	TArray<int32> Heavy; // 0 tank, 1 gun, 2 lorry, 3 bunker
-	for (int32 K = 0; K < FMath::Min(Armour, 2); ++K) Heavy.Add(0);
-	for (int32 K = 0; K < FMath::Min(Guns, 1); ++K) Heavy.Add(1);
-	for (int32 K = 0; K < FMath::Min(Motor, 1); ++K) Heavy.Add(2);
-	for (int32 K = 0; K < FMath::Min(Fort, 1); ++K) Heavy.Add(3);
-	Heavy.SetNum(FMath::Min(Heavy.Num(), 2));
-	const bool bPair = Heavy.Num() == 2;
-	for (int32 K = 0; K < Heavy.Num(); ++K)
+	// One big thing takes the middle of the base: a tank before a gun before a lorry before a bunker.
+	int32 Heavy = INDEX_NONE; // 0 tank, 1 gun, 2 lorry, 3 bunker
+	if (Armour > 0) Heavy = 0;
+	else if (Guns > 0) Heavy = 1;
+	else if (Motor > 0) Heavy = 2;
+	else if (Fort > 0) Heavy = 3;
+	const bool bHeavy = Heavy != INDEX_NONE;
+	if (bHeavy)
 	{
-		// One stands to the fore and a little to the left; two stand side by side. Each is turned to be seen three-quarters on.
-		const FVector Where = bPair ? On(-0.18, K ? 0.46 : -0.44) : On(-0.2, -0.22);
-		const double Size = (bPair ? 1.75 : 2.3) * Unit;
-		const double Turn = bPair ? (K ? 20.0 : -20.0) : -24.0;
-		switch (Heavy[K])
+		// Turned to be seen three-quarters on.
+		const FVector Where = On(-0.2, 0.45);
+		const double Turn = -24.0;
+		switch (Heavy)
 		{
 		case 0:
-			// The nation's own tank if it is modelled (a real metre is drawn so that a six-metre tank is as long as
-			// the plain one was), or the plain one in the nation's paint.
-			if (!MainTank(Where, Size * 0.43, Tag, Turn))
+			// The nation's own tank if there is a model of it, or a plain one of the same size in the nation's paint.
+			if (!MainTank(Where, Metre, Tag, Turn))
 			{
-				Tank(Where, Size, Vehicles, Turn);
+				Tank(Where, Metre * 2.3, Vehicles, Turn);
 			}
 			break;
-		case 1: FieldGun(Where, Size * 1.05, Vehicles, Turn); break;
-		case 2: Lorry(Where, Size, Vehicles, Turn); break;
-		default: Bunker(Where, Size * 1.15, Nation, Turn); break;
+		case 1: FieldGun(Where, Metre * 2.0, Vehicles, Turn); break;
+		case 2: Lorry(Where, Metre * 2.4, Vehicles, Turn); break;
+		default: Bunker(Where, Metre * 2.0, Nation, Turn); break;
 		}
 	}
 
-	// The men fill what room is left: riflemen for the infantry, a horseman for cavalry, riflemen by a rock for mountain troops.
+	// The men fill what room is left. With nothing big on the base they stand in three ranks of four;
+	// otherwise a few stand about it.
 	TArray<FVector2D> Places;
-	if (Heavy.Num() == 0)
+	if (!bHeavy)
 	{
-		Places = { { -0.36, -0.36 }, { -0.4, 0.3 }, { 0.02, -0.02 }, { 0.0, 0.62 } };
+		for (int32 Rank = 0; Rank < 3; ++Rank)
+		{
+			for (int32 File = 0; File < 4; ++File)
+			{
+				Places.Add(FVector2D(-1.7 + Rank * 1.35, (File - 1.5) * 1.2 + (Rank % 2 ? 0.25 : 0.0)));
+			}
+		}
 	}
-	else if (Heavy.Num() == 1)
+	else if (Heavy == 0 || Heavy == 2)
 	{
-		Places = { { -0.42, 0.52 }, { 0.02, 0.52 } };
+		Places = { { -2.3, -2.3 }, { -0.9, -3.1 }, { 2.9, 1.6 }, { 3.2, 0.3 } };
 	}
 	else
 	{
-		Places = { { 0.3, 0.1 } };
+		Places = { { 1.6, -1.2 }, { 1.9, 1.4 }, { -2.3, -2.3 }, { 2.9, 0.2 }, { -0.9, -3.1 } };
 	}
-	const double Man = 4.4 * Unit;
 	int32 Slot = 0;
-	if (Mountain > 0 && Places.IsValidIndex(Slot))
+	if (Mountain > 0)
 	{
-		Crag(On(Places[Slot].X, Places[Slot].Y), Man * 0.8);
-		++Slot;
+		// Mountain troops stand by a rock, at the back.
+		Crag(On(2.3, 2.3), Metre * 1.6);
 	}
-	for (int32 K = 0; K < FMath::Min(Horse, 1) && Places.IsValidIndex(Slot); ++K, ++Slot)
+	for (int32 K = 0; K < FMath::Min(Horse, 2) && Places.IsValidIndex(Slot); ++K)
 	{
-		Horseman(On(Places[Slot].X, Places[Slot].Y), Man * 0.7, Nation, -16.0);
+		// A horseman takes the room of two men.
+		Horseman(On(Places[Slot].X, Places[Slot].Y + 0.3), Metre * 1.5, Nation, -10.0);
+		Slot += bHeavy ? 1 : 2;
 	}
-	// One rifleman for each corps on foot, up to the room there is; at least one if there is nothing else on the base.
-	int32 Men = FMath::Min(Foot + Mountain, Places.Num() - Slot);
-	if (Men == 0 && Heavy.Num() == 0 && Horse == 0)
+	// Riflemen for the corps on foot: two ranks for one corps, all three for more. A tank or a gun has a few
+	// men about it whatever else the army holds.
+	int32 Men = FMath::Min(bHeavy ? 2 + 2 * (Foot + Mountain) : 4 + 4 * (Foot + Mountain), Places.Num() - Slot);
+	if (!bHeavy && Foot + Mountain == 0 && Horse > 0)
 	{
-		Men = 1;
+		Men = 0; // cavalry alone
 	}
 	for (int32 K = 0; K < Men && Places.IsValidIndex(Slot); ++K, ++Slot)
 	{
-		Rifleman(On(Places[Slot].X, Places[Slot].Y), Man, Nation, (K % 3 - 1) * 16.0);
+		Soldier(Tag, On(Places[Slot].X, Places[Slot].Y), Metre, ((K * 7) % 5 - 2) * 5.0, false);
 	}
 }

@@ -57,7 +57,7 @@ public:
 	float GetHorizontalFov() const;
 
 	UPROPERTY(EditAnywhere, Category = "Camera")
-	float MinDistance = 1800.0f;
+	float MinDistance = 750.0f;
 
 	/** How high above the table the point being looked at is, and the flattest the view may go (degrees below level). Changed only for looking at models. */
 	float FocusHeight = 0.0f;

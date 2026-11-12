@@ -81,7 +81,7 @@ struct FMiniatureMesh
 	 * as his army wore them. Any nation can be asked for; one with nothing special drawn wears a plain kit in
 	 * its own colour.
 	 */
-	void Soldier(const FString& Tag, const FVector& Where, double Metre, double Turn = 0.0);
+	void Soldier(const FString& Tag, const FVector& Where, double Metre, double Turn = 0.0, bool bFine = true);
 
 	/** Every vehicle there is a model of; and a line about one, with its real length and height. */
 	static TArray<FString> VehicleNames();
