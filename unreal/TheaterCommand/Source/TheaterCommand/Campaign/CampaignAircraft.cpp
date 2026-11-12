@@ -29,63 +29,9 @@ namespace AircraftParts
 	static const FLinearColor GunSteel = Hex(TEXT("2E2F31"));
 	static const FLinearColor Tyre = Hex(TEXT("1C1C1B"));
 
-	/** One cross-section of a body: how far forward it is, how high its middle is, half its width, half its depth. */
-	struct FStation
-	{
-		double X, Z, W, H;
-	};
-
-	/**
-	 * More stations between the ones given, following a curve through them, so a body swells and tapers
-	 * smoothly from nose to tail and is not a row of cones. Where two stations are close together (the lip of
-	 * a cowling, the back of a spinner) the step between them is kept as it is.
-	 */
-	static TArray<FStation> Flowing(const TArray<FStation>& Stations)
-	{
-		TArray<FStation> Fine;
-		const int32 Count = Stations.Num();
-		for (int32 K = 0; K + 1 < Count; ++K)
-		{
-			const FStation& P0 = Stations[FMath::Max(K - 1, 0)];
-			const FStation& P1 = Stations[K];
-			const FStation& P2 = Stations[K + 1];
-			const FStation& P3 = Stations[FMath::Min(K + 2, Count - 1)];
-			const double Length = FMath::Abs(P2.X - P1.X);
-			const int32 Parts = Length < 0.2 ? 1 : FMath::Clamp(FMath::CeilToInt32(Length / 0.3), 2, 8);
-			for (int32 Part = 0; Part < Parts; ++Part)
-			{
-				const double T = static_cast<double>(Part) / Parts;
-				auto Curve = [T](double A, double B, double C, double D)
-				{
-					// (a curve through B and C that heads for A before and D after, held between B and C so it cannot bulge past them)
-					const double V = 0.5 * ((2.0 * B) + (-A + C) * T + (2.0 * A - 5.0 * B + 4.0 * C - D) * T * T + (-A + 3.0 * B - 3.0 * C + D) * T * T * T);
-					return FMath::Clamp(V, FMath::Min(B, C), FMath::Max(B, C));
-				};
-				Fine.Add({ FMath::Lerp(P1.X, P2.X, T), Curve(P0.Z, P1.Z, P2.Z, P3.Z), Curve(P0.W, P1.W, P2.W, P3.W), Curve(P0.H, P1.H, P2.H, P3.H) });
-			}
-		}
-		Fine.Add(Stations.Last());
-		return Fine;
-	}
-
-	/** The rings of a body (a fuselage, a nacelle, a canopy) over its stations. Square above 2 makes the section boxier than an oval. Side moves the whole body to one side. */
-	static TArray<TArray<FVector>> Body(const TArray<FStation>& Given, double Square = 2.0, int32 Round = 20, double Side = 0.0)
-	{
-		const TArray<FStation> Stations = Flowing(Given);
-		TArray<TArray<FVector>> Rings;
-		for (const FStation& S : Stations)
-		{
-			TArray<FVector>& Ring = Rings.AddDefaulted_GetRef();
-			for (int32 K = 0; K < Round; ++K)
-			{
-				const double Angle = UE_DOUBLE_TWO_PI * K / Round, C = FMath::Cos(Angle), Sn = FMath::Sin(Angle);
-				const double Power = 2.0 / Square;
-				const double Y = FMath::Sign(C) * FMath::Pow(FMath::Abs(C), Power), Z = FMath::Sign(Sn) * FMath::Pow(FMath::Abs(Sn), Power);
-				Ring.Add(At(S.X, Side + Y * S.W, S.Z + Z * S.H));
-			}
-		}
-		return Rings;
-	}
+	using MiniatureParts::FStation;
+	using MiniatureParts::Flowing;
+	using MiniatureParts::Body;
 
 	/** One section of a wing or tail: how far out it is, where its leading and trailing edges are, how high, how thick. */
 	struct FSection

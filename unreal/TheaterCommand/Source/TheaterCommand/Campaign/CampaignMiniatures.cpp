@@ -1131,7 +1131,7 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 	const double Metre = BaseRadius / 3.7;
 	const FLinearColor Nation = UniformColour(Tag) * 1.25f;
 	const FLinearColor Vehicles = VehicleColour(Tag) * 1.3f;
-	int32 Armour = 0, Guns = 0, Motor = 0, Horse = 0, Mountain = 0, Fort = 0, Foot = 0;
+	int32 Armour = 0, Guns = 0, Motor = 0, Horse = 0, Mountain = 0, Fort = 0, Foot = 0, Sappers = 0;
 	for (const FString& Kind : Kinds)
 	{
 		if (Kind == TEXT("arm")) ++Armour;
@@ -1140,6 +1140,7 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 		else if (Kind == TEXT("cav")) ++Horse;
 		else if (Kind == TEXT("mtn")) ++Mountain;
 		else if (Kind == TEXT("fort")) ++Fort;
+		else if (Kind == TEXT("eng")) ++Sappers;
 		else ++Foot;
 	}
 	// A place on the base, in metres from its middle: so far toward the back, so far to the right as it is looked at.
@@ -1151,6 +1152,7 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 	else if (Guns > 0) Heavy = 1;
 	else if (Motor > 0) Heavy = 2;
 	else if (Fort > 0) Heavy = 3;
+	else if (Sappers > 0) Heavy = 4;
 	const bool bHeavy = Heavy != INDEX_NONE;
 	if (bHeavy)
 	{
@@ -1178,7 +1180,13 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 				Lorry(Where, Metre * 2.4, Vehicles, Turn);
 			}
 			break;
-		default: Bunker(Where, Metre * 2.0, Nation, Turn); break;
+		case 3: Bunker(Where, Metre * 2.0, Nation, Turn); break;
+		default:
+			// The engineers' bridging gear: a pontoon on its side timbers, and a stack of decking beside it.
+			Ball(Where + FVector(0.0, 0.0, 0.55 * Metre), FVector(5.6, 1.7, 0.9) * Metre, FLinearColor(FColor::FromHex(TEXT("6A7068"))), 5, 12);
+			Box(Where + FVector(0.0, 0.0, 0.1 * Metre), FVector(1.2, 1.9, 0.2) * Metre, FLinearColor(FColor::FromHex(TEXT("7A5C3A"))), Turn);
+			Box(Where + FVector(1.9 * Metre, 0.9 * Metre, 0.25 * Metre), FVector(2.6, 0.9, 0.5) * Metre, FLinearColor(FColor::FromHex(TEXT("8A6A44"))), Turn + 8.0);
+			break;
 		}
 	}
 
@@ -1209,11 +1217,16 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 		// Mountain troops stand by a rock, at the back.
 		Crag(On(2.3, 2.3), Metre * 1.6);
 	}
-	for (int32 K = 0; K < FMath::Min(Horse, 2) && Places.IsValidIndex(Slot); ++K)
+	if (Horse > 0 && !bHeavy)
 	{
-		// A horseman takes the room of two men.
-		Horseman(On(Places[Slot].X, Places[Slot].Y + 0.3), Metre * 1.5, Nation, -10.0);
-		Slot += bHeavy ? 1 : 2;
+		// Cavalry: troopers on their horses in the front, three for one corps and five for more; any foot stand behind.
+		const TArray<FVector2D> Mounts = { { -1.5, -2.0 }, { -1.5, 0.0 }, { -1.5, 2.0 }, { 1.0, -1.0 }, { 1.0, 1.0 } };
+		const int32 Riders = Horse > 1 || Foot + Mountain == 0 ? 5 : 3;
+		for (int32 K = 0; K < Riders; ++K)
+		{
+			Rider(Tag, On(Mounts[K].X, Mounts[K].Y), Metre, ((K * 7) % 5 - 2) * 4.0, false);
+		}
+		Places = Riders == 5 ? TArray<FVector2D>{ { 2.9, -1.8 }, { 2.9, -0.6 }, { 2.9, 0.6 }, { 2.9, 1.8 } } : TArray<FVector2D>{ { 0.8, -1.8 }, { 0.8, -0.6 }, { 0.8, 0.6 }, { 0.8, 1.8 }, { 2.2, -1.2 }, { 2.2, 0.0 }, { 2.2, 1.2 } };
 	}
 	// Riflemen for the corps on foot: two ranks for one corps, all three for more. A tank or a gun has a few
 	// men about it whatever else the army holds.
@@ -1222,8 +1235,19 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 	{
 		Men = 0; // cavalry alone
 	}
+	if (Heavy == 4)
+	{
+		Men = FMath::Min(Places.Num() - Slot, 5); // the engineers themselves
+	}
 	for (int32 K = 0; K < Men && Places.IsValidIndex(Slot); ++K, ++Slot)
 	{
-		Soldier(Tag, On(Places[Slot].X, Places[Slot].Y), Metre, ((K * 7) % 5 - 2) * 5.0, false);
+		if (Heavy == 4)
+		{
+			Pioneer(Tag, On(Places[Slot].X, Places[Slot].Y), Metre, ((K * 7) % 5 - 2) * 5.0, false);
+		}
+		else
+		{
+			Soldier(Tag, On(Places[Slot].X, Places[Slot].Y), Metre, ((K * 7) % 5 - 2) * 5.0, false);
+		}
 	}
 }

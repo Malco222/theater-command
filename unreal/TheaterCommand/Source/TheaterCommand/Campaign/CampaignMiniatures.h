@@ -94,6 +94,11 @@ struct FMiniatureMesh
 	 */
 	void Soldier(const FString& Tag, const FVector& Where, double Metre, double Turn = 0.0, bool bFine = true);
 
+	/** The same nation's cavalryman on his horse, and its pioneer with a shovel in place of a rifle. */
+	void Rider(const FString& Tag, const FVector& Where, double Metre, double Turn = 0.0, bool bFine = true);
+	void Pioneer(const FString& Tag, const FVector& Where, double Metre, double Turn = 0.0, bool bFine = true);
+	void Figure(const FString& Tag, int32 Pose, const FVector& Where, double Metre, double Turn, bool bFine);
+
 	/** Every vehicle there is a model of; and a line about one, with its real length and height. */
 	static TArray<FString> VehicleNames();
 	static FString VehicleTitle(const FString& Name);

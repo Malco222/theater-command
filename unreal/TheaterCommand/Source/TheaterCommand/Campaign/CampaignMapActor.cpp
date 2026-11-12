@@ -1135,8 +1135,8 @@ void ACampaignMapActor::BuildParade()
 		if (Names[K].Split(TEXT(":"), &Kind, &Whose) && Kind == TEXT("Soldier"))
 		{
 			Model.Soldier(Whose, Spot, Metre, 90.0);
-			Model.Soldier(Whose, Spot + FVector(-1.3 * Metre, 0.0, 0.0), Metre, 35.0);
-			Model.Soldier(Whose, Spot + FVector(1.3 * Metre, 0.0, 0.0), Metre, 215.0);
+			Model.Pioneer(Whose, Spot + FVector(-1.3 * Metre, 0.0, 0.0), Metre, 35.0);
+			Model.Rider(Whose, Spot + FVector(2.2 * Metre, 0.0, 0.0), Metre, 40.0);
 			static const TMap<FString, FString> Peoples = { { TEXT("GER"), TEXT("German") }, { TEXT("SOV"), TEXT("Soviet") }, { TEXT("USA"), TEXT("American") },
 				{ TEXT("UK"), TEXT("British") }, { TEXT("FRA"), TEXT("French") }, { TEXT("ITA"), TEXT("Italian") }, { TEXT("JAP"), TEXT("Japanese") }, { TEXT("POL"), TEXT("Polish") } };
 			const FString* People = Peoples.Find(Whose);

@@ -1,4 +1,5 @@
 #include "Campaign/CampaignMiniatures.h"
+#include "Campaign/CampaignMiniatureParts.h"
 #include "TheaterCommand.h"
 
 /**
@@ -235,8 +236,53 @@ namespace SoldierParts
 		return Plan;
 	}
 
-	/** bFine is the figure for looking at closely; without it he is made of fewer pieces, for standing in ranks on an army's base. */
-	static void Build(FMiniatureMesh& M, const FKit& K, bool bFine)
+	/** A cavalry horse, about fifteen hands at the shoulder, saddled, standing with its head up. */
+	static void Horse(FMiniatureMesh& M, const FLinearColor& Coat, const FLinearColor& Leather)
+	{
+		const FLinearColor Dark = Coat * 0.35f, Hoof = Hex(TEXT("2A2420"));
+		// The barrel, from rump to the base of the neck.
+		MiniatureParts::Skin(M, MiniatureParts::Body({ { -0.98, 1.2, 0.05, 0.08 }, { -0.82, 1.25, 0.24, 0.26 }, { -0.45, 1.25, 0.3, 0.33 }, { 0.0, 1.2, 0.29, 0.32 }, { 0.45, 1.22, 0.27, 0.34 }, { 0.75, 1.3, 0.2, 0.3 }, { 0.92, 1.38, 0.12, 0.2 } }, 2.0, 12),
+			[&Coat](const FVector&, const FVector&, int32) { return Coat; });
+		// Neck, head, ears, mane and tail.
+		M.Limb(At(0.68, 0.0, 1.4), At(1.16, 0.0, 1.9), 0.2, 0.12, Coat, 8);
+		M.Limb(At(1.12, 0.0, 1.95), At(1.6, 0.0, 1.66), 0.135, 0.075, Coat, 8);
+		M.Ball(At(1.6, 0.0, 1.66), FVector(0.17, 0.15, 0.15), Coat * 0.8f, 3, 6);
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			M.Limb(At(1.14, Hand * 0.07, 2.02), At(1.1, Hand * 0.09, 2.14), 0.035, 0.012, Coat, 4);
+		}
+		M.Limb(At(0.74, 0.0, 1.6), At(1.1, 0.0, 2.02), 0.05, 0.04, Dark, 5);
+		M.Limb(At(-0.96, 0.0, 1.3), At(-1.2, 0.0, 0.7), 0.065, 0.03, Dark, 6);
+		// Four legs, each to a hoof.
+		struct FShank
+		{
+			FVector Top, Joint, Foot;
+			double Thick;
+		};
+		for (const double Hand : { -1.0, 1.0 })
+		{
+			const FShank Shanks[2] = {
+				{ At(0.55, Hand * 0.14, 1.05), At(0.58, Hand * 0.14, 0.56), At(0.56, Hand * 0.14, 0.1), 0.08 },
+				{ At(-0.6, Hand * 0.16, 1.08), At(-0.78, Hand * 0.16, 0.6), At(-0.7, Hand * 0.16, 0.1), 0.1 } };
+			for (const FShank& Shank : Shanks)
+			{
+				M.Limb(Shank.Top, Shank.Joint, Shank.Thick, 0.052, Coat, 7);
+				M.Limb(Shank.Joint, Shank.Foot, 0.05, 0.036, Coat * 0.85f, 6);
+				M.Pillar(Shank.Foot - FVector(0.0, 0.0, 0.1), 0.06, 0.05, 0.1, Hoof, 6);
+			}
+		}
+		// The saddle on its blanket, and a rolled cloak behind it.
+		M.Box(At(-0.02, 0.0, 1.535), FVector(0.72, 0.62, 0.04), Hex(TEXT("5C5A48")));
+		M.Box(At(0.0, 0.0, 1.57), FVector(0.5, 0.4, 0.07), Leather);
+		M.Rod(At(-0.3, -0.26, 1.6), At(-0.3, 0.26, 1.6), 0.07, Hex(TEXT("6E6A52")), 6);
+	}
+
+	/**
+	 * bFine is the figure for looking at closely; without it he is made of fewer pieces, for standing in ranks
+	 * on an army's base. Pose is 0 for a rifleman on foot, 1 for a trooper on his horse, 2 for a pioneer with
+	 * a shovel in place of his rifle.
+	 */
+	static void Build(FMiniatureMesh& M, const FKit& K, bool bFine, int32 Pose)
 	{
 		const int32 Round = bFine ? 8 : 6;
 		const FLinearColor Flesh = Hex(TEXT("C49A78")), Steel = Hex(TEXT("2E2F31")), Walnut = Hex(TEXT("5E4128"));
@@ -246,11 +292,17 @@ namespace SoldierParts
 		{
 			FVector Hip, Knee, Ankle;
 		};
-		const FLeg Legs[2] = {
+		const FLeg Standing[2] = {
 			{ At(0.0, -0.09, 0.9), At(0.1, -0.1, 0.5), At(0.12, -0.1, 0.09) },
 			{ At(0.0, 0.09, 0.9), At(-0.02, 0.1, 0.49), At(-0.1, 0.11, 0.09) } };
-		for (const FLeg& Leg : Legs)
+		// Astride: knees forward and out round the horse's barrel, heels down.
+		const FLeg Riding[2] = {
+			{ At(0.0, -0.11, 0.9), At(0.3, -0.33, 0.66), At(0.14, -0.37, 0.2) },
+			{ At(0.0, 0.11, 0.9), At(0.3, 0.33, 0.66), At(0.14, 0.37, 0.2) } };
+		const FLeg* Legs = Pose == 1 ? Riding : Standing;
+		for (int32 Which = 0; Which < 2; ++Which)
 		{
+			const FLeg& Leg = Legs[Which];
 			M.Limb(Leg.Hip, Leg.Knee, 0.096, 0.07, K.Trousers, Round);
 			if (bFine)
 			{
@@ -347,12 +399,21 @@ namespace SoldierParts
 		// ---- The rifle, through both hands: butt low on the right, muzzle up past the left shoulder.
 		const FVector Along = (LeftHand - RightHand).GetSafeNormal();
 		const FVector Butt = RightHand - Along * 0.3, Muzzle = RightHand + Along * (K.Rifle - 0.3);
-		M.Limb(Butt, RightHand, 0.045, 0.028, Walnut, 6);
-		M.Limb(RightHand, RightHand + Along * (K.Rifle * 0.5), 0.028, 0.02, Walnut, 6);
-		M.Rod(RightHand + Along * 0.05, Muzzle, 0.011, Steel, 5);
-		if (K.bBayonet)
+		if (Pose == 2)
 		{
-			M.Rod(Muzzle, Muzzle + Along * 0.4, 0.006, Hex(TEXT("9A9A98")), 4);
+			// A pioneer's shovel, carried the same way.
+			M.Rod(Butt, RightHand + Along * 0.72, 0.018, Walnut, 5);
+			M.Box(RightHand + Along * 0.84, FVector(0.03, 0.2, 0.26), Steel, 0.0, 0.0);
+		}
+		else
+		{
+			M.Limb(Butt, RightHand, 0.045, 0.028, Walnut, 6);
+			M.Limb(RightHand, RightHand + Along * (K.Rifle * 0.5), 0.028, 0.02, Walnut, 6);
+			M.Rod(RightHand + Along * 0.05, Muzzle, 0.011, Steel, 5);
+			if (K.bBayonet)
+			{
+				M.Rod(Muzzle, Muzzle + Along * 0.4, 0.006, Hex(TEXT("9A9A98")), 4);
+			}
 		}
 
 		// ---- What he carries.
@@ -425,24 +486,50 @@ namespace SoldierParts
 				[](double C, double) { return C > 0.3 ? 0.03 : 0.05; }, [](double C, double) { return C > 0.3 ? 0.12 : 0.04; }, K.HelmetPaint, bFine);
 			break;
 		}
+	
+		if (Pose == 1)
+		{
+			// Lift the man into the saddle, and put the horse under him.
+			for (FVector& Vertex : M.Vertices)
+			{
+				Vertex.Z += 0.72;
+			}
+			const FLinearColor Coats[3] = { Hex(TEXT("5B3A26")), Hex(TEXT("3A2A20")), Hex(TEXT("7A5636")) };
+			Horse(M, Coats[GetTypeHash(K.Tunic.ToFColor(true).ToHex()) % 3], K.Straps * 0.9f);
+		}
 	}
 }
 
 void FMiniatureMesh::Soldier(const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFine)
 {
-	static TMap<FString, FMiniatureMesh> BuiltFine, BuiltPlain;
-	TMap<FString, FMiniatureMesh>& Built = bFine ? BuiltFine : BuiltPlain;
-	FMiniatureMesh* Model = Built.Find(Tag);
+	Figure(Tag, 0, Where, Metre, Turn, bFine);
+}
+
+void FMiniatureMesh::Rider(const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFine)
+{
+	Figure(Tag, 1, Where, Metre, Turn, bFine);
+}
+
+void FMiniatureMesh::Pioneer(const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFine)
+{
+	Figure(Tag, 2, Where, Metre, Turn, bFine);
+}
+
+void FMiniatureMesh::Figure(const FString& Tag, int32 Pose, const FVector& Where, double Metre, double Turn, bool bFine)
+{
+	static TMap<FString, FMiniatureMesh> Built;
+	const FString Key = FString::Printf(TEXT("%s/%d/%d"), *Tag, Pose, bFine ? 1 : 0);
+	FMiniatureMesh* Model = Built.Find(Key);
 	if (!Model)
 	{
 		FMiniatureMesh Fresh;
-		// A little dust on his boots.
+		// A little dust on his boots (and on his horse's legs).
 		Fresh.DustFoot = 0.0;
 		Fresh.DustTop = 0.5;
 		Fresh.DustAmount = 0.4f;
-		SoldierParts::Build(Fresh, SoldierParts::KitFor(Tag), bFine);
-		UE_LOG(LogTheater, Log, TEXT("Soldier %s (%s) built: %d points, %d triangles"), *Tag, bFine ? TEXT("fine") : TEXT("plain"), Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
-		Model = &Built.Add(Tag, MoveTemp(Fresh));
+		SoldierParts::Build(Fresh, SoldierParts::KitFor(Tag), bFine, Pose);
+		UE_LOG(LogTheater, Log, TEXT("Figure %s built: %d points, %d triangles"), *Key, Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
+		Model = &Built.Add(Key, MoveTemp(Fresh));
 	}
 	Stamp(*Model, Where, Metre, Turn);
 }
