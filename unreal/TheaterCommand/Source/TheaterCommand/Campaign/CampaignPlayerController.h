@@ -268,6 +268,22 @@ public:
 	/** The treasury in a line, for the date plate. */
 	FText GetTreasuryText() const;
 
+	/** What comes in, goes out and is left each month, in a line under it; empty in the scenarios, where nothing goes out. */
+	FText GetBudgetText() const;
+
+	/** True when the treasury is in debt, so the plate can show it in red. */
+	bool IsInDebt() const;
+
+	/** The ledger: the player's books, shown over the table. Revision goes up when they change. */
+	const FLedger& GetLedger() const { return Ledger; }
+	bool IsLedgerOpen() const { return bLedgerOpen; }
+	FString GetLedgerNationTag() const;
+	void OpenLedger();
+	void CloseLedger();
+
+	/** Closes the ledger and looks at one of its provinces on the table. */
+	void ShowProvince(int32 RegionId);
+
 	/** Shows the road the picked-up army would take to a region. */
 	void ShowRouteTo(int32 RegionId);
 
@@ -352,6 +368,8 @@ private:
 
 	FFaceOff FaceOff;
 	FWarPrompt WarPrompt;
+	FLedger Ledger;
+	bool bLedgerOpen = false;
 	FOpening Opening;
 	FDocumentPage Document;
 	int32 DocumentRevision = 0;

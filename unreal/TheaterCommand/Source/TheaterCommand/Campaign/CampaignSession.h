@@ -75,6 +75,9 @@ public:
 	/** Takes back an order placed this month. */
 	bool CancelOrder(int32 OrderId);
 
+	/** The player's books for this month. */
+	FLedger Ledger();
+
 	/** The player declares war on a country he is at peace with. */
 	bool Declare(const FString& Nation);
 

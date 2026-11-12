@@ -26,6 +26,7 @@
 //   TC.raise(kind, regionId)            -> { ok, view }: orders a new corps
 //   TC.fortify(regionId)                -> { ok, view }: orders the next level of fortification
 //   TC.cancel(buildId)                  -> { ok, view }: takes back an order placed this month
+//   TC.ledger()                         -> the player's books: money in by source, upkeep by arm, what is left, every province's yield, what is on order
 //   TC.declare(nation)                  -> { ok, view }: the player declares war. view.declare lists who it can be declared on
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
@@ -35,7 +36,7 @@ import {
   beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
 } from '../../../src/campaign/turn';
-import { PRODUCTION, canRaise, fortCost, income, isHome } from '../../../src/campaign/economy';
+import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, provinceYield } from '../../../src/campaign/economy';
 import { generalOf, rankOf } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND } from '../../../src/campaign/types';
@@ -81,12 +82,7 @@ function view() {
     open: isOpen(s),
     fallen: fallenNation,
     // The player's treasury: production points in hand, what the factories earn a month, and what is on order.
-    treasury: s.human ? {
-      pp: Math.floor(s.nations[s.human].pp),
-      income: Math.round(income(s, s.human)),
-      pc: Math.floor(s.nations[s.human].pc),
-      orders: s.nations[s.human].queue.map((b) => orderLine(s, b)),
-    } : null,
+    treasury: s.human ? treasuryOf(s, s.human) : null,
     // The countries the player could declare war on this month: those at peace with him that he borders or can reach by sea.
     declare: up ? declarable(s) : [],
     regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
@@ -101,6 +97,63 @@ function view() {
     nations: Object.fromEntries(Object.values(s.nations).map((n) => [n.id, {
       name: n.name, adj: n.adj, alive: n.alive, standing: standingOf(s, n.id), atWar: n.atWar,
     }])),
+  };
+}
+
+/** Money as the player sees it: a production point is shown as BUDGET.scale (a hundred), in whole numbers. */
+const shown = (pp: number): number => Math.round(pp * BUDGET.scale);
+const inHand = (pp: number): number => (pp >= 0 ? Math.floor(pp * BUDGET.scale + 1e-6) : shown(pp));
+
+/**
+ * The player's treasury in a few numbers, for the plate that is always on screen: what is in hand, what comes
+ * in each month, what the forces cost, and what is left. `budget` is true in the grand campaign, where upkeep
+ * is charged and the treasury can run into debt; in the scenarios only income is counted.
+ */
+function treasuryOf(s: Game, nat: string) {
+  const L = ledgerOf(s, nat);
+  return {
+    pp: Math.floor(s.nations[nat].pp),
+    income: Math.round(income(s, nat)),
+    pc: Math.floor(s.nations[nat].pc),
+    orders: s.nations[nat].queue.map((b) => orderLine(s, b)),
+    scale: BUDGET.scale,
+    budget: L.budget,
+    money: inHand(L.treasury),
+    gross: shown(L.gross),
+    upkeep: shown(L.upkeepTotal),
+    net: shown(L.net),
+    debt: L.debt,
+  };
+}
+
+/** The player's books in full. Every amount is money as the player sees it. */
+function ledger() {
+  const s = game();
+  const me = s.human;
+  if (!me) return null;
+  const L = ledgerOf(s, me);
+  const line = (l: { label: string; amount: number; count?: number }) => ({ label: l.label, amount: shown(l.amount), count: l.count ?? 0 });
+  const orders = s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) }));
+  return {
+    nation: s.nations[me].name,
+    date: turnToDate(s.turn).label,
+    budget: L.budget,
+    money: inHand(L.treasury),
+    gross: shown(L.gross),
+    upkeepTotal: shown(L.upkeepTotal),
+    net: shown(L.net),
+    debt: L.debt,
+    // How deep the debt may go before the lenders stop, and what it does to the army meanwhile.
+    debtFloor: shown(BUDGET.debt.floor * Math.max(1, L.gross)),
+    income: L.income.map(line),
+    changes: L.changes.map(line),
+    upkeep: L.upkeep.map(line),
+    provinces: L.provinces.map((p) => ({
+      id: p.id, name: p.name, land: shown(p.land), port: shown(p.port), oil: shown(p.oil), fac: shown(p.fac), capital: shown(p.capital), total: shown(p.total),
+      home: s.regions[p.id].owner === me,
+    })),
+    orders,
+    onOrder: orders.reduce((sum, o) => sum + o.cost, 0),
   };
 }
 
@@ -462,21 +515,29 @@ function province(id: number) {
     worksFacing: r.fort?.vs.map((v) => s.nations[v]?.name ?? v) ?? [],
     harbour: r.port,
     capital: r.cap,
+    // What the province gives whoever holds it each month, as money: by its land, harbour, oil, factories and seat of government.
+    yield: (() => {
+      const y = provinceYield(s, r);
+      return { land: shown(y.land), port: shown(y.port), oil: shown(y.oil), fac: shown(y.fac), capital: shown(y.capital), total: shown(y.total) };
+    })(),
+    budget: budgeted(s),
     // New corps: what each kind is, what it costs, how long it takes, and whether it can be ordered now.
     raise: raiseHere ? (Object.keys(PRODUCTION.builds) as Kind[]).map((kind) => {
       const spec = PRODUCTION.builds[kind];
       return {
-        kind, label: spec.label, divs: spec.divs, cost: spec.cost, months: spec.months, blurb: spec.blurb,
+        kind, label: spec.label, divs: spec.divs, cost: shown(spec.cost), months: spec.months, blurb: spec.blurb,
+        // What the new corps will cost to keep each month once it has arrived (nothing in the scenarios).
+        keep: budgeted(s) ? shown(corpsUpkeep(kind, spec.divs, 1)) : 0,
         ok: up && !!n && n.pp >= spec.cost,
-        why: !up ? 'It is not your month.' : n && n.pp < spec.cost ? `Needs ${spec.cost} production points; you have ${Math.floor(n.pp)}.` : '',
+        why: !up ? 'It is not your month.' : n && n.pp < spec.cost ? `Needs ${shown(spec.cost).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.` : '',
       };
     }) : [],
     raiseNote: raiseHere ? '' : home ? 'New corps are raised in the home country and sent out by sea.' : '',
     // Fortifications: the next level, if there is one.
     fort: home && cost !== null ? {
-      level: level + 1, cost, months: PRODUCTION.fort.months,
+      level: level + 1, cost: shown(cost), months: PRODUCTION.fort.months,
       ok: up && !!n && n.pp >= cost,
-      why: !up ? 'It is not your month.' : n && n.pp < cost ? `Needs ${cost} production points; you have ${Math.floor(n.pp)}.` : '',
+      why: !up ? 'It is not your month.' : n && n.pp < cost ? `Needs ${shown(cost).toLocaleString('en-US')}; the treasury has ${inHand(n.pp).toLocaleString('en-US')}.` : '',
     } : null,
     forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).map((b) => orderLine(s, b)) : [],
   };
@@ -564,4 +625,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, ledger, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

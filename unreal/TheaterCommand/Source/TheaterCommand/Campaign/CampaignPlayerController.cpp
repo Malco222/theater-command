@@ -385,8 +385,18 @@ void ACampaignPlayerController::CancelOrder(int32 OrderId)
 	{
 		return;
 	}
-	Notify(Session->CancelOrder(OrderId) ? TEXT("The order is taken back and the points returned.") : TEXT("An order can only be taken back in the month it was placed."), 4.0);
+	Notify(Session->CancelOrder(OrderId) ? TEXT("The order is taken back and the money returned.") : TEXT("An order can only be taken back in the month it was placed."), 4.0);
 	RefreshRegionPanel(Map->GetSelectedRegion());
+}
+
+namespace
+{
+	/** Money with its thousands marked off, and a sign in front when asked for. */
+	FString Money(int32 Amount, bool bSigned = false)
+	{
+		const FString Figure = FText::AsNumber(FMath::Abs(Amount)).ToString();
+		return Amount < 0 ? TEXT("\u2212") + Figure : (bSigned && Amount > 0 ? TEXT("+") + Figure : Figure);
+	}
 }
 
 FText ACampaignPlayerController::GetTreasuryText() const
@@ -397,12 +407,74 @@ FText ACampaignPlayerController::GetTreasuryText() const
 		return FText::GetEmpty();
 	}
 	const FTreasury& Treasury = Session->GetView().Treasury;
-	FString Line = FString::Printf(TEXT("Production: %d in hand, +%d a month"), Treasury.Production, Treasury.Income);
+	FString Line = FString::Printf(TEXT("Treasury %s"), *Money(Treasury.Money));
+	if (!Treasury.bBudget)
+	{
+		Line += FString::Printf(TEXT("   %s a month"), *Money(Treasury.Gross, true));
+	}
 	if (Treasury.Orders.Num() > 0)
 	{
 		Line += FString::Printf(TEXT("  \u00B7  %d on order"), Treasury.Orders.Num());
 	}
 	return FText::FromString(Line);
+}
+
+FText ACampaignPlayerController::GetBudgetText() const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || !Session->GetView().Treasury.bValid || !Session->GetView().Treasury.bBudget)
+	{
+		return FText::GetEmpty();
+	}
+	const FTreasury& Treasury = Session->GetView().Treasury;
+	return FText::FromString(FString::Printf(TEXT("Each month: %s in, %s upkeep, %s left"),
+		*Money(Treasury.Gross), *Money(Treasury.Upkeep), *Money(Treasury.Net, true)));
+}
+
+bool ACampaignPlayerController::IsInDebt() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Session->GetView().Treasury.bValid && Session->GetView().Treasury.Money < 0;
+}
+
+void ACampaignPlayerController::OpenLedger()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
+	{
+		return;
+	}
+	const int32 Revision = Ledger.Revision + 1;
+	Ledger = Session->Ledger();
+	Ledger.Revision = Revision;
+	bLedgerOpen = Ledger.bValid;
+}
+
+FString ACampaignPlayerController::GetLedgerNationTag() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session ? Session->GetView().Human : FString();
+}
+
+void ACampaignPlayerController::CloseLedger()
+{
+	bLedgerOpen = false;
+}
+
+void ACampaignPlayerController::ShowProvince(int32 RegionId)
+{
+	CloseLedger();
+	if (!Map.IsValid() || !Map->GetData().Regions.IsValidIndex(RegionId))
+	{
+		return;
+	}
+	PutDownArmy();
+	SelectRegion(RegionId);
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		const FVector2D At = Map->GetData().Regions[RegionId].Center;
+		Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.3f), false);
+	}
 }
 
 void ACampaignPlayerController::OpenRecord(int32 CorpsId)
@@ -467,6 +539,10 @@ void ACampaignPlayerController::Escape()
 	else if (bWatching)
 	{
 		SkipWatching();
+	}
+	else if (bLedgerOpen)
+	{
+		CloseLedger();
 	}
 	else if (WarPrompt.bVisible)
 	{
@@ -578,7 +654,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid;
+	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
@@ -1671,9 +1747,19 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 	if (FCampaignSession* Session = GetSession())
 	{
 		const FProvinceInfo Province = Session->Province(RegionId);
+		if (Province.bValid)
+		{
+			// What the province holds and what it is worth: shown for any ground, friend's or enemy's.
+			const bool bMine = Session->GetView().RegionHolder.IsValidIndex(RegionId) && Session->GetView().RegionHolder[RegionId] == Session->GetView().Human;
+			FString Holdings = Province.Holdings;
+			if (!Province.Yield.IsEmpty())
+			{
+				Holdings += bMine ? FString::Printf(TEXT("\nGives your treasury %s"), *Province.Yield) : FString::Printf(TEXT("\nWorth %s to whoever holds it"), *Province.Yield);
+			}
+			RegionPanel.Holdings = FText::FromString(Holdings);
+		}
 		if (Province.bValid && Province.bHome)
 		{
-			RegionPanel.Holdings = FText::FromString(Province.Holdings);
 			RegionPanel.ProvinceNote = FText::FromString(Province.Note);
 			RegionPanel.Options = Province.Options;
 			RegionPanel.Forming = Province.Forming;

@@ -198,7 +198,8 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		}
 		Shots.Reset();
 		Add(TEXT("30-grand-whole-map"), TEXT(""), 0.97f);
-		Add(TEXT("31-grand-capital"), TEXT("@capital"), 0.45f);
+		Add(TEXT("31-grand-capital"), TEXT("@capital"), 0.45f).Select = TEXT("@capital");
+		Add(TEXT("31b-ledger"), TEXT("@capital"), 0.45f).bLedger = true;
 		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
 	}
 
@@ -295,6 +296,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	}
 	Controller->CloseMenu();
 	Controller->CloseDocument();
+	Controller->CloseLedger();
 	if (!Shot.bKeep)
 	{
 		Controller->CloseWarPrompt();
@@ -326,7 +328,18 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (!Shot.bKeep)
 	{
 		const int32* Pick = Data.RegionByName.Find(Shot.Select);
-		Controller->SelectRegion(Pick ? *Pick : INDEX_NONE);
+		int32 Picked = Pick ? *Pick : INDEX_NONE;
+		if (Shot.Select == TEXT("@capital") && Controller->GetSession())
+		{
+			for (const FCampaignRegion& Region : Data.Regions)
+			{
+				if (Region.bCapital && Region.Owner == Controller->GetSession()->GetView().Human)
+				{
+					Picked = Region.Id;
+				}
+			}
+		}
+		Controller->SelectRegion(Picked);
 	}
 	if (const int32* Army = Data.RegionByName.Find(Shot.Army))
 	{
@@ -385,6 +398,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (Shot.bRoll)
 	{
 		Controller->OpenRoll();
+	}
+	if (Shot.bLedger)
+	{
+		Controller->OpenLedger();
 	}
 }
 

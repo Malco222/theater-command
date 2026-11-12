@@ -30,6 +30,8 @@ namespace
 	const FLinearColor Cream = FLinearColor(FColor::FromHex(TEXT("EDE6D6")));
 	const FLinearColor Muted = FLinearColor(FColor::FromHex(TEXT("A89F8D")));
 	const FLinearColor Faint = FLinearColor(FColor::FromHex(TEXT("6E675B")));
+	const FLinearColor Alarm = FLinearColor(FColor::FromHex(TEXT("E08A6A")));
+	const FLinearColor Gain = FLinearColor(FColor::FromHex(TEXT("9CC08A")));
 
 	FSlateFontInfo Font(const TCHAR* Weight, int32 Size, int32 Spacing = 0)
 	{
@@ -86,6 +88,7 @@ namespace
 			ScrimBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 0.0f);
 			DeepScrimBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.72f), 0.0f);
 			PlainButton = MakeButtonStyle(CardFill, CardHover, Faint, 1.0f);
+			PlateButton = MakeButtonStyle(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), FLinearColor(0.2f, 0.16f, 0.09f, 0.6f), FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 1.0f);
 			ChosenCard = MakeButtonStyle(FLinearColor(0.12f, 0.09f, 0.045f, 0.98f), FLinearColor(0.17f, 0.125f, 0.065f, 0.98f), BrightBrass, 2.0f);
 			FootBrush = FSlateRoundedBoxBrush(FLinearColor(0.03f, 0.026f, 0.021f, 0.98f), 5.0f, Brass.CopyWithNewOpacity(0.8f), 1.0f);
 			WatchBrush = FSlateRoundedBoxBrush(FLinearColor(0.16f, 0.15f, 0.13f, 1.0f), 2.0f, Faint, 1.0f);
@@ -164,12 +167,29 @@ namespace
 								SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Muted)
 								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetRulesNote() : FText::GetEmpty(); })
 							]
-							// The treasury: what is in hand, what comes in each month, what is on order.
-							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+							// The treasury, always in view: what is in hand, and what comes in, goes out and is left each
+							// month. It is a button: pressing it opens the ledger.
+							+ SVerticalBox::Slot().AutoHeight().Padding(-8.0f, 6.0f, 0.0f, -4.0f)
 							[
-								SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(BrightBrass)
-								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetTreasuryText() : FText::GetEmpty(); })
-								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetTreasuryText().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								SNew(SButton).ButtonStyle(&PlateButton).ContentPadding(FMargin(8.0f, 4.0f)).IsFocusable(false)
+								.ToolTipText(FText::FromString(TEXT("Open the ledger: where the money comes from, what the forces cost, and what every province gives.")))
+								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetTreasuryText().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+								.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenLedger(); } return FReply::Handled(); })
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Font(Font(TEXT("Bold"), 14))
+										.ColorAndOpacity_Lambda([this]() { return FSlateColor(Controller.IsValid() && Controller->IsInDebt() ? Alarm : BrightBrass); })
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetTreasuryText() : FText::GetEmpty(); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream)
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetBudgetText() : FText::GetEmpty(); })
+										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetBudgetText().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+									]
+								]
 							]
 						]
 					]
@@ -195,6 +215,14 @@ namespace
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 12.0f)
 						[
 								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenLedger(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("LEDGER"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+									]
+								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
 									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
@@ -562,6 +590,86 @@ namespace
 						]
 					]
 
+					// The ledger: the country's books.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsLedgerOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(1120.0f).HeightOverride(760.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 22.0f, 26.0f, 22.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
+										[
+											SNew(SBox).WidthOverride(72.0f).HeightOverride(48.0f)
+											[
+												SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() && Controller->GetSession() ? Controller->GetLedgerNationTag() : FString()); })
+											]
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+										[
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
+											[
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 240)).ColorAndOpacity(Brass)
+												.Text_Lambda([this]()
+												{
+													const FLedger* Books = Controller.IsValid() ? &Controller->GetLedger() : nullptr;
+													return Books ? FText::FromString(FString::Printf(TEXT("THE LEDGER  \u00B7  %s  \u00B7  %s"), *Books->Nation.ToUpper(), *Books->Date.ToUpper())) : FText::GetEmpty();
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 26))
+												.ColorAndOpacity_Lambda([this]() { return FSlateColor(Controller.IsValid() && Controller->GetLedger().Money < 0 ? Alarm : Cream); })
+												.Text_Lambda([this]()
+												{
+													const FLedger* Books = Controller.IsValid() ? &Controller->GetLedger() : nullptr;
+													return Books ? FText::FromString(FString::Printf(TEXT("%s in the treasury"), *Cash(Books->Money))) : FText::GetEmpty();
+												})
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+												.Text_Lambda([this]() { return Controller.IsValid() ? LedgerSummary(Controller->GetLedger()) : FText::GetEmpty(); })
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(20.0f, 9.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseLedger(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+											]
+										]
+									]
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 18.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 22.0f, 0.0f)
+										[
+											SNew(SScrollBox) + SScrollBox::Slot()[SAssignNew(LedgerIn, SVerticalBox)]
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 22.0f, 0.0f)
+										[
+											SNew(SScrollBox) + SScrollBox::Slot()[SAssignNew(LedgerOut, SVerticalBox)]
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.15f)
+										[
+											SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(LedgerProvinces, SVerticalBox)]
+										]
+									]
+								]
+							]
+						]
+					]
+
 					// The question before a war: asked when an army is sent onto the ground of a country at peace.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
@@ -737,7 +845,7 @@ namespace
 						]
 					];
 				}
-				if (Info.Options.Num() > 0 || Info.Forming.Num() > 0 || !Info.ProvinceNote.IsEmpty())
+				if (Info.Options.Num() > 0 || Info.Forming.Num() > 0 || !Info.ProvinceNote.IsEmpty() || !Info.Holdings.IsEmpty())
 				{
 					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 					[
@@ -833,6 +941,13 @@ namespace
 				}
 			}
 
+			// Write the ledger out when it is opened.
+			if (Controller.IsValid() && LedgerIn.IsValid() && Controller->IsLedgerOpen() && Controller->GetLedger().Revision != ShownLedger)
+			{
+				ShownLedger = Controller->GetLedger().Revision;
+				LayOutLedger(Controller->GetLedger());
+			}
+
 			// Lay out the opening screen's choices when they change.
 			if (Controller.IsValid() && Starts.IsValid() && Controller->GetOpening().Revision != ShownOpening)
 			{
@@ -910,6 +1025,185 @@ namespace
 		}
 
 	private:
+		/** Money with its thousands marked off; a minus for a debt, and a plus for a gain when asked for. */
+		static FString Cash(int32 Amount, bool bSigned = false)
+		{
+			const FString Figure = FText::AsNumber(FMath::Abs(Amount)).ToString();
+			return Amount < 0 ? TEXT("\u2212") + Figure : (bSigned && Amount > 0 ? TEXT("+") + Figure : Figure);
+		}
+
+		static FText LedgerSummary(const FLedger& Books)
+		{
+			if (!Books.bBudget)
+			{
+				return FText::FromString(FString::Printf(TEXT("%s comes in each month. In the historical scenarios the forces cost nothing to keep; in the grand campaign they are paid for every month."), *Cash(Books.Gross)));
+			}
+			FString Line = FString::Printf(TEXT("Each month %s comes in and %s goes to keep the forces, which leaves %s for new orders and replacements."),
+				*Cash(Books.Gross), *Cash(Books.UpkeepTotal), *Cash(Books.Net, true));
+			if (Books.Money < 0)
+			{
+				Line += FString::Printf(TEXT(" The country is in debt (%d%% of the %s it may owe). At the limit unpaid corps rest badly and men drift away, so cut costs or take richer ground."),
+					FMath::RoundToInt32(Books.Debt * 100.0f), *Cash(Books.DebtFloor));
+			}
+			else if (Books.Net < 0)
+			{
+				Line += TEXT(" More goes out than comes in: the treasury is shrinking.");
+			}
+			return FText::FromString(Line);
+		}
+
+		/** One line of the books: what, how many, how much. */
+		TSharedRef<SWidget> LedgerRow(const FString& Label, const FString& Count, const FString& Amount, const FLinearColor& AmountColour, bool bStrong = false)
+		{
+			return SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(bStrong ? TEXT("Bold") : TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true)
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Count)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Faint)
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(SBox).MinDesiredWidth(74.0f).HAlign(HAlign_Right)
+					[
+						SNew(STextBlock).Text(FText::FromString(Amount)).Font(Font(bStrong ? TEXT("Bold") : TEXT("Regular"), 12)).ColorAndOpacity(AmountColour)
+					]
+				];
+		}
+
+		void LayOutLedger(const FLedger& Books)
+		{
+			auto Heading = [](TSharedPtr<SVerticalBox>& Box, const FString& Text, float Top)
+			{
+				Box->AddSlot().AutoHeight().Padding(0.0f, Top, 0.0f, 8.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Text)).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+				];
+			};
+			auto Rule = [this](TSharedPtr<SVerticalBox>& Box)
+			{
+				Box->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 6.0f)
+				[
+					SNew(SBox).HeightOverride(1.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Faint)]
+				];
+			};
+			auto Add = [](TSharedPtr<SVerticalBox>& Box, TSharedRef<SWidget> Row)
+			{
+				Box->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)[Row];
+			};
+
+			// ---- Money in.
+			LedgerIn->ClearChildren();
+			Heading(LedgerIn, TEXT("MONEY IN, EACH MONTH"), 0.0f);
+			for (const FLedgerLine& Line : Books.Income)
+			{
+				Add(LedgerIn, LedgerRow(Line.Label, Line.Count > 0 ? FText::AsNumber(Line.Count).ToString() : FString(), Cash(Line.Amount), Cream));
+			}
+			for (const FLedgerLine& Line : Books.Changes)
+			{
+				Add(LedgerIn, LedgerRow(Line.Label, FString(), Cash(Line.Amount, true), Line.Amount < 0 ? Alarm : Gain));
+			}
+			Rule(LedgerIn);
+			Add(LedgerIn, LedgerRow(TEXT("Comes in each month"), FString(), Cash(Books.Gross), BrightBrass, true));
+
+			Heading(LedgerIn, TEXT("ON ORDER, ALREADY PAID FOR"), 22.0f);
+			if (Books.Orders.Num() == 0)
+			{
+				LedgerIn->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("Nothing is on order. New corps and works are ordered from a territory's panel."))).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
+				];
+			}
+			for (const FLedgerLine& Line : Books.Orders)
+			{
+				Add(LedgerIn, LedgerRow(Line.Label, FString(), Cash(Line.Amount), Muted));
+			}
+			if (Books.Orders.Num() > 1)
+			{
+				Rule(LedgerIn);
+				Add(LedgerIn, LedgerRow(TEXT("Spent on what is forming"), FString(), Cash(Books.OnOrder), Muted, true));
+			}
+
+			// ---- Money out.
+			LedgerOut->ClearChildren();
+			Heading(LedgerOut, TEXT("UPKEEP, EACH MONTH"), 0.0f);
+			if (!Books.bBudget)
+			{
+				LedgerOut->AddSlot().AutoHeight()
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("In a historical scenario the forces cost nothing to keep, so that history's timetable holds. In the grand campaign every division, ship and aircraft is paid for each month.")))
+				];
+			}
+			for (const FLedgerLine& Line : Books.Upkeep)
+			{
+				Add(LedgerOut, LedgerRow(Line.Label, Line.Count > 0 ? FText::AsNumber(Line.Count).ToString() : FString(), Cash(Line.Amount), Cream));
+			}
+			if (Books.bBudget)
+			{
+				Rule(LedgerOut);
+				Add(LedgerOut, LedgerRow(TEXT("Goes out each month"), FString(), Cash(Books.UpkeepTotal), BrightBrass, true));
+				LedgerOut->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+				[
+					LedgerRow(TEXT("Left each month"), FString(), Cash(Books.Net, true), Books.Net < 0 ? Alarm : Gain, true)
+				];
+				LedgerOut->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("The small figures are how many: divisions, ships, aircraft. A country at peace pays half. What is left pays for replacements first, then for whatever you order.")))
+				];
+			}
+
+			// ---- Every province, richest first.
+			LedgerProvinces->ClearChildren();
+			Heading(LedgerProvinces, FString::Printf(TEXT("WHAT EACH PROVINCE GIVES  \u00B7  %d HELD"), Books.Provinces.Num()), 0.0f);
+			for (const FLedgerProvince& Province : Books.Provinces)
+			{
+				TArray<FString> Parts;
+				auto Part = [&Parts](const TCHAR* What, int32 Amount)
+				{
+					if (Amount > 0)
+					{
+						Parts.Add(FString::Printf(TEXT("%s %s"), What, *Cash(Amount)));
+					}
+				};
+				Part(TEXT("factories"), Province.Factories);
+				Part(TEXT("land"), Province.Land);
+				Part(TEXT("harbour"), Province.Port);
+				Part(TEXT("oil"), Province.Oil);
+				Part(TEXT("capital"), Province.Capital);
+				LedgerProvinces->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 5.0f)).IsFocusable(false)
+					.ToolTipText(FText::FromString(TEXT("Show this province on the table.")))
+					.OnClicked_Lambda([this, Region = Province.Region]() { if (Controller.IsValid()) { Controller->ShowProvince(Region); } return FReply::Handled(); })
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 12)).ColorAndOpacity(Cream)
+								.Text(FText::FromString(Province.bHome ? Province.Name : Province.Name + TEXT("  (occupied)")))
+							]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+								.Text(FText::FromString(FString::Join(Parts, TEXT("  \u00B7  "))))
+							]
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Cash(Province.Total))).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(BrightBrass)
+						]
+					]
+				];
+			}
+		}
+
 		/** A nation's flag as a brush for the panels. A nation with no tag gets a plain dark chip. */
 		const FSlateBrush* FlagBrush(const FString& Tag)
 		{
@@ -1370,6 +1664,11 @@ namespace
 		FSlateBrush FootBrush;
 		FSlateBrush WatchBrush;
 		FButtonStyle ChosenCard;
+		FButtonStyle PlateButton;
+		TSharedPtr<SVerticalBox> LedgerIn;
+		TSharedPtr<SVerticalBox> LedgerOut;
+		TSharedPtr<SVerticalBox> LedgerProvinces;
+		int32 ShownLedger = -1;
 		TMap<FString, TSharedPtr<FSlateBrush>> FlagBrushes;
 		int32 ShownOpening = -1;
 		TSharedPtr<SVerticalBox> ProvinceBox;

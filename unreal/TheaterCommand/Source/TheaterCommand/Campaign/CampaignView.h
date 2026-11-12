@@ -58,6 +58,48 @@ struct FTreasury
 	int32 Income = 0; // earned each month
 	int32 Political = 0; // political capital
 	TArray<FOrderLine> Orders;
+
+	// Money as the player sees it (a production point is shown as a hundred).
+	bool bBudget = false; // the grand campaign: forces cost money to keep, and the treasury can run into debt
+	int32 Money = 0; // in the treasury now; below nothing when in debt
+	int32 Gross = 0; // comes in each month
+	int32 Upkeep = 0; // goes out each month to keep the forces in being
+	int32 Net = 0; // what is left each month
+	float Debt = 0.0f; // 0 in credit, rising to 1 when the nation owes all it is allowed to
+};
+
+/** One line of the ledger: a source of money or a cost, how much, and how many of the thing it counts. */
+struct FLedgerLine
+{
+	FString Label;
+	int32 Amount = 0;
+	int32 Count = 0;
+};
+
+/** What one province gives each month. */
+struct FLedgerProvince
+{
+	int32 Region = INDEX_NONE;
+	FString Name;
+	bool bHome = false;
+	int32 Land = 0, Port = 0, Oil = 0, Factories = 0, Capital = 0, Total = 0;
+};
+
+/** The player's books: where the money comes from, what the forces cost, what is left, and what is on order. */
+struct FLedger
+{
+	bool bValid = false;
+	bool bBudget = false;
+	FString Nation;
+	FString Date;
+	int32 Money = 0, Gross = 0, UpkeepTotal = 0, Net = 0, DebtFloor = 0, OnOrder = 0;
+	float Debt = 0.0f;
+	TArray<FLedgerLine> Income; // by source
+	TArray<FLedgerLine> Changes; // nation-wide gains and losses on that income
+	TArray<FLedgerLine> Upkeep; // by arm
+	TArray<FLedgerProvince> Provinces; // richest first
+	TArray<FLedgerLine> Orders; // what is on order: Label is what and where, Amount what was paid
+	int32 Revision = 0;
 };
 
 struct FCampaignView
@@ -240,6 +282,7 @@ struct FProvinceInfo
 	int32 Region = INDEX_NONE;
 	bool bHome = false;
 	FString Holdings; // industry, works, harbour, in a line
+	FString Yield; // what the province gives each month, in a line
 	FString Note;
 	TArray<FProvinceOption> Options;
 	TArray<FOrderLine> Forming;

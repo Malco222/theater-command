@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 17a015c 2026-11-12. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of b4aec2c 2026-11-12. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -854,6 +854,54 @@
     armourName: {
       GER: "Panzer",
       _default: "Armoured"
+    }
+  };
+
+  // ../../data/campaign/budget.json
+  var budget_default = {
+    _about: "The budget: where a nation's money comes from and what its armed forces cost to keep. These rules are in force in the grand campaign; the historical scenarios keep the simpler arithmetic of production.json so that history's timetable holds. 'scale' is how the interface shows money: one production point is shown as that many, so that a province's yield reads as a whole number. 'land' is what a province gives each month by its ground, before anything is built on it; 'port' and 'oil' are added for a harbour and an oilfield; 'capital' is what the seat of government brings in for as long as it is held. A factory gives one point at home (production.json). 'occupied' and 'overseas' are the shares of land, port and oil yields that reach the treasury from conquered ground and from colonies. 'upkeep' is the monthly cost of keeping forces in being: corps by the division at full strength, ships by the hull, aircraft by the machine; 'peace' is the share of it a nation at peace pays. 'debt' is what happens when the treasury is empty: 'floor' is how many months of income a nation can owe before its creditors stop lending, 'rest' the share of the monthly rest unpaid corps lose at that point, 'desert' the share of each corps that melts away a month, and 'aiMargin' how many months of a new formation's upkeep a computer-run nation wants to see in its monthly surplus before it orders one.",
+    scale: 100,
+    capital: 2,
+    land: {
+      urban: 0.3,
+      plains: 0.18,
+      forest: 0.12,
+      hills: 0.1,
+      marsh: 0.06,
+      mountain: 0.06,
+      desert: 0.03
+    },
+    port: 0.12,
+    oil: 1.5,
+    occupied: 0.5,
+    overseas: 0.5,
+    upkeep: {
+      corps: {
+        inf: 0.04,
+        mtn: 0.04,
+        cav: 0.04,
+        fort: 0.025,
+        mot: 0.06,
+        arm: 0.1
+      },
+      ships: {
+        bb: 0.08,
+        cv: 0.08,
+        ca: 0.03,
+        dd: 8e-3,
+        ss: 5e-3
+      },
+      air: {
+        ftr: 6e-4,
+        bmr: 1e-3
+      },
+      peace: 0.5
+    },
+    debt: {
+      floor: 3,
+      rest: 0.5,
+      desert: 0.03,
+      aiMargin: 1
     }
   };
 
@@ -4774,14 +4822,144 @@
   // ../../src/campaign/economy.ts
   var PRODUCTION = production_default;
   var firstCorpsNumber = (nat) => PRODUCTION.firstCorpsNumber[nat] ?? PRODUCTION.firstCorpsNumber._default;
+  var BUDGET = budget_default;
+  var budgeted = (g2) => g2.flags.open === 1;
+  function provinceYield(g2, r, nat = r.ctrl) {
+    const own = r.owner === nat;
+    const fac = own ? r.fac : r.fac * PRODUCTION.occupiedIncome;
+    if (!budgeted(g2)) return { land: 0, port: 0, oil: 0, fac, capital: 0, total: fac };
+    const k = !own ? BUDGET.occupied : r.overseas ? BUDGET.overseas : 1;
+    const land = BUDGET.land[r.terrain] * k;
+    const port = r.port ? BUDGET.port * k : 0;
+    const oil = r.oil ? BUDGET.oil * k : 0;
+    const capital = own && g2.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
+    return { land, port, oil, fac, capital, total: land + port + oil + fac + capital };
+  }
+  var KIND_LABEL = { inf: "Infantry", mtn: "Mountain troops", cav: "Cavalry", mot: "Motorized troops", arm: "Armour", fort: "Fortress troops" };
+  var SHIP_LABEL = { bb: "Battleships", cv: "Carriers", ca: "Cruisers", dd: "Destroyers", ss: "Submarines" };
+  var corpsUpkeep = (kind, divs, str = 1) => (BUDGET.upkeep.corps[kind] ?? BUDGET.upkeep.corps.inf) * divs * str;
+  function upkeep(g2, nat) {
+    var _a;
+    if (!budgeted(g2)) return [];
+    const n = g2.nations[nat];
+    const peace = n.atWar.length ? 1 : BUDGET.upkeep.peace;
+    const out = [];
+    const land = {};
+    for (const c of g2.corps) {
+      if (c.nat !== nat || c.dead) continue;
+      const row2 = land[_a = c.kind] ?? (land[_a] = { divs: 0, cost: 0 });
+      row2.divs += c.divs;
+      row2.cost += corpsUpkeep(c.kind, c.divs, c.str);
+    }
+    for (const kind of Object.keys(KIND_LABEL)) {
+      const row2 = land[kind];
+      if (row2) out.push({ key: `corps:${kind}`, label: KIND_LABEL[kind], amount: row2.cost * peace, count: row2.divs });
+    }
+    const hulls = {};
+    for (const f of g2.fleets) if (f.nat === nat) for (const cls of Object.keys(SHIP_LABEL)) hulls[cls] = (hulls[cls] ?? 0) + (f.ships[cls] ?? 0);
+    for (const cls of Object.keys(SHIP_LABEL)) {
+      const have = hulls[cls] ?? 0;
+      if (have > 0) out.push({ key: `ships:${cls}`, label: SHIP_LABEL[cls], amount: have * BUDGET.upkeep.ships[cls] * peace, count: have });
+    }
+    let ftr = 0, bmr = 0;
+    for (const f of g2.airFleets) if (f.nat === nat) {
+      ftr += f.ftr;
+      bmr += f.bmr;
+    }
+    if (ftr > 0) out.push({ key: "air:ftr", label: "Fighters", amount: ftr * BUDGET.upkeep.air.ftr * peace, count: ftr });
+    if (bmr > 0) out.push({ key: "air:bmr", label: "Bombers", amount: bmr * BUDGET.upkeep.air.bmr * peace, count: bmr });
+    return out;
+  }
+  function ledger(g2, nat) {
+    const n = g2.nations[nat];
+    const budget = budgeted(g2);
+    const provinces = [];
+    let facHome = 0, facOcc = 0, nHome = 0, nOcc = 0, land = 0, ports = 0, oil = 0, capital = 0, held = 0, nPorts = 0, nOil = 0;
+    for (const r of g2.regions) {
+      if (r.ctrl !== nat) continue;
+      const y = provinceYield(g2, r, nat);
+      provinces.push({ id: r.id, name: r.name, ...y });
+      held++;
+      if (r.owner === nat) {
+        facHome += y.fac;
+        nHome += r.fac;
+      } else {
+        facOcc += y.fac;
+        nOcc += r.fac;
+      }
+      land += y.land;
+      ports += y.port;
+      oil += y.oil;
+      capital += y.capital;
+      if (y.port) nPorts++;
+      if (y.oil) nOil++;
+    }
+    provinces.sort((a, b) => b.total - a.total || a.id - b.id);
+    const away = n.offmap?.industry ?? 0;
+    const seat2 = budget ? n.offmap ? BUDGET.capital : capital : PRODUCTION.baseIncome;
+    const partners = tradePartners(g2, nat).length;
+    const trade = partners * DIPLOMACY.tradeIncome;
+    const peace = n.atWar.length ? 1 : PRODUCTION.peaceIncome;
+    const sea = seaIncomeLoss(g2, nat), air = airIncomeLoss(g2, nat), tech = techMul(g2, nat, "industry");
+    const before = seat2 + facHome + facOcc + away + land + ports + oil;
+    const atPeace = before * peace + trade;
+    const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
+    const gross = budget ? afterAir * tech : income(g2, nat);
+    const lines = [
+      { key: "capital", label: budget ? "The capital and the state" : "The state", amount: seat2 },
+      { key: "factories", label: "Factories at home", amount: facHome, count: nHome },
+      { key: "occupied", label: "Factories on occupied ground", amount: facOcc, count: nOcc },
+      { key: "homeland", label: "Industry in the homeland, beyond the map", amount: away, count: away },
+      { key: "land", label: "Towns, farms and land", amount: land, count: held },
+      { key: "ports", label: "Harbours", amount: ports, count: nPorts },
+      { key: "oil", label: "Oilfields", amount: oil, count: nOil },
+      { key: "trade", label: "Trade with friendly neutrals", amount: trade, count: partners }
+    ];
+    const changes = [
+      { key: "peace", label: "At peace: industry at half speed", amount: before * (peace - 1) },
+      { key: "sea", label: "Cargoes sunk at sea", amount: afterSea - atPeace },
+      { key: "air", label: "Bombing of industry", amount: afterAir - afterSea },
+      { key: "tech", label: tech >= 1 ? "Better production methods" : "Production methods behind the times", amount: afterAir * (tech - 1) }
+    ];
+    const costs = upkeep(g2, nat);
+    const upkeepTotal2 = costs.reduce((s, l) => s + l.amount, 0);
+    const floor = BUDGET.debt.floor * Math.max(1, gross);
+    return {
+      nat,
+      budget,
+      scale: BUDGET.scale,
+      treasury: n.pp,
+      income: lines.filter((l) => l.amount > 1e-9),
+      changes: changes.filter((l) => Math.abs(l.amount) > 1e-9),
+      gross,
+      upkeep: costs,
+      upkeepTotal: upkeepTotal2,
+      net: gross - upkeepTotal2,
+      debt: budget && n.pp < 0 ? Math.min(1, -n.pp / floor) : 0,
+      provinces
+    };
+  }
   function income(g2, nat) {
     const n = g2.nations[nat];
+    if (budgeted(g2)) {
+      let sum = 0, seat2 = n.offmap ? BUDGET.capital : 0;
+      for (const r of g2.regions) {
+        if (r.ctrl !== nat) continue;
+        const y = provinceYield(g2, r, nat);
+        sum += y.land + y.port + y.oil + y.fac;
+        seat2 += y.capital;
+      }
+      sum += seat2 + (n.offmap?.industry ?? 0);
+      const trade2 = tradePartners(g2, nat).length * DIPLOMACY.tradeIncome;
+      return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade2) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry");
+    }
     let fac = 0;
     for (const r of g2.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
     fac += n.offmap?.industry ?? 0;
     const trade = tradePartners(g2, nat).length * DIPLOMACY.tradeIncome;
     return ((PRODUCTION.baseIncome + fac) * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry");
   }
+  var upkeepTotal = (g2, nat) => upkeep(g2, nat).reduce((s, l) => s + l.amount, 0);
   function lastScheduled(nat) {
     let t = 0;
     for (const row2 of setup_1939_default.reinforcements) if (row2[1] === nat) t = Math.max(t, row2[0]);
@@ -4880,10 +5058,15 @@
     if (!isHome(g2, nat, cap3)) return;
     let home = 0;
     for (const r of g2.regions) if (isHome(g2, nat, r)) home += r.fac;
+    const keep = (b) => b.what === "corps" ? corpsUpkeep(b.kind, b.divs) : 0;
+    let spare = budgeted(g2) ? income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
     while (n.queue.length < 2) {
       const kind = home >= 20 && n.corpsNo % 3 === 2 ? "arm" : "inf";
       if (n.pp < PRODUCTION.builds[kind].cost + PRODUCTION.aiReserve) break;
+      const cost = corpsUpkeep(kind, PRODUCTION.builds[kind].divs);
+      if (spare < cost * BUDGET.debt.aiMargin) break;
       if (!orderCorps(g2, nat, kind, cap3.id)) break;
+      spare -= cost;
     }
   }
 
@@ -6536,7 +6719,10 @@
     researchTick(g2, nat);
     computeSupply(g2);
     cutOffNews(g2);
-    n.pp += income(g2, nat);
+    const earned = income(g2, nat);
+    n.pp += earned - upkeepTotal(g2, nat);
+    const credit = BUDGET.debt.floor * Math.max(1, earned);
+    const owed = budgeted(g2) && n.pp < 0 ? Math.min(1, -n.pp / credit) : 0;
     n.pc = Math.min(DIPLOMACY.pcCap, n.pc + pcIncome(nat));
     const perDiv = PRODUCTION.replacementCost;
     const tempo = freshOffensive(g2, nat);
@@ -6556,7 +6742,9 @@
         const cold = frozen(g2, nat, g2.regions[c.reg]);
         const bite = cold ? cmdWinter(g2, c) : 0;
         if (cold) c.str *= 1 - EASTERN.winter.attrition * bite;
-        c.org = Math.min(1, c.org + (c.fought ? 0.25 : 0.45) * lineStrength(g2, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g2, c));
+        const rest = (c.fought ? 0.25 : 0.45) * lineStrength(g2, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g2, c);
+        c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
+        if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
       } else {
         c.org -= 0.4;
         c.str *= 0.85;
@@ -6580,7 +6768,17 @@
       if (lost.names.length === 1) headline(g2, "battle", `Cut off and out of supply, ${lost.names[0]} lays down its arms at ${place2}.`, nat, reg);
       else headline(g2, "battle", `Cut off and out of supply, the ${n.adj} army at ${place2} lays down its arms: ${lost.names.length} corps, ${lost.men.toLocaleString("en-US")} men.`, nat, reg);
     }
-    n.pp = Math.max(0, n.pp);
+    n.pp = budgeted(g2) ? n.pp > -1e-9 ? Math.max(0, n.pp) : Math.max(-credit, n.pp) : Math.max(0, n.pp);
+    if (budgeted(g2)) {
+      const key = `debt:${nat}`;
+      if (n.pp < 0 && g2.flags[key] === void 0) {
+        g2.flags[key] = g2.turn;
+        if (nat === g2.human) headline(g2, "info", `The treasury is empty. Until the books balance again no replacements go out to the armies, nothing new can be ordered, and unpaid troops rest badly and begin to drift away. Open the ledger to see where the money goes.`, nat);
+      } else if (n.pp >= 0 && g2.flags[key] !== void 0) {
+        delete g2.flags[key];
+        if (nat === g2.human) headline(g2, "info", `The books balance again: the treasury is out of debt.`, nat);
+      }
+    }
     deliver(g2, nat);
     if (nat !== g2.human) n.pp = Math.min(n.pp, PRODUCTION.aiBank[canBuildYet(g2, nat) ? 1 : 0]);
     n.armyPeak = Math.max(n.armyPeak, armySize(g2, nat));
@@ -8808,12 +9006,7 @@
       open: isOpen(s),
       fallen: fallenNation,
       // The player's treasury: production points in hand, what the factories earn a month, and what is on order.
-      treasury: s.human ? {
-        pp: Math.floor(s.nations[s.human].pp),
-        income: Math.round(income(s, s.human)),
-        pc: Math.floor(s.nations[s.human].pc),
-        orders: s.nations[s.human].queue.map((b) => orderLine(s, b))
-      } : null,
+      treasury: s.human ? treasuryOf(s, s.human) : null,
       // The countries the player could declare war on this month: those at peace with him that he borders or can reach by sea.
       declare: up ? declarable(s) : [],
       regions: s.regions.map((r) => ({ id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) })),
@@ -8846,6 +9039,60 @@
         standing: standingOf(s, n.id),
         atWar: n.atWar
       }]))
+    };
+  }
+  var shown = (pp) => Math.round(pp * BUDGET.scale);
+  var inHand = (pp) => pp >= 0 ? Math.floor(pp * BUDGET.scale + 1e-6) : shown(pp);
+  function treasuryOf(s, nat) {
+    const L = ledger(s, nat);
+    return {
+      pp: Math.floor(s.nations[nat].pp),
+      income: Math.round(income(s, nat)),
+      pc: Math.floor(s.nations[nat].pc),
+      orders: s.nations[nat].queue.map((b) => orderLine(s, b)),
+      scale: BUDGET.scale,
+      budget: L.budget,
+      money: inHand(L.treasury),
+      gross: shown(L.gross),
+      upkeep: shown(L.upkeepTotal),
+      net: shown(L.net),
+      debt: L.debt
+    };
+  }
+  function ledger2() {
+    const s = game();
+    const me = s.human;
+    if (!me) return null;
+    const L = ledger(s, me);
+    const line = (l) => ({ label: l.label, amount: shown(l.amount), count: l.count ?? 0 });
+    const orders = s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) }));
+    return {
+      nation: s.nations[me].name,
+      date: turnToDate(s.turn).label,
+      budget: L.budget,
+      money: inHand(L.treasury),
+      gross: shown(L.gross),
+      upkeepTotal: shown(L.upkeepTotal),
+      net: shown(L.net),
+      debt: L.debt,
+      // How deep the debt may go before the lenders stop, and what it does to the army meanwhile.
+      debtFloor: shown(BUDGET.debt.floor * Math.max(1, L.gross)),
+      income: L.income.map(line),
+      changes: L.changes.map(line),
+      upkeep: L.upkeep.map(line),
+      provinces: L.provinces.map((p) => ({
+        id: p.id,
+        name: p.name,
+        land: shown(p.land),
+        port: shown(p.port),
+        oil: shown(p.oil),
+        fac: shown(p.fac),
+        capital: shown(p.capital),
+        total: shown(p.total),
+        home: s.regions[p.id].owner === me
+      })),
+      orders,
+      onOrder: orders.reduce((sum, o) => sum + o.cost, 0)
     };
   }
   function orderLine(s, b) {
@@ -9148,6 +9395,12 @@
       worksFacing: r.fort?.vs.map((v) => s.nations[v]?.name ?? v) ?? [],
       harbour: r.port,
       capital: r.cap,
+      // What the province gives whoever holds it each month, as money: by its land, harbour, oil, factories and seat of government.
+      yield: (() => {
+        const y = provinceYield(s, r);
+        return { land: shown(y.land), port: shown(y.port), oil: shown(y.oil), fac: shown(y.fac), capital: shown(y.capital), total: shown(y.total) };
+      })(),
+      budget: budgeted(s),
       // New corps: what each kind is, what it costs, how long it takes, and whether it can be ordered now.
       raise: raiseHere ? Object.keys(PRODUCTION.builds).map((kind) => {
         const spec2 = PRODUCTION.builds[kind];
@@ -9155,21 +9408,23 @@
           kind,
           label: spec2.label,
           divs: spec2.divs,
-          cost: spec2.cost,
+          cost: shown(spec2.cost),
           months: spec2.months,
           blurb: spec2.blurb,
+          // What the new corps will cost to keep each month once it has arrived (nothing in the scenarios).
+          keep: budgeted(s) ? shown(corpsUpkeep(kind, spec2.divs, 1)) : 0,
           ok: up && !!n && n.pp >= spec2.cost,
-          why: !up ? "It is not your month." : n && n.pp < spec2.cost ? `Needs ${spec2.cost} production points; you have ${Math.floor(n.pp)}.` : ""
+          why: !up ? "It is not your month." : n && n.pp < spec2.cost ? `Needs ${shown(spec2.cost).toLocaleString("en-US")}; the treasury has ${inHand(n.pp).toLocaleString("en-US")}.` : ""
         };
       }) : [],
       raiseNote: raiseHere ? "" : home ? "New corps are raised in the home country and sent out by sea." : "",
       // Fortifications: the next level, if there is one.
       fort: home && cost !== null ? {
         level: level + 1,
-        cost,
+        cost: shown(cost),
         months: PRODUCTION.fort.months,
         ok: up && !!n && n.pp >= cost,
-        why: !up ? "It is not your month." : n && n.pp < cost ? `Needs ${cost} production points; you have ${Math.floor(n.pp)}.` : ""
+        why: !up ? "It is not your month." : n && n.pp < cost ? `Needs ${shown(cost).toLocaleString("en-US")}; the treasury has ${inHand(n.pp).toLocaleString("en-US")}.` : ""
       } : null,
       forming: me ? s.nations[me].queue.filter((b) => b.region === r.id).map((b) => orderLine(s, b)) : []
     };
@@ -9270,6 +9525,7 @@
     fortify,
     cancel,
     declare,
+    ledger: ledger2,
     starts,
     grand,
     start,

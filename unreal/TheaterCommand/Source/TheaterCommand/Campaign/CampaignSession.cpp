@@ -362,6 +362,12 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 		(*Treasury)->TryGetNumberField(TEXT("income"), Out.Treasury.Income);
 		(*Treasury)->TryGetNumberField(TEXT("pc"), Out.Treasury.Political);
 		Out.Treasury.Orders = ReadOrders(*Treasury, TEXT("orders"));
+		(*Treasury)->TryGetBoolField(TEXT("budget"), Out.Treasury.bBudget);
+		(*Treasury)->TryGetNumberField(TEXT("money"), Out.Treasury.Money);
+		(*Treasury)->TryGetNumberField(TEXT("gross"), Out.Treasury.Gross);
+		(*Treasury)->TryGetNumberField(TEXT("upkeep"), Out.Treasury.Upkeep);
+		(*Treasury)->TryGetNumberField(TEXT("net"), Out.Treasury.Net);
+		(*Treasury)->TryGetNumberField(TEXT("debt"), Out.Treasury.Debt);
 	}
 
 	const TArray<TSharedPtr<FJsonValue>>* Corps = nullptr;
@@ -789,6 +795,35 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 	Holdings.Add(bHarbour ? TEXT("Harbour") : TEXT("No harbour"));
 	Info.Holdings = FString::Join(Holdings, TEXT("   \u00B7   "));
 
+	// What the province gives whoever holds it each month.
+	const TSharedPtr<FJsonObject>* Yield = nullptr;
+	if (Object->TryGetObjectField(TEXT("yield"), Yield))
+	{
+		int32 Land = 0, Port = 0, Oil = 0, Factories = 0, Capital = 0, Total = 0;
+		(*Yield)->TryGetNumberField(TEXT("land"), Land);
+		(*Yield)->TryGetNumberField(TEXT("port"), Port);
+		(*Yield)->TryGetNumberField(TEXT("oil"), Oil);
+		(*Yield)->TryGetNumberField(TEXT("fac"), Factories);
+		(*Yield)->TryGetNumberField(TEXT("capital"), Capital);
+		(*Yield)->TryGetNumberField(TEXT("total"), Total);
+		TArray<FString> Parts;
+		auto Part = [&Parts](const TCHAR* What, int32 Amount)
+		{
+			if (Amount > 0)
+			{
+				Parts.Add(FString::Printf(TEXT("%s %s"), What, *FText::AsNumber(Amount).ToString()));
+			}
+		};
+		Part(TEXT("factories"), Factories);
+		Part(TEXT("land"), Land);
+		Part(TEXT("harbour"), Port);
+		Part(TEXT("oil"), Oil);
+		Part(TEXT("seat of government"), Capital);
+		Info.Yield = Total > 0
+			? FString::Printf(TEXT("%s a month%s"), *FText::AsNumber(Total).ToString(), Parts.Num() > 1 ? *FString::Printf(TEXT(" (%s)"), *FString::Join(Parts, TEXT(", "))) : TEXT(""))
+			: FString(TEXT("nothing"));
+	}
+
 	const TArray<TSharedPtr<FJsonValue>>* Raise = nullptr;
 	if (Object->TryGetArrayField(TEXT("raise"), Raise))
 	{
@@ -796,7 +831,8 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		{
 			const TSharedPtr<FJsonObject> Spec = Value->AsObject();
 			FProvinceOption Option;
-			int32 Cost = 0, Months = 0, Divisions = 0;
+			int32 Cost = 0, Months = 0, Divisions = 0, Keep = 0;
+			Spec->TryGetNumberField(TEXT("keep"), Keep);
 			Spec->TryGetStringField(TEXT("kind"), Option.Action);
 			Spec->TryGetStringField(TEXT("label"), Option.Label);
 			Spec->TryGetNumberField(TEXT("cost"), Cost);
@@ -805,7 +841,11 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 			Spec->TryGetBoolField(TEXT("ok"), Option.bEnabled);
 			Spec->TryGetStringField(TEXT("why"), Option.Why);
 			Option.Label = FString::Printf(TEXT("Raise: %s"), *Option.Label);
-			Option.Detail = FString::Printf(TEXT("%d divisions  \u00B7  %d points  \u00B7  ready in %d months"), Divisions, Cost, Months);
+			Option.Detail = FString::Printf(TEXT("%d divisions  \u00B7  costs %s  \u00B7  ready in %d months"), Divisions, *FText::AsNumber(Cost).ToString(), Months);
+			if (Keep > 0)
+			{
+				Option.Detail += FString::Printf(TEXT("  \u00B7  then %s a month to keep"), *FText::AsNumber(Keep).ToString());
+			}
 			Info.Options.Add(MoveTemp(Option));
 		}
 	}
@@ -821,7 +861,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		(*Fort)->TryGetStringField(TEXT("why"), Option.Why);
 		Option.Action = TEXT("fort");
 		Option.Label = FString::Printf(TEXT("Build: fortifications, level %d"), Level);
-		Option.Detail = FString::Printf(TEXT("%d points  \u00B7  finished in %d months"), Cost, Months);
+		Option.Detail = FString::Printf(TEXT("Costs %s  \u00B7  finished in %d months"), *FText::AsNumber(Cost).ToString(), Months);
 		Info.Options.Add(MoveTemp(Option));
 	}
 	Info.Forming = ReadOrders(Object, TEXT("forming"));
@@ -845,6 +885,79 @@ bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FS
 	TakeView(Object);
 	OutNote = bOk ? FString::Printf(TEXT("%s ordered. Due %s."), *Name, *Due) : FString(TEXT("That cannot be ordered now."));
 	return bOk;
+}
+
+FLedger FCampaignSession::Ledger()
+{
+	FLedger Out;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("ledger"), TEXT("[]"), Object))
+	{
+		return Out;
+	}
+	Out.bValid = true;
+	Object->TryGetBoolField(TEXT("budget"), Out.bBudget);
+	Object->TryGetStringField(TEXT("nation"), Out.Nation);
+	Object->TryGetStringField(TEXT("date"), Out.Date);
+	Object->TryGetNumberField(TEXT("money"), Out.Money);
+	Object->TryGetNumberField(TEXT("gross"), Out.Gross);
+	Object->TryGetNumberField(TEXT("upkeepTotal"), Out.UpkeepTotal);
+	Object->TryGetNumberField(TEXT("net"), Out.Net);
+	Object->TryGetNumberField(TEXT("debt"), Out.Debt);
+	Object->TryGetNumberField(TEXT("debtFloor"), Out.DebtFloor);
+	Object->TryGetNumberField(TEXT("onOrder"), Out.OnOrder);
+	auto Lines = [&Object](const TCHAR* Field, TArray<FLedgerLine>& Into)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (Object->TryGetArrayField(Field, Values))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Values)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FLedgerLine& Line = Into.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("label"), Line.Label);
+				Entry->TryGetNumberField(TEXT("amount"), Line.Amount);
+				Entry->TryGetNumberField(TEXT("count"), Line.Count);
+			}
+		}
+	};
+	Lines(TEXT("income"), Out.Income);
+	Lines(TEXT("changes"), Out.Changes);
+	Lines(TEXT("upkeep"), Out.Upkeep);
+	const TArray<TSharedPtr<FJsonValue>>* Provinces = nullptr;
+	if (Object->TryGetArrayField(TEXT("provinces"), Provinces))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Provinces)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FLedgerProvince& Province = Out.Provinces.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("id"), Province.Region);
+			Entry->TryGetStringField(TEXT("name"), Province.Name);
+			Entry->TryGetBoolField(TEXT("home"), Province.bHome);
+			Entry->TryGetNumberField(TEXT("land"), Province.Land);
+			Entry->TryGetNumberField(TEXT("port"), Province.Port);
+			Entry->TryGetNumberField(TEXT("oil"), Province.Oil);
+			Entry->TryGetNumberField(TEXT("fac"), Province.Factories);
+			Entry->TryGetNumberField(TEXT("capital"), Province.Capital);
+			Entry->TryGetNumberField(TEXT("total"), Province.Total);
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Orders = nullptr;
+	if (Object->TryGetArrayField(TEXT("orders"), Orders))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Orders)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FLedgerLine& Line = Out.Orders.AddDefaulted_GetRef();
+			FString Name, Where, Due;
+			Entry->TryGetStringField(TEXT("name"), Name);
+			Entry->TryGetStringField(TEXT("where"), Where);
+			Entry->TryGetStringField(TEXT("due"), Due);
+			Entry->TryGetNumberField(TEXT("cost"), Line.Amount);
+			Line.Label = FString::Printf(TEXT("%s, %s, due %s"), *Name, *Where, *Due);
+		}
+	}
+	return Out;
 }
 
 bool FCampaignSession::Declare(const FString& Nation)
