@@ -125,6 +125,9 @@ public:
 	 */
 	void ShowBuildings(const TArray<FIntVector4>& Works);
 
+	/** Smoke and gun flashes over a region where a battle has just been fought, for a few seconds. */
+	void AddBattleSmoke(int32 RegionId);
+
 	/** Shows which bridges are down and which railways are cut. Does nothing if nothing has changed. */
 	void ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut);
 
@@ -188,6 +191,23 @@ private:
 	TObjectPtr<UProceduralMeshComponent> WorksMesh;
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> BuildingsMesh;
+
+	// Smoke: puffs that rise from the chimneys of works, and for a few seconds from a battlefield. Each puff is a
+	// small fan of triangles turned to face the eye, dense in the middle and clear at the rim.
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> SmokeMesh;
+	struct FBattleSmoke
+	{
+		FVector Where = FVector::ZeroVector;
+		double Began = 0.0;
+	};
+	TArray<FVector> TownChimneys; // the tops of the chimneys of the towns' own works
+	TArray<FVector> WorksChimneys; // and of the factories built since the war began
+	TArray<FBattleSmoke> Battles;
+	TArray<FVector> SmokeVertices;
+	TArray<FColor> SmokeColours;
+	bool bSmokeMade = false;
+	void UpdateSmoke(float CameraDistance, const FVector& CameraFocus);
 	TArray<FIntVector4> ShownBuildings;
 	FLandFeatures Land;
 	UPROPERTY()

@@ -1959,6 +1959,10 @@ void ACampaignPlayerController::ConfirmWar()
 		CampaignSounds::Play(this, TEXT("ship_guns"), 0.6f);
 		CampaignSounds::PlayLater(this, TEXT("battle"), 0.8f, 0.7f);
 		const FLandingResult Result = Session->Land(PickedCorps, Asked.Region);
+		if (Map.IsValid() && Result.bOk)
+		{
+			Map->AddBattleSmoke(Asked.Region);
+		}
 		ShowWar(Session->GetView(), Result.Moved);
 		if (Result.bOk)
 		{
@@ -2165,7 +2169,8 @@ void ACampaignPlayerController::ConfirmAttack()
 		return;
 	}
 
-	// The fight is heard, and then how it went.
+	// The fight is seen and heard, and then how it went.
+	Map->AddBattleSmoke(RegionId);
 	CampaignSounds::Play(this, TEXT("battle"), 0.8f);
 	if (!Result.bYielded)
 	{
@@ -2202,6 +2207,11 @@ void ACampaignPlayerController::ConfirmAttack()
 
 void ACampaignPlayerController::CloseFaceOff()
 {
+	if (FaceOff.bVisible && FaceOff.bResolved && Map.IsValid())
+	{
+		// The result has been read: the field is still smoking when the eye goes back to the table.
+		Map->AddBattleSmoke(FaceOff.Region);
+	}
 	FaceOff.bVisible = false;
 }
 

@@ -912,7 +912,7 @@ void FMiniatureMesh::Broadleaf(const FVector& Where, double Height, double Radiu
 	Ball(Where + FVector(0.0, 0.0, Height * 0.58), FVector(Radius * 2.0, Radius * 2.0, Height * 0.84), Leaf, 4, 6);
 }
 
-void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed)
+void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed, TArray<FVector>* OutChimneys)
 {
 	FRandomStream Random(Seed * 7919 + 13);
 	static const TCHAR* WallPaints[] = { TEXT("E6DCC4"), TEXT("D8C8A6"), TEXT("CEC6B6"), TEXT("E2D2AE"), TEXT("C9B79A") };
@@ -960,6 +960,10 @@ void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool 
 		const double Turn = FMath::RadiansToDegrees(Angle) + 90.0;
 		House(At, 1.5 * Unit, 0.8 * Unit, 0.5 * Unit, 0.22 * Unit, Brick, Soot, Turn);
 		Pillar(At + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * 0.6 * Unit, 0.13 * Unit, 0.09 * Unit, 1.5 * Unit, Brick, 7);
+		if (OutChimneys)
+		{
+			OutChimneys->Add(At + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * 0.6 * Unit + FVector(0.0, 0.0, 1.5 * Unit));
+		}
 	}
 }
 

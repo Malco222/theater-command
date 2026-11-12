@@ -157,7 +157,7 @@ struct FMiniatureMesh
 	 * A town standing on the table: a cluster of houses, more of them for a city, a great building with a dome
 	 * for a capital, a church for a city, and a works with a chimney for each pair of factories.
 	 */
-	void Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed);
+	void Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed, TArray<FVector>* OutChimneys = nullptr);
 
 	// ---- The figures. Each stands at Where, turned by Turn degrees, in the nation's colour.
 

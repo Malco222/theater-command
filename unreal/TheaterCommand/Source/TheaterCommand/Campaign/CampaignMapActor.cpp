@@ -106,6 +106,7 @@ ACampaignMapActor::ACampaignMapActor()
 	RailMesh = MakeMesh(TEXT("Railways"), false);
 	WorksMesh = MakeMesh(TEXT("Works"), false);
 	BuildingsMesh = MakeMesh(TEXT("Buildings"), false);
+	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
 	HighlightMesh = MakeMesh(TEXT("Highlight"), false);
 	OrdersMesh = MakeMesh(TEXT("Orders"), false);
 
@@ -761,6 +762,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	}
 	ShownBuildings = Works;
 	BuildingsMesh->ClearAllMeshSections();
+	WorksChimneys.Reset();
 
 	const FLinearColor Brick(FColor::FromHex(TEXT("7A5547"))), Soot(FColor::FromHex(TEXT("3B3532"))), Pane(FColor::FromHex(TEXT("8FA6A8")));
 	const FLinearColor Apron(FColor::FromHex(TEXT("A9A69C"))), Girder(FColor::FromHex(TEXT("4A4F55"))), RedLead(FColor::FromHex(TEXT("8A3B2A")));
@@ -859,6 +861,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 				const FVector Foot = At + Ahead(Turn, -1.15 * Unit, (Stack - 1) * 0.5 * Unit);
 				Model.Pillar(Foot, 0.12 * Unit, 0.08 * Unit, 1.7 * Unit, Brick, 8);
 				Model.Pillar(Foot + FVector(0.0, 0.0, 1.7 * Unit), 0.09 * Unit, 0.09 * Unit, 0.06 * Unit, Soot, 8);
+				WorksChimneys.Add(Foot + FVector(0.0, 0.0, 1.76 * Unit));
 			}
 			++Count;
 		}
@@ -1227,6 +1230,7 @@ void ACampaignMapActor::BuildTowns()
 	FMiniatureMesh Model;
 	const double U = UnitScale;
 	int32 Count = 0;
+	TownChimneys.Reset();
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
@@ -1236,7 +1240,7 @@ void ACampaignMapActor::BuildTowns()
 			continue;
 		}
 		const int32 Houses = Region.bCapital ? 13 : (bCity ? 10 : 6);
-		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1, Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id);
+		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1, Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id, &TownChimneys);
 		++Count;
 	}
 	if (Model.Vertices.Num() > 0)
@@ -2058,8 +2062,191 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 	Buffers.Commit(OrdersMesh, 1, HighlightMaterial);
 }
 
+void ACampaignMapActor::AddBattleSmoke(int32 RegionId)
+{
+	if (!Data.Regions.IsValidIndex(RegionId) || !GetWorld())
+	{
+		return;
+	}
+	// Between the town and where the armies stand, so that it rises clear of both.
+	const FVector2D Spot = Data.Regions[RegionId].Center + FVector2D(3.5, -3.0);
+	FBattleSmoke& Battle = Battles.AddDefaulted_GetRef();
+	Battle.Where = SurfacePoint(Spot.X, Spot.Y, 0.05);
+	Battle.Began = GetWorld()->GetTimeSeconds();
+}
+
+void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraFocus)
+{
+	UWorld* World = GetWorld();
+	if (!SmokeMesh || !World || !HighlightMaterial)
+	{
+		return;
+	}
+	const int32 MaxPuffs = 420, Rim = 8, PerPuff = Rim + 1;
+	if (!bSmokeMade)
+	{
+		// The mesh is made once, with room for every puff; after that only its points and colours change.
+		bSmokeMade = true;
+		SmokeVertices.Init(FVector::ZeroVector, MaxPuffs * PerPuff);
+		// (two far corners to begin with, so that the mesh is never thought too small to draw)
+		SmokeVertices[1] = FVector(-20000.0, -20000.0, 0.0);
+		SmokeVertices[2] = FVector(20000.0, 20000.0, 2000.0);
+		SmokeColours.Init(FColor(0, 0, 0, 0), MaxPuffs * PerPuff);
+		TArray<int32> Triangles;
+		Triangles.Reserve(MaxPuffs * Rim * 3);
+		for (int32 Puff = 0; Puff < MaxPuffs; ++Puff)
+		{
+			const int32 First = Puff * PerPuff;
+			for (int32 K = 0; K < Rim; ++K)
+			{
+				// Both faces, so that a puff shows whichever way it is wound to the eye.
+				Triangles.Add(First);
+				Triangles.Add(First + 1 + (K + 1) % Rim);
+				Triangles.Add(First + 1 + K);
+				Triangles.Add(First);
+				Triangles.Add(First + 1 + K);
+				Triangles.Add(First + 1 + (K + 1) % Rim);
+			}
+		}
+		TArray<FVector> Normals;
+		Normals.Init(FVector::UpVector, SmokeVertices.Num());
+		SmokeMesh->CreateMeshSection(0, SmokeVertices, Triangles, Normals, TArray<FVector2D>(), SmokeColours, TArray<FProcMeshTangent>(), false);
+		SmokeMesh->SetMaterial(0, HighlightMaterial);
+		SmokeMesh->SetCastShadow(false);
+	}
+
+	// Which way the eye is looking, to turn every puff to face it.
+	FVector Right = FVector::RightVector, Up = FVector::UpVector;
+	if (const APlayerController* Player = World->GetFirstPlayerController())
+	{
+		if (Player->PlayerCameraManager)
+		{
+			const FRotationMatrix Looking(Player->PlayerCameraManager->GetCameraRotation());
+			Right = Looking.GetUnitAxis(EAxis::Y);
+			Up = Looking.GetUnitAxis(EAxis::Z);
+		}
+	}
+	const double Now = World->GetTimeSeconds();
+	const double Unit = UnitScale * 2.1;
+	const FVector Wind(0.25, 0.9, 0.0); // the wind is from the west
+	int32 Puff = 0;
+	auto Draw = [&](const FVector& Where, double Radius, const FLinearColor& Colour, float Alpha)
+	{
+		if (Puff >= MaxPuffs || Alpha <= 0.004f)
+		{
+			return;
+		}
+		const int32 First = Puff * PerPuff;
+		FLinearColor Middle = Colour;
+		Middle.A = Alpha;
+		FLinearColor Edge = Colour;
+		Edge.A = 0.0f;
+		SmokeVertices[First] = Where;
+		SmokeColours[First] = Middle.ToFColor(false);
+		for (int32 K = 0; K < Rim; ++K)
+		{
+			const double Angle = K * 2.0 * PI / Rim;
+			SmokeVertices[First + 1 + K] = Where + (Right * FMath::Cos(Angle) + Up * FMath::Sin(Angle)) * Radius;
+			SmokeColours[First + 1 + K] = Edge.ToFColor(false);
+		}
+		++Puff;
+	};
+
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterSmokeTest")))
+	{
+		Draw(CameraFocus + FVector(0.0, 0.0, 120.0), 300.0, FLinearColor(1.0f, 0.5f, 0.1f), 0.9f); // one great puff, to see that puffs draw at all
+	}
+	// Chimneys: a thin grey plume from each, leaning with the wind. Only those near what the eye is looking at.
+	const FLinearColor Grey(0.6f, 0.6f, 0.62f);
+	const double Reach = FMath::Min(CameraDistance * 1.4 + 1500.0, 9000.0);
+	auto Plume = [&](const FVector& Top, int32 Seed)
+	{
+		if (FVector::DistSquared2D(Top, CameraFocus) > Reach * Reach)
+		{
+			return;
+		}
+		const int32 Count = 6;
+		const double Life = 7.0;
+		for (int32 K = 0; K < Count; ++K)
+		{
+			const double Age = FMath::Frac(Now / Life + static_cast<double>(K) / Count + Seed * 0.137);
+			const double Sway = FMath::Sin(Now * 0.7 + Seed + K * 1.7) * 0.12 * Unit * Age;
+			const FVector At = Top + FVector(0.0, 0.0, 4.0 * Unit * Age) + Wind * (2.8 * Unit * Age * Age) + Right * Sway;
+			const float Alpha = 0.55f * FMath::SmoothStep(0.0, 0.1, Age) * FMath::Pow(1.0 - Age, 1.3);
+			Draw(At, (0.22 + 1.1 * Age) * Unit, Grey, Alpha);
+		}
+	};
+	for (int32 K = 0; K < TownChimneys.Num(); ++K)
+	{
+		Plume(TownChimneys[K], K);
+	}
+	for (int32 K = 0; K < WorksChimneys.Num(); ++K)
+	{
+		Plume(WorksChimneys[K], K + 500);
+	}
+
+	// Battles: for a few seconds the guns flash, and dark smoke rolls up and drifts away.
+	const double Lasts = 11.0;
+	const double Big = Unit * 2.3; // a battle is a bigger thing than a chimney
+	Battles.RemoveAll([Now, Lasts](const FBattleSmoke& Battle) { return Now - Battle.Began > Lasts + 4.0; });
+	const FLinearColor Dark(0.16f, 0.15f, 0.14f), Dust(0.55f, 0.5f, 0.42f), Fire(1.0f, 0.62f, 0.22f);
+	for (int32 B = 0; B < Battles.Num(); ++B)
+	{
+		const FBattleSmoke& Battle = Battles[B];
+		const double Since = Now - Battle.Began;
+		FRandomStream Random(B * 977 + static_cast<int32>(Battle.Where.X));
+		// Shell bursts round the field while the fight lasts: each a flash, then a puff of dust.
+		for (int32 K = 0; K < 14; ++K)
+		{
+			const double Starts = Random.FRandRange(0.0f, static_cast<float>(Lasts * 0.75));
+			const FVector Offset(Random.FRandRange(-2.6f, 2.6f) * Big, Random.FRandRange(-2.6f, 2.6f) * Big, 0.0);
+			const double Age = (Since - Starts) / 2.4;
+			if (Age < 0.0 || Age > 1.0)
+			{
+				continue;
+			}
+			if (Age < 0.09)
+			{
+				Draw(Battle.Where + Offset + FVector(0.0, 0.0, 0.2 * Big), (0.25 + 4.0 * Age) * Big, Fire, 0.95f * (1.0f - static_cast<float>(Age / 0.09)));
+			}
+			Draw(Battle.Where + Offset + FVector(0.0, 0.0, (0.3 + 1.6 * Age) * Big) + Wind * (0.9 * Big * Age), (0.45 + 1.3 * Age) * Big, Dust, 0.65f * FMath::Pow(1.0 - Age, 1.2));
+		}
+		// The pall over it all.
+		for (int32 K = 0; K < 9; ++K)
+		{
+			const double Starts = K * 0.9;
+			const double Age = (Since - Starts) / 6.5;
+			if (Age < 0.0 || Age > 1.0)
+			{
+				continue;
+			}
+			const FVector Offset(Random.FRandRange(-1.2f, 1.2f) * Big, Random.FRandRange(-1.2f, 1.2f) * Big, 0.0);
+			const FVector At = Battle.Where + Offset + FVector(0.0, 0.0, (0.6 + 5.0 * Age) * Big) + Wind * (3.2 * Big * Age * Age);
+			Draw(At, (0.9 + 2.6 * Age) * Big, Dark, 0.72f * FMath::SmoothStep(0.0, 0.1, Age) * FMath::Pow(1.0 - Age, 1.2));
+		}
+	}
+
+	// The puffs not used this time are folded away to nothing.
+	for (int32 Spare = Puff; Spare < MaxPuffs; ++Spare)
+	{
+		const int32 First = Spare * PerPuff;
+		if (SmokeColours[First].A == 0 && SmokeVertices[First + 1].Equals(SmokeVertices[First]))
+		{
+			continue;
+		}
+		for (int32 K = 0; K < PerPuff; ++K)
+		{
+			SmokeVertices[First + K] = SmokeVertices[First];
+			SmokeColours[First + K] = FColor(0, 0, 0, 0);
+		}
+	}
+	SmokeMesh->UpdateMeshSection(0, SmokeVertices, TArray<FVector>(), TArray<FVector2D>(), SmokeColours, TArray<FProcMeshTangent>());
+}
+
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
+	UpdateSmoke(CameraDistance, CameraFocus);
+
 	// The land's tiles: fine near what the eye looks at, coarse far from it.
 	UpdateLand(CameraDistance, CameraFocus, false);
 
