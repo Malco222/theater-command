@@ -101,10 +101,12 @@ describe('sea transport', () => {
     expect(abroad!.units).toContain(c);
   });
 
-  it('a nation without command of the sea cannot ship', () => {
-    const g = asPlayer('GER');
-    const c = g.corps.find((x) => x.nat === 'GER' && x.kind !== 'fort' && g.regions[x.reg].port);
-    if (c) expect(shipTargets(g, c).length).toBe(0);
+  it('a nation with no troopships cannot ship', () => {
+    const g = asPlayer('FRA');
+    expect(g.nations.FRA.sealift).toBe(0);
+    const c = g.corps.find((x) => x.nat === 'FRA' && x.kind !== 'fort' && g.regions[x.reg].port)!;
+    expect(c).toBeDefined();
+    expect(shipTargets(g, c).length).toBe(0);
   });
 });
 

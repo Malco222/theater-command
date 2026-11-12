@@ -127,7 +127,7 @@ export const REGIONS = [
   ['Northumbria', 54.9, -1.9, 'UK', 'hills', 1, 1, { port: 1 }],
   ['Clydeside', 55.8, -4.3, 'UK', 'urban', 1, 2, { port: 1 }],
   ['Lothian', 55.8, -3.0, 'UK', 'hills', 1, 0, {}],
-  ['Highlands', 57.3, -4.5, 'UK', 'mountain', 0, 0, {}],
+  ['Highlands', 57.3, -4.5, 'UK', 'mountain', 0, 0, { port: 1 }],
   ['Aberdeen', 57.2, -2.5, 'UK', 'hills', 0, 0, { port: 1 }],
   ['Ulster', 54.6, -6.4, 'UK', 'hills', 0, 1, { port: 1, depot: 1 }],
   ['Dublin', 53.3, -6.6, 'IRL', 'plains', 2, 0, { cap: 1 }],
@@ -312,6 +312,31 @@ export const REGIONS = [
   ['Syria', 36.2, 37.2, 'FRA', 'hills', 0, 0, { vichy: 1, depot: 1 }],
   ['Iraq', 36.3, 43.1, 'IRQ', 'hills', 1, 0, { cap: 1, oil: 1 }],
   ['Iran', 37.9, 46.0, 'IRN', 'mountain', 1, 0, { cap: 1 }],
+  // The far north: the rest of Norway, the iron ore country, Lapland and the Soviet Arctic.
+  ['Oppland', 61.7, 9.4, 'NOR', 'mountain', 0, 0, {}],
+  ['Trondheim', 63.4, 10.6, 'NOR', 'hills', 1, 0, { port: 1 }],
+  ['Nordland', 66.0, 13.8, 'NOR', 'mountain', 0, 0, {}],
+  ['Narvik', 68.4, 17.6, 'NOR', 'mountain', 2, 0, { port: 1, ore: 1 }],
+  ['Finnmark', 69.8, 24.0, 'NOR', 'mountain', 0, 0, { port: 1, depot: 1 }],
+  ['Jamtland', 63.2, 14.6, 'SWE', 'forest', 0, 0, {}],
+  ['Sundsvall', 62.4, 17.0, 'SWE', 'forest', 0, 0, {}],
+  ['Vasterbotten', 64.6, 19.0, 'SWE', 'forest', 0, 0, {}],
+  ['Norrbotten', 67.2, 20.8, 'SWE', 'forest', 1, 1, { ore: 1 }],
+  ['Vaasa', 63.0, 22.8, 'FIN', 'forest', 0, 0, {}],
+  ['Kuopio', 62.8, 27.6, 'FIN', 'forest', 0, 0, {}],
+  ['Oulu', 65.0, 26.5, 'FIN', 'forest', 0, 0, {}],
+  ['Lapland', 67.6, 26.6, 'FIN', 'forest', 0, 0, {}],
+  ['Petsamo', 69.3, 29.8, 'FIN', 'hills', 1, 0, { port: 1 }],
+  ['Petrozavodsk', 61.9, 34.2, 'SOV', 'forest', 0, 0, {}],
+  ['Belomorsk', 64.5, 34.0, 'SOV', 'forest', 0, 0, {}],
+  ['Kandalaksha', 67.4, 32.5, 'SOV', 'forest', 0, 0, {}],
+  ['Murmansk', 68.8, 33.6, 'SOV', 'hills', 2, 0, { port: 1 }],
+  ['Kargopol', 61.6, 38.9, 'SOV', 'forest', 0, 0, {}],
+  ['Arkhangelsk', 64.4, 40.8, 'SOV', 'forest', 1, 0, { port: 1 }],
+  ['Kotlas', 61.4, 45.6, 'SOV', 'forest', 0, 0, {}],
+  ['Mezen', 65.8, 44.4, 'SOV', 'forest', 0, 0, {}],
+  ['Kola', 67.0, 37.6, 'SOV', 'forest', 0, 0, {}],
+  ['Dalarna', 61.0, 14.2, 'SWE', 'forest', 0, 0, {}],
 ];
 
 // Short crossings that armies can use without a fleet.
@@ -321,4 +346,17 @@ export const LINKS = [
   ['Istanbul', 'Bursa'],
   ['Zealand', 'Scania'],
   ['Crimea', 'Novorossiysk'],
+];
+
+// Land borders along a narrow coast, where the line between two regions runs mostly out to sea
+// and the map-maker would otherwise miss the road.
+export const ROADS = [
+  ['Trondheim', 'Nordland'],
+  ['Narvik', 'Finnmark'],
+];
+
+// And the opposite: borders the map-maker finds that are not there, because the line between
+// two regions touches both shores of a bay.
+export const NO_BORDER = [
+  ['Kola', 'Belomorsk'],
 ];

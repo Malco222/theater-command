@@ -5,10 +5,11 @@
 
 import plan from '../../data/campaign/plan-historical.json';
 import { aiProduction } from './economy';
+import { NAVY, landCorps, navalAI, surpriseOn } from './navy';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage,
-  hostileUnits, limitAttackers, moveCorps, moveCost, railMove, resolveBattle, weekOf,
+  hostileUnits, limitAttackers, moveCorps, moveCost, railMove, resolveBattle, shipMove, weekOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -45,7 +46,9 @@ function campaign(g: Game, nat: string): void {
     }
     if (go) for (const e of ph.declare) declareWar(g, nat, e);
   }
+  navalAI(g, nat, ph?.fleets);
   if (!n.atWar.length) return;
+  if (ph?.landings) landings(g, nat, ph);
   if (ph?.release) for (const c of g.corps) if (c.nat === nat && c.hold && c.kind !== 'fort' && ph.release.includes(g.regions[c.reg].name)) c.hold = false;
   const posture = ph?.posture ?? 'defend';
   if (posture === 'defend') { defend(g, nat); return; }
@@ -59,7 +62,14 @@ function campaign(g: Game, nat: string): void {
   else if (follow) {
     advance(g, nat, enemies, 0, null, halt);
     // With the month's attacks made, whoever still has marching time shores up the thin places.
-    if (n.alive) defend(g, nat);
+    defend(g, nat, false);
+    // Where the plan calls for it, troops who closed up to a great prize late in the month go straight in
+    // once the line around it has been filled out, and the line is then put in order again.
+    if (ph?.lastPush?.length) {
+      const fights = g.reports.length;
+      offensive(g, nat, ph.lastPush, enemies, ph.minOdds ?? 1.3, [], true, false, halt, new Set(ph.lastPush));
+      if (n.alive && g.reports.length > fights) defend(g, nat, false);
+    }
   }
 }
 
@@ -75,6 +85,35 @@ function enemySet(g: Game, nat: string): Set<string> {
 function objectivesFor(g: Game, nat: string): string[] {
   const list = phases(nat).filter((p) => p.from <= g.turn).sort((a, b) => b.from - a.from);
   return list.flatMap((p) => p.objectives ?? []);
+}
+
+// ---- Across the sea --------------------------------------------------------------------
+
+/** Sends the corps the plan names across the sea, each to the first place on its list it can get ashore. */
+function landings(g: Game, nat: string, ph: PlanPhase): void {
+  for (const L of ph.landings ?? []) {
+    const c = g.corps.find((x) => x.nat === nat && x.name === L.corps && !x.dead);
+    // Only a corps still waiting in a home port: one already overseas has made its landing.
+    if (!c || g.regions[c.reg].owner !== nat || !g.regions[c.reg].port) continue;
+    for (const name of L.to) {
+      const to = g.byName[name];
+      if (!to) continue;
+      let ok = false;
+      if (allied(g, nat, to.ctrl)) ok = to.owner !== nat && shipMove(g, c, to);
+      else if (atWar(g, nat, to.ctrl)) {
+        // A defended shore is only stormed at fair odds.
+        if (hostileUnits(g, to, nat).length) {
+          const surprise = surpriseOn(g, nat, to);
+          if (assess(g, [c], to, { sea: surprise ? NAVY.landing.surprise : NAVY.landing.assault, surprise }).odds < (L.minOdds ?? 1.2)) continue;
+        }
+        const res = landCorps(g, [c], to);
+        ok = res.ok && !!res.taken;
+        if (res.ok && !res.taken) break; // beaten off: the corps is back in port and has had its month
+      }
+      // Once ashore the corps stays overseas for as long as the plan's operation runs.
+      if (ok) { c.hold = false; g.flags[`exp:${c.id}`] = ph.to; break; }
+    }
+  }
 }
 
 // ---- Attack ---------------------------------------------------------------------------
@@ -272,9 +311,11 @@ function advance(g: Game, nat: string, enemies: Set<string>, wave: number, door:
     }
     if (wave <= 1 && c.ap >= 4 && dist[c.reg] >= 3 && dist[c.reg] < 1e9) {
       // Far behind the front: go by rail to the nearest railhead that has been in friendly hands a while.
+      // Only a railhead the trains can actually reach: a front across the sea is no use to a corps on this shore.
+      const byRail = hops(g, c.reg, (r) => allied(g, nat, r.ctrl));
       let to: Region | null = null, bd = dist[c.reg] - 1, bu = 99;
       for (const r of g.regions) {
-        if (r.since >= g.turn || dist[r.id] > bd || !allied(g, nat, r.ctrl)) continue;
+        if (r.since >= g.turn || dist[r.id] > bd || byRail[r.id] < 0 || !allied(g, nat, r.ctrl)) continue;
         const u = friendlyUnits(g, r, nat).length;
         if (u >= STACK) continue;
         if (dist[r.id] < bd || u < bu) { to = r; bd = dist[r.id]; bu = u; }
@@ -365,7 +406,7 @@ function defPower(g: Game, c: Corps, r: Region): number {
   return corpsBase(g, c) * KIND[c.kind].def * TERRAIN_DEF[r.terrain];
 }
 
-function defend(g: Game, nat: string): void {
+function defend(g: Game, nat: string, line = true): void {
   ensureSupply(g);
   const n = g.nations[nat];
   if (n.seaSupply) evacuations(g, nat);
@@ -403,6 +444,16 @@ function defend(g: Game, nat: string): void {
       const others = friendlyUnits(g, here, nat).length > 1 || threat[here.id] === 0;
       const gap = here.nb.map((j) => g.regions[j]).find((r) => atWar(g, nat, r.ctrl) && lost(r) && !late(r) && !hostileUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4));
       if (gap && others && moveCorps(g, c, gap)) continue;
+    }
+    // An army standing on the defensive keeps a continuous line: an empty place in it is an open door, and a
+    // neighbour with three corps or more sends one to shut it. A slow command does not see the gap in time,
+    // and an army on the attack accepts gaps behind its spearheads.
+    if (line && !n.slowCommand && friendlyUnits(g, here, nat).length >= 3) {
+      const door = here.nb.map((j) => g.regions[j]).find((r) => mine(r) && threat[r.id] > 0 && !friendlyUnits(g, r, nat).length && c.ap >= Math.min(moveCost(g, c, r), 4));
+      if (door) {
+        const was = defPower(g, c, here);
+        if (moveCorps(g, c, door)) { held[here.id] -= was; held[door.id] += defPower(g, c, door); continue; }
+      }
     }
     let spared = 0;
     if (threat[here.id] > 0) {
@@ -455,12 +506,17 @@ function walkToward(g: Game, c: Corps, to: Region): void {
 /** An expeditionary corps goes home when it is cut off, broken, or its host is collapsing. */
 function wantsOut(g: Game, c: Corps): boolean {
   if (g.regions[c.reg].owner === c.nat || c.dead) return false;
+
   // The host is the biggest continental ally. If it has fallen, there is nothing left to stay for.
   let host: string | null = null, size = 0;
   for (const n of Object.values(g.nations)) {
     if (n.id === c.nat || n.dormant || !allied(g, c.nat, n.id) || n.capital < 0 || n.seaSupply) continue;
     if (n.armyPeak > size) { size = n.armyPeak; host = n.id; }
   }
+  // A corps the plan sent overseas stays for the length of the operation, unless it is cut off,
+  // broken, or the country it came to help, or the main ally on the Continent, has fallen.
+  const until = g.flags[`exp:${c.id}`];
+  if (until !== undefined && g.turn <= until) return !c.supplied || c.org < 0.3 || !host || !g.nations[host].alive || !g.nations[g.regions[c.reg].owner].alive;
   if (!c.supplied || c.org < 0.45 || !host || !g.nations[host].alive) return true;
   const H = g.nations[host];
   const d = hops(g, c.reg, (r) => allied(g, c.nat, r.ctrl));

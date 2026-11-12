@@ -14,7 +14,25 @@ export function loadLand(res) {
     if (g.type === 'Polygon') polys.push(g.coordinates);
     else if (g.type === 'MultiPolygon') polys.push(...g.coordinates);
   }
-  return polys;
+  return polys.map((p) => p.map(unwrapRing));
+}
+
+// Eurasia's outline crosses the 180th meridian in Chukotka, where the longitudes jump from
+// +180 to -180. Left alone, that jump is a false edge running right across the map between
+// 65 and 69 degrees north, which turns Lapland into sea. Carry the ring on past 180 instead.
+function unwrapRing(ring) {
+  let shift = 0, jumped = false, sum = 0;
+  const out = ring.map(([x, y], i) => {
+    if (i > 0) {
+      const d = x - ring[i - 1][0];
+      if (d > 180) { shift -= 360; jumped = true; } else if (d < -180) { shift += 360; jumped = true; }
+    }
+    sum += x + shift;
+    return [x + shift, y];
+  });
+  if (!jumped) return ring;
+  const back = -360 * Math.round(sum / ring.length / 360);
+  return out.map(([x, y]) => [x + back, y]);
 }
 
 export function clipToBox(polys, [w, s, e, n]) {

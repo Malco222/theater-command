@@ -1,5 +1,5 @@
 {
-  "_about": "Nations on the prototype map. quality scales how well a nation's army fights in 1939-40 (training, doctrine, command). air is relative air strength. resilience is how much of its capital, territory and army a nation can lose before it asks for terms. align is its place on the alignment track in September 1939. blitz gives a nation's fast troops extra reach and punch in the first two turns of a new offensive. slowCommand makes attacks weaker and counter-attacks late, and a failed assault is not renewed the same month. maxAttack is the most corps a nation's staffs can bring into one battle. seaSupply lets an army be supplied through any friendly port.",
+  "_about": "Nations on the prototype map. quality scales how well a nation's army fights in 1939-40 (training, doctrine, command). air is relative air strength. resilience is how much of its capital, territory and army a nation can lose before it asks for terms. align is its place on the alignment track in September 1939. blitz gives a nation's fast troops extra reach and punch in the first two turns of a new offensive. slowCommand makes attacks weaker and counter-attacks late, and a failed assault is not renewed the same month. maxAttack is the most corps a nation's staffs can bring into one battle. seaSupply lets an army be supplied through any friendly port. sealift is how many corps a nation's shipping can carry across the sea in a month; a nation with sea lift can also be supplied through any friendly port its ships can still reach.",
   "GER": {
     "name": "Germany",
     "adj": "German",
@@ -8,7 +8,8 @@
     "air": 100,
     "resilience": 0.8,
     "align": "axis",
-    "blitz": true
+    "blitz": true,
+    "sealift": 4
   },
   "ITA": {
     "name": "Italy",
@@ -36,7 +37,8 @@
     "air": 60,
     "resilience": 0.9,
     "align": "allies",
-    "seaSupply": true
+    "seaSupply": true,
+    "sealift": 4
   },
   "FRA": {
     "name": "France",
@@ -99,7 +101,7 @@
     "color": "#7f9fb5",
     "quality": 0.7,
     "air": 1,
-    "resilience": 0.6,
+    "resilience": 0.97,
     "align": "independent"
   },
   "SWE": {

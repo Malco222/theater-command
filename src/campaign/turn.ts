@@ -1,7 +1,8 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type BattleReport, type Build, type Corps, type Game, type General, type Kind, type Region, type Skill } from './types';
+import { KIND, STACK, type BattleReport, type Build, type Corps, type Fleet, type Game, type General, type Kind, type Region, type Skill, type Stance } from './types';
+import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hostileUnits, limitAttackers,
@@ -14,6 +15,8 @@ import { court, monthlyDiplomacy } from './diplomacy';
 export const current = (g: Game): string => g.order[g.phase];
 
 function closePhase(g: Game, nat: string): void {
+  // The month's fleet actions are fought once the nation's orders are all given.
+  seaBattles(g, nat);
   if (nat === 'GER') sovietEvent(g);
   g.phase++;
   if (g.phase >= g.order.length) {
@@ -130,8 +133,41 @@ export function orderRail(g: Game, c: Corps, to: number): boolean {
 /** Friendly ports this corps could be shipped to this month. */
 export function shipTargets(g: Game, c: Corps): Region[] {
   const from = g.regions[c.reg];
-  if (!g.nations[c.nat].seaSupply || !from.port || c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return [];
-  return g.regions.filter((r) => r.port && r.id !== from.id && allied(g, c.nat, r.ctrl) && !hostileUnits(g, r, c.nat).length && friendlyUnits(g, r, c.nat).length < STACK);
+  if (g.nations[c.nat].sealift <= 0 || !from.port || c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return [];
+  return g.regions.filter((r) => r.port && r.id !== from.id && whyNotShip(g, c, r) === null);
+}
+
+/** Enemy coasts the player's chosen corps could land on from the port they stand in. */
+export function landTargets(g: Game, cs: Corps[]): Region[] {
+  return cs.length && cs.every((c) => canOrder(g, c)) ? landingTargets(g, cs) : [];
+}
+
+/** The odds and the dangers of a landing, before the order is given. */
+export function previewLanding(g: Game, cs: Corps[], to: number): LandingPlan {
+  return planLanding(g, cs, g.regions[to]);
+}
+
+/** Sends the chosen corps across the sea to land on an enemy coast. */
+export function orderLand(g: Game, cs: Corps[], to: number): Landing {
+  if (!cs.length || !cs.every((c) => canOrder(g, c))) return { ok: false, why: 'Those corps cannot be given orders now.' };
+  return landCorps(g, cs, g.regions[to]);
+}
+
+const myFleet = (g: Game, id: number): Fleet | null => {
+  const f = g.fleets.find((x) => x.id === id);
+  return f && f.nat === g.human && current(g) === f.nat ? f : null;
+};
+
+/** Sends one of the player's fleets to a sea to patrol or raid, or back to port. */
+export function orderFleet(g: Game, id: number, zone: number, stance: Stance): boolean {
+  const f = myFleet(g, id);
+  return !!f && sail(g, f, zone, stance);
+}
+
+/** Moves one of the player's fleets to a new home port. */
+export function orderRebase(g: Game, id: number, region: number): boolean {
+  const f = myFleet(g, id);
+  return !!f && rebase(g, f, g.regions[region]);
 }
 
 export function orderShip(g: Game, c: Corps, to: number): boolean {
@@ -207,12 +243,23 @@ export function declarable(g: Game): string[] {
   const me = g.human;
   if (!me || !g.nations[me].alive) return [];
   const out = new Set<string>();
+  const add = (o: string): void => {
+    const N = g.nations[o];
+    if (N && N.alive && !allied(g, me, o) && !atWar(g, me, o)) out.add(o);
+  };
   for (const r of g.regions) {
     if (!allied(g, me, r.ctrl)) continue;
-    for (const j of r.nb) {
-      const o = g.regions[j].ctrl;
-      const N = g.nations[o];
-      if (N && N.alive && !allied(g, me, o) && !atWar(g, me, o)) out.add(o);
+    for (const j of r.nb) add(g.regions[j].ctrl);
+  }
+  // A nation with troopships can also reach any coast within landing range of its own ports.
+  if (g.nations[me].sealift > 0) {
+    const depth = new Int16Array(g.seas.length).fill(-1);
+    const q: number[] = [];
+    for (const r of g.regions) if (r.port && r.ctrl === me) for (const z of r.seas) if (depth[z] < 0) { depth[z] = 1; q.push(z); }
+    for (let i = 0; i < q.length; i++) {
+      for (const id of g.seas[q[i]].coast) add(g.regions[id].ctrl);
+      if (depth[q[i]] >= NAVY.landing.range) continue;
+      for (const j of g.seas[q[i]].adj) if (depth[j] < 0 && canPass(g, q[i], j, me)) { depth[j] = depth[q[i]] + 1; q.push(j); }
     }
   }
   return [...out];

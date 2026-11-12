@@ -1,0 +1,85 @@
+{
+  "_about": {
+    "what": "The war at sea. Fleets are counts of ships by class. A fleet on patrol holds a sea: it fights enemy fleets there, guards convoys and stops enemy troopships. A fleet raiding hunts merchant ships and avoids battle. A fleet in port is safe and refits.",
+    "classes": "power is a ship's weight in a fleet action. tough scales how likely it is to be sunk when its fleet takes losses (lower is tougher). escort is its worth guarding a convoy, raid its worth hunting one.",
+    "quality": "How well a navy fights, ship for ship.",
+    "air": "Aircraft flying from a sea's coasts count toward holding it. weight turns air strength into fleet strength. A surface fleet at sea where the enemy's air outweighs its own by more than 'safe' loses ships to bombers every month: lossPer of the fleet for each point beyond that, up to maxLoss. A computer-run admiral keeps out of water where the margin is over 'avoid'.",
+    "closed": "A sea is closed to a nation's troopships and supply ships when the enemy's strength there (ships at sea plus aircraft) is at least 'min' and at least 'ratio' times its own.",
+    "ready": "A fleet in harbour regains 'port' of its fitness for sea each month. On patrol it wears down to 'floor' and no further, and a damaged fleet that stays out mends only slowly. A battle costs the loser 'lost' and the winner 'won'. A computer-run fleet that has gone in to refit comes out again at sortieAt.",
+    "battle": "A patrolling fleet offers battle when it is at least 'seek' times as strong as the enemy in its sea. Raiding surface ships are brought to action with chance catchRaider. A fleet outnumbered by evadeAt or more slips away to port with chance evade.",
+    "intercept": "Troopships crossing a sea where enemy ships or aircraft are at work lose men: up to 'loss' of a corps when the enemy is unopposed. 'sea' is how hard a convoy is to find.",
+    "landing": "A corps landing on a defended coast fights at 'assault' strength; in the month war is declared the defenders are caught unready and it fights at 'surprise' strength and cannot be intercepted. range is how many seas a landing force can cross.",
+    "convoys": "Routes that feed a nation by sea. The share of the cargo lost is raiders / (raiders + escorts x escortWorth + ocean); 'share' of the nation's production rides on the route, and 'tons' is the shipping sunk in a month if nothing got through.",
+    "ore": "Swedish iron ore reaches Germany across the Baltic when it is free of ice, and down the Norwegian coast from Narvik when it is not. If neither way is open, Germany loses 'share' of her production.",
+    "fleets": "The navies of 1 September 1939. base is the region of the home port (null for a base off the map, with 'home' naming the sea it opens on) and port its name. zone is the sea the fleet is stationed in and duty what it does there. 'from' brings a fleet into being later in the war.",
+    "building": "Ships that join a fleet every month over a span of turns.",
+    "arrivals": "Single ships that join a fleet in a given month: [turn, nation, fleet, ships, what the news calls them]."
+  },
+  "classes": {
+    "bb": {"label": "Battleships", "one": "battleship", "many": "battleships", "power": 10, "tough": 0.45, "escort": 0, "raid": 3},
+    "cv": {"label": "Carriers", "one": "carrier", "many": "carriers", "power": 7, "tough": 0.7, "escort": 3, "raid": 1},
+    "ca": {"label": "Cruisers", "one": "cruiser", "many": "cruisers", "power": 3, "tough": 0.9, "escort": 0.5, "raid": 1.5},
+    "dd": {"label": "Destroyers", "one": "destroyer", "many": "destroyers", "power": 1, "tough": 1.1, "escort": 1, "raid": 0},
+    "ss": {"label": "Submarines", "one": "submarine", "many": "submarines", "power": 0.25, "tough": 0.3, "escort": 0, "raid": 1}
+  },
+  "quality": {"UK": 1.1, "GER": 1.1, "FRA": 0.95, "ITA": 0.8, "SOV": 0.7, "NOR": 0.6, "POL": 0.8, "_default": 0.7},
+  "air": {"weight": 0.6, "safe": 12, "avoid": 30, "lossPer": 0.002, "maxLoss": 0.15},
+  "closed": {"min": 15, "ratio": 2},
+  "battle": {"seek": 1.15, "catchRaider": 0.35, "evadeAt": 2.5, "evade": 0.4},
+  "ready": {"port": 0.3, "sea": -0.03, "mend": 0.05, "floor": 0.75, "lost": 0.35, "won": 0.15, "sortieAt": 0.75},
+  "intercept": {"loss": 0.6, "sea": 20},
+  "landing": {"assault": 0.6, "surprise": 1, "range": 3},
+  "range": 3,
+  "admiral": {"perLevel": 0.04, "maxLevel": 5, "lostWithFlagship": 0.25},
+  "convoy": {"escortWorth": 1.5, "ocean": 40, "air": 0.3, "patrolRaid": 0.5, "subBase": 0.012, "subHunt": 0.06, "escortLoss": 0.004},
+  "convoys": [
+    {"id": "atlantic", "name": "the Atlantic convoys", "to": "UK", "zones": ["wapp", "natl", "irish"], "share": 0.5, "tons": 1200000}
+  ],
+  "ore": {"to": "GER", "source": "Norrbotten", "share": 0.08, "iceMonths": [12, 1, 2, 3, 4], "winterPort": "Narvik", "summerZones": ["bothnia", "baltic"]},
+  "fleets": [
+    {"nat": "UK", "name": "Home Fleet", "base": "Highlands", "port": "Scapa Flow", "home": "nsea", "zone": "nsea", "duty": "patrol", "admiral": "Charles Forbes", "ships": {"bb": 7, "cv": 2, "ca": 12, "dd": 24, "ss": 0}},
+    {"nat": "UK", "name": "Western Approaches Command", "base": "Cornwall", "port": "Plymouth", "home": "wapp", "zone": "wapp", "duty": "patrol", "tied": true, "admiral": "Martin Dunbar-Nasmith", "ships": {"bb": 0, "cv": 0, "ca": 3, "dd": 36, "ss": 0}},
+    {"nat": "UK", "name": "Dover Command", "base": "Kent", "port": "Dover", "home": "channel", "zone": "channel", "duty": "patrol", "tied": true, "admiral": "Bertram Ramsay", "ships": {"bb": 0, "cv": 0, "ca": 2, "dd": 18, "ss": 0}},
+    {"nat": "UK", "name": "Mediterranean Fleet", "base": null, "port": "Alexandria", "home": "emed", "zone": "emed", "duty": "patrol", "admiral": "Andrew Cunningham", "ships": {"bb": 3, "cv": 1, "ca": 7, "dd": 22, "ss": 8}},
+    {"nat": "UK", "name": "Force H", "from": 11, "base": null, "port": "Gibraltar", "home": "iberia", "zone": "iberia", "duty": "patrol", "admiral": "James Somerville", "ships": {"bb": 2, "cv": 1, "ca": 2, "dd": 9, "ss": 0}},
+
+    {"nat": "GER", "name": "Battle Fleet", "base": "Bremen", "port": "Wilhelmshaven", "home": "nsea", "zone": "nsea", "duty": "port", "admiral": "Wilhelm Marschall", "ships": {"bb": 2, "cv": 0, "ca": 8, "dd": 20, "ss": 0}},
+    {"nat": "GER", "name": "U-boat Arm", "base": "Bremen", "port": "Wilhelmshaven", "home": "nsea", "zone": "wapp", "duty": "raid", "admiral": "Karl Donitz", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 27}},
+    {"nat": "GER", "name": "Baltic Station", "base": "Stettin", "port": "Swinemunde", "home": "baltic", "zone": "baltic", "duty": "patrol", "tied": true, "admiral": "Rolf Carls", "ships": {"bb": 0, "cv": 0, "ca": 2, "dd": 6, "ss": 6}},
+
+    {"nat": "FRA", "name": "Atlantic Squadron", "base": "Brittany", "port": "Brest", "home": "biscay", "zone": "biscay", "duty": "patrol", "admiral": "Marcel Gensoul", "ships": {"bb": 2, "cv": 1, "ca": 3, "dd": 10, "ss": 12}},
+    {"nat": "FRA", "name": "Mediterranean Squadron", "base": "Marseille", "port": "Toulon", "home": "wmed", "zone": "wmed", "duty": "patrol", "admiral": "Jean-Pierre Esteva", "ships": {"bb": 3, "cv": 0, "ca": 10, "dd": 28, "ss": 40}},
+
+    {"nat": "ITA", "name": "1st Squadron", "base": "Apulia", "port": "Taranto", "home": "ionian", "zone": "ionian", "duty": "patrol", "admiral": "Inigo Campioni", "ships": {"bb": 4, "cv": 0, "ca": 12, "dd": 30, "ss": 0}},
+    {"nat": "ITA", "name": "2nd Squadron", "base": "Naples", "port": "Naples", "home": "tyrr", "zone": "tyrr", "duty": "patrol", "admiral": "Riccardo Paladini", "ships": {"bb": 0, "cv": 0, "ca": 7, "dd": 25, "ss": 0}},
+    {"nat": "ITA", "name": "Submarine Command", "base": "Liguria", "port": "La Spezia", "home": "tyrr", "zone": "wmed", "duty": "raid", "admiral": "Mario Falangola", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 0, "ss": 60}},
+
+    {"nat": "SOV", "name": "Baltic Fleet", "base": "Leningrad", "port": "Kronstadt", "home": "finland", "zone": "finland", "duty": "patrol", "tied": true, "admiral": "Vladimir Tributs", "ships": {"bb": 2, "cv": 0, "ca": 2, "dd": 20, "ss": 50}},
+    {"nat": "SOV", "name": "Black Sea Fleet", "base": "Crimea", "port": "Sevastopol", "home": "black", "zone": "black", "duty": "patrol", "tied": true, "admiral": "Filipp Oktyabrsky", "ships": {"bb": 1, "cv": 0, "ca": 5, "dd": 17, "ss": 44}},
+    {"nat": "SOV", "name": "Northern Fleet", "base": "Murmansk", "port": "Polyarny", "home": "barents", "zone": "barents", "duty": "patrol", "tied": true, "admiral": "Arseniy Golovko", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 8, "ss": 15}},
+
+    {"nat": "NOR", "name": "Royal Norwegian Navy", "base": "Oslo", "port": "Horten", "home": "skag", "zone": "skag", "duty": "patrol", "tied": true, "admiral": "Henry Diesen", "ships": {"bb": 0, "cv": 0, "ca": 2, "dd": 7, "ss": 9}},
+    {"nat": "POL", "name": "Polish Navy", "base": "Danzig Corridor", "port": "Gdynia", "home": "baltic", "zone": "baltic", "duty": "patrol", "tied": true, "admiral": "Jozef Unrug", "ships": {"bb": 0, "cv": 0, "ca": 0, "dd": 4, "ss": 5}}
+  ],
+  "building": [
+    {"nat": "GER", "fleet": "U-boat Arm", "cls": "ss", "from": 2, "to": 12, "perMonth": 2},
+    {"nat": "GER", "fleet": "U-boat Arm", "cls": "ss", "from": 13, "to": 18, "perMonth": 6},
+    {"nat": "GER", "fleet": "U-boat Arm", "cls": "ss", "from": 19, "to": 28, "perMonth": 13},
+    {"nat": "GER", "fleet": "U-boat Arm", "cls": "ss", "from": 29, "to": 99, "perMonth": 18},
+    {"nat": "UK", "fleet": "Western Approaches Command", "cls": "dd", "from": 6, "to": 12, "perMonth": 4},
+    {"nat": "UK", "fleet": "Western Approaches Command", "cls": "dd", "from": 13, "to": 99, "perMonth": 8},
+    {"nat": "UK", "fleet": "Home Fleet", "cls": "dd", "from": 10, "to": 99, "perMonth": 1}
+  ],
+  "arrivals": [
+    [10, "UK", "Home Fleet", {"cv": 1}, "the carrier Illustrious"],
+    [13, "UK", "Western Approaches Command", {"dd": 12}, "the first of fifty old American destroyers"],
+    [14, "UK", "Western Approaches Command", {"dd": 12}, "more of the American destroyers"],
+    [15, "UK", "Western Approaches Command", {"dd": 12}, "more of the American destroyers"],
+    [16, "UK", "Home Fleet", {"bb": 1}, "the battleship King George V"],
+    [16, "UK", "Mediterranean Fleet", {"cv": 1}, "the carrier Formidable"],
+    [21, "UK", "Home Fleet", {"bb": 1, "cv": 1}, "the battleship Prince of Wales and the carrier Victorious"],
+    [21, "GER", "Battle Fleet", {"bb": 1}, "the battleship Bismarck"],
+    [12, "ITA", "1st Squadron", {"bb": 2}, "the battleships Littorio and Vittorio Veneto"],
+    [30, "GER", "Battle Fleet", {"bb": 1}, "the battleship Tirpitz"]
+  ]
+}

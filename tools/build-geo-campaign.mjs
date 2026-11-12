@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import { Delaunay } from 'd3-delaunay';
 import polygonClipping from 'polygon-clipping';
 import { loadLand, clipToBox, simplifyRing, ringArea } from './geo-common.mjs';
-import { REGIONS, LINKS } from '../data/campaign/regions.mjs';
+import { REGIONS, LINKS, ROADS, NO_BORDER } from '../data/campaign/regions.mjs';
+import { buildSeas } from './geo-seas.mjs';
 
-const W = -11, E = 47, S = 35.3, N = 61.6;
+const W = -11, E = 47, S = 35.3, N = 71.4;
 const SCALE = 40, KX = Math.cos((50 * Math.PI) / 180);
 const proj = ([lon, lat]) => [(lon - W) * KX * SCALE, (N - lat) * SCALE];
 const width = (E - W) * KX * SCALE, height = (N - S) * SCALE;
@@ -87,12 +88,26 @@ for (const [a, b] of LINKS) {
   if (!ra.nb.includes(rb.id)) { ra.nb.push(rb.id); rb.nb.push(ra.id); }
   links.push([ra.id, rb.id]);
 }
+for (const [a, b] of ROADS) {
+  const ra = byName.get(a), rb = byName.get(b);
+  if (!ra || !rb) { console.warn('bad road', a, b); continue; }
+  if (!ra.nb.includes(rb.id)) { ra.nb.push(rb.id); rb.nb.push(ra.id); }
+}
+for (const [a, b] of NO_BORDER) {
+  const ra = byName.get(a), rb = byName.get(b);
+  if (!ra || !rb) { console.warn('bad border', a, b); continue; }
+  ra.nb = ra.nb.filter((i) => i !== rb.id);
+  rb.nb = rb.nb.filter((i) => i !== ra.id);
+}
 for (const r of regions) if (!r.nb.length) console.warn(`! ${r.name} has no neighbours`);
 
+const seas = buildSeas({ land, regions, proj, width, height });
+regions.forEach((r) => { r.seas = seas.seaOf[r.id]; });
 const out = {
   width: Math.round(width), height: Math.round(height),
   land: land.map((p) => p.map((r) => r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)]))),
   regions, links,
+  seas: { zones: seas.zones, gates: seas.gates, borders: seas.borders, cell: seas.cell, grid: seas.grid },
 };
 fs.writeFileSync(new URL('../src/generated/campaign-map.json', import.meta.url), JSON.stringify(out));
 const pts = regions.reduce((s, r) => s + r.polys.reduce((t, p) => t + p.reduce((u, q) => u + q.length, 0), 0), 0);

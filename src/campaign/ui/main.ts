@@ -6,17 +6,20 @@ import {
   allied, armySize, atWar, collapseScore, createGame, ensureSupply, frozen, hostileUnits, limitAttackers, lineStrength, men, weather,
 } from '../game';
 import {
-  beginHuman, canOrder, candidates, declarable, endHuman, humanUp, orderAttack, orderBuildCorps, orderBuildFort,
-  orderAssign, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderMove, orderPromote, orderRail, orderRelieve, orderSack, orderShip, orderSkill, previewAttack, reach, runTurnAI,
-  shipTargets, stepAI,
+  beginHuman, canOrder, candidates, declarable, endHuman, humanUp, landTargets, orderAttack, orderBuildCorps, orderBuildFort,
+  orderAssign, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill,
+  previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI,
 } from '../turn';
+import {
+  NAVY, SEA_BORDERS, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
+} from '../navy';
 import { phaseFor } from '../ai';
 import { PRODUCTION, fortCost, income, isHome } from '../economy';
 import { loadGame, peekSave, saveGame } from '../save';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
 import { DIPLOMACY, TRACK_LABEL, canCourt, courtable, momentum, pcIncome, receptive, step, tradePartners } from '../diplomacy';
 import { bloc } from '../game';
-import { KIND, type BattleReport, type Corps, type Game, type General, type Kind, type Nation, type Region, type Skill } from '../types';
+import { KIND, type BattleReport, type Corps, type Fleet, type Game, type General, type Kind, type Nation, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -27,9 +30,21 @@ const ui = {
   picked: new Set<number>(),
   rail: false,
   ship: false,
+  /** Choosing an enemy coast for the picked corps to land on. */
+  land: false,
+  /** The sea being looked at, when no region is. */
+  sea: -1,
+  /** The fleet being given orders under the Navy tab. */
+  fleet: -1,
+  stance: 'patrol' as Stance,
+  /** Choosing a new home port for that fleet. */
+  rebase: false,
+  seenSea: 0,
+  /** A one-line answer to the last click, shown where the hint is. */
+  msg: '',
   /** False until a game has been started or resumed, so the title screen never overwrites a saved game. */
   live: false,
-  tab: 'region' as 'region' | 'build' | 'generals' | 'reel' | 'battles' | 'powers',
+  tab: 'region' as 'region' | 'build' | 'generals' | 'navy' | 'reel' | 'battles' | 'powers',
   view: { x: 380, y: 300, w: 620 },
   unread: 0,
   seenReports: 0,
@@ -43,6 +58,9 @@ const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 const natName = (id: string): string => g.nations[id]?.name ?? id;
 const date = (t: number): string => turnToDate(t).label;
+const capital = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
+/** Enemy coasts the picked corps could land on, worked out once each time the screen is drawn. */
+let lands: Region[] = [];
 
 function mix(a: string, b: string, t: number): string {
   const p = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
@@ -74,6 +92,43 @@ function icon(c: Corps): string {
   return `<svg width="34" height="24" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[c.nat].color}"/>${symbol(c.kind, 24, 15)}</svg>`;
 }
 
+// ---- Fleet symbols: a warship in profile, or a submarine for a flotilla with no surface ships
+
+const HULL = 'M-12 .5L-10 4H10L12.5 .5H6V-2H3V-4.5H-1V-2H-6V.5Z';
+const SUB = 'M-11 2.2Q-11 4.2-8 4.2H8Q11.5 4.2 11.5 2.2Q11.5 .2 8 .2H2.5V-3H-1.5V.2H-8Q-11 .2-11 2.2Z';
+
+function hullIcon(f: Fleet): string {
+  return `<svg width="34" height="24" viewBox="-14 -9 28 18" class="ctr"><path class="hull" d="${surfaceShips(f) ? HULL : SUB}" fill="${g.nations[f.nat].color}"/></svg>`;
+}
+
+/** The fleets on the map: one marker for each navy in each sea, and a smaller one for ships lying in harbour. */
+function fleetMarks(): string {
+  const groups = new Map<string, Fleet[]>();
+  for (const f of g.fleets) {
+    if (!shipCount(f.ships)) continue;
+    const key = atSea(f) ? `s:${f.zone}:${f.nat}:${f.stance}` : f.base >= 0 ? `p:${f.base}:${f.nat}` : `h:${f.home}:${f.nat}`;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(f);
+  }
+  const rows = new Map<string, number>();
+  for (const key of groups.keys()) { const k = key.split(':').slice(0, 2).join(':'); rows.set(k, (rows.get(k) ?? 0) + 1); }
+  const used = new Map<string, number>();
+  let out = '';
+  for (const [key, fs] of groups) {
+    const [where, idText] = key.split(':');
+    const id = Number(idText), slot = `${where}:${id}`;
+    const i = used.get(slot) ?? 0;
+    used.set(slot, i + 1);
+    const n = fs.reduce((t, f) => t + shipCount(f.ships), 0);
+    const shape = fs.some((f) => surfaceShips(f) > 0) ? HULL : SUB;
+    const picked = fs.some((f) => f.id === ui.fleet) && ui.tab === 'navy';
+    let x: number, y: number, small = false;
+    if (where === 'p') { const r = g.regions[id]; x = r.x + 16 + i * 12; y = r.y + 12; small = true; }
+    else { const z = g.seas[id]; x = z.x + (i - (rows.get(slot)! - 1) / 2) * 30; y = z.y + (where === 'h' ? 37 : 19); small = where === 'h'; }
+    out += `<g class="ctr flt${fs[0].stance === 'raid' ? ' raid' : ''}${small ? ' port' : ''}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})${small ? ' scale(.68)' : ''}">${picked ? '<circle class="fsel" r="17"/>' : ''}<path class="hull" d="${shape}" fill="${g.nations[fs[0].nat].color}"/><text x="0" y="11.5">${n}</text></g>`;
+  }
+  return out;
+}
+
 // ---- The page skeleton --------------------------------------------------------------------
 
 function mount(): void {
@@ -88,10 +143,10 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs><pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="labels"></g><g id="units"></g>
+          <g id="seas"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="labels"></g><g id="fleets"></g><g id="units"></g>
         </svg>
         <div class="hint" id="hint"></div>
-        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span></div>
+        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span></div>
         <div class="zoom"><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
       </div>
@@ -107,6 +162,14 @@ function mount(): void {
 }
 
 function drawStatic(): void {
+  $('#seas').innerHTML = SEA_BORDERS.map((b) => `<path class="seaborder" d="M${b.map((p) => `${p[0]} ${p[1]}`).join('L')}"/>`).join('')
+    + g.seas.map((z) => {
+      // Long names, and names in tight water, go on two lines.
+      const cut = z.narrow || z.name.length > 12 ? z.name.lastIndexOf(' ') : -1;
+      const lines = cut > 0 ? [z.name.slice(0, cut), z.name.slice(cut + 1)] : [z.name];
+      const step = z.narrow ? 9 : 11;
+      return `<text class="sealbl${z.narrow ? ' narrow' : ''}" y="${z.y - (lines.length - 1) * step / 2}">${lines.map((t, i) => `<tspan x="${z.x}" dy="${i ? step : 0}">${esc(t)}</tspan>`).join('')}</text>`;
+    }).join('');
   $('#land').innerHTML = `<path class="land" d="${pathOf(g.land)}"/>`;
   $('#regs').innerHTML = g.regions.map((r) => `<path class="reg" data-id="${r.id}" d="${pathOf(r.polys)}"/>`).join('');
 }
@@ -140,8 +203,17 @@ function refresh(): void {
   // Where the picked corps can go.
   let marks = '';
   const picked = pickedCorps();
-  if (ui.rail && picked.length) {
+  lands = picked.length && g.regions[picked[0].reg].port && g.nations[picked[0].nat].atWar.length ? landTargets(g, picked) : [];
+  if (!lands.length) ui.land = false;
+  const fl = ui.tab === 'navy' ? myFleet() : null;
+  if (!fl) ui.rebase = false;
+  if (fl) {
+    if (ui.rebase) for (const r of baseTargets(g, fl)) marks += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
+    else for (const z of fleetReach(g, fl)) marks += `<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
+  } else if (ui.rail && picked.length) {
     for (const r of railTargets(picked[0])) marks += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
+  } else if (ui.land && picked.length) {
+    for (const r of lands) marks += `<path class="mk hit" d="${pathOf(r.polys)}"/>`;
   } else if (ui.ship && picked.length) {
     const ports = new Set<number>();
     for (const c of picked) for (const r of shipTargets(g, c)) ports.add(r.id);
@@ -152,7 +224,9 @@ function refresh(): void {
     for (const [id, attack] of goes) marks += `<path class="mk ${attack ? 'hit' : 'move'}" d="${pathOf(g.regions[id].polys)}"/>`;
   }
   if (ui.sel >= 0) marks += `<path class="mk sel" d="${pathOf(g.regions[ui.sel].polys)}"/>`;
+  else if (ui.sea >= 0 && ui.tab === 'region') marks += `<circle class="mk seasel" cx="${g.seas[ui.sea].x}" cy="${g.seas[ui.sea].y + 9}" r="33"/>`;
   $('#marks').innerHTML = marks;
+  $('#fleets').innerHTML = fleetMarks();
 
   // Counters.
   let units = '';
@@ -219,7 +293,14 @@ function railTargets(c: Corps): Region[] {
 function hintText(): string {
   if (!g.human) return '';
   if (!humanUp(g)) return '';
+  if (ui.msg) return ui.msg;
   if (ui.tab === 'build') return 'Planning production: click one of your own home regions to raise troops or build works there.';
+  if (ui.tab === 'navy') {
+    const f = myFleet();
+    if (f && ui.rebase) return `New base for the ${f.name}: click any blue port. The fleet spends the month in harbour there.`;
+    return f ? `Click a ringed sea to send the ${f.name} there.` : 'Pick one of your fleets in the list to give it orders.';
+  }
+  if (ui.land) return 'Landing from the sea: click a red coast to see the odds.';
   if (ui.rail) return 'Rail move: click any blue region. It takes the whole month.';
   if (ui.ship) return 'Sea transport: click any blue port. It takes the whole month.';
   if (pickedCorps().length) return 'Click a green region to march there, or a red one to plan an attack.';
@@ -246,13 +327,13 @@ function drawBar(): void {
 }
 
 function drawTabs(): void {
-  const newB = g.reports.length - ui.seenReports;
+  const newB = g.reports.length - ui.seenReports + Math.max(0, g.seaReports.length - ui.seenSea);
   const t = (id: string, label: string, n = 0) => `<button class="tab${ui.tab === id ? ' on' : ''}" data-act="tab" data-tab="${id}">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
   const me = g.human && g.nations[g.human].alive ? g.human : null;
   const build = me ? t('build', 'Build') : '';
   // Generals with no corps, when there is a corps for them: a decision waiting for the player.
   const idle = me && vacant(g, me).length ? waiting(g, me).length : 0;
-  $('#tabs').innerHTML = t('region', 'Region') + build + t('generals', 'Generals', idle) + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
+  $('#tabs').innerHTML = t('region', 'Region') + build + t('generals', 'Generals', idle) + t('navy', 'Navy') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
 }
 
 function advice(): string {
@@ -261,14 +342,14 @@ function advice(): string {
   const ph = phaseFor(g, me);
   if (!ph) return '';
   const list = (a?: string[]) => (a ?? []).slice(0, 7).join(', ');
-  if (ph.posture === 'attack') return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> ${ph.declare?.length ? `Declare war on ${ph.declare.map(natName).join(', ')}. ` : ''}Objectives, in order: ${esc(list(ph.objectives))}. You are free to do something else.</div>`;
+  if (ph.posture === 'attack') return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> ${ph.declare?.length ? `Declare war on ${ph.declare.map(natName).join(', ')}. ` : ''}Objectives, in order: ${esc(list(ph.objectives))}.${ph.landings?.length ? ` From the sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''} You are free to do something else.</div>`;
   if (ph.posture === 'redeploy') return `<div class="note"><b>History's plan this month.</b> Move the army west by rail and wait for spring. Assembly areas: ${esc(list(ph.assembly))}.</div>`;
-  return `<div class="note"><b>History's plan this month.</b> Hold the line and keep a reserve near the capital.</div>`;
+  return `<div class="note"><b>History's plan this month${ph.name ? `: ${esc(ph.name)}` : ''}.</b> Hold the line and keep a reserve near the capital.${ph.landings?.length ? ` By sea: ${esc(ph.landings.map((l) => `${l.corps} to ${l.to[0]}`).join(', '))}.` : ''}</div>`;
 }
 
 function scopeNote(): string {
   if (g.turn < STORY_ENDS) return '';
-  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the spring of 1942. You can play on, but the computer's nations will only hold what they have. The war at sea and in the air, research and the later campaigns come in later phases.</div>`;
+  return `<div class="note"><b>This is as far as the prototype's story goes.</b> History's plans cover the land war from September 1939 to the spring of 1942. You can play on, but the computer's nations will only hold what they have. The war in the air, research, shipbuilding and the later campaigns come in later phases.</div>`;
 }
 
 function corpsRow(c: Corps, mine: boolean): string {
@@ -295,21 +376,28 @@ function corpsRow(c: Corps, mine: boolean): string {
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>`;
 }
 
+let paneKey = '';
+
 function drawPane(): void {
   const pane = $('#pane');
+  // A new subject starts at the top of the panel; a redraw of the same one keeps its place.
+  const key = `${ui.tab}:${ui.tab === 'region' ? `${ui.sel}:${ui.sea}` : ''}`;
+  if (key !== paneKey) { paneKey = key; pane.scrollTop = 0; }
   if (ui.tab === 'build' && !(g.human && g.nations[g.human].alive)) ui.tab = 'region';
   if (ui.tab === 'region') pane.innerHTML = regionPane();
   else if (ui.tab === 'build') pane.innerHTML = buildPane();
   else if (ui.tab === 'generals') pane.innerHTML = generalsPane();
+  else if (ui.tab === 'navy') pane.innerHTML = navyPane();
   else if (ui.tab === 'reel') pane.innerHTML = reelPane();
   else if (ui.tab === 'battles') pane.innerHTML = battlesPane();
   else pane.innerHTML = powersPane();
 }
 
 function regionPane(): string {
+  if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${scopeNote()}${advice()}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li>' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li>${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Your factories earn production points every month. Open <b>Build</b> to raise new corps or fortify a region.</li><li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li>' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -317,6 +405,7 @@ function regionPane(): string {
   const tags: string[] = [];
   if (r.cap) tags.push('<span class="tag good">Capital</span>');
   if (r.port) tags.push('<span class="tag">Port</span>');
+  if (r.seas.length) tags.push(`<span class="tag">Coast: ${r.seas.map((z) => esc(g.seas[z].name)).join(', ')}</span>`);
   if (r.fort) tags.push(`<span class="tag">Fortified, level ${r.fort.lv}, facing ${r.fort.vs.map((v) => g.nations[v]?.adj ?? v).join(' and ')} ground</span>`);
   if (me && g.nations[me].alive && allied(g, me, r.ctrl)) tags.push(g.supply[me]?.[r.id] ? '<span class="tag good">In your supply net</span>' : '<span class="tag bad">No supply line to here</span>');
   const mineHere = r.units.filter((c) => canOrder(g, c));
@@ -326,7 +415,7 @@ function regionPane(): string {
     const canRail = picked.some((c) => c.ap >= 4);
     const canShip = picked.some((c) => shipTargets(g, c).length > 0);
     const canEvac = picked.some((c) => g.nations[c.nat].seaSupply && r.port && r.owner !== c.nat);
-    acts = `<div class="acts">${canRail ? `<button class="btn small${ui.rail ? ' on' : ''}" data-act="rail">Rail move</button>` : ''}${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${canEvac ? '<button class="btn small" data-act="evac" title="An emergency lift home. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>' : ''}${picked.length === 1 ? (picked[0].general !== null ? `<button class="btn small" data-act="general" data-id="${picked[0].general}">General's record</button>` : `<button class="btn small" data-act="appoint" data-id="${picked[0].id}">Appoint a general</button>`) : ''}<button class="btn small" data-act="unpick">Stand down</button></div>`;
+    acts = `<div class="acts">${canRail ? `<button class="btn small${ui.rail ? ' on' : ''}" data-act="rail">Rail move</button>` : ''}${canShip ? `<button class="btn small${ui.ship ? ' on' : ''}" data-act="ship">Ship by sea</button>` : ''}${lands.length ? `<button class="btn small${ui.land ? ' on' : ''}" data-act="land" title="Land these corps on an enemy coast.">Invade by sea</button>` : ''}${canEvac ? '<button class="btn small" data-act="evac" title="An emergency lift home. The corps leaves a quarter of its strength behind.">Evacuate by sea</button>' : ''}${picked.length === 1 ? (picked[0].general !== null ? `<button class="btn small" data-act="general" data-id="${picked[0].general}">General's record</button>` : `<button class="btn small" data-act="appoint" data-id="${picked[0].id}">Appoint a general</button>`) : ''}<button class="btn small" data-act="unpick">Stand down</button></div>`;
   } else if (mineHere.some((c) => c.ap > 0)) {
     acts = `<div class="acts"><button class="btn small" data-act="pickall">Select all here</button></div>`;
   }
@@ -523,11 +612,27 @@ function verdictFor(rep: BattleReport): { text: string; cls: string } {
   return { text: flip[rep.level] ?? rep.level, cls: rep.taken ? 'loss' : 'win' };
 }
 
+function seaVerdict(r: SeaReport): { text: string; cls: string } {
+  const me = g.human;
+  const defSide = me !== null && r.def.some((u) => u.nat === me) && !r.att.some((u) => u.nat === me);
+  if (!defSide) return { text: r.level, cls: r.won ? 'win' : 'loss' };
+  const flip: Record<string, string> = { 'Decisive victory': 'Decisive defeat', 'Close victory': 'Close defeat', 'Close defeat': 'Close victory', 'Decisive defeat': 'Decisive victory' };
+  return { text: flip[r.level] ?? r.level, cls: r.won ? 'loss' : 'win' };
+}
+
+function seaRow(r: SeaReport): string {
+  const v = seaVerdict(r);
+  return `<button class="brow" data-act="seareport" data-id="${r.id}"><b>${esc(r.zoneName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)} · fleet action, ${g.nations[r.attNat].adj} against ${g.nations[r.defNat].adj} ships</span></button>`;
+}
+
 function battlesPane(): string {
-  if (!g.reports.length) return '<h2>Battles</h2><div class="empty">No battles yet. Every battle is settled from its Battle Ticket and filed here.</div>';
-  let out = '<h2>Battles</h2><p class="sub">Open any battle to see its Battle Ticket: what the campaign map fed into the fight.</p><div style="height:8px"></div>';
-  for (let i = g.reports.length - 1; i >= Math.max(0, g.reports.length - 80); i--) {
-    const r = g.reports[i];
+  if (!g.reports.length && !g.seaReports.length) return '<h2>Battles</h2><div class="empty">No battles yet. Every battle is settled from its Battle Ticket and filed here.</div>';
+  let out = '<h2>Battles</h2><p class="sub">Open any battle, on land or at sea, to see its Battle Ticket: what the campaign map fed into the fight.</p><div style="height:8px"></div>';
+  // Newest first. A month's fleet actions are fought after its land battles.
+  let s = g.seaReports.length - 1;
+  for (let i = g.reports.length - 1, shown = 0; (i >= 0 || s >= 0) && shown < 90; shown++) {
+    if (s >= 0 && (i < 0 || g.seaReports[s].turn >= g.reports[i].turn)) { out += seaRow(g.seaReports[s--]); continue; }
+    const r = g.reports[i--];
     const v = verdictFor(r);
     out += `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week} · ${g.nations[r.attNat].adj} attack on ${g.nations[r.defNat].adj} forces</span></button>`;
   }
@@ -580,6 +685,167 @@ function trackPane(list: Nation[]): string {
   return out;
 }
 
+// ---- The war at sea -----------------------------------------------------------------------
+
+function whereFleet(f: Fleet): string {
+  if (!atSea(f)) return `In harbour at ${esc(f.port)}`;
+  return `${f.stance === 'raid' ? 'Raiding shipping in' : 'Patrolling'} the ${esc(g.seas[f.zone].name)} from ${esc(f.port)}`;
+}
+
+function fleetRow(f: Fleet, mine: boolean, whose = false): string {
+  const adm = f.admiral ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(f.admiral.name)} <span class="lvl" title="Level ${f.admiral.level} admiral">${f.admiral.level}</span></span>` : '';
+  const lost = shipCount(f.lost);
+  const el = mine ? 'button' : 'div';
+  return `<${el} class="corps fleet${mine && ui.fleet === f.id ? ' pick' : ''}" ${mine ? `data-act="fleet" data-id="${f.id}"` : ''}>
+    ${hullIcon(f)}<span class="nm">${esc(f.name)}${adm}</span><span></span>
+    <span class="meta">${whose ? `${g.nations[f.nat].adj} · ` : ''}${whereFleet(f)}</span>
+    <span class="meta">${esc(capital(shipList(f.ships)))}${lost ? ` · lost so far: ${esc(shipList(f.lost))}` : ''}</span>
+    <span class="bars"><span>Readiness</span><span class="meter"><i class="${f.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(f.ready * 100)}%"></i></span></span></${el}>`;
+}
+
+/** The orders the player can give the fleet that is picked. */
+function fleetOrders(f: Fleet): string {
+  const rows = fleetReach(g, f).map((z) => {
+    const them = seaSide(g, z, f.nat, true), us = seaSide(g, z, f.nat, false);
+    const here = atSea(f) && f.zone === z;
+    const foe = them.total >= 1 ? `Enemy strength ${num(them.total)}${them.air > them.ships ? ', mostly aircraft' : ''}` : 'No enemy seen';
+    return `<button class="pickrow${here ? ' pick' : ''}" data-act="sail" data-zone="${z}"><span class="grow"><b>${esc(g.seas[z].name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${foe} · your side ${num(us.total)}</span></span>${here ? '<span class="tag good">Here now</span>' : ''}</button>`;
+  }).join('');
+  return `<div class="orders">
+    <div class="acts"><button class="btn small${ui.stance === 'patrol' ? ' on' : ''}" data-act="stance" data-stance="patrol" title="Hold the sea: bring enemy fleets to battle, guard convoys and troopships.">Patrol</button><button class="btn small${ui.stance === 'raid' ? ' on' : ''}" data-act="stance" data-stance="raid" title="Hunt merchant ships and keep clear of the enemy's fleet.">Raid shipping</button><button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="A fleet in harbour refits quickly.">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button></div>
+    <p class="sub" style="margin:8px 0 6px">Fleet strength ${num(fleetPower(f))}. It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${ui.stance === 'raid' ? 'raid shipping' : 'patrol'} there.</p>${rows}</div>`;
+}
+
+/** The convoy war and the ore traffic, for whoever has a stake in them. */
+function seaNotes(): string {
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  let out = '';
+  for (const route of NAVY.convoys) {
+    const m = g.convoys[route.id];
+    if (!m || (me && me !== route.to && !atWar(g, me, route.to))) continue;
+    const share = m.raid + m.guard > 0 ? m.raid / (m.raid + m.guard * NAVY.convoy.escortWorth) : 0;
+    out += `<div class="note"><b>${esc(capital(route.name))}.</b> ${num(m.tons)} tons of shipping sunk ${m.turn === g.turn ? 'this month' : 'last month'}, cutting ${g.nations[route.to].adj} production by ${(m.share * 100).toFixed(m.share < 0.095 ? 1 : 0)}%. ${m.subsLost} submarine${m.subsLost === 1 ? '' : 's'} and ${m.escortsLost} escort${m.escortsLost === 1 ? '' : 's'} lost. ${num(m.total)} tons since the war began.
+      <div class="oddsbar" title="Raiders against escorts"><i style="width:${Math.round(share * 100)}%;background:var(--red)"></i><i style="flex:1;background:#6f9fd0"></i></div><span style="font-size:11.5px">Raiders ${num(m.raid)} against escorts ${num(m.guard)}. More escorts and patrolling fleets on the route cut the losses.</span></div>`;
+  }
+  const ore = oreRoute(g);
+  const to = NAVY.ore.to;
+  if (ore !== 'none' && (!me || me === to || atWar(g, me, to))) {
+    const text = ore === 'baltic' ? `Swedish iron ore is reaching ${natName(to)} across the Baltic.` : ore === 'narvik' ? `The Baltic ports are frozen. Swedish iron ore is reaching ${natName(to)} through ${NAVY.ore.winterPort}.` : `Swedish iron ore is not getting through. ${natName(to)} loses ${Math.round(NAVY.ore.share * 100)}% of its production until the route is open again.`;
+    out += `<div class="note"${ore === 'cut' ? ' style="border-left-color:var(--red)"' : ''}><b>The ore traffic.</b> ${esc(text)}</div>`;
+  }
+  return out;
+}
+
+function navyPane(): string {
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  const afloat = (f: Fleet): boolean => shipCount(f.ships) > 0;
+  const size = (a: Fleet, b: Fleet): number => fleetPower(b) - fleetPower(a);
+  let out = '';
+  if (me) {
+    const mine = fleetsOf(g, me).filter(afloat);
+    const n = g.nations[me];
+    const order = humanUp(g);
+    out += `<h2>The ${n.adj} navy</h2><p class="sub">A fleet holds a sea by patrolling it. Where one side is much the stronger, that sea is closed to the other's troopships and supply ships. Ships at sea wear down, so bring a fleet home to refit after a fight.</p>
+      <div class="facts"><div class="fact"><span>Ships</span><b>${num(mine.reduce((t, f) => t + shipCount(f.ships), 0))}</b></div><div class="fact"><span>Fleets at sea</span><b>${mine.filter(atSea).length} of ${mine.length}</b></div><div class="fact"><span>Sea lift left</span><b>${n.sealift > 0 ? `${liftLeft(g, me)} corps` : 'None'}</b></div></div>`;
+    if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> The fleet stays in harbour until the nation is at war.</div>`;
+    out += seaNotes();
+    out += `<h3>Your fleets</h3>${mine.length ? mine.map((f) => fleetRow(f, order && n.atWar.length > 0) + (order && ui.fleet === f.id && n.atWar.length ? fleetOrders(f) : '')).join('') : '<div class="empty">No ships under your flag.</div>'}`;
+    const friends = g.fleets.filter((f) => f.nat !== me && afloat(f) && allied(g, f.nat, me)).sort(size);
+    const foes = g.fleets.filter((f) => afloat(f) && atWar(g, f.nat, me)).sort(size);
+    if (friends.length) out += `<h3>Allied fleets</h3>${friends.map((f) => fleetRow(f, false, true)).join('')}`;
+    if (foes.length) out += `<h3>Enemy fleets</h3>${foes.map((f) => fleetRow(f, false, true)).join('')}`;
+    return out;
+  }
+  out += `<h2>The war at sea</h2><p class="sub">A fleet holds a sea by patrolling it. Where one side is much the stronger, that sea is closed to the other's troopships and supply ships. Click any sea on the map to see who holds it.</p>${seaNotes()}`;
+  const war = g.fleets.filter((f) => afloat(f) && g.nations[f.nat].atWar.length > 0);
+  const nats = [...new Set(war.map((f) => f.nat))].sort((a, b) => war.filter((f) => f.nat === b).reduce((t, f) => t + fleetPower(f), 0) - war.filter((f) => f.nat === a).reduce((t, f) => t + fleetPower(f), 0));
+  for (const nat of nats) out += `<h3>${esc(natName(nat))}</h3>${war.filter((f) => f.nat === nat).map((f) => fleetRow(f, false)).join('')}`;
+  const peace = g.fleets.filter((f) => afloat(f) && !g.nations[f.nat].atWar.length).sort(size);
+  if (peace.length) out += `<h3>Navies at peace</h3>${peace.map((f) => fleetRow(f, false, true)).join('')}`;
+  return out;
+}
+
+/** One sea: who holds it, which fleets are in it, and what it would cost to cross. */
+function seaPane(): string {
+  const z = g.seas[ui.sea];
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  const afloat = (f: Fleet): boolean => shipCount(f.ships) > 0;
+  const here = g.fleets.filter((f) => f.zone === z.id && atSea(f) && afloat(f));
+  const docked = g.fleets.filter((f) => f.home === z.id && !atSea(f) && afloat(f));
+  let head: string;
+  if (me && g.nations[me].atWar.length) {
+    const us = seaSide(g, z.id, me, false), them = seaSide(g, z.id, me, true);
+    const loss = Math.round(seaRisk(g, z.id, me) * NAVY.intercept.loss * 100);
+    head = `<div class="sub">${closedTo(g, z.id, me) ? 'Closed to your troopships and supply ships: the enemy is much the stronger here.' : them.total >= 1 ? 'Contested, but still open to your shipping.' : 'Open to your shipping.'}</div>
+      <div class="facts"><div class="fact"><span>Your side</span><b>${num(us.total)}</b></div><div class="fact"><span>The enemy</span><b>${num(them.total)}</b></div><div class="fact"><span>Lost crossing</span><b>${loss ? `about ${loss}%` : 'None'}</b></div></div>
+      <p class="sub" style="margin-top:6px">Strength counts the fleets at sea here and the aircraft that can reach this sea from the coasts each side holds${us.air + them.air >= 1 ? `: yours ${num(us.air)}, the enemy's ${num(them.air)}` : ''}. The last figure is the share of a corps likely to be lost if it crossed this sea now.</p>`;
+  } else head = `<div class="sub">${z.coast.length} coastal region${z.coast.length === 1 ? '' : 's'} on this sea.</div>`;
+  let straits = '';
+  for (const gt of g.gates) {
+    if (gt.a !== z.id && gt.b !== z.id) continue;
+    const other = g.seas[gt.a === z.id ? gt.b : gt.a];
+    const holder = gt.region >= 0 ? g.regions[gt.region].ctrl : gt.nation!;
+    straits += `<div class="note"><b>${esc(capital(gt.name))}.</b> The way to the ${esc(other.name)}, held by ${esc(natName(holder))}.${me ? ` ${canPass(g, gt.a, gt.b, me) ? 'Open to your ships.' : 'Closed to your ships.'}` : ''}</div>`;
+  }
+  return `<h2>${esc(z.name)}</h2>${head}${straits}
+    <h3>Fleets at sea here</h3>${here.length ? here.map((f) => fleetRow(f, false, true)).join('') : '<div class="empty">No fleet at sea here.</div>'}
+    ${docked.length ? `<h3>In harbour on this sea</h3>${docked.map((f) => fleetRow(f, false, true)).join('')}` : ''}
+    ${me && humanUp(g) ? '<p class="sub" style="margin-top:10px">To send a fleet here, open <b style="color:var(--ink)">Navy</b>, pick the fleet, then click this sea.</p>' : ''}`;
+}
+
+function seaReportCard(r: SeaReport): string {
+  const v = seaVerdict(r);
+  const count = (ss: SeaSide[], k: 'ships' | 'sunk'): number => ss.reduce((n, x) => n + shipCount(x[k]), 0);
+  const side = (ss: SeaSide[]): string => `<div class="big">${count(ss, 'ships')}</div><small>ships in ${ss.length} fleet${ss.length > 1 ? 's' : ''} · lost ${count(ss, 'sunk')}</small>`;
+  const list = (ss: SeaSide[]): string => `<ul class="ulist">${ss.map((x) => `<li><span>${esc(x.fleet)} <span style="color:var(--ink-3)">(${g.nations[x.nat].adj}${x.admiral ? `, ${esc(x.admiral)}` : ''})</span><br><span style="color:var(--ink-2)">${esc(capital(shipList(x.ships)))}</span></span><span>${shipCount(x.sunk) ? `lost ${esc(shipList(x.sunk))}` : 'no ships lost'}</span></li>`).join('')}</ul>`;
+  const beaten = g.nations[r.won ? r.defNat : r.attNat].adj;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · fleet action · ${date(r.turn)}</div><h2>Battle of the ${esc(r.zoneName)}</h2></header>
+    <div class="body">
+      <div class="verdict ${v.cls}">${v.text}</div>
+      <div class="sub">The ${beaten} ships broke off and made for port. Final odds ${r.odds.toFixed(2)} to 1.</div>
+      <div class="vs"><div><h4><span class="chip" style="background:${g.nations[r.attNat].color}"></span> ${natName(r.attNat)} offering battle</h4>${side(r.att)}</div><div class="mid">vs</div><div class="r"><h4>${natName(r.defNat)} <span class="chip" style="background:${g.nations[r.defNat].color}"></span></h4>${side(r.def)}</div></div>
+      <h3>What the campaign map fed into the battle</h3>
+      <table class="ticket">${r.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>
+      <h3>Offering battle</h3>${list(r.att)}<h3>Brought to battle</h3>${list(r.def)}
+      <div class="note" style="margin-top:14px"><b>Auto-resolved.</b> A fleet action is settled from its ticket in the same way as a land battle, so the full game can hand it to a 3D sea battle and take the same kind of result back.</div>
+    </div><footer><button class="btn" data-act="showsea" data-id="${r.zone}">Show on map</button><button class="btn go" data-act="close">Close</button></footer>`;
+}
+
+/** The plan for a landing from the sea: the crossing, the odds on the beach, and the order to go. */
+function landingCard(): string {
+  const m = ui.modal!;
+  const target = g.regions[m.target];
+  const cs = g.corps.filter((c) => m.corps.has(c.id));
+  const plan = previewLanding(g, cs, target.id);
+  let body: string;
+  if (plan.why) body = `<div class="empty">${esc(plan.why)}</div>`;
+  else {
+    const a = plan.assess;
+    const route = plan.path.map((z) => g.seas[z].name).join(', then the ');
+    const loss = Math.round(plan.risk * NAVY.intercept.loss * 100);
+    const crossing = plan.surprise
+      ? `War has only just been declared, so the enemy is caught unready: no fleet can stop the crossing this month, and the troops go ashore at full strength.`
+      : loss > 0 ? `Enemy ships and aircraft are at work on the way. Expect to lose about ${loss}% of the force at sea.` : 'No enemy ship or aircraft is in a position to stop the crossing.';
+    let odds = `<div class="verdict win" style="font-size:24px">The coast is undefended</div><div class="sub">The force walks ashore and takes ${esc(target.name)}.</div>`;
+    if (a) {
+      const p = Math.max(0, Math.min(1, (1.2 - 1.2 / a.odds) / 0.4));
+      const share = a.A / (a.A + a.D);
+      const word = p >= 0.95 ? 'Victory is all but certain' : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : 'This landing will fail';
+      odds = `<div class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}" style="font-size:24px">${word}</div>
+        <div class="oddsbar"><i style="width:${Math.round(share * 100)}%;background:${g.nations[g.human!].color}"></i><i style="flex:1;background:${g.nations[a.defenders[0].nat].color}"></i></div>
+        <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${Math.round(p * 100)}% chance to take ${esc(target.name)}${plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(NAVY.landing.assault * 100)}%`}</div>`;
+    }
+    body = `${odds}
+      <h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>
+      ${a ? `<h3>Battle Ticket</h3><table class="ticket">${a.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>` : ''}
+      <h3>Going ashore</h3>${cs.map((c) => `<div class="pickrow pick">${icon(c)}<span class="grow"><b>${esc(c.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[c.reg].name)} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span></span></div>`).join('')}
+      <div class="note"><b>Once ashore</b> the force is supplied through a port you hold on a sea the enemy has not closed. If your navy loses that sea, the troops are cut off.</div>`;
+  }
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Landing from the sea · ${date(g.turn)}</div><h2>Landing at ${esc(target.name)}</h2></header>
+    <div class="body">${body}</div>
+    <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="doland" ${plan.why ? 'disabled' : ''}>Land the troops</button></footer>`;
+}
+
 // ---- Modals -------------------------------------------------------------------------------
 
 function openModal(m: typeof ui.modal): void {
@@ -594,8 +860,14 @@ function openModal(m: typeof ui.modal): void {
     if (!rep) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = reportCard(rep);
   }
+  else if (m.kind === 'seareport') {
+    const rep = g.seaReports.find((r) => r.id === m.id);
+    if (!rep) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = seaReportCard(rep);
+  }
+  else if (m.kind === 'landing') card.innerHTML = landingCard();
   else if (m.kind === 'attack') card.innerHTML = attackCard();
-  else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports);
+  else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
   else if (m.kind === 'general') {
     const x = g.generals[m.id];
@@ -615,14 +887,14 @@ function startCard(): string {
   const saved = peekSave(readSave() ?? '');
   const resume = saved ? `<button class="sidebtn wide resume" data-act="continue"><b>Continue your campaign</b><span>${saved.human ? `${esc(natName(saved.human))}, ${date(saved.turn)}` : `Watching history, ${date(saved.turn)}`}. Saved in this browser.</span></button>` : '';
   return `<header><div class="kick">Phase 1 prototype · campaign layer</div><h2>Theater Command 1939 to 1945</h2></header>
-    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe in ${g.regions.length} regions, monthly turns, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan.</p>
+    <div class="body"><p class="lead">This is the strategy layer of the game: a map of Europe in ${g.regions.length} regions and ${g.seas.length} seas, monthly turns, armies and fleets, and battles settled from a <b>Battle Ticket</b>. Pick where to start and which side to play, or watch the computer play out history's plan.</p>
     ${resume ? `<div class="sides">${resume}</div>` : ''}
     <h3>September 1939 · The war begins</h3>
     <div class="sides">
       ${side(null, 'Watch history unfold', 'Every nation follows its plan. Press Play and watch Poland, then the West, then the East.', true)}
       ${side('GER', 'Germany', 'On the attack from the first day. The hardest plan to pull off on schedule.')}
       ${side('FRA', 'France', 'The Maginot Line, a large army, and a slow command. Can you keep Paris?')}
-      ${side('UK', 'United Kingdom', 'A small expeditionary force and the sea at your back.')}
+      ${side('UK', 'United Kingdom', 'A small army, the largest navy in the world, and convoys to keep alive.')}
       ${side('POL', 'Poland', 'Outnumbered and nearly surrounded. Hold as long as you can.')}
     </div>
     <h3>June 1941 · Barbarossa</h3>
@@ -631,7 +903,7 @@ function startCard(): string {
       ${side('GER', 'Germany', 'Three army groups on the frontier. Reach Moscow before the snow, or outrun your supplies trying.', false, 22)}
       ${side('SOV', 'Soviet Union', 'The frontier armies are about to be hit. Trade space for time until the reserves and the winter arrive.', false, 22)}
     </div>
-    <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
+    <ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b> and send your fleets out under <b>Navy</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol></div>`;
 }
 
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea' };
@@ -675,14 +947,15 @@ function attackCard(): string {
     <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="attack" ${a ? '' : 'disabled'}>Attack</button></footer>`;
 }
 
-function newsCard(from: number, repFrom: number): string {
+function newsCard(from: number, repFrom: number, seaFrom: number): string {
   const hs = g.headlines.slice(from);
   const me = g.human;
   const reps = g.reports.slice(repFrom).filter((r) => me && (r.attackers.some((u) => u.nat === me) || r.defenders.some((u) => u.nat === me)));
-  const all = g.reports.length - repFrom;
+  const seas = g.seaReports.slice(seaFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
+  const all = g.reports.length - repFrom + (g.seaReports.length - seaFrom);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Dispatches</div><h2>${date(g.turn)}</h2></header>
     <div class="body">${hs.length ? `<div class="reel">${hs.map((h) => `<p class="${h.kind}"><span class="wk">${date(h.turn).split(' ')[0]} wk ${h.week}</span>${esc(h.text)}</p>`).join('')}</div>` : '<p class="lead">A quiet month. No news of note.</p>'}
-    ${reps.length ? `<h3>Battles your forces fought</h3>${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
+    ${reps.length || seas.length ? `<h3>Battles your forces fought</h3>${seas.map(seaRow).join('')}${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
     ${all ? `<p class="sub" style="margin-top:10px">${all} battle${all > 1 ? 's were' : ' was'} fought across the map. They are filed under Battles.</p>` : ''}</div>
     <footer><button class="btn go" data-act="close">${me && humanUp(g) ? 'Give orders' : 'Continue'}</button></footer>`;
 }
@@ -705,6 +978,7 @@ function newGame(human: string | null, seed?: number, from = 1): void {
   g.human = human;
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = from > 1 ? g.reports.length : 0; ui.flash = [];
+  ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = from > 1 ? g.seaReports.length : 0;
   drawStatic();
   const focus = from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: human === 'GER' || from > 1 ? 640 : 600 };
@@ -720,6 +994,7 @@ function continueGame(): boolean {
   g = loaded;
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = g.reports.length; ui.flash = [];
+  ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = g.seaReports.length;
   drawStatic();
   const me = g.human;
   const cap = me ? g.nations[me].capital : -1;
@@ -731,8 +1006,8 @@ function continueGame(): boolean {
 }
 
 /** Lets the computer play until it is the player's month again. */
-function advanceToHuman(show: boolean): void {
-  const hFrom = g.headlines.length, rFrom = g.reports.length;
+function advanceToHuman(show: boolean, since?: { h: number; r: number; s: number }): void {
+  const hFrom = since?.h ?? g.headlines.length, rFrom = since?.r ?? g.reports.length, sFrom = since?.s ?? g.seaReports.length;
   const before = g.regions.map((r) => r.ctrl);
   let guard = 0;
   while (!humanUp(g) && guard++ < 80) {
@@ -742,17 +1017,17 @@ function advanceToHuman(show: boolean): void {
   if (humanUp(g)) beginHuman(g);
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
   ui.unread += g.headlines.length - hFrom;
-  ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false;
+  ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = '';
   refresh();
   if (g.human && !g.nations[g.human].alive) {
     const lost = g.human;
     g.human = null;
     refresh();
-    openModal({ kind: 'news', from: hFrom, reports: rFrom });
+    openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom });
     $('#card').querySelector('.kick')!.textContent = `${natName(lost)} has fallen. The war goes on without you.`;
     return;
   }
-  if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom });
+  if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom });
 }
 
 function nextMonth(): void {
@@ -780,6 +1055,43 @@ function focusOn(ids: number[]): void {
   applyView();
 }
 
+function focusOnPoint(x: number, y: number): void {
+  const svg = $('#map');
+  const a = svg.clientHeight / Math.max(1, svg.clientWidth);
+  const w = Math.max(ui.view.w, 520);
+  ui.view = { x: x - w / 2, y: y - (w * a) / 2, w };
+  applyView();
+}
+
+/** Where on the map a point of the screen falls. */
+function mapPoint(cx: number, cy: number): { x: number; y: number } {
+  const rect = $('#map').getBoundingClientRect();
+  const k = ui.view.w / Math.max(1, rect.width);
+  return { x: ui.view.x + (cx - rect.left) * k, y: ui.view.y + (cy - rect.top) * k };
+}
+
+/** The player's fleet being given orders, if it is still theirs to order. */
+function myFleet(): Fleet | null {
+  if (ui.fleet < 0 || !humanUp(g)) return null;
+  const f = g.fleets.find((x) => x.id === ui.fleet);
+  return f && f.nat === g.human && shipCount(f.ships) > 0 ? f : null;
+}
+
+function onSea(z: number): void {
+  ui.flash = [];
+  ui.msg = '';
+  const fl = ui.tab === 'navy' ? myFleet() : null;
+  if (fl) {
+    if (ui.rebase) ui.msg = 'A base has to be a port: click one of the blue regions.';
+    else if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`;
+    refresh();
+    return;
+  }
+  ui.sea = z; ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = false;
+  ui.tab = 'region';
+  refresh();
+}
+
 function stopAuto(): void {
   if (ui.auto) { clearInterval(ui.auto); ui.auto = 0; }
 }
@@ -791,6 +1103,7 @@ function onClick(e: MouseEvent): void {
   if (!t) { if (e.target === $('#veil') && ui.modal && ui.modal.kind !== 'start') openModal(null); return; }
   const act = t.dataset.act!;
   const id = Number(t.dataset.id);
+  ui.msg = '';
   switch (act) {
     case 'start': openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1)); break;
     case 'continue': if (continueGame()) openModal(null); else openModal({ kind: 'start' }); break;
@@ -799,7 +1112,8 @@ function onClick(e: MouseEvent): void {
     case 'tab':
       ui.tab = t.dataset.tab as typeof ui.tab;
       if (ui.tab === 'reel') ui.unread = 0;
-      if (ui.tab === 'battles') ui.seenReports = g.reports.length;
+      if (ui.tab === 'battles') { ui.seenReports = g.reports.length; ui.seenSea = g.seaReports.length; }
+      ui.rail = ui.ship = ui.land = ui.rebase = false;
       refresh();
       break;
     case 'zin': zoomBy(0.7); break;
@@ -809,15 +1123,60 @@ function onClick(e: MouseEvent): void {
       if (ui.auto) stopAuto(); else { nextMonth(); ui.auto = window.setInterval(nextMonth, 1500); }
       drawBar();
       break;
-    case 'end': endHuman(g); advanceToHuman(true); break;
+    case 'end': {
+      // The player's own fleet actions are fought as the month closes, so the dispatches start from here.
+      const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length };
+      endHuman(g);
+      advanceToHuman(true, since);
+      break;
+    }
     case 'pick': {
       if (ui.picked.has(id)) ui.picked.delete(id); else ui.picked.add(id);
-      ui.rail = ui.ship = false; refresh(); break;
+      ui.rail = ui.ship = ui.land = false; refresh(); break;
     }
     case 'pickall': selectRegion(ui.sel); refresh(); break;
-    case 'unpick': ui.picked.clear(); ui.rail = ui.ship = false; refresh(); break;
-    case 'rail': ui.rail = !ui.rail; ui.ship = false; refresh(); break;
-    case 'ship': ui.ship = !ui.ship; ui.rail = false; refresh(); break;
+    case 'unpick': ui.picked.clear(); ui.rail = ui.ship = ui.land = false; refresh(); break;
+    case 'rail': ui.rail = !ui.rail; ui.ship = ui.land = false; refresh(); break;
+    case 'ship': ui.ship = !ui.ship; ui.rail = ui.land = false; refresh(); break;
+    case 'land': ui.land = !ui.land; ui.rail = ui.ship = false; refresh(); break;
+    case 'fleet': {
+      const f = g.fleets.find((x) => x.id === id);
+      ui.fleet = ui.fleet === id ? -1 : id;
+      ui.rebase = false;
+      if (f && ui.fleet === id) ui.stance = atSea(f) ? f.stance : f.duty === 'raid' ? 'raid' : 'patrol';
+      refresh(); break;
+    }
+    case 'stance': {
+      ui.stance = t.dataset.stance as Stance;
+      const f = myFleet();
+      if (f && atSea(f)) orderFleet(g, f.id, f.zone, ui.stance);
+      refresh(); break;
+    }
+    case 'sail': {
+      const f = myFleet();
+      if (f && !orderFleet(g, f.id, Number(t.dataset.zone), ui.stance)) ui.msg = `The ${f.name} cannot reach that sea.`;
+      ui.rebase = false;
+      refresh(); break;
+    }
+    case 'toport': { const f = myFleet(); if (f) orderFleet(g, f.id, f.home, 'port'); ui.rebase = false; refresh(); break; }
+    case 'rebase': ui.rebase = !ui.rebase; refresh(); break;
+    case 'showsea': openModal(null); ui.sea = id; ui.sel = -1; ui.picked.clear(); ui.tab = 'region'; focusOnPoint(g.seas[id].x, g.seas[id].y); refresh(); break;
+    case 'seareport': openModal({ kind: 'seareport', id }); break;
+    case 'doland': {
+      const m = ui.modal!;
+      const h = g.headlines.length;
+      const before = g.regions.map((r) => r.ctrl);
+      const res = orderLand(g, g.corps.filter((c) => m.corps.has(c.id)), m.target);
+      ui.unread += g.headlines.length - h;
+      ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
+      ui.land = false;
+      if (!res.ok) { ui.msg = res.why ?? ''; openModal(null); refresh(); break; }
+      ui.picked.clear();
+      ui.sel = m.target; ui.sea = -1;
+      if (res.report) { ui.seenReports = g.reports.length; refresh(); openModal({ kind: 'report', id: res.report.id }); }
+      else { openModal(null); refresh(); }
+      break;
+    }
     case 'build': { const at = raiseAt(); if (at) orderBuildCorps(g, t.dataset.kind as Kind, at.id); refresh(); break; }
     case 'fortify': if (ui.sel >= 0) orderBuildFort(g, ui.sel); refresh(); break;
     case 'cancelbuild': orderCancelBuild(g, id); refresh(); break;
@@ -877,7 +1236,8 @@ function onClick(e: MouseEvent): void {
 
 function selectRegion(id: number): void {
   ui.sel = id;
-  ui.rail = ui.ship = false;
+  ui.sea = -1;
+  ui.rail = ui.ship = ui.land = false;
   ui.picked = new Set(humanUp(g) ? g.regions[id].units.filter((c) => canOrder(g, c) && c.ap > 0).map((c) => c.id) : []);
   ui.tab = 'region';
 }
@@ -885,13 +1245,28 @@ function selectRegion(id: number): void {
 function onRegion(id: number): void {
   const r = g.regions[id];
   ui.flash = [];
+  ui.msg = '';
+  // Under the Navy tab with a fleet picked, a click on a port is a change of base.
+  const fl = ui.tab === 'navy' ? myFleet() : null;
+  if (fl && ui.rebase) {
+    if (orderRebase(g, fl.id, id)) ui.rebase = false;
+    else ui.msg = `${r.name} cannot be the fleet's base: it has to be a friendly port the ships can steam to.`;
+    refresh();
+    return;
+  }
   // While planning production the map only chooses where to build. No army moves by accident.
   if (ui.tab === 'build') {
-    ui.sel = id; ui.picked.clear(); ui.rail = ui.ship = false;
+    ui.sel = id; ui.sea = -1; ui.picked.clear(); ui.rail = ui.ship = false;
     refresh();
     return;
   }
   const picked = pickedCorps();
+  if (picked.length && ui.land) {
+    const plan = previewLanding(g, picked, id);
+    if (plan.why) { ui.msg = plan.why; refresh(); return; }
+    openModal({ kind: 'landing', target: id, corps: new Set(picked.map((c) => c.id)) });
+    return;
+  }
   if (picked.length && (ui.rail || ui.ship)) {
     for (const c of picked) { if (ui.rail) orderRail(g, c, id); else orderShip(g, c, id); }
     selectRegion(id);
@@ -981,10 +1356,19 @@ function wireMap(): void {
     // Hover: say what is under the cursor.
     const el = (e.target as Element).closest?.('[data-id]') as HTMLElement | null;
     const tip = $('#tip');
-    if (!el || e.pointerType !== 'mouse') { tip.style.display = 'none'; return; }
+    if (e.pointerType !== 'mouse') { tip.style.display = 'none'; return; }
+    if (!el) {
+      const p = mapPoint(e.clientX, e.clientY);
+      const z = seaAt(p.x, p.y);
+      if (z < 0) { tip.style.display = 'none'; return; }
+      const by = new Map<string, number>();
+      for (const f of g.fleets) if (f.zone === z && atSea(f)) by.set(f.nat, (by.get(f.nat) ?? 0) + shipCount(f.ships));
+      tip.innerHTML = `<b>${esc(g.seas[z].name)}</b><br>${by.size ? [...by].map(([nat, n]) => `${g.nations[nat].adj}: ${n} ships`).join(' · ') : 'No fleet at sea here'}`;
+    } else {
     const r = g.regions[Number(el.dataset.id)];
     const divs = sumDivs(r.units);
     tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)}${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${r.units.length ? `<br>${r.units.length} corps, ${num(divs)} divisions` : ''}`;
+    }
     tip.style.display = 'block';
     const wrap = $('#mapwrap').getBoundingClientRect();
     tip.style.left = Math.min(wrap.width - 250, e.clientX - wrap.left + 14) + 'px';
@@ -995,8 +1379,14 @@ function wireMap(): void {
     pts.delete(e.pointerId);
     svg.classList.remove('drag');
     if (was === 1 && !moved && e.type === 'pointerup') {
+      $('#tip').style.display = 'none';
       const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-id]') as HTMLElement | null;
       if (el && el.classList.contains('reg')) onRegion(Number(el.dataset.id));
+      else if (!el) {
+        const p = mapPoint(e.clientX, e.clientY);
+        const z = seaAt(p.x, p.y);
+        if (z >= 0) onSea(z);
+      }
     }
     if (pts.size === 0) start = null;
     else if (pts.size === 1) { const p = [...pts.values()][0]; start = { x: p.x, y: p.y, vx: ui.view.x, vy: ui.view.y }; moved = true; }
@@ -1017,4 +1407,4 @@ refresh();
 openModal({ kind: 'start' });
 
 // A handle for automated checks and for curious players in the browser console.
-(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, continueGame, save: () => saveGame(g) };
+(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, continueGame, save: () => saveGame(g) };

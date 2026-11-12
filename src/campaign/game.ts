@@ -11,6 +11,7 @@ import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
 import { PRODUCTION, canBuildYet, deliver, firstCorpsNumber, income } from './economy';
 import { DIPLOMACY, homeOpinion, pcIncome } from './diplomacy';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
+import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import eastData from '../../data/campaign/east.json';
 
 /** Rules for campaigning deep inside the Soviet Union. See data/campaign/east.json. */
@@ -34,7 +35,7 @@ export function createGame(seed: number, human: string | null): Game {
     cap: !!r.flags.cap, port: !!r.flags.port || !!r.flags.depot,
     fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1) } : null,
     vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil,
-    x: r.x, y: r.y, nb: r.nb, polys: r.polys, units: [], since: 0, prev: null,
+    x: r.x, y: r.y, nb: r.nb, polys: r.polys, units: [], seas: r.seas ?? [], since: 0, prev: null,
   }));
   const byName: Record<string, Region> = {};
   for (const r of regions) byName[r.name] = r;
@@ -44,7 +45,7 @@ export function createGame(seed: number, human: string | null): Game {
     const cap = regions.find((r) => r.owner === id && r.cap);
     nations[id] = {
       id, name: d.name, adj: d.adj, color: d.color, quality: d.quality, air: d.air, resilience: d.resilience, align: d.align,
-      blitz: !!d.blitz, slowCommand: !!d.slowCommand, maxAttack: d.maxAttack ?? 0, seaSupply: !!d.seaSupply,
+      blitz: !!d.blitz, slowCommand: !!d.slowCommand, maxAttack: d.maxAttack ?? 0, seaSupply: !!d.seaSupply, sealift: d.sealift ?? 0,
       atWar: [], alive: !d.dormant, dormant: !!d.dormant, capital: cap ? cap.id : -1, pp: 0, queue: [], corpsNo: firstCorpsNumber(id),
       opinion: homeOpinion(id, d.align), home: homeOpinion(id, d.align), pc: 0, armyPeak: 0, offStart: {}, lastFight: {},
     };
@@ -53,9 +54,11 @@ export function createGame(seed: number, human: string | null): Game {
   const g: Game = {
     seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], generals: [], nextCorps: 1, nextBuild: 1, human,
     reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, capDist: {}, week: 1,
+    seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], convoys: {},
     links: md.links, width: md.width, height: md.height, land: md.land,
   };
   for (const row of (setup as any).corps) addCorps(g, row[0], row[1], row[2], row[3], row[4], row[5] ?? {});
+  setupNavy(g);
   // Depots: home regions that can feed an army even when cut off from the capital.
   (md.regions as any[]).forEach((r) => { if (r.flags.depot) g.flags['depot:' + r.id] = 1; });
   for (const n of Object.values(nations)) {
@@ -74,6 +77,7 @@ export function createGame(seed: number, human: string | null): Game {
   nations.GER.offStart.POL = 1;
   headline(g, 'war', 'Germany invades Poland. Britain and France declare war on Germany.', 'GER');
   for (const n of Object.values(nations)) n.armyPeak = armySize(g, n.id);
+  openingStations(g);
   computeSupply(g);
   return g;
 }
@@ -125,6 +129,7 @@ export function declareWar(g: Game, a: string, b: string): void {
   if (!A.alive || !B.alive || atWar(g, a, b) || allied(g, a, b)) return;
   setWar(g, a, b);
   A.offStart[b] = g.turn;
+  g.flags[`war:${a}:${b}`] = g.turn;
   // A neutral that leans toward a bloc and attacks that bloc's enemy becomes its co-belligerent.
   if (A.align === 'leaning_axis' || A.align === 'leaning_allies') {
     const side = A.align === 'leaning_axis' ? 'axis' : 'allies';
@@ -245,12 +250,13 @@ export function computeSupply(g: Game): void {
     const n = g.nations[id];
     const ok = new Uint8Array(g.regions.length);
     const q: number[] = [];
+    // A nation with ships can also be fed through any friendly port its supply ships can still reach.
+    const open = n.seaSupply || n.sealift > 0 ? openSeas(g, id) : null;
     for (const r of g.regions) {
       if (!allied(g, id, r.ctrl)) continue;
       // An army is fed from its own country: its capital, its big industrial regions, its depots.
-      // A nation with command of the sea can also be fed through any friendly port.
       const home = r.ctrl === id && r.owner === id;
-      if ((home && (r.cap || r.fac >= 3 || g.flags['depot:' + r.id])) || (n.seaSupply && r.port)) { ok[r.id] = 1; q.push(r.id); }
+      if ((home && (r.cap || r.fac >= 3 || g.flags['depot:' + r.id])) || (open && r.port && r.seas.some((z) => open[z]))) { ok[r.id] = 1; q.push(r.id); }
     }
     for (let i = 0; i < q.length; i++) {
       for (const j of g.regions[q[i]].nb) {
@@ -351,8 +357,11 @@ export interface Assessment {
   defenders: Corps[];
 }
 
+/** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
+export interface AttackOpts { sea?: number; surprise?: boolean }
+
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
-export function assess(g: Game, attackers: Corps[], target: Region): Assessment {
+export function assess(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): Assessment {
   ensureSupply(g);
   const attNat = attackers[0].nat;
   const defenders = hostileUnits(g, target, attNat);
@@ -376,6 +385,7 @@ export function assess(g: Game, attackers: Corps[], target: Region): Assessment 
     if (pocket && lead > cmdAttack(g, c, false)) trap = true;
     if (tempo && KIND[c.kind].mobile) p *= 1.2;
     if (g.nations[c.nat].slowCommand) p *= 0.85;
+    if (opts.sea !== undefined) p *= opts.sea;
     const line = lineStrength(g, c);
     if (line.mul < 1) { p *= line.mul; longest = Math.max(longest, line.length); lineMul = Math.min(lineMul, line.mul); }
     if (frozen(g, c.nat, target)) { p *= 1 - (1 - EASTERN.winter.attack) * cmdWinter(g, c); cold = true; }
@@ -419,6 +429,9 @@ export function assess(g: Game, attackers: Corps[], target: Region): Assessment 
     const fx = [up ? `Attack ${up > 0 ? 'up' : 'down'} ${Math.abs(up)}%` : '', dup ? `defence ${dup > 0 ? 'up' : 'down'} ${Math.abs(dup)}%` : ''].filter(Boolean).join(', ');
     lines.push({ label: 'Commanders', value: `${gens || 'No general named'} against ${dgens || 'no general named'}`, effect: fx ? fx[0].toUpperCase() + fx.slice(1) : undefined });
   }
+  if (opts.sea !== undefined) lines.push(opts.surprise
+    ? { label: 'Landing', value: 'From the sea, on the day war is declared', effect: 'The defenders are caught unready: the landing fights at full strength' }
+    : { label: 'Landing', value: 'From the sea, against a defended shore', effect: `Attack cut to ${Math.round(opts.sea * 100)}%` });
   if (trap) lines.push({ label: 'Encirclement', value: 'The defenders have no line of retreat', effect: 'A general who knows how to close a pocket hits 15% harder' });
   if (lineMul < 1) lines.push({ label: 'Supply line', value: `Stretched over ${Math.round(longest)} regions of Soviet railway`, effect: `Attack cut to as little as ${Math.round(lineMul * 100)}% until the track behind is relaid` });
   if (cold) lines.push({ label: 'Winter', value: 'Attackers without winter equipment', effect: `Attack cut to ${Math.round(EASTERN.winter.attack * 100)}%` });
@@ -469,8 +482,8 @@ function retreatTarget(g: Game, c: Corps, from: Region, banned: Set<number>): Re
   return best;
 }
 
-export function resolveBattle(g: Game, attackers: Corps[], target: Region): BattleReport {
-  const a = assess(g, attackers, target);
+export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): BattleReport {
+  const a = assess(g, attackers, target, opts);
   const defenders = a.defenders;
   const attNat = attackers[0].nat;
   const defNat = defenders[0]?.nat ?? target.ctrl;
@@ -518,7 +531,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region): Batt
       const to = c.str < 0.15 ? null : retreatTarget(g, c, target, banned);
       const N = g.nations[c.nat];
       if (to) { place(g, c, to); c.ap = 0; defU[i].fate = 'retreated'; }
-      else if (c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0) {
+      else if (c.str >= 0.15 && N.seaSupply && target.port && target.owner !== c.nat && N.capital >= 0 && seaOpenAt(g, c.nat, target)) {
         // Backs to the sea: the navy takes off what it can.
         place(g, c, g.regions[N.capital]);
         c.str *= 0.75; c.org = 0.2; c.ap = 0;
@@ -536,7 +549,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region): Batt
     const order = attackers.map((c, i) => ({ c, i })).sort((x, y) => KIND[x.c.kind].move - KIND[y.c.kind].move || corpsBase(g, y.c) - corpsBase(g, x.c));
     let moved = 0;
     for (const { c, i } of order) {
-      const cost = moveCost(g, c, target);
+      // A force that came by sea all goes ashore together.
+      const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
       if (moved >= STACK || (moved > 0 && c.ap < cost)) { c.ap = Math.max(0, c.ap - 1); continue; }
       place(g, c, target);
       c.ap = Math.max(0, c.ap - cost);
@@ -643,6 +657,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
   X.alive = false;
   X.fellOn = { turn: g.turn, week: g.week, to: by };
   for (const c of g.corps.filter((c) => c.nat === nat)) removeCorps(g, c);
+  fleetsOnFall(g, nat);
   const pact = g.nations.SOV.alive && !atWar(g, 'SOV', by);
   for (const r of g.regions) {
     if (r.owner === nat) {
@@ -675,7 +690,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
     if (allied(g, c.nat, r.ctrl)) continue;
     if (atWar(g, c.nat, r.ctrl) && hostileUnits(g, r, c.nat).length === 0) continue; // still occupying enemy ground
     const N = g.nations[c.nat];
-    if (N.seaSupply && N.capital >= 0) {
+    if (N.seaSupply && N.capital >= 0 && (!r.seas.length || seaOpenAt(g, c.nat, r))) {
       place(g, c, g.regions[N.capital]);
       c.str *= 0.7; c.org = 0.3; c.ap = 0;
       if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are evacuated from the Continent, leaving their heavy equipment behind.`, c.nat); }
@@ -688,22 +703,16 @@ export function capitulate(g: Game, nat: string, by: string): void {
   for (const n of Object.values(g.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g, n.id, by);
 }
 
-/** Sea transport: a nation that commands the sea can ship a corps from one friendly port to another. It takes the whole month. */
+/** Sea transport: a nation with shipping can send a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */
 export function shipMove(g: Game, c: Corps, to: Region): boolean {
-  const from = g.regions[c.reg];
-  if (!g.nations[c.nat].seaSupply || c.kind === 'fort' || c.ap < Math.min(4, c.apMax) || !from.port || !to.port || to.id === from.id) return false;
-  if (!allied(g, c.nat, to.ctrl) || hostileUnits(g, to, c.nat).length || friendlyUnits(g, to, c.nat).length >= STACK) return false;
-  place(g, c, to);
-  c.ap = 0;
-  g.week = 2;
-  return true;
+  return shipCorps(g, c, to);
 }
 
 /** Lifts a corps off the Continent from a port. */
 export function evacuate(g: Game, c: Corps): boolean {
   const r = g.regions[c.reg];
   const N = g.nations[c.nat];
-  if (!N.seaSupply || !r.port || r.owner === c.nat || N.capital < 0) return false;
+  if (!N.seaSupply || !r.port || r.owner === c.nat || N.capital < 0 || !seaOpenAt(g, c.nat, r)) return false;
   place(g, c, g.regions[N.capital]);
   c.str *= 0.75; c.org = 0.3; c.ap = 0;
   if (!g.flags[`evac:${g.turn}`]) { g.flags[`evac:${g.turn}`] = 1; headline(g, 'event', `${N.adj} troops are lifted off the beaches at ${r.name}.`, c.nat, r.id); }
@@ -758,6 +767,7 @@ export function startPhase(g: Game, nat: string): void {
   }
   mobilise(g, nat);
   monthlyCommand(g, nat);
+  navalUpkeep(g, nat);
   computeSupply(g);
   // The month's production comes in. Losses are made good first.
   n.pp += income(g, nat);

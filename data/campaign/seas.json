@@ -1,0 +1,45 @@
+{
+  "_about": "The seas of the campaign map. Each zone is the water nearest its anchor point (lat, lon); the map-maker works out which regions have a coast on it. 'waters' marks more of the same sea: an arm the coastline all but closes off, or a stretch that would otherwise be nearer another zone's anchor. 'label' is where the name and the fleets are drawn when the anchor itself is in a narrow place, and 'narrow' asks for the name in smaller type where the water is tight. 'air' is how much of the sea aircraft flying from its coasts can cover: 1 for narrow waters, much less for open ocean. adjacent lists the zones a fleet can sail between. A gate is a strait someone holds: a fleet passes only if the holder (the nation named, or whoever controls the region named) is not at war with it, and a gate marked closed is shut to every navy at war, as the Turkish straits were under the Montreux Convention.",
+  "zones": [
+    {"id": "natl", "air": 0.25, "name": "North Atlantic", "at": [60.3, -8.6]},
+    {"id": "wapp", "air": 0.3, "name": "Western Approaches", "at": [49.6, -9.0]},
+    {"id": "irish", "air": 1, "name": "Irish Sea", "at": [53.7, -5.2], "narrow": true},
+    {"id": "biscay", "air": 0.4, "name": "Bay of Biscay", "at": [45.6, -4.6]},
+    {"id": "iberia", "air": 0.4, "name": "Iberian Coast", "at": [36.4, -8.4]},
+    {"id": "channel", "air": 1, "name": "English Channel", "at": [50.1, -1.2], "label": [50.0, -1.6]},
+    {"id": "nsea", "air": 0.6, "name": "North Sea", "at": [56.3, 3.2]},
+    {"id": "norw", "air": 0.3, "name": "Norwegian Sea", "at": [66.2, 4.0], "waters": [[70.7, 17.5]]},
+    {"id": "barents", "air": 0.3, "name": "Barents Sea", "at": [70.6, 36.0], "waters": [[65.8, 37.6]]},
+    {"id": "skag", "air": 1, "name": "Skagerrak", "at": [57.0, 11.3], "label": [57.9, 9.5], "narrow": true},
+    {"id": "baltic", "air": 0.8, "name": "Baltic Sea", "at": [55.8, 18.2]},
+    {"id": "bothnia", "air": 0.8, "name": "Gulf of Bothnia", "at": [62.0, 19.6], "label": [62.0, 19.3]},
+    {"id": "finland", "air": 1, "name": "Gulf of Finland", "at": [59.9, 27.4], "label": [59.93, 26.9], "narrow": true},
+    {"id": "wmed", "air": 0.6, "name": "Western Mediterranean", "at": [39.6, 5.2], "label": [38.3, 4.9]},
+    {"id": "tyrr", "air": 0.8, "name": "Tyrrhenian Sea", "at": [40.0, 12.3]},
+    {"id": "adriatic", "air": 1, "name": "Adriatic Sea", "at": [43.3, 15.0], "narrow": true},
+    {"id": "ionian", "air": 0.6, "name": "Ionian Sea", "at": [37.3, 18.3]},
+    {"id": "aegean", "air": 0.8, "name": "Aegean Sea", "at": [37.9, 25.0], "label": [38.9, 25.25], "narrow": true, "waters": [[40.7, 28.2]]},
+    {"id": "emed", "air": 0.5, "name": "Eastern Mediterranean", "at": [35.8, 31.0]},
+    {"id": "black", "air": 0.6, "name": "Black Sea", "at": [43.3, 34.5], "waters": [[46.0, 36.6]]}
+  ],
+  "adjacent": [
+    ["natl", "wapp"], ["natl", "irish"], ["natl", "nsea"], ["natl", "norw"],
+    ["wapp", "irish"], ["wapp", "channel"], ["wapp", "biscay"], ["wapp", "iberia"],
+    ["biscay", "iberia"],
+    ["channel", "nsea"],
+    ["nsea", "norw"], ["nsea", "skag"],
+    ["norw", "barents"],
+    ["skag", "baltic"],
+    ["baltic", "bothnia"], ["baltic", "finland"],
+    ["iberia", "wmed"],
+    ["wmed", "tyrr"], ["wmed", "ionian"],
+    ["tyrr", "ionian"],
+    ["ionian", "adriatic"], ["ionian", "aegean"], ["ionian", "emed"],
+    ["aegean", "emed"], ["aegean", "black"]
+  ],
+  "gates": [
+    {"between": ["skag", "baltic"], "name": "the Danish straits", "region": "Zealand"},
+    {"between": ["iberia", "wmed"], "name": "the Strait of Gibraltar", "nation": "UK"},
+    {"between": ["aegean", "black"], "name": "the Turkish straits", "region": "Istanbul", "closed": true}
+  ]
+}

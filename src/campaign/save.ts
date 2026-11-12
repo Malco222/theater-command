@@ -10,6 +10,7 @@ import type { Corps, Game, General } from './types';
 
 export const SAVE_VERSION = 1;
 const KEEP_REPORTS = 200;
+const KEEP_SEA = 80;
 
 export function saveGame(g: Game): string {
   return JSON.stringify({
@@ -17,9 +18,11 @@ export function saveGame(g: Game): string {
     nextCorps: g.nextCorps, nextBuild: g.nextBuild, flags: g.flags, rng: g.rng.state,
     dirty: g.supplyDirty, supply: Object.fromEntries(Object.entries(g.supply).map(([k, v]) => [k, Array.from(v).join('')])),
     nations: g.nations,
-    regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev]),
+    // The order corps stand in within a region is kept too: battles and retreats take them in that order.
+    regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id)]),
     corps: g.corps,
     generals: g.generals,
+    fleets: g.fleets, nextFleet: g.nextFleet, seaReports: g.seaReports.slice(-KEEP_SEA), convoys: g.convoys,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -51,7 +54,13 @@ export function loadGame(text: string): Game | null {
     r.owner = owner; r.ctrl = ctrl; r.cap = !!cap; r.fort = fort; r.since = since; r.prev = prev ?? null; r.units = [];
   });
   g.corps = d.corps as Corps[];
-  for (const c of g.corps) g.regions[c.reg].units.push(c);
+  const byId = new Map(g.corps.map((c) => [c.id, c]));
+  g.regions.forEach((r, i) => {
+    const ids = d.regions[i][6] as number[] | undefined;
+    if (ids) for (const id of ids) { const c = byId.get(id); if (c && c.reg === r.id) { r.units.push(c); byId.delete(id); } }
+  });
+  // Anything a save from an older build did not list goes in as it comes.
+  for (const c of g.corps) if (byId.has(c.id)) g.regions[c.reg].units.push(c);
   if (Array.isArray(d.generals)) g.generals = d.generals as General[];
   else {
     // A save from before generals were people: each corps carried only a name and a label.
@@ -63,6 +72,7 @@ export function loadGame(text: string): Game | null {
       if (typeof name === 'string') seat(g, c, name, label);
     }
   }
+  if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.convoys = d.convoys ?? {}; }
   // The supply picture is restored exactly as it stood, so the loaded game plays on identically.
   const fed = g.corps.map((c) => c.supplied);
   computeSupply(g);

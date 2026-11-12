@@ -24,6 +24,8 @@ export interface Region {
   nb: number[];
   polys: [number, number][][][];
   units: Corps[];
+  /** Sea zones this region has a coast on. Empty for inland regions. */
+  seas: number[];
   /** Turn this region last changed hands, and who held it before. */
   since: number;
   prev: string | null;
@@ -43,6 +45,8 @@ export interface Nation {
   /** The most corps this nation's staffs can bring into one battle. 0 means no limit. */
   maxAttack: number;
   seaSupply: boolean;
+  /** How many corps this nation's shipping can carry across the sea in a month. 0 means it has no sea lift. */
+  sealift: number;
   atWar: string[];
   alive: boolean;
   dormant: boolean;
@@ -184,6 +188,114 @@ export interface BattleReport {
   prisoners: number;
 }
 
+// ---- The war at sea ---------------------------------------------------------------------
+
+export type ShipClass = 'bb' | 'cv' | 'ca' | 'dd' | 'ss';
+export type Ships = Record<ShipClass, number>;
+/** What a fleet is doing: holding a sea, hunting merchant ships, or lying in harbour. */
+export type Stance = 'patrol' | 'raid' | 'port';
+
+export interface SeaZone {
+  id: number;
+  key: string;
+  name: string;
+  x: number;
+  y: number;
+  adj: number[];
+  /** Regions with a coast on this sea. */
+  coast: number[];
+  /** How much of this sea land-based aircraft can cover: 1 for narrow waters, less for open ocean. */
+  air: number;
+  /** Tight water: its name is drawn in smaller type. */
+  narrow: boolean;
+}
+
+/** A strait someone holds. */
+export interface Gate {
+  a: number;
+  b: number;
+  name: string;
+  /** The region whose controller holds the strait, or -1 when a nation holds it from off the map. */
+  region: number;
+  nation: string | null;
+  /** Shut to every navy at war. */
+  closed: boolean;
+}
+
+export interface Admiral {
+  name: string;
+  level: number;
+  xp: number;
+}
+
+export interface Fleet {
+  id: number;
+  nat: string;
+  name: string;
+  ships: Ships;
+  /** Ships lost since the war began. */
+  lost: Ships;
+  /** Region of the home port, or -1 when the base is off the map. */
+  base: number;
+  /** What the base is called: Scapa Flow, Wilhelmshaven. */
+  port: string;
+  /** The sea the base opens on. */
+  home: number;
+  /** The sea the fleet is in. A fleet in harbour is counted in its home sea but takes no part there. */
+  zone: number;
+  stance: Stance;
+  /** Where a computer-run fleet goes when it has nothing better to do, and what it does there. */
+  station: number;
+  duty: Stance;
+  /** A fleet tied to its station is never sent anywhere else by the computer. */
+  tied: boolean;
+  /** 0..1: how fit for sea the ships are. Battle and long patrols wear it down; time in harbour restores it. */
+  ready: number;
+  admiral: Admiral | null;
+  /** Month the fleet last fought. */
+  fought: number;
+}
+
+export interface SeaSide {
+  nat: string;
+  fleet: string;
+  admiral: string | null;
+  ships: Ships;
+  sunk: Ships;
+}
+
+export interface SeaReport {
+  id: number;
+  turn: number;
+  zone: number;
+  zoneName: string;
+  attNat: string;
+  defNat: string;
+  att: SeaSide[];
+  def: SeaSide[];
+  lines: TicketLine[];
+  aPower: number;
+  dPower: number;
+  odds: number;
+  level: VictoryLevel;
+  won: boolean;
+}
+
+/** One month on a convoy route. */
+export interface ConvoyMonth {
+  turn: number;
+  /** Raiders hunting the route and escorts guarding it, as strength. */
+  raid: number;
+  guard: number;
+  /** Tons of shipping sunk this month, and in the whole war. */
+  tons: number;
+  total: number;
+  /** Share of the receiving nation's production lost with it. */
+  share: number;
+  subsLost: number;
+  escortsLost: number;
+}
+
 export interface Headline {
   turn: number;
   week: number;
@@ -207,6 +319,8 @@ export interface PlanPhase {
   axis?: string[];
   /** Ground the plan leaves alone in its first month. */
   haltOrder?: string[];
+  /** Prizes that troops who closed up to them late in the month attack at once, without waiting for next month. */
+  lastPush?: string[];
   assembly?: string[];
   armour?: string[];
   garrison?: string[];
@@ -223,6 +337,10 @@ export interface PlanPhase {
   targets?: string[];
   /** The phase only applies while these two nations are at war with each other. */
   ifAtWar?: [string, string];
+  /** Corps sent across the sea, each to the first place on its list it can reach: an enemy coast is assaulted, a friendly port reinforced. */
+  landings?: { corps: string; to: string[]; minOdds?: number }[];
+  /** Orders for named fleets while the phase lasts. */
+  fleets?: { fleet: string; zone: string; stance: Stance }[];
 }
 
 export interface Game {
@@ -251,6 +369,13 @@ export interface Game {
   reach: Record<string, Float32Array>;
   capDist: Record<string, Int16Array>;
   week: number;
+  seas: SeaZone[];
+  gates: Gate[];
+  fleets: Fleet[];
+  nextFleet: number;
+  seaReports: SeaReport[];
+  /** Last month's result on each convoy route, by route id. */
+  convoys: Record<string, ConvoyMonth>;
   links: [number, number][];
   width: number;
   height: number;
