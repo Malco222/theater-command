@@ -11,7 +11,7 @@ import {
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { foundBureau, setTeams } from './research';
-import { runAI } from './ai';
+import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy } from './diplomacy';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -48,6 +48,43 @@ export function endHuman(g: Game): void {
   closePhase(g, current(g));
 }
 
+// ---- The eve of war ------------------------------------------------------------------------
+
+/** The nation history's plan sends against the player before the player's first month comes round, if any. */
+export function eveAttacker(g: Game): string | null {
+  const me = g.human;
+  if (!me || g.turn !== 1) return null;
+  return g.order.slice(0, g.order.indexOf(me)).find((n) => {
+    const ph = phaseFor(g, n);
+    return ph?.posture === 'attack' && (!!ph.declare?.includes(me) || (atWar(g, n, me) && !!ph.enemies?.includes(me)));
+  }) ?? null;
+}
+
+/** True while the player is placing an army on the eve of war. */
+export const onEve = (g: Game): boolean => g.flags.eve === 1;
+
+/**
+ * The eve of war. A player whose country is attacked in the opening month before its own turn comes round would
+ * otherwise watch it fall without giving an order, so that player places the army first: marches and rail moves
+ * on friendly ground, on the corps' opening action points. No shot is fired, no month passes, nothing is
+ * produced and nobody else moves.
+ */
+export function beginEve(g: Game): boolean {
+  if (g.phase !== 0 || g.flags.eve !== undefined || !eveAttacker(g)) return false;
+  g.flags.eve = 1;
+  g.phase = g.order.indexOf(g.human!);
+  g.week = 1;
+  return true;
+}
+
+/** Ends the eve of war: the month begins with whoever moves first. */
+export function endEve(g: Game): void {
+  if (!onEve(g)) return;
+  g.flags.eve = 0;
+  g.phase = 0;
+  g.week = 1;
+}
+
 /** True when the nation up next is the player's and still in the war. */
 export function humanUp(g: Game): boolean {
   return g.human !== null && current(g) === g.human && g.nations[g.human].alive;
@@ -80,7 +117,7 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
     for (const j of g.regions[a].nb) {
       const r = g.regions[j];
       const friendly = allied(g, c.nat, r.ctrl);
-      if (!friendly && !atWar(g, c.nat, r.ctrl)) continue;
+      if (!friendly && (onEve(g) || !atWar(g, c.nat, r.ctrl))) continue; // on the eve of war nobody crosses a frontier
       const step = moveCost(g, c, r);
       const left = c.ap - ca;
       if (left <= 0 || left < Math.min(step, 4)) continue;
@@ -124,6 +161,7 @@ export function previewAttack(g: Game, corps: Corps[], target: Region): Assessme
 }
 
 export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
+  if (onEve(g)) return null;
   const ok = limitAttackers(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length) return null;
   return resolveBattle(g, ok, target);
@@ -142,7 +180,7 @@ export function shipTargets(g: Game, c: Corps): Region[] {
 
 /** Enemy coasts the player's chosen corps could land on from the port they stand in. */
 export function landTargets(g: Game, cs: Corps[]): Region[] {
-  return cs.length && cs.every((c) => canOrder(g, c)) ? landingTargets(g, cs) : [];
+  return cs.length && !onEve(g) && cs.every((c) => canOrder(g, c)) ? landingTargets(g, cs) : [];
 }
 
 /** The odds and the dangers of a landing, before the order is given. */
@@ -152,7 +190,7 @@ export function previewLanding(g: Game, cs: Corps[], to: number): LandingPlan {
 
 /** Sends the chosen corps across the sea to land on an enemy coast. */
 export function orderLand(g: Game, cs: Corps[], to: number): Landing {
-  if (!cs.length || !cs.every((c) => canOrder(g, c))) return { ok: false, why: 'Those corps cannot be given orders now.' };
+  if (!cs.length || onEve(g) || !cs.every((c) => canOrder(g, c))) return { ok: false, why: 'Those corps cannot be given orders now.' };
   return landCorps(g, cs, g.regions[to]);
 }
 
@@ -283,7 +321,7 @@ export function orderSkill(g: Game, general: number, skill: Skill): boolean {
 
 export function declarable(g: Game): string[] {
   const me = g.human;
-  if (!me || !g.nations[me].alive) return [];
+  if (!me || !g.nations[me].alive || onEve(g)) return [];
   const out = new Set<string>();
   const add = (o: string): void => {
     const N = g.nations[o];

@@ -6,7 +6,7 @@ import {
   DESERT, allied, atWar, collapseScore, convoyDrag, createGame, ensureSupply, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, weather,
 } from '../game';
 import {
-  beginHuman, canOrder, candidates, declarable, endHuman, humanUp, landTargets, orderAttack, orderBuildCorps, orderBuildFort,
+  beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderTeams,
   previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI,
 } from '../turn';
@@ -358,6 +358,7 @@ function hintText(): string {
   if (!g.human) return '';
   if (!humanUp(g)) return '';
   if (ui.msg) return ui.msg;
+  if (onEve(g)) return `The eve of war. ${natName(eveAttacker(g) ?? 'GER')} strikes before your first month comes round: place your army now, by road or by rail, then finish. No month passes.`;
   if (ui.tab === 'build') return 'Planning production: click one of your own home regions to raise troops or build works there.';
   if (ui.tab === 'research') return g.human && g.nations[g.human].lab ? 'Research: use − and + to move design teams between branches. The new pace starts next month.' : '';
   if (ui.tab === 'navy') {
@@ -384,14 +385,15 @@ function hintText(): string {
 function drawBar(): void {
   const me = g.human;
   const w = weather(g);
-  const who = me ? (g.nations[me].alive ? `Your orders: ${natName(me)}` : `${natName(me)} has fallen`) : 'Watching history unfold: every nation on its historical plan';
-  const when = me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
+  const eve = onEve(g);
+  const who = me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}`) : `${natName(me)} has fallen`) : 'Watching history unfold: every nation on its historical plan';
+  const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
   const pts = me && g.nations[me].alive ? ` · ${num(Math.floor(g.nations[me].pp))} production pts` : '';
   $('#when').innerHTML = `${when}<small>${esc(who)}${pts}${me ? ` · ${esc(w.text)}` : ''}</small>`;
   let b = '';
   if (me && humanUp(g)) {
     if (declarable(g).length) b += `<button class="btn warn" data-act="declare">Declare war</button>`;
-    b += `<button class="btn go" data-act="end">End month ▸</button>`;
+    b += `<button class="btn go" data-act="end">${eve ? 'Finish deployment ▸' : 'End month ▸'}</button>`;
   } else {
     b += `<button class="btn" data-act="auto">${ui.auto ? 'Pause' : 'Play ▸▸'}</button><button class="btn go" data-act="next">Next month ▸</button>`;
   }
@@ -1300,7 +1302,7 @@ function startCard(): string {
       ${side('GER', 'Germany', 'On the attack from the first day. The hardest plan to pull off on schedule.')}
       ${side('FRA', 'France', 'The Maginot Line, a large army, and a slow command. Can you keep Paris?')}
       ${side('UK', 'United Kingdom', 'A small army, the largest navy in the world, and convoys to keep alive.')}
-      ${side('POL', 'Poland', 'Outnumbered and nearly surrounded. Hold as long as you can.')}
+      ${side('POL', 'Poland', 'Outnumbered and nearly surrounded. You place your army on the eve of war, then hold as long as you can.')}
     </div>
     <h3>July 1940 · The Battle of Britain</h3>
     <div class="sides">
@@ -1410,7 +1412,9 @@ function newGame(human: string | null, seed?: number, from = 1): void {
   const focus = britain ? g.byName['Calais'] : desert ? g.byName['Tobruk'] : balkans ? g.byName['Thessaly'] : from > 1 ? g.byName[human === 'SOV' ? 'Smolensk' : 'Brest'] : human ? g.regions[g.nations[human].capital] : g.byName['Poznan'];
   ui.view = { x: focus.x - 300, y: focus.y - 230, w: desert || balkans ? 580 : human === 'GER' || from > 1 ? 640 : 600 };
   applyView();
-  if (human) advanceToHuman(from > 1 && human !== 'GER'); else { ui.unread = from > 1 ? 0 : g.headlines.length; refresh(); }
+  // A country that is attacked before its first month comes round places its army on the eve of war.
+  if (human && from === 1 && beginEve(g)) refresh();
+  else if (human) advanceToHuman(from > 1 && human !== 'GER'); else { ui.unread = from > 1 ? 0 : g.headlines.length; refresh(); }
 }
 
 /** Picks up the campaign saved in this browser. Returns false if there is none that can be read. */
@@ -1442,15 +1446,18 @@ function advanceToHuman(show: boolean, since?: { h: number; r: number; s: number
     if (g.human && !g.nations[g.human].alive) break;
     stepAI(g);
   }
+  const lost = g.human && !g.nations[g.human].alive ? g.human : null;
+  if (lost) {
+    // The month the country fell in is played out to its end, so the watcher's calendar starts on a month's last day.
+    g.human = null;
+    while (g.phase > 0) stepAI(g);
+  }
   if (humanUp(g)) beginHuman(g);
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
   ui.unread += g.headlines.length - hFrom;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = ''; ui.airMode = '';
   refresh();
-  if (g.human && !g.nations[g.human].alive) {
-    const lost = g.human;
-    g.human = null;
-    refresh();
+  if (lost) {
     openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
     $('#card').querySelector('.kick')!.textContent = `${natName(lost)} has fallen. The war goes on without you.`;
     return;
@@ -1565,7 +1572,7 @@ function onClick(e: MouseEvent): void {
     case 'end': {
       // The player's own fleet actions are fought as the month closes, so the dispatches start from here.
       const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length };
-      endHuman(g);
+      if (onEve(g)) endEve(g); else endHuman(g);
       advanceToHuman(true, since);
       break;
     }
