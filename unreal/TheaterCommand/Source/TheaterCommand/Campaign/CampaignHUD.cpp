@@ -219,7 +219,7 @@ namespace
 								SNew(SHorizontalBox)
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("Order corps, aircraft, ships, factories and other works.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenArsenal(); } return FReply::Handled(); })
 									[
@@ -228,7 +228,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("Your generals: who commands what, who is waiting for a command, and the corps that have nobody.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGenerals(); } return FReply::Handled(); })
 									[
@@ -237,7 +237,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("The design offices: put design teams on the branches whose new weapons you want early.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenResearch(); } return FReply::Handled(); })
 									[
@@ -246,7 +246,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("The foreign office: who is at war, where every neutral stands, courting them, and declaring war.")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenDiplomacy(); } return FReply::Handled(); })
 									[
@@ -255,7 +255,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenLedger(); } return FReply::Handled(); })
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("LEDGER"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
@@ -263,7 +263,7 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenRoll(); } return FReply::Handled(); })
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("HONOURS"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
@@ -271,7 +271,16 @@ namespace
 								]
 								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 11.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
+									.ToolTipText(FText::FromString(TEXT("How to play: the table, a month, moving and attacking, and what every button is for.")))
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGuide(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("GUIDE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+									]
+								]
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+								[
+									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(14.0f, 11.0f)).IsFocusable(false)
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMenu(); } return FReply::Handled(); })
 									[
 										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
@@ -455,7 +464,7 @@ namespace
 						.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army. Click where it should go, twice, or drag the flag there    Esc: put it down    Enter: end the month    M: music    N: sounds")))
+							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army. Click where it should go, twice, or drag the flag there    Esc: put it down    Enter: end the month    H: how to play    M: music    N: sounds")))
 							.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
 						]
 					]

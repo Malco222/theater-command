@@ -304,6 +304,9 @@ public:
 	void OpenLedger();
 	void CloseLedger();
 
+	/** How to play, as a page over the table. */
+	void OpenGuide();
+
 	/** The generals: who commands what, who is waiting, and the corps that have nobody. */
 	const FGeneralStaff& GetGenerals() const { return Staff; }
 	bool IsGeneralsOpen() const { return bGeneralsOpen; }

@@ -338,6 +338,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &ACampaignPlayerController::EndMonth);
 	InputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACampaignPlayerController::SpaceBar);
 	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ACampaignPlayerController::ToggleMusic);
+	InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACampaignPlayerController::OpenGuide);
 	InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ACampaignPlayerController::ToggleEffects);
 }
 
@@ -917,6 +918,65 @@ void ACampaignPlayerController::OpenRoll()
 		Document = Session->Roll();
 		++DocumentRevision;
 	}
+}
+
+void ACampaignPlayerController::OpenGuide()
+{
+	if (bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible)
+	{
+		return;
+	}
+	if (Document.bValid && Document.Title == TEXT("How to play"))
+	{
+		CloseDocument(); // the same key puts the page away again
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	CloseArsenal();
+	CloseLedger();
+	CloseDiplomacy();
+	CloseResearch();
+	CloseGenerals();
+	FDocumentPage Page;
+	Page.bValid = true;
+	Page.Title = TEXT("How to play");
+	Page.Subtitle = TEXT("Theater Command, 1939 to 1945. Esc, or H again, closes this page.");
+	auto Add = [&Page](const TCHAR* Heading, const TCHAR* Body)
+	{
+		FDocumentSection& Section = Page.Sections.AddDefaulted_GetRef();
+		Section.Heading = Heading;
+		Section.Body = Body;
+	};
+	Add(TEXT("THE TABLE"),
+		TEXT("You are looking down at a map table. Drag to move across it, scroll to zoom, and right-drag (or press Q and E) to turn the view. ")
+		TEXT("Every flag is an army, a fleet or an air fleet, and the number under it is its strength. Click any territory to see who holds it and what it has."));
+	Add(TEXT("A MONTH"),
+		TEXT("Each turn is one month. Give your orders, then press END THE MONTH, or Enter. The other nations move, and the month's news is shown at the top right. ")
+		TEXT("Every corps has a few moves each month: marching through friendly ground costs one, and entering enemy ground costs more."));
+	Add(TEXT("MOVING AND ATTACKING"),
+		TEXT("Click one of your flags to pick the army up. Ground it can march to lightens, ground it can attack turns red, and a neutral country's ground beside it turns amber. ")
+		TEXT("Click where it should go and click again to send it, or drag the flag there. An attack first shows both armies and the odds: SEND THEM IN fights it, CALL IT OFF does not. Esc puts the army down.\n")
+		TEXT("In the army's tray you can leave some corps behind, say what it does if attacked (stand, dig in or fall back), and send it BY RAIL along a working railway or BY SEA from a port."));
+	Add(TEXT("WAR AND PEACE"),
+		TEXT("Marching onto amber ground means declaring war. The game first tells you who that country's friends are and what will follow, and nothing happens unless you say yes.\n")
+		TEXT("DIPLOMACY shows who is at war, where every neutral stands between the Axis and the Allies, and lets you court a neutral with political capital. ")
+		TEXT("A small country chooses its own path there: join a side, stand alone, or found the League with a willing neighbour."));
+	Add(TEXT("MONEY AND BUILDING"),
+		TEXT("Every province you hold pays into your treasury each month. The treasury is at the top left: click it, or LEDGER, for the books.\n")
+		TEXT("The ARSENAL sells corps, aircraft, ships and works such as factories, shipyards, airfields and anti-aircraft guns. Click one of your own territories first, so the game knows where to build. Works you build stand on the map."));
+	Add(TEXT("RESEARCH AND GENERALS"),
+		TEXT("RESEARCH shows your design teams. A branch with one team keeps to history's dates. A second team brings its next designs early, and the new tanks and aircraft then appear on your pieces.\n")
+		TEXT("GENERALS lists your commanders. Give a waiting general a corps, promote an officer from the ranks, and spend the skill points your generals earn in battle. A corps with no general fights by the book."));
+	Add(TEXT("RIVERS, RAILWAYS AND ENGINEERS"),
+		TEXT("The great rivers are crossed at bridges. Blow the bridges and nothing on wheels or tracks can cross until engineers rebuild them. ")
+		TEXT("Armies are fed along the railways, and troops beyond a cut line fight weaker until engineers relay it. Click a province to see the work that can be ordered there."));
+	Add(TEXT("FLEETS AND AIR FLEETS"),
+		TEXT("Click a fleet or an air fleet to give it orders: where to patrol or raid, and what to bomb. ")
+		TEXT("A corps in a port can go BY SEA to a friendly port or land on an enemy coast. Before a landing the game tells you what it will meet, and asks."));
+	Add(TEXT("SAVING, MUSIC AND SOUND"),
+		TEXT("The game saves itself every month and when you leave. MENU lets you continue or begin another campaign. M turns the music on and off, and N the sound effects."));
+	Document = Page;
+	++DocumentRevision;
 }
 
 void ACampaignPlayerController::CloseDocument()

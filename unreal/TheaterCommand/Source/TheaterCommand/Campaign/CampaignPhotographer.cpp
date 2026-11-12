@@ -144,6 +144,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.Months = 1;
 	}
 	Add(TEXT("14b-menu-with-save"), TEXT("Warsaw"), 0.5f).bMenu = true;
+	Add(TEXT("14e-guide"), TEXT("Warsaw"), 0.5f).bGuide = true;
 	{
 		// A province of one's own: what it holds, what can be raised there, and something put on order.
 		FShot& Shot = Add(TEXT("14c-province"), TEXT("Berlin"), 0.4f);
@@ -565,6 +566,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (Shot.bRoll)
 	{
 		Controller->OpenRoll();
+	}
+	if (Shot.bGuide)
+	{
+		Controller->OpenGuide();
 	}
 	if (Shot.bWorks)
 	{

@@ -49,6 +49,7 @@ private:
 		bool bSea = false; // switch the army in hand to going by sea
 	bool bLedger = false; // open the ledger
 	bool bDiplomacy = false; // open the foreign office
+	bool bGuide = false; // open the page that says how to play
 	bool bWorks = false; // stand a full set of works in the region looked at: factories, a shipyard, guns and an airfield
 	bool bGenerals = false; // open the generals' list, and give the first corps without one the man who suits it
 	bool bResearch = false; // open the design offices, and put a second team on armour
