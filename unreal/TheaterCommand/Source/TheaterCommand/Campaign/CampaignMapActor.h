@@ -125,6 +125,9 @@ public:
 	 */
 	void ShowBuildings(const TArray<FIntVector4>& Works);
 
+	/** Draws the shipping lanes over the sea: pale where the cargoes get through, amber where raiders are at them, red where the lane is cut. */
+	void ShowLanes(const TArray<FViewLane>& Lanes);
+
 	/** Smoke and gun flashes over a region where a battle has just been fought, for a few seconds. */
 	void AddBattleSmoke(int32 RegionId);
 
@@ -189,6 +192,9 @@ private:
 	TObjectPtr<UProceduralMeshComponent> RailMesh;
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> WorksMesh;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> LanesMesh;
+	FString ShownLanes; // what is drawn now, to tell when it has changed
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> BuildingsMesh;
 

@@ -107,6 +107,7 @@ ACampaignMapActor::ACampaignMapActor()
 	WorksMesh = MakeMesh(TEXT("Works"), false);
 	BuildingsMesh = MakeMesh(TEXT("Buildings"), false);
 	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
+	LanesMesh = MakeMesh(TEXT("Lanes"), false);
 	HighlightMesh = MakeMesh(TEXT("Highlight"), false);
 	OrdersMesh = MakeMesh(TEXT("Orders"), false);
 
@@ -2060,6 +2061,69 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 	const int32 C = Buffers.AddVertex(SurfacePoint(Right.X, Right.Y, 0.36), FVector::UpVector, Gold);
 	Buffers.AddTriangleFacingUp(A, B, C);
 	Buffers.Commit(OrdersMesh, 1, HighlightMaterial);
+}
+
+void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
+{
+	if (!LanesMesh || !Data.IsLoaded())
+	{
+		return;
+	}
+	FString Key;
+	for (const FViewLane& Lane : Lanes)
+	{
+		Key += FString::Printf(TEXT("%s%d:%d;"), *Lane.State, Lane.Path.Num(), FMath::RoundToInt32(Lane.Flow * 20.0f));
+	}
+	if (Key == ShownLanes)
+	{
+		return;
+	}
+	ShownLanes = Key;
+	LanesMesh->ClearAllMeshSections();
+	FCampaignMeshBuffers Buffers;
+	for (const FViewLane& Lane : Lanes)
+	{
+		if (Lane.Path.Num() < 2)
+		{
+			continue;
+		}
+		const FLinearColor Ink = Lane.State == TEXT("cut") ? FLinearColor(0.95f, 0.14f, 0.1f, 0.62f)
+			: Lane.State == TEXT("raided") ? FLinearColor(1.0f, 0.68f, 0.14f, 0.58f)
+			: FLinearColor(0.86f, 0.93f, 1.0f, 0.3f);
+		// The lane as a smooth curve through its points, a step every map unit or so.
+		TArray<FVector2D> Curve;
+		const int32 Count = Lane.Path.Num();
+		for (int32 K = 0; K + 1 < Count; ++K)
+		{
+			const FVector2D P0 = Lane.Path[FMath::Max(K - 1, 0)], P1 = Lane.Path[K], P2 = Lane.Path[K + 1], P3 = Lane.Path[FMath::Min(K + 2, Count - 1)];
+			const int32 Steps = FMath::Clamp(FMath::CeilToInt32(FVector2D::Distance(P1, P2) / 2.0), 2, 400);
+			for (int32 Step = 0; Step < Steps; ++Step)
+			{
+				const double T = static_cast<double>(Step) / Steps;
+				Curve.Add(0.5 * ((2.0 * P1) + (P2 - P0) * T + (2.0 * P0 - 5.0 * P1 + 4.0 * P2 - P3) * T * T + (3.0 * P1 - P0 - 3.0 * P2 + P3) * T * T * T));
+			}
+		}
+		Curve.Add(Lane.Path.Last());
+		// Drawn as dashes, like a course pencilled on a chart; only over the water.
+		const int32 Dash = 4, Gap = 3;
+		for (int32 First = 0; First + 1 < Curve.Num(); First += Dash + Gap)
+		{
+			TArray<FVector2D> Stroke;
+			for (int32 K = First; K <= First + Dash && K < Curve.Num(); ++K)
+			{
+				if (Terrain.HeightAt(Curve[K].X, Curve[K].Y) > 0.0f)
+				{
+					break;
+				}
+				Stroke.Add(Curve[K]);
+			}
+			if (Stroke.Num() >= 2)
+			{
+				AppendRibbon(Buffers, Stroke, Lane.State == TEXT("open") ? 0.55 : 0.75, 0.12, Ink.ToFColor(false), false);
+			}
+		}
+	}
+	Buffers.Commit(LanesMesh, 0, HighlightMaterial);
 }
 
 void ACampaignMapActor::AddBattleSmoke(int32 RegionId)

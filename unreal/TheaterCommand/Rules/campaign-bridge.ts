@@ -48,6 +48,7 @@ import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
+  depots, shippingLanes,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
   invasions, previewDeclare, orderCourt, leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
@@ -149,6 +150,10 @@ function view() {
       }
       return [n.id, (['armour', 'fighters', 'bombers'] as const).map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab!.clock[f] - n.lab!.months)) + 7) / 12))];
     })),
+    // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
+    // the months it will last and its books in words, and every shipping lane to draw over the sea.
+    stores: storesOf(s),
+    lanes: s.flags.open === 1 ? shippingLanes(s).filter((l) => l.kind === 'sea' && l.path.length > 1 && l.state !== 'idle').map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })) : [],
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
     idle: s.human ? idleTeams(s, s.human) : 0,
     // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -938,6 +943,27 @@ function warPlan(on: string, target = -1) {
     ? `Its friends: ${[...ties].map(([why, who]) => `${listOf(who)} (${why})`).join('; ')}.`
     : `${The} has no close friends among the nations.`;
   return { ok: true, name: theName(s, on), lead, friends: friendsLine, lines };
+}
+
+/** The player's oil and supplies, for the two gauges beside the treasury. */
+function storesOf(s: Game) {
+  const v = s.human ? depots(s) : null;
+  if (!v) return null;
+  const amount = (x: number): string => (Math.round(x * 10) / 10).toLocaleString('en-US');
+  const book = (bk: typeof v.oil, word: string) => {
+    const months = Number.isFinite(bk.months) ? Math.max(0, Math.floor(bk.months)) : -1;
+    const lines = [
+      `${word}: ${amount(bk.stock)} in the depots, which hold ${amount(bk.cap)}.`,
+      `Comes in each month: ${amount(bk.made)}.`,
+      ...bk.income.filter((l) => Math.abs(l.amount) >= 0.05).map((l) => `   ${l.label}: ${amount(l.amount)}${l.note ? ` (${l.note})` : ''}`),
+      `Goes out each month: ${amount(bk.need)}.`,
+      ...bk.spend.filter((l) => Math.abs(l.amount) >= 0.05).map((l) => `   ${l.label}: ${amount(l.amount)}`),
+      bk.net >= 0 ? `The stock is ${bk.net > 0.05 ? 'growing' : 'steady'}.` : months <= 0 ? 'The depots are empty.' : `At this rate the depots are empty in ${months} month${months === 1 ? '' : 's'}.`,
+      ...bk.effects,
+    ];
+    return { stock: bk.stock, cap: bk.cap, net: bk.net, months, met: bk.met, short: bk.met < 0.999, tip: lines.join('\n') };
+  };
+  return { oil: book(v.oil, 'Oil'), sup: book(v.sup, 'Supplies') };
 }
 
 /** A nation's abilities and its special formation, each as a line. */

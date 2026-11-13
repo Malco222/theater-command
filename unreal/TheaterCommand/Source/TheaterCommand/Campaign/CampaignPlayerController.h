@@ -328,6 +328,8 @@ public:
 	void StopTech(const FString& Id);
 	/** Research teams of the player's with nothing to do, for the badge on the button. */
 	int32 GetIdleTeams() const;
+	/** The player's oil or supplies, or null where his nation keeps no stocks (a small country, a scenario, nobody led). */
+	const FViewStock* GetStock(bool bOil) const;
 	void FoundResearchBureau();
 
 	/** The foreign office: the powers at war, the countries at peace, courting them and declaring war. */

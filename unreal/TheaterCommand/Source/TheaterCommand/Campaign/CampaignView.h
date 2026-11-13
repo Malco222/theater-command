@@ -117,6 +117,25 @@ struct FViewFleet
 	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
 };
 
+/** One of the two stocks a great power keeps in the grand campaign: oil, or supplies. */
+struct FViewStock
+{
+	float Stock = 0.0f;
+	float Cap = 0.0f;
+	float Net = 0.0f; // what the stock gains or loses a month
+	int32 Months = -1; // months until the depots are empty at this rate; -1 when the stock is steady or growing
+	bool bShort = false; // the need was not met this month
+	FString Tip; // the books in words
+};
+
+/** A shipping lane drawn over the sea. */
+struct FViewLane
+{
+	TArray<FVector2D> Path; // on the map
+	FString State; // open, raided or cut
+	float Flow = 1.0f; // the share of its cargoes getting through
+};
+
 /** An air fleet on its airfields. */
 struct FViewAirFleet
 {
@@ -147,6 +166,10 @@ struct FCampaignView
 	TArray<FString> Declarable; // the countries the player could declare war on this month
 	TArray<FString> League; // the members of the League, the third alliance
 	int32 IdleTeams = 0; // research teams of the player's with nothing to do
+	bool bStores = false; // the player's nation keeps oil and supplies (a great power in the grand campaign)
+	FViewStock Oil;
+	FViewStock Supplies;
+	TArray<FViewLane> Lanes;
 	TMap<FString, FIntVector> DesignYears; // by nation: the year its tank, fighter and bomber designs have reached
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
 	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown

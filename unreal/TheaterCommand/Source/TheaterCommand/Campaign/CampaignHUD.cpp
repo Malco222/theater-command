@@ -193,6 +193,14 @@ namespace
 									]
 								]
 							]
+							// Oil and supplies, for a power that keeps stocks of them: how full the depots are and how long they last.
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								.Visibility_Lambda([this]() { return StoresShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)[MakeGauge(TEXT("OIL"), true)]
+								+ SHorizontalBox::Slot().AutoWidth()[MakeGauge(TEXT("SUPPLIES"), false)]
+							]
 						]
 					]
 
@@ -2770,6 +2778,71 @@ namespace
 				}
 				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)[Row];
 			}
+		}
+
+		bool StoresShown() const
+		{
+			return Controller.IsValid() && Controller->GetStock(true) != nullptr;
+		}
+
+		const FViewStock* StockOf(bool bOil) const
+		{
+			return Controller.IsValid() ? Controller->GetStock(bOil) : nullptr;
+		}
+
+		/** A small gauge on the date plate: a stock's name, how full its depots are, and how long it lasts. */
+		TSharedRef<SWidget> MakeGauge(const TCHAR* Label, bool bOil)
+		{
+			auto Low = [this, bOil]()
+			{
+				const FViewStock* Stock = StockOf(bOil);
+				return Stock && (Stock->bShort || (Stock->Months >= 0 && Stock->Months <= 6));
+			};
+			auto Share = [this, bOil]()
+			{
+				const FViewStock* Stock = StockOf(bOil);
+				return Stock && Stock->Cap > 0.0f ? FMath::Clamp(Stock->Stock / Stock->Cap, 0.0f, 1.0f) : 0.0f;
+			};
+			return SNew(SHorizontalBox)
+				.ToolTipText_Lambda([this, bOil]() { const FViewStock* Stock = StockOf(bOil); return Stock ? FText::FromString(Stock->Tip) : FText::GetEmpty(); })
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 160))
+					.ColorAndOpacity_Lambda([Low]() { return FSlateColor(Low() ? Alarm : Brass); })
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(40.0f).HeightOverride(6.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(TAttribute<float>::CreateLambda([Share]() { return FMath::Max(Share(), 0.0001f); }))
+						[
+							SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor_Lambda([Low]() { return FSlateColor(Low() ? Alarm : BrightBrass); })
+						]
+						+ SHorizontalBox::Slot().FillWidth(TAttribute<float>::CreateLambda([Share]() { return FMath::Max(1.0f - Share(), 0.0001f); }))
+						[
+							SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.12f))
+						]
+					]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Regular"), 10))
+					.ColorAndOpacity_Lambda([Low]() { return FSlateColor(Low() ? Alarm : Muted); })
+					.Text_Lambda([this, bOil]()
+					{
+						const FViewStock* Stock = StockOf(bOil);
+						if (!Stock)
+						{
+							return FText::GetEmpty();
+						}
+						if (Stock->bShort || Stock->Months == 0)
+						{
+							return FText::FromString(TEXT("empty"));
+						}
+						return FText::FromString(Stock->Months < 0 ? FString(Stock->Net > 0.05f ? TEXT("growing") : TEXT("steady")) : FString::Printf(TEXT("%d months"), Stock->Months));
+					})
+				];
 		}
 
 		/** The names of a country's abilities in a line: each ability's line begins with its name and a full stop. */

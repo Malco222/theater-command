@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bc5cc15 2026-11-12. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d874c88 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1838,7 +1838,7 @@
       start: "What each nation has researched when the war begins. A campaign begun in a later year gives every nation the months of research in between, chosen as its own staff would.",
       slots: "Research teams each nation begins with.",
       units: "Formations the tree unlocks beyond the ordinary kinds: 'para' is an airborne corps, raised like infantry, 'most' at once in the field and on order.",
-      ai: "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open). 'order' is each nation's preference among the branches."
+      ai: "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open), less 'fuel' for one that makes oil while the nation's stock of it is running down (the months in resources.json). 'order' is each nation's preference among the branches."
     },
     months: [0, 5, 8, 11, 14],
     early: 0.5,
@@ -1884,8 +1884,9 @@
       { id: "institutes", branch: "industry", tier: 1, year: 1939, months: 6, needs: [], name: "Research institutes", text: "Scientists and engineers brought together from the universities and set to war work.", slots: 1 },
       { id: "assembly", branch: "industry", tier: 2, year: 1940, needs: ["machinetools"], name: "Assembly lines", text: "Tanks, lorries and aircraft built on a moving line from standard parts.", cost: { what: ["corps:arm", "corps:mot", "air:ftr", "air:bmr"], mul: 0.9 } },
       { id: "mobilise", branch: "industry", tier: 2, year: 1940, needs: [], name: "General mobilisation", text: "Every class called up in its turn, with the depots and instructors to turn recruits into replacements.", drafts: 1.2 },
-      { id: "synthetics", branch: "industry", tier: 2, year: 1941, needs: [], name: "Synthetic fuel and rubber", text: "Petrol from coal and rubber from the chemical works, so the factories do not wait on cargoes.", field: "industry" },
+      { id: "synthetics", branch: "industry", tier: 2, year: 1940, needs: [], name: "Synthetic fuel and rubber", text: "Petrol from coal and rubber from the chemical works, so the tanks and the factories do not wait on cargoes.", oil: 0.25 },
       { id: "warplan", branch: "industry", tier: 3, year: 1942, needs: ["assembly"], name: "War economy", text: "One central plan for steel, labour and machine tools, and nothing made that the war does not need.", field: "industry" },
+      { id: "hydrogenation", branch: "industry", tier: 3, year: 1942, needs: ["synthetics"], name: "Hydrogenation plants", text: "Great works beside the coalfields that turn brown coal into aviation spirit by the trainload.", oil: 0.3 },
       { id: "labs", branch: "industry", tier: 3, year: 1942, months: 12, needs: ["institutes"], name: "Central laboratories", text: "The institutes joined under one directorate with first call on money and men.", slots: 1 },
       { id: "massprod", branch: "industry", tier: 4, year: 1944, needs: ["warplan"], name: "Mass production", text: "Simplified designs turned out round the clock by factories that make one thing only.", field: "industry", cost: { what: ["corps:inf"], mul: 0.9 } },
       { id: "staff", branch: "doctrine", tier: 1, year: 1939, needs: [], name: "Staff colleges", text: "Officers trained to one method, so that an order means the same thing to everyone who reads it.", field: "doctrine" },
@@ -1926,6 +1927,7 @@
       early: 30,
       teams: 14,
       later: 100,
+      fuel: 40,
       skip: { _all: ["airborne", "carriers"] },
       order: {
         _default: ["land", "industry", "doctrine", "air", "naval"],
@@ -2133,500 +2135,65 @@
     return g2.flags.open === 1 ? [...out, ...treeNotes(g2, who, fields)] : out;
   }
 
-  // ../../src/campaign/tech.ts
-  var TECH = tech_default;
-  var BY_ID = {};
-  var GATE = {};
-  for (const t of TECH.techs) {
-    BY_ID[t.id] = t;
-    for (const k of t.unlock ?? []) GATE[k] = t;
-  }
-  var techRules = (g2) => g2.flags.open === 1;
-  var yearOf = (turn) => turnToDate(Math.max(1, turn)).year;
-  var fresh = (nat) => ({ done: (TECH.start[nat] ?? []).filter((id) => id in BY_ID), work: [] });
-  function techOf(g2, nat) {
-    if (!techRules(g2)) return null;
-    const n = g2.nations[nat];
-    if (!n) return null;
-    if (!g2.flags["tech:open"]) openTech(g2);
-    return n.tech ?? (n.tech = fresh(nat));
-  }
-  var NOTHING = { src: null, n: 0, level: {}, traits: [], open: /* @__PURE__ */ new Set(), winter: false, slots: 0 };
-  var cache = /* @__PURE__ */ new WeakMap();
-  function sum(g2, nat) {
-    const t = techOf(g2, nat);
-    if (!t) return NOTHING;
-    const n = g2.nations[nat];
-    const had = cache.get(n);
-    if (had && had.src === t.done && had.n === t.done.length) return had;
-    const d = { src: t.done, n: t.done.length, level: {}, traits: [], open: /* @__PURE__ */ new Set(), winter: false, slots: 0 };
-    for (const id of t.done) {
-      const x = BY_ID[id];
-      if (!x) continue;
-      if (x.field) d.level[x.field] = (d.level[x.field] ?? 0) + 1;
-      for (const k of x.unlock ?? []) d.open.add(k);
-      if (x.winterKit) d.winter = true;
-      d.slots += x.slots ?? 0;
-      if (x.attack !== void 0 || x.defence !== void 0 || x.drafts !== void 0 || x.cost || x.fleet !== void 0 || x.seaLoss !== void 0) {
-        d.traits.push({ id: `tech:${x.id}`, name: x.name, text: x.text, attack: x.attack, defence: x.defence, when: x.when, drafts: x.drafts, cost: x.cost, fleet: x.fleet, seaLoss: x.seaLoss });
-      }
-    }
-    cache.set(n, d);
-    return d;
-  }
-  var treeLevel = (g2, nat, f) => g2.flags.open === 1 ? sum(g2, nat).level[f] ?? 0 : 0;
-  var techTraits = (g2, nat) => sum(g2, nat).traits;
-  function locked(g2, nat, key2) {
-    const t = GATE[key2];
-    return t && techRules(g2) && !sum(g2, nat).open.has(key2) ? t : null;
-  }
-  var winterReady = (g2, nat) => g2.flags.open === 1 && sum(g2, nat).winter;
-  function teamsOf(g2, nat) {
-    if (!techRules(g2)) return 0;
-    return (TECH.slots[nat] ?? TECH.slots._default) + sum(g2, nat).slots + (g2.nations[nat].lab?.founded ?? 0);
-  }
-  var hasTech = (g2, nat, id) => !!techOf(g2, nat)?.done.includes(id);
-  function monthsFor(t, turn) {
-    const base = t.months ?? TECH.months[t.tier];
-    return Math.ceil(base * (1 + TECH.early * Math.max(0, t.year - yearOf(turn))) - 1e-9);
-  }
-  var and = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
-  function whyNotResearch(g2, nat, id) {
-    const s = techOf(g2, nat), t = BY_ID[id];
-    if (!s) return "The technology tree belongs to the grand campaign.";
-    if (!t) return "There is no such technology.";
-    if (!g2.nations[nat].alive) return "The nation is out of the war.";
-    if (s.done.includes(id)) return "Already researched.";
-    if (s.work.some((w) => w.id === id)) return "A team is already at work on it.";
-    const lacks = t.needs.filter((x) => !s.done.includes(x));
-    if (lacks.length) return `Needs ${and(lacks.map((x) => BY_ID[x]?.name ?? x))} first.`;
-    if (s.work.length >= teamsOf(g2, nat)) return "Every research team is busy. Wait for one to finish, or stop a project.";
-    return null;
-  }
-  function startResearch(g2, nat, id) {
-    if (whyNotResearch(g2, nat, id) !== null) return false;
-    const of = monthsFor(BY_ID[id], g2.turn);
-    techOf(g2, nat).work.push({ id, left: of, of });
-    return true;
-  }
-  function stopResearch(g2, nat, id) {
-    const s = techOf(g2, nat);
-    const i = s ? s.work.findIndex((w) => w.id === id) : -1;
-    if (!s || i < 0) return false;
-    s.work.splice(i, 1);
-    return true;
-  }
-  function finish(g2, n, id, quiet2) {
-    const s = n.tech, t = BY_ID[id];
-    if (!t || s.done.includes(id)) return;
-    s.done.push(id);
-    if (t.sealift) n.sealift += t.sealift;
-    if (!quiet2 && n.id === g2.human) headline(g2, "info", `Research complete: ${t.name}. ${techRule(t)} A research team is free for new work.`, n.id);
-  }
-  function staffPick(g2, nat, turn = g2.turn) {
-    const s = techOf(g2, nat);
-    if (!s) return null;
-    const A = TECH.ai, order2 = A.order[nat] ?? A.order._default, year = yearOf(turn);
-    const skip = (id) => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
-    let best = null, low = Infinity;
-    for (const t of TECH.techs) {
-      if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
-      const place2 = order2.indexOf(t.branch);
-      const score = t.tier * A.tier + (place2 < 0 ? order2.length : place2) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0);
-      if (score < low) {
-        low = score;
-        best = t;
-      }
-    }
-    return best ? best.id : null;
-  }
-  function month(g2, n, turn, staffed, quiet2) {
-    const s = n.tech;
-    const due = [];
-    for (const w of s.work) {
-      w.left -= 1;
-      if (w.left <= 1e-9) due.push(w.id);
-    }
-    if (due.length) {
-      s.work = s.work.filter((w) => w.left > 1e-9);
-      for (const id of due) finish(g2, n, id, quiet2);
-    }
-    if (!staffed) return;
-    while (s.work.length < teamsOf(g2, n.id)) {
-      const id = staffPick(g2, n.id, turn);
-      if (!id) break;
-      const of = monthsFor(BY_ID[id], turn);
-      s.work.push({ id, left: of, of });
-    }
-  }
-  function openTech(g2) {
-    if (!techRules(g2) || g2.flags["tech:open"]) return;
-    g2.flags["tech:open"] = 1;
-    const all = Object.values(g2.nations);
-    for (const n of all) {
-      n.tech ?? (n.tech = fresh(n.id));
-      if (n.lab) for (const f of Object.keys(n.lab.teams)) n.lab.teams[f] = 1;
-    }
-    for (let turn = 1; turn < g2.turn; turn++) for (const n of all) if (n.alive || n.dormant) month(g2, n, turn, true, true);
-    for (const n of all) if (n.alive && n.id !== g2.human) month0(g2, n);
-  }
-  function month0(g2, n) {
-    const s = n.tech;
-    while (s.work.length < teamsOf(g2, n.id)) {
-      const id = staffPick(g2, n.id);
-      if (!id) break;
-      const of = monthsFor(BY_ID[id], g2.turn);
-      s.work.push({ id, left: of, of });
-    }
-  }
-  function techTick(g2, nat) {
-    const s = techOf(g2, nat);
-    const n = g2.nations[nat];
-    if (!s || !n.alive) return;
-    month(g2, n, g2.turn, nat !== g2.human, false);
-  }
-  function techMonth(g2) {
-    if (!techRules(g2)) return;
-    for (const n of Object.values(g2.nations)) if (!n.alive && n.dormant && techOf(g2, n.id)) month(g2, n, g2.turn, true, true);
-  }
-  function paraCount(g2, nat) {
-    let k = g2.nations[nat].queue.filter((b) => b.airborne).length;
-    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.airborne) k++;
-    return k;
-  }
-  function whyNoPara(g2, nat) {
-    if (!techRules(g2)) return "Airborne corps are raised in the grand campaign.";
-    const need = locked(g2, nat, "para");
-    if (need) return `Needs the technology ${need.name}.`;
-    const most = TECH.units.para.most;
-    if (paraCount(g2, nat) >= most) return `The transport aircraft can serve ${most} airborne corps at once, in the field and on order.`;
-    return null;
-  }
-  var pct = (x) => `${Math.round(x * 100)}%`;
-  var FIELD_RULE = {
-    armour: (p) => `Armoured and motorised corps fight ${p} harder.`,
-    infantry: (p) => `Every corps that is not armoured or motorised fights ${p} harder.`,
-    doctrine: (p) => `Every corps attacks ${p} harder.`,
-    fighters: (p) => `Fighters fight ${p} harder.`,
-    bombers: (p) => `Bombers that get through do ${p} more damage.`,
-    navy: (p) => `Fleets, raiders and convoy escorts fight ${p} harder.`,
-    radar: (p) => `Fighters over their own sky and the escorts on the convoy routes are worth ${p} more.`,
-    industry: (p) => `Earnings up ${p}.`
+  // ../../data/campaign/resources.json
+  var resources_default = {
+    _about: "Oil and supplies: the two stocks a great power keeps beside its treasury (the grand campaign only; the historical scenarios do not use this file). Money builds an army, oil moves it, supplies keep it fighting. 'nations' are the powers that keep stocks; every other country buys the little it needs abroad month by month and is never short. Each month a nation's stock gains what it produces and imports and loses what it needs. When the stock runs dry the nation gets only the share of its need that came in that month, and its forces suffer for the rest.",
+    nations: ["GER", "UK", "FRA", "ITA", "SOV", "USA"],
+    oil: {
+      _about: "'fields' is what each oilfield yields a month to a nation that owns it, by the province's name; 'occupied' is the share a conqueror gets out of a field it has taken. 'home' is what a nation produces at home without a field on the map: small wells, pre-war synthetic plants, and for a country off the map its whole industry. 'need' is what the forces burn a month: corps by the division and kind, aircraft by the machine, ships by the hull at sea ('port' is the share a ship in harbour burns), and 'peace' the share of it all a nation at peace uses. 'start' is the stock a nation begins with, in months of its need, and 'cap' the most its tanks can hold, in months of need. 'short' is what a shortage does when only part of the need is met: the share of their attack and defence tanks and lorried troops lose when there is no fuel at all, the same for aircraft and for the fleet's readiness, and 'slowAt' the share of need met below which fast troops lose one move a month.",
+      fields: { Ploiesti: 14, Maikop: 8, Grozny: 12, Kirovabad: 40, Iraq: 12, _default: 8 },
+      occupied: 0.6,
+      home: { GER: 14, ITA: 2.5, FRA: 1, UK: 0, SOV: 4, USA: 120 },
+      need: {
+        corps: { arm: 0.5, mot: 0.3, _default: 0.02 },
+        air: 4e-3,
+        ships: { bb: 0.3, cv: 0.3, ca: 0.15, dd: 0.04, ss: 0.03 },
+        port: 0.25,
+        peace: 0.4
+      },
+      start: { GER: 6, UK: 4, FRA: 3, ITA: 6, SOV: 4, USA: 6, _default: 4 },
+      cap: 8,
+      short: { attack: 0.5, defence: 0.25, air: 0.5, fleet: 0.4, slowAt: 0.5 }
+    },
+    sup: {
+      _about: "Supplies are food, steel, rubber and ammunition. 'land' is what a province grows or digs a month by its ground, and 'factory' what each working factory adds; 'occupied' and 'overseas' are the shares that reach the nation from conquered ground and from colonies, and 'offmap' what each factory of a homeland beyond the map is worth, farms included. 'ratio' is how far a nation's own home ground covers its people's needs: at 1 it exactly feeds itself, below 1 it must import the rest, above 1 it has a surplus for its army. 'perDiv' is what a division in the field uses a month in war, and 'peace' the share of that it uses at peace. 'start' and 'cap' are in months of need, as for oil. 'short' is what a shortage does when nothing at all comes in: the share of every corps' attack and defence lost, the share of the monthly drafts that do not go out, and the share of the treasury's income lost as factories stand idle.",
+      land: { plains: 1, forest: 0.5, hills: 0.5, marsh: 0.3, mountain: 0.2, urban: 0.3, desert: 0.05 },
+      factory: 0.5,
+      occupied: 0.25,
+      overseas: 0.5,
+      offmap: 1.5,
+      ratio: { _default: 1.15, GER: 0.85, UK: 0.5, FRA: 1.1, ITA: 1, SOV: 1.1, USA: 2 },
+      perDiv: 0.03,
+      peace: 0.25,
+      start: { _default: 3 },
+      cap: 6,
+      short: { fight: 0.3, drafts: 0.8, income: 0.5 }
+    },
+    will: {
+      _about: "Privation at home wears away the will to fight. Each month a nation's count of privation rises by 'sup' times the share of its supplies that did not come and 'oil' times the share of its oil; a month with everything it needs takes 'heal' off again. Each point of the count takes 'per' off the nation's will to fight, up to 'most', and that counts toward surrender beside a lost capital, lost ground and a broken army. A country that imports half its food and is cut off for a year and a half asks for terms.",
+      sup: 1,
+      oil: 0.3,
+      heal: 0.5,
+      per: 0.08,
+      most: 1
+    },
+    _lanes: "A lane crosses the sea to 'to' through 'zones', where raiders sink a share of its cargoes and escorts and aircraft guard them, as on the convoy routes of navy.json. 'oil' and 'sup' are the shares of the recipient's monthly need the lane brings when every cargo arrives. 'source' is a nation the cargoes are bought from (a war with it ends the traffic); 'field' an oilfield they come from (the lane runs while its holder is no enemy); 'past' narrows an enemy holder shuts; 'shutBy' the sea powers whose blockade closes the lane while the recipient is at war with one of them; 'allies' the powers the recipient must be fighting beside for it to run at all. 'enter', 'draw' and 'via' are for drawing it on the map. A deal comes overland in fixed amounts: from whoever holds 'field', from 'seller', or (ore) by the Swedish ore traffic of navy.json; it stops when the seller is an enemy or in the enemy's camp.",
+    lanes: [
+      { id: "atlantic", name: "the Atlantic lane", from: "the Americas", source: "USA", to: "UK", zones: ["natl", "wapp", "irish"], oil: 0.95, sup: 0.62, text: "Oil from Texas and Venezuela, wheat, steel and machines, across the Atlantic to the western ports.", enter: [0, 470], draw: ["natl", "irish"] },
+      { id: "gulf", name: "the Gulf route", from: "Iraq and the Persian Gulf", field: "Iraq", to: "UK", zones: [], oil: 0.15, sup: 0, text: "Oil from Iraq and the Gulf, by the long way round Africa. It flows while Iraq is in friendly hands." },
+      { id: "french", name: "the Biscay lane", from: "the Americas and the colonies", to: "FRA", zones: ["biscay"], oil: 1.05, sup: 0.08, text: "Oil and colonial goods into the French Atlantic ports.", enter: [0, 1060], draw: ["biscay"] },
+      { id: "italian", name: "the Gibraltar lane", from: "the oceans beyond Gibraltar", to: "ITA", zones: ["wmed", "tyrr"], past: ["Gibraltar"], oil: 0.9, sup: 0.12, text: "Nearly all of Italy's oil comes in past Gibraltar. An enemy who holds the Rock shuts the door.", enter: [0, 1440], draw: ["wmed", "tyrr"], via: "Gibraltar" },
+      { id: "german", name: "the North Sea lane", from: "the oceans beyond the North Sea", to: "GER", zones: ["nsea"], shutBy: ["UK", "USA"], oil: 0.5, sup: 0.1, text: "Germany's trade with the wider world. A war with a great sea power closes it by blockade.", enter: [300, 0], draw: ["nsea"] },
+      { id: "arctic", name: "the Arctic convoys", from: "Britain and America", to: "SOV", zones: ["norw", "barents"], allies: ["UK", "USA"], oil: 0.08, sup: 0.12, text: "Lorries, aviation fuel, tinned food and boots round the North Cape to Murmansk, once the Soviet Union fights beside the western Allies.", enter: [0, 150], draw: ["norw", "barents"] }
+    ],
+    deals: [
+      { id: "ploiesti", name: "Romanian oil", field: "Ploiesti", to: "GER", oil: 9, sup: 0, text: "Bought from the Ploiesti fields and brought up the Danube." },
+      { id: "ploiesti-ita", name: "Romanian oil", field: "Ploiesti", to: "ITA", oil: 6, sup: 0, text: "Bought from the Ploiesti fields and brought across the Balkans." },
+      { id: "pact", name: "Soviet deliveries", seller: "SOV", to: "GER", oil: 6, sup: 6, text: "Oil, grain and manganese delivered under the trade agreement of 1939, for as long as the two are at peace." },
+      { id: "ore", name: "Swedish iron ore", ore: true, to: "GER", oil: 0, sup: 5, text: "Iron ore from the north of Sweden, across the Baltic in summer and through Narvik in winter." }
+    ],
+    ai: { armourAt: 6, synthAt: 36 }
   };
-  var UNLOCK_RULE = {
-    "corps:arm": "Armoured corps can be raised.",
-    "corps:mot": "Motorised corps can be raised.",
-    "ship:cv": "Aircraft carriers can be laid down.",
-    para: "Airborne corps can be raised."
-  };
-  function techRule(t) {
-    const out = [];
-    for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
-    if (t.field) out.push(FIELD_RULE[t.field](pct(RESEARCH.fields[t.field].per)));
-    const rest = traitRule({ id: t.id, name: t.name, text: t.text, attack: t.attack, defence: t.defence, when: t.when, drafts: t.drafts, cost: t.cost, sealift: t.sealift, fleet: t.fleet, seaLoss: t.seaLoss });
-    if (rest) out.push(rest);
-    if (t.slots) out.push(t.slots === 1 ? "One more research team." : `${t.slots} more research teams.`);
-    if (t.winterKit) out.push("Its troops no longer march and fight worse in the eastern winter.");
-    return out.join(" ");
-  }
-  function techView(g2, nat) {
-    const s = techOf(g2, nat);
-    if (!s) return null;
-    const nodes = TECH.techs.map((t) => {
-      const w = s.work.find((x) => x.id === t.id);
-      const done = s.done.includes(t.id);
-      const open = t.needs.every((x) => s.done.includes(x));
-      return {
-        id: t.id,
-        branch: t.branch,
-        tier: t.tier,
-        name: t.name,
-        text: t.text,
-        rule: techRule(t),
-        year: t.year,
-        needs: t.needs.map((x) => ({ id: x, name: BY_ID[x]?.name ?? x, done: s.done.includes(x) })),
-        state: done ? "done" : w ? "work" : open ? "ready" : "locked",
-        months: monthsFor(t, g2.turn),
-        base: t.months ?? TECH.months[t.tier],
-        left: w ? Math.max(1, Math.ceil(w.left - 1e-9)) : 0,
-        of: w ? w.of : 0,
-        why: whyNotResearch(g2, nat, t.id)
-      };
-    });
-    return {
-      nat,
-      teams: teamsOf(g2, nat),
-      busy: s.work.length,
-      done: nodes.filter((x) => x.state === "done").length,
-      total: nodes.length,
-      branches: TECH.branches.map((b) => ({ ...b, done: nodes.filter((x) => x.branch === b.id && x.state === "done").length, total: nodes.filter((x) => x.branch === b.id).length })),
-      eras: TECH.eras,
-      nodes
-    };
-  }
-  function idleTeams(g2, nat) {
-    const s = techOf(g2, nat);
-    if (!s || !g2.nations[nat].alive) return 0;
-    const free2 = teamsOf(g2, nat) - s.work.length;
-    return free2 > 0 && staffPick(g2, nat) ? free2 : 0;
-  }
-  function treeNotes(g2, nats, fields) {
-    const out = [];
-    if (g2.flags.open !== 1) return out;
-    for (const nat of new Set(nats)) {
-      for (const f of fields) {
-        const k = treeLevel(g2, nat, f);
-        if (!k) continue;
-        out.push({ text: `${g2.nations[nat].adj} ${RESEARCH.fields[f].noun}: ${k === 1 ? "one technology" : `${k} technologies`} researched`, pct: Math.round(RESEARCH.fields[f].per * k * 100) });
-      }
-    }
-    return out;
-  }
-
-  // ../../src/campaign/traits.ts
-  var TRAITS = traits_default;
-  var traitRules = (g2) => g2.flags.open === 1;
-  var traitsOf = (nat) => TRAITS.nations[nat]?.traits ?? [];
-  var eliteOf = (nat) => TRAITS.nations[nat]?.unit ?? null;
-  var sceneTurn = -1;
-  var scene = { year: 0, winter: false };
-  function sceneOf(g2) {
-    if (g2.turn !== sceneTurn) {
-      const d = turnToDate(g2.turn);
-      scene = { year: d.year, winter: TRAITS.winter.includes(d.month) };
-      sceneTurn = g2.turn;
-    }
-    return scene;
-  }
-  function holds(g2, w, c, target, landing) {
-    if (!w) return true;
-    if (w.kinds && !w.kinds.includes(c.kind)) return false;
-    if (w.mobile && !KIND[c.kind].mobile) return false;
-    if (w.terrain && !w.terrain.includes(target.terrain)) return false;
-    if (w.home && target.owner !== c.nat) return false;
-    if (w.works && !target.fort) return false;
-    if (w.landing && !landing) return false;
-    if (w.winter || w.from !== void 0 || w.until !== void 0) {
-      const s = sceneOf(g2);
-      if (w.winter && !s.winter) return false;
-      if (w.from !== void 0 && s.year < w.from) return false;
-      if (w.until !== void 0 && s.year > w.until) return false;
-    }
-    return true;
-  }
-  function edge(g2, c, target, landing, side2, names) {
-    if (!traitRules(g2)) return 1;
-    const row2 = TRAITS.nations[c.nat];
-    let m = 1;
-    if (row2) for (const t of row2.traits) {
-      const x2 = t[side2];
-      if (x2 === void 0 || t.builtin || !holds(g2, t.when, c, target, landing)) continue;
-      m *= x2;
-      names?.add(t.name);
-    }
-    for (const t of techTraits(g2, c.nat)) {
-      const x2 = t[side2];
-      if (x2 === void 0 || !holds(g2, t.when, c, target, landing)) continue;
-      m *= x2;
-      names?.add(t.name);
-    }
-    const u = c.elite && row2?.unit && row2.unit.id === c.elite ? row2.unit : null;
-    const x = u?.[side2];
-    if (u && x !== void 0 && holds(g2, u.when, c, target, landing)) {
-      m *= x;
-      names?.add(u.label);
-    }
-    return m;
-  }
-  var traitAttack = (g2, c, target, landing = false) => edge(g2, c, target, landing, "attack");
-  var traitDefence = (g2, c, target) => edge(g2, c, target, false, "defence");
-  function traitNames(g2, cs, target, side2, landing = false) {
-    const names = /* @__PURE__ */ new Set();
-    for (const c of cs) edge(g2, c, target, side2 === "attack" && landing, side2, names);
-    return [...names];
-  }
-  var NO_MONEY = { lines: [], flat: 0, mul: 1, mulBy: "" };
-  function traitMoney(g2, nat) {
-    const row2 = TRAITS.nations[nat];
-    if (!traitRules(g2) || !row2) return NO_MONEY;
-    const n = g2.nations[nat];
-    const out = { lines: [], flat: 0, mul: 1, mulBy: "" };
-    const add = (t, amount, count2) => {
-      if (amount <= 1e-9) return;
-      out.lines.push({ key: `trait:${t.id}`, label: t.name, amount, count: count2 });
-      out.flat += amount;
-    };
-    for (const t of row2.traits) {
-      if (t.builtin) continue;
-      const now = !t.incomeAt || t.incomeAt === "war" === n.atWar.length > 0;
-      if (t.income && now) add(t, t.income);
-      if (t.incomeMul && now) {
-        out.mul *= t.incomeMul;
-        out.mulBy = t.name;
-      }
-      if (t.oil) {
-        let oil = 0, wells = 0;
-        for (const r of g2.regions) if (r.ctrl === nat && r.owner === nat && r.oil) {
-          oil += provinceYield(g2, r, nat).oil;
-          wells++;
-        }
-        add(t, oil * (t.oil - 1), wells);
-      }
-      if (t.relocate) {
-        let fac = 0;
-        for (const r of g2.regions) if (r.owner === nat && r.ctrl !== nat && r.fac > 0 && atWar(g2, nat, r.ctrl)) fac += r.fac;
-        add(t, fac * t.relocate, fac);
-      }
-    }
-    return out;
-  }
-  var product = (g2, nat, pick) => {
-    if (!traitRules(g2)) return 1;
-    let m = 1;
-    for (const t of traitsOf(nat)) {
-      const x = t.builtin ? void 0 : pick(t);
-      if (x !== void 0) m *= x;
-    }
-    for (const t of techTraits(g2, nat)) {
-      const x = pick(t);
-      if (x !== void 0) m *= x;
-    }
-    return m;
-  };
-  var traitDrafts = (g2, nat) => product(g2, nat, (t) => t.drafts);
-  var costMul = (g2, nat, key2) => product(g2, nat, (t) => t.cost?.what.includes(key2) ? t.cost.mul : void 0);
-  function priceOf(g2, nat, key2, list3) {
-    const m = costMul(g2, nat, key2);
-    return m === 1 ? list3 : Math.round(list3 * m * 10) / 10;
-  }
-  var traitFleet = (g2, nat) => product(g2, nat, (t) => t.fleet);
-  var traitSeaLoss = (g2, nat) => product(g2, nat, (t) => t.seaLoss);
-  var alertNation = (g2, nat) => traitRules(g2) && traitsOf(nat).some((t) => t.alert);
-  var traitSealift = (nat) => traitsOf(nat).reduce((s, t) => s + (t.builtin ? 0 : t.sealift ?? 0), 0);
-  function eliteCount(g2, nat) {
-    let k = g2.nations[nat].queue.filter((b) => b.elite).length;
-    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.elite) k++;
-    return k;
-  }
-  function whyNoElite(g2, nat) {
-    const u = eliteOf(nat);
-    if (!traitRules(g2) || !u) return "This nation has no special formation.";
-    if (u.from !== void 0 && sceneOf(g2).year < u.from) return `Not before ${u.from}.`;
-    if (eliteCount(g2, nat) >= u.most) return `The nation can keep ${u.most} of these at once, in the field and on order.`;
-    return null;
-  }
-  function openTraits(g2) {
-    if (!traitRules(g2) || g2.flags["traits:open"]) return;
-    g2.flags["traits:open"] = 1;
-    for (const [nat, row2] of Object.entries(TRAITS.nations)) {
-      const n = g2.nations[nat];
-      if (!n) continue;
-      n.sealift += traitSealift(nat);
-      const u = row2.unit;
-      if (!u?.starts) continue;
-      let left = u.starts;
-      for (const c of g2.corps) {
-        if (left <= 0) break;
-        if (c.nat === nat && !c.dead && c.kind === u.kind && !c.elite) {
-          c.elite = u.id;
-          left--;
-        }
-      }
-    }
-  }
-  function traitsMonth(g2) {
-    if (!traitRules(g2)) return;
-    for (const [nat, row2] of Object.entries(TRAITS.nations)) {
-      const t = row2.traits.find((x) => x.partisans);
-      const X = g2.nations[nat];
-      if (!t || !X) continue;
-      const victor = X.fellOn?.to;
-      const foe = (id) => X.alive ? atWar(g2, nat, id) : !!victor && (id === victor || allied(g2, id, victor));
-      let hit = 0, where = -1;
-      for (const r of g2.regions) {
-        if (r.owner !== nat || r.ctrl === nat || !TRAITS.partisanGround.includes(r.terrain) || !foe(r.ctrl)) continue;
-        for (const c of r.units) {
-          if (c.dead || !foe(c.nat) || c.str <= 0.3) continue;
-          c.str = Math.max(0.3, c.str - t.partisans);
-          if (c.nat === g2.human || nat === g2.human) {
-            hit++;
-            where = r.id;
-          }
-        }
-      }
-      if (hit && g2.turn % 6 === 0) {
-        const mine = nat === g2.human;
-        headline(g2, "info", mine ? `The partisans go on fighting in the occupied provinces: ${hit === 1 ? "one enemy corps" : `${hit} enemy corps`} lost men to raids and ambushes this month.` : `Partisans in occupied ${X.name} raid roads and depots: ${hit === 1 ? "one of your corps there" : `${hit} of your corps there`} lost men this month. The mountains, hills and forests are their country.`, g2.human ?? void 0, where);
-      }
-    }
-  }
-  var pct2 = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
-  var KIND_WORD = { inf: "infantry", mot: "motorised troops", arm: "tanks", cav: "cavalry", mtn: "mountain troops", fort: "fortress troops", art: "artillery", eng: "engineers" };
-  var DIV_WORD = { inf: "infantry", mot: "motorised", arm: "armoured", cav: "cavalry", mtn: "mountain", art: "artillery", eng: "engineer" };
-  var ORDER_WORD = {
-    "corps:inf": "infantry corps",
-    "corps:mtn": "mountain corps",
-    "corps:mot": "motorised corps",
-    "corps:arm": "armoured corps",
-    "corps:cav": "cavalry",
-    "corps:art": "artillery corps",
-    "corps:eng": "engineer corps",
-    "work:fort": "fortifications",
-    "work:aa": "anti-aircraft guns",
-    "ship:dd": "destroyers",
-    "ship:ss": "submarines",
-    "ship:ca": "cruisers",
-    "ship:bb": "battleships",
-    "ship:cv": "carriers",
-    "ship:tp": "troopships",
-    "air:ftr": "fighter wings",
-    "air:bmr": "bomber wings"
-  };
-  var list = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
-  function whenWords(w, who) {
-    if (!w) return "";
-    const out = [];
-    if (w.kinds) out.push(`for ${list(w.kinds.map((k) => KIND_WORD[k] ?? k))}`);
-    if (w.mobile) out.push("for tanks, motorised troops and cavalry");
-    if (w.landing) out.push("in a landing from the sea");
-    if (w.terrain) out.push(`in ${list(w.terrain.map((t) => t === "urban" ? "cities" : t === "mountain" ? "mountains" : t === "forest" ? "forest" : t))}`);
-    if (w.works) out.push("behind fortifications");
-    if (w.home) out.push(`on ${who} own ground`);
-    if (w.winter) out.push("from December to March");
-    if (w.from !== void 0) out.push(`from ${w.from}`);
-    if (w.until !== void 0) out.push(`until the end of ${w.until}`);
-    return out.length ? ` ${out.join(" ")}` : "";
-  }
-  function fightWords(x, who) {
-    const a = x.attack, d = x.defence;
-    if (a === void 0 && d === void 0) return "";
-    const head = a !== void 0 && d !== void 0 ? a === d ? `Attack and defence up ${pct2(a)}` : `Attack up ${pct2(a)}, defence up ${pct2(d)}` : a !== void 0 ? `Attack up ${pct2(a)}` : `Defence up ${pct2(d)}`;
-    return `${head}${whenWords(x.when, who)}.`;
-  }
-  function traitRule(t, scale = 100) {
-    if (t.builtin) return t.rule ?? "Part of the rules of every campaign.";
-    const out = [];
-    const fight2 = fightWords(t, "its");
-    if (fight2) out.push(fight2);
-    const at = t.incomeAt === "peace" ? " while at peace" : t.incomeAt === "war" ? " while at war" : "";
-    if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString("en-US")} a month${at}.`);
-    if (t.incomeMul) out.push(`Earnings up ${pct2(t.incomeMul)}${at}.`);
-    if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? "double" : `${t.oil} times as much`}.`);
-    if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);
-    if (t.drafts) out.push(`Losses are made good ${pct2(t.drafts)} ${t.drafts > 1 ? "faster" : "slower"}.`);
-    if (t.cost) out.push(`${list(t.cost.what.map((k) => ORDER_WORD[k] ?? k)).replace(/^./, (ch) => ch.toUpperCase())} cost ${pct2(t.cost.mul)} ${t.cost.mul < 1 ? "less" : "more"}.`);
-    if (t.sealift) out.push(`Shipping for ${t.sealift === 1 ? "one more corps" : `${t.sealift} more corps`} a month.`);
-    if (t.alert) out.push("No enemy gets the surprise of the first month against it.");
-    if (t.partisans) out.push(`Enemy corps on its occupied mountains, hills and forests lose ${Math.round(t.partisans * 100)}% of their strength a month.`);
-    if (t.fleet) out.push(`Fleets fight ${pct2(t.fleet)} harder.`);
-    if (t.seaLoss) out.push(`Convoy losses down ${pct2(t.seaLoss)}.`);
-    return out.join(" ");
-  }
-  function eliteRule(u) {
-    const fight2 = fightWords(u, "its");
-    const size = `${u.divs === 1 ? `One ${DIV_WORD[u.kind] ?? u.kind} division` : `${u.divs} ${DIV_WORD[u.kind] ?? u.kind} divisions`}.`;
-    return [size, fight2, u.from !== void 0 ? `Raised from ${u.from}.` : "", `At most ${u.most} at once.`].filter(Boolean).join(" ");
-  }
 
   // ../../data/campaign/navy.json
   var navy_default = {
@@ -4033,7 +3600,7 @@
       award(g2, kind, u, d, at, extra);
     }
   }
-  function edge2(g2, u, key2) {
+  function edge(g2, u, key2) {
     let e = 0;
     for (const id of u.hon ?? []) {
       const a = awardOf(g2, id);
@@ -4048,19 +3615,19 @@
   };
   function storyAttack(g2, c, target, defenders) {
     if (c.nat !== g2.human || c.kind === "fort") return 1;
-    let m = 1 + edge2(g2, c, "attack");
+    let m = 1 + edge(g2, c, "attack");
     if (c.home === target.id && target.owner === c.nat) m += STORIES.home.attack;
     if (rivalIn(g2, c, defenders)) m += STORIES.rivals.edge;
     return m;
   }
   function storyDefence(g2, c, target, attackers2) {
     if (c.nat !== g2.human || c.kind === "fort") return 1;
-    let m = 1 + edge2(g2, c, "defence");
+    let m = 1 + edge(g2, c, "defence");
     if (c.home === target.id) m += STORIES.home.defence;
     if (rivalIn(g2, c, attackers2)) m += STORIES.rivals.edge;
     return m;
   }
-  var storyEdge = (g2, f) => f.nat === g2.human ? 1 + edge2(g2, f, "all") : 1;
+  var storyEdge = (g2, f) => f.nat === g2.human ? 1 + edge(g2, f, "all") : 1;
   function moment(g2, w, m, c, reg, o = {}) {
     if (c.nat !== g2.human) return;
     const gen = "general" in c ? generalOf(g2, c) : null;
@@ -4471,7 +4038,7 @@
     if (!groundRules(g2)) return 0;
     return (GROUND.march[kind]?.[r.terrain] ?? 0) + (STEEP.has(r.name) ? GROUND.steep.march[kind] ?? 0 : 0);
   }
-  var pct3 = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
+  var pct = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
   var NAME = { inf: "infantry", mot: "motorized troops", arm: "tanks", cav: "cavalry", mtn: "mountain troops", fort: "fortress troops", art: "artillery", eng: "engineers" };
   var KINDS = Object.keys(KIND);
   var groundSays = (g2, r) => groundRules(g2) ? GROUND.says[steep(g2, r) ? "steep" : r.terrain] : "";
@@ -4508,7 +4075,7 @@
       if (seen.has(c.kind)) continue;
       seen.add(c.kind);
       const m = defending ? groundDefence(g2, c.kind, r) : groundAttack(g2, c.kind, r);
-      if (m !== 1) bits.push(`${NAME[c.kind]} ${defending ? "defend" : "attack"} ${pct3(m)} ${m > 1 ? "stronger" : "weaker"}`);
+      if (m !== 1) bits.push(`${NAME[c.kind]} ${defending ? "defend" : "attack"} ${pct(m)} ${m > 1 ? "stronger" : "weaker"}`);
     }
     return bits.join(", ");
   }
@@ -4898,7 +4465,7 @@
     for (const r of rows ?? []) if (r[0] <= turn) out = r;
     return out;
   };
-  var list2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var list = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var cap = (s) => s[0].toUpperCase() + s.slice(1);
   var planes = (n, one) => `${n.toLocaleString("en-US")} ${one}${n === 1 ? "" : "s"}`;
   var airFleetsOf = (g2, nat) => g2.airFleets.filter((f) => f.nat === nat);
@@ -4934,7 +4501,7 @@
   var gunsAt = (g2, region) => g2.flags[`wk:aa:${region}`] ?? 0;
   var WORKS = arsenal_default.works;
   var leaderMul = (f) => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
-  var worth = (g2, f) => spec(f.nat).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g2, f.nat, "fighters") * storyEdge(g2, f);
+  var worth = (g2, f) => spec(f.nat).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g2, f.nat, "fighters") * storyEdge(g2, f) * fuelAir(g2, f.nat);
   function skyOver(g2, region) {
     const s = g2.sky[region];
     if (!s || g2.turn - s.turn > AIR.sky.lasts || !g2.nations[s.nat]?.alive) return null;
@@ -5255,8 +4822,8 @@
       const least = Math.min(...packed.map((f) => crowding(g2, f)));
       out.lines.push({
         label: "Airfields",
-        value: `The airfields of ${list2(bases)} are crowded`,
-        effect: `${list2(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? "its" : "their"} aircraft from there`
+        value: `The airfields of ${list(bases)} are crowded`,
+        effect: `${list(packed.map((f) => f.name))} can fly only ${Math.round(least * 100)}% of ${packed.length === 1 ? "its" : "their"} aircraft from there`
       });
     }
     if (out.aa) out.lines.push({ label: "Anti-aircraft guns", value: `Level ${out.aa} guns ring the factories of ${place2}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
@@ -5268,10 +4835,10 @@
       const up = (k) => `${k > 0 ? "up" : "down"} ${Math.abs(k)}%`;
       out.lines.push({ label: "Equipment", value: [...kitA, ...kitD].map((x) => x.text).join("; "), effect: [...kitA.map((x) => `Attacker ${up(x.pct)}`), ...kitD.map((x) => `Defender ${up(x.pct)}`)].join(", ") });
     }
-    const names = (fs) => list2(fs.filter((f) => f.leader).map((f) => `${f.leader.name}${f.leader.level > 1 ? ` (level ${f.leader.level})` : ""}`)) || "no commander named";
+    const names = (fs) => list(fs.filter((f) => f.leader).map((f) => `${f.leader.name}${f.leader.level > 1 ? ` (level ${f.leader.level})` : ""}`)) || "no commander named";
     out.lines.push({ label: "Commanders", value: `${names(out.att.map((a) => a.f))} against ${names(out.def.map((x) => x.f))}` });
     const worn = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => f.ready < 0.8);
-    if (worn.length) out.lines.push({ label: "Readiness", value: `${list2(worn.map((f) => f.name))} not fully fit to fly`, effect: "A worn fleet fights below its strength" });
+    if (worn.length) out.lines.push({ label: "Readiness", value: `${list(worn.map((f) => f.name))} not fully fit to fly`, effect: "A worn fleet fights below its strength" });
     return out;
   }
   function gainXp2(f, won) {
@@ -5351,7 +4918,7 @@
         ground += gf + gb;
         value += cut * 300;
       }
-      result = through <= 0 ? "" : hit.length ? `The airfields of ${list2(hit.map((f) => f.name))} were bombed: readiness cut by ${Math.round(cut * 100)}%${ground ? ` and ${planes(ground, "aircraft").replace("aircrafts", "aircraft")} destroyed on the ground` : ""}.` : "The bombers found no airfields in use.";
+      result = through <= 0 ? "" : hit.length ? `The airfields of ${list(hit.map((f) => f.name))} were bombed: readiness cut by ${Math.round(cut * 100)}%${ground ? ` and ${planes(ground, "aircraft").replace("aircrafts", "aircraft")} destroyed on the ground` : ""}.` : "The bombers found no airfields in use.";
     } else if (m === "bomb" || night) {
       const N = AIR.damage.industry;
       const r = g2.regions[target];
@@ -5453,7 +5020,7 @@
     };
     g2.airReports.push(rep);
     storyAir(g2, m, target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost });
-    const who = list2(fleets.filter((f) => a.att.some((x) => x.f === f)).map((f) => f.name));
+    const who = list(fleets.filter((f) => a.att.some((x) => x.f === f)).map((f) => f.name));
     const cost = `${planes(aLost, "aircraft").replace("aircrafts", "aircraft")} lost`;
     const adj = defNat ? g2.nations[defNat].adj : "enemy";
     const together = !!defNat && (nat === "UK" || nat === "USA") && ["UK", "USA"].every((x) => g2.nations[x]?.alive && g2.nations[x].atWar.includes(defNat));
@@ -5638,12 +5205,12 @@
       f.stance = f.duty;
     }
   }
-  var fit2 = (f) => 0.5 + 0.5 * f.ready;
+  var fit2 = (g2, f) => (0.5 + 0.5 * f.ready) * fuelFleet(g2, f.nat);
   var admiralMul = (f) => 1 + (f.admiral ? NAVY.admiral.perLevel * (f.admiral.level - 1) : 0);
   function fleetPower(g2, f) {
     let p = 0;
     for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power;
-    return p * quality(g2, f.nat) * fit2(f) * admiralMul(f) * storyEdge(g2, f) * traitFleet(g2, f.nat);
+    return p * quality(g2, f.nat) * fit2(g2, f) * admiralMul(f) * storyEdge(g2, f) * traitFleet(g2, f.nat);
   }
   function airOver(g2, z, nat, hostile = false) {
     const zone = g2.seas[z];
@@ -6052,7 +5619,7 @@
         if (atWar(g2, f.nat, nat)) {
           let p = 0;
           for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-          p *= quality(g2, f.nat) * fit2(f) * (f.stance === "raid" ? 1 : NAVY.convoy.patrolRaid);
+          p *= quality(g2, f.nat) * fit2(g2, f) * (f.stance === "raid" ? 1 : NAVY.convoy.patrolRaid);
           if (p > 0) {
             raid2 += p;
             raiders.push(f);
@@ -6060,7 +5627,7 @@
         } else if (allied(g2, f.nat, nat) && f.stance === "patrol") {
           let p = 0;
           for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort;
-          p *= quality(g2, f.nat) * fit2(f);
+          p *= quality(g2, f.nat) * fit2(g2, f);
           if (p > 0) {
             guard += p;
             escorts.push(f);
@@ -6098,6 +5665,25 @@
         headline(g2, "info", `${cap2(route.name)}: ${tons.toLocaleString("en-US")} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? "submarine" : "submarines"} destroyed` : ""}.`, nat);
       }
     }
+  }
+  function laneLoss(g2, nat, zones) {
+    let raid2 = 0, guard = 0;
+    for (const f of g2.fleets) {
+      if (!atSea(f) || !zones.includes(f.zone)) continue;
+      if (atWar(g2, f.nat, nat)) {
+        let p = 0;
+        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+        raid2 += p * quality(g2, f.nat) * fit2(g2, f) * (f.stance === "raid" ? 1 : NAVY.convoy.patrolRaid);
+      } else if (allied(g2, f.nat, nat) && f.stance === "patrol") {
+        let p = 0;
+        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort;
+        guard += p * quality(g2, f.nat) * fit2(g2, f);
+      }
+    }
+    for (const z of zones) guard += airOver(g2, z, nat) * NAVY.convoy.air;
+    const G = guard * NAVY.convoy.escortWorth * techMul(g2, nat, "radar");
+    const loss = raid2 > 0 ? raid2 / (raid2 + G + NAVY.convoy.ocean) * traitSeaLoss(g2, nat) : 0;
+    return { raid: raid2, guard, loss: Math.min(0.95, loss) };
   }
   function oreRoute(g2) {
     const o = NAVY.ore, n = g2.nations[o.to], src = g2.byName[o.source];
@@ -6277,6 +5863,864 @@
       }
       if (best < 0 || !sail(g2, f, best, "patrol")) home();
     }
+  }
+
+  // ../../src/campaign/resources.ts
+  var RES = resources_default;
+  var resRules = (g2) => g2.flags.open === 1;
+  var keepsStores = (g2, nat) => resRules(g2) && RES.nations.includes(nat) && !!g2.nations[nat];
+  var GOODS = ["oil", "sup"];
+  var GOOD_NAME = { oil: "Oil", sup: "Supplies" };
+  var pick = (row2, nat) => row2[nat] ?? row2._default ?? 0;
+  function fieldYield(g2, r, nat = r.ctrl) {
+    if (!r.oil) return 0;
+    return (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied);
+  }
+  function treeOil(g2, nat) {
+    let rate = 0;
+    for (const id of g2.nations[nat].tech?.done ?? []) rate += TECH.techs.find((t) => t.id === id)?.oil ?? 0;
+    if (!rate) return { amount: 0, factories: 0 };
+    let fac = g2.nations[nat].offmap?.industry ?? 0;
+    for (const r of g2.regions) if (r.owner === nat && r.ctrl === nat && !r.overseas) fac += workingFactories(g2, r);
+    return { amount: rate * fac, factories: fac };
+  }
+  function oilUse(g2, nat) {
+    const N = RES.oil.need;
+    const u = { fast: 0, fastDivs: 0, foot: 0, footDivs: 0, air: 0, planes: 0, sea: 0, atSea: 0, port: 0, inPort: 0 };
+    for (const c of g2.corps) {
+      if (c.nat !== nat || c.dead) continue;
+      const rate = N.corps[c.kind] ?? N.corps._default;
+      if (c.kind === "arm" || c.kind === "mot") {
+        u.fast += rate * c.divs;
+        u.fastDivs += c.divs;
+      } else {
+        u.foot += rate * c.divs;
+        u.footDivs += c.divs;
+      }
+    }
+    for (const f of g2.airFleets) if (f.nat === nat) {
+      u.planes += f.ftr + f.bmr;
+      u.air += (f.ftr + f.bmr) * N.air;
+    }
+    for (const f of g2.fleets) {
+      if (f.nat !== nat) continue;
+      let burn = 0, hulls = 0;
+      for (const c of CLASSES) {
+        burn += f.ships[c] * N.ships[c];
+        hulls += f.ships[c];
+      }
+      if (atSea(f)) {
+        u.sea += burn;
+        u.atSea += hulls;
+      } else {
+        u.port += burn * N.port;
+        u.inPort += hulls;
+      }
+    }
+    return u;
+  }
+  function landYield(g2, r, built = false) {
+    return RES.sup.land[r.terrain] + (built ? r.fac : workingFactories(g2, r)) * RES.sup.factory;
+  }
+  var divisions = (g2, nat) => g2.corps.reduce((s, c) => s + (c.nat === nat && !c.dead ? c.divs : 0), 0);
+  function needOf(g2, nat, good, war = g2.nations[nat].atWar.length > 0) {
+    return outLines(g2, nat, good, war).reduce((s, l) => s + l.amount, 0);
+  }
+  function outLines(g2, nat, good, war = g2.nations[nat].atWar.length > 0) {
+    const n = g2.nations[nat];
+    if (good === "oil") {
+      const u = oilUse(g2, nat), k = war ? 1 : RES.oil.need.peace;
+      return [
+        { key: "fast", label: "Tanks and lorried troops", amount: u.fast * k, count: u.fastDivs },
+        { key: "foot", label: "The rest of the army", amount: u.foot * k, count: u.footDivs },
+        { key: "air", label: "Aircraft", amount: u.air * k, count: u.planes },
+        { key: "sea", label: "Ships at sea", amount: u.sea * k, count: u.atSea },
+        { key: "port", label: "Ships in harbour", amount: u.port * k, count: u.inPort }
+      ].filter((l) => l.amount > 1e-9);
+    }
+    let home = 0, held = 0;
+    for (const r of g2.regions) if (r.owner === nat && r.ctrl === nat && !r.overseas) {
+      home += landYield(g2, r, true);
+      held++;
+    }
+    if (n.offmap) home += n.offmap.industry * RES.sup.offmap;
+    const divs = divisions(g2, nat);
+    return [
+      { key: "people", label: "The people at home", amount: home / pick(RES.sup.ratio, nat), count: held },
+      { key: "army", label: "The army in the field", amount: divs * RES.sup.perDiv * (war ? 1 : RES.sup.peace), count: divs }
+    ].filter((l) => l.amount > 1e-9);
+  }
+  var friendly = (g2, holder, nat) => {
+    if (holder === nat) return true;
+    const H = g2.nations[holder], N = g2.nations[nat];
+    if (!H || !N || atWar(g2, holder, nat)) return false;
+    const hb = bloc(H), nb = bloc(N);
+    return hb === null || nb === null || hb === nb;
+  };
+  var natOf = (g2, id) => g2.nations[id]?.name ?? id;
+  var the = (name) => /^(United|Soviet|Netherlands)/.test(name) ? `the ${name}` : name;
+  function lanePath(g2, row2) {
+    const seas = (row2.draw ?? row2.zones).map((k) => g2.seas[zoneOf(g2, k)]).filter(Boolean);
+    if (!seas.length) return [];
+    const pts = [];
+    if (row2.enter) pts.push(row2.enter);
+    const via = row2.via ? g2.byName[row2.via] : null;
+    if (via) pts.push([via.x, via.y + 16]);
+    for (const z of seas) pts.push([z.x, z.y + 22]);
+    const last = seas[seas.length - 1].id;
+    let port = null;
+    for (const r of g2.regions) if (r.port && r.owner === row2.to && !r.overseas && r.seas.includes(last) && (!port || r.fac > port.fac)) port = r;
+    const cap4 = g2.nations[row2.to]?.capital ?? -1;
+    const end = port ?? (cap4 >= 0 ? g2.regions[cap4] : null);
+    if (end) pts.push([end.x, end.y]);
+    return pts;
+  }
+  function seaLane(g2, row2, need) {
+    const zones = row2.zones.map((k) => zoneOf(g2, k)).filter((z) => z >= 0);
+    const full = { oil: row2.oil * need.oil, sup: row2.sup * need.sup };
+    const lane = { id: row2.id, path: lanePath(g2, row2), kind: "sea", name: row2.name, from: row2.from, to: row2.to, text: row2.text, zones, full, flow: 1, oil: 0, sup: 0, raid: 0, guard: 0, state: "open", why: "" };
+    const cut = (why, state = "cut") => ({ ...lane, flow: 0, state, why });
+    const to = row2.to;
+    if (row2.allies) {
+      const friend2 = row2.allies.find((a) => g2.nations[a]?.alive && allied(g2, a, to) && g2.nations[a].atWar.length > 0);
+      if (!friend2 || !g2.nations[to].atWar.length) return cut(`It runs only while ${the(natOf(g2, to))} fights beside the western Allies.`, "idle");
+    }
+    if (row2.source && g2.nations[row2.source] && atWar(g2, row2.source, to)) return cut(`${the(natOf(g2, to))} is at war with ${the(natOf(g2, row2.source))}, which sold the cargoes.`);
+    if (row2.field) {
+      const f = g2.byName[row2.field];
+      if (f && !friendly(g2, f.ctrl, to)) return cut(`${f.name} is in the hands of ${the(natOf(g2, f.ctrl))}.`);
+    }
+    for (const name of row2.past ?? []) {
+      const r = g2.byName[name];
+      if (r && atWar(g2, r.ctrl, to)) return cut(`${the(natOf(g2, r.ctrl))} holds ${r.name} and lets nothing past.`);
+    }
+    const jailer = (row2.shutBy ?? []).find((x) => g2.nations[x]?.alive && atWar(g2, x, to));
+    if (jailer) return cut(`Shut by the blockade of ${the(natOf(g2, jailer))}.`);
+    if (zones.length && g2.nations[to].atWar.length) {
+      const m = laneLoss(g2, to, zones);
+      lane.raid = m.raid;
+      lane.guard = m.guard;
+      lane.flow = 1 - m.loss;
+      if (m.loss >= 0.02) {
+        lane.state = "raided";
+        lane.why = `Raiders are sinking ${Math.round(m.loss * 100)}% of the cargoes.`;
+      }
+    }
+    lane.oil = full.oil * lane.flow;
+    lane.sup = full.sup * lane.flow;
+    return lane;
+  }
+  function deal(g2, row2) {
+    const full = { oil: row2.oil, sup: row2.sup };
+    const lane = { id: row2.id, path: [], kind: "land", name: row2.name, from: "", to: row2.to, text: row2.text, zones: [], full, flow: 1, oil: row2.oil, sup: row2.sup, raid: 0, guard: 0, state: "open", why: "" };
+    const stop = (why, state = "cut") => ({ ...lane, flow: 0, oil: 0, sup: 0, state, why });
+    const to = row2.to;
+    if (row2.ore) {
+      lane.from = "Sweden";
+      const way = oreRoute(g2);
+      if (way === "cut") return stop("The ore cannot get through: the Baltic is frozen or closed and Narvik is in enemy hands.");
+      lane.why = way === "narvik" ? "Coming through Narvik while the Baltic is frozen." : "";
+      return lane;
+    }
+    let seller = row2.seller ?? "";
+    if (row2.field) {
+      const f = g2.byName[row2.field];
+      if (!f) return stop("", "idle");
+      seller = f.ctrl;
+      lane.from = natOf(g2, f.owner);
+      if (seller === to) return stop(`${f.name} is in ${natOf(g2, to)}'s own hands and counts as its own production.`, "idle");
+    } else lane.from = natOf(g2, seller);
+    const S = g2.nations[seller];
+    if (!S || !S.alive && !row2.field) return stop(`${the(natOf(g2, seller))} has fallen.`);
+    if (!friendly(g2, seller, to)) {
+      const f = row2.field ? g2.byName[row2.field] : null;
+      if (f && f.owner !== seller) return stop(`${f.name} is in the hands of ${the(natOf(g2, seller))}.`);
+      return stop(atWar(g2, seller, to) ? `${the(natOf(g2, to))[0].toUpperCase()}${the(natOf(g2, to)).slice(1)} is at war with ${the(natOf(g2, seller))}.` : `${the(natOf(g2, seller))[0].toUpperCase()}${the(natOf(g2, seller)).slice(1)} has gone over to the other side.`);
+    }
+    return lane;
+  }
+  function lanesTo(g2, nat) {
+    if (!keepsStores(g2, nat)) return [];
+    const need = { oil: needOf(g2, nat, "oil"), sup: needOf(g2, nat, "sup") };
+    return [...RES.lanes.filter((l) => l.to === nat).map((l) => seaLane(g2, l, need)), ...RES.deals.filter((d) => d.to === nat).map((d) => deal(g2, d))];
+  }
+  function seaLanes(g2) {
+    if (!resRules(g2)) return [];
+    const out = [];
+    for (const nat of RES.nations) {
+      if (!g2.nations[nat]?.alive) continue;
+      for (const l of lanesTo(g2, nat)) if (l.kind === "sea" && l.zones.length) out.push(l);
+    }
+    return out;
+  }
+  function incomeLines(g2, nat, good, lanes) {
+    const n = g2.nations[nat];
+    const out = [];
+    if (good === "oil") {
+      let own = 0, nOwn = 0, taken = 0, nTaken = 0;
+      for (const r of g2.regions) {
+        if (!r.oil || r.ctrl !== nat) continue;
+        if (r.owner === nat) {
+          own += fieldYield(g2, r, nat);
+          nOwn++;
+        } else {
+          taken += fieldYield(g2, r, nat);
+          nTaken++;
+        }
+      }
+      const home = pick(RES.oil.home, nat) * (n.offmap || n.capital >= 0 && g2.regions[n.capital].ctrl === nat ? 1 : 0.5);
+      out.push({ key: "fields", label: "Oilfields at home", amount: own, count: nOwn });
+      out.push({ key: "taken", label: "Captured oilfields", amount: taken, count: nTaken });
+      out.push({ key: "home", label: n.offmap ? "The oilfields of the homeland, beyond the map" : "Small wells and plants at home", amount: home });
+      const plants = treeOil(g2, nat);
+      out.push({ key: "tech", label: "Synthetic fuel plants", amount: plants.amount, count: plants.factories });
+    } else {
+      let land2 = 0, held = 0, fac = 0, nFac = 0, occ = 0, nOcc = 0, sea = 0, nSea = 0;
+      for (const r of g2.regions) {
+        if (r.ctrl !== nat) continue;
+        const works = workingFactories(g2, r);
+        if (r.owner !== nat) {
+          occ += landYield(g2, r) * RES.sup.occupied;
+          nOcc++;
+        } else if (r.overseas) {
+          sea += landYield(g2, r) * RES.sup.overseas;
+          nSea++;
+        } else {
+          land2 += RES.sup.land[r.terrain];
+          held++;
+          fac += works * RES.sup.factory;
+          nFac += works;
+        }
+      }
+      out.push({ key: "land", label: "Farms, mines and forests at home", amount: land2, count: held });
+      out.push({ key: "fac", label: "Factories at home", amount: fac, count: nFac });
+      if (n.offmap) out.push({ key: "homeland", label: "The farms and mills of the homeland, beyond the map", amount: n.offmap.industry * RES.sup.offmap });
+      out.push({ key: "colonies", label: "The colonies", amount: sea, count: nSea });
+      out.push({ key: "occupied", label: "Taken from occupied ground", amount: occ, count: nOcc });
+    }
+    for (const l of lanes) {
+      if (l.full[good] <= 0) continue;
+      const label = l.kind === "sea" ? `${l.name[0].toUpperCase()}${l.name.slice(1)}` : `${l.name}${l.from ? `, from ${the(l.from)}` : ""}`;
+      out.push({ key: `lane:${l.id}`, label, amount: l[good], lane: l.id, note: l.state === "open" ? l.why || void 0 : l.state === "raided" ? `${Math.round(l.flow * 100)}% getting through` : l.why });
+    }
+    for (const d of RES.deals) {
+      if (d.seller !== nat || d[good] <= 0) continue;
+      const l = deal(g2, d);
+      if (l.state === "open") out.push({ key: `sold:${d.id}`, label: `Deliveries to ${the(natOf(g2, d.to))}`, amount: -d[good] });
+    }
+    return out.filter((l) => Math.abs(l.amount) > 1e-9 || l.lane !== void 0);
+  }
+  var SHORT_OIL = (m) => {
+    const s = RES.oil.short, lack = 1 - m, pc = (x) => Math.round(x * lack * 100);
+    return [
+      `Tanks and lorried troops attack ${pc(s.attack)}% weaker and defend ${pc(s.defence)}% weaker`,
+      ...m < s.slowAt ? ["They lose one move a month"] : [],
+      `Aircraft are worth ${pc(s.air)}% less in every fight`,
+      `The fleet is ${pc(s.fleet)}% less fit for sea`
+    ];
+  };
+  var SHORT_SUP = (m) => {
+    const s = RES.sup.short, lack = 1 - m, pc = (x) => Math.round(x * lack * 100);
+    return [`Every corps fights ${pc(s.fight)}% weaker`, `${pc(s.drafts)}% fewer replacements reach the armies`, `The treasury's income is down ${pc(s.income)}% as factories stand idle`];
+  };
+  function storesOf(g2, nat) {
+    if (!keepsStores(g2, nat)) return null;
+    const n = g2.nations[nat];
+    if (!n.res) {
+      n.res = { oil: 0, sup: 0, oilMet: 1, supMet: 1 };
+      n.res.oil = pick(RES.oil.start, nat) * needOf(g2, nat, "oil", true);
+      n.res.sup = pick(RES.sup.start, nat) * needOf(g2, nat, "sup", true);
+    }
+    return n.res;
+  }
+  function stores(g2, nat) {
+    const st = storesOf(g2, nat);
+    if (!st) return null;
+    const lanes = lanesTo(g2, nat);
+    const book = (good) => {
+      const income2 = incomeLines(g2, nat, good, lanes), spend = outLines(g2, nat, good);
+      const made = income2.reduce((s, l) => s + l.amount, 0), need = spend.reduce((s, l) => s + l.amount, 0);
+      const cap4 = (good === "oil" ? RES.oil.cap : RES.sup.cap) * Math.max(needOf(g2, nat, good, true), 1);
+      const net = made - need;
+      const met2 = good === "oil" ? st.oilMet : st.supMet;
+      return { good, stock: st[good], cap: cap4, income: income2, spend, made, need, net, months: net < -1e-9 ? st[good] / -net : Infinity, met: met2, effects: met2 < 0.995 ? good === "oil" ? SHORT_OIL(met2) : SHORT_SUP(met2) : [] };
+    };
+    return { nat, oil: book("oil"), sup: book("sup"), lanes, willLost: willLost(g2, nat) };
+  }
+  function openStores(g2) {
+    if (!resRules(g2)) return;
+    for (const nat of RES.nations) storesOf(g2, nat);
+  }
+  function resourcesTick(g2, nat) {
+    const v = stores(g2, nat);
+    if (!v) return;
+    const st = g2.nations[nat].res;
+    const hungryBefore = st.hunger ?? 0;
+    for (const good of GOODS) {
+      const b = v[good];
+      let stock = st[good] + b.made - b.need, met2 = 1;
+      if (stock < 0) {
+        met2 = b.need > 0 ? Math.max(0, Math.min(1, (b.need + stock) / b.need)) : 1;
+        stock = 0;
+      }
+      st[good] = Math.min(stock, b.cap);
+      const was = good === "oil" ? st.oilMet : st.supMet;
+      if (good === "oil") st.oilMet = met2;
+      else st.supMet = met2;
+      if (nat !== g2.human) continue;
+      const name = GOOD_NAME[good].toLowerCase(), key2 = `res:${good}:${nat}`, low = `res:low:${good}:${nat}`;
+      if (met2 < 0.995 && was >= 0.995) {
+        headline(g2, "info", good === "oil" ? `The oil has run out. Only ${Math.round(met2 * 100)}% of what the forces need came in this month: tanks, aircraft and ships are short of fuel. Open Oil on the top bar to see where it comes from and what is stopping it.` : `The depots are empty. Only ${Math.round(met2 * 100)}% of the supplies the nation needs came in this month: the armies fight weaker, fewer replacements go out and factories stand idle. Open Supplies on the top bar to see why.`, nat);
+        g2.flags[key2] = g2.turn;
+      } else if (met2 >= 0.995 && was < 0.995) {
+        headline(g2, "info", `There is ${name} enough again: the forces have all they need this month.`, nat);
+        delete g2.flags[key2];
+      }
+      const left = b.net < -1e-9 ? st[good] / -b.net : Infinity;
+      if (met2 >= 0.995 && left <= 3 && g2.flags[low] === void 0) {
+        g2.flags[low] = g2.turn;
+        headline(g2, "info", `${GOOD_NAME[good]} for ${Math.max(1, Math.round(left))} more month${Math.round(left) <= 1 ? "" : "s"}: more is going out than coming in. Open ${GOOD_NAME[good]} on the top bar.`, nat);
+      } else if (left > 6 && g2.flags[low] !== void 0) delete g2.flags[low];
+    }
+    const W = RES.will, lack = W.sup * (1 - st.supMet) + W.oil * (1 - st.oilMet);
+    const hunger = lack > 1e-9 ? hungryBefore + lack : Math.max(0, hungryBefore - W.heal);
+    if (hunger > 0) st.hunger = hunger;
+    else delete st.hunger;
+    if (nat === g2.human && willLost(g2, nat) >= 0.1 && hungryBefore * W.per < 0.1) {
+      headline(g2, "info", `Rationing bites at home. The longer the depots stay empty the less the nation will bear: its will to fight is falling, and a country that is starved long enough asks for terms. Open Powers to see how much fight is left.`, nat);
+    }
+  }
+  function willLost(g2, nat) {
+    if (g2.flags.open !== 1) return 0;
+    const h = g2.nations[nat]?.res?.hunger ?? 0;
+    return h > 0 ? Math.min(RES.will.most, h * RES.will.per) : 0;
+  }
+  var metOf = (g2, nat, good) => {
+    if (g2.flags.open !== 1) return 1;
+    const r = g2.nations[nat]?.res;
+    return r ? good === "oil" ? r.oilMet : r.supMet : 1;
+  };
+  var fuelMet = (g2, nat) => metOf(g2, nat, "oil");
+  var suppliesMet = (g2, nat) => metOf(g2, nat, "sup");
+  var runsOnFuel = (kind) => kind === "arm" || kind === "mot";
+  function shortAttack(g2, c) {
+    const sup = 1 - RES.sup.short.fight * (1 - suppliesMet(g2, c.nat));
+    return runsOnFuel(c.kind) ? sup * (1 - RES.oil.short.attack * (1 - fuelMet(g2, c.nat))) : sup;
+  }
+  function shortDefence(g2, c) {
+    const sup = 1 - RES.sup.short.fight * (1 - suppliesMet(g2, c.nat));
+    return runsOnFuel(c.kind) ? sup * (1 - RES.oil.short.defence * (1 - fuelMet(g2, c.nat))) : sup;
+  }
+  var fuelSlows = (g2, c) => runsOnFuel(c.kind) && KIND[c.kind].mobile && fuelMet(g2, c.nat) < RES.oil.short.slowAt;
+  var fuelAir = (g2, nat) => 1 - RES.oil.short.air * (1 - fuelMet(g2, nat));
+  var fuelFleet = (g2, nat) => 1 - RES.oil.short.fleet * (1 - fuelMet(g2, nat));
+  var supDrafts = (g2, nat) => 1 - RES.sup.short.drafts * (1 - suppliesMet(g2, nat));
+  var supIncome = (g2, nat) => 1 - RES.sup.short.income * (1 - suppliesMet(g2, nat));
+  function oilMonths(g2, nat) {
+    const v = stores(g2, nat);
+    if (!v) return Infinity;
+    if (v.oil.met < 0.995) return 0;
+    return v.oil.months;
+  }
+  var shortOfOil = (g2, nat) => oilMonths(g2, nat) < RES.ai.armourAt;
+
+  // ../../src/campaign/tech.ts
+  var TECH = tech_default;
+  var BY_ID = {};
+  var GATE = {};
+  for (const t of TECH.techs) {
+    BY_ID[t.id] = t;
+    for (const k of t.unlock ?? []) GATE[k] = t;
+  }
+  var techRules = (g2) => g2.flags.open === 1;
+  var yearOf = (turn) => turnToDate(Math.max(1, turn)).year;
+  var fresh = (nat) => ({ done: (TECH.start[nat] ?? []).filter((id) => id in BY_ID), work: [] });
+  function techOf(g2, nat) {
+    if (!techRules(g2)) return null;
+    const n = g2.nations[nat];
+    if (!n) return null;
+    if (!g2.flags["tech:open"]) openTech(g2);
+    return n.tech ?? (n.tech = fresh(nat));
+  }
+  var NOTHING = { src: null, n: 0, level: {}, traits: [], open: /* @__PURE__ */ new Set(), winter: false, slots: 0 };
+  var cache = /* @__PURE__ */ new WeakMap();
+  function sum(g2, nat) {
+    const t = techOf(g2, nat);
+    if (!t) return NOTHING;
+    const n = g2.nations[nat];
+    const had = cache.get(n);
+    if (had && had.src === t.done && had.n === t.done.length) return had;
+    const d = { src: t.done, n: t.done.length, level: {}, traits: [], open: /* @__PURE__ */ new Set(), winter: false, slots: 0 };
+    for (const id of t.done) {
+      const x = BY_ID[id];
+      if (!x) continue;
+      if (x.field) d.level[x.field] = (d.level[x.field] ?? 0) + 1;
+      for (const k of x.unlock ?? []) d.open.add(k);
+      if (x.winterKit) d.winter = true;
+      d.slots += x.slots ?? 0;
+      if (x.attack !== void 0 || x.defence !== void 0 || x.drafts !== void 0 || x.cost || x.fleet !== void 0 || x.seaLoss !== void 0) {
+        d.traits.push({ id: `tech:${x.id}`, name: x.name, text: x.text, attack: x.attack, defence: x.defence, when: x.when, drafts: x.drafts, cost: x.cost, fleet: x.fleet, seaLoss: x.seaLoss });
+      }
+    }
+    cache.set(n, d);
+    return d;
+  }
+  var treeLevel = (g2, nat, f) => g2.flags.open === 1 ? sum(g2, nat).level[f] ?? 0 : 0;
+  var techTraits = (g2, nat) => sum(g2, nat).traits;
+  function locked(g2, nat, key2) {
+    const t = GATE[key2];
+    return t && techRules(g2) && !sum(g2, nat).open.has(key2) ? t : null;
+  }
+  var winterReady = (g2, nat) => g2.flags.open === 1 && sum(g2, nat).winter;
+  function teamsOf(g2, nat) {
+    if (!techRules(g2)) return 0;
+    return (TECH.slots[nat] ?? TECH.slots._default) + sum(g2, nat).slots + (g2.nations[nat].lab?.founded ?? 0);
+  }
+  var hasTech = (g2, nat, id) => !!techOf(g2, nat)?.done.includes(id);
+  function monthsFor(t, turn) {
+    const base = t.months ?? TECH.months[t.tier];
+    return Math.ceil(base * (1 + TECH.early * Math.max(0, t.year - yearOf(turn))) - 1e-9);
+  }
+  var and = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  function whyNotResearch(g2, nat, id) {
+    const s = techOf(g2, nat), t = BY_ID[id];
+    if (!s) return "The technology tree belongs to the grand campaign.";
+    if (!t) return "There is no such technology.";
+    if (!g2.nations[nat].alive) return "The nation is out of the war.";
+    if (s.done.includes(id)) return "Already researched.";
+    if (s.work.some((w) => w.id === id)) return "A team is already at work on it.";
+    const lacks = t.needs.filter((x) => !s.done.includes(x));
+    if (lacks.length) return `Needs ${and(lacks.map((x) => BY_ID[x]?.name ?? x))} first.`;
+    if (s.work.length >= teamsOf(g2, nat)) return "Every research team is busy. Wait for one to finish, or stop a project.";
+    return null;
+  }
+  function startResearch(g2, nat, id) {
+    if (whyNotResearch(g2, nat, id) !== null) return false;
+    const of = monthsFor(BY_ID[id], g2.turn);
+    techOf(g2, nat).work.push({ id, left: of, of });
+    return true;
+  }
+  function stopResearch(g2, nat, id) {
+    const s = techOf(g2, nat);
+    const i = s ? s.work.findIndex((w) => w.id === id) : -1;
+    if (!s || i < 0) return false;
+    s.work.splice(i, 1);
+    return true;
+  }
+  function finish(g2, n, id, quiet2) {
+    const s = n.tech, t = BY_ID[id];
+    if (!t || s.done.includes(id)) return;
+    s.done.push(id);
+    if (t.sealift) n.sealift += t.sealift;
+    if (!quiet2 && n.id === g2.human) headline(g2, "info", `Research complete: ${t.name}. ${techRule(t)} A research team is free for new work.`, n.id);
+  }
+  function staffPick(g2, nat, turn = g2.turn) {
+    const s = techOf(g2, nat);
+    if (!s) return null;
+    const A = TECH.ai, order2 = A.order[nat] ?? A.order._default, year = yearOf(turn);
+    const skip = (id) => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
+    let best = null, low = Infinity;
+    const thirsty = oilMonths(g2, nat) < RES.ai.synthAt;
+    for (const t of TECH.techs) {
+      if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
+      const place2 = order2.indexOf(t.branch);
+      const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
+      const idle = t.oil && !keepsStores(g2, nat) ? A.later : 0;
+      const score = t.tier * A.tier + (place2 < 0 ? order2.length : place2) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle;
+      if (score < low) {
+        low = score;
+        best = t;
+      }
+    }
+    return best ? best.id : null;
+  }
+  function month(g2, n, turn, staffed, quiet2) {
+    const s = n.tech;
+    const due = [];
+    for (const w of s.work) {
+      w.left -= 1;
+      if (w.left <= 1e-9) due.push(w.id);
+    }
+    if (due.length) {
+      s.work = s.work.filter((w) => w.left > 1e-9);
+      for (const id of due) finish(g2, n, id, quiet2);
+    }
+    if (!staffed) return;
+    while (s.work.length < teamsOf(g2, n.id)) {
+      const id = staffPick(g2, n.id, turn);
+      if (!id) break;
+      const of = monthsFor(BY_ID[id], turn);
+      s.work.push({ id, left: of, of });
+    }
+  }
+  function openTech(g2) {
+    if (!techRules(g2) || g2.flags["tech:open"]) return;
+    g2.flags["tech:open"] = 1;
+    const all = Object.values(g2.nations);
+    for (const n of all) {
+      n.tech ?? (n.tech = fresh(n.id));
+      if (n.lab) for (const f of Object.keys(n.lab.teams)) n.lab.teams[f] = 1;
+    }
+    for (let turn = 1; turn < g2.turn; turn++) for (const n of all) if (n.alive || n.dormant) month(g2, n, turn, true, true);
+    for (const n of all) if (n.alive && n.id !== g2.human) month0(g2, n);
+  }
+  function month0(g2, n) {
+    const s = n.tech;
+    while (s.work.length < teamsOf(g2, n.id)) {
+      const id = staffPick(g2, n.id);
+      if (!id) break;
+      const of = monthsFor(BY_ID[id], g2.turn);
+      s.work.push({ id, left: of, of });
+    }
+  }
+  function techTick(g2, nat) {
+    const s = techOf(g2, nat);
+    const n = g2.nations[nat];
+    if (!s || !n.alive) return;
+    month(g2, n, g2.turn, nat !== g2.human, false);
+  }
+  function techMonth(g2) {
+    if (!techRules(g2)) return;
+    for (const n of Object.values(g2.nations)) if (!n.alive && n.dormant && techOf(g2, n.id)) month(g2, n, g2.turn, true, true);
+  }
+  function paraCount(g2, nat) {
+    let k = g2.nations[nat].queue.filter((b) => b.airborne).length;
+    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.airborne) k++;
+    return k;
+  }
+  function whyNoPara(g2, nat) {
+    if (!techRules(g2)) return "Airborne corps are raised in the grand campaign.";
+    const need = locked(g2, nat, "para");
+    if (need) return `Needs the technology ${need.name}.`;
+    const most = TECH.units.para.most;
+    if (paraCount(g2, nat) >= most) return `The transport aircraft can serve ${most} airborne corps at once, in the field and on order.`;
+    return null;
+  }
+  var pct2 = (x) => `${Math.round(x * 100)}%`;
+  var FIELD_RULE = {
+    armour: (p) => `Armoured and motorised corps fight ${p} harder.`,
+    infantry: (p) => `Every corps that is not armoured or motorised fights ${p} harder.`,
+    doctrine: (p) => `Every corps attacks ${p} harder.`,
+    fighters: (p) => `Fighters fight ${p} harder.`,
+    bombers: (p) => `Bombers that get through do ${p} more damage.`,
+    navy: (p) => `Fleets, raiders and convoy escorts fight ${p} harder.`,
+    radar: (p) => `Fighters over their own sky and the escorts on the convoy routes are worth ${p} more.`,
+    industry: (p) => `Earnings up ${p}.`
+  };
+  var UNLOCK_RULE = {
+    "corps:arm": "Armoured corps can be raised.",
+    "corps:mot": "Motorised corps can be raised.",
+    "ship:cv": "Aircraft carriers can be laid down.",
+    para: "Airborne corps can be raised."
+  };
+  function techRule(t) {
+    const out = [];
+    for (const k of t.unlock ?? []) out.push(UNLOCK_RULE[k] ?? `Unlocks ${k}.`);
+    if (t.field) out.push(FIELD_RULE[t.field](pct2(RESEARCH.fields[t.field].per)));
+    const rest = traitRule({ id: t.id, name: t.name, text: t.text, attack: t.attack, defence: t.defence, when: t.when, drafts: t.drafts, cost: t.cost, sealift: t.sealift, fleet: t.fleet, seaLoss: t.seaLoss });
+    if (rest) out.push(rest);
+    if (t.slots) out.push(t.slots === 1 ? "One more research team." : `${t.slots} more research teams.`);
+    if (t.winterKit) out.push("Its troops no longer march and fight worse in the eastern winter.");
+    if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month, where no raider can reach it. A country that keeps no stocks of oil has no use for it.`);
+    return out.join(" ");
+  }
+  function techView(g2, nat) {
+    const s = techOf(g2, nat);
+    if (!s) return null;
+    const nodes = TECH.techs.map((t) => {
+      const w = s.work.find((x) => x.id === t.id);
+      const done = s.done.includes(t.id);
+      const open = t.needs.every((x) => s.done.includes(x));
+      return {
+        id: t.id,
+        branch: t.branch,
+        tier: t.tier,
+        name: t.name,
+        text: t.text,
+        rule: techRule(t),
+        year: t.year,
+        needs: t.needs.map((x) => ({ id: x, name: BY_ID[x]?.name ?? x, done: s.done.includes(x) })),
+        state: done ? "done" : w ? "work" : open ? "ready" : "locked",
+        months: monthsFor(t, g2.turn),
+        base: t.months ?? TECH.months[t.tier],
+        left: w ? Math.max(1, Math.ceil(w.left - 1e-9)) : 0,
+        of: w ? w.of : 0,
+        why: whyNotResearch(g2, nat, t.id)
+      };
+    });
+    return {
+      nat,
+      teams: teamsOf(g2, nat),
+      busy: s.work.length,
+      done: nodes.filter((x) => x.state === "done").length,
+      total: nodes.length,
+      branches: TECH.branches.map((b) => ({ ...b, done: nodes.filter((x) => x.branch === b.id && x.state === "done").length, total: nodes.filter((x) => x.branch === b.id).length })),
+      eras: TECH.eras,
+      nodes
+    };
+  }
+  function idleTeams(g2, nat) {
+    const s = techOf(g2, nat);
+    if (!s || !g2.nations[nat].alive) return 0;
+    const free2 = teamsOf(g2, nat) - s.work.length;
+    return free2 > 0 && staffPick(g2, nat) ? free2 : 0;
+  }
+  function treeNotes(g2, nats, fields) {
+    const out = [];
+    if (g2.flags.open !== 1) return out;
+    for (const nat of new Set(nats)) {
+      for (const f of fields) {
+        const k = treeLevel(g2, nat, f);
+        if (!k) continue;
+        out.push({ text: `${g2.nations[nat].adj} ${RESEARCH.fields[f].noun}: ${k === 1 ? "one technology" : `${k} technologies`} researched`, pct: Math.round(RESEARCH.fields[f].per * k * 100) });
+      }
+    }
+    return out;
+  }
+
+  // ../../src/campaign/traits.ts
+  var TRAITS = traits_default;
+  var traitRules = (g2) => g2.flags.open === 1;
+  var traitsOf = (nat) => TRAITS.nations[nat]?.traits ?? [];
+  var eliteOf = (nat) => TRAITS.nations[nat]?.unit ?? null;
+  var sceneTurn = -1;
+  var scene = { year: 0, winter: false };
+  function sceneOf(g2) {
+    if (g2.turn !== sceneTurn) {
+      const d = turnToDate(g2.turn);
+      scene = { year: d.year, winter: TRAITS.winter.includes(d.month) };
+      sceneTurn = g2.turn;
+    }
+    return scene;
+  }
+  function holds(g2, w, c, target, landing) {
+    if (!w) return true;
+    if (w.kinds && !w.kinds.includes(c.kind)) return false;
+    if (w.mobile && !KIND[c.kind].mobile) return false;
+    if (w.terrain && !w.terrain.includes(target.terrain)) return false;
+    if (w.home && target.owner !== c.nat) return false;
+    if (w.works && !target.fort) return false;
+    if (w.landing && !landing) return false;
+    if (w.winter || w.from !== void 0 || w.until !== void 0) {
+      const s = sceneOf(g2);
+      if (w.winter && !s.winter) return false;
+      if (w.from !== void 0 && s.year < w.from) return false;
+      if (w.until !== void 0 && s.year > w.until) return false;
+    }
+    return true;
+  }
+  function edge2(g2, c, target, landing, side2, names) {
+    if (!traitRules(g2)) return 1;
+    const row2 = TRAITS.nations[c.nat];
+    let m = 1;
+    if (row2) for (const t of row2.traits) {
+      const x2 = t[side2];
+      if (x2 === void 0 || t.builtin || !holds(g2, t.when, c, target, landing)) continue;
+      m *= x2;
+      names?.add(t.name);
+    }
+    for (const t of techTraits(g2, c.nat)) {
+      const x2 = t[side2];
+      if (x2 === void 0 || !holds(g2, t.when, c, target, landing)) continue;
+      m *= x2;
+      names?.add(t.name);
+    }
+    const u = c.elite && row2?.unit && row2.unit.id === c.elite ? row2.unit : null;
+    const x = u?.[side2];
+    if (u && x !== void 0 && holds(g2, u.when, c, target, landing)) {
+      m *= x;
+      names?.add(u.label);
+    }
+    return m;
+  }
+  var traitAttack = (g2, c, target, landing = false) => edge2(g2, c, target, landing, "attack");
+  var traitDefence = (g2, c, target) => edge2(g2, c, target, false, "defence");
+  function traitNames(g2, cs, target, side2, landing = false) {
+    const names = /* @__PURE__ */ new Set();
+    for (const c of cs) edge2(g2, c, target, side2 === "attack" && landing, side2, names);
+    return [...names];
+  }
+  var NO_MONEY = { lines: [], flat: 0, mul: 1, mulBy: "" };
+  function traitMoney(g2, nat) {
+    const row2 = TRAITS.nations[nat];
+    if (!traitRules(g2) || !row2) return NO_MONEY;
+    const n = g2.nations[nat];
+    const out = { lines: [], flat: 0, mul: 1, mulBy: "" };
+    const add = (t, amount, count2) => {
+      if (amount <= 1e-9) return;
+      out.lines.push({ key: `trait:${t.id}`, label: t.name, amount, count: count2 });
+      out.flat += amount;
+    };
+    for (const t of row2.traits) {
+      if (t.builtin) continue;
+      const now = !t.incomeAt || t.incomeAt === "war" === n.atWar.length > 0;
+      if (t.income && now) add(t, t.income);
+      if (t.incomeMul && now) {
+        out.mul *= t.incomeMul;
+        out.mulBy = t.name;
+      }
+      if (t.oil) {
+        let oil = 0, wells = 0;
+        for (const r of g2.regions) if (r.ctrl === nat && r.owner === nat && r.oil) {
+          oil += provinceYield(g2, r, nat).oil;
+          wells++;
+        }
+        add(t, oil * (t.oil - 1), wells);
+      }
+      if (t.relocate) {
+        let fac = 0;
+        for (const r of g2.regions) if (r.owner === nat && r.ctrl !== nat && r.fac > 0 && atWar(g2, nat, r.ctrl)) fac += r.fac;
+        add(t, fac * t.relocate, fac);
+      }
+    }
+    return out;
+  }
+  var product = (g2, nat, pick2) => {
+    if (!traitRules(g2)) return 1;
+    let m = 1;
+    for (const t of traitsOf(nat)) {
+      const x = t.builtin ? void 0 : pick2(t);
+      if (x !== void 0) m *= x;
+    }
+    for (const t of techTraits(g2, nat)) {
+      const x = pick2(t);
+      if (x !== void 0) m *= x;
+    }
+    return m;
+  };
+  var traitDrafts = (g2, nat) => product(g2, nat, (t) => t.drafts);
+  var costMul = (g2, nat, key2) => product(g2, nat, (t) => t.cost?.what.includes(key2) ? t.cost.mul : void 0);
+  function priceOf(g2, nat, key2, list3) {
+    const m = costMul(g2, nat, key2);
+    return m === 1 ? list3 : Math.round(list3 * m * 10) / 10;
+  }
+  var traitFleet = (g2, nat) => product(g2, nat, (t) => t.fleet);
+  var traitSeaLoss = (g2, nat) => product(g2, nat, (t) => t.seaLoss);
+  var alertNation = (g2, nat) => traitRules(g2) && traitsOf(nat).some((t) => t.alert);
+  var traitSealift = (nat) => traitsOf(nat).reduce((s, t) => s + (t.builtin ? 0 : t.sealift ?? 0), 0);
+  function eliteCount(g2, nat) {
+    let k = g2.nations[nat].queue.filter((b) => b.elite).length;
+    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.elite) k++;
+    return k;
+  }
+  function whyNoElite(g2, nat) {
+    const u = eliteOf(nat);
+    if (!traitRules(g2) || !u) return "This nation has no special formation.";
+    if (u.from !== void 0 && sceneOf(g2).year < u.from) return `Not before ${u.from}.`;
+    if (eliteCount(g2, nat) >= u.most) return `The nation can keep ${u.most} of these at once, in the field and on order.`;
+    return null;
+  }
+  function openTraits(g2) {
+    if (!traitRules(g2) || g2.flags["traits:open"]) return;
+    g2.flags["traits:open"] = 1;
+    for (const [nat, row2] of Object.entries(TRAITS.nations)) {
+      const n = g2.nations[nat];
+      if (!n) continue;
+      n.sealift += traitSealift(nat);
+      const u = row2.unit;
+      if (!u?.starts) continue;
+      let left = u.starts;
+      for (const c of g2.corps) {
+        if (left <= 0) break;
+        if (c.nat === nat && !c.dead && c.kind === u.kind && !c.elite) {
+          c.elite = u.id;
+          left--;
+        }
+      }
+    }
+  }
+  function traitsMonth(g2) {
+    if (!traitRules(g2)) return;
+    for (const [nat, row2] of Object.entries(TRAITS.nations)) {
+      const t = row2.traits.find((x) => x.partisans);
+      const X = g2.nations[nat];
+      if (!t || !X) continue;
+      const victor = X.fellOn?.to;
+      const foe = (id) => X.alive ? atWar(g2, nat, id) : !!victor && (id === victor || allied(g2, id, victor));
+      let hit = 0, where = -1;
+      for (const r of g2.regions) {
+        if (r.owner !== nat || r.ctrl === nat || !TRAITS.partisanGround.includes(r.terrain) || !foe(r.ctrl)) continue;
+        for (const c of r.units) {
+          if (c.dead || !foe(c.nat) || c.str <= 0.3) continue;
+          c.str = Math.max(0.3, c.str - t.partisans);
+          if (c.nat === g2.human || nat === g2.human) {
+            hit++;
+            where = r.id;
+          }
+        }
+      }
+      if (hit && g2.turn % 6 === 0) {
+        const mine = nat === g2.human;
+        headline(g2, "info", mine ? `The partisans go on fighting in the occupied provinces: ${hit === 1 ? "one enemy corps" : `${hit} enemy corps`} lost men to raids and ambushes this month.` : `Partisans in occupied ${X.name} raid roads and depots: ${hit === 1 ? "one of your corps there" : `${hit} of your corps there`} lost men this month. The mountains, hills and forests are their country.`, g2.human ?? void 0, where);
+      }
+    }
+  }
+  var pct3 = (m) => `${Math.round(Math.abs(m - 1) * 100)}%`;
+  var KIND_WORD = { inf: "infantry", mot: "motorised troops", arm: "tanks", cav: "cavalry", mtn: "mountain troops", fort: "fortress troops", art: "artillery", eng: "engineers" };
+  var DIV_WORD = { inf: "infantry", mot: "motorised", arm: "armoured", cav: "cavalry", mtn: "mountain", art: "artillery", eng: "engineer" };
+  var ORDER_WORD = {
+    "corps:inf": "infantry corps",
+    "corps:mtn": "mountain corps",
+    "corps:mot": "motorised corps",
+    "corps:arm": "armoured corps",
+    "corps:cav": "cavalry",
+    "corps:art": "artillery corps",
+    "corps:eng": "engineer corps",
+    "work:fort": "fortifications",
+    "work:aa": "anti-aircraft guns",
+    "ship:dd": "destroyers",
+    "ship:ss": "submarines",
+    "ship:ca": "cruisers",
+    "ship:bb": "battleships",
+    "ship:cv": "carriers",
+    "ship:tp": "troopships",
+    "air:ftr": "fighter wings",
+    "air:bmr": "bomber wings"
+  };
+  var list2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  function whenWords(w, who) {
+    if (!w) return "";
+    const out = [];
+    if (w.kinds) out.push(`for ${list2(w.kinds.map((k) => KIND_WORD[k] ?? k))}`);
+    if (w.mobile) out.push("for tanks, motorised troops and cavalry");
+    if (w.landing) out.push("in a landing from the sea");
+    if (w.terrain) out.push(`in ${list2(w.terrain.map((t) => t === "urban" ? "cities" : t === "mountain" ? "mountains" : t === "forest" ? "forest" : t))}`);
+    if (w.works) out.push("behind fortifications");
+    if (w.home) out.push(`on ${who} own ground`);
+    if (w.winter) out.push("from December to March");
+    if (w.from !== void 0) out.push(`from ${w.from}`);
+    if (w.until !== void 0) out.push(`until the end of ${w.until}`);
+    return out.length ? ` ${out.join(" ")}` : "";
+  }
+  function fightWords(x, who) {
+    const a = x.attack, d = x.defence;
+    if (a === void 0 && d === void 0) return "";
+    const head = a !== void 0 && d !== void 0 ? a === d ? `Attack and defence up ${pct3(a)}` : `Attack up ${pct3(a)}, defence up ${pct3(d)}` : a !== void 0 ? `Attack up ${pct3(a)}` : `Defence up ${pct3(d)}`;
+    return `${head}${whenWords(x.when, who)}.`;
+  }
+  function traitRule(t, scale = 100) {
+    if (t.builtin) return t.rule ?? "Part of the rules of every campaign.";
+    const out = [];
+    const fight2 = fightWords(t, "its");
+    if (fight2) out.push(fight2);
+    const at = t.incomeAt === "peace" ? " while at peace" : t.incomeAt === "war" ? " while at war" : "";
+    if (t.income) out.push(`Earns ${Math.round(t.income * scale).toLocaleString("en-US")} a month${at}.`);
+    if (t.incomeMul) out.push(`Earnings up ${pct3(t.incomeMul)}${at}.`);
+    if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? "double" : `${t.oil} times as much`}.`);
+    if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);
+    if (t.drafts) out.push(`Losses are made good ${pct3(t.drafts)} ${t.drafts > 1 ? "faster" : "slower"}.`);
+    if (t.cost) out.push(`${list2(t.cost.what.map((k) => ORDER_WORD[k] ?? k)).replace(/^./, (ch) => ch.toUpperCase())} cost ${pct3(t.cost.mul)} ${t.cost.mul < 1 ? "less" : "more"}.`);
+    if (t.sealift) out.push(`Shipping for ${t.sealift === 1 ? "one more corps" : `${t.sealift} more corps`} a month.`);
+    if (t.alert) out.push("No enemy gets the surprise of the first month against it.");
+    if (t.partisans) out.push(`Enemy corps on its occupied mountains, hills and forests lose ${Math.round(t.partisans * 100)}% of their strength a month.`);
+    if (t.fleet) out.push(`Fleets fight ${pct3(t.fleet)} harder.`);
+    if (t.seaLoss) out.push(`Convoy losses down ${pct3(t.seaLoss)}.`);
+    return out.join(" ");
+  }
+  function eliteRule(u) {
+    const fight2 = fightWords(u, "its");
+    const size = `${u.divs === 1 ? `One ${DIV_WORD[u.kind] ?? u.kind} division` : `${u.divs} ${DIV_WORD[u.kind] ?? u.kind} divisions`}.`;
+    return [size, fight2, u.from !== void 0 ? `Raised from ${u.from}.` : "", `At most ${u.most} at once.`].filter(Boolean).join(" ");
   }
 
   // ../../src/campaign/diplomacy.ts
@@ -6932,12 +7376,12 @@
       });
     }
     const W = ARSENAL.works;
-    const pick = "Pick one of your own provinces on the map.";
+    const pick2 = "Pick one of your own provinces on the map.";
     {
       const have = r ? factoriesBuilt(g2, r.id) + queued(g2, nat, "factory", r.id) : 0;
       const most = r && (r.terrain === "urban" || r.cap) ? W.factory.most.city : W.factory.most.town;
       const cost = W.factory.cost + W.factory.step * have;
-      const why = !r ? pick : !isHome(g2, nat, r) || r.overseas ? "Factories are built in the home country." : !isCity(r) ? "Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size." : have >= most ? `${r.name} has room for no more new factories.` : poor(cost);
+      const why = !r ? pick2 : !isHome(g2, nat, r) || r.overseas ? "Factories are built in the home country." : !isCity(r) ? "Factories are built in cities: a province that is urban, the capital, has industry already or is a place of some size." : have >= most ? `${r.name} has room for no more new factories.` : poor(cost);
       out.push({ key: "work:factory", group: "works", label: W.factory.label, blurb: W.factory.blurb, size: "one factory", cost, months: W.factory.months, upkeep: 0, at: r ? r.id : -1, note: r ? `${r.name} has ${plural2(r.fac, "factory", "factories")}${have ? `, ${have} of ${most} new ones built or building` : ""}.` : "", why });
     }
     const FULL = { yard: "The shipyard at % is as large as a yard can be.", aa: "The guns at % are as heavy as they can be.", field: "The airfields at % are as large as they can be." };
@@ -6959,13 +7403,13 @@
         why: why ?? (next > TOP ? FULL[what].replace("%", r.name) : poor(cost))
       });
     };
-    level("yard", W.yard, r ? yardLevel(g2, r) : 0, 0, !r ? pick : !isHome(g2, nat, r) ? "Shipyards are built in the home country." : !r.port ? `${r.name} has no harbour.` : null);
-    level("aa", W.aa, r ? workLevel(g2, "aa", r.id) : 0, W.aa.upkeep, !r ? pick : r.ctrl !== nat ? "That ground is not in your hands." : null);
-    level("field", W.field, r ? workLevel(g2, "field", r.id) : 0, W.field.upkeep, !r ? pick : r.ctrl !== nat ? "That ground is not in your hands." : null);
+    level("yard", W.yard, r ? yardLevel(g2, r) : 0, 0, !r ? pick2 : !isHome(g2, nat, r) ? "Shipyards are built in the home country." : !r.port ? `${r.name} has no harbour.` : null);
+    level("aa", W.aa, r ? workLevel(g2, "aa", r.id) : 0, W.aa.upkeep, !r ? pick2 : r.ctrl !== nat ? "That ground is not in your hands." : null);
+    level("field", W.field, r ? workLevel(g2, "field", r.id) : 0, W.field.upkeep, !r ? pick2 : r.ctrl !== nat ? "That ground is not in your hands." : null);
     {
       const cost = r ? fortCost(g2, nat, r) : null;
       if (r && cost !== null) out.push(fortOffer(g2, nat, r, cost, poor(cost)));
-      else out.push({ key: "work:fort", group: "works", label: "Fortifications", blurb: FORT_BLURB, size: "", cost: priceOf(g2, nat, "work:fort", PRODUCTION.fort.cost[1]), months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: "", why: !r ? pick : !isHome(g2, nat, r) ? "Fortifications are built on home ground." : `${r.name} is fortified as heavily as it can be.` });
+      else out.push({ key: "work:fort", group: "works", label: "Fortifications", blurb: FORT_BLURB, size: "", cost: priceOf(g2, nat, "work:fort", PRODUCTION.fort.cost[1]), months: PRODUCTION.fort.months, upkeep: 0, at: r ? r.id : -1, note: "", why: !r ? pick2 : !isHome(g2, nat, r) ? "Fortifications are built on home ground." : `${r.name} is fortified as heavily as it can be.` });
     }
     return out;
   }
@@ -7185,7 +7629,8 @@
     const atPeace = before * peace + trade + gift.flat;
     const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
     const hard = budget ? incomeMul(g2, nat) : 1;
-    const gross = budget ? afterAir * tech2 * hard * gift.mul : income(g2, nat);
+    const fed = budget ? supIncome(g2, nat) : 1;
+    const gross = budget ? afterAir * tech2 * hard * gift.mul * fed : income(g2, nat);
     const lines = [
       { key: "capital", label: budget ? "The capital and the state" : "The state", amount: seat3 },
       { key: "factories", label: "Factories at home", amount: facHome, count: nHome },
@@ -7203,7 +7648,8 @@
       { key: "air", label: "Bombing of industry", amount: afterAir - afterSea },
       { key: "tech", label: tech2 >= 1 ? "Better production methods" : "Production methods behind the times", amount: afterAir * (tech2 - 1) },
       { key: "level", label: `Difficulty: ${levelOf(g2).name}`, amount: afterAir * tech2 * (hard - 1) },
-      { key: "trait", label: gift.mulBy, amount: afterAir * tech2 * hard * (gift.mul - 1) }
+      { key: "trait", label: gift.mulBy, amount: afterAir * tech2 * hard * (gift.mul - 1) },
+      { key: "supplies", label: "Factories idle for want of supplies", amount: afterAir * tech2 * hard * gift.mul * (fed - 1) }
     ];
     const costs = upkeep(g2, nat);
     const upkeepTotal2 = costs.reduce((s, l) => s + l.amount, 0);
@@ -7236,7 +7682,7 @@
       sum2 += seat3 + (n.offmap?.industry ?? 0);
       const trade2 = tradePartners(g2, nat).length * DIPLOMACY.tradeIncome;
       const gift = traitMoney(g2, nat);
-      return (sum2 * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade2 + gift.flat) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry") * incomeMul(g2, nat) * gift.mul;
+      return (sum2 * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade2 + gift.flat) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry") * incomeMul(g2, nat) * gift.mul * supIncome(g2, nat);
     }
     let fac = 0;
     for (const r of g2.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
@@ -7381,7 +7827,7 @@
     let spare = budgeted(g2) ? income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
     const slots = () => n.queue.filter((b) => b.what === "corps" && b.kind !== "eng" || b.what === "fort").length;
     const u = budgeted(g2) ? eliteOf(nat) : null;
-    if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g2, nat) === null && !locked(g2, nat, `corps:${u.kind}`)) {
+    if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g2, nat) === null && !locked(g2, nat, `corps:${u.kind}`) && !(u.kind === "arm" && shortOfOil(g2, nat))) {
       const at = raiseSite(g2, nat, u.kind, cap4.id), cost = corpsUpkeep(u.kind, u.divs);
       const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
       if (at >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && orderElite(g2, nat, at)) spare -= cost;
@@ -7389,7 +7835,7 @@
     while (slots() < 2) {
       let kind = home >= 20 && n.corpsNo % 3 === 2 ? "arm" : "inf";
       let at = budgeted(g2) ? raiseSite(g2, nat, kind, cap4.id) : cap4.id;
-      if (at < 0 || locked(g2, nat, `corps:${kind}`)) {
+      if (at < 0 || locked(g2, nat, `corps:${kind}`) || kind === "arm" && shortOfOil(g2, nat)) {
         kind = "inf";
         at = cap4.id;
       }
@@ -8518,7 +8964,7 @@
   var men = (c) => Math.round(c.divs * c.str * MEN_PER_DIV);
   function airOf(g2, nats, enemies) {
     let s = 0;
-    for (const id of nats) s += g2.nations[id].air;
+    for (const id of nats) s += g2.nations[id].air * fuelAir(g2, id);
     for (const n of Object.values(g2.nations)) {
       if (!n.alive || nats.has(n.id) || n.capital < 0) continue;
       if ([...nats].some((a) => allied(g2, a, n.id)) && [...enemies].some((e) => atWar(g2, n.id, e))) s += n.air * 0.25;
@@ -8546,7 +8992,7 @@
     const wide = groundRules(g2);
     const land2 = opts.sea === void 0;
     const armsA = wide ? combinedArms(g2, land2 ? attackers2.filter((c) => !noCrossing(g2, c.kind, c.reg, target.id)) : attackers2, target, false) : null, armsD = wide ? combinedArms(g2, defenders, target, true) : null;
-    let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1;
+    let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1;
     let roadA = 0, railA = 1, roadD = 0, railD = 1;
     const rivers = /* @__PURE__ */ new Set();
     const sap = wide ? sappers(attackers2.filter((c) => !land2 || !blocked(g2, c, target))) : 0;
@@ -8601,6 +9047,13 @@
         if (gift !== 1) {
           p *= gift;
           giftA = Math.max(giftA, gift);
+        }
+      }
+      if (wide) {
+        const short = shortAttack(g2, c);
+        if (short !== 1) {
+          p *= short;
+          shortA = Math.min(shortA, short);
         }
       }
       if (g2.nations[c.nat].slowCommand) p *= 0.85;
@@ -8681,6 +9134,13 @@
         if (gift !== 1) {
           p *= gift;
           giftD = Math.max(giftD, gift);
+        }
+      }
+      if (wide) {
+        const short = shortDefence(g2, d);
+        if (short !== 1) {
+          p *= short;
+          shortD = Math.min(shortD, short);
         }
       }
       const proud = storyDefence(g2, d, target, attackers2);
@@ -8800,6 +9260,21 @@
         label: "Abilities and technology",
         value: [a.length ? `Attacking: ${say(a)}` : "", d.length ? `Defending: ${say(d)}` : ""].filter(Boolean).join(". "),
         effect: [giftA !== 1 ? `Attack up as much as ${Math.round((giftA - 1) * 100)}% for the corps it covers` : "", giftD !== 1 ? `${giftA !== 1 ? "defence" : "Defence"} up as much as ${Math.round((giftD - 1) * 100)}% for the corps it covers` : ""].filter(Boolean).join(", ")
+      });
+    }
+    if (shortA < 1 || shortD < 1) {
+      const worst = (cs) => {
+        let fuel = 1, sup = 1;
+        for (const c of cs) {
+          fuel = Math.min(fuel, c.kind === "arm" || c.kind === "mot" ? fuelMet(g2, c.nat) : 1);
+          sup = Math.min(sup, suppliesMet(g2, c.nat));
+        }
+        return [fuel < 1 ? `fuel for ${Math.round(fuel * 100)}% of what their tanks and lorries need` : "", sup < 1 ? `${Math.round(sup * 100)}% of the supplies they need` : ""].filter(Boolean).join(" and ");
+      };
+      lines.push({
+        label: "Oil and supplies",
+        value: [shortA < 1 ? `Attackers have ${worst(attackers2)}` : "", shortD < 1 ? `Defenders have ${worst(defenders)}` : ""].filter(Boolean).join(". "),
+        effect: [shortA < 1 ? `Attack cut to as little as ${Math.round(shortA * 100)}%` : "", shortD < 1 ? `${shortA < 1 ? "defence" : "Defence"} cut to as little as ${Math.round(shortD * 100)}%` : ""].filter(Boolean).join(", ")
       });
     }
     if (sneaked) lines.push({ label: "Surprise", value: "War was declared this month on a country at peace", effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
@@ -9083,14 +9558,14 @@
     if (!from.nb.includes(to.id) || c.kind === "fort" || blocked(g2, c, to)) return false;
     const cost = moveCost(g2, c, to);
     if (c.ap < Math.min(cost, 4) || c.ap <= 0) return false;
-    const friendly = allied(g2, c.nat, to.ctrl);
-    if (!friendly && !atWar(g2, c.nat, to.ctrl)) return false;
+    const friendly2 = allied(g2, c.nat, to.ctrl);
+    if (!friendly2 && !atWar(g2, c.nat, to.ctrl)) return false;
     if (hostileUnits(g2, to, c.nat).length) return false;
     if (!hasRoom(g2, to, c)) return false;
     g2.week = weekOf(c, cost);
     place(g2, c, to);
     c.ap = Math.max(0, c.ap - cost);
-    if (!friendly) capture(g2, to, c.nat);
+    if (!friendly2) capture(g2, to, c.nat);
     return true;
   }
   function railReach(g2, c) {
@@ -9137,7 +9612,9 @@
       if (allied(g2, nat, r.ctrl)) held += r.vp;
     }
     const army = n.armyPeak > 0 ? clamp(armySize(g2, nat) / n.armyPeak, 0, 1) : 1;
-    return 0.45 * capLost + 0.35 * (vp ? 1 - held / vp : 0) + 0.2 * (1 - army);
+    const score = 0.45 * capLost + 0.35 * (vp ? 1 - held / vp : 0) + 0.2 * (1 - army);
+    const worn = willLost(g2, nat);
+    return worn > 0 ? score + worn : score;
   }
   function checkCollapse(g2, nat, by) {
     const n = g2.nations[nat];
@@ -9399,10 +9876,10 @@
         draw(g2, o.of ?? nat, o.from, row2[4], here ? c : void 0);
       }
       if (o.until) g2.flags[`lent:${i}`] = c.id;
-      const the = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? "" : "the ";
+      const the2 = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? "" : "the ";
       const bySea = reg.port && (reg.overseas || g2.nations[nat].seaSupply && reg.owner !== nat);
       if (o.news) headline(g2, "event", o.news, nat, reg.id);
-      else if (o.gen) headline(g2, "event", `${o.gen} ${bySea ? "lands at" : "arrives in"} ${reg.name} with ${the}${c.name}.`, nat, reg.id);
+      else if (o.gen) headline(g2, "event", `${o.gen} ${bySea ? "lands at" : "arrives in"} ${reg.name} with ${the2}${c.name}.`, nat, reg.id);
       else if (nat === g2.human) headline(g2, "info", `${c.name} has ${bySea ? "landed at" : "arrived in"} ${reg.name}.`, nat, reg.id);
     });
     if (gone.length) {
@@ -9473,6 +9950,7 @@
     airUpkeep(g2, nat);
     researchTick(g2, nat);
     techTick(g2, nat);
+    resourcesTick(g2, nat);
     computeSupply(g2);
     cutOffNews(g2);
     const earned = income(g2, nat);
@@ -9483,7 +9961,7 @@
     const perDiv = PRODUCTION.replacementCost;
     const tempo = freshOffensive(g2, nat);
     const army = g2.corps.filter((c) => c.nat === nat);
-    const drafts = draftsMul(g2, nat) * traitDrafts(g2, nat);
+    const drafts = draftsMul(g2, nat) * traitDrafts(g2, nat) * supDrafts(g2, nat);
     const want = army.map((c) => c.supplied && !(c.lean && nat === g2.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * c.divs * lineStrength(g2, c).mul * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
     const asked2 = want.reduce((s, x) => s + x, 0);
     const share = asked2 > 0 ? Math.min(1, n.pp / perDiv / asked2, PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g2, nat)) / asked2) : 0;
@@ -9517,7 +9995,7 @@
       }
       c.fought = false;
       if (c.gaveWay) delete c.gaveWay;
-      c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g2, c);
+      c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g2, c) - (fuelSlows(g2, c) ? 1 : 0);
     });
     for (const [reg, lost] of starved) {
       if (lost.men <= 3e4 && g2.flags[`ring:${reg}`] === void 0) continue;
@@ -9784,6 +10262,7 @@
     startEngineers(g2);
     openTraits(g2);
     openTech(g2);
+    openStores(g2);
     g2.supplyDirty = true;
     return g2;
   }
@@ -10818,20 +11297,20 @@
               const fast = (c) => KIND[c.kind].mobile ? 1 : 0;
               pool.sort((a, b) => (main ? fast(b) - fast(a) : fast(a) - fast(b)) || atkPower(g2, b) - atkPower(g2, a));
               const least = main ? Math.max(1, pool.filter((c) => fast(c)).length) : 1;
-              let pick = null, odds = 0;
+              let pick2 = null, odds = 0;
               for (let k = least; k <= pool.length; k++) {
                 odds = assess(g2, pool.slice(0, k), target).odds;
                 if (odds >= 2.6) {
-                  pick = pool.slice(0, k);
+                  pick2 = pool.slice(0, k);
                   break;
                 }
               }
-              if (!pick) {
+              if (!pick2) {
                 if (odds < (oddsFor[target.name] ?? minOdds)) continue;
-                pick = pool;
+                pick2 = pool;
               }
               const score = value + Math.min(odds, 4);
-              if (!best || score > best.score) best = { score, target, corps: pick, battle: true };
+              if (!best || score > best.score) best = { score, target, corps: pick2, battle: true };
             }
           }
           if (!best) break;
@@ -11310,8 +11789,8 @@
       const ca = out.get(a).cost;
       for (const j of g2.regions[a].nb) {
         const r = g2.regions[j];
-        const friendly = allied(g2, c.nat, r.ctrl);
-        if (!friendly && (onEve(g2) || !atWar(g2, c.nat, r.ctrl))) continue;
+        const friendly2 = allied(g2, c.nat, r.ctrl);
+        if (!friendly2 && (onEve(g2) || !atWar(g2, c.nat, r.ctrl))) continue;
         if (blocked(g2, c, r, a)) continue;
         const step2 = moveCost(g2, c, r, a);
         const left = c.ap - ca;
@@ -11446,6 +11925,12 @@
   }
   function techTree(g2) {
     return g2.human ? techView(g2, g2.human) : null;
+  }
+  function depots(g2, nat = g2.human) {
+    return nat ? stores(g2, nat) : null;
+  }
+  function shippingLanes(g2) {
+    return seaLanes(g2);
   }
   function whyNotOrderResearch(g2, id) {
     if (!g2.human) return "Nobody is at the controls.";
@@ -12135,6 +12620,10 @@
         }
         return [n.id, ["armour", "fighters", "bombers"].map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab.clock[f] - n.lab.months)) + 7) / 12))];
       })),
+      // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
+      // the months it will last and its books in words, and every shipping lane to draw over the sea.
+      stores: storesOf2(s),
+      lanes: s.flags.open === 1 ? shippingLanes(s).filter((l) => l.kind === "sea" && l.path.length > 1 && l.state !== "idle").map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })) : [],
       // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
       idle: s.human ? idleTeams(s, s.human) : 0,
       // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -12843,6 +13332,25 @@
     for (const x of f.friends) ties.set(x.why, [...ties.get(x.why) ?? [], theName2(s, x.nat)]);
     const friendsLine = f.friends.length ? `Its friends: ${[...ties].map(([why, who]) => `${listOf3(who)} (${why})`).join("; ")}.` : `${The} has no close friends among the nations.`;
     return { ok: true, name: theName2(s, on), lead: lead2, friends: friendsLine, lines };
+  }
+  function storesOf2(s) {
+    const v = s.human ? depots(s) : null;
+    if (!v) return null;
+    const amount = (x) => (Math.round(x * 10) / 10).toLocaleString("en-US");
+    const book = (bk, word) => {
+      const months = Number.isFinite(bk.months) ? Math.max(0, Math.floor(bk.months)) : -1;
+      const lines = [
+        `${word}: ${amount(bk.stock)} in the depots, which hold ${amount(bk.cap)}.`,
+        `Comes in each month: ${amount(bk.made)}.`,
+        ...bk.income.filter((l) => Math.abs(l.amount) >= 0.05).map((l) => `   ${l.label}: ${amount(l.amount)}${l.note ? ` (${l.note})` : ""}`),
+        `Goes out each month: ${amount(bk.need)}.`,
+        ...bk.spend.filter((l) => Math.abs(l.amount) >= 0.05).map((l) => `   ${l.label}: ${amount(l.amount)}`),
+        bk.net >= 0 ? `The stock is ${bk.net > 0.05 ? "growing" : "steady"}.` : months <= 0 ? "The depots are empty." : `At this rate the depots are empty in ${months} month${months === 1 ? "" : "s"}.`,
+        ...bk.effects
+      ];
+      return { stock: bk.stock, cap: bk.cap, net: bk.net, months, met: bk.met, short: bk.met < 0.999, tip: lines.join("\n") };
+    };
+    return { oil: book(v.oil, "Oil"), sup: book(v.sup, "Supplies") };
   }
   function abilityLines(nat) {
     const out = traitsOf(nat).map((t) => `${t.name}. ${traitRule(t, BUDGET.scale)}`);

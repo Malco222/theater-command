@@ -357,6 +357,49 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
 	Object->TryGetStringArrayField(TEXT("league"), Out.League);
 	Object->TryGetNumberField(TEXT("idle"), Out.IdleTeams);
+	const TSharedPtr<FJsonObject>* Stores = nullptr;
+	if (Object->TryGetObjectField(TEXT("stores"), Stores)) // null for a small country and in a scenario
+	{
+		Out.bStores = true;
+		for (const TPair<const TCHAR*, FViewStock*>& Good : { TPair<const TCHAR*, FViewStock*>(TEXT("oil"), &Out.Oil), TPair<const TCHAR*, FViewStock*>(TEXT("sup"), &Out.Supplies) })
+		{
+			const TSharedPtr<FJsonObject>* Book = nullptr;
+			if ((*Stores)->TryGetObjectField(Good.Key, Book))
+			{
+				double Stock = 0.0, Cap = 0.0, Net = 0.0;
+				(*Book)->TryGetNumberField(TEXT("stock"), Stock);
+				(*Book)->TryGetNumberField(TEXT("cap"), Cap);
+				(*Book)->TryGetNumberField(TEXT("net"), Net);
+				Good.Value->Stock = static_cast<float>(Stock);
+				Good.Value->Cap = static_cast<float>(Cap);
+				Good.Value->Net = static_cast<float>(Net);
+				(*Book)->TryGetNumberField(TEXT("months"), Good.Value->Months);
+				(*Book)->TryGetBoolField(TEXT("short"), Good.Value->bShort);
+				(*Book)->TryGetStringField(TEXT("tip"), Good.Value->Tip);
+			}
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Lanes = nullptr;
+	if (Object->TryGetArrayField(TEXT("lanes"), Lanes))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Lanes)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FViewLane& Lane = Out.Lanes.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("state"), Lane.State);
+			double Flow = 1.0;
+			Entry->TryGetNumberField(TEXT("flow"), Flow);
+			Lane.Flow = static_cast<float>(Flow);
+			const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
+			if (Entry->TryGetArrayField(TEXT("path"), Points))
+			{
+				for (int32 K = 0; K + 1 < Points->Num(); K += 2)
+				{
+					Lane.Path.Add(FVector2D((*Points)[K]->AsNumber(), (*Points)[K + 1]->AsNumber()));
+				}
+			}
+		}
+	}
 	const TSharedPtr<FJsonObject>* Designs = nullptr;
 	if (Object->TryGetObjectField(TEXT("designs"), Designs))
 	{

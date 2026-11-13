@@ -727,6 +727,16 @@ int32 ACampaignPlayerController::GetIdleTeams() const
 	return Session && Session->GetView().bHumanUp ? Session->GetView().IdleTeams : 0;
 }
 
+const FViewStock* ACampaignPlayerController::GetStock(bool bOil) const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || !Session->GetView().bStores || Session->GetView().Human.IsEmpty())
+	{
+		return nullptr;
+	}
+	return bOil ? &Session->GetView().Oil : &Session->GetView().Supplies;
+}
+
 void ACampaignPlayerController::FoundResearchBureau()
 {
 	FCampaignSession* Session = GetSession();
@@ -1010,6 +1020,9 @@ void ACampaignPlayerController::OpenGuide()
 	Add(TEXT("MONEY AND BUILDING"),
 		TEXT("Every province you hold pays into your treasury each month. The treasury is at the top left: click it, or LEDGER, for the books.\n")
 		TEXT("The ARSENAL sells corps, aircraft, ships and works such as factories, shipyards, airfields and anti-aircraft guns. Click one of your own territories first, so the game knows where to build. Works you build stand on the map."));
+	Add(TEXT("OIL AND SUPPLIES"),
+		TEXT("In the grand campaign a great power keeps stocks of oil and of supplies. The two gauges under the treasury show how full the depots are and how many months they will last; rest the mouse on one to read where it comes from and where it goes. ")
+		TEXT("Tanks, aircraft and ships burn oil, and the people at home and the army eat supplies. Much of both comes by sea along the dashed lanes on the map: pale where cargoes get through, amber where raiders are at them, red where the lane is cut. The game warns you when a stock has six months left."));
 	Add(TEXT("RESEARCH AND GENERALS"),
 		TEXT("RESEARCH is where your research teams get their work. In the grand campaign it is a tree of technologies: pick one for each idle team, because a team never chooses for itself, and the button at the top says when some are idle. ")
 		TEXT("Some technologies unlock orders in the arsenal, and medium and heavy tanks, long-range fighters and heavy bombers change the models on your pieces. In a historical scenario research keeps to history's dates, and you move design teams between branches instead.\n")
@@ -2083,6 +2096,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowArmies(View, Marches, CarriedFrom);
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
 		Map->ShowBuildings(View.RegionWorks);
+		Map->ShowLanes(View.Lanes);
 	}
 }
 
@@ -2394,7 +2408,29 @@ void ACampaignPlayerController::FinishMonth()
 	}
 	else
 	{
-		Notify(View.Human.IsEmpty() ? View.Date : FString::Printf(TEXT("%s. Your orders."), *View.Date), 4.0);
+		// A stock that has run dry, or will within six months, is said at once: it takes that long to do anything about it.
+		FString Warning;
+		if (View.bStores)
+		{
+			auto Warn = [&Warning](const FViewStock& Stock, const TCHAR* Word)
+			{
+				if (Stock.bShort || Stock.Months == 0)
+				{
+					Warning += FString::Printf(TEXT(" The %s depots are empty."), Word);
+				}
+				else if (Stock.Months > 0 && Stock.Months <= 6)
+				{
+					Warning += FString::Printf(TEXT(" %s runs out in %d month%s."), *FString(Word).Left(1).ToUpper().Append(FString(Word).Mid(1)), Stock.Months, Stock.Months == 1 ? TEXT("") : TEXT("s"));
+				}
+			};
+			Warn(View.Oil, TEXT("oil"));
+			Warn(View.Supplies, TEXT("supply"));
+		}
+		if (!Warning.IsEmpty())
+		{
+			CampaignSounds::Play(this, TEXT("siren"), 0.35f);
+		}
+		Notify(View.Human.IsEmpty() ? View.Date : FString::Printf(TEXT("%s. Your orders.%s"), *View.Date, *Warning), Warning.IsEmpty() ? 4.0 : 10.0);
 	}
 }
 
