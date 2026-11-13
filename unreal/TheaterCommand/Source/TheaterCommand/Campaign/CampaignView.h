@@ -250,6 +250,7 @@ struct FCampaignView
 	FString Human; // the nation the player leads
 	FString Current; // whose month it is
 	bool bHumanUp = false;
+	bool bAtWar = false; // the player's country is at war with somebody
 	bool bEve = false; // the player is placing an army on the eve of war: marches at home only, no month passes
 	bool bOpen = false; // free play: no nation follows history's plan
 	FString Fallen; // the player's nation, once it has been beaten

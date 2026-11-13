@@ -27,6 +27,13 @@ public:
 	/** Turns the music off, or on again. Returns true if it is now playing. */
 	bool ToggleMusic();
 	bool HasMusic() const { return Music != nullptr; }
+	/**
+	 * The music follows the war: "theme" for a country at war, "quiet" for one at peace, "battle" while there is
+	 * fighting to watch. One piece fades out as the next fades in. A piece that has not been made is passed over.
+	 */
+	void SetMusicMood(const FString& Mood);
+	/** Plays the music softly under a voice (the newsreel's), and brings it back up afterwards. */
+	void DuckMusic(bool bDown);
 
 	/** The campaign being played: the rules, and the latest picture of the war. */
 	FCampaignSession* GetSession() const { return Session.Get(); }
@@ -59,4 +66,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UAudioComponent> Music;
 	bool bMusicOn = true;
+	UPROPERTY(Transient)
+	TMap<FString, TObjectPtr<UAudioComponent>> Pieces; // every piece that has been made, by its mood
+	FString MusicMood = TEXT("theme");
+	bool bMusicDucked = false;
+	float MusicVolume = 0.55f;
 };

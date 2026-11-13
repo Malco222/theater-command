@@ -352,6 +352,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetStringField(TEXT("human"), Out.Human); // null once the player's nation has fallen
 	Object->TryGetStringField(TEXT("current"), Out.Current);
 	Object->TryGetBoolField(TEXT("humanUp"), Out.bHumanUp);
+	Object->TryGetBoolField(TEXT("atWar"), Out.bAtWar);
 	Object->TryGetBoolField(TEXT("eve"), Out.bEve);
 	Object->TryGetBoolField(TEXT("open"), Out.bOpen);
 	Object->TryGetStringField(TEXT("level"), Out.Level);

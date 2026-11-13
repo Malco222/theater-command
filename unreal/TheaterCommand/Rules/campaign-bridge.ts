@@ -131,6 +131,8 @@ function view() {
     human: s.human,
     current: current(s),
     humanUp: up,
+    // Whether the player's country is at war with anybody: the music follows it.
+    atWar: !!s.human && (s.nations[s.human]?.atWar.length ?? 0) > 0,
     eve: onEve(s),
     open: isOpen(s),
     level: isOpen(s) && s.human ? levelNow(s).name : '',

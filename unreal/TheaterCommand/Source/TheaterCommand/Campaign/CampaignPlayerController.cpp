@@ -641,6 +641,7 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	}
 	if (bOk && Sorties.Num() > 0 && Map.IsValid())
 	{
+		BattleMusicUntil = FPlatformTime::Seconds() + 13.0;
 		// A raid is flown the moment it is ordered: the room is put away, and the player watches every group
 		// take off from its own airfield, meet over the target and come home again.
 		bool bBombers = false;
@@ -1695,6 +1696,16 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	if (!Eye || !Map.IsValid())
 	{
 		return;
+	}
+
+	// The music follows the war: the march while there is fighting to watch, the theme for a country at war,
+	// the quiet piece for one at peace.
+	if (ACampaignGameMode* Mode = GetMode())
+	{
+		const FCampaignSession* Now = GetSession();
+		const bool bFighting = FPlatformTime::Seconds() < BattleMusicUntil || FaceOff.bVisible;
+		Mode->SetMusicMood(bFighting ? TEXT("battle") : (Now && !Opening.bVisible && !Now->GetView().bAtWar && !Now->GetView().Human.IsEmpty()) ? TEXT("quiet") : TEXT("theme"));
+		Mode->DuckMusic(Newsreel.bOn);
 	}
 
 	// The newsreel: the view drifts slowly round the place while its story is told, then the next comes on.
@@ -3302,6 +3313,7 @@ void ACampaignPlayerController::CloseFaceOff()
 {
 	if (FaceOff.bVisible && FaceOff.bResolved && Map.IsValid())
 	{
+		BattleMusicUntil = FPlatformTime::Seconds() + 6.0; // the march plays on a little after the result
 		// The result has been read: the field is still smoking when the eye goes back to the table.
 		Map->AddBattleSmoke(FaceOff.Region);
 	}
@@ -3393,6 +3405,10 @@ void ACampaignPlayerController::WatchNextStep()
 	if (Step.Battles.Num() > 0 && !Step.bMine)
 	{
 		CampaignSounds::Play(this, TEXT("field_gun"), 0.25f);
+	}
+	if (Step.Battles.Num() > 0 || Step.Raids.Num() > 0)
+	{
+		BattleMusicUntil = FPlatformTime::Seconds() + (Step.bMine ? 9.0 : 5.0);
 	}
 	// The raids of the month are flown again, each group from its own airfield.
 	for (const FSortie& Raid : Step.Raids)

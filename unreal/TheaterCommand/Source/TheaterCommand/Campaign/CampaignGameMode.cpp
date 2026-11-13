@@ -230,23 +230,77 @@ void ACampaignGameMode::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// The music: one original piece on a loop, quiet enough to think over. It is made by Tools/build_music.sh
-	// and is not kept in the repository, so a copy of the game without it simply plays in silence.
-	if (USoundBase* Theme = LoadObject<USoundBase>(nullptr, TEXT("/Game/Campaign/Music/Theme.Theme")))
+	// The music: original pieces on a loop, quiet enough to think over. They are made by Tools/build_music.sh
+	// and are not kept in the repository, so a copy of the game without them simply plays in silence.
+	// "-TheaterQuiet" plays them too softly to hear: for checking that they play without disturbing anyone.
+	MusicVolume = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")) ? 0.0005f : 0.55f;
+	const TPair<const TCHAR*, const TCHAR*> Made[] = {
+		{ TEXT("theme"), TEXT("/Game/Campaign/Music/Theme.Theme") },
+		{ TEXT("battle"), TEXT("/Game/Campaign/Music/Battle.Battle") },
+		{ TEXT("quiet"), TEXT("/Game/Campaign/Music/MapRoom.MapRoom") },
+	};
+	for (const TPair<const TCHAR*, const TCHAR*>& Piece : Made)
 	{
-		// "-TheaterQuiet" plays it too softly to hear: for checking that it plays without disturbing anyone.
-		const float Volume = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")) ? 0.0005f : 0.55f;
-		Music = UGameplayStatics::SpawnSound2D(this, Theme, Volume, 1.0f, 0.0f, nullptr, false, false);
-		if (Music)
+		if (USoundBase* Sound = LoadObject<USoundBase>(nullptr, Piece.Value))
 		{
-			Music->bIsUISound = true; // keeps playing if the game is paused
-			Music->FadeIn(4.0f, Volume);
+			UAudioComponent* Player = UGameplayStatics::SpawnSound2D(this, Sound, MusicVolume, 1.0f, 0.0f, nullptr, false, false);
+			if (Player)
+			{
+				Player->bIsUISound = true; // keeps playing if the game is paused
+				Player->Stop();
+				Pieces.Add(Piece.Key, Player);
+			}
 		}
-		UE_LOG(LogTheater, Display, TEXT("Music: %s, %.0f seconds on a loop"), Music && Music->IsPlaying() ? TEXT("playing") : TEXT("not playing"), Theme->GetDuration());
+	}
+	if (TObjectPtr<UAudioComponent>* Theme = Pieces.Find(TEXT("theme")))
+	{
+		Music = *Theme;
+		Music->FadeIn(4.0f, MusicVolume);
+		UE_LOG(LogTheater, Display, TEXT("Music: %d pieces, the theme %s"), Pieces.Num(), Music->IsPlaying() ? TEXT("playing") : TEXT("not playing"));
 	}
 	else
 	{
 		UE_LOG(LogTheater, Display, TEXT("No music found. Run Tools/build_music.sh to make it."));
+	}
+}
+
+void ACampaignGameMode::SetMusicMood(const FString& Mood)
+{
+	if (Mood == MusicMood)
+	{
+		return;
+	}
+	TObjectPtr<UAudioComponent>* Next = Pieces.Find(Mood);
+	if (!Next || !*Next)
+	{
+		return; // that piece has not been made: what is playing goes on
+	}
+	MusicMood = Mood;
+	if (Music == *Next)
+	{
+		return;
+	}
+	if (Music && bMusicOn)
+	{
+		Music->FadeOut(Mood == TEXT("battle") ? 0.8f : 2.5f, 0.0f);
+	}
+	Music = *Next;
+	if (bMusicOn)
+	{
+		Music->FadeIn(Mood == TEXT("battle") ? 0.6f : 3.0f, bMusicDucked ? MusicVolume * 0.3f : MusicVolume);
+	}
+}
+
+void ACampaignGameMode::DuckMusic(bool bDown)
+{
+	if (bDown == bMusicDucked)
+	{
+		return;
+	}
+	bMusicDucked = bDown;
+	if (Music && bMusicOn)
+	{
+		Music->AdjustVolume(0.8f, bDown ? MusicVolume * 0.3f : MusicVolume);
 	}
 }
 
@@ -259,7 +313,7 @@ bool ACampaignGameMode::ToggleMusic()
 	bMusicOn = !bMusicOn;
 	if (bMusicOn)
 	{
-		Music->FadeIn(1.5f, 0.55f);
+		Music->FadeIn(1.5f, bMusicDucked ? MusicVolume * 0.3f : MusicVolume);
 	}
 	else
 	{

@@ -583,6 +583,7 @@ private:
 	TArray<FAnnouncement> Announcements;
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
+	double BattleMusicUntil = 0.0; // the march plays until then
 	FNewsreelShow Newsreel;
 	bool bNewsreels = true; // K turns them off
 	TArray<FAnnouncement> HeldAnnouncements; // waiting for the newsreel to end

@@ -13,7 +13,9 @@ if ! command -v node > /dev/null; then
 fi
 mkdir -p "$PROJECT/Saved/Music"
 node "$HERE/make_music.mjs" "$PROJECT/Saved/Music/theme.wav"
+node "$HERE/make_music_battle.mjs" "$PROJECT/Saved/Music/battle.wav"
+node "$HERE/make_music_map_room.mjs" "$PROJECT/Saved/Music/map_room.wav"
 "$ENGINE/Engine/Binaries/Mac/UnrealEditor-Cmd" "$PROJECT/TheaterCommand.uproject" -run=pythonscript -script="$HERE/build_music.py" -unattended -nosplash -nullrhi -stdout 2>&1 | grep -E "Theater Command:|Error|error:|Traceback" || true
 ls -la "$PROJECT/Content/Campaign/Music/" 2> /dev/null || { echo "The music was not imported." >&2; exit 1; }
 # Note which version of the piece this was made from, so the launcher knows when to make it again.
-shasum "$HERE/make_music.mjs" | cut -d' ' -f1 > "$PROJECT/Saved/Music/made-from.txt"
+cat "$HERE"/make_music*.mjs | shasum | cut -d' ' -f1 > "$PROJECT/Saved/Music/made-from.txt"
