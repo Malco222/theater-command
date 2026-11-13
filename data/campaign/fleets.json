@@ -5,7 +5,7 @@
     "hunt": "Submarines are sunk by destroyers and aircraft and by nothing else. Each month a nation's hunters in a sea sink this share of the enemy submarines at sea there: base + rate x H / (H + submarines x perSub + sea), never more than 'most'. H counts its destroyers (and 'carrier' for each carrier, whose aircraft search far): in full for a fleet ordered to hunt there ('hunter'), 'escort' for a fleet escorting a lane through that sea, 'loose' for one on patrol there, plus 'air' for each point of friendly air strength over the sea, the whole multiplied by what radar is worth. With no hunter at all nothing is sunk. A hunting fleet loses 'cost' destroyers for each submarine it sinks.",
     "screen": "A fleet of heavy ships needs destroyers round it. With fewer than 'per' destroyers for each battleship, carrier and cruiser, a fleet at sea where enemy submarines are at work may be torpedoed: each month the chance of losing one heavy ship is submarines x risk x the share of the screen that is missing, never more than 'most'.",
     "bombard": "A fleet at sea can shell an enemy coast on the sea it is in, once a month, and a coast is shelled once a month at most. 'guns' is the weight of each class of ship. Against troops the organisation cut is weight / (scale + perDiv x enemy divisions there), never more than max, less in cover (the ground raid's table in airwar.json), 'dug' of it for troops dug in and 'fort' for fortress troops; 'str' of the cut is also lost in men and guns and no corps is driven below 'floor'. Against a city the share of the province's output stopped for a month is weight / scale, never more than max. Shelling costs the fleet 'ready' of its fitness for sea and needs 'minReady' to begin and at least 'least' weight of guns. A fortified coast answers: 'reply' of the fleet's cruisers and destroyers for each level of the fortress.",
-    "ai": "A computer admiral shells troops on a coast its own army (or an ally's) stands beside, when its fleet is on patrol there with readiness of 'ready' or better and its side is the stronger in that sea. bombard false stops it."
+    "ai": "A computer admiral shells troops on a coast its own army (or an ally's) stands beside, when its fleet is on patrol there with readiness of 'ready' or better and its side is the stronger in that sea. A fleet lying in harbour with the guns for it puts to sea for the month to shell such a coast in any sea within its reach, but only where its side would be 'sortie' times the enemy's strength with it there; raiders keep to their own work. bombard false stops it, and sortie 0 keeps the harbour fleets in."
   },
   "escort": { "loose": 0.25 },
   "hunt": { "base": 0.004, "rate": 0.12, "sea": 20, "perSub": 1, "hunter": 1, "escort": 0.5, "loose": 0.25, "carrier": 3, "air": 0.15, "most": 0.25, "cost": 0.12 },
@@ -19,7 +19,7 @@
     "city": { "scale": 250, "max": 0.45 },
     "reply": 0.012
   },
-  "ai": { "bombard": true, "ready": 0.75 },
+  "ai": { "bombard": true, "ready": 0.75, "sortie": 1.5 },
   "roles": {
     "bb": "The big guns. They win fleet actions and shell a coast. They cannot find a submarine.",
     "cv": "Aircraft at sea. Strong in a fleet action, and their aircraft search wide for submarines and guard a convoy.",

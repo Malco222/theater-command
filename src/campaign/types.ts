@@ -86,6 +86,25 @@ export interface Nation {
   res?: Stores;
 }
 
+/** A trade agreement between two countries (the grand campaign). It pays both every month. */
+export interface TradeDeal {
+  /** A land route that runs only between colonies: the first country's province at that border. */
+  via?: number;
+  /** A land route across other countries: those countries, in order. */
+  through?: string[];
+  a: string;
+  b: string;
+  /** The month it was signed. */
+  since: number;
+  /** What it is worth to each side a month with nothing sunk, before either's own commerce is counted. */
+  worth: number;
+  /** How the goods go, the seas they cross, the share sunk on the way, and how the agreement stands. */
+  way: 'land' | 'sea' | 'none';
+  seas: number[];
+  lost: number;
+  state: 'open' | 'raided' | 'cut';
+}
+
 /** A power's stocks of oil and supplies, and the share of last month's need of each that was met (1 unless the depots ran dry). */
 export interface Stores {
   oil: number; sup: number; oilMet: number; supMet: number;
@@ -116,8 +135,8 @@ export interface Lab {
 
 export interface Build {
   id: number;
-  /** A corps, a level of fortification, or from the arsenal: aircraft, ships, or a work built in a province. */
-  what: 'corps' | 'fort' | 'air' | 'ship' | 'work';
+  /** A corps, a level of fortification, from the arsenal (aircraft, ships, or a work built in a province), or a level of a town's building ('civic', its line in 'item'). */
+  what: 'corps' | 'fort' | 'air' | 'ship' | 'work' | 'civic';
   kind?: Kind;
   divs?: number;
   /** For the arsenal: which aircraft ('ftr', 'bmr'), ship class ('dd', 'tp' and so on) or work ('factory', 'yard', 'aa', 'field'), and how many. */
@@ -782,6 +801,8 @@ export interface Game {
   seaReports: SeaReport[];
   /** Coasts shelled from the sea, oldest first (the grand campaign). */
   shoreReports: ShoreReport[];
+  /** Trade agreements in force (the grand campaign). */
+  trade: TradeDeal[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
   airFleets: AirFleet[];

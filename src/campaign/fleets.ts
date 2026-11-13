@@ -13,7 +13,7 @@ import { allied, atWar, headline } from './game';
 import { SIGHT, sightOf } from './intel';
 import {
   CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, quality, screenGap, seaRng,
-  seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
+  sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
@@ -466,18 +466,38 @@ export function openEscorts(g: Game): void {
 /** A computer admiral shells the troops on a coast its own army, or an ally's, stands beside. */
 export function shoreAI(g: Game, nat: string): void {
   if (!seaWar(g) || !FLEETS.ai.bombard || nat === g.human || !g.nations[nat]?.atWar.length) return;
+  // Only where the army can follow it up: enemy troops on a coast with one of its own side's armies beside them.
+  const worth = (r: Region): number => {
+    if (!atWar(g, nat, r.ctrl) || g.flags[`shell:${r.id}`] === g.turn) return 0;
+    if (!r.nb.some((j) => g.regions[j].units.some((u) => !u.dead && u.kind !== 'fort' && allied(g, u.nat, nat)))) return 0;
+    return foesAt(g, r, nat).reduce((s, c) => s + c.divs, 0);
+  };
   for (const f of fleetsOf(g, nat)) {
-    if (f.stance !== 'patrol' || f.ready < FLEETS.ai.ready || f.shelled === g.turn || gunsRaw(f.ships) < B.least) continue;
-    if (seaSide(g, f.zone, nat, false).total < seaSide(g, f.zone, nat, true).total) continue;
-    let best: Region | null = null, bv = 0;
-    for (const id of g.seas[f.zone].coast) {
-      const r = g.regions[id];
-      if (whyNotBombard(g, f, r, 'troops')) continue;
-      // Only where the army can follow it up.
-      if (!r.nb.some((j) => g.regions[j].units.some((u) => !u.dead && u.kind !== 'fort' && allied(g, u.nat, nat)))) continue;
-      const divs = foesAt(g, r, nat).reduce((s, c) => s + c.divs, 0);
-      if (divs > bv) { bv = divs; best = r; }
+    if (f.ready < FLEETS.ai.ready || f.shelled === g.turn || gunsRaw(f.ships) < B.least) continue;
+    if (atSea(f)) {
+      if (f.stance !== 'patrol' || seaSide(g, f.zone, nat, false).total < seaSide(g, f.zone, nat, true).total) continue;
+      let best: Region | null = null, bv = 0;
+      for (const id of g.seas[f.zone].coast) {
+        const r = g.regions[id];
+        if (whyNotBombard(g, f, r, 'troops')) continue;
+        const v = worth(r);
+        if (v > bv) { bv = v; best = r; }
+      }
+      if (best) bombard(g, f, best, 'troops');
+      continue;
     }
-    if (best) bombard(g, f, best, 'troops');
+    // A fleet lying in harbour with the guns for it puts to sea for the month to shell such a coast, but only into
+    // a sea where its side would be much the stronger with it there. Raiders keep to their own work.
+    if (f.duty === 'raid' || !(FLEETS.ai.sortie > 0)) continue;
+    const mine = fleetPower(g, f);
+    let at = -1, best: Region | null = null, bv = 0;
+    for (const z of fleetReach(g, f)) {
+      if (seaSide(g, z, nat, false).total + mine < FLEETS.ai.sortie * seaSide(g, z, nat, true).total) continue;
+      for (const id of g.seas[z].coast) {
+        const v = worth(g.regions[id]);
+        if (v > bv) { bv = v; best = g.regions[id]; at = z; }
+      }
+    }
+    if (best && sail(g, f, at, 'patrol')) bombard(g, f, best, 'troops');
   }
 }

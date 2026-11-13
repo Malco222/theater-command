@@ -21,7 +21,7 @@ import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './eng
 import { tearUp, whyNotCutRail } from './rails';
 import { foundBureau, setTeams } from './research';
 import { startResearch, stopResearch, techView, whyNotResearch, type TechView } from './tech';
-import { seaLanes, stores, type Lane, type StoresView } from './resources';
+import { keepsStores, seaLanes, stores, type Lane, type StoresView } from './resources';
 import {
   bombard, bombardTargets, detach, escortLane, escortLanes, fleetCard, merge, mergeTargets, planBombard, planEscort, seaOptions, whyNotDetach, whyNotMerge,
   type EscortLane, type EscortPlan, type FleetCard, type SeaOption, type ShorePlan, type ShoreTarget,
@@ -40,7 +40,9 @@ import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotD
 import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
 import { corpsMood, type Mood } from './morale';
-import { prizeOf, prizesInReach, townAt, townsOf, type Prize, type TownView } from './towns';
+import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
+import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
+import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -732,6 +734,71 @@ export function depots(g: Game, nat: string | null = g.human): StoresView | null
  */
 export function shippingLanes(g: Game): Lane[] {
   return seaLanes(g);
+}
+
+// ---- Towns and trade (the grand campaign) --------------------------------------------------------------
+
+export interface TownBuildings {
+  region: number;
+  /** The chief place of the province and how big it is: the size sets the number of plots. */
+  town: string;
+  size: TownSize;
+  /** Every plot in order: what stands on it, what is being built, or free (line null). */
+  plots: PlotView[];
+  free: number;
+  /** True when the province is the player's to build in. */
+  mine: boolean;
+  /** Every line of building as an offer here: the next level, its cost, months and effect, or why not. */
+  offers: CivicOffer[];
+}
+
+/** The buildings of a province's chief place, and what the player could build there. Null in a history campaign. */
+export function townBuildings(g: Game, region: number): TownBuildings | null {
+  const r = g.regions[region];
+  if (!r || !civicRules(g)) return null;
+  const plots = plotsAt(g, region, keepsStores(g, r.ctrl));
+  const me = g.human;
+  const mine = !!me && r.ctrl === me && g.nations[me].alive;
+  return { region, town: townName(r), size: townSize(g, r), plots, free: plots.filter((p) => p.line === null).length, mine, offers: mine ? civicOffers(g, me!, region, keepsStores(g, me!)) : [] };
+}
+
+/** Orders the next level of a line of building ('market', 'farm', 'school', 'camp', 'hospital', 'hall') in one of the player's provinces. */
+export function orderBuilding(g: Game, region: number, line: string): Build | null {
+  return humanUp(g) ? orderCivic(g, g.human!, region, line) : null;
+}
+
+export interface BuildingTip { region: number; town: string; province: string; offer: CivicOffer }
+
+/** The buildings worth ordering next, for a list on the Build tab: for each line, the richest of the player's places that can take it now. */
+export function buildingTips(g: Game, most = 6): BuildingTip[] {
+  const me = g.human;
+  if (!me || !civicRules(g) || !g.nations[me].alive) return [];
+  const worth = (r: Region): number => (g.nations[me].capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + (r.terrain === 'urban' ? 3 : r.terrain === 'plains' ? 2 : 1) + (r.port ? 1 : 0);
+  const home = g.regions.filter((r) => r.ctrl === me && r.owner === me).sort((a, b) => worth(b) - worth(a) || a.id - b.id);
+  const keeps = keepsStores(g, me);
+  const out: BuildingTip[] = [];
+  for (const l of CIVIC.lines) {
+    for (const r of home) {
+      const o = civicOffers(g, me, r.id, keeps).find((x) => x.line === l.id);
+      if (o && (o.why === null || o.poor)) { out.push({ region: r.id, town: townName(r), province: r.name, offer: o }); break; }
+    }
+  }
+  return out.slice(0, most);
+}
+
+/** The player's trade: agreements in force, what each pays and how the goods go, and every country he could sign with. Null in a history campaign. */
+export function tradeLedger(g: Game, nat: string | null = g.human): TradeBook | null {
+  return nat ? tradeBook(g, nat) : null;
+}
+
+/** Signs a trade agreement with another country. It costs political capital. */
+export function orderTrade(g: Game, nat: string): boolean {
+  return humanUp(g) && !!signTrade(g, g.human!, nat);
+}
+
+/** Ends the player's trade agreement with another country. */
+export function orderEndTrade(g: Game, nat: string): boolean {
+  return humanUp(g) && endTrade(g, g.human!, nat);
 }
 
 // ---- Spies and the fog of war (the grand campaign) -----------------------------------------------------

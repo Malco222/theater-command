@@ -412,6 +412,24 @@ describe('shelling a coast', () => {
     }
     expect(all).toBeGreaterThan(0);
   }, 30_000);
+
+  it('a computer admiral lying in harbour puts to sea to shell a coast his army stands beside', () => {
+    // The German battle fleet opens the war in port. With the army on the Polish border it sorties to shell the coast in front of it.
+    const g = startOpen(createGame(1, null));
+    const fleet = g.fleets.filter((f) => f.nat === 'GER').sort((a, b) => b.ships.bb - a.ships.bb)[0];
+    expect(atSea(fleet)).toBe(false);
+    expect(FLEETS.ai.sortie).toBeGreaterThan(1);
+    runTurnAI(g);
+    const rep = g.shoreReports.find((r) => r.nat === 'GER')!;
+    expect(rep).toBeTruthy();
+    expect(rep.fleet).toBe(fleet.name);
+    expect(rep.what).toBe('troops');
+    expect(g.regions[rep.region].owner).toBe('POL');
+    expect(g.regions[rep.region].nb.some((j) => g.regions[j].ctrl === 'GER')).toBe(true);
+    // Raiders keep to their own work: no submarine flotilla is ever sent to shell anything.
+    for (let m = 0; m < 10; m++) runTurnAI(g);
+    for (const r of g.shoreReports) expect(r.ships.bb + r.ships.ca, `${r.nat} ${r.fleet}`).toBeGreaterThan(0);
+  }, 30_000);
 });
 
 describe('splitting and joining fleets', () => {

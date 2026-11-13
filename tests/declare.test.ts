@@ -10,6 +10,7 @@ import { income, ledger } from '../src/campaign/economy';
 import { addCorps, assess, atWar, bloc, createGame, declareWar } from '../src/campaign/game';
 import { techMul } from '../src/campaign/research';
 import { startOpen } from '../src/campaign/staff';
+import { dealsOf, tradeIncome } from '../src/campaign/trade';
 import { declarable, humanUp, invasions, onEve, orderDeclare, passMonth, previewDeclare, reach } from '../src/campaign/turn';
 import { KIND, type Corps, type Game, type Kind } from '../src/campaign/types';
 
@@ -260,12 +261,15 @@ describe('declaring war', () => {
     expect(g.nations['NOR'].align).toBe('leaning_allies');
     expect(g.nations['HUN'].align).toBe('independent');
     expect(tradePartners(g, 'GER').map((n) => n.id)).not.toContain('HUN');
-    // A friendly neutral's trade is worth as much as a factory each month: that much is gone, and the ledger shows it.
-    // (Germany's machine tools raise everything it earns by a twentieth, trade included.)
-    expect(cash - income(g, 'GER')).toBeCloseTo(DIPLOMACY.tradeIncome * techMul(g, 'GER', 'industry'), 6);
+    // Trade in the grand campaign is by agreement: a neutral that steps back keeps the agreements it has, unless
+    // feeling there turns right against the attacker's alliance. So the attack costs no income by itself, and the
+    // ledger's trade line is the agreements in force.
+    expect(cash - income(g, 'GER')).toBeCloseTo(0, 6);
     const line = ledger(g, 'GER').income.find((l) => l.key === 'trade')!;
-    expect(line.count).toBe(tradePartners(g, 'GER').length);
-    expect(line.amount).toBeCloseTo(line.count! * DIPLOMACY.tradeIncome, 6);
+    expect(line.count).toBe(dealsOf(g, 'GER').length);
+    expect(line.amount).toBeCloseTo(tradeIncome(g, 'GER'), 6);
+    expect(DIPLOMACY.tradeIncome).toBeGreaterThan(0);
+    expect(techMul(g, 'GER', 'industry')).toBeGreaterThan(0);
     const told = g.headlines.slice(news).find((h) => /alarms the neutral world/.test(h.text))!;
     expect(told.text).toMatch(/Denmark/);
     for (const name of ['Norway', 'Sweden', 'Finland']) expect(told.text).toContain(name);

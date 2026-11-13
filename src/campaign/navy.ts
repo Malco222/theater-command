@@ -56,7 +56,7 @@ export const FLEETS = fleetData as unknown as {
     city: { scale: number; max: number };
     reply: number;
   };
-  ai: { bombard: boolean; ready: number };
+  ai: { bombard: boolean; ready: number; sortie: number };
   roles: Record<ShipClass, string>;
   brief: Record<ShipClass, string>;
   orders: Record<Stance, { label: string; blurb: string }>;
