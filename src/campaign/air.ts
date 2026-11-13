@@ -16,6 +16,7 @@ import { storyAir, storyEdge } from './stories';
 import { groundRules } from './ground';
 import { bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, seat } from './difficulty';
+import { fuelAir } from './resources';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Game, Region, Ships } from './types';
 
 type Sched = [number, number, number][];
@@ -128,7 +129,7 @@ const WORKS = (arsenalData as unknown as { works: { aa: { cut: number; flak: num
 
 const leaderMul = (f: AirFleet): number => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
 /** What one of a fleet's aircraft is worth in a fight. */
-const worth = (g: Game, f: AirFleet): number => spec(f.nat).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * storyEdge(g, f);
+const worth = (g: Game, f: AirFleet): number => spec(f.nat).quality * leaderMul(f) * (0.5 + 0.5 * f.ready) * techMul(g, f.nat, 'fighters') * storyEdge(g, f) * fuelAir(g, f.nat);
 
 /** Who holds the sky over a region, if anyone has won it lately. */
 export function skyOver(g: Game, region: number): string | null {

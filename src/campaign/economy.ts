@@ -19,6 +19,7 @@ import { workingFactories } from './rails';
 import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
 import { TECH, locked, whyNoPara } from './tech';
+import { shortOfOil, supIncome } from './resources';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -195,7 +196,8 @@ export function ledger(g: Game, nat: string): Ledger {
   const atPeace = before * peace + trade + gift.flat;
   const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
   const hard = budget ? incomeMul(g, nat) : 1;
-  const gross = budget ? afterAir * tech * hard * gift.mul : income(g, nat);
+  const fed = budget ? supIncome(g, nat) : 1;
+  const gross = budget ? afterAir * tech * hard * gift.mul * fed : income(g, nat);
   const lines: LedgerLine[] = [
     { key: 'capital', label: budget ? 'The capital and the state' : 'The state', amount: seat },
     { key: 'factories', label: 'Factories at home', amount: facHome, count: nHome },
@@ -214,6 +216,7 @@ export function ledger(g: Game, nat: string): Ledger {
     { key: 'tech', label: tech >= 1 ? 'Better production methods' : 'Production methods behind the times', amount: afterAir * (tech - 1) },
     { key: 'level', label: `Difficulty: ${levelOf(g).name}`, amount: afterAir * tech * (hard - 1) },
     { key: 'trait', label: gift.mulBy, amount: afterAir * tech * hard * (gift.mul - 1) },
+    { key: 'supplies', label: 'Factories idle for want of supplies', amount: afterAir * tech * hard * gift.mul * (fed - 1) },
   ];
   const costs = upkeep(g, nat);
   const upkeepTotal = costs.reduce((s, l) => s + l.amount, 0);
@@ -242,7 +245,8 @@ export function income(g: Game, nat: string): number {
     const trade = tradePartners(g, nat).length * DIPLOMACY.tradeIncome;
     // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
     const gift = traitMoney(g, nat);
-    return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul;
+    // Factories short of steel, coal and rubber stand idle part of the month.
+    return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul * supIncome(g, nat);
   }
   let fac = 0;
   for (const r of g.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
@@ -426,7 +430,7 @@ export function aiProduction(g: Game, nat: string): void {
   const slots = (): number => n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || b.what === 'fort').length;
   // The nation's special formation comes first when it can be had (the grand campaign): one on order at a time.
   const u = budgeted(g) ? eliteOf(nat) : null;
-  if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g, nat) === null && !locked(g, nat, `corps:${u.kind}`)) {
+  if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g, nat) === null && !locked(g, nat, `corps:${u.kind}`) && !(u.kind === 'arm' && shortOfOil(g, nat))) {
     const at = raiseSite(g, nat, u.kind, cap.id), cost = corpsUpkeep(u.kind, u.divs);
     // A staff never holds more than its bank allows, so a costly formation is ordered as soon as the bank is full.
     const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
@@ -437,8 +441,8 @@ export function aiProduction(g: Game, nat: string): void {
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
     // nation's greatest industrial province; a nation with no such province raises infantry instead.
     let at = budgeted(g) ? raiseSite(g, nat, kind, cap.id) : cap.id;
-    // A nation that has not researched the tank arm raises infantry instead.
-    if (at < 0 || locked(g, nat, `corps:${kind}`)) { kind = 'inf'; at = cap.id; }
+    // A nation that has not researched the tank arm raises infantry instead, and so does one with no fuel to run more tanks.
+    if (at < 0 || locked(g, nat, `corps:${kind}`) || (kind === 'arm' && shortOfOil(g, nat))) { kind = 'inf'; at = cap.id; }
     if (n.pp < corpsCost(g, nat, kind) + PRODUCTION.aiReserve) break;
     const cost = corpsUpkeep(kind, PRODUCTION.builds[kind].divs);
     if (spare < cost * BUDGET.debt.aiMargin) break;

@@ -58,11 +58,12 @@ describe('the data', () => {
 
   it('gives every technology something to do, with numbers that are sane and orders that exist', () => {
     for (const t of TECH.techs) {
-      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss'].filter((k) => (t as any)[k] !== undefined);
+      const does = ['field', 'unlock', 'slots', 'winterKit', 'sealift', 'attack', 'defence', 'drafts', 'cost', 'fleet', 'seaLoss', 'oil'].filter((k) => (t as any)[k] !== undefined);
       expect(does.length, t.id).toBeGreaterThan(0);
       if (t.field) expect(FIELDS, t.id).toContain(t.field);
       for (const k of t.unlock ?? []) expect(k, t.id).toMatch(ORDERS);
       for (const m of [t.attack, t.defence, t.drafts, t.fleet]) if (m !== undefined) { expect(m, t.id).toBeGreaterThan(1); expect(m, t.id).toBeLessThanOrEqual(1.25); }
+      if (t.oil !== undefined) { expect(t.oil, t.id).toBeGreaterThan(0); expect(t.oil, t.id).toBeLessThan(1); }
       if (t.seaLoss !== undefined) { expect(t.seaLoss).toBeGreaterThanOrEqual(0.7); expect(t.seaLoss).toBeLessThan(1); }
       if (t.cost) { expect(t.cost.mul).toBeGreaterThanOrEqual(0.7); expect(t.cost.mul).toBeLessThan(1); for (const k of t.cost.what) expect(k, t.id).toMatch(ORDERS); }
       for (const k of t.when?.kinds ?? []) expect(KIND[k], t.id).toBeDefined();

@@ -15,6 +15,7 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
+import { fuelFleet } from './resources';
 import {
   STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type ShipClass, type Ships, type Stance,
 } from './types';
@@ -133,14 +134,15 @@ export function openingStations(g: Game): void {
 
 // ---- Who holds a sea ------------------------------------------------------------------------
 
-const fit = (f: Fleet): number => 0.5 + 0.5 * f.ready;
+/** How fit a fleet is to fight: its readiness, and in the grand campaign whether it has the fuel to steam. */
+const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fuelFleet(g, f.nat);
 const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel * (f.admiral.level - 1) : 0);
 
 /** A fleet's weight in a fleet action. */
 export function fleetPower(g: Game, f: Fleet): number {
   let p = 0;
   for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power;
-  return p * quality(g, f.nat) * fit(f) * admiralMul(f) * storyEdge(g, f) * traitFleet(g, f.nat);
+  return p * quality(g, f.nat) * fit(g, f) * admiralMul(f) * storyEdge(g, f) * traitFleet(g, f.nat);
 }
 
 /** Air strength over a sea from the coasts one side holds: this nation's friends, or (hostile) its enemies. */
@@ -592,12 +594,12 @@ export function convoyWar(g: Game, nat: string): void {
       if (atWar(g, f.nat, nat)) {
         let p = 0;
         for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-        p *= quality(g, f.nat) * fit(f) * (f.stance === 'raid' ? 1 : NAVY.convoy.patrolRaid);
+        p *= quality(g, f.nat) * fit(g, f) * (f.stance === 'raid' ? 1 : NAVY.convoy.patrolRaid);
         if (p > 0) { raid += p; raiders.push(f); }
       } else if (allied(g, f.nat, nat) && f.stance === 'patrol') {
         let p = 0;
         for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort;
-        p *= quality(g, f.nat) * fit(f);
+        p *= quality(g, f.nat) * fit(g, f);
         if (p > 0) { guard += p; escorts.push(f); }
       }
     }
@@ -631,6 +633,31 @@ export function convoyWar(g: Game, nat: string): void {
       headline(g, 'info', `${cap(route.name)}: ${tons.toLocaleString('en-US')} tons of shipping sunk this month${subsLost ? `, ${subsLost} ${subsLost === 1 ? 'submarine' : 'submarines'} destroyed` : ''}.`, nat);
     }
   }
+}
+
+/**
+ * The share of its cargoes a nation would lose this month on a lane through these seas: raiders against escorts,
+ * counted as the convoy war counts them, with no dice thrown and no ship lost. The grand campaign's shipping lanes
+ * for oil and supplies are read from this.
+ */
+export function laneLoss(g: Game, nat: string, zones: number[]): { raid: number; guard: number; loss: number } {
+  let raid = 0, guard = 0;
+  for (const f of g.fleets) {
+    if (!atSea(f) || !zones.includes(f.zone)) continue;
+    if (atWar(g, f.nat, nat)) {
+      let p = 0;
+      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+      raid += p * quality(g, f.nat) * fit(g, f) * (f.stance === 'raid' ? 1 : NAVY.convoy.patrolRaid);
+    } else if (allied(g, f.nat, nat) && f.stance === 'patrol') {
+      let p = 0;
+      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort;
+      guard += p * quality(g, f.nat) * fit(g, f);
+    }
+  }
+  for (const z of zones) guard += airOver(g, z, nat) * NAVY.convoy.air;
+  const G = guard * NAVY.convoy.escortWorth * techMul(g, nat, 'radar');
+  const loss = raid > 0 ? (raid / (raid + G + NAVY.convoy.ocean)) * traitSeaLoss(g, nat) : 0;
+  return { raid, guard, loss: Math.min(0.95, loss) };
 }
 
 /** Which way Swedish iron ore is reaching Germany this month, if at all. */

@@ -5,7 +5,7 @@
     "start": "What each nation has researched when the war begins. A campaign begun in a later year gives every nation the months of research in between, chosen as its own staff would.",
     "slots": "Research teams each nation begins with.",
     "units": "Formations the tree unlocks beyond the ordinary kinds: 'para' is an airborne corps, raised like infantry, 'most' at once in the field and on order.",
-    "ai": "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open). 'order' is each nation's preference among the branches."
+    "ai": "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open), less 'fuel' for one that makes oil while the nation's stock of it is running down (the months in resources.json). 'order' is each nation's preference among the branches."
   },
   "months": [0, 5, 8, 11, 14],
   "early": 0.5,
@@ -54,8 +54,9 @@
     { "id": "institutes", "branch": "industry", "tier": 1, "year": 1939, "months": 6, "needs": [], "name": "Research institutes", "text": "Scientists and engineers brought together from the universities and set to war work.", "slots": 1 },
     { "id": "assembly", "branch": "industry", "tier": 2, "year": 1940, "needs": ["machinetools"], "name": "Assembly lines", "text": "Tanks, lorries and aircraft built on a moving line from standard parts.", "cost": { "what": ["corps:arm", "corps:mot", "air:ftr", "air:bmr"], "mul": 0.9 } },
     { "id": "mobilise", "branch": "industry", "tier": 2, "year": 1940, "needs": [], "name": "General mobilisation", "text": "Every class called up in its turn, with the depots and instructors to turn recruits into replacements.", "drafts": 1.2 },
-    { "id": "synthetics", "branch": "industry", "tier": 2, "year": 1941, "needs": [], "name": "Synthetic fuel and rubber", "text": "Petrol from coal and rubber from the chemical works, so the factories do not wait on cargoes.", "field": "industry" },
+    { "id": "synthetics", "branch": "industry", "tier": 2, "year": 1940, "needs": [], "name": "Synthetic fuel and rubber", "text": "Petrol from coal and rubber from the chemical works, so the tanks and the factories do not wait on cargoes.", "oil": 0.25 },
     { "id": "warplan", "branch": "industry", "tier": 3, "year": 1942, "needs": ["assembly"], "name": "War economy", "text": "One central plan for steel, labour and machine tools, and nothing made that the war does not need.", "field": "industry" },
+    { "id": "hydrogenation", "branch": "industry", "tier": 3, "year": 1942, "needs": ["synthetics"], "name": "Hydrogenation plants", "text": "Great works beside the coalfields that turn brown coal into aviation spirit by the trainload.", "oil": 0.3 },
     { "id": "labs", "branch": "industry", "tier": 3, "year": 1942, "months": 12, "needs": ["institutes"], "name": "Central laboratories", "text": "The institutes joined under one directorate with first call on money and men.", "slots": 1 },
     { "id": "massprod", "branch": "industry", "tier": 4, "year": 1944, "needs": ["warplan"], "name": "Mass production", "text": "Simplified designs turned out round the clock by factories that make one thing only.", "field": "industry", "cost": { "what": ["corps:inf"], "mul": 0.9 } },
 
@@ -92,7 +93,7 @@
     "para": { "label": "Airborne corps", "word": "Airborne", "divs": 2, "cost": 44, "months": 6, "most": 2, "blurb": "Parachute and glider troops. Once a month they can be dropped on an enemy coast across one sea with no ships at all, as long as the enemy's fighters do not hold the sky there. They land without heavy weapons, so pick a weakly held target." }
   },
   "ai": {
-    "tier": 10, "branch": 6, "early": 30, "teams": 14, "later": 100,
+    "tier": 10, "branch": 6, "early": 30, "teams": 14, "later": 100, "fuel": 40,
     "skip": { "_all": ["airborne", "carriers"] },
     "order": {
       "_default": ["land", "industry", "doctrine", "air", "naval"],
