@@ -3873,7 +3873,8 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			// What the province holds and what it is worth: shown for any ground, friend's or enemy's.
 			const bool bMine = Session->GetView().RegionHolder.IsValidIndex(RegionId) && Session->GetView().RegionHolder[RegionId] == Session->GetView().Human;
 			FString Holdings = Province.Holdings;
-			if (!Province.Yield.IsEmpty())
+			// (the prize line says what the place pays where the rules give one; the plain line is for where they do not)
+			if (!Province.Yield.IsEmpty() && Province.PrizeLine.IsEmpty())
 			{
 				Holdings += bMine ? FString::Printf(TEXT("\nGives your treasury %s"), *Province.Yield) : FString::Printf(TEXT("\nWorth %s to whoever holds it"), *Province.Yield);
 			}
