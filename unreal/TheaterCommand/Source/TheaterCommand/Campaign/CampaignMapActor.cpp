@@ -423,6 +423,12 @@ void ACampaignMapActor::PaintGround()
 	ReliefPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Relief, false, false, TEXT("TableRelief"));
 	MasksPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Masks, false, false, TEXT("TableMasks"));
 	CoverPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Cover, false, false, TEXT("TableCover"));
+	LiePicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Lie, false, false, TEXT("TableLie"));
+	if (LiePicture)
+	{
+		LiePicture->Filter = TF_Nearest; // (an angle half way between two provinces' angles is neither's: no smoothing)
+		LiePicture->UpdateResource();
+	}
 	WaterPicture = CampaignTextures::Create(Paint.WaterNX, Paint.WaterNY, Paint.Water, true, false, TEXT("TableWater"));
 	ShorePicture = CampaignTextures::Create(Paint.WaterNX, Paint.WaterNY, Paint.Surf, false, false, TEXT("TableShore"));
 
@@ -450,6 +456,7 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetTextureParameterValue(TEXT("Masks"), MasksPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Cover"), CoverPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Fields"), FieldsPicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Lie"), LiePicture);
 	// (the nation's stain lies over the canopy at a little under half its strength: a wood is green first, and its owner's second)
 	LandMaterial->SetScalarParameterValue(TEXT("WoodsStain"), 0.42f);
 	LandMaterial->SetVectorParameterValue(TEXT("FirColour"), FLinearColor(0.015f, 0.034f, 0.028f));
@@ -922,11 +929,15 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 		const FVector2D Middle = Region.Center;
 		// Where things already stand round a town: the army's flag to the north-east (or north-west), the air
 		// fleets to the south-west and south-east. The works take the gaps: north, south, west and east.
-		auto Place = [this, &Middle, Id](const FVector2D& Offset, FVector2D& OutSpot) -> bool
+		// (The town is larger than it was, by its tier: its works stand outside its last roofs, as far beyond them as
+		// they used to stand beyond those of a town of the first size.)
+		const double Grown = TownSpread(Id), Roofs = TownRadius(Id);
+		auto Place = [this, &Middle, Id, Roofs](const FVector2D& Offset, FVector2D& OutSpot) -> bool
 		{
-			for (const double Share : { 1.0, 0.75, 0.55 })
+			const double Beyond = FMath::Max(Offset.Size() - 6.4, 2.5);
+			for (const double Share : { 1.0, 0.65, 0.35 })
 			{
-				OutSpot = Middle + Offset * Share;
+				OutSpot = Middle + Offset.GetSafeNormal() * (Roofs + Beyond * Share);
 				if (Data.FindRegionAt(OutSpot.X, OutSpot.Y) == Id)
 				{
 					return true;
@@ -935,10 +946,10 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 			return false; // no room in this province: leave it off the table
 		};
 		// A shipyard wants the water in front of it: the nearest stretch of the province's own coast that is clear of the pieces.
-		auto PlaceOnCoast = [this, &Middle, Id](FVector2D& OutSpot) -> bool
+		auto PlaceOnCoast = [this, &Middle, Id, Grown, Roofs](FVector2D& OutSpot) -> bool
 		{
 			static const FVector2D Taken[] = { FVector2D(9.0, -7.0), FVector2D(-9.0, -7.0), FVector2D(-10.0, 8.0), FVector2D(10.0, 9.0), FVector2D(0.0, -9.0), FVector2D(-10.0, 13.0), FVector2D(-9.5, 0.5) };
-			for (double Reach = 6.0; Reach <= 34.0; Reach += 1.5)
+			for (double Reach = Roofs + 1.5; Reach <= Roofs + 34.0; Reach += 1.5)
 			{
 				for (int32 Step = 0; Step < 24; ++Step)
 				{
@@ -953,7 +964,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 					bool bClear = true;
 					for (const FVector2D& Other : Taken)
 					{
-						bClear &= FVector2D::Distance(Offset, Other) > 6.0;
+						bClear &= FVector2D::Distance(Offset, Other * Grown) > 6.0;
 					}
 					if (bClear)
 					{
@@ -1464,7 +1475,7 @@ void ACampaignMapActor::BuildWorks()
 			{
 				continue;
 			}
-			const FVector2D Spot = Data.Regions[RegionId].Center + FVector2D(4.0, 5.0);
+			const FVector2D Spot = Data.Regions[RegionId].Center + FVector2D(4.0, 5.0) * TownSpread(RegionId);
 			const FVector Foot = SurfacePoint(Spot.X, Spot.Y, 0.02);
 			const FVector Peaks[2] = { Foot, Foot + FVector(0.9 * U, 1.5 * U, 0.0) };
 			const double Heights[2] = { 3.0 * U, 2.2 * U };
@@ -1739,7 +1750,7 @@ void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 		const FCampaignRegion& Region = Data.Regions[RegionId];
 		const bool bCity = Region.Terrain == TEXT("urban");
 		// (the near row stands just outside the last of the town's own houses)
-		const double Clear = Region.bCapital ? 14.5 : (bCity ? 13.5 : 10.5);
+		const double Clear = TownRadius(RegionId) + 4.4;
 		const double Size = Region.bCapital ? 2.9 : (bCity ? 2.7 : 2.4);
 		const FVector2D Offset(Plots[Line].X, Clear + Plots[Line].Y);
 		// If its place is in the sea or over the frontier, the quarter is tried on the town's other sides.
@@ -1818,7 +1829,7 @@ void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
 		for (int32 F = 0; F < Fires; ++F)
 		{
 			const double Angle = F * 2.4 + Region.Id;
-			SiegeFires.Add(SurfacePoint(Region.Center.X + FMath::Cos(Angle) * 2.2, Region.Center.Y + FMath::Sin(Angle) * 2.2, 1.6));
+			SiegeFires.Add(SurfacePoint(Region.Center.X + FMath::Cos(Angle) * 2.2 * TownSpread(Region.Id), Region.Center.Y + FMath::Sin(Angle) * 2.2 * TownSpread(Region.Id), 1.6 * TownSpread(Region.Id)));
 		}
 	}
 }
@@ -1858,7 +1869,7 @@ void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 		if (Mark.bBurning)
 		{
 			// What was wrecked lies outside the town: the fire is beside it, not in its streets.
-			PrizeFires.Add(SurfacePoint(Region.Center.X - 3.0, Region.Center.Y - 1.9, 0.5));
+			PrizeFires.Add(SurfacePoint(Region.Center.X - 0.84 * (TownRadius(Region.Id) + 1.6), Region.Center.Y - 0.54 * (TownRadius(Region.Id) + 1.6), 0.5));
 		}
 		if (!Mark.By.IsEmpty())
 		{
@@ -1868,7 +1879,7 @@ void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 			const FLinearColor Cloth = Whose ? FLinearColor(Whose->Color) : FLinearColor(0.7f, 0.7f, 0.7f);
 			// (a pale band along its top edge, so that a dark colour is still seen to be a flag)
 			const FLinearColor Band(FColor::FromHex(TEXT("EFE6CC")));
-			const FVector Foot = SurfacePoint(Region.Center.X + 3.6, Region.Center.Y + 2.6, 0.02);
+			const FVector Foot = SurfacePoint(Region.Center.X + 0.81 * (TownRadius(Region.Id) + 1.6), Region.Center.Y + 0.59 * (TownRadius(Region.Id) + 1.6), 0.02);
 			Model.Pillar(Foot, 0.2 * U, 0.14 * U, 11.0 * U, Pole, 6);
 			for (int32 Cross = 0; Cross < 2; ++Cross)
 			{
@@ -1883,6 +1894,63 @@ void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 		PrizesMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		PrizesMesh->SetMaterial(0, SceneryMaterial);
 	}
+}
+
+namespace
+{
+	/** How far a town's outermost roofs stand from its middle at the size towns were first built, in map units, by its tier: capital, city, large town, small place. */
+	double FirstTownRadius(const FCampaignRegion& Region)
+	{
+		const bool bCity = Region.Terrain == TEXT("urban");
+		const bool bBig = Region.bCapital || bCity || Region.VictoryPoints >= 2 || Region.Factories >= 2;
+		const bool bTown = bBig || Region.VictoryPoints > 0 || Region.Factories > 0 || Region.bOil || Region.bPort;
+		return Region.bCapital ? 10.1 : bCity ? 8.5 : bBig ? 6.4 : bTown ? 4.4 : 0.0;
+	}
+}
+
+double ACampaignMapActor::TownSpread(int32 RegionId) const
+{
+	if (!Data.Regions.IsValidIndex(RegionId))
+	{
+		return 1.0;
+	}
+	if (TownSpreads.Num() != Data.Regions.Num())
+	{
+		// The ladder (art fix 8): an army's base is about 14 map units across; a capital is built to about two and
+		// a half of them, a city to about one and two thirds, a large town to a little over one, a small place to
+		// three quarters. A town is never built past the edge of its own province, though, nor smaller than it was.
+		TownSpreads.SetNum(Data.Regions.Num());
+		for (const FCampaignRegion& Region : Data.Regions)
+		{
+			const bool bCity = Region.Terrain == TEXT("urban");
+			const double First = FirstTownRadius(Region);
+			double Wanted = Region.bCapital ? 1.75 : bCity ? 1.4 : First >= 6.0 ? 1.25 : First > 0.0 ? 1.2 : 1.0;
+			if (First > 0.0)
+			{
+				double Room = 1.0e9;
+				for (const TArray<FVector2D>& Ring : Region.Polygons)
+				{
+					for (int32 i = 0, n = Ring.Num(); i < n; ++i)
+					{
+						Room = FMath::Min(Room, FMath::PointDistToSegment(FVector(Region.Center, 0.0), FVector(Ring[i], 0.0), FVector(Ring[(i + 1) % n], 0.0)));
+					}
+				}
+				Wanted = FMath::Clamp(Room * 0.95 / First, 1.0, Wanted);
+			}
+			TownSpreads[Region.Id] = static_cast<float>(Wanted);
+		}
+	}
+	return TownSpreads[RegionId];
+}
+
+double ACampaignMapActor::TownRadius(int32 RegionId) const
+{
+	if (!Data.Regions.IsValidIndex(RegionId))
+	{
+		return 3.0;
+	}
+	const double First = FirstTownRadius(Data.Regions[RegionId]);
+	return First > 0.0 ? First * TownSpread(RegionId) : 3.0;
 }
 
 bool ACampaignMapActor::GetAirfieldWorld(int32 RegionId, FVector& OutWorld) const
@@ -1994,7 +2062,7 @@ void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 		FRandomStream Random(RegionId * 3571 + 17);
 		// The field: in the open country of the province, away from its town, its pieces and the quarter south of it.
 		FVector2D Field = Region.Centroid;
-		if (FVector2D::Distance(Field, Region.Center) < 16.0)
+		if (FVector2D::Distance(Field, Region.Center) < TownRadius(RegionId) + 9.6)
 		{
 			bool bFound = false;
 			const double Turn = Random.FRandRange(0.0f, 360.0f);
@@ -2002,7 +2070,7 @@ void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 			{
 				// (west, north-west and north first: the east is the army's, the south the town's new quarter)
 				const double Angle = FMath::DegreesToRadians(200.0 + Try * 45.0 + Turn * 0.1);
-				const FVector2D At = Region.Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * 19.0;
+				const FVector2D At = Region.Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (TownRadius(RegionId) + 12.6);
 				if (Terrain.HeightAt(At.X, At.Y) > 0.0f && Data.FindRegionAt(At.X, At.Y) == RegionId)
 				{
 					Field = At;
@@ -2114,7 +2182,7 @@ void ACampaignMapActor::BuildTowns()
 		// point it scores toward victory.
 		if (Region.VictoryPoints > 0)
 		{
-			const FVector Foot = SurfacePoint(Region.Center.X + 3.6, Region.Center.Y + 1.4, 0.02);
+			const FVector Foot = SurfacePoint(Region.Center.X + 3.6 * TownSpread(Region.Id), Region.Center.Y + 1.4 * TownSpread(Region.Id), 0.02);
 			const FLinearColor Gold(FColor::FromHex(TEXT("D9A521"))), GoldEdge(FColor::FromHex(TEXT("9C7412")));
 			for (int32 Coin = 0; Coin < FMath::Min(Region.VictoryPoints, 9); ++Coin)
 			{
@@ -2125,7 +2193,7 @@ void ACampaignMapActor::BuildTowns()
 		// Oil: two derricks and a storage tank.
 		if (Region.bOil)
 		{
-			const FVector Foot = SurfacePoint(Region.Center.X - 4.2, Region.Center.Y - 2.6, 0.02);
+			const FVector Foot = SurfacePoint(Region.Center.X - 4.2 * TownSpread(Region.Id), Region.Center.Y - 2.6 * TownSpread(Region.Id), 0.02);
 			const FLinearColor Iron(FColor::FromHex(TEXT("2B2A28"))), Tank(FColor::FromHex(TEXT("9A9C9E")));
 			for (int32 Rig = 0; Rig < 2; ++Rig)
 			{
@@ -2137,7 +2205,7 @@ void ACampaignMapActor::BuildTowns()
 		}
 		const int32 Houses = Region.bCapital ? 13 : (bCity ? 10 : (bBig ? 6 : 4));
 		const int32 WindowsBefore = TownWindows.Num();
-		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1, Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id, &TownChimneys, Region.bPort);
+		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1 * TownSpread(Region.Id), Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id, &TownChimneys, Region.bPort);
 		for (int32 Pane = WindowsBefore / 2; Pane < TownWindows.Num() / 2; ++Pane)
 		{
 			PaneRegion.Add(Region.Id);
@@ -2279,13 +2347,14 @@ void ACampaignMapActor::BuildTowns()
 			{
 				continue;
 			}
-			const double Spread = (Region.bCapital ? 5.2 : bCity ? 4.4 : bBig ? 3.4 : 2.5) * U; // (half what it first was)
-			AddGlow(SurfacePoint(Region.Center.X, Region.Center.Y, 5.4), Spread, Region.Id, 0);
+			const double Grown = TownSpread(Region.Id);
+			const double Spread = (Region.bCapital ? 5.2 : bCity ? 4.4 : bBig ? 3.4 : 2.5) * U * Grown; // (half what it first was, on the town as it is now built)
+			AddGlow(SurfacePoint(Region.Center.X, Region.Center.Y, 5.4 * Grown), Spread, Region.Id, 0);
 			const int32 Quarters = Region.bCapital ? 4 : bCity ? 2 : 0;
 			for (int32 Quarter = 0; Quarter < Quarters; ++Quarter)
 			{
-				const double Angle = Scatter.FRandRange(0.0f, 6.283f) + Quarter * 1.7, Out = Scatter.FRandRange(2.0f, 3.9f);
-				AddGlow(SurfacePoint(Region.Center.X + FMath::Cos(Angle) * Out, Region.Center.Y + FMath::Sin(Angle) * Out, 3.4), Scatter.FRandRange(1.4f, 2.1f) * U, Region.Id, 1);
+				const double Angle = Scatter.FRandRange(0.0f, 6.283f) + Quarter * 1.7, Out = Scatter.FRandRange(2.0f, 3.9f) * Grown;
+				AddGlow(SurfacePoint(Region.Center.X + FMath::Cos(Angle) * Out, Region.Center.Y + FMath::Sin(Angle) * Out, 3.4 * Grown), Scatter.FRandRange(1.4f, 2.1f) * U * Grown, Region.Id, 1);
 			}
 			AddGlow(SurfacePoint(Region.Center.X, Region.Center.Y, 1.4), FMath::Max(Spread * 3.2, 8.0 * U), Region.Id, 2);
 		}
@@ -2888,8 +2957,8 @@ void ACampaignMapActor::BuildTrees()
 		{
 			Clearings[Region.Id].Add(WorldToMap(ArmySpot(Region.Id, Slot)));
 		}
-		Clearings[Region.Id].Add(Region.Center + FVector2D(-10.0, 8.0));
-		Clearings[Region.Id].Add(Region.Center + FVector2D(10.0, 9.0));
+		Clearings[Region.Id].Add(Region.Center + FVector2D(-0.92, 0.4) * (TownRadius(Region.Id) + 5.0));
+		Clearings[Region.Id].Add(Region.Center + FVector2D(0.92, 0.4) * (TownRadius(Region.Id) + 5.0));
 	}
 	for (int32 SY = 0; SY < SquaresY; ++SY)
 	{
@@ -2917,12 +2986,12 @@ void ACampaignMapActor::BuildTrees()
 					}
 					// Not on top of a town.
 					const int32 RegionId = Terrain.Region[Terrain.Index(GI, GJ)];
-					if (RegionId >= 0 && FVector2D::Distance(Data.Regions[RegionId].Center, FVector2D(X, Y)) < 8.5)
+					if (RegionId >= 0 && FVector2D::Distance(Data.Regions[RegionId].Center, FVector2D(X, Y)) < TownRadius(RegionId) + 2.1)
 					{
 						continue;
 					}
 					// Nor where the armies of the region stand: a clearing for each of the first three, and one for its airfield.
-					if (RegionId >= 0 && Clearings[RegionId].ContainsByPredicate([X, Y](const FVector2D& Spot) { return FVector2D::DistSquared(Spot, FVector2D(X, Y)) < 6.2 * 6.2; }))
+					if (RegionId >= 0 && Clearings[RegionId].ContainsByPredicate([X, Y](const FVector2D& Spot) { return FVector2D::DistSquared(Spot, FVector2D(X, Y)) < 7.8 * 7.8; }))
 					{
 						continue;
 					}
@@ -3093,7 +3162,7 @@ void ACampaignMapActor::BuildLabels()
 			FPlateSpot& Spot = PlateSpots.AddDefaulted_GetRef();
 			Spot.Region = Region.Id;
 			Spot.World = MapToWorld(Region.Center.X, Region.Center.Y, Terrain.HeightAt(Region.Center.X, Region.Center.Y));
-			Spot.Reach = (Region.bCapital ? 7.0f : bTown ? 5.2f : 3.6f) * UnitScale;
+			Spot.Reach = (Region.bCapital ? 7.0f : bTown ? 5.2f : 3.6f) * UnitScale * static_cast<float>(TownSpread(Region.Id));
 			// (the plate is the town's: "Essen", not "Ruhr". The province's own name is lettered small on the ground.)
 			Spot.Name = Towns.IsValidIndex(Region.Id) && Towns[Region.Id].Region == Region.Id && !Towns[Region.Id].Name.IsEmpty() ? Towns[Region.Id].Name : Region.Name;
 			Spot.Line = FString::Join(Worth, TEXT("  \u00B7  "));
@@ -3315,7 +3384,7 @@ void ACampaignMapActor::BuildWords()
 			// of it and is another eighteen deep as the far view shows it)
 			// (measured on the far view, where the table's far half is drawn at under a pixel to the map unit: the
 			// plate there is as deep as twenty-five units and as wide as fifty)
-			const FVector2D Plate = Seat.Center + FVector2D(0.0, 13.0);
+			const FVector2D Plate = Seat.Center + FVector2D(0.0, 6.0 + 7.0 * TownSpread(Seat.Id));
 			const double Along = FVector2D::DotProduct(Plate - From, Axis), Off = FVector2D::DotProduct(Plate - From, Cross);
 			const double Clear = Height * 0.5 + 21.0;
 			if (Along < -(28.0 + Height) || Along > Long + 28.0 + Height || FMath::Abs(Off) >= Clear)
@@ -3356,13 +3425,35 @@ FVector ACampaignMapActor::ArmySpot(int32 RegionId, int32 Slot) const
 {
 	const FCampaignRegion& Region = Data.Regions[RegionId];
 	// Beside the town, clear of its houses: to the north-east of it, or the north-west if that is over the border.
-	FVector2D Spot = Region.Center + FVector2D(9.0 + 11.0 * Slot, -7.0);
+	// (Art fix 8: the town is larger than it was and so is an army's base, so the armies stand further out and
+	// further apart.)
+	// (North by east of it, not north-east: a town's first factory stands out to the north-east, and an army's
+	// base used to sit on its roof.)
+	const double Out = TownRadius(RegionId) + 8.0; // (the last roofs, then half a base and its rim)
+	FVector2D Spot = Region.Center + FVector2D(0.34 * Out + 14.6 * Slot, -0.94 * Out);
 	if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
 	{
-		Spot = Region.Center + FVector2D(-9.0 - 11.0 * Slot, -7.0);
+		Spot = Region.Center + FVector2D(-0.34 * Out - 14.6 * Slot, -0.94 * Out);
 		if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
 		{
-			Spot = Slot == 0 ? Region.Centroid : Region.Center + FVector2D(0.0, -6.0 * Slot);
+			// Neither side of north has room: round the town by other bearings, still clear of its roofs, before
+			// giving up and standing in the middle of the province.
+			bool bFound = false;
+			for (const double Bearing : { 75.0, -75.0, 125.0, -125.0, 180.0 })
+			{
+				const double Rad = FMath::DegreesToRadians(Bearing), Sign = Bearing < 0.0 ? -1.0 : 1.0;
+				const FVector2D Try = Region.Center + FVector2D(FMath::Sin(Rad), -FMath::Cos(Rad)) * Out + FVector2D(FMath::Cos(Rad), FMath::Sin(Rad)) * (Sign * 14.6 * Slot);
+				if (Data.FindRegionAt(Try.X, Try.Y) == Region.Id)
+				{
+					Spot = Try;
+					bFound = true;
+					break;
+				}
+			}
+			if (!bFound)
+			{
+				Spot = Slot == 0 ? Region.Centroid : Region.Center + FVector2D(0.0, -6.0 * Slot);
+			}
 		}
 	}
 	return SurfacePoint(Spot.X, Spot.Y, 0.0);
@@ -3490,6 +3581,10 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(Spot, FRotator(0.0f, LastPieceYaw, 0.0f));
+			if (Piece)
+			{
+				Piece->SetActorScale3D(FVector(PieceGrowth)); // (as large as the others are drawn just now)
+			}
 		}
 		if (Piece)
 		{
@@ -3611,6 +3706,10 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(MapToWorld(At.X, At.Y), Facing);
+			if (Piece)
+			{
+				Piece->SetActorScale3D(FVector(PieceGrowth));
+			}
 		}
 		if (Piece)
 		{
@@ -3648,16 +3747,21 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			continue;
 		}
 		int32& Others = Crowd.FindOrAdd(FIntPoint(3, Wing.Base));
-		FVector2D At = Data.Regions[Wing.Base].Center + FVector2D(-10.0 - 11.0 * Others, 8.0);
+		const double Out = TownRadius(Wing.Base) + 5.0; // (outside the last roofs: never across the town or its name)
+		FVector2D At = Data.Regions[Wing.Base].Center + FVector2D(-0.92 * Out - 6.5 * Others, 0.4 * Out);
 		if (Data.FindRegionAt(At.X, At.Y) != Wing.Base)
 		{
-			At = Data.Regions[Wing.Base].Center + FVector2D(10.0 + 11.0 * Others, 9.0);
+			At = Data.Regions[Wing.Base].Center + FVector2D(0.92 * Out + 6.5 * Others, 0.4 * Out);
 		}
 		++Others;
 		TObjectPtr<AArmyPiece>& Piece = AirPieces.FindOrAdd(Wing.Id);
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(SurfacePoint(At.X, At.Y, 0.0), Facing);
+			if (Piece)
+			{
+				Piece->SetActorScale3D(FVector(PieceGrowth));
+			}
 		}
 		if (Piece)
 		{
@@ -4495,7 +4599,7 @@ FVector2D ACampaignMapActor::AirfieldSpot(int32 RegionId) const
 	{
 		return *Spot;
 	}
-	return Data.Regions.IsValidIndex(RegionId) ? Data.Regions[RegionId].Center + FVector2D(-10.0, 12.0) : FVector2D::ZeroVector;
+	return Data.Regions.IsValidIndex(RegionId) ? Data.Regions[RegionId].Center + FVector2D(-10.0, 12.0) * TownSpread(RegionId) : FVector2D::ZeroVector;
 }
 
 int32 ACampaignMapActor::AirfieldNear(const FVector2D& MapPoint) const
@@ -4737,7 +4841,7 @@ void ACampaignMapActor::AddBattleSmoke(int32 RegionId)
 		return;
 	}
 	// Between the town and where the armies stand, so that it rises clear of both.
-	const FVector2D Spot = Data.Regions[RegionId].Center + FVector2D(3.5, -3.0);
+	const FVector2D Spot = Data.Regions[RegionId].Center + FVector2D(3.5, -3.0) * TownSpread(RegionId);
 	FBattleSmoke& Battle = Battles.AddDefaulted_GetRef();
 	Battle.Where = SurfacePoint(Spot.X, Spot.Y, 0.05);
 	Battle.Began = GetWorld()->GetTimeSeconds();
@@ -5207,8 +5311,9 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	}
 	// The quilt of fields: plain to see close to, quieter at working height (where it must not fight the province
 	// lines), and fading out toward the top of the zoom. Its hedges are seen only close to.
-	const float Fields = CameraDistance < 9000.0f ? FMath::GetMappedRangeValueClamped(FVector2f(3000.0f, 9000.0f), FVector2f(FieldsNear, FieldsWorking), CameraDistance)
-		: FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 19000.0f), FVector2f(FieldsWorking, FieldsWorking * 0.45f), CameraDistance);
+	// (by moonlight the quilt is halved: the blocks showed under the moon)
+	const float Fields = (CameraDistance < 9000.0f ? FMath::GetMappedRangeValueClamped(FVector2f(3000.0f, 9000.0f), FVector2f(FieldsNear, FieldsWorking), CameraDistance)
+		: FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 19000.0f), FVector2f(FieldsWorking, FieldsWorking * 0.45f), CameraDistance)) * (1.0f - 0.5f * GetMoonlight());
 	const float Hedges = FMath::GetMappedRangeValueClamped(FVector2f(2600.0f, 7000.0f), FVector2f(HedgesNear, 0.0f), CameraDistance);
 	if (LandMaterial && FMath::Abs(Fields - FieldsShown) > 0.005f)
 	{
@@ -5301,6 +5406,38 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			if (Labels[i])
 			{
 				Labels[i]->SetVisibility(bShow);
+			}
+		}
+	}
+
+	// The pieces grow a little as the eye rises, so that they still read from high up: by a quarter at most, which
+	// keeps an army's base well under the width of a city (art fix 8: nothing grows past the tier above it).
+	{
+		const float Growth = FMath::Lerp(1.0f, 1.25f, FMath::SmoothStep(9000.0f, 17000.0f, CameraDistance));
+		if (FMath::Abs(Growth - PieceGrowth) > 0.01f)
+		{
+			PieceGrowth = Growth;
+			const FVector Scale(Growth);
+			for (AArmyPiece* Piece : Pieces)
+			{
+				if (Piece)
+				{
+					Piece->SetActorScale3D(Scale);
+				}
+			}
+			for (const auto& Pair : FleetPieces)
+			{
+				if (Pair.Value)
+				{
+					Pair.Value->SetActorScale3D(Scale);
+				}
+			}
+			for (const auto& Pair : AirPieces)
+			{
+				if (Pair.Value)
+				{
+					Pair.Value->SetActorScale3D(Scale);
+				}
 			}
 		}
 	}

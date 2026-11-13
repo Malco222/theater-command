@@ -53,6 +53,13 @@ public:
 	 * in its lee. Alpha: how far the woods there are fir and pine.
 	 */
 	TArray<FColor> Cover;
+	/**
+	 * How the fields lie, province by province, so that all Europe is not ruled on one grid: red and green are the
+	 * cosine and sine of the angle the province's field system is turned by (0.5 is nought), blue how large its
+	 * blocks are beside the common size (0.5 is the same). Read without smoothing: a province's fields break off at
+	 * its edge, as field systems do.
+	 */
+	TArray<FColor> Lie;
 
 	/** The sea's colour, one pixel every WaterStep map units. */
 	double WaterStep = 1.5;

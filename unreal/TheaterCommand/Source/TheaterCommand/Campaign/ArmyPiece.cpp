@@ -196,7 +196,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	LiftHeight = 3.2 * U;
 
 	// The ring that shows when the piece is picked up: a thin bright disc a little wider than the base.
-	SelectionRing = AddPart(Cylinder, FVector(0.0, 0.0, 0.06 * U), FVector(11.2 * U, 11.2 * U, 0.12 * U), Glow);
+	SelectionRing = AddPart(Cylinder, FVector(0.0, 0.0, 0.06 * U), FVector(12.6 * U, 12.6 * U, 0.12 * U), Glow); // (a little wider than the base and its rim)
 	SelectionRing->SetCastShadow(false);
 	ShowRing();
 
@@ -238,14 +238,24 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	else if (What == 2)
 	{
 		// An air fleet: its aircraft over a patch of airfield.
-		Model.AirFleet(Wing.Fighters, Wing.Bombers, U, Colour, NationTag);
-		Top = 0.2 * U;
-		Size = FMath::Clamp(0.8 + (Wing.Fighters + Wing.Bombers) / 2500.0, 0.9, 1.6);
+		// (Art fix 8: under half the size it was. It is kept only where the table shows no airfields to click,
+		// in the scenarios: where it does, the airfield itself says who flies from it.)
+		const double Small = 0.46;
+		Model.AirFleet(Wing.Fighters, Wing.Bombers, U * Small, Colour, NationTag);
+		Top = 0.2 * U * Small;
+		CounterWidth = 8.6 * U * Small;
+		Size = 0.62 * FMath::Clamp(0.8 + (Wing.Fighters + Wing.Bombers) / 2500.0, 0.9, 1.3);
 		Figure = FText::AsNumber(Wing.Fighters + Wing.Bombers).ToString();
 	}
 	else
 	{
 		// A counter for each corps, stacked: the taller the stack, the bigger the army.
+		// (Art fix 8: the base is a fifth wider than it was, and stands on a rim.)
+		// (rim and all it comes to a fifth more than the base was across, and no more: from working height the
+		// flags must still lead the eye, not the discs under them)
+		CounterWidth *= 1.12;
+		Model.Pillar(FVector(0.0, 0.0, 0.0), CounterWidth * 0.5 + 0.34 * U, CounterWidth * 0.5 + 0.16 * U, Top + 0.16 * U, Dark, 30);
+		Model.Pillar(FVector(0.0, 0.0, Top + 0.16 * U), CounterWidth * 0.5 + 0.16 * U, CounterWidth * 0.5 + 0.06 * U, 0.08 * U, BrassPaint, 30);
 		const int32 Counters = FMath::Clamp(Corps.Num(), 1, 7);
 		const double CounterHeight = 0.5 * U, CounterGap = 0.1 * U;
 		for (int32 i = 0; i < Counters; ++i)
@@ -377,8 +387,9 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	}
 
 	// The standard: a pole at the back of the base, the nation's flag of the period, and a brass finial.
-	const double FlagWidth = 6.6 * U * Size, FlagHeight = FlagWidth / 1.5;
-	const double PoleHeight = 9.0 * U + FlagHeight;
+	// (Art fix 8: the flag is three quarters the size it was. The plate under it keeps its lettering.)
+	const double FlagWidth = 6.6 * 0.75 * U * Size, FlagHeight = FlagWidth / 1.5;
+	const double PoleHeight = (What == 2 ? 7.0 : 8.4) * U + FlagHeight; // (an air group's plate hangs clear above its aircraft)
 	const FVector Pole(CounterWidth * 0.32, -CounterWidth * 0.3, 0.0); // behind the figures, and to the left, so the flag flies over the piece
 	Model.Pillar(Pole + FVector(0.0, 0.0, Top), 0.2 * U, 0.2 * U, PoleHeight, IronPaint, 8);
 	Model.Ball(Pole + FVector(0.0, 0.0, Top + PoleHeight + 0.4 * U), FVector(1.1 * U), BrassPaint, 6, 10);
@@ -441,7 +452,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	FlagRadius = FlagWidth * 0.55;
 
 	// The strength plate, hung from the pole under the flag, edged in brass.
-	const double PlateHeight = FMath::Min(FlagHeight * 0.42, 2.7 * U);
+	const double PlateHeight = FMath::Min(FlagHeight * 0.56, 2.7 * U); // (the same height as before the flag was made smaller)
 	const double PlateWidth = PlateHeight * (0.95 + 0.5 * Figure.Len());
 	const FVector PlateAt = Pole + FVector(0.0, Hoist + PlateWidth * 0.5, FlagAt.Z - FlagHeight * 0.5 - 0.35 * U - PlateHeight * 0.5);
 	Model.Box(PlateAt, FVector(0.2 * U, PlateWidth, PlateHeight), FLinearColor(FColor::FromHex(TEXT("15130F"))));

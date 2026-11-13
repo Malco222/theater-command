@@ -305,11 +305,20 @@ def build_land():
     # wheat to plough, read from a picture with one pixel to a field; the rows lean and wander a little so that it
     # is no chessboard. The quilt multiplies whatever is under it, so a nation's fields are still its own colour.
     # Small fields with hedges round them in the west, great open ones on the eastern plains.
-    place = world_uv(m, "FieldTiling", 0.0222, -3000, 1500)  # (a small field is about four and a half map units long)
-    east = node(m, unreal.MaterialExpressionComponentMask, -2700, 1500, r=True, g=False, b=False, a=False)
-    connect(place, "", east, "")
-    south = node(m, unreal.MaterialExpressionComponentMask, -2700, 1600, r=False, g=True, b=False, a=False)
-    connect(place, "", south, "")
+    place = world_uv(m, "FieldTiling", 0.0444, -3000, 1500)  # (a small field is about two and a quarter map units long)
+    east0 = node(m, unreal.MaterialExpressionComponentMask, -2900, 1500, r=True, g=False, b=False, a=False)
+    connect(place, "", east0, "")
+    south0 = node(m, unreal.MaterialExpressionComponentMask, -2900, 1600, r=False, g=True, b=False, a=False)
+    connect(place, "", south0, "")
+    # Every province's fields are turned by an angle of its own and are a little larger or smaller than the next
+    # province's (a picture the game paints says how, read without smoothing): the province lines are the natural
+    # breaks between one field system and another, and the land is no tiled floor.
+    lie = picture(m, "Lie", uv, -3000, 1750, numbers=True)
+    cosine = plus(m, times(m, (lie, "R"), 2.0, -2800, 1750), -1.0, -2700, 1750)
+    sine = plus(m, times(m, (lie, "G"), 2.0, -2800, 1850), -1.0, -2700, 1850)
+    size = plus(m, times(m, (lie, "B"), -0.7, -2800, 1950), 1.35, -2700, 1950)  # 1.21 (small blocks) down to 0.79 (large)
+    east = times(m, plus(m, times(m, east0, cosine, -2600, 1500), times(m, south0, sine, -2600, 1560), -2500, 1500), size, -2400, 1500)
+    south = times(m, plus(m, times(m, south0, cosine, -2600, 1640), times(m, times(m, east0, sine, -2600, 1700), -1.0, -2550, 1700), -2500, 1640), size, -2400, 1640)
     rows = pair(m, plus(m, east, times(m, south, 0.33, -2500, 1560), -2350, 1500),
                 times(m, plus(m, south, times(m, east, -0.22, -2500, 1660), -2350, 1620), 1.389, -2200, 1620), -2050, 1550)
     rows = plus(m, rows, times(m, leaning(m, coarse, "R", "G", -2300, 1800), scalar(m, "FieldWander", 0.3, -2000, 1900), -1700, 1800), -1500, 1600)
@@ -347,11 +356,18 @@ def build_land():
     wooded = one_in(m, unreal.MaterialExpressionSaturate,
                     plus(m, times(m, plus(m, plus(m, (ground, "A"), ragged, -2200, -1250),
                                           -0.5, -2050, -1250), scalar(m, "WoodsSharp", 6.0, -2050, -1150), -1900, -1250), 0.5, -1750, -1250), -1600, -1250)
+    # (a warm stain, red or orange, turns dark green to brown-black: the woods of such a nation take less of it)
+    tint_r = node(m, unreal.MaterialExpressionComponentMask, -2500, -1550, r=True, g=False, b=False, a=False)
+    connect(tint, "RGB", tint_r, "")
+    tint_g = node(m, unreal.MaterialExpressionComponentMask, -2500, -1480, r=False, g=True, b=False, a=False)
+    connect(tint, "RGB", tint_g, "")
+    warm = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, tint_r, times(m, tint_g, -1.0, -2350, -1480), -2250, -1520), 2.5, -2150, -1520), -2050, -1520)
+    cool = plus(m, times(m, warm, scalar(m, "WoodsWarmLess", -0.45, -2050, -1440), -1950, -1500), 1.0, -1850, -1500)
     leaf = lerp(m, vector(m, "WoodsColour", (0.05, 0.09, 0.04, 1.0), -2000, -900),
                 vector(m, "FirColour", (0.024, 0.056, 0.04, 1.0), -2000, -1050), (cover, "A"), -1800, -950)
     woods = lerp(m, leaf,
                  times(m, (tint, "RGB"), scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), -2100, -1000),
-                 times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), -1650, -950)
+                 times(m, times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), cool, -1950, -1080), -1650, -950)
     c = lerp(m, c, woods,
              times(m, wooded, scalar(m, "WoodsStrength", 0.84, -2300, -900), -2000, -700), -1500, -500)
     # The rim of a wood: lighter on its sunward edge, and a strip of shade on the open ground in its lee.

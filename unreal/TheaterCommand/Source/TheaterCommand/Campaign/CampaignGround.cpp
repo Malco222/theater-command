@@ -406,6 +406,22 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		}
 	});
 
+	// How the fields lie in each province: turned by an angle of the province's own, and a little larger or smaller.
+	Lie.SetNumUninitialized(Count);
+	for (int32 Idx = 0; Idx < Count; ++Idx)
+	{
+		const int32 Id = Terrain.Region[Idx] >= 0 ? Terrain.Region[Idx] : ShoreRegion[Idx];
+		if (Id < 0)
+		{
+			Lie[Idx] = FColor(255, 128, 128, 255);
+			continue;
+		}
+		const uint32 Seed = static_cast<uint32>(Id) * 2654435761u;
+		const float Angle = ((Seed >> 8) & 0xFFFF) / 65535.0f * UE_PI; // anywhere in the half circle: a grid turned further is the same grid again
+		const float Larger = 0.5f + 0.5f * ((((Seed >> 3) & 0xFF) / 255.0f) * 2.0f - 1.0f) * 0.6f; // 0.2 to 0.8
+		Lie[Idx] = FColor(ToByte(0.5f + 0.5f * FMath::Cos(Angle)), ToByte(0.5f + 0.5f * FMath::Sin(Angle)), ToByte(Larger), 255);
+	}
+
 	Tint.SetNumUninitialized(Count);
 	PaintTint(Data, Terrain, 0, 0, NX - 1, NY - 1);
 

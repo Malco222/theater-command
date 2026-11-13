@@ -240,6 +240,14 @@ public:
 	void ShowAirfieldSigns(const TArray<FViewAirfield>& Fields);
 	/** Where an airfield stands in the world, for its badge on the screen; false if the province has none on the table. */
 	bool GetAirfieldWorld(int32 RegionId, FVector& OutWorld) const;
+	/**
+	 * How much larger a province's town is built than the size towns first had (art fix 8: one scale for everything
+	 * on the table, a capital the largest thing on it and a town about as wide as an army's base): 1 where there is
+	 * no town. Whatever stands round a town stands that much further out from its middle.
+	 */
+	double TownSpread(int32 RegionId) const;
+	/** How far the outermost roofs of a province's town stand from its middle, in map units (about 3 where there is no town). */
+	double TownRadius(int32 RegionId) const;
 	/** Prizes outside the towns (Version 56): a fire where one is wrecked, a pennant in the colour of the army that holds one outside a town it has not taken. */
 	void ShowPrizes(const TArray<FPrizeMark>& Marks);
 	/** The night's war: the nations whose towns are blacked out, and the fronts (pairs of regions) where the guns flicker. */
@@ -575,6 +583,8 @@ private:
 	TObjectPtr<UTexture2D> CoverPicture; // farmland, the size of its fields, the rims of the woods, and where they are fir
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> FieldsPicture; // the tones of the fields, one pixel a field
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> LiePicture; // how the fields lie in each province: the turn of its grid and the size of its blocks
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> WaterPicture;
@@ -654,5 +664,7 @@ private:
 	int32 HoveredRegion = INDEX_NONE;
 	int32 LabelState = -1;
 	float LastPieceYaw = 0.0f;
+	float PieceGrowth = 1.0f; // how much larger than life the pieces are drawn at the moment (they grow a little as the eye rises)
+	mutable TArray<float> TownSpreads; // TownSpread for every province, worked out once
 	bool bFacingSet = false;
 };
