@@ -1,0 +1,53 @@
+{
+  "_about": {
+    "what": "Morale and rest (the grand campaign). Every corps carries its morale, 0 to 1, beside its strength and its rest. Morale rises with victories, on home soil, with friends close by and with a quiet month out of the line; it falls with defeats, heavy losses, being cut off, going unpaid and standing alone in front of the enemy. A corps in good heart hits harder and holds together longer; a shaken one does neither.",
+    "rule": "Only the grand campaign keeps morale. A historical scenario has none: its corps fight exactly as they always did, and so its wars come out as they did before this rule was written.",
+    "start": "The morale a corps begins the war with, or is raised with.",
+    "level": "Where morale settles when nothing is happening to it, and 'drift', the share of the way back it goes each month. Because the mood settles by a share each month, what a corps gains every month adds up to a level and no further: 0.03 a month for home soil is worth 0.12 in the end, at a drift of 0.25.",
+    "battle": "What one battle does to the morale of the corps that fought it. 'won' and 'decisive' (odds of 2 to 1 or better) for attackers who carry the ground, 'repulsed' and 'thrown' (odds under 0.8 to 1) for attackers who do not; 'held' for defenders who keep their ground, 'lost' and 'routed' (2 to 1 or better against them) for defenders driven off it. 'bloody' is added for a corps that lost 'bloodyAt' of its men or more in the one fight. 'capital' is for the corps that take an enemy's capital, and 'capitalLost' is what every corps of a nation feels the day its own capital falls.",
+    "month": "The monthly reckoning, at the start of a nation's month. 'home': on its own country's soil. 'beside': other friendly corps in the same province. 'near': friendly corps in a province next door. 'alone': no friend in the province or next door, and the enemy next door. 'rested': a whole month in supply without marching or fighting. 'cutOff': out of supply. 'unpaid': the treasury is empty (scaled by how deep the debt is). 'winter': a winter in the east without winter equipment. 'general': a general in command who rallies men.",
+    "fight": "'span': the whole range morale is worth in battle, half of it either side of morale 0.5 (0.3 is from 15% weaker to 15% stronger). 'steady': how much faster a corps with no heart loses its cohesion in a fight, and how much slower one in good heart does (0.5 is from 25% faster to 25% slower).",
+    "rested": "What a whole month out of the line is worth besides morale: 'org' more rest recovered, and drafts arriving 'drafts' times as fast.",
+    "words": "What a level of morale is called: [from, name].",
+    "restWords": "What a level of rest (cohesion) is called: [from, name].",
+    "why": "The words for each reason, as the player reads them."
+  },
+  "start": 0.6,
+  "level": 0.5,
+  "drift": 0.25,
+  "battle": {
+    "won": 0.08, "decisive": 0.12, "repulsed": -0.06, "thrown": -0.1,
+    "held": 0.08, "lost": -0.1, "routed": -0.14,
+    "bloody": -0.04, "bloodyAt": 0.15,
+    "capital": 0.08, "capitalLost": -0.1
+  },
+  "month": {
+    "home": 0.03, "beside": 0.02, "near": 0.01, "alone": -0.04, "rested": 0.04,
+    "cutOff": -0.12, "unpaid": -0.05, "winter": -0.04, "general": 0.02
+  },
+  "fight": { "span": 0.3, "steady": 0.5 },
+  "rested": { "org": 0.15, "drafts": 1.5 },
+  "words": [[0, "Broken"], [0.2, "Shaken"], [0.4, "Steady"], [0.6, "Confident"], [0.8, "Eager"]],
+  "restWords": [[0, "Exhausted"], [0.25, "Worn"], [0.5, "Tired"], [0.75, "Rested"], [0.95, "Fresh"]],
+  "why": {
+    "won": "Carried the enemy's ground",
+    "decisive": "A decisive victory",
+    "repulsed": "An attack beaten off",
+    "thrown": "An attack thrown back with loss",
+    "held": "Held its ground",
+    "lost": "Driven from its ground",
+    "routed": "Routed",
+    "bloody": "Heavy losses",
+    "capital": "Took an enemy capital",
+    "capitalLost": "The capital has fallen",
+    "home": "On home soil",
+    "friends": "Friendly troops close by",
+    "alone": "Alone in front of the enemy",
+    "rested": "A quiet month out of the line",
+    "cutOff": "Cut off from supply",
+    "unpaid": "Unpaid: the treasury is empty",
+    "winter": "A winter without winter kit",
+    "general": "A general the men trust",
+    "time": "The mood settling"
+  }
+}

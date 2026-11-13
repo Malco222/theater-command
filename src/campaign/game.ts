@@ -18,6 +18,8 @@ import { techTick, winterReady } from './tech';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, retaken, standsFreed } from './liberation';
+import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedOrg } from './morale';
+import { numberCorps } from './armies';
 import { INTEL, intelAttack, intelTick } from './intel';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
@@ -123,6 +125,9 @@ export function addCorps(g: Game, nat: string, name: string, kind: Kind, divs: n
   // Where and when it was raised: the first lines of its record.
   c.born = g.turn;
   if (reg.owner === nat) c.home = reg.id;
+  // The grand campaign: its morale, and the numbers its divisions carry.
+  raiseMorale(g, c);
+  numberCorps(g, c);
   g.corps.push(c);
   reg.units.push(c);
   if (o.gen) seat(g, c, o.gen, o.trait);
@@ -596,6 +601,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (wide) { const short = shortAttack(g, c); if (short !== 1) { p *= short; shortA = Math.min(shortA, short); } }
     // An agent at work in the province has mapped its defences for the attackers (the grand campaign).
     if (wide) { const spy = intelAttack(g, c.nat, target); if (spy) { p *= spy.mul; spied = spy.agent; } }
+    // Troops in good heart hit harder, and shaken ones do not (the grand campaign: nobody else carries morale).
+    p *= heart(c);
     if (g.nations[c.nat].slowCommand) p *= 0.85;
     p *= techMul(g, c.nat, 'doctrine');
     if (opts.sea !== undefined) p *= opts.sea;
@@ -640,6 +647,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     }
     if (wide) { const gift = traitDefence(g, d, target); if (gift !== 1) { p *= gift; giftD = Math.max(giftD, gift); } }
     if (wide) { const short = shortDefence(g, d); if (short !== 1) { p *= short; shortD = Math.min(shortD, short); } }
+    p *= heart(d);
     const proud = storyDefence(g, d, target, attackers);
     if (proud !== 1) { p *= proud; proudD = Math.max(proudD, proud); }
     const lead = cmdDefence(g, d);
@@ -774,6 +782,17 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       label: 'Oil and supplies', value: [shortA < 1 ? `Attackers have ${worst(attackers)}` : '', shortD < 1 ? `Defenders have ${worst(defenders)}` : ''].filter(Boolean).join('. '),
       effect: [shortA < 1 ? `Attack cut to as little as ${Math.round(shortA * 100)}%` : '', shortD < 1 ? `${shortA < 1 ? 'defence' : 'Defence'} cut to as little as ${Math.round(shortD * 100)}%` : ''].filter(Boolean).join(', '),
     });
+  }
+  const heartA = forceMorale(attackers), heartD = forceMorale(defenders);
+  if (heartA !== null || heartD !== null) {
+    const say = (m: number | null, who: string): string => (m === null ? '' : `${who} ${moraleWord(m).toLowerCase()} (${Math.round(m * 100)}%)`);
+    const fx = (m: number | null, what: string): string => {
+      const pct = m === null ? 0 : Math.round((m - 0.5) * MORALE.fight.span * 100);
+      return pct ? `${what} ${pct > 0 ? 'up' : 'down'} ${Math.abs(pct)}%` : '';
+    };
+    const value = [say(heartA, 'Attackers'), say(heartD, heartA === null ? 'Defenders' : 'defenders')].filter(Boolean).join(', ');
+    const effect = [fx(heartA, 'Attack'), fx(heartD, 'defence')].filter(Boolean).join(', ');
+    lines.push({ label: 'Morale', value, effect: effect ? effect[0].toUpperCase() + effect.slice(1) : undefined });
   }
   if (spied) lines.push({ label: 'Intelligence', value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
   if (sneaked) lines.push({ label: 'Surprise', value: 'War was declared this month on a country at peace', effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
@@ -934,14 +953,17 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
   const attFrac = clamp(0.14 / R, 0.02, 0.2);
   let attLost = 0, defLost = 0, prisoners = 0;
+  // The share of its men each corps loses in this fight: what its morale makes of the day.
+  const bled = new Map<number, number>();
   attackers.forEach((c, i) => {
     const before = men(c);
     c.str *= 1 - Math.min(0.6, attFrac * cmdLoss(g, c));
-    c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g, c), 0, 1);
+    c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.05);
     c.fought = true;
     attU[i].lost = before - men(c);
     attLost += attU[i].lost;
+    if (before > 0) bled.set(c.id, attU[i].lost / before);
   });
   const win = R >= 1.2;
   // Troops who hold their ground come out of the fight in better shape than troops driven off it.
@@ -951,12 +973,14 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   defenders.forEach((c, i) => {
     const before = men(c);
     c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c));
-    c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c), 0, 1);
+    c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
     defU[i].lost = before - men(c);
     defLost += defU[i].lost;
+    if (before > 0) bled.set(c.id, defU[i].lost / before);
   });
+  moraleBattle(g, attackers, defenders, R, win, bled, enemyCapital);
 
   const level: VictoryLevel = R >= 3 ? 'Heroic victory' : R >= 2 ? 'Decisive victory' : R >= 1.2 ? (attLost > defLost ? 'Pyrrhic victory' : 'Close victory') : R >= 0.8 ? 'Close defeat' : 'Decisive defeat';
   const affected = new Set(defenders.map((c) => c.nat));
@@ -1018,6 +1042,7 @@ export function capture(g: Game, r: Region, nat: string): void {
   const owner = g.nations[r.owner];
   r.ctrl = owner.alive && allied(g, nat, r.owner) ? r.owner : nat;
   r.since = g.turn;
+  moraleCapital(g, r, old);
   r.prev = old;
   g.supplyDirty = true;
   if (groundRules(g)) {
@@ -1514,12 +1539,15 @@ export function startPhase(g: Game, nat: string): void {
   // The level of the campaign quickens or slows the drafts, for the player or for his rivals: at the fair level, not at all.
   // A nation whose supplies have run out cannot equip the drafts it trains (the grand campaign).
   const drafts = draftsMul(g, nat) * traitDrafts(g, nat) * supDrafts(g, nat);
-  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
+  // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
+  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;
   // Corps starved into surrender this month, by where they stood: an army lost together is one piece of news.
   const starved = new Map<number, { names: string[]; men: number }>();
   army.forEach((c, i) => {
+    // Its morale for the month: where it stands, who stands with it, whether it has had any rest (the grand campaign).
+    moraleMonth(g, c, { owed, cold: c.supplied && frozen(g, nat, g.regions[c.reg]) });
     if (c.supplied) {
       const give = want[i] * share;
       if (give > 0) {
@@ -1531,7 +1559,7 @@ export function startPhase(g: Game, nat: string): void {
       const cold = frozen(g, nat, g.regions[c.reg]);
       const bite = cold ? cmdWinter(g, c) : 0;
       if (cold) c.str *= 1 - EASTERN.winter.attrition * bite;
-      const rest = (c.fought ? 0.25 : 0.45) * lineStrength(g, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
+      const rest = ((c.fought ? 0.25 : 0.45) + restedOrg(g, c)) * lineStrength(g, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
       c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
       if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {

@@ -201,6 +201,12 @@ export interface Corps extends Storied {
   heir?: number;
   /** One of its nation's special formations (the grand campaign): the id of the unit in traits.json. */
   elite?: string;
+  /** Morale, 0 to 1 (the grand campaign). A corps in a historical scenario carries none. See morale.json. */
+  mor?: number;
+  /** Why its morale stands where it does: [reason, change, 0 for since its nation's last reckoning or 1 for the month before]. */
+  mw?: [string, number, number][];
+  /** The number its first division carries (the grand campaign): its divisions are numbered on from there. */
+  dn?: number;
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */

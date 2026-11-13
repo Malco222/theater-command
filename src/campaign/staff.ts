@@ -18,6 +18,8 @@ import { concertFor, landingsFor, nerveOf, seat } from './difficulty';
 import { DOMINATION, dominating } from './domination';
 import { openAirWar } from './air';
 import { startEngineers } from './engineers';
+import { openMorale } from './morale';
+import { numberDivisions } from './armies';
 import { NAVY } from './navy';
 import { EASTERN, allied, atWar, collapseScore, corpsBase, frozen, weather } from './game';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
@@ -69,6 +71,8 @@ export function startOpen(g: Game): Game {
   openTech(g);
   openStores(g);
   openAirWar(g);
+  openMorale(g);
+  numberDivisions(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
   g.supplyDirty = true;
   return g;
