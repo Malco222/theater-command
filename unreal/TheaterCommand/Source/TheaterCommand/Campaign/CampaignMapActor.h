@@ -230,6 +230,8 @@ public:
 	 * while they are fresh. Three numbers for each place: the region, the months since, and how big it was (1 to 3).
 	 */
 	void ShowScars(const TArray<int32>& Scars);
+	/** Smoke hangs over the towns that are besieged: three numbers each, the region, 1 if the ring is closed, months of stores left. */
+	void ShowSieges(const TArray<int32>& Sieges);
 	/** Where a flight takes off from: its airfield, or for a carrier's aircraft the ships themselves. */
 	FVector2D SortieStart(const FSortie& Sortie) const;
 
@@ -481,6 +483,8 @@ private:
 	TObjectPtr<UProceduralMeshComponent> ScarsMesh;
 	TArray<int32> ShownScars;
 	TArray<FVector> Smoulders; // wrecks still burning, for the smoke that rises from them
+	TArray<int32> ShownSieges;
+	TArray<FVector> SiegeFires; // besieged towns, for the smoke that hangs over them
 	// Pieces on the move, to know when one is set down; and where pieces were lately set down, for the dust.
 	TSet<TWeakObjectPtr<AArmyPiece>> OnTheMarch;
 	TArray<TPair<FVector, double>> SetDowns;

@@ -45,6 +45,7 @@ struct FViewCorps
 	FString Posture; // stand, dig, back
 	bool bDug = false; // it is entrenched: it spent last month where it stands, digging in
 	bool bSupplied = true; // supply reaches it
+	bool bInTown = false; // it is the garrison of the province's town, not in the field
 	int32 Divisions = 0;
 	int32 Men = 0;
 	float Strength = 1.0f; // 0..1: men and equipment left
@@ -337,6 +338,8 @@ struct FCampaignView
 	TArray<int32> Civic;
 	// Where battles were lately fought, three numbers each: region, months since, and how big (1 to 3).
 	TArray<int32> Scars;
+	// Towns under siege that the player knows of, three numbers each: region, 1 if the ring is closed, months of stores left.
+	TArray<int32> Sieges;
 	TArray<FString> Alerts; // things to tell the player as his month opens
 	TArray<FString> PageIds; // the rooms the rules set out themselves that are open to him
 	TArray<FString> PageLabels;
@@ -432,6 +435,7 @@ struct FAttackResult
 	FString Level; // "Decisive victory" and the like, from the attacker's side
 	bool bTaken = false;
 	bool bYielded = false; // the defenders fell back without a fight
+	bool bSiege = false; // the country round the town was won, but the town holds: it is now besieged
 	int32 AttackerLost = 0;
 	int32 DefenderLost = 0;
 	int32 Prisoners = 0;
@@ -961,5 +965,8 @@ struct FProvinceInfo
 	// The same as things to draw.
 	TArray<FTownPlot> TownPlots;
 	TArray<FTownOffer> TownOffers;
+	// The town as a fortress, and how its siege stands (the grand campaign): who stands round it, and plain lines.
+	FString SiegeBy;
+	TArray<FString> SiegeLines;
 	FString TownKind; // capital, city, town or village
 };

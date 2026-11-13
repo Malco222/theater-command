@@ -404,6 +404,14 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				Out.Civic.Add(FMath::RoundToInt32(Value->AsNumber()));
 			}
 		}
+		const TArray<TSharedPtr<FJsonValue>>* Sieges = nullptr;
+		if (Object->TryGetArrayField(TEXT("sieges"), Sieges))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Sieges)
+			{
+				Out.Sieges.Add(FMath::RoundToInt32(Value->AsNumber()));
+			}
+		}
 		const TArray<TSharedPtr<FJsonValue>>* Scars = nullptr;
 		if (Object->TryGetArrayField(TEXT("scars"), Scars))
 		{
@@ -683,6 +691,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetStringField(TEXT("posture"), C.Posture);
 			Unit->TryGetBoolField(TEXT("dug"), C.bDug);
 			Unit->TryGetBoolField(TEXT("supplied"), C.bSupplied);
+			Unit->TryGetBoolField(TEXT("town"), C.bInTown);
 			C.Divisions = Unit->GetIntegerField(TEXT("divs"));
 			C.Strength = static_cast<float>(Unit->GetNumberField(TEXT("str")));
 			// Rules that do not count heads (the stand-in) are taken at a full division's strength.
@@ -907,6 +916,7 @@ FAttackResult FCampaignSession::Attack(const TArray<int32>& CorpsIds, int32 Regi
 		Out.Defenders = ReadUnits(*Report, TEXT("defenders"));
 	}
 	Object->TryGetStringField(TEXT("note"), Out.Note);
+	Object->TryGetBoolField(TEXT("siege"), Out.bSiege);
 	Out.Moved = ReadMoves(Object);
 	TakeView(Object);
 	return Out;
@@ -1390,6 +1400,14 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		}
 	}
 	Object->TryGetStringField(TEXT("raiseNote"), Info.Note);
+	{
+		const TSharedPtr<FJsonObject>* Siege = nullptr;
+		if (Object->TryGetObjectField(TEXT("siege"), Siege))
+		{
+			(*Siege)->TryGetStringField(TEXT("by"), Info.SiegeBy);
+			(*Siege)->TryGetStringArrayField(TEXT("lines"), Info.SiegeLines);
+		}
+	}
 	{
 		const TSharedPtr<FJsonObject>* Town = nullptr;
 		if (Object->TryGetObjectField(TEXT("town"), Town))

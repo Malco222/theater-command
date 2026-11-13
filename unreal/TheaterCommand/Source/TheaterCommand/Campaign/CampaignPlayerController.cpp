@@ -666,7 +666,15 @@ void ACampaignPlayerController::ProvinceAction(const FString& Action)
 		{
 			Map->FlySortie(Sortie);
 		}
-		CampaignSounds::Play(this, Sorties.Num() > 0 ? TEXT("fighter_pass") : Action.StartsWith(TEXT("work:blow")) ? TEXT("explosion") : TEXT("hammer"), 0.6f);
+		const bool bAssault = Action.StartsWith(TEXT("work:storm")) || Action.StartsWith(TEXT("work:sally"));
+		if (bAssault)
+		{
+			// An assault on a town, or its garrison's sortie: the guns are seen and heard, and the march plays.
+			Map->AddBattleSmoke(Map->GetSelectedRegion());
+			BattleMusicUntil = FPlatformTime::Seconds() + 14.0;
+			CampaignSounds::PlayLater(this, TEXT("field_gun"), 0.5f, 0.55f);
+		}
+		CampaignSounds::Play(this, Sorties.Num() > 0 ? TEXT("fighter_pass") : (bAssault || Action.StartsWith(TEXT("work:blow"))) ? TEXT("explosion") : TEXT("hammer"), 0.6f);
 	}
 	RefreshRegionPanel(Map->GetSelectedRegion());
 	Notify(Note, 5.0);
@@ -1379,6 +1387,21 @@ void ACampaignPlayerController::PressToDo(int32 Index)
 	if (Screen.StartsWith(TEXT("page:")))
 	{
 		OpenPage(Screen.Mid(5));
+	}
+	else if (Screen.StartsWith(TEXT("goto:")) && Map.IsValid())
+	{
+		// (a place on the map: the view goes there and the province is picked)
+		const int32 Where = FCString::Atoi(*Screen.Mid(5));
+		if (Map->GetData().Regions.IsValidIndex(Where))
+		{
+			if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+			{
+				const FVector2D At = Map->GetData().Regions[Where].Center;
+				Eye->GoTo(Map->MapToWorld(At.X, At.Y), 0.3f);
+			}
+			SelectRegion(Where);
+			SetProvinceTab(2);
+		}
 	}
 	else if (Screen == TEXT("generals"))
 	{
@@ -3972,7 +3995,7 @@ void ACampaignPlayerController::RefreshOrders()
 		FTrayCard Card;
 		Card.CorpsId = Unit.Id;
 		Card.Name = FText::FromString(Unit.Name);
-		Card.Kind = FText::FromString(FCampaignMapData::CorpsKindLabel(Unit.Kind));
+		Card.Kind = FText::FromString(Unit.bInTown ? FCampaignMapData::CorpsKindLabel(Unit.Kind) + TEXT(", in the town") : FCampaignMapData::CorpsKindLabel(Unit.Kind));
 		Card.Divisions = Unit.Divisions;
 		Card.Strength = Unit.Strength;
 		Card.KindId = Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy")) : Unit.Kind;
@@ -4442,6 +4465,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
 		Map->ShowCivic(View.Civic);
 		Map->ShowScars(View.Scars);
+		Map->ShowSieges(View.Sieges);
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowLanes(View.Lanes);
 		Map->ShowFreeCapitals(View.FreeCapitals);
@@ -4618,11 +4642,12 @@ void ACampaignPlayerController::ConfirmAttack()
 	{
 		CampaignSounds::PlayLater(this, TEXT("field_gun"), 0.9f, 0.5f);
 	}
-	CampaignSounds::PlayLater(this, Result.bTaken ? TEXT("victory") : TEXT("defeat"), 2.8f, 0.6f);
+	CampaignSounds::PlayLater(this, Result.bTaken || Result.bSiege ? TEXT("victory") : TEXT("defeat"), 2.8f, 0.6f);
 
 	FaceOff.bResolved = true;
 	FaceOff.ResultTitle = FText::FromString(Result.bYielded ? FString(TEXT("They fell back without a fight")) : Result.Level);
-	const FString Outcome = Result.bTaken ? TEXT("The ground is yours.") : TEXT("The attack was held. The ground is still theirs.");
+	const FString Outcome = Result.bSiege ? TEXT("The country is yours, but the town holds. It is now besieged: starve it out, or pick the province and storm it.")
+		: Result.bTaken ? TEXT("The ground is yours.") : TEXT("The attack was held. The ground is still theirs.");
 	FString Cost = FString::Printf(TEXT("You lost %s men; they lost %s"), *Thousands(Result.AttackerLost), *Thousands(Result.DefenderLost));
 	if (Result.Prisoners > 0)
 	{
@@ -5192,6 +5217,11 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			RegionPanel.Prize = FText::FromString(Province.PrizeLine);
 			RegionPanel.PrizeTip = FText::FromString(FString::Join(Province.PrizeItems, TEXT("\n")));
 			RegionPanel.bPrizeToTake = Province.PrizeKind == TEXT("taken") || Province.PrizeKind == TEXT("restored");
+			if (Province.SiegeLines.Num() > 0)
+			{
+				RegionPanel.SiegeTitle = FText::FromString(Province.SiegeBy.IsEmpty() ? FString(TEXT("THE TOWN AS A FORTRESS")) : FString::Printf(TEXT("BESIEGED BY %s"), *Province.SiegeBy.ToUpper()));
+				RegionPanel.SiegeText = FText::FromString(FString::Join(Province.SiegeLines, TEXT("\n")));
+			}
 			// The town's plots: shown on the player's own ground, and elsewhere only where something stands.
 			const bool bBuiltOn = Province.Plots.ContainsByPredicate([](const FString& Plot) { return Plot != TEXT("Free plot"); });
 			RegionPanel.Plots = Province.bHasPlots && (Province.bPlotsMine || bBuiltOn) ? Province.Plots : TArray<FString>();
@@ -5225,7 +5255,11 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			if (!Province.bHome)
 			{
 				// On ground that is not the player's, only what can be ordered from afar is offered.
-				RegionPanel.Options.RemoveAll([](const FProvinceOption& Option) { return !Option.Action.StartsWith(TEXT("work:recon")) && !Option.Action.StartsWith(TEXT("work:evac")); });
+				RegionPanel.Options.RemoveAll([](const FProvinceOption& Option)
+				{
+					return !Option.Action.StartsWith(TEXT("work:recon")) && !Option.Action.StartsWith(TEXT("work:evac")) && !Option.Action.StartsWith(TEXT("work:storm"))
+						&& !Option.Action.StartsWith(TEXT("work:sally")) && !Option.Action.StartsWith(TEXT("work:garrison")) && !Option.Action.StartsWith(TEXT("work:field"));
+				});
 			}
 			RegionPanel.Forming = Province.Forming;
 		}

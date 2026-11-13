@@ -857,6 +857,10 @@ namespace
 						[
 							MakeToDo(3)
 						]
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
+							MakeToDo(4)
+						]
 						// The small map: every country in its colour, the armies as marks, the part on screen boxed.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 4.0f, 0.0f, 12.0f)
 						[
@@ -2200,6 +2204,19 @@ namespace
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 						[
 							SNew(STextBlock).Text(Info.Holdings).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						];
+					}
+					if ((ProvinceTab == 0 || !bProvince) && !Info.SiegeText.IsEmpty())
+					{
+						// The town as a fortress, and how its siege stands.
+						const bool bBesieged = Info.SiegeTitle.ToString().StartsWith(TEXT("BESIEGED"));
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.SiegeTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(bBesieged ? Alarm : Brass)
+						];
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.SiegeText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.12f)
 						];
 					}
 					if (ProvinceTab == 0 && bProvince && Info.Plots.Num() > 0)

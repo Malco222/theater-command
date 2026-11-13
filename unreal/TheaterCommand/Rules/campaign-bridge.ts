@@ -51,6 +51,7 @@ import {
   depots, shippingLanes, previewAirOrder,
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   fleetsInSight, wingsOfFleet,
+  townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
@@ -196,7 +197,7 @@ function view() {
       return ({
       id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
-      canOrder: up && canOrder(s, c), supplied: c.supplied, dug: !!c.dug, men: men(c),
+      canOrder: up && canOrder(s, c), supplied: c.supplied, dug: !!c.dug, town: !!(c as { town?: unknown }).town, men: men(c),
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
@@ -249,6 +250,8 @@ function view() {
     free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
     alerts: alertsOf(s),
     todo: todoOf(s),
+    // Towns under siege that the player knows of (Version 54): region, 1 if the ring is closed, months of stores left.
+    sieges: (() => { try { return siegesInSight(s).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]); } catch { return []; } })(),
     // Where battles were lately fought, for the scars they leave on the table: three numbers for each place, the
     // region, the months since, and how big the fighting was (1 to 3). Only what the player saw or took part in.
     scars: (() => {
@@ -778,7 +781,15 @@ function battleNote(s: Game, r: BattleReport): string {
   if (r.yielded) return `The ${s.nations[r.defNat].adj} troops fell back from ${r.regionName} without a fight.`;
   const cost = `${r.attLost.toLocaleString('en')} lost against ${r.defLost.toLocaleString('en')}`;
   const prisoners = r.prisoners > 0 ? `, ${r.prisoners.toLocaleString('en')} prisoners` : '';
-  return `${r.level} at ${r.regionName}: ${r.taken ? 'the ground is taken' : 'the attack is held'}, ${cost}${prisoners}.`;
+  const x = r as BattleReport & { siege?: boolean; town?: boolean; relief?: boolean; sally?: boolean };
+  const town = townSiege(s, r.region)?.town ?? r.regionName;
+  // (Version 54: the town is the key to its province. Winning the country round it does not take it.)
+  const came = x.town ? (r.taken ? `${town} is stormed and taken` : `the assault on ${town} is thrown back`)
+    : x.sally ? (r.taken ? `the garrison of ${town} breaks the ring: the siege is raised` : `the garrison's sortie from ${town} is driven back in`)
+      : x.relief ? (r.taken ? `the besiegers are driven off and ${town} is relieved` : `the relief of ${town} is held off`)
+        : x.siege ? `the country is won, but ${town} holds: it is now besieged`
+          : r.taken ? 'the ground is taken' : 'the attack is held';
+  return `${r.level} at ${r.regionName}: ${came}, ${cost}${prisoners}.`;
 }
 
 function attack(ids: number[], to: number) {
@@ -789,7 +800,9 @@ function attack(ids: number[], to: number) {
   const moved = report
     ? s.corps.filter((c) => !c.dead && c.nat === s.human && c.reg === to && before.get(c.id) !== to).map((c) => ({ id: c.id, path: [to] }))
     : [];
-  return { report, note: report ? battleNote(s, report) : '', moved, view: view() };
+  // (where the town still holds, the province has not changed hands: the screen shows no capture)
+  const siege = !!(report as (BattleReport & { siege?: boolean }) | null)?.siege;
+  return { report: report && siege ? { ...report, taken: false } : report, siege, note: report ? battleNote(s, report) : '', moved, view: view() };
 }
 
 function endMonth() {
@@ -1091,9 +1104,37 @@ function province(id: number) {
     // What kind of country it is for an army, the rivers on its borders and their bridges, and its railway
     // (all only in the grand campaign, where those rules apply).
     // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
+    // The town as a fortress (Version 54): what it adds to its defenders, and how its siege stands, in plain lines.
+    siege: (() => { try { const v = townSiege(s, r.id); return v ? { town: v.town, by: v.by ? s.nations[v.by]?.name ?? v.by : '', lines: v.lines, inside: v.inside, room: v.room } : null; } catch { return null; } })(),
     jobs: (() => {
       const out: { key: string; label: string; detail: string; ok: boolean; why: string }[] = [];
       if (!me) return out;
+      // A siege's own orders: the assault, the garrison's sortie, and corps into the town or out of it.
+      try {
+        const v = townSiege(s, r.id);
+        if (v) {
+          const odds = (o: { exact: boolean; odds: number; lo: number; hi: number; chance: number } | null): string => !o ? ''
+            : ` The staff put the odds at ${o.exact ? o.odds.toFixed(1) : `${o.lo.toFixed(1)} to ${o.hi.toFixed(1)}`} to 1, about ${Math.round(o.chance * 100)} chances in a hundred.`;
+          if (v.by === me) {
+            const why = whyNotStormTown(s, r.id);
+            out.push({ key: 'storm', label: `Storm ${v.town}`, detail: `An assault on the town itself, once a month. It costs more men than a fight in the open.${odds(stormOutlook(s, r.id))}`, ok: why === null, why: why ?? '' });
+          }
+          if (v.holder === me && v.by) {
+            const why = whyNotSallyOut(s, r.id);
+            out.push({ key: 'sally', label: `Sally out from ${v.town}`, detail: `The garrison comes out against the army round the town: win, and the siege is raised.${odds(sallyOutlook(s, r.id))}`, ok: why === null, why: why ?? '' });
+          }
+          for (const c of s.corps) {
+            if (c.dead || c.nat !== me || c.reg !== r.id || c.kind === 'fort') continue;
+            if ((c as { town?: unknown }).town) {
+              const why = whyNotLeaveTown(s, c);
+              out.push({ key: `field:${c.id}`, label: `${c.name}: take the field`, detail: `It leaves ${v.town} and stands in the open country of the province again.`, ok: why === null, why: why ?? '' });
+            } else if (r.ctrl === me || allied(s, r.ctrl, me)) {
+              const why = whyNotGarrisonTown(s, c);
+              out.push({ key: `garrison:${c.id}`, label: `${c.name}: into ${v.town}`, detail: `It goes into the town as its garrison: it fights much stronger behind the walls, and holds the province while the town holds.`, ok: why === null, why: why ?? '' });
+            }
+          }
+        }
+      } catch { /* a campaign from history has no sieges */ }
       // A reconnaissance flight over ground that is not the player's: one press, by the group the staff would send.
       if (!allied(s, r.ctrl, me)) {
         try {
@@ -1181,6 +1222,17 @@ function work(key: string, region: number) {
     const h0 = s.headlines.length;
     ok = !!c && orderEvacuate(s, c);
     if (ok && c) note = s.headlines.slice(h0).map((h) => h.text).join(' ') || `${c.name} is lifted off by sea to ${s.regions[c.reg].name}.`;
+  } else if (what === 'storm' || what === 'sally') {
+    const why = what === 'storm' ? whyNotStormTown(s, region) : whyNotSallyOut(s, region);
+    const report = why ? null : what === 'storm' ? orderStorm(s, region) : orderSally(s, region);
+    ok = !!report;
+    note = report ? battleNote(s, report) : why ?? note;
+  } else if (what === 'garrison' || what === 'field') {
+    const c = s.corps.find((x) => x.id === Number(a));
+    const why = !c ? 'That corps is not there.' : what === 'garrison' ? whyNotGarrisonTown(s, c) : whyNotLeaveTown(s, c);
+    ok = !!c && !why && (what === 'garrison' ? orderGarrison(s, c) : orderTakeField(s, c));
+    const town = townSiege(s, region)?.town ?? s.regions[region]?.name ?? 'the town';
+    note = ok && c ? (what === 'garrison' ? `${c.name} goes into ${town} as its garrison.` : `${c.name} leaves ${town} and takes the field.`) : why ?? note;
   } else if (what === 'recon') {
     const group = s.airFleets.find((f) => f.id === Number(a));
     const flown = sendScout(s, Number(a), region);
@@ -1470,6 +1522,13 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
       tip: 'A design team with nothing to do designs nothing. Open RESEARCH and give it work.',
     });
   }
+  // Sieges: a town of the player's shut in, and towns his armies stand round.
+  try {
+    const all = siegesInSight(s).filter((v) => v.by);
+    const mine = all.filter((v) => v.holder === me.id), theirs = all.filter((v) => v.by === me.id);
+    if (mine.length) out.push({ k: `goto:${mine[0].region}`, t: mine.length === 1 ? `${mine[0].town.toUpperCase()} IS BESIEGED` : `${mine.length} OF YOUR TOWNS ARE BESIEGED`, tip: `${mine.map((v) => v.town).slice(0, 4).join(', ')}: ${mine[0].lines[mine[0].lines.length - 1]} Attack the army round it to raise the siege, or let the garrison sally out.` });
+    if (theirs.length) out.push({ k: `goto:${theirs[0].region}`, t: theirs.length === 1 ? `YOU BESIEGE ${theirs[0].town.toUpperCase()}` : `YOU BESIEGE ${theirs.length} TOWNS`, tip: `${theirs.map((v) => v.town).slice(0, 4).join(', ')}. Starve it out, or storm it: pick the province and look under ORDERS.` });
+  } catch { /* a campaign from history has no sieges */ }
   // Trade: a route cut, or a trading house idle with a country ready to sign.
   const book = tradeLedger(s);
   if (book) {

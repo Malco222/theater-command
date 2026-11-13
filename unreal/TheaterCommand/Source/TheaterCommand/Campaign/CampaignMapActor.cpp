@@ -1746,6 +1746,31 @@ void ACampaignMapActor::SetColourStrength(int32 Level)
 	}
 }
 
+void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
+{
+	if (Sieges == ShownSieges)
+	{
+		return;
+	}
+	ShownSieges = Sieges;
+	SiegeFires.Reset();
+	for (int32 K = 0; K + 2 < Sieges.Num(); K += 3)
+	{
+		if (!Data.Regions.IsValidIndex(Sieges[K]))
+		{
+			continue;
+		}
+		// Fires in the town itself: more of them once the ring is closed.
+		const FCampaignRegion& Region = Data.Regions[Sieges[K]];
+		const int32 Fires = Sieges[K + 1] != 0 ? 4 : 2;
+		for (int32 F = 0; F < Fires; ++F)
+		{
+			const double Angle = F * 2.4 + Region.Id;
+			SiegeFires.Add(SurfacePoint(Region.Center.X + FMath::Cos(Angle) * 2.2, Region.Center.Y + FMath::Sin(Angle) * 2.2, 1.6));
+		}
+	}
+}
+
 void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 {
 	if (!Data.IsLoaded() || (ScarsMesh && Scars == ShownScars))
@@ -4194,6 +4219,11 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		for (int32 K = 0; K < Smoulders.Num(); ++K)
 		{
 			Plume(Smoulders[K], K * 7 + 300, 1.7, &Oily);
+		}
+		// And a pall hangs over every town that is besieged.
+		for (int32 K = 0; K < SiegeFires.Num(); ++K)
+		{
+			Plume(SiegeFires[K], K * 11 + 700, 2.3, &Oily);
 		}
 	}
 	// The fires of armies in camp: a thin thread of smoke from each.

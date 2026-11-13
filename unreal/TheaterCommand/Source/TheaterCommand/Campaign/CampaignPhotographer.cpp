@@ -475,6 +475,33 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Force = TEXT("air:1");
 			Shot.Order = TEXT("air:1:bomb:38");
 		}
+		if (GrandNation == TEXT("GER"))
+		{
+			// Cities and sieges (version 54): an attack that wins the country but not the town, the province's
+			// panel with how the siege stands and the order to storm it, and the smoke over the town.
+			{
+				FShot& Shot = Add(TEXT("41a-attack-on-a-town"), TEXT("Danzig Corridor"), 0.3f);
+				Shot.Army = TEXT("Farther Pomerania");
+				Shot.Attack = TEXT("Danzig Corridor");
+			}
+			{
+				FShot& Shot = Add(TEXT("41b-the-town-holds"), TEXT("Danzig Corridor"), 0.3f);
+				Shot.bKeep = true;
+				Shot.bConfirm = true;
+			}
+			{
+				FShot& Shot = Add(TEXT("41c-siege-orders"), TEXT("Danzig Corridor"), 0.26f);
+				Shot.bClose = true;
+				Shot.Select = TEXT("Danzig Corridor");
+				Shot.ProvinceTab = 2;
+				Shot.Wait = 2.0f;
+			}
+			{
+				FShot& Shot = Add(TEXT("41d-siege-panel"), TEXT("Danzig Corridor"), 0.2f);
+				Shot.Select = TEXT("Danzig Corridor");
+				Shot.Wait = 2.0f;
+			}
+		}
 		{
 			// The title card that opens a year: four months on from September 1939. Then put away.
 			FShot& Shot = Add(TEXT("40a-year-card"), TEXT("@capital"), 0.5f);
