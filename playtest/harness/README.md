@@ -114,3 +114,27 @@ Traps:
 - The United States is not offered from a 1939 start: a job for it plays no months.
 - The scripted player never courts a neutral and never signs a trade agreement, so its political capital sits at the cap more than a person's would.
 - The German cabinet wars with the money or the men cabinet end early (month 56 or 57): compare levers at one month with `probe26`, not whole wars.
+
+## Version 58 (prepared defences), and a first look at Version 59 (manpower)
+
+Build against the version under test, for example `./build.sh probe28 /home/user/tc58 out58`. The scripted player in `lib.ts` has new plan options, all off unless named: `"minChance":0.6` (attack only where the card gives that chance), `"guns":1.5` (keep that many artillery corps for every ten field corps), `"useGuns":true` (bring up to two artillery corps into an attack in place of the weakest corps from the same province, where the card then reads better), and the hooks `onLook` (every attack on offer, before the player chooses) and `onAttack`.
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `probe28.ts` | Every field battle of the player's, split by who attacked, whether the line was dug in and fed, and the card's odds; dug-in corps each January; who holds Berlin in December 1944; the longest spell with no battle. With `ROWS=1` every battle is printed as a row | `ROWS=1 node out58/probe28.mjs GER 1 7 76 '<plan>'` |
+| `def.sh` | The fifteen defence wars (Germany, Soviet Union, Britain, France, Italy on seeds 7, 11, 23) in streams | `BIN=out58 ./def.sh out/v58def 4` |
+| `deftab.py`, `rows.py` | Totals of `probe28`'s BATTLES lines; from the rows, how often a line holds by the card's odds and by how ready the works are, and attacks with guns | `python3 rows.py out/v58rows` |
+| `probe29.ts`, `card.sh` | Is the attack card honest: the chance the card showed against what happened, for a German and a Soviet player on three seeds | `BIN=out58 ./card.sh out/v58card` |
+| `probe30.ts` | Why a front stands still: each month every attack on offer, how many reach the player's bar, how many are on a dug-in line, the best odds, what the player did. A detail month lists every option with the troops on both sides (strength, organisation, experience, national quality) and the card's lines | `node out58/probe30.mjs GER 1 7 76 '<plan>' 37 49` |
+| `guns.sh`, `guns2.sh`, `gunstab.py` | German, Soviet and Soviet-first players on three seeds with four habits (no guns, guns kept in the line, card reader, both), then with the guns brought into attacks; one line a war | `BIN=out58 ./guns2.sh out/v58guns2 4; python3 gunstab.py out/v58guns2` |
+| `scorch58.sh` | The scorched earth on and off test on Version 58 (output in `out/v58x/`) | `./scorch58.sh` |
+| `probe31.ts` | Writes a save for the page at the first month with an attack on a finished dug-in line at 1.15 to 1.7 to 1 | `node out58/probe31.mjs GER 1 7 76 '<plan>' out/v58saves/GER-7 30` |
+| `ui18.cjs`, `uix.cjs` | The new screens from that save: earth banks, "Dug in" tags, the attack card as it opens and with every corps in, the result, wrecking asked twice, the folded policy; `uix.cjs` lists what is on the page | `TC_PAGE=file:///home/user/tc58/dist/play.html node ui18.cjs SAVE.json SAVE.txt shots/84-v58-ger` |
+| `probe32.ts` | Version 59 on: the player's reserve of men, the month's class, corps, divisions, how full they are, beside the main enemy's, every third month | `node out59/probe32.mjs SOV 1 11 76 '{"minOdds":1.5}'` |
+
+Traps met on Version 58:
+
+- A battle report's `odds` is the odds after the day's luck, so every win reads 1.2 or better. The odds a player sees on the card are `aPower / dPower`. Band battles by the second (a first table banded by the first showed lines that never held).
+- `limitAttackers` takes the strongest corps that fit the roads, so artillery corps are left out. `"guns"` alone buys guns that sit in the line; `"useGuns"` is needed to see guns in an attack.
+- In the page the province panel is `#pane`, the army tray is `#tray`, and `#veil` with `#card` inside is the modal (the attack card). The attack card opens with the selected army only: click every `[data-act="atkpick"].out` to add the rest.
+- `probe32` builds only against Version 59 or later.

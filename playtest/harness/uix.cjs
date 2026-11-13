@@ -1,0 +1,20 @@
+const { chromium } = require('playwright'); const fs = require('fs');
+const [file, infoFile] = process.argv.slice(2); const info = JSON.parse(fs.readFileSync(infoFile, 'utf8'));
+(async () => {
+  const browser = await chromium.launch(); const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const save = fs.readFileSync(file, 'utf8');
+  await page.addInitScript((s) => { try { localStorage.setItem('tc-watch', '0'); localStorage.setItem('theater-command-save-v1', s); } catch {} }, save);
+  await page.goto('file:///home/user/tc58/dist/play.html'); await page.waitForTimeout(1000);
+  await page.locator('[data-act="continue"]').first().click(); await page.waitForTimeout(1500);
+  const dump = async (tag) => console.log(tag, await page.evaluate(() => [...document.querySelectorAll('body > *, #app > *')].map((e) => `${e.tagName}#${e.id}.${String(e.className.baseVal ?? e.className).slice(0, 30)}[${e.offsetParent !== null ? 'shown' : 'hidden'} ${(e.innerText || '').length}]`).join(' ')));
+  await dump('top:');
+  await page.evaluate((id) => window.theater.onRegion(id), info.from); await page.waitForTimeout(400);
+  await dump('after from:');
+  console.log('ids with tags:', await page.evaluate(() => [...new Set([...document.querySelectorAll('.tag')].map((t) => { let e = t; while (e && !e.id) e = e.parentElement; return e ? e.id : '?'; }))].join(',')));
+  console.log('acts in panel:', await page.evaluate(() => { const c = {}; for (const b of document.querySelectorAll('[data-act]')) { if (b.offsetParent === null) continue; c[b.dataset.act] = (c[b.dataset.act] || 0) + 1; } return JSON.stringify(c); }));
+  await page.evaluate((id) => window.theater.onRegion(id), info.target); await page.waitForTimeout(400);
+  await dump('after target:');
+  console.log('acts now:', await page.evaluate(() => { const c = {}; for (const b of document.querySelectorAll('[data-act]')) { if (b.offsetParent === null) continue; c[b.dataset.act] = (c[b.dataset.act] || 0) + 1; } return JSON.stringify(c); }));
+  console.log('ui:', await page.evaluate(() => JSON.stringify(window.theater.ui, (k, v) => (v instanceof Set ? [...v] : v)).slice(0, 900)));
+  await browser.close();
+})();

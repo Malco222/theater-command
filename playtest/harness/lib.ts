@@ -178,6 +178,16 @@ export interface Plan {
   noMass?: boolean;
   /** Extra orders each month. */
   each?: (g: Game, run: Run) => void;
+  /** Version 58: told of every field attack the player orders, with the attack card's outlook as read just before (default off). */
+  onAttack?: (g: Game, out: any, rep: any, target: any) => void;
+  /** Version 58: shown every attack on offer before the player chooses (the province, the corps that would go, the card's outlook), each pass of the month (default off). */
+  onLook?: (g: Game, options: { r: any; cands: any[]; odds: number; out: any }[], pass: number) => void;
+  /** Version 58: attack only where the attack card gives this chance or better (default off: the odds alone decide). */
+  minChance?: number;
+  /** Version 58: keep this many artillery corps for every ten field corps, ordered ahead of everything else (default off: no guns are bought). */
+  guns?: number;
+  /** Version 58: bring up to two artillery corps into an attack in place of the weakest corps from the same province, where the card then gives a better chance (default off: the staff's own picker, which takes the strongest and leaves the guns behind). */
+  useGuns?: boolean;
 }
 
 function distanceToEnemy(g: Game, me: string, homeOnly: boolean): Int16Array {
@@ -244,13 +254,19 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   if (book?.offers) for (const o of book.offers) if (!o.why && T.orderTrade(g, o.nat)) row.bought.push(`trade:${o.nat}`);
 
   // The arsenal: buy what is most wanted and can be afforded, keeping a small reserve.
-  const want = plan.buy ?? ['corps:arm', 'corps:inf', 'corps:mot', 'air:ftr', 'work:factory'];
+  const want0 = plan.buy ?? ['corps:arm', 'corps:inf', 'corps:mot', 'air:ftr', 'work:factory'];
+  const gunsDue = (run as any).gunsDue ?? ((run as any).gunsDue = [] as number[]);
   for (let n = 0; n < 6; n++) {
     const offers = T.arsenalOffers(g, g.nations[me].capital);
+    // Guns on order arrive in five months; count them with the guns in the field.
+    const mine = g.corps.filter((c) => c.nat === me && !(c as any).dead && c.kind !== 'fort');
+    const needGuns = plan.guns !== undefined && mine.filter((c) => c.kind === 'art').length + gunsDue.filter((t: number) => t > g.turn).length < Math.floor((mine.length * plan.guns) / 10);
+    const want = needGuns ? ['corps:art', ...want0] : want0;
     const o = want.map((k) => offers.find((x) => x.key === k)).find((x) => x && x.why === null);
     if (!o) break;
     const b = T.orderArsenal(g, o.key, o.at);
     if (!b) break;
+    if (o.key === 'corps:art') gunsDue.push(g.turn + 5);
     row.bought.push(o.key);
   }
 
@@ -295,19 +311,22 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     // Attacks, best odds first.
     const targets = new Set<number>();
     for (const c of my()) for (const j of g.regions[c.reg].nb) if (hostileUnits(g, g.regions[j], me).length) targets.add(j);
-    const scored = [...targets].map((j) => {
+    const looked = [...targets].map((j) => {
       const r = g.regions[j];
-      const cands = limitAttackers(g, T.candidates(g, r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), r);
+      const cands = pickAttackers(g, T.candidates(g, r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), r, plan);
       const out = cands.length ? T.attackOutlook(g, cands, r) : null;
-      return { r, cands, odds: out?.odds ?? 0 };
-    }).filter((x) => x.odds >= (x.r.id === chaseId ? chaseOdds : minOdds) && (!plan.homeOnly || x.r.owner === me || x.r.id === chaseId)).sort((a, b) => Number(b.r.id === chaseId) - Number(a.r.id === chaseId) || b.odds - a.odds);
+      return { r, cands, odds: out?.odds ?? 0, out };
+    });
+    plan.onLook?.(g, looked, pass);
+    const scored = looked.filter((x) => x.odds >= (x.r.id === chaseId ? chaseOdds : minOdds) && (!plan.homeOnly || x.r.owner === me || x.r.id === chaseId)).sort((a, b) => Number(b.r.id === chaseId) - Number(a.r.id === chaseId) || b.odds - a.odds);
     for (const x of scored) {
-      const cands = limitAttackers(g, T.candidates(g, x.r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), x.r);
+      const cands = pickAttackers(g, T.candidates(g, x.r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), x.r, plan);
       if (!cands.length || !hostileUnits(g, x.r, me).length) continue;
       const out = T.attackOutlook(g, cands, x.r);
       if (!out || out.odds < (x.r.id === chaseId ? chaseOdds : minOdds)) continue;
+      if (plan.minChance !== undefined && ((out as any).chance ?? 1) < plan.minChance) continue;
       const rep = T.orderAttack(g, cands, x.r);
-      if (rep) { row.attacksOrdered++; if (rep.taken || (rep as any).siege) row.attacksWon++; did++; }
+      if (rep) { row.attacksOrdered++; if (rep.taken || (rep as any).siege) row.attacksWon++; did++; plan.onAttack?.(g, out, rep, x.r); }
     }
     // Towns (Version 54): storm the town the army stands round when the odds are good, sooner settled for once the
     // siege has lasted two months; and bring a garrison out against the besiegers when it can win.
@@ -386,6 +405,24 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   if (plan.land) tryLanding(run, row, minOdds, plan);
 
   plan.each?.(g, run);
+}
+
+/** The corps for an attack: the staff's pick under the frontage limit, or (plan.useGuns) the same with up to two artillery corps swapped in where that reads better on the card. */
+function pickAttackers(g: Game, all: Corps[], r: any, plan: Plan): Corps[] {
+  const base = limitAttackers(g, all, r);
+  if (!plan.useGuns || !base.length) return base;
+  const spare = all.filter((c) => c.kind === 'art' && !base.includes(c));
+  if (!spare.length || base.filter((c) => c.kind === 'art').length >= 2) return base;
+  let best = base, bestOut = T.attackOutlook(g, base, r) as any;
+  let cur = [...base];
+  for (const gun of spare.slice(0, 2 - base.filter((c) => c.kind === 'art').length)) {
+    // The frontage is counted by the province the corps start from: the gun takes the place of the weakest corps beside it.
+    const mates = cur.filter((c) => c.reg === gun.reg && c.kind !== 'art').sort((x, y) => x.divs * x.str - y.divs * y.str);
+    const next = mates.length ? cur.map((c) => (c === mates[0] ? gun : c)) : [...cur, gun];
+    const o = T.attackOutlook(g, next, r) as any;
+    if (o && bestOut && (o.chance > bestOut.chance + 1e-9 || (o.chance >= bestOut.chance - 1e-9 && o.odds > bestOut.odds))) { best = next; bestOut = o; cur = next; }
+  }
+  return best;
 }
 
 function mass(run: Run, plan: Plan, row: MonthRow, minOdds: number): void {
