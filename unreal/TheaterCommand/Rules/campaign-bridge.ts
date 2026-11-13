@@ -60,7 +60,7 @@ import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, 
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND } from '../../../src/campaign/types';
-import { GOALS, GOAL_KEYS, judgeGoals, openGoals } from '../../../src/campaign/goals';
+import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
@@ -1327,6 +1327,45 @@ function reportsPage(s: Game): Page | null {
   };
 }
 
+/** What winning means: the player's short campaign and his long one, each thing they ask for ticked or not, and how long is left. */
+function goalsPage(s: Game): Page | null {
+  const me = s.human;
+  if (!me) return null;
+  const date = (turn: number): string => turnToDate(turn).label;
+  const sections: Page['sections'] = [];
+  let open = 0, wonAny = 0;
+  for (const key of GOAL_KEYS) {
+    const goal = GOALS[me]?.[key];
+    if (!goal) continue;
+    const state = goalState(s, key);
+    const checks = goalChecks(s, me, goal);
+    const done = checks.filter((c) => c.done).length;
+    const left = goalEnds(goal) - s.turn;
+    if (state === 'open') open++;
+    if (state === 'won') wonAny++;
+    const standing = state === 'won' ? 'Won.' : state === 'lost' ? 'Lost: its time ran out, or the country fell.' : state === 'out' ? 'Not in play in this campaign.'
+      : `${done} of ${checks.length} done, ${goalWhen(goal, date)}${goal.outlast === undefined && left >= 0 ? ` (${left} month${left === 1 ? '' : 's'} left)` : ''}.`;
+    sections.push({
+      heading: `${key === 'short' ? 'THE SHORT CAMPAIGN' : 'THE LONG CAMPAIGN'}  \u00B7  ${goal.title.toUpperCase()}`,
+      text: `${goal.text}\n${standing}`,
+      rows: checks.map((c) => {
+        const r = s.byName[c.label];
+        return {
+          nat: r ? r.ctrl : '', title: `${c.done ? '\u2713' : '\u25CB'}  ${c.label}`,
+          lines: [r ? (c.done ? `Held by ${s.nations[r.ctrl]?.name ?? r.ctrl}.` : `In the hands of ${s.nations[r.ctrl]?.name ?? r.ctrl}: it must be yours or an ally's.`) : c.done ? 'Done.' : 'Not yet.'],
+          buttons: r ? [{ label: 'GO THERE', act: `goto:region:${r.id}`, ok: true, tip: 'Looks at the place on the map.' }] : [],
+        };
+      }),
+    });
+  }
+  if (!sections.length) return null;
+  return {
+    id: 'goals', title: 'YOUR OBJECTIVES', headline: wonAny ? `${wonAny} campaign${wonAny === 1 ? '' : 's'} won${open ? `, ${open} still to win` : ''}` : open ? `${open} campaign${open === 1 ? '' : 's'} to win` : 'Nothing left to win',
+    note: 'What winning means for your country. Goals judge the war and never change it: you can play on after they are decided.',
+    top: [], sections,
+  };
+}
+
 /** Every force the player commands, each with a way to go to it: his armies by where they stand, his fleets, his airfields. */
 function forcesPage(s: Game): Page | null {
   const me = s.human;
@@ -1385,7 +1424,7 @@ function forcesPage(s: Game): Page | null {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s)
+  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s)
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))

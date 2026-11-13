@@ -346,6 +346,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::NextArmy);
 	InputComponent->BindKey(EKeys::L, IE_Pressed, this, &ACampaignPlayerController::OpenForces);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACampaignPlayerController::OpenReports);
+	InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ACampaignPlayerController::OpenGoals);
 	InputComponent->BindKey(EKeys::K, IE_Pressed, this, &ACampaignPlayerController::ToggleNewsreels);
 	InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
 	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
@@ -1426,6 +1427,20 @@ void ACampaignPlayerController::HushNarrator()
 		}
 		FPlatformProcess::CloseProc(Narrator);
 		Narrator.Reset();
+	}
+}
+
+void ACampaignPlayerController::OpenGoals()
+{
+	if (bPageOpen && Page.Id == TEXT("goals"))
+	{
+		ClosePage();
+		return;
+	}
+	OpenPage(TEXT("goals"));
+	if (!bPageOpen)
+	{
+		Notify(TEXT("This country has no set objectives: the war is yours to make of what you will."), 5.0);
 	}
 }
 
@@ -2660,6 +2675,7 @@ void ACampaignPlayerController::RefreshOrders()
 	const FCampaignNation* Nation = Map->GetData().FindNation(View.Human);
 	FString General;
 	int32 Divisions = 0, CorpsCount = 0;
+	TMap<FString, int32> Mix;
 	for (const FViewCorps& Unit : View.Corps)
 	{
 		if (Unit.Region != ArmyRegion || Unit.Nation != View.Human)
@@ -2710,6 +2726,18 @@ void ACampaignPlayerController::RefreshOrders()
 		Tray.Cards.Add(Card);
 		Divisions += Unit.Divisions;
 		++CorpsCount;
+		// What the army is made of, by its divisions: "4 armoured, 6 infantry".
+		if (Unit.Parts.Num() > 0)
+		{
+			for (const FViewDivision& Part : Unit.Parts)
+			{
+				++Mix.FindOrAdd(Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy tank")) : FCampaignMapData::CorpsKindLabel(Part.Kind));
+			}
+		}
+		else
+		{
+			Mix.FindOrAdd(FCampaignMapData::CorpsKindLabel(Unit.Kind)) += Unit.Divisions;
+		}
 		if (General.IsEmpty() && !Unit.General.IsEmpty())
 		{
 			General = Unit.General;
@@ -2729,8 +2757,14 @@ void ACampaignPlayerController::RefreshOrders()
 	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
 	Tray.Tag = View.Human;
 	Tray.Title = FText::FromString(General.IsEmpty() ? FString::Printf(TEXT("%s army"), *Adjective) : General);
-	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s army at %s  ·  %d corps, %d division%s"),
-		*Adjective, *Where, CorpsCount, Divisions, Divisions == 1 ? TEXT("") : TEXT("s")));
+	Mix.ValueSort([](int32 A, int32 B) { return A > B; });
+	TArray<FString> Made;
+	for (const TPair<FString, int32>& Kind : Mix)
+	{
+		Made.Add(FString::Printf(TEXT("%d %s"), Kind.Value, *Kind.Key));
+	}
+	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s army at %s  ·  %d corps  ·  %s division%s"),
+		*Adjective, *Where, CorpsCount, Made.Num() > 0 ? *FString::Join(Made, TEXT(", ")) : *FString::FromInt(Divisions), Divisions == 1 ? TEXT("") : TEXT("s")));
 
 	// The standing order they are under, if they all share one.
 	Tray.Posture.Reset();

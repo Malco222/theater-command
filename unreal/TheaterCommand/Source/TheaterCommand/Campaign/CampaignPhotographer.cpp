@@ -225,6 +225,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.ProvinceTab = 2;
 		}
 		Add(TEXT("31m-forces"), TEXT("@capital"), 0.45f).Room = TEXT("forces");
+		Add(TEXT("31o-objectives"), TEXT("@capital"), 0.45f).Room = TEXT("goals");
 		{
 			// An army in hand: a card for each corps, its divisions by name, its morale and its rest.
 			FShot& Shot = Add(TEXT("31n-army-cards"), TEXT("Upper Silesia"), 0.4f);

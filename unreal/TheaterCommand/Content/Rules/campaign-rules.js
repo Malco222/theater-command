@@ -14272,6 +14272,10 @@
     return out;
   }
   var met = (g2, nat, goal) => g2.nations[nat].alive && goalChecks(g2, nat, goal).every((c) => c.done);
+  function goalWhen(goal, date) {
+    if (goal.outlast !== void 0) return `decided by how long you hold out`;
+    return goal.until !== void 0 ? `decided when ${date(goal.until + 1)} opens` : `by the end of ${date(goal.by)}`;
+  }
   function openGoals(g2, nat, from) {
     for (const key2 of GOAL_KEYS) {
       const goal = GOALS[nat]?.[key2];
@@ -16084,6 +16088,47 @@
       ].filter((x) => x.rows.length || x.text)
     };
   }
+  function goalsPage(s) {
+    const me = s.human;
+    if (!me) return null;
+    const date = (turn) => turnToDate(turn).label;
+    const sections = [];
+    let open = 0, wonAny = 0;
+    for (const key2 of GOAL_KEYS) {
+      const goal = GOALS[me]?.[key2];
+      if (!goal) continue;
+      const state = goalState(s, key2);
+      const checks = goalChecks(s, me, goal);
+      const done = checks.filter((c) => c.done).length;
+      const left = goalEnds(goal) - s.turn;
+      if (state === "open") open++;
+      if (state === "won") wonAny++;
+      const standing2 = state === "won" ? "Won." : state === "lost" ? "Lost: its time ran out, or the country fell." : state === "out" ? "Not in play in this campaign." : `${done} of ${checks.length} done, ${goalWhen(goal, date)}${goal.outlast === void 0 && left >= 0 ? ` (${left} month${left === 1 ? "" : "s"} left)` : ""}.`;
+      sections.push({
+        heading: `${key2 === "short" ? "THE SHORT CAMPAIGN" : "THE LONG CAMPAIGN"}  ·  ${goal.title.toUpperCase()}`,
+        text: `${goal.text}
+${standing2}`,
+        rows: checks.map((c) => {
+          const r = s.byName[c.label];
+          return {
+            nat: r ? r.ctrl : "",
+            title: `${c.done ? "✓" : "○"}  ${c.label}`,
+            lines: [r ? c.done ? `Held by ${s.nations[r.ctrl]?.name ?? r.ctrl}.` : `In the hands of ${s.nations[r.ctrl]?.name ?? r.ctrl}: it must be yours or an ally's.` : c.done ? "Done." : "Not yet."],
+            buttons: r ? [{ label: "GO THERE", act: `goto:region:${r.id}`, ok: true, tip: "Looks at the place on the map." }] : []
+          };
+        })
+      });
+    }
+    if (!sections.length) return null;
+    return {
+      id: "goals",
+      title: "YOUR OBJECTIVES",
+      headline: wonAny ? `${wonAny} campaign${wonAny === 1 ? "" : "s"} won${open ? `, ${open} still to win` : ""}` : open ? `${open} campaign${open === 1 ? "" : "s"} to win` : "Nothing left to win",
+      note: "What winning means for your country. Goals judge the war and never change it: you can play on after they are decided.",
+      top: [],
+      sections
+    };
+  }
   function forcesPage(s) {
     const me = s.human;
     if (!me) return null;
@@ -16144,7 +16189,7 @@
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
-    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
+    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : id === "goals" ? goalsPage(s) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
     return p ? { ok: true, ...p } : { ok: false };
   }
   function act(action, region = -1) {

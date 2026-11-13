@@ -412,6 +412,8 @@ public:
 	void NextNewsCard();
 	void EndNewsreel();
 	void ToggleNewsreels();
+	/** What winning means: the campaign's objectives, each thing they ask for ticked or not (O). */
+	void OpenGoals();
 	/** What every nation did last month, each with a way to go and look (R). */
 	void OpenReports();
 	/** Looks at the player's capital (Home, or C). */

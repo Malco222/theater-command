@@ -554,33 +554,14 @@ namespace
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 								[
 									SNew(SHorizontalBox)
-									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)
-									[
-										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(4.0f, 4.0f)).IsFocusable(false).HAlign(HAlign_Center)
-										.ToolTipText(FText::FromString(TEXT("Every army, fleet and airfield you command, each with a way to go to it. (L)")))
-										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenForces(); } return FReply::Handled(); })
-										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("FORCES"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
-										]
-									]
-									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 3.0f, 0.0f)
-									[
-										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(4.0f, 4.0f)).IsFocusable(false).HAlign(HAlign_Center)
-										.ToolTipText(FText::FromString(TEXT("What every nation did last month, each with a way to go and look. (R)")))
-										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenReports(); } return FReply::Handled(); })
-										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("REPORT"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
-										]
-									]
-									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)
-									[
-										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(4.0f, 4.0f)).IsFocusable(false).HAlign(HAlign_Center)
-										.ToolTipText(FText::FromString(TEXT("Look at your capital. (C, or Home)")))
-										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->GoToCapital(); } return FReply::Handled(); })
-										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("CAPITAL"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
-										]
-									]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("FORCES"), TEXT("Every army, fleet and airfield you command, each with a way to go to it. (L)"), [this]() { Controller->OpenForces(); })]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("REPORT"), TEXT("What every nation did last month, each with a way to go and look. (R)"), [this]() { Controller->OpenReports(); })]
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("GOALS"), TEXT("What winning means for your country, and how far you have got. (O)"), [this]() { Controller->OpenGoals(); })]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("CAPITAL"), TEXT("Look at your capital. (C, or Home)"), [this]() { Controller->GoToCapital(); })]
 								]
 							]
 						]
@@ -2096,6 +2077,17 @@ namespace
 		}
 
 	private:
+		/** One of the small buttons under the minimap. */
+		TSharedRef<SWidget> MapButton(const TCHAR* Label, const TCHAR* Tip, TFunction<void()> Do)
+		{
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(4.0f, 4.0f)).IsFocusable(false).HAlign(HAlign_Center)
+				.ToolTipText(FText::FromString(Tip))
+				.OnClicked_Lambda([this, Do]() { if (Controller.IsValid()) { Do(); } return FReply::Handled(); })
+				[
+					SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
+				];
+		}
+
 		/** Money with its thousands marked off; a minus for a debt, and a plus for a gain when asked for. */
 		static FString Cash(int32 Amount, bool bSigned = false)
 		{
