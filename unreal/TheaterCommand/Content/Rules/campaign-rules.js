@@ -5411,6 +5411,25 @@
     if (!parts.length) return "no ships";
     return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
   }
+  var lookup = null;
+  var lookCols = 0;
+  function seaAt(x, y) {
+    const md = campaign_map_default.seas;
+    if (!lookup) {
+      lookCols = Math.ceil(campaign_map_default.width / md.cell);
+      lookup = new Int8Array(lookCols * md.grid.length).fill(-1);
+      md.grid.forEach((row2, r2) => {
+        let c2 = 0;
+        for (const m of row2.matchAll(/([a-z.])(\d+)/g)) {
+          const v = m[1] === "." ? -1 : m[1].charCodeAt(0) - 97;
+          for (let k = Number(m[2]); k > 0 && c2 < lookCols; k--) lookup[r2 * lookCols + c2++] = v;
+        }
+      });
+    }
+    const c = Math.floor(x / md.cell), r = Math.floor(y / md.cell);
+    if (c < 0 || r < 0 || c >= lookCols || r >= md.grid.length) return -1;
+    return lookup[r * lookCols + c];
+  }
   function setupNavy(g2) {
     const md = campaign_map_default.seas;
     g2.seas = md.zones.map((z, id) => ({ id, key: z.id, name: z.name, x: z.x, y: z.y, adj: z.adj, coast: z.coast, air: z.air ?? 1, narrow: !!z.narrow }));
@@ -5792,6 +5811,9 @@
       }
     }
     return false;
+  }
+  function baseTargets(g2, f) {
+    return g2.regions.filter((r) => r.port && r.seas.length > 0 && r.id !== f.base && allied(g2, f.nat, r.ctrl) && canSailTo(g2, f, r));
   }
   function rebase(g2, f, r) {
     if (!r.port || !r.seas.length || r.id === f.base || !allied(g2, f.nat, r.ctrl) || !canSailTo(g2, f, r)) return false;
@@ -14434,6 +14456,10 @@
     const f = myFleet(g2, id);
     return !!f && sail(g2, f, zone, stance2);
   }
+  function orderRebase(g2, id, region) {
+    const f = myFleet(g2, id);
+    return !!f && rebase(g2, f, g2.regions[region]);
+  }
   function orderShip(g2, c, to) {
     return canOrder(g2, c) && shipMove(g2, c, g2.regions[to]);
   }
@@ -15526,7 +15552,9 @@
         dd: f.ships.dd,
         ss: f.ships.ss,
         // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
-        reach: f.nat === s.human && up ? fleetReach(s, f) : []
+        reach: f.nat === s.human && up ? fleetReach(s, f) : [],
+        // And the friendly ports it could make its new home.
+        bases: f.nat === s.human && up ? baseTargets(s, f).map((r) => r.id) : []
       })),
       // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
       // many groups and aircraft stand on it, or -1 where the fog hides that.
@@ -16339,6 +16367,7 @@
     const [what, id, a, b] = key2.split(":");
     let ok = false;
     if (what === "fleet") ok = orderFleet(s, Number(id), Number(a), b);
+    else if (what === "fleetbase") ok = orderRebase(s, Number(id), Number(a));
     else if (what === "air") ok = orderAir(s, Number(id), a, Number(b));
     else if (what === "airbase") ok = orderAirBase(s, Number(id), Number(a));
     return { ok, note: ok ? "The order is given." : "That order cannot be given now.", view: view() };
@@ -17295,6 +17324,7 @@ ${standing2}`,
   globalThis.TC = {
     raidsFlown,
     towns: townsList,
+    seaAt: (x, y) => ({ sea: seaAt(x, y) }),
     land,
     work,
     force,

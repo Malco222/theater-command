@@ -96,6 +96,8 @@ public:
 
 	/** Rivers, crossings, railways and steep country, as the rules have them. Empty with the stand-in rules. */
 	FLandFeatures Land();
+	/** The sea under a point of the map, or INDEX_NONE for land. */
+	int32 SeaAt(const FVector2D& MapPoint);
 	/** Every province's chief town, what the province pays and how that ranks. */
 	TArray<FTownInfo> Towns();
 

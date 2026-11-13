@@ -409,6 +409,8 @@ public:
 	/** What the fleet in hand does where it is sent: "patrol" or "raid". Changes what it is doing now if it is at sea. */
 	void SetFleetStance(const FString& Stance);
 	void FleetToHarbour();
+	/** Moves the fleet in hand to a new home port. */
+	void FleetToNewBase(int32 RegionId);
 	/** Sends the fleet in hand to a sea, to do there what it has been told (patrol or raid). */
 	void OrderFleetTo(int32 Zone);
 	void ShowShipModel(const FString& Model, const FText& Name);
@@ -618,6 +620,8 @@ private:
 	int32 ProvinceTab = 0;
 	int32 FleetInHand = INDEX_NONE; // the fleet picked up, by its id
 	FString FleetNext = TEXT("patrol");
+	mutable FVector2D SeaAskedAt = FVector2D(-1.0e6, -1.0e6); // where the rules were last asked which sea lies under the pointer
+	mutable int32 SeaAsked = INDEX_NONE;
 	int32 FleetHoverSea = INDEX_NONE; // the sea the pointer is nearest, while a fleet is in hand
 	FVector2D PointerMap = FVector2D::ZeroVector; // where the pointer is on the map
 	bool bPointerOnWater = false;

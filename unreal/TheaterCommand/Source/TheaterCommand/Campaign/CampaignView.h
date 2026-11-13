@@ -140,6 +140,7 @@ struct FViewFleet
 	int32 Battleships = 0, Carriers = 0, Cruisers = 0, Destroyers = 0, Submarines = 0;
 	int32 Home = INDEX_NONE; // the sea its harbour lies on
 	TArray<int32> Reach; // the seas it can sail to this month (the player's own fleets only)
+	TArray<int32> Bases; // the friendly ports it could make its new home
 	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
 };
 

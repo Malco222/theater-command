@@ -1912,9 +1912,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			{
 				FleetToHarbour();
 			}
+			else if (Held && Held->Bases.Contains(PointedRegion))
+			{
+				FleetToNewBase(PointedRegion);
+			}
 			else
 			{
-				Notify(TEXT("A fleet keeps to the sea: right-click one of the ringed seas, or its own harbour to bring it home."), 5.0);
+				Notify(TEXT("A fleet keeps to the sea: right-click one of the ringed seas, a friendly port tinted blue to make it the fleet's new home, or its own harbour to bring it in."), 6.0);
 			}
 		}
 		bRightHeld = false;
@@ -2078,6 +2082,18 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					: Field->Groups == 0 ? FString(TEXT("no aircraft based here"))
 					: FString::Printf(TEXT("%d air group%s, %s aircraft%s"), Field->Groups, Field->Groups == 1 ? TEXT("") : TEXT("s"), *FText::AsNumber(Field->Aircraft).ToString(), Field->bCrowded ? TEXT(" (crowded)") : TEXT(""));
 				Line = FString::Printf(TEXT("%s  \u00B7  %s\nServes %s aircraft: %s.\nClick to open the airfield."), *Field->Word.ToUpper(), *Region.Name, *FText::AsNumber(Field->Holds).ToString(), *Stands);
+			}
+			if (FleetInHand != INDEX_NONE)
+			{
+				const FViewFleet* Held = View.Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
+				if (Held && Held->Base == TipRegion)
+				{
+					Line += FString::Printf(TEXT("\nRight-click: %s returns to harbour here."), *Held->Name);
+				}
+				else if (Held && Held->Bases.Contains(TipRegion))
+				{
+					Line += FString::Printf(TEXT("\nRight-click: %s makes this its home port, and lies in harbour for the month."), *Held->Name);
+				}
 			}
 			HoverTip = FText::FromString(Line);
 		}
@@ -2281,10 +2297,20 @@ void ACampaignPlayerController::JumpToMapShare(const FVector2D& Share)
 
 int32 ACampaignPlayerController::SeaNear(const FVector2D& MapPoint) const
 {
-	int32 Best = INDEX_NONE;
-	double Nearest = TNumericLimits<double>::Max();
-	if (Map.IsValid())
+	// The rules keep the chart of which sea is where: asked again only when the pointer has moved a little.
+	if (FVector2D::DistSquared(MapPoint, SeaAskedAt) < 4.0 && SeaAsked != INDEX_NONE)
 	{
+		return SeaAsked;
+	}
+	int32 Best = INDEX_NONE;
+	if (FCampaignSession* Session = GetSession())
+	{
+		Best = Session->SeaAt(MapPoint);
+	}
+	if (Best == INDEX_NONE && Map.IsValid())
+	{
+		// (off the chart, or on the shore line: the sea whose middle is nearest)
+		double Nearest = TNumericLimits<double>::Max();
 		const TArray<FCampaignSeaZone>& Seas = Map->GetData().Seas;
 		for (int32 Zone = 0; Zone < Seas.Num(); ++Zone)
 		{
@@ -2296,6 +2322,8 @@ int32 ACampaignPlayerController::SeaNear(const FVector2D& MapPoint) const
 			}
 		}
 	}
+	SeaAskedAt = MapPoint;
+	SeaAsked = Best;
 	return Best;
 }
 
@@ -2362,8 +2390,20 @@ void ACampaignPlayerController::LayOutFleet()
 	Tray.FleetNext = FleetNext;
 	Tray.PendingButton = FText::GetEmpty();
 	Tray.Hint = FText::FromString(View.bHumanUp
-		? TEXT("Right-click a ringed sea to send the fleet there, or its own harbour to bring it home. Click anywhere on the land, or press Esc, to let it go.")
+		? TEXT("Right-click a ringed sea to send the fleet there, a port tinted blue to make it the fleet's new home, or its own harbour to bring it in. Esc lets it go.")
 		: TEXT("It is not your month."));
+	// The friendly ports it could move to are tinted, as the ground an army can reach by rail is.
+	{
+		TArray<FReachRegion> Ports;
+		for (int32 PortRegion : Fleet->Bases)
+		{
+			FReachRegion Entry;
+			Entry.Region = PortRegion;
+			Entry.Previous = Fleet->Base;
+			Ports.Add(Entry);
+		}
+		Map->SetReach(View.bHumanUp ? Ports : TArray<FReachRegion>(), true);
+	}
 
 	// A card for each ship. A great fleet has too many destroyers to show one by one: those are dealt in flotillas.
 	struct FClass { int32 Count; const TCHAR* Model; const TCHAR* One; const TCHAR* Many; const TCHAR* Role; bool bCapital; };
@@ -2464,6 +2504,29 @@ void ACampaignPlayerController::SetFleetStance(const FString& Stance)
 		}
 	}
 	RefreshOrders();
+}
+
+void ACampaignPlayerController::FleetToNewBase(int32 RegionId)
+{
+	FCampaignSession* Session = GetSession();
+	const FViewFleet* Fleet = Session ? Session->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; }) : nullptr;
+	if (!Fleet || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(RegionId))
+	{
+		return;
+	}
+	FString Note;
+	const FString Name = Fleet->Name, Port = Map->GetData().Regions[RegionId].Name;
+	if (Session->OrderForce(FString::Printf(TEXT("fleetbase:%d:%d"), FleetInHand, RegionId), Note))
+	{
+		CampaignSounds::Play(this, TEXT("ship_horn"), 0.45f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		RefreshOrders();
+		Notify(FString::Printf(TEXT("%s moves its base to %s, and lies in harbour there for the month."), *Name, *Port), 6.0);
+	}
+	else
+	{
+		Notify(TEXT("The fleet cannot move its base there now."), 5.0);
+	}
 }
 
 void ACampaignPlayerController::FleetToHarbour()

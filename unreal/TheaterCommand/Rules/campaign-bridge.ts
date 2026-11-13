@@ -45,7 +45,7 @@ import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../sr
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
 import {
-  arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
+  arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderRebase, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes, previewAirOrder,
@@ -66,7 +66,7 @@ import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { CROSSINGS, RIVERS, bridgeDown, riverNotes } from '../../../src/campaign/rivers';
 import { RAIL_LINKS, railCut, railNote } from '../../../src/campaign/rails';
-import { fleetReach, landingTargets, whyNotShip } from '../../../src/campaign/navy';
+import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
@@ -190,6 +190,8 @@ function view() {
       bb: f.ships.bb, cv: f.ships.cv, ca: f.ships.ca, dd: f.ships.dd, ss: f.ships.ss,
       // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
       reach: f.nat === s.human && up ? fleetReach(s, f) : [],
+      // And the friendly ports it could make its new home.
+      bases: f.nat === s.human && up ? baseTargets(s, f).map((r) => r.id) : [],
     })),
     // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
     // many groups and aircraft stand on it, or -1 where the fog hides that.
@@ -1054,6 +1056,7 @@ function forceOrder(key: string) {
   const [what, id, a, b] = key.split(':');
   let ok = false;
   if (what === 'fleet') ok = orderFleet(s, Number(id), Number(a), b as Stance);
+  else if (what === 'fleetbase') ok = orderRebase(s, Number(id), Number(a));
   else if (what === 'air') ok = orderAir(s, Number(id), a as AirMission, Number(b));
   else if (what === 'airbase') ok = orderAirBase(s, Number(id), Number(a));
   return { ok, note: ok ? 'The order is given.' : 'That order cannot be given now.', view: view() };
@@ -1987,5 +1990,5 @@ function raidsFlown(turn?: number) {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  raidsFlown, towns: townsList,
+  raidsFlown, towns: townsList, seaAt: (x: number, y: number) => ({ sea: seaUnder(x, y) }),
   land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

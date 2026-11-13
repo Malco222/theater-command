@@ -460,6 +460,14 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetNumberField(TEXT("dd"), Fleet.Destroyers);
 			Entry->TryGetNumberField(TEXT("ss"), Fleet.Submarines);
 			Entry->TryGetNumberField(TEXT("home"), Fleet.Home);
+			const TArray<TSharedPtr<FJsonValue>>* Ports = nullptr;
+			if (Entry->TryGetArrayField(TEXT("bases"), Ports))
+			{
+				for (const TSharedPtr<FJsonValue>& Port : *Ports)
+				{
+					Fleet.Bases.Add(FMath::RoundToInt32(Port->AsNumber()));
+				}
+			}
 			const TArray<TSharedPtr<FJsonValue>>* Seas = nullptr;
 			if (Entry->TryGetArrayField(TEXT("reach"), Seas))
 			{
@@ -1402,6 +1410,17 @@ bool FCampaignSession::OrderForce(const FString& Key, FString& OutNote)
 	Object->TryGetStringField(TEXT("note"), OutNote);
 	TakeView(Object);
 	return bOk;
+}
+
+int32 FCampaignSession::SeaAt(const FVector2D& MapPoint)
+{
+	TSharedPtr<FJsonObject> Object;
+	int32 Sea = INDEX_NONE;
+	if (CallRules(TEXT("seaAt"), FString::Printf(TEXT("[%.1f,%.1f]"), MapPoint.X, MapPoint.Y), Object) && Object.IsValid())
+	{
+		Object->TryGetNumberField(TEXT("sea"), Sea);
+	}
+	return Sea < 0 ? INDEX_NONE : Sea;
 }
 
 TArray<FTownInfo> FCampaignSession::Towns()
