@@ -51,6 +51,7 @@ struct FTrayCard
 	FText Nickname; // empty until the corps has earned one
 	FText Grade; // "Veteran, 65"
 	FString KindId; // inf, arm, art, mot, cav, mtn, eng, fort: for the picture on each division's card
+	FString Ally; // an ally's corps marching with the army: its own country's tag
 	float Morale = 1.0f; // 0..1: how well it holds together
 	// Where the rules keep morale and rest (the grand campaign): both, with their words and why; and each division.
 	bool bMood = false;
@@ -105,6 +106,7 @@ struct FArmyTray
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
 	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast
+	FText JoinButton; // "ASK 1 SLOVAK CORPS TO JOIN": allied corps beside the army that could march with it. Empty when there are none
 	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
 	FText Hint; // what to do next, in a line
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
@@ -420,6 +422,9 @@ public:
 	int32 ArmiesYetToMove() const;
 	/** The list of everything the player commands, each with a way to go to it (L). */
 	void OpenForces();
+	/** Joint armies: asks the allied corps beside the army in hand to march with it; sends one of them home. */
+	void AskAlliesToJoin();
+	void SendBackCorps(int32 CorpsId);
 	/** The adviser's first steps, and the way to send him away. */
 	const FAdviser& GetAdviser() const { return Adviser; }
 	void DismissAdviser() { Adviser.bOn = false; ++Adviser.Revision; }

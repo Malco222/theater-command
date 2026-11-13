@@ -2120,6 +2120,19 @@ namespace
 				[
 					OrderButton(TEXT("BY SEA"), Army.bBySea, [this]() { if (Controller.IsValid()) { Controller->ToggleSea(); } })
 				];
+				// Allied corps beside the army that could be asked to march with it.
+				if (!Army.JoinButton.IsEmpty())
+				{
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(TEXT("An ally's corps standing here can march with your army: it keeps its own flag and pay, but takes your orders, attacks beside your corps, and the ground you take together is yours. It goes home when you send it back, or if it is left a month with none of your troops beside it. It does not sail, dig in or get promoted.")))
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->AskAlliesToJoin(); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Army.JoinButton).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+						]
+					];
+				}
 				// The place clicked once and waiting for the word, and the way to let the army go.
 				TrayOrders->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
 				if (!Army.PendingButton.IsEmpty())
@@ -4191,7 +4204,7 @@ namespace
 
 			// The picture on each card is the game's own model of what the division is: this nation's tank of the
 			// year, its gun, its soldier. Where there is no model yet, a plain drawing stands in.
-			const FString Tag = Controller.IsValid() ? Controller->GetArmyTray().Tag : FString();
+			const FString Tag = !Card.Ally.IsEmpty() ? Card.Ally : Controller.IsValid() ? Controller->GetArmyTray().Tag : FString();
 			TSharedRef<SHorizontalBox> Divisions = SNew(SHorizontalBox);
 			const int32 Count = Card.Parts.Num() > 0 ? FMath::Min(Card.Parts.Num(), 12) : FMath::Clamp(Card.Divisions, 1, 12);
 			for (int32 Division = 0; Division < Count; ++Division)
@@ -4293,6 +4306,15 @@ namespace
 					+ SVerticalBox::Slot().AutoHeight()
 					[
 						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, Card.Ally.IsEmpty() ? 0.0f : 6.0f, 0.0f)
+						[
+							// An ally's corps marching with the army carries its own flag.
+							SNew(SBox).WidthOverride(Card.Ally.IsEmpty() ? 0.0f : 21.0f).HeightOverride(14.0f)
+							.Visibility(Card.Ally.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible)
+							[
+								SNew(SImage).Image(FlagBrush(Card.Ally))
+							]
+						]
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
 						[
 							SNew(STextBlock).Text(Card.Nickname.IsEmpty() ? Card.Name : FText::FromString(FString::Printf(TEXT("%s \u201C%s\u201D"), *Card.Name.ToString(), *Card.Nickname.ToString()))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Ink)
@@ -4302,6 +4324,16 @@ namespace
 							MakeRibbons(Card.Honours, 4)
 						]
 						+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SSpacer)]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 1.0f)).IsFocusable(false)
+							.Visibility(Card.Ally.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible)
+							.ToolTipText(FText::FromString(TEXT("Send this corps back to its own country's command.")))
+							.OnClicked_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->SendBackCorps(Id); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("SEND BACK"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(BrightBrass)
+							]
+						]
 						// The way to the corps' service record: its honours and its diary.
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 4.0f, 0.0f)
 						[

@@ -1232,6 +1232,7 @@ void ACampaignPlayerController::OpenGuide()
 	Add(TEXT("YOUR ARMIES' CARDS"),
 		TEXT("Pick an army up and each corps is a card, with a small card for each of its divisions: its name, its strength and its stripes of experience. ")
 		TEXT("Two bars belong to the whole corps. MORALE rises with victories, on home soil, with friends near and with rest, and falls with defeats, hunger and want of pay; it is worth up to fifteen parts in a hundred in battle. ")
+		TEXT("Where an ally's corps stand beside your army, the tray offers to ASK them TO JOIN: they march and attack under your orders, keep their own flag, and go home when you SEND them BACK or leave them a month without your troops. ")
 		TEXT("REST is spent by marching and fighting. A corps that neither moves nor fights for a whole month rests: it takes replacements half as fast again, and its morale and rest rise. Point at the bars to read why they stand where they do."));
 	Add(TEXT("FLEETS"),
 		TEXT("A fleet is picked up like an army: click its flag, and its ships are dealt as cards. The seas it can reach this month are ringed in brass. Right-click a ringed sea to send it there, or its own harbour to bring it home. ")
@@ -1516,6 +1517,51 @@ void ACampaignPlayerController::AdviserSaw(int32 Step)
 		Adviser.bOn = false; // he has no more to say
 		Notify(TEXT("That is the whole of it. H opens the guide whenever you want it."), 6.0);
 	}
+}
+
+void ACampaignPlayerController::AskAlliesToJoin()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	const int32 Here = ArmyRegion;
+	const bool bJoined = Session->JoinArmy(Here, Note);
+	CampaignSounds::Play(this, bJoined ? TEXT("stamp") : TEXT("click"), 0.6f);
+	if (bJoined)
+	{
+		// They are part of the army now: its cards are dealt again with theirs among them.
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		PickUpArmyIn(Here);
+		RefreshRegionPanel(SelectedRegion);
+	}
+	Notify(Note, 7.0);
+}
+
+void ACampaignPlayerController::SendBackCorps(int32 CorpsId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session)
+	{
+		return;
+	}
+	FString Note;
+	const int32 Here = ArmyRegion;
+	const bool bSent = Session->SendBack(CorpsId, Note);
+	CampaignSounds::Play(this, bSent ? TEXT("stamp") : TEXT("click"), 0.6f);
+	if (bSent)
+	{
+		PickedCorps.Remove(CorpsId);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		if (Here != INDEX_NONE && !PickUpArmyIn(Here))
+		{
+			PutDownArmy();
+		}
+		RefreshRegionPanel(SelectedRegion);
+	}
+	Notify(Note, 6.0);
 }
 
 void ACampaignPlayerController::OpenGoals()
@@ -2856,6 +2902,7 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Divisions = Unit.Divisions;
 		Card.Strength = Unit.Strength;
 		Card.KindId = Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy")) : Unit.Kind;
+		Card.Ally = Unit.Ally;
 		Card.Morale = Unit.Cohesion;
 		if (Unit.Morale >= 0.0f)
 		{
@@ -2946,6 +2993,12 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	Tray.bByRail = bByRail;
 	Tray.bBySea = bBySea;
+	// Allied corps standing beside the army that could be asked to march with it.
+	Tray.JoinButton = FText::GetEmpty();
+	if (const FString* Could = View.Joins.Find(ArmyRegion))
+	{
+		Tray.JoinButton = FText::FromString(FString::Printf(TEXT("ASK %s CORPS TO JOIN"), *Could->ToUpper()));
+	}
 	// The model of one of its corps stands beside the cards: the one last pointed at, or the first.
 	{
 		const bool bStill = Tray.Cards.ContainsByPredicate([this](const FTrayCard& Card) { return Card.CorpsId == ShowCorps; });
@@ -3404,7 +3457,15 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 	FaceOff.bVisible = true;
 	FaceOff.Region = RegionId;
 	FaceOff.Title = FText::FromString(FString::Printf(TEXT("The attack on %s"), *Place));
-	FaceOff.OurName = FText::FromString(Ours ? Ours->Name : View.Human);
+	{
+		// An army with allied corps marching in it is named for all of them: "Germany and Slovakia".
+		FString Named = Ours ? Ours->Name : View.Human;
+		for (int32 Index = 0; Index < Preview.Allies.Num(); ++Index)
+		{
+			Named += (Index == Preview.Allies.Num() - 1 ? TEXT(" and ") : TEXT(", ")) + Preview.Allies[Index];
+		}
+		FaceOff.OurName = FText::FromString(Named);
+	}
 	FaceOff.TheirName = FText::FromString(Theirs ? Theirs->Name : TheirTag);
 	FaceOff.OurColor = Ours ? FLinearColor(Ours->Color) : FLinearColor::Gray;
 	FaceOff.TheirColor = Theirs ? FLinearColor(Theirs->Color) : FLinearColor::Gray;

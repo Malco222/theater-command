@@ -71,7 +71,7 @@ import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm,
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
-import { orderScout as sendScout, previewRaid as weighRaid } from '../../../src/campaign/turn';
+import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoinAll, orderSendBack } from '../../../src/campaign/turn';
 import { airfieldsSeen, announcements, attackOutlook, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
@@ -138,6 +138,11 @@ function view() {
     human: s.human,
     current: current(s),
     humanUp: up,
+    // Where an ally's corps stand beside the player's own and could be asked to march with them: the province, how many, and whose.
+    joins: s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== 'fort').map((c) => c.reg))].map((reg) => {
+      const can = joinOffers(s, reg).filter((o) => !o.why);
+      return { region: reg, n: can.length, nats: [...new Set(can.map((o) => s.nations[o.nat]?.adj ?? o.nat))] };
+    }).filter((x) => x.n > 0) : [],
     // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
     unseen: s.human ? s.regions.filter((r) => seen[r.id] === 0).map((r) => r.id) : [],
     // Whether the player's country is at war with anybody: the music follows it.
@@ -174,7 +179,7 @@ function view() {
         return { id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: '', divs: c.divs, str: mid, org: 0.5, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: Math.round(c.divs * 15000 * mid), xp: 0, grade: '', nick: null, honours: [], dim: false, stale: kn.age, strLo: lo, strHi: hi };
       }
       return ({
-      id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
+      id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
       canOrder: up && canOrder(s, c), supplied: c.supplied, men: men(c),
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
@@ -182,7 +187,7 @@ function view() {
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
       dim: false,
       // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
-      ...(c.nat === s.human ? cardOf(s, c) : {}),
+      ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
     fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({
@@ -612,6 +617,7 @@ function preview(ids: number[], to: number) {
   if (!a) return null;
   // Where the defenders are not all identified, the odds are a band and the ticket leaves out what is not known.
   const look = attackOutlook(s, corps, s.regions[to]);
+  const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
   const named = (c: Corps) => {
     const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
     return kn.level === 'none' ? { id: c.id, nat: c.nat, name: 'A corps not identified', kind: '', divs: 0, men: 0, gen: null }
@@ -620,7 +626,7 @@ function preview(ids: number[], to: number) {
   };
   if (look && !look.exact) {
     return {
-      region: to, prize: prizeLine(s, to), attack: look.odds, defence: 1, odds: look.odds,
+      region: to, allies, prize: prizeLine(s, to), attack: look.odds, defence: 1, odds: look.odds,
       exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: look.note,
       lines: look.lines,
       attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
@@ -628,7 +634,7 @@ function preview(ids: number[], to: number) {
     };
   }
   return {
-    exact: true, lo: a.odds, hi: a.odds, chance: look?.chance ?? 0, chanceLo: look?.chance ?? 0, chanceHi: look?.chance ?? 0, note: '',
+    allies, exact: true, lo: a.odds, hi: a.odds, chance: look?.chance ?? 0, chanceLo: look?.chance ?? 0, chanceHi: look?.chance ?? 0, note: '',
     region: to,
     // What taking the place is worth, in a sentence, for the screen that asks whether to attack.
     prize: prizeLine(s, to),
@@ -1066,6 +1072,22 @@ function forceOrder(key: string) {
 function townsList() {
   const s = game();
   return { towns: townsOfMap(s).map((t) => ({ region: t.region, name: t.name, province: t.province, size: t.size, worth: t.worth, rank: t.rank, signs: t.signs })) };
+}
+
+/** Asks every ally's corps in a province that can to march with the player's army there. */
+function joinArmyAt(region: number) {
+  const s = game();
+  const n = orderJoinAll(s, region);
+  const why = n ? '' : joinOffers(s, region).map((o) => o.why).find(Boolean) ?? 'No ally\'s corps here can join.';
+  return { ok: n > 0, note: n ? `${n} allied corps ${n === 1 ? 'marches' : 'march'} with your army: ${n === 1 ? 'it takes' : 'they take'} your orders, and ${n === 1 ? 'goes' : 'go'} home if left a month without your troops beside ${n === 1 ? 'it' : 'them'}.` : why, view: view() };
+}
+
+/** Sends an ally's corps that marches with the player's army back to its own command. */
+function sendBack(id: number) {
+  const s = game();
+  const c = s.corps.find((x) => x.id === id);
+  const ok = !!c && orderSendBack(s, c);
+  return { ok, note: ok && c ? `${c.name} goes back to ${s.nations[c.nat]?.adj ?? 'its own'} command.` : 'It cannot be sent back now.', view: view() };
 }
 
 /** The rivers, their crossings, the railways and the steep country: geography that does not change. */
@@ -1990,5 +2012,5 @@ function raidsFlown(turn?: number) {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  raidsFlown, towns: townsList, seaAt: (x: number, y: number) => ({ sea: seaUnder(x, y) }),
+  raidsFlown, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => ({ sea: seaUnder(x, y) }),
   land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

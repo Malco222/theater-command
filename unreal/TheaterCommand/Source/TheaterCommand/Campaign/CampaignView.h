@@ -38,6 +38,7 @@ struct FViewCorps
 	FString Elite; // the special formation it is, if it is one: "heavy", "ski", "guards"
 	bool bDim = false; // only glimpsed through the fog of war, or in view but not identified: a flag and no more
 	bool bNear = false; // dim, but in plain view: a corps not identified
+	FString Ally; // an ally's corps that marches with the player's army: its own country
 	int32 Stale = 0; // known from a report this many months old (0: known as it is today)
 	FString General; // empty when the corps has no named commander
 	FString Posture; // stand, dig, back
@@ -259,6 +260,7 @@ struct FCampaignView
 	FString Fallen; // the player's nation, once it has been beaten
 	TArray<FString> RegionHolder; // by region id: the nation that holds it now
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)
+	TMap<int32, FString> Joins; // provinces where allied corps could be asked to join the player's army: how many, and whose ("2 Slovak")
 	TArray<int32> Unseen; // provinces the player has no eyes on, under the fog of war
 	TArray<int32> FreeCapitals; // capitals of fallen countries the player would set free by taking them
 	TArray<FViewAirfield> Airfields; // every airfield the player knows of (the grand campaign; empty in a scenario)
@@ -341,6 +343,7 @@ struct FAttackPreview
 	bool bExact = true; // false where the defenders are not all identified: the odds are then a band
 	float OddsLow = 0.0f, OddsHigh = 0.0f;
 	FString Note; // why the odds are a band, and how to narrow it
+	TArray<FString> Allies; // the allied countries whose corps march in the attack
 	FString Prize; // what taking the place is worth, in a sentence
 	TArray<FTicketLine> Lines;
 	TArray<FBattleUnit> Attackers;

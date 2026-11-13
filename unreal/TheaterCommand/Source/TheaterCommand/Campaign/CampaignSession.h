@@ -96,6 +96,9 @@ public:
 
 	/** Rivers, crossings, railways and steep country, as the rules have them. Empty with the stand-in rules. */
 	FLandFeatures Land();
+	/** Asks the allied corps in a province to march with the player's army there; sends one of them home again. */
+	bool JoinArmy(int32 RegionId, FString& OutNote);
+	bool SendBack(int32 CorpsId, FString& OutNote);
 	/** The sea under a point of the map, or INDEX_NONE for land. */
 	int32 SeaAt(const FVector2D& MapPoint);
 	/** Every province's chief town, what the province pays and how that ranks. */

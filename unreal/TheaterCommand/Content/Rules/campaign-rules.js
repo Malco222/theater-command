@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 3b2dd7e 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 562ac50 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3821,9 +3821,9 @@
   function rivals(g2, mine2, theirs, won, target) {
     var _a;
     const S = g2.stories, me = g2.human;
-    const field = theirs.filter((c) => c.kind !== "fort");
-    if (!field.length) return;
-    const lead2 = [...field].sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
+    const field2 = theirs.filter((c) => c.kind !== "fort");
+    if (!field2.length) return;
+    const lead2 = [...field2].sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
     for (const c of mine2) {
       if (c.nat !== me || c.kind === "fort") continue;
       const R = rivalryOf(g2, c.rival);
@@ -7757,17 +7757,17 @@
   var isCity = (r) => r.terrain === "urban" || r.cap || r.fac > 0 || r.vp >= 2;
   var queued = (g2, nat, item, region) => g2.nations[nat].queue.filter((b) => b.what === "work" && b.item === item && b.region === region).length;
   function worksUpkeep(g2, nat) {
-    let aa = 0, field = 0;
+    let aa = 0, field2 = 0;
     for (const k in g2.flags) {
       if (!k.startsWith("wk:")) continue;
       const [, what, id] = k.split(":");
       if (what !== "aa" && what !== "field" || g2.regions[+id]?.ctrl !== nat) continue;
       if (what === "aa") aa += g2.flags[k];
-      else field += g2.flags[k];
+      else field2 += g2.flags[k];
     }
     const out = [];
     if (aa > 0) out.push({ key: "works:aa", label: "Anti-aircraft guns", amount: aa * ARSENAL.works.aa.upkeep, count: aa });
-    if (field > 0) out.push({ key: "works:field", label: "Airfields", amount: field * ARSENAL.works.field.upkeep, count: field });
+    if (field2 > 0) out.push({ key: "works:field", label: "Airfields", amount: field2 * ARSENAL.works.field.upkeep, count: field2 });
     return out;
   }
   function restoreWorks(g2) {
@@ -9414,6 +9414,91 @@
     hardened: 0.4
   };
 
+  // ../../data/campaign/joint.json
+  var joint_default = {
+    _about: "Joint armies (the grand campaign). The player may ask an ally's field corps that stand in a province with his own to march with his army. They take his orders in his month, move and attack with his corps and take ground for him, and go back to their own command when he sends them back or leaves them behind. 'share' is the most of its field corps one ally will lend at a time: never fewer than 'least' (a country with one corps will lend it), never more than 'most'. An ally keeps 'capital' field corps under its own command in its capital (0: it will lend even those), and lends nothing while it is at war with none of the player's enemies.",
+    share: 0.4,
+    least: 1,
+    most: 8,
+    capital: 0
+  };
+
+  // ../../src/campaign/joint.ts
+  var JOINT = joint_default;
+  var jointRules = (g2) => g2.flags.open === 1;
+  var armyOf = (c) => c.joint ?? c.nat;
+  var field = (c) => !c.dead && c.kind !== "fort";
+  var nameOf = (g2, nat) => g2.nations[nat].name;
+  var lentBy = (g2, nat) => g2.corps.filter((c) => c.nat === nat && !c.dead && c.joint !== void 0);
+  function lendLimit(g2, nat) {
+    const n = g2.corps.reduce((s, c) => s + (c.nat === nat && field(c) ? 1 : 0), 0);
+    return Math.max(0, Math.min(n, JOINT.most, Math.max(JOINT.least, Math.floor(n * JOINT.share))));
+  }
+  function whyNotJoin(g2, c, to = g2.human) {
+    if (!jointRules(g2) || to === null || to !== g2.human || !g2.nations[to]?.alive) return "Joint armies are formed only by the player, in the grand campaign.";
+    if (c.dead) return "That corps is no more.";
+    if (c.nat === to) return "It is your own.";
+    if (!allied(g2, c.nat, to)) return `${nameOf(g2, c.nat)} is not your ally.`;
+    if (c.joint === to) return "It already marches with your army.";
+    if (c.kind === "fort") return "Fortress troops do not leave their works.";
+    const here = g2.regions[c.reg];
+    if (!here.units.some((u) => u.nat === to && field(u))) return "An ally's corps joins an army of yours that stands in the same province.";
+    const foes = g2.nations[to].atWar;
+    if (foes.length && !foes.some((e) => atWar(g2, c.nat, e))) return `${nameOf(g2, c.nat)} is at war with none of your enemies: its corps stay under its own command.`;
+    if (JOINT.capital > 0 && g2.nations[c.nat].capital === c.reg && here.units.filter((u) => u !== c && u.nat === c.nat && field(u) && u.joint === void 0).length < JOINT.capital) {
+      return `${nameOf(g2, c.nat)} keeps a corps of its own in its capital.`;
+    }
+    const limit = lendLimit(g2, c.nat);
+    if (lentBy(g2, c.nat).length >= limit) return limit ? `${nameOf(g2, c.nat)} has lent all the corps it can spare (${limit}).` : `${nameOf(g2, c.nat)} has no corps to spare.`;
+    return null;
+  }
+  function joinArmy(g2, c, to = g2.human) {
+    if (whyNotJoin(g2, c, to) !== null) return false;
+    c.joint = to;
+    delete c.yields;
+    delete c.digs;
+    return true;
+  }
+  function leaveArmy(g2, c) {
+    if (c.joint === void 0) return false;
+    delete c.joint;
+    delete c.yields;
+    delete c.digs;
+    if (!c.dead) g2.flags[`back:${c.id}`] = g2.turn;
+    return true;
+  }
+  function jointHold(g2, c) {
+    if (c.joint !== void 0) {
+      if (c.joint === g2.human && g2.nations[c.joint].alive && allied(g2, c.nat, c.joint)) return true;
+      delete c.joint;
+      return false;
+    }
+    const key2 = `back:${c.id}`;
+    if (g2.flags[key2] === void 0) return false;
+    const now = g2.flags[key2] === g2.turn;
+    delete g2.flags[key2];
+    return now;
+  }
+  function jointMonth(g2, nat) {
+    if (!jointRules(g2)) return;
+    for (const c of g2.corps) {
+      if (c.dead || c.joint === void 0) continue;
+      if (c.joint !== g2.human || !g2.nations[c.joint].alive || !allied(g2, c.nat, c.joint)) {
+        leaveArmy(g2, c);
+        continue;
+      }
+      if (c.joint !== nat) continue;
+      const r = g2.regions[c.reg];
+      if (!r.units.some((u) => u.nat === nat && field(u))) {
+        leaveArmy(g2, c);
+        delete g2.flags[`back:${c.id}`];
+        headline(g2, "info", `Left with none of your troops beside it, ${c.name} at ${r.name} has gone back to ${g2.nations[c.nat].adj} command.`, nat, r.id);
+        continue;
+      }
+      c.ap = c.apMax;
+    }
+  }
+
   // ../../src/campaign/armies.ts
   var DIVISIONS = divisions_default;
   var counter = (nat, kind) => `dn:${nat}:${kind}`;
@@ -9509,7 +9594,8 @@
       age: 0,
       source: null,
       strLo: c.str,
-      strHi: c.str
+      strHi: c.str,
+      joint: c.joint ?? null
     };
   }
   function corpsSeen(g2, c, viewer = g2.human) {
@@ -10676,7 +10762,7 @@
   }
   function assess(g2, attackers2, target, opts = {}) {
     ensureSupply(g2);
-    const attNat = attackers2[0].nat;
+    const attNat = armyOf(attackers2[0]);
     const defenders = hostileUnits(g2, target, attNat);
     const lines = [];
     const aN = new Set(attackers2.map((c) => c.nat)), dN = new Set(defenders.map((c) => c.nat));
@@ -11087,7 +11173,7 @@
     return gone;
   }
   function walkIn(g2, attackers2, target, opts, a, gone) {
-    const attNat = attackers2[0].nat;
+    const attNat = armyOf(attackers2[0]);
     const AN = g2.nations[attNat];
     for (const d of new Set(gone.map((u) => u.nat))) {
       if (AN.lastFight[d] === void 0 || g2.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== void 0 && g2.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g2.turn;
@@ -11133,11 +11219,11 @@
     let a = assess(g2, attackers2, target, opts);
     const gone = giveWay(g2, a, attackers2, target);
     if (gone.length) {
-      if (!hostileUnits(g2, target, attackers2[0].nat).length) return walkIn(g2, attackers2, target, opts, a, gone);
+      if (!hostileUnits(g2, target, armyOf(attackers2[0])).length) return walkIn(g2, attackers2, target, opts, a, gone);
       a = assess(g2, attackers2, target, opts);
     }
     const defenders = a.defenders;
-    const attNat = attackers2[0].nat;
+    const attNat = armyOf(attackers2[0]);
     const defNat = defenders[0]?.nat ?? target.ctrl;
     const AN = g2.nations[attNat];
     const enemyCapital = target.cap && atWar(g2, attNat, target.owner);
@@ -11297,7 +11383,7 @@
     g2.week = weekOf(c, cost);
     place(g2, c, to);
     c.ap = Math.max(0, c.ap - cost);
-    if (!friendly2) capture(g2, to, c.nat);
+    if (!friendly2) capture(g2, to, armyOf(c));
     return true;
   }
   function railReach(g2, c) {
@@ -11736,6 +11822,7 @@
       c.fought = false;
       if (c.gaveWay) delete c.gaveWay;
       c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g2, c) - (fuelSlows(g2, c) ? 1 : 0);
+      if (jointHold(g2, c)) c.ap = 0;
     });
     for (const [reg, lost] of starved) {
       if (lost.men <= 3e4 && g2.flags[`ring:${reg}`] === void 0) continue;
@@ -11760,6 +11847,7 @@
     n.armyPeak = Math.max(n.armyPeak, armySize(g2, nat));
     if (tempo) g2.flags[`tempo:${nat}:${g2.turn}`] = 1;
     storyMonth(g2, nat);
+    jointMonth(g2, nat);
     checkCollapse(g2, nat, n.atWar[0] ?? nat);
   }
   function sovietEvent(g2) {
@@ -11871,15 +11959,15 @@
   function airfieldCard(g2, region, viewer = g2.human) {
     const r = g2.regions[region];
     if (!r || !airWar(g2)) return null;
-    const field = fieldRow(g2, region, viewer, sightOf(g2, viewer));
+    const field2 = fieldRow(g2, region, viewer, sightOf(g2, viewer));
     const E = AIRWAR.fields.engineers, built = g2.flags[`wk:field:${region}`] ?? 0;
-    const build2 = built < E ? `An engineer corps standing here can ${field ? "enlarge it" : "lay one out"} in a month, as far as ${E} levels built. The treasury builds larger ones from the arsenal.` : "It is as large as field engineers can make it. The treasury builds larger ones from the arsenal.";
-    if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${r.name}: no aircraft can be based here.`, build: build2, hidden: false, rows: [] };
-    const hidden = field.groups < 0;
+    const build2 = built < E ? `An engineer corps standing here can ${field2 ? "enlarge it" : "lay one out"} in a month, as far as ${E} levels built. The treasury builds larger ones from the arsenal.` : "It is as large as field engineers can make it. The treasury builds larger ones from the arsenal.";
+    if (!field2) return { region, name: r.name, field: null, note: `There is no airfield at ${r.name}: no aircraft can be based here.`, build: build2, hidden: false, rows: [] };
+    const hidden = field2.groups < 0;
     const rows = hidden ? [] : g2.airFleets.filter((f) => f.base === region && flying(f)).map((f) => groupRow(g2, f, viewer));
     const used = rows.reduce((s, x) => s + x.aircraft, 0);
-    const note3 = `${field.word}: it serves ${num(field.holds)} aircraft${hidden ? ". What flies from here is not known: scout it from the air, or put an agent on watch" : `, and ${used > 0 ? `${num(used)} are based here` : "none are based here"}${field.crowded ? `. It is crowded: only ${pct4(field.holds / used)} of each group can fly` : ""}`}.`;
-    return { region, name: r.name, field, note: note3, build: build2, hidden, rows };
+    const note3 = `${field2.word}: it serves ${num(field2.holds)} aircraft${hidden ? ". What flies from here is not known: scout it from the air, or put an agent on watch" : `, and ${used > 0 ? `${num(used)} are based here` : "none are based here"}${field2.crowded ? `. It is crowded: only ${pct4(field2.holds / used)} of each group can fly` : ""}`}.`;
+    return { region, name: r.name, field: field2, note: note3, build: build2, hidden, rows };
   }
   var mine = (g2, id, nat) => {
     const f = g2.airFleets.find((x) => x.id === id);
@@ -14302,8 +14390,10 @@
     while (g2.turn === t) stepAI(g2);
   }
   function canOrder(g2, c) {
-    return !c.dead && c.nat === g2.human && current(g2) === c.nat && c.kind !== "fort" && c.leave === void 0;
+    if (c.dead || g2.human === null || current(g2) !== g2.human || c.kind === "fort" || c.leave !== void 0) return false;
+    return c.nat === g2.human || c.joint === g2.human && allied(g2, c.nat, g2.human);
   }
+  var ownOrder = (g2, c) => c.nat === g2.human && canOrder(g2, c);
   function reach2(g2, c) {
     const out = /* @__PURE__ */ new Map();
     if (c.kind === "fort" || c.ap <= 0) return out;
@@ -14354,8 +14444,14 @@
     return g2.corps.filter((c) => canOrder(g2, c) && c.ap > 0 && g2.regions[c.reg].nb.includes(target.id));
   }
   function previewAttack(g2, corps, target) {
-    if (!corps.length || !hostileUnits(g2, target, corps[0].nat).length) return null;
-    return assess(g2, corps, target);
+    const going = jointForce(g2, corps, target);
+    if (!going.length || !hostileUnits(g2, target, going[0].nat).length) return null;
+    return assess(g2, going, target);
+  }
+  function jointForce(g2, corps, target) {
+    if (!corps.some((c) => c.joint !== void 0)) return corps;
+    const going = corps.filter((c) => c.joint === void 0 || hostileUnits(g2, target, c.nat).length > 0);
+    return going.sort((a, b) => (a.joint === void 0 ? 0 : 1) - (b.joint === void 0 ? 0 : 1));
   }
   var chanceAt = (odds) => Math.max(0, Math.min(1, (1.2 - 1.2 / Math.max(1e-6, odds)) / 0.4));
   function attackOutlook(g2, corps, target) {
@@ -14396,9 +14492,27 @@
   }
   function orderAttack(g2, corps, target) {
     if (onEve(g2)) return null;
-    const ok = limitAttackers(g2, corps.filter((c) => canOrder(g2, c) && c.ap > 0 && g2.regions[c.reg].nb.includes(target.id)), target);
+    const ok = jointForce(g2, limitAttackers(g2, jointForce(g2, corps.filter((c) => canOrder(g2, c) && c.ap > 0 && g2.regions[c.reg].nb.includes(target.id)), target), target), target);
     if (!ok.length || !hostileUnits(g2, target, ok[0].nat).length) return null;
     return resolveBattle(g2, ok, target);
+  }
+  function whyNotJoinArmy(g2, c) {
+    if (!humanUp(g2)) return "It is not your month.";
+    return whyNotJoin(g2, c, g2.human);
+  }
+  function joinOffers(g2, region) {
+    const me = g2.human, r = g2.regions[region];
+    if (me === null || !r || g2.flags.open !== 1 || !r.units.some((u) => u.nat === me && u.kind !== "fort" && !u.dead)) return [];
+    return r.units.filter((c) => !c.dead && c.nat !== me && c.joint === void 0 && c.kind !== "fort" && allied(g2, c.nat, me)).map((c) => ({ corps: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, why: whyNotJoinArmy(g2, c) }));
+  }
+  function orderJoinAll(g2, region) {
+    if (!humanUp(g2)) return 0;
+    let n = 0;
+    for (const c of [...g2.regions[region]?.units ?? []].sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id)) if (joinArmy(g2, c, g2.human)) n++;
+    return n;
+  }
+  function orderSendBack(g2, c) {
+    return humanUp(g2) && c.joint === g2.human && leaveArmy(g2, c);
   }
   function orderStance(g2, c, posture) {
     if (!canOrder(g2, c)) return false;
@@ -14416,7 +14530,7 @@
     return c.nat === g2.human ? jobsFor(g2, c) : [];
   }
   function orderEngineers(g2, c, job) {
-    return canOrder(g2, c) && orderJob(g2, c, job);
+    return ownOrder(g2, c) && orderJob(g2, c, job);
   }
   function orderStopWork(g2, c) {
     return c.nat === g2.human && humanUp(g2) && cancelJob(g2, c);
@@ -14445,7 +14559,7 @@
     return planLanding(g2, cs, g2.regions[to]);
   }
   function orderLand(g2, cs, to) {
-    if (!cs.length || onEve(g2) || !cs.every((c) => canOrder(g2, c))) return { ok: false, why: "Those corps cannot be given orders now." };
+    if (!cs.length || onEve(g2) || !cs.every((c) => ownOrder(g2, c))) return { ok: false, why: cs.some((c) => c.joint !== void 0) ? "An ally's corps does not sail under your orders: send the landing with your own." : "Those corps cannot be given orders now." };
     return landCorps(g2, cs, g2.regions[to]);
   }
   var myFleet = (g2, id) => {
@@ -14461,7 +14575,7 @@
     return !!f && rebase(g2, f, g2.regions[region]);
   }
   function orderShip(g2, c, to) {
-    return canOrder(g2, c) && shipMove(g2, c, g2.regions[to]);
+    return ownOrder(g2, c) && shipMove(g2, c, g2.regions[to]);
   }
   var myAir = (g2, id) => {
     const f = g2.airFleets.find((x) => x.id === id);
@@ -14598,8 +14712,8 @@
   function orderStopResearch(g2, id) {
     return humanUp(g2) && stopResearch(g2, g2.human, id);
   }
-  function orderTeams(g2, field, teams2) {
-    return humanUp(g2) && setTeams(g2, g2.human, field, teams2);
+  function orderTeams(g2, field2, teams2) {
+    return humanUp(g2) && setTeams(g2, g2.human, field2, teams2);
   }
   function orderBureau(g2) {
     return humanUp(g2) && foundBureau(g2, g2.human);
@@ -14637,7 +14751,7 @@
   }
   function orderPromote(g2, corps) {
     const c = g2.corps.find((x) => x.id === corps);
-    return c && canOrder(g2, c) ? promote(g2, c) : null;
+    return c && ownOrder(g2, c) ? promote(g2, c) : null;
   }
   function orderSkill(g2, general, skill) {
     const gen = myGeneral(g2, general);
@@ -14681,7 +14795,7 @@
     const can = new Set(declarable(g2));
     if (!can.size) return out;
     for (const c of cs) {
-      if (!canOrder(g2, c) || c.ap <= 0) continue;
+      if (!ownOrder(g2, c) || c.ap <= 0) continue;
       for (const j of g2.regions[c.reg].nb) {
         const r = g2.regions[j];
         if (can.has(r.ctrl) && !blocked(g2, c, r, c.reg)) out.set(j, r.ctrl);
@@ -15476,6 +15590,11 @@
       human: s.human,
       current: current(s),
       humanUp: up,
+      // Where an ally's corps stand beside the player's own and could be asked to march with them: the province, how many, and whose.
+      joins: s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== "fort").map((c) => c.reg))].map((reg) => {
+        const can = joinOffers(s, reg).filter((o) => !o.why);
+        return { region: reg, n: can.length, nats: [...new Set(can.map((o) => s.nations[o.nat]?.adj ?? o.nat))] };
+      }).filter((x) => x.n > 0) : [],
       // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
       unseen: s.human ? s.regions.filter((r) => seen[r.id] === 0).map((r) => r.id) : [],
       // Whether the player's country is at war with anybody: the music follows it.
@@ -15511,7 +15630,8 @@
         }
         return {
           id: c.id,
-          nat: c.nat,
+          nat: s.human && c.joint === s.human ? s.human : c.nat,
+          ally: s.human && c.joint === s.human ? c.nat : "",
           name: c.name,
           kind: c.kind,
           elite: c.elite ?? "",
@@ -15533,7 +15653,7 @@
           honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ["#b08d57", "#f2ead6"] })),
           dim: false,
           // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
-          ...c.nat === s.human ? cardOf(s, c) : {}
+          ...c.nat === s.human || s.human && c.joint === s.human ? cardOf(s, c) : {}
         };
       }),
       // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
@@ -15927,6 +16047,7 @@
     const a = previewAttack(s, corps, s.regions[to]);
     if (!a) return null;
     const look = attackOutlook(s, corps, s.regions[to]);
+    const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
     const named2 = (c) => {
       const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
       return kn.level === "none" ? { id: c.id, nat: c.nat, name: "A corps not identified", kind: "", divs: 0, men: 0, gen: null } : kn.level === "report" ? { id: c.id, nat: c.nat, name: `${c.name} (a report ${kn.age} month${kn.age === 1 ? "" : "s"} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null } : { id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
@@ -15934,6 +16055,7 @@
     if (look && !look.exact) {
       return {
         region: to,
+        allies,
         prize: prizeLine(s, to),
         attack: look.odds,
         defence: 1,
@@ -15951,6 +16073,7 @@
       };
     }
     return {
+      allies,
       exact: true,
       lo: a.odds,
       hi: a.odds,
@@ -16376,6 +16499,18 @@
     const s = game();
     return { towns: towns(s).map((t) => ({ region: t.region, name: t.name, province: t.province, size: t.size, worth: t.worth, rank: t.rank, signs: t.signs })) };
   }
+  function joinArmyAt(region) {
+    const s = game();
+    const n = orderJoinAll(s, region);
+    const why = n ? "" : joinOffers(s, region).map((o) => o.why).find(Boolean) ?? "No ally's corps here can join.";
+    return { ok: n > 0, note: n ? `${n} allied corps ${n === 1 ? "marches" : "march"} with your army: ${n === 1 ? "it takes" : "they take"} your orders, and ${n === 1 ? "goes" : "go"} home if left a month without your troops beside ${n === 1 ? "it" : "them"}.` : why, view: view() };
+  }
+  function sendBack(id) {
+    const s = game();
+    const c = s.corps.find((x) => x.id === id);
+    const ok = !!c && orderSendBack(s, c);
+    return { ok, note: ok && c ? `${c.name} goes back to ${s.nations[c.nat]?.adj ?? "its own"} command.` : "It cannot be sent back now.", view: view() };
+  }
   function land() {
     const s = game();
     const steepNames = new Set(GROUND.steep.regions);
@@ -16758,11 +16893,11 @@ ${standing2}`,
     let canMove = 0;
     const armies = [...places.entries()].map(([reg, cs]) => {
       const moving = cs.filter((c) => up && canOrder(s, c) && c.ap > 0);
-      const field = cs.filter((c) => c.kind !== "fort");
+      const field2 = cs.filter((c) => c.kind !== "fort");
       if (moving.length) canMove++;
       const gen = cs.map((c) => generalOf(s, c)?.name).find(Boolean);
       const kinds = /* @__PURE__ */ new Map();
-      for (const c of field) kinds.set(KIND[c.kind]?.label ?? c.kind, (kinds.get(KIND[c.kind]?.label ?? c.kind) ?? 0) + c.divs);
+      for (const c of field2) kinds.set(KIND[c.kind]?.label ?? c.kind, (kinds.get(KIND[c.kind]?.label ?? c.kind) ?? 0) + c.divs);
       const what = [...kinds.entries()].map(([k, n]) => `${n} ${k.toLowerCase()}`).join(", ");
       return {
         sort: (moving.length ? 0 : 1) * 1e6 - cs.reduce((n, c) => n + men(c), 0) / 1e3,
@@ -17140,9 +17275,9 @@ ${standing2}`,
     const s = game();
     return { ok: orderStopResearch(s, id), view: view() };
   }
-  function teams(field, n) {
+  function teams(field2, n) {
     const s = game();
-    return { ok: orderTeams(s, field, n), view: view() };
+    return { ok: orderTeams(s, field2, n), view: view() };
   }
   function bureau() {
     const s = game();
@@ -17324,6 +17459,8 @@ ${standing2}`,
   globalThis.TC = {
     raidsFlown,
     towns: townsList,
+    join: joinArmyAt,
+    sendBack,
     seaAt: (x, y) => ({ sea: seaAt(x, y) }),
     land,
     work,

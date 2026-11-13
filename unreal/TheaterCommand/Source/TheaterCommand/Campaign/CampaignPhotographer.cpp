@@ -230,6 +230,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.bAdviser = true;
 			Shot.Select = Shot.Army = TEXT("Upper Silesia");
 		}
+		if (GrandNation == TEXT("GER"))
+		{
+			// A joint army: the Slovak corps beside the German one asked to march with it.
+			FShot& Shot = Add(TEXT("31u-joint-army"), TEXT("Moravia"), 0.4f);
+			Shot.bJoin = true;
+		}
 		Add(TEXT("31m-forces"), TEXT("@capital"), 0.45f).Room = TEXT("forces");
 		// An enemy capital picked: the prize for taking it. And the wealth view of the whole map.
 		Add(TEXT("31p-prize"), TEXT("Warsaw"), 0.4f).Select = TEXT("Warsaw");
@@ -669,6 +675,23 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		}
 		Controller->PlayNewsreel(TEXT("September 1939"), Cards);
 		Controller->NextNewsCard();
+	}
+	if (Shot.bJoin && Controller->GetSession())
+	{
+		// The first province where an ally's corps could join: its army picked up, and the allies asked.
+		TArray<int32> Places;
+		Controller->GetSession()->GetView().Joins.GetKeys(Places);
+		if (Places.Num() > 0)
+		{
+			const int32 Place = Places[0];
+			Controller->SelectRegion(Place);
+			if (Controller->PickUpArmyIn(Place))
+			{
+				Controller->AskAlliesToJoin();
+				const FVector2D Spot = Table->GetData().Regions[Place].Center;
+				Eye->GoTo(Table->MapToWorld(Spot.X, Spot.Y), Shot.Zoom, true);
+			}
+		}
 	}
 	if (Shot.bFleet && Controller->GetSession())
 	{

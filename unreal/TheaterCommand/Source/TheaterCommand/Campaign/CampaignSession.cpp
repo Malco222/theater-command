@@ -496,6 +496,21 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	}
 	// The airfields (the grand campaign). There the aircraft belong to their airfield, so the table shows one
 	// piece for each airfield with aircraft on it instead of one for each group.
+	const TArray<TSharedPtr<FJsonValue>>* Joins = nullptr;
+	if (Object->TryGetArrayField(TEXT("joins"), Joins))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Joins)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			int32 Region = INDEX_NONE, Count = 0;
+			TArray<FString> Whose;
+			if (Entry.IsValid() && Entry->TryGetNumberField(TEXT("region"), Region) && Entry->TryGetNumberField(TEXT("n"), Count))
+			{
+				Entry->TryGetStringArrayField(TEXT("nats"), Whose);
+				Out.Joins.Add(Region, FString::Printf(TEXT("%d %s"), Count, *FString::Join(Whose, TEXT(" and "))));
+			}
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Unseen = nullptr;
 	if (Object->TryGetArrayField(TEXT("unseen"), Unseen))
 	{
@@ -623,6 +638,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetBoolField(TEXT("canOrder"), C.bCanOrder);
 			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
+			Unit->TryGetStringField(TEXT("ally"), C.Ally);
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);
 			Unit->TryGetNumberField(TEXT("stale"), C.Stale);
 			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
@@ -789,6 +805,7 @@ FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, in
 		Out.OddsLow = static_cast<float>(Low);
 		Out.OddsHigh = static_cast<float>(High);
 		Object->TryGetStringField(TEXT("note"), Out.Note);
+		Object->TryGetStringArrayField(TEXT("allies"), Out.Allies);
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
 	if (Object->TryGetArrayField(TEXT("lines"), Lines))
@@ -1409,6 +1426,32 @@ bool FCampaignSession::OrderForce(const FString& Key, FString& OutNote)
 	Object->TryGetBoolField(TEXT("ok"), bOk);
 	Object->TryGetStringField(TEXT("note"), OutNote);
 	TakeView(Object);
+	return bOk;
+}
+
+bool FCampaignSession::JoinArmy(int32 RegionId, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("join"), FString::Printf(TEXT("[%d]"), RegionId), Object) && Object.IsValid())
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("note"), OutNote);
+		TakeView(Object);
+	}
+	return bOk;
+}
+
+bool FCampaignSession::SendBack(int32 CorpsId, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("sendBack"), FString::Printf(TEXT("[%d]"), CorpsId), Object) && Object.IsValid())
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("note"), OutNote);
+		TakeView(Object);
+	}
 	return bOk;
 }
 
