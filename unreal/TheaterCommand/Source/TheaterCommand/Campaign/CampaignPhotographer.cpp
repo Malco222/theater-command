@@ -413,6 +413,16 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			FShot& Shot = Add(TEXT("43b-after-the-cabinet"), TEXT("@capital"), 0.62f);
 		}
 		{
+			// The options page in a grand campaign, where the war cabinet can be switched off (version 59).
+			FShot& Shot = Add(TEXT("43c-options-with-the-cabinet"), TEXT("@capital"), 0.62f);
+			Shot.bMenu = true;
+			Shot.OpeningTab = 2;
+		}
+		{
+			FShot& Shot = Add(TEXT("43d-after-the-options"), TEXT("@capital"), 0.62f);
+			Shot.bDismiss = true;
+		}
+		{
 			// The secret service, with the capital selected and an agent recruited.
 			FShot& Shot = Add(TEXT("31h-secret-service"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");

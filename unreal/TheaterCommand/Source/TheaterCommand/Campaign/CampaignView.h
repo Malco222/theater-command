@@ -268,6 +268,7 @@ struct FViewStock
 	int32 Months = -1; // months until the depots are empty at this rate; -1 when the stock is steady or growing
 	bool bShort = false; // the need was not met this month
 	FString Tip; // the books in words
+	FString Word; // for the reserve of men: how it stands in a word ("Ample", "Thinning", "Short", "Spent"); empty for oil and supplies
 };
 
 /** A shipping lane drawn over the sea. */
@@ -360,6 +361,13 @@ struct FCampaignView
 	TArray<FString> PageIds; // the rooms the rules set out themselves that are open to him
 	TArray<FString> PageLabels;
 	bool bStores = false; // the player's nation keeps oil and supplies (a great power in the grand campaign)
+	// (Version 59) The reserve of men, where the rules keep one: Stock is the share left of what the war opened with.
+	bool bMen = false;
+	FViewStock Men;
+	// (Version 59) The war cabinet can be switched off, and whether it is.
+	bool bCabinetCan = false, bCabinetOff = false;
+	// (Version 59) The town a directive of the war cabinet names, and the months left: for a small seal on the map.
+	int32 SealRegion = INDEX_NONE, SealLeft = 0;
 	FViewStock Oil;
 	FViewStock Supplies;
 	TArray<FViewLane> Lanes;
@@ -987,6 +995,7 @@ struct FProvinceInfo
 	FString SiegeBy;
 	TArray<FString> SiegeLines;
 	// The places of the province that are prizes of their own (Version 56), in plain lines.
+	FString DirectiveLine; // a directive of the war cabinet that names this province, in a sentence
 	FString PlacesHead;
 	TArray<FString> PlacesLines;
 	FString TownKind; // capital, city, town or village

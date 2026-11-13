@@ -274,6 +274,20 @@ namespace
 			TArray<FBox2D> Taken;
 			for (const FTownPlate& Each : Plates)
 			{
+				if (Each.bSeal)
+				{
+					// A directive's seal: a small brass plate with a dark figure, the months left to carry it out.
+					const FSlateFontInfo SealFont = Font(TEXT("Bold"), 10);
+					const FString Months = Each.Name + TEXT(" mo");
+					const FVector2D SealSize = Measure->Measure(Months, SealFont);
+					const double SealWide = SealSize.X + 14.0, SealHigh = 18.0;
+					const FVector2D Corner(Each.At.X / Scale - SealWide * 0.5, Each.At.Y / Scale);
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(SealWide + 2.0, SealHigh + 2.0), FSlateLayoutTransform(Corner - FVector2D(1.0, 1.0))), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("3A2E12"))));
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(SealWide, SealHigh), FSlateLayoutTransform(Corner)), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("C9A227"))));
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(SealSize, FSlateLayoutTransform(Corner + FVector2D(7.0, 2.0))), Months, SealFont, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("1F1808"))));
+					Taken.Add(FBox2D(Corner - FVector2D(3.0, 2.0), Corner + FVector2D(SealWide + 3.0, SealHigh + 2.0)));
+					continue;
+				}
 				if (Each.bAirfield)
 				{
 					// An airfield in use: a small plate with a little aircraft drawn on it and the number of groups.
@@ -639,8 +653,15 @@ namespace
 							[
 								SNew(SHorizontalBox)
 								.Visibility_Lambda([this]() { return StoresShown() ? EVisibility::Visible : EVisibility::Collapsed; })
-								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)[MakeGauge(TEXT("OIL"), true)]
-								+ SHorizontalBox::Slot().AutoWidth()[MakeGauge(TEXT("SUPPLIES"), false)]
+								+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)[MakeGauge(TEXT("OIL"), 0)]
+								+ SHorizontalBox::Slot().AutoWidth()[MakeGauge(TEXT("SUPPLIES"), 1)]
+							]
+							// The reserve of men (version 59), for every nation that keeps one: a line of its own.
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								.Visibility_Lambda([this]() { return StockOf(2) ? EVisibility::Visible : EVisibility::Collapsed; })
+								+ SHorizontalBox::Slot().AutoWidth()[MakeGauge(TEXT("MEN"), 2)]
 							]
 						]
 					]
@@ -2242,6 +2263,14 @@ namespace
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 						[
 							SNew(STextBlock).Text(Info.SiegeText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.12f)
+						];
+					}
+					if ((ProvinceTab == 0 || !bProvince) && !Info.DirectiveText.IsEmpty())
+					{
+						// A directive of the war cabinet names this province.
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.DirectiveText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(BrightBrass).AutoWrapText(true).LineHeightPercentage(1.12f)
 						];
 					}
 					if ((ProvinceTab == 0 || !bProvince) && !Info.PlacesText.IsEmpty())
@@ -4466,26 +4495,27 @@ namespace
 			return Controller.IsValid() && Controller->GetStock(true) != nullptr;
 		}
 
-		const FViewStock* StockOf(bool bOil) const
+		/** Which: 0 oil, 1 supplies, 2 the reserve of men. */
+		const FViewStock* StockOf(int32 Which) const
 		{
-			return Controller.IsValid() ? Controller->GetStock(bOil) : nullptr;
+			return !Controller.IsValid() ? nullptr : Which == 2 ? Controller->GetMen() : Controller->GetStock(Which == 0);
 		}
 
 		/** A small gauge on the date plate: a stock's name, how full its depots are, and how long it lasts. */
-		TSharedRef<SWidget> MakeGauge(const TCHAR* Label, bool bOil)
+		TSharedRef<SWidget> MakeGauge(const TCHAR* Label, int32 Which)
 		{
-			auto Low = [this, bOil]()
+			auto Low = [this, Which]()
 			{
-				const FViewStock* Stock = StockOf(bOil);
+				const FViewStock* Stock = StockOf(Which);
 				return Stock && (Stock->bShort || (Stock->Months >= 0 && Stock->Months <= 6));
 			};
-			auto Share = [this, bOil]()
+			auto Share = [this, Which]()
 			{
-				const FViewStock* Stock = StockOf(bOil);
+				const FViewStock* Stock = StockOf(Which);
 				return Stock && Stock->Cap > 0.0f ? FMath::Clamp(Stock->Stock / Stock->Cap, 0.0f, 1.0f) : 0.0f;
 			};
 			return SNew(SHorizontalBox)
-				.ToolTipText_Lambda([this, bOil]() { const FViewStock* Stock = StockOf(bOil); return Stock ? FText::FromString(Stock->Tip) : FText::GetEmpty(); })
+				.ToolTipText_Lambda([this, Which]() { const FViewStock* Stock = StockOf(Which); return Stock ? FText::FromString(Stock->Tip) : FText::GetEmpty(); })
 				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
 				[
 					SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 160))
@@ -4510,12 +4540,16 @@ namespace
 				[
 					SNew(STextBlock).Font(Font(TEXT("Regular"), 10))
 					.ColorAndOpacity_Lambda([Low]() { return FSlateColor(Low() ? Alarm : Muted); })
-					.Text_Lambda([this, bOil]()
+					.Text_Lambda([this, Which]()
 					{
-						const FViewStock* Stock = StockOf(bOil);
+						const FViewStock* Stock = StockOf(Which);
 						if (!Stock)
 						{
 							return FText::GetEmpty();
+						}
+						if (!Stock->Word.IsEmpty())
+						{
+							return FText::FromString(Stock->Word.ToLower()); // (the reserve of men: how it stands, in a word)
 						}
 						if (Stock->bShort || Stock->Months == 0)
 						{

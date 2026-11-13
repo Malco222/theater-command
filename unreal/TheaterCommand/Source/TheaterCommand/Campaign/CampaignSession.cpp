@@ -467,6 +467,35 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Out.PageLabels.Add(Label);
 		}
 	}
+	{
+		const TSharedPtr<FJsonObject>* Men = nullptr;
+		if (Object->TryGetObjectField(TEXT("men"), Men)) // null where the rules keep no reserve of men
+		{
+			Out.bMen = true;
+			double Share = 0.0;
+			(*Men)->TryGetNumberField(TEXT("share"), Share);
+			Out.Men.Stock = static_cast<float>(Share);
+			Out.Men.Cap = 1.0f;
+			(*Men)->TryGetBoolField(TEXT("short"), Out.Men.bShort);
+			(*Men)->TryGetStringField(TEXT("word"), Out.Men.Word);
+			(*Men)->TryGetStringField(TEXT("tip"), Out.Men.Tip);
+		}
+		const TSharedPtr<FJsonObject>* Cabinet = nullptr;
+		if (Object->TryGetObjectField(TEXT("cabinet"), Cabinet))
+		{
+			(*Cabinet)->TryGetBoolField(TEXT("can"), Out.bCabinetCan);
+			(*Cabinet)->TryGetBoolField(TEXT("off"), Out.bCabinetOff);
+		}
+		const TSharedPtr<FJsonObject>* Seal = nullptr;
+		if (Object->TryGetObjectField(TEXT("seal"), Seal))
+		{
+			double Region = -1.0, Left = 0.0;
+			(*Seal)->TryGetNumberField(TEXT("region"), Region);
+			(*Seal)->TryGetNumberField(TEXT("left"), Left);
+			Out.SealRegion = FMath::RoundToInt32(Region);
+			Out.SealLeft = FMath::RoundToInt32(Left);
+		}
+	}
 	const TSharedPtr<FJsonObject>* Stores = nullptr;
 	if (Object->TryGetObjectField(TEXT("stores"), Stores)) // null for a small country and in a scenario
 	{
@@ -1456,6 +1485,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 			(*Siege)->TryGetStringArrayField(TEXT("lines"), Info.SiegeLines);
 		}
 	}
+	Object->TryGetStringField(TEXT("directive"), Info.DirectiveLine);
 	{
 		const TSharedPtr<FJsonObject>* Places = nullptr;
 		if (Object->TryGetObjectField(TEXT("places"), Places))

@@ -53,6 +53,7 @@ import {
   fleetsInSight, wingsOfFleet,
   prizesOf, prizesOnMap, whyNotWreckPrize, orderWreck, whyNotBurnOrder, orderBurn, orderScorchPolicy,
   governmentOf, whyNotAppointMinister, orderAppoint, whyNotOrderDecree, orderDecree, whyNotSetAsideDirective, orderSetAside,
+  manpowerOf, cabinetIsOff, orderCabinet,
   townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
@@ -283,6 +284,8 @@ function view() {
           .filter((m) => m.by || m.burning);
       } catch { return []; }
     })(),
+    // (Version 59) The town a directive of the war cabinet names, and the months left: for a small seal on the map.
+    seal: (() => { try { const d = governmentOf(s)?.directive; return d && d.region !== undefined && d.region >= 0 ? { region: d.region, left: d.left } : null; } catch { return null; } })(),
     // Towns under siege that the player knows of (Version 54): region, 1 if the ring is closed, months of stores left.
     sieges: (() => { try { return siegesInSight(s).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]); } catch { return []; } })(),
     // Where battles were lately fought, for the scars they leave on the table: three numbers for each place, the
@@ -328,6 +331,22 @@ function view() {
     // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
     // the months it will last and its books in words, and every shipping lane to draw over the sea.
     stores: storesOf(s),
+    // (Version 59) The reserve of men: how much of what the war opened with is left, in a word and in a sentence.
+    men: (() => {
+      try {
+        const m = manpowerOf(s);
+        if (!m) return null;
+        const words = (n: number): string => (n >= 1000000 ? `${(n / 1000000).toFixed(1).replace(/\.0$/, '')} million` : Math.round(n / 1000) * 1000 >= 1000 ? `${(Math.round(n / 1000) * 1000).toLocaleString('en-US')}` : `${Math.round(n)}`);
+        return {
+          share: Math.max(0, Math.min(1, m.share)), word: m.word, short: m.word === 'Short' || m.word === 'Spent',
+          tip: [m.line, `That is enough for about ${Math.floor(m.divs)} division${Math.floor(m.divs) === 1 ? '' : 's'}.`,
+            `Each month ${words(m.classMen)} more come of age${m.home < 0.995 ? `, from the ${Math.round(m.home * 100)}% of the homeland still in your hands` : ''}.`,
+            `Drawn since the campaign opened: ${words(m.drawn)}.`, 'Every new corps and every replacement comes out of this reserve. When it is spent, nothing new can be raised.'].join('\n'),
+        };
+      } catch { return null; }
+    })(),
+    // (Version 59) The war cabinet can be switched off by a player who wants the war without the politics.
+    cabinet: (() => { try { const off = cabinetIsOff(s); return s.human && s.flags.open === 1 ? { can: true, off } : { can: false, off: false }; } catch { return { can: false, off: false }; } })(),
     lanes: s.flags.open === 1 ? [
       ...shippingLanes(s).filter((l) => l.kind === 'sea' && l.path.length > 1 && l.state !== 'idle').map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })),
       // The player's trade routes, over land and sea, in gold: red where one is cut.
@@ -1154,6 +1173,13 @@ function province(id: number) {
     // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
     // The town as a fortress (Version 54): what it adds to its defenders, and how its siege stands, in plain lines.
     siege: (() => { try { const v = townSiege(s, r.id); return v ? { town: v.town, by: v.by ? s.nations[v.by]?.name ?? v.by : '', lines: v.lines, inside: v.inside, room: v.room } : null; } catch { return null; } })(),
+    // (Version 59) A directive of the war cabinet that names this province: said on its panel, with the months left.
+    directive: (() => {
+      try {
+        const d = governmentOf(s)?.directive;
+        return d && d.region === r.id ? `The war cabinet's directive: ${d.title}. ${d.left <= 1 ? 'It is due this month.' : `${d.left} months left.`} ${d.progress}` : '';
+      } catch { return ''; }
+    })(),
     // The places of the province that are prizes of their own (Version 56), in plain lines.
     places: placesOf(s, r.id),
     jobs: (() => {
@@ -1320,6 +1346,8 @@ function placeJobs(s: Game, region: number): { key: string; label: string; detai
 
 /** The wreck order the player has been asked to confirm: province, kind and month. */
 let wreckAsked = '';
+/** The appointment or decree the player has been asked to confirm, and the month. */
+let cabinetAsked = '';
 
 /** Carries out one of the works a province offers (see province().jobs). */
 function work(key: string, region: number) {
@@ -1544,7 +1572,9 @@ function arsenal(region = -1) {
     region: s.regions[region]?.name ?? '',
     offers: arsenalOffers(s, region).map((o) => ({
       key: o.key, group: o.group, label: o.label, blurb: o.blurb, size: o.size, months: o.months,
-      cost: shown(o.cost), upkeep: shown(o.upkeep), at: o.at, where: s.regions[o.at]?.name ?? '', note: o.note,
+      cost: shown(o.cost), upkeep: shown(o.upkeep), at: o.at, where: s.regions[o.at]?.name ?? '',
+      // (Version 59: what it takes from the reserve of men, said with its note)
+      note: [o.note, (o as { men?: number }).men ? `Takes ${Math.round((o as { men?: number }).men!).toLocaleString('en-US')} men from the reserve.` : ''].filter(Boolean).join(' '),
       why: up ? o.why : 'It is not your month.', poor: o.poor,
     })),
     orders: s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) })),
@@ -1716,6 +1746,13 @@ function alertsOf(s: Game): string[] {
   const act = lastAct(s);
   if (act?.winner) out.push(`${s.nations[act.winner]?.name ?? act.winner} has won the world.`);
   else if (act?.open && !act.peace) out.push('The war between the alliances is decided. Open DIPLOMACY and choose THE LAST ACT.');
+  // (Version 59) The reserve of men running low, and a cabinet that has begun to doubt the player.
+  try {
+    const m = manpowerOf(s);
+    if (m && (m.word === 'Short' || m.word === 'Spent')) out.push(m.word === 'Spent' ? 'The reserve of men is spent: nothing new can be raised until more come of age.' : `The reserve of men is short. ${m.line}`);
+    const gov = governmentOf(s);
+    if (gov?.mine && gov.doubts) out.push(`The cabinet doubts you.${gov.withheld ? ` ${gov.withheld}` : ''} Open DIPLOMACY, THE CABINET.`);
+  } catch { /* neither rule in this game */ }
   return out;
 }
 
@@ -2403,10 +2440,17 @@ function cabinetPage(s: Game): Page | null {
   const d = v.directive;
   const directive: PageRow[] = d ? [{
     nat: s.nations[d.from] ? d.from : v.nat, title: `${d.title}  \u00B7  ${d.left <= 1 ? 'due this month' : `${months(d.left)} left`}`,
-    lines: [d.text, `Set by ${d.by.replace(/^The /, 'the ')}, to be done by the end of ${turnToDate(d.due).label}.`, d.progress, `Reward: ${d.reward}.`.replace(/\.\.$/, '.')],
+    lines: [d.text, `Set by ${d.by.replace(/^The /, 'the ')}, to be done by the end of ${turnToDate(d.due).label}.`, d.progress, `Reward: ${d.reward}.`.replace(/\.\.$/, '.'),
+      (d as { hard?: boolean }).hard ? 'The cabinet knows the place is strongly held: it has given more time and a larger reward.' : '',
+      (d as { again?: boolean }).again ? 'The cabinet has asked for this before.' : ''].filter(Boolean),
     buttons: [
       ...(d.region !== undefined && d.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? 'the place'}.` }] : []),
-      (() => { const why = up ? whyNotSetAsideDirective(s) : notNow; return { label: 'SET IT ASIDE', act: 'cabinet:aside', ok: why === null, tip: why ?? `Tells the cabinet it will not be done. Costs ${d.price} of its trust at once, the same as letting it lapse, and the next directive comes sooner.`, danger: true }; })(),
+      (() => {
+        const why = up ? whyNotSetAsideDirective(s) : notNow;
+        const aside = (d as { asidePrice?: number }).asidePrice ?? d.price, next = (d as { asideNext?: number }).asideNext;
+        return { label: 'SET IT ASIDE', act: 'cabinet:aside', ok: why === null, danger: true,
+          tip: why ?? `Tells the cabinet it will not be done. Costs ${aside} of its trust at once${aside < d.price ? `, where letting it lapse would cost ${d.price}` : ''}${next !== undefined ? `. The next directive would then be set in ${turnToDate(next).label}` : ''}.` };
+      })(),
     ],
   }] : [];
   const offices: PageRow[] = v.seats.map((seat) => ({
@@ -2430,8 +2474,8 @@ function cabinetPage(s: Game): Page | null {
     id: 'cabinet', title: 'THE CABINET',
     // (the headline is one short line: the screen cuts a long one off)
     headline: `Trust ${Math.round(v.trust)} of 100  \u00B7  ${v.trustWord}`,
-    note: `${v.form.name}. Political capital ${Math.floor(v.capital)} of ${v.capitalMost}, +${v.capitalMonth.toFixed(1)} a month. ${v.form.blurb} ${falling ? `The cabinet's trust is at ${v.fallsAt} or under: if it stays there for ${months(v.crisisMonths)} running the cabinet falls (it has been there for ${months(v.low)}).` : `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. At ${v.fallsAt} or under for ${months(v.crisisMonths)} running, the cabinet falls.`} Directives carried out: ${v.done}. Missed or set aside: ${v.missed}.`,
-    top: [],
+    note: `${v.form.name}${(v as { since?: number }).since !== undefined ? `, in office since ${turnToDate((v as { since?: number }).since!).label}` : ''}. Political capital ${Math.floor(v.capital)} of ${v.capitalMost}, +${v.capitalMonth.toFixed(1)} a month. ${(v as { doubts?: boolean }).doubts ? `THE CABINET DOUBTS YOU. ${(v as { withheld?: string | null }).withheld ?? ''} ` : ''}${v.form.blurb} ${falling ? `The cabinet's trust is at ${v.fallsAt} or under: if it stays there for ${months(v.crisisMonths)} running the cabinet falls (it has been there for ${months(v.low)}).` : `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. At ${v.fallsAt} or under for ${months(v.crisisMonths)} running, the cabinet falls.`} Directives carried out: ${v.done}. Missed or set aside: ${v.missed}.`,
+    top: [{ label: 'PLAY WITHOUT THE CABINET', act: 'cabinet:switch:off', ok: true, danger: true, tip: 'Switches the war cabinet off: no ministers, decrees, trust or directives, and nothing they moved is moved. A standing directive is withdrawn without blame. You can switch it on again in any month, from MENU, OPTIONS.' }],
     sections: [
       { heading: 'THE DIRECTIVE', text: d ? '' : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months(v.nextIn)}.` : 'The cabinet is weighing the next.'}`, rows: directive },
       { heading: 'THE FOUR OFFICES', text: `A new minister costs ${v.appointCost} political capital. Each brings something and costs something.`, rows: offices },
@@ -2506,6 +2550,22 @@ function act(action: string, region = -1) {
   if (part[0] === 'cabinet') {
     // The government (Version 57): a minister appointed, a decree, or the directive set aside.
     const v = governmentOf(s);
+    if (part[1] === 'switch') {
+      // The cabinet switched off or on (Version 59): it takes hold at once, in any month.
+      const on = part[2] === 'on';
+      ok = orderCabinet(s, on);
+      note = ok ? (on ? 'The war cabinet sits again, as it was left. It will set its next directive in a few months.' : 'The war cabinet is switched off. Switch it on again from MENU, OPTIONS.') : (on ? 'The war cabinet is sitting already.' : 'The war cabinet is switched off already.');
+      return { ok, note, fly, flies, open, view: view() };
+    }
+    // (an appointment or a decree that costs political capital is asked twice: the first press says what it spends)
+    const spends = part[1] === 'appoint' ? (v?.appointCost ?? 0) : part[1] === 'decree' ? ((): number => { const t = v?.tracks.find((x) => x.id === part[2]); const i = Number(part[3]); return t && i > t.at ? t.steps[i]?.cost ?? 0 : 0; })() : 0;
+    const refused = part[1] === 'appoint' ? whyNotAppointMinister(s, part[2], part[3]) : part[1] === 'decree' ? whyNotOrderDecree(s, part[2], Number(part[3])) : 'x';
+    const asking = `${action}:${s.turn}`;
+    if (spends > 0 && !refused && cabinetAsked !== asking) {
+      cabinetAsked = asking;
+      return { ok: false, note: `That spends ${spends} political capital of the ${Math.floor(v?.capital ?? 0)} you hold. Press it again to carry it.`, fly, flies, open, view: view() };
+    }
+    cabinetAsked = '';
     if (part[1] === 'appoint') {
       const why = whyNotAppointMinister(s, part[2], part[3]);
       const seat = v?.seats.find((x) => x.id === part[2]);

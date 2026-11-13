@@ -35,6 +35,7 @@ struct FRegionPanelInfo
 	FText ProvinceNote;
 	FText SiegeTitle, SiegeText; // the town as a fortress, and how its siege stands
 	FText PlacesTitle, PlacesText; // the places of the province that are prizes of their own, and scorched earth
+	FText DirectiveText; // a directive of the war cabinet that names this province
 	TArray<FProvinceOption> Options;
 	/** The heading over those: "PROVINCE", or "ORDERS" for a fleet or an air fleet. */
 	FText OptionsTitle = FText::FromString(TEXT("PROVINCE"));
@@ -214,6 +215,7 @@ struct FTownPlate
 	bool bCapital = false;
 	bool bFar = false; // seen from far off: a small plate
 	bool bAirfield = false; // not a town at all: the badge of an airfield with air groups based on it (Name is how many)
+	bool bSeal = false; // not a town either: the seal on the town a directive of the war cabinet names (Name is the months left)
 	int32 Rank = 0;
 };
 
@@ -501,6 +503,8 @@ public:
 	float GetMoonlight() const;
 	/** True where whoever stands a month digs in unasked (the grand campaign): the tray then offers stand, or fall back. */
 	bool IsAutoDig() const;
+	/** The reserve of men, where the rules keep one (the grand campaign); null otherwise. */
+	const FViewStock* GetMen() const;
 	void JumpToMapShare(const FVector2D& Share);
 	bool IsMapShown() const;
 	/** A fleet in hand: picked up like an army, sent to a sea with a right-click, its ships shown as cards. */

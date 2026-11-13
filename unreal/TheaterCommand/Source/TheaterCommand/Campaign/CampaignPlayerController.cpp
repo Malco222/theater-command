@@ -189,6 +189,17 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 		TActorIterator<ACampaignEnvironment> Room(World);
 		Keeping = Room ? Room->GetTimeKeeping() : 0;
 	}
+	// The war cabinet (the grand campaign): a player who wants the war without the politics switches it off.
+	// (This one belongs to the campaign and is saved with it, not with the other options. It stands first, where it
+	// is seen without scrolling.)
+	if (const FCampaignSession* Session = GetSession())
+	{
+		if (Session->IsRunning() && Session->GetView().bCabinetCan)
+		{
+			const bool bSits = !Session->GetView().bCabinetOff;
+			Add(TEXT("cabinet"), TEXT("The war cabinet"), TEXT("Ministers, decrees, the cabinet's trust and its directives. Off: none of it, and nothing it moved is moved. It can be switched in any month, and this campaign remembers it."), bSits ? TEXT("ON") : TEXT("OFF"), bSits);
+		}
+	}
 	Add(TEXT("music"), TEXT("Music"), TEXT("The game's own score, which follows the war. Key M."), bMusic ? TEXT("ON") : TEXT("OFF"), bMusic);
 	Add(TEXT("loud"), TEXT("How loud the music plays"), TEXT("From soft, under the sounds of the table, to full."), Loud == 0 ? TEXT("SOFT") : Loud == 1 ? TEXT("MIDDLE") : TEXT("FULL"), bMusic);
 	Add(TEXT("sounds"), TEXT("Sounds"), TEXT("Boots, engines, guns, aircraft and the click of every button. Key N."), CampaignSounds::IsOn() ? TEXT("ON") : TEXT("OFF"), CampaignSounds::IsOn());
@@ -287,6 +298,24 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("colour") && Map.IsValid())
 	{
 		Map->SetColourStrength((Map->GetColourStrength() + 1) % 3);
+	}
+	else if (Id == TEXT("cabinet"))
+	{
+		if (FCampaignSession* Session = GetSession())
+		{
+			FString Note;
+			const bool bSwitchOn = Session->GetView().bCabinetOff;
+			if (Session->Act(bSwitchOn ? TEXT("cabinet:switch:on") : TEXT("cabinet:switch:off"), INDEX_NONE, Note))
+			{
+				ShowWar(Session->GetView(), TArray<FCorpsMove>());
+				RefreshOrders();
+			}
+			if (!Note.IsEmpty())
+			{
+				Notify(Note, 6.0);
+			}
+		}
+		return; // (kept by the campaign, not with the options)
 	}
 	SaveOptions();
 }
@@ -1251,6 +1280,12 @@ void ACampaignPlayerController::StopTech(const FString& Id)
 	bResearchOpen = Research.bValid;
 }
 
+const FViewStock* ACampaignPlayerController::GetMen() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Session->GetView().bMen && !Session->GetView().Human.IsEmpty() ? &Session->GetView().Men : nullptr;
+}
+
 bool ACampaignPlayerController::IsAutoDig() const
 {
 	const FCampaignSession* Session = GetSession();
@@ -1410,6 +1445,21 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		}
 	}
 	Out.Sort([](const FTownPlate& A, const FTownPlate& B) { return A.Rank > B.Rank; });
+	// The town a directive of the war cabinet names wears a small brass seal with the months left on it, at any height.
+	if (View.SealRegion != INDEX_NONE && Data.Regions.IsValidIndex(View.SealRegion))
+	{
+		const FVector2D Place = Data.Regions[View.SealRegion].Center;
+		FVector2D Screen;
+		if (ProjectWorldLocationToScreen(Map->MapToWorld(Place.X, Place.Y, 0.0) + FVector(0.0, 0.0, 3.0 * Map->UnitScale), Screen, false)
+			&& Screen.X > -40.0 && Screen.X < Width + 40.0 && Screen.Y > -20.0 && Screen.Y < Height + 20.0)
+		{
+			FTownPlate& Seal = Out.AddDefaulted_GetRef();
+			Seal.At = Screen - FVector2D(0.0, 44.0);
+			Seal.Name = FString::FromInt(FMath::Max(View.SealLeft, 0));
+			Seal.bSeal = true;
+			Seal.Rank = 1000; // (before any name plate: nothing crowds it out)
+		}
+	}
 	// An airfield with air groups based on it wears a small badge: an aircraft and how many groups fly from it, on
 	// its holder's colour. From working height and closer; from far off the map is left clear. (The groups
 	// themselves are seen by clicking the airfield: no aircraft piece stands on the map for them.)
@@ -5519,6 +5569,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 				RegionPanel.SiegeTitle = FText::FromString(Province.SiegeBy.IsEmpty() ? FString(TEXT("THE TOWN AS A FORTRESS")) : FString::Printf(TEXT("BESIEGED BY %s"), *Province.SiegeBy.ToUpper()));
 				RegionPanel.SiegeText = FText::FromString(FString::Join(Province.SiegeLines, TEXT("\n")));
 			}
+			RegionPanel.DirectiveText = FText::FromString(Province.DirectiveLine);
 			if (Province.PlacesLines.Num() > 0)
 			{
 				RegionPanel.PlacesTitle = FText::FromString(Province.PlacesHead.IsEmpty() ? FString(TEXT("PLACES OF THEIR OWN")) : Province.PlacesHead);
