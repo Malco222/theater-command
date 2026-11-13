@@ -10,6 +10,7 @@ import { KIND, type Corps, type Game, type Kind, type Region, type ShipClass, ty
 import { allied, atWar, bloc, headline } from './game';
 import { CLASSES, atSea, laneLoss, oreRoute, zoneOf } from './navy';
 import { workingFactories } from './rails';
+import { prizeTaker } from './prizes';
 import { TECH } from './tech';
 
 export type Good = 'oil' | 'sup';
@@ -339,7 +340,8 @@ function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[]
   if (good === 'oil') {
     let own = 0, nOwn = 0, taken = 0, nTaken = 0;
     for (const r of g.regions) {
-      if (!r.oil || r.ctrl !== nat) continue;
+      // The wells lie outside the town: an army that holds the field round it has them, though the town holds (prizes.ts).
+      if (!r.oil || prizeTaker(g, r, 'oil') !== nat) continue;
       if (r.owner === nat) { own += fieldYield(g, r, nat); nOwn++; } else { taken += fieldYield(g, r, nat); nTaken++; }
     }
     // The wells and plants at home work for as long as the homeland is held.

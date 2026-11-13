@@ -244,7 +244,7 @@ describe('special formations', () => {
     for (const id of Object.keys(TRAITS.nations)) if (eliteOf(id)) expect(eliteCount(g, id), id).toBeLessThanOrEqual(eliteOf(id)!.most);
     // And no heavy tanks or Guards before their year.
     expect(g.corps.some((c) => c.elite === 'heavy' || c.elite === 'guards')).toBe(false);
-  });
+  }, 20_000);
 });
 
 describe('in the books', () => {

@@ -22,11 +22,13 @@ import {
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
   garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
+  orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { INTEL, armyKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
 import { SIEGE, besiegers, garrisonOf, guardMen, salliers, siegeRules, stormForce, townHitText } from '../siege';
+import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { CIVIC, civicSum, type CivicOffer, type PlotView } from '../buildings';
 import { dealsOf, housesOf, tradePath, tradeRules, type TradeOffer, type TradeRow } from '../trade';
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
@@ -499,7 +501,7 @@ function mount(): void {
         <div class="passing" id="passing"></div>
         <div class="alerts" id="alerts"></div>
         <div class="tray" id="tray"></div>
-        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfree" hidden><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-3px;margin-right:4px"><circle r="5.2" fill="none" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="2.6 1.8"/></svg>Fallen capital: take it to free the country</span><span id="legsiege" hidden><svg width="15" height="15" viewBox="-12 -12 24 24" style="vertical-align:-3px;margin-right:4px"><circle r="8.6" fill="none" stroke="#e2664d" stroke-width="3" stroke-dasharray="4.4 2.8"/><circle r="3" fill="#efe6cf"/></svg>Town under siege</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legtrade" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3.2" stroke-linecap="round"/><path d="M1 4H17" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="4 2.4" stroke-linecap="round"/></svg>Your trade routes</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="44" height="13" viewBox="-8 -9.4 49 14" style="vertical-align:-2px;margin-right:4px">${townGlyph('capital', 4)}<g transform="translate(15 0)">${townGlyph('city', 2)}</g><g transform="translate(28 0)">${townGlyph('town', 0)}</g><g transform="translate(37 0)">${townGlyph('village', 0)}</g></svg>Capital, city, town, village: the more gold, the richer</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg><span id="legair">Air fleet</span></span><span id="legfield" hidden><svg width="19" height="14" viewBox="-9.5 -7 19 14" style="vertical-align:-3px;margin-right:4px"><rect x="-8.5" y="-6" width="17" height="12" rx="2" fill="#66733f" stroke="#e9dfc4" stroke-width=".9"/><path d="M-6.3 2.4H6.3M0 -4.3L-4.6 4M0 -4.3L4.6 4" fill="none" stroke="#f1e9d4" stroke-width="1.3" stroke-linecap="round"/></svg>Airfield: click to open</span></div>
+        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfree" hidden><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-3px;margin-right:4px"><circle r="5.2" fill="none" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="2.6 1.8"/></svg>Fallen capital: take it to free the country</span><span id="legsiege" hidden><svg width="15" height="15" viewBox="-12 -12 24 24" style="vertical-align:-3px;margin-right:4px"><circle r="8.6" fill="none" stroke="#e2664d" stroke-width="3" stroke-dasharray="4.4 2.8"/><circle r="3" fill="#efe6cf"/></svg>Town under siege</span><span id="legprize" hidden><svg width="11" height="14" viewBox="-5 -6.6 10 12.2" style="vertical-align:-2px;margin-right:4px"><path d="M0 5C-3 5-4.6 3-4.2 .6-3.9-1.2-2.5-2-2.2-4-1-3.2-.6-2.3-.4-1.2.6-2.6.7-4.4-.2-6 2.6-4.8 4.6-2.2 4.4 .9 4.2 3.3 2.6 5 0 5Z" fill="#e8622c" stroke="#15120f" stroke-width=".9"/></svg>Wrecked: out of use</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legtrade" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3.2" stroke-linecap="round"/><path d="M1 4H17" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="4 2.4" stroke-linecap="round"/></svg>Your trade routes</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="44" height="13" viewBox="-8 -9.4 49 14" style="vertical-align:-2px;margin-right:4px">${townGlyph('capital', 4)}<g transform="translate(15 0)">${townGlyph('city', 2)}</g><g transform="translate(28 0)">${townGlyph('town', 0)}</g><g transform="translate(37 0)">${townGlyph('village', 0)}</g></svg>Capital, city, town, village: the more gold, the richer</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg><span id="legair">Air fleet</span></span><span id="legfield" hidden><svg width="19" height="14" viewBox="-9.5 -7 19 14" style="vertical-align:-3px;margin-right:4px"><rect x="-8.5" y="-6" width="17" height="12" rx="2" fill="#66733f" stroke="#e9dfc4" stroke-width=".9"/><path d="M-6.3 2.4H6.3M0 -4.3L-4.6 4M0 -4.3L4.6 4" fill="none" stroke="#f1e9d4" stroke-width="1.3" stroke-linecap="round"/></svg>Airfield: click to open</span></div>
         <div class="zoom"><button class="btn" id="lensbtn" data-act="lens" aria-label="Show what every province is worth" title="Show what every province is worth: the richer the ground, the more gold on it."><svg width="18" height="18" viewBox="-9 -9 18 18"><circle r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M0 -3.9V3.9M-2.3 -1.6Q-2.3 -3 0 -3T2.3 -1.6 0 0 -2.3 1.6 0 3 2.3 1.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
       </div>
@@ -633,7 +635,7 @@ function refresh(): void {
   // Sieges (the grand campaign): the country round a besieged town in the besieger's colour, the town ringed, a shield on a garrison.
   const sg = siegeMarks();
   $('#fx').innerHTML = ui.flash.map((id) => `<path class="flash" d="${pathOf(g.regions[id].polys)}"/>`).join('') + skies + freeable + sg.under;
-  $('#sieges').innerHTML = sg.over;
+  $('#sieges').innerHTML = sg.over + placeMarks();
 
   // Where the picked corps can go.
   let marks = '';
@@ -1753,6 +1755,68 @@ function prizeBlock(r: Region): string {
     <p>${esc(p.line)}</p><div class="pzrows">${p.items.map((it) => `<div class="pzrow">${PRIZE_SIGN[it.key] ?? ''}<span><b>${esc(it.label)}</b> ${esc(it.text)}.</span></div>`).join('')}</div></div>`;
 }
 
+const PLACE_SIGN: Record<PrizeKind, string> = { oil: PRIZE_SIGN.oil, works: PRIZE_SIGN.factory, airfield: PRIZE_SIGN.airfield, harbour: PRIZE_SIGN.harbour, junction: PRIZE_SIGN.rail };
+const WRECK_WORD: Record<PrizeKind, string> = { oil: 'Fire the wells', works: 'Blow up the works', airfield: 'Plough it up', harbour: 'Block the harbour', junction: 'Blow the junction' };
+const POLICY_WORD: Record<ScorchPolicy, string> = { never: 'Never', conquered: 'Conquered ground', everywhere: 'Everywhere' };
+const wreckTip = (k: PrizeKind): string => (k === 'junction'
+  ? 'One corps spends its month on it. No train runs through for either side until engineers relay the line.'
+  : `One corps spends its month on it, engineers for choice. Nobody has the use of it for ${PRIZES.wreck[k]} months, you included.`);
+
+/**
+ * The places of a province that are prizes of their own (the grand campaign): its oilfield, factory district,
+ * airfield, harbour and great rail junction, each with who holds it and how it stands, the order to wreck one the
+ * player's troops hold, and what they do if they are driven off: scorched earth.
+ */
+function placesBlock(r: Region): string {
+  const v = prizesOf(g, r.id);
+  if (!v) return '';
+  const me = g.human, up = humanUp(g);
+  const alive = !!me && g.nations[me].alive;
+  const under = v.prizes.some((p) => p.holder !== r.ctrl);
+  const rows = v.prizes.map((p) => {
+    const mine = alive && p.holder === me;
+    const why = mine && up ? whyNotWreckPrize(g, r.id, p.kind) : null;
+    const btn = mine && up && p.out <= 0 ? `<button class="btn small" data-act="wreck" data-id="${r.id}" data-kind="${p.kind}" ${why ? `disabled title="${esc(why)}"` : `title="${esc(wreckTip(p.kind))}"`}>${WRECK_WORD[p.kind]}</button>` : '';
+    const cls = p.out > 0 ? ' down' : p.holder !== r.ctrl ? ' seized' : '';
+    const where = p.inside ? 'Inside the defences' : 'Outside the walls';
+    return `<div class="rrow place${cls}"${p.holder !== r.ctrl ? ` style="border-left-color:${g.nations[p.holder].color}"` : ''}><span>${PLACE_SIGN[p.kind]}<b>${esc(p.name)}</b> <i>${where}</i></span><small>${esc(p.detail[0].toUpperCase() + p.detail.slice(1))}. ${esc(p.state)}</small>${btn}</div>`;
+  }).join('');
+  // Scorched earth: the player's order for this province, where he holds the town or the country round it.
+  let order = '';
+  if (alive && (r.ctrl === me || v.prizes.some((p) => p.holder === me))) {
+    const seg = (val: number, label: string, tip: string): string => `<button class="btn small${v.order === val ? ' on' : ''}" data-act="burnorder" data-id="${r.id}" data-v="${val}" ${up ? `title="${esc(tip)}"` : 'disabled title="It is not your month."'}>${label}</button>`;
+    const pol = (p: ScorchPolicy, tip: string): string => `<button class="btn small${v.policy === p ? ' on' : ''}" data-act="scorch" data-v="${p}" ${up ? `title="${esc(tip)}"` : 'disabled title="It is not your month."'}>${POLICY_WORD[p]}</button>`;
+    const odds = Math.round(PRIZES.burn.chance * 100);
+    order = `<div class="rrow scorch${v.burns ? ' burns' : ''}"><span><b>If your troops are driven off ${esc(r.name)}</b></span>
+      <small>${v.burns ? `They burn what they hold as they go. Each place burns about ${odds} times in 100, less often if nobody is left near to do it or the enemy comes on fast. A burned place is out of use for ${PRIZES.burn.months.airfield} to ${PRIZES.burn.months.oil} months, whoever holds it.` : 'They leave everything whole, for the enemy to use.'} ${v.order ? 'That is your order for this province.' : `That follows your policy: ${POLICY_WORD[v.policy].toLowerCase()}.`}</small>
+      <div class="acts">${seg(1, 'Burn it', 'Scorched earth here, whatever the policy says.')}${seg(-1, 'Leave it whole', 'Nothing is burned here, whatever the policy says.')}${seg(0, 'By policy', 'This province follows your policy.')}</div>
+      <small class="polline">Scorched earth policy, for every province without an order of its own:</small>
+      <div class="acts">${pol('never', 'Your troops burn nothing they leave.')}${pol('conquered', 'Your troops burn what they leave on ground that is not your own or an ally\'s.')}${pol('everywhere', 'Your troops burn what they leave, at home too.')}</div></div>`;
+  }
+  return `<div class="rivers places"><div class="placehead"><b>Places of their own</b><small>${under ? `The army round ${esc(townName(r))} holds what lies outside its walls, and has the use of it after a month.` : `What lies outside the walls of ${esc(townName(r))} goes with the country round it: an army that wins the field holds it, though the town holds.`}</small></div>${rows}${order}</div>`;
+}
+
+/**
+ * Prizes on the map (the grand campaign): a flame over a town where one is wrecked and still out of use, and a
+ * pennant in the colour of the army that holds prizes outside a town it has not taken.
+ */
+function placeMarks(): string {
+  const leg = $('#legprize') as HTMLElement;
+  const marks = prizesOnMap(g);
+  let out = '', flames = 0;
+  const list = marks.length ? towns(g) : [];
+  for (const m of marks) {
+    const t = list[m.region];
+    // The airfield alone is not worth a pennant: nearly every province has one.
+    const worth = m.seized.filter((k) => k !== 'airfield');
+    if (m.by && worth.length) out += `<g class="pzflag" transform="translate(${t.x + 11.5} ${t.y + 6})"><path class="pole" d="M0 4.6V-4.8"/><path d="M0 -4.8L6.2 -2.9 0 -1Z" fill="${g.nations[m.by].color}"/></g>`;
+    if (m.burning.length) { flames++; out += `<g class="pzfire" transform="translate(${t.x - 10.5} ${t.y - 8.5})"><path class="o" d="${FLAME}"/><path class="i" d="M0 4.3C-1.7 4.3-2.3 3-2 1.9-1.6.8-.5.3 0-1.2 1.1.2 2.2 1 2.1 2.4 2 3.5 1.2 4.3 0 4.3Z"/></g>`; }
+  }
+  leg.hidden = !flames;
+  return out;
+}
+const FLAME = 'M0 5C-3 5-4.6 3-4.2 .6-3.9-1.2-2.5-2-2.2-4-1-3.2-.6-2.3-.4-1.2.6-2.6.7-4.4-.2-6 2.6-4.8 4.6-2.2 4.4 .9 4.2 3.3 2.6 5 0 5Z';
+
 /** The richest enemy ground the player could strike at next, each a button that shows it on the map. */
 function prizesBlock(): string {
   if (!g.human || !g.nations[g.human].alive || !g.nations[g.human].atWar.length) return '';
@@ -1995,7 +2059,7 @@ function regionPane(): string {
   return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${townLine(r)}${siegeBlock(r)}${freeNote(r)}${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
-    ${prizeBlock(r)}${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${oilNote(r)}${provinceSlots(r)}${townPlots(r)}
+    ${prizeBlock(r)}${placesBlock(r)}${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${oilNote(r)}${provinceSlots(r)}${townPlots(r)}
     <h3>Forces here</h3>${acts}${units}${jobBlock(r)}${spyBlock(r)}
     ${based.length ? `<h3>On the airfields</h3>${based.map((f) => airRow(f, false, true)).join('')}` : ''}${provinceMuster(r)}${ui.sel >= 0 && me ? advice() : ''}`;
 }
@@ -5565,6 +5629,22 @@ function onClick(e: MouseEvent): void {
       const from = Number(t.dataset.from), to = Number(t.dataset.to);
       if (orderBlowBridges(g, from, to)) { ui.msg = `The bridges between ${g.regions[from].name} and ${g.regions[to].name} are blown.`; queueSave(); }
       else ui.msg = whyNotBlowBridges(g, from, to) ?? '';
+      refresh(); break;
+    }
+    case 'wreck': {
+      const kind = t.dataset.kind as PrizeKind, why = whyNotWreckPrize(g, id, kind);
+      if (orderWreck(g, id, kind)) { ui.msg = `${PRIZES.names[kind]} at ${g.regions[id].name}: wrecked. ${kind === 'junction' ? 'No train runs through until engineers relay the line.' : `It is out of use for ${PRIZES.wreck[kind]} months.`}`; queueSave(); }
+      else ui.msg = why ?? '';
+      refresh(); break;
+    }
+    case 'burnorder': {
+      const v = Number(t.dataset.v);
+      if (orderBurn(g, id, v)) { ui.msg = v > 0 ? `If ${g.regions[id].name} is lost, your troops burn what they hold there.` : v < 0 ? `If ${g.regions[id].name} is lost, your troops leave it whole.` : `${g.regions[id].name} follows your scorched earth policy.`; queueSave(); }
+      refresh(); break;
+    }
+    case 'scorch': {
+      const p = t.dataset.v as ScorchPolicy;
+      if (orderScorchPolicy(g, p)) { ui.msg = p === 'never' ? 'Scorched earth policy: your troops burn nothing they leave.' : p === 'conquered' ? 'Scorched earth policy: your troops burn what they leave on conquered ground.' : 'Scorched earth policy: your troops burn what they leave, at home too.'; queueSave(); }
       refresh(); break;
     }
     case 'cutrail': {

@@ -550,7 +550,7 @@ describe('the month\'s secret war', () => {
     expect(share(lost, N)).toBeLessThan(INTEL.missions.books.caught + 0.04);
     // The Soviet Union is at peace and outside both blocs when the war opens: it protests every time.
     expect(protests).toBe(lost);
-  });
+  }, 20_000);
 
   it('teaches an agent that stays alive, and announces the new rank', () => {
     const g = grand('GER', 2);

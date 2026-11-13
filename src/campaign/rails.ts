@@ -23,6 +23,7 @@ import { groundRules } from './ground';
 import { downBetween } from './rivers';
 import { EASTERN, allied, atWar, headline, inDesert } from './game';
 import { besieged } from './siege';
+import { junctionOpenTo, worksBurnt } from './prizes';
 
 /** A line between two neighbouring provinces (a is the lower id), and the point where it crosses from one into the other. */
 export interface RailLink { a: number; b: number; x: number; y: number }
@@ -75,7 +76,9 @@ export function mendRail(g: Game, r: number): boolean {
 export function railOpen(g: Game, nat: string, a: number, b: number): boolean {
   if (!railsAt(a).includes(b) || railCut(g, a) || railCut(g, b) || downBetween(g, a, b)) return false;
   // The station is in the town: no train runs through a province whose town is under siege, whoever is winning there.
-  return allied(g, nat, g.regions[a].ctrl) && allied(g, nat, g.regions[b].ctrl) && !besieged(g, g.regions[a]) && !besieged(g, g.regions[b]);
+  // A great junction is the exception: it lies outside the town, and the army that holds the field runs its trains through.
+  const end = (r: Region): boolean => (allied(g, nat, r.ctrl) && !besieged(g, r)) || junctionOpenTo(g, nat, r);
+  return end(g.regions[a]) && end(g.regions[b]);
 }
 
 /** Whether the news of a railway matters to the player: it was theirs, or they took it. */
@@ -214,8 +217,8 @@ export const railheadOf = (g: Game, c: Corps): Railhead => (c.supplied ? railhea
 const ruinKey = (r: number): string => `ruin:${r}`;
 /** How many of a province's factories lie wrecked by bombing. Always 0 outside the grand campaign. */
 export const ruinedAt = (g: Game, r: Region): number => (groundRules(g) ? Math.min(r.fac, g.flags[ruinKey(r.id)] ?? 0) : 0);
-/** The factories of a province that are at work. */
-export const workingFactories = (g: Game, r: Region): number => r.fac - ruinedAt(g, r);
+/** The factories of a province that are at work: not wrecked by bombing, and not standing idle in a factory district blown up or burned (prizes.ts). */
+export const workingFactories = (g: Game, r: Region): number => r.fac - ruinedAt(g, r) - worksBurnt(g, r);
 /** The most of a province's factories that bombing can wreck outright. */
 export const ruinMost = (r: Region): number => Math.ceil(r.fac * RAILWAYS.ruin.most);
 
