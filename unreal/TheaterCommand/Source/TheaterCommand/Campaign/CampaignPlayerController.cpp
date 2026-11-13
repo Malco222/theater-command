@@ -236,6 +236,7 @@ void ACampaignPlayerController::ContinueCampaign()
 
 void ACampaignPlayerController::OpenMenu()
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	if (bWatching || FaceOff.bVisible)
 	{
 		return;
@@ -537,6 +538,7 @@ bool ACampaignPlayerController::IsInDebt() const
 
 void ACampaignPlayerController::OpenLedger()
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	FCampaignSession* Session = GetSession();
 	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
 	{
@@ -567,6 +569,7 @@ void ACampaignPlayerController::CloseLedger()
 
 void ACampaignPlayerController::OpenPage(const FString& Id)
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	FCampaignSession* Session = GetSession();
 	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
 	{
@@ -719,6 +722,7 @@ void ACampaignPlayerController::GetPageLinks(TArray<FString>& OutIds, TArray<FSt
 
 void ACampaignPlayerController::OpenGenerals()
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	FCampaignSession* Session = GetSession();
 	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
 	{
@@ -899,6 +903,7 @@ void ACampaignPlayerController::SpendSkill(int32 GeneralId, const FString& Skill
 
 void ACampaignPlayerController::OpenResearch()
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	FCampaignSession* Session = GetSession();
 	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
 	{
@@ -1014,6 +1019,7 @@ void ACampaignPlayerController::FoundResearchBureau()
 
 void ACampaignPlayerController::OpenDiplomacy()
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	FCampaignSession* Session = GetSession();
 	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
 	{
@@ -1140,6 +1146,7 @@ void ACampaignPlayerController::AskWarOn(const FString& Tag)
 
 void ACampaignPlayerController::OpenArsenal()
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	FCampaignSession* Session = GetSession();
 	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
 	{
@@ -1210,6 +1217,7 @@ void ACampaignPlayerController::ShowProvince(int32 RegionId)
 
 void ACampaignPlayerController::OpenRecord(int32 CorpsId)
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	if (FCampaignSession* Session = GetSession())
 	{
 		Document = Session->Record(CorpsId);
@@ -1223,6 +1231,7 @@ void ACampaignPlayerController::OpenRecord(int32 CorpsId)
 
 void ACampaignPlayerController::OpenRoll()
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	if (bWatching || FaceOff.bVisible || Opening.bVisible)
 	{
 		return;
@@ -1242,6 +1251,7 @@ void ACampaignPlayerController::OpenRoll()
 
 void ACampaignPlayerController::OpenGuide()
 {
+	EndNewsreel(); // (a screen is never opened over a newsreel: the reel gives way to it)
 	if (bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible)
 	{
 		return;
