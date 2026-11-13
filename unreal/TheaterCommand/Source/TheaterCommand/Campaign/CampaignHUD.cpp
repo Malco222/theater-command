@@ -738,7 +738,7 @@ namespace
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 								[
-									MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: every country in its colour; the wealth view, gold by what a province pays; and friend and foe, your own ground green, your allies' blue, your enemies' red. (Y)"), [this]() { Controller->ToggleWealth(); })
+									MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; and friend and foe, your own ground green, your allies' blue, your enemies' red. (Y)"), [this]() { Controller->ToggleWealth(); })
 								]
 							]
 						]

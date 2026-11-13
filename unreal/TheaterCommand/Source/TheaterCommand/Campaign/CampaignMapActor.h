@@ -202,6 +202,12 @@ public:
 	 * next is going up.
 	 */
 	void ShowCivic(const TArray<int32>& Civic);
+	/** The countries in flat colour, as a map view: the stain laid on whole instead of as a wash and a band. */
+	void SetFlatColours(bool bFlat);
+	bool AreColoursFlat() const { return bFlatColours; }
+	/** How strongly the countries are coloured: 0 light, 1 as the art is meant, 2 strong. */
+	void SetColourStrength(int32 Level);
+	int32 GetColourStrength() const { return ColourStrength; }
 	/**
 	 * Leaves the scars of battle on the ground where fighting lately was: craters, burnt-out wrecks, and smoke
 	 * while they are fresh. Three numbers for each place: the region, the months since, and how big it was (1 to 3).
@@ -436,6 +442,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> CivicMesh;
 	TArray<int32> ShownCivic;
+	bool bFlatColours = false;
+	int32 ColourStrength = 1;
+	float WashShown = -1.0f;
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> ScarsMesh;
 	TArray<int32> ShownScars;

@@ -196,6 +196,10 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
 	Add(TEXT("watch"), TEXT("The other nations' month"), TEXT("At a month's end: watch every nation's moves, or only what touches you. Key V."), bWatchAll ? TEXT("EVERY MOVE") : TEXT("ONLY MINE"), bWatchAll);
 	Add(TEXT("day"), TEXT("Day and night in the room"), TEXT("The day passes over the table in twelve minutes, or the hour is held. Key T."), Keeping == 0 ? TEXT("PASSING") : Keeping == 1 ? TEXT("ALWAYS DAY") : TEXT("ALWAYS NIGHT"), Keeping == 0);
+	{
+		const int32 Strength = Map.IsValid() ? Map->GetColourStrength() : 1;
+		Add(TEXT("colour"), TEXT("How strongly countries are coloured"), TEXT("Light shows more of the land itself, strong more of whose it is. Key Y has flat colours."), Strength == 0 ? TEXT("LIGHT") : Strength == 1 ? TEXT("MIDDLE") : TEXT("STRONG"), Strength == 2);
+	}
 	Add(TEXT("edge"), TEXT("Sliding the map at the window's edge"), TEXT("Rest the pointer at the window's very edge and the table slides that way."), bEdgeScroll ? TEXT("ON") : TEXT("OFF"), bEdgeScroll);
 	return Out;
 }
@@ -258,6 +262,10 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	{
 		bEdgeScroll = !bEdgeScroll;
 	}
+	else if (Id == TEXT("colour") && Map.IsValid())
+	{
+		Map->SetColourStrength((Map->GetColourStrength() + 1) % 3);
+	}
 	SaveOptions();
 }
 
@@ -272,8 +280,8 @@ void ACampaignPlayerController::SaveOptions() const
 	}
 	auto Word = [](bool bYes) { return bYes ? TEXT("true") : TEXT("false"); };
 	const FString Text = FString::Printf(
-		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s}\n"),
-		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings));
+		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d}\n"),
+		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1);
 	FFileHelper::SaveStringToFile(Text, *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
@@ -313,6 +321,10 @@ void ACampaignPlayerController::LoadOptions()
 	bWatchAll = Yes(TEXT("watchAll"), true);
 	bEdgeScroll = Yes(TEXT("edge"), true);
 	bBriefings = Yes(TEXT("briefing"), true);
+	if (Kept->TryGetNumberField(TEXT("colour"), Number) && Map.IsValid())
+	{
+		Map->SetColourStrength(Number);
+	}
 	if (Kept->TryGetNumberField(TEXT("day"), Number))
 	{
 		// (a run that takes pictures holds the hour it was asked for, whatever is kept)
@@ -1947,15 +1959,17 @@ void ACampaignPlayerController::ToggleWealth()
 	{
 		return;
 	}
-	// One key steps through the views of the map: as it is, by wealth, by friend and foe.
-	const int32 Now = Map->IsWealthShown() ? 1 : Map->AreSidesShown() ? 2 : 0;
-	const int32 Next = (Now + 1) % 3;
-	Map->ShowWealth(Next == 1);
-	Map->ShowSides(Next == 2, Session->GetView().RegionStanding);
+	// One key steps through the views of the map: as it is, the countries in flat colour, by wealth, by friend and foe.
+	const int32 Now = Map->IsWealthShown() ? 2 : Map->AreSidesShown() ? 3 : Map->AreColoursFlat() ? 1 : 0;
+	const int32 Next = (Now + 1) % 4;
+	Map->SetFlatColours(Next == 1);
+	Map->ShowWealth(Next == 2);
+	Map->ShowSides(Next == 3, Session->GetView().RegionStanding);
 	CampaignSounds::Play(this, TEXT("click"), 0.5f);
-	Notify(Next == 1 ? TEXT("The wealth view: the deeper the gold, the more a province pays. Press Y for friend and foe.")
-		: Next == 2 ? TEXT("Friend and foe: your own ground green, your allies' blue, your enemies' red. Press Y to put it away.")
-		: TEXT("The map as it is: every country in its own colour."), 5.0);
+	Notify(Next == 1 ? TEXT("Flat colours: every country painted whole in its own colour. Press Y for the wealth view.")
+		: Next == 2 ? TEXT("The wealth view: the deeper the gold, the more a province pays. Press Y for friend and foe.")
+		: Next == 3 ? TEXT("Friend and foe: your own ground green, your allies' blue, your enemies' red. Press Y to put it away.")
+		: TEXT("The map as it is: each country's colour a stain over its own ground."), 5.0);
 }
 
 void ACampaignPlayerController::AdviserSaw(int32 Step)

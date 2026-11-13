@@ -16,10 +16,14 @@ class FCampaignTerrain;
  * is repainted by changing a few pixels.
  *
  * There is one pixel for every point of the terrain's grid:
- *   Ground  the colour of the bare country, with how wooded it is in the alpha
- *   Tint    the same country as its nation has painted it
- *   Relief  which way the ground leans (red, green) and how the lamp and the
- *           lie of the land shade it (blue, half scale)
+ *   Ground  the colour of the bare country as nature made it, with how wooded
+ *           it is in the alpha
+ *   Tint    the colour the country takes where its nation's stain lies on it,
+ *           with how near the national frontier is in the alpha: the stain
+ *           is a wash everywhere and a band along the frontier
+ *   Relief  which way the ground leans (red, green), how the lamp and the
+ *           lie of the land shade it (blue, half scale), and in the alpha how
+ *           much more wash a nation of little colour needs to be read
  *   Masks   how much bare rock (red), snow (green), shore sand (blue) and dry
  *           country (alpha)
  * and a coarser picture, Water, of the colour of the sea.
@@ -51,8 +55,15 @@ public:
 	static FLinearColor SnowColour();
 	static FLinearColor SandColour();
 
+	/** How much more wash than the rest a nation needs for its ground to read as its own: more for a grey one. */
+	static float WashBoost(const FColor& NationColour);
+	/** How far inside a national frontier its band of stronger stain reaches, in map units. */
+	static constexpr double BandReach = 11.0;
+
 private:
-	// The colour of the bare ground at every point, softened across region boundaries. Kept for repainting.
+	// The colour of the bare ground at every point, as it is seen (0 to 1, not linear light). Kept for repainting.
 	TArray<float> GroundR, GroundG, GroundB;
 	float PlainsLightness = 1.0f;
+	// For points just off the shore: the region of the nearest land, so the paint runs right to the water's edge.
+	TArray<int16> ShoreRegion;
 };

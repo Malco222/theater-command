@@ -262,7 +262,11 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 	// the same countries' colours mixed stronger, so that ground always shows whose it is.
 	static const TCHAR* TablePaints[][2] =
 	{
-		{ TEXT("GER"), TEXT("5E6B77") },
+		// (deepened by the art director, 2026-11-13, so that each holds up as a stain over real ground)
+		{ TEXT("GER"), TEXT("545C68") }, { TEXT("POL"), TEXT("B85464") }, { TEXT("FRA"), TEXT("466CB0") }, { TEXT("SOV"), TEXT("9C3A2E") },
+		{ TEXT("UK"), TEXT("B04A3E") }, { TEXT("ITA"), TEXT("548C5C") }, { TEXT("ROM"), TEXT("C4B048") }, { TEXT("BEL"), TEXT("CEA834") },
+		{ TEXT("NED"), TEXT("D68230") }, { TEXT("HUN"), TEXT("B08C5C") }, { TEXT("YUG"), TEXT("7892B8") }, { TEXT("SWE"), TEXT("CCB85C") },
+		{ TEXT("DEN"), TEXT("B26084") },
 	};
 	for (const auto& Paint : TablePaints)
 	{

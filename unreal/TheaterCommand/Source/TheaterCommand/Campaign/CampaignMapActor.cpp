@@ -738,7 +738,7 @@ void ACampaignMapActor::BuildBorders()
 {
 	BorderMesh->ClearAllMeshSections();
 
-	const FColor NationalInk = FromHex(TEXT("1B1612")).ToFColor(true);
+	const FColor NationalInk = FromHex(TEXT("1E1612")).ToFColor(true); // dark brown ink, never pure black
 	const FColor RegionInk = FromHex(TEXT("4A4236")).ToFColor(true);
 	const double Lift = 0.13;
 
@@ -776,7 +776,7 @@ void ACampaignMapActor::BuildBorders()
 					continue; // coast, or a line the neighbour has already drawn
 				}
 				const bool bNational = Data.Regions[Other].Owner != Region.Owner;
-				const double HalfWidth = bNational ? 0.5 : 0.15;
+				const double HalfWidth = bNational ? 0.2 : 0.15; // (a frontier is a fine inked line: the band of stain beside it says whose side is whose)
 				const FColor Ink = bNational ? NationalInk : RegionInk;
 				(bNational ? NationalCount : RegionCount)++;
 
@@ -1676,6 +1676,26 @@ void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 	}
 }
 
+void ACampaignMapActor::SetFlatColours(bool bFlat)
+{
+	bFlatColours = bFlat;
+	if (LandMaterial)
+	{
+		LandMaterial->SetScalarParameterValue(TEXT("Flat"), bFlat ? 1.0f : 0.0f);
+	}
+}
+
+void ACampaignMapActor::SetColourStrength(int32 Level)
+{
+	ColourStrength = FMath::Clamp(Level, 0, 2);
+	WashShown = -1.0f; // (set again at the next look)
+	if (LandMaterial)
+	{
+		static const float Bands[3] = { 0.5f, 0.6f, 0.7f };
+		LandMaterial->SetScalarParameterValue(TEXT("Band"), Bands[ColourStrength]);
+	}
+}
+
 void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 {
 	if (!Data.IsLoaded() || (ScarsMesh && Scars == ShownScars))
@@ -2369,8 +2389,8 @@ UTextRenderComponent* ACampaignMapActor::AddLabel(const FString& Text, const FVe
 FColor ACampaignMapActor::RegionInk(int32 RegionId) const
 {
 	const FCampaignNation* Nation = Data.Regions.IsValidIndex(RegionId) ? Data.FindNation(Data.Regions[RegionId].Owner) : nullptr;
-	const bool bDark = Nation && FLinearColor(Nation->Color).GetLuminance() < 0.22f;
-	return (bDark ? FromHex(TEXT("C9C3B2")) : FromHex(TEXT("2B251E"))).ToFColor(true);
+	// (the stained ground is darker than the old flat paint everywhere: a region's name is written pale on all of it)
+	return FromHex(TEXT("D9D2BC")).ToFColor(true);
 }
 
 void ACampaignMapActor::BuildLabels()
@@ -2482,8 +2502,8 @@ void ACampaignMapActor::BuildLabels()
 		const float Size = static_cast<float>(FMath::Clamp(Room / (Nation->Name.Len() * 0.95), 6.0, 34.0));
 		// Dark lettering on a pale country, pale lettering on a dark one. It is held clear of the mountains
 		// and the pieces: it is only shown from high above, where that height does not shift it.
-		const bool bPaleCountry = FLinearColor(Nation->Color).GetLuminance() > 0.3f;
-		const FColor Lettering = FromHex(bPaleCountry ? TEXT("1A1511") : TEXT("F1EBDC")).ToFColor(true);
+		// (cream on every country now that the nations' colours are a stain over darker ground)
+		const FColor Lettering = FromHex(TEXT("F4E8CC")).ToFColor(true);
 		UTextRenderComponent* Label = AddLabel(Nation->Name.ToUpper(), Middle, Size, Lettering, TierFar, 0.35f);
 		Label->SetRelativeLocation(MapToWorld(Middle.X, Middle.Y, 30.0));
 	}
@@ -2857,7 +2877,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	// Ground has changed hands. Repaint it, with a margin for the band of thick paint along the new
 	// frontier, rebuild only the pieces of the land that touches, and redraw the frontier lines.
 	Terrain.MeasureFrontiers(Data);
-	const double Margin = 8.0;
+	const double Margin = FCampaignGround::BandReach + 2.0; // (the band of stronger stain along the new frontier reaches that far in)
 	const int32 I0 = FMath::Clamp(FMath::FloorToInt32((Changed.Min.X - Margin) / Terrain.Cell), 0, Terrain.NX - 1);
 	const int32 I1 = FMath::Clamp(FMath::CeilToInt32((Changed.Max.X + Margin) / Terrain.Cell), 0, Terrain.NX - 1);
 	const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Changed.Min.Y - Margin) / Terrain.Cell), 0, Terrain.NY - 1);
@@ -2877,6 +2897,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	// Only the nations' paint changes: the land itself is left as it is.
 	Paint.PaintTint(Data, Terrain, I0, J0, I1, J1);
 	CampaignTextures::Update(TintPicture, Paint.Tint);
+	CampaignTextures::Update(ReliefPicture, Paint.Relief); // (it carries how much wash each nation's ground needs)
 	BuildBorders();
 }
 
@@ -4216,6 +4237,35 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	{
 		WoodsShown = Woods;
 		LandMaterial->SetScalarParameterValue(TEXT("WoodsStrength"), Woods);
+	}
+
+	// The nations' stain: a thicker wash from high up, where the eye wants to see whose a country is, and a
+	// thinner one close to, where it wants to see the country itself.
+	{
+		static const float Strengths[3] = { 0.72f, 1.0f, 1.4f };
+		// (The art director's starting values were 0.42, 0.34 and 0.2. Under the room's lamp those left the
+		// inside of a country reading as nobody's: a red or pink stain over green ground mixes to plain khaki.
+		// Brian's rule is that every tile is a shade of its holder's colour, so the wash is laid on thicker.)
+		const float Far = FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 13000.0f), FVector2f(0.64f, 0.74f), CameraDistance);
+		const float Near = FMath::GetMappedRangeValueClamped(FVector2f(3000.0f, 9000.0f), FVector2f(0.5f, 0.64f), CameraDistance);
+		// ("-TheaterWash=1.3" and "-TheaterBand=0.7" try other strengths without a rebuild)
+		static float Tried = -1.0f;
+		if (Tried < 0.0f)
+		{
+			Tried = 1.0f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterWash="), Tried);
+			float Band = 0.0f;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBand="), Band) && LandMaterial)
+			{
+				LandMaterial->SetScalarParameterValue(TEXT("Band"), Band);
+			}
+		}
+		const float Wash = (CameraDistance > 9000.0f ? Far : Near) * Strengths[FMath::Clamp(ColourStrength, 0, 2)] * Tried;
+		if (LandMaterial && FMath::Abs(Wash - WashShown) > 0.004f)
+		{
+			WashShown = Wash;
+			LandMaterial->SetScalarParameterValue(TEXT("Wash"), Wash);
+		}
 	}
 
 	// Lettering: nations from far off, every region's name close up, capitals and seas always.

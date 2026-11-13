@@ -271,11 +271,22 @@ def build_land():
     relief = picture(m, "Relief", uv, -2600, 0, numbers=True)
     masks = picture(m, "Masks", uv, -2600, 250, numbers=True)
 
-    # The nation's paint over the bare ground, then rock, snow and sand over that.
-    c = lerp(m, (ground, "RGB"), (tint, "RGB"), scalar(m, "Politics", 1.0, -2300, -700), -2000, -400)
+    # The nation's colour is a stain over the bare ground: a wash everywhere (thicker for a nation of little colour,
+    # which the Relief picture's alpha says) and a band along the national frontier (the Tint picture's alpha).
+    # "Flat" lays the stain on whole, for the map view that shows the countries in flat colour.
+    wash = times(m, scalar(m, "Wash", 0.34, -2300, -760), plus(m, (relief, "A"), 1.0, -2300, -700), -2150, -730)
+    band = times(m, (tint, "A"), scalar(m, "Band", 0.6, -2300, -640), -2150, -640)
+    stain = one_in(m, unreal.MaterialExpressionSaturate, plus(m, wash, band, -2050, -690), -1950, -690)
+    stain = lerp(m, stain, 1.0, scalar(m, "Flat", 0.0, -2050, -600), -1850, -660)
+    stain = times(m, stain, scalar(m, "Politics", 0.94, -1850, -570), -1750, -630)
+    c = lerp(m, (ground, "RGB"), (tint, "RGB"), stain, -2000, -400)
     # Woods are a dark green cloth laid over the paint, thick enough to read as woods on any nation's colour.
+    # The woods take the nation's stain too, and keep about a third of their own colour under it.
     wooded = (ground, "A")
-    c = lerp(m, c, vector(m, "WoodsColour", (0.075, 0.13, 0.055, 1.0), -2000, -900),
+    woods = lerp(m, vector(m, "WoodsColour", (0.075, 0.13, 0.055, 1.0), -2000, -900),
+                 times(m, (tint, "RGB"), scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), -2100, -1000),
+                 times(m, stain, scalar(m, "WoodsStain", 0.65, -2300, -1080), -2100, -1080), -1900, -950)
+    c = lerp(m, c, woods,
              times(m, wooded, scalar(m, "WoodsStrength", 0.62, -2300, -900), -2000, -700), -1900, -500)
     c = lerp(m, c, vector(m, "RockColour", (0.235, 0.205, 0.162, 1.0), -2000, -150), (masks, "R"), -1700, -400)
     c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), (masks, "G"), -1400, -400)

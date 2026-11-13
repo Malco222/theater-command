@@ -595,6 +595,19 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		}
 	}
 
+	// "-TheaterReview" takes the art director's fixed views instead, so that each build can be held against his
+	// target pictures: central Europe from high up, Germany and Poland at working height, the Alps and northern
+	// Italy, Berlin close, and an army piece close. Run it by day, and again with "-TheaterNight".
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterReview")))
+	{
+		Shots.Reset();
+		Add(TEXT("review-1-far"), TEXT("@700,979"), 0.803f, 0.0f, 20.9f).Lens = 34.1f;
+		Add(TEXT("review-2-working"), TEXT("@623,747"), 0.70f);
+		Add(TEXT("review-3-alps"), TEXT("@642,1034"), 0.611f, 0.0f, 0.7f).Lens = 36.5f;
+		Add(TEXT("review-4-berlin"), TEXT("Berlin"), 0.3f);
+		Add(TEXT("review-5-army"), TEXT("Grenzmark"), 0.12f, -20.0f, 4.0f);
+	}
+
 	// "-TheaterOnly=13b,13c" takes only the pictures whose names begin with one of these.
 	FString Only;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterOnly="), Only, false))
@@ -689,6 +702,13 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		{
 			GEngine->GameViewport->RemoveAllViewportWidgets();
 		}
+	}
+	if (Shot.Region.StartsWith(TEXT("@")) && Shot.Region.Contains(TEXT(",")))
+	{
+		// "@700,979": a point of the map itself, in map units.
+		FString X, Y;
+		Shot.Region.Mid(1).Split(TEXT(","), &X, &Y);
+		At = FVector2D(FCString::Atod(*X), FCString::Atod(*Y));
 	}
 	if (Shot.Region == TEXT("@report") && Controller->GetSession())
 	{
