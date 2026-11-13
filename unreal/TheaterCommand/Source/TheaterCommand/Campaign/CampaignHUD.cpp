@@ -546,7 +546,7 @@ namespace
 							.ToolTipText(FText::FromString(TEXT("The whole map. White marks are your armies, blue your allies', red the enemy's. Click or drag to look somewhere else.")))
 							[
 								SNew(SVerticalBox)
-								+ SVerticalBox::Slot().AutoHeight()[SNew(SMinimap).Controller(Controller).High(212.0f)]
+								+ SVerticalBox::Slot().AutoHeight()[SNew(SMinimap).Controller(Controller).High(236.0f)]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 								[
 									SNew(SHorizontalBox)
@@ -557,6 +557,15 @@ namespace
 										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenForces(); } return FReply::Handled(); })
 										[
 											SNew(STextBlock).Text(FText::FromString(TEXT("FORCES"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
+										]
+									]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 3.0f, 0.0f)
+									[
+										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(4.0f, 4.0f)).IsFocusable(false).HAlign(HAlign_Center)
+										.ToolTipText(FText::FromString(TEXT("What every nation did last month, each with a way to go and look. (R)")))
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenReports(); } return FReply::Handled(); })
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("REPORT"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
 										]
 									]
 									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)

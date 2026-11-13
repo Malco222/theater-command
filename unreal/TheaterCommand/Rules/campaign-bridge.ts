@@ -468,6 +468,7 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   const from = options?.from ?? 1;
   const seed = options?.seed ?? 1939;
   fallenNation = null;
+  lastMonth = null;
   if (options?.view === 'grand') {
     g = grandGame(from, seed, human);
   } else {
@@ -509,6 +510,7 @@ function load(text: string) {
   if (!loaded) return null;
   g = loaded;
   fallenNation = null;
+  lastMonth = null;
   if (g.human && !humanUp(g)) {
     runOthers(g, null);
     arrive(g);
@@ -612,6 +614,7 @@ function endMonth() {
     if (s.human) {
       // The country has been liberated: the player leads it again. The others finish their month, and his opens.
       fallenNation = null;
+  lastMonth = null;
       runOthers(s, steps);
       if (humanUp(s)) beginHuman(s);
     }
@@ -657,6 +660,11 @@ function endMonth() {
     if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} HAS FALLEN`, text: said(n.id) || `${upFirst(theName(s, n.id))} is eliminated from the war.`, good: foe });
     else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName(s, n.id))} is free again, and back in the war.`, good: mine || !foe });
   }
+  lastMonth = {
+    date: turnToDate(month0).label,
+    rows: (steps as { nat: string; note: string; focus?: number[]; mine?: boolean; moved?: boolean }[]).filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
+    news: events.map((e) => e.text),
+  };
   return { steps, headlines, events, fallen, announce, view: view() };
 }
 
@@ -1066,6 +1074,7 @@ let domAsked = 0;
 function pagesOf(s: Game): { id: string; label: string }[] {
   const out: { id: string; label: string }[] = [];
   if (!s.human) return out;
+  if (lastMonth) out.push({ id: 'reports', label: "THE MONTH'S REPORT" });
   if (secretService(s)) out.push({ id: 'spies', label: 'THE SECRET SERVICE' });
   const act = lastAct(s);
   if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
@@ -1260,6 +1269,30 @@ function rebasePage(s: Game, id: number): Page | null {
   };
 }
 
+/** What the last month brought, kept so that it can be read again after it has been watched: each nation's doings and where. */
+let lastMonth: { date: string; rows: { nat: string; note: string; region: number; mine: boolean }[]; news: string[] } | null = null;
+
+/** The month's report: what every nation did while the player waited, each with a way to go and look. */
+function reportsPage(s: Game): Page | null {
+  if (!lastMonth) return null;
+  const row = (r: { nat: string; note: string; region: number }): PageRow => ({
+    nat: r.nat, title: s.nations[r.nat]?.name ?? r.nat, lines: [r.note],
+    buttons: r.region >= 0 ? [{ label: `GO TO ${s.regions[r.region].name.toUpperCase()}`, act: `goto:region:${r.region}`, ok: true, tip: 'Looks at the place on the map.' }] : [],
+  });
+  const mine = lastMonth.rows.filter((r) => r.mine).map(row), rest = lastMonth.rows.filter((r) => !r.mine).map(row);
+  return {
+    id: 'reports', title: `THE MONTH'S REPORT  \u00B7  ${lastMonth.date.toUpperCase()}`,
+    headline: lastMonth.rows.length ? `${mine.length ? `${mine.length} report${mine.length === 1 ? '' : 's'} from your own fronts` : 'Nothing touched your own fronts'}, ${rest.length} from elsewhere` : 'A quiet month',
+    note: 'What every nation did while your month was closed, as it was shown on the table. Your own fronts come first.',
+    top: [],
+    sections: [
+      { heading: 'YOUR FRONTS', text: mine.length ? '' : 'No enemy moved against you, and none of your ground changed hands.', rows: mine },
+      { heading: 'ELSEWHERE', text: rest.length ? '' : 'Nothing was fought for elsewhere.', rows: rest },
+      { heading: 'THE NEWS', text: lastMonth.news.join('\n'), rows: [] },
+    ].filter((x) => x.rows.length || x.text),
+  };
+}
+
 /** Every force the player commands, each with a way to go to it: his armies by where they stand, his fleets, his airfields. */
 function forcesPage(s: Game): Page | null {
   const me = s.human;
@@ -1318,7 +1351,7 @@ function forcesPage(s: Game): Page | null {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s)
+  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s)
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))

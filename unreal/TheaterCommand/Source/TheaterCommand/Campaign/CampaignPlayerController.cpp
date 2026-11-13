@@ -344,6 +344,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ACampaignPlayerController::ToggleEffects);
 	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::NextArmy);
 	InputComponent->BindKey(EKeys::L, IE_Pressed, this, &ACampaignPlayerController::OpenForces);
+	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACampaignPlayerController::OpenReports);
 	InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
 	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
 	InputComponent->BindKey(EKeys::V, IE_Pressed, this, &ACampaignPlayerController::ToggleWatchAll);
@@ -604,7 +605,7 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 			{
 				OpenPage(TEXT("airfield"));
 			}
-			else if (PickUpArmyIn(Number))
+			else if (Parts[1] == TEXT("army") && PickUpArmyIn(Number))
 			{
 				CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
 			}
@@ -1294,6 +1295,20 @@ void ACampaignPlayerController::OpenForces()
 		return;
 	}
 	OpenPage(TEXT("forces"));
+}
+
+void ACampaignPlayerController::OpenReports()
+{
+	if (bPageOpen && Page.Id == TEXT("reports"))
+	{
+		ClosePage();
+		return;
+	}
+	OpenPage(TEXT("reports"));
+	if (!bPageOpen)
+	{
+		Notify(TEXT("There is no report yet: end a month first."), 4.0);
+	}
 }
 
 void ACampaignPlayerController::GoToCapital()

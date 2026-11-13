@@ -390,6 +390,8 @@ public:
 	int32 ArmiesYetToMove() const;
 	/** The list of everything the player commands, each with a way to go to it (L). */
 	void OpenForces();
+	/** What every nation did last month, each with a way to go and look (R). */
+	void OpenReports();
 	/** Looks at the player's capital (Home, or C). */
 	void GoToCapital();
 	/** While the month is replayed: the nations whose moves are shown, in order, and which is on the table now. */

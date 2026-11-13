@@ -14952,6 +14952,7 @@
     const from = options?.from ?? 1;
     const seed = options?.seed ?? 1939;
     fallenNation = null;
+    lastMonth = null;
     if (options?.view === "grand") {
       g = grandGame(from, seed, human);
     } else {
@@ -14985,6 +14986,7 @@
     if (!loaded) return null;
     g = loaded;
     fallenNation = null;
+    lastMonth = null;
     if (g.human && !humanUp(g)) {
       runOthers(g, null);
       arrive(g);
@@ -15071,6 +15073,7 @@
       for (let guard = 0; guard < 80 && s.turn === month2 && !s.human; guard++) stepOne(s, steps);
       if (s.human) {
         fallenNation = null;
+        lastMonth = null;
         runOthers(s, steps);
         if (humanUp(s)) beginHuman(s);
       }
@@ -15121,6 +15124,11 @@
       if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} HAS FALLEN`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is eliminated from the war.`, good: foe });
       else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is free again, and back in the war.`, good: mine2 || !foe });
     }
+    lastMonth = {
+      date: turnToDate(month02).label,
+      rows: steps.filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
+      news: events.map((e) => e.text)
+    };
     return { steps, headlines, events, fallen, announce, view: view() };
   }
   function stance(ids2, posture) {
@@ -15496,6 +15504,7 @@
   function pagesOf(s) {
     const out = [];
     if (!s.human) return out;
+    if (lastMonth) out.push({ id: "reports", label: "THE MONTH'S REPORT" });
     if (secretService(s)) out.push({ id: "spies", label: "THE SECRET SERVICE" });
     const act2 = lastAct(s);
     if (act2 && (act2.decided || act2.on)) out.push({ id: "lastact", label: act2.on ? "THE WORLD STANDINGS" : "THE LAST ACT" });
@@ -15690,6 +15699,29 @@
       sections: [{ heading: "AIRFIELDS", text: "", rows }]
     };
   }
+  var lastMonth = null;
+  function reportsPage(s) {
+    if (!lastMonth) return null;
+    const row2 = (r) => ({
+      nat: r.nat,
+      title: s.nations[r.nat]?.name ?? r.nat,
+      lines: [r.note],
+      buttons: r.region >= 0 ? [{ label: `GO TO ${s.regions[r.region].name.toUpperCase()}`, act: `goto:region:${r.region}`, ok: true, tip: "Looks at the place on the map." }] : []
+    });
+    const mine2 = lastMonth.rows.filter((r) => r.mine).map(row2), rest = lastMonth.rows.filter((r) => !r.mine).map(row2);
+    return {
+      id: "reports",
+      title: `THE MONTH'S REPORT  ·  ${lastMonth.date.toUpperCase()}`,
+      headline: lastMonth.rows.length ? `${mine2.length ? `${mine2.length} report${mine2.length === 1 ? "" : "s"} from your own fronts` : "Nothing touched your own fronts"}, ${rest.length} from elsewhere` : "A quiet month",
+      note: "What every nation did while your month was closed, as it was shown on the table. Your own fronts come first.",
+      top: [],
+      sections: [
+        { heading: "YOUR FRONTS", text: mine2.length ? "" : "No enemy moved against you, and none of your ground changed hands.", rows: mine2 },
+        { heading: "ELSEWHERE", text: rest.length ? "" : "Nothing was fought for elsewhere.", rows: rest },
+        { heading: "THE NEWS", text: lastMonth.news.join("\n"), rows: [] }
+      ].filter((x) => x.rows.length || x.text)
+    };
+  }
   function forcesPage(s) {
     const me = s.human;
     if (!me) return null;
@@ -15750,7 +15782,7 @@
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
-    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
+    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
     return p ? { ok: true, ...p } : { ok: false };
   }
   function act(action, region = -1) {
