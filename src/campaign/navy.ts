@@ -17,7 +17,7 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, routineNews, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
-import { arrive, garrisonOf, roomIn, siegeRules } from './siege';
+import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
@@ -1053,6 +1053,20 @@ function invadedHere(g: Game, z: number, nat: string): boolean {
   return g.seas[z].coast.some((id) => g.regions[id].owner === nat && !g.regions[id].overseas && atWar(g, nat, g.regions[id].ctrl));
 }
 
+/**
+ * True where a sea lies off a port this nation's side stands round and ships can still feed (the grand campaign):
+ * such a town is never starved while one sea off it is open, so a fleet is wanted there to close it.
+ */
+function blockadeWanted(g: Game, z: number, nat: string): boolean {
+  if (!siegeRules(g)) return false;
+  return g.seas[z].coast.some((id) => {
+    const r = g.regions[id];
+    if (!r.port || !r.seas.includes(z) || !atWar(g, nat, r.ctrl) || !besieged(g, r)) return false;
+    const by = besiegerOf(g, r);
+    return by !== null && allied(g, nat, by) && feeders(g, r).length > 0;
+  });
+}
+
 /** Orders for one computer-run nation's fleets. Named orders from the plan come first. */
 export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: string; stance: Stance }[]): void {
   if (nat === g.human) return;
@@ -1088,6 +1102,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       if (f.duty === 'patrol' && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry; // an enemy fleet that can be beaten
       if (landedLately(g, z, nat) && own >= e.total) v += 30; // cut the sea lane behind an enemy landing
       if (invaded) v += 60;
+      // A port the army stands round and cannot starve while ships reach it: close the sea off it, if the fleet can live there.
+      if (f.duty === 'patrol' && own >= NAVY.battle.seek * e.total && blockadeWanted(g, z, nat)) v += SIEGE.ai.sea.blockade;
       if (z === f.station && f.duty === 'patrol' && (quarry <= 0 || own >= 0.7 * e.total)) v += 5; // the usual beat
       if (v > bv) { bv = v; best = z; }
     }

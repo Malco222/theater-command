@@ -1558,3 +1558,17 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
   .gvarrow { display: none; }
   .gvlog li { grid-template-columns: 1fr; gap: 0; }
 }
+
+/* Version 58: the earth bank of an army that has had a month to dig in. */
+.army .worksbed { fill: none; stroke: rgba(22, 17, 10, .9); stroke-width: 2.7; stroke-linecap: round; }
+.army .works { fill: none; stroke: #d2b87e; stroke-width: 1.5; stroke-dasharray: 2.3 1.1; }
+
+/* Version 58: an order that cannot be undone asks twice, in red; a greyed one says why in words. */
+.btn.danger { border-color: #a8452f; color: #f1b9a6; }
+.btn.danger:hover:not(:disabled) { background: rgba(168, 69, 47, .22); }
+.btn.danger:disabled { border-color: var(--line); color: var(--ink-3); }
+.wreckask { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.wreckask .btn.danger { background: #8f2f1c; color: #fff; border-color: #c75a3f; }
+.rrow.place .whynot { grid-column: 1 / -1; color: var(--ink-3); font-size: 11.5px; }
+.rrow.place .whynot.ask { color: #f1b9a6; }
+.btn.quiet { border-style: dashed; color: var(--ink-2); margin-left: auto; }

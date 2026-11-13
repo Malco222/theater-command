@@ -12,10 +12,10 @@ import { addCorps, createGame, declareWar, relocate } from '../src/campaign/game
 import { whyNotShip } from '../src/campaign/navy';
 import {
   PRIZES, PRIZE_KINDS, airfieldOpenTo, burnChance, burnOrder, harbourOpen, hasPrize, junctionOpenTo, mendPrizes, orderWreckPrize, prizeHolder, prizeIncome,
-  prizeInside, prizeMarks, prizeOut, prizeRules, prizeSettling, prizeTaker, prizeUser, prizesAt, prizesOnLoss, scorchPolicy, setBurnOrder, setScorchPolicy,
-  whyNotWreck, willBurn, worksOutside, wreckPrize, type PrizeKind,
+  prizeInside, prizeMarks, prizeOut, prizeRules, prizeSettling, prizeTaker, prizeUser, prizesAt, prizesOnLoss, railOnScorch, scorchPolicy, setBurnOrder,
+  setScorchPolicy, tellBurnt, tellSettled, whyNotWreck, willBurn, worksOutside, wreckPrize, type PrizeKind,
 } from '../src/campaign/prizes';
-import { mendRail, railCut, railOpen, railsAt, workingFactories } from '../src/campaign/rails';
+import { cutRail, hastyLeft, lineSince, mendRail, railCut, railNote, railOpen, railsAt, workingFactories } from '../src/campaign/rails';
 import { fieldYield, stores } from '../src/campaign/resources';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { arrive, besieged, fedBySea, fieldCtrl, garrisonOf, lift } from '../src/campaign/siege';
@@ -147,12 +147,13 @@ describe('the prizes outside the walls go with the field', () => {
   it('an army that wins the country round a town holds them at once, and has the use of them after a month', () => {
     const { g, town } = warsaw();
     expect(besieged(g, town)).toBe(true);
-    // The player is told what changed hands whole. An airfield alone is not news.
-    expect(g.headlines.some((h) => h.text === 'The factory district, the airfield and the rail junction outside Warsaw are in German hands, though the town holds. They work for Germany after a month.')).toBe(true);
+    // Nothing is said of them yet: most sieges are over before they pay. The player is told when they start to work for him.
+    expect(g.headlines.some((h) => /outside Warsaw/.test(h.text))).toBe(false);
+    tellSettled(g, 'GER');
+    expect(g.headlines.some((h) => /outside Warsaw/.test(h.text))).toBe(false);
     const lodz = g.byName['Lodz'];
     clearField(g, lodz, g.byName['Lublin']);
     comeUp(g, 'GER', lodz);
-    expect(g.headlines.some((h) => /outside Lodz/.test(h.text))).toBe(false);
     expect(town.ctrl).toBe('POL');
     expect(fieldCtrl(g, town)).toBe('GER');
     for (const k of ['works', 'airfield', 'junction'] as const) {
@@ -168,6 +169,19 @@ describe('the prizes outside the walls go with the field', () => {
       expect(prizeUser(g, town, k)).toBe('GER');
     }
     expect(prizesAt(g, town.id)!.prizes[0].state).toMatch(/In German hands with the country round the town/);
+    // That is the month the player hears of it, with what it is worth. An airfield alone is not news.
+    heldFor(g, lodz, PRIZES.settle);
+    const news = g.headlines.length;
+    tellSettled(g, 'GER');
+    const told = g.headlines.slice(news).map((h) => h.text);
+    expect(told.filter((t) => /outside Warsaw/.test(t))).toHaveLength(1);
+    expect(told.find((t) => /outside Warsaw/.test(t))).toMatch(/^The factory district, the airfield and the rail junction outside Warsaw now work for Germany, though the town holds: [\d.]+ a month to its treasury\.$/);
+    expect(told.some((t) => /outside Lodz/.test(t))).toBe(kindsAt(g, lodz).some((k) => k !== 'airfield' && !prizeInside(g, lodz, k)));
+    // Not said twice: a month later it is old news.
+    heldFor(g, town, PRIZES.settle + 1);
+    const later = g.headlines.length;
+    tellSettled(g, 'GER');
+    expect(g.headlines.slice(later).some((h) => /outside Warsaw/.test(h.text))).toBe(false);
   });
 
   it('the factory district pays the army that holds it, and the map marks the province', () => {
@@ -457,7 +471,7 @@ describe('scorched earth', () => {
       const burnt = prizesOnLoss(g, town, 'GER', 'POL', 'outside');
       if (burnt.includes('works')) works++;
       if (burnt.includes('airfield')) fields++;
-      // The railway keeps its own rule (rails.ts): a junction is cut by order, not by scorched earth.
+      // The railway is another matter: its track is torn up as the province itself changes hands (railOnScorch).
       expect(burnt).not.toContain('junction');
     }
     expect(railCut(g, town.id)).toBe(false);
@@ -479,9 +493,98 @@ describe('scorched earth', () => {
     expect(burnt).toContain('works');
     expect(prizeOut(g, town, 'works')).toBe(PRIZES.burn.months.works);
     expect(PRIZES.burn.months.works).toBeLessThan(PRIZES.wreck.works);
-    expect(g.headlines.slice(news).some((h) => /^Scorched earth: Polish troops wreck .*the factory district.* at Warsaw as they are driven off\. Germany will get nothing from/.test(h.text))).toBe(true);
+    // The news waits for the month to close, and then comes as one line.
+    expect(g.headlines.slice(news).some((h) => /^Scorched earth/.test(h.text))).toBe(false);
+    tellBurnt(g);
+    const told = g.headlines.slice(news).filter((h) => /^Scorched earth/.test(h.text));
+    expect(told).toHaveLength(1);
+    expect(told[0].text).toMatch(/^Scorched earth: Polish troops wrecked .*the factory district of Warsaw.* as they were driven off\. Germany will get nothing from the wrecks for months\.$/);
+    // Told once: nothing is left to tell.
+    tellBurnt(g);
+    expect(g.headlines.slice(news).filter((h) => /^Scorched earth/.test(h.text))).toHaveLength(1);
     // Nothing is burned twice.
     expect(prizesOnLoss(g, town, 'GER', 'POL', 'outside')).not.toContain('works');
+  });
+
+  it('the month\'s burning is one line for each army driven off, and airfields alone are not news', () => {
+    const g = playing('GER');
+    const bare = g.regions.filter((r) => r.owner === 'POL' && kindsAt(g, r).join() === 'airfield' && !r.cap && r.fac < 4);
+    expect(bare.length).toBeGreaterThan(1);
+    const news = g.headlines.length;
+    const burnAll = (r: Region, want: PrizeKind = 'airfield'): PrizeKind[] => {
+      setBurnOrder(g, 'POL', r, 1);
+      let burnt: PrizeKind[] = [];
+      const t0 = g.turn;
+      for (let k = 0; k < 80 && !burnt.includes(want); k++) { g.turn = t0 + k; burnt = prizesOnLoss(g, r, 'GER', 'POL', 'all'); }
+      g.turn = t0;
+      return burnt;
+    };
+    for (const r of bare.slice(0, 2)) expect(burnAll(r)).toEqual(['airfield']);
+    tellBurnt(g);
+    expect(g.headlines.slice(news).some((h) => /^Scorched earth/.test(h.text))).toBe(false);
+    // With a factory district among them it is news, and the airfields are counted, not named.
+    for (const r of bare.slice(0, 2)) { for (const key of Object.keys(g.flags)) if (key.startsWith('pzo:')) delete g.flags[key]; expect(burnAll(r)).toEqual(['airfield']); }
+    const town = g.byName['Warsaw'];
+    clearField(g, town, g.byName['Lublin']);
+    addCorps(g, 'GER', 'Test corps', 'inf', 3, town.id, {});
+    expect(burnAll(town, 'works')).toContain('works');
+    tellBurnt(g);
+    const told = g.headlines.slice(news).filter((h) => /^Scorched earth/.test(h.text));
+    expect(told).toHaveLength(1);
+    expect(told[0].text).toMatch(/Polish troops wrecked the factory district of Warsaw and (2|3) airfields as they were driven off/);
+    expect(told[0].region).toBe(town.id);
+  });
+
+  it('scorched earth tears up the track as the province is lost: a hasty cut that time makes good', () => {
+    const g = playing('GER');
+    const town = g.byName['Warsaw'];
+    clearField(g, town, g.byName['Lublin']);
+    addCorps(g, 'GER', 'Test corps', 'inf', 3, town.id, {});
+    // No order, no hasty cut.
+    expect(railOnScorch(g, town, 'GER', 'POL')).toBe(false);
+    setBurnOrder(g, 'POL', town, 1);
+    const p = burnChance(g, town, 'GER', 'POL');
+    let cuts = 0;
+    const N = 400, t0 = g.turn;
+    for (let k = 0; k < N; k++) {
+      g.turn = t0 + k;
+      if (railOnScorch(g, town, 'GER', 'POL')) { cuts++; expect(hastyLeft(g, town.id)).toBe(PRIZES.burn.months.rail); expect(mendRail(g, town.id)).toBe(true); expect(hastyLeft(g, town.id)).toBe(0); }
+    }
+    expect(cuts / N).toBeGreaterThan(p - 0.07);
+    expect(cuts / N).toBeLessThan(p + 0.07);
+    for (const key of Object.keys(g.flags)) if (key.startsWith('burnt:')) delete g.flags[key];
+    // A line already cut the old way is left as it is: only engineers relay that.
+    expect(cutRail(g, town.id)).toBe(true);
+    expect(railOnScorch(g, town, 'GER', 'POL')).toBe(false);
+    expect(hastyLeft(g, town.id)).toBe(0);
+    expect(prizeOut(g, town, 'junction')).toBe(99);
+    mendRail(g, town.id);
+    // A hasty cut: the panels count its months, and the holder's railwaymen make it good as his month closes.
+    let k = 0;
+    while (!railOnScorch(g, town, 'GER', 'POL') && k++ < 60) g.turn++;
+    expect(railCut(g, town.id)).toBe(true);
+    town.ctrl = 'GER';
+    const months = PRIZES.burn.months.rail;
+    expect(prizeOut(g, town, 'junction')).toBe(months);
+    expect(prizesAt(g, town.id)!.prizes.find((x) => x.kind === 'junction')!.state).toMatch(/^Torn up in haste: the railwaymen will have it running in /);
+    expect(railNote(g, town.id, 'GER')!.hasty).toBe(months);
+    const news = g.headlines.length;
+    tellBurnt(g);
+    expect(g.headlines.slice(news).some((h) => /^Scorched earth: Polish troops tore up the railway at Warsaw as they were driven off\. The track will take about /.test(h.text))).toBe(true);
+    const since = g.turn;
+    for (let m = 1; m < months; m++) { g.turn++; mendPrizes(g, 'GER'); expect(railCut(g, town.id)).toBe(true); expect(hastyLeft(g, town.id)).toBe(months - m); }
+    g.turn++;
+    // Somebody else's month closing does nothing for it.
+    mendPrizes(g, 'ITA');
+    expect(railCut(g, town.id)).toBe(true);
+    mendPrizes(g, 'GER');
+    expect(railCut(g, town.id)).toBe(false);
+    expect(hastyLeft(g, town.id)).toBe(0);
+    expect(g.headlines.slice(news).some((h) => h.text === 'The railway at Warsaw is made good: the trains run again.')).toBe(true);
+    // Burned ground is slow to carry an invader's trains: its line counts from the month it was made good.
+    expect(lineSince(g, town.id, since)).toBe(since + months);
+    expect(lineSince(g, town.id, since + months + 4)).toBe(since + months + 4);
+    expect(lineSince(g, g.byName['Lodz'].id, 3)).toBe(3);
   });
 
   it('when the field is lost only what lies outside burns; the harbour inside burns when the town falls', () => {

@@ -11,7 +11,7 @@
     "chance": 0.85,
     "unguarded": 0.35,
     "fastCaptor": 0.25,
-    "months": { "oil": 5, "works": 3, "airfield": 2, "harbour": 3 }
+    "months": { "oil": 5, "works": 3, "airfield": 2, "harbour": 3, "rail": 2 }
   },
   "mend": 1,
   "ai": {
@@ -21,10 +21,10 @@
     "works": "A province with at least 'least' factories has a factory district outside the walls: 'outside' of its factories, rounded down. The rest stand in the town.",
     "junction": "A province where at least 'lines' railway lines meet has a great junction outside the town: the army holding the field runs its trains through, though the town holds.",
     "harbourInside": "A harbour lies inside the defences of a place of these sizes and of any fortress, and goes with the town. Elsewhere the quays lie outside: they go with the field, and a garrison whose harbour is lost or wrecked is not fed by sea.",
-    "settle": "Months an army holds the field before the prizes outside the town work for it.",
+    "settle": "Months an army holds the field before the prizes outside the town work for it. The player is told when they start to, not when they are seized.",
     "ap": "Marching time a corps needs to wreck a prize by order. The work takes the rest of its month.",
     "wreck": "Months a prize is out of use when wrecked by order: a thorough job. A junction's line is cut until engineers relay it.",
-    "burn": "Scorched earth, when an army with the order is driven off the ground. 'chance' that each prize is burned when the loser still has troops next door or in the town, 'unguarded' when not, less 'fastCaptor' when fast troops took the ground. 'months' each is then out of use: a hasty job. A junction is not burned this way: the railway keeps its own rule when ground is lost (rails.ts).",
+    "burn": "Scorched earth, when an army with the order is driven off the ground. 'chance' that each prize is burned when the loser still has troops next door or in the town, 'unguarded' when not, less 'fastCaptor' when fast troops took the ground. 'months' each is then out of use: a hasty job. 'months.rail': the province's railway is torn up as well, on the same chance, beside the rule the railway always had when ground is lost (rails.ts). Such a hasty cut needs no engineers: the new holder's railwaymen make it good after that many months, and engineers sooner. Inside the Soviet Union an invader's trains run on converted track only so many months (east.json) after the line was made good, so burned ground keeps an invader's supply line long for longer.",
     "mend": "Months an engineer corps standing in the province takes off each wrecked prize there, each month, beside the month that passes anyway.",
     "ai.policy": "Each computer nation's scorched earth policy: never, conquered (ground that is not its own or an ally's) or everywhere."
   }

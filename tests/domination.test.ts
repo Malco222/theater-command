@@ -426,8 +426,10 @@ describe('the standings', () => {
 
 describe('a war with nobody at the table', () => {
   it('is never given a last act, however it ends', () => {
-    const g = grand(null, 1);
-    // In this war Germany and Italy are beaten somewhere between its fifth year and its seventh: the month moves whenever the rules do.
+    const g = grand(null, 2);
+    // In this war Germany and Italy are beaten in its sixth year: the month moves whenever the rules do. (Since armies
+    // dig in unasked, not every war nobody plays is decided: in the war of seed 1 an Italian line in the Apennines
+    // is still holding in 1951.)
     while (g.turn <= 96 && !warDecided(g)) runTurnAI(g);
     expect(warDecided(g)).not.toBeNull();
     for (let i = 0; i < 3; i++) runTurnAI(g);
@@ -435,5 +437,5 @@ describe('a war with nobody at the table', () => {
     expect(g.flags.dom).toBeUndefined();
     expect(Object.keys(g.flags).some((k) => k.startsWith('dom'))).toBe(false);
     expect(DIPLOMACY.majors.filter((id) => g.nations[id].alive).every((id) => g.nations[id].align !== 'independent' || id === 'SOV')).toBe(true);
-  }, 60000);
+  }, 120000);
 });

@@ -29,11 +29,12 @@ import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupN
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
+import defenceData from '../../data/campaign/defence.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot } from './ground';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
-import { railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
-import { junctionOpenTo, mendPrizes } from './prizes';
+import { lineSince, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
+import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitNames } from './traits';
@@ -501,7 +502,8 @@ function reachInto(g: Game, id: string, ok: Uint8Array): Float32Array {
       const r = g.regions[j];
       if (!ok[j] || !deep(r)) continue;
       // In the grand campaign a line the defenders tore up is not relaid by time alone: engineers must do it.
-      const step = (g.turn - r.since >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+      // And a line burned under a scorched earth order is converted only from the month it was made good.
+      const step = (g.turn - lineSince(g, j, r.since) >= EASTERN.convertAfter && !railCut(g, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
       if (d[a] + step < d[j] - 1e-6) { d[j] = d[a] + step; q.push(j); }
     }
   }
@@ -552,6 +554,19 @@ export function corpsBase(g: Game, c: Corps): number {
 const HELD_LOSS = 0.6;
 /** How much stronger troops defend from trenches they have had a month to dig. */
 export const DUG_IN = 1.25;
+/** Prepared defences (the grand campaign): who digs in, and how the day's luck runs against an attack on a line that is ready for it. */
+export const DEFENCE = defenceData as unknown as {
+  entrench: { auto: boolean; months: number };
+  prepared: { dice: [number, number]; spentAt: number; surprise: number; armour: number; losses: { attacker: number; defender: number } };
+  staff: { odds: number };
+};
+/** The run of the day's luck in the open: it takes 1.2 to 1 on the day to carry the ground. */
+export const FIELD_DICE: [number, number] = [0.8, 1.2];
+/** The chance that an attack at these odds carries the ground, with the day's luck running between the two numbers. */
+export const chanceOn = (odds: number, dice: [number, number]): number => Math.max(0, Math.min(1, (dice[1] - 1.2 / Math.max(1e-6, odds)) / (dice[1] - dice[0])));
+const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+/** The odds at which an attack is an even chance. */
+export const evenOdds = (dice: [number, number]): number => 2.4 / (dice[0] + dice[1]);
 /** What artillery does in a land battle (the grand campaign's arsenal). */
 export const GUNS = (arsenalData as unknown as { guns: { soften: number; softenMost: number; thicken: number; thickenMost: number } }).guns;
 /** The weight of guns in a force: its artillery divisions, at the strength they stand at. */
@@ -577,6 +592,10 @@ export interface Assessment {
   odds: number;
   lines: TicketLine[];
   defenders: Corps[];
+  /** The run of the day's luck: 0.8 to 1.2 in the open, wider and against the attacker in the streets of a town or on a prepared defence. */
+  dice: [number, number];
+  /** The share of the defence that is dug in and in supply, less what the attacker's guns have broken up (the grand campaign): 0 to 1. */
+  prepared: number;
 }
 
 /** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
@@ -703,7 +722,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   A *= flank;
   // What the town is worth to those inside it, after the guns and the engineers of this assault have done their work.
   const walls = town ? townBonus(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften) : 1;
-  let D = 0, thin = 1;
+  let D = 0, thin = 1, readyD = 0;
   for (const d of defenders) {
     // In the streets the country round about counts for nothing: the town is the ground.
     let p = corpsBase(g, d) * KIND[d.kind].def * (town ? walls : TERRAIN_DEF[target.terrain]);
@@ -732,7 +751,17 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     rawD += p;
     cmdD += p * lead;
     D += p * lead;
+    // Works grow with the months spent on them: a line held since the spring is not one occupied last month.
+    if (d.dug && d.supplied) readyD += p * lead * Math.min(1, (d.dugFor ?? 1) / DEFENCE.entrench.months);
   }
+  // A line that is dug in and fed (the grand campaign): the attacker's luck runs worse against it, by the share of the defence that is ready.
+  // Massed guns break it up, and the first blows of a new offensive by an army trained to it catch it off balance.
+  const caught = tempo ? DEFENCE.prepared.surprise : 0;
+  // And tanks break into a line that has no armour of its own to meet them.
+  const pierced = armorShock ? DEFENCE.prepared.armour : 0;
+  const prepared = wide && !town && D > 0 ? Math.min(1, readyD / D) * (1 - soften) * (1 - caught) * (1 - pierced) : 0;
+  const dice: [number, number] = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]]
+    : prepared > 0 ? [FIELD_DICE[0] + (DEFENCE.prepared.dice[0] - FIELD_DICE[0]) * prepared, FIELD_DICE[1] + (DEFENCE.prepared.dice[1] - FIELD_DICE[1]) * prepared] : FIELD_DICE;
   // The town's own guard stands with whoever is inside.
   const watch = town ? guardPower(g, target) * walls : 0;
   if (watch > 0) { rawD += watch; cmdD += watch; D += watch; }
@@ -822,6 +851,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     ].filter(Boolean).join('; '),
   });
   if (dugIn) lines.push({ label: 'Dug in', value: dugIn === defenders.length ? 'The defenders have had a month to entrench' : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
+  if (prepared > 0) lines.push({
+    label: 'Prepared defence',
+    value: prepared >= 0.995 ? 'The line is dug in, fed and has had months to finish its works' : readyD < D * 0.995 ? 'The line is dug in and fed, but its works are not complete everywhere' : `The line is dug in and fed, but ${listAnd([soften ? 'the guns have worked it over' : '', caught ? 'the new offensive has caught it off balance' : '', pierced ? 'it has no armour to meet the tanks' : ''].filter(Boolean))}`,
+    effect: `The day runs against the attack: an even chance takes about ${evenOdds(dice).toFixed(1)} to 1, and nothing is sure under ${(1.2 / dice[0]).toFixed(1)} to 1. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer`,
+  });
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });
   lines.push({ label: 'Air', value: skyWon ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * 30)}%` : undefined });
@@ -899,7 +933,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (streets) lines.push({ label: 'Armor', value: 'Tanks in the streets of the town', effect: `Tank attack cut to ${Math.round(SIEGE.assault.armour * 100)}%` });
   if (hasty) lines.push({ label: 'A hasty assault', value: 'The army has only just come up to the town: it goes in off the march', effect: `Attack cut to ${Math.round(rushed * 100)}%. Next month the assault is made ready and goes in at full weight` });
   if (flank > 1) lines.push({ label: 'Direction', value: `Attack from ${sources.size} sides`, effect: `Attack up ${Math.round((flank - 1) * 100)}%` });
-  return { A, D, odds: A / D, lines, defenders };
+  return { A, D, odds: A / D, lines, defenders, dice, prepared };
 }
 
 function reportUnit(c: Corps): ReportUnit {
@@ -1081,13 +1115,16 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const count = late ? `t${target.theatre}:${g.flags[`fought:${target.theatre}`] ?? 0}` : `${(g.flags.battles ?? 0) - (g.flags.lateBattles ?? 0)}`;
   const dice = aside ? new Rng(hashString(`land:${g.seed}:${g.turn}:${target.id}:${attNat}:${count}`)) : g.rng;
   // Luck runs wider in the streets of a town than in the open, and mostly against the attacker.
-  const R = a.odds * (town ? dice.range(SIEGE.assault.dice[0], SIEGE.assault.dice[1]) : dice.range(0.8, 1.2));
+  // Against a line that is dug in and fed it runs wider still (the grand campaign): the assessment carries the run.
+  const R = a.odds * dice.range(a.dice[0], a.dice[1]);
   const attU = attackers.map(reportUnit), defU = defenders.map(reportUnit);
   const attGens = attackers.map((c) => generalOf(g, c)), defGens = defenders.map((c) => generalOf(g, c));
   const mobile = attackers.some((c) => KIND[c.kind].mobile);
   const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
   // Fighting from house to house costs the attackers more.
-  const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1);
+  // Men who go at trenches pay for it, and the men in them are harder to hit (the grand campaign).
+  const ready = town ? 0 : a.prepared;
+  const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
   let attLost = 0, defLost = 0, prisoners = 0;
   // True if the field is won but the town holds out (the grand campaign), and if it gave itself up at the summons.
   let held = false, gates = false;
@@ -1110,7 +1147,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
   defenders.forEach((c, i) => {
     const before = men(c);
-    c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c));
+    c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready));
     c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g, c) * nerve(c), 0, 1);
     c.xp = Math.min(1, c.xp + 0.04);
     c.fought = true;
@@ -1171,7 +1208,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
       if (held) closeRound(g, target, attackers); else gates = walls;
     }
   } else {
-    for (const c of attackers) c.ap = Math.max(0, c.ap - (town ? SIEGE.assault.ap : 1));
+    // Thrown back from a prepared line, an attack has shot its bolt: those corps do nothing more this month.
+    const spent = !town && a.prepared >= DEFENCE.prepared.spentAt && a.prepared > 0;
+    for (const c of attackers) c.ap = spent ? 0 : Math.max(0, c.ap - (town ? SIEGE.assault.ap : 1));
     if (town) tallySiege(g, 'repulsed');
     if (town && watch > 0) {
       // The guard has its losses too, and they are not made good while the siege lasts.
@@ -1194,6 +1233,7 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (gates) rep.gates = true;
   if (relief) rep.relief = true;
   if (opts.sally) rep.sally = true;
+  if (a.prepared > 0) rep.prepared = Math.round(a.prepared * 100) / 100;
   g.reports.push(rep);
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
@@ -1224,7 +1264,7 @@ export function capture(g: Game, r: Region, nat: string): void {
   if (groundRules(g)) {
     // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
     liftMines(g, r);
-    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat); railOnCapture(g, r, nat, old); }
+    if (atWar(g, nat, old)) { bridgesOnCapture(g, r, nat); railOnCapture(g, r, nat, old); railOnScorch(g, r, nat, old); }
   }
   if (r.cap && r.owner === old) headline(g, 'fall', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
@@ -1322,7 +1362,10 @@ export function collapseScore(g: Game, nat: string): number {
   const shut = siegeRules(g) && besieged(g, seat) && ringClosed(g, seat);
   const since = g.flags[`siege:${seat.id}`];
   const sat = since === undefined ? 0 : Math.max(0, g.turn - since);
-  const capLost = !allied(g, nat, seat.ctrl) ? 1 : shut ? Math.min(1, SIEGE.capital + (1 - SIEGE.capital) * sat / SIEGE.capitalYear) : 0;
+  // (Nothing in the month the ring closes: a capital stands a siege before its country gives in.)
+  const after = SIEGE.capitalAfter;
+  const hold = sat < after ? SIEGE.capital * sat / after : SIEGE.capital + (1 - SIEGE.capital) * (sat - after) / Math.max(1, SIEGE.capitalYear - after);
+  const capLost = !allied(g, nat, seat.ctrl) ? 1 : shut ? Math.min(1, hold) : 0;
   // The colonies are fought over like any other ground, but a nation stands or falls by its home country.
   const army = n.armyPeak > 0 ? clamp(armySize(g, nat) / n.armyPeak, 0, 1) : 1;
   const score = 0.45 * capLost + 0.35 * homeLost(g, nat) + 0.2 * (1 - army);
@@ -1771,10 +1814,27 @@ function cutOffNews(g: Game): void {
 }
 
 /** The last thing in a nation's month: a beachhead won in it is dug in before the enemy's turn comes round. */
+/**
+ * The grand campaign: whoever stood the whole month where he was, without marching or fighting, is dug in from now
+ * on, the computer's armies as well as the player's. Troops in a town have its walls, and troops under orders to
+ * give ground do not dig. A corps lent to an ally's army keeps that army's month.
+ */
+function digIn(g: Game, nat: string): void {
+  if (g.flags.open !== 1 || !DEFENCE.entrench.auto) return;
+  for (const c of g.corps) {
+    if (c.dead || c.kind === 'fort' || armyOf(c) !== nat) continue;
+    if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) { c.dugFor = c.dug ? (c.dugFor ?? 1) + 1 : 1; c.dug = true; }
+    else { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; }
+  }
+}
+
 export function endPhase(g: Game, nat: string): void {
+  digIn(g, nat);
   if (g.nations[nat].alive) desertWorks(g, nat, true);
   siegeEmpties(g);
   mendPrizes(g, nat);
+  // What was burned in this month's fighting is told once, in one line for each army driven off.
+  tellBurnt(g);
   // The player's directive is looked at as his month closes: a town taken in it is a job done (the grand campaign).
   judgeDirective(g, nat);
 }
@@ -1811,6 +1871,8 @@ export function startPhase(g: Game, nat: string): void {
   intelTick(g, nat);
   // The towns this nation holds that are under siege: another month of bombardment and of stores eaten (the grand campaign).
   siegeMonth(g, nat);
+  // The places outside a town this nation's army has now held long enough: they start to work for it.
+  tellSettled(g, nat);
   computeSupply(g);
   cutOffNews(g);
   // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good
