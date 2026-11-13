@@ -884,7 +884,29 @@ function endMonth() {
     rows: (steps as { nat: string; note: string; focus?: number[]; mine?: boolean; moved?: boolean }[]).filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
     news: events.map((e) => e.text),
   };
-  return { steps, headlines, events, fallen, announce, newsreel, view: view() };
+  // A title card as each year opens: the year, and how the player stands as it begins.
+  const year = (() => {
+    const d = turnToDate(s.turn);
+    const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+    if (d.month !== 0 || !me) return null;
+    const foes = me.atWar.filter((id) => s.nations[id]?.alive);
+    const held = s.regions.filter((r) => r.ctrl === me.id).length, own = s.regions.filter((r) => r.owner === me.id).length;
+    const divs = s.corps.filter((c) => !c.dead && c.nat === me.id).reduce((n, c) => n + c.divs, 0);
+    const lines = [
+      foes.length ? `At war with ${listOf(foes.slice(0, 5).map((id) => theName(s, id)))}${foes.length > 5 ? ` and ${foes.length - 5} more` : ''}.` : 'At peace.',
+      `${held} province${held === 1 ? '' : 's'} under your flag${held > own ? `, ${held - own} more than your own country` : held < own ? `, ${own - held} of your own in other hands` : ''}. ${divs} division${divs === 1 ? '' : 's'} in the field.`,
+    ];
+    for (const key of GOAL_KEYS) {
+      const goal = GOALS[me.id]?.[key];
+      if (!goal || goalState(s, key) !== 'open') continue;
+      const checks = goalChecks(s, me.id, goal);
+      lines.push(`${key === 'short' ? 'The short campaign' : 'The long campaign'}: ${checks.filter((c) => c.done).length} of ${checks.length} done, ${goalWhen(goal, (t: number) => turnToDate(t).label)}.`);
+      break;
+    }
+    const months = s.turn - 1;
+    return { year: String(d.year), title: foes.length ? `${me.name} at war` : `${me.name} at peace`, kicker: months > 0 ? `${months} month${months === 1 ? '' : 's'} since September 1939` : '', lines };
+  })();
+  return { steps, headlines, events, fallen, announce, newsreel, year, view: view() };
 }
 
 /** The player's standing order for the picked corps on the day the enemy comes. */
@@ -1897,6 +1919,104 @@ function forcesPage(s: Game): Page | null {
 const moneyWords = (pp: number): string => shown(pp).toLocaleString('en-US');
 const monthsWords = (n: number): string => `${n} month${n === 1 ? '' : 's'}`;
 
+/**
+ * The situation as a campaign opens, told as a flight over the map: the player's capital, each enemy's frontier,
+ * his friends, what he is short of, and his first objective. Each stop has a place to look at, how close, which way
+ * the eye is turned, a heading and a few plain sentences. Only what the player may know is said.
+ */
+function briefing() {
+  const s = game();
+  const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+  if (!me) return { ok: false };
+  const seen = sight(s);
+  const cards: { region: number; zoom: number; turn: number; title: string; text: string }[] = [];
+  const cap = me.capital >= 0 ? me.capital : s.regions.find((r) => r.ctrl === me.id)?.id ?? -1;
+  const num = (n: number): string => Math.round(n).toLocaleString('en-US');
+  const count = (n: number, one: string, many: string): string => `${num(n)} ${n === 1 ? one : many}`;
+  // What answers to him.
+  const mine = s.corps.filter((c) => !c.dead && c.nat === me.id);
+  const places = new Set(mine.filter((c) => c.kind !== 'fort').map((c) => c.reg)).size;
+  const divs = mine.reduce((n, c) => n + c.divs, 0);
+  const ships = s.fleets.filter((f) => f.nat === me.id).reduce((n, f) => n + f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss, 0);
+  const planes = s.airFleets.filter((f) => f.nat === me.id).reduce((n, f) => n + f.ftr + f.bmr, 0);
+  const forces = [count(divs, 'division', 'divisions') + ` in ${count(places, 'army', 'armies')}`, ships ? count(ships, 'warship', 'warships') : '', planes >= 1 ? `${num(planes)} aircraft` : ''].filter(Boolean);
+  cards.push({
+    region: cap, zoom: 0.4, turn: 0, title: `${me.name.toUpperCase()}  \u00B7  ${turnToDate(s.turn).label.toUpperCase()}`,
+    text: `You lead ${theName(s, me.id)}${s.regions[cap] ? ` from ${townIn(s, cap)?.name ?? s.regions[cap].name}` : ''}. ${listOf(forces)} answer to you.${budgeted(s) ? ` The treasury holds ${inHand(me.pp).toLocaleString('en-US')}.` : ''}`,
+  });
+  // His enemies: each where its ground meets his, or at its capital if the sea lies between.
+  const foes = me.atWar.filter((id) => s.nations[id]?.alive).sort((a, b) => fieldArmy(s, b) - fieldArmy(s, a));
+  let turn = -18;
+  for (const foe of foes.slice(0, 3)) {
+    const them = s.nations[foe];
+    let best = -1, bestSeen = -1;
+    for (const r of s.regions) {
+      if (r.ctrl !== foe || !r.nb.some((n) => s.regions[n].ctrl === me.id)) continue;
+      const there = seen[r.id] > 0 ? s.corps.filter((c) => !c.dead && c.reg === r.id && c.nat === foe).reduce((n, c) => n + c.divs, 0) : 0;
+      if (there > bestSeen) { bestSeen = there; best = r.id; }
+    }
+    const theirCap = them.capital >= 0 ? s.regions[them.capital] : null;
+    if (best >= 0) {
+      const inSight = s.regions.filter((r) => r.ctrl === foe && seen[r.id] > 1).reduce((n, r) => n + s.corps.filter((c) => !c.dead && c.reg === r.id && c.nat === foe).reduce((m, c) => m + c.divs, 0), 0);
+      cards.push({
+        region: best, zoom: 0.33, turn, title: `AT WAR WITH ${theName(s, foe).toUpperCase()}`,
+        text: `${cap1(theName(s, foe))} lies across this frontier.${inSight ? ` ${count(inSight, 'division', 'divisions')} of its army ${inSight === 1 ? 'is' : 'are'} in sight.` : ' What it has behind the frontier is not known.'}${theirCap ? ` Its capital is ${townIn(s, theirCap.id)?.name ?? theirCap.name}.` : ''}`,
+      });
+    } else if (theirCap) {
+      cards.push({
+        region: theirCap.id, zoom: 0.5, turn, title: `AT WAR WITH ${theName(s, foe).toUpperCase()}`,
+        text: `${cap1(theName(s, foe))} has no frontier with you: the sea, or another country, lies between. Its fleets and its bombers can still reach you, and yours can reach it.`,
+      });
+    }
+    turn = -turn;
+  }
+  if (!foes.length) {
+    // At peace: the strongest power on his borders.
+    const near = [...new Set(s.regions.filter((r) => r.ctrl === me.id).flatMap((r) => r.nb.map((n) => s.regions[n].ctrl)).filter((id) => id !== me.id && s.nations[id]?.alive))].sort((a, b) => fieldArmy(s, b) - fieldArmy(s, a));
+    const big = near[0];
+    const at = big ? s.regions.find((r) => r.ctrl === big && r.nb.some((n) => s.regions[n].ctrl === me.id))?.id ?? cap : cap;
+    cards.push({
+      region: at, zoom: 0.4, turn: 14, title: 'AT PEACE',
+      text: `Nobody is at war with you.${big ? ` ${cap1(theName(s, big))} is the strongest power on your borders, with ${count(fieldArmy(s, big), 'division', 'divisions')}${near.length > 1 ? `; ${listOf(near.slice(1, 4).map((id) => theName(s, id)))} ${near.length === 2 ? 'is' : 'are'} your other neighbour${near.length === 2 ? '' : 's'}` : ''}.` : ''} The war will come to your borders or it will not: how you stand toward it is yours to decide.`,
+    });
+  }
+  // His friends.
+  const friends = Object.values(s.nations).filter((n) => n.alive && n.id !== me.id && allied(s, n.id, me.id)).sort((a, b) => fieldArmy(s, b.id) - fieldArmy(s, a.id));
+  if (friends.length) {
+    const first = friends[0];
+    cards.push({
+      region: first.capital >= 0 ? first.capital : cap, zoom: 0.5, turn: 10, title: 'YOUR ALLIES',
+      text: `${cap1(listOf(friends.slice(0, 4).map((n) => theName(s, n.id))))} ${friends.length === 1 ? 'stands' : 'stand'} with you${friends.length > 4 ? `, and ${friends.length - 4} more` : ''}. ${cap1(theName(s, first.id))} is the strongest of them, with ${count(fieldArmy(s, first.id), 'division', 'divisions')}.`,
+    });
+  } else if (foes.length) {
+    cards.push({ region: cap, zoom: 0.62, turn: 0, title: 'YOU STAND ALONE', text: 'No country fights beside you. DIPLOMACY shows where every neutral stands, and which of them might be won over.' });
+  }
+  // What he is short of.
+  const st = storesOf(s);
+  if (st) {
+    const line = (word: string, b: { months: number; net: number; short: boolean }): string => (b.short ? `${word} is already short: the army and the factories are going without.`
+      : b.net < 0 && b.months >= 0 && b.months <= 18 ? `${word} will last ${count(b.months, 'month', 'months')} at this rate.` : '');
+    const said = [line('Oil', st.oil), line('Supply', st.sup)].filter(Boolean);
+    if (said.length) {
+      const oilAt = s.regions.find((r) => r.oil && r.ctrl === me.id)?.id ?? cap;
+      cards.push({ region: st.oil.short || (st.oil.net < 0 && st.oil.months >= 0 && st.oil.months <= 18) ? oilAt : cap, zoom: 0.45, turn: -8, title: 'WHAT YOU ARE SHORT OF', text: `${said.join(' ')} The bars under the treasury show both, and what feeds them.` });
+    }
+  }
+  // His first objective.
+  for (const key of GOAL_KEYS) {
+    const goal = GOALS[me.id]?.[key];
+    if (!goal || goalState(s, key) !== 'open') continue;
+    const next = goalChecks(s, me.id, goal).find((c) => !c.done && s.byName[c.label]);
+    const r = next ? s.byName[next.label] : null;
+    cards.push({
+      region: r ? r.id : cap, zoom: 0.4, turn: 6, title: `YOUR OBJECTIVE  \u00B7  ${goal.title.toUpperCase()}`,
+      text: `${goal.text}${r ? ` Begin with ${r.name}, which ${theName(s, r.ctrl)} holds.` : ''} The O key shows how it stands at any time.`,
+    });
+    break;
+  }
+  return { ok: true, date: turnToDate(s.turn).label, nation: me.name, cards: cards.filter((c) => c.region >= 0).slice(0, 7) };
+}
+
 /** The town plan of one province: its plots, what stands on them, and every line of building that could go up. */
 function townPage(s: Game, region: number): Page | null {
   const t = townBuildings(s, region);
@@ -2570,5 +2690,5 @@ function raidsFlown(turn?: number) {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  raidsFlown, fleetInHand, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => ({ sea: seaUnder(x, y) }),
+  raidsFlown, fleetInHand, briefing, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => ({ sea: seaUnder(x, y) }),
   land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

@@ -18844,7 +18844,28 @@
       rows: steps.filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
       news: events.map((e) => e.text)
     };
-    return { steps, headlines, events, fallen, announce, newsreel, view: view() };
+    const year = (() => {
+      const d = turnToDate(s.turn);
+      const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+      if (d.month !== 0 || !me) return null;
+      const foes = me.atWar.filter((id) => s.nations[id]?.alive);
+      const held = s.regions.filter((r) => r.ctrl === me.id).length, own = s.regions.filter((r) => r.owner === me.id).length;
+      const divs = s.corps.filter((c) => !c.dead && c.nat === me.id).reduce((n, c) => n + c.divs, 0);
+      const lines = [
+        foes.length ? `At war with ${listOf3(foes.slice(0, 5).map((id) => theName2(s, id)))}${foes.length > 5 ? ` and ${foes.length - 5} more` : ""}.` : "At peace.",
+        `${held} province${held === 1 ? "" : "s"} under your flag${held > own ? `, ${held - own} more than your own country` : held < own ? `, ${own - held} of your own in other hands` : ""}. ${divs} division${divs === 1 ? "" : "s"} in the field.`
+      ];
+      for (const key3 of GOAL_KEYS) {
+        const goal = GOALS[me.id]?.[key3];
+        if (!goal || goalState(s, key3) !== "open") continue;
+        const checks = goalChecks(s, me.id, goal);
+        lines.push(`${key3 === "short" ? "The short campaign" : "The long campaign"}: ${checks.filter((c) => c.done).length} of ${checks.length} done, ${goalWhen(goal, (t) => turnToDate(t).label)}.`);
+        break;
+      }
+      const months = s.turn - 1;
+      return { year: String(d.year), title: foes.length ? `${me.name} at war` : `${me.name} at peace`, kicker: months > 0 ? `${months} month${months === 1 ? "" : "s"} since September 1939` : "", lines };
+    })();
+    return { steps, headlines, events, fallen, announce, newsreel, year, view: view() };
   }
   function stance(ids2, posture) {
     const s = game();
@@ -19830,6 +19851,112 @@ ${standing2}`,
   }
   var moneyWords = (pp) => shown(pp).toLocaleString("en-US");
   var monthsWords = (n) => `${n} month${n === 1 ? "" : "s"}`;
+  function briefing() {
+    const s = game();
+    const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+    if (!me) return { ok: false };
+    const seen = sight(s);
+    const cards = [];
+    const cap5 = me.capital >= 0 ? me.capital : s.regions.find((r) => r.ctrl === me.id)?.id ?? -1;
+    const num4 = (n) => Math.round(n).toLocaleString("en-US");
+    const count3 = (n, one, many) => `${num4(n)} ${n === 1 ? one : many}`;
+    const mine2 = s.corps.filter((c) => !c.dead && c.nat === me.id);
+    const places = new Set(mine2.filter((c) => c.kind !== "fort").map((c) => c.reg)).size;
+    const divs = mine2.reduce((n, c) => n + c.divs, 0);
+    const ships = s.fleets.filter((f) => f.nat === me.id).reduce((n, f) => n + f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss, 0);
+    const planes2 = s.airFleets.filter((f) => f.nat === me.id).reduce((n, f) => n + f.ftr + f.bmr, 0);
+    const forces = [count3(divs, "division", "divisions") + ` in ${count3(places, "army", "armies")}`, ships ? count3(ships, "warship", "warships") : "", planes2 >= 1 ? `${num4(planes2)} aircraft` : ""].filter(Boolean);
+    cards.push({
+      region: cap5,
+      zoom: 0.4,
+      turn: 0,
+      title: `${me.name.toUpperCase()}  ·  ${turnToDate(s.turn).label.toUpperCase()}`,
+      text: `You lead ${theName2(s, me.id)}${s.regions[cap5] ? ` from ${townIn(s, cap5)?.name ?? s.regions[cap5].name}` : ""}. ${listOf3(forces)} answer to you.${budgeted(s) ? ` The treasury holds ${inHand(me.pp).toLocaleString("en-US")}.` : ""}`
+    });
+    const foes = me.atWar.filter((id) => s.nations[id]?.alive).sort((a, b) => fieldArmy(s, b) - fieldArmy(s, a));
+    let turn = -18;
+    for (const foe of foes.slice(0, 3)) {
+      const them = s.nations[foe];
+      let best = -1, bestSeen = -1;
+      for (const r of s.regions) {
+        if (r.ctrl !== foe || !r.nb.some((n) => s.regions[n].ctrl === me.id)) continue;
+        const there = seen[r.id] > 0 ? s.corps.filter((c) => !c.dead && c.reg === r.id && c.nat === foe).reduce((n, c) => n + c.divs, 0) : 0;
+        if (there > bestSeen) {
+          bestSeen = there;
+          best = r.id;
+        }
+      }
+      const theirCap = them.capital >= 0 ? s.regions[them.capital] : null;
+      if (best >= 0) {
+        const inSight = s.regions.filter((r) => r.ctrl === foe && seen[r.id] > 1).reduce((n, r) => n + s.corps.filter((c) => !c.dead && c.reg === r.id && c.nat === foe).reduce((m, c) => m + c.divs, 0), 0);
+        cards.push({
+          region: best,
+          zoom: 0.33,
+          turn,
+          title: `AT WAR WITH ${theName2(s, foe).toUpperCase()}`,
+          text: `${cap1(theName2(s, foe))} lies across this frontier.${inSight ? ` ${count3(inSight, "division", "divisions")} of its army ${inSight === 1 ? "is" : "are"} in sight.` : " What it has behind the frontier is not known."}${theirCap ? ` Its capital is ${townIn(s, theirCap.id)?.name ?? theirCap.name}.` : ""}`
+        });
+      } else if (theirCap) {
+        cards.push({
+          region: theirCap.id,
+          zoom: 0.5,
+          turn,
+          title: `AT WAR WITH ${theName2(s, foe).toUpperCase()}`,
+          text: `${cap1(theName2(s, foe))} has no frontier with you: the sea, or another country, lies between. Its fleets and its bombers can still reach you, and yours can reach it.`
+        });
+      }
+      turn = -turn;
+    }
+    if (!foes.length) {
+      const near = [...new Set(s.regions.filter((r) => r.ctrl === me.id).flatMap((r) => r.nb.map((n) => s.regions[n].ctrl)).filter((id) => id !== me.id && s.nations[id]?.alive))].sort((a, b) => fieldArmy(s, b) - fieldArmy(s, a));
+      const big = near[0];
+      const at = big ? s.regions.find((r) => r.ctrl === big && r.nb.some((n) => s.regions[n].ctrl === me.id))?.id ?? cap5 : cap5;
+      cards.push({
+        region: at,
+        zoom: 0.4,
+        turn: 14,
+        title: "AT PEACE",
+        text: `Nobody is at war with you.${big ? ` ${cap1(theName2(s, big))} is the strongest power on your borders, with ${count3(fieldArmy(s, big), "division", "divisions")}${near.length > 1 ? `; ${listOf3(near.slice(1, 4).map((id) => theName2(s, id)))} ${near.length === 2 ? "is" : "are"} your other neighbour${near.length === 2 ? "" : "s"}` : ""}.` : ""} The war will come to your borders or it will not: how you stand toward it is yours to decide.`
+      });
+    }
+    const friends = Object.values(s.nations).filter((n) => n.alive && n.id !== me.id && allied(s, n.id, me.id)).sort((a, b) => fieldArmy(s, b.id) - fieldArmy(s, a.id));
+    if (friends.length) {
+      const first = friends[0];
+      cards.push({
+        region: first.capital >= 0 ? first.capital : cap5,
+        zoom: 0.5,
+        turn: 10,
+        title: "YOUR ALLIES",
+        text: `${cap1(listOf3(friends.slice(0, 4).map((n) => theName2(s, n.id))))} ${friends.length === 1 ? "stands" : "stand"} with you${friends.length > 4 ? `, and ${friends.length - 4} more` : ""}. ${cap1(theName2(s, first.id))} is the strongest of them, with ${count3(fieldArmy(s, first.id), "division", "divisions")}.`
+      });
+    } else if (foes.length) {
+      cards.push({ region: cap5, zoom: 0.62, turn: 0, title: "YOU STAND ALONE", text: "No country fights beside you. DIPLOMACY shows where every neutral stands, and which of them might be won over." });
+    }
+    const st = storesOf2(s);
+    if (st) {
+      const line = (word, b) => b.short ? `${word} is already short: the army and the factories are going without.` : b.net < 0 && b.months >= 0 && b.months <= 18 ? `${word} will last ${count3(b.months, "month", "months")} at this rate.` : "";
+      const said = [line("Oil", st.oil), line("Supply", st.sup)].filter(Boolean);
+      if (said.length) {
+        const oilAt = s.regions.find((r) => r.oil && r.ctrl === me.id)?.id ?? cap5;
+        cards.push({ region: st.oil.short || st.oil.net < 0 && st.oil.months >= 0 && st.oil.months <= 18 ? oilAt : cap5, zoom: 0.45, turn: -8, title: "WHAT YOU ARE SHORT OF", text: `${said.join(" ")} The bars under the treasury show both, and what feeds them.` });
+      }
+    }
+    for (const key3 of GOAL_KEYS) {
+      const goal = GOALS[me.id]?.[key3];
+      if (!goal || goalState(s, key3) !== "open") continue;
+      const next = goalChecks(s, me.id, goal).find((c) => !c.done && s.byName[c.label]);
+      const r = next ? s.byName[next.label] : null;
+      cards.push({
+        region: r ? r.id : cap5,
+        zoom: 0.4,
+        turn: 6,
+        title: `YOUR OBJECTIVE  ·  ${goal.title.toUpperCase()}`,
+        text: `${goal.text}${r ? ` Begin with ${r.name}, which ${theName2(s, r.ctrl)} holds.` : ""} The O key shows how it stands at any time.`
+      });
+      break;
+    }
+    return { ok: true, date: turnToDate(s.turn).label, nation: me.name, cards: cards.filter((c) => c.region >= 0).slice(0, 7) };
+  }
   function townPage(s, region) {
     const t = townBuildings(s, region);
     const r = s.regions[region];
@@ -20546,6 +20673,7 @@ ${standing2}`,
   globalThis.TC = {
     raidsFlown,
     fleetInHand,
+    briefing,
     sack: sackGeneral,
     drafts: draftsFor,
     evePlanGo,

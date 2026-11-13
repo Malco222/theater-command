@@ -473,6 +473,16 @@ struct FNewsCard
 	FString Title;
 	FString Text;
 	int32 Region = INDEX_NONE;
+	float Zoom = 0.36f; // how close the place is looked at while it is told
+	float Turn = 0.0f; // which way the eye is turned, in degrees, for a stop of the opening flight
+};
+
+/** The title card that opens a year: the year, and how the player stands as it begins. */
+struct FYearCard
+{
+	bool bValid = false;
+	FString Year, Title, Kicker;
+	TArray<FString> Lines;
 };
 
 /** Everything that happened between the player ending one month and beginning the next. */
@@ -483,6 +493,7 @@ struct FMonthResult
 	FString Fallen; // the player's nation, if it has just been beaten
 	TArray<FAnnouncement> Announcements;
 	FString ReelDate; // the month the newsreel is of
+	FYearCard Year; // set when the month that opens is a January
 	TArray<FNewsCard> Reel; // the month's stories; empty in a quiet month
 };
 

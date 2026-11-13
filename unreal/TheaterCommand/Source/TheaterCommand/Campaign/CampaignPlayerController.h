@@ -92,6 +92,8 @@ struct FAdviser
 struct FNewsreelShow
 {
 	bool bOn = false;
+	int32 Kind = 0; // 0 the month's newsreel, in black and white; 1 the opening flight, the situation told in colour; 2 a year's title card
+	FYearCard Year; // for a title card
 	FString Date;
 	TArray<FNewsCard> Cards;
 	int32 Index = -1;
@@ -503,7 +505,13 @@ public:
 	void ShowAdviser() { Adviser.bOn = true; ++Adviser.Revision; }
 	/** The newsreel: the month's great stories flown over in black and white, each read out. Space skips it; K turns newsreels off or on. */
 	const FNewsreelShow& GetNewsreel() const { return Newsreel; }
-	void PlayNewsreel(const FString& Date, const TArray<FNewsCard>& Cards);
+	void PlayNewsreel(const FString& Date, const TArray<FNewsCard>& Cards, int32 Kind = 0);
+	/** The opening flight: the situation as the campaign begins, told stop by stop over the map. Space skips it. */
+	void PlayBriefing();
+	/** The title card that opens a year. A click or Space goes on. */
+	void PlayYearCard(const FYearCard& Year);
+	const FYearCard& GetLastYear() const { return LastYear; }
+	FText GetArmySaid() const { return FPlatformTime::Seconds() < ArmySaidUntil ? ArmySaid : FText::GetEmpty(); }
 	void NextNewsCard();
 	void EndNewsreel();
 	void ToggleNewsreels();
@@ -702,6 +710,16 @@ private:
 	static FString OptionsFile();
 	bool bOptionsRead = false;
 	bool bNarrator = true; // the voice that reads the newsreels
+	bool bBriefings = true; // the opening flight when a campaign begins, and the title card of each year
+	bool bFreshCampaign = false; // a campaign has just been begun, not continued
+	FYearCard LastYear; // the last year's card, to show again
+	// What an army answers as it is picked up, in its own language, for a moment.
+	FText ArmySaid;
+	double ArmySaidUntil = 0.0;
+	double BriefingAt = 0.0; // when the opening flight is to begin, a moment after the table is laid
+	// A newsreel that waits for a year's title card to go by.
+	FString WaitingReelDate;
+	TArray<FNewsCard> WaitingReel;
 	bool bAdviserWanted = true; // the staff officer of the opening months
 	bool bEdgeScroll = true; // the pointer resting at the window's edge slides the table
 	float EdgeRest = 0.0f; // how long it has rested there

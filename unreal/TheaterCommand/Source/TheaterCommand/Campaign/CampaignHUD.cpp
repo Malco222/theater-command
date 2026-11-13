@@ -865,6 +865,12 @@ namespace
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 20)).ColorAndOpacity(Cream)
 										.Text_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? Info->Title : FText::GetEmpty(); })
 									]
+									// What the army answers as it is picked up, for a moment.
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 4.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Italic"), 14)).ColorAndOpacity(BrightBrass)
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetArmySaid() : FText::GetEmpty(); })
+									]
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 8.0f, 0.0f)
 								[
@@ -1548,7 +1554,7 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(SBorder).BorderImage(&ClearBrush).Padding(FMargin(0.0f))
-						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Visible : EVisibility::Collapsed; })
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn && Controller->GetNewsreel().Kind != 2 ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([this](const FGeometry&, const FPointerEvent&) { if (Controller.IsValid()) { Controller->NextNewsCard(); } return FReply::Handled(); })
 						[
 							SNew(SVerticalBox)
@@ -1559,7 +1565,8 @@ namespace
 									SNew(SHorizontalBox)
 									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("THEATER NEWS"))).Font(Font(TEXT("Bold"), 30, 420)).ColorAndOpacity(FLinearColor(0.92f, 0.92f, 0.9f))
+										SNew(STextBlock).Font(Font(TEXT("Bold"), 30, 420)).ColorAndOpacity(FLinearColor(0.92f, 0.92f, 0.9f))
+										.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->GetNewsreel().Kind == 1 ? TEXT("THE SITUATION") : TEXT("THEATER NEWS")); })
 									]
 									+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SSpacer)]
 									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
@@ -1590,7 +1597,7 @@ namespace
 														return FText::GetEmpty();
 													}
 													const FNewsreelShow& Reel = Controller->GetNewsreel();
-													return FText::FromString(Reel.Cards.IsValidIndex(Reel.Index) ? Reel.Cards[Reel.Index].Title : FString(TEXT("THE MONTH IN REVIEW")));
+													return FText::FromString(Reel.Cards.IsValidIndex(Reel.Index) ? Reel.Cards[Reel.Index].Title : FString(Reel.Kind == 1 ? TEXT("YOUR COMMAND") : TEXT("THE MONTH IN REVIEW")));
 												})
 											]
 										]
@@ -1604,16 +1611,62 @@ namespace
 													return FText::GetEmpty();
 												}
 												const FNewsreelShow& Reel = Controller->GetNewsreel();
-												return FText::FromString(Reel.Cards.IsValidIndex(Reel.Index) ? Reel.Cards[Reel.Index].Text : FString(TEXT("The war as it stood when the month closed.")));
+												return FText::FromString(Reel.Cards.IsValidIndex(Reel.Index) ? Reel.Cards[Reel.Index].Text : FString(Reel.Kind == 1 ? TEXT("The war as it stands on the day you take over.") : TEXT("The war as it stood when the month closed.")));
 											})
 										]
 										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
 										[
 											SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(FLinearColor(0.5f, 0.5f, 0.48f))
-											.Text(FText::FromString(TEXT("Click: the next story    Space: skip the newsreel    K: no more newsreels")))
+											.Text_Lambda([this]() { return FText::FromString(Controller.IsValid() && Controller->GetNewsreel().Kind == 1
+												? TEXT("Click: go on    Space: skip the flight    MENU, then OPTIONS, turns it off")
+												: TEXT("Click: the next story    Space: skip the newsreel    K: no more newsreels")); })
 										]
 									]
 								]
+							]
+						]
+					]
+
+					// The title card that opens a year: the year in great figures over the darkened table, and how the
+					// player stands as it begins. A click or Space goes on.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn && Controller->GetNewsreel().Kind == 2 ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([this](const FGeometry&, const FPointerEvent&) { if (Controller.IsValid()) { Controller->NextNewsCard(); } return FReply::Handled(); })
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 13, 420)).ColorAndOpacity(Brass)
+								.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetNewsreel().Year.Kicker.ToUpper()) : FText::GetEmpty(); })
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 4.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 132, 120)).ColorAndOpacity(Cream)
+								.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetNewsreel().Year.Year) : FText::GetEmpty(); })
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+							[
+								SNew(SBox).WidthOverride(420.0f).HeightOverride(2.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Brass)]
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 18.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Regular"), 30, 160)).ColorAndOpacity(BrightBrass)
+								.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetNewsreel().Year.Title.ToUpper()) : FText::GetEmpty(); })
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 18.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(860.0f)
+								[
+									SNew(STextBlock).Font(Font(TEXT("Regular"), 16)).ColorAndOpacity(FLinearColor(0.86f, 0.84f, 0.78f)).AutoWrapText(true).Justification(ETextJustify::Center).LineHeightPercentage(1.45f)
+									.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(FString::Join(Controller->GetNewsreel().Year.Lines, TEXT("\n"))) : FText::GetEmpty(); })
+								]
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 30.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint)
+								.Text(FText::FromString(TEXT("Click or Space to go on")))
 							]
 						]
 					]

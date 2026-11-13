@@ -130,6 +130,8 @@ public:
 	bool Act(const FString& Action, int32 RegionId, FString& OutNote, TArray<FSortie>* OutSorties = nullptr, FString* OutOpen = nullptr, FActExtras* OutExtras = nullptr);
 	/** One of the player's fleets as the rules describe it, with the seas and coasts in its reach. */
 	FFleetHand FleetInHand(int32 FleetId);
+	/** The situation as the campaign opens, as stops of a flight over the map. Empty if there is nothing to tell. */
+	TArray<FNewsCard> Briefing(FString& OutNation, FString& OutDate);
 
 	/** The generals of the player's nation, and the corps that have none. */
 	FGeneralStaff Generals();

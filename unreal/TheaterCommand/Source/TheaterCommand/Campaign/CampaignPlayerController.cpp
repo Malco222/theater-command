@@ -192,6 +192,7 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("sounds"), TEXT("Sounds"), TEXT("Boots, engines, guns, aircraft and the click of every button. Key N."), CampaignSounds::IsOn() ? TEXT("ON") : TEXT("OFF"), CampaignSounds::IsOn());
 	Add(TEXT("newsreels"), TEXT("Newsreels"), TEXT("A month's great stories shown as film when it ends. Key K; Space skips one."), bNewsreels ? TEXT("ON") : TEXT("OFF"), bNewsreels);
 	Add(TEXT("narrator"), TEXT("The narrator"), TEXT("A voice that reads the newsreels aloud."), bNarrator ? TEXT("ON") : TEXT("OFF"), bNarrator);
+	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
 	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
 	Add(TEXT("watch"), TEXT("The other nations' month"), TEXT("At a month's end: watch every nation's moves, or only what touches you. Key V."), bWatchAll ? TEXT("EVERY MOVE") : TEXT("ONLY MINE"), bWatchAll);
 	Add(TEXT("day"), TEXT("Day and night in the room"), TEXT("The day passes over the table in twelve minutes, or the hour is held. Key T."), Keeping == 0 ? TEXT("PASSING") : Keeping == 1 ? TEXT("ALWAYS DAY") : TEXT("ALWAYS NIGHT"), Keeping == 0);
@@ -225,6 +226,10 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 		{
 			HushNarrator();
 		}
+	}
+	else if (Id == TEXT("briefing"))
+	{
+		bBriefings = !bBriefings;
 	}
 	else if (Id == TEXT("adviser"))
 	{
@@ -267,8 +272,8 @@ void ACampaignPlayerController::SaveOptions() const
 	}
 	auto Word = [](bool bYes) { return bYes ? TEXT("true") : TEXT("false"); };
 	const FString Text = FString::Printf(
-		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s}\n"),
-		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll));
+		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s}\n"),
+		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings));
 	FFileHelper::SaveStringToFile(Text, *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
@@ -307,6 +312,7 @@ void ACampaignPlayerController::LoadOptions()
 	bAdviserWanted = Yes(TEXT("adviser"), true);
 	bWatchAll = Yes(TEXT("watchAll"), true);
 	bEdgeScroll = Yes(TEXT("edge"), true);
+	bBriefings = Yes(TEXT("briefing"), true);
 	if (Kept->TryGetNumberField(TEXT("day"), Number))
 	{
 		// (a run that takes pictures holds the hour it was asked for, whatever is kept)
@@ -376,6 +382,7 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 	const FString Level = Opening.Levels.IsValidIndex(Opening.LevelIndex) ? Opening.Levels[Opening.LevelIndex].Id : FString();
 	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed, Level))
 	{
+		bFreshCampaign = true;
 		EnterCampaign();
 		CampaignSounds::Play(this, TEXT("bugle"), 0.6f);
 	}
@@ -391,6 +398,7 @@ void ACampaignPlayerController::BeginCampaign(int32 GroupIndex, int32 SideIndex)
 	const FStartGroup& Group = StartGroups[GroupIndex];
 	if (Mode->StartCampaign(Group.Sides[SideIndex].Nation, Group.From, Group.ViewMode, NewSeed()))
 	{
+		bFreshCampaign = true;
 		EnterCampaign();
 	}
 }
@@ -470,6 +478,11 @@ void ACampaignPlayerController::EnterCampaign()
 	Notify(Nation
 		? FString::Printf(TEXT("%s. You lead %s.%s"), *View.Date, *Nation->Name, View.bEve ? TEXT(" Place your army, then end the month.") : TEXT(""))
 		: FString::Printf(TEXT("%s. End the month to watch the war."), *View.Date), 7.0);
+	// A campaign just begun opens with a flight over the situation, a moment after the table is laid.
+	BriefingAt = bFreshCampaign && Nation && bBriefings && !bScripted ? FPlatformTime::Seconds() + 1.4 : 0.0;
+	bFreshCampaign = false;
+	LastYear = FYearCard();
+	WaitingReel.Reset();
 }
 
 void ACampaignPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -1720,10 +1733,35 @@ void ACampaignPlayerController::OpenForces()
 	OpenPage(TEXT("forces"));
 }
 
-void ACampaignPlayerController::PlayNewsreel(const FString& Date, const TArray<FNewsCard>& Cards)
+void ACampaignPlayerController::PlayBriefing()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session)
+	{
+		return;
+	}
+	FString Nation, Date;
+	const TArray<FNewsCard> Stops = Session->Briefing(Nation, Date);
+	if (Stops.Num() > 0)
+	{
+		PlayNewsreel(Date, Stops, 1);
+	}
+}
+
+void ACampaignPlayerController::PlayYearCard(const FYearCard& Year)
+{
+	if (!Year.bValid)
+	{
+		return;
+	}
+	PlayNewsreel(Year.Year, TArray<FNewsCard>(), 2);
+	Newsreel.Year = Year;
+}
+
+void ACampaignPlayerController::PlayNewsreel(const FString& Date, const TArray<FNewsCard>& Cards, int32 Kind)
 {
 	ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
-	if (!Eye || !Map.IsValid() || Cards.Num() == 0)
+	if (!Eye || !Map.IsValid() || (Cards.Num() == 0 && Kind != 2))
 	{
 		return;
 	}
@@ -1735,18 +1773,31 @@ void ACampaignPlayerController::PlayNewsreel(const FString& Date, const TArray<F
 	Newsreel.Date = Date;
 	Newsreel.Cards = Cards;
 	Newsreel.Index = -1;
-	Newsreel.Until = FPlatformTime::Seconds() + 3.4; // the title, while the band plays
+	Newsreel.Kind = Kind;
+	Newsreel.Until = FPlatformTime::Seconds() + (Kind == 2 ? 7.0 : Kind == 1 ? 3.0 : 3.4); // the title, while the band plays
 	// The great moments are told when the reel is over.
 	HeldAnnouncements = Announcements;
 	Announcements.Reset();
 	ReelReturnFocus = Eye->GetFocus();
 	ReelReturnZoom = Eye->GetZoom();
 	ReelReturnYaw = Eye->GetYaw();
-	Eye->SetNewsreel(true);
-	// The title is shown over the whole map.
-	const FCampaignMapData& Data = Map->GetData();
-	Eye->GoTo(Map->MapToWorld(Data.Width * 0.5, Data.Height * 0.48), 0.92f);
-	CampaignSounds::Play(this, TEXT("newsreel"), 0.6f);
+	if (Kind == 0)
+	{
+		// The month's newsreel is film: black and white, and its title is shown over the whole map.
+		Eye->SetNewsreel(true);
+		const FCampaignMapData& Data = Map->GetData();
+		Eye->GoTo(Map->MapToWorld(Data.Width * 0.5, Data.Height * 0.48), 0.92f);
+		CampaignSounds::Play(this, TEXT("newsreel"), 0.6f);
+	}
+	else if (Kind == 1)
+	{
+		// The opening flight is in colour, and begins by rising from where the view stands.
+		Eye->GoTo(ReelReturnFocus, FMath::Min(ReelReturnZoom + 0.16f, 0.9f));
+	}
+	else
+	{
+		CampaignSounds::Play(this, TEXT("stamp"), 0.5f);
+	}
 }
 
 void ACampaignPlayerController::NextNewsCard()
@@ -1762,23 +1813,34 @@ void ACampaignPlayerController::NextNewsCard()
 		return;
 	}
 	const FNewsCard& Card = Newsreel.Cards[Newsreel.Index];
-	// Long enough to be read out, and never rushed.
-	Newsreel.Until = FPlatformTime::Seconds() + FMath::Clamp(2.2 + Card.Text.Len() / 13.5, 5.5, 16.0);
+	// Long enough to be read out, and never rushed. (The opening flight is read, not spoken, until it has a voice.)
+	Newsreel.Until = FPlatformTime::Seconds() + (Newsreel.Kind == 1 ? FMath::Clamp(2.6 + Card.Text.Len() / 15.0, 5.5, 13.0) : FMath::Clamp(2.2 + Card.Text.Len() / 13.5, 5.5, 16.0));
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 	{
 		const FCampaignMapData& Data = Map->GetData();
+		if (Newsreel.Kind == 1)
+		{
+			Eye->SetHeading(Card.Turn);
+		}
 		if (Data.Regions.IsValidIndex(Card.Region))
 		{
 			const FVector2D At = Data.Regions[Card.Region].Center;
-			Eye->GoTo(Map->MapToWorld(At.X, At.Y), 0.36f);
+			Eye->GoTo(Map->MapToWorld(At.X, At.Y), Newsreel.Kind == 1 ? Card.Zoom : 0.36f);
 		}
 		else
 		{
 			Eye->GoTo(Map->MapToWorld(Data.Width * 0.5, Data.Height * 0.48), 0.8f);
 		}
 	}
-	CampaignSounds::Play(this, TEXT("projector"), 0.35f);
-	Narrate(Card.Text);
+	if (Newsreel.Kind == 0)
+	{
+		CampaignSounds::Play(this, TEXT("projector"), 0.35f);
+		Narrate(Card.Text);
+	}
+	else
+	{
+		CampaignSounds::Play(this, TEXT("tick"), 0.5f, 0.8f);
+	}
 }
 
 void ACampaignPlayerController::EndNewsreel()
@@ -1792,11 +1854,26 @@ void ACampaignPlayerController::EndNewsreel()
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 	{
 		Eye->SetNewsreel(false);
-		Eye->RotateBy(ReelReturnYaw - Eye->GetYaw()); // back the way the player was facing
+		if (Newsreel.Kind == 1)
+		{
+			Eye->SetHeading(ReelReturnYaw);
+		}
+		else
+		{
+			Eye->RotateBy(ReelReturnYaw - Eye->GetYaw()); // back the way the player was facing
+		}
 		Eye->GoTo(ReelReturnFocus, ReelReturnZoom);
 	}
 	Announcements = HeldAnnouncements;
 	HeldAnnouncements.Reset();
+	if (Newsreel.Kind == 2 && WaitingReel.Num() > 0)
+	{
+		// The year's title card has gone by: now the month's newsreel that waited behind it.
+		const TArray<FNewsCard> Reel = MoveTemp(WaitingReel);
+		WaitingReel.Reset();
+		PlayNewsreel(WaitingReelDate, Reel);
+		return;
+	}
 	if (Announcements.Num() > 0)
 	{
 		CampaignSounds::Play(this, Announcements[0].bGood ? TEXT("victory") : TEXT("defeat"), 0.55f);
@@ -2309,10 +2386,21 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// The newsreel: the view drifts slowly round the place while its story is told, then the next comes on.
 	if (Newsreel.bOn)
 	{
-		Eye->RotateBy(DeltaTime * 1.8f);
+		if (Newsreel.Kind != 2)
+		{
+			Eye->RotateBy(DeltaTime * (Newsreel.Kind == 1 ? 1.2f : 1.8f));
+		}
 		if (FPlatformTime::Seconds() >= Newsreel.Until)
 		{
 			NextNewsCard();
+		}
+	}
+	else if (BriefingAt > 0.0 && FPlatformTime::Seconds() >= BriefingAt)
+	{
+		BriefingAt = 0.0;
+		if (!bBusyWithScreens() && GetSession())
+		{
+			PlayBriefing();
 		}
 	}
 
@@ -3618,10 +3706,54 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 	{
 		return false;
 	}
+	const bool bNewInHand = ArmyRegion != RegionId;
 	ArmyRegion = RegionId;
 	AdviserSaw(0);
 	PickedCorps = MoveTemp(Orderable);
 	RefreshOrders();
+	if (bNewInHand)
+	{
+		// It answers, in its own language: a word on the tray for a moment (and one day a voice).
+		struct FAnswers { const TCHAR* Tag; const TCHAR* Said[3]; };
+		static const FAnswers Answers[] =
+		{
+			{ TEXT("GER"), { TEXT("Zu Befehl!"), TEXT("Jawohl!"), TEXT("Wird gemacht!") } },
+			{ TEXT("UK"), { TEXT("Very good, sir."), TEXT("Right away, sir."), TEXT("Ready to move, sir.") } },
+			{ TEXT("USA"), { TEXT("Yes, sir."), TEXT("On our way."), TEXT("Ready to roll.") } },
+			{ TEXT("FRA"), { TEXT("\u00C0 vos ordres !"), TEXT("Bien re\u00E7u !"), TEXT("En avant !") } },
+			{ TEXT("VIC"), { TEXT("\u00C0 vos ordres !"), TEXT("Bien re\u00E7u !"), TEXT("En avant !") } },
+			{ TEXT("ITA"), { TEXT("Agli ordini!"), TEXT("Signors\u00EC!"), TEXT("Avanti!") } },
+			{ TEXT("SOV"), { TEXT("\u0415\u0441\u0442\u044C!"), TEXT("\u0422\u0430\u043A \u0442\u043E\u0447\u043D\u043E!"), TEXT("\u0421\u043B\u0443\u0448\u0430\u044E\u0441\u044C!") } },
+			{ TEXT("POL"), { TEXT("Rozkaz!"), TEXT("Tak jest!"), TEXT("Naprz\u00F3d!") } },
+			{ TEXT("NED"), { TEXT("Tot uw orders!"), TEXT("Jawel!"), TEXT("Voorwaarts!") } },
+			{ TEXT("BEL"), { TEXT("\u00C0 vos ordres !"), TEXT("Tot uw orders!"), TEXT("En avant !") } },
+			{ TEXT("SWE"), { TEXT("Uppfattat!"), TEXT("Ska bli!"), TEXT("Fram\u00E5t!") } },
+			{ TEXT("NOR"), { TEXT("Javel!"), TEXT("Skal bli!"), TEXT("Fremad!") } },
+			{ TEXT("DEN"), { TEXT("Javel!"), TEXT("Forst\u00E5et!"), TEXT("Fremad!") } },
+			{ TEXT("FIN"), { TEXT("K\u00E4skyst\u00E4!"), TEXT("Selv\u00E4!"), TEXT("Eteenp\u00E4in!") } },
+			{ TEXT("HUN"), { TEXT("Igenis!"), TEXT("Parancs!"), TEXT("El\u0151re!") } },
+			{ TEXT("ROM"), { TEXT("Am \u00EEn\u021Beles!"), TEXT("S\u0103 tr\u0103i\u021Bi!"), TEXT("\u00CEnainte!") } },
+			{ TEXT("YUG"), { TEXT("Razumem!"), TEXT("Na zapovest!"), TEXT("Napred!") } },
+			{ TEXT("BUL"), { TEXT("\u0421\u043B\u0443\u0448\u0430\u043C!"), TEXT("\u0422\u044A\u0439 \u0432\u044F\u0440\u043D\u043E!"), TEXT("\u041D\u0430\u043F\u0440\u0435\u0434!") } },
+			{ TEXT("GRE"), { TEXT("\u039C\u03AC\u03BB\u03B9\u03C3\u03C4\u03B1!"), TEXT("\u0394\u03B9\u03B1\u03C4\u03AC\u03BE\u03C4\u03B5!"), TEXT("\u0395\u03BC\u03C0\u03C1\u03CC\u03C2!") } },
+			{ TEXT("TUR"), { TEXT("Emredersiniz!"), TEXT("Ba\u015F\u00FCst\u00FCne!"), TEXT("\u0130leri!") } },
+			{ TEXT("ESP"), { TEXT("\u00A1A la orden!"), TEXT("\u00A1S\u00ED, mi general!"), TEXT("\u00A1Adelante!") } },
+			{ TEXT("POR"), { TEXT("\u00C0s ordens!"), TEXT("Sim, meu general!"), TEXT("Em frente!") } },
+		};
+		const FString Tag = View.Human;
+		const FAnswers* Mine = nullptr;
+		for (const FAnswers& Each : Answers)
+		{
+			if (Tag == Each.Tag)
+			{
+				Mine = &Each;
+				break;
+			}
+		}
+		static int32 Turn = 0;
+		ArmySaid = FText::FromString(FString::Printf(TEXT("\u201C%s\u201D"), Mine ? Mine->Said[Turn++ % 3] : TEXT("Ready.")));
+		ArmySaidUntil = FPlatformTime::Seconds() + (bScripted ? 30.0 : 2.6); // (held while pictures are taken, so that it is in them)
+	}
 	return true;
 }
 
@@ -4640,8 +4772,16 @@ void ACampaignPlayerController::FinishMonth()
 		CampaignSounds::PlayLater(this, Announcements[0].bGood ? TEXT("victory") : TEXT("defeat"), 0.4f, 0.55f);
 	}
 
-	// First the newsreel, if the month had stories worth one; the great moments wait until it is over.
-	if (bReel)
+	// A January opens with the year's title card; then the newsreel, if the month had stories worth one. The
+	// great moments wait until both are over.
+	LastYear = Month.Year.bValid ? Month.Year : LastYear;
+	if (Month.Year.bValid && bBriefings && !bScripted && Month.Fallen.IsEmpty())
+	{
+		WaitingReel = bReel ? Month.Reel : TArray<FNewsCard>();
+		WaitingReelDate = Month.ReelDate;
+		PlayYearCard(Month.Year);
+	}
+	else if (bReel)
 	{
 		PlayNewsreel(Month.ReelDate, Month.Reel);
 	}

@@ -1028,7 +1028,50 @@ FMonthResult FCampaignSession::EndMonth()
 			}
 		}
 	}
+	const TSharedPtr<FJsonObject>* Year = nullptr;
+	if (Object->TryGetObjectField(TEXT("year"), Year))
+	{
+		Out.Year.bValid = (*Year)->TryGetStringField(TEXT("year"), Out.Year.Year);
+		(*Year)->TryGetStringField(TEXT("title"), Out.Year.Title);
+		(*Year)->TryGetStringField(TEXT("kicker"), Out.Year.Kicker);
+		(*Year)->TryGetStringArrayField(TEXT("lines"), Out.Year.Lines);
+	}
 	TakeView(Object);
+	return Out;
+}
+
+TArray<FNewsCard> FCampaignSession::Briefing(FString& OutNation, FString& OutDate)
+{
+	TArray<FNewsCard> Out;
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (!CallRules(TEXT("briefing"), TEXT("[]"), Object) || !Object->TryGetBoolField(TEXT("ok"), bOk) || !bOk)
+	{
+		return Out;
+	}
+	Object->TryGetStringField(TEXT("nation"), OutNation);
+	Object->TryGetStringField(TEXT("date"), OutDate);
+	const TArray<TSharedPtr<FJsonValue>>* Cards = nullptr;
+	if (Object->TryGetArrayField(TEXT("cards"), Cards))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Cards)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FNewsCard& Card = Out.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("title"), Card.Title);
+			Entry->TryGetStringField(TEXT("text"), Card.Text);
+			Entry->TryGetNumberField(TEXT("region"), Card.Region);
+			double Zoom = 0.36, Turn = 0.0;
+			Entry->TryGetNumberField(TEXT("zoom"), Zoom);
+			Entry->TryGetNumberField(TEXT("turn"), Turn);
+			Card.Zoom = static_cast<float>(Zoom);
+			Card.Turn = static_cast<float>(Turn);
+		}
+	}
 	return Out;
 }
 

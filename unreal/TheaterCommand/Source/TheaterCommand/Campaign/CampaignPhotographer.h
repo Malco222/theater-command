@@ -67,6 +67,8 @@ private:
 	bool bJoin = false; // ask the allied corps beside one of the player's armies to join it
 	bool bAdviser = false; // the adviser's first steps on the screen
 	bool bNewsreel = false; // show a newsreel story over the map
+	int32 Flight = -2; // play the opening flight and stop at this card of it (-1: its title)
+	bool bYearCard = false; // show the title card of the year that has just opened
 	bool bFleet = false; // pick up the player's largest fleet, as an army is picked up
 	bool bFleetSails = false;
 	FString FleetDo; // with the fleet in hand: "orders" opens its room, "shell" asks about shelling the first coast in reach, "fire" shells it // and send it to the farthest sea it can reach

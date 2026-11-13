@@ -176,6 +176,19 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	}
 	Add(TEXT("14e-guide"), TEXT("Warsaw"), 0.5f).bGuide = true;
 	{
+		// The opening flight: its title, an enemy's frontier, and the objective. Then put away.
+		FShot& Title = Add(TEXT("14j-flight-title"), TEXT("Berlin"), 0.5f);
+		Title.Flight = -1;
+		Title.Wait = 1.0f;
+		FShot& Foe = Add(TEXT("14k-flight-enemy"), TEXT("Berlin"), 0.5f);
+		Foe.Flight = 1;
+		Foe.Wait = 3.0f;
+		FShot& Aim = Add(TEXT("14l-flight-objective"), TEXT("Berlin"), 0.5f);
+		Aim.Flight = 5;
+		Aim.Wait = 3.0f;
+		Add(TEXT("14m-after-flight"), TEXT("Berlin"), 0.5f).bDismiss = true;
+	}
+	{
 		FShot& Shot = Add(TEXT("14h-newsreel"), TEXT("Lodz"), 0.36f);
 		Shot.bNewsreel = true;
 		Shot.Wait = 1.5f;
@@ -439,6 +452,13 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			FShot& Shot = Add(TEXT("34c-air-orders"), TEXT("Berlin"), 0.25f);
 			Shot.Force = TEXT("air:1");
 			Shot.Order = TEXT("air:1:bomb:38");
+		}
+		{
+			// The title card that opens a year: four months on from September 1939. Then put away.
+			FShot& Shot = Add(TEXT("40a-year-card"), TEXT("@capital"), 0.5f);
+			Shot.Months = 4;
+			Shot.bYearCard = true;
+			Add(TEXT("40b-after-year-card"), TEXT("@capital"), 0.5f).bDismiss = true;
 		}
 		if (GrandNation == TEXT("UK"))
 		{
@@ -823,6 +843,18 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		Controller->PlayNewsreel(TEXT("September 1939"), Cards);
 		Controller->NextNewsCard();
 	}
+	if (Shot.Flight >= -1)
+	{
+		Controller->PlayBriefing();
+		for (int32 Card = 0; Card <= Shot.Flight; ++Card)
+		{
+			Controller->NextNewsCard();
+		}
+	}
+	if (Shot.bYearCard)
+	{
+		Controller->PlayYearCard(Controller->GetLastYear());
+	}
 	if (!Shot.Look.IsEmpty() && Controller->GetSession())
 	{
 		if (const int32* Place = Data.RegionByName.Find(Shot.Look))
@@ -991,6 +1023,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (Shot.bDismiss)
 	{
 		Controller->DismissAnnouncement();
+		Controller->EndNewsreel();
 	}
 	if (Shot.bAnnounce)
 	{
