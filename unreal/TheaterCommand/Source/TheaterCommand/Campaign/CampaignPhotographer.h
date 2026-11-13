@@ -60,6 +60,7 @@ private:
 	int32 ProvinceTab = 0; // the tab of the province panel to show
 	bool bWealth = false; // the wealth view of the map
 	bool bSides = false; // the friend-and-foe view
+	FString Hover; // rest the pointer on this region, so its tip is in the picture
 	FString Look; // look at the army standing in this region without picking it up: its corps as cards
 	bool bJoin = false; // ask the allied corps beside one of the player's armies to join it
 	bool bAdviser = false; // the adviser's first steps on the screen

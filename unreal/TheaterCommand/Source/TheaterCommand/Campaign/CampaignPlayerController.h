@@ -404,7 +404,9 @@ public:
 	/** A line about the province under the pointer, for a tip that follows the mouse; empty when a screen is open. */
 	FText GetHoverTip() const { return HoverTip; }
 	/** Where the pointer is, in the window's own pixels. */
-	FVector2D GetPointer() const { return LastMouse; }
+	FVector2D GetPointer() const { return StagedHover != INDEX_NONE ? StagedPointer : LastMouse; }
+	// For the photographer, who has no mouse: the tip as it would read with the pointer resting on this region.
+	void StageHover(int32 RegionId) { StagedHover = RegionId; }
 	/** Shows the model of one of the corps in hand large and turning beside the cards. */
 	void ShowCorpsModel(int32 CorpsId);
 	FText GetShowTitle() const { return ShowTitle; }
@@ -676,6 +678,8 @@ private:
 	int32 SeaNear(const FVector2D& MapPoint) const;
 	int32 PointedField = INDEX_NONE; // the province whose airfield the pointer is over
 	int32 HoverTipField = INDEX_NONE;
+	int32 StagedHover = INDEX_NONE;
+	FVector2D StagedPointer = FVector2D::ZeroVector;
 	int32 HoverTipHand = INDEX_NONE; // what was in hand, and how it was to travel, when the tip was written
 	int32 HoverTipRegion = INDEX_NONE;
 	bool bWatchAll = true; // watch every nation's move at the month's end; V switches to only what touches the player

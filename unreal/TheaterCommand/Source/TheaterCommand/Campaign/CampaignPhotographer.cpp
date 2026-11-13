@@ -92,6 +92,18 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.Click = TEXT("Mecklenburg");
 	}
 	{
+		// The pointer resting on ground the army in hand could attack: the tip gives the odds before anything is ordered.
+		FShot& Shot = Add(TEXT("09d-tip-odds"), TEXT("Pomorze"), 0.34f);
+		Shot.Army = TEXT("Farther Pomerania");
+		Shot.Route = Shot.Hover = TEXT("Pomorze");
+	}
+	{
+		// And resting on ground it could simply march to.
+		FShot& Shot = Add(TEXT("09e-tip-march"), TEXT("Berlin"), 0.4f);
+		Shot.Army = TEXT("Farther Pomerania");
+		Shot.Route = Shot.Hover = TEXT("Hamburg");
+	}
+	{
 		FShot& Shot = Add(TEXT("10-face-off"), TEXT("Pomorze"), 0.34f);
 		Shot.Army = TEXT("Farther Pomerania");
 		Shot.Attack = TEXT("Pomorze");
@@ -661,6 +673,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (const int32* Route = Data.RegionByName.Find(Shot.Route))
 	{
 		Controller->ShowRouteTo(*Route);
+	}
+	{
+		const int32* Rest = Shot.Hover.IsEmpty() ? nullptr : Data.RegionByName.Find(Shot.Hover);
+		Controller->StageHover(Rest ? *Rest : INDEX_NONE);
 	}
 	if (Shot.bSea)
 	{

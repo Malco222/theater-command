@@ -2282,8 +2282,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 
 	// A tip that follows the pointer: what the province under it is, whose, what it is worth and who stands there.
 	// (no tip for the ground behind a panel the pointer is on)
-	const int32 TipRegion = (bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : PointedRegion;
-	const int32 TipField = TipRegion == INDEX_NONE ? INDEX_NONE : PointedField;
+	const bool bStagedTip = StagedHover != INDEX_NONE && Map->GetData().Regions.IsValidIndex(StagedHover);
+	if (bStagedTip)
+	{
+		const FCampaignRegion& Staged = Map->GetData().Regions[StagedHover];
+		ProjectWorldLocationToScreen(Map->MapToWorld(Staged.Centroid.X, Staged.Centroid.Y), StagedPointer);
+	}
+	const int32 TipRegion = bStagedTip ? StagedHover : (bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : PointedRegion;
+	const int32 TipField = (TipRegion == INDEX_NONE || bStagedTip) ? INDEX_NONE : PointedField;
 	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0);
 	if (TipRegion != HoverTipRegion || TipField != HoverTipField || TipHand != HoverTipHand)
 	{
@@ -2354,7 +2360,28 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					}
 					else if (There->bAttack)
 					{
-						Line += bBySea ? TEXT("\nRight-click: land here from the sea. You are shown what it will meet first.") : TEXT("\nRight-click: attack. You are shown the odds first.");
+						if (bBySea)
+						{
+							Line += TEXT("\nRight-click: land here from the sea. You are shown what it will meet first.");
+						}
+						else
+						{
+							// The odds at a glance, before anything is ordered: as the staff reckon them from what is known.
+							const FAttackPreview Glance = Session->PreviewAttack(PickedCorps, TipRegion);
+							auto Say = [](float Odds) { return Odds >= 1.0f ? FString::Printf(TEXT("%.1f to 1 for you"), Odds) : FString::Printf(TEXT("%.1f to 1 against"), 1.0f / FMath::Max(Odds, 0.01f)); };
+							if (!Glance.bValid)
+							{
+								Line += TEXT("\nRight-click: attack. You are shown the odds first.");
+							}
+							else if (Glance.bExact)
+							{
+								Line += FString::Printf(TEXT("\nRight-click: attack. Odds %s."), *Say(Glance.Odds));
+							}
+							else
+							{
+								Line += FString::Printf(TEXT("\nRight-click: attack. The staff's estimate: between %s and %s."), *Say(Glance.OddsLow), *Say(Glance.OddsHigh));
+							}
+						}
 					}
 					else if (bByRail || bBySea)
 					{
