@@ -384,15 +384,37 @@ private:
 	float ShownNight = -1.0f;
 	float NightNow = 0.0f; // how far into the night the room is, 0 to 1
 	bool bLamplightNow = false; // the night is the old lamplight, not moonlight
-	TArray<int32> PaneRegion; // the region each lit pane belongs to: a window of its town, or a village light
+	TArray<int32> PaneRegion; // the region each lit pane belongs to: a window of its town
+	// The lights of villages and farms: each a small round glow lying on the land, soft at its edge.
+	TArray<FVector> VillagePoints;
+	TArray<FColor> VillageColours;
+	TArray<int32> VillageRegion;
+	static constexpr int32 VillageRim = 6; // points round a village light
 	// The glow of each town's lamps as it is seen from far off: a soft disc of light over the town.
 	TArray<FVector> GlowPoints;
 	TArray<FColor> GlowColours;
 	TArray<int32> GlowRegion;
-	static constexpr int32 GlowRim = 10; // points round each ring of a glow
+	TArray<uint8> GlowKind; // 0 the lamps of a town, 1 a quarter of a great city beside them, 2 the faint warm wash a lit town throws on the country round it
+	static constexpr int32 GlowRim = 12; // points round each ring of a glow
+	static constexpr int32 GlowRings = 3; // rings to a glow: a hot heart, its fall, and the edge where it is gone
 	TArray<FString> BlackoutTags;
 	TArray<int32> FrontPairs;
-	TArray<FVector> FrontFires; // where the fires of a front burn by night: points along the frontier the armies face each other across
+	/** A fire on a front by night: where, how big (most are small, one in five large), and how hot (below 1 it is only an ember). */
+	struct FFrontFire
+	{
+		FVector At = FVector::ZeroVector;
+		float Size = 1.0f;
+		float Heat = 1.0f;
+	};
+	TArray<FFrontFire> FrontFires; // along the frontier the armies face each other across: thick where they face, thin elsewhere
+	TArray<FVector> FrontGlow; // and evenly along the same frontier, for one faint line of glow under the fires
+	// The night's grading of the water (the picture run can try others: "-TheaterNightSea=grey,surf,r,g,b,liftr,liftg,liftb").
+	FVector2f SeaNight = FVector2f(0.7f, 0.3f); // how far the water is greyed by moonlight, and the strength of the surf line
+	FLinearColor SeaNightTint = FLinearColor(0.42f, 0.38f, 0.33f);
+	FLinearColor SeaNightLift = FLinearColor(0.06f, 0.06f, 0.065f);
+	FLinearColor RiverNightTint = FLinearColor(7.0f, 3.0f, 1.45f); // rivers by moonlight are steel, not blue
+	float TownWash = 0.2f; // the strength of the faint warm wash under a lit town
+	float FrontLineGlow = 0.085f; // the strength of the line of glow under a front's fires
 	TArray<FVector> WorksChimneys; // and of the factories built since the war began
 	TArray<FBattleSmoke> Battles;
 	TArray<FVector> SmokeVertices;
