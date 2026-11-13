@@ -386,6 +386,12 @@ public:
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
+	/** The list of everything the player commands, each with a way to go to it (L). */
+	void OpenForces();
+	/** Looks at the player's capital (Home, or C). */
+	void GoToCapital();
+	/** While the month is replayed: the nations whose moves are shown, in order, and which is on the table now. */
+	void GetWatchOrder(TArray<FString>& OutTags, int32& OutNow) const;
 	/** Whether every nation's move is watched at the end of a month, or only what touches the player. */
 	void ToggleWatchAll();
 	/** The player's oil or supplies, or null where his nation keeps no stocks (a small country, a scenario, nobody led). */

@@ -343,6 +343,9 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACampaignPlayerController::OpenGuide);
 	InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ACampaignPlayerController::ToggleEffects);
 	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::NextArmy);
+	InputComponent->BindKey(EKeys::L, IE_Pressed, this, &ACampaignPlayerController::OpenForces);
+	InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
+	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
 	InputComponent->BindKey(EKeys::V, IE_Pressed, this, &ACampaignPlayerController::ToggleWatchAll);
 	InputComponent->BindKey(EKeys::One, IE_Pressed, this, &ACampaignPlayerController::OpenScreen1);
 	InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACampaignPlayerController::OpenScreen2);
@@ -569,6 +572,43 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	FCampaignSession* Session = GetSession();
 	if (!Session || !bPageOpen)
 	{
+		return;
+	}
+	if (Action.StartsWith(TEXT("goto:")))
+	{
+		// A way from the list of forces to one of them on the table: the view goes there, and it is picked up or opened.
+		TArray<FString> Parts;
+		Action.ParseIntoArray(Parts, TEXT(":"));
+		const int32 Number = Parts.Num() >= 3 ? FCString::Atoi(*Parts[2]) : INDEX_NONE;
+		ClosePage();
+		ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+		if (Parts.Num() >= 3 && Parts[1] == TEXT("fleet") && Map.IsValid())
+		{
+			PickUpFleet(Number);
+			const FVector2D At = Map->FleetPlace(Number);
+			if (Eye)
+			{
+				Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Clamp(Eye->GetZoom(), 0.4f, 0.6f), false);
+			}
+		}
+		else if (Parts.Num() >= 3 && Map.IsValid() && Map->GetData().Regions.IsValidIndex(Number))
+		{
+			const FVector2D At = Map->GetData().Regions[Number].Center;
+			if (Eye)
+			{
+				Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
+			}
+			PutDownFleet();
+			SelectRegion(Number);
+			if (Parts[1] == TEXT("field"))
+			{
+				OpenPage(TEXT("airfield"));
+			}
+			else if (PickUpArmyIn(Number))
+			{
+				CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+			}
+		}
 		return;
 	}
 	if (Action.StartsWith(TEXT("open:")))
@@ -1226,6 +1266,62 @@ void ACampaignPlayerController::OpenScreen2() { if (bGeneralsOpen) { CloseGenera
 void ACampaignPlayerController::OpenScreen3() { if (bResearchOpen) { CloseResearch(); } else { OpenResearch(); } }
 void ACampaignPlayerController::OpenScreen4() { if (bDiplomacyOpen) { CloseDiplomacy(); } else { OpenDiplomacy(); } }
 void ACampaignPlayerController::OpenScreen5() { if (bLedgerOpen) { CloseLedger(); } else { OpenLedger(); } }
+
+void ACampaignPlayerController::OpenForces()
+{
+	if (bPageOpen && Page.Id == TEXT("forces"))
+	{
+		ClosePage();
+		return;
+	}
+	OpenPage(TEXT("forces"));
+}
+
+void ACampaignPlayerController::GoToCapital()
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || bWatching)
+	{
+		return;
+	}
+	const FString& Mine = Session->GetView().Human;
+	for (const FCampaignRegion& Region : Map->GetData().Regions)
+	{
+		if (Region.bCapital && Region.Owner == Mine)
+		{
+			if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+			{
+				Eye->GoTo(Map->MapToWorld(Region.Center.X, Region.Center.Y), FMath::Min(Eye->GetZoom(), 0.45f), false);
+			}
+			SelectRegion(Region.Id);
+			CampaignSounds::Play(this, TEXT("click"), 0.5f);
+			return;
+		}
+	}
+}
+
+void ACampaignPlayerController::GetWatchOrder(TArray<FString>& OutTags, int32& OutNow) const
+{
+	OutTags.Reset();
+	OutNow = INDEX_NONE;
+	if (!bWatching)
+	{
+		return;
+	}
+	// The nations whose moves are being shown, in the order they made them; the one on the table now is marked.
+	for (int32 Index = 0; Index < Month.Steps.Num(); ++Index)
+	{
+		const FString& Tag = Month.Steps[Index].Nation;
+		if (OutTags.Num() == 0 || OutTags.Last() != Tag)
+		{
+			OutTags.Add(Tag);
+		}
+		if (Index == WatchIndex - 1)
+		{
+			OutNow = OutTags.Num() - 1;
+		}
+	}
+}
 
 void ACampaignPlayerController::ToggleWatchAll()
 {

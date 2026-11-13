@@ -404,6 +404,17 @@ namespace
 						]
 					]
 
+					// While the month is replayed: the flags of the nations whose moves are shown, in the order they
+					// made them, with the one on the table now standing larger.
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(24.0f, 136.0f, 24.0f, 0.0f)
+					[
+						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(12.0f, 7.0f))
+						.Visibility_Lambda([this]() { return WatchShown.Num() > 0 ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+						[
+							SAssignNew(WatchStrip, SHorizontalBox)
+						]
+					]
+
 					// The top right corner: the buttons, and under them the month's news for a while after the month turns.
 					+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(24.0f)
 					[
@@ -518,7 +529,30 @@ namespace
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMapShown() ? EVisibility::Visible : EVisibility::Collapsed; })
 							.ToolTipText(FText::FromString(TEXT("The whole map. White marks are your armies, blue your allies', red the enemy's. Click or drag to look somewhere else.")))
 							[
-								SNew(SMinimap).Controller(Controller).High(212.0f)
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()[SNew(SMinimap).Controller(Controller).High(212.0f)]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)
+									[
+										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(4.0f, 4.0f)).IsFocusable(false).HAlign(HAlign_Center)
+										.ToolTipText(FText::FromString(TEXT("Every army, fleet and airfield you command, each with a way to go to it. (L)")))
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenForces(); } return FReply::Handled(); })
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("FORCES"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
+										]
+									]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)
+									[
+										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(4.0f, 4.0f)).IsFocusable(false).HAlign(HAlign_Center)
+										.ToolTipText(FText::FromString(TEXT("Look at your capital. (C, or Home)")))
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->GoToCapital(); } return FReply::Handled(); })
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("CAPITAL"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
+										]
+									]
+								]
 							]
 						]
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
@@ -1481,6 +1515,35 @@ namespace
 		virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+			// The order of play, while the month is replayed.
+			if (Controller.IsValid() && WatchStrip.IsValid())
+			{
+				TArray<FString> Tags;
+				int32 Now = INDEX_NONE;
+				Controller->GetWatchOrder(Tags, Now);
+				if (Tags != WatchShown || Now != WatchNow)
+				{
+					WatchShown = Tags;
+					WatchNow = Now;
+					WatchStrip->ClearChildren();
+					// A long month: the flags either side of the one moving, so the strip keeps to the middle of the screen.
+					const int32 First = FMath::Clamp(Now - 7, 0, FMath::Max(0, Tags.Num() - 15)), Last = FMath::Min(Tags.Num(), First + 15);
+					for (int32 Index = First; Index < Last; ++Index)
+					{
+						const bool bNow = Index == Now;
+						WatchStrip->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(3.0f, 0.0f)
+						[
+							SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(bNow ? BrightBrass : FLinearColor(0.0f, 0.0f, 0.0f, 0.0f)).Padding(FMargin(bNow ? 2.0f : 0.0f))
+							[
+								SNew(SBox).WidthOverride(bNow ? 45.0f : 27.0f).HeightOverride(bNow ? 30.0f : 18.0f)
+								[
+									SNew(SImage).Image(FlagBrush(Tags[Index])).ColorAndOpacity(FLinearColor(1.0f, 1.0f, 1.0f, bNow ? 1.0f : (Index < Now ? 0.35f : 0.75f)))
+								]
+							]
+						];
+					}
+				}
+			}
 			// The province section of the territory panel.
 			if (Controller.IsValid() && ProvinceBox.IsValid() && Controller->GetRegionPanel().Revision != ShownProvince)
 			{
@@ -4047,6 +4110,9 @@ namespace
 		TSharedPtr<SVerticalBox> ProvinceBox;
 		TSharedPtr<SHorizontalBox> TrayOrders;
 		int32 ShownProvince = -1;
+		TSharedPtr<SHorizontalBox> WatchStrip;
+		TArray<FString> WatchShown;
+		int32 WatchNow = INDEX_NONE;
 		TSharedPtr<SVerticalBox> PageSections;
 		TSharedPtr<SBox> PageRibbons;
 		int32 ShownPage = -1;

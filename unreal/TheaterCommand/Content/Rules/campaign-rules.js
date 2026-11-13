@@ -15391,10 +15391,67 @@
       sections: [{ heading: "AIRFIELDS", text: "", rows }]
     };
   }
+  function forcesPage(s) {
+    const me = s.human;
+    if (!me) return null;
+    const up = humanUp(s) && !onEve(s);
+    const num3 = (n) => Math.round(n).toLocaleString("en-US");
+    const places = /* @__PURE__ */ new Map();
+    for (const c of s.corps) if (!c.dead && c.nat === me) places.set(c.reg, [...places.get(c.reg) ?? [], c]);
+    let canMove = 0;
+    const armies = [...places.entries()].map(([reg, cs]) => {
+      const moving = cs.filter((c) => up && canOrder(s, c) && c.ap > 0);
+      const field = cs.filter((c) => c.kind !== "fort");
+      if (moving.length) canMove++;
+      const gen = cs.map((c) => generalOf(s, c)?.name).find(Boolean);
+      const kinds = /* @__PURE__ */ new Map();
+      for (const c of field) kinds.set(KIND[c.kind]?.label ?? c.kind, (kinds.get(KIND[c.kind]?.label ?? c.kind) ?? 0) + c.divs);
+      const what = [...kinds.entries()].map(([k, n]) => `${n} ${k.toLowerCase()}`).join(", ");
+      return {
+        sort: (moving.length ? 0 : 1) * 1e6 - cs.reduce((n, c) => n + men(c), 0) / 1e3,
+        row: {
+          nat: me,
+          title: `${s.regions[reg].name}${gen ? `  ·  ${gen}` : ""}`,
+          lines: [`${cs.length} corps, ${num3(cs.reduce((n, c) => n + men(c), 0))} men${what ? `: ${what} divisions` : ""}.`, moving.length ? `${moving.length} corps can still move this month.` : up ? "It has used its month, or holds its ground." : ""].filter(Boolean),
+          buttons: [{ label: "GO THERE", act: `goto:army:${reg}`, ok: true, tip: "Looks at the army and picks it up." }]
+        }
+      };
+    }).sort((a, b) => a.sort - b.sort).map((x) => x.row);
+    const fleets = s.fleets.filter((f) => f.nat === me && f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => {
+      const parts = [[f.ships.bb, "battleships"], [f.ships.cv, "carriers"], [f.ships.ca, "cruisers"], [f.ships.dd, "destroyers"], [f.ships.ss, "submarines"]].filter((x) => x[0] > 0).map((x) => `${x[0]} ${x[1]}`).join(", ");
+      const sea = s.seas[f.zone]?.name ?? "the sea";
+      return {
+        nat: me,
+        title: f.name,
+        lines: [`${parts}.`, f.stance === "port" ? `In harbour at ${f.port}.` : f.stance === "raid" ? `Raiding shipping in the ${sea}.` : `On patrol in the ${sea}.`],
+        buttons: [{ label: "GO THERE", act: `goto:fleet:${f.id}`, ok: true, tip: "Looks at the fleet and picks it up." }]
+      };
+    });
+    const bases = /* @__PURE__ */ new Map();
+    for (const f of s.airFleets) if (f.nat === me && f.ftr + f.bmr >= 1) bases.set(f.base, [...bases.get(f.base) ?? [], f]);
+    const fields = [...bases.entries()].map(([reg, fs]) => ({
+      nat: me,
+      title: s.regions[reg]?.name ?? "An airfield",
+      lines: [`${fs.length} air group${fs.length === 1 ? "" : "s"}: ${num3(fs.reduce((n, f) => n + f.ftr, 0))} fighters, ${num3(fs.reduce((n, f) => n + f.bmr, 0))} bombers.`, fs.map((f) => f.name).slice(0, 6).join(", ") + (fs.length > 6 ? ` and ${fs.length - 6} more` : "") + "."],
+      buttons: [{ label: "OPEN THE AIRFIELD", act: `goto:field:${reg}`, ok: true, tip: "Looks at the airfield and opens it." }]
+    }));
+    return {
+      id: "forces",
+      title: "YOUR FORCES",
+      headline: `${armies.length} arm${armies.length === 1 ? "y" : "ies"}, ${fleets.length} fleet${fleets.length === 1 ? "" : "s"}, ${fields.length} airfield${fields.length === 1 ? "" : "s"} with aircraft`,
+      note: up ? canMove ? `${canMove} of your armies can still move this month. They are listed first.` : "Every army has used its month." : "It is not your month.",
+      top: [],
+      sections: [
+        { heading: "ARMIES", text: armies.length ? "" : "You have no army in the field.", rows: armies },
+        { heading: "FLEETS", text: fleets.length ? "" : "You have no fleet.", rows: fleets },
+        { heading: "AIRFIELDS", text: fields.length ? "" : "You have no aircraft.", rows: fields }
+      ]
+    };
+  }
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
-    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
+    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
     return p ? { ok: true, ...p } : { ok: false };
   }
   function act(action, region = -1) {

@@ -218,6 +218,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Select = TEXT("@capital");
 			Shot.ProvinceTab = 2;
 		}
+		Add(TEXT("31m-forces"), TEXT("@capital"), 0.45f).Room = TEXT("forces");
 		Add(TEXT("31b-ledger"), TEXT("@capital"), 0.45f).bLedger = true;
 		Add(TEXT("31e-diplomacy"), TEXT("@capital"), 0.45f).bDiplomacy = true;
 		Add(TEXT("31f-research"), TEXT("@capital"), 0.45f).bResearch = true;
