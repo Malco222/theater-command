@@ -256,6 +256,7 @@ struct FCampaignView
 	FString Fallen; // the player's nation, once it has been beaten
 	TArray<FString> RegionHolder; // by region id: the nation that holds it now
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)
+	TArray<int32> Unseen; // provinces the player has no eyes on, under the fog of war
 	TArray<int32> FreeCapitals; // capitals of fallen countries the player would set free by taking them
 	TArray<FViewAirfield> Airfields; // every airfield the player knows of (the grand campaign; empty in a scenario)
 	TArray<FIntVector4> RegionWorks; // by region id: factories built since the war began, shipyard level, anti-aircraft level, airfield level

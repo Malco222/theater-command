@@ -1210,7 +1210,8 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("Under it: FORCES (L) lists every army, fleet and airfield you command with a way to each; REPORT (R) is what every nation did last month; GOALS (O) is what winning means and how far you have got; ")
 		TEXT("CAPITAL (C) looks at your capital; and MAP VIEWS (Y) steps through the map as it is, the wealth view (gold by what a province pays, so you can see what is worth taking) and friend and foe (your ground green, your allies' blue, your enemies' red). ")
 		TEXT("Click a province to see its chief town and THE PRIZE: what taking it would be worth to you. Its RECRUIT and WORKS tabs hold what can be ordered there. ")
-		TEXT("The line beside END THE MONTH says how many armies can still move: click it, or press Tab, to go to the next."));
+		TEXT("The line beside END THE MONTH says how many armies can still move: click it, or press Tab, to go to the next. ")
+		TEXT("In the grand campaign, ground under a shadow is ground you have no eyes on: what stands there is not known until your troops, your allies, an agent or a reconnaissance flight come near."));
 	Add(TEXT("YOUR ARMIES' CARDS"),
 		TEXT("Pick an army up and each corps is a card, with a small card for each of its divisions: its name, its strength and its stripes of experience. ")
 		TEXT("Two bars belong to the whole corps. MORALE rises with victories, on home soil, with friends near and with rest, and falls with defeats, hunger and want of pay; it is worth up to fifteen parts in a hundred in battle. ")
@@ -3196,6 +3197,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowLanes(View.Lanes);
 		Map->ShowFreeCapitals(View.FreeCapitals);
+		Map->ShowShroud(View.Unseen);
 		if (Map->AreSidesShown())
 		{
 			Map->ShowSides(true, View.RegionStanding); // ground that has changed sides changes colour

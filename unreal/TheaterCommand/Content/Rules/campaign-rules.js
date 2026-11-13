@@ -15284,6 +15284,8 @@
       human: s.human,
       current: current(s),
       humanUp: up,
+      // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
+      unseen: s.human ? s.regions.filter((r) => seen[r.id] === 0).map((r) => r.id) : [],
       // Whether the player's country is at war with anybody: the music follows it.
       atWar: !!s.human && (s.nations[s.human]?.atWar.length ?? 0) > 0,
       eve: onEve(s),

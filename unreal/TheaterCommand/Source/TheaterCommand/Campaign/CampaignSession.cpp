@@ -488,6 +488,14 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	}
 	// The airfields (the grand campaign). There the aircraft belong to their airfield, so the table shows one
 	// piece for each airfield with aircraft on it instead of one for each group.
+	const TArray<TSharedPtr<FJsonValue>>* Unseen = nullptr;
+	if (Object->TryGetArrayField(TEXT("unseen"), Unseen))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Unseen)
+		{
+			Out.Unseen.Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Free = nullptr;
 	if (Object->TryGetArrayField(TEXT("free"), Free))
 	{

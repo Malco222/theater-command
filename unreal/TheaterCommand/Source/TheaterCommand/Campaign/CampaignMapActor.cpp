@@ -1724,6 +1724,10 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 				const float Rich = Gold[FMath::Clamp(Towns[Here].Rank, 0, 5)];
 				Tint = FMath::Lerp(FLinearColor(0.16f, 0.16f, 0.15f), FLinearColor(1.0f, 0.74f, 0.1f), Rich);
 			}
+			if (UnseenSet.Contains(Here))
+			{
+				Tint *= 0.55f; // under the fog of war
+			}
 			// A frontier between two countries is drawn dark; a province line inside one is not drawn at all.
 			const int32 East = At(X + 1, Y), South = At(X, Y + 1);
 			if ((East >= 0 && HolderOf(East) != Holder) || (South >= 0 && HolderOf(South) != Holder))
@@ -2701,6 +2705,32 @@ void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 		}
 	}
 	Buffers.Commit(OrdersMesh, 5, HighlightMaterial);
+}
+
+void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen)
+{
+	if (Unseen == ShownUnseen)
+	{
+		return;
+	}
+	ShownUnseen = Unseen;
+	UnseenSet = TSet<int32>(Unseen);
+	bMiniStale = true;
+	OrdersMesh->ClearMeshSection(6);
+	if (Unseen.Num() == 0)
+	{
+		return;
+	}
+	// A shadow over the ground nobody of the player's can see: what stands there is not known.
+	FCampaignMeshBuffers Buffers;
+	for (int32 RegionId : Unseen)
+	{
+		if (Data.Regions.IsValidIndex(RegionId))
+		{
+			AppendRegionFill(Buffers, RegionId, FLinearColor(0.02f, 0.03f, 0.05f, 0.34f));
+		}
+	}
+	Buffers.Commit(OrdersMesh, 6, HighlightMaterial);
 }
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)

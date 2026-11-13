@@ -91,6 +91,8 @@ public:
 	/** The friend-and-foe view: the player's own ground left as it is, his allies' washed blue, his enemies' red, on the table and on the small map. */
 	void ShowSides(bool bOn, const TArray<FString>& Standing);
 	bool AreSidesShown() const { return bSides; }
+	/** The fog of war: ground the player has no eyes on lies under a shadow, on the table and on the small map. */
+	void ShowShroud(const TArray<int32>& Unseen);
 	/** Rings in gold the capitals of fallen countries that the player would set free by taking them. */
 	void ShowFreeCapitals(const TArray<int32>& Capitals);
 	/** Rings the seas a fleet in hand can sail to, the one the pointer is over more brightly, and the fleet itself. None clears them. */
@@ -315,6 +317,8 @@ private:
 	bool bMiniStale = true;
 	TArray<FIntVector4> ShownBuildings;
 	TArray<int32> ShownFree;
+	TArray<int32> ShownUnseen;
+	TSet<int32> UnseenSet;
 	TArray<FTownInfo> Towns; // by province id, once the rules have said
 	bool bWealth = false;
 	bool bSides = false;
