@@ -2134,7 +2134,7 @@ UTextRenderComponent* ACampaignMapActor::AddLabel(const FString& Text, const FVe
 FColor ACampaignMapActor::RegionInk(int32 RegionId) const
 {
 	const FCampaignNation* Nation = Data.Regions.IsValidIndex(RegionId) ? Data.FindNation(Data.Regions[RegionId].Owner) : nullptr;
-	const bool bDark = Nation && FLinearColor(Nation->Color).GetLuminance() < 0.16f;
+	const bool bDark = Nation && FLinearColor(Nation->Color).GetLuminance() < 0.22f;
 	return (bDark ? FromHex(TEXT("C9C3B2")) : FromHex(TEXT("2B251E"))).ToFColor(true);
 }
 
