@@ -5,6 +5,7 @@
 // Every number lives in data/campaign/resources.json. The historical scenarios do not use any of this.
 
 import data from '../../data/campaign/resources.json';
+import { civicSum } from './buildings';
 import { KIND, type Corps, type Game, type Kind, type Region, type ShipClass, type Stores, type Terrain } from './types';
 import { allied, atWar, bloc, headline } from './game';
 import { CLASSES, atSea, laneLoss, oreRoute, zoneOf } from './navy';
@@ -362,6 +363,9 @@ function incomeLines(g: Game, nat: string, good: Good, lanes: Lane[]): ResLine[]
     if (n.offmap) out.push({ key: 'homeland', label: 'The farms and mills of the homeland, beyond the map', amount: n.offmap.industry * RES.sup.offmap });
     out.push({ key: 'colonies', label: 'The colonies', amount: sea, count: nSea });
     out.push({ key: 'occupied', label: 'Taken from occupied ground', amount: occ, count: nOcc });
+    // Farm buildings in the towns (the grand campaign).
+    const farms = civicSum(g, nat, true).sup;
+    if (farms > 0) out.push({ key: 'farms', label: 'Cooperative farms, granaries and food works', amount: farms });
   }
   for (const l of lanes) {
     if (l.full[good] <= 0) continue;

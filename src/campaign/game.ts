@@ -18,7 +18,9 @@ import { techTick, winterReady } from './tech';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
 import { afterFall, recordFall, retaken, standsFreed } from './liberation';
-import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedOrg } from './morale';
+import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedMonth, restedOrg } from './morale';
+import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
+import { tradeTick } from './trade';
 import { numberCorps } from './armies';
 import { INTEL, identify, intelAttack, intelTick } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
@@ -85,7 +87,7 @@ export function createGame(seed: number, human: string | null): Game {
   const g: Game = {
     seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], generals: [], nextCorps: 1, nextBuild: 1, human,
     reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, railhead: {}, capDist: {}, week: 1,
-    seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], shoreReports: [], convoys: {},
+    seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], shoreReports: [], trade: [], convoys: {},
     airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {}, stories: newStories(), intel: { agents: [], next: 1, notes: [], heat: {} }, passings: [],
     links: md.links, width: md.width, height: md.height, land: md.land,
   };
@@ -1530,11 +1532,13 @@ export function startPhase(g: Game, nat: string): void {
   cutOffNews(g);
   // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good
   // from what is left. A treasury that is empty pays nobody: no drafts go out, the armies rest badly and men drift away.
+  // Trade agreements are looked over first: what war has ended, what the sea lets through (the grand campaign).
+  tradeTick(g, nat);
   const earned = income(g, nat);
   n.pp += earned - upkeepTotal(g, nat);
   const credit = BUDGET.debt.floor * Math.max(1, earned);
   const owed = budgeted(g) && n.pp < 0 ? Math.min(1, -n.pp / credit) : 0;
-  n.pc = Math.min(DIPLOMACY.pcCap, n.pc + pcIncome(nat));
+  n.pc = Math.min(DIPLOMACY.pcCap, n.pc + pcIncome(nat) + civicSum(g, nat).pc);
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
   const army = g.corps.filter((c) => c.nat === nat);
@@ -1544,9 +1548,12 @@ export function startPhase(g: Game, nat: string): void {
   // A corps the player has told to keep its veterans together asks for no drafts.
   // The level of the campaign quickens or slows the drafts, for the player or for his rivals: at the fair level, not at all.
   // A nation whose supplies have run out cannot equip the drafts it trains (the grand campaign).
-  const drafts = draftsMul(g, nat) * traitDrafts(g, nat) * supDrafts(g, nat);
+  // Training grounds at home turn out replacements faster (the grand campaign).
+  const drafts = draftsMul(g, nat) * traitDrafts(g, nat) * supDrafts(g, nat) * civicDrafts(g, nat);
+  // A hospital in a resting corps' province, or beside it, sends more of its men back and rests it better.
+  const ward = (c: Corps): { drafts: number; org: number } => (restedMonth(g, c) ? hospitalWorth(hospitalNear(g, c, (h) => h === nat || allied(g, h, nat))) : { drafts: 1, org: 0 });
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
-  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
+  const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;
   // Corps starved into surrender this month, by where they stood: an army lost together is one piece of news.
@@ -1565,7 +1572,7 @@ export function startPhase(g: Game, nat: string): void {
       const cold = frozen(g, nat, g.regions[c.reg]);
       const bite = cold ? cmdWinter(g, c) : 0;
       if (cold) c.str *= 1 - EASTERN.winter.attrition * bite;
-      const rest = ((c.fought ? 0.25 : 0.45) + restedOrg(g, c)) * lineStrength(g, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
+      const rest = ((c.fought ? 0.25 : 0.45) + restedOrg(g, c) + ward(c).org) * lineStrength(g, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g, c);
       c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
       if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {

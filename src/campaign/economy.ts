@@ -9,6 +9,8 @@ import setup from '../../data/campaign/setup-1939.json';
 import { STACK, type Build, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
 import { addCorps, allied, headline } from './game';
 import { DIPLOMACY, tradePartners } from './diplomacy';
+import { campXp, civicSum, deliverCivic, hallShare } from './buildings';
+import { dealsOf, tradeIncome } from './trade';
 import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
@@ -19,7 +21,7 @@ import { workingFactories } from './rails';
 import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
 import { TECH, locked, whyNoPara } from './tech';
-import { shortOfOil, supIncome } from './resources';
+import { keepsStores, shortOfOil, supIncome } from './resources';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -93,9 +95,11 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl): Yield {
   const own = r.owner === nat;
   // A factory wrecked by bombing earns nothing until engineers rebuild it (the grand campaign only).
   const works = workingFactories(g, r);
-  const fac = own ? works : works * PRODUCTION.occupiedIncome;
-  if (!budgeted(g)) return { land: 0, port: 0, oil: 0, fac, capital: 0, total: fac };
-  const k = !own ? BUDGET.occupied : r.overseas ? BUDGET.overseas : 1;
+  if (!budgeted(g)) { const fac = own ? works : works * PRODUCTION.occupiedIncome; return { land: 0, port: 0, oil: 0, fac, capital: 0, total: fac }; }
+  // An administration set up on conquered ground makes it pay more of what it is worth.
+  const lift = own ? 0 : hallShare(g, r);
+  const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift);
+  const k = !own ? BUDGET.occupied + lift : r.overseas ? BUDGET.overseas : 1;
   const land = BUDGET.land[r.terrain] * k;
   const port = r.port ? BUDGET.port * k : 0;
   const oil = r.oil ? BUDGET.oil * k : 0;
@@ -186,14 +190,17 @@ export function ledger(g: Game, nat: string): Ledger {
   const away = n.offmap?.industry ?? 0;
   // A government whose homeland is off the map sits there, out of reach.
   const seat = budget ? (n.offmap ? BUDGET.capital : capital) : PRODUCTION.baseIncome;
-  const partners = tradePartners(g, nat).length;
-  const trade = partners * DIPLOMACY.tradeIncome;
+  // In the grand campaign trade is by agreement and the towns' buildings pay their own way.
+  const partners = budget ? dealsOf(g, nat).length : tradePartners(g, nat).length;
+  const trade = budget ? tradeIncome(g, nat) : partners * DIPLOMACY.tradeIncome;
+  const towns = budget ? civicSum(g, nat, keepsStores(g, nat)) : null;
+  const civic = towns ? towns.commerce + towns.farms + towns.tax : 0;
   const peace = n.atWar.length ? 1 : PRODUCTION.peaceIncome;
   const sea = seaIncomeLoss(g, nat), air = airIncomeLoss(g, nat), tech = techMul(g, nat, 'industry');
   const before = seat + facHome + facOcc + away + land + ports + oil;
   // What the nation's own abilities earn it (the grand campaign): banks, ore, a merchant fleet, factories moved out of reach.
   const gift = traitMoney(g, nat);
-  const atPeace = before * peace + trade + gift.flat;
+  const atPeace = before * peace + trade + gift.flat + civic;
   const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
   const hard = budget ? incomeMul(g, nat) : 1;
   const fed = budget ? supIncome(g, nat) : 1;
@@ -206,7 +213,10 @@ export function ledger(g: Game, nat: string): Ledger {
     { key: 'land', label: 'Towns, farms and land', amount: land, count: held },
     { key: 'ports', label: 'Harbours', amount: ports, count: nPorts },
     { key: 'oil', label: 'Oilfields', amount: oil, count: nOil },
-    { key: 'trade', label: 'Trade with friendly neutrals', amount: trade, count: partners },
+    { key: 'trade', label: budget ? 'Trade agreements' : 'Trade with friendly neutrals', amount: trade, count: partners },
+    { key: 'commerce', label: 'Commerce in the towns', amount: towns?.commerce ?? 0 },
+    { key: 'farms', label: 'Farm produce sold', amount: towns?.farms ?? 0 },
+    { key: 'tax', label: 'Taxes the administration gathers', amount: towns?.tax ?? 0 },
     ...gift.lines,
   ];
   const changes: LedgerLine[] = [
@@ -242,7 +252,9 @@ export function income(g: Game, nat: string): number {
       seat += y.capital;
     }
     sum += seat + (n.offmap?.industry ?? 0);
-    const trade = tradePartners(g, nat).length * DIPLOMACY.tradeIncome;
+    // Trade is by agreement, and the towns' buildings pay their own way.
+    const towns = civicSum(g, nat, keepsStores(g, nat));
+    const trade = tradeIncome(g, nat) + towns.commerce + towns.farms + towns.tax;
     // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
     const gift = traitMoney(g, nat);
     // Factories short of steel, coal and rubber stand idle part of the month.
@@ -390,6 +402,7 @@ export function deliver(g: Game, nat: string): void {
   for (const b of due) {
     const r = g.regions[b.region];
     if (b.what === 'air' || b.what === 'ship' || b.what === 'work') { deliverArsenal(g, nat, b); continue; }
+    if (b.what === 'civic') { const news = deliverCivic(g, nat, b); if (news && nat === g.human) headline(g, 'info', news, nat, r.id); continue; }
     if (b.what === 'fort') {
       if (!isHome(g, nat, r)) continue; // the ground was lost before the works were finished
       const vs = new Set(r.fort?.vs ?? []);
@@ -405,7 +418,7 @@ export function deliver(g: Game, nat: string): void {
     if (!at) at = g.regions.find((x) => room(x) && x.fac > 0) ?? g.regions.find(room) ?? null;
     if (!at) continue; // nowhere left to form up
     // The player's new corps are as well trained as the instructors he has sent home can make them.
-    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: nat === g.human ? raisedXp(g, nat) : 0.05, airborne: b.airborne });
+    const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: (nat === g.human ? raisedXp(g, nat) : 0.05) + campXp(g, at.id), airborne: b.airborne });
     c.org = 0.7;
     if (b.elite) c.elite = b.elite;
     const old = b.revive !== undefined ? fallenOf(g, b.revive) : undefined;

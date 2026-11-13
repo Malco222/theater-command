@@ -496,7 +496,7 @@ describe('ordering', () => {
     for (let t = 0; t < 30; t++) runTurnAI(g);
     for (const [id, n] of Object.entries(g.nations)) {
       expect(Number.isFinite(n.pp), id).toBe(true);
-      for (const b of n.queue) expect(['corps', 'fort', 'work']).toContain(b.what);
+      for (const b of n.queue) expect(['corps', 'fort', 'work', 'civic']).toContain(b.what);
     }
     for (const k of Object.keys(g.flags).filter((x) => x.startsWith('wk:aa:'))) expect(g.flags[k]).toBeLessThanOrEqual(3);
     expect(PRODUCTION.builds.art).toBeUndefined();

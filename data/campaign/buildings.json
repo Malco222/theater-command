@@ -1,0 +1,50 @@
+{
+  "_about": {
+    "what": "The buildings of a town, in the grand campaign. Every province has a chief place, and its size sets how many building plots it has ('plots'). Each plot takes one line of building, raised in three levels; a province holds one building of a line. They are separate from the military works of the arsenal (factories, shipyards, guns, airfields, fortifications). None of this touches the history campaigns.",
+    "lines": "'levels' names the three levels, 'cost' and 'months' what each level takes. 'size' is the smallest place that can hold the line, 'ground' the only ground it can stand on, and 'occupied' true lets it be built on conquered ground as well as at home. What a level is worth: 'money' a month to whoever holds the province (times 'place.base' + the province's own land yield / 'place.per', so a city pays more than a village, and times the occupied share on conquered ground); 'sup' supplies a month for a power that keeps stocks ('moneyElse' in money for a country that does not); 'research' on the speed of every research team; 'xp' on the experience of a corps raised in the province and 'drafts' on the nation's replacements; 'rest' on the drafts that reach a corps resting in the province or beside it and 'org' on the rest it gets back; 'tax' in money at home, 'occupiedShare' on the share of a conquered province's yield that reaches the treasury, and 'pc' political capital a month; 'trade' on the worth of every trade agreement, and from level 'house' in a harbour town or the capital one more trading house (trade.json).",
+    "caps": "The most a nation's buildings add up to, however many it has.",
+    "ai": "A computer-run nation sets aside 'share' of its month's income for buildings and orders from it, never letting the treasury fall below 'reserve'. It has one gang of builders, and one more for every 'gang' home provinces; each works on one building at a time. It keeps to the 'mix': the line it has fewest levels of for its weight comes next, in the richest place that can take it."
+  },
+  "plots": { "village": 1, "town": 2, "city": 3, "capital": 4 },
+  "place": { "base": 0.6, "per": 0.75 },
+  "lines": [
+    {
+      "id": "market", "name": "Commerce", "levels": ["Market hall", "Merchant quarter", "Exchange"],
+      "cost": [9, 10, 12], "months": [3, 4, 5], "size": "town",
+      "money": 0.45, "trade": 0.04, "house": 2,
+      "blurb": "Shops, banks and warehouses. Every level pays into the treasury each month, the more the richer the place, and adds to what your trade agreements are worth. From the second level, in a harbour town or the capital, it opens one more trading house."
+    },
+    {
+      "id": "farm", "name": "Farming", "levels": ["Cooperative farms", "Granaries", "Food works"],
+      "cost": [6, 8, 10], "months": [2, 3, 4], "ground": ["plains", "forest", "hills"],
+      "sup": 0.4, "moneyElse": 0.15,
+      "blurb": "Better farming, storage and canning. Every level sends more supplies to the depots each month."
+    },
+    {
+      "id": "school", "name": "Learning", "levels": ["Technical school", "Polytechnic", "Research institute"],
+      "cost": [10, 14, 18], "months": [4, 5, 6], "size": "city",
+      "research": 0.02,
+      "blurb": "Engineers and scientists for the laboratories. Every level quickens all your research."
+    },
+    {
+      "id": "camp", "name": "Training", "levels": ["Drill ground", "Barracks", "Officer school"],
+      "cost": [6, 9, 12], "months": [2, 3, 4],
+      "xp": 0.06, "drafts": 0.015,
+      "blurb": "Instructors, ranges and parade grounds. Corps raised in this province start with more experience, and every level speeds the replacements for the whole army a little."
+    },
+    {
+      "id": "hospital", "name": "Medicine", "levels": ["Aid post", "Military hospital", "Convalescent home"],
+      "cost": [6, 8, 10], "months": [2, 3, 4], "occupied": true,
+      "rest": 0.25, "org": 0.04,
+      "blurb": "Wards and rest homes behind the front. A corps that rests a month in this province or beside it gets more of its men back and more of its rest."
+    },
+    {
+      "id": "hall", "name": "Administration", "levels": ["Town hall", "Prefecture", "Governor's office"],
+      "cost": [7, 9, 12], "months": [3, 3, 4], "occupied": true,
+      "tax": 0.1, "occupiedShare": 0.1, "pc": 0.15,
+      "blurb": "Clerks, police and tax collectors. At home every level brings in a little more tax and political capital. On conquered ground it makes the province pay more of what it is worth."
+    }
+  ],
+  "caps": { "research": 0.3, "drafts": 0.2, "trade": 0.4, "pc": 3, "houses": 5 },
+  "ai": { "share": 0.1, "reserve": 30, "gang": 12, "mix": { "market": 4, "farm": 2, "school": 2, "hall": 1, "camp": 1, "hospital": 1 } }
+}

@@ -22,6 +22,7 @@ import { openMorale } from './morale';
 import { numberDivisions } from './armies';
 import { NAVY } from './navy';
 import { openEscorts } from './fleets';
+import { openTrade } from './trade';
 import { EASTERN, allied, atWar, collapseScore, corpsBase, frozen, weather } from './game';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -74,6 +75,7 @@ export function startOpen(g: Game): Game {
   openAirWar(g);
   openMorale(g);
   openEscorts(g);
+  openTrade(g);
   numberDivisions(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
   g.supplyDirty = true;

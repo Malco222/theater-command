@@ -6,7 +6,9 @@
 import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { airAI } from './air';
-import { aiProduction } from './economy';
+import { aiProduction, income } from './economy';
+import { civicAI } from './buildings';
+import { keepsStores } from './resources';
 import { aiArsenal } from './arsenal';
 import { blocked, blowBridges } from './rivers';
 import { groundRules } from './ground';
@@ -133,6 +135,7 @@ export function runAI(g: Game, nat: string): void {
   aiBridges(g, nat, (x, from) => blowBridges(g, nat, x, from));
   aiProduction(g, nat);
   aiArsenal(g, nat);
+  civicAI(g, nat, income(g, nat), keepsStores(g, nat));
 }
 
 function campaign(g: Game, nat: string): void {

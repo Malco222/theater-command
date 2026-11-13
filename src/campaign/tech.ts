@@ -10,6 +10,7 @@ import { headline } from './game';
 import { RESEARCH } from './research';
 import { traitRule, type Trait, type When } from './traits';
 import { RES, keepsStores, oilMonths } from './resources';
+import { researchSpeed } from './buildings';
 import type { Field, Game, Nation, TechState } from './types';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine';
@@ -215,7 +216,9 @@ export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
 function month(g: Game, n: Nation, turn: number, staffed: boolean, quiet: boolean): void {
   const s = n.tech!;
   const due: string[] = [];
-  for (const w of s.work) { w.left -= 1; if (w.left <= 1e-9) due.push(w.id); }
+  // Schools and institutes at home quicken every team.
+  const pace = researchSpeed(g, n.id);
+  for (const w of s.work) { w.left -= pace; if (w.left <= 1e-9) due.push(w.id); }
   if (due.length) {
     s.work = s.work.filter((w) => w.left > 1e-9);
     for (const id of due) finish(g, n, id, quiet);
