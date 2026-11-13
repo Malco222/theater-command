@@ -404,6 +404,14 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				Out.Civic.Add(FMath::RoundToInt32(Value->AsNumber()));
 			}
 		}
+		const TArray<TSharedPtr<FJsonValue>>* Scars = nullptr;
+		if (Object->TryGetArrayField(TEXT("scars"), Scars))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Scars)
+			{
+				Out.Scars.Add(FMath::RoundToInt32(Value->AsNumber()));
+			}
+		}
 	}
 	Object->TryGetStringArrayField(TEXT("alerts"), Out.Alerts);
 	const TArray<TSharedPtr<FJsonValue>>* Pages = nullptr;

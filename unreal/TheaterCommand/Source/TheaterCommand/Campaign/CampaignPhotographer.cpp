@@ -127,6 +127,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		FShot& Shot = Add(TEXT("12-ground-taken"), TEXT("Pomorze"), 0.34f);
 		Shot.bKeep = Shot.bClose = true;
 	}
+	// The scars the battle left at Pomorze, close to; and the scars of battles of each size and age, side by side.
+	Add(TEXT("12b-scars-of-the-battle"), TEXT("Pomorze"), 0.2f);
+	{
+		FShot& Shot = Add(TEXT("12c-scars-by-size-and-age"), TEXT("Lodz"), 0.36f);
+		Shot.Scars = TEXT("Poznan:0:3;Lodz:0:2;Kielce:0:1;Mlawa:1:3;Polish Silesia:2:3;Lublin:3:3");
+	}
 	{
 		FShot& Shot = Add(TEXT("13-army-on-the-march"), TEXT("Berlin"), 0.4f);
 		Shot.Army = TEXT("Neumark");
@@ -1068,6 +1074,23 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			Works[*Here] = FIntVector4(3, 3, 3, 2);
 		}
 		Table->ShowBuildings(Works);
+	}
+	if (!Shot.Scars.IsEmpty())
+	{
+		TArray<int32> Left;
+		TArray<FString> Each;
+		Shot.Scars.ParseIntoArray(Each, TEXT(";"));
+		for (const FString& One : Each)
+		{
+			TArray<FString> Part;
+			One.ParseIntoArray(Part, TEXT(":"));
+			const int32* Where = Part.Num() >= 3 ? Data.RegionByName.Find(Part[0]) : nullptr;
+			if (Where)
+			{
+				Left.Append({ *Where, FCString::Atoi(*Part[1]), FCString::Atoi(*Part[2]) });
+			}
+		}
+		Table->ShowScars(Left);
 	}
 	if (Shot.TownPlot >= 0)
 	{

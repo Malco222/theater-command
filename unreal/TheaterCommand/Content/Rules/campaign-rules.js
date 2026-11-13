@@ -18258,6 +18258,23 @@
       free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
       alerts: alertsOf(s),
       todo: todoOf(s),
+      // Where battles were lately fought, for the scars they leave on the table: three numbers for each place, the
+      // region, the months since, and how big the fighting was (1 to 3). Only what the player saw or took part in.
+      scars: (() => {
+        const last = /* @__PURE__ */ new Map();
+        for (const r of s.reports) {
+          const age = s.turn - r.turn;
+          if (age < 0 || age > 3 || r.yielded) continue;
+          const mine2 = !s.human || r.attNat === s.human || r.defNat === s.human || allied(s, r.attNat, s.human) || allied(s, r.defNat, s.human);
+          if (!mine2 && !(seen[r.region] > 0)) continue;
+          const lost = r.attLost + r.defLost;
+          const size = lost >= 3e4 ? 3 : lost >= 8e3 ? 2 : 1;
+          const cur = last.get(r.region);
+          if (!cur) last.set(r.region, [age, size]);
+          else last.set(r.region, [Math.min(cur[0], age), Math.max(cur[1], size)]);
+        }
+        return [...last.entries()].flatMap(([reg, [age, size]]) => [reg, age, size]);
+      })(),
       // Every building of the towns' own that stands or is going up, for the table: region, line (0 market, 1 farm,
       // 2 school, 3 camp, 4 hospital, 5 hall), the level that stands, and 1 while the next is being built.
       civic: (() => {

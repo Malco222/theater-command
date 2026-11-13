@@ -202,6 +202,11 @@ public:
 	 * next is going up.
 	 */
 	void ShowCivic(const TArray<int32>& Civic);
+	/**
+	 * Leaves the scars of battle on the ground where fighting lately was: craters, burnt-out wrecks, and smoke
+	 * while they are fresh. Three numbers for each place: the region, the months since, and how big it was (1 to 3).
+	 */
+	void ShowScars(const TArray<int32>& Scars);
 	/** Where a flight takes off from: its airfield, or for a carrier's aircraft the ships themselves. */
 	FVector2D SortieStart(const FSortie& Sortie) const;
 
@@ -372,6 +377,13 @@ private:
 	bool bSides = false;
 	TArray<FString> SideOf; // by province: own, ally, enemy or neutral, as the player stands to its holder
 	int32 ShownMonth = -1;
+	// The year turning: the look the trees wear (0 summer, 1 September, 2 October, 3 November, 4 winter, 5 March,
+	// 6 April), how hard the winter lies (0 to 1), and what the rivers were last drawn for.
+	int32 TreeLook = 0;
+	float WinterHard = 0.0f;
+	float RiversDrawnFor = -1.0f;
+	/** How deep the snow lies at a place on the map (0 to 1) when the winter is this hard. */
+	static float SnowLying(const FVector2D& Place, float Hard);
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
 	FLandFeatures Land;
 	UPROPERTY()
@@ -424,6 +436,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> CivicMesh;
 	TArray<int32> ShownCivic;
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> ScarsMesh;
+	TArray<int32> ShownScars;
+	TArray<FVector> Smoulders; // wrecks still burning, for the smoke that rises from them
 	// Pieces on the move, to know when one is set down; and where pieces were lately set down, for the dust.
 	TSet<TWeakObjectPtr<AArmyPiece>> OnTheMarch;
 	TArray<TPair<FVector, double>> SetDowns;

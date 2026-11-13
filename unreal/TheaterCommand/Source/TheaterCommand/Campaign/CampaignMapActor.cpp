@@ -1049,7 +1049,10 @@ void ACampaignMapActor::BuildWaterways()
 	RiverMesh->ClearAllMeshSections();
 	// A river is a ribbon of water laid over the relief along its course: narrow at the source, broad at the
 	// mouth, its course rounded so it winds instead of turning corners, its banks a shade darker than midstream.
-	const FColor Midstream = FromHex(TEXT("3E86B4")).ToFColor(true), Bank = FromHex(TEXT("2B5F86")).ToFColor(true);
+	const FLinearColor MidstreamRuns = FromHex(TEXT("3E86B4")), BankRuns = FromHex(TEXT("2B5F86"));
+	// (in the depth of winter the rivers freeze where the snow lies: ice, pale and dull, with a darker lead midstream)
+	const FLinearColor MidstreamIce = FromHex(TEXT("A9C3CF")), BankIce = FromHex(TEXT("DCE7EA"));
+	RiversDrawnFor = WinterHard;
 	const double Lift = 0.1;
 	FCampaignMeshBuffers Buffers;
 	for (const FLandRiver& River : Land.Rivers)
@@ -1084,6 +1087,8 @@ void ACampaignMapActor::BuildWaterways()
 			{
 				break;
 			}
+			const float Frozen = WinterHard >= 0.8f ? FMath::SmoothStep(0.45f, 0.8f, SnowLying(Path[K], WinterHard)) : 0.0f;
+			const FColor Midstream = FMath::Lerp(MidstreamRuns, MidstreamIce, Frozen).ToFColor(true), Bank = FMath::Lerp(BankRuns, BankIce, Frozen).ToFColor(true);
 			const int32 Here[3] = {
 				Buffers.AddVertex(SurfacePointOver(L.X, L.Y, Lift), FVector::UpVector, Bank),
 				Buffers.AddVertex(SurfacePointOver(Path[K].X, Path[K].Y, Lift), FVector::UpVector, Midstream),
@@ -1671,6 +1676,121 @@ void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 	}
 }
 
+void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
+{
+	if (!Data.IsLoaded() || (ScarsMesh && Scars == ShownScars))
+	{
+		return;
+	}
+	ShownScars = Scars;
+	if (!ScarsMesh)
+	{
+		ScarsMesh = NewObject<UProceduralMeshComponent>(this);
+		ScarsMesh->SetupAttachment(Root);
+		ScarsMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ScarsMesh->RegisterComponent();
+	}
+	ScarsMesh->ClearAllMeshSections();
+	Smoulders.Reset();
+	FMiniatureMesh Model;
+	const double U = UnitScale;
+	const FLinearColor Rim(FColor::FromHex(TEXT("6A553D"))), Pit(FColor::FromHex(TEXT("2B231B"))), Burnt(FColor::FromHex(TEXT("2E2724"))), Rust(FColor::FromHex(TEXT("5A3A2A"))), Char(FColor::FromHex(TEXT("191614"))), Timber(FColor::FromHex(TEXT("4A3A2A")));
+	for (int32 K = 0; K + 2 < Scars.Num(); K += 3)
+	{
+		const int32 RegionId = Scars[K], Age = Scars[K + 1], Big = FMath::Clamp(Scars[K + 2], 1, 3);
+		if (!Data.Regions.IsValidIndex(RegionId) || Age > 3)
+		{
+			continue;
+		}
+		const FCampaignRegion& Region = Data.Regions[RegionId];
+		FRandomStream Random(RegionId * 3571 + 17);
+		// The field: in the open country of the province, away from its town, its pieces and the quarter south of it.
+		FVector2D Field = Region.Centroid;
+		if (FVector2D::Distance(Field, Region.Center) < 16.0)
+		{
+			bool bFound = false;
+			const double Turn = Random.FRandRange(0.0f, 360.0f);
+			for (int32 Try = 0; Try < 8 && !bFound; ++Try)
+			{
+				// (west, north-west and north first: the east is the army's, the south the town's new quarter)
+				const double Angle = FMath::DegreesToRadians(200.0 + Try * 45.0 + Turn * 0.1);
+				const FVector2D At = Region.Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * 19.0;
+				if (Terrain.HeightAt(At.X, At.Y) > 0.0f && Data.FindRegionAt(At.X, At.Y) == RegionId)
+				{
+					Field = At;
+					bFound = true;
+				}
+			}
+		}
+		auto Spot = [&](double Reach, FVector2D& Out) -> bool
+		{
+			for (int32 Try = 0; Try < 6; ++Try)
+			{
+				const double Angle = Random.FRandRange(0.0f, 6.2832f), Far = Reach * FMath::Sqrt(Random.FRandRange(0.04f, 1.0f));
+				Out = Field + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Far;
+				if (Terrain.HeightAt(Out.X, Out.Y) > 0.0f)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
+		// Craters: fewer as the months go by and the ground heals.
+		const int32 Craters = FMath::Max(1, (2 + Big * 3) * (4 - Age) / 4);
+		for (int32 C = 0; C < Craters; ++C)
+		{
+			FVector2D At;
+			if (!Spot(4.5 + Big * 1.4, At))
+			{
+				continue;
+			}
+			const double Wide = Random.FRandRange(0.75f, 1.5f) * U;
+			const FVector Foot = SurfacePoint(At.X, At.Y, 0.01);
+			Model.Pillar(Foot, Wide * 1.3, Wide * 0.92, 0.13 * U, Rim, 9);
+			Model.Pillar(Foot + FVector(0.0, 0.0, 0.11 * U), Wide * 0.84, Wide * 0.7, 0.03 * U, Pit, 9);
+		}
+		// Wrecks: burnt-out tanks and lorries, cleared away after a couple of months.
+		const int32 Wrecks = Age >= 3 ? 0 : FMath::Max(1, (Big + 1) * (3 - Age) / 3 + (Age == 0 ? 1 : 0));
+		for (int32 W = 0; W < Wrecks; ++W)
+		{
+			FVector2D At;
+			if (!Spot(4.0 + Big * 1.2, At))
+			{
+				continue;
+			}
+			const FVector Foot = SurfacePoint(At.X, At.Y, 0.02);
+			const double Turn = Random.FRandRange(0.0f, 360.0f), S = 1.4 * U;
+			const double Cos = FMath::Cos(FMath::DegreesToRadians(Turn)), Sin = FMath::Sin(FMath::DegreesToRadians(Turn));
+			auto At3 = [&](double Along, double Across, double Up) { return Foot + FVector(Along * Cos - Across * Sin, Along * Sin + Across * Cos, Up) * S; };
+			if (W % 3 != 2)
+			{
+				// A tank: its hull, the turret blown askew, the gun drooping, a track thrown off beside it.
+				Model.Box(At3(0.0, 0.0, 0.28), FVector(2.1, 1.15, 0.5) * S, W % 2 == 0 ? Burnt : Rust, Turn);
+				Model.Box(At3(0.2, 0.25, 0.68), FVector(0.95, 0.85, 0.36) * S, Char, Turn + 24.0, 12.0);
+				Model.Rod(At3(0.6, 0.45, 0.7), At3(1.7, 0.95, 0.42), 0.07 * S, Char, 5);
+				Model.Box(At3(-0.3, -0.95, 0.06), FVector(1.5, 0.3, 0.1) * S, Char, Turn + 9.0);
+			}
+			else
+			{
+				// A lorry on its side, and what it carried.
+				Model.Box(At3(0.0, 0.0, 0.32), FVector(1.7, 0.5, 0.64) * S, Rust, Turn, 0.0);
+				Model.Box(At3(0.95, 0.0, 0.28), FVector(0.55, 0.5, 0.56) * S, Burnt, Turn);
+				Model.Box(At3(-0.5, 0.75, 0.12), FVector(0.45, 0.45, 0.24) * S, Timber, Turn + 30.0);
+				Model.Box(At3(0.2, 0.9, 0.1), FVector(0.4, 0.4, 0.2) * S, Timber, Turn - 15.0);
+			}
+			if (Age <= 1 && (Age == 0 || W == 0))
+			{
+				Smoulders.Add(At3(0.0, 0.0, 0.8)); // still burning
+			}
+		}
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		ScarsMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		ScarsMesh->SetMaterial(0, SceneryMaterial);
+	}
+}
+
 void ACampaignMapActor::BuildTowns()
 {
 	TownMarkers->ClearInstances();
@@ -2152,13 +2272,40 @@ void ACampaignMapActor::BuildTrees()
 					const FVector Foot = SurfacePoint(X, Y, 0.0);
 					// Firs toward the north (small y) and on high ground.
 					const bool bFir = Random.FRand() < FMath::Clamp(0.15 + (700.0 - Y) / 600.0 + Height * 0.35, 0.05, 0.92);
+					// (a number of the tree's own, the same every month, so that a tree keeps its place in the turning)
+					const float Own = static_cast<float>(FMath::Frac(FMath::Sin(X * 12.9898 + Y * 78.233) * 43758.5453));
+					const float Lying = SnowLying(FVector2D(X, Y), WinterHard);
 					if (bFir)
 					{
-						Model.Fir(Foot, 1.9 * Size * U, 0.55 * Size * U, FLinearColor(0.035f * Shade, 0.085f * Shade, 0.045f * Shade));
+						// Firs keep their green the year round, and carry the snow where it lies.
+						const FLinearColor Green(0.035f * Shade, 0.085f * Shade, 0.045f * Shade);
+						Model.Fir(Foot, 1.9 * Size * U, 0.55 * Size * U, FMath::Lerp(Green, FLinearColor(0.5f, 0.54f, 0.54f), 0.62f * Lying));
 					}
 					else
 					{
-						Model.Broadleaf(Foot, 1.5 * Size * U, 0.7 * Size * U, FLinearColor(0.055f * Shade, 0.115f * Shade, 0.038f * Shade));
+						const FLinearColor Summer(0.055f * Shade, 0.115f * Shade, 0.038f * Shade), Fresh(0.085f * Shade, 0.17f * Shade, 0.045f * Shade);
+						const FLinearColor Gold(0.46f * Shade, 0.3f * Shade, 0.04f), Orange(0.42f * Shade, 0.17f * Shade, 0.03f), Russet(0.25f * Shade, 0.085f * Shade, 0.03f);
+						const FLinearColor Twigs = FMath::Lerp(FLinearColor(0.115f * Shade, 0.095f * Shade, 0.08f * Shade), FLinearColor(0.5f, 0.52f, 0.52f), 0.5f * Lying);
+						FLinearColor Leaf = Summer;
+						bool bBare = false;
+						switch (TreeLook)
+						{
+						case 1: Leaf = Own < 0.3f ? Gold : Summer; break; // September: the first of them turn
+						case 2: Leaf = Own < 0.34f ? Gold : Own < 0.64f ? Orange : Own < 0.88f ? Russet : Summer; break; // October
+						case 3: bBare = Own < 0.5f; Leaf = Own < 0.8f ? Russet : Orange; break; // November: half of them bare
+						case 4: bBare = true; break; // winter
+						case 5: bBare = Own < 0.5f; Leaf = Fresh; break; // March: in bud
+						case 6: Leaf = Fresh; break; // April
+						default: break;
+						}
+						if (bBare)
+						{
+							Model.Broadleaf(Foot, 1.4 * Size * U, 0.46 * Size * U, Twigs);
+						}
+						else
+						{
+							Model.Broadleaf(Foot, 1.5 * Size * U, 0.7 * Size * U, Leaf);
+						}
 					}
 					++Trees;
 				}
@@ -2763,6 +2910,19 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 	Buffers.Commit(OrdersMesh, 0, HighlightMaterial);
 }
 
+float ACampaignMapActor::SnowLying(const FVector2D& P, float Hard)
+{
+	if (Hard <= 0.0f)
+	{
+		return 0.0f;
+	}
+	// The snow comes down from the north as the winter hardens, and farther south in the east, where the winter
+	// is a continental one. Its edge is ragged, not ruled.
+	const double Line = FMath::Lerp(120.0, 800.0, static_cast<double>(Hard)) + 0.22 * (P.X - 600.0);
+	const double Ragged = 95.0 * FMath::PerlinNoise2D(P * 0.011) + 40.0 * FMath::PerlinNoise2D(P * 0.047 + FVector2D(13.0, 71.0));
+	return 1.0f - static_cast<float>(FMath::SmoothStep(Line - 170.0, Line + 60.0, P.Y + Ragged));
+}
+
 void ACampaignMapActor::SetSeason(int32 Turn)
 {
 	// ("-TheaterSeason=5" on the command line holds the table at one month of the war, for a picture)
@@ -2794,11 +2954,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 					continue; // the sea does not lie under snow
 				}
 				const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
-				// The snow comes down from the north as the winter hardens, and farther south in the east, where
-				// the winter is a continental one. Its edge is ragged, not ruled.
-				const double Line = FMath::Lerp(120.0, 800.0, static_cast<double>(Hard)) + 0.22 * (P.X - 600.0);
-				const double Ragged = 95.0 * FMath::PerlinNoise2D(P * 0.011) + 40.0 * FMath::PerlinNoise2D(P * 0.047 + FVector2D(13.0, 71.0));
-				const float Lying = 1.0f - static_cast<float>(FMath::SmoothStep(Line - 170.0, Line + 60.0, P.Y + Ragged));
+				const float Lying = SnowLying(P, Hard);
 				// It lies thinner than on the crests, so that each country's colour still shows through it.
 				const float Plain = 0.25f * FMath::Sqrt(Hard) * Lying;
 				// And the snow line on the mountains comes down.
@@ -2811,6 +2967,34 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 		});
 	}
 	CampaignTextures::Update(MasksPicture, Pixels);
+	// The year turns on the table. The woods: fresh green in spring, gold and russet through the autumn, bare in
+	// winter where they are not fir. The cloth of the woods seen from far off takes the same turn.
+	{
+		static const int32 Looks[12] = { 4, 4, 5, 6, 0, 0, 0, 0, 1, 2, 3, 4 };
+		static const FLinearColor Cloth[7] =
+		{
+			FLinearColor(0.075f, 0.13f, 0.055f), FLinearColor(0.095f, 0.13f, 0.05f), FLinearColor(0.17f, 0.125f, 0.04f), FLinearColor(0.14f, 0.095f, 0.05f),
+			FLinearColor(0.085f, 0.095f, 0.075f), FLinearColor(0.085f, 0.11f, 0.06f), FLinearColor(0.085f, 0.15f, 0.055f)
+		};
+		const bool bTrees = Looks[Month] != TreeLook || FMath::Abs(Hard - WinterHard) > 0.3f;
+		TreeLook = Looks[Month];
+		WinterHard = Hard;
+		if (LandMaterial)
+		{
+			LandMaterial->SetVectorParameterValue(TEXT("WoodsColour"), Cloth[TreeLook]);
+		}
+		if (bTrees && TreeMeshes.Num() > 0)
+		{
+			const double Began = FPlatformTime::Seconds();
+			BuildTrees();
+			UE_LOG(LogTheater, Log, TEXT("The woods turned for the month in %.2f s"), FPlatformTime::Seconds() - Began);
+		}
+		// The rivers of the east freeze where the snow lies, and run again in the thaw.
+		if (FMath::Abs(Hard - RiversDrawnFor) > 0.01f && RiverMesh)
+		{
+			BuildWaterways();
+		}
+	}
 	// The light of the season: colder and a little weaker in winter, warm in high summer.
 	static const float Summer[12] = { 0.0f, 0.0f, 0.1f, 0.3f, 0.6f, 0.9f, 1.0f, 0.95f, 0.6f, 0.3f, 0.1f, 0.0f };
 	if (UWorld* World = GetWorld())
@@ -3776,7 +3960,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	// Chimneys: a thin grey plume from each, leaning with the wind. Only those near what the eye is looking at.
 	const FLinearColor Grey(0.6f, 0.6f, 0.62f);
 	const double Reach = FMath::Min(CameraDistance * 1.4 + 1500.0, 9000.0);
-	auto Plume = [&](const FVector& Top, int32 Seed, double Scale = 1.0)
+	auto Plume = [&](const FVector& Top, int32 Seed, double Scale = 1.0, const FLinearColor* Ink = nullptr)
 	{
 		if (FVector::DistSquared2D(Top, CameraFocus) > Reach * Reach)
 		{
@@ -3791,9 +3975,17 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const double Sway = FMath::Sin(Now * 0.7 + Seed + K * 1.7) * 0.12 * Big * Age;
 			const FVector At = Top + FVector(0.0, 0.0, 4.0 * Big * Age) + Wind * (2.8 * Big * Age * Age) + Right * Sway;
 			const float Alpha = 0.55f * FMath::SmoothStep(0.0, 0.1, Age) * FMath::Pow(1.0 - Age, 1.3);
-			Draw(At, (0.22 + 1.1 * Age) * Big, Grey, Alpha);
+			Draw(At, (0.22 + 1.1 * Age) * Big, Ink ? *Ink : Grey, Alpha);
 		}
 	};
+	// The wrecks of a battle lately fought still burn: dark smoke from each.
+	{
+		const FLinearColor Oily(0.13f, 0.12f, 0.115f);
+		for (int32 K = 0; K < Smoulders.Num(); ++K)
+		{
+			Plume(Smoulders[K], K * 7 + 300, 1.7, &Oily);
+		}
+	}
 	// The fires of armies in camp: a thin thread of smoke from each.
 	// And a puff of dust as a piece that has been moved is set down on the table again.
 	for (AArmyPiece* Piece : Pieces)
