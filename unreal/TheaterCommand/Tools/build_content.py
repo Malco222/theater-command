@@ -146,7 +146,11 @@ def build_highlight():
     mel.connect_material_expressions(colour, "", glow, "A")
     mel.connect_material_expressions(scalar(m, "Brightness", 1.6, -700, 200), "", glow, "B")
     mel.connect_material_property(glow, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-    mel.connect_material_property(colour, "A", unreal.MaterialProperty.MP_OPACITY)
+    # (the inked lines of the map use this too, with "Opacity" turned down as the eye rises)
+    faded = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -450, 200)
+    mel.connect_material_expressions(colour, "A", faded, "A")
+    mel.connect_material_expressions(scalar(m, "Opacity", 1.0, -700, 320), "", faded, "B")
+    mel.connect_material_property(faded, "", unreal.MaterialProperty.MP_OPACITY)
     finish(m)
 
 

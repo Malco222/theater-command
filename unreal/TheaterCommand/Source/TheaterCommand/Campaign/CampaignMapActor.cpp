@@ -302,6 +302,16 @@ void ACampaignMapActor::LoadMaterials()
 		return Instance;
 	};
 	InkMaterial = MakeSurface(0.8f, 0.2f, 0.0f, 0.0f);
+	// The quiet lines: drawn in ink that can be thinned as the eye rises.
+	auto MakeInk = [this]()
+	{
+		UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		Instance->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+		return Instance;
+	};
+	ProvinceInk = MakeInk();
+	RailInk = MakeInk();
+	SleeperInk = MakeInk();
 	// The pieces: painted metal and cloth, not bare plastic. A fine grain in the paint and a slight tooth to the
 	// surface catch the lamp, at a scale that suits things the size of a model.
 	PieceMaterial = MakeSurface(0.56f, 0.4f, 0.1f, 0.3f);
@@ -739,11 +749,13 @@ void ACampaignMapActor::BuildBorders()
 {
 	BorderMesh->ClearAllMeshSections();
 
-	const FColor NationalInk = FromHex(TEXT("1E1612")).ToFColor(true); // dark brown ink, never pure black
-	const FColor RegionInk = FromHex(TEXT("4A4236")).ToFColor(true);
+	// All the map's lines are dark brown ink, never pure black, and each kind has one weight. A frontier is inked
+	// firmly; a province line is faint (how faint depends on how high the eye is: see UpdateForCamera).
+	const FColor NationalInk = FromHex(TEXT("1E1612")).ToFColor(true);
+	const FColor RegionInk = FromHex(TEXT("1E1814")).ToFColor(false);
 	const double Lift = 0.13;
 
-	FCampaignMeshBuffers Buffers;
+	FCampaignMeshBuffers Buffers, Faint;
 	int32 NationalCount = 0, RegionCount = 0;
 
 	for (const FCampaignRegion& Region : Data.Regions)
@@ -777,8 +789,9 @@ void ACampaignMapActor::BuildBorders()
 					continue; // coast, or a line the neighbour has already drawn
 				}
 				const bool bNational = Data.Regions[Other].Owner != Region.Owner;
-				const double HalfWidth = bNational ? 0.2 : 0.15; // (a frontier is a fine inked line: the band of stain beside it says whose side is whose)
+				const double HalfWidth = bNational ? 0.2 : 0.12; // (a frontier is a fine inked line: the band of stain beside it says whose side is whose)
 				const FColor Ink = bNational ? NationalInk : RegionInk;
+				FCampaignMeshBuffers& Into = bNational ? Buffers : Faint;
 				(bNational ? NationalCount : RegionCount)++;
 
 				// Lay the line over the relief as a ribbon, a short step at a time.
@@ -791,12 +804,12 @@ void ACampaignMapActor::BuildBorders()
 					const FVector2D P = A + Dir * T;
 					const FVector2D L = P + Side * HalfWidth;
 					const FVector2D R = P - Side * HalfWidth;
-					const int32 Left = Buffers.AddVertex(SurfacePointOver(L.X, L.Y, Lift), FVector::UpVector, Ink);
-					const int32 Right = Buffers.AddVertex(SurfacePointOver(R.X, R.Y, Lift), FVector::UpVector, Ink);
+					const int32 Left = Into.AddVertex(SurfacePointOver(L.X, L.Y, Lift), FVector::UpVector, Ink);
+					const int32 Right = Into.AddVertex(SurfacePointOver(R.X, R.Y, Lift), FVector::UpVector, Ink);
 					if (PrevLeft != INDEX_NONE)
 					{
-						Buffers.AddTriangleFacingUp(PrevLeft, PrevRight, Left);
-						Buffers.AddTriangleFacingUp(PrevRight, Left, Right);
+						Into.AddTriangleFacingUp(PrevLeft, PrevRight, Left);
+						Into.AddTriangleFacingUp(PrevRight, Left, Right);
 					}
 					PrevLeft = Left;
 					PrevRight = Right;
@@ -805,6 +818,7 @@ void ACampaignMapActor::BuildBorders()
 		}
 	}
 	Buffers.Commit(BorderMesh, 0, InkMaterial);
+	Faint.Commit(BorderMesh, 1, ProvinceInk);
 	UE_LOG(LogTheater, Log, TEXT("Borders: %d frontier edges, %d region edges"), NationalCount, RegionCount);
 }
 
@@ -1251,9 +1265,10 @@ void ACampaignMapActor::BuildRailways()
 	RailMesh->ClearAllMeshSections();
 	// A railway runs from the middle of one region to the middle of the next through the point where it
 	// crosses their border: a dark line with sleepers across it, as railways are drawn on maps.
-	const FColor Iron = FromHex(TEXT("2E2A27")).ToFColor(true);
-	const double Lift = 0.16, Half = 0.17;
-	FCampaignMeshBuffers Buffers;
+	// (A fine brown line, hidden from high up; its sleepers are seen only close to. See UpdateForCamera.)
+	const FColor Iron = FromHex(TEXT("34261E")).ToFColor(false);
+	const double Lift = 0.16, Half = 0.14;
+	FCampaignMeshBuffers Buffers, Sleepers;
 	for (const FLandRail& Rail : Land.Rails)
 	{
 		if (!Data.Regions.IsValidIndex(Rail.A) || !Data.Regions.IsValidIndex(Rail.B))
@@ -1286,16 +1301,17 @@ void ACampaignMapActor::BuildRailways()
 				PrevRight = Right;
 				// A sleeper across the line at every step.
 				const FVector2D S0 = P + Side * 0.55, S1 = P - Side * 0.55, Back = Dir * 0.13;
-				const int32 T0 = Buffers.AddVertex(SurfacePointOver(S0.X - Back.X, S0.Y - Back.Y, Lift), FVector::UpVector, Iron);
-				const int32 T1 = Buffers.AddVertex(SurfacePointOver(S1.X - Back.X, S1.Y - Back.Y, Lift), FVector::UpVector, Iron);
-				const int32 T2 = Buffers.AddVertex(SurfacePointOver(S0.X + Back.X, S0.Y + Back.Y, Lift), FVector::UpVector, Iron);
-				const int32 T3 = Buffers.AddVertex(SurfacePointOver(S1.X + Back.X, S1.Y + Back.Y, Lift), FVector::UpVector, Iron);
-				Buffers.AddTriangleFacingUp(T0, T1, T2);
-				Buffers.AddTriangleFacingUp(T1, T2, T3);
+				const int32 T0 = Sleepers.AddVertex(SurfacePointOver(S0.X - Back.X, S0.Y - Back.Y, Lift), FVector::UpVector, Iron);
+				const int32 T1 = Sleepers.AddVertex(SurfacePointOver(S1.X - Back.X, S1.Y - Back.Y, Lift), FVector::UpVector, Iron);
+				const int32 T2 = Sleepers.AddVertex(SurfacePointOver(S0.X + Back.X, S0.Y + Back.Y, Lift), FVector::UpVector, Iron);
+				const int32 T3 = Sleepers.AddVertex(SurfacePointOver(S1.X + Back.X, S1.Y + Back.Y, Lift), FVector::UpVector, Iron);
+				Sleepers.AddTriangleFacingUp(T0, T1, T2);
+				Sleepers.AddTriangleFacingUp(T1, T2, T3);
 			}
 		}
 	}
-	Buffers.Commit(RailMesh, 0, InkMaterial);
+	Buffers.Commit(RailMesh, 0, RailInk);
+	Sleepers.Commit(RailMesh, 1, SleeperInk);
 	UE_LOG(LogTheater, Log, TEXT("Railways: %d links, in %d points"), Land.Rails.Num(), Buffers.Vertices.Num());
 }
 
@@ -2918,9 +2934,17 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 	// Ground across a frontier at peace is amber: the army can go there, but only by declaring war.
 	const FLinearColor War(1.0f, 0.55f, 0.0f, 0.5f);
 	const FColor WarRing = FLinearColor(1.0f, 0.72f, 0.16f, 0.9f).ToFColor(false);
+	const FColor Edge = FLinearColor(0.045f, 0.03f, 0.022f, 0.9f).ToFColor(false); // (the province lines of ground in reach, at full strength)
 	for (const FReachRegion& Entry : Reach)
 	{
 		AppendRegionFill(Buffers, Entry.Region, Entry.IsWar() ? War : Entry.bAttack ? Attack : March);
+		if (!Entry.bAttack && !Entry.IsWar() && Data.Regions.IsValidIndex(Entry.Region))
+		{
+			for (const TArray<FVector2D>& Ring : Data.Regions[Entry.Region].Polygons)
+			{
+				AppendRibbon(Buffers, Ring, 0.12, 0.2, Edge, true);
+			}
+		}
 		if ((Entry.bAttack || Entry.IsWar()) && Data.Regions.IsValidIndex(Entry.Region))
 		{
 			for (const TArray<FVector2D>& Ring : Data.Regions[Entry.Region].Polygons)
@@ -4239,6 +4263,33 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	{
 		WoodsShown = Woods;
 		LandMaterial->SetScalarParameterValue(TEXT("WoodsStrength"), Woods);
+	}
+
+	// The quiet lines. Province lines are faint from high up and a little firmer on the way down; every one is
+	// at full strength while the "show provinces" key is held. Railways are hidden from high up, a fine line at
+	// working height, and have their sleepers only close to.
+	{
+		const float Province = bShowProvinces ? 1.0f
+			: CameraDistance > 9000.0f ? FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 13000.0f), FVector2f(0.2f, 0.14f), CameraDistance)
+			: FMath::GetMappedRangeValueClamped(FVector2f(3000.0f, 9000.0f), FVector2f(0.32f, 0.2f), CameraDistance);
+		const float Rail = CameraDistance > 9000.0f ? FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 12500.0f), FVector2f(0.4f, 0.0f), CameraDistance)
+			: FMath::GetMappedRangeValueClamped(FVector2f(3000.0f, 9000.0f), FVector2f(0.7f, 0.4f), CameraDistance);
+		const float Sleeper = FMath::GetMappedRangeValueClamped(FVector2f(3200.0f, 5200.0f), FVector2f(0.7f, 0.0f), CameraDistance);
+		if (ProvinceInk && FMath::Abs(Province - ProvinceShown) > 0.004f)
+		{
+			ProvinceShown = Province;
+			ProvinceInk->SetScalarParameterValue(TEXT("Opacity"), Province);
+		}
+		if (RailInk && FMath::Abs(Rail - RailShown) > 0.004f)
+		{
+			RailShown = Rail;
+			RailInk->SetScalarParameterValue(TEXT("Opacity"), Rail);
+		}
+		if (SleeperInk && FMath::Abs(Sleeper - SleeperShown) > 0.004f)
+		{
+			SleeperShown = Sleeper;
+			SleeperInk->SetScalarParameterValue(TEXT("Opacity"), Sleeper);
+		}
 	}
 
 	// The nations' stain: a thicker wash from high up, where the eye wants to see whose a country is, and a

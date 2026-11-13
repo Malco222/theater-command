@@ -2704,6 +2704,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 	}
 
+	Map->SetShowProvinces(IsInputKeyDown(EKeys::P)); // (held: every province line at full strength)
 	Map->UpdateForCamera(Eye->GetDistance(), Eye->GetYaw(), Eye->GetFocus());
 
 	// A tip that follows the pointer: what the province under it is, whose, what it is worth and who stands there.

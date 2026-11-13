@@ -96,14 +96,18 @@ void ACampaignEnvironment::UpdateAir()
 	{
 		return;
 	}
-	// From the eye to the middle of the view, and to the far edge of it: the haze begins at the first and has
-	// thinned the light by about a third at the second.
+	// The haze begins three quarters of the way up the screen and is at its thickest at the far edge of the view.
+	// How thick depends on how high the eye is: about a third from the top of the zoom, half of that at working
+	// height, and next to nothing close to, where the far edge is not far.
 	const float Middle = Eye->GetDistance();
 	const float Down = FMath::DegreesToRadians(FMath::Clamp(-Player->PlayerCameraManager->GetCameraRotation().Pitch, 20.0f, 89.0f));
 	int32 Wide = 1600, High = 1000;
 	Player->GetViewportSize(Wide, High);
 	const float HalfUp = FMath::Atan(FMath::Tan(FMath::DegreesToRadians(Eye->GetHorizontalFov() * 0.5f)) * High / FMath::Max(Wide, 1));
 	const float FarEdge = Middle * FMath::Sin(Down) / FMath::Sin(FMath::Max(Down - HalfUp, 0.12f));
+	const float Begins = Middle * FMath::Sin(Down) / FMath::Sin(FMath::Max(Down - FMath::Atan(0.5f * FMath::Tan(HalfUp)), 0.14f));
+	const float Thick = Middle > 9000.0f ? FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 14000.0f), FVector2f(0.17f, 0.35f), Middle)
+		: FMath::GetMappedRangeValueClamped(FVector2f(4000.0f, 9000.0f), FVector2f(0.06f, 0.17f), Middle);
 	static float Strength = -1.0f, Glow = 1.0f;
 	if (Strength < 0.0f)
 	{
@@ -113,12 +117,12 @@ void ACampaignEnvironment::UpdateAir()
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirGlow="), Glow);
 	}
 	// (the engine's fog thins light by two to the power of minus its density, in thousandths, times the way through it)
-	const float Density = 621.5f / FMath::Max(FarEdge - Middle, 50.0f) * Strength;
-	if (FMath::Abs(Middle - AirStart) > Middle * 0.01f || FMath::Abs(Density - AirDensity) > AirDensity * 0.02f)
+	const float Density = -FMath::Log2(1.0f - Thick) * 1000.0f / FMath::Max(FarEdge - Begins, 50.0f) * Strength;
+	if (FMath::Abs(Begins - AirStart) > Begins * 0.01f || FMath::Abs(Density - AirDensity) > AirDensity * 0.02f)
 	{
-		AirStart = Middle;
+		AirStart = Begins;
 		AirDensity = Density;
-		Air->SetStartDistance(Middle);
+		Air->SetStartDistance(Begins);
 		Air->SetFogDensity(Density);
 	}
 	if (FMath::Abs(Night - AirNight) > 0.01f)

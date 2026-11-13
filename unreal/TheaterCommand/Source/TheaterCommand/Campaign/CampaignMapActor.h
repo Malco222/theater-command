@@ -204,6 +204,8 @@ public:
 	void ShowCivic(const TArray<int32>& Civic);
 	/** The countries in flat colour, as a map view: the stain laid on whole instead of as a wash and a band. */
 	void SetFlatColours(bool bFlat);
+	/** While a key is held: every province line at full strength. */
+	void SetShowProvinces(bool bShow) { bShowProvinces = bShow; }
 	bool AreColoursFlat() const { return bFlatColours; }
 	/** How strongly the countries are coloured: 0 light, 1 as the art is meant, 2 strong. */
 	void SetColourStrength(int32 Level);
@@ -428,6 +430,16 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> InkMaterial;
+
+	// The quiet lines of the map, each faded by how high the eye is: province lines, railways, and their sleepers.
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> ProvinceInk;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> RailInk;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> SleeperInk;
+	float ProvinceShown = -1.0f, RailShown = -1.0f, SleeperShown = -1.0f;
+	bool bShowProvinces = false;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> PieceMaterial;
