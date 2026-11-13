@@ -8,8 +8,10 @@
 //
 // A prize can be wrecked by the army that holds it: by order, which is a corps' work for the month and a thorough
 // job, or as that army is driven off the ground, if its nation has ordered scorched earth there. A wrecked prize
-// gives nobody anything for months. Time mends it, and engineers standing in the province mend it faster. A junction
-// is cut only by order: when ground is lost the railway keeps the rule it always had (rails.ts).
+// gives nobody anything for months. Time mends it, and engineers standing in the province mend it faster. Scorched
+// earth reaches the railway too: the track is torn up in haste, beside the rule the railway always had when ground
+// is lost (rails.ts), and the new holder's railwaymen need a month or two to make it good. What was burned in a
+// month is told once, in one line for each army driven off, and an airfield alone is not news.
 //
 // The numbers are in data/campaign/prizes.json. The historical scenarios have none of this. Both interfaces read
 // prizesAt() for a province's panel and give the orders through turn.ts.
@@ -21,7 +23,7 @@ import { airWar, airfieldsHold } from './air';
 import { BUDGET, PRODUCTION } from './economy';
 import { allied, atWar, headline, theName } from './game';
 import { armyOf } from './joint';
-import { cutRail, railCut, railsAt, ruinedAt } from './rails';
+import { cutRail, cutRailHasty, hastyLeft, mendHasty, onNet, railCut, railsAt, ruinedAt } from './rails';
 import { fieldOut, fireField } from './resources';
 import { besieged, fieldCtrl, garrisonOf, siegeRules } from './siege';
 import { townName, townSize, type TownSize } from './towns';
@@ -40,7 +42,7 @@ export const PRIZES = data as unknown as {
   settle: number;
   ap: number;
   wreck: Record<Exclude<PrizeKind, 'junction'>, number>;
-  burn: { chance: number; unguarded: number; fastCaptor: number; months: Record<Exclude<PrizeKind, 'junction'>, number> };
+  burn: { chance: number; unguarded: number; fastCaptor: number; months: Record<Exclude<PrizeKind, 'junction'> | 'rail', number> };
   mend: number;
   ai: { policy: Record<string, ScorchPolicy> };
 };
@@ -71,11 +73,11 @@ const outKey = (r: Region, kind: PrizeKind): string => `pzo:${r.id}:${kind}`;
 
 /**
  * Months a prize is still out of use: 0 for one at work. A junction whose line is cut says 99: it stays cut until
- * engineers relay it.
+ * engineers relay it, unless it was torn up in haste under a scorched earth order, which time makes good.
  */
 export function prizeOut(g: Game, r: Region, kind: PrizeKind): number {
   if (!hasPrize(g, r, kind)) return 0;
-  if (kind === 'junction') return railCut(g, r.id) ? 99 : 0;
+  if (kind === 'junction') return railCut(g, r.id) ? hastyLeft(g, r.id) || 99 : 0;
   if (kind === 'oil') return fieldOut(g, r) > 0 ? Math.max(1, (g.flags[`oilout:${r.id}`] ?? 0) - g.turn) : 0;
   return Math.max(0, (g.flags[outKey(r, kind)] ?? 0) - g.turn);
 }
@@ -285,33 +287,114 @@ export function prizesOnLoss(g: Game, r: Region, by: string, from: string, which
     const roll = new Rng(hashString(`prize:${g.seed}:${g.turn}:${r.id}:${kind}`)).next();
     if (roll < p && wreckPrize(g, r, kind, PRIZES.burn.months[kind])) burnt.push(kind);
   }
-  if (burnt.length) {
-    const list = listed(burnt);
-    tellPrize(g, r, `Scorched earth: ${g.nations[from].adj} troops wreck ${list} at ${r.name} as they are driven off. ${theName(g.nations[by], true)} will get nothing from ${burnt.length === 1 && burnt[0] !== 'oil' ? 'it' : 'them'} for months.`, from, [by, from, r.owner]);
-  }
+  if (burnt.length) noteBurnt(g, r, from, by, burnt);
   return burnt;
+}
+
+/**
+ * Scorched earth reaches the railway: as a province is lost in war, the side driven out of it with the order tears
+ * up the track in haste, if the railway's own rule (rails.ts) has not cut it already. The new holder's railwaymen
+ * make such a cut good after a month or two, and engineers sooner. The dice are the province's own for the month.
+ */
+export function railOnScorch(g: Game, r: Region, by: string, from: string): boolean {
+  if (!prizeRules(g) || !g.nations[from] || !atWar(g, by, from) || !onNet(r.id) || railCut(g, r.id) || !willBurn(g, from, r)) return false;
+  const roll = new Rng(hashString(`prize:${g.seed}:${g.turn}:${r.id}:rail`)).next();
+  if (roll >= burnChance(g, r, by, from) || !cutRailHasty(g, r.id, PRIZES.burn.months.rail)) return false;
+  noteBurnt(g, r, from, by, ['rail']);
+  return true;
+}
+
+// What is burned in a month's fighting is told once, when the month closes: kept in the game's flags until then,
+// so a game saved in the middle of a month still tells it.
+type Burnt = PrizeKind | 'rail';
+const BIT: Record<Burnt, number> = { oil: 1, works: 2, airfield: 4, harbour: 8, rail: 16, junction: 0 };
+const BKEYS: string[] = [];
+const burntKey = (r: number): string => (BKEYS[r] ??= `burnt:${r}`);
+
+function noteBurnt(g: Game, r: Region, from: string, by: string, what: Burnt[]): void {
+  const names = Object.keys(g.nations);
+  const pair = names.indexOf(from) * 1000 + names.indexOf(by);
+  let mask = 0;
+  for (const k of what) mask |= BIT[k];
+  const old = g.flags[burntKey(r.id)];
+  if (old !== undefined && Math.floor(old / 32) === pair) mask |= old % 32;
+  g.flags[burntKey(r.id)] = pair * 32 + mask;
+}
+
+const andList = (w: string[]): string => (w.length <= 1 ? w.join('') : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`);
+
+/**
+ * The month's scorched earth, told as the month closes: one line for each army driven off, naming the oilfields,
+ * factory districts and harbours it wrecked, counting the airfields, and saying where it tore up the track. It is
+ * news for the player when it is his doing, his ally's, or done to him; a great prize is news to everyone. Airfields
+ * alone are not news: nearly every province has one, and the map marks them.
+ */
+export function tellBurnt(g: Game): void {
+  if (!prizeRules(g)) return;
+  const names = Object.keys(g.nations);
+  const groups = new Map<number, { r: Region; mask: number }[]>();
+  for (const r of g.regions) {
+    const v = g.flags[burntKey(r.id)];
+    if (v === undefined) continue;
+    delete g.flags[burntKey(r.id)];
+    const pair = Math.floor(v / 32);
+    (groups.get(pair) ?? groups.set(pair, []).get(pair)!).push({ r, mask: v % 32 });
+  }
+  for (const [pair, rows] of groups) {
+    const from = names[Math.floor(pair / 1000)], by = names[pair % 1000];
+    if (!g.nations[from] || !g.nations[by]) continue;
+    const party = g.human !== null && [by, from].some((p) => p === g.human || allied(g, p, g.human!));
+    const places: string[] = [], tracks: string[] = [];
+    let fields = 0, at = -1;
+    for (const { r, mask } of rows) {
+      const mine = party || (g.human !== null && (r.owner === g.human || allied(g, r.owner, g.human)));
+      if (!mine && !r.oil && !r.cap && r.fac < 4) continue;
+      const kinds = (['oil', 'works', 'harbour'] as const).filter((k) => mask & BIT[k]);
+      if (kinds.length) { places.push(`${listed(kinds)} of ${r.name}`); if (at < 0) at = r.id; }
+      if (mask & BIT.airfield) fields++;
+      if (mine && mask & BIT.rail) tracks.push(r.name);
+    }
+    if (!places.length && !tracks.length) continue;
+    if (fields) places.push(fields === 1 ? 'an airfield' : `${fields} airfields`);
+    const where = tracks.length > 3 ? `${tracks.length} places` : andList(tracks);
+    const did = [places.length ? `wrecked ${andList(places)}` : '', tracks.length ? `tore up the railway at ${where}` : ''].filter(Boolean).join(', and ');
+    const cost = [places.length ? `${theName(g.nations[by], true)} will get nothing from the wrecks for months` : '',
+      tracks.length ? `${places.length ? 'the' : 'The'} track will take about ${monthsWord(PRIZES.burn.months.rail)} to make good, less with engineers` : ''].filter(Boolean).join(', and ');
+    headline(g, 'battle', `Scorched earth: ${g.nations[from].adj} troops ${did} as they were driven off. ${cost}.`, from, at >= 0 ? at : rows[0].r.id);
+  }
 }
 
 const PLACE_WORDS: Record<PrizeKind, string> = { oil: 'the oilfields', works: 'the factory district', airfield: 'the airfield', harbour: 'the harbour', junction: 'the rail junction' };
 const listed = (kinds: PrizeKind[]): string => { const w = kinds.map((k) => PLACE_WORDS[k]); return w.length === 1 ? w[0] : `${w.slice(0, -1).join(', ')} and ${w[w.length - 1]}`; };
 
 /**
- * News for the player when the places outside a town change hands whole with the field: his army's gain, his
- * ally's, or his own loss. An airfield alone is not news: nearly every province has one.
+ * News for the player in the month the places outside a town start to work for the army that holds the field,
+ * though the town still holds: his army's gain, his ally's, or his own loss. Told when they start to pay, not when
+ * they are seized: most sieges are over before that. An airfield alone is not news: nearly every province has one.
  */
-export function tellSeized(g: Game, r: Region, by: string): void {
-  if (!prizeRules(g) || g.human === null || !g.nations[by]) return;
-  if (![by, r.ctrl].some((p) => p === g.human || allied(g, p, g.human!))) return;
-  const got = PRIZE_KINDS.filter((k) => hasPrize(g, r, k) && !prizeInside(g, r, k) && prizeOut(g, r, k) <= 0);
-  if (!got.some((k) => k !== 'airfield')) return;
-  const words = listed(got);
-  const many = got.length > 1 || got[0] === 'oil';
-  headline(g, 'info', `${words[0].toUpperCase()}${words.slice(1)} outside ${townName(r)} ${many ? 'are' : 'is'} in ${g.nations[by].adj} hands, though the town holds. ${many ? 'They work' : 'It works'} for ${theName(g.nations[by])} after ${monthsWord(PRIZES.settle)}.`, by, r.id);
+export function tellSettled(g: Game, nat: string): void {
+  if (!prizeRules(g) || g.human === null || !g.nations[nat]) return;
+  for (const r of g.regions) {
+    if (r.ctrl === nat || !r.units.length || !besieged(g, r) || fieldCtrl(g, r) !== nat) continue;
+    const since = g.flags[`siege:${r.id}`];
+    if (since === undefined || g.turn - since !== PRIZES.settle) continue;
+    if (![nat, r.ctrl].some((p) => p === g.human || allied(g, p, g.human!))) continue;
+    const got = PRIZE_KINDS.filter((k) => hasPrize(g, r, k) && !prizeInside(g, r, k) && prizeOut(g, r, k) <= 0);
+    if (!got.some((k) => k !== 'airfield')) continue;
+    const words = listed(got);
+    const many = got.length > 1 || got[0] === 'oil';
+    const money = Math.round(got.reduce((s, k) => s + prizeMoney(g, r, k, nat), 0) * 10) / 10;
+    headline(g, 'info', `${words[0].toUpperCase()}${words.slice(1)} outside ${townName(r)} now ${many ? 'work' : 'works'} for ${theName(g.nations[nat])}, though the town holds${money > 0 ? `: ${money} a month to its treasury` : ''}.`, nat, r.id);
+  }
 }
 
-/** Engineers standing in a province mend its wrecked prizes faster: called as their nation's month closes. */
+/** Engineers standing in a province mend its wrecked prizes faster: called as their nation's month closes. Hasty cuts in the track that have had their time are made good. */
 export function mendPrizes(g: Game, nat: string): void {
-  if (!prizeRules(g) || PRIZES.mend <= 0) return;
+  if (!prizeRules(g)) return;
+  for (const id of mendHasty(g, nat)) {
+    if (nat === g.human) headline(g, 'info', `The railway at ${g.regions[id].name} is made good: the trains run again.`, nat, id);
+  }
+  if (PRIZES.mend <= 0) return;
   for (const r of g.regions) {
     if (!allied(g, nat, fieldCtrl(g, r)) || !r.units.some((u) => !u.dead && u.nat === nat && u.kind === 'eng' && u.leave === undefined)) continue;
     for (const kind of ['works', 'airfield', 'harbour'] as const) {
@@ -368,6 +451,7 @@ export function prizesAt(g: Game, region: number, nat: string | null = g.human):
       : 'wells and refineries';
     const who = g.nations[holder]?.adj ?? holder;
     const state = out >= 99 ? 'The line is cut until engineers relay it.'
+      : out > 0 && kind === 'junction' ? `Torn up in haste: the railwaymen will have it running in ${monthsWord(out)}, engineers sooner.`
       : out > 0 ? `${kind === 'oil' ? 'Burning' : 'Wrecked'}: out of use for ${monthsWord(out)} more.`
       : settling ? `Taken by ${who} troops this month: it works for them from next month.`
       : holder !== r.ctrl ? `In ${who} hands with the country round the town.`

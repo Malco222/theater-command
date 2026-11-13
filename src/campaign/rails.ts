@@ -68,8 +68,47 @@ export function cutRail(g: Game, r: number): boolean {
 export function mendRail(g: Game, r: number): boolean {
   if (!railCut(g, r)) return false;
   delete g.flags[key(r)];
+  delete g.flags[hastyKey(r)];
   g.supplyDirty = true;
   return true;
+}
+
+// A hasty cut: track torn up by troops under a scorched earth order as they are driven off (prizes.ts). Nobody needs
+// engineers for it: the new holder's own railwaymen make it good after a month or two. But ground whose line was
+// burned is slow to carry an invader's trains: inside the Soviet Union the gauge is converted only from the month
+// the line is made good (game.ts).
+const HKEYS: string[] = [];
+const hastyKey = (r: number): string => (HKEYS[r] ??= `railhasty:${r}`);
+const GKEYS: string[] = [];
+const goodKey = (r: number): string => (GKEYS[r] ??= `railgood:${r}`);
+
+/** Cuts a province's railway in haste: it is made good without engineers after so many months. False where there is no line or it is cut already. */
+export function cutRailHasty(g: Game, r: number, months: number): boolean {
+  if (!cutRail(g, r)) return false;
+  g.flags[hastyKey(r)] = g.turn + months;
+  return true;
+}
+
+/** Months until a hastily cut line is made good without engineers, or 0 for a line that is whole or needs engineers. */
+export const hastyLeft = (g: Game, r: number): number => (railCut(g, r) && g.flags[hastyKey(r)] !== undefined ? Math.max(1, g.flags[hastyKey(r)] - g.turn) : 0);
+
+/** The month a province's burned line was made good, if that is later than `since`; otherwise `since`. */
+export function lineSince(g: Game, r: number, since: number): number {
+  const good = g.flags[goodKey(r)];
+  return good !== undefined && good > since ? good : since;
+}
+
+/** As a nation's month closes, the hasty cuts on its ground that have had their time are made good. Returns the provinces. */
+export function mendHasty(g: Game, nat: string): number[] {
+  const out: number[] = [];
+  if (!groundRules(g)) return out;
+  for (const r of g.regions) {
+    if (r.ctrl !== nat) continue;
+    const due = g.flags[hastyKey(r.id)];
+    if (due === undefined || g.turn < due) continue;
+    if (mendRail(g, r.id)) { g.flags[goodKey(r.id)] = g.turn; out.push(r.id); } else delete g.flags[hastyKey(r.id)];
+  }
+  return out;
 }
 
 /** Whether a train of this nation can run from one province to the next: a line between them, both ends friendly and whole, the bridges standing. */
@@ -263,6 +302,8 @@ export interface RailNote {
   cut: boolean;
   /** The month it was cut. */
   since?: number;
+  /** Months until a line torn up in haste (scorched earth) is made good without engineers; 0 for a whole line or one only engineers can relay. */
+  hasty: number;
   /** For the nation asked about: provinces of road from here to its nearest working railway, 0 on it, -1 where it draws no supply. */
   road: number;
   /** What that nation's troops here are worth for it. */
@@ -280,7 +321,7 @@ export function railNote(g: Game, region: number, nat: string | null = g.human):
   const head = nat ? railheadAt(g, nat, region) : AT_HOME;
   const raw = nat ? railheads(g, nat)?.[region] ?? -1 : -1;
   return {
-    line: onNet(region), to: railsAt(region), cut: railCut(g, region), since: cutOn(g, region),
+    line: onNet(region), to: railsAt(region), cut: railCut(g, region), since: cutOn(g, region), hasty: hastyLeft(g, region),
     road: raw < 0 ? -1 : head.road, attack: head.attack, defence: head.defence,
     ruined: ruinedAt(g, r), factories: r.fac,
   };
