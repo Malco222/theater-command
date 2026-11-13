@@ -58,7 +58,7 @@ public:
 	/** How much more wash than the rest a nation needs for its ground to read as its own: more for a grey one. */
 	static float WashBoost(const FColor& NationColour);
 	/** How far inside a national frontier its band of stronger stain reaches, in map units. */
-	static constexpr double BandReach = 11.0;
+	static constexpr double BandReach = 8.0;
 
 private:
 	// The colour of the bare ground at every point, as it is seen (0 to 1, not linear light). Kept for repainting.

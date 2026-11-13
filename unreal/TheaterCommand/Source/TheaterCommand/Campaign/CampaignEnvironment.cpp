@@ -1,4 +1,7 @@
 #include "Campaign/CampaignEnvironment.h"
+#include "Campaign/CampaignCameraPawn.h"
+#include "Components/ExponentialHeightFogComponent.h"
+#include "GameFramework/PlayerController.h"
 
 #include "Campaign/CampaignMapActor.h"
 #include "EngineUtils.h"
@@ -56,7 +59,7 @@ ACampaignEnvironment::ACampaignEnvironment()
 	FillLight->SetIntensity(FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")) ? 0.6f : 0.75f); // the cool light of the room, filling the shadows
 	FillLight->ForwardShadingPriority = 0;
 	FillLight->bUseTemperature = true;
-	FillLight->Temperature = 8500.0f;
+	FillLight->Temperature = 9800.0f; // (the shade is cool against the warm lamp)
 	FillLight->SetCastShadows(false);
 
 	SkyLight = CreateDefaultSubobject<USkyLightComponent>(TEXT("SkyLight"));
@@ -72,6 +75,59 @@ ACampaignEnvironment::ACampaignEnvironment()
 	// and its shape can be read.
 	SkyLight->SetIntensity(FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")) ? 1.0f : 0.72f);
 	SkyLight->bLowerHemisphereIsBlack = false;
+
+	// The air: a plain haze (no volumes, nothing that costs), set each frame so that it begins where the eye is
+	// looking and reaches about a third at the far edge of the view.
+	Air = CreateDefaultSubobject<UExponentialHeightFogComponent>(TEXT("Air"));
+	Air->SetupAttachment(Root);
+	Air->SetMobility(EComponentMobility::Movable);
+	Air->FogHeightFalloff = 0.001f;
+	Air->FogMaxOpacity = 0.36f;
+	Air->FogDensity = 0.0f;
+	Air->DirectionalInscatteringLuminance = FLinearColor::Black;
+	Air->SetVisibility(!FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")) && !FParse::Param(FCommandLine::Get(), TEXT("TheaterNoAir")));
+}
+
+void ACampaignEnvironment::UpdateAir()
+{
+	const APlayerController* Player = GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr;
+	const ACampaignCameraPawn* Eye = Player ? Cast<ACampaignCameraPawn>(Player->GetPawn()) : nullptr;
+	if (!Air || !Eye || !Player->PlayerCameraManager)
+	{
+		return;
+	}
+	// From the eye to the middle of the view, and to the far edge of it: the haze begins at the first and has
+	// thinned the light by about a third at the second.
+	const float Middle = Eye->GetDistance();
+	const float Down = FMath::DegreesToRadians(FMath::Clamp(-Player->PlayerCameraManager->GetCameraRotation().Pitch, 20.0f, 89.0f));
+	int32 Wide = 1600, High = 1000;
+	Player->GetViewportSize(Wide, High);
+	const float HalfUp = FMath::Atan(FMath::Tan(FMath::DegreesToRadians(Eye->GetHorizontalFov() * 0.5f)) * High / FMath::Max(Wide, 1));
+	const float FarEdge = Middle * FMath::Sin(Down) / FMath::Sin(FMath::Max(Down - HalfUp, 0.12f));
+	static float Strength = -1.0f, Glow = 1.0f;
+	if (Strength < 0.0f)
+	{
+		// ("-TheaterAir=0.5" tries another strength, "-TheaterAirGlow=2" another brightness)
+		Strength = 1.0f;
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAir="), Strength);
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirGlow="), Glow);
+	}
+	// (the engine's fog thins light by two to the power of minus its density, in thousandths, times the way through it)
+	const float Density = 621.5f / FMath::Max(FarEdge - Middle, 50.0f) * Strength;
+	if (FMath::Abs(Middle - AirStart) > Middle * 0.01f || FMath::Abs(Density - AirDensity) > AirDensity * 0.02f)
+	{
+		AirStart = Middle;
+		AirDensity = Density;
+		Air->SetStartDistance(Middle);
+		Air->SetFogDensity(Density);
+	}
+	if (FMath::Abs(Night - AirNight) > 0.01f)
+	{
+		AirNight = Night;
+		// Pale blue-grey by day; by lamplight the far table simply falls away into the dark of the room.
+		const FLinearColor Day(0.80f, 0.84f, 0.88f), Dark(0.035f, 0.04f, 0.055f);
+		Air->SetFogInscatteringColor(FMath::Lerp(Day, Dark, Night) * Glow);
+	}
 }
 
 void ACampaignEnvironment::SetSeason(float Winter, float Summer)
@@ -108,6 +164,7 @@ void ACampaignEnvironment::Tick(float DeltaSeconds)
 		Wanted = Clock < 0.58f ? 0.0f : Clock < 0.68f ? FMath::SmoothStep(0.58f, 0.68f, Clock) : Clock < 0.9f ? 1.0f : 1.0f - FMath::SmoothStep(0.9f, 1.0f, Clock);
 	}
 	// A held time is come to over a few seconds, not at a jump.
+	UpdateAir();
 	const float Next = FMath::FInterpTo(Night, Wanted, DeltaSeconds, 0.9f);
 	if (FMath::Abs(Next - Night) > 0.0015f || (Next != Night && FMath::IsNearlyEqual(Next, Wanted, 0.002f)))
 	{

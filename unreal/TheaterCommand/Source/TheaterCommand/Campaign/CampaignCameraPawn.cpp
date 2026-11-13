@@ -38,6 +38,13 @@ ACampaignCameraPawn::ACampaignCameraPawn()
 	Look.VignetteIntensity = 0.5f;
 	Look.bOverride_BloomIntensity = true;
 	Look.BloomIntensity = 0.25f;
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
+	{
+		// Only what is truly bright blooms: the lamp's glint on water, and snow.
+		Look.BloomIntensity = 0.4f;
+		Look.bOverride_BloomThreshold = true;
+		Look.BloomThreshold = 1.1f;
+	}
 	// The grade of the picture: a little more colour and contrast, the lit side warm and the shadows cool,
 	// as a photograph of a model under a lamp comes out.
 	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
@@ -45,7 +52,7 @@ ACampaignCameraPawn::ACampaignCameraPawn()
 		Look.bOverride_ColorSaturation = true;
 		Look.ColorSaturation = FVector4(1.07, 1.07, 1.07, 1.0);
 		Look.bOverride_ColorContrast = true;
-		Look.ColorContrast = FVector4(1.05, 1.05, 1.05, 1.0);
+		Look.ColorContrast = FVector4(1.08, 1.08, 1.08, 1.0);
 		Look.bOverride_ColorGainHighlights = true;
 		Look.ColorGainHighlights = FVector4(1.03, 1.0, 0.96, 1.0);
 		Look.bOverride_ColorGainShadows = true;

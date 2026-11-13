@@ -275,7 +275,7 @@ def build_land():
     # which the Relief picture's alpha says) and a band along the national frontier (the Tint picture's alpha).
     # "Flat" lays the stain on whole, for the map view that shows the countries in flat colour.
     wash = times(m, scalar(m, "Wash", 0.34, -2300, -760), plus(m, (relief, "A"), 1.0, -2300, -700), -2150, -730)
-    band = times(m, (tint, "A"), scalar(m, "Band", 0.6, -2300, -640), -2150, -640)
+    band = times(m, (tint, "A"), scalar(m, "Band", 0.4, -2300, -640), -2150, -640)
     stain = one_in(m, unreal.MaterialExpressionSaturate, plus(m, wash, band, -2050, -690), -1950, -690)
     stain = lerp(m, stain, 1.0, scalar(m, "Flat", 0.0, -2050, -600), -1850, -660)
     stain = times(m, stain, scalar(m, "Politics", 0.94, -1850, -570), -1750, -630)
@@ -311,8 +311,12 @@ def build_land():
     detail = lerp(m, 1.0, times(m, near, far, -800, 850), scalar(m, "DetailStrength", 0.8, -800, 1000), -600, 850)
 
     # Shaded as a printed relief map is, on top of whatever the lamp does.
-    shade = times(m, (relief, "B"), 2.0, -1100, 100)
-    c = times(m, times(m, c, detail, -400, -400), shade, -200, -400)
+    # (the picture's blue is how squarely the ground faces a low sun in the north-west, shadows and all: the sun's
+    # share of the light is warm and the shade's cool, so a lit slope and a shaded one differ in colour too)
+    sun = times(m, (relief, "B"), scalar(m, "SunReach", 2.2, -1300, 180), -1100, 100)
+    light = plus(m, vector(m, "ShadeColour", (0.43, 0.48, 0.58, 1.0), -1100, 260),
+                 times(m, vector(m, "SunColour", (0.63, 0.56, 0.45, 1.0), -1100, 420), sun, -900, 300), -700, 200)
+    c = times(m, times(m, c, detail, -400, -400), light, -200, -400)
     to_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     # Which way the surface leans: the ground itself, and the tree-tops and the rock on it.

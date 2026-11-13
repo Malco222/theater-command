@@ -85,12 +85,24 @@ namespace
 	 * little bluer than it is meant to look, by these shares of red, green and blue.
 	 * ("-TheaterTone=0.6,0.64,0.7" tries others without a rebuild.)
 	 */
+	/** How strongly a slope is leaned for the shading of the relief. ("-TheaterRelief=0.08" tries another.) */
+	float ReliefStrength()
+	{
+		static float Kept = -1.0f;
+		if (Kept < 0.0f)
+		{
+			Kept = 0.22f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterRelief="), Kept);
+		}
+		return Kept;
+	}
+
 	FVector3f Tone()
 	{
 		static FVector3f Kept(0.0f);
 		if (Kept.X <= 0.0f)
 		{
-			Kept = FVector3f(0.72f, 0.78f, 0.82f);
+			Kept = FVector3f(0.66f, 0.71f, 0.75f);
 			FString Asked;
 			TArray<FString> Parts;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterTone="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
@@ -201,15 +213,63 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		}
 	}
 
-	// How each point stands against the ground around it: crests come out lighter, valley floors darker.
-	TArray<float> Surround = Terrain.Height;
+	// The relief is shaded into the paint as well as lit by the lamp, the way a printed relief map is: a low sun
+	// in the west-north-west (x east, y south, z up), about thirty-eight degrees up. (The art director's sun
+	// stood in the north-west, as on a printed map. The room's lamp stands in the west-south-west so that the
+	// pieces are lit from the front, and the two were sixty degrees apart: the hills' shadows fell one way and
+	// the flags' another. This is between them.) Heights are squeezed first, so
+	// that low hills show and the Alps do not burn out; high ground throws its shadow across the country behind
+	// it; and valley floors lie a little darker than the crests. All of it is in the picture, so it costs
+	// nothing while the game runs.
+	const FVector3f ToSun = FVector3f(-0.75f, -0.22f, 0.62f).GetSafeNormal();
+	TArray<float> Metres, Squeezed;
+	Metres.SetNumUninitialized(Count);
+	Squeezed.SetNumUninitialized(Count);
+	for (int32 J = 0; J < NY; ++J)
+	{
+		for (int32 I = 0; I < NX; ++I)
+		{
+			const int32 Idx = Terrain.Index(I, J);
+			const float M = Terrain.HasElevation() ? FMath::Max(Terrain.MetresAt(I * Terrain.Cell, J * Terrain.Cell), 0.0f) : FMath::Max(Terrain.Height[Idx], 0.0f) * 380.0f;
+			Metres[Idx] = M;
+			Squeezed[Idx] = FMath::Pow(M, 0.82f);
+		}
+	}
+	TArray<float> Surround = Metres;
 	FCampaignTerrain::Smooth(Surround, NX, NY, FMath::RoundToInt32(5.0 / Terrain.Cell), 2);
-
-	// The direction the lamp shines from, in map terms (x east, y south, z up): low in the west-south-west.
-	// The relief is shaded into the paint as well as lit by the lamp, the way a printed relief map is,
-	// so that gentle country still reads as country.
-	const FVector3f ToLamp = FVector3f(-0.80f, 0.30f, 0.52f).GetSafeNormal();
-	const float Exaggerate = 1.8f;
+	// Shadows thrown by the high ground: from each point a march toward the sun, over about twenty-six map
+	// units, to see whether anything on the way stands above the line of its light.
+	TArray<float> Thrown;
+	Thrown.Init(0.0f, Count);
+	{
+		const float Tall = 0.014f; // map units of height to the metre, for the throwing of shadows
+		const FVector2f Flat(ToSun.X, ToSun.Y);
+		const FVector2f Step = Flat / FMath::Max(FMath::Abs(Flat.X), FMath::Abs(Flat.Y)); // one grid point a step along the longer way
+		const float Drop = ToSun.Z / Flat.Size() * Step.Size() * static_cast<float>(Terrain.Cell); // how far the light's line falls each step
+		const int32 Steps = FMath::CeilToInt32(26.0 / (Step.Size() * Terrain.Cell));
+		ParallelFor(NY, [&](int32 J)
+		{
+			for (int32 I = 0; I < NX; ++I)
+			{
+				const int32 Idx = Terrain.Index(I, J);
+				const float Here = Metres[Idx] * Tall;
+				for (int32 K = 1; K <= Steps; ++K)
+				{
+					const int32 SI = I + FMath::RoundToInt32(Step.X * K), SJ = J + FMath::RoundToInt32(Step.Y * K);
+					if (SI < 0 || SJ < 0 || SI >= NX || SJ >= NY)
+					{
+						break;
+					}
+					if (Metres[Terrain.Index(SI, SJ)] * Tall - K * Drop > Here + 0.15f)
+					{
+						Thrown[Idx] = 1.0f;
+						break;
+					}
+				}
+			}
+		});
+		FCampaignTerrain::Smooth(Thrown, NX, NY, 1, 2);
+	}
 
 	Ground.SetNumUninitialized(Count);
 	Relief.SetNumUninitialized(Count);
@@ -238,13 +298,20 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			float Wooded = FMath::SmoothStep(0.42f, 0.58f, Patch + (Woods[Idx] - 0.5f) * 0.82f);
 			Wooded *= (1.0f - FMath::SmoothStep(2.6f, 3.8f, H)) * (1.0f - Rock) * (1.0f - Sand / 0.45f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
 
-			// Shaded relief, as on a printed map, and how the point stands among its neighbours.
-			const FVector3f Leaning = FVector3f(-Slope.X * Exaggerate, -Slope.Y * Exaggerate, 1.0f).GetSafeNormal();
-			const float Lit = FMath::Clamp(FVector3f::DotProduct(Leaning, ToLamp) / ToLamp.Z, 0.35f, 1.45f);
-			const float Standing = FMath::Clamp(1.0f + (H - Surround[Idx]) * 0.16f, 0.72f, 1.18f);
+			// Shaded relief, as on a printed map: how squarely the ground faces the sun (1 on the flat, up to 2.2
+			// on a slope turned full to it, nothing on one turned away), less where a shadow is thrown across it,
+			// and a little less on a valley floor than on a crest.
+			const int32 IW = FMath::Max(I - 1, 0), IE = FMath::Min(I + 1, NX - 1), JN = FMath::Max(J - 1, 0), JS = FMath::Min(J + 1, NY - 1);
+			const float Rough = 0.5f * FMath::PerlinNoise2D(P * 0.33) * FMath::Clamp(Steepness * 30.0f, 0.0f, 26.0f); // (broken ground on the steeps)
+			const float SlopeX = (Squeezed[Terrain.Index(IE, J)] - Squeezed[Terrain.Index(IW, J)]) / static_cast<float>((IE - IW) * Terrain.Cell) + Rough * 0.2f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(3.0, 9.0));
+			const float SlopeY = (Squeezed[Terrain.Index(I, JS)] - Squeezed[Terrain.Index(I, JN)]) / static_cast<float>((JS - JN) * Terrain.Cell) + Rough * 0.2f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(17.0, 1.0));
+			const FVector3f Leaning = FVector3f(-SlopeX * ReliefStrength(), -SlopeY * ReliefStrength(), 1.0f).GetSafeNormal();
+			float Sun = FMath::Clamp(FVector3f::DotProduct(Leaning, ToSun) / ToSun.Z, 0.0f, 2.2f);
+			Sun *= 1.0f - 0.42f * Thrown[Idx];
+			Sun -= 0.3f * FMath::Clamp((Surround[Idx] - Metres[Idx]) / 260.0f, -0.6f, 0.6f);
 			// A little unevenness, so that large areas do not look printed.
-			const float Grain = 1.0f + 0.03f * FMath::PerlinNoise2D(FVector2D(I * 0.61, J * 0.61));
-			const float Shade = FMath::Lerp(1.0f, Lit, 0.5f) * Standing * Grain;
+			Sun *= 1.0f + 0.03f * FMath::PerlinNoise2D(FVector2D(I * 0.61, J * 0.61));
+			const float Shade = FMath::Clamp(Sun, 0.0f, 2.2f) / 2.2f * 2.0f; // (kept as half of it in the picture's blue, below)
 
 			// Which way the ground leans, as the lamp sees it: north is +X and east is +Y in the world.
 			const FVector3f Normal = FVector3f(Slope.Y * VerticalScale, -Slope.X * VerticalScale, 1.0f).GetSafeNormal();
@@ -309,8 +376,9 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 	// The nation's colour is a stain over the ground, not a coat of paint: the colour a point takes under it is
 	// the nation's own, lighter on light ground and darker on dark, so the lie of the land shows through. How
 	// much of the stain lies there is the material's business: a wash everywhere, and a band along the frontier
-	// (the alpha here: 1 on the frontier, fading to nothing about ten map units inside it).
-	const double Sigma = 3.0;
+	// (the alpha here: 1 on the frontier, falling away smoothly to nothing eight map units inside it, with no
+	// shelf). The stain itself is a fifth darker at the line, so the band is always a deeper shade of the
+	// country's own colour and never a brighter one.
 	const FVector3f Toned = Tone();
 	for (int32 J = J0; J <= J1; ++J)
 	{
@@ -325,7 +393,8 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 			{
 				C = RegionStain[Id] * (0.42f + 1.05f * Bare.Light());
 				const double Far = Terrain.BorderDistance[Idx] * Terrain.Cell;
-				Band = Terrain.Region[Idx] >= 0 ? FMath::Pow(FMath::Min(1.0f, 2.4f * static_cast<float>(FMath::Exp(-Far * Far / (2.0 * Sigma * Sigma)))), 0.75f) : 0.0f;
+				Band = Terrain.Region[Idx] >= 0 ? FMath::Pow(FMath::Clamp(1.0f - static_cast<float>(Far / BandReach), 0.0f, 1.0f), 1.7f) : 0.0f;
+				C = C * (1.0f - 0.2f * Band);
 				Boost = RegionBoost[Id] - 1.0f;
 			}
 			Tint[Idx] = FColor(ToByte(C.R * Toned.X), ToByte(C.G * Toned.Y), ToByte(C.B * Toned.Z), ToByte(Band));

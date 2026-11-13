@@ -6,6 +6,7 @@
 
 class UDirectionalLightComponent;
 class USkyLightComponent;
+class UExponentialHeightFogComponent;
 
 /**
  * The light over the campaign table: one warm lamp from the north-west, as on
@@ -45,6 +46,12 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Light")
 	TObjectPtr<USkyLightComponent> SkyLight;
+
+	/** The air of the room: the far part of the table fades a little toward a pale blue-grey. */
+	UPROPERTY(VisibleAnywhere, Category = "Light")
+	TObjectPtr<UExponentialHeightFogComponent> Air;
+	float AirStart = -1.0f, AirDensity = -1.0f, AirNight = -1.0f;
+	void UpdateAir();
 
 	float SeasonWinter = 0.0f, SeasonSummer = 0.0f;
 	double DayClock = 0.12; // where in the room's day it is, from 0 to 1: the morning to begin with

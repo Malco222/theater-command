@@ -265,8 +265,8 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 		// (deepened by the art director, 2026-11-13, so that each holds up as a stain over real ground)
 		{ TEXT("GER"), TEXT("545C68") }, { TEXT("POL"), TEXT("B85464") }, { TEXT("FRA"), TEXT("466CB0") }, { TEXT("SOV"), TEXT("9C3A2E") },
 		{ TEXT("UK"), TEXT("B04A3E") }, { TEXT("ITA"), TEXT("548C5C") }, { TEXT("ROM"), TEXT("C4B048") }, { TEXT("BEL"), TEXT("CEA834") },
-		{ TEXT("NED"), TEXT("D68230") }, { TEXT("HUN"), TEXT("B08C5C") }, { TEXT("YUG"), TEXT("7892B8") }, { TEXT("SWE"), TEXT("CCB85C") },
-		{ TEXT("DEN"), TEXT("B26084") },
+		{ TEXT("NED"), TEXT("D68230") }, { TEXT("HUN"), TEXT("B08C5C") }, { TEXT("SWE"), TEXT("CCB85C") },
+		{ TEXT("DEN"), TEXT("B26084") }, { TEXT("YUG"), TEXT("607CA8") },
 	};
 	for (const auto& Paint : TablePaints)
 	{
@@ -274,6 +274,29 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 		{
 			Nation->Color = FColor::FromHex(Paint[1]);
 		}
+	}
+	// No stain is pale or washed out, or its country reads as snow or as bare table (the art director's rule,
+	// 2026-11-13): none brighter than about 0.55, none with less colour in it than about 0.3. Germany's field
+	// grey is the one exception.
+	for (TPair<FString, FCampaignNation>& Pair : Nations)
+	{
+		if (Pair.Key == TEXT("GER"))
+		{
+			continue;
+		}
+		FLinearColor Seen(Pair.Value.Color.R / 255.0f, Pair.Value.Color.G / 255.0f, Pair.Value.Color.B / 255.0f);
+		FLinearColor Hsv = Seen.LinearRGBToHSV(); // (hue, saturation and value of the colour as it is seen)
+		if (Hsv.G < 0.3f)
+		{
+			Hsv.G = 0.3f;
+			Seen = Hsv.HSVToLinearRGB();
+		}
+		const float Bright = 0.30f * Seen.R + 0.59f * Seen.G + 0.11f * Seen.B;
+		if (Bright > 0.55f)
+		{
+			Seen *= 0.55f / Bright;
+		}
+		Pair.Value.Color = FColor(static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Seen.R * 255.0f), 0, 255)), static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Seen.G * 255.0f), 0, 255)), static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Seen.B * 255.0f), 0, 255)));
 	}
 	// "-TheaterColour=GER:3D4A54,SVK:7C8794" tries other paints without a rebuild.
 	FString Tried;

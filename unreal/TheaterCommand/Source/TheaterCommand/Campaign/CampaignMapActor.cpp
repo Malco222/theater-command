@@ -401,6 +401,7 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetTextureParameterValue(TEXT("Ground"), GroundPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Tint"), TintPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Relief"), ReliefPicture);
+	LandMaterial->SetScalarParameterValue(TEXT("Band"), 0.4f);
 	LandMaterial->SetTextureParameterValue(TEXT("Masks"), MasksPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Detail"), DetailPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Bumps"), BumpsPicture);
@@ -1691,7 +1692,7 @@ void ACampaignMapActor::SetColourStrength(int32 Level)
 	WashShown = -1.0f; // (set again at the next look)
 	if (LandMaterial)
 	{
-		static const float Bands[3] = { 0.5f, 0.6f, 0.7f };
+		static const float Bands[3] = { 0.32f, 0.4f, 0.48f };
 		LandMaterial->SetScalarParameterValue(TEXT("Band"), Bands[ColourStrength]);
 	}
 }
