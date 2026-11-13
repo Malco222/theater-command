@@ -98,13 +98,15 @@ export interface Directive {
   /** The month it was set: one at a time, so that names it. */
   id: number;
   nat: string;
-  /** Take a town, hold one of his own, bring the army up to strength, sign a trade agreement, or strike an ally's enemy. */
-  kind: 'take' | 'hold' | 'raise' | 'relief' | 'trade';
+  /** Take a town, hold one of his own, bring the army up to strength, sign a trade agreement, strike an ally's enemy, or spare the army. */
+  kind: 'take' | 'hold' | 'raise' | 'relief' | 'trade' | 'spare';
   /** Who set it: the nation's own cabinet, or an ally. */
   from: string;
   region?: number;
-  /** For 'raise': the army to reach, in divisions, in the field or forming. For 'trade': the agreements to have signed. */
+  /** For 'raise': the army to reach, in divisions, in the field or forming. For 'trade': the agreements to have signed. For 'spare': the most men that may be lost in battle while it runs. */
   target?: number;
+  /** For 'spare': the men lost in battle since the order came. */
+  lost?: number;
   /** A town the cabinet knows is strongly held: it gave more months and a larger reward. */
   hard?: boolean;
   /** A town the cabinet has asked for before in this war. */
@@ -122,6 +124,29 @@ export interface Directive {
   title: string;
   text: string;
 }
+
+/** A promise the player made the war cabinet of his own accord (the grand campaign): an enemy town by a day he named. */
+export interface Vow {
+  region: number;
+  issued: number;
+  /** The last month it can be kept in, and the months he allowed himself. */
+  due: number;
+  months: number;
+  /** How bold the cabinet reckoned it on the day, from the odds, the depth and the time: that set the terms. */
+  band: string;
+  odds: number;
+  depth: number;
+  /** Kept: trust, political capital and money. Broken: `price` in trust. */
+  trust: number;
+  capital: number;
+  money: number;
+  price: number;
+  title: string;
+}
+
+/** The war cabinet's demand for a general's dismissal, and the general the player stood by while the cabinet watches him. */
+export interface HeadAsk { general: number; issued: number; /** The last month the player can answer in. */ due: number; why: string }
+export interface StoodBy { general: number; until: number; battles: number; won: number }
 
 /** The player's government (the grand campaign). Rules in government.ts. */
 export interface GovState {
@@ -151,6 +176,19 @@ export interface GovState {
   since?: number;
   /** Towns the cabinet asked for and did not get, by province: the month the order ended. */
   asked?: Record<string, number>;
+  /** The player's own promise to the cabinet, the month he may make another, and promises kept and broken. */
+  vow?: Vow;
+  vowNext?: number;
+  kept?: number;
+  broken?: number;
+  /** The general the cabinet wants dismissed, the month it may ask again, and the one the player stood by. */
+  head?: HeadAsk;
+  headNext?: number;
+  stood?: StoodBy;
+  /** The month a directive was last failed: cause for the cabinet to look for someone to blame. */
+  blame?: number;
+  /** The wing of the cabinet that was on top when it last made the news. */
+  wing?: 'hawks' | 'doves' | 'balanced';
 }
 
 /** A trade agreement between two countries (the grand campaign). It pays both every month. */
