@@ -29,6 +29,8 @@
       { "key": "ground", "label": "Raid troops", "short": "Raid on troops", "blurb": "Fighters and bombers go for an enemy army where it stands: its organisation is cut for the battle that follows, and some of its men and guns are lost.", "needs": "any" },
       { "key": "superiority", "label": "Fight for the sky", "short": "Fight for the sky", "blurb": "Fighters sweep the sky over one province and bombers hit its airfields. Win it and your armies and fleets have the air there for a month.", "needs": "any" },
       { "key": "strike", "label": "Strike shipping", "short": "Shipping strike", "blurb": "Bombers hunt warships and merchant ships in one sea.", "needs": "bmr" },
+      { "key": "fleet", "label": "Strike a fleet", "short": "Fleet strike", "blurb": "Bombers go for one enemy fleet at sea that your side has found. Carrier aircraft are trained for it; land bombers mostly are not. Its carrier fighters and its guns defend it.", "needs": "bmr" },
+      { "key": "harbour", "label": "Raid a harbour", "short": "Harbour raid", "blurb": "Bombers go for the warships lying in one harbour. Ships at anchor cannot manoeuvre, and a harbour raided in the month war is declared is caught unready.", "needs": "bmr" },
       { "key": "recon", "label": "Scout from the air", "short": "Reconnaissance", "blurb": "A few aircraft photograph one province and the ground round it: every army there is seen whole until the month ends.", "needs": "any" }
     ]
   },

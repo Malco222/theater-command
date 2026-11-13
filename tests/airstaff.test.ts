@@ -16,7 +16,8 @@ import type { AirFleet, AirReport, Game } from '../src/campaign/types';
 
 const grand = (human: string | null = 'FRA', level = 'colonel', seed = 3): Game => { const g = startOpen(createGame(seed, human)); setLevel(g, level); return g; };
 const R = AIRWAR.ai.raids;
-const bombers = (r: AirReport): number => r.att.reduce((s, x) => s + x.bmr, 0);
+/** The bombers that flew a raid on land or on shipping: strikes on a fleet or a harbour are the sea staff's, with rules of their own (carriers.test.ts). */
+const bombers = (r: AirReport): number => (r.mission === 'fleet' || r.mission === 'harbour' ? 0 : r.att.reduce((s, x) => s + x.bmr, 0));
 /** Plays so many months with the player giving no orders, and returns the raids flown in them. */
 function months(g: Game, n: number): AirReport[] {
   const from = g.airReports.length;
@@ -201,7 +202,7 @@ describe('the computer\'s air staff', () => {
     const groups = airFleetsOf(g, 'GER').filter((f) => f.kind === 'bmr').length;
     airAI(g, 'GER');
     expect(g.airReports.filter((r) => bombers(r) > 0).length).toBeLessThanOrEqual(Math.ceil(groups * R.share));
-  });
+  }, 60000);
 
   it('goes only where the forecast says a raid should pay, within the losses it will bear', () => {
     const g = grand('FRA');

@@ -3,6 +3,7 @@
 
 import { KIND, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
+import { fleetKnown, fleetsSeen, searchOptions, searchSea, seaPicture, syncWings, wingCards, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import {
   airGroups, airfieldCard, airfields, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
@@ -51,6 +52,8 @@ function closePhase(g: Game, nat: string): void {
   // The month's air campaigns and fleet actions are fought once the nation's orders are all given.
   airBattles(g, nat);
   seaBattles(g, nat);
+  // Carriers lost in the month's fleet actions take their aircraft with them (the grand campaign).
+  syncWings(g);
   endPhase(g, nat);
   if (nat === 'GER') sovietEvent(g);
   g.phase++;
@@ -490,7 +493,8 @@ export function orderRebase(g: Game, id: number, region: number): boolean {
 /** Any fleet as a card: its admiral, where it is, what it is doing, and its ships by class. */
 export function fleetView(g: Game, id: number): FleetCard | null {
   const f = g.fleets.find((x) => x.id === id);
-  return f ? fleetCard(g, f) : null;
+  // A fleet the player's side has not identified has no card to show: fleetsInSight() says what is known of it.
+  return f && fleetKnown(g, f, g.human) === 'exact' ? fleetCard(g, f) : null;
 }
 
 /** The player's fleets as cards, strongest first. */
@@ -519,7 +523,7 @@ export function fleetOptions(g: Game, id: number): FleetOptions | null {
   if (!f) return null;
   const war = g.nations[f.nat].atWar.length > 0;
   return {
-    seas: war ? seaOptions(g, f) : [],
+    seas: war ? seaOptions(g, f, f.nat) : [],
     lanes: war ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
     coasts: war ? bombardTargets(g, f, f.nat).map((r) => r.id) : [],
     ports: baseTargets(g, f).map((r) => r.id),
@@ -656,6 +660,33 @@ export function orderScout(g: Game, id: number, target: number): { ok: boolean; 
   // The photographs name every corps in the province and around it.
   if (flown.ok) reconnoitre(g);
   return flown;
+}
+
+// ---- Carriers and the air war at sea (the grand campaign) ----
+//
+// A carrier wing is an air group like any other: its id (WingCard.id, GroupRow.id with ship >= 0) goes to the raid
+// planner (raidTargetsFor, previewRaid, orderRaid with the kinds 'fleet' and 'harbour'), to airGroupJobs and
+// orderGroupJob, and to the search below. It has no airfield: it flies from wherever its fleet is.
+
+/** Every fleet the player can put on the map: his own side's whole, and others' as far as his side has found them. A fleet only reported has a flag and a rough size and no more; one not found is not in the list. */
+export const fleetsInSight = (g: Game): FleetSeen[] => fleetsSeen(g, g.human);
+
+/** One sea as the player knows it: each side's known strength, enemy forces only reported, and how well his side has it searched. Null with nobody at the table. */
+export const seaPictureOf = (g: Game, zone: number): SeaPicture | null => (g.human && g.seas[zone] ? seaPicture(g, zone, g.human) : null);
+
+/** The aircraft one fleet's carriers bring, as cards: fighters first. Empty for a fleet without carriers, one that is not identified, and outside the grand campaign. */
+export function wingsOfFleet(g: Game, id: number): WingCard[] {
+  const f = g.fleets.find((x) => x.id === id);
+  return f && fleetKnown(g, f, g.human) === 'exact' ? wingCards(g, f) : [];
+}
+
+/** The seas one of the player's air groups (a carrier wing, or a group on an airfield) could search this month, nearest first. */
+export const searchOptionsFor = (g: Game, id: number): SearchOption[] => searchOptions(g, id, g.human);
+
+/** Sends a few aircraft of one of the player's groups to search a sea: enemy ships there may be reported, or identified. One flight a month for each group, beside its raid. */
+export function orderSearch(g: Game, id: number, zone: number): { ok: boolean; text: string; found: number } {
+  if (!myAir(g, id)) return { ok: false, text: 'It is not your month.', found: 0 };
+  return searchSea(g, id, zone, g.human);
 }
 
 /** The odds and the dangers of an air mission, before the order is given. */

@@ -13,6 +13,7 @@ import { DIPLOMACY, RELATIONS, alarm, alarmed, homeOpinion, pcIncome, sneakOn, w
 import { ownPath } from './league';
 import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss, cmdRally, cmdSteady, cmdWinter, commandersIn, generalOf, monthlyCommand, seat } from './commanders';
 import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
+import { syncWings } from './carriers';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { techTick, winterReady } from './tech';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
@@ -1521,6 +1522,8 @@ export function startPhase(g: Game, nat: string): void {
   mobilise(g, nat);
   monthlyCommand(g, nat);
   navalUpkeep(g, nat);
+  // Carriers that joined or went down this month: their wings follow (the grand campaign).
+  syncWings(g);
   airUpkeep(g, nat);
   researchTick(g, nat);
   techTick(g, nat);

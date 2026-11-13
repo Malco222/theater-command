@@ -17,6 +17,7 @@ import { holds } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat } from './difficulty';
 import { DOMINATION, dominating } from './domination';
 import { openAirWar } from './air';
+import { openCarriers } from './carriers';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
@@ -73,6 +74,7 @@ export function startOpen(g: Game): Game {
   openTech(g);
   openStores(g);
   openAirWar(g);
+  openCarriers(g);
   openMorale(g);
   openEscorts(g);
   openTrade(g);
