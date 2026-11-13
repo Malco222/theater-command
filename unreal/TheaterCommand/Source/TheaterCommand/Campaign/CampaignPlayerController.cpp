@@ -1642,6 +1642,12 @@ void ACampaignPlayerController::SendBackCorps(int32 CorpsId)
 	Notify(Note, 6.0);
 }
 
+FString ACampaignPlayerController::GetPlayerTag() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session ? Session->GetView().Human : FString();
+}
+
 void ACampaignPlayerController::SayWhy(const FString& Why)
 {
 	CampaignSounds::Play(this, TEXT("click"), 0.4f);

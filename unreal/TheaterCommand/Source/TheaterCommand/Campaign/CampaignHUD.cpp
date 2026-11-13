@@ -1,6 +1,7 @@
 #include "Campaign/CampaignHUD.h"
 
 #include "Campaign/CampaignMapActor.h"
+#include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignPlayerController.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
@@ -2387,7 +2388,7 @@ namespace
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
 				[
-					SNew(STextBlock).Text(FText::FromString(Terms)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(bCan ? BrightBrass : (Offer.bPoor ? Alarm : Faint))
+					SNew(STextBlock).Text(FText::FromString(Terms)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(bCan ? BrightBrass : (Offer.bPoor ? Alarm : Faint)).AutoWrapText(true)
 				];
 			// A long description of what is delivered goes on the line below instead of beside the name.
 			const FString Where = Offer.Size.Len() > 16 ? Offer.Size.Left(1).ToUpper() + Offer.Size.Mid(1) + TEXT(". ") + Offer.Note : Offer.Note;
@@ -2405,7 +2406,33 @@ namespace
 					SNew(STextBlock).Text(FText::FromString(Offer.Why)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Offer.bPoor ? Alarm : Muted).AutoWrapText(true)
 				];
 			}
-			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(11.0f, 7.0f, 11.0f, 8.0f)).IsFocusable(false).IsEnabled(bCan)
+			// A picture of what is on offer, where the game has a model of it: this nation's own tank, aircraft or ship.
+			const FString Tag = Controller.IsValid() ? Controller->GetPlayerTag() : FString();
+			FString Model;
+			if (Offer.Key.StartsWith(TEXT("corps:"))) { Model = ACampaignMapActor::ModelFor(Tag, Offer.Key.Mid(6)); }
+			else if (Offer.Key == TEXT("elite")) { Model = ACampaignMapActor::ModelFor(Tag, TEXT("heavy")); }
+			else if (Offer.Key == TEXT("para")) { Model = ACampaignMapActor::ModelFor(Tag, TEXT("inf")); }
+			else if (Offer.Key == TEXT("air:ftr")) { Model = FMiniatureMesh::MainFighterOf(Tag); }
+			else if (Offer.Key == TEXT("air:bmr")) { Model = FMiniatureMesh::MainBomberOf(Tag); }
+			else if (Offer.Key == TEXT("ship:bb")) { Model = TEXT("Battleship:") + Tag; }
+			else if (Offer.Key == TEXT("ship:cv")) { Model = TEXT("Carrier:") + Tag; }
+			else if (Offer.Key == TEXT("ship:ca")) { Model = TEXT("Cruiser:") + Tag; }
+			else if (Offer.Key == TEXT("ship:dd")) { Model = TEXT("Destroyer:") + Tag; }
+			else if (Offer.Key == TEXT("ship:ss")) { Model = TEXT("Submarine:") + Tag; }
+			const TSharedPtr<FSlateBrush> Portrait = Model.IsEmpty() ? TSharedPtr<FSlateBrush>() : PortraitOf(Model);
+			TSharedRef<SHorizontalBox> Face = SNew(SHorizontalBox);
+			if (Portrait.IsValid())
+			{
+				Face->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
+				[
+					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(2.0f))
+					[
+						SNew(SPortrait).Picture(Portrait).Size(FVector2D(78.0, 48.0))
+					]
+				];
+			}
+			Face->AddSlot().FillWidth(1.0f)[Words];
+			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(9.0f, 7.0f, 11.0f, 8.0f)).IsFocusable(false).IsEnabled(bCan)
 				.ToolTipText(FText::FromString(Offer.Blurb))
 				.OnClicked_Lambda([this, Key = Offer.Key]()
 				{
@@ -2416,7 +2443,7 @@ namespace
 					return FReply::Handled();
 				})
 				[
-					Words
+					Face
 				];
 		}
 
