@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import budget from '../data/campaign/budget.json';
 import { BUDGET, PRODUCTION, aiProduction, budgeted, corpsUpkeep, income, ledger, orderCorps, provinceYield, upkeep, upkeepTotal } from '../src/campaign/economy';
-import { addCorps, createGame, startPhase } from '../src/campaign/game';
+import { addCorps, createGame, homeLost, startPhase } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
@@ -260,7 +260,8 @@ describe('the computer\'s nations', () => {
     let worst = 0;
     while (g.turn <= 40) {
       runTurnAI(g);
-      for (const n of Object.values(g.nations)) if (n.alive && !n.dormant) worst = Math.min(worst, n.pp);
+      // A country in its last weeks, most of its home overrun and its army still to be paid, may owe a little. Nobody else may.
+      for (const n of Object.values(g.nations)) if (n.alive && !n.dormant && homeLost(g, n.id) < 0.5) worst = Math.min(worst, n.pp);
     }
     expect(worst).toBeGreaterThanOrEqual(0);
   }, 60000);

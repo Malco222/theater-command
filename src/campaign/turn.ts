@@ -13,7 +13,7 @@ import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './diffic
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hasRoom, hostileUnits, limitAttackers,
-  endPhase, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, type Assessment,
+  endPhase, foldNews, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, theName, type Assessment,
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { offers, orderOffer, type Offer } from './arsenal';
@@ -44,7 +44,8 @@ import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
-import { garrison, garrisonOf, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type SiegeView } from './siege';
+import { SIEGE, garrison, garrisonOf, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type SiegeView } from './siege';
+import { quietNews } from './staff';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -55,6 +56,8 @@ function closePhase(g: Game, nat: string): void {
   seaBattles(g, nat);
   // Carriers lost in the month's fleet actions take their aircraft with them (the grand campaign).
   syncWings(g);
+  // The routine of the month, in one line (the grand campaign).
+  foldNews(g, nat);
   endPhase(g, nat);
   if (nat === 'GER') sovietEvent(g);
   g.phase++;
@@ -81,6 +84,7 @@ export function beginHuman(g: Game): void {
   startPhase(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
   reconnoitre(g);
+  quietNews(g);
 }
 
 export function endHuman(g: Game): void {
@@ -267,9 +271,22 @@ export function candidates(g: Game, target: Region): Corps[] {
 }
 
 export function previewAttack(g: Game, corps: Corps[], target: Region): Assessment | null {
-  const going = jointForce(g, corps, target);
-  if (!going.length || !hostileUnits(g, target, going[0].nat).length) return null;
+  // Only as many corps as the ground lets in will fight: the forecast counts the same force the battle will.
+  const going = jointForce(g, limitAttackers(g, jointForce(g, corps, target), target), target);
+  if (!going.length || !hostileUnits(g, target, going[0].nat).length || whyNotAttack(g, target, going[0].nat)) return null;
   return assess(g, going, target);
+}
+
+/**
+ * Why troops may not be attacked where they stand, or '' if they may (the grand campaign). Enemy troops on the
+ * ground of a country the attacker is neither allied to nor at war with are out of reach: marching in there is an
+ * act of war on that country, and it has to be declared first (orderDeclare).
+ */
+export function whyNotAttack(g: Game, target: Region, nat: string | null = g.human): string {
+  if (g.flags.open !== 1 || nat === null) return '';
+  if (allied(g, nat, target.ctrl) || atWar(g, nat, target.ctrl)) return '';
+  const host = g.nations[target.ctrl];
+  return host ? `${target.name} belongs to ${theName(host)}, and you are not at war with it. Declare war on ${theName(host)} first, or leave the troops there alone.` : '';
 }
 
 /**
@@ -292,6 +309,8 @@ export interface Outlook {
   exact: boolean;
   odds: number; lo: number; hi: number;
   chance: number; chanceLo: number; chanceHi: number;
+  /** The odds at which it is an even chance: 1.2 to 1 in the open, more for an assault on a town, where luck runs against the attacker. */
+  even: number;
   /** Defending corps not identified, and those known only from a stale report. */
   unidentified: number;
   stale: number;
@@ -300,7 +319,9 @@ export interface Outlook {
   lines: TicketLine[];
 }
 
-const chanceAt = (odds: number): number => Math.max(0, Math.min(1, (1.2 - 1.2 / Math.max(1e-6, odds)) / 0.4));
+/** The dice of a battle in the open: the day's luck runs from the first to the second, and it takes 1.2 to 1 on the day to win. */
+const FIELD_DICE: [number, number] = [0.8, 1.2];
+const chanceOn = (odds: number, dice: [number, number]): number => Math.max(0, Math.min(1, (dice[1] - 1.2 / Math.max(1e-6, odds)) / (dice[1] - dice[0])));
 
 export function attackOutlook(g: Game, corps: Corps[], target: Region): Outlook | null {
   const a = previewAttack(g, corps, target);
@@ -308,10 +329,12 @@ export function attackOutlook(g: Game, corps: Corps[], target: Region): Outlook 
 }
 
 /** An assessment as the player's staff can report it: exact where every defender is identified, a band where not. */
-function outlookOf(g: Game, a: Assessment, target: Region): Outlook {
+function outlookOf(g: Game, a: Assessment, target: Region, dice: [number, number] = FIELD_DICE): Outlook {
+  const chanceAt = (odds: number): number => chanceOn(odds, dice);
+  const even = 2.4 / (dice[0] + dice[1]);
   const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
   const k = sortKnown(g, a.defenders, g.human);
-  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), unidentified: 0, stale: 0, note: '', lines: a.lines };
+  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', lines: a.lines };
   const n = a.defenders.length;
   const corpsWord = (x: number): string => `${x} corps`;
   // What the ticket says of the defenders' numbers, spirit and armour is left out where it is not known.
@@ -333,7 +356,7 @@ function outlookOf(g: Game, a: Assessment, target: Region): Outlook {
     : `${count(old)} of the ${n} defending corps ${old === 1 ? 'is' : 'are'} known only from ${old === 1 ? 'an old report' : 'old reports'}`;
   const what = [dark, dated].filter(Boolean).join(', and ');
   return {
-    exact: false, odds: band.mid, lo: band.lo, hi: band.hi, chance: chanceAt(band.mid), chanceLo: chanceAt(band.lo), chanceHi: chanceAt(band.hi),
+    exact: false, odds: band.mid, lo: band.lo, hi: band.hi, chance: chanceAt(band.mid), chanceLo: chanceAt(band.lo), chanceHi: chanceAt(band.hi), even,
     unidentified: k.none.length, stale: k.report.length,
     note: `${what}, so the odds are the staff's estimate. A battle, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
     lines,
@@ -343,7 +366,7 @@ function outlookOf(g: Game, a: Assessment, target: Region): Outlook {
 export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
   if (onEve(g)) return null;
   const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
-  if (!ok.length || !hostileUnits(g, target, ok[0].nat).length) return null;
+  if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
   return resolveBattle(g, ok, target);
 }
 
@@ -438,7 +461,7 @@ export function stormOutlook(g: Game, region: number, corps?: Corps[]): Outlook 
   const r = g.regions[region];
   if (!r || whyNotStormTown(g, region)) return null;
   const a = previewStorm(g, corps ? corps.filter((c) => canOrder(g, c)) : stormCandidates(g, region), r);
-  return a ? outlookOf(g, a, r) : null;
+  return a ? outlookOf(g, a, r, SIEGE.assault.dice) : null;
 }
 
 /** Storms the town: once a month for each town. It costs more men than a fight in the open, and an assault the month the army comes up is a hasty one. */

@@ -11,10 +11,10 @@ import { openTraits } from './traits';
 import { openTech } from './tech';
 import { openStores } from './resources';
 import openData from '../../data/campaign/open.json';
-import { hashString } from '../core/rng';
+import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { holds } from './diplomacy';
-import { concertFor, landingsFor, nerveOf, seat } from './difficulty';
+import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
 import { openAirWar } from './air';
 import { openCarriers } from './carriers';
@@ -25,7 +25,7 @@ import { numberDivisions } from './armies';
 import { NAVY } from './navy';
 import { openEscorts } from './fleets';
 import { openTrade } from './trade';
-import { EASTERN, allied, atWar, collapseScore, corpsBase, frozen, weather } from './game';
+import { EASTERN, allied, atWar, collapseScore, corpsBase, frozen, headline, weather } from './game';
 import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -40,6 +40,8 @@ export interface Op {
   prep?: number;
   /** The chance, each month the conditions hold, that the staff takes the decision. */
   chance: number;
+  /** The chance, each month the army is up and the season right, that the blow is put off another month: weather, a plan compromised, nerves. Never past the season's last month. */
+  hold?: number;
   /** Months of the year in which the blow may fall. */
   season?: number[];
   /** Months the offensive is pressed whatever the odds, once begun. */
@@ -55,6 +57,10 @@ const OPEN = openData as unknown as {
   mood: number; major: number; rest: number; stall: number; headOn: number; commit: number; bound: number; boundOverseas: number; thrust: [number, number]; weak: number; foothold: number; general: number; guard: number; guardWithin: number;
   temper: Record<string, Partial<Temper>>;
   ops: Record<string, Op[]>;
+  /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
+  impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
+  /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
+  descent: Landings & { after: number };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -88,6 +94,12 @@ export function startOpen(g: Game): Game {
 
 /** A draw between 0 and 1 that depends only on the war's seed and what is being decided, never on the battle dice. */
 const draw = (g: Game, ...key: (string | number)[]): number => hashString(`${g.seed}:${key.join(':')}`) / 4294967296;
+/**
+ * A chance taken month by month. The plain hash above barely moves when only the month at the end of its key
+ * changes, so a staff that drew badly in one month drew badly for years; this one is stirred first, and each
+ * month is a throw of its own.
+ */
+export const monthly = (g: Game, ...key: (string | number)[]): number => new Rng(hashString(`${g.seed}:${key.join(':')}`)).next();
 
 /** A nation's character in this war: its nerve differs a little from one war to the next. */
 export function temper(g: Game, nat: string): Temper {
@@ -388,6 +400,74 @@ function setOn(g: Game, nat: string, f: Front, turn: number, where = ''): void {
   for (const e of f.enemies) { if (turn) g.flags[onKey(nat, e, where)] = turn; else delete g.flags[onKey(nat, e, where)]; }
 }
 
+/** Months since this nation and an enemy last fought on land, either way round, or since their war began. */
+export function quietWith(g: Game, nat: string, e: string): number {
+  const last = Math.max(g.nations[nat]?.lastFight[e] ?? 0, g.nations[e]?.lastFight[nat] ?? 0, flag(g, `war:${nat}:${e}`), flag(g, `war:${e}:${nat}`), 1);
+  return g.turn - last;
+}
+
+/**
+ * How far a staff's patience has run out on a front: 0 while there has been fighting on it lately, then a step for
+ * each term of quiet in open.json that has gone by. A war nobody is fighting makes bolder generals.
+ */
+export function boldness(g: Game, nat: string, f: Pick<Front, 'enemies'>): number {
+  const I = OPEN.impatience;
+  if (!I || !f.enemies.length) return 0;
+  const quiet = Math.min(...f.enemies.map((e) => quietWith(g, nat, e)));
+  return I.after.filter((m) => quiet >= m).length;
+}
+
+/** The step of boldness a nation's present offensive was opened at, while its main effort lasts. 0 otherwise. */
+export const boldNow = (g: Game, nat: string): number => (g.turn <= flag(g, `st:bold:${nat}`) ? flag(g, `st:boldK:${nat}`) : 0);
+
+/**
+ * The local attacks a staff standing on the defensive will make this month: against which enemies, at what odds or
+ * better, and how many. A quiet front is not a truce. Once the first term of quiet has gone by it takes a weak
+ * point where it sees one, and it keeps at it for as long as the last such attack is fresh. Null when it makes none.
+ */
+export function probing(g: Game, nat: string): { enemies: Set<string>; odds: number; most: number; step: number } | null {
+  const I = OPEN.impatience;
+  const n = g.nations[nat];
+  if (!isOpen(g) || !I?.local || !n?.alive || n.dormant || nat === g.human) return null;
+  const enemies = new Set<string>();
+  let k = 0;
+  for (const e of n.atWar) {
+    if (!g.nations[e]?.alive) continue;
+    const quiet = quietWith(g, nat, e);
+    const at = flag(g, `st:probe:${nat}:${e}`);
+    const step = at && g.turn - at <= I.effort ? flag(g, `st:probeK:${nat}:${e}`) : I.after.filter((m) => quiet >= m).length;
+    if (step) { enemies.add(e); k = Math.max(k, step); }
+  }
+  return k ? { enemies, odds: I.local[Math.min(k, I.local.length) - 1], most: I.locals, step: k } : null;
+}
+
+/**
+ * Told to the player once a year while his war is silent: nobody has fought, and what that will bring. A war does
+ * not end by going quiet, and the player should know the other side's patience is running out as well.
+ */
+export function quietNews(g: Game): void {
+  const me = g.human;
+  if (!isOpen(g) || me === null) return;
+  const n = g.nations[me];
+  if (!n?.alive) return;
+  const foes = n.atWar.filter((e) => g.nations[e]?.alive && !g.nations[e].dormant);
+  if (!foes.length) return;
+  const quiet = Math.min(...foes.map((e) => quietWith(g, me, e)));
+  if (quiet < 12 || g.turn - flag(g, 'st:quietTold') < 12) return;
+  g.flags['st:quietTold'] = g.turn;
+  const span = quiet >= 24 ? `${Math.floor(quiet / 12)} years` : 'a year';
+  const next = foes.some((e) => inTouch(g, me, e) || inTouch(g, e, me))
+    ? 'A quiet front makes bolder generals: your enemies will now attack on a smaller advantage than they waited for before, and strike at any weak point in your line.'
+    : 'With no front on land between you, the war will be carried over the sea: watch your coasts, or put an army ashore on theirs.';
+  headline(g, 'info', `No battle has been fought between you and your enemies for ${span}. ${next}`, me);
+}
+
+/** Notes a local attack made on an enemy, so that the staff keeps at it while it is fresh. */
+export function probed(g: Game, nat: string, e: string, step: number): void {
+  g.flags[`st:probe:${nat}:${e}`] = g.turn;
+  g.flags[`st:probeK:${nat}:${e}`] = step;
+}
+
 /**
  * On the hardest level the player's rivals time their blows together: while an ally of this nation has an offensive
  * under way against the player, it opens its own against him at a smaller ratio than it would alone. 1 otherwise.
@@ -453,21 +533,43 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
   g.flags[`st:n:${nat}`] = held;
   const stalled = g.turn - flag(g, `st:gain:${nat}`) >= OPEN.stall;
   const pushed = g.turn <= flag(g, `st:push:${nat}`);
+  const list = ops(nat);
+  // A great choice still open against an enemy this nation is already at war with: the way its staff means to
+  // deal with him. While it stands, a quiet front does not tempt the staff into a head-on attack: it hurries the
+  // plan along.
+  const meant = (op: Op, f: Pick<Front, 'enemies'>): boolean => !op.side && f.enemies.some((e) => (op.if ?? []).includes(`war:${nat},${e}`));
+  const planned = (f: Front): boolean => list.some((op) => meant(op, f) && !flag(g, `st:done:${nat}:${op.id}`) && g.turn <= (op.to ?? 999)
+    && (op.if ?? []).filter((c) => c !== 'quiet').every((c) => cond(g, nat, c, real)));
+  const hurried = (op: Op): boolean => real.some((f) => meant(op, f) && boldness(g, nat, f) > 0);
 
   for (const f of real) {
     const since = onSince(g, nat, f);
     if (since) {
-      const fresh = g.turn - since < 2 || (pushed && f.enemies.some((e) => flag(g, `st:pushed:${nat}:${e}`)));
+      // A main effort opened out of impatience is given its season before anyone asks what it has gained.
+      const fresh = g.turn - since < 2 || (pushed && f.enemies.some((e) => flag(g, `st:pushed:${nat}:${e}`))) || boldNow(g, nat) > 0;
       if (fresh || (f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt))) setOn(g, nat, f, since);
       else { setOn(g, nat, f, 0); for (const e of f.enemies) g.flags[`st:rest:${nat}:${e}`] = g.turn + OPEN.rest; }
-    } else if (f.ratio >= T.attackAt * inConcert(g, nat, f) && f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}`))) {
-      setOn(g, nat, f, g.turn);
-      g.flags[`st:gain:${nat}`] = g.turn;
+    } else if (f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}`))) {
+      const usual = T.attackAt * inConcert(g, nat, f);
+      // The longer the front has been quiet, the smaller the advantage a staff waits for: a nation with no
+      // offensive of its own in it finds one at last, and nobody attacks at hopeless odds.
+      const I = OPEN.impatience;
+      const k0 = boldness(g, nat, f);
+      const k = k0 < (I?.after.length ?? 0) && planned(f) ? 0 : k0;
+      const none = T.attackAt >= 50;
+      const eager = !k ? usual : none ? (k >= I.after.length ? I.any : usual) : Math.max(I.floor, usual * I.ratio[k - 1]);
+      if (f.ratio >= eager) {
+        setOn(g, nat, f, g.turn);
+        g.flags[`st:gain:${nat}`] = g.turn;
+        if (f.ratio < usual) {
+          g.flags[`st:bold:${nat}`] = g.turn + I.effort - 1;
+          g.flags[`st:boldK:${nat}`] = k;
+        }
+      }
     }
   }
 
   // History's great choices. One is prepared at a time, and none while a great offensive is still being fought.
-  const list = ops(nat);
   const busy = real.some((f) => onSince(g, nat, f) && !cond(g, nat, 'quiet', [f]) && g.turn - flag(g, `st:gain:${nat}`) <= 1);
   let cur = flag(g, `st:op:${nat}`);
   const go = (k: number): void => {
@@ -492,12 +594,15 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       delete g.flags[`st:op:${nat}`];
       if (op) g.flags[`st:cool:${nat}:${op.id}`] = g.turn + 6;
       cur = 0;
-    } else if (g.turn - flag(g, `st:opAt:${nat}`) >= (op.prep ?? 0) && inSeason(g, op) && (op.ratio === undefined || p.ratio >= op.ratio)) {
+    } else if (g.turn - flag(g, `st:opAt:${nat}`) >= (op.prep ?? 0) && inSeason(g, op) && (op.ratio === undefined || p.ratio >= op.ratio)
+      && !(op.hold && !hurried(op) && inSeason(g, op, g.turn + 1) && monthly(g, nat, op.id, 'hold', g.turn) < op.hold)) {
       go(cur - 1);
       cur = 0;
     }
   }
-  if (!cur) {
+  // One great choice a month: a second one launched in the same month would take the declaration of war away
+  // from the first (the orders carry one operation), and the first would be marked done without ever happening.
+  if (!cur && flag(g, `st:go:${nat}`) !== g.turn) {
     for (let k = 0; k < list.length; k++) {
       const op = list[k];
       if (flag(g, `st:done:${nat}:${op.id}`) || g.turn < (op.from ?? 1) || g.turn > (op.to ?? 999) || g.turn < flag(g, `st:cool:${nat}:${op.id}`)) continue;
@@ -509,7 +614,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       // The blow has to be able to fall in season once the army is up.
       if (!op.side && op.season && ![0, 1, 2].some((late) => inSeason(g, op, g.turn + (op.prep ?? 0) + late))) continue;
       // A staff thinks twice before a blow that would bring the whole League down on it.
-      if (draw(g, nat, op.id, g.turn) >= op.chance * deterred(g, nat, who)) continue;
+      // (A front that has been quiet too long settles it: the plan is taken up without more waiting.)
+      if (!hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * deterred(g, nat, who)) continue;
       if (op.side || !(op.prep ?? 0)) {
         if (inSeason(g, op)) go(k);
       } else {
@@ -556,7 +662,9 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   if (live.length) {
     phase.enemies = [...new Set(live.flatMap((f) => f.enemies))];
     phase.objectives = [...new Set(live.flatMap((f) => objectives(g, f)))];
-    phase.minOdds = T.minOdds;
+    // In a main effort opened out of impatience the staff accepts shorter odds battle by battle.
+    const bold = boldNow(g, nat);
+    phase.minOdds = bold ? Math.min(T.minOdds, OPEN.impatience.odds[bold - 1]) : T.minOdds;
     phase.release = [...new Set(live.flatMap((f) => jumpOff(g, nat, f)))];
     phase.targets = [...new Set(live.flatMap((f) => bound(g, nat, f, [], false)))];
   }
@@ -598,7 +706,7 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   if (cap && cap.ctrl === nat && nearEnemy(g, nat, cap, OPEN.guardWithin)) phase.staging = { ...(phase.staging ?? {}), [cap.name]: OPEN.guard };
   // On the hardest level a rival with shipping keeps a force by the quay for a descent on the player's coast.
   const quay = seaBase(g, nat);
-  if (quay) phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, landingsFor(g, nat)!.force) };
+  if (quay) phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, seaFoe(g, nat)!.L.force) };
   // A force kept ready for a stroke still to come.
   for (const op of list) {
     if (!op.staging || flag(g, `st:done:${nat}:${op.id}`) || g.turn > (op.to ?? 999)) continue;
@@ -607,16 +715,59 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   return phase;
 }
 
+/** True where this nation's field troops stand next to ground an enemy holds: a land front with him. */
+function inTouch(g: Game, nat: string, e: string): boolean {
+  for (const r of g.regions) {
+    if (r.ctrl !== e) continue;
+    for (const j of r.nb) if (g.regions[j].units.some((u) => u.nat === nat && !u.dead && u.kind !== 'fort')) return true;
+    if (r.units.some((u) => u.nat === nat && !u.dead)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whom a staff with shipping means to cross the sea against, and the rules it lands by. On the hardest level a
+ * rival goes for the player's coasts. On every level a nation that has been at war with an enemy for a year and
+ * more with no land front against him and no fighting opens a second front: the choice stands for a year, and for
+ * as long as the men it put ashore still have a front to hold. Null for the player and for a nation with no ships.
+ */
+export function seaFoe(g: Game, nat: string): { foe: string; L: Landings } | null {
+  const n = g.nations[nat];
+  if (!n || !n.alive || n.dormant || n.sealift <= 0 || n.capital < 0 || nat === g.human) return null;
+  const L = landingsFor(g, nat), you = seat(g);
+  if (L && you !== null && atWar(g, nat, you)) return { foe: you, L };
+  const D = OPEN.descent;
+  if (!D || !isOpen(g)) return null;
+  const ids = Object.keys(g.nations);
+  const key = `st:foe:${nat}`, at = `st:foeAt:${nat}`;
+  const kept = ids[flag(g, key) - 1];
+  if (kept && g.nations[kept].alive && atWar(g, nat, kept)) {
+    const lodged = g.regions[flag(g, `st:lodged:${nat}`) - 1];
+    if (g.turn - flag(g, at) < 12 || (lodged && lodged.ctrl === nat && lodged.nb.some((j) => atWar(g, nat, g.regions[j].ctrl)))) return { foe: kept, L: D };
+  }
+  let best: string | null = null, bq = D.after - 1;
+  for (const e of [...n.atWar].sort()) {
+    const x = g.nations[e];
+    if (!x?.alive || x.capital < 0) continue;
+    const q = quietWith(g, nat, e);
+    if (q > bq && !inTouch(g, nat, e)) { bq = q; best = e; }
+  }
+  if (!best) { delete g.flags[key]; return null; }
+  g.flags[key] = ids.indexOf(best) + 1;
+  g.flags[at] = g.turn;
+  return { foe: best, L: D };
+}
+
 /**
  * The harbour a rival's staff keeps its landing force at, on the level that has it land on the player's coasts:
  * a home port of its own, in touch with the capital by land, and the one with the shortest crossing to a harbour
  * the player holds. The choice is kept while it still serves and looked at again every half year.
  */
 export function seaBase(g: Game, nat: string): Region | null {
-  const L = landingsFor(g, nat);
-  const you = seat(g);
+  const sea = seaFoe(g, nat);
   const n = g.nations[nat];
-  if (!L || you === null || !n.alive || n.sealift <= 0 || !atWar(g, nat, you) || n.capital < 0) return null;
+  if (!sea) return null;
+  const you = sea.foe;
   const key = `st:quay:${nat}`, at = `st:quayAt:${nat}`;
   const kept = g.regions[flag(g, key) - 1];
   if (kept && kept.ctrl === nat && g.turn - flag(g, at) < 6) return kept;

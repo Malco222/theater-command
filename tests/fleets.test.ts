@@ -401,9 +401,10 @@ describe('shelling a coast', () => {
       for (let m = 0; m < 14; m++) runTurnAI(g);
       all += g.shoreReports.length;
       for (const rep of g.shoreReports) {
-        expect(rep.what).toBe('troops');
+        // Troops on the coast, or (in the grand campaign) the defences of a town their army is besieging: never a city's output.
+        expect(['troops', 'town']).toContain(rep.what);
         expect(rep.guns).toBeGreaterThanOrEqual(B.least * 0.5);
-        expect(rep.cut).toBeLessThanOrEqual(B.troops.max * 1.16);
+        if (rep.what === 'troops') expect(rep.cut).toBeLessThanOrEqual(B.troops.max * 1.16);
         expect(g.regions[rep.region].seas).toContain(rep.zone);
       }
       // One coast is shelled once a month at most.
