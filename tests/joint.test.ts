@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { allied, atWar, createGame, startPhase } from '../src/campaign/game';
 import { JOINT, armyOf, couldJoin, joinArmy, jointMonth, leaveArmy, lendLimit, lentBy, lentTo, whyNotJoin } from '../src/campaign/joint';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { besiegerOf, guardOf } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
 import {
   armyAt, beginHuman, canOrder, candidates, current, endHuman, humanUp, joinOffers, joinable, jointForce, knowledgeOf, lending, orderAttack, orderEngineers,
@@ -210,8 +211,8 @@ describe('a corps that has joined', () => {
   it('marches with the army, and ground it walks into is the player\'s', () => {
     const { g, svk, home } = withSlovaks();
     orderJoin(g, svk);
-    // Polish ground with nobody on it, beside ground the player holds.
-    const empty = g.regions.find((r) => r.ctrl === 'POL' && g.regions.some((x) => x.nb.includes(r.id) && x.ctrl === 'GER'))!;
+    // Polish ground with nobody on it and no town guard to hold it, beside ground the player holds.
+    const empty = g.regions.find((r) => r.ctrl === 'POL' && guardOf(g, r) === 0 && g.regions.some((x) => x.nb.includes(r.id) && x.ctrl === 'GER'))!;
     expect(empty).toBeDefined();
     for (const c of [...empty.units]) { c.dead = true; empty.units.splice(empty.units.indexOf(c), 1); }
     const door = g.regions.find((x) => x.nb.includes(empty.id) && x.ctrl === 'GER')!;
@@ -246,7 +247,8 @@ describe('a corps that has joined', () => {
     expect(rep.attackers[0].nat).toBe('GER');
     expect(svk.fought).toBe(true);
     if (rep.taken) {
-      expect(krakow.ctrl).toBe('GER');
+      // The field is the player's; the town is too unless it holds out, and then the siege is his.
+      expect(rep.siege ? besiegerOf(g, krakow) : krakow.ctrl).toBe('GER');
       expect(rep.attackers.some((u) => u.nat === 'SVK' && u.fate === 'advanced') ? svk.reg : krakow.id).toBe(krakow.id);
     }
     expect(svk.joint).toBe('GER');
@@ -260,7 +262,7 @@ describe('a corps that has joined', () => {
     expect(rep).not.toBeNull();
     expect(rep.attNat).toBe('GER');
     expect(rep.attackers.map((u) => u.nat)).toEqual(['SVK']);
-    if (rep.taken) expect(krakow.ctrl).toBe('GER');
+    if (rep.taken) expect(rep.siege ? besiegerOf(g, krakow) : krakow.ctrl).toBe('GER');
   });
 
   it('stays out of a fight with a country its own is not at war with', () => {

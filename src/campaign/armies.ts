@@ -22,6 +22,7 @@ import { generalOf } from './commanders';
 import { grade, STORIES } from './stories';
 import { SIGHT, armyBand, corpsKnown, reportSource, sightOf, sortKnown, strengthBand, type Source } from './intel';
 import { armyOf } from './joint';
+import { townName } from './towns';
 import { corpsMood, forceMorale, moraleWord, restWord, type Mood } from './morale';
 
 export const DIVISIONS = data as unknown as {
@@ -271,17 +272,18 @@ function alliesIn(cs: Corps[], nat: string): string[] {
  * known in full. Anyone else's is a flag and a count until its corps are identified: in battle, by an agent, or
  * from the air. On ground the viewer cannot see there is nothing (null).
  */
-export function armyCard(g: Game, region: number, nat: string, viewer: string | null = g.human): ArmyCard | null {
+export function armyCard(g: Game, region: number, nat: string, viewer: string | null = g.human, town = false): ArmyCard | null {
   const r = g.regions[region];
   if (!r) return null;
   // An army is every corps that marches under its flag: the nation's own, and an ally's that have joined it.
-  const cs = r.units.filter((c) => armyOf(c) === nat && !c.dead);
+  // With `town`, the card is of the garrison inside the province's town, not of the army in the field (the grand campaign).
+  const cs = (town ? r.garr ?? [] : r.units).filter((c) => armyOf(c) === nat && !c.dead);
   if (!cs.length) return null;
   const allies = alliesIn(cs, nat);
   const mine = viewer === null || allied(g, nat, viewer);
   const sight = mine ? SIGHT.full : sightOf(g, viewer)[region];
   if (sight === SIGHT.none) return null;
-  const name = `${g.nations[nat].adj} army at ${r.name}`;
+  const name = town ? `${g.nations[nat].adj} garrison of ${townName(r)}` : `${g.nations[nat].adj} army at ${r.name}`;
   const last = (c: Corps): number => (c.kind === 'fort' ? 1 : 0);
   const sorted = (xs: Corps[]): Corps[] => [...xs].sort((a, b) => last(a) - last(b) || DIVISIONS.order.indexOf(a.kind) - DIVISIONS.order.indexOf(b.kind) || b.divs * b.str - a.divs * a.str || a.id - b.id);
   const k = mine ? null : sortKnown(g, cs, viewer);

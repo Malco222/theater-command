@@ -36,7 +36,7 @@ export interface AirActResult {
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const craft = (x: { ftr: number; bmr: number }): string => [x.ftr >= 1 ? `${num(x.ftr)} fighters` : '', x.bmr >= 1 ? `${num(x.bmr)} bombers` : ''].filter(Boolean).join(', ') || 'no aircraft fit to fly';
-const KINDS: RaidKind[] = ['bomb', 'night', 'ground', 'superiority', 'strike', 'fleet', 'harbour', 'recon'];
+const KINDS: RaidKind[] = ['bomb', 'night', 'ground', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon'];
 const isKind = (k: string): k is RaidKind => (KINDS as string[]).includes(k);
 const ids = (s: string | undefined): number[] => (s ? s.split('.').map(Number).filter((n) => Number.isFinite(n)) : []);
 const BACK: PageButton = { label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' };
@@ -127,7 +127,7 @@ function targetsPage(g: Game, kind: RaidKind, group: number): Page | null {
     id: group >= 0 ? `raid:${kind}:${group}` : `raid:${kind}`, title: k.label.toUpperCase(),
     headline: all.length ? `${all.length} target${all.length === 1 ? '' : 's'} in reach, nearest first` : 'No target is in reach',
     note: k.blurb, top: [{ label: 'BACK', act: group >= 0 ? `open:group:${group}` : 'open:raids', ok: true, tip: '' }],
-    sections: [{ heading: 'TARGETS', text: all.length ? '' : kind === 'fleet' ? 'No enemy fleet at sea has been found within reach. Search a sea from a group\'s page, or send a fleet to look: a fleet has to be found before it can be struck.' : kind === 'harbour' ? 'No enemy warships lie in a harbour within reach.' : 'Move a group to an airfield nearer the enemy, or wait until one that has flown is back.', rows }],
+    sections: [{ heading: 'TARGETS', text: all.length ? '' : kind === 'fleet' ? 'No enemy fleet at sea has been found within reach. Search a sea from a group\'s page, or send a fleet to look: a fleet has to be found before it can be struck.' : kind === 'harbour' ? 'No enemy warships lie in a harbour within reach.' : kind === 'town' ? 'No enemy town that your armies stand round or beside is within reach of a bomber group that can still fly.' : 'Move a group to an airfield nearer the enemy, or wait until one that has flown is back.', rows }],
   };
 }
 

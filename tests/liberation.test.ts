@@ -164,26 +164,29 @@ describe('who can free a fallen country', () => {
 
   it('must wait out the month the country fell in', () => {
     const g = world();
-    expect(g.nations.NOR.alive).toBe(true);
-    capitulate(g, 'NOR', 'GER');
-    expect(g.nations.NOR.alive).toBe(false);
-    expect(whyNotFreedBy(g, 'NOR', 'UK')).toMatch(/only this month/);
-    expect(whyNotFreedBy(g, 'NOR', 'UK', true)).toBeNull();
+    // A small country still standing in this war: which one depends on how the war has gone.
+    const nat = ['NOR', 'GRE', 'YUG'].find((id) => g.nations[id].alive)!;
+    expect(nat).toBeDefined();
+    const seat = g.regions[g.nations[nat].capital].name;
+    capitulate(g, nat, 'GER');
+    expect(g.nations[nat].alive).toBe(false);
+    expect(whyNotFreedBy(g, nat, 'UK')).toMatch(/only this month/);
+    expect(whyNotFreedBy(g, nat, 'UK', true)).toBeNull();
     g.human = 'UK';
-    expect(nationsFallen(g).find((f) => f.nat === 'NOR')!.note).toMatch(/^From next month, take Oslo/);
-    const oslo = take(g, 'Oslo', 'UK');
-    expect(g.nations.NOR.alive).toBe(false);
-    expect(oslo.ctrl).toBe('UK');
-    // Next month the capital is already in friendly hands: Norway returns the next time any of its ground is taken.
+    expect(nationsFallen(g).find((f) => f.nat === nat)!.note).toMatch(new RegExp(`^From next month, take ${seat}`));
+    const capital = take(g, seat, 'UK');
+    expect(g.nations[nat].alive).toBe(false);
+    expect(capital.ctrl).toBe('UK');
+    // Next month the capital is already in friendly hands: the country returns the next time any of its ground is taken.
     g.turn++;
-    expect(nationsFallen(g).find((f) => f.nat === 'NOR')!.note).toMatch(/^Your side holds Oslo/);
-    const other = g.regions.find((r) => r.owner === 'NOR' && !r.overseas && r.id !== oslo.id)!;
+    expect(nationsFallen(g).find((f) => f.nat === nat)!.note).toMatch(new RegExp(`^Your side holds ${seat}`));
+    const other = g.regions.find((r) => r.owner === nat && !r.overseas && r.id !== capital.id)!;
     clear(g, other);
     other.ctrl = 'GER';
     capture(g, other, 'UK');
-    expect(g.nations.NOR.alive).toBe(true);
-    expect(oslo.ctrl).toBe('NOR');
-    expect(other.ctrl).toBe('NOR');
+    expect(g.nations[nat].alive).toBe(true);
+    expect(capital.ctrl).toBe(nat);
+    expect(other.ctrl).toBe(nat);
   });
 
   it('is nobody once the last act has dissolved the alliances', () => {

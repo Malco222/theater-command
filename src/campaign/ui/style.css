@@ -1401,3 +1401,48 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 @media (max-width: 1700px) { .cards.haswings .ucard.corpsbox.shipbox { width: 124px; } .cards.haswings .wingcol { width: 166px; } }
 .acts .btn.go.on { color: var(--brass-ink); box-shadow: inset 0 0 0 2px rgba(20, 24, 28, .5); }
 .afield.deck { border-left: 3px solid rgba(111, 159, 208, .7); }
+
+/* ---- Cities, towns and sieges (the grand campaign) ---- */
+/* On the map: the country round a besieged town in the besieger's colour, the town's disc in its holder's, the siege lines turning round it, a shield on a garrison. */
+.sieged { opacity: .46; pointer-events: none; stroke: rgba(21, 18, 15, .55); stroke-width: .8; stroke-dasharray: 3 2; }
+.sgdisc { stroke: #15120f; stroke-width: 1.1; pointer-events: none; }
+.sgo { fill: none; stroke: #15120f; stroke-width: 4.2; opacity: .85; pointer-events: none; }
+.sgi { fill: none; stroke-width: 2.3; stroke-dasharray: 4.2 2.7; pointer-events: none; animation: freeturn 14s linear infinite; transform-box: fill-box; transform-origin: center; filter: saturate(1.35) brightness(1.2); }
+@media (prefers-reduced-motion: reduce) { .sgi { animation: none; } }
+.garrb { pointer-events: none; }
+.garrb path { stroke: #15120f; stroke-width: 1; stroke-linejoin: round; paint-order: stroke; filter: drop-shadow(0 .6px .8px rgba(0, 0, 0, .6)); }
+.garrb text { font-family: var(--head); font-size: 6.6px; font-weight: 700; fill: #fff; text-anchor: middle; paint-order: stroke; stroke: rgba(0, 0, 0, .65); stroke-width: 1.2px; }
+/* In the province panel: the town as a fortress. */
+.siegebox { margin-top: 9px; padding: 8px 10px 9px; background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--ink-3); border-radius: 0 4px 4px 0; display: grid; gap: 7px; }
+.siegebox.under { border-left-color: var(--red); background: linear-gradient(90deg, rgba(207, 90, 65, .13), rgba(207, 90, 65, 0) 62%), var(--panel-2); }
+.sghead { display: flex; align-items: center; gap: 9px; }
+.sghead .grow { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.sghead b { font-family: var(--head); font-size: 15px; letter-spacing: .03em; color: var(--ink); }
+.siegebox.under .sghead b { color: #f0b3a5; }
+.sghead small { font-size: 12px; line-height: 1.35; color: var(--ink-2); }
+.sghead.plain b { font-size: 10.5px; font-family: var(--body); font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.sgicon { flex: 0 0 auto; display: block; }
+.sgfacts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.sgfact { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 4px 6px 5px; display: grid; gap: 1px; min-width: 0; cursor: help; }
+.sgfact small { font-size: 9.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sgfact b { font-family: var(--head); font-size: 15px; font-weight: 700; color: var(--ink); line-height: 1.1; white-space: nowrap; }
+.sgfact.hurt b { color: #f0b3a5; }
+.sglines { display: grid; gap: 3px; }
+.sglines p { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--ink-2); }
+.sgrow { display: flex; align-items: center; gap: 8px; padding: 5px 7px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
+.sgrow .grow { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.sgrow b { font-size: 13px; color: var(--ink); }
+.sgrow small { font-size: 11.5px; color: var(--ink-2); line-height: 1.3; }
+.sgrow.dim { border-style: dashed; }
+.sgrow svg { flex: 0 0 auto; }
+.siegebox .acts { margin: 0; display: flex; flex-wrap: wrap; gap: 5px; }
+.siegebox .acts .btn { white-space: normal; text-align: left; line-height: 1.2; }
+.sghint { margin: 0; font-size: 12px; line-height: 1.4; color: var(--ink-3); }
+.sghint b { color: var(--ink-2); }
+/* On a battle report and on the tray. */
+.note.siegenote { display: flex; gap: 9px; align-items: flex-start; border-left-color: var(--red); margin: 10px 0 2px; }
+.jointbar.siegebar small { align-items: center; }
+.jointbar.siegebar .sgicon { display: inline-block; vertical-align: middle; }
+.alert.besieged { border-right-color: var(--red); }
+.alerts.inpane .alert.besieged { border-left-color: var(--red); }
+@media (max-width: 520px) { .sgfacts { grid-template-columns: repeat(2, 1fr); } }

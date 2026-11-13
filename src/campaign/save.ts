@@ -12,6 +12,7 @@ import { restoreWorks } from './arsenal';
 import { resetRailheads } from './rails';
 import { openAirWar } from './air';
 import { openCarriers } from './carriers';
+import { openSieges } from './siege';
 import { FAIR } from './difficulty';
 import { rollFromMemory } from './liberation';
 import { openMorale } from './morale';
@@ -121,15 +122,17 @@ export function loadGame(text: string): Game | null {
   g.regions.forEach((r, i) => {
     const [owner, ctrl, cap, fort, since, prev] = d.regions[i];
     r.owner = owner; r.ctrl = ctrl; r.cap = !!cap; r.fort = fort; r.since = since; r.prev = prev ?? null; r.units = [];
+    delete r.garr;
   });
   g.corps = d.corps as Corps[];
   const byId = new Map(g.corps.map((c) => [c.id, c]));
   g.regions.forEach((r, i) => {
     const ids = d.regions[i][6] as number[] | undefined;
-    if (ids) for (const id of ids) { const c = byId.get(id); if (c && c.reg === r.id) { r.units.push(c); byId.delete(id); } }
+    if (ids) for (const id of ids) { const c = byId.get(id); if (c && c.reg === r.id && !c.town) { r.units.push(c); byId.delete(id); } }
   });
-  // Anything a save from an older build did not list goes in as it comes.
-  for (const c of g.corps) if (byId.has(c.id)) g.regions[c.reg].units.push(c);
+  // Anything a save from an older build did not list goes in as it comes. A corps in garrison (the grand campaign)
+  // is on no field's list: it goes back inside its town, in the order it was saved.
+  for (const c of g.corps) if (byId.has(c.id)) { const r = g.regions[c.reg]; if (c.town) (r.garr ??= []).push(c); else r.units.push(c); }
   // A carved place that finds itself in the front line is not left empty: if the ground it was cut from has two
   // or more corps free to move, the first of them takes post there.
   for (let i = saved; i < g.regions.length; i++) {
@@ -166,6 +169,8 @@ export function loadGame(text: string): Game | null {
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
   if (g.flags.open === 1) openCarriers(g);
+  // And one saved before towns were garrisoned and besieged goes on under those rules.
+  openSieges(g);
   // Trade agreements; a grand campaign saved before there were any signs history's when it is loaded.
   g.trade = Array.isArray(d.trade) ? d.trade : [];
   openTrade(g);

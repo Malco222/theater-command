@@ -33,7 +33,7 @@
   },
   "will": {
     "_about": "Privation at home wears away the will to fight. Each month a nation's count of privation rises by 'sup' times the share of its supplies that did not come and 'oil' times the share of its oil; a month with everything it needs takes 'heal' off again. Each point of the count takes 'per' off the nation's will to fight, up to 'most', and that counts toward surrender beside a lost capital, lost ground and a broken army. A country that imports half its food and is cut off for a year and a half asks for terms.",
-    "sup": 1, "oil": 0.3, "heal": 0.5, "per": 0.08, "most": 1
+    "sup": 1, "oil": 0.3, "heal": 0.5, "per": 0.08, "most": 0.3
   },
   "_lanes": "A lane crosses the sea to 'to' through 'zones', where raiders sink a share of its cargoes and escorts and aircraft guard them, as on the convoy routes of navy.json. 'oil' and 'sup' are the shares of the recipient's monthly need the lane brings when every cargo arrives. 'source' is a nation the cargoes are bought from (a war with it ends the traffic); 'field' an oilfield they come from (the lane runs while its holder is no enemy); 'past' narrows an enemy holder shuts; 'shutBy' the sea powers whose blockade closes the lane while the recipient is at war with one of them; 'allies' the powers the recipient must be fighting beside for it to run at all. 'enter', 'draw' and 'via' are for drawing it on the map. A deal comes overland in fixed amounts: from whoever holds 'field', from 'seller', or (ore) by the Swedish ore traffic of navy.json; it stops when the seller is an enemy or in the enemy's camp.",
   "lanes": [

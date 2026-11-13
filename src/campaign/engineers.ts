@@ -175,8 +175,11 @@ function wanted(g: Game, nat: string): Site[] {
   let head: Int16Array | null = null;
   if (g.regions.some((r) => railCut(g, r.id) && allied(g, nat, r.ctrl))) { ensureSupply(g); head = railheads(g, nat); }
   const troops = (r: Region): boolean => r.units.some((u) => u.nat === nat && u.kind !== 'eng');
+  // Engineers work on their own country's ground, and on an ally's only where their own army stands or next to it:
+  // a country at peace sends none abroad, and nobody's sappers wander the far end of somebody else's war.
+  const abroad = g.nations[nat].atWar.length > 0;
   for (const r of g.regions) {
-    if (!allied(g, nat, r.ctrl)) continue;
+    if (r.ctrl !== nat && !(abroad && allied(g, nat, r.ctrl) && (troops(r) || r.nb.some((j) => troops(g.regions[j]))))) continue;
     const site: Site = { reg: r.id, score: 0, what: 'bridge', spans: [] };
     const own = troops(r);
     for (const x of crossingsAt(r.id)) {

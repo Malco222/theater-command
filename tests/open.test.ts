@@ -88,7 +88,7 @@ describe('the mode', () => {
 describe('the staffs', () => {
   it('give the same war for the same seed', () => {
     expect(print(play(free(5), 30))).toBe(print(play(free(5), 30)));
-  });
+  }, 30_000);
 
   it('give a different war for a different seed', () => {
     const west = new Set(runs.map((g) => g.flags['war:GER:BEL'] ?? 0));

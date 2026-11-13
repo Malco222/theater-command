@@ -17,6 +17,8 @@ import {
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
 } from './navy';
 import { lanesTo } from './resources';
+import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, siegeView, townHeld, townHitText, townShare, type TownHit } from './siege';
+import { townName } from './towns';
 import type { Corps, Fleet, Game, Region, ShipClass, Ships, ShoreReport, Stance } from './types';
 
 // Read straight from the data, so that nothing here depends on the order the modules are loaded in.
@@ -252,7 +254,8 @@ export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): Sea
 
 // ---- Shelling a coast ----------------------------------------------------------------------------------------
 
-export type ShoreTarget = 'troops' | 'city';
+/** What a fleet's guns are laid on: the troops in the open, the factories and docks, or the defences of the town (the grand campaign's sieges). */
+export type ShoreTarget = 'troops' | 'city' | 'town';
 
 const foesAt = (g: Game, r: Region, nat: string): Corps[] => r.units.filter((u) => !u.dead && atWar(g, nat, u.nat));
 
@@ -274,7 +277,10 @@ export function whyNotBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, 
   const troops = seen && foesAt(g, r, f.nat).length > 0;
   if (what === 'troops' && !troops) return viewer === null ? `No enemy troops stand at ${r.name}.` : `No enemy troops have been seen at ${r.name}.`;
   if (what === 'city' && r.fac <= 0) return `${r.name} has no industry for the guns to hit.`;
-  if (!what && !troops && r.fac <= 0) return `There is nothing at ${r.name} worth the shells: no enemy troops in sight and no industry.`;
+  const town = siegeRules(g) && townHeld(g, r);
+  if (what === 'town' && !siegeRules(g)) return 'Towns are shelled only in the grand campaign.';
+  if (what === 'town' && !town) return `Nobody holds ${townName(r)}: an army can walk in.`;
+  if (!what && !troops && r.fac <= 0 && !town) return `There is nothing at ${r.name} worth the shells: no enemy troops in sight and no industry.`;
   return null;
 }
 
@@ -284,7 +290,9 @@ export interface ShorePlan {
   region: number;
   what: ShoreTarget;
   /** Which targets are there to choose between. */
-  can: { troops: boolean; city: boolean };
+  can: { troops: boolean; city: boolean; town: boolean };
+  /** The town's defences: what the shelling would do to its works and to the troops inside. Null where there is no held town. */
+  town: TownHit | null;
   guns: number;
   /** Troops: the share of their organisation the shelling would cost troops in the open, how many corps and divisions stand there. */
   cut: number;
@@ -313,14 +321,16 @@ const shelter = (c: Corps): number => (c.kind === 'fort' ? B.troops.fort : c.dug
 export function planBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, viewer: string | null = null): ShorePlan {
   const seen = viewer === null || sightOf(g, viewer)[r.id] !== SIGHT.none;
   const foes = seen ? foesAt(g, r, f.nat) : [];
-  const can = { troops: whyNotBombard(g, f, r, 'troops', viewer) === null, city: whyNotBombard(g, f, r, 'city', viewer) === null };
-  const pick: ShoreTarget = what ?? (can.troops || !can.city ? 'troops' : 'city');
+  const can = { troops: whyNotBombard(g, f, r, 'troops', viewer) === null, city: whyNotBombard(g, f, r, 'city', viewer) === null, town: whyNotBombard(g, f, r, 'town', viewer) === null };
+  // With no target named: the troops in the open if there are any, then a town under siege, then the factories.
+  const pick: ShoreTarget = what ?? (can.troops ? 'troops' : can.town && besieged(g, r) ? 'town' : can.city ? 'city' : can.town ? 'town' : 'troops');
   const guns = gunWeight(g, f);
+  const town = siegeRules(g) && townHeld(g, r) ? planTownHit(g, r, 'shell', townShare('shell', guns)) : null;
   const total = g.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
   const output = r.fac > 0 ? Math.min(B.city.max, guns / B.city.scale) : 0;
   const fort = r.fort?.lv ?? 0;
   const plan: ShorePlan = {
-    why: whyNotBombard(g, f, r, what ?? (can.troops || can.city ? pick : undefined), viewer), fleet: f.id, region: r.id, what: pick, can, guns,
+    why: whyNotBombard(g, f, r, what ?? (can.troops || can.city || can.town ? pick : undefined), viewer), fleet: f.id, region: r.id, what: pick, can, town, guns,
     cut: shellCut(r, foes, guns), corps: foes.length, divs: foes.reduce((s, c) => s + c.divs, 0),
     output, nation: total > 0 ? output * (r.fac / total) : 0,
     fort, reply: Math.min(0.5, B.reply * fort), ready: Math.max(0, f.ready - B.ready), lines: [],
@@ -332,6 +342,10 @@ export function planBombard(g: Game, f: Fleet, r: Region, what?: ShoreTarget, vi
     if (cover < 1) plan.lines.push({ label: 'Ground', value: cap(r.terrain), effect: `Cover takes ${Math.round((1 - cover) * 100)}% off the effect` });
     plan.lines.push({ label: 'Troops', value: `${plural(plan.corps, 'corps', 'corps')}, ${plural(plan.divs, 'division')}`, effect: plan.cut > 0 ? `Organisation cut by about ${Math.round(plan.cut * 100)}%` : 'Nothing to hit' });
     if (foes.some((c) => c.dug || c.kind === 'fort')) plan.lines.push({ label: 'Shelter', value: foes.some((c) => c.kind === 'fort') ? 'Fortress troops under concrete' : 'Troops dug in', effect: `Dug in they lose ${Math.round(B.troops.dug * 100)}% as much, in a fortress ${Math.round(B.troops.fort * 100)}%` });
+  } else if (pick === 'town') {
+    const v = siegeView(g, r.id)!;
+    plan.lines.push({ label: 'The town', value: `${townName(r)}, ${v.sizeWord.toLowerCase()}: troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger`, effect: `A weight of fire of ${SIEGE.bombard.shellFull} breaks down ${SIEGE.breach.shell}% of its works, less its share; never more than ${SIEGE.breach.most}% in all` });
+    if (town) plan.lines.push({ label: 'The shelling', value: town.works >= 0.5 ? `About ${Math.round(town.works)}% of the works broken down` : 'Little more can be broken', effect: townHitText(g, r, town, 'shells', false) });
   } else {
     plan.lines.push({ label: 'Industry', value: plural(r.fac, 'factory', 'factories'), effect: output > 0 ? `${Math.round(output * 100)}% of its output stopped for a month: ${(plan.nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production` : 'Nothing to hit' });
   }
@@ -347,7 +361,7 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   const rng = seaRng(g, `shell:${f.id}:${r.id}`);
   const before = { ...f.ships };
   const defNat = r.ctrl;
-  let cut = 0, divs = 0, output = 0, nation = 0, result: string;
+  let cut = 0, divs = 0, output = 0, nation = 0, works: number | undefined, result: string;
   if (what === 'troops') {
     const foes = foesAt(g, r, f.nat);
     const base = shellCut(r, foes, plan.guns) * rng.range(0.85, 1.15);
@@ -361,6 +375,10 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
     result = cut > 0
       ? `The shelling cut the organisation of ${foes.length === 1 ? foes[0].name : `the ${foes.length} corps`} at ${r.name} by ${Math.round(cut * 100)}%${foes.some((c) => c.dug || c.kind === 'fort') ? ', less where they are dug in or under concrete' : ''}. They fight the weaker for it until they have rested.`
       : 'The guns found little to hit.';
+  } else if (what === 'town') {
+    const hit = hitTown(g, r, 'shell', townShare('shell', plan.guns) * rng.range(0.85, 1.15));
+    works = hit.works; cut = hit.org; divs = hit.divs;
+    result = townHitText(g, r, hit, 'shells', true);
   } else {
     output = plan.output; nation = plan.nation;
     stopOutput(g, f.nat, r.ctrl, nation);
@@ -378,10 +396,12 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
     id: g.flags.shoreReports, turn: g.turn, nat: f.nat, fleet: f.name, admiral: f.admiral?.name ?? null, ships: before, sunk,
     region: r.id, place: r.name, zone: f.zone, defNat, what, guns: plan.guns, cut, divs, output, nation, lines: plan.lines, result,
   };
+  if (works !== undefined) rep.works = works;
   g.shoreReports.push(rep);
   const adj = g.nations[defNat].adj;
   headline(g, 'battle', what === 'troops'
     ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
+    : what === 'town' ? `The ${f.name} shells the defences of ${townName(r)} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
     : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`, f.nat, r.id);
   return rep;
 }
@@ -492,8 +512,12 @@ export function openEscorts(g: Game): void {
 export function shoreAI(g: Game, nat: string): void {
   if (!seaWar(g) || !FLEETS.ai.bombard || nat === g.human || !g.nations[nat]?.atWar.length) return;
   // Only where the army can follow it up: enemy troops on a coast with one of its own side's armies beside them.
+  // A town its own side stands round counts too: the guns break down its works for the assault.
+  const sieged = (r: Region): boolean => besieged(g, r) && allied(g, nat, besiegerOf(g, r) ?? '') && townHeld(g, r) && breachOf(g, r) * 100 <= SIEGE.breach.most - 10;
+  const aim = (r: Region): ShoreTarget => (sieged(r) ? 'town' : 'troops');
   const worth = (r: Region): number => {
     if (!atWar(g, nat, r.ctrl) || g.flags[`shell:${r.id}`] === g.turn) return 0;
+    if (sieged(r)) return planTownHit(g, r, 'shell', 1).divs;
     if (!r.nb.some((j) => g.regions[j].units.some((u) => !u.dead && u.kind !== 'fort' && allied(g, u.nat, nat)))) return 0;
     return foesAt(g, r, nat).reduce((s, c) => s + c.divs, 0);
   };
@@ -504,11 +528,11 @@ export function shoreAI(g: Game, nat: string): void {
       let best: Region | null = null, bv = 0;
       for (const id of g.seas[f.zone].coast) {
         const r = g.regions[id];
-        if (whyNotBombard(g, f, r, 'troops')) continue;
+        if (whyNotBombard(g, f, r, aim(r))) continue;
         const v = worth(r);
         if (v > bv) { bv = v; best = r; }
       }
-      if (best) bombard(g, f, best, 'troops');
+      if (best) bombard(g, f, best, aim(best));
       continue;
     }
     // A fleet lying in harbour with the guns for it puts to sea for the month to shell such a coast, but only into
@@ -523,6 +547,6 @@ export function shoreAI(g: Game, nat: string): void {
         if (v > bv) { bv = v; best = g.regions[id]; at = z; }
       }
     }
-    if (best && sail(g, f, at, 'patrol')) bombard(g, f, best, 'troops');
+    if (best && sail(g, f, at, 'patrol')) bombard(g, f, best, aim(best));
   }
 }

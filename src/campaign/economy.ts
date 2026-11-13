@@ -22,6 +22,7 @@ import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
 import { TECH, locked, whyNoPara } from './tech';
 import { keepsStores, shortOfOil, supIncome } from './resources';
+import { SIEGE, besieged } from './siege';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -88,10 +89,13 @@ export const BUDGET = budgetData as unknown as {
 export const budgeted = (g: Game): boolean => g.flags.open === 1;
 
 /** What one province brings its holder each month, before the nation-wide gains and losses. */
-export interface Yield { land: number; port: number; oil: number; fac: number; capital: number; total: number }
+export interface Yield { land: number; port: number; oil: number; fac: number; capital: number; total: number; /** True while an enemy army stands round its town: it pays its holder little or nothing. */ siege?: boolean }
 
-/** What a province gives the nation that holds it. Conquered ground and colonies give less than the home country. */
-export function provinceYield(g: Game, r: Region, nat: string = r.ctrl): Yield {
+/**
+ * What a province gives the nation that holds it. Conquered ground and colonies give less than the home country.
+ * `whole` leaves a siege out of account: what the province is worth to its holder once the roads are open again.
+ */
+export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = false): Yield {
   const own = r.owner === nat;
   // A factory wrecked by bombing earns nothing until engineers rebuild it (the grand campaign only).
   const works = workingFactories(g, r);
@@ -104,6 +108,11 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl): Yield {
   const port = r.port ? BUDGET.port * k : 0;
   const oil = r.oil ? BUDGET.oil * k : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
+  // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.
+  if (!whole && nat === r.ctrl && besieged(g, r)) {
+    const p = SIEGE.pay;
+    return { land: land * p, port: port * p, oil: oil * p, fac: fac * p, capital: capital * p, total: (land + port + oil + fac + capital) * p, siege: true };
+  }
   return { land, port, oil, fac, capital, total: land + port + oil + fac + capital };
 }
 
@@ -302,7 +311,7 @@ export function corpsName(nat: string, kind: Kind, no: number): string {
 export const isHome = (g: Game, nat: string, r: Region): boolean => r.owner === nat && r.ctrl === nat;
 
 /** Where new formations can be raised: at home, not in the colonies. Troops for overseas are raised at home and shipped. */
-export const canRaise = (g: Game, nat: string, r: Region): boolean => isHome(g, nat, r) && !r.overseas;
+export const canRaise = (g: Game, nat: string, r: Region): boolean => isHome(g, nat, r) && !r.overseas && !besieged(g, r);
 
 /**
  * Orders a new corps. The points are paid now; the corps arrives in a few months. 'revive' names a destroyed

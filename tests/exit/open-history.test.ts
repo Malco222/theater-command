@@ -51,7 +51,8 @@ describe('twelve wars with no plan', () => {
     for (const w of wars) {
       for (const r of w.g.regions) expect(w.g.nations[r.ctrl], r.name).toBeDefined();
       for (const c of w.g.corps) {
-        expect(w.g.regions[c.reg].units, c.name).toContain(c);
+        // In the field of its province, or inside the town as its garrison.
+        expect(c.town !== undefined ? w.g.regions[c.reg].garr ?? [] : w.g.regions[c.reg].units, c.name).toContain(c);
         expect(Number.isFinite(c.str) && c.str >= 0 && c.str <= 1.0001, c.name).toBe(true);
       }
     }

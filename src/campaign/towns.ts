@@ -195,7 +195,8 @@ export function prizeOf(g: Game, region: number, nat: string | null = g.human): 
   const to = kind === 'restored' ? (frees ?? r.owner) : kind === 'ally' ? r.ctrl : nat;
   const scale = BUDGET.scale;
   const income = Math.round(provinceYield(g, r, to === nat ? nat : to).total * scale);
-  const incomeNow = Math.round(provinceYield(g, r, r.ctrl).total * scale);
+  // What its holder stands to lose for good: a siege that stops its pay for now is left out of account.
+  const incomeNow = Math.round(provinceYield(g, r, r.ctrl, true).total * scale);
   const oil = resRules(g) ? fieldYield(g, r, to) : 0, oilNow = resRules(g) ? fieldYield(g, r, r.ctrl) : 0;
   const factories = workingFactories(g, r);
   const yard = yardLevel(g, r), airfield = workLevel(g, 'field', r.id), fort = r.fort?.lv ?? 0;
