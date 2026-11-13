@@ -34,6 +34,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes } from './prizes';
+import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, dropSieges, fall, fieldCtrl, garrisonOf, guardAfter, guardMen, guardOf, guardPower, joinTown, musterNear, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
@@ -1774,6 +1775,8 @@ export function endPhase(g: Game, nat: string): void {
   if (g.nations[nat].alive) desertWorks(g, nat, true);
   siegeEmpties(g);
   mendPrizes(g, nat);
+  // The player's directive is looked at as his month closes: a town taken in it is a job done (the grand campaign).
+  judgeDirective(g, nat);
 }
 
 export function startPhase(g: Game, nat: string): void {
@@ -1814,11 +1817,13 @@ export function startPhase(g: Game, nat: string): void {
   // from what is left. A treasury that is empty pays nobody: no drafts go out, the armies rest badly and men drift away.
   // Trade agreements are looked over first: what war has ended, what the sea lets through (the grand campaign).
   tradeTick(g, nat);
+  // The player's war cabinet reads the month's news, and sets or judges its directive (the grand campaign).
+  govMonth(g, nat);
   const earned = income(g, nat);
   n.pp += earned - upkeepTotal(g, nat);
   const credit = BUDGET.debt.floor * Math.max(1, earned);
   const owed = budgeted(g) && n.pp < 0 ? Math.min(1, -n.pp / credit) : 0;
-  n.pc = Math.min(DIPLOMACY.pcCap, n.pc + pcIncome(nat) + civicSum(g, nat).pc);
+  n.pc = Math.min(Math.max(n.pc, DIPLOMACY.pcCap), n.pc + Math.max(0, pcIncome(nat) + civicSum(g, nat).pc + govCapital(g, nat)));
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
   const army = g.corps.filter((c) => c.nat === nat);
@@ -1829,7 +1834,8 @@ export function startPhase(g: Game, nat: string): void {
   // The level of the campaign quickens or slows the drafts, for the player or for his rivals: at the fair level, not at all.
   // A nation whose supplies have run out cannot equip the drafts it trains (the grand campaign).
   // Training grounds at home turn out replacements faster (the grand campaign).
-  const drafts = draftsMul(g, nat) * traitDrafts(g, nat) * supDrafts(g, nat) * civicDrafts(g, nat);
+  // The player's ministers and his decrees on the call-up quicken them, or slow them (the grand campaign).
+  const drafts = draftsMul(g, nat) * traitDrafts(g, nat) * supDrafts(g, nat) * civicDrafts(g, nat) * govMul(g, nat, 'drafts');
   // A hospital in a resting corps' province, or beside it, sends more of its men back and rests it better.
   const ward = (c: Corps): { drafts: number; org: number } => (restedMonth(g, c) ? hospitalWorth(hospitalNear(g, c, (h) => h === nat || allied(g, h, nat))) : { drafts: 1, org: 0 });
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).

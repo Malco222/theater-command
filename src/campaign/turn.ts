@@ -50,6 +50,7 @@ import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
 } from './prizes';
+import { appoint, decree, government, setAside, whyNotAppoint, whyNotDecree, whyNotSetAside, type GovView } from './government';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -444,6 +445,48 @@ export function orderScorchPolicy(g: Game, policy: ScorchPolicy): boolean {
   if (g.human === null || !humanUp(g) || g.flags.open !== 1) return false;
   setScorchPolicy(g, g.human, policy);
   return true;
+}
+
+// ---- Government and the war cabinet (the grand campaign) --------------------------------------
+
+/**
+ * A nation's government: its form, and for the player his war cabinet (four seats, the minister in each and who
+ * else could hold it), his decrees, political capital, the cabinet's trust in him and the directive it has set.
+ * With no nation named, the player's own. Null outside the grand campaign.
+ */
+export const governmentOf = (g: Game, nat: string | null = g.human): GovView | null => government(g, nat);
+
+/** Why the player cannot put this minister in this seat of his war cabinet, or null if he can. */
+export function whyNotAppointMinister(g: Game, seat: string, minister: string): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotAppoint(g, g.human, seat, minister);
+}
+
+/** The player appoints a minister: it costs political capital, and the seat cannot change again for some months. */
+export function orderAppoint(g: Game, seat: string, minister: string): boolean {
+  return g.human !== null && humanUp(g) && appoint(g, g.human, seat, minister);
+}
+
+/** Why the player cannot move a decree track to this step (one step up, or one down), or null if he can. */
+export function whyNotOrderDecree(g: Game, track: string, step: number): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotDecree(g, g.human, track, step);
+}
+
+/** The player carries a decree, one step up for its price in political capital, or relaxes one, free. */
+export function orderDecree(g: Game, track: string, step: number): boolean {
+  return g.human !== null && humanUp(g) && decree(g, g.human, track, step);
+}
+
+/** Why the player cannot set his directive aside, or null if he can. */
+export function whyNotSetAsideDirective(g: Game): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotSetAside(g, g.human);
+}
+
+/** The player tells the cabinet its directive will not be carried out: the trust is lost at once, and the next one is set sooner. */
+export function orderSetAside(g: Game): boolean {
+  return g.human !== null && humanUp(g) && setAside(g, g.human);
 }
 
 /** The town of a province as a fortress: what it holds, what it adds to its defenders, and how its siege stands. Null outside the grand campaign. */
