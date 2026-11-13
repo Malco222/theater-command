@@ -31,6 +31,7 @@ import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplom
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
+import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -693,6 +694,51 @@ export function orderEvacuate(g: Game, c: Corps): boolean {
 }
 
 /** Nations the player could declare war on: neighbours by land that are not already friends or enemies. */
+// ---- The fall of nations and their return ------------------------------------------------------------
+
+/**
+ * The announcements both interfaces make: every nation that has left the war and every one that has come back into
+ * it, in words, oldest first. Give a month to have only that month's. Each carries the nation, who did it, and the
+ * capital to show on the map.
+ */
+export function announcements(g: Game, turn?: number): PassingCard[] {
+  return passingsIn(g, turn).map((p) => passingCard(g, p));
+}
+
+/** One announcement by its number on the roll, or null. */
+export function announcement(g: Game, id: number): PassingCard | null {
+  const p = g.passings.find((x) => x.id === id);
+  return p ? passingCard(g, p) : null;
+}
+
+/**
+ * Every fallen country as the player sees its chances: when it fell, to whom, who holds its capital, whether it can
+ * come back at all, and whether the player taking that capital would free it.
+ */
+export function nationsFallen(g: Game): FallenRow[] {
+  return fallenNations(g, g.human);
+}
+
+/** The fallen country whose capital this province is, or null: what the province panel says about freeing it. */
+export function fallenCapitalAt(g: Game, region: number): FallenRow | null {
+  return fallenNations(g, g.human).find((f) => f.capital === region) ?? null;
+}
+
+/**
+ * The player's country has fallen: the player steps back and watches the war go on. The seat is remembered, and if
+ * the country is liberated the player is given it back (g.human is that country again). Returns the country lost.
+ */
+export function playerFell(g: Game): string | null {
+  return g.human && !g.nations[g.human].alive ? standDown(g) : null;
+}
+
+/** The country the player lost and may yet be given back, or null. */
+export function playerLost(g: Game): string | null {
+  if (g.human) return null;
+  const k = Object.keys(g.flags).find((x) => x.startsWith('was:'));
+  return k ? k.slice(4) : null;
+}
+
 // ---- The player's generals ----------------------------------------------------------------
 
 const myGeneral = (g: Game, id: number): General | null => {

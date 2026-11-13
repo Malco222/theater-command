@@ -55,7 +55,7 @@ function free(g: Game, n: Nation): boolean {
 }
 
 /** Makes a country a member. It leaves the track between the two blocs and takes its stand in the middle. */
-function enrol(g: Game, n: Nation): void {
+export function enrol(g: Game, n: Nation): void {
   n.league = true;
   n.align = 'independent';
   n.opinion = n.home = 0;

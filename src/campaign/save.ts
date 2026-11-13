@@ -12,6 +12,7 @@ import { restoreWorks } from './arsenal';
 import { resetRailheads } from './rails';
 import { openAirWar } from './air';
 import { FAIR } from './difficulty';
+import { rollFromMemory } from './liberation';
 import mapData from '../generated/campaign-map.json';
 import type { Corps, Game, General } from './types';
 
@@ -45,6 +46,8 @@ export function saveGame(g: Game): string {
     stories: g.stories,
     // The secret service exists only in the grand campaign: a historical save is written exactly as it always was.
     intel: g.flags.open === 1 ? g.intel : undefined,
+    // The roll of the fallen and the freed: left out while it is empty, so a save with nothing on it is written as it always was.
+    passings: g.passings.length ? g.passings : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -148,6 +151,8 @@ export function loadGame(text: string): Game | null {
   g.stories = { ...newStories(), ...(d.stories ?? {}) };
   // A save from before spies: the service starts with nobody on its books.
   g.intel = { agents: [], next: 1, notes: [], heat: {}, ...(d.intel ?? {}) };
+  // A save from before the roll of the fallen was kept: it is written up from what each nation remembers of its own fall.
+  g.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g);
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.convoys = d.convoys ?? {}; }
   // The supply picture is restored exactly as it stood, so the loaded game plays on identically.
   const fed = g.corps.map((c) => c.supplied);
