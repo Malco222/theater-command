@@ -1,0 +1,7 @@
+{
+  "_about": "Joint armies (the grand campaign). The player may ask an ally's field corps that stand in a province with his own to march with his army. They take his orders in his month, move and attack with his corps and take ground for him, and go back to their own command when he sends them back or leaves them behind. 'share' is the most of its field corps one ally will lend at a time: never fewer than 'least' (a country with one corps will lend it), never more than 'most'. An ally keeps 'capital' field corps under its own command in its capital (0: it will lend even those), and lends nothing while it is at war with none of the player's enemies.",
+  "share": 0.4,
+  "least": 1,
+  "most": 8,
+  "capital": 0
+}

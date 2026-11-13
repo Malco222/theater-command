@@ -21,6 +21,7 @@ import { allied, men } from './game';
 import { generalOf } from './commanders';
 import { grade, STORIES } from './stories';
 import { SIGHT, armyBand, corpsKnown, reportSource, sightOf, sortKnown, strengthBand, type Source } from './intel';
+import { armyOf } from './joint';
 import { corpsMood, forceMorale, moraleWord, restWord, type Mood } from './morale';
 
 export const DIVISIONS = data as unknown as {
@@ -162,6 +163,8 @@ export interface CorpsCard {
   source: Source | null;
   strLo: number;
   strHi: number;
+  /** The nation whose army it marches with, where that is not its own: an ally's corps in a joint army. Null otherwise. */
+  joint: string | null;
 }
 
 export interface ArmyMix { kind: Kind; word: string; divs: number; men: number }
@@ -197,6 +200,8 @@ export interface ArmyCard {
   mix: ArmyMix[];
   /** "5 infantry, 4 armoured and 2 artillery divisions". */
   line: string;
+  /** The allies whose corps march in this army beside its own (a joint army), most divisions first. Empty for an army of one nation. */
+  allies: string[];
   corps: CorpsCard[];
 }
 
@@ -209,7 +214,7 @@ export function corpsCard(g: Game, c: Corps): CorpsCard {
   return {
     id: c.id, nat: c.nat, name: c.name, nick: c.nick ?? null, kind: c.kind, label: KIND[c.kind].label, divs: c.divs, men: men(c),
     str: c.str, xp: c.xp, grade: grade(c.xp), hardened, battles, won, service, general: generalOf(g, c)?.name ?? null,
-    mood: corpsMood(g, c), divisions: divisionsOf(g, c), known: 'exact', age: 0, source: null, strLo: c.str, strHi: c.str,
+    mood: corpsMood(g, c), divisions: divisionsOf(g, c), known: 'exact', age: 0, source: null, strLo: c.str, strHi: c.str, joint: c.joint ?? null,
   };
 }
 
@@ -254,6 +259,13 @@ export function corpsSeen(g: Game, c: Corps, viewer: string | null = g.human): C
   };
 }
 
+/** The other nations whose corps march in an army, most divisions first. */
+function alliesIn(cs: Corps[], nat: string): string[] {
+  const by = new Map<string, number>();
+  for (const c of cs) if (c.nat !== nat) by.set(c.nat, (by.get(c.nat) ?? 0) + c.divs);
+  return [...by].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([n]) => n);
+}
+
 /**
  * One nation's army in a province, as the viewer knows it. The viewer's own armies and their allies' are always
  * known in full. Anyone else's is a flag and a count until its corps are identified: in battle, by an agent, or
@@ -262,8 +274,10 @@ export function corpsSeen(g: Game, c: Corps, viewer: string | null = g.human): C
 export function armyCard(g: Game, region: number, nat: string, viewer: string | null = g.human): ArmyCard | null {
   const r = g.regions[region];
   if (!r) return null;
-  const cs = r.units.filter((c) => c.nat === nat && !c.dead);
+  // An army is every corps that marches under its flag: the nation's own, and an ally's that have joined it.
+  const cs = r.units.filter((c) => armyOf(c) === nat && !c.dead);
   if (!cs.length) return null;
+  const allies = alliesIn(cs, nat);
   const mine = viewer === null || allied(g, nat, viewer);
   const sight = mine ? SIGHT.full : sightOf(g, viewer)[region];
   if (sight === SIGHT.none) return null;
@@ -274,7 +288,7 @@ export function armyCard(g: Game, region: number, nat: string, viewer: string | 
   if (k && (k.report.length || k.none.length)) {
     const seen = sorted([...k.exact, ...k.report]);
     if (!seen.length && sight !== SIGHT.full) {
-      return { region, nat, name, known: 'count', corpsCount: cs.length, unidentified: cs.length, est: null, oldest: 0, divs: 0, men: 0, str: 0, morale: null, moraleWord: '', rest: 0, restWord: '', mix: [], line: '', corps: [] };
+      return { region, nat, name, known: 'count', corpsCount: cs.length, unidentified: cs.length, est: null, oldest: 0, divs: 0, men: 0, str: 0, morale: null, moraleWord: '', rest: 0, restWord: '', mix: [], line: '', allies: [], corps: [] };
     }
     // Part of the army is known: the identified corps as cards, the rest as a count, and the staff's estimate of the whole.
     const cards = seen.map((c) => corpsSeen(g, c, viewer)!);
@@ -285,7 +299,7 @@ export function armyCard(g: Game, region: number, nat: string, viewer: string | 
     return {
       region, nat, name, known: 'partial', corpsCount: cs.length, unidentified: k.none.length, est, oldest: cards.reduce((m, c) => Math.max(m, c.age), 0),
       divs: dv, men: cards.reduce((s, c) => s + c.men, 0), str: dv > 0 ? cards.reduce((s, c) => s + c.divs * c.str, 0) / dv : 0,
-      morale: null, moraleWord: '', rest: 0, restWord: '', mix, line: `${words[0].toUpperCase()}${words.slice(1)}`, corps: cards,
+      morale: null, moraleWord: '', rest: 0, restWord: '', mix, line: `${words[0].toUpperCase()}${words.slice(1)}`, allies: [], corps: cards,
     };
   }
   const order = sorted(cs);
@@ -298,6 +312,6 @@ export function armyCard(g: Game, region: number, nat: string, viewer: string | 
     divs, men: cs.reduce((s, c) => s + men(c), 0),
     str: divs > 0 ? cs.reduce((s, c) => s + c.divs * c.str, 0) / divs : 0,
     morale, moraleWord: morale === null ? '' : moraleWord(morale), rest, restWord: restWord(rest),
-    mix, line: mixLine(mix), corps: order.map((c) => (mine ? null : corpsSeen(g, c, viewer)) ?? corpsCard(g, c)),
+    mix, line: mixLine(mix), allies, corps: order.map((c) => (mine ? null : corpsSeen(g, c, viewer)) ?? corpsCard(g, c)),
   };
 }

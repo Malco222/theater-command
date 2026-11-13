@@ -239,7 +239,9 @@ export function armiesSeen(g: Game, viewer: string | null = g.human): ArmySeen[]
     const by = new Map<string, { corps: number; divs: number; list: Corps[] }>();
     for (const c of r.units) {
       if (c.dead) continue;
-      const row = by.get(c.nat) ?? by.set(c.nat, { corps: 0, divs: 0, list: [] }).get(c.nat)!;
+      // A corps that marches with an ally's army stands under that army's flag.
+      const flag = c.joint ?? c.nat;
+      const row = by.get(flag) ?? by.set(flag, { corps: 0, divs: 0, list: [] }).get(flag)!;
       row.corps++; row.divs += c.divs * c.str; row.list.push(c);
     }
     for (const [nat, row] of by) {
