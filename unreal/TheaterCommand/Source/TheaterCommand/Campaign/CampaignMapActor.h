@@ -171,6 +171,8 @@ public:
 
 	/** Smoke and gun flashes over a region where a battle has just been fought, for a few seconds. */
 	void AddBattleSmoke(int32 RegionId);
+	/** The same over a sea where fleets have fought. */
+	void AddSeaBattle(int32 Zone);
 
 	/** Shows which bridges are down and which railways are cut. Does nothing if nothing has changed. */
 	void ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut);

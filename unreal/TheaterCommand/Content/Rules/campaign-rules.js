@@ -15829,24 +15829,37 @@
     }
     return { flights, notes, focus, mine: mine2 };
   }
+  var lastSeaReport = (s) => s.seaReports.reduce((m, r) => Math.max(m, r.id), -1);
+  function seaFightsSince(s, since) {
+    const fresh2 = s.seaReports.filter((r) => r.id > since);
+    const adj = (nat) => s.nations[nat]?.adj ?? nat;
+    return {
+      zones: [...new Set(fresh2.map((r) => r.zone))],
+      notes: fresh2.map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`),
+      mine: fresh2.some((r) => r.attNat === s.human || r.defNat === s.human)
+    };
+  }
   function stepOne(s, steps) {
     {
       const ctrl = s.regions.map((r) => r.ctrl);
       const r0 = s.reports.length;
       const month2 = s.turn;
       const stood = new Map(s.corps.filter((c) => !c.dead).map((c) => [c.id, c.reg]));
-      const air0 = lastAirReport(s);
+      const air0 = lastAirReport(s), sea0 = lastSeaReport(s);
       const nat = stepAI(s);
       if (s.human && s.turn !== month2) judgeGoals(s, s.human);
       if (!steps) return;
       const air = raidsSince(s, air0, [month2, s.turn]);
       const raidNote = air.notes.slice(0, 2).join(" ");
+      const sea = seaFightsSince(s, sea0);
+      const seaNote = sea.notes.slice(0, 2).join(" ");
       const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
       const reps = s.reports.slice(r0);
       if (!taken.length && !reps.length) {
         const seen = sight(s);
         const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)] > 0)).map((c) => c.reg))];
-        if (air.flights.length) steps.push({ nat, note: raidNote, taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine, raids: air.flights, view: view() });
+        if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine, raids: air.flights, seas: sea.zones, view: view() });
+        else if (sea.zones.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: [], mine: sea.mine, seas: sea.zones, view: view() });
         else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
         return;
       }
@@ -15864,6 +15877,7 @@
         note: `${s.nations[nat].adj} forces ${said.join(", ")}.${raidNote ? ` ${raidNote}` : ""}`,
         taken,
         raids: air.flights,
+        seas: sea.zones,
         battles: reps.map((r) => r.region),
         focus: [.../* @__PURE__ */ new Set([...taken, ...reps.map((r) => r.region)])],
         // The player's own ground or troops were involved.
@@ -16116,6 +16130,7 @@
     const steps = [];
     let fallen = null;
     const roll0 = s.passings.length, month02 = s.turn;
+    const seaStart = lastSeaReport(s);
     const me0 = s.human;
     const goals0 = GOAL_KEYS.map((key2) => goalState(s, key2));
     if (!s.human) {
@@ -16128,7 +16143,7 @@
         if (humanUp(s)) beginHuman(s);
       }
     } else {
-      const air0 = lastAirReport(s), month2 = s.turn, me = s.human;
+      const air0 = lastAirReport(s), sea00 = lastSeaReport(s), month2 = s.turn, me = s.human;
       if (onEve(s)) endEve(s);
       else {
         judgeGoals(s, s.human);
@@ -16136,8 +16151,29 @@
       }
       const air = raidsSince(s, air0, [month2, s.turn]);
       if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, view: view() });
+      const sea = seaFightsSince(s, sea00);
+      if (sea.zones.length) steps.push({ nat: me, note: sea.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: [], mine: true, seas: sea.zones, view: view() });
       runOthers(s, steps);
       fallen = arrive(s);
+    }
+    {
+      const shown2 = new Set(steps.flatMap((x) => x.seas ?? []));
+      const late = s.seaReports.filter((r) => r.id > seaStart && !shown2.has(r.zone));
+      if (late.length) {
+        const all = seaFightsSince(s, seaStart);
+        const zones = [...new Set(late.map((r) => r.zone))];
+        const adj = (nat) => s.nations[nat]?.adj ?? nat;
+        steps.push({
+          nat: late[0].attNat,
+          taken: [],
+          battles: [],
+          focus: [],
+          seas: zones,
+          mine: late.some((r) => r.attNat === s.human || r.defNat === s.human),
+          note: late.slice(0, 2).map((r) => `${adj(r.attNat)} and ${adj(r.defNat)} ships fight in the ${r.zoneName}: ${r.won ? `the ${adj(r.attNat)} fleet has the better of it` : `the ${adj(r.defNat)} fleet holds the sea`}.`).join(" ") || all.notes[0] || "",
+          view: view()
+        });
+      }
     }
     const headlines = s.headlines.slice(h0).map((h) => ({
       kind: h.kind,
@@ -17471,7 +17507,7 @@ ${standing2}`,
   }
   function raidsFlown(turn) {
     const s = game();
-    return { battles: s.flags.airBattles ?? 0, reports: s.airReports.length, turns: [...new Set(s.airReports.map((r) => r.turn))], raids: flownRaids(s, turn ?? s.turn) };
+    return { sea: s.seaReports.map((r) => [r.id, r.turn, r.zoneName]), battles: s.flags.airBattles ?? 0, reports: s.airReports.length, turns: [...new Set(s.airReports.map((r) => r.turn))], raids: flownRaids(s, turn ?? s.turn) };
   }
   globalThis.TC = {
     raidsFlown,

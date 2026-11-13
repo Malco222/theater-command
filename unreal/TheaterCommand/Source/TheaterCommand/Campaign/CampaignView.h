@@ -382,6 +382,7 @@ struct FMonthStep
 	TArray<int32> Battles; // the regions fought over
 	bool bMarchOnly = false; // nothing was fought for or taken: armies only moved
 	TArray<FSortie> Raids; // the raids flown in it, each group from its own airfield
+	TArray<int32> SeaFights; // the seas where fleets fought in it
 	bool bMine = false; // the player's own ground or troops were involved
 	FCampaignView View; // the war as it stood when that nation had finished
 };

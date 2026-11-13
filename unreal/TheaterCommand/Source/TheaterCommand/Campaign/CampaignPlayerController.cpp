@@ -3679,9 +3679,18 @@ void ACampaignPlayerController::WatchNextStep()
 	{
 		CampaignSounds::Play(this, TEXT("field_gun"), 0.25f);
 	}
-	if (Step.Battles.Num() > 0 || Step.Raids.Num() > 0)
+	if (Step.Battles.Num() > 0 || Step.Raids.Num() > 0 || Step.SeaFights.Num() > 0)
 	{
 		BattleMusicUntil = FPlatformTime::Seconds() + (Step.bMine ? 9.0 : 5.0);
+	}
+	// Where fleets fought, the guns are seen and heard over the water.
+	for (int32 Zone : Step.SeaFights)
+	{
+		Map->AddSeaBattle(Zone);
+	}
+	if (Step.SeaFights.Num() > 0)
+	{
+		CampaignSounds::Play(this, TEXT("ship_guns"), Step.bMine ? 0.5f : 0.3f);
 	}
 	// The raids of the month are flown again, each group from its own airfield.
 	for (const FSortie& Raid : Step.Raids)
@@ -3706,6 +3715,18 @@ void ACampaignPlayerController::WatchNextStep()
 				++Count;
 			}
 		}
+		if (Count == 0)
+		{
+			// Nothing on land: a fight at sea is looked at where it was.
+			for (int32 Zone : Step.SeaFights)
+			{
+				if (Map->GetData().Seas.IsValidIndex(Zone))
+				{
+					Middle += Map->GetData().Seas[Zone].Center;
+					++Count;
+				}
+			}
+		}
 		if (Count > 0)
 		{
 			Middle /= Count;
@@ -3719,7 +3740,7 @@ void ACampaignPlayerController::WatchNextStep()
 		CampaignSounds::Play(this, TEXT("explosion"), 0.3f);
 	}
 	// (a raid takes its time to fly: long enough to see it reach the target when it is the player's sky)
-	const double Pause = Step.Raids.Num() > 0 ? (Step.bMine ? 6.0 : 2.2) : Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
+	const double Pause = Step.Raids.Num() > 0 ? (Step.bMine ? 6.0 : 2.2) : Step.SeaFights.Num() > 0 && Step.Battles.Num() == 0 ? (Step.bMine ? 2.4 : 1.4) : Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
 	Notify(Step.Note, Pause + 0.3);
 	WatchNext = FPlatformTime::Seconds() + Pause;
 }

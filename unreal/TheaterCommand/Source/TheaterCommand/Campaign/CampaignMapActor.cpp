@@ -3287,6 +3287,22 @@ void ACampaignMapActor::AddBattleSmoke(int32 RegionId)
 	Battle.Began = GetWorld()->GetTimeSeconds();
 }
 
+void ACampaignMapActor::AddSeaBattle(int32 Zone)
+{
+	if (!Data.Seas.IsValidIndex(Zone) || !GetWorld())
+	{
+		return;
+	}
+	// Two bursts a little apart, as two lines of ships firing at each other.
+	for (const double Side : { -1.0, 1.0 })
+	{
+		const FVector2D Spot = Data.Seas[Zone].Center + FVector2D(5.0 * Side, 3.0 * Side);
+		FBattleSmoke& Battle = Battles.AddDefaulted_GetRef();
+		Battle.Where = MapToWorld(Spot.X, Spot.Y, 0.3);
+		Battle.Began = GetWorld()->GetTimeSeconds() + (Side > 0.0 ? 0.35 : 0.0);
+	}
+}
+
 void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraFocus)
 {
 	UWorld* World = GetWorld();

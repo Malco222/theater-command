@@ -871,6 +871,14 @@ FMonthResult FCampaignSession::EndMonth()
 			Entry->TryGetStringField(TEXT("note"), Step.Note);
 			Entry->TryGetBoolField(TEXT("mine"), Step.bMine);
 			Entry->TryGetBoolField(TEXT("moved"), Step.bMarchOnly);
+			const TArray<TSharedPtr<FJsonValue>>* SeaFights = nullptr;
+			if (Entry->TryGetArrayField(TEXT("seas"), SeaFights))
+			{
+				for (const TSharedPtr<FJsonValue>& Sea : *SeaFights)
+				{
+					Step.SeaFights.AddUnique(FMath::RoundToInt32(Sea->AsNumber()));
+				}
+			}
 			const TArray<TSharedPtr<FJsonValue>>* Raids = nullptr;
 			if (Entry->TryGetArrayField(TEXT("raids"), Raids))
 			{
