@@ -335,11 +335,14 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	WaterNX = FMath::CeilToInt32(Data.Width / WaterStep) + 1;
 	WaterNY = FMath::CeilToInt32(Data.Height / WaterStep) + 1;
 	Water.SetNumUninitialized(WaterNX * WaterNY);
+	Surf.SetNumUninitialized(WaterNX * WaterNY);
 	const FVector2D SunOnMap = FVector2D(ToSun.X, ToSun.Y).GetSafeNormal();
 	// (The lens crushes the darkest of a colour's three parts, which takes the red out of deep blue water and
 	// turns it harsh; so the darks of the sea's paint are lifted a little before it goes on, and it comes out
 	// the colour it was meant to be. "-TheaterSea=0.1,0.95" tries a greying and another strength.)
 	float SeaGrey = 0.0f, SeaStrength = 0.95f;
+	float SeaFloor = 0.18f; // (the palest the sea may be, as a place on its ramp: "-TheaterSeaFloor=0.1" tries another)
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaFloor="), SeaFloor);
 	{
 		FString Asked;
 		TArray<FString> Parts;
@@ -363,7 +366,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			float Floor = 1.0f;
 			if (Terrain.HasElevation())
 			{
-				Deep = FMath::Pow(FMath::Clamp(-Bed(X, Y) / 3200.0f, 0.0f, 1.0f), 0.55f);
+				Deep = FMath::Max(FMath::Pow(FMath::Clamp(-Bed(X, Y) / 3200.0f, 0.0f, 1.0f), 0.55f), SeaFloor);
 				const float SlopeX = (Bed(X + 1.5, Y) - Bed(X - 1.5, Y)) / 3.0f, SlopeY = (Bed(X, Y + 1.5) - Bed(X, Y - 1.5)) / 3.0f;
 				Floor = FMath::Clamp(1.0f - 0.004f * (SlopeX * static_cast<float>(SunOnMap.X) + SlopeY * static_cast<float>(SunOnMap.Y)), 0.82f, 1.2f);
 			}
@@ -378,7 +381,22 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			}
 			const float Swell = 0.955f + 0.045f * (1.0f + FMath::PerlinNoise2D(FVector2D(X, Y) * 0.11));
 			C = C * (Floor * Swell);
-			C = Mix(C, FSeen::Bytes(120, 190, 184), 0.5f * FMath::Pow(FMath::Clamp(1.0f - OffShore / 3.2f, 0.0f, 1.0f), 1.2f));
+			// (a narrow band, and less of it over water that is pale already: or a shallow enclosed sea turns to milk)
+			C = Mix(C, FSeen::Bytes(120, 190, 184), 0.25f * FMath::Pow(FMath::Clamp(1.0f - OffShore / 2.0f, 0.0f, 1.0f), 1.2f) * FMath::SmoothStep(0.04f, 0.2f, Deep));
+			// The surf comes and goes along a shore, and is strongest where the open ocean runs in: how deep the
+			// water is a little way out says which shore that is.
+			float Ocean = 0.0f;
+			if (Terrain.HasElevation() && OffShore < 2.5f)
+			{
+				for (int32 Ray = 0; Ray < 8; ++Ray)
+				{
+					const double Angle = Ray * UE_DOUBLE_PI / 4.0;
+					Ocean = FMath::Max(Ocean, -Bed(X + FMath::Cos(Angle) * 22.0, Y + FMath::Sin(Angle) * 22.0));
+				}
+				Ocean = FMath::SmoothStep(120.0f, 900.0f, Ocean);
+			}
+			const float Comes = FMath::SmoothStep(-0.25f, 0.45f, FMath::PerlinNoise2D(FVector2D(X, Y) * 0.045) + 0.5f * FMath::PerlinNoise2D(FVector2D(X, Y) * 0.13 + FVector2D(9.0, 4.0)));
+			Surf[J * WaterNX + I] = FColor(ToByte(FMath::Lerp(0.3f, 1.0f, Ocean) * FMath::Lerp(0.25f, 1.0f, Comes)), 0, 0, 255);
 			// The land's shadow: darker where the land stands between this water and the sun.
 			const float Lee = Terrain.CoverageAt(X + SunOnMap.X * 1.3, Y + SunOnMap.Y * 1.3) * (1.0f - Terrain.CoverageAt(X, Y));
 			C = C * (1.0f - 0.3f * FMath::Clamp(Lee * 1.6f, 0.0f, 1.0f));

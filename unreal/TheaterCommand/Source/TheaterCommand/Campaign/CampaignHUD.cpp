@@ -5,7 +5,9 @@
 #include "Campaign/CampaignPlayerController.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
+#include "Fonts/CompositeFont.h"
 #include "Fonts/FontMeasure.h"
+#include "Misc/Paths.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Rendering/SlateRenderer.h"
 #include "Engine/GameViewportClient.h"
@@ -39,6 +41,52 @@ namespace
 	const FLinearColor Faint = FLinearColor(FColor::FromHex(TEXT("6E675B")));
 	const FLinearColor Alarm = FLinearColor(FColor::FromHex(TEXT("E08A6A")));
 	const FLinearColor Gain = FLinearColor(FColor::FromHex(TEXT("9CC08A")));
+
+	/**
+	 * The map's own lettering is a serif, as an atlas's is: PT Serif (ParaType; SIL Open Font License 1.1), read
+	 * from the project's own Content/Fonts folder if it is there, and otherwise from the Mac's system fonts, where
+	 * the same face is installed. Weight is Regular, Italic or Bold. Without either file the plain face is used.
+	 */
+	FSlateFontInfo Serif(const TCHAR* Weight, float Size, int32 Spacing = 0)
+	{
+		static TSharedPtr<FStandaloneCompositeFont> Face;
+		static bool bLooked = false;
+		if (!bLooked)
+		{
+			bLooked = true;
+			const FString Own = FPaths::ProjectContentDir() / TEXT("Fonts");
+			const FString System = TEXT("/System/Library/Fonts/Supplemental/PTSerif.ttc");
+			auto Add = [](FStandaloneCompositeFont& Into, const TCHAR* Name, const FString& File, int32 SubFace)
+			{
+				FTypefaceEntry& Entry = Into.DefaultTypeface.Fonts.Emplace_GetRef(FName(Name));
+				Entry.Font = FFontData(File, EFontHinting::Default, EFontLoadingPolicy::LazyLoad, SubFace);
+			};
+			if (FPaths::FileExists(Own / TEXT("PTSerif-Regular.ttf")) && FPaths::FileExists(Own / TEXT("PTSerif-Italic.ttf")) && FPaths::FileExists(Own / TEXT("PTSerif-Bold.ttf")))
+			{
+				Face = MakeShared<FStandaloneCompositeFont>();
+				Add(*Face, TEXT("Regular"), Own / TEXT("PTSerif-Regular.ttf"), 0);
+				Add(*Face, TEXT("Italic"), Own / TEXT("PTSerif-Italic.ttf"), 0);
+				Add(*Face, TEXT("Bold"), Own / TEXT("PTSerif-Bold.ttf"), 0);
+			}
+			else if (FPaths::FileExists(System))
+			{
+				// (in the system's collection the faces stand in this order: regular, italic, bold italic, bold)
+				Face = MakeShared<FStandaloneCompositeFont>();
+				Add(*Face, TEXT("Regular"), System, 0);
+				Add(*Face, TEXT("Italic"), System, 1);
+				Add(*Face, TEXT("Bold"), System, 3);
+			}
+		}
+		if (!Face.IsValid())
+		{
+			FSlateFontInfo Plain = FCoreStyle::GetDefaultFontStyle(FCString::Stricmp(Weight, TEXT("Bold")) == 0 ? TEXT("Bold") : FCString::Stricmp(Weight, TEXT("Italic")) == 0 ? TEXT("Italic") : TEXT("Regular"), Size);
+			Plain.LetterSpacing = Spacing;
+			return Plain;
+		}
+		FSlateFontInfo Info(Face, Size, FName(Weight));
+		Info.LetterSpacing = Spacing;
+		return Info;
+	}
 
 	FSlateFontInfo Font(const TCHAR* Weight, int32 Size, int32 Spacing = 0)
 	{
@@ -97,6 +145,86 @@ namespace
 
 	/** The small map in the corner: the countries in their colours, the armies as marks, and the part on screen boxed. A click goes there. */
 	/**
+	 * The names of the countries and the seas, lettered across the map as an atlas letters them: spaced serif
+	 * capitals in cream with a dark edge, each letter lying on the ground where it stands (drawn leaning and
+	 * foreshortened as the ground there is seen), so that a word follows its country's long axis and its arc.
+	 */
+	class SMapLettering : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SMapLettering) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Controller)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Controller = Args._Controller;
+			SetVisibility(EVisibility::HitTestInvisible);
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(16.0, 16.0); }
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
+			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
+		{
+			if (!Controller.IsValid())
+			{
+				return LayerId;
+			}
+			TArray<FMapLetter> Letters;
+			Controller->GetMapLetters(Letters);
+			if (Letters.Num() == 0)
+			{
+				return LayerId;
+			}
+			const float Scale = FMath::Max(Geometry.Scale, 0.01f);
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			// A few sizes of type only, so the letters are cut once and not afresh for every size on the screen.
+			static const float Sizes[] = { 10.0f, 14.0f, 20.0f, 28.0f, 40.0f, 56.0f, 80.0f };
+			for (const FMapLetter& Each : Letters)
+			{
+				// On the screen a capital is as high as its "up" is long; a capital is about seven tenths of its type size.
+				const double High = Each.Up.Size() / Scale, Wide = Each.Along.Size() / Scale;
+				if (High < 2.5 || Wide < 2.5)
+				{
+					continue;
+				}
+				float Size = Sizes[6];
+				for (const float Cut : Sizes)
+				{
+					if (Cut * 0.7f >= High)
+					{
+						Size = Cut;
+						break;
+					}
+				}
+				const bool bWhole = !Each.Whole.IsEmpty();
+				FSlateFontInfo Type = Serif(Each.bSea || bWhole ? TEXT("Italic") : TEXT("Bold"), Size);
+				if (!Each.bSea)
+				{
+					// (a soft dark edge, so cream letters hold on pale ground and on snow)
+					Type.OutlineSettings.OutlineSize = FMath::Max(1, FMath::RoundToInt32(Size / 22.0f));
+					Type.OutlineSettings.OutlineColor = FLinearColor(0.02f, 0.013f, 0.01f, 0.55f * Each.Alpha);
+				}
+				const FString Glyph = bWhole ? Each.Whole : FString(1, &Each.Char);
+				const FVector2D Box = Measure->Measure(Glyph, Type);
+				// The letter's own right and down, as they lie on the screen: its type size is as long as a capital
+				// is high divided by seven tenths.
+				const double Unit = Size * 0.7;
+				const FVector2D Right = Each.Along / Scale / Unit, Down = -Each.Up / Scale / Unit;
+				const FSlateRenderTransform Lying(FMatrix2x2(static_cast<float>(Right.X), static_cast<float>(Right.Y), static_cast<float>(Down.X), static_cast<float>(Down.Y)));
+				const FGeometry Place = Geometry.MakeChild(Box, FSlateLayoutTransform(Each.At / Scale - Box * 0.5), Lying, FVector2D(0.5, 0.5));
+				const FLinearColor Ink = Each.bSea ? FLinearColor(FColor(214, 232, 236)).CopyWithNewOpacity(Each.Alpha) : FLinearColor(FColor(244, 232, 204)).CopyWithNewOpacity(Each.Alpha);
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Place.ToPaintGeometry(), Glyph, Type, ESlateDrawEffect::None, Ink);
+			}
+			return LayerId;
+		}
+
+	private:
+		TWeakObjectPtr<ACampaignPlayerController> Controller;
+	};
+
+	/**
 	 * The name plates of the towns: each hangs before its town and faces the player, so a name can be read from
 	 * any side of the table and is never hidden by the models. A stripe in the holder's colour says whose it is.
 	 * Where plates would crowd one another the place that matters more keeps its plate.
@@ -134,10 +262,10 @@ namespace
 			}
 			const float Scale = FMath::Max(Geometry.Scale, 0.01f);
 			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
-			const FSlateFontInfo CapitalFont = Font(TEXT("Bold"), 12, 40);
-			const FSlateFontInfo TownFont = Font(TEXT("Bold"), 10, 30);
+			const FSlateFontInfo CapitalFont = Serif(TEXT("Bold"), 12.0f, 20);
+			const FSlateFontInfo TownFont = Serif(TEXT("Bold"), 10.0f, 10);
 			const FSlateFontInfo LineFont = Font(TEXT("Regular"), 9);
-			const FSlateFontInfo FarFont = Font(TEXT("Bold"), 8, 20);
+			const FSlateFontInfo FarFont = Serif(TEXT("Bold"), 9.0f, 10);
 			const FLinearColor NameInk(FColor::FromHex(TEXT("F2E8D5")));
 			const FLinearColor LineInk(FColor::FromHex(TEXT("B9AC93")));
 			TArray<FBox2D> Taken;
@@ -145,8 +273,13 @@ namespace
 			{
 				// (from far off the capitals' plates are small, so the countries' own names can still be read)
 				const FSlateFontInfo& NameFont = Each.bFar ? FarFont : Each.bCapital ? CapitalFont : TownFont;
-				const FString Shown = Each.bCapital && !Each.bFar ? FString(TEXT("\u2605 ")) + Each.Name : Each.Name;
-				const FVector2D NameSize = Measure->Measure(Shown, NameFont);
+				// (a capital's star is cut from the plain face: the serif has none)
+				const bool bStar = Each.bCapital && !Each.bFar;
+				const FString Shown = Each.Name;
+				const FSlateFontInfo StarFont = Font(TEXT("Bold"), 10);
+				const double StarWide = bStar ? Measure->Measure(TEXT("\u2605"), StarFont).X + 4.0 : 0.0;
+				FVector2D NameSize = Measure->Measure(Shown, NameFont);
+				NameSize.X += StarWide;
 				const FVector2D LineSize = Each.Line.IsEmpty() ? FVector2D::ZeroVector : FVector2D(Measure->Measure(Each.Line, LineFont));
 				const double Wide = FMath::Max(NameSize.X, LineSize.X) + 19.0;
 				const double High = NameSize.Y + (Each.Line.IsEmpty() ? 0.0 : LineSize.Y - 1.0) + 5.0;
@@ -169,7 +302,11 @@ namespace
 				const FSlateBrush& Back = Each.bCapital && !Each.bFar ? CapitalPlate : Plate;
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, High), FSlateLayoutTransform(Corner)), &Back, ESlateDrawEffect::None, Back.GetTint(InWidgetStyle));
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, High - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour.CopyWithNewOpacity(1.0f));
-				FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 2.0))), Shown, NameFont, ESlateDrawEffect::None, NameInk);
+				if (bStar)
+				{
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 3.0))), FString(TEXT("\u2605")), StarFont, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("E0B872"))));
+				}
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(13.0 + StarWide, 2.0))), Shown, NameFont, ESlateDrawEffect::None, NameInk);
 				if (!Each.Line.IsEmpty())
 				{
 					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(LineSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 1.0 + NameSize.Y))), Each.Line, LineFont, ESlateDrawEffect::None, LineInk);
@@ -405,7 +542,12 @@ namespace
 				[
 					SNew(SOverlay)
 
-					// Under everything else on the screen: the name plates of the towns on the table.
+					// Under everything else on the screen: the names lettered across the map, and over them the name
+					// plates of the towns on the table.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SMapLettering).Controller(Controller)
+					]
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
 						SNew(STownPlates).Controller(Controller)

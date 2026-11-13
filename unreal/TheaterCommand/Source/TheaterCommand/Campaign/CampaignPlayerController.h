@@ -190,6 +190,18 @@ struct FOpening
 	int32 Revision = 0;
 };
 
+/** One letter of a name lettered across the map, as the screen should draw it this frame. */
+struct FMapLetter
+{
+	TCHAR Char = TEXT(' ');
+	FVector2D At = FVector2D::ZeroVector; // the middle of the letter on the screen
+	FVector2D Along = FVector2D::ZeroVector; // on the screen: the way the word runs, as long as a capital is high
+	FVector2D Up = FVector2D::ZeroVector; // and the way the letter's top points, the same length on the map
+	float Alpha = 1.0f;
+	bool bSea = false;
+	FString Whole; // a province's name, written whole here instead of a single letter
+};
+
 /** A town's name plate as the screen should draw it this frame. */
 struct FTownPlate
 {
@@ -480,6 +492,8 @@ public:
 	void GetMinimapMarks(TArray<FVector>& OutDots, FBox2D& OutLooking) const;
 	/** The name plates of the towns in view, the ones that matter most first. */
 	void GetTownPlates(TArray<FTownPlate>& Out) const;
+	/** The names of the countries and the seas, letter by letter, lying on the map. */
+	void GetMapLetters(TArray<FMapLetter>& Out) const;
 	void JumpToMapShare(const FVector2D& Share);
 	bool IsMapShown() const;
 	/** A fleet in hand: picked up like an army, sent to a sea with a right-click, its ships shown as cards. */

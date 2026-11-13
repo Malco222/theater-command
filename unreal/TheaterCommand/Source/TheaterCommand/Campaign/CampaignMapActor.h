@@ -59,6 +59,21 @@ public:
 		int32 Rank = 0; // the more a place matters, the sooner its plate wins a crowded spot
 	};
 	const TArray<FPlateSpot>& GetPlateSpots() const { return PlateSpots; }
+
+	/**
+	 * A name lettered across the map as an atlas letters it: a country's along the long axis of the ground it
+	 * holds, with a slight arc; a sea's across its middle. The letters are spaced out from From to To.
+	 */
+	struct FMapWord
+	{
+		FString Text;
+		FVector2D From = FVector2D::ZeroVector, To = FVector2D::ZeroVector; // where the first and the last letter stand
+		double Bulge = 0.0; // how far the middle of the word stands off the straight line, toward the letters' tops
+		double Height = 6.0; // the height of a capital, in map units
+		bool bSea = false;
+		bool bRegion = false; // a province's own name, small, written whole where the province's middle is
+	};
+	const TArray<FMapWord>& GetMapWords() const { return MapWords; }
 	FVector2D WorldToMap(const FVector& World) const;
 
 	/** A point on the surface of the table: on the ground over land, on the water over sea. */
@@ -435,6 +450,11 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> ProvinceInk;
 	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> ProvincePaleInk;
+	float ProvincePaleShown = -1.0f;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> ShorePicture;
+	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> RailInk;
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> SleeperInk;
@@ -539,6 +559,8 @@ private:
 	TArray<int32> LabelTiers;
 	TArray<int32> LabelRegions; // the region a label names, where its ink should suit that region's paint; or none
 	TArray<FPlateSpot> PlateSpots;
+	TArray<FMapWord> MapWords;
+	void BuildWords();
 
 	FCampaignMapData Data;
 	FCampaignTerrain Terrain;

@@ -1205,6 +1205,107 @@ void ACampaignPlayerController::StopTech(const FString& Id)
 	bResearchOpen = Research.bValid;
 }
 
+void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
+{
+	Out.Reset();
+	const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+	if (!Map.IsValid() || !GetSession() || !Eye || Opening.bVisible || Newsreel.bOn)
+	{
+		return;
+	}
+	// Countries' names are for the view from high up, and fade out on the way down. The seas' are always there,
+	// faint.
+	const float Distance = Eye->GetDistance();
+	const float Countries = FMath::GetMappedRangeValueClamped(FVector2f(8500.0f, 12000.0f), FVector2f(0.0f, 0.92f), Distance);
+	const float Seas = FMath::GetMappedRangeValueClamped(FVector2f(2500.0f, 6000.0f), FVector2f(0.0f, 0.6f), Distance);
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	auto OnScreen = [this](const FVector2D& MapPoint, double Lift, FVector2D& OutScreen)
+	{
+		return ProjectWorldLocationToScreen(Map->SurfacePoint(MapPoint.X, MapPoint.Y, Lift), OutScreen, false);
+	};
+	const float Provinces = FMath::GetMappedRangeValueClamped(FVector2f(6500.0f, 8500.0f), FVector2f(0.8f, 0.0f), Distance);
+	for (const ACampaignMapActor::FMapWord& Word : Map->GetMapWords())
+	{
+		if (Word.bRegion)
+		{
+			// A province's name: one piece of lettering lying on the ground, read from wherever the table is seen.
+			FVector2D Screen, East, North;
+			if (Provinces <= 0.01f || !OnScreen(Word.From, 0.3, Screen) || Screen.X < -80.0 || Screen.X > Width + 80.0 || Screen.Y < -40.0 || Screen.Y > Height + 40.0
+				|| !OnScreen(Word.From + FVector2D(Word.Height, 0.0), 0.3, East) || !OnScreen(Word.From - FVector2D(0.0, Word.Height), 0.3, North))
+			{
+				continue;
+			}
+			FMapLetter& Name = Out.AddDefaulted_GetRef();
+			Name.Whole = Word.Text;
+			Name.At = Screen;
+			Name.Along = East - Screen;
+			Name.Up = North - Screen;
+			if (Name.Along.X < 0.0)
+			{
+				// (the table has been turned right round: the name is turned with it, so it still reads)
+				Name.Along = -Name.Along;
+				Name.Up = -Name.Up;
+			}
+			Name.Alpha = Provinces;
+			continue;
+		}
+		const float Alpha = Word.bSea ? Seas : Countries;
+		const int32 Count = Word.Text.Len();
+		if (Alpha <= 0.01f || Count == 0)
+		{
+			continue;
+		}
+		FVector2D Run = Word.To - Word.From;
+		const double Long = Run.Size();
+		if (Long < 0.01)
+		{
+			continue;
+		}
+		Run /= Long;
+		// If the table has been turned so that the word would read backwards, it is lettered the other way round.
+		FVector2D First, Last;
+		if (!OnScreen(Word.From, 0.3, First) || !OnScreen(Word.To, 0.3, Last))
+		{
+			continue;
+		}
+		if (FMath::Max(First.X, Last.X) < -200.0 || FMath::Min(First.X, Last.X) > Width + 200.0 || FMath::Max(First.Y, Last.Y) < -200.0 || FMath::Min(First.Y, Last.Y) > Height + 200.0)
+		{
+			continue;
+		}
+		const bool bTurned = Last.X < First.X;
+		const FVector2D Start = bTurned ? Word.To : Word.From;
+		const FVector2D Way = bTurned ? -Run : Run;
+		const FVector2D Top(Way.Y, -Way.X);
+		for (int32 K = 0; K < Count; ++K)
+		{
+			const TCHAR Char = Word.Text[K];
+			if (Char == TEXT(' '))
+			{
+				continue;
+			}
+			const double T = Count > 1 ? static_cast<double>(K) / (Count - 1) : 0.5;
+			// Along a slight arc: the middle of the word stands off the straight line, and each letter leans with it.
+			const FVector2D Place = Start + Way * (Long * T) + Top * (Word.Bulge * 4.0 * T * (1.0 - T));
+			const double Lean = Word.Bulge * 4.0 * (1.0 - 2.0 * T) / Long;
+			const FVector2D Tangent = (Way + Top * Lean).GetSafeNormal();
+			const FVector2D Above(Tangent.Y, -Tangent.X);
+			FVector2D Screen, ScreenAlong, ScreenUp;
+			if (!OnScreen(Place, 0.3, Screen) || !OnScreen(Place + Tangent * Word.Height, 0.3, ScreenAlong) || !OnScreen(Place + Above * Word.Height, 0.3, ScreenUp))
+			{
+				continue;
+			}
+			FMapLetter& Letter = Out.AddDefaulted_GetRef();
+			Letter.Char = Char;
+			Letter.At = Screen;
+			Letter.Along = ScreenAlong - Screen;
+			Letter.Up = ScreenUp - Screen;
+			Letter.Alpha = Alpha;
+			Letter.bSea = Word.bSea;
+		}
+	}
+}
+
 void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 {
 	Out.Reset();
@@ -1241,7 +1342,7 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		FTownPlate& Plate = Out.AddDefaulted_GetRef();
 		Plate.At = Screen;
 		Plate.Name = Spot.Name;
-		Plate.Line = bWorth ? Spot.Line : FString();
+		Plate.Line = bWorth && Map->IsWealthShown() ? Spot.Line : FString(); // (what a place pays is on the pointer's tip, and on its plate only in the wealth view)
 		Plate.bCapital = Spot.Tier == 0;
 		Plate.bFar = State == 0;
 		Plate.Rank = Spot.Rank;

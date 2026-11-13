@@ -351,7 +351,10 @@ def build_sea():
     # map units), and the surf lies between about a tenth of a unit and two thirds of one.
     rising = one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, (water, "A"), 40.0, -1150, -260), -0.48, -1000, -260), -850, -260)
     falling = one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, (water, "A"), -16.0, -1150, -140), 1.76, -1000, -140), -850, -140)
-    surf = times(m, times(m, rising, falling, -700, -200), scalar(m, "Surf", 0.6, -850, -60), -550, -200)
+    # (how strong it is on each stretch of shore is in a second picture: it comes and goes, and is strongest where
+    # the open ocean runs in)
+    shore = picture(m, "Shore", uv, -1400, -500, numbers=True)
+    surf = times(m, times(m, times(m, rising, falling, -700, -200), scalar(m, "Surf", 0.45, -850, -60), -550, -200), (shore, "R"), -400, -250)
     colour = lerp(m, (water, "RGB"), vector(m, "SurfColour", (0.86, 0.9, 0.86, 1.0), -850, -400), surf, -400, -100)
     to_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
 

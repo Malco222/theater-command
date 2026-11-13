@@ -310,6 +310,7 @@ void ACampaignMapActor::LoadMaterials()
 		return Instance;
 	};
 	ProvinceInk = MakeInk();
+	ProvincePaleInk = MakeInk();
 	RailInk = MakeInk();
 	SleeperInk = MakeInk();
 	// The pieces: painted metal and cloth, not bare plastic. A fine grain in the paint and a slight tooth to the
@@ -398,6 +399,7 @@ void ACampaignMapActor::PaintGround()
 	ReliefPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Relief, false, false, TEXT("TableRelief"));
 	MasksPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Masks, false, false, TEXT("TableMasks"));
 	WaterPicture = CampaignTextures::Create(Paint.WaterNX, Paint.WaterNY, Paint.Water, true, false, TEXT("TableWater"));
+	ShorePicture = CampaignTextures::Create(Paint.WaterNX, Paint.WaterNY, Paint.Surf, false, false, TEXT("TableShore"));
 
 	// The fine detail that repeats over it: grass, tree-tops, rock and sand, and the ripples on the water.
 	TArray<FColor> Pixels;
@@ -427,6 +429,7 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetVectorParameterValue(TEXT("SnowColour"), FCampaignGround::SnowColour() * 0.86f); // (the baked sun lifts it to white where it is lit)
 	LandMaterial->SetVectorParameterValue(TEXT("SandColour"), FCampaignGround::SandColour());
 	SeaMaterial->SetTextureParameterValue(TEXT("Water"), WaterPicture);
+	SeaMaterial->SetTextureParameterValue(TEXT("Shore"), ShorePicture);
 	SeaMaterial->SetTextureParameterValue(TEXT("Ripples"), RipplesPicture);
 
 	UE_LOG(LogTheater, Log, TEXT("Ground: %d x %d pixels of paint and three detail pictures made in %.2f s"), Paint.NX, Paint.NY, FPlatformTime::Seconds() - StartTime);
@@ -758,7 +761,7 @@ void ACampaignMapActor::BuildBorders()
 	const FColor RegionInkPale = FromHex(TEXT("F4E8CC")).ToFColor(false);
 	const double Lift = 0.13;
 
-	FCampaignMeshBuffers Buffers, Faint;
+	FCampaignMeshBuffers Buffers, Faint, FaintPale;
 	int32 NationalCount = 0, RegionCount = 0;
 
 	for (const FCampaignRegion& Region : Data.Regions)
@@ -796,7 +799,7 @@ void ACampaignMapActor::BuildBorders()
 				const FCampaignNation* Whose = Data.FindNation(Region.Owner);
 				const bool bDarkGround = Whose && (0.30f * Whose->Color.R + 0.59f * Whose->Color.G + 0.11f * Whose->Color.B) / 255.0f < 0.42f;
 				const FColor Ink = bNational ? NationalInk : bDarkGround ? RegionInkPale : RegionInk;
-				FCampaignMeshBuffers& Into = bNational ? Buffers : Faint;
+				FCampaignMeshBuffers& Into = bNational ? Buffers : bDarkGround ? FaintPale : Faint;
 				(bNational ? NationalCount : RegionCount)++;
 
 				// Lay the line over the relief as a ribbon, a short step at a time.
@@ -824,6 +827,7 @@ void ACampaignMapActor::BuildBorders()
 	}
 	Buffers.Commit(BorderMesh, 0, InkMaterial);
 	Faint.Commit(BorderMesh, 1, ProvinceInk);
+	FaintPale.Commit(BorderMesh, 2, ProvincePaleInk);
 	UE_LOG(LogTheater, Log, TEXT("Borders: %d frontier edges, %d region edges"), NationalCount, RegionCount);
 }
 
@@ -2455,7 +2459,6 @@ void ACampaignMapActor::BuildLabels()
 	LabelState = -1;
 
 	const FColor Ink = FromHex(TEXT("17130F")).ToFColor(true);
-	const FColor SeaInk = FromHex(TEXT("A9C6CE")).ToFColor(true);
 
 	// Towns and regions.
 	for (const FCampaignRegion& Region : Data.Regions)
@@ -2508,50 +2511,180 @@ void ACampaignMapActor::BuildLabels()
 		}
 		else
 		{
-			AddLabel(Region.Name, Region.Centroid, 2.6f, RegionInk(Region.Id), TierNear, 0.0f, Region.Id);
+			// (its name is lettered by the screen with the rest of the map's lettering: see BuildWords)
 		}
 	}
 
-	// Seas.
+	// The names of the countries and of the seas are lettered by the screen, as an atlas letters them (see
+	// BuildWords): this only says where each word runs.
+	BuildWords();
+}
+
+void ACampaignMapActor::BuildWords()
+{
+	MapWords.Reset();
+	// Provinces with no town of note: the province's own name, small, in the middle of it.
+	for (const FCampaignRegion& Region : Data.Regions)
+	{
+		const bool bTown = Region.bCapital || Region.Terrain == TEXT("urban") || Region.VictoryPoints >= 2;
+		const bool bWorth = Region.VictoryPoints > 0 || Region.Factories > 0 || Region.bOil || Region.bPort;
+		if (bTown || bWorth)
+		{
+			continue; // (it has a name plate)
+		}
+		FMapWord& Word = MapWords.AddDefaulted_GetRef();
+		Word.Text = Region.Name;
+		Word.Height = 1.5;
+		Word.From = Word.To = Region.Centroid;
+		Word.bRegion = true;
+	}
+	// Seas: across the middle of each, in spaced italic capitals.
 	for (const FCampaignSeaZone& Sea : Data.Seas)
 	{
-		AddLabel(Sea.Name.ToUpper(), Sea.Center, 6.0f, SeaInk, TierAlways, 0.75f);
+		FMapWord& Word = MapWords.AddDefaulted_GetRef();
+		Word.Text = Sea.Name.ToUpper();
+		Word.Height = 4.6;
+		const double Long = Word.Height * 1.75 * FMath::Max(Word.Text.Len() - 1, 1);
+		Word.From = Sea.Center - FVector2D(Long * 0.5, 0.0);
+		Word.To = Sea.Center + FVector2D(Long * 0.5, 0.0);
+		Word.bSea = true;
 	}
-
-	// Nations, written large across their home country, for the view from far off.
-	struct FNationExtent
+	// Countries: each along the long axis of the ground it holds today, worked out from its provinces, spanning
+	// about two thirds of it, with a slight arc. (It is worked out again whenever ground changes hands.)
+	struct FHeld
 	{
 		double Area = 0.0;
 		FVector2D Weighted = FVector2D::ZeroVector;
+		TArray<int32> Regions;
 	};
-	TMap<FString, FNationExtent> Extents;
+	TMap<FString, FHeld> Lands;
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		if (Region.bColony || Region.Area <= 0.0)
 		{
 			continue;
 		}
-		FNationExtent& Extent = Extents.FindOrAdd(Region.Owner);
-		Extent.Area += Region.Area;
-		Extent.Weighted += Region.Centroid * Region.Area;
+		FHeld& Held = Lands.FindOrAdd(Region.Owner);
+		Held.Area += Region.Area;
+		Held.Weighted += Region.Centroid * Region.Area;
+		Held.Regions.Add(Region.Id);
 	}
-	for (const auto& Pair : Extents)
+	// A country's name goes across its main body: the ground joined to its capital (or, if the capital is lost, the
+	// largest piece of what it holds). Its islands, its colonies and its far conquests do not pull the name askew.
+	for (TPair<FString, FHeld>& Pair : Lands)
+	{
+		TSet<int32> Mine(Pair.Value.Regions), Best;
+		TArray<int32> Seeds = Pair.Value.Regions;
+		Seeds.Sort([this](int32 A, int32 B) { return Data.Regions[A].bCapital > Data.Regions[B].bCapital; });
+		TSet<int32> Seen;
+		double BestArea = 0.0;
+		for (int32 Seed : Seeds)
+		{
+			if (Seen.Contains(Seed))
+			{
+				continue;
+			}
+			TSet<int32> Piece;
+			TArray<int32> Open = { Seed };
+			double Area = 0.0;
+			while (Open.Num() > 0)
+			{
+				const int32 Id = Open.Pop();
+				if (Piece.Contains(Id))
+				{
+					continue;
+				}
+				Piece.Add(Id);
+				Seen.Add(Id);
+				Area += Data.Regions[Id].Area;
+				for (int32 Next : Data.Regions[Id].Neighbors)
+				{
+					if (Mine.Contains(Next) && !Piece.Contains(Next))
+					{
+						Open.Add(Next);
+					}
+				}
+			}
+			const bool bSeat = Data.Regions[Seed].bCapital;
+			if (bSeat || Area > BestArea)
+			{
+				BestArea = Area;
+				Best = Piece;
+			}
+			if (bSeat)
+			{
+				break; // the piece the capital stands in is the one
+			}
+		}
+		Pair.Value.Regions = Best.Array();
+		Pair.Value.Area = 0.0;
+		Pair.Value.Weighted = FVector2D::ZeroVector;
+		for (int32 Id : Pair.Value.Regions)
+		{
+			Pair.Value.Area += Data.Regions[Id].Area;
+			Pair.Value.Weighted += Data.Regions[Id].Centroid * Data.Regions[Id].Area;
+		}
+	}
+	for (const TPair<FString, FHeld>& Pair : Lands)
 	{
 		const FCampaignNation* Nation = Data.FindNation(Pair.Key);
-		if (!Nation || Pair.Value.Area < 600.0)
+		if (!Nation || Pair.Value.Area < 140.0)
 		{
 			continue; // too small a country to letter across
 		}
 		const FVector2D Middle = Pair.Value.Weighted / Pair.Value.Area;
-		// Sized so that the whole name fits across the country.
-		const double Room = FMath::Sqrt(Pair.Value.Area) * 1.1;
-		const float Size = static_cast<float>(FMath::Clamp(Room / (Nation->Name.Len() * 0.95), 6.0, 34.0));
-		// Dark lettering on a pale country, pale lettering on a dark one. It is held clear of the mountains
-		// and the pieces: it is only shown from high above, where that height does not shift it.
-		// (cream on every country now that the nations' colours are a stain over darker ground)
-		const FColor Lettering = FromHex(TEXT("F4E8CC")).ToFColor(true);
-		UTextRenderComponent* Label = AddLabel(Nation->Name.ToUpper(), Middle, Size, Lettering, TierFar, 0.35f);
-		Label->SetRelativeLocation(MapToWorld(Middle.X, Middle.Y, 30.0));
+		// The long axis: the direction along which the country's ground is spread the most.
+		double Sxx = 0.0, Syy = 0.0, Sxy = 0.0;
+		for (int32 Id : Pair.Value.Regions)
+		{
+			const FVector2D D = Data.Regions[Id].Centroid - Middle;
+			const double W = Data.Regions[Id].Area;
+			// (a province is not a point: its own spread counts too, so that a country of one province has an axis)
+			Sxx += W * (D.X * D.X + W / 12.0);
+			Syy += W * (D.Y * D.Y + W / 12.0);
+			Sxy += W * D.X * D.Y;
+		}
+		const double Angle = 0.5 * FMath::Atan2(2.0 * Sxy, Sxx - Syy);
+		FVector2D Axis(FMath::Cos(Angle), FMath::Sin(Angle));
+		// A country nearly as broad as it is long is lettered straight across, as a reader expects.
+		const double Spread = FMath::Sqrt(FMath::Square(Sxx - Syy) + 4.0 * Sxy * Sxy) / FMath::Max(Sxx + Syy, 1.0);
+		if (Spread < 0.38)
+		{
+			Axis = FVector2D(1.0, 0.0);
+		}
+		if (Axis.X < 0.0)
+		{
+			Axis = -Axis; // read from west to east
+		}
+		const FVector2D Cross(Axis.Y, -Axis.X); // toward the letters' tops
+		double Lo = 1.0e9, Hi = -1.0e9, Down = 1.0e9, Up = -1.0e9;
+		for (int32 Id : Pair.Value.Regions)
+		{
+			const FVector2D D = Data.Regions[Id].Centroid - Middle;
+			const double Reach = FMath::Sqrt(Data.Regions[Id].Area / UE_DOUBLE_PI);
+			Lo = FMath::Min(Lo, FVector2D::DotProduct(D, Axis) - Reach);
+			Hi = FMath::Max(Hi, FVector2D::DotProduct(D, Axis) + Reach);
+			Down = FMath::Min(Down, FVector2D::DotProduct(D, Cross) - Reach);
+			Up = FMath::Max(Up, FVector2D::DotProduct(D, Cross) + Reach);
+		}
+		const FString Name = Nation->Name.ToUpper();
+		const int32 Gaps = FMath::Max(Name.Len() - 1, 1);
+		const double Span = (Hi - Lo) * 0.66;
+		// (letters well spaced out, as an atlas spaces them: a capital under half as high as the letters stand apart)
+		const double Height = FMath::Min3(Span / Gaps * 0.44, (Up - Down) * 0.2, 20.0);
+		if (Height < 2.4)
+		{
+			continue;
+		}
+		const double MiddleAlong = (Lo + Hi) * 0.5;
+		FMapWord& Word = MapWords.AddDefaulted_GetRef();
+		Word.Text = Name;
+		Word.Height = Height;
+		// (no wider than its letters can fill: a short name is not strung out across a long country)
+		const double Long = FMath::Min(Span, Height * 3.6 * Gaps);
+		Word.From = Middle + Axis * (MiddleAlong - Long * 0.5);
+		Word.To = Middle + Axis * (MiddleAlong + Long * 0.5);
+		Word.Bulge = Long * 0.035;
 	}
 }
 
@@ -2919,6 +3052,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		return;
 	}
 	bMiniStale = true;
+	BuildWords();
 
 	// Ground has changed hands. Repaint it, with a margin for the band of thick paint along the new
 	// frontier, rebuild only the pieces of the land that touches, and redraw the frontier lines.
@@ -4308,6 +4442,14 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		{
 			ProvinceShown = Province;
 			ProvinceInk->SetScalarParameterValue(TEXT("Opacity"), Province);
+		}
+		// (cream lines on dark ground are a touch fainter close to, where the brown ones grow firmer: close up
+		// cream turned into a white net over the country)
+		const float Pale = bShowProvinces ? 0.9f : FMath::Min(Province, FMath::GetMappedRangeValueClamped(FVector2f(3000.0f, 9000.0f), FVector2f(0.18f, 0.2f), CameraDistance));
+		if (ProvincePaleInk && FMath::Abs(Pale - ProvincePaleShown) > 0.004f)
+		{
+			ProvincePaleShown = Pale;
+			ProvincePaleInk->SetScalarParameterValue(TEXT("Opacity"), Pale);
 		}
 		if (RailInk && FMath::Abs(Rail - RailShown) > 0.004f)
 		{

@@ -52,6 +52,8 @@ public:
 	int32 WaterNX = 0;
 	int32 WaterNY = 0;
 	TArray<FColor> Water;
+	/** With the sea's picture, point for point: in its red, how strong the surf is on that stretch of shore. */
+	TArray<FColor> Surf;
 
 	// The colours the material lays over the paint where the masks say.
 	static FLinearColor RockColour();
