@@ -234,6 +234,8 @@ const HOW_TO_KNOW = 'A battle, an agent on watch or a reconnaissance flight woul
 let marchToken = 0;
 /** The region whose route is drawn under the cursor. */
 let routeShown = -1;
+// Until this moment (performance.now), a click off the map is the echo of a tap on the map and is ignored.
+let ghostUntil = 0;
 
 function mix(a: string, b: string, t: number): string {
   const p = (h: string, i: number) => parseInt(h.slice(1 + 2 * i, 3 + 2 * i), 16);
@@ -503,6 +505,11 @@ function mount(): void {
       </div>
     </div>
     <div class="veil" id="veil"><div class="card" id="card"></div></div>`;
+  // A tap on the map can put a panel under the finger, and the browser's follow-up click would then press whatever
+  // appeared there. For a moment after such a tap, a click that lands off the map is swallowed.
+  document.addEventListener('click', (e) => {
+    if (performance.now() < ghostUntil && !(e.target as Element | null)?.closest?.('#map')) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
   document.addEventListener('click', onClick);
   document.addEventListener('keydown', onKey);
   wireMap();
@@ -5907,6 +5914,7 @@ function wireMap(): void {
     svg.classList.remove('drag');
     if (was === 1 && !moved && !held && e.type === 'pointerup') {
       $('#tip').style.display = 'none';
+      if (e.pointerType !== 'mouse') ghostUntil = performance.now() + 420;
       const under = document.elementFromPoint(e.clientX, e.clientY);
       const el = under?.closest('[data-id]') as HTMLElement | null;
       // One of the player's fleets is a piece: a click picks it up, unless the map is waiting for a place to finish another order.
