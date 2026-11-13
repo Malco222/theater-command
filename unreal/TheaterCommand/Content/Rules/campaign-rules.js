@@ -16164,7 +16164,18 @@
       // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
       jobs: (() => {
         const out = [];
-        if (!me || !groundRules(s)) return out;
+        if (!me) return out;
+        if (!allied(s, r.ctrl, me)) {
+          try {
+            const plan = previewRaid(s, "recon", r.id);
+            if (plan.picked.length) {
+              const group = s.airFleets.find((f) => f.id === plan.picked[0]);
+              out.push({ key: `recon:${plan.picked[0]}`, label: "Send a reconnaissance flight", detail: `${group?.name ?? "An air group"} photographs ${r.name}: every army here and beside it is seen whole and identified until the month ends. ${plan.effects[0] ?? ""}`.trim(), ok: up && !plan.why, why: plan.why ?? (up ? "" : "It is not your month.") });
+            }
+          } catch {
+          }
+        }
+        if (!groundRules(s)) return out;
         for (const n2 of riverNotes(s, r.id)) {
           if (n2.down) continue;
           const why = whyNotBlowBridges(s, r.id, n2.far);
@@ -16222,6 +16233,10 @@
       const c = s.corps.find((x) => x.id === Number(a));
       ok = !!c && orderStopWork(s, c);
       if (ok) note3 = "The engineers are taken off their work.";
+    } else if (what === "recon") {
+      const flown = orderScout(s, Number(a), region);
+      ok = flown.ok;
+      note3 = flown.text || (ok ? "The flight is back with its photographs." : "No flight can be sent there now.");
     }
     return { ok, note: note3, view: view() };
   }

@@ -3841,10 +3841,16 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			RegionPanel.PrizeTip = FText::FromString(FString::Join(Province.PrizeItems, TEXT("\n")));
 			RegionPanel.bPrizeToTake = Province.PrizeKind == TEXT("taken") || Province.PrizeKind == TEXT("restored");
 		}
-		if (Province.bValid && Province.bHome)
+		// (ground that is not the player's can still have something to order: a reconnaissance flight over it)
+		if (Province.bValid && (Province.bHome || Province.Options.Num() > 0))
 		{
 			RegionPanel.ProvinceNote = FText::FromString(Province.Note);
 			RegionPanel.Options = Province.Options;
+			if (!Province.bHome)
+			{
+				// On ground that is not the player's, only what can be ordered from afar is offered.
+				RegionPanel.Options.RemoveAll([](const FProvinceOption& Option) { return !Option.Action.StartsWith(TEXT("work:recon")); });
+			}
 			RegionPanel.Forming = Province.Forming;
 		}
 	}

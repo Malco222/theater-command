@@ -1739,7 +1739,8 @@ namespace
 						}
 						if (Works.Num() > 0)
 						{
-							Tabs->AddSlot().AutoWidth()[TabButton(FString::Printf(TEXT("WORKS  %d"), Works.Num()), 2)];
+							// (on ground that is not the player's there is nothing to build: what is offered there is an order)
+							Tabs->AddSlot().AutoWidth()[TabButton(FString::Printf(TEXT("%s  %d"), Recruits.Num() > 0 ? TEXT("WORKS") : TEXT("ORDERS"), Works.Num()), 2)];
 						}
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[Tabs];
 					}
