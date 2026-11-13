@@ -400,6 +400,14 @@ made.click = () => {
   return finish(b, 0.001, 0.02, 0.6);
 };
 
+made.tick = () => {
+  // The pointer crossing a button: the lightest of touches, hardly more than a breath.
+  const b = buffer(0.045);
+  const bp = bandpass(3600, 2.0);
+  add(b, 0.001, 0.04, 0, (t) => bp(noise()) * Math.exp(-t / 0.0025) * 0.9 + Math.sin(TAU * 2100 * t) * Math.exp(-t / 0.006) * 0.25);
+  return finish(b, 0.0005, 0.012, 0.16);
+};
+
 made.stamp = () => {
   const b = buffer(0.4);
   const bp = bandpass(2500, 0.8);

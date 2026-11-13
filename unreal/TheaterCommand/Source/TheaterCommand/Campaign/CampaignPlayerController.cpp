@@ -11,6 +11,8 @@
 #include "Components/InputComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Layout/WidgetPath.h"
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 #include "Misc/CommandLine.h"
@@ -1903,6 +1905,32 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	if (!Eye || !Map.IsValid())
 	{
 		return;
+	}
+
+	// The pointer crossing onto a button is heard: the lightest tick, once for each button.
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication& Slate = FSlateApplication::Get();
+		const FWidgetPath Under = Slate.LocateWindowUnderMouse(Slate.GetCursorPos(), Slate.GetInteractiveTopLevelWindows(), true);
+		const void* Button = nullptr;
+		static const FName ButtonType(TEXT("SButton"));
+		for (int32 Index = Under.Widgets.Num() - 1; Index >= 0; --Index)
+		{
+			const TSharedRef<SWidget>& Widget = Under.Widgets[Index].Widget;
+			if (Widget->GetType() == ButtonType)
+			{
+				Button = Widget->IsEnabled() ? &Widget.Get() : nullptr;
+				break;
+			}
+		}
+		if (Button != HoveredButton)
+		{
+			HoveredButton = Button;
+			if (Button)
+			{
+				CampaignSounds::Play(this, TEXT("tick"), 0.6f);
+			}
+		}
 	}
 
 	// The music follows the war: the march while there is fighting to watch, the theme for a country at war,
