@@ -1572,3 +1572,41 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 .rrow.place .whynot { grid-column: 1 / -1; color: var(--ink-3); font-size: 11.5px; }
 .rrow.place .whynot.ask { color: #f1b9a6; }
 .btn.quiet { border-style: dashed; color: var(--ink-2); margin-left: auto; }
+
+/* Men: the reserve on the top bar and in the ledger (the grand campaign) */
+.purse.store.men b { color: #cdbfa6; }
+.menbar { position: relative; height: 18px; border-radius: 4px; overflow: hidden; background: var(--panel-2); margin: 4px 0 10px; }
+.menbar i { display: block; height: 100%; background: linear-gradient(90deg, #8d7a55, #cdbfa6); }
+.menbar.short i { background: linear-gradient(90deg, #a2671f, #e0aa3c); }
+.menbar.spent i { background: var(--red); min-width: 3px; }
+.menbar u { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(15, 12, 8, .65); }
+.ledger .lfacts.men { margin-bottom: 8px; }
+.ledger .lfacts.men .lfact b { font-size: 22px; }
+.ledger .lfact b.pos { color: var(--green); }
+
+/* The cabinet: asking before an appointment or a decree, and the directive in sight on the map */
+.gov .fact b.neg { color: var(--red); }
+.tag.warn { background: #4a3a12; color: #f0d68a; }
+.gvseat.asking { border-color: #e0aa3c; padding-bottom: 9px; }
+.gvseat.asking .note, .gvtrack > .note { margin: 6px 0 0; font-size: 12.5px; }
+.gvseat.asking .acts, .gvtrack > .acts { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.gvdhead .tag { margin-left: 6px; vertical-align: 2px; }
+.dirmark { pointer-events: none; }
+.dirmark circle { fill: none; stroke: #d8b25a; stroke-width: 1.5; stroke-dasharray: 2.4 1.7; filter: drop-shadow(0 0 1.6px rgba(0, 0, 0, .9)); animation: freeturn 14s linear infinite; transform-box: fill-box; transform-origin: center; }
+.dirmark .dseal { fill: #d8b25a; stroke: #15120f; stroke-width: .8; stroke-linejoin: round; paint-order: stroke; filter: drop-shadow(0 .6px .8px rgba(0, 0, 0, .6)); }
+.dirmark text { font-family: var(--head); font-size: 6.6px; font-weight: 700; fill: #1b150a; text-anchor: middle; }
+.dirmark.late circle { stroke: #e9825f; }
+.dirmark.late .dseal { fill: #e9825f; }
+@media (prefers-reduced-motion: reduce) { .dirmark circle { animation: none; } }
+.dirline { display: flex; align-items: flex-start; gap: 8px; width: 100%; margin-top: 7px; padding: 6px 8px; text-align: left; color: inherit; background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: 0 4px 4px 0; cursor: pointer; }
+.dirline:hover { border-color: var(--brass); }
+.dirline .dseal { flex: none; min-width: 22px; padding: 3px 4px 7px; margin-top: 1px; font-style: normal; font-family: var(--head); font-weight: 700; font-size: 13px; text-align: center; color: #1b150a; background: #d8b25a; clip-path: polygon(0 0, 100% 0, 100% 72%, 50% 100%, 0 72%); }
+.dirline.late { border-left-color: #e9825f; }
+.dirline.late .dseal { background: #e9825f; }
+.dirline .grow { flex: 1; min-width: 0; }
+.dirline b { display: block; font-size: 12.5px; color: var(--ink); }
+.dirline small { display: block; margin-top: 2px; font-size: 11.5px; color: var(--ink-2); }
+.gclevels.two { grid-template-columns: 1fr 1fr; }
+/* Four gauges on the top bar: one row on a wide screen, a tidy two by two on a narrower one */
+#purse { display: inline-grid; grid-template-columns: repeat(4, auto); gap: 6px; align-items: stretch; }
+@media (max-width: 1640px) { #purse { grid-template-columns: repeat(2, auto); } }

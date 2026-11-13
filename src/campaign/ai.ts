@@ -816,7 +816,10 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           // The tanks go in together along the main axis; elsewhere the infantry does the work.
           const main = axis.has(target.name);
           const fast = (c: Corps): number => (KIND[c.kind].mobile ? 1 : 0);
-          pool.sort((a, b) => (main ? fast(b) - fast(a) : fast(a) - fast(b)) || atkPower(g, b) - atkPower(g, a));
+          // Against works the guns are brought into the attack first (the grand campaign): they are what breaks a dug-in line.
+          const works = g.flags.open === 1 && (!!target.fort || hostileUnits(g, target, nat).some((u) => u.dug));
+          const gun = (c: Corps): number => (works && c.kind === 'art' ? 1 : 0);
+          pool.sort((a, b) => gun(b) - gun(a) || (main ? fast(b) - fast(a) : fast(a) - fast(b)) || atkPower(g, b) - atkPower(g, a));
           const least = main ? Math.max(1, pool.filter((c) => fast(c)).length) : 1;
           let pick: Corps[] | null = null, odds = 0, ready = 0;
           for (let k = least; k <= pool.length; k++) {
