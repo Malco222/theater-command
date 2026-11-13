@@ -49,6 +49,12 @@ struct FTrayCard
 	FText Grade; // "Veteran, 65"
 	FString KindId; // inf, arm, art, mot, cav, mtn, eng, fort: for the picture on each division's card
 	float Morale = 1.0f; // 0..1: how well it holds together
+	// Where the rules keep morale and rest (the grand campaign): both, with their words and why; and each division.
+	bool bMood = false;
+	float Rest = 1.0f;
+	FString MoraleWord, RestWord, Trend, MoodTip, Service;
+	bool bResting = false;
+	TArray<FViewDivision> Parts;
 	int32 Experience = 0; // 0 to 100
 	TArray<FHonourRibbon> Honours;
 };

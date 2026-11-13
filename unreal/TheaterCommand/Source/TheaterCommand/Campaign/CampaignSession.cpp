@@ -608,6 +608,44 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
 			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
 			C.Honours = ReadRibbons(Unit, TEXT("honours"));
+			{
+				double Morale = -1.0, Rest = -1.0;
+				Unit->TryGetNumberField(TEXT("mor"), Morale);
+				Unit->TryGetNumberField(TEXT("rest"), Rest);
+				C.Morale = static_cast<float>(Morale);
+				C.Rest = static_cast<float>(Rest);
+				Unit->TryGetStringField(TEXT("morWord"), C.MoraleWord);
+				Unit->TryGetStringField(TEXT("restWord"), C.RestWord);
+				Unit->TryGetStringField(TEXT("trend"), C.Trend);
+				Unit->TryGetStringField(TEXT("moodLine"), C.MoodLine);
+				Unit->TryGetStringField(TEXT("restLine"), C.RestLine);
+				Unit->TryGetStringField(TEXT("service"), C.Service);
+				Unit->TryGetBoolField(TEXT("resting"), C.bResting);
+				Unit->TryGetStringArrayField(TEXT("why"), C.Why);
+				const TArray<TSharedPtr<FJsonValue>>* Parts = nullptr;
+				if (Unit->TryGetArrayField(TEXT("dv"), Parts))
+				{
+					for (const TSharedPtr<FJsonValue>& PartValue : *Parts)
+					{
+						const TSharedPtr<FJsonObject> Part = PartValue->AsObject();
+						if (!Part.IsValid())
+						{
+							continue;
+						}
+						FViewDivision& Division = C.Parts.AddDefaulted_GetRef();
+						Part->TryGetStringField(TEXT("name"), Division.Name);
+						Part->TryGetStringField(TEXT("full"), Division.Full);
+						Part->TryGetStringField(TEXT("kind"), Division.Kind);
+						Part->TryGetStringField(TEXT("grade"), Division.Grade);
+						double Left = 1.0;
+						Part->TryGetNumberField(TEXT("str"), Left);
+						Division.Strength = static_cast<float>(Left);
+						Part->TryGetNumberField(TEXT("men"), Division.Men);
+						Part->TryGetNumberField(TEXT("stripes"), Division.Stripes);
+						Part->TryGetBoolField(TEXT("hard"), Division.bHardened);
+					}
+				}
+			}
 			Out.Corps.Add(MoveTemp(C));
 		}
 	}

@@ -2674,6 +2674,31 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Strength = Unit.Strength;
 		Card.KindId = Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy")) : Unit.Kind;
 		Card.Morale = Unit.Cohesion;
+		if (Unit.Morale >= 0.0f)
+		{
+			Card.bMood = true;
+			Card.Morale = Unit.Morale;
+			Card.Rest = Unit.Rest >= 0.0f ? Unit.Rest : Unit.Cohesion;
+			Card.MoraleWord = Unit.MoraleWord;
+			Card.RestWord = Unit.RestWord;
+			Card.Trend = Unit.Trend;
+			Card.bResting = Unit.bResting;
+			Card.Service = Unit.Service;
+			TArray<FString> Tip;
+			Tip.Add(Unit.MoodLine);
+			Tip.Add(Unit.RestLine);
+			if (Unit.Why.Num() > 0)
+			{
+				Tip.Add(TEXT("What has moved its morale:"));
+				Tip.Append(Unit.Why);
+			}
+			if (Unit.bResting)
+			{
+				Tip.Add(TEXT("If it neither marches nor fights this month it rests: it takes replacements faster, and its morale and rest rise."));
+			}
+			Card.MoodTip = FString::Join(Tip, TEXT("\n"));
+		}
+		Card.Parts = Unit.Parts;
 		Card.Experience = Unit.Experience;
 		Card.Moves = Unit.Moves;
 		Card.MovesMax = Unit.MovesMax;

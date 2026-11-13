@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bb1cf9c 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f203bb0 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3605,20 +3605,20 @@
     S.awards.push(a);
     (u.hon ?? (u.hon = [])).push(a.id);
     note(g2, u, "honour", at, a.id);
-    const named = !u.nick && !d.last ? nickFor(g2, u, d, kind, at) : void 0;
-    if (named) u.nick = named;
+    const named2 = !u.nick && !d.last ? nickFor(g2, u, d, kind, at) : void 0;
+    if (named2) u.nick = named2;
     const service = kind === "corps" ? "army" : kind === "air" ? "air force" : "navy";
     const where = kind === "fleet" ? void 0 : at >= 0 ? at : corpsRegion(kind, u);
     if (u.nat === g2.human) {
-      news(g2, a, `${citation(g2, a)}${named ? ` The ${service} has begun to call it ${named}.` : ""}`, where);
+      news(g2, a, `${citation(g2, a)}${named2 ? ` The ${service} has begun to call it ${named2}.` : ""}`, where);
       if (kind === "corps" && !d.last) {
         const c = u;
         const gen = generalOf(g2, c);
         if (gen) gainXp(g2, gen, STORIES.generalXp);
-        moment(g2, 5, named ? "nick" : "honour", c, where ?? c.reg, { x: named ?? awardTitle(g2, a) });
+        moment(g2, 5, named2 ? "nick" : "honour", c, where ?? c.reg, { x: named2 ?? awardTitle(g2, a) });
       }
     } else if (first && d.fame >= 2 && major(u.nat) && !d.last) {
-      news(g2, a, `${citation(g2, a)}${named ? ` The ${N.adj} ${service} has begun to call it ${named}.` : ""}`, where);
+      news(g2, a, `${citation(g2, a)}${named2 ? ` The ${N.adj} ${service} has begun to call it ${named2}.` : ""}`, where);
     }
     return a;
   }
@@ -5820,13 +5820,13 @@
       const f = addFleet(g2, row2);
       headline(g2, "info", `${f.name} forms at ${f.port}.`, nat);
     }
-    const named = (name) => g2.fleets.find((f) => f.nat === nat && f.name === name);
+    const named2 = (name) => g2.fleets.find((f) => f.nat === nat && f.name === name);
     for (const b of NAVY.building) if (b.nat === nat && g2.turn >= b.from && g2.turn <= b.to) {
-      const f = named(b.fleet);
+      const f = named2(b.fleet);
       if (f) f.ships[b.cls] += b.perMonth;
     }
     for (const [turn, who, fleet, ships, what] of NAVY.arrivals) {
-      const f = who === nat && turn === g2.turn ? named(fleet) : void 0;
+      const f = who === nat && turn === g2.turn ? named2(fleet) : void 0;
       if (!f) continue;
       for (const c of CLASSES) f.ships[c] += ships[c] ?? 0;
       headline(g2, "info", `${cap2(what)} ${/ and /.test(what) || /s$/.test(what.split(" ")[0]) ? "join" : "joins"} the ${f.name}.`, nat);
@@ -9103,6 +9103,306 @@
     return { on: dominating(g2), since: g2.flags.dom ?? 0, began: g2.flags["dom:n"] ?? rows.length, left: rows.length, rows, fallen, winner: worldWinner(g2), scale };
   }
 
+  // ../../data/campaign/morale.json
+  var morale_default = {
+    _about: {
+      what: "Morale and rest (the grand campaign). Every corps carries its morale, 0 to 1, beside its strength and its rest. Morale rises with victories, on home soil, with friends close by and with a quiet month out of the line; it falls with defeats, heavy losses, being cut off, going unpaid and standing alone in front of the enemy. A corps in good heart hits harder and holds together longer; a shaken one does neither.",
+      rule: "Only the grand campaign keeps morale. A historical scenario has none: its corps fight exactly as they always did, and so its wars come out as they did before this rule was written.",
+      start: "The morale a corps begins the war with, or is raised with.",
+      level: "Where morale settles when nothing is happening to it, and 'drift', the share of the way back it goes each month. Because the mood settles by a share each month, what a corps gains every month adds up to a level and no further: 0.03 a month for home soil is worth 0.12 in the end, at a drift of 0.25.",
+      battle: "What one battle does to the morale of the corps that fought it. 'won' and 'decisive' (odds of 2 to 1 or better) for attackers who carry the ground, 'repulsed' and 'thrown' (odds under 0.8 to 1) for attackers who do not; 'held' for defenders who keep their ground, 'lost' and 'routed' (2 to 1 or better against them) for defenders driven off it. 'bloody' is added for a corps that lost 'bloodyAt' of its men or more in the one fight. 'capital' is for the corps that take an enemy's capital, and 'capitalLost' is what every corps of a nation feels the day its own capital falls.",
+      month: "The monthly reckoning, at the start of a nation's month. 'home': on its own country's soil. 'beside': other friendly corps in the same province. 'near': friendly corps in a province next door. 'alone': no friend in the province or next door, and the enemy next door. 'rested': a whole month in supply without marching or fighting. 'cutOff': out of supply. 'unpaid': the treasury is empty (scaled by how deep the debt is). 'winter': a winter in the east without winter equipment. 'general': a general in command who rallies men.",
+      fight: "'span': the whole range morale is worth in battle, half of it either side of morale 0.5 (0.3 is from 15% weaker to 15% stronger). 'steady': how much faster a corps with no heart loses its cohesion in a fight, and how much slower one in good heart does (0.5 is from 25% faster to 25% slower).",
+      rested: "What a whole month out of the line is worth besides morale: 'org' more rest recovered, and drafts arriving 'drafts' times as fast.",
+      words: "What a level of morale is called: [from, name].",
+      restWords: "What a level of rest (cohesion) is called: [from, name].",
+      why: "The words for each reason, as the player reads them."
+    },
+    start: 0.6,
+    level: 0.5,
+    drift: 0.25,
+    battle: {
+      won: 0.08,
+      decisive: 0.12,
+      repulsed: -0.06,
+      thrown: -0.1,
+      held: 0.08,
+      lost: -0.1,
+      routed: -0.14,
+      bloody: -0.04,
+      bloodyAt: 0.15,
+      capital: 0.08,
+      capitalLost: -0.1
+    },
+    month: {
+      home: 0.03,
+      beside: 0.02,
+      near: 0.01,
+      alone: -0.04,
+      rested: 0.04,
+      cutOff: -0.12,
+      unpaid: -0.05,
+      winter: -0.04,
+      general: 0.02
+    },
+    fight: { span: 0.3, steady: 0.5 },
+    rested: { org: 0.15, drafts: 1.5 },
+    words: [[0, "Broken"], [0.2, "Shaken"], [0.4, "Steady"], [0.6, "Confident"], [0.8, "Eager"]],
+    restWords: [[0, "Exhausted"], [0.25, "Worn"], [0.5, "Tired"], [0.75, "Rested"], [0.95, "Fresh"]],
+    why: {
+      won: "Carried the enemy's ground",
+      decisive: "A decisive victory",
+      repulsed: "An attack beaten off",
+      thrown: "An attack thrown back with loss",
+      held: "Held its ground",
+      lost: "Driven from its ground",
+      routed: "Routed",
+      bloody: "Heavy losses",
+      capital: "Took an enemy capital",
+      capitalLost: "The capital has fallen",
+      home: "On home soil",
+      friends: "Friendly troops close by",
+      alone: "Alone in front of the enemy",
+      rested: "A quiet month out of the line",
+      cutOff: "Cut off from supply",
+      unpaid: "Unpaid: the treasury is empty",
+      winter: "A winter without winter kit",
+      general: "A general the men trust",
+      time: "The mood settling"
+    }
+  };
+
+  // ../../src/campaign/morale.ts
+  var MORALE = morale_default;
+  var moraleRules = (g2) => g2.flags.open === 1;
+  var MONTHLY = /* @__PURE__ */ new Set(["home", "friends", "alone", "rested", "cutOff", "unpaid", "winter", "general", "time"]);
+  var r3 = (x) => Math.round(x * 1e3) / 1e3;
+  var named = (table, x) => {
+    let out = table[0][1];
+    for (const [from, name] of table) if (x >= from) out = name;
+    return out;
+  };
+  var moraleWord = (m) => named(MORALE.words, m);
+  var restWord = (org) => named(MORALE.restWords, org);
+  function openMorale(g2) {
+    if (!moraleRules(g2)) return;
+    for (const c of g2.corps) if (c.mor === void 0) c.mor = MORALE.start;
+  }
+  function raiseMorale(g2, c) {
+    if (moraleRules(g2)) c.mor = MORALE.start;
+  }
+  function feel(c, why, delta) {
+    if (c.mor === void 0 || !delta) return;
+    c.mor = r3(clamp(c.mor + delta, 0, 1));
+    const list4 = c.mw ?? (c.mw = []);
+    const e = list4.find((x) => x[0] === why && x[2] === 0);
+    if (e) e[1] = r3(e[1] + delta);
+    else list4.push([why, r3(delta), 0]);
+  }
+  var heart = (c) => c.mor === void 0 ? 1 : 1 + (c.mor - 0.5) * MORALE.fight.span;
+  var nerve = (c) => c.mor === void 0 ? 1 : 1 + (0.5 - c.mor) * MORALE.fight.steady;
+  var restedMonth = (g2, c) => moraleRules(g2) && c.supplied && !c.fought && c.ap >= c.apMax && c.kind !== "fort" && c.born !== g2.turn;
+  var resting = (g2, c) => moraleRules(g2) && c.supplied && !c.fought && c.ap >= c.apMax && c.kind !== "fort";
+  var restedDrafts = (g2, c) => restedMonth(g2, c) ? MORALE.rested.drafts : 1;
+  var restedOrg = (g2, c) => restedMonth(g2, c) ? MORALE.rested.org : 0;
+  function moraleBattle(g2, attackers2, defenders, odds, win, lost, capital) {
+    if (!moraleRules(g2)) return;
+    const B = MORALE.battle;
+    for (const c of attackers2) {
+      if (win) feel(c, odds >= 2 ? "decisive" : "won", odds >= 2 ? B.decisive : B.won);
+      else feel(c, odds < 0.8 ? "thrown" : "repulsed", odds < 0.8 ? B.thrown : B.repulsed);
+      if ((lost.get(c.id) ?? 0) >= B.bloodyAt) feel(c, "bloody", B.bloody);
+      if (win && capital) feel(c, "capital", B.capital);
+    }
+    for (const c of defenders) {
+      if (win) feel(c, odds >= 2 ? "routed" : "lost", odds >= 2 ? B.routed : B.lost);
+      else feel(c, "held", B.held);
+      if ((lost.get(c.id) ?? 0) >= B.bloodyAt) feel(c, "bloody", B.bloody);
+    }
+  }
+  function moraleCapital(g2, r, old) {
+    if (!moraleRules(g2) || !r.cap || r.owner !== old || r.ctrl === old || !g2.nations[old]?.alive) return;
+    if (g2.nations[old].capital !== r.id) return;
+    for (const c of g2.corps) if (c.nat === old && !c.dead) feel(c, "capitalLost", MORALE.battle.capitalLost);
+  }
+  function moraleMonth(g2, c, facts) {
+    if (c.mor === void 0) return;
+    c.mw = (c.mw ?? []).filter((e) => e[2] === 0 && !MONTHLY.has(e[0])).map((e) => [e[0], e[1], 1]);
+    const M = MORALE.month;
+    const here = g2.regions[c.reg];
+    feel(c, "time", (MORALE.level - c.mor) * MORALE.drift);
+    if (here.owner === c.nat && !here.overseas) feel(c, "home", M.home);
+    const friend2 = (u) => u !== c && !u.dead && allied(g2, u.nat, c.nat);
+    const beside = here.units.some(friend2);
+    let near = false, foe = false;
+    for (const j of here.nb) {
+      for (const u of g2.regions[j].units) {
+        if (friend2(u)) near = true;
+        else if (atWar(g2, u.nat, c.nat)) foe = true;
+      }
+    }
+    if (beside || near) feel(c, "friends", (beside ? M.beside : 0) + (near ? M.near : 0));
+    else if (foe) feel(c, "alone", M.alone);
+    if (restedMonth(g2, c)) feel(c, "rested", M.rested);
+    if (!c.supplied) feel(c, "cutOff", M.cutOff);
+    if (facts.owed > 0) feel(c, "unpaid", M.unpaid * facts.owed);
+    if (facts.cold) feel(c, "winter", M.winter);
+    if (cmdRally(g2, c) > 1) feel(c, "general", M.general);
+    if (!c.mw.length) delete c.mw;
+  }
+  var lower = (s) => s[0].toLowerCase() + s.slice(1);
+  var listed = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  function corpsMood(g2, c) {
+    const rest = clamp(c.org, 0, 1);
+    const quiet2 = resting(g2, c);
+    const restLine = !c.supplied ? "Cut off from supply: it gets no rest at all." : c.fought ? `${restWord(rest)}: it has fought this month, and will get back less of its rest for it.` : quiet2 ? `${restWord(rest)}: left where it stands for the month, it rests, takes in drafts half as fast again and recovers its spirits.` : `${restWord(rest)}: it has marched this month. A month where it neither marches nor fights would rest it properly.`;
+    if (c.mor === void 0) {
+      return { morale: null, moraleWord: "", trend: "steady", rest, restWord: restWord(rest), line: "", restLine: !c.supplied ? restLine : `${restWord(rest)}.`, why: [], resting: false };
+    }
+    const why = (c.mw ?? []).filter((e) => Math.abs(e[1]) >= 5e-3).map((e) => ({ key: e[0], text: MORALE.why[e[0]] ?? e[0], delta: e[1], earlier: e[2] === 1 })).sort((a, b) => Number(a.earlier) - Number(b.earlier) || Number(a.key === "time") - Number(b.key === "time") || Math.abs(b.delta) - Math.abs(a.delta));
+    const net = why.filter((w) => !w.earlier).reduce((s, w) => s + w.delta, 0);
+    const trend = net >= 0.02 && c.mor < 0.995 ? "rising" : net <= -0.02 && c.mor > 5e-3 ? "falling" : "steady";
+    const word = moraleWord(c.mor);
+    const told = why.filter((w) => !w.earlier && w.key !== "time" && (trend === "falling" ? w.delta < 0 : trend === "rising" ? w.delta > 0 : true)).slice(0, 3).map((w) => lower(w.text));
+    const line = trend === "steady" ? `${word}, and holding steady${told.length ? `: ${listed(told)}` : ""}.` : told.length ? `${word} and ${trend}: ${listed(told)}.` : trend === "falling" ? `${word}, and settling back towards its usual temper.` : `${word}, and recovering with time.`;
+    return { morale: c.mor, moraleWord: word, trend, rest, restWord: restWord(rest), line, restLine, why, resting: quiet2 };
+  }
+  function forceMorale(cs) {
+    let sum2 = 0, n = 0;
+    for (const c of cs) if (c.mor !== void 0) {
+      sum2 += c.mor * c.divs;
+      n += c.divs;
+    }
+    return n > 0 ? sum2 / n : null;
+  }
+
+  // ../../data/campaign/divisions.json
+  var divisions_default = {
+    _about: {
+      what: "The divisions inside a corps, as both interfaces show them: what each kind is called, the numbers they carry, and how a corps' strength and experience are shared out among its divisions.",
+      rule: "A corps fights as one body: its strength and its experience are the corps' own, and the divisions shown inside it always add up to exactly those. Each division keeps its own character through the war, so the same one is always the most worn or the most seasoned of its corps. Nothing here changes a battle.",
+      kinds: "For each kind of corps: 'word' as it reads in a count ('5 infantry divisions'), 'name' for one division ('7th Infantry Division') and 'short' for a card.",
+      names: "What a nation calls its own divisions of a kind, where it differs: [name, short].",
+      order: "The order the kinds are listed in when an army is summed up.",
+      spread: "How far apart the divisions of a corps stand: the share of the room the corps' own strength (or experience) leaves either side of it.",
+      hardened: "The experience (0 to 1) at which a division counts as battle-hardened."
+    },
+    kinds: {
+      inf: { word: "infantry", name: "Infantry Division", short: "Infantry" },
+      mot: { word: "motorised", name: "Motorised Division", short: "Motorised" },
+      arm: { word: "armoured", name: "Armoured Division", short: "Armoured" },
+      cav: { word: "cavalry", name: "Cavalry Division", short: "Cavalry" },
+      mtn: { word: "mountain", name: "Mountain Division", short: "Mountain" },
+      fort: { word: "fortress", name: "Fortress Division", short: "Fortress" },
+      art: { word: "artillery", name: "Artillery Division", short: "Artillery" },
+      eng: { word: "engineer", name: "Engineer Brigade", short: "Engineers" }
+    },
+    names: {
+      GER: { arm: ["Panzer Division", "Panzer"] },
+      SOV: { inf: ["Rifle Division", "Rifles"], arm: ["Tank Division", "Tanks"], mot: ["Motor Rifle Division", "Motor Rifles"] },
+      USA: { arm: ["Armored Division", "Armored"], mot: ["Motorized Division", "Motorized"] },
+      ITA: { mtn: ["Alpine Division", "Alpini"] },
+      FRA: { mtn: ["Alpine Division", "Alpine"] }
+    },
+    order: ["arm", "mot", "cav", "inf", "mtn", "art", "eng", "fort"],
+    spread: { str: 0.6, xp: 0.7 },
+    hardened: 0.4
+  };
+
+  // ../../src/campaign/armies.ts
+  var DIVISIONS = divisions_default;
+  var counter = (nat, kind) => `dn:${nat}:${kind}`;
+  function numberCorps(g2, c) {
+    if (g2.flags.open !== 1 || c.dn !== void 0) return;
+    const key2 = counter(c.nat, c.kind);
+    c.dn = (g2.flags[key2] ?? 0) + 1;
+    g2.flags[key2] = c.dn + c.divs - 1;
+  }
+  function numberDivisions(g2) {
+    if (g2.flags.open !== 1) return;
+    for (const c of [...g2.corps].sort((a, b) => a.id - b.id)) numberCorps(g2, c);
+  }
+  function firstNumber(g2, c) {
+    if (c.dn !== void 0) return c.dn;
+    let n = 1;
+    for (const o of g2.corps) if (o.nat === c.nat && o.kind === c.kind && o.id < c.id && !o.dead) n += o.divs;
+    return n;
+  }
+  function ordinal2(n) {
+    const t = n % 100;
+    if (t >= 11 && t <= 13) return `${n}th`;
+    return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
+  }
+  function divisionWords(nat, kind) {
+    const own = DIVISIONS.names[nat]?.[kind];
+    return own ? { name: own[0], short: own[1] } : { name: DIVISIONS.kinds[kind].name, short: DIVISIONS.kinds[kind].short };
+  }
+  function characters(id, n, salt) {
+    if (n <= 1) return [0];
+    const raw = Array.from({ length: n }, (_, i) => hashString(`${salt}:${id}:${i}`) % 2001 / 1e3 - 1);
+    const mean = raw.reduce((s, x) => s + x, 0) / n;
+    const off = raw.map((x) => x - mean);
+    const top = Math.max(...off.map(Math.abs));
+    return top > 0 ? off.map((x) => x / top) : off;
+  }
+  var stripesOf = (xp) => {
+    let k = 0;
+    STORIES.grades.forEach(([from], i) => {
+      if (xp >= from) k = i;
+    });
+    return k;
+  };
+  function divisionsOf(g2, c) {
+    const first = firstNumber(g2, c);
+    const words = divisionWords(c.nat, c.kind);
+    const str = Math.min(1, Math.max(0, c.str)), xp = Math.min(1, Math.max(0, c.xp));
+    const ds = characters(c.id, c.divs, "ds"), dx = characters(c.id, c.divs, "dx");
+    const roomS = Math.min(str, 1 - str) * DIVISIONS.spread.str, roomX = Math.min(xp, 1 - xp) * DIVISIONS.spread.xp;
+    return Array.from({ length: c.divs }, (_, i) => {
+      const s = str + ds[i] * roomS, x = xp + dx[i] * roomX;
+      const no = first + i;
+      return {
+        slot: i,
+        no,
+        name: `${ordinal2(no)} ${words.name}`,
+        short: `${ordinal2(no)} ${words.short}`,
+        kind: c.kind,
+        nat: c.nat,
+        str: s,
+        men: Math.round(s * MEN_PER_DIV),
+        xp: x,
+        grade: grade(x),
+        stripes: stripesOf(x),
+        hardened: x >= DIVISIONS.hardened
+      };
+    });
+  }
+  function corpsCard(g2, c) {
+    const battles = c.rec?.battles ?? 0, won = c.rec?.won ?? 0;
+    const hardened = c.xp >= DIVISIONS.hardened;
+    const service = `${grade(c.xp)}${hardened ? ", battle-hardened" : ""} · ${battles ? `${battles} battle${battles === 1 ? "" : "s"}` : "untested"}`;
+    return {
+      id: c.id,
+      nat: c.nat,
+      name: c.name,
+      nick: c.nick ?? null,
+      kind: c.kind,
+      label: KIND[c.kind].label,
+      divs: c.divs,
+      men: men(c),
+      str: c.str,
+      xp: c.xp,
+      grade: grade(c.xp),
+      hardened,
+      battles,
+      won,
+      service,
+      general: generalOf(g2, c)?.name ?? null,
+      mood: corpsMood(g2, c),
+      divisions: divisionsOf(g2, c)
+    };
+  }
+
   // ../../data/campaign/east.json
   var east_default = {
     _about: `Campaigning deep inside the Soviet Union. Soviet railways use a wider gauge and roads are few, so an invader's supply thins out the further it goes: every Soviet-owned region between a corps and the frontier railheads adds 'stepFresh' to its supply line, or 'stepConverted' once the region has been held for 'convertAfter' months and the track has been relaid. 'mud' lists the months (0 is January) when the roads dissolve. Mud and winter multiply the line by 'badWeather'. 'lineDefence' is how much of that loss of strength also applies in defence. 'bands' turn the length of the line into attack strength and 'drag' into extra movement cost: [longest line, value]. In the winter months, attackers from nations without winter equipment fight at 'winter.attack', defend at 'winter.defence', lose 'winter.attrition' of their men to the cold each month, get only 'winter.rest' of their usual rest, and move one step slower on Soviet ground. 'mobilisation' is the wave of new formations a nation raises once it is at war: corps per month, counted from the month the war began, then 'after' per month. 'roads' is the extra movement cost an invader pays for every Soviet-owned region: the distances are vast and the roads are poor. Replacements and rest also reach a corps only as well as its supply line allows. 'works' are the defence lines its people dig once the war has begun: [months into the war, place, level of the works]. 'works' are dug by history's calendar, as in desert.json and theatres.json: [month, place, level, who must hold it, the news, and optionally {"vs": the owners of the ground an attack must come from to meet them, "port": true for a harbour that supplies the place by sea}]. They are not dug in free play.`,
@@ -9931,6 +10231,8 @@
     if (o.airborne) c.airborne = true;
     c.born = g2.turn;
     if (reg.owner === nat) c.home = reg.id;
+    raiseMorale(g2, c);
+    numberCorps(g2, c);
     g2.corps.push(c);
     reg.units.push(c);
     if (o.gen) seat(g2, c, o.gen, o.trait);
@@ -10334,6 +10636,7 @@
           spied = spy.agent;
         }
       }
+      p *= heart(c);
       if (g2.nations[c.nat].slowCommand) p *= 0.85;
       p *= techMul(g2, c.nat, "doctrine");
       if (opts.sea !== void 0) p *= opts.sea;
@@ -10421,6 +10724,7 @@
           shortD = Math.min(shortD, short);
         }
       }
+      p *= heart(d);
       const proud = storyDefence(g2, d, target, attackers2);
       if (proud !== 1) {
         p *= proud;
@@ -10554,6 +10858,17 @@
         value: [shortA < 1 ? `Attackers have ${worst(attackers2)}` : "", shortD < 1 ? `Defenders have ${worst(defenders)}` : ""].filter(Boolean).join(". "),
         effect: [shortA < 1 ? `Attack cut to as little as ${Math.round(shortA * 100)}%` : "", shortD < 1 ? `${shortA < 1 ? "defence" : "Defence"} cut to as little as ${Math.round(shortD * 100)}%` : ""].filter(Boolean).join(", ")
       });
+    }
+    const heartA = forceMorale(attackers2), heartD = forceMorale(defenders);
+    if (heartA !== null || heartD !== null) {
+      const say = (m, who) => m === null ? "" : `${who} ${moraleWord(m).toLowerCase()} (${Math.round(m * 100)}%)`;
+      const fx = (m, what) => {
+        const pct7 = m === null ? 0 : Math.round((m - 0.5) * MORALE.fight.span * 100);
+        return pct7 ? `${what} ${pct7 > 0 ? "up" : "down"} ${Math.abs(pct7)}%` : "";
+      };
+      const value = [say(heartA, "Attackers"), say(heartD, heartA === null ? "Defenders" : "defenders")].filter(Boolean).join(", ");
+      const effect = [fx(heartA, "Attack"), fx(heartD, "defence")].filter(Boolean).join(", ");
+      lines.push({ label: "Morale", value, effect: effect ? effect[0].toUpperCase() + effect.slice(1) : void 0 });
     }
     if (spied) lines.push({ label: "Intelligence", value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
     if (sneaked) lines.push({ label: "Surprise", value: "War was declared this month on a country at peace", effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
@@ -10713,14 +11028,16 @@
     const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
     const attFrac = clamp(0.14 / R, 0.02, 0.2);
     let attLost = 0, defLost = 0, prisoners = 0;
+    const bled = /* @__PURE__ */ new Map();
     attackers2.forEach((c, i) => {
       const before = men(c);
       c.str *= 1 - Math.min(0.6, attFrac * cmdLoss(g2, c));
-      c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g2, c), 0, 1);
+      c.org = clamp(c.org - (0.1 + 0.08 / R) * cmdSteady(g2, c) * nerve(c), 0, 1);
       c.xp = Math.min(1, c.xp + 0.05);
       c.fought = true;
       attU[i].lost = before - men(c);
       attLost += attU[i].lost;
+      if (before > 0) bled.set(c.id, attU[i].lost / before);
     });
     const win = R >= 1.2;
     const stood = win ? 1 : HELD_LOSS;
@@ -10728,12 +11045,14 @@
     defenders.forEach((c, i) => {
       const before = men(c);
       c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c));
-      c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g2, c), 0, 1);
+      c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g2, c) * nerve(c), 0, 1);
       c.xp = Math.min(1, c.xp + 0.04);
       c.fought = true;
       defU[i].lost = before - men(c);
       defLost += defU[i].lost;
+      if (before > 0) bled.set(c.id, defU[i].lost / before);
     });
+    moraleBattle(g2, attackers2, defenders, R, win, bled, enemyCapital);
     const level = R >= 3 ? "Heroic victory" : R >= 2 ? "Decisive victory" : R >= 1.2 ? attLost > defLost ? "Pyrrhic victory" : "Close victory" : R >= 0.8 ? "Close defeat" : "Decisive defeat";
     const affected = new Set(defenders.map((c) => c.nat));
     if (win) {
@@ -10814,6 +11133,7 @@
     const owner = g2.nations[r.owner];
     r.ctrl = owner.alive && allied(g2, nat, r.owner) ? r.owner : nat;
     r.since = g2.turn;
+    moraleCapital(g2, r, old);
     r.prev = old;
     g2.supplyDirty = true;
     if (groundRules(g2)) {
@@ -11010,7 +11330,7 @@
     }
     return true;
   }
-  var ordinal2 = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]}`;
+  var ordinal3 = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]}`;
   function mobilise(g2, nat) {
     const plan = EASTERN.mobilisation[nat];
     const n = g2.nations[nat];
@@ -11031,7 +11351,7 @@
         }
       }
       if (!best) break;
-      const c = addCorps(g2, nat, `${ordinal2(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
+      const c = addCorps(g2, nat, `${ordinal3(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
       c.org = 0.7;
     }
     if (count3 > 0 && month2 === 0) headline(g2, "event", `${n.name} orders general mobilisation.`, nat);
@@ -11249,11 +11569,12 @@
     const tempo = freshOffensive(g2, nat);
     const army = g2.corps.filter((c) => c.nat === nat);
     const drafts = draftsMul(g2, nat) * traitDrafts(g2, nat) * supDrafts(g2, nat);
-    const want = army.map((c) => c.supplied && !(c.lean && nat === g2.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * c.divs * lineStrength(g2, c).mul * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
+    const want = army.map((c) => c.supplied && !(c.lean && nat === g2.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * restedDrafts(g2, c) * c.divs * lineStrength(g2, c).mul * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
     const asked2 = want.reduce((s, x) => s + x, 0);
     const share = asked2 > 0 ? Math.min(1, n.pp / perDiv / asked2, PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g2, nat)) / asked2) : 0;
     const starved = /* @__PURE__ */ new Map();
     army.forEach((c, i) => {
+      moraleMonth(g2, c, { owed, cold: c.supplied && frozen(g2, nat, g2.regions[c.reg]) });
       if (c.supplied) {
         const give = want[i] * share;
         if (give > 0) {
@@ -11264,7 +11585,7 @@
         const cold = frozen(g2, nat, g2.regions[c.reg]);
         const bite = cold ? cmdWinter(g2, c) : 0;
         if (cold) c.str *= 1 - EASTERN.winter.attrition * bite;
-        const rest = (c.fought ? 0.25 : 0.45) * lineStrength(g2, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g2, c);
+        const rest = ((c.fought ? 0.25 : 0.45) + restedOrg(g2, c)) * lineStrength(g2, c).mul * (1 - (1 - EASTERN.winter.rest) * bite) * cmdRally(g2, c);
         c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
         if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
       } else {
@@ -11995,6 +12316,8 @@
     openTech(g2);
     openStores(g2);
     openAirWar(g2);
+    openMorale(g2);
+    numberDivisions(g2);
     g2.supplyDirty = true;
     return g2;
   }
@@ -12855,8 +13178,8 @@
   function enemySet(g2, nat) {
     const n = g2.nations[nat];
     const s = /* @__PURE__ */ new Set();
-    const named = isOpen(g2) ? [phaseFor(g2, nat)].filter((p) => !!p) : phases(nat).filter((p) => p.from <= g2.turn);
-    for (const p of named) for (const e of p.enemies ?? []) if (n.atWar.includes(e)) s.add(e);
+    const named2 = isOpen(g2) ? [phaseFor(g2, nat)].filter((p) => !!p) : phases(nat).filter((p) => p.from <= g2.turn);
+    for (const p of named2) for (const e of p.enemies ?? []) if (n.atWar.includes(e)) s.add(e);
     for (const r of g2.regions) if (r.owner === nat && r.ctrl !== nat && n.atWar.includes(r.ctrl)) s.add(r.ctrl);
     return s;
   }
@@ -13784,6 +14107,7 @@
   function playerFell(g2) {
     return g2.human && !g2.nations[g2.human].alive ? standDown(g2) : null;
   }
+  var corpsDetail = (g2, c) => corpsCard(g2, c);
   var myGeneral = (g2, id) => {
     const gen = g2.generals[id];
     return gen && gen.nat === g2.human && current(g2) === gen.nat ? gen : null;
@@ -14132,6 +14456,8 @@
       g2.raids = d.raids ?? {};
     }
     if (g2.flags.open === 1) openAirWar(g2);
+    openMorale(g2);
+    numberDivisions(g2);
     g2.stories = { ...newStories(), ...d.stories ?? {} };
     g2.intel = { agents: [], next: 1, notes: [], heat: {}, ...d.intel ?? {} };
     g2.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g2);
@@ -14590,6 +14916,28 @@
     if (atWar(game2, me, nat)) return "enemy";
     return allied(game2, me, nat) ? "ally" : "neutral";
   }
+  function cardOf(s, c) {
+    try {
+      const d = corpsDetail(s, c);
+      const m = d.mood;
+      const pts = (x) => `${x >= 0 ? "+" : "−"}${Math.max(1, Math.round(Math.abs(x) * 100))}`;
+      return {
+        mor: m.morale ?? -1,
+        morWord: m.moraleWord,
+        trend: m.trend,
+        rest: m.rest,
+        restWord: m.restWord,
+        moodLine: m.line,
+        restLine: m.restLine,
+        resting: m.resting,
+        why: m.why.slice(0, 6).map((w) => `${pts(w.delta)}  ${w.text}${w.earlier ? " (last month)" : ""}`),
+        service: d.service,
+        dv: d.divisions.map((x) => ({ name: x.short, full: x.name, kind: x.kind, str: x.str, men: x.men, stripes: x.stripes, grade: x.grade, hard: x.hardened }))
+      };
+    } catch {
+      return {};
+    }
+  }
   function view() {
     const s = game();
     const up = humanUp(s);
@@ -14647,7 +14995,9 @@
         grade: grade(c.xp),
         nick: c.nick ?? null,
         honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ["#b08d57", "#f2ead6"] })),
-        dim: false
+        dim: false,
+        // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
+        ...c.nat === s.human ? cardOf(s, c) : {}
       }),
       // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
       fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({

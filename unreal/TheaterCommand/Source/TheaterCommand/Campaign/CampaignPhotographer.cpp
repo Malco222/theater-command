@@ -225,6 +225,11 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.ProvinceTab = 2;
 		}
 		Add(TEXT("31m-forces"), TEXT("@capital"), 0.45f).Room = TEXT("forces");
+		{
+			// An army in hand: a card for each corps, its divisions by name, its morale and its rest.
+			FShot& Shot = Add(TEXT("31n-army-cards"), TEXT("Upper Silesia"), 0.4f);
+			Shot.Select = Shot.Army = TEXT("Upper Silesia");
+		}
 		Add(TEXT("31b-ledger"), TEXT("@capital"), 0.45f).bLedger = true;
 		Add(TEXT("31e-diplomacy"), TEXT("@capital"), 0.45f).bDiplomacy = true;
 		Add(TEXT("31f-research"), TEXT("@capital"), 0.45f).bResearch = true;
@@ -433,6 +438,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		// Nothing was asked for that exists: leave, instead of sitting there for ever.
 		bStarted = false;
 		UKismetSystemLibrary::QuitGame(this, nullptr, EQuitPreference::Quit, false);
+		FPlatformMisc::RequestExit(false); // (the polite way has been seen not to end a run that never began)
 	}
 }
 

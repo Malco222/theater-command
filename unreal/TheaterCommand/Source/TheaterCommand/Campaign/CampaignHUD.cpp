@@ -4091,38 +4091,95 @@ namespace
 			const int32 Pips = FMath::Clamp(1 + Card.Experience / 22, 1, 5);
 			const FString Tip = FString::Printf(TEXT("%s: %s, %d division%s. Strength %d%%, morale %d%%. %s. Click to tell this corps to come along or stay behind."),
 				*Card.Name.ToString(), *Card.Kind.ToString(), Card.Divisions, Card.Divisions == 1 ? TEXT("") : TEXT("s"),
-				FMath::RoundToInt32(Card.Strength * 100.0f), FMath::RoundToInt32(Card.Morale * 100.0f), *Card.Grade.ToString());
+				FMath::RoundToInt32(Card.Strength * 100.0f), FMath::RoundToInt32(Card.Morale * 100.0f), Card.Service.IsEmpty() ? *Card.Grade.ToString() : *Card.Service);
 
 			// The picture on each card is the game's own model of what the division is: this nation's tank of the
 			// year, its gun, its soldier. Where there is no model yet, a plain drawing stands in.
-			const FString Model = ACampaignMapActor::ModelFor(Controller.IsValid() ? Controller->GetArmyTray().Tag : FString(), Card.KindId);
-			const TSharedPtr<FSlateBrush> Portrait = PortraitOf(Model);
+			const FString Tag = Controller.IsValid() ? Controller->GetArmyTray().Tag : FString();
 			TSharedRef<SHorizontalBox> Divisions = SNew(SHorizontalBox);
-			for (int32 Division = 0; Division < FMath::Clamp(Card.Divisions, 1, 12); ++Division)
+			const int32 Count = Card.Parts.Num() > 0 ? FMath::Min(Card.Parts.Num(), 12) : FMath::Clamp(Card.Divisions, 1, 12);
+			for (int32 Division = 0; Division < Count; ++Division)
 			{
+				// Each division is named and has its own strength and its own stripes, where the rules keep them.
+				const FViewDivision* Part = Card.Parts.IsValidIndex(Division) ? &Card.Parts[Division] : nullptr;
+				const FString Kind = Part && !Part->Kind.IsEmpty() && Card.KindId != TEXT("heavy") ? Part->Kind : Card.KindId;
+				const TSharedPtr<FSlateBrush> Portrait = PortraitOf(ACampaignMapActor::ModelFor(Tag, Kind));
 				const TSharedRef<SWidget> Picture = Portrait.IsValid()
 					? StaticCastSharedRef<SWidget>(SNew(SPortrait).Picture(Portrait).Size(FVector2D(74.0, 45.0)))
-					: KindPicture(Card.KindId == TEXT("heavy") ? FString(TEXT("arm")) : Card.KindId, Ink);
+					: KindPicture(Kind == TEXT("heavy") ? FString(TEXT("arm")) : Kind, Ink);
+				const float Left = Part ? Part->Strength : Card.Strength;
+				const int32 Lit = Part ? FMath::Clamp(Part->Stripes, 0, 4) : Pips - 1;
 				TSharedRef<SHorizontalBox> Stripes = SNew(SHorizontalBox);
-				for (int32 Pip = 0; Pip < 5; ++Pip)
+				for (int32 Pip = 0; Pip < 4; ++Pip)
 				{
 					Stripes->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 2.0f, 0.0f)
 					[
-						SNew(SBox).WidthOverride(6.0f).HeightOverride(3.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Pip < Pips ? BrightBrass : FLinearColor(1.0f, 1.0f, 1.0f, 0.1f))]
+						SNew(SBox).WidthOverride(8.0f).HeightOverride(3.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Pip < Lit ? BrightBrass : FLinearColor(1.0f, 1.0f, 1.0f, 0.1f))]
 					];
 				}
+				const FString PartTip = Part
+					? FString::Printf(TEXT("%s\n%s%s. %s men, strength %d%%."), *Part->Full, *Part->Grade, Part->bHardened ? TEXT(", battle-hardened") : TEXT(""), *FText::AsNumber(Part->Men).ToString(), FMath::RoundToInt32(Part->Strength * 100.0f))
+					: Tip;
+				TSharedRef<SVerticalBox> Face = SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[Picture];
+				if (Part)
+				{
+					Face->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(74.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Part->Name)).Font(Font(TEXT("Bold"), 8)).ColorAndOpacity(bGoing ? Cream : Faint).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+						]
+					];
+				}
+				Face->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Left, bGoing ? (Left < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("8FBF6A")))) : Faint, TEXT("Strength"))];
+				if (!Card.bMood && !Part)
+				{
+					Face->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[Meter(Card.Morale, bGoing ? MoraleInk : Faint, TEXT("Morale"))];
+				}
+				Face->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)[Stripes];
 				Divisions->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
 				[
-					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f))
+					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f)).ToolTipText(FText::FromString(PartTip))
 					[
-						SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()[Picture]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Card.Strength, bGoing ? StrengthInk : Faint, TEXT("Strength"))]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[Meter(Card.Morale, bGoing ? MoraleInk : Faint, TEXT("Morale"))]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)[Stripes]
+						Face
 					]
 				];
 			}
+
+			// Morale and rest belong to the whole corps: a bar each with its word, and which way morale is going.
+			auto MoodBar = [this, bGoing](const TCHAR* Label, const FString& Word, float Share, const FLinearColor& Colour, const FString& Arrow)
+			{
+				const float Left = FMath::Clamp(Share, 0.0f, 1.0f);
+				return SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(52.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(bGoing ? Brass : Faint)]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(56.0f).HeightOverride(5.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(FMath::Max(Left, 0.001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(bGoing ? Colour : Faint)]
+							+ SHorizontalBox::Slot().FillWidth(FMath::Max(1.0f - Left, 0.001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.1f))]
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(STextBlock).Text(FText::FromString(Arrow.IsEmpty() ? Word : FString::Printf(TEXT("%s %s"), *Word, *Arrow))).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? Cream : Faint)
+					];
+			};
+			const FString Arrow = Card.Trend == TEXT("rising") ? FString(TEXT("\u25B2")) : Card.Trend == TEXT("falling") ? FString(TEXT("\u25BC")) : FString();
+			const FLinearColor RestInk = Card.Rest < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("C9A227")));
+			const TSharedRef<SWidget> Mood = Card.bMood
+				? StaticCastSharedRef<SWidget>(SNew(SBox).ToolTipText(FText::FromString(Card.MoodTip))
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[MoodBar(TEXT("MORALE"), Card.MoraleWord, Card.Morale, MoraleInk, Arrow)]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[MoodBar(TEXT("REST"), Card.bResting ? Card.RestWord + TEXT(", resting") : Card.RestWord, Card.Rest, RestInk, FString())]
+					])
+				: StaticCastSharedRef<SWidget>(SNew(SSpacer).Size(FVector2D(0.0, 0.0)));
 
 			return SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(8.0f, 6.0f, 4.0f, 7.0f))
 				.IsFocusable(false).IsEnabled(Card.bCanOrder).ToolTipText(FText::FromString(Tip))
@@ -4165,6 +4222,7 @@ namespace
 						SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? BrightBrass : Faint)
 						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), *Card.Kind.ToString(), *Card.Grade.ToString(), *MovesLine)))
 					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 4.0f, Card.bMood ? 6.0f : 0.0f)[Mood]
 					+ SVerticalBox::Slot().AutoHeight()[Divisions]
 				];
 		}

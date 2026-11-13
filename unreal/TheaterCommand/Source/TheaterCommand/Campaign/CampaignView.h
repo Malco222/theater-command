@@ -16,6 +16,19 @@ struct FHonourRibbon
 	FColor Second = FColor(242, 234, 214);
 };
 
+/** One division of a corps, as its card shows it. */
+struct FViewDivision
+{
+	FString Name; // "7th Panzer"
+	FString Full; // "7th Panzer Division"
+	FString Kind;
+	FString Grade;
+	float Strength = 1.0f;
+	int32 Men = 0;
+	int32 Stripes = 0; // 0 to 4: how seasoned it is
+	bool bHardened = false;
+};
+
 struct FViewCorps
 {
 	int32 Id = INDEX_NONE;
@@ -38,6 +51,14 @@ struct FViewCorps
 	FString Grade; // what that experience is called: Green, Trained, Seasoned, Veteran, Elite
 	FString Nickname; // the name the army gives it, once it has earned one
 	TArray<FHonourRibbon> Honours;
+	// The player's own corps, where the rules keep them (the grand campaign): morale and rest with their words, and its divisions.
+	float Morale = -1.0f; // 0 to 1, or -1 where no morale is kept
+	float Rest = -1.0f;
+	FString MoraleWord, RestWord, Trend; // Trend is rising, falling or steady
+	FString MoodLine, RestLine, Service;
+	TArray<FString> Why; // what has moved its morale, a line each
+	bool bResting = false; // it will count as rested if it neither marches nor fights this month
+	TArray<FViewDivision> Parts;
 };
 
 /** Something the player has on order: a new corps forming up, or works being dug. */

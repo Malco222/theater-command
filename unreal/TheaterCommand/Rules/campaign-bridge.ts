@@ -71,7 +71,7 @@ import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm,
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
-import { airfieldsSeen, announcements, fallenCapitalAt, flownRaids, nationsFallen, playerFell } from '../../../src/campaign/turn';
+import { airfieldsSeen, announcements, corpsDetail, fallenCapitalAt, flownRaids, nationsFallen, playerFell } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -93,6 +93,23 @@ function standingOf(game: Game, nat: string): string {
   if (nat === me) return 'own';
   if (atWar(game, me, nat)) return 'enemy';
   return allied(game, me, nat) ? 'ally' : 'neutral';
+}
+
+/** A corps of the player's as its card reads: its divisions, how it feels and how rested it is. Empty if the rules keep none. */
+function cardOf(s: Game, c: Corps): Record<string, unknown> {
+  try {
+    const d = corpsDetail(s, c);
+    const m = d.mood;
+    const pts = (x: number): string => `${x >= 0 ? '+' : '\u2212'}${Math.max(1, Math.round(Math.abs(x) * 100))}`;
+    return {
+      mor: m.morale ?? -1, morWord: m.moraleWord, trend: m.trend, rest: m.rest, restWord: m.restWord, moodLine: m.line, restLine: m.restLine, resting: m.resting,
+      why: m.why.slice(0, 6).map((w) => `${pts(w.delta)}  ${w.text}${w.earlier ? ' (last month)' : ''}`),
+      service: d.service,
+      dv: d.divisions.map((x) => ({ name: x.short, full: x.name, kind: x.kind, str: x.str, men: x.men, stripes: x.stripes, grade: x.grade, hard: x.hardened })),
+    };
+  } catch {
+    return {};
+  }
 }
 
 /** The picture of the war the game draws. */
@@ -143,6 +160,8 @@ function view() {
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
       dim: false,
+      // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
+      ...(c.nat === s.human ? cardOf(s, c) : {}),
     })),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
     fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({
