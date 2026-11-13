@@ -262,7 +262,7 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 	// the same countries' colours mixed stronger, so that ground always shows whose it is.
 	static const TCHAR* TablePaints[][2] =
 	{
-		{ TEXT("GER"), TEXT("56636F") },
+		{ TEXT("GER"), TEXT("5E6B77") },
 	};
 	for (const auto& Paint : TablePaints)
 	{
