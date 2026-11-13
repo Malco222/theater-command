@@ -79,6 +79,15 @@ export interface Nation {
   league?: boolean;
   /** The technology tree (the grand campaign): what the nation has researched and what its teams are working on. */
   tech?: TechState;
+  /** Oil and supplies in the depots (the grand campaign), for a power that keeps stocks of its own. */
+  res?: Stores;
+}
+
+/** A power's stocks of oil and supplies, and the share of last month's need of each that was met (1 unless the depots ran dry). */
+export interface Stores {
+  oil: number; sup: number; oilMet: number; supMet: number;
+  /** Months of privation at home, counted up while the depots are empty and back down once they are filled. It wears away the will to fight. */
+  hunger?: number;
 }
 
 export interface TechState {

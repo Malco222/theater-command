@@ -851,3 +851,67 @@ svg.flag.inh { vertical-align: -3px; margin-right: 4px; }
   .tlanehead small { display: none; }
   .tlanehead span { margin-left: auto; }
 }
+
+/* ---- Oil and supplies: the gauges, the books, the shipping lanes ---- */
+#purse { display: inline-flex; gap: 6px; align-items: stretch; flex-wrap: wrap; }
+.purse.store b { color: var(--ink); }
+.purse.store.oil b { color: #d9b05a; }
+.purse.store.sup b { color: #9fc48a; }
+.purse.store.low { border-color: #c9922e; }
+.purse.store.low i { color: #e0aa3c; }
+.purse.store.debt b { color: var(--red); }
+.stores .lcols { align-items: start; }
+.sbook h3 { margin-top: 4px; }
+.sbar { height: 14px; border-radius: 7px; background: var(--panel-3); overflow: hidden; margin: 6px 0 6px; border: 1px solid var(--line); }
+.sbar i { display: block; height: 100%; background: linear-gradient(90deg, #8a6a2a, #d9b05a); }
+.sbook.sup .sbar i { background: linear-gradient(90deg, #4f6f45, #9fc48a); }
+.sbar.low i { background: linear-gradient(90deg, #8a5a1a, #e0aa3c); }
+.sbar.dry { border-color: var(--red); }
+.sfacts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
+.sfacts b { font-family: var(--head); font-size: 15px; color: var(--ink); margin-left: 3px; }
+.sfacts .neg b { color: var(--red); }
+.sfacts .pos b { color: var(--green); }
+.note.bad { border-left-color: var(--red); }
+.note.warn { border-left-color: #e0aa3c; }
+.note ul { margin: 5px 0 0; padding-left: 18px; }
+.ltab small.lnote { display: block; color: #e0aa3c; }
+.ltab tr.stopped td { color: var(--ink-3); }
+.ltab tr.stopped small.lnote { color: #d98b78; }
+.ltab td.neg { color: #d98b78; }
+.lanes { display: grid; gap: 8px; margin-top: 6px; }
+.lanes .lane { background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid #6f9fd0; border-radius: 0 4px 4px 0; padding: 7px 9px; }
+.lanes .lane.raided { border-left-color: #e0aa3c; }
+.lanes .lane.cut { border-left-color: var(--red); }
+.lanes .lane.idle { border-left-color: var(--ink-3); opacity: .8; }
+.lanes .lhead { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 13.5px; }
+.lanes .lflow { margin-left: auto; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.lanes .lane.raided .lflow { color: #e0aa3c; }
+.lanes .lane.cut .lflow { color: var(--red); font-weight: 600; }
+.lanes .oddsbar i { background: #6f9fd0; }
+.lanes .lane.raided .oddsbar i { background: #e0aa3c; }
+.lanes .lane small { display: block; color: var(--ink-2); font-size: 12px; line-height: 1.4; }
+.lanes .lane small b { color: var(--ink); font-weight: 600; }
+.lanes .lane .acts { margin-top: 6px; }
+.sttab th { text-align: left; font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; padding-bottom: 3px; }
+.sttab td.st, .sttab th:not(:first-child) { text-align: right; }
+.sttab td:last-child, .sttab td.st { white-space: nowrap; padding-left: 10px; text-align: right; }
+.st.ample { color: var(--green); }
+.st.steady { color: var(--ink-2); }
+.st.tightening { color: #e0aa3c; }
+.st.short, .st.dry { color: var(--red); font-weight: 600; }
+.ledger .lfacts.two { grid-template-columns: 1fr 1fr; }
+#lanes .lane { cursor: pointer; }
+#lanes .lanebed { fill: none; stroke: rgba(10, 18, 28, .22); stroke-width: 4; stroke-linecap: round; }
+#lanes .laneline { fill: none; stroke: #a9c8e6; stroke-width: 1.8; stroke-dasharray: 7 5; stroke-linecap: round; opacity: .75; }
+#lanes .lanehit { fill: none; stroke: transparent; stroke-width: 16; }
+#lanes .lane.raided .laneline { stroke: #e9b548; opacity: .95; }
+#lanes .lane.cut .laneline { stroke: #d2553d; stroke-dasharray: 5 6; stroke-width: 2.2; opacity: .95; }
+#lanes .lane.ours .laneline { stroke-width: 2.4; }
+#lanes .lanelbl { font-family: var(--head); font-size: 8px; font-weight: 600; fill: #dbe8f4; text-anchor: middle; paint-order: stroke; stroke: rgba(10, 18, 28, .6); stroke-width: 1.3px; letter-spacing: .08em; text-transform: uppercase; pointer-events: none; }
+#lanes .lane.raided .lanelbl { fill: #f0c768; }
+#lanes .lane.cut .lanelbl { fill: #ee8a75; }
+#lanes .lane:hover .laneline { stroke-width: 3; opacity: 1; }
+@media (max-width: 760px) {
+  .purse.store .pl { font-size: 9px; }
+  .purse.store i { font-size: 10.5px; }
+}

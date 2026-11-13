@@ -1,0 +1,54 @@
+{
+  "_about": "Oil and supplies: the two stocks a great power keeps beside its treasury (the grand campaign only; the historical scenarios do not use this file). Money builds an army, oil moves it, supplies keep it fighting. 'nations' are the powers that keep stocks; every other country buys the little it needs abroad month by month and is never short. Each month a nation's stock gains what it produces and imports and loses what it needs. When the stock runs dry the nation gets only the share of its need that came in that month, and its forces suffer for the rest.",
+  "nations": ["GER", "UK", "FRA", "ITA", "SOV", "USA"],
+  "oil": {
+    "_about": "'fields' is what each oilfield yields a month to a nation that owns it, by the province's name; 'occupied' is the share a conqueror gets out of a field it has taken. 'home' is what a nation produces at home without a field on the map: small wells, pre-war synthetic plants, and for a country off the map its whole industry. 'need' is what the forces burn a month: corps by the division and kind, aircraft by the machine, ships by the hull at sea ('port' is the share a ship in harbour burns), and 'peace' the share of it all a nation at peace uses. 'start' is the stock a nation begins with, in months of its need, and 'cap' the most its tanks can hold, in months of need. 'short' is what a shortage does when only part of the need is met: the share of their attack and defence tanks and lorried troops lose when there is no fuel at all, the same for aircraft and for the fleet's readiness, and 'slowAt' the share of need met below which fast troops lose one move a month.",
+    "fields": {"Ploiesti": 14, "Maikop": 8, "Grozny": 12, "Kirovabad": 40, "Iraq": 12, "_default": 8},
+    "occupied": 0.6,
+    "home": {"GER": 14, "ITA": 2.5, "FRA": 1, "UK": 0, "SOV": 4, "USA": 120},
+    "need": {
+      "corps": {"arm": 0.5, "mot": 0.3, "_default": 0.02},
+      "air": 0.004,
+      "ships": {"bb": 0.3, "cv": 0.3, "ca": 0.15, "dd": 0.04, "ss": 0.03},
+      "port": 0.25,
+      "peace": 0.4
+    },
+    "start": {"GER": 6, "UK": 4, "FRA": 3, "ITA": 6, "SOV": 4, "USA": 6, "_default": 4},
+    "cap": 8,
+    "short": {"attack": 0.5, "defence": 0.25, "air": 0.5, "fleet": 0.4, "slowAt": 0.5}
+  },
+  "sup": {
+    "_about": "Supplies are food, steel, rubber and ammunition. 'land' is what a province grows or digs a month by its ground, and 'factory' what each working factory adds; 'occupied' and 'overseas' are the shares that reach the nation from conquered ground and from colonies, and 'offmap' what each factory of a homeland beyond the map is worth, farms included. 'ratio' is how far a nation's own home ground covers its people's needs: at 1 it exactly feeds itself, below 1 it must import the rest, above 1 it has a surplus for its army. 'perDiv' is what a division in the field uses a month in war, and 'peace' the share of that it uses at peace. 'start' and 'cap' are in months of need, as for oil. 'short' is what a shortage does when nothing at all comes in: the share of every corps' attack and defence lost, the share of the monthly drafts that do not go out, and the share of the treasury's income lost as factories stand idle.",
+    "land": {"plains": 1, "forest": 0.5, "hills": 0.5, "marsh": 0.3, "mountain": 0.2, "urban": 0.3, "desert": 0.05},
+    "factory": 0.5,
+    "occupied": 0.25,
+    "overseas": 0.5,
+    "offmap": 1.5,
+    "ratio": {"_default": 1.15, "GER": 0.85, "UK": 0.5, "FRA": 1.1, "ITA": 1, "SOV": 1.1, "USA": 2},
+    "perDiv": 0.03,
+    "peace": 0.25,
+    "start": {"_default": 3},
+    "cap": 6,
+    "short": {"fight": 0.3, "drafts": 0.8, "income": 0.5}
+  },
+  "will": {
+    "_about": "Privation at home wears away the will to fight. Each month a nation's count of privation rises by 'sup' times the share of its supplies that did not come and 'oil' times the share of its oil; a month with everything it needs takes 'heal' off again. Each point of the count takes 'per' off the nation's will to fight, up to 'most', and that counts toward surrender beside a lost capital, lost ground and a broken army. A country that imports half its food and is cut off for a year and a half asks for terms.",
+    "sup": 1, "oil": 0.3, "heal": 0.5, "per": 0.08, "most": 1
+  },
+  "_lanes": "A lane crosses the sea to 'to' through 'zones', where raiders sink a share of its cargoes and escorts and aircraft guard them, as on the convoy routes of navy.json. 'oil' and 'sup' are the shares of the recipient's monthly need the lane brings when every cargo arrives. 'source' is a nation the cargoes are bought from (a war with it ends the traffic); 'field' an oilfield they come from (the lane runs while its holder is no enemy); 'past' narrows an enemy holder shuts; 'shutBy' the sea powers whose blockade closes the lane while the recipient is at war with one of them; 'allies' the powers the recipient must be fighting beside for it to run at all. 'enter', 'draw' and 'via' are for drawing it on the map. A deal comes overland in fixed amounts: from whoever holds 'field', from 'seller', or (ore) by the Swedish ore traffic of navy.json; it stops when the seller is an enemy or in the enemy's camp.",
+  "lanes": [
+    {"id": "atlantic", "name": "the Atlantic lane", "from": "the Americas", "source": "USA", "to": "UK", "zones": ["natl", "wapp", "irish"], "oil": 0.95, "sup": 0.62, "text": "Oil from Texas and Venezuela, wheat, steel and machines, across the Atlantic to the western ports.", "enter": [0, 470], "draw": ["natl", "irish"]},
+    {"id": "gulf", "name": "the Gulf route", "from": "Iraq and the Persian Gulf", "field": "Iraq", "to": "UK", "zones": [], "oil": 0.15, "sup": 0, "text": "Oil from Iraq and the Gulf, by the long way round Africa. It flows while Iraq is in friendly hands."},
+    {"id": "french", "name": "the Biscay lane", "from": "the Americas and the colonies", "to": "FRA", "zones": ["biscay"], "oil": 1.05, "sup": 0.08, "text": "Oil and colonial goods into the French Atlantic ports.", "enter": [0, 1060], "draw": ["biscay"]},
+    {"id": "italian", "name": "the Gibraltar lane", "from": "the oceans beyond Gibraltar", "to": "ITA", "zones": ["wmed", "tyrr"], "past": ["Gibraltar"], "oil": 0.9, "sup": 0.12, "text": "Nearly all of Italy's oil comes in past Gibraltar. An enemy who holds the Rock shuts the door.", "enter": [0, 1440], "draw": ["wmed", "tyrr"], "via": "Gibraltar"},
+    {"id": "german", "name": "the North Sea lane", "from": "the oceans beyond the North Sea", "to": "GER", "zones": ["nsea"], "shutBy": ["UK", "USA"], "oil": 0.5, "sup": 0.1, "text": "Germany's trade with the wider world. A war with a great sea power closes it by blockade.", "enter": [300, 0], "draw": ["nsea"]},
+    {"id": "arctic", "name": "the Arctic convoys", "from": "Britain and America", "to": "SOV", "zones": ["norw", "barents"], "allies": ["UK", "USA"], "oil": 0.08, "sup": 0.12, "text": "Lorries, aviation fuel, tinned food and boots round the North Cape to Murmansk, once the Soviet Union fights beside the western Allies.", "enter": [0, 150], "draw": ["norw", "barents"]}
+  ],
+  "deals": [
+    {"id": "ploiesti", "name": "Romanian oil", "field": "Ploiesti", "to": "GER", "oil": 9, "sup": 0, "text": "Bought from the Ploiesti fields and brought up the Danube."},
+    {"id": "ploiesti-ita", "name": "Romanian oil", "field": "Ploiesti", "to": "ITA", "oil": 6, "sup": 0, "text": "Bought from the Ploiesti fields and brought across the Balkans."},
+    {"id": "pact", "name": "Soviet deliveries", "seller": "SOV", "to": "GER", "oil": 6, "sup": 6, "text": "Oil, grain and manganese delivered under the trade agreement of 1939, for as long as the two are at peace."},
+    {"id": "ore", "name": "Swedish iron ore", "ore": true, "to": "GER", "oil": 0, "sup": 5, "text": "Iron ore from the north of Sweden, across the Baltic in summer and through Narvik in winter."}
+  ],
+  "ai": {"armourAt": 6, "synthAt": 36}
+}

@@ -17,6 +17,7 @@ import {
   orderResearch, orderStopResearch,
 } from '../turn';
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
+import { GOOD_NAME, RES, fieldYield, keepsStores, resRules, seaLanes, standing as depotState, stores, type Book, type Lane, type ResLine } from '../resources';
 import { LEAGUE, leagueFounded, leagueMembers, ownPath, small as isSmall, type PathId, type PathOption } from '../league';
 import { ARSENAL, canStation, factoriesBuilt, workLevel, yardLevel, type Hull, type Offer } from '../arsenal';
 import { TRAITS, eliteCount, eliteIn, eliteOf, eliteRule, traitRule, traitsOf } from '../traits';
@@ -359,7 +360,7 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="labels"></g><g id="bridges"></g><g id="fleets"></g><g id="units"></g><g id="route"></g><g id="ghost"></g>
+          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="labels"></g><g id="bridges"></g><g id="fleets"></g><g id="units"></g><g id="route"></g><g id="ghost"></g>
         </svg>
         <div class="hint" id="hint"></div>
         <div class="passing" id="passing"></div>
@@ -516,6 +517,7 @@ function refresh(): void {
   ($('#legleague') as HTMLElement).hidden = !leagueMembers(g).length;
   $('#rails').innerHTML = railMarks();
   $('#bridges').innerHTML = bridgeMarks();
+  $('#lanes').innerHTML = laneMarks();
   $('#fleets').innerHTML = airBaseMarks() + fleetMarks();
 
   // Armies. Each nation's force in a region is one piece on the map: its colours on a standard with the branch
@@ -648,7 +650,7 @@ function drawBar(): void {
   // The level of a grand campaign is always in sight beside the date: a click shows what it does and lets it be changed.
   const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign. Click to see what it does, or to change it.">${pips(levelIndex(g))}${esc(levelOf(g).name)}</button>` : '';
   $('#when').innerHTML = `${when}${rank}<small>${esc(who)}${me ? ` · ${esc(w.text)}` : ''}</small>`;
-  $('#purse').innerHTML = me && g.nations[me].alive && !eve ? purse(me) : '';
+  $('#purse').innerHTML = me && g.nations[me].alive && !eve ? purse(me) + gauges(me) : '';
   let b = '';
   if (passing) b += `<button class="btn go" data-act="skip" title="Play the rest of the month at once">Skip ▸▸</button>`;
   else if (me && humanUp(g)) {
@@ -1007,6 +1009,12 @@ function alertList(): Alert[] {
   const cheapest = Math.min(...Object.values(PRODUCTION.builds).map((b) => b.cost));
   if (n.pp < 0) out.push({ kind: 'debt', text: 'The treasury is in debt: open the ledger' });
   if (Math.floor(n.pp) >= cheapest) out.push({ kind: 'build', text: `${money(n.pp)} in the treasury to spend`, tab: 'build' });
+  const depots = stores(g, me);
+  for (const b of depots ? [depots.oil, depots.sup] : []) {
+    const name = GOOD_NAME[b.good];
+    if (b.met < 0.995) out.push({ kind: `short ${b.good}`, text: `Short of ${name.toLowerCase()}: ${Math.round(b.met * 100)}% of the need met` });
+    else if (b.net < -0.04 && b.months <= 6) out.push({ kind: `low ${b.good}`, text: `${name} for ${monthsWordOf(b.months)}` });
+  }
   const stars = g.generals.filter((x) => x.nat === me && x.points > 0 && serving(x)).length;
   if (stars) out.push({ kind: 'generals', text: `${stars} general${stars === 1 ? ' has' : 's have'} skill points to spend`, tab: 'generals' });
   if (isOpen(g)) { const idle = idleTeams(g, me); if (idle) out.push({ kind: 'research', text: idle === 1 ? 'A research team has no work' : `${idle} research teams have no work`, tab: 'research' }); }
@@ -1024,6 +1032,7 @@ function followAlert(kind: string): void {
   if (!a) return;
   if (kind === 'honours') { const next = unseen(g)[0]; if (next) openModal({ kind: 'award', id: next.id }); return; }
   if (kind === 'debt') { openModal({ kind: 'ledger' }); return; }
+  if (kind.startsWith('short ') || kind.startsWith('low ')) { openModal({ kind: 'stores', nat: g.human || '' }); return; }
   if (a.tab) { ui.tab = a.tab as typeof ui.tab; ui.rail = ui.ship = ui.land = ui.rebase = false; refresh(); return; }
   const regs = a.regs ?? [];
   if (!regs.length) return;
@@ -1222,7 +1231,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with fleets on patrol; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -1253,7 +1262,7 @@ function regionPane(): string {
   return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
-    ${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${provinceSlots(r)}
+    ${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${oilNote(r)}${provinceSlots(r)}
     <h3>Forces here</h3>${acts}${units}${jobBlock(r)}
     ${based.length ? `<h3>On the airfields</h3>${based.map((f) => airRow(f, false, true)).join('')}` : ''}${provinceMuster(r)}${ui.sel >= 0 && me ? advice() : ''}`;
 }
@@ -2290,6 +2299,7 @@ function navyPane(): string {
       <div class="facts"><div class="fact"><span>Ships</span><b>${num(mine.reduce((t, f) => t + shipCount(f.ships), 0))}</b></div><div class="fact"><span>Fleets at sea</span><b>${mine.filter(atSea).length} of ${mine.length}</b></div><div class="fact"><span>Sea lift left</span><b>${n.sealift > 0 ? `${liftLeft(g, me)} corps` : 'None'}</b></div></div>${budgeted(g) ? '<div class="acts"><button class="btn small" data-act="armgo" data-arm="navy" title="Lay down warships and troopships in your shipyards.">Lay down more ships</button></div>' : ''}`;
     if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> The fleet stays in harbour until the nation is at war.</div>`;
     out += seaNotes();
+    out += laneNotes();
     out += `<h3>Your fleets</h3>${mine.length ? mine.map((f) => fleetRow(f, order && n.atWar.length > 0) + (order && ui.fleet === f.id && n.atWar.length ? fleetOrders(f) : '')).join('') : '<div class="empty">No ships under your flag.</div>'}`;
     const friends = g.fleets.filter((f) => f.nat !== me && afloat(f) && allied(g, f.nat, me)).sort(size);
     const foes = g.fleets.filter((f) => afloat(f) && atWar(g, f.nat, me)).sort(size);
@@ -2297,7 +2307,7 @@ function navyPane(): string {
     if (foes.length) out += `<h3>Enemy fleets</h3>${foes.map((f) => fleetRow(f, false, true)).join('')}`;
     return out;
   }
-  out += `<h2>The war at sea</h2><p class="sub">A fleet holds a sea by patrolling it. Where one side is much the stronger, that sea is closed to the other's troopships and supply ships. Click any sea on the map to see who holds it.</p>${seaNotes()}`;
+  out += `<h2>The war at sea</h2><p class="sub">A fleet holds a sea by patrolling it. Where one side is much the stronger, that sea is closed to the other's troopships and supply ships. Click any sea on the map to see who holds it.</p>${seaNotes()}${laneNotes()}`;
   const war = g.fleets.filter((f) => afloat(f) && g.nations[f.nat].atWar.length > 0);
   const nats = [...new Set(war.map((f) => f.nat))].sort((a, b) => war.filter((f) => f.nat === b).reduce((t, f) => t + fleetPower(g, f), 0) - war.filter((f) => f.nat === a).reduce((t, f) => t + fleetPower(g, f), 0));
   for (const nat of nats) out += `<h3>${esc(natName(nat))}</h3>${war.filter((f) => f.nat === nat).map((f) => fleetRow(f, false)).join('')}`;
@@ -2589,7 +2599,7 @@ function openModal(m: typeof ui.modal): void {
   if (!m) { veil.classList.remove('open'); return; }
   veil.classList.add('open');
   const card = $('#card');
-  card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'report' || m.kind === 'ledger' || m.kind === 'tech');
+  card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'report' || m.kind === 'ledger' || m.kind === 'tech' || m.kind === 'stores');
   card.classList.toggle('techcard', m.kind === 'tech');
   if (m.kind === 'start') card.innerHTML = startCard();
   else if (m.kind === 'report') {
@@ -2627,6 +2637,11 @@ function openModal(m: typeof ui.modal): void {
     const nat = m.nat || g.human;
     if (!nat || !g.nations[nat]) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = ledgerCard(nat);
+  }
+  else if (m.kind === 'stores') {
+    const nat = m.nat || g.human;
+    if (!nat || !g.nations[nat] || !resRules(g)) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = storesCard(nat);
   }
   else if (m.kind === 'general') {
     const x = g.generals[m.id];
@@ -3018,6 +3033,167 @@ function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: numbe
     <footer><button class="btn go" data-act="close">${me && humanUp(g) ? 'Give orders' : 'Continue'}</button></footer>`;
 }
 
+// ---- Oil and supplies: the gauges on the top bar, the books, and the shipping lanes on the map ----
+
+/** An amount of oil or supplies: whole numbers once they are big enough to read that way. */
+const amt = (x: number): string => (Math.abs(x) >= 9.95 ? num(x) : (Math.round(x * 10) / 10).toString());
+const signedAmt = (x: number): string => `${x < -0.04 ? '−' : '+'}${amt(Math.abs(x))}`;
+const monthsWordOf = (m: number): string => { const k = Math.max(1, Math.round(m)); return `${k} month${k === 1 ? '' : 's'}`; };
+const STANDING: Record<ReturnType<typeof depotState>, string> = { ample: 'Ample', steady: 'Steady', tightening: 'Running down', short: 'Short', dry: 'Run dry' };
+
+/** One of the two gauges beside the treasury: what is in the depots, and whether it is rising, falling or gone. */
+function gauge(b: Book): string {
+  const name = GOOD_NAME[b.good];
+  const short = b.met < 0.995, falling = b.net < -0.04, low = !short && falling && b.months <= 6;
+  const line = short ? `${Math.round(b.met * 100)}% of need met` : falling && b.months < 36 ? `${monthsWordOf(b.months)} left` : `${signedAmt(b.net)} a month`;
+  const tip = short
+    ? `The depots are empty and only ${Math.round(b.met * 100)}% of the need came in this month. ${b.effects.join('. ')}. Click to see why.`
+    : `${amt(b.made)} comes in each month and ${amt(b.need)} goes out. ${falling ? `At this rate the depots are empty in ${monthsWordOf(b.months)}. ` : ''}Click to see where it comes from.`;
+  return `<button class="purse store ${b.good}${short ? ' debt' : low ? ' low' : ''}" data-act="stores" data-good="${b.good}" title="${esc(tip)}"><span class="pl">${name}</span><b>${num(Math.floor(b.stock + 1e-6))}</b><i class="${short || falling ? 'down' : 'up'}">${line}</i></button>`;
+}
+
+/** The gauges for a power that keeps stocks; nothing for a small country, which buys what it needs abroad. */
+function gauges(me: string): string {
+  const v = stores(g, me);
+  return v ? gauge(v.oil) + gauge(v.sup) : '';
+}
+
+/** One side of the books: a bar for the depots, then what comes in and what goes out. */
+function bookBlock(b: Book): string {
+  const name = GOOD_NAME[b.good], lower = name.toLowerCase();
+  const fill = Math.max(0, Math.min(100, (b.stock / Math.max(b.cap, 1e-9)) * 100));
+  const short = b.met < 0.995, falling = b.net < -0.04;
+  const state = short
+    ? `<div class="note bad"><b>Short of ${lower}.</b> The depots are empty and only ${Math.round(b.met * 100)}% of the need came in this month.<ul>${b.effects.map((e) => `<li>${esc(e)}</li>`).join('')}</ul></div>`
+    : falling && b.months <= 12
+      ? `<div class="note warn"><b>${upFirst(monthsWordOf(b.months))} left.</b> More is going out than coming in. Once the depots are empty the forces get only what arrives that month.</div>`
+      : '';
+  const row = (l: ResLine, sign: 1 | -1): string => {
+    const unit = l.count === undefined || l.lane ? '' : l.key === 'fast' || l.key === 'foot' || l.key === 'army' ? `${num(l.count)} division${l.count === 1 ? '' : 's'}` : l.key === 'air' ? `${num(l.count)} aircraft` : l.key === 'sea' || l.key === 'port' ? `${num(l.count)} ship${l.count === 1 ? '' : 's'}` : l.key === 'fields' || l.key === 'taken' ? `${l.count} field${l.count === 1 ? '' : 's'}` : l.key === 'fac' || l.key === 'tech' ? `${num(l.count)} working factor${l.count === 1 ? 'y' : 'ies'}` : `${l.count} province${l.count === 1 ? '' : 's'}`;
+    const stopped = l.lane !== undefined && Math.abs(l.amount) < 1e-9;
+    return `<tr${stopped ? ' class="stopped"' : ''}><td>${esc(l.label)}${unit ? ` <small>${unit}</small>` : ''}${l.note ? `<small class="lnote">${esc(l.note)}</small>` : ''}</td><td class="${l.amount * sign < -1e-9 ? 'neg' : ''}">${stopped ? '0' : signedAmt(l.amount * sign)}</td></tr>`;
+  };
+  return `<section class="sbook ${b.good}">
+    <h3>${name} <span class="inhand">${num(Math.floor(b.stock + 1e-6))} in the depots · room for ${num(b.cap)}</span></h3>
+    <div class="sbar${short ? ' dry' : falling && b.months <= 6 ? ' low' : ''}" role="img" aria-label="${name}: the depots are ${Math.round(fill)}% full"><i style="width:${fill.toFixed(1)}%"></i></div>
+    <div class="sfacts"><span>Comes in <b>${signedAmt(b.made)}</b></span><span>Goes out <b>${signedAmt(-b.need)}</b></span><span class="${b.net < -0.04 ? 'neg' : 'pos'}">${b.net < -0.04 ? 'Short each month' : 'Left over each month'} <b>${signedAmt(b.net)}</b></span></div>
+    ${state}
+    <table class="ltab">${b.income.map((l) => row(l, 1)).join('')}<tr class="sum"><td>Comes in each month</td><td>${signedAmt(b.made)}</td></tr></table>
+    <table class="ltab" style="margin-top:10px">${b.spend.map((l) => row(l, -1)).join('') || '<tr><td>Nothing needs any</td><td>0</td></tr>'}<tr class="sum"><td>Goes out each month</td><td>${signedAmt(-b.need)}</td></tr></table>
+  </section>`;
+}
+
+const seaNames = (zones: number[]): string => { const xs = zones.map((z) => `the ${g.seas[z].name}`); return xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`; };
+
+/** One lane or overland deal: what it carries, how much is getting through, and what to do about it. */
+function laneRow(l: Lane, me: string | null): string {
+  const pct = Math.round(l.flow * 100);
+  const mine = !!me && (l.to === me || allied(g, l.to, me)), foe = !!me && atWar(g, me, l.to);
+  const carries = [l.full.oil > 0.05 ? `oil ${amt(l.oil)} of ${amt(l.full.oil)}` : '', l.full.sup > 0.05 ? `supplies ${amt(l.sup)} of ${amt(l.full.sup)}` : ''].filter(Boolean).join(' · ');
+  const status = l.state === 'cut' ? 'Cut' : l.state === 'idle' ? 'Not running' : `${pct}% getting through`;
+  const fight = l.kind === 'sea' && l.zones.length && l.state !== 'cut' && l.state !== 'idle' && g.nations[l.to].atWar.length
+    ? ` Raiders ${num(l.raid)} against escorts ${num(l.guard)} in ${seaNames(l.zones)}.` : '';
+  const advice = l.kind !== 'sea' || !l.zones.length || l.state === 'idle' ? ''
+    : mine && l.state !== 'cut' ? ` Fleets on patrol in those seas, and aircraft on the coasts, keep it open.`
+    : foe && l.state !== 'cut' ? ` Submarines and raiders sent into those seas bleed it.` : '';
+  return `<div class="lane ${l.state}">
+    <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">${l.kind === 'sea' ? 'By sea' : 'Overland'}</span><span class="lflow">${status}</span></div>
+    <div class="oddsbar" title="${status}"><i style="width:${pct}%"></i></div>
+    <small>${esc(l.text)}${carries ? ` This month: ${carries}.` : ''}${l.why ? ` <b>${esc(l.why)}</b>` : ''}${esc(fight)}${advice}</small>
+    ${l.path.length ? `<div class="acts"><button class="btn small" data-act="lanego" data-id="${l.id}">Show on the map</button></div>` : ''}
+  </div>`;
+}
+
+/** How the other powers stand, as far as anyone outside can judge: a word for each, never a number. */
+function standingTable(skip: string): string {
+  const rows = RES.nations.filter((id) => id !== skip && g.nations[id]?.alive).map((id) => {
+    const v = stores(g, id);
+    if (!v) return '';
+    const word = (b: Book): string => { const s = depotState(b); return `<td class="st ${s}">${STANDING[s]}</td>`; };
+    return `<tr><td>${flagIcon(id, g.nations[id].color, 18, 'inh')} ${esc(natName(id))}</td>${word(v.oil)}${word(v.sup)}</tr>`;
+  }).join('');
+  return rows ? `<table class="ltab sttab"><tr><th></th><th>Oil</th><th>Supplies</th></tr>${rows}</table>` : '';
+}
+
+/** The books for oil and supplies: the player's own in full, an ally's in full, anyone else's only as far as it shows from outside. */
+function storesCard(nat: string): string {
+  const n = g.nations[nat];
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  const mine = nat === me, open = !me || mine || allied(g, nat, me);
+  const v = stores(g, nat);
+  const head = `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Oil and supplies · ${date(g.turn)}</div><h2>${flagIcon(nat, n.color, 34, 'inh')} ${esc(mine ? 'Your depots' : `The depots of ${theName(nat)}`)}</h2></header>`;
+  const foot = `<footer>${mine ? '<button class="btn" data-act="ledger">Open the ledger</button>' : me && keepsStores(g, me) ? `<button class="btn" data-act="stores" data-nat="${me}">Your own depots</button>` : ''}<button class="btn go" data-act="close">Close</button></footer>`;
+  const story = `Money builds an army, oil moves it, and supplies keep it fighting. Think of a lorry: money buys the lorry, oil is the fuel in its tank, and supplies are the load it carries and the driver's dinner. A great power makes some of each at home, buys some from its neighbours, and brings the rest in by sea. Whoever cuts those sea lanes chokes it.`;
+  if (!v) {
+    return `${head}<div class="body ledger stores"><p class="sub">${story}</p>
+      <div class="note"><b>${esc(upFirst(theName(nat)))} keeps no stocks.</b> A small country buys the little oil and the supplies it needs abroad, month by month, and is never short. Only the great powers have fleets, air forces and tank armies large enough to run dry.</div>
+      <h3>How the great powers stand</h3>${standingTable('') || '<div class="empty">No great power is in the field.</div>'}
+      <p class="sub" style="margin-top:8px">The shipping lanes are drawn on the map. A lane in amber is losing cargoes to raiders; one in red is cut.</p></div>${foot}`;
+  }
+  const lanes = v.lanes.filter((l) => l.state !== 'idle' || l.kind === 'sea');
+  const laneList = lanes.length ? lanes.map((l) => laneRow(l, me)).join('') : `<div class="empty">${esc(upFirst(theName(nat)))} lives on what it makes at home.</div>`;
+  if (!open) {
+    const word = (b: Book): string => { const s = depotState(b); return `<div class="lfact"><span>${GOOD_NAME[b.good]}</span><b class="st ${s}">${STANDING[s]}</b></div>`; };
+    return `${head}<div class="body ledger stores"><p class="sub">${story}</p>
+      <div class="lfacts two">${word(v.oil)}${word(v.sup)}</div>
+      <p class="sub">What ${esc(theName(nat))} holds in its depots is its own secret. This is how it looks from outside: what its lanes carry, and what is getting through.</p>
+      <h3>Its lanes and deals</h3><div class="lanes">${laneList}</div></div>${foot}`;
+  }
+  return `${head}<div class="body ledger stores">
+    <p class="sub">${story}</p>
+    <div class="lcols">${bookBlock(v.oil)}${bookBlock(v.sup)}</div>
+    ${v.willLost > 0.005 ? `<div class="note bad"><b>Privation at home.</b> Months of empty depots have worn away ${Math.round(v.willLost * 100)}% of the nation's will to fight. It counts toward surrender beside lost ground and a broken army, and it mends only slowly once the depots are filled again.</div>` : ''}
+    <h3>Shipping lanes and deals <span class="inhand">what comes from abroad</span></h3>
+    <div class="lanes">${laneList}</div>
+    <h3>How the other powers stand <span class="inhand">as far as it shows from outside</span></h3>
+    ${standingTable(nat) || '<div class="empty">No other great power is in the field.</div>'}
+  </div>${foot}`;
+}
+
+/** The shipping lanes on the map: a line through each lane's seas, pale while cargoes pass, amber while raiders bleed it, red and broken when it is cut. */
+function laneMarks(): string {
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  let out = '';
+  for (const l of seaLanes(g)) {
+    if (l.state === 'idle' || l.path.length < 2) continue;
+    const p = l.path;
+    let d = `M${p[0][0]} ${p[0][1]}`;
+    for (let i = 0; i < p.length - 1; i++) {
+      const a = p[i - 1] ?? p[i], b = p[i], c = p[i + 1], e = p[i + 2] ?? c;
+      d += `C${(b[0] + (c[0] - a[0]) / 6).toFixed(1)} ${(b[1] + (c[1] - a[1]) / 6).toFixed(1)} ${(c[0] - (e[0] - b[0]) / 6).toFixed(1)} ${(c[1] - (e[1] - b[1]) / 6).toFixed(1)} ${c[0]} ${c[1]}`;
+    }
+    const side = me ? (l.to === me || allied(g, l.to, me) ? ' ours' : atWar(g, me, l.to) ? ' theirs' : '') : '';
+    // The label sits on the longest stretch of open water, a little above the line.
+    let k = 0, best = 0;
+    for (let i = 0; i < p.length - 1; i++) { const len = Math.hypot(p[i + 1][0] - p[i][0], p[i + 1][1] - p[i][1]); if (len > best) { best = len; k = i; } }
+    const lx = (p[k][0] + p[k + 1][0]) / 2, ly = (p[k][1] + p[k + 1][1]) / 2;
+    const word = l.state === 'cut' ? 'cut' : `${Math.round(l.flow * 100)}%`;
+    const tip = `${upFirst(l.name)}: feeds ${theName(l.to)}. ${l.state === 'cut' ? l.why : `${Math.round(l.flow * 100)}% of its cargoes are getting through.`}`;
+    out += `<g class="lane ${l.state}${side}" data-act="stores" data-nat="${l.to}"><title>${esc(tip)}</title><path class="lanebed" d="${d}"/><path class="laneline" d="${d}"/><path class="lanehit" d="${d}"/><text class="lanelbl" x="${lx.toFixed(1)}" y="${(ly - 7).toFixed(1)}">${esc(upFirst(l.name.replace(/^the /, '')))} · ${word}</text></g>`;
+  }
+  return out;
+}
+
+/** The lanes that matter to the player, for the Navy tab: his own and his allies' to guard, his enemies' to raid. */
+function laneNotes(): string {
+  if (!resRules(g)) return '';
+  const me = g.human && g.nations[g.human].alive ? g.human : null;
+  const rows = seaLanes(g).filter((l) => l.state !== 'idle' && (!me || l.to === me || allied(g, l.to, me) || atWar(g, me, l.to)));
+  if (!rows.length) return '';
+  return `<h3>Shipping lanes</h3><p class="sub">Oil and supplies come to the great powers by sea. Guard your own lanes with fleets on patrol; send raiders into an enemy's.</p><div class="lanes">${rows.map((l) => laneRow(l, me)).join('')}</div>`;
+}
+
+/** What an oilfield is worth in oil, for the province panel. */
+function oilNote(r: Region): string {
+  if (!r.oil || !resRules(g)) return '';
+  const own = fieldYield(g, r, r.owner), held = fieldYield(g, r);
+  const buyers = RES.deals.filter((d) => d.field === r.name && d.oil > 0 && stores(g, d.to)?.lanes.some((l) => l.id === d.id && l.state === 'open'));
+  const who = keepsStores(g, r.ctrl)
+    ? `It gives ${esc(theName(r.ctrl))} ${amt(held)} oil a month${r.ctrl !== r.owner ? `, less than the ${amt(own)} it gave its owner` : ''}.`
+    : `It yields ${amt(own)} oil a month.${buyers.length ? ` ${buyers.map((d) => `${natName(d.to)} buys ${amt(d.oil)}`).join(' and ')}.` : ''}`;
+  return `<div class="note"><b>Oilfield.</b> ${who} A conqueror gets ${Math.round(RES.oil.occupied * 100)}% of what the owner did.</div>`;
+}
+
 // ---- The ledger: where the money comes from, what the forces cost, and what every province pays ----
 
 type Arm = 'army' | 'navy' | 'air' | 'works';
@@ -3081,7 +3257,7 @@ function ledgerCard(nat: string): string {
       <div class="lprovs">${prov || '<div class="empty">No provinces held.</div>'}</div>
       ${L.provinces.length > 10 ? `<div class="acts"><button class="btn small" data-act="ledgerall">${all ? 'Show the ten richest' : `Show all ${L.provinces.length} provinces`}</button></div>` : ''}
     </div>
-    <footer>${mine ? '<button class="btn" data-act="ledgerbuild">Raise forces</button>' : ''}<button class="btn go" data-act="close">Close</button></footer>`;
+    <footer>${mine ? '<button class="btn" data-act="ledgerbuild">Raise forces</button>' : ''}${resRules(g) ? `<button class="btn" data-act="stores" data-nat="${nat}">Oil and supplies</button>` : ''}<button class="btn go" data-act="close">Close</button></footer>`;
 }
 
 const listOf = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
@@ -3448,6 +3624,24 @@ function onClick(e: MouseEvent): void {
     case 'skip': endPassing(); break;
     case 'alert': followAlert(t.dataset.kind!); break;
     case 'ledger': openModal({ kind: 'ledger', nat: t.dataset.nat || g.human || '' }); break;
+    case 'stores': {
+      openModal({ kind: 'stores', nat: t.dataset.nat || g.human || '' });
+      // Asked for by one of the two gauges, the card opens at that side of the books.
+      const side = t.dataset.good ? document.querySelector(`#card .sbook.${t.dataset.good}`) : null;
+      if (side && window.innerWidth < 760) side.scrollIntoView({ block: 'start' });
+      break;
+    }
+    case 'lanego': {
+      const l = seaLanes(g).find((x) => x.id === t.dataset.id);
+      openModal(null);
+      if (l && l.path.length) {
+        ui.tab = 'navy';
+        refresh();
+        const xs = l.path.map((p) => p[0]), ys = l.path.map((p) => p[1]);
+        focusOnPoint((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2);
+      }
+      break;
+    }
     case 'ledgerall': { const top = $('#card').scrollTop; openModal({ ...ui.modal!, all: !ui.modal?.all }); $('#card').scrollTop = top; break; }
     case 'ledgergo': { openModal(null); ui.tab = 'region'; selectRegion(id); refresh(); focusOn([id]); break; }
     case 'ledgerbuild': openModal(null); ui.tab = 'build'; refresh(); break;

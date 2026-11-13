@@ -15,6 +15,7 @@ import { afterBattle, cmdAp, cmdAttack, cmdCutOff, cmdDefence, cmdLine, cmdLoss,
 import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { techTick, winterReady } from './tech';
+import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
@@ -494,7 +495,8 @@ export const men = (c: Corps): number => Math.round(c.divs * c.str * MEN_PER_DIV
 
 function airOf(g: Game, nats: Set<string>, enemies: Set<string>): number {
   let s = 0;
-  for (const id of nats) s += g.nations[id].air;
+  // An air force short of fuel flies fewer sorties (the grand campaign).
+  for (const id of nats) s += g.nations[id].air * fuelAir(g, id);
   for (const n of Object.values(g.nations)) {
     // An ally at war with the same enemy lends a share of its air force, if it has airfields on the map to fly from.
     if (!n.alive || nats.has(n.id) || n.capital < 0) continue;
@@ -550,7 +552,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const land = opts.sea === undefined;
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
   const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide ? combinedArms(g, defenders, target, true) : null;
-  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1;
+  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1;
   // Armies that have outrun their railhead: how far the worst of them is from it, and what it is worth there.
   let roadA = 0, railA = 1, roadD = 0, railD = 1;
   const rivers = new Set<string>();
@@ -586,6 +588,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (wide && sneakOn(g, c.nat, target.ctrl)) { p *= RELATIONS.sneak.attack; sneaked = true; }
     // What its nation does best, and what it is itself if it is one of the nation's special formations (the grand campaign).
     if (wide) { const gift = traitAttack(g, c, target, !land); if (gift !== 1) { p *= gift; giftA = Math.max(giftA, gift); } }
+    // Tanks without fuel and troops without shells: a nation whose depots are empty fights weaker (the grand campaign).
+    if (wide) { const short = shortAttack(g, c); if (short !== 1) { p *= short; shortA = Math.min(shortA, short); } }
     if (g.nations[c.nat].slowCommand) p *= 0.85;
     p *= techMul(g, c.nat, 'doctrine');
     if (opts.sea !== undefined) p *= opts.sea;
@@ -629,6 +633,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       if (head.defence < 1) { p *= head.defence; roadD = Math.max(roadD, head.road); railD = Math.min(railD, head.defence); }
     }
     if (wide) { const gift = traitDefence(g, d, target); if (gift !== 1) { p *= gift; giftD = Math.max(giftD, gift); } }
+    if (wide) { const short = shortDefence(g, d); if (short !== 1) { p *= short; shortD = Math.min(shortD, short); } }
     const proud = storyDefence(g, d, target, attackers);
     if (proud !== 1) { p *= proud; proudD = Math.max(proudD, proud); }
     const lead = cmdDefence(g, d);
@@ -750,6 +755,18 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     lines.push({
       label: 'Abilities and technology', value: [a.length ? `Attacking: ${say(a)}` : '', d.length ? `Defending: ${say(d)}` : ''].filter(Boolean).join('. '),
       effect: [giftA !== 1 ? `Attack up as much as ${Math.round((giftA - 1) * 100)}% for the corps it covers` : '', giftD !== 1 ? `${giftA !== 1 ? 'defence' : 'Defence'} up as much as ${Math.round((giftD - 1) * 100)}% for the corps it covers` : ''].filter(Boolean).join(', '),
+    });
+  }
+  if (shortA < 1 || shortD < 1) {
+    // Who is short of what: the nation on each side whose depots are emptiest.
+    const worst = (cs: Corps[]): string => {
+      let fuel = 1, sup = 1;
+      for (const c of cs) { fuel = Math.min(fuel, c.kind === 'arm' || c.kind === 'mot' ? fuelMet(g, c.nat) : 1); sup = Math.min(sup, suppliesMet(g, c.nat)); }
+      return [fuel < 1 ? `fuel for ${Math.round(fuel * 100)}% of what their tanks and lorries need` : '', sup < 1 ? `${Math.round(sup * 100)}% of the supplies they need` : ''].filter(Boolean).join(' and ');
+    };
+    lines.push({
+      label: 'Oil and supplies', value: [shortA < 1 ? `Attackers have ${worst(attackers)}` : '', shortD < 1 ? `Defenders have ${worst(defenders)}` : ''].filter(Boolean).join('. '),
+      effect: [shortA < 1 ? `Attack cut to as little as ${Math.round(shortA * 100)}%` : '', shortD < 1 ? `${shortA < 1 ? 'defence' : 'Defence'} cut to as little as ${Math.round(shortD * 100)}%` : ''].filter(Boolean).join(', '),
     });
   }
   if (sneaked) lines.push({ label: 'Surprise', value: 'War was declared this month on a country at peace', effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
@@ -1081,7 +1098,10 @@ export function collapseScore(g: Game, nat: string): number {
   // The colonies are fought over like any other ground, but a nation stands or falls by its home country.
   for (const r of g.regions) if (r.owner === nat && !r.overseas) { vp += r.vp; if (allied(g, nat, r.ctrl)) held += r.vp; }
   const army = n.armyPeak > 0 ? clamp(armySize(g, nat) / n.armyPeak, 0, 1) : 1;
-  return 0.45 * capLost + 0.35 * (vp ? 1 - held / vp : 0) + 0.2 * (1 - army);
+  const score = 0.45 * capLost + 0.35 * (vp ? 1 - held / vp : 0) + 0.2 * (1 - army);
+  // A people gone short for months will bear less (the grand campaign): this is how a blockade chokes a country.
+  const worn = willLost(g, nat);
+  return worn > 0 ? score + worn : score;
 }
 
 export function checkCollapse(g: Game, nat: string, by: string): void {
@@ -1451,6 +1471,8 @@ export function startPhase(g: Game, nat: string): void {
   airUpkeep(g, nat);
   researchTick(g, nat);
   techTick(g, nat);
+  // Oil and supplies come in and go out before the month's money is counted: idle factories earn less (the grand campaign).
+  resourcesTick(g, nat);
   computeSupply(g);
   cutOffNews(g);
   // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good
@@ -1468,7 +1490,8 @@ export function startPhase(g: Game, nat: string): void {
   // Overseas, every man and tank has to come by sea first: the drafts arrive slower.
   // A corps the player has told to keep its veterans together asks for no drafts.
   // The level of the campaign quickens or slows the drafts, for the player or for his rivals: at the fair level, not at all.
-  const drafts = draftsMul(g, nat) * traitDrafts(g, nat);
+  // A nation whose supplies have run out cannot equip the drafts it trains (the grand campaign).
+  const drafts = draftsMul(g, nat) * traitDrafts(g, nat) * supDrafts(g, nat);
   const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
   const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;
@@ -1504,7 +1527,7 @@ export function startPhase(g: Game, nat: string): void {
     }
     c.fought = false;
     if (c.gaveWay) delete c.gaveWay;
-    c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c);
+    c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c) - (fuelSlows(g, c) ? 1 : 0);
   });
   for (const [reg, lost] of starved) {
     // Small parties are not news, unless they are the end of an army the newsreel has already said was surrounded.

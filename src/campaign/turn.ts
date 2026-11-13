@@ -17,6 +17,7 @@ import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './eng
 import { tearUp, whyNotCutRail } from './rails';
 import { foundBureau, setTeams } from './research';
 import { startResearch, stopResearch, techView, whyNotResearch, type TechView } from './tech';
+import { seaLanes, stores, type Lane, type StoresView } from './resources';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
@@ -425,6 +426,25 @@ export function orderCancelBuild(g: Game, id: number): boolean {
  */
 export function techTree(g: Game): TechView | null {
   return g.human ? techView(g, g.human) : null;
+}
+
+/**
+ * Oil and supplies (the grand campaign): the books of the player's nation, or of any power that keeps stocks. For
+ * each of the two: what is in the depots and the most they hold, every source and every use for the month, months
+ * left at this rate, the share of the need that was met, and what a shortage is costing in words; and every lane and
+ * overland deal that feeds the nation, with the share getting through. Null in a historical scenario, and for a
+ * small country, which buys what it needs abroad and is never short.
+ */
+export function depots(g: Game, nat: string | null = g.human): StoresView | null {
+  return nat ? stores(g, nat) : null;
+}
+
+/**
+ * Every shipping lane on the map this month, whoever it feeds: the points to draw it through, the seas where it can
+ * be raided or guarded, the share of its cargoes getting through, and whether it is open, raided or cut.
+ */
+export function shippingLanes(g: Game): Lane[] {
+  return seaLanes(g);
 }
 
 /** Why the player cannot begin this technology now, or null when a free research team can start on it. */

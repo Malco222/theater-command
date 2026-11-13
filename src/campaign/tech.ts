@@ -9,6 +9,7 @@ import { turnToDate } from '../core/ticket';
 import { headline } from './game';
 import { RESEARCH } from './research';
 import { traitRule, type Trait, type When } from './traits';
+import { RES, keepsStores, oilMonths } from './resources';
 import type { Field, Game, Nation, TechState } from './types';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine';
@@ -33,6 +34,8 @@ export interface Tech {
   slots?: number;
   /** Ends the eastern winter's penalty for the nation's troops. */
   winterKit?: boolean;
+  /** Oil made each month by every working factory at home, out of any raider's reach. */
+  oil?: number;
   sealift?: number;
   attack?: number;
   defence?: number;
@@ -55,7 +58,7 @@ export const TECH = data as unknown as {
   techs: Tech[];
   start: Record<string, string[]>;
   units: { para: TechUnit };
-  ai: { tier: number; branch: number; early: number; teams: number; later: number; skip: Record<string, string[]>; order: Record<string, Branch[]> };
+  ai: { tier: number; branch: number; early: number; teams: number; later: number; fuel?: number; skip: Record<string, string[]>; order: Record<string, Branch[]> };
 };
 
 const BY_ID: Record<string, Tech> = {};
@@ -194,10 +197,15 @@ export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
   const A = TECH.ai, order = A.order[nat] ?? A.order._default, year = yearOf(turn);
   const skip = (id: string): boolean => A.skip._all.includes(id) || !!A.skip[nat]?.includes(id);
   let best: Tech | null = null, low = Infinity;
+  const thirsty = oilMonths(g, nat) < RES.ai.synthAt;
   for (const t of TECH.techs) {
     if (s.done.includes(t.id) || s.work.some((w) => w.id === t.id) || t.needs.some((x) => !s.done.includes(x))) continue;
     const place = order.indexOf(t.branch);
-    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0);
+    // A staff watching its oil run down puts the fuel chemists first.
+    const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
+    // A small country buys its oil abroad and has no use for fuel chemistry.
+    const idle = t.oil && !keepsStores(g, nat) ? A.later : 0;
+    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle;
     if (score < low) { low = score; best = t; }
   }
   return best ? best.id : null;
@@ -313,6 +321,7 @@ export function techRule(t: Tech): string {
   if (rest) out.push(rest);
   if (t.slots) out.push(t.slots === 1 ? 'One more research team.' : `${t.slots} more research teams.`);
   if (t.winterKit) out.push('Its troops no longer march and fight worse in the eastern winter.');
+  if (t.oil) out.push(`Every working factory at home also makes ${t.oil} oil a month, where no raider can reach it. A country that keeps no stocks of oil has no use for it.`);
   return out.join(' ');
 }
 
