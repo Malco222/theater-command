@@ -157,6 +157,9 @@ export interface Plan {
   idle?: boolean;
   /** Lowest odds at which the player attacks. */
   minOdds?: number;
+  /** Version 57: go for the town the directive names: mass on it, and attack and storm it at shorter odds (default off). */
+  chase?: boolean;
+  chaseOdds?: number;
   /** Wars the player starts: [month number, nation]. */
   declare?: [number, string][];
   /** Never march out of the home country (a defender). */
@@ -193,6 +196,13 @@ function distanceToEnemy(g: Game, me: string, homeOnly: boolean): Int16Array {
     d[j] = d[q[i]] + 1; q.push(j);
   }
   return d;
+}
+
+/** The province the standing directive wants taken, for a player who chases directives; -1 if none. */
+function chaseOf(g: Game, plan: Plan): number {
+  if (!plan.chase) return -1;
+  const d = (T as any).governmentOf?.(g)?.directive;
+  return d && (d.kind === 'take' || d.kind === 'relief') && typeof d.region === 'number' ? d.region : -1;
 }
 
 export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
@@ -279,6 +289,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   // The army.
   const my = (): Corps[] => g.corps.filter((c) => c.nat === me && T.canOrder(g, c) && c.ap > 0 && !(c.kind === 'eng' && (c.job || (c as any).ptBusy === g.turn)));
   const capital = g.nations[me].capital;
+  const chaseId = chaseOf(g, plan), chaseOdds = plan.chaseOdds ?? 1.1;
   for (let pass = 0; pass < 4; pass++) {
     let did = 0;
     // Attacks, best odds first.
@@ -289,12 +300,12 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
       const cands = limitAttackers(g, T.candidates(g, r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), r);
       const out = cands.length ? T.attackOutlook(g, cands, r) : null;
       return { r, cands, odds: out?.odds ?? 0 };
-    }).filter((x) => x.odds >= minOdds && (!plan.homeOnly || x.r.owner === me)).sort((a, b) => b.odds - a.odds);
+    }).filter((x) => x.odds >= (x.r.id === chaseId ? chaseOdds : minOdds) && (!plan.homeOnly || x.r.owner === me || x.r.id === chaseId)).sort((a, b) => Number(b.r.id === chaseId) - Number(a.r.id === chaseId) || b.odds - a.odds);
     for (const x of scored) {
       const cands = limitAttackers(g, T.candidates(g, x.r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), x.r);
       if (!cands.length || !hostileUnits(g, x.r, me).length) continue;
       const out = T.attackOutlook(g, cands, x.r);
-      if (!out || out.odds < minOdds) continue;
+      if (!out || out.odds < (x.r.id === chaseId ? chaseOdds : minOdds)) continue;
       const rep = T.orderAttack(g, cands, x.r);
       if (rep) { row.attacksOrdered++; if (rep.taken || (rep as any).siege) row.attacksWon++; did++; }
     }
@@ -304,7 +315,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
       const sr = run as any;
       for (const r of g.regions) {
         if (!atWar(g, me, r.ctrl) || !r.units.some((u) => u.nat === me && !u.dead)) continue;
-        if (plan.homeOnly && r.owner !== me) continue;
+        if (plan.homeOnly && r.owner !== me && r.id !== chaseId) continue;
         if ((plan as any).noStorm || T.whyNotStormTown(g, r.id) !== null) continue;
         const out = T.stormOutlook(g, r.id);
         const view = T.townSiege(g, r.id);
@@ -312,7 +323,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
         const want = sat >= 2 ? Math.min(minOdds, 1.1) : Math.min(minOdds, 1.3);
         // Version 55: assault dice run against the attacker, so the card's chance is what an average player goes by:
         // six in ten the first two months round a town, an even chance after that.
-        const fair = out && typeof (out as any).even === 'number' ? out.chance >= ((plan as any).stormAt ?? (sat >= 2 ? 0.5 : 0.6)) : !!out && out.odds >= want;
+        const fair = out && typeof (out as any).even === 'number' ? out.chance >= (r.id === chaseId ? 0.4 : (plan as any).stormAt ?? (sat >= 2 ? 0.5 : 0.6)) : !!out && out.odds >= want;
         if (!out || !fair) { if (out) sr.stormsHeld = (sr.stormsHeld ?? 0) + 1; continue; }
         const rep = T.orderStorm(g, r.id);
         if (rep && typeof (out as any).chance === 'number') { const b = Math.min(9, Math.floor(out.chance * 10)); sr.calib = sr.calib ?? {}; sr.calib[b] = sr.calib[b] ?? [0, 0]; sr.calib[b][0]++; if (rep.taken) sr.calib[b][1]++; }
@@ -338,9 +349,9 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
         if (info.attack || id === c.reg) continue;
         const r = g.regions[id];
         const enemyGround = atWar(g, me, r.ctrl);
-        if (plan.homeOnly && r.owner !== me) continue;
+        if (plan.homeOnly && r.owner !== me && id !== chaseId) continue;
         const dist = d[id] < 0 ? 99 : d[id];
-        const score = (enemyGround ? 50 + r.vp * 10 + (r.cap ? 40 : 0) : 0) - dist * 4 - info.cost * 0.5;
+        const score = (enemyGround ? 50 + r.vp * 10 + (r.cap ? 40 : 0) : 0) - dist * 4 - info.cost * 0.5 + (id === chaseId ? 300 : 0);
         if (score > bestScore) { bestScore = score; best = id; }
       }
       const cur = (d[c.reg] < 0 ? 99 : d[c.reg]);
@@ -382,9 +393,11 @@ function mass(run: Run, plan: Plan, row: MonthRow, minOdds: number): void {
   const st = run as any;
   const capital = g.nations[me].capital;
   // The focus: an enemy-held province with troops in it, next to ground we or our allies hold.
-  const front = g.regions.filter((r) => hostileUnits(g, r, me).length && (!plan.homeOnly || r.owner === me) && r.nb.some((j) => g.regions[j].ctrl === me));
+  const chase = chaseOf(g, plan);
+  const front = g.regions.filter((r) => hostileUnits(g, r, me).length && (!plan.homeOnly || r.owner === me || r.id === chase) && r.nb.some((j) => g.regions[j].ctrl === me));
   if (!front.length) { st.focus = -1; return; }
-  if (st.focus === undefined || st.focus < 0 || !front.some((r) => r.id === st.focus) || g.turn - (st.focusSince ?? 0) > 5) {
+  if (chase >= 0 && front.some((r) => r.id === chase)) { if (st.focus !== chase) { st.focus = chase; st.focusSince = g.turn; } }
+  else if (st.focus === undefined || st.focus < 0 || !front.some((r) => r.id === st.focus) || g.turn - (st.focusSince ?? 0) > 5) {
     let best = -1, bestScore = -1;
     for (const r of front) {
       const defence = hostileUnits(g, r, me).reduce((s, u) => s + u.divs * u.str, 0) * (r.fort ? 1 + 0.5 * r.fort.lv : 1) * (r.terrain === 'mountain' ? 1.6 : r.terrain === 'plains' ? 1 : 1.25);

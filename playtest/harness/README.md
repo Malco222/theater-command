@@ -95,7 +95,22 @@ cd playtest/harness && ./build.sh probe24 && ./gov.sh ../results/v57-gov 4
 
 | Script | What it does | Example |
 | --- | --- | --- |
-| `probe24.ts` | Government from the player's seat: every directive with what stood beside its target when it was set (my provinces and corps beside it, land hops for the nearest corps, defenders), how it ended, the cabinet's trust every half year with what moved it, the months the cabinet fell, capital, income. A sixth argument picks a cabinet: `none`, `money`, `men`, `calm`, `most`, or `aside` (set every directive aside at once). The plan may be `{"idle":true}` | `node out/probe24.mjs GER 1 7 76 '<plan>' money` |
-| `gov.sh` | About 70 government wars in streams: scripted players of eleven countries, idle players of ten, three countries with four cabinets each, three who set everything aside. Writes one file a war, `totals.txt` and `errors.txt` | `BIN=out57 ./gov.sh out/v57gov 4` |
+| `probe24.ts` | Government from the player's seat: every directive with what stood beside its target when it was set (my provinces and corps beside it, land hops for the nearest corps, defenders), how it ended, the cabinet's trust every half year with what moved it, the months the cabinet fell, capital, income, and at the end `TRUST` and `CAPITAL` lines with one value a month. A sixth argument picks a cabinet: `none`, `money`, `men`, `calm`, `most`, or `aside` (set every directive aside at once). The plan may be `{"idle":true}` | `node out/probe24.mjs GER 1 7 76 '<plan>' money` |
+| `gov.sh` | The 83 government wars in streams. Part A: scripted players of eleven countries who leave the cabinet alone. B: idle players of nine. C: three countries with four cabinets each. D: three who set everything aside. E: fifteen who go for the town each directive names. `PARTS=E` runs one part. Writes one file a war, `totals.txt` and `errors.txt` | `BIN=out57 ./gov.sh out/v57gov 4` |
+| `govread.py` | One line for each directive in a folder of `probe24` output (kind, town, size, fortress, owner, what stood beside it, months, how it ended), or the totals | `python3 govread.py out/v57gov directives > d.txt` |
+| `govtab.py` | Tables from those lines: by kind, by defenders against the player's troops beside the town, by fortress level, the first directive of each war, by country, the holds | `python3 govtab.py d.txt` |
+| `probe25.ts` | Plays a war and writes saves for the page at government moments: `-start`, `-directive`, `-late`, `-doubt`, `-crisis`, `-rich` | `node out/probe25.mjs GER 1 7 40 '<plan>' out/v57saves/ger` |
+| `probe26.ts` | What each minister and decree is worth in money at one month of one war, lever by lever from the ledger. It gives the player the political capital for each lever, on that run only | `node out/probe26.mjs GER 1 7 30 '<plan>'` |
+| `probe27.ts` | Each "bring the army up to strength" directive beside the army the player sees: divisions on the map and overseas, the directive's own count, the price of an infantry corps in months of income | `node out/probe27.mjs SWE 1 7 76 '<plan>'` |
+| `ui16.cjs` | The Cabinet screen from a save: the button's flag, the alerts, the card's text and buttons, then clicks on Set it aside, an appointment, a decree and Show it on the map, with pictures | `node ui16.cjs out/v57saves/ger-directive.json 80-ger aside,appoint,decree,show` |
+| `ui17.cjs` | The countries the start card offers from a start year | `node ui17.cjs` |
 
-`lib.ts`: an idle plan now calls `each` too, so a probe can watch a player who only ends the month. Nothing else in the scripted player changed.
+`lib.ts`: an idle plan now calls `each` too, so a probe can watch a player who only ends the month. A plan may set `"chase": true` (and `chaseOdds`, 1.1 unless set): the scripted player then masses on the town the directive names, attacks it at shorter odds, storms it at a 40% chance, and is let off `homeOnly` for that one town. Off by default, so every other run plays as before.
+
+Traps:
+- The cabinet's minutes (`governmentOf(g).log`) keep the last twelve lines only. A probe that reads them by position loses endings and falls in a long war: tell lines apart by month and text.
+- The probe prints a town's owner at the end of the player's month. "Take X [of ME; defenders 0]" means the town fell in the month the order came, not that the cabinet named a town the player already held.
+- "Land hops -1" is a sea crossing only when no corps of the player's stands beside the town. Corps landed on ground they do not control give the same -1.
+- The United States is not offered from a 1939 start: a job for it plays no months.
+- The scripted player never courts a neutral and never signs a trade agreement, so its political capital sits at the cap more than a person's would.
+- The German cabinet wars with the money or the men cabinet end early (month 56 or 57): compare levers at one month with `probe26`, not whole wars.
