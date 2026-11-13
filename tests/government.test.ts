@@ -449,7 +449,8 @@ describe('the cabinet\'s trust', () => {
     govMonth(g, 'GER');
     // What a minister or a decree does to the trust is felt in full, whatever the form of government.
     expect(swing('GER')).not.toBe(1);
-    expect(st.trust).toBeCloseTo(GOV.trust.rest + 0.5, 9);
+    // He sits with the doves, and a table that leans to them settles a little higher: the drift toward that is felt too.
+    expect(st.trust).toBeCloseTo(GOV.trust.rest + 0.5 + GOV.wings.doves.rest * GOV.trust.drift, 9);
     st.trust = GOV.trust.rest;
     st.seats.finance = 'taxman';
     st.steps.economy = 2;

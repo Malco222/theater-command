@@ -1610,3 +1610,59 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 /* Four gauges on the top bar: one row on a wide screen, a tidy two by two on a narrower one */
 #purse { display: inline-grid; grid-template-columns: repeat(4, auto); gap: 6px; align-items: stretch; }
 @media (max-width: 1640px) { #purse { grid-template-columns: repeat(2, auto); } }
+
+/* Version 60: the cabinet talks back. Hawks and doves, the player's own promise, and the general the cabinet wants dismissed. */
+.gvwings { margin: 2px 0 9px; padding: 9px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; }
+.gvwings p { margin: 8px 0 0; font-size: 12.5px; color: var(--ink-2); }
+.gvwings p b { color: var(--ink); }
+.gvwings .gvsums { margin-top: 7px; }
+.gvwbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+.gvwbar .lab { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: #a9c8e8; white-space: nowrap; }
+.gvwbar .lab.r { color: #eab09a; }
+.gvwbar .lab b { font-family: var(--head); font-size: 15px; color: var(--paper); }
+.gvwbar .track { position: relative; height: 10px; border-radius: 5px; background: var(--panel-3); }
+.gvwbar .z { position: absolute; top: 0; bottom: 0; opacity: .8; }
+.gvwbar .z.dove { left: 0; background: #35587c; border-radius: 5px 0 0 5px; }
+.gvwbar .z.hawk { right: 0; background: #8a3f2c; border-radius: 0 5px 5px 0; }
+.gvwbar .mid { position: absolute; left: 50%; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink-3); }
+.gvwbar .pin { position: absolute; top: -5px; width: 10px; height: 20px; margin-left: -5px; border-radius: 3px; background: var(--paper); border: 2px solid var(--brass); box-shadow: 0 1px 4px rgba(0, 0, 0, .5); transition: left .25s ease; }
+.tag.wing { margin-left: 5px; vertical-align: 2px; font-family: var(--body); font-weight: 600; }
+.tag.wing.hawk { background: #4a2a1e; color: #eab09a; }
+.tag.wing.dove { background: #1f3247; color: #a9c8e8; }
+.gvdir.vow { border-left-color: #9cc0e6; }
+.gvdir.vow.late, .gvdir.head { border-left-color: var(--red); }
+.gvdir.vow.late .gvclock b, .gvdir.head .gvclock b { color: #f0b3a5; }
+.gvdir.vow.asking > .note { margin: 0; font-size: 12.5px; }
+.gvdir.vow.asking > p:first-child { margin-top: 0; }
+.gvdir .acts { display: flex; gap: 6px; flex-wrap: wrap; }
+.gvdir .note { margin: 9px 0 0; font-size: 12.5px; }
+.tag.band { vertical-align: 3px; margin-left: 6px; }
+.tag.band.safe, .vowopt.safe small { color: #b8dcb2; }
+.tag.band.fair, .vowopt.fair small { color: #e6d596; }
+.tag.band.bold, .vowopt.bold small { color: #f0bd7e; }
+.tag.band.daring, .vowopt.daring small { color: #f0a08c; }
+.vowlist { display: grid; gap: 5px; margin-top: 9px; }
+.vowrow { display: flex; align-items: center; gap: 10px; padding: 6px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; }
+.vowrow.pick { border-color: #9cc0e6; }
+.vowrow .grow { flex: 1; min-width: 0; }
+.vowrow .grow b { display: block; font-family: var(--head); font-size: 16px; font-weight: 600; color: var(--paper); }
+.vowrow .grow small { display: block; font-size: 11.5px; color: var(--ink-2); }
+.vowopts { display: grid; grid-template-columns: repeat(4, 58px); gap: 4px; flex: none; }
+.vowopt { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 4px 2px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); }
+.vowopt:hover:not(:disabled) { border-color: #9cc0e6; }
+.vowopt b { font-family: var(--head); font-size: 13px; font-weight: 600; }
+.vowopt small { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.gvstood { margin: 8px 0 0; }
+.vowbtn { display: block; margin-top: 7px; }
+.dirmark.vow circle { stroke: #9cc0e6; }
+.dirmark.vow .dseal { fill: #9cc0e6; }
+.dirmark.vow.late circle { stroke: #e9825f; }
+.dirmark.vow.late .dseal { fill: #e9825f; }
+.dirline.vow { border-left-color: #9cc0e6; }
+.dirline.vow .dseal { background: #9cc0e6; clip-path: circle(50%); min-width: 24px; padding: 4px 4px; }
+.dirline.vow.late { border-left-color: #e9825f; }
+.dirline.vow.late .dseal { background: #e9825f; }
+@media (max-width: 640px) {
+  .vowrow { flex-direction: column; align-items: stretch; gap: 6px; }
+  .vowopts { grid-template-columns: repeat(4, 1fr); }
+}
