@@ -105,8 +105,14 @@ def build_map_surface():
     connect(grain, "", painted, "B")
     # A tint over the whole of it, white unless C++ says otherwise: the woods take a cool one by moonlight, so that
     # the yellow of autumn does not shine out of the dark like lamps.
-    tinted = node(m, unreal.MaterialExpressionMultiply, -250, 0)
-    connect(painted, "", tinted, "A")
+    # (and it can be greyed, nothing unless C++ says so: the pieces' paint by moonlight)
+    weights = node(m, unreal.MaterialExpressionConstant3Vector, -450, -420, constant=unreal.LinearColor(0.3, 0.59, 0.11, 0.0))
+    brightness = node(m, unreal.MaterialExpressionDotProduct, -350, -420)
+    connect(painted, "", brightness, "A")
+    connect(weights, "", brightness, "B")
+    greyed = lerp(m, painted, brightness, scalar(m, "Grey", 0.0, -350, -540), -300, -300)
+    tinted = node(m, unreal.MaterialExpressionMultiply, -150, 0)
+    connect(greyed, "", tinted, "A")
     connect(vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -450, -200), "", tinted, "B")
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
@@ -365,11 +371,15 @@ def build_land():
     cool = plus(m, times(m, warm, scalar(m, "WoodsWarmLess", -0.45, -2050, -1440), -1950, -1500), 1.0, -1850, -1500)
     leaf = lerp(m, vector(m, "WoodsColour", (0.05, 0.09, 0.04, 1.0), -2000, -900),
                 vector(m, "FirColour", (0.024, 0.056, 0.04, 1.0), -2000, -1050), (cover, "A"), -1800, -950)
+    # (on a warm stain the canopy itself is olive: a very dark green goes chocolate with the least red showing through)
+    leaf = times(m, leaf, lerp(m, 1.0, vector(m, "WoodsWarmTint", (1.0, 1.0, 1.0, 1.0), -1800, -1180), warm, -1700, -1100), -1600, -1000)
     woods = lerp(m, leaf,
                  times(m, (tint, "RGB"), scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), -2100, -1000),
                  times(m, times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), cool, -1950, -1080), -1650, -950)
     c = lerp(m, c, woods,
-             times(m, wooded, scalar(m, "WoodsStrength", 0.84, -2300, -900), -2000, -700), -1500, -500)
+             one_in(m, unreal.MaterialExpressionSaturate,
+                    times(m, times(m, wooded, scalar(m, "WoodsStrength", 0.84, -2300, -900), -2000, -700),
+                          plus(m, times(m, warm, scalar(m, "WoodsWarmMore", 0.0, -2000, -620), -1900, -640), 1.0, -1800, -640), -1700, -680), -1600, -680), -1500, -500)
     # The rim of a wood: lighter on its sunward edge, and a strip of shade on the open ground in its lee.
     c = times(m, c, plus(m, 1.0, times(m, plus(m, (cover, "B"), -0.5, -1500, -700), scalar(m, "WoodsRim", 0.6, -1500, -600), -1350, -650), -1200, -650), -1100, -500)
     c = lerp(m, c, vector(m, "RockColour", (0.235, 0.205, 0.162, 1.0), -2000, -150), (masks, "R"), -1000, -400)

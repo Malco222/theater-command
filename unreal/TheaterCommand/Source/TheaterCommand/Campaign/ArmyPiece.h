@@ -36,6 +36,14 @@ public:
 
 	/** Says what the piece stands for. It is rebuilt only if that has changed. */
 	void SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 InRegionId, const TArray<FViewCorps>& InCorps);
+	/**
+	 * How large the standard is drawn beside its life size, and how far it leans back toward an eye above it, in
+	 * degrees. The base is not touched. (The size is what is seen: a piece that is itself drawn small keeps a
+	 * standard of the same size as its neighbours'.)
+	 */
+	void SetStandard(float Scale, float TiltDegrees);
+	/** How large the whole piece is drawn: 1, or four fifths in a crowded province. Its standard keeps the size its neighbours' have. */
+	void SetSize(float Size);
 
 	/** Makes the piece a fleet lying on the sea, or an air fleet over its airfield, instead of an army. */
 	void SetFleet(ACampaignMapActor* Map, const FCampaignNation& Nation, const FViewFleet& InFleet);
@@ -94,7 +102,7 @@ public:
 
 private:
 	void Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation);
-	UStaticMeshComponent* AddPart(UStaticMesh* Mesh, const FVector& Location, const FVector& Size, UMaterialInterface* Material);
+	UStaticMeshComponent* AddPart(UStaticMesh* Mesh, const FVector& Location, const FVector& Size, UMaterialInterface* Material, USceneComponent* Parent = nullptr);
 
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
 	TObjectPtr<USceneComponent> Root;
@@ -116,6 +124,21 @@ private:
 	/** The army's strength, written on a plate under its colours. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTextRenderComponent> StrengthLabel;
+
+	/**
+	 * The standard: the pole, the colours, the strength plate and what hangs under it. It stands on its own foot so
+	 * that it can grow and lean toward the eye as the eye rises, while the base under it keeps its size on the
+	 * table (art fix 8: the flags lead from working height, not the discs).
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<USceneComponent> Standard;
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Mast; // the pole, its finial and the plate
+	float StandardScale = 1.0f, StandardTilt = 0.0f;
+	FVector StandardFoot = FVector::ZeroVector; // where the standard stands, in the piece's own space
+	void ApplyStandard();
+	/** A point of the standard as it stands now, grown and leaning, in the piece's own space. */
+	FVector OnStandard(const FVector& Point) const;
 
 	int32 RegionId = INDEX_NONE;
 	FString NationTag;

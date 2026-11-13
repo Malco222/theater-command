@@ -16,10 +16,10 @@ AArmyPiece::AArmyPiece()
 	SetRootComponent(Root);
 }
 
-UStaticMeshComponent* AArmyPiece::AddPart(UStaticMesh* Mesh, const FVector& Location, const FVector& Size, UMaterialInterface* Material)
+UStaticMeshComponent* AArmyPiece::AddPart(UStaticMesh* Mesh, const FVector& Location, const FVector& Size, UMaterialInterface* Material, USceneComponent* Parent)
 {
 	UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this);
-	Part->SetupAttachment(Root);
+	Part->SetupAttachment(Parent ? Parent : Root.Get());
 	Part->SetStaticMesh(Mesh);
 	Part->SetMaterial(0, Material);
 	Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -175,6 +175,16 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		StrengthLabel->DestroyComponent();
 		StrengthLabel = nullptr;
 	}
+	if (Mast)
+	{
+		Mast->DestroyComponent();
+		Mast = nullptr;
+	}
+	if (Standard)
+	{
+		Standard->DestroyComponent();
+		Standard = nullptr;
+	}
 
 	UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -253,14 +263,24 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		// (Art fix 8: the base is a fifth wider than it was, and stands on a rim.)
 		// (rim and all it comes to a fifth more than the base was across, and no more: from working height the
 		// flags must still lead the eye, not the discs under them)
-		CounterWidth *= 1.12;
-		Model.Pillar(FVector(0.0, 0.0, 0.0), CounterWidth * 0.5 + 0.34 * U, CounterWidth * 0.5 + 0.16 * U, Top + 0.16 * U, Dark, 30);
-		Model.Pillar(FVector(0.0, 0.0, Top + 0.16 * U), CounterWidth * 0.5 + 0.16 * U, CounterWidth * 0.5 + 0.06 * U, 0.08 * U, BrassPaint, 30);
+		CounterWidth *= 1.06;
+		// (the counters are painted wood, not enamel: the nation's colour with its saturation capped and its
+		// brightness brought down, so that the flag above leads the eye and not the disc; and a broad brass edge
+		// that still reads from working height)
+		FLinearColor Seen = FLinearColor(Colour.ToFColor(true).R / 255.0f, Colour.ToFColor(true).G / 255.0f, Colour.ToFColor(true).B / 255.0f).LinearRGBToHSV();
+		// (the caps are on the paint; under the lamp it comes out near saturation 0.55 and brightness 0.42 on the screen)
+		Seen.G = FMath::Min(Seen.G, 0.42f);
+		Seen.B = FMath::Min(Seen.B, 0.4f);
+		const FLinearColor Painted = Seen.HSVToLinearRGB();
+		const FLinearColor Wood(FColor(static_cast<uint8>(Painted.R * 255.0f), static_cast<uint8>(Painted.G * 255.0f), static_cast<uint8>(Painted.B * 255.0f)));
+		const FLinearColor WoodDark = Wood * 0.6f;
+		Model.Pillar(FVector(0.0, 0.0, 0.0), CounterWidth * 0.5 + 0.72 * U, CounterWidth * 0.5 + 0.62 * U, Top + 0.04 * U, WoodDark, 30);
+		Model.Pillar(FVector(0.0, 0.0, Top + 0.04 * U), CounterWidth * 0.5 + 0.62 * U, CounterWidth * 0.5 + 0.5 * U, 0.12 * U, FLinearColor(FColor::FromHex(TEXT("846C2E"))), 30); // (old brass: it must not be taken for the bright ring of a piece that is picked)
 		const int32 Counters = FMath::Clamp(Corps.Num(), 1, 7);
 		const double CounterHeight = 0.5 * U, CounterGap = 0.1 * U;
 		for (int32 i = 0; i < Counters; ++i)
 		{
-			Model.Pillar(FVector(0.0, 0.0, Top), CounterWidth * 0.5, CounterWidth * 0.5 - 0.08 * U, CounterHeight, i % 2 == 0 ? Colour : Dark, 30);
+			Model.Pillar(FVector(0.0, 0.0, Top), CounterWidth * 0.5, CounterWidth * 0.5 - 0.08 * U, CounterHeight, i % 2 == 0 ? Wood : WoodDark, 30);
 			Top += CounterHeight + CounterGap;
 		}
 		Top -= CounterGap;
@@ -391,8 +411,15 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	const double FlagWidth = 6.6 * 0.75 * U * Size, FlagHeight = FlagWidth / 1.5;
 	const double PoleHeight = (What == 2 ? 7.0 : 8.4) * U + FlagHeight; // (an air group's plate hangs clear above its aircraft)
 	const FVector Pole(CounterWidth * 0.32, -CounterWidth * 0.3, 0.0); // behind the figures, and to the left, so the flag flies over the piece
-	Model.Pillar(Pole + FVector(0.0, 0.0, Top), 0.2 * U, 0.2 * U, PoleHeight, IronPaint, 8);
-	Model.Ball(Pole + FVector(0.0, 0.0, Top + PoleHeight + 0.4 * U), FVector(1.1 * U), BrassPaint, 6, 10);
+	// (The standard is a thing of its own, standing on the foot of its pole: see the header.)
+	StandardFoot = Pole + FVector(0.0, 0.0, Top);
+	Standard = NewObject<USceneComponent>(this);
+	Standard->SetupAttachment(Root);
+	Standard->SetRelativeLocation(StandardFoot);
+	Standard->RegisterComponent();
+	FMiniatureMesh Staff;
+	Staff.Pillar(FVector::ZeroVector, 0.2 * U, 0.2 * U, PoleHeight, IronPaint, 8);
+	Staff.Ball(FVector(0.0, 0.0, PoleHeight + 0.4 * U), FVector(1.1 * U), BrassPaint, 6, 10);
 	const double Hoist = 0.2 * U; // where the cloth begins, just clear of the pole
 	const FVector FlagAt = Pole + FVector(0.0, Hoist + FlagWidth * 0.5, Top + PoleHeight - FlagHeight * 0.5 - 0.3 * U);
 	if (UMaterialInterface* Colours = Map->GetFlagMaterial(Nation.Tag))
@@ -431,7 +458,8 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			}
 		}
 		Cloth = NewObject<UProceduralMeshComponent>(this);
-		Cloth->SetupAttachment(Root);
+		Cloth->SetupAttachment(Standard);
+		Cloth->SetRelativeLocation(-StandardFoot); // (its points are written in the piece's own space)
 		Cloth->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Cloth->RegisterComponent();
 		Cloth->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UVs, TArray<FLinearColor>(), Tangents, false);
@@ -440,9 +468,9 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	else
 	{
 		// No flag material: a plain banner in the nation's colour, with a paler band top and bottom.
-		AddPart(Cube, FlagAt, FVector(0.16 * U, FlagWidth, FlagHeight), Banner);
-		AddPart(Cube, FlagAt + FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
-		AddPart(Cube, FlagAt - FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand);
+		AddPart(Cube, FlagAt - StandardFoot, FVector(0.16 * U, FlagWidth, FlagHeight), Banner, Standard);
+		AddPart(Cube, FlagAt - StandardFoot + FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand, Standard);
+		AddPart(Cube, FlagAt - StandardFoot - FVector(0.0, 0.0, FlagHeight * 0.41), FVector(0.2 * U, FlagWidth, FlagHeight * 0.14), BannerBand, Standard);
 	}
 	PoleFoot = Pole;
 	PoleTop = Top + PoleHeight;
@@ -455,9 +483,9 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	const double PlateHeight = FMath::Min(FlagHeight * 0.56, 2.7 * U); // (the same height as before the flag was made smaller)
 	const double PlateWidth = PlateHeight * (0.95 + 0.5 * Figure.Len());
 	const FVector PlateAt = Pole + FVector(0.0, Hoist + PlateWidth * 0.5, FlagAt.Z - FlagHeight * 0.5 - 0.35 * U - PlateHeight * 0.5);
-	Model.Box(PlateAt, FVector(0.2 * U, PlateWidth, PlateHeight), FLinearColor(FColor::FromHex(TEXT("15130F"))));
-	Model.Box(PlateAt + FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), BrassPaint);
-	Model.Box(PlateAt - FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), BrassPaint);
+	Staff.Box(PlateAt - StandardFoot, FVector(0.2 * U, PlateWidth, PlateHeight), FLinearColor(FColor::FromHex(TEXT("15130F"))));
+	Staff.Box(PlateAt - StandardFoot + FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), BrassPaint);
+	Staff.Box(PlateAt - StandardFoot - FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), BrassPaint);
 
 	// A small pennant under the plate for each ally whose corps march with this army.
 	if (Cloth && What == 0)
@@ -498,6 +526,12 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Body->RegisterComponent();
 	Body->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 	Body->SetMaterial(0, Map->GetPieceMaterial());
+	Mast = NewObject<UProceduralMeshComponent>(this);
+	Mast->SetupAttachment(Standard);
+	Mast->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mast->RegisterComponent();
+	Mast->CreateMeshSection(0, Staff.Vertices, Staff.Triangles, Staff.Normals, TArray<FVector2D>(), Staff.Colors, TArray<FProcMeshTangent>(), false);
+	Mast->SetMaterial(0, Map->GetPieceMaterial());
 
 	// Honours: a two-coloured streamer for each, one under another below the plate.
 	int32 Streamer = 0;
@@ -511,17 +545,17 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 				break;
 			}
 			const double Z = PlateAt.Z - PlateHeight * 0.5 - 0.6 * U - Streamer * (StreamerDepth + 0.16 * U);
-			AddPart(Cube, Pole + FVector(0.0, Hoist + StreamerLength * 0.25, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
-				Map->GetSolidMaterial(FLinearColor(Honour.First), 0.6f, 0.0f, 0.6f))->SetCastShadow(false);
-			AddPart(Cube, Pole + FVector(0.0, Hoist + StreamerLength * 0.75, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
-				Map->GetSolidMaterial(FLinearColor(Honour.Second), 0.6f, 0.0f, 0.6f))->SetCastShadow(false);
+			AddPart(Cube, Pole - StandardFoot + FVector(0.0, Hoist + StreamerLength * 0.25, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
+				Map->GetSolidMaterial(FLinearColor(Honour.First), 0.6f, 0.0f, 0.6f), Standard)->SetCastShadow(false);
+			AddPart(Cube, Pole - StandardFoot + FVector(0.0, Hoist + StreamerLength * 0.75, Z), FVector(0.14 * U, StreamerLength * 0.5, StreamerDepth),
+				Map->GetSolidMaterial(FLinearColor(Honour.Second), 0.6f, 0.0f, 0.6f), Standard)->SetCastShadow(false);
 			++Streamer;
 		}
 	}
 
 	// The figure. The lettering faces back along -X, toward the viewer.
 	StrengthLabel = NewObject<UTextRenderComponent>(this);
-	StrengthLabel->SetupAttachment(Root);
+	StrengthLabel->SetupAttachment(Standard);
 	StrengthLabel->SetText(FText::FromString(Figure));
 	StrengthLabel->SetWorldSize(static_cast<float>(PlateHeight * 0.86));
 	StrengthLabel->SetTextRenderColor(FColor::FromHex(TEXT("F4F0E4")));
@@ -535,9 +569,58 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	StrengthLabel->SetVerticalAlignment(EVRTA_TextCenter);
 	StrengthLabel->SetCastShadow(false);
 	StrengthLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	StrengthLabel->SetRelativeLocation(PlateAt - FVector(0.16 * U, 0.0, 0.0));
+	StrengthLabel->SetRelativeLocation(PlateAt - StandardFoot - FVector(0.16 * U, 0.0, 0.0));
 	StrengthLabel->SetRelativeRotation(FRotator(0.0f, 180.0f, 0.0f));
 	StrengthLabel->RegisterComponent();
+	ApplyStandard(); // (a piece rebuilt stands as its neighbours stand)
+}
+
+void AArmyPiece::SetStandard(float Scale, float TiltDegrees)
+{
+	if (FMath::Abs(Scale - StandardScale) < 0.004f && FMath::Abs(TiltDegrees - StandardTilt) < 0.2f)
+	{
+		return;
+	}
+	StandardScale = Scale;
+	StandardTilt = TiltDegrees;
+	ApplyStandard();
+}
+
+void AArmyPiece::SetSize(float Size)
+{
+	if (FMath::Abs(GetActorScale3D().X - Size) > 0.001)
+	{
+		SetActorScale3D(FVector(Size));
+		ApplyStandard();
+	}
+}
+
+void AArmyPiece::ApplyStandard()
+{
+	if (Standard)
+	{
+		const double Own = FMath::Max(GetActorScale3D().X, 0.1);
+		Standard->SetRelativeScale3D(FVector(StandardScale / Own));
+		// (leaning back, away from whoever looks: its face, which looks back along -X, turns up toward him)
+		Standard->SetRelativeRotation(FRotator(-StandardTilt, 0.0f, 0.0f));
+		// (a standard drawn larger than life throws no shadow: a shadow that size would not be the flag's own,
+		// and from high up it lay across the map as a dark bar beside every army)
+		const bool bShadow = StandardScale < 1.12f;
+		if (Cloth && Cloth->CastShadow != bShadow)
+		{
+			Cloth->SetCastShadow(bShadow);
+		}
+		if (Mast && Mast->CastShadow != bShadow)
+		{
+			Mast->SetCastShadow(bShadow);
+		}
+	}
+}
+
+FVector AArmyPiece::OnStandard(const FVector& Point) const
+{
+	const double Own = FMath::Max(GetActorScale3D().X, 0.1);
+	return StandardFoot + FRotator(-StandardTilt, 0.0f, 0.0f).RotateVector((Point - StandardFoot) * (StandardScale / Own));
 }
 
 void AArmyPiece::ShowRing()
@@ -595,9 +678,9 @@ bool AArmyPiece::HitByRay(const FVector& Origin, const FVector& Direction, doubl
 		return true;
 	};
 	// The colours first (they are what the eye goes to), then the pole and the stack of counters.
-	const FVector Flag = Place.TransformPosition(FlagCenter);
-	return Near(Flag, Flag, FlagRadius)
-		|| Near(Place.TransformPosition(PoleFoot), Place.TransformPosition(PoleFoot + FVector(0.0, 0.0, PoleTop)), BaseRadius * 0.3)
+	const FVector Flag = Place.TransformPosition(OnStandard(FlagCenter));
+	return Near(Flag, Flag, FlagRadius * StandardScale)
+		|| Near(Place.TransformPosition(PoleFoot), Place.TransformPosition(OnStandard(PoleFoot + FVector(0.0, 0.0, PoleTop))), BaseRadius * 0.3)
 		|| Near(Place.TransformPosition(FVector::ZeroVector), Place.TransformPosition(FVector(0.0, 0.0, BodyTop)), BaseRadius);
 }
 

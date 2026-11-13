@@ -461,6 +461,24 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetScalarParameterValue(TEXT("WoodsStain"), 0.42f);
 	LandMaterial->SetVectorParameterValue(TEXT("FirColour"), FLinearColor(0.015f, 0.034f, 0.028f));
 	{
+		// Woods on a warm-stained nation (Poland's red, Holland's orange) went chocolate: a very dark green takes
+		// on the least red that shows through it. There the canopy takes almost none of the stain, is laid on a
+		// little thicker, and is itself olive. ("-TheaterWarmWoods=less,more,r,g,b" tries others.)
+		float Less = 1.0f, More = 0.13f;
+		FLinearColor Olive(2.05f, 1.8f, 1.55f);
+		FString Asked;
+		TArray<FString> Parts;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterWarmWoods="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 5)
+		{
+			Less = FCString::Atof(*Parts[0]);
+			More = FCString::Atof(*Parts[1]);
+			Olive = FLinearColor(FCString::Atof(*Parts[2]), FCString::Atof(*Parts[3]), FCString::Atof(*Parts[4]));
+		}
+		LandMaterial->SetScalarParameterValue(TEXT("WoodsWarmLess"), -Less);
+		LandMaterial->SetScalarParameterValue(TEXT("WoodsWarmMore"), More);
+		LandMaterial->SetVectorParameterValue(TEXT("WoodsWarmTint"), Olive);
+	}
+	{
 		// "-TheaterFields=0.55,0.4,0.34" tries other strengths for the quilt of fields (close to, at working height) and its hedges.
 		FString Asked;
 		TArray<FString> Parts;
@@ -1072,17 +1090,36 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 			const double Turn = Facing(Spot) + 90.0;
 			const double Long = 2.9 + 0.45 * Size, Wide = 1.5 + 0.3 * Size;
 			AirfieldLie.Add(Id, FVector2D(Turn, Size));
-			// The field is a slab thick enough to stand clear of the roll of the ground under it.
-			Model.Box(At + FVector(0.0, 0.0, 0.0), FVector(Long, Wide, 0.16) * Field, Turf, Turn);
-			const FLinearColor Strip = Size >= 2 ? Apron : FLinearColor(FColor::FromHex(TEXT("8E9A62")));
+			// The field is a slab thick enough to stand clear of the roll of the ground under it. (Art fix 8: it is
+			// mown grass, a little lighter than the fields round it and no lime sticker: darker than it was, with
+			// the nation's stain let through, and with a rounded, uneven edge in place of a ruled square. Its
+			// runways are pale concrete, not white.)
+			FLinearColor Grass = Turf * 0.6f;
+			if (const FCampaignNation* Holder = Data.FindNation(Region.Owner))
+			{
+				Grass = FMath::Lerp(Grass, FLinearColor(Holder->Color) * 0.42f, 0.3f);
+			}
+			{
+				TArray<FVector2D> Edge;
+				FRandomStream Ragged(Id * 131 + 7);
+				for (int32 K = 0; K < 18; ++K)
+				{
+					const double Angle = K * UE_DOUBLE_TWO_PI / 18.0, C = FMath::Cos(Angle), S = FMath::Sin(Angle);
+					const double Uneven = 1.0 + Ragged.FRandRange(-0.07f, 0.07f);
+					Edge.Add(FVector2D(FMath::Sign(C) * FMath::Pow(FMath::Abs(C), 0.55) * Long * 0.53, FMath::Sign(S) * FMath::Pow(FMath::Abs(S), 0.55) * Wide * 0.55) * Uneven);
+				}
+				Model.Slab(At, Field, Turn, Edge, -0.08, 0.08, Grass);
+			}
+			const FLinearColor Runway(FColor::FromHex(TEXT("7E7C74")));
+			const FLinearColor Strip = Size >= 2 ? Runway : FLinearColor(FColor::FromHex(TEXT("6C7650")));
 			Model.Box(At + FVector(0.0, 0.0, 0.085 * Field), FVector(Long - 0.25, 0.3, 0.02) * Field, Strip, Turn);
 			if (Size >= 3)
 			{
-				Model.Box(At + FVector(0.0, 0.0, 0.088 * Field), FVector(Wide * 1.5, 0.26, 0.02) * Field, Apron, Turn + 58.0);
+				Model.Box(At + FVector(0.0, 0.0, 0.088 * Field), FVector(Wide * 1.5, 0.26, 0.02) * Field, Runway, Turn + 58.0);
 			}
 			if (Size >= 4)
 			{
-				Model.Box(At + FVector(0.0, 0.0, 0.091 * Field), FVector(Wide * 1.5, 0.26, 0.02) * Field, Apron, Turn - 58.0);
+				Model.Box(At + FVector(0.0, 0.0, 0.091 * Field), FVector(Wide * 1.5, 0.26, 0.02) * Field, Runway, Turn - 58.0);
 			}
 			const int32 Hangars = Size;
 			for (int32 Hangar = 0; Hangar < Hangars; ++Hangar)
@@ -2524,6 +2561,13 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		const float Moon = bLamplight ? 0.0f : Night;
 		LandMaterial->SetVectorParameterValue(TEXT("SunColour"), FMath::Lerp(FLinearColor(0.69f, 0.62f, 0.5f), FLinearColor(0.77f, 0.81f, 1.0f), Moon));
 		LandMaterial->SetVectorParameterValue(TEXT("ShadeColour"), FMath::Lerp(FLinearColor(0.43f, 0.48f, 0.58f), FLinearColor(0.44f, 0.48f, 0.7f), Moon));
+		if (PieceMaterial)
+		{
+			// (and the pieces: under a blue moon a blue base was the loudest thing on the table after the fires.
+			// Their paint is greyed by night so that its saturation stays under about 0.6, and dimmed a little.)
+			PieceMaterial->SetScalarParameterValue(TEXT("Grey"), 0.5f * Moon);
+			PieceMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.86f, 0.84f, 0.78f), Moon));
+		}
 		if (WoodsMaterial)
 		{
 			// (and the woods are cooled and dimmed with it, or the yellows of autumn shine like lamps in the blackout)
@@ -2955,7 +2999,7 @@ void ACampaignMapActor::BuildTrees()
 	{
 		for (int32 Slot = 0; Slot < 3; ++Slot)
 		{
-			Clearings[Region.Id].Add(WorldToMap(ArmySpot(Region.Id, Slot)));
+			Clearings[Region.Id].Add(WorldToMap(ArmySpot(Region.Id, Slot, Slot + 1)));
 		}
 		Clearings[Region.Id].Add(Region.Center + FVector2D(-0.92, 0.4) * (TownRadius(Region.Id) + 5.0));
 		Clearings[Region.Id].Add(Region.Center + FVector2D(0.92, 0.4) * (TownRadius(Region.Id) + 5.0));
@@ -3421,41 +3465,68 @@ void ACampaignMapActor::BuildWords()
 	}
 }
 
-FVector ACampaignMapActor::ArmySpot(int32 RegionId, int32 Slot) const
+FVector ACampaignMapActor::ArmySpot(int32 RegionId, int32 Slot, int32 Count, bool* bOutSmall) const
 {
 	const FCampaignRegion& Region = Data.Regions[RegionId];
-	// Beside the town, clear of its houses: to the north-east of it, or the north-west if that is over the border.
-	// (Art fix 8: the town is larger than it was and so is an army's base, so the armies stand further out and
-	// further apart.)
-	// (North by east of it, not north-east: a town's first factory stands out to the north-east, and an army's
-	// base used to sit on its roof.)
-	const double Out = TownRadius(RegionId) + 8.0; // (the last roofs, then half a base and its rim)
-	FVector2D Spot = Region.Center + FVector2D(0.34 * Out + 14.6 * Slot, -0.94 * Out);
-	if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
+	// Beside the town and clear of its roofs. First a row north by east of it (not north-east: a town's first
+	// factory stands out to the north-east), or the same to the north-west; then round the town by other
+	// bearings; then further out, for a town that stands at the edge of its province. If the province has not
+	// room for all its armies like that, they are drawn at four fifths and the search is made again with less
+	// room asked for. Only when even that fails does an army stand in the middle of the province.
+	const int32 Wanted = FMath::Max(Count, Slot + 1);
+	auto Collect = [this, &Region, Wanted](double Size, TArray<FVector2D>& Spots)
 	{
-		Spot = Region.Center + FVector2D(-0.34 * Out - 14.6 * Slot, -0.94 * Out);
-		if (Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id)
+		const double Out = TownRadius(Region.Id) + 8.0 * Size, Apart = 14.6 * Size;
+		auto Try = [this, &Region, &Spots, Wanted, Apart](const FVector2D& Spot)
 		{
-			// Neither side of north has room: round the town by other bearings, still clear of its roofs, before
-			// giving up and standing in the middle of the province.
-			bool bFound = false;
-			for (const double Bearing : { 75.0, -75.0, 125.0, -125.0, 180.0 })
+			if (Spots.Num() >= Wanted || Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id || Terrain.HeightAt(Spot.X, Spot.Y) <= 0.0f)
 			{
-				const double Rad = FMath::DegreesToRadians(Bearing), Sign = Bearing < 0.0 ? -1.0 : 1.0;
-				const FVector2D Try = Region.Center + FVector2D(FMath::Sin(Rad), -FMath::Cos(Rad)) * Out + FVector2D(FMath::Cos(Rad), FMath::Sin(Rad)) * (Sign * 14.6 * Slot);
-				if (Data.FindRegionAt(Try.X, Try.Y) == Region.Id)
+				return;
+			}
+			for (const FVector2D& Taken : Spots)
+			{
+				if (FVector2D::DistSquared(Taken, Spot) < (Apart - 0.5) * (Apart - 0.5))
 				{
-					Spot = Try;
-					bFound = true;
-					break;
+					return;
 				}
 			}
-			if (!bFound)
+			Spots.Add(Spot);
+		};
+		auto Toward = [](double Bearing) { const double Rad = FMath::DegreesToRadians(Bearing); return FVector2D(FMath::Sin(Rad), -FMath::Cos(Rad)); }; // (degrees east of north)
+		for (int32 K = 0; K < 3; ++K)
+		{
+			Try(Region.Center + FVector2D(0.34 * Out + Apart * K, -0.94 * Out));
+		}
+		for (int32 K = 0; K < 3; ++K)
+		{
+			Try(Region.Center + FVector2D(-0.34 * Out - Apart * K, -0.94 * Out));
+		}
+		for (const double Bearing : { 75.0, -75.0, 125.0, -125.0, 180.0, 100.0, -100.0, 150.0, -150.0 })
+		{
+			Try(Region.Center + Toward(Bearing) * Out);
+		}
+		for (const double Further : { 6.0, 12.0, 20.0, 30.0 })
+		{
+			for (double Bearing = 20.0; Bearing < 380.0 && Spots.Num() < Wanted; Bearing += 20.0)
 			{
-				Spot = Slot == 0 ? Region.Centroid : Region.Center + FVector2D(0.0, -6.0 * Slot);
+				Try(Region.Center + Toward(Bearing) * (Out + Further));
 			}
 		}
+	};
+	TArray<FVector2D> Spots;
+	Collect(1.0, Spots);
+	bool bSmall = false;
+	if (Spots.Num() < Wanted)
+	{
+		bSmall = true;
+		Spots.Reset();
+		Collect(0.8, Spots);
 	}
+	if (bOutSmall)
+	{
+		*bOutSmall = bSmall;
+	}
+	const FVector2D Spot = Spots.IsValidIndex(Slot) ? Spots[Slot] : Slot == 0 ? Region.Centroid : Region.Center + FVector2D(0.0, -6.0 * Slot);
 	return SurfacePoint(Spot.X, Spot.Y, 0.0);
 }
 
@@ -3575,21 +3646,21 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		}
 		TArray<FString>& Present = NationsIn[Group[0].Region];
 		Present.Sort();
-		const FVector Spot = ArmySpot(Group[0].Region, Present.IndexOfByKey(Group[0].Nation));
+		bool bSmall = false;
+		const FVector Spot = ArmySpot(Group[0].Region, Present.IndexOfByKey(Group[0].Nation), Present.Num(), &bSmall);
+		const FVector PieceSize(bSmall ? 0.8 : 1.0); // (in a crowded province the bases are drawn at four fifths)
 
 		TObjectPtr<AArmyPiece>& Piece = PieceByKey.FindOrAdd(Key);
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(Spot, FRotator(0.0f, LastPieceYaw, 0.0f));
-			if (Piece)
-			{
-				Piece->SetActorScale3D(FVector(PieceGrowth)); // (as large as the others are drawn just now)
-			}
 		}
 		if (Piece)
 		{
 			Piece->SetArmy(this, *Nation, Group[0].Region, Group);
 			Piece->SetRestLocation(Spot);
+			Piece->SetSize(static_cast<float>(PieceSize.X));
+			Piece->SetStandard(StandardGrowth, StandardLean);
 			Pieces.Add(Piece);
 		}
 	}
@@ -3706,14 +3777,11 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(MapToWorld(At.X, At.Y), Facing);
-			if (Piece)
-			{
-				Piece->SetActorScale3D(FVector(PieceGrowth));
-			}
 		}
 		if (Piece)
 		{
 			Piece->SetFleet(this, *Nation, Fleet);
+			Piece->SetStandard(StandardGrowth, StandardLean);
 			Piece->SetRestLocation(MapToWorld(At.X, At.Y, 0.02));
 			Afloat.Add(Fleet.Id);
 		}
@@ -3758,14 +3826,11 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		if (!Piece)
 		{
 			Piece = World->SpawnActor<AArmyPiece>(SurfacePoint(At.X, At.Y, 0.0), Facing);
-			if (Piece)
-			{
-				Piece->SetActorScale3D(FVector(PieceGrowth));
-			}
 		}
 		if (Piece)
 		{
 			Piece->SetAirFleet(this, *Nation, Wing);
+			Piece->SetStandard(StandardGrowth, StandardLean);
 			Piece->SetRestLocation(SurfacePoint(At.X, At.Y, 0.0));
 			Flying.Add(Wing.Id);
 		}
@@ -5410,33 +5475,38 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		}
 	}
 
-	// The pieces grow a little as the eye rises, so that they still read from high up: by a quarter at most, which
-	// keeps an army's base well under the width of a city (art fix 8: nothing grows past the tier above it).
+	// The standards lead the eye from working height and above (art fix 8): the base keeps its size on the table at
+	// every height, while the flag and its plate hold a size on the screen as the eye rises (about one and two
+	// thirds of life at working height, where a flag is then 26 pixels wide on a screen of 1,600 and the plate's
+	// figures 8 high), and lean back to face an eye that looks down on them. Close to they are as they were made.
 	{
-		const float Growth = FMath::Lerp(1.0f, 1.25f, FMath::SmoothStep(9000.0f, 17000.0f, CameraDistance));
-		if (FMath::Abs(Growth - PieceGrowth) > 0.01f)
+		const float Growth = FMath::Clamp(CameraDistance / 6000.0f, 1.0f, 3.0f);
+		// (the eye looks down more steeply the higher it stands: about 40 degrees close to, 74 at the top)
+		const float LooksDown = FMath::Lerp(40.0f, 74.0f, FMath::Pow(FMath::Clamp(FMath::LogX(40.0f, FMath::Max(CameraDistance, 750.0f) / 750.0f), 0.0f, 1.0f), 0.85f));
+		const float Lean = FMath::Clamp((LooksDown - 30.0f) * 0.85f, 0.0f, 48.0f) * FMath::SmoothStep(3000.0f, 8500.0f, CameraDistance);
+		if (FMath::Abs(Growth - StandardGrowth) > 0.004f || FMath::Abs(Lean - StandardLean) > 0.2f)
 		{
-			PieceGrowth = Growth;
-			const FVector Scale(Growth);
+			StandardGrowth = Growth;
+			StandardLean = Lean;
 			for (AArmyPiece* Piece : Pieces)
 			{
 				if (Piece)
 				{
-					Piece->SetActorScale3D(Scale);
+					Piece->SetStandard(Growth, Lean);
 				}
 			}
 			for (const auto& Pair : FleetPieces)
 			{
 				if (Pair.Value)
 				{
-					Pair.Value->SetActorScale3D(Scale);
+					Pair.Value->SetStandard(Growth, Lean);
 				}
 			}
 			for (const auto& Pair : AirPieces)
 			{
 				if (Pair.Value)
 				{
-					Pair.Value->SetActorScale3D(Scale);
+					Pair.Value->SetStandard(Growth, Lean);
 				}
 			}
 		}

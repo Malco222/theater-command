@@ -296,7 +296,12 @@ private:
 	void AppendRibbon(FCampaignMeshBuffers& Buffers, const TArray<FVector2D>& Points, double HalfWidth, double Lift, const FColor& Ink, bool bClosed) const;
 
 	/** Where a nation's piece stands in a region: beside the town, not on its name; a second nation's piece stands further along. */
-	FVector ArmySpot(int32 RegionId, int32 Slot) const;
+	/**
+	 * Where the army in a province's given slot stands: beside the town and never on its roofs. Count is how many
+	 * armies stand in the province; where there is not room for them all at full size they are drawn at four
+	 * fifths and fanned round the town, and bOutSmall says so.
+	 */
+	FVector ArmySpot(int32 RegionId, int32 Slot, int32 Count = 1, bool* bOutSmall = nullptr) const;
 
 	/** Spacing is extra room between letters, as a fraction of their height. */
 	UTextRenderComponent* AddLabel(const FString& Text, const FVector2D& MapPos, float SizeUnits, const FColor& Color, int32 Tier, float Spacing = 0.0f, int32 OfRegion = INDEX_NONE);
@@ -664,7 +669,7 @@ private:
 	int32 HoveredRegion = INDEX_NONE;
 	int32 LabelState = -1;
 	float LastPieceYaw = 0.0f;
-	float PieceGrowth = 1.0f; // how much larger than life the pieces are drawn at the moment (they grow a little as the eye rises)
+	float StandardGrowth = 1.0f, StandardLean = 0.0f; // how large the pieces' standards are drawn just now, and how far they lean back toward the eye
 	mutable TArray<float> TownSpreads; // TownSpread for every province, worked out once
 	bool bFacingSet = false;
 };
