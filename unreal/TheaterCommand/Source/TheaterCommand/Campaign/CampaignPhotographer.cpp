@@ -558,7 +558,13 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	// The first picture after the opening screen begins a campaign through it, as Germany in September 1939.
 	if (!Shot.bOpening && !Controller->GetSession())
 	{
-		if (GrandNation.IsEmpty())
+		// "-TheaterContinue" picks up the campaign saved for pictures instead (a copy of a real save put there
+		// by hand), to see a war that has been played as its player sees it.
+		if (FParse::Param(FCommandLine::Get(), TEXT("TheaterContinue")))
+		{
+			Controller->ContinueCampaign();
+		}
+		else if (GrandNation.IsEmpty())
 		{
 			Controller->BeginCampaign(StartGroup, StartSide);
 		}
