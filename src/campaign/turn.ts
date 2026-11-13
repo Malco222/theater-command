@@ -50,7 +50,10 @@ import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
 } from './prizes';
-import { appoint, cabinetOff, decree, govMul, government, setAside, setCabinet, whyNotAppoint, whyNotDecree, whyNotSetAside, type GovView } from './government';
+import {
+  appoint, cabinetOff, decree, govMul, government, headAsked, headGiven, headOf, promise, promiseTargets, promiseTerms, setAside, setCabinet, standBy, takeBack,
+  whyNotAppoint, whyNotDecree, whyNotPromise, whyNotSetAside, whyNotStandBy, whyNotTakeBack, type GovView, type PromiseTarget, type PromiseTerms,
+} from './government';
 import { manpower, type MenView } from './manpower';
 import EVE from '../../data/campaign/eve.json';
 
@@ -507,6 +510,56 @@ export function whyNotSetAsideDirective(g: Game): string | null {
 /** The player tells the cabinet its directive will not be carried out: the trust is lost at once, and the next one is set sooner. */
 export function orderSetAside(g: Game): boolean {
   return g.human !== null && humanUp(g) && setAside(g, g.human);
+}
+
+/**
+ * Call your shot. The enemy towns the player could promise his war cabinet today, the richest first, each with the
+ * terms for every length of time he may allow himself: the odds on the day, how bold the cabinet reckons the promise,
+ * what keeping it earns and what breaking it costs. Empty when he cannot make a promise now (governmentOf().promiseWhy says why).
+ */
+export const promiseTargetsOf = (g: Game, most = 8): PromiseTarget[] => promiseTargets(g, g.human, most);
+
+/** The terms of promising one town in so many months, or null where no such promise can be reckoned: for a town picked on the map. */
+export const promiseTermsOf = (g: Game, region: number, months: number): PromiseTerms | null => (g.human ? promiseTerms(g, g.human, region, months) : null);
+
+/** Why the player cannot go to the cabinet with a promise now (or with this town, or in this time), or null if he can. */
+export function whyNotOrderPromise(g: Game, region?: number, months?: number): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotPromise(g, g.human, region, months);
+}
+
+/** The player gives the cabinet his word: this town in his side's hands within so many months. One promise at a time. */
+export function orderPromise(g: Game, region: number, months: number): boolean {
+  return g.human !== null && humanUp(g) && promise(g, g.human, region, months);
+}
+
+/** Why the player cannot take his promise back, or null if he can. */
+export function whyNotTakeBackPromise(g: Game): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotTakeBack(g, g.human);
+}
+
+/** The player takes his promise back before its day, for a share of what breaking it would cost. */
+export function orderTakeBack(g: Game): boolean {
+  return g.human !== null && humanUp(g) && takeBack(g, g.human);
+}
+
+/** The general the war cabinet is asking the player to dismiss, by id, or null (governmentOf().head has the rest). */
+export const headWantedOf = (g: Game): number | null => headOf(g);
+
+/** Why the player cannot stand by a general, or null while the cabinet is asking for one's dismissal. */
+export function whyNotStandByGeneral(g: Game): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotStandBy(g, g.human);
+}
+
+/**
+ * The player refuses the cabinet the general it wants dismissed (governmentOf().head). Its trust falls, and his
+ * next battle settles it: won, he is vindicated for the rest of the war; lost, the cabinet was right. To give the
+ * cabinet its head instead, dismiss him with orderSack.
+ */
+export function orderStandBy(g: Game): boolean {
+  return g.human !== null && humanUp(g) && standBy(g, g.human);
 }
 
 /** The town of a province as a fortress: what it holds, what it adds to its defenders, and how its siege stands. Null outside the grand campaign. */
@@ -1427,7 +1480,12 @@ export function orderRelieve(g: Game, general: number): boolean {
 
 export function orderSack(g: Game, general: number): boolean {
   const gen = myGeneral(g, general);
-  return !!gen && sack(g, gen);
+  if (!gen) return false;
+  // A general the war cabinet asked to see dismissed: its trust recovers, and it carries what his popularity would have cost.
+  const asked = headAsked(g, gen), before = g.nations[gen.nat].pc;
+  if (!sack(g, gen)) return false;
+  if (asked) headGiven(g, gen, before - g.nations[gen.nat].pc);
+  return true;
 }
 
 /** Promotes an unknown officer to command one of the player's corps. */
