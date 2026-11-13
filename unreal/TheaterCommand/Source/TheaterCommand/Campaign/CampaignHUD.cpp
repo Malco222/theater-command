@@ -565,7 +565,7 @@ namespace
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 								[
-									MapButton(TEXT("WEALTH VIEW"), TEXT("Tints every province gold by what it pays a month, on the map and here, so the prizes stand out. Press again to put it away. (Y)"), [this]() { Controller->ToggleWealth(); })
+									MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: every country in its colour; the wealth view, gold by what a province pays; and friend and foe, your own ground green, your allies' blue, your enemies' red. (Y)"), [this]() { Controller->ToggleWealth(); })
 								]
 							]
 						]
@@ -724,7 +724,7 @@ namespace
 						.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("Drag or W A S D: move the map    Scroll: zoom    Right-drag or Q / E: turn    C: your capital    Y: wealth view    T: day or night\nClick a flag, a fleet or an airfield. Right-click where an army or a fleet should go    Tab: next army    Esc: put it down    Enter: end the month\n1 to 5: the screens    L: forces    R: report    O: goals    H: how to play")))
+							.Text(FText::FromString(TEXT("Drag or W A S D: move the map    Scroll: zoom    Right-drag or Q / E: turn    C: your capital    Y: map views    T: day or night\nClick a flag, a fleet or an airfield. Right-click where an army or a fleet should go    Tab: next army    Esc: put it down    Enter: end the month\n1 to 5: the screens    L: forces    R: report    O: goals    H: how to play")))
 							.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
 						]
 					]

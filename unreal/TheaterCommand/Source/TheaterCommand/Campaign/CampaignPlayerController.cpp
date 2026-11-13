@@ -1208,7 +1208,7 @@ void ACampaignPlayerController::OpenGuide()
 	Add(TEXT("FINDING YOUR WAY ABOUT"),
 		TEXT("The small map in the corner shows every country in its colour, your armies in white, your allies' in blue and the enemy's in red. Click or drag on it to look somewhere else. ")
 		TEXT("Under it: FORCES (L) lists every army, fleet and airfield you command with a way to each; REPORT (R) is what every nation did last month; GOALS (O) is what winning means and how far you have got; ")
-		TEXT("CAPITAL (C) looks at your capital; and the WEALTH VIEW (Y) tints every province gold by what it pays, so you can see what is worth taking. ")
+		TEXT("CAPITAL (C) looks at your capital; and MAP VIEWS (Y) steps through the map as it is, the wealth view (gold by what a province pays, so you can see what is worth taking) and friend and foe (your ground green, your allies' blue, your enemies' red). ")
 		TEXT("Click a province to see its chief town and THE PRIZE: what taking it would be worth to you. Its RECRUIT and WORKS tabs hold what can be ordered there. ")
 		TEXT("The line beside END THE MONTH says how many armies can still move: click it, or press Tab, to go to the next."));
 	Add(TEXT("YOUR ARMIES' CARDS"),
@@ -1463,13 +1463,20 @@ bool ACampaignPlayerController::IsWealthShown() const
 
 void ACampaignPlayerController::ToggleWealth()
 {
-	if (!Map.IsValid() || !GetSession())
+	FCampaignSession* Session = GetSession();
+	if (!Map.IsValid() || !Session)
 	{
 		return;
 	}
-	Map->ShowWealth(!Map->IsWealthShown());
+	// One key steps through the views of the map: as it is, by wealth, by friend and foe.
+	const int32 Now = Map->IsWealthShown() ? 1 : Map->AreSidesShown() ? 2 : 0;
+	const int32 Next = (Now + 1) % 3;
+	Map->ShowWealth(Next == 1);
+	Map->ShowSides(Next == 2, Session->GetView().RegionStanding);
 	CampaignSounds::Play(this, TEXT("click"), 0.5f);
-	Notify(Map->IsWealthShown() ? TEXT("The wealth view: the deeper the gold, the more a province pays. Press Y to put it away.") : TEXT("The wealth view is put away."), 4.0);
+	Notify(Next == 1 ? TEXT("The wealth view: the deeper the gold, the more a province pays. Press Y for friend and foe.")
+		: Next == 2 ? TEXT("Friend and foe: your own ground green, your allies' blue, your enemies' red. Press Y to put it away.")
+		: TEXT("The map as it is: every country in its own colour."), 5.0);
 }
 
 void ACampaignPlayerController::OpenGoals()
@@ -3189,6 +3196,10 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowLanes(View.Lanes);
 		Map->ShowFreeCapitals(View.FreeCapitals);
+		if (Map->AreSidesShown())
+		{
+			Map->ShowSides(true, View.RegionStanding); // ground that has changed sides changes colour
+		}
 	}
 }
 

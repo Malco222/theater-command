@@ -229,6 +229,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("31p-prize"), TEXT("Warsaw"), 0.4f).Select = TEXT("Warsaw");
 		Add(TEXT("31q-wealth-view"), TEXT(""), 0.97f).bWealth = true;
 		Add(TEXT("31r-wealth-close"), TEXT("Ruhr"), 0.55f).bWealth = true;
+		Add(TEXT("31s-friend-and-foe"), TEXT(""), 0.97f).bSides = true;
 		Add(TEXT("31o-objectives"), TEXT("@capital"), 0.45f).Room = TEXT("goals");
 		{
 			// An army in hand: a card for each corps, its divisions by name, its morale and its rest.
@@ -382,6 +383,11 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			}
 		}
 		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
+		{
+			// The month ended and caught while the others' moves are shown: the strip of flags, and the march.
+			FShot& Shot = Add(TEXT("37-month-replay"), TEXT("@capital"), 0.5f);
+			Shot.bKeep = Shot.bWatch = true;
+		}
 	}
 
 	// "-TheaterWorksAt=Hamburg" takes two pictures of that region with a full set of works standing in it.
@@ -620,9 +626,13 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		Controller->OrderTo(*Target);
 	}
 	Controller->SetProvinceTab(Shot.ProvinceTab);
-	if (Table->IsWealthShown() != Shot.bWealth)
 	{
-		Controller->ToggleWealth();
+		// The view of the map the picture asks for: as it is, by wealth, or by friend and foe.
+		const int32 Wanted = Shot.bWealth ? 1 : Shot.bSides ? 2 : 0;
+		for (int32 Step = 0; Step < 3 && (Table->IsWealthShown() ? 1 : Table->AreSidesShown() ? 2 : 0) != Wanted; ++Step)
+		{
+			Controller->ToggleWealth();
+		}
 	}
 	if (Shot.bNewsreel)
 	{

@@ -1583,7 +1583,14 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 			const FString& Holder = HolderOf(Here);
 			const FCampaignNation* Nation = Data.FindNation(Holder);
 			FLinearColor Tint = Nation ? FLinearColor(Nation->Color) : FLinearColor(0.35f, 0.35f, 0.33f);
-			if (bWealth && Towns.IsValidIndex(Here))
+			if (bSides && SideOf.IsValidIndex(Here))
+			{
+				// The friend-and-foe view: the player's own ground green, his allies' blue, his enemies' red, the rest grey.
+				const FString& Side = SideOf[Here];
+				Tint = Side == TEXT("own") ? FLinearColor(0.2f, 0.62f, 0.3f) : Side == TEXT("ally") ? FLinearColor(0.16f, 0.4f, 0.85f)
+					: Side == TEXT("enemy") ? FLinearColor(0.8f, 0.1f, 0.08f) : FLinearColor(0.3f, 0.3f, 0.29f);
+			}
+			else if (bWealth && Towns.IsValidIndex(Here))
 			{
 				// The wealth view: grey ground, gold by what the province pays.
 				static const float Gold[6] = { 0.0f, 0.22f, 0.4f, 0.6f, 0.8f, 1.0f };
@@ -2528,6 +2535,45 @@ void ACampaignMapActor::ShowWealth(bool bOn)
 		}
 	}
 	Buffers.Commit(OrdersMesh, 4, HighlightMaterial);
+}
+
+void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
+{
+	if (bOn == bSides && Standing == SideOf)
+	{
+		return;
+	}
+	bSides = bOn;
+	SideOf = Standing;
+	bMiniStale = true;
+	OrdersMesh->ClearMeshSection(5);
+	if (!bSides)
+	{
+		return;
+	}
+	FCampaignMeshBuffers Buffers;
+	for (int32 Id = 0; Id < Data.Regions.Num() && Id < SideOf.Num(); ++Id)
+	{
+		const FString& Side = SideOf[Id];
+		if (Side == TEXT("enemy"))
+		{
+			AppendRegionFill(Buffers, Id, FLinearColor(0.95f, 0.08f, 0.05f, 0.42f));
+		}
+		else if (Side == TEXT("ally"))
+		{
+			AppendRegionFill(Buffers, Id, FLinearColor(0.15f, 0.5f, 1.0f, 0.38f));
+		}
+		else if (Side == TEXT("own"))
+		{
+			AppendRegionFill(Buffers, Id, FLinearColor(0.3f, 1.0f, 0.45f, 0.2f));
+		}
+		else
+		{
+			// A country at peace with the player is greyed, so that a red country at peace is not taken for an enemy.
+			AppendRegionFill(Buffers, Id, FLinearColor(0.36f, 0.36f, 0.34f, 0.6f));
+		}
+	}
+	Buffers.Commit(OrdersMesh, 5, HighlightMaterial);
 }
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)

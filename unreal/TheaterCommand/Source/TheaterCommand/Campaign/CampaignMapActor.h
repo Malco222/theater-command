@@ -88,6 +88,9 @@ public:
 	/** The wealth view: every province tinted gold by what it pays, on the table and on the small map. */
 	void ShowWealth(bool bOn);
 	bool IsWealthShown() const { return bWealth; }
+	/** The friend-and-foe view: the player's own ground left as it is, his allies' washed blue, his enemies' red, on the table and on the small map. */
+	void ShowSides(bool bOn, const TArray<FString>& Standing);
+	bool AreSidesShown() const { return bSides; }
 	/** Rings in gold the capitals of fallen countries that the player would set free by taking them. */
 	void ShowFreeCapitals(const TArray<int32>& Capitals);
 	/** Rings the seas a fleet in hand can sail to, the one the pointer is over more brightly, and the fleet itself. None clears them. */
@@ -302,6 +305,8 @@ private:
 	TArray<int32> ShownFree;
 	TArray<FTownInfo> Towns; // by province id, once the rules have said
 	bool bWealth = false;
+	bool bSides = false;
+	TArray<FString> SideOf; // by province: own, ally, enemy or neutral, as the player stands to its holder
 	int32 ShownMonth = -1;
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
 	FLandFeatures Land;
