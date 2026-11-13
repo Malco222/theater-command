@@ -54,6 +54,7 @@ import {
   prizesOf, prizesOnMap, whyNotWreckPrize, orderWreck, whyNotBurnOrder, orderBurn, orderScorchPolicy,
   governmentOf, whyNotAppointMinister, orderAppoint, whyNotOrderDecree, orderDecree, whyNotSetAsideDirective, orderSetAside,
   manpowerOf, cabinetIsOff, orderCabinet,
+  promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, orderPromise, whyNotTakeBackPromise, orderTakeBack, whyNotStandByGeneral, orderStandBy, orderSack,
   townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
@@ -286,6 +287,8 @@ function view() {
     })(),
     // (Version 59) The town a directive of the war cabinet names, and the months left: for a small seal on the map.
     seal: (() => { try { const d = governmentOf(s)?.directive; return d && d.region !== undefined && d.region >= 0 ? { region: d.region, left: d.left } : null; } catch { return null; } })(),
+    // (Version 60) And the town the player has promised the cabinet, with the months left: a second seal.
+    vow: (() => { try { const pr = (governmentOf(s) as { promise?: { region?: number; left: number } | null } | null)?.promise; return pr && pr.region !== undefined && pr.region >= 0 ? { region: pr.region, left: pr.left } : null; } catch { return null; } })(),
     // Towns under siege that the player knows of (Version 54): region, 1 if the ring is closed, months of stores left.
     sieges: (() => { try { return siegesInSight(s).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]); } catch { return []; } })(),
     // Where battles were lately fought, for the scars they leave on the table: three numbers for each place, the
@@ -1176,8 +1179,13 @@ function province(id: number) {
     // (Version 59) A directive of the war cabinet that names this province: said on its panel, with the months left.
     directive: (() => {
       try {
-        const d = governmentOf(s)?.directive;
-        return d && d.region === r.id ? `The war cabinet's directive: ${d.title}. ${d.left <= 1 ? 'It is due this month.' : `${d.left} months left.`} ${d.progress}` : '';
+        const gov = governmentOf(s);
+        const d = gov?.directive;
+        const pr = (gov as { promise?: { region?: number; town: string; left: number; progress: string } | null } | null)?.promise;
+        return [
+          d && d.region === r.id ? `The war cabinet's directive: ${d.title}. ${d.left <= 1 ? 'It is due this month.' : `${d.left} months left.`} ${d.progress}` : '',
+          pr && pr.region === r.id ? `Your word to the cabinet: ${pr.town} ${pr.left <= 1 ? 'this month' : `within ${pr.left} months`}. ${pr.progress}` : '',
+        ].filter(Boolean).join('\n');
       } catch { return ''; }
     })(),
     // The places of the province that are prizes of their own (Version 56), in plain lines.
@@ -1244,6 +1252,16 @@ function province(id: number) {
       }
       // (Version 56) Wreck a prize the player's troops hold, and scorched earth for the province and the nation.
       out.push(...placeJobs(s, r.id));
+      // (Version 60) Call your shot: an enemy town within reach can be promised to the cabinet from its own panel.
+      try {
+        if (r.ctrl !== me && governmentOf(s)?.mine && whyNotOrderPromise(s) === null) {
+          for (const months of [2, 3, 4, 6]) {
+            if (whyNotOrderPromise(s, r.id, months) !== null) continue;
+            const terms = promiseTermsOf(s, r.id, months);
+            if (terms) out.push({ key: `promise:${months}`, label: `Promise ${terms.town} to the cabinet in ${months} months`, detail: terms.text, ok: up, why: up ? '' : 'It is not your month.' });
+          }
+        }
+      } catch { /* no cabinet in this game */ }
       for (const c of s.corps) {
         if (c.dead || c.nat !== me || c.reg !== r.id || c.kind !== 'eng') continue;
         if (c.job) {
@@ -1386,6 +1404,19 @@ function work(key: string, region: number) {
     ok = !!c && !why && (what === 'garrison' ? orderGarrison(s, c) : orderTakeField(s, c));
     const town = townSiege(s, region)?.town ?? s.regions[region]?.name ?? 'the town';
     note = ok && c ? (what === 'garrison' ? `${c.name} goes into ${town} as its garrison.` : `${c.name} leaves ${town} and takes the field.`) : why ?? note;
+  } else if (what === 'promise') {
+    // (Version 60) The player's word to the cabinet, given from the town's own panel: asked twice.
+    const months = Number(a);
+    const why = whyNotOrderPromise(s, region, months);
+    const terms = why ? null : promiseTermsOf(s, region, months);
+    const asking = `promise:${region}:${months}:${s.turn}`;
+    if (!why && terms && wreckAsked !== asking) {
+      wreckAsked = asking;
+      return { ok: false, note: `Promise ${terms.town} to the cabinet within ${months} months? ${terms.bandName}: kept, ${terms.reward}; broken, its trust falls ${terms.price}. Press it again to give your word.`, flies, view: view() };
+    }
+    wreckAsked = '';
+    ok = !why && orderPromise(s, region, months);
+    note = ok ? `Your word is given: ${terms?.town ?? 'the town'} by the end of ${terms ? turnToDate(terms.due).label : 'the time named'}.` : why ?? note;
   } else if (what === 'wreck') {
     const kind = a as PrizeKind;
     const why = whyNotWreckPrize(s, region, kind);
@@ -1707,6 +1738,11 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
       const d = gov.directive;
       if (gov.low > 0 && gov.trust <= gov.fallsAt) {
         out.push({ k: 'page:cabinet', t: 'THE CABINET IS ABOUT TO FALL', tip: `The cabinet's trust is ${Math.round(gov.trust)} of 100. At ${gov.fallsAt} or under for ${gov.crisisMonths} months running, it falls; it has been there for ${gov.low}. Open THE CABINET.` });
+      } else if ((gov as { head?: { name: string } | null }).head) {
+        out.push({ k: 'page:cabinet', t: 'THE CABINET WANTS A HEAD', tip: `The cabinet asks you to dismiss ${(gov as { head?: { name: string } | null }).head!.name}. Open THE CABINET to dismiss him or stand by him.` });
+      } else if ((gov as { promise?: { town: string; left: number } | null }).promise && (gov as { promise?: { town: string; left: number } | null }).promise!.left <= 2) {
+        const pr = (gov as { promise?: { town: string; left: number } | null }).promise!;
+        out.push({ k: 'page:cabinet', t: pr.left <= 1 ? 'YOUR PROMISE IS DUE THIS MONTH' : 'YOUR PROMISE IS DUE NEXT MONTH', tip: `You promised the cabinet ${pr.town}. Open THE CABINET.` });
       } else if (d && d.issued === s.turn) {
         out.push({ k: 'page:cabinet', t: 'A NEW DIRECTIVE', tip: `${d.by}: ${d.title}. ${d.text} Open THE CABINET.` });
       } else if (d && d.left <= 2) {
@@ -1752,6 +1788,9 @@ function alertsOf(s: Game): string[] {
     if (m && (m.word === 'Short' || m.word === 'Spent')) out.push(m.word === 'Spent' ? 'The reserve of men is spent: nothing new can be raised until more come of age.' : `The reserve of men is short. ${m.line}`);
     const gov = governmentOf(s);
     if (gov?.mine && gov.doubts) out.push(`The cabinet doubts you.${gov.withheld ? ` ${gov.withheld}` : ''} Open DIPLOMACY, THE CABINET.`);
+    const talk = gov as (typeof gov & { head?: { name: string; left: number } | null; promise?: { town: string; left: number } | null }) | null;
+    if (talk?.mine && talk.head) out.push(`The cabinet wants ${talk.head.name} dismissed, and an answer ${talk.head.left <= 1 ? 'this month' : `within ${talk.head.left} months`}. Open DIPLOMACY, THE CABINET.`);
+    if (talk?.mine && talk.promise && talk.promise.left <= 1) out.push(`Your promise of ${talk.promise.town} falls due this month.`);
   } catch { /* neither rule in this game */ }
   return out;
 }
@@ -2458,7 +2497,7 @@ function cabinetPage(s: Game): Page | null {
     lines: [cap(seat.minister.plus), cap(seat.minister.minus)].filter(Boolean),
     buttons: seat.options.map((o) => ({
       label: o.name.toUpperCase(), act: `cabinet:appoint:${seat.id}:${o.id}`, ok: up && o.why === null,
-      tip: !up ? notNow : o.why ?? `${cap(o.plus)}. ${cap(o.minus)}. The appointment costs ${v!.appointCost} political capital.`.replace(/\.\./g, '.'),
+      tip: !up ? notNow : o.why ?? `${(o as { wing?: string | null }).wing === 'hawk' ? 'A hawk. ' : (o as { wing?: string | null }).wing === 'dove' ? 'A dove. ' : ''}${cap(o.plus)}. ${cap(o.minus)}. The appointment costs ${v!.appointCost} political capital.`.replace(/\.\./g, '.'),
     })),
   }));
   const decrees: PageRow[] = v.tracks.map((t) => ({
@@ -2470,6 +2509,59 @@ function cabinetPage(s: Game): Page | null {
     })),
   }));
   const falling = v.trust <= v.fallsAt;
+  // (Version 60: the cabinet talks back.) Everything below is read with care: an older rules bundle has none of it.
+  const x = v as typeof v & {
+    wings?: { hawks: number; doves: number; lean: number; word: string; text: string; effects: string[] } | null;
+    promise?: { town: string; bandName: string; left: number; progress: string; reward: string; back: number; region?: number } | null;
+    promiseWhy?: string | null; kept?: number; broken?: number;
+    head?: { general: number; name: string; rank: string; command: string; why: string; left: number; gain: number; cost: number; vindicated: number; wrong: number; loved: boolean } | null;
+    stoodBy?: { general: number; name: string; left: number } | null;
+  };
+  const wingOf = (m: { wing?: string | null }): string => (m.wing === 'hawk' ? ' (a hawk)' : m.wing === 'dove' ? ' (a dove)' : '');
+  for (const seat of v.seats) {
+    const row = offices[v.seats.indexOf(seat)];
+    if (row) row.title = `${seat.name}  \u00B7  ${seat.minister.name}${wingOf(seat.minister as { wing?: string | null })}`;
+  }
+  // Call your shot: the player's word to the cabinet, or the towns he could give it for.
+  let word: { heading: string; text: string; rows: PageRow[] } | null = null;
+  try {
+    if (x.promise) {
+      const pw = up ? whyNotTakeBackPromise(s) : notNow;
+      word = { heading: 'YOUR WORD TO THE CABINET', text: `Promises kept: ${x.kept ?? 0}. Broken: ${x.broken ?? 0}.`, rows: [{
+        nat: v.nat, title: `${x.promise.town}  \u00B7  ${x.promise.left <= 1 ? 'due this month' : `${months(x.promise.left)} left`}`,
+        lines: [`${x.promise.bandName}. ${x.promise.progress}`, `Kept: ${x.promise.reward}.`],
+        buttons: [
+          ...(x.promise.region !== undefined && x.promise.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:${x.promise.region}`, ok: true, tip: 'Goes to the town you promised.' }] : []),
+          { label: 'TAKE IT BACK', act: 'cabinet:takeback', ok: pw === null, danger: true, tip: pw ?? `You tell the cabinet it cannot be done. Costs ${x.promise.back} of its trust, half of what breaking your word would.` },
+        ],
+      }] };
+    } else if (x.promiseWhy !== undefined) {
+      const targets = x.promiseWhy === null ? promiseTargetsOf(s, 6) : [];
+      word = { heading: 'CALL YOUR SHOT', text: x.promiseWhy ?? (targets.length ? `Give the cabinet your word that a town will be in your side's hands by a day you name. Keep it and its trust rises; break it and it remembers. Promises kept: ${x.kept ?? 0}. Broken: ${x.broken ?? 0}. Any other enemy town within reach can be promised from its own province panel.` : 'No enemy town is within reach of your ground or your troops to promise.'),
+        rows: targets.map((t) => ({
+          nat: t.holder, title: `${t.town}  \u00B7  ${s.nations[t.holder]?.name ?? t.holder}  \u00B7  odds ${t.odds >= 10 ? 'better than 10' : t.odds.toFixed(1)} to 1`,
+          lines: [t.depth <= 1 ? 'Beside your ground or your troops.' : `${t.depth} provinces from your ground and your troops.`],
+          buttons: t.terms.map((term) => ({ label: `IN ${term.months} MONTHS`, act: `cabinet:promise:${t.region}:${term.months}`, ok: up, tip: !up ? notNow : term.text })),
+        })) };
+    }
+  } catch { word = null; }
+  // The cabinet wants a head: a general it asks the player to dismiss.
+  let head: { heading: string; text: string; rows: PageRow[] } | null = null;
+  if (x.head) {
+    const h = x.head;
+    const sw = up ? whyNotStandByGeneral(s) : notNow;
+    head = { heading: 'THE CABINET WANTS A HEAD', text: '', rows: [{
+      nat: v.nat, title: `${h.rank} ${h.name}  \u00B7  ${h.left <= 1 ? 'answer this month' : `${months(h.left)} to answer`}`,
+      lines: [h.why, h.command ? `He commands ${h.command}.${h.loved ? ' The army thinks well of him: his corps will take his going badly.' : ''}` : 'He holds no command.', 'Unanswered, the cabinet takes it as a refusal.'],
+      buttons: [
+        { label: 'DISMISS HIM', act: `cabinet:sack:${h.general}`, ok: up, danger: true, tip: !up ? notNow : `The cabinet has its head: its trust rises ${h.gain}. He leaves the army for good.` },
+        { label: 'STAND BY HIM', act: 'cabinet:standby', ok: sw === null, tip: sw ?? `You refuse. The cabinet's trust falls ${h.cost} at once, and his next battle settles it: won, its trust rises ${h.vindicated} and he is vindicated for the rest of the war; lost, it falls ${h.wrong} more.` },
+      ],
+    }] };
+  } else if (x.stoodBy) {
+    head = { heading: 'THE CABINET WANTS A HEAD', text: `You stood by ${x.stoodBy.name}. His next battle settles it${x.stoodBy.left > 0 ? `, within ${months(x.stoodBy.left)}` : ''}.`, rows: [] };
+  }
+  const wings = x.wings ? { heading: 'HAWKS AND DOVES', text: [`${x.wings.hawks} hawk${x.wings.hawks === 1 ? '' : 's'} and ${x.wings.doves} dove${x.wings.doves === 1 ? '' : 's'} at the table: ${x.wings.word.toLowerCase()}. ${x.wings.text}`, ...x.wings.effects].join('\n'), rows: [] as PageRow[] } : null;
   return {
     id: 'cabinet', title: 'THE CABINET',
     // (the headline is one short line: the screen cuts a long one off)
@@ -2478,7 +2570,10 @@ function cabinetPage(s: Game): Page | null {
     top: [{ label: 'PLAY WITHOUT THE CABINET', act: 'cabinet:switch:off', ok: true, danger: true, tip: 'Switches the war cabinet off: no ministers, decrees, trust or directives, and nothing they moved is moved. A standing directive is withdrawn without blame. You can switch it on again in any month, from MENU, OPTIONS.' }],
     sections: [
       { heading: 'THE DIRECTIVE', text: d ? '' : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months(v.nextIn)}.` : 'The cabinet is weighing the next.'}`, rows: directive },
+      ...(head ? [head] : []),
+      ...(word ? [word] : []),
       { heading: 'THE FOUR OFFICES', text: `A new minister costs ${v.appointCost} political capital. Each brings something and costs something.`, rows: offices },
+      ...(wings ? [wings] : []),
       { heading: 'DECREES', text: 'One step up at a time, for political capital. A step down is free.', rows: decrees },
       { heading: 'WHAT IT ALL COMES TO', text: v.sums.length ? v.sums.join('  \u00B7  ') : 'Nothing either way.', rows: [] },
       { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => `${m.label} ${m.amount > 0 ? '+' : ''}${m.amount.toFixed(1)}`).join('  \u00B7  ') : 'Nothing since it last read the news.', rows: [] },
@@ -2555,6 +2650,46 @@ function act(action: string, region = -1) {
       const on = part[2] === 'on';
       ok = orderCabinet(s, on);
       note = ok ? (on ? 'The war cabinet sits again, as it was left. It will set its next directive in a few months.' : 'The war cabinet is switched off. Switch it on again from MENU, OPTIONS.') : (on ? 'The war cabinet is sitting already.' : 'The war cabinet is switched off already.');
+      return { ok, note, fly, flies, open, view: view() };
+    }
+    if (part[1] === 'promise') {
+      // Call your shot (Version 60): the player's word that a town will be his side's within so many months. Asked twice.
+      const region = Number(part[2]), months = Number(part[3]);
+      const why = whyNotOrderPromise(s, region, months);
+      const terms = why ? null : promiseTermsOf(s, region, months);
+      const asking = `${action}:${s.turn}`;
+      if (!why && terms && cabinetAsked !== asking) {
+        cabinetAsked = asking;
+        return { ok: false, note: `Promise ${terms.town} to the cabinet within ${months} months? ${terms.bandName}: kept, ${terms.reward}; broken, its trust falls ${terms.price}. Press it again to give your word.`, fly, flies, open, view: view() };
+      }
+      cabinetAsked = '';
+      ok = !why && orderPromise(s, region, months);
+      note = ok ? `Your word is given: ${terms?.town ?? 'the town'} by the end of ${terms ? turnToDate(terms.due).label : 'the time named'}.` : why ?? 'That promise cannot be made now.';
+      return { ok, note, fly, flies, open, view: view() };
+    }
+    if (part[1] === 'takeback') {
+      const why = whyNotTakeBackPromise(s);
+      ok = !why && orderTakeBack(s);
+      note = ok ? 'You have taken your word back. The cabinet makes a note of it.' : why ?? 'There is no promise to take back.';
+      return { ok, note, fly, flies, open, view: view() };
+    }
+    if (part[1] === 'sack' || part[1] === 'standby') {
+      // The cabinet wants a head (Version 60): dismiss the general it names, or stand by him. Dismissal is asked twice.
+      const name = (v as { head?: { name: string } | null } | null)?.head?.name ?? 'the general';
+      if (part[1] === 'sack') {
+        const asking = `${action}:${s.turn}`;
+        if (cabinetAsked !== asking) {
+          cabinetAsked = asking;
+          return { ok: false, note: `Dismiss ${name}? He leaves the army for good. Press it again to do it.`, fly, flies, open, view: view() };
+        }
+        cabinetAsked = '';
+        ok = orderSack(s, Number(part[2]));
+        note = ok ? `${name} is dismissed. The cabinet has its head.` : 'He cannot be dismissed now.';
+      } else {
+        const why = whyNotStandByGeneral(s);
+        ok = !why && orderStandBy(s);
+        note = ok ? `You stand by ${name}. His next battle settles it.` : why ?? 'The cabinet is asking for nobody.';
+      }
       return { ok, note, fly, flies, open, view: view() };
     }
     // (an appointment or a decree that costs political capital is asked twice: the first press says what it spends)

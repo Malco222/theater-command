@@ -283,8 +283,9 @@ namespace
 					const double SealWide = SealSize.X + 14.0, SealHigh = 18.0;
 					const FVector2D Corner(Each.At.X / Scale - SealWide * 0.5, Each.At.Y / Scale);
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(SealWide + 2.0, SealHigh + 2.0), FSlateLayoutTransform(Corner - FVector2D(1.0, 1.0))), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("3A2E12"))));
-					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(SealWide, SealHigh), FSlateLayoutTransform(Corner)), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("C9A227"))));
-					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(SealSize, FSlateLayoutTransform(Corner + FVector2D(7.0, 2.0))), Months, SealFont, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("1F1808"))));
+					// (the cabinet's directive is brass; the player's own promise is sealing-wax red)
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(SealWide, SealHigh), FSlateLayoutTransform(Corner)), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(Each.bVow ? TEXT("9C2B22") : TEXT("C9A227"))));
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(SealSize, FSlateLayoutTransform(Corner + FVector2D(7.0, 2.0))), Months, SealFont, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(Each.bVow ? TEXT("F6E7D2") : TEXT("1F1808"))));
 					Taken.Add(FBox2D(Corner - FVector2D(3.0, 2.0), Corner + FVector2D(SealWide + 3.0, SealHigh + 2.0)));
 					continue;
 				}

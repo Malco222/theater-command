@@ -1445,18 +1445,25 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		}
 	}
 	Out.Sort([](const FTownPlate& A, const FTownPlate& B) { return A.Rank > B.Rank; });
-	// The town a directive of the war cabinet names wears a small brass seal with the months left on it, at any height.
-	if (View.SealRegion != INDEX_NONE && Data.Regions.IsValidIndex(View.SealRegion))
+	// The town a directive of the war cabinet names wears a small brass seal with the months left on it, at any height;
+	// and the town the player has promised the cabinet wears one in wax red. (Where they are the same town, side by side.)
+	for (int32 Which = 0; Which < 2; ++Which)
 	{
-		const FVector2D Place = Data.Regions[View.SealRegion].Center;
+		const int32 SealAt = Which == 0 ? View.SealRegion : View.VowRegion;
+		if (SealAt == INDEX_NONE || !Data.Regions.IsValidIndex(SealAt))
+		{
+			continue;
+		}
+		const FVector2D Place = Data.Regions[SealAt].Center;
 		FVector2D Screen;
 		if (ProjectWorldLocationToScreen(Map->MapToWorld(Place.X, Place.Y, 0.0) + FVector(0.0, 0.0, 3.0 * Map->UnitScale), Screen, false)
 			&& Screen.X > -40.0 && Screen.X < Width + 40.0 && Screen.Y > -20.0 && Screen.Y < Height + 20.0)
 		{
 			FTownPlate& Seal = Out.AddDefaulted_GetRef();
-			Seal.At = Screen - FVector2D(0.0, 44.0);
-			Seal.Name = FString::FromInt(FMath::Max(View.SealLeft, 0));
+			Seal.At = Screen - FVector2D(Which == 1 && View.SealRegion == View.VowRegion ? -52.0 : 0.0, 44.0);
+			Seal.Name = FString::FromInt(FMath::Max(Which == 0 ? View.SealLeft : View.VowLeft, 0));
 			Seal.bSeal = true;
+			Seal.bVow = Which == 1;
 			Seal.Rank = 1000; // (before any name plate: nothing crowds it out)
 		}
 	}

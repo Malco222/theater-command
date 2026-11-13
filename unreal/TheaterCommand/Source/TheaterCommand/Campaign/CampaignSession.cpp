@@ -495,6 +495,15 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Out.SealRegion = FMath::RoundToInt32(Region);
 			Out.SealLeft = FMath::RoundToInt32(Left);
 		}
+		const TSharedPtr<FJsonObject>* Vow = nullptr;
+		if (Object->TryGetObjectField(TEXT("vow"), Vow))
+		{
+			double Region = -1.0, Left = 0.0;
+			(*Vow)->TryGetNumberField(TEXT("region"), Region);
+			(*Vow)->TryGetNumberField(TEXT("left"), Left);
+			Out.VowRegion = FMath::RoundToInt32(Region);
+			Out.VowLeft = FMath::RoundToInt32(Left);
+		}
 	}
 	const TSharedPtr<FJsonObject>* Stores = nullptr;
 	if (Object->TryGetObjectField(TEXT("stores"), Stores)) // null for a small country and in a scenario

@@ -368,6 +368,8 @@ struct FCampaignView
 	bool bCabinetCan = false, bCabinetOff = false;
 	// (Version 59) The town a directive of the war cabinet names, and the months left: for a small seal on the map.
 	int32 SealRegion = INDEX_NONE, SealLeft = 0;
+	// (Version 60) The town the player has promised the cabinet, and the months left: a second seal, in wax red.
+	int32 VowRegion = INDEX_NONE, VowLeft = 0;
 	FViewStock Oil;
 	FViewStock Supplies;
 	TArray<FViewLane> Lanes;
