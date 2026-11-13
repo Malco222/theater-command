@@ -22,6 +22,7 @@ import { KIND, type Corps, type Game, type Region } from './types';
 import { groundRules } from './ground';
 import { downBetween } from './rivers';
 import { EASTERN, allied, atWar, headline, inDesert } from './game';
+import { besieged } from './siege';
 
 /** A line between two neighbouring provinces (a is the lower id), and the point where it crosses from one into the other. */
 export interface RailLink { a: number; b: number; x: number; y: number }
@@ -73,7 +74,8 @@ export function mendRail(g: Game, r: number): boolean {
 /** Whether a train of this nation can run from one province to the next: a line between them, both ends friendly and whole, the bridges standing. */
 export function railOpen(g: Game, nat: string, a: number, b: number): boolean {
   if (!railsAt(a).includes(b) || railCut(g, a) || railCut(g, b) || downBetween(g, a, b)) return false;
-  return allied(g, nat, g.regions[a].ctrl) && allied(g, nat, g.regions[b].ctrl);
+  // The station is in the town: no train runs through a province whose town is under siege, whoever is winning there.
+  return allied(g, nat, g.regions[a].ctrl) && allied(g, nat, g.regions[b].ctrl) && !besieged(g, g.regions[a]) && !besieged(g, g.regions[b]);
 }
 
 /** Whether the news of a railway matters to the player: it was theirs, or they took it. */

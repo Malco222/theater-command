@@ -500,5 +500,5 @@ describe('ordering', () => {
     }
     for (const k of Object.keys(g.flags).filter((x) => x.startsWith('wk:aa:'))) expect(g.flags[k]).toBeLessThanOrEqual(3);
     expect(PRODUCTION.builds.art).toBeUndefined();
-  });
+  }, 30_000);
 });

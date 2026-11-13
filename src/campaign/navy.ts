@@ -17,6 +17,7 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
+import { arrive, garrisonOf, roomIn, siegeRules } from './siege';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
   STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
@@ -320,7 +321,13 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   if (n.sealift <= 0) return `${n.name} has no shipping to move an army by sea.`;
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
   if (!from.port || !to.port || to.id === from.id) return 'Troops are shipped from one port to another.';
-  if (!allied(g, c.nat, to.ctrl) || hostileUnits(g, to, c.nat).length) return `${to.name} is not in friendly hands.`;
+  if (!allied(g, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
+  if (hostileUnits(g, to, c.nat).length) {
+    // A town under siege with its harbour still open: ships can run more troops into the garrison, if it has room.
+    if (!siegeRules(g)) return `${to.name} is not in friendly hands.`;
+    if (c.kind === 'eng') return `The enemy holds the country round ${to.name}: only fighting troops are run into the town.`;
+    if (garrisonOf(to).length >= roomIn(g, to)) return `${to.name} is under siege, and the town has no room for another corps.`;
+  }
   const steep = whyBarred(g, c, to);
   if (steep) return steep;
   if (friendlyUnits(g, to, c.nat).length >= STACK) return `${to.name} has no room for another corps.`;
@@ -483,7 +490,8 @@ export function landCorps(g: Game, cs: Corps[], to: Region): Landing {
   } else {
     g.week = 1;
     for (const c of cs) relocate(g, c, to);
-    capture(g, to, nat);
+    // Ashore with no army to meet them: the province is theirs unless its town is held, and then the town is under siege.
+    arrive(g, to, nat);
   }
   for (const c of cs) if (!c.dead) c.ap = 0;
   const adj = g.nations[nat].adj;

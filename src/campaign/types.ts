@@ -33,6 +33,11 @@ export interface Region {
   /** Turn this region last changed hands, and who held it before. */
   since: number;
   prev: string | null;
+  /**
+   * The corps inside the province's town (the grand campaign): its garrison. They are not among `units`, which
+   * are the armies in the field, so nothing that moves or fights in the open ever counts them. See siege.ts.
+   */
+  garr?: Corps[];
 }
 
 export interface Nation {
@@ -228,6 +233,8 @@ export interface Corps extends Storied {
   mw?: [string, number, number][];
   /** The number its first division carries (the grand campaign): its divisions are numbered on from there. */
   dn?: number;
+  /** In garrison inside its province's town since this month (the grand campaign): it is on the region's `garr` list, not among its `units`. */
+  town?: number;
 }
 
 /** What an army does on the day the enemy comes: fight where it stands, fight from trenches it has dug, or give ground. */
@@ -289,7 +296,9 @@ export interface ReportUnit {
   divs: number;
   men: number;
   lost: number;
-  fate: '' | 'retreated' | 'surrendered' | 'destroyed' | 'advanced' | 'evacuated' | 'yielded';
+  fate: '' | 'retreated' | 'surrendered' | 'destroyed' | 'advanced' | 'evacuated' | 'yielded' | 'sheltered';
+  /** Not a corps: the town's own guard of depot troops, police and militia (the grand campaign). */
+  guard?: boolean;
 }
 
 export interface BattleReport {
@@ -314,6 +323,14 @@ export interface BattleReport {
   prisoners: number;
   /** No battle was fought: the defenders were under orders to give ground and fell back before the attack. */
   yielded?: boolean;
+  /** The fight was for the town itself: an assault on its garrison (the grand campaign). */
+  town?: boolean;
+  /** The field was won but the town holds out: the province is under siege, not taken (the grand campaign). */
+  siege?: boolean;
+  /** A relief: the attackers came to raise a siege of their own side's town. */
+  relief?: boolean;
+  /** The garrison of a besieged town came out against the army round it. */
+  sally?: boolean;
 }
 
 // ---- The war at sea ---------------------------------------------------------------------
@@ -410,7 +427,9 @@ export interface ShoreReport {
   place: string;
   zone: number;
   defNat: string;
-  what: 'troops' | 'city';
+  what: 'troops' | 'city' | 'town';
+  /** A town's defences shelled (the grand campaign's sieges): the percent of its works broken down. */
+  works?: number;
   /** The weight of the guns that fired. */
   guns: number;
   /** Troops: the share of their organisation the shelling cost them, and how many divisions it fell on. */
@@ -673,8 +692,8 @@ export interface PlanPhase {
  * its own sky; the others are month-long air campaigns against a region or a sea.
  */
 /** What an air fleet is doing. 'ground' is a raid on troops, flown only in the grand campaign's air war. */
-/** 'fleet' is a strike on one fleet at sea (its target is that fleet's id) and 'harbour' a raid on the ships lying in a port: the grand campaign's carriers and air-sea war. */
-export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour';
+/** 'fleet' is a strike on one fleet at sea (its target is that fleet's id) and 'harbour' a raid on the ships lying in a port: the grand campaign's carriers and air-sea war. 'town' is a raid on the defences of a town an army means to take (the grand campaign's sieges). */
+export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town';
 
 export interface AirLeader {
   name: string;

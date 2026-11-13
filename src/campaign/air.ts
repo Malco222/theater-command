@@ -25,6 +25,8 @@ import { groundRules } from './ground';
 import { bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, raidsMul, seat } from './difficulty';
 import { fuelAir } from './resources';
+import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
+import { townName } from './towns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, Region, SeaSide, ShipClass, Ships } from './types';
 
 type Sched = [number, number, number][];
@@ -115,10 +117,11 @@ export const MISSION: Record<AirMission, { label: string; what: string }> = {
   ground: { label: 'Raid troops', what: 'Fighters and bombers go for an enemy army where it stands, and cut its organisation for the battle that follows.' },
   fleet: { label: 'Strike a fleet', what: 'Bombers go for one enemy fleet at sea, with fighters if it is in their range.' },
   harbour: { label: 'Raid a harbour', what: 'Bombers go for the warships lying in one enemy port.' },
+  town: { label: 'Bomb a town', what: 'Bombers go for the defences of a town an army means to take, and shake the troops inside it.' },
 };
-const OFFENSIVE: AirMission[] = ['superiority', 'bomb', 'night', 'strike', 'ground', 'fleet', 'harbour'];
+const OFFENSIVE: AirMission[] = ['superiority', 'bomb', 'night', 'strike', 'ground', 'fleet', 'harbour', 'town'];
 /** How hard a month of one kind of mission is fought, beside a fight for the sky. */
-const intensity = (m: AirMission): number => (m === 'ground' ? AIRWAR.ground.intensity : m === 'fleet' ? CARRIERS.strike.intensity : m === 'harbour' ? CARRIERS.harbour.intensity : AIR.combat.intensity[m]);
+const intensity = (m: AirMission): number => (m === 'ground' ? AIRWAR.ground.intensity : m === 'fleet' ? CARRIERS.strike.intensity : m === 'harbour' ? CARRIERS.harbour.intensity : m === 'town' ? SIEGE.bombard.intensity : AIR.combat.intensity[m]);
 export const isOffensive = (m: AirMission): boolean => OFFENSIVE.includes(m);
 
 const SURFACE = ['bb', 'cv', 'ca', 'dd'] as const;
@@ -465,6 +468,13 @@ export function whyNotMission(g: Game, f: AirFleet, m: AirMission, target: numbe
     if (!r.units.some((u) => !u.dead && atWar(g, f.nat, u.nat))) return 'There are no enemy troops there.';
     return (f.ftr > 0 && d <= R.ftrRange) || (f.bmr > 0 && d <= R.bmrRange) ? null : 'It is out of range.';
   }
+  if (m === 'town') {
+    if (!siegeRules(g) || !airWar(g)) return 'Towns are bombed only in the grand campaign.';
+    if (!atWar(g, f.nat, r.ctrl)) return `${townName(r)} is not in enemy hands.`;
+    if (!townHeld(g, r)) return `Nobody holds ${townName(r)}: an army can walk in.`;
+    if (!f.bmr && !escort) return 'It has no bombers.';
+    return d > (escort ? R.ftrRange : R.bmrRange) ? (escort ? 'That town is beyond its fighters.' : 'That town is beyond its bombers.') : null;
+  }
   if (!atWar(g, f.nat, r.ctrl)) return 'That region is not in enemy hands.';
   if (m === 'superiority') return (f.ftr > 0 && d <= R.ftrRange) || (f.bmr > 0 && d <= R.bmrRange) ? null : 'It is out of range.';
   if (!f.bmr && !escort) return f.kind === 'ftr' ? 'Fighters do not fly with the night bombers.' : 'It has no bombers.';
@@ -514,7 +524,8 @@ export function airUpkeep(g: Game, nat: string): void {
   for (const f of airFleetsOf(g, nat)) {
     // A carrier wing has no airfield to lose: it goes where its fleet goes.
     if (f.ship !== undefined) continue;
-    if (!allied(g, nat, g.regions[f.base].ctrl) && !fallBack(g, f)) continue;
+    // Airfields lie out in the country: a group whose province is under siege has lost them, though the town holds.
+    if ((!allied(g, nat, g.regions[f.base].ctrl) || besieged(g, g.regions[f.base])) && !fallBack(g, f)) continue;
     // The staff moves strength between fleets by changing what each is kept at.
     const r = AIR.fleets.find((x) => x.nat === nat && x.name === (f.parent ?? f.name));
     const e = r ? row(r.est, g.turn) : null;
@@ -554,7 +565,7 @@ function fallBack(g: Game, f: AirFleet): boolean {
   const nearest = (fields: boolean): Region | null => {
     let out: Region | null = null, bd = Infinity;
     for (const r of g.regions) {
-      if (r.ctrl !== f.nat || (fields && !hasAirfield(g, r.id))) continue;
+      if (r.ctrl !== f.nat || (fields && !hasAirfield(g, r.id)) || besieged(g, r)) continue;
       const d = Math.hypot(r.x - old.x, r.y - old.y);
       if (d < bd) { bd = d; out = r; }
     }
@@ -578,7 +589,7 @@ function fallBack(g: Game, f: AirFleet): boolean {
   f.ready = Math.max(AIR.ready.floor, f.ready - AIR.ready.move);
   f.mission = 'support';
   f.target = -1;
-  headline(g, 'event', `With ${old.name} lost, ${f.name} falls back to airfields in ${best.name}.`, f.nat, best.id);
+  headline(g, 'event', `With ${old.name} ${allied(g, f.nat, old.ctrl) && besieged(g, old) ? 'under siege' : 'lost'}, ${f.name} falls back to airfields in ${best.name}.`, f.nat, best.id);
   return true;
 }
 
@@ -723,7 +734,7 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
   const L = airWar(g) ? (night ? AIRWAR.losses.night : AIRWAR.losses) : null;
   out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met, L.power) : C.bombers * met) * I + (night ? C.night.flak : C.flak) * I) : 0;
   // Guns round the factories bring down more of the bombers that come for them.
-  out.aa = m === 'bomb' || night || m === 'harbour' ? gunsAt(g, target) : 0;
+  out.aa = m === 'bomb' || night || m === 'harbour' || m === 'town' ? gunsAt(g, target) : 0;
   if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I * unready);
   // Ships under attack: their own guns, what the fighter cover spoils, and what the crews are worth against ships.
   const shipGuns = out.ships.reduce((s, x) => s + SHIPS.reduce((n, c) => n + x.ships[c] * CARRIERS.flak.ships[c], 0), 0);
@@ -766,6 +777,11 @@ export function assessAir(g: Game, fleets: AirFleet[], m: AirMission, target: nu
     });
   }
   if (out.aa && m === 'harbour') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring the harbour of ${place}`, effect: 'They bring down more of the bombers' });
+  if (m === 'town') {
+    const r = g.regions[target], gone = breachOf(g, r);
+    out.lines.push({ label: 'The town', value: `Troops inside ${townName(r)} fight ${Math.round((townBonus(g, r) - 1) * 100)}% stronger${gone > 0 ? `, with ${Math.round(gone * 100)}% of its works already broken down` : ''}`, effect: `${SIEGE.bombard.raidFull} bombers getting through break down ${SIEGE.breach.raid}% of its works, fewer their share; never more than ${SIEGE.breach.most}% in all` });
+  }
+  if (out.aa && m === 'town') out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   else if (out.aa) out.lines.push({ label: 'Anti-aircraft guns', value: `Level ${out.aa} guns ring the factories of ${place}`, effect: `They stop ${Math.round(out.aa * WORKS.aa.cut * 100)}% of the bombing and bring down more of the bombers` });
   if (out.ships.length) {
     const pc = (x: number): string => `${Math.round(x * 100)}%`;
@@ -954,6 +970,12 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0)) { value += 300; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
     else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : 'No bombers got through.';
     result = result.trim();
+  } else if (m === 'town') {
+    // A raid on a town: part of its works are broken down for the assault, and the troops inside are shaken.
+    const r = g.regions[target];
+    const hit = hitTown(g, r, 'raid', townShare('raid', through) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
+    value += hit.share * hit.divs * SIEGE.bombard.value;
+    result = through > 0 ? townHitText(g, r, hit, 'bombs', true) : 'No bombers got through.';
   } else if (m === 'ground') {
     // A raid on troops: the army there is harried for a month, and goes into its next battle the weaker for it.
     const G = AIRWAR.ground;
@@ -1034,7 +1056,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   };
   if (struck) { rep.ships = struck; if (m === 'fleet') rep.fleet = target; if (a.surprise) rep.surprise = true; }
   g.airReports.push(rep);
-  storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost });
+  storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost });
 
   const who = list(fleets.filter((f) => a.att.some((x) => x.f === f)).map((f) => f.name));
   const cost = `${planes(aLost, 'aircraft').replace('aircrafts', 'aircraft')} lost`;
@@ -1045,6 +1067,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   if (m === 'superiority') text = `${who} ${a.att.length === 1 ? 'fights' : 'fight'} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? (together ? 'The Allied air forces now hold the sky there.' : `The ${g.nations[nat].adj} air force now holds the sky there.`) : df(def) ? 'The defenders still hold their sky.' : 'No fighters came up to meet them.'}`;
   else if (m === 'fleet') text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} the ${a.ships[0].name} in ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (m === 'harbour') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} the harbour of ${a.place}${a.surprise ? ' without warning' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
+  else if (m === 'town') text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} the defences of ${townName(g.regions[target])}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else if (sea) text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} at shipping in ${a.place}. ${result} ${cap(cost)}.`;
   else if (m === 'ground') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} the ${adj} troops at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} ${a.place}${night ? ' by night' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
@@ -1209,7 +1232,8 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
         if (fc.bomberLoss > rules.loss || fc.success < R.success) return;
         // Factories stopped, a factory wrecked, a junction cut or an army shaken, against the aircraft it should cost.
         const railWorth = (m === 'bomb' || m === 'night') && r.fac <= 0 ? rules.rail : 1;
-        const v = (fc.worth * railWorth + fc.foeLoss) * (you !== null && r.ctrl === you ? rules.focus ?? 1 : 1) - fc.ftrLoss - fc.bmrLoss;
+        // (A town its own army stands round comes first with the staff: the assault waits on the bombers.)
+        const v = (fc.worth * railWorth * (m === 'town' ? SIEGE.ai.raid : 1) + fc.foeLoss) * (you !== null && r.ctrl === you ? rules.focus ?? 1 : 1) - fc.ftrLoss - fc.bmrLoss;
         if (v > R.worth && (!pick.best || v > pick.best.v)) pick.best = { m, t: r.id, fleets, v };
       };
       const works = g.regions
@@ -1225,6 +1249,13 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
         .sort((a, b) => (front.get(b.id) ?? 0) * foes(b) - (front.get(a.id) ?? 0) * foes(a) || a.id - b.id)
         .slice(0, R.look);
       for (const r of troops) weigh('ground', r, [f, ...escorts.filter((e) => whyNotMission(g, e, 'ground', r.id) === null)]);
+      // A town its side's army stands round: the bombers break down the works for the assault.
+      if (siegeRules(g)) {
+        for (const r of g.regions) {
+          if (hit.has(r.id) || !besieged(g, r) || !allied(g, nat, besiegerOf(g, r) ?? '') || breachOf(g, r) * 100 > SIEGE.breach.most - 10 || whyNotMission(g, f, 'town', r.id) !== null) continue;
+          weigh('town', r, [f, ...escorts.filter((e) => whyNotMission(g, e, 'town', r.id) === null)]);
+        }
+      }
     }
     if (!pick.best) break;
     send(pick.best.m, pick.best.t, pick.best.fleets, flown++);
@@ -1272,6 +1303,8 @@ export interface AirForecast {
   /** A strike on ships: the ships of each class it should sink, and the hits it should score. */
   ships?: Ships;
   hits?: number;
+  /** A raid on a town: what it should do to the works and to the troops inside. */
+  town?: TownHit;
 }
 
 /** The share of a strike that finds the ships it is sent against: all of it where they are identified, less where they are known only from a report. */
@@ -1300,6 +1333,7 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
   let rail: number | undefined, ruin: number | undefined;
   let ships: Ships | undefined, hits: number | undefined;
   let lumps: [number, number][] | undefined, expected = 0;
+  let town: TownHit | undefined;
   if (m === 'superiority') {
     const based = g.airFleets.filter((f) => f.base === target && f.ship === undefined && atWar(g, f.nat, nat)).length;
     cut = based ? Math.min(AIR.damage.airfields.max, through / AIR.damage.airfields.scale) : 0;
@@ -1333,6 +1367,10 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     value = SHIPS.reduce((s, c) => s + Math.floor(exp.sunk[c]) * V[c], 0);
     lumps = SHIPS.filter((c) => exp.sunk[c] % 1 > 0.001).map((c): [number, number] => [exp.sunk[c] % 1, V[c]]);
     expected = exp.value;
+  } else if (m === 'town') {
+    town = planTownHit(g, g.regions[target], 'raid', townShare('raid', through) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
+    cut = town.share;
+    value = town.share * town.divs * SIEGE.bombard.value;
   } else if (m === 'ground') {
     const G = AIRWAR.ground;
     const r = g.regions[target];
@@ -1360,5 +1398,5 @@ export function forecastAir(g: Game, a: AirAssess, m: AirMission, target: number
     }
     value = expected;
   }
-  return { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, success, worth: value + 300 * (pr + pf), ships, hits };
+  return { odds, bomberLoss: a.bomberLoss, cut, nation, rail, ruin, ftrLoss, bmrLoss, foeLoss, success, worth: value + 300 * (pr + pf), ships, hits, town };
 }

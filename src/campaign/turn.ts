@@ -28,7 +28,7 @@ import {
   type EscortLane, type EscortPlan, type FleetCard, type SeaOption, type ShorePlan, type ShoreTarget,
 } from './fleets';
 import {
-  armiesSeen, booksOf, cityReport, corpsKnown, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
+  SIGHT, armiesSeen, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
   whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
 import type { TicketLine } from '../core/ticket';
@@ -44,6 +44,7 @@ import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
+import { garrison, garrisonOf, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type SiegeView } from './siege';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -238,6 +239,8 @@ export function reach(g: Game, c: Corps): Map<number, Reach> {
       const old = out.get(j);
       if (old && old.cost <= cost) continue;
       out.set(j, { cost, prev: a, attack: false });
+      // An army that comes up to a town the enemy holds stops there for the month (the grand campaign).
+      if (!friendly && siegeRules(g) && townHeld(g, r)) continue;
       open.push(j);
     }
   }
@@ -301,7 +304,11 @@ const chanceAt = (odds: number): number => Math.max(0, Math.min(1, (1.2 - 1.2 / 
 
 export function attackOutlook(g: Game, corps: Corps[], target: Region): Outlook | null {
   const a = previewAttack(g, corps, target);
-  if (!a) return null;
+  return a ? outlookOf(g, a, target) : null;
+}
+
+/** An assessment as the player's staff can report it: exact where every defender is identified, a band where not. */
+function outlookOf(g: Game, a: Assessment, target: Region): Outlook {
   const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
   const k = sortKnown(g, a.defenders, g.human);
   if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), unidentified: 0, stale: 0, note: '', lines: a.lines };
@@ -338,6 +345,130 @@ export function orderAttack(g: Game, corps: Corps[], target: Region): BattleRepo
   const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length) return null;
   return resolveBattle(g, ok, target);
+}
+
+// ---- Cities, towns and sieges (the grand campaign) -------------------------------------------------------------
+//
+// The town is the key to its province. Troops stand either in the field (the province's armies, as always) or
+// inside the town as its garrison. Winning the field wins the country round the town and puts it under siege; the
+// province changes hands only when the town is stormed, starved out or opens its gates. An interface shows a
+// province's town with townSiege(), lists every siege with siegesInSight(), and gives the orders below: into the
+// town and out of it, the assault, and the garrison's sortie. A siege is raised by an ordinary attack on the army
+// round the town (orderAttack): the garrison joins in.
+
+/** True for a corps of the player's own in a garrison, or in the field, that he may order into or out of a town this month. */
+const townOrder = (g: Game, c: Corps): boolean => !c.dead && g.human !== null && current(g) === g.human && c.nat === g.human && c.leave === undefined;
+
+/** The town of a province as a fortress: what it holds, what it adds to its defenders, and how its siege stands. Null outside the grand campaign. */
+export function townSiege(g: Game, region: number): SiegeView | null {
+  const v = siegeView(g, region);
+  if (!v || g.human === null || !fogOn(g, g.human)) return v;
+  // Under the fog an enemy's garrison is counted only where the player's side stands round the town or has the province in full view.
+  const r = g.regions[region];
+  if (allied(g, g.human, r.ctrl) || (v.by && allied(g, g.human, v.by)) || sightOf(g, g.human)[region] === SIGHT.full) return v;
+  return { ...v, inside: -1 };
+}
+
+/** Every siege the player knows of: his own, his allies', and any other on ground he can see. */
+export function siegesInSight(g: Game): SiegeView[] {
+  const all = siegesNow(g);
+  if (g.human === null || !fogOn(g, g.human)) return all;
+  const sight = sightOf(g, g.human);
+  return all.filter((v) => allied(g, g.human!, v.holder) || (v.by !== null && allied(g, g.human!, v.by)) || sight[v.region] !== SIGHT.none);
+}
+
+/** The garrison inside a province's town, one card for each nation with corps in it, as the player knows them. */
+export function garrisonsAt(g: Game, region: number): ArmyCard[] {
+  const r = g.regions[region];
+  if (!r || !r.garr) return [];
+  const nats = [...new Set(r.garr.filter((c) => !c.dead).map((c) => c.joint ?? c.nat))];
+  return nats.map((n) => armyCard(g, region, n, g.human, true)).filter((a): a is ArmyCard => a !== null);
+}
+
+/** The player's own corps inside a province's town. */
+export const myGarrison = (g: Game, region: number): Corps[] => (g.human === null ? [] : garrisonOf(g.regions[region]).filter((c) => c.nat === g.human && !c.dead));
+
+/** Why the player cannot send this corps into its province's town, or null if he can. */
+export function whyNotGarrisonTown(g: Game, c: Corps): string | null {
+  if (!townOrder(g, c)) return 'That corps takes no orders from you this month.';
+  return whyNotGarrison(g, c);
+}
+
+/** Sends a corps into the town of the province it stands in. It does nothing more this month. */
+export function orderGarrison(g: Game, c: Corps): boolean {
+  return whyNotGarrisonTown(g, c) === null && garrison(g, c);
+}
+
+/** Why the player cannot bring this corps out of its town into the field, or null if he can. */
+export function whyNotLeaveTown(g: Game, c: Corps): string | null {
+  if (!townOrder(g, c)) return 'That corps takes no orders from you this month.';
+  return whyNotTakeField(g, c);
+}
+
+/** Brings a corps of the garrison out into the field. */
+export function orderTakeField(g: Game, c: Corps): boolean {
+  return whyNotLeaveTown(g, c) === null && takeField(g, c);
+}
+
+/**
+ * The player's corps round a town that could go into an assault this month. A town is assaulted once a month, and
+ * every corps round it can go in, however much of its month it has used: troops that have just won the country
+ * round the town may follow the beaten defenders straight to the walls.
+ */
+export function stormCandidates(g: Game, region: number): Corps[] {
+  const r = g.regions[region];
+  if (!r || g.human === null) return [];
+  return r.units.filter((c) => canOrder(g, c) && !c.town && atWar(g, c.nat, r.ctrl));
+}
+
+/** Why the player cannot storm the town of this province, or null if he can. */
+export function whyNotStormTown(g: Game, region: number): string | null {
+  const r = g.regions[region];
+  if (!r) return 'Pick a province.';
+  if (g.human === null || current(g) !== g.human || onEve(g)) return 'It is not your month.';
+  return whyNotStorm(g, r, g.human) ?? (stormCandidates(g, region).length ? null : 'None of your corps round the town takes your orders this month.');
+}
+
+/**
+ * What the staff can say of an assault on the town before it is ordered: the odds (a band where the garrison is
+ * not identified), the chance of taking it, and the Battle Ticket. `corps` are the player's corps to send, all that
+ * can go if left out.
+ */
+export function stormOutlook(g: Game, region: number, corps?: Corps[]): Outlook | null {
+  const r = g.regions[region];
+  if (!r || whyNotStormTown(g, region)) return null;
+  const a = previewStorm(g, corps ? corps.filter((c) => canOrder(g, c)) : stormCandidates(g, region), r);
+  return a ? outlookOf(g, a, r) : null;
+}
+
+/** Storms the town: once a month for each town. It costs more men than a fight in the open, and an assault the month the army comes up is a hasty one. */
+export function orderStorm(g: Game, region: number, corps?: Corps[]): BattleReport | null {
+  const r = g.regions[region];
+  if (!r || whyNotStormTown(g, region)) return null;
+  return storm(g, corps ? corps.filter((c) => canOrder(g, c)) : stormCandidates(g, region), r);
+}
+
+/** Why the player's garrison cannot sally out against the army round its town, or null if it can. */
+export function whyNotSallyOut(g: Game, region: number): string | null {
+  const r = g.regions[region];
+  if (!r) return 'Pick a province.';
+  if (g.human === null || current(g) !== g.human || onEve(g)) return 'It is not your month.';
+  return whyNotSally(g, r, g.human);
+}
+
+/** What the staff can say of a sortie before it is ordered. */
+export function sallyOutlook(g: Game, region: number): Outlook | null {
+  const r = g.regions[region];
+  if (!r || whyNotSallyOut(g, region)) return null;
+  const a = previewSally(g, r, g.human!);
+  return a ? outlookOf(g, a, r) : null;
+}
+
+/** The garrison comes out against the army round the town: win, and the siege is raised. One sortie a month from each town. */
+export function orderSally(g: Game, region: number): BattleReport | null {
+  const r = g.regions[region];
+  if (!r || whyNotSallyOut(g, region)) return null;
+  return sally(g, r, g.human!);
 }
 
 // ---- Joint armies: an ally's corps marching with the player's (the grand campaign) ---------------------------

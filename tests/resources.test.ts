@@ -446,16 +446,19 @@ describe('privation at home', () => {
     expect(st.hunger ?? 0).toBeCloseTo(Math.max(0, worst - RES.will.heal), 9);
   });
 
-  it('chokes a country that is starved for long enough', () => {
+  it('weakens a country that is starved for long, but hunger alone brings nobody down', () => {
     const g = grand('GER');
     war(g, 'UK', 'GER');
     const st = g.nations.UK.res!;
-    st.hunger = (g.nations.UK.resilience / RES.will.per) * 0.6;
+    const base = collapseScore(g, 'UK');
+    st.hunger = g.nations.UK.resilience / RES.will.per + 0.5;
+    // However long it lasts, privation counts for so much and no more: the rest must be done in the field.
+    expect(willLost(g, 'UK')).toBeCloseTo(RES.will.most, 9);
+    expect(collapseScore(g, 'UK')).toBeCloseTo(base + RES.will.most, 9);
+    expect(RES.will.most).toBeLessThan(g.nations.UK.resilience);
+    expect(RES.will.most).toBeLessThan(g.nations.ITA.resilience);
     checkCollapse(g, 'UK', 'GER');
     expect(g.nations.UK.alive).toBe(true);
-    st.hunger = g.nations.UK.resilience / RES.will.per + 0.5;
-    checkCollapse(g, 'UK', 'GER');
-    expect(g.nations.UK.alive).toBe(false);
   });
 });
 

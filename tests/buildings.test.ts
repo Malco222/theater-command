@@ -312,6 +312,8 @@ describe('what the buildings are worth', () => {
     expect(civicSum(g, 'GER')).toMatchObject({ tax: l.tax! * 2, pc: l.pc! * 2 });
     expect(ledger(g, 'GER').income.find((x) => x.key === 'tax')!.amount).toBeCloseTo(l.tax! * 2, 6);
     const warsaw = g.byName['Warsaw'];
+    // Taken, with nobody left in the field to dispute it: a province under siege would pay nothing.
+    for (const c of [...warsaw.units]) { c.dead = true; warsaw.units.splice(warsaw.units.indexOf(c), 1); }
     warsaw.ctrl = 'GER';
     const bare = provinceYield(g, warsaw, 'GER').total;
     built(g, 'hall', warsaw, 2);

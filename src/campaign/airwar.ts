@@ -27,8 +27,10 @@ import { allied, atWar, headline } from './game';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
 import { onNet, railCut, railsAt } from './rails';
+import { besiegerOf, siegeRules, siegeView, townHeld, townHitText } from './siege';
+import { townName } from './towns';
 
-export type RaidKind = 'bomb' | 'night' | 'ground' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon';
+export type RaidKind = 'bomb' | 'night' | 'ground' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon';
 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
@@ -44,10 +46,11 @@ function placeOf(g: Game, kind: RaidKind, target: number, viewer: string | null 
     return fleetKnown(g, t, viewer) === 'exact' ? `the ${t.name}` : `${g.nations[t.nat].adj} ships in the ${g.seas[t.zone].name}`;
   }
   if (kind === 'harbour') return `the harbour of ${g.regions[target]?.name ?? ''}`;
+  if (kind === 'town') return g.regions[target] ? `the defences of ${townName(g.regions[target])}` : '';
   return g.regions[target]?.name ?? '';
 }
 /** The kind of raid a group's orders are, for naming what it flew against. */
-const kindFlown = (m: AirMission): RaidKind => (m === 'strike' || m === 'fleet' || m === 'harbour' ? m : 'bomb');
+const kindFlown = (m: AirMission): RaidKind => (m === 'strike' || m === 'fleet' || m === 'harbour' || m === 'town' ? m : 'bomb');
 /** Where a group flies from, in words: its airfield's province, or the fleet whose carriers it is aboard. */
 const homeName = (g: Game, f: AirFleet): string => carrierOf(g, f)?.name ?? g.regions[f.base].name;
 /** How far one group is from another's base: nothing where they share an airfield or a fleet. */
@@ -350,6 +353,15 @@ function unidentified(g: Game, nat: string, region: number): boolean {
   return g.regions[region].units.some((u) => !u.dead && !allied(g, u.nat, nat) && corpsKnown(g, u, nat).level !== 'exact');
 }
 
+/** True for an enemy town worth the bombs: one this nation's side stands round, or one its armies stand beside. */
+function townWanted(g: Game, nat: string, region: number): boolean {
+  const r = g.regions[region];
+  if (!siegeRules(g) || !atWar(g, nat, r.ctrl) || !townHeld(g, r)) return false;
+  const by = besiegerOf(g, r);
+  if (by) return allied(g, nat, by);
+  return r.nb.some((j) => g.regions[j].units.some((u) => !u.dead && allied(g, u.nat, nat)));
+}
+
 function reachable(g: Game, nat: string, kind: RaidKind): Map<number, AirFleet[]> {
   const out = new Map<number, AirFleet[]>();
   const fleets = able(g, nat);
@@ -357,6 +369,7 @@ function reachable(g: Game, nat: string, kind: RaidKind): Map<number, AirFleet[]
   const sight = kind === 'ground' || kind === 'recon' ? sightOf(g, nat) : null;
   for (const t of targetIds(g, kind, nat)) {
     if (kind === 'ground' && !troopsSeen(g, nat, t, sight!)) continue;
+    if (kind === 'town' && !townWanted(g, nat, t)) continue;
     // Ground in full view has something to show a camera only where an army there is not identified, or known from an old report.
     if (kind === 'recon' && sight![t] === SIGHT.full && !unidentified(g, nat, t)) continue;
     const can = fleets.filter((f) => whyNotSeat(g, f, kind, t) === null);
@@ -424,6 +437,11 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
     return bits.join(', ');
   }
   const r = g.regions[t];
+  if (kind === 'town') {
+    const v = siegeView(g, t)!;
+    const who = sight[t] === SIGHT.none && !v.by ? 'its garrison not known' : v.inside ? `${plural(v.inside, 'corps', 'corps')} inside${v.guard > 0 ? ' with its guard' : ''}` : 'held by its guard alone';
+    return `${v.sizeWord}: ${who}. Troops inside fight ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, ${Math.round(v.broken * 100)}% of its works broken` : ''}${v.by ? ', under siege' : ''}${gunsAt(g, t) ? `, level ${gunsAt(g, t)} guns` : ''}`;
+  }
   if (kind === 'bomb' || kind === 'night') {
     const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : ''];
     return bits.filter(Boolean).join(', ');
@@ -545,6 +563,8 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     const maybe = sunk ? CLASSES.filter((c) => sunk[c] % 1 >= 0.15).map((c) => `${pct(sunk[c] % 1)} for ${sunk[c] >= 1 ? 'another' : 'a'} ${word(c, 1)}`) : [];
     out.push(`About ${hits >= 10 ? num(hits) : hits.toFixed(1)} bombs and torpedoes should hit. ${sure.length ? `That should sink ${list(sure)}` : maybe.length ? 'No ship is sure to go down' : 'Too few to sink a ship'}${maybe.length ? `, with a chance of ${list(maybe)}` : ''}. Carriers and battleships are aimed at first, and every ship hit leaves the fleet less fit for sea.`);
     if (sunk && sunk.cv > 0.15) out.push('A carrier that goes down takes most of its aircraft with it.');
+  } else if (kind === 'town') {
+    if (fc.town) out.push(townHitText(g, g.regions[target], fc.town, 'bombs', false));
   } else if (kind === 'ground') {
     const dug = g.regions[target].units.some((u) => !u.dead && u.dug && atWar(g, nat, u.nat));
     out.push(`The troops at ${place} should lose about ${pct(fc.cut)} of their organisation${dug ? ' (less where they are dug in)' : ''}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);

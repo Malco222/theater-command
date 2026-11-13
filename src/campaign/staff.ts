@@ -18,6 +18,7 @@ import { concertFor, landingsFor, nerveOf, seat } from './difficulty';
 import { DOMINATION, dominating } from './domination';
 import { openAirWar } from './air';
 import { openCarriers } from './carriers';
+import { fieldCtrl, openSieges } from './siege';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
@@ -75,6 +76,7 @@ export function startOpen(g: Game): Game {
   openStores(g);
   openAirWar(g);
   openCarriers(g);
+  openSieges(g);
   openMorale(g);
   openEscorts(g);
   openTrade(g);
@@ -139,7 +141,9 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   const inPlay = (r: Region): boolean => (o.scope ? o.scope.has(r.id) : !o.skip?.(r));
   // 1 friendly ground, 2 enemy ground.
   const side = new Int8Array(N);
-  for (const r of g.regions) if (inPlay(r)) side[r.id] = foe(r.ctrl) ? 2 : allied(g, nat, r.ctrl) ? 1 : 0;
+  // Whose army holds the country counts here, not whose town it is: a town shut in by the enemy lies behind his front.
+  const lord = g.regions.map((r) => fieldCtrl(g, r));
+  for (const r of g.regions) if (inPlay(r)) side[r.id] = foe(lord[r.id]) ? 2 : allied(g, nat, lord[r.id]) ? 1 : 0;
   const label = new Int16Array(N).fill(-1);
   let groups = 0;
   // In the last act every neighbour is an enemy and none of them is another's friend: each country is a front of
@@ -151,7 +155,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     label[r.id] = groups;
     for (let i = 0; i < q.length; i++) {
       for (const j of g.regions[q[i]].nb) {
-        if (label[j] >= 0 || side[j] !== side[r.id] || (each && side[j] === 2 && g.regions[j].ctrl !== r.ctrl)) continue;
+        if (label[j] >= 0 || side[j] !== side[r.id] || (each && side[j] === 2 && lord[j] !== lord[r.id])) continue;
         label[j] = groups; q.push(j);
       }
     }
@@ -167,8 +171,8 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     for (const j of r.nb) {
       if (side[j] !== 1 || !manned[label[j]]) continue;
       // An ally's country is a way in only if that ally is in this war too: nobody attacks out of a neutral's garden.
-      const host = g.regions[j].ctrl;
-      if (host !== nat && !atWar(g, host, r.ctrl)) continue;
+      const host = lord[j];
+      if (host !== nat && !atWar(g, host, lord[r.id])) continue;
       let f = found.get(label[r.id]);
       if (!f) found.set(label[r.id], (f = { ours: new Set(), edge: new Set(), areas: new Set() }));
       f.ours.add(j); f.edge.add(r.id); f.areas.add(label[j]);
@@ -197,7 +201,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     const enemies = new Set<string>();
     for (const id of q) {
       const r = g.regions[id], d = depth[id];
-      enemies.add(r.ctrl);
+      enemies.add(lord[id]);
       const near = d === 1 ? 1 : d === 2 ? 0.6 : d === 3 ? 0.35 : 0.12;
       for (const u of r.units) {
         if (!foe(u.nat)) continue;
@@ -280,7 +284,7 @@ function axis(g: Game, nat: string, f: Front, placed = false): string[] {
   // of the front held by a corps or two, however short the way from there.
   const push = (id: number): number => {
     let sum = 0;
-    for (const j of g.regions[id].nb) if (allied(g, nat, g.regions[j].ctrl)) for (const u of g.regions[j].units) if (u.nat === nat && u.kind !== 'fort' && !u.dead) sum += atkP(g, u);
+    for (const j of g.regions[id].nb) if (allied(g, nat, fieldCtrl(g, g.regions[j]))) for (const u of g.regions[j].units) if (u.nat === nat && u.kind !== 'fort' && !u.dead) sum += atkP(g, u);
     return sum;
   };
   const force = placed ? doors.map(push) : [];
@@ -344,7 +348,7 @@ function bound(g: Game, nat: string, f: Front, way: string[], opening: boolean, 
     // A bulge in the line, with more of this army's ground around it than the enemy's, is a base for a stroke into
     // the flank of the advance. It is cleared: nothing is left standing behind the front.
     const round = r.nb.map((j) => g.regions[j]);
-    const bulge = round.filter((x) => allied(g, nat, x.ctrl)).length > round.filter((x) => atWar(g, nat, x.ctrl)).length;
+    const bulge = round.filter((x) => allied(g, nat, fieldCtrl(g, x))).length > round.filter((x) => atWar(g, nat, fieldCtrl(g, x))).length;
     if (r.cap || r.vp >= 2 || held <= OPEN.weak || bulge) out.add(r.name);
   }
   return [...out];
@@ -356,7 +360,7 @@ function nearEnemy(g: Game, nat: string, at: Region, within: number): boolean {
   let ring = [at.id];
   for (let d = 0; d < within; d++) {
     const next: number[] = [];
-    for (const id of ring) for (const j of g.regions[id].nb) if (!seen.has(j)) { seen.add(j); next.push(j); if (atWar(g, nat, g.regions[j].ctrl)) return true; }
+    for (const id of ring) for (const j of g.regions[id].nb) if (!seen.has(j)) { seen.add(j); next.push(j); if (atWar(g, nat, fieldCtrl(g, g.regions[j]))) return true; }
     ring = next;
   }
   return false;
