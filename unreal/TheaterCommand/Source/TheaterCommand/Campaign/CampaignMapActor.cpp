@@ -452,6 +452,7 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetTextureParameterValue(TEXT("Fields"), FieldsPicture);
 	// (the nation's stain lies over the canopy at a little under half its strength: a wood is green first, and its owner's second)
 	LandMaterial->SetScalarParameterValue(TEXT("WoodsStain"), 0.42f);
+	LandMaterial->SetVectorParameterValue(TEXT("FirColour"), FLinearColor(0.015f, 0.034f, 0.028f));
 	{
 		// "-TheaterFields=0.55,0.4,0.34" tries other strengths for the quilt of fields (close to, at working height) and its hedges.
 		FString Asked;
@@ -2872,7 +2873,7 @@ void ACampaignMapActor::BuildTrees()
 	// off its place, firs in the north and on high ground and broad-leaved trees elsewhere. They are kept in
 	// squares of country, and only the squares near the eye are drawn (UpdateForCamera): from far off the woods
 	// are the dark cloth of the paint, and close up they have trees standing in them.
-	const double Spacing = 2.1, Square = 130.0;
+	const double Spacing = 1.75, Square = 130.0; // (trees stand close inside a wood: a mass, with the trees as its texture)
 	TreeSquare = Square * UnitScale;
 	const int32 SquaresX = FMath::CeilToInt32(Data.Width / Square), SquaresY = FMath::CeilToInt32(Data.Height / Square);
 	const int32 PerSide = FMath::CeilToInt32(Square / Spacing);
@@ -3854,8 +3855,9 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 		static const FLinearColor Cloth[7] =
 		{
 			// (a dark cloth: a wood is darker than the fields beside it, whatever the nation's colour)
-			FLinearColor(0.048f, 0.104f, 0.042f), FLinearColor(0.056f, 0.102f, 0.04f), FLinearColor(0.07f, 0.096f, 0.038f), FLinearColor(0.068f, 0.08f, 0.042f),
-			FLinearColor(0.06f, 0.07f, 0.054f), FLinearColor(0.058f, 0.086f, 0.045f), FLinearColor(0.058f, 0.118f, 0.042f)
+			// (the art director's canopy: about (52, 70, 52) as it is seen at working height, cool and dark)
+			FLinearColor(0.017f, 0.047f, 0.03f), FLinearColor(0.021f, 0.047f, 0.029f), FLinearColor(0.028f, 0.047f, 0.027f), FLinearColor(0.03f, 0.04f, 0.028f),
+			FLinearColor(0.029f, 0.036f, 0.031f), FLinearColor(0.026f, 0.042f, 0.03f), FLinearColor(0.021f, 0.054f, 0.03f)
 		};
 		const bool bTrees = Looks[Month] != TreeLook || FMath::Abs(Hard - WinterHard) > 0.3f;
 		TreeLook = Looks[Month];
@@ -5194,11 +5196,14 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	// The woods are one dense canopy from working height and above (the nation's stain lies over it at half
 	// strength, so a wood is still seen to be its owner's); close to, where single trees stand on it, the cloth
 	// under them is laid a little thinner.
-	const float Woods = FMath::Lerp(0.66f, 0.84f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance));
+	const float Woods = FMath::Lerp(0.8f, 0.86f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance)); // (close to it is the dark floor of the forest)
 	if (LandMaterial && FMath::Abs(Woods - WoodsShown) > 0.01f)
 	{
 		WoodsShown = Woods;
 		LandMaterial->SetScalarParameterValue(TEXT("WoodsStrength"), Woods);
+		// (the tree-tops' own bumps are for close to: from working height they are let down, so that the lie of
+		// the land still shades the canopy and a wood does not sit on the hills like a sticker)
+		LandMaterial->SetScalarParameterValue(TEXT("TreeBump"), FMath::Lerp(0.55f, 0.16f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance)));
 	}
 	// The quilt of fields: plain to see close to, quieter at working height (where it must not fight the province
 	// lines), and fading out toward the top of the zoom. Its hedges are seen only close to.

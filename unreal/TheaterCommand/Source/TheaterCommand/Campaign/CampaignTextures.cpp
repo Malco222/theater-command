@@ -297,11 +297,19 @@ void CampaignTextures::MakeFields(TArray<FColor>& OutPixels)
 		{ 0.68f, FVector3f(150.0f, 132.0f, 92.0f) }, { 0.84f, FVector3f(104.0f, 134.0f, 78.0f) }, { 1.0f, FVector3f(170.0f, 166.0f, 110.0f) },
 	};
 	const FVector3f Average(143.0f, 150.0f, 91.0f);
-	OutPixels.SetNumUninitialized(FieldsSize * FieldsSize);
+	// Fields are not all of a size: the picture is laid out in blocks of one to three pixels by one or two, each
+	// block a single field, so that the quilt is not a chessboard.
+	OutPixels.Init(FColor(0, 0, 0, 0), FieldsSize * FieldsSize);
+	TArray<bool> Laid;
+	Laid.Init(false, FieldsSize * FieldsSize);
 	for (int32 J = 0; J < FieldsSize; ++J)
 	{
 		for (int32 I = 0; I < FieldsSize; ++I)
 		{
+			if (Laid[J * FieldsSize + I])
+			{
+				continue;
+			}
 			const uint32 H = Hash(static_cast<uint32>(I), static_cast<uint32>(J), 7u);
 			const float Throw = (H & 0xFFFF) / 65535.0f;
 			FVector3f Tone = Stops[0].Tone;
@@ -313,7 +321,22 @@ void CampaignTextures::MakeFields(TArray<FColor>& OutPixels)
 				}
 			}
 			auto Share = [](float Seen, float Mean) { return ToByte(FMath::Clamp(FMath::Pow(Seen / Mean, 2.2f), 0.0f, 2.0f) * 0.5f); };
-			OutPixels[J * FieldsSize + I] = FColor(Share(Tone.X, Average.X), Share(Tone.Y, Average.Y), Share(Tone.Z, Average.Z), static_cast<uint8>((H >> 16) & 0xFF));
+			const FColor Field(Share(Tone.X, Average.X), Share(Tone.Y, Average.Y), Share(Tone.Z, Average.Z), static_cast<uint8>((H >> 16) & 0xFF));
+			static const int32 Longs[] = { 1, 1, 2, 2, 2, 3 }, Deeps[] = { 1, 1, 1, 2 };
+			const int32 Long = Longs[(H >> 20) % UE_ARRAY_COUNT(Longs)], Deep = Deeps[(H >> 26) % UE_ARRAY_COUNT(Deeps)];
+			for (int32 DJ = 0; DJ < Deep && J + DJ < FieldsSize; ++DJ)
+			{
+				for (int32 DI = 0; DI < Long && I + DI < FieldsSize; ++DI)
+				{
+					const int32 At = (J + DJ) * FieldsSize + I + DI;
+					if (Laid[At])
+					{
+						break; // (another field is already in the way: this one is the shorter for it)
+					}
+					Laid[At] = true;
+					OutPixels[At] = Field;
+				}
+			}
 		}
 	}
 }

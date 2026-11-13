@@ -631,7 +631,7 @@ private:
 	FCampaignTerrain Terrain;
 	float WoodsShown = -1.0f; // how thickly the woods are laid on at the moment
 	float FieldsShown = -1.0f, HedgesShown = -1.0f; // how strongly the quilt of fields and its hedges show at the moment
-	float FieldsNear = 0.85f, FieldsWorking = 0.5f, HedgesNear = 0.34f; // ("-TheaterFields=near,working,hedges" tries others)
+	float FieldsNear = 1.0f, FieldsWorking = 0.8f, HedgesNear = 0.25f; // ("-TheaterFields=near,working,hedges" tries others)
 	FCampaignGround Paint; // the table's colours, as pictures
 	// The land's mesh is cut into square tiles, each the same number of quads across. Near the eye the tiles are
 	// small and their quads fine; far off one tile covers the ground of four, sixteen or more, with quads to

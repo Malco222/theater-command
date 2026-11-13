@@ -312,7 +312,7 @@ def build_land():
     connect(place, "", south, "")
     rows = pair(m, plus(m, east, times(m, south, 0.33, -2500, 1560), -2350, 1500),
                 times(m, plus(m, south, times(m, east, -0.22, -2500, 1660), -2350, 1620), 1.389, -2200, 1620), -2050, 1550)
-    rows = plus(m, rows, times(m, leaning(m, coarse, "R", "G", -2300, 1800), scalar(m, "FieldWander", 1.4, -2000, 1900), -1700, 1800), -1500, 1600)
+    rows = plus(m, rows, times(m, leaning(m, coarse, "R", "G", -2300, 1800), scalar(m, "FieldWander", 0.3, -2000, 1900), -1700, 1800), -1500, 1600)
     small = picture(m, "Fields", times(m, rows, 1.0 / 64.0, -1300, 1500), -1100, 1500, numbers=True)
     large = picture(m, "Fields", plus(m, times(m, rows, 0.42 / 64.0, -1300, 1700), 0.37, -1150, 1700), -950, 1700, numbers=True)
     tone = times(m, lerp(m, (small, "RGB"), (large, "RGB"), (cover, "G"), -750, 1600), 2.0, -600, 1600)
@@ -340,9 +340,13 @@ def build_land():
     # Woods are one dark cloth laid over the paint: a standing mass with a ragged edge, thick enough to read as
     # woods on any nation's colour, fir-dark in the north and on the high ground. The woods take the nation's
     # stain too, at about half its strength, so that a nation's wood is still seen to be its own.
+    # (its edge is broken at two scales, a fine one and a broad one: the broad one cuts clearings into a big wood
+    # and throws a copse or two out beyond its edge; then the edge is made firm, a shape and not a fade)
+    ragged = plus(m, times(m, plus(m, (fine, "G"), -0.5, -2500, -1250), scalar(m, "WoodsRag", 0.5, -2500, -1150), -2350, -1250),
+                  times(m, plus(m, (coarse, "G"), -0.5, -2500, -1400), scalar(m, "WoodsRagBroad", 1.1, -2500, -1320), -2350, -1400), -2250, -1320)
     wooded = one_in(m, unreal.MaterialExpressionSaturate,
-                    plus(m, times(m, plus(m, plus(m, (ground, "A"), times(m, plus(m, (fine, "G"), -0.5, -2500, -1250), scalar(m, "WoodsRag", 0.5, -2500, -1150), -2350, -1250), -2200, -1250),
-                                          -0.5, -2050, -1250), scalar(m, "WoodsSharp", 3.5, -2050, -1150), -1900, -1250), 0.5, -1750, -1250), -1600, -1250)
+                    plus(m, times(m, plus(m, plus(m, (ground, "A"), ragged, -2200, -1250),
+                                          -0.5, -2050, -1250), scalar(m, "WoodsSharp", 6.0, -2050, -1150), -1900, -1250), 0.5, -1750, -1250), -1600, -1250)
     leaf = lerp(m, vector(m, "WoodsColour", (0.05, 0.09, 0.04, 1.0), -2000, -900),
                 vector(m, "FirColour", (0.024, 0.056, 0.04, 1.0), -2000, -1050), (cover, "A"), -1800, -950)
     woods = lerp(m, leaf,

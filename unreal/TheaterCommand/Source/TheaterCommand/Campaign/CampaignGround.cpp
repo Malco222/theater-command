@@ -113,6 +113,18 @@ namespace
 		return Kept;
 	}
 
+	/** How far the finest relief is calmed on the low ground: 1 halves it, 0 leaves it. ("-TheaterLowland=0" tries without.) */
+	float LowlandCalm()
+	{
+		static float Kept = -1.0f;
+		if (Kept < 0.0f)
+		{
+			Kept = 1.0f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterLowland="), Kept);
+		}
+		return Kept;
+	}
+
 	FVector3f Tone()
 	{
 		static FVector3f Kept(0.0f);
@@ -253,6 +265,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	}
 	TArray<float> Surround = Metres;
 	FCampaignTerrain::Smooth(Surround, NX, NY, FMath::RoundToInt32(5.0 / Terrain.Cell), 2);
+	// (the same heights with their finest detail smoothed away, for the low ground: see where the sun is worked out)
+	TArray<float> Gentle = Squeezed;
+	FCampaignTerrain::Smooth(Gentle, NX, NY, FMath::Max(1, FMath::RoundToInt32(3.0 / Terrain.Cell)), 2);
 	// Shadows thrown by the high ground: from each point a march toward the sun, over about twenty-six map
 	// units, to see whether anything on the way stands above the line of its light.
 	TArray<float> Thrown;
@@ -320,7 +335,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			};
 			const float Northing = 71.4f - static_cast<float>(P.Y) / 40.0f, Easting = -11.0f + static_cast<float>(P.X) / 25.7f;
 			const float DryLand = FMath::Clamp(FMath::SmoothStep(0.0f, 8.0f, 46.0f - Northing) * 0.8f + FMath::SmoothStep(28.0f, 44.0f, Easting) * FMath::SmoothStep(0.0f, 6.0f, 52.0f - Northing) * 0.45f, 0.0f, 1.0f);
+			// (and a third, small one breaks the outline, cuts clearings and throws out a copse here and there)
 			const float Thick = Cloudy(1.0 / 34.0, FVector2D(31.0, -17.0)) * 0.62f + Cloudy(1.0 / 150.0, FVector2D(-7.0, 53.0)) * 0.38f + Woods[Idx]
+				+ 0.11f * FMath::PerlinNoise2D(P * 0.13 + FVector2D(3.0, 41.0)) + 0.06f * FMath::PerlinNoise2D(P * 0.31 + FVector2D(19.0, 7.0))
 				+ FMath::SmoothStep(56.0f, 63.0f, Northing) * 0.2f - DryLand * 0.16f + FMath::SmoothStep(250.0f, 900.0f, Metres[Idx]) * 0.08f;
 			float Wooded = FMath::SmoothStep(WoodsFrom(), WoodsFrom() + 0.07f, Thick) * FMath::SmoothStep(0.0f, 300.0f, 1750.0f - Metres[Idx]);
 			Wooded *= (1.0f - Rock) * (1.0f - Sand / 0.35f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
@@ -330,18 +347,23 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// and a little less on a valley floor than on a crest.
 			const int32 IW = FMath::Max(I - 1, 0), IE = FMath::Min(I + 1, NX - 1), JN = FMath::Max(J - 1, 0), JS = FMath::Min(J + 1, NY - 1);
 			const float Rough = 0.5f * FMath::PerlinNoise2D(P * 0.33) * FMath::Clamp(Steepness * 30.0f, 0.0f, 26.0f); // (broken ground on the steeps)
-			const float SlopeX = (Squeezed[Terrain.Index(IE, J)] - Squeezed[Terrain.Index(IW, J)]) / static_cast<float>((IE - IW) * Terrain.Cell) + Rough * 0.13f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(3.0, 9.0));
-			const float SlopeY = (Squeezed[Terrain.Index(I, JS)] - Squeezed[Terrain.Index(I, JN)]) / static_cast<float>((JS - JN) * Terrain.Cell) + Rough * 0.13f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(17.0, 1.0));
+			// (Art fix 7: below about 300 metres the finest of the relief is cut by half. The plains are smooth and
+			// the hills rough, not the other way about, and the fields can be seen.)
+			const float Lowland = (1.0f - FMath::SmoothStep(200.0f, 400.0f, Metres[Idx])) * LowlandCalm();
+			auto Fall = [&](const TArray<float>& Heights, int32 IA, int32 JA, int32 IB, int32 JB, int32 Steps) { return (Heights[Terrain.Index(IA, JA)] - Heights[Terrain.Index(IB, JB)]) / static_cast<float>(Steps * Terrain.Cell); };
+			const float SlopeX = FMath::Lerp(Fall(Squeezed, IE, J, IW, J, IE - IW), Fall(Gentle, IE, J, IW, J, IE - IW), Lowland) + Rough * 0.13f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(3.0, 9.0));
+			const float SlopeY = FMath::Lerp(Fall(Squeezed, I, JS, I, JN, JS - JN), Fall(Gentle, I, JS, I, JN, JS - JN), Lowland) + Rough * 0.13f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(17.0, 1.0));
 			const FVector3f Leaning = FVector3f(-SlopeX * ReliefStrength(), -SlopeY * ReliefStrength(), 1.0f).GetSafeNormal();
 			float Sun = FMath::Clamp(FVector3f::DotProduct(Leaning, ToSun) / ToSun.Z, 0.0f, 2.2f);
 			Sun *= 1.0f - 0.42f * Thrown[Idx];
 			Sun -= 0.3f * FMath::Clamp((Surround[Idx] - Metres[Idx]) / 260.0f, -0.6f, 0.6f);
 			// A little unevenness, so that large areas do not look printed.
-			Sun *= 1.0f + 0.03f * FMath::PerlinNoise2D(FVector2D(I * 0.61, J * 0.61));
+			Sun *= 1.0f + 0.03f * (1.0f - 0.6f * Lowland) * FMath::PerlinNoise2D(FVector2D(I * 0.61, J * 0.61));
 			const float Shade = FMath::Clamp(Sun, 0.0f, 2.2f) / 2.2f * 2.0f; // (kept as half of it in the picture's blue, below)
 
 			// Which way the ground leans, as the lamp sees it: north is +X and east is +Y in the world.
-			const FVector3f Normal = FVector3f(Slope.Y * VerticalScale, -Slope.X * VerticalScale, 1.0f).GetSafeNormal();
+			// (on the low ground the lamp, too, sees the land leaning only half as much as it does)
+			const FVector3f Normal = FVector3f(Slope.Y * VerticalScale * (1.0f - 0.5f * Lowland), -Slope.X * VerticalScale * (1.0f - 0.5f * Lowland), 1.0f).GetSafeNormal();
 
 			const FVector3f Toned = Tone();
 			FColor Bare(ToByte(GroundR[Idx] * Toned.X), ToByte(GroundG[Idx] * Toned.Y), ToByte(GroundB[Idx] * Toned.Z), 255);
@@ -375,7 +397,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// ground behind it. (The sun stands in the west-north-west: the grid point toward it is the one to the west.)
 			const float Sunward = Ground[Terrain.Index(FMath::Max(I - 1, 0), J)].A / 255.0f;
 			const float Lit = FMath::Clamp(Wooded - Sunward, 0.0f, 1.0f), Shaded = FMath::Clamp(Sunward - Wooded, 0.0f, 1.0f);
-			const float Rim = 0.5f + 0.5f * FMath::Clamp(0.47f * Lit - Shaded, -1.0f, 1.0f);
+			// (a rim should be about 0.6 map units wide; one point of this picture is 1.5, so the light on it is
+			// cut to what the narrower rim would give, or a small wood would be all rim and go pale)
+			const float Rim = 0.5f + 0.5f * FMath::Clamp(0.19f * Lit - Shaded, -1.0f, 1.0f);
 			// Fir and pine in the north and on the high ground.
 			const float Fir = FMath::Max(Boreal, FMath::SmoothStep(700.0f, 1300.0f, Metres[Idx]));
 			Cover[Idx] = FColor(ToByte(Arable), ToByte(Big), ToByte(Rim), ToByte(Fir));
