@@ -1435,7 +1435,7 @@ void ACampaignPlayerController::Narrate(const FString& Words)
 {
 	HushNarrator();
 	// The stories are read by the computer's own voice. Not while pictures are being taken, nor with the sound off.
-	if (bScripted || !CampaignSounds::IsOn() || Words.IsEmpty())
+	if (bScripted || !CampaignSounds::IsOn() || Words.IsEmpty() || FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")))
 	{
 		return;
 	}

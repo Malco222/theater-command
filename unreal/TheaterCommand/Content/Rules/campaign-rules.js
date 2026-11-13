@@ -15430,6 +15430,10 @@
       return {};
     }
   }
+  function prizeLine(s, region) {
+    const z = prize(s, region);
+    return z && (z.income > 0 || z.incomeNow > 0 || z.vp > 0 || z.factories > 0 || z.oil > 0 || z.capitalOf || z.frees) ? z.line : "";
+  }
   function view() {
     const s = game();
     const up = humanUp(s);
@@ -15902,7 +15906,7 @@
     if (look && !look.exact) {
       return {
         region: to,
-        prize: prize(s, to)?.line ?? "",
+        prize: prizeLine(s, to),
         attack: look.odds,
         defence: 1,
         odds: look.odds,
@@ -15928,7 +15932,7 @@
       note: "",
       region: to,
       // What taking the place is worth, in a sentence, for the screen that asks whether to attack.
-      prize: prize(s, to)?.line ?? "",
+      prize: prizeLine(s, to),
       attack: a.A,
       defence: a.D,
       odds: a.odds,
@@ -16137,7 +16141,7 @@
       })(),
       prize: (() => {
         const z = prize(s, r.id);
-        return z ? { kind: z.kind, line: z.line, items: z.items.map((i) => `${i.label}: ${i.text}`) } : null;
+        return z && prizeLine(s, r.id) ? { kind: z.kind, line: z.line, items: z.items.map((i) => `${i.label}: ${i.text}`) } : null;
       })(),
       // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.
       fallenNote: fallenCapitalAt(s, r.id)?.note ?? "",

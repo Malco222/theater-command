@@ -113,6 +113,12 @@ function cardOf(s: Game, c: Corps): Record<string, unknown> {
   }
 }
 
+/** What taking a place is worth, in a sentence; nothing where it is worth nothing (bare ground, or a scenario that keeps no money). */
+function prizeLine(s: Game, region: number): string {
+  const z = prizeOfPlace(s, region);
+  return z && (z.income > 0 || z.incomeNow > 0 || z.vp > 0 || z.factories > 0 || z.oil > 0 || z.capitalOf || z.frees) ? z.line : '';
+}
+
 /** The picture of the war the game draws. */
 function view() {
   const s = game();
@@ -612,7 +618,7 @@ function preview(ids: number[], to: number) {
   };
   if (look && !look.exact) {
     return {
-      region: to, prize: prizeOfPlace(s, to)?.line ?? '', attack: look.odds, defence: 1, odds: look.odds,
+      region: to, prize: prizeLine(s, to), attack: look.odds, defence: 1, odds: look.odds,
       exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: look.note,
       lines: look.lines,
       attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
@@ -623,7 +629,7 @@ function preview(ids: number[], to: number) {
     exact: true, lo: a.odds, hi: a.odds, chance: look?.chance ?? 0, chanceLo: look?.chance ?? 0, chanceHi: look?.chance ?? 0, note: '',
     region: to,
     // What taking the place is worth, in a sentence, for the screen that asks whether to attack.
-    prize: prizeOfPlace(s, to)?.line ?? '',
+    prize: prizeLine(s, to),
     attack: a.A,
     defence: a.D,
     odds: a.odds,
@@ -850,7 +856,7 @@ function province(id: number) {
     home,
     // The chief town of the province, and what the player gets for taking the place (or has from holding it).
     town: (() => { const t = townIn(s, r.id); return t ? { name: t.name, size: t.sizeWord, worth: t.worth, rank: t.rank } : null; })(),
-    prize: (() => { const z = prizeOfPlace(s, r.id); return z ? { kind: z.kind, line: z.line, items: z.items.map((i) => `${i.label}: ${i.text}`) } : null; })(),
+    prize: (() => { const z = prizeOfPlace(s, r.id); return z && prizeLine(s, r.id) ? { kind: z.kind, line: z.line, items: z.items.map((i) => `${i.label}: ${i.text}`) } : null; })(),
     // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.
     fallenNote: fallenCapitalAt(s, r.id)?.note ?? '',
     industry: r.fac,

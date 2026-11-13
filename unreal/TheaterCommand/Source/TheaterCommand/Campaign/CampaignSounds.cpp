@@ -47,7 +47,9 @@ void CampaignSounds::Play(const UObject* World, const TCHAR* Name, float Volume,
 	}
 	if (USoundBase* Sound = Find(Name))
 	{
-		UGameplayStatics::PlaySound2D(World, Sound, Volume, Pitch);
+		// "-TheaterQuiet" plays everything too softly to hear: for trying the sound out without disturbing anyone.
+		static const bool bQuiet = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet"));
+		UGameplayStatics::PlaySound2D(World, Sound, bQuiet ? Volume * 0.001f : Volume, Pitch);
 	}
 }
 
