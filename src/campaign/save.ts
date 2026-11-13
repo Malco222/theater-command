@@ -42,6 +42,8 @@ export function saveGame(g: Game): string {
     fleets: g.fleets, nextFleet: g.nextFleet, seaReports: g.seaReports.slice(-KEEP_SEA), convoys: g.convoys,
     airFleets: g.airFleets, nextAir: g.nextAir, airReports: g.airReports.slice(-KEEP_SEA), airPool: g.airPool, sky: g.sky, raids: g.raids,
     stories: g.stories,
+    // The secret service exists only in the grand campaign: a historical save is written exactly as it always was.
+    intel: g.flags.open === 1 ? g.intel : undefined,
     headlines: g.headlines,
     reports: g.reports.slice(-KEEP_REPORTS),
   });
@@ -141,6 +143,8 @@ export function loadGame(text: string): Game | null {
   if (Array.isArray(d.airFleets)) { g.airFleets = d.airFleets; g.nextAir = d.nextAir; g.airReports = d.airReports ?? []; g.airPool = d.airPool ?? {}; g.sky = d.sky ?? {}; g.raids = d.raids ?? {}; }
   // A save from before the units kept records: the roll of honour starts empty and fills from here on.
   g.stories = { ...newStories(), ...(d.stories ?? {}) };
+  // A save from before spies: the service starts with nobody on its books.
+  g.intel = { agents: [], next: 1, notes: [], heat: {}, ...(d.intel ?? {}) };
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.convoys = d.convoys ?? {}; }
   // The supply picture is restored exactly as it stood, so the loaded game plays on identically.
   const fed = g.corps.map((c) => c.supplied);

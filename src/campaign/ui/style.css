@@ -915,3 +915,77 @@ svg.flag.inh { vertical-align: -3px; margin-right: 4px; }
   .purse.store .pl { font-size: 9px; }
   .purse.store i { font-size: 10.5px; }
 }
+
+/* Spies and the fog of war */
+#fog .fog { pointer-events: none; }
+#fog .fog.dark { fill: rgba(16, 20, 26, .44); }
+#fog .fog.dim { fill: rgba(16, 20, 26, .2); }
+.ctr.army.dimly { opacity: .82; }
+.ctr.army.dimly rect.box { stroke-dasharray: 2 1.4; }
+#units .spy { pointer-events: auto; cursor: pointer; }
+.spy circle { fill: #14181d; stroke: #d9b45a; stroke-width: 1.1; }
+.spy path { fill: none; stroke: #f1e3bb; stroke-width: .9; stroke-linejoin: round; }
+.spy .pupil { fill: #f1e3bb; stroke: none; }
+.spy.away circle:first-of-type { stroke: #e2664d; }
+.spy.road { opacity: .6; }
+.spy.road circle:first-of-type { stroke-dasharray: 2 1.6; }
+.spy.sel circle:first-of-type { stroke: #fff6d8; stroke-width: 1.8; }
+.spy:hover circle:first-of-type { stroke-width: 1.8; }
+.tipfog { color: #b9c0c9; font-style: italic; }
+.note.fogged { border-left-color: #6b7480; background: rgba(60, 68, 80, .35); }
+.note.spyhere, .note.spyrep { border-left-color: #d9b45a; }
+.note.spyhere .btn { margin-left: 6px; }
+.acts.spysend { margin-top: 8px; }
+.btn.tiny { padding: 1px 6px; font-size: 11px; margin-left: 6px; vertical-align: 1px; }
+.agent { background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid #d9b45a; border-radius: 0 4px 4px 0; margin-top: 8px; }
+.agent.away { border-left-color: #e2664d; }
+.agent.road { border-left-color: var(--ink-3); }
+.agent.sel { border-color: var(--brass); }
+.agent .ahead { display: flex; align-items: center; gap: 9px; width: 100%; background: none; border: 0; color: inherit; font: inherit; text-align: left; padding: 8px 9px; cursor: pointer; }
+.agent .ahead .grow { flex: 1; min-width: 0; }
+.agent .ahead b { font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+.agent .ahead small { display: block; color: var(--ink-2); font-size: 12px; line-height: 1.35; }
+.agent .aseal { width: 30px; height: 30px; flex: none; }
+.agent .aseal circle { fill: #14181d; stroke: #d9b45a; stroke-width: 1; }
+.agent.away .aseal circle:first-of-type { stroke: #e2664d; }
+.agent .aseal path { fill: none; stroke: #f1e3bb; stroke-width: .9; }
+.agent .aseal .pupil { fill: #f1e3bb; stroke: none; }
+.agent .apips { display: inline-flex; gap: 2px; }
+.agent .apips i { width: 6px; height: 6px; border-radius: 50%; background: var(--panel-3); border: 1px solid var(--ink-3); }
+.agent .apips i.on { background: var(--brass); border-color: var(--brass); }
+.agent .awhere { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex: none; }
+.agent .arisk { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+.agent .arisk.hot { color: #f0b3a5; font-weight: 600; }
+.agent .arisk.safe { color: var(--ink-3); }
+.agent .abody { padding: 0 9px 9px; border-top: 1px solid var(--line); }
+.agent .abody .note { margin-top: 8px; }
+.agent .asees { font-size: 12.5px; color: var(--ink-2); margin-top: 8px; }
+.agent .asees b { color: var(--ink); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 500; }
+.agent .asees ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.agent .asees li { display: flex; align-items: center; gap: 6px; }
+.agent .asees p { margin: 4px 0 0; }
+.agent .buy.amis { margin-top: 6px; width: 100%; }
+.agent .buy.amis.now { border-color: var(--brass); }
+.agent .buy.amis[disabled].now b, .agent .buy.amis[disabled].now small:not(.whyno) { opacity: 1; }
+.agent .buy.amis small.odds { color: var(--brass); }
+.agent .acts { margin-top: 9px; }
+.spyhow { margin-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+.spyhow summary { cursor: pointer; color: var(--ink); }
+.spyhow ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.sfile { display: grid; gap: 5px; }
+.sfile .snote { display: grid; grid-template-columns: 96px 1fr; gap: 8px; font-size: 12.5px; color: var(--ink-2); border-left: 3px solid var(--green); padding-left: 8px; }
+.sfile .snote.bad { border-left-color: var(--red); }
+.sfile .snote small { color: var(--ink-3); }
+p.sub.whyno { color: #f0b3a5; }
+.books .lrow { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.books .lrow small { color: var(--ink-3); }
+.books .lrow b { white-space: nowrap; font-weight: 600; }
+.books .lfact b.neg { color: #d98b78; }
+@media (max-width: 760px) {
+  .sfile .snote { grid-template-columns: 1fr; gap: 0; }
+}
+/* Eleven tabs do not fit one row of the side panel: on a wide screen they take two, on a phone the row scrolls. */
+@media (min-width: 761px) {
+  .tabs { flex-wrap: wrap; overflow-x: visible; }
+  .tab { padding: 7px 6px 5px; }
+}

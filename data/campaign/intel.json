@@ -1,0 +1,159 @@
+{
+  "_about": "Spies and the fog of war, the grand campaign only. A historical scenario has neither: the whole map is in sight and nobody has agents. In the grand campaign the player sees an enemy or neutral army in full only where his own side can see it, and less the deeper it stands (sight). Agents are recruited for money and sent abroad to see further, to read a government's books, and to wreck factories, railways and oilfields; each month abroad an agent may be caught. The computer's staffs see the whole map, as they always did, and keep no agents on it: their services work against the player as a monthly chance of sabotage (enemy), which the player's own agents on guard at home can stop. So a war with nobody at the table is fought exactly as before.",
+  "sight": {
+    "_about": "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is seen whole: every corps, its kind and its strength. Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands.",
+    "full": 1,
+    "glimpse": 2
+  },
+  "agents": {
+    "_about": "cost is in production points (shown times the budget scale). most is how many agents a nation's service can run at once. train is the months before a recruit is ready, travel the months an agent is on the road when sent somewhere. skillAt is the experience at which an agent becomes an operative and then a master; watch is how many quiet months abroad earn one point of it.",
+    "cost": 6,
+    "most": {
+      "_default": 2,
+      "GER": 4,
+      "UK": 5,
+      "SOV": 5,
+      "USA": 4,
+      "FRA": 3,
+      "ITA": 3,
+      "JAP": 4
+    },
+    "train": 1,
+    "travel": 1,
+    "skillAt": [
+      3,
+      8
+    ],
+    "watch": 4,
+    "ranks": [
+      "Agent",
+      "Operative",
+      "Master spy"
+    ]
+  },
+  "missions": {
+    "_about": "caught is the chance each month that the agent is found out while on this work; for sabotage it is the chance on the night of the attempt. success is the chance an attempt comes off. gain is the experience a success earns.",
+    "watch": {
+      "caught": 0.03
+    },
+    "books": {
+      "caught": 0.07
+    },
+    "factory": {
+      "caught": 0.18,
+      "success": 0.45,
+      "gain": 2
+    },
+    "rail": {
+      "caught": 0.14,
+      "success": 0.55,
+      "gain": 1
+    },
+    "oil": {
+      "caught": 0.18,
+      "success": 0.45,
+      "gain": 2,
+      "months": 3,
+      "cut": 0.5
+    },
+    "guard": {
+      "caught": 0
+    }
+  },
+  "skill": {
+    "_about": "For each rank above the first: caught takes this share off the chance of being found out, success adds this to the chance an attempt comes off, guard adds this to the chance of stopping a plot.",
+    "caught": 0.2,
+    "success": 0.1,
+    "guard": 0.08
+  },
+  "risk": {
+    "_about": "What multiplies the chance of being caught: in a capital (not when reading the books, whose risk already counts it), in a country at war with the agent's own, and in a province on alert after an act of sabotage (heat months). lieLow is how many months an agent must wait after an attempt before the next.",
+    "capital": 1.5,
+    "war": 1.25,
+    "heat": 1.6,
+    "heatMonths": 3,
+    "lieLow": 2
+  },
+  "caught": {
+    "_about": "A neutral that catches a spy thinks worse of the side that sent it: its opinion moves this far away from that side.",
+    "opinion": 6
+  },
+  "battle": {
+    "_about": "An agent at work in a province has mapped its defences: the agent's own side attacks it this much harder.",
+    "attack": 0.08
+  },
+  "enemy": {
+    "_about": "From 'quiet' months after the player's campaign begins, each month every great power on the 'services' list that is at war with the player has this chance of an act of sabotage on the player's home ground, times the number for the campaign's level (easiest first). kinds is how the acts divide. A guard in or next to the province stops it with chance 'near'; every other guard at home adds 'far', up to 'most' in all.",
+    "chance": 0.05,
+    "quiet": 3,
+    "level": [
+      0,
+      0.5,
+      1,
+      1.4,
+      1.8
+    ],
+    "services": [
+      "GER",
+      "UK",
+      "FRA",
+      "ITA",
+      "SOV",
+      "USA",
+      "JAP"
+    ],
+    "kinds": {
+      "factory": 0.6,
+      "rail": 0.4
+    },
+    "near": 0.7,
+    "far": 0.15,
+    "most": 0.9
+  },
+  "estimate": {
+    "_about": "Without an agent reading its books, a foreign army's size is known only to the nearest this many divisions.",
+    "round": 10
+  },
+  "names": [
+    "Nightjar",
+    "Cobalt",
+    "Lantern",
+    "Marigold",
+    "Sextant",
+    "Halberd",
+    "Tinsmith",
+    "Juniper",
+    "Plumbline",
+    "Saffron",
+    "Bellows",
+    "Thimble",
+    "Osprey",
+    "Quartz",
+    "Harrow",
+    "Gimlet",
+    "Tallow",
+    "Vesper",
+    "Mallard",
+    "Cinder",
+    "Hawthorn",
+    "Kestrel",
+    "Lodestar",
+    "Mosaic",
+    "Nettle",
+    "Pewter",
+    "Ratchet",
+    "Sorrel",
+    "Trellis",
+    "Anvil",
+    "Bramble",
+    "Chalice",
+    "Dovetail",
+    "Ember",
+    "Farrier",
+    "Garnet",
+    "Heron",
+    "Inkwell",
+    "Jackdaw",
+    "Keystone"
+  ]
+}

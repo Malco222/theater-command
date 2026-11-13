@@ -1,7 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type AirFleet, type AirMission, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Posture, type Region, type Skill, type Stance } from './types';
+import { KIND, STACK, type Agent, type AirFleet, type AirMission, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
 import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
@@ -18,6 +18,10 @@ import { tearUp, whyNotCutRail } from './rails';
 import { foundBureau, setTeams } from './research';
 import { startResearch, stopResearch, techView, whyNotResearch, type TechView } from './tech';
 import { seaLanes, stores, type Lane, type StoresView } from './resources';
+import {
+  armiesSeen, booksOf, cityReport, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, spyRoom,
+  whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type SpyRoom,
+} from './intel';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
@@ -445,6 +449,92 @@ export function depots(g: Game, nat: string | null = g.human): StoresView | null
  */
 export function shippingLanes(g: Game): Lane[] {
   return seaLanes(g);
+}
+
+// ---- Spies and the fog of war (the grand campaign) -----------------------------------------------------
+
+/**
+ * What the player can see of every province, by region id: 2 where an army is seen whole, 1 where only its flag
+ * and the number of its corps are known, 0 where nothing is known. Who holds the ground is always known. Everything
+ * is 2 in a historical scenario, with nobody at the controls, or once the player has lifted the fog.
+ */
+export function sight(g: Game): Uint8Array {
+  return sightOf(g, g.human);
+}
+
+/**
+ * Every army the player knows of, one row for each nation's force in a province: the number of corps, and the
+ * divisions it has left where it is seen whole (null where only glimpsed). Armies in unseen ground are not listed:
+ * a map drawn from this list shows exactly what the player is allowed to know.
+ */
+export function visibleArmies(g: Game): ArmySeen[] {
+  return armiesSeen(g, g.human);
+}
+
+/**
+ * The secret service's room: every agent with its rank, where it is, what it is doing, the chance of being caught
+ * this month, the work it can be given there (with the reason for any it cannot) and the armies it has in sight;
+ * how many agents the service can run and what one costs; the service's file of what has happened; the nations
+ * whose books are being read; and the chance of the other side's saboteurs striking at home. Null outside the grand campaign.
+ */
+export function secretService(g: Game): SpyRoom | null {
+  return spyRoom(g, g.human);
+}
+
+/** Why the player cannot recruit an agent now, or null if he can. */
+export function whyNotRecruitAgent(g: Game): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  return whyNotRecruit(g, g.human);
+}
+
+/** Recruits an agent for the player: paid for at once, trained at home, ready for orders next month. */
+export function orderRecruitAgent(g: Game): Agent | null {
+  return whyNotRecruitAgent(g) ? null : recruit(g, g.human!);
+}
+
+/** Why the player's agent cannot be sent to a province, or null if it can. */
+export function whyNotSendAgent(g: Game, id: number, region: number): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  return whyNotSend(g, g.human, id, region);
+}
+
+/** Sends the player's agent to any province on the map: a month on the road, then watching abroad or on guard at home. */
+export function orderSendAgent(g: Game, id: number, region: number): boolean {
+  return whyNotSendAgent(g, id, region) === null && sendAgent(g, g.human!, id, region);
+}
+
+/** Why the player's agent cannot be given this work where it stands, or null if it can. */
+export function whyNotAgentMission(g: Game, id: number, mission: Mission): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  return whyNotMission(g, g.human, id, mission);
+}
+
+/** Gives the player's agent its work: 'watch', 'books', 'factory', 'rail', 'oil' or 'guard'. */
+export function orderAgentMission(g: Game, id: number, mission: Mission): boolean {
+  return whyNotAgentMission(g, id, mission) === null && setAgentMission(g, g.human!, id, mission);
+}
+
+/** Retires one of the player's agents, which frees a place in the service. */
+export function orderRetireAgent(g: Game, id: number): boolean {
+  return !!g.human && humanUp(g) && retire(g, g.human, id);
+}
+
+/** Lifts the fog of war for this campaign, or lays it again. Agents and sabotage go on either way. */
+export function orderFog(g: Game, on: boolean): boolean {
+  return !!g.human && setFog(g, on);
+}
+
+/** A foreign government's books as the player's agent in its capital reads them, or null where none is reading. An ally's are always open. */
+export function foreignBooks(g: Game, nat: string): Books | null {
+  return g.human ? booksOf(g, nat, g.human) : null;
+}
+
+/** What the player's agent in a province reports of it beyond its armies: what is on order there and the air fleets based there. Null without one. */
+export function agentReport(g: Game, region: number): CityReport | null {
+  return g.human ? cityReport(g, region, g.human) : null;
 }
 
 /** Why the player cannot begin this technology now, or null when a free research team can start on it. */

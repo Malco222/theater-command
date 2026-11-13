@@ -232,6 +232,13 @@ export function bombFactories(g: Game, by: string, r: Region, stopped: number): 
   return true;
 }
 
+/** Wrecks one working factory of a province outright, by a saboteur's hand. False where no more can be wrecked. */
+export function wreckFactory(g: Game, r: Region): boolean {
+  if (!groundRules(g) || r.fac <= 0 || ruinedAt(g, r) >= ruinMost(r)) return false;
+  g.flags[ruinKey(r.id)] = ruinedAt(g, r) + 1;
+  return true;
+}
+
 /** Engineers put one wrecked factory back to work. */
 export function rebuildFactory(g: Game, r: Region): boolean {
   const n = ruinedAt(g, r);
