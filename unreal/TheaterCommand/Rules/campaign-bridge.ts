@@ -546,6 +546,7 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   const seed = options?.seed ?? 1939;
   fallenNation = null;
   lastMonth = null;
+  lastReel = -9;
   if (options?.view === 'grand') {
     g = grandGame(from, seed, human);
   } else {
@@ -588,6 +589,7 @@ function load(text: string) {
   g = loaded;
   fallenNation = null;
   lastMonth = null;
+  lastReel = -9;
   if (g.human && !humanUp(g)) {
     runOthers(g, null);
     arrive(g);
@@ -717,6 +719,7 @@ function endMonth() {
       // The country has been liberated: the player leads it again. The others finish their month, and his opens.
       fallenNation = null;
   lastMonth = null;
+  lastReel = -9;
       runOthers(s, steps);
       if (humanUp(s)) beginHuman(s);
     }
@@ -801,14 +804,24 @@ function endMonth() {
   const capitalOf = (nat: string | null): number => (nat ? s.regions.find((r) => r.cap && r.owner === nat)?.id ?? -1 : -1);
   const reel: { nat: string; title: string; text: string; region: number }[] = [];
   for (const a of announce) reel.push({ nat: a.nat, title: a.title, text: short(a.text), region: a.region ?? capitalOf(a.nat) });
-  for (const h of headlines.filter((x) => x.kind === 'war').slice(0, 2)) reel.push({ nat: h.nat ?? '', title: 'WAR IS DECLARED', text: short(h.text), region: capitalOf(h.nat) });
+  // A declaration of war that touches the player is always news; one between others is told when a reel is due anyway.
+  const myName = s.human ? s.nations[s.human]?.name ?? '' : '';
+  const touches = (h: { nat: string | null; text: string }): boolean => !!s.human && (h.nat === s.human || (!!myName && h.text.includes(myName)));
+  const wars = headlines.filter((x) => x.kind === 'war');
+  const always = reel.length > 0 || wars.some(touches);
+  for (const h of [...wars.filter(touches), ...wars.filter((x) => !touches(x))].slice(0, 2)) reel.push({ nat: h.nat ?? '', title: 'WAR IS DECLARED', text: short(h.text), region: capitalOf(h.nat) });
+  // (the fighting on the ground only: raids are flown every month and are shown as they happen)
   const fights = (steps as { nat: string; note: string; focus?: number[]; mine?: boolean; moved?: boolean; battles?: number[]; taken?: number[]; raids?: unknown[] }[])
-    .filter((x) => x.note && !x.moved && ((x.battles?.length ?? 0) > 0 || (x.taken?.length ?? 0) > 0 || (x.raids?.length ?? 0) > 0))
+    .filter((x) => x.note && !x.moved && ((x.battles?.length ?? 0) > 0 || (x.taken?.length ?? 0) > 0))
     .sort((a, b) => (b.mine ? 100 : 0) + (b.battles?.length ?? 0) + (b.taken?.length ?? 0) - ((a.mine ? 100 : 0) + (a.battles?.length ?? 0) + (a.taken?.length ?? 0)));
-  const big = reel.length > 0 || fights.some((x) => x.mine) || fights.length >= 3;
+  // A newsreel is an occasion: always for a nation's fall or return, a campaign decided or a declaration of war;
+  // for hard fighting no more than once in three months.
+  const heavy = fights.some((x) => x.mine && (x.taken?.length ?? 0) > 0) || fights.reduce((n, x) => n + (x.taken?.length ?? 0), 0) >= 4;
+  const big = always || ((heavy || wars.length > 0) && s.turn - lastReel >= 3);
+  if (big) lastReel = s.turn;
   for (const f of fights.slice(0, 2)) {
     const n = s.nations[f.nat];
-    reel.push({ nat: f.nat, title: (f.raids?.length ?? 0) > 0 && !(f.battles?.length) ? `${(n?.adj ?? f.nat).toUpperCase()} RAIDERS OVERHEAD` : `THE ${(n?.adj ?? f.nat).toUpperCase()} ARMY ON THE MARCH`, text: short(f.note), region: f.focus?.[0] ?? capitalOf(f.nat) });
+    reel.push({ nat: f.nat, title: `THE ${(n?.adj ?? f.nat).toUpperCase()} ARMY ON THE MARCH`, text: short(f.note), region: f.focus?.[0] ?? capitalOf(f.nat) });
   }
   const newsreel = big ? { date: turnToDate(month0).label, cards: reel.slice(0, 4) } : null;
   lastMonth = {
@@ -1482,6 +1495,9 @@ function rebasePage(s: Game, id: number): Page | null {
 }
 
 /** What the last month brought, kept so that it can be read again after it has been watched: each nation's doings and where. */
+/** The month the last newsreel was shown in, so that they do not come too often. */
+let lastReel = -9;
+
 let lastMonth: { date: string; rows: { nat: string; note: string; region: number; mine: boolean }[]; news: string[] } | null = null;
 
 /** The month's report: what every nation did while the player waited, each with a way to go and look. */

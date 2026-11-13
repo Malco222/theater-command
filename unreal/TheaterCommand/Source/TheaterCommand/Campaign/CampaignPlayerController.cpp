@@ -3952,7 +3952,8 @@ void ACampaignPlayerController::FinishMonth()
 
 	// The great moments of the month are told one at a time, each on a screen of its own.
 	Announcements = Month.Announcements;
-	const bool bReel = bNewsreels && Month.Reel.Num() > 0 && Month.Fallen.IsEmpty();
+	// (not while pictures are being taken: the newsreel has a picture of its own)
+	const bool bReel = bNewsreels && !bScripted && Month.Reel.Num() > 0 && Month.Fallen.IsEmpty();
 	if (Announcements.Num() > 0 && !bReel)
 	{
 		CampaignSounds::PlayLater(this, Announcements[0].bGood ? TEXT("victory") : TEXT("defeat"), 0.4f, 0.55f);
@@ -3966,9 +3967,20 @@ void ACampaignPlayerController::FinishMonth()
 
 	// The month's news stays up for a while.
 	TArray<FString> Lines;
-	for (int32 i = 0; i < Month.Headlines.Num() && i < 7; ++i)
+	for (int32 i = 0; i < Month.Headlines.Num() && i < 5; ++i)
 	{
-		Lines.Add(Month.Headlines[i]);
+		// Each in a sentence or two: the rest is in the month's report (R).
+		FString Line = Month.Headlines[i];
+		if (Line.Len() > 150)
+		{
+			const int32 Stop = Line.Find(TEXT(". "), ESearchCase::CaseSensitive, ESearchDir::FromStart, 70);
+			Line = Stop != INDEX_NONE && Stop < 170 ? Line.Left(Stop + 1) : Line.Left(150) + TEXT("...");
+		}
+		Lines.Add(Line);
+	}
+	if (Month.Headlines.Num() > 5)
+	{
+		Lines.Add(FString::Printf(TEXT("And %d more: press R for the month's report."), Month.Headlines.Num() - 5));
 	}
 	DispatchText = FString::Join(Lines, TEXT("\n\n"));
 	DispatchUntil = FPlatformTime::Seconds() + 25.0;

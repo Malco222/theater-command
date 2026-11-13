@@ -338,7 +338,7 @@ namespace
 							// The weather, when it is not fair: mud in the east, or the eastern winter.
 							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 							[
-								SNew(SBox).MaxDesiredWidth(330.0f)
+								SNew(SBox).WidthOverride(296.0f)
 								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWeatherText().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 								[
 									SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(FLinearColor(FColor::FromHex(TEXT("C9B48A")))).AutoWrapText(true)

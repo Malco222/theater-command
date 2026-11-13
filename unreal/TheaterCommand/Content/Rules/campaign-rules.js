@@ -16232,6 +16232,7 @@
     const seed = options?.seed ?? 1939;
     fallenNation = null;
     lastMonth = null;
+    lastReel = -9;
     if (options?.view === "grand") {
       g = grandGame(from, seed, human);
     } else {
@@ -16266,6 +16267,7 @@
     g = loaded;
     fallenNation = null;
     lastMonth = null;
+    lastReel = -9;
     if (g.human && !humanUp(g)) {
       runOthers(g, null);
       arrive(g);
@@ -16392,6 +16394,7 @@
       if (s.human) {
         fallenNation = null;
         lastMonth = null;
+        lastReel = -9;
         runOthers(s, steps);
         if (humanUp(s)) beginHuman(s);
       }
@@ -16484,12 +16487,18 @@
     const capitalOf = (nat) => nat ? s.regions.find((r) => r.cap && r.owner === nat)?.id ?? -1 : -1;
     const reel = [];
     for (const a of announce) reel.push({ nat: a.nat, title: a.title, text: short(a.text), region: a.region ?? capitalOf(a.nat) });
-    for (const h of headlines.filter((x) => x.kind === "war").slice(0, 2)) reel.push({ nat: h.nat ?? "", title: "WAR IS DECLARED", text: short(h.text), region: capitalOf(h.nat) });
-    const fights = steps.filter((x) => x.note && !x.moved && ((x.battles?.length ?? 0) > 0 || (x.taken?.length ?? 0) > 0 || (x.raids?.length ?? 0) > 0)).sort((a, b) => (b.mine ? 100 : 0) + (b.battles?.length ?? 0) + (b.taken?.length ?? 0) - ((a.mine ? 100 : 0) + (a.battles?.length ?? 0) + (a.taken?.length ?? 0)));
-    const big = reel.length > 0 || fights.some((x) => x.mine) || fights.length >= 3;
+    const myName = s.human ? s.nations[s.human]?.name ?? "" : "";
+    const touches = (h) => !!s.human && (h.nat === s.human || !!myName && h.text.includes(myName));
+    const wars = headlines.filter((x) => x.kind === "war");
+    const always = reel.length > 0 || wars.some(touches);
+    for (const h of [...wars.filter(touches), ...wars.filter((x) => !touches(x))].slice(0, 2)) reel.push({ nat: h.nat ?? "", title: "WAR IS DECLARED", text: short(h.text), region: capitalOf(h.nat) });
+    const fights = steps.filter((x) => x.note && !x.moved && ((x.battles?.length ?? 0) > 0 || (x.taken?.length ?? 0) > 0)).sort((a, b) => (b.mine ? 100 : 0) + (b.battles?.length ?? 0) + (b.taken?.length ?? 0) - ((a.mine ? 100 : 0) + (a.battles?.length ?? 0) + (a.taken?.length ?? 0)));
+    const heavy = fights.some((x) => x.mine && (x.taken?.length ?? 0) > 0) || fights.reduce((n, x) => n + (x.taken?.length ?? 0), 0) >= 4;
+    const big = always || (heavy || wars.length > 0) && s.turn - lastReel >= 3;
+    if (big) lastReel = s.turn;
     for (const f of fights.slice(0, 2)) {
       const n = s.nations[f.nat];
-      reel.push({ nat: f.nat, title: (f.raids?.length ?? 0) > 0 && !f.battles?.length ? `${(n?.adj ?? f.nat).toUpperCase()} RAIDERS OVERHEAD` : `THE ${(n?.adj ?? f.nat).toUpperCase()} ARMY ON THE MARCH`, text: short(f.note), region: f.focus?.[0] ?? capitalOf(f.nat) });
+      reel.push({ nat: f.nat, title: `THE ${(n?.adj ?? f.nat).toUpperCase()} ARMY ON THE MARCH`, text: short(f.note), region: f.focus?.[0] ?? capitalOf(f.nat) });
     }
     const newsreel = big ? { date: turnToDate(month02).label, cards: reel.slice(0, 4) } : null;
     lastMonth = {
@@ -17126,6 +17135,7 @@
       sections: [{ heading: "AIRFIELDS", text: "", rows }]
     };
   }
+  var lastReel = -9;
   var lastMonth = null;
   function reportsPage(s) {
     if (!lastMonth) return null;
