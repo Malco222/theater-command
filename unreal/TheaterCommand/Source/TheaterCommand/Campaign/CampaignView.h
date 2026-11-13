@@ -43,6 +43,8 @@ struct FViewCorps
 	int32 Stale = 0; // known from a report this many months old (0: known as it is today)
 	FString General; // empty when the corps has no named commander
 	FString Posture; // stand, dig, back
+	bool bDug = false; // it is entrenched: it spent last month where it stands, digging in
+	bool bSupplied = true; // supply reaches it
 	int32 Divisions = 0;
 	int32 Men = 0;
 	float Strength = 1.0f; // 0..1: men and equipment left

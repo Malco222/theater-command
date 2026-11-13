@@ -673,6 +673,8 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetBoolField(TEXT("dim"), C.bDim);
 			Unit->TryGetStringField(TEXT("gen"), C.General); // null when nobody is named
 			Unit->TryGetStringField(TEXT("posture"), C.Posture);
+			Unit->TryGetBoolField(TEXT("dug"), C.bDug);
+			Unit->TryGetBoolField(TEXT("supplied"), C.bSupplied);
 			C.Divisions = Unit->GetIntegerField(TEXT("divs"));
 			C.Strength = static_cast<float>(Unit->GetNumberField(TEXT("str")));
 			// Rules that do not count heads (the stand-in) are taken at a full division's strength.

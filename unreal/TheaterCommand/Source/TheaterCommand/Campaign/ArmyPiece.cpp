@@ -54,6 +54,32 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		}
 		NewSignature += FString::Printf(TEXT("|%d%s%s%s"), Unit.Id, Unit.bDim ? TEXT("?") : TEXT(""), Unit.Stale > 0 ? TEXT("~") : TEXT(""), *Unit.Ally); // (what is known of it is part of how it looks)
 	}
+	// What it is about, for the dressing round its base: entrenched or digging, in camp, supplied or cut off.
+	{
+		int32 Known = 0, Dug = 0, Digging = 0, Starved = 0, Own = 0, Resting = 0, Tired = 0;
+		for (const FViewCorps& Unit : Corps)
+		{
+			if (Unit.bDim || Unit.Stale > 0)
+			{
+				continue; // (only what is known of it as it is today)
+			}
+			++Known;
+			Dug += Unit.bDug ? 1 : 0;
+			Digging += !Unit.bDug && Unit.Posture == TEXT("dig") ? 1 : 0;
+			Starved += Unit.bSupplied ? 0 : 1;
+			if (Unit.Rest >= 0.0f)
+			{
+				++Own;
+				Resting += Unit.bResting ? 1 : 0;
+				Tired += Unit.Rest < 0.95f ? 1 : 0;
+			}
+		}
+		WorksState = Known == 0 ? 0 : Dug * 2 >= Known ? 2 : (Dug + Digging) * 2 >= Known ? 1 : 0;
+		// (a camp is pitched by an army that is getting something from its rest: one already fresh simply stands)
+		bCamp = Own > 0 && Resting == Own && Tired > 0;
+		SupplyState = Known == 0 ? 0 : Starved > 0 ? 2 : 1;
+		NewSignature += FString::Printf(TEXT("|w%dc%ds%d"), WorksState, bCamp ? 1 : 0, SupplyState);
+	}
 	// The standard carries a streamer for every honour its corps have won.
 	int32 HonourCount = 0;
 	for (const FViewCorps& Unit : Corps)
@@ -68,6 +94,25 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		Signature = NewSignature;
 		Rebuild(Map, Nation);
 	}
+}
+
+void AArmyPiece::DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 Works, bool bInCamp, int32 Supply)
+{
+	if (What != 0)
+	{
+		return;
+	}
+	WorksState = Works;
+	bCamp = bInCamp;
+	SupplyState = Supply;
+	Signature += TEXT("|dressed");
+	Rebuild(Map, Nation);
+}
+
+FVector AArmyPiece::GetCampFire() const
+{
+	// (as it is placed when the piece is built: forward-left of the tents, on the viewer's right of the base)
+	return GetActorTransform().TransformPosition(CampFireAt);
 }
 
 void AArmyPiece::SetFleet(ACampaignMapActor* Map, const FCampaignNation& Nation, const FViewFleet& InFleet)
@@ -215,6 +260,90 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			Kinds.Add(Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy")) : Unit.Kind);
 		}
 		Model.Force(Kinds, CounterWidth * 0.5, Top, U, Colour, NationTag);
+
+		// The dressing round the base, which says what the army is about without a click. (The piece is always
+		// turned so that -X is toward whoever looks at the table, +Y to his right.)
+		const double Rim = CounterWidth * 0.5;
+		auto Round = [](double FromFront, double Out) { const double A = FMath::DegreesToRadians(FromFront); return FVector(-FMath::Cos(A) * Out, FMath::Sin(A) * Out, 0.0); };
+		if (WorksState > 0)
+		{
+			// Dug in: a breastwork of sandbags round the front of the base, two courses high, and wire before it.
+			// Still digging: one short course across the front and a heap of spoil.
+			const FLinearColor Bag(FColor::FromHex(TEXT("C2B280"))), BagDark(FColor::FromHex(TEXT("A99B6C"))), Stake(FColor::FromHex(TEXT("3A342C"))), Wire(FColor::FromHex(TEXT("55585C"))), Spoil(FColor::FromHex(TEXT("6B5338")));
+			const double Sweep = WorksState == 2 ? 118.0 : 46.0;
+			const int32 Bags = WorksState == 2 ? 13 : 5;
+			for (int32 Course = 0; Course < (WorksState == 2 ? 2 : 1); ++Course)
+			{
+				for (int32 K = 0; K < Bags - Course; ++K)
+				{
+					const double Angle = -Sweep + (K + 0.5 * Course) * (2.0 * Sweep / (Bags - 1));
+					const FVector At = Round(Angle, Rim + 0.85 * U) + FVector(0.0, 0.0, (0.24 + 0.42 * Course) * U);
+					Model.Box(At, FVector(0.62, 1.3, 0.44) * U, (K + Course) % 2 == 0 ? Bag : BagDark, FMath::RadiansToDegrees(FMath::Atan2(At.Y, At.X)));
+				}
+			}
+			if (WorksState == 2)
+			{
+				FVector Last = FVector::ZeroVector;
+				for (int32 K = 0; K < 8; ++K)
+				{
+					const double Angle = -104.0 + K * (208.0 / 7.0);
+					const FVector Foot = Round(Angle, Rim + 2.15 * U);
+					const FVector Along = Round(Angle + 90.0, 0.34 * U);
+					Model.Rod(Foot - Along, Foot + Along + FVector(0.0, 0.0, 0.8 * U), 0.05 * U, Stake, 4);
+					Model.Rod(Foot + Along, Foot - Along + FVector(0.0, 0.0, 0.8 * U), 0.05 * U, Stake, 4);
+					const FVector Top2 = Foot + FVector(0.0, 0.0, 0.5 * U);
+					if (K > 0)
+					{
+						Model.Rod(Last, Top2, 0.028 * U, Wire, 4);
+						Model.Rod(Last + FVector(0.0, 0.0, 0.26 * U), Top2 + FVector(0.0, 0.0, 0.26 * U), 0.028 * U, Wire, 4);
+					}
+					Last = Top2;
+				}
+			}
+			else
+			{
+				Model.Ball(Round(-70.0, Rim + 1.3 * U) + FVector(0.0, 0.0, 0.12 * U), FVector(1.5, 1.1, 0.7) * U, Spoil, 4, 8);
+			}
+		}
+		if (bCamp)
+		{
+			// In camp: a row of ridge tents to the right of the base, their open ends to the viewer, and a fire.
+			const FLinearColor Tent(FColor::FromHex(TEXT("D2C8A4"))), TentShade(FColor::FromHex(TEXT("B8AD86"))), Log(FColor::FromHex(TEXT("4A3A2A"))), Flame(FColor::FromHex(TEXT("FF8A2A"))), Ember(FColor::FromHex(TEXT("FFD060")));
+			for (int32 K = 0; K < 3; ++K)
+			{
+				Model.House(FVector((-2.4 + K * 2.1) * U, Rim + (2.3 + 0.3 * (K % 2)) * U, 0.0), 1.9 * U, 1.5 * U, 0.06 * U, 1.1 * U, K % 2 == 0 ? Tent : TentShade, K % 2 == 0 ? TentShade : Tent, 0.0);
+			}
+			const FVector Fire(-4.4 * U, Rim + 2.0 * U, 0.0);
+			CampFireAt = Fire + FVector(0.0, 0.0, 0.6 * U);
+			for (int32 K = 0; K < 3; ++K)
+			{
+				const double A = K * 2.094;
+				Model.Rod(Fire + FVector(FMath::Cos(A), FMath::Sin(A), 0.0) * 0.38 * U, Fire - FVector(FMath::Cos(A), FMath::Sin(A), 0.0) * 0.2 * U + FVector(0.0, 0.0, 0.2 * U), 0.07 * U, Log, 4);
+			}
+			Model.Pillar(Fire + FVector(0.0, 0.0, 0.08 * U), 0.3 * U, 0.0, 0.85 * U, Flame, 6);
+			Model.Pillar(Fire + FVector(-0.04 * U, 0.0, 0.08 * U), 0.16 * U, 0.0, 0.5 * U, Ember, 5);
+		}
+		if (SupplyState == 1)
+		{
+			// Supplied: a lorry of its column drawn up on the left, and a dump of crates and drums.
+			const FLinearColor Crate(FColor::FromHex(TEXT("7A6444"))), Drum(FColor::FromHex(TEXT("4F5A4A")));
+			Model.Lorry(FVector(-0.2 * U, -(Rim + 1.9 * U), 0.0), 1.3 * U, Colour, 12.0);
+			Model.Box(FVector(-2.5 * U, -(Rim + 1.5 * U), 0.22 * U), FVector(0.6, 0.6, 0.44) * U, Crate, 20.0);
+			Model.Box(FVector(-3.1 * U, -(Rim + 1.1 * U), 0.22 * U), FVector(0.6, 0.6, 0.44) * U, Crate, -10.0);
+			Model.Box(FVector(-2.8 * U, -(Rim + 1.3 * U), 0.64 * U), FVector(0.55, 0.55, 0.4) * U, Crate, 35.0);
+			Model.Pillar(FVector(-3.3 * U, -(Rim + 1.9 * U), 0.0), 0.24 * U, 0.24 * U, 0.6 * U, Drum, 8);
+		}
+		else if (SupplyState == 2)
+		{
+			// Cut off: no column comes up. A barred red board on a post, and the last crates lying empty.
+			const FLinearColor Post(FColor::FromHex(TEXT("3A342C"))), Red(FColor::FromHex(TEXT("C4261D"))), White(FColor::FromHex(TEXT("F0ECE0"))), Crate(FColor::FromHex(TEXT("7A6444")));
+			const FVector Foot(-1.6 * U, -(Rim + 1.6 * U), 0.0);
+			Model.Rod(Foot, Foot + FVector(0.0, 0.0, 2.6 * U), 0.09 * U, Post, 5);
+			Model.Box(Foot + FVector(-0.12 * U, 0.0, 2.9 * U), FVector(0.1, 1.9, 1.3) * U, Red);
+			Model.Box(Foot + FVector(-0.19 * U, 0.0, 2.9 * U), FVector(0.06, 1.5, 0.3) * U, White);
+			Model.Box(FVector(-3.0 * U, -(Rim + 1.3 * U), 0.2 * U), FVector(0.6, 0.6, 0.4) * U, Crate, 25.0, 38.0);
+			Model.Box(FVector(-2.3 * U, -(Rim + 2.3 * U), 0.14 * U), FVector(0.6, 0.6, 0.28) * U, Crate, -30.0, 0.0);
+		}
 
 		// The bigger the army, the bigger its flag; and its strength is written, in thousands of men, on a dark
 		// plate under the flag.

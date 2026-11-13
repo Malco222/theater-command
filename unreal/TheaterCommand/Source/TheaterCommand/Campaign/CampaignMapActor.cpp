@@ -3151,7 +3151,7 @@ void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, in
 	Buffers.Commit(OrdersMesh, 2, HighlightMaterial);
 }
 
-void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& Regions)
+void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& Regions, int32 RouteEnds)
 {
 	OrdersMesh->ClearMeshSection(1);
 	if (Regions.Num() == 0)
@@ -3172,8 +3172,33 @@ void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& 
 		return;
 	}
 	FCampaignMeshBuffers Buffers;
-	const FColor Gold = FLinearColor(1.0f, 0.83f, 0.45f, 0.95f).ToFColor(false);
-	AppendRibbon(Buffers, Points, 0.5, 0.34, Gold, false);
+	// Gold for a march, red where it ends in a battle, amber where it means declaring war.
+	const FColor Gold = (RouteEnds == 1 ? FLinearColor(1.0f, 0.3f, 0.2f, 0.95f) : RouteEnds == 2 ? FLinearColor(1.0f, 0.62f, 0.12f, 0.95f) : FLinearColor(1.0f, 0.83f, 0.45f, 0.95f)).ToFColor(false);
+	// A dotted line, as a staff officer pencils a march on the map: short dashes from province to province.
+	for (int32 Leg = 0; Leg + 1 < Points.Num(); ++Leg)
+	{
+		const FVector2D A0 = Points[Leg], B0 = Points[Leg + 1];
+		const double Long = FVector2D::Distance(A0, B0);
+		const int32 Dashes = FMath::Max(1, FMath::RoundToInt32(Long / 3.4));
+		for (int32 D = 0; D < Dashes; ++D)
+		{
+			const double T0 = (D + 0.14) / Dashes, T1 = (D + 0.72) / Dashes;
+			TArray<FVector2D> Dash;
+			Dash.Add(FMath::Lerp(A0, B0, T0));
+			Dash.Add(FMath::Lerp(A0, B0, T1));
+			AppendRibbon(Buffers, Dash, 0.52, 0.34, Gold, false);
+		}
+		// A mark where each week's march ends: a small ring at every province on the way.
+		if (Leg + 2 < Points.Num())
+		{
+			TArray<FVector2D> Ring;
+			for (int32 K = 0; K < 14; ++K)
+			{
+				Ring.Add(B0 + FVector2D(FMath::Cos(K * 0.4488), FMath::Sin(K * 0.4488)) * 1.25);
+			}
+			AppendRibbon(Buffers, Ring, 0.3, 0.35, Gold, true);
+		}
+	}
 
 	// An arrowhead where the road ends.
 	const FVector2D End = Points.Last();
@@ -3712,7 +3737,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	// Chimneys: a thin grey plume from each, leaning with the wind. Only those near what the eye is looking at.
 	const FLinearColor Grey(0.6f, 0.6f, 0.62f);
 	const double Reach = FMath::Min(CameraDistance * 1.4 + 1500.0, 9000.0);
-	auto Plume = [&](const FVector& Top, int32 Seed)
+	auto Plume = [&](const FVector& Top, int32 Seed, double Scale = 1.0)
 	{
 		if (FVector::DistSquared2D(Top, CameraFocus) > Reach * Reach)
 		{
@@ -3720,15 +3745,51 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		}
 		const int32 Count = 6;
 		const double Life = 7.0;
+		const double Big = Unit * Scale;
 		for (int32 K = 0; K < Count; ++K)
 		{
 			const double Age = FMath::Frac(Now / Life + static_cast<double>(K) / Count + Seed * 0.137);
-			const double Sway = FMath::Sin(Now * 0.7 + Seed + K * 1.7) * 0.12 * Unit * Age;
-			const FVector At = Top + FVector(0.0, 0.0, 4.0 * Unit * Age) + Wind * (2.8 * Unit * Age * Age) + Right * Sway;
+			const double Sway = FMath::Sin(Now * 0.7 + Seed + K * 1.7) * 0.12 * Big * Age;
+			const FVector At = Top + FVector(0.0, 0.0, 4.0 * Big * Age) + Wind * (2.8 * Big * Age * Age) + Right * Sway;
 			const float Alpha = 0.55f * FMath::SmoothStep(0.0, 0.1, Age) * FMath::Pow(1.0 - Age, 1.3);
-			Draw(At, (0.22 + 1.1 * Age) * Unit, Grey, Alpha);
+			Draw(At, (0.22 + 1.1 * Age) * Big, Grey, Alpha);
 		}
 	};
+	// The fires of armies in camp: a thin thread of smoke from each.
+	// And a puff of dust as a piece that has been moved is set down on the table again.
+	for (AArmyPiece* Piece : Pieces)
+	{
+		if (!Piece)
+		{
+			continue;
+		}
+		if (Piece->IsInCamp() && !Piece->IsMarching())
+		{
+			Plume(Piece->GetCampFire(), Piece->GetRegionId() + 900, 0.62);
+		}
+		const TWeakObjectPtr<AArmyPiece> Key(Piece);
+		if (Piece->IsMarching())
+		{
+			OnTheMarch.Add(Key);
+		}
+		else if (OnTheMarch.Contains(Key))
+		{
+			OnTheMarch.Remove(Key);
+			SetDowns.Emplace(Piece->GetActorLocation(), Now);
+		}
+	}
+	SetDowns.RemoveAll([Now](const TPair<FVector, double>& Down) { return Now - Down.Value > 1.6; });
+	for (const TPair<FVector, double>& Down : SetDowns)
+	{
+		const double Age = (Now - Down.Value) / 1.6;
+		const FLinearColor Dusty(0.62f, 0.56f, 0.45f);
+		for (int32 K = 0; K < 9; ++K)
+		{
+			const double Angle = K * 0.698 + 0.3;
+			const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0);
+			Draw(Down.Key + Out * (2.6 + 3.4 * Age) * Unit + FVector(0.0, 0.0, (0.3 + 1.1 * Age) * Unit), (0.7 + 1.5 * Age) * Unit, Dusty, 0.5f * static_cast<float>(FMath::Pow(1.0 - Age, 1.4)));
+		}
+	}
 	for (int32 K = 0; K < TownChimneys.Num(); ++K)
 	{
 		Plume(TownChimneys[K], K);

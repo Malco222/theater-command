@@ -18185,6 +18185,7 @@
           posture: postureOf(c),
           canOrder: up && canOrder(s, c),
           supplied: c.supplied,
+          dug: !!c.dug,
           men: men(c),
           // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
           xp: Math.round(c.xp * 100),

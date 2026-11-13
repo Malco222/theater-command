@@ -59,6 +59,13 @@ public:
 	 */
 	void MarchAlong(const TArray<FVector>& Waypoints, bool bRemoveOnArrival, bool bLifted = true);
 	bool IsMarching() const { return bMarching; }
+	bool IsInCamp() const { return What == 0 && bCamp; }
+	int32 GetWorksState() const { return What == 0 ? WorksState : 0; }
+	int32 GetSupplyState() const { return What == 0 ? SupplyState : 0; }
+	/** For looking at the dressing itself: shows the army as entrenched (2) or digging (1), in camp, supplied (1) or cut off (2), whatever it is. */
+	void DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 Works, bool bInCamp, int32 Supply);
+	/** Where its camp fire burns, in the world, for the smoke that rises from it. */
+	FVector GetCampFire() const;
 
 	/** A picked-up piece shows a bright ring under its base and is held a little off the table. */
 	void SetSelected(bool bInSelected);
@@ -128,6 +135,12 @@ private:
 	double MarchTime = 1.0;
 	double LiftHeight = 40.0;
 	bool bMarching = false;
+	// What the army is about, shown round its base so it can be read without a click: 0 nothing, 1 digging in,
+	// 2 entrenched; in camp, resting; 0 not known, 1 supplied, 2 cut off.
+	int32 WorksState = 0;
+	bool bCamp = false;
+	int32 SupplyState = 0;
+	FVector CampFireAt = FVector::ZeroVector; // in the piece's own frame
 	bool bRemoveOnArrival = false;
 	bool bLiftOnMarch = true;
 	bool bSelected = false;

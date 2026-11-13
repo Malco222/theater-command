@@ -1,4 +1,5 @@
 #include "Campaign/CampaignPhotographer.h"
+#include "Campaign/ArmyPiece.h"
 
 #include "Campaign/CampaignCameraPawn.h"
 #include "Campaign/CampaignMapActor.h"
@@ -102,6 +103,16 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		FShot& Shot = Add(TEXT("09e-tip-march"), TEXT("Berlin"), 0.4f);
 		Shot.Army = TEXT("Farther Pomerania");
 		Shot.Route = Shot.Hover = TEXT("Hamburg");
+	}
+	{
+		// What stands round an army's base says what it is about: entrenched behind sandbags and wire, in camp by
+		// its fire, supplied by its lorries, or cut off; and one that is still digging.
+		FShot& Shot = Add(TEXT("09f-armies-at-a-glance"), TEXT("Grenzmark"), 0.22f);
+		Shot.Dress = TEXT("Farther Pomerania:2:0:1;Grenzmark:0:1:1;Pomorze:1:0:2;Poznan:2:1:1");
+	}
+	{
+		FShot& Shot = Add(TEXT("09g-at-a-glance-wide"), TEXT("Poznan"), 0.4f);
+		Shot.Dress = TEXT("Farther Pomerania:2:0:1;Grenzmark:0:1:1;Pomorze:1:0:2;Poznan:2:1:1;Lower Silesia:2:0:1;Lodz:0:1:2");
 	}
 	{
 		FShot& Shot = Add(TEXT("10-face-off"), TEXT("Pomorze"), 0.34f);
@@ -1008,6 +1019,35 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			Works[*Here] = FIntVector4(3, 3, 3, 2);
 		}
 		Table->ShowBuildings(Works);
+	}
+	if (!Shot.Dress.IsEmpty() && Controller->GetSession())
+	{
+		// For looking at what stands round an army's base: each army named is shown in the state given.
+		TArray<FString> Each;
+		Shot.Dress.ParseIntoArray(Each, TEXT(";"));
+		for (const FString& One : Each)
+		{
+			TArray<FString> Part;
+			One.ParseIntoArray(Part, TEXT(":"));
+			const int32* Where = Part.Num() >= 4 ? Data.RegionByName.Find(Part[0]) : nullptr;
+			if (!Where)
+			{
+				continue;
+			}
+			for (const FViewCorps& Unit : Controller->GetSession()->GetView().Corps)
+			{
+				if (Unit.Region == *Where)
+				{
+					const FCampaignNation* Nation = Data.FindNation(Unit.Nation);
+					AArmyPiece* Piece = Table->FindPiece(*Where, Unit.Nation);
+					if (Piece && Nation)
+					{
+						Piece->DressAs(Table, *Nation, FCString::Atoi(*Part[1]), FCString::Atoi(*Part[2]) != 0, FCString::Atoi(*Part[3]));
+					}
+					break;
+				}
+			}
+		}
 	}
 	if (Shot.Civic > 0)
 	{

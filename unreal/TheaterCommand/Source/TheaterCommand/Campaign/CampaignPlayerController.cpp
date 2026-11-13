@@ -1572,7 +1572,9 @@ void ACampaignPlayerController::OpenGuide()
 	Add(TEXT("MOVING AND ATTACKING"),
 		TEXT("Click one of your flags to pick the army up. Ground it can march to lightens, ground it can attack turns red, and a neutral country's ground beside it turns amber. ")
 		TEXT("Click where it should go and click again to send it, or drag the flag there. An attack first shows both armies and the odds: SEND THEM IN fights it, CALL IT OFF does not. Esc puts the army down.\n")
-		TEXT("In the army's tray you can leave some corps behind, say what it does if attacked (stand, dig in or fall back), and send it BY RAIL along a working railway or BY SEA from a port."));
+		TEXT("In the army's tray you can leave some corps behind, say what it does if attacked (stand, dig in or fall back), and send it BY RAIL along a working railway or BY SEA from a port.\n")
+		TEXT("What stands round an army's base says what it is about: sandbags and wire when it is entrenched (a short row while it is still digging), tents and a fire when it is in camp and resting, ")
+		TEXT("a lorry and crates while supply reaches it, and a red barred board when it is cut off. The dotted line to where an army would go has a ring for each province on the way, and ends in red where there would be a battle."));
 	Add(TEXT("WAR AND PEACE"),
 		TEXT("Marching onto amber ground means declaring war. The game first tells you who that country's friends are and what will follow, and nothing happens unless you say yes.\n")
 		TEXT("DIPLOMACY shows who is at war, where every neutral stands between the Axis and the Allies, and lets you court a neutral with political capital. ")
@@ -2662,6 +2664,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Line += bDim && Force.Value.Y == 0
 					? FString::Printf(TEXT("\n%s army: %d corps, strength unknown"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X)
 					: FString::Printf(TEXT("\n%s army: %d corps, %d division%s"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X, Force.Value.Y, Force.Value.Y == 1 ? TEXT("") : TEXT("s"));
+				// What stands round its base, in words: the same thing the table shows.
+				if (const AArmyPiece* Stands = Map->FindPiece(TipRegion, Force.Key))
+				{
+					TArray<FString> About;
+					if (Stands->GetWorksState() == 2) { About.Add(TEXT("entrenched")); }
+					else if (Stands->GetWorksState() == 1) { About.Add(TEXT("digging in")); }
+					if (Stands->IsInCamp()) { About.Add(TEXT("in camp, resting")); }
+					if (Stands->GetSupplyState() == 2) { About.Add(TEXT("cut off from supply")); }
+					if (About.Num() > 0)
+					{
+						Line += FString::Printf(TEXT(": %s"), *FString::Join(About, TEXT(", ")));
+					}
+				}
 			}
 			// Over an airfield: what it is and what stands on it, and that a click opens it.
 			if (const FViewAirfield* Field = View.Airfields.FindByPredicate([TipField](const FViewAirfield& Each) { return Each.Region == TipField; }))
@@ -3895,7 +3910,8 @@ void ACampaignPlayerController::ShowRouteTo(int32 RegionId)
 		}
 	}
 	const FVector From = RingedPiece.IsValid() ? RingedPiece->GetRestLocation() : FVector::ZeroVector;
-	Map->SetRoute(From, RingedPiece.IsValid() ? Road : TArray<int32>());
+	const FReachRegion* Ends = FindReach(RegionId);
+	Map->SetRoute(From, RingedPiece.IsValid() ? Road : TArray<int32>(), Ends && Ends->IsWar() ? 2 : Ends && Ends->bAttack ? 1 : 0);
 }
 
 void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFrom)

@@ -196,7 +196,7 @@ function view() {
       return ({
       id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
-      canOrder: up && canOrder(s, c), supplied: c.supplied, men: men(c),
+      canOrder: up && canOrder(s, c), supplied: c.supplied, dug: !!c.dug, men: men(c),
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),

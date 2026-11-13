@@ -118,7 +118,8 @@ public:
 	void ShowSeaReach(const TArray<int32>& Zones, int32 Hover, int32 FleetId);
 
 	/** Draws the road an army would take, from where it stands through the regions given. An empty list clears it. */
-	void SetRoute(const FVector& FromWorld, const TArray<int32>& Regions);
+	/** RouteEnds: 0 a march, 1 a battle at the end of it, 2 a frontier that means war. */
+	void SetRoute(const FVector& FromWorld, const TArray<int32>& Regions, int32 RouteEnds = 0);
 
 	/** Called as the camera moves: decides which lettering is worth showing and turns the standards to face the viewer. */
 	void UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus);
@@ -423,6 +424,9 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> CivicMesh;
 	TArray<int32> ShownCivic;
+	// Pieces on the move, to know when one is set down; and where pieces were lately set down, for the dust.
+	TSet<TWeakObjectPtr<AArmyPiece>> OnTheMarch;
+	TArray<TPair<FVector, double>> SetDowns;
 
 	/** The trees, in squares of country so that only those near the eye are drawn. */
 	UPROPERTY(Transient)
