@@ -405,6 +405,14 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			FShot& Shot = Add(TEXT("38f-trade-routes"), TEXT("@capital"), 0.72f);
 		}
 		{
+			// The government and its war cabinet (version 57): trust, the directive, the four offices, the decrees.
+			FShot& Shot = Add(TEXT("43a-the-cabinet"), TEXT("@capital"), 0.62f);
+			Shot.Room = TEXT("cabinet");
+		}
+		{
+			FShot& Shot = Add(TEXT("43b-after-the-cabinet"), TEXT("@capital"), 0.62f);
+		}
+		{
 			// The secret service, with the capital selected and an agent recruited.
 			FShot& Shot = Add(TEXT("31h-secret-service"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");

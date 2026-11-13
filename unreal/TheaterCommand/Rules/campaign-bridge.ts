@@ -52,6 +52,7 @@ import {
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   fleetsInSight, wingsOfFleet,
   prizesOf, prizesOnMap, whyNotWreckPrize, orderWreck, whyNotBurnOrder, orderBurn, orderScorchPolicy,
+  governmentOf, whyNotAppointMinister, orderAppoint, whyNotOrderDecree, orderDecree, whyNotSetAsideDirective, orderSetAside,
   townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
@@ -1614,6 +1615,8 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   if (lastMonth) out.push({ id: 'reports', label: "THE MONTH'S REPORT" });
   if (s.stories.awards.some((a) => a.nat === s.human && !a.old)) out.push({ id: 'heroes', label: 'HEROES AT HOME' });
   if (secretService(s)) out.push({ id: 'spies', label: 'THE SECRET SERVICE' });
+  // The government and its war cabinet (Version 57, the grand campaign).
+  try { if (governmentOf(s)?.mine) out.push({ id: 'cabinet', label: 'THE CABINET' }); } catch { /* no government in this game */ }
   // Towns to build up and trade agreements (the grand campaign).
   if (tradeLedger(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
   if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: 'towns', label: 'TOWNS TO BUILD UP' });
@@ -1647,6 +1650,20 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
       tip: 'A design team with nothing to do designs nothing. Open RESEARCH and give it work.',
     });
   }
+  // The cabinet (Version 57): a directive newly set or nearly due, or a cabinet about to fall.
+  try {
+    const gov = governmentOf(s);
+    if (gov?.mine) {
+      const d = gov.directive;
+      if (gov.low > 0 && gov.trust <= gov.fallsAt) {
+        out.push({ k: 'page:cabinet', t: 'THE CABINET IS ABOUT TO FALL', tip: `The cabinet's trust is ${Math.round(gov.trust)} of 100. At ${gov.fallsAt} or under for ${gov.crisisMonths} months running, it falls; it has been there for ${gov.low}. Open THE CABINET.` });
+      } else if (d && d.issued === s.turn) {
+        out.push({ k: 'page:cabinet', t: 'A NEW DIRECTIVE', tip: `${d.by}: ${d.title}. ${d.text} Open THE CABINET.` });
+      } else if (d && d.left <= 2) {
+        out.push({ k: 'page:cabinet', t: d.left <= 1 ? 'A DIRECTIVE IS DUE THIS MONTH' : 'A DIRECTIVE IS DUE NEXT MONTH', tip: `${d.title}. ${d.progress} Open THE CABINET.` });
+      }
+    }
+  } catch { /* no government in this game */ }
   // Sieges: a town of the player's shut in, and towns his armies stand round.
   try {
     const all = siegesInSight(s).filter((v) => v.by);
@@ -2351,10 +2368,65 @@ function tradePage(s: Game): Page | null {
   };
 }
 
+/**
+ * The government and its war cabinet (Version 57): the cabinet's trust, the directive in hand with its clock, the
+ * four offices and who could hold each, the two ladders of decrees, what it all comes to, and the minutes.
+ */
+function cabinetPage(s: Game): Page | null {
+  let v: ReturnType<typeof governmentOf> = null;
+  try { v = governmentOf(s); } catch { return null; }
+  if (!v || !v.mine) return null;
+  const up = humanUp(s) && !onEve(s);
+  const notNow = 'It is not your month.';
+  const months = (n: number): string => `${n} month${n === 1 ? '' : 's'}`;
+  const cap = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
+  const d = v.directive;
+  const directive: PageRow[] = d ? [{
+    nat: s.nations[d.from] ? d.from : v.nat, title: `${d.title}  \u00B7  ${d.left <= 1 ? 'due this month' : `${months(d.left)} left`}`,
+    lines: [d.text, `Set by ${d.by.replace(/^The /, 'the ')}, to be done by the end of ${turnToDate(d.due).label}.`, d.progress, `Reward: ${d.reward}.`.replace(/\.\.$/, '.')],
+    buttons: [
+      ...(d.region !== undefined && d.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? 'the place'}.` }] : []),
+      (() => { const why = up ? whyNotSetAsideDirective(s) : notNow; return { label: 'SET IT ASIDE', act: 'cabinet:aside', ok: why === null, tip: why ?? `Tells the cabinet it will not be done. Costs ${d.price} of its trust at once, the same as letting it lapse, and the next directive comes sooner.`, danger: true }; })(),
+    ],
+  }] : [];
+  const offices: PageRow[] = v.seats.map((seat) => ({
+    nat: v!.nat, title: `${seat.name}  \u00B7  ${seat.minister.name}`,
+    lines: [cap(seat.minister.plus), cap(seat.minister.minus)].filter(Boolean),
+    buttons: seat.options.map((o) => ({
+      label: o.name.toUpperCase(), act: `cabinet:appoint:${seat.id}:${o.id}`, ok: up && o.why === null,
+      tip: !up ? notNow : o.why ?? `${cap(o.plus)}. ${cap(o.minus)}. The appointment costs ${v!.appointCost} political capital.`.replace(/\.\./g, '.'),
+    })),
+  }));
+  const decrees: PageRow[] = v.tracks.map((t) => ({
+    nat: v!.nat, title: `${t.name}  \u00B7  ${t.steps[t.at]?.name ?? ''}`,
+    lines: [t.steps[t.at]?.text ?? ''].filter(Boolean),
+    buttons: t.steps.map((st, i) => ({ st, i })).filter((x) => !x.st.on).map(({ st, i }) => ({
+      label: st.name.toUpperCase(), act: `cabinet:decree:${t.id}:${i}`, ok: up && st.why === null,
+      tip: !up ? notNow : st.why ?? `${st.text}${i > t.at && st.cost > 0 ? ` Costs ${st.cost} political capital.` : i < t.at ? ' Stepping down is free.' : ''}`,
+    })),
+  }));
+  const falling = v.trust <= v.fallsAt;
+  return {
+    id: 'cabinet', title: 'THE CABINET',
+    // (the headline is one short line: the screen cuts a long one off)
+    headline: `Trust ${Math.round(v.trust)} of 100  \u00B7  ${v.trustWord}`,
+    note: `${v.form.name}. Political capital ${Math.floor(v.capital)} of ${v.capitalMost}, +${v.capitalMonth.toFixed(1)} a month. ${v.form.blurb} ${falling ? `The cabinet's trust is at ${v.fallsAt} or under: if it stays there for ${months(v.crisisMonths)} running the cabinet falls (it has been there for ${months(v.low)}).` : `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. At ${v.fallsAt} or under for ${months(v.crisisMonths)} running, the cabinet falls.`} Directives carried out: ${v.done}. Missed or set aside: ${v.missed}.`,
+    top: [],
+    sections: [
+      { heading: 'THE DIRECTIVE', text: d ? '' : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months(v.nextIn)}.` : 'The cabinet is weighing the next.'}`, rows: directive },
+      { heading: 'THE FOUR OFFICES', text: `A new minister costs ${v.appointCost} political capital. Each brings something and costs something.`, rows: offices },
+      { heading: 'DECREES', text: 'One step up at a time, for political capital. A step down is free.', rows: decrees },
+      { heading: 'WHAT IT ALL COMES TO', text: v.sums.length ? v.sums.join('  \u00B7  ') : 'Nothing either way.', rows: [] },
+      { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => `${m.label} ${m.amount > 0 ? '+' : ''}${m.amount.toFixed(1)}`).join('  \u00B7  ') : 'Nothing since it last read the news.', rows: [] },
+      { heading: 'MINUTES', text: v.log.length ? v.log.slice(-8).reverse().map((l) => `${turnToDate(l.turn).label}: ${l.text}`).join('\n') : 'Nothing minuted yet.', rows: [] },
+    ],
+  };
+}
+
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
+  const p = id === 'cabinet' ? cabinetPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
     : id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
@@ -2409,6 +2481,29 @@ function act(action: string, region = -1) {
     const b = orderBuilding(s, at, part[2]);
     ok = !!b;
     note = b ? `${before?.label ?? 'The building'} ordered at ${townBuildings(s, at)?.town ?? s.regions[at]?.name ?? 'the town'}. Due ${turnToDate(b.eta).label}.` : before?.why ?? 'That cannot be built now.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'cabinet') {
+    // The government (Version 57): a minister appointed, a decree, or the directive set aside.
+    const v = governmentOf(s);
+    if (part[1] === 'appoint') {
+      const why = whyNotAppointMinister(s, part[2], part[3]);
+      const seat = v?.seats.find((x) => x.id === part[2]);
+      const who = seat?.options.find((o) => o.id === part[3])?.name ?? 'The new minister';
+      ok = !why && orderAppoint(s, part[2], part[3]);
+      note = ok ? `${who} takes office${seat ? ` as ${seat.name}` : ''}.` : why ?? 'That appointment cannot be made now.';
+    } else if (part[1] === 'decree') {
+      const step = Number(part[3]);
+      const why = whyNotOrderDecree(s, part[2], step);
+      const track = v?.tracks.find((x) => x.id === part[2]);
+      ok = !why && orderDecree(s, part[2], step);
+      note = ok ? `Decreed: ${track?.steps[step]?.name ?? 'the new measure'}${track ? ` (${track.name})` : ''}.` : why ?? 'That cannot be decreed now.';
+    } else if (part[1] === 'aside') {
+      const why = whyNotSetAsideDirective(s);
+      const title = v?.directive?.title ?? 'The directive';
+      ok = !why && orderSetAside(s);
+      note = ok ? `${title}: set aside. The cabinet takes note.` : why ?? 'There is no directive to set aside.';
+    }
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'trade') {
