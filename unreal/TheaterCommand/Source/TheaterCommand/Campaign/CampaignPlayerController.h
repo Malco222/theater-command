@@ -71,6 +71,14 @@ struct FShipCard
 	int32 Count = 1; // how many ships this card stands for, when the fleet has too many to show each
 };
 
+/** The adviser's first steps: shown at the start of a campaign, each ticked as the player does it. */
+struct FAdviser
+{
+	bool bOn = false;
+	bool bDone[5] = { false, false, false, false, false }; // an army picked up, sent, a province looked at, an airfield or fleet opened, the month ended
+	int32 Revision = 0;
+};
+
 /** The newsreel being shown: the month it is of, its stories, and which is on the screen (-1 for the title). */
 struct FNewsreelShow
 {
@@ -410,6 +418,10 @@ public:
 	int32 ArmiesYetToMove() const;
 	/** The list of everything the player commands, each with a way to go to it (L). */
 	void OpenForces();
+	/** The adviser's first steps, and the way to send him away. */
+	const FAdviser& GetAdviser() const { return Adviser; }
+	void DismissAdviser() { Adviser.bOn = false; ++Adviser.Revision; }
+	void ShowAdviser() { Adviser.bOn = true; ++Adviser.Revision; }
 	/** The newsreel: the month's great stories flown over in black and white, each read out. Space skips it; K turns newsreels off or on. */
 	const FNewsreelShow& GetNewsreel() const { return Newsreel; }
 	void PlayNewsreel(const FString& Date, const TArray<FNewsCard>& Cards);
@@ -593,6 +605,8 @@ private:
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
 	double BattleMusicUntil = 0.0; // the march plays until then
+	FAdviser Adviser;
+	void AdviserSaw(int32 Step);
 	FNewsreelShow Newsreel;
 	bool bNewsreels = true; // K turns them off
 	TArray<FAnnouncement> HeldAnnouncements; // waiting for the newsreel to end

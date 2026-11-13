@@ -407,6 +407,41 @@ namespace
 						]
 					]
 
+					// The adviser: the first steps of a campaign, each ticked as it is done. He can be sent away.
+					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(24.0f, 218.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(360.0f)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetAdviser().bOn && Controller->IsMapShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+						[
+							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 12.0f, 14.0f, 13.0f))
+							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("YOUR CHIEF OF STAFF SUGGESTS"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+									]
+									+ SHorizontalBox::Slot().AutoWidth()
+									[
+										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(7.0f, 2.0f)).IsFocusable(false)
+										.ToolTipText(FText::FromString(TEXT("Send him away. H opens the guide whenever you want it.")))
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->DismissAdviser(); } return FReply::Handled(); })
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("DISMISS"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+										]
+									]
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+								[
+									SAssignNew(AdviserSteps, SVerticalBox)
+								]
+							]
+						]
+					]
+
 					// While the month is replayed: the flags of the nations whose moves are shown, in the order they
 					// made them, with the one on the table now standing larger.
 					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(24.0f, 136.0f, 24.0f, 0.0f)
@@ -1639,6 +1674,36 @@ namespace
 		virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+			// The adviser's steps, ticked as they are done.
+			if (Controller.IsValid() && AdviserSteps.IsValid() && Controller->GetAdviser().Revision != ShownAdviser)
+			{
+				const FAdviser& Adviser = Controller->GetAdviser();
+				ShownAdviser = Adviser.Revision;
+				AdviserSteps->ClearChildren();
+				static const TCHAR* Steps[5] = {
+					TEXT("Pick up an army: click one of your flags, or press Tab."),
+					TEXT("Send it: right-click ground that lights up. Red ground is an attack, and you are asked first."),
+					TEXT("Look at a place: click a town. THE PRIZE says what taking it is worth; RECRUIT raises troops."),
+					TEXT("Click an airfield to plan a raid, or one of your fleets to send it to sea."),
+					TEXT("End the month with Enter and watch the others move. Space hurries it."),
+				};
+				for (int32 Step = 0; Step < 5; ++Step)
+				{
+					const bool bDone = Adviser.bDone[Step];
+					AdviserSteps->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(bDone ? TEXT("\u2713") : FString::Printf(TEXT("%d"), Step + 1))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(bDone ? FLinearColor(FColor::FromHex(TEXT("8FBF6A"))) : BrightBrass)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Steps[Step])).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(bDone ? Faint : Cream).AutoWrapText(true)
+						]
+					];
+				}
+			}
 			// The order of play, while the month is replayed.
 			if (Controller.IsValid() && WatchStrip.IsValid())
 			{
@@ -4325,6 +4390,8 @@ namespace
 		TSharedPtr<SVerticalBox> ProvinceBox;
 		TSharedPtr<SHorizontalBox> TrayOrders;
 		int32 ShownProvince = -1;
+		TSharedPtr<SVerticalBox> AdviserSteps;
+		int32 ShownAdviser = -1;
 		TSharedPtr<SHorizontalBox> WatchStrip;
 		TArray<FString> WatchShown;
 		int32 WatchNow = INDEX_NONE;

@@ -60,6 +60,7 @@ private:
 	int32 ProvinceTab = 0; // the tab of the province panel to show
 	bool bWealth = false; // the wealth view of the map
 	bool bSides = false; // the friend-and-foe view
+	bool bAdviser = false; // the adviser's first steps on the screen
 	bool bNewsreel = false; // show a newsreel story over the map
 	bool bFleet = false; // pick up the player's largest fleet, as an army is picked up
 	bool bFleetSails = false; // and send it to the farthest sea it can reach

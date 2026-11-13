@@ -224,6 +224,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Select = TEXT("@capital");
 			Shot.ProvinceTab = 2;
 		}
+		{
+			// The adviser's first steps, with an army picked up so the first is ticked.
+			FShot& Shot = Add(TEXT("31t-adviser"), TEXT("@capital"), 0.45f);
+			Shot.bAdviser = true;
+			Shot.Select = Shot.Army = TEXT("Upper Silesia");
+		}
 		Add(TEXT("31m-forces"), TEXT("@capital"), 0.45f).Room = TEXT("forces");
 		// An enemy capital picked: the prize for taking it. And the wealth view of the whole map.
 		Add(TEXT("31p-prize"), TEXT("Warsaw"), 0.4f).Select = TEXT("Warsaw");
@@ -638,6 +644,14 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		{
 			Controller->ToggleWealth();
 		}
+	}
+	if (Shot.bAdviser)
+	{
+		Controller->ShowAdviser();
+	}
+	else if (Controller->GetAdviser().bOn)
+	{
+		Controller->DismissAdviser();
 	}
 	if (Shot.bNewsreel)
 	{

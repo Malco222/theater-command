@@ -287,6 +287,13 @@ void ACampaignPlayerController::EnterCampaign()
 			}
 		}
 	}
+	// The adviser stands by for the first months of a campaign with somebody at the table.
+	{
+		const int32 Next = Adviser.Revision + 1; // (so that the screen writes his list afresh)
+		Adviser = FAdviser();
+		Adviser.Revision = Next;
+		Adviser.bOn = Nation != nullptr && View.Turn <= 2 && !bScripted;
+	}
 	Notify(Nation
 		? FString::Printf(TEXT("%s. You lead %s.%s"), *View.Date, *Nation->Name, View.bEve ? TEXT(" Place your army, then end the month.") : TEXT(""))
 		: FString::Printf(TEXT("%s. End the month to watch the war."), *View.Date), 7.0);
@@ -573,6 +580,10 @@ void ACampaignPlayerController::OpenPage(const FString& Id)
 	Page = Session->Page(Id, SelectedRegion);
 	Page.Revision = Revision;
 	bPageOpen = Page.bValid;
+	if (bPageOpen && Id == TEXT("airfield"))
+	{
+		AdviserSaw(3);
+	}
 }
 
 void ACampaignPlayerController::ClosePage()
@@ -1486,6 +1497,27 @@ void ACampaignPlayerController::ToggleWealth()
 		: TEXT("The map as it is: every country in its own colour."), 5.0);
 }
 
+void ACampaignPlayerController::AdviserSaw(int32 Step)
+{
+	if (!Adviser.bOn || Step < 0 || Step >= 5 || Adviser.bDone[Step])
+	{
+		return;
+	}
+	Adviser.bDone[Step] = true;
+	++Adviser.Revision;
+	CampaignSounds::Play(this, TEXT("stamp"), 0.3f);
+	bool bAll = true;
+	for (bool bDone : Adviser.bDone)
+	{
+		bAll &= bDone;
+	}
+	if (bAll)
+	{
+		Adviser.bOn = false; // he has no more to say
+		Notify(TEXT("That is the whole of it. H opens the guide whenever you want it."), 6.0);
+	}
+}
+
 void ACampaignPlayerController::OpenGoals()
 {
 	if (bPageOpen && Page.Id == TEXT("goals"))
@@ -2285,6 +2317,7 @@ bool ACampaignPlayerController::PickUpFleet(int32 FleetId)
 	RegionPanel.bVisible = false;
 	RegionPanel.Revision = ++PanelRevision;
 	FleetInHand = FleetId;
+	AdviserSaw(3);
 	FleetNext = Fleet->Stance == TEXT("raid") ? TEXT("raid") : TEXT("patrol");
 	FleetHoverSea = INDEX_NONE;
 	CampaignSounds::Play(this, TEXT("ship_horn"), 0.35f);
@@ -2537,6 +2570,10 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 	if (!PickUpArmyIn(Target))
 	{
 		PutDownArmy();
+		if (Target != INDEX_NONE)
+		{
+			AdviserSaw(2); // a province looked at
+		}
 	}
 }
 
@@ -2654,6 +2691,7 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 		return false;
 	}
 	ArmyRegion = RegionId;
+	AdviserSaw(0);
 	PickedCorps = MoveTemp(Orderable);
 	RefreshOrders();
 	return true;
@@ -3016,10 +3054,12 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	}
 	if (Target->bAttack)
 	{
+		AdviserSaw(1);
 		OpenFaceOff(RegionId);
 		return;
 	}
 
+	AdviserSaw(1);
 	const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId);
 	if (Marches.Num() == 0)
 	{
@@ -3436,6 +3476,7 @@ void ACampaignPlayerController::EndMonth()
 	PutDownArmy();
 	PutDownFleet();
 	ClosePage();
+	AdviserSaw(4);
 	CampaignSounds::Play(this, TEXT("bell"), 0.5f);
 	// Where every corps stands as the month ends, so that the others' marches can be seen from there.
 	WatchStood.Reset();
