@@ -52,7 +52,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		{
 			General = Unit.General; // the first general named is the senior one
 		}
-		NewSignature += FString::Printf(TEXT("|%d%s%s"), Unit.Id, Unit.bDim ? TEXT("?") : TEXT(""), Unit.Stale > 0 ? TEXT("~") : TEXT("")); // (what is known of it is part of how it looks)
+		NewSignature += FString::Printf(TEXT("|%d%s%s%s"), Unit.Id, Unit.bDim ? TEXT("?") : TEXT(""), Unit.Stale > 0 ? TEXT("~") : TEXT(""), *Unit.Ally); // (what is known of it is part of how it looks)
 	}
 	// The standard carries a streamer for every honour its corps have won.
 	int32 HonourCount = 0;
@@ -298,6 +298,38 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Model.Box(PlateAt, FVector(0.2 * U, PlateWidth, PlateHeight), FLinearColor(FColor::FromHex(TEXT("15130F"))));
 	Model.Box(PlateAt + FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), BrassPaint);
 	Model.Box(PlateAt - FVector(0.0, 0.0, PlateHeight * 0.5), FVector(0.26 * U, PlateWidth + 0.1 * U, 0.14 * U), BrassPaint);
+
+	// A small pennant under the plate for each ally whose corps march with this army.
+	if (Cloth && What == 0)
+	{
+		TArray<FString> Allies;
+		for (const FViewCorps& Unit : Corps)
+		{
+			if (!Unit.Ally.IsEmpty())
+			{
+				Allies.AddUnique(Unit.Ally);
+			}
+		}
+		const double PennantWide = FlagWidth * 0.46, PennantHigh = PennantWide / 1.5;
+		for (int32 Index = 0; Index < Allies.Num() && Index < 3; ++Index)
+		{
+			UMaterialInterface* Theirs = Map->GetFlagMaterial(Allies[Index]);
+			if (!Theirs)
+			{
+				continue;
+			}
+			const double TopZ = PlateAt.Z - PlateHeight * 0.5 - 0.45 * U - Index * (PennantHigh + 0.3 * U);
+			const double Near = Pole.Y + Hoist, Far = Near + PennantWide;
+			const TArray<FVector> Corners = { FVector(Pole.X, Near, TopZ), FVector(Pole.X, Far, TopZ), FVector(Pole.X, Near, TopZ - PennantHigh), FVector(Pole.X, Far, TopZ - PennantHigh) };
+			TArray<FVector> Facing;
+			Facing.Init(FVector(-1.0, 0.0, 0.0), 4);
+			const TArray<FVector2D> Cover = { FVector2D(0.0, 0.0), FVector2D(1.0, 0.0), FVector2D(0.0, 1.0), FVector2D(1.0, 1.0) };
+			TArray<FProcMeshTangent> Lie;
+			Lie.Init(FProcMeshTangent(FVector(0.0, 1.0, 0.0), false), 4);
+			Cloth->CreateMeshSection_LinearColor(Index + 1, Corners, { 0, 2, 1, 1, 2, 3 }, Facing, Cover, TArray<FLinearColor>(), Lie, false);
+			Cloth->SetMaterial(Index + 1, Theirs);
+		}
+	}
 
 	// The mesh is done: hand it over.
 	Body = NewObject<UProceduralMeshComponent>(this);
