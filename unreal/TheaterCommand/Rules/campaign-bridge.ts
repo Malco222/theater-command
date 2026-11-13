@@ -36,7 +36,7 @@
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, men, railReach as railReachOf, weather as weatherNow } from '../../../src/campaign/game';
+import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, railReach as railReachOf, weather as weatherNow } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -692,9 +692,31 @@ function move(ids: number[], to: number) {
 }
 
 /** The player's corps that could join an attack on a region: the ones picked that stand next to it. */
-function attackers(s: Game, ids: number[], to: number): Corps[] {
+/** The corps of those picked that could attack a region at all. */
+function wouldAttack(s: Game, ids: number[], to: number): Corps[] {
   const able = new Set(candidates(s, s.regions[to]).map((c) => c.id));
   return corpsById(s, ids).filter((c) => able.has(c.id));
+}
+
+/**
+ * And those of them that the front has room for: only so many corps can attack a province from each side, the
+ * strongest first, as the battle itself will take them. (Without this the card would promise better odds than
+ * the battle delivers.)
+ */
+function attackers(s: Game, ids: number[], to: number): Corps[] {
+  return limitAttackers(s, wouldAttack(s, ids, to), s.regions[to]);
+}
+
+/** A line for the Battle Ticket where the front is too narrow for everybody: how many go in, and who waits. */
+function frontLine(s: Game, ids: number[], to: number): { label: string; value: string; effect: string } | null {
+  const all = wouldAttack(s, ids, to), going = new Set(attackers(s, ids, to).map((c) => c.id));
+  const left = all.filter((c) => !going.has(c.id));
+  if (!left.length) return null;
+  const cap = frontage(s.regions[to]);
+  return {
+    label: 'The front', value: `${going.size} of ${all.length} corps go in`,
+    effect: `Only ${cap} corps can attack ${s.regions[to].terrain === 'plains' ? 'open country' : s.regions[to].terrain === 'mountain' ? 'mountains' : 'this ground'} from one side, the strongest first. ${listOf(left.slice(0, 3).map((c) => c.name))}${left.length > 3 ? ` and ${left.length - 3} more` : ''} ${left.length === 1 ? 'waits' : 'wait'} behind.`,
+  };
 }
 
 function preview(ids: number[], to: number) {
@@ -715,7 +737,7 @@ function preview(ids: number[], to: number) {
     return {
       region: to, allies, prize: prizeLine(s, to), attack: look.odds, defence: 1, odds: look.odds,
       exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: look.note,
-      lines: look.lines,
+      lines: [...look.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : [])],
       attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
       defenders: a.defenders.map(named),
     };
@@ -728,7 +750,7 @@ function preview(ids: number[], to: number) {
     attack: a.A,
     defence: a.D,
     odds: a.odds,
-    lines: a.lines,
+    lines: [...a.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : [])],
     attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
     defenders: a.defenders.map((c) => ({ id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
   };

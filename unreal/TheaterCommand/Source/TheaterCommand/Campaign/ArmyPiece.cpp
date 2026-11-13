@@ -369,7 +369,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		}
 		else if (bStale)
 		{
-			Figure = TEXT("~") + Figure; // known from reports gone stale
+			Figure = Figure + TEXT("?"); // known from reports gone stale (a mark that cannot be misread as a minus at map size)
 		}
 	}
 

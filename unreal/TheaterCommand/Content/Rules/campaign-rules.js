@@ -18647,9 +18647,23 @@
     }
     return { moved, view: view() };
   }
-  function attackers(s, ids2, to) {
+  function wouldAttack(s, ids2, to) {
     const able2 = new Set(candidates(s, s.regions[to]).map((c) => c.id));
     return corpsById(s, ids2).filter((c) => able2.has(c.id));
+  }
+  function attackers(s, ids2, to) {
+    return limitAttackers(s, wouldAttack(s, ids2, to), s.regions[to]);
+  }
+  function frontLine(s, ids2, to) {
+    const all = wouldAttack(s, ids2, to), going = new Set(attackers(s, ids2, to).map((c) => c.id));
+    const left = all.filter((c) => !going.has(c.id));
+    if (!left.length) return null;
+    const cap5 = frontage(s.regions[to]);
+    return {
+      label: "The front",
+      value: `${going.size} of ${all.length} corps go in`,
+      effect: `Only ${cap5} corps can attack ${s.regions[to].terrain === "plains" ? "open country" : s.regions[to].terrain === "mountain" ? "mountains" : "this ground"} from one side, the strongest first. ${listOf3(left.slice(0, 3).map((c) => c.name))}${left.length > 3 ? ` and ${left.length - 3} more` : ""} ${left.length === 1 ? "waits" : "wait"} behind.`
+    };
   }
   function preview(ids2, to) {
     const s = game();
@@ -18677,7 +18691,7 @@
         chanceLo: look.chanceLo,
         chanceHi: look.chanceHi,
         note: look.note,
-        lines: look.lines,
+        lines: [...look.lines, ...frontLine(s, ids2, to) ? [frontLine(s, ids2, to)] : []],
         attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
         defenders: a.defenders.map(named2)
       };
@@ -18697,7 +18711,7 @@
       attack: a.A,
       defence: a.D,
       odds: a.odds,
-      lines: a.lines,
+      lines: [...a.lines, ...frontLine(s, ids2, to) ? [frontLine(s, ids2, to)] : []],
       attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
       defenders: a.defenders.map((c) => ({ id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null }))
     };
