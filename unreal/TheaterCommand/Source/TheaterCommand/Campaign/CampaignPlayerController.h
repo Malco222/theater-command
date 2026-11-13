@@ -47,6 +47,9 @@ struct FTrayCard
 	bool bCanOrder = false;
 	FText Nickname; // empty until the corps has earned one
 	FText Grade; // "Veteran, 65"
+	FString KindId; // inf, arm, art, mot, cav, mtn, eng, fort: for the picture on each division's card
+	float Morale = 1.0f; // 0..1: how well it holds together
+	int32 Experience = 0; // 0 to 100
 	TArray<FHonourRibbon> Honours;
 };
 

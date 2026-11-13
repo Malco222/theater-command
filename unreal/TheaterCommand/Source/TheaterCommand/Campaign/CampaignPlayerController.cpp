@@ -1617,7 +1617,7 @@ void ACampaignPlayerController::SetPending(int32 RegionId)
 		? TEXT("Click a port or a coast tinted blue, then click it again to send them by sea. Esc, or a click on their flag, puts them down.")
 		: bByRail
 		? TEXT("Click ground tinted blue, then click it again to send them by rail. Esc, or a click on their flag, puts them down.")
-		: TEXT("Click where they should go, then click it again to send them. Or drag the flag there. Esc, or a click on their flag, puts them down."));
+		: TEXT("Right-click where they should go, or drag the flag there. Esc puts them down."));
 	const FReachRegion* Target = FindReach(RegionId);
 	if (Target && Map.IsValid() && Map->GetData().Regions.IsValidIndex(RegionId))
 	{
@@ -1809,6 +1809,9 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Kind = FText::FromString(FCampaignMapData::CorpsKindLabel(Unit.Kind));
 		Card.Divisions = Unit.Divisions;
 		Card.Strength = Unit.Strength;
+		Card.KindId = Unit.Elite == TEXT("heavy") ? FString(TEXT("arm")) : Unit.Kind;
+		Card.Morale = Unit.Cohesion;
+		Card.Experience = Unit.Experience;
 		Card.Moves = Unit.Moves;
 		Card.MovesMax = Unit.MovesMax;
 		Card.bCanOrder = Unit.bCanOrder;

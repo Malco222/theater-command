@@ -461,7 +461,8 @@ namespace
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
 								[
-									SAssignNew(Cards, SHorizontalBox)
+									SNew(SScrollBox).Orientation(Orient_Horizontal)
+									+ SScrollBox::Slot()[SAssignNew(Cards, SHorizontalBox)]
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 8.0f, 0.0f)
 								[
@@ -3360,101 +3361,187 @@ namespace
 				];
 		}
 
+		/** A small picture of a kind of troops, made of plain shapes: a tank, a gun, a lorry, a horseman, men on foot. */
+		TSharedRef<SWidget> KindPicture(const FString& Kind, const FLinearColor& Ink)
+		{
+			TSharedRef<SOverlay> Picture = SNew(SOverlay);
+			auto Shape = [this, &Picture, &Ink](float X, float Y, float W, float H, bool bRound = false)
+			{
+				Picture->AddSlot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(X, Y, 0.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(W).HeightOverride(H)[SNew(SBorder).BorderImage(bRound ? &DotBrush : &BarBrush).BorderBackgroundColor(Ink)]
+				];
+			};
+			auto Man = [&Shape](float X, float Y)
+			{
+				Shape(X + 1.0f, Y, 5.0f, 5.0f, true); // head and helmet
+				Shape(X, Y + 5.5f, 7.0f, 9.0f); // coat
+				Shape(X + 0.5f, Y + 14.5f, 2.5f, 6.0f); // legs
+				Shape(X + 4.0f, Y + 14.5f, 2.5f, 6.0f);
+				Shape(X + 7.5f, Y + 1.0f, 1.5f, 13.0f); // rifle at the shoulder
+			};
+			if (Kind == TEXT("arm"))
+			{
+				Shape(4.0f, 15.0f, 36.0f, 8.0f); // hull
+				Shape(2.0f, 21.0f, 40.0f, 4.0f); // tracks
+				Shape(14.0f, 8.0f, 15.0f, 8.0f); // turret
+				Shape(28.0f, 10.5f, 15.0f, 2.5f); // gun
+			}
+			else if (Kind == TEXT("art"))
+			{
+				Shape(8.0f, 9.0f, 30.0f, 3.5f); // barrel
+				Shape(12.0f, 11.0f, 12.0f, 6.0f); // breech and shield
+				Shape(13.0f, 14.0f, 11.0f, 11.0f, true); // wheel
+				Shape(2.0f, 21.0f, 14.0f, 2.5f); // trail
+			}
+			else if (Kind == TEXT("mot"))
+			{
+				Shape(4.0f, 9.0f, 24.0f, 11.0f); // body under its canvas
+				Shape(29.0f, 12.0f, 10.0f, 8.0f); // cab
+				Shape(8.0f, 18.0f, 8.0f, 8.0f, true); // wheels
+				Shape(28.0f, 18.0f, 8.0f, 8.0f, true);
+			}
+			else if (Kind == TEXT("cav"))
+			{
+				Shape(8.0f, 13.0f, 24.0f, 7.0f); // the horse
+				Shape(30.0f, 7.0f, 5.0f, 9.0f); // its neck
+				Shape(32.0f, 5.0f, 8.0f, 4.0f); // and head
+				Shape(9.0f, 19.0f, 2.5f, 8.0f);
+				Shape(15.0f, 19.0f, 2.5f, 8.0f);
+				Shape(24.0f, 19.0f, 2.5f, 8.0f);
+				Shape(29.0f, 19.0f, 2.5f, 8.0f);
+				Shape(17.0f, 2.0f, 5.0f, 5.0f, true); // the rider
+				Shape(16.0f, 7.0f, 7.0f, 7.0f);
+			}
+			else if (Kind == TEXT("fort"))
+			{
+				Shape(4.0f, 12.0f, 36.0f, 13.0f); // the bunker
+				Shape(9.0f, 8.0f, 26.0f, 5.0f);
+				Picture->AddSlot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(14.0f, 16.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(16.0f).HeightOverride(3.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(0.02f, 0.02f, 0.02f, 1.0f))]
+				];
+			}
+			else if (Kind == TEXT("mtn"))
+			{
+				Man(6.0f, 5.0f);
+				Shape(22.0f, 20.0f, 20.0f, 5.0f); // a mountain behind him, in steps
+				Shape(25.0f, 15.0f, 14.0f, 5.0f);
+				Shape(28.0f, 10.0f, 8.0f, 5.0f);
+				Shape(30.5f, 6.0f, 3.0f, 4.0f);
+			}
+			else if (Kind == TEXT("eng"))
+			{
+				Man(6.0f, 5.0f);
+				Shape(20.0f, 16.0f, 22.0f, 3.0f); // a bridge span
+				Shape(22.0f, 19.0f, 3.0f, 7.0f);
+				Shape(37.0f, 19.0f, 3.0f, 7.0f);
+			}
+			else
+			{
+				Man(5.0f, 5.0f);
+				Man(18.0f, 5.0f);
+				Man(31.0f, 5.0f);
+			}
+			return SNew(SBox).WidthOverride(46.0f).HeightOverride(28.0f)[Picture];
+		}
+
+		/** A thin meter: how much is left of something. */
+		TSharedRef<SWidget> Meter(float Share, const FLinearColor& Ink, const TCHAR* Tip)
+		{
+			const float Left = FMath::Clamp(Share, 0.0f, 1.0f);
+			return SNew(SBox).HeightOverride(4.0f).ToolTipText(FText::FromString(FString::Printf(TEXT("%s: %d%%"), Tip, FMath::RoundToInt32(Left * 100.0f))))
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(FMath::Max(Left, 0.001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Ink)]
+					+ SHorizontalBox::Slot().FillWidth(FMath::Max(1.0f - Left, 0.001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.1f))]
+				];
+		}
+
+		/**
+		 * One corps of the army in hand, as a card for each of its divisions: a picture of what it is, how much of
+		 * it is left, how well it holds together, and how seasoned it is. A click on any of them tells the corps to
+		 * come along or stay behind.
+		 */
 		TSharedRef<SWidget> MakeCard(const FTrayCard& Card)
 		{
 			const bool bGoing = Card.bPicked && Card.bCanOrder;
 			const FLinearColor Ink = bGoing ? Cream : Muted;
-			const FString MovesLine = !Card.bCanOrder ? FString(TEXT("Holds its ground"))
-				: (!Card.bPicked ? FString(TEXT("Staying behind"))
-					: FString::Printf(TEXT("Moves %d of %d"), Card.Moves, Card.MovesMax));
-			const float Strength = FMath::Clamp(Card.Strength, 0.0f, 1.0f);
+			const FString MovesLine = !Card.bCanOrder ? FString(TEXT("holds its ground"))
+				: (!Card.bPicked ? FString(TEXT("staying behind"))
+					: FString::Printf(TEXT("moves %d of %d"), Card.Moves, Card.MovesMax));
+			const FLinearColor StrengthInk = Card.Strength < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("8FBF6A")));
+			const FLinearColor MoraleInk = Card.Morale < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("6FA3D8")));
+			const int32 Pips = FMath::Clamp(1 + Card.Experience / 22, 1, 5);
+			const FString Tip = FString::Printf(TEXT("%s: %s, %d division%s. Strength %d%%, morale %d%%. %s. Click to tell this corps to come along or stay behind."),
+				*Card.Name.ToString(), *Card.Kind.ToString(), Card.Divisions, Card.Divisions == 1 ? TEXT("") : TEXT("s"),
+				FMath::RoundToInt32(Card.Strength * 100.0f), FMath::RoundToInt32(Card.Morale * 100.0f), *Card.Grade.ToString());
 
-			TSharedRef<SWidget> CardBody = SNew(SBox).WidthOverride(172.0f)
+			TSharedRef<SHorizontalBox> Divisions = SNew(SHorizontalBox);
+			for (int32 Division = 0; Division < FMath::Clamp(Card.Divisions, 1, 12); ++Division)
+			{
+				TSharedRef<SHorizontalBox> Stripes = SNew(SHorizontalBox);
+				for (int32 Pip = 0; Pip < 5; ++Pip)
+				{
+					Stripes->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 2.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(6.0f).HeightOverride(3.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Pip < Pips ? BrightBrass : FLinearColor(1.0f, 1.0f, 1.0f, 0.1f))]
+					];
+				}
+				Divisions->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
 				[
-					SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(11.0f, 8.0f, 11.0f, 9.0f))
-					.IsFocusable(false).IsEnabled(Card.bCanOrder)
-					.OnClicked_Lambda([this, Id = Card.CorpsId]()
-					{
-						if (Controller.IsValid())
-						{
-							Controller->ToggleCorps(Id);
-						}
-						return FReply::Handled();
-					})
+					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f))
 					[
 						SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()
-						[
-							SNew(STextBlock).Text(Card.Name).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Ink)
-						]
-						// The name the army gives it, once it has earned one.
-						+ SVerticalBox::Slot().AutoHeight()
-						[
-							SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(BrightBrass)
-							.Text(FText::FromString(FString::Printf(TEXT("\u201C%s\u201D"), *Card.Nickname.ToString())))
-							.Visibility(Card.Nickname.IsEmpty() ? EVisibility::Collapsed : EVisibility::HitTestInvisible)
-						]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
-						[
-							SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
-							.Text(FText::FromString(FString::Printf(TEXT("%s, %d division%s"), *Card.Kind.ToString(), Card.Divisions, Card.Divisions == 1 ? TEXT("") : TEXT("s"))))
-						]
-						// How seasoned it is, and a ribbon for each honour it carries.
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
-						[
-							SNew(SHorizontalBox)
-							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 7.0f, 0.0f)
-							[
-								SNew(STextBlock).Text(Card.Grade).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
-							]
-							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
-							[
-								MakeRibbons(Card.Honours, 5)
-							]
-						]
-						// How much of the corps is left.
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
-						[
-							SNew(SBox).HeightOverride(4.0f)
-							[
-								SNew(SHorizontalBox)
-								+ SHorizontalBox::Slot().FillWidth(FMath::Max(Strength, 0.001f))
-								[
-									SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(bGoing ? BrightBrass : Faint)
-								]
-								+ SHorizontalBox::Slot().FillWidth(FMath::Max(1.0f - Strength, 0.001f))
-								[
-									SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.08f))
-								]
-							]
-						]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
-						[
-							SNew(STextBlock).Text(FText::FromString(MovesLine)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(bGoing ? BrightBrass : Faint)
-						]
+						+ SVerticalBox::Slot().AutoHeight()[KindPicture(Card.KindId, Ink)]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Card.Strength, bGoing ? StrengthInk : Faint, TEXT("Strength"))]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[Meter(Card.Morale, bGoing ? MoraleInk : Faint, TEXT("Morale"))]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)[Stripes]
 					]
 				];
+			}
 
-			// The card, and under it the way to the corps' service record.
-			return SNew(SVerticalBox)
-				+ SVerticalBox::Slot().AutoHeight()
-				[
-					CardBody
-				]
-				+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
-				[
-					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(8.0f, 3.0f)).IsFocusable(false).HAlign(HAlign_Center)
-					.OnClicked_Lambda([this, Id = Card.CorpsId]()
+			return SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(8.0f, 6.0f, 4.0f, 7.0f))
+				.IsFocusable(false).IsEnabled(Card.bCanOrder).ToolTipText(FText::FromString(Tip))
+				.OnClicked_Lambda([this, Id = Card.CorpsId]()
+				{
+					if (Controller.IsValid())
 					{
-						if (Controller.IsValid())
-						{
-							Controller->OpenRecord(Id);
-						}
-						return FReply::Handled();
-					})
+						Controller->ToggleCorps(Id);
+					}
+					return FReply::Handled();
+				})
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()
 					[
-						SNew(STextBlock).Text(FText::FromString(TEXT("SERVICE RECORD"))).Font(Font(TEXT("Bold"), 8, 160)).ColorAndOpacity(Muted)
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(Card.Nickname.IsEmpty() ? Card.Name : FText::FromString(FString::Printf(TEXT("%s \u201C%s\u201D"), *Card.Name.ToString(), *Card.Nickname.ToString()))).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Ink)
+						]
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+						[
+							MakeRibbons(Card.Honours, 4)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SSpacer)]
+						// The way to the corps' service record: its honours and its diary.
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 4.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 1.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(TEXT("Its service record: what it has done, its honours and its diary.")))
+							.OnClicked_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->OpenRecord(Id); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("RECORD"))).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Muted)
+							]
+						]
 					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 4.0f, 5.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bGoing ? BrightBrass : Faint)
+						.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s  \u00B7  %s"), *Card.Kind.ToString(), *Card.Grade.ToString(), *MovesLine)))
+					]
+					+ SVerticalBox::Slot().AutoHeight()[Divisions]
 				];
 		}
 
