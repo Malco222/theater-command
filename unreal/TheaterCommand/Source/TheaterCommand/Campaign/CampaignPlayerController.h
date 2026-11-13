@@ -213,6 +213,7 @@ struct FTownPlate
 	FLinearColor Colour = FLinearColor::Gray; // of whoever holds the place
 	bool bCapital = false;
 	bool bFar = false; // seen from far off: a small plate
+	bool bAirfield = false; // not a town at all: the badge of an airfield with air groups based on it (Name is how many)
 	int32 Rank = 0;
 };
 

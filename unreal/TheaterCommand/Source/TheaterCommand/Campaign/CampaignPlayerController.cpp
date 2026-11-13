@@ -1403,6 +1403,31 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 		}
 	}
 	Out.Sort([](const FTownPlate& A, const FTownPlate& B) { return A.Rank > B.Rank; });
+	// An airfield with air groups based on it wears a small badge: an aircraft and how many groups fly from it, on
+	// its holder's colour. From working height and closer; from far off the map is left clear. (The groups
+	// themselves are seen by clicking the airfield: no aircraft piece stands on the map for them.)
+	if (State >= 1)
+	{
+		for (const FViewAirfield& Field : View.Airfields)
+		{
+			FVector World;
+			FVector2D Screen;
+			if (Field.Groups <= 0 || !Map->GetAirfieldWorld(Field.Region, World) || !ProjectWorldLocationToScreen(World, Screen, false)
+				|| Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
+			{
+				continue;
+			}
+			FTownPlate& Badge = Out.AddDefaulted_GetRef();
+			Badge.At = Screen - FVector2D(0.0, 30.0);
+			Badge.Name = FString::FromInt(Field.Groups);
+			Badge.bAirfield = true;
+			Badge.Rank = -1;
+			if (const FCampaignNation* Nation = Data.FindNation(Field.Nation))
+			{
+				Badge.Colour = FLinearColor(Nation->Color);
+			}
+		}
+	}
 }
 
 FString ACampaignPlayerController::GetToDoText(int32 Index) const
@@ -4726,6 +4751,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->SetWarAtNight(View.Blackout, View.Fronts);
 		Map->ShowPrizes(View.Prizes);
 		Map->ShowBuildings(View.RegionWorks);
+		Map->ShowAirfieldSigns(View.Airfields);
 		Map->ShowLanes(View.Lanes);
 		Map->ShowFreeCapitals(View.FreeCapitals);
 		Map->ShowShroud(View.Unseen);

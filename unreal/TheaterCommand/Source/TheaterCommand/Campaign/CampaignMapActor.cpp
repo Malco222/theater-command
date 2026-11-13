@@ -899,6 +899,8 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	BuildingsMesh->ClearAllMeshSections();
 	WorksChimneys.Reset();
 	AirfieldSpots.Reset();
+	AirfieldLie.Reset();
+	ShownAirSigns.Reset(); // (the aircraft parked on the airfields are stood again where the airfields now are)
 
 	const FLinearColor Brick(FColor::FromHex(TEXT("7A5547"))), Soot(FColor::FromHex(TEXT("3B3532"))), Pane(FColor::FromHex(TEXT("8FA6A8")));
 	const FLinearColor Apron(FColor::FromHex(TEXT("A9A69C"))), Girder(FColor::FromHex(TEXT("4A4F55"))), RedLead(FColor::FromHex(TEXT("8A3B2A")));
@@ -1057,6 +1059,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
 			const double Turn = Facing(Spot) + 90.0;
 			const double Long = 2.9 + 0.45 * Size, Wide = 1.5 + 0.3 * Size;
+			AirfieldLie.Add(Id, FVector2D(Turn, Size));
 			// The field is a slab thick enough to stand clear of the roll of the ground under it.
 			Model.Box(At + FVector(0.0, 0.0, 0.0), FVector(Long, Wide, 0.16) * Field, Turf, Turn);
 			const FLinearColor Strip = Size >= 2 ? Apron : FLinearColor(FColor::FromHex(TEXT("8E9A62")));
@@ -1878,6 +1881,85 @@ void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 	{
 		PrizesMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		PrizesMesh->SetMaterial(0, SceneryMaterial);
+	}
+}
+
+bool ACampaignMapActor::GetAirfieldWorld(int32 RegionId, FVector& OutWorld) const
+{
+	if (const FVector2D* Spot = AirfieldSpots.Find(RegionId))
+	{
+		OutWorld = SurfacePoint(Spot->X, Spot->Y, 0.6);
+		return true;
+	}
+	return false;
+}
+
+void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
+{
+	FString Signature = FString::Printf(TEXT("%d|"), AirfieldSpots.Num());
+	for (const FViewAirfield& Field : Fields)
+	{
+		if (Field.Groups > 0)
+		{
+			Signature += FString::Printf(TEXT("%d:%s:%d;"), Field.Region, *Field.Nation, Field.Groups);
+		}
+	}
+	if (!Data.IsLoaded() || Signature == ShownAirSigns)
+	{
+		return;
+	}
+	ShownAirSigns = Signature;
+	if (!AirSignMesh)
+	{
+		AirSignMesh = NewObject<UProceduralMeshComponent>(this);
+		AirSignMesh->SetupAttachment(Root);
+		AirSignMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		AirSignMesh->RegisterComponent();
+		AirSignMesh->SetCastShadow(false);
+	}
+	AirSignMesh->ClearAllMeshSections();
+	FMiniatureMesh Model;
+	const double Field = UnitScale * 2.1 * 1.3; // (the size the airfields themselves are built to)
+	auto Ahead = [](double Turn, double Along, double Across) -> FVector
+	{
+		const double R = FMath::DegreesToRadians(Turn);
+		return FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, 0.0);
+	};
+	const FLinearColor Dural(FColor::FromHex(TEXT("B9BDB6"))), Tyre(FColor::FromHex(TEXT("2E2C2A")));
+	for (const FViewAirfield& Each : Fields)
+	{
+		const FVector2D* Spot = AirfieldSpots.Find(Each.Region);
+		const FVector2D* Lie = AirfieldLie.Find(Each.Region);
+		if (Each.Groups <= 0 || !Spot || !Lie)
+		{
+			continue;
+		}
+		const FCampaignNation* Whose = Data.FindNation(Each.Nation);
+		const FLinearColor Livery = Whose ? FLinearColor(Whose->Color) : FLinearColor(0.5f, 0.5f, 0.5f);
+		const double Turn = Lie->X, Wide = 1.5 + 0.3 * Lie->Y;
+		const FVector At = SurfacePoint(Spot->X, Spot->Y, 0.02);
+		// One small aircraft for each group, drawn up in a row on the grass on the side away from the hangars,
+		// their noses to the runway: silver, with wings and fin tipped in their country's colour.
+		const int32 Parked = FMath::Min(Each.Groups, 6);
+		for (int32 K = 0; K < Parked; ++K)
+		{
+			const FVector Foot = At + Ahead(Turn, (K - (Parked - 1) * 0.5) * 0.62 * Field, -(Wide * 0.5 - 0.42) * Field) + FVector(0.0, 0.0, 0.085 * Field);
+			const double Nose = Turn + 90.0; // across the field, toward the runway
+			Model.Box(Foot + FVector(0.0, 0.0, 0.07 * Field), FVector(0.5, 0.075, 0.075) * Field, Dural, Nose);
+			Model.Box(Foot + Ahead(Nose, 0.06 * Field, 0.0) + FVector(0.0, 0.0, 0.075 * Field), FVector(0.11, 0.52, 0.022) * Field, Dural, Nose);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Model.Box(Foot + Ahead(Nose, 0.06 * Field, Side * 0.22 * Field) + FVector(0.0, 0.0, 0.078 * Field), FVector(0.112, 0.1, 0.024) * Field, Livery, Nose);
+			}
+			Model.Box(Foot + Ahead(Nose, -0.21 * Field, 0.0) + FVector(0.0, 0.0, 0.08 * Field), FVector(0.07, 0.2, 0.02) * Field, Dural, Nose);
+			Model.Box(Foot + Ahead(Nose, -0.22 * Field, 0.0) + FVector(0.0, 0.0, 0.14 * Field), FVector(0.09, 0.02, 0.1) * Field, Livery, Nose);
+			Model.Box(Foot + Ahead(Nose, 0.255 * Field, 0.0) + FVector(0.0, 0.0, 0.07 * Field), FVector(0.02, 0.05, 0.05) * Field, Tyre, Nose);
+		}
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		AirSignMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		AirSignMesh->SetMaterial(0, SceneryMaterial);
 	}
 }
 
@@ -3549,11 +3631,18 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 	}
 
 	// ---- Air fleets, each over its airfields: to the south-west of the town, where the army does not stand.
+	// (Where the table shows the airfields themselves, as it does in the grand campaign, an air group has no piece
+	// of its own: the airfield says it is in use, and a click on it shows who flies from it. The map is the clearer for it.)
+	TSet<int32> WithAirfield;
+	for (const FViewAirfield& Field : View.Airfields)
+	{
+		WithAirfield.Add(Field.Region);
+	}
 	TSet<int32> Flying;
 	for (const FViewAirFleet& Wing : View.AirFleets)
 	{
 		const FCampaignNation* Nation = Data.FindNation(Wing.Nation);
-		if (!Nation || !Data.Regions.IsValidIndex(Wing.Base))
+		if (!Nation || !Data.Regions.IsValidIndex(Wing.Base) || WithAirfield.Contains(Wing.Base))
 		{
 			continue;
 		}

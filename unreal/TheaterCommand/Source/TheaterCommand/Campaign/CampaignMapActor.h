@@ -232,6 +232,14 @@ public:
 	void ShowScars(const TArray<int32>& Scars);
 	/** Smoke hangs over the towns that are besieged: three numbers each, the region, 1 if the ring is closed, months of stores left. */
 	void ShowSieges(const TArray<int32>& Sieges);
+	/**
+	 * The airfields that have air groups based on them (Brian's ask of 2026-11-13: no great aircraft piece standing
+	 * on the map; the airfield itself says it is in use): a small aircraft parked on the field for each group, in
+	 * its nation's colours. The groups themselves are seen by clicking the airfield.
+	 */
+	void ShowAirfieldSigns(const TArray<FViewAirfield>& Fields);
+	/** Where an airfield stands in the world, for its badge on the screen; false if the province has none on the table. */
+	bool GetAirfieldWorld(int32 RegionId, FVector& OutWorld) const;
 	/** Prizes outside the towns (Version 56): a fire where one is wrecked, a pennant in the colour of the army that holds one outside a town it has not taken. */
 	void ShowPrizes(const TArray<FPrizeMark>& Marks);
 	/** The night's war: the nations whose towns are blacked out, and the fronts (pairs of regions) where the guns flicker. */
@@ -449,6 +457,10 @@ private:
 	/** How deep the snow lies at a place on the map (0 to 1) when the winter is this hard. */
 	static float SnowLying(const FVector2D& Place, float Hard);
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
+	TMap<int32, FVector2D> AirfieldLie; // and how it lies: X the way it is turned (degrees), Y its size (1 to 4)
+	FString ShownAirSigns; // what the aircraft parked on the airfields were last built from
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> AirSignMesh; // aircraft parked on the airfields that have air groups based there
 	FLandFeatures Land;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> WaterMaterial;

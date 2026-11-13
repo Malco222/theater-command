@@ -274,6 +274,28 @@ namespace
 			TArray<FBox2D> Taken;
 			for (const FTownPlate& Each : Plates)
 			{
+				if (Each.bAirfield)
+				{
+					// An airfield in use: a small plate with a little aircraft drawn on it and the number of groups.
+					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 9);
+					const FVector2D CountSize = Measure->Measure(Each.Name, CountFont);
+					const double BadgeWide = 30.0 + CountSize.X, BadgeHigh = 16.0;
+					const FVector2D Corner(Each.At.X / Scale - BadgeWide * 0.5, Each.At.Y / Scale);
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(BadgeWide, BadgeHigh), FSlateLayoutTransform(Corner)), &Plate, ESlateDrawEffect::None, Plate.GetTint(InWidgetStyle));
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, BadgeHigh - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour);
+					// (the aircraft, seen from above with its nose up the plate: a body, wings and a tailplane)
+					const FVector2D Middle = Corner + FVector2D(17.0, BadgeHigh * 0.5);
+					const FPaintGeometry Whole = Geometry.ToPaintGeometry();
+					auto Stroke = [&](const FVector2D& From, const FVector2D& To, float Thick)
+					{
+						FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, Whole, TArray<FVector2D>{ Middle + From, Middle + To }, ESlateDrawEffect::None, NameInk, true, Thick);
+					};
+					Stroke(FVector2D(0.0, -5.0), FVector2D(0.0, 5.0), 2.0f);
+					Stroke(FVector2D(-5.5, -0.8), FVector2D(5.5, -0.8), 2.2f);
+					Stroke(FVector2D(-2.4, 4.2), FVector2D(2.4, 4.2), 1.6f);
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(25.0, 1.5))), Each.Name, CountFont, ESlateDrawEffect::None, NameInk);
+					continue;
+				}
 				// (from far off the capitals' plates are small, so the countries' own names can still be read)
 				const FSlateFontInfo& NameFont = Each.bFar ? FarFont : Each.bCapital ? CapitalFont : TownFont;
 				// (a capital's star is cut from the plain face: the serif has none)
