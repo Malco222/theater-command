@@ -13426,7 +13426,9 @@
         cv: f.ships.cv,
         ca: f.ships.ca,
         dd: f.ships.dd,
-        ss: f.ships.ss
+        ss: f.ships.ss,
+        // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
+        reach: f.nat === s.human && up ? fleetReach(s, f) : []
       })),
       air: s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => ({
         id: f.id,
