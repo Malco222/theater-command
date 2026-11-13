@@ -1,7 +1,9 @@
 // Spies and the fog of war (the grand campaign).
-// The player no longer sees every army on the map. An enemy or neutral force is seen whole only where the
+// The player no longer sees every army on the map. An enemy or neutral force is in view only where the
 // player's own side can see it: on the ground it holds, beside its troops, and a province beyond. A province
-// further off it is a flag and a count; deeper still, nothing. Agents are how the player sees further. Each is
+// further off it is a flag and a count; deeper still, nothing. And being in view is not being known: what an army
+// is made of is known only once its corps are identified, in battle, by an agent or from the air, and a report
+// goes stale with the months (see 'reports'). Agents are how the player sees further. Each is
 // a piece: recruited for money, sent to a province, and at work there a month later. An agent watches, reads a
 // government's books in its capital, or tries an act of sabotage, and every month abroad it may be caught.
 // The computer's staffs see the whole map, as they always did, and keep no agents on it. Their services work
@@ -10,7 +12,7 @@
 
 import data from '../../data/campaign/intel.json';
 import { Rng, hashString } from '../core/rng';
-import type { Agent, Game, IntelNote, Mission, Region } from './types';
+import type { Agent, Corps, Game, IntelNote, Mission, Region } from './types';
 import { allied, atWar, bloc, fieldArmy, headline } from './game';
 import { cutRail, onNet, railCut, ruinMost, ruinedAt, workingFactories, wreckFactory } from './rails';
 import { levelIndex } from './difficulty';
@@ -30,6 +32,7 @@ export const INTEL = data as unknown as {
   battle: { attack: number };
   enemy: { chance: number; quiet: number; level: number[]; services: string[]; kinds: { factory: number; rail: number }; near: number; far: number; most: number };
   estimate: { round: number };
+  reports: { fresh: number; keep: number; drift: number; widest: number; contact: number; unknown: number };
   names: string[];
 };
 
@@ -90,8 +93,142 @@ export function sightOf(g: Game, viewer: string | null = g.human): Uint8Array {
   return out;
 }
 
-/** One nation's force in a province as the viewer knows it: divisions is null where only the flag and the count are known. */
-export interface ArmySeen { reg: number; nat: string; sight: 1 | 2; corps: number; divs: number | null; mine: boolean }
+// ---- What is known of a foreign army's make-up ----------------------------------------------------------
+// Seeing a flag is not knowing what stands under it. The player's side identifies a foreign corps by fighting it,
+// by an agent at work who has it in view, or by photographing its province from the air. A report is exact in the
+// month it is made, then goes stale, and after a few months is worth nothing. Only the player keeps reports: the
+// computer's staffs see the whole map, as they always did.
+
+/** How well a corps is known: everything, a dated report gone stale, or nothing but that it is there. */
+export type Known = 'exact' | 'report' | 'none';
+
+/** How a corps came to be identified: fought in battle, watched by an agent, or photographed from the air. */
+export type Source = 'battle' | 'agent' | 'air';
+
+/** Marks corps as identified this month by a nation: nothing happens unless that nation is the player or the player's ally. */
+export function identify(g: Game, corps: Corps[], by: string | null, how: Source = 'battle'): void {
+  const me = g.human;
+  if (!me || !by || !intelRules(g) || !(by === me || allied(g, by, me))) return;
+  for (const c of corps) {
+    if (c.dead || allied(g, c.nat, me)) continue;
+    (g.intel.known ??= {})[c.id] = g.turn;
+    (g.intel.how ??= {})[c.id] = how;
+  }
+}
+
+/** The provinces round a set of provinces that an agent's eyes or a camera cover: each one's own and those around it. */
+function cover(g: Game, from: number[]): Set<number> {
+  const out = new Set<number>(from);
+  let ring = from;
+  for (let d = 1; d <= INTEL.sight.full && ring.length; d++) {
+    const next: number[] = [];
+    for (const id of ring) for (const j of g.regions[id].nb) if (!out.has(j)) { out.add(j); next.push(j); }
+    ring = next;
+  }
+  return out;
+}
+
+/** How the viewer last identified a corps, or null where it has no report of it (its own and its allies' need none). */
+export function reportSource(g: Game, c: Corps, viewer: string | null = g.human): Source | null {
+  if (viewer !== g.human || !fogOn(g, viewer) || allied(g, c.nat, viewer as string) || corpsKnown(g, c, viewer).level === 'none') return null;
+  return g.intel.how?.[c.id] ?? 'battle';
+}
+
+/**
+ * Brings the player's reports up to date: every foreign corps an agent at work has in view, or that aircraft have
+ * photographed this month, is identified now. Reports too old to be worth anything, and those of corps that are no
+ * more, are thrown away. Called when the player's month begins and after a reconnaissance flight.
+ */
+export function reconnoitre(g: Game): void {
+  const me = g.human;
+  if (!me || !intelRules(g) || !g.nations[me]?.alive) return;
+  const photographed = Object.entries(g.intel.scout ?? {}).filter(([, turn]) => turn === g.turn).map(([id]) => +id);
+  for (const id of cover(g, photographed)) identify(g, g.regions[id].units, me, 'air');
+  for (const id of cover(g, agentsOf(g, me).filter((a) => atWork(g, a)).map((a) => a.reg))) identify(g, g.regions[id].units, me, 'agent');
+  const known = g.intel.known;
+  if (!known) return;
+  const alive = new Set<number>();
+  for (const c of g.corps) if (!c.dead) alive.add(c.id);
+  for (const k of Object.keys(known)) if (!alive.has(+k) || g.turn - known[+k] > INTEL.reports.keep) { delete known[+k]; if (g.intel.how) delete g.intel.how[+k]; }
+}
+
+/**
+ * How well the viewer knows a corps, and how old the report is in months. The viewer's own corps and its allies' are
+ * always known, and so is everything with the fog lifted or outside the grand campaign.
+ */
+export function corpsKnown(g: Game, c: Corps, viewer: string | null = g.human): { level: Known; age: number } {
+  if (!fogOn(g, viewer) || allied(g, c.nat, viewer as string) || viewer !== g.human) return { level: 'exact', age: 0 };
+  const seen = g.intel.known?.[c.id];
+  if (seen === undefined) return { level: 'none', age: -1 };
+  const age = Math.max(0, g.turn - seen);
+  return age <= INTEL.reports.fresh ? { level: 'exact', age } : age <= INTEL.reports.keep ? { level: 'report', age } : { level: 'none', age: -1 };
+}
+
+/** A stale report's reading of a corps' strength: a band that holds the truth and is wider for every month of age. */
+export function strengthBand(g: Game, c: Corps, age: number): { lo: number; hi: number } {
+  const w = Math.min(INTEL.reports.widest, INTEL.reports.drift * Math.max(0, age));
+  const v = draw(g, 'str', c.id, g.turn);
+  return { lo: clamp(c.str * (1 - w * v), 0, 1), hi: clamp(c.str * (1 + w * (1 - v)), 0, 1) };
+}
+
+/**
+ * The staff's estimate of corps it has counted but not identified, in divisions at full strength: a band that holds
+ * the truth. It is the same all month, and a new guess the month after.
+ */
+export function divisionsBand(g: Game, region: number, nat: string, corps: Corps[]): { lo: number; hi: number } {
+  const total = corps.reduce((s, c) => s + c.divs * c.str, 0);
+  if (!corps.length) return { lo: 0, hi: 0 };
+  const w = INTEL.reports.contact, v = draw(g, 'divs', region, nat, g.turn);
+  return { lo: total * (1 - w * v), hi: total * (1 + w * (1 - v)) };
+}
+
+/** What a viewer makes of a set of corps under one flag: which are known exactly, which from a stale report, which not at all. */
+export function sortKnown(g: Game, corps: Corps[], viewer: string | null = g.human): { exact: Corps[]; report: Corps[]; none: Corps[] } {
+  const out = { exact: [] as Corps[], report: [] as Corps[], none: [] as Corps[] };
+  for (const c of corps) if (!c.dead) out[corpsKnown(g, c, viewer).level].push(c);
+  return out;
+}
+
+/**
+ * How unsure the viewer is of the strength of a force it means to attack, as a share of that strength: nothing where
+ * every corps is identified this month, more for each one known from a stale report, most for those not identified.
+ * And the band of odds that follows: it holds the true odds, and is not centred on them.
+ */
+export function oddsBand(g: Game, defenders: Corps[], odds: number, target: number, viewer: string | null = g.human): { exact: boolean; doubt: number; lo: number; hi: number; mid: number } {
+  let doubt = 0, all = 0;
+  const R = INTEL.reports;
+  for (const c of defenders) {
+    const k = corpsKnown(g, c, viewer);
+    const w = c.divs * Math.max(0.05, c.str);
+    doubt += w * (k.level === 'exact' ? 0 : k.level === 'report' ? Math.min(R.widest, R.drift * k.age) : R.unknown);
+    all += w;
+  }
+  doubt = all > 0 ? doubt / all : 0;
+  if (doubt <= 0) return { exact: true, doubt: 0, lo: odds, hi: odds, mid: odds };
+  // The defence may be anything from this much weaker to this much stronger than it truly is: the truth lies inside.
+  const v = draw(g, 'odds', target, g.turn);
+  const strong = 1 + doubt * (1 - v), weak = Math.max(0.2, 1 - doubt * v);
+  return { exact: false, doubt, lo: odds / strong, hi: odds / weak, mid: odds / ((strong + weak) / 2) };
+}
+
+/**
+ * One nation's force in a province as the viewer knows it. 'known' is 'full' where every corps is identified, 'partial'
+ * where the army is in view but some of it is not identified or is known only from a stale report, and 'count' where
+ * only the flag and the number of corps are known. 'divs' is the strength in divisions where all is known, else null;
+ * 'est' is the staff's estimate of it as a band where the army stands in view of the viewer's lines, else null.
+ */
+export interface ArmySeen { reg: number; nat: string; sight: 1 | 2; corps: number; divs: number | null; mine: boolean; known: 'full' | 'partial' | 'count'; identified: number; est: { lo: number; hi: number } | null }
+
+/** The viewer's estimate of an army's strength in divisions, as a band: exact corps as they are, stale reports by their bands, the rest by the staff's count. Null where the unidentified corps are too far off to be estimated. */
+export function armyBand(g: Game, region: number, nat: string, corps: Corps[], viewer: string | null, inContact: boolean): { lo: number; hi: number } | null {
+  const k = sortKnown(g, corps, viewer);
+  if (k.none.length && !inContact) return null;
+  let lo = 0, hi = 0;
+  for (const c of k.exact) { lo += c.divs * c.str; hi += c.divs * c.str; }
+  for (const c of k.report) { const b = strengthBand(g, c, corpsKnown(g, c, viewer).age); lo += c.divs * b.lo; hi += c.divs * b.hi; }
+  if (k.none.length) { const b = divisionsBand(g, region, nat, k.none); lo += b.lo; hi += b.hi; }
+  return { lo, hi };
+}
 
 /** Every army the viewer knows of, for a map to draw. Armies in ground the viewer cannot see are not on the list. */
 export function armiesSeen(g: Game, viewer: string | null = g.human): ArmySeen[] {
@@ -99,17 +236,21 @@ export function armiesSeen(g: Game, viewer: string | null = g.human): ArmySeen[]
   const out: ArmySeen[] = [];
   for (const r of g.regions) {
     if (!r.units.length) continue;
-    const by = new Map<string, { corps: number; divs: number }>();
+    const by = new Map<string, { corps: number; divs: number; list: Corps[] }>();
     for (const c of r.units) {
       if (c.dead) continue;
-      const row = by.get(c.nat) ?? by.set(c.nat, { corps: 0, divs: 0 }).get(c.nat)!;
-      row.corps++; row.divs += c.divs * c.str;
+      const row = by.get(c.nat) ?? by.set(c.nat, { corps: 0, divs: 0, list: [] }).get(c.nat)!;
+      row.corps++; row.divs += c.divs * c.str; row.list.push(c);
     }
     for (const [nat, row] of by) {
       const mine = viewer !== null && allied(g, nat, viewer);
       const s = mine ? SIGHT.full : sight[r.id];
       if (s === SIGHT.none) continue;
-      out.push({ reg: r.id, nat, sight: s as 1 | 2, corps: row.corps, divs: s === SIGHT.full ? row.divs : null, mine });
+      const k = mine ? null : sortKnown(g, row.list, viewer);
+      const all = !k || (!k.report.length && !k.none.length);
+      const identified = k ? k.exact.length + k.report.length : row.corps;
+      const known: ArmySeen['known'] = all ? 'full' : s === SIGHT.full || identified > 0 ? 'partial' : 'count';
+      out.push({ reg: r.id, nat, sight: s as 1 | 2, corps: row.corps, divs: all ? row.divs : null, mine, known, identified, est: all ? { lo: row.divs, hi: row.divs } : armyBand(g, r.id, nat, row.list, viewer, s === SIGHT.full) });
     }
   }
   return out;

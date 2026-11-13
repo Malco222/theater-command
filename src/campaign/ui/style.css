@@ -1249,3 +1249,23 @@ text.lbl2.tf { font-weight: 600; }
   .prizeline { flex-wrap: wrap; font-size: 12.5px; padding: 7px 9px; }
   .prizeline .twicon { display: none; }
 }
+
+/* ---- Fog on armies: corps not identified, and reports gone stale ---- */
+.ctr.army.unsure rect.box { stroke-dasharray: 2.6 1.6; }
+.ctr.army.unsure text { font-style: italic; }
+text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4eeda; text-anchor: middle; paint-order: stroke; stroke: rgba(12, 15, 18, .75); stroke-width: 1.6px; }
+.meter i.band { background: repeating-linear-gradient(115deg, #c9c2ad 0 3px, #8d8776 3px 6px); border-radius: 3px; }
+.corps.stale, .corps.unknown { border-style: dashed; }
+.corps.unknown { background: rgba(60, 68, 80, .3); }
+.corps.unknown .nm { color: var(--ink-2); }
+.ucard.stale, .ucard.unknown { border-style: dashed; }
+.ucard.unknown { background: rgba(60, 68, 80, .3); color: var(--ink-2); }
+.ucard.unknown .utop b { color: var(--ink-2); }
+.ucard.corpsbox.unknown .chits, .ucard.corpsbox.stale .chits { opacity: .9; }
+.tcount.fogline { color: var(--ink-3); font-style: italic; }
+.balance .doubt { position: absolute; top: 1px; bottom: 1px; border-radius: 3px; background: repeating-linear-gradient(115deg, rgba(244, 238, 218, .5) 0 3px, rgba(244, 238, 218, .12) 3px 7px); box-shadow: 0 0 0 1px rgba(244, 238, 218, .65); pointer-events: none; }
+
+.btn.scoutnow { display: inline-flex; align-items: center; gap: 6px; margin: 8px 0 2px; }
+.btn.scoutnow small { opacity: .75; font-size: 12px; }
+.btn.scoutnow svg.cam { flex: none; }
+.note.fogged .btn.scoutnow { display: flex; margin-top: 8px; }
