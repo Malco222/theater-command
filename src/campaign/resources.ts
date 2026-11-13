@@ -208,12 +208,9 @@ function lanePath(g: Game, row: LaneRow): [number, number][] {
   return pts;
 }
 
-/** One sea lane as it stands this month for the nation it feeds. 'need' is that nation's monthly need of each good. */
-function seaLane(g: Game, row: LaneRow, need: Record<Good, number>): Lane {
-  const zones = row.zones.map((k) => zoneOf(g, k)).filter((z) => z >= 0);
-  const full = { oil: row.oil * need.oil, sup: row.sup * need.sup };
-  const lane: Lane = { id: row.id, path: lanePath(g, row), kind: 'sea', name: row.name, from: row.from, to: row.to, text: row.text, zones, full, flow: 1, oil: 0, sup: 0, raid: 0, guard: 0, state: 'open', why: '' };
-  const cut = (why: string, state: LaneState = 'cut'): Lane => ({ ...lane, flow: 0, state, why });
+/** Why nothing sails on a sea lane this month, if nothing does: it is cut by an enemy, or idle because the trade has not begun. */
+function laneStop(g: Game, row: LaneRow): { state: 'cut' | 'idle'; why: string } | null {
+  const cut = (why: string, state: 'cut' | 'idle' = 'cut'): { state: 'cut' | 'idle'; why: string } => ({ state, why });
   const to = row.to;
   if (row.allies) {
     const friend = row.allies.find((a) => g.nations[a]?.alive && allied(g, a, to) && g.nations[a].atWar.length > 0);
@@ -230,8 +227,25 @@ function seaLane(g: Game, row: LaneRow, need: Record<Good, number>): Lane {
   }
   const jailer = (row.shutBy ?? []).find((x) => g.nations[x]?.alive && atWar(g, x, to));
   if (jailer) return cut(`Shut by the blockade of ${the(natOf(g, jailer))}.`);
+  return null;
+}
+
+/** Why nothing sails on the shipping lane with this id this month, or null while cargoes are moving (or it is no lane of these books). */
+export function laneStopped(g: Game, id: string): { state: 'cut' | 'idle'; why: string } | null {
+  const row = RES.lanes.find((l) => l.id === id);
+  return row && g.nations[row.to] ? laneStop(g, row) : null;
+}
+
+/** One sea lane as it stands this month for the nation it feeds. 'need' is that nation's monthly need of each good. */
+function seaLane(g: Game, row: LaneRow, need: Record<Good, number>): Lane {
+  const zones = row.zones.map((k) => zoneOf(g, k)).filter((z) => z >= 0);
+  const full = { oil: row.oil * need.oil, sup: row.sup * need.sup };
+  const lane: Lane = { id: row.id, path: lanePath(g, row), kind: 'sea', name: row.name, from: row.from, to: row.to, text: row.text, zones, full, flow: 1, oil: 0, sup: 0, raid: 0, guard: 0, state: 'open', why: '' };
+  const to = row.to;
+  const stop = laneStop(g, row);
+  if (stop) return { ...lane, flow: 0, state: stop.state, why: stop.why };
   if (zones.length && g.nations[to].atWar.length) {
-    const m = laneLoss(g, to, zones);
+    const m = laneLoss(g, to, zones, row.id);
     lane.raid = m.raid; lane.guard = m.guard; lane.flow = 1 - m.loss;
     if (m.loss >= 0.02) { lane.state = 'raided'; lane.why = `Raiders are sinking ${Math.round(m.loss * 100)}% of the cargoes.`; }
   }

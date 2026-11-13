@@ -16,6 +16,7 @@ import {
   invasions, previewDeclare, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, corpsKnownAs, knowledgeOf,
   joinOffers, jointForce, lending, orderJoin, orderJoinAll, orderSendBack,
+  fleetOptions, fleetView, lanesToGuard, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
@@ -38,8 +39,9 @@ import {
   km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
 } from '../air';
 import {
-  NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
+  FLEETS, NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips,
 } from '../navy';
+import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
 import { phaseFor, theatrePhases } from '../ai';
 import { SIDE_NAME } from '../domination';
 import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
@@ -55,7 +57,7 @@ import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc } from '../game';
-import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
+import { KIND, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
 let g: Game;
@@ -80,6 +82,8 @@ const ui = {
   /** Choosing a new home port for that fleet. */
   rebase: false,
   seenSea: 0,
+  /** Where the list of shore bombardments stood when the player's last month ended: coasts of his shelled since are this month's. */
+  shoreFrom: -1,
   /** The air fleet being given orders under the Air tab. */
   air: -1,
   /** What a click on the map means for that air fleet: a new base, a province to photograph, or a target for a mission. */
@@ -199,6 +203,8 @@ let lands: Region[] = [];
 let reaches: { from: number; ap: number; map: Map<number, Reach> }[] = [];
 /** The army whose general and units the tray shows. */
 let trayArmy: { reg: number; nat: string } | null = null;
+/** The enemy coasts the fleet that is picked up could shell from where it is. */
+let shellAt: number[] = [];
 /** The piece kept off the map while a copy of it is still being slid along its road, and the march being drawn. */
 let marchHide: { reg: number; nat: string } | null = null;
 /** What the player can see of each province this moment: 2 an army in full, 1 a flag and a count, 0 nothing (the fog of war). */
@@ -376,10 +382,14 @@ function fleetMarks(): string {
     const n = fs.reduce((t, f) => t + shipCount(f.ships), 0);
     const shape = fs.some((f) => surfaceShips(f) > 0) ? HULL : SUB;
     const picked = fs.some((f) => f.id === ui.fleet) && ui.tab === 'navy';
+    // The player's own fleets are pieces: a click on one picks it up.
+    const own = fs[0].nat === g.human;
+    const badge = fs[0].stance === 'escort' ? 'E' : fs[0].stance === 'hunt' ? 'H' : '';
+    const tipText = own ? `${fs.map((f) => `${f.name}: ${fleetDoing(g, f)}`).join(' · ')}. Click to pick ${fs.length > 1 ? 'one' : 'it'} up.` : '';
     let x: number, y: number, small = false;
     if (where === 'p') { const r = g.regions[id]; x = r.x + 16 + i * 12; y = r.y + 12; small = true; }
     else { const z = g.seas[id]; x = z.x + (i - (rows.get(slot)! - 1) / 2) * 30; y = z.y + (where === 'h' ? 37 : 19); small = where === 'h'; }
-    out += `<g class="ctr flt${fs[0].stance === 'raid' ? ' raid' : ''}${small ? ' port' : ''}" transform="translate(${x.toFixed(1)} ${y.toFixed(1)})${small ? ' scale(.68)' : ''}">${picked ? '<circle class="fsel" r="17"/>' : ''}<path class="hull" d="${shape}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(-5 -12.4)">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="11.5">${n}</text></g>`;
+    out += `<g class="ctr flt${fs[0].stance === 'raid' ? ' raid' : ''}${small ? ' port' : ''}"${own ? ` data-fleets="${fs.map((f) => f.id).join(',')}"` : ''} transform="translate(${x.toFixed(1)} ${y.toFixed(1)})${small ? ' scale(.68)' : ''}">${own ? `<title>${esc(tipText)}</title><circle class="fhit" r="15"/>` : ''}${picked ? '<circle class="fsel" r="17"/>' : ''}<path class="hull" d="${shape}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(-5 -12.4)">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="11.5">${n}</text>${badge ? `<g class="fbadge"><circle cx="11" cy="-4.5" r="4.4"/><text x="11" y="-2.3">${badge}</text></g>` : ''}</g>`;
   }
   return out;
 }
@@ -600,6 +610,8 @@ function refresh(): void {
   if (!lands.length) ui.land = false;
   const fl = ui.tab === 'navy' ? myFleet() : null;
   if (!fl) ui.rebase = false;
+  // The coasts the picked fleet's guns can reach: red on the map, and a click on one plans a bombardment.
+  shellAt = fl && seaWar(g) && g.nations[fl.nat].atWar.length ? fleetOptions(g, fl.id)?.coasts ?? [] : [];
   const af = ui.tab === 'air' ? myAir() : null;
   if (!af) ui.airMode = '';
   const raiding = ui.tab === 'air' && airWar(g) && !!g.human && humanUp(g);
@@ -608,7 +620,10 @@ function refresh(): void {
   else if (af) marks += airMarks(af);
   else if (fl) {
     if (ui.rebase) for (const r of baseTargets(g, fl)) marks += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
-    else for (const z of fleetReach(g, fl)) marks += `<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
+    else {
+      for (const z of fleetReach(g, fl)) marks += `<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
+      for (const id of shellAt) marks += `<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`;
+    }
   } else if (ui.rail && picked.length) {
     for (const r of railTargets(picked[0])) marks += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
   } else if (ui.land && picked.length) {
@@ -1150,9 +1165,62 @@ function foeCard(c: Corps, tray = false): string {
     <span class="tags"><span class="tag" title="${card.source ? `From ${sourceWord(card.source)}. ` : ''}${HOW_TO_KNOW}">${reportAge(card.age)}</span></span></div>`;
 }
 
+/** The player's fleet that is picked up under the Navy tab: its tray is open even in a month that is not his to give orders in. */
+function fleetShown(): Fleet | null {
+  if (ui.tab !== 'navy' || ui.fleet < 0 || !g.human) return null;
+  const f = g.fleets.find((x) => x.id === ui.fleet);
+  return f && f.nat === g.human && shipCount(f.ships) > 0 ? f : null;
+}
+
+/** A ship of one class on a plate in its navy's colour, as the arsenal draws it. */
+function shipPlate(nat: string, cls: string, w = 22, h = 16): string {
+  const [d, k] = HULL_OF[cls];
+  return `<svg width="${w}" height="${h}" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[nat].color}"/><path class="symf" d="${d}" transform="translate(12 7.5) scale(${k})"/></svg>`;
+}
+
+/** One class of a fleet's ships as a card: how many, a plate for each of the first few, and what they are for. */
+function shipCardHtml(card: FleetCard, c: ShipCard): string {
+  const shown = Math.min(c.count, 10);
+  return `<div class="ucard corpsbox shipbox" style="--n:3" title="${esc(c.label)}: ${esc(c.role)}">
+    <span class="utop"><b>${esc(c.label)}</b><span class="shipn">${c.count}</span></span>
+    <span class="um vet">${esc(c.brief)}</span>
+    <span class="hulls">${shipPlate(card.nat, c.cls, 26, 19).repeat(shown)}${c.count > shown ? `<i>+${c.count - shown}</i>` : ''}</span>
+    ${c.lost ? `<span class="tags"><span class="tag bad" title="Sunk since the war began">${c.lost} lost</span></span>` : ''}</div>`;
+}
+
+/** The order a fleet is under, or (in harbour) the one it will sail under when a sea is clicked. */
+const fleetStance = (f: Fleet): Stance => (atSea(f) ? f.stance : ui.stance);
+
+/** The tray of a fleet that has been picked up: its admiral, its ships as cards by class, and its orders. */
+function drawFleetTray(f: Fleet): void {
+  const el = $('#tray');
+  const card = fleetView(g, f.id)!;
+  const n = g.nations[f.nat];
+  const adm = card.admiral;
+  const can = !!myFleet() && n.atWar.length > 0;
+  const pieces = seaWar(g);
+  const head = `<div class="tgen"><span class="seal${adm ? '' : ' none'}" style="background:${n.color}">${adm ? esc(initialsOf(adm.name)) : ''}</span><span class="grow"><b>${esc(card.name)}</b><small>${adm ? `Admiral ${esc(surname(adm.name))}, level ${adm.level} · ` : ''}${esc(card.doing)}</small></span></div>`;
+  const bar = (label: string, v: number, cls: string, word: string, title: string): string => `<span class="mrow" title="${esc(title)}"><small>${label}</small><span class="meter"><i class="${cls}" style="width:${Math.round(v * 100)}%"></i></span><em>${esc(word)}</em></span>`;
+  const heavy = f.ships.bb + f.ships.cv + f.ships.ca;
+  const screen = pieces && heavy > 0
+    ? bar('Screen', 1 - card.screen.gap, card.screen.gap > 0.4 ? 'low' : 'org', card.screen.word, `${card.screen.have} destroyers for ${heavy} heavy ships; ${card.screen.need} would screen them fully. A fleet short of destroyers can lose a heavy ship to a submarine${card.screen.risk >= 0.01 ? `: about ${Math.round(card.screen.risk * 100)}% this month where it is` : ''}.`)
+    : '';
+  const tally = `<div class="tsum"><small class="tcount">${card.ships} ship${card.ships === 1 ? '' : 's'} · fleet strength ${num(card.power)}${pieces && card.guns >= FLEETS.bombard.least ? ` · guns ${num(card.guns)}` : ''}</small>
+    <span class="m3 wide">${bar('Ready', card.ready, card.ready < 0.5 ? 'low' : '', `${Math.round(card.ready * 100)}%`, 'How fit for sea the ships are. A fleet in harbour refits quickly.')}${screen}</span></div>`;
+  const now = fleetStance(f);
+  const ord = (s: Stance, label: string): string => `<button class="${now === s ? 'on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
+  const orders = can
+    ? `<div class="tstance fleetord" role="group" aria-label="Orders for this fleet"><small>Orders</small>${ord('patrol', 'Patrol')}${ord('raid', 'Raid')}${pieces ? `${ord('hunt', 'Hunt subs')}<button class="${f.stance === 'escort' ? 'on' : ''}" data-act="fleetsec" data-sec="flanes" title="${esc(FLEETS.orders.escort.blurb)}">Escort</button>` : ''}<button data-act="toport" ${atSea(f) ? '' : 'disabled'} title="${esc(FLEETS.orders.port.blurb)}">Port</button>${pieces ? `<button data-act="fleetsplit" ${fleetOptions(g, f.id)?.split ? '' : 'disabled'} title="Send some of its ships off as a squadron of their own.">Split</button>` : ''}</div>`
+    : `<small class="tcount">${n.atWar.length ? 'Orders can be given in your own month.' : 'At peace: the fleet stays in harbour.'}</small>`;
+  el.innerHTML = `<div class="thead">${head}${tally}${orders}</div><div class="cards">${card.cards.map((c) => shipCardHtml(card, c)).join('')}</div>`;
+  el.classList.add('open');
+}
+
 function drawTray(): void {
   const el = $('#tray');
   const a = trayArmy;
+  const fleet = a ? null : fleetShown();
+  if (fleet) { drawFleetTray(fleet); return; }
   if (!a) { el.classList.remove('open'); el.innerHTML = ''; return; }
   const r = g.regions[a.reg];
   const last = (c: Corps): number => (c.kind === 'fort' ? 1 : 0);
@@ -1346,6 +1414,14 @@ function alertList(): Alert[] {
   // Enemy raids since the player's last month: the places hit, to visit in turn.
   const raided = ui.raidsFrom < 0 ? [] : [...new Set(g.airReports.slice(ui.raidsFrom).filter((r) => r.region >= 0 && atWar(g, r.attNat, me) && (r.defNat === me || g.regions[r.region].ctrl === me)).map((r) => r.region))];
   if (raided.length) out.push({ kind: 'raided', text: raided.length === 1 ? `Enemy aircraft raided ${g.regions[raided[0]].name}` : `Enemy aircraft raided ${raided.length} of your provinces`, regs: raided });
+  // Coasts of the player's shelled from the sea since his last month.
+  const shelled = ui.shoreFrom < 0 ? [] : [...new Set(g.shoreReports.slice(ui.shoreFrom).filter((r) => atWar(g, r.nat, me) && (r.defNat === me || g.regions[r.region].ctrl === me || g.regions[r.region].units.some((c) => c.nat === me))).map((r) => r.region))];
+  if (shelled.length) out.push({ kind: 'bombarded', text: shelled.length === 1 ? `Enemy warships shelled ${g.regions[shelled[0]].name}` : `Enemy warships shelled ${shelled.length} of your coasts`, regs: shelled });
+  // A lane of the player's own that raiders are bleeding with no fleet bound to it.
+  if (n.atWar.length && seaWar(g)) {
+    const bare = lanesToGuard(g).filter((l) => l.to === me && l.state === 'raided' && l.loss >= 0.05 && !l.escorts.length).sort((a, b) => b.loss - a.loss)[0];
+    if (bare) out.push({ kind: 'unescorted', text: `${upFirst(bare.name)} has no escort: ${pc100(bare.loss)} of its cargoes are being sunk`, tab: 'navy' });
+  }
   const cited = unseen(g).length;
   if (cited) out.push({ kind: 'honours', text: `${cited} honour${cited === 1 ? '' : 's'} earned: read the citation${cited === 1 ? '' : 's'}` });
   // The war between the alliances is decided and the player has not yet said what comes next.
@@ -1623,7 +1699,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${prizesBlock()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li>${airWar(g) ? '<li>Aircraft fly from airfields, the round pads on the map: click one to see the air groups based there. Fighters patrol their sky to catch raids, stick with a bomber group as its escort, or rest. Any group flies one raid a month. Open <b>Air</b> and plan it from its target: you see the chance of success and the losses to expect, then pick who goes. Bombers from several airfields can meet up for one raid, and the more that go together the smaller the share they lose. Engineers lay out new airfields.</li>' : '<li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>'}${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with fleets on patrol; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li><li>Allies can fight as one army. Where an ally\'s corps stands in a province with yours, the tray and the province panel offer <b>Join my army</b>. A corps that joins keeps its own flag, pay and supply, but takes your orders in your month: it marches and attacks with your corps, and the ground you take together is yours. Its country lends only a share of its army, and only against enemies it is itself at war with. Send it back from the same place, or leave it behind for a month and it goes home by itself.</li><li>The fog of war hides what your side cannot see. Beside your own lines a foreign army is a flag, a count of its corps and your staff\'s estimate of its strength; a province further off it is a flag and a count; deeper than that the map is dark. What an army is made of is known only once its corps are identified: by fighting them, by an agent with them in view, or by a reconnaissance flight over their province. A report is exact in the month it is made and then goes stale: the strength becomes an estimate that widens every month, morale and rest are no longer known, and after ' + INTEL.reports.keep + ' months the corps is unidentified again. Where the defence is not known, the card that plans an attack gives the odds as a band. Open <b>Spies</b> to recruit agents and send them anywhere on the map. An agent identifies every army in its province and around it, reads a government\'s books in its capital, and can wreck a factory, blow a railway or fire an oilfield in a country you are at war with. Every month abroad an agent may be caught. Keep one at home on guard, because the other side has saboteurs too. The fog can be lifted under <b>Spies</b> if you would rather see everything.</li><li>When a great power has fallen and the great powers have stopped fighting each other, the war is decided and a card gives you the choice: take the victory, or <b>World Domination</b>. That dissolves every alliance and sets every nation still standing against every other, yesterday\'s allies among them, until one is left. It cannot be undone. The Powers tab then shows the standings.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li>${airWar(g) ? '<li>Aircraft fly from airfields, the round pads on the map: click one to see the air groups based there. Fighters patrol their sky to catch raids, stick with a bomber group as its escort, or rest. Any group flies one raid a month. Open <b>Air</b> and plan it from its target: you see the chance of success and the losses to expect, then pick who goes. Bombers from several airfields can meet up for one raid, and the more that go together the smaller the share they lose. Engineers lay out new airfields.</li>' : '<li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>'}${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li>' + (budgeted(g) ? '<li>Fleets are pieces on the map, handled like armies. Click one of your fleets to pick it up: its ships are laid out as cards by class, and the seas it can reach are ringed. Give it one of five orders. <b>Patrol</b> holds a sea and brings enemy fleets to battle. <b>Raid</b> goes after merchant ships. <b>Escort</b> binds it to one shipping lane and guards the convoys the whole way. <b>Hunt</b> sends its destroyers and carrier aircraft after submarines, which nothing else can sink. <b>Port</b> brings it home to refit. Battleships and cruisers standing off an enemy coast can shell the troops or the factories there once a month: shell first, attack after. Heavy ships need destroyers round them, or a submarine may get one. <b>Split off ships</b> makes an escort group or a bombardment force out of a big fleet.</li>' : '') + '<li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with an escort; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li><li>Allies can fight as one army. Where an ally\'s corps stands in a province with yours, the tray and the province panel offer <b>Join my army</b>. A corps that joins keeps its own flag, pay and supply, but takes your orders in your month: it marches and attacks with your corps, and the ground you take together is yours. Its country lends only a share of its army, and only against enemies it is itself at war with. Send it back from the same place, or leave it behind for a month and it goes home by itself.</li><li>The fog of war hides what your side cannot see. Beside your own lines a foreign army is a flag, a count of its corps and your staff\'s estimate of its strength; a province further off it is a flag and a count; deeper than that the map is dark. What an army is made of is known only once its corps are identified: by fighting them, by an agent with them in view, or by a reconnaissance flight over their province. A report is exact in the month it is made and then goes stale: the strength becomes an estimate that widens every month, morale and rest are no longer known, and after ' + INTEL.reports.keep + ' months the corps is unidentified again. Where the defence is not known, the card that plans an attack gives the odds as a band. Open <b>Spies</b> to recruit agents and send them anywhere on the map. An agent identifies every army in its province and around it, reads a government\'s books in its capital, and can wreck a factory, blow a railway or fire an oilfield in a country you are at war with. Every month abroad an agent may be caught. Keep one at home on guard, because the other side has saboteurs too. The fog can be lifted under <b>Spies</b> if you would rather see everything.</li><li>When a great power has fallen and the great powers have stopped fighting each other, the war is decided and a card gives you the choice: take the victory, or <b>World Domination</b>. That dissolves every alliance and sets every nation still standing against every other, yesterday\'s allies among them, until one is left. It cannot be undone. The Powers tab then shows the standings.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -2174,7 +2250,7 @@ function statLine(kind: UnitKind, u: AnyUnit): string {
   const parts: string[] = [];
   if (v('actions')) parts.push(`${v('actions')} ${v('actions') === 1 ? 'action' : 'actions'} won`);
   if (v('tons')) parts.push(`${num(v('tons'))} tons sunk`);
-  if (v('escort')) parts.push(`${v('escort')} months on escort`);
+  if (v('escort')) parts.push(`${v('escort')} month${v('escort') === 1 ? '' : 's'} on escort`);
   return parts.length ? parts.join(' · ') : 'No actions yet';
 }
 
@@ -2493,12 +2569,13 @@ function landRow(r: BattleReport): string {
 }
 
 function battlesPane(): string {
-  if (!g.reports.length && !g.seaReports.length && !g.airReports.length) return '<h2>Battles</h2><div class="empty">No battles yet. Every battle is settled from its Battle Ticket and filed here.</div>';
+  if (!g.reports.length && !g.seaReports.length && !g.airReports.length && !g.shoreReports.length) return '<h2>Battles</h2><div class="empty">No battles yet. Every battle is settled from its Battle Ticket and filed here.</div>';
   // Newest first. Within a month the land battles are fought first, then the air campaigns, then the fleet actions.
   const rows: { turn: number; rank: number; i: number; html: () => string }[] = [];
   g.reports.forEach((r, i) => rows.push({ turn: r.turn, rank: 0, i, html: () => landRow(r) }));
   g.airReports.forEach((r, i) => rows.push({ turn: r.turn, rank: 1, i, html: () => airBrow(r) }));
   g.seaReports.forEach((r, i) => rows.push({ turn: r.turn, rank: 2, i, html: () => seaRow(r) }));
+  g.shoreReports.forEach((r, i) => rows.push({ turn: r.turn, rank: 3, i, html: () => shoreRow(r) }));
   rows.sort((a, b) => b.turn - a.turn || b.rank - a.rank || b.i - a.i);
   return '<h2>Battles</h2><p class="sub">Open any battle, on land, at sea or in the air, to see its Battle Ticket: what the campaign map fed into the fight.</p><div style="height:8px"></div>'
     + rows.slice(0, 90).map((x) => x.html()).join('');
@@ -2913,8 +2990,11 @@ function trackPane(list: Nation[]): string {
 
 function whereFleet(f: Fleet): string {
   if (!atSea(f)) return `In harbour at ${esc(f.port)}`;
-  return `${f.stance === 'raid' ? 'Raiding shipping in' : 'Patrolling'} the ${esc(g.seas[f.zone].name)} from ${esc(f.port)}`;
+  return `${esc(fleetDoing(g, f))} from ${esc(f.port)}`;
 }
+
+const pc100 = (x: number): string => `${Math.round(x * 100)}%`;
+const SHIP_CLASSES: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 
 function fleetRow(f: Fleet, mine: boolean, whose = false): string {
   const adm = f.admiral ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(f.admiral.name)} <span class="lvl" title="Level ${f.admiral.level} admiral">${f.admiral.level}</span></span>` : '';
@@ -2929,15 +3009,109 @@ function fleetRow(f: Fleet, mine: boolean, whose = false): string {
 
 /** The orders the player can give the fleet that is picked. */
 function fleetOrders(f: Fleet): string {
-  const rows = fleetReach(g, f).map((z) => {
-    const them = seaSide(g, z, f.nat, true), us = seaSide(g, z, f.nat, false);
-    const here = atSea(f) && f.zone === z;
-    const foe = them.total >= 1 ? `Enemy strength ${num(them.total)}${them.air > them.ships ? ', mostly aircraft' : ''}` : 'No enemy seen';
-    return `<button class="pickrow${here ? ' pick' : ''}" data-act="sail" data-zone="${z}"><span class="grow"><b>${esc(g.seas[z].name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${foe} · your side ${num(us.total)}</span></span>${here ? '<span class="tag good">Here now</span>' : ''}</button>`;
+  const o = fleetOptions(g, f.id);
+  if (!o) return '';
+  const pieces = seaWar(g);
+  const now = fleetStance(f);
+  const small = (t: string): string => `<span style="font-size:11.5px;color:var(--ink-2)">${t}</span>`;
+  const rows = o.seas.map((s) => {
+    const them = seaSide(g, s.zone, f.nat, true);
+    const foe = s.theirs >= 1 ? `Enemy strength ${num(s.theirs)}${them.air > them.ships ? ', mostly aircraft' : ''}` : 'No enemy seen';
+    const more: string[] = [];
+    if (s.subs > 0) {
+      const sunk = s.subs * s.hunt;
+      more.push(`${s.subs} enemy submarine${s.subs === 1 ? '' : 's'} at work${pieces ? `: a hunt here would sink ${sunk < 0.5 ? 'less than one' : `about ${Math.round(sunk)}`} a month` : ''}`);
+    }
+    if (s.torpedo >= 0.02) more.push(`<span style="color:var(--red)">${pc100(s.torpedo)} chance of a heavy ship torpedoed: too few destroyers</span>`);
+    if (now === 'patrol' && s.meet !== 'clear') more.push(s.meet === 'battle' ? 'on patrol it would bring the enemy fleet to battle' : 'the enemy fleet is too strong here to offer battle');
+    return `<button class="pickrow${s.here ? ' pick' : ''}" data-act="sail" data-zone="${s.zone}"><span class="grow"><b>${esc(s.name)}</b><br>${small(`${foe} · your side ${num(s.ours)}${more.length ? `<br>${more.join(' · ')}` : ''}`)}</span>${s.here ? '<span class="tag good">Here now</span>' : ''}</button>`;
   }).join('');
-  return `<div class="orders">
-    <div class="acts"><button class="btn small${ui.stance === 'patrol' ? ' on' : ''}" data-act="stance" data-stance="patrol" title="Hold the sea: bring enemy fleets to battle, guard convoys and troopships.">Patrol</button><button class="btn small${ui.stance === 'raid' ? ' on' : ''}" data-act="stance" data-stance="raid" title="Hunt merchant ships and keep clear of the enemy's fleet.">Raid shipping</button><button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="A fleet in harbour refits quickly.">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button></div>
-    <p class="sub" style="margin:8px 0 6px">Fleet strength ${num(fleetPower(g, f))}. It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${ui.stance === 'raid' ? 'raid shipping' : 'patrol'} there.</p>${rows}</div>`;
+  const st = (s: Stance, label: string): string => `<button class="btn small${now === s ? ' on' : ''}" data-act="stance" data-stance="${s}" title="${esc(FLEETS.orders[s].blurb)}">${label}</button>`;
+  const will = now === 'raid' ? 'raid shipping' : now === 'hunt' ? 'hunt submarines' : 'patrol';
+  let out = `<div class="orders">
+    <div class="acts">${st('patrol', 'Patrol')}${st('raid', 'Raid shipping')}${pieces ? st('hunt', 'Hunt submarines') : ''}<button class="btn small" data-act="toport" ${atSea(f) ? '' : 'disabled'} title="A fleet in harbour refits quickly.">Return to port</button><button class="btn small${ui.rebase ? ' on' : ''}" data-act="rebase">Change base</button>${o.split ? '<button class="btn small" data-act="fleetsplit" title="Send some of its ships off as a squadron of their own: an escort group for a lane, a hunting group, a bombardment force.">Split off ships</button>' : ''}</div>`;
+  if (pieces && o.lanes.length) {
+    out += `<h3 id="flanes">Escort a shipping lane</h3><p class="sub" style="margin:0 0 6px">An escort sails with the convoys the whole length of the lane. Destroyers count most, carriers and cruisers help, and battleships guard nothing.</p>${o.lanes.map((p) => `<div class="pickrow${p.bound ? ' pick' : ''}">${flagIcon(p.to, g.nations[p.to].color, 18, 'inh')}<span class="grow"><b>${esc(upFirst(p.name))}</b><br>${small(p.bound ? `This fleet is its escort. ${pc100(p.now)} of the cargoes are being sunk.` : p.why ? esc(p.why) : p.raid <= 0 ? 'No raiders are on it now.' : `Cargoes sunk: ${pc100(p.now)} now, ${pc100(p.then)} with this fleet as its escort.`)}</span>${p.bound ? '<span class="tag good">Escorting</span>' : `<button class="btn small go" data-act="escort" data-lane="${p.lane}" ${p.why ? 'disabled' : ''}>Escort</button>`}</div>`).join('')}`;
+  }
+  if (pieces) {
+    const card = fleetView(g, f.id)!;
+    const none = !atSea(f) ? 'In harbour. Send the fleet to sea off an enemy coast first.' : card.guns < FLEETS.bombard.least * 0.5 || f.ships.bb + f.ships.ca <= 0 ? 'Too few heavy guns: shelling a coast is work for battleships and cruisers.' : card.shelled ? 'Its guns have already spoken this month.' : 'No enemy coast on this sea has troops in sight or industry to hit.';
+    out += `<h3>Coasts under its guns</h3>${o.coasts.length ? o.coasts.map((id) => {
+      const r = g.regions[id];
+      const p = previewBombard(g, f.id, id)!;
+      const bits = [p.can.troops ? `${p.corps} corps, ${p.divs} division${p.divs === 1 ? '' : 's'}: organisation cut by about ${pc100(p.cut)}` : '', p.can.city ? `${r.fac} factor${r.fac === 1 ? 'y' : 'ies'}: ${pc100(p.output)} of its output stopped` : ''].filter(Boolean);
+      return `<button class="pickrow" data-act="shell" data-id="${id}"><span class="grow"><b>${esc(r.name)}</b><br>${small(bits.join(' · '))}</span><span class="tag bad">Shell</span></button>`;
+    }).join('') : `<div class="empty">${none}</div>`}`;
+  }
+  if (o.merge.length) {
+    out += `<h3>Join another fleet here</h3>${o.merge.map((id) => { const x = g.fleets.find((q) => q.id === id)!; return `<div class="pickrow">${hullIcon(x)}<span class="grow"><b>${esc(x.name)}</b><br>${small(esc(capital(shipList(x.ships))))}</span><button class="btn small" data-act="fleetjoin" data-id="${id}" title="The ships of the ${esc(f.name)} sail under the ${esc(x.name)}'s flag from now on.">Join it</button></div>`; }).join('')}`;
+  }
+  out += `<h3>Seas in reach</h3><p class="sub" style="margin:0 0 6px">Fleet strength ${num(fleetPower(g, f))}. It can reach the seas within ${NAVY.range} of ${esc(f.port)}: click a ringed sea on the map, or pick one here. It will ${will} there.</p>${rows}</div>`;
+  return out;
+}
+
+/** The plan for a bombardment before the guns open: what it would do to the troops or the factories, and what it costs the fleet. */
+function shellCard(): string {
+  const m = ui.modal!;
+  const f = g.fleets.find((x) => x.id === m.fleet);
+  const r = g.regions[m.target];
+  const p = f ? previewBombard(g, f.id, r.id, m.what) : null;
+  if (!f || !p) return `<header><button class="x" data-act="close" aria-label="Close">×</button><h2>${esc(r.name)}</h2></header><div class="body"><div class="empty">That fleet cannot be given orders now.</div></div><footer><button class="btn go" data-act="close">Close</button></footer>`;
+  const adj = g.nations[r.ctrl].adj;
+  const pick = p.can.troops && p.can.city
+    ? `<div class="acts" style="margin-bottom:8px"><button class="btn small${p.what === 'troops' ? ' on' : ''}" data-act="shellwhat" data-what="troops">Shell the troops</button><button class="btn small${p.what === 'city' ? ' on' : ''}" data-act="shellwhat" data-what="city">Shell the factories</button></div>`
+    : '';
+  let head: string;
+  if (p.why) head = `<div class="empty">${esc(p.why)}</div>`;
+  else if (p.what === 'troops') {
+    head = `<div class="verdict ${p.cut >= 0.2 ? 'win' : ''}" style="font-size:24px">${p.cut >= 0.2 ? 'A heavy bombardment' : p.cut >= 0.1 ? 'A useful bombardment' : 'A light bombardment'}</div>
+      <div class="sub">The ${adj} troops at ${esc(r.name)} should lose about ${pc100(p.cut)} of their organisation, and some of their men and guns. They go into their next battle the weaker for it, so shell first and attack after.${p.reply > 0 ? ` The coast is fortified and will answer.` : ''}</div>`;
+  } else {
+    head = `<div class="verdict ${p.output >= 0.3 ? 'win' : ''}" style="font-size:24px">${p.output >= 0.3 ? 'The works under heavy fire' : 'The works under fire'}</div>
+      <div class="sub">The shelling should stop about ${pc100(p.output)} of ${esc(r.name)}'s output for a month: ${(p.nation * 100).toFixed(1)}% of ${adj} production.${p.reply > 0 ? ` The coast is fortified and will answer.` : ''}</div>`;
+  }
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Shore bombardment · ${esc(f.name)} · ${date(g.turn)}</div><h2>${esc(p.what === 'city' ? `Shelling ${r.name}` : `Shelling the troops at ${r.name}`)}</h2></header>
+    <div class="body">${pick}${head}${p.why ? '' : `<h3>Battle Ticket</h3>${ticketTable(p.lines)}<div class="note"><b>Fired at once.</b> A fleet's guns speak once a month, and a coast is shelled once a month.</div>`}</div>
+    <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="doshell" ${p.why ? 'disabled' : ''}>Open fire</button></footer>`;
+}
+
+/** How a bombardment went, for whoever fired it and whoever was under it. */
+function shoreVerdict(r: ShoreReport): { text: string; cls: string } {
+  const ours = !!g.human && allied(g, r.nat, g.human), theirs = !!g.human && allied(g, r.defNat, g.human);
+  const heavy = r.what === 'troops' ? r.cut >= 0.2 : r.output >= 0.3;
+  return { text: heavy ? 'Heavy bombardment' : 'Bombardment', cls: ours ? 'win' : theirs ? 'loss' : '' };
+}
+
+function shoreRow(r: ShoreReport): string {
+  const v = shoreVerdict(r);
+  return `<button class="brow" data-act="shorereport" data-id="${r.id}"><b>${esc(r.place)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)} · shelled from the sea by the ${esc(r.fleet)}</span></button>`;
+}
+
+function shoreReportCard(r: ShoreReport): string {
+  const v = shoreVerdict(r);
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · shore bombardment · ${date(r.turn)}</div><h2>${esc(r.place)} shelled from the ${esc(g.seas[r.zone]?.name ?? 'sea')}</h2></header>
+    <div class="body"><div class="verdict ${v.cls}" style="font-size:24px">${v.text}</div><div class="sub">${esc(r.result)}</div>
+    <h3>Battle Ticket</h3>${ticketTable(r.lines)}
+    <h3>The ships that stood in</h3><ul class="ulist"><li><span>${esc(r.fleet)} <span style="color:var(--ink-3)">(${g.nations[r.nat].adj}${r.admiral ? `, ${esc(r.admiral)}` : ''})</span><br><span style="color:var(--ink-2)">${esc(capital(shipList(r.ships)))}</span></span><span>${shipCount(r.sunk) ? `lost ${esc(shipList(r.sunk))}` : 'no ships lost'}</span></li></ul></div>
+    <footer><button class="btn" data-act="showmap" data-id="${r.region}">Show on map</button><button class="btn go" data-act="close">Close</button></footer>`;
+}
+
+/** Choosing the ships to send off from a fleet as a squadron of their own. */
+function splitCard(): string {
+  const m = ui.modal!;
+  const f = g.fleets.find((x) => x.id === m.fleet);
+  if (!f) return `<header><button class="x" data-act="close" aria-label="Close">×</button><h2>Split off ships</h2></header><div class="body"><div class="empty">That fleet is gone.</div></div><footer><button class="btn go" data-act="close">Close</button></footer>`;
+  const take = m.take as Ships;
+  const why = whyNotSplit(g, f.id, take);
+  const n = SHIP_CLASSES.reduce((s, c) => s + take[c], 0);
+  const rows = SHIP_CLASSES.filter((c) => f.ships[c] > 0).map((c) => {
+    const step = (d: number, label: string): string => `<button class="btn small" data-act="splitadj" data-cls="${c}" data-d="${d}" ${(d < 0 ? take[c] <= 0 : take[c] >= f.ships[c]) ? 'disabled' : ''}>${label}</button>`;
+    return `<div class="pickrow splitrow">${shipPlate(f.nat, c, 30, 21)}<span class="grow"><b>${esc(NAVY.classes[c].label)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(FLEETS.brief[c])} · ${f.ships[c]} in the fleet</span></span><span class="stepper">${step(-5, '−5')}${step(-1, '−')}<b>${take[c]}</b>${step(1, '+')}${step(5, '+5')}</span></div>`;
+  }).join('');
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${esc(f.name)} · ${esc(fleetDoing(g, f))}</div><h2>Split off ships</h2></header>
+    <div class="body"><p class="sub" style="margin-top:0">The ships you choose form a squadron of their own, in the same place and under the same order. Give it work of its own afterwards: destroyers to escort a lane or hunt submarines, battleships and cruisers to shell a coast.</p>${rows}
+    <div class="note">${why ? esc(why) : `<b>${esc(squadronName(g, f.nat, take))}</b> will form with ${esc(shipList(take))}. ${shipCount(f.ships) - n} ship${shipCount(f.ships) - n === 1 ? '' : 's'} stay with the ${esc(f.name)}.`}</div></div>
+    <footer><button class="btn" data-act="close">Cancel</button><button class="btn go" data-act="dosplit" ${why ? 'disabled' : ''}>Form the squadron</button></footer>`;
 }
 
 /** What a route that feeds an army overseas means for that army this month. */
@@ -2961,7 +3135,7 @@ function seaNotes(): string {
     if (!m || (me && me !== route.to && !atWar(g, me, route.to))) continue;
     const share = m.raid + m.guard > 0 ? m.raid / (m.raid + m.guard * NAVY.convoy.escortWorth) : 0;
     out += `<div class="note"><b>${esc(capital(route.name))}.</b> ${num(m.tons)} tons of shipping sunk ${m.turn === g.turn ? 'this month' : 'last month'}, cutting ${g.nations[route.to].adj} production by ${(m.share * 100).toFixed(m.share < 0.095 ? 1 : 0)}%. ${m.subsLost} submarine${m.subsLost === 1 ? '' : 's'} and ${m.escortsLost} escort${m.escortsLost === 1 ? '' : 's'} lost. ${num(m.total)} tons since the war began.
-      <div class="oddsbar" title="Raiders against escorts"><i style="width:${Math.round(share * 100)}%;background:var(--red)"></i><i style="flex:1;background:#6f9fd0"></i></div><span style="font-size:11.5px">Raiders ${num(m.raid)} against escorts ${num(m.guard)}. More escorts and patrolling fleets on the route cut the losses.${desertNote(route)}</span></div>`;
+      <div class="oddsbar" title="Raiders against escorts"><i style="width:${Math.round(share * 100)}%;background:var(--red)"></i><i style="flex:1;background:#6f9fd0"></i></div><span style="font-size:11.5px">Raiders ${num(m.raid)} against escorts ${num(m.guard)}. ${seaWar(g) ? 'Fleets ordered to escort the route cut the losses most; destroyers sent to hunt in its seas sink the submarines.' : 'More escorts and patrolling fleets on the route cut the losses.'}${desertNote(route)}</span></div>`;
   }
   const ore = oreRoute(g);
   const to = NAVY.ore.to;
@@ -2981,7 +3155,7 @@ function navyPane(): string {
     const mine = fleetsOf(g, me).filter(afloat);
     const n = g.nations[me];
     const order = humanUp(g);
-    out += `<h2>The ${n.adj} navy</h2><p class="sub">A fleet holds a sea by patrolling it. Where one side is much the stronger, that sea is closed to the other's troopships and supply ships. Ships at sea wear down, so bring a fleet home to refit after a fight.</p>
+    out += `<h2>The ${n.adj} navy</h2><p class="sub">${seaWar(g) ? 'Your fleets are pieces on the map: click one there, or below, to pick it up and give it orders. A fleet holds a sea by patrolling it, guards a shipping lane by escorting it, and sinks submarines only by hunting them with destroyers and aircraft. Battleships and cruisers can shell an enemy coast. Ships at sea wear down, so bring a fleet home to refit.' : 'A fleet holds a sea by patrolling it. Where one side is much the stronger, that sea is closed to the other\'s troopships and supply ships. Ships at sea wear down, so bring a fleet home to refit after a fight.'}</p>
       <div class="facts"><div class="fact"><span>Ships</span><b>${num(mine.reduce((t, f) => t + shipCount(f.ships), 0))}</b></div><div class="fact"><span>Fleets at sea</span><b>${mine.filter(atSea).length} of ${mine.length}</b></div><div class="fact"><span>Sea lift left</span><b>${n.sealift > 0 ? `${liftLeft(g, me)} corps` : 'None'}</b></div></div>${budgeted(g) ? '<div class="acts"><button class="btn small" data-act="armgo" data-arm="navy" title="Lay down warships and troopships in your shipyards.">Lay down more ships</button></div>' : ''}`;
     if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> The fleet stays in harbour until the nation is at war.</div>`;
     out += seaNotes();
@@ -3027,7 +3201,7 @@ function seaPane(): string {
   return `<h2>${esc(z.name)}</h2>${head}${straits}
     <h3>Fleets at sea here</h3>${here.length ? here.map((f) => fleetRow(f, false, true)).join('') : '<div class="empty">No fleet at sea here.</div>'}
     ${docked.length ? `<h3>In harbour on this sea</h3>${docked.map((f) => fleetRow(f, false, true)).join('')}` : ''}
-    ${me && humanUp(g) ? '<p class="sub" style="margin-top:10px">To send a fleet here, open <b style="color:var(--ink)">Navy</b>, pick the fleet, then click this sea.</p>' : ''}`;
+    ${me && humanUp(g) ? `<p class="sub" style="margin-top:10px">${seaWar(g) ? 'To send a fleet here, click the fleet on the map to pick it up, then click this sea.' : 'To send a fleet here, open <b style="color:var(--ink)">Navy</b>, pick the fleet, then click this sea.'}</p>` : ''}`;
 }
 
 function seaReportCard(r: SeaReport): string {
@@ -3516,6 +3690,13 @@ function openModal(m: typeof ui.modal): void {
     if (!rep) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = airReportCard(rep);
   }
+  else if (m.kind === 'shell') card.innerHTML = shellCard();
+  else if (m.kind === 'split') card.innerHTML = splitCard();
+  else if (m.kind === 'shorereport') {
+    const rep = g.shoreReports.find((r) => r.id === m.id);
+    if (!rep) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = shoreReportCard(rep);
+  }
   else if (m.kind === 'airplan') card.innerHTML = airPlanCard();
   else if (m.kind === 'raid') card.innerHTML = raidCard();
   else if (m.kind === 'landing') card.innerHTML = landingCard();
@@ -3975,11 +4156,13 @@ function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: numbe
   const reps = g.reports.slice(repFrom).filter((r) => me && (r.attNat === me || r.attackers.some((u) => u.nat === me) || r.defenders.some((u) => u.nat === me)));
   const seas = g.seaReports.slice(seaFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
   const airs = g.airReports.slice(airFrom).filter((r) => me && (r.attNat === me || r.defNat === me || r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
+  // Coasts shelled from the sea this month, by the player's ships or on the player's ground.
+  const shores = !me || ui.shoreFrom < 0 ? [] : g.shoreReports.slice(ui.shoreFrom).filter((r) => r.turn >= g.turn - 1 && (r.nat === me || r.defNat === me || g.regions[r.region].units.some((c) => c.nat === me)));
   const all = g.reports.length - repFrom + (g.seaReports.length - seaFrom) + (g.airReports.length - airFrom);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Dispatches</div><h2>${date(g.turn)}</h2></header>
     <div class="body">${big.length ? `<div class="evcards">${big.map(eventCard).join('')}</div>` : ''}${rest.length ? `<div class="reel">${rest.map((h) => `<p class="${h.kind}"><span class="wk">${date(h.turn).split(' ')[0]} wk ${h.week}</span>${esc(h.text)}</p>`).join('')}</div>` : hs.length ? '' : '<p class="lead">A quiet month. No news of note.</p>'}
     ${letters.length ? `<h3>Letters from the front</h3>${letters.map(letterBlock).join('')}` : ''}
-    ${reps.length || seas.length || airs.length ? `<h3>Battles your forces fought</h3>${airs.map(airBrow).join('')}${seas.map(seaRow).join('')}${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
+    ${reps.length || seas.length || airs.length || shores.length ? `<h3>Battles your forces fought</h3>${airs.map(airBrow).join('')}${shores.map(shoreRow).join('')}${seas.map(seaRow).join('')}${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
     ${all ? `<p class="sub" style="margin-top:10px">${all} battle${all > 1 ? 's were' : ' was'} fought across the map. They are filed under Battles.</p>` : ''}</div>
     <footer><button class="btn go" data-act="close">${me && humanUp(g) ? 'Give orders' : 'Continue'}</button></footer>`;
 }
@@ -4036,6 +4219,13 @@ function bookBlock(b: Book): string {
 
 const seaNames = (zones: number[]): string => { const xs = zones.map((z) => `the ${g.seas[z].name}`); return xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`; };
 
+/** Who is escorting a lane, in a sentence for its row. */
+function laneGuards(id: string, own: boolean): string {
+  const fs = g.fleets.filter((f) => f.stance === 'escort' && f.lane === id && atSea(f) && shipCount(f.ships) > 0);
+  if (fs.length) { const names = fs.map((f) => `the ${esc(f.name)}`); return ` Escorted by ${names.length <= 1 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`}.`; }
+  return own ? ' <b>No fleet is escorting it.</b> Pick up a fleet with destroyers and order it to escort this lane; a fleet that only patrols these seas gives a quarter of the cover.' : ' No fleet is escorting it.';
+}
+
 /** One lane or overland deal: what it carries, how much is getting through, and what to do about it. */
 function laneRow(l: Lane, me: string | null): string {
   const pct = Math.round(l.flow * 100);
@@ -4045,7 +4235,7 @@ function laneRow(l: Lane, me: string | null): string {
   const fight = l.kind === 'sea' && l.zones.length && l.state !== 'cut' && l.state !== 'idle' && g.nations[l.to].atWar.length
     ? ` Raiders ${num(l.raid)} against escorts ${num(l.guard)} in ${seaNames(l.zones)}.` : '';
   const advice = l.kind !== 'sea' || !l.zones.length || l.state === 'idle' ? ''
-    : mine && l.state !== 'cut' ? ` Fleets on patrol in those seas, and aircraft on the coasts, keep it open.`
+    : mine && l.state !== 'cut' ? (seaWar(g) ? laneGuards(l.id, l.to === me) : ` Fleets on patrol in those seas, and aircraft on the coasts, keep it open.`)
     : foe && l.state !== 'cut' ? ` Submarines and raiders sent into those seas bleed it.` : '';
   return `<div class="lane ${l.state}">
     <div class="lhead">${flagIcon(l.to, g.nations[l.to].color, 18, 'inh')}<b>${esc(upFirst(l.name))}</b><span class="tag">${l.kind === 'sea' ? 'By sea' : 'Overland'}</span><span class="lflow">${status}</span></div>
@@ -4132,7 +4322,7 @@ function laneNotes(): string {
   const me = g.human && g.nations[g.human].alive ? g.human : null;
   const rows = seaLanes(g).filter((l) => l.state !== 'idle' && (!me || l.to === me || allied(g, l.to, me) || atWar(g, me, l.to)));
   if (!rows.length) return '';
-  return `<h3>Shipping lanes</h3><p class="sub">Oil and supplies come to the great powers by sea. Guard your own lanes with fleets on patrol; send raiders into an enemy's.</p><div class="lanes">${rows.map((l) => laneRow(l, me)).join('')}</div>`;
+  return `<h3>Shipping lanes</h3><p class="sub">${seaWar(g) ? 'Oil and supplies come to the great powers by sea. Give each of your own lanes an escort: pick up a fleet and choose <b style="color:var(--ink)">Escort</b>. Send raiders into an enemy\'s.' : 'Oil and supplies come to the great powers by sea. Guard your own lanes with fleets on patrol; send raiders into an enemy\'s.'}</p><div class="lanes">${rows.map((l) => laneRow(l, me)).join('')}</div>`;
 }
 
 /** What an oilfield is worth in oil, for the province panel. */
@@ -4332,7 +4522,7 @@ function continueGame(): boolean {
 }
 
 /** Lets the computer play until it is the player's month again. */
-type Since = { h: number; r: number; s: number; a: number };
+type Since = { h: number; r: number; s: number; a: number; shore?: number };
 
 /** The other nations' months being played out in front of the player, one nation at a time. */
 let passing: { since: Since; before: string[]; show: boolean; view: { x: number; y: number; w: number }; timer: number; nat: string; note: string; done: number; total: number } | null = null;
@@ -4344,7 +4534,7 @@ function watchPref(): boolean {
 }
 
 function advanceToHuman(show: boolean, since?: Since): void {
-  const from: Since = since ?? { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length };
+  const from: Since = since ?? { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length };
   const before = g.regions.map((r) => r.ctrl);
   if (show && g.human && watchPref() && !humanUp(g)) {
     passing = { since: from, before, show, view: { ...ui.view }, timer: 0, nat: '', note: '', done: 0, total: g.order.length - 1 };
@@ -4437,6 +4627,7 @@ function arrive(show: boolean, from: Since, before: string[]): void {
   }
   if (humanUp(g)) beginHuman(g);
   ui.raidsFrom = aFrom;
+  ui.shoreFrom = from.shore ?? -1;
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
   ui.unread += g.headlines.length - hFrom;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = ''; ui.airMode = '';
@@ -4533,6 +4724,29 @@ function mapPoint(cx: number, cy: number): { x: number; y: number } {
   return { x: ui.view.x + (cx - rect.left) * k, y: ui.view.y + (cy - rect.top) * k };
 }
 
+/** The order a fleet will sail under when it is sent to a sea: the work it is doing, or its usual duty. Escorting is given by lane, not by sea. */
+const sailingAs = (f: Fleet): Stance => (atSea(f) && f.stance !== 'escort' ? f.stance : f.duty === 'raid' ? 'raid' : 'patrol');
+
+/** Picks up one of the player's fleets: the Navy tab opens on it, its tray is laid out, and the map shows where it can go. */
+function pickFleet(id: number): void {
+  const f = g.fleets.find((x) => x.id === id);
+  if (!f) return;
+  ui.tab = 'navy'; ui.fleet = id; ui.sel = -1; ui.sea = -1; ui.picked.clear();
+  ui.rail = ui.ship = ui.land = ui.rebase = false; ui.spySend = false;
+  ui.stance = sailingAs(f);
+  refresh();
+  document.querySelector('#pane .fleet.pick')?.scrollIntoView({ block: 'nearest' });
+}
+
+/** A click on a fleet marker: picks the fleet up, moves on to the next one under the same marker, or puts the only one down. */
+function pickFleetMark(ids: number[]): void {
+  ui.flash = [];
+  ui.msg = '';
+  const at = ui.tab === 'navy' ? ids.indexOf(ui.fleet) : -1;
+  if (at >= 0 && ids.length === 1) { ui.fleet = -1; ui.rebase = false; refresh(); return; }
+  pickFleet(ids[(at + 1) % ids.length]);
+}
+
 /** The player's fleet being given orders, if it is still theirs to order. */
 function myFleet(): Fleet | null {
   if (ui.fleet < 0 || !humanUp(g)) return null;
@@ -4573,6 +4787,7 @@ function onSea(z: number): void {
   const fl = ui.tab === 'navy' ? myFleet() : null;
   if (fl) {
     if (ui.rebase) ui.msg = 'A base has to be a port: click one of the blue regions.';
+    else if (!g.nations[fl.nat].atWar.length) ui.msg = 'At peace the fleet stays in harbour.';
     else if (!orderFleet(g, fl.id, z, ui.stance)) ui.msg = `The ${g.seas[z].name} is out of reach of the ${fl.name} from ${fl.port}.`;
     refresh();
     return;
@@ -4720,7 +4935,7 @@ function onClick(e: MouseEvent): void {
       break;
     case 'end': {
       // The player's own fleet actions are fought as the month closes, so the dispatches start from here.
-      const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length };
+      const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length };
       if (onEve(g)) endEve(g); else { judgeGoals(g, g.human!); endHuman(g); }
       advanceToHuman(true, since);
       break;
@@ -4801,13 +5016,70 @@ function onClick(e: MouseEvent): void {
       const f = g.fleets.find((x) => x.id === id);
       ui.fleet = ui.fleet === id ? -1 : id;
       ui.rebase = false;
-      if (f && ui.fleet === id) ui.stance = atSea(f) ? f.stance : f.duty === 'raid' ? 'raid' : 'patrol';
+      if (f && ui.fleet === id) { ui.stance = sailingAs(f); ui.sel = -1; ui.sea = -1; ui.picked.clear(); }
       refresh(); break;
     }
     case 'stance': {
       ui.stance = t.dataset.stance as Stance;
       const f = myFleet();
-      if (f && atSea(f)) orderFleet(g, f.id, f.zone, ui.stance);
+      // A fleet at sea changes its work where it is. One in harbour, or bound to a lane, waits to be told which sea.
+      if (f && atSea(f) && f.stance !== 'escort') orderFleet(g, f.id, f.zone, ui.stance);
+      else if (f) ui.msg = `Click a ringed sea: the ${f.name} will ${ui.stance === 'raid' ? 'raid shipping' : ui.stance === 'hunt' ? 'hunt submarines' : 'patrol'} there.`;
+      refresh(); break;
+    }
+    case 'fleetsec': {
+      ui.tab = 'navy';
+      refresh();
+      document.getElementById(t.dataset.sec ?? '')?.scrollIntoView({ block: 'start' });
+      break;
+    }
+    case 'escort': {
+      const f = myFleet();
+      const lane = t.dataset.lane ?? '';
+      if (f && orderEscort(g, f.id, lane)) ui.msg = `The ${f.name} sails with the convoys on ${lanesToGuard(g).find((l) => l.id === lane)?.name ?? 'the lane'}.`;
+      else if (f) ui.msg = `The ${f.name} cannot escort that lane.`;
+      ui.rebase = false;
+      refresh(); break;
+    }
+    case 'shell': { const f = myFleet(); if (f) openModal({ kind: 'shell', fleet: f.id, target: id }); break; }
+    case 'shellwhat': { const m = ui.modal; if (m && m.kind === 'shell') openModal({ ...m, what: t.dataset.what }); break; }
+    case 'doshell': {
+      const m = ui.modal;
+      if (!m || m.kind !== 'shell') break;
+      const plan = previewBombard(g, m.fleet, m.target, m.what);
+      const rep = plan && !plan.why ? orderBombard(g, m.fleet, m.target, plan.what) : null;
+      refresh();
+      if (rep) openModal({ kind: 'shorereport', id: rep.id }); else { ui.msg = 'The bombardment could not be made.'; openModal(null); refresh(); }
+      break;
+    }
+    case 'shorereport': openModal({ kind: 'shorereport', id }); break;
+    case 'fleetsplit': {
+      const f = myFleet();
+      if (f) openModal({ kind: 'split', fleet: f.id, take: { bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 } });
+      break;
+    }
+    case 'splitadj': {
+      const m = ui.modal;
+      const f = m && m.kind === 'split' ? g.fleets.find((x) => x.id === m.fleet) : null;
+      if (!m || !f) break;
+      const c = t.dataset.cls as ShipClass;
+      const take = { ...(m.take as Ships) };
+      take[c] = Math.max(0, Math.min(f.ships[c], take[c] + Number(t.dataset.d)));
+      openModal({ ...m, take });
+      break;
+    }
+    case 'dosplit': {
+      const m = ui.modal;
+      if (!m || m.kind !== 'split') break;
+      const made = orderSplit(g, m.fleet, m.take as Ships);
+      openModal(null);
+      if (made >= 0) { pickFleet(made); ui.msg = `${g.fleets.find((x) => x.id === made)?.name ?? 'The squadron'} forms. Give it its orders.`; }
+      refresh(); break;
+    }
+    case 'fleetjoin': {
+      const f = myFleet();
+      const into = g.fleets.find((x) => x.id === id);
+      if (f && into && orderMerge(g, f.id, id)) { ui.msg = `The ships of the ${f.name} join the ${into.name}.`; pickFleet(id); }
       refresh(); break;
     }
     case 'sail': {
@@ -5107,6 +5379,8 @@ function onRegion(id: number): void {
     refresh();
     return;
   }
+  // With a fleet picked up, a click on a coast under its guns plans a bombardment.
+  if (fl && shellAt.includes(id)) { openModal({ kind: 'shell', fleet: fl.id, target: id }); return; }
   // While planning production the map only chooses where to build. No army moves by accident.
   if (ui.tab === 'build') {
     ui.sel = id; ui.sea = -1; ui.picked.clear(); ui.rail = ui.ship = false;
@@ -5262,8 +5536,13 @@ function wireMap(): void {
     svg.classList.remove('drag');
     if (was === 1 && !moved && !held && e.type === 'pointerup') {
       $('#tip').style.display = 'none';
-      const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-id]') as HTMLElement | null;
-      if (el && el.classList.contains('reg')) onRegion(Number(el.dataset.id));
+      const under = document.elementFromPoint(e.clientX, e.clientY);
+      const el = under?.closest('[data-id]') as HTMLElement | null;
+      // One of the player's fleets is a piece: a click picks it up, unless the map is waiting for a place to finish another order.
+      const piece = under?.closest('[data-fleets]') as HTMLElement | null;
+      const busy = ui.rail || ui.ship || ui.land || ui.spySend || ui.tab === 'build' || (ui.tab === 'air' && (!!ui.airMode || (!!ui.raid && ui.raid !== 'menu')));
+      if (piece && !busy) pickFleetMark((piece.dataset.fleets ?? '').split(',').map(Number));
+      else if (el && el.classList.contains('reg')) onRegion(Number(el.dataset.id));
       else if (el && el.classList.contains('afm')) {
         // An airfield's pad opens the airfield, unless the map is waiting for a province to finish an order.
         const id = Number(el.dataset.id);
@@ -5296,4 +5575,4 @@ recallPick();
 openModal({ kind: 'start' });
 
 // A handle for automated checks and for curious players in the browser console.
-(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, applyView, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by) };
+(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, applyView, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by), shell: (fleet: number, region: number, what: 'troops' | 'city') => { const f = g.fleets.find((x) => x.id === fleet); return f ? bombard(g, f, g.regions[region], what) : null; } };

@@ -44,6 +44,8 @@ export function saveGame(g: Game): string {
     corps: g.corps,
     generals: g.generals,
     fleets: g.fleets, nextFleet: g.nextFleet, seaReports: g.seaReports.slice(-KEEP_SEA), convoys: g.convoys,
+    // Coasts shelled from the sea, in the grand campaign: left out while there are none, so a historical save is written as it always was.
+    shoreReports: g.shoreReports.length ? g.shoreReports.slice(-KEEP_SEA) : undefined,
     airFleets: g.airFleets, nextAir: g.nextAir, airReports: g.airReports.slice(-KEEP_SEA), airPool: g.airPool, sky: g.sky, raids: g.raids,
     stories: g.stories,
     // The secret service exists only in the grand campaign: a historical save is written exactly as it always was.
@@ -158,7 +160,7 @@ export function loadGame(text: string): Game | null {
   g.intel = { agents: [], next: 1, notes: [], heat: {}, ...(d.intel ?? {}) };
   // A save from before the roll of the fallen was kept: it is written up from what each nation remembers of its own fall.
   g.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g);
-  if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.convoys = d.convoys ?? {}; }
+  if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
   // The supply picture is restored exactly as it stood, so the loaded game plays on identically.
   const fed = g.corps.map((c) => c.supplied);
   computeSupply(g);

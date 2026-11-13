@@ -5,6 +5,7 @@
 
 import mapData from '../generated/campaign-map.json';
 import data from '../../data/campaign/navy.json';
+import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
@@ -15,9 +16,9 @@ import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
-import { fuelFleet } from './resources';
+import { RES, fuelFleet, laneStopped } from './resources';
 import {
-  STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type ShipClass, type Ships, type Stance,
+  STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
 } from './types';
 
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
@@ -44,14 +45,34 @@ export const NAVY = data as unknown as {
   arrivals: [number, string, string, Partial<Ships>, string][];
 };
 
+/** The grand campaign's navy: escorts bound to lanes, destroyers that hunt, guns that shell a coast. See fleets.json. */
+export const FLEETS = fleetData as unknown as {
+  escort: { loose: number };
+  hunt: { base: number; rate: number; sea: number; perSub: number; hunter: number; escort: number; loose: number; carrier: number; air: number; most: number; cost: number };
+  screen: { per: number; risk: number; most: number };
+  bombard: {
+    guns: Ships; least: number; ready: number; minReady: number;
+    troops: { scale: number; perDiv: number; max: number; str: number; dug: number; fort: number; floor: number };
+    city: { scale: number; max: number };
+    reply: number;
+  };
+  ai: { bombard: boolean; ready: number };
+  roles: Record<ShipClass, string>;
+  brief: Record<ShipClass, string>;
+  orders: Record<Stance, { label: string; blurb: string }>;
+};
+
+/** True where fleets are handled as pieces: bound to lanes, sent to hunt, stood in to shell a coast. Only the grand campaign. */
+export const seaWar = (g: Game): boolean => g.flags.open === 1;
+
 export const CLASSES: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 /** The lines drawn on the chart between one sea and the next. */
 export const SEA_BORDERS = (mapData as any).seas.borders as [number, number][][];
 const SURFACE: ShipClass[] = ['bb', 'cv', 'ca', 'dd'];
 const none = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
-const quality = (g: Game, nat: string): number => (NAVY.quality[nat] ?? NAVY.quality._default) * techMul(g, nat, 'navy');
+export const quality = (g: Game, nat: string): number => (NAVY.quality[nat] ?? NAVY.quality._default) * techMul(g, nat, 'navy');
 /** The sea has its own dice, so that a naval battle never changes how a land battle falls out. */
-const seaRng = (g: Game, key: string): Rng => new Rng(hashString(`sea:${g.seed}:${g.turn}:${key}`));
+export const seaRng = (g: Game, key: string): Rng => new Rng(hashString(`sea:${g.seed}:${g.turn}:${key}`));
 const cap = (s: string): string => s[0].toUpperCase() + s.slice(1);
 
 export const zoneOf = (g: Game, key: string): number => g.seas.findIndex((z) => z.key === key);
@@ -59,6 +80,26 @@ export const shipCount = (s: Ships, list: ShipClass[] = CLASSES): number => list
 export const surfaceShips = (f: Fleet): number => shipCount(f.ships, SURFACE);
 export const atSea = (f: Fleet): boolean => f.stance !== 'port';
 export const fleetsOf = (g: Game, nat: string): Fleet[] => g.fleets.filter((f) => f.nat === nat);
+
+/** A way cargoes travel by sea to one nation: a shipping lane of resources.json or a convoy route of navy.json. */
+export interface SeaRoute { id: string; name: string; to: string; zones: number[] }
+const routeCache = new WeakMap<SeaZone[], SeaRoute[]>();
+
+/** Every route cargoes travel by sea, once each: what an escort can be bound to. */
+export function seaRoutes(g: Game): SeaRoute[] {
+  let rows = routeCache.get(g.seas);
+  if (!rows) {
+    rows = [];
+    const add = (id: string, name: string, to: string, keys: string[]): void => {
+      const zones = keys.map((k) => zoneOf(g, k)).filter((z) => z >= 0);
+      if (zones.length && !rows!.some((r) => r.id === id)) rows!.push({ id, name, to, zones });
+    };
+    for (const l of RES.lanes) add(l.id, l.name, l.to, l.zones);
+    for (const c of NAVY.convoys) add(c.id, c.name, c.to, c.zones);
+    routeCache.set(g.seas, rows);
+  }
+  return rows;
+}
 
 /** "2 cruisers and 7 destroyers". */
 export function shipList(s: Ships): string {
@@ -98,6 +139,7 @@ export function setupNavy(g: Game): void {
   g.fleets = [];
   g.nextFleet = 1;
   g.seaReports = [];
+  g.shoreReports = [];
   g.convoys = {};
   for (const row of NAVY.fleets) if ((row.from ?? 1) <= 1) addFleet(g, row);
 }
@@ -135,7 +177,7 @@ export function openingStations(g: Game): void {
 // ---- Who holds a sea ------------------------------------------------------------------------
 
 /** How fit a fleet is to fight: its readiness, and in the grand campaign whether it has the fuel to steam. */
-const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fuelFleet(g, f.nat);
+export const fit = (g: Game, f: Fleet): number => (0.5 + 0.5 * f.ready) * fuelFleet(g, f.nat);
 const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel * (f.admiral.level - 1) : 0);
 
 /** A fleet's weight in a fleet action. */
@@ -469,15 +511,66 @@ export function fleetReach(g: Game, f: Fleet): number[] {
   return q;
 }
 
-/** Sends a fleet to a sea to patrol or raid there, or back to harbour. */
-export function sail(g: Game, f: Fleet, zone: number, stance: Stance): boolean {
+/**
+ * Sends a fleet to a sea to patrol or raid there, or back to harbour. In the grand campaign it can also be sent to hunt
+ * submarines, or (with the lane named) to sail as the escort of a shipping lane that crosses that sea.
+ */
+export function sail(g: Game, f: Fleet, zone: number, stance: Stance, lane?: string): boolean {
+  if ((stance === 'escort' || stance === 'hunt') && !seaWar(g)) return false;
+  if (stance === 'escort' && !seaRoutes(g).some((r) => r.id === lane && r.zones.includes(zone))) return false;
   if (stance !== 'port' && (!shipCount(f.ships) || !fleetReach(g, f).includes(zone))) return false;
   const to = stance === 'port' ? f.home : zone;
   // Who holds a sea decides which ports can be supplied, so the supply map is redrawn when a fleet moves.
   if (f.zone !== to || f.stance !== stance) g.supplyDirty = true;
   f.zone = to;
   f.stance = stance;
+  if (stance === 'escort') f.lane = lane; else delete f.lane;
   return true;
+}
+
+/** A ship's worth with a convoy, summed over a fleet: destroyers, carriers and cruisers count, battleships and submarines do not. */
+export function escortWorth(s: Ships): number {
+  let p = 0;
+  for (const c of CLASSES) p += s[c] * NAVY.classes[c].escort;
+  return p;
+}
+
+/** How hard an enemy's raiders are pressing these seas: what a lane's escorts are up against. */
+function raidersIn(g: Game, nat: string, z: number): number {
+  let p = 0;
+  for (const f of g.fleets) if (f.zone === z && atSea(f) && atWar(g, f.nat, nat)) for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
+  return p;
+}
+
+/** Why a fleet cannot be bound to a lane as its escort, or null if it can (the grand campaign). */
+export function whyNotEscort(g: Game, f: Fleet, lane: string): string | null {
+  if (!seaWar(g)) return 'Escorts are bound to shipping lanes only in the grand campaign.';
+  const rt = seaRoutes(g).find((r) => r.id === lane);
+  if (!rt) return 'There is no such lane.';
+  const to = g.nations[rt.to];
+  if (!shipCount(f.ships)) return `The ${f.name} has no ships.`;
+  if (!to?.alive || (rt.to !== f.nat && !allied(g, f.nat, rt.to))) return `${cap(rt.name)} feeds ${to?.name ?? rt.to}, which is no ally of ${g.nations[f.nat].name}.`;
+  if (!to.atWar.length || !g.nations[f.nat].atWar.length) return `${cap(rt.name)} is not under attack: nobody is at war over it.`;
+  const stop = laneStopped(g, lane);
+  if (stop) return `Nothing sails on ${rt.name} now. ${stop.why}`.trim();
+  if (escortWorth(f.ships) <= 0) return `The ${f.name} has nothing that can guard a convoy: escorts are destroyers, carriers and cruisers.`;
+  const reach = fleetReach(g, f);
+  if (!rt.zones.some((z) => reach.includes(z))) return `${cap(rt.name)} is out of reach of the ${f.name} from ${f.port}.`;
+  return null;
+}
+
+/** Binds a fleet to a shipping lane as its escort: it sails with the convoys, in the sea of the lane where the raiders are thickest. */
+export function escort(g: Game, f: Fleet, lane: string): boolean {
+  if (whyNotEscort(g, f, lane)) return false;
+  const rt = seaRoutes(g).find((r) => r.id === lane)!;
+  const reach = fleetReach(g, f);
+  let best = -1, bv = -1;
+  for (const z of reach) {
+    if (!rt.zones.includes(z)) continue;
+    const v = raidersIn(g, rt.to, z);
+    if (v > bv) { bv = v; best = z; }
+  }
+  return best >= 0 && sail(g, f, best, 'escort', lane);
 }
 
 /** True when a fleet could steam from its present base to this coast, through straits open to it. */
@@ -505,6 +598,7 @@ export function rebase(g: Game, f: Fleet, r: Region): boolean {
   f.home = r.seas[0];
   f.zone = f.home;
   f.stance = 'port';
+  delete f.lane;
   g.supplyDirty = true;
   return true;
 }
@@ -547,7 +641,112 @@ export function navalUpkeep(g: Game, nat: string): void {
       f.ready = f.ready > NAVY.ready.floor ? Math.max(NAVY.ready.floor, f.ready + NAVY.ready.sea) : Math.min(NAVY.ready.floor, f.ready + NAVY.ready.mend);
     } else f.ready = Math.min(1, f.ready + NAVY.ready.port);
   }
-  convoyWar(g, nat);
+  // The grand campaign: the destroyers hunt before the month's cargoes are counted, and thin screens pay for it.
+  const sunk = seaWar(g) && n.atWar.length ? huntSubs(g, nat) : undefined;
+  if (sunk) torpedoes(g, nat);
+  convoyWar(g, nat, sunk);
+}
+
+/** How much of a fleet's hunting weight falls on a sea: all of it for a fleet sent there to hunt, part for an escort whose lane crosses it or a patrol there. */
+function huntShare(g: Game, f: Fleet, z: number): number {
+  const H = FLEETS.hunt;
+  if (f.stance === 'escort') {
+    const rt = seaRoutes(g).find((r) => r.id === f.lane);
+    return rt && rt.zones.includes(z) ? H.escort : f.zone === z ? H.loose : 0;
+  }
+  if (f.zone !== z) return 0;
+  return f.stance === 'hunt' ? H.hunter : f.stance === 'patrol' ? H.loose : 0;
+}
+
+/** What a nation's hunters are worth against the submarines in one sea: its destroyers and carriers there, and the aircraft on the coasts. */
+export function huntersIn(g: Game, nat: string, z: number): { weight: number; fleets: Fleet[] } {
+  const H = FLEETS.hunt;
+  let w = 0;
+  const fleets: Fleet[] = [];
+  for (const f of g.fleets) {
+    if (f.nat !== nat || !atSea(f)) continue;
+    const p = (f.ships.dd + f.ships.cv * H.carrier) * huntShare(g, f, z) * quality(g, nat) * fit(g, f);
+    if (p > 0) { w += p; fleets.push(f); }
+  }
+  w += airOver(g, z, nat) * H.air;
+  return { weight: w * techMul(g, nat, 'radar'), fleets };
+}
+
+/** The share of the enemy submarines at sea in one place that hunters of this weight sink in a month. */
+export function huntShareSunk(weight: number, subs: number): number {
+  const H = FLEETS.hunt;
+  return weight > 0 && subs > 0 ? Math.min(H.most, H.base + H.rate * (weight / (weight + subs * H.perSub + H.sea))) : 0;
+}
+
+/**
+ * The grand campaign's month of submarine hunting for one nation: in every sea where enemy submarines are out, its
+ * destroyers, carrier aircraft and the aircraft on its coasts sink a share of them. Returns what was sunk, by sea.
+ */
+export function huntSubs(g: Game, nat: string): Record<number, number> {
+  const out: Record<number, number> = {};
+  for (const zone of g.seas) {
+    const z = zone.id;
+    const quarry = g.fleets.filter((f) => f.zone === z && atSea(f) && f.ships.ss > 0 && atWar(g, f.nat, nat));
+    if (!quarry.length) continue;
+    const h = huntersIn(g, nat, z);
+    const subs = quarry.reduce((s, f) => s + f.ships.ss, 0);
+    const share = huntShareSunk(h.weight, subs);
+    if (share <= 0) continue;
+    const rng = seaRng(g, `hunt:${nat}:${z}`);
+    let sunk = 0;
+    for (const f of quarry) {
+      const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * share));
+      f.ships.ss -= k; f.lost.ss += k; sunk += k;
+    }
+    if (!sunk) continue;
+    out[z] = sunk;
+    // The submarines hit back at the groups sent out after them.
+    const groups = h.fleets.filter((f) => f.stance === 'hunt' && f.ships.dd > 0);
+    const dd = groups.reduce((s, f) => s + f.ships.dd, 0);
+    let cost = 0;
+    for (const f of groups) {
+      const k = Math.min(f.ships.dd, rng.roll(sunk * FLEETS.hunt.cost * (f.ships.dd / dd)));
+      f.ships.dd -= k; f.lost.dd += k; cost += k;
+    }
+    const who = groups.length ? `Destroyers of the ${groups[0].name}` : h.fleets.length ? `The escorts of the ${h.fleets[0].name}` : `${g.nations[nat].adj} aircraft`;
+    const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
+    if (told) headline(g, 'battle', `${who} sink ${sunk} ${g.nations[quarry[0].nat].adj} submarine${sunk === 1 ? '' : 's'} in the ${zone.name}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, nat);
+  }
+  return out;
+}
+
+/** The share of the destroyer screen a fleet's heavy ships are missing: 0 when there are destroyers enough, 1 when there are none. */
+export function screenGap(f: Fleet): number {
+  const heavy = f.ships.bb + f.ships.cv + f.ships.ca;
+  return heavy > 0 ? clamp(1 - f.ships.dd / (heavy * FLEETS.screen.per), 0, 1) : 0;
+}
+
+/** The chance that a fleet at sea in this sea loses a heavy ship to a submarine this month, for want of destroyers round it. */
+export function torpedoRisk(g: Game, f: Fleet, z: number): number {
+  const gap = screenGap(f);
+  if (gap <= 0) return 0;
+  let subs = 0;
+  for (const x of g.fleets) if (x.zone === z && atSea(x) && x.ships.ss > 0 && atWar(g, x.nat, f.nat)) subs += x.ships.ss * quality(g, x.nat) * fit(g, x);
+  return Math.min(FLEETS.screen.most, subs * FLEETS.screen.risk * gap);
+}
+
+/** The grand campaign: heavy ships at sea among enemy submarines without destroyers enough to screen them may be torpedoed. */
+function torpedoes(g: Game, nat: string): void {
+  for (const f of fleetsOf(g, nat)) {
+    if (!atSea(f)) continue;
+    const p = torpedoRisk(g, f, f.zone);
+    if (p <= 0) continue;
+    const rng = seaRng(g, `torpedo:${f.id}`);
+    if (!rng.chance(p)) continue;
+    const heavy: ShipClass[] = ['bb', 'cv', 'ca'];
+    let pick = rng.range(0, f.ships.bb + f.ships.cv + f.ships.ca);
+    let cls: ShipClass = 'ca';
+    for (const c of heavy) { if (pick < f.ships[c]) { cls = c; break; } pick -= f.ships[c]; }
+    if (f.ships[cls] <= 0) continue;
+    f.ships[cls]--; f.lost[cls]++;
+    f.ready = Math.max(0, f.ready - 0.05);
+    headline(g, 'battle', `A submarine torpedoes and sinks a ${NAVY.classes[cls].one} of the ${f.name} in the ${g.seas[f.zone].name}: the fleet has too few destroyers to screen its heavy ships.`, nat);
+  }
 }
 
 /** A fleet whose base has fallen makes for the nearest port its nation still holds. Returns false if there is none and the fleet is lost. */
@@ -579,8 +778,22 @@ function airAttack(g: Game, f: Fleet): void {
   if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of the ${f.name} in the ${g.seas[f.zone].name}.`, f.nat);
 }
 
+/** How much of its raiding strength a fleet at sea brings against cargoes: all of it when it is raiding, part when it is on patrol, none on other work. */
+const raidShare = (f: Fleet): number => (f.stance === 'raid' ? 1 : f.stance === 'patrol' ? NAVY.convoy.patrolRaid : 0);
+
+/**
+ * How much of its escort worth a friendly fleet at sea brings to the cargoes that cross these seas. In the history
+ * campaigns a fleet on patrol in one of them guards them. In the grand campaign the fleets bound to the lane as its
+ * escort guard it in full, and a fleet that only patrols or hunts in one of its seas gives distant cover.
+ */
+function guardShare(g: Game, f: Fleet, zones: number[], lane?: string): number {
+  if (!seaWar(g)) return f.stance === 'patrol' && zones.includes(f.zone) ? 1 : 0;
+  if (f.stance === 'escort' && lane !== undefined && f.lane === lane) return 1;
+  return f.stance !== 'raid' && zones.includes(f.zone) ? FLEETS.escort.loose : 0;
+}
+
 /** The month's fighting on the convoy routes that feed this nation: raiders against escorts. */
-export function convoyWar(g: Game, nat: string): void {
+export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>): void {
   const n = g.nations[nat];
   for (const route of NAVY.convoys) {
     if (route.to !== nat) continue;
@@ -590,16 +803,19 @@ export function convoyWar(g: Game, nat: string): void {
     let raid = 0, guard = 0;
     const raiders: Fleet[] = [], escorts: Fleet[] = [];
     for (const f of g.fleets) {
-      if (!atSea(f) || !zones.includes(f.zone)) continue;
+      if (!atSea(f)) continue;
       if (atWar(g, f.nat, nat)) {
+        if (!zones.includes(f.zone)) continue;
         let p = 0;
         for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-        p *= quality(g, f.nat) * fit(g, f) * (f.stance === 'raid' ? 1 : NAVY.convoy.patrolRaid);
+        p *= quality(g, f.nat) * fit(g, f) * raidShare(f);
         if (p > 0) { raid += p; raiders.push(f); }
-      } else if (allied(g, f.nat, nat) && f.stance === 'patrol') {
+      } else if (allied(g, f.nat, nat)) {
+        const w = guardShare(g, f, zones, route.id);
+        if (w <= 0) continue;
         let p = 0;
         for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort;
-        p *= quality(g, f.nat) * fit(g, f);
+        p *= quality(g, f.nat) * fit(g, f) * w;
         if (p > 0) { guard += p; escorts.push(f); }
       }
     }
@@ -615,10 +831,14 @@ export function convoyWar(g: Game, nat: string): void {
     const tons = Math.round((route.tons * L) / 1000) * 1000;
     let subsLost = 0, escortsLost = 0;
     if (raid > 0) {
-      const hunt = NAVY.convoy.subBase + NAVY.convoy.subHunt * (G / (raid + G + NAVY.convoy.ocean));
-      for (const f of raiders) {
-        const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * hunt));
-        f.ships.ss -= k; f.lost.ss += k; subsLost += k;
+      // In the grand campaign the submarines have already been hunted, sea by sea, by the destroyers and aircraft alone.
+      if (sunkAt) for (const z of zones) subsLost += sunkAt[z] ?? 0;
+      else {
+        const hunt = NAVY.convoy.subBase + NAVY.convoy.subHunt * (G / (raid + G + NAVY.convoy.ocean));
+        for (const f of raiders) {
+          const k = Math.min(f.ships.ss, rng.roll(f.ships.ss * hunt));
+          f.ships.ss -= k; f.lost.ss += k; subsLost += k;
+        }
       }
       const dd = escorts.reduce((s, f) => s + f.ships.dd, 0);
       for (const f of escorts) {
@@ -640,18 +860,21 @@ export function convoyWar(g: Game, nat: string): void {
  * counted as the convoy war counts them, with no dice thrown and no ship lost. The grand campaign's shipping lanes
  * for oil and supplies are read from this.
  */
-export function laneLoss(g: Game, nat: string, zones: number[]): { raid: number; guard: number; loss: number } {
+export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): { raid: number; guard: number; loss: number } {
   let raid = 0, guard = 0;
   for (const f of g.fleets) {
-    if (!atSea(f) || !zones.includes(f.zone)) continue;
+    if (!atSea(f)) continue;
     if (atWar(g, f.nat, nat)) {
+      if (!zones.includes(f.zone)) continue;
       let p = 0;
       for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].raid;
-      raid += p * quality(g, f.nat) * fit(g, f) * (f.stance === 'raid' ? 1 : NAVY.convoy.patrolRaid);
-    } else if (allied(g, f.nat, nat) && f.stance === 'patrol') {
+      raid += p * quality(g, f.nat) * fit(g, f) * raidShare(f);
+    } else if (allied(g, f.nat, nat)) {
+      const w = guardShare(g, f, zones, lane);
+      if (w <= 0) continue;
       let p = 0;
       for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort;
-      guard += p * quality(g, f.nat) * fit(g, f);
+      guard += p * quality(g, f.nat) * fit(g, f) * w;
     }
   }
   for (const z of zones) guard += airOver(g, z, nat) * NAVY.convoy.air;
@@ -801,6 +1024,9 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
     // A worn fleet stays in harbour until it is fit for sea again.
     if (f.ready < 0.5 || (!atSea(f) && f.ready < NAVY.ready.sortieAt)) { home(); continue; }
     if (f.duty === 'raid') { if (!sail(g, f, f.station, 'raid')) home(); continue; }
+    // The grand campaign: a fleet tied to a station on one of its side's shipping lanes sails with the convoys.
+    const lane = seaWar(g) ? laneOnBeat(g, f) : null;
+    if (lane && f.tied && escort(g, f, lane.id)) continue;
     const mine = fleetPower(g, f);
     const reach = fleetReach(g, f);
     // A fleet hunts on its own beat and the seas next to it. It goes further only to meet a landing or an invasion.
@@ -822,6 +1048,19 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       if (z === f.station && f.duty === 'patrol' && (quarry <= 0 || own >= 0.7 * e.total)) v += 5; // the usual beat
       if (v > bv) { bv = v; best = z; }
     }
+    // With no enemy fleet to fight, a fleet whose beat is on a lane the raiders are bleeding guards the cargoes instead.
+    if (lane && f.duty === 'patrol' && bv <= 5 && laneLoss(g, lane.to, lane.zones, lane.id).raid > 0 && escort(g, f, lane.id)) continue;
     if (best < 0 || !sail(g, f, best, 'patrol')) home();
   }
+}
+
+/** The shipping lane a computer-run fleet's station lies on, if it feeds the fleet's own nation or an ally at war: its own first. */
+function laneOnBeat(g: Game, f: Fleet): SeaRoute | null {
+  let found: SeaRoute | null = null;
+  for (const rt of seaRoutes(g)) {
+    if (!rt.zones.includes(f.station) || whyNotEscort(g, f, rt.id)) continue;
+    if (rt.to === f.nat) return rt;
+    found ??= rt;
+  }
+  return found;
 }

@@ -197,7 +197,8 @@ export function airIncomeLoss(g: Game, nat: string): number {
   return r && r.turn === g.turn ? r.share : 0;
 }
 
-function raid(g: Game, by: string, victim: string, share: number): void {
+/** Stops this share of a nation's production for a month: bombs on its factories, or shells from the sea. */
+export function raid(g: Game, by: string, victim: string, share: number): void {
   if (share <= 0) return;
   // The loss falls on the victim's next month of production: this month if it has yet to move, otherwise the next.
   const when = g.order.indexOf(by) < g.order.indexOf(victim) ? g.turn : g.turn + 1;

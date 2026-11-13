@@ -1,13 +1,13 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { KIND, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
 import {
   airGroups, airfieldCard, airfields, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidReplays, raidTargets, scout, setGroupJob,
   type AirfieldCard, type AirfieldRow, type BaseOption, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
 } from './airwar';
-import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
+import { NAVY, baseTargets, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
@@ -22,6 +22,10 @@ import { tearUp, whyNotCutRail } from './rails';
 import { foundBureau, setTeams } from './research';
 import { startResearch, stopResearch, techView, whyNotResearch, type TechView } from './tech';
 import { seaLanes, stores, type Lane, type StoresView } from './resources';
+import {
+  bombard, bombardTargets, detach, escortLane, escortLanes, fleetCard, merge, mergeTargets, planBombard, planEscort, seaOptions, whyNotDetach, whyNotMerge,
+  type EscortLane, type EscortPlan, type FleetCard, type SeaOption, type ShorePlan, type ShoreTarget,
+} from './fleets';
 import {
   armiesSeen, booksOf, cityReport, corpsKnown, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
   whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
@@ -477,6 +481,97 @@ export function orderFleet(g: Game, id: number, zone: number, stance: Stance): b
 export function orderRebase(g: Game, id: number, region: number): boolean {
   const f = myFleet(g, id);
   return !!f && rebase(g, f, g.regions[region]);
+}
+
+// ---- The navy as pieces (the grand campaign): cards, escorts on a lane, shelling a coast, splitting and joining ----
+
+/** Any fleet as a card: its admiral, where it is, what it is doing, and its ships by class. */
+export function fleetView(g: Game, id: number): FleetCard | null {
+  const f = g.fleets.find((x) => x.id === id);
+  return f ? fleetCard(g, f) : null;
+}
+
+/** The player's fleets as cards, strongest first. */
+export function myFleetCards(g: Game): FleetCard[] {
+  if (!g.human) return [];
+  return g.fleets.filter((f) => f.nat === g.human && Object.values(f.ships).some((n) => n > 0)).map((f) => fleetCard(g, f)).sort((a, b) => b.power - a.power);
+}
+
+export interface FleetOptions {
+  /** The seas it can be sent to, with what it would meet in each. */
+  seas: SeaOption[];
+  /** Each lane it has a stake in, with what binding it to that lane would do for the cargoes (and why it cannot, if it cannot). */
+  lanes: EscortPlan[];
+  /** Enemy coasts it could shell from where it is, and friendly ports it could move its base to. */
+  coasts: number[];
+  ports: number[];
+  /** Fleets it could join where it is. */
+  merge: number[];
+  /** True when it has more than one ship, so that some can be split off. */
+  split: boolean;
+}
+
+/** Everything one of the player's fleets could be told to do this month. Null if it is not theirs to order now. */
+export function fleetOptions(g: Game, id: number): FleetOptions | null {
+  const f = myFleet(g, id);
+  if (!f) return null;
+  const war = g.nations[f.nat].atWar.length > 0;
+  return {
+    seas: war ? seaOptions(g, f) : [],
+    lanes: war ? escortLanes(g, f.nat).map((l) => planEscort(g, f, l.id)) : [],
+    coasts: war ? bombardTargets(g, f, f.nat).map((r) => r.id) : [],
+    ports: baseTargets(g, f).map((r) => r.id),
+    merge: mergeTargets(g, f).map((x) => x.id),
+    split: g.flags.open === 1 && Object.values(f.ships).reduce((s, n) => s + n, 0) > 1,
+  };
+}
+
+/** The shipping lanes the player has a stake in guarding, with the escorts bound to each. */
+export function lanesToGuard(g: Game): EscortLane[] {
+  return g.human ? escortLanes(g, g.human) : [];
+}
+
+/** What binding one of the player's fleets to a lane would do for its cargoes. */
+export function previewEscort(g: Game, id: number, lane: string): EscortPlan | null {
+  const f = myFleet(g, id);
+  return f ? planEscort(g, f, lane) : null;
+}
+
+/** Binds one of the player's fleets to a shipping lane as its escort. */
+export function orderEscort(g: Game, id: number, lane: string): boolean {
+  const f = myFleet(g, id);
+  return !!f && escortLane(g, f, lane);
+}
+
+/** What shelling a coast with one of the player's fleets would do: the troops there, or the works of its city. */
+export function previewBombard(g: Game, id: number, region: number, what?: ShoreTarget): ShorePlan | null {
+  const f = myFleet(g, id);
+  return f ? planBombard(g, f, g.regions[region], what, f.nat) : null;
+}
+
+/** Stands one of the player's fleets in to an enemy coast to shell it. */
+export function orderBombard(g: Game, id: number, region: number, what: ShoreTarget): ShoreReport | null {
+  const f = myFleet(g, id);
+  return f ? bombard(g, f, g.regions[region], what, f.nat) : null;
+}
+
+/** Why these ships cannot be split off from one of the player's fleets, or null. */
+export function whyNotSplit(g: Game, id: number, ships: Partial<Ships>): string | null {
+  const f = myFleet(g, id);
+  return f ? whyNotDetach(g, f, ships) : 'That fleet cannot be given orders now.';
+}
+
+/** Splits ships off from one of the player's fleets as a squadron of their own. Returns the new fleet's id, or -1. */
+export function orderSplit(g: Game, id: number, ships: Partial<Ships>, name?: string): number {
+  const f = myFleet(g, id);
+  return (f && detach(g, f, ships, name)?.id) || -1;
+}
+
+/** Joins one of the player's fleets to another in the same harbour or the same sea. */
+export function orderMerge(g: Game, id: number, into: number): boolean {
+  const a = myFleet(g, id), b = myFleet(g, into);
+  if (!a || !b) return false;
+  return whyNotMerge(g, a, b) === null && merge(g, a, b);
 }
 
 export function orderShip(g: Game, c: Corps, to: number): boolean {

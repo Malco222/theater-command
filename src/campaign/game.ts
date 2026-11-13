@@ -85,7 +85,7 @@ export function createGame(seed: number, human: string | null): Game {
   const g: Game = {
     seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], generals: [], nextCorps: 1, nextBuild: 1, human,
     reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, railhead: {}, capDist: {}, week: 1,
-    seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], convoys: {},
+    seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], shoreReports: [], convoys: {},
     airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {}, stories: newStories(), intel: { agents: [], next: 1, notes: [], heat: {} }, passings: [],
     links: md.links, width: md.width, height: md.height, land: md.land,
   };

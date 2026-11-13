@@ -23,7 +23,7 @@ import { TECH } from './tech';
 interface MissionRow { caught: number; success?: number; gain?: number; months?: number; cut?: number }
 
 export const INTEL = data as unknown as {
-  sight: { full: number; glimpse: number };
+  sight: { full: number; glimpse: number; fleets?: boolean };
   agents: { cost: number; most: Record<string, number>; train: number; travel: number; skillAt: number[]; watch: number; ranks: string[] };
   missions: Record<Mission, MissionRow>;
   skill: { caught: number; success: number; guard: number };
@@ -90,6 +90,13 @@ export function sightOf(g: Game, viewer: string | null = g.human): Uint8Array {
     ring = next;
   }
   for (let i = 0; i < out.length; i++) out[i] = dist[i] < 0 ? SIGHT.none : dist[i] <= S.full ? SIGHT.full : SIGHT.glimpse;
+  // A fleet at sea sees the coasts of the sea it is in: the flags on them, and how many corps stand there.
+  if (S.fleets) {
+    for (const f of g.fleets) {
+      if (f.stance === 'port' || !allied(g, f.nat, me) || !g.seas[f.zone] || !Object.values(f.ships).some((n) => n > 0)) continue;
+      for (const id of g.seas[f.zone].coast) if (out[id] === SIGHT.none) out[id] = SIGHT.glimpse;
+    }
+  }
   return out;
 }
 
