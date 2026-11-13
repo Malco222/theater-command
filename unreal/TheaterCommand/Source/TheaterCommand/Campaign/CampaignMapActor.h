@@ -413,6 +413,7 @@ private:
 	static constexpr int32 VillageRim = 6; // points round a village light
 	// The glow of each town's lamps as it is seen from far off: a soft disc of light over the town.
 	TArray<FVector> GlowPoints;
+	TArray<FVector> GlowShown; // the same, with every dark glow gathered into its middle so that it costs nothing to draw
 	TArray<FColor> GlowColours;
 	TArray<int32> GlowRegion;
 	TArray<uint8> GlowKind; // 0 the lamps of a town, 1 a quarter of a great city beside them, 2 the faint warm wash a lit town throws on the country round it

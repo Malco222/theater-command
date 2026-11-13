@@ -2393,7 +2393,8 @@ void ACampaignMapActor::BuildTowns()
 				const double Angle = Scatter.FRandRange(0.0f, 6.283f) + Quarter * 1.7, Out = Scatter.FRandRange(2.0f, 3.9f) * Grown;
 				AddGlow(SurfacePoint(Region.Center.X + FMath::Cos(Angle) * Out, Region.Center.Y + FMath::Sin(Angle) * Out, 3.4 * Grown), Scatter.FRandRange(1.4f, 2.1f) * U * Grown, Region.Id, 1);
 			}
-			AddGlow(SurfacePoint(Region.Center.X, Region.Center.Y, 1.4), FMath::Max(Spread * 3.2, 8.0 * U), Region.Id, 2);
+			// (the wash is as wide as it was before the towns were built larger: a wider one cost frames by night)
+			AddGlow(SurfacePoint(Region.Center.X, Region.Center.Y, 1.4), FMath::Max(Spread / Grown * 3.2, 8.0 * U), Region.Id, 2);
 		}
 		if (GlowPoints.Num() > 0)
 		{
@@ -2670,9 +2671,19 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 	if (GlowColours.Num() == GlowRegion.Num() * PerGlow && GlowPoints.Num() == GlowColours.Num() && GlowKind.Num() == GlowRegion.Num() && GlowColours.Num() > 0)
 	{
 		const float Dusk = FMath::SmoothStep(0.3f, 0.85f, Night);
+		// (A glow that is dark is not drawn at all: its points are gathered into its middle. A see-through disc
+		// with nothing in it still costs as much to draw as a lit one, and half Europe is blacked out.)
+		if (GlowShown.Num() != GlowPoints.Num())
+		{
+			GlowShown = GlowPoints;
+		}
 		for (int32 Glow = 0; Glow < GlowRegion.Num(); ++Glow)
 		{
 			const float Lit = Black.Contains(GlowRegion[Glow]) ? 0.0f : Dusk;
+			for (int32 K = 0; K < PerGlow; ++K)
+			{
+				GlowShown[Glow * PerGlow + K] = Lit > 0.003f ? GlowPoints[Glow * PerGlow + K] : GlowPoints[Glow * PerGlow];
+			}
 			const uint8 Kind = GlowKind[Glow];
 			const float Heart = Kind == 2 ? TownWash : Kind == 1 ? 0.85f : 1.0f;
 			const float Fall[GlowRings] = { Kind == 2 ? 0.95f : 0.78f, Kind == 2 ? 0.55f : 0.24f, 0.0f };
@@ -2689,7 +2700,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 				}
 			}
 		}
-		LightsMesh->UpdateMeshSection(1, GlowPoints, TArray<FVector>(), TArray<FVector2D>(), GlowColours, TArray<FProcMeshTangent>());
+		LightsMesh->UpdateMeshSection(1, GlowShown, TArray<FVector>(), TArray<FVector2D>(), GlowColours, TArray<FProcMeshTangent>());
 	}
 }
 
