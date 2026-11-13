@@ -1666,3 +1666,19 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
   .vowrow { flex-direction: column; align-items: stretch; gap: 6px; }
   .vowopts { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* Version 61: works that wear down, and everyone who can reach. */
+.tag.good.worn { border-style: dashed; }
+.note.massnote { display: flex; align-items: center; gap: 14px; margin: 12px 0 2px; border-left: 3px solid var(--brass); }
+.note.massnote span { flex: 1; }
+.note.massnote .btn { flex: none; white-space: nowrap; }
+.note.wornnote { margin: 10px 0 2px; border-left: 3px solid var(--brass); }
+@media (max-width: 720px) { .note.massnote { flex-direction: column; align-items: stretch; } .note.massnote .btn { white-space: normal; } }
+/* On a phone the Battle Ticket reads down the page: each line's name, what it is and what it does, one under the other. */
+@media (max-width: 720px) {
+  table.ticket, table.ticket tbody, table.ticket tr { display: block; }
+  table.ticket tr { border-top: 1px solid var(--line); padding: 6px 0 7px; }
+  table.ticket td { display: block; border-top: 0; padding: 1px 2px; }
+  table.ticket td:first-child { white-space: normal; font-size: 12px; }
+  table.ticket td.fx:empty { display: none; }
+}

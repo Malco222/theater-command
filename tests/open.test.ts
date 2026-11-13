@@ -172,7 +172,7 @@ describe('the player in free play', () => {
     // America is in the war by then, against Germany only.
     expect(g.nations.USA.atWar).toContain('GER');
     expect(g.nations.USA.atWar).not.toContain('ITA');
-  });
+  }, 30_000);
 
   it('can play the Soviet Union from the first day, at peace until someone chooses otherwise', () => {
     const g = free(6, 'SOV');

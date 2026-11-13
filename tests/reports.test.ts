@@ -476,7 +476,10 @@ describe('the card that plans an attack', () => {
     const morale = look.lines.find((l) => l.label === 'Morale');
     if (morale) { expect(morale.value).toMatch(/not known/); expect(morale.value).not.toMatch(/defenders (shaken|steady|confident|wavering|broken)/i); }
     // The ground, the weather and the player's own side are told as they are.
-    for (const l of look.lines) if (!['Forces', 'Morale', 'Armor'].includes(l.label)) expect(l).toEqual(truth.lines.find((x) => x.label === l.label));
+    for (const l of look.lines) if (!['Forces', 'Morale', 'Armor', 'Troops'].includes(l.label)) expect(l).toEqual(truth.lines.find((x) => x.label === l.label));
+    // How good the defenders are is not known either (Version 61): the line is there, and says so.
+    const troops = look.lines.find((l) => l.label === 'Troops');
+    if (troops) { expect(troops.value).toBe('How good the defenders are is not known'); expect(troops.effect).toMatch(/identify them first/); }
     expect(look.lines).toHaveLength(truth.lines.length);
   });
 
