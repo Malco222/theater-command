@@ -727,7 +727,11 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		FAnnouncement Told;
 		Told.Tag = TEXT("POL");
 		Told.Title = TEXT("POLAND HAS FALLEN");
-		Told.Text = TEXT("Poland capitulates to Germany.");
+		Told.Text = TEXT("Poland asked Germany for terms in the fourth week of September 1939. Its armies have laid down their arms, and its 17 home provinces are under foreign flags.");
+		Told.Kicker = TEXT("Eliminated \u00B7 September 1939");
+		Told.More = TEXT("Poland can come back. If a member of an alliance at war with Germany takes Warsaw, Poland is liberated and returns to the war on that side.");
+		Told.FactLabels = { TEXT("Fell to"), TEXT("Home provinces"), TEXT("Week of the war") };
+		Told.FactValues = { TEXT("Germany"), TEXT("17"), TEXT("4") };
 		Told.bGood = true;
 		Controller->Announce(Told);
 	}

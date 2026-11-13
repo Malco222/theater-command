@@ -2239,6 +2239,41 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 	Buffers.Commit(OrdersMesh, 0, HighlightMaterial);
 }
 
+void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)
+{
+	if (Capitals == ShownFree)
+	{
+		return;
+	}
+	ShownFree = Capitals;
+	OrdersMesh->ClearMeshSection(3);
+	if (Capitals.Num() == 0)
+	{
+		return;
+	}
+	FCampaignMeshBuffers Buffers;
+	for (int32 Capital : Capitals)
+	{
+		if (!Data.Regions.IsValidIndex(Capital))
+		{
+			continue;
+		}
+		// Two rings of gold round the town: a country waits here to be set free.
+		for (const double Radius : { 6.5, 8.0 })
+		{
+			TArray<FVector2D> Round;
+			const int32 Sides = 36;
+			for (int32 Side = 0; Side < Sides; ++Side)
+			{
+				const double Angle = 2.0 * PI * Side / Sides;
+				Round.Add(Data.Regions[Capital].Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius);
+			}
+			AppendRibbon(Buffers, Round, Radius > 7.0 ? 0.3 : 0.45, 0.32, FLinearColor(1.0f, 0.8f, 0.2f, 0.95f).ToFColor(false), true);
+		}
+	}
+	Buffers.Commit(OrdersMesh, 3, HighlightMaterial);
+}
+
 void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, int32 FleetId)
 {
 	OrdersMesh->ClearMeshSection(2);

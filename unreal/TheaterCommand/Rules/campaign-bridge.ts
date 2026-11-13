@@ -71,7 +71,7 @@ import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm,
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
-import { airfieldsSeen, flownRaids } from '../../../src/campaign/turn';
+import { airfieldsSeen, announcements, fallenCapitalAt, flownRaids, nationsFallen, playerFell } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -172,6 +172,8 @@ function view() {
       return [n.id, (['armour', 'fighters', 'bombers'] as const).map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab!.clock[f] - n.lab!.months)) + 7) / 12))];
     })),
     // Things the player should be told as his month opens, and the rooms beyond the main screens that are open to him.
+    // Capitals of fallen countries the player would set free by taking them (or holds already): ringed in gold.
+    free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
     alerts: alertsOf(s),
     pages: pagesOf(s),
     // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
@@ -353,8 +355,9 @@ function arrive(s: Game): string | null {
   if (lost) {
     // The month the country fell in is played out to its end. The war goes on without the player.
     fallenNation = lost;
-    s.human = null;
-    while (s.phase > 0) stepAI(s);
+    // The rules remember the seat: if the country is liberated, the player is given it back.
+    if (!playerFell(s)) s.human = null;
+    while (s.phase > 0 && !s.human) stepAI(s);
   }
   if (humanUp(s)) beginHuman(s);
   return lost;
@@ -601,10 +604,17 @@ function endMonth() {
   const wasDown = new Set(Object.values(s.nations).filter((n) => !n.alive && !n.dormant).map((n) => n.id));
   const steps: unknown[] = [];
   let fallen: string | null = null;
+  const roll0 = s.passings.length, month0 = s.turn;
   if (!s.human) {
     // Nobody at the controls (the player's country has fallen): one whole month of the war, every nation on the computer.
     const month = s.turn;
-    for (let guard = 0; guard < 80 && s.turn === month; guard++) stepOne(s, steps);
+    for (let guard = 0; guard < 80 && s.turn === month && !s.human; guard++) stepOne(s, steps);
+    if (s.human) {
+      // The country has been liberated: the player leads it again. The others finish their month, and his opens.
+      fallenNation = null;
+      runOthers(s, steps);
+      if (humanUp(s)) beginHuman(s);
+    }
   } else {
     const air0 = lastAirReport(s), month = s.turn, me = s.human;
     if (onEve(s)) endEve(s);
@@ -629,8 +639,18 @@ function endMonth() {
   const events = (first.length ? first : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
   // The great moments of the month, each told on a screen of its own: a nation eliminated, a nation liberated.
   const said = (nat: string): string => [...headlines].reverse().find((h) => h.nat === nat && (h.kind === 'fall' || h.kind === 'event' || h.kind === 'war'))?.text ?? '';
-  const announce: { nat: string; title: string; text: string; good: boolean }[] = [];
-  for (const n of Object.values(s.nations)) {
+  const announce: { nat: string; title: string; text: string; good: boolean; kicker?: string; more?: string; facts?: { label: string; value: string }[]; region?: number }[] = [];
+  // The rules keep a roll of every nation that leaves the war or comes back into it, in words (the grand campaign).
+  const cards = [...new Set([month0, s.turn])].flatMap((t) => announcements(s, t)).filter((c) => c.id > roll0 && c.nat !== fallen);
+  for (const c of cards) {
+    const foe = s.human ? atWar(s, s.human, c.nat) : false;
+    const friend = s.human ? allied(s, s.human, c.nat) || c.nat === s.human : false;
+    announce.push({
+      nat: c.nat, title: c.title.toUpperCase(), text: c.text, more: c.more, kicker: c.kicker, facts: c.facts, region: c.region,
+      good: c.kind === 'freed' ? friend || !foe : foe,
+    });
+  }
+  if (!cards.length) for (const n of Object.values(s.nations)) {
     if (n.id === s.human || n.id === fallen) continue;
     const mine = s.human ? allied(s, s.human, n.id) : false;
     const foe = s.human ? atWar(s, s.human, n.id) : false;
@@ -731,6 +751,8 @@ function province(id: number) {
     id: r.id,
     name: r.name,
     home,
+    // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.
+    fallenNote: fallenCapitalAt(s, r.id)?.note ?? '',
     industry: r.fac,
     works: level,
     worksFacing: r.fort?.vs.map((v) => s.nations[v]?.name ?? v) ?? [],

@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6cf79c1 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bb1cf9c 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -6823,9 +6823,9 @@
     if (!traitRules(g2) || !row2) return NO_MONEY;
     const n = g2.nations[nat];
     const out = { lines: [], flat: 0, mul: 1, mulBy: "" };
-    const add = (t, amount, count2) => {
+    const add = (t, amount, count3) => {
       if (amount <= 1e-9) return;
-      out.lines.push({ key: `trait:${t.id}`, label: t.name, amount, count: count2 });
+      out.lines.push({ key: `trait:${t.id}`, label: t.name, amount, count: count3 });
       out.flat += amount;
     };
     for (const t of row2.traits) {
@@ -6998,6 +6998,257 @@
     const fight2 = fightWords(u, "its");
     const size = `${u.divs === 1 ? `One ${DIV_WORD[u.kind] ?? u.kind} division` : `${u.divs} ${DIV_WORD[u.kind] ?? u.kind} divisions`}.`;
     return [size, fight2, u.from !== void 0 ? `Raised from ${u.from}.` : "", `At most ${u.most} at once.`].filter(Boolean).join(" ");
+  }
+
+  // ../../data/campaign/liberation.json
+  var liberation_default = {
+    _about: "The fall of nations and their return. Every fall is kept on a roll that both interfaces read, in every campaign. The return is a rule of the grand campaign only: a country beaten in the field comes back when its capital is in the hands of an alliance member at war with the country that conquered it (or whose conqueror has itself fallen), and ground of the fallen country has just been taken or its conqueror has just been beaten. 'gap' is how many months must pass after the fall first. The freed country joins its liberator's alliance, is at war with its liberator's enemies, and takes back every province of its own that its new allies hold. 'never' lists countries that do not return (Vichy is a government, not a country: its ground goes back to a freed France). A country annexed outright or divided by treaty does not return either, and nor does anyone in the last act of the grand campaign, when there are no alliances left to join. The League frees only countries that could be members of it. 'army' is what a freed country puts in the field the day it returns: one corps, and one more for every 'perVp' victory points of home ground it has on the map, up to 'most', each of 'divs' divisions of infantry at 'str' strength, 'org' organisation and 'xp' experience. A freed country stands for as long as its capital does: it cannot be brought down again while the capital is in its own side's hands.",
+    gap: 1,
+    never: ["VIC"],
+    army: { perVp: 12, most: 3, divs: 2, str: 0.8, org: 0.6, xp: 0.1 },
+    lines: {
+      freed: "{Name} is liberated. {adj} troops hold {capital}, and {name} returns to the war {side}.",
+      freedAfter: "{Name} is liberated. With {foe} beaten, {capital} is in {adj} hands, and {name} returns {side}.",
+      freedSelf: "{Name} is liberated. {adj} troops hold {capital}: the country is yours to lead again, {side}.",
+      sides: { allies: "beside the Allies", axis: "beside the Axis", league: "as a member of the League" }
+    }
+  };
+
+  // ../../src/campaign/liberation.ts
+  var LIB = liberation_default;
+  var fill2 = (line, vars) => line.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+  var liberationRules = (g2) => g2.flags.open === 1 && !g2.flags.dom;
+  var homeOf = (X, r) => !r.overseas && (r.owner === X.id || X.id === "FRA" && r.owner === "VIC" && r.vichy);
+  function recordFall(g2, nat, by, how) {
+    const X = g2.nations[nat];
+    if (!X) return;
+    let provinces = 0;
+    for (const r of g2.regions) if (r.owner === nat && !r.overseas) provinces++;
+    g2.passings.push({
+      id: g2.passings.length + 1,
+      turn: g2.turn,
+      week: g2.week,
+      kind: "fell",
+      nat,
+      by,
+      how,
+      capital: X.capital,
+      provinces,
+      weeks: (g2.turn - 1) * 4 + g2.week,
+      ...g2.human === nat ? { player: true } : {}
+    });
+  }
+  function rollFromMemory(g2) {
+    const out = [];
+    for (const X of Object.values(g2.nations)) {
+      if (X.alive || X.dormant || !X.fellOn) continue;
+      let provinces = 0;
+      for (const r of g2.regions) if (homeOf(X, r)) provinces++;
+      const how = X.fellOn.how ?? (X.capital >= 0 && g2.regions[X.capital].owner !== X.id ? "annexed" : "beaten");
+      out.push({ id: 0, turn: X.fellOn.turn, week: X.fellOn.week, kind: "fell", nat: X.id, by: X.fellOn.to, how, capital: X.capital, provinces, weeks: (X.fellOn.turn - 1) * 4 + X.fellOn.week });
+    }
+    out.sort((a, b) => a.turn - b.turn || a.week - b.week || (a.nat < b.nat ? -1 : 1));
+    out.forEach((p, i) => {
+      p.id = i + 1;
+    });
+    return out;
+  }
+  var passingsIn = (g2, turn) => turn === void 0 ? g2.passings : g2.passings.filter((p) => p.turn === turn);
+  function whyNoReturn(g2, nat) {
+    const X = g2.nations[nat];
+    if (!X || X.alive) return "It has not fallen.";
+    if (g2.flags.open !== 1) return "Countries return only in the grand campaign.";
+    if (g2.flags.dom) return "In the last act there are no alliances left to restore it.";
+    if (X.dormant || !X.fellOn || X.capital < 0 || LIB.never.includes(nat)) return "It has no country on the map to return to.";
+    const cap4 = g2.regions[X.capital];
+    if (X.fellOn.how === "annexed" || cap4.owner !== nat) return "It was annexed outright: there is no country left to restore.";
+    if (X.fellOn.how === "terms" || !cap4.cap) return "It left the war by treaty and was divided by the terms.";
+    return null;
+  }
+  function whyNotFreedBy(g2, nat, by, soon = false) {
+    const never = whyNoReturn(g2, nat);
+    if (never) return never;
+    const X = g2.nations[nat], H = g2.nations[by];
+    if (!H || !H.alive || by === nat) return "Nobody is there to free it.";
+    const V = g2.nations[X.fellOn.to];
+    const side2 = bloc(H);
+    if (V && (by === V.id || allied(g2, by, V.id))) return `${theName(H, true)} stands with its conqueror.`;
+    if (V?.alive && !atWar(g2, by, V.id)) return `${theName(H, true)} is not at war with ${theName(V)}.`;
+    if (!side2) return `${theName(H, true)} belongs to no alliance: what it takes it keeps as a conquest.`;
+    if (side2 === "league" && !small(nat)) return "The League restores only countries that could be members of it.";
+    if (!soon && g2.turn - X.fellOn.turn < LIB.gap) return "It fell only this month.";
+    return null;
+  }
+  function handBack(g2, X) {
+    let back = 0;
+    for (const r of g2.regions) {
+      const mine2 = r.owner === X.id || X.id === "FRA" && r.owner === "VIC" && r.vichy;
+      if (!mine2 || r.ctrl === X.id || r.ctrl === "VIC" || !allied(g2, X.id, r.ctrl)) continue;
+      r.ctrl = X.id;
+      if (r.owner !== X.id) {
+        r.owner = X.id;
+        r.cap = false;
+      }
+      back++;
+    }
+    if (back) g2.supplyDirty = true;
+    return back;
+  }
+  function musterAt(g2, X) {
+    const room2 = (r) => r.units.filter((u) => u.kind !== "eng" && allied(g2, u.nat, X.id)).length < STACK;
+    const seen = new Uint8Array(g2.regions.length);
+    const q = [X.capital];
+    seen[X.capital] = 1;
+    for (let i = 0; i < q.length; i++) {
+      const r = g2.regions[q[i]];
+      if (room2(r)) return r;
+      for (const j of r.nb) if (!seen[j] && g2.regions[j].ctrl === X.id) {
+        seen[j] = 1;
+        q.push(j);
+      }
+    }
+    return null;
+  }
+  function liberate(g2, nat, by, after) {
+    if (whyNotFreedBy(g2, nat, by)) return false;
+    const X = g2.nations[nat], H = g2.nations[by];
+    const side2 = bloc(H);
+    const cap4 = g2.regions[X.capital];
+    X.alive = true;
+    X.league = false;
+    if (side2 === "league") enrol(g2, X);
+    else {
+      if (bloc(X) !== side2) X.align = side2 === "allies" ? "allies" : "axis_cobelligerent";
+      X.opinion = X.home = homeOpinion(nat, X.align);
+    }
+    X.atWar = [];
+    for (const e of [...H.atWar]) if (e !== nat && g2.nations[e]?.alive && !allied(g2, nat, e)) setWar(g2, nat, e);
+    cap4.cap = true;
+    const provinces = handBack(g2, X);
+    let vp = 0;
+    for (const r of g2.regions) if (homeOf(X, r)) vp += r.vp;
+    const want = clamp(1 + Math.floor(vp / LIB.army.perVp), 1, LIB.army.most);
+    let corps = 0;
+    for (let k = 0; k < want; k++) {
+      const at = musterAt(g2, X);
+      if (!at) break;
+      const c = addCorps(g2, nat, corpsName(nat, "inf", X.corpsNo++), "inf", LIB.army.divs, at.id, { xp: LIB.army.xp });
+      c.str = LIB.army.str;
+      c.org = LIB.army.org;
+      c.ap = 0;
+      corps++;
+    }
+    X.armyPeak = armySize(g2, nat);
+    X.pp = Math.max(0, X.pp);
+    X.queue = [];
+    X.freedOn = { turn: g2.turn, week: g2.week, by };
+    g2.supplyDirty = true;
+    const player = g2.human === null && g2.flags[`was:${nat}`] !== void 0;
+    if (player) {
+      g2.human = nat;
+      delete g2.flags[`was:${nat}`];
+    }
+    const foe = after ? g2.nations[after] : null;
+    headline(g2, "event", fill2(player ? LIB.lines.freedSelf : foe ? LIB.lines.freedAfter : LIB.lines.freed, { Name: theName(X, true), name: theName(X), adj: H.adj, capital: cap4.name, side: LIB.lines.sides[side2], foe: foe ? theName(foe) : "" }), nat, cap4.id);
+    g2.passings.push({ id: g2.passings.length + 1, turn: g2.turn, week: g2.week, kind: "freed", nat, by, how: "freed", capital: cap4.id, provinces, corps, side: side2, ...after ? { after } : {}, ...player ? { player: true } : {} });
+    return true;
+  }
+  function tryFree(g2, X, after) {
+    if (X.alive || !X.fellOn || X.capital < 0) return false;
+    return liberate(g2, X.id, g2.regions[X.capital].ctrl, after);
+  }
+  function retaken(g2, r, by) {
+    if (!liberationRules(g2)) return;
+    const F = g2.nations.FRA;
+    if (r.owner === "VIC" && r.vichy && F?.alive && F.freedOn && r.ctrl !== "VIC" && allied(g2, r.ctrl, "FRA")) {
+      r.owner = "FRA";
+      r.ctrl = "FRA";
+      r.cap = false;
+      g2.supplyDirty = true;
+      return;
+    }
+    const X = g2.nations[r.owner === "VIC" && r.vichy ? "FRA" : r.owner];
+    if (X && !X.alive && by !== X.id) tryFree(g2, X);
+  }
+  function afterFall(g2, nat) {
+    if (!liberationRules(g2)) return;
+    const F = g2.nations.FRA;
+    if (nat === "VIC" && F?.alive && F.freedOn) handBack(g2, F);
+    for (const X of Object.values(g2.nations)) if (X.id !== nat) tryFree(g2, X, nat);
+  }
+  var standsFreed = (g2, n) => !!n.freedOn && g2.flags.open === 1 && n.capital >= 0 && allied(g2, n.id, g2.regions[n.capital].ctrl);
+  function standDown(g2) {
+    const was = g2.human;
+    if (!was) return null;
+    g2.flags[`was:${was}`] = g2.turn;
+    g2.human = null;
+    return was;
+  }
+  function fallenNations(g2, viewer = g2.human) {
+    const out = [];
+    for (const X of Object.values(g2.nations)) {
+      if (X.alive || X.dormant || !X.fellOn) continue;
+      const never = whyNoReturn(g2, X.id);
+      const cap4 = X.capital >= 0 ? g2.regions[X.capital] : null;
+      const V = g2.nations[X.fellOn.to];
+      const me = viewer ? g2.nations[viewer] : null;
+      const why = never ?? (me ? whyNotFreedBy(g2, X.id, me.id, true) : null);
+      const yours = !never && !!me && why === null;
+      const side2 = yours ? bloc(me) : null;
+      const wait = g2.turn - X.fellOn.turn < LIB.gap;
+      let note3;
+      if (never) note3 = never;
+      else if (yours && cap4) note3 = cap4.ctrl === me.id || allied(g2, cap4.ctrl, me.id) ? `Your side holds ${cap4.name}: ${theName(X)} returns the next time any of its ground is taken${wait ? ", from next month on" : ""}.` : `${wait ? `From next month, take` : "Take"} ${cap4.name} and ${theName(X)} is liberated: it returns to the war ${LIB.lines.sides[side2]}.`;
+      else if (me && why) note3 = `${why} It returns if a member of an alliance at war with ${V ? theName(V) : "its conqueror"} takes ${cap4?.name ?? "its capital"}.`;
+      else note3 = `It returns if a member of an alliance at war with ${V ? theName(V) : "its conqueror"} takes ${cap4?.name ?? "its capital"}.`;
+      out.push({
+        nat: X.id,
+        name: X.name,
+        fell: { turn: X.fellOn.turn, week: X.fellOn.week, to: X.fellOn.to, how: X.fellOn.how ?? "beaten" },
+        capital: X.capital,
+        capitalName: cap4?.name ?? "",
+        holder: cap4?.ctrl ?? "",
+        canReturn: !never,
+        yours,
+        side: side2,
+        note: note3
+      });
+    }
+    return out.sort((a, b) => b.fell.turn - a.fell.turn || b.fell.week - a.fell.week || (a.nat < b.nat ? -1 : 1));
+  }
+  var NTH = ["", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh", "twelfth"];
+  var count2 = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  function passingCard(g2, p) {
+    const X = g2.nations[p.nat], B = g2.nations[p.by];
+    const when = turnToDate(p.turn).label;
+    const cap4 = p.capital >= 0 ? g2.regions[p.capital] : null;
+    const Name = theName(X, true), name = theName(X);
+    const freedBy = p.kind === "fell" ? g2.passings.filter((q) => q.kind === "freed" && q.after === p.nat && q.turn === p.turn && q.id > p.id).map((q) => q.nat) : [];
+    const base = { id: p.id, kind: p.kind, nat: p.nat, by: p.by, region: p.capital, freed: freedBy, after: p.after ?? null, player: !!p.player };
+    if (p.kind === "freed") {
+      const side2 = LIB.lines.sides[p.side ?? "allies"];
+      const army = p.corps ? `${count2(p.corps, "new corps", "new corps")} ${p.corps === 1 ? "is" : "are"} forming${cap4 ? ` at ${cap4.name}` : ""}` : "its army has yet to be raised";
+      return {
+        ...base,
+        kicker: `Liberated · ${when}`,
+        title: `${Name} is free`,
+        text: `${p.after && g2.nations[p.after] ? `With ${theName(g2.nations[p.after])} beaten, ${cap4?.name ?? "the capital"} is in ${B.adj} hands` : `${B.adj} troops hold ${cap4?.name ?? "the capital"}`}. ${Name} returns to the war ${side2}: ${p.provinces ? `${count2(p.provinces, "province")} ${p.provinces === 1 ? "is" : "are"} back under its own flag` : "its flag flies over its capital again"}, and ${army}.`,
+        more: p.player ? "The country is yours to lead again. What its allies win back of it from now on is handed over to you at once." : `It is run by its own government as ${p.by === g2.human ? "your ally" : `an ally of ${theName(B)}`}. What its allies win back of its ground from now on is handed over to it at once, and it stands for as long as ${cap4?.name ?? "its capital"} does.`,
+        facts: [{ label: "Freed by", value: B.name }, { label: "Provinces returned", value: String(p.provinces) }, { label: "Army raised", value: count2(p.corps ?? 0, "corps", "corps") }]
+      };
+    }
+    const week = p.weeks !== void 0 ? (p.weeks - 1) % 4 + 1 : p.week;
+    const text = p.how === "annexed" ? `${Name} was annexed by ${theName(B)} in ${when}. Its ${count2(p.provinces, "province")} ${p.provinces === 1 ? "is" : "are"} part of ${theName(B)} now.` : p.how === "terms" ? `${Name} left the war in ${when}. Its ground is divided by the terms, and its armies have laid down their arms.` : `${Name} asked ${theName(B)} for terms in the ${NTH[week] ?? "last"} week of ${when}. Its armies have laid down their arms, and its ${count2(p.provinces, "home province")} ${p.provinces === 1 ? "is" : "are"} under foreign flags.`;
+    const never = X.alive ? null : whyNoReturn(g2, p.nat);
+    const more = X.alive ? `${Name} has since been liberated and is back in the war.` : never ? g2.flags.open === 1 ? `${Name} will not return. ${never}` : "" : `${Name} can come back. If a member of an alliance at war with ${theName(B)} takes ${cap4?.name ?? "its capital"}, ${name} is liberated and returns to the war on that side${p.player ? ", and you are given it back to lead" : ""}.`;
+    return {
+      ...base,
+      kicker: `${p.how === "annexed" ? "Annexed" : p.how === "terms" ? "Out of the war" : "Eliminated"} · ${when}`,
+      title: p.how === "annexed" ? `${Name} is annexed` : p.how === "terms" ? `${Name} is out of the war` : `${Name} has fallen`,
+      text,
+      more,
+      facts: [{ label: p.how === "annexed" ? "Annexed by" : "Fell to", value: B.name }, { label: "Home provinces", value: String(p.provinces) }, { label: "Week of the war", value: String(p.weeks ?? (p.turn - 1) * 4 + p.week) }]
+    };
   }
 
   // ../../src/campaign/diplomacy.ts
@@ -7275,9 +7526,10 @@
         const n = g2.nations[id];
         if (!n?.alive || n.atWar.length || bloc(n) || ownPath(g2, id)) continue;
         for (const c of g2.corps.filter((c2) => c2.nat === id)) removeCorps(g2, c);
+        recordFall(g2, id, e.annex.by, "annexed");
         for (const r of g2.regions) if (r.owner === id) transfer(g2, r, e.annex.by);
         n.alive = false;
-        n.fellOn = { turn: g2.turn, week: g2.week, to: e.annex.by };
+        n.fellOn = { turn: g2.turn, week: g2.week, to: e.annex.by, how: "annexed" };
         did = true;
       }
       if (!did) return false;
@@ -7393,7 +7645,8 @@
       }
       X.alive = false;
       X.align = "independent";
-      X.fellOn = { turn: g2.turn, week: g2.week, to: heir2 };
+      X.fellOn = { turn: g2.turn, week: g2.week, to: heir2, how: "terms" };
+      recordFall(g2, X.id, heir2, "terms");
       for (const n of Object.values(g2.nations)) n.atWar = n.atWar.filter((x) => x !== X.id);
       X.atWar = [];
       g2.supplyDirty = true;
@@ -7730,8 +7983,8 @@
       if (nat === g2.human) headline(g2, "info", text, nat, r.id);
     };
     if (b.what === "air") {
-      const wing = b.item, count2 = b.count ?? ARSENAL.air[wing].count;
-      const word = `${count2} ${wing === "ftr" ? "fighters" : "bombers"}`;
+      const wing = b.item, count3 = b.count ?? ARSENAL.air[wing].count;
+      const word = `${count3} ${wing === "ftr" ? "fighters" : "bombers"}`;
       const war = airWar(g2);
       let f = canStation(g2, nat, r) || r.ctrl === nat ? fleetAt(g2, nat, r.id, wing) : null;
       if (!f && r.ctrl === nat && (!war || hasAirfield(g2, r.id))) {
@@ -7744,20 +7997,20 @@
       if (!f) {
         const p = airPool(g2, nat);
         if (wing === "ftr") {
-          p.ftr += count2;
-          p.pilots += count2;
-        } else p.bmr += count2;
+          p.ftr += count3;
+          p.pilots += count3;
+        } else p.bmr += count3;
         return;
       }
-      f[wing] += count2;
-      f.est[wing] += count2;
-      (f.extra ?? (f.extra = { ftr: 0, bmr: 0 }))[wing] += count2;
+      f[wing] += count3;
+      f.est[wing] += count3;
+      (f.extra ?? (f.extra = { ftr: 0, bmr: 0 }))[wing] += count3;
       return;
     }
     if (b.what === "ship") {
-      const hull = b.item, count2 = b.count ?? ARSENAL.ships[hull].count;
+      const hull = b.item, count3 = b.count ?? ARSENAL.ships[hull].count;
       if (hull === "tp") {
-        n.sealift += count2;
+        n.sealift += count3;
         g2.flags[`wk:tp:${nat}`] = (g2.flags[`wk:tp:${nat}`] ?? 0) + 1;
         tell(`New troopships are ready: the nation can now move ${plural2(n.sealift, "corps", "corps")} by sea each month.`);
         return;
@@ -7768,8 +8021,8 @@
         tell(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`);
         return;
       }
-      f.ships[hull] += count2;
-      tell(`${cap3(plural2(count2, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count2 === 1 ? "joins" : "join"} the ${f.name}.`);
+      f.ships[hull] += count3;
+      tell(`${cap3(plural2(count3, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count3 === 1 ? "joins" : "join"} the ${f.name}.`);
       return;
     }
     const what = b.item;
@@ -8696,7 +8949,7 @@
   var SIDES = ["axis", "allies"];
   var domRules = (g2) => g2.flags.open === 1;
   var dominating = (g2) => (g2.flags.dom ?? 0) > 0;
-  var fill2 = (line, vars) => line.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+  var fill3 = (line, vars) => line.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
   function contenders(g2) {
     return Object.values(g2.nations).filter((n) => n.alive && !n.dormant && n.capital >= 0);
   }
@@ -8739,12 +8992,12 @@
   function heir(g2, r, gone) {
     const owner = g2.nations[r.owner];
     if (owner?.alive && owner.id !== gone && owner.capital >= 0) return owner.id;
-    const count2 = {};
+    const count3 = {};
     for (const j of r.nb) {
       const c = g2.regions[j].ctrl;
-      if (c !== gone && g2.nations[c]?.alive && g2.nations[c].capital >= 0) count2[c] = (count2[c] ?? 0) + 1;
+      if (c !== gone && g2.nations[c]?.alive && g2.nations[c].capital >= 0) count3[c] = (count3[c] ?? 0) + 1;
     }
-    return Object.keys(count2).sort((a, b) => count2[b] - count2[a] || (a < b ? -1 : 1))[0] ?? null;
+    return Object.keys(count3).sort((a, b) => count3[b] - count3[a] || (a < b ? -1 : 1))[0] ?? null;
   }
   function leave(g2, n) {
     for (const c of g2.corps.filter((c2) => c2.nat === n.id)) removeCorps(g2, c);
@@ -8764,7 +9017,7 @@
     n.atWar = [];
     n.alive = false;
     n.dormant = true;
-    headline(g2, "event", fill2(DOMINATION.lines.leave, { name: n.name }), n.id);
+    headline(g2, "event", fill3(DOMINATION.lines.leave, { name: n.name }), n.id);
   }
   function startDomination(g2, by = g2.human) {
     if (whyNotDomination(g2, by)) return false;
@@ -8779,7 +9032,7 @@
     for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) setWar(g2, live[i].id, live[j].id);
     g2.flags.dom = g2.turn;
     g2.flags["dom:n"] = live.length;
-    headline(g2, "war", fill2(DOMINATION.lines.open, { n: live.length }), by ?? void 0);
+    headline(g2, "war", fill3(DOMINATION.lines.open, { n: live.length }), by ?? void 0);
     let home = 0;
     for (const c of guests) {
       if (c.dead) continue;
@@ -8793,7 +9046,7 @@
       c.org = Math.min(c.org, DOMINATION.guests.org);
       home++;
     }
-    if (home) headline(g2, "event", fill2(DOMINATION.lines.guests, { n: home }));
+    if (home) headline(g2, "event", fill3(DOMINATION.lines.guests, { n: home }));
     g2.supplyDirty = true;
     crown(g2);
     return true;
@@ -8808,7 +9061,7 @@
     const live = contenders(g2);
     if (live.length !== 1) return;
     g2.flags["dom:won"] = g2.turn;
-    headline(g2, "goal", fill2(DOMINATION.lines.won, { name: live[0].name, adj: live[0].adj }), live[0].id);
+    headline(g2, "goal", fill3(DOMINATION.lines.won, { name: live[0].name, adj: live[0].adj }), live[0].id);
   }
   function worldWinner(g2) {
     if (!dominating(g2) || !g2.flags["dom:won"]) return null;
@@ -9619,6 +9872,7 @@
       raids: {},
       stories: newStories(),
       intel: { agents: [], next: 1, notes: [], heat: {} },
+      passings: [],
       links: md.links,
       width: md.width,
       height: md.height,
@@ -10450,8 +10704,8 @@
     g2.week = week;
     const aside2 = target.overseas || target.theatre >= 0;
     const late = lateTheatre(target);
-    const count2 = late ? `t${target.theatre}:${g2.flags[`fought:${target.theatre}`] ?? 0}` : `${(g2.flags.battles ?? 0) - (g2.flags.lateBattles ?? 0)}`;
-    const dice2 = aside2 ? new Rng(hashString(`land:${g2.seed}:${g2.turn}:${target.id}:${attNat}:${count2}`)) : g2.rng;
+    const count3 = late ? `t${target.theatre}:${g2.flags[`fought:${target.theatre}`] ?? 0}` : `${(g2.flags.battles ?? 0) - (g2.flags.lateBattles ?? 0)}`;
+    const dice2 = aside2 ? new Rng(hashString(`land:${g2.seed}:${g2.turn}:${target.id}:${attNat}:${count3}`)) : g2.rng;
     const R = a.odds * dice2.range(0.8, 1.2);
     const attU = attackers2.map(reportUnit), defU = defenders.map(reportUnit);
     const attGens = attackers2.map((c) => generalOf(g2, c)), defGens = defenders.map((c) => generalOf(g2, c));
@@ -10572,6 +10826,7 @@
     if (r.cap && r.owner === old) headline(g2, "fall", `${r.name} falls to ${g2.nations[nat].adj} forces.`, old, r.id);
     else if (r.overseas && r.port && r.vp > 0 && atWar(g2, nat, old)) headline(g2, "battle", `${r.name} falls to ${g2.nations[nat].adj} forces.`, old, r.id);
     checkCollapse(g2, old, nat);
+    retaken(g2, r, nat);
   }
   function hasRoom(g2, to, c) {
     const here = friendlyUnits(g2, to, c.nat);
@@ -10644,6 +10899,7 @@
   function checkCollapse(g2, nat, by) {
     const n = g2.nations[nat];
     if (!n || !n.alive || n.capital < 0) return;
+    if (standsFreed(g2, n)) return;
     if (collapseScore(g2, nat) >= n.resilience) capitulate(g2, nat, by);
   }
   function nearestFriendly(g2, c) {
@@ -10664,8 +10920,10 @@
     const X = g2.nations[nat];
     if (!X.alive) return;
     X.alive = false;
-    X.fellOn = { turn: g2.turn, week: g2.week, to: by };
-    const armistice = nat === "FRA" && !g2.flags.dom;
+    X.fellOn = { turn: g2.turn, week: g2.week, to: by, how: "beaten" };
+    recordFall(g2, nat, by, "beaten");
+    const armistice = nat === "FRA" && !g2.flags.dom && !X.freedOn;
+    delete X.freedOn;
     for (const c of g2.corps.filter((c2) => c2.nat === nat)) {
       const at = g2.regions[c.reg];
       if (armistice && at.vichy && at.overseas && at.ctrl === "FRA") {
@@ -10731,6 +10989,7 @@
       }
     }
     for (const n of Object.values(g2.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g2, n.id, by);
+    afterFall(g2, nat);
     crown(g2);
   }
   function shipMove(g2, c, to) {
@@ -10759,9 +11018,9 @@
     const key2 = `mobilised:${nat}`;
     if (g2.flags[key2] === void 0) g2.flags[key2] = g2.turn;
     const month2 = g2.turn - g2.flags[key2];
-    const count2 = plan.perMonth[month2] ?? plan.after;
+    const count3 = plan.perMonth[month2] ?? plan.after;
     const enemyNear = (r) => r.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl));
-    for (let k = 0; k < count2; k++) {
+    for (let k = 0; k < count3; k++) {
       let best = null, bs = 1e9;
       for (const r of g2.regions) {
         if (r.owner !== nat || r.ctrl !== nat || r.fac < 1 || r.units.length >= STACK || enemyNear(r)) continue;
@@ -10775,7 +11034,7 @@
       const c = addCorps(g2, nat, `${ordinal2(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
       c.org = 0.7;
     }
-    if (count2 > 0 && month2 === 0) headline(g2, "event", `${n.name} orders general mobilisation.`, nat);
+    if (count3 > 0 && month2 === 0) headline(g2, "event", `${n.name} orders general mobilisation.`, nat);
     const close = (r) => {
       const seen = /* @__PURE__ */ new Set([r.id]);
       let ring = [r.id];
@@ -12500,10 +12759,10 @@
   }
   function hold(g2, nat, ph) {
     if (!ph?.staging || ph.posture === "redeploy") return;
-    for (const [name, count2] of Object.entries(ph.staging)) {
+    for (const [name, count3] of Object.entries(ph.staging)) {
       const r = g2.byName[name];
       if (!r || !allied(g2, nat, r.ctrl)) continue;
-      standing(g2, nat, r).slice(0, count2).forEach((u, k) => {
+      standing(g2, nat, r).slice(0, count3).forEach((u, k) => {
         if (!KIND[u.kind].mobile || k < 2) massed.add(u.id);
       });
     }
@@ -12511,19 +12770,19 @@
   function mass(g2, nat, ph) {
     if (!ph?.staging || ph.posture === "redeploy") return;
     const own = (r) => r.units.filter((u) => u.nat === nat && u.kind !== "fort");
-    for (const [name, count2] of Object.entries(ph.staging)) {
+    for (const [name, count3] of Object.entries(ph.staging)) {
       const r = g2.byName[name];
       if (!r || !allied(g2, nat, r.ctrl)) continue;
       let have = own(r).filter((u) => massed.has(u.id)).length;
-      if (have >= count2) continue;
-      for (const u of standing(g2, nat, r)) if (have < count2 && !massed.has(u.id) && (!KIND[u.kind].mobile || have < 2)) {
+      if (have >= count3) continue;
+      for (const u of standing(g2, nat, r)) if (have < count3 && !massed.has(u.id) && (!KIND[u.kind].mobile || have < 2)) {
         massed.add(u.id);
         have++;
       }
       const d = hops(g2, r.id, (x) => allied(g2, nat, x.ctrl));
       const pool = g2.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== "fort" && !KIND[c.kind].mobile && c.ap > 0 && !massed.has(c.id) && c.reg !== r.id && d[c.reg] > 0 && d[c.reg] <= 3 && own(g2.regions[c.reg]).length >= 2).sort((a, b) => d[a.reg] - d[b.reg] || atkPower(g2, b) - atkPower(g2, a));
       for (const c of pool) {
-        if (have >= count2 || friendlyUnits(g2, r, nat).length >= STACK) break;
+        if (have >= count3 || friendlyUnits(g2, r, nat).length >= STACK) break;
         if (own(g2.regions[c.reg]).length < 2) continue;
         walkToward(g2, c, r);
         if (c.reg === r.id) {
@@ -12934,12 +13193,12 @@
       c.hold = true;
     }
     const staged = /* @__PURE__ */ new Set();
-    for (const [name, count2] of Object.entries(ph.staging ?? {})) {
+    for (const [name, count3] of Object.entries(ph.staging ?? {})) {
       const r = g2.byName[name];
       if (!r || !allied(g2, nat, r.ctrl)) continue;
       const there = r.units.filter((u) => u.nat === nat && !u.hold);
       there.forEach((u) => staged.add(u.id));
-      for (let k = there.length; k < count2; k++) {
+      for (let k = there.length; k < count3; k++) {
         const c = nearest(free2().filter((c2) => c2.kind === "inf" && !staged.has(c2.id)), r);
         if (!c || !railToward(g2, c, r)) break;
         staged.add(c.id);
@@ -13513,6 +13772,18 @@
   function orderBureau(g2) {
     return humanUp(g2) && foundBureau(g2, g2.human);
   }
+  function announcements(g2, turn) {
+    return passingsIn(g2, turn).map((p) => passingCard(g2, p));
+  }
+  function nationsFallen(g2) {
+    return fallenNations(g2, g2.human);
+  }
+  function fallenCapitalAt(g2, region) {
+    return fallenNations(g2, g2.human).find((f) => f.capital === region) ?? null;
+  }
+  function playerFell(g2) {
+    return g2.human && !g2.nations[g2.human].alive ? standDown(g2) : null;
+  }
   var myGeneral = (g2, id) => {
     const gen = g2.generals[id];
     return gen && gen.nat === g2.human && current(g2) === gen.nat ? gen : null;
@@ -13752,6 +14023,8 @@
       stories: g2.stories,
       // The secret service exists only in the grand campaign: a historical save is written exactly as it always was.
       intel: g2.flags.open === 1 ? g2.intel : void 0,
+      // The roll of the fallen and the freed: left out while it is empty, so a save with nothing on it is written as it always was.
+      passings: g2.passings.length ? g2.passings : void 0,
       headlines: g2.headlines,
       reports: g2.reports.slice(-KEEP_REPORTS)
     });
@@ -13861,6 +14134,7 @@
     if (g2.flags.open === 1) openAirWar(g2);
     g2.stories = { ...newStories(), ...d.stories ?? {} };
     g2.intel = { agents: [], next: 1, notes: [], heat: {}, ...d.intel ?? {} };
+    g2.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g2);
     if (Array.isArray(d.fleets)) {
       g2.fleets = d.fleets;
       g2.nextFleet = d.nextFleet;
@@ -14418,6 +14692,8 @@
         return [n.id, ["armour", "fighters", "bombers"].map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab.clock[f] - n.lab.months)) + 7) / 12))];
       })),
       // Things the player should be told as his month opens, and the rooms beyond the main screens that are open to him.
+      // Capitals of fallen countries the player would set free by taking them (or holds already): ringed in gold.
+      free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
       alerts: alertsOf(s),
       pages: pagesOf(s),
       // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
@@ -14595,8 +14871,8 @@
     const lost = s.human && !s.nations[s.human].alive ? s.human : null;
     if (lost) {
       fallenNation = lost;
-      s.human = null;
-      while (s.phase > 0) stepAI(s);
+      if (!playerFell(s)) s.human = null;
+      while (s.phase > 0 && !s.human) stepAI(s);
     }
     if (humanUp(s)) beginHuman(s);
     return lost;
@@ -14789,9 +15065,15 @@
     const wasDown = new Set(Object.values(s.nations).filter((n) => !n.alive && !n.dormant).map((n) => n.id));
     const steps = [];
     let fallen = null;
+    const roll0 = s.passings.length, month02 = s.turn;
     if (!s.human) {
       const month2 = s.turn;
-      for (let guard = 0; guard < 80 && s.turn === month2; guard++) stepOne(s, steps);
+      for (let guard = 0; guard < 80 && s.turn === month2 && !s.human; guard++) stepOne(s, steps);
+      if (s.human) {
+        fallenNation = null;
+        runOthers(s, steps);
+        if (humanUp(s)) beginHuman(s);
+      }
     } else {
       const air0 = lastAirReport(s), month2 = s.turn, me = s.human;
       if (onEve(s)) endEve(s);
@@ -14817,7 +15099,22 @@
     const events = (first.length ? first : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
     const said = (nat) => [...headlines].reverse().find((h) => h.nat === nat && (h.kind === "fall" || h.kind === "event" || h.kind === "war"))?.text ?? "";
     const announce = [];
-    for (const n of Object.values(s.nations)) {
+    const cards = [.../* @__PURE__ */ new Set([month02, s.turn])].flatMap((t) => announcements(s, t)).filter((c) => c.id > roll0 && c.nat !== fallen);
+    for (const c of cards) {
+      const foe = s.human ? atWar(s, s.human, c.nat) : false;
+      const friend2 = s.human ? allied(s, s.human, c.nat) || c.nat === s.human : false;
+      announce.push({
+        nat: c.nat,
+        title: c.title.toUpperCase(),
+        text: c.text,
+        more: c.more,
+        kicker: c.kicker,
+        facts: c.facts,
+        region: c.region,
+        good: c.kind === "freed" ? friend2 || !foe : foe
+      });
+    }
+    if (!cards.length) for (const n of Object.values(s.nations)) {
       if (n.id === s.human || n.id === fallen) continue;
       const mine2 = s.human ? allied(s, s.human, n.id) : false;
       const foe = s.human ? atWar(s, s.human, n.id) : false;
@@ -14904,6 +15201,8 @@
       id: r.id,
       name: r.name,
       home,
+      // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.
+      fallenNote: fallenCapitalAt(s, r.id)?.note ?? "",
       industry: r.fac,
       works: level,
       worksFacing: r.fort?.vs.map((v) => s.nations[v]?.name ?? v) ?? [],
@@ -15016,14 +15315,14 @@
       const f2 = s.fleets.find((x) => x.id === id);
       if (!f2) return null;
       const parts = [];
-      const count2 = (n, one, many) => {
+      const count3 = (n, one, many) => {
         if (n > 0) parts.push(`${n} ${n === 1 ? one : many}`);
       };
-      count2(f2.ships.bb, "battleship", "battleships");
-      count2(f2.ships.cv, "carrier", "carriers");
-      count2(f2.ships.ca, "cruiser", "cruisers");
-      count2(f2.ships.dd, "destroyer", "destroyers");
-      count2(f2.ships.ss, "submarine", "submarines");
+      count3(f2.ships.bb, "battleship", "battleships");
+      count3(f2.ships.cv, "carrier", "carriers");
+      count3(f2.ships.ca, "cruiser", "cruisers");
+      count3(f2.ships.dd, "destroyer", "destroyers");
+      count3(f2.ships.ss, "submarine", "submarines");
       const sea = s.seas[f2.zone]?.name ?? "the sea";
       const doing2 = f2.stance === "port" ? `In harbour at ${f2.port}.` : f2.stance === "raid" ? `Raiding shipping in the ${sea}.` : `On patrol in the ${sea}.`;
       const mine3 = f2.nat === s.human;

@@ -80,6 +80,8 @@ public:
 
 	/** Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it. */
 	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false);
+	/** Rings in gold the capitals of fallen countries that the player would set free by taking them. */
+	void ShowFreeCapitals(const TArray<int32>& Capitals);
 	/** Rings the seas a fleet in hand can sail to, the one the pointer is over more brightly, and the fleet itself. None clears them. */
 	void ShowSeaReach(const TArray<int32>& Zones, int32 Hover, int32 FleetId);
 
@@ -285,6 +287,7 @@ private:
 	int32 MiniWide = 0, MiniHigh = 0;
 	bool bMiniStale = true;
 	TArray<FIntVector4> ShownBuildings;
+	TArray<int32> ShownFree;
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
 	FLandFeatures Land;
 	UPROPERTY()

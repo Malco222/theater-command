@@ -1342,16 +1342,21 @@ namespace
 						.OnMouseButtonDown_Lambda([this](const FGeometry&, const FPointerEvent&) { if (Controller.IsValid()) { Controller->DismissAnnouncement(); } return FReply::Handled(); })
 						[
 							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 0.0f, 18.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 300)).ColorAndOpacity(Brass)
+								.Text_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return Told ? FText::FromString(Told->Kicker.ToUpper()) : FText::GetEmpty(); })
+							]
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
 							[
-								SNew(SBox).WidthOverride(330.0f).HeightOverride(220.0f)
+								SNew(SBox).WidthOverride(300.0f).HeightOverride(200.0f)
 								[
 									SNew(SImage).Image_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return FlagBrush(Told ? Told->Tag : FString()); })
 								]
 							]
 							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 30.0f, 0.0f, 0.0f)
 							[
-								SNew(STextBlock).Font(Font(TEXT("Bold"), 46, 220))
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 40, 200))
 								.ColorAndOpacity_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return FSlateColor(Told && Told->bGood ? BrightBrass : Alarm); })
 								.Text_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return Told ? FText::FromString(Told->Title) : FText::GetEmpty(); })
 							]
@@ -1363,7 +1368,30 @@ namespace
 									.Text_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return Told ? FText::FromString(Told->Text) : FText::GetEmpty(); })
 								]
 							]
-							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 34.0f, 0.0f, 0.0f)
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 12.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(760.0f).HAlign(HAlign_Center)
+								[
+									SNew(STextBlock).Font(Font(TEXT("Italic"), 14)).ColorAndOpacity(Muted).AutoWrapText(true).Justification(ETextJustify::Center)
+									.Text_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return Told ? FText::FromString(Told->More) : FText::GetEmpty(); })
+								]
+							]
+							// Three figures for the foot: who did it, how much ground, when.
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 24.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 12, 160)).ColorAndOpacity(Cream)
+								.Text_Lambda([this]()
+								{
+									const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr;
+									TArray<FString> Parts;
+									for (int32 Index = 0; Told && Index < Told->FactLabels.Num() && Index < Told->FactValues.Num(); ++Index)
+									{
+										Parts.Add(FString::Printf(TEXT("%s:  %s"), *Told->FactLabels[Index].ToUpper(), *Told->FactValues[Index]));
+									}
+									return FText::FromString(FString::Join(Parts, TEXT("          ")));
+								})
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 30.0f, 0.0f, 0.0f)
 							[
 								SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted)
 								.Text(FText::FromString(TEXT("Click, or press Space, to go on.")))

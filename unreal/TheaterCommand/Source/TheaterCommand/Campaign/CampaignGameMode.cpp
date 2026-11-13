@@ -167,6 +167,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
 		Table->ShowBuildings(Session->GetView().RegionWorks);
 		Table->ShowLanes(Session->GetView().Lanes);
+		Table->ShowFreeCapitals(Session->GetView().FreeCapitals);
 	}
 }
 

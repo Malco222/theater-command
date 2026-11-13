@@ -1358,6 +1358,16 @@ void ACampaignPlayerController::DismissAnnouncement()
 {
 	if (Announcements.Num() > 0)
 	{
+		// The view goes to the country's capital, so the player sees where it happened.
+		const int32 Capital = Announcements[0].Region;
+		if (Map.IsValid() && Map->GetData().Regions.IsValidIndex(Capital) && !bWatching)
+		{
+			if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+			{
+				const FVector2D At = Map->GetData().Regions[Capital].Center;
+				Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Clamp(Eye->GetZoom(), 0.4f, 0.6f), false);
+			}
+		}
 		Announcements.RemoveAt(0);
 		if (Announcements.Num() > 0)
 		{
@@ -2879,6 +2889,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowLanes(View.Lanes);
+		Map->ShowFreeCapitals(View.FreeCapitals);
 	}
 }
 

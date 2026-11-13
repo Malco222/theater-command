@@ -487,6 +487,18 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	}
 	// The airfields (the grand campaign). There the aircraft belong to their airfield, so the table shows one
 	// piece for each airfield with aircraft on it instead of one for each group.
+	const TArray<TSharedPtr<FJsonValue>>* Free = nullptr;
+	if (Object->TryGetArrayField(TEXT("free"), Free))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Free)
+		{
+			int32 Capital = INDEX_NONE;
+			if (Value->AsObject().IsValid() && Value->AsObject()->TryGetNumberField(TEXT("region"), Capital))
+			{
+				Out.FreeCapitals.Add(Capital);
+			}
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Airfields = nullptr;
 	if (Object->TryGetArrayField(TEXT("airfields"), Airfields))
 	{
@@ -828,6 +840,22 @@ FMonthResult FCampaignSession::EndMonth()
 			Entry->TryGetStringField(TEXT("title"), Told.Title);
 			Entry->TryGetStringField(TEXT("text"), Told.Text);
 			Entry->TryGetBoolField(TEXT("good"), Told.bGood);
+			Entry->TryGetStringField(TEXT("kicker"), Told.Kicker);
+			Entry->TryGetStringField(TEXT("more"), Told.More);
+			Entry->TryGetNumberField(TEXT("region"), Told.Region);
+			const TArray<TSharedPtr<FJsonValue>>* Facts = nullptr;
+			if (Entry->TryGetArrayField(TEXT("facts"), Facts))
+			{
+				for (const TSharedPtr<FJsonValue>& Fact : *Facts)
+				{
+					const TSharedPtr<FJsonObject> Pair = Fact->AsObject();
+					if (Pair.IsValid())
+					{
+						Told.FactLabels.Add(Pair->GetStringField(TEXT("label")));
+						Told.FactValues.Add(Pair->GetStringField(TEXT("value")));
+					}
+				}
+			}
 		}
 	}
 	TakeView(Object);
@@ -1085,6 +1113,14 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 	Info.Region = RegionId;
 	Object->TryGetBoolField(TEXT("home"), Info.bHome);
 	Object->TryGetStringField(TEXT("raiseNote"), Info.Note);
+	{
+		// A fallen country's capital: what taking it would mean.
+		FString Fallen;
+		if (Object->TryGetStringField(TEXT("fallenNote"), Fallen) && !Fallen.IsEmpty())
+		{
+			Info.Note = Info.Note.IsEmpty() ? Fallen : Fallen + TEXT("\n") + Info.Note;
+		}
+	}
 
 	int32 Industry = 0, Works = 0;
 	bool bHarbour = false;
