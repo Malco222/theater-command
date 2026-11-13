@@ -205,6 +205,30 @@ namespace
 						]
 					]
 
+					// A tip that follows the pointer over the map: the province under it, in a few words.
+					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top)
+					.Padding(TAttribute<FMargin>::CreateLambda([this]()
+					{
+						FVector2D Size(1920.0, 1080.0);
+						if (GEngine && GEngine->GameViewport)
+						{
+							GEngine->GameViewport->GetViewportSize(Size);
+						}
+						const float Scale = FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f);
+						const FVector2D At = Controller.IsValid() ? Controller->GetPointer() / Scale : FVector2D::ZeroVector;
+						// Kept on the screen: to the left of the pointer when it is near the right edge.
+						const float Width = static_cast<float>(Size.X) / Scale;
+						return FMargin(At.X > Width - 330.0f ? static_cast<float>(At.X) - 300.0f : static_cast<float>(At.X) + 18.0f, static_cast<float>(At.Y) + 20.0f, 0.0f, 0.0f);
+					}))
+					[
+						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(10.0f, 6.0f))
+						.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetHoverTip().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+						[
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).LineHeightPercentage(1.15f)
+							.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetHoverTip() : FText::GetEmpty(); })
+						]
+					]
+
 					// News for the player, for a few seconds at a time.
 					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(24.0f, 84.0f, 24.0f, 0.0f)
 					[
@@ -481,7 +505,7 @@ namespace
 						.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army. Click where it should go, twice, or drag the flag there    Esc: put it down    Enter: end the month    H: how to play    M: music    N: sounds")))
+							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army. Click where it should go, twice, or drag the flag there    Tab: next army    Esc: put it down    Enter: end the month    1 to 5: the screens    H: how to play")))
 							.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
 						]
 					]

@@ -341,6 +341,13 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::M, IE_Pressed, this, &ACampaignPlayerController::ToggleMusic);
 	InputComponent->BindKey(EKeys::H, IE_Pressed, this, &ACampaignPlayerController::OpenGuide);
 	InputComponent->BindKey(EKeys::N, IE_Pressed, this, &ACampaignPlayerController::ToggleEffects);
+	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::NextArmy);
+	InputComponent->BindKey(EKeys::V, IE_Pressed, this, &ACampaignPlayerController::ToggleWatchAll);
+	InputComponent->BindKey(EKeys::One, IE_Pressed, this, &ACampaignPlayerController::OpenScreen1);
+	InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &ACampaignPlayerController::OpenScreen2);
+	InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &ACampaignPlayerController::OpenScreen3);
+	InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &ACampaignPlayerController::OpenScreen4);
+	InputComponent->BindKey(EKeys::Five, IE_Pressed, this, &ACampaignPlayerController::OpenScreen5);
 }
 
 void ACampaignPlayerController::WheelUp()
@@ -1168,6 +1175,61 @@ void ACampaignPlayerController::SpaceBar()
 	SkipWatching();
 }
 
+// The number keys open the screens of the top bar, and the same key puts one away again.
+void ACampaignPlayerController::OpenScreen1() { if (bArsenalOpen) { CloseArsenal(); } else { OpenArsenal(); } }
+void ACampaignPlayerController::OpenScreen2() { if (bGeneralsOpen) { CloseGenerals(); } else { OpenGenerals(); } }
+void ACampaignPlayerController::OpenScreen3() { if (bResearchOpen) { CloseResearch(); } else { OpenResearch(); } }
+void ACampaignPlayerController::OpenScreen4() { if (bDiplomacyOpen) { CloseDiplomacy(); } else { OpenDiplomacy(); } }
+void ACampaignPlayerController::OpenScreen5() { if (bLedgerOpen) { CloseLedger(); } else { OpenLedger(); } }
+
+void ACampaignPlayerController::ToggleWatchAll()
+{
+	bWatchAll = !bWatchAll;
+	Notify(bWatchAll ? TEXT("At the end of a month you will watch every nation's move.") : TEXT("At the end of a month you will be shown only what touches you. The rest is in the news."), 5.0);
+}
+
+void ACampaignPlayerController::NextArmy()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible)
+	{
+		return;
+	}
+	// The provinces where the player has corps that can still move, in order; the one after the army in hand.
+	const FCampaignView& View = Session->GetView();
+	TArray<int32> Places;
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		if (Unit.Nation == View.Human && Unit.bCanOrder && Unit.Moves > 0)
+		{
+			Places.AddUnique(Unit.Region);
+		}
+	}
+	if (Places.Num() == 0)
+	{
+		Notify(TEXT("Every army has used its month. Press Enter to end it."), 4.0);
+		return;
+	}
+	Places.Sort();
+	int32 Next = Places[0];
+	for (int32 Place : Places)
+	{
+		if (Place > ArmyRegion)
+		{
+			Next = Place;
+			break;
+		}
+	}
+	SelectRegion(Next);
+	PickUpArmyIn(Next);
+	CampaignSounds::Play(this, TEXT("pickup"), 0.5f);
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		const FVector2D At = Map->GetData().Regions[Next].Center;
+		Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.4f), false);
+	}
+}
+
 void ACampaignPlayerController::Escape()
 {
 	// Esc backs out one step: the watching, the face-off, the army in hand, then the territory.
@@ -1451,6 +1513,54 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 
 	Map->UpdateForCamera(Eye->GetDistance(), Eye->GetYaw(), Eye->GetFocus());
+
+	// A tip that follows the pointer: what the province under it is, whose, what it is worth and who stands there.
+	const int32 TipRegion = (bBusy || !bHaveMouse || bLeftHeld || bRightHeld) ? INDEX_NONE : PointedRegion;
+	if (TipRegion != HoverTipRegion)
+	{
+		HoverTipRegion = TipRegion;
+		HoverTip = FText::GetEmpty();
+		FCampaignSession* Session = GetSession();
+		if (Session && Map->GetData().Regions.IsValidIndex(TipRegion))
+		{
+			const FCampaignRegion& Region = Map->GetData().Regions[TipRegion];
+			const FCampaignView& View = Session->GetView();
+			const FString Holder = View.RegionHolder.IsValidIndex(TipRegion) ? View.RegionHolder[TipRegion] : Region.Owner;
+			const FCampaignNation* Nation = Map->GetData().FindNation(Holder);
+			const FString Standing = View.RegionStanding.IsValidIndex(TipRegion) ? View.RegionStanding[TipRegion] : FString();
+			FString Line = FString::Printf(TEXT("%s  \u00B7  %s%s"), *Region.Name, Nation ? *Nation->Name : *Holder,
+				Standing == TEXT("own") ? TEXT(" (yours)") : Standing == TEXT("enemy") ? TEXT(" (enemy)") : Standing == TEXT("ally") ? TEXT(" (ally)") : Standing == TEXT("neutral") ? TEXT(" (at peace)") : TEXT(""));
+			TArray<FString> Worth;
+			if (Region.VictoryPoints > 0) { Worth.Add(FString::Printf(TEXT("worth %d"), Region.VictoryPoints)); }
+			if (Region.Factories > 0) { Worth.Add(FString::Printf(TEXT("%d %s"), Region.Factories, Region.Factories == 1 ? TEXT("factory") : TEXT("factories"))); }
+			if (Region.bOil) { Worth.Add(TEXT("oil")); }
+			if (Region.bPort) { Worth.Add(TEXT("harbour")); }
+			if (Worth.Num() > 0)
+			{
+				Line += TEXT("\n") + FString::Join(Worth, TEXT("  \u00B7  "));
+			}
+			TMap<FString, FIntPoint> Forces; // by nation: corps, divisions
+			bool bDim = false;
+			for (const FViewCorps& Unit : View.Corps)
+			{
+				if (Unit.Region == TipRegion)
+				{
+					FIntPoint& Count = Forces.FindOrAdd(Unit.Nation);
+					Count.X += 1;
+					Count.Y += Unit.Divisions;
+					bDim |= Unit.bDim;
+				}
+			}
+			for (const TPair<FString, FIntPoint>& Force : Forces)
+			{
+				const FCampaignNation* Whose = Map->GetData().FindNation(Force.Key);
+				Line += bDim && Force.Value.Y == 0
+					? FString::Printf(TEXT("\n%s army: %d corps, strength unknown"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X)
+					: FString::Printf(TEXT("\n%s army: %d corps, %d division%s"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X, Force.Value.Y, Force.Value.Y == 1 ? TEXT("") : TEXT("s"));
+			}
+			HoverTip = FText::FromString(Line);
+		}
+	}
 
 	LastMouse = Mouse;
 	bHaveLastMouse = bHaveMouse;
@@ -2418,6 +2528,12 @@ void ACampaignPlayerController::EndMonthAndWatch()
 
 void ACampaignPlayerController::WatchNextStep()
 {
+	// Unless he has asked to watch everything (V), the player is shown only the moves that touch him; the rest
+	// have happened all the same, and are in the month's news.
+	while (!bWatchAll && Month.Steps.IsValidIndex(WatchIndex) && !Month.Steps[WatchIndex].bMine)
+	{
+		++WatchIndex;
+	}
 	if (!Month.Steps.IsValidIndex(WatchIndex))
 	{
 		FinishMonth();

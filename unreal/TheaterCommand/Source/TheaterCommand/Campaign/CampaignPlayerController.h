@@ -340,6 +340,14 @@ public:
 	void StopTech(const FString& Id);
 	/** Research teams of the player's with nothing to do, for the badge on the button. */
 	int32 GetIdleTeams() const;
+	/** A line about the province under the pointer, for a tip that follows the mouse; empty when a screen is open. */
+	FText GetHoverTip() const { return HoverTip; }
+	/** Where the pointer is, in the window's own pixels. */
+	FVector2D GetPointer() const { return LastMouse; }
+	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
+	void NextArmy();
+	/** Whether every nation's move is watched at the end of a month, or only what touches the player. */
+	void ToggleWatchAll();
 	/** The player's oil or supplies, or null where his nation keeps no stocks (a small country, a scenario, nobody led). */
 	const FViewStock* GetStock(bool bOil) const;
 	void FoundResearchBureau();
@@ -497,6 +505,14 @@ private:
 	bool bRightHeld = false;
 	bool bTurning = false;
 	bool bHaveLastMouse = false;
+	FText HoverTip;
+	int32 HoverTipRegion = INDEX_NONE;
+	bool bWatchAll = false; // watch every nation's move at the month's end, not only what touches the player
+	void OpenScreen1();
+	void OpenScreen2();
+	void OpenScreen3();
+	void OpenScreen4();
+	void OpenScreen5();
 	bool bScripted = false;
 	bool bAlwaysWatch = false;
 	bool bByRail = false;
