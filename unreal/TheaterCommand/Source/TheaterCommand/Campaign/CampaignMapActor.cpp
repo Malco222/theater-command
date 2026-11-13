@@ -2081,7 +2081,7 @@ void ACampaignMapActor::SetWarAtNight(const TArray<FString>& Blackout, const TAr
 		FrontFires.Reset();
 		TArray<FVector2D> Spots;
 		FRandomStream Random(1939);
-		const double Apart = 4.6;
+		const double Apart = 6.2;
 		for (int32 K = 0; K + 1 < FrontPairs.Num(); K += 2)
 		{
 			if (!Data.Regions.IsValidIndex(FrontPairs[K]) || !Data.Regions.IsValidIndex(FrontPairs[K + 1]))
@@ -2125,7 +2125,7 @@ void ACampaignMapActor::SetWarAtNight(const TArray<FString>& Blackout, const TAr
 					double At = Carried;
 					for (; At < Length; At += Apart)
 					{
-						Spots.Add(A + Dir * At + Side * Random.FRandRange(-0.9f, 0.9f) + Dir * Random.FRandRange(-0.7f, 0.7f));
+						Spots.Add(A + Dir * At + Side * Random.FRandRange(-1.1f, 1.1f) + Dir * Random.FRandRange(-1.6f, 1.6f));
 					}
 					Carried = At - Length;
 				}
@@ -4515,9 +4515,9 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		if (NightNow > 0.25f)
 		{
 			const float Dark = FMath::SmoothStep(0.25f, 0.8f, NightNow);
-			const FLinearColor Flash(1.0f, 0.74f, 0.38f), Ember(1.0f, 0.42f, 0.12f);
+			const FLinearColor Flash(1.0f, 0.74f, 0.38f), Ember(1.0f, 0.34f, 0.09f);
 			// (seen from high up a fire is drawn larger than life, or the front would not be seen at all)
-			const double Seen = FMath::Clamp(CameraDistance / (Unit * 400.0), 0.34, 2.0);
+			const double Seen = FMath::Clamp(CameraDistance / (Unit * 480.0), 0.34, 1.3);
 			const float Soft = static_cast<float>(FMath::GetMappedRangeValueClamped(FVector2D(0.34, 1.0), FVector2D(0.7, 1.0), Seen));
 			// Fires that burn along the line all night, each flickering; and the flashes of the guns among them.
 			for (int32 K = 0; K < FrontFires.Num(); ++K)
@@ -4526,7 +4526,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 				{
 					continue;
 				}
-				const float Flicker = 0.56f + 0.3f * FMath::Sin(static_cast<float>(Now) * (2.1f + (K % 5) * 0.37f) + K * 1.9f);
+				const float Flicker = (0.5f + 0.26f * FMath::Sin(static_cast<float>(Now) * (2.1f + (K % 5) * 0.37f) + K * 1.9f)) * (0.6f + 0.4f * ((K * 13) % 7) / 6.0f);
 				const double Big = (1.05 + 0.3 * ((K * 7) % 5) / 4.0) * Unit * Seen;
 				Draw(FrontFires[K] + FVector(0.0, 0.0, Big * 0.7), Big, Ember, Flicker * Dark * Soft);
 			}
