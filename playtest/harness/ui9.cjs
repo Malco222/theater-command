@@ -1,0 +1,47 @@
+// Version 54 in the page: a siege in progress (Poznan, September 1939), the panel, the assault card, the assault.
+const { chromium } = require('playwright');
+const fs = require('fs');
+const dir = __dirname;
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const errs = [];
+  page.on('pageerror', (e) => errs.push(e.message));
+  page.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text()); });
+  const save = fs.readFileSync(dir + '/out/siege.json', 'utf8');
+  await page.addInitScript((s) => { try { localStorage.setItem('tc-watch', '0'); localStorage.setItem('theater-command-save-v1', s); } catch {} }, save);
+  await page.goto('file:///home/user/theater-command/dist/play.html');
+  await page.waitForTimeout(800);
+  console.log('continue', await page.evaluate(() => window.theater.continueGame()));
+  await page.waitForTimeout(400);
+  const closeAll = async () => { for (let i = 0; i < 12; i++) { const open = await page.evaluate(() => document.querySelector('#veil')?.classList.contains('open')); if (!open) break; await page.keyboard.press('Escape'); await page.waitForTimeout(120); } };
+  const card = (n = 1600) => page.evaluate((n) => document.querySelector('#veil')?.classList.contains('open') ? document.querySelector('#card')?.innerText?.replace(/\s+/g, ' ').slice(0, n) : '(no card)', n);
+  const side = (n = 1400) => page.evaluate((n) => (document.querySelector('#side, aside, .side')?.innerText ?? '').replace(/\s+/g, ' ').slice(0, n), n);
+  const acts = (sel = '') => page.evaluate((sel) => [...new Set([...document.querySelectorAll((sel ? sel + ' ' : '') + '[data-act]')].filter((e) => e.offsetParent !== null).map((e) => `${e.getAttribute('data-act')}|${(e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 50)}`))].filter((x) => /storm|siege|garrison|sally|takefield|raidtown|attack|close/.test(x)).join('  ;  '), sel);
+  const press = (sel) => page.evaluate((s) => { const e = document.querySelector(s); if (!e) return 'missing ' + s; e.dispatchEvent(new MouseEvent('click', { bubbles: true })); return 'pressed ' + s + ' "' + (e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 40) + '"'; }, sel);
+  await closeAll();
+  const id = await page.evaluate(() => window.theater.game().regions.find((r) => r.name === 'Poznan').id);
+  await page.evaluate((id) => window.theater.onRegion(id), id); await page.waitForTimeout(300);
+  console.log('SIEGE PANEL:', (await side(1500)).slice(60));
+  console.log('ACTS:', await acts());
+  await page.screenshot({ path: dir + '/shots/61-siege-panel-v55.png' });
+  console.log(await press('[data-act="storm"]')); await page.waitForTimeout(400);
+  console.log('ASSAULT CARD:', await card(1900));
+  console.log('ACTS in card:', await acts('#card'));
+  await page.screenshot({ path: dir + '/shots/62-storm-card-v55.png' });
+  console.log(await press('#card [data-act="dosiege"]')); await page.waitForTimeout(600);
+  console.log('ASSAULT RESULT:', await card(1100));
+  await page.screenshot({ path: dir + '/shots/63-storm-result-v55.png' });
+  await closeAll();
+  const st = await page.evaluate((id) => { const g = window.theater.game(); const r = g.regions[id]; return { ctrl: r.ctrl, field: r.units.map((u) => u.nat + ' ' + u.name + ' ap' + u.ap), garr: (r.garr || []).map((u) => u.nat + ' ' + u.name) }; }, id);
+  console.log('STATE', JSON.stringify(st));
+  await page.evaluate((id) => window.theater.onRegion(id), id); await page.waitForTimeout(300);
+  console.log('PANEL AFTER:', (await side(800)).slice(60));
+  console.log('ACTS:', await acts());
+  await page.screenshot({ path: dir + '/shots/63b-after-assault-v55.png' });
+  // The map: is a siege marked on it?
+  const marks = await page.evaluate(() => [...document.querySelectorAll('svg [class*="siege"], svg [class*="invest"], svg [class*="ring"]')].length);
+  console.log('siege marks on the map:', marks);
+  console.log('errors', errs);
+  await browser.close();
+})();

@@ -1,0 +1,21 @@
+const { chromium } = require('playwright');
+(async () => {
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  page.on('pageerror', (e) => console.log(`pageerror: ${e.message}`));
+  await page.addInitScript(() => { try { localStorage.setItem('tc-watch', '0'); } catch {} });
+  await page.goto('file:///home/user/theater-command/dist/play.html');
+  await page.waitForTimeout(800);
+  await page.evaluate(() => window.theater.newGame('ITA', 7, 1, 'grand', 'colonel'));
+  await page.waitForTimeout(300);
+  const st = () => page.evaluate(() => ({ modal: window.theater.ui.modal && window.theater.ui.modal.kind, veil: document.querySelector('#veil').className, turn: window.theater.game().turn, active: document.activeElement && document.activeElement.tagName + '.' + document.activeElement.className }));
+  console.log('start', JSON.stringify(await st()));
+  await page.keyboard.press('Escape'); console.log('after Esc', JSON.stringify(await st()));
+  await page.locator('[data-act="end"]').click(); await page.waitForTimeout(400);
+  console.log('after End', JSON.stringify(await st()));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100); console.log('after Esc', JSON.stringify(await st()));
+  await page.keyboard.press('Enter'); await page.waitForTimeout(400); console.log('after Enter', JSON.stringify(await st()));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(100); console.log('after Esc', JSON.stringify(await st()));
+  await page.keyboard.press('Enter'); await page.waitForTimeout(400); console.log('after Enter', JSON.stringify(await st()));
+  await browser.close();
+})();
