@@ -1,0 +1,47 @@
+{
+  "_about": {
+    "what": "Cities and towns: the chief place of every province, how big it is, and what holding it is worth. A province named for its city needs no entry here; one named for a stretch of country names its chief town under 'names'.",
+    "rule": "Nothing here changes the war. It says what is already true of each province (its money, factories, harbour, oil and victory points) in a form both interfaces can draw on the map and put in front of the player before an attack.",
+    "sizes": "A capital is the seat of a government that still stands. Otherwise a place is a 'city' at 'city.vp' victory points or 'city.fac' factories or on urban ground, a 'town' at 'town.vp' victory points or with any factory, harbour or oilfield, and a 'village' if it has none of these.",
+    "ranks": "How a province's worth (what it pays its own country a month, in money as the interface shows it) is ranked from 0 to 5: the least it takes for each rank from 1 up.",
+    "words": "What each size is called, and the words for the signs a town can carry."
+  },
+  "sizes": { "city": { "vp": 2, "fac": 2 }, "town": { "vp": 1 } },
+  "ranks": [20, 60, 120, 250, 450],
+  "words": {
+    "capital": "Capital", "city": "City", "town": "Town", "village": "Village",
+    "factory": "Factories", "harbour": "Harbour", "oil": "Oilfield", "fort": "Fortress", "yard": "Shipyard", "airfield": "Airfield", "rail": "Railway"
+  },
+  "names": {
+    "Schleswig-Holstein": "Kiel", "Westphalia": "Bielefeld", "Ruhr": "Essen", "Rhineland": "Cologne", "Eifel": "Trier", "Saar": "Saarbrucken",
+    "Baden": "Karlsruhe", "Wurttemberg": "Stuttgart", "Bavaria": "Munich", "Franconia": "Nuremberg", "Hesse": "Kassel", "Saxony": "Leipzig",
+    "Mecklenburg": "Rostock", "Farther Pomerania": "Koslin", "Neumark": "Kustrin", "Grenzmark": "Schneidemuhl", "Lower Silesia": "Breslau",
+    "Upper Silesia": "Oppeln", "Masuria": "Allenstein", "Upper Austria": "Linz", "Tyrol": "Innsbruck", "Styria": "Graz", "Bohemia": "Prague", "Moravia": "Brno",
+    "Pomorze": "Bydgoszcz", "Danzig Corridor": "Gdynia", "Polish Silesia": "Katowice", "Polesie": "Pinsk", "Volhynia": "Lutsk",
+    "Somme": "Amiens", "Normandy": "Caen", "Cotentin": "Cherbourg", "Brittany": "Lorient", "Champagne": "Reims", "Lorraine": "Nancy", "Alsace": "Strasbourg",
+    "Vosges": "Epinal", "Aube": "Troyes", "Burgundy": "Dijon", "Touraine": "Tours", "Maine": "Le Mans", "Berry": "Bourges", "Auvergne": "Clermont-Ferrand",
+    "Limousin": "Limoges", "Poitou": "Poitiers", "Gascony": "Bayonne", "Languedoc": "Montpellier", "Riviera": "Nice", "Savoy": "Grenoble", "Jura": "Besancon",
+    "Corsica": "Ajaccio", "Syria": "Aleppo", "Lebanon": "Beirut",
+    "Flanders": "Ghent", "Ardennes": "Bastogne", "Holland": "Amsterdam", "Gelderland": "Arnhem", "Friesland": "Groningen", "Brabant": "Eindhoven",
+    "Kent": "Dover", "Hampshire": "Portsmouth", "West Country": "Bristol", "Cornwall": "Plymouth", "East Anglia": "Norwich", "Midlands": "Birmingham",
+    "Wales": "Cardiff", "Lancashire": "Liverpool", "Yorkshire": "Leeds", "Lincolnshire": "Lincoln", "Northumbria": "Newcastle", "Clydeside": "Glasgow",
+    "Lothian": "Edinburgh", "Highlands": "Inverness", "Ulster": "Belfast", "Palestine": "Jerusalem", "Transjordan": "Amman", "Cyprus": "Nicosia",
+    "Malta": "Valletta", "Sinai": "El Arish", "Qattara Depression": "Qara",
+    "Munster": "Cork", "Connacht": "Galway", "Jutland": "Aarhus", "Zealand": "Copenhagen",
+    "Sorlandet": "Kristiansand", "Oppland": "Lillehammer", "Nordland": "Bodo", "Finnmark": "Kirkenes",
+    "Scania": "Malmo", "Smaland": "Jonkoping", "Varmland": "Karlstad", "Jamtland": "Ostersund", "Vasterbotten": "Umea", "Norrbotten": "Lulea", "Dalarna": "Falun",
+    "Karelia": "Viipuri", "Lapland": "Rovaniemi", "Estonia": "Tallinn", "Latvia": "Riga", "Courland": "Libau", "Lithuania": "Kaunas",
+    "Lombardy": "Milan", "Piedmont": "Turin", "Liguria": "Genoa", "Veneto": "Venice", "Emilia": "Bologna", "Tuscany": "Florence", "Alto Adige": "Bolzano",
+    "Friuli": "Trieste", "Marche": "Ancona", "Abruzzo": "Pescara", "Apulia": "Bari", "Calabria": "Reggio", "Sicily": "Palermo", "Sardinia": "Cagliari", "Albania": "Tirana",
+    "Graubunden": "Chur",
+    "Catalonia": "Barcelona", "Basque Country": "Bilbao", "Galicia": "Corunna", "Asturias": "Oviedo", "Old Castile": "Burgos", "Aragon": "Zaragoza",
+    "La Mancha": "Albacete", "Extremadura": "Badajoz", "Andalusia": "Seville", "Spanish Morocco": "Tetuan",
+    "Slovakia": "Bratislava", "Transdanubia": "Pecs",
+    "Transylvania": "Cluj", "Banat": "Timisoara", "Oltenia": "Craiova", "Moldavia": "Iasi", "Bukovina": "Cernauti", "Bessarabia": "Kishinev", "Dobruja": "Constanta",
+    "Croatia": "Zagreb", "Slovenia": "Ljubljana", "Bosnia": "Sarajevo", "Dalmatia": "Split", "Vojvodina": "Novi Sad", "Serbia": "Nis", "Montenegro": "Cetinje", "Macedonia": "Skopje",
+    "Epirus": "Ioannina", "Thessaly": "Larissa", "Peloponnese": "Patras", "Thrace": "Komotini", "Crete": "Heraklion",
+    "Anatolia": "Eskisehir",
+    "Crimea": "Sevastopol", "Don Bend": "Kletskaya", "Kalmyk Steppe": "Elista", "Kuban": "Krasnodar", "Terek": "Mozdok", "Dagestan": "Makhachkala", "Kola": "Lovozero",
+    "Iraq": "Kirkuk", "Iran": "Tehran"
+  }
+}

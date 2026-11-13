@@ -34,6 +34,7 @@ import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotD
 import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
 import { armyCard, corpsCard, type ArmyCard, type CorpsCard } from './armies';
 import { corpsMood, type Mood } from './morale';
+import { prizeOf, prizesInReach, townAt, townsOf, type Prize, type TownView } from './towns';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -768,6 +769,29 @@ export const corpsDetail = (g: Game, c: Corps): CorpsCard => corpsCard(g, c);
  * going, a sentence on why, and the reasons one by one. Morale is null in a historical scenario, which keeps none.
  */
 export const moodOf = (g: Game, c: Corps): Mood => corpsMood(g, c);
+
+// ---- Cities and towns: where the valuable places are, and what taking one earns ---------------------
+
+/**
+ * Every province's chief place for a map to draw: its name, its size ('capital', 'city', 'town' or 'village'), where it
+ * stands (x, y on the campaign map, a fixed place beside the province's centre), the signs it carries (factory, harbour,
+ * oil, fort, yard, airfield), what it pays its own country a month, and that worth ranked 0 to 5.
+ */
+export const towns = (g: Game): TownView[] => townsOf(g);
+
+/** The chief place of one province. */
+export const townIn = (g: Game, region: number): TownView | null => townAt(g, region);
+
+/**
+ * What a province is worth to the player: what it gives if it is the player's own ('yours'), what it gives the ally who
+ * holds it ('ally'), what taking it would bring ('taken'), or what freeing it for its owner would do ('restored'). A
+ * sentence to show before an attack ('line'), and the items one by one: money, industry, oil, harbour, airfield,
+ * railway junction, victory points, a capital, a country to be freed, a fortress in the way.
+ */
+export const prize = (g: Game, region: number): Prize | null => prizeOf(g, region, g.human);
+
+/** The richest prizes the player could take next: enemy ground beside the player's own or beside the player's troops. */
+export const prizesNear = (g: Game, most = 5): Prize[] => prizesInReach(g, g.human, most);
 
 // ---- The player's generals ----------------------------------------------------------------
 
