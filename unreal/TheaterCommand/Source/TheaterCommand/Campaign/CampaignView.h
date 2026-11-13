@@ -315,6 +315,10 @@ struct FCampaignView
 	TArray<FString> Declarable; // the countries the player could declare war on this month
 	TArray<FString> League; // the members of the League, the third alliance
 	int32 IdleTeams = 0; // research teams of the player's with nothing to do
+	// What is still worth doing before the month is ended, besides moving the armies: a line, the screen that
+	// deals with it ("generals", "research", "arsenal") and a word of explanation.
+	struct FToDo { FString Screen; FString Text; FString Tip; };
+	TArray<FToDo> ToDo;
 	TArray<FString> Alerts; // things to tell the player as his month opens
 	TArray<FString> PageIds; // the rooms the rules set out themselves that are open to him
 	TArray<FString> PageLabels;

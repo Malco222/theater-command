@@ -1172,6 +1172,41 @@ void ACampaignPlayerController::StopTech(const FString& Id)
 	bResearchOpen = Research.bValid;
 }
 
+FString ACampaignPlayerController::GetToDoText(int32 Index) const
+{
+	const FCampaignSession* Session = GetSession();
+	const bool bShown = Session && Session->GetView().bHumanUp && !bWatching && !Opening.bVisible && Session->GetView().ToDo.IsValidIndex(Index);
+	return bShown ? Session->GetView().ToDo[Index].Text : FString();
+}
+
+FString ACampaignPlayerController::GetToDoTip(int32 Index) const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Session->GetView().ToDo.IsValidIndex(Index) ? Session->GetView().ToDo[Index].Tip : FString();
+}
+
+void ACampaignPlayerController::PressToDo(int32 Index)
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || !Session->GetView().ToDo.IsValidIndex(Index))
+	{
+		return;
+	}
+	const FString Screen = Session->GetView().ToDo[Index].Screen;
+	if (Screen == TEXT("generals"))
+	{
+		OpenGenerals();
+	}
+	else if (Screen == TEXT("research"))
+	{
+		OpenResearch();
+	}
+	else if (Screen == TEXT("arsenal"))
+	{
+		OpenArsenal();
+	}
+}
+
 int32 ACampaignPlayerController::GetIdleTeams() const
 {
 	const FCampaignSession* Session = GetSession();
@@ -2489,7 +2524,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		const FCampaignRegion& Staged = Map->GetData().Regions[StagedHover];
 		ProjectWorldLocationToScreen(Map->MapToWorld(Staged.Centroid.X, Staged.Centroid.Y), StagedPointer);
 	}
-	const int32 TipRegion = bStagedTip ? StagedHover : (bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : PointedRegion;
+	// (while pictures are being taken the real pointer, wherever it happens to lie, says nothing)
+	const int32 TipRegion = bStagedTip ? StagedHover : (bScripted || bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : PointedRegion;
 	const int32 TipField = (TipRegion == INDEX_NONE || bStagedTip) ? INDEX_NONE : PointedField;
 	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0);
 	if (TipRegion != HoverTipRegion || TipField != HoverTipField || TipHand != HoverTipHand)

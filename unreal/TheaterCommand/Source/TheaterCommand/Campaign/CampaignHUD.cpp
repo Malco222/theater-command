@@ -600,8 +600,21 @@ namespace
 								})
 							]
 						]
+						// And the rest of it: a general with no command, a design team with no work, nothing on order.
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
+							MakeToDo(0)
+						]
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
+							MakeToDo(1)
+						]
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
+							MakeToDo(2)
+						]
 						// The small map: every country in its colour, the armies as marks, the part on screen boxed.
-						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 12.0f)
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 4.0f, 0.0f, 12.0f)
 						[
 							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(6.0f))
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMapShown() ? EVisibility::Visible : EVisibility::Collapsed; })
@@ -3825,6 +3838,22 @@ namespace
 		}
 
 		/** Lays widgets out in rows of so many columns, each column the same width. */
+		/** One of the chips under the END THE MONTH button that say what is still worth doing; a click opens the screen for it. */
+		TSharedRef<SWidget> MakeToDo(int32 Index)
+		{
+			return SNew(SBox).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
+				.Visibility_Lambda([this, Index]() { return Controller.IsValid() && !Controller->GetToDoText(Index).IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+				[
+					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+					.ToolTipText_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoTip(Index) : FString()); })
+					.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PressToDo(Index); } return FReply::Handled(); })
+					[
+						SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(Brass)
+						.Text_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoText(Index) : FString()); })
+					]
+				];
+		}
+
 		void AddGrid(const TArray<TSharedRef<SWidget>>& Cells, int32 Columns)
 		{
 			for (int32 First = 0; First < Cells.Num(); First += Columns)

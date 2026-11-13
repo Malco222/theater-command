@@ -236,6 +236,7 @@ function view() {
     // Capitals of fallen countries the player would set free by taking them (or holds already): ringed in gold.
     free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
     alerts: alertsOf(s),
+    todo: todoOf(s),
     pages: pagesOf(s),
     // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
     // the months it will last and its books in words, and every shipping lane to draw over the sea.
@@ -1317,6 +1318,41 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   if (secretService(s)) out.push({ id: 'spies', label: 'THE SECRET SERVICE' });
   const act = lastAct(s);
   if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
+  return out;
+}
+
+/**
+ * What is still worth doing before the month is ended, besides moving the armies: each a line for a chip under the
+ * END THE MONTH button, the screen that deals with it, and a word of explanation. Nothing here has to be done.
+ */
+function todoOf(s: Game): { k: string; t: string; tip: string }[] {
+  const out: { k: string; t: string; tip: string }[] = [];
+  const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
+  if (!me || !humanUp(s) || onEve(s)) return out;
+  // A general waiting for a command while a corps he may take has nobody.
+  const open = vacant(s, me.id).filter((c) => !c.dead);
+  const free = open.length ? waiting(s, me.id).filter((x) => open.some((c) => !whyNotAssign(s, x, c))) : [];
+  if (free.length) {
+    out.push({
+      k: 'generals', t: free.length === 1 ? 'A GENERAL AWAITS A COMMAND' : `${free.length} GENERALS AWAIT A COMMAND`,
+      tip: `${free.length === 1 ? 'A general is' : `${free.length} generals are`} waiting for a command, and ${open.length === 1 ? 'a corps has' : `${open.length} corps have`} nobody. A corps with no general fights by the book. Open GENERALS.`,
+    });
+  }
+  // Design teams with nothing to do: they never choose their own work.
+  const idle = idleTeams(s, me.id);
+  if (idle > 0) {
+    out.push({
+      k: 'research', t: idle === 1 ? 'A DESIGN TEAM IS IDLE' : `${idle} DESIGN TEAMS ARE IDLE`,
+      tip: 'A design team with nothing to do designs nothing. Open RESEARCH and give it work.',
+    });
+  }
+  // Nothing on order at all, with money in the treasury for something the arsenal offers.
+  if (me.queue.length === 0 && arsenalOffers(s, -1).some((o) => !o.why)) {
+    out.push({
+      k: 'arsenal', t: 'NOTHING IS ON ORDER',
+      tip: `Nothing is being raised or built, and there is ${inHand(me.pp).toLocaleString('en-US')} in the treasury. Open the ARSENAL to order corps, aircraft, ships or works.`,
+    });
+  }
   return out;
 }
 

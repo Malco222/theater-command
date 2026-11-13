@@ -378,6 +378,23 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
 	Object->TryGetStringArrayField(TEXT("league"), Out.League);
 	Object->TryGetNumberField(TEXT("idle"), Out.IdleTeams);
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Things = nullptr;
+		if (Object->TryGetArrayField(TEXT("todo"), Things))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Things)
+			{
+				const TSharedPtr<FJsonObject>* Thing = nullptr;
+				if (Value->TryGetObject(Thing))
+				{
+					auto& Line = Out.ToDo.AddDefaulted_GetRef();
+					(*Thing)->TryGetStringField(TEXT("k"), Line.Screen);
+					(*Thing)->TryGetStringField(TEXT("t"), Line.Text);
+					(*Thing)->TryGetStringField(TEXT("tip"), Line.Tip);
+				}
+			}
+		}
+	}
 	Object->TryGetStringArrayField(TEXT("alerts"), Out.Alerts);
 	const TArray<TSharedPtr<FJsonValue>>* Pages = nullptr;
 	if (Object->TryGetArrayField(TEXT("pages"), Pages))
