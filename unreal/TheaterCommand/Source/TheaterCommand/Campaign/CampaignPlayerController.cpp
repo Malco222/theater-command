@@ -1841,6 +1841,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		Mode->DuckMusic(Newsreel.bOn);
 	}
 
+	// The first time evening comes on in the room, it is said what is happening and how to hold the day.
+	if (!bToldOfEvening && !bBusyWithScreens() && GetSession())
+	{
+		for (TActorIterator<ACampaignEnvironment> It(GetWorld()); It; ++It)
+		{
+			if (It->GetNight() > 0.25f)
+			{
+				bToldOfEvening = true;
+				Notify(TEXT("Evening in the war room: the lamps are lit, and day will come round again. Press T to hold it at day."), 9.0);
+			}
+		}
+	}
+
 	// The newsreel: the view drifts slowly round the place while its story is told, then the next comes on.
 	if (Newsreel.bOn)
 	{

@@ -611,9 +611,11 @@ private:
 	TArray<FAnnouncement> Announcements;
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
+	bool bToldOfEvening = false; // the first dusk has been explained
 	double BattleMusicUntil = 0.0; // the march plays until then
 	FAdviser Adviser;
 	void AdviserSaw(int32 Step);
+	bool bBusyWithScreens() const { return bWatching || Newsreel.bOn || Opening.bVisible || Announcements.Num() > 0 || bScripted; }
 	FNewsreelShow Newsreel;
 	bool bNewsreels = true; // K turns them off
 	TArray<FAnnouncement> HeldAnnouncements; // waiting for the newsreel to end

@@ -28,6 +28,8 @@ public:
 	 * steps to the next way of keeping time (running, held at day, held at night) and says which it now is.
 	 */
 	int32 NextTimeKeeping();
+	/** How far into the night the room's light has gone, 0 to 1. */
+	float GetNight() const { return Night; }
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Light")
