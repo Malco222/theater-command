@@ -81,6 +81,7 @@ namespace
 	constexpr int32 TierAlways = 0;
 	constexpr int32 TierFar = 1;
 	constexpr int32 TierNear = 2;
+	constexpr int32 TierMiddle = 3; // from the middle distance in: the places worth having, and what each is worth
 }
 
 ACampaignMapActor::ACampaignMapActor()
@@ -1236,12 +1237,38 @@ void ACampaignMapActor::BuildTowns()
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
-		const bool bTown = Region.bCapital || bCity || Region.VictoryPoints >= 2 || Region.Factories >= 2;
+		const bool bBig = Region.bCapital || bCity || Region.VictoryPoints >= 2 || Region.Factories >= 2;
+		const bool bTown = bBig || Region.VictoryPoints > 0 || Region.Factories > 0 || Region.bOil || Region.bPort;
 		if (!bTown)
 		{
 			continue;
 		}
-		const int32 Houses = Region.bCapital ? 13 : (bCity ? 10 : 6);
+		// What the place is worth, where the eye can count it: a stack of gold coins beside the town, one for each
+		// point it scores toward victory.
+		if (Region.VictoryPoints > 0)
+		{
+			const FVector Foot = SurfacePoint(Region.Center.X + 3.6, Region.Center.Y + 1.4, 0.02);
+			const FLinearColor Gold(FColor::FromHex(TEXT("D9A521"))), GoldEdge(FColor::FromHex(TEXT("9C7412")));
+			for (int32 Coin = 0; Coin < FMath::Min(Region.VictoryPoints, 9); ++Coin)
+			{
+				Model.Pillar(Foot + FVector(0.0, 0.0, Coin * 0.3 * U), 0.62 * U, 0.62 * U, 0.2 * U, Gold, 14);
+				Model.Pillar(Foot + FVector(0.0, 0.0, Coin * 0.3 * U + 0.2 * U), 0.56 * U, 0.56 * U, 0.1 * U, GoldEdge, 14);
+			}
+		}
+		// Oil: two derricks and a storage tank.
+		if (Region.bOil)
+		{
+			const FVector Foot = SurfacePoint(Region.Center.X - 4.2, Region.Center.Y - 2.6, 0.02);
+			const FLinearColor Iron(FColor::FromHex(TEXT("2B2A28"))), Tank(FColor::FromHex(TEXT("9A9C9E")));
+			for (int32 Rig = 0; Rig < 2; ++Rig)
+			{
+				const FVector At = Foot + FVector(Rig * 1.5 * U, Rig * 0.9 * U, 0.0);
+				Model.Pillar(At, 0.55 * U, 0.08 * U, 3.0 * U, Iron, 4);
+				Model.Box(At + FVector(0.0, 0.0, 3.05 * U), FVector(0.3, 0.3, 0.12) * U, Iron);
+			}
+			Model.Pillar(Foot + FVector(-1.3 * U, 0.6 * U, 0.0), 0.7 * U, 0.7 * U, 0.8 * U, Tank, 12);
+		}
+		const int32 Houses = Region.bCapital ? 13 : (bCity ? 10 : (bBig ? 6 : 4));
 		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1, Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id, &TownChimneys);
 		++Count;
 	}
@@ -1570,11 +1597,34 @@ void ACampaignMapActor::BuildLabels()
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bTown = Region.bCapital || Region.Terrain == TEXT("urban") || Region.VictoryPoints >= 2;
-		if (bTown)
+		// A place worth having: it scores toward victory, or has factories, oil or a harbour.
+		const bool bWorth = Region.VictoryPoints > 0 || Region.Factories > 0 || Region.bOil || Region.bPort;
+		if (bTown || bWorth)
 		{
-			const float Size = Region.bCapital ? 4.4f : 3.4f;
-			// The name sits just south of the town's marker.
-			AddLabel(Region.Name, Region.Center + FVector2D(0.0, Size * 0.5 + 2.0), Size, Ink, Region.bCapital ? TierAlways : TierNear);
+			const float Size = Region.bCapital ? 4.4f : (bTown ? 3.4f : 2.9f);
+			// The name sits just south of the town's marker, and under it what the place is worth.
+			AddLabel(Region.Name, Region.Center + FVector2D(0.0, Size * 0.5 + 2.0), Size, Ink, Region.bCapital ? TierAlways : TierMiddle);
+			TArray<FString> Worth;
+			if (Region.VictoryPoints > 0)
+			{
+				Worth.Add(FString::Printf(TEXT("worth %d"), Region.VictoryPoints));
+			}
+			if (Region.Factories > 0)
+			{
+				Worth.Add(FString::Printf(TEXT("%d %s"), Region.Factories, Region.Factories == 1 ? TEXT("factory") : TEXT("factories")));
+			}
+			if (Region.bOil)
+			{
+				Worth.Add(TEXT("oil"));
+			}
+			if (Region.bPort)
+			{
+				Worth.Add(TEXT("harbour"));
+			}
+			if (Worth.Num() > 0)
+			{
+				AddLabel(FString::Join(Worth, TEXT("  \u00B7  ")), Region.Center + FVector2D(0.0, Size * 0.5 + 2.0 + Size * 0.95 + (Region.bCapital ? 2.2 : 0.0)), 2.3f, FromHex(TEXT("5A1E12")).ToFColor(true), TierMiddle);
+			}
 		}
 		else
 		{
@@ -2509,7 +2559,8 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		{
 			const bool bShow = LabelTiers[i] == TierAlways
 				|| (LabelTiers[i] == TierFar && State == 0)
-				|| (LabelTiers[i] == TierNear && State == 2);
+				|| (LabelTiers[i] == TierNear && State == 2)
+				|| (LabelTiers[i] == TierMiddle && State >= 1);
 			if (Labels[i])
 			{
 				Labels[i]->SetVisibility(bShow);
