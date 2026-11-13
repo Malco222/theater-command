@@ -4,6 +4,7 @@
 
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignCameraPawn.h"
+#include "Campaign/CampaignEnvironment.h"
 #include "Campaign/CampaignGameMode.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignSession.h"
@@ -348,6 +349,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACampaignPlayerController::OpenReports);
 	InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ACampaignPlayerController::OpenGoals);
 	InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ACampaignPlayerController::ToggleWealth);
+	InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ACampaignPlayerController::ToggleDayNight);
 	InputComponent->BindKey(EKeys::K, IE_Pressed, this, &ACampaignPlayerController::ToggleNewsreels);
 	InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
 	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
@@ -1439,6 +1441,18 @@ void ACampaignPlayerController::HushNarrator()
 		}
 		FPlatformProcess::CloseProc(Narrator);
 		Narrator.Reset();
+	}
+}
+
+void ACampaignPlayerController::ToggleDayNight()
+{
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ACampaignEnvironment> It(World); It; ++It)
+		{
+			const int32 Now = It->NextTimeKeeping();
+			Notify(Now == 0 ? TEXT("Day and night go by in the room again.") : Now == 1 ? TEXT("Held at day. Press T again for night.") : TEXT("Held at night, by lamplight. Press T again to let the day run."), 4.0);
+		}
 	}
 }
 

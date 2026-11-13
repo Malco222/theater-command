@@ -7,7 +7,17 @@
 
 ACampaignEnvironment::ACampaignEnvironment()
 {
-	PrimaryActorTick.bCanEverTick = false;
+	PrimaryActorTick.bCanEverTick = true;
+	// Pictures are taken by day unless night is asked for ("-TheaterNight"), so that they can be compared.
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterNight")))
+	{
+		TimeKeeping = 2;
+		Night = 1.0f;
+	}
+	else if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), DayClockHeld))
+	{
+		TimeKeeping = 1;
+	}
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
@@ -63,12 +73,57 @@ ACampaignEnvironment::ACampaignEnvironment()
 
 void ACampaignEnvironment::SetSeason(float Winter, float Summer)
 {
+	SeasonWinter = Winter;
+	SeasonSummer = Summer;
+	ApplyLight();
+}
+
+int32 ACampaignEnvironment::NextTimeKeeping()
+{
+	TimeKeeping = (TimeKeeping + 1) % 3;
+	return TimeKeeping;
+}
+
+void ACampaignEnvironment::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	// One day of the room in about twelve minutes: most of it daylight, a short dusk, the night, a short dawn.
+	const double DayLasts = 720.0;
+	if (TimeKeeping == 0)
+	{
+		DayClock = FMath::Fmod(DayClock + DeltaSeconds / DayLasts, 1.0);
+	}
+	// (the day is the first 0.58 of it, then dusk to 0.68, night to 0.9, and dawn)
+	float Wanted = 0.0f;
+	if (TimeKeeping == 2)
+	{
+		Wanted = 1.0f;
+	}
+	else if (TimeKeeping == 0)
+	{
+		const float Clock = static_cast<float>(DayClock);
+		Wanted = Clock < 0.58f ? 0.0f : Clock < 0.68f ? FMath::SmoothStep(0.58f, 0.68f, Clock) : Clock < 0.9f ? 1.0f : 1.0f - FMath::SmoothStep(0.9f, 1.0f, Clock);
+	}
+	// A held time is come to over a few seconds, not at a jump.
+	const float Next = FMath::FInterpTo(Night, Wanted, DeltaSeconds, 0.9f);
+	if (FMath::Abs(Next - Night) > 0.0015f || (Next != Night && FMath::IsNearlyEqual(Next, Wanted, 0.002f)))
+	{
+		Night = FMath::IsNearlyEqual(Next, Wanted, 0.002f) ? Wanted : Next;
+		ApplyLight();
+	}
+}
+
+void ACampaignEnvironment::ApplyLight()
+{
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
 	{
 		return;
 	}
 	// The lamp is warm at 4900 K: winter takes it toward a cold white and takes a little off it; summer warms it.
-	KeyLight->SetTemperature(4900.0f + 1300.0f * Winter - 250.0f * Summer);
-	KeyLight->SetIntensity(7.0f - 0.9f * Winter + 0.3f * Summer);
-	FillLight->SetIntensity(0.75f + 0.25f * Winter);
+	// At night the lamp is all there is: warmer and a little lower, with the cool light of the windows gone,
+	// so the table stands in a pool of lamplight and the shadows deepen.
+	KeyLight->SetTemperature(4900.0f + 1300.0f * SeasonWinter * (1.0f - Night) - 250.0f * SeasonSummer - 900.0f * Night);
+	KeyLight->SetIntensity((7.0f - 0.9f * SeasonWinter + 0.3f * SeasonSummer) * (1.0f - 0.2f * Night));
+	FillLight->SetIntensity((0.75f + 0.25f * SeasonWinter) * (1.0f - 0.72f * Night));
+	SkyLight->SetIntensity(0.72f * (1.0f - 0.55f * Night));
 }

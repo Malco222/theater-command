@@ -416,6 +416,8 @@ public:
 	void NextNewsCard();
 	void EndNewsreel();
 	void ToggleNewsreels();
+	/** Day and night in the room: running, held at day, or held at night (T). */
+	void ToggleDayNight();
 	/** The wealth view of the map: provinces tinted by what they pay (Y). */
 	void ToggleWealth();
 	bool IsWealthShown() const;
