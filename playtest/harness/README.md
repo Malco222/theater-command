@@ -138,3 +138,31 @@ Traps met on Version 58:
 - `limitAttackers` takes the strongest corps that fit the roads, so artillery corps are left out. `"guns"` alone buys guns that sit in the line; `"useGuns"` is needed to see guns in an attack.
 - In the page the province panel is `#pane`, the army tray is `#tray`, and `#veil` with `#card` inside is the modal (the attack card). The attack card opens with the selected army only: click every `[data-act="atkpick"].out` to add the rest.
 - `probe32` builds only against Version 59 or later.
+
+## Versions 59 and 60 (manpower, the cabinet fixes, the cabinet that talks back)
+
+Build against the version under test, for example `./build.sh probe24 /home/user/tc60 out60`. New plan options in `lib.ts`, all off unless named: `"vow":"safe|fair|bold|daring|any"` (promise a town of that band whenever the cabinet will hear one, longest time on offer, then go for it), `"head":"sack|stand"` (answer the cabinet when it asks for a general), `"noCabinet":true` (switch the cabinet off at the start), `"menKeep":0.5` (raise no new corps while the reserve is under that share), and a hook `first(g, run)` called at the start of the player's month, before any order.
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `jobs.sh`, `v60jobs.sh` | A queue that survives a restart: `v60jobs.sh` writes one `NAME<TAB>COMMAND` line a job (252 for the whole test), `jobs.sh` plays them in streams and leaves `DIR/.done/NAME` for each finished one, so the same command plays only what is missing | `./v60jobs.sh > v60.tsv; ./jobs.sh v60.tsv out/v60 4` |
+| `probe24.ts` | The government probe, with more on each line: `when asked` (who held the town, the troops in it and the cabinet's own odds before the player moved), the attack card's odds before the player moved in the month asked and at their best while the directive ran, `HEAD asked` with the general's record and his last battles as they stood on the day, the wing on top, promises. Cabinets `hawks` and `doves` | `node out60/probe24.mjs GER 1 7 76 '<plan with "chase":true>' hawks` |
+| `vowtab.py` | Promises by the player's habit (made, kept, kept in the month made, broken) and heads asked for (what the general had lost and at what odds, his record, what came of standing by him) | `python3 vowtab.py out/v60 gov-vow` |
+| `wingtab.py` | What a hawk or a dove table asked for and what came of it, by how the war was going | `python3 wingtab.py out/v60b wing- -v` |
+| `cardtab.py`, `oddstab.py` | Towns the cabinet asked for: its own odds against the attack card's, and how often each band was taken | `python3 cardtab.py out/v60c/card-*.txt -v` |
+| `probe32.ts` | Men: the reserve, the class, corps, divisions and how full they are, every third month | `node out60/probe32.mjs SOV 1 23 76 '{"minOdds":1.5,"menKeep":0.5}'` |
+| `probe33.ts` | A campaign with the cabinet off (and on again at a month): leaks, the switch across a save, income | `node out60/probe33.mjs GER 1 7 76 '<plan>' 31` |
+| `probe34.ts` | Writes saves for the page at the first month of each new thing (a promise on offer, a head asked for, hawks on top, the reserve thinning, short and spent, a doubting cabinet) | `node out60/probe34.mjs SOV 1 11 76 '<plan>' out/v60saves/SOVd-11 doves` |
+| `probe35.ts` | Stand back, then promise: lists the promises on offer, marches every corps within two provinces of a town away, lists them again, gives the promise and plays it out | `node out60/probe35.mjs GER 1 7 24 '<plan>' back 2 Kiev` |
+| `probe36.ts` | What switching the cabinet off and on again in one month clears, on saves | `node out60/probe36.mjs out/v60saves/GERh-7-directive.json` |
+| `probe37.ts` | What an appointment costs and the capital a government opens with, by country | `node out60/probe37.mjs GER BEL SWE` |
+| `ui19.cjs`, `ui20.cjs`, `ui21.cjs` | The screens: the men gauge, ledger and cabinet switch; wings, promises and both answers on a general; the start card's picker and the promise button on a province | `TC_PAGE=file:///home/user/tc60/dist/play.html node ui20.cjs SAVE.json 86-v60-sov-head promise,head:stand` |
+
+Traps met on Versions 59 and 60:
+
+- `each` runs at the end of the player's month. A town printed there as the player's own was taken that month, and a general's "last battles" include the month's own fights. Read what the cabinet saw in `first`, before any order (this trap produced a wrong finding twice).
+- The cabinet's odds (`directiveOdds`: troops within two provinces over defenders and walls) are not the attack card's (`attackOutlook` on the corps that fit). Compare them before the player moves; at the end of the month the corps that attacked have no moves left and the card reads low.
+- The Soviet call-up fills its corps from the reserve of men, so `"menKeep"` cannot stop the Soviet reserve falling.
+- The machine can restart in the middle of a long run and kill background work; files survive. Use `jobs.sh`.
+- Swap a rebuilt bundle in with `mv` (build to another folder first), never in place, while a queue is running.
+- `ui20.cjs` puts `shots/` in front of the shot prefix itself; `ui21.cjs` takes the path as given.

@@ -159,6 +159,14 @@ export interface Plan {
   minOdds?: number;
   /** Version 57: go for the town the directive names: mass on it, and attack and storm it at shorter odds (default off). */
   chase?: boolean;
+  /** Version 60: promise the cabinet a town whenever a promise can be made, of this boldness ('safe', 'fair', 'bold' or 'daring'; 'any' takes the boldest on offer), with the longest time on offer; the player then goes for that town as for a directive's (default: no promises). */
+  vow?: string;
+  /** Version 60: the answer when the cabinet asks for a general's dismissal: 'sack' or 'stand' (default: left unanswered). */
+  head?: string;
+  /** Version 59: switch the war cabinet off as the campaign opens (default: left on). */
+  noCabinet?: boolean;
+  /** Version 59: raise no new corps while the reserve of men stands under this share of what it opened with (default: never holds back). */
+  menKeep?: number;
   chaseOdds?: number;
   /** Wars the player starts: [month number, nation]. */
   declare?: [number, string][];
@@ -178,6 +186,8 @@ export interface Plan {
   noMass?: boolean;
   /** Extra orders each month. */
   each?: (g: Game, run: Run) => void;
+  /** Called at the start of the player's month, before any order is given (reads only). */
+  first?: (g: Game, run: Run) => void;
   /** Version 58: told of every field attack the player orders, with the attack card's outlook as read just before (default off). */
   onAttack?: (g: Game, out: any, rep: any, target: any) => void;
   /** Version 58: shown every attack on offer before the player chooses (the province, the corps that would go, the card's outlook), each pass of the month (default off). */
@@ -210,14 +220,48 @@ function distanceToEnemy(g: Game, me: string, homeOnly: boolean): Int16Array {
 
 /** The province the standing directive wants taken, for a player who chases directives; -1 if none. */
 function chaseOf(g: Game, plan: Plan): number {
-  if (!plan.chase) return -1;
-  const d = (T as any).governmentOf?.(g)?.directive;
-  return d && (d.kind === 'take' || d.kind === 'relief') && typeof d.region === 'number' ? d.region : -1;
+  if (!plan.chase && !plan.vow) return -1;
+  const v = (T as any).governmentOf?.(g), d = v?.directive;
+  if (plan.chase && d && (d.kind === 'take' || d.kind === 'relief') && typeof d.region === 'number') return d.region;
+  return plan.vow && v?.promise ? v.promise.region : -1;
+}
+
+/** Version 60: the general the cabinet wants dismissed, in one line: who, why, his record, how many others have two defeats running, and his last three battles with the card's odds. */
+export function headDetail(g: Game, me: string, hd: any): string {
+  const gen = g.generals.find((x: any) => x.id === hd.general) as any, corps = g.corps.find((c: any) => c.id === gen?.corps) as any;
+  const mine = (us: any[]): boolean => !!corps && us.some((u: any) => u.name === corps.name && u.nat === me);
+  const fights = [...g.reports].reverse().filter((r: any) => mine(r.attackers) || mine(r.defenders)).slice(0, 3)
+    .map((r: any) => `${mine(r.attackers) ? 'attacked' : 'defended'} ${String(r.regionName)} at ${(r.dPower > 0 ? r.aPower / r.dPower : 99).toFixed(2)} to 1 (${r.attackers.length} corps on ${r.defenders.length})${r.taken || r.siege || r.gates ? ', attacker won' : ', attacker thrown back'}`);
+  const others = g.generals.filter((x: any) => x.nat === me && x.status === 'active' && x.corps >= 0 && x.rec.streak >= 2 && x.id !== hd.general).length;
+  return `${hd.rank} ${hd.name} (${hd.command}); ${hd.why} record ${gen?.rec.won} won of ${gen?.rec.battles}, level ${gen?.level}${hd.loved ? ', popular' : ''}; ${hd.left} months to answer; sack +${hd.gain}, refuse -${hd.cost}; other generals with two defeats running: ${others}; his last battles: ${fights.join(' | ') || 'none found'}`;
+}
+
+/** Version 60: the player's own dealings with the cabinet before the month's moves: his answer on a general, and a promise. What he did is kept on the run (run.cab). */
+function cabinetMoves(run: Run, plan: Plan): void {
+  if (!plan.vow && !plan.head) return;
+  const g = run.g, X = T as any, v = X.governmentOf?.(g);
+  if (!v || !v.mine) return;
+  const log = ((run as any).cab ??= { vows: [] as any[], heads: [] as any[] });
+  if (plan.head && v.head) {
+    const h = v.head;
+    const detail = headDetail(g, run.me, h);
+    const ok = plan.head === 'sack' ? X.orderSack(g, h.general) : X.orderStandBy(g);
+    log.heads.push({ turn: g.turn, name: h.name, why: h.why, did: plan.head, ok, detail });
+  }
+  if (plan.vow && !v.promise && X.whyNotOrderPromise?.(g) === null) {
+    const order = ['safe', 'fair', 'bold', 'daring'];
+    const all = (X.promiseTargetsOf(g, 12) as any[]).flatMap((t) => t.terms as any[]);
+    const pool = plan.vow === 'any' ? all.sort((a, b) => order.indexOf(b.band) - order.indexOf(a.band) || b.months - a.months || b.odds - a.odds) : all.filter((t) => t.band === plan.vow).sort((a, b) => b.months - a.months || b.odds - a.odds);
+    const pick = pool[0];
+    if (pick && X.orderPromise(g, pick.region, pick.months)) log.vows.push({ turn: g.turn, town: pick.town, band: pick.band, months: pick.months, odds: pick.odds, depth: pick.depth, trust: pick.trust, capital: pick.capital, price: pick.price });
+  }
 }
 
 export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   const g = run.g, me = run.me;
+  plan.first?.(g, run);
   if (plan.idle) { plan.each?.(g, run); return; }
+  cabinetMoves(run, plan);
   const minOdds = plan.minOdds ?? 1.5;
 
   // A small country chooses its path in its first month.
@@ -261,7 +305,9 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     // Guns on order arrive in five months; count them with the guns in the field.
     const mine = g.corps.filter((c) => c.nat === me && !(c as any).dead && c.kind !== 'fort');
     const needGuns = plan.guns !== undefined && mine.filter((c) => c.kind === 'art').length + gunsDue.filter((t: number) => t > g.turn).length < Math.floor((mine.length * plan.guns) / 10);
-    const want = needGuns ? ['corps:art', ...want0] : want0;
+    const men = plan.menKeep !== undefined ? (T as any).manpowerOf?.(g, me) : null;
+    const want1 = men && men.share < plan.menKeep! ? want0.filter((k) => !k.startsWith('corps:')) : want0;
+    const want = needGuns && want1 === want0 ? ['corps:art', ...want0] : want1;
     const o = want.map((k) => offers.find((x) => x.key === k)).find((x) => x && x.why === null);
     if (!o) break;
     const b = T.orderArsenal(g, o.key, o.at);
@@ -500,6 +546,7 @@ export function campaign(me: string, from: number, seed: number, plan: Plan, o: 
   const until = o.until ?? 76;
   const g = start(me, from, seed, o.level ?? 'colonel');
   const run: Run = { g, me, from, seed, level: o.level ?? 'colonel', rows: [], problems: [], fellOn: null, errors: [] };
+  if (plan.noCabinet) (T as any).orderCabinet?.(g, false);
   const seen = new Set<string>();
   let up: boolean;
   const t0 = Date.now();
