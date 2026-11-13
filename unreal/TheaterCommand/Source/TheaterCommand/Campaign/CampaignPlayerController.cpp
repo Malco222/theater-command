@@ -8,6 +8,8 @@
 #include "Campaign/CampaignGameMode.h"
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignSession.h"
+#include "TheaterCommand.h"
+#include "HAL/FileManager.h"
 #include "Components/InputComponent.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -191,7 +193,7 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("loud"), TEXT("How loud the music plays"), TEXT("From soft, under the sounds of the table, to full."), Loud == 0 ? TEXT("SOFT") : Loud == 1 ? TEXT("MIDDLE") : TEXT("FULL"), bMusic);
 	Add(TEXT("sounds"), TEXT("Sounds"), TEXT("Boots, engines, guns, aircraft and the click of every button. Key N."), CampaignSounds::IsOn() ? TEXT("ON") : TEXT("OFF"), CampaignSounds::IsOn());
 	Add(TEXT("newsreels"), TEXT("Newsreels"), TEXT("A month's great stories shown as film when it ends. Key K; Space skips one."), bNewsreels ? TEXT("ON") : TEXT("OFF"), bNewsreels);
-	Add(TEXT("narrator"), TEXT("The narrator"), TEXT("A voice that reads the newsreels aloud."), bNarrator ? TEXT("ON") : TEXT("OFF"), bNarrator);
+	Add(TEXT("narrator"), TEXT("The narrator"), TEXT("The game's voice: it reads the newsreels and the opening flight aloud, speaks for the adviser, and lets your armies answer."), bNarrator ? TEXT("ON") : TEXT("OFF"), bNarrator);
 	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
 	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
 	Add(TEXT("watch"), TEXT("The other nations' month"), TEXT("At a month's end: watch every nation's moves, or only what touches you. Key V."), bWatchAll ? TEXT("EVERY MOVE") : TEXT("ONLY MINE"), bWatchAll);
@@ -518,6 +520,7 @@ void ACampaignPlayerController::EnterCampaign()
 	{
 		const int32 Next = Adviser.Revision + 1; // (so that the screen writes his list afresh)
 		Adviser = FAdviser();
+		bAdviserSpoke = false;
 		Adviser.Revision = Next;
 		Adviser.bOn = Nation != nullptr && View.Turn <= 2 && !bScripted && bAdviserWanted;
 	}
@@ -1908,6 +1911,97 @@ void ACampaignPlayerController::OpenForces()
 	OpenPage(TEXT("forces"));
 }
 
+namespace
+{
+	/** The voices this computer has, by name: asked of it once. */
+	const TSet<FString>& InstalledVoices()
+	{
+		static TSet<FString> Names;
+		static bool bAsked = false;
+		if (!bAsked)
+		{
+			bAsked = true;
+#if PLATFORM_MAC
+			FString Listed, Errors;
+			int32 Code = 0;
+			if (FPlatformProcess::ExecProcess(TEXT("/usr/bin/say"), TEXT("-v ?"), &Code, &Listed, &Errors))
+			{
+				TArray<FString> Lines;
+				Listed.ParseIntoArrayLines(Lines);
+				for (const FString& Line : Lines)
+				{
+					// A line reads "Anna                de_DE    # Hallo! Ich heisse Anna.": the name is what stands before the language.
+					int32 Hash = INDEX_NONE;
+					FString Left = Line.FindChar(TEXT('#'), Hash) ? Line.Left(Hash) : Line;
+					Left.TrimEndInline();
+					int32 Space = INDEX_NONE;
+					if (Left.FindLastChar(TEXT(' '), Space))
+					{
+						Names.Add(Left.Left(Space).TrimEnd());
+					}
+				}
+			}
+#endif
+		}
+		return Names;
+	}
+
+	/** True if the computer has this voice. (It lists some by a longer name: "Daniel (English (UK))".) */
+	bool HasVoice(const FString& Name)
+	{
+		const FString Longer = Name + TEXT(" (");
+		for (const FString& Had : InstalledVoices())
+		{
+			if (Had == Name || Had.StartsWith(Longer))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** A card's heading as it is said aloud: not shouted in capitals, and its dots read as pauses. */
+	FString HeadingAloud(const FString& Heading)
+	{
+		FString Said = Heading;
+		Said.ReplaceInline(TEXT("\u00B7"), TEXT(","));
+		Said.ReplaceInline(TEXT("  ,"), TEXT(","));
+		Said.ReplaceInline(TEXT(" ,"), TEXT(","));
+		if (Said.Equals(Said.ToUpper(), ESearchCase::CaseSensitive) && Said.Len() > 1)
+		{
+			Said = Said.Left(1) + Said.Mid(1).ToLower();
+		}
+		return Said;
+	}
+
+	/** The voice an army of this country answers in: one that speaks its language, where the computer has one. */
+	FString VoiceOfNation(const FString& Tag)
+	{
+		static const TMap<FString, FString> ByNation = {
+			{ TEXT("GER"), TEXT("Anna") }, { TEXT("FRA"), TEXT("Jacques") }, { TEXT("VIC"), TEXT("Jacques") }, { TEXT("ITA"), TEXT("Alice") },
+			{ TEXT("SOV"), TEXT("Milena") }, { TEXT("POL"), TEXT("Zosia") }, { TEXT("NED"), TEXT("Xander") }, { TEXT("BEL"), TEXT("Ellen") },
+			{ TEXT("SWE"), TEXT("Alva") }, { TEXT("NOR"), TEXT("Nora") }, { TEXT("DEN"), TEXT("Sara") }, { TEXT("FIN"), TEXT("Satu") },
+			{ TEXT("HUN"), TEXT("Tünde") }, { TEXT("ROM"), TEXT("Ioana") }, { TEXT("YUG"), TEXT("Lana") }, { TEXT("BUL"), TEXT("Daria") },
+			{ TEXT("GRE"), TEXT("Melina") }, { TEXT("TUR"), TEXT("Yelda") }, { TEXT("ESP"), TEXT("Mónica") }, { TEXT("POR"), TEXT("Joana") },
+			{ TEXT("USA"), TEXT("Samantha") },
+		};
+		const FString* Found = ByNation.Find(Tag);
+		return Found ? *Found : FString(TEXT("Daniel"));
+	}
+
+	/** A year as it is said aloud: "nineteen forty". */
+	FString YearAloud(const FString& Year)
+	{
+		static const TCHAR* Ones[] = { TEXT(""), TEXT("-one"), TEXT("-two"), TEXT("-three"), TEXT("-four"), TEXT("-five"), TEXT("-six"), TEXT("-seven"), TEXT("-eight"), TEXT("-nine") };
+		const int32 Number = FCString::Atoi(*Year);
+		if (Number >= 1930 && Number <= 1949)
+		{
+			return FString::Printf(TEXT("Nineteen %s%s"), Number < 1940 ? TEXT("thirty") : TEXT("forty"), Ones[Number % 10]);
+		}
+		return Year;
+	}
+}
+
 void ACampaignPlayerController::PlayBriefing()
 {
 	FCampaignSession* Session = GetSession();
@@ -1931,6 +2025,7 @@ void ACampaignPlayerController::PlayYearCard(const FYearCard& Year)
 	}
 	PlayNewsreel(Year.Year, TArray<FNewsCard>(), 2);
 	Newsreel.Year = Year;
+	Speak(YearAloud(Year.Year) + TEXT(". ") + HeadingAloud(Year.Title), TEXT("Daniel"), 160, 2);
 }
 
 void ACampaignPlayerController::PlayNewsreel(const FString& Date, const TArray<FNewsCard>& Cards, int32 Kind)
@@ -1988,7 +2083,7 @@ void ACampaignPlayerController::NextNewsCard()
 		return;
 	}
 	const FNewsCard& Card = Newsreel.Cards[Newsreel.Index];
-	// Long enough to be read out, and never rushed. (The opening flight is read, not spoken, until it has a voice.)
+	// Long enough to be read out, and never rushed. (And a card stays until the voice has finished it: PlayerTick.)
 	Newsreel.Until = FPlatformTime::Seconds() + (Newsreel.Kind == 1 ? FMath::Clamp(2.6 + Card.Text.Len() / 15.0, 5.5, 13.0) : FMath::Clamp(2.2 + Card.Text.Len() / 13.5, 5.5, 16.0));
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 	{
@@ -2015,6 +2110,8 @@ void ACampaignPlayerController::NextNewsCard()
 	else
 	{
 		CampaignSounds::Play(this, TEXT("tick"), 0.5f, 0.8f);
+		// The opening flight is told by a radio voice, a little slower than the newsreels.
+		Speak(Card.Title.IsEmpty() ? Card.Text : HeadingAloud(Card.Title) + TEXT(". ") + Card.Text, TEXT("Daniel"), 172, 2);
 	}
 }
 
@@ -2068,23 +2165,86 @@ void ACampaignPlayerController::ToggleNewsreels()
 
 void ACampaignPlayerController::Narrate(const FString& Words)
 {
-	HushNarrator();
-	// The stories are read by the computer's own voice. Not while pictures are being taken, nor with the sound off.
-	if (bScripted || !bNarrator || !CampaignSounds::IsOn() || Words.IsEmpty() || FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")))
+	// The stories are read by the computer's own voice, and a new story cuts the last one short.
+	Speak(Words, TEXT("Daniel"), 182, 2);
+}
+
+void ACampaignPlayerController::Speak(const FString& Words, const FString& Voice, int32 Rate, int32 Cut)
+{
+	if (Cut >= 2)
+	{
+		HushNarrator();
+	}
+	// Not while pictures are being taken, nor with the voice or the sound off. ("-TheaterVoiceTo=<folder>" has every
+	// line written there as a sound file instead of spoken, pictures or no: a way to check the voice in silence.)
+	FString ToFolder;
+	const bool bToFiles = FParse::Value(FCommandLine::Get(), TEXT("TheaterVoiceTo="), ToFolder);
+	if (!bNarrator || Words.TrimStartAndEnd().IsEmpty() || FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")) || (!bToFiles && (bScripted || !CampaignSounds::IsOn())))
 	{
 		return;
 	}
+	FVoiceLine Line;
+	Line.Words = Words;
+	Line.Voice = Voice;
+	Line.Rate = Rate;
+	if (Cut == 1)
+	{
+		StopSpeaking();
+		VoiceQueue.Insert(Line, 0);
+	}
+	else
+	{
+		VoiceQueue.Add(Line);
+	}
+	// (nobody waits for a long queue of old remarks)
+	while (VoiceQueue.Num() > 4)
+	{
+		VoiceQueue.RemoveAt(Cut == 1 ? 1 : 0);
+	}
+	PumpVoice();
+}
+
+void ACampaignPlayerController::PumpVoice()
+{
+	if (VoiceQueue.Num() == 0 || IsSpeaking())
+	{
+		return;
+	}
+	const FVoiceLine Line = VoiceQueue[0];
+	VoiceQueue.RemoveAt(0);
 #if PLATFORM_MAC
-	FString Said = Words;
-	Said.ReplaceInline(TEXT("\""), TEXT("'"));
-	Said.ReplaceInline(TEXT("\\"), TEXT(" "));
+	// The words go by way of a file, so that nothing in them can be taken for an instruction to the program.
+	const FString Folder = FPaths::ConvertRelativePathToFull(FPaths::ProjectSavedDir() / TEXT("Voice"));
+	IFileManager::Get().MakeDirectory(*Folder, true);
+	const FString File = Folder / TEXT("line.txt");
+	FString Said = Line.Words;
 	Said.ReplaceInline(TEXT("\n"), TEXT(" "));
-	const FString Arguments = FString::Printf(TEXT("-v Daniel -r 182 \"%s\""), *Said);
+	Said.ReplaceInline(TEXT("[["), TEXT(" ")); // (the speaking program reads double brackets as commands to itself)
+	Said.ReplaceInline(TEXT("]]"), TEXT(" "));
+	if (!FFileHelper::SaveStringToFile(Said, *File, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+	{
+		return;
+	}
+	// A voice the computer has not got is replaced by the narrator's, and failing that by whatever it speaks with.
+	const FString Voice = HasVoice(Line.Voice) ? Line.Voice : HasVoice(TEXT("Daniel")) ? FString(TEXT("Daniel")) : FString();
+	FString Arguments = FString::Printf(TEXT("%s-r %d -f \"%s\""), Voice.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("-v \"%s\" "), *Voice), Line.Rate, *File);
+	FString ToFolder;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterVoiceTo="), ToFolder))
+	{
+		IFileManager::Get().MakeDirectory(*ToFolder, true);
+		Arguments += FString::Printf(TEXT(" -o \"%s\""), *(ToFolder / FString::Printf(TEXT("%02d-%s.aiff"), ++VoiceCount, Voice.IsEmpty() ? TEXT("voice") : *Voice)));
+		UE_LOG(LogTheater, Display, TEXT("Voice %d (%s, %d words a minute): %s"), VoiceCount, *Voice, Line.Rate, *Said.Left(120));
+	}
 	Narrator = FPlatformProcess::CreateProc(TEXT("/usr/bin/say"), *Arguments, true, true, true, nullptr, 0, nullptr, nullptr);
 #endif
 }
 
-void ACampaignPlayerController::HushNarrator()
+bool ACampaignPlayerController::IsSpeaking()
+{
+	return Narrator.IsValid() && FPlatformProcess::IsProcRunning(Narrator);
+}
+
+void ACampaignPlayerController::StopSpeaking()
 {
 	if (Narrator.IsValid())
 	{
@@ -2094,6 +2254,36 @@ void ACampaignPlayerController::HushNarrator()
 		}
 		FPlatformProcess::CloseProc(Narrator);
 		Narrator.Reset();
+	}
+}
+
+void ACampaignPlayerController::HushNarrator()
+{
+	VoiceQueue.Reset();
+	StopSpeaking();
+}
+
+void ACampaignPlayerController::SpeakAdviser()
+{
+	// The staff officer says the next of his first steps aloud, as it is written on his card.
+	static const TCHAR* Steps[5] = {
+		TEXT("Pick up an army. Click one of your flags."),
+		TEXT("Now send it. Right-click where it should go."),
+		TEXT("Look at a province. Click any ground to see what it holds."),
+		TEXT("Open an airfield or a fleet. Click one to see your air groups and your ships."),
+		TEXT("When your orders are given, end the month."),
+	};
+	if (!Adviser.bOn || Newsreel.bOn)
+	{
+		return;
+	}
+	for (int32 Step = 0; Step < 5; ++Step)
+	{
+		if (!Adviser.bDone[Step])
+		{
+			Speak(Steps[Step], TEXT("Daniel"), 176, 0);
+			return;
+		}
 	}
 }
 
@@ -2153,6 +2343,11 @@ void ACampaignPlayerController::AdviserSaw(int32 Step)
 	{
 		Adviser.bOn = false; // he has no more to say
 		Notify(TEXT("That is the whole of it. H opens the guide whenever you want it."), 6.0);
+		Speak(TEXT("That is the whole of it."), TEXT("Daniel"), 176, 0);
+	}
+	else
+	{
+		SpeakAdviser();
 	}
 }
 
@@ -2484,6 +2679,12 @@ bool ACampaignPlayerController::PointerOnTable(FVector& OutWorld) const
 void ACampaignPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
+	PumpVoice();
+	if (Adviser.bOn && !bAdviserSpoke && !Newsreel.bOn && BriefingAt <= 0.0 && !Opening.bVisible && Announcements.Num() == 0 && !bWatching)
+	{
+		bAdviserSpoke = true;
+		SpeakAdviser();
+	}
 
 	ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
 	if (!Eye || !Map.IsValid())
@@ -2567,7 +2768,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		{
 			Eye->RotateBy(DeltaTime * (Newsreel.Kind == 1 ? 1.2f : 1.8f));
 		}
-		if (FPlatformTime::Seconds() >= Newsreel.Until)
+		// (the next card waits for the voice to finish this one, though not for ever)
+		if (FPlatformTime::Seconds() >= Newsreel.Until && !(IsSpeaking() && FPlatformTime::Seconds() < Newsreel.Until + 8.0))
 		{
 			NextNewsCard();
 		}
@@ -3937,7 +4139,15 @@ bool ACampaignPlayerController::PickUpArmyIn(int32 RegionId)
 			}
 		}
 		static int32 Turn = 0;
-		ArmySaid = FText::FromString(FString::Printf(TEXT("\u201C%s\u201D"), Mine ? Mine->Said[Turn++ % 3] : TEXT("Ready.")));
+		const FString Answer = Mine ? Mine->Said[Turn++ % 3] : TEXT("Ready.");
+		ArmySaid = FText::FromString(FString::Printf(TEXT("\u201C%s\u201D"), *Answer));
+		// And aloud, in a voice of its own country where the computer has one. Armies do not chatter: one answer,
+		// then quiet for a few seconds; and never over a newsreel.
+		if (!Newsreel.bOn && FPlatformTime::Seconds() - AnsweredAt > 3.0)
+		{
+			AnsweredAt = FPlatformTime::Seconds();
+			Speak(Answer, VoiceOfNation(Tag), 190, 1);
+		}
 		ArmySaidUntil = FPlatformTime::Seconds() + (bScripted ? 30.0 : 2.6); // (held while pictures are taken, so that it is in them)
 	}
 	return true;

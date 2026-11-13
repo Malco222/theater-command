@@ -765,6 +765,24 @@ private:
 	FProcHandle Narrator; // the voice reading the story
 	void Narrate(const FString& Words);
 	void HushNarrator();
+	// The game's voice (the computer's own, for a start): the newsreels and the opening flight read aloud, the
+	// title card of a year, the adviser's steps, and an army's answer in its own language when it is picked up.
+	// One line is spoken at a time; the others wait their turn.
+	struct FVoiceLine
+	{
+		FString Words, Voice;
+		int32 Rate = 180;
+	};
+	TArray<FVoiceLine> VoiceQueue;
+	int32 VoiceCount = 0;
+	double AnsweredAt = 0.0; // when an army last answered aloud: they do not chatter
+	bool bAdviserSpoke = false; // the adviser has said his first word in this campaign
+	/** Cut: 0 waits its turn; 1 is said now and the rest wait behind it; 2 is said now and the rest are forgotten. */
+	void Speak(const FString& Words, const FString& Voice, int32 Rate, int32 Cut);
+	void PumpVoice();
+	void StopSpeaking();
+	bool IsSpeaking();
+	void SpeakAdviser();
 	int32 ProvinceTab = 0;
 	int32 FleetInHand = INDEX_NONE; // the fleet picked up, by its id
 	FString FleetNext = TEXT("patrol");
