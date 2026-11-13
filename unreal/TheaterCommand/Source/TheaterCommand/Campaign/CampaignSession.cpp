@@ -355,6 +355,12 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("atWar"), Out.bAtWar);
 	Object->TryGetBoolField(TEXT("eve"), Out.bEve);
 	Object->TryGetBoolField(TEXT("evePlan"), Out.bEvePlan);
+	Object->TryGetBoolField(TEXT("autoDig"), Out.bAutoDig);
+	{
+		double Full = 3.0;
+		Object->TryGetNumberField(TEXT("dugFull"), Full);
+		Out.DugFull = FMath::Max(1, FMath::RoundToInt32(Full));
+	}
 	{
 		const TSharedPtr<FJsonObject>* Weather = nullptr;
 		if (Object->TryGetObjectField(TEXT("weather"), Weather))
@@ -717,6 +723,12 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetStringField(TEXT("gen"), C.General); // null when nobody is named
 			Unit->TryGetStringField(TEXT("posture"), C.Posture);
 			Unit->TryGetBoolField(TEXT("dug"), C.bDug);
+			{
+				double Months = 0.0;
+				Unit->TryGetNumberField(TEXT("dugFor"), Months);
+				C.DugFor = FMath::RoundToInt32(Months);
+				C.bWorksDone = C.bDug && (C.DugFor == 0 || C.DugFor >= Out.DugFull);
+			}
 			Unit->TryGetBoolField(TEXT("supplied"), C.bSupplied);
 			Unit->TryGetBoolField(TEXT("town"), C.bInTown);
 			C.Divisions = Unit->GetIntegerField(TEXT("divs"));

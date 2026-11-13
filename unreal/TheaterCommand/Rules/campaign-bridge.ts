@@ -36,7 +36,7 @@
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, railReach as railReachOf, weather as weatherNow } from '../../../src/campaign/game';
+import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, railReach as railReachOf, weather as weatherNow } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -167,6 +167,9 @@ function view() {
     // Whether the player's country is at war with anybody: the music follows it.
     atWar: !!s.human && (s.nations[s.human]?.atWar.length ?? 0) > 0,
     eve: onEve(s),
+    // (Version 58) In the grand campaign whoever stands a month digs in unasked: the tray then offers two orders,
+    // stand (and dig in) or fall back; and the works are finished after this many months.
+    autoDig: s.flags.open === 1 && !!DEFENCE.entrench.auto, dugFull: DEFENCE.entrench.months,
     open: isOpen(s),
     level: isOpen(s) && s.human ? levelNow(s).name : '',
     fallen: fallenNation,
@@ -200,7 +203,7 @@ function view() {
       return ({
       id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
-      canOrder: up && canOrder(s, c), supplied: c.supplied, dug: !!c.dug, town: !!(c as { town?: unknown }).town, men: men(c),
+      canOrder: up && canOrder(s, c), supplied: c.supplied, dug: !!c.dug, dugFor: (c as { dugFor?: number }).dugFor ?? 0, town: !!(c as { town?: unknown }).town, men: men(c),
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
@@ -783,7 +786,10 @@ function preview(ids: number[], to: number) {
   const look = attackOutlook(s, corps, s.regions[to]);
   // (Version 55) The odds at which it is an even chance: 1.2 to 1 in the open, more for an assault on a town.
   const even = look?.even ?? 1.2;
-  const evenLine = even > 1.21 ? [{ label: 'An even chance', value: `${even.toFixed(1)} to 1`, effect: 'Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance.' }] : [];
+  // (Version 58: an attack on a line that is dug in and fed needs better odds too, and the rules' own "Prepared
+  // defence" line says so: it is not said twice.)
+  const saidAlready = [...(look?.lines ?? []), ...a.lines].some((l) => l.label === 'Prepared defence');
+  const evenLine = even > 1.21 && !saidAlready ? [{ label: 'An even chance', value: `${even.toFixed(1)} to 1`, effect: 'Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance.' }] : [];
   const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
   const named = (c: Corps) => {
     const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
@@ -819,7 +825,7 @@ function battleNote(s: Game, r: BattleReport): string {
   if (r.yielded) return `The ${s.nations[r.defNat].adj} troops fell back from ${r.regionName} without a fight.`;
   const cost = `${r.attLost.toLocaleString('en')} lost against ${r.defLost.toLocaleString('en')}`;
   const prisoners = r.prisoners > 0 ? `, ${r.prisoners.toLocaleString('en')} prisoners` : '';
-  const x = r as BattleReport & { siege?: boolean; town?: boolean; relief?: boolean; sally?: boolean; gates?: boolean };
+  const x = r as BattleReport & { siege?: boolean; town?: boolean; relief?: boolean; sally?: boolean; gates?: boolean; prepared?: number };
   const town = townSiege(s, r.region)?.town ?? r.regionName;
   // (Version 54: the town is the key to its province. Winning the country round it does not take it.)
   // (Version 55: a town held only by its guard may open its gates to the army that has just won the field outside.)
@@ -828,7 +834,9 @@ function battleNote(s: Game, r: BattleReport): string {
     : x.sally ? (r.taken ? `the garrison of ${town} breaks the ring: the siege is raised` : `the garrison's sortie from ${town} is driven back in`)
       : x.relief ? (r.taken ? `the besiegers are driven off and ${town} is relieved` : `the relief of ${town} is held off`)
         : x.siege ? `the country is won, but ${town} holds: it is now besieged`
-          : r.taken ? 'the ground is taken' : 'the attack is held';
+          // (Version 58: a line that was dug in and fed either held or was broken, and the note says which)
+          : (x.prepared ?? 0) >= 0.5 ? (r.taken ? 'the prepared line is broken and the ground is taken' : 'the attack breaks on a prepared line')
+            : r.taken ? 'the ground is taken' : 'the attack is held';
   return `${r.level} at ${r.regionName}: ${came}, ${cost}${prisoners}.`;
 }
 
@@ -1231,7 +1239,8 @@ function province(id: number) {
       }
       const rail = railNote(s, r.id);
       if (rail) {
-        lines.push(rail.line ? (rail.cut ? 'The railway here is cut.' : 'A railway runs through here.')
+        const hasty = (rail as { hasty?: number }).hasty ?? 0;
+        lines.push(rail.line ? (rail.cut ? (hasty > 0 ? `The railway here is cut: torn up in haste, the railwaymen will have it running in about ${hasty === 1 ? 'a month' : `${hasty} months`}.` : 'The railway here is cut: it stays cut until engineers relay it.') : 'A railway runs through here.')
           : rail.road > 0 ? `No railway: ${rail.road} province${rail.road === 1 ? '' : 's'} of road from the railhead.` : 'No railway.');
         if (rail.ruined > 0) lines.push(`${rail.ruined} of its ${rail.factories} factories lie in ruins from bombing.`);
       }
@@ -1309,6 +1318,9 @@ function placeJobs(s: Game, region: number): { key: string; label: string; detai
   return out;
 }
 
+/** The wreck order the player has been asked to confirm: province, kind and month. */
+let wreckAsked = '';
+
 /** Carries out one of the works a province offers (see province().jobs). */
 function work(key: string, region: number) {
   const s = game();
@@ -1349,6 +1361,14 @@ function work(key: string, region: number) {
   } else if (what === 'wreck') {
     const kind = a as PrizeKind;
     const why = whyNotWreckPrize(s, region, kind);
+    // (it cannot be undone, so it is asked twice: the first press says what it will cost, the second does it)
+    const asking = `${region}:${kind}:${s.turn}`;
+    if (!why && wreckAsked !== asking) {
+      wreckAsked = asking;
+      const place = prizesOf(s, region)?.prizes.find((x) => x.kind === kind)?.name ?? 'It';
+      return { ok: false, note: `${WRECK_WORD[kind]} at ${s.regions[region]?.name ?? 'this place'}? ${place} cannot be un-wrecked: ${kind === 'junction' ? 'no train runs through, for either side, until engineers relay the line' : `nobody has the use of it for ${PRIZES.wreck[kind as Exclude<PrizeKind, 'junction'>]} months, you included`}. Press it again to give the order.`, flies, view: view() };
+    }
+    wreckAsked = '';
     ok = !why && orderWreck(s, region, kind);
     note = ok ? `${WRECKED_WORD[kind] ?? 'It is wrecked.'} ${kind === 'junction' ? 'No train runs through until engineers relay the line.' : `Nobody has the use of it for ${PRIZES.wreck[kind as Exclude<PrizeKind, 'junction'>]} months.`}` : why ?? note;
   } else if (what === 'burn') {

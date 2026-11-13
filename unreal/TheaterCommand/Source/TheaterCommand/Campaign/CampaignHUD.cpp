@@ -2678,6 +2678,16 @@ namespace
 				[
 					SNew(STextBlock).Text(FText::FromString(TEXT("If attacked:"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
 				];
+				if (Controller.IsValid() && Controller->IsAutoDig())
+				{
+					// (Version 58, the grand campaign: whoever stands a month digs in unasked, so there are two orders, not three)
+					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
+					[
+						OrderButton(TEXT("STAND AND DIG IN"), Army.Posture != TEXT("back"), [this]() { if (Controller.IsValid()) { Controller->SetStance(TEXT("stand")); } })
+					];
+				}
+				else
+				{
 				TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
 				[
 					OrderButton(TEXT("STAND"), Army.Posture == TEXT("stand"), [this]() { if (Controller.IsValid()) { Controller->SetStance(TEXT("stand")); } })
@@ -2686,6 +2696,7 @@ namespace
 				[
 					OrderButton(TEXT("DIG IN"), Army.Posture == TEXT("dig"), [this]() { if (Controller.IsValid()) { Controller->SetStance(TEXT("dig")); } })
 				];
+				}
 				TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
 				[
 					OrderButton(TEXT("FALL BACK"), Army.Posture == TEXT("back"), [this]() { if (Controller.IsValid()) { Controller->SetStance(TEXT("back")); } })

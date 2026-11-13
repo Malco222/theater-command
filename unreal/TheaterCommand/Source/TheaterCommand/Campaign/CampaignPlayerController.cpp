@@ -629,8 +629,9 @@ void ACampaignPlayerController::SetStance(const FString& Posture)
 	Session->SetStance(PickedCorps, Posture);
 	RefreshOrders();
 	Notify(Posture == TEXT("dig") ? TEXT("They will dig in. After a whole month on this ground they defend a quarter stronger.")
-		: Posture == TEXT("back") ? TEXT("They will fall back whole if they are attacked at odds they cannot hold.")
-		: TEXT("They will stand and fight where they are."), 4.0);
+		: Posture == TEXT("back") ? (IsAutoDig() ? TEXT("They will fall back whole if they are attacked at odds they cannot hold. An army told to give ground leaves its trenches.") : TEXT("They will fall back whole if they are attacked at odds they cannot hold."))
+		: IsAutoDig() ? TEXT("They will stand and fight where they are. Left there for the whole month, without marching or attacking, they dig in: a line that is dug in and fed is hard to break.")
+		: TEXT("They will stand and fight where they are."), IsAutoDig() ? 6.0 : 4.0);
 }
 
 void ACampaignPlayerController::ToggleRail()
@@ -1248,6 +1249,12 @@ void ACampaignPlayerController::StopTech(const FString& Id)
 	Research = Session->Research();
 	Research.Revision = Revision;
 	bResearchOpen = Research.bValid;
+}
+
+bool ACampaignPlayerController::IsAutoDig() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Session->GetView().bAutoDig;
 }
 
 float ACampaignPlayerController::GetMoonlight() const
@@ -3218,7 +3225,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 							}
 							if (Glance.bValid && Glance.Even > 1.25f)
 							{
-								Line += FString::Printf(TEXT(" In a town it takes %.1f to 1 for an even chance."), Glance.Even);
+								Line += FString::Printf(TEXT(" Here it takes %.1f to 1 for an even chance."), Glance.Even);
 							}
 						}
 					}

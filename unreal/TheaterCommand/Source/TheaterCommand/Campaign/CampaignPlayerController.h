@@ -499,6 +499,8 @@ public:
 	void GetMapLetters(TArray<FMapLetter>& Out) const;
 	/** How far into a moonlit night the table is, 0 to 1: the lettering on the map dims with it. */
 	float GetMoonlight() const;
+	/** True where whoever stands a month digs in unasked (the grand campaign): the tray then offers stand, or fall back. */
+	bool IsAutoDig() const;
 	void JumpToMapShare(const FVector2D& Share);
 	bool IsMapShown() const;
 	/** A fleet in hand: picked up like an army, sent to a sea with a right-click, its ships shown as cards. */

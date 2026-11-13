@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f4eb2ba 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9a4d5be 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -3313,8 +3313,8 @@
       bombard: "Softening a town from the air and the sea. raidFull is how many bombers must get through for an air raid in full, shellFull the weight of ships' guns for a shelling in full; less does its share. A bombardment in full takes org off the organisation of each corps inside (never below floor) and puts guard percent of the town guard out of action. intensity is how hard a month of raids on a town is flown beside a fight for the sky, and value is what a raid in full on one division inside counts for when the raid is judged.",
       sortie: "The share of the garrison's attacking strength that joins a relieving army's attack.",
       pay: "The share of its worth a province under siege still pays the country that holds its town.",
-      capital: "How far a capital counts as lost, when its country reckons whether to ask for terms, while an army strong enough to close the ring stands round it (1 is lost outright). A government shut in loses its hold month by month: after capitalYear months of siege the capital counts as lost outright.",
-      ai: "The computer: hasty is the odds it wants before it storms a town off the march, the month it comes up, assault is the odds at which it storms one it has stood round for a month, late the odds it settles for once the siege has lasted two months, last the gamble it takes when the siege has dragged on for that many months, relief the odds at which it attacks an army round a town of its own side (its capital, any other), sally the odds at which its garrison comes out against the army round it, invest how many divisions it wants outside for each one inside before it closes round a city whose defenders have all gone into it, raid how much more its air staff makes of a raid on a town its army stands round than of other bombing, hold is how many corps it puts into a threatened city or capital."
+      capital: "How far a capital counts as lost, when its country reckons whether to ask for terms, while an army strong enough to close the ring stands round it (1 is lost outright). A government shut in loses its hold month by month: nothing in the month the ring closes, this much after capitalAfter months of siege, and after capitalYear months the capital counts as lost outright. So a capital stands a siege before its country gives in.",
+      ai: "The computer: hasty is the odds it wants before it storms a town off the march, the month it comes up, assault is the odds at which it storms one it has stood round for a month, late the odds it settles for once the siege has lasted two months, last the gamble it takes when the siege has dragged on for that many months, sea what it does about a port that ships still feed and so cannot be starved (after that many months round one only the ring stays and the rest of the army goes to overrun the country behind it; blockade is how much its admirals make of closing the sea off such a port, where 5 is a fleet's usual beat and 30 the sea behind an enemy landing), relief the odds at which it attacks an army round a town of its own side (its capital, any other), relieved how it treats a town whose siege a relieving army has just raised (for that many months it comes back at the country round it only with that much better odds than it usually asks), sally the odds at which its garrison comes out against the army round it, invest how many divisions it wants outside for each one inside before it closes round a city whose defenders have all gone into it, raid how much more its air staff makes of a raid on a town its army stands round than of other bombing, hold is how many corps it puts into a threatened city or capital."
     },
     room: { village: 1, town: 1, city: 2, capital: 3 },
     fortRoom: 1,
@@ -3336,8 +3336,9 @@
     sortie: 0.5,
     pay: 0,
     capital: 0.5,
+    capitalAfter: 3,
     capitalYear: 12,
-    ai: { hasty: 1.85, assault: 1.5, late: 1.3, last: { after: 6, odds: 1.15 }, sally: 1.4, raid: 2.5, invest: 1, relief: { capital: 1.25, other: 1.5 }, hold: { city: 1, capital: 2 } }
+    ai: { hasty: 1.85, assault: 1.5, late: 1.3, last: { after: 6, odds: 1.15 }, sea: { after: 3, blockade: 20 }, relieved: { months: 3, odds: 0.6 }, sally: 1.4, raid: 2.5, invest: 1, relief: { capital: 1.25, other: 1.5 }, hold: { city: 1, capital: 2 } }
   };
 
   // ../../data/campaign/joint.json
@@ -5060,7 +5061,7 @@
       chance: 0.85,
       unguarded: 0.35,
       fastCaptor: 0.25,
-      months: { oil: 5, works: 3, airfield: 2, harbour: 3 }
+      months: { oil: 5, works: 3, airfield: 2, harbour: 3, rail: 2 }
     },
     mend: 1,
     ai: {
@@ -5070,10 +5071,10 @@
       works: "A province with at least 'least' factories has a factory district outside the walls: 'outside' of its factories, rounded down. The rest stand in the town.",
       junction: "A province where at least 'lines' railway lines meet has a great junction outside the town: the army holding the field runs its trains through, though the town holds.",
       harbourInside: "A harbour lies inside the defences of a place of these sizes and of any fortress, and goes with the town. Elsewhere the quays lie outside: they go with the field, and a garrison whose harbour is lost or wrecked is not fed by sea.",
-      settle: "Months an army holds the field before the prizes outside the town work for it.",
+      settle: "Months an army holds the field before the prizes outside the town work for it. The player is told when they start to, not when they are seized.",
       ap: "Marching time a corps needs to wreck a prize by order. The work takes the rest of its month.",
       wreck: "Months a prize is out of use when wrecked by order: a thorough job. A junction's line is cut until engineers relay it.",
-      burn: "Scorched earth, when an army with the order is driven off the ground. 'chance' that each prize is burned when the loser still has troops next door or in the town, 'unguarded' when not, less 'fastCaptor' when fast troops took the ground. 'months' each is then out of use: a hasty job. A junction is not burned this way: the railway keeps its own rule when ground is lost (rails.ts).",
+      burn: "Scorched earth, when an army with the order is driven off the ground. 'chance' that each prize is burned when the loser still has troops next door or in the town, 'unguarded' when not, less 'fastCaptor' when fast troops took the ground. 'months' each is then out of use: a hasty job. 'months.rail': the province's railway is torn up as well, on the same chance, beside the rule the railway always had when ground is lost (rails.ts). Such a hasty cut needs no engineers: the new holder's railwaymen make it good after that many months, and engineers sooner. Inside the Soviet Union an invader's trains run on converted track only so many months (east.json) after the line was made good, so burned ground keeps an invader's supply line long for longer.",
       mend: "Months an engineer corps standing in the province takes off each wrecked prize there, each month, beside the month that passes anyway.",
       "ai.policy": "Each computer nation's scorched earth policy: never, conquered (ground that is not its own or an ally's) or everywhere."
     }
@@ -5097,7 +5098,7 @@
   var outKey = (r, kind) => `pzo:${r.id}:${kind}`;
   function prizeOut(g2, r, kind) {
     if (!hasPrize(g2, r, kind)) return 0;
-    if (kind === "junction") return railCut(g2, r.id) ? 99 : 0;
+    if (kind === "junction") return railCut(g2, r.id) ? hastyLeft(g2, r.id) || 99 : 0;
     if (kind === "oil") return fieldOut(g2, r) > 0 ? Math.max(1, (g2.flags[`oilout:${r.id}`] ?? 0) - g2.turn) : 0;
     return Math.max(0, (g2.flags[outKey(r, kind)] ?? 0) - g2.turn);
   }
@@ -5237,28 +5238,94 @@
       const roll2 = new Rng(hashString(`prize:${g2.seed}:${g2.turn}:${r.id}:${kind}`)).next();
       if (roll2 < p && wreckPrize(g2, r, kind, PRIZES.burn.months[kind])) burnt.push(kind);
     }
-    if (burnt.length) {
-      const list4 = listed(burnt);
-      tellPrize(g2, r, `Scorched earth: ${g2.nations[from].adj} troops wreck ${list4} at ${r.name} as they are driven off. ${theName(g2.nations[by], true)} will get nothing from ${burnt.length === 1 && burnt[0] !== "oil" ? "it" : "them"} for months.`, from, [by, from, r.owner]);
-    }
+    if (burnt.length) noteBurnt(g2, r, from, by, burnt);
     return burnt;
+  }
+  function railOnScorch(g2, r, by, from) {
+    if (!prizeRules(g2) || !g2.nations[from] || !atWar(g2, by, from) || !onNet(r.id) || railCut(g2, r.id) || !willBurn(g2, from, r)) return false;
+    const roll2 = new Rng(hashString(`prize:${g2.seed}:${g2.turn}:${r.id}:rail`)).next();
+    if (roll2 >= burnChance(g2, r, by, from) || !cutRailHasty(g2, r.id, PRIZES.burn.months.rail)) return false;
+    noteBurnt(g2, r, from, by, ["rail"]);
+    return true;
+  }
+  var BIT = { oil: 1, works: 2, airfield: 4, harbour: 8, rail: 16, junction: 0 };
+  var BKEYS = [];
+  var burntKey = (r) => BKEYS[r] ?? (BKEYS[r] = `burnt:${r}`);
+  function noteBurnt(g2, r, from, by, what) {
+    const names = Object.keys(g2.nations);
+    const pair2 = names.indexOf(from) * 1e3 + names.indexOf(by);
+    let mask = 0;
+    for (const k of what) mask |= BIT[k];
+    const old = g2.flags[burntKey(r.id)];
+    if (old !== void 0 && Math.floor(old / 32) === pair2) mask |= old % 32;
+    g2.flags[burntKey(r.id)] = pair2 * 32 + mask;
+  }
+  var andList = (w) => w.length <= 1 ? w.join("") : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`;
+  function tellBurnt(g2) {
+    if (!prizeRules(g2)) return;
+    const names = Object.keys(g2.nations);
+    const groups = /* @__PURE__ */ new Map();
+    for (const r of g2.regions) {
+      const v = g2.flags[burntKey(r.id)];
+      if (v === void 0) continue;
+      delete g2.flags[burntKey(r.id)];
+      const pair2 = Math.floor(v / 32);
+      (groups.get(pair2) ?? groups.set(pair2, []).get(pair2)).push({ r, mask: v % 32 });
+    }
+    for (const [pair2, rows] of groups) {
+      const from = names[Math.floor(pair2 / 1e3)], by = names[pair2 % 1e3];
+      if (!g2.nations[from] || !g2.nations[by]) continue;
+      const party = g2.human !== null && [by, from].some((p) => p === g2.human || allied(g2, p, g2.human));
+      const places = [], tracks = [];
+      let fields = 0, at = -1;
+      for (const { r, mask } of rows) {
+        const mine3 = party || g2.human !== null && (r.owner === g2.human || allied(g2, r.owner, g2.human));
+        if (!mine3 && !r.oil && !r.cap && r.fac < 4) continue;
+        const kinds = ["oil", "works", "harbour"].filter((k) => mask & BIT[k]);
+        if (kinds.length) {
+          places.push(`${listed(kinds)} of ${r.name}`);
+          if (at < 0) at = r.id;
+        }
+        if (mask & BIT.airfield) fields++;
+        if (mine3 && mask & BIT.rail) tracks.push(r.name);
+      }
+      if (!places.length && !tracks.length) continue;
+      if (fields) places.push(fields === 1 ? "an airfield" : `${fields} airfields`);
+      const where = tracks.length > 3 ? `${tracks.length} places` : andList(tracks);
+      const did = [places.length ? `wrecked ${andList(places)}` : "", tracks.length ? `tore up the railway at ${where}` : ""].filter(Boolean).join(", and ");
+      const cost = [
+        places.length ? `${theName(g2.nations[by], true)} will get nothing from the wrecks for months` : "",
+        tracks.length ? `${places.length ? "the" : "The"} track will take about ${monthsWord(PRIZES.burn.months.rail)} to make good, less with engineers` : ""
+      ].filter(Boolean).join(", and ");
+      headline(g2, "battle", `Scorched earth: ${g2.nations[from].adj} troops ${did} as they were driven off. ${cost}.`, from, at >= 0 ? at : rows[0].r.id);
+    }
   }
   var PLACE_WORDS = { oil: "the oilfields", works: "the factory district", airfield: "the airfield", harbour: "the harbour", junction: "the rail junction" };
   var listed = (kinds) => {
     const w = kinds.map((k) => PLACE_WORDS[k]);
     return w.length === 1 ? w[0] : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`;
   };
-  function tellSeized(g2, r, by) {
-    if (!prizeRules(g2) || g2.human === null || !g2.nations[by]) return;
-    if (![by, r.ctrl].some((p) => p === g2.human || allied(g2, p, g2.human))) return;
-    const got = PRIZE_KINDS.filter((k) => hasPrize(g2, r, k) && !prizeInside(g2, r, k) && prizeOut(g2, r, k) <= 0);
-    if (!got.some((k) => k !== "airfield")) return;
-    const words = listed(got);
-    const many = got.length > 1 || got[0] === "oil";
-    headline(g2, "info", `${words[0].toUpperCase()}${words.slice(1)} outside ${townName(r)} ${many ? "are" : "is"} in ${g2.nations[by].adj} hands, though the town holds. ${many ? "They work" : "It works"} for ${theName(g2.nations[by])} after ${monthsWord(PRIZES.settle)}.`, by, r.id);
+  function tellSettled(g2, nat) {
+    if (!prizeRules(g2) || g2.human === null || !g2.nations[nat]) return;
+    for (const r of g2.regions) {
+      if (r.ctrl === nat || !r.units.length || !besieged(g2, r) || fieldCtrl(g2, r) !== nat) continue;
+      const since = g2.flags[`siege:${r.id}`];
+      if (since === void 0 || g2.turn - since !== PRIZES.settle) continue;
+      if (![nat, r.ctrl].some((p) => p === g2.human || allied(g2, p, g2.human))) continue;
+      const got = PRIZE_KINDS.filter((k) => hasPrize(g2, r, k) && !prizeInside(g2, r, k) && prizeOut(g2, r, k) <= 0);
+      if (!got.some((k) => k !== "airfield")) continue;
+      const words = listed(got);
+      const many = got.length > 1 || got[0] === "oil";
+      const money = Math.round(got.reduce((s, k) => s + prizeMoney(g2, r, k, nat), 0) * 10) / 10;
+      headline(g2, "info", `${words[0].toUpperCase()}${words.slice(1)} outside ${townName(r)} now ${many ? "work" : "works"} for ${theName(g2.nations[nat])}, though the town holds${money > 0 ? `: ${money} a month to its treasury` : ""}.`, nat, r.id);
+    }
   }
   function mendPrizes(g2, nat) {
-    if (!prizeRules(g2) || PRIZES.mend <= 0) return;
+    if (!prizeRules(g2)) return;
+    for (const id of mendHasty(g2, nat)) {
+      if (nat === g2.human) headline(g2, "info", `The railway at ${g2.regions[id].name} is made good: the trains run again.`, nat, id);
+    }
+    if (PRIZES.mend <= 0) return;
     for (const r of g2.regions) {
       if (!allied(g2, nat, fieldCtrl(g2, r)) || !r.units.some((u) => !u.dead && u.nat === nat && u.kind === "eng" && u.leave === void 0)) continue;
       for (const kind of ["works", "airfield", "harbour"]) {
@@ -5278,7 +5345,7 @@
       const n = worksOutside(r);
       const detail = kind === "works" ? `${n} of ${r.fac} ${r.fac === 1 ? "factory" : "factories"} outside the walls` : kind === "airfield" ? `room for ${airfieldsHold(g2, r.id).toLocaleString("en-US")} aircraft` : kind === "junction" ? `${railsAt(r.id).length} lines meet here` : kind === "harbour" ? inside2 ? "inside the defences: it goes with the town" : "the quays lie outside the town" : "wells and refineries";
       const who2 = g2.nations[holder]?.adj ?? holder;
-      const state = out >= 99 ? "The line is cut until engineers relay it." : out > 0 ? `${kind === "oil" ? "Burning" : "Wrecked"}: out of use for ${monthsWord(out)} more.` : settling ? `Taken by ${who2} troops this month: it works for them from next month.` : holder !== r.ctrl ? `In ${who2} hands with the country round the town.` : besieged(g2, r) && inside2 ? "Held with the town, and still in use." : "At work.";
+      const state = out >= 99 ? "The line is cut until engineers relay it." : out > 0 && kind === "junction" ? `Torn up in haste: the railwaymen will have it running in ${monthsWord(out)}, engineers sooner.` : out > 0 ? `${kind === "oil" ? "Burning" : "Wrecked"}: out of use for ${monthsWord(out)} more.` : settling ? `Taken by ${who2} troops this month: it works for them from next month.` : holder !== r.ctrl ? `In ${who2} hands with the country round the town.` : besieged(g2, r) && inside2 ? "Held with the town, and still in use." : "At work.";
       prizes.push({ kind, name: PRIZES.names[kind], inside: inside2, holder, user: prizeUser(g2, r, kind), out, settling, detail, state });
     }
     if (!prizes.length) return null;
@@ -5356,15 +5423,20 @@
   var storesOf = (g2, r) => SIEGE.stores[townSize(g2, r)] + (r.fort ? SIEGE.fortStores * r.fort.lv : 0);
   var monthsShut = (g2, r) => g2.flags[`sgm:${r.id}`] ?? 0;
   var investedOn = (g2, r) => g2.flags[`siege:${r.id}`] ?? -1;
-  function fedBySea(g2, r) {
-    if (!r.port || !r.seas.length) return false;
-    if (!harbourOpen(g2, r)) return false;
-    const nats = /* @__PURE__ */ new Set([r.ctrl, ...garrisonOf(r).map((c) => c.nat)]);
-    for (const id of nats) {
+  function feeders(g2, r) {
+    if (!r.port || !r.seas.length) return [];
+    if (!harbourOpen(g2, r)) return [];
+    return [.../* @__PURE__ */ new Set([r.ctrl, ...garrisonOf(r).map((c) => c.nat)])].filter((id) => {
       const n = g2.nations[id];
-      if (n && n.alive && (n.seaSupply || n.sealift > 0) && seaOpenAt(g2, id, r)) return true;
-    }
-    return false;
+      return !!n && n.alive && (n.seaSupply || n.sealift > 0);
+    });
+  }
+  function fedBySea(g2, r) {
+    return feeders(g2, r).some((id) => seaOpenAt(g2, id, r));
+  }
+  function feedingSeas(g2, r) {
+    const who = feeders(g2, r);
+    return r.seas.filter((z) => who.some((id) => !closedTo(g2, z, id)));
   }
   var strength = (cs) => cs.reduce((s, c) => s + c.divs * c.str, 0);
   function ringClosed(g2, r) {
@@ -5483,7 +5555,6 @@
     const who = inside2.length ? `${inside2.length === 1 ? "one corps" : `${inside2.length} corps`} inside` : "only its guard inside";
     tell(g2, r, `${g2.nations[by].adj} troops close round ${townName(r)}: ${placeWords(g2, r)} is under siege, with ${who}.`, r.ctrl, [by, r.ctrl, ...inside2.map((c) => c.nat)]);
     prizesOnLoss(g2, r, by, r.ctrl, "outside");
-    tellSeized(g2, r, by);
   }
   function lift(g2, r, by = null) {
     const key3 = `siege:${r.id}`;
@@ -5493,6 +5564,7 @@
     delete g2.flags[key3];
     delete g2.flags[`sgby:${r.id}`];
     delete g2.flags[`sgm:${r.id}`];
+    if (by) g2.flags[`relieved:${r.id}`] = g2.turn;
     g2.supplyDirty = true;
     tallySiege(g2, "raised");
     tell(g2, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ""}${by ? ` by ${g2.nations[by].adj} troops` : ""}.`, r.ctrl, [r.ctrl, ...by ? [by] : [], ...garrisonOf(r).map((c) => c.nat)]);
@@ -5742,7 +5814,8 @@
     if (guard > 0) lines.push(`Its own guard of depot troops, police and militia is worth ${guard >= 0.95 ? `${guard.toFixed(1)} divisions` : "part of a division"}. It holds the town while no army does.`);
     if (by) {
       const closed = ringClosed(g2, r);
-      lines.push(bySea ? "Ships still reach the harbour: the town cannot be starved while they do." : !closed ? "The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it." : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? "one more month" : `${left} more months`}; after that they go hungry.` : inside2 ? "Its stores are gone: the garrison is starving, and loses men and heart every month." : "Its stores are gone: it is about to give in.");
+      const seas = bySea ? feedingSeas(g2, r).map((z) => g2.seas[z].name) : [];
+      lines.push(bySea ? `Ships still reach the harbour${seas.length ? ` by the ${seas.length === 1 ? seas[0] : `${seas.slice(0, -1).join(", ")} and the ${seas[seas.length - 1]}`}` : ""}: the town cannot be starved while they do. A fleet at sea there, strong enough to close ${seas.length > 1 ? "those waters" : "that water"} to them, starts its stores running down.` : !closed ? "The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it." : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? "one more month" : `${left} more months`}; after that they go hungry.` : inside2 ? "Its stores are gone: the garrison is starving, and loses men and heart every month." : "Its stores are gone: it is about to give in.");
       if (closed && r.cap && r.owner === r.ctrl) {
         const sat = Math.max(0, g2.turn - investedOn(g2, r));
         lines.push(sat >= SIEGE.capitalYear ? `Shut in for ${months(sat)}, the government has lost its hold on the country: the capital counts as lost when it reckons whether to fight on.` : `A government shut in its capital loses its hold on the country month by month. After ${months(SIEGE.capitalYear)} of siege the capital counts as lost, whether it has fallen or not.`);
@@ -5799,8 +5872,37 @@
   function mendRail(g2, r) {
     if (!railCut(g2, r)) return false;
     delete g2.flags[key(r)];
+    delete g2.flags[hastyKey(r)];
     g2.supplyDirty = true;
     return true;
+  }
+  var HKEYS = [];
+  var hastyKey = (r) => HKEYS[r] ?? (HKEYS[r] = `railhasty:${r}`);
+  var GKEYS = [];
+  var goodKey = (r) => GKEYS[r] ?? (GKEYS[r] = `railgood:${r}`);
+  function cutRailHasty(g2, r, months2) {
+    if (!cutRail(g2, r)) return false;
+    g2.flags[hastyKey(r)] = g2.turn + months2;
+    return true;
+  }
+  var hastyLeft = (g2, r) => railCut(g2, r) && g2.flags[hastyKey(r)] !== void 0 ? Math.max(1, g2.flags[hastyKey(r)] - g2.turn) : 0;
+  function lineSince(g2, r, since) {
+    const good = g2.flags[goodKey(r)];
+    return good !== void 0 && good > since ? good : since;
+  }
+  function mendHasty(g2, nat) {
+    const out = [];
+    if (!groundRules(g2)) return out;
+    for (const r of g2.regions) {
+      if (r.ctrl !== nat) continue;
+      const due = g2.flags[hastyKey(r.id)];
+      if (due === void 0 || g2.turn < due) continue;
+      if (mendRail(g2, r.id)) {
+        g2.flags[goodKey(r.id)] = g2.turn;
+        out.push(r.id);
+      } else delete g2.flags[hastyKey(r.id)];
+    }
+    return out;
   }
   var concerns2 = (g2, ...nats) => g2.human !== null && g2.nations[g2.human].alive && nats.includes(g2.human);
   function whyNotCutRail(g2, nat, region) {
@@ -5925,6 +6027,7 @@
       to: railsAt(region),
       cut: railCut(g2, region),
       since: cutOn(g2, region),
+      hasty: hastyLeft(g2, region),
       road: raw < 0 ? -1 : head.road,
       attack: head.attack,
       defence: head.defence,
@@ -7824,6 +7927,15 @@
   function invadedHere(g2, z, nat) {
     return g2.seas[z].coast.some((id) => g2.regions[id].owner === nat && !g2.regions[id].overseas && atWar(g2, nat, g2.regions[id].ctrl));
   }
+  function blockadeWanted(g2, z, nat) {
+    if (!siegeRules(g2)) return false;
+    return g2.seas[z].coast.some((id) => {
+      const r = g2.regions[id];
+      if (!r.port || !r.seas.includes(z) || !atWar(g2, nat, r.ctrl) || !besieged(g2, r)) return false;
+      const by = besiegerOf(g2, r);
+      return by !== null && allied(g2, nat, by) && feeders(g2, r).length > 0;
+    });
+  }
   function navalAI(g2, nat, orders) {
     if (nat === g2.human) return;
     const n = g2.nations[nat];
@@ -7866,6 +7978,7 @@
         if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry;
         if (landedLately(g2, z, nat) && own >= e.total) v += 30;
         if (invaded) v += 60;
+        if (f.duty === "patrol" && own >= NAVY.battle.seek * e.total && blockadeWanted(g2, z, nat)) v += SIEGE.ai.sea.blockade;
         if (z === f.station && f.duty === "patrol" && (quarry <= 0 || own >= 0.7 * e.total)) v += 5;
         if (v > bv) {
           bv = v;
@@ -13297,6 +13410,20 @@
     lineDefence: 0.5
   };
 
+  // ../../data/campaign/defence.json
+  var defence_default = {
+    _about: "Prepared defences (the grand campaign). An army that spends a whole month where it stands, without marching or fighting, digs in whoever commands it, the computer's armies as well as the player's. Against troops who are dug in and in supply the day's luck runs against the attacker, so that odds which would be safe in the open become a gamble, and an attack thrown back from such a line has shot its bolt for the month. Rules in src/campaign/game.ts (assess, resolveBattle, endPhase).",
+    entrench: { auto: true, months: 3 },
+    prepared: { dice: [0.5, 1.2], spentAt: 0.5, surprise: 0.85, armour: 0.5, losses: { attacker: 1.5, defender: 0.65 } },
+    staff: { odds: 0 },
+    notes: {
+      entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. Trenches are lost the moment the corps leaves the ground. With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by the share of them it has had, so a line occupied last month is a third of the obstacle one held since the spring is.",
+      prepared: "'dice' is the run of the day's luck for an attack on defenders who are all dug in and in supply (in the open it is 0.8 to 1.2, and it takes 1.2 to 1 on the day to carry the ground). Where only part of the defence is prepared the run lies between the two in proportion, and massed guns in the attack take their share off it as they do off the trenches. 'spentAt': an attack that fails against a defence at least this far prepared leaves the attacking corps with no moves for the rest of the month. 'surprise': how much of its preparedness a line loses to the first two months of a new offensive by an army trained to it (Germany's). 'armour': how much it loses to an attack with tanks in it when the defence has no armour of its own. Both multiply with what the guns take off. 'losses': against a fully prepared line the attackers lose 'attacker' times the men they would in the open and the defenders 'defender' times, in proportion where the line is partly prepared.",
+      staff: "'odds': how much better odds than usual a computer staff asks before it attacks a fully prepared line. At 0 it attacks as it always did, and learns the cost in men.",
+      measured: "Over 72 computer wars to the end of 1944 (Version 57 before, Version 58 after): Berlin fallen in 38 and 25, the German army still deep in Russia in 16 and 7, neither in 10 and 40; Paris falls between 2 and 3 months later. Of 36 wars run on to January 1947 Berlin had fallen in 29 and 7 were undecided. A dug-in, supplied line now throws back an attack at 1.5 to 1 about 4 times in 10 and at 2 to 1 about 1 in 7; nothing is safe under 2.4 to 1."
+    }
+  };
+
   // ../../src/campaign/engineers.ts
   var JOBS = ["bridge", "rail", "plant", "works", "airfield", "mines", "demolish"];
   var REPAIRS = { bridge: "rebuilding the bridges", rail: "relaying the railway", plant: "rebuilding a factory" };
@@ -14300,7 +14427,7 @@
       for (const j of g2.regions[a].nb) {
         const r = g2.regions[j];
         if (!ok[j] || !deep(r)) continue;
-        const step2 = (g2.turn - r.since >= EASTERN.convertAfter && !railCut(g2, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
+        const step2 = (g2.turn - lineSince(g2, j, r.since) >= EASTERN.convertAfter && !railCut(g2, j) ? EASTERN.stepConverted : EASTERN.stepFresh) * bad;
         if (d[a] + step2 < d[j] - 1e-6) {
           d[j] = d[a] + step2;
           q.push(j);
@@ -14339,6 +14466,11 @@
   }
   var HELD_LOSS = 0.6;
   var DUG_IN = 1.25;
+  var DEFENCE = defence_default;
+  var FIELD_DICE = [0.8, 1.2];
+  var chanceOn = (odds, dice2) => Math.max(0, Math.min(1, (dice2[1] - 1.2 / Math.max(1e-6, odds)) / (dice2[1] - dice2[0])));
+  var listAnd = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var evenOdds = (dice2) => 2.4 / (dice2[0] + dice2[1]);
   var GUNS = arsenal_default.guns;
   var gunsIn = (cs) => cs.reduce((s, c) => s + (c.kind === "art" ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
   var men = (c) => Math.round(c.divs * c.str * MEN_PER_DIV);
@@ -14493,7 +14625,7 @@
     const flank = Math.min(1.3, 1 + 0.1 * (sources.size - 1));
     A *= flank;
     const walls = town ? townBonus(g2, target, breach2 ? 1 - (1 - soften) * (1 - breach2) : soften) : 1;
-    let D = 0, thin = 1;
+    let D = 0, thin = 1, readyD = 0;
     for (const d of defenders) {
       let p = corpsBase(g2, d) * KIND[d.kind].def * (town ? walls : TERRAIN_DEF[target.terrain]);
       if (wide && !town) {
@@ -14552,7 +14684,12 @@
       rawD += p;
       cmdD += p * lead2;
       D += p * lead2;
+      if (d.dug && d.supplied) readyD += p * lead2 * Math.min(1, (d.dugFor ?? 1) / DEFENCE.entrench.months);
     }
+    const caught = tempo ? DEFENCE.prepared.surprise : 0;
+    const pierced = armorShock ? DEFENCE.prepared.armour : 0;
+    const prepared = wide && !town && D > 0 ? Math.min(1, readyD / D) * (1 - soften) * (1 - caught) * (1 - pierced) : 0;
+    const dice2 = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]] : prepared > 0 ? [FIELD_DICE[0] + (DEFENCE.prepared.dice[0] - FIELD_DICE[0]) * prepared, FIELD_DICE[1] + (DEFENCE.prepared.dice[1] - FIELD_DICE[1]) * prepared] : FIELD_DICE;
     const watch = town ? guardPower(g2, target) * walls : 0;
     if (watch > 0) {
       rawD += watch;
@@ -14643,6 +14780,11 @@
       ].filter(Boolean).join("; ")
     });
     if (dugIn) lines.push({ label: "Dug in", value: dugIn === defenders.length ? "The defenders have had a month to entrench" : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
+    if (prepared > 0) lines.push({
+      label: "Prepared defence",
+      value: prepared >= 0.995 ? "The line is dug in, fed and has had months to finish its works" : readyD < D * 0.995 ? "The line is dug in and fed, but its works are not complete everywhere" : `The line is dug in and fed, but ${listAnd([soften ? "the guns have worked it over" : "", caught ? "the new offensive has caught it off balance" : "", pierced ? "it has no armour to meet the tanks" : ""].filter(Boolean))}`,
+      effect: `The day runs against the attack: an even chance takes about ${evenOdds(dice2).toFixed(1)} to 1, and nothing is sure under ${(1.2 / dice2[0]).toFixed(1)} to 1. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer`
+    });
     const aUns = attackers2.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
     lines.push({ label: "Supply", value: `${aUns ? `${aUns} attacking corps cut off` : "Attackers in supply"}; ${dUns ? `${dUns} defending corps cut off` : "defenders in supply"}`, effect: aUns || dUns ? "Corps that are cut off fight at half strength" : void 0 });
     lines.push({ label: "Air", value: skyWon ? `The ${g2.nations[sky].adj} air force has won the sky here` : airEdge > 0.15 ? "Attacker holds the sky" : airEdge < -0.15 ? "Defender holds the sky" : "Contested", effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? "Attack" : "Defence"} strengthened by about ${Math.round(Math.abs(airEdge) * 30)}%` : void 0 });
@@ -14719,7 +14861,7 @@
     if (streets) lines.push({ label: "Armor", value: "Tanks in the streets of the town", effect: `Tank attack cut to ${Math.round(SIEGE.assault.armour * 100)}%` });
     if (hasty) lines.push({ label: "A hasty assault", value: "The army has only just come up to the town: it goes in off the march", effect: `Attack cut to ${Math.round(rushed * 100)}%. Next month the assault is made ready and goes in at full weight` });
     if (flank > 1) lines.push({ label: "Direction", value: `Attack from ${sources.size} sides`, effect: `Attack up ${Math.round((flank - 1) * 100)}%` });
-    return { A, D, odds: A / D, lines, defenders };
+    return { A, D, odds: A / D, lines, defenders, dice: dice2, prepared };
   }
   function reportUnit(c) {
     return { name: c.name, nat: c.nat, kind: c.kind, divs: c.divs, men: men(c), lost: 0, fate: "" };
@@ -14892,12 +15034,13 @@
     const late = lateTheatre(target);
     const count3 = late ? `t${target.theatre}:${g2.flags[`fought:${target.theatre}`] ?? 0}` : `${(g2.flags.battles ?? 0) - (g2.flags.lateBattles ?? 0)}`;
     const dice2 = aside2 ? new Rng(hashString(`land:${g2.seed}:${g2.turn}:${target.id}:${attNat}:${count3}`)) : g2.rng;
-    const R = a.odds * (town ? dice2.range(SIEGE.assault.dice[0], SIEGE.assault.dice[1]) : dice2.range(0.8, 1.2));
+    const R = a.odds * dice2.range(a.dice[0], a.dice[1]);
     const attU = attackers2.map(reportUnit), defU = defenders.map(reportUnit);
     const attGens = attackers2.map((c) => generalOf(g2, c)), defGens = defenders.map((c) => generalOf(g2, c));
     const mobile = attackers2.some((c) => KIND[c.kind].mobile);
     const defFrac = clamp(0.07 + 0.1 * R, 0.06, 0.45);
-    const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1);
+    const ready = town ? 0 : a.prepared;
+    const attFrac = clamp(0.14 / R, 0.02, 0.2) * (town ? SIEGE.assault.loss : 1) * (1 + (DEFENCE.prepared.losses.attacker - 1) * ready);
     let attLost = 0, defLost = 0, prisoners = 0;
     let held = false, gates = false;
     const bled = /* @__PURE__ */ new Map();
@@ -14916,7 +15059,7 @@
     const caught = win && mobile && target.terrain === DESERT.terrain && !target.fort ? DESERT.retreat[R >= 2 ? 1 : 0] : 1;
     defenders.forEach((c, i) => {
       const before = men(c);
-      c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c));
+      c.str *= 1 - Math.min(0.8, defFrac * (win && mobile ? 1.3 : 1) * (KIND[c.kind].mobile ? 1 : caught) * stood * cmdLoss(g2, c) * (1 - (1 - DEFENCE.prepared.losses.defender) * ready));
       c.org = clamp(c.org - clamp(0.18 + 0.14 * R, 0.2, 0.75) * stood * cmdSteady(g2, c) * nerve(c), 0, 1);
       c.xp = Math.min(1, c.xp + 0.04);
       c.fought = true;
@@ -14979,7 +15122,8 @@
         else gates = walls;
       }
     } else {
-      for (const c of attackers2) c.ap = Math.max(0, c.ap - (town ? SIEGE.assault.ap : 1));
+      const spent = !town && a.prepared >= DEFENCE.prepared.spentAt && a.prepared > 0;
+      for (const c of attackers2) c.ap = spent ? 0 : Math.max(0, c.ap - (town ? SIEGE.assault.ap : 1));
       if (town) tallySiege(g2, "repulsed");
       if (town && watch > 0) {
         const share = clamp(SIEGE.assault.guardHit / 100 * Math.min(1.2, R), 0.05, 0.6);
@@ -15015,6 +15159,7 @@
     if (gates) rep.gates = true;
     if (relief) rep.relief = true;
     if (opts.sally) rep.sally = true;
+    if (a.prepared > 0) rep.prepared = Math.round(a.prepared * 100) / 100;
     g2.reports.push(rep);
     if (aside2) g2.flags.asideBattles = (g2.flags.asideBattles ?? 0) + 1;
     if (late) {
@@ -15046,6 +15191,7 @@
       if (atWar(g2, nat, old)) {
         bridgesOnCapture(g2, r, nat);
         railOnCapture(g2, r, nat, old);
+        railOnScorch(g2, r, nat, old);
       }
     }
     if (r.cap && r.owner === old) headline(g2, "fall", `${r.name} falls to ${g2.nations[nat].adj} forces.`, old, r.id);
@@ -15124,7 +15270,9 @@
     const shut = siegeRules(g2) && besieged(g2, seat3) && ringClosed(g2, seat3);
     const since = g2.flags[`siege:${seat3.id}`];
     const sat = since === void 0 ? 0 : Math.max(0, g2.turn - since);
-    const capLost = !allied(g2, nat, seat3.ctrl) ? 1 : shut ? Math.min(1, SIEGE.capital + (1 - SIEGE.capital) * sat / SIEGE.capitalYear) : 0;
+    const after = SIEGE.capitalAfter;
+    const hold2 = sat < after ? SIEGE.capital * sat / after : SIEGE.capital + (1 - SIEGE.capital) * (sat - after) / Math.max(1, SIEGE.capitalYear - after);
+    const capLost = !allied(g2, nat, seat3.ctrl) ? 1 : shut ? Math.min(1, hold2) : 0;
     const army = n.armyPeak > 0 ? clamp(armySize(g2, nat) / n.armyPeak, 0, 1) : 1;
     const score = 0.45 * capLost + 0.35 * homeLost(g2, nat) + 0.2 * (1 - army);
     const worn = willLost(g2, nat);
@@ -15514,10 +15662,25 @@
       headline(g2, "battle", `The ring closes at ${g2.regions[reg].name}: ${ring.corps} ${adj} corps, ${ring.men.toLocaleString("en-US")} men, are cut off from all supply.`, who[0], reg);
     }
   }
+  function digIn(g2, nat) {
+    if (g2.flags.open !== 1 || !DEFENCE.entrench.auto) return;
+    for (const c of g2.corps) {
+      if (c.dead || c.kind === "fort" || armyOf(c) !== nat) continue;
+      if (c.town === void 0 && !c.yields && c.ap >= c.apMax && !c.fought) {
+        c.dugFor = c.dug ? (c.dugFor ?? 1) + 1 : 1;
+        c.dug = true;
+      } else {
+        if (c.dug) delete c.dug;
+        if (c.dugFor !== void 0) delete c.dugFor;
+      }
+    }
+  }
   function endPhase(g2, nat) {
+    digIn(g2, nat);
     if (g2.nations[nat].alive) desertWorks(g2, nat, true);
     siegeEmpties(g2);
     mendPrizes(g2, nat);
+    tellBurnt(g2);
     judgeDirective(g2, nat);
   }
   function startPhase(g2, nat) {
@@ -15546,6 +15709,7 @@
     resourcesTick(g2, nat);
     intelTick(g2, nat);
     siegeMonth(g2, nat);
+    tellSettled(g2, nat);
     computeSupply(g2);
     cutOffNews(g2);
     tradeTick(g2, nat);
@@ -17695,13 +17859,42 @@
       if (!besieged(g2, r)) continue;
       if (now >= need && storm(g2, pool(), r)?.taken) continue;
       if (!besieged(g2, r) || after) continue;
+      const fed = prize2 && sat >= SIEGE.ai.sea.after && feeders(g2, r).length > 0;
       const fast = (c) => KIND[c.kind].mobile ? 1 : 0;
       let have = 0;
       for (const c of mine3().filter((u) => u.kind !== "eng").sort((x, y) => fast(x) - fast(y) || atkPower(g2, x) - atkPower(g2, y))) {
-        if (!prize2 && have > 0 && have >= SIEGE.ring * inside2) break;
+        if ((!prize2 || fed) && have > 0 && have >= SIEGE.ring * inside2) break;
         c.ap = 0;
         have += c.divs * c.str;
       }
+    }
+  }
+  function overrun(g2, nat) {
+    if (!siegeRules(g2)) return;
+    const lands = /* @__PURE__ */ new Set();
+    for (const r of g2.regions) {
+      if (!within(r) || !besieged(g2, r) || !atWar(g2, nat, r.ctrl) || g2.turn - investedOn(g2, r) < SIEGE.ai.sea.after || !feeders(g2, r).length) continue;
+      if (r.units.some((c) => c.nat === nat && !c.dead)) lands.add(r.ctrl);
+    }
+    if (!lands.size) return;
+    for (const c of g2.corps) {
+      if (c.nat !== nat || c.dead || c.town || c.hold || c.ap <= 0 || c.kind === "fort" || c.kind === "eng" || c.joint !== void 0 || c.leave !== void 0) continue;
+      const here = g2.regions[c.reg];
+      if (!within(here)) continue;
+      if (!besieged(g2, here) && here.nb.some((j) => hostileUnits(g2, g2.regions[j], nat).length > 0)) continue;
+      let best = null, bv = -1;
+      for (const j of here.nb) {
+        const x = g2.regions[j];
+        if (!within(x) || !lands.has(x.ctrl) || x.owner !== x.ctrl || !atWar(g2, nat, x.ctrl) || x.units.length || besieged(g2, x)) continue;
+        if (blocked(g2, c, x) || c.ap < Math.min(moveCost(g2, c, x), 4) || !hasRoom(g2, x, c)) continue;
+        const v = x.vp + (x.cap ? 5 : 0) + x.fac * 0.2;
+        if (v > bv) {
+          bv = v;
+          best = x;
+        }
+      }
+      if (best) moveCorps(g2, c, best);
+      if (!g2.nations[nat].alive) return;
     }
   }
   function sorties(g2, nat) {
@@ -17750,6 +17943,7 @@
       try {
         sorties(g2, nat);
         sieges(g2, nat);
+        overrun(g2, nat);
         hold(g2, nat, ph);
         const base = g2.byName[ph?.base ?? T.bases?.[nat] ?? ""];
         if (base) fallBack2(g2, nat, base.id);
@@ -17851,6 +18045,7 @@
     const n = g2.nations[nat];
     sorties(g2, nat);
     sieges(g2, nat);
+    overrun(g2, nat);
     if (!n.alive) return;
     try {
       fightOn(g2, nat, ph, posture);
@@ -18170,16 +18365,19 @@
               const fast = (c) => KIND[c.kind].mobile ? 1 : 0;
               pool.sort((a, b) => (main ? fast(b) - fast(a) : fast(a) - fast(b)) || atkPower(g2, b) - atkPower(g2, a));
               const least = main ? Math.max(1, pool.filter((c) => fast(c)).length) : 1;
-              let pick2 = null, odds = 0;
+              let pick2 = null, odds = 0, ready = 0;
               for (let k = least; k <= pool.length; k++) {
-                odds = assess(g2, pool.slice(0, k), target).odds;
+                const a = assess(g2, pool.slice(0, k), target);
+                odds = a.odds;
+                ready = a.prepared;
                 if (odds >= 2.6) {
                   pick2 = pool.slice(0, k);
                   break;
                 }
               }
               if (!pick2) {
-                if (odds < (oddsFor[target.name] ?? minOdds)) continue;
+                const sore = g2.flags.open === 1 && g2.turn - (g2.flags[`relieved:${j}`] ?? -99) <= SIEGE.ai.relieved.months ? SIEGE.ai.relieved.odds : 0;
+                if (odds < (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready + sore) continue;
                 pick2 = pool;
               }
               const score = value + Math.min(odds, 4);
@@ -18690,6 +18888,7 @@
     closePhase(g2, current(g2));
   }
   function entrench(g2, nat) {
+    if (g2.flags.open === 1 && DEFENCE.entrench.auto) return;
     for (const c of g2.corps) {
       if (c.nat !== nat || c.dead) continue;
       if (c.digs && c.kind !== "fort" && c.ap >= c.apMax && !c.fought) c.dug = true;
@@ -18828,15 +19027,14 @@
     const going = corps.filter((c) => c.joint === void 0 || hostileUnits(g2, target, c.nat).length > 0);
     return going.sort((a, b) => (a.joint === void 0 ? 0 : 1) - (b.joint === void 0 ? 0 : 1));
   }
-  var FIELD_DICE = [0.8, 1.2];
-  var chanceOn = (odds, dice2) => Math.max(0, Math.min(1, (dice2[1] - 1.2 / Math.max(1e-6, odds)) / (dice2[1] - dice2[0])));
   function attackOutlook(g2, corps, target) {
     const a = previewAttack(g2, corps, target);
     return a ? outlookOf(g2, a, target) : null;
   }
-  function outlookOf(g2, a, target, dice2 = FIELD_DICE) {
+  function outlookOf(g2, a, target) {
+    const dice2 = a.dice;
     const chanceAt = (odds) => chanceOn(odds, dice2);
-    const even = 2.4 / (dice2[0] + dice2[1]);
+    const even = evenOdds(dice2);
     const band = oddsBand(g2, a.defenders, a.odds, target.id, g2.human);
     const k = sortKnown(g2, a.defenders, g2.human);
     if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: "", lines: a.lines };
@@ -18973,7 +19171,7 @@
     const r = g2.regions[region];
     if (!r || whyNotStormTown(g2, region)) return null;
     const a = previewStorm(g2, corps ? corps.filter((c) => canOrder(g2, c)) : stormCandidates(g2, region), r);
-    return a ? outlookOf(g2, a, r, SIEGE.assault.dice) : null;
+    return a ? outlookOf(g2, a, r) : null;
   }
   function orderStorm(g2, region, corps) {
     const r = g2.regions[region];
@@ -19022,7 +19220,7 @@
     if (posture === "dig") c.digs = true;
     else {
       delete c.digs;
-      delete c.dug;
+      if (posture === "back" || !(g2.flags.open === 1 && DEFENCE.entrench.auto)) delete c.dug;
     }
     return true;
   }
@@ -20281,6 +20479,10 @@
       // Whether the player's country is at war with anybody: the music follows it.
       atWar: !!s.human && (s.nations[s.human]?.atWar.length ?? 0) > 0,
       eve: onEve(s),
+      // (Version 58) In the grand campaign whoever stands a month digs in unasked: the tray then offers two orders,
+      // stand (and dig in) or fall back; and the works are finished after this many months.
+      autoDig: s.flags.open === 1 && !!DEFENCE.entrench.auto,
+      dugFull: DEFENCE.entrench.months,
       open: isOpen(s),
       level: isOpen(s) && s.human ? levelNow(s).name : "",
       fallen: fallenNation,
@@ -20327,6 +20529,7 @@
           canOrder: up && canOrder(s, c),
           supplied: c.supplied,
           dug: !!c.dug,
+          dugFor: c.dugFor ?? 0,
           town: !!c.town,
           men: men(c),
           // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
@@ -20870,7 +21073,8 @@
     if (!a) return null;
     const look = attackOutlook(s, corps, s.regions[to]);
     const even = look?.even ?? 1.2;
-    const evenLine = even > 1.21 ? [{ label: "An even chance", value: `${even.toFixed(1)} to 1`, effect: "Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance." }] : [];
+    const saidAlready = [...look?.lines ?? [], ...a.lines].some((l) => l.label === "Prepared defence");
+    const evenLine = even > 1.21 && !saidAlready ? [{ label: "An even chance", value: `${even.toFixed(1)} to 1`, effect: "Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance." }] : [];
     const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
     const named2 = (c) => {
       const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
@@ -20924,7 +21128,7 @@
     const prisoners = r.prisoners > 0 ? `, ${r.prisoners.toLocaleString("en")} prisoners` : "";
     const x = r;
     const town = townSiege(s, r.region)?.town ?? r.regionName;
-    const came = x.gates ? `the army outside is beaten, and ${town} opens its gates without a fight` : x.town ? r.taken ? `${town} is stormed and taken` : `the assault on ${town} is thrown back` : x.sally ? r.taken ? `the garrison of ${town} breaks the ring: the siege is raised` : `the garrison's sortie from ${town} is driven back in` : x.relief ? r.taken ? `the besiegers are driven off and ${town} is relieved` : `the relief of ${town} is held off` : x.siege ? `the country is won, but ${town} holds: it is now besieged` : r.taken ? "the ground is taken" : "the attack is held";
+    const came = x.gates ? `the army outside is beaten, and ${town} opens its gates without a fight` : x.town ? r.taken ? `${town} is stormed and taken` : `the assault on ${town} is thrown back` : x.sally ? r.taken ? `the garrison of ${town} breaks the ring: the siege is raised` : `the garrison's sortie from ${town} is driven back in` : x.relief ? r.taken ? `the besiegers are driven off and ${town} is relieved` : `the relief of ${town} is held off` : x.siege ? `the country is won, but ${town} holds: it is now besieged` : (x.prepared ?? 0) >= 0.5 ? r.taken ? "the prepared line is broken and the ground is taken" : "the attack breaks on a prepared line" : r.taken ? "the ground is taken" : "the attack is held";
     return `${r.level} at ${r.regionName}: ${came}, ${cost}${prisoners}.`;
   }
   function attack(ids2, to) {
@@ -21324,7 +21528,8 @@
         }
         const rail2 = railNote(s, r.id);
         if (rail2) {
-          lines.push(rail2.line ? rail2.cut ? "The railway here is cut." : "A railway runs through here." : rail2.road > 0 ? `No railway: ${rail2.road} province${rail2.road === 1 ? "" : "s"} of road from the railhead.` : "No railway.");
+          const hasty = rail2.hasty ?? 0;
+          lines.push(rail2.line ? rail2.cut ? hasty > 0 ? `The railway here is cut: torn up in haste, the railwaymen will have it running in about ${hasty === 1 ? "a month" : `${hasty} months`}.` : "The railway here is cut: it stays cut until engineers relay it." : "A railway runs through here." : rail2.road > 0 ? `No railway: ${rail2.road} province${rail2.road === 1 ? "" : "s"} of road from the railhead.` : "No railway.");
           if (rail2.ruined > 0) lines.push(`${rail2.ruined} of its ${rail2.factories} factories lie in ruins from bombing.`);
         }
         return lines;
@@ -21396,6 +21601,7 @@
     }
     return out;
   }
+  var wreckAsked = "";
   function work(key3, region) {
     const s = game();
     const [what, a, b] = key3.split(":");
@@ -21435,6 +21641,13 @@
     } else if (what === "wreck") {
       const kind = a;
       const why = whyNotWreckPrize(s, region, kind);
+      const asking = `${region}:${kind}:${s.turn}`;
+      if (!why && wreckAsked !== asking) {
+        wreckAsked = asking;
+        const place2 = prizesOf(s, region)?.prizes.find((x) => x.kind === kind)?.name ?? "It";
+        return { ok: false, note: `${WRECK_WORD[kind]} at ${s.regions[region]?.name ?? "this place"}? ${place2} cannot be un-wrecked: ${kind === "junction" ? "no train runs through, for either side, until engineers relay the line" : `nobody has the use of it for ${PRIZES.wreck[kind]} months, you included`}. Press it again to give the order.`, flies, view: view() };
+      }
+      wreckAsked = "";
       ok = !why && orderWreck(s, region, kind);
       note4 = ok ? `${WRECKED_WORD[kind] ?? "It is wrecked."} ${kind === "junction" ? "No train runs through until engineers relay the line." : `Nobody has the use of it for ${PRIZES.wreck[kind]} months.`}` : why ?? note4;
     } else if (what === "burn") {

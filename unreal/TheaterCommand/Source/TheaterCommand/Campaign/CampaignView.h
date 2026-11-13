@@ -44,6 +44,8 @@ struct FViewCorps
 	FString General; // empty when the corps has no named commander
 	FString Posture; // stand, dig, back
 	bool bDug = false; // it is entrenched: it spent last month where it stands, digging in
+	int32 DugFor = 0; // months it has been dug in where it stands (the grand campaign): its works grow with them; 0 where months are not counted
+	bool bWorksDone = false; // dug in, and its works finished (or dug in where months are not counted): wire and sandbags, not only an earth bank
 	bool bSupplied = true; // supply reaches it
 	bool bInTown = false; // it is the garrison of the province's town, not in the field
 	int32 Divisions = 0;
@@ -324,6 +326,8 @@ struct FCampaignView
 	bool bAtWar = false; // the player's country is at war with somebody
 	bool bEve = false; // the player is placing an army on the eve of war: marches at home only, no month passes
 	bool bOpen = false; // free play: no nation follows history's plan
+	bool bAutoDig = false; // whoever stands a month digs in unasked (the grand campaign): the orders are then stand, or fall back
+	int32 DugFull = 3; // months until a dug-in army's works are finished
 	FString Fallen; // the player's nation, once it has been beaten
 	TArray<FString> RegionHolder; // by region id: the nation that holds it now
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)

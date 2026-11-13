@@ -56,7 +56,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	}
 	// What it is about, for the dressing round its base: entrenched or digging, in camp, supplied or cut off.
 	{
-		int32 Known = 0, Dug = 0, Digging = 0, Starved = 0, Own = 0, Resting = 0, Tired = 0;
+		int32 Known = 0, Dug = 0, Done = 0, Digging = 0, Starved = 0, Own = 0, Resting = 0, Tired = 0;
 		for (const FViewCorps& Unit : Corps)
 		{
 			if (Unit.bDim || Unit.Stale > 0)
@@ -65,6 +65,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 			}
 			++Known;
 			Dug += Unit.bDug ? 1 : 0;
+			Done += Unit.bWorksDone ? 1 : 0;
 			Digging += !Unit.bDug && Unit.Posture == TEXT("dig") ? 1 : 0;
 			Starved += Unit.bSupplied ? 0 : 1;
 			if (Unit.Rest >= 0.0f)
@@ -74,7 +75,9 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 				Tired += Unit.Rest < 0.95f ? 1 : 0;
 			}
 		}
-		WorksState = Known == 0 ? 0 : Dug * 2 >= Known ? 2 : (Dug + Digging) * 2 >= Known ? 1 : 0;
+		// (Version 58: an earth bank once at least half its corps are dug in, and wire and sandbags once their works
+		// are finished, which takes some months of standing still.)
+		WorksState = Known == 0 ? 0 : Done * 2 >= Known ? 2 : (Dug + Digging) * 2 >= Known ? 1 : 0;
 		// (a camp is pitched by an army that is getting something from its rest: one already fresh simply stands)
 		bCamp = Own > 0 && Resting == Own && Tired > 0;
 		SupplyState = Known == 0 ? 0 : Starved > 0 ? 2 : 1;
