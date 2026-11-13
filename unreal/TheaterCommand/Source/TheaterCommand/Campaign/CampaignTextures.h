@@ -34,6 +34,13 @@ namespace CampaignTextures
 	 * blue is bare rock, alpha is sand.
 	 */
 	void MakeGroundDetail(TArray<FColor>& OutPixels);
+	/**
+	 * The fields of the quilt, one pixel a field (FieldsSize each way, read without smoothing so that every field keeps
+	 * its own tone): how each field's colour stands to the average of them all, from pasture through wheat to
+	 * plough. Half is no change; the material doubles it and multiplies the ground by it.
+	 */
+	constexpr int32 FieldsSize = 64;
+	void MakeFields(TArray<FColor>& OutPixels);
 
 	/** Which way the surface leans, for the two kinds of ground that have a shape: tree-tops in red and green, rock in blue and alpha. */
 	void MakeGroundBumps(TArray<FColor>& OutPixels);

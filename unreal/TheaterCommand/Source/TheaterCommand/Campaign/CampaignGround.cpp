@@ -25,16 +25,20 @@ namespace
 		return FromHex(TEXT("A8A777")); // plains
 	}
 
-	/** How wooded each kind of country is: forest nearly all, open country a copse here and there. */
+	/**
+	 * How each kind of country leans toward woods (the art director's recipe): forest country is mostly wooded,
+	 * hills, mountains and marsh carry more than the plains, towns little, the desert none. It is added to the
+	 * noise that decides where the woods stand, so the woods come in standing masses and not as specks.
+	 */
 	float WoodsFor(const FString& Terrain)
 	{
-		if (Terrain == TEXT("forest")) return 0.92f;
-		if (Terrain == TEXT("hills")) return 0.34f;
-		if (Terrain == TEXT("mountain")) return 0.3f;
-		if (Terrain == TEXT("marsh")) return 0.24f;
-		if (Terrain == TEXT("urban")) return 0.04f;
-		if (Terrain == TEXT("desert")) return 0.0f;
-		return 0.16f; // plains
+		if (Terrain == TEXT("forest")) return 0.26f;
+		if (Terrain == TEXT("hills")) return 0.05f;
+		if (Terrain == TEXT("mountain")) return 0.10f;
+		if (Terrain == TEXT("marsh")) return 0.10f;
+		if (Terrain == TEXT("urban")) return -0.14f;
+		if (Terrain == TEXT("desert")) return -0.6f;
+		return -0.07f; // plains
 	}
 
 	const FLinearColor Unclaimed = FLinearColor(FColor::FromHex(TEXT("A49C86")));
@@ -97,6 +101,18 @@ namespace
 		return Kept;
 	}
 
+	/** How thick the noise must be before a wood stands: lower, and there are more woods. ("-TheaterWoods=0.58" tries another.) */
+	float WoodsFrom()
+	{
+		static float Kept = -1.0f;
+		if (Kept < 0.0f)
+		{
+			Kept = 0.575f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterWoods="), Kept);
+		}
+		return Kept;
+	}
+
 	FVector3f Tone()
 	{
 		static FVector3f Kept(0.0f);
@@ -153,12 +169,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	for (int32 Idx = 0; Idx < Count; ++Idx)
 	{
 		const int16 Id = Terrain.Region[Idx];
-		Woods[Idx] = Id >= 0 ? RegionWoods[Id] : 0.12f;
+		Woods[Idx] = Id >= 0 ? RegionWoods[Id] : -0.07f;
 		Dry[Idx] = Id >= 0 ? RegionDry[Id] : 0.0f;
 		Marsh[Idx] = Id >= 0 && Data.Regions[Id].Terrain == TEXT("marsh") ? 1.0f : 0.0f;
 	}
 	const int32 Soften = FMath::RoundToInt32(4.0 / Terrain.Cell);
-	FCampaignTerrain::Smooth(Woods, NX, NY, FMath::RoundToInt32(7.0 / Terrain.Cell), 2); // the edge of a wood does not follow a frontier
+	FCampaignTerrain::Smooth(Woods, NX, NY, FMath::RoundToInt32(9.0 / Terrain.Cell), 2); // the edge of a wood does not follow a frontier
 	FCampaignTerrain::Smooth(Dry, NX, NY, Soften, 2);
 	FCampaignTerrain::Smooth(Marsh, NX, NY, Soften, 2);
 	PlainsLightness = GroundColor(TEXT("plains")).GetLuminance();
@@ -294,9 +310,20 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 
 			// Woods stand in patches: nearly everywhere in forest country, a copse here and there in the open,
 			// none above the tree line, on bare rock, on the beach or in the sea.
-			const float Patch = 0.5f + 0.5f * (0.65f * FMath::PerlinNoise2D(P * 0.045) + 0.35f * FMath::PerlinNoise2D(P * 0.13 + FVector2D(31.0, -17.0)));
-			float Wooded = FMath::SmoothStep(0.42f, 0.58f, Patch + (Woods[Idx] - 0.5f) * 0.82f);
-			Wooded *= (1.0f - FMath::SmoothStep(2.6f, 3.8f, H)) * (1.0f - Rock) * (1.0f - Sand / 0.35f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
+			// (Art fix 7: the woods stand in masses. Two noises decide where, a middling one about thirty-four map
+			// units across and a broad one about a hundred and fifty; the kind of country, the north, dry ground
+			// and height lean it one way or the other.)
+			auto Cloudy = [&P](double Scale, const FVector2D& Shift)
+			{
+				const float Sum = FMath::PerlinNoise2D(P * Scale + Shift) + 0.5f * FMath::PerlinNoise2D(P * (Scale * 2.03) + Shift * 1.7) + 0.25f * FMath::PerlinNoise2D(P * (Scale * 4.1) + Shift * 2.9);
+				return FMath::Clamp(0.5f + 0.5f * Sum, 0.0f, 1.0f);
+			};
+			const float Northing = 71.4f - static_cast<float>(P.Y) / 40.0f, Easting = -11.0f + static_cast<float>(P.X) / 25.7f;
+			const float DryLand = FMath::Clamp(FMath::SmoothStep(0.0f, 8.0f, 46.0f - Northing) * 0.8f + FMath::SmoothStep(28.0f, 44.0f, Easting) * FMath::SmoothStep(0.0f, 6.0f, 52.0f - Northing) * 0.45f, 0.0f, 1.0f);
+			const float Thick = Cloudy(1.0 / 34.0, FVector2D(31.0, -17.0)) * 0.62f + Cloudy(1.0 / 150.0, FVector2D(-7.0, 53.0)) * 0.38f + Woods[Idx]
+				+ FMath::SmoothStep(56.0f, 63.0f, Northing) * 0.2f - DryLand * 0.16f + FMath::SmoothStep(250.0f, 900.0f, Metres[Idx]) * 0.08f;
+			float Wooded = FMath::SmoothStep(WoodsFrom(), WoodsFrom() + 0.07f, Thick) * FMath::SmoothStep(0.0f, 300.0f, 1750.0f - Metres[Idx]);
+			Wooded *= (1.0f - Rock) * (1.0f - Sand / 0.35f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
 
 			// Shaded relief, as on a printed map: how squarely the ground faces the sun (1 on the flat, up to 2.2
 			// on a slope turned full to it, nothing on one turned away), less where a shadow is thrown across it,
@@ -322,6 +349,36 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			Ground[Idx] = Bare;
 			Relief[Idx] = FColor(ToByte(Normal.X * 0.5f + 0.5f), ToByte(Normal.Y * 0.5f + 0.5f), ToByte(Shade * 0.5f), 255);
 			Masks[Idx] = FColor(ToByte(Rock), ToByte(Snow), ToByte(Sand), ToByte(Dry[Idx]));
+		}
+	});
+
+	// What covers the ground (art fix 7): farmland for the quilt of fields, and the rims of the woods.
+	Cover.SetNumUninitialized(Count);
+	ParallelFor(NY, [&](int32 J)
+	{
+		for (int32 I = 0; I < NX; ++I)
+		{
+			const int32 Idx = Terrain.Index(I, J);
+			const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
+			const float Latitude = 71.4f - static_cast<float>(P.Y) / 40.0f, Longitude = -11.0f + static_cast<float>(P.X) / 25.7f;
+			const float Boreal = FMath::SmoothStep(56.0f, 63.0f, Latitude);
+			const float Broad = 0.5f + 0.5f * FMath::PerlinNoise2D(P * 0.02);
+			const float Wooded = Ground[Idx].A / 255.0f;
+			const FColor& Mask = Masks[Idx];
+			// Farmland: the low ground, where it is not desert, marsh, wood, rock or beach; thinning in the far north.
+			float Arable = FMath::SmoothStep(0.0f, 300.0f, 520.0f - Metres[Idx]) * (1.0f - FMath::Clamp(Dry[Idx] * 1.4f, 0.0f, 1.0f)) * (1.0f - Boreal * 0.75f)
+				* (0.55f + 0.45f * Broad) * (1.0f - Marsh[Idx]) * (1.0f - Wooded) * (1.0f - Mask.R / 255.0f) * (1.0f - Mask.G / 255.0f) * (1.0f - FMath::Min(Mask.B / 90.0f, 1.0f));
+			Arable = FMath::Clamp(Arable, 0.0f, 1.0f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
+			// Small fields and heavy hedges in the Atlantic west, great open ones on the eastern plains.
+			const float Big = FMath::Clamp(FMath::SmoothStep(11.0f, 27.0f, Longitude) + 0.3f * FMath::PerlinNoise2D(P * 0.011 + FVector2D(5.0, 23.0)), 0.0f, 1.0f);
+			// The rim of a wood: its sunward edge catches the light, and it throws a strip of shade on the open
+			// ground behind it. (The sun stands in the west-north-west: the grid point toward it is the one to the west.)
+			const float Sunward = Ground[Terrain.Index(FMath::Max(I - 1, 0), J)].A / 255.0f;
+			const float Lit = FMath::Clamp(Wooded - Sunward, 0.0f, 1.0f), Shaded = FMath::Clamp(Sunward - Wooded, 0.0f, 1.0f);
+			const float Rim = 0.5f + 0.5f * FMath::Clamp(0.47f * Lit - Shaded, -1.0f, 1.0f);
+			// Fir and pine in the north and on the high ground.
+			const float Fir = FMath::Max(Boreal, FMath::SmoothStep(700.0f, 1300.0f, Metres[Idx]));
+			Cover[Idx] = FColor(ToByte(Arable), ToByte(Big), ToByte(Rim), ToByte(Fir));
 		}
 	});
 

@@ -559,6 +559,10 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> MasksPicture;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> CoverPicture; // farmland, the size of its fields, the rims of the woods, and where they are fir
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> FieldsPicture; // the tones of the fields, one pixel a field
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> WaterPicture;
@@ -614,6 +618,8 @@ private:
 	FCampaignMapData Data;
 	FCampaignTerrain Terrain;
 	float WoodsShown = -1.0f; // how thickly the woods are laid on at the moment
+	float FieldsShown = -1.0f, HedgesShown = -1.0f; // how strongly the quilt of fields and its hedges show at the moment
+	float FieldsNear = 0.85f, FieldsWorking = 0.5f, HedgesNear = 0.34f; // ("-TheaterFields=near,working,hedges" tries others)
 	FCampaignGround Paint; // the table's colours, as pictures
 	// The land's mesh is cut into square tiles, each the same number of quads across. Near the eye the tiles are
 	// small and their quads fine; far off one tile covers the ground of four, sixteen or more, with quads to

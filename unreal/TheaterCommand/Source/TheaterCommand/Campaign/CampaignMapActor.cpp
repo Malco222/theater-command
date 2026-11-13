@@ -422,6 +422,7 @@ void ACampaignMapActor::PaintGround()
 	TintPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Tint, true, false, TEXT("TableTint"));
 	ReliefPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Relief, false, false, TEXT("TableRelief"));
 	MasksPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Masks, false, false, TEXT("TableMasks"));
+	CoverPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Cover, false, false, TEXT("TableCover"));
 	WaterPicture = CampaignTextures::Create(Paint.WaterNX, Paint.WaterNY, Paint.Water, true, false, TEXT("TableWater"));
 	ShorePicture = CampaignTextures::Create(Paint.WaterNX, Paint.WaterNY, Paint.Surf, false, false, TEXT("TableShore"));
 
@@ -431,6 +432,14 @@ void ACampaignMapActor::PaintGround()
 	DetailPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableDetail"));
 	CampaignTextures::MakeGroundBumps(Pixels);
 	BumpsPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableBumps"));
+	// The fields of the quilt: one pixel a field, read without smoothing so that each keeps its own tone and its edge.
+	CampaignTextures::MakeFields(Pixels);
+	FieldsPicture = CampaignTextures::Create(CampaignTextures::FieldsSize, CampaignTextures::FieldsSize, Pixels, false, true, TEXT("TableFields"));
+	if (FieldsPicture)
+	{
+		FieldsPicture->Filter = TF_Nearest;
+		FieldsPicture->UpdateResource();
+	}
 	CampaignTextures::MakeWaterBumps(Pixels);
 	RipplesPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableRipples"));
 
@@ -439,6 +448,21 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetTextureParameterValue(TEXT("Relief"), ReliefPicture);
 	LandMaterial->SetScalarParameterValue(TEXT("Band"), 0.4f);
 	LandMaterial->SetTextureParameterValue(TEXT("Masks"), MasksPicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Cover"), CoverPicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Fields"), FieldsPicture);
+	// (the nation's stain lies over the canopy at a little under half its strength: a wood is green first, and its owner's second)
+	LandMaterial->SetScalarParameterValue(TEXT("WoodsStain"), 0.42f);
+	{
+		// "-TheaterFields=0.55,0.4,0.34" tries other strengths for the quilt of fields (close to, at working height) and its hedges.
+		FString Asked;
+		TArray<FString> Parts;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFields="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
+		{
+			FieldsNear = FCString::Atof(*Parts[0]);
+			FieldsWorking = FCString::Atof(*Parts[1]);
+			HedgesNear = FCString::Atof(*Parts[2]);
+		}
+	}
 	LandMaterial->SetTextureParameterValue(TEXT("Detail"), DetailPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Bumps"), BumpsPicture);
 	{
@@ -2835,15 +2859,17 @@ void ACampaignMapActor::BuildTrees()
 					else
 					{
 						const FLinearColor Summer(0.055f * Shade, 0.115f * Shade, 0.038f * Shade), Fresh(0.085f * Shade, 0.17f * Shade, 0.045f * Shade);
-						const FLinearColor Gold(0.46f * Shade, 0.3f * Shade, 0.04f), Orange(0.42f * Shade, 0.17f * Shade, 0.03f), Russet(0.25f * Shade, 0.085f * Shade, 0.03f);
+						// (autumn is ochre and rust, not lemon: the art director's (196, 150, 60), a little under it since the lamp is strong)
+						const FLinearColor Gold(0.15f * Shade, 0.105f * Shade, 0.032f), Orange(0.15f * Shade, 0.08f * Shade, 0.03f), Russet(0.11f * Shade, 0.055f * Shade, 0.028f);
 						const FLinearColor Twigs = FMath::Lerp(FLinearColor(0.115f * Shade, 0.095f * Shade, 0.08f * Shade), FLinearColor(0.5f, 0.52f, 0.52f), 0.5f * Lying);
 						FLinearColor Leaf = Summer;
 						bool bBare = false;
 						switch (TreeLook)
 						{
-						case 1: Leaf = Own < 0.3f ? Gold : Summer; break; // September: the first of them turn
-						case 2: Leaf = Own < 0.34f ? Gold : Own < 0.64f ? Orange : Own < 0.88f ? Russet : Summer; break; // October
-						case 3: bBare = Own < 0.5f; Leaf = Own < 0.8f ? Russet : Orange; break; // November: half of them bare
+						// (no more than a third of the canopy is ever turned: a wood must still read as its owner's)
+						case 1: Leaf = Own < 0.16f ? Gold : Summer; break; // September: the first of them turn
+						case 2: Leaf = Own < 0.12f ? Gold : Own < 0.23f ? Orange : Own < 0.33f ? Russet : Summer; break; // October
+						case 3: bBare = Own < 0.3f; Leaf = Own < 0.45f ? Russet : Own < 0.55f ? Orange : Summer; break; // November: the first of them bare
 						case 4: bBare = true; break; // winter
 						case 5: bBare = Own < 0.5f; Leaf = Fresh; break; // March: in bud
 						case 6: Leaf = Fresh; break; // April
@@ -3738,8 +3764,9 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 		static const int32 Looks[12] = { 4, 4, 5, 6, 0, 0, 0, 0, 1, 2, 3, 4 };
 		static const FLinearColor Cloth[7] =
 		{
-			FLinearColor(0.075f, 0.13f, 0.055f), FLinearColor(0.095f, 0.13f, 0.05f), FLinearColor(0.17f, 0.125f, 0.04f), FLinearColor(0.14f, 0.095f, 0.05f),
-			FLinearColor(0.085f, 0.095f, 0.075f), FLinearColor(0.085f, 0.11f, 0.06f), FLinearColor(0.085f, 0.15f, 0.055f)
+			// (a dark cloth: a wood is darker than the fields beside it, whatever the nation's colour)
+			FLinearColor(0.048f, 0.104f, 0.042f), FLinearColor(0.056f, 0.102f, 0.04f), FLinearColor(0.07f, 0.096f, 0.038f), FLinearColor(0.068f, 0.08f, 0.042f),
+			FLinearColor(0.06f, 0.07f, 0.054f), FLinearColor(0.058f, 0.086f, 0.045f), FLinearColor(0.058f, 0.118f, 0.042f)
 		};
 		const bool bTrees = Looks[Month] != TreeLook || FMath::Abs(Hard - WinterHard) > 0.3f;
 		TreeLook = Looks[Month];
@@ -5060,7 +5087,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	}
 
 	// Trees are drawn only close to: in the squares of country round what the eye is looking at.
-	const bool bNear = CameraDistance < 11500.0f;
+	const bool bNear = CameraDistance < 7200.0f; // (from working height and above the woods are one canopy: art fix 7)
 	const double Reach = CameraDistance * 1.25 + TreeSquare * 0.75;
 	for (int32 Index = 0; Index < TreeMeshes.Num(); ++Index)
 	{
@@ -5075,13 +5102,29 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		}
 	}
 
-	// From far off the map is read by its nations' colours, so the woods are laid on thinly; close up they
-	// are laid on thick, and the country reads as country.
-	const float Woods = FMath::Lerp(0.7f, 0.26f, FMath::SmoothStep(6000.0f, 17000.0f, CameraDistance));
+	// The woods are one dense canopy from working height and above (the nation's stain lies over it at half
+	// strength, so a wood is still seen to be its owner's); close to, where single trees stand on it, the cloth
+	// under them is laid a little thinner.
+	const float Woods = FMath::Lerp(0.66f, 0.84f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance));
 	if (LandMaterial && FMath::Abs(Woods - WoodsShown) > 0.01f)
 	{
 		WoodsShown = Woods;
 		LandMaterial->SetScalarParameterValue(TEXT("WoodsStrength"), Woods);
+	}
+	// The quilt of fields: plain to see close to, quieter at working height (where it must not fight the province
+	// lines), and fading out toward the top of the zoom. Its hedges are seen only close to.
+	const float Fields = CameraDistance < 9000.0f ? FMath::GetMappedRangeValueClamped(FVector2f(3000.0f, 9000.0f), FVector2f(FieldsNear, FieldsWorking), CameraDistance)
+		: FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 19000.0f), FVector2f(FieldsWorking, FieldsWorking * 0.45f), CameraDistance);
+	const float Hedges = FMath::GetMappedRangeValueClamped(FVector2f(2600.0f, 7000.0f), FVector2f(HedgesNear, 0.0f), CameraDistance);
+	if (LandMaterial && FMath::Abs(Fields - FieldsShown) > 0.005f)
+	{
+		FieldsShown = Fields;
+		LandMaterial->SetScalarParameterValue(TEXT("FieldsStrength"), Fields);
+	}
+	if (LandMaterial && FMath::Abs(Hedges - HedgesShown) > 0.005f)
+	{
+		HedgesShown = Hedges;
+		LandMaterial->SetScalarParameterValue(TEXT("HedgeStrength"), Hedges);
 	}
 
 	// The quiet lines. Province lines are faint from high up and a little firmer on the way down; every one is

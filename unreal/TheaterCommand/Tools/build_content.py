@@ -293,20 +293,71 @@ def build_land():
     stain = lerp(m, stain, 1.0, scalar(m, "Flat", 0.0, -2050, -600), -1850, -660)
     stain = times(m, stain, scalar(m, "Politics", 0.94, -1850, -570), -1750, -630)
     c = lerp(m, (ground, "RGB"), (tint, "RGB"), stain, -2000, -400)
-    # Woods are a dark green cloth laid over the paint, thick enough to read as woods on any nation's colour.
-    # The woods take the nation's stain too, and keep about a third of their own colour under it.
-    wooded = (ground, "A")
-    woods = lerp(m, vector(m, "WoodsColour", (0.075, 0.13, 0.055, 1.0), -2000, -900),
-                 times(m, (tint, "RGB"), scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), -2100, -1000),
-                 times(m, stain, scalar(m, "WoodsStain", 0.65, -2300, -1080), -2100, -1080), -1900, -950)
-    c = lerp(m, c, woods,
-             times(m, wooded, scalar(m, "WoodsStrength", 0.62, -2300, -900), -2000, -700), -1900, -500)
-    c = lerp(m, c, vector(m, "RockColour", (0.235, 0.205, 0.162, 1.0), -2000, -150), (masks, "R"), -1700, -400)
-    c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), (masks, "G"), -1400, -400)
-    c = lerp(m, c, vector(m, "SandColour", (0.694, 0.597, 0.371, 1.0), -1400, -150), (masks, "B"), -1100, -400)
+    # The detail, at two sizes so that its repeat does not show. (It is read here, ahead of its use, because the
+    # edges of the woods and the lie of the fields are roughened by it.)
+    fine_uv = world_uv(m, "DetailTiling", 0.0052, -3000, 700)
+    coarse_uv = world_uv(m, "DetailTilingCoarse", 0.00137, -3000, 1000)
+    fine = picture(m, "Detail", fine_uv, -2300, 700, numbers=True)
+    coarse = picture(m, "Detail", coarse_uv, -2300, 1000, numbers=True)
+    cover = picture(m, "Cover", uv, -2600, 500, numbers=True)
 
-    # The detail, at two sizes so that its repeat does not show. Which kind shows where: grass by default,
-    # tree-tops where it is wooded, rock where rock shows, sand on the shore and in the desert, nothing on snow.
+    # Farmland: a quilt of fields on the low ground. Every field has a tone of its own, from pasture through
+    # wheat to plough, read from a picture with one pixel to a field; the rows lean and wander a little so that it
+    # is no chessboard. The quilt multiplies whatever is under it, so a nation's fields are still its own colour.
+    # Small fields with hedges round them in the west, great open ones on the eastern plains.
+    place = world_uv(m, "FieldTiling", 0.0222, -3000, 1500)  # (a small field is about four and a half map units long)
+    east = node(m, unreal.MaterialExpressionComponentMask, -2700, 1500, r=True, g=False, b=False, a=False)
+    connect(place, "", east, "")
+    south = node(m, unreal.MaterialExpressionComponentMask, -2700, 1600, r=False, g=True, b=False, a=False)
+    connect(place, "", south, "")
+    rows = pair(m, plus(m, east, times(m, south, 0.33, -2500, 1560), -2350, 1500),
+                times(m, plus(m, south, times(m, east, -0.22, -2500, 1660), -2350, 1620), 1.389, -2200, 1620), -2050, 1550)
+    rows = plus(m, rows, times(m, leaning(m, coarse, "R", "G", -2300, 1800), scalar(m, "FieldWander", 1.4, -2000, 1900), -1700, 1800), -1500, 1600)
+    small = picture(m, "Fields", times(m, rows, 1.0 / 64.0, -1300, 1500), -1100, 1500, numbers=True)
+    large = picture(m, "Fields", plus(m, times(m, rows, 0.42 / 64.0, -1300, 1700), 0.37, -1150, 1700), -950, 1700, numbers=True)
+    tone = times(m, lerp(m, (small, "RGB"), (large, "RGB"), (cover, "G"), -750, 1600), 2.0, -600, 1600)
+    quilt = lerp(m, 1.0, tone, times(m, (cover, "R"), scalar(m, "FieldsStrength", 0.45, -750, 1800), -600, 1800), -400, 1650)
+    # Hedges: a thin dark line round each small field, seen only close to.
+    part = one_in(m, unreal.MaterialExpressionFrac, rows, -1300, 2000)
+    back = one_in(m, unreal.MaterialExpressionOneMinus, part, -1150, 2100)
+    near_edge = node(m, unreal.MaterialExpressionMin, -1000, 2000)
+    connect(part, "", near_edge, "A")
+    connect(back, "", near_edge, "B")
+    edge_x = node(m, unreal.MaterialExpressionComponentMask, -850, 2000, r=True, g=False, b=False, a=False)
+    connect(near_edge, "", edge_x, "")
+    edge_y = node(m, unreal.MaterialExpressionComponentMask, -850, 2100, r=False, g=True, b=False, a=False)
+    connect(near_edge, "", edge_y, "")
+    edge = node(m, unreal.MaterialExpressionMin, -700, 2050)
+    connect(edge_x, "", edge, "A")
+    connect(edge_y, "", edge, "B")
+    hedge_line = one_in(m, unreal.MaterialExpressionOneMinus,
+                        one_in(m, unreal.MaterialExpressionSaturate, times(m, edge, scalar(m, "HedgeFine", 16.0, -700, 2200), -550, 2050), -400, 2050), -250, 2050)
+    hedged = one_in(m, unreal.MaterialExpressionOneMinus,
+                    times(m, times(m, hedge_line, scalar(m, "HedgeStrength", 0.0, -250, 2200), -100, 2100),
+                          times(m, (cover, "R"), one_in(m, unreal.MaterialExpressionOneMinus, (cover, "G"), -250, 2350), -100, 2300), 50, 2150), 200, 2150)
+    c = times(m, times(m, c, quilt, -1750, -330), hedged, -1650, -330)
+
+    # Woods are one dark cloth laid over the paint: a standing mass with a ragged edge, thick enough to read as
+    # woods on any nation's colour, fir-dark in the north and on the high ground. The woods take the nation's
+    # stain too, at about half its strength, so that a nation's wood is still seen to be its own.
+    wooded = one_in(m, unreal.MaterialExpressionSaturate,
+                    plus(m, times(m, plus(m, plus(m, (ground, "A"), times(m, plus(m, (fine, "G"), -0.5, -2500, -1250), scalar(m, "WoodsRag", 0.5, -2500, -1150), -2350, -1250), -2200, -1250),
+                                          -0.5, -2050, -1250), scalar(m, "WoodsSharp", 3.5, -2050, -1150), -1900, -1250), 0.5, -1750, -1250), -1600, -1250)
+    leaf = lerp(m, vector(m, "WoodsColour", (0.05, 0.09, 0.04, 1.0), -2000, -900),
+                vector(m, "FirColour", (0.024, 0.056, 0.04, 1.0), -2000, -1050), (cover, "A"), -1800, -950)
+    woods = lerp(m, leaf,
+                 times(m, (tint, "RGB"), scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), -2100, -1000),
+                 times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), -1650, -950)
+    c = lerp(m, c, woods,
+             times(m, wooded, scalar(m, "WoodsStrength", 0.84, -2300, -900), -2000, -700), -1500, -500)
+    # The rim of a wood: lighter on its sunward edge, and a strip of shade on the open ground in its lee.
+    c = times(m, c, plus(m, 1.0, times(m, plus(m, (cover, "B"), -0.5, -1500, -700), scalar(m, "WoodsRim", 0.6, -1500, -600), -1350, -650), -1200, -650), -1100, -500)
+    c = lerp(m, c, vector(m, "RockColour", (0.235, 0.205, 0.162, 1.0), -2000, -150), (masks, "R"), -1000, -400)
+    c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), (masks, "G"), -900, -400)
+    c = lerp(m, c, vector(m, "SandColour", (0.694, 0.597, 0.371, 1.0), -1400, -150), (masks, "B"), -800, -400)
+
+    # Which kind of detail shows where: grass by default, tree-tops where it is wooded, rock where rock shows,
+    # sand on the shore and in the desert, nothing on snow.
     sandy = one_in(m, unreal.MaterialExpressionSaturate, plus(m, (masks, "B"), (masks, "A"), -2300, 500), -2100, 500)
 
     def kind_of_ground(sample, x, y):
@@ -315,10 +366,6 @@ def build_land():
         v = lerp(m, v, (sample, "A"), sandy, x + 400, y)
         return lerp(m, v, 0.5, (masks, "G"), x + 600, y)
 
-    fine_uv = world_uv(m, "DetailTiling", 0.0052, -3000, 700)
-    coarse_uv = world_uv(m, "DetailTilingCoarse", 0.00137, -3000, 1000)
-    fine = picture(m, "Detail", fine_uv, -2300, 700, numbers=True)
-    coarse = picture(m, "Detail", coarse_uv, -2300, 1000, numbers=True)
     near = times(m, kind_of_ground(fine, -2000, 700), 2.0, -1200, 700)
     far = lerp(m, 1.0, times(m, kind_of_ground(coarse, -2000, 1000), 2.0, -1200, 1000), scalar(m, "DetailCoarse", 0.45, -1200, 1150), -1000, 1000)
     detail = lerp(m, 1.0, times(m, near, far, -800, 850), scalar(m, "DetailStrength", 0.8, -800, 1000), -600, 850)

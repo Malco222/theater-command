@@ -286,6 +286,38 @@ void CampaignTextures::MakeGroundDetail(TArray<FColor>& OutPixels)
 	}
 }
 
+void CampaignTextures::MakeFields(TArray<FColor>& OutPixels)
+{
+	// Six tones from pasture through wheat to plough, and everything between them: a field takes one by the throw
+	// of its own number. What is kept is how the tone stands to the average of them all, as light (half is no change).
+	struct FStop { float At; FVector3f Tone; };
+	static const FStop Stops[] =
+	{
+		{ 0.0f, FVector3f(120.0f, 146.0f, 84.0f) }, { 0.3f, FVector3f(140.0f, 150.0f, 86.0f) }, { 0.5f, FVector3f(184.0f, 172.0f, 104.0f) },
+		{ 0.68f, FVector3f(150.0f, 132.0f, 92.0f) }, { 0.84f, FVector3f(104.0f, 134.0f, 78.0f) }, { 1.0f, FVector3f(170.0f, 166.0f, 110.0f) },
+	};
+	const FVector3f Average(143.0f, 150.0f, 91.0f);
+	OutPixels.SetNumUninitialized(FieldsSize * FieldsSize);
+	for (int32 J = 0; J < FieldsSize; ++J)
+	{
+		for (int32 I = 0; I < FieldsSize; ++I)
+		{
+			const uint32 H = Hash(static_cast<uint32>(I), static_cast<uint32>(J), 7u);
+			const float Throw = (H & 0xFFFF) / 65535.0f;
+			FVector3f Tone = Stops[0].Tone;
+			for (int32 K = 0; K + 1 < UE_ARRAY_COUNT(Stops); ++K)
+			{
+				if (Throw >= Stops[K].At)
+				{
+					Tone = FMath::Lerp(Stops[K].Tone, Stops[K + 1].Tone, FMath::Clamp((Throw - Stops[K].At) / (Stops[K + 1].At - Stops[K].At), 0.0f, 1.0f));
+				}
+			}
+			auto Share = [](float Seen, float Mean) { return ToByte(FMath::Clamp(FMath::Pow(Seen / Mean, 2.2f), 0.0f, 2.0f) * 0.5f); };
+			OutPixels[J * FieldsSize + I] = FColor(Share(Tone.X, Average.X), Share(Tone.Y, Average.Y), Share(Tone.Z, Average.Z), static_cast<uint8>((H >> 16) & 0xFF));
+		}
+	}
+}
+
 void CampaignTextures::MakeGroundBumps(TArray<FColor>& OutPixels)
 {
 	TArray<float> Trees, Rock;

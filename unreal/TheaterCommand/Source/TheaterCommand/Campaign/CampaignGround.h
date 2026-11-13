@@ -46,6 +46,13 @@ public:
 	TArray<FColor> Tint;
 	TArray<FColor> Relief;
 	TArray<FColor> Masks;
+	/**
+	 * What covers the ground besides the bare paint (art fix 7). Red: how much of it is farmland, for the quilt of
+	 * fields. Green: how large the fields are there (small, hedged ones in the west; great open ones on the steppe).
+	 * Blue: the rim of the woods, 0.5 where there is none: lighter on a wood's sunward edge, darker on the ground
+	 * in its lee. Alpha: how far the woods there are fir and pine.
+	 */
+	TArray<FColor> Cover;
 
 	/** The sea's colour, one pixel every WaterStep map units. */
 	double WaterStep = 1.5;
