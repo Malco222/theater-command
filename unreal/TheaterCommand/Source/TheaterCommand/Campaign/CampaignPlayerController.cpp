@@ -1925,6 +1925,10 @@ void ACampaignPlayerController::Escape()
 	{
 		PutDownFleet();
 	}
+	else if (LookRegion != INDEX_NONE)
+	{
+		StopLooking();
+	}
 	else
 	{
 		SelectRegion(INDEX_NONE);
@@ -2648,6 +2652,7 @@ bool ACampaignPlayerController::PickUpFleet(int32 FleetId)
 		return false;
 	}
 	PutDownArmy();
+	LookRegion = INDEX_NONE;
 	SelectRegion(INDEX_NONE);
 	RegionPanel.bVisible = false;
 	RegionPanel.Revision = ++PanelRevision;
@@ -2898,6 +2903,7 @@ void ACampaignPlayerController::FleetToHarbour()
 
 void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 {
+	StopLooking();
 	// A fleet or an air fleet: look at it, and at what it can be told to do.
 	if (Piece && !Piece->IsArmy() && Piece->GetForceId() != INDEX_NONE)
 	{
@@ -2980,6 +2986,138 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 		if (Target != INDEX_NONE)
 		{
 			AdviserSaw(2); // a province looked at
+			// Somebody's army stands there that cannot be picked up: its corps are dealt as cards all the same, as far
+			// as they are known. The flag that was clicked, or else the first army on that ground.
+			FString Whose = Piece && Piece->IsArmy() ? Piece->GetNationTag() : FString();
+			if (Whose.IsEmpty() && GetSession())
+			{
+				for (const FViewCorps& Unit : GetSession()->GetView().Corps)
+				{
+					if (Unit.Region == Target)
+					{
+						Whose = Unit.Nation;
+						break;
+					}
+				}
+			}
+			if (!Whose.IsEmpty())
+			{
+				LookAtArmy(Target, Whose);
+			}
+		}
+	}
+}
+
+void ACampaignPlayerController::LookAtArmy(int32 RegionId, const FString& Nation)
+{
+	if (ArmyRegion != INDEX_NONE || FleetInHand != INDEX_NONE || RegionId == INDEX_NONE || Nation.IsEmpty())
+	{
+		return;
+	}
+	LookRegion = RegionId;
+	LookNation = Nation;
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::StopLooking()
+{
+	if (LookRegion != INDEX_NONE)
+	{
+		LookRegion = INDEX_NONE;
+		RefreshOrders();
+	}
+}
+
+void ACampaignPlayerController::LayOutLook()
+{
+	FCampaignSession* Session = GetSession();
+	const FCampaignView& View = Session->GetView();
+	const FCampaignNation* Nation = Map->GetData().FindNation(LookNation);
+	const FString Adjective = Nation && !Nation->Adjective.IsEmpty() ? Nation->Adjective : LookNation;
+	int32 Known = 0, Unknown = 0, Divisions = 0, Reports = 0;
+	FString General;
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		if (Unit.Region != LookRegion || Unit.Nation != LookNation)
+		{
+			continue;
+		}
+		FTrayCard Card;
+		Card.CorpsId = Unit.Id;
+		Card.bLook = true;
+		if (Unit.bDim)
+		{
+			Card.bUnknown = true;
+			Card.Name = FText::FromString(TEXT("Not identified"));
+			Card.Kind = FText::FromString(TEXT("a corps"));
+			++Unknown;
+		}
+		else
+		{
+			Card.Name = FText::FromString(Unit.Name);
+			Card.Kind = FText::FromString(FCampaignMapData::CorpsKindLabel(Unit.Kind));
+			Card.Divisions = Unit.Divisions;
+			Card.Strength = Unit.Strength;
+			Card.KindId = Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy")) : Unit.Kind;
+			Card.Ally = Unit.Ally;
+			Card.Morale = Unit.Cohesion;
+			Card.Experience = Unit.Experience;
+			Card.Stale = Unit.Stale;
+			Card.Nickname = FText::FromString(Unit.Nickname);
+			Card.Grade = FText::FromString(Unit.Grade.IsEmpty() ? FString() : FString::Printf(TEXT("%s, %d"), *Unit.Grade, Unit.Experience));
+			Card.Honours = Unit.Honours;
+			Card.Parts = Unit.Parts;
+			if (Unit.Morale >= 0.0f)
+			{
+				Card.bMood = true;
+				Card.Morale = Unit.Morale;
+				Card.Rest = Unit.Rest >= 0.0f ? Unit.Rest : Unit.Cohesion;
+				Card.MoraleWord = Unit.MoraleWord;
+				Card.RestWord = Unit.RestWord;
+				Card.Trend = Unit.Trend;
+				Card.bResting = Unit.bResting;
+				Card.MoodTip = Unit.MoodLine + TEXT("\n") + Unit.RestLine;
+			}
+			++Known;
+			Divisions += Unit.Divisions;
+			Reports += Unit.Stale > 0 ? 1 : 0;
+			if (General.IsEmpty() && !Unit.General.IsEmpty())
+			{
+				General = Unit.General;
+			}
+		}
+		Tray.Cards.Add(Card);
+	}
+	if (Tray.Cards.Num() == 0)
+	{
+		LookRegion = INDEX_NONE; // nobody stands there any more
+		return;
+	}
+	const FString Where = Map->GetData().Regions.IsValidIndex(LookRegion) ? Map->GetData().Regions[LookRegion].Name : FString();
+	const FString Standing = View.RegionStanding.IsValidIndex(LookRegion) ? View.RegionStanding[LookRegion] : FString();
+	const bool bMine = LookNation == View.Human;
+	Tray.bVisible = true;
+	Tray.bLook = true;
+	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
+	Tray.Tag = LookNation;
+	Tray.Title = FText::FromString(General.IsEmpty() ? FString::Printf(TEXT("%s army"), *Adjective) : General);
+	const FString Size = Unknown == 0 ? FString::Printf(TEXT("%d corps, %d division%s%s"), Known, Divisions, Divisions == 1 ? TEXT("") : TEXT("s"), Reports > 0 ? TEXT(" (from reports gone stale)") : TEXT(""))
+		: Known == 0 ? FString::Printf(TEXT("%d corps, none identified"), Unknown)
+		: FString::Printf(TEXT("%d corps: %d identified, %d not"), Known + Unknown, Known, Unknown);
+	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s army at %s  \u00B7  %s"), *Adjective, *Where, *Size));
+	Tray.PendingButton = FText::GetEmpty();
+	Tray.JoinButton = FText::GetEmpty();
+	Tray.Hint = FText::FromString(bMine ? TEXT("This army has used its month, or holds its ground: it can be given no orders now.")
+		: Unknown > 0 ? TEXT("Not yours to command. A battle, an agent on watch or a reconnaissance flight would show what the unidentified corps are.")
+		: TEXT("Not yours to command."));
+	// The model of its first known corps stands beside the cards.
+	for (const FTrayCard& Card : Tray.Cards)
+	{
+		if (!Card.bUnknown)
+		{
+			ShowCorps = INDEX_NONE;
+			ShowCorpsModel(Card.CorpsId);
+			break;
 		}
 	}
 }
@@ -3150,6 +3288,7 @@ void ACampaignPlayerController::RefreshOrders()
 	Tray.Cards.Reset();
 	Tray.Ships.Reset();
 	Tray.bFleet = false;
+	Tray.bLook = false;
 	Reach.Reset();
 	RouteTarget = INDEX_NONE;
 	PendingTarget = INDEX_NONE;
@@ -3175,11 +3314,17 @@ void ACampaignPlayerController::RefreshOrders()
 		Map->SetReach(Reach);
 		if (FleetInHand != INDEX_NONE)
 		{
+			LookRegion = INDEX_NONE;
 			LayOutFleet();
+		}
+		else if (LookRegion != INDEX_NONE)
+		{
+			LayOutLook();
 		}
 		return;
 	}
 	FleetInHand = INDEX_NONE; // an army in hand: the fleet is let go
+	LookRegion = INDEX_NONE; // and nothing else is being looked at
 
 	// The army in hand, as the rules see it now.
 	const FCampaignView& View = Session->GetView();

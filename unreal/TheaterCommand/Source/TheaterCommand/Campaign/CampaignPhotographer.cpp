@@ -236,6 +236,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			FShot& Shot = Add(TEXT("31u-joint-army"), TEXT("Moravia"), 0.4f);
 			Shot.bJoin = true;
 		}
+		if (GrandNation == TEXT("GER"))
+		{
+			// Armies that are not the player's to move, looked at: an enemy's that nobody has identified, and a garrison of his own.
+			Add(TEXT("31v-enemy-army-looked-at"), TEXT("Lodz"), 0.4f).Look = TEXT("Lodz");
+			Add(TEXT("31w-own-garrison-looked-at"), TEXT("Hamburg"), 0.4f).Look = TEXT("Hamburg");
+		}
 		Add(TEXT("31m-forces"), TEXT("@capital"), 0.45f).Room = TEXT("forces");
 		// An enemy capital picked: the prize for taking it. And the wealth view of the whole map.
 		Add(TEXT("31p-prize"), TEXT("Warsaw"), 0.4f).Select = TEXT("Warsaw");
@@ -697,6 +703,21 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		}
 		Controller->PlayNewsreel(TEXT("September 1939"), Cards);
 		Controller->NextNewsCard();
+	}
+	if (!Shot.Look.IsEmpty() && Controller->GetSession())
+	{
+		if (const int32* Place = Data.RegionByName.Find(Shot.Look))
+		{
+			Controller->SelectRegion(*Place);
+			for (const FViewCorps& Unit : Controller->GetSession()->GetView().Corps)
+			{
+				if (Unit.Region == *Place)
+				{
+					Controller->LookAtArmy(*Place, Unit.Nation);
+					break;
+				}
+			}
+		}
 	}
 	if (Shot.bJoin && Controller->GetSession())
 	{

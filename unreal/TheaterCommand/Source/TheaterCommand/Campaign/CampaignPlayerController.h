@@ -52,6 +52,9 @@ struct FTrayCard
 	FText Grade; // "Veteran, 65"
 	FString KindId; // inf, arm, art, mot, cav, mtn, eng, fort: for the picture on each division's card
 	FString Ally; // an ally's corps marching with the army: its own country's tag
+	bool bLook = false; // a card of an army only being looked at: it cannot be given orders from here
+	bool bUnknown = false; // a corps in view that nobody has identified
+	int32 Stale = 0; // known from a report this many months old
 	float Morale = 1.0f; // 0..1: how well it holds together
 	// Where the rules keep morale and rest (the grand campaign): both, with their words and why; and each division.
 	bool bMood = false;
@@ -101,6 +104,7 @@ struct FArmyTray
 	FString Tag; // whose flag to show
 	TArray<FTrayCard> Cards;
 	bool bFleet = false; // it is a fleet in hand, not an army: its ships are the cards
+	bool bLook = false; // somebody's army being looked at, not one in hand: its corps as cards, and no orders
 	TArray<FShipCard> Ships;
 	FString FleetStance; // patrol, raid or port: what the fleet is doing now
 	FString FleetNext; // patrol, raid or hunt: what it will do in the sea it is sent to next
@@ -439,6 +443,9 @@ public:
 	int32 ArmiesYetToMove() const;
 	/** The list of everything the player commands, each with a way to go to it (L). */
 	void OpenForces();
+	/** Looks at an army that is not in hand (an enemy's, an ally's, or one of the player's that cannot move): its corps are dealt as cards, as far as they are known. */
+	void LookAtArmy(int32 RegionId, const FString& Nation);
+	void StopLooking();
 	/** Joint armies: asks the allied corps beside the army in hand to march with it; sends one of them home. */
 	void AskAlliesToJoin();
 	void SendBackCorps(int32 CorpsId);
@@ -658,6 +665,9 @@ private:
 	FString FleetNext = TEXT("patrol");
 	mutable FVector2D SeaAskedAt = FVector2D(-1.0e6, -1.0e6); // where the rules were last asked which sea lies under the pointer
 	mutable int32 SeaAsked = INDEX_NONE;
+	int32 LookRegion = INDEX_NONE; // where the army being looked at stands, and whose it is
+	FString LookNation;
+	void LayOutLook();
 	FFleetHand FleetHand; // the fleet in hand as the rules describe it
 	int32 FleetHoverSea = INDEX_NONE; // the sea the pointer is nearest, while a fleet is in hand
 	FVector2D PointerMap = FVector2D::ZeroVector; // where the pointer is on the map

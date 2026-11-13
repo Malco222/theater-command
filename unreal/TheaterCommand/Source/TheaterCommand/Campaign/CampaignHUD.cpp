@@ -2241,6 +2241,9 @@ namespace
 				}
 				else
 				{
+				// (an army only being looked at has no orders to give: its cards, and a way to put them away)
+				if (!Army.bLook)
+				{
 				TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
 				[
 					SNew(STextBlock).Text(FText::FromString(TEXT("If attacked:"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
@@ -2290,6 +2293,7 @@ namespace
 						]
 					];
 				}
+				}
 				// The place clicked once and waiting for the word, and the way to let the army go.
 				TrayOrders->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
 				if (!Army.PendingButton.IsEmpty())
@@ -2305,7 +2309,7 @@ namespace
 				}
 				TrayOrders->AddSlot().AutoWidth().Padding(Army.PendingButton.IsEmpty() ? 22.0f : 0.0f, 0.0f, 8.0f, 0.0f)
 				[
-					OrderButton(TEXT("PUT DOWN"), false, [this]() { if (Controller.IsValid()) { Controller->PutDownArmy(); } })
+					OrderButton(Army.bLook ? TEXT("CLOSE") : TEXT("PUT DOWN"), false, [this, bLook = Army.bLook]() { if (Controller.IsValid()) { if (bLook) { Controller->StopLooking(); } else { Controller->PutDownArmy(); } } })
 				];
 
 				Cards->ClearChildren();
@@ -4384,17 +4388,24 @@ namespace
 		 */
 		TSharedRef<SWidget> MakeCard(const FTrayCard& Card)
 		{
-			const bool bGoing = Card.bPicked && Card.bCanOrder;
+			// (a card of an army only being looked at is shown as plainly as one in hand, where it is known)
+			const bool bGoing = Card.bLook ? !Card.bUnknown : (Card.bPicked && Card.bCanOrder);
 			const FLinearColor Ink = bGoing ? Cream : Muted;
-			const FString MovesLine = !Card.bCanOrder ? FString(TEXT("holds its ground"))
+			const FString MovesLine = Card.bLook ? (Card.bUnknown ? FString(TEXT("kind and strength not known"))
+					: Card.Stale > 0 ? FString::Printf(TEXT("from a report %d month%s old"), Card.Stale, Card.Stale == 1 ? TEXT("") : TEXT("s")) : FString(TEXT("as it stands today")))
+				: !Card.bCanOrder ? FString(TEXT("holds its ground"))
 				: (!Card.bPicked ? FString(TEXT("staying behind"))
 					: FString::Printf(TEXT("moves %d of %d"), Card.Moves, Card.MovesMax));
 			const FLinearColor StrengthInk = Card.Strength < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("8FBF6A")));
 			const FLinearColor MoraleInk = Card.Morale < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("6FA3D8")));
 			const int32 Pips = FMath::Clamp(1 + Card.Experience / 22, 1, 5);
-			const FString Tip = FString::Printf(TEXT("%s: %s, %d division%s. Strength %d%%, morale %d%%. %s. Click to tell this corps to come along or stay behind."),
+			const FString Tip = Card.bUnknown ? FString(TEXT("A corps in plain view that nobody has identified: its kind and its strength are not known. A battle, an agent on watch or a reconnaissance flight would show what it is."))
+				: FString::Printf(TEXT("%s: %s, %d division%s. Strength %s%d%%%s. %s.%s"),
 				*Card.Name.ToString(), *Card.Kind.ToString(), Card.Divisions, Card.Divisions == 1 ? TEXT("") : TEXT("s"),
-				FMath::RoundToInt32(Card.Strength * 100.0f), FMath::RoundToInt32(Card.Morale * 100.0f), Card.Service.IsEmpty() ? *Card.Grade.ToString() : *Card.Service);
+				Card.Stale > 0 ? TEXT("about ") : TEXT(""), FMath::RoundToInt32(Card.Strength * 100.0f),
+				Card.Stale > 0 ? TEXT("") : *FString::Printf(TEXT(", morale %d%%"), FMath::RoundToInt32(Card.Morale * 100.0f)),
+				Card.Service.IsEmpty() ? *Card.Grade.ToString() : *Card.Service,
+				Card.bLook ? TEXT("") : TEXT(" Click to tell this corps to come along or stay behind."));
 
 			// The picture on each card is the game's own model of what the division is: this nation's tank of the
 			// year, its gun, its soldier. Where there is no model yet, a plain drawing stands in.
@@ -4407,7 +4418,12 @@ namespace
 				const FViewDivision* Part = Card.Parts.IsValidIndex(Division) ? &Card.Parts[Division] : nullptr;
 				const FString Kind = Part && !Part->Kind.IsEmpty() && Card.KindId != TEXT("heavy") ? Part->Kind : Card.KindId;
 				const TSharedPtr<FSlateBrush> Portrait = PortraitOf(ACampaignMapActor::ModelFor(Tag, Kind));
-				const TSharedRef<SWidget> Picture = Portrait.IsValid()
+				const TSharedRef<SWidget> Picture = Card.bUnknown
+					? StaticCastSharedRef<SWidget>(SNew(SBox).WidthOverride(74.0f).HeightOverride(45.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						[
+							SNew(STextBlock).Text(FText::FromString(TEXT("?"))).Font(Font(TEXT("Bold"), 26)).ColorAndOpacity(Muted)
+						])
+					: Portrait.IsValid()
 					? StaticCastSharedRef<SWidget>(SNew(SPortrait).Picture(Portrait).Size(FVector2D(74.0, 45.0)))
 					: KindPicture(Kind == TEXT("heavy") ? FString(TEXT("arm")) : Kind, Ink);
 				const float Left = Part ? Part->Strength : Card.Strength;
@@ -4435,12 +4451,15 @@ namespace
 						]
 					];
 				}
-				Face->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Left, bGoing ? (Left < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("8FBF6A")))) : Faint, TEXT("Strength"))];
-				if (!Card.bMood && !Part)
+				if (!Card.bUnknown)
 				{
-					Face->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[Meter(Card.Morale, bGoing ? MoraleInk : Faint, TEXT("Morale"))];
+					Face->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Left, bGoing ? (Left < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("8FBF6A")))) : Faint, Card.Stale > 0 ? TEXT("Strength, about") : TEXT("Strength"))];
+					if (!Card.bMood && !Part && Card.Stale == 0)
+					{
+						Face->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[Meter(Card.Morale, bGoing ? MoraleInk : Faint, TEXT("Morale"))];
+					}
+					Face->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)[Stripes];
 				}
-				Face->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)[Stripes];
 				Divisions->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
 				[
 					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f)).ToolTipText(FText::FromString(PartTip))
@@ -4485,7 +4504,7 @@ namespace
 				: StaticCastSharedRef<SWidget>(SNew(SSpacer).Size(FVector2D(0.0, 0.0)));
 
 			return SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(8.0f, 6.0f, 4.0f, 7.0f))
-				.IsFocusable(false).IsEnabled(Card.bCanOrder).ToolTipText(FText::FromString(Tip))
+				.IsFocusable(false).IsEnabled(Card.bCanOrder || Card.bLook).ToolTipText(FText::FromString(Tip))
 				.OnHovered_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->ShowCorpsModel(Id); } })
 				.OnClicked_Lambda([this, Id = Card.CorpsId]()
 				{
@@ -4532,6 +4551,7 @@ namespace
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 4.0f, 0.0f)
 						[
 							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(6.0f, 1.0f)).IsFocusable(false)
+							.Visibility(Card.bLook ? EVisibility::Collapsed : EVisibility::Visible)
 							.ToolTipText(FText::FromString(TEXT("Its service record: what it has done, its honours and its diary.")))
 							.OnClicked_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->OpenRecord(Id); } return FReply::Handled(); })
 							[
