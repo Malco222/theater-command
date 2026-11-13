@@ -15958,6 +15958,8 @@
     const steps = [];
     let fallen = null;
     const roll0 = s.passings.length, month02 = s.turn;
+    const me0 = s.human;
+    const goals0 = GOAL_KEYS.map((key2) => goalState(s, key2));
     if (!s.human) {
       const month2 = s.turn;
       for (let guard = 0; guard < 80 && s.turn === month2 && !s.human; guard++) stepOne(s, steps);
@@ -15992,6 +15994,7 @@
     const events = (first.length ? first : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
     const said = (nat) => [...headlines].reverse().find((h) => h.nat === nat && (h.kind === "fall" || h.kind === "event" || h.kind === "war"))?.text ?? "";
     const announce = [];
+    const capitalOfNat = (nat) => s.regions.find((r) => r.cap && r.owner === nat)?.id ?? -1;
     const cards = [.../* @__PURE__ */ new Set([month02, s.turn])].flatMap((t) => announcements(s, t)).filter((c) => c.id > roll0 && c.nat !== fallen);
     for (const c of cards) {
       const foe = s.human ? atWar(s, s.human, c.nat) : false;
@@ -16013,6 +16016,22 @@
       const foe = s.human ? atWar(s, s.human, n.id) : false;
       if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} HAS FALLEN`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is eliminated from the war.`, good: foe });
       else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is free again, and back in the war.`, good: mine2 || !foe });
+    }
+    if (me0 && s.nations[me0] && !fallen) {
+      GOAL_KEYS.forEach((key2, i) => {
+        const now = goalState(s, key2), goal = GOALS[me0]?.[key2];
+        if (!goal || goals0[i] !== "open" || now !== "won" && now !== "lost") return;
+        announce.unshift({
+          nat: me0,
+          title: now === "won" ? `VICTORY: ${goal.title.toUpperCase()}` : `${goal.title.toUpperCase()}: THE CHANCE IS GONE`,
+          text: now === "won" ? `${goal.text} It is done. The ${key2 === "short" ? "short" : "long"} campaign is won.` : `${goal.text} It was not to be: the ${key2 === "short" ? "short" : "long"} campaign is lost.`,
+          more: now === "won" ? key2 === "short" ? "The war goes on, and the long campaign is still to win. You can play on as long as you like." : "You can play on as long as you like." : "The war goes on, and you can play on as long as you like.",
+          kicker: `${key2 === "short" ? "The short campaign" : "The long campaign"} · ${turnToDate(month02).label}`,
+          facts: goalChecks(s, me0, goal).slice(0, 3).map((c) => ({ label: c.label, value: c.done ? "done" : "not done" })),
+          region: capitalOfNat(me0),
+          good: now === "won"
+        });
+      });
     }
     const short = (t, most = 230) => t.length <= most ? t : `${t.slice(0, t.lastIndexOf(".", most) + 1) || `${t.slice(0, most)}...`}`;
     const capitalOf = (nat) => nat ? s.regions.find((r) => r.cap && r.owner === nat)?.id ?? -1 : -1;

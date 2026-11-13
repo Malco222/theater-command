@@ -661,6 +661,9 @@ function endMonth() {
   const steps: unknown[] = [];
   let fallen: string | null = null;
   const roll0 = s.passings.length, month0 = s.turn;
+  // How the player's own campaigns stood, to tell afterwards which were decided this month.
+  const me0 = s.human;
+  const goals0 = GOAL_KEYS.map((key) => goalState(s, key));
   if (!s.human) {
     // Nobody at the controls (the player's country has fallen): one whole month of the war, every nation on the computer.
     const month = s.turn;
@@ -697,6 +700,7 @@ function endMonth() {
   // The great moments of the month, each told on a screen of its own: a nation eliminated, a nation liberated.
   const said = (nat: string): string => [...headlines].reverse().find((h) => h.nat === nat && (h.kind === 'fall' || h.kind === 'event' || h.kind === 'war'))?.text ?? '';
   const announce: { nat: string; title: string; text: string; good: boolean; kicker?: string; more?: string; facts?: { label: string; value: string }[]; region?: number }[] = [];
+  const capitalOfNat = (nat: string): number => s.regions.find((r) => r.cap && r.owner === nat)?.id ?? -1;
   // The rules keep a roll of every nation that leaves the war or comes back into it, in words (the grand campaign).
   const cards = [...new Set([month0, s.turn])].flatMap((t) => announcements(s, t)).filter((c) => c.id > roll0 && c.nat !== fallen);
   for (const c of cards) {
@@ -713,6 +717,22 @@ function endMonth() {
     const foe = s.human ? atWar(s, s.human, n.id) : false;
     if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} HAS FALLEN`, text: said(n.id) || `${upFirst(theName(s, n.id))} is eliminated from the war.`, good: foe });
     else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName(s, n.id))} is free again, and back in the war.`, good: mine || !foe });
+  }
+  // A campaign of the player's own decided this month: won, or lost.
+  // (not when the country itself has fallen: that is told in its own way, and there is no playing on)
+  if (me0 && s.nations[me0] && !fallen) {
+    GOAL_KEYS.forEach((key, i) => {
+      const now = goalState(s, key), goal = GOALS[me0]?.[key];
+      if (!goal || goals0[i] !== 'open' || (now !== 'won' && now !== 'lost')) return;
+      announce.unshift({
+        nat: me0, title: now === 'won' ? `VICTORY: ${goal.title.toUpperCase()}` : `${goal.title.toUpperCase()}: THE CHANCE IS GONE`,
+        text: now === 'won' ? `${goal.text} It is done. The ${key === 'short' ? 'short' : 'long'} campaign is won.` : `${goal.text} It was not to be: the ${key === 'short' ? 'short' : 'long'} campaign is lost.`,
+        more: now === 'won' ? (key === 'short' ? 'The war goes on, and the long campaign is still to win. You can play on as long as you like.' : 'You can play on as long as you like.') : 'The war goes on, and you can play on as long as you like.',
+        kicker: `${key === 'short' ? 'The short campaign' : 'The long campaign'} \u00B7 ${turnToDate(month0).label}`,
+        facts: goalChecks(s, me0, goal).slice(0, 3).map((c) => ({ label: c.label, value: c.done ? 'done' : 'not done' })),
+        region: capitalOfNat(me0), good: now === 'won',
+      });
+    });
   }
   // The newsreel: the month's few great stories, each with the place to show while it is told. A quiet month has none.
   const short = (t: string, most = 230): string => (t.length <= most ? t : `${t.slice(0, t.lastIndexOf('.', most) + 1) || `${t.slice(0, most)}...`}`);
