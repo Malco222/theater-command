@@ -112,6 +112,7 @@ ACampaignMapActor::ACampaignMapActor()
 	RailMesh = MakeMesh(TEXT("Railways"), false);
 	WorksMesh = MakeMesh(TEXT("Works"), false);
 	BuildingsMesh = MakeMesh(TEXT("Buildings"), false);
+	RoomMesh = MakeMesh(TEXT("WarRoom"), false);
 	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
 	SortieMesh = MakeMesh(TEXT("Sorties"), true);
@@ -197,6 +198,7 @@ bool ACampaignMapActor::BuildMap()
 	BuildSeaMesh();
 	BuildBorders();
 	BuildTable();
+	BuildWarRoom();
 	BuildTowns();
 	BuildParade();
 	BuildTrees();
@@ -1291,6 +1293,175 @@ void ACampaignMapActor::BuildTable()
 
 	// The floor of the tray, under the sea bed, so nothing shows through at the edges.
 	AddBlock(FVector(0.0, 0.0, -3.0 * U - 5.0 * U), FVector(2.0 * Half.X, 2.0 * Half.Y, 10.0 * U), Wood);
+}
+
+void ACampaignMapActor::BuildWarRoom()
+{
+	if (!RoomMesh)
+	{
+		return;
+	}
+	RoomMesh->ClearAllMeshSections();
+	// The things of a map room, lying on the wood round the map where the people who work the table have left
+	// them. They are life-size beside the pieces, which are miniatures: a mug stands as tall as a flag's pole.
+	const FVector2D Half = GetWorldHalfExtent(); // X: north-south, Y: east-west
+	const double U = UnitScale, Top = 2.4 * U;
+	FMiniatureMesh M;
+	const FLinearColor Enamel(FColor::FromHex(TEXT("E4DFCF"))), Tea(FColor::FromHex(TEXT("5A3A22"))), Paper(FColor::FromHex(TEXT("E9E1C8"))), Ink(FColor::FromHex(TEXT("3A3A44")));
+	const FLinearColor Bakelite(FColor::FromHex(TEXT("141416"))), Dial(FColor::FromHex(TEXT("CFC8B4"))), Pencil(FColor::FromHex(TEXT("C9962B"))), Lead(FColor::FromHex(TEXT("2A2520")));
+	const FLinearColor Boxwood(FColor::FromHex(TEXT("C8A66B"))), Glass(FColor::FromHex(TEXT("2F4A3C"))), Ash(FColor::FromHex(TEXT("8D8A84"))), Steel(FColor::FromHex(TEXT("8A9098")));
+	const FLinearColor BrassPaint(FColor::FromHex(TEXT("B08D57"))), Shade(FColor::FromHex(TEXT("1F4D3A"))), Cloth(FColor::FromHex(TEXT("6E1F1F"))), Label(FColor::FromHex(TEXT("D8C9A0")));
+	const FLinearColor Counters[] = { FLinearColor(FColor::FromHex(TEXT("5C6068"))), FLinearColor(FColor::FromHex(TEXT("B33A32"))), FLinearColor(FColor::FromHex(TEXT("2F5D9A"))), FLinearColor(FColor::FromHex(TEXT("5E7A4A"))), FLinearColor(FColor::FromHex(TEXT("C9A227"))) };
+
+	// A place outside one edge of the map: 0 south, 1 west, 2 north, 3 east; Along from -1 to 1 down the edge; Out from the brass lip.
+	auto Spot = [&Half, Top](int32 Edge, double Along, double Out) -> FVector
+	{
+		switch (Edge)
+		{
+		case 0: return FVector(-Half.X - Out, Along * Half.Y, Top);
+		case 1: return FVector(Along * Half.X, -Half.Y - Out, Top);
+		case 2: return FVector(Half.X + Out, Along * Half.Y, Top);
+		default: return FVector(Along * Half.X, Half.Y + Out, Top);
+		}
+	};
+	auto Ahead = [](double Turn, double Forward, double Side) -> FVector
+	{
+		const double R = FMath::DegreesToRadians(Turn);
+		return FVector(FMath::Cos(R) * Forward - FMath::Sin(R) * Side, FMath::Sin(R) * Forward + FMath::Cos(R) * Side, 0.0);
+	};
+	const FVector Up(0.0, 0.0, 1.0);
+
+	auto Mug = [&](const FVector& At, double Turn)
+	{
+		M.Pillar(At, 4.6 * U, 5.0 * U, 10.5 * U, Enamel, 18);
+		M.Pillar(At + Up * 10.0 * U, 4.2 * U, 4.2 * U, 0.55 * U, Tea, 18);
+		// The handle: a loop of three short rods.
+		const FVector Side = At + Ahead(Turn, 5.0 * U, 0.0);
+		M.Rod(Side + Up * 8.0 * U, Side + Ahead(Turn, 3.0 * U, 0.0) + Up * 7.0 * U, 0.6 * U, Enamel);
+		M.Rod(Side + Ahead(Turn, 3.0 * U, 0.0) + Up * 7.0 * U, Side + Ahead(Turn, 3.0 * U, 0.0) + Up * 3.5 * U, 0.6 * U, Enamel);
+		M.Rod(Side + Ahead(Turn, 3.0 * U, 0.0) + Up * 3.5 * U, Side + Up * 2.5 * U, 0.6 * U, Enamel);
+	};
+	auto Papers = [&](const FVector& At, double Turn)
+	{
+		M.Box(At + Up * 0.12 * U, FVector(26.0, 36.0, 0.24) * U, Paper, Turn + 9.0);
+		M.Box(At + Ahead(Turn, 3.0 * U, -4.0 * U) + Up * 0.36 * U, FVector(26.0, 36.0, 0.24) * U, Paper * 1.04f, Turn - 6.0);
+		// What is typed on the top sheet: a heading and lines.
+		M.Box(At + Ahead(Turn - 6.0, 13.0 * U, -5.0 * U) + Ahead(Turn, 3.0 * U, -4.0 * U) + Up * 0.5 * U, FVector(1.0, 14.0, 0.05) * U, Ink, Turn - 6.0);
+		for (int32 Line = 0; Line < 7; ++Line)
+		{
+			M.Box(At + Ahead(Turn - 6.0, (8.5 - Line * 2.6) * U, (Line % 3 - 1) * 0.8 * U) + Ahead(Turn, 3.0 * U, -4.0 * U) + Up * 0.5 * U, FVector(0.35, 20.0 - (Line % 3) * 2.5, 0.05) * U, Ink * 1.3f, Turn - 6.0);
+		}
+	};
+	auto PencilAt = [&](const FVector& At, double Turn)
+	{
+		const FVector A = At + Up * 0.5 * U, B = A + Ahead(Turn, 19.0 * U, 0.0);
+		M.Rod(A, B, 0.48 * U, Pencil, 6);
+		M.Limb(B, B + Ahead(Turn, 1.6 * U, 0.0), 0.48 * U, 0.05 * U, Boxwood, 6);
+		M.Limb(B + Ahead(Turn, 1.1 * U, 0.0), B + Ahead(Turn, 1.7 * U, 0.0), 0.18 * U, 0.02 * U, Lead, 6);
+	};
+	auto Ruler = [&](const FVector& At, double Turn)
+	{
+		M.Box(At + Up * 0.18 * U, FVector(36.0, 3.6, 0.36) * U, Boxwood, Turn);
+		for (int32 Tick = 0; Tick <= 12; ++Tick)
+		{
+			M.Box(At + Ahead(Turn, (Tick - 6) * 2.9 * U, 1.1 * U) + Up * 0.38 * U, FVector(0.12, Tick % 6 == 0 ? 1.6 : 0.9, 0.04) * U, Lead, Turn);
+		}
+	};
+	auto Telephone = [&](const FVector& At, double Turn)
+	{
+		M.Box(At + Up * 2.6 * U, FVector(16.0, 21.0, 5.2) * U, Bakelite, Turn);
+		M.Box(At + Up * 6.2 * U, FVector(9.0, 13.0, 2.0) * U, Bakelite, Turn);
+		// The dial on the front slope, and the cradle with the handset across it.
+		M.Pillar(At + Ahead(Turn, 5.4 * U, 0.0) + Up * 5.2 * U, 4.2 * U, 4.2 * U, 0.5 * U, Dial, 16);
+		M.Pillar(At + Ahead(Turn, 5.4 * U, 0.0) + Up * 5.7 * U, 1.3 * U, 1.3 * U, 0.3 * U, Bakelite, 10);
+		for (const double Side : { -5.0, 5.0 })
+		{
+			M.Box(At + Ahead(Turn, -1.0 * U, Side * U) + Up * 8.3 * U, FVector(3.0, 1.4, 2.6) * U, Bakelite, Turn);
+		}
+		const FVector Ear = At + Ahead(Turn, -1.0 * U, -10.5 * U) + Up * 10.2 * U, Mouth = At + Ahead(Turn, -1.0 * U, 10.5 * U) + Up * 10.2 * U;
+		M.Rod(Ear, Mouth, 1.35 * U, Bakelite, 8);
+		M.Ball(Ear + Up * -0.8 * U, FVector(4.4, 4.4, 3.4) * U, Bakelite);
+		M.Ball(Mouth + Up * -0.8 * U, FVector(4.4, 4.4, 3.4) * U, Bakelite);
+		// Its cord, away across the table.
+		M.Rod(At + Ahead(Turn, -8.0 * U, 0.0) + Up * 0.5 * U, At + Ahead(Turn, -30.0 * U, 9.0 * U) + Up * 0.4 * U, 0.4 * U, Bakelite, 5);
+	};
+	auto Ashtray = [&](const FVector& At, double Turn)
+	{
+		M.Pillar(At, 6.5 * U, 7.6 * U, 2.2 * U, Glass, 18);
+		M.Pillar(At + Up * 1.9 * U, 5.6 * U, 5.6 * U, 0.4 * U, Ash, 18);
+		M.Rod(At + Ahead(Turn, 2.0 * U, 0.0) + Up * 2.5 * U, At + Ahead(Turn, 9.0 * U, 1.0 * U) + Up * 3.1 * U, 0.42 * U, Enamel, 6);
+		M.Rod(At + Ahead(Turn, 1.2 * U, -0.1 * U) + Up * 2.45 * U, At + Ahead(Turn, 2.0 * U, 0.0) + Up * 2.5 * U, 0.44 * U, FLinearColor(FColor::FromHex(TEXT("C46A2A"))), 6);
+	};
+	auto Stacks = [&](const FVector& At, double Turn, int32 Seed)
+	{
+		// Spare counters, stacked by colour, waiting to go on the map.
+		for (int32 Stack = 0; Stack < 5; ++Stack)
+		{
+			const int32 Tall = 2 + (Seed * 7 + Stack * 5) % 5;
+			const FVector Foot = At + Ahead(Turn, (Stack % 3) * 10.0 * U, (Stack / 3) * 10.0 * U + (Stack % 2) * 1.5 * U);
+			for (int32 Disc = 0; Disc < Tall; ++Disc)
+			{
+				M.Pillar(Foot + Up * Disc * 0.62 * U, 4.3 * U, 4.2 * U, 0.52 * U, Disc % 2 ? Counters[(Stack + Seed) % 5] * 0.8f : Counters[(Stack + Seed) % 5], 20);
+			}
+		}
+	};
+	auto Rake = [&](const FVector& At, double Turn)
+	{
+		// The long stick the pieces are pushed with, its head toward the map.
+		const FVector A = At + Up * 0.9 * U, B = A + Ahead(Turn, 92.0 * U, 0.0);
+		M.Rod(A, B, 0.75 * U, Boxwood, 8);
+		M.Box(B + Up * 1.2 * U, FVector(2.6, 15.0, 4.2) * U, Boxwood * 0.85f, Turn);
+	};
+	auto Lamp = [&](const FVector& At, double Turn)
+	{
+		// A desk lamp of brass with a green shade, standing back from the map.
+		M.Pillar(At, 8.0 * U, 6.5 * U, 1.6 * U, BrassPaint, 18);
+		M.Rod(At + Up * 1.6 * U, At + Up * 30.0 * U, 0.8 * U, BrassPaint, 8);
+		M.Rod(At + Up * 30.0 * U, At + Ahead(Turn, 10.0 * U, 0.0) + Up * 33.0 * U, 0.8 * U, BrassPaint, 8);
+		M.Box(At + Ahead(Turn, 12.0 * U, 0.0) + Up * 32.0 * U, FVector(9.0, 24.0, 5.0) * U, Shade, Turn);
+		M.Box(At + Ahead(Turn, 12.0 * U, 0.0) + Up * 29.3 * U, FVector(7.6, 22.0, 0.5) * U, FLinearColor(FColor::FromHex(TEXT("F2E6B8"))), Turn);
+	};
+	auto Book = [&](const FVector& At, double Turn)
+	{
+		M.Box(At + Up * 1.6 * U, FVector(18.0, 25.0, 3.2) * U, Cloth, Turn);
+		M.Box(At + Up * 1.6 * U + Ahead(Turn, 0.6 * U, 0.0), FVector(17.6, 24.2, 2.6) * U, Paper, Turn);
+		M.Box(At + Up * 3.25 * U, FVector(18.0, 25.0, 0.3) * U, Cloth, Turn);
+		M.Box(At + Ahead(Turn, 3.0 * U, 0.0) + Up * 3.45 * U, FVector(5.0, 14.0, 0.06) * U, Label, Turn);
+	};
+	auto Dividers = [&](const FVector& At, double Turn)
+	{
+		const FVector Hinge = At + Up * 0.9 * U;
+		M.Rod(Hinge, Hinge + Ahead(Turn + 9.0, 17.0 * U, 0.0) + Up * -0.5 * U, 0.38 * U, Steel, 6);
+		M.Rod(Hinge, Hinge + Ahead(Turn - 9.0, 17.0 * U, 0.0) + Up * -0.5 * U, 0.38 * U, Steel, 6);
+		M.Pillar(Hinge + Up * -0.5 * U, 1.0 * U, 1.0 * U, 1.0 * U, BrassPaint, 10);
+	};
+
+	// Along each edge, facing the map: Turn is the way a thing's front points, toward the map.
+	const double Toward[4] = { 0.0, 90.0, 180.0, 270.0 };
+	for (int32 Edge = 0; Edge < 4; ++Edge)
+	{
+		const double T = Toward[Edge];
+		const int32 S = Edge * 3 + 1;
+		Telephone(Spot(Edge, -0.72 + 0.11 * Edge, 34.0 * U), T + 12.0 - 9.0 * Edge);
+		Mug(Spot(Edge, -0.52 + 0.07 * Edge, 22.0 * U), T + 70.0);
+		Papers(Spot(Edge, -0.3 + 0.05 * Edge, 36.0 * U), T + 4.0 * Edge);
+		PencilAt(Spot(Edge, -0.21 + 0.05 * Edge, 16.0 * U), T + 68.0 + 20.0 * Edge);
+		Stacks(Spot(Edge, -0.05, 14.0 * U), T + 90.0, S);
+		Ruler(Spot(Edge, 0.16 - 0.04 * Edge, 12.0 * U), T + 84.0 + 5.0 * Edge);
+		Dividers(Spot(Edge, 0.23, 24.0 * U), T + 40.0 * Edge);
+		Ashtray(Spot(Edge, 0.36 + 0.05 * Edge, 26.0 * U), T + 200.0);
+		Book(Spot(Edge, 0.5 - 0.03 * Edge, 40.0 * U), T - 14.0 + 8.0 * Edge);
+		Stacks(Spot(Edge, 0.66, 18.0 * U), T + 90.0, S + 2);
+		Mug(Spot(Edge, 0.8, 30.0 * U), T - 40.0);
+		Rake(Spot(Edge, 0.55 - 0.9 * (Edge % 2), 100.0 * U), T + 6.0 - 12.0 * (Edge % 2));
+		Lamp(Spot(Edge, 0.93 - 1.86 * (Edge % 2), 60.0 * U), T + 150.0 - 300.0 * (Edge % 2));
+	}
+	if (M.Vertices.Num() > 0)
+	{
+		RoomMesh->CreateMeshSection(0, M.Vertices, M.Triangles, M.Normals, TArray<FVector2D>(), M.Colors, TArray<FProcMeshTangent>(), false);
+		RoomMesh->SetMaterial(0, SceneryMaterial);
+		RoomMesh->SetCastShadow(true);
+	}
 }
 
 void ACampaignMapActor::BuildTowns()

@@ -1203,6 +1203,16 @@ void ACampaignPlayerController::OpenGuide()
 	Add(TEXT("RIVERS, RAILWAYS AND ENGINEERS"),
 		TEXT("The great rivers are crossed at bridges. Blow the bridges and nothing on wheels or tracks can cross until engineers rebuild them. ")
 		TEXT("Armies are fed along the railways, and troops beyond a cut line fight weaker until engineers relay it. Click a province to see the work that can be ordered there."));
+	Add(TEXT("FINDING YOUR WAY ABOUT"),
+		TEXT("The small map in the corner shows every country in its colour, your armies in white, your allies' in blue and the enemy's in red. Click or drag on it to look somewhere else. ")
+		TEXT("Under it: FORCES (L) lists every army, fleet and airfield you command with a way to each; REPORT (R) is what every nation did last month; GOALS (O) is what winning means and how far you have got; ")
+		TEXT("CAPITAL (C) looks at your capital; and the WEALTH VIEW (Y) tints every province gold by what it pays, so you can see what is worth taking. ")
+		TEXT("Click a province to see its chief town and THE PRIZE: what taking it would be worth to you. Its RECRUIT and WORKS tabs hold what can be ordered there. ")
+		TEXT("The line beside END THE MONTH says how many armies can still move: click it, or press Tab, to go to the next."));
+	Add(TEXT("YOUR ARMIES' CARDS"),
+		TEXT("Pick an army up and each corps is a card, with a small card for each of its divisions: its name, its strength and its stripes of experience. ")
+		TEXT("Two bars belong to the whole corps. MORALE rises with victories, on home soil, with friends near and with rest, and falls with defeats, hunger and want of pay; it is worth up to fifteen parts in a hundred in battle. ")
+		TEXT("REST is spent by marching and fighting. A corps that neither moves nor fights for a whole month rests: it takes replacements half as fast again, and its morale and rest rise. Point at the bars to read why they stand where they do."));
 	Add(TEXT("FLEETS"),
 		TEXT("A fleet is picked up like an army: click its flag, and its ships are dealt as cards. The seas it can reach this month are ringed in brass. Right-click a ringed sea to send it there, or its own harbour to bring it home. ")
 		TEXT("PATROL seeks out the enemy's warships and guards your convoys; RAID SHIPPING goes for merchant ships and keeps clear of a fight. ")

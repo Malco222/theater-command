@@ -193,6 +193,8 @@ private:
 	void BuildRailways();
 	void BuildWorks();
 	void BuildTable();
+	/** The clutter of a war room on the table round the map: telephones, mugs, papers, pencils, spare counters, a pusher's rake. */
+	void BuildWarRoom();
 	void BuildLabels();
 	void BuildTowns();
 
@@ -270,6 +272,8 @@ private:
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LanesMesh;
 	FString ShownLanes; // what is drawn now, to tell when it has changed
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> RoomMesh;
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> BuildingsMesh;
 

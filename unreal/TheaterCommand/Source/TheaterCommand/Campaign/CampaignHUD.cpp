@@ -724,7 +724,7 @@ namespace
 						.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 						[
 							SNew(STextBlock)
-							.Text(FText::FromString(TEXT("Drag: move the map    Scroll: zoom    Right-drag or Q / E: turn\nClick a flag: pick up the army. Click where it should go, twice, or drag the flag there    Tab: next army    Esc: put it down    Enter: end the month    1 to 5: the screens    H: how to play")))
+							.Text(FText::FromString(TEXT("Drag or W A S D: move the map    Scroll: zoom    Right-drag or Q / E: turn    C: your capital    Y: wealth view\nClick a flag, a fleet or an airfield. Right-click where an army or a fleet should go    Tab: next army    Esc: put it down    Enter: end the month\n1 to 5: the screens    L: forces    R: report    O: goals    H: how to play")))
 							.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
 						]
 					]
