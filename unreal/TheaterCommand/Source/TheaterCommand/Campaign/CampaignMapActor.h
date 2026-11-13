@@ -282,6 +282,10 @@ private:
 	};
 	TArray<FFlight> Flights;
 	void UpdateSorties();
+	/** Ground that has just changed hands flashes once: the province, and when. */
+	TArray<TPair<int32, double>> Flashes;
+	double FlashesDrawn = 0.0;
+	void UpdateFlashes();
 	/** A little train on the railway: which link it is on, when it set out, and which way it is going. */
 	struct FTrain
 	{

@@ -2582,6 +2582,11 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		if (bNewHolder)
 		{
 			Data.Regions[i].Owner = Holders[i];
+			// It flashes as it changes hands (not at the first laying out of the table, nor more than a dozen at once).
+			if (bLandLaid && GetWorld() && Flashes.Num() < 12)
+			{
+				Flashes.Emplace(i, GetWorld()->GetTimeSeconds());
+			}
 		}
 		if ((bNewHolder || Turned.Contains(Data.Regions[i].Owner)) && Data.Regions[i].Bounds.bIsValid)
 		{
@@ -2772,6 +2777,38 @@ void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 		}
 	}
 	Buffers.Commit(OrdersMesh, 5, HighlightMaterial);
+}
+
+void ACampaignMapActor::UpdateFlashes()
+{
+	UWorld* World = GetWorld();
+	if (!World || (Flashes.Num() == 0 && FlashesDrawn <= 0.0))
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds(), Lasts = 2.2;
+	Flashes.RemoveAll([Now, Lasts](const TPair<int32, double>& Flash) { return Now - Flash.Value > Lasts; });
+	if (Flashes.Num() == 0)
+	{
+		OrdersMesh->ClearMeshSection(8);
+		FlashesDrawn = 0.0;
+		return;
+	}
+	// (drawn afresh about twenty times a second: often enough to fade smoothly)
+	if (Now - FlashesDrawn < 0.05)
+	{
+		return;
+	}
+	FlashesDrawn = Now;
+	FCampaignMeshBuffers Buffers;
+	for (const TPair<int32, double>& Flash : Flashes)
+	{
+		// A bright wash that comes up at once and dies away, with a second, fainter beat as it goes.
+		const double T = (Now - Flash.Value) / Lasts;
+		const float Beat = static_cast<float>(FMath::Square(1.0 - T) * (0.75 + 0.25 * FMath::Cos(T * PI * 4.0)));
+		AppendRegionFill(Buffers, Flash.Key, FLinearColor(0.62f, 0.56f, 0.4f, 0.7f * Beat));
+	}
+	Buffers.Commit(OrdersMesh, 8, HighlightMaterial);
 }
 
 void ACampaignMapActor::ShowMud(const TArray<int32>& Regions)
@@ -3694,6 +3731,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateSorties();
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateClouds();
+	UpdateFlashes();
 	// The showpiece turns slowly on its stand.
 	if (ShowMesh && !ShowModel.IsEmpty() && GetWorld())
 	{

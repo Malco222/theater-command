@@ -1951,6 +1951,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				CampaignSounds::Play(this, TEXT("tick"), 0.6f);
 			}
 		}
+		// And every press of a button is felt: a lower, firmer tick as the mouse goes down on one.
+		const bool bDown = Slate.GetPressedMouseButtons().Contains(EKeys::LeftMouseButton);
+		if (bDown && !bButtonDown && Button)
+		{
+			CampaignSounds::Play(this, TEXT("tick"), 1.0f, 0.7f);
+		}
+		bButtonDown = bDown;
 	}
 
 	// The music follows the war: the march while there is fighting to watch, the theme for a country at war,

@@ -629,6 +629,7 @@ private:
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
 	bool bToldOfEvening = false; // the first dusk has been explained
+	bool bButtonDown = false; // the mouse was down at the last look
 	const void* HoveredButton = nullptr; // the button the pointer is on, to tick once as it crosses onto one
 	double BattleMusicUntil = 0.0; // the march plays until then
 	int32 SackAsked = INDEX_NONE; // the general whose dismissal has been asked once
