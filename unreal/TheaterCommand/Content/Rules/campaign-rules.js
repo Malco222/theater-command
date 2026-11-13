@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 562ac50 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7eb46e7 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2495,13 +2495,22 @@
       loss: 0.25,
       ready: 0.04
     },
+    losses: {
+      _note: "What a raid costs in bombers, in the air war. The share lost is bombers x (the defending fighters' share of the fighting weight over the target) to the power 'power', plus what the guns bring down, and never more than most. The escort and the bombers' own guns are the rest of that weight, so an escort saves far more than its numbers. Set against history: a day raid that goes without escort into a strong patrol loses 15 to 25% of its bombers and an escorted one 3 to 8%. By night the few fighters that find the bombers take 2 to 5%. clash is how hard the fighters of the two sides fight over a raid, beside a fight for the sky (1): the escort is there to see the bombers through, not to hunt.",
+      bombers: 0.26,
+      power: 2,
+      most: 0.3,
+      night: { bombers: 0.4, power: 1 },
+      clash: 0.5
+    },
     success: {
       _note: "The chance of success shown before a raid: a raid succeeds when it costs the enemy more than it costs you. k is how sharply the chance turns on the expected exchange. Set from 489 raids flown by four nations over six months: at 12 the raids given 10 to 25% won 15% of the time, those given 25 to 40% won 38%, and those given over 90% all won.",
       k: 12
     },
     ai: {
-      _note: "The computer's air staff: the least readiness at which a fighter group flies escort.",
-      escortReady: 0.5
+      _note: "The computer's air staff. escortReady is the least readiness at which a fighter group flies escort. raids is how every computer nation at war plans raids of its own, at every level: each month 'share' of its bomber groups fit to fly go out (a group is fit with 'least' bombers and readiness 'ready'), each against the best target among the 'look' most promising it can reach, and only where the forecast gives a chance of success of 'success' or better, a gain of 'worth' aircraft or more, and bomber losses of no more than 'loss'. 'rail' is what a province with a junction and no factory is worth beside one with industry. It flies up to 'sweeps' fights for the sky a month, over front where its fighters go in at 'sky' times the odds that win it; 'skyWorth' is what the sky over an army's front is worth to it, in aircraft. The harder levels replace share, least, loss and rail for a rival (difficulty.json, bombing); the easier ones cut a rival's share.",
+      escortReady: 0.5,
+      raids: { share: 0.34, least: 60, loss: 0.1, rail: 0.25, ready: 0.6, success: 0.55, look: 4, worth: 15, sweeps: 1, sky: 1.2, skyWorth: 150 }
     }
   };
 
@@ -4516,7 +4525,7 @@
 
   // ../../data/campaign/difficulty.json
   var difficulty_default = {
-    _note: "Campaign difficulty, the grand campaign only. Five levels named for ranks. 'start' is the level a campaign begins on unless another is chosen: at it every number here is 1 and nothing is switched on, so the war is exactly the one the game was balanced for. A level never touches the battle arithmetic: an attack is worth the same at every level, and so is every die. What a level changes is what each side can afford and how the computer's staffs think. 'you' applies to the player's nation; 'rival' to every computer-run nation that is not on the player's side (the player's own allies always play at the fair level). income multiplies the month's earnings. drafts multiplies how fast replacements reach a worn corps and how many trained men the depots can send out in a month. nerve multiplies the strength ratio at which a rival staff opens an offensive and the ratio below which it calls one off (above 1 more cautious, below 1 bolder), and odds the odds it wants before a single attack. bombing: a rival's air staff sends bomber fleets against the player's factories and railways: 'share' of its fleets with bombers at most, each with 'least' bombers or more, and only where it expects to lose no more than 'loss' of them; 'rail' is what a cut railway is worth to it beside a factory province's output. A factory on ground the player has only occupied is as good a target as one in his own country: trial wars showed that raids on occupied industry and the junctions behind the front hurt him most. landings: a rival with shipping keeps 'force' corps at a port and puts them ashore on a coast of the player's with a harbour: any unguarded shore, or a guarded one at 'odds' or better, when the crossing risks no more than 'risk' of the force and no more than 'near' times its own divisions stand within a march of the beach. It waits 'every' months between descents, goes in a month with a chance of 'chance', and afterwards feeds a harbour it holds across the sea with the same force. concert: while an ally of its own has an offensive under way against the player, a rival opens one too at this share of its usual ratio. 'lines' is what the picker tells the player.",
+    _note: "Campaign difficulty, the grand campaign only. Five levels named for ranks. 'start' is the level a campaign begins on unless another is chosen: at it every number here is 1 and nothing is switched on, so the war is exactly the one the game was balanced for. A level never touches the battle arithmetic: an attack is worth the same at every level, and so is every die. What a level changes is what each side can afford and how the computer's staffs think. 'you' applies to the player's nation; 'rival' to every computer-run nation that is not on the player's side (the player's own allies always play at the fair level). income multiplies the month's earnings. drafts multiplies how fast replacements reach a worn corps and how many trained men the depots can send out in a month. nerve multiplies the strength ratio at which a rival staff opens an offensive and the ratio below which it calls one off (above 1 more cautious, below 1 bolder), and odds the odds it wants before a single attack. Every computer nation at war flies raids of its own at every level, by the ordinary rules in airwar.json (ai.raids). raids multiplies the share of its bomber groups a rival sends out each month on the easier levels. bombing: on the harder levels a rival's air staff raids by these numbers in place of the ordinary ones: 'share' of its bomber groups go out each month, each with 'least' bombers or more, and only where it expects to lose no more than 'loss' of them; 'rail' is what a province with a junction and no factory is worth to it beside one with industry; 'focus' multiplies what a target on the player's ground is worth to it, so that the player is raided first. A factory on ground the player has only occupied is as good a target as one in his own country: trial wars showed that raids on occupied industry and the junctions behind the front hurt him most. landings: a rival with shipping keeps 'force' corps at a port and puts them ashore on a coast of the player's with a harbour: any unguarded shore, or a guarded one at 'odds' or better, when the crossing risks no more than 'risk' of the force and no more than 'near' times its own divisions stand within a march of the beach. It waits 'every' months between descents, goes in a month with a chance of 'chance', and afterwards feeds a harbour it holds across the sea with the same force. concert: while an ally of its own has an offensive under way against the player, a rival opens one too at this share of its usual ratio. 'lines' is what the picker tells the player.",
     start: "colonel",
     levels: [
       {
@@ -4524,16 +4533,16 @@
         name: "Cadet",
         blurb: "For learning the ropes. The treasury is generous, the ranks refill quickly, and rival staffs are slow to move.",
         you: { income: 1.3, drafts: 1.3 },
-        rival: { income: 0.85, drafts: 0.8, nerve: 1.25, odds: 1.1 },
-        lines: ["Your income is 30% higher and your replacements arrive 30% faster", "Rival nations earn 15% less and refill their ranks more slowly", "Rival staffs wait for much better odds before they attack"]
+        rival: { income: 0.85, drafts: 0.8, nerve: 1.25, odds: 1.1, raids: 0.5 },
+        lines: ["Your income is 30% higher and your replacements arrive 30% faster", "Rival nations earn 15% less and refill their ranks more slowly", "Rival staffs wait for much better odds before they attack", "Rival air forces fly half as many raids"]
       },
       {
         id: "captain",
         name: "Captain",
         blurb: "A gentler war. A little more money and men for you, and rivals who think twice.",
         you: { income: 1.15, drafts: 1.15 },
-        rival: { income: 1, drafts: 0.9, nerve: 1.1, odds: 1.05 },
-        lines: ["Your income is 15% higher and your replacements arrive 15% faster", "Rival nations refill their ranks a little more slowly", "Rival staffs wait for somewhat better odds before they attack"]
+        rival: { income: 1, drafts: 0.9, nerve: 1.1, odds: 1.05, raids: 0.75 },
+        lines: ["Your income is 15% higher and your replacements arrive 15% faster", "Rival nations refill their ranks a little more slowly", "Rival staffs wait for somewhat better odds before they attack", "Rival air forces fly fewer raids"]
       },
       {
         id: "colonel",
@@ -4541,7 +4550,7 @@
         blurb: "The fair fight. Every nation plays by the same rules, with nothing added and nothing taken away.",
         you: { income: 1, drafts: 1 },
         rival: { income: 1, drafts: 1, nerve: 1, odds: 1 },
-        lines: ["No bonuses for anyone: the war as the game was balanced", "Rival air fleets fly for their armies and leave your factories alone", "Rival staffs land from the sea only where history planned it"]
+        lines: ["No bonuses for anyone: the war as the game was balanced", "Every air force raids its enemies' factories, railways and armies at the same rate", "Rival staffs land from the sea only where history planned it"]
       },
       {
         id: "general",
@@ -4549,8 +4558,8 @@
         blurb: "A harder war. Rivals have deeper pockets, attack sooner, and send their bombers after your factories and railways.",
         you: { income: 1, drafts: 1 },
         rival: { income: 1.2, drafts: 1.25, nerve: 0.9, odds: 1 },
-        bombing: { share: 0.5, least: 80, loss: 0.12, rail: 0.25 },
-        lines: ["Rival nations earn 20% more and refill their ranks 25% faster", "Rival staffs open their offensives sooner", "Rival bombers raid your factories and cut your railways"]
+        bombing: { share: 0.5, least: 60, loss: 0.12, rail: 0.25, focus: 1.5 },
+        lines: ["Rival nations earn 20% more and refill their ranks 25% faster", "Rival staffs open their offensives sooner", "Rival air forces fly more raids, and come for you first"]
       },
       {
         id: "marshal",
@@ -4558,10 +4567,10 @@
         blurb: "The hardest war. Rivals are rich, bold and work together: bombers over your cities, landings on your coasts, and offensives timed to fall at once.",
         you: { income: 1, drafts: 1 },
         rival: { income: 1.4, drafts: 1.5, nerve: 0.8, odds: 0.95 },
-        bombing: { share: 0.67, least: 60, loss: 0.18, rail: 0.25 },
+        bombing: { share: 0.67, least: 60, loss: 0.18, rail: 0.25, focus: 2 },
         landings: { force: 2, odds: 1.5, risk: 0.2, near: 2, every: 4, chance: 0.6 },
         concert: 0.8,
-        lines: ["Rival nations earn 40% more and refill their ranks 50% faster", "Rival bombers raid your factories and cut your railways", "Rivals with shipping land on any coast you leave thinly held", "When one rival attacks you, its allies join in"]
+        lines: ["Rival nations earn 40% more and refill their ranks 50% faster", "Rival air forces fly twice the raids, bear heavier losses, and come for you first", "Rivals with shipping land on any coast you leave thinly held", "When one rival attacks you, its allies join in"]
       }
     ]
   };
@@ -4606,6 +4615,7 @@
   var draftsMul = (g2, nat) => side(g2, nat)?.drafts ?? 1;
   var nerveOf = (g2, nat) => rival(g2, nat) ? levelOf(g2).rival : { nerve: 1, odds: 1 };
   var bombingFor = (g2, nat) => rival(g2, nat) ? levelOf(g2).bombing ?? null : null;
+  var raidsMul = (g2, nat) => rival(g2, nat) ? levelOf(g2).rival.raids ?? 1 : 1;
   var landingsFor = (g2, nat) => rival(g2, nat) ? levelOf(g2).landings ?? null : null;
   var concertFor = (g2, nat) => rival(g2, nat) ? levelOf(g2).concert ?? 1 : 1;
 
@@ -5021,6 +5031,8 @@
     g2.airFleets = g2.airFleets.filter((f) => f.nat !== nat);
     for (const k of Object.keys(g2.sky)) if (g2.sky[+k].nat === nat) delete g2.sky[+k];
   }
+  var clashOf = (g2, m) => airWar(g2) && m !== "superiority" ? AIRWAR.losses.clash : 1;
+  var mostBomberLoss = (g2) => airWar(g2) ? AIRWAR.losses.most : AIR.combat.maxBomberLoss;
   function assessAir(g2, fleets, m, target) {
     const C = AIR.combat;
     const sea = m === "strike", night = m === "night";
@@ -5076,9 +5088,12 @@
     }
     const guns = out.B * C.bomberDefence;
     const I = intensity(m);
-    out.bomberLoss = out.B > 0 ? Math.min(C.maxBomberLoss, C.bombers * I * (out.Dpow / Math.max(1, out.Dpow + out.Epow + guns)) + (night ? C.night.flak : C.flak) * I) : 0;
+    const met2 = out.Dpow / Math.max(1, out.Dpow + out.Epow + guns);
+    const most = mostBomberLoss(g2);
+    const L = airWar(g2) ? night ? AIRWAR.losses.night : AIRWAR.losses : null;
+    out.bomberLoss = out.B > 0 ? Math.min(most, (L ? L.bombers * Math.pow(met2, L.power) : C.bombers * met2) * I + (night ? C.night.flak : C.flak) * I) : 0;
     out.aa = m === "bomb" || night ? gunsAt(g2, target) : 0;
-    if (out.aa && out.B > 0) out.bomberLoss = Math.min(C.maxBomberLoss, out.bomberLoss + out.aa * WORKS.aa.flak * I);
+    if (out.aa && out.B > 0) out.bomberLoss = Math.min(most, out.bomberLoss + out.aa * WORKS.aa.flak * I);
     const af = out.att.reduce((s, a) => s + a.f.ftr, 0);
     const ab = out.att.reduce((s, a) => s + (a.bmr > 0 ? a.f.bmr : 0), 0);
     const df2 = out.def.reduce((s, x) => s + x.f.ftr, 0);
@@ -5163,10 +5178,10 @@
     const att = a.att.map((x) => before(x.f)), def = a.def.map((x) => before(x.f));
     const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
     const share = se + sd > 0 ? se / (se + sd) : 0;
-    const clash = Math.min(a.E, a.D);
+    const clash = Math.min(a.E, a.D) * clashOf(g2, m);
     const dLoss = C.fighters * I * clash * 2 * share * luck();
     const eLoss = C.fighters * I * clash * 2 * (1 - share) * C.escortShare * luck();
-    const bLoss = a.B * Math.min(C.maxBomberLoss, a.bomberLoss * luck());
+    const bLoss = a.B * Math.min(mostBomberLoss(g2), a.bomberLoss * luck());
     const saved = (home) => sea ? (AIR.pilots.home + AIR.pilots.away) / 2 : home ? AIR.pilots.home : AIR.pilots.away;
     const down = (f, side2, n, home) => {
       const k = Math.min(f.ftr, rng.roll(Math.max(0, n)));
@@ -5376,13 +5391,13 @@
     if (nat === g2.human) return;
     const n = g2.nations[nat];
     const mine2 = airFleetsOf(g2, nat);
-    for (const f of mine2) {
+    for (const f of mine2) if (f.flew !== g2.turn) {
       f.mission = "support";
       f.target = -1;
     }
     if (!n.alive || !n.atWar.length) return;
     if (g2.flags.open === 1) {
-      raidPlayer(g2, nat, mine2);
+      raidStaff(g2, nat, mine2);
       return;
     }
     for (const ph of AIR.plan) {
@@ -5399,36 +5414,101 @@
       }
     }
   }
-  function raidPlayer(g2, nat, mine2) {
+  function raidStaff(g2, nat, mine2) {
+    if (!airWar(g2)) return;
+    const R = AIRWAR.ai.raids;
     const B = bombingFor(g2, nat);
-    const you = seat2(g2);
-    if (!B || you === null || !atWar(g2, nat, you)) return;
-    const withBombers = mine2.filter((f) => f.bmr > 0);
-    const most = Math.max(1, Math.floor(withBombers.length * B.share + 1e-9));
-    const escorts = (f) => airWar(g2) ? mine2.filter((x) => x.kind === "ftr" && x.ftr > 0 && x.base === f.base && x.ready >= AIRWAR.ai.escortReady) : [];
-    const picks = [];
-    for (const f of withBombers) {
-      if (f.bmr < B.least || f.ready < 0.5) continue;
-      let best = null;
-      for (const r of g2.regions) {
-        if (r.ctrl !== you || r.fac <= 0 && railsAt(r.id).length < 3 || whyNotMission(g2, f, "bomb", r.id)) continue;
-        for (const m of ["bomb", "night"]) {
-          const a = assessAir(g2, m === "bomb" ? [f, ...escorts(f)] : [f], m, r.id);
-          if (a.why) continue;
-          const fc = forecastAir(g2, a, m, r.id);
-          if (fc.bomberLoss > B.loss) continue;
-          const v = fc.cut * r.fac + 3 * (fc.ruin ?? 0) + B.rail * (fc.rail ?? 0) * railsAt(r.id).length - 2 * fc.bomberLoss;
-          if (v > 0.15 && (!best || v > best.v)) best = { f, m, t: r.id, v };
+    const rules = B ? { ...R, ...B } : { ...R, share: R.share * raidsMul(g2, nat) };
+    const you = B ? seat2(g2) : null;
+    const rng = airRng(g2, `staff:${nat}`);
+    const used = /* @__PURE__ */ new Set();
+    const fit3 = (f) => !used.has(f.id) && f.flew !== g2.turn && f.mission === "support";
+    const leads = () => mine2.filter((f) => fit3(f) && f.kind !== "ftr" && f.bmr >= rules.least && f.ready >= R.ready);
+    const fightersAt = (base) => mine2.filter((x) => fit3(x) && x.kind === "ftr" && x.ftr > 0 && x.base === base && x.ready >= AIRWAR.ai.escortReady);
+    const front = /* @__PURE__ */ new Map();
+    for (const c of g2.corps) {
+      if (c.nat !== nat || c.dead || c.kind === "fort") continue;
+      for (const j of g2.regions[c.reg].nb) {
+        const r = g2.regions[j];
+        if (atWar(g2, nat, r.ctrl) && r.units.some((u) => !u.dead && atWar(g2, nat, u.nat))) front.set(j, (front.get(j) ?? 0) + c.divs);
+      }
+    }
+    const foes = (r) => r.units.reduce((s, u) => s + (!u.dead && atWar(g2, nat, u.nat) ? u.divs : 0), 0);
+    const fought = /* @__PURE__ */ new Set();
+    for (let i = g2.reports.length - 1; i >= 0 && g2.reports[i].turn >= g2.turn - 1; i--) {
+      const b = g2.reports[i];
+      if (b.yielded || !(allied(g2, b.attNat, nat) || allied(g2, b.defNat, nat))) continue;
+      fought.add(b.region);
+      for (const j of g2.regions[b.region].nb) fought.add(j);
+    }
+    const pushing = (e) => Object.keys(g2.flags).some((k) => k.startsWith(`st:on:${nat}:${e}`));
+    const against = /* @__PURE__ */ new Map();
+    const pushed = (t) => g2.regions[t].units.some((u) => {
+      if (u.dead || !atWar(g2, nat, u.nat)) return false;
+      if (!against.has(u.nat)) against.set(u.nat, pushing(u.nat));
+      return against.get(u.nat);
+    });
+    for (const t of [...front.keys()]) if (!fought.has(t) && !pushed(t)) front.delete(t);
+    const hit = /* @__PURE__ */ new Set();
+    const send = (m, t, fleets, k) => {
+      const rep = fly(g2, nat, m, t, fleets, `:staff${k}`);
+      hit.add(t);
+      for (const f of fleets) {
+        used.add(f.id);
+        if (rep) {
+          f.mission = m;
+          f.target = t;
+          f.flew = g2.turn;
         }
       }
-      if (best) picks.push(best);
-    }
-    picks.sort((a, b) => b.v - a.v || a.f.id - b.f.id);
-    for (const p of picks.slice(0, most)) {
-      setMission(g2, p.f, p.m, p.t);
-      if (p.m === "bomb") {
-        for (const e of escorts(p.f)) if (e.mission === "support") setMission(g2, e, p.m, p.t);
+    };
+    let flown = 0;
+    for (let k = 0; k < R.sweeps && front.size; k++) {
+      let best = null;
+      const bases = [...new Set(mine2.filter((f) => fit3(f) && f.kind === "ftr" && f.ftr > 0 && f.ready >= R.ready).map((f) => f.base))];
+      const spots = [...front.entries()].filter(([t]) => !hit.has(t) && pushed(t) && skyOver(g2, t) === null).sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, R.look);
+      for (const base of bases) {
+        for (const [t, divs] of spots) {
+          const fleets = fightersAt(base).filter((f) => f.ready >= R.ready && whyNotMission(g2, f, "superiority", t) === null);
+          if (!fleets.length) continue;
+          const a = assessAir(g2, fleets, "superiority", t);
+          if (a.why || a.E < AIR.sky.least) continue;
+          const fc = forecastAir(g2, a, "superiority", t);
+          if (fc.odds < AIR.sky.win * R.sky) continue;
+          const v = R.skyWorth * Math.min(1, divs / 6) + fc.foeLoss - fc.ftrLoss;
+          if (v > R.worth && (!best || v > best.v)) best = { t, fleets, v };
+        }
       }
+      if (!best) break;
+      send("superiority", best.t, best.fleets, flown++);
+    }
+    const most = Math.floor(leads().length * rules.share + rng.range(0, 1));
+    for (let k = 0; k < most; k++) {
+      const pick2 = { best: null };
+      const seen = /* @__PURE__ */ new Set();
+      for (const f of leads().sort((a, b) => b.bmr - a.bmr || a.id - b.id)) {
+        if (seen.has(f.base)) continue;
+        seen.add(f.base);
+        const escorts = fightersAt(f.base);
+        const weigh = (m, r, fleets) => {
+          const a = assessAir(g2, fleets, m, r.id);
+          if (a.why) return;
+          const fc = forecastAir(g2, a, m, r.id);
+          if (fc.bomberLoss > rules.loss || fc.success < R.success) return;
+          const railWorth = (m === "bomb" || m === "night") && r.fac <= 0 ? rules.rail : 1;
+          const v = (fc.worth * railWorth + fc.foeLoss) * (you !== null && r.ctrl === you ? rules.focus ?? 1 : 1) - fc.ftrLoss - fc.bmrLoss;
+          if (v > R.worth && (!pick2.best || v > pick2.best.v)) pick2.best = { m, t: r.id, fleets, v };
+        };
+        const works = g2.regions.filter((r) => !hit.has(r.id) && atWar(g2, nat, r.ctrl) && (r.fac > 0 || railsAt(r.id).length >= 3) && whyNotMission(g2, f, "bomb", r.id) === null).sort((a, b) => b.fac + rules.rail * railsAt(b.id).length - (a.fac + rules.rail * railsAt(a.id).length) || a.id - b.id).slice(0, R.look);
+        for (const r of works) {
+          weigh("bomb", r, [f, ...escorts.filter((e) => whyNotMission(g2, e, "bomb", r.id) === null)]);
+          weigh("night", r, [f]);
+        }
+        const troops = [...front.keys()].map((t) => g2.regions[t]).filter((r) => !hit.has(r.id) && whyNotMission(g2, f, "ground", r.id) === null).sort((a, b) => (front.get(b.id) ?? 0) * foes(b) - (front.get(a.id) ?? 0) * foes(a) || a.id - b.id).slice(0, R.look);
+        for (const r of troops) weigh("ground", r, [f, ...escorts.filter((e) => whyNotMission(g2, e, "ground", r.id) === null)]);
+      }
+      if (!pick2.best) break;
+      send(pick2.best.m, pick2.best.t, pick2.best.fleets, flown++);
     }
   }
   function forecastAir(g2, a, m, target) {
@@ -5438,7 +5518,7 @@
     const odds = a.Dpow > 0 ? a.Epow / a.Dpow : 9;
     const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
     const share = se + sd > 0 ? se / (se + sd) : 0;
-    const clash = Math.min(a.E, a.D);
+    const clash = Math.min(a.E, a.D) * clashOf(g2, m);
     const foeLoss = C.fighters * I * clash * 2 * share;
     let ftrLoss = C.fighters * I * clash * 2 * (1 - share) * C.escortShare;
     const bmrLoss = a.B * a.bomberLoss;
@@ -5482,7 +5562,7 @@
     };
     const pr = rail2 ?? 0, pf = ruin ?? 0;
     const success = (1 - pr) * (1 - pf) * beats(value) + pr * (1 - pf) * beats(value + 300) + (1 - pr) * pf * beats(value + 300) + pr * pf * beats(value + 600);
-    return { odds, bomberLoss: a.bomberLoss, cut, nation, rail: rail2, ruin, ftrLoss, bmrLoss, foeLoss, success };
+    return { odds, bomberLoss: a.bomberLoss, cut, nation, rail: rail2, ruin, ftrLoss, bmrLoss, foeLoss, success, worth: value + 300 * (pr + pf) };
   }
 
   // ../../src/campaign/navy.ts
