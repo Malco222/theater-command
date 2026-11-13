@@ -3218,7 +3218,8 @@ namespace
 		TArray<FString> Lines;
 		for (const FBattleUnit& Unit : Units)
 		{
-			FString Line = FString::Printf(TEXT("%s  \u00B7  %s, %d division%s"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind),
+			// A corps not identified has no arm and no numbers to give.
+			FString Line = Unit.Kind.IsEmpty() ? Unit.Name : FString::Printf(TEXT("%s  \u00B7  %s, %d division%s"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind),
 				Unit.Divisions, Unit.Divisions == 1 ? TEXT("") : TEXT("s"));
 			if (bAfter)
 			{
@@ -3251,11 +3252,16 @@ namespace
 
 	FString StrengthLine(const TArray<FBattleUnit>& Units)
 	{
-		int32 Divisions = 0, Men = 0;
+		int32 Divisions = 0, Men = 0, Unknown = 0;
 		for (const FBattleUnit& Unit : Units)
 		{
 			Divisions += Unit.Divisions;
 			Men += Unit.Men;
+			Unknown += Unit.Kind.IsEmpty() || Unit.Men <= 0 ? 1 : 0;
+		}
+		if (Unknown > 0)
+		{
+			return FString::Printf(TEXT("%d corps  \u00B7  strength not known"), Units.Num());
 		}
 		return FString::Printf(TEXT("%d corps  \u00B7  %d division%s  \u00B7  %s men"), Units.Num(), Divisions, Divisions == 1 ? TEXT("") : TEXT("s"), *Thousands(Men));
 	}
@@ -3304,9 +3310,22 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 	FaceOff.TheirUnits = FText::FromString(ListUnits(Preview.Defenders, false));
 	FaceOff.Balance = Preview.Attack + Preview.Defence > 0.0f ? Preview.Attack / (Preview.Attack + Preview.Defence) : 0.5f;
 	FaceOff.Prize = FText::FromString(Preview.Prize);
-	FaceOff.OddsLine = FText::FromString(Preview.Odds >= 1.0f
-		? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), Preview.Odds)
-		: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f)));
+	if (Preview.bExact)
+	{
+		FaceOff.OddsLine = FText::FromString(Preview.Odds >= 1.0f
+			? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), Preview.Odds)
+			: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f)));
+	}
+	else
+	{
+		// The defenders are not all identified: the staff give the odds as a band that holds the truth.
+		auto Say = [](float Odds) { return Odds >= 1.0f ? FString::Printf(TEXT("%.1f to 1 for you"), Odds) : FString::Printf(TEXT("%.1f to 1 against"), 1.0f / FMath::Max(Odds, 0.01f)); };
+		FaceOff.OddsLine = FText::FromString(FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Preview.OddsLow), *Say(Preview.OddsHigh)));
+		if (!Preview.Note.IsEmpty())
+		{
+			FaceOff.Prize = FText::FromString(Preview.Note + (Preview.Prize.IsEmpty() ? FString() : TEXT("\n") + Preview.Prize));
+		}
+	}
 
 	// The Battle Ticket: what the campaign map says about this fight, and what each thing does in it.
 	TArray<FString> Lines;
@@ -3768,7 +3787,18 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 		{
 			continue;
 		}
-		int32 Listed = 0;
+		int32 Listed = 0, Hidden = 0;
+		for (const FViewCorps& Unit : Piece->GetCorps())
+		{
+			Hidden += Unit.bDim && Unit.bNear ? 1 : 0;
+		}
+		if (Hidden > 0)
+		{
+			// Corps in plain view that nobody has identified: their kind and strength are not known.
+			ForceLines.Last() = FString::Printf(TEXT("%s army, %d corps: %s"), *Adjective, Piece->GetCorps().Num(),
+				Hidden == Piece->GetCorps().Num() ? TEXT("none identified") : *FString::Printf(TEXT("%d not identified"), Hidden));
+			ForceLines.Add(TEXT("      A battle, an agent or a reconnaissance flight would show what is there."));
+		}
 		for (const FViewCorps& Unit : Piece->GetCorps())
 		{
 			if (Unit.bDim)
@@ -3780,7 +3810,9 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 				ForceLines.Add(FString::Printf(TEXT("      and %d more corps"), Piece->GetCorps().Num() - 4));
 				break;
 			}
-			ForceLines.Add(FString::Printf(TEXT("      %s  (%s, %d)"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind), Unit.Divisions));
+			ForceLines.Add(Unit.Stale > 0
+				? FString::Printf(TEXT("      %s  (%s, %d; a report %d month%s old)"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind), Unit.Divisions, Unit.Stale, Unit.Stale == 1 ? TEXT("") : TEXT("s"))
+				: FString::Printf(TEXT("      %s  (%s, %d)"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind), Unit.Divisions));
 		}
 	}
 	RegionPanel.Forces = FText::FromString(ForceLines.Num() > 0 ? FString::Join(ForceLines, TEXT("\n")) : FString(TEXT("No troops here.")));

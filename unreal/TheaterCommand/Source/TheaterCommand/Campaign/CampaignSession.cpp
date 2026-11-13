@@ -615,6 +615,8 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetBoolField(TEXT("canOrder"), C.bCanOrder);
 			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
+			Unit->TryGetBoolField(TEXT("near"), C.bNear);
+			Unit->TryGetNumberField(TEXT("stale"), C.Stale);
 			Unit->TryGetStringField(TEXT("nick"), C.Nickname); // null until it has earned one
 			C.Honours = ReadRibbons(Unit, TEXT("honours"));
 			{
@@ -771,6 +773,15 @@ FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, in
 	Out.Defence = static_cast<float>(Object->GetNumberField(TEXT("defence")));
 	Out.Odds = static_cast<float>(Object->GetNumberField(TEXT("odds")));
 	Object->TryGetStringField(TEXT("prize"), Out.Prize);
+	{
+		double Low = Out.Odds, High = Out.Odds;
+		Object->TryGetBoolField(TEXT("exact"), Out.bExact);
+		Object->TryGetNumberField(TEXT("lo"), Low);
+		Object->TryGetNumberField(TEXT("hi"), High);
+		Out.OddsLow = static_cast<float>(Low);
+		Out.OddsHigh = static_cast<float>(High);
+		Object->TryGetStringField(TEXT("note"), Out.Note);
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
 	if (Object->TryGetArrayField(TEXT("lines"), Lines))
 	{

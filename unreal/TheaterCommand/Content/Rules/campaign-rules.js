@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6409c21 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 3b2dd7e 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -4120,16 +4120,16 @@
     if (tanks <= 0) return null;
     const A = GROUND.arms;
     const share = foot > 0 ? Math.min(1, tanks * A.perTank / foot) : 0;
-    const cover2 = Math.min(1, foot / tanks);
+    const cover3 = Math.min(1, foot / tanks);
     const lone = (defending ? A.defence.alone : A.alone)[r.terrain];
-    const alone = lone !== void 0 && cover2 < 1 ? 1 - (1 - lone) * (1 - cover2) : 1;
+    const alone = lone !== void 0 && cover3 < 1 ? 1 - (1 - lone) * (1 - cover3) : 1;
     return {
       foot,
       tanks,
       share,
-      cover: cover2,
+      cover: cover3,
       infantry: 1 + (defending ? A.defence.infantry : A.infantry) * share,
-      armour: (defending ? 1 : 1 + A.armour * cover2) * alone,
+      armour: (defending ? 1 : 1 + A.armour * cover3) * alone,
       alone
     };
   }
@@ -8409,7 +8409,7 @@
   var intel_default = {
     _about: "Spies and the fog of war, the grand campaign only. A historical scenario has neither: the whole map is in sight and nobody has agents. In the grand campaign the player sees an enemy or neutral army in full only where his own side can see it, and less the deeper it stands (sight). Agents are recruited for money and sent abroad to see further, to read a government's books, and to wreck factories, railways and oilfields; each month abroad an agent may be caught. The computer's staffs see the whole map, as they always did, and keep no agents on it: their services work against the player as a monthly chance of sabotage (enemy), which the player's own agents on guard at home can stop. So a war with nobody at the table is fought exactly as before.",
     sight: {
-      _about: "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is seen whole: every corps, its kind and its strength. Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands.",
+      _about: "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is in view: its flag, the number of its corps and the staff's estimate of its strength, and each corps that has been identified (see 'reports'). Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands.",
       full: 1,
       glimpse: 2
     },
@@ -8522,6 +8522,15 @@
       _about: "Without an agent reading its books, a foreign army's size is known only to the nearest this many divisions.",
       round: 10
     },
+    reports: {
+      _about: "What the player knows of a foreign army's make-up. Seeing a flag is not knowing what stands under it. A corps is identified when the player's side fights it, when an agent at work has it in view, or when aircraft photograph its province. In the month it is identified (and for 'fresh' months more) the report is exact. For 'keep' months it is kept but goes stale: the corps' kind and its divisions are still known, its strength is an estimate inside a band 'drift' wider for every month of age (never wider than 'widest'), and its morale and rest are no longer known. After that the corps is unidentified again. Corps that stand beside the player's lines without a report are counted, and the staff estimates their strength in divisions inside a band 'contact' wide. On the card that plans an attack the odds are a band too: 'unknown' wide for a defender not identified, 'drift' wide for every month of age for one known from a stale report. Every band holds the truth.",
+      fresh: 0,
+      keep: 4,
+      drift: 0.15,
+      widest: 0.6,
+      contact: 0.5,
+      unknown: 0.5
+    },
     names: [
       "Nightjar",
       "Cobalt",
@@ -8618,6 +8627,80 @@
     }
     for (let i = 0; i < out.length; i++) out[i] = dist[i] < 0 ? SIGHT.none : dist[i] <= S.full ? SIGHT.full : SIGHT.glimpse;
     return out;
+  }
+  function identify(g2, corps, by, how = "battle") {
+    var _a, _b;
+    const me = g2.human;
+    if (!me || !by || !intelRules(g2) || !(by === me || allied(g2, by, me))) return;
+    for (const c of corps) {
+      if (c.dead || allied(g2, c.nat, me)) continue;
+      ((_a = g2.intel).known ?? (_a.known = {}))[c.id] = g2.turn;
+      ((_b = g2.intel).how ?? (_b.how = {}))[c.id] = how;
+    }
+  }
+  function cover2(g2, from) {
+    const out = new Set(from);
+    let ring = from;
+    for (let d = 1; d <= INTEL.sight.full && ring.length; d++) {
+      const next = [];
+      for (const id of ring) for (const j of g2.regions[id].nb) if (!out.has(j)) {
+        out.add(j);
+        next.push(j);
+      }
+      ring = next;
+    }
+    return out;
+  }
+  function reportSource(g2, c, viewer = g2.human) {
+    if (viewer !== g2.human || !fogOn(g2, viewer) || allied(g2, c.nat, viewer) || corpsKnown(g2, c, viewer).level === "none") return null;
+    return g2.intel.how?.[c.id] ?? "battle";
+  }
+  function reconnoitre(g2) {
+    const me = g2.human;
+    if (!me || !intelRules(g2) || !g2.nations[me]?.alive) return;
+    const photographed = Object.entries(g2.intel.scout ?? {}).filter(([, turn]) => turn === g2.turn).map(([id]) => +id);
+    for (const id of cover2(g2, photographed)) identify(g2, g2.regions[id].units, me, "air");
+    for (const id of cover2(g2, agentsOf(g2, me).filter((a) => atWork(g2, a)).map((a) => a.reg))) identify(g2, g2.regions[id].units, me, "agent");
+    const known = g2.intel.known;
+    if (!known) return;
+    const alive = /* @__PURE__ */ new Set();
+    for (const c of g2.corps) if (!c.dead) alive.add(c.id);
+    for (const k of Object.keys(known)) if (!alive.has(+k) || g2.turn - known[+k] > INTEL.reports.keep) {
+      delete known[+k];
+      if (g2.intel.how) delete g2.intel.how[+k];
+    }
+  }
+  function corpsKnown(g2, c, viewer = g2.human) {
+    if (!fogOn(g2, viewer) || allied(g2, c.nat, viewer) || viewer !== g2.human) return { level: "exact", age: 0 };
+    const seen = g2.intel.known?.[c.id];
+    if (seen === void 0) return { level: "none", age: -1 };
+    const age = Math.max(0, g2.turn - seen);
+    return age <= INTEL.reports.fresh ? { level: "exact", age } : age <= INTEL.reports.keep ? { level: "report", age } : { level: "none", age: -1 };
+  }
+  function strengthBand(g2, c, age) {
+    const w = Math.min(INTEL.reports.widest, INTEL.reports.drift * Math.max(0, age));
+    const v = draw(g2, "str", c.id, g2.turn);
+    return { lo: clamp3(c.str * (1 - w * v), 0, 1), hi: clamp3(c.str * (1 + w * (1 - v)), 0, 1) };
+  }
+  function sortKnown(g2, corps, viewer = g2.human) {
+    const out = { exact: [], report: [], none: [] };
+    for (const c of corps) if (!c.dead) out[corpsKnown(g2, c, viewer).level].push(c);
+    return out;
+  }
+  function oddsBand(g2, defenders, odds, target, viewer = g2.human) {
+    let doubt = 0, all = 0;
+    const R = INTEL.reports;
+    for (const c of defenders) {
+      const k = corpsKnown(g2, c, viewer);
+      const w = c.divs * Math.max(0.05, c.str);
+      doubt += w * (k.level === "exact" ? 0 : k.level === "report" ? Math.min(R.widest, R.drift * k.age) : R.unknown);
+      all += w;
+    }
+    doubt = all > 0 ? doubt / all : 0;
+    if (doubt <= 0) return { exact: true, doubt: 0, lo: odds, hi: odds, mid: odds };
+    const v = draw(g2, "odds", target, g2.turn);
+    const strong = 1 + doubt * (1 - v), weak = Math.max(0.2, 1 - doubt * v);
+    return { exact: false, doubt, lo: odds / strong, hi: odds / weak, mid: odds / ((strong + weak) / 2) };
   }
   var skillOf = (a) => 1 + INTEL.agents.skillAt.filter((x) => a.xp >= x).length;
   var rankOf2 = (a) => INTEL.agents.ranks[skillOf(a) - 1] ?? INTEL.agents.ranks[0];
@@ -9399,7 +9482,32 @@
       service,
       general: generalOf(g2, c)?.name ?? null,
       mood: corpsMood(g2, c),
-      divisions: divisionsOf(g2, c)
+      divisions: divisionsOf(g2, c),
+      known: "exact",
+      age: 0,
+      source: null,
+      strLo: c.str,
+      strHi: c.str
+    };
+  }
+  function corpsSeen(g2, c, viewer = g2.human) {
+    const k = corpsKnown(g2, c, viewer);
+    if (k.level === "none") return null;
+    const card = { ...corpsCard(g2, c), source: reportSource(g2, c, viewer) };
+    if (k.level === "exact") return card;
+    const band = strengthBand(g2, c, k.age);
+    const mid = (band.lo + band.hi) / 2;
+    const since = `Not known since the report of ${k.age === 1 ? "last month" : `${k.age} months ago`}.`;
+    return {
+      ...card,
+      known: "report",
+      age: k.age,
+      str: mid,
+      strLo: band.lo,
+      strHi: band.hi,
+      men: Math.round(c.divs * mid * MEN_PER_DIV),
+      divisions: [],
+      mood: { morale: null, moraleWord: "Not known", trend: "steady", rest: 0, restWord: "Not known", line: since, restLine: since, why: [], resting: false }
     };
   }
 
@@ -9709,19 +9817,19 @@
     const sites = wanted(g2, nat);
     const covered = /* @__PURE__ */ new Set();
     const taken = /* @__PURE__ */ new Set();
-    const cover2 = (reg, what) => {
+    const cover3 = (reg, what) => {
       if (what === "bridge") {
         for (const x of crossingsAt(reg)) if (bridgeDown(g2, x)) covered.add(x);
       } else taken.add(`${what}:${reg}`);
     };
     const open = (s) => s.what === "bridge" ? s.spans.some((x) => !covered.has(x)) : !taken.has(`${s.what}:${s.reg}`);
-    for (const c of mine2) if (c.job && REPAIRS[c.job.what]) cover2(c.job.reg, c.job.what);
+    for (const c of mine2) if (c.job && REPAIRS[c.job.what]) cover3(c.job.reg, c.job.what);
     for (const c of mine2) {
       c.hold = true;
       if (c.job) continue;
       const here = sites.find((s) => s.reg === c.reg && open(s));
       if (here && orderJob(g2, c, here.what)) {
-        cover2(c.reg, here.what);
+        cover3(c.reg, here.what);
         continue;
       }
       if (c.ap > 0) {
@@ -9732,7 +9840,7 @@
           const goal = site && railMove(g2, c, g2.regions[site.reg]) ? site.reg : march(g2, c, new Set(todo.map((s) => s.reg)));
           if (goal >= 0) {
             const job = site && site.reg === goal ? site : todo.find((s) => s.reg === goal);
-            cover2(goal, job.what);
+            cover3(goal, job.what);
             if (c.reg === goal) orderJob(g2, c, job.what);
             continue;
           }
@@ -11053,6 +11161,8 @@
       if (before > 0) bled.set(c.id, defU[i].lost / before);
     });
     moraleBattle(g2, attackers2, defenders, R, win, bled, enemyCapital);
+    identify(g2, defenders, attNat);
+    for (const nat of new Set(defenders.map((c) => c.nat))) identify(g2, attackers2, nat);
     const level = R >= 3 ? "Heroic victory" : R >= 2 ? "Decisive victory" : R >= 1.2 ? attLost > defLost ? "Pyrrhic victory" : "Close victory" : R >= 0.8 ? "Close defeat" : "Decisive defeat";
     const affected = new Set(defenders.map((c) => c.nat));
     if (win) {
@@ -11836,6 +11946,9 @@
   function troopsSeen(g2, nat, region, sight2) {
     return sight2[region] !== SIGHT.none && g2.regions[region].units.some((u) => !u.dead && atWar(g2, nat, u.nat));
   }
+  function unidentified(g2, nat, region) {
+    return g2.regions[region].units.some((u) => !u.dead && !allied(g2, u.nat, nat) && corpsKnown(g2, u, nat).level !== "exact");
+  }
   function reachable(g2, nat, kind) {
     const out = /* @__PURE__ */ new Map();
     const fleets = able(g2, nat);
@@ -11843,7 +11956,7 @@
     const sight2 = kind === "ground" || kind === "recon" ? sightOf(g2, nat) : null;
     for (const t of targetIds(g2, kind)) {
       if (kind === "ground" && !troopsSeen(g2, nat, t, sight2)) continue;
-      if (kind === "recon" && sight2[t] === SIGHT.full) continue;
+      if (kind === "recon" && sight2[t] === SIGHT.full && !unidentified(g2, nat, t)) continue;
       const can = fleets.filter((f) => whyNotSeat(g2, f, kind, t) === null);
       if (!can.length || needs === "bmr" && !can.some((f) => f.bmr > 0)) continue;
       out.set(t, can);
@@ -11870,12 +11983,18 @@
     }
     if (kind === "ground") {
       const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
-      return sight2[t] === SIGHT.full ? `${plural3(foes.length, "corps", "corps")}, ${plural3(foes.reduce((s, c) => s + c.divs, 0), "division")}${foes.some((c) => c.dug) ? ", dug in" : ""}` : `${plural3(foes.length, "corps", "corps")} seen`;
+      const known = foes.every((c) => corpsKnown(g2, c, nat).level === "exact");
+      return sight2[t] === SIGHT.full && known ? `${plural3(foes.length, "corps", "corps")}, ${plural3(foes.reduce((s, c) => s + c.divs, 0), "division")}${foes.some((c) => c.dug) ? ", dug in" : ""}` : sight2[t] === SIGHT.full ? `${plural3(foes.length, "corps", "corps")} seen, not identified${foes.some((c) => c.dug) ? ", dug in" : ""}` : `${plural3(foes.length, "corps", "corps")} seen`;
     }
     if (kind === "superiority") {
       const based = g2.airFleets.filter((f) => f.base === t && flying(f) && atWar(g2, f.nat, nat)).length;
       const up = fightersOver(g2, t, nat);
       return [based ? `${plural3(based, "air group")} based there` : airfieldsHold(g2, t) > 0 ? "an empty airfield" : "no airfield", up >= 1 ? `about ${num(up)} fighters can come up` : "no fighters in reach"].join(", ");
+    }
+    if (sight2[t] === SIGHT.full) {
+      const foes = g2.regions[t].units.filter((u) => !u.dead && !allied(g2, u.nat, nat));
+      const old = foes.filter((c) => corpsKnown(g2, c, nat).level === "report").length;
+      return old === foes.length ? `${plural3(foes.length, "corps", "corps")} known only from old reports` : `${plural3(foes.length, "corps", "corps")} in view, ${old ? `${foes.length - old} of them not identified` : "not identified"}`;
     }
     return sight2[t] === SIGHT.glimpse ? "Only a flag and a count are known" : "Nothing is known of what stands there";
   }
@@ -11999,7 +12118,7 @@
       if (f.ftr > 0) plan.fighterLossN = Math.round(lost);
       else plan.bomberLossN = Math.round(lost);
       plan.bomberLoss = f.ftr > 0 ? 0 : risk;
-      plan.effects = [`Every army at ${place2} and in the provinces beside it is seen whole until the month ends.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
+      plan.effects = [`Every army at ${place2} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
       return plan;
     }
     const m = missionOf(kind);
@@ -12439,8 +12558,8 @@
       let kept = 0;
       for (const x of out) {
         if (x === f || ![...x.areas].some((a) => f.areas.has(a))) continue;
-        const cover2 = Math.max(0, 0.55 * x.threat - 0.7 * x.fixed);
-        kept += o.busy?.(x) ? Math.max(cover2, Math.min(x.atk, OPEN.commit * x.def)) : cover2;
+        const cover3 = Math.max(0, 0.55 * x.threat - 0.7 * x.fixed);
+        kept += o.busy?.(x) ? Math.max(cover3, Math.min(x.atk, OPEN.commit * x.def)) : cover3;
       }
       f.ratio = Math.max(0, f.atk - kept) / f.def;
     }
@@ -14109,6 +14228,7 @@
   function beginHuman(g2) {
     g2.week = 1;
     startPhase(g2, current(g2));
+    reconnoitre(g2);
   }
   function endHuman(g2) {
     entrench(g2, current(g2));
@@ -14215,6 +14335,43 @@
     if (!corps.length || !hostileUnits(g2, target, corps[0].nat).length) return null;
     return assess(g2, corps, target);
   }
+  var chanceAt = (odds) => Math.max(0, Math.min(1, (1.2 - 1.2 / Math.max(1e-6, odds)) / 0.4));
+  function attackOutlook(g2, corps, target) {
+    const a = previewAttack(g2, corps, target);
+    if (!a) return null;
+    const band = oddsBand(g2, a.defenders, a.odds, target.id, g2.human);
+    const k = sortKnown(g2, a.defenders, g2.human);
+    if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), unidentified: 0, stale: 0, note: "", lines: a.lines };
+    const n = a.defenders.length;
+    const corpsWord = (x) => `${x} corps`;
+    const lines = a.lines.map((l) => {
+      if (l.label === "Forces") return { ...l, value: `${l.value.split(", against ")[0]}, against ${corpsWord(n)}${k.none.length ? `, ${k.none.length === n ? "none" : `${n - k.none.length}`} of them identified` : ", known from old reports"}` };
+      if (l.label === "Morale") {
+        const ours = l.value.split(", defenders")[0];
+        return { ...l, value: /^Attackers/.test(ours) ? `${ours}; the defenders' spirit is not known` : "The defenders' spirit is not known", effect: l.effect ? l.effect.split(", defence")[0].replace(/^Defence.*$/, "") || void 0 : void 0 };
+      }
+      if (l.label === "Armor" && /without armor/.test(l.value) && k.none.length) return { ...l, value: "No tanks have been seen among the defenders", effect: "Tank attack up 25% if there are none" };
+      return l;
+    });
+    const nn = k.none.length, old = k.report.length;
+    const count3 = (x) => ["No", "One", "Two", "Three", "Four", "Five", "Six"][x] ?? `${x}`;
+    const dark = !nn ? "" : nn < n ? `${count3(nn)} of the ${n} defending corps ${nn === 1 ? "is" : "are"} not identified` : n === 1 ? "The defending corps is not identified" : n === 2 ? "Neither of the two defending corps is identified" : `None of the ${n} defending corps is identified`;
+    const dated = !old ? "" : nn ? `${count3(old).toLowerCase()} ${old === 1 ? "is" : "are"} known only from ${old === 1 ? "an old report" : "old reports"}` : old === n ? n === 1 ? "The defending corps is known only from an old report" : "The defending corps are known only from old reports" : `${count3(old)} of the ${n} defending corps ${old === 1 ? "is" : "are"} known only from ${old === 1 ? "an old report" : "old reports"}`;
+    const what = [dark, dated].filter(Boolean).join(", and ");
+    return {
+      exact: false,
+      odds: band.mid,
+      lo: band.lo,
+      hi: band.hi,
+      chance: chanceAt(band.mid),
+      chanceLo: chanceAt(band.lo),
+      chanceHi: chanceAt(band.hi),
+      unidentified: k.none.length,
+      stale: k.report.length,
+      note: `${what}, so the odds are the staff's estimate. A battle, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
+      lines
+    };
+  }
   function orderAttack(g2, corps, target) {
     if (onEve(g2)) return null;
     const ok = limitAttackers(g2, corps.filter((c) => canOrder(g2, c) && c.ap > 0 && g2.regions[c.reg].nb.includes(target.id)), target);
@@ -14308,7 +14465,10 @@
   }
   var flownRaids = (g2, turn = g2.turn) => raidReplays(g2, turn, g2.human);
   function orderScout(g2, id, target) {
-    return myAir(g2, id) ? scout(g2, id, target, g2.human) : { ok: false, text: "It is not your month.", lost: 0 };
+    if (!myAir(g2, id)) return { ok: false, text: "It is not your month.", lost: 0 };
+    const flown = scout(g2, id, target, g2.human);
+    if (flown.ok) reconnoitre(g2);
+    return flown;
   }
   function previewAirOrder(g2, id, mission, target) {
     const f = g2.airFleets.find((x) => x.id === id);
@@ -14431,6 +14591,8 @@
     return g2.human && !g2.nations[g2.human].alive ? standDown(g2) : null;
   }
   var corpsDetail = (g2, c) => corpsCard(g2, c);
+  var knowledgeOf = (g2, c) => corpsKnown(g2, c, g2.human);
+  var corpsKnownAs = (g2, c) => corpsSeen(g2, c, g2.human);
   var towns = (g2) => townsOf(g2);
   var townIn = (g2, region) => townAt(g2, region);
   var prize = (g2, region) => prizeOf(g2, region, g2.human);
@@ -15307,31 +15469,42 @@
       }),
       // Under the fog of war the player's map shows only what he is allowed to know: an army seen whole, an army
       // only glimpsed (a flag and how many corps, 'dim'), or nothing at all.
-      corps: s.corps.filter((c) => !c.dead && seen[c.reg] > 0).map((c) => seen[c.reg] === 1 ? { id: c.id, nat: c.nat, name: "An army seen from afar", kind: "inf", elite: "", divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: 0, xp: 0, grade: "", nick: null, honours: [], dim: true } : {
-        id: c.id,
-        nat: c.nat,
-        name: c.name,
-        kind: c.kind,
-        elite: c.elite ?? "",
-        divs: c.divs,
-        str: c.str,
-        org: c.org,
-        reg: c.reg,
-        ap: c.ap,
-        apMax: c.apMax,
-        gen: generalOf(s, c)?.name ?? null,
-        posture: postureOf(c),
-        canOrder: up && canOrder(s, c),
-        supplied: c.supplied,
-        men: men(c),
-        // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
-        xp: Math.round(c.xp * 100),
-        grade: grade(c.xp),
-        nick: c.nick ?? null,
-        honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ["#b08d57", "#f2ead6"] })),
-        dim: false,
-        // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
-        ...c.nat === s.human ? cardOf(s, c) : {}
+      corps: s.corps.filter((c) => !c.dead && seen[c.reg] > 0).map((c) => {
+        const kn = s.human && c.nat !== s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
+        if (seen[c.reg] === 1 || kn.level === "none") {
+          return { id: c.id, nat: c.nat, name: seen[c.reg] === 1 ? "An army seen from afar" : "A corps not identified", kind: "inf", elite: "", divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: 0, xp: 0, grade: "", nick: null, honours: [], dim: true, near: seen[c.reg] !== 1 };
+        }
+        if (kn.level === "report") {
+          const card = corpsKnownAs(s, c);
+          const lo = card?.strLo ?? c.str, hi = card?.strHi ?? c.str, mid = (lo + hi) / 2;
+          return { id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: "", divs: c.divs, str: mid, org: 0.5, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: Math.round(c.divs * 15e3 * mid), xp: 0, grade: "", nick: null, honours: [], dim: false, stale: kn.age, strLo: lo, strHi: hi };
+        }
+        return {
+          id: c.id,
+          nat: c.nat,
+          name: c.name,
+          kind: c.kind,
+          elite: c.elite ?? "",
+          divs: c.divs,
+          str: c.str,
+          org: c.org,
+          reg: c.reg,
+          ap: c.ap,
+          apMax: c.apMax,
+          gen: generalOf(s, c)?.name ?? null,
+          posture: postureOf(c),
+          canOrder: up && canOrder(s, c),
+          supplied: c.supplied,
+          men: men(c),
+          // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
+          xp: Math.round(c.xp * 100),
+          grade: grade(c.xp),
+          nick: c.nick ?? null,
+          honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ["#b08d57", "#f2ead6"] })),
+          dim: false,
+          // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
+          ...c.nat === s.human ? cardOf(s, c) : {}
+        };
       }),
       // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
       fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({
@@ -15721,7 +15894,38 @@
     const corps = attackers(s, ids2, to);
     const a = previewAttack(s, corps, s.regions[to]);
     if (!a) return null;
+    const look = attackOutlook(s, corps, s.regions[to]);
+    const named2 = (c) => {
+      const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: "exact", age: 0 };
+      return kn.level === "none" ? { id: c.id, nat: c.nat, name: "A corps not identified", kind: "", divs: 0, men: 0, gen: null } : kn.level === "report" ? { id: c.id, nat: c.nat, name: `${c.name} (a report ${kn.age} month${kn.age === 1 ? "" : "s"} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null } : { id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+    };
+    if (look && !look.exact) {
+      return {
+        region: to,
+        prize: prize(s, to)?.line ?? "",
+        attack: look.odds,
+        defence: 1,
+        odds: look.odds,
+        exact: false,
+        lo: look.lo,
+        hi: look.hi,
+        chance: look.chance,
+        chanceLo: look.chanceLo,
+        chanceHi: look.chanceHi,
+        note: look.note,
+        lines: look.lines,
+        attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+        defenders: a.defenders.map(named2)
+      };
+    }
     return {
+      exact: true,
+      lo: a.odds,
+      hi: a.odds,
+      chance: look?.chance ?? 0,
+      chanceLo: look?.chance ?? 0,
+      chanceHi: look?.chance ?? 0,
+      note: "",
       region: to,
       // What taking the place is worth, in a sentence, for the screen that asks whether to attack.
       prize: prize(s, to)?.line ?? "",

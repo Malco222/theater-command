@@ -71,7 +71,7 @@ import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm,
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
-import { airfieldsSeen, announcements, corpsDetail, fallenCapitalAt, flownRaids, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
+import { airfieldsSeen, announcements, attackOutlook, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -154,9 +154,19 @@ function view() {
     }),
     // Under the fog of war the player's map shows only what he is allowed to know: an army seen whole, an army
     // only glimpsed (a flag and how many corps, 'dim'), or nothing at all.
-    corps: s.corps.filter((c) => !c.dead && seen[c.reg] > 0).map((c) => seen[c.reg] === 1
-      ? { id: c.id, nat: c.nat, name: 'An army seen from afar', kind: 'inf', elite: '', divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: 0, xp: 0, grade: '', nick: null, honours: [], dim: true }
-      : ({
+    corps: s.corps.filter((c) => !c.dead && seen[c.reg] > 0).map((c) => {
+      // A foreign corps is known exactly, from a report gone stale, or not identified at all (the grand campaign).
+      const kn = s.human && c.nat !== s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
+      if (seen[c.reg] === 1 || kn.level === 'none') {
+        return { id: c.id, nat: c.nat, name: seen[c.reg] === 1 ? 'An army seen from afar' : 'A corps not identified', kind: 'inf', elite: '', divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: 0, xp: 0, grade: '', nick: null, honours: [], dim: true, near: seen[c.reg] !== 1 };
+      }
+      if (kn.level === 'report') {
+        // Known from a report some months old: its name and its arm, and its strength only as a band.
+        const card = corpsKnownAs(s, c);
+        const lo = card?.strLo ?? c.str, hi = card?.strHi ?? c.str, mid = (lo + hi) / 2;
+        return { id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: '', divs: c.divs, str: mid, org: 0.5, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: Math.round(c.divs * 15000 * mid), xp: 0, grade: '', nick: null, honours: [], dim: false, stale: kn.age, strLo: lo, strHi: hi };
+      }
+      return ({
       id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
       canOrder: up && canOrder(s, c), supplied: c.supplied, men: men(c),
@@ -166,7 +176,7 @@ function view() {
       dim: false,
       // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
       ...(c.nat === s.human ? cardOf(s, c) : {}),
-    })),
+    }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
     fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({
       id: f.id, nat: f.nat, name: f.name, zone: f.zone, home: f.home, base: f.base, port: f.port, stance: f.stance,
@@ -591,7 +601,25 @@ function preview(ids: number[], to: number) {
   const corps = attackers(s, ids, to);
   const a = previewAttack(s, corps, s.regions[to]);
   if (!a) return null;
+  // Where the defenders are not all identified, the odds are a band and the ticket leaves out what is not known.
+  const look = attackOutlook(s, corps, s.regions[to]);
+  const named = (c: Corps) => {
+    const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
+    return kn.level === 'none' ? { id: c.id, nat: c.nat, name: 'A corps not identified', kind: '', divs: 0, men: 0, gen: null }
+      : kn.level === 'report' ? { id: c.id, nat: c.nat, name: `${c.name} (a report ${kn.age} month${kn.age === 1 ? '' : 's'} old)`, kind: c.kind, divs: c.divs, men: 0, gen: null }
+        : { id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null };
+  };
+  if (look && !look.exact) {
+    return {
+      region: to, prize: prizeOfPlace(s, to)?.line ?? '', attack: look.odds, defence: 1, odds: look.odds,
+      exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: look.note,
+      lines: look.lines,
+      attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
+      defenders: a.defenders.map(named),
+    };
+  }
   return {
+    exact: true, lo: a.odds, hi: a.odds, chance: look?.chance ?? 0, chanceLo: look?.chance ?? 0, chanceHi: look?.chance ?? 0, note: '',
     region: to,
     // What taking the place is worth, in a sentence, for the screen that asks whether to attack.
     prize: prizeOfPlace(s, to)?.line ?? '',

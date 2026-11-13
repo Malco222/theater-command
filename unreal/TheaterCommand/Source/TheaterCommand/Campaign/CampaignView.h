@@ -36,7 +36,9 @@ struct FViewCorps
 	FString Name;
 	FString Kind; // inf, mot, arm, cav, mtn, fort
 	FString Elite; // the special formation it is, if it is one: "heavy", "ski", "guards"
-	bool bDim = false; // only glimpsed through the fog of war: a flag and no more
+	bool bDim = false; // only glimpsed through the fog of war, or in view but not identified: a flag and no more
+	bool bNear = false; // dim, but in plain view: a corps not identified
+	int32 Stale = 0; // known from a report this many months old (0: known as it is today)
 	FString General; // empty when the corps has no named commander
 	FString Posture; // stand, dig, back
 	int32 Divisions = 0;
@@ -335,6 +337,9 @@ struct FAttackPreview
 	float Attack = 0.0f;
 	float Defence = 0.0f;
 	float Odds = 0.0f;
+	bool bExact = true; // false where the defenders are not all identified: the odds are then a band
+	float OddsLow = 0.0f, OddsHigh = 0.0f;
+	FString Note; // why the odds are a band, and how to narrow it
 	FString Prize; // what taking the place is worth, in a sentence
 	TArray<FTicketLine> Lines;
 	TArray<FBattleUnit> Attackers;

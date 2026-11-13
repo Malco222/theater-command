@@ -52,7 +52,7 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		{
 			General = Unit.General; // the first general named is the senior one
 		}
-		NewSignature += FString::Printf(TEXT("|%d"), Unit.Id);
+		NewSignature += FString::Printf(TEXT("|%d%s%s"), Unit.Id, Unit.bDim ? TEXT("?") : TEXT(""), Unit.Stale > 0 ? TEXT("~") : TEXT("")); // (what is known of it is part of how it looks)
 	}
 	// The standard carries a streamer for every honour its corps have won.
 	int32 HonourCount = 0;
@@ -204,10 +204,26 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Size = FMath::Clamp(0.82 + 0.26 * FMath::Sqrt(Men / 30000.0), 0.9, 2.0);
 		Figure = Men >= 995000 ? FString::Printf(TEXT("%.1fM"), Men / 1000000.0) : FString::Printf(TEXT("%dk"), FMath::Max(1, FMath::RoundToInt32(Men / 1000.0)));
 		// An army only glimpsed through the fog of war: its flag, how many corps, and no more.
-		if (Corps.Num() > 0 && Corps[0].bDim)
+		int32 Dim = 0;
+		bool bStale = false;
+		for (const FViewCorps& Unit : Corps)
+		{
+			Dim += Unit.bDim ? 1 : 0;
+			bStale |= Unit.Stale > 0;
+		}
+		if (Corps.Num() > 0 && Dim == Corps.Num())
 		{
 			Size = 1.0;
 			Figure = Corps.Num() == 1 ? FString(TEXT("?")) : FString::Printf(TEXT("%d ?"), Corps.Num());
+		}
+		else if (Dim > 0)
+		{
+			// Some of its corps are not identified: what is known, and that there is more.
+			Figure = Figure + TEXT(" +?");
+		}
+		else if (bStale)
+		{
+			Figure = TEXT("~") + Figure; // known from reports gone stale
 		}
 	}
 
