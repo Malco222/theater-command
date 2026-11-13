@@ -96,6 +96,8 @@ public:
 
 	/** Rivers, crossings, railways and steep country, as the rules have them. Empty with the stand-in rules. */
 	FLandFeatures Land();
+	/** Every province's chief town, what the province pays and how that ranks. */
+	TArray<FTownInfo> Towns();
 
 	/** Places an order from the arsenal. OutName is what was ordered. */
 	bool OrderArsenal(const FString& Key, int32 RegionId, FString& OutName);

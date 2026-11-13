@@ -762,6 +762,7 @@ FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, in
 	Out.Attack = static_cast<float>(Object->GetNumberField(TEXT("attack")));
 	Out.Defence = static_cast<float>(Object->GetNumberField(TEXT("defence")));
 	Out.Odds = static_cast<float>(Object->GetNumberField(TEXT("odds")));
+	Object->TryGetStringField(TEXT("prize"), Out.Prize);
 	const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
 	if (Object->TryGetArrayField(TEXT("lines"), Lines))
 	{
@@ -1171,6 +1172,22 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 	Object->TryGetBoolField(TEXT("home"), Info.bHome);
 	Object->TryGetStringField(TEXT("raiseNote"), Info.Note);
 	{
+		const TSharedPtr<FJsonObject>* Town = nullptr;
+		if (Object->TryGetObjectField(TEXT("town"), Town))
+		{
+			(*Town)->TryGetStringField(TEXT("name"), Info.Town);
+			(*Town)->TryGetStringField(TEXT("size"), Info.TownSize);
+			(*Town)->TryGetNumberField(TEXT("worth"), Info.TownWorth);
+		}
+		const TSharedPtr<FJsonObject>* Prize = nullptr;
+		if (Object->TryGetObjectField(TEXT("prize"), Prize))
+		{
+			(*Prize)->TryGetStringField(TEXT("kind"), Info.PrizeKind);
+			(*Prize)->TryGetStringField(TEXT("line"), Info.PrizeLine);
+			(*Prize)->TryGetStringArrayField(TEXT("items"), Info.PrizeItems);
+		}
+	}
+	{
 		// A fallen country's capital: what taking it would mean.
 		FString Fallen;
 		if (Object->TryGetStringField(TEXT("fallenNote"), Fallen) && !Fallen.IsEmpty())
@@ -1361,6 +1378,33 @@ bool FCampaignSession::OrderForce(const FString& Key, FString& OutNote)
 	Object->TryGetStringField(TEXT("note"), OutNote);
 	TakeView(Object);
 	return bOk;
+}
+
+TArray<FTownInfo> FCampaignSession::Towns()
+{
+	TArray<FTownInfo> Out;
+	TSharedPtr<FJsonObject> Object;
+	const TArray<TSharedPtr<FJsonValue>>* List = nullptr;
+	if (!CallRules(TEXT("towns"), TEXT("[]"), Object) || !Object.IsValid() || !Object->TryGetArrayField(TEXT("towns"), List))
+	{
+		return Out;
+	}
+	for (const TSharedPtr<FJsonValue>& Value : *List)
+	{
+		const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+		if (!Entry.IsValid())
+		{
+			continue;
+		}
+		FTownInfo& Town = Out.AddDefaulted_GetRef();
+		Entry->TryGetNumberField(TEXT("region"), Town.Region);
+		Entry->TryGetStringField(TEXT("name"), Town.Name);
+		Entry->TryGetStringField(TEXT("province"), Town.Province);
+		Entry->TryGetStringField(TEXT("size"), Town.Size);
+		Entry->TryGetNumberField(TEXT("worth"), Town.Worth);
+		Entry->TryGetNumberField(TEXT("rank"), Town.Rank);
+	}
+	return Out;
 }
 
 FLandFeatures FCampaignSession::Land()

@@ -225,6 +225,10 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.ProvinceTab = 2;
 		}
 		Add(TEXT("31m-forces"), TEXT("@capital"), 0.45f).Room = TEXT("forces");
+		// An enemy capital picked: the prize for taking it. And the wealth view of the whole map.
+		Add(TEXT("31p-prize"), TEXT("Warsaw"), 0.4f).Select = TEXT("Warsaw");
+		Add(TEXT("31q-wealth-view"), TEXT(""), 0.97f).bWealth = true;
+		Add(TEXT("31r-wealth-close"), TEXT("Ruhr"), 0.55f).bWealth = true;
 		Add(TEXT("31o-objectives"), TEXT("@capital"), 0.45f).Room = TEXT("goals");
 		{
 			// An army in hand: a card for each corps, its divisions by name, its morale and its rest.
@@ -616,6 +620,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		Controller->OrderTo(*Target);
 	}
 	Controller->SetProvinceTab(Shot.ProvinceTab);
+	if (Table->IsWealthShown() != Shot.bWealth)
+	{
+		Controller->ToggleWealth();
+	}
 	if (Shot.bNewsreel)
 	{
 		TArray<FNewsCard> Cards;

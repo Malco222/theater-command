@@ -563,6 +563,10 @@ namespace
 									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("GOALS"), TEXT("What winning means for your country, and how far you have got. (O)"), [this]() { Controller->OpenGoals(); })]
 									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("CAPITAL"), TEXT("Look at your capital. (C, or Home)"), [this]() { Controller->GoToCapital(); })]
 								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+								[
+									MapButton(TEXT("WEALTH VIEW"), TEXT("Tints every province gold by what it pays a month, on the map and here, so the prizes stand out. Press again to put it away. (Y)"), [this]() { Controller->ToggleWealth(); })
+								]
 							]
 						]
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
@@ -804,6 +808,13 @@ namespace
 									[
 										SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->OddsLine : FText::GetEmpty(); })
+									]
+									// The prize: what taking the place is worth.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(40.0f, 8.0f, 40.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(BrightBrass).AutoWrapText(true).Justification(ETextJustify::Center)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->Prize.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Prize : FText::GetEmpty(); })
 									]
 
 									// The Battle Ticket: what the map says about this fight.
@@ -1729,6 +1740,25 @@ namespace
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
 						[
 							SNew(STextBlock).Text(Info.OptionsTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+						];
+					}
+					if ((ProvinceTab == 0 || !bProvince) && !Info.Prize.IsEmpty())
+					{
+						// The prize: what the player gets for taking the place, or has from holding it.
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 2.0f)
+						[
+							SNew(SBox).ToolTipText(Info.PrizeTip)
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(STextBlock).Text(FText::FromString(Info.bPrizeToTake ? TEXT("THE PRIZE") : TEXT("WHAT IT PAYS"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+								[
+									SNew(STextBlock).Text(Info.Prize).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Info.bPrizeToTake ? BrightBrass : Cream).AutoWrapText(true)
+								]
+							]
 						];
 					}
 					if (ProvinceTab == 0 || !bProvince)

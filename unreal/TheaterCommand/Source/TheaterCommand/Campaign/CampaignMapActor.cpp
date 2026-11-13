@@ -1412,6 +1412,13 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 			const FString& Holder = HolderOf(Here);
 			const FCampaignNation* Nation = Data.FindNation(Holder);
 			FLinearColor Tint = Nation ? FLinearColor(Nation->Color) : FLinearColor(0.35f, 0.35f, 0.33f);
+			if (bWealth && Towns.IsValidIndex(Here))
+			{
+				// The wealth view: grey ground, gold by what the province pays.
+				static const float Gold[6] = { 0.0f, 0.22f, 0.4f, 0.6f, 0.8f, 1.0f };
+				const float Rich = Gold[FMath::Clamp(Towns[Here].Rank, 0, 5)];
+				Tint = FMath::Lerp(FLinearColor(0.16f, 0.16f, 0.15f), FLinearColor(1.0f, 0.74f, 0.1f), Rich);
+			}
 			// A frontier between two countries is drawn dark; a province line inside one is not drawn at all.
 			const int32 East = At(X + 1, Y), South = At(X, Y + 1);
 			if ((East >= 0 && HolderOf(East) != Holder) || (South >= 0 && HolderOf(South) != Holder))
@@ -1768,7 +1775,20 @@ void ACampaignMapActor::BuildLabels()
 			// The name sits just south of the town's marker, and under it what the place is worth.
 			AddLabel(Region.Name, Region.Center + FVector2D(0.0, Size * 0.5 + 2.0), Size, Ink, Region.bCapital ? TierAlways : TierMiddle);
 			TArray<FString> Worth;
-			if (Region.VictoryPoints > 0)
+			if (Towns.IsValidIndex(Region.Id) && Towns[Region.Id].Region == Region.Id)
+			{
+				// From the rules: the chief town where it is not the province's own name, and what the place pays a month.
+				const FTownInfo& Town = Towns[Region.Id];
+				if (!Town.Name.IsEmpty() && Town.Name != Region.Name)
+				{
+					Worth.Add(Town.Name);
+				}
+				if (Town.Worth > 0)
+				{
+					Worth.Add(FString::Printf(TEXT("pays %d"), Town.Worth));
+				}
+			}
+			else if (Region.VictoryPoints > 0)
 			{
 				Worth.Add(FString::Printf(TEXT("worth %d"), Region.VictoryPoints));
 			}
@@ -2299,6 +2319,44 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 			It->SetSeason(Hard, Summer[Month]);
 		}
 	}
+}
+
+void ACampaignMapActor::SetTowns(const TArray<FTownInfo>& InTowns)
+{
+	Towns.Reset();
+	Towns.SetNum(Data.Regions.Num());
+	for (const FTownInfo& Town : InTowns)
+	{
+		if (Towns.IsValidIndex(Town.Region))
+		{
+			Towns[Town.Region] = Town;
+		}
+	}
+	BuildLabels();
+	bMiniStale = true;
+}
+
+void ACampaignMapActor::ShowWealth(bool bOn)
+{
+	bWealth = bOn && Towns.Num() > 0;
+	bMiniStale = true;
+	OrdersMesh->ClearMeshSection(4);
+	if (!bWealth)
+	{
+		return;
+	}
+	// Every province washed with gold, the richer the deeper, so the prizes stand out of the map.
+	static const float Wash[6] = { 0.0f, 0.1f, 0.2f, 0.32f, 0.46f, 0.62f };
+	FCampaignMeshBuffers Buffers;
+	for (const FTownInfo& Town : Towns)
+	{
+		const int32 Rank = FMath::Clamp(Town.Rank, 0, 5);
+		if (Rank > 0 && Data.Regions.IsValidIndex(Town.Region))
+		{
+			AppendRegionFill(Buffers, Town.Region, FLinearColor(1.0f, 0.78f, 0.12f, Wash[Rank]));
+		}
+	}
+	Buffers.Commit(OrdersMesh, 4, HighlightMaterial);
 }
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)

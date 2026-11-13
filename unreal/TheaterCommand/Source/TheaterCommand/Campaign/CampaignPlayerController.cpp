@@ -347,6 +347,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::L, IE_Pressed, this, &ACampaignPlayerController::OpenForces);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACampaignPlayerController::OpenReports);
 	InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ACampaignPlayerController::OpenGoals);
+	InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ACampaignPlayerController::ToggleWealth);
 	InputComponent->BindKey(EKeys::K, IE_Pressed, this, &ACampaignPlayerController::ToggleNewsreels);
 	InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
 	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
@@ -1429,6 +1430,22 @@ void ACampaignPlayerController::HushNarrator()
 		FPlatformProcess::CloseProc(Narrator);
 		Narrator.Reset();
 	}
+}
+
+bool ACampaignPlayerController::IsWealthShown() const
+{
+	return Map.IsValid() && Map->IsWealthShown();
+}
+
+void ACampaignPlayerController::ToggleWealth()
+{
+	if (!Map.IsValid() || !GetSession())
+	{
+		return;
+	}
+	Map->ShowWealth(!Map->IsWealthShown());
+	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	Notify(Map->IsWealthShown() ? TEXT("The wealth view: the deeper the gold, the more a province pays. Press Y to put it away.") : TEXT("The wealth view is put away."), 4.0);
 }
 
 void ACampaignPlayerController::OpenGoals()
@@ -3134,6 +3151,13 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 				Map->SetLand(Session->Land());
 			}
 		}
+		if (!Map->HasTowns())
+		{
+			if (FCampaignSession* Session = GetSession())
+			{
+				Map->SetTowns(Session->Towns());
+			}
+		}
 		Map->SetHolders(View.RegionHolder, View.League);
 		Map->SetSeason(View.Turn);
 		Map->ShowArmies(View, Marches, CarriedFrom);
@@ -3242,6 +3266,7 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 	FaceOff.OurUnits = FText::FromString(ListUnits(Preview.Attackers, false));
 	FaceOff.TheirUnits = FText::FromString(ListUnits(Preview.Defenders, false));
 	FaceOff.Balance = Preview.Attack + Preview.Defence > 0.0f ? Preview.Attack / (Preview.Attack + Preview.Defence) : 0.5f;
+	FaceOff.Prize = FText::FromString(Preview.Prize);
 	FaceOff.OddsLine = FText::FromString(Preview.Odds >= 1.0f
 		? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), Preview.Odds)
 		: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f)));
@@ -3716,6 +3741,15 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 				Holdings += bMine ? FString::Printf(TEXT("\nGives your treasury %s"), *Province.Yield) : FString::Printf(TEXT("\nWorth %s to whoever holds it"), *Province.Yield);
 			}
 			RegionPanel.Holdings = FText::FromString(Holdings);
+			// Its chief town, and the prize: what taking the place is worth to the player, or what holding it pays.
+			if (!Province.Town.IsEmpty() && Province.Town != Region.Name)
+			{
+				// (where the province is named for its city, its name has said so already)
+				RegionPanel.Details = FText::FromString(FString::Printf(TEXT("Chief town %s  \u00B7  %s"), *Province.Town, *RegionPanel.Details.ToString()));
+			}
+			RegionPanel.Prize = FText::FromString(Province.PrizeLine);
+			RegionPanel.PrizeTip = FText::FromString(FString::Join(Province.PrizeItems, TEXT("\n")));
+			RegionPanel.bPrizeToTake = Province.PrizeKind == TEXT("taken") || Province.PrizeKind == TEXT("restored");
 		}
 		if (Province.bValid && Province.bHome)
 		{

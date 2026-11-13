@@ -71,7 +71,7 @@ import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm,
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
-import { airfieldsSeen, announcements, corpsDetail, fallenCapitalAt, flownRaids, nationsFallen, playerFell } from '../../../src/campaign/turn';
+import { airfieldsSeen, announcements, corpsDetail, fallenCapitalAt, flownRaids, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -591,6 +591,8 @@ function preview(ids: number[], to: number) {
   if (!a) return null;
   return {
     region: to,
+    // What taking the place is worth, in a sentence, for the screen that asks whether to attack.
+    prize: prizeOfPlace(s, to)?.line ?? '',
     attack: a.A,
     defence: a.D,
     odds: a.odds,
@@ -795,6 +797,9 @@ function province(id: number) {
     id: r.id,
     name: r.name,
     home,
+    // The chief town of the province, and what the player gets for taking the place (or has from holding it).
+    town: (() => { const t = townIn(s, r.id); return t ? { name: t.name, size: t.sizeWord, worth: t.worth, rank: t.rank } : null; })(),
+    prize: (() => { const z = prizeOfPlace(s, r.id); return z ? { kind: z.kind, line: z.line, items: z.items.map((i) => `${i.label}: ${i.text}`) } : null; })(),
     // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.
     fallenNote: fallenCapitalAt(s, r.id)?.note ?? '',
     industry: r.fac,
@@ -976,6 +981,12 @@ function forceOrder(key: string) {
   else if (what === 'air') ok = orderAir(s, Number(id), a as AirMission, Number(b));
   else if (what === 'airbase') ok = orderAirBase(s, Number(id), Number(a));
   return { ok, note: ok ? 'The order is given.' : 'That order cannot be given now.', view: view() };
+}
+
+/** Every province's chief town with what the province pays a month and how that ranks (0 to 5), for the map's labels and its wealth view. */
+function townsList() {
+  const s = game();
+  return { towns: townsOfMap(s).map((t) => ({ region: t.region, name: t.name, province: t.province, size: t.size, worth: t.worth, rank: t.rank, signs: t.signs })) };
 }
 
 /** The rivers, their crossings, the railways and the steep country: geography that does not change. */
@@ -1900,5 +1911,5 @@ function raidsFlown(turn?: number) {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  raidsFlown,
+  raidsFlown, towns: townsList,
   land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

@@ -82,6 +82,12 @@ public:
 	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false);
 	/** The time of year, from the month of the war (1 is September 1939): snow lies over the north and the high ground in winter. */
 	void SetSeason(int32 Turn);
+	/** The chief town of each province with what it pays, from the rules: the labels are written again to say so. */
+	void SetTowns(const TArray<FTownInfo>& InTowns);
+	bool HasTowns() const { return Towns.Num() > 0; }
+	/** The wealth view: every province tinted gold by what it pays, on the table and on the small map. */
+	void ShowWealth(bool bOn);
+	bool IsWealthShown() const { return bWealth; }
 	/** Rings in gold the capitals of fallen countries that the player would set free by taking them. */
 	void ShowFreeCapitals(const TArray<int32>& Capitals);
 	/** Rings the seas a fleet in hand can sail to, the one the pointer is over more brightly, and the fleet itself. None clears them. */
@@ -290,6 +296,8 @@ private:
 	bool bMiniStale = true;
 	TArray<FIntVector4> ShownBuildings;
 	TArray<int32> ShownFree;
+	TArray<FTownInfo> Towns; // by province id, once the rules have said
+	bool bWealth = false;
 	int32 ShownMonth = -1;
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
 	FLandFeatures Land;

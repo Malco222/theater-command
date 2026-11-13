@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of f203bb0 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6409c21 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -12447,10 +12447,10 @@
     return out.sort((a, b) => b.def - a.def);
   }
   function objectives(g2, f) {
-    const inside = g2.regions.filter((r) => f.depth[r.id] >= 1);
-    const caps = inside.filter((r) => r.cap && f.depth[r.id] <= 7 && g2.nations[r.owner]?.alive && f.enemies.includes(r.owner)).sort((a, b) => f.depth[a.id] - f.depth[b.id]);
-    const worth2 = inside.filter((r) => f.depth[r.id] <= 4 && (r.vp >= 1 || r.port)).sort((a, b) => f.depth[a.id] - f.depth[b.id] || b.vp - a.vp || a.id - b.id);
-    const near = inside.filter((r) => f.depth[r.id] <= 2).sort((a, b) => f.depth[a.id] - f.depth[b.id] || a.id - b.id);
+    const inside2 = g2.regions.filter((r) => f.depth[r.id] >= 1);
+    const caps = inside2.filter((r) => r.cap && f.depth[r.id] <= 7 && g2.nations[r.owner]?.alive && f.enemies.includes(r.owner)).sort((a, b) => f.depth[a.id] - f.depth[b.id]);
+    const worth2 = inside2.filter((r) => f.depth[r.id] <= 4 && (r.vp >= 1 || r.port)).sort((a, b) => f.depth[a.id] - f.depth[b.id] || b.vp - a.vp || a.id - b.id);
+    const near = inside2.filter((r) => f.depth[r.id] <= 2).sort((a, b) => f.depth[a.id] - f.depth[b.id] || a.id - b.id);
     return [...new Set([...caps, ...worth2, ...near].map((r) => r.name))].slice(0, 30);
   }
   var GOING = { plains: 0, desert: 0.3, forest: 0.5, hills: 0.6, urban: 0.8, marsh: 1.5, mountain: 2 };
@@ -13759,6 +13759,329 @@
     }
   }
 
+  // ../../data/campaign/towns.json
+  var towns_default = {
+    _about: {
+      what: "Cities and towns: the chief place of every province, how big it is, and what holding it is worth. A province named for its city needs no entry here; one named for a stretch of country names its chief town under 'names'.",
+      rule: "Nothing here changes the war. It says what is already true of each province (its money, factories, harbour, oil and victory points) in a form both interfaces can draw on the map and put in front of the player before an attack.",
+      sizes: "A capital is the seat of a government that still stands. Otherwise a place is a 'city' at 'city.vp' victory points or 'city.fac' factories or on urban ground, a 'town' at 'town.vp' victory points or with any factory, harbour or oilfield, and a 'village' if it has none of these.",
+      ranks: "How a province's worth (what it pays its own country a month, in money as the interface shows it) is ranked from 0 to 5: the least it takes for each rank from 1 up.",
+      words: "What each size is called, and the words for the signs a town can carry."
+    },
+    sizes: { city: { vp: 2, fac: 2 }, town: { vp: 1 } },
+    ranks: [20, 60, 120, 250, 450],
+    words: {
+      capital: "Capital",
+      city: "City",
+      town: "Town",
+      village: "Village",
+      factory: "Factories",
+      harbour: "Harbour",
+      oil: "Oilfield",
+      fort: "Fortress",
+      yard: "Shipyard",
+      airfield: "Airfield",
+      rail: "Railway"
+    },
+    names: {
+      "Schleswig-Holstein": "Kiel",
+      Westphalia: "Bielefeld",
+      Ruhr: "Essen",
+      Rhineland: "Cologne",
+      Eifel: "Trier",
+      Saar: "Saarbrucken",
+      Baden: "Karlsruhe",
+      Wurttemberg: "Stuttgart",
+      Bavaria: "Munich",
+      Franconia: "Nuremberg",
+      Hesse: "Kassel",
+      Saxony: "Leipzig",
+      Mecklenburg: "Rostock",
+      "Farther Pomerania": "Koslin",
+      Neumark: "Kustrin",
+      Grenzmark: "Schneidemuhl",
+      "Lower Silesia": "Breslau",
+      "Upper Silesia": "Oppeln",
+      Masuria: "Allenstein",
+      "Upper Austria": "Linz",
+      Tyrol: "Innsbruck",
+      Styria: "Graz",
+      Bohemia: "Prague",
+      Moravia: "Brno",
+      Pomorze: "Bydgoszcz",
+      "Danzig Corridor": "Gdynia",
+      "Polish Silesia": "Katowice",
+      Polesie: "Pinsk",
+      Volhynia: "Lutsk",
+      Somme: "Amiens",
+      Normandy: "Caen",
+      Cotentin: "Cherbourg",
+      Brittany: "Lorient",
+      Champagne: "Reims",
+      Lorraine: "Nancy",
+      Alsace: "Strasbourg",
+      Vosges: "Epinal",
+      Aube: "Troyes",
+      Burgundy: "Dijon",
+      Touraine: "Tours",
+      Maine: "Le Mans",
+      Berry: "Bourges",
+      Auvergne: "Clermont-Ferrand",
+      Limousin: "Limoges",
+      Poitou: "Poitiers",
+      Gascony: "Bayonne",
+      Languedoc: "Montpellier",
+      Riviera: "Nice",
+      Savoy: "Grenoble",
+      Jura: "Besancon",
+      Corsica: "Ajaccio",
+      Syria: "Aleppo",
+      Lebanon: "Beirut",
+      Flanders: "Ghent",
+      Ardennes: "Bastogne",
+      Holland: "Amsterdam",
+      Gelderland: "Arnhem",
+      Friesland: "Groningen",
+      Brabant: "Eindhoven",
+      Kent: "Dover",
+      Hampshire: "Portsmouth",
+      "West Country": "Bristol",
+      Cornwall: "Plymouth",
+      "East Anglia": "Norwich",
+      Midlands: "Birmingham",
+      Wales: "Cardiff",
+      Lancashire: "Liverpool",
+      Yorkshire: "Leeds",
+      Lincolnshire: "Lincoln",
+      Northumbria: "Newcastle",
+      Clydeside: "Glasgow",
+      Lothian: "Edinburgh",
+      Highlands: "Inverness",
+      Ulster: "Belfast",
+      Palestine: "Jerusalem",
+      Transjordan: "Amman",
+      Cyprus: "Nicosia",
+      Malta: "Valletta",
+      Sinai: "El Arish",
+      "Qattara Depression": "Qara",
+      Munster: "Cork",
+      Connacht: "Galway",
+      Jutland: "Aarhus",
+      Zealand: "Copenhagen",
+      Sorlandet: "Kristiansand",
+      Oppland: "Lillehammer",
+      Nordland: "Bodo",
+      Finnmark: "Kirkenes",
+      Scania: "Malmo",
+      Smaland: "Jonkoping",
+      Varmland: "Karlstad",
+      Jamtland: "Ostersund",
+      Vasterbotten: "Umea",
+      Norrbotten: "Lulea",
+      Dalarna: "Falun",
+      Karelia: "Viipuri",
+      Lapland: "Rovaniemi",
+      Estonia: "Tallinn",
+      Latvia: "Riga",
+      Courland: "Libau",
+      Lithuania: "Kaunas",
+      Lombardy: "Milan",
+      Piedmont: "Turin",
+      Liguria: "Genoa",
+      Veneto: "Venice",
+      Emilia: "Bologna",
+      Tuscany: "Florence",
+      "Alto Adige": "Bolzano",
+      Friuli: "Trieste",
+      Marche: "Ancona",
+      Abruzzo: "Pescara",
+      Apulia: "Bari",
+      Calabria: "Reggio",
+      Sicily: "Palermo",
+      Sardinia: "Cagliari",
+      Albania: "Tirana",
+      Graubunden: "Chur",
+      Catalonia: "Barcelona",
+      "Basque Country": "Bilbao",
+      Galicia: "Corunna",
+      Asturias: "Oviedo",
+      "Old Castile": "Burgos",
+      Aragon: "Zaragoza",
+      "La Mancha": "Albacete",
+      Extremadura: "Badajoz",
+      Andalusia: "Seville",
+      "Spanish Morocco": "Tetuan",
+      Slovakia: "Bratislava",
+      Transdanubia: "Pecs",
+      Transylvania: "Cluj",
+      Banat: "Timisoara",
+      Oltenia: "Craiova",
+      Moldavia: "Iasi",
+      Bukovina: "Cernauti",
+      Bessarabia: "Kishinev",
+      Dobruja: "Constanta",
+      Croatia: "Zagreb",
+      Slovenia: "Ljubljana",
+      Bosnia: "Sarajevo",
+      Dalmatia: "Split",
+      Vojvodina: "Novi Sad",
+      Serbia: "Nis",
+      Montenegro: "Cetinje",
+      Macedonia: "Skopje",
+      Epirus: "Ioannina",
+      Thessaly: "Larissa",
+      Peloponnese: "Patras",
+      Thrace: "Komotini",
+      Crete: "Heraklion",
+      Anatolia: "Eskisehir",
+      Crimea: "Sevastopol",
+      "Don Bend": "Kletskaya",
+      "Kalmyk Steppe": "Elista",
+      Kuban: "Krasnodar",
+      Terek: "Mozdok",
+      Dagestan: "Makhachkala",
+      Kola: "Lovozero",
+      Iraq: "Kirkuk",
+      Iran: "Tehran"
+    }
+  };
+
+  // ../../src/campaign/towns.ts
+  var TOWNS = towns_default;
+  var townName = (r) => TOWNS.names[r.name] ?? r.name;
+  function townSize(g2, r) {
+    const seat3 = g2.nations[r.owner];
+    if (r.cap && seat3 && seat3.capital === r.id && seat3.alive) return "capital";
+    const S = TOWNS.sizes;
+    if (r.cap || r.vp >= S.city.vp || r.fac >= S.city.fac || r.terrain === "urban") return "city";
+    if (r.vp >= S.town.vp || r.fac > 0 || r.port || r.oil) return "town";
+    return "village";
+  }
+  function inRing(x, y, ring) {
+    let inside2 = false;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i], [xj, yj] = ring[j];
+      if (yi > y !== yj > y && x < (xj - xi) * (y - yi) / (yj - yi) + xi) inside2 = !inside2;
+    }
+    return inside2;
+  }
+  var inside = (polys, x, y) => polys.some((p) => p.length > 0 && inRing(x, y, p[0]) && !p.slice(1).some((hole) => inRing(x, y, hole)));
+  var SPOTS = [[-22, -8], [22, -8], [-18, -9], [18, -9], [0, -22], [-24, 5], [24, 5], [-15, -10], [15, -10], [0, -16], [0, 34]];
+  var TIGHT = [[-12, -7], [12, -7], [0, -10], [-9, 2], [9, 2], [0, 0]];
+  var ROOM = 3.5;
+  var SITES = campaign_map_default.regions.map((r) => {
+    const fits2 = (dx, dy, room2) => {
+      const x = r.x + dx, y = r.y + dy;
+      return inside(r.polys, x, y) && (room2 === 0 || [[-room2, 0], [room2, 0], [0, -room2], [0, room2]].every(([a, b]) => inside(r.polys, x + a, y + b)));
+    };
+    const spot = SPOTS.find(([dx, dy]) => fits2(dx, dy, ROOM)) ?? SPOTS.find(([dx, dy]) => fits2(dx, dy, 0)) ?? TIGHT.find(([dx, dy]) => fits2(dx, dy, 0)) ?? [0, 0];
+    return [Math.round((r.x + spot[0]) * 10) / 10, Math.round((r.y + spot[1]) * 10) / 10];
+  });
+  var townSite = (region) => SITES[region] ?? [0, 0];
+  function worthOf(g2, r) {
+    if (!budgeted(g2)) return Math.round(r.fac * BUDGET.scale);
+    const k = r.overseas ? BUDGET.overseas : 1;
+    const seat3 = g2.nations[r.owner];
+    const capital = r.cap && seat3 && seat3.capital === r.id ? BUDGET.capital : 0;
+    return Math.round((BUDGET.land[r.terrain] * k + (r.port ? BUDGET.port * k : 0) + (r.oil ? BUDGET.oil * k : 0) + r.fac + capital) * BUDGET.scale);
+  }
+  var rankOf3 = (worth2) => TOWNS.ranks.filter((x) => worth2 >= x).length;
+  function signsOf(g2, r) {
+    const out = [];
+    if (r.fac > 0) out.push("factory");
+    if (r.port) out.push("harbour");
+    if (r.oil) out.push("oil");
+    if (r.fort) out.push("fort");
+    if (yardLevel(g2, r) > 0) out.push("yard");
+    if (workLevel(g2, "field", r.id) > 0) out.push("airfield");
+    return out;
+  }
+  function townAt(g2, region) {
+    const r = g2.regions[region];
+    if (!r) return null;
+    const size = townSize(g2, r);
+    const [x, y] = townSite(region);
+    const worth2 = worthOf(g2, r);
+    return {
+      region,
+      name: townName(r),
+      province: r.name,
+      size,
+      sizeWord: TOWNS.words[size],
+      x,
+      y,
+      owner: r.owner,
+      holder: r.ctrl,
+      worth: worth2,
+      rank: rankOf3(worth2),
+      signs: signsOf(g2, r),
+      factories: r.fac,
+      vp: r.vp
+    };
+  }
+  var townsOf = (g2) => g2.regions.map((r) => townAt(g2, r.id));
+  var listed2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var plural4 = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+  function prizeOf(g2, region, nat = g2.human) {
+    const r = g2.regions[region];
+    if (!r || !nat || !g2.nations[nat]) return null;
+    const owner = g2.nations[r.owner], holder = g2.nations[r.ctrl];
+    const mine2 = r.ctrl === nat;
+    const friendly2 = !mine2 && allied(g2, nat, r.ctrl);
+    let frees = null;
+    if (!mine2 && !friendly2) {
+      for (const X of Object.values(g2.nations)) {
+        if (X.alive || X.capital !== r.id || X.id === nat) continue;
+        if (!whyNoReturn(g2, X.id) && !whyNotFreedBy(g2, X.id, nat, true)) frees = X.id;
+      }
+    }
+    const restored = !mine2 && !friendly2 && (frees !== null || r.owner !== nat && owner.alive && allied(g2, nat, r.owner));
+    const kind = mine2 ? "yours" : friendly2 ? "ally" : restored ? "restored" : "taken";
+    const to = kind === "restored" ? frees ?? r.owner : kind === "ally" ? r.ctrl : nat;
+    const scale = BUDGET.scale;
+    const income2 = Math.round(provinceYield(g2, r, to === nat ? nat : to).total * scale);
+    const incomeNow = Math.round(provinceYield(g2, r, r.ctrl).total * scale);
+    const oil = resRules(g2) ? fieldYield(g2, r, to) : 0, oilNow = resRules(g2) ? fieldYield(g2, r, r.ctrl) : 0;
+    const factories = workingFactories(g2, r);
+    const yard = yardLevel(g2, r), airfield = workLevel(g2, "field", r.id), fort = r.fort?.lv ?? 0;
+    const capitalOf = r.cap && owner.capital === r.id && owner.alive ? r.owner : null;
+    const rails = g2.flags.open === 1 ? railsAt(r.id).length : 0;
+    let vpAll = 0;
+    for (const x of g2.regions) if (x.owner === r.owner && !x.overseas) vpAll += x.vp;
+    const town = townName(r);
+    const items = [];
+    const whose = to === nat ? "your treasury" : `${theName(g2.nations[to])}'s treasury`;
+    if (budgeted(g2) || factories) {
+      const y = provinceYield(g2, r, to);
+      const parts = [
+        y.land ? `land ${Math.round(y.land * scale)}` : "",
+        y.port ? `harbour ${Math.round(y.port * scale)}` : "",
+        y.oil ? `oilfield ${Math.round(y.oil * scale)}` : "",
+        y.fac ? `${plural4(factories, "factory", "factories")} ${Math.round(y.fac * scale)}` : "",
+        y.capital ? `seat of government ${Math.round(y.capital * scale)}` : ""
+      ].filter(Boolean);
+      items.push({ key: "income", label: "Money", text: `${income2} a month to ${whose}${parts.length ? ` (${parts.join(", ")})` : ""}${to !== r.owner ? ". Conquered ground pays less than it pays its own country" : ""}` });
+    }
+    if (r.fac > 0) items.push({ key: "factory", label: "Industry", text: `${plural4(r.fac, "factory", "factories")}${factories < r.fac ? `, ${r.fac - factories} wrecked by bombing` : ""}${to !== r.owner ? ". Working for a conqueror they turn out less, and heavy equipment can only be built at home" : ""}` });
+    if (r.oil) items.push({ key: "oil", label: "Oil", text: resRules(g2) ? `An oilfield: ${Math.round(oil * 10) / 10} a month to ${to === nat ? "your" : `${g2.nations[to].adj}`} depots${to !== r.owner ? ", less than its owner draws" : ""}` : "An oilfield" });
+    if (r.port) items.push({ key: "harbour", label: "Harbour", text: yard > 0 ? `A harbour with a shipyard of level ${yard}: a base for fleets, and a port for supply and for landings` : "A harbour: a base for fleets, and a port for supply and for landings" });
+    if (airfield > 0) items.push({ key: "airfield", label: "Airfield", text: `An airfield of level ${airfield} to fly from` });
+    if (rails >= 3) items.push({ key: "rail", label: "Railway", text: `A junction where ${rails} lines meet` });
+    if (r.vp > 0 && !r.overseas) items.push({ key: "vp", label: "Victory points", text: `${r.vp} of ${theName(owner)}'s ${vpAll}: a country that has lost its capital and enough of these gives up the war` });
+    if (capitalOf && capitalOf !== nat && !allied(g2, nat, capitalOf)) items.push({ key: "capital", label: "Capital", text: `The capital of ${theName(owner)}. Its fall may knock ${owner.name} out of the war, and shakes the morale of every corps it has` });
+    if (frees) items.push({ key: "frees", label: "Liberation", text: `The capital of ${theName(g2.nations[frees])}, which has fallen. Take it and ${g2.nations[frees].name} returns to the war on your side` });
+    if (fort > 0 && !mine2 && !friendly2) items.push({ key: "fort", label: "Fortress", text: `Works of level ${fort} stand in the way` });
+    const gains = [
+      factories ? plural4(factories, "factory", "factories") : "",
+      r.oil ? "an oilfield" : "",
+      r.port ? yard > 0 ? "a harbour and shipyard" : "a harbour" : "",
+      r.vp > 0 && !r.overseas ? `${plural4(r.vp, "victory point")} of ${theName(owner)}'s ${vpAll}` : ""
+    ].filter(Boolean);
+    const tail = gains.length ? `: ${listed2(gains)}` : "";
+    const line = kind === "yours" ? `${town} pays ${income2} a month into your treasury${tail}.` : kind === "ally" ? `${town} is held by ${theName(holder)}, your ally, and pays ${incomeNow} a month into its treasury${tail}.` : frees ? `Taking ${town} frees ${g2.nations[frees].name}, which returns to the war on your side and takes its capital back. ${theName(holder, true)} loses ${incomeNow} a month${tail}.` : kind === "restored" ? `Taking ${town} gives it back to ${theName(owner)}, your ally, and takes ${incomeNow} a month from ${theName(holder)}${tail}.` : `Taking ${town} is worth ${income2} a month to you and costs ${theName(holder)} ${incomeNow}${tail}.${capitalOf && atWar(g2, nat, capitalOf) ? ` It is ${theName(owner)}'s capital.` : ""}`;
+    return { region, town, nat, kind, to, income: income2, incomeNow, factories, oil, oilNow, harbour: r.port, yard, airfield, fort, vp: r.vp, capitalOf, frees, rails, items, line };
+  }
+
   // ../../src/campaign/turn.ts
   var current = (g2) => g2.order[g2.phase];
   function closePhase(g2, nat) {
@@ -14108,6 +14431,9 @@
     return g2.human && !g2.nations[g2.human].alive ? standDown(g2) : null;
   }
   var corpsDetail = (g2, c) => corpsCard(g2, c);
+  var towns = (g2) => townsOf(g2);
+  var townIn = (g2, region) => townAt(g2, region);
+  var prize = (g2, region) => prizeOf(g2, region, g2.human);
   var myGeneral = (g2, id) => {
     const gen = g2.generals[id];
     return gen && gen.nat === g2.human && current(g2) === gen.nat ? gen : null;
@@ -15395,6 +15721,8 @@
     if (!a) return null;
     return {
       region: to,
+      // What taking the place is worth, in a sentence, for the screen that asks whether to attack.
+      prize: prize(s, to)?.line ?? "",
       attack: a.A,
       defence: a.D,
       odds: a.odds,
@@ -15577,6 +15905,15 @@
       id: r.id,
       name: r.name,
       home,
+      // The chief town of the province, and what the player gets for taking the place (or has from holding it).
+      town: (() => {
+        const t = townIn(s, r.id);
+        return t ? { name: t.name, size: t.sizeWord, worth: t.worth, rank: t.rank } : null;
+      })(),
+      prize: (() => {
+        const z = prize(s, r.id);
+        return z ? { kind: z.kind, line: z.line, items: z.items.map((i) => `${i.label}: ${i.text}`) } : null;
+      })(),
       // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.
       fallenNote: fallenCapitalAt(s, r.id)?.note ?? "",
       industry: r.fac,
@@ -15758,6 +16095,10 @@
     else if (what === "air") ok = orderAir(s, Number(id), a, Number(b));
     else if (what === "airbase") ok = orderAirBase(s, Number(id), Number(a));
     return { ok, note: ok ? "The order is given." : "That order cannot be given now.", view: view() };
+  }
+  function townsList() {
+    const s = game();
+    return { towns: towns(s).map((t) => ({ region: t.region, name: t.name, province: t.province, size: t.size, worth: t.worth, rank: t.rank, signs: t.signs })) };
   }
   function land() {
     const s = game();
@@ -16706,6 +17047,7 @@ ${standing2}`,
   }
   globalThis.TC = {
     raidsFlown,
+    towns: townsList,
     land,
     work,
     force,

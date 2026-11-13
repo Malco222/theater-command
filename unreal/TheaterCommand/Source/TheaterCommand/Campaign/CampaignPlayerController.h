@@ -25,6 +25,9 @@ struct FRegionPanelInfo
 	FText DiplomacyLine;
 	// What the player can do here, on home ground: raise corps, build works, and what is already forming.
 	FText Holdings;
+	FText Prize; // what taking the place is worth, or what holding it pays, in a sentence
+	FText PrizeTip; // and in detail
+	bool bPrizeToTake = false; // it is not the player's yet
 	FText ProvinceNote;
 	TArray<FProvinceOption> Options;
 	/** The heading over those: "PROVINCE", or "ORDERS" for a fleet or an air fleet. */
@@ -198,6 +201,7 @@ struct FFaceOff
 	FText TheirUnits;
 	float Balance = 0.5f; // the attackers' share of the strength on the field
 	FText OddsLine;
+	FText Prize; // what taking the place is worth
 	FText Ticket;
 	FText ResultTitle;
 	FText ResultDetail;
@@ -412,6 +416,9 @@ public:
 	void NextNewsCard();
 	void EndNewsreel();
 	void ToggleNewsreels();
+	/** The wealth view of the map: provinces tinted by what they pay (Y). */
+	void ToggleWealth();
+	bool IsWealthShown() const;
 	/** What winning means: the campaign's objectives, each thing they ask for ticked or not (O). */
 	void OpenGoals();
 	/** What every nation did last month, each with a way to go and look (R). */

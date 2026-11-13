@@ -334,6 +334,7 @@ struct FAttackPreview
 	float Attack = 0.0f;
 	float Defence = 0.0f;
 	float Odds = 0.0f;
+	FString Prize; // what taking the place is worth, in a sentence
 	TArray<FTicketLine> Lines;
 	TArray<FBattleUnit> Attackers;
 	TArray<FBattleUnit> Defenders;
@@ -810,6 +811,17 @@ struct FLandFeatures
 	TArray<int32> Steep;
 };
 
+/** A province's chief town as the rules know it: its name, what the province pays a month, and how that ranks. */
+struct FTownInfo
+{
+	int32 Region = INDEX_NONE;
+	FString Name; // "Essen"
+	FString Province; // "Ruhr"
+	FString Size; // capital, city, town or village
+	int32 Worth = 0; // money a month to its own country
+	int32 Rank = 0; // 0 to 5
+};
+
 struct FProvinceInfo
 {
 	bool bValid = false;
@@ -817,6 +829,11 @@ struct FProvinceInfo
 	bool bHome = false;
 	FString Holdings; // industry, works, harbour, in a line
 	FString Yield; // what the province gives each month, in a line
+	FString Town, TownSize; // its chief town, and what kind of place that is
+	int32 TownWorth = 0;
+	FString PrizeKind; // yours, ally, taken or restored
+	FString PrizeLine; // what taking it is worth (or what holding it pays), in a sentence
+	TArray<FString> PrizeItems; // and in detail, a line each
 	FString Note;
 	TArray<FProvinceOption> Options;
 	TArray<FOrderLine> Forming;
