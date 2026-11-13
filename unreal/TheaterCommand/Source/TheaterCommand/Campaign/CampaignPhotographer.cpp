@@ -329,6 +329,26 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		// A fleet picked up like an army: its ships as cards, the seas it can reach ringed; and then sent to one.
 		Add(TEXT("34d-fleet-in-hand"), TEXT("@capital"), 0.5f).bFleet = true;
 		Add(TEXT("34e-fleet-in-hand-wide"), TEXT("@capital"), 0.8f).bFleet = true;
+		if (GrandNation == TEXT("UK"))
+		{
+			// The navy as pieces: the fleet's room of orders, the question before a coast is shelled, and the shelling.
+			{
+				FShot& Shot = Add(TEXT("34g-fleet-orders-room"), TEXT("@capital"), 0.5f);
+				Shot.bFleet = true;
+				Shot.FleetDo = TEXT("orders");
+			}
+			{
+				FShot& Shot = Add(TEXT("34h-shell-question"), TEXT("@capital"), 0.5f);
+				Shot.bFleet = true;
+				Shot.FleetDo = TEXT("shell");
+			}
+			{
+				FShot& Shot = Add(TEXT("34i-coast-shelled"), TEXT("@capital"), 0.5f);
+				Shot.bFleet = true;
+				Shot.FleetDo = TEXT("fire");
+				Shot.Wait = 1.2f;
+			}
+		}
 		{
 			FShot& Shot = Add(TEXT("34f-fleet-sent"), TEXT("@capital"), 0.6f);
 			Shot.bFleet = true;
@@ -732,6 +752,24 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			}
 			const FVector2D Spot = Table->FleetPlace(Id);
 			Eye->GoTo(Table->MapToWorld(Spot.X, Spot.Y), Shot.Zoom, true);
+			if (Shot.FleetDo == TEXT("orders"))
+			{
+				Controller->OpenFleetOrders();
+			}
+			else if (!Shot.FleetDo.IsEmpty() && Controller->GetFleetHand().Coasts.Num() > 0)
+			{
+				// The first coast its guns can reach: the question, and then (for "fire") the shelling itself.
+				const int32 Coast = Controller->GetFleetHand().Coasts[0];
+				Controller->OpenPage(FString::Printf(TEXT("shell:%d:%d"), Id, Coast));
+				if (Shot.FleetDo == TEXT("fire"))
+				{
+					const FOfficePage& Asked = Controller->GetPage();
+					if (Asked.Sections.Num() > 0 && Asked.Sections[0].Rows.Num() > 0 && Asked.Sections[0].Rows[0].Buttons.Num() > 0)
+					{
+						Controller->PressPage(Asked.Sections[0].Rows[0].Buttons[0].Act);
+					}
+				}
+			}
 		}
 	}
 	if (!Shot.Force.IsEmpty())

@@ -652,7 +652,12 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	}
 	FString Note, Next;
 	TArray<FSortie> Sorties;
-	const bool bOk = Session->Act(Action, SelectedRegion, Note, &Sorties, &Next);
+	FActExtras Extras;
+	const bool bOk = Session->Act(Action, SelectedRegion, Note, &Sorties, &Next, &Extras);
+	if (bOk && Extras.Joined != INDEX_NONE && FleetInHand != INDEX_NONE)
+	{
+		FleetInHand = Extras.Joined; // the fleet in hand is part of another now: that one is in hand
+	}
 	CampaignSounds::Play(this, bOk ? TEXT("stamp") : TEXT("click"), 0.6f);
 	if (bOk)
 	{
@@ -663,6 +668,21 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	if (!Note.IsEmpty())
 	{
 		Notify(Note, Sorties.Num() > 0 ? 12.0 : 8.0);
+	}
+	if (bOk && Extras.Shell != INDEX_NONE && Map.IsValid() && Map->GetData().Regions.IsValidIndex(Extras.Shell))
+	{
+		// The fleet stands in and opens fire: the room is put away, and the shells are seen to fall on the coast.
+		Map->AddBattleSmoke(Extras.Shell);
+		CampaignSounds::Play(this, TEXT("ship_guns"), 0.6f);
+		CampaignSounds::PlayLater(this, TEXT("explosion"), 0.9f, 0.4f);
+		BattleMusicUntil = FPlatformTime::Seconds() + 8.0;
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			const FVector2D At = Map->GetData().Regions[Extras.Shell].Center;
+			Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Clamp(Eye->GetZoom(), 0.3f, 0.45f));
+		}
+		ClosePage();
+		return;
 	}
 	if (bOk && Sorties.Num() > 0 && Map.IsValid())
 	{
@@ -1324,7 +1344,10 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("REST is spent by marching and fighting. A corps that neither moves nor fights for a whole month rests: it takes replacements half as fast again, and its morale and rest rise. Point at the bars to read why they stand where they do."));
 	Add(TEXT("FLEETS"),
 		TEXT("A fleet is picked up like an army: click its flag, and its ships are dealt as cards. The seas it can reach this month are ringed in brass. Right-click a ringed sea to send it there, or its own harbour to bring it home. ")
-		TEXT("PATROL seeks out the enemy's warships and guards your convoys; RAID SHIPPING goes for merchant ships and keeps clear of a fight. ")
+		TEXT("PATROL seeks out the enemy's warships and guards your convoys; RAID SHIPPING goes for merchant ships and keeps clear of a fight; HUNT SUBMARINES sweeps a sea with the fleet's destroyers. ")
+		TEXT("In the grand campaign a fleet with heavy guns can shell an enemy coast: the coasts it can reach turn red, and a right-click on one shows what the guns would do to the troops there or to the city before you give the word. ")
+		TEXT("ORDERS opens everything else: every sea in reach with the enemy known there, the shipping lanes it could escort and what that would save, and the way to split ships off as a squadron of their own or join another fleet. ")
+		TEXT("Heavy ships want destroyers round them: a thinly screened fleet risks a torpedo. ")
 		TEXT("A corps in a port can go BY SEA to a friendly port or land on an enemy coast. Before a landing the game tells you what it will meet, and asks."));
 	Add(TEXT("THE AIR WAR"),
 		TEXT("Aircraft belong to airfields, which stand on the map: a landing ground, an airfield, an air base. Click an airfield to open it and see the air groups based there. ")
@@ -2116,6 +2139,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			{
 				FleetToHarbour();
 			}
+			else if (Held && FleetHand.bGrand && !FleetHand.bShelled && FleetHand.Coasts.Contains(PointedRegion))
+			{
+				// An enemy coast its guns can reach: the question is put first, with what the shelling would do.
+				OpenPage(FString::Printf(TEXT("shell:%d:%d"), FleetInHand, PointedRegion));
+			}
 			else if (Held && Held->Bases.Contains(PointedRegion))
 			{
 				FleetToNewBase(PointedRegion);
@@ -2345,6 +2373,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				{
 					Line += FString::Printf(TEXT("\nRight-click: %s returns to harbour here."), *Held->Name);
 				}
+				else if (Held && FleetHand.bGrand && !FleetHand.bShelled && FleetHand.Coasts.Contains(TipRegion))
+				{
+					Line += FString::Printf(TEXT("\nRight-click: %s stands in to shell this coast. You are shown what it would do first."), *Held->Name);
+				}
 				else if (Held && Held->Bases.Contains(TipRegion))
 				{
 					Line += FString::Printf(TEXT("\nRight-click: %s makes this its home port, and lies in harbour for the month."), *Held->Name);
@@ -2368,8 +2400,28 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			if (Held && Map->GetData().Seas.IsValidIndex(Sea))
 			{
 				const FString& Name = Map->GetData().Seas[Sea].Name;
+				// What is known of the enemy there, and what a patrol would come to.
+				FString Known;
+				if (const FFleetSea* There = FleetHand.Seas.FindByPredicate([Sea](const FFleetSea& Each) { return Each.Zone == Sea; }))
+				{
+					Known = There->Surface > 0 || There->Subs > 0
+						? FString::Printf(TEXT("\nEnemy there: %d surface warship%s, %d submarine%s."), There->Surface, There->Surface == 1 ? TEXT("") : TEXT("s"), There->Subs, There->Subs == 1 ? TEXT("") : TEXT("s"))
+						: FString(TEXT("\nNo enemy ships are known there."));
+					if (There->Meet == TEXT("shy"))
+					{
+						Known += TEXT(" Too strong for a patrol to face.");
+					}
+					if (There->Subs > 0 && There->Hunt > 0.005f)
+					{
+						Known += FString::Printf(TEXT(" Hunting would sink about %d%% of the submarines."), FMath::RoundToInt32(There->Hunt * 100.0f));
+					}
+					if (There->Torpedo >= 0.01f)
+					{
+						Known += FString::Printf(TEXT(" Torpedo risk to a heavy ship: %d%%."), FMath::RoundToInt32(There->Torpedo * 100.0f));
+					}
+				}
 				HoverTip = FText::FromString(Held->Reach.Contains(Sea)
-					? FString::Printf(TEXT("%s\nRight-click: %s sails here to %s."), *Name, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : TEXT("patrol"))
+					? FString::Printf(TEXT("%s%s\nRight-click: %s sails here to %s."), *Name, *Known, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : FleetNext == TEXT("hunt") ? TEXT("hunt submarines") : TEXT("patrol"))
 					: FString::Printf(TEXT("%s\nToo far for %s this month."), *Name, *Held->Name));
 			}
 			else if (TipRegion == INDEX_NONE)
@@ -2601,7 +2653,7 @@ bool ACampaignPlayerController::PickUpFleet(int32 FleetId)
 	RegionPanel.Revision = ++PanelRevision;
 	FleetInHand = FleetId;
 	AdviserSaw(3);
-	FleetNext = Fleet->Stance == TEXT("raid") ? TEXT("raid") : TEXT("patrol");
+	FleetNext = Fleet->Stance == TEXT("raid") ? TEXT("raid") : Fleet->Stance == TEXT("hunt") ? TEXT("hunt") : TEXT("patrol");
 	FleetHoverSea = INDEX_NONE;
 	CampaignSounds::Play(this, TEXT("ship_horn"), 0.35f);
 	RefreshOrders();
@@ -2633,21 +2685,33 @@ void ACampaignPlayerController::LayOutFleet()
 	const FCampaignNation* Nation = Map->GetData().FindNation(View.Human);
 	const TArray<FCampaignSeaZone>& Seas = Map->GetData().Seas;
 	const FString Sea = Seas.IsValidIndex(Fleet->Zone) ? Seas[Fleet->Zone].Name : FString(TEXT("the sea"));
-	const FString Doing = Fleet->Stance == TEXT("port") ? FString::Printf(TEXT("In harbour at %s"), *Fleet->Port)
+	// The fleet as the rules describe it: what it is doing, who commands, the seas and coasts in its reach.
+	FleetHand = Session->FleetInHand(FleetInHand);
+	const FString Doing = FleetHand.bValid && !FleetHand.Doing.IsEmpty() ? FleetHand.Doing
+		: Fleet->Stance == TEXT("port") ? FString::Printf(TEXT("In harbour at %s"), *Fleet->Port)
 		: Fleet->Stance == TEXT("raid") ? FString::Printf(TEXT("Raiding shipping: %s"), *Sea) : FString::Printf(TEXT("On patrol: %s"), *Sea);
 	Tray.bVisible = true;
 	Tray.bFleet = true;
+	Tray.bFleetGrand = FleetHand.bValid && FleetHand.bGrand;
 	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
 	Tray.Tag = View.Human;
 	Tray.Title = FText::FromString(Fleet->Name);
-	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d ship%s  \u00B7  can reach %d sea%s this month"), *Doing, Fleet->Ships(), Fleet->Ships() == 1 ? TEXT("") : TEXT("s"), Fleet->Reach.Num(), Fleet->Reach.Num() == 1 ? TEXT("") : TEXT("s")));
+	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d ship%s%s  \u00B7  can reach %d sea%s"), *Doing, Fleet->Ships(), Fleet->Ships() == 1 ? TEXT("") : TEXT("s"),
+		FleetHand.Admiral.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("  \u00B7  %s"), *FleetHand.Admiral), Fleet->Reach.Num(), Fleet->Reach.Num() == 1 ? TEXT("") : TEXT("s")));
+	Tray.FleetWarning = FText::FromString(FleetHand.bShelled ? FString(TEXT("Its guns have spoken this month.")) : FleetHand.Screen);
 	Tray.FleetStance = Fleet->Stance;
+	if (FleetNext == TEXT("hunt") && !Tray.bFleetGrand)
+	{
+		FleetNext = TEXT("patrol");
+	}
 	Tray.FleetNext = FleetNext;
 	Tray.PendingButton = FText::GetEmpty();
-	Tray.Hint = FText::FromString(View.bHumanUp
-		? TEXT("Right-click a ringed sea to send the fleet there, a port tinted blue to make it the fleet's new home, or its own harbour to bring it in. Esc lets it go.")
-		: TEXT("It is not your month."));
-	// The friendly ports it could move to are tinted, as the ground an army can reach by rail is.
+	Tray.Hint = FText::FromString(!View.bHumanUp ? TEXT("It is not your month.")
+		: Tray.bFleetGrand && FleetHand.Coasts.Num() > 0
+		? TEXT("Right-click a ringed sea to send it there, a coast in red to shell it, a port in blue to make it the fleet's home, or its own harbour to bring it in. ORDERS has the rest. Esc lets it go.")
+		: TEXT("Right-click a ringed sea to send the fleet there, a port tinted blue to make it the fleet's new home, or its own harbour to bring it in. Esc lets it go."));
+	// The friendly ports it could move to are tinted, as the ground an army can reach by rail is; and the enemy
+	// coasts its guns could reach are red, as ground an army could attack is.
 	{
 		TArray<FReachRegion> Ports;
 		for (int32 PortRegion : Fleet->Bases)
@@ -2657,17 +2721,28 @@ void ACampaignPlayerController::LayOutFleet()
 			Entry.Previous = Fleet->Base;
 			Ports.Add(Entry);
 		}
+		if (!FleetHand.bShelled)
+		{
+			for (int32 Coast : FleetHand.Coasts)
+			{
+				FReachRegion Entry;
+				Entry.Region = Coast;
+				Entry.Previous = Fleet->Base;
+				Entry.bAttack = true;
+				Ports.Add(Entry);
+			}
+		}
 		Map->SetReach(View.bHumanUp ? Ports : TArray<FReachRegion>(), true);
 	}
 
 	// A card for each ship. A great fleet has too many destroyers to show one by one: those are dealt in flotillas.
-	struct FClass { int32 Count; const TCHAR* Model; const TCHAR* One; const TCHAR* Many; const TCHAR* Role; bool bCapital; };
+	struct FClass { int32 Count; const TCHAR* Key; const TCHAR* Model; const TCHAR* One; const TCHAR* Many; const TCHAR* Role; const TCHAR* Brief; bool bCapital; };
 	const FClass Classes[] = {
-		{ Fleet->Battleships, TEXT("Battleship"), TEXT("Battleship"), TEXT("battleships"), TEXT("The line of battle: its guns decide who holds a sea."), true },
-		{ Fleet->Carriers, TEXT("Carrier"), TEXT("Aircraft carrier"), TEXT("carriers"), TEXT("Its aircraft strike before the guns are in range."), true },
-		{ Fleet->Cruisers, TEXT("Cruiser"), TEXT("Cruiser"), TEXT("cruisers"), TEXT("Scouts for the fleet, guards convoys and raids shipping."), false },
-		{ Fleet->Destroyers, TEXT("Destroyer"), TEXT("Destroyer"), TEXT("destroyers"), TEXT("Screens the fleet, escorts convoys and hunts submarines."), false },
-		{ Fleet->Submarines, TEXT("Submarine"), TEXT("Submarine"), TEXT("submarines"), TEXT("Sinks merchant ships, and slips away from the fleet."), false },
+		{ Fleet->Battleships, TEXT("bb"), TEXT("Battleship"), TEXT("Battleship"), TEXT("battleships"), TEXT("The line of battle: its guns decide who holds a sea."), TEXT("Fleet action"), true },
+		{ Fleet->Carriers, TEXT("cv"), TEXT("Carrier"), TEXT("Aircraft carrier"), TEXT("carriers"), TEXT("Its aircraft strike before the guns are in range."), TEXT("Aircraft"), true },
+		{ Fleet->Cruisers, TEXT("ca"), TEXT("Cruiser"), TEXT("Cruiser"), TEXT("cruisers"), TEXT("Scouts for the fleet, guards convoys and raids shipping."), TEXT("Scout and raider"), false },
+		{ Fleet->Destroyers, TEXT("dd"), TEXT("Destroyer"), TEXT("Destroyer"), TEXT("destroyers"), TEXT("Screens the fleet, escorts convoys and hunts submarines."), TEXT("Screen and escort"), false },
+		{ Fleet->Submarines, TEXT("ss"), TEXT("Submarine"), TEXT("Submarine"), TEXT("submarines"), TEXT("Sinks merchant ships, and slips away from the fleet."), TEXT("Commerce raider"), false },
 	};
 	const bool bAll = Fleet->Ships() <= 14;
 	for (const FClass& Class : Classes)
@@ -2676,6 +2751,10 @@ void ACampaignPlayerController::LayOutFleet()
 		{
 			continue;
 		}
+		// What the class is for, in the rules' own words where they give them.
+		const FFleetShipClass* Told = FleetHand.Classes.FindByPredicate([&Class](const FFleetShipClass& Each) { return Each.Class == Class.Key; });
+		const FString Role = Told && !Told->Role.IsEmpty() ? Told->Role + (Told->Lost > 0 ? FString::Printf(TEXT(" %d lost since the war began."), Told->Lost) : FString()) : FString(Class.Role);
+		const FString Brief = Told && !Told->Brief.IsEmpty() ? Told->Brief : FString(Class.Brief);
 		const int32 CardCount = bAll ? Class.Count : FMath::Min(Class.Count, Class.bCapital ? 4 : 2);
 		for (int32 Index = 0; Index < CardCount; ++Index)
 		{
@@ -2683,7 +2762,8 @@ void ACampaignPlayerController::LayOutFleet()
 			Card.Model = FString::Printf(TEXT("%s:%s"), Class.Model, *View.Human);
 			Card.Count = Class.Count / CardCount + (Index < Class.Count % CardCount ? 1 : 0);
 			Card.Name = FText::FromString(Card.Count == 1 ? FString(Class.One) : FString::Printf(TEXT("%d %s"), Card.Count, Class.Many));
-			Card.Role = FText::FromString(Class.Role);
+			Card.Role = FText::FromString(Role);
+			Card.Brief = FText::FromString(Brief);
 		}
 	}
 	if (Tray.Ships.Num() > 0)
@@ -2692,6 +2772,14 @@ void ACampaignPlayerController::LayOutFleet()
 		ShowShipModel(Tray.Ships[0].Model, Tray.Ships[0].Name);
 	}
 	Map->ShowSeaReach(View.bHumanUp ? Fleet->Reach : TArray<int32>(), FleetHoverSea, Fleet->Id);
+}
+
+void ACampaignPlayerController::OpenFleetOrders()
+{
+	if (FleetInHand != INDEX_NONE)
+	{
+		OpenPage(FString::Printf(TEXT("fleet:%d"), FleetInHand));
+	}
 }
 
 void ACampaignPlayerController::ShowShipModel(const FString& Model, const FText& Name)
@@ -2729,7 +2817,7 @@ void ACampaignPlayerController::OrderFleetTo(int32 Zone)
 		CampaignSounds::Play(this, TEXT("ship_horn"), 0.45f);
 		ShowWar(Session->GetView(), TArray<FCorpsMove>());
 		RefreshOrders();
-		Notify(FString::Printf(TEXT("%s sails for the %s, to %s."), *Name, *Sea, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : TEXT("patrol")), 5.0);
+		Notify(FString::Printf(TEXT("%s sails for the %s, to %s."), *Name, *Sea, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : FleetNext == TEXT("hunt") ? TEXT("hunt submarines") : TEXT("patrol")), 5.0);
 	}
 	else
 	{
@@ -2744,7 +2832,7 @@ void ACampaignPlayerController::SetFleetStance(const FString& Stance)
 	{
 		return;
 	}
-	FleetNext = Stance == TEXT("raid") ? TEXT("raid") : TEXT("patrol");
+	FleetNext = Stance == TEXT("raid") ? TEXT("raid") : Stance == TEXT("hunt") ? TEXT("hunt") : TEXT("patrol");
 	const FViewFleet* Fleet = Session->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	if (Fleet && Fleet->Stance != TEXT("port") && Fleet->Stance != FleetNext)
@@ -2755,7 +2843,8 @@ void ACampaignPlayerController::SetFleetStance(const FString& Stance)
 		if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:%s"), FleetInHand, Fleet->Zone, *FleetNext), Note))
 		{
 			ShowWar(Session->GetView(), TArray<FCorpsMove>());
-			Notify(FString::Printf(TEXT("%s: %s."), *Name, FleetNext == TEXT("raid") ? TEXT("raiding merchant shipping, and keeping clear of the enemy fleet") : TEXT("on patrol, seeking the enemy's warships and guarding the convoys")), 5.0);
+			Notify(FString::Printf(TEXT("%s: %s."), *Name, FleetNext == TEXT("raid") ? TEXT("raiding merchant shipping, and keeping clear of the enemy fleet")
+				: FleetNext == TEXT("hunt") ? TEXT("hunting submarines with its destroyers") : TEXT("on patrol, seeking the enemy's warships and guarding the convoys")), 5.0);
 		}
 	}
 	RefreshOrders();
@@ -3901,6 +3990,16 @@ void ACampaignPlayerController::WatchNextStep()
 	if (Step.Battles.Num() > 0 || Step.Raids.Num() > 0 || Step.SeaFights.Num() > 0)
 	{
 		BattleMusicUntil = FPlatformTime::Seconds() + (Step.bMine ? 9.0 : 5.0);
+	}
+	// A coast shelled from the sea smokes, and the guns are heard.
+	for (int32 Coast : Step.Shelled)
+	{
+		Map->AddBattleSmoke(Coast);
+	}
+	if (Step.Shelled.Num() > 0)
+	{
+		CampaignSounds::Play(this, TEXT("ship_guns"), Step.bMine ? 0.5f : 0.3f);
+		BattleMusicUntil = FPlatformTime::Seconds() + (Step.bMine ? 8.0 : 4.0);
 	}
 	// Where fleets fought, the guns are seen and heard over the water.
 	for (int32 Zone : Step.SeaFights)

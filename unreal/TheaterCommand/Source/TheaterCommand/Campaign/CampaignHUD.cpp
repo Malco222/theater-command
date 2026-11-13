@@ -2130,13 +2130,23 @@ namespace
 							OrderButton(TEXT("PATROL"), Army.FleetNext == TEXT("patrol"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("patrol")); } })
 						]
 					];
-					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
+					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, Army.bFleetGrand ? 5.0f : 22.0f, 0.0f)
 					[
 						SNew(SBox).ToolTipText(FText::FromString(TEXT("Goes for merchant ships and keeps clear of a fight with the enemy fleet.")))
 						[
 							OrderButton(TEXT("RAID SHIPPING"), Army.FleetNext == TEXT("raid"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("raid")); } })
 						]
 					];
+					if (Army.bFleetGrand)
+					{
+						TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
+						[
+							SNew(SBox).ToolTipText(FText::FromString(TEXT("Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks. The pointer over a sea says what hunting there would do.")))
+							[
+								OrderButton(TEXT("HUNT SUBMARINES"), Army.FleetNext == TEXT("hunt"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("hunt")); } })
+							]
+						];
+					}
 					TrayOrders->AddSlot().AutoWidth()
 					[
 						SNew(SBox).ToolTipText(FText::FromString(TEXT("Safe from the enemy fleet, and takes no part at sea.")))
@@ -2144,6 +2154,25 @@ namespace
 							OrderButton(TEXT("RETURN TO HARBOUR"), Army.FleetStance == TEXT("port"), [this]() { if (Controller.IsValid()) { Controller->FleetToHarbour(); } })
 						]
 					];
+					if (Army.bFleetGrand)
+					{
+						TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(TEXT("Everything this fleet could be told to do: every sea in reach with the enemy known there, shipping lanes to escort, coasts to shell, and splitting ships off or joining another fleet.")))
+							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFleetOrders(); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(TEXT("ORDERS: ESCORT, SHELL, SPLIT"))).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+							]
+						];
+					}
+					if (!Army.FleetWarning.IsEmpty())
+					{
+						TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Army.FleetWarning).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Alarm)
+						];
+					}
 					TrayOrders->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
 					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 8.0f, 0.0f)
 					[
@@ -2197,6 +2226,14 @@ namespace
 								+ SVerticalBox::Slot().AutoHeight().Padding(1.0f, 5.0f, 0.0f, 0.0f)
 								[
 									SNew(STextBlock).Text(Ship.Name).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(Cream)
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(1.0f, 1.0f, 0.0f, 0.0f)
+								[
+									// What the class is for, in three words.
+									SNew(SBox).WidthOverride(82.0f)
+									[
+										SNew(STextBlock).Text(Ship.Brief).Font(Font(TEXT("Regular"), 8)).ColorAndOpacity(Muted).AutoWrapText(true)
+									]
 								]
 							]
 						];

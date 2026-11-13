@@ -64,7 +64,8 @@ private:
 	bool bAdviser = false; // the adviser's first steps on the screen
 	bool bNewsreel = false; // show a newsreel story over the map
 	bool bFleet = false; // pick up the player's largest fleet, as an army is picked up
-	bool bFleetSails = false; // and send it to the farthest sea it can reach
+	bool bFleetSails = false;
+	FString FleetDo; // with the fleet in hand: "orders" opens its room, "shell" asks about shelling the first coast in reach, "fire" shells it // and send it to the farthest sea it can reach
 	bool bGenerals = false; // open the generals' list, and give the first corps without one the man who suits it
 	bool bResearch = false; // open the design offices, and put a second team on armour
 	FString Path; // in the foreign office: press this path ("found:DEN" names the partner)

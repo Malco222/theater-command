@@ -69,6 +69,7 @@ struct FShipCard
 	FString Model; // "Battleship:UK"
 	FText Name; // "Battleship"
 	FText Role; // what it is for, in a line
+	FText Brief; // and in three words, for the face of the card
 	int32 Count = 1; // how many ships this card stands for, when the fleet has too many to show each
 };
 
@@ -102,7 +103,9 @@ struct FArmyTray
 	bool bFleet = false; // it is a fleet in hand, not an army: its ships are the cards
 	TArray<FShipCard> Ships;
 	FString FleetStance; // patrol, raid or port: what the fleet is doing now
-	FString FleetNext; // patrol or raid: what it will do in the sea it is sent to next
+	FString FleetNext; // patrol, raid or hunt: what it will do in the sea it is sent to next
+	bool bFleetGrand = false; // the navy as pieces: it can hunt, escort, shell, split and join
+	FText FleetWarning; // its heavy ships are thinly screened, or its guns have spoken
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
 	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast
@@ -422,6 +425,9 @@ public:
 	/** What the fleet in hand does where it is sent: "patrol" or "raid". Changes what it is doing now if it is at sea. */
 	void SetFleetStance(const FString& Stance);
 	void FleetToHarbour();
+	const FFleetHand& GetFleetHand() const { return FleetHand; }
+	/** Opens the room with everything the fleet in hand could be told to do: seas, lanes to escort, coasts to shell, splitting and joining. */
+	void OpenFleetOrders();
 	/** Moves the fleet in hand to a new home port. */
 	void FleetToNewBase(int32 RegionId);
 	/** Sends the fleet in hand to a sea, to do there what it has been told (patrol or raid). */
@@ -652,6 +658,7 @@ private:
 	FString FleetNext = TEXT("patrol");
 	mutable FVector2D SeaAskedAt = FVector2D(-1.0e6, -1.0e6); // where the rules were last asked which sea lies under the pointer
 	mutable int32 SeaAsked = INDEX_NONE;
+	FFleetHand FleetHand; // the fleet in hand as the rules describe it
 	int32 FleetHoverSea = INDEX_NONE; // the sea the pointer is nearest, while a fleet is in hand
 	FVector2D PointerMap = FVector2D::ZeroVector; // where the pointer is on the map
 	bool bPointerOnWater = false;

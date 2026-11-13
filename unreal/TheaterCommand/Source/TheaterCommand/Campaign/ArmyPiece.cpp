@@ -78,7 +78,7 @@ void AArmyPiece::SetFleet(ACampaignMapActor* Map, const FCampaignNation& Nation,
 	Fleet = InFleet;
 	// (a fleet that puts to sea or comes into harbour is remade: it has a wake at sea and none in port)
 	const FString NewSignature = FString::Printf(TEXT("%s|fleet|%d|%d|%d|%d|%d|%d|%s"), *Nation.Tag, InFleet.Id,
-		InFleet.Battleships, InFleet.Carriers, InFleet.Cruisers, InFleet.Destroyers, InFleet.Submarines, InFleet.Stance == TEXT("port") ? TEXT("port") : TEXT("sea"));
+		InFleet.Battleships, InFleet.Carriers, InFleet.Cruisers, InFleet.Destroyers, InFleet.Submarines, *InFleet.Stance);
 	if (NewSignature != Signature)
 	{
 		Signature = NewSignature;
@@ -168,7 +168,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		CounterWidth = 9.5 * U;
 		Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour, NationTag, Fleet.Stance != TEXT("port"));
 		Size = FMath::Clamp(0.8 + 0.012 * Fleet.Ships(), 0.9, 1.7);
-		Figure = FString::Printf(TEXT("%d ships"), Fleet.Ships());
+		// Its plate says how many ships, and what they are about when it is not a plain patrol.
+		Figure = Fleet.Stance == TEXT("escort") ? FString::Printf(TEXT("%d escort"), Fleet.Ships())
+			: Fleet.Stance == TEXT("hunt") ? FString::Printf(TEXT("%d hunting"), Fleet.Ships())
+			: Fleet.Stance == TEXT("raid") ? FString::Printf(TEXT("%d raiding"), Fleet.Ships())
+			: FString::Printf(TEXT("%d ships"), Fleet.Ships());
 		SelectionRing->SetVisibility(false);
 	}
 	else if (What == 2)

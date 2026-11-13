@@ -890,6 +890,14 @@ FMonthResult FCampaignSession::EndMonth()
 			Entry->TryGetStringField(TEXT("note"), Step.Note);
 			Entry->TryGetBoolField(TEXT("mine"), Step.bMine);
 			Entry->TryGetBoolField(TEXT("moved"), Step.bMarchOnly);
+			const TArray<TSharedPtr<FJsonValue>>* Shelled = nullptr;
+			if (Entry->TryGetArrayField(TEXT("shelled"), Shelled))
+			{
+				for (const TSharedPtr<FJsonValue>& Coast : *Shelled)
+				{
+					Step.Shelled.AddUnique(FMath::RoundToInt32(Coast->AsNumber()));
+				}
+			}
 			const TArray<TSharedPtr<FJsonValue>>* SeaFights = nullptr;
 			if (Entry->TryGetArrayField(TEXT("seas"), SeaFights))
 			{
@@ -1970,7 +1978,77 @@ static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSort
 	}
 }
 
-bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNote, TArray<FSortie>* OutSorties, FString* OutOpen)
+FFleetHand FCampaignSession::FleetInHand(int32 FleetId)
+{
+	FFleetHand Out;
+	TSharedPtr<FJsonObject> Object;
+	if (!CallRules(TEXT("fleetInHand"), FString::Printf(TEXT("[%d]"), FleetId), Object) || !Object.IsValid() || !Object->HasField(TEXT("ok")))
+	{
+		return Out;
+	}
+	Out.bValid = true;
+	Object->TryGetBoolField(TEXT("grand"), Out.bGrand);
+	Object->TryGetStringField(TEXT("doing"), Out.Doing);
+	Object->TryGetStringField(TEXT("admiral"), Out.Admiral);
+	Object->TryGetStringField(TEXT("screen"), Out.Screen);
+	Object->TryGetBoolField(TEXT("shelled"), Out.bShelled);
+	Object->TryGetNumberField(TEXT("guns"), Out.Guns);
+	double Ready = 1.0;
+	Object->TryGetNumberField(TEXT("ready"), Ready);
+	Out.Ready = static_cast<float>(Ready);
+	const TArray<TSharedPtr<FJsonValue>>* Cards = nullptr;
+	if (Object->TryGetArrayField(TEXT("cards"), Cards))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Cards)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FFleetShipClass& Class = Out.Classes.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("cls"), Class.Class);
+			Entry->TryGetStringField(TEXT("label"), Class.Label);
+			Entry->TryGetStringField(TEXT("role"), Class.Role);
+			Entry->TryGetStringField(TEXT("brief"), Class.Brief);
+			Entry->TryGetNumberField(TEXT("count"), Class.Count);
+			Entry->TryGetNumberField(TEXT("lost"), Class.Lost);
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Seas = nullptr;
+	if (Object->TryGetArrayField(TEXT("seas"), Seas))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Seas)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			if (!Entry.IsValid())
+			{
+				continue;
+			}
+			FFleetSea& Sea = Out.Seas.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("zone"), Sea.Zone);
+			Entry->TryGetNumberField(TEXT("surface"), Sea.Surface);
+			Entry->TryGetNumberField(TEXT("subs"), Sea.Subs);
+			Entry->TryGetStringField(TEXT("meet"), Sea.Meet);
+			double Hunt = 0.0, Torpedo = 0.0;
+			Entry->TryGetNumberField(TEXT("hunt"), Hunt);
+			Entry->TryGetNumberField(TEXT("torpedo"), Torpedo);
+			Sea.Hunt = static_cast<float>(Hunt);
+			Sea.Torpedo = static_cast<float>(Torpedo);
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Coasts = nullptr;
+	if (Object->TryGetArrayField(TEXT("coasts"), Coasts))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Coasts)
+		{
+			Out.Coasts.Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
+	return Out;
+}
+
+bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNote, TArray<FSortie>* OutSorties, FString* OutOpen, FActExtras* OutExtras)
 {
 	TSharedPtr<FJsonObject> Object;
 	bool bOk = false;
@@ -1981,6 +2059,15 @@ bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNo
 		if (OutOpen)
 		{
 			Object->TryGetStringField(TEXT("open"), *OutOpen);
+		}
+		if (OutExtras)
+		{
+			Object->TryGetNumberField(TEXT("shell"), OutExtras->Shell);
+			Object->TryGetNumberField(TEXT("made"), OutExtras->Made);
+			Object->TryGetNumberField(TEXT("joined"), OutExtras->Joined);
+			if (OutExtras->Shell < 0) { OutExtras->Shell = INDEX_NONE; }
+			if (OutExtras->Made < 0) { OutExtras->Made = INDEX_NONE; }
+			if (OutExtras->Joined < 0) { OutExtras->Joined = INDEX_NONE; }
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Flies = nullptr;
 		if (OutSorties && Object->TryGetArrayField(TEXT("flies"), Flies))

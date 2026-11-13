@@ -146,6 +146,46 @@ struct FViewFleet
 	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
 };
 
+/** A sea in a fleet's reach, with what it would meet there. */
+struct FFleetSea
+{
+	int32 Zone = INDEX_NONE;
+	int32 Surface = 0, Subs = 0; // enemy surface warships and submarines known there
+	FString Meet; // clear, battle or shy: what a patrol there would come to
+	float Hunt = 0.0f; // the share of those submarines it would sink in a month if it hunted there
+	float Torpedo = 0.0f; // the chance it loses a heavy ship to a submarine there this month
+};
+
+/** The ships of one class in a fleet, as its cards show them. */
+struct FFleetShipClass
+{
+	FString Class; // bb, cv, ca, dd or ss
+	FString Label, Role, Brief; // "Battleships", what they are for in a sentence, and in three words
+	int32 Count = 0, Lost = 0;
+};
+
+/** The fleet in hand as the rules describe it, with what it could be told to do (the grand campaign). */
+struct FFleetHand
+{
+	bool bValid = false;
+	bool bGrand = false; // the navy as pieces: hunting, escorts, shelling, splitting and joining
+	FString Doing, Admiral, Screen; // what it is doing; who commands; a warning if its heavy ships are thinly screened
+	float Ready = 1.0f;
+	int32 Guns = 0;
+	bool bShelled = false; // its guns have spoken this month
+	TArray<FFleetShipClass> Classes;
+	TArray<FFleetSea> Seas;
+	TArray<int32> Coasts; // enemy coasts it could shell from where it is
+};
+
+/** What else came of something pressed in a room, beyond its words. */
+struct FActExtras
+{
+	int32 Shell = INDEX_NONE; // a coast just shelled
+	int32 Made = INDEX_NONE; // a squadron just split off
+	int32 Joined = INDEX_NONE; // the fleet another was just joined to
+};
+
 /** Aircraft seen leaving for their target when a raid is ordered. */
 struct FSortie
 {
@@ -388,6 +428,7 @@ struct FMonthStep
 	bool bMarchOnly = false; // nothing was fought for or taken: armies only moved
 	TArray<FSortie> Raids; // the raids flown in it, each group from its own airfield
 	TArray<int32> SeaFights; // the seas where fleets fought in it
+	TArray<int32> Shelled; // the coasts shelled from the sea in it
 	bool bMine = false; // the player's own ground or troops were involved
 	FCampaignView View; // the war as it stood when that nation had finished
 };

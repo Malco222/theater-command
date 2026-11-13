@@ -71,6 +71,7 @@ import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm,
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
+import { fleetOptions, fleetView, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit } from '../../../src/campaign/turn';
 import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack } from '../../../src/campaign/turn';
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
@@ -354,6 +355,17 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
 }
 
 const lastSeaReport = (s: Game): number => s.seaReports.reduce((m, r) => Math.max(m, r.id), -1);
+const lastShoreReport = (s: Game): number => (s.shoreReports ?? []).reduce((m, r) => Math.max(m, r.id), -1);
+
+/** The coasts shelled from the sea since a report (by its id): where, what came of each, and whether it was the player's coast. */
+function shellingSince(s: Game, since: number): { regions: number[]; notes: string[]; mine: boolean } {
+  const fresh = (s.shoreReports ?? []).filter((r) => r.id > since && r.nat !== s.human);
+  return {
+    regions: [...new Set(fresh.map((r) => r.region))],
+    notes: fresh.map((r) => `${s.nations[r.nat]?.adj ?? r.nat} warships shell ${r.place}. ${r.result}`),
+    mine: fresh.some((r) => r.defNat === s.human || s.regions[r.region]?.ctrl === s.human),
+  };
+}
 
 /** The fights at sea since a report (by its id): the seas they were in, a line on each, and whether the player's ships were in one. */
 function seaFightsSince(s: Game, since: number): { zones: number[]; notes: string[]; mine: boolean } {
@@ -373,7 +385,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     const r0 = s.reports.length;
     const month = s.turn;
     const stood = new Map(s.corps.filter((c) => !c.dead).map((c) => [c.id, c.reg] as const));
-    const air0 = lastAirReport(s), sea0 = lastSeaReport(s);
+    const air0 = lastAirReport(s), sea0 = lastSeaReport(s), shore0 = lastShoreReport(s);
     const nat = stepAI(s);
     if (s.human && s.turn !== month) judgeGoals(s, s.human);
     if (!steps) return;
@@ -381,7 +393,8 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     const air = raidsSince(s, air0, [month, s.turn]);
     const raidNote = air.notes.slice(0, 2).join(' ');
     const sea = seaFightsSince(s, sea0);
-    const seaNote = sea.notes.slice(0, 2).join(' ');
+    const shore = shellingSince(s, shore0);
+    const seaNote = [...sea.notes.slice(0, 2), ...shore.notes.slice(0, 1)].join(' ');
     const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
     const reps = s.reports.slice(r0);
     if (!taken.length && !reps.length) {
@@ -389,7 +402,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       const seen = sight(s);
       const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)!] > 0)).map((c) => c.reg))];
       if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine, raids: air.flights, seas: sea.zones, view: view() });
-      else if (sea.zones.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: [], mine: sea.mine, seas: sea.zones, view: view() });
+      else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, shelled: shore.regions, view: view() });
       else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
       return;
     }
@@ -408,6 +421,7 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       taken,
       raids: air.flights,
       seas: sea.zones,
+      shelled: shore.regions,
       battles: reps.map((r) => r.region),
       focus: [...new Set([...taken, ...reps.map((r) => r.region)])],
       // The player's own ground or troops were involved.
@@ -1084,7 +1098,7 @@ function force(kind: string, id: number) {
     count(f.ships.dd, 'destroyer', 'destroyers');
     count(f.ships.ss, 'submarine', 'submarines');
     const sea = s.seas[f.zone]?.name ?? 'the sea';
-    const doing = f.stance === 'port' ? `In harbour at ${f.port}.` : f.stance === 'raid' ? `Raiding shipping in the ${sea}.` : `On patrol in the ${sea}.`;
+    const doing = `${fleetView(s, f.id)?.doing ?? (f.stance === 'port' ? `In harbour at ${f.port}` : f.stance === 'raid' ? `Raiding shipping in the ${sea}` : `On patrol in the ${sea}`)}.`;
     const mine = f.nat === s.human;
     if (mine) {
       const reach = fleetReach(s, f).slice().sort((a, b) => (a === f.zone ? -1 : b === f.zone ? 1 : 0));
@@ -1552,6 +1566,133 @@ function heroesPage(s: Game): Page | null {
   };
 }
 
+// ---- The navy as pieces (the grand campaign) --------------------------------------------------------------
+
+const SHIP_WORD: Record<string, [string, string]> = { bb: ['battleship', 'battleships'], cv: ['carrier', 'carriers'], ca: ['cruiser', 'cruisers'], dd: ['destroyer', 'destroyers'], ss: ['submarine', 'submarines'] };
+
+/** One of the player's fleets in hand: its card, and everything it could be told to do this month. Null where the rules keep no such navy. */
+function fleetInHand(id: number) {
+  const s = game();
+  try {
+    const card = fleetView(s, id);
+    if (!card || card.nat !== s.human) return null;
+    // (the navy as pieces is the grand campaign's: a historical scenario keeps its fleets to patrol, raid and harbour)
+    const grand = s.flags.open === 1;
+    const o = grand ? fleetOptions(s, id) : null;
+    return {
+      ok: true, grand, id, name: card.name, admiral: card.admiral ? `${card.admiral.name}, level ${card.admiral.level}` : '', doing: card.doing, order: card.order, stance: card.stance,
+      ready: card.ready, guns: Math.round(card.guns), screen: card.screen.gap > 0 ? `${cap1(card.screen.word)}: ${card.screen.have} destroyers where ${card.screen.need} are needed.` : '', shelled: card.shelled,
+      cards: card.cards.map((c) => ({ cls: c.cls, label: c.label, count: c.count, lost: c.lost, role: c.role, brief: c.brief })),
+      seas: (o?.seas ?? []).map((z) => ({ zone: z.zone, name: z.name, surface: z.surface, subs: z.subs, meet: z.meet, hunt: z.hunt, torpedo: z.torpedo })),
+      coasts: o?.coasts ?? [], merge: o?.merge ?? [], split: !!o?.split, canOrder: !!o,
+    };
+  } catch {
+    return null;
+  }
+}
+const cap1 = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
+
+/** A fleet's orders, all in one room: what it is, the seas in its reach and what it would meet, lanes to escort, coasts to shell, splitting and joining. */
+function fleetPage(s: Game, id: number): Page | null {
+  const card = s.flags.open === 1 ? fleetView(s, id) : null;
+  if (!card || card.nat !== s.human) return null;
+  const o = fleetOptions(s, id);
+  const up = !!o;
+  const share = (x: number): string => `${Math.round(x * 100)}%`;
+  const ships: PageRow[] = card.cards.map((c) => {
+    const buttons: PageButton[] = [];
+    if (o?.split) {
+      const all = { [c.cls]: c.count } as Record<string, number>;
+      const whyAll = whyNotSplit(s, id, all);
+      buttons.push({ label: c.count === 1 ? 'SPLIT IT OFF' : 'SPLIT THEM ALL OFF', act: `fleetsplit:${id}:${c.cls}:${c.count}`, ok: up && !whyAll, tip: whyAll ?? 'They leave as a squadron of their own, in the same sea or harbour, which can be given its own orders.' });
+      if (c.count >= 2) {
+        const half = Math.floor(c.count / 2);
+        const whyHalf = whyNotSplit(s, id, { [c.cls]: half } as Record<string, number>);
+        buttons.push({ label: `SPLIT OFF ${half}`, act: `fleetsplit:${id}:${c.cls}:${half}`, ok: up && !whyHalf, tip: whyHalf ?? 'Half of them leave as a squadron of their own.' });
+      }
+    }
+    return { nat: card.nat, title: `${c.count} ${SHIP_WORD[c.cls]?.[c.count === 1 ? 0 : 1] ?? c.label.toLowerCase()}`, lines: [c.role, c.lost ? `${c.lost} lost since the war began.` : ''].filter(Boolean), buttons };
+  });
+  const seas: PageRow[] = (o?.seas ?? []).map((z) => {
+    const meet = z.meet === 'clear' ? 'A patrol would meet no enemy fleet.' : z.meet === 'battle' ? 'A patrol would bring the enemy fleet to battle.' : 'The enemy there is too strong: a patrol would not face him.';
+    const enemy = z.surface || z.subs ? `Enemy there: ${[z.surface ? `${z.surface} surface warship${z.surface === 1 ? '' : 's'}` : '', z.subs ? `${z.subs} submarine${z.subs === 1 ? '' : 's'}` : ''].filter(Boolean).join(' and ')}.` : 'No enemy ships are known there.';
+    const hunt = z.subs ? `Hunting would sink about ${share(z.hunt)} of the submarines in a month${z.huntNow > 0 ? ` (${share(z.huntNow)} as things stand)` : ''}.` : '';
+    const risk = z.torpedo >= 0.005 ? `Chance of losing a heavy ship to a torpedo: ${share(z.torpedo)}.` : '';
+    const at = (st: string): boolean => z.here && card.stance === st;
+    return {
+      nat: '', title: `${z.name}${z.here ? '  \u00B7  it is here' : ''}`, lines: [`${enemy} ${meet}`, [hunt, risk].filter(Boolean).join(' ')].filter(Boolean),
+      buttons: [
+        { label: 'PATROL', act: `fleet:${id}:${z.zone}:patrol`, ok: up && !at('patrol'), tip: 'Seeks out the enemy\'s warships there and guards the convoys that cross it.' },
+        { label: 'RAID SHIPPING', act: `fleet:${id}:${z.zone}:raid`, ok: up && !at('raid'), tip: 'Goes for merchant ships and keeps clear of a fight with the enemy fleet.' },
+        { label: 'HUNT SUBMARINES', act: `fleet:${id}:${z.zone}:hunt`, ok: up && !at('hunt') && card.hunters > 0, tip: card.hunters > 0 ? 'Its destroyers sweep the sea for submarines: the more destroyers, the more it sinks.' : 'It has no destroyers to hunt with.' },
+      ],
+    };
+  });
+  const lanes: PageRow[] = (o?.lanes ?? []).map((l) => ({
+    nat: l.to, title: l.name,
+    lines: [l.why ?? `Cargoes lost on it now: ${share(l.now)}. With this fleet as its escort: ${share(l.then)}.`, l.bound ? 'This fleet is its escort now.' : ''].filter(Boolean),
+    buttons: [{ label: l.bound ? 'ITS ESCORT NOW' : 'ESCORT THIS LANE', act: `fleetescort:${id}:${l.lane}`, ok: up && !l.why && !l.bound, tip: l.why ?? 'The fleet is bound to the lane and sails with its convoys: fewer cargoes are sunk, and it fights only for them.' }],
+  }));
+  const coasts: PageRow[] = (o?.coasts ?? []).map((r) => {
+    const t = previewBombard(s, id, r, 'troops'), c = previewBombard(s, id, r, 'city');
+    const lines: string[] = [];
+    if (t?.can.troops) lines.push(`The troops there (${t.corps} corps, ${t.divs} division${t.divs === 1 ? '' : 's'}) would lose about ${share(t.cut)} of their order.`);
+    if (c?.can.city) lines.push(`Its city would lose about ${share(c.output)} of its output for a month.`);
+    const reply = t ?? c;
+    if (reply && reply.fort > 0) lines.push(`A fortress of level ${reply.fort} answers: it is likely to sink about ${share(reply.reply)} of the cruisers and destroyers.`);
+    return {
+      nat: s.regions[r].ctrl, title: s.regions[r].name, lines,
+      buttons: [
+        { label: 'SHELL THE TROOPS', act: `fleetshell:${id}:${r}:troops`, ok: up && !!t?.can.troops && !t.why, tip: t?.why ?? 'The guns fall on the troops in the open: they fight the weaker for it until they have rested.' },
+        { label: 'SHELL THE CITY', act: `fleetshell:${id}:${r}:city`, ok: up && !!c?.can.city && !c.why, tip: c?.why ?? 'The guns fall on its docks and works: part of its output is stopped for a month.' },
+      ],
+    };
+  });
+  const joins: PageRow[] = (o?.merge ?? []).map((other) => {
+    const f = fleetView(s, other);
+    return { nat: card.nat, title: f?.name ?? 'A fleet', lines: [f ? `${f.ships} ships. ${f.doing}.` : ''], buttons: [{ label: 'JOIN IT', act: `fleetmerge:${id}:${other}`, ok: up, tip: 'The two become one fleet under the other\'s flag and orders.' }] };
+  });
+  const gap = card.screen.gap > 0 ? ` ${cap1(card.screen.word)}: it has ${card.screen.have} destroyers where its heavy ships need ${card.screen.need}.` : '';
+  return {
+    id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
+    note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.`,
+    top: [{ label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: 'Safe from the enemy fleet, and takes no part at sea.' }],
+    sections: [
+      { heading: 'ITS SHIPS', text: '', rows: ships },
+      { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
+      { heading: 'LANES TO ESCORT', text: '', rows: lanes },
+      { heading: 'COASTS TO SHELL', text: '', rows: coasts },
+      { heading: 'FLEETS TO JOIN', text: '', rows: joins },
+    ].filter((x) => x.rows.length || x.text),
+  };
+}
+
+/** The question before a coast is shelled: what the guns would do to the troops there, or to the city, and what the shore would answer. */
+function shellPage(s: Game, id: number, region: number): Page | null {
+  const card = s.flags.open === 1 ? fleetView(s, id) : null;
+  const r = s.regions[region];
+  if (!card || card.nat !== s.human || !r) return null;
+  const share = (x: number): string => `${Math.round(x * 100)}%`;
+  const rows: PageRow[] = [];
+  for (const what of ['troops', 'city'] as const) {
+    const plan = previewBombard(s, id, region, what);
+    if (!plan || !plan.can[what]) continue;
+    const does = what === 'troops' ? `The troops there (${plan.corps} corps, ${plan.divs} division${plan.divs === 1 ? '' : 's'}) would lose about ${share(plan.cut)} of their order, and fight the weaker for it until they have rested.`
+      : `About ${share(plan.output)} of ${r.name}'s output would be stopped for a month: ${(plan.nation * 100).toFixed(1)}% of ${s.nations[r.ctrl]?.adj ?? 'the enemy\'s'} production.`;
+    rows.push({
+      nat: r.ctrl, title: what === 'troops' ? 'The troops on the coast' : 'The city and its works',
+      lines: [does, plan.fort > 0 ? `A fortress of level ${plan.fort} answers: it is likely to sink about ${share(plan.reply)} of the cruisers and destroyers that stand in.` : 'No fortress answers from the shore.', ...plan.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`)],
+      buttons: [{ label: what === 'troops' ? 'SHELL THE TROOPS' : 'SHELL THE CITY', act: `fleetshell:${id}:${region}:${what}`, ok: !plan.why, tip: plan.why ?? 'The fleet stands in and opens fire. Its guns speak once a month.' }],
+    });
+  }
+  return {
+    id: `shell:${id}:${region}`, title: `SHELL ${r.name.toUpperCase()}?`, headline: `${card.name}, with guns of weight ${Math.round(card.guns)}`,
+    note: 'A fleet with heavy guns can stand in to an enemy coast and shell it: the troops in the open there, or the docks and works of its city. Battleships and cruisers do the work; a fortress on the coast shoots back.',
+    top: [{ label: 'THE FLEET\'S OTHER ORDERS', act: `open:fleet:${id}`, ok: true, tip: '' }],
+    sections: [{ heading: 'WHAT TO SHELL', text: rows.length ? '' : card.shelled ? 'Its guns have spoken this month: they can speak again next month.' : 'There is nothing there the guns can reach.', rows }],
+  };
+}
+
 /** What winning means: the player's short campaign and his long one, each thing they ask for ticked or not, and how long is left. */
 function goalsPage(s: Game): Page | null {
   const me = s.human;
@@ -1622,7 +1763,7 @@ function forcesPage(s: Game): Page | null {
     const sea = s.seas[f.zone]?.name ?? 'the sea';
     return {
       nat: me, title: f.name,
-      lines: [`${parts}.`, f.stance === 'port' ? `In harbour at ${f.port}.` : f.stance === 'raid' ? `Raiding shipping in the ${sea}.` : `On patrol in the ${sea}.`],
+      lines: [`${parts}.`, `${fleetView(s, f.id)?.doing ?? (f.stance === 'port' ? `In harbour at ${f.port}` : f.stance === 'raid' ? `Raiding shipping in the ${sea}` : `On patrol in the ${sea}`)}.`],
       buttons: [{ label: 'GO THERE', act: `goto:fleet:${f.id}`, ok: true, tip: 'Looks at the fleet and picks it up.' }],
     };
   });
@@ -1649,7 +1790,7 @@ function forcesPage(s: Game): Page | null {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s)
+  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
@@ -1693,6 +1834,29 @@ function act(action: string, region = -1) {
   } else if (part[0] === 'airbase') {
     ok = orderAirBase(s, Number(part[1]), Number(part[2]));
     note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';
+  } else if (part[0] === 'fleet') {
+    ok = orderFleet(s, Number(part[1]), Number(part[2]), part[3] as Stance);
+    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The order is given'}.` : 'That order cannot be given now.';
+    return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
+  } else if (part[0] === 'fleetescort') {
+    ok = orderEscort(s, Number(part[1]), part.slice(2).join(':'));
+    note = ok ? `${fleetView(s, Number(part[1]))?.doing ?? 'The fleet is bound to the lane'}.` : 'It cannot escort that lane now.';
+    return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, view: view() };
+  } else if (part[0] === 'fleetshell') {
+    const rep2 = orderBombard(s, Number(part[1]), Number(part[2]), part[3] as 'troops' | 'city');
+    ok = !!rep2;
+    note = rep2 ? rep2.result : previewBombard(s, Number(part[1]), Number(part[2]), part[3] as 'troops' | 'city')?.why ?? 'The coast cannot be shelled now.';
+    // (the map shows the guns falling on the coast)
+    return { ok, note, fly, flies: [], open: '', shell: ok ? Number(part[2]) : -1, view: view() };
+  } else if (part[0] === 'fleetsplit') {
+    const made = orderSplit(s, Number(part[1]), { [part[2]]: Number(part[3]) } as Record<string, number>);
+    ok = made >= 0;
+    note = ok ? `${fleetView(s, made)?.name ?? 'A new squadron'} is formed from ${fleetView(s, Number(part[1]))?.name ?? 'the fleet'}.` : whyNotSplit(s, Number(part[1]), { [part[2]]: Number(part[3]) } as Record<string, number>) ?? 'Those ships cannot be split off now.';
+    return { ok, note, fly, flies: [], open: `fleet:${part[1]}`, made, view: view() };
+  } else if (part[0] === 'fleetmerge') {
+    ok = orderMerge(s, Number(part[1]), Number(part[2]));
+    note = ok ? `The fleets are joined as ${fleetView(s, Number(part[2]))?.name ?? 'one'}.` : 'They cannot be joined now.';
+    return { ok, note, fly, flies: [], open: ok ? `fleet:${part[2]}` : `fleet:${part[1]}`, joined: ok ? Number(part[2]) : -1, view: view() };
   } else if (part[0] === 'cash') {
     const award = s.stories.awards[Number(part[1]) - 1];
     const why = award ? whyNotCash(s, award, part[2] as 'bonds' | 'school') : 'There is no such honour.';
@@ -2153,5 +2317,5 @@ function raidsFlown(turn?: number) {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  raidsFlown, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => ({ sea: seaUnder(x, y) }),
+  raidsFlown, fleetInHand, sack: sackGeneral, drafts: draftsFor, evePlanGo, towns: townsList, join: joinArmyAt, sendBack, seaAt: (x: number, y: number) => ({ sea: seaUnder(x, y) }),
   land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
