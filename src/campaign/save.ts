@@ -13,6 +13,8 @@ import { resetRailheads } from './rails';
 import { openAirWar } from './air';
 import { FAIR } from './difficulty';
 import { rollFromMemory } from './liberation';
+import { openMorale } from './morale';
+import { numberDivisions } from './armies';
 import mapData from '../generated/campaign-map.json';
 import type { Corps, Game, General } from './types';
 
@@ -147,6 +149,9 @@ export function loadGame(text: string): Game | null {
   if (Array.isArray(d.airFleets)) { g.airFleets = d.airFleets; g.nextAir = d.nextAir; g.airReports = d.airReports ?? []; g.airPool = d.airPool ?? {}; g.sky = d.sky ?? {}; g.raids = d.raids ?? {}; }
   // A grand campaign saved before the air war became its own game: its airfields are placed and its fleets become air groups.
   if (g.flags.open === 1) openAirWar(g);
+  // A grand campaign saved before morale was kept, or before divisions carried numbers, picks both up here.
+  openMorale(g);
+  numberDivisions(g);
   // A save from before the units kept records: the roll of honour starts empty and fills from here on.
   g.stories = { ...newStories(), ...(d.stories ?? {}) };
   // A save from before spies: the service starts with nobody on its books.

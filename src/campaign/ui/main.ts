@@ -14,6 +14,7 @@ import {
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
+  armyAt, corpsDetail, moodOf,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
@@ -46,6 +47,8 @@ import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCos
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame, staleSave } from '../save';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, popular, rankOf, serving, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../commanders';
+import { DIVISIONS, ordinal, type DivisionCard } from '../armies';
+import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
 import { bloc } from '../game';
@@ -873,10 +876,13 @@ function corpsRow(c: Corps, mine: boolean): string {
   else if (c.digs && c.nat === g.human) tags.push(`<span class="tag" title="${esc(STANCE_DIG)}">Digging in: ready next month if it stays put</span>`);
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const el = mine && c.kind !== 'fort' ? 'button' : 'div';
+  const card = corpsDetail(g, c);
+  if (card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7)) tags.push(`<span class="tag good" title="${esc(REST_RULE)}">Resting</span>`);
   return `<div class="unit"><${el} class="corps${pick ? ' pick' : ''}" ${el === 'button' ? `data-act="pick" data-id="${c.id}"` : ''}>
     ${icon(c)}<span class="nm">${esc(c.name)}${c.nick ? ` <i class="nick">${esc(c.nick)}</i>` : ''}${gen ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(gen.name)} <span class="lvl" title="Level ${gen.level} general">${gen.level}</span></span>` : ''}</span>${pips}
-    <span class="meta">${g.nations[c.nat].adj} ${k.label.toLowerCase()} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span>
-    <span class="bars"><span>Strength</span><span class="meter"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span><span>Cohesion</span><span class="meter"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span></span>
+    <span class="meta">${g.nations[c.nat].adj} ${k.label.toLowerCase()} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men · ${esc(card.service)}</span>
+    <span class="chits wide">${card.divisions.map((d) => chit(d, true)).join('')}</span>
+    ${moodMeters(c, card.mood, true)}${moodWhy(card.mood)}
     ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${recStrip('corps', c)}</div>`;
 }
 
@@ -899,20 +905,51 @@ function armyShown(): { reg: number; nat: string } | null {
   return { reg: r.id, nat: me && size.has(me) ? me : [...size].sort((a, b) => b[1] - a[1])[0][0] };
 }
 
-/** One corps of the army as a card. The player's own are buttons: a click leaves the corps behind or takes it along. */
+const REST_RULE = 'A corps that spends a whole month in supply without marching or fighting rests: its drafts arrive half as fast again, it gets back more of its rest, and its morale recovers.';
+
+/** One division as a chit: its arm in its nation's colour, a stripe for each grade of experience, its number, and its strength along the foot. */
+function chit(d: DivisionCard, named = false): string {
+  const pct = Math.round(d.str * 100);
+  const stripes = `<span class="stripes" aria-hidden="true">${'<i></i>'.repeat(d.stripes)}</span>`;
+  return `<span class="chit${d.hardened ? ' hard' : ''}${d.str < 0.5 ? ' weak' : ''}" title="${esc(d.name)} · ${pct}% strength, ${num(d.men)} men · ${esc(d.grade)}${d.hardened ? ', battle-hardened' : ''}">
+    <span class="ctop"><svg width="26" height="19" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${g.nations[d.nat].color}"/>${symbol(d.kind, 24, 15)}</svg>${stripes}</span>
+    <b>${esc(named ? d.short : ordinal(d.no))}</b>${named ? `<small>${esc(d.grade)}</small>` : ''}<span class="meter"><i class="${d.str < 0.5 ? 'low' : ''}" style="width:${pct}%"></i></span></span>`;
+}
+
+/** Strength, rest and morale as three meters. Each says in a tooltip where it stands and why. */
+function moodMeters(c: Corps, m: Mood = moodOf(g, c), wide = false): string {
+  const row = (label: string, v: number, cls: string, title: string, word = '', extra = ''): string =>
+    `<span class="mrow" title="${esc(title)}"><small>${label}</small><span class="meter"><i class="${cls}" style="width:${Math.round(v * 100)}%"></i></span>${wide ? `<em>${esc(word)}</em>` : ''}${extra}</span>`;
+  const s = Math.round(c.str * 100);
+  let out = row('Strength', c.str, c.str < 0.5 ? 'low' : '', `Strength ${s}%: ${num(men(c))} men`, `${s}%`)
+    + row('Rest', m.rest, `org${m.rest < 0.4 ? ' low' : ''}`, `Rest ${Math.round(m.rest * 100)}%. ${m.restLine}`, m.restWord);
+  if (m.morale !== null) out += row('Morale', m.morale, `mor${m.morale < 0.4 ? ' low' : ''}`, `Morale ${Math.round(m.morale * 100)}%. ${m.line}`, m.moraleWord, `<i class="trend ${m.trend}" title="Morale ${m.trend}"></i>`);
+  return `<span class="m3${wide ? ' wide' : ''}">${out}</span>`;
+}
+
+/** Why a corps' morale stands where it does: a sentence, then each reason with what it was worth. */
+function moodWhy(m: Mood): string {
+  if (m.morale === null) return '';
+  const pts = (d: number): string => `${d > 0 ? '+' : '−'}${Math.max(1, Math.round(Math.abs(d) * 100))}`;
+  const why = m.why.map((w) => `<i class="${w.delta > 0 ? 'up' : 'dn'}${w.earlier ? ' old' : ''}"${w.earlier ? ' title="From the month before"' : ''}>${esc(w.text)} ${pts(w.delta)}</i>`).join('');
+  return `<span class="moodl"><b>Morale:</b> ${esc(m.line)}${why ? `<span class="why">${why}</span>` : ''}<span class="restl"><b>Rest:</b> ${esc(m.restLine)}</span></span>`;
+}
+
+/** One corps of the army as a card, with its divisions as chits. The player's own are buttons: a click leaves the corps behind or takes it along. */
 function unitCard(c: Corps, mine: boolean): string {
   const can = mine && c.kind !== 'fort';
   const el = can ? 'button' : 'div';
   const pips = c.kind === 'fort' ? '' : `<span class="pips" title="Moves left this month">${Array.from({ length: Math.max(c.apMax, c.ap) }, (_, i) => `<i class="${i < c.ap ? '' : 'off'}"></i>`).join('')}</span>`;
   const gen = generalOf(g, c);
   const special = eliteIn(c);
-  const flags = `${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="Entrenched: defends 25% stronger until it leaves this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to entrench: the trenches are ready next month if it stays put">Digging</span>' : ''}`;
-  return `<${el} class="ucard${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''}">
-    <span class="utop">${icon(c)}${pips}</span><b>${esc(c.name)}</b>
-    <span class="um">${c.divs} ${KIND[c.kind].label.toLowerCase()} div${c.divs > 1 ? 's' : ''}${gen ? ` · ${esc(surname(gen.name))}` : ''}</span>
-    <span class="um vet">${esc(grade(c.xp))}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 5)}</span>
-    <span class="meter" title="Strength ${Math.round(c.str * 100)}%"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span>
-    <span class="meter" title="Cohesion ${Math.round(c.org * 100)}%"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span>${flags ? `<span class="tags">${flags}</span>` : ''}</${el}>`;
+  const card = corpsDetail(g, c);
+  const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
+  const flags = `${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="Entrenched: defends 25% stronger until it leaves this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to entrench: the trenches are ready next month if it stays put">Digging</span>' : ''}`;
+  return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
+    <span class="utop"><b>${esc(c.name)}</b>${pips}</span>
+    <span class="um vet">${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
+    <span class="chits">${card.divisions.map((d) => chit(d)).join('')}</span>
+    ${moodMeters(c, card.mood)}${flags ? `<span class="tags">${flags}</span>` : ''}</${el}>`;
 }
 
 function drawTray(): void {
@@ -930,7 +967,14 @@ function drawTray(): void {
   const head = who
     ? `<button class="tgen" data-act="general" data-id="${who.id}" title="Open this general's record"><span class="seal" style="background:${n.color}">${esc(initials)}</span><span class="grow"><b>${esc(who.name)}</b><small>${esc(n.adj)} army at ${esc(r.name)} · ${esc(rankOf(who))}, level ${who.level}</small>${who.traits.length ? `<span class="tags">${traitTags(who)}</span>` : ''}</span></button>`
     : `<div class="tgen"><span class="seal none" style="background:${n.color}"></span><span class="grow"><b>${esc(n.adj)} army at ${esc(r.name)}</b><small>No general in command</small></span></div>`;
-  const tally = `<div class="ttally"><b>${num(sumDivs(cs))}</b><small>divisions</small><b>${Math.round(fitness(cs) * 100)}%</b><small>strength</small>${others.length ? `<small class="also">Also here: ${others.map((o) => esc(g.nations[o].adj)).join(', ')}</small>` : ''}</div>`;
+  // What the army is made of, arm by arm, and how it stands as a whole.
+  const army = armyAt(g, a.reg, a.nat);
+  const bar = (label: string, v: number, cls: string, word: string): string => `<span class="mrow" title="${label} ${Math.round(v * 100)}%"><small>${label}</small><span class="meter"><i class="${cls}" style="width:${Math.round(v * 100)}%"></i></span><em>${esc(word)}</em></span>`;
+  const tally = army && army.known === 'full'
+    ? `<div class="tsum"><div class="tmix" title="${esc(army.line)}">${army.mix.map((m) => `<span class="mixc"><svg width="22" height="16" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${n.color}"/>${symbol(m.kind, 24, 15)}</svg><b>${m.divs}</b><small>${esc(m.word)}</small></span>`).join('')}</div>
+      <small class="tcount">${army.divs} division${army.divs === 1 ? '' : 's'} · ${num(army.men)} men${others.length ? ` · also here: ${others.map((o) => esc(g.nations[o].adj)).join(', ')}` : ''}</small>
+      <span class="m3 wide">${bar('Strength', army.str, army.str < 0.5 ? 'low' : '', `${Math.round(army.str * 100)}%`)}${bar('Rest', army.rest, `org${army.rest < 0.4 ? ' low' : ''}`, army.restWord)}${army.morale !== null ? bar('Morale', army.morale, `mor${army.morale < 0.4 ? ' low' : ''}`, army.moraleWord) : ''}</span></div>`
+    : `<div class="ttally"><b>${num(sumDivs(cs))}</b><small>divisions</small><b>${Math.round(fitness(cs) * 100)}%</b><small>strength</small>${others.length ? `<small class="also">Also here: ${others.map((o) => esc(g.nations[o].adj)).join(', ')}</small>` : ''}</div>`;
   // The standing order for the day the enemy comes: the whole army in the tray takes it together.
   const field = cs.filter((c) => c.kind !== 'fort');
   const under = new Set(field.map(postureOf));
@@ -938,7 +982,7 @@ function drawTray(): void {
   const stance = mine && field.length
     ? `<div class="tstance" role="group" aria-label="Orders if this army is attacked"><small>If attacked${under.size > 1 ? ' · mixed' : ''}</small><button class="${all('stand')}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_STAND)}">Stand</button><button class="${all('dig')}" data-act="ifattacked" data-v="dig" title="${esc(STANCE_DIG)}">Dig in</button><button class="${all('back')}" data-act="ifattacked" data-v="back" title="${esc(STANCE_BACK)}">Fall back</button></div>`
     : '';
-  el.innerHTML = `${head}${tally}${stance}<div class="cards">${cs.map((c) => unitCard(c, mine)).join('')}</div>`;
+  el.innerHTML = `<div class="thead">${head}${tally}${stance}</div><div class="cards">${cs.map((c) => unitCard(c, mine)).join('')}</div>`;
   el.classList.add('open');
 }
 
@@ -3519,7 +3563,7 @@ function battleCard(c: Corps, opts: { act?: boolean; on?: boolean; note?: string
     <span class="utop">${icon(c)}${gen ? `<span class="lvl" title="${esc(gen.name)}, level ${gen.level} general">${gen.level}</span>` : ''}</span><b>${esc(c.name)}</b>
     <span class="um">${c.divs} ${KIND[c.kind].label.toLowerCase()} div${c.divs > 1 ? 's' : ''}${where}</span>
     <span class="meter" title="Strength ${Math.round(c.str * 100)}%"><i class="${c.str < 0.5 ? 'low' : ''}" style="width:${Math.round(c.str * 100)}%"></i></span>
-    <span class="meter" title="Cohesion ${Math.round(c.org * 100)}%"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span>${opts.note ? `<span class="tags"><span class="tag bad">${esc(opts.note)}</span></span>` : ''}</${el}>`;
+    <span class="meter" title="Rest ${Math.round(c.org * 100)}%"><i class="org${c.org < 0.4 ? ' low' : ''}" style="width:${Math.round(c.org * 100)}%"></i></span>${c.mor !== undefined ? `<span class="meter" title="Morale ${Math.round(c.mor * 100)}%: ${esc(moodOf(g, c).moraleWord.toLowerCase())}"><i class="mor${c.mor < 0.4 ? ' low' : ''}" style="width:${Math.round(c.mor * 100)}%"></i></span>` : ''}${opts.note ? `<span class="tags"><span class="tag bad">${esc(opts.note)}</span></span>` : ''}</${el}>`;
 }
 
 const FATE: Record<string, string> = { '': 'held its ground', retreated: 'retreated', surrendered: 'surrendered', destroyed: 'destroyed', advanced: 'advanced', evacuated: 'evacuated by sea', yielded: 'gave ground under orders' };

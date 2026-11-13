@@ -1,0 +1,31 @@
+{
+  "_about": {
+    "what": "The divisions inside a corps, as both interfaces show them: what each kind is called, the numbers they carry, and how a corps' strength and experience are shared out among its divisions.",
+    "rule": "A corps fights as one body: its strength and its experience are the corps' own, and the divisions shown inside it always add up to exactly those. Each division keeps its own character through the war, so the same one is always the most worn or the most seasoned of its corps. Nothing here changes a battle.",
+    "kinds": "For each kind of corps: 'word' as it reads in a count ('5 infantry divisions'), 'name' for one division ('7th Infantry Division') and 'short' for a card.",
+    "names": "What a nation calls its own divisions of a kind, where it differs: [name, short].",
+    "order": "The order the kinds are listed in when an army is summed up.",
+    "spread": "How far apart the divisions of a corps stand: the share of the room the corps' own strength (or experience) leaves either side of it.",
+    "hardened": "The experience (0 to 1) at which a division counts as battle-hardened."
+  },
+  "kinds": {
+    "inf": { "word": "infantry", "name": "Infantry Division", "short": "Infantry" },
+    "mot": { "word": "motorised", "name": "Motorised Division", "short": "Motorised" },
+    "arm": { "word": "armoured", "name": "Armoured Division", "short": "Armoured" },
+    "cav": { "word": "cavalry", "name": "Cavalry Division", "short": "Cavalry" },
+    "mtn": { "word": "mountain", "name": "Mountain Division", "short": "Mountain" },
+    "fort": { "word": "fortress", "name": "Fortress Division", "short": "Fortress" },
+    "art": { "word": "artillery", "name": "Artillery Division", "short": "Artillery" },
+    "eng": { "word": "engineer", "name": "Engineer Brigade", "short": "Engineers" }
+  },
+  "names": {
+    "GER": { "arm": ["Panzer Division", "Panzer"] },
+    "SOV": { "inf": ["Rifle Division", "Rifles"], "arm": ["Tank Division", "Tanks"], "mot": ["Motor Rifle Division", "Motor Rifles"] },
+    "USA": { "arm": ["Armored Division", "Armored"], "mot": ["Motorized Division", "Motorized"] },
+    "ITA": { "mtn": ["Alpine Division", "Alpini"] },
+    "FRA": { "mtn": ["Alpine Division", "Alpine"] }
+  },
+  "order": ["arm", "mot", "cav", "inf", "mtn", "art", "eng", "fort"],
+  "spread": { "str": 0.6, "xp": 0.7 },
+  "hardened": 0.4
+}

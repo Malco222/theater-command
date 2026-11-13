@@ -32,6 +32,8 @@ import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type In
 import { awardOf, cashHonour } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
+import { armyCard, corpsCard, type ArmyCard, type CorpsCard } from './armies';
+import { corpsMood, type Mood } from './morale';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -738,6 +740,34 @@ export function playerLost(g: Game): string | null {
   const k = Object.keys(g.flags).find((x) => x.startsWith('was:'));
   return k ? k.slice(4) : null;
 }
+
+// ---- Armies opened up: divisions, morale and rest ---------------------------------------------------
+
+/**
+ * One nation's army in a province as the player knows it: what it is made of arm by arm ("5 infantry, 4 armoured
+ * and 2 artillery divisions"), and each corps with its divisions as cards, its experience, its morale and its rest.
+ * The player's own armies and their allies' are known in full. An enemy's is known in full only where the fog
+ * allows; with a glimpse, only how many corps stand under the flag ('known' is 'count'); unseen, null.
+ */
+export const armyAt = (g: Game, region: number, nat: string): ArmyCard | null => armyCard(g, region, nat, g.human);
+
+/** Every army in a province that the player knows anything of, the player's own first and the largest after. */
+export function armiesAt(g: Game, region: number): ArmyCard[] {
+  const r = g.regions[region];
+  if (!r) return [];
+  const nats = [...new Set(r.units.filter((c) => !c.dead).map((c) => c.nat))];
+  const cards = nats.map((n) => armyCard(g, region, n, g.human)).filter((a): a is ArmyCard => a !== null);
+  return cards.sort((a, b) => Number(b.nat === g.human) - Number(a.nat === g.human) || b.divs - a.divs || b.corpsCount - a.corpsCount);
+}
+
+/** One corps opened up: its divisions, its record, its morale and its rest. */
+export const corpsDetail = (g: Game, c: Corps): CorpsCard => corpsCard(g, c);
+
+/**
+ * How a corps feels: morale and rest, each 0 to 1, each with its word ("Confident", "Rested"), which way morale is
+ * going, a sentence on why, and the reasons one by one. Morale is null in a historical scenario, which keeps none.
+ */
+export const moodOf = (g: Game, c: Corps): Mood => corpsMood(g, c);
 
 // ---- The player's generals ----------------------------------------------------------------
 
