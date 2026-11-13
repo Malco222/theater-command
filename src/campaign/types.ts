@@ -301,8 +301,11 @@ export interface BattleReport {
 
 export type ShipClass = 'bb' | 'cv' | 'ca' | 'dd' | 'ss';
 export type Ships = Record<ShipClass, number>;
-/** What a fleet is doing: holding a sea, hunting merchant ships, or lying in harbour. */
-export type Stance = 'patrol' | 'raid' | 'port';
+/**
+ * What a fleet is doing: holding a sea, hunting merchant ships, or lying in harbour. In the grand campaign it can also
+ * be bound to a shipping lane as its escort, or sent to a sea to hunt submarines.
+ */
+export type Stance = 'patrol' | 'raid' | 'port' | 'escort' | 'hunt';
 
 export interface SeaZone {
   id: number;
@@ -363,6 +366,39 @@ export interface Fleet extends Storied {
   admiral: Admiral | null;
   /** Month the fleet last fought. */
   fought: number;
+  /** The shipping lane the fleet is escorting, while its stance is 'escort' (the grand campaign). */
+  lane?: string;
+  /** Month the fleet last shelled a coast: its guns speak once a month (the grand campaign). */
+  shelled?: number;
+}
+
+/** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
+export interface ShoreReport {
+  id: number;
+  turn: number;
+  nat: string;
+  fleet: string;
+  admiral: string | null;
+  /** The ships that stood in, as they were before the shore answered. */
+  ships: Ships;
+  /** What the shore batteries sank. */
+  sunk: Ships;
+  region: number;
+  place: string;
+  zone: number;
+  defNat: string;
+  what: 'troops' | 'city';
+  /** The weight of the guns that fired. */
+  guns: number;
+  /** Troops: the share of their organisation the shelling cost them, and how many divisions it fell on. */
+  cut: number;
+  divs: number;
+  /** City: the share of the province's output stopped for a month, and of the nation's production. */
+  output: number;
+  nation: number;
+  lines: TicketLine[];
+  /** What the shelling did, in a sentence. */
+  result: string;
 }
 
 export interface SeaSide {
@@ -744,6 +780,8 @@ export interface Game {
   fleets: Fleet[];
   nextFleet: number;
   seaReports: SeaReport[];
+  /** Coasts shelled from the sea, oldest first (the grand campaign). */
+  shoreReports: ShoreReport[];
   /** Last month's result on each convoy route, by route id. */
   convoys: Record<string, ConvoyMonth>;
   airFleets: AirFleet[];

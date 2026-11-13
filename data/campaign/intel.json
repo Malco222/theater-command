@@ -1,9 +1,10 @@
 {
   "_about": "Spies and the fog of war, the grand campaign only. A historical scenario has neither: the whole map is in sight and nobody has agents. In the grand campaign the player sees an enemy or neutral army in full only where his own side can see it, and less the deeper it stands (sight). Agents are recruited for money and sent abroad to see further, to read a government's books, and to wreck factories, railways and oilfields; each month abroad an agent may be caught. The computer's staffs see the whole map, as they always did, and keep no agents on it: their services work against the player as a monthly chance of sabotage (enemy), which the player's own agents on guard at home can stop. So a war with nobody at the table is fought exactly as before.",
   "sight": {
-    "_about": "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is in view: its flag, the number of its corps and the staff's estimate of its strength, and each corps that has been identified (see 'reports'). Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands.",
+    "_about": "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is in view: its flag, the number of its corps and the staff's estimate of its strength, and each corps that has been identified (see 'reports'). Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands. With 'fleets' true, a fleet at sea glimpses every coast of the sea it is in.",
     "full": 1,
-    "glimpse": 2
+    "glimpse": 2,
+    "fleets": true
   },
   "agents": {
     "_about": "cost is in production points (shown times the budget scale). most is how many agents a nation's service can run at once. train is the months before a recruit is ready, travel the months an agent is on the road when sent somewhere. skillAt is the experience at which an agent becomes an operative and then a master; watch is how many quiet months abroad earn one point of it.",

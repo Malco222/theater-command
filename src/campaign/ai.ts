@@ -12,6 +12,7 @@ import { blocked, blowBridges } from './rivers';
 import { groundRules } from './ground';
 import { aiBridges, aiEngineers } from './engineers';
 import { landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding } from './navy';
+import { shoreAI } from './fleets';
 import { afterDeclaring, decide, isOpen, seaBase, staffPhase, theatreStaff } from './staff';
 import { landingsFor, seat } from './difficulty';
 import { hashString } from '../core/rng';
@@ -222,6 +223,7 @@ function mainCampaign(g: Game, nat: string): void {
     if (open) afterDeclaring(g, nat);
   }
   navalAI(g, nat, ph?.fleets);
+  shoreAI(g, nat);
   airAI(g, nat);
   // A nation at peace gives its army no orders, unless its staff is bringing it up for a war of its own choosing.
   if (!n.atWar.length && !(open && ph?.posture === 'redeploy')) return;
