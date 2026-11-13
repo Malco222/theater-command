@@ -2529,7 +2529,8 @@ void ACampaignMapActor::BuildLabels()
 			Spot.Region = Region.Id;
 			Spot.World = MapToWorld(Region.Center.X, Region.Center.Y, Terrain.HeightAt(Region.Center.X, Region.Center.Y));
 			Spot.Reach = (Region.bCapital ? 7.0f : bTown ? 5.2f : 3.6f) * UnitScale;
-			Spot.Name = Region.Name;
+			// (the plate is the town's: "Essen", not "Ruhr". The province's own name is lettered small on the ground.)
+			Spot.Name = Towns.IsValidIndex(Region.Id) && Towns[Region.Id].Region == Region.Id && !Towns[Region.Id].Name.IsEmpty() ? Towns[Region.Id].Name : Region.Name;
 			Spot.Line = FString::Join(Worth, TEXT("  \u00B7  "));
 			Spot.Tier = Region.bCapital ? 0 : bTown ? 1 : 2;
 			Spot.Rank = (Region.bCapital ? 1000 : 0) + Region.VictoryPoints * 20 + Region.Factories * 5 + (bTown ? 10 : 0);
@@ -2548,19 +2549,35 @@ void ACampaignMapActor::BuildLabels()
 void ACampaignMapActor::BuildWords()
 {
 	MapWords.Reset();
-	// Provinces with no town of note: the province's own name, small, in the middle of it.
+	// A province's own name, small, lying on its ground: for every province that has no plate, and for every one
+	// whose plate carries its town's name instead.
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bTown = Region.bCapital || Region.Terrain == TEXT("urban") || Region.VictoryPoints >= 2;
 		const bool bWorth = Region.VictoryPoints > 0 || Region.Factories > 0 || Region.bOil || Region.bPort;
-		if (bTown || bWorth)
+		const bool bPlate = bTown || bWorth;
+		const bool bTownNamed = Towns.IsValidIndex(Region.Id) && Towns[Region.Id].Region == Region.Id && !Towns[Region.Id].Name.IsEmpty() && Towns[Region.Id].Name != Region.Name;
+		if (bPlate && !bTownNamed)
 		{
-			continue; // (it has a name plate)
+			continue; // (its plate says its name already)
+		}
+		FVector2D At = Region.Centroid;
+		if (bPlate && FVector2D::Distance(At, Region.Center) < 9.0)
+		{
+			// Clear of the town and its plate: north of it, or wherever in the province there is room.
+			for (const FVector2D& Offset : { FVector2D(0.0, -9.0), FVector2D(-10.0, -4.0), FVector2D(10.0, -4.0), FVector2D(0.0, 13.0) })
+			{
+				if (Data.FindRegionAt(Region.Center.X + Offset.X, Region.Center.Y + Offset.Y) == Region.Id)
+				{
+					At = Region.Center + Offset;
+					break;
+				}
+			}
 		}
 		FMapWord& Word = MapWords.AddDefaulted_GetRef();
 		Word.Text = Region.Name;
 		Word.Height = 1.5;
-		Word.From = Word.To = Region.Centroid;
+		Word.From = Word.To = At;
 		Word.bRegion = true;
 	}
 	// Seas: across the middle of each, in spaced italic capitals.
@@ -2681,6 +2698,11 @@ void ACampaignMapActor::BuildWords()
 		{
 			Axis = -Axis; // read from west to east
 		}
+		{
+			// (never stood on end: tilted fifty-five degrees at the most)
+			const double Tilt = FMath::Clamp(FMath::Atan2(Axis.Y, Axis.X), -FMath::DegreesToRadians(55.0), FMath::DegreesToRadians(55.0));
+			Axis = FVector2D(FMath::Cos(Tilt), FMath::Sin(Tilt));
+		}
 		const FVector2D Cross(Axis.Y, -Axis.X); // toward the letters' tops
 		double Lo = 1.0e9, Hi = -1.0e9, Down = 1.0e9, Up = -1.0e9;
 		for (int32 Id : Pair.Value.Regions)
@@ -2706,9 +2728,59 @@ void ACampaignMapActor::BuildWords()
 		Word.Text = Name;
 		Word.Height = Height;
 		// (no wider than its letters can fill: a short name is not strung out across a long country)
-		const double Long = FMath::Min(Span, Height * 3.6 * Gaps);
-		Word.From = Middle + Axis * (MiddleAlong - Long * 0.5);
-		Word.To = Middle + Axis * (MiddleAlong + Long * 0.5);
+		// (and no more than a capital and a half of space between one letter and the next, or the word falls apart)
+		const double Long = FMath::Min(Span, Height * 2.2 * Gaps);
+		FVector2D From = Middle + Axis * (MiddleAlong - Long * 0.5), To = Middle + Axis * (MiddleAlong + Long * 0.5);
+		// The name keeps clear of the capital and its plate (which hangs just south of the town): the baseline is
+		// slid a capital and a half off it, to whichever side stays inside the country. If neither does, the
+		// plate wins and the country is not lettered.
+		bool bRoom = true;
+		for (int32 Id : Pair.Value.Regions)
+		{
+			const FCampaignRegion& Seat = Data.Regions[Id];
+			if (!Seat.bCapital)
+			{
+				continue;
+			}
+			// (From high up, where the names are read, a plate is as big on the screen as some forty map units by
+			// twelve, hanging south of a town that is itself a dozen across: that is the room the name must leave.)
+			// (the town's models reach about six units north of its middle; its plate hangs from seven units south
+			// of it and is another eighteen deep as the far view shows it)
+			// (measured on the far view, where the table's far half is drawn at under a pixel to the map unit: the
+			// plate there is as deep as twenty-five units and as wide as fifty)
+			const FVector2D Plate = Seat.Center + FVector2D(0.0, 13.0);
+			const double Along = FVector2D::DotProduct(Plate - From, Axis), Off = FVector2D::DotProduct(Plate - From, Cross);
+			const double Clear = Height * 0.5 + 21.0;
+			if (Along < -(28.0 + Height) || Along > Long + 28.0 + Height || FMath::Abs(Off) >= Clear)
+			{
+				continue; // the plate is not in the word's way
+			}
+			bRoom = false;
+			for (const double Side : { Off >= 0.0 ? -1.0 : 1.0, Off >= 0.0 ? 1.0 : -1.0 })
+			{
+				// (to the near side first: the smaller slide)
+				const FVector2D Slide = Cross * (Side * Clear + Off);
+				const FVector2D Mid = (From + To) * 0.5 + Slide;
+				const int32 Under = Data.FindRegionAt(Mid.X, Mid.Y);
+				if (Under != INDEX_NONE && Data.Regions[Under].Owner == Pair.Key
+					&& Data.FindRegionAt(From.X + Slide.X + Axis.X * Long * 0.2, From.Y + Slide.Y + Axis.Y * Long * 0.2) != INDEX_NONE
+					&& Data.FindRegionAt(To.X + Slide.X - Axis.X * Long * 0.2, To.Y + Slide.Y - Axis.Y * Long * 0.2) != INDEX_NONE)
+				{
+					From += Slide;
+					To += Slide;
+					bRoom = true;
+					break;
+				}
+			}
+			break;
+		}
+		if (!bRoom)
+		{
+			MapWords.Pop(); // (the word was begun above)
+			continue;
+		}
+		Word.From = From;
+		Word.To = To;
 		Word.Bulge = Long * 0.035;
 	}
 }

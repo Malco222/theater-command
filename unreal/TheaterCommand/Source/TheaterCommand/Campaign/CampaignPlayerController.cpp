@@ -1224,7 +1224,7 @@ void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 	// Countries' names are for the view from high up, and fade out on the way down. The seas' are always there,
 	// faint.
 	const float Distance = Eye->GetDistance();
-	const float Countries = FMath::GetMappedRangeValueClamped(FVector2f(8500.0f, 12000.0f), FVector2f(0.0f, 0.92f), Distance);
+	const float Countries = FMath::GetMappedRangeValueClamped(FVector2f(10500.0f, 12500.0f), FVector2f(0.0f, 0.92f), Distance);
 	const float Seas = FMath::GetMappedRangeValueClamped(FVector2f(2500.0f, 6000.0f), FVector2f(0.0f, 0.6f), Distance);
 	int32 Width = 0, Height = 0;
 	GetViewportSize(Width, Height);
