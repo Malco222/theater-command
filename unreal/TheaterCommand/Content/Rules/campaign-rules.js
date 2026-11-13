@@ -17404,6 +17404,29 @@
       free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
       alerts: alertsOf(s),
       todo: todoOf(s),
+      // Every building of the towns' own that stands or is going up, for the table: region, line (0 market, 1 farm,
+      // 2 school, 3 camp, 4 hospital, 5 hall), the level that stands, and 1 while the next is being built.
+      civic: (() => {
+        const LINES = ["market", "farm", "school", "camp", "hospital", "hall"];
+        const seen2 = /* @__PURE__ */ new Map();
+        for (const k of Object.keys(s.flags)) {
+          if (!k.startsWith("cv:")) continue;
+          const [, line, reg] = k.split(":");
+          const i = LINES.indexOf(line), lv = s.flags[k];
+          if (i >= 0 && lv > 0) seen2.set(`${reg}:${i}`, [Number(reg), i, lv, 0]);
+        }
+        for (const n of Object.values(s.nations)) {
+          for (const b of n.queue) {
+            const q = b;
+            const i = q.what === "civic" ? LINES.indexOf(q.item ?? "") : -1;
+            if (i < 0 || q.region === void 0) continue;
+            const cur = seen2.get(`${q.region}:${i}`);
+            if (cur) cur[3] = 1;
+            else seen2.set(`${q.region}:${i}`, [q.region, i, 0, 1]);
+          }
+        }
+        return [...seen2.values()].flat();
+      })(),
       pages: pagesOf(s),
       // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
       // the months it will last and its books in words, and every shipping lane to draw over the sea.

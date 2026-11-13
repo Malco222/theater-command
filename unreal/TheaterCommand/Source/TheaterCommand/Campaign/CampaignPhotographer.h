@@ -57,6 +57,7 @@ private:
 	bool bAnnounce = false; // show the screen that tells of a nation's fall
 	bool bGuide = false; // open the page that says how to play
 	bool bWorks = false; // stand a full set of works in the region looked at: factories, a shipyard, guns and an airfield
+	int32 Civic = 0; // stand every kind of town building at this level beside the region looked at (4: one of each level, some going up)
 	int32 ProvinceTab = 0; // the tab of the province panel to show
 	bool bWealth = false; // the wealth view of the map
 	bool bSides = false; // the friend-and-foe view

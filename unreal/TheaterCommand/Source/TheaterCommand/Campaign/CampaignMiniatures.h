@@ -161,6 +161,12 @@ struct FMiniatureMesh
 	 * for a capital, a church for a city, and a works with a chimney for each pair of factories.
 	 */
 	void Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed, TArray<FVector>* OutChimneys = nullptr, bool bHarbour = false);
+	/**
+	 * One of the buildings a town is given by its owner, standing at the town's edge: Line is 0 a market, 1 farms,
+	 * 2 a school, 3 a drill ground, 4 a hospital, 5 a town hall. Each grows with its level (1 to 3); bGoing puts
+	 * builders' scaffolding beside it (or alone, at level 0) while the next level goes up.
+	 */
+	void Civic(const FVector& Where, double Unit, int32 Line, int32 Level, bool bGoing, const FLinearColor& Nation);
 
 	// ---- The figures. Each stands at Where, turned by Turn degrees, in the nation's colour.
 

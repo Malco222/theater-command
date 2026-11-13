@@ -195,6 +195,12 @@ public:
 
 	/** Shows which bridges are down and which railways are cut. Does nothing if nothing has changed. */
 	void ShowWorks(const TArray<int32>& BridgesDown, const TArray<int32>& RailsCut);
+	/**
+	 * Stands the towns' own buildings on the table, each at its town's edge: four numbers for each, the region,
+	 * the line (0 market, 1 farm, 2 school, 3 camp, 4 hospital, 5 hall), the level that stands, and 1 while the
+	 * next is going up.
+	 */
+	void ShowCivic(const TArray<int32>& Civic);
 
 	/** Where the fleet of this number lies, on the map (for the photographer: "@fleet2"). The middle of the map if there is none. */
 	FVector2D FleetSpot(int32 Index) const;
@@ -412,6 +418,9 @@ private:
 	/** The towns, all in one mesh. */
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> TownMesh;
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> CivicMesh;
+	TArray<int32> ShownCivic;
 
 	/** The trees, in squares of country so that only those near the eye are drawn. */
 	UPROPERTY(Transient)

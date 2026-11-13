@@ -4158,6 +4158,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->SetSeason(View.Turn);
 		Map->ShowArmies(View, Marches, CarriedFrom);
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
+		Map->ShowCivic(View.Civic);
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowLanes(View.Lanes);
 		Map->ShowFreeCapitals(View.FreeCapitals);

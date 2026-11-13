@@ -1600,6 +1600,77 @@ void ACampaignMapActor::BuildWarRoom()
 	}
 }
 
+void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
+{
+	if (!Data.IsLoaded() || (CivicMesh && Civic == ShownCivic))
+	{
+		return;
+	}
+	ShownCivic = Civic;
+	if (!CivicMesh)
+	{
+		CivicMesh = NewObject<UProceduralMeshComponent>(this);
+		CivicMesh->SetupAttachment(Root);
+		CivicMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CivicMesh->RegisterComponent();
+	}
+	CivicMesh->ClearAllMeshSections();
+	FMiniatureMesh Model;
+	const double U = UnitScale;
+	// The buildings stand together as a new quarter on the south side of the town, before it as the table is
+	// usually looked at, where no flag or aeroplane hides them: the market, the hall and the school in the near
+	// row, the hospital, the drill ground and the farms beyond. (An army stands north-east of a town, its air
+	// wings and airfield south-west, its factories north and its guns west.) East and south of the town's middle:
+	static const FVector2D Plots[] = { FVector2D(1.0, 0.0), FVector2D(16.0, 7.2), FVector2D(16.0, 0.0), FVector2D(8.5, 7.2), FVector2D(1.0, 7.2), FVector2D(8.5, 0.0) };
+	for (int32 K = 0; K + 3 < Civic.Num(); K += 4)
+	{
+		const int32 RegionId = Civic[K], Line = Civic[K + 1], Level = Civic[K + 2];
+		if (!Data.Regions.IsValidIndex(RegionId) || Line < 0 || Line > 5)
+		{
+			continue;
+		}
+		const FCampaignRegion& Region = Data.Regions[RegionId];
+		const bool bCity = Region.Terrain == TEXT("urban");
+		// (the near row stands just outside the last of the town's own houses)
+		const double Clear = Region.bCapital ? 14.5 : (bCity ? 13.5 : 10.5);
+		const double Size = Region.bCapital ? 2.9 : (bCity ? 2.7 : 2.4);
+		const FVector2D Offset(Plots[Line].X, Clear + Plots[Line].Y);
+		// If its place is in the sea or over the frontier, the quarter is tried on the town's other sides.
+		FVector2D At = Region.Center;
+		int32 Found = 0; // 2 on the province's own dry land, 1 on dry land
+		for (const double Shift : { 0.0, -55.0, 55.0, -110.0, 110.0, 180.0 })
+		{
+			const double Angle = FMath::DegreesToRadians(Shift);
+			const FVector2D Try = Region.Center + FVector2D(Offset.X * FMath::Cos(Angle) - Offset.Y * FMath::Sin(Angle), Offset.X * FMath::Sin(Angle) + Offset.Y * FMath::Cos(Angle));
+			if (Terrain.HeightAt(Try.X, Try.Y) <= 0.0f)
+			{
+				continue;
+			}
+			const int32 Here = Data.FindRegionAt(Try.X, Try.Y) == RegionId ? 2 : 1;
+			if (Here > Found)
+			{
+				Found = Here;
+				At = Try;
+			}
+			if (Found == 2)
+			{
+				break;
+			}
+		}
+		if (Found == 0)
+		{
+			continue;
+		}
+		const FCampaignNation* Holder = Data.FindNation(Region.Owner);
+		Model.Civic(SurfacePoint(At.X, At.Y, 0.02), U * Size, Line, Level, Civic[K + 3] != 0, Holder ? FLinearColor(Holder->Color) : FLinearColor::Gray);
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		CivicMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		CivicMesh->SetMaterial(0, SceneryMaterial);
+	}
+}
+
 void ACampaignMapActor::BuildTowns()
 {
 	TownMarkers->ClearInstances();

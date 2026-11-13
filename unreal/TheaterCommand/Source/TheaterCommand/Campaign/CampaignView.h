@@ -319,6 +319,9 @@ struct FCampaignView
 	// deals with it ("generals", "research", "arsenal") and a word of explanation.
 	struct FToDo { FString Screen; FString Text; FString Tip; };
 	TArray<FToDo> ToDo;
+	// The towns' own buildings, four numbers each: region, line (0 market, 1 farm, 2 school, 3 camp, 4 hospital,
+	// 5 hall), the level that stands, and 1 while the next is going up.
+	TArray<int32> Civic;
 	TArray<FString> Alerts; // things to tell the player as his month opens
 	TArray<FString> PageIds; // the rooms the rules set out themselves that are open to him
 	TArray<FString> PageLabels;

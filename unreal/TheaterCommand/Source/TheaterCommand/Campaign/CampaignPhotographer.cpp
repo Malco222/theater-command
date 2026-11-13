@@ -336,6 +336,16 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			FShot& Shot = Add(TEXT("38c-plots-on-the-panel"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");
 		}
+		// (the market hall ordered two pictures ago is seen going up at the town's edge)
+		Add(TEXT("38c2-builders-at-work"), TEXT("@capital"), 0.24f, 0.0f);
+		{
+			// The buildings themselves on the table: every kind at its first level, at its third, and a mixture.
+			Add(TEXT("38g-buildings-first-level"), TEXT("@capital"), 0.3f).Civic = 1;
+			Add(TEXT("38h-buildings-third-level"), TEXT("@capital"), 0.3f).Civic = 3;
+			FShot& Mixed = Add(TEXT("38i-buildings-going-up"), TEXT("@capital"), 0.24f, 30.0f);
+			Mixed.Civic = 4;
+			Add(TEXT("38j-buildings-at-a-town"), TEXT("Saxony"), 0.26f).Civic = 2;
+		}
 		{
 			FShot& Shot = Add(TEXT("38d-towns-to-build-up"), TEXT("@capital"), 0.45f);
 			Shot.Room = TEXT("towns");
@@ -968,6 +978,32 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			Works[*Here] = FIntVector4(3, 3, 3, 2);
 		}
 		Table->ShowBuildings(Works);
+	}
+	if (Shot.Civic > 0)
+	{
+		// For looking at the models: every kind of town building beside the town the picture is of.
+		int32 Here = INDEX_NONE;
+		if (const int32* Named = Data.RegionByName.Find(Shot.Region))
+		{
+			Here = *Named;
+		}
+		else
+		{
+			for (const FCampaignRegion& Region : Data.Regions)
+			{
+				if (Region.bCapital && Controller->GetSession() && Region.Owner == Controller->GetSession()->GetView().Human)
+				{
+					Here = Region.Id;
+				}
+			}
+		}
+		TArray<int32> Stood;
+		for (int32 Line = 0; Line < 6 && Here != INDEX_NONE; ++Line)
+		{
+			const int32 Level = Shot.Civic >= 4 ? (Line % 3) + 1 : Shot.Civic;
+			Stood.Append({ Here, Line, Shot.Civic >= 4 && Line == 4 ? 0 : Level, Shot.Civic >= 4 && Line % 2 == 0 ? 1 : 0 });
+		}
+		Table->ShowCivic(Stood);
 	}
 	if (Shot.bGenerals)
 	{

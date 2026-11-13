@@ -964,6 +964,246 @@ void FMiniatureMesh::Broadleaf(const FVector& Where, double Height, double Radiu
 	Ball(Where + FVector(0.0, 0.0, Height * 0.58), FVector(Radius * 2.0, Radius * 2.0, Height * 0.84), Leaf, 4, 6);
 }
 
+void FMiniatureMesh::Civic(const FVector& Where, double Unit, int32 Line, int32 Level, bool bGoing, const FLinearColor& Nation)
+{
+	const double S = Unit;
+	auto P = [&Where, S](double North, double East, double Up) { return Where + FVector(North, East, Up) * S; };
+	auto Hex = [](const TCHAR* Code) { return FLinearColor(FColor::FromHex(Code)); };
+	const FLinearColor Cream = Hex(TEXT("E6DCC4")), Ashlar = Hex(TEXT("D9D2C0")), White = Hex(TEXT("EFEBE0")), Brick = Hex(TEXT("8E5644")), Tile = Hex(TEXT("A04A31"));
+	const FLinearColor Slate = Hex(TEXT("555A60")), Wood = Hex(TEXT("8A6A45")), Cobble = Hex(TEXT("8F887A")), Copper = Hex(TEXT("6FA08C")), Gilt = Hex(TEXT("C9A227"));
+	const FLinearColor Tenting = Hex(TEXT("C9BE9A")), Wheat = Hex(TEXT("D2B052")), Crop = Hex(TEXT("7C9A52")), Straw = Hex(TEXT("D8C277")), Tin = Hex(TEXT("A9ADB0"));
+	const FLinearColor Red = Hex(TEXT("BE2A26")), Drill = Hex(TEXT("C9B487")), Hut = Hex(TEXT("6B7355")), Lawn = Hex(TEXT("6E8B4C")), Leaf = Hex(TEXT("4F6B3A"));
+	TArray<FVector>* const Lit = Windows; // (the scaffolding and the small things have no windows to light)
+
+	// Builders at work: a half-built wall inside a cage of poles, with a derrick over it.
+	auto Scaffold = [&](double North, double East)
+	{
+		Windows = nullptr;
+		Box(P(North, East, 0.17), FVector(0.5, 0.5, 0.34) * S, Brick);
+		for (const double A : { -1.0, 1.0 })
+		{
+			for (const double B : { -1.0, 1.0 })
+			{
+				Rod(P(North + A * 0.32, East + B * 0.32, 0.0), P(North + A * 0.32, East + B * 0.32, 0.8), 0.018 * S, Wood, 4);
+			}
+			for (const double High : { 0.3, 0.62 })
+			{
+				Rod(P(North + A * 0.32, East - 0.32, High), P(North + A * 0.32, East + 0.32, High), 0.014 * S, Wood, 4);
+				Rod(P(North - 0.32, East + A * 0.32, High), P(North + 0.32, East + A * 0.32, High), 0.014 * S, Wood, 4);
+			}
+		}
+		Rod(P(North + 0.32, East + 0.32, 0.8), P(North - 0.1, East - 0.1, 1.05), 0.016 * S, Wood, 4);
+		Rod(P(North - 0.1, East - 0.1, 1.05), P(North - 0.1, East - 0.1, 0.55), 0.006 * S, Slate, 4);
+		Windows = Lit;
+	};
+	// A flag on a pole, in the holder's colour.
+	auto Flag = [&](double North, double East, double High)
+	{
+		Rod(P(North, East, 0.0), P(North, East, High), 0.016 * S, Ashlar, 5);
+		Box(P(North, East + 0.17, High - 0.1), FVector(0.02, 0.34, 0.2) * S, Nation);
+	};
+	if (Level <= 0)
+	{
+		Box(P(0.0, 0.0, 0.015), FVector(1.1, 1.1, 0.03) * S, Cobble);
+		Scaffold(0.0, 0.0);
+		return;
+	}
+	switch (Line)
+	{
+	case 0: // commerce: a market hall with its stalls, then a bank, then a domed exchange
+	{
+		Box(P(0.0, 0.0, 0.015), FVector(1.9, 2.4, 0.03) * S, Cobble);
+		House(P(0.3, 0.0, 0.0), 1.5 * S, 0.66 * S, 0.4 * S, 0.34 * S, Cream, Tile, 90.0);
+		Windows = nullptr;
+		static const TCHAR* Awnings[] = { TEXT("B8342B"), TEXT("ECE3CC"), TEXT("2F6C96"), TEXT("D39B3A") };
+		for (int32 Stall = 0; Stall < 4; ++Stall)
+		{
+			const double East = (Stall - 1.5) * 0.42;
+			Box(P(-0.5, East, 0.07), FVector(0.2, 0.24, 0.14) * S, Wood);
+			Box(P(-0.5, East, 0.2), FVector(0.3, 0.32, 0.03) * S, Hex(Awnings[Stall]), 0.0, 12.0);
+		}
+		Windows = Lit;
+		if (Level >= 2)
+		{
+			Box(P(0.25, -1.45, 0.48), FVector(0.72, 0.6, 0.96) * S, Ashlar);
+			Box(P(0.25, -1.45, 0.99), FVector(0.8, 0.68, 0.06) * S, Slate);
+			for (int32 Column = 0; Column < 4; ++Column)
+			{
+				Pillar(P(-0.16, -1.45 + (Column - 1.5) * 0.16, 0.0), 0.035 * S, 0.03 * S, 0.8 * S, White, 6);
+			}
+		}
+		if (Level >= 3)
+		{
+			Pillar(P(0.25, 1.5, 0.0), 0.44 * S, 0.44 * S, 0.62 * S, Ashlar, 12);
+			Ball(P(0.25, 1.5, 0.74), FVector(0.86, 0.86, 0.62) * S, Copper, 5, 10);
+			Pillar(P(0.25, 1.5, 1.0), 0.04 * S, 0.0, 0.34 * S, Gilt, 6);
+		}
+		if (bGoing) { Scaffold(-0.45, Level >= 2 ? 1.5 : -1.45); }
+		break;
+	}
+	case 1: // farming: a barn among striped fields, then silos, then a canning works
+	{
+		Windows = nullptr;
+		for (int32 Strip = 0; Strip < 6; ++Strip)
+		{
+			Box(P((Strip - 2.5) * 0.34, 0.95, 0.012), FVector(0.3, 1.5, 0.024) * S, Strip % 2 == 0 ? Wheat : Crop);
+		}
+		House(P(0.1, -0.5, 0.0), 1.0 * S, 0.58 * S, 0.36 * S, 0.38 * S, Hex(TEXT("8C3B2E")), Hex(TEXT("4B4038")), 0.0);
+		Ball(P(-0.75, -0.2, 0.1), FVector(0.3, 0.3, 0.24) * S, Straw, 4, 8);
+		Ball(P(-0.75, -0.62, 0.1), FVector(0.3, 0.3, 0.24) * S, Straw, 4, 8);
+		if (Level >= 2)
+		{
+			for (const double East : { -1.25, -1.72 })
+			{
+				Pillar(P(0.35, East, 0.0), 0.2 * S, 0.2 * S, 0.8 * S, Tin, 10);
+				Pillar(P(0.35, East, 0.8), 0.22 * S, 0.0, 0.2 * S, Slate, 10);
+			}
+		}
+		if (Level >= 3)
+		{
+			Windows = Lit;
+			House(P(1.05, -0.7, 0.0), 1.5 * S, 0.6 * S, 0.44 * S, 0.18 * S, Brick, Slate, 90.0);
+			Windows = nullptr;
+			Pillar(P(1.05, 0.25, 0.0), 0.09 * S, 0.065 * S, 1.25 * S, Brick, 8);
+		}
+		Windows = Lit;
+		if (bGoing) { Scaffold(-0.6, -1.4); }
+		break;
+	}
+	case 2: // learning: a schoolhouse with a bell tower, then wings, then an observatory and a mast
+	{
+		Box(P(0.0, 0.0, 0.012), FVector(1.9, 2.3, 0.024) * S, Lawn);
+		House(P(0.2, 0.0, 0.0), 1.25 * S, 0.6 * S, 0.5 * S, 0.32 * S, Brick, Slate, 90.0);
+		Box(P(0.2, 0.0, 0.55), FVector(0.3, 0.3, 1.1) * S, Brick);
+		Pillar(P(0.2, 0.0, 1.1), 0.24 * S, 0.0, 0.36 * S, Slate, 4);
+		if (Level >= 2)
+		{
+			for (const double Side : { -1.0, 1.0 })
+			{
+				House(P(-0.25, Side * 0.86, 0.0), 0.95 * S, 0.5 * S, 0.5 * S, 0.28 * S, Brick, Slate, 0.0);
+			}
+		}
+		if (Level >= 3)
+		{
+			Pillar(P(0.75, -1.25, 0.0), 0.3 * S, 0.3 * S, 0.5 * S, White, 10);
+			Ball(P(0.75, -1.25, 0.6), FVector(0.6, 0.6, 0.5) * S, White, 5, 10);
+			Windows = nullptr;
+			Rod(P(0.75, 1.3, 0.0), P(0.75, 1.3, 1.7), 0.02 * S, Slate, 4);
+			for (const double High : { 0.6, 1.1, 1.5 })
+			{
+				Rod(P(0.75, 1.3 - 0.16, High), P(0.75, 1.3 + 0.16, High), 0.012 * S, Slate, 4);
+			}
+			Windows = Lit;
+		}
+		if (bGoing) { Scaffold(-0.95, 0.0); }
+		break;
+	}
+	case 3: // training: a drill ground with tents and a flag, then barrack huts, then an officers' school
+	{
+		Windows = nullptr;
+		Box(P(0.0, 0.0, 0.012), FVector(2.0, 2.3, 0.024) * S, Drill);
+		Flag(0.75, 0.0, 1.25);
+		if (Level == 1)
+		{
+			for (int32 Tent = 0; Tent < 4; ++Tent)
+			{
+				House(P(-0.55, (Tent - 1.5) * 0.48, 0.0), 0.5 * S, 0.34 * S, 0.04 * S, 0.24 * S, Tenting, Tenting, 0.0);
+			}
+		}
+		Windows = Lit;
+		if (Level >= 2)
+		{
+			for (int32 Row = 0; Row < 3; ++Row)
+			{
+				House(P(-0.72 + Row * 0.42, -0.25, 0.0), 1.5 * S, 0.32 * S, 0.24 * S, 0.14 * S, Hut, Hex(TEXT("3F4338")), 90.0);
+			}
+		}
+		if (Level >= 3)
+		{
+			House(P(0.1, 0.85, 0.0), 1.1 * S, 0.56 * S, 0.56 * S, 0.28 * S, Ashlar, Slate, 0.0);
+			Box(P(0.55, 0.85, 0.5), FVector(0.3, 0.3, 1.0) * S, Ashlar);
+			Pillar(P(0.55, 0.85, 1.0), 0.22 * S, 0.0, 0.3 * S, Slate, 4);
+		}
+		if (bGoing) { Scaffold(-0.7, 0.95); }
+		break;
+	}
+	case 4: // medicine: an aid post under canvas, then a hospital with two wings, then a rest home in a garden
+	{
+		// A red cross laid out on the ground, as on the roof of every hospital, where it can be read from above.
+		Windows = nullptr;
+		Box(P(-0.75, 0.0, 0.02), FVector(0.66, 0.66, 0.04) * S, White);
+		Box(P(-0.75, 0.0, 0.045), FVector(0.5, 0.15, 0.02) * S, Red);
+		Box(P(-0.75, 0.0, 0.045), FVector(0.15, 0.5, 0.02) * S, Red);
+		if (Level == 1)
+		{
+			House(P(0.15, 0.0, 0.0), 1.0 * S, 0.62 * S, 0.12 * S, 0.4 * S, White, Tenting, 90.0);
+			House(P(0.15, 0.85, 0.0), 0.5 * S, 0.36 * S, 0.05 * S, 0.26 * S, Tenting, Tenting, 90.0);
+		}
+		Windows = Lit;
+		if (Level >= 2)
+		{
+			Box(P(0.25, 0.0, 0.4), FVector(0.6, 1.7, 0.8) * S, White);
+			Box(P(0.25, 0.0, 0.83), FVector(0.68, 1.78, 0.06) * S, Slate);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Box(P(-0.05, Side * 0.7, 0.3), FVector(0.9, 0.42, 0.6) * S, White);
+				Box(P(-0.05, Side * 0.7, 0.63), FVector(0.98, 0.5, 0.06) * S, Slate);
+			}
+			if (Lit)
+			{
+				for (int32 K = 0; K < 5; ++K)
+				{
+					Lit->Add(P(-0.06, (K - 2) * 0.3, 0.5));
+					Lit->Add(FVector(-1.0, 0.0, 0.0));
+				}
+			}
+		}
+		if (Level >= 3)
+		{
+			House(P(0.2, 1.55, 0.0), 0.8 * S, 0.56 * S, 0.42 * S, 0.3 * S, Cream, Tile, 0.0);
+			Windows = nullptr;
+			Box(P(-0.55, 1.5, 0.012), FVector(0.7, 0.9, 0.024) * S, Lawn);
+			Broadleaf(P(-0.5, 1.25, 0.0), 0.5 * S, 0.2 * S, Leaf);
+			Broadleaf(P(-0.62, 1.75, 0.0), 0.44 * S, 0.18 * S, Leaf);
+			Windows = Lit;
+		}
+		if (bGoing) { Scaffold(0.9, -1.2); }
+		break;
+	}
+	default: // administration: a town hall with a clock tower, then a colonnade and a wing, then the governor's block
+	{
+		Box(P(0.0, 0.0, 0.015), FVector(1.9, 2.2, 0.03) * S, Cobble);
+		House(P(0.25, 0.0, 0.0), 1.3 * S, 0.7 * S, 0.55 * S, 0.36 * S, Cream, Tile, 90.0);
+		Box(P(0.25, 0.0, 0.75), FVector(0.34, 0.34, 1.5) * S, Cream);
+		Box(P(0.07, 0.0, 1.2), FVector(0.02, 0.2, 0.2) * S, White); // the clock
+		Pillar(P(0.25, 0.0, 1.5), 0.27 * S, 0.0, 0.46 * S, Copper, 4);
+		Windows = nullptr;
+		Flag(-0.7, 0.0, Level >= 3 ? 1.5 : 1.1);
+		if (Level >= 2)
+		{
+			for (int32 Column = 0; Column < 6; ++Column)
+			{
+				Pillar(P(-0.2, (Column - 2.5) * 0.22, 0.0), 0.035 * S, 0.03 * S, 0.5 * S, White, 6);
+			}
+			Box(P(-0.2, 0.0, 0.53), FVector(0.16, 1.3, 0.06) * S, Ashlar);
+			Windows = Lit;
+			House(P(0.25, 1.05, 0.0), 0.8 * S, 0.6 * S, 0.5 * S, 0.3 * S, Cream, Tile, 0.0);
+		}
+		if (Level >= 3)
+		{
+			Windows = Lit;
+			Box(P(0.85, -0.2, 0.5), FVector(0.5, 1.9, 1.0) * S, Ashlar);
+			Box(P(0.85, -0.2, 1.03), FVector(0.58, 1.98, 0.06) * S, Slate);
+			House(P(0.25, -1.05, 0.0), 0.8 * S, 0.6 * S, 0.5 * S, 0.3 * S, Cream, Tile, 0.0);
+		}
+		Windows = Lit;
+		if (bGoing) { Scaffold(-0.75, -0.95); }
+		break;
+	}
+	}
+	Windows = Lit;
+}
+
 void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed, TArray<FVector>* OutChimneys, bool bHarbour)
 {
 	FRandomStream Random(Seed * 7919 + 13);
