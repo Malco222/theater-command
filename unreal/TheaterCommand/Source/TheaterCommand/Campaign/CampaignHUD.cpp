@@ -91,6 +91,133 @@ namespace
 		FVector2D Size = FVector2D(64.0, 40.0);
 	};
 
+	/** The small map in the corner: the countries in their colours, the armies as marks, and the part on screen boxed. A click goes there. */
+	class SMinimap : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SMinimap) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Controller)
+			SLATE_ARGUMENT(float, High)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Controller = Args._Controller;
+			High = Args._High;
+			Picture.DrawAs = ESlateBrushDrawType::Image;
+			Dot.DrawAs = ESlateBrushDrawType::Image;
+			Dot.TintColor = FSlateColor(FLinearColor::White);
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			double Share = 0.87;
+			if (Controller.IsValid())
+			{
+				if (const UTexture2D* Texture = Controller->GetMinimapTexture())
+				{
+					Share = static_cast<double>(Texture->GetSizeX()) / FMath::Max(1, Texture->GetSizeY());
+				}
+			}
+			return FVector2D(High * Share, High);
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
+			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
+		{
+			if (!Controller.IsValid())
+			{
+				return LayerId;
+			}
+			UTexture2D* Texture = Controller->GetMinimapTexture();
+			if (!Texture)
+			{
+				return LayerId;
+			}
+			if (Picture.GetResourceObject() != Texture)
+			{
+				Picture.SetResourceObject(Texture);
+				Picture.ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
+			}
+			const FVector2D Size = Geometry.GetLocalSize();
+			FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), &Picture, ESlateDrawEffect::IgnoreTextureAlpha, FLinearColor::White);
+
+			TArray<FVector> Dots;
+			FBox2D Looking(ForceInit);
+			Controller->GetMinimapMarks(Dots, Looking);
+			static const FLinearColor Inks[] = { FLinearColor(1.0f, 1.0f, 1.0f, 1.0f), FLinearColor(0.45f, 0.8f, 1.0f, 1.0f), FLinearColor(1.0f, 0.2f, 0.12f, 1.0f), FLinearColor(0.1f, 0.1f, 0.1f, 0.85f) };
+			for (const FVector& Mark : Dots)
+			{
+				const int32 Whose = FMath::Clamp(FMath::RoundToInt32(Mark.Z), 0, 3);
+				const double Wide = Whose == 0 ? 5.0 : Whose == 3 ? 3.0 : 4.0;
+				const FVector2D At(Mark.X * Size.X - Wide * 0.5, Mark.Y * Size.Y - Wide * 0.5);
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(Wide, Wide), FSlateLayoutTransform(At)), &Dot, ESlateDrawEffect::None, Inks[Whose]);
+			}
+			if (Looking.bIsValid)
+			{
+				// The part of the map on screen, as a box of four thin lines, kept inside the picture.
+				const FVector2D A(FMath::Clamp(Looking.Min.X, 0.0, 1.0) * Size.X, FMath::Clamp(Looking.Min.Y, 0.0, 1.0) * Size.Y);
+				const FVector2D B(FMath::Clamp(Looking.Max.X, 0.0, 1.0) * Size.X, FMath::Clamp(Looking.Max.Y, 0.0, 1.0) * Size.Y);
+				TArray<FVector2D> Box;
+				Box.Add(A);
+				Box.Add(FVector2D(B.X, A.Y));
+				Box.Add(B);
+				Box.Add(FVector2D(A.X, B.Y));
+				Box.Add(A);
+				FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 2, Geometry.ToPaintGeometry(), Box, ESlateDrawEffect::None, FLinearColor(1.0f, 0.9f, 0.55f, 0.95f), true, 1.5f);
+			}
+			return LayerId + 2;
+		}
+
+		virtual FReply OnMouseButtonDown(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			if (Event.GetEffectingButton() != EKeys::LeftMouseButton)
+			{
+				return FReply::Unhandled();
+			}
+			bHeld = true;
+			Jump(Geometry, Event);
+			return FReply::Handled().CaptureMouse(SharedThis(this));
+		}
+
+		virtual FReply OnMouseMove(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			if (bHeld && HasMouseCapture())
+			{
+				Jump(Geometry, Event);
+				return FReply::Handled();
+			}
+			return FReply::Unhandled();
+		}
+
+		virtual FReply OnMouseButtonUp(const FGeometry& Geometry, const FPointerEvent& Event) override
+		{
+			if (bHeld)
+			{
+				bHeld = false;
+				return FReply::Handled().ReleaseMouseCapture();
+			}
+			return FReply::Unhandled();
+		}
+
+	private:
+		void Jump(const FGeometry& Geometry, const FPointerEvent& Event) const
+		{
+			const FVector2D Size = Geometry.GetLocalSize();
+			const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
+			if (Controller.IsValid() && Size.X > 0.0 && Size.Y > 0.0)
+			{
+				Controller->JumpToMapShare(FVector2D(Local.X / Size.X, Local.Y / Size.Y));
+			}
+		}
+
+		TWeakObjectPtr<ACampaignPlayerController> Controller;
+		float High = 200.0f;
+		mutable FSlateBrush Picture;
+		FSlateBrush Dot;
+		bool bHeld = false;
+	};
+
 	class SCampaignOverlay : public SCompoundWidget
 	{
 	public:
@@ -384,6 +511,16 @@ namespace
 								]
 								]
 						]
+						// The small map: every country in its colour, the armies as marks, the part on screen boxed.
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 12.0f)
+						[
+							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(6.0f))
+							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMapShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+							.ToolTipText(FText::FromString(TEXT("The whole map. White marks are your armies, blue your allies', red the enemy's. Click or drag to look somewhere else.")))
+							[
+								SNew(SMinimap).Controller(Controller).High(212.0f)
+							]
+						]
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
 						[
 						SNew(SBox).WidthOverride(400.0f)
@@ -467,7 +604,7 @@ namespace
 									// (It can be a long list, so it scrolls within a fixed height and never climbs over the date plate.)
 									+ SVerticalBox::Slot().AutoHeight()
 									[
-										SNew(SBox).MaxDesiredHeight(455.0f)
+										SNew(SBox).MaxDesiredHeight(330.0f)
 										[
 											SNew(SScrollBox)
 											+ SScrollBox::Slot()
@@ -1378,48 +1515,106 @@ namespace
 				}
 				if (Info.Options.Num() > 0 || Info.Forming.Num() > 0 || !Info.ProvinceNote.IsEmpty() || !Info.Holdings.IsEmpty())
 				{
-					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
-					[
-						SNew(STextBlock).Text(Info.OptionsTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
-					];
-					ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
-					[
-						SNew(STextBlock).Text(Info.Holdings).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
-					];
-					if (!Info.ProvinceNote.IsEmpty())
+					// What can be ordered here is sorted under two tabs, so the panel stays small: troops to raise,
+					// and work on the ground itself (forts, bridges, railways, engineers). A fleet's or an air
+					// fleet's orders are one list.
+					TArray<const FProvinceOption*> Recruits, Works;
+					int32 ProvinceTab = Controller->GetProvinceTab();
+					const bool bProvince = Info.OptionsTitle.ToString() == TEXT("PROVINCE");
+					for (const FProvinceOption& Option : Info.Options)
+					{
+						(bProvince && (Option.Action == TEXT("fort") || Option.Action.StartsWith(TEXT("work:"))) ? Works : Recruits).Add(&Option);
+					}
+					if (!bProvince)
+					{
+						ProvinceTab = 1;
+					}
+					else if ((ProvinceTab == 1 && Recruits.Num() == 0) || (ProvinceTab == 2 && Works.Num() == 0))
+					{
+						ProvinceTab = 0;
+					}
+					auto TabButton = [this, &ProvinceTab](const FString& Label, int32 Tab)
+					{
+						const bool bOn = ProvinceTab == Tab;
+						return SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(10.0f, 4.0f)).IsFocusable(false)
+							.OnClicked_Lambda([this, Tab]() { if (Controller.IsValid()) { Controller->SetProvinceTab(Tab); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(bOn ? BrightBrass : Muted)
+							];
+					};
+					if (bProvince && (Recruits.Num() > 0 || Works.Num() > 0))
+					{
+						TSharedRef<SHorizontalBox> Tabs = SNew(SHorizontalBox);
+						Tabs->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)[TabButton(TEXT("PROVINCE"), 0)];
+						if (Recruits.Num() > 0)
+						{
+							Tabs->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)[TabButton(FString::Printf(TEXT("RECRUIT  %d"), Recruits.Num()), 1)];
+						}
+						if (Works.Num() > 0)
+						{
+							Tabs->AddSlot().AutoWidth()[TabButton(FString::Printf(TEXT("WORKS  %d"), Works.Num()), 2)];
+						}
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)[Tabs];
+					}
+					else
+					{
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 14.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.OptionsTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+						];
+					}
+					if (ProvinceTab == 0 || !bProvince)
+					{
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.Holdings).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						];
+					}
+					if (!Info.ProvinceNote.IsEmpty() && ProvinceTab != 2)
 					{
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 						[
 							SNew(STextBlock).Text(Info.ProvinceNote).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Faint).AutoWrapText(true)
 						];
 					}
-					for (const FProvinceOption& Option : Info.Options)
+					// Each thing that can be ordered is one short row: its name, and under it what it costs in a
+					// single line. The rest, and why it cannot be ordered if it cannot, is in the tip.
+					const TArray<const FProvinceOption*>& Shown = ProvinceTab == 2 ? Works : Recruits;
+					if (ProvinceTab != 0)
 					{
-						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
-						[
-							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 6.0f)).IsFocusable(false).IsEnabled(Option.bEnabled)
-							.ToolTipText(FText::FromString(Option.Why))
-							.OnClicked_Lambda([this, Action = Option.Action]()
-							{
-								if (Controller.IsValid())
-								{
-									Controller->ProvinceAction(Action);
-								}
-								return FReply::Handled();
-							})
+						for (const FProvinceOption* Each : Shown)
+						{
+							const FProvinceOption& Option = *Each;
+							const FString Label = Option.Label.StartsWith(TEXT("Raise: ")) ? Option.Label.Mid(7) : Option.Label;
+							const FString Tip = Option.Why.IsEmpty() ? FString::Printf(TEXT("%s\n%s"), *Option.Label, *Option.Detail) : FString::Printf(TEXT("%s\n%s\n%s"), *Option.Label, *Option.Detail, *Option.Why);
+							ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
 							[
-								SNew(SVerticalBox)
-								+ SVerticalBox::Slot().AutoHeight()
+								SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(10.0f, 4.0f)).IsFocusable(false).IsEnabled(Option.bEnabled)
+								.ToolTipText(FText::FromString(Tip))
+								.OnClicked_Lambda([this, Action = Option.Action]()
+								{
+									if (Controller.IsValid())
+									{
+										Controller->ProvinceAction(Action);
+									}
+									return FReply::Handled();
+								})
 								[
-									SNew(STextBlock).Text(FText::FromString(Option.Label)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Option.bEnabled ? Cream : Faint)
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Option.bEnabled ? Cream : Faint)
+										.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+									]
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Option.bEnabled ? Muted : Faint)
+										.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										.Text(FText::FromString(Option.bEnabled || Option.Why.IsEmpty() ? Option.Detail : Option.Why))
+									]
 								]
-								+ SVerticalBox::Slot().AutoHeight()
-								[
-									SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Option.bEnabled ? Muted : Faint).AutoWrapText(true)
-									.Text(FText::FromString(Option.bEnabled || Option.Why.IsEmpty() ? Option.Detail : Option.Detail + TEXT("\n") + Option.Why))
-								]
-							]
-						];
+							];
+						}
 					}
 					for (const FOrderLine& Order : Info.Forming)
 					{

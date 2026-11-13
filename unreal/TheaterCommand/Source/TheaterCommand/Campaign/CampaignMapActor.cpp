@@ -1355,6 +1355,85 @@ void ACampaignMapActor::BuildTowns()
 	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points"), Count, Model.Vertices.Num());
 }
 
+UTexture2D* ACampaignMapActor::GetMinimap()
+{
+	if (!Data.IsLoaded() || Data.Width <= 0.0 || Data.Height <= 0.0)
+	{
+		return nullptr;
+	}
+	if (MiniRegion.Num() == 0)
+	{
+		// Which province lies under each point: worked out once, since the provinces do not move.
+		MiniHigh = 264;
+		MiniWide = FMath::Max(8, FMath::RoundToInt32(MiniHigh * Data.Width / Data.Height));
+		MiniRegion.SetNumUninitialized(MiniWide * MiniHigh);
+		for (int32 Y = 0; Y < MiniHigh; ++Y)
+		{
+			for (int32 X = 0; X < MiniWide; ++X)
+			{
+				MiniRegion[Y * MiniWide + X] = static_cast<int16>(Data.FindRegionAt((X + 0.5) * Data.Width / MiniWide, (Y + 0.5) * Data.Height / MiniHigh));
+			}
+		}
+		bMiniStale = true;
+	}
+	if (!bMiniStale && MiniTexture)
+	{
+		return MiniTexture;
+	}
+	bMiniStale = false;
+	TArray<FColor> Pixels;
+	Pixels.SetNumUninitialized(MiniWide * MiniHigh);
+	const FColor Water(22, 52, 74), Shore(12, 28, 40);
+	auto At = [this](int32 X, int32 Y) -> int32
+	{
+		return (X < 0 || Y < 0 || X >= MiniWide || Y >= MiniHigh) ? -1 : MiniRegion[Y * MiniWide + X];
+	};
+	auto HolderOf = [this](int32 RegionId) -> const FString&
+	{
+		static const FString None;
+		return Data.Regions.IsValidIndex(RegionId) ? Data.Regions[RegionId].Owner : None;
+	};
+	for (int32 Y = 0; Y < MiniHigh; ++Y)
+	{
+		for (int32 X = 0; X < MiniWide; ++X)
+		{
+			const int32 Here = At(X, Y);
+			FColor& Out = Pixels[Y * MiniWide + X];
+			if (Here < 0)
+			{
+				// The sea, darker along the shore so that the land stands out of it.
+				const bool bCoast = At(X + 1, Y) >= 0 || At(X - 1, Y) >= 0 || At(X, Y + 1) >= 0 || At(X, Y - 1) >= 0;
+				Out = bCoast ? Shore : Water;
+				continue;
+			}
+			const FString& Holder = HolderOf(Here);
+			const FCampaignNation* Nation = Data.FindNation(Holder);
+			FLinearColor Tint = Nation ? FLinearColor(Nation->Color) : FLinearColor(0.35f, 0.35f, 0.33f);
+			// A frontier between two countries is drawn dark; a province line inside one is not drawn at all.
+			const int32 East = At(X + 1, Y), South = At(X, Y + 1);
+			if ((East >= 0 && HolderOf(East) != Holder) || (South >= 0 && HolderOf(South) != Holder))
+			{
+				Tint *= 0.45f;
+			}
+			Tint.A = 1.0f;
+			Out = Tint.ToFColor(true);
+		}
+	}
+	if (!MiniTexture)
+	{
+		MiniTexture = CampaignTextures::Create(MiniWide, MiniHigh, Pixels, true, false, TEXT("CampaignMinimap"));
+		if (MiniTexture)
+		{
+			MiniTexture->Filter = TF_Bilinear;
+		}
+	}
+	else
+	{
+		CampaignTextures::Update(MiniTexture, Pixels);
+	}
+	return MiniTexture;
+}
+
 FVector2D ACampaignMapActor::FleetPlace(int32 FleetId) const
 {
 	const TObjectPtr<AArmyPiece>* Piece = FleetPieces.Find(FleetId);
@@ -2114,6 +2193,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	{
 		return;
 	}
+	bMiniStale = true;
 
 	// Ground has changed hands. Repaint it, with a margin for the band of thick paint along the new
 	// frontier, rebuild only the pieces of the land that touches, and redraw the frontier lines.

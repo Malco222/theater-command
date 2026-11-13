@@ -365,6 +365,15 @@ public:
 	void DismissAnnouncement();
 	/** Tells a great moment on a screen of its own, after any already waiting. */
 	void Announce(const FAnnouncement& Told) { Announcements.Add(Told); }
+	/** Which part of the province panel is open: 0 the province, 1 what can be raised there, 2 the works. */
+	int32 GetProvinceTab() const { return ProvinceTab; }
+	void SetProvinceTab(int32 Tab) { ProvinceTab = Tab; RegionPanel.Revision = ++PanelRevision; }
+	/** The small map in the corner: its picture, the marks on it, and a jump to a place on it. */
+	UTexture2D* GetMinimapTexture() const;
+	/** Armies as (x, y, whose) with x and y from 0 to 1 and whose 0 for the player's, 1 for a friend's, 2 for an enemy's, 3 for others; and the part of the map on screen. */
+	void GetMinimapMarks(TArray<FVector>& OutDots, FBox2D& OutLooking) const;
+	void JumpToMapShare(const FVector2D& Share);
+	bool IsMapShown() const;
 	/** A fleet in hand: picked up like an army, sent to a sea with a right-click, its ships shown as cards. */
 	bool PickUpFleet(int32 FleetId);
 	void PutDownFleet();
@@ -540,6 +549,7 @@ private:
 	TArray<FAnnouncement> Announcements;
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
+	int32 ProvinceTab = 0;
 	int32 FleetInHand = INDEX_NONE; // the fleet picked up, by its id
 	FString FleetNext = TEXT("patrol");
 	int32 FleetHoverSea = INDEX_NONE; // the sea the pointer is nearest, while a fleet is in hand

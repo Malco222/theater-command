@@ -57,6 +57,7 @@ private:
 	bool bAnnounce = false; // show the screen that tells of a nation's fall
 	bool bGuide = false; // open the page that says how to play
 	bool bWorks = false; // stand a full set of works in the region looked at: factories, a shipyard, guns and an airfield
+	int32 ProvinceTab = 0; // the tab of the province panel to show
 	bool bFleet = false; // pick up the player's largest fleet, as an army is picked up
 	bool bFleetSails = false; // and send it to the farthest sea it can reach
 	bool bGenerals = false; // open the generals' list, and give the first corps without one the man who suits it

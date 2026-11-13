@@ -162,6 +162,8 @@ public:
 
 	/** Where the fleet of this number lies, on the map (for the photographer: "@fleet2"). The middle of the map if there is none. */
 	FVector2D FleetSpot(int32 Index) const;
+	/** The whole map small, each country's ground in its colour, for the corner of the screen. Painted afresh when ground changes hands. */
+	UTexture2D* GetMinimap();
 	/** Where a fleet lies on the map, by its id. */
 	FVector2D FleetPlace(int32 FleetId) const;
 
@@ -277,6 +279,11 @@ private:
 	TArray<FColor> SmokeColours;
 	bool bSmokeMade = false;
 	void UpdateSmoke(float CameraDistance, const FVector& CameraFocus);
+	UPROPERTY()
+	TObjectPtr<UTexture2D> MiniTexture;
+	TArray<int16> MiniRegion; // the province under each point of the small map, or -1 for the sea
+	int32 MiniWide = 0, MiniHigh = 0;
+	bool bMiniStale = true;
 	TArray<FIntVector4> ShownBuildings;
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
 	FLandFeatures Land;

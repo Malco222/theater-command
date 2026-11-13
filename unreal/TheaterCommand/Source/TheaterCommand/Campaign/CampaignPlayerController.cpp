@@ -1814,6 +1814,72 @@ void ACampaignPlayerController::ShowForce(bool bFleet, int32 Id)
 	RegionPanel.Options = Force.Options;
 }
 
+UTexture2D* ACampaignPlayerController::GetMinimapTexture() const
+{
+	return Map.IsValid() ? Map->GetMinimap() : nullptr;
+}
+
+bool ACampaignPlayerController::IsMapShown() const
+{
+	return GetSession() != nullptr && Map.IsValid() && !Opening.bVisible;
+}
+
+void ACampaignPlayerController::GetMinimapMarks(TArray<FVector>& OutDots, FBox2D& OutLooking) const
+{
+	OutDots.Reset();
+	OutLooking = FBox2D(ForceInit);
+	const FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return;
+	}
+	const FCampaignMapData& Data = Map->GetData();
+	const FCampaignView& View = Session->GetView();
+	// One mark for each province an army stands in, for each side that has one there.
+	TSet<FIntPoint> Marked;
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		if (!Data.Regions.IsValidIndex(Unit.Region))
+		{
+			continue;
+		}
+		const bool bMine = Unit.Nation == View.Human;
+		const FString Standing = View.RegionStanding.IsValidIndex(Unit.Region) ? View.RegionStanding[Unit.Region] : FString();
+		// (whose the army is, as nearly as the map can say: the player's own, or by where it stands)
+		const int32 Whose = bMine ? 0 : (Standing == TEXT("enemy") ? 2 : Standing == TEXT("ally") || Standing == TEXT("own") ? 1 : 3);
+		bool bAlready = false;
+		Marked.Add(FIntPoint(Unit.Region, Whose), &bAlready);
+		if (!bAlready)
+		{
+			const FVector2D At = Data.Regions[Unit.Region].Center;
+			OutDots.Add(FVector(At.X / Data.Width, At.Y / Data.Height, Whose));
+		}
+	}
+	if (const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		// About what the screen takes in: as wide as the view at the point looked at, and three fifths as deep.
+		const FVector2D Middle = Map->WorldToMap(Eye->GetFocus());
+		const double PerUnit = FVector::Dist(Map->MapToWorld(0.0, 0.0), Map->MapToWorld(1.0, 0.0));
+		const double Wide = PerUnit > 0.0 ? 2.0 * Eye->GetDistance() * FMath::Tan(FMath::DegreesToRadians(Eye->GetHorizontalFov() * 0.5)) / PerUnit : 100.0;
+		const FVector2D Half(Wide * 0.5 / Data.Width, Wide * 0.3 / Data.Height);
+		const FVector2D Centre(Middle.X / Data.Width, Middle.Y / Data.Height);
+		OutLooking = FBox2D(Centre - Half, Centre + Half);
+	}
+}
+
+void ACampaignPlayerController::JumpToMapShare(const FVector2D& Share)
+{
+	if (!Map.IsValid())
+	{
+		return;
+	}
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		const FCampaignMapData& Data = Map->GetData();
+		Eye->GoTo(Map->MapToWorld(FMath::Clamp(Share.X, 0.0, 1.0) * Data.Width, FMath::Clamp(Share.Y, 0.0, 1.0) * Data.Height));
+	}
+}
+
 int32 ACampaignPlayerController::SeaNear(const FVector2D& MapPoint) const
 {
 	int32 Best = INDEX_NONE;
@@ -3243,8 +3309,24 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			Header += FString::Printf(TEXT(", under %s"), *Piece->GetGeneral());
 		}
 		ForceLines.Add(Header);
+		// The player's own army is read from its cards when it is picked up; another's corps are listed here, a few of them.
+		const FCampaignSession* Now = GetSession();
+		if (Now && Piece->GetNationTag() == Now->GetView().Human)
+		{
+			continue;
+		}
+		int32 Listed = 0;
 		for (const FViewCorps& Unit : Piece->GetCorps())
 		{
+			if (Unit.bDim)
+			{
+				continue;
+			}
+			if (++Listed > 4)
+			{
+				ForceLines.Add(FString::Printf(TEXT("      and %d more corps"), Piece->GetCorps().Num() - 4));
+				break;
+			}
 			ForceLines.Add(FString::Printf(TEXT("      %s  (%s, %d)"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind), Unit.Divisions));
 		}
 	}

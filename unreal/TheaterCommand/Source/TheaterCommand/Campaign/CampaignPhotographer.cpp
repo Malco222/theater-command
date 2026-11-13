@@ -208,6 +208,16 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shots.Reset();
 		Add(TEXT("30-grand-whole-map"), TEXT(""), 0.97f);
 		Add(TEXT("31-grand-capital"), TEXT("@capital"), 0.45f).Select = TEXT("@capital");
+		{
+			FShot& Shot = Add(TEXT("31a-province-recruit"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.ProvinceTab = 1;
+		}
+		{
+			FShot& Shot = Add(TEXT("31a2-province-works"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.ProvinceTab = 2;
+		}
 		Add(TEXT("31b-ledger"), TEXT("@capital"), 0.45f).bLedger = true;
 		Add(TEXT("31e-diplomacy"), TEXT("@capital"), 0.45f).bDiplomacy = true;
 		Add(TEXT("31f-research"), TEXT("@capital"), 0.45f).bResearch = true;
@@ -591,6 +601,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	{
 		Controller->OrderTo(*Target);
 	}
+	Controller->SetProvinceTab(Shot.ProvinceTab);
 	if (Shot.bFleet && Controller->GetSession())
 	{
 		const FCampaignView& Now = Controller->GetSession()->GetView();
