@@ -2502,7 +2502,32 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			Offered->SetHovered(true);
 		}
 	}
-	CurrentMouseCursor = HeldPiece.IsValid() && bDragging ? EMouseCursor::GrabHandClosed : (Offered ? EMouseCursor::GrabHand : EMouseCursor::Default);
+	// The pointer itself says what a right-click would do with what is in hand: cross-hairs over ground or a coast
+	// that would be attacked, a barred circle over what is out of reach this month.
+	EMouseCursor::Type Pointer = HeldPiece.IsValid() && bDragging ? EMouseCursor::GrabHandClosed : (Offered ? EMouseCursor::GrabHand : EMouseCursor::Default);
+	if (Pointer == EMouseCursor::Default && !bBusy && !bScripted && !bTurning && !bPointerOverPanel && bOnTable)
+	{
+		if (ArmyRegion != INDEX_NONE && PointedRegion != INDEX_NONE && PointedRegion != ArmyRegion)
+		{
+			const FReachRegion* There = FindReach(PointedRegion);
+			Pointer = !There ? EMouseCursor::SlashedCircle : (There->bAttack || There->IsWar()) ? EMouseCursor::Crosshairs : EMouseCursor::Default;
+		}
+		else if (FleetInHand != INDEX_NONE)
+		{
+			const FCampaignSession* Now = GetSession();
+			const FViewFleet* Held = Now ? Now->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; }) : nullptr;
+			if (Held && bPointerOnWater)
+			{
+				Pointer = Held->Reach.Contains(SeaNear(PointerMap)) ? EMouseCursor::Default : EMouseCursor::SlashedCircle;
+			}
+			else if (Held && PointedRegion != INDEX_NONE)
+			{
+				const bool bShell = FleetHand.bGrand && !FleetHand.bShelled && FleetHand.Coasts.Contains(PointedRegion);
+				Pointer = bShell ? EMouseCursor::Crosshairs : (PointedRegion == Held->Base || Held->Bases.Contains(PointedRegion)) ? EMouseCursor::Default : EMouseCursor::SlashedCircle;
+			}
+		}
+	}
+	CurrentMouseCursor = Pointer;
 
 	// Whatever the pointer rests on is lit faintly, and with an army in hand the road to it is drawn.
 	if (!bScripted && !bTurning && (!bDragging || HeldPiece.IsValid()))
