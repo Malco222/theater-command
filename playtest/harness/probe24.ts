@@ -16,9 +16,10 @@ const WANT: Record<string, { seats: [string, string][]; tracks: [string, number]
   most: { seats: [['finance', 'taxman'], ['arms', 'planner'], ['foreign', 'statesman'], ['staff', 'organiser']], tracks: [['economy', 1], ['economy', 2], ['service', 1]] },
 };
 const want = WANT[cabinet];
-let lastDir = -1, logSeen = 0, months = 0, low35 = 0, debtMonths = 0, minTrust = 999, sumTrust = 0, falls: string[] = [], sumNet = 0, sumGross = 0, spent = 0;
+const logSeen = new Set<string>(); const trustBy: number[] = [], capBy: number[] = []; let atCap = 0, moneyWon = 0, corpsWon = 0;
+let lastDir = -1, months = 0, low35 = 0, debtMonths = 0, minTrust = 999, sumTrust = 0, falls: string[] = [], sumNet = 0, sumGross = 0, spent = 0;
 const issued: Record<string, number> = {}, ended: Record<string, number> = {};
-let open: { kind: string; title: string } | null = null;
+let open: { kind: string; title: string; reward: string } | null = null;
 
 /** Hops from the nearest corps of mine to a province next to the target, walking only over ground my side holds. -1: no way by land. */
 function landHops(g: Game, target: number): number {
@@ -38,18 +39,18 @@ const run = campaign(me, Number(fromS), Number(seedS), { ...plan, each: (g) => {
   sumNet += L.net * L.scale; sumGross += L.gross * L.scale;
   if (g.nations[me].pp < 0) debtMonths++;
   if (v.trust < 35) low35++;
-  minTrust = Math.min(minTrust, v.trust); sumTrust += v.trust;
+  minTrust = Math.min(minTrust, v.trust); sumTrust += v.trust; trustBy.push(v.trust); capBy.push(v.capital); if (v.capital >= v.capitalMost) atCap++;
   // News from the cabinet's own log since last month.
   const log = [...v.log].reverse();
-  for (const e of log.slice(logSeen)) {
-    if (/^Directive (carried out|not carried out|set aside|withdrawn)/.test(e.text)) { const how = e.text.split(':')[0].replace('Directive ', ''); const k = `${open?.kind ?? '?'} ${how}`; ended[k] = (ended[k] ?? 0) + 1; console.log(`   ${date(e.turn)}  => ${how}${open ? '' : ' (?)'}`); open = null; }
+  for (const e of log) {
+    const key = `${e.turn}|${e.text}`; if (logSeen.has(key)) continue; logSeen.add(key);
+    if (/^Directive (carried out|not carried out|set aside|withdrawn)/.test(e.text)) { const how = e.text.split(':')[0].replace('Directive ', ''); const k = `${open?.kind ?? '?'} ${how}`; ended[k] = (ended[k] ?? 0) + 1; if (how === 'carried out' && open) { const m = /([\d,]+) for the treasury/.exec(open.reward); if (m) moneyWon += Number(m[1].replace(/,/g, '')); if (/corps/.test(open.reward)) corpsWon++; } console.log(`   ${date(e.turn)}  => ${how}${open ? '' : ' (?)'}`); open = null; }
     else if (/cabinet fell/.test(e.text)) { falls.push(date(e.turn)); console.log(`   ${date(e.turn)}  THE CABINET FELL (trust now ${v.trust})`); }
     else if (!/^Directive:/.test(e.text)) console.log(`   ${date(e.turn)}  ${e.text}`);
   }
-  logSeen = log.length;
   const d = v.directive;
   if (d && d.id !== lastDir) {
-    lastDir = d.id; issued[d.kind] = (issued[d.kind] ?? 0) + 1; open = { kind: d.kind, title: d.title };
+    lastDir = d.id; issued[d.kind] = (issued[d.kind] ?? 0) + 1; open = { kind: d.kind, title: d.title, reward: d.reward };
     let extra = '';
     if (d.region !== undefined && d.region >= 0) {
       const r = g.regions[d.region];
@@ -72,4 +73,6 @@ const run = campaign(me, Number(fromS), Number(seedS), { ...plan, each: (g) => {
   }
 } }, { until: Number(untilS) });
 for (const e of run.errors) console.log('ERROR', String(e).slice(0, 600));
-console.log(`TOTAL ${me} seed ${seedS} cabinet ${cabinet}${plan.idle ? ' IDLE' : ''}: ${months} months; directives issued ${JSON.stringify(issued)}; ended ${JSON.stringify(ended)}; cabinet fell ${falls.length} times ${falls.join(', ')}; trust mean ${(sumTrust / Math.max(1, months)).toFixed(0)}, lowest ${minTrust}, months under 35: ${low35}; months in debt ${debtMonths}; capital spent on the cabinet ${spent}; income in all gross ${Math.round(sumGross)} net ${Math.round(sumNet)}`);
+console.log(`TRUST ${trustBy.join(' ')}`);
+console.log(`CAPITAL ${capBy.join(' ')}`);
+console.log(`TOTAL ${me} seed ${seedS} cabinet ${cabinet}${plan.idle ? ' IDLE' : ''}: ${months} months; directives issued ${JSON.stringify(issued)}; ended ${JSON.stringify(ended)}; cabinet fell ${falls.length} times ${falls.join(', ')}; trust mean ${(sumTrust / Math.max(1, months)).toFixed(0)}, lowest ${minTrust}, months under 35: ${low35}; months in debt ${debtMonths}; capital spent on the cabinet ${spent}; months with capital at its most ${atCap}; directives paid ${moneyWon} and ${corpsWon} corps; income in all gross ${Math.round(sumGross)} net ${Math.round(sumNet)}`);
