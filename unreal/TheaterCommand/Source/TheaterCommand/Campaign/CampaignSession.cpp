@@ -1610,7 +1610,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 	return Out;
 }
 
-bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNote)
+bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNote, FSortie* OutSortie)
 {
 	TSharedPtr<FJsonObject> Object;
 	bool bOk = false;
@@ -1618,6 +1618,19 @@ bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNo
 	{
 		Object->TryGetBoolField(TEXT("ok"), bOk);
 		Object->TryGetStringField(TEXT("note"), OutNote);
+		const TSharedPtr<FJsonObject>* Fly = nullptr;
+		if (OutSortie && Object->TryGetObjectField(TEXT("fly"), Fly))
+		{
+			OutSortie->bValid = true;
+			(*Fly)->TryGetNumberField(TEXT("from"), OutSortie->From);
+			(*Fly)->TryGetNumberField(TEXT("region"), OutSortie->Region);
+			(*Fly)->TryGetStringField(TEXT("nat"), OutSortie->Nation);
+			(*Fly)->TryGetBoolField(TEXT("bombers"), OutSortie->bBombers);
+			double X = 0.0, Y = 0.0;
+			(*Fly)->TryGetNumberField(TEXT("x"), X);
+			(*Fly)->TryGetNumberField(TEXT("y"), Y);
+			OutSortie->To = FVector2D(X, Y);
+		}
 		TakeView(Object);
 	}
 	return bOk;

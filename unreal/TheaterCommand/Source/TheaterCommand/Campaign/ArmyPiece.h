@@ -76,6 +76,8 @@ public:
 	void ReturnToRest();
 
 	int32 GetRegionId() const { return RegionId; }
+	/** For an air fleet: the province its airfield is in. */
+	int32 GetBaseRegion() const { return What == 2 ? Wing.Base : RegionId; }
 	const FString& GetNationTag() const { return NationTag; }
 	const FString& GetGeneral() const { return General; }
 	int32 GetDivisions() const { return Divisions; }

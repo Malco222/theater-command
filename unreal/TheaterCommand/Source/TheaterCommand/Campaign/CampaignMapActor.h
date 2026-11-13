@@ -128,6 +128,9 @@ public:
 	/** Draws the shipping lanes over the sea: pale where the cargoes get through, amber where raiders are at them, red where the lane is cut. */
 	void ShowLanes(const TArray<FViewLane>& Lanes);
 
+	/** Aircraft take off from their airfield, fly to the target and come home, over some seconds. */
+	void FlySortie(const FSortie& Sortie);
+
 	/** Smoke and gun flashes over a region where a battle has just been fought, for a few seconds. */
 	void AddBattleSmoke(int32 RegionId);
 
@@ -192,6 +195,16 @@ private:
 	TObjectPtr<UProceduralMeshComponent> RailMesh;
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> WorksMesh;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> SortieMesh;
+	struct FFlight
+	{
+		FSortie Sortie;
+		double Began = 0.0;
+		bool bStruck = false; // the bombs have been seen to fall
+	};
+	TArray<FFlight> Flights;
+	void UpdateSorties();
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LanesMesh;
 	FString ShownLanes; // what is drawn now, to tell when it has changed

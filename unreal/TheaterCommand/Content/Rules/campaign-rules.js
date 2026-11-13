@@ -4478,6 +4478,7 @@
     const own = AIR.fleets.find((x) => x.nat === f.nat && x.name === f.name)?.ftrRange;
     return own ? { ...spec(f.nat), ftrRange: own } : spec(f.nat);
   };
+  var airRange = (f) => ({ ftr: reach(f).ftrRange, bmr: reach(f).bmrRange });
   function airPool(g2, nat) {
     var _a;
     return (_a = g2.airPool)[nat] ?? (_a[nat] = { ftr: 0, bmr: 0, pilots: 0, lostFtr: 0, lostBmr: 0, lostPilots: 0 });
@@ -4845,6 +4846,10 @@
     const worn = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => f.ready < 0.8);
     if (worn.length) out.lines.push({ label: "Readiness", value: `${list(worn.map((f) => f.name))} not fully fit to fly`, effect: "A worn fleet fights below its strength" });
     return out;
+  }
+  function previewAir(g2, f, m, target) {
+    const group = airFleetsOf(g2, f.nat).filter((x) => x.id === f.id || x.mission === m && x.target === target);
+    return assessAir(g2, group, m, target);
   }
   function gainXp2(f, won) {
     const l = f.leader;
@@ -12656,6 +12661,10 @@
     const f = myAir(g2, id);
     return !!f && rebaseAir(g2, f, g2.regions[region]);
   }
+  function previewAirOrder(g2, id, mission, target) {
+    const f = g2.airFleets.find((x) => x.id === id);
+    return f ? previewAir(g2, f, mission, target) : null;
+  }
   function orderBuildCorps(g2, kind, region, revive) {
     return humanUp(g2) ? orderCorps(g2, g2.human, kind, region, revive) : null;
   }
@@ -13352,6 +13361,7 @@
     const s = game();
     const up = humanUp(s);
     const seen = sight(s);
+    const based = new Set(s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => f.base));
     return {
       rules: "campaign",
       turn: s.turn,
@@ -13374,7 +13384,7 @@
       // Each region: who holds it, and the works built there since the war began that the table shows as models:
       // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
       regions: s.regions.map((r) => {
-        const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, "aa", r.id), workLevel(s, "field", r.id)];
+        const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, "aa", r.id), Math.max(workLevel(s, "field", r.id), based.has(r.id) ? 1 : 0)];
         return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
       }),
       // Under the fog of war the player's map shows only what he is allowed to know: an army seen whole, an army
@@ -14244,9 +14254,119 @@
       ]
     };
   }
+  var craftOf = (ftr, bmr) => [ftr >= 1 ? `${Math.round(ftr).toLocaleString("en-US")} fighters` : "", bmr >= 1 ? `${Math.round(bmr).toLocaleString("en-US")} bombers` : ""].filter(Boolean).join(", ") || "no aircraft fit to fly";
+  var airPlace = (s, m, t) => m === "strike" ? `the ${s.seas[t]?.name ?? "sea"}` : s.regions[t]?.name ?? "";
+  var airDoing = (s, f) => `${MISSION[f.mission].label}${f.target >= 0 ? `: ${airPlace(s, f.mission, f.target)}` : ""}`;
+  var RAID_TITLE = { bomb: "A BOMBING RAID BY DAY", night: "RAIDS BY NIGHT", superiority: "A FIGHT FOR THE SKY", strike: "A STRIKE ON SHIPPING" };
+  function airfieldPage(s, region) {
+    const r = s.regions[region];
+    if (!r || !s.human) return null;
+    const up = humanUp(s) && !onEve(s);
+    const here = s.airFleets.filter((f) => f.base === region && f.ftr + f.bmr > 0);
+    const level = workLevel(s, "field", region);
+    const rows = here.map((f) => {
+      const mine = f.nat === s.human;
+      const rg = airRange(f);
+      const lines = [`${craftOf(f.ftr, f.bmr)}. Fighters reach ${rg.ftr} km, bombers ${rg.bmr} km.`, `Orders: ${airDoing(s, f)}.`];
+      const buttons = [];
+      if (mine) {
+        if (f.bmr >= 1) {
+          buttons.push({ label: "PLAN A BOMBING RAID", act: `open:raid:bomb:${f.id}`, ok: up, tip: MISSION.bomb.what });
+          buttons.push({ label: "PLAN RAIDS BY NIGHT", act: `open:raid:night:${f.id}`, ok: up, tip: MISSION.night.what });
+          buttons.push({ label: "PLAN A STRIKE ON SHIPPING", act: `open:raid:strike:${f.id}`, ok: up, tip: MISSION.strike.what });
+        }
+        buttons.push({ label: "FIGHT FOR THE SKY", act: `open:raid:superiority:${f.id}`, ok: up, tip: MISSION.superiority.what });
+        buttons.push({ label: "SUPPORT THE ARMIES", act: `air:${f.id}:support:-1`, ok: up && f.mission !== "support", tip: `${MISSION.support.what} Its fighters patrol their own sky and meet any raid that comes.` });
+        buttons.push({ label: "REST AND REFIT", act: `air:${f.id}:rest:-1`, ok: up && f.mission !== "rest", tip: MISSION.rest.what });
+        buttons.push({ label: "MOVE TO ANOTHER AIRFIELD", act: `open:rebase:${f.id}`, ok: up, tip: "Settling in costs it some readiness for a month." });
+      }
+      return { nat: f.nat, title: f.name, lines, buttons };
+    });
+    return {
+      id: "airfield",
+      title: `THE AIRFIELDS AT ${r.name.toUpperCase()}`,
+      headline: here.length ? `${here.length} air group${here.length === 1 ? "" : "s"} based here` : "No air group is based here",
+      note: `${level > 0 ? `Airfields of level ${level}.` : "Rough landing grounds only."} Aircraft take off from here and come back here. Fighters left to support the armies also guard this sky against raids. Bombers are sent on raids you plan: you pick the target, see the odds and the likely losses, and decide which groups fly it together. Better airfields are built from the ARSENAL with this province selected.`,
+      top: [],
+      sections: [{ heading: "THE AIR GROUPS", text: here.length ? "" : "Order aircraft in the ARSENAL, or move a group here from another airfield.", rows }]
+    };
+  }
+  function raidPage(s, mission, id) {
+    const f = s.airFleets.find((x) => x.id === id);
+    if (!f || f.nat !== s.human) return null;
+    const up = humanUp(s) && !onEve(s);
+    const base = s.regions[f.base];
+    const far = (t) => {
+      const p = mission === "strike" ? s.seas[t] : s.regions[t];
+      return Math.hypot(p.x - base.x, p.y - base.y);
+    };
+    const targets2 = airTargets(s, f, mission).sort((a, b) => far(a) - far(b)).slice(0, 10);
+    const others = s.airFleets.filter((x) => x.nat === f.nat && x.id !== f.id && x.ftr + x.bmr > 0);
+    const rows = [];
+    for (const t of targets2) {
+      const a = previewAirOrder(s, f.id, mission, t);
+      const why = whyNotMission(s, f, mission, t) ?? a?.why ?? (a ? null : "Nothing can reach the target.");
+      const place2 = airPlace(s, mission, t);
+      const lines = [];
+      const buttons = [];
+      if (why || !a) lines.push(why ?? "");
+      else {
+        const fc = forecastAir(s, a, mission, t);
+        const loss = Math.round(fc.bomberLoss * 100);
+        if (mission === "superiority") {
+          lines.push(`${a.D <= 0 ? "No fighters will come up." : fc.odds >= AIR.sky.win ? "The sky can be won." : fc.odds >= 1.2 ? "A hard fight that wears them down." : fc.odds >= 0.8 ? "An even fight." : "The defenders have the edge."} Fighter odds ${fc.odds.toFixed(1)} to 1.${a.B > 0 ? ` About ${loss}% of the bombers are likely to be lost.` : ""}`);
+        } else if (mission === "strike") {
+          lines.push(`Likely bomber losses: about ${loss}%. Warships caught at sea there could lose up to ${Math.round(fc.cut * 100)}% of their number.`);
+        } else {
+          const fac = s.regions[t].fac > 0;
+          lines.push(`Likely bomber losses: about ${loss}% (${loss <= 10 ? "light" : loss <= 25 ? "the fighters will take a toll" : "heavy"}). ${fac ? `The raid should stop about ${Math.round(fc.cut * 100)}% of its output for a month.` : "There is no industry here: the bombers go for the rail yards."}${fc.rail ? ` About a ${Math.round(fc.rail * 100)}% chance of cutting its railway.` : ""}${fc.ruin ? ` About a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ""}`);
+        }
+        lines.push(`Flying it: ${a.att.map((x) => `${x.f.name} from ${s.regions[x.f.base].name} (${craftOf(mission === "night" ? 0 : x.ftr, x.bmr)})`).join("; ")}.`);
+        lines.push(a.def.length ? `Rising to meet them: ${a.def.map((x) => `${x.f.name}, about ${Math.round(x.f.ftr * x.w)} fighters`).join("; ")}.${a.aa > 0 ? ` Anti-aircraft guns of level ${a.aa}.` : ""}` : `No enemy fighters are in reach.${a.aa > 0 ? ` Anti-aircraft guns of level ${a.aa}.` : ""}`);
+        const now = f.mission === mission && f.target === t;
+        buttons.push({ label: now ? "ORDERED" : `SEND ${f.name.toUpperCase()}`, act: `air:${f.id}:${mission}:${t}`, ok: up && !now, tip: "Flown when you end the month. A group on a raid does not defend its own sky that month." });
+        for (const o of others) {
+          if (o.mission === mission && o.target === t) continue;
+          if (whyNotMission(s, o, mission, t) !== null) continue;
+          buttons.push({ label: `ALSO SEND ${o.name.toUpperCase()}`, act: `air:${o.id}:${mission}:${t}`, ok: up, tip: `${o.name} from ${s.regions[o.base].name} (${craftOf(o.ftr, o.bmr)}) joins the raid. Groups given the same target fly it together, and the odds above are worked out again.` });
+          if (buttons.length >= 5) break;
+        }
+      }
+      rows.push({ nat: mission === "strike" ? "" : s.regions[t].ctrl, title: mission === "strike" ? upFirst(place2) : `${place2}, ${Math.round(km(s, f.base, t)).toLocaleString("en-US")} km`, lines, buttons });
+    }
+    return {
+      id: `raid:${mission}:${id}`,
+      title: `${RAID_TITLE[mission] ?? "A RAID"}  ·  ${f.name.toUpperCase()}`,
+      headline: targets2.length ? `${targets2.length} target${targets2.length === 1 ? "" : "s"} in reach, nearest first` : "No target is in reach",
+      note: `${MISSION[mission].what} ${f.name} flies from ${base.name} with ${craftOf(f.ftr, f.bmr)}. Its orders now: ${airDoing(s, f)}. Send more than one group against the same target and they fly it together, which spreads the defenders' fire.`,
+      top: [{ label: "BACK TO THE AIRFIELD", act: "open:airfield", ok: true, tip: "" }],
+      sections: [{ heading: "TARGETS", text: targets2.length ? "" : "Move the group to an airfield nearer the enemy, or wait for aircraft with a longer reach.", rows }]
+    };
+  }
+  function rebasePage(s, id) {
+    const f = s.airFleets.find((x) => x.id === id);
+    if (!f || f.nat !== s.human) return null;
+    const up = humanUp(s) && !onEve(s);
+    const base = s.regions[f.base];
+    const rows = airBases(s, f).sort((a, b) => Math.hypot(a.x - base.x, a.y - base.y) - Math.hypot(b.x - base.x, b.y - base.y)).slice(0, 14).map((r) => ({
+      nat: r.ctrl,
+      title: r.name,
+      lines: [`${workLevel(s, "field", r.id) > 0 ? `Airfields of level ${workLevel(s, "field", r.id)}` : "Rough landing grounds"}.${s.airFleets.some((x) => x.base === r.id && x.id !== f.id && x.ftr + x.bmr > 0) ? " Other groups are based there already." : ""}`],
+      buttons: [{ label: "MOVE HERE", act: `airbase:${f.id}:${r.id}`, ok: up, tip: "Settling in costs it some readiness for a month." }]
+    }));
+    return {
+      id: `rebase:${id}`,
+      title: `A NEW AIRFIELD  ·  ${f.name.toUpperCase()}`,
+      headline: `${rows.length} airfield${rows.length === 1 ? "" : "s"} it could move to, nearest first`,
+      note: `${f.name} is based at ${base.name}. A group reaches farther into enemy country from an airfield nearer the front.`,
+      top: [{ label: "BACK TO THE AIRFIELD", act: "open:airfield", ok: true, tip: "" }],
+      sections: [{ heading: "AIRFIELDS", text: "", rows }]
+    };
+  }
   function page(id, region = -1) {
     const s = game();
-    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : null;
+    const part = id.split(":");
+    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "airfield" ? airfieldPage(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage(s, Number(part[1])) : null;
     return p ? { ok: true, ...p } : { ok: false };
   }
   function act(action, region = -1) {
@@ -14254,7 +14374,20 @@
     const h0 = s.headlines.length;
     const part = action.split(":");
     let ok = false, note3 = "";
-    if (action === "spy:recruit") {
+    let fly2 = null;
+    if (part[0] === "air") {
+      const f = s.airFleets.find((x) => x.id === Number(part[1]));
+      const m = part[2], t = Number(part[3]);
+      ok = orderAir(s, Number(part[1]), m, t);
+      note3 = ok ? t >= 0 ? `${f?.name ?? "The group"} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? "The group"}: ${MISSION[m].label.toLowerCase()}.` : "That order cannot be given now.";
+      if (ok && f && t >= 0) {
+        const p = m === "strike" ? s.seas[t] : s.regions[t];
+        fly2 = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== "superiority" && f.bmr >= 1, region: m === "strike" ? -1 : t };
+      }
+    } else if (part[0] === "airbase") {
+      ok = orderAirBase(s, Number(part[1]), Number(part[2]));
+      note3 = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? "its new airfield"}.` : "It cannot move there now.";
+    } else if (action === "spy:recruit") {
       const a = orderRecruitAgent(s);
       ok = !!a;
       note3 = a ? `${a.name} joins the service.` : "No agent could be recruited.";
@@ -14290,7 +14423,7 @@
       note3 = ok ? "You take the victory, and the world stays as it is." : "";
     }
     const news2 = s.headlines.slice(h0).map((h) => h.text);
-    return { ok, note: news2.length ? news2.join(" ") : note3, view: view() };
+    return { ok, note: news2.length ? news2.join(" ") : note3, fly: fly2, view: view() };
   }
   function storesOf2(s) {
     const v = s.human ? depots(s) : null;

@@ -211,6 +211,25 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("31f-research"), TEXT("@capital"), 0.45f).bResearch = true;
 		Add(TEXT("31g-generals"), TEXT("@capital"), 0.45f).bGenerals = true;
 		{
+			// The airfield at the capital, then a raid planned from it and ordered: the aircraft are on their way.
+			FShot& Shot = Add(TEXT("31i-airfield"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("airfield");
+		}
+		{
+			FShot& Shot = Add(TEXT("31j-raid-planned"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("airfield");
+			Shot.RoomAct = TEXT("open:raid:bomb:1");
+		}
+		{
+			FShot& Shot = Add(TEXT("31k-raid-flying"), TEXT("@capital"), 0.7f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("airfield");
+			Shot.RoomAct = TEXT("air:1:bomb:38");
+			Shot.bCloseRoom = true;
+		}
+		{
 			// The secret service, with the capital selected and an agent recruited.
 			FShot& Shot = Add(TEXT("31h-secret-service"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");
@@ -581,6 +600,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		if (!Shot.RoomAct.IsEmpty())
 		{
 			Controller->PressPage(Shot.RoomAct);
+		}
+		if (Shot.bCloseRoom)
+		{
+			Controller->ClosePage();
 		}
 	}
 	if (Shot.bGuide)

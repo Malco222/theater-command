@@ -48,7 +48,7 @@ import {
   arsenalOffers, beginEve, beginHuman, canOrder, candidates, current, declarable, endEve, endHuman, humanUp, onEve, orderAttack, orderBuildCorps, orderArsenal, orderDeclare,
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
-  depots, shippingLanes,
+  depots, shippingLanes, previewAirOrder,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
@@ -67,7 +67,7 @@ import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { CROSSINGS, RIVERS, bridgeDown, riverNotes } from '../../../src/campaign/rivers';
 import { RAIL_LINKS, railCut, railNote } from '../../../src/campaign/rails';
 import { fleetReach, landingTargets, whyNotShip } from '../../../src/campaign/navy';
-import { MISSION, airBases, airTargets } from '../../../src/campaign/air';
+import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { STARTS } from './starts';
@@ -98,6 +98,8 @@ function view() {
   const s = game();
   const up = humanUp(s);
   const seen = sight(s);
+  // Where air groups are based: each such place is an airfield on the table.
+  const based = new Set(s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => f.base));
   return {
     rules: 'campaign',
     turn: s.turn,
@@ -120,7 +122,7 @@ function view() {
     // Each region: who holds it, and the works built there since the war began that the table shows as models:
     // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
     regions: s.regions.map((r) => {
-      const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, 'aa', r.id), workLevel(s, 'field', r.id)];
+      const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, 'aa', r.id), Math.max(workLevel(s, 'field', r.id), based.has(r.id) ? 1 : 0)];
       return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
     }),
     // Under the fog of war the player's map shows only what he is allowed to know: an army seen whole, an army
@@ -1054,10 +1056,122 @@ function lastActPage(s: Game): Page | null {
   };
 }
 
+// ---- The air war: airfields, the groups on them, and the planning of a raid --------------------------------
+
+const craftOf = (ftr: number, bmr: number): string => [ftr >= 1 ? `${Math.round(ftr).toLocaleString('en-US')} fighters` : '', bmr >= 1 ? `${Math.round(bmr).toLocaleString('en-US')} bombers` : ''].filter(Boolean).join(', ') || 'no aircraft fit to fly';
+const airPlace = (s: Game, m: AirMission, t: number): string => (m === 'strike' ? `the ${s.seas[t]?.name ?? 'sea'}` : s.regions[t]?.name ?? '');
+const airDoing = (s: Game, f: Game['airFleets'][number]): string => `${MISSION[f.mission].label}${f.target >= 0 ? `: ${airPlace(s, f.mission, f.target)}` : ''}`;
+const RAID_TITLE: Record<string, string> = { bomb: 'A BOMBING RAID BY DAY', night: 'RAIDS BY NIGHT', superiority: 'A FIGHT FOR THE SKY', strike: 'A STRIKE ON SHIPPING' };
+
+/** An airfield: the air groups based in a province, what each is doing, and the work each can be given. */
+function airfieldPage(s: Game, region: number): Page | null {
+  const r = s.regions[region];
+  if (!r || !s.human) return null;
+  const up = humanUp(s) && !onEve(s);
+  const here = s.airFleets.filter((f) => f.base === region && f.ftr + f.bmr > 0);
+  const level = workLevel(s, 'field', region);
+  const rows: PageRow[] = here.map((f) => {
+    const mine = f.nat === s.human;
+    const rg = airRange(f);
+    const lines = [`${craftOf(f.ftr, f.bmr)}. Fighters reach ${rg.ftr} km, bombers ${rg.bmr} km.`, `Orders: ${airDoing(s, f)}.`];
+    const buttons: PageButton[] = [];
+    if (mine) {
+      if (f.bmr >= 1) {
+        buttons.push({ label: 'PLAN A BOMBING RAID', act: `open:raid:bomb:${f.id}`, ok: up, tip: MISSION.bomb.what });
+        buttons.push({ label: 'PLAN RAIDS BY NIGHT', act: `open:raid:night:${f.id}`, ok: up, tip: MISSION.night.what });
+        buttons.push({ label: 'PLAN A STRIKE ON SHIPPING', act: `open:raid:strike:${f.id}`, ok: up, tip: MISSION.strike.what });
+      }
+      buttons.push({ label: 'FIGHT FOR THE SKY', act: `open:raid:superiority:${f.id}`, ok: up, tip: MISSION.superiority.what });
+      buttons.push({ label: 'SUPPORT THE ARMIES', act: `air:${f.id}:support:-1`, ok: up && f.mission !== 'support', tip: `${MISSION.support.what} Its fighters patrol their own sky and meet any raid that comes.` });
+      buttons.push({ label: 'REST AND REFIT', act: `air:${f.id}:rest:-1`, ok: up && f.mission !== 'rest', tip: MISSION.rest.what });
+      buttons.push({ label: 'MOVE TO ANOTHER AIRFIELD', act: `open:rebase:${f.id}`, ok: up, tip: 'Settling in costs it some readiness for a month.' });
+    }
+    return { nat: f.nat, title: f.name, lines, buttons };
+  });
+  return {
+    id: 'airfield', title: `THE AIRFIELDS AT ${r.name.toUpperCase()}`,
+    headline: here.length ? `${here.length} air group${here.length === 1 ? '' : 's'} based here` : 'No air group is based here',
+    note: `${level > 0 ? `Airfields of level ${level}.` : 'Rough landing grounds only.'} Aircraft take off from here and come back here. Fighters left to support the armies also guard this sky against raids. Bombers are sent on raids you plan: you pick the target, see the odds and the likely losses, and decide which groups fly it together. Better airfields are built from the ARSENAL with this province selected.`,
+    top: [], sections: [{ heading: 'THE AIR GROUPS', text: here.length ? '' : 'Order aircraft in the ARSENAL, or move a group here from another airfield.', rows }],
+  };
+}
+
+/** Planning a raid for one air group: every target in reach with what the raid would meet and do, and who else could fly it. */
+function raidPage(s: Game, mission: AirMission, id: number): Page | null {
+  const f = s.airFleets.find((x) => x.id === id);
+  if (!f || f.nat !== s.human) return null;
+  const up = humanUp(s) && !onEve(s);
+  const base = s.regions[f.base];
+  const far = (t: number): number => { const p = mission === 'strike' ? s.seas[t] : s.regions[t]; return Math.hypot(p.x - base.x, p.y - base.y); };
+  const targets = airTargets(s, f, mission).sort((a, b) => far(a) - far(b)).slice(0, 10);
+  const others = s.airFleets.filter((x) => x.nat === f.nat && x.id !== f.id && x.ftr + x.bmr > 0);
+  const rows: PageRow[] = [];
+  for (const t of targets) {
+    const a = previewAirOrder(s, f.id, mission, t);
+    const why = whyNotMission(s, f, mission, t) ?? a?.why ?? (a ? null : 'Nothing can reach the target.');
+    const place = airPlace(s, mission, t);
+    const lines: string[] = [];
+    const buttons: PageButton[] = [];
+    if (why || !a) lines.push(why ?? '');
+    else {
+      const fc = forecastAir(s, a, mission, t);
+      const loss = Math.round(fc.bomberLoss * 100);
+      if (mission === 'superiority') {
+        lines.push(`${a.D <= 0 ? 'No fighters will come up.' : fc.odds >= AIR.sky.win ? 'The sky can be won.' : fc.odds >= 1.2 ? 'A hard fight that wears them down.' : fc.odds >= 0.8 ? 'An even fight.' : 'The defenders have the edge.'} Fighter odds ${fc.odds.toFixed(1)} to 1.${a.B > 0 ? ` About ${loss}% of the bombers are likely to be lost.` : ''}`);
+      } else if (mission === 'strike') {
+        lines.push(`Likely bomber losses: about ${loss}%. Warships caught at sea there could lose up to ${Math.round(fc.cut * 100)}% of their number.`);
+      } else {
+        const fac = s.regions[t].fac > 0;
+        lines.push(`Likely bomber losses: about ${loss}% (${loss <= 10 ? 'light' : loss <= 25 ? 'the fighters will take a toll' : 'heavy'}). ${fac ? `The raid should stop about ${Math.round(fc.cut * 100)}% of its output for a month.` : 'There is no industry here: the bombers go for the rail yards.'}${fc.rail ? ` About a ${Math.round(fc.rail * 100)}% chance of cutting its railway.` : ''}${fc.ruin ? ` About a ${Math.round(fc.ruin * 100)}% chance of wrecking a factory outright.` : ''}`);
+      }
+      lines.push(`Flying it: ${a.att.map((x) => `${x.f.name} from ${s.regions[x.f.base].name} (${craftOf(mission === 'night' ? 0 : x.ftr, x.bmr)})`).join('; ')}.`);
+      lines.push(a.def.length ? `Rising to meet them: ${a.def.map((x) => `${x.f.name}, about ${Math.round(x.f.ftr * x.w)} fighters`).join('; ')}.${a.aa > 0 ? ` Anti-aircraft guns of level ${a.aa}.` : ''}` : `No enemy fighters are in reach.${a.aa > 0 ? ` Anti-aircraft guns of level ${a.aa}.` : ''}`);
+      const now = f.mission === mission && f.target === t;
+      buttons.push({ label: now ? 'ORDERED' : `SEND ${f.name.toUpperCase()}`, act: `air:${f.id}:${mission}:${t}`, ok: up && !now, tip: 'Flown when you end the month. A group on a raid does not defend its own sky that month.' });
+      // Other groups that could fly the same raid with it: together they stand a better chance.
+      for (const o of others) {
+        if (o.mission === mission && o.target === t) continue;
+        if (whyNotMission(s, o, mission, t) !== null) continue;
+        buttons.push({ label: `ALSO SEND ${o.name.toUpperCase()}`, act: `air:${o.id}:${mission}:${t}`, ok: up, tip: `${o.name} from ${s.regions[o.base].name} (${craftOf(o.ftr, o.bmr)}) joins the raid. Groups given the same target fly it together, and the odds above are worked out again.` });
+        if (buttons.length >= 5) break;
+      }
+    }
+    rows.push({ nat: mission === 'strike' ? '' : s.regions[t].ctrl, title: mission === 'strike' ? upFirst(place) : `${place}, ${Math.round(airKm(s, f.base, t)).toLocaleString('en-US')} km`, lines, buttons });
+  }
+  return {
+    id: `raid:${mission}:${id}`, title: `${RAID_TITLE[mission] ?? 'A RAID'}  \u00B7  ${f.name.toUpperCase()}`,
+    headline: targets.length ? `${targets.length} target${targets.length === 1 ? '' : 's'} in reach, nearest first` : 'No target is in reach',
+    note: `${MISSION[mission].what} ${f.name} flies from ${base.name} with ${craftOf(f.ftr, f.bmr)}. Its orders now: ${airDoing(s, f)}. Send more than one group against the same target and they fly it together, which spreads the defenders' fire.`,
+    top: [{ label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' }],
+    sections: [{ heading: 'TARGETS', text: targets.length ? '' : 'Move the group to an airfield nearer the enemy, or wait for aircraft with a longer reach.', rows }],
+  };
+}
+
+/** Moving an air group: the airfields it could go to. */
+function rebasePage(s: Game, id: number): Page | null {
+  const f = s.airFleets.find((x) => x.id === id);
+  if (!f || f.nat !== s.human) return null;
+  const up = humanUp(s) && !onEve(s);
+  const base = s.regions[f.base];
+  const rows: PageRow[] = airBases(s, f).sort((a, b) => Math.hypot(a.x - base.x, a.y - base.y) - Math.hypot(b.x - base.x, b.y - base.y)).slice(0, 14).map((r) => ({
+    nat: r.ctrl, title: r.name, lines: [`${workLevel(s, 'field', r.id) > 0 ? `Airfields of level ${workLevel(s, 'field', r.id)}` : 'Rough landing grounds'}.${s.airFleets.some((x) => x.base === r.id && x.id !== f.id && x.ftr + x.bmr > 0) ? ' Other groups are based there already.' : ''}`],
+    buttons: [{ label: 'MOVE HERE', act: `airbase:${f.id}:${r.id}`, ok: up, tip: 'Settling in costs it some readiness for a month.' }],
+  }));
+  return {
+    id: `rebase:${id}`, title: `A NEW AIRFIELD  \u00B7  ${f.name.toUpperCase()}`, headline: `${rows.length} airfield${rows.length === 1 ? '' : 's'} it could move to, nearest first`,
+    note: `${f.name} is based at ${base.name}. A group reaches farther into enemy country from an airfield nearer the front.`,
+    top: [{ label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' }], sections: [{ heading: 'AIRFIELDS', text: '', rows }],
+  };
+}
+
 /** One of the rooms the general panel shows. region is the province selected on the map, or -1. */
 function page(id: string, region = -1) {
   const s = game();
-  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : null;
+  const part = id.split(':');
+  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s)
+    : id === 'airfield' ? airfieldPage(s, region)
+    : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
+    : part[0] === 'rebase' ? rebasePage(s, Number(part[1])) : null;
   return p ? { ok: true, ...p } : { ok: false };
 }
 
@@ -1067,7 +1181,18 @@ function act(action: string, region = -1) {
   const h0 = s.headlines.length;
   const part = action.split(':');
   let ok = false, note = '';
-  if (action === 'spy:recruit') { const a = orderRecruitAgent(s); ok = !!a; note = a ? `${a.name} joins the service.` : 'No agent could be recruited.'; }
+  // Aircraft seen leaving for their target when a raid is ordered: where from, where to, whose, and what flies.
+  let fly: { from: number; x: number; y: number; nat: string; bombers: boolean; region: number } | null = null;
+  if (part[0] === 'air') {
+    const f = s.airFleets.find((x) => x.id === Number(part[1]));
+    const m = part[2] as AirMission, t = Number(part[3]);
+    ok = orderAir(s, Number(part[1]), m, t);
+    note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
+    if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, region: m === 'strike' ? -1 : t }; }
+  } else if (part[0] === 'airbase') {
+    ok = orderAirBase(s, Number(part[1]), Number(part[2]));
+    note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';
+  } else if (action === 'spy:recruit') { const a = orderRecruitAgent(s); ok = !!a; note = a ? `${a.name} joins the service.` : 'No agent could be recruited.'; }
   else if (part[0] === 'spy' && part[1] === 'send') { const why = whyNotSendAgent(s, Number(part[2]), region); ok = orderSendAgent(s, Number(part[2]), region); note = ok ? `The agent sets out for ${s.regions[region]?.name ?? 'the province'}.` : why ?? 'The agent cannot go there.'; }
   else if (part[0] === 'spy' && part[1] === 'mission') { ok = orderAgentMission(s, Number(part[2]), part[3] as Parameters<typeof orderAgentMission>[2]); note = ok ? 'The agent has new orders.' : 'The agent cannot take that work now.'; }
   else if (part[0] === 'spy' && part[1] === 'retire') { ok = orderRetireAgent(s, Number(part[2])); note = ok ? 'The agent has left the service.' : ''; }
@@ -1078,7 +1203,7 @@ function act(action: string, region = -1) {
   else if (action === 'dom:yes') { domAsked = 0; ok = orderDomination(s); note = ok ? 'The last act has begun. Every nation still standing is at war with every other.' : whyNotOrderDomination(s) ?? 'It cannot be chosen now.'; }
   else if (action === 'dom:peace') { domAsked = 0; ok = orderKeepPeace(s); note = ok ? 'You take the victory, and the world stays as it is.' : ''; }
   const news = s.headlines.slice(h0).map((h) => h.text);
-  return { ok, note: news.length ? news.join(' ') : note, view: view() };
+  return { ok, note: news.length ? news.join(' ') : note, fly, view: view() };
 }
 
 /** The player's oil and supplies, for the two gauges beside the treasury. */

@@ -108,6 +108,7 @@ ACampaignMapActor::ACampaignMapActor()
 	BuildingsMesh = MakeMesh(TEXT("Buildings"), false);
 	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
+	SortieMesh = MakeMesh(TEXT("Sorties"), true);
 	HighlightMesh = MakeMesh(TEXT("Highlight"), false);
 	OrdersMesh = MakeMesh(TEXT("Orders"), false);
 
@@ -799,7 +800,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 		// A shipyard wants the water in front of it: the nearest stretch of the province's own coast that is clear of the pieces.
 		auto PlaceOnCoast = [this, &Middle, Id](FVector2D& OutSpot) -> bool
 		{
-			static const FVector2D Taken[] = { FVector2D(9.0, -7.0), FVector2D(-9.0, -7.0), FVector2D(-10.0, 8.0), FVector2D(10.0, 9.0), FVector2D(0.0, -9.0), FVector2D(0.0, 10.0), FVector2D(-9.5, 0.5) };
+			static const FVector2D Taken[] = { FVector2D(9.0, -7.0), FVector2D(-9.0, -7.0), FVector2D(-10.0, 8.0), FVector2D(10.0, 9.0), FVector2D(0.0, -9.0), FVector2D(-10.0, 13.0), FVector2D(-9.5, 0.5) };
 			for (double Reach = 6.0; Reach <= 34.0; Reach += 1.5)
 			{
 				for (int32 Step = 0; Step < 24; ++Step)
@@ -912,7 +913,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 			++Count;
 		}
 		// An airfield: a mown field with a runway (two for a big one), a hangar and a windsock.
-		if (Built.W > 0 && Place(FVector2D(0.0, 10.0), Spot))
+		if (Built.W > 0 && Place(FVector2D(-10.0, 13.0), Spot))
 		{
 			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
 			const double Turn = Facing(Spot) + 90.0;
@@ -2126,6 +2127,140 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 	Buffers.Commit(LanesMesh, 0, HighlightMaterial);
 }
 
+void ACampaignMapActor::FlySortie(const FSortie& Sortie)
+{
+	if (!GetWorld() || !Data.Regions.IsValidIndex(Sortie.From))
+	{
+		return;
+	}
+	FFlight& Flight = Flights.AddDefaulted_GetRef();
+	Flight.Sortie = Sortie;
+	Flight.Began = GetWorld()->GetTimeSeconds();
+}
+
+void ACampaignMapActor::UpdateSorties()
+{
+	UWorld* World = GetWorld();
+	if (!SortieMesh || !World)
+	{
+		return;
+	}
+	if (Flights.Num() == 0)
+	{
+		if (SortieMesh->GetNumSections() > 0)
+		{
+			SortieMesh->ClearAllMeshSections();
+		}
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	const double FlightLasts = 10.0;
+	const double U = UnitScale;
+	FMiniatureMesh Model;
+	for (int32 Index = Flights.Num() - 1; Index >= 0; --Index)
+	{
+		FFlight& Flight = Flights[Index];
+		const double Share = (Now - Flight.Began) / FlightLasts;
+		if (Share >= 1.0)
+		{
+			Flights.RemoveAt(Index);
+			continue;
+		}
+		// Out to the target, a turn over it, and home: the airfield is where the air groups stand, south-west of the town.
+		const FVector2D Field = Data.Regions[Flight.Sortie.From].Center + FVector2D(-10.0, 12.0);
+		const FVector Field0 = SurfacePoint(Field.X, Field.Y, 0.3), Aim = SurfacePoint(Flight.Sortie.To.X, Flight.Sortie.To.Y, 0.3);
+		const FVector Course = (Aim - Field0).GetSafeNormal2D();
+		const FVector Abeam(-Course.Y, Course.X, 0.0);
+		const double Leg = FVector::Dist2D(Field0, Aim);
+		const double Circle = FMath::Clamp(Leg * 0.08, 3.0 * U, 9.0 * U); // the turn over the target
+		FVector Where, Heading;
+		const double Out = 0.44, TurnShare = 0.12;
+		if (Share < Out)
+		{
+			const double T = FMath::SmoothStep(0.0, 1.0, Share / Out);
+			Where = FMath::Lerp(Field0, Aim - Course * Circle, T);
+			Heading = Course;
+		}
+		else if (Share < Out + TurnShare)
+		{
+			// Round in a half circle over the target.
+			const double Angle = PI * (Share - Out) / TurnShare;
+			Where = Aim - Course * Circle * FMath::Cos(Angle) + Abeam * Circle * FMath::Sin(Angle) * 0.6;
+			Heading = (Course * FMath::Sin(Angle) + Abeam * FMath::Cos(Angle) * 0.6).GetSafeNormal();
+			if (!Flight.bStruck && Angle > PI * 0.4)
+			{
+				Flight.bStruck = true;
+				if (Flight.Sortie.bBombers && Flight.Sortie.Region != INDEX_NONE)
+				{
+					AddBattleSmoke(Flight.Sortie.Region);
+				}
+			}
+		}
+		else
+		{
+			const double T = FMath::SmoothStep(0.0, 1.0, (Share - Out - TurnShare) / (1.0 - Out - TurnShare));
+			Where = FMath::Lerp(Aim - Course * Circle * -1.0 * 0.0 + Course * 0.0, Field0, T) + FMath::Lerp(Course * Circle, FVector::ZeroVector, T) * 0.0;
+			Where = FMath::Lerp(Aim + Course * Circle * 0.0, Field0, T);
+			Heading = -Course;
+		}
+		// They climb away from the field, fly high, and let down again to land.
+		const double Aloft = (2.0 + 9.0 * FMath::Sin(PI * FMath::Clamp(Share, 0.0, 1.0))) * U;
+		const FVector Across(-Heading.Y, Heading.X, 0.0);
+		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Heading.Y, Heading.X));
+		const FLinearColor PlanePaint = FMiniatureMesh::VehicleColour(Flight.Sortie.Nation) * 1.2f;
+		const FLinearColor PlaneDark = PlanePaint * 0.6f;
+		const double PlaneSize = (Flight.Sortie.bBombers ? 3.0 : 2.2) * U; // larger than life, to be seen from high over the table
+		const int32 Planes = Flight.Sortie.bBombers ? 5 : 4;
+		for (int32 Plane = 0; Plane < Planes; ++Plane)
+		{
+			// A vic: the leader ahead, the rest stepped back and out on either hand.
+			const int32 Row = (Plane + 1) / 2;
+			const double Hand = Plane == 0 ? 0.0 : (Plane % 2 == 1 ? 1.0 : -1.0);
+			const FVector At = Where - Heading * (Row * 2.4 * PlaneSize) + Across * (Hand * Row * 2.0 * PlaneSize) + FVector(0.0, 0.0, Aloft + Row * 0.3 * PlaneSize);
+			Model.Box(At, FVector(2.6, 0.34, 0.34) * PlaneSize, PlanePaint, Yaw);
+			Model.Box(At + Heading * (0.25 * PlaneSize), FVector(0.62, 3.4, 0.07) * PlaneSize, PlanePaint, Yaw);
+			Model.Box(At - Heading * (1.15 * PlaneSize), FVector(0.36, 1.2, 0.06) * PlaneSize, PlanePaint, Yaw);
+			Model.Box(At - Heading * (1.15 * PlaneSize) + FVector(0.0, 0.0, 0.25 * PlaneSize), FVector(0.4, 0.06, 0.46) * PlaneSize, PlanePaint, Yaw);
+			Model.Box(At + Heading * (0.75 * PlaneSize) + FVector(0.0, 0.0, 0.16 * PlaneSize), FVector(0.5, 0.26, 0.14) * PlaneSize, PlaneDark, Yaw);
+			if (Flight.Sortie.bBombers)
+			{
+				for (const double Engine : { -0.8, 0.8 })
+				{
+					Model.Box(At + Heading * (0.55 * PlaneSize) + Across * (Engine * PlaneSize), FVector(0.8, 0.26, 0.26) * PlaneSize, PlaneDark, Yaw);
+				}
+			}
+		}
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		SortieMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		SortieMesh->SetMaterial(0, PieceMaterial);
+		// The course of each raid, pencilled on the table from the airfield to the target while it is flown.
+		FCampaignMeshBuffers Courses;
+		for (const FFlight& Flight : Flights)
+		{
+			const FVector2D From = Data.Regions[Flight.Sortie.From].Center + FVector2D(-10.0, 12.0);
+			const double Length = FVector2D::Distance(From, Flight.Sortie.To);
+			const int32 Dashes = FMath::Clamp(FMath::RoundToInt32(Length / 7.0), 2, 200);
+			for (int32 Dash = 0; Dash < Dashes; ++Dash)
+			{
+				TArray<FVector2D> Stroke;
+				Stroke.Add(FMath::Lerp(From, Flight.Sortie.To, (Dash + 0.15) / Dashes));
+				Stroke.Add(FMath::Lerp(From, Flight.Sortie.To, (Dash + 0.75) / Dashes));
+				AppendRibbon(Courses, Stroke, 0.45, 0.4, FLinearColor(1.0f, 0.86f, 0.4f, 0.75f).ToFColor(false), false);
+			}
+		}
+		if (!Courses.Commit(SortieMesh, 1, HighlightMaterial))
+		{
+			SortieMesh->ClearMeshSection(1);
+		}
+	}
+	else
+	{
+		SortieMesh->ClearAllMeshSections();
+	}
+}
+
 void ACampaignMapActor::AddBattleSmoke(int32 RegionId)
 {
 	if (!Data.Regions.IsValidIndex(RegionId) || !GetWorld())
@@ -2310,6 +2445,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
 	UpdateSmoke(CameraDistance, CameraFocus);
+	UpdateSorties();
 
 	// The land's tiles: fine near what the eye looks at, coarse far from it.
 	UpdateLand(CameraDistance, CameraFocus, false);

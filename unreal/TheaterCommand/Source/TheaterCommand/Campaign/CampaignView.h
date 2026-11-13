@@ -118,6 +118,17 @@ struct FViewFleet
 	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
 };
 
+/** Aircraft seen leaving for their target when a raid is ordered. */
+struct FSortie
+{
+	bool bValid = false;
+	int32 From = INDEX_NONE; // the province they fly from
+	FVector2D To = FVector2D::ZeroVector; // where they are going, on the map
+	int32 Region = INDEX_NONE; // the province bombed, if it is one
+	FString Nation;
+	bool bBombers = false;
+};
+
 /** A button in one of the rooms the rules set out themselves. */
 struct FPageButton
 {

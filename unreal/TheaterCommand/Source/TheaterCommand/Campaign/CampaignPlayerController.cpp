@@ -563,9 +563,26 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	{
 		return;
 	}
+	if (Action.StartsWith(TEXT("open:")))
+	{
+		// A door from one room to another: the raid planner from the airfield, and back.
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+		const int32 Opened = Page.Revision + 1;
+		Page = Session->Page(Action.Mid(5), SelectedRegion);
+		Page.Revision = Opened;
+		bPageOpen = Page.bValid;
+		return;
+	}
 	FString Note;
-	const bool bOk = Session->Act(Action, SelectedRegion, Note);
+	FSortie Sortie;
+	const bool bOk = Session->Act(Action, SelectedRegion, Note, &Sortie);
 	CampaignSounds::Play(this, bOk ? TEXT("stamp") : TEXT("click"), 0.6f);
+	if (bOk && Sortie.bValid && Map.IsValid())
+	{
+		// The aircraft are seen to take off for their target and come home again.
+		Map->FlySortie(Sortie);
+		CampaignSounds::Play(this, Sortie.bBombers ? TEXT("bomber_drone") : TEXT("fighter_pass"), 0.45f);
+	}
 	if (bOk)
 	{
 		// Whatever it was may have changed the table: the fog lifted, the world at war.
@@ -1545,6 +1562,15 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 	// A fleet or an air fleet: look at it, and at what it can be told to do.
 	if (Piece && !Piece->IsArmy() && Piece->GetForceId() != INDEX_NONE)
 	{
+		if (!Piece->IsFleet() && Piece->GetBaseRegion() != INDEX_NONE)
+		{
+			// Aircraft belong to their airfield: a click on them opens it, with every group based there.
+			PutDownArmy();
+			SelectRegion(Piece->GetBaseRegion());
+			OpenPage(TEXT("airfield"));
+			CampaignSounds::Play(this, TEXT("fighter_pass"), 0.35f);
+			return;
+		}
 		ShowForce(Piece->IsFleet(), Piece->GetForceId());
 		CampaignSounds::Play(this, Piece->IsFleet() ? TEXT("ship_horn") : TEXT("fighter_pass"), 0.35f);
 		return;
