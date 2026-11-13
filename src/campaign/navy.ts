@@ -18,6 +18,7 @@ import { whyBarred } from './ground';
 import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, routineNews, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { arrive, garrisonOf, roomIn, siegeRules } from './siege';
+import { harbourOpen, prizeOut } from './prizes';
 import { RES, fuelFleet, laneStopped } from './resources';
 import {
   STACK, type BattleReport, type Corps, type Fleet, type Game, type Region, type SeaReport, type SeaSide, type SeaZone, type ShipClass, type Ships, type Stance,
@@ -322,7 +323,10 @@ export function whyNotShip(g: Game, c: Corps, to: Region): string | null {
   if (c.kind === 'fort' || c.ap < Math.min(4, c.apMax)) return 'Only a corps that has not moved this month can embark.';
   if (!from.port || !to.port || to.id === from.id) return 'Troops are shipped from one port to another.';
   if (!allied(g, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
+  // A harbour blocked and its quays blown up takes no ship until it is mended (prizes.ts).
+  for (const p of [from, to]) { const out = prizeOut(g, p, 'harbour'); if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? 'a month' : `${out} months`} more.`; }
   if (hostileUnits(g, to, c.nat).length) {
+    if (siegeRules(g) && !harbourOpen(g, to)) return `The enemy holds the quays of ${to.name}: nothing can be run into the town by sea.`;
     // A town under siege with its harbour still open: ships can run more troops into the garrison, if it has room.
     if (!siegeRules(g)) return `${to.name} is not in friendly hands.`;
     if (c.kind === 'eng') return `The enemy holds the country round ${to.name}: only fighting troops are run into the town.`;

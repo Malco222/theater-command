@@ -263,6 +263,34 @@ h3 { font-family: var(--head); font-size: 13px; font-weight: 600; letter-spacing
 .rrow.down b { color: #f0b3a5; }
 .rrow.mined { border-left-color: var(--brass); }
 .rrow.rail { border-left-color: #8a8272; }
+/* Places of their own: the prizes of a province, and scorched earth. */
+.places .placehead { display: grid; gap: 2px; padding: 0 1px 1px; }
+.places .placehead b { font-family: var(--head); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--brass); font-weight: 600; }
+.places .placehead small { font-size: 12px; line-height: 1.35; color: var(--ink-3); }
+.rrow.place { border-left-color: #8a8272; }
+.rrow.place { grid-template-columns: minmax(0, 1fr) auto; }
+.rrow.place span { display: flex; align-items: center; gap: 3px 7px; flex-wrap: wrap; }
+.rrow.place .btn { white-space: nowrap; }
+.rrow.place span svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.rrow.place span i { font-style: normal; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.places .sgn { fill: none; stroke: #e9dfc4; stroke-width: .6; }
+.places .sgn.solid { fill: #e9dfc4; stroke: none; }
+.rrow.place.down { border-left-color: #e8622c; }
+.rrow.place.down b { color: #f3b08a; }
+.rrow.place.seized small { color: var(--ink); }
+.rrow.scorch { border-left-color: var(--line); grid-template-columns: minmax(0, 1fr); }
+.rrow.scorch.burns { border-left-color: #e8622c; }
+.rrow.scorch .acts { grid-column: 1; display: flex; gap: 5px; flex-wrap: wrap; margin: 3px 0 0; }
+.rrow.scorch .btn { grid-column: auto; grid-row: auto; }
+.rrow.scorch .polline { margin-top: 5px; color: var(--ink-3); }
+.pzfire, .pzflag { pointer-events: none; }
+.pzfire .o { fill: #e8622c; stroke: #15120f; stroke-width: .9; stroke-linejoin: round; paint-order: stroke; filter: drop-shadow(0 .6px .8px rgba(0, 0, 0, .6)); }
+.pzfire .i { fill: #ffd15a; }
+.pzfire { animation: pzflick 1.7s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100%; }
+@keyframes pzflick { 0%, 100% { opacity: 1; } 50% { opacity: .78; } }
+@media (prefers-reduced-motion: reduce) { .pzfire { animation: none; } }
+.pzflag .pole { stroke: #15120f; stroke-width: 1.3; stroke-linecap: round; fill: none; }
+.pzflag path:not(.pole) { stroke: #15120f; stroke-width: .8; stroke-linejoin: round; paint-order: stroke; filter: saturate(1.3) brightness(1.15); }
 .jobs { margin-top: 12px; }
 .jobs h3 { margin-bottom: 4px; }
 .corps { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 9px; align-items: center; padding: 8px 8px; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 6px; background: var(--panel-2); width: 100%; text-align: left; }

@@ -21,6 +21,7 @@ import { armyOf } from './joint';
 import { seaOpenAt } from './navy';
 import { storyFallen } from './stories';
 import { TOWNS, townName, townSize, type TownSize } from './towns';
+import { PRIZES, harbourOpen, prizesOnLoss, tellSeized } from './prizes';
 import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
 
 export const SIEGE = data as unknown as {
@@ -148,6 +149,8 @@ export const investedOn = (g: Game, r: Region): number => g.flags[`siege:${r.id}
 /** True where the defenders' ships can still bring food into the harbour: such a town is never starved. */
 export function fedBySea(g: Game, r: Region): boolean {
   if (!r.port || !r.seas.length) return false;
+  // The quays of a small place lie outside the town: lost with the field, or wrecked, they land nothing (prizes.ts).
+  if (!harbourOpen(g, r)) return false;
   const nats = new Set([r.ctrl, ...garrisonOf(r).map((c) => c.nat)]);
   for (const id of nats) {
     const n = g.nations[id];
@@ -296,12 +299,18 @@ export function invest(g: Game, r: Region, by: string): void {
   const key = `siege:${r.id}`;
   if (g.flags[key] !== undefined) return;
   g.flags[key] = g.turn;
+  // Who closed round it: so that an army driven off again can be told to burn what it held outside the walls.
+  g.flags[`sgby:${r.id}`] = Object.keys(g.nations).indexOf(by);
   delete g.flags[`sgm:${r.id}`];
   g.supplyDirty = true;
   tallySiege(g, 'begun');
   const inside = garrisonOf(r);
   const who = inside.length ? `${inside.length === 1 ? 'one corps' : `${inside.length} corps`} inside` : 'only its guard inside';
   tell(g, r, `${g.nations[by].adj} troops close round ${townName(r)}: ${placeWords(g, r)} is under siege, with ${who}.`, r.ctrl, [by, r.ctrl, ...inside.map((c) => c.nat)]);
+  // What lies outside the walls goes with the field: the side driven off it burns what it was ordered to, and the
+  // player is told what changed hands whole.
+  prizesOnLoss(g, r, by, r.ctrl, 'outside');
+  tellSeized(g, r, by);
 }
 
 /** The besiegers are gone: the siege is raised. What was broken is mended month by month. */
@@ -309,11 +318,15 @@ export function lift(g: Game, r: Region, by: string | null = null): void {
   const key = `siege:${r.id}`;
   if (g.flags[key] === undefined) return;
   const lasted = g.turn - g.flags[key];
+  const was = Object.keys(g.nations)[g.flags[`sgby:${r.id}`] ?? -1];
   delete g.flags[key];
+  delete g.flags[`sgby:${r.id}`];
   delete g.flags[`sgm:${r.id}`];
   g.supplyDirty = true;
   tallySiege(g, 'raised');
   tell(g, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ''}${by ? ` by ${g.nations[by].adj} troops` : ''}.`, r.ctrl, [r.ctrl, ...(by ? [by] : []), ...garrisonOf(r).map((c) => c.nat)]);
+  // Driven off by a relieving army, the besiegers burn what they held outside the walls, if that is their order.
+  if (by && was && lasted >= PRIZES.settle) prizesOnLoss(g, r, by, was, 'outside');
 }
 
 export type Fell = 'storm' | 'gates' | 'hunger' | 'empty';
@@ -331,6 +344,7 @@ export function fall(g: Game, r: Region, by: string, how: Fell): void {
     removeCorps(g, c);
   }
   delete g.flags[`siege:${r.id}`];
+  delete g.flags[`sgby:${r.id}`];
   delete g.flags[`sgm:${r.id}`];
   delete g.flags[`guard:${r.id}`];
   delete g.flags[`storm:${r.id}`];
@@ -338,6 +352,8 @@ export function fall(g: Game, r: Region, by: string, how: Fell): void {
   const adj = g.nations[by].adj;
   // A capital's fall is told by the rules that take it; the rest is told here.
   const cap = r.cap && r.owner === old;
+  // Scorched earth: what was not already lost with the field is burned, if that is the order, as the place falls.
+  prizesOnLoss(g, r, by, old, since === undefined ? 'all' : 'inside');
   if (!cap && how !== 'empty' && how !== 'storm') {
     const text = how === 'gates' ? `${townName(r)} opens its gates to ${adj} troops without a fight.`
       : `Starved out after a siege of ${months(lasted)}, ${townName(r)} surrenders to ${adj} forces.`;
@@ -473,6 +489,7 @@ export function dropSieges(g: Game, nat: string): void {
   for (const r of g.regions) {
     if (r.ctrl !== nat) continue;
     delete g.flags[`siege:${r.id}`];
+    delete g.flags[`sgby:${r.id}`];
     delete g.flags[`sgm:${r.id}`];
     delete g.flags[`guard:${r.id}`];
   }

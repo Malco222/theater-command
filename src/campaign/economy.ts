@@ -21,8 +21,9 @@ import { workingFactories } from './rails';
 import { incomeMul, levelOf } from './difficulty';
 import { eliteOf, priceOf, traitMoney, whyNoElite } from './traits';
 import { TECH, locked, whyNoPara } from './tech';
-import { keepsStores, shortOfOil, supIncome } from './resources';
+import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
+import { prizeIncome, prizeOut, prizeRules } from './prizes';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -105,8 +106,9 @@ export function provinceYield(g: Game, r: Region, nat: string = r.ctrl, whole = 
   const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift);
   const k = !own ? BUDGET.occupied + lift : r.overseas ? BUDGET.overseas : 1;
   const land = BUDGET.land[r.terrain] * k;
-  const port = r.port ? BUDGET.port * k : 0;
-  const oil = r.oil ? BUDGET.oil * k : 0;
+  // A harbour blocked pays nothing until it is mended (prizes.ts), and an oilfield alight pays only for the wells still at work.
+  const port = r.port && (whole || prizeOut(g, r, 'harbour') <= 0) ? BUDGET.port * k : 0;
+  const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g, r)) : 0;
   const capital = own && g.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
   // With an enemy army round its town a province sends its holder next to nothing: the roads out are cut.
   if (!whole && nat === r.ctrl && besieged(g, r)) {
@@ -206,7 +208,9 @@ export function ledger(g: Game, nat: string): Ledger {
   const civic = towns ? towns.commerce + towns.farms + towns.tax : 0;
   const peace = n.atWar.length ? 1 : PRODUCTION.peaceIncome;
   const sea = seaIncomeLoss(g, nat), air = airIncomeLoss(g, nat), tech = techMul(g, nat, 'industry');
-  const before = seat + facHome + facOcc + away + land + ports + oil;
+  // What its armies hold outside towns they have not yet taken: factory districts, oilfields and quays.
+  const prizes = prizeIncome(g, nat);
+  const before = seat + facHome + facOcc + away + land + ports + oil + prizes.total;
   // What the nation's own abilities earn it (the grand campaign): banks, ore, a merchant fleet, factories moved out of reach.
   const gift = traitMoney(g, nat);
   const atPeace = before * peace + trade + gift.flat + civic;
@@ -222,6 +226,7 @@ export function ledger(g: Game, nat: string): Ledger {
     { key: 'land', label: 'Towns, farms and land', amount: land, count: held },
     { key: 'ports', label: 'Harbours', amount: ports, count: nPorts },
     { key: 'oil', label: 'Oilfields', amount: oil, count: nOil },
+    ...(prizeRules(g) ? [{ key: 'prizes', label: 'Prizes held outside towns under siege', amount: prizes.total, count: prizes.count }] : []),
     { key: 'trade', label: budget ? 'Trade agreements' : 'Trade with friendly neutrals', amount: trade, count: partners },
     { key: 'commerce', label: 'Commerce in the towns', amount: towns?.commerce ?? 0 },
     { key: 'farms', label: 'Farm produce sold', amount: towns?.farms ?? 0 },
@@ -260,7 +265,7 @@ export function income(g: Game, nat: string): number {
       sum += y.land + y.port + y.oil + y.fac;
       seat += y.capital;
     }
-    sum += seat + (n.offmap?.industry ?? 0);
+    sum += seat + (n.offmap?.industry ?? 0) + prizeIncome(g, nat).total;
     // Trade is by agreement, and the towns' buildings pay their own way.
     const towns = civicSum(g, nat, keepsStores(g, nat));
     const trade = tradeIncome(g, nat) + towns.commerce + towns.farms + towns.tax;

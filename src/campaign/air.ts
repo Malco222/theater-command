@@ -25,7 +25,8 @@ import { groundRules } from './ground';
 import { bombFactories, bombRail, onNet, railBombChance, railCut, railsAt, ruinChance } from './rails';
 import { bombingFor, raidsMul, seat } from './difficulty';
 import { fuelAir } from './resources';
-import { SIEGE, besieged, besiegerOf, breachOf, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
+import { SIEGE, besieged, besiegerOf, breachOf, fieldCtrl, hitTown, planTownHit, siegeRules, townBonus, townHeld, townHitText, townShare, type TownHit } from './siege';
+import { airfieldOpenTo, prizeOut } from './prizes';
 import { townName } from './towns';
 import type { AirFleet, AirMission, AirPool, AirReport, AirSide, Corps, Fleet, Game, Region, SeaSide, ShipClass, Ships } from './types';
 
@@ -403,7 +404,16 @@ export function openAirWar(g: Game): void {
 export function whyNotBase(g: Game, f: AirFleet, r: Region): string | null {
   if (f.ship !== undefined) return 'It flies from the carriers of its fleet, and goes where they go.';
   if (r.id === f.base) return 'It is already based there.';
-  if (!allied(g, f.nat, r.ctrl)) return 'That ground is not in friendly hands.';
+  // An airfield lies outside the town, and goes with the country round it (prizes.ts): an army that holds the
+  // field of an enemy province has the use of its airfield after a month, and a wrecked one serves nobody.
+  if (!airfieldOpenTo(g, f.nat, r)) {
+    const ours = besieged(g, r) && allied(g, f.nat, fieldCtrl(g, r));
+    if (!allied(g, f.nat, r.ctrl) && !ours) return 'That ground is not in friendly hands.';
+    if (!hasAirfield(g, r.id)) return 'There is no airfield there. Engineers can lay one out, and the treasury can build one.';
+    const out = prizeOut(g, r, 'airfield');
+    if (out > 0) return `The airfield there is wrecked: it will be ${out === 1 ? 'a month' : `${out} months`} before aircraft can use it.`;
+    return ours ? 'Airfields taken this month are not yet in use.' : 'The enemy holds the country round the town, and the airfield with it.';
+  }
   if (!hasAirfield(g, r.id)) return 'There is no airfield there. Engineers can lay one out, and the treasury can build one.';
   if (r.since >= g.turn) return 'Airfields taken this month are not yet in use.';
   if (f.moved === g.turn) return 'It has already changed base this month.';
@@ -525,7 +535,8 @@ export function airUpkeep(g: Game, nat: string): void {
     // A carrier wing has no airfield to lose: it goes where its fleet goes.
     if (f.ship !== undefined) continue;
     // Airfields lie out in the country: a group whose province is under siege has lost them, though the town holds.
-    if ((!allied(g, nat, g.regions[f.base].ctrl) || besieged(g, g.regions[f.base])) && !fallBack(g, f)) continue;
+    // (The army round an enemy town has its airfield, and a wrecked field serves nobody: prizes.ts.)
+    if (!airfieldOpenTo(g, nat, g.regions[f.base]) && !fallBack(g, f)) continue;
     // The staff moves strength between fleets by changing what each is kept at.
     const r = AIR.fleets.find((x) => x.nat === nat && x.name === (f.parent ?? f.name));
     const e = r ? row(r.est, g.turn) : null;
@@ -565,7 +576,7 @@ function fallBack(g: Game, f: AirFleet): boolean {
   const nearest = (fields: boolean): Region | null => {
     let out: Region | null = null, bd = Infinity;
     for (const r of g.regions) {
-      if (r.ctrl !== f.nat || (fields && !hasAirfield(g, r.id)) || besieged(g, r)) continue;
+      if (r.ctrl !== f.nat || (fields && !hasAirfield(g, r.id)) || besieged(g, r) || prizeOut(g, r, 'airfield') > 0) continue;
       const d = Math.hypot(r.x - old.x, r.y - old.y);
       if (d < bd) { bd = d; out = r; }
     }

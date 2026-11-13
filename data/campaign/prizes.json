@@ -1,0 +1,31 @@
+{
+  "_about": "Prizes outside the town (the grand campaign). A province's oilfield, factory district, airfield, harbour and great rail junction are places of their own. Those outside the walls go with the countryside: the army that wins the field has the use of them once it has held them 'settle' months, while the town still holds. A prize can be wrecked by order, and burned by an army driven off it (scorched earth). Rules in src/campaign/prizes.ts.",
+  "names": { "oil": "Oilfield", "works": "Factory district", "airfield": "Airfield", "harbour": "Harbour", "junction": "Rail junction" },
+  "works": { "least": 2, "outside": 0.5 },
+  "junction": { "lines": 5 },
+  "harbourInside": ["city", "capital"],
+  "settle": 1,
+  "ap": 1,
+  "wreck": { "oil": 8, "works": 6, "airfield": 3, "harbour": 5 },
+  "burn": {
+    "chance": 0.85,
+    "unguarded": 0.35,
+    "fastCaptor": 0.25,
+    "months": { "oil": 5, "works": 3, "airfield": 2, "harbour": 3 }
+  },
+  "mend": 1,
+  "ai": {
+    "policy": { "_default": "never", "SOV": "everywhere", "GER": "conquered", "UK": "conquered" }
+  },
+  "notes": {
+    "works": "A province with at least 'least' factories has a factory district outside the walls: 'outside' of its factories, rounded down. The rest stand in the town.",
+    "junction": "A province where at least 'lines' railway lines meet has a great junction outside the town: the army holding the field runs its trains through, though the town holds.",
+    "harbourInside": "A harbour lies inside the defences of a place of these sizes and of any fortress, and goes with the town. Elsewhere the quays lie outside: they go with the field, and a garrison whose harbour is lost or wrecked is not fed by sea.",
+    "settle": "Months an army holds the field before the prizes outside the town work for it.",
+    "ap": "Marching time a corps needs to wreck a prize by order. The work takes the rest of its month.",
+    "wreck": "Months a prize is out of use when wrecked by order: a thorough job. A junction's line is cut until engineers relay it.",
+    "burn": "Scorched earth, when an army with the order is driven off the ground. 'chance' that each prize is burned when the loser still has troops next door or in the town, 'unguarded' when not, less 'fastCaptor' when fast troops took the ground. 'months' each is then out of use: a hasty job. A junction is not burned this way: the railway keeps its own rule when ground is lost (rails.ts).",
+    "mend": "Months an engineer corps standing in the province takes off each wrecked prize there, each month, beside the month that passes anyway.",
+    "ai.policy": "Each computer nation's scorched earth policy: never, conquered (ground that is not its own or an ally's) or everywhere."
+  }
+}

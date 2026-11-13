@@ -44,8 +44,12 @@ import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
-import { SIEGE, garrison, garrisonOf, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type SiegeView } from './siege';
+import { SIEGE, fieldCtrl, garrison, garrisonOf, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type SiegeView } from './siege';
 import { quietNews } from './staff';
+import {
+  orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
+  type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
+} from './prizes';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -381,6 +385,66 @@ export function orderAttack(g: Game, corps: Corps[], target: Region): BattleRepo
 
 /** True for a corps of the player's own in a garrison, or in the field, that he may order into or out of a town this month. */
 const townOrder = (g: Game, c: Corps): boolean => !c.dead && g.human !== null && current(g) === g.human && c.nat === g.human && c.leave === undefined;
+
+// ---- Prizes outside the town, and scorched earth (the grand campaign) -------------------------
+
+/**
+ * The prizes of a province: its oilfield, factory district, airfield, harbour and great rail junction, each with who
+ * holds it, who has the use of it this month, and how long it is out of use if wrecked; and the player's scorched
+ * earth order for the province. Null outside the grand campaign and where the province has none.
+ */
+export const prizesOf = (g: Game, region: number): PrizesView | null => prizesAt(g, region, g.human);
+
+/** Provinces to mark on the map: a prize wrecked there (burning), or in the hands of an army that has not taken the town (seized). Under the fog, only ground the player can see. */
+export function prizesOnMap(g: Game): PrizeMark[] {
+  const all = prizeMarks(g);
+  if (g.human === null || !fogOn(g, g.human)) return all;
+  const sight = sightOf(g, g.human);
+  return all.filter((m) => sight[m.region] !== SIGHT.none || allied(g, g.human!, g.regions[m.region].ctrl));
+}
+
+/** What the player's armies earn from prizes they hold outside towns they have not yet taken. */
+export const myPrizeIncome = (g: Game): PrizeIncome | null => (g.human === null ? null : prizeIncome(g, g.human));
+
+/** Why the player cannot wreck a prize by order, or null if he can: it is a corps' work for the month. */
+export function whyNotWreckPrize(g: Game, region: number, kind: PrizeKind): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotWreck(g, g.human, region, kind);
+}
+
+/** The player's order to wreck a prize his troops hold: a thorough job, and nobody has the use of it for months. */
+export function orderWreck(g: Game, region: number, kind: PrizeKind): boolean {
+  return g.human !== null && humanUp(g) && orderWreckPrize(g, g.human, region, kind);
+}
+
+/** Why the player cannot give a scorched earth order for a province, or null if he can: he must hold its town or the country round it. */
+export function whyNotBurnOrder(g: Game, region: number): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  const r = g.regions[region];
+  if (!r || !prizesAt(g, region, g.human)) return 'There is nothing there to burn.';
+  if (r.ctrl !== g.human && fieldCtrl(g, r) !== g.human) return `${r.name} is not in your hands.`;
+  return null;
+}
+
+/**
+ * The player's standing order for one province if his troops are driven off it: 1 burn its prizes, -1 leave them
+ * whole, 0 follow the nation's policy.
+ */
+export function orderBurn(g: Game, region: number, order: number): boolean {
+  if (whyNotBurnOrder(g, region)) return false;
+  setBurnOrder(g, g.human!, g.regions[region], order);
+  return true;
+}
+
+/** The player's scorched earth policy: never, on conquered ground only, or everywhere. */
+export const scorchPolicyNow = (g: Game): ScorchPolicy => (g.human === null ? 'never' : scorchPolicy(g, g.human));
+
+/** The player sets his nation's scorched earth policy. A province's own order overrides it. */
+export function orderScorchPolicy(g: Game, policy: ScorchPolicy): boolean {
+  if (g.human === null || !humanUp(g) || g.flags.open !== 1) return false;
+  setScorchPolicy(g, g.human, policy);
+  return true;
+}
 
 /** The town of a province as a fortress: what it holds, what it adds to its defenders, and how its siege stands. Null outside the grand campaign. */
 export function townSiege(g: Game, region: number): SiegeView | null {

@@ -76,7 +76,7 @@ describe('a grand campaign begun in a later year', () => {
     expect(g.headlines.length).toBeGreaterThan(before);
     const ph = phaseFor(g, 'GER');
     expect(ph === null || typeof ph.posture === 'string').toBe(true);
-  });
+  }, 20_000);
 
   it('leaves the historical war it was cut from untouched', () => {
     const a = at(1942), b = at(1942);

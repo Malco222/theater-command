@@ -33,6 +33,7 @@ import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMa
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
+import { junctionOpenTo, mendPrizes } from './prizes';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, dropSieges, fall, fieldCtrl, garrisonOf, guardAfter, guardMen, guardOf, guardPower, joinTown, musterNear, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
@@ -1268,7 +1269,8 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
  */
 export function railReach(g: Game, c: Corps): Set<number> {
   const out = new Set<number>();
-  if (c.kind === 'fort' || c.ap < 4 || g.regions[c.reg].terrain === DESERT.terrain || besieged(g, g.regions[c.reg])) return out;
+  // No train leaves a province under siege, unless the army round the town holds a great junction outside it (prizes.ts).
+  if (c.kind === 'fort' || c.ap < 4 || g.regions[c.reg].terrain === DESERT.terrain || (besieged(g, g.regions[c.reg]) && !junctionOpenTo(g, c.nat, g.regions[c.reg]))) return out;
   const net = groundRules(g);
   if (net && railCut(g, c.reg)) return out;
   const seen = new Uint8Array(g.regions.length);
@@ -1277,7 +1279,8 @@ export function railReach(g: Game, c: Corps): Set<number> {
   for (let i = 0; i < q.length; i++) {
     for (const j of net ? railsAt(q[i]) : g.regions[q[i]].nb) {
       const r = g.regions[j];
-      if (seen[j] || !allied(g, c.nat, r.ctrl) || r.terrain === DESERT.terrain || besieged(g, r)) continue;
+      if (seen[j] || r.terrain === DESERT.terrain) continue;
+      if ((!allied(g, c.nat, r.ctrl) || besieged(g, r)) && !junctionOpenTo(g, c.nat, r)) continue;
       if (downBetween(g, q[i], j)) continue; // no train crosses a river whose bridges are down
       if (net && railCut(g, j)) {
         // Engineers alone ride the works train to the break itself. Nothing goes on through it.
@@ -1293,7 +1296,8 @@ export function railReach(g: Game, c: Corps): Set<number> {
 
 /** Rail move: anywhere through friendly territory, for the whole month. */
 export function railMove(g: Game, c: Corps, to: Region): boolean {
-  if (c.kind === 'fort' || c.ap < 4 || !allied(g, c.nat, to.ctrl) || !hasRoom(g, to, c) || barred(g, c, to) || besieged(g, to) || c.town) return false;
+  const friendly = (allied(g, c.nat, to.ctrl) && !besieged(g, to)) || junctionOpenTo(g, c.nat, to);
+  if (c.kind === 'fort' || c.ap < 4 || !friendly || !hasRoom(g, to, c) || barred(g, c, to) || c.town) return false;
   if (to.id !== c.reg && !railReach(g, c).has(to.id)) return false;
   place(g, c, to);
   c.ap = 0;
@@ -1769,6 +1773,7 @@ function cutOffNews(g: Game): void {
 export function endPhase(g: Game, nat: string): void {
   if (g.nations[nat].alive) desertWorks(g, nat, true);
   siegeEmpties(g);
+  mendPrizes(g, nat);
 }
 
 export function startPhase(g: Game, nat: string): void {
