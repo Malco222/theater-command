@@ -178,6 +178,8 @@ export interface Corps extends Storied {
   /** Airborne troops: they can take a coast across one sea from the air, with no ships and no sea lane. */
   airborne?: boolean;
   /** The player's standing order to give ground rather than be broken on it. No computer nation sets it. */
+  /** The ally whose army this corps marches with, by the player's asking: it takes that nation's orders in that nation's month (the grand campaign). */
+  joint?: string;
   yields?: boolean;
   /** The corps has already given ground this month, and will stand if it is attacked again. */
   gaveWay?: boolean;

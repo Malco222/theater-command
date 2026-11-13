@@ -21,6 +21,7 @@ import { afterFall, recordFall, retaken, standsFreed } from './liberation';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedOrg } from './morale';
 import { numberCorps } from './armies';
 import { INTEL, identify, intelAttack, intelTick } from './intel';
+import { armyOf, jointHold, jointMonth } from './joint';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
@@ -535,7 +536,8 @@ export interface AttackOpts {
 /** Works out both sides' strength for an attack. Auto-resolve and the odds preview share it. */
 export function assess(g: Game, attackers: Corps[], target: Region, opts: AttackOpts = {}): Assessment {
   ensureSupply(g);
-  const attNat = attackers[0].nat;
+  // A joint army attacks under the flag of the nation that commands it.
+  const attNat = armyOf(attackers[0]);
   const defenders = hostileUnits(g, target, attNat);
   const lines: TicketLine[] = [];
   const aN = new Set(attackers.map((c) => c.nat)), dN = new Set(defenders.map((c) => c.nat));
@@ -895,7 +897,7 @@ function giveWay(g: Game, a: Assessment, attackers: Corps[], target: Region): Re
 
 /** The attackers take ground the defenders have given up without a fight. It is filed with the battles so the player can see what happened. */
 function walkIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a: Assessment, gone: ReportUnit[]): BattleReport {
-  const attNat = attackers[0].nat;
+  const attNat = armyOf(attackers[0]);
   const AN = g.nations[attNat];
   // The offensive is counted as under way all the same: the attackers came on and the ground changed hands.
   for (const d of new Set(gone.map((u) => u.nat))) {
@@ -925,12 +927,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   let a = assess(g, attackers, target, opts);
   const gone = giveWay(g, a, attackers, target);
   if (gone.length) {
-    if (!hostileUnits(g, target, attackers[0].nat).length) return walkIn(g, attackers, target, opts, a, gone);
+    if (!hostileUnits(g, target, armyOf(attackers[0])).length) return walkIn(g, attackers, target, opts, a, gone);
     // Whoever stayed behind, in the works or under other orders, fights alone.
     a = assess(g, attackers, target, opts);
   }
   const defenders = a.defenders;
-  const attNat = attackers[0].nat;
+  const attNat = armyOf(attackers[0]);
   const defNat = defenders[0]?.nat ?? target.ctrl;
   const AN = g.nations[attNat];
   // An enemy's capital, for the records of the corps that take it: known before the fight, since its fall may end the war with him.
@@ -1084,7 +1086,8 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   g.week = weekOf(c, cost);
   place(g, c, to);
   c.ap = Math.max(0, c.ap - cost);
-  if (!friendly) capture(g, to, c.nat);
+  // Ground a corps walks into is taken for the army it marches with.
+  if (!friendly) capture(g, to, armyOf(c));
   return true;
 }
 
@@ -1581,6 +1584,8 @@ export function startPhase(g: Game, nat: string): void {
     c.fought = false;
     if (c.gaveWay) delete c.gaveWay;
     c.ap = c.apMax = 4 + (tempo && KIND[c.kind].mobile ? 1 : 0) + cmdAp(g, c) - (fuelSlows(g, c) ? 1 : 0);
+    // A corps with an ally's army marches in that army's month, not in its own (the grand campaign).
+    if (jointHold(g, c)) c.ap = 0;
   });
   for (const [reg, lost] of starved) {
     // Small parties are not news, unless they are the end of an army the newsreel has already said was surrounded.
@@ -1608,6 +1613,7 @@ export function startPhase(g: Game, nat: string): void {
   n.armyPeak = Math.max(n.armyPeak, armySize(g, nat));
   if (tempo) g.flags[`tempo:${nat}:${g.turn}`] = 1;
   storyMonth(g, nat);
+  jointMonth(g, nat);
   checkCollapse(g, nat, n.atWar[0] ?? nat);
 }
 

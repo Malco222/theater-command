@@ -27,6 +27,7 @@ import {
   whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
 import type { TicketLine } from '../core/ticket';
+import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
@@ -133,7 +134,7 @@ export function evePlan(g: Game): EvePlan | null {
 export function orderEvePlan(g: Game): number {
   const plan = evePlan(g);
   if (!plan) return 0;
-  const army = g.corps.filter((c) => canOrder(g, c)).sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id);
+  const army = g.corps.filter((c) => ownOrder(g, c)).sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id);
   const want = new Map<number, number>();
   let k = 0;
   for (const [name, n] of plan.place) {
@@ -191,8 +192,13 @@ export function runTurnAI(g: Game): void {
 
 export function canOrder(g: Game, c: Corps): boolean {
   // A corps sent home on a bond tour or to the schools takes no orders until it is back.
-  return !c.dead && c.nat === g.human && current(g) === c.nat && c.kind !== 'fort' && c.leave === undefined;
+  if (c.dead || g.human === null || current(g) !== g.human || c.kind === 'fort' || c.leave !== undefined) return false;
+  // An ally's corps that marches with the player's army takes his orders too (the grand campaign).
+  return c.nat === g.human || (c.joint === g.human && allied(g, c.nat, g.human));
 }
+
+/** True for a corps of the player's own nation that can be given orders: what an ally has lent does not sail, drop or dig for him. */
+const ownOrder = (g: Game, c: Corps): boolean => c.nat === g.human && canOrder(g, c);
 
 export interface Reach { cost: number; prev: number; attack: boolean }
 
@@ -249,8 +255,19 @@ export function candidates(g: Game, target: Region): Corps[] {
 }
 
 export function previewAttack(g: Game, corps: Corps[], target: Region): Assessment | null {
-  if (!corps.length || !hostileUnits(g, target, corps[0].nat).length) return null;
-  return assess(g, corps, target);
+  const going = jointForce(g, corps, target);
+  if (!going.length || !hostileUnits(g, target, going[0].nat).length) return null;
+  return assess(g, going, target);
+}
+
+/**
+ * The corps of a force that can take part in an attack on a region, the player's own first. An ally's corps in a
+ * joint army fights only an enemy its own country is at war with: against anyone else it stays where it is.
+ */
+export function jointForce(g: Game, corps: Corps[], target: Region): Corps[] {
+  if (!corps.some((c) => c.joint !== undefined)) return corps;
+  const going = corps.filter((c) => c.joint === undefined || hostileUnits(g, target, c.nat).length > 0);
+  return going.sort((a, b) => (a.joint === undefined ? 0 : 1) - (b.joint === undefined ? 0 : 1));
 }
 
 /**
@@ -309,10 +326,60 @@ export function attackOutlook(g: Game, corps: Corps[], target: Region): Outlook 
 
 export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
   if (onEve(g)) return null;
-  const ok = limitAttackers(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target);
+  const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length) return null;
   return resolveBattle(g, ok, target);
 }
+
+// ---- Joint armies: an ally's corps marching with the player's (the grand campaign) ---------------------------
+
+/** An ally's field corps standing in a province with the player's army: whether it could join, and why not if it cannot. */
+export interface JoinOffer { corps: number; nat: string; name: string; kind: Corps['kind']; divs: number; why: string | null }
+
+/** Why the player cannot ask this corps to join his army now, or null if he can. */
+export function whyNotJoinArmy(g: Game, c: Corps): string | null {
+  if (!humanUp(g)) return 'It is not your month.';
+  return whyNotJoin(g, c, g.human);
+}
+
+/** Every ally's field corps in a province that is not already with the player's army, with whether each could join it. */
+export function joinOffers(g: Game, region: number): JoinOffer[] {
+  const me = g.human, r = g.regions[region];
+  if (me === null || !r || g.flags.open !== 1 || !r.units.some((u) => u.nat === me && u.kind !== 'fort' && !u.dead)) return [];
+  return r.units.filter((c) => !c.dead && c.nat !== me && c.joint === undefined && c.kind !== 'fort' && allied(g, c.nat, me))
+    .map((c) => ({ corps: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, why: whyNotJoinArmy(g, c) }));
+}
+
+/** Asks an ally's corps to march with the player's army in its province. */
+export function orderJoin(g: Game, c: Corps): boolean {
+  return humanUp(g) && joinArmy(g, c, g.human);
+}
+
+/** Asks every ally's corps in a province that can to join the player's army there. Returns how many did. */
+export function orderJoinAll(g: Game, region: number): number {
+  if (!humanUp(g)) return 0;
+  let n = 0;
+  // One at a time: each that joins counts against what its country can still spare.
+  for (const c of [...(g.regions[region]?.units ?? [])].sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id)) if (joinArmy(g, c, g.human)) n++;
+  return n;
+}
+
+/** Sends an ally's corps back from the player's army to its own command. */
+export function orderSendBack(g: Game, c: Corps): boolean {
+  return humanUp(g) && c.joint === g.human && leaveArmy(g, c);
+}
+
+/** What each ally has lent the player and how much more it could: for a list of the joint armies. */
+export function lending(g: Game): { nat: string; lent: number; limit: number; corps: number[] }[] {
+  const me = g.human;
+  if (me === null || g.flags.open !== 1) return [];
+  return Object.values(g.nations).filter((n) => n.alive && n.id !== me && allied(g, n.id, me))
+    .map((n) => { const cs = lentBy(g, n.id).filter((c) => c.joint === me); return { nat: n.id, lent: cs.length, limit: lendLimit(g, n.id), corps: cs.map((c) => c.id) }; })
+    .filter((x) => x.lent > 0 || x.limit > 0);
+}
+
+/** The ally's corps in a province that would join the player's army if asked. */
+export const joinable = (g: Game, region: number): Corps[] => (humanUp(g) ? couldJoin(g, region, g.human) : []);
 
 /**
  * The player's standing order for a corps that is attacked: stand and fight, dig in where it is, or give ground
@@ -335,7 +402,7 @@ export function engineerJobs(g: Game, c: Corps): JobOffer[] {
 
 /** Sets one of the player's engineer corps to work for the month. */
 export function orderEngineers(g: Game, c: Corps, job: JobKind): boolean {
-  return canOrder(g, c) && orderJob(g, c, job);
+  return ownOrder(g, c) && orderJob(g, c, job);
 }
 
 /** Takes one of the player's engineer corps off the work it was given this month. */
@@ -381,7 +448,7 @@ export function shipTargets(g: Game, c: Corps): Region[] {
 
 /** Enemy coasts the player's chosen corps could land on from the port they stand in. */
 export function landTargets(g: Game, cs: Corps[]): Region[] {
-  return cs.length && !onEve(g) && cs.every((c) => canOrder(g, c)) ? landingTargets(g, cs) : [];
+  return cs.length && !onEve(g) && cs.every((c) => ownOrder(g, c)) ? landingTargets(g, cs) : [];
 }
 
 /** The odds and the dangers of a landing, before the order is given. */
@@ -391,7 +458,7 @@ export function previewLanding(g: Game, cs: Corps[], to: number): LandingPlan {
 
 /** Sends the chosen corps across the sea to land on an enemy coast. */
 export function orderLand(g: Game, cs: Corps[], to: number): Landing {
-  if (!cs.length || onEve(g) || !cs.every((c) => canOrder(g, c))) return { ok: false, why: 'Those corps cannot be given orders now.' };
+  if (!cs.length || onEve(g) || !cs.every((c) => ownOrder(g, c))) return { ok: false, why: cs.some((c) => c.joint !== undefined) ? 'An ally\'s corps does not sail under your orders: send the landing with your own.' : 'Those corps cannot be given orders now.' };
   return landCorps(g, cs, g.regions[to]);
 }
 
@@ -413,7 +480,7 @@ export function orderRebase(g: Game, id: number, region: number): boolean {
 }
 
 export function orderShip(g: Game, c: Corps, to: number): boolean {
-  return canOrder(g, c) && shipMove(g, c, g.regions[to]);
+  return ownOrder(g, c) && shipMove(g, c, g.regions[to]);
 }
 
 const myAir = (g: Game, id: number): AirFleet | null => {
@@ -754,7 +821,7 @@ export function passMonth(g: Game): boolean {
 }
 
 export function orderEvacuate(g: Game, c: Corps): boolean {
-  return canOrder(g, c) && evacuate(g, c);
+  return ownOrder(g, c) && evacuate(g, c);
 }
 
 /** Nations the player could declare war on: neighbours by land that are not already friends or enemies. */
@@ -891,7 +958,7 @@ export function orderSack(g: Game, general: number): boolean {
 /** Promotes an unknown officer to command one of the player's corps. */
 export function orderPromote(g: Game, corps: number): General | null {
   const c = g.corps.find((x) => x.id === corps);
-  return c && canOrder(g, c) ? promote(g, c) : null;
+  return c && ownOrder(g, c) ? promote(g, c) : null;
 }
 
 export function orderSkill(g: Game, general: number, skill: Skill): boolean {
@@ -936,7 +1003,8 @@ export function invasions(g: Game, cs: Corps[]): Map<number, string> {
   const can = new Set(declarable(g));
   if (!can.size) return out;
   for (const c of cs) {
-    if (!canOrder(g, c) || c.ap <= 0) continue;
+    // War is declared by the player's own corps crossing the frontier, not by an ally's.
+    if (!ownOrder(g, c) || c.ap <= 0) continue;
     for (const j of g.regions[c.reg].nb) {
       const r = g.regions[j];
       if (can.has(r.ctrl) && !blocked(g, c, r, c.reg)) out.set(j, r.ctrl);

@@ -1269,3 +1269,18 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 .btn.scoutnow small { opacity: .75; font-size: 12px; }
 .btn.scoutnow svg.cam { flex: none; }
 .note.fogged .btn.scoutnow { display: flex; margin-top: 8px; }
+
+/* Joint armies: an ally's corps marching with the player's */
+#units .pennant .box { stroke: #14181d; stroke-width: 1.6; }
+#units .pennant { filter: drop-shadow(0 .4px .6px rgba(0, 0, 0, .55)); }
+.jstrip { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; padding: 6px 9px; background: var(--panel-2); border: 1px solid var(--line); border-top: 0; border-radius: 0 0 4px 4px; font-size: 12.5px; line-height: 1.35; color: var(--ink-2); }
+.jstrip.on { border-color: var(--brass); box-shadow: inset 3px 0 0 var(--brass); color: var(--ink); }
+.jstrip .grow { flex: 1 1 auto; min-width: 0; }
+.jstrip .btn { flex: 0 0 auto; white-space: nowrap; }
+.corps:has(+ .jstrip) { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.jstrip:has(+ .recstrip) { margin-bottom: 0; border-radius: 0; }
+.jointbar { display: grid; gap: 4px; align-content: center; flex: 0 0 auto; max-width: 250px; }
+.jointbar small { font-size: 11.5px; line-height: 1.3; color: var(--ink-2); display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.jointbar .btn { white-space: normal; text-align: left; line-height: 1.2; }
+.jointbar .btn.quiet { background: transparent; color: var(--ink-2); }
+.ucard .um .chip { vertical-align: -2px; margin-right: 1px; }
