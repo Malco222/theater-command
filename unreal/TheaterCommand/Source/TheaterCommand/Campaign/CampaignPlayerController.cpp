@@ -1642,6 +1642,12 @@ void ACampaignPlayerController::SendBackCorps(int32 CorpsId)
 	Notify(Note, 6.0);
 }
 
+void ACampaignPlayerController::SayWhy(const FString& Why)
+{
+	CampaignSounds::Play(this, TEXT("click"), 0.4f);
+	Notify(Why.IsEmpty() ? FString(TEXT("That cannot be ordered now.")) : Why, 5.0);
+}
+
 FText ACampaignPlayerController::GetWeatherText() const
 {
 	const FCampaignSession* Session = GetSession();

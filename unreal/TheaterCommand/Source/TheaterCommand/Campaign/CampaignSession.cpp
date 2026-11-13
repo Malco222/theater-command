@@ -1329,6 +1329,10 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 			Spec->TryGetNumberField(TEXT("divs"), Divisions);
 			Spec->TryGetBoolField(TEXT("ok"), Option.bEnabled);
 			Spec->TryGetStringField(TEXT("why"), Option.Why);
+			Option.Cost = Cost;
+			Option.Months = Months;
+			Option.Divisions = Divisions;
+			Option.Keep = Keep;
 			Option.Label = FString::Printf(TEXT("Raise: %s"), *Option.Label);
 			Option.Detail = FString::Printf(TEXT("%d divisions  \u00B7  costs %s  \u00B7  ready in %d months"), Divisions, *FText::AsNumber(Cost).ToString(), Months);
 			if (Keep > 0)

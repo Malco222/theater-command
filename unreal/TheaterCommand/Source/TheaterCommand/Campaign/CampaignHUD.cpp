@@ -1889,7 +1889,81 @@ namespace
 					// Each thing that can be ordered is one short row: its name, and under it what it costs in a
 					// single line. The rest, and why it cannot be ordered if it cannot, is in the tip.
 					const TArray<const FProvinceOption*>& Shown = ProvinceTab == 2 ? Works : Recruits;
-					if (ProvinceTab != 0)
+					if (ProvinceTab == 1 && bProvince)
+					{
+						// What can be raised here, as cards two abreast: a picture of what it is, its name, and what it
+						// costs in money and months. A click orders it.
+						TSharedPtr<SHorizontalBox> Row;
+						int32 InRow = 0;
+						for (const FProvinceOption* Each : Shown)
+						{
+							const FProvinceOption& Option = *Each;
+							const FString Name = Option.Label.StartsWith(TEXT("Raise: ")) ? Option.Label.Mid(7) : Option.Label;
+							const FString Tip = Option.Why.IsEmpty() ? FString::Printf(TEXT("%s\n%s"), *Option.Label, *Option.Detail) : FString::Printf(TEXT("%s\n%s\n%s"), *Option.Label, *Option.Detail, *Option.Why);
+							const TSharedPtr<FSlateBrush> Portrait = PortraitOf(ACampaignMapActor::ModelFor(Info.OwnerTag, Option.Action));
+							const TSharedRef<SWidget> Picture = Portrait.IsValid()
+								? StaticCastSharedRef<SWidget>(SNew(SPortrait).Picture(Portrait).Size(FVector2D(66.0, 40.0)))
+								: KindPicture(Option.Action == TEXT("heavy") ? FString(TEXT("arm")) : Option.Action, Option.bEnabled ? Cream : Faint);
+							if (!Row.IsValid() || InRow == 2)
+							{
+								ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)[SAssignNew(Row, SHorizontalBox)];
+								InRow = 0;
+							}
+							Row->AddSlot().FillWidth(1.0f).Padding(InRow == 0 ? 0.0f : 3.0f, 0.0f, InRow == 0 ? 3.0f : 0.0f, 0.0f)
+							[
+								SNew(SButton).ButtonStyle(Option.bEnabled ? &PlainButton : &LeftCard).ContentPadding(FMargin(5.0f, 5.0f)).IsFocusable(false)
+								.ToolTipText(FText::FromString(Tip))
+								.OnClicked_Lambda([this, Action = Option.Action, bCan = Option.bEnabled, Why = Option.Why]()
+								{
+									// (one that cannot be afforded can still be pressed, and says why: its price stays readable)
+									if (Controller.IsValid())
+									{
+										if (bCan)
+										{
+											Controller->ProvinceAction(Action);
+										}
+										else
+										{
+											Controller->SayWhy(Why);
+										}
+									}
+									return FReply::Handled();
+								})
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+									[
+										SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(2.0f))[Picture]
+									]
+									+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+									[
+										SNew(SVerticalBox)
+										+ SVerticalBox::Slot().AutoHeight()
+										[
+											SNew(STextBlock).Text(FText::FromString(Name.Replace(TEXT(" corps"), TEXT("")))).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(Option.bEnabled ? Cream : Muted)
+											.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+										]
+										+ SVerticalBox::Slot().AutoHeight()
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Option.bEnabled ? BrightBrass : Alarm.CopyWithNewOpacity(0.9f))
+											.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d mo"), *FText::AsNumber(Option.Cost).ToString(), Option.Months)))
+										]
+										+ SVerticalBox::Slot().AutoHeight()
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted)
+											.Text(FText::FromString(FString::Printf(TEXT("%d division%s"), Option.Divisions, Option.Divisions == 1 ? TEXT("") : TEXT("s"))))
+										]
+									]
+								]
+							];
+							++InRow;
+						}
+						if (Row.IsValid() && InRow == 1)
+						{
+							Row->AddSlot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[SNew(SSpacer)];
+						}
+					}
+					else if (ProvinceTab != 0)
 					{
 						for (const FProvinceOption* Each : Shown)
 						{

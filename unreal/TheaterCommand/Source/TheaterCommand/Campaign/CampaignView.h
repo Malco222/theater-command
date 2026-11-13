@@ -501,6 +501,8 @@ struct FProvinceOption
 	FString Detail; // what it costs and how long it takes
 	FString Why; // why it cannot be ordered now, if it cannot
 	bool bEnabled = false;
+	// For a corps to raise: what it costs, how long it takes, how many divisions, and what it costs to keep.
+	int32 Cost = 0, Months = 0, Divisions = 0, Keep = 0;
 };
 
 /** One thing the arsenal offers: a corps, a wing of aircraft, ships, or a work for a province. */
