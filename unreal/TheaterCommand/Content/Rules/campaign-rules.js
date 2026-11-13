@@ -16219,6 +16219,7 @@
     const [what, a, b] = key2.split(":");
     let ok = false;
     let note3 = "That cannot be done now.";
+    const flies = [];
     if (what === "blow") {
       ok = orderBlowBridges(s, region, Number(a));
       if (ok) note3 = "The bridges are blown.";
@@ -16234,11 +16235,13 @@
       ok = !!c && orderStopWork(s, c);
       if (ok) note3 = "The engineers are taken off their work.";
     } else if (what === "recon") {
+      const group = s.airFleets.find((f) => f.id === Number(a));
       const flown = orderScout(s, Number(a), region);
       ok = flown.ok;
       note3 = flown.text || (ok ? "The flight is back with its photographs." : "No flight can be sent there now.");
+      if (ok && group && s.regions[region]) flies.push({ from: group.base, x: s.regions[region].x, y: s.regions[region].y, nat: group.nat, bombers: false, escort: false, region: -1, aa: 0, meet: "", meetFrom: -1, loss: 0 });
     }
-    return { ok, note: note3, view: view() };
+    return { ok, note: note3, flies, view: view() };
   }
   function force(kind, id) {
     const s = game();

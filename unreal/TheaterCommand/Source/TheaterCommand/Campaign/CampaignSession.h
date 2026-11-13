@@ -82,7 +82,7 @@ public:
 	FProvinceInfo Province(int32 RegionId);
 
 	/** Orders something in a territory: a kind of corps ("inf", "mtn", "mot", "arm") or works ("fort"). OutNote says what was ordered. */
-	bool OrderInProvince(const FString& Action, int32 RegionId, FString& OutNote);
+	bool OrderInProvince(const FString& Action, int32 RegionId, FString& OutNote, TArray<FSortie>* OutSorties = nullptr);
 
 	/** Takes back an order placed this month. */
 	bool CancelOrder(int32 OrderId);

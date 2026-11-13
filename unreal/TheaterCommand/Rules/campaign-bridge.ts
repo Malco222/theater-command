@@ -926,6 +926,7 @@ function work(key: string, region: number) {
   const [what, a, b] = key.split(':');
   let ok = false;
   let note = 'That cannot be done now.';
+  const flies: Flight[] = [];
   if (what === 'blow') {
     ok = orderBlowBridges(s, region, Number(a));
     if (ok) note = 'The bridges are blown.';
@@ -941,11 +942,14 @@ function work(key: string, region: number) {
     ok = !!c && orderStopWork(s, c);
     if (ok) note = 'The engineers are taken off their work.';
   } else if (what === 'recon') {
+    const group = s.airFleets.find((f) => f.id === Number(a));
     const flown = sendScout(s, Number(a), region);
     ok = flown.ok;
     note = flown.text || (ok ? 'The flight is back with its photographs.' : 'No flight can be sent there now.');
+    // The flight is seen to go out and come back: a few fighters from the group's own airfield.
+    if (ok && group && s.regions[region]) flies.push({ from: group.base, x: s.regions[region].x, y: s.regions[region].y, nat: group.nat, bombers: false, escort: false, region: -1, aa: 0, meet: '', meetFrom: -1, loss: 0 });
   }
-  return { ok, note, view: view() };
+  return { ok, note, flies, view: view() };
 }
 
 interface ForceOption { key: string; label: string; detail: string; ok: boolean; why: string }

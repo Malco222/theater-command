@@ -1323,7 +1323,7 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 	return Info;
 }
 
-bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FString& OutNote)
+bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FString& OutNote, TArray<FSortie>* OutSorties)
 {
 	TSharedPtr<FJsonObject> Object;
 	if (Action.StartsWith(TEXT("work:")))
@@ -1336,6 +1336,11 @@ bool FCampaignSession::OrderInProvince(const FString& Action, int32 RegionId, FS
 		bool bDone = false;
 		Object->TryGetBoolField(TEXT("ok"), bDone);
 		Object->TryGetStringField(TEXT("note"), OutNote);
+		const TArray<TSharedPtr<FJsonValue>>* Flies = nullptr;
+		if (OutSorties && Object->TryGetArrayField(TEXT("flies"), Flies))
+		{
+			ReadSorties(*Flies, *OutSorties);
+		}
 		TakeView(Object);
 		return bDone;
 	}
