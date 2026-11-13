@@ -89,6 +89,8 @@ const ui = {
   raid: '' as '' | 'menu' | RaidKind,
   lead: -1,
   seenAir: 0,
+  /** Where the list of raids stood when the player's last month ended: those flown against him since are this month's. */
+  raidsFrom: -1,
   /** How far down the roll of fallen and freed nations the player has been shown. */
   seenPass: 0,
   /** A one-line answer to the last click, shown where the hint is. */
@@ -1341,6 +1343,9 @@ function alertList(): Alert[] {
   else if (n.lab && teamsFree(n.lab) > 0) out.push({ kind: 'research', text: 'A design team has no work', tab: 'research' });
   const fresh = secretService(g)?.agents.filter((a) => a.atWork && !a.abroad && g.intel.agents.find((x) => x.id === a.id)?.ready === g.turn) ?? [];
   if (fresh.length) out.push({ kind: 'agent', text: fresh.length === 1 ? `Agent ${fresh[0].name} is ready for orders` : `${fresh.length} agents are ready for orders`, tab: 'spies' });
+  // Enemy raids since the player's last month: the places hit, to visit in turn.
+  const raided = ui.raidsFrom < 0 ? [] : [...new Set(g.airReports.slice(ui.raidsFrom).filter((r) => r.region >= 0 && atWar(g, r.attNat, me) && (r.defNat === me || g.regions[r.region].ctrl === me)).map((r) => r.region))];
+  if (raided.length) out.push({ kind: 'raided', text: raided.length === 1 ? `Enemy aircraft raided ${g.regions[raided[0]].name}` : `Enemy aircraft raided ${raided.length} of your provinces`, regs: raided });
   const cited = unseen(g).length;
   if (cited) out.push({ kind: 'honours', text: `${cited} honour${cited === 1 ? '' : 's'} earned: read the citation${cited === 1 ? '' : 's'}` });
   // The war between the alliances is decided and the player has not yet said what comes next.
@@ -2456,8 +2461,19 @@ function seaRow(r: SeaReport): string {
 
 function airVerdict(r: AirReport): { text: string; cls: string } {
   const me = g.human;
-  const defSide = me !== null && r.def.some((u) => u.nat === me) && !r.att.some((u) => u.nat === me);
-  if (!defSide) return { text: r.level, cls: r.won ? 'win' : 'loss' };
+  // A raid is the player's to win when he or an ally flew it, and his to lose when it fell on him or an ally,
+  // whether or not a fighter rose to meet it. Anybody else's raid is reported as its attacker saw it.
+  const ours = (nat: string): boolean => me !== null && !!nat && (nat === me || allied(g, nat, me));
+  const attSide = ours(r.attNat) || r.att.some((u) => u.nat === me);
+  const defSide = !attSide && (ours(r.defNat) || r.def.some((u) => ours(u.nat)));
+  // A raid that no fighter rose to meet was no battle: it got through, and is called that, not a victory or a defeat.
+  // A raid is judged by what it did: it got through or it was beaten off. Only a fight for the sky is won or lost outright.
+  if (airWar(g) && r.mission !== 'superiority') {
+    const cls = me !== null && !attSide && !defSide ? '' : r.won === defSide ? 'loss' : 'win';
+    if (!r.def.length) return { text: defSide ? 'Not intercepted' : 'Unopposed', cls };
+    return { text: r.won ? (defSide ? 'Raid got through' : 'Raid succeeded') : 'Raid beaten off', cls };
+  }
+  if (!defSide) return { text: r.level, cls: me !== null && !attSide ? '' : r.won ? 'win' : 'loss' };
   const flip: Record<string, string> = { 'Decisive victory': 'Decisive defeat', 'Close victory': 'Close defeat', 'Close defeat': 'Close victory', 'Decisive defeat': 'Decisive victory' };
   return { text: flip[r.level] ?? r.level, cls: r.won ? 'loss' : 'win' };
 }
@@ -3958,7 +3974,7 @@ function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: numbe
   const me = g.human;
   const reps = g.reports.slice(repFrom).filter((r) => me && (r.attNat === me || r.attackers.some((u) => u.nat === me) || r.defenders.some((u) => u.nat === me)));
   const seas = g.seaReports.slice(seaFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
-  const airs = g.airReports.slice(airFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
+  const airs = g.airReports.slice(airFrom).filter((r) => me && (r.attNat === me || r.defNat === me || r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
   const all = g.reports.length - repFrom + (g.seaReports.length - seaFrom) + (g.airReports.length - airFrom);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Dispatches</div><h2>${date(g.turn)}</h2></header>
     <div class="body">${big.length ? `<div class="evcards">${big.map(eventCard).join('')}</div>` : ''}${rest.length ? `<div class="reel">${rest.map((h) => `<p class="${h.kind}"><span class="wk">${date(h.turn).split(' ')[0]} wk ${h.week}</span>${esc(h.text)}</p>`).join('')}</div>` : hs.length ? '' : '<p class="lead">A quiet month. No news of note.</p>'}
@@ -4420,6 +4436,7 @@ function arrive(show: boolean, from: Since, before: string[]): void {
     ui.seenPass = g.passings.length;
   }
   if (humanUp(g)) beginHuman(g);
+  ui.raidsFrom = aFrom;
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
   ui.unread += g.headlines.length - hFrom;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = ''; ui.airMode = '';

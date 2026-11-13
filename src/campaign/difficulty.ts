@@ -9,8 +9,8 @@ import { allied, bloc } from './game';
 import type { Game } from './types';
 
 export interface Side { income: number; drafts: number }
-export interface Rival extends Side { nerve: number; odds: number }
-export interface Bombing { share: number; least: number; loss: number; rail: number }
+export interface Rival extends Side { nerve: number; odds: number; raids?: number }
+export interface Bombing { share: number; least: number; loss: number; rail: number; focus?: number }
 export interface Landings { force: number; odds: number; risk: number; near: number; every: number; chance: number }
 export interface Level {
   id: string; name: string; blurb: string; lines: string[];
@@ -75,8 +75,10 @@ export const incomeMul = (g: Game, nat: string): number => side(g, nat)?.income 
 export const draftsMul = (g: Game, nat: string): number => side(g, nat)?.drafts ?? 1;
 /** What the level does to a rival staff's nerve: the ratios at which it opens and keeps up an offensive, and the odds it wants. */
 export const nerveOf = (g: Game, nat: string): { nerve: number; odds: number } => (rival(g, nat) ? levelOf(g).rival : { nerve: 1, odds: 1 });
-/** The rules a rival's air staff bombs the player by, if this level has it bomb at all. */
+/** The harder levels: the rules a rival's air staff raids by in place of the ordinary ones, the player first. Null where the ordinary rules hold. */
 export const bombingFor = (g: Game, nat: string): Bombing | null => (rival(g, nat) ? levelOf(g).bombing ?? null : null);
+/** What the level does to the share of its bombers a rival sends out on raids each month: 1 for no change. */
+export const raidsMul = (g: Game, nat: string): number => (rival(g, nat) ? levelOf(g).rival.raids ?? 1 : 1);
 /** The rules a rival lands on the player's coasts by, if this level has it land at all. */
 export const landingsFor = (g: Game, nat: string): Landings | null => (rival(g, nat) ? levelOf(g).landings ?? null : null);
 /** The share of its usual ratio at which a rival joins an ally's offensive against the player: 1 when it does not. */

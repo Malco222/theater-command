@@ -1,7 +1,7 @@
 // Campaign difficulty in the grand campaign: five levels named for ranks, Cadet to Field Marshal. The middle one,
 // Colonel, is the game with nothing added. A level never touches the battle arithmetic: it changes what each side
-// can afford and how the rival staffs think, and on the two hardest levels the rivals bomb the player's factories,
-// land on his coasts and time their offensives together. The historical scenarios use none of it.
+// can afford and how the rival staffs think, and on the two hardest levels the rivals raid more and go for the
+// player first, land on his coasts and time their offensives together. The historical scenarios use none of it.
 import { describe, expect, it } from 'vitest';
 import { runAI } from '../src/campaign/ai';
 import { airAI, airFleetsOf } from '../src/campaign/air';
@@ -49,7 +49,7 @@ describe('the levels', () => {
     expect(L[0].you.income).toBeGreaterThan(1);
     expect(L[3].you.income).toBe(1);
     expect(L[4].you.income).toBe(1);
-    // Bombing begins at General; landings and offensives in concert are the Field Marshal's alone.
+    // Raiding rules of a rival's own begin at General; landings and offensives in concert are the Field Marshal's alone.
     expect(L.map((l) => !!l.bombing)).toEqual([false, false, false, true, true]);
     expect(L.map((l) => !!l.landings)).toEqual([false, false, false, false, true]);
     expect(L.map((l) => l.concert !== undefined)).toEqual([false, false, false, false, true]);
@@ -240,43 +240,41 @@ describe('how the rival staffs think', () => {
 });
 
 describe('rival bombers', () => {
-  it('leave the player\'s factories alone up to Colonel and go for them from General', () => {
+  it('fly at every level, and from General a rival sends more of them, bears more, and goes for the player first', () => {
     const flying = (human: string, level: string, nat: string) => {
       const g = grand(3, human, level);
       airAI(g, nat);
-      return { g, out: airFleetsOf(g, nat).filter((f) => f.mission === 'bomb' || f.mission === 'night') };
+      return { g, out: g.airReports.filter((r) => r.attNat === nat && (r.mission === 'bomb' || r.mission === 'night')) };
     };
-    for (const id of ['cadet', 'captain', 'colonel']) expect(flying('GER', id, 'UK').out, id).toEqual([]);
+    // Up to Colonel no level gives a rival's air staff rules of its own.
+    for (const id of ['cadet', 'captain', 'colonel']) expect(bombingFor(flying('GER', id, 'UK').g, 'UK'), id).toBeNull();
     for (const id of ['general', 'marshal']) {
       const { g, out } = flying('GER', id, 'UK');
+      const B = bombingFor(g, 'UK')!;
+      expect(B.share).toBe(levelOf(g).bombing!.share);
+      expect(B.focus!).toBeGreaterThan(1);
       expect(out.length, id).toBeGreaterThan(0);
-      for (const f of out) {
-        expect(f.bmr).toBeGreaterThanOrEqual(levelOf(g).bombing!.least);
-        const r = g.regions[f.target];
-        // Always a province of the player's, with factories or a railway junction in it.
-        expect(r.ctrl).toBe('GER');
-        expect(r.fac > 0 || railsAt(r.id).length >= 3, r.name).toBe(true);
+      for (const r of out) {
+        for (const x of r.att) if (x.bmr > 0) expect(x.bmr).toBeGreaterThanOrEqual(B.least);
+        const p = g.regions[r.region];
+        // A province of an enemy's, with factories or a railway junction in it.
+        expect(g.nations.UK.atWar).toContain(p.ctrl);
+        expect(p.fac > 0 || railsAt(p.id).length >= 3, p.name).toBe(true);
       }
-      // Never more than the level's share of the fleets that have bombers, so the armies keep their support.
+      // Never more than the level's share of the groups that have bombers, to the next whole raid.
       const withBombers = airFleetsOf(g, 'UK').filter((f) => f.bmr > 0).length;
-      expect(out.length).toBeLessThanOrEqual(Math.max(1, Math.floor(withBombers * levelOf(g).bombing!.share + 1e-9)));
-      // The fighters stay at home.
-      expect(airFleetsOf(g, 'UK').filter((f) => f.bmr === 0).every((f) => f.mission === 'support')).toBe(true);
+      expect(out.length).toBeLessThanOrEqual(Math.ceil(withBombers * B.share));
     }
   });
 
-  it('never fly against anyone but the player, and the player\'s allies never fly them at all', () => {
-    // Britain is France's ally: with France the player its bombers fly for the armies, at any level.
+  it('are never flown against the player by his own allies', () => {
+    // Britain is France's ally: with France the player its bombers go for Germany, at any level.
     const g = grand(3, 'FRA', 'marshal');
     airAI(g, 'UK');
-    expect(airFleetsOf(g, 'UK').every((f) => f.mission === 'support')).toBe(true);
-    // Germany is France's rival and bombs France, not Poland.
-    airAI(g, 'GER');
-    for (const f of airFleetsOf(g, 'GER')) if (f.mission !== 'support') expect(g.regions[f.target].ctrl).toBe('FRA');
-    // A rival at peace with the player bombs nobody.
-    const h = grand(3, 'UK', 'marshal');
-    airAI(h, 'SOV');
-    expect(airFleetsOf(h, 'SOV').every((f) => f.mission === 'support')).toBe(true);
+    for (const r of g.airReports) { expect(r.attNat).toBe('UK'); expect(r.defNat).not.toBe('FRA'); expect(g.nations.UK.atWar).toContain(g.regions[r.region].ctrl); }
+    // Germany is France's rival, and a target on French ground is worth more to it than one in Poland.
+    expect(bombingFor(g, 'GER')!.focus!).toBeGreaterThan(1);
+    expect(bombingFor(g, 'UK')).toBeNull();
   });
 });
 
