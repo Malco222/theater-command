@@ -1173,6 +1173,11 @@ void ACampaignPlayerController::ToggleEffects()
 
 void ACampaignPlayerController::SpaceBar()
 {
+	if (Announcements.Num() > 0)
+	{
+		DismissAnnouncement();
+		return;
+	}
 	SkipWatching();
 }
 
@@ -1212,6 +1217,18 @@ void ACampaignPlayerController::ShowCorpsModel(int32 CorpsId)
 		Title = Card->Kind.ToString();
 	}
 	ShowTitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Card->Name.ToString(), *Title));
+}
+
+void ACampaignPlayerController::DismissAnnouncement()
+{
+	if (Announcements.Num() > 0)
+	{
+		Announcements.RemoveAt(0);
+		if (Announcements.Num() > 0)
+		{
+			CampaignSounds::Play(this, Announcements[0].bGood ? TEXT("victory") : TEXT("defeat"), 0.55f);
+		}
+	}
 }
 
 void ACampaignPlayerController::NextArmy()
@@ -1259,7 +1276,11 @@ void ACampaignPlayerController::NextArmy()
 void ACampaignPlayerController::Escape()
 {
 	// Esc backs out one step: the watching, the face-off, the army in hand, then the territory.
-	if (Document.bValid)
+	if (Announcements.Num() > 0)
+	{
+		DismissAnnouncement();
+	}
+	else if (Document.bValid)
 	{
 		CloseDocument();
 	}
@@ -1405,7 +1426,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen;
+	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || Announcements.Num() > 0;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
@@ -2678,6 +2699,13 @@ void ACampaignPlayerController::FinishMonth()
 	if (ACampaignGameMode* Mode = GetMode())
 	{
 		Mode->SaveCampaign();
+	}
+
+	// The great moments of the month are told one at a time, each on a screen of its own.
+	Announcements = Month.Announcements;
+	if (Announcements.Num() > 0)
+	{
+		CampaignSounds::PlayLater(this, Announcements[0].bGood ? TEXT("victory") : TEXT("defeat"), 0.4f, 0.55f);
 	}
 
 	// The month's news stays up for a while.

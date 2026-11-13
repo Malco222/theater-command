@@ -13779,6 +13779,8 @@
   function endMonth() {
     const s = game();
     const h0 = s.headlines.length;
+    const stoodUp = new Set(Object.values(s.nations).filter((n) => n.alive && !n.dormant).map((n) => n.id));
+    const wasDown = new Set(Object.values(s.nations).filter((n) => !n.alive && !n.dormant).map((n) => n.id));
     const steps = [];
     let fallen = null;
     if (!s.human) {
@@ -13804,7 +13806,16 @@
     const weight = { fall: 0, war: 1, goal: 2, honour: 3, event: 4, letter: 5 };
     const first = headlines.filter((h) => h.kind in weight).sort((a, b) => weight[a.kind] - weight[b.kind]);
     const events = (first.length ? first : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
-    return { steps, headlines, events, fallen, view: view() };
+    const said = (nat) => [...headlines].reverse().find((h) => h.nat === nat && (h.kind === "fall" || h.kind === "event" || h.kind === "war"))?.text ?? "";
+    const announce = [];
+    for (const n of Object.values(s.nations)) {
+      if (n.id === s.human || n.id === fallen) continue;
+      const mine = s.human ? allied(s, s.human, n.id) : false;
+      const foe = s.human ? atWar(s, s.human, n.id) : false;
+      if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} HAS FALLEN`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is eliminated from the war.`, good: foe });
+      else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is free again, and back in the war.`, good: mine || !foe });
+    }
+    return { steps, headlines, events, fallen, announce, view: view() };
   }
   function stance(ids, posture) {
     const s = game();

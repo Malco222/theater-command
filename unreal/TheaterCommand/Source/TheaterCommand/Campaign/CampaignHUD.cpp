@@ -1163,6 +1163,43 @@ namespace
 						]
 					]
 
+					// A great moment: a nation eliminated or liberated, told across the whole screen under its flag.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&DeepScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetAnnouncement() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([this](const FGeometry&, const FPointerEvent&) { if (Controller.IsValid()) { Controller->DismissAnnouncement(); } return FReply::Handled(); })
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+							[
+								SNew(SBox).WidthOverride(330.0f).HeightOverride(220.0f)
+								[
+									SNew(SImage).Image_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return FlagBrush(Told ? Told->Tag : FString()); })
+								]
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 30.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 46, 220))
+								.ColorAndOpacity_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return FSlateColor(Told && Told->bGood ? BrightBrass : Alarm); })
+								.Text_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return Told ? FText::FromString(Told->Title) : FText::GetEmpty(); })
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 14.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).WidthOverride(760.0f).HAlign(HAlign_Center)
+								[
+									SNew(STextBlock).Font(Font(TEXT("Regular"), 17)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
+									.Text_Lambda([this]() { const FAnnouncement* Told = Controller.IsValid() ? Controller->GetAnnouncement() : nullptr; return Told ? FText::FromString(Told->Text) : FText::GetEmpty(); })
+								]
+							]
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 34.0f, 0.0f, 0.0f)
+							[
+								SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted)
+								.Text(FText::FromString(TEXT("Click, or press Space, to go on.")))
+							]
+						]
+					]
+
 					// The question before a war: asked when an army is sent onto the ground of a country at peace.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[

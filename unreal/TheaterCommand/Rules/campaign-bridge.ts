@@ -547,6 +547,9 @@ function attack(ids: number[], to: number) {
 function endMonth() {
   const s = game();
   const h0 = s.headlines.length;
+  // Who stands as the month ends, to tell afterwards who has been struck from the map and who has come back.
+  const stoodUp = new Set(Object.values(s.nations).filter((n) => n.alive && !n.dormant).map((n) => n.id));
+  const wasDown = new Set(Object.values(s.nations).filter((n) => !n.alive && !n.dormant).map((n) => n.id));
   const steps: unknown[] = [];
   let fallen: string | null = null;
   if (!s.human) {
@@ -572,7 +575,17 @@ function endMonth() {
   const weight: Record<string, number> = { fall: 0, war: 1, goal: 2, honour: 3, event: 4, letter: 5 };
   const first = headlines.filter((h) => h.kind in weight).sort((a, b) => weight[a.kind] - weight[b.kind]);
   const events = (first.length ? first : headlines).slice(0, 12).map((h) => ({ kind: h.kind, text: h.text }));
-  return { steps, headlines, events, fallen, view: view() };
+  // The great moments of the month, each told on a screen of its own: a nation eliminated, a nation liberated.
+  const said = (nat: string): string => [...headlines].reverse().find((h) => h.nat === nat && (h.kind === 'fall' || h.kind === 'event' || h.kind === 'war'))?.text ?? '';
+  const announce: { nat: string; title: string; text: string; good: boolean }[] = [];
+  for (const n of Object.values(s.nations)) {
+    if (n.id === s.human || n.id === fallen) continue;
+    const mine = s.human ? allied(s, s.human, n.id) : false;
+    const foe = s.human ? atWar(s, s.human, n.id) : false;
+    if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} HAS FALLEN`, text: said(n.id) || `${upFirst(theName(s, n.id))} is eliminated from the war.`, good: foe });
+    else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName(s, n.id))} is free again, and back in the war.`, good: mine || !foe });
+  }
+  return { steps, headlines, events, fallen, announce, view: view() };
 }
 
 /** The player's standing order for the picked corps on the day the enemy comes. */

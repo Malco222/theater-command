@@ -762,6 +762,19 @@ FMonthResult FCampaignSession::EndMonth()
 		}
 	}
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen);
+	const TArray<TSharedPtr<FJsonValue>>* Announce = nullptr;
+	if (Object->TryGetArrayField(TEXT("announce"), Announce))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Announce)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FAnnouncement& Told = Out.Announcements.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("nat"), Told.Tag);
+			Entry->TryGetStringField(TEXT("title"), Told.Title);
+			Entry->TryGetStringField(TEXT("text"), Told.Text);
+			Entry->TryGetBoolField(TEXT("good"), Told.bGood);
+		}
+	}
 	TakeView(Object);
 	return Out;
 }

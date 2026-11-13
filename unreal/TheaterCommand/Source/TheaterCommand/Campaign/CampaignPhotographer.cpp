@@ -145,6 +145,8 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	}
 	Add(TEXT("14b-menu-with-save"), TEXT("Warsaw"), 0.5f).bMenu = true;
 	Add(TEXT("14e-guide"), TEXT("Warsaw"), 0.5f).bGuide = true;
+	Add(TEXT("14f-nation-fallen"), TEXT("Warsaw"), 0.5f).bAnnounce = true;
+	Add(TEXT("14g-after"), TEXT("Warsaw"), 0.5f).bDismiss = true;
 	{
 		// A province of one's own: what it holds, what can be raised there, and something put on order.
 		FShot& Shot = Add(TEXT("14c-province"), TEXT("Berlin"), 0.4f);
@@ -614,6 +616,19 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		{
 			Controller->ClosePage();
 		}
+	}
+	if (Shot.bDismiss)
+	{
+		Controller->DismissAnnouncement();
+	}
+	if (Shot.bAnnounce)
+	{
+		FAnnouncement Told;
+		Told.Tag = TEXT("POL");
+		Told.Title = TEXT("POLAND HAS FALLEN");
+		Told.Text = TEXT("Poland capitulates to Germany.");
+		Told.bGood = true;
+		Controller->Announce(Told);
 	}
 	if (Shot.bGuide)
 	{

@@ -347,6 +347,11 @@ public:
 	/** Shows the model of one of the corps in hand large and turning beside the cards. */
 	void ShowCorpsModel(int32 CorpsId);
 	FText GetShowTitle() const { return ShowTitle; }
+	/** The great moment being told now, or null: a nation eliminated or liberated, on a screen of its own. */
+	const FAnnouncement* GetAnnouncement() const { return Announcements.Num() > 0 ? &Announcements[0] : nullptr; }
+	void DismissAnnouncement();
+	/** Tells a great moment on a screen of its own, after any already waiting. */
+	void Announce(const FAnnouncement& Told) { Announcements.Add(Told); }
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
 	/** Whether every nation's move is watched at the end of a month, or only what touches the player. */
@@ -509,6 +514,7 @@ private:
 	bool bTurning = false;
 	bool bHaveLastMouse = false;
 	FText HoverTip;
+	TArray<FAnnouncement> Announcements;
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
 	int32 HoverTipRegion = INDEX_NONE;

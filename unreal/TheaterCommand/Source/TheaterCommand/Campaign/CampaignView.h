@@ -333,12 +333,22 @@ struct FMonthStep
 	FCampaignView View; // the war as it stood when that nation had finished
 };
 
+/** A great moment told on a screen of its own: a nation eliminated, a nation liberated. */
+struct FAnnouncement
+{
+	FString Tag; // whose flag
+	FString Title; // "FRANCE HAS FALLEN"
+	FString Text;
+	bool bGood = false; // good news for the player
+};
+
 /** Everything that happened between the player ending one month and beginning the next. */
 struct FMonthResult
 {
 	TArray<FMonthStep> Steps;
 	TArray<FString> Headlines; // the month's news, most important first
 	FString Fallen; // the player's nation, if it has just been beaten
+	TArray<FAnnouncement> Announcements;
 };
 
 /** One way into a campaign: a nation to lead (or nobody, to watch), with a line about what lies ahead. */

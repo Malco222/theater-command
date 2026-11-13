@@ -53,6 +53,8 @@ private:
 	FString RoomAct;
 	bool bCloseRoom = false; // then close the room, to see the table
 	float Wait = 0.0f; // seconds longer to wait before taking the picture, for something that takes time to happen
+	bool bDismiss = false; // put that screen away again
+	bool bAnnounce = false; // show the screen that tells of a nation's fall
 	bool bGuide = false; // open the page that says how to play
 	bool bWorks = false; // stand a full set of works in the region looked at: factories, a shipyard, guns and an airfield
 	bool bGenerals = false; // open the generals' list, and give the first corps without one the man who suits it
