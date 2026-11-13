@@ -869,8 +869,17 @@ FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, in
 	{
 		return Out; // also what comes back when the rules answer null: there is nobody there to attack
 	}
-	Out.bValid = true;
 	Out.Region = RegionId;
+	if (Object->TryGetStringField(TEXT("refused"), Out.Refused) && !Out.Refused.IsEmpty())
+	{
+		return Out; // the troops there stand on a neutral's ground: no attack until war is declared on it
+	}
+	Out.bValid = true;
+	{
+		double Even = 1.2;
+		Object->TryGetNumberField(TEXT("even"), Even);
+		Out.Even = static_cast<float>(Even);
+	}
 	Out.Attack = static_cast<float>(Object->GetNumberField(TEXT("attack")));
 	Out.Defence = static_cast<float>(Object->GetNumberField(TEXT("defence")));
 	Out.Odds = static_cast<float>(Object->GetNumberField(TEXT("odds")));

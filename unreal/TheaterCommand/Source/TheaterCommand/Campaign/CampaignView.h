@@ -418,6 +418,8 @@ struct FAttackPreview
 	FString Note; // why the odds are a band, and how to narrow it
 	TArray<FString> Allies; // the allied countries whose corps march in the attack
 	FString Prize; // what taking the place is worth, in a sentence
+	FString Refused; // why the troops there may not be attacked at all (they stand on a neutral's ground): then nothing else is filled in
+	float Even = 1.2f; // the odds at which it is an even chance: 1.2 to 1 in the open, more for an assault on a town
 	TArray<FTicketLine> Lines;
 	TArray<FBattleUnit> Attackers;
 	TArray<FBattleUnit> Defenders;

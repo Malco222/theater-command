@@ -2973,7 +2973,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 							// The odds at a glance, before anything is ordered: as the staff reckon them from what is known.
 							const FAttackPreview Glance = Session->PreviewAttack(PickedCorps, TipRegion);
 							auto Say = [](float Odds) { return Odds >= 1.0f ? FString::Printf(TEXT("%.1f to 1 for you"), Odds) : FString::Printf(TEXT("%.1f to 1 against"), 1.0f / FMath::Max(Odds, 0.01f)); };
-							if (!Glance.bValid)
+							if (!Glance.Refused.IsEmpty())
+							{
+								Line += TEXT("\n") + Glance.Refused;
+							}
+							else if (!Glance.bValid)
 							{
 								Line += TEXT("\nRight-click: attack. You are shown the odds first.");
 							}
@@ -2984,6 +2988,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 							else
 							{
 								Line += FString::Printf(TEXT("\nRight-click: attack. The staff's estimate: between %s and %s."), *Say(Glance.OddsLow), *Say(Glance.OddsHigh));
+							}
+							if (Glance.bValid && Glance.Even > 1.25f)
+							{
+								Line += FString::Printf(TEXT(" In a town it takes %.1f to 1 for an even chance."), Glance.Even);
 							}
 						}
 					}
@@ -4591,6 +4599,11 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 	if (Preview.bValid && Preview.Attackers.Num() > 0)
 	{
 		CampaignSounds::Play(this, TEXT("drums"), 0.6f); // the two sides are drawn up
+	}
+	if (!Preview.Refused.IsEmpty())
+	{
+		Notify(Preview.Refused, 8.0); // they stand on a neutral's ground: war must be declared on it first
+		return;
 	}
 	if (!Preview.bValid || Preview.Attackers.Num() == 0)
 	{

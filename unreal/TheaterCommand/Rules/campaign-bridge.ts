@@ -79,7 +79,7 @@ import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoi
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
-import { airfieldsSeen, announcements, attackOutlook, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
+import { airfieldsSeen, announcements, attackOutlook, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -761,10 +761,18 @@ function frontLine(s: Game, ids: number[], to: number): { label: string; value: 
 function preview(ids: number[], to: number) {
   const s = game();
   const corps = attackers(s, ids, to);
+  // (Version 55) Enemy troops standing on the ground of a country the player is not at war with cannot be attacked
+  // until war is declared on that country: the rules say why, and the game tells the player instead of the odds.
+  const foeThere = !!s.human && s.regions[to].units.some((u) => !u.dead && atWar(s, s.human!, u.nat));
+  const refused = foeThere ? whyNotAttack(s, s.regions[to]) : '';
+  if (refused) return { region: to, refused };
   const a = previewAttack(s, corps, s.regions[to]);
   if (!a) return null;
   // Where the defenders are not all identified, the odds are a band and the ticket leaves out what is not known.
   const look = attackOutlook(s, corps, s.regions[to]);
+  // (Version 55) The odds at which it is an even chance: 1.2 to 1 in the open, more for an assault on a town.
+  const even = look?.even ?? 1.2;
+  const evenLine = even > 1.21 ? [{ label: 'An even chance', value: `${even.toFixed(1)} to 1`, effect: 'Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance.' }] : [];
   const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
   const named = (c: Corps) => {
     const kn = c.nat !== s.human && s.human && !allied(s, c.nat, s.human) ? knowledgeOf(s, c) : { level: 'exact' as const, age: 0 };
@@ -775,21 +783,21 @@ function preview(ids: number[], to: number) {
   if (look && !look.exact) {
     return {
       region: to, allies, prize: prizeLine(s, to), attack: look.odds, defence: 1, odds: look.odds,
-      exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: look.note,
-      lines: [...look.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : [])],
+      exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: look.note, even,
+      lines: [...look.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : []), ...evenLine],
       attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
       defenders: a.defenders.map(named),
     };
   }
   return {
-    allies, exact: true, lo: a.odds, hi: a.odds, chance: look?.chance ?? 0, chanceLo: look?.chance ?? 0, chanceHi: look?.chance ?? 0, note: '',
+    allies, exact: true, lo: a.odds, hi: a.odds, chance: look?.chance ?? 0, chanceLo: look?.chance ?? 0, chanceHi: look?.chance ?? 0, note: '', even,
     region: to,
     // What taking the place is worth, in a sentence, for the screen that asks whether to attack.
     prize: prizeLine(s, to),
     attack: a.A,
     defence: a.D,
     odds: a.odds,
-    lines: [...a.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : [])],
+    lines: [...a.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : []), ...evenLine],
     attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
     defenders: a.defenders.map((c) => ({ id: c.id, nat: c.nat, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
   };
@@ -800,10 +808,12 @@ function battleNote(s: Game, r: BattleReport): string {
   if (r.yielded) return `The ${s.nations[r.defNat].adj} troops fell back from ${r.regionName} without a fight.`;
   const cost = `${r.attLost.toLocaleString('en')} lost against ${r.defLost.toLocaleString('en')}`;
   const prisoners = r.prisoners > 0 ? `, ${r.prisoners.toLocaleString('en')} prisoners` : '';
-  const x = r as BattleReport & { siege?: boolean; town?: boolean; relief?: boolean; sally?: boolean };
+  const x = r as BattleReport & { siege?: boolean; town?: boolean; relief?: boolean; sally?: boolean; gates?: boolean };
   const town = townSiege(s, r.region)?.town ?? r.regionName;
   // (Version 54: the town is the key to its province. Winning the country round it does not take it.)
-  const came = x.town ? (r.taken ? `${town} is stormed and taken` : `the assault on ${town} is thrown back`)
+  // (Version 55: a town held only by its guard may open its gates to the army that has just won the field outside.)
+  const came = x.gates ? `the army outside is beaten, and ${town} opens its gates without a fight`
+    : x.town ? (r.taken ? `${town} is stormed and taken` : `the assault on ${town} is thrown back`)
     : x.sally ? (r.taken ? `the garrison of ${town} breaks the ring: the siege is raised` : `the garrison's sortie from ${town} is driven back in`)
       : x.relief ? (r.taken ? `the besiegers are driven off and ${town} is relieved` : `the relief of ${town} is held off`)
         : x.siege ? `the country is won, but ${town} holds: it is now besieged`
