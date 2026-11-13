@@ -1,0 +1,41 @@
+{
+  "_about": "The seas of the wider world, added to those of the map of Europe (seas.json) for the grand campaign. The same rules: each zone is the water nearest its anchor point (lat, lon) by sea, 'waters' marks more of the same sea, 'air' is how much of it aircraft from its coasts can cover, and 'adjacent' lists the zones a fleet can sail between, here including the links to the seas of Europe. The seas of Europe keep their numbers; these come after them, in this order. Add new ones at the end.",
+  "zones": [
+    {"id": "iceland", "air": 0.2, "name": "Iceland Gap", "at": [61.3, -17.5]},
+    {"id": "denmark", "air": 0.2, "name": "Denmark Strait", "at": [66.6, -26.5]},
+    {"id": "midnatl", "air": 0.05, "name": "Mid-Atlantic Gap", "at": [52.5, -33.0]},
+    {"id": "labrador", "air": 0.1, "name": "Labrador Sea", "at": [58.0, -52.5]},
+    {"id": "hudson", "air": 0.1, "name": "Hudson Bay", "at": [59.5, -86.0]},
+    {"id": "lawrence", "air": 0.6, "name": "Gulf of St Lawrence", "at": [48.2, -62.0]},
+    {"id": "banks", "air": 0.2, "name": "Grand Banks", "at": [44.5, -50.5]},
+    {"id": "maine", "air": 0.6, "name": "Gulf of Maine", "at": [43.0, -67.6]},
+    {"id": "seaboard", "air": 0.5, "name": "Eastern Seaboard", "at": [38.2, -72.0]},
+    {"id": "hatteras", "air": 0.5, "name": "Carolina Coast", "at": [32.2, -77.0]},
+    {"id": "sargasso", "air": 0.05, "name": "Sargasso Sea", "at": [30.5, -60.0]},
+    {"id": "florida", "air": 0.8, "name": "Straits of Florida", "at": [24.2, -80.6]},
+    {"id": "gulf", "air": 0.4, "name": "Gulf of Mexico", "at": [25.3, -90.5]},
+    {"id": "caribbean", "air": 0.3, "name": "Caribbean Sea", "at": [15.2, -75.5]},
+    {"id": "antilles", "air": 0.2, "name": "Leeward Passage", "at": [20.8, -62.0]},
+    {"id": "azores", "air": 0.1, "name": "Azores Waters", "at": [40.0, -29.5]},
+    {"id": "canary", "air": 0.2, "name": "Canary Basin", "at": [30.0, -19.5]},
+    {"id": "tropic", "air": 0.05, "name": "Tropical Atlantic", "at": [15.5, -38.0]},
+    {"id": "california", "air": 0.5, "name": "California Coast", "at": [33.6, -121.6], "waters": [[27.6, -111.7]]},
+    {"id": "cascadia", "air": 0.2, "name": "North-East Pacific", "at": [47.0, -129.0]},
+    {"id": "tehuantepec", "air": 0.2, "name": "Gulf of Tehuantepec", "at": [14.5, -97.5]},
+    {"id": "scotian", "air": 0.4, "name": "Scotian Shelf", "at": [43.4, -61.5]}
+  ],
+  "adjacent": [
+    ["natl", "iceland"], ["wapp", "iceland"], ["wapp", "midnatl"], ["wapp", "azores"],
+    ["iberia", "azores"], ["iberia", "canary"],
+    ["iceland", "denmark"], ["iceland", "midnatl"], ["denmark", "labrador"], ["denmark", "midnatl"],
+    ["labrador", "midnatl"], ["labrador", "banks"], ["labrador", "hudson"], ["labrador", "lawrence"], ["lawrence", "banks"],
+    ["banks", "midnatl"], ["banks", "scotian"], ["banks", "sargasso"], ["banks", "azores"], ["midnatl", "azores"],
+    ["scotian", "maine"], ["scotian", "lawrence"], ["scotian", "seaboard"], ["scotian", "sargasso"],
+    ["maine", "seaboard"], ["seaboard", "hatteras"], ["seaboard", "sargasso"], ["hatteras", "sargasso"], ["hatteras", "florida"],
+    ["florida", "gulf"], ["florida", "caribbean"], ["florida", "antilles"], ["gulf", "caribbean"],
+    ["caribbean", "antilles"], ["antilles", "sargasso"], ["antilles", "tropic"], ["sargasso", "azores"], ["sargasso", "tropic"],
+    ["azores", "canary"], ["canary", "tropic"],
+    ["california", "cascadia"], ["california", "tehuantepec"]
+  ],
+  "gates": []
+}
