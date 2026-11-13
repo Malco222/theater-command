@@ -821,7 +821,7 @@ void FMiniatureMesh::Aeroplane(const FVector& Where, double Span, bool bBomber, 
 	}
 }
 
-void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& /*Nation*/, const FString& Tag)
+void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& /*Nation*/, const FString& Tag, bool bUnderWay)
 {
 	// The three kinds of ship most worth showing: the big ships first.
 	TArray<const TCHAR*> Show;
@@ -842,7 +842,42 @@ void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, in
 	for (int32 K = 0; K < Show.Num(); ++K)
 	{
 		const FVector Where((K - (Show.Num() - 1) * 0.5) * 4.2 * Unit, (K % 2 ? 2.4 : -1.8) * Unit, 0.02 * Unit);
-		Vehicle(FString(Show[K]) + Tag, Where, Metre, -90.0 + (K - 1) * 4.0);
+		const double Turn = -90.0 + (K - 1) * 4.0;
+		Vehicle(FString(Show[K]) + Tag, Where, Metre, Turn);
+		if (bUnderWay)
+		{
+			// A ship at sea is under way: foam at her bows and a wake astern, painted on the water as on a model's base,
+			// white by the hull and fading into the sea behind her.
+			const FString Kind(Show[K]);
+			const double Half = (Kind.StartsWith(TEXT("Battleship")) ? 112.0 : Kind.StartsWith(TEXT("Carrier")) ? 122.0 : Kind.StartsWith(TEXT("Cruiser")) ? 92.0 : Kind.StartsWith(TEXT("Destroyer")) ? 54.0 : 36.0) * Metre;
+			const double Beam = (Kind.StartsWith(TEXT("Battleship")) || Kind.StartsWith(TEXT("Carrier")) ? 30.0 : Kind.StartsWith(TEXT("Cruiser")) ? 20.0 : Kind.StartsWith(TEXT("Destroyer")) ? 11.0 : 7.0) * Metre;
+			const double R = FMath::DegreesToRadians(Turn);
+			// (a model's front is toward -X before it is turned: Ahead is the way her bows point on the table)
+			const FVector Ahead(-FMath::Cos(R), -FMath::Sin(R), 0.0), Abeam(-Ahead.Y, Ahead.X, 0.0);
+			const FLinearColor Foam(FColor::FromHex(TEXT("EEF4F2"))), Water(FColor::FromHex(TEXT("2B6E88")));
+			const FVector Sea(Where.X, Where.Y, 0.012 * Unit);
+			const int32 Pieces = 14;
+			const FVector Up(0.0, 0.0, 1.0);
+			for (int32 Piece = 0; Piece < Pieces; ++Piece)
+			{
+				// The wake astern: one smooth tapering strip, widening a little and fading into the sea as it falls behind.
+				const double S0 = static_cast<double>(Piece) / Pieces, S1 = static_cast<double>(Piece + 1) / Pieces;
+				const double W0 = Beam * (0.34 + 0.75 * S0), W1 = Beam * (0.34 + 0.75 * S1);
+				const FVector P0 = Sea - Ahead * (Half * (0.9 + 1.7 * S0)), P1 = Sea - Ahead * (Half * (0.9 + 1.7 * S1));
+				const FLinearColor Shade = FMath::Lerp(Foam, Water, FMath::Pow((S0 + S1) * 0.5, 0.55));
+				Quad(P0 - Abeam * W0, P0 + Abeam * W0, P1 + Abeam * W1, P1 - Abeam * W1, Up, Shade.ToFColor(true)); // (corners in order round the strip)
+			}
+			for (const double Side : { -1.0, 1.0 })
+			{
+				// The bow wave: a thin line of foam thrown out on each side from the stem.
+				for (int32 Piece = 0; Piece < 4; ++Piece)
+				{
+					const double Share = (Piece + 0.5) / 4.0;
+					const FVector At = Sea + Ahead * (Half * (0.95 - 1.15 * Share)) + Abeam * Side * (Beam * (0.35 + 1.25 * Share));
+					Box(At, FVector(Half * 0.3, Beam * 0.16, 0.012 * Unit), FMath::Lerp(Foam, Water, 0.25 + 0.6 * Share), Turn + Side * 24.0);
+				}
+			}
+		}
 	}
 }
 

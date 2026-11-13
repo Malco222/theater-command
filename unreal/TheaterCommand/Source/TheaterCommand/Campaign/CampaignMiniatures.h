@@ -139,7 +139,7 @@ struct FMiniatureMesh
 	void WingMarking(const FVector& Where, double Radius, const FString& Tag, double Turn = 0.0);
 
 	/** A fleet: up to three ships for the classes it has most worth showing, lying together. Unit is one map unit. */
-	void Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& Nation, const FString& Tag);
+	void Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& Nation, const FString& Tag, bool bUnderWay = false);
 
 	/** An air fleet: a fighter and a bomber (whichever it has) over a patch of airfield. */
 	void AirFleet(int32 Fighters, int32 Bombers, double Unit, const FLinearColor& Nation, const FString& Tag);

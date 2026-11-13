@@ -76,8 +76,9 @@ void AArmyPiece::SetFleet(ACampaignMapActor* Map, const FCampaignNation& Nation,
 	RegionId = INDEX_NONE;
 	NationTag = Nation.Tag;
 	Fleet = InFleet;
-	const FString NewSignature = FString::Printf(TEXT("%s|fleet|%d|%d|%d|%d|%d|%d"), *Nation.Tag, InFleet.Id,
-		InFleet.Battleships, InFleet.Carriers, InFleet.Cruisers, InFleet.Destroyers, InFleet.Submarines);
+	// (a fleet that puts to sea or comes into harbour is remade: it has a wake at sea and none in port)
+	const FString NewSignature = FString::Printf(TEXT("%s|fleet|%d|%d|%d|%d|%d|%d|%s"), *Nation.Tag, InFleet.Id,
+		InFleet.Battleships, InFleet.Carriers, InFleet.Cruisers, InFleet.Destroyers, InFleet.Submarines, InFleet.Stance == TEXT("port") ? TEXT("port") : TEXT("sea"));
 	if (NewSignature != Signature)
 	{
 		Signature = NewSignature;
@@ -165,7 +166,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		// A fleet: its ships lie on the water, with no base under them.
 		Top = 0.02 * U;
 		CounterWidth = 9.5 * U;
-		Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour, NationTag);
+		Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour, NationTag, Fleet.Stance != TEXT("port"));
 		Size = FMath::Clamp(0.8 + 0.012 * Fleet.Ships(), 0.9, 1.7);
 		Figure = FString::Printf(TEXT("%d ships"), Fleet.Ships());
 		SelectionRing->SetVisibility(false);
