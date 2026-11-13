@@ -1334,6 +1334,51 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 			(*Plots)->TryGetNumberField(TEXT("free"), Info.PlotsFree);
 			(*Plots)->TryGetNumberField(TEXT("can"), Info.PlotsCanBuild);
 			(*Plots)->TryGetStringArrayField(TEXT("list"), Info.Plots);
+			(*Plots)->TryGetStringField(TEXT("size"), Info.TownKind);
+			const TArray<TSharedPtr<FJsonValue>>* Each = nullptr;
+			if ((*Plots)->TryGetArrayField(TEXT("plots"), Each))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Each)
+				{
+					const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+					if (!Entry.IsValid())
+					{
+						continue;
+					}
+					FTownPlot& Plot = Info.TownPlots.AddDefaulted_GetRef();
+					Entry->TryGetStringField(TEXT("line"), Plot.Line);
+					Entry->TryGetNumberField(TEXT("no"), Plot.No);
+					Entry->TryGetStringField(TEXT("name"), Plot.Name);
+					Entry->TryGetStringField(TEXT("label"), Plot.Label);
+					Entry->TryGetNumberField(TEXT("level"), Plot.Level);
+					Entry->TryGetBoolField(TEXT("building"), Plot.bBuilding);
+					Entry->TryGetStringField(TEXT("due"), Plot.Due);
+					Entry->TryGetStringField(TEXT("does"), Plot.Does);
+				}
+			}
+			if ((*Plots)->TryGetArrayField(TEXT("offers"), Each))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Each)
+				{
+					const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+					if (!Entry.IsValid())
+					{
+						continue;
+					}
+					FTownOffer& Offer = Info.TownOffers.AddDefaulted_GetRef();
+					Entry->TryGetStringField(TEXT("line"), Offer.Line);
+					Entry->TryGetNumberField(TEXT("no"), Offer.No);
+					Entry->TryGetStringField(TEXT("name"), Offer.Name);
+					Entry->TryGetStringField(TEXT("label"), Offer.Label);
+					Entry->TryGetStringField(TEXT("effect"), Offer.Effect);
+					Entry->TryGetStringField(TEXT("blurb"), Offer.Blurb);
+					Entry->TryGetStringField(TEXT("why"), Offer.Why);
+					Entry->TryGetNumberField(TEXT("level"), Offer.Level);
+					Entry->TryGetNumberField(TEXT("has"), Offer.Has);
+					Entry->TryGetNumberField(TEXT("cost"), Offer.Cost);
+					Entry->TryGetNumberField(TEXT("months"), Offer.Months);
+				}
+			}
 		}
 	}
 	Object->TryGetStringField(TEXT("raiseNote"), Info.Note);

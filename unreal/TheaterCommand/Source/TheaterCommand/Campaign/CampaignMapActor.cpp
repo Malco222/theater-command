@@ -3305,6 +3305,45 @@ bool ACampaignMapActor::StageModel(const FString& Model, UProceduralMeshComponen
 		else if (Kind == TEXT("Pioneer")) { Built.Pioneer(Tag, FVector::ZeroVector, Metre, 0.0, true); }
 		else { Built.Soldier(Tag, FVector::ZeroVector, Metre, 0.0, true); }
 	}
+	else if (Kind == TEXT("Civic"))
+	{
+		// A town's building for its picture: "Civic:<line 0-5>:<level>:<TAG>", or "Civic:lot" for an empty lot.
+		TArray<FString> Part;
+		Tag.ParseIntoArray(Part, TEXT(":"));
+		const FCampaignNation* Whose = Part.Num() >= 3 ? Data.FindNation(Part[2]) : nullptr;
+		if (Part.Num() >= 2)
+		{
+			const int32 Level = FCString::Atoi(*Part[1]);
+			Built.Civic(FVector::ZeroVector, Metre, FCString::Atoi(*Part[0]), Level, Level <= 0, Whose ? FLinearColor(Whose->Color) : FLinearColor(0.5f, 0.5f, 0.5f));
+		}
+		else
+		{
+			// An empty lot: bare earth pegged out with posts and a rope, a stack of bricks and some planks waiting.
+			const FLinearColor Earth(FColor::FromHex(TEXT("8C7A5A"))), Grass(FColor::FromHex(TEXT("6E8B4C"))), Post(FColor::FromHex(TEXT("4A3A2A"))), Rope(FColor::FromHex(TEXT("D8CFB4"))), Brick(FColor::FromHex(TEXT("8E5644"))), Plank(FColor::FromHex(TEXT("B79A6A")));
+			Built.Box(FVector(0.0, 0.0, 1.5), FVector(210.0, 250.0, 3.0), Grass);
+			Built.Box(FVector(0.0, 0.0, 3.5), FVector(170.0, 210.0, 2.0), Earth);
+			FVector Last = FVector::ZeroVector;
+			for (int32 K = 0; K <= 4; ++K)
+			{
+				const FVector Corner((K == 0 || K == 3 || K == 4) ? -85.0 : 85.0, (K == 0 || K == 1 || K == 4) ? -105.0 : 105.0, 0.0);
+				if (K < 4)
+				{
+					Built.Rod(Corner, Corner + FVector(0.0, 0.0, 34.0), 2.6, Post, 5);
+				}
+				if (K > 0)
+				{
+					Built.Rod(Last + FVector(0.0, 0.0, 28.0), Corner + FVector(0.0, 0.0, 28.0), 0.9, Rope, 4);
+				}
+				Last = Corner;
+			}
+			Built.Box(FVector(-35.0, -50.0, 13.0), FVector(38.0, 26.0, 18.0), Brick, 12.0);
+			Built.Box(FVector(-30.0, -48.0, 27.0), FVector(26.0, 20.0, 10.0), Brick, 30.0);
+			for (int32 K = 0; K < 4; ++K)
+			{
+				Built.Box(FVector(30.0 + K * 3.0, 40.0 + K * 7.0, 6.0 + K * 3.2), FVector(90.0, 9.0, 3.0), Plank, 8.0 * K);
+			}
+		}
+	}
 	else if (!Built.Vehicle(Model, FVector::ZeroVector, Metre, 0.0, true))
 	{
 		return false;

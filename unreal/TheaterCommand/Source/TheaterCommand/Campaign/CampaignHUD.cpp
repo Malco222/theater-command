@@ -838,6 +838,18 @@ namespace
 							]
 						]
 
+						// The town of the province picked, when nothing is in hand: its building plots as pictures. A click on
+						// a plot lays out above the bar what could go up on it, and a click on one of those orders it.
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+						[
+							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 11.0f, 14.0f, 13.0f))
+							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsTownBarShown() ? EVisibility::Visible : EVisibility::Collapsed; })
+							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the bar is not the map
+							[
+								SAssignNew(TownBarBox, SVerticalBox)
+							]
+						]
+
 						// The army in hand: its general, and a card for each corps. A click on a card leaves that corps behind.
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
 						[
@@ -900,7 +912,7 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Bottom).Padding(24.0f)
 					[
 						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 9.0f))
-						.Visibility_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info && Info->bVisible ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
+						.Visibility_Lambda([this, Tray]() { const FArmyTray* Info = Tray(); return (Info && Info->bVisible) || (Controller.IsValid() && Controller->IsTownBarShown()) ? EVisibility::Collapsed : EVisibility::HitTestInvisible; })
 						[
 							SNew(STextBlock)
 							.Text(FText::FromString(TEXT("Drag or W A S D: move the map    Scroll: zoom    Right-drag or Q / E: turn    C: your capital    Y: map views    T: day or night\nClick a flag, a fleet or an airfield; double-click a place to go there. Right-click where an army or a fleet should go    Tab: next army    Esc: put it down    Enter: end the month\n1 to 5: the screens    L: forces    R: report    O: goals    H: how to play")))
@@ -2299,6 +2311,13 @@ namespace
 			{
 				ShownOpening = Controller->GetOpening().Revision;
 				LayOutOpening(Controller->GetOpening());
+			}
+
+			// Lay the town's bar out again whenever it has changed.
+			if (Controller.IsValid() && TownBarBox.IsValid() && Controller->GetTownBar().Revision != ShownTownBar)
+			{
+				ShownTownBar = Controller->GetTownBar().Revision;
+				LayOutTownBar(Controller->GetTownBar());
 			}
 
 			// Deal the cards again whenever the army in hand has changed.
@@ -4040,6 +4059,168 @@ namespace
 		}
 
 		/** Lays widgets out in rows of so many columns, each column the same width. */
+		/** The town's bar: a picture for every building plot, and above it the choices for the plot that is picked. */
+		void LayOutTownBar(const FTownBar& Bar)
+		{
+			TownBarBox->ClearChildren();
+			if (Bar.Plots.Num() == 0)
+			{
+				return;
+			}
+			auto Picture = [this](const FString& Model, const FVector2D& Size) -> TSharedRef<SWidget>
+			{
+				const TSharedPtr<FSlateBrush> Portrait = PortraitOf(Model);
+				return Portrait.IsValid()
+					? StaticCastSharedRef<SWidget>(SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(2.0f))[SNew(SPortrait).Picture(Portrait).Size(Size)])
+					: StaticCastSharedRef<SWidget>(SNew(SBox).WidthOverride(static_cast<float>(Size.X)).HeightOverride(static_cast<float>(Size.Y)));
+			};
+			auto ModelOf = [&Bar](int32 No, int32 Level) { return FString::Printf(TEXT("Civic:%d:%d:%s"), No, Level, *Bar.Tag); };
+
+			// What could go up on the plot that is picked.
+			if (Bar.bMine && Bar.Plots.IsValidIndex(Bar.Picked))
+			{
+				const FTownPlot& On = Bar.Plots[Bar.Picked];
+				TArray<const FTownOffer*> Choices;
+				for (const FTownOffer& Offer : Bar.Offers)
+				{
+					const bool bStands = Bar.Plots.ContainsByPredicate([&Offer](const FTownPlot& Plot) { return Plot.Line == Offer.Line; });
+					if (On.Line.IsEmpty() ? !bStands : (Offer.Line == On.Line && !On.bBuilding && Offer.Has < 3))
+					{
+						Choices.Add(&Offer);
+					}
+				}
+				const FString Heading = On.Line.IsEmpty() ? FString(TEXT("WHAT TO BUILD ON THIS PLOT"))
+					: On.bBuilding ? FString::Printf(TEXT("%s IS GOING UP, DUE %s"), *On.Label.ToUpper(), *On.Due.ToUpper())
+					: Choices.Num() > 0 ? FString(TEXT("RAISE IT A LEVEL")) : FString(TEXT("COMPLETE: IT CAN BE RAISED NO HIGHER"));
+				TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Heading)).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+				];
+				if (Choices.Num() > 0)
+				{
+					TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+					for (const FTownOffer* Each : Choices)
+					{
+						const FTownOffer& Offer = *Each;
+						const bool bCan = Offer.Why.IsEmpty();
+						const FString Tip = FString::Printf(TEXT("%s: %s\n%s\n%s%s"), *Offer.Name, *Offer.Label, *Offer.Effect, *Offer.Blurb, bCan ? TEXT("") : *(TEXT("\n") + Offer.Why));
+						Row->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(130.0f)
+							[
+								SNew(SButton).ButtonStyle(bCan ? &PlainButton : &LeftCard).ContentPadding(FMargin(5.0f, 5.0f)).IsFocusable(false)
+								.ToolTipText(FText::FromString(Tip))
+								.OnClicked_Lambda([this, Line = Offer.Line, bCan, Why = Offer.Why]()
+								{
+									if (Controller.IsValid())
+									{
+										// (one that cannot be ordered can still be pressed, and says why)
+										if (bCan) { Controller->OrderTownBuilding(Line); } else { Controller->SayWhy(Why); }
+									}
+									return FReply::Handled();
+								})
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+									[
+										Picture(ModelOf(Offer.No, Offer.Level), FVector2D(114.0, 69.0))
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+									[
+										SNew(STextBlock).Text(FText::FromString(Offer.Label)).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bCan ? Cream : Muted).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+									]
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(bCan ? BrightBrass : Alarm.CopyWithNewOpacity(0.9f))
+										.Text(FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d mo"), *FText::AsNumber(Offer.Cost).ToString(), Offer.Months)))
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+									[
+										SNew(SBox).HeightOverride(46.0f)
+										[
+											SNew(STextBlock).Text(FText::FromString(Offer.Effect)).Font(Font(TEXT("Regular"), 8)).ColorAndOpacity(Muted).AutoWrapText(true)
+										]
+									]
+								]
+							]
+						];
+					}
+					TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 10.0f)[Row];
+				}
+			}
+
+			// The town, and its plots.
+			TownBarBox->AddSlot().AutoHeight()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(30.0f).HeightOverride(20.0f)[SNew(SImage).Image(FlagBrush(Bar.Tag))]
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+				[
+					SNew(STextBlock).Text(Bar.Title).Font(Font(TEXT("Regular"), 18)).ColorAndOpacity(Cream)
+				]
+				+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(12.0f, 0.0f, 0.0f, 2.0f)
+				[
+					SNew(STextBlock).Text(Bar.Sub).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted)
+				]
+			];
+			TSharedRef<SHorizontalBox> Lots = SNew(SHorizontalBox);
+			for (int32 Index = 0; Index < Bar.Plots.Num(); ++Index)
+			{
+				const FTownPlot& Plot = Bar.Plots[Index];
+				const bool bFree = Plot.Line.IsEmpty(), bOn = Index == Bar.Picked;
+				// (a first level still going up is pictured as the builders' scaffolding)
+				const FString Model = bFree ? FString(TEXT("Civic:lot")) : ModelOf(Plot.No, Plot.Level);
+				const FString Under = bFree ? (Bar.bMine ? FString(TEXT("Click to choose a building")) : FString(TEXT("Nothing built")))
+					: Plot.bBuilding ? FString::Printf(TEXT("%s: due %s"), Plot.Level > 0 ? TEXT("Next level going up") : TEXT("Going up"), *Plot.Due)
+					: Plot.Does;
+				TSharedRef<SHorizontalBox> Pips = SNew(SHorizontalBox);
+				for (int32 Pip = 0; Pip < 3 && !bFree; ++Pip)
+				{
+					Pips->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 3.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(14.0f).HeightOverride(4.0f)[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Pip < Plot.Level ? BrightBrass : Faint.CopyWithNewOpacity(0.5f))]
+					];
+				}
+				Lots->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 6.0f, 0.0f)
+				[
+					SNew(SBox).WidthOverride(178.0f)
+					[
+						SNew(SButton).ButtonStyle(bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(6.0f, 6.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(bFree ? FString(TEXT("A free plot. Each plot takes one kind of building, which can then be raised two more levels.")) : FString::Printf(TEXT("%s: %s\n%s"), *Plot.Name, Plot.Level > 0 ? *Plot.Label : TEXT("going up"), *Under)))
+						.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PickTownPlot(Index); } return FReply::Handled(); })
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+							[
+								Picture(Model, FVector2D(160.0, 97.0))
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+							[
+								SNew(SHorizontalBox)
+								+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+								[
+									SNew(STextBlock).Font(Font(TEXT("Bold"), 10)).ColorAndOpacity(bFree ? Muted : Cream).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+									.Text(FText::FromString(bFree ? FString(TEXT("Free plot")) : Plot.Level > 0 ? Plot.Label : Plot.Name))
+								]
+								+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[Pips]
+							]
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).HeightOverride(24.0f)
+								[
+									SNew(STextBlock).Text(FText::FromString(Under)).Font(Font(TEXT("Regular"), 8)).ColorAndOpacity(Plot.bBuilding || (bFree && Bar.bMine) ? BrightBrass : Muted).AutoWrapText(true)
+								]
+							]
+						]
+					]
+				];
+			}
+			TownBarBox->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)[Lots];
+		}
+
 		/** One of the chips under the END THE MONTH button that say what is still worth doing; a click opens the screen for it. */
 		TSharedRef<SWidget> MakeToDo(int32 Index)
 		{
@@ -4941,6 +5122,8 @@ namespace
 		int32 ShownOpening = -1;
 		TSharedPtr<SVerticalBox> ProvinceBox;
 		TSharedPtr<SHorizontalBox> TrayOrders;
+		TSharedPtr<SVerticalBox> TownBarBox;
+		int32 ShownTownBar = -1;
 		int32 ShownProvince = -1;
 		TSharedPtr<SVerticalBox> AdviserSteps;
 		int32 ShownAdviser = -1;

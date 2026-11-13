@@ -371,6 +371,22 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Add(TEXT("38j-buildings-at-a-town"), TEXT("Saxony"), 0.26f).Civic = 2;
 		}
 		{
+			// The town's bar of pictures: the capital with its market going up; four months on, the market built and
+			// the choices for a free plot; a second building ordered from them; and the raising of the first.
+			Add(TEXT("38k-town-bar"), TEXT("@capital"), 0.45f).Select = TEXT("@capital");
+			FShot& Later = Add(TEXT("38l-town-bar-choices"), TEXT("@capital"), 0.45f);
+			Later.Months = 4;
+			Later.Select = TEXT("@capital");
+			Later.TownPlot = 1;
+			FShot& Ordered = Add(TEXT("38m-town-bar-ordered"), TEXT("@capital"), 0.45f);
+			Ordered.Select = TEXT("@capital");
+			Ordered.TownPlot = 1;
+			Ordered.TownOrder = TEXT("school");
+			FShot& Raise = Add(TEXT("38n-town-bar-raise"), TEXT("@capital"), 0.45f);
+			Raise.Select = TEXT("@capital");
+			Raise.TownPlot = 0;
+		}
+		{
 			FShot& Shot = Add(TEXT("38d-towns-to-build-up"), TEXT("@capital"), 0.45f);
 			Shot.Room = TEXT("towns");
 		}
@@ -1052,6 +1068,14 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			Works[*Here] = FIntVector4(3, 3, 3, 2);
 		}
 		Table->ShowBuildings(Works);
+	}
+	if (Shot.TownPlot >= 0)
+	{
+		Controller->PickTownPlot(Shot.TownPlot);
+	}
+	if (!Shot.TownOrder.IsEmpty())
+	{
+		Controller->OrderTownBuilding(Shot.TownOrder);
 	}
 	if (!Shot.Dress.IsEmpty() && Controller->GetSession())
 	{

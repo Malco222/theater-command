@@ -202,6 +202,19 @@ struct FTownPlate
 	int32 Rank = 0;
 };
 
+/** The bar of a town's building plots, shown when one of the player's provinces is picked and nothing is in hand. */
+struct FTownBar
+{
+	int32 Region = INDEX_NONE;
+	FString Tag; // whose town it is
+	bool bMine = false;
+	FText Title, Sub;
+	TArray<FTownPlot> Plots;
+	TArray<FTownOffer> Offers;
+	int32 Picked = INDEX_NONE; // the plot whose choices are laid out above the bar
+	int32 Revision = 0;
+};
+
 /** One of the game's standing choices, as the options page shows it. They are remembered from one day to the next. */
 struct FGameOption
 {
@@ -456,6 +469,11 @@ public:
 	void SetProvinceTab(int32 Tab) { ProvinceTab = Tab; RegionPanel.Revision = ++PanelRevision; }
 	/** Opens the town plan of the province picked on the map: its plots and what could be built on them. */
 	void OpenTownPlan();
+	/** The town's plots as a bar of pictures; whether it is to be shown; a click on a plot; and an order from its choices. */
+	const FTownBar& GetTownBar() const { return TownBar; }
+	bool IsTownBarShown() const;
+	void PickTownPlot(int32 Index);
+	void OrderTownBuilding(const FString& Line);
 	/** The small map in the corner: its picture, the marks on it, and a jump to a place on it. */
 	UTexture2D* GetMinimapTexture() const;
 	/** Armies as (x, y, whose) with x and y from 0 to 1 and whose 0 for the player's, 1 for a friend's, 2 for an enemy's, 3 for others; and the part of the map on screen. */
@@ -761,6 +779,7 @@ private:
 	bool bByRail = false;
 	bool bBySea = false;
 	int32 PanelRevision = 0;
+	FTownBar TownBar;
 	int32 SelectedRegion = INDEX_NONE;
 	int32 SizedForWidth = 0;
 	int32 SizedForHeight = 0;

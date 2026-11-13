@@ -4897,10 +4897,52 @@ FText ACampaignPlayerController::GetRulesNote() const
 	return FText::FromString(Note);
 }
 
+bool ACampaignPlayerController::IsTownBarShown() const
+{
+	// (the bottom of the screen is the army's or the fleet's while one is in hand or being looked at)
+	return TownBar.Plots.Num() > 0 && !Tray.bVisible && Map.IsValid() && Map->GetSelectedRegion() == TownBar.Region && !bWatching && !Newsreel.bOn && !Opening.bVisible;
+}
+
+void ACampaignPlayerController::PickTownPlot(int32 Index)
+{
+	TownBar.Picked = TownBar.Picked == Index || !TownBar.Plots.IsValidIndex(Index) ? INDEX_NONE : Index;
+	++TownBar.Revision;
+}
+
+void ACampaignPlayerController::OrderTownBuilding(const FString& Line)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || TownBar.Region == INDEX_NONE)
+	{
+		return;
+	}
+	FString Note;
+	const int32 Where = TownBar.Region;
+	const bool bDone = Session->Act(FString::Printf(TEXT("civic:%d:%s"), Where, *Line), Where, Note);
+	if (bDone)
+	{
+		// The builders are seen to start at once, at the town's edge, and heard.
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		CampaignSounds::Play(this, TEXT("stamp"), 0.6f);
+		CampaignSounds::PlayLater(this, TEXT("hammer"), 0.25f, 0.6f);
+		TownBar.Picked = INDEX_NONE;
+	}
+	RefreshRegionPanel(Where);
+	Notify(Note.IsEmpty() ? FString(TEXT("That cannot be built now.")) : Note, 5.0);
+}
+
 void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 {
 	RegionPanel = FRegionPanelInfo();
 	RegionPanel.Revision = ++PanelRevision;
+	{
+		// The town's bar is written afresh with the panel; the plot picked on it is kept while the town is the same.
+		const int32 Kept = TownBar.Region == RegionId ? TownBar.Picked : INDEX_NONE;
+		const int32 Next = TownBar.Revision + 1;
+		TownBar = FTownBar();
+		TownBar.Revision = Next;
+		TownBar.Picked = Kept;
+	}
 	if (!Map.IsValid() || !Map->GetData().Regions.IsValidIndex(RegionId))
 	{
 		return;
@@ -5037,6 +5079,24 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			const bool bBuiltOn = Province.Plots.ContainsByPredicate([](const FString& Plot) { return Plot != TEXT("Free plot"); });
 			RegionPanel.Plots = Province.bHasPlots && (Province.bPlotsMine || bBuiltOn) ? Province.Plots : TArray<FString>();
 			RegionPanel.bPlotsMine = Province.bPlotsMine;
+			if (RegionPanel.Plots.Num() > 0 && Province.TownPlots.Num() > 0)
+			{
+				const FString Holder = Session->GetView().RegionHolder.IsValidIndex(RegionId) ? Session->GetView().RegionHolder[RegionId] : Region.Owner;
+				const int32 Count = Province.TownPlots.Num();
+				TownBar.Region = RegionId;
+				TownBar.Tag = Holder;
+				TownBar.bMine = Province.bPlotsMine;
+				TownBar.Plots = Province.TownPlots;
+				TownBar.Offers = Province.TownOffers;
+				TownBar.Title = FText::FromString(Province.Town.IsEmpty() ? Region.Name : Province.Town);
+				TownBar.Sub = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d building plot%s, %s"),
+					Province.TownKind == TEXT("capital") ? TEXT("The capital") : Province.TownKind == TEXT("city") ? TEXT("A city") : Province.TownKind == TEXT("town") ? TEXT("A town") : TEXT("A village"),
+					Count, Count == 1 ? TEXT("") : TEXT("s"), Province.PlotsFree > 0 ? *FString::Printf(TEXT("%d free"), Province.PlotsFree) : TEXT("all taken")));
+				if (!TownBar.Plots.IsValidIndex(TownBar.Picked))
+				{
+					TownBar.Picked = INDEX_NONE;
+				}
+			}
 			RegionPanel.PlotsFree = Province.PlotsFree;
 			RegionPanel.PlotsCanBuild = Province.PlotsCanBuild;
 		}

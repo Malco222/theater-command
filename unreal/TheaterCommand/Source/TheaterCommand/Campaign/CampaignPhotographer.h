@@ -57,6 +57,8 @@ private:
 	bool bAnnounce = false; // show the screen that tells of a nation's fall
 	bool bGuide = false; // open the page that says how to play
 	bool bWorks = false; // stand a full set of works in the region looked at: factories, a shipyard, guns and an airfield
+	int32 TownPlot = -1; // on the town's bar: click this plot, so its choices are laid out
+	FString TownOrder; // and order this line of building from them
 	FString Dress; // dress the armies in these regions to be looked at: "Region:works:camp:supply;..." (works 0-2, camp 0-1, supply 0-2)
 	int32 Civic = 0; // stand every kind of town building at this level beside the region looked at (4: one of each level, some going up)
 	int32 ProvinceTab = 0; // the tab of the province panel to show

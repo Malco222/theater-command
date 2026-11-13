@@ -915,6 +915,27 @@ struct FTownInfo
 	int32 Rank = 0; // 0 to 5
 };
 
+/** One building plot of a town: what stands on it, or nothing. */
+struct FTownPlot
+{
+	FString Line; // market, farm, school, camp, hospital, hall; empty for a free plot
+	int32 No = INDEX_NONE; // the same as a number, 0 to 5
+	FString Name, Label; // "Commerce", "Market hall"
+	int32 Level = 0;
+	bool bBuilding = false; // the next level (or the first) is going up
+	FString Due; // the month it is due
+	FString Does; // what the levels that stand do, in a sentence
+};
+
+/** A line of building as it could be ordered in a town: the next level, what it costs and does, or why not. */
+struct FTownOffer
+{
+	FString Line;
+	int32 No = INDEX_NONE;
+	FString Name, Label, Effect, Blurb, Why;
+	int32 Level = 0, Has = 0, Cost = 0, Months = 0;
+};
+
 struct FProvinceInfo
 {
 	bool bValid = false;
@@ -935,4 +956,8 @@ struct FProvinceInfo
 	bool bHasPlots = false, bPlotsMine = false;
 	TArray<FString> Plots;
 	int32 PlotsFree = 0, PlotsCanBuild = 0;
+	// The same as things to draw.
+	TArray<FTownPlot> TownPlots;
+	TArray<FTownOffer> TownOffers;
+	FString TownKind; // capital, city, town or village
 };
