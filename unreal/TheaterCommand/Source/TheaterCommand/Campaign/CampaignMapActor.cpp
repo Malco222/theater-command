@@ -1611,6 +1611,8 @@ void ACampaignMapActor::BuildTowns()
 	const double U = UnitScale;
 	int32 Count = 0;
 	TownChimneys.Reset();
+	TownWindows.Reset();
+	Model.Windows = &TownWindows;
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
 		const bool bCity = Region.Terrain == TEXT("urban");
@@ -1646,7 +1648,7 @@ void ACampaignMapActor::BuildTowns()
 			Model.Pillar(Foot + FVector(-1.3 * U, 0.6 * U, 0.0), 0.7 * U, 0.7 * U, 0.8 * U, Tank, 12);
 		}
 		const int32 Houses = Region.bCapital ? 13 : (bCity ? 10 : (bBig ? 6 : 4));
-		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1, Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id, &TownChimneys);
+		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1, Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id, &TownChimneys, Region.bPort);
 		++Count;
 	}
 	if (Model.Vertices.Num() > 0)
@@ -1655,6 +1657,70 @@ void ACampaignMapActor::BuildTowns()
 		TownMesh->SetMaterial(0, SceneryMaterial);
 	}
 	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points"), Count, Model.Vertices.Num());
+
+	// The windows, each a small warm pane a hair proud of its wall: dark by day, lit as night comes on.
+	if (!LightsMesh)
+	{
+		LightsMesh = NewObject<UProceduralMeshComponent>(this);
+		LightsMesh->SetupAttachment(Root);
+		LightsMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		LightsMesh->RegisterComponent();
+		LightsMesh->SetCastShadow(false);
+	}
+	LightsMesh->ClearAllMeshSections();
+	LightColours.Reset();
+	LightPoints.Reset();
+	ShownNight = -1.0f;
+	const int32 Panes = TownWindows.Num() / 2;
+	if (Panes > 0 && HighlightMaterial)
+	{
+		TArray<FVector>& Points = LightPoints;
+		TArray<FVector> Normals;
+		TArray<int32> Triangles;
+		Points.Reset(Panes * 4);
+		const double Wide = 0.075 * U * 2.1, High = 0.09 * U * 2.1;
+		for (int32 Pane = 0; Pane < Panes; ++Pane)
+		{
+			const FVector At = TownWindows[Pane * 2], Facing = TownWindows[Pane * 2 + 1].GetSafeNormal();
+			const FVector Side = FVector(-Facing.Y, Facing.X, 0.0) * Wide, Up(0.0, 0.0, High);
+			const FVector Proud = At + Facing * (0.012 * U);
+			const int32 First = Points.Num();
+			Points.Append({ Proud - Side - Up, Proud + Side - Up, Proud + Side + Up, Proud - Side + Up });
+			Triangles.Append({ First, First + 1, First + 2, First, First + 2, First + 3, First, First + 2, First + 1, First, First + 3, First + 2 });
+		}
+		Normals.Init(FVector::UpVector, Points.Num());
+		LightColours.Init(FColor(0, 0, 0, 0), Points.Num());
+		LightsMesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), LightColours, TArray<FProcMeshTangent>(), false);
+		LightsMesh->SetMaterial(0, HighlightMaterial);
+	}
+	UE_LOG(LogTheater, Log, TEXT("Windows to light: %d"), Panes);
+}
+
+void ACampaignMapActor::SetNight(float Night)
+{
+	if (!LightsMesh || LightColours.Num() == 0 || LightPoints.Num() != LightColours.Num() || FMath::Abs(Night - ShownNight) < 0.02f)
+	{
+		return;
+	}
+	ShownNight = Night;
+	// The lamps are lit one by one as the light goes: each window has its own moment, and some stay dark all night.
+	const int32 Panes = LightColours.Num() / 4;
+	for (int32 Pane = 0; Pane < Panes; ++Pane)
+	{
+		const uint32 Chance = (static_cast<uint32>(Pane) * 2654435761u) >> 24; // 0 to 255, the same for a pane every time
+		const float Moment = 0.15f + 0.6f * (Chance / 255.0f);
+		const bool bDark = Chance % 5 == 0;
+		const float Lit = bDark ? 0.0f : FMath::Clamp((Night - Moment) / 0.12f, 0.0f, 1.0f);
+		// Lamplight through a curtain: warm, and a little different from house to house.
+		// (the glow's material brightens what it is given, so the colour is kept below white to stay amber)
+		const FColor Glow(static_cast<uint8>(205 + Chance % 30), static_cast<uint8>(118 + Chance % 34), static_cast<uint8>(34 + Chance % 26), static_cast<uint8>(Lit * 240.0f));
+		for (int32 Corner = 0; Corner < 4; ++Corner)
+		{
+			LightColours[Pane * 4 + Corner] = Glow;
+		}
+	}
+	// (the points go with the colours: the mesh takes no change that does not come with as many points as it has)
+	LightsMesh->UpdateMeshSection(0, LightPoints, TArray<FVector>(), TArray<FVector2D>(), LightColours, TArray<FProcMeshTangent>());
 }
 
 UTexture2D* ACampaignMapActor::GetMinimap()

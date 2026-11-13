@@ -935,6 +935,23 @@ void FMiniatureMesh::House(const FVector& Where, double Length, double Width, do
 		const int32 A = Add(At(End * L, W, WallHeight), Out, Gable), B = Add(At(End * L, -W, WallHeight), Out, Gable), C = Add(End < 0.0 ? RidgeA : RidgeB, Out, Gable);
 		Face(A, B, C, Out);
 	}
+	if (Windows)
+	{
+		// A window or two in each long wall, a row for each storey of a tall house.
+		const int32 Storeys = FMath::Clamp(FMath::RoundToInt32(WallHeight / (Width * 0.75)), 1, 4);
+		const int32 Across2 = Length > Width * 2.2 ? 3 : 2;
+		for (const double Side : { -1.0, 1.0 })
+		{
+			for (int32 Storey = 0; Storey < Storeys; ++Storey)
+			{
+				for (int32 K = 0; K < Across2; ++K)
+				{
+					Windows->Add(At(Length * ((K + 0.5) / Across2 - 0.5) * 0.8, Side * (Width * 0.5 + Width * 0.02), WallHeight * (Storey + 0.55) / Storeys));
+					Windows->Add(Across * Side);
+				}
+			}
+		}
+	}
 }
 
 void FMiniatureMesh::Fir(const FVector& Where, double Height, double Radius, const FLinearColor& Leaf)
@@ -947,7 +964,7 @@ void FMiniatureMesh::Broadleaf(const FVector& Where, double Height, double Radiu
 	Ball(Where + FVector(0.0, 0.0, Height * 0.58), FVector(Radius * 2.0, Radius * 2.0, Height * 0.84), Leaf, 4, 6);
 }
 
-void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed, TArray<FVector>* OutChimneys)
+void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed, TArray<FVector>* OutChimneys, bool bHarbour)
 {
 	FRandomStream Random(Seed * 7919 + 13);
 	static const TCHAR* WallPaints[] = { TEXT("E6DCC4"), TEXT("D8C8A6"), TEXT("CEC6B6"), TEXT("E2D2AE"), TEXT("C9B79A") };
@@ -956,50 +973,156 @@ void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool 
 	const FLinearColor Copper(FColor::FromHex(TEXT("6FA08C")));
 	const FLinearColor Brick(FColor::FromHex(TEXT("7A5547")));
 	const FLinearColor Soot(FColor::FromHex(TEXT("3B3532")));
+	const FLinearColor Slate(FColor::FromHex(TEXT("5E5A58")));
+	const FLinearColor Cobble(FColor::FromHex(TEXT("8F887A")));
+	const FLinearColor Gilt(FColor::FromHex(TEXT("C9A227")));
+	const FLinearColor Leaf(FColor::FromHex(TEXT("4F6B3A"))), LeafLight(FColor::FromHex(TEXT("668249")));
+	auto Out = [&Where](double Angle, double Distance) { return Where + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * Distance; };
 
 	// The great building in the middle: a domed palace for a capital, a church with a tower for a city.
 	double Clear = 0.0;
+	const bool bTown = !bCapital && !bCity;
 	if (bCapital)
 	{
+		// The palace: a long front with a wing at each end, a row of columns before it, a flight of steps, and the dome.
+		Box(Where + FVector(0.0, 0.0, 0.04 * Unit), FVector(2.9, 3.6, 0.08) * Unit, Cobble); // the square it stands in
 		Box(Where + FVector(0.0, 0.0, 0.45 * Unit), FVector(1.5, 2.3, 0.9) * Unit, StoneWork);
+		for (const double Wing : { -1.0, 1.0 })
+		{
+			Box(Where + FVector(0.25 * Unit, Wing * 1.35 * Unit, 0.38 * Unit), FVector(1.9, 0.55, 0.76) * Unit, StoneWork);
+			Box(Where + FVector(0.25 * Unit, Wing * 1.35 * Unit, 0.79 * Unit), FVector(2.0, 0.65, 0.06) * Unit, Slate);
+		}
+		for (int32 Column = 0; Column < 6; ++Column)
+		{
+			Pillar(Where + FVector(0.86 * Unit, (Column - 2.5) * 0.36 * Unit, 0.08 * Unit), 0.06 * Unit, 0.05 * Unit, 0.72 * Unit, StoneWork, 6);
+		}
+		Box(Where + FVector(0.86 * Unit, 0.0, 0.84 * Unit), FVector(0.24, 2.1, 0.1) * Unit, StoneWork); // the entablature they carry
+		for (int32 Step = 0; Step < 3; ++Step)
+		{
+			Box(Where + FVector((1.05 + Step * 0.09) * Unit, 0.0, (0.15 - Step * 0.04) * Unit), FVector(0.1, 1.9, 0.06) * Unit, Cobble);
+		}
+		Box(Where + FVector(0.0, 0.0, 0.93 * Unit), FVector(1.6, 2.4, 0.06) * Unit, Slate);
 		Pillar(Where + FVector(0.0, 0.0, 0.9 * Unit), 0.5 * Unit, 0.5 * Unit, 0.35 * Unit, StoneWork, 12);
 		Ball(Where + FVector(0.0, 0.0, 1.25 * Unit), FVector(1.0, 1.0, 0.9) * Unit, Copper, 5, 10);
-		Pillar(Where + FVector(0.0, 0.0, 1.65 * Unit), 0.06 * Unit, 0.0, 0.5 * Unit, FLinearColor(FColor::FromHex(TEXT("C9A227"))), 6);
-		Clear = 1.5 * Unit;
+		Pillar(Where + FVector(0.0, 0.0, 1.65 * Unit), 0.06 * Unit, 0.0, 0.5 * Unit, Gilt, 6);
+		if (Windows)
+		{
+			for (int32 K = 0; K < 7; ++K)
+			{
+				for (const double Side : { -1.0, 1.0 })
+				{
+					Windows->Add(Where + FVector(Side * 0.76 * Unit, (K - 3) * 0.3 * Unit, 0.52 * Unit));
+					Windows->Add(FVector(Side, 0.0, 0.0));
+				}
+			}
+		}
+		Clear = 2.1 * Unit;
 	}
 	else if (bCity)
 	{
-		House(Where, 1.5 * Unit, 0.7 * Unit, 0.6 * Unit, 0.45 * Unit, StoneWork, FLinearColor(FColor::FromHex(TEXT("5E5A58"))), 0.0);
-		Box(Where + FVector(0.0, 0.95 * Unit, 0.7 * Unit), FVector(0.5, 0.5, 1.4) * Unit, StoneWork);
-		Pillar(Where + FVector(0.0, 0.95 * Unit, 1.4 * Unit), 0.36 * Unit, 0.0, 0.8 * Unit, FLinearColor(FColor::FromHex(TEXT("5E5A58"))), 4);
-		Clear = 1.2 * Unit;
+		// The church with its tower, the town hall across the square from it, and the railway station on the edge.
+		Box(Where + FVector(0.0, 0.0, 0.03 * Unit), FVector(2.2, 2.6, 0.06) * Unit, Cobble);
+		House(Where + FVector(0.0, -0.5 * Unit, 0.0), 1.5 * Unit, 0.7 * Unit, 0.6 * Unit, 0.45 * Unit, StoneWork, Slate, 0.0);
+		Box(Where + FVector(0.0, 0.45 * Unit, 0.7 * Unit), FVector(0.5, 0.5, 1.4) * Unit, StoneWork);
+		Pillar(Where + FVector(0.0, 0.45 * Unit, 1.4 * Unit), 0.36 * Unit, 0.0, 0.8 * Unit, Slate, 4);
+		Pillar(Where + FVector(0.0, 0.45 * Unit, 2.2 * Unit), 0.03 * Unit, 0.0, 0.25 * Unit, Gilt, 4);
+		House(Where + FVector(-0.75 * Unit, 0.2 * Unit, 0.0), 1.0 * Unit, 0.6 * Unit, 0.62 * Unit, 0.25 * Unit, FLinearColor(FColor::FromHex(TEXT("C9B79A"))), FLinearColor(FColor::FromHex(TEXT("7C3F2E"))), 90.0);
+		Box(Where + FVector(-0.75 * Unit, 0.2 * Unit, 0.95 * Unit), FVector(0.22, 0.22, 0.4) * Unit, FLinearColor(FColor::FromHex(TEXT("C9B79A"))));
+		Pillar(Where + FVector(-0.75 * Unit, 0.2 * Unit, 1.15 * Unit), 0.17 * Unit, 0.0, 0.3 * Unit, Copper, 4);
+		Clear = 1.5 * Unit;
+	}
+	else if (Houses >= 6)
+	{
+		// A town of some size has its church: a nave and a steeple.
+		House(Where, 0.9 * Unit, 0.45 * Unit, 0.42 * Unit, 0.3 * Unit, StoneWork, Slate, 20.0);
+		Box(Where + FVector(0.5 * Unit, 0.18 * Unit, 0.45 * Unit), FVector(0.3, 0.3, 0.9) * Unit, StoneWork, 20.0);
+		Pillar(Where + FVector(0.5 * Unit, 0.18 * Unit, 0.9 * Unit), 0.22 * Unit, 0.0, 0.6 * Unit, Slate, 4);
+		Clear = 0.75 * Unit;
 	}
 
-	// Houses round it, closer packed toward the middle, each turned its own way.
+	// Houses round it, closer packed toward the middle, each turned its own way. In a city and a capital the
+	// inner ones are tall tenements with flat-pitched roofs.
 	const double Spread = (0.9 + 0.36 * FMath::Sqrt(static_cast<double>(Houses))) * Unit;
-	for (int32 K = 0; K < Houses; ++K)
+	const int32 Tall = bCapital ? 6 : bCity ? 4 : 0;
+	const int32 All = Houses + Tall;
+	for (int32 K = 0; K < All; ++K)
 	{
 		const double Angle = K * 2.39996 + Random.FRandRange(-0.3f, 0.3f); // the golden angle scatters them evenly
-		const double Distance = Clear + Spread * FMath::Sqrt((K + 0.6) / Houses);
-		const FVector At = Where + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * Distance;
+		const double Distance = Clear + Spread * FMath::Sqrt((K + 0.6) / All);
+		const FVector At = Out(Angle, Distance);
+		const FLinearColor Wall(FColor::FromHex(WallPaints[Random.RandRange(0, 4)])), Roof(FColor::FromHex(RoofPaints[Random.RandRange(0, 4)]));
+		if (K < Tall)
+		{
+			// A block of flats: three or four storeys round a stair, facing the square.
+			House(At, Random.FRandRange(0.8f, 1.1f) * Unit, Random.FRandRange(0.5f, 0.62f) * Unit, Random.FRandRange(0.75f, 1.05f) * Unit, 0.16 * Unit, Wall, Slate, FMath::RadiansToDegrees(Angle) + 90.0);
+			continue;
+		}
 		const double Length = Random.FRandRange(0.62f, 0.95f) * Unit, Width = Random.FRandRange(0.42f, 0.58f) * Unit;
-		House(At, Length, Width, Random.FRandRange(0.3f, 0.5f) * Unit, Random.FRandRange(0.22f, 0.34f) * Unit,
-			FLinearColor(FColor::FromHex(WallPaints[Random.RandRange(0, 4)])), FLinearColor(FColor::FromHex(RoofPaints[Random.RandRange(0, 4)])), Random.FRandRange(0.0f, 180.0f));
+		const double Turn = Random.FRandRange(0.0f, 180.0f);
+		House(At, Length, Width, Random.FRandRange(0.3f, 0.5f) * Unit, Random.FRandRange(0.22f, 0.34f) * Unit, Wall, Roof, Turn);
+		// A chimney on the ridge of some, and a tree in the garden of others.
+		if (K % 3 == 0)
+		{
+			Box(At + FVector(0.0, 0.0, 0.62 * Unit), FVector(0.09, 0.09, 0.3) * Unit, Brick, Turn);
+		}
+		if (K % 2 == 1)
+		{
+			const FVector Garden = Out(Angle + 0.5, Distance + 0.55 * Unit);
+			Broadleaf(Garden, Random.FRandRange(0.45f, 0.7f) * Unit, Random.FRandRange(0.16f, 0.24f) * Unit, K % 4 == 1 ? Leaf : LeafLight);
+		}
+	}
+
+	// The roads through it: two that cross in the middle, laid on the ground under everything.
+	const double Reach = Clear + Spread + 0.5 * Unit;
+	const double Lane = Random.FRandRange(0.0f, 60.0f);
+	Box(Where + FVector(0.0, 0.0, 0.012 * Unit), FVector(Reach * 2.0, 0.2 * Unit, 0.024 * Unit), Cobble, Lane);
+	Box(Where + FVector(0.0, 0.0, 0.014 * Unit), FVector(Reach * 1.7, 0.18 * Unit, 0.028 * Unit), Cobble, Lane + 78.0);
+
+	// A city's railway station, out along one of the roads: a long hall with a glazed roof and a clock turret.
+	if (bCity || bCapital)
+	{
+		const double Angle = FMath::DegreesToRadians(Lane) + PI;
+		const FVector At = Out(Angle, Reach + 0.2 * Unit);
+		const double Turn = Lane + 90.0;
+		House(At, 1.7 * Unit, 0.6 * Unit, 0.4 * Unit, 0.2 * Unit, FLinearColor(FColor::FromHex(TEXT("B9A27E"))), FLinearColor(FColor::FromHex(TEXT("6E7C80"))), Turn);
+		Box(At + FVector(0.0, 0.0, 0.62 * Unit), FVector(0.24, 0.24, 0.44) * Unit, FLinearColor(FColor::FromHex(TEXT("B9A27E"))), Turn);
+		Pillar(At + FVector(0.0, 0.0, 0.84 * Unit), 0.19 * Unit, 0.0, 0.22 * Unit, Slate, 4);
+	}
+
+	// A harbour town has a quay with a crane and a warehouse or two, on the side the works are not.
+	if (bHarbour)
+	{
+		const double Angle = 0.9 + PI;
+		const FVector At = Out(Angle, Reach + 0.3 * Unit);
+		const double Turn = FMath::RadiansToDegrees(Angle) + 90.0;
+		Box(At + FVector(0.0, 0.0, 0.05 * Unit), FVector(2.2, 0.7, 0.1) * Unit, Cobble, Turn);
+		House(At + FVector(0.0, 0.0, 0.1 * Unit), 0.9 * Unit, 0.45 * Unit, 0.3 * Unit, 0.14 * Unit, Brick, Soot, Turn);
+		const FVector Crane = Out(Angle + 0.32, Reach + 0.3 * Unit) + FVector(0.0, 0.0, 0.1 * Unit);
+		Pillar(Crane, 0.1 * Unit, 0.06 * Unit, 0.9 * Unit, Soot, 4);
+		Rod(Crane + FVector(0.0, 0.0, 0.85 * Unit), Crane + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * 0.7 * Unit + FVector(0.0, 0.0, 1.15 * Unit), 0.035 * Unit, Soot, 4);
 	}
 
 	// The works, out at the edge: a long shed with a chimney.
 	for (int32 K = 0; K < Works; ++K)
 	{
 		const double Angle = 0.9 + K * 2.1;
-		const FVector At = Where + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * (Clear + Spread + 0.9 * Unit);
+		const FVector At = Out(Angle, Reach + 0.5 * Unit);
 		const double Turn = FMath::RadiansToDegrees(Angle) + 90.0;
 		House(At, 1.5 * Unit, 0.8 * Unit, 0.5 * Unit, 0.22 * Unit, Brick, Soot, Turn);
+		// A saw-toothed north-light roof on a second shed beside it.
+		const FVector Beside = At + FVector(-FMath::Sin(Angle), FMath::Cos(Angle), 0.0) * 0.95 * Unit;
+		Box(Beside + FVector(0.0, 0.0, 0.2 * Unit), FVector(1.2, 0.7, 0.4) * Unit, Brick, Turn);
+		for (int32 Tooth = 0; Tooth < 3; ++Tooth)
+		{
+			Box(Beside + FVector(FMath::Cos(FMath::DegreesToRadians(Turn)), FMath::Sin(FMath::DegreesToRadians(Turn)), 0.0) * ((Tooth - 1) * 0.4 * Unit) + FVector(0.0, 0.0, 0.46 * Unit), FVector(0.3, 0.7, 0.1) * Unit, Soot, Turn, 22.0);
+		}
 		Pillar(At + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * 0.6 * Unit, 0.13 * Unit, 0.09 * Unit, 1.5 * Unit, Brick, 7);
 		if (OutChimneys)
 		{
 			OutChimneys->Add(At + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * 0.6 * Unit + FVector(0.0, 0.0, 1.5 * Unit));
 		}
 	}
+	(void)bTown;
 }
 
 // ---------------------------------------------------------------------------- the figures

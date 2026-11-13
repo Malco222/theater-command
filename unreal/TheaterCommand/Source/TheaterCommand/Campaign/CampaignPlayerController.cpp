@@ -1304,6 +1304,7 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("CAPITAL (C) looks at your capital; and MAP VIEWS (Y) steps through the map as it is, the wealth view (gold by what a province pays, so you can see what is worth taking) and friend and foe (your ground green, your allies' blue, your enemies' red). ")
 		TEXT("Click a province to see its chief town and THE PRIZE: what taking it would be worth to you. Its RECRUIT and WORKS tabs hold what can be ordered there. ")
 		TEXT("The line beside END THE MONTH says how many armies can still move: click it, or press Tab, to go to the next. ")
+		TEXT("The room's day goes slowly by, and at night the towns on the map light their windows; T holds it at day or at night. ")
 		TEXT("The date plate says when the weather is against you: in the mud of the eastern spring and autumn the ground there turns brown and every army on it is slowed, and in the eastern winter armies without winter kit fight and march badly. ")
 		TEXT("In the grand campaign, ground under a shadow is ground you have no eyes on: what stands there is not known until your troops, your allies, an agent or a reconnaissance flight come near."));
 	Add(TEXT("YOUR ARMIES' CARDS"),

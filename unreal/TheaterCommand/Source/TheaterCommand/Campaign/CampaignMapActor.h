@@ -93,6 +93,8 @@ public:
 	/** The friend-and-foe view: the player's own ground left as it is, his allies' washed blue, his enemies' red, on the table and on the small map. */
 	void ShowSides(bool bOn, const TArray<FString>& Standing);
 	bool AreSidesShown() const { return bSides; }
+	/** How far into the night the room is, 0 to 1: the windows of the towns are lit as it comes on. */
+	void SetNight(float Night);
 	/** The mud of the eastern spring and autumn: the ground it lies on is washed brown. None clears it. */
 	void ShowMud(const TArray<int32>& Regions);
 	/** The fog of war: ground the player has no eyes on lies under a shadow, on the table and on the small map. */
@@ -310,6 +312,12 @@ private:
 		double Began = 0.0;
 	};
 	TArray<FVector> TownChimneys; // the tops of the chimneys of the towns' own works
+	TArray<FVector> TownWindows; // the windows of the towns' houses, each as its place and the way it faces
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> LightsMesh; // those windows lit, at night
+	TArray<FVector> LightPoints;
+	TArray<FColor> LightColours;
+	float ShownNight = -1.0f;
 	TArray<FVector> WorksChimneys; // and of the factories built since the war began
 	TArray<FBattleSmoke> Battles;
 	TArray<FVector> SmokeVertices;

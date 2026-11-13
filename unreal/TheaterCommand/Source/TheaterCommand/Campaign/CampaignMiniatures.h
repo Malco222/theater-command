@@ -149,6 +149,9 @@ struct FMiniatureMesh
 	/** A house: four walls and a pitched roof, its ridge along its length. */
 	void House(const FVector& Where, double Length, double Width, double WallHeight, double RoofHeight, const FLinearColor& Wall, const FLinearColor& Roof, double Turn = 0.0);
 
+	/** Where the windows of the houses built since this was set are noted, each as its place and the way it faces: for lighting them at night. Null to note none. */
+	TArray<FVector>* Windows = nullptr;
+
 	/** A fir: a cone. A broad-leaved tree: a ball on a short trunk. */
 	void Fir(const FVector& Where, double Height, double Radius, const FLinearColor& Leaf);
 	void Broadleaf(const FVector& Where, double Height, double Radius, const FLinearColor& Leaf);
@@ -157,7 +160,7 @@ struct FMiniatureMesh
 	 * A town standing on the table: a cluster of houses, more of them for a city, a great building with a dome
 	 * for a capital, a church for a city, and a works with a chimney for each pair of factories.
 	 */
-	void Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed, TArray<FVector>* OutChimneys = nullptr);
+	void Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed, TArray<FVector>* OutChimneys = nullptr, bool bHarbour = false);
 
 	// ---- The figures. Each stands at Where, turned by Turn degrees, in the nation's colour.
 

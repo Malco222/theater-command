@@ -1,5 +1,8 @@
 #include "Campaign/CampaignEnvironment.h"
 
+#include "Campaign/CampaignMapActor.h"
+#include "EngineUtils.h"
+
 #include "Components/DirectionalLightComponent.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/TextureCube.h"
@@ -126,4 +129,12 @@ void ACampaignEnvironment::ApplyLight()
 	KeyLight->SetIntensity((7.0f - 0.9f * SeasonWinter + 0.3f * SeasonSummer) * (1.0f - 0.2f * Night));
 	FillLight->SetIntensity((0.75f + 0.25f * SeasonWinter) * (1.0f - 0.72f * Night));
 	SkyLight->SetIntensity(0.72f * (1.0f - 0.55f * Night));
+	// And the towns on the map light their windows.
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ACampaignMapActor> It(World); It; ++It)
+		{
+			It->SetNight(Night);
+		}
+	}
 }
