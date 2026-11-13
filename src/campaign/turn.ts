@@ -1,8 +1,12 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type Agent, type AirFleet, type AirMission, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { KIND, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
+import {
+  airGroups, airfieldCard, airfields, groupBases, groupJobs, launchRaid, planRaid, raidKinds, raidReplays, raidTargets, scout, setGroupJob,
+  type AirfieldCard, type AirfieldRow, type BaseOption, type GroupJob, type GroupRow, type RaidKind, type RaidKindView, type RaidPlan, type RaidReplay, type RaidTarget,
+} from './airwar';
 import { NAVY, canPass, landCorps, landingTargets, planLanding, rebase, sail, seaBattles, whyNotShip, type Landing, type LandingPlan } from './navy';
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
@@ -372,6 +376,57 @@ export function orderAirBase(g: Game, id: number, region: number): boolean {
 export function airOptions(g: Game, id: number, mission: AirMission): { targets: number[]; bases: number[] } {
   const f = myAir(g, id);
   return f ? { targets: airTargets(g, f, mission), bases: airBases(g, f).map((r) => r.id) } : { targets: [], bases: [] };
+}
+
+// ---- The air war as its own game (the grand campaign): airfields, air groups, and raids planned from their target ----
+
+/** Every airfield on the map as the player knows it, for a map to draw. Empty in a historical scenario. */
+export const airfieldsSeen = (g: Game): AirfieldRow[] => airfields(g, g.human);
+
+/** One airfield opened: its size and the air groups based there. Null outside the grand campaign. */
+export const airfieldAt = (g: Game, region: number): AirfieldCard | null => airfieldCard(g, region, g.human);
+
+/** The player's air groups, as cards. */
+export const myAirGroups = (g: Game): GroupRow[] => (g.human ? airGroups(g, g.human) : []);
+
+/** What one of the player's air groups can be left doing between raids, each with what it would mean. */
+export const airGroupJobs = (g: Game, id: number): GroupJob[] => groupJobs(g, id, g.human);
+
+/** Gives one of the player's air groups its standing order: 'patrol', 'escort:<bomber group id>' or 'rest'. */
+export function orderGroupJob(g: Game, id: number, key: string): boolean {
+  return !!myAir(g, id) && setGroupJob(g, id, key, g.human);
+}
+
+/** The airfields one of the player's air groups could move to, nearest first. orderAirBase() moves it. */
+export const airGroupBases = (g: Game, id: number): BaseOption[] => groupBases(g, id, g.human);
+
+/** The raid planner's menu: each kind of raid and how many targets are in reach this month. */
+export const raidMenu = (g: Game): RaidKindView[] => raidKinds(g, g.human);
+
+/** Every target for one kind of raid, nearest first. With `lead`, only those that one of the player's groups can fly against. */
+export const raidTargetsFor = (g: Game, kind: RaidKind, lead = -1): RaidTarget[] => raidTargets(g, kind, g.human, lead);
+
+/**
+ * A raid weighed up before it is ordered: who could fly it, who is going, what will meet it, the chance of success,
+ * the losses to expect and what meeting up is worth. Leave `ids` out for the staff's proposal.
+ */
+export const previewRaid = (g: Game, kind: RaidKind, target: number, ids?: number[]): RaidPlan => planRaid(g, kind, target, ids, g.human);
+
+/** Flies a planned raid at once and files its report. Null if it cannot be flown as picked. */
+export function orderRaid(g: Game, kind: RaidKind, target: number, ids: number[]): AirReport | null {
+  return g.human !== null && humanUp(g) ? launchRaid(g, kind, target, ids, g.human) : null;
+}
+
+/**
+ * The raids flown in a month (this month unless told otherwise), as the player may know them: his side's and those
+ * flown against it. Each gives the target, every group that flew with the airfield it took off from, the fighters
+ * that rose and from where, and what each lost, so an interface can show the raid again.
+ */
+export const flownRaids = (g: Game, turn = g.turn): RaidReplay[] => raidReplays(g, turn, g.human);
+
+/** Sends a few aircraft of one of the player's groups to photograph a province: its armies are seen whole until the month ends. */
+export function orderScout(g: Game, id: number, target: number): { ok: boolean; text: string; lost: number } {
+  return myAir(g, id) ? scout(g, id, target, g.human) : { ok: false, text: 'It is not your month.', lost: 0 };
 }
 
 /** The odds and the dangers of an air mission, before the order is given. */

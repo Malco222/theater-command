@@ -6,7 +6,7 @@
 // classic corps and fortifications, as they always did.
 
 import data from '../../data/campaign/arsenal.json';
-import { airFleetsOf, airPool, foundAirFleet } from './air';
+import { AIRWAR, airFleetsOf, airPool, airWar, foundAirFleet, hasAirfield } from './air';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
@@ -89,6 +89,8 @@ const industry = (g: Game, nat: string, factories: number): boolean => g.regions
 /** True if a new wing can be stationed in this region: the nation holds it and it has airfields, built or already in use by one of its fleets. */
 export function canStation(g: Game, nat: string, r: Region | undefined): boolean {
   if (!r || r.ctrl !== nat || r.since >= g.turn) return false;
+  // The air war: an airfield is a place, and aircraft are stationed only where there is one.
+  if (airWar(g)) return hasAirfield(g, r.id);
   return workLevel(g, 'field', r.id) > 0 || g.airFleets.some((f) => f.nat === nat && f.base === r.id);
 }
 
@@ -102,8 +104,12 @@ export function stationSite(g: Game, nat: string, want = -1): number {
   return g.regions.find((r) => canStation(g, nat, r))?.id ?? -1;
 }
 
-/** The air fleet a wing stationed here would join, if one of the nation's is based here. */
-const fleetAt = (g: Game, nat: string, region: number): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region));
+/**
+ * The air fleet a wing stationed here would join, if one of the nation's is based here. In the air war a wing joins
+ * an air group of its own kind that has room for it, and otherwise founds a new group.
+ */
+const fleetAt = (g: Game, nat: string, region: number, wing?: Wing): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region
+  && (!airWar(g) || !wing || (f.kind === wing && f.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))));
 
 /** True if a ship needing a yard of this level can be laid down here. */
 export const canLay = (g: Game, nat: string, r: Region | undefined, yard: number): boolean => !!r && isHome(g, nat, r) && r.port && yardLevel(g, r) >= yard;
@@ -227,12 +233,12 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
     const spec = ARSENAL.air[wing];
     const built = industry(g, nat, spec.factories);
     const at = built ? stationSite(g, nat, sel) : -1;
-    const joins = at >= 0 ? fleetAt(g, nat, at) : null;
+    const joins = at >= 0 ? fleetAt(g, nat, at, wing) : null;
     const cost = priceOf(g, nat, `air:${wing}`, spec.cost);
     out.push({
       key: `air:${wing}`, group: 'air', label: spec.label, blurb: spec.blurb, size: `${spec.count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`, cost, months: spec.months,
       upkeep: spec.count * BUDGET.upkeep.air[wing], at,
-      note: at < 0 ? '' : joins ? `Joins ${joins.name} at ${g.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g.regions[at].name}.`,
+      note: at < 0 ? '' : joins ? `Joins ${joins.name} at ${g.regions[at].name}.` : airWar(g) ? `Forms a new air group on the airfield at ${g.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g.regions[at].name}.`,
       why: !built ? `Needs an aircraft industry: a home province with ${spec.factories} factories.` : at < 0 ? 'Needs airfields to fly from. Build airfields in a province first.' : poor(cost),
     });
   }
@@ -324,12 +330,14 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
     const wing = b.item as Wing, count = b.count ?? ARSENAL.air[wing].count;
     const word = `${count} ${wing === 'ftr' ? 'fighters' : 'bombers'}`;
     // The wing goes where it was ordered for; if that ground is lost, to the strongest fleet the nation has left.
-    let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id) : null;
-    if (!f && r.ctrl === nat) {
-      f = foundAirFleet(g, nat, r, `${r.name} Air Command`);
-      tell(`A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
+    const war = airWar(g);
+    let f = canStation(g, nat, r) || r.ctrl === nat ? fleetAt(g, nat, r.id, wing) : null;
+    if (!f && r.ctrl === nat && (!war || hasAirfield(g, r.id))) {
+      f = foundAirFleet(g, nat, r, `${r.name} Air Command`, war ? wing : undefined);
+      tell(war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
     } else {
-      f ??= strongest(airFleetsOf(g, nat));
+      // The air war: the wing goes to the strongest group of its own kind.
+      f ??= strongest(airFleetsOf(g, nat).filter((x) => !war || x.kind === wing));
       if (f) tell(`${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`);
     }
     if (!f) {
