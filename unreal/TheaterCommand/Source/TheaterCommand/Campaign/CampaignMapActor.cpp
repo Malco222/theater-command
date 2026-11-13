@@ -414,7 +414,7 @@ void ACampaignMapActor::PaintGround()
 		}
 	}
 	LandMaterial->SetVectorParameterValue(TEXT("RockColour"), FCampaignGround::RockColour());
-	LandMaterial->SetVectorParameterValue(TEXT("SnowColour"), FCampaignGround::SnowColour());
+	LandMaterial->SetVectorParameterValue(TEXT("SnowColour"), FCampaignGround::SnowColour() * 0.86f); // (the baked sun lifts it to white where it is lit)
 	LandMaterial->SetVectorParameterValue(TEXT("SandColour"), FCampaignGround::SandColour());
 	SeaMaterial->SetTextureParameterValue(TEXT("Water"), WaterPicture);
 	SeaMaterial->SetTextureParameterValue(TEXT("Ripples"), RipplesPicture);
@@ -2977,8 +2977,9 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 				}
 				const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
 				const float Lying = SnowLying(P, Hard);
-				// It lies thinner than on the crests, so that each country's colour still shows through it.
-				const float Plain = 0.25f * FMath::Sqrt(Hard) * Lying;
+				// It lies thinner than on the crests, so that each country's colour still shows through it: under
+				// the stained paint a dusting is enough to turn the country white, so it is a thin one.
+				const float Plain = 0.15f * FMath::Sqrt(Hard) * Lying;
 				// And the snow line on the mountains comes down.
 				const float H = Terrain.Height[Idx];
 				const float High = 0.9f * FMath::SmoothStep(5.0f - 1.5f * Hard, 6.6f - 1.7f * Hard, H);
