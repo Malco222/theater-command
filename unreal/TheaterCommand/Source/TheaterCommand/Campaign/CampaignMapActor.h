@@ -201,6 +201,8 @@ public:
 	 * next is going up.
 	 */
 	void ShowCivic(const TArray<int32>& Civic);
+	/** Where a flight takes off from: its airfield, or for a carrier's aircraft the ships themselves. */
+	FVector2D SortieStart(const FSortie& Sortie) const;
 
 	/** Where the fleet of this number lies, on the map (for the photographer: "@fleet2"). The middle of the map if there is none. */
 	FVector2D FleetSpot(int32 Index) const;

@@ -2314,6 +2314,20 @@ namespace
 							]
 						];
 					}
+					if (Army.FleetAircraft > 0)
+					{
+						// A fleet with carriers: the way to its aircraft.
+						TrayOrders->AddSlot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(TEXT("The fighters and strike aircraft its carriers bring. Send them to search a sea for the enemy, to strike a fleet your side has found, or to raid ships in a harbour.")))
+							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFleetWings(); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+								.Text(FText::FromString(FString::Printf(TEXT("CARRIER AIRCRAFT  \u00B7  %d"), Army.FleetAircraft)))
+							]
+						];
+					}
 					if (!Army.FleetWarning.IsEmpty())
 					{
 						TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(16.0f, 0.0f, 0.0f, 0.0f)

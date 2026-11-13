@@ -113,6 +113,7 @@ struct FArmyTray
 	FString FleetStance; // patrol, raid or port: what the fleet is doing now
 	FString FleetNext; // patrol, raid or hunt: what it will do in the sea it is sent to next
 	bool bFleetGrand = false; // the navy as pieces: it can hunt, escort, shell, split and join
+	int32 FleetAircraft = 0; // the aircraft its carriers bring, if it has carriers
 	FText FleetWarning; // its heavy ships are thinly screened, or its guns have spoken
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
@@ -471,6 +472,8 @@ public:
 	const FFleetHand& GetFleetHand() const { return FleetHand; }
 	/** Opens the room with everything the fleet in hand could be told to do: seas, lanes to escort, coasts to shell, splitting and joining. */
 	void OpenFleetOrders();
+	/** The room of the aircraft the fleet in hand carries: search a sea, strike a fleet, raid a harbour. */
+	void OpenFleetWings();
 	/** Moves the fleet in hand to a new home port. */
 	void FleetToNewBase(int32 RegionId);
 	/** Sends the fleet in hand to a sea, to do there what it has been told (patrol or raid). */

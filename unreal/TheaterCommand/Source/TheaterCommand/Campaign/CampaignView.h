@@ -141,6 +141,11 @@ struct FViewFleet
 	FString Stance; // patrol, raid or port
 	int32 Battleships = 0, Carriers = 0, Cruisers = 0, Destroyers = 0, Submarines = 0;
 	int32 Home = INDEX_NONE; // the sea its harbour lies on
+	// A fleet known only from a report (the fog at sea): a flag and a rough size, its ships not counted.
+	bool bReport = false;
+	FString SizeWord; // "A few ships", "A squadron", "A fleet", "Submarines"
+	// The aircraft its carriers bring.
+	int32 WingFighters = 0, WingStrike = 0;
 	TArray<int32> Reach; // the seas it can sail to this month (the player's own fleets only)
 	TArray<int32> Bases; // the friendly ports it could make its new home
 	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
@@ -154,6 +159,8 @@ struct FFleetSea
 	FString Meet; // clear, battle or shy: what a patrol there would come to
 	float Hunt = 0.0f; // the share of those submarines it would sink in a month if it hunted there
 	float Torpedo = 0.0f; // the chance it loses a heavy ship to a submarine there this month
+	int32 Reported = 0; // enemy forces there known only from a report, their strength not counted
+	FString Search; // how well the player's side has that sea searched, in a phrase
 };
 
 /** The ships of one class in a fleet, as its cards show them. */
@@ -199,6 +206,10 @@ struct FSortie
 	int32 Flak = 0; // the level of the anti-aircraft guns round the target
 	FString Meet; // the nation whose fighters rise to meet the raid; empty if none can
 	int32 MeetFrom = INDEX_NONE; // the province whose airfield they rise from, if it is known
+	// A carrier's aircraft fly from the ships, wherever they are on the map, not from an airfield.
+	bool bFromSea = false;
+	FVector2D FromPoint = FVector2D::ZeroVector;
+	int32 FromFleet = INDEX_NONE; // the fleet itself, where that is known: the flight leaves from where its ships are drawn
 	float Loss = 0.0f; // the share of the bombers likely to be lost
 };
 

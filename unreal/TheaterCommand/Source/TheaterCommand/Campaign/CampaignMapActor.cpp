@@ -1899,6 +1899,23 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 	return MiniTexture;
 }
 
+FVector2D ACampaignMapActor::SortieStart(const FSortie& Sortie) const
+{
+	if (!Sortie.bFromSea)
+	{
+		return AirfieldSpot(Sortie.From);
+	}
+	// From the ships as they lie on the table, if the fleet is on it; otherwise from where the report puts them.
+	if (const TObjectPtr<AArmyPiece>* Piece = FleetPieces.Find(Sortie.FromFleet))
+	{
+		if (*Piece)
+		{
+			return FleetPlace(Sortie.FromFleet);
+		}
+	}
+	return Sortie.FromPoint;
+}
+
 FVector2D ACampaignMapActor::FleetPlace(int32 FleetId) const
 {
 	const TObjectPtr<AArmyPiece>* Piece = FleetPieces.Find(FleetId);
@@ -3368,7 +3385,7 @@ int32 ACampaignMapActor::AirfieldNear(const FVector2D& MapPoint) const
 
 void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 {
-	if (!GetWorld() || !Data.Regions.IsValidIndex(Sortie.From))
+	if (!GetWorld() || (!Sortie.bFromSea && !Data.Regions.IsValidIndex(Sortie.From)))
 	{
 		return;
 	}
@@ -3473,7 +3490,7 @@ void ACampaignMapActor::UpdateSorties()
 			continue;
 		}
 		// Out to the target, a turn over it, and home: the airfield is where the air groups stand, south-west of the town.
-		const FVector2D Field = AirfieldSpot(Flight.Sortie.From);
+		const FVector2D Field = SortieStart(Flight.Sortie);
 		const FVector Field0 = SurfacePoint(Field.X, Field.Y, 0.3), Aim = SurfacePoint(Flight.Sortie.To.X, Flight.Sortie.To.Y, 0.3);
 		const FVector Course = (Aim - Field0).GetSafeNormal2D();
 		const FVector Abeam(-Course.Y, Course.X, 0.0);

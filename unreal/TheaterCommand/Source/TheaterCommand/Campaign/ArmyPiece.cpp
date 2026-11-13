@@ -77,8 +77,8 @@ void AArmyPiece::SetFleet(ACampaignMapActor* Map, const FCampaignNation& Nation,
 	NationTag = Nation.Tag;
 	Fleet = InFleet;
 	// (a fleet that puts to sea or comes into harbour is remade: it has a wake at sea and none in port)
-	const FString NewSignature = FString::Printf(TEXT("%s|fleet|%d|%d|%d|%d|%d|%d|%s"), *Nation.Tag, InFleet.Id,
-		InFleet.Battleships, InFleet.Carriers, InFleet.Cruisers, InFleet.Destroyers, InFleet.Submarines, *InFleet.Stance);
+	const FString NewSignature = FString::Printf(TEXT("%s|fleet|%d|%d|%d|%d|%d|%d|%s|%d|%s"), *Nation.Tag, InFleet.Id,
+		InFleet.Battleships, InFleet.Carriers, InFleet.Cruisers, InFleet.Destroyers, InFleet.Submarines, *InFleet.Stance, InFleet.bReport ? 1 : 0, *InFleet.SizeWord);
 	if (NewSignature != Signature)
 	{
 		Signature = NewSignature;
@@ -166,10 +166,22 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		// A fleet: its ships lie on the water, with no base under them.
 		Top = 0.02 * U;
 		CounterWidth = 9.5 * U;
-		Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour, NationTag, Fleet.Stance != TEXT("port"));
-		Size = FMath::Clamp(0.8 + 0.012 * Fleet.Ships(), 0.9, 1.7);
+		if (Fleet.bReport)
+		{
+			// Known only from a report: a plotting marker on the water, as on an admiral's chart, under the flag of
+			// whoever it is said to be. No ships are shown, for nobody has counted them.
+			const FLinearColor Marker(FColor::FromHex(TEXT("3A3F45")));
+			Model.Pillar(FVector(0.0, 0.0, Top), 1.5 * U, 1.25 * U, 0.34 * U, Marker, 6);
+			Model.Pillar(FVector(0.0, 0.0, Top + 0.34 * U), 0.9 * U, 0.0, 0.5 * U, Colour, 6);
+		}
+		else
+		{
+			Model.Fleet(Fleet.Battleships, Fleet.Carriers, Fleet.Cruisers, Fleet.Destroyers, Fleet.Submarines, U, Colour, NationTag, Fleet.Stance != TEXT("port"));
+		}
+		Size = Fleet.bReport ? 0.9 : FMath::Clamp(0.8 + 0.012 * Fleet.Ships(), 0.9, 1.7);
 		// Its plate says how many ships, and what they are about when it is not a plain patrol.
-		Figure = Fleet.Stance == TEXT("escort") ? FString::Printf(TEXT("%d escort"), Fleet.Ships())
+		Figure = Fleet.bReport ? (Fleet.SizeWord == TEXT("Submarines") ? FString(TEXT("? subs")) : Fleet.SizeWord == TEXT("A fleet") ? FString(TEXT("? fleet")) : Fleet.SizeWord == TEXT("A squadron") ? FString(TEXT("? squadron")) : FString(TEXT("? ships")))
+			: Fleet.Stance == TEXT("escort") ? FString::Printf(TEXT("%d escort"), Fleet.Ships())
 			: Fleet.Stance == TEXT("hunt") ? FString::Printf(TEXT("%d hunting"), Fleet.Ships())
 			: Fleet.Stance == TEXT("raid") ? FString::Printf(TEXT("%d raiding"), Fleet.Ships())
 			: FString::Printf(TEXT("%d ships"), Fleet.Ships());

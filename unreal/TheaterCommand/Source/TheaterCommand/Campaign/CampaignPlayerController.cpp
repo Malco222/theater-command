@@ -873,7 +873,7 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		{
 			Map->FlySortie(Sortie);
 			bBombers |= Sortie.bBombers;
-			Middle += Map->AirfieldSpot(Sortie.From);
+			Middle += Map->SortieStart(Sortie);
 		}
 		Middle = (Middle / Sorties.Num() + Sorties[0].To) * 0.5;
 		CampaignSounds::Play(this, bBombers ? TEXT("bomber_drone") : TEXT("fighter_pass"), 0.45f);
@@ -883,7 +883,7 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 			double Spread = 0.0;
 			for (const FSortie& Sortie : Sorties)
 			{
-				Spread = FMath::Max(Spread, FVector2D::Distance(Map->AirfieldSpot(Sortie.From), Sortie.To));
+				Spread = FMath::Max(Spread, FVector2D::Distance(Map->SortieStart(Sortie), Sortie.To));
 			}
 			Eye->GoTo(Map->MapToWorld(Middle.X, Middle.Y), FMath::Clamp(static_cast<float>(0.3 + Spread / 420.0), 0.4f, 0.85f));
 		}
@@ -2761,6 +2761,15 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					Known = There->Surface > 0 || There->Subs > 0
 						? FString::Printf(TEXT("\nEnemy there: %d surface warship%s, %d submarine%s."), There->Surface, There->Surface == 1 ? TEXT("") : TEXT("s"), There->Subs, There->Subs == 1 ? TEXT("") : TEXT("s"))
 						: FString(TEXT("\nNo enemy ships are known there."));
+					// (the fog at sea: forces only reported, and how well the sea has been searched)
+					if (There->Reported > 0)
+					{
+						Known += FString::Printf(TEXT(" %d enemy force%s reported there and not identified."), There->Reported, There->Reported == 1 ? TEXT(" is") : TEXT("s are"));
+					}
+					if (!There->Search.IsEmpty())
+					{
+						Known += FString::Printf(TEXT(" %s%s."), *There->Search.Left(1).ToUpper(), *There->Search.Mid(1));
+					}
 					if (There->Meet == TEXT("shy"))
 					{
 						Known += TEXT(" Too strong for a patrol to face.");
@@ -3048,6 +3057,7 @@ void ACampaignPlayerController::LayOutFleet()
 	Tray.bVisible = true;
 	Tray.bFleet = true;
 	Tray.bFleetGrand = FleetHand.bValid && FleetHand.bGrand;
+	Tray.FleetAircraft = Fleet->WingFighters + Fleet->WingStrike;
 	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
 	Tray.Tag = View.Human;
 	Tray.Title = FText::FromString(Fleet->Name);
@@ -3134,6 +3144,14 @@ void ACampaignPlayerController::OpenFleetOrders()
 	if (FleetInHand != INDEX_NONE)
 	{
 		OpenPage(FString::Printf(TEXT("fleet:%d"), FleetInHand));
+	}
+}
+
+void ACampaignPlayerController::OpenFleetWings()
+{
+	if (FleetInHand != INDEX_NONE)
+	{
+		OpenPage(FString::Printf(TEXT("wings:%d"), FleetInHand));
 	}
 }
 

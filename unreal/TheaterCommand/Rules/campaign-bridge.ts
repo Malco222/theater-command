@@ -50,6 +50,7 @@ import {
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes, previewAirOrder,
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
+  fleetsInSight, wingsOfFleet,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
@@ -205,18 +206,28 @@ function view() {
       ...(c.nat === s.human || (s.human && c.joint === s.human) ? cardOf(s, c) : {}),
     }); }),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
-    fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({
-      id: f.id, nat: f.nat, name: f.name, zone: f.zone, home: f.home, base: f.base, port: f.port, stance: f.stance,
-      bb: f.ships.bb, cv: f.ships.cv, ca: f.ships.ca, dd: f.ships.dd, ss: f.ships.ss,
+    // (Version 53: only the fleets the player's side has found. One that is only reported is a flag and a rough
+    // size: its ships are not counted, and what it is about is not known. One not found is not on the table.)
+    fleets: fleetsInSight(s).map((k) => ({ k, f: s.fleets.find((x) => x.id === k.id)! })).filter((x) => !!x.f).map(({ k, f }) => {
+      const exact = k.known === 'exact';
+      const wings = exact ? wingsOfFleet(s, f.id) : [];
+      return {
+      id: f.id, nat: f.nat, name: k.name, zone: f.zone, home: f.home, base: f.base, port: exact ? f.port : '', stance: exact ? f.stance : (k.atSea ? 'patrol' : 'port'),
+      bb: exact ? f.ships.bb : 0, cv: exact ? f.ships.cv : 0, ca: exact ? f.ships.ca : 0, dd: exact ? f.ships.dd : 0, ss: exact ? f.ships.ss : 0,
+      report: !exact, size: k.size,
+      // The aircraft its carriers bring: fighters, and strike aircraft.
+      wingFtr: Math.round(wings.filter((w) => w.kind === 'ftr').reduce((n, w) => n + w.aircraft, 0)),
+      wingStrike: Math.round(wings.filter((w) => w.kind !== 'ftr').reduce((n, w) => n + w.aircraft, 0)),
       // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
       reach: f.nat === s.human && up ? fleetReach(s, f) : [],
       // And the friendly ports it could make its new home.
       bases: f.nat === s.human && up ? baseTargets(s, f).map((r) => r.id) : [],
-    })),
+      };
+    }),
     // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
     // many groups and aircraft stand on it, or -1 where the fog hides that.
     airfields: fields.map((a) => ({ region: a.region, nat: a.holder, side: a.side, size: a.size, word: a.word, holds: a.holds, groups: a.groups, aircraft: a.aircraft, crowded: a.crowded })),
-    air: s.airFleets.filter((f) => f.ftr + f.bmr > 0 && !fieldHidden.has(f.base)).map((f) => ({
+    air: s.airFleets.filter((f) => f.ftr + f.bmr > 0 && (f as { ship?: number }).ship === undefined && !fieldHidden.has(f.base)).map((f) => ({
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
     })),
     // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
@@ -350,7 +361,7 @@ const corpsById = (s: Game, ids: number[]): Corps[] =>
 
 
 /** One formation seen to fly a raid: where from, where to, whose, what flies, and what it meets. */
-interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number }
+interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number; fromX?: number; fromY?: number; fleet?: number }
 
 const lastAirReport = (s: Game): number => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
 
@@ -365,9 +376,11 @@ function raidsSince(s: Game, since: number, turns: number[], skipNat: string | n
       seenIds.add(r.id);
       const riser = r.defenders.find((d) => d.ftr >= 1 && d.base >= 0);
       let first = true;
-      for (const a of r.attackers.filter((x) => x.base >= 0 && x.ftr + x.bmr >= 1).slice(0, 4)) {
+      // (a carrier wing has no airfield: it takes off from where its fleet was, which the report gives as a point)
+      const deck = (x: { base: number; x: number; y: number }): boolean => x.base < 0 && (x.x > 0 || x.y > 0);
+      for (const a of r.attackers.filter((x) => (x.base >= 0 || deck(x)) && x.ftr + x.bmr >= 1).slice(0, 4)) {
         flights.push({
-          from: a.base, x: r.x, y: r.y, nat: a.nat, bombers: a.bmr >= 1, escort: a.bmr >= 1 && a.ftr >= 1, region: r.region,
+          from: a.base, ...(deck(a) ? { fromX: a.x, fromY: a.y, fleet: (s.airFleets.find((g) => g.id === a.id) as { ship?: number } | undefined)?.ship ?? -1 } : {}), x: r.x, y: r.y, nat: a.nat, bombers: a.bmr >= 1, escort: a.bmr >= 1 && a.ftr >= 1, region: r.region,
           aa: first && r.region >= 0 ? workLevel(s, 'aa', r.region) : 0, meet: first && riser ? riser.nat : '', meetFrom: first && riser ? riser.base : -1,
           loss: a.bmr >= 1 ? a.lostBmr / a.bmr : a.ftr >= 1 ? a.lostFtr / a.ftr : 0,
         });
@@ -1127,6 +1140,12 @@ function force(kind: string, id: number) {
   if (kind === 'fleet') {
     const f = s.fleets.find((x) => x.id === id);
     if (!f) return null;
+    const seen = fleetsInSight(s).find((x) => x.id === id);
+    if (!seen) return null;
+    if (seen.known !== 'exact') {
+      const where = seen.atSea ? `In the ${s.seas[f.zone]?.name ?? 'sea'}` : 'In harbour';
+      return { name: seen.name, nat: f.nat, mine: false, lines: [`${seen.size}, not identified. ${where}.`, 'A report and no more: its ships are not counted. Search this sea from the air, or with a carrier\'s aircraft, to find out what it is.'], options: [] };
+    }
     const parts: string[] = [];
     const count = (n: number, one: string, many: string) => { if (n > 0) parts.push(`${n} ${n === 1 ? one : many}`); };
     count(f.ships.bb, 'battleship', 'battleships');
@@ -1667,8 +1686,9 @@ function fleetInHand(id: number) {
       ok: true, grand, id, name: card.name, admiral: card.admiral ? `${card.admiral.name}, level ${card.admiral.level}` : '', doing: card.doing, order: card.order, stance: card.stance,
       ready: card.ready, guns: Math.round(card.guns), screen: card.screen.gap > 0 ? `${cap1(card.screen.word)}: ${card.screen.have} destroyers where ${card.screen.need} are needed.` : '', shelled: card.shelled,
       cards: card.cards.map((c) => ({ cls: c.cls, label: c.label, count: c.count, lost: c.lost, role: c.role, brief: c.brief })),
-      seas: (o?.seas ?? []).map((z) => ({ zone: z.zone, name: z.name, surface: z.surface, subs: z.subs, meet: z.meet, hunt: z.hunt, torpedo: z.torpedo })),
+      seas: (o?.seas ?? []).map((z) => ({ zone: z.zone, name: z.name, surface: z.surface, subs: z.subs, meet: z.meet, hunt: z.hunt, torpedo: z.torpedo, reported: z.reported ?? 0, search: z.search ?? '' })),
       coasts: o?.coasts ?? [], merge: o?.merge ?? [], split: !!o?.split, canOrder: !!o,
+      wings: wingsOfFleet(s, id).map((w) => ({ id: w.id, label: w.label, aircraft: Math.round(w.aircraft), doing: w.doing, flew: w.flew })),
     };
   } catch {
     return null;
@@ -1740,7 +1760,10 @@ function fleetPage(s: Game, id: number): Page | null {
   return {
     id: `fleet:${id}`, title: card.name.toUpperCase(), headline: `${card.doing}`,
     note: `${card.admiral ? `${card.admiral.name} commands (level ${card.admiral.level}). ` : ''}${card.ships} ships, readiness ${share(card.ready)}.${gap}${card.shelled ? ' Its guns have spoken this month.' : ''} A fleet reaches three seas from its base, and can be given one order a month.`,
-    top: [{ label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: 'Safe from the enemy fleet, and takes no part at sea.' }],
+    top: [
+      { label: 'RETURN TO HARBOUR', act: `fleet:${id}:${s.fleets.find((f) => f.id === id)?.home ?? card.zone}:port`, ok: up && card.stance !== 'port', tip: 'Safe from the enemy fleet, and takes no part at sea.' },
+      ...(wingsOfFleet(s, id).length ? [{ label: 'CARRIER AIRCRAFT', act: `open:wings:${id}`, ok: true, tip: 'The fighters and strike aircraft its carriers bring: search a sea for the enemy, strike a fleet, or raid a harbour.' }] : []),
+    ],
     sections: [
       { heading: 'ITS SHIPS', text: '', rows: ships },
       { heading: 'SEAS IN ITS REACH', text: seas.length ? '' : up ? 'The country is at peace: the fleet keeps its station.' : 'It is not your month.', rows: seas },
@@ -2013,6 +2036,21 @@ function act(action: string, region = -1) {
       // What came of it, in the report's own words first, kept short enough to read while the raid is flown.
       const told = flown.notes.join(' ') || note;
       note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
+    }
+    // A search of a sea is seen to go out too: a few aircraft from the group's airfield, or from the ships.
+    if (air.ok && part[0] === 'search') {
+      const grp = s.airFleets.find((x) => x.id === Number(part[1])) as (typeof s.airFleets[number] & { ship?: number }) | undefined;
+      const sea = s.seas[Number(part[2])];
+      const ship = grp?.ship !== undefined ? s.fleets.find((f) => f.id === grp.ship) : undefined;
+      const from = ship ? s.seas[ship.zone] : undefined;
+      if (grp && sea) {
+        // (a search of the fleet's own waters still flies out and back: a sweep to one side of the ships)
+        const own = !!ship && ship.zone === sea.id;
+        flies = [{
+          from: ship ? -1 : grp.base, ...(ship && from ? { fromX: from.x, fromY: from.y, fleet: ship.id } : {}), x: sea.x + (own ? 46 : 0), y: sea.y - (own ? 30 : 0), nat: grp.nat,
+          bombers: false, escort: false, region: -1, aa: 0, meet: '', meetFrom: -1, loss: 0,
+        }];
+      }
     }
     return { ok, note, fly, flies, open, view: view() };
   }

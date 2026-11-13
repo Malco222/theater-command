@@ -505,6 +505,10 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetNumberField(TEXT("dd"), Fleet.Destroyers);
 			Entry->TryGetNumberField(TEXT("ss"), Fleet.Submarines);
 			Entry->TryGetNumberField(TEXT("home"), Fleet.Home);
+			Entry->TryGetBoolField(TEXT("report"), Fleet.bReport);
+			Entry->TryGetStringField(TEXT("size"), Fleet.SizeWord);
+			Entry->TryGetNumberField(TEXT("wingFtr"), Fleet.WingFighters);
+			Entry->TryGetNumberField(TEXT("wingStrike"), Fleet.WingStrike);
 			const TArray<TSharedPtr<FJsonValue>>* Ports = nullptr;
 			if (Entry->TryGetArrayField(TEXT("bases"), Ports))
 			{
@@ -2013,6 +2017,13 @@ static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSort
 		Fly->TryGetNumberField(TEXT("x"), X);
 		Fly->TryGetNumberField(TEXT("y"), Y);
 		Sortie.To = FVector2D(X, Y);
+		double FromX = 0.0, FromY = 0.0;
+		if (Fly->TryGetNumberField(TEXT("fromX"), FromX) && Fly->TryGetNumberField(TEXT("fromY"), FromY))
+		{
+			Sortie.bFromSea = true;
+			Sortie.FromPoint = FVector2D(FromX, FromY);
+			Fly->TryGetNumberField(TEXT("fleet"), Sortie.FromFleet);
+		}
 	}
 }
 
@@ -2071,6 +2082,8 @@ FFleetHand FCampaignSession::FleetInHand(int32 FleetId)
 			double Hunt = 0.0, Torpedo = 0.0;
 			Entry->TryGetNumberField(TEXT("hunt"), Hunt);
 			Entry->TryGetNumberField(TEXT("torpedo"), Torpedo);
+			Entry->TryGetNumberField(TEXT("reported"), Sea.Reported);
+			Entry->TryGetStringField(TEXT("search"), Sea.Search);
 			Sea.Hunt = static_cast<float>(Hunt);
 			Sea.Torpedo = static_cast<float>(Torpedo);
 		}

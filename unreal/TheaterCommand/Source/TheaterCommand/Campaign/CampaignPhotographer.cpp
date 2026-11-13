@@ -431,6 +431,24 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		}
 		if (GrandNation == TEXT("UK"))
 		{
+			// Carriers and the fog at sea (version 53): a fleet with carriers in hand, the room of its aircraft, a
+			// search flown from the ships, and an enemy force known only from a report.
+			Add(TEXT("39a-carrier-fleet-in-hand"), TEXT("@capital"), 0.62f).bFleet = true;
+			Add(TEXT("39b-carrier-aircraft"), TEXT("@capital"), 0.62f).Room = TEXT("wings:1");
+			Add(TEXT("39c-wing-orders"), TEXT("@capital"), 0.62f).Room = TEXT("group:53");
+			{
+				FShot& Shot = Add(TEXT("39d-search-flown"), TEXT("@fleet0"), 0.5f);
+				Shot.Room = TEXT("search:53");
+				Shot.RoomAct = TEXT("search:53:9");
+				Shot.Wait = 2.2f;
+			}
+			{
+				FShot& Shot = Add(TEXT("39e-fleet-only-reported"), TEXT("@report"), 0.3f);
+				Shot.Force = TEXT("fleet:6");
+			}
+		}
+		if (GrandNation == TEXT("UK"))
+		{
 			// An army sent by sea: where it can go, the question before a landing, and the landing made.
 			{
 				FShot& Shot = Add(TEXT("35-by-sea"), TEXT("Hamburg"), 0.62f);
@@ -617,6 +635,18 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		if (GEngine && GEngine->GameViewport)
 		{
 			GEngine->GameViewport->RemoveAllViewportWidgets();
+		}
+	}
+	if (Shot.Region == TEXT("@report") && Controller->GetSession())
+	{
+		// The first fleet known only from a report.
+		for (const FViewFleet& Fleet : Controller->GetSession()->GetView().Fleets)
+		{
+			if (Fleet.bReport)
+			{
+				At = Table->FleetPlace(Fleet.Id);
+				break;
+			}
 		}
 	}
 	if (Shot.Region.StartsWith(TEXT("@fleet")))
