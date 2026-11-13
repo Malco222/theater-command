@@ -1104,6 +1104,133 @@ void ACampaignMapActor::BuildWaterways()
 	UE_LOG(LogTheater, Log, TEXT("Rivers: %d, in %d points"), Land.Rivers.Num(), Buffers.Vertices.Num());
 }
 
+void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDistance)
+{
+	UWorld* World = GetWorld();
+	if (!World || Land.Rails.Num() == 0)
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	const double U = UnitScale;
+	const double LinkLasts = 11.0; // seconds from one town to the next
+	const FVector2D Looking = WorldToMap(CameraFocus);
+	// From far off the trains are too small to see, and are put away.
+	const bool bNear = CameraDistance < 9000.0f;
+
+	// The trains running: each along its link, and on to another when it arrives.
+	for (int32 Index = Trains.Num() - 1; Index >= 0; --Index)
+	{
+		FTrain& Train = Trains[Index];
+		double Share = (Now - Train.Began) / LinkLasts;
+		const bool bGone = !bNear || !Land.Rails.IsValidIndex(Train.Rail) || ShownCut.Contains(Land.Rails[Train.Rail].A) || ShownCut.Contains(Land.Rails[Train.Rail].B)
+			|| FVector2D::DistSquared(Land.Rails[Train.Rail].At, Looking) > 260.0 * 260.0;
+		if (!bGone && Share >= 1.0)
+		{
+			// Arrived: onward by another line out of this town, if there is one and the journey is not over.
+			const int32 Here = Train.bBackward ? Land.Rails[Train.Rail].A : Land.Rails[Train.Rail].B;
+			TArray<int32> Onward;
+			for (int32 Other = 0; Other < Land.Rails.Num(); ++Other)
+			{
+				if (Other != Train.Rail && (Land.Rails[Other].A == Here || Land.Rails[Other].B == Here) && !ShownCut.Contains(Land.Rails[Other].A) && !ShownCut.Contains(Land.Rails[Other].B))
+				{
+					Onward.Add(Other);
+				}
+			}
+			if (Onward.Num() > 0 && ++Train.Links < 4)
+			{
+				Train.Rail = Onward[FMath::RandHelper(Onward.Num())];
+				Train.bBackward = Land.Rails[Train.Rail].B == Here;
+				Train.Began = Now;
+				Share = 0.0;
+			}
+		}
+		if (bGone || Share >= 1.0)
+		{
+			if (Train.Mesh)
+			{
+				Train.Mesh->DestroyComponent();
+			}
+			Trains.RemoveAt(Index);
+			continue;
+		}
+		const FLandRail& Rail = Land.Rails[Train.Rail];
+		if (!Data.Regions.IsValidIndex(Rail.A) || !Data.Regions.IsValidIndex(Rail.B))
+		{
+			continue;
+		}
+		const FVector2D From = Data.Regions[Train.bBackward ? Rail.B : Rail.A].Center, To = Data.Regions[Train.bBackward ? Rail.A : Rail.B].Center;
+		const double First = FVector2D::Distance(From, Rail.At), Second = FVector2D::Distance(Rail.At, To);
+		// It draws out of the station and slows into the next.
+		const double Along = FMath::SmoothStep(0.0, 1.0, Share) * (First + Second);
+		const FVector2D A = Along < First ? From : Rail.At, B = Along < First ? Rail.At : To;
+		const double Leg = Along < First ? First : Second, Done = Along < First ? Along : Along - First;
+		const FVector2D At = FMath::Lerp(A, B, Leg > 0.01 ? Done / Leg : 0.0);
+		const FVector Here = SurfacePointOver(At.X, At.Y, 0.2);
+		const FVector Ahead = (MapToWorld(B.X, B.Y) - MapToWorld(A.X, A.Y)).GetSafeNormal2D();
+		if (Train.Mesh)
+		{
+			Train.Mesh->SetRelativeLocationAndRotation(Here, FRotator(0.0, FMath::RadiansToDegrees(FMath::Atan2(Ahead.Y, Ahead.X)), 0.0));
+		}
+	}
+
+	// A new train now and then, on a line near what the player is looking at.
+	if (!bNear || Trains.Num() >= 7 || Now < NextTrain)
+	{
+		return;
+	}
+	NextTrain = Now + FMath::FRandRange(0.8, 2.5);
+	// (on the lines that are on the screen, or nearly: the closer the eye, the nearer the trains are started)
+	const double Reach = FMath::Clamp(0.42 * CameraDistance / U, 30.0, 170.0);
+	TArray<int32> Near;
+	for (int32 Index = 0; Index < Land.Rails.Num(); ++Index)
+	{
+		const FLandRail& Rail = Land.Rails[Index];
+		if (FVector2D::DistSquared(Rail.At, Looking) < Reach * Reach && !ShownCut.Contains(Rail.A) && !ShownCut.Contains(Rail.B)
+			&& !Trains.ContainsByPredicate([Index](const FTrain& Each) { return Each.Rail == Index; }))
+		{
+			Near.Add(Index);
+		}
+	}
+	if (Near.Num() == 0)
+	{
+		return;
+	}
+	// The train: a black engine with its funnel and red wheels, a tender, and three wagons, its front toward +X.
+	FMiniatureMesh Model;
+	const FLinearColor Black(FColor::FromHex(TEXT("1B1B1D"))), Red(FColor::FromHex(TEXT("8E2A22"))), Brass(FColor::FromHex(TEXT("B08D57")));
+	const FLinearColor Wagons[] = { FLinearColor(FColor::FromHex(TEXT("5B4634"))), FLinearColor(FColor::FromHex(TEXT("4E5A4A"))), FLinearColor(FColor::FromHex(TEXT("6A3C2E"))), FLinearColor(FColor::FromHex(TEXT("55595E"))) };
+	const double W = 0.62 * U;
+	Model.Rod(FVector(0.2 * U, 0.0, 0.62 * U), FVector(1.75 * U, 0.0, 0.62 * U), 0.3 * U, Black, 10);
+	Model.Box(FVector(-0.2 * U, 0.0, 0.66 * U), FVector(0.75 * U, W, 0.92 * U), Black);
+	Model.Box(FVector(-0.2 * U, 0.0, 1.15 * U), FVector(0.9 * U, W * 1.1, 0.08 * U), Black * 1.6f);
+	Model.Pillar(FVector(1.45 * U, 0.0, 0.9 * U), 0.1 * U, 0.14 * U, 0.4 * U, Black, 8);
+	Model.Pillar(FVector(0.95 * U, 0.0, 0.9 * U), 0.12 * U, 0.1 * U, 0.16 * U, Brass, 8);
+	Model.Box(FVector(0.75 * U, 0.0, 0.22 * U), FVector(2.3 * U, W * 0.95, 0.3 * U), Red);
+	Model.Box(FVector(-1.25 * U, 0.0, 0.5 * U), FVector(1.0 * U, W, 0.66 * U), Black);
+	const int32 Sort = FMath::RandHelper(4);
+	for (int32 Wagon = 0; Wagon < 3; ++Wagon)
+	{
+		const double X = (-2.75 - Wagon * 1.7) * U;
+		Model.Box(FVector(X, 0.0, 0.52 * U), FVector(1.5 * U, W, 0.7 * U), Wagons[(Sort + Wagon) % 4]);
+		Model.Box(FVector(X, 0.0, 0.12 * U), FVector(1.3 * U, W * 0.8, 0.14 * U), Black);
+	}
+	FTrain& Train = Trains.AddDefaulted_GetRef();
+	Train.Rail = Near[FMath::RandHelper(Near.Num())];
+	Train.bBackward = FMath::RandBool();
+	Train.Began = Now;
+	Train.Mesh = NewObject<UProceduralMeshComponent>(this);
+	Train.Mesh->SetupAttachment(Root);
+	Train.Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Train.Mesh->RegisterComponent();
+	Train.Mesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+	Train.Mesh->SetMaterial(0, SceneryMaterial);
+	Train.Mesh->SetCastShadow(true);
+	Train.Mesh->SetVisibility(false); // until its first place on the line is set, at the next frame
+	Train.Mesh->SetVisibility(true);
+	Train.Mesh->SetRelativeLocation(SurfacePointOver(Data.Regions[Train.bBackward ? Land.Rails[Train.Rail].B : Land.Rails[Train.Rail].A].Center.X, Data.Regions[Train.bBackward ? Land.Rails[Train.Rail].B : Land.Rails[Train.Rail].A].Center.Y, 0.2));
+}
+
 void ACampaignMapActor::BuildRailways()
 {
 	RailMesh->ClearAllMeshSections();
@@ -3357,6 +3484,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 {
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSorties();
+	UpdateTrains(CameraFocus, CameraDistance);
 	// The showpiece turns slowly on its stand.
 	if (ShowMesh && !ShowModel.IsEmpty() && GetWorld())
 	{

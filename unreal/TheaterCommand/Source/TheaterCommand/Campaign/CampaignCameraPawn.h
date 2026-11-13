@@ -72,7 +72,7 @@ public:
 
 	/** How strongly the far and near parts of the view fall out of focus. This is what makes the table read as a model. */
 	UPROPERTY(EditAnywhere, Category = "Camera")
-	float MiniatureStrength = 20.0f;
+	float MiniatureStrength = 13.0f;
 
 private:
 	void ApplyView();

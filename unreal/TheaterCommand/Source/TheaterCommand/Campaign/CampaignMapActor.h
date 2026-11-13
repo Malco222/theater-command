@@ -272,6 +272,18 @@ private:
 	};
 	TArray<FFlight> Flights;
 	void UpdateSorties();
+	/** A little train on the railway: which link it is on, when it set out, and which way it is going. */
+	struct FTrain
+	{
+		int32 Rail = INDEX_NONE;
+		bool bBackward = false; // from the link's second province to its first
+		double Began = 0.0;
+		int32 Links = 0; // how many links it has run so far
+		TObjectPtr<UProceduralMeshComponent> Mesh;
+	};
+	TArray<FTrain> Trains;
+	double NextTrain = 0.0;
+	void UpdateTrains(const FVector& CameraFocus, float CameraDistance);
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LanesMesh;
 	FString ShownLanes; // what is drawn now, to tell when it has changed
