@@ -6,6 +6,8 @@
 #include "Campaign/CampaignTextures.h"
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
@@ -110,6 +112,50 @@ ACampaignMapActor::ACampaignMapActor()
 	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
 	SortieMesh = MakeMesh(TEXT("Sorties"), true);
+
+	// The studio, far above the table and seen by nothing but its own cameras.
+	auto MakeStage = [this, &MakeMesh](const TCHAR* Name, const FVector& Where)
+	{
+		UProceduralMeshComponent* Stage = MakeMesh(Name, false);
+		Stage->SetRelativeLocation(Where);
+		Stage->SetVisibleInSceneCaptureOnly(true);
+		return Stage;
+	};
+	auto MakeStudioCamera = [this](const TCHAR* Name, UProceduralMeshComponent* Stage, bool bEveryFrame)
+	{
+		USceneCaptureComponent2D* Camera = CreateDefaultSubobject<USceneCaptureComponent2D>(Name);
+		Camera->SetupAttachment(Root);
+		Camera->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+		Camera->ShowOnlyComponents.Add(Stage);
+		Camera->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+		Camera->bCaptureEveryFrame = false;
+		Camera->bCaptureOnMovement = false;
+		Camera->bAlwaysPersistRenderingState = bEveryFrame;
+		Camera->FOVAngle = 20.0f;
+		// A plain, steady picture: the lamp and the light of the room, and nothing that needs several frames to settle.
+		Camera->ShowFlags.SetTemporalAA(false);
+		Camera->ShowFlags.SetMotionBlur(false);
+		Camera->ShowFlags.SetBloom(false);
+		Camera->ShowFlags.SetFog(false);
+		Camera->ShowFlags.SetAtmosphere(false);
+		Camera->ShowFlags.SetGlobalIllumination(false);
+		Camera->ShowFlags.SetLumenReflections(false);
+		Camera->ShowFlags.SetScreenSpaceReflections(false);
+		Camera->ShowFlags.SetGrain(false);
+		Camera->ShowFlags.SetVignette(false);
+		Camera->PostProcessSettings.bOverride_AutoExposureMethod = true;
+		Camera->PostProcessSettings.AutoExposureMethod = AEM_Manual;
+		Camera->PostProcessSettings.bOverride_AutoExposureApplyPhysicalCameraExposure = true;
+		Camera->PostProcessSettings.AutoExposureApplyPhysicalCameraExposure = false;
+		Camera->PostProcessSettings.bOverride_AutoExposureBias = true;
+		Camera->PostProcessSettings.AutoExposureBias = -0.9f;
+		Camera->PostProcessBlendWeight = 1.0f;
+		return Camera;
+	};
+	PortraitMesh = MakeStage(TEXT("PortraitStage"), FVector(0.0, 0.0, 60000.0));
+	PortraitCamera = MakeStudioCamera(TEXT("PortraitCamera"), PortraitMesh, false);
+	ShowMesh = MakeStage(TEXT("ShowStage"), FVector(6000.0, 0.0, 60000.0));
+	ShowCamera = MakeStudioCamera(TEXT("ShowCamera"), ShowMesh, true);
 	HighlightMesh = MakeMesh(TEXT("Highlight"), false);
 	OrdersMesh = MakeMesh(TEXT("Orders"), false);
 
@@ -2177,6 +2223,111 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 	Buffers.Commit(LanesMesh, 0, HighlightMaterial);
 }
 
+FString ACampaignMapActor::ModelFor(const FString& Nation, const FString& Kind)
+{
+	if (Kind == TEXT("arm")) { return FMiniatureMesh::MainTankOf(Nation); }
+	if (Kind == TEXT("heavy")) { return Nation == TEXT("GER") ? FString(TEXT("Tiger")) : FMiniatureMesh::MainTankOf(Nation); }
+	if (Kind == TEXT("art")) { return FMiniatureMesh::MainGunOf(Nation); }
+	if (Kind == TEXT("mot")) { return FMiniatureMesh::MainCarrierOf(Nation); }
+	if (Kind == TEXT("cav")) { return TEXT("Rider:") + Nation; }
+	if (Kind == TEXT("eng")) { return TEXT("Pioneer:") + Nation; }
+	return TEXT("Soldier:") + Nation;
+}
+
+bool ACampaignMapActor::StageModel(const FString& Model, UProceduralMeshComponent* Stage, double& OutRadius)
+{
+	if (!Stage)
+	{
+		return false;
+	}
+	// Everything is built to one scale, a hundred units to the metre, and then set with its middle at the stage's.
+	const double Metre = 100.0;
+	FMiniatureMesh Built;
+	FString Kind, Tag;
+	if (Model.Split(TEXT(":"), &Kind, &Tag) && (Kind == TEXT("Soldier") || Kind == TEXT("Rider") || Kind == TEXT("Pioneer")))
+	{
+		if (Kind == TEXT("Rider")) { Built.Rider(Tag, FVector::ZeroVector, Metre, 0.0, true); }
+		else if (Kind == TEXT("Pioneer")) { Built.Pioneer(Tag, FVector::ZeroVector, Metre, 0.0, true); }
+		else { Built.Soldier(Tag, FVector::ZeroVector, Metre, 0.0, true); }
+	}
+	else if (!Built.Vehicle(Model, FVector::ZeroVector, Metre, 0.0, true))
+	{
+		return false;
+	}
+	if (Built.Vertices.Num() == 0)
+	{
+		return false;
+	}
+	const FBox Box(Built.Vertices);
+	const FVector Middle = Box.GetCenter();
+	for (FVector& Point : Built.Vertices)
+	{
+		Point -= Middle;
+	}
+	OutRadius = Box.GetExtent().Size();
+	Stage->ClearAllMeshSections();
+	Stage->CreateMeshSection(0, Built.Vertices, Built.Triangles, Built.Normals, TArray<FVector2D>(), Built.Colors, TArray<FProcMeshTangent>(), false);
+	Stage->SetMaterial(0, SceneryMaterial);
+	return true;
+}
+
+void ACampaignMapActor::AimStudioCamera(USceneCaptureComponent2D* Camera, const FVector& Middle, double Radius)
+{
+	// From in front, a little to one side and above: the three-quarter view a model is photographed from.
+	// (a model's front is toward -X and its right toward -Y)
+	const FVector From = FVector(-0.78, -0.5, 0.36).GetSafeNormal();
+	const double Back = Radius / FMath::Tan(FMath::DegreesToRadians(Camera->FOVAngle * 0.5)) * 1.02;
+	const FVector Eye = Middle + From * Back;
+	Camera->SetRelativeLocationAndRotation(Eye, (Middle - Eye).Rotation());
+}
+
+UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model)
+{
+	if (const TObjectPtr<UTextureRenderTarget2D>* Kept = Portraits.Find(Model))
+	{
+		return Kept->Get();
+	}
+	UTextureRenderTarget2D* Picture = nullptr;
+	double Radius = 100.0;
+	if (PortraitMesh && PortraitCamera && StageModel(Model, PortraitMesh, Radius))
+	{
+		Picture = NewObject<UTextureRenderTarget2D>(this);
+		Picture->ClearColor = FLinearColor(0.03f, 0.028f, 0.024f, 1.0f);
+		Picture->InitCustomFormat(184, 112, PF_B8G8R8A8, false);
+		Picture->UpdateResourceImmediate(true);
+		AimStudioCamera(PortraitCamera, PortraitMesh->GetRelativeLocation(), Radius);
+		PortraitCamera->TextureTarget = Picture;
+		PortraitCamera->CaptureScene();
+	}
+	Portraits.Add(Model, Picture); // (kept even when there is none, so that it is not tried again every frame)
+	return Picture;
+}
+
+void ACampaignMapActor::SetShowpiece(const FString& Model)
+{
+	if (Model == ShowModel || !ShowMesh || !ShowCamera)
+	{
+		return;
+	}
+	ShowModel = Model;
+	double Radius = 100.0;
+	if (Model.IsEmpty() || !StageModel(Model, ShowMesh, Radius))
+	{
+		ShowModel.Reset();
+		return;
+	}
+	if (!ShowTarget)
+	{
+		ShowTarget = NewObject<UTextureRenderTarget2D>(this);
+		ShowTarget->ClearColor = FLinearColor(0.03f, 0.028f, 0.024f, 1.0f);
+		ShowTarget->InitCustomFormat(420, 260, PF_B8G8R8A8, false);
+		ShowTarget->UpdateResourceImmediate(true);
+	}
+	AimStudioCamera(ShowCamera, ShowMesh->GetRelativeLocation(), Radius);
+	ShowCamera->TextureTarget = ShowTarget;
+	ShowCamera->CaptureScene();
+}
+
 void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 {
 	if (!GetWorld() || !Data.Regions.IsValidIndex(Sortie.From))
@@ -2626,6 +2777,20 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 {
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSorties();
+	// The showpiece turns slowly on its stand.
+	if (ShowMesh && !ShowModel.IsEmpty() && GetWorld())
+	{
+		ShowTurn = FMath::Fmod(ShowTurn + 28.0 * GetWorld()->GetDeltaSeconds(), 360.0);
+		ShowMesh->SetRelativeRotation(FRotator(0.0, ShowTurn, 0.0));
+		// Its picture is taken afresh about twenty times a second: smooth enough to the eye, and a third of the work.
+		static double LastTaken = 0.0;
+		const double Clock = GetWorld()->GetTimeSeconds();
+		if (ShowCamera && ShowTarget && Clock - LastTaken > 0.05)
+		{
+			LastTaken = Clock;
+			ShowCamera->CaptureScene();
+		}
+	}
 
 	// The land's tiles: fine near what the eye looks at, coarse far from it.
 	UpdateLand(CameraDistance, CameraFocus, false);

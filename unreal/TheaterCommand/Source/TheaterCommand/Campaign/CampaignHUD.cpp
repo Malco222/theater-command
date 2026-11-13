@@ -8,6 +8,8 @@
 #include "Styling/CoreStyle.h"
 #include "Styling/SlateTypes.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Widgets/SLeafWidget.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
@@ -57,6 +59,38 @@ namespace
 	 * The panels drawn over the campaign table. Most of them only show things and let clicks through to the
 	 * map; the army tray and the End Month button take the mouse.
 	 */
+	/** A picture taken in the studio, drawn without regard to its alpha (a scene capture leaves that empty). */
+	class SPortrait : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SPortrait) {}
+			SLATE_ARGUMENT(TSharedPtr<FSlateBrush>, Picture)
+			SLATE_ARGUMENT(FVector2D, Size)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Picture = Args._Picture;
+			Size = Args._Size;
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override { return Size; }
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
+			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
+		{
+			if (Picture.IsValid() && Picture->GetResourceObject())
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Picture.Get(), ESlateDrawEffect::IgnoreTextureAlpha, InWidgetStyle.GetColorAndOpacityTint());
+			}
+			return LayerId;
+		}
+
+	private:
+		TSharedPtr<FSlateBrush> Picture;
+		FVector2D Size = FVector2D(64.0, 40.0);
+	};
+
 	class SCampaignOverlay : public SCompoundWidget
 	{
 	public:
@@ -1513,6 +1547,36 @@ namespace
 				];
 
 				Cards->ClearChildren();
+				// The model of the corps pointed at, large and turning, with its name under it.
+				if (ACampaignMapActor* Table = Controller->GetMap())
+				{
+					if (UTextureRenderTarget2D* Stand = Table->GetShowpiece())
+					{
+						if (!ShowBrush.IsValid())
+						{
+							ShowBrush = MakeShared<FSlateBrush>();
+							ShowBrush->ImageSize = FVector2D(420.0, 260.0);
+							ShowBrush->DrawAs = ESlateBrushDrawType::Image;
+						}
+						ShowBrush->SetResourceObject(Stand);
+						Cards->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+						[
+							SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f))
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()[SNew(SPortrait).Picture(ShowBrush).Size(FVector2D(194.0, 120.0))]
+								+ SVerticalBox::Slot().AutoHeight().Padding(2.0f, 4.0f, 2.0f, 0.0f)
+								[
+									SNew(SBox).WidthOverride(190.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted).AutoWrapText(true)
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetShowTitle() : FText::GetEmpty(); })
+									]
+								]
+							]
+						];
+					}
+				}
 				for (const FTrayCard& Card : Controller->GetArmyTray().Cards)
 				{
 					Cards->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 8.0f, 0.0f)
@@ -3385,6 +3449,26 @@ namespace
 				];
 		}
 
+		/** The studio's picture of a model, as something to draw; null if there is no such model. Kept once made. */
+		TSharedPtr<FSlateBrush> PortraitOf(const FString& Model)
+		{
+			if (const TSharedPtr<FSlateBrush>* Kept = PortraitBrushes.Find(Model))
+			{
+				return *Kept;
+			}
+			TSharedPtr<FSlateBrush> Made;
+			ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
+			if (UTextureRenderTarget2D* Picture = Table ? Table->GetPortrait(Model) : nullptr)
+			{
+				Made = MakeShared<FSlateBrush>();
+				Made->SetResourceObject(Picture);
+				Made->ImageSize = FVector2D(184.0, 112.0);
+				Made->DrawAs = ESlateBrushDrawType::Image;
+			}
+			PortraitBrushes.Add(Model, Made);
+			return Made;
+		}
+
 		/** A small picture of a kind of troops, made of plain shapes: a tank, a gun, a lorry, a horseman, men on foot. */
 		TSharedRef<SWidget> KindPicture(const FString& Kind, const FLinearColor& Ink)
 		{
@@ -3501,9 +3585,16 @@ namespace
 				*Card.Name.ToString(), *Card.Kind.ToString(), Card.Divisions, Card.Divisions == 1 ? TEXT("") : TEXT("s"),
 				FMath::RoundToInt32(Card.Strength * 100.0f), FMath::RoundToInt32(Card.Morale * 100.0f), *Card.Grade.ToString());
 
+			// The picture on each card is the game's own model of what the division is: this nation's tank of the
+			// year, its gun, its soldier. Where there is no model yet, a plain drawing stands in.
+			const FString Model = ACampaignMapActor::ModelFor(Controller.IsValid() ? Controller->GetArmyTray().Tag : FString(), Card.KindId);
+			const TSharedPtr<FSlateBrush> Portrait = PortraitOf(Model);
 			TSharedRef<SHorizontalBox> Divisions = SNew(SHorizontalBox);
 			for (int32 Division = 0; Division < FMath::Clamp(Card.Divisions, 1, 12); ++Division)
 			{
+				const TSharedRef<SWidget> Picture = Portrait.IsValid()
+					? StaticCastSharedRef<SWidget>(SNew(SPortrait).Picture(Portrait).Size(FVector2D(74.0, 45.0)))
+					: KindPicture(Card.KindId == TEXT("heavy") ? FString(TEXT("arm")) : Card.KindId, Ink);
 				TSharedRef<SHorizontalBox> Stripes = SNew(SHorizontalBox);
 				for (int32 Pip = 0; Pip < 5; ++Pip)
 				{
@@ -3517,7 +3608,7 @@ namespace
 					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f))
 					[
 						SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight()[KindPicture(Card.KindId, Ink)]
+						+ SVerticalBox::Slot().AutoHeight()[Picture]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)[Meter(Card.Strength, bGoing ? StrengthInk : Faint, TEXT("Strength"))]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[Meter(Card.Morale, bGoing ? MoraleInk : Faint, TEXT("Morale"))]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)[Stripes]
@@ -3527,6 +3618,7 @@ namespace
 
 			return SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(8.0f, 6.0f, 4.0f, 7.0f))
 				.IsFocusable(false).IsEnabled(Card.bCanOrder).ToolTipText(FText::FromString(Tip))
+				.OnHovered_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->ShowCorpsModel(Id); } })
 				.OnClicked_Lambda([this, Id = Card.CorpsId]()
 				{
 					if (Controller.IsValid())
@@ -3611,6 +3703,8 @@ namespace
 		FButtonStyle PlateButton;
 		TSharedPtr<SHorizontalBox> ArsenalColumns;
 		int32 ShownArsenal = -1;
+		TMap<FString, TSharedPtr<FSlateBrush>> PortraitBrushes;
+		TSharedPtr<FSlateBrush> ShowBrush;
 		TSharedPtr<SVerticalBox> PageBody;
 		int32 ShownRoom = -1;
 		TSharedPtr<SVerticalBox> GeneralsList;

@@ -344,6 +344,9 @@ public:
 	FText GetHoverTip() const { return HoverTip; }
 	/** Where the pointer is, in the window's own pixels. */
 	FVector2D GetPointer() const { return LastMouse; }
+	/** Shows the model of one of the corps in hand large and turning beside the cards. */
+	void ShowCorpsModel(int32 CorpsId);
+	FText GetShowTitle() const { return ShowTitle; }
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
 	/** Whether every nation's move is watched at the end of a month, or only what touches the player. */
@@ -506,6 +509,8 @@ private:
 	bool bTurning = false;
 	bool bHaveLastMouse = false;
 	FText HoverTip;
+	FText ShowTitle;
+	int32 ShowCorps = INDEX_NONE;
 	int32 HoverTipRegion = INDEX_NONE;
 	bool bWatchAll = true; // watch every nation's move at the month's end; V switches to only what touches the player
 	TMap<int32, int32> WatchStood; // where each corps stood at the last step watched, to see who has marched

@@ -9,6 +9,8 @@
 #include "CampaignMapActor.generated.h"
 
 class UProceduralMeshComponent;
+class USceneCaptureComponent2D;
+class UTextureRenderTarget2D;
 class UTextRenderComponent;
 class UStaticMeshComponent;
 class UInstancedStaticMeshComponent;
@@ -128,6 +130,21 @@ public:
 	/** Draws the shipping lanes over the sea: pale where the cargoes get through, amber where raiders are at them, red where the lane is cut. */
 	void ShowLanes(const TArray<FViewLane>& Lanes);
 
+	/**
+	 * A picture of one of the game's own models, for a unit's card: taken once for each model and kept. The name is
+	 * a vehicle's, an aircraft's or a ship's ("PanzerIV", "B17", "Battleship:UK"), or a figure's ("Soldier:GER",
+	 * "Rider:POL", "Pioneer:GER").
+	 */
+	UTextureRenderTarget2D* GetPortrait(const FString& Model);
+
+	/** The model that stands for a kind of corps of a nation, as it is this year: its tank, its gun, its soldier. */
+	static FString ModelFor(const FString& Nation, const FString& Kind);
+
+	/** The model shown large and slowly turning beside the cards; empty for none. */
+	void SetShowpiece(const FString& Model);
+	UTextureRenderTarget2D* GetShowpiece() const { return ShowTarget; }
+	const FString& GetShowpieceModel() const { return ShowModel; }
+
 	/** Aircraft take off from their airfield, fly to the target and come home, over some seconds. */
 	void FlySortie(const FSortie& Sortie);
 
@@ -195,6 +212,24 @@ private:
 	TObjectPtr<UProceduralMeshComponent> RailMesh;
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> WorksMesh;
+	// The studio: a place far above the table where a model is set alone before a camera, for its picture.
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> PortraitMesh;
+	UPROPERTY()
+	TObjectPtr<USceneCaptureComponent2D> PortraitCamera;
+	UPROPERTY()
+	TMap<FString, TObjectPtr<UTextureRenderTarget2D>> Portraits;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> ShowMesh;
+	UPROPERTY()
+	TObjectPtr<USceneCaptureComponent2D> ShowCamera;
+	UPROPERTY()
+	TObjectPtr<UTextureRenderTarget2D> ShowTarget;
+	FString ShowModel;
+	double ShowTurn = 0.0;
+	/** Sets a model alone on a mesh, its middle at the mesh's own middle; says how big it is. False if there is none of that name. */
+	bool StageModel(const FString& Model, UProceduralMeshComponent* Stage, double& OutRadius);
+	void AimStudioCamera(USceneCaptureComponent2D* Camera, const FVector& Middle, double Radius);
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> SortieMesh;
 	struct FFlight

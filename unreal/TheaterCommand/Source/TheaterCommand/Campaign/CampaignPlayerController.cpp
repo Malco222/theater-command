@@ -1,4 +1,5 @@
 #include "Campaign/CampaignPlayerController.h"
+#include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignSounds.h"
 
 #include "Campaign/ArmyPiece.h"
@@ -1188,6 +1189,31 @@ void ACampaignPlayerController::ToggleWatchAll()
 	Notify(bWatchAll ? TEXT("At the end of a month you will watch every nation's moves and battles.") : TEXT("Quick months: you will be shown only what touches you. The rest is in the news."), 5.0);
 }
 
+void ACampaignPlayerController::ShowCorpsModel(int32 CorpsId)
+{
+	if (CorpsId == ShowCorps || !Map.IsValid())
+	{
+		return;
+	}
+	const FTrayCard* Card = Tray.Cards.FindByPredicate([CorpsId](const FTrayCard& Each) { return Each.CorpsId == CorpsId; });
+	if (!Card)
+	{
+		ShowCorps = INDEX_NONE;
+		ShowTitle = FText::GetEmpty();
+		Map->SetShowpiece(FString());
+		return;
+	}
+	ShowCorps = CorpsId;
+	const FString Model = ACampaignMapActor::ModelFor(Tray.Tag, Card->KindId);
+	Map->SetShowpiece(Model);
+	FString Title = Model.StartsWith(TEXT("Soldier:")) ? FString(TEXT("Infantry")) : Model.StartsWith(TEXT("Rider:")) ? FString(TEXT("Cavalry")) : Model.StartsWith(TEXT("Pioneer:")) ? FString(TEXT("Engineers")) : FMiniatureMesh::VehicleTitle(Model);
+	if (Title.IsEmpty())
+	{
+		Title = Card->Kind.ToString();
+	}
+	ShowTitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Card->Name.ToString(), *Title));
+}
+
 void ACampaignPlayerController::NextArmy()
 {
 	FCampaignSession* Session = GetSession();
@@ -1876,6 +1902,11 @@ void ACampaignPlayerController::RefreshOrders()
 	FCampaignSession* Session = GetSession();
 	++Tray.Revision;
 	Tray.bVisible = false;
+	if (Map.IsValid() && ArmyRegion == INDEX_NONE)
+	{
+		Map->SetShowpiece(FString()); // nothing in hand: the studio's camera rests
+		ShowCorps = INDEX_NONE;
+	}
 	Tray.Cards.Reset();
 	Reach.Reset();
 	RouteTarget = INDEX_NONE;
@@ -1919,7 +1950,7 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Kind = FText::FromString(FCampaignMapData::CorpsKindLabel(Unit.Kind));
 		Card.Divisions = Unit.Divisions;
 		Card.Strength = Unit.Strength;
-		Card.KindId = Unit.Elite == TEXT("heavy") ? FString(TEXT("arm")) : Unit.Kind;
+		Card.KindId = Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy")) : Unit.Kind;
 		Card.Morale = Unit.Cohesion;
 		Card.Experience = Unit.Experience;
 		Card.Moves = Unit.Moves;
@@ -1967,6 +1998,13 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	Tray.bByRail = bByRail;
 	Tray.bBySea = bBySea;
+	// The model of one of its corps stands beside the cards: the one last pointed at, or the first.
+	{
+		const bool bStill = Tray.Cards.ContainsByPredicate([this](const FTrayCard& Card) { return Card.CorpsId == ShowCorps; });
+		const int32 Wanted = bStill ? ShowCorps : (Tray.Cards.Num() > 0 ? Tray.Cards[0].CorpsId : INDEX_NONE);
+		ShowCorps = INDEX_NONE; // so that it is set afresh
+		ShowCorpsModel(Wanted);
+	}
 
 	if (bBySea)
 	{
