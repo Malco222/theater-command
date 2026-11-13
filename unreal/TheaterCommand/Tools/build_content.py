@@ -347,7 +347,13 @@ def build_sea():
     m = new_material("M_Sea")
     uv = node(m, unreal.MaterialExpressionTextureCoordinate, -1800, 0)
     water = picture(m, "Water", uv, -1400, 0)
-    to_property(water, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+    # A thin white line of surf just off every shore: the picture's alpha is how far offshore a point is (1 at six
+    # map units), and the surf lies between about a tenth of a unit and two thirds of one.
+    rising = one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, (water, "A"), 40.0, -1150, -260), -0.48, -1000, -260), -850, -260)
+    falling = one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, (water, "A"), -16.0, -1150, -140), 1.76, -1000, -140), -850, -140)
+    surf = times(m, times(m, rising, falling, -700, -200), scalar(m, "Surf", 0.6, -850, -60), -550, -200)
+    colour = lerp(m, (water, "RGB"), vector(m, "SurfColour", (0.86, 0.9, 0.86, 1.0), -850, -400), surf, -400, -100)
+    to_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     first_uv = node(m, unreal.MaterialExpressionPanner, -1400, 400, speed_x=0.011, speed_y=0.006)
     connect(world_uv(m, "RippleTiling", 0.0095, -2200, 400), "", first_uv, "Coordinate")

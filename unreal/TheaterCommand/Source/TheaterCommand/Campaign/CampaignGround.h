@@ -26,7 +26,10 @@ class FCampaignTerrain;
  *           much more wash a nation of little colour needs to be read
  *   Masks   how much bare rock (red), snow (green), shore sand (blue) and dry
  *           country (alpha)
- * and a coarser picture, Water, of the colour of the sea.
+ * and a picture, Water, of the colour of the sea: pale over the shelves, dark
+ * over the deeps, turquoise in the shallows, with how far offshore a point is
+ * in its alpha (0 at the shore, 1 at six map units and beyond), from which the
+ * sea's material draws the line of surf.
  */
 class FCampaignGround
 {
@@ -45,7 +48,7 @@ public:
 	TArray<FColor> Masks;
 
 	/** The sea's colour, one pixel every WaterStep map units. */
-	double WaterStep = 3.0;
+	double WaterStep = 1.5;
 	int32 WaterNX = 0;
 	int32 WaterNY = 0;
 	TArray<FColor> Water;

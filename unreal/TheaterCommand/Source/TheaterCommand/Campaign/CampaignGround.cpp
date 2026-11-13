@@ -290,21 +290,21 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			const float Rock = FMath::Min(0.85f, 0.72f * FMath::SmoothStep(0.16f, 0.62f, Steepness) * FMath::SmoothStep(0.7f, 2.2f, H)
 				+ 0.3f * FMath::SmoothStep(3.6f, 5.4f, H));
 			const float Snow = 0.9f * FMath::SmoothStep(5.0f, 6.6f, H) * (1.0f - 0.5f * Steepness);
-			const float Sand = 0.45f * (1.0f - FMath::SmoothStep(0.2f, 1.8f, Shore));
+			const float Sand = 0.35f * (1.0f - FMath::SmoothStep(0.1f, 0.75f, Shore)); // (a thin strand, not a halo round every coast)
 
 			// Woods stand in patches: nearly everywhere in forest country, a copse here and there in the open,
 			// none above the tree line, on bare rock, on the beach or in the sea.
 			const float Patch = 0.5f + 0.5f * (0.65f * FMath::PerlinNoise2D(P * 0.045) + 0.35f * FMath::PerlinNoise2D(P * 0.13 + FVector2D(31.0, -17.0)));
 			float Wooded = FMath::SmoothStep(0.42f, 0.58f, Patch + (Woods[Idx] - 0.5f) * 0.82f);
-			Wooded *= (1.0f - FMath::SmoothStep(2.6f, 3.8f, H)) * (1.0f - Rock) * (1.0f - Sand / 0.45f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
+			Wooded *= (1.0f - FMath::SmoothStep(2.6f, 3.8f, H)) * (1.0f - Rock) * (1.0f - Sand / 0.35f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
 
 			// Shaded relief, as on a printed map: how squarely the ground faces the sun (1 on the flat, up to 2.2
 			// on a slope turned full to it, nothing on one turned away), less where a shadow is thrown across it,
 			// and a little less on a valley floor than on a crest.
 			const int32 IW = FMath::Max(I - 1, 0), IE = FMath::Min(I + 1, NX - 1), JN = FMath::Max(J - 1, 0), JS = FMath::Min(J + 1, NY - 1);
 			const float Rough = 0.5f * FMath::PerlinNoise2D(P * 0.33) * FMath::Clamp(Steepness * 30.0f, 0.0f, 26.0f); // (broken ground on the steeps)
-			const float SlopeX = (Squeezed[Terrain.Index(IE, J)] - Squeezed[Terrain.Index(IW, J)]) / static_cast<float>((IE - IW) * Terrain.Cell) + Rough * 0.2f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(3.0, 9.0));
-			const float SlopeY = (Squeezed[Terrain.Index(I, JS)] - Squeezed[Terrain.Index(I, JN)]) / static_cast<float>((JS - JN) * Terrain.Cell) + Rough * 0.2f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(17.0, 1.0));
+			const float SlopeX = (Squeezed[Terrain.Index(IE, J)] - Squeezed[Terrain.Index(IW, J)]) / static_cast<float>((IE - IW) * Terrain.Cell) + Rough * 0.13f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(3.0, 9.0));
+			const float SlopeY = (Squeezed[Terrain.Index(I, JS)] - Squeezed[Terrain.Index(I, JN)]) / static_cast<float>((JS - JN) * Terrain.Cell) + Rough * 0.13f * FMath::PerlinNoise2D(P * 0.7 + FVector2D(17.0, 1.0));
 			const FVector3f Leaning = FVector3f(-SlopeX * ReliefStrength(), -SlopeY * ReliefStrength(), 1.0f).GetSafeNormal();
 			float Sun = FMath::Clamp(FVector3f::DotProduct(Leaning, ToSun) / ToSun.Z, 0.0f, 2.2f);
 			Sun *= 1.0f - 0.42f * Thrown[Idx];
@@ -328,28 +328,65 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	Tint.SetNumUninitialized(Count);
 	PaintTint(Data, Terrain, 0, 0, NX - 1, NY - 1);
 
-	// The sea. The water pales toward every coast, the way a chart shows shoal water. Where the real depth
-	// is known the shading follows it: the North Sea and the Baltic lie pale on their shelf, the Atlantic
-	// and the deep basins of the Mediterranean dark.
+	// The sea, by its depth: pale teal over the shelves (the North Sea and the Baltic), darkening through the
+	// slopes to the abyss; the sea floor faintly shaded by the same sun as the land; a little unevenness for the
+	// swell; pale turquoise in the shallows for about three map units out; and the land's shadow on the water
+	// on the side away from the sun. The alpha is how far offshore the point is, for the line of surf.
 	WaterNX = FMath::CeilToInt32(Data.Width / WaterStep) + 1;
 	WaterNY = FMath::CeilToInt32(Data.Height / WaterStep) + 1;
 	Water.SetNumUninitialized(WaterNX * WaterNY);
-	const FLinearColor Deep = FromHex(TEXT("15304A"));
-	const FLinearColor Shallow = FromHex(TEXT("356E80"));
+	const FVector2D SunOnMap = FVector2D(ToSun.X, ToSun.Y).GetSafeNormal();
+	// (The lens crushes the darkest of a colour's three parts, which takes the red out of deep blue water and
+	// turns it harsh; so the darks of the sea's paint are lifted a little before it goes on, and it comes out
+	// the colour it was meant to be. "-TheaterSea=0.1,0.95" tries a greying and another strength.)
+	float SeaGrey = 0.0f, SeaStrength = 0.95f;
+	{
+		FString Asked;
+		TArray<FString> Parts;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSea="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
+		{
+			SeaGrey = FCString::Atof(*Parts[0]);
+			SeaStrength = FCString::Atof(*Parts[1]);
+		}
+	}
 	ParallelFor(WaterNY, [&](int32 J)
 	{
+		static const float Stops[] = { 0.0f, 0.22f, 0.5f, 0.8f, 1.0f };
+		static const FSeen Blues[] = { FSeen::Bytes(86, 160, 160), FSeen::Bytes(52, 126, 144), FSeen::Bytes(30, 86, 116), FSeen::Bytes(17, 52, 82), FSeen::Bytes(11, 34, 60) };
 		for (int32 I = 0; I < WaterNX; ++I)
 		{
 			const double X = FMath::Min(I * WaterStep, Data.Width);
 			const double Y = FMath::Min(J * WaterStep, Data.Height);
 			const float OffShore = -Terrain.ShoreAt(X, Y);
-			float Depth = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp(OffShore / 9.0f, 0.0f, 1.0f));
+			auto Bed = [&Terrain](double AtX, double AtY) { return FMath::Min(Terrain.MetresAt(AtX, AtY), 0.0f); };
+			float Deep = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp(OffShore / 40.0f, 0.0f, 1.0f));
+			float Floor = 1.0f;
 			if (Terrain.HasElevation())
 			{
-				const float Fathomed = FMath::Clamp(FMath::Pow(FMath::Max(-Terrain.MetresAt(X, Y), 0.0f) / 3200.0f, 0.42f), 0.0f, 1.0f);
-				Depth = FMath::Min(Depth, 0.25f + 0.75f * Fathomed) * FMath::Lerp(0.55f, 1.0f, Fathomed);
+				Deep = FMath::Pow(FMath::Clamp(-Bed(X, Y) / 3200.0f, 0.0f, 1.0f), 0.55f);
+				const float SlopeX = (Bed(X + 1.5, Y) - Bed(X - 1.5, Y)) / 3.0f, SlopeY = (Bed(X, Y + 1.5) - Bed(X, Y - 1.5)) / 3.0f;
+				Floor = FMath::Clamp(1.0f - 0.004f * (SlopeX * static_cast<float>(SunOnMap.X) + SlopeY * static_cast<float>(SunOnMap.Y)), 0.82f, 1.2f);
 			}
-			Water[J * WaterNX + I] = FMath::Lerp(Shallow, Deep, FMath::Pow(Depth, 0.7f)).ToFColor(true);
+			FSeen C = Blues[4];
+			for (int32 K = 1; K < 5; ++K)
+			{
+				if (Deep <= Stops[K])
+				{
+					C = Mix(Blues[K - 1], Blues[K], (Deep - Stops[K - 1]) / (Stops[K] - Stops[K - 1]));
+					break;
+				}
+			}
+			const float Swell = 0.955f + 0.045f * (1.0f + FMath::PerlinNoise2D(FVector2D(X, Y) * 0.11));
+			C = C * (Floor * Swell);
+			C = Mix(C, FSeen::Bytes(120, 190, 184), 0.5f * FMath::Pow(FMath::Clamp(1.0f - OffShore / 3.2f, 0.0f, 1.0f), 1.2f));
+			// The land's shadow: darker where the land stands between this water and the sun.
+			const float Lee = Terrain.CoverageAt(X + SunOnMap.X * 1.3, Y + SunOnMap.Y * 1.3) * (1.0f - Terrain.CoverageAt(X, Y));
+			C = C * (1.0f - 0.3f * FMath::Clamp(Lee * 1.6f, 0.0f, 1.0f));
+			const float Grey = C.Light();
+			auto Lift = [](float Part) { return Part + 0.031f * FMath::Max(0.0f, 1.0f - Part / 0.5f); };
+			C = FSeen(Lift(C.R), Lift(C.G) * 0.92f, Lift(C.B) * 0.98f);
+			C = Mix(C, FSeen(Grey, Grey, Grey), SeaGrey) * SeaStrength;
+			Water[J * WaterNX + I] = FColor(ToByte(C.R), ToByte(C.G), ToByte(C.B), ToByte(FMath::Clamp(OffShore / 6.0f, 0.0f, 1.0f)));
 		}
 	});
 }

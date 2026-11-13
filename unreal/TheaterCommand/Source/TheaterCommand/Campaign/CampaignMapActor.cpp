@@ -753,6 +753,9 @@ void ACampaignMapActor::BuildBorders()
 	// firmly; a province line is faint (how faint depends on how high the eye is: see UpdateForCamera).
 	const FColor NationalInk = FromHex(TEXT("1E1612")).ToFColor(true);
 	const FColor RegionInk = FromHex(TEXT("1E1814")).ToFColor(false);
+	// (on a dark country the same faint line is drawn in the lettering's cream instead, so that a province edge
+	// can be found at working height without holding a key)
+	const FColor RegionInkPale = FromHex(TEXT("F4E8CC")).ToFColor(false);
 	const double Lift = 0.13;
 
 	FCampaignMeshBuffers Buffers, Faint;
@@ -790,7 +793,9 @@ void ACampaignMapActor::BuildBorders()
 				}
 				const bool bNational = Data.Regions[Other].Owner != Region.Owner;
 				const double HalfWidth = bNational ? 0.2 : 0.12; // (a frontier is a fine inked line: the band of stain beside it says whose side is whose)
-				const FColor Ink = bNational ? NationalInk : RegionInk;
+				const FCampaignNation* Whose = Data.FindNation(Region.Owner);
+				const bool bDarkGround = Whose && (0.30f * Whose->Color.R + 0.59f * Whose->Color.G + 0.11f * Whose->Color.B) / 255.0f < 0.42f;
+				const FColor Ink = bNational ? NationalInk : bDarkGround ? RegionInkPale : RegionInk;
 				FCampaignMeshBuffers& Into = bNational ? Buffers : Faint;
 				(bNational ? NationalCount : RegionCount)++;
 
@@ -1062,11 +1067,16 @@ void ACampaignMapActor::ShowWorks(const TArray<int32>& BridgesDown, const TArray
 void ACampaignMapActor::BuildWaterways()
 {
 	RiverMesh->ClearAllMeshSections();
-	// A river is a ribbon of water laid over the relief along its course: narrow at the source, broad at the
-	// mouth, its course rounded so it winds instead of turning corners, its banks a shade darker than midstream.
-	const FLinearColor MidstreamRuns = FromHex(TEXT("3E86B4")), BankRuns = FromHex(TEXT("2B5F86"));
+	// A river is a ribbon of water set into the land along its course: narrow at the source, broader at the
+	// mouth (a great river about a map unit and a quarter across, the rest under one), its course rounded and
+	// given a gentle wander so that it winds, blue-green, with a dark bank on either side.
+	// (the paint is laid on darker than it is meant to look, to suit the lamp, as the land's is)
+	const FLinearColor MidstreamRuns = FLinearColor(FColor(72, 104, 125)), BankRuns = FLinearColor(FColor(60, 88, 106));
+	const FColor Earth = FColor(26, 38, 36);
+	static const TSet<FString> Great = { TEXT("Rhine"), TEXT("Danube"), TEXT("Vistula"), TEXT("Dnieper"), TEXT("Volga"), TEXT("Don"), TEXT("Elbe"), TEXT("Oder"), TEXT("Loire"), TEXT("Seine"),
+		TEXT("Rhone"), TEXT("Po"), TEXT("Nile"), TEXT("Dvina"), TEXT("Niemen"), TEXT("Bug"), TEXT("Dniester") };
 	// (in the depth of winter the rivers freeze where the snow lies: ice, pale and dull, with a darker lead midstream)
-	const FLinearColor MidstreamIce = FromHex(TEXT("A9C3CF")), BankIce = FromHex(TEXT("DCE7EA"));
+	const FLinearColor MidstreamIce = FLinearColor(FColor(140, 162, 172)), BankIce = FLinearColor(FColor(186, 196, 199));
 	RiversDrawnFor = WinterHard;
 	const double Lift = 0.1;
 	FCampaignMeshBuffers Buffers;
@@ -1090,13 +1100,27 @@ void ACampaignMapActor::BuildWaterways()
 			}
 		}
 		Path.Add(River.Course.Last());
-		int32 Previous[3] = { INDEX_NONE, INDEX_NONE, INDEX_NONE };
+		// A little wander, so that a river does not run like a ruled line: nothing at its two ends, most in the
+		// middle, and never so much that it leaves its bridges.
+		{
+			const int32 Seed = GetTypeHash(River.Name) % 9973;
+			const TArray<FVector2D> Straight = Path;
+			for (int32 K = 1; K + 1 < Path.Num(); ++K)
+			{
+				const double T = static_cast<double>(K) / (Path.Num() - 1);
+				const FVector2D Along = (Straight[K + 1] - Straight[K - 1]).GetSafeNormal();
+				const double Wobble = 0.5 * FMath::Sin(T * 7.0 * UE_DOUBLE_TWO_PI + Seed) + 0.28 * FMath::Sin(T * 17.0 * UE_DOUBLE_TWO_PI + Seed * 1.7) + 0.16 * FMath::Sin(T * 31.0 * UE_DOUBLE_TWO_PI + Seed * 2.3);
+				Path[K] = Straight[K] + FVector2D(Along.Y, -Along.X) * Wobble * FMath::Sin(T * UE_DOUBLE_PI);
+			}
+		}
+		const double Broad = Great.Contains(River.Name) ? 0.625 : 0.425;
+		int32 Previous[5] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
 		for (int32 K = 0; K < Path.Num(); ++K)
 		{
 			const FVector2D Along = (Path[FMath::Min(K + 1, Path.Num() - 1)] - Path[FMath::Max(K - 1, 0)]).GetSafeNormal();
 			const FVector2D Side(Along.Y, -Along.X);
-			const double Half = FMath::Lerp(0.45, 1.25, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1)));
-			const FVector2D L = Path[K] + Side * Half, R = Path[K] - Side * Half;
+			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1)));
+			const double Shore = Half + 0.2; // the dark of the bank beside the water
 			// A river does not run over the sea: stop where the land does.
 			if (Terrain.HeightAt(Path[K].X, Path[K].Y) <= 0.0f && K > Path.Num() / 2)
 			{
@@ -1104,21 +1128,26 @@ void ACampaignMapActor::BuildWaterways()
 			}
 			const float Frozen = WinterHard >= 0.8f ? FMath::SmoothStep(0.45f, 0.8f, SnowLying(Path[K], WinterHard)) : 0.0f;
 			const FColor Midstream = FMath::Lerp(MidstreamRuns, MidstreamIce, Frozen).ToFColor(true), Bank = FMath::Lerp(BankRuns, BankIce, Frozen).ToFColor(true);
-			const int32 Here[3] = {
-				Buffers.AddVertex(SurfacePointOver(L.X, L.Y, Lift), FVector::UpVector, Bank),
-				Buffers.AddVertex(SurfacePointOver(Path[K].X, Path[K].Y, Lift), FVector::UpVector, Midstream),
-				Buffers.AddVertex(SurfacePointOver(R.X, R.Y, Lift), FVector::UpVector, Bank) };
+			const FVector2D Across[5] = { Path[K] + Side * Shore, Path[K] + Side * Half, Path[K], Path[K] - Side * Half, Path[K] - Side * Shore };
+			const FColor Inks[5] = { Earth, Bank, Midstream, Bank, Earth };
+			int32 Here[5];
+			for (int32 P = 0; P < 5; ++P)
+			{
+				// (the banks a hair lower than the water between them, so the water is never hidden by its bank)
+				Here[P] = Buffers.AddVertex(SurfacePointOver(Across[P].X, Across[P].Y, P == 0 || P == 4 ? Lift - 0.03 : Lift), FVector::UpVector, Inks[P]);
+			}
 			if (Previous[0] != INDEX_NONE)
 			{
-				for (int32 Strip = 0; Strip < 2; ++Strip)
+				for (int32 Strip = 0; Strip < 4; ++Strip)
 				{
 					Buffers.AddTriangleFacingUp(Previous[Strip], Previous[Strip + 1], Here[Strip]);
 					Buffers.AddTriangleFacingUp(Previous[Strip + 1], Here[Strip], Here[Strip + 1]);
 				}
 			}
-			Previous[0] = Here[0];
-			Previous[1] = Here[1];
-			Previous[2] = Here[2];
+			for (int32 P = 0; P < 5; ++P)
+			{
+				Previous[P] = Here[P];
+			}
 		}
 	}
 	if (!WaterMaterial)
