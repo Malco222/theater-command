@@ -458,6 +458,15 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetNumberField(TEXT("ca"), Fleet.Cruisers);
 			Entry->TryGetNumberField(TEXT("dd"), Fleet.Destroyers);
 			Entry->TryGetNumberField(TEXT("ss"), Fleet.Submarines);
+			Entry->TryGetNumberField(TEXT("home"), Fleet.Home);
+			const TArray<TSharedPtr<FJsonValue>>* Seas = nullptr;
+			if (Entry->TryGetArrayField(TEXT("reach"), Seas))
+			{
+				for (const TSharedPtr<FJsonValue>& Sea : *Seas)
+				{
+					Fleet.Reach.Add(FMath::RoundToInt32(Sea->AsNumber()));
+				}
+			}
 		}
 	}
 	const TArray<TSharedPtr<FJsonValue>>* AirFleets = nullptr;

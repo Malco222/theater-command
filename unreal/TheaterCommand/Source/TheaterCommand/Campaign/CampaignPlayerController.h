@@ -53,6 +53,15 @@ struct FTrayCard
 	TArray<FHonourRibbon> Honours;
 };
 
+/** One ship of the fleet in hand, as a card. */
+struct FShipCard
+{
+	FString Model; // "Battleship:UK"
+	FText Name; // "Battleship"
+	FText Role; // what it is for, in a line
+	int32 Count = 1; // how many ships this card stands for, when the fleet has too many to show each
+};
+
 /** The army the player has picked up: its general, and its corps as cards. */
 struct FArmyTray
 {
@@ -62,6 +71,10 @@ struct FArmyTray
 	FLinearColor Color = FLinearColor::Gray;
 	FString Tag; // whose flag to show
 	TArray<FTrayCard> Cards;
+	bool bFleet = false; // it is a fleet in hand, not an army: its ships are the cards
+	TArray<FShipCard> Ships;
+	FString FleetStance; // patrol, raid or port: what the fleet is doing now
+	FString FleetNext; // patrol or raid: what it will do in the sea it is sent to next
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
 	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast
@@ -352,6 +365,16 @@ public:
 	void DismissAnnouncement();
 	/** Tells a great moment on a screen of its own, after any already waiting. */
 	void Announce(const FAnnouncement& Told) { Announcements.Add(Told); }
+	/** A fleet in hand: picked up like an army, sent to a sea with a right-click, its ships shown as cards. */
+	bool PickUpFleet(int32 FleetId);
+	void PutDownFleet();
+	bool HasFleetInHand() const { return FleetInHand != INDEX_NONE; }
+	/** What the fleet in hand does where it is sent: "patrol" or "raid". Changes what it is doing now if it is at sea. */
+	void SetFleetStance(const FString& Stance);
+	void FleetToHarbour();
+	/** Sends the fleet in hand to a sea, to do there what it has been told (patrol or raid). */
+	void OrderFleetTo(int32 Zone);
+	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
 	/** Whether every nation's move is watched at the end of a month, or only what touches the player. */
@@ -517,6 +540,13 @@ private:
 	TArray<FAnnouncement> Announcements;
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
+	int32 FleetInHand = INDEX_NONE; // the fleet picked up, by its id
+	FString FleetNext = TEXT("patrol");
+	int32 FleetHoverSea = INDEX_NONE; // the sea the pointer is nearest, while a fleet is in hand
+	FVector2D PointerMap = FVector2D::ZeroVector; // where the pointer is on the map
+	bool bPointerOnWater = false;
+	void LayOutFleet();
+	int32 SeaNear(const FVector2D& MapPoint) const;
 	int32 PointedField = INDEX_NONE; // the province whose airfield the pointer is over
 	int32 HoverTipField = INDEX_NONE;
 	int32 HoverTipRegion = INDEX_NONE;

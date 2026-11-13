@@ -1355,6 +1355,12 @@ void ACampaignMapActor::BuildTowns()
 	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points"), Count, Model.Vertices.Num());
 }
 
+FVector2D ACampaignMapActor::FleetPlace(int32 FleetId) const
+{
+	const TObjectPtr<AArmyPiece>* Piece = FleetPieces.Find(FleetId);
+	return Piece && *Piece ? WorldToMap((*Piece)->GetRestLocation()) : FVector2D(Data.Width * 0.5, Data.Height * 0.5);
+}
+
 FVector2D ACampaignMapActor::FleetSpot(int32 Index) const
 {
 	int32 Count = 0;
@@ -2151,6 +2157,67 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 		}
 	}
 	Buffers.Commit(OrdersMesh, 0, HighlightMaterial);
+}
+
+void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, int32 FleetId)
+{
+	OrdersMesh->ClearMeshSection(2);
+	if (Zones.Num() == 0)
+	{
+		return;
+	}
+	FCampaignMeshBuffers Buffers;
+	auto Ring = [this, &Buffers](const FVector2D& Middle, double Radius, double HalfWidth, const FLinearColor& Ink)
+	{
+		TArray<FVector2D> Round;
+		const int32 Sides = 40;
+		for (int32 Side = 0; Side < Sides; ++Side)
+		{
+			const double Angle = 2.0 * PI * Side / Sides;
+			Round.Add(Middle + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Radius);
+		}
+		AppendRibbon(Buffers, Round, HalfWidth, 0.3, Ink.ToFColor(false), true);
+	};
+	// Where the fleet lies now.
+	FVector2D From = FVector2D::ZeroVector;
+	bool bHaveFleet = false;
+	if (const TObjectPtr<AArmyPiece>* Piece = FleetPieces.Find(FleetId))
+	{
+		if (*Piece)
+		{
+			From = WorldToMap((*Piece)->GetRestLocation());
+			bHaveFleet = true;
+			Ring(From, 9.0, 0.7, FLinearColor(1.0f, 1.0f, 1.0f, 0.9f));
+		}
+	}
+	for (int32 Zone : Zones)
+	{
+		if (!Data.Seas.IsValidIndex(Zone))
+		{
+			continue;
+		}
+		const FVector2D Middle = Data.Seas[Zone].Center;
+		const bool bHere = Zone == Hover;
+		// An anchorage marked on the chart: a ring of brass, doubled and brighter under the pointer.
+		const double Wide = bHere ? 15.0 : 13.0;
+		Ring(Middle, Wide * 0.5, Wide * 0.5, FLinearColor(1.0f, 0.82f, 0.3f, bHere ? 0.1f : 0.045f)); // the water inside it, tinted
+		Ring(Middle, Wide, bHere ? 0.9 : 0.55, FLinearColor(1.0f, 0.82f, 0.3f, bHere ? 0.98f : 0.7f));
+		Ring(Middle, 1.8, bHere ? 1.4 : 1.0, FLinearColor(1.0f, 0.86f, 0.4f, bHere ? 0.98f : 0.75f));
+		if (bHere && bHaveFleet && FVector2D::Distance(From, Middle) > 12.0)
+		{
+			// The course it would steer, dashed from the fleet to the sea.
+			const double Length = FVector2D::Distance(From, Middle);
+			const int32 Dashes = FMath::Clamp(FMath::RoundToInt32(Length / 6.0), 2, 200);
+			for (int32 Dash = 0; Dash < Dashes; ++Dash)
+			{
+				TArray<FVector2D> Stroke;
+				Stroke.Add(FMath::Lerp(From, Middle, (Dash + 0.15) / Dashes));
+				Stroke.Add(FMath::Lerp(From, Middle, (Dash + 0.7) / Dashes));
+				AppendRibbon(Buffers, Stroke, 0.5, 0.3, FLinearColor(1.0f, 0.92f, 0.6f, 0.85f).ToFColor(false), false);
+			}
+		}
+	}
+	Buffers.Commit(OrdersMesh, 2, HighlightMaterial);
 }
 
 void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& Regions)

@@ -146,7 +146,7 @@ function view() {
     })),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
     fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({
-      id: f.id, nat: f.nat, name: f.name, zone: f.zone, base: f.base, port: f.port, stance: f.stance,
+      id: f.id, nat: f.nat, name: f.name, zone: f.zone, home: f.home, base: f.base, port: f.port, stance: f.stance,
       bb: f.ships.bb, cv: f.ships.cv, ca: f.ships.ca, dd: f.ships.dd, ss: f.ships.ss,
       // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
       reach: f.nat === s.human && up ? fleetReach(s, f) : [],

@@ -1157,9 +1157,15 @@ void ACampaignPlayerController::OpenGuide()
 	Add(TEXT("RIVERS, RAILWAYS AND ENGINEERS"),
 		TEXT("The great rivers are crossed at bridges. Blow the bridges and nothing on wheels or tracks can cross until engineers rebuild them. ")
 		TEXT("Armies are fed along the railways, and troops beyond a cut line fight weaker until engineers relay it. Click a province to see the work that can be ordered there."));
-	Add(TEXT("FLEETS AND AIR FLEETS"),
-		TEXT("Click a fleet or an air fleet to give it orders: where to patrol or raid, and what to bomb. ")
+	Add(TEXT("FLEETS"),
+		TEXT("A fleet is picked up like an army: click its flag, and its ships are dealt as cards. The seas it can reach this month are ringed in brass. Right-click a ringed sea to send it there, or its own harbour to bring it home. ")
+		TEXT("PATROL seeks out the enemy's warships and guards your convoys; RAID SHIPPING goes for merchant ships and keeps clear of a fight. ")
 		TEXT("A corps in a port can go BY SEA to a friendly port or land on an enemy coast. Before a landing the game tells you what it will meet, and asks."));
+	Add(TEXT("THE AIR WAR"),
+		TEXT("Aircraft belong to airfields, which stand on the map: a landing ground, an airfield, an air base. Click an airfield to open it and see the air groups based there. ")
+		TEXT("A fighter group patrols its own sky, sticks with a bomber group as escort, or rests. Any group can fly one raid a month. To plan a raid you pick its kind and its target, and you are shown the chance of success and the losses to expect. ")
+		TEXT("Then you choose which groups fly it, from one airfield or several: bombers that meet up lose fewer of their number. The raid is flown at once, and you watch it go. ")
+		TEXT("Engineers lay out new airfields and enlarge old ones; the ARSENAL builds bigger ones. In a historical scenario air fleets are given a mission for the month instead."));
 	if (FCampaignSession* Session = GetSession())
 	{
 		// What the player's own country does in its own way, from the rules.
@@ -1361,6 +1367,10 @@ void ACampaignPlayerController::Escape()
 	{
 		PutDownArmy();
 	}
+	else if (FleetInHand != INDEX_NONE)
+	{
+		PutDownFleet();
+	}
 	else
 	{
 		SelectRegion(INDEX_NONE);
@@ -1445,7 +1455,9 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	FVector PointerWorld;
 	const bool bOnTable = bHaveMouse && PointerOnTable(PointerWorld);
 	const int32 PointedRegion = bOnTable ? Map->RegionAtWorld(PointerWorld) : INDEX_NONE;
-	PointedField = bOnTable ? Map->AirfieldNear(Map->WorldToMap(PointerWorld)) : INDEX_NONE;
+	PointerMap = bOnTable ? Map->WorldToMap(PointerWorld) : FVector2D::ZeroVector;
+	bPointerOnWater = bOnTable && PointedRegion == INDEX_NONE;
+	PointedField = bOnTable ? Map->AirfieldNear(PointerMap) : INDEX_NONE;
 	AArmyPiece* PointedPiece = nullptr;
 	{
 		FVector RayOrigin, RayDirection;
@@ -1486,6 +1498,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		if (!bTurning && !bBusy && ArmyRegion != INDEX_NONE && PointedRegion != INDEX_NONE)
 		{
 			OrderTo(PointedRegion);
+		}
+		else if (!bTurning && !bBusy && FleetInHand != INDEX_NONE && bOnTable)
+		{
+			// A fleet in hand is sent with a right-click, as an army is: to the sea under the pointer, or home
+			// if it is its own harbour that is pointed at.
+			const FCampaignSession* Now = GetSession();
+			const FViewFleet* Held = Now ? Now->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; }) : nullptr;
+			if (bPointerOnWater)
+			{
+				OrderFleetTo(SeaNear(PointerMap));
+			}
+			else if (Held && PointedRegion == Held->Base)
+			{
+				FleetToHarbour();
+			}
+			else
+			{
+				Notify(TEXT("A fleet keeps to the sea: right-click one of the ringed seas, or its own harbour to bring it home."), 5.0);
+			}
 		}
 		bRightHeld = false;
 		bTurning = false;
@@ -1652,6 +1683,31 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			HoverTip = FText::FromString(Line);
 		}
 	}
+	// With a fleet in hand, the sea under the pointer is marked, and what a right-click would do is said.
+	{
+		const int32 Sea = (FleetInHand != INDEX_NONE && !bBusy && bHaveMouse && bPointerOnWater && !bLeftHeld && !bRightHeld) ? SeaNear(PointerMap) : INDEX_NONE;
+		if (Sea != FleetHoverSea)
+		{
+			FleetHoverSea = Sea;
+			FCampaignSession* Session = GetSession();
+			const FViewFleet* Held = Session ? Session->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; }) : nullptr;
+			if (Held)
+			{
+				Map->ShowSeaReach(Held->Reach, Sea, Held->Id);
+			}
+			if (Held && Map->GetData().Seas.IsValidIndex(Sea))
+			{
+				const FString& Name = Map->GetData().Seas[Sea].Name;
+				HoverTip = FText::FromString(Held->Reach.Contains(Sea)
+					? FString::Printf(TEXT("%s\nRight-click: %s sails here to %s."), *Name, *Held->Name, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : TEXT("patrol"))
+					: FString::Printf(TEXT("%s\nToo far for %s this month."), *Name, *Held->Name));
+			}
+			else if (TipRegion == INDEX_NONE)
+			{
+				HoverTip = FText::GetEmpty();
+			}
+		}
+	}
 
 	LastMouse = Mouse;
 	bHaveLastMouse = bHaveMouse;
@@ -1758,6 +1814,215 @@ void ACampaignPlayerController::ShowForce(bool bFleet, int32 Id)
 	RegionPanel.Options = Force.Options;
 }
 
+int32 ACampaignPlayerController::SeaNear(const FVector2D& MapPoint) const
+{
+	int32 Best = INDEX_NONE;
+	double Nearest = TNumericLimits<double>::Max();
+	if (Map.IsValid())
+	{
+		const TArray<FCampaignSeaZone>& Seas = Map->GetData().Seas;
+		for (int32 Zone = 0; Zone < Seas.Num(); ++Zone)
+		{
+			const double Far = FVector2D::DistSquared(Seas[Zone].Center, MapPoint);
+			if (Far < Nearest)
+			{
+				Nearest = Far;
+				Best = Zone;
+			}
+		}
+	}
+	return Best;
+}
+
+bool ACampaignPlayerController::PickUpFleet(int32 FleetId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid())
+	{
+		return false;
+	}
+	const FCampaignView& View = Session->GetView();
+	const FViewFleet* Fleet = View.Fleets.FindByPredicate([FleetId](const FViewFleet& Each) { return Each.Id == FleetId; });
+	if (!Fleet || Fleet->Nation != View.Human)
+	{
+		return false;
+	}
+	PutDownArmy();
+	SelectRegion(INDEX_NONE);
+	RegionPanel.bVisible = false;
+	RegionPanel.Revision = ++PanelRevision;
+	FleetInHand = FleetId;
+	FleetNext = Fleet->Stance == TEXT("raid") ? TEXT("raid") : TEXT("patrol");
+	FleetHoverSea = INDEX_NONE;
+	CampaignSounds::Play(this, TEXT("ship_horn"), 0.35f);
+	RefreshOrders();
+	return true;
+}
+
+void ACampaignPlayerController::PutDownFleet()
+{
+	if (FleetInHand == INDEX_NONE)
+	{
+		return;
+	}
+	FleetInHand = INDEX_NONE;
+	FleetHoverSea = INDEX_NONE;
+	HoverTip = FText::GetEmpty();
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::LayOutFleet()
+{
+	FCampaignSession* Session = GetSession();
+	const FCampaignView& View = Session->GetView();
+	const FViewFleet* Fleet = View.Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
+	if (!Fleet || Fleet->Nation != View.Human)
+	{
+		FleetInHand = INDEX_NONE; // sunk, or no longer the player's
+		return;
+	}
+	const FCampaignNation* Nation = Map->GetData().FindNation(View.Human);
+	const TArray<FCampaignSeaZone>& Seas = Map->GetData().Seas;
+	const FString Sea = Seas.IsValidIndex(Fleet->Zone) ? Seas[Fleet->Zone].Name : FString(TEXT("the sea"));
+	const FString Doing = Fleet->Stance == TEXT("port") ? FString::Printf(TEXT("In harbour at %s"), *Fleet->Port)
+		: Fleet->Stance == TEXT("raid") ? FString::Printf(TEXT("Raiding shipping: %s"), *Sea) : FString::Printf(TEXT("On patrol: %s"), *Sea);
+	Tray.bVisible = true;
+	Tray.bFleet = true;
+	Tray.Color = Nation ? FLinearColor(Nation->Color) : FLinearColor::Gray;
+	Tray.Tag = View.Human;
+	Tray.Title = FText::FromString(Fleet->Name);
+	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d ship%s  \u00B7  can reach %d sea%s this month"), *Doing, Fleet->Ships(), Fleet->Ships() == 1 ? TEXT("") : TEXT("s"), Fleet->Reach.Num(), Fleet->Reach.Num() == 1 ? TEXT("") : TEXT("s")));
+	Tray.FleetStance = Fleet->Stance;
+	Tray.FleetNext = FleetNext;
+	Tray.PendingButton = FText::GetEmpty();
+	Tray.Hint = FText::FromString(View.bHumanUp
+		? TEXT("Right-click a ringed sea to send the fleet there, or its own harbour to bring it home. Click anywhere on the land, or press Esc, to let it go.")
+		: TEXT("It is not your month."));
+
+	// A card for each ship. A great fleet has too many destroyers to show one by one: those are dealt in flotillas.
+	struct FClass { int32 Count; const TCHAR* Model; const TCHAR* One; const TCHAR* Many; const TCHAR* Role; bool bCapital; };
+	const FClass Classes[] = {
+		{ Fleet->Battleships, TEXT("Battleship"), TEXT("Battleship"), TEXT("battleships"), TEXT("The line of battle: its guns decide who holds a sea."), true },
+		{ Fleet->Carriers, TEXT("Carrier"), TEXT("Aircraft carrier"), TEXT("carriers"), TEXT("Its aircraft strike before the guns are in range."), true },
+		{ Fleet->Cruisers, TEXT("Cruiser"), TEXT("Cruiser"), TEXT("cruisers"), TEXT("Scouts for the fleet, guards convoys and raids shipping."), false },
+		{ Fleet->Destroyers, TEXT("Destroyer"), TEXT("Destroyer"), TEXT("destroyers"), TEXT("Screens the fleet, escorts convoys and hunts submarines."), false },
+		{ Fleet->Submarines, TEXT("Submarine"), TEXT("Submarine"), TEXT("submarines"), TEXT("Sinks merchant ships, and slips away from the fleet."), false },
+	};
+	const bool bAll = Fleet->Ships() <= 14;
+	for (const FClass& Class : Classes)
+	{
+		if (Class.Count <= 0)
+		{
+			continue;
+		}
+		const int32 CardCount = bAll ? Class.Count : FMath::Min(Class.Count, Class.bCapital ? 4 : 2);
+		for (int32 Index = 0; Index < CardCount; ++Index)
+		{
+			FShipCard& Card = Tray.Ships.AddDefaulted_GetRef();
+			Card.Model = FString::Printf(TEXT("%s:%s"), Class.Model, *View.Human);
+			Card.Count = Class.Count / CardCount + (Index < Class.Count % CardCount ? 1 : 0);
+			Card.Name = FText::FromString(Card.Count == 1 ? FString(Class.One) : FString::Printf(TEXT("%d %s"), Card.Count, Class.Many));
+			Card.Role = FText::FromString(Class.Role);
+		}
+	}
+	if (Tray.Ships.Num() > 0)
+	{
+		ShowCorps = INDEX_NONE;
+		ShowShipModel(Tray.Ships[0].Model, Tray.Ships[0].Name);
+	}
+	Map->ShowSeaReach(View.bHumanUp ? Fleet->Reach : TArray<int32>(), FleetHoverSea, Fleet->Id);
+}
+
+void ACampaignPlayerController::ShowShipModel(const FString& Model, const FText& Name)
+{
+	if (!Map.IsValid())
+	{
+		return;
+	}
+	Map->SetShowpiece(Model);
+	ShowTitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *Tray.Title.ToString(), *Name.ToString()));
+}
+
+void ACampaignPlayerController::OrderFleetTo(int32 Zone)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !Map.IsValid() || !Map->GetData().Seas.IsValidIndex(Zone))
+	{
+		return;
+	}
+	const FViewFleet* Fleet = Session->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
+	if (!Fleet)
+	{
+		return;
+	}
+	const FString Name = Fleet->Name, Sea = Map->GetData().Seas[Zone].Name;
+	if (!Fleet->Reach.Contains(Zone))
+	{
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		Notify(FString::Printf(TEXT("%s cannot reach the %s this month."), *Name, *Sea), 5.0);
+		return;
+	}
+	FString Note;
+	if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:%s"), FleetInHand, Zone, *FleetNext), Note))
+	{
+		CampaignSounds::Play(this, TEXT("ship_horn"), 0.45f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		RefreshOrders();
+		Notify(FString::Printf(TEXT("%s sails for the %s, to %s."), *Name, *Sea, FleetNext == TEXT("raid") ? TEXT("raid merchant shipping") : TEXT("patrol")), 5.0);
+	}
+	else
+	{
+		Notify(Note.IsEmpty() ? FString(TEXT("That order cannot be given now.")) : Note, 5.0);
+	}
+}
+
+void ACampaignPlayerController::SetFleetStance(const FString& Stance)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || FleetInHand == INDEX_NONE)
+	{
+		return;
+	}
+	FleetNext = Stance == TEXT("raid") ? TEXT("raid") : TEXT("patrol");
+	const FViewFleet* Fleet = Session->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	if (Fleet && Fleet->Stance != TEXT("port") && Fleet->Stance != FleetNext)
+	{
+		// At sea already: it changes what it is doing where it is.
+		FString Note;
+		const FString Name = Fleet->Name;
+		if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:%s"), FleetInHand, Fleet->Zone, *FleetNext), Note))
+		{
+			ShowWar(Session->GetView(), TArray<FCorpsMove>());
+			Notify(FString::Printf(TEXT("%s: %s."), *Name, FleetNext == TEXT("raid") ? TEXT("raiding merchant shipping, and keeping clear of the enemy fleet") : TEXT("on patrol, seeking the enemy's warships and guarding the convoys")), 5.0);
+		}
+	}
+	RefreshOrders();
+}
+
+void ACampaignPlayerController::FleetToHarbour()
+{
+	FCampaignSession* Session = GetSession();
+	const FViewFleet* Fleet = Session ? Session->GetView().Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; }) : nullptr;
+	if (!Fleet)
+	{
+		return;
+	}
+	FString Note;
+	const FString Name = Fleet->Name, Port = Fleet->Port;
+	if (Session->OrderForce(FString::Printf(TEXT("fleet:%d:%d:port"), FleetInHand, Fleet->Home), Note))
+	{
+		CampaignSounds::Play(this, TEXT("ship_horn"), 0.45f);
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		RefreshOrders();
+		Notify(FString::Printf(TEXT("%s returns to harbour at %s."), *Name, *Port), 5.0);
+	}
+	else
+	{
+		Notify(Note.IsEmpty() ? FString(TEXT("That order cannot be given now.")) : Note, 5.0);
+	}
+}
+
 void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 {
 	// A fleet or an air fleet: look at it, and at what it can be told to do.
@@ -1772,9 +2037,32 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 			CampaignSounds::Play(this, TEXT("fighter_pass"), 0.35f);
 			return;
 		}
+		if (Piece->IsFleet())
+		{
+			// One of the player's fleets is picked up like an army; a click on the fleet in hand puts it down.
+			if (FleetInHand == Piece->GetForceId())
+			{
+				PutDownFleet();
+				return;
+			}
+			if (PickUpFleet(Piece->GetForceId()))
+			{
+				return;
+			}
+			PutDownFleet();
+		}
 		ShowForce(Piece->IsFleet(), Piece->GetForceId());
 		CampaignSounds::Play(this, Piece->IsFleet() ? TEXT("ship_horn") : TEXT("fighter_pass"), 0.35f);
 		return;
+	}
+	if (FleetInHand != INDEX_NONE && !Piece)
+	{
+		if (bPointerOnWater)
+		{
+			OrderFleetTo(SeaNear(PointerMap));
+			return;
+		}
+		PutDownFleet(); // a click on the land lets the fleet go, and looks at the land
 	}
 	// A click on somebody's flag is a click on the ground it stands on.
 	const int32 Target = Piece ? Piece->GetRegionId() : RegionId;
@@ -1982,6 +2270,8 @@ void ACampaignPlayerController::RefreshOrders()
 		ShowCorps = INDEX_NONE;
 	}
 	Tray.Cards.Reset();
+	Tray.Ships.Reset();
+	Tray.bFleet = false;
 	Reach.Reset();
 	RouteTarget = INDEX_NONE;
 	PendingTarget = INDEX_NONE;
@@ -1998,14 +2288,20 @@ void ACampaignPlayerController::RefreshOrders()
 		return;
 	}
 	Map->SetRoute(FVector::ZeroVector, TArray<int32>());
+	Map->ShowSeaReach(TArray<int32>(), INDEX_NONE, INDEX_NONE);
 
 	if (ArmyRegion == INDEX_NONE)
 	{
 		bByRail = false;
 		bBySea = false;
 		Map->SetReach(Reach);
+		if (FleetInHand != INDEX_NONE)
+		{
+			LayOutFleet();
+		}
 		return;
 	}
+	FleetInHand = INDEX_NONE; // an army in hand: the fleet is let go
 
 	// The army in hand, as the rules see it now.
 	const FCampaignView& View = Session->GetView();

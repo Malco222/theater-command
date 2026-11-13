@@ -1537,6 +1537,94 @@ namespace
 							SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(bOn ? BrightBrass : Muted)
 						];
 				};
+				if (Army.bFleet)
+				{
+					// A fleet in hand: what it does at sea, the way home, and a card for each ship.
+					TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("At sea:"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
+					];
+					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 5.0f, 0.0f)
+					[
+						SNew(SBox).ToolTipText(FText::FromString(TEXT("Seeks out the enemy's warships in its sea and guards the convoys that cross it.")))
+						[
+							OrderButton(TEXT("PATROL"), Army.FleetNext == TEXT("patrol"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("patrol")); } })
+						]
+					];
+					TrayOrders->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 22.0f, 0.0f)
+					[
+						SNew(SBox).ToolTipText(FText::FromString(TEXT("Goes for merchant ships and keeps clear of a fight with the enemy fleet.")))
+						[
+							OrderButton(TEXT("RAID SHIPPING"), Army.FleetNext == TEXT("raid"), [this]() { if (Controller.IsValid()) { Controller->SetFleetStance(TEXT("raid")); } })
+						]
+					];
+					TrayOrders->AddSlot().AutoWidth()
+					[
+						SNew(SBox).ToolTipText(FText::FromString(TEXT("Safe from the enemy fleet, and takes no part at sea.")))
+						[
+							OrderButton(TEXT("RETURN TO HARBOUR"), Army.FleetStance == TEXT("port"), [this]() { if (Controller.IsValid()) { Controller->FleetToHarbour(); } })
+						]
+					];
+					TrayOrders->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 8.0f, 0.0f)
+					[
+						OrderButton(TEXT("PUT DOWN"), false, [this]() { if (Controller.IsValid()) { Controller->PutDownFleet(); } })
+					];
+
+					Cards->ClearChildren();
+					if (ACampaignMapActor* Table = Controller->GetMap())
+					{
+						if (UTextureRenderTarget2D* Stand = Table->GetShowpiece())
+						{
+							if (!ShowBrush.IsValid())
+							{
+								ShowBrush = MakeShared<FSlateBrush>();
+								ShowBrush->ImageSize = FVector2D(420.0, 260.0);
+								ShowBrush->DrawAs = ESlateBrushDrawType::Image;
+							}
+							ShowBrush->SetResourceObject(Stand);
+							Cards->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+							[
+								SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()[SNew(SPortrait).Picture(ShowBrush).Size(FVector2D(194.0, 120.0))]
+									+ SVerticalBox::Slot().AutoHeight().Padding(2.0f, 4.0f, 2.0f, 0.0f)
+									[
+										SNew(SBox).WidthOverride(190.0f)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted).AutoWrapText(true)
+											.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetShowTitle() : FText::GetEmpty(); })
+										]
+									]
+								]
+							];
+						}
+					}
+					for (const FShipCard& Ship : Army.Ships)
+					{
+						const TSharedPtr<FSlateBrush> Portrait = PortraitOf(Ship.Model);
+						const TSharedRef<SWidget> Picture = Portrait.IsValid()
+							? StaticCastSharedRef<SWidget>(SNew(SPortrait).Picture(Portrait).Size(FVector2D(74.0, 45.0)))
+							: StaticCastSharedRef<SWidget>(SNew(SBox).WidthOverride(74.0f).HeightOverride(45.0f));
+						Cards->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 0.0f, 6.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(&PickedCard).ContentPadding(FMargin(6.0f, 6.0f, 6.0f, 7.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(FString::Printf(TEXT("%s. %s"), *Ship.Name.ToString(), *Ship.Role.ToString())))
+							.OnHovered_Lambda([this, Model = Ship.Model, Name = Ship.Name]() { if (Controller.IsValid()) { Controller->ShowShipModel(Model, Name); } })
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()[SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(4.0f))[Picture]]
+								+ SVerticalBox::Slot().AutoHeight().Padding(1.0f, 5.0f, 0.0f, 0.0f)
+								[
+									SNew(STextBlock).Text(Ship.Name).Font(Font(TEXT("Bold"), 9)).ColorAndOpacity(Cream)
+								]
+							]
+						];
+					}
+				}
+				else
+				{
 				TrayOrders->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 9.0f, 0.0f)
 				[
 					SNew(STextBlock).Text(FText::FromString(TEXT("If attacked:"))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted)
@@ -1620,6 +1708,7 @@ namespace
 					[
 						MakeCard(Card)
 					];
+				}
 				}
 			}
 		}

@@ -80,6 +80,8 @@ public:
 
 	/** Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it. */
 	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false);
+	/** Rings the seas a fleet in hand can sail to, the one the pointer is over more brightly, and the fleet itself. None clears them. */
+	void ShowSeaReach(const TArray<int32>& Zones, int32 Hover, int32 FleetId);
 
 	/** Draws the road an army would take, from where it stands through the regions given. An empty list clears it. */
 	void SetRoute(const FVector& FromWorld, const TArray<int32>& Regions);
@@ -160,6 +162,8 @@ public:
 
 	/** Where the fleet of this number lies, on the map (for the photographer: "@fleet2"). The middle of the map if there is none. */
 	FVector2D FleetSpot(int32 Index) const;
+	/** Where a fleet lies on the map, by its id. */
+	FVector2D FleetPlace(int32 FleetId) const;
 
 	/** Lays the fleets on their seas (or by their harbours) and the air fleets over their airfields. */
 	void ShowFleets(const FCampaignView& View);

@@ -14381,6 +14381,7 @@
         nat: f.nat,
         name: f.name,
         zone: f.zone,
+        home: f.home,
         base: f.base,
         port: f.port,
         stance: f.stance,

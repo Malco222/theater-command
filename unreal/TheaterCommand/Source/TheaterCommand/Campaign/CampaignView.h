@@ -115,6 +115,8 @@ struct FViewFleet
 	FString Port;
 	FString Stance; // patrol, raid or port
 	int32 Battleships = 0, Carriers = 0, Cruisers = 0, Destroyers = 0, Submarines = 0;
+	int32 Home = INDEX_NONE; // the sea its harbour lies on
+	TArray<int32> Reach; // the seas it can sail to this month (the player's own fleets only)
 	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
 };
 

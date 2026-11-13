@@ -286,6 +286,15 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		}
 		// A fleet and an air fleet, each with the orders it can be given; and one given.
 		Add(TEXT("34-fleet-orders"), TEXT("@fleet4"), 0.25f).Force = TEXT("fleet:5");
+		// A fleet picked up like an army: its ships as cards, the seas it can reach ringed; and then sent to one.
+		Add(TEXT("34d-fleet-in-hand"), TEXT("@capital"), 0.5f).bFleet = true;
+		Add(TEXT("34e-fleet-in-hand-wide"), TEXT("@capital"), 0.8f).bFleet = true;
+		{
+			FShot& Shot = Add(TEXT("34f-fleet-sent"), TEXT("@capital"), 0.6f);
+			Shot.bFleet = true;
+			Shot.bFleetSails = true;
+			Shot.Wait = 1.5f;
+		}
 		{
 			FShot& Shot = Add(TEXT("34b-fleet-sails"), TEXT("@fleet4"), 0.25f);
 			Shot.Force = TEXT("fleet:5");
@@ -581,6 +590,45 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (const int32* Target = Data.RegionByName.Find(Shot.Attack))
 	{
 		Controller->OrderTo(*Target);
+	}
+	if (Shot.bFleet && Controller->GetSession())
+	{
+		const FCampaignView& Now = Controller->GetSession()->GetView();
+		const FViewFleet* Best = nullptr;
+		for (const FViewFleet& Fleet : Now.Fleets)
+		{
+			if (Fleet.Nation == Now.Human && Fleet.Reach.Num() > 1 && (!Best || Fleet.Ships() > Best->Ships()))
+			{
+				Best = &Fleet;
+			}
+		}
+		if (Best)
+		{
+			const int32 Id = Best->Id;
+			const TArray<int32> Seas = Best->Reach;
+			const int32 From = Best->Zone;
+			Controller->PickUpFleet(Id);
+			if (Shot.bFleetSails)
+			{
+				int32 Far = INDEX_NONE;
+				double Most = -1.0;
+				for (int32 Sea : Seas)
+				{
+					if (Table->GetData().Seas.IsValidIndex(Sea) && Table->GetData().Seas.IsValidIndex(From))
+					{
+						const double Away = FVector2D::Distance(Table->GetData().Seas[Sea].Center, Table->GetData().Seas[From].Center);
+						if (Away > Most)
+						{
+							Most = Away;
+							Far = Sea;
+						}
+					}
+				}
+				Controller->OrderFleetTo(Far);
+			}
+			const FVector2D Spot = Table->FleetPlace(Id);
+			Eye->GoTo(Table->MapToWorld(Spot.X, Spot.Y), Shot.Zoom, true);
+		}
 	}
 	if (!Shot.Force.IsEmpty())
 	{
