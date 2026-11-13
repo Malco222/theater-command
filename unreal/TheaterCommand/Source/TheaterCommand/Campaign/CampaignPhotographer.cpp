@@ -219,26 +219,40 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Room = TEXT("airfield");
 		}
 		{
-			FShot& Shot = Add(TEXT("31j-raid-planned"), TEXT("@capital"), 0.45f);
+			// One air group's orders: what it does between raids, and the raids it can fly.
+			FShot& Shot = Add(TEXT("31j-air-group"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");
 			Shot.Room = TEXT("airfield");
-			Shot.RoomAct = TEXT("open:raid:bomb:1");
+			Shot.RoomAct = TEXT("@row");
 		}
 		{
+			FShot& Shot = Add(TEXT("31j2-raid-targets"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("airfield");
+			Shot.RoomAct = TEXT("open:raid:bomb");
+		}
+		{
+			// The raid planned: who flies it, who could join, what rises to meet it.
+			FShot& Shot = Add(TEXT("31j3-raid-plan"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("airfield");
+			Shot.RoomAct = TEXT("open:raid:bomb|@row");
+		}
+		{
+			// The raid flown: the groups are on their way from their airfields.
 			FShot& Shot = Add(TEXT("31k-raid-flying"), TEXT("@capital"), 0.7f);
 			Shot.Select = TEXT("@capital");
 			Shot.Room = TEXT("airfield");
-			Shot.RoomAct = TEXT("air:1:bomb:38");
-			Shot.bCloseRoom = true;
+			Shot.RoomAct = TEXT("open:raid:bomb|@row|@top");
+			Shot.Wait = 2.6f;
 		}
 		{
-			// A raid on a defended target, caught over it: the defender's fighters among the bombers, and the guns firing.
-			FShot& Shot = Add(TEXT("31l-raid-met"), TEXT("Lodz"), 0.3f, 20.0f, 8.0f);
+			// A raid on troops, caught over them.
+			FShot& Shot = Add(TEXT("31l-raid-met"), TEXT("@capital"), 0.7f);
 			Shot.Select = TEXT("@capital");
 			Shot.Room = TEXT("airfield");
-			Shot.RoomAct = TEXT("air:1:bomb:37");
-			Shot.bCloseRoom = true;
-			Shot.Wait = 2.3f;
+			Shot.RoomAct = TEXT("open:raid:ground|@row|@top");
+			Shot.Wait = 5.2f;
 		}
 		{
 			// The secret service, with the capital selected and an agent recruited.
@@ -608,9 +622,36 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (!Shot.Room.IsEmpty())
 	{
 		Controller->OpenPage(Shot.Room);
-		if (!Shot.RoomAct.IsEmpty())
+		// The presses of a shot, one after another: an act by name, "@row" for the first button of a row that can
+		// be pressed, "@top" for the first button across the top.
+		TArray<FString> Presses;
+		Shot.RoomAct.ParseIntoArray(Presses, TEXT("|"));
+		for (const FString& Press : Presses)
 		{
-			Controller->PressPage(Shot.RoomAct);
+			FString Act = Press;
+			const FOfficePage& Now = Controller->GetPage();
+			if (Press == TEXT("@top"))
+			{
+				Act = Now.Top.Num() > 0 ? Now.Top[0].Act : FString();
+			}
+			else if (Press == TEXT("@row"))
+			{
+				Act.Reset();
+				for (const FPageSection& Section : Now.Sections)
+				{
+					for (const FPageRow& Row : Section.Rows)
+					{
+						if (Act.IsEmpty() && Row.Buttons.Num() > 0 && Row.Buttons[0].bOk)
+						{
+							Act = Row.Buttons[0].Act;
+						}
+					}
+				}
+			}
+			if (!Act.IsEmpty())
+			{
+				Controller->PressPage(Act);
+			}
 		}
 		if (Shot.bCloseRoom)
 		{

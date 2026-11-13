@@ -130,6 +130,7 @@ struct FSortie
 	bool bEscort = false; // fighters go with the bombers
 	int32 Flak = 0; // the level of the anti-aircraft guns round the target
 	FString Meet; // the nation whose fighters rise to meet the raid; empty if none can
+	int32 MeetFrom = INDEX_NONE; // the province whose airfield they rise from, if it is known
 	float Loss = 0.0f; // the share of the bombers likely to be lost
 };
 
@@ -194,6 +195,19 @@ struct FViewLane
 };
 
 /** An air fleet on its airfields. */
+/** An airfield as the player knows it (the grand campaign). */
+struct FViewAirfield
+{
+	int32 Region = INDEX_NONE;
+	FString Nation; // who holds it
+	FString Side; // own, ally, foe or other
+	FString Word; // "Landing ground", "Airfield", "Air base"...
+	int32 Size = 1; // 1 to 4
+	int32 Holds = 0; // how many aircraft it serves
+	int32 Groups = 0, Aircraft = 0; // -1 where the fog of war hides what flies from it
+	bool bCrowded = false;
+};
+
 struct FViewAirFleet
 {
 	int32 Id = INDEX_NONE;
@@ -202,6 +216,7 @@ struct FViewAirFleet
 	int32 Base = INDEX_NONE;
 	int32 Fighters = 0, Bombers = 0;
 	FString Mission;
+	int32 Groups = 1; // how many air groups this piece stands for (one piece for each airfield in the grand campaign)
 };
 
 struct FCampaignView
@@ -217,6 +232,7 @@ struct FCampaignView
 	FString Fallen; // the player's nation, once it has been beaten
 	TArray<FString> RegionHolder; // by region id: the nation that holds it now
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)
+	TArray<FViewAirfield> Airfields; // every airfield the player knows of (the grand campaign; empty in a scenario)
 	TArray<FIntVector4> RegionWorks; // by region id: factories built since the war began, shipyard level, anti-aircraft level, airfield level
 	TArray<FViewCorps> Corps;
 	FTreasury Treasury;
@@ -329,6 +345,7 @@ struct FMonthStep
 	TArray<int32> Focus; // the regions it happened in
 	TArray<int32> Battles; // the regions fought over
 	bool bMarchOnly = false; // nothing was fought for or taken: armies only moved
+	TArray<FSortie> Raids; // the raids flown in it, each group from its own airfield
 	bool bMine = false; // the player's own ground or troops were involved
 	FCampaignView View; // the war as it stood when that nation had finished
 };

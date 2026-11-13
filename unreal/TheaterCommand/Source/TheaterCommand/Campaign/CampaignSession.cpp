@@ -11,6 +11,8 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 
+static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSortie>& Out);
+
 namespace
 {
 	FString IdList(const TArray<int32>& Ids)
@@ -474,6 +476,45 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Entry->TryGetStringField(TEXT("mission"), Fleet.Mission);
 		}
 	}
+	// The airfields (the grand campaign). There the aircraft belong to their airfield, so the table shows one
+	// piece for each airfield with aircraft on it instead of one for each group.
+	const TArray<TSharedPtr<FJsonValue>>* Airfields = nullptr;
+	if (Object->TryGetArrayField(TEXT("airfields"), Airfields))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Airfields)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FViewAirfield& Field = Out.Airfields.AddDefaulted_GetRef();
+			Entry->TryGetNumberField(TEXT("region"), Field.Region);
+			Entry->TryGetStringField(TEXT("nat"), Field.Nation);
+			Entry->TryGetStringField(TEXT("side"), Field.Side);
+			Entry->TryGetStringField(TEXT("word"), Field.Word);
+			Entry->TryGetNumberField(TEXT("size"), Field.Size);
+			Entry->TryGetNumberField(TEXT("holds"), Field.Holds);
+			Entry->TryGetNumberField(TEXT("groups"), Field.Groups);
+			Entry->TryGetNumberField(TEXT("aircraft"), Field.Aircraft);
+			Entry->TryGetBoolField(TEXT("crowded"), Field.bCrowded);
+		}
+	}
+	if (Out.Airfields.Num() > 0)
+	{
+		TArray<FViewAirFleet> Stood;
+		for (const FViewAirFleet& Group : Out.AirFleets)
+		{
+			FViewAirFleet* Same = Stood.FindByPredicate([&Group](const FViewAirFleet& Other) { return Other.Base == Group.Base && Other.Nation == Group.Nation; });
+			if (Same)
+			{
+				Same->Fighters += Group.Fighters;
+				Same->Bombers += Group.Bombers;
+				++Same->Groups;
+			}
+			else
+			{
+				Stood.Add(Group);
+			}
+		}
+		Out.AirFleets = MoveTemp(Stood);
+	}
 
 	const TArray<TSharedPtr<FJsonValue>>* Regions = nullptr;
 	if (Object->TryGetArrayField(TEXT("regions"), Regions))
@@ -725,6 +766,11 @@ FMonthResult FCampaignSession::EndMonth()
 			Entry->TryGetStringField(TEXT("note"), Step.Note);
 			Entry->TryGetBoolField(TEXT("mine"), Step.bMine);
 			Entry->TryGetBoolField(TEXT("moved"), Step.bMarchOnly);
+			const TArray<TSharedPtr<FJsonValue>>* Raids = nullptr;
+			if (Entry->TryGetArrayField(TEXT("raids"), Raids))
+			{
+				ReadSorties(*Raids, Step.Raids);
+			}
 			const TArray<TSharedPtr<FJsonValue>>* Battles = nullptr;
 			if (Entry->TryGetArrayField(TEXT("battles"), Battles))
 			{
@@ -1632,7 +1678,36 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 	return Out;
 }
 
-bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNote, FSortie* OutSortie)
+/** The formations of a raid, as the rules list them. */
+static void ReadSorties(const TArray<TSharedPtr<FJsonValue>>& List, TArray<FSortie>& Out)
+{
+	for (const TSharedPtr<FJsonValue>& Value : List)
+	{
+		const TSharedPtr<FJsonObject> Fly = Value->AsObject();
+		if (!Fly.IsValid())
+		{
+			continue;
+		}
+		FSortie& Sortie = Out.AddDefaulted_GetRef();
+		Sortie.bValid = true;
+		Fly->TryGetNumberField(TEXT("from"), Sortie.From);
+		Fly->TryGetNumberField(TEXT("region"), Sortie.Region);
+		Fly->TryGetStringField(TEXT("nat"), Sortie.Nation);
+		Fly->TryGetBoolField(TEXT("bombers"), Sortie.bBombers);
+		Fly->TryGetBoolField(TEXT("escort"), Sortie.bEscort);
+		Fly->TryGetNumberField(TEXT("aa"), Sortie.Flak);
+		Fly->TryGetStringField(TEXT("meet"), Sortie.Meet);
+		Fly->TryGetNumberField(TEXT("meetFrom"), Sortie.MeetFrom);
+		double Loss = 0.0, X = 0.0, Y = 0.0;
+		Fly->TryGetNumberField(TEXT("loss"), Loss);
+		Sortie.Loss = static_cast<float>(Loss);
+		Fly->TryGetNumberField(TEXT("x"), X);
+		Fly->TryGetNumberField(TEXT("y"), Y);
+		Sortie.To = FVector2D(X, Y);
+	}
+}
+
+bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNote, TArray<FSortie>* OutSorties, FString* OutOpen)
 {
 	TSharedPtr<FJsonObject> Object;
 	bool bOk = false;
@@ -1640,24 +1715,14 @@ bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNo
 	{
 		Object->TryGetBoolField(TEXT("ok"), bOk);
 		Object->TryGetStringField(TEXT("note"), OutNote);
-		const TSharedPtr<FJsonObject>* Fly = nullptr;
-		if (OutSortie && Object->TryGetObjectField(TEXT("fly"), Fly))
+		if (OutOpen)
 		{
-			OutSortie->bValid = true;
-			(*Fly)->TryGetNumberField(TEXT("from"), OutSortie->From);
-			(*Fly)->TryGetNumberField(TEXT("region"), OutSortie->Region);
-			(*Fly)->TryGetStringField(TEXT("nat"), OutSortie->Nation);
-			(*Fly)->TryGetBoolField(TEXT("bombers"), OutSortie->bBombers);
-			(*Fly)->TryGetBoolField(TEXT("escort"), OutSortie->bEscort);
-			(*Fly)->TryGetNumberField(TEXT("aa"), OutSortie->Flak);
-			(*Fly)->TryGetStringField(TEXT("meet"), OutSortie->Meet);
-			double Loss = 0.0;
-			(*Fly)->TryGetNumberField(TEXT("loss"), Loss);
-			OutSortie->Loss = static_cast<float>(Loss);
-			double X = 0.0, Y = 0.0;
-			(*Fly)->TryGetNumberField(TEXT("x"), X);
-			(*Fly)->TryGetNumberField(TEXT("y"), Y);
-			OutSortie->To = FVector2D(X, Y);
+			Object->TryGetStringField(TEXT("open"), *OutOpen);
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Flies = nullptr;
+		if (OutSorties && Object->TryGetArrayField(TEXT("flies"), Flies))
+		{
+			ReadSorties(*Flies, *OutSorties);
 		}
 		TakeView(Object);
 	}

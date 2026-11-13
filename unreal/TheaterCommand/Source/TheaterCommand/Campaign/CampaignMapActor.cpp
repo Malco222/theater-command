@@ -812,6 +812,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	ShownBuildings = Works;
 	BuildingsMesh->ClearAllMeshSections();
 	WorksChimneys.Reset();
+	AirfieldSpots.Reset();
 
 	const FLinearColor Brick(FColor::FromHex(TEXT("7A5547"))), Soot(FColor::FromHex(TEXT("3B3532"))), Pane(FColor::FromHex(TEXT("8FA6A8")));
 	const FLinearColor Apron(FColor::FromHex(TEXT("A9A69C"))), Girder(FColor::FromHex(TEXT("4A4F55"))), RedLead(FColor::FromHex(TEXT("8A3B2A")));
@@ -959,26 +960,54 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 			}
 			++Count;
 		}
-		// An airfield: a mown field with a runway (two for a big one), a hangar and a windsock.
+		// An airfield, by its size: a landing ground is a mown strip with a hut and a windsock; an airfield has a
+		// hard runway and hangars; an air base has crossing runways, a row of hangars and a control tower; and
+		// the greatest has three runways in a triangle.
 		if (Built.W > 0 && Place(FVector2D(-10.0, 13.0), Spot))
 		{
+			AirfieldSpots.Add(Id, Spot);
+			const double Field = Unit * 1.3; // an airfield is a big place, and the player has to find it
+			const int32 Size = FMath::Clamp(Built.W, 1, 4);
 			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
 			const double Turn = Facing(Spot) + 90.0;
+			const double Long = 2.9 + 0.45 * Size, Wide = 1.5 + 0.3 * Size;
 			// The field is a slab thick enough to stand clear of the roll of the ground under it.
-			Model.Box(At + FVector(0.0, 0.0, 0.0), FVector(3.4, 1.9, 0.16) * Unit, Turf, Turn);
-			Model.Box(At + FVector(0.0, 0.0, 0.085 * Unit), FVector(3.2, 0.32, 0.02) * Unit, Apron, Turn);
-			if (Built.W >= 2)
+			Model.Box(At + FVector(0.0, 0.0, 0.0), FVector(Long, Wide, 0.16) * Field, Turf, Turn);
+			const FLinearColor Strip = Size >= 2 ? Apron : FLinearColor(FColor::FromHex(TEXT("8E9A62")));
+			Model.Box(At + FVector(0.0, 0.0, 0.085 * Field), FVector(Long - 0.25, 0.3, 0.02) * Field, Strip, Turn);
+			if (Size >= 3)
 			{
-				Model.Box(At + FVector(0.0, 0.0, 0.088 * Unit), FVector(2.4, 0.28, 0.02) * Unit, Apron, Turn + 62.0);
+				Model.Box(At + FVector(0.0, 0.0, 0.088 * Field), FVector(Wide * 1.5, 0.26, 0.02) * Field, Apron, Turn + 58.0);
 			}
-			for (int32 Hangar = 0; Hangar < FMath::Clamp(Built.W, 1, 3); ++Hangar)
+			if (Size >= 4)
 			{
-				const FVector Foot = At + Ahead(Turn, (Hangar - 1) * 0.85 * Unit, 0.72 * Unit) + FVector(0.0, 0.0, 0.08 * Unit);
-				Model.House(Foot, 0.7 * Unit, 0.55 * Unit, 0.22 * Unit, 0.14 * Unit, Tin, Girder, Turn + 90.0);
+				Model.Box(At + FVector(0.0, 0.0, 0.091 * Field), FVector(Wide * 1.5, 0.26, 0.02) * Field, Apron, Turn - 58.0);
 			}
-			const FVector Pole = At + Ahead(Turn, 1.5 * Unit, -0.7 * Unit) + FVector(0.0, 0.0, 0.08 * Unit);
-			Model.Pillar(Pole, 0.02 * Unit, 0.02 * Unit, 0.5 * Unit, Timber, 5);
-			Model.Rod(Pole + FVector(0.0, 0.0, 0.5 * Unit), Pole + Ahead(Turn, 0.26 * Unit, 0.06 * Unit) + FVector(0.0, 0.0, 0.46 * Unit), 0.035 * Unit, Orange);
+			const int32 Hangars = Size;
+			for (int32 Hangar = 0; Hangar < Hangars; ++Hangar)
+			{
+				const FVector Foot = At + Ahead(Turn, (Hangar - (Hangars - 1) * 0.5) * 0.85 * Field, (Wide * 0.5 - 0.3) * Field) + FVector(0.0, 0.0, 0.08 * Field);
+				if (Size == 1)
+				{
+					Model.House(Foot, 0.42 * Field, 0.36 * Field, 0.16 * Field, 0.1 * Field, Timber, Soot, Turn + 90.0);
+				}
+				else
+				{
+					Model.House(Foot, 0.7 * Field, 0.55 * Field, 0.22 * Field, 0.14 * Field, Tin, Girder, Turn + 90.0);
+				}
+			}
+			if (Size >= 3)
+			{
+				// The control tower: a square tower with a glazed watch room and a mast.
+				const FVector Tower = At + Ahead(Turn, -(Long * 0.5 - 0.35) * Field, (Wide * 0.5 - 0.3) * Field) + FVector(0.0, 0.0, 0.08 * Field);
+				Model.Box(Tower + FVector(0.0, 0.0, 0.22 * Field), FVector(0.3, 0.3, 0.44) * Field, Brick, Turn);
+				Model.Box(Tower + FVector(0.0, 0.0, 0.5 * Field), FVector(0.38, 0.38, 0.14) * Field, Pane, Turn);
+				Model.Box(Tower + FVector(0.0, 0.0, 0.585 * Field), FVector(0.42, 0.42, 0.03) * Field, Soot, Turn);
+				Model.Pillar(Tower + FVector(0.0, 0.0, 0.6 * Field), 0.015 * Field, 0.01 * Field, 0.3 * Field, Girder, 5);
+			}
+			const FVector Pole = At + Ahead(Turn, (Long * 0.5 - 0.25) * Field, -(Wide * 0.5 - 0.2) * Field) + FVector(0.0, 0.0, 0.08 * Field);
+			Model.Pillar(Pole, 0.02 * Field, 0.02 * Field, 0.5 * Field, Timber, 5);
+			Model.Rod(Pole + FVector(0.0, 0.0, 0.5 * Field), Pole + Ahead(Turn, 0.26 * Field, 0.06 * Field) + FVector(0.0, 0.0, 0.46 * Field), 0.035 * Field, Orange);
 			++Count;
 		}
 	}
@@ -2328,6 +2357,31 @@ void ACampaignMapActor::SetShowpiece(const FString& Model)
 	ShowCamera->CaptureScene();
 }
 
+FVector2D ACampaignMapActor::AirfieldSpot(int32 RegionId) const
+{
+	if (const FVector2D* Spot = AirfieldSpots.Find(RegionId))
+	{
+		return *Spot;
+	}
+	return Data.Regions.IsValidIndex(RegionId) ? Data.Regions[RegionId].Center + FVector2D(-10.0, 12.0) : FVector2D::ZeroVector;
+}
+
+int32 ACampaignMapActor::AirfieldNear(const FVector2D& MapPoint) const
+{
+	int32 Best = INDEX_NONE;
+	double Nearest = 4.2 * 4.2; // about the reach of the field itself
+	for (const TPair<int32, FVector2D>& Field : AirfieldSpots)
+	{
+		const double Far = FVector2D::DistSquared(Field.Value, MapPoint);
+		if (Far < Nearest)
+		{
+			Nearest = Far;
+			Best = Field.Key;
+		}
+	}
+	return Best;
+}
+
 void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 {
 	if (!GetWorld() || !Data.Regions.IsValidIndex(Sortie.From))
@@ -2435,7 +2489,7 @@ void ACampaignMapActor::UpdateSorties()
 			continue;
 		}
 		// Out to the target, a turn over it, and home: the airfield is where the air groups stand, south-west of the town.
-		const FVector2D Field = Data.Regions[Flight.Sortie.From].Center + FVector2D(-10.0, 12.0);
+		const FVector2D Field = AirfieldSpot(Flight.Sortie.From);
 		const FVector Field0 = SurfacePoint(Field.X, Field.Y, 0.3), Aim = SurfacePoint(Flight.Sortie.To.X, Flight.Sortie.To.Y, 0.3);
 		const FVector Course = (Aim - Field0).GetSafeNormal2D();
 		const FVector Abeam(-Course.Y, Course.X, 0.0);
@@ -2489,8 +2543,15 @@ void ACampaignMapActor::UpdateSorties()
 		Flight.bEngaged = false;
 		if (Flight.Rivals)
 		{
-			const double Meets = Out - 0.16, Parts = Out + TurnShare + 0.1, Climb = 0.1;
-			const FVector Ground = Aim + FVector(0.0, 0.0, 1.0 * U);
+			// (a longer climb when they come from an airfield of their own, some way off)
+			const double Meets = Out - 0.16, Parts = Out + TurnShare + 0.1, Climb = Data.Regions.IsValidIndex(Flight.Sortie.MeetFrom) ? 0.24 : 0.1;
+			// They rise from their own airfield where that is known, and from under the raid where it is not.
+			FVector Ground = Aim + FVector(0.0, 0.0, 1.0 * U);
+			if (Data.Regions.IsValidIndex(Flight.Sortie.MeetFrom))
+			{
+				const FVector2D Theirs = AirfieldSpot(Flight.Sortie.MeetFrom);
+				Ground = SurfacePoint(Theirs.X, Theirs.Y, 0.3) + FVector(0.0, 0.0, 1.0 * U);
+			}
 			const double Round = FMath::Clamp((Share - Meets) / (Parts - Meets), 0.0, 1.0) * PI * 3.0;
 			const FVector Among = Flight.At + (Course * FMath::Cos(Round) + Abeam * FMath::Sin(Round)) * (6.5 * U) + FVector(0.0, 0.0, 2.2 * U * FMath::Sin(Round * 2.0));
 			FVector Now3 = Among;

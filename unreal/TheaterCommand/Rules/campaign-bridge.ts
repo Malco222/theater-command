@@ -70,6 +70,8 @@ import { fleetReach, landingTargets, whyNotShip } from '../../../src/campaign/na
 import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
+import { airAct, airPage } from '../../../src/campaign/airpages';
+import { airfieldsSeen, flownRaids } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -100,6 +102,10 @@ function view() {
   const seen = sight(s);
   // Where air groups are based: each such place is an airfield on the table.
   const based = new Set(s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => f.base));
+  // The airfields as the player knows them (the grand campaign): the size of each, and which the fog hides.
+  const fields = airfieldsSeen(s);
+  const fieldSize = new Map(fields.map((a) => [a.region, a.size] as const));
+  const fieldHidden = new Set(fields.filter((a) => a.groups < 0).map((a) => a.region));
   return {
     rules: 'campaign',
     turn: s.turn,
@@ -122,7 +128,7 @@ function view() {
     // Each region: who holds it, and the works built there since the war began that the table shows as models:
     // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
     regions: s.regions.map((r) => {
-      const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, 'aa', r.id), Math.max(workLevel(s, 'field', r.id), based.has(r.id) ? 1 : 0)];
+      const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, 'aa', r.id), fields.length ? fieldSize.get(r.id) ?? 0 : Math.max(workLevel(s, 'field', r.id), based.has(r.id) ? 1 : 0)];
       return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
     }),
     // Under the fog of war the player's map shows only what he is allowed to know: an army seen whole, an army
@@ -145,7 +151,10 @@ function view() {
       // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
       reach: f.nat === s.human && up ? fleetReach(s, f) : [],
     })),
-    air: s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => ({
+    // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
+    // many groups and aircraft stand on it, or -1 where the fog hides that.
+    airfields: fields.map((a) => ({ region: a.region, nat: a.holder, side: a.side, size: a.size, word: a.word, holds: a.holds, groups: a.groups, aircraft: a.aircraft, crowded: a.crowded })),
+    air: s.airFleets.filter((f) => f.ftr + f.bmr > 0 && !fieldHidden.has(f.base)).map((f) => ({
       id: f.id, nat: f.nat, name: f.name, base: f.base, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr), mission: f.mission,
     })),
     // The year each nation's own designers have reached for tanks, fighters and bombers: a nation that pushes a
@@ -248,6 +257,40 @@ function orderLine(s: Game, b: Build) {
 const corpsById = (s: Game, ids: number[]): Corps[] =>
   ids.map((id) => s.corps.find((c) => c.id === id)).filter((c): c is Corps => !!c && !c.dead);
 
+
+/** One formation seen to fly a raid: where from, where to, whose, what flies, and what it meets. */
+interface Flight { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; meetFrom: number; loss: number }
+
+const lastAirReport = (s: Game): number => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
+
+/** The raids flown since a report (by its id), as the player may know them: each group that flew, from its own airfield. */
+function raidsSince(s: Game, since: number, turns: number[], skipNat: string | null = null): { flights: Flight[]; notes: string[]; focus: number[]; mine: boolean } {
+  const flights: Flight[] = [], notes: string[] = [], focus: number[] = [];
+  let mine = false;
+  const seenIds = new Set<number>();
+  for (const turn of [...new Set(turns)]) {
+    for (const r of flownRaids(s, turn)) {
+      if (r.id <= since || seenIds.has(r.id) || r.attNat === skipNat) continue;
+      seenIds.add(r.id);
+      const riser = r.defenders.find((d) => d.ftr >= 1 && d.base >= 0);
+      let first = true;
+      for (const a of r.attackers.filter((x) => x.base >= 0 && x.ftr + x.bmr >= 1).slice(0, 4)) {
+        flights.push({
+          from: a.base, x: r.x, y: r.y, nat: a.nat, bombers: a.bmr >= 1, escort: a.bmr >= 1 && a.ftr >= 1, region: r.region,
+          aa: first && r.region >= 0 ? workLevel(s, 'aa', r.region) : 0, meet: first && riser ? riser.nat : '', meetFrom: first && riser ? riser.base : -1,
+          loss: a.bmr >= 1 ? a.lostBmr / a.bmr : a.ftr >= 1 ? a.lostFtr / a.ftr : 0,
+        });
+        first = false;
+      }
+      if (first) continue;
+      notes.push(r.result);
+      if (r.region >= 0) focus.push(r.region);
+      if (r.defNat === s.human || (r.region >= 0 && s.regions[r.region].ctrl === s.human)) mine = true;
+    }
+  }
+  return { flights, notes, focus, mine };
+}
+
 /** One computer nation's month. If it did something worth seeing, that is noted. */
 function stepOne(s: Game, steps: unknown[] | null): void {
   {
@@ -255,16 +298,21 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     const r0 = s.reports.length;
     const month = s.turn;
     const stood = new Map(s.corps.filter((c) => !c.dead).map((c) => [c.id, c.reg] as const));
+    const air0 = lastAirReport(s);
     const nat = stepAI(s);
     if (s.human && s.turn !== month) judgeGoals(s, s.human);
     if (!steps) return;
+    // The raids it flew, or that were flown as its month closed: shown over the map with the rest of what it did.
+    const air = raidsSince(s, air0, [month, s.turn]);
+    const raidNote = air.notes.slice(0, 2).join(' ');
     const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
     const reps = s.reports.slice(r0);
     if (!taken.length && !reps.length) {
       // Nothing was fought for or taken, but armies the player can see may have marched: that is shown too.
       const seen = sight(s);
       const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)!] > 0)).map((c) => c.reg))];
-      if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
+      if (air.flights.length) steps.push({ nat, note: raidNote, taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine, raids: air.flights, view: view() });
+      else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
       return;
     }
     const some = (names: string[]): string => (names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`);
@@ -278,8 +326,9 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     ].filter(Boolean);
     steps.push({
       nat,
-      note: `${s.nations[nat].adj} forces ${said.join(', ')}.`,
+      note: `${s.nations[nat].adj} forces ${said.join(', ')}.${raidNote ? ` ${raidNote}` : ''}`,
       taken,
+      raids: air.flights,
       battles: reps.map((r) => r.region),
       focus: [...new Set([...taken, ...reps.map((r) => r.region)])],
       // The player's own ground or troops were involved.
@@ -557,11 +606,14 @@ function endMonth() {
     const month = s.turn;
     for (let guard = 0; guard < 80 && s.turn === month; guard++) stepOne(s, steps);
   } else {
+    const air0 = lastAirReport(s), month = s.turn, me = s.human;
     if (onEve(s)) endEve(s);
     else {
       judgeGoals(s, s.human);
       endHuman(s);
     }
+    const air = raidsSince(s, air0, [month, s.turn]);
+    if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(' '), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, view: view() });
     runOthers(s, steps);
     fallen = arrive(s);
   }
@@ -1191,6 +1243,7 @@ function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
   const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s)
+    : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
     : part[0] === 'rebase' ? rebasePage(s, Number(part[1])) : null;
@@ -1204,7 +1257,23 @@ function act(action: string, region = -1) {
   const part = action.split(':');
   let ok = false, note = '';
   // Aircraft seen leaving for their target when a raid is ordered: where from, where to, whose, and what flies.
-  let fly: { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; loss: number } | null = null;
+  let fly: Flight | null = null;
+  let flies: Flight[] = [];
+  let open = '';
+  const air0 = lastAirReport(s);
+  const air = airAct(s, action);
+  if (air) {
+    // The air war as its own game (the grand campaign): a raid is flown the moment it is ordered, by every group picked.
+    ok = air.ok; note = air.note; open = air.ok ? air.open ?? '' : '';
+    if (air.ok && air.report !== undefined) {
+      const flown = raidsSince(s, air0, [s.turn]);
+      flies = flown.flights;
+      // What came of it, in the report's own words first, kept short enough to read while the raid is flown.
+      const told = flown.notes.join(' ') || note;
+      note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
+    }
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'air') {
     const f = s.airFleets.find((x) => x.id === Number(part[1]));
     const m = part[2] as AirMission, t = Number(part[3]);
@@ -1213,7 +1282,7 @@ function act(action: string, region = -1) {
     const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? '', loss: forecastAir(s, before, m, t).bomberLoss } : { aa: 0, meet: '', loss: 0 };
     ok = orderAir(s, Number(part[1]), m, t);
     note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
-    if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: m === 'strike' ? -1 : t, ...meets }; }
+    if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: m === 'strike' ? -1 : t, meetFrom: -1, ...meets }; }
   } else if (part[0] === 'airbase') {
     ok = orderAirBase(s, Number(part[1]), Number(part[2]));
     note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';
@@ -1228,7 +1297,7 @@ function act(action: string, region = -1) {
   else if (action === 'dom:yes') { domAsked = 0; ok = orderDomination(s); note = ok ? 'The last act has begun. Every nation still standing is at war with every other.' : whyNotOrderDomination(s) ?? 'It cannot be chosen now.'; }
   else if (action === 'dom:peace') { domAsked = 0; ok = orderKeepPeace(s); note = ok ? 'You take the victory, and the world stays as it is.' : ''; }
   const news = s.headlines.slice(h0).map((h) => h.text);
-  return { ok, note: news.length ? news.join(' ') : note, fly, view: view() };
+  return { ok, note: news.length ? news.join(' ') : note, fly, flies: fly ? [fly] : [], open: '', view: view() };
 }
 
 /** The player's oil and supplies, for the two gauges beside the treasury. */
@@ -1640,5 +1709,12 @@ function roll() {
   };
 }
 
+/** The raids flown in a month as the player may know them, and how many air battles the war has seen (for checking). */
+function raidsFlown(turn?: number) {
+  const s = game();
+  return { battles: s.flags.airBattles ?? 0, reports: s.airReports.length, turns: [...new Set(s.airReports.map((r) => r.turn))], raids: flownRaids(s, turn ?? s.turn) };
+}
+
 (globalThis as Record<string, unknown>).TC = {
+  raidsFlown,
   land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };

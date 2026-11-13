@@ -517,6 +517,8 @@ private:
 	TArray<FAnnouncement> Announcements;
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
+	int32 PointedField = INDEX_NONE; // the province whose airfield the pointer is over
+	int32 HoverTipField = INDEX_NONE;
 	int32 HoverTipRegion = INDEX_NONE;
 	bool bWatchAll = true; // watch every nation's move at the month's end; V switches to only what touches the player
 	TMap<int32, int32> WatchStood; // where each corps stood at the last step watched, to see who has marched

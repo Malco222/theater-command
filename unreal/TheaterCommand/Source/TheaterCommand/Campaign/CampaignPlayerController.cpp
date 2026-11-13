@@ -581,16 +581,10 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		bPageOpen = Page.bValid;
 		return;
 	}
-	FString Note;
-	FSortie Sortie;
-	const bool bOk = Session->Act(Action, SelectedRegion, Note, &Sortie);
+	FString Note, Next;
+	TArray<FSortie> Sorties;
+	const bool bOk = Session->Act(Action, SelectedRegion, Note, &Sorties, &Next);
 	CampaignSounds::Play(this, bOk ? TEXT("stamp") : TEXT("click"), 0.6f);
-	if (bOk && Sortie.bValid && Map.IsValid())
-	{
-		// The aircraft are seen to take off for their target and come home again.
-		Map->FlySortie(Sortie);
-		CampaignSounds::Play(this, Sortie.bBombers ? TEXT("bomber_drone") : TEXT("fighter_pass"), 0.45f);
-	}
 	if (bOk)
 	{
 		// Whatever it was may have changed the table: the fog lifted, the world at war.
@@ -599,7 +593,46 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 	}
 	if (!Note.IsEmpty())
 	{
-		Notify(Note, 8.0);
+		Notify(Note, Sorties.Num() > 0 ? 12.0 : 8.0);
+	}
+	if (bOk && Sorties.Num() > 0 && Map.IsValid())
+	{
+		// A raid is flown the moment it is ordered: the room is put away, and the player watches every group
+		// take off from its own airfield, meet over the target and come home again.
+		bool bBombers = false;
+		FVector2D Middle = FVector2D::ZeroVector;
+		for (const FSortie& Sortie : Sorties)
+		{
+			Map->FlySortie(Sortie);
+			bBombers |= Sortie.bBombers;
+			Middle += Map->AirfieldSpot(Sortie.From);
+		}
+		Middle = (Middle / Sorties.Num() + Sorties[0].To) * 0.5;
+		CampaignSounds::Play(this, bBombers ? TEXT("bomber_drone") : TEXT("fighter_pass"), 0.45f);
+		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			// Far enough back to hold the airfields and the target in one look.
+			double Spread = 0.0;
+			for (const FSortie& Sortie : Sorties)
+			{
+				Spread = FMath::Max(Spread, FVector2D::Distance(Map->AirfieldSpot(Sortie.From), Sortie.To));
+			}
+			Eye->GoTo(Map->MapToWorld(Middle.X, Middle.Y), FMath::Clamp(static_cast<float>(0.3 + Spread / 420.0), 0.4f, 0.85f));
+		}
+		ClosePage();
+		return;
+	}
+	if (bOk && !Next.IsEmpty() && Next != Page.Id)
+	{
+		// The rules say which room comes next: back to the group once it has its orders.
+		const int32 Opened = Page.Revision + 1;
+		const FOfficePage Then = Session->Page(Next, SelectedRegion);
+		if (Then.bValid)
+		{
+			Page = Then;
+			Page.Revision = Opened;
+			return;
+		}
 	}
 	const FString Id = Page.Id;
 	const int32 Revision = Page.Revision + 1;
@@ -1412,6 +1445,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	FVector PointerWorld;
 	const bool bOnTable = bHaveMouse && PointerOnTable(PointerWorld);
 	const int32 PointedRegion = bOnTable ? Map->RegionAtWorld(PointerWorld) : INDEX_NONE;
+	PointedField = bOnTable ? Map->AirfieldNear(Map->WorldToMap(PointerWorld)) : INDEX_NONE;
 	AArmyPiece* PointedPiece = nullptr;
 	{
 		FVector RayOrigin, RayDirection;
@@ -1563,9 +1597,11 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 
 	// A tip that follows the pointer: what the province under it is, whose, what it is worth and who stands there.
 	const int32 TipRegion = (bBusy || !bHaveMouse || bLeftHeld || bRightHeld) ? INDEX_NONE : PointedRegion;
-	if (TipRegion != HoverTipRegion)
+	const int32 TipField = TipRegion == INDEX_NONE ? INDEX_NONE : PointedField;
+	if (TipRegion != HoverTipRegion || TipField != HoverTipField)
 	{
 		HoverTipRegion = TipRegion;
+		HoverTipField = TipField;
 		HoverTip = FText::GetEmpty();
 		FCampaignSession* Session = GetSession();
 		if (Session && Map->GetData().Regions.IsValidIndex(TipRegion))
@@ -1604,6 +1640,14 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				Line += bDim && Force.Value.Y == 0
 					? FString::Printf(TEXT("\n%s army: %d corps, strength unknown"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X)
 					: FString::Printf(TEXT("\n%s army: %d corps, %d division%s"), Whose ? *Whose->Adjective : *Force.Key, Force.Value.X, Force.Value.Y, Force.Value.Y == 1 ? TEXT("") : TEXT("s"));
+			}
+			// Over an airfield: what it is and what stands on it, and that a click opens it.
+			if (const FViewAirfield* Field = View.Airfields.FindByPredicate([TipField](const FViewAirfield& Each) { return Each.Region == TipField; }))
+			{
+				const FString Stands = Field->Groups < 0 ? FString(TEXT("what flies from it is not known"))
+					: Field->Groups == 0 ? FString(TEXT("no aircraft based here"))
+					: FString::Printf(TEXT("%d air group%s, %s aircraft%s"), Field->Groups, Field->Groups == 1 ? TEXT("") : TEXT("s"), *FText::AsNumber(Field->Aircraft).ToString(), Field->bCrowded ? TEXT(" (crowded)") : TEXT(""));
+				Line = FString::Printf(TEXT("%s  \u00B7  %s\nServes %s aircraft: %s.\nClick to open the airfield."), *Field->Word.ToUpper(), *Region.Name, *FText::AsNumber(Field->Holds).ToString(), *Stands);
 			}
 			HoverTip = FText::FromString(Line);
 		}
@@ -1734,6 +1778,15 @@ void ACampaignPlayerController::ClickOnTable(AArmyPiece* Piece, int32 RegionId)
 	}
 	// A click on somebody's flag is a click on the ground it stands on.
 	const int32 Target = Piece ? Piece->GetRegionId() : RegionId;
+
+	// An airfield with nothing in hand: it opens, with the groups based there and what they can be sent to do.
+	if (!Piece && ArmyRegion == INDEX_NONE && PointedField != INDEX_NONE && GetSession() && GetSession()->GetView().Airfields.Num() > 0)
+	{
+		SelectRegion(PointedField);
+		OpenPage(TEXT("airfield"));
+		CampaignSounds::Play(this, TEXT("click"), 0.5f);
+		return;
+	}
 
 	if (ArmyRegion != INDEX_NONE && Target != INDEX_NONE && Target != ArmyRegion && FindReach(Target))
 	{
@@ -2632,6 +2685,15 @@ void ACampaignPlayerController::WatchNextStep()
 	{
 		CampaignSounds::Play(this, TEXT("field_gun"), 0.25f);
 	}
+	// The raids of the month are flown again, each group from its own airfield.
+	for (const FSortie& Raid : Step.Raids)
+	{
+		Map->FlySortie(Raid);
+	}
+	if (Step.Raids.Num() > 0)
+	{
+		CampaignSounds::Play(this, Step.Raids[0].bBombers ? TEXT("bomber_drone") : TEXT("fighter_pass"), 0.35f);
+	}
 
 	// Travel to where it happened.
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
@@ -2658,7 +2720,8 @@ void ACampaignPlayerController::WatchNextStep()
 	{
 		CampaignSounds::Play(this, TEXT("explosion"), 0.3f);
 	}
-	const double Pause = Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
+	// (a raid takes its time to fly: long enough to see it reach the target when it is the player's sky)
+	const double Pause = Step.Raids.Num() > 0 ? (Step.bMine ? 6.0 : 2.2) : Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
 	Notify(Step.Note, Pause + 0.3);
 	WatchNext = FPlatformTime::Seconds() + Pause;
 }

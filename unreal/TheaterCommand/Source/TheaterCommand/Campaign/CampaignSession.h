@@ -116,7 +116,7 @@ public:
 	FOfficePage Page(const FString& Id, int32 RegionId);
 
 	/** Something pressed in such a room. OutNote says what came of it. */
-	bool Act(const FString& Action, int32 RegionId, FString& OutNote, FSortie* OutSortie = nullptr);
+	bool Act(const FString& Action, int32 RegionId, FString& OutNote, TArray<FSortie>* OutSorties = nullptr, FString* OutOpen = nullptr);
 
 	/** The generals of the player's nation, and the corps that have none. */
 	FGeneralStaff Generals();

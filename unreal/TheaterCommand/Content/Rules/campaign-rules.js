@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6211167 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6cf79c1 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1567,31 +1567,31 @@
   function pathOptions(g2, nat) {
     const n = chooser(g2, nat);
     if (!n) return [];
-    const mine = bloc(n);
+    const mine2 = bloc(n);
     const out = [];
     for (const b of ["axis", "allies"]) {
       const leader = g2.nations[DIPLOMACY.leaders[b]];
       const name = b === "axis" ? "the Axis" : "the Allies";
       let why = "";
-      if (mine === b) why = `You are a member of ${name}.`;
-      else if (mine) why = `You have given your word to ${mine === "league" ? LEAGUE.name : mine === "axis" ? "the Axis" : "the Allies"}.`;
+      if (mine2 === b) why = `You are a member of ${name}.`;
+      else if (mine2) why = `You have given your word to ${mine2 === "league" ? LEAGUE.name : mine2 === "axis" ? "the Axis" : "the Allies"}.`;
       else if (!leader?.alive || bloc(leader) !== b) why = `${name[0].toUpperCase()}${name.slice(1)} ${b === "axis" ? "has" : "have"} no leader left to join.`;
       else if (n.atWar.some((x) => bloc(g2.nations[x]) === b)) why = `You are at war with ${name}.`;
-      out.push({ id: b, ok: why === "", why, now: mine === b });
+      out.push({ id: b, ok: why === "", why, now: mine2 === b });
     }
-    out.push({ id: "alone", ok: mine === null && step(n) !== 0, why: mine ? "An alliance, once joined, is not left." : step(n) === 0 ? "You answer to nobody." : "", now: mine === null && step(n) === 0 });
+    out.push({ id: "alone", ok: mine2 === null && step(n) !== 0, why: mine2 ? "An alliance, once joined, is not left." : step(n) === 0 ? "You answer to nobody." : "", now: mine2 === null && step(n) === 0 });
     if (!leagueFounded(g2)) {
-      const partner = !mine && !n.atWar.length && founders(g2, nat).some((x) => x.ok);
-      out.push({ id: "found", ok: partner, why: mine ? `You have given your word to ${mine === "axis" ? "the Axis" : "the Allies"}.` : n.atWar.length ? "A country at war finds no partners: the League is founded in peace." : partner ? "" : "No other country is ready to found it with you yet.", now: false });
+      const partner = !mine2 && !n.atWar.length && founders(g2, nat).some((x) => x.ok);
+      out.push({ id: "found", ok: partner, why: mine2 ? `You have given your word to ${mine2 === "axis" ? "the Axis" : "the Allies"}.` : n.atWar.length ? "A country at war finds no partners: the League is founded in peace." : partner ? "" : "No other country is ready to found it with you yet.", now: false });
     } else {
       const members = leagueMembers(g2);
       let why = "";
-      if (mine === "league") why = `You are a member of ${LEAGUE.name}.`;
-      else if (mine) why = `You have given your word to ${mine === "axis" ? "the Axis" : "the Allies"}.`;
+      if (mine2 === "league") why = `You are a member of ${LEAGUE.name}.`;
+      else if (mine2) why = `You have given your word to ${mine2 === "axis" ? "the Axis" : "the Allies"}.`;
       else if (!members.length) why = "The League has fallen: none of its members is left.";
       else if (n.atWar.length) why = "The League takes in no country that is already at war.";
       else if (members.length >= LEAGUE.join.most) why = "The League is as large as it can hold together.";
-      out.push({ id: "join", ok: why === "", why, now: mine === "league" });
+      out.push({ id: "join", ok: why === "", why, now: mine2 === "league" });
     }
     return out;
   }
@@ -2438,6 +2438,71 @@
         { fleet: "US Ninth Air Force", base: ["Champagne", "Paris", "Maine", "Rennes", "Cotentin"], mission: "support" }
       ] }
     ]
+  };
+
+  // ../../data/campaign/airwar.json
+  var airwar_default = {
+    _note: "The air war as its own game (the grand campaign only). Aircraft fly from airfields: places on the map with a size, which engineers can lay out and the treasury can enlarge. Each air fleet history lists is split into air groups of one kind, fighters or bombers, of at most groups.most aircraft. A group patrols, rests, or flies one raid a month. A raid is planned from its target: who can reach it, what will meet it, the chance of success and the losses to expect, and it is flown the moment the order is given.",
+    fields: {
+      _note: "sizes is how many aircraft a seeded airfield serves, by its class: 1 a landing ground, 2 an airfield, 3 an air base. Every level built on top (the arsenal's airfields, or engineers as far as 'engineers') serves arsenal.works.field.holds more. seed says where the war begins with airfields: an air base wherever history bases an air fleet and at every capital, an airfield in every city, a landing ground in every town. least is what a group stranded on bare ground can still fly. words name an airfield from the aircraft it serves.",
+      sizes: [0, 500, 1e3, 1500],
+      least: 100,
+      engineers: 2,
+      seed: { base: 3, city: { class: 2, fac: 2, vp: 3 }, town: { class: 1, fac: 1, vp: 2 } },
+      words: [[500, "Landing ground"], [1e3, "Airfield"], [2e3, "Air base"], [99999, "Great air base"]]
+    },
+    groups: {
+      _note: "most is the largest group a fleet is split into. names is how each nation numbers its groups of each kind: {n} is the number and {nth} the ordinal. A command small enough to be one group keeps its own name.",
+      most: 250,
+      names: {
+        _default: { ftr: "{nth} Fighter Group", bmr: "{nth} Bomber Group" },
+        GER: { ftr: "Jagdgeschwader {n}", bmr: "Kampfgeschwader {n}" },
+        UK: { ftr: "No. {n} Fighter Wing", bmr: "No. {n} Bomber Group" },
+        FRA: { ftr: "Groupe de Chasse {n}", bmr: "Groupe de Bombardement {n}" },
+        ITA: { ftr: "Stormo Caccia {n}", bmr: "Stormo Bombardieri {n}" },
+        SOV: { ftr: "{nth} Fighter Division", bmr: "{nth} Bomber Division" },
+        USA: { ftr: "{nth} Fighter Group", bmr: "{nth} Bomb Group" }
+      }
+    },
+    raids: {
+      _note: "The kinds of raid the planner offers, in the order shown. needs says which aircraft can fly it at all.",
+      kinds: [
+        { key: "bomb", label: "Bomb factories and railways", short: "Day bombing", blurb: "Bombers go for the factories and rail yards of one province by day. Fighters in range can go with them.", needs: "bmr" },
+        { key: "night", label: "Bomb by night", short: "Night bombing", blurb: "Bombers go in darkness with no escort: few are lost, and only about a third of the bombs find the target.", needs: "bmr" },
+        { key: "ground", label: "Raid troops", short: "Raid on troops", blurb: "Fighters and bombers go for an enemy army where it stands: its organisation is cut for the battle that follows, and some of its men and guns are lost.", needs: "any" },
+        { key: "superiority", label: "Fight for the sky", short: "Fight for the sky", blurb: "Fighters sweep the sky over one province and bombers hit its airfields. Win it and your armies and fleets have the air there for a month.", needs: "any" },
+        { key: "strike", label: "Strike shipping", short: "Shipping strike", blurb: "Bombers hunt warships and merchant ships in one sea.", needs: "bmr" },
+        { key: "recon", label: "Scout from the air", short: "Reconnaissance", blurb: "A few aircraft photograph one province and the ground round it: every army there is seen whole until the month ends.", needs: "any" }
+      ]
+    },
+    ground: {
+      _note: "A raid on troops. intensity is how hard the month's fighting is beside a fight for the sky (1). fighters is what one fighter is worth beside a bomber against troops. The organisation cut is weight / (scale + perDiv x enemy divisions there), never more than max; troops in cover (by terrain) or dug in lose less. str is the share of the cut that is also lost in men and guns. fire is the share of the attacking fighters brought down by ground fire. value is what a point of the cut on one division counts for when the raid is judged.",
+      intensity: 0.6,
+      fighters: 0.5,
+      scale: 600,
+      perDiv: 40,
+      max: 0.35,
+      str: 0.12,
+      floor: 0.1,
+      dug: 0.6,
+      cover: { plains: 1, desert: 1, hills: 0.85, marsh: 0.85, forest: 0.7, mountain: 0.7, urban: 0.6 },
+      fire: 0.015,
+      value: 60
+    },
+    recon: {
+      _note: "A reconnaissance flight. aircraft is how many of the group go. loss is the share of them lost when enemy fighters patrol the target, per unit of their cover there. ready is the readiness the group spends.",
+      aircraft: 12,
+      loss: 0.25,
+      ready: 0.04
+    },
+    success: {
+      _note: "The chance of success shown before a raid: a raid succeeds when it costs the enemy more than it costs you. k is how sharply the chance turns on the expected exchange. Set from 489 raids flown by four nations over six months: at 12 the raids given 10 to 25% won 15% of the time, those given 25 to 40% won 38%, and those given over 90% all won.",
+      k: 12
+    },
+    ai: {
+      _note: "The computer's air staff: the least readiness at which a fighter group flies escort.",
+      escortReady: 0.5
+    }
   };
 
   // ../../data/campaign/stories.json
@@ -3753,13 +3818,13 @@
       note(g2, c, "took", target.id);
     }
   }
-  function rivals(g2, mine, theirs, won, target) {
+  function rivals(g2, mine2, theirs, won, target) {
     var _a;
     const S = g2.stories, me = g2.human;
     const field = theirs.filter((c) => c.kind !== "fort");
     if (!field.length) return;
     const lead2 = [...field].sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
-    for (const c of mine) {
+    for (const c of mine2) {
       if (c.nat !== me || c.kind === "fort") continue;
       const R = rivalryOf(g2, c.rival);
       if (R && !R.over) {
@@ -3854,7 +3919,7 @@
     }
   }
   function storyMonth(g2, nat) {
-    const mine = nat === g2.human;
+    const mine2 = nat === g2.human;
     batch = [];
     for (const c of g2.corps) {
       if (c.nat !== nat || c.kind === "fort") continue;
@@ -3881,14 +3946,14 @@
         if (lost && !c.rec?.exile) {
           bump(c, "exile");
           note(g2, c, "homelost", h.id);
-          if (mine && c.reg !== h.id) {
+          if (mine2 && c.reg !== h.id) {
             c.org = clamp(c.org - STORIES.home.lostOrg, 0, 1);
             moment(g2, 6, "homeLost", c, h.id, { foe: g2.nations[h.ctrl]?.adj });
           }
         } else if (!lost && c.rec?.exile && allied(g2, nat, h.ctrl)) {
           delete c.rec.exile;
           note(g2, c, "homefree", h.id);
-          if (mine) {
+          if (mine2) {
             c.org = clamp(c.org + STORIES.home.freedOrg, 0, 1);
             moment(g2, 6, "homeFreed", c, h.id);
           }
@@ -3898,12 +3963,12 @@
         delete c.leave;
         note(g2, c, "back", c.reg);
         moment(g2, 2, "back", c, c.reg);
-        if (mine) headline(g2, "info", `${c.name} is back from home and ready for orders at ${g2.regions[c.reg].name}.`, nat, c.reg);
+        if (mine2) headline(g2, "info", `${c.name} is back from home and ready for orders at ${g2.regions[c.reg].name}.`, nat, c.reg);
       }
       earn2(g2, "corps", c, c.reg);
     }
     publish(g2);
-    if (!mine) return;
+    if (!mine2) return;
     const S = g2.stories;
     const alive = new Set(g2.corps.map((c) => c.id));
     for (const r of S.rivals) {
@@ -3950,8 +4015,8 @@
       earn2(g2, "fleet", f, zone);
     }
     for (const f of losers) note(g2, f, "beaten", zone, sunkOfWinners || void 0);
-    const mine = winners.find((f) => f.nat === g2.human);
-    if (mine && sunkCapital) g2.stories.mail.push({ w: 4, m: "sea", id: -1e3 - mine.id, unit: mine.name, reg: -1 });
+    const mine2 = winners.find((f) => f.nat === g2.human);
+    if (mine2 && sunkCapital) g2.stories.mail.push({ w: 4, m: "sea", id: -1e3 - mine2.id, unit: mine2.name, reg: -1 });
   }
   function storyConvoy(g2, raiders, escorts, tons, attacked) {
     if (tons > 0) for (const f of raiders) {
@@ -4109,6 +4174,7 @@
       rail: { label: "Relay the railway", blurb: "The track torn up or bombed in this province is relaid by next month. Trains run through again, and the armies beyond are fed from a railhead that much nearer." },
       plant: { label: "Rebuild a factory", blurb: "One factory wrecked by bombing is put back to work by next month and earns again." },
       works: { label: "Build field works", blurb: "Trenches, wire and gun pits: the province's fortifications rise one level, as far as level 2. Heavier works are ordered from the treasury." },
+      airfield: { label: "Lay out an airfield", blurb: "Runways, dispersal pens and a fuel dump: by next month air groups can be based in this province, or more of them if it has an airfield already. Each month's work serves 500 more aircraft, as far as two levels; a larger airfield is ordered from the treasury. An airfield costs a little to keep up." },
       mines: { label: "Lay minefields and traps", blurb: "Mines and booby traps on every road in. Each level takes 12% off any attack on the province and costs the enemy a move to enter it, until his own engineers clear lanes. Two levels at most." },
       demolish: { label: "Demolish the fortifications", blurb: "The works here are blown up, one level a month, so that nobody can use them." }
     },
@@ -4452,15 +4518,19 @@
 
   // ../../src/campaign/air.ts
   var AIR = air_default;
+  var AIRWAR = airwar_default;
+  var airWar = (g2) => g2.flags.airwar === 1;
   var MISSION = {
     support: { label: "Support the armies", what: "Flies for the armies and defends its own sky." },
     superiority: { label: "Win the sky", what: "Fighters and bombers go for the enemy air force and its airfields over one region." },
     bomb: { label: "Bomb industry", what: "Bombers attack the factories of one region by day, with fighters if it is in their range." },
     night: { label: "Bomb by night", what: "Bombers attack by night: few are lost, and few bombs find the factories." },
     strike: { label: "Strike shipping", what: "Bombers hunt warships and merchant ships in one sea." },
-    rest: { label: "Rest and refit", what: "Stands down to refit. It gets replacements first and does not fly." }
+    rest: { label: "Rest and refit", what: "Stands down to refit. It gets replacements first and does not fly." },
+    ground: { label: "Raid troops", what: "Fighters and bombers go for an enemy army where it stands, and cut its organisation for the battle that follows." }
   };
-  var OFFENSIVE = ["superiority", "bomb", "night", "strike"];
+  var OFFENSIVE = ["superiority", "bomb", "night", "strike", "ground"];
+  var intensity = (m) => m === "ground" ? AIRWAR.ground.intensity : AIR.combat.intensity[m];
   var isOffensive = (m) => OFFENSIVE.includes(m);
   var SURFACE = ["bb", "cv", "ca", "dd"];
   var spec = (nat) => AIR.nations[nat] ?? AIR.nations._default;
@@ -4475,7 +4545,7 @@
   var planes = (n, one) => `${n.toLocaleString("en-US")} ${one}${n === 1 ? "" : "s"}`;
   var airFleetsOf = (g2, nat) => g2.airFleets.filter((f) => f.nat === nat);
   var reach = (f) => {
-    const own = AIR.fleets.find((x) => x.nat === f.nat && x.name === f.name)?.ftrRange;
+    const own = AIR.fleets.find((x) => x.nat === f.nat && x.name === (f.parent ?? f.name))?.ftrRange;
     return own ? { ...spec(f.nat), ftrRange: own } : spec(f.nat);
   };
   var airRange = (f) => ({ ftr: reach(f).ftrRange, bmr: reach(f).bmrRange });
@@ -4500,10 +4570,15 @@
   }
   function crowding(g2, f) {
     const there = g2.airFleets.reduce((s, x) => s + (x.base === f.base ? x.ftr + x.bmr : 0), 0);
-    const built = g2.flags[`wk:field:${f.base}`];
-    const holds3 = built ? AIR.airfields.holds + built * WORKS.field.holds : AIR.airfields.holds;
+    const holds3 = airWar(g2) ? Math.max(AIRWAR.fields.least, airfieldsHold(g2, f.base)) : airfieldsHold(g2, f.base);
     return there > holds3 ? holds3 / there : 1;
   }
+  var fieldClass = (g2, region) => g2.flags[`af:${region}`] ?? 0;
+  function airfieldsHold(g2, region) {
+    const built = (g2.flags[`wk:field:${region}`] ?? 0) * WORKS.field.holds;
+    return airWar(g2) ? (AIRWAR.fields.sizes[fieldClass(g2, region)] ?? 0) + built : AIR.airfields.holds + built;
+  }
+  var hasAirfield = (g2, region) => !airWar(g2) || airfieldsHold(g2, region) > 0;
   var gunsAt = (g2, region) => g2.flags[`wk:aa:${region}`] ?? 0;
   var WORKS = arsenal_default.works;
   var leaderMul = (f) => 1 + (f.leader ? AIR.leader.perLevel * (f.leader.level - 1) : 0);
@@ -4572,14 +4647,14 @@
     g2.airFleets.push(f);
     return f;
   }
-  function foundAirFleet(g2, nat, r, name) {
+  function foundAirFleet(g2, nat, r, name, kind) {
     const taken = (x) => g2.airFleets.some((f2) => f2.name === x);
     let unique = name;
     for (let k = 2; taken(unique); k++) unique = `${name} ${k}`;
     const f = {
       id: g2.nextAir++,
       nat,
-      name: unique,
+      name: kind ? groupName(g2, nat, kind) : unique,
       base: r.id,
       ftr: 0,
       bmr: 0,
@@ -4591,12 +4666,96 @@
       moved: 0,
       lost: { ftr: 0, bmr: 0 }
     };
+    if (kind) {
+      f.kind = kind;
+      f.parent = unique;
+      f.share = 1;
+    }
     g2.airFleets.push(f);
     return f;
+  }
+  var ordinal = (k) => `${k}${k % 100 >= 11 && k % 100 <= 13 ? "th" : k % 10 === 1 ? "st" : k % 10 === 2 ? "nd" : k % 10 === 3 ? "rd" : "th"}`;
+  function groupName(g2, nat, kind) {
+    const key2 = `agn:${nat}:${kind}`;
+    let name;
+    do {
+      g2.flags[key2] = (g2.flags[key2] ?? 0) + 1;
+      name = (AIRWAR.groups.names[nat] ?? AIRWAR.groups.names._default)[kind].replace("{nth}", ordinal(g2.flags[key2])).replace("{n}", String(g2.flags[key2]));
+    } while (g2.airFleets.some((f) => f.nat === nat && f.name === name));
+    return name;
+  }
+  function splitFleet(g2, f) {
+    if (f.kind) return [f];
+    const most = AIRWAR.groups.most;
+    const plan = [];
+    for (const kind of ["ftr", "bmr"]) {
+      const n = Math.ceil(Math.max(f.est[kind], f[kind]) / most);
+      for (let k = 0; k < n; k++) plan.push({ kind, of: n, k });
+    }
+    f.parent = f.name;
+    f.share = 1;
+    if (!plan.length) {
+      f.kind = (f.extra?.bmr ?? 0) > (f.extra?.ftr ?? 0) ? "bmr" : "ftr";
+      return [f];
+    }
+    const whole = { ftr: f.ftr, bmr: f.bmr, est: { ...f.est }, extra: f.extra ? { ...f.extra } : null };
+    const at = g2.airFleets.indexOf(f);
+    const out = [];
+    plan.forEach((p, i) => {
+      const part = (n) => Math.floor(n / p.of) + (p.k < n % p.of ? 1 : 0);
+      const grp = i === 0 ? f : {
+        id: g2.nextAir++,
+        nat: f.nat,
+        name: "",
+        base: f.base,
+        ftr: 0,
+        bmr: 0,
+        est: { ftr: 0, bmr: 0 },
+        mission: f.mission,
+        target: f.target,
+        ready: f.ready,
+        leader: null,
+        moved: f.moved,
+        lost: { ftr: 0, bmr: 0 }
+      };
+      grp.kind = p.kind;
+      grp.parent = f.parent;
+      grp.share = 1 / p.of;
+      grp.ftr = p.kind === "ftr" ? part(whole.ftr) : 0;
+      grp.bmr = p.kind === "bmr" ? part(whole.bmr) : 0;
+      grp.est = { ftr: p.kind === "ftr" ? part(whole.est.ftr) : 0, bmr: p.kind === "bmr" ? part(whole.est.bmr) : 0 };
+      if (whole.extra) grp.extra = { ftr: p.kind === "ftr" ? part(whole.extra.ftr) : 0, bmr: p.kind === "bmr" ? part(whole.extra.bmr) : 0 };
+      if (i > 0) g2.airFleets.splice(at + i, 0, grp);
+      out.push(grp);
+    });
+    if (out.length > 1) for (const grp of out) grp.name = groupName(g2, f.nat, grp.kind);
+    return out;
+  }
+  function openAirWar(g2) {
+    if (g2.flags.airwar === 1) return;
+    g2.flags.airwar = 1;
+    const S = AIRWAR.fields.seed;
+    const seed = (id, cls) => {
+      if (fieldClass(g2, id) < cls) g2.flags[`af:${id}`] = cls;
+    };
+    for (const r of g2.regions) {
+      if (r.cap) seed(r.id, S.base);
+      else if (r.fac >= S.city.fac || r.vp >= S.city.vp) seed(r.id, S.city.class);
+      else if (r.fac >= S.town.fac || r.vp >= S.town.vp) seed(r.id, S.town.class);
+    }
+    for (const row2 of AIR.fleets) {
+      const b = g2.byName[row2.base];
+      if (b && !row2.scripted) seed(b.id, S.base);
+    }
+    for (const f of [...g2.airFleets]) {
+      seed(f.base, S.base);
+      splitFleet(g2, f);
+    }
   }
   function whyNotBase(g2, f, r) {
     if (r.id === f.base) return "It is already based there.";
     if (!allied(g2, f.nat, r.ctrl)) return "That ground is not in friendly hands.";
+    if (!hasAirfield(g2, r.id)) return "There is no airfield there. Engineers can lay one out, and the treasury can build one.";
     if (r.since >= g2.turn) return "Airfields taken this month are not yet in use.";
     if (f.moved === g2.turn) return "It has already changed base this month.";
     if (km(g2, f.base, r.id) > AIR.ferry) return "Too far to move in one month.";
@@ -4623,19 +4782,25 @@
     if (m === "support" || m === "rest") return null;
     if (!g2.nations[f.nat].atWar.length) return "The nation is at peace.";
     const R = reach(f);
+    const escort = f.kind === "ftr" && f.ftr > 0 && m !== "night";
     if (m === "strike") {
       if (!g2.seas[target]) return "Pick a sea.";
-      if (!f.bmr) return "It has no bombers.";
-      if (seaKm(g2, f.base, target) > R.bmrRange) return "That sea is beyond its bombers.";
+      if (!f.bmr && !escort) return "It has no bombers.";
+      if (seaKm(g2, f.base, target) > (escort ? R.ftrRange : R.bmrRange)) return escort ? "That sea is beyond its fighters." : "That sea is beyond its bombers.";
       return shipping(g2, f.nat, target) ? null : "There is no enemy shipping there.";
     }
     const r = g2.regions[target];
     if (!r) return "Pick a region.";
-    if (!atWar(g2, f.nat, r.ctrl)) return "That region is not in enemy hands.";
     const d = km(g2, f.base, target);
+    if (m === "ground") {
+      if (!airWar(g2)) return "Raids on troops are flown only in the grand campaign.";
+      if (!r.units.some((u) => !u.dead && atWar(g2, f.nat, u.nat))) return "There are no enemy troops there.";
+      return f.ftr > 0 && d <= R.ftrRange || f.bmr > 0 && d <= R.bmrRange ? null : "It is out of range.";
+    }
+    if (!atWar(g2, f.nat, r.ctrl)) return "That region is not in enemy hands.";
     if (m === "superiority") return f.ftr > 0 && d <= R.ftrRange || f.bmr > 0 && d <= R.bmrRange ? null : "It is out of range.";
-    if (!f.bmr) return "It has no bombers.";
-    if (d > R.bmrRange) return "It is beyond its bombers.";
+    if (!f.bmr && !escort) return f.kind === "ftr" ? "Fighters do not fly with the night bombers." : "It has no bombers.";
+    if (d > (escort ? R.ftrRange : R.bmrRange)) return escort ? "It is beyond its fighters." : "It is beyond its bombers.";
     if (r.fac > 0 || onNet(target) && !railCut(g2, target) && groundRules(g2)) return null;
     return !groundRules(g2) ? "There is no industry there to bomb." : onNet(target) ? "There is no industry there, and its railway is already cut." : "There is no industry or railway there to bomb.";
   }
@@ -4662,6 +4827,10 @@
       if (!f) continue;
       g2.flags[`air:${r.name}`] = g2.turn;
       headline(g2, "info", `${f.name} forms in ${base.name}.`, nat, base.id);
+      if (airWar(g2)) {
+        if (!hasAirfield(g2, base.id)) g2.flags[`af:${base.id}`] = AIRWAR.fields.seed.base;
+        splitFleet(g2, f);
+      }
     }
     const p = airPool(g2, nat);
     const built = row(AIR.production[nat], g2.turn), trained = row(AIR.pilots.perMonth[nat], g2.turn);
@@ -4672,9 +4841,10 @@
     if (trained) p.pilots += trained[1];
     for (const f of airFleetsOf(g2, nat)) {
       if (!allied(g2, nat, g2.regions[f.base].ctrl) && !fallBack(g2, f)) continue;
-      const r = AIR.fleets.find((x) => x.nat === nat && x.name === f.name);
+      const r = AIR.fleets.find((x) => x.nat === nat && x.name === (f.parent ?? f.name));
       const e = r ? row(r.est, g2.turn) : null;
-      if (e) f.est = f.extra ? { ftr: e[1] + f.extra.ftr, bmr: e[2] + f.extra.bmr } : { ftr: e[1], bmr: e[2] };
+      const ef = e ? f.kind === "bmr" ? 0 : Math.round(e[1] * (f.share ?? 1)) : 0, eb = e ? f.kind === "ftr" ? 0 : Math.round(e[2] * (f.share ?? 1)) : 0;
+      if (e) f.est = f.extra ? { ftr: ef + f.extra.ftr, bmr: eb + f.extra.bmr } : { ftr: ef, bmr: eb };
       if (f.ftr > f.est.ftr) {
         const s = f.ftr - f.est.ftr;
         f.ftr -= s;
@@ -4698,6 +4868,10 @@
       f.bmr += nb;
       p.bmr -= nb;
       f.ready = clamp(f.ready + (f.mission === "rest" ? R.rest : f.mission === "support" ? R.support : R.flying), R.floor, 1);
+      if (f.flew !== void 0 && f.flew < g2.turn && isOffensive(f.mission)) {
+        f.mission = "support";
+        f.target = -1;
+      }
       if (!n.atWar.length || isOffensive(f.mission) && whyNotMission(g2, f, f.mission, f.target)) {
         f.mission = "support";
         f.target = -1;
@@ -4710,14 +4884,22 @@
   }
   function fallBack(g2, f) {
     const old = g2.regions[f.base];
-    let best = null, bd = Infinity;
-    for (const r of g2.regions) {
-      if (r.ctrl !== f.nat) continue;
-      const d = Math.hypot(r.x - old.x, r.y - old.y);
-      if (d < bd) {
-        bd = d;
-        best = r;
+    const nearest = (fields) => {
+      let out = null, bd = Infinity;
+      for (const r of g2.regions) {
+        if (r.ctrl !== f.nat || fields && !hasAirfield(g2, r.id)) continue;
+        const d = Math.hypot(r.x - old.x, r.y - old.y);
+        if (d < bd) {
+          bd = d;
+          out = r;
+        }
       }
+      return out;
+    };
+    let best = nearest(true);
+    if (!best && airWar(g2)) {
+      best = nearest(false);
+      if (best) g2.flags[`af:${best.id}`] = 1;
     }
     const p = airPool(g2, f.nat);
     if (!best) {
@@ -4772,7 +4954,7 @@
       out.why = "Nothing can reach the target.";
       return out;
     }
-    if (m !== "superiority" && out.B <= 0) {
+    if (m !== "superiority" && m !== "ground" && out.B <= 0) {
       out.why = "No bombers can reach the target.";
       return out;
     }
@@ -4785,7 +4967,7 @@
         }
       }
     } else out.radar = radarAt(g2, g2.regions[target]);
-    const holder = sea ? null : g2.regions[target].ctrl;
+    const holder = sea || m === "ground" ? null : g2.regions[target].ctrl;
     for (const f of g2.airFleets) {
       if (f.ftr <= 0 || f.mission !== "support" || !atWar(g2, f.nat, nat)) continue;
       if (holder && !allied(g2, f.nat, holder)) continue;
@@ -4800,7 +4982,7 @@
       out.Dpow += f.ftr * w * worth(g2, f) * techMul(g2, f.nat, "radar");
     }
     const guns = out.B * C.bomberDefence;
-    const I = C.intensity[m];
+    const I = intensity(m);
     out.bomberLoss = out.B > 0 ? Math.min(C.maxBomberLoss, C.bombers * I * (out.Dpow / Math.max(1, out.Dpow + out.Epow + guns)) + (night ? C.night.flak : C.flak) * I) : 0;
     out.aa = m === "bomb" || night ? gunsAt(g2, target) : 0;
     if (out.aa && out.B > 0) out.bomberLoss = Math.min(C.maxBomberLoss, out.bomberLoss + out.aa * WORKS.aa.flak * I);
@@ -4815,11 +4997,11 @@
     if (night) out.lines.push({ label: "Night", value: "Flown in darkness", effect: "Few fighters find the bombers, and only about a third of the bombs find the target" });
     else if (af > 0) {
       const far = out.att.filter((a) => a.f.ftr > 0).sort((a, b) => a.esc - b.esc)[0];
-      const pct5 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
+      const pct7 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
       out.lines.push({
         label: "Range",
-        value: pct5 >= 100 ? "The target is well inside fighter range" : pct5 > 0 ? `The fighters are at ${pct5}% effect over the target` : "The target is beyond fighter range",
-        effect: pct5 >= 100 ? void 0 : pct5 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
+        value: pct7 >= 100 ? "The target is well inside fighter range" : pct7 > 0 ? `The fighters are at ${pct7}% effect over the target` : "The target is beyond fighter range",
+        effect: pct7 >= 100 ? void 0 : pct7 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
       });
     } else if (out.B > 0) out.lines.push({ label: "Range", value: "No escort", effect: "The bombers go alone" });
     const packed = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => crowding(g2, f) < 1);
@@ -4860,14 +5042,31 @@
       l.level++;
     }
   }
-  function fly(g2, nat, m, target, fleets) {
+  function troopCut(r, foes, weight) {
+    const G = AIRWAR.ground;
+    const divs = foes.reduce((s, c) => s + c.divs, 0);
+    return divs > 0 ? Math.min(G.max, weight / (G.scale + G.perDiv * divs)) * (G.cover[r.terrain] ?? 1) : 0;
+  }
+  function tradeHurt(g2, nat, target, through) {
+    const S = AIR.damage.shipping;
+    const zone = g2.seas[target];
+    const hurt = {};
+    const weight = through / (through + S.tradeScale) * zone.air;
+    for (const c of NAVY.convoys) if (atWar(g2, nat, c.to) && c.zones.includes(zone.key)) hurt[c.to] = Math.max(hurt[c.to] ?? 0, c.share / c.zones.length * weight);
+    for (const id of zone.coast) {
+      const r = g2.regions[id];
+      if (r.port && r.owner === r.ctrl && atWar(g2, nat, r.ctrl)) hurt[r.ctrl] = Math.max(hurt[r.ctrl] ?? 0, S.coastal * weight);
+    }
+    return hurt;
+  }
+  function fly(g2, nat, m, target, fleets, salt = "") {
     const a = assessAir(g2, fleets, m, target);
     if (a.why) return null;
-    const C = AIR.combat, I = C.intensity[m];
+    const C = AIR.combat, I = intensity(m);
     const sea = m === "strike", night = m === "night";
-    const rng = airRng(g2, `${m}:${target}:${nat}`);
+    const rng = airRng(g2, `${m}:${target}:${nat}${salt}`);
     const luck = () => rng.range(1 - C.luck, 1 + C.luck);
-    const before = (f) => ({ nat: f.nat, fleet: f.name, leader: f.leader?.name ?? null, ftr: f.ftr, bmr: f.bmr, lostFtr: 0, lostBmr: 0 });
+    const before = (f) => ({ nat: f.nat, fleet: f.name, id: f.id, base: f.base, leader: f.leader?.name ?? null, ftr: f.ftr, bmr: f.bmr, lostFtr: 0, lostBmr: 0 });
     const att = a.att.map((x) => before(x.f)), def = a.def.map((x) => before(x.f));
     const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
     const share = se + sd > 0 ? se / (se + sd) : 0;
@@ -4937,7 +5136,7 @@
       const cut = a.aa ? open * (1 - a.aa * WORKS.aa.cut) : open;
       const nation = total > 0 ? cut * (r.fac / total) : 0;
       raid(g2, nat, r.ctrl, nation);
-      value += cut * 1e3;
+      value += airWar(g2) && r.fac <= 0 ? 0 : cut * 1e3;
       result = r.fac > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g2.nations[r.ctrl].adj} production.` : "";
       if (bombFactories(g2, nat, r, cut)) {
         value += 300;
@@ -4948,9 +5147,24 @@
         result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`;
       } else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : "No bombers got through.";
       result = result.trim();
+    } else if (m === "ground") {
+      const G = AIRWAR.ground;
+      const r = g2.regions[target];
+      const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
+      a.att.forEach((x, i) => down(x.f, att[i], x.ftr * G.fire * luck(), false));
+      const low = a.att.reduce((s, x) => s + x.f.ftr * x.esc * x.crowd, 0);
+      const cut = troopCut(r, foes, through + low * G.fighters);
+      let divs = 0;
+      for (const c of foes) {
+        const k = cut * (c.dug ? G.dug : 1);
+        c.org = Math.max(Math.min(c.org, G.floor), c.org - k);
+        c.str = Math.max(0.05, c.str * (1 - k * G.str));
+        divs += c.divs;
+      }
+      value += cut * divs * G.value;
+      result = cut > 0 ? `The raids cut the organisation of ${foes.length === 1 ? foes[0].name : `the ${foes.length} corps`} at ${r.name} by ${Math.round(cut * 100)}%${foes.some((c) => c.dug) ? ", less where they are dug in" : ""}. They fight the weaker for it until they have rested.` : "The aircraft found little to hit.";
     } else {
       const S = AIR.damage.shipping;
-      const zone = g2.seas[target];
       const frac = Math.min(S.maxSink, S.sink * (through / (through + S.scale)));
       const none2 = () => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
       const sunk = none2();
@@ -4960,13 +5174,7 @@
         f.ready = Math.max(0, f.ready - 0.1);
         for (const c of SURFACE) sunk[c] += s[c];
       }
-      const hurt = {};
-      const weight = through / (through + S.tradeScale) * zone.air;
-      for (const c of NAVY.convoys) if (atWar(g2, nat, c.to) && c.zones.includes(zone.key)) hurt[c.to] = Math.max(hurt[c.to] ?? 0, c.share / c.zones.length * weight);
-      for (const id of zone.coast) {
-        const r = g2.regions[id];
-        if (r.port && r.owner === r.ctrl && atWar(g2, nat, r.ctrl)) hurt[r.ctrl] = Math.max(hurt[r.ctrl] ?? 0, S.coastal * weight);
-      }
+      const hurt = tradeHurt(g2, nat, target, through);
       for (const [victim, s] of Object.entries(hurt)) raid(g2, nat, victim, s);
       const worst = Object.entries(hurt).sort((x, y) => y[1] - x[1])[0];
       shipsSunk = shipCount(sunk);
@@ -5008,7 +5216,8 @@
     }
     const level = sky || ratio >= 2 ? "Decisive victory" : ratio >= 1 ? "Close victory" : ratio >= 0.5 ? "Close defeat" : "Decisive defeat";
     g2.flags.airBattles = (g2.flags.airBattles ?? 0) + 1;
-    const defNat = def[0]?.nat ?? (sea ? "" : g2.regions[target].ctrl);
+    const troops = m === "ground" ? g2.regions[target].units.find((u) => !u.dead && atWar(g2, nat, u.nat))?.nat : void 0;
+    const defNat = troops ?? def[0]?.nat ?? (sea ? "" : g2.regions[target].ctrl);
     const rep = {
       id: g2.flags.airBattles,
       turn: g2.turn,
@@ -5037,6 +5246,7 @@
     let text;
     if (m === "superiority") text = `${who} ${a.att.length === 1 ? "fights" : "fight"} for the sky over ${a.place}: ${dLost} ${adj} aircraft destroyed, ${cost}. ${sky ? together ? "The Allied air forces now hold the sky there." : `The ${g2.nations[nat].adj} air force now holds the sky there.` : df(def) ? "The defenders still hold their sky." : "No fighters came up to meet them."}`;
     else if (sea) text = `${who} ${a.att.length === 1 ? "strikes" : "strike"} at shipping in ${a.place}. ${result} ${cap(cost)}.`;
+    else if (m === "ground") text = `${who} ${a.att.length === 1 ? "raids" : "raid"} the ${adj} troops at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} ${a.place}${night ? " by night" : ""}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     headline(g2, "battle", text, nat, sea ? void 0 : target);
     return rep;
@@ -5045,9 +5255,18 @@
   function airBattles(g2, nat) {
     const out = [];
     if (!g2.nations[nat]?.alive) return out;
+    const followers = [];
+    if (airWar(g2)) for (const f of airFleetsOf(g2, nat)) {
+      if (f.escorts === void 0 || f.mission !== "support" || f.flew === g2.turn || f.ftr <= 0) continue;
+      const b = g2.airFleets.find((x) => x.id === f.escorts && x.nat === nat);
+      if (!b || b.flew === g2.turn || !isOffensive(b.mission) || whyNotMission(g2, f, b.mission, b.target)) continue;
+      f.mission = b.mission;
+      f.target = b.target;
+      followers.push(f);
+    }
     const groups = /* @__PURE__ */ new Map();
     for (const f of airFleetsOf(g2, nat)) {
-      if (!isOffensive(f.mission) || whyNotMission(g2, f, f.mission, f.target)) continue;
+      if (f.flew === g2.turn || !isOffensive(f.mission) || whyNotMission(g2, f, f.mission, f.target)) continue;
       const k = `${OFFENSIVE.indexOf(f.mission)}:${f.target}`;
       if (!groups.has(k)) groups.set(k, []);
       groups.get(k).push(f);
@@ -5057,25 +5276,26 @@
       const rep = fly(g2, nat, fleets[0].mission, fleets[0].target, fleets);
       if (rep) out.push(rep);
     }
+    for (const f of followers) f.flew = g2.turn;
     return out;
   }
   function airAI(g2, nat) {
     if (nat === g2.human) return;
     const n = g2.nations[nat];
-    const mine = airFleetsOf(g2, nat);
-    for (const f of mine) {
+    const mine2 = airFleetsOf(g2, nat);
+    for (const f of mine2) {
       f.mission = "support";
       f.target = -1;
     }
     if (!n.alive || !n.atWar.length) return;
     if (g2.flags.open === 1) {
-      raidPlayer(g2, nat, mine);
+      raidPlayer(g2, nat, mine2);
       return;
     }
     for (const ph of AIR.plan) {
       if (ph.nat !== nat || g2.turn < ph.from || g2.turn > ph.to || !atWar(g2, nat, ph.against)) continue;
       for (const o of ph.orders) {
-        const f = mine.find((x) => x.name === o.fleet);
+        const f = mine2.find((x) => x.name === o.fleet);
         if (!f) continue;
         const bases = (o.base ?? []).map((b) => g2.byName[b]).filter(Boolean);
         if (bases.length && !bases.some((r) => r.id === f.base)) {
@@ -5086,12 +5306,13 @@
       }
     }
   }
-  function raidPlayer(g2, nat, mine) {
+  function raidPlayer(g2, nat, mine2) {
     const B = bombingFor(g2, nat);
     const you = seat2(g2);
     if (!B || you === null || !atWar(g2, nat, you)) return;
-    const withBombers = mine.filter((f) => f.bmr > 0);
+    const withBombers = mine2.filter((f) => f.bmr > 0);
     const most = Math.max(1, Math.floor(withBombers.length * B.share + 1e-9));
+    const escorts = (f) => airWar(g2) ? mine2.filter((x) => x.kind === "ftr" && x.ftr > 0 && x.base === f.base && x.ready >= AIRWAR.ai.escortReady) : [];
     const picks = [];
     for (const f of withBombers) {
       if (f.bmr < B.least || f.ready < 0.5) continue;
@@ -5099,7 +5320,7 @@
       for (const r of g2.regions) {
         if (r.ctrl !== you || r.fac <= 0 && railsAt(r.id).length < 3 || whyNotMission(g2, f, "bomb", r.id)) continue;
         for (const m of ["bomb", "night"]) {
-          const a = assessAir(g2, [f], m, r.id);
+          const a = assessAir(g2, m === "bomb" ? [f, ...escorts(f)] : [f], m, r.id);
           if (a.why) continue;
           const fc = forecastAir(g2, a, m, r.id);
           if (fc.bomberLoss > B.loss) continue;
@@ -5110,26 +5331,65 @@
       if (best) picks.push(best);
     }
     picks.sort((a, b) => b.v - a.v || a.f.id - b.f.id);
-    for (const p of picks.slice(0, most)) setMission(g2, p.f, p.m, p.t);
+    for (const p of picks.slice(0, most)) {
+      setMission(g2, p.f, p.m, p.t);
+      if (p.m === "bomb") {
+        for (const e of escorts(p.f)) if (e.mission === "support") setMission(g2, e, p.m, p.t);
+      }
+    }
   }
   function forecastAir(g2, a, m, target) {
-    const through = a.B * (1 - a.bomberLoss) * (m === "night" ? AIR.combat.night.accuracy : 1) * techMul(g2, a.att[0]?.f.nat ?? "", "bombers");
+    const C = AIR.combat, I = intensity(m);
+    const nat = a.att[0]?.f.nat ?? "";
+    const through = a.B * (1 - a.bomberLoss) * (m === "night" ? C.night.accuracy : 1) * techMul(g2, nat, "bombers");
     const odds = a.Dpow > 0 ? a.Epow / a.Dpow : 9;
-    let cut = 0, nation = 0;
+    const se = Math.sqrt(a.Epow), sd = Math.sqrt(a.Dpow);
+    const share = se + sd > 0 ? se / (se + sd) : 0;
+    const clash = Math.min(a.E, a.D);
+    const foeLoss = C.fighters * I * clash * 2 * share;
+    let ftrLoss = C.fighters * I * clash * 2 * (1 - share) * C.escortShare;
+    const bmrLoss = a.B * a.bomberLoss;
+    let cut = 0, nation = 0, value = 0;
+    let rail2, ruin;
     if (m === "superiority") {
-      const based = g2.airFleets.some((f) => f.base === target && atWar(g2, f.nat, a.att[0]?.f.nat ?? ""));
+      const based = g2.airFleets.filter((f) => f.base === target && atWar(g2, f.nat, nat)).length;
       cut = based ? Math.min(AIR.damage.airfields.max, through / AIR.damage.airfields.scale) : 0;
+      value = cut * 300 * based;
     } else if (m === "bomb" || m === "night") {
       const r = g2.regions[target];
       const total = g2.regions.reduce((s, x) => s + (x.ctrl === r.ctrl ? x.fac : 0), 0);
       cut = Math.min(AIR.damage.industry.max, through / AIR.damage.industry.scale);
       if (a.aa) cut *= 1 - a.aa * WORKS.aa.cut;
       nation = total > 0 ? cut * (r.fac / total) : 0;
-      if (groundRules(g2)) return { odds, bomberLoss: a.bomberLoss, cut: r.fac > 0 ? cut : 0, nation, rail: railBombChance(g2, target, through, a.aa ? a.aa * WORKS.aa.cut : 0), ruin: ruinChance(g2, r, cut) };
+      value = airWar(g2) && r.fac <= 0 ? 0 : cut * 1e3;
+      if (groundRules(g2)) {
+        rail2 = railBombChance(g2, target, through, a.aa ? a.aa * WORKS.aa.cut : 0);
+        ruin = ruinChance(g2, r, cut);
+        if (r.fac <= 0) cut = 0;
+      }
     } else if (m === "strike") {
       cut = Math.min(AIR.damage.shipping.maxSink, AIR.damage.shipping.sink * (through / (through + AIR.damage.shipping.scale)));
+      const afloat = g2.fleets.reduce((s, f) => s + (f.zone === target && atSea(f) && atWar(g2, nat, f.nat) ? surfaceShips(f) : 0), 0);
+      const worst = Math.max(0, ...Object.values(tradeHurt(g2, nat, target, through)));
+      value = cut * afloat * 30 + worst * 3e3;
+    } else if (m === "ground") {
+      const G = AIRWAR.ground;
+      const r = g2.regions[target];
+      const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
+      const fire2 = a.E * G.fire;
+      ftrLoss += fire2;
+      cut = troopCut(r, foes, through + Math.max(0, a.E - ftrLoss) * G.fighters);
+      value = cut * foes.reduce((s, c) => s + c.divs, 0) * G.value;
     }
-    return { odds, bomberLoss: a.bomberLoss, cut, nation };
+    const k = AIRWAR.success.k;
+    const cost = ftrLoss + bmrLoss + 10;
+    const beats = (worth2) => {
+      const x = Math.pow((foeLoss + worth2 + 10) / cost, k);
+      return x / (1 + x);
+    };
+    const pr = rail2 ?? 0, pf = ruin ?? 0;
+    const success = (1 - pr) * (1 - pf) * beats(value) + pr * (1 - pf) * beats(value + 300) + (1 - pr) * pf * beats(value + 300) + pr * pf * beats(value + 600);
+    return { odds, bomberLoss: a.bomberLoss, cut, nation, rail: rail2, ruin, ftrLoss, bmrLoss, foeLoss, success };
   }
 
   // ../../src/campaign/navy.ts
@@ -5142,7 +5402,7 @@
   var seaRng = (g2, key2) => new Rng(hashString(`sea:${g2.seed}:${g2.turn}:${key2}`));
   var cap2 = (s) => s[0].toUpperCase() + s.slice(1);
   var zoneOf = (g2, key2) => g2.seas.findIndex((z) => z.key === key2);
-  var shipCount = (s, list3 = CLASSES) => list3.reduce((n, c) => n + s[c], 0);
+  var shipCount = (s, list4 = CLASSES) => list4.reduce((n, c) => n + s[c], 0);
   var surfaceShips = (f) => shipCount(f.ships, SURFACE2);
   var atSea = (f) => f.stance !== "port";
   var fleetsOf = (g2, nat) => g2.fleets.filter((f) => f.nat === nat);
@@ -5543,9 +5803,9 @@
     g2.supplyDirty = true;
     return true;
   }
-  function sinkShips(f, frac, rng, list3 = CLASSES) {
+  function sinkShips(f, frac, rng, list4 = CLASSES) {
     const out = none();
-    for (const c of list3) {
+    for (const c of list4) {
       const k = Math.min(f.ships[c], rng.roll(f.ships[c] * frac * NAVY.classes[c].tough));
       f.ships[c] -= k;
       f.lost[c] += k;
@@ -5738,13 +5998,13 @@
       const z = zone.id;
       const foes = g2.fleets.filter((f) => f.zone === z && atSea(f) && atWar(g2, f.nat, nat) && shipCount(f.ships) > 0);
       if (!foes.length) continue;
-      const mine = g2.fleets.filter((f) => f.zone === z && f.stance === "patrol" && surfaceShips(f) > 0 && (f.nat === nat || allied(g2, f.nat, nat) && foes.some((e) => atWar(g2, f.nat, e.nat))));
-      if (!mine.some((f) => f.nat === nat)) continue;
+      const mine2 = g2.fleets.filter((f) => f.zone === z && f.stance === "patrol" && surfaceShips(f) > 0 && (f.nat === nat || allied(g2, f.nat, nat) && foes.some((e) => atWar(g2, f.nat, e.nat))));
+      if (!mine2.some((f) => f.nat === nat)) continue;
       const rng = seaRng(g2, `battle:${z}:${nat}`);
       const met2 = foes.filter((f) => surfaceShips(f) > 0 && (f.stance === "patrol" || rng.chance(NAVY.battle.catchRaider)));
       if (!met2.length) continue;
       const airA = airOver(g2, z, nat) * NAVY.air.weight, airD = airOver(g2, z, nat, true) * NAVY.air.weight;
-      const A = sum2(mine) + airA, D = Math.max(1, sum2(met2) + airD);
+      const A = sum2(mine2) + airA, D = Math.max(1, sum2(met2) + airD);
       if (A < NAVY.battle.seek * D) continue;
       const names = (fs) => {
         const l = fs.map((f) => `the ${f.name}`);
@@ -5755,12 +6015,12 @@
         headline(g2, "event", `${cap2(names(met2))} ${met2.length === 1 ? "declines" : "decline"} battle in the ${zone.name} and ${met2.length === 1 ? "makes" : "make"} for port.`, met2[0].nat);
         continue;
       }
-      const att = mine.map(sideOf), def = met2.map(sideOf);
+      const att = mine2.map(sideOf), def = met2.map(sideOf);
       const R = A / D * rng.range(0.8, 1.2);
       const won = R >= 1;
       const edge3 = won ? R : 1 / R;
       const hard = clamp(0.14 + 0.08 * edge3, 0.18, 0.5), light = clamp(0.16 / edge3, 0.03, 0.14);
-      mine.forEach((f, i) => {
+      mine2.forEach((f, i) => {
         att[i].sunk = sinkShips(f, won ? light : hard, rng);
       });
       met2.forEach((f, i) => {
@@ -5773,18 +6033,18 @@
       };
       const ships = (fs) => fs.reduce((s, x) => s + shipCount(x.ships), 0);
       const lines = [
-        { label: "Forces", value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(sum2(mine))} against ${Math.round(sum2(met2))} before the battle` }
+        { label: "Forces", value: `${ships(att)} ships against ${ships(def)}`, effect: `Fleet strength ${Math.round(sum2(mine2))} against ${Math.round(sum2(met2))} before the battle` }
       ];
       if (airA > 0.5 || airD > 0.5) lines.push({ label: "Air", value: airA > airD ? "The attacker has the stronger air cover from the coast" : airD > airA ? "The defender has the stronger air cover from the coast" : "Even", effect: `Worth ${Math.round(airA)} to the attacker and ${Math.round(airD)} to the defender` });
       const flag3 = (fs) => fs.filter((f) => f.admiral).map((f) => `${f.admiral.name}${f.admiral.level > 1 ? ` (level ${f.admiral.level})` : ""}`).join(", ") || "no admiral named";
-      lines.push({ label: "Admirals", value: `${flag3(mine)} against ${flag3(met2)}` });
-      const kitA = techNotes(g2, mine.map((f) => f.nat), ["navy"]), kitD = techNotes(g2, met2.map((f) => f.nat), ["navy"]);
+      lines.push({ label: "Admirals", value: `${flag3(mine2)} against ${flag3(met2)}` });
+      const kitA = techNotes(g2, mine2.map((f) => f.nat), ["navy"]), kitD = techNotes(g2, met2.map((f) => f.nat), ["navy"]);
       if (kitA.length || kitD.length) lines.push({ label: "Equipment", value: [...kitA, ...kitD].map((x) => x.text).join("; "), effect: [...kitA.map((x) => `Attacker ${x.pct > 0 ? "up" : "down"} ${Math.abs(x.pct)}%`), ...kitD.map((x) => `Defender ${x.pct > 0 ? "up" : "down"} ${Math.abs(x.pct)}%`)].join(", ") });
-      const worn = [...mine, ...met2].filter((f) => f.ready < 0.8);
+      const worn = [...mine2, ...met2].filter((f) => f.ready < 0.8);
       if (worn.length) lines.push({ label: "Readiness", value: `${worn.map((f) => f.name).join(", ")} not fully fit for sea`, effect: "A fleet in need of refit fights below its strength" });
-      mine.forEach((f, i) => afterAction(g2, f, att[i], won, rng));
+      mine2.forEach((f, i) => afterAction(g2, f, att[i], won, rng));
       met2.forEach((f, i) => afterAction(g2, f, def[i], !won, rng));
-      for (const f of won ? met2 : mine) sail(g2, f, f.home, "port");
+      for (const f of won ? met2 : mine2) sail(g2, f, f.home, "port");
       const level = won ? edge3 >= 2 ? "Decisive victory" : "Close victory" : edge3 >= 2 ? "Decisive defeat" : "Close defeat";
       g2.flags.seaBattles = (g2.flags.seaBattles ?? 0) + 1;
       const rep = {
@@ -5805,7 +6065,7 @@
       };
       g2.seaReports.push(rep);
       out.push(rep);
-      const win = won ? mine : met2, lose3 = won ? met2 : mine;
+      const win = won ? mine2 : met2, lose3 = won ? met2 : mine2;
       const ws = total(won ? att : def), ls = total(won ? def : att);
       storySea(g2, z, win, lose3, ls.bb + ls.cv, shipCount(ls), shipCount(ws));
       headline(g2, "battle", `${cap2(names(win))} ${win.length === 1 ? "defeats" : "defeat"} ${names(lose3)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ""}.`, win[0].nat);
@@ -5850,13 +6110,13 @@
         if (!sail(g2, f, f.station, "raid")) home();
         continue;
       }
-      const mine = fleetPower(g2, f);
+      const mine2 = fleetPower(g2, f);
       const reach3 = fleetReach(g2, f);
       const beat = /* @__PURE__ */ new Set([f.station, ...g2.seas[f.station].adj]);
       let best = -1, bv = 0;
       for (const z of f.tied ? [f.station] : reach3) {
         const e = seaSide(g2, z, nat, true);
-        const own = seaSide(g2, z, nat, false).total + (f.zone === z && atSea(f) ? 0 : mine);
+        const own = seaSide(g2, z, nat, false).total + (f.zone === z && atSea(f) ? 0 : mine2);
         const invaded = invadedHere(g2, z, nat) && own >= 0.5 * e.total;
         if (airOver(g2, z, nat, true) - airOver(g2, z, nat, false) > NAVY.air.avoid && !invaded) continue;
         let quarry = 0;
@@ -6607,9 +6867,9 @@
   };
   var traitDrafts = (g2, nat) => product(g2, nat, (t) => t.drafts);
   var costMul = (g2, nat, key2) => product(g2, nat, (t) => t.cost?.what.includes(key2) ? t.cost.mul : void 0);
-  function priceOf(g2, nat, key2, list3) {
+  function priceOf(g2, nat, key2, list4) {
     const m = costMul(g2, nat, key2);
-    return m === 1 ? list3 : Math.round(list3 * m * 10) / 10;
+    return m === 1 ? list4 : Math.round(list4 * m * 10) / 10;
   }
   var traitFleet = (g2, nat) => product(g2, nat, (t) => t.fleet);
   var traitSeaLoss = (g2, nat) => product(g2, nat, (t) => t.seaLoss);
@@ -6667,8 +6927,8 @@
         }
       }
       if (hit && g2.turn % 6 === 0) {
-        const mine = nat === g2.human;
-        headline(g2, "info", mine ? `The partisans go on fighting in the occupied provinces: ${hit === 1 ? "one enemy corps" : `${hit} enemy corps`} lost men to raids and ambushes this month.` : `Partisans in occupied ${X.name} raid roads and depots: ${hit === 1 ? "one of your corps there" : `${hit} of your corps there`} lost men this month. The mountains, hills and forests are their country.`, g2.human ?? void 0, where);
+        const mine2 = nat === g2.human;
+        headline(g2, "info", mine2 ? `The partisans go on fighting in the occupied provinces: ${hit === 1 ? "one enemy corps" : `${hit} enemy corps`} lost men to raids and ambushes this month.` : `Partisans in occupied ${X.name} raid roads and depots: ${hit === 1 ? "one of your corps there" : `${hit} of your corps there`} lost men this month. The mountains, hills and forests are their country.`, g2.human ?? void 0, where);
       }
     }
   }
@@ -6871,12 +7131,12 @@
     const rank = (a) => a.friend ? 0 : a.from !== a.to ? 1 : 2;
     return out.sort((x, y) => rank(x) - rank(y) || g2.nations[x.nat].name.localeCompare(g2.nations[y.nat].name));
   }
-  function alarm(g2, list3, on) {
-    if (!list3.length) return;
-    const friends = list3.filter((a) => a.friend).map((a) => g2.nations[a.nat].name);
+  function alarm(g2, list4, on) {
+    if (!list4.length) return;
+    const friends = list4.filter((a) => a.friend).map((a) => g2.nations[a.nat].name);
     const names = friends.length <= 1 ? friends.join("") : `${friends.slice(0, -1).join(", ")} and ${friends[friends.length - 1]}`;
     headline(g2, "event", friends.length ? `The attack on ${g2.nations[on].name} alarms the neutral world, and its friends most of all: ${names}.` : `The attack on ${g2.nations[on].name} alarms the neutral world.`, on);
-    for (const a of list3) {
+    for (const a of list4) {
       const n = g2.nations[a.nat];
       n.opinion = a.opinion;
       n.home = a.home;
@@ -7098,7 +7358,7 @@
     if (e.partition) {
       const X = g2.nations[e.partition.nation];
       if (!X?.alive) return false;
-      const first = (list3) => list3.find((id) => g2.nations[id]?.alive && g2.nations[id].atWar.length > 0);
+      const first = (list4) => list4.find((id) => g2.nations[id]?.alive && g2.nations[id].atWar.length > 0);
       for (const c of g2.corps.filter((c2) => c2.nat === X.id)) removeCorps(g2, c);
       fleetsOnFall(g2, X.id);
       airOnFall(g2, X.id);
@@ -7244,6 +7504,7 @@
   var industry = (g2, nat, factories) => g2.regions.some((r) => isHome(g2, nat, r) && r.fac >= factories);
   function canStation(g2, nat, r) {
     if (!r || r.ctrl !== nat || r.since >= g2.turn) return false;
+    if (airWar(g2)) return hasAirfield(g2, r.id);
     return workLevel(g2, "field", r.id) > 0 || g2.airFleets.some((f) => f.nat === nat && f.base === r.id);
   }
   var strongest = (fs) => fs.reduce((best, f) => !best || f.ftr + f.bmr > best.ftr + best.bmr ? f : best, null);
@@ -7253,7 +7514,7 @@
     if (main) return main.base;
     return g2.regions.find((r) => canStation(g2, nat, r))?.id ?? -1;
   }
-  var fleetAt = (g2, nat, region) => strongest(airFleetsOf(g2, nat).filter((f) => f.base === region));
+  var fleetAt = (g2, nat, region, wing) => strongest(airFleetsOf(g2, nat).filter((f) => f.base === region && (!airWar(g2) || !wing || f.kind === wing && f.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most)));
   var canLay = (g2, nat, r, yard) => !!r && isHome(g2, nat, r) && r.port && yardLevel(g2, r) >= yard;
   function slipSite(g2, nat, yard, want = -1) {
     if (canLay(g2, nat, g2.regions[want], yard)) return want;
@@ -7358,7 +7619,7 @@
       const spec2 = ARSENAL.air[wing];
       const built = industry(g2, nat, spec2.factories);
       const at = built ? stationSite(g2, nat, sel) : -1;
-      const joins = at >= 0 ? fleetAt(g2, nat, at) : null;
+      const joins = at >= 0 ? fleetAt(g2, nat, at, wing) : null;
       const cost = priceOf(g2, nat, `air:${wing}`, spec2.cost);
       out.push({
         key: `air:${wing}`,
@@ -7370,7 +7631,7 @@
         months: spec2.months,
         upkeep: spec2.count * BUDGET.upkeep.air[wing],
         at,
-        note: at < 0 ? "" : joins ? `Joins ${joins.name} at ${g2.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g2.regions[at].name}.`,
+        note: at < 0 ? "" : joins ? `Joins ${joins.name} at ${g2.regions[at].name}.` : airWar(g2) ? `Forms a new air group on the airfield at ${g2.regions[at].name}.` : `Founds a new air fleet on the airfields of ${g2.regions[at].name}.`,
         why: !built ? `Needs an aircraft industry: a home province with ${spec2.factories} factories.` : at < 0 ? "Needs airfields to fly from. Build airfields in a province first." : poor(cost)
       });
     }
@@ -7471,12 +7732,13 @@
     if (b.what === "air") {
       const wing = b.item, count2 = b.count ?? ARSENAL.air[wing].count;
       const word = `${count2} ${wing === "ftr" ? "fighters" : "bombers"}`;
-      let f = canStation(g2, nat, r) || r.ctrl === nat ? fleetAt(g2, nat, r.id) : null;
-      if (!f && r.ctrl === nat) {
-        f = foundAirFleet(g2, nat, r, `${r.name} Air Command`);
-        tell(`A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
+      const war = airWar(g2);
+      let f = canStation(g2, nat, r) || r.ctrl === nat ? fleetAt(g2, nat, r.id, wing) : null;
+      if (!f && r.ctrl === nat && (!war || hasAirfield(g2, r.id))) {
+        f = foundAirFleet(g2, nat, r, `${r.name} Air Command`, war ? wing : void 0);
+        tell(war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
       } else {
-        f ?? (f = strongest(airFleetsOf(g2, nat)));
+        f ?? (f = strongest(airFleetsOf(g2, nat).filter((x) => !war || x.kind === wing)));
         if (f) tell(`${cap3(word)} from the factories join ${f.name} at ${g2.regions[f.base].name}.`);
       }
       if (!f) {
@@ -8087,6 +8349,12 @@
       dist[a.reg] = 0;
       ring.push(a.reg);
     }
+    if (me === g2.human) {
+      for (const [id, turn] of Object.entries(g2.intel.scout ?? {})) if (turn === g2.turn && dist[+id] !== 0) {
+        dist[+id] = 0;
+        ring.push(+id);
+      }
+    }
     for (let d = 1; d <= far && ring.length; d++) {
       const next = [];
       for (const id of ring) for (const j of g2.regions[id].nb) if (dist[j] < 0) {
@@ -8408,18 +8676,18 @@
   }
   function spyRoom(g2, nat = g2.human) {
     if (!intelRules(g2) || nat === null || !g2.nations[nat]) return null;
-    const mine = agentsOf(g2, nat);
+    const mine2 = agentsOf(g2, nat);
     const T = threat(g2, nat);
     return {
       nat,
-      agents: mine.map((a) => viewOf(g2, a)),
+      agents: mine2.map((a) => viewOf(g2, a)),
       most: mostAgents(nat),
       cost: agentCost(),
       whyNotRecruit: whyNotRecruit(g2, nat),
       notes: g2.intel.notes.filter((n) => n.nat === nat).slice().reverse(),
       fog: fogOn(g2, nat),
       books: Object.values(g2.nations).filter((n) => n.alive && !allied(g2, n.id, nat) && knowsBooks(g2, n.id, nat)).map((n) => n.id),
-      threat: { chance: T.chance, foes: T.foes, guards: mine.filter((a) => a.mission === "guard" && atWork(g2, a) && !abroad(g2, a)).length }
+      threat: { chance: T.chance, foes: T.foes, guards: mine2.filter((a) => a.mission === "guard" && atWork(g2, a) && !abroad(g2, a)).length }
     };
   }
 
@@ -8710,7 +8978,7 @@
   };
 
   // ../../src/campaign/engineers.ts
-  var JOBS = ["bridge", "rail", "plant", "works", "mines", "demolish"];
+  var JOBS = ["bridge", "rail", "plant", "works", "airfield", "mines", "demolish"];
   var REPAIRS = { bridge: "rebuilding the bridges", rail: "relaying the railway", plant: "rebuilding a factory" };
   var isEngineer = (c) => c.kind === "eng";
   var mineKey = (r) => `mine:${typeof r === "number" ? r : r.id}`;
@@ -8718,6 +8986,7 @@
   function liftMines(g2, r) {
     delete g2.flags[mineKey(r)];
   }
+  var builtField = (g2, r) => g2.flags[`wk:field:${r.id}`] ?? 0;
   var sappers = (cs) => cs.reduce((s, c) => s + (c.kind === "eng" && !c.dead ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
   function whyNot(g2, c, key2) {
     const r = g2.regions[c.reg];
@@ -8730,6 +8999,12 @@
     const other = REPAIRS[key2] && (key2 !== "plant" || ruinedAt(g2, r) <= 1) ? r.units.find((u) => u !== c && !u.dead && u.job?.what === key2 && u.job.reg === r.id) : void 0;
     if (other) return `${other.name} is already ${REPAIRS[key2]} here.`;
     if (key2 === "works" && (r.fort?.lv ?? 0) >= E.works.most) return `The works here are at level ${r.fort?.lv ?? 0}: as strong as field engineers can make them. Heavier fortifications are ordered from the treasury.`;
+    if (key2 === "airfield") {
+      if (!airWar(g2)) return "Airfields are laid out only in the grand campaign.";
+      if (builtField(g2, r) >= AIRWAR.fields.engineers) return `The airfield here is as large as field engineers can make it: it serves ${airfieldsHold(g2, r.id).toLocaleString("en-US")} aircraft. A larger one is ordered from the treasury.`;
+      const laying = r.units.find((u) => u !== c && !u.dead && u.job?.what === "airfield" && u.job.reg === r.id);
+      if (laying) return `${laying.name} is already laying out an airfield here.`;
+    }
     if (key2 === "mines" && minesAt(g2, r) >= E.mines.most) return "The minefields here are as thick as they can be laid.";
     if (key2 === "demolish" && !r.fort) return "There are no fortifications here to demolish.";
     return null;
@@ -8753,7 +9028,7 @@
   function jobLine(g2, c) {
     if (!c.job) return "";
     const r = g2.regions[c.job.reg];
-    const what = c.job.what === "bridge" ? `rebuilding the bridges at ${r.name}` : c.job.what === "rail" ? `relaying the railway at ${r.name}` : c.job.what === "plant" ? `rebuilding a factory at ${r.name}` : c.job.what === "works" ? `building field works at ${r.name}` : c.job.what === "mines" ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
+    const what = c.job.what === "bridge" ? `rebuilding the bridges at ${r.name}` : c.job.what === "rail" ? `relaying the railway at ${r.name}` : c.job.what === "plant" ? `rebuilding a factory at ${r.name}` : c.job.what === "works" ? `building field works at ${r.name}` : c.job.what === "airfield" ? `laying out an airfield at ${r.name}` : c.job.what === "mines" ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
     return `${what[0].toUpperCase()}${what.slice(1)}: done when next month begins`;
   }
   function facing(g2, r) {
@@ -8777,29 +9052,35 @@
       if (g2.turn < job.eta) continue;
       delete c.job;
       const r = g2.regions[job.reg];
-      const mine = nat === g2.human;
+      const mine2 = nat === g2.human;
       if (job.what === "bridge") {
         const done = rebuildAt(g2, r.id);
-        if (done.length && mine) headline(g2, "info", `${c.name} has rebuilt the ${done.length > 1 ? "bridges" : `bridges over the ${riverName(done[0])}`} at ${r.name}. Tanks, lorries and guns can cross again.`, nat, r.id);
+        if (done.length && mine2) headline(g2, "info", `${c.name} has rebuilt the ${done.length > 1 ? "bridges" : `bridges over the ${riverName(done[0])}`} at ${r.name}. Tanks, lorries and guns can cross again.`, nat, r.id);
       } else if (job.what === "rail") {
-        if (mendRail(g2, r.id) && mine) headline(g2, "info", `${c.name} has relaid the railway at ${r.name}. The trains run again.`, nat, r.id);
+        if (mendRail(g2, r.id) && mine2) headline(g2, "info", `${c.name} has relaid the railway at ${r.name}. The trains run again.`, nat, r.id);
       } else if (job.what === "plant") {
-        if (rebuildFactory(g2, r) && mine) {
+        if (rebuildFactory(g2, r) && mine2) {
           const left = ruinedAt(g2, r);
           headline(g2, "info", `${c.name} has put a bombed factory at ${r.name} back to work${left ? `: ${left} still ${left > 1 ? "lie" : "lies"} in ruins` : ""}.`, nat, r.id);
         }
       } else if (job.what === "works") {
         if ((r.fort?.lv ?? 0) < ENGINEERING.works.most) {
           r.fort = { lv: (r.fort?.lv ?? 0) + 1, vs: facing(g2, r) };
-          if (mine) headline(g2, "info", `${c.name} has finished field works at ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
+          if (mine2) headline(g2, "info", `${c.name} has finished field works at ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
+        }
+      } else if (job.what === "airfield") {
+        if (airWar(g2) && builtField(g2, r) < AIRWAR.fields.engineers) {
+          const had = airfieldsHold(g2, r.id);
+          g2.flags[`wk:field:${r.id}`] = builtField(g2, r) + 1;
+          if (mine2) headline(g2, "info", `${c.name} has ${had > 0 ? "enlarged the airfield" : "laid out an airfield"} at ${r.name}: it serves ${airfieldsHold(g2, r.id).toLocaleString("en-US")} aircraft. Air groups can be based there from next month.`, nat, r.id);
         }
       } else if (job.what === "mines") {
         const lv = Math.min(ENGINEERING.mines.most, minesAt(g2, r) + 1);
         g2.flags[mineKey(r)] = lv;
-        if (mine) headline(g2, "info", `${c.name} has laid minefields and booby traps round ${r.name}${lv > 1 ? ", two belts deep" : ""}.`, nat, r.id);
+        if (mine2) headline(g2, "info", `${c.name} has laid minefields and booby traps round ${r.name}${lv > 1 ? ", two belts deep" : ""}.`, nat, r.id);
       } else if (job.what === "demolish" && r.fort) {
         r.fort = r.fort.lv <= 1 ? null : { lv: r.fort.lv - 1, vs: r.fort.vs };
-        if (mine) headline(g2, "info", `${c.name} has demolished ${r.fort ? "part of the fortifications" : "the fortifications"} at ${r.name}.`, nat, r.id);
+        if (mine2) headline(g2, "info", `${c.name} has demolished ${r.fort ? "part of the fortifications" : "the fortifications"} at ${r.name}.`, nat, r.id);
       }
     }
   }
@@ -8871,7 +9152,7 @@
   }
   function aiEngineers(g2, nat) {
     if (!groundRules(g2) || nat === g2.human || !g2.nations[nat].alive) return;
-    const mine = g2.corps.filter((c) => c.nat === nat && c.kind === "eng" && !c.dead);
+    const mine2 = g2.corps.filter((c) => c.nat === nat && c.kind === "eng" && !c.dead);
     const sites = wanted(g2, nat);
     const covered = /* @__PURE__ */ new Set();
     const taken = /* @__PURE__ */ new Set();
@@ -8881,8 +9162,8 @@
       } else taken.add(`${what}:${reg}`);
     };
     const open = (s) => s.what === "bridge" ? s.spans.some((x) => !covered.has(x)) : !taken.has(`${s.what}:${s.reg}`);
-    for (const c of mine) if (c.job && REPAIRS[c.job.what]) cover2(c.job.reg, c.job.what);
-    for (const c of mine) {
+    for (const c of mine2) if (c.job && REPAIRS[c.job.what]) cover2(c.job.reg, c.job.what);
+    for (const c of mine2) {
       c.hold = true;
       if (c.job) continue;
       const here = sites.find((s) => s.reg === c.reg && open(s));
@@ -8912,9 +9193,9 @@
     const n = g2.nations[nat];
     const spec2 = arsenal_default.land.eng;
     const coming = n.queue.filter((b) => b.what === "corps" && b.kind === "eng").length;
-    const idle = mine.filter((c) => !c.job).length;
+    const idle = mine2.filter((c) => !c.job).length;
     const waiting2 = new Set(sites.filter((s) => s.what === "bridge").flatMap((s) => s.spans).filter((x) => !covered.has(x))).size + sites.filter((s) => s.what !== "bridge" && open(s)).length;
-    if (waiting2 > idle + coming && mine.length + coming < ENGINEERING.ai.most && n.pp >= spec2.cost + ENGINEERING.ai.reserve) {
+    if (waiting2 > idle + coming && mine2.length + coming < ENGINEERING.ai.most && n.pp >= spec2.cost + ENGINEERING.ai.reserve) {
       const at = raiseSite(g2, nat, "eng", n.capital);
       if (at >= 0) orderCorps(g2, nat, "eng", at);
     }
@@ -9502,8 +9783,8 @@
   function freshOffensive(g2, nat, enemy) {
     const n = g2.nations[nat];
     if (!n.blitz) return false;
-    const list3 = enemy ? [enemy] : n.atWar;
-    return list3.some((e) => n.offStart[e] !== void 0 && g2.turn - n.offStart[e] <= 1);
+    const list4 = enemy ? [enemy] : n.atWar;
+    return list4.some((e) => n.offStart[e] !== void 0 && g2.turn - n.offStart[e] <= 1);
   }
   function weather(g2) {
     const m = turnToDate(g2.turn).month;
@@ -10470,7 +10751,7 @@
     }
     return true;
   }
-  var ordinal = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]}`;
+  var ordinal2 = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]}`;
   function mobilise(g2, nat) {
     const plan = EASTERN.mobilisation[nat];
     const n = g2.nations[nat];
@@ -10491,7 +10772,7 @@
         }
       }
       if (!best) break;
-      const c = addCorps(g2, nat, `${ordinal(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
+      const c = addCorps(g2, nat, `${ordinal2(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
       c.org = 0.7;
     }
     if (count2 > 0 && month2 === 0) headline(g2, "event", `${n.name} orders general mobilisation.`, nat);
@@ -10793,6 +11074,450 @@
     checkCollapse(g2, "POL", "GER");
   }
 
+  // ../../src/campaign/airwar.ts
+  var num = (n) => Math.round(n).toLocaleString("en-US");
+  var pct4 = (x) => `${Math.round(x * 100)}%`;
+  var plural3 = (n, one, many = `${one}s`) => `${num(n)} ${Math.round(n) === 1 ? one : many}`;
+  var list3 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var kindRow = (k) => AIRWAR.raids.kinds.find((x) => x.key === k);
+  var placeOf = (g2, kind, target) => kind === "strike" ? `the ${g2.seas[target]?.name ?? "sea"}` : g2.regions[target]?.name ?? "";
+  var missionOf = (kind) => kind === "recon" ? "support" : kind;
+  var kindOf = (f) => f.kind ?? (f.bmr <= 0 ? "ftr" : f.ftr <= 0 ? "bmr" : "mixed");
+  var flying = (f) => f.ftr + f.bmr > 0;
+  function fieldWord(holds3) {
+    const W = AIRWAR.fields.words;
+    const i = W.findIndex(([most]) => holds3 <= most);
+    const k = i < 0 ? W.length - 1 : i;
+    return { word: W[k][1], size: k + 1 };
+  }
+  function fieldRow(g2, id, viewer, sight2) {
+    const holds3 = airfieldsHold(g2, id);
+    if (holds3 <= 0) return null;
+    const r = g2.regions[id];
+    const side2 = viewer === null ? "other" : r.ctrl === viewer ? "own" : allied(g2, r.ctrl, viewer) ? "ally" : atWar(g2, r.ctrl, viewer) ? "foe" : "other";
+    const based = g2.airFleets.filter((f) => f.base === id && flying(f));
+    const known = side2 === "own" || side2 === "ally" || sight2[id] === SIGHT.full;
+    const aircraft = based.reduce((s, f) => s + f.ftr + f.bmr, 0);
+    return {
+      region: id,
+      name: r.name,
+      x: r.x,
+      y: r.y,
+      holder: r.ctrl,
+      side: side2,
+      holds: holds3,
+      ...fieldWord(holds3),
+      groups: known ? based.length : -1,
+      aircraft: known ? aircraft : -1,
+      crowded: known && aircraft > holds3
+    };
+  }
+  function airfields(g2, viewer = g2.human) {
+    if (!airWar(g2)) return [];
+    const sight2 = sightOf(g2, viewer);
+    const out = [];
+    for (const r of g2.regions) {
+      const row2 = fieldRow(g2, r.id, viewer, sight2);
+      if (row2) out.push(row2);
+    }
+    return out;
+  }
+  var escorted = (g2, f) => f.escorts === void 0 ? null : g2.airFleets.find((x) => x.id === f.escorts && x.nat === f.nat && x.bmr > 0) ?? null;
+  function groupRow(g2, f, viewer = g2.human) {
+    const R = airRange(f);
+    const kind = kindOf(f);
+    const away = f.flew === g2.turn && isOffensive(f.mission);
+    const with_ = escorted(g2, f);
+    const place2 = placeOf(g2, f.mission === "strike" ? "strike" : "bomb", f.target);
+    const doing = away ? `Flew against ${place2} this month: back at its airfield next month` : isOffensive(f.mission) ? `Ordered against ${place2}: flies when the month ends` : f.mission === "rest" ? "Resting and refitting" : kind === "bmr" ? "Supporting the armies, and ready for a raid" : with_ ? `On patrol, and sticking with the ${with_.name} as its escort` : "On patrol: meets any raid within its reach";
+    return {
+      id: f.id,
+      nat: f.nat,
+      name: f.name,
+      command: f.parent && f.parent !== f.name ? f.parent : "",
+      kind,
+      ftr: f.ftr,
+      bmr: f.bmr,
+      aircraft: f.ftr + f.bmr,
+      est: f.est.ftr + f.est.bmr,
+      ready: f.ready,
+      leader: f.leader?.name ?? null,
+      level: f.leader?.level ?? 0,
+      base: f.base,
+      baseName: g2.regions[f.base].name,
+      doing,
+      job: away || isOffensive(f.mission) ? "raid" : f.mission === "rest" ? "rest" : with_ ? "escort" : "patrol",
+      escorts: with_ ? with_.id : -1,
+      flew: f.flew === g2.turn,
+      scouted: f.scouted === g2.turn,
+      range: kind === "bmr" ? R.bmr : kind === "ftr" ? R.ftr : Math.max(R.ftr, R.bmr),
+      crowd: crowding(g2, f),
+      mine: f.nat === viewer
+    };
+  }
+  var airGroups = (g2, nat) => airFleetsOf(g2, nat).filter((f) => flying(f) || f.est.ftr + f.est.bmr > 0).map((f) => groupRow(g2, f, nat));
+  function airfieldCard(g2, region, viewer = g2.human) {
+    const r = g2.regions[region];
+    if (!r || !airWar(g2)) return null;
+    const field = fieldRow(g2, region, viewer, sightOf(g2, viewer));
+    const E = AIRWAR.fields.engineers, built = g2.flags[`wk:field:${region}`] ?? 0;
+    const build2 = built < E ? `An engineer corps standing here can ${field ? "enlarge it" : "lay one out"} in a month, as far as ${E} levels built. The treasury builds larger ones from the arsenal.` : "It is as large as field engineers can make it. The treasury builds larger ones from the arsenal.";
+    if (!field) return { region, name: r.name, field: null, note: `There is no airfield at ${r.name}: no aircraft can be based here.`, build: build2, hidden: false, rows: [] };
+    const hidden = field.groups < 0;
+    const rows = hidden ? [] : g2.airFleets.filter((f) => f.base === region && flying(f)).map((f) => groupRow(g2, f, viewer));
+    const used = rows.reduce((s, x) => s + x.aircraft, 0);
+    const note3 = `${field.word}: it serves ${num(field.holds)} aircraft${hidden ? ". What flies from here is not known: scout it from the air, or put an agent on watch" : `, and ${used > 0 ? `${num(used)} are based here` : "none are based here"}${field.crowded ? `. It is crowded: only ${pct4(field.holds / used)} of each group can fly` : ""}`}.`;
+    return { region, name: r.name, field, note: note3, build: build2, hidden, rows };
+  }
+  var mine = (g2, id, nat) => {
+    const f = g2.airFleets.find((x) => x.id === id);
+    return f && nat !== null && f.nat === nat && airWar(g2) ? f : null;
+  };
+  function groupJobs(g2, id, nat = g2.human) {
+    const f = mine(g2, id, nat);
+    if (!f) return [];
+    const R = airRange(f), kind = kindOf(f), base = g2.regions[f.base];
+    const away = f.flew === g2.turn && isOffensive(f.mission);
+    const gone = away ? "It has flown its raid this month, and is back at its airfield next month." : null;
+    const out = [];
+    const with_ = escorted(g2, f);
+    const idle = !away && f.mission === "support";
+    if (kind === "bmr") {
+      out.push({ key: "patrol", label: "Support the armies", on: idle, why: gone, forecast: `Stands ready at ${base.name}. Its bombers reach ${num(R.bmr)} km: plan a raid for it whenever there is a target worth the losses.` });
+    } else {
+      const under = g2.regions.filter((r) => allied(g2, r.ctrl, f.nat) && cover(km(g2, f.base, r.id), R.ftr) > 0).length;
+      out.push({
+        key: "patrol",
+        label: "Patrol the sky",
+        on: idle && !with_,
+        why: gone,
+        forecast: `Meets any raid within ${num(R.ftr)} km of ${base.name}, at full effect to ${num(R.ftr * AIR.range.fullAt)} km: ${plural3(under, "friendly province")} under its cover. About ${num(f.ftr * crowding(g2, f))} fighters can go up.`
+      });
+      const bombers = airFleetsOf(g2, f.nat).filter((b) => b.id !== f.id && kindOf(b) !== "ftr" && b.bmr > 0 && km(g2, f.base, b.base) <= R.ftr);
+      for (const b of bombers) {
+        const d = km(g2, f.base, b.base);
+        out.push({
+          key: `escort:${b.id}`,
+          label: `Escort the ${b.name}`,
+          on: idle && with_?.id === b.id,
+          why: gone,
+          forecast: `Sticks with the ${b.name}${d > 0 ? ` (${g2.regions[b.base].name}, ${num(d)} km away)` : " from the same airfield"}: it goes on every day raid they fly within ${num(R.ftr)} km of ${base.name}, at full effect to ${num(R.ftr * AIR.range.fullAt)} km. Beyond that the bombers go alone. Until they fly it patrols.`
+        });
+      }
+      if (!bombers.length) out.push({ key: "escort", label: "Escort a bomber group", on: false, why: `No bomber group is based within ${num(R.ftr)} km of ${base.name}. Fighters can still be picked for any raid when it is planned.`, forecast: "" });
+    }
+    const R2 = AIR.ready;
+    out.push({ key: "rest", label: "Rest and refit", on: f.mission === "rest", why: null, forecast: `Stands down: it regains ${pct4(R2.rest)} readiness a month in place of ${pct4(R2.support)}, and gets replacement aircraft first. It does not fly, and does not meet raids.` });
+    return out;
+  }
+  function setGroupJob(g2, id, key2, nat = g2.human) {
+    const f = mine(g2, id, nat);
+    const job = f ? groupJobs(g2, id, nat).find((j) => j.key === key2) : void 0;
+    if (!f || !job || job.why) return false;
+    if (key2 === "rest") {
+      delete f.escorts;
+      return setMission(g2, f, "rest");
+    }
+    if (key2 === "patrol") delete f.escorts;
+    else f.escorts = Number(key2.split(":")[1]);
+    return setMission(g2, f, "support");
+  }
+  function groupBases(g2, id, nat = g2.human) {
+    const f = mine(g2, id, nat);
+    if (!f) return [];
+    const out = [];
+    for (const r of g2.regions) {
+      const holds3 = airfieldsHold(g2, r.id);
+      if (holds3 <= 0 || r.id === f.base || !allied(g2, f.nat, r.ctrl)) continue;
+      const d = km(g2, f.base, r.id);
+      if (d > AIR.ferry) continue;
+      const there = g2.airFleets.reduce((s, x) => s + (x.base === r.id ? x.ftr + x.bmr : 0), 0);
+      out.push({ region: r.id, name: r.name, km: d, word: fieldWord(holds3).word, holds: holds3, free: Math.max(0, holds3 - there), why: whyNotBase(g2, f, r) });
+    }
+    return out.sort((a, b) => a.km - b.km);
+  }
+  function whyNotSeat(g2, f, kind, target) {
+    if (!flying(f)) return "It has no aircraft fit to fly.";
+    if (kind === "recon") {
+      const r = g2.regions[target];
+      if (!r) return "Pick a province.";
+      if (f.scouted === g2.turn) return "It has flown its reconnaissance this month.";
+      if (!atWar(g2, f.nat, r.ctrl)) return "Only ground held by a nation you are at war with is photographed.";
+      const R = airRange(f);
+      return km(g2, f.base, target) <= (f.bmr > 0 ? R.bmr : R.ftr) ? null : "It is out of range.";
+    }
+    if (f.flew === g2.turn) return "It has flown its raid this month.";
+    if (f.mission === "rest") return "It is resting and refitting.";
+    if (isOffensive(f.mission)) return "It already has orders for the month.";
+    return whyNotMission(g2, f, kind, target);
+  }
+  var able = (g2, nat) => airFleetsOf(g2, nat).filter((f) => flying(f));
+  var targetIds = (g2, kind) => kind === "strike" ? g2.seas.map((z) => z.id) : g2.regions.map((r) => r.id);
+  function troopsSeen(g2, nat, region, sight2) {
+    return sight2[region] !== SIGHT.none && g2.regions[region].units.some((u) => !u.dead && atWar(g2, nat, u.nat));
+  }
+  function reachable(g2, nat, kind) {
+    const out = /* @__PURE__ */ new Map();
+    const fleets = able(g2, nat);
+    const needs = kindRow(kind).needs;
+    const sight2 = kind === "ground" || kind === "recon" ? sightOf(g2, nat) : null;
+    for (const t of targetIds(g2, kind)) {
+      if (kind === "ground" && !troopsSeen(g2, nat, t, sight2)) continue;
+      if (kind === "recon" && sight2[t] === SIGHT.full) continue;
+      const can = fleets.filter((f) => whyNotSeat(g2, f, kind, t) === null);
+      if (!can.length || needs === "bmr" && !can.some((f) => f.bmr > 0)) continue;
+      out.set(t, can);
+    }
+    return out;
+  }
+  function raidKinds(g2, nat = g2.human) {
+    if (!airWar(g2) || nat === null) return [];
+    const peace = !g2.nations[nat].atWar.length;
+    return AIRWAR.raids.kinds.map((k) => {
+      const n = peace ? 0 : reachable(g2, nat, k.key).size;
+      return { key: k.key, label: k.label, short: k.short, blurb: k.blurb, targets: n, why: peace ? "The nation is at peace." : n ? null : "No group that can still fly this month has a target in reach." };
+    });
+  }
+  function whatIsThere(g2, nat, kind, t, sight2) {
+    if (kind === "strike") {
+      const ships = g2.fleets.reduce((s, f) => s + (f.zone === t && atSea(f) && atWar(g2, nat, f.nat) ? surfaceShips(f) : 0), 0);
+      return ships ? `${plural3(ships, "warship")} at sea, and merchant shipping` : "Merchant shipping";
+    }
+    const r = g2.regions[t];
+    if (kind === "bomb" || kind === "night") {
+      const bits = [r.fac > 0 ? plural3(r.fac, "factory", "factories") : "", onNet(t) && !railCut(g2, t) ? railsAt(t).length >= 3 ? "a railway junction" : "a railway" : "", gunsAt(g2, t) ? `level ${gunsAt(g2, t)} guns` : ""];
+      return bits.filter(Boolean).join(", ");
+    }
+    if (kind === "ground") {
+      const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
+      return sight2[t] === SIGHT.full ? `${plural3(foes.length, "corps", "corps")}, ${plural3(foes.reduce((s, c) => s + c.divs, 0), "division")}${foes.some((c) => c.dug) ? ", dug in" : ""}` : `${plural3(foes.length, "corps", "corps")} seen`;
+    }
+    if (kind === "superiority") {
+      const based = g2.airFleets.filter((f) => f.base === t && flying(f) && atWar(g2, f.nat, nat)).length;
+      const up = fightersOver(g2, t, nat);
+      return [based ? `${plural3(based, "air group")} based there` : airfieldsHold(g2, t) > 0 ? "an empty airfield" : "no airfield", up >= 1 ? `about ${num(up)} fighters can come up` : "no fighters in reach"].join(", ");
+    }
+    return sight2[t] === SIGHT.glimpse ? "Only a flag and a count are known" : "Nothing is known of what stands there";
+  }
+  function raidTargets(g2, kind, nat = g2.human, lead2 = -1) {
+    if (!airWar(g2) || nat === null || !g2.nations[nat].atWar.length) return [];
+    const sea = kind === "strike";
+    const sight2 = sightOf(g2, nat);
+    const out = [];
+    for (const [t, can] of reachable(g2, nat, kind)) {
+      if (lead2 >= 0 && !can.some((f) => f.id === lead2)) continue;
+      const p = sea ? g2.seas[t] : g2.regions[t];
+      const d = Math.min(...can.filter((f) => lead2 < 0 || f.id === lead2).map((f) => sea ? seaKm(g2, f.base, t) : km(g2, f.base, t)));
+      out.push({ id: t, sea, name: p.name, holder: sea ? "" : g2.regions[t].ctrl, x: p.x, y: p.y, km: d, groups: can.length, what: whatIsThere(g2, nat, kind, t, sight2) });
+    }
+    return out.sort((a, b) => a.km - b.km || a.id - b.id);
+  }
+  var VERDICT = [[0.8, "Very likely to succeed"], [0.6, "Likely to succeed"], [0.4, "It could go either way"], [0.2, "Likely to fail"], [0, "Very likely to fail"]];
+  function effectsOf(g2, kind, target, fc, nat) {
+    const out = [];
+    const place2 = placeOf(g2, kind, target);
+    if (kind === "bomb" || kind === "night") {
+      const r = g2.regions[target];
+      out.push(r.fac > 0 ? `Should stop about ${pct4(fc.cut)} of ${place2}'s output for a month: ${(fc.nation * 100).toFixed(1)}% of ${g2.nations[r.ctrl].adj} production.` : `There is no industry at ${place2}: the bombers go for its rail yards.`);
+      if (fc.rail) out.push(`About a ${pct4(fc.rail)} chance of cutting the railway through ${place2}, which stays cut until engineers relay it.`);
+      if (fc.ruin) out.push(`About a ${pct4(fc.ruin)} chance of wrecking a factory outright.`);
+    } else if (kind === "superiority") {
+      out.push(`Fighter odds ${fc.odds >= 9 ? "overwhelming" : `${fc.odds.toFixed(1)} to 1`} going in. The sky is won when your fighters end the month with ${AIR.sky.win} times what the defender can still put up.`);
+      if (fc.cut > 0) out.push(`The air groups based at ${place2} should lose about ${pct4(fc.cut)} of their readiness, and aircraft on the ground.`);
+    } else if (kind === "strike") {
+      out.push(`Warships caught at sea there could lose up to ${pct4(fc.cut)} of their number, and merchant ships in those waters will be sunk.`);
+    } else if (kind === "ground") {
+      const dug = g2.regions[target].units.some((u) => !u.dead && u.dug && atWar(g2, nat, u.nat));
+      out.push(`The troops at ${place2} should lose about ${pct4(fc.cut)} of their organisation${dug ? " (less where they are dug in)" : ""}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
+    }
+    return out;
+  }
+  function planRaid(g2, kind, target, ids2, nat = g2.human) {
+    const row2 = kindRow(kind);
+    const place2 = placeOf(g2, kind, target);
+    const sea = kind === "strike";
+    const plan = {
+      kind,
+      target,
+      place: place2,
+      title: `${row2.short}: ${place2}`,
+      why: null,
+      seats: [],
+      picked: [],
+      bombers: 0,
+      fighters: 0,
+      meets: [],
+      lines: [],
+      success: 0,
+      verdict: "",
+      bomberLoss: 0,
+      bomberLossN: 0,
+      fighterLossN: 0,
+      foeLossN: 0,
+      effects: [],
+      massed: "",
+      offPatrol: ""
+    };
+    if (!airWar(g2) || nat === null) {
+      plan.why = "Raids are planned only in the grand campaign.";
+      return plan;
+    }
+    if (!(sea ? g2.seas[target] : g2.regions[target])) {
+      plan.why = sea ? "Pick a sea." : "Pick a province.";
+      return plan;
+    }
+    if (!g2.nations[nat].atWar.length) {
+      plan.why = "The nation is at peace.";
+      return plan;
+    }
+    if (kind === "ground" && !troopsSeen(g2, nat, target, sightOf(g2, nat))) {
+      plan.why = "No enemy troops have been seen there.";
+      return plan;
+    }
+    const fleets = airFleetsOf(g2, nat).filter((f) => flying(f) || f.est.ftr + f.est.bmr > 0);
+    const whys = new Map(fleets.map((f) => [f.id, whyNotSeat(g2, f, kind, target)]));
+    const can = fleets.filter((f) => whys.get(f.id) === null);
+    const dist = (f) => sea ? seaKm(g2, f.base, target) : km(g2, f.base, target);
+    let going;
+    if (ids2) going = can.filter((f) => ids2.includes(f.id));
+    else {
+      const near = [...can].sort((a2, b) => dist(a2) - dist(b) || a2.id - b.id);
+      const lead2 = kind === "recon" ? near[0] : kind === "superiority" ? near.find((f) => f.ftr > 0) ?? near[0] : near.find((f) => f.bmr > 0) ?? (row2.needs === "any" ? near[0] : void 0);
+      const same = lead2 ? can.filter((f) => f.base === lead2.base && (lead2.bmr > 0 ? f.bmr > 0 : f.ftr > 0)) : [];
+      going = kind === "recon" ? same.slice(0, 1) : same;
+    }
+    if (kind === "recon") going = going.slice(0, 1);
+    const locked2 = /* @__PURE__ */ new Set();
+    if (kind !== "recon" && kind !== "night") for (const f of can) {
+      if (going.includes(f) || f.escorts === void 0 || !going.some((b) => b.id === f.escorts && b.bmr > 0)) continue;
+      going.push(f);
+      locked2.add(f.id);
+    }
+    plan.picked = going.map((f) => f.id);
+    plan.seats = fleets.map((f) => {
+      const d = dist(f), R = airRange(f), k = kindOf(f);
+      const effect = k === "bmr" ? d <= R.bmr ? 1 : 0 : kind === "night" ? 0 : cover(d, R.ftr);
+      const why = whys.get(f.id) ?? null;
+      const note3 = why ? "" : kind === "recon" ? `${Math.min(AIRWAR.recon.aircraft, f.ftr + f.bmr)} of its aircraft go` : k === "bmr" ? `${num(d)} km to fly` : effect >= 1 ? `${num(d)} km: well inside its range` : `${num(d)} km: at ${pct4(effect)} effect over the target`;
+      return { id: f.id, name: f.name, kind: k, aircraft: f.ftr + f.bmr, base: f.base, baseName: g2.regions[f.base].name, km: d, effect, ready: f.ready, picked: going.includes(f), locked: locked2.has(f.id), why, note: note3 };
+    }).sort((a2, b) => (a2.why ? 1 : 0) - (b.why ? 1 : 0) || a2.km - b.km || a2.id - b.id);
+    plan.bombers = going.reduce((s, f) => s + f.bmr, 0);
+    plan.fighters = going.reduce((s, f) => s + f.ftr, 0);
+    if (!going.length) {
+      plan.why = can.length ? "Pick at least one air group." : "No group that can still fly this month reaches it.";
+      return plan;
+    }
+    if (kind === "recon") {
+      const f = going[0];
+      const n = Math.min(AIRWAR.recon.aircraft, f.ftr + f.bmr);
+      const risk = reconRisk(g2, nat, target);
+      plan.fighters = f.ftr > 0 ? n : 0;
+      plan.bombers = f.ftr > 0 ? 0 : n;
+      plan.success = 1 - risk;
+      plan.verdict = risk <= 0 ? "Nothing will come up to stop it" : risk < 0.15 ? "A small risk from fighters on patrol there" : "Fighters on patrol there will take a toll";
+      const lost = n * risk;
+      if (f.ftr > 0) plan.fighterLossN = Math.round(lost);
+      else plan.bomberLossN = Math.round(lost);
+      plan.bomberLoss = f.ftr > 0 ? 0 : risk;
+      plan.effects = [`Every army at ${place2} and in the provinces beside it is seen whole until the month ends.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
+      return plan;
+    }
+    const m = missionOf(kind);
+    if (row2.needs === "bmr" && plan.bombers <= 0) {
+      plan.why = "Pick at least one bomber group: fighters only go as their escort.";
+      return plan;
+    }
+    const a = assessAir(g2, going, m, target);
+    if (a.why) {
+      plan.why = a.why;
+      return plan;
+    }
+    const fc = forecastAir(g2, a, m, target);
+    plan.meets = a.def.map((x) => ({ name: x.f.name, nat: x.f.nat, baseName: g2.regions[x.f.base].name, ftr: x.f.ftr, able: Math.round(x.f.ftr * x.w) }));
+    plan.lines = a.lines;
+    plan.success = fc.success;
+    plan.verdict = VERDICT.find(([least]) => fc.success >= least)[1];
+    plan.bomberLoss = fc.bomberLoss;
+    plan.bomberLossN = Math.round(fc.bmrLoss);
+    plan.fighterLossN = Math.round(fc.ftrLoss);
+    plan.foeLossN = Math.round(fc.foeLoss);
+    plan.effects = effectsOf(g2, kind, target, fc, nat);
+    const bombers = going.filter((f) => f.bmr > 0);
+    if (bombers.length >= 2) {
+      const alone = bombers.map((b) => assessAir(g2, [b, ...going.filter((x) => x.bmr <= 0 && x.base === b.base)], m, target)).filter((x) => !x.why).map((x) => x.bomberLoss);
+      if (alone.length) {
+        const lo = Math.min(...alone), hi = Math.max(...alone);
+        const fields = new Set(bombers.map((b) => b.base)).size;
+        plan.massed = hi > a.bomberLoss + 5e-3 ? `Meeting up pays: ${plural3(bombers.length, "bomber group")} from ${plural3(fields, "airfield")} flying together should lose about ${pct4(a.bomberLoss)} of their bombers. Sent one group at a time it would be ${pct4(lo)}${pct4(lo) !== pct4(hi) ? ` to ${pct4(hi)}` : ""}.` : `${plural3(bombers.length, "bomber group")} fly together from ${plural3(fields, "airfield")}. Here it changes the losses little: ${a.D < 1 ? "no fighters will come up" : "the defenders are too many, or the escort too strong, for numbers to tell"}.`;
+      }
+    }
+    const off = going.filter((f) => f.ftr > 0 && f.mission === "support" && kindOf(f) !== "bmr");
+    if (off.length) plan.offPatrol = `${list3(off.map((f) => `the ${f.name}`))} ${off.length === 1 ? "leaves its patrol" : "leave their patrols"} for the rest of the month: the sky over ${list3([...new Set(off.map((f) => g2.regions[f.base].name))])} has that much less cover until next month.`;
+    return plan;
+  }
+  function launchRaid(g2, kind, target, ids2, nat = g2.human) {
+    if (kind === "recon" || nat === null) return null;
+    const plan = planRaid(g2, kind, target, ids2, nat);
+    if (plan.why) return null;
+    const fleets = plan.picked.map((id) => g2.airFleets.find((f) => f.id === id));
+    const m = missionOf(kind);
+    const rep = fly(g2, nat, m, target, fleets, `:${(g2.flags.airBattles ?? 0) + 1}`);
+    if (!rep) return null;
+    for (const f of fleets) {
+      f.mission = m;
+      f.target = target;
+      f.flew = g2.turn;
+    }
+    return rep;
+  }
+  function reconRisk(g2, nat, target) {
+    const up = fightersOver(g2, target, nat);
+    return up <= 0 ? 0 : Math.min(1, up / (up + 200)) * AIRWAR.recon.loss;
+  }
+  function raidReplays(g2, turn = g2.turn, viewer = g2.human) {
+    const side2 = (xs) => xs.map((s) => {
+      const f = s.id === void 0 ? g2.airFleets.find((y) => y.name === s.fleet && y.nat === s.nat) : g2.airFleets.find((y) => y.id === s.id);
+      const base = s.base ?? f?.base ?? -1, r = g2.regions[base];
+      return { id: s.id ?? f?.id ?? -1, name: s.fleet, nat: s.nat, base, baseName: r?.name ?? "", x: r?.x ?? 0, y: r?.y ?? 0, ftr: s.ftr, bmr: s.bmr, lostFtr: s.lostFtr, lostBmr: s.lostBmr };
+    });
+    const mineToo = (nat) => viewer === null || !!nat && allied(g2, nat, viewer);
+    return g2.airReports.filter((r) => r.turn === turn && (mineToo(r.attNat) || mineToo(r.defNat))).map((r) => {
+      const p = r.zone >= 0 ? g2.seas[r.zone] : g2.regions[r.region];
+      return { id: r.id, turn: r.turn, kind: r.mission, region: r.region, zone: r.zone, place: r.place, x: p?.x ?? 0, y: p?.y ?? 0, attNat: r.attNat, defNat: r.defNat, attackers: side2(r.att), defenders: side2(r.def), won: r.won, level: r.level, result: r.result };
+    });
+  }
+  function scout(g2, id, target, nat = g2.human) {
+    const f = mine(g2, id, nat);
+    const why = !f ? "That group is not yours to send." : !g2.nations[f.nat].atWar.length ? "The nation is at peace." : whyNotSeat(g2, f, "recon", target);
+    if (!f || why) return { ok: false, text: why ?? "", lost: 0 };
+    const r = g2.regions[target];
+    const n = Math.min(AIRWAR.recon.aircraft, f.ftr + f.bmr);
+    const rng = new Rng(hashString(`air:${g2.seed}:${g2.turn}:recon:${f.id}:${target}`));
+    const lost = Math.min(n, rng.roll(n * reconRisk(g2, f.nat, target)));
+    const p = airPool(g2, f.nat);
+    if (f.ftr > 0) {
+      f.ftr -= lost;
+      f.lost.ftr += lost;
+      p.lostFtr += lost;
+      p.lostPilots += lost;
+    } else {
+      f.bmr -= lost;
+      f.lost.bmr += lost;
+      p.lostBmr += lost;
+    }
+    f.ready = Math.max(AIR.ready.floor, f.ready - AIRWAR.recon.ready);
+    f.scouted = g2.turn;
+    const kept = {};
+    for (const [k, turn] of Object.entries(g2.intel.scout ?? {})) if (turn === g2.turn) kept[+k] = turn;
+    kept[target] = g2.turn;
+    g2.intel.scout = kept;
+    const foes = r.units.filter((u) => !u.dead && atWar(g2, f.nat, u.nat));
+    const seen = foes.length ? `${plural3(foes.length, "corps", "corps")}, ${plural3(foes.reduce((s, c) => s + c.divs, 0), "division")}${foes.some((c) => c.dug) ? ", dug in" : ""}` : "no troops there";
+    const text = `Aircraft of the ${f.name} photographed ${r.name}: ${seen}.${lost ? ` ${plural3(lost, "aircraft", "aircraft")} did not come back.` : ""}`;
+    if (f.nat === g2.human) headline(g2, "info", text, f.nat, r.id);
+    return { ok: true, text, lost };
+  }
+
   // ../../data/campaign/plan-historical.json
   var plan_historical_default = {
     _about: "What each AI nation sets out to do in Historical mode, by turn (turn 1 is September 1939). These are intentions, not results: the armies still have to win the battles. declare lists nations the AI declares war on that turn. posture is attack, defend or redeploy. objectives are worked through in order. axis is the line the tanks are massed along. haltOrder is ground the plan leaves alone in its first month (the stop short of Dunkirk, and Paris until the second phase). lastPush names prizes that troops who close up to them late in the month go straight in against, instead of waiting a month at the gates. staging keeps a few corps at a jumping-off point. landings sends named corps across the sea, each to the first place on its list it can get ashore: an enemy coast is assaulted (only at fair odds if it is defended), an ally's port is reinforced, and the corps stays overseas until the phase ends. fleets gives named fleets their orders for the phase. minOdds lets a nation attack at worse odds than a careful staff would accept. declareWhenCollapsing waits until that nation is breaking, or has fallen. renew set to false allows each place one assault a month: an attack that is held is not sent in again until the next month. strict keeps an army to the letter of its orders: it attacks only its targets, steps into no ground the enemy has left empty beyond them, and makes no counter-attack of its own. That is written against history's enemy: ground a player holds it steps into and wins back as freely as any other army.",
@@ -11010,6 +11735,7 @@
     openTraits(g2);
     openTech(g2);
     openStores(g2);
+    openAirWar(g2);
     g2.supplyDirty = true;
     return g2;
   }
@@ -11120,8 +11846,8 @@
         atk += atkP(g2, c) * season;
       }
       const key2 = Object.keys(share).sort((a, b) => share[b] - share[a])[0] ?? g2.regions[edge3[0]].ctrl;
-      const mine = g2.nations[nat].air, his = g2.nations[key2]?.air ?? 0;
-      const airEdge = (mine - his) / (mine + his + 1);
+      const mine2 = g2.nations[nat].air, his = g2.nations[key2]?.air ?? 0;
+      const airEdge = (mine2 - his) / (mine2 + his + 1);
       atk *= 1 + 0.3 * airEdge;
       def *= 1 - 0.2 * airEdge;
       if (!soft.length) def *= OPEN.headOn;
@@ -11316,11 +12042,11 @@
         g2.flags[`st:gain:${nat}`] = g2.turn;
       }
     }
-    const list3 = ops(nat);
+    const list4 = ops(nat);
     const busy = real.some((f) => onSince(g2, nat, f) && !cond(g2, nat, "quiet", [f]) && g2.turn - flag2(g2, `st:gain:${nat}`) <= 1);
     let cur = flag2(g2, `st:op:${nat}`);
     const go = (k) => {
-      const op = list3[k];
+      const op = list4[k];
       const who = targets(g2, nat, op);
       g2.flags[`st:done:${nat}:${op.id}`] = g2.turn;
       g2.flags[`st:go:${nat}`] = g2.turn;
@@ -11336,7 +12062,7 @@
       }
     };
     if (cur) {
-      const op = list3[cur - 1];
+      const op = list4[cur - 1];
       const p = op ? prospect(g2, nat, op, skip) : null;
       const still = !!op && (op.if ?? []).filter((c) => c !== "quiet").every((c) => cond(g2, nat, c, real));
       if (!op || !p || !still || op.ratio !== void 0 && p.ratio < 0.8 * op.ratio) {
@@ -11349,8 +12075,8 @@
       }
     }
     if (!cur) {
-      for (let k = 0; k < list3.length; k++) {
-        const op = list3[k];
+      for (let k = 0; k < list4.length; k++) {
+        const op = list4[k];
         if (flag2(g2, `st:done:${nat}:${op.id}`) || g2.turn < (op.from ?? 1) || g2.turn > (op.to ?? 999) || g2.turn < flag2(g2, `st:cool:${nat}:${op.id}`)) continue;
         if (!op.side && busy) continue;
         if (!(op.if ?? []).every((c) => cond(g2, nat, c, real))) continue;
@@ -11390,9 +12116,9 @@
     const n = g2.nations[nat];
     if (!n.alive || n.dormant) return null;
     const T = temper(g2, nat);
-    const list3 = ops(nat);
-    const prep = list3[flag2(g2, `st:op:${nat}`) - 1] ?? null;
-    const went = g2.turn - flag2(g2, `st:go:${nat}`) <= 1 && flag2(g2, `st:go:${nat}`) ? list3[flag2(g2, `st:goOp:${nat}`) - 1] ?? null : null;
+    const list4 = ops(nat);
+    const prep = list4[flag2(g2, `st:op:${nat}`) - 1] ?? null;
+    const went = g2.turn - flag2(g2, `st:go:${nat}`) <= 1 && flag2(g2, `st:go:${nat}`) ? list4[flag2(g2, `st:goOp:${nat}`) - 1] ?? null : null;
     const declare2 = went && flag2(g2, `st:go:${nat}`) === g2.turn ? targets(g2, nat, went) : [];
     const real = fronts(g2, nat, { extra: new Set(declare2), skip });
     const live = real.filter((f) => onSince(g2, nat, f) > 0 || f.enemies.some((e) => declare2.includes(e)));
@@ -11442,7 +12168,7 @@
     if (cap4 && cap4.ctrl === nat && nearEnemy(g2, nat, cap4, OPEN.guardWithin)) phase.staging = { ...phase.staging ?? {}, [cap4.name]: OPEN.guard };
     const quay = seaBase(g2, nat);
     if (quay) phase.staging = { ...phase.staging ?? {}, [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, landingsFor(g2, nat).force) };
-    for (const op of list3) {
+    for (const op of list4) {
       if (!op.staging || flag2(g2, `st:done:${nat}:${op.id}`) || g2.turn > (op.to ?? 999)) continue;
       phase.staging = { ...phase.staging ?? {}, ...op.staging };
     }
@@ -11498,8 +12224,8 @@
     return Infinity;
   }
   function afterDeclaring(g2, nat) {
-    const list3 = ops(nat);
-    const op = flag2(g2, `st:go:${nat}`) === g2.turn ? list3[flag2(g2, `st:goOp:${nat}`) - 1] : null;
+    const list4 = ops(nat);
+    const op = flag2(g2, `st:go:${nat}`) === g2.turn ? list4[flag2(g2, `st:goOp:${nat}`) - 1] : null;
     const n = g2.nations[nat];
     if (dominating(g2)) return;
     if (!op?.join || !n.alive || n.align === "allies" || n.align === "axis") return;
@@ -11562,15 +12288,15 @@
   var THEATRES = Object.entries(theatres_default).filter((e) => typeof e[1] !== "string").map((e) => e[1]);
   var theatreIds = /* @__PURE__ */ new WeakMap();
   function theatreRegions(g2) {
-    let ids = theatreIds.get(g2);
-    if (!ids) theatreIds.set(g2, ids = THEATRES.map((t) => new Set(t.regions.map((nm) => g2.byName[nm]?.id ?? -1))));
-    return ids;
+    let ids2 = theatreIds.get(g2);
+    if (!ids2) theatreIds.set(g2, ids2 = THEATRES.map((t) => new Set(t.regions.map((nm) => g2.byName[nm]?.id ?? -1))));
+    return ids2;
   }
   var apart = (g2, k, nat) => isOpen(g2) ? !!THEATRES[k].open && !!(THEATRES[k].plans[nat] || THEATRES[k].bases?.[nat]) : !!THEATRES[k].plans[nat] && begun(g2, k);
   var begun = (g2, k) => g2.turn >= (THEATRES[k].opens ?? 0);
   function theatreOf(g2, c) {
-    const ids = theatreRegions(g2);
-    for (let k = 0; k < THEATRES.length; k++) if (apart(g2, k, c.nat) && ids[k].has(c.reg)) return k;
+    const ids2 = theatreRegions(g2);
+    for (let k = 0; k < THEATRES.length; k++) if (apart(g2, k, c.nat) && ids2[k].has(c.reg)) return k;
     return -1;
   }
   var scope = null;
@@ -11586,12 +12312,12 @@
   var within = (r) => !scope || scope.has(r.id);
   var allowed = (g2, r) => !bound2 || bound2.has(r.name) || r.ctrl === g2.human;
   var COUNTER_WINDOW = 2;
-  function theatrePhase(g2, nat, list3) {
+  function theatrePhase(g2, nat, list4) {
     const ours = (nm) => {
       const r = g2.byName[nm];
       return !!r && allied(g2, nat, r.ctrl);
     };
-    const ph = list3.find((p) => g2.turn >= p.from && g2.turn <= p.to && (p.ifLost ?? []).every((nm) => !ours(nm))) ?? null;
+    const ph = list4.find((p) => g2.turn >= p.from && g2.turn <= p.to && (p.ifLost ?? []).every((nm) => !ours(nm))) ?? null;
     return ph?.ifAtWar && !atWar(g2, ph.ifAtWar[0], ph.ifAtWar[1]) ? null : ph;
   }
   function phaseFor(g2, nat) {
@@ -11623,25 +12349,25 @@
   }
   function overseas(g2, nat) {
     const n = g2.nations[nat];
-    const ids = theatreRegions(g2);
+    const ids2 = theatreRegions(g2);
     THEATRES.forEach((T, k) => {
       const open = isOpen(g2);
       const phases2 = open ? [] : T.plans[nat];
-      if (!(open ? apart(g2, k, nat) : phases2 && begun(g2, k)) || !n.alive || !g2.corps.some((c) => c.nat === nat && ids[k].has(c.reg))) return;
-      const ph = open ? theatreStaff(g2, nat, ids[k], k) : theatrePhase(g2, nat, phases2);
+      if (!(open ? apart(g2, k, nat) : phases2 && begun(g2, k)) || !n.alive || !g2.corps.some((c) => c.nat === nat && ids2[k].has(c.reg))) return;
+      const ph = open ? theatreStaff(g2, nat, ids2[k], k) : theatrePhase(g2, nat, phases2);
       if (ph?.declare) for (const e of ph.declare) declareWar(g2, nat, e);
       if (!n.alive || !n.atWar.length) return;
-      if (ph?.landings) landings(g2, nat, ph, ids[k]);
+      if (ph?.landings) landings(g2, nat, ph, ids2[k]);
       if (ph?.release) {
         for (const c of g2.corps) if (c.nat === nat && c.hold && c.kind !== "fort" && ph.release.includes(g2.regions[c.reg].name)) c.hold = false;
       }
-      const rest = g2.corps.filter((c) => c.nat === nat && !c.hold && !ids[k].has(c.reg));
+      const rest = g2.corps.filter((c) => c.nat === nat && !c.hold && !ids2[k].has(c.reg));
       for (const c of rest) c.hold = true;
-      scope = ids[k];
+      scope = ids2[k];
       quiet = !!ph?.quiet;
       single = ph?.renew === false;
       leaving = ph?.withdraw ?? null;
-      given = new Set((ph?.abandon ?? []).map((nm) => g2.byName[nm]?.id).filter((id) => id !== void 0 && ids[k].has(id)));
+      given = new Set((ph?.abandon ?? []).map((nm) => g2.byName[nm]?.id).filter((id) => id !== void 0 && ids2[k].has(id)));
       entrusted = handedOver(g2, nat, ph);
       masked = new Set((ph?.mask ?? []).map((nm) => g2.byName[nm]?.id).filter((id) => id !== void 0));
       try {
@@ -11652,7 +12378,7 @@
         for (const p of phases2) if (p.from <= g2.turn) {
           for (const e of p.enemies ?? []) if (n.atWar.includes(e)) enemies.add(e);
         }
-        for (const id of ids[k]) {
+        for (const id of ids2[k]) {
           const r = g2.regions[id];
           if (n.atWar.includes(r.ctrl)) enemies.add(r.ctrl);
         }
@@ -11660,7 +12386,7 @@
           const only = ph.targets ? new Set(ph.targets) : null;
           const halt = /* @__PURE__ */ new Set([...ph.siege ?? [], ...ph.mask ?? []]), edge3 = new Set(halt);
           for (const r of g2.regions) {
-            if (!ids[k].has(r.id)) {
+            if (!ids2[k].has(r.id)) {
               halt.add(r.name);
               edge3.add(r.name);
             } else if (only && !only.has(r.name)) halt.add(r.name);
@@ -11877,8 +12603,8 @@
   }
   function objectivesFor(g2, nat) {
     if (isOpen(g2)) return phaseFor(g2, nat)?.objectives ?? [];
-    const list3 = phases(nat).filter((p) => p.from <= g2.turn).sort((a, b) => b.from - a.from);
-    return list3.flatMap((p) => p.objectives ?? []);
+    const list4 = phases(nat).filter((p) => p.from <= g2.turn).sort((a, b) => b.from - a.from);
+    return list4.flatMap((p) => p.objectives ?? []);
   }
   function landings(g2, nat, ph, within2) {
     for (const L of ph.landings ?? []) {
@@ -12028,9 +12754,9 @@
               if (failed.has(j) || halt.has(r.name) || only && !only.has(r.name) || !enemies.has(r.ctrl) || !atWar(g2, nat, r.ctrl) || notYet(r.name)) continue;
               if (kept && !axis2.has(r.name)) continue;
               if (blocked(g2, c, r)) continue;
-              let list3 = cand.get(j);
-              if (!list3) cand.set(j, list3 = []);
-              list3.push(c);
+              let list4 = cand.get(j);
+              if (!list4) cand.set(j, list4 = []);
+              list4.push(c);
             }
           }
           let best = null;
@@ -12190,10 +12916,10 @@
     const engaged = (c) => g2.regions[c.reg].nb.some((j) => enemies.has(g2.regions[j].ctrl) && atWar(g2, nat, g2.regions[j].ctrl));
     const free2 = () => g2.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== "fort" && c.ap >= 4 && !engaged(c));
     const room2 = (r) => allied(g2, nat, r.ctrl) && friendlyUnits(g2, r, nat).length < STACK;
-    const nearest = (list3, to) => {
+    const nearest = (list4, to) => {
       const d = hops(g2, to.id, (r) => allied(g2, nat, r.ctrl));
       let best = null, bd = 1e9;
-      for (const c of list3) if (d[c.reg] >= 0 && d[c.reg] < bd) {
+      for (const c of list4) if (d[c.reg] >= 0 && d[c.reg] < bd) {
         bd = d[c.reg];
         best = c;
       }
@@ -12254,9 +12980,9 @@
     if (n.seaSupply && (!scope || leaving)) evacuations(g2, nat);
     const N = g2.regions.length;
     const threat2 = new Float32Array(N), held = new Float32Array(N);
-    const mine = (r) => scope ? scope.has(r.id) && allied(g2, nat, r.ctrl) : !aside(g2, r, nat) && (r.ctrl === nat || r.owner === nat && allied(g2, nat, r.ctrl));
+    const mine2 = (r) => scope ? scope.has(r.id) && allied(g2, nat, r.ctrl) : !aside(g2, r, nat) && (r.ctrl === nat || r.owner === nat && allied(g2, nat, r.ctrl));
     for (const r of g2.regions) {
-      if (!mine(r)) continue;
+      if (!mine2(r)) continue;
       for (const j of r.nb) {
         const e = g2.regions[j];
         if (!atWar(g2, nat, e.ctrl) || masked.has(j)) continue;
@@ -12265,7 +12991,7 @@
       }
       for (const u of friendlyUnits(g2, r, nat)) held[r.id] += defPower(g2, u, r);
     }
-    if (!scope && isOpen(g2) && n.capital >= 0 && mine(g2.regions[n.capital]) && threat2[n.capital] === 0) {
+    if (!scope && isOpen(g2) && n.capital >= 0 && mine2(g2.regions[n.capital]) && threat2[n.capital] === 0) {
       const cap4 = g2.regions[n.capital];
       const seen = /* @__PURE__ */ new Set([cap4.id]);
       let ring = [cap4.id], worst = 0;
@@ -12290,14 +13016,14 @@
     for (const c of movers) {
       if (c.dead || c.ap <= 0 || massed.has(c.id)) continue;
       const here = g2.regions[c.reg];
-      if (!mine(here)) continue;
+      if (!mine2(here)) continue;
       if (!(scope && quiet)) {
         const others = friendlyUnits(g2, here, nat).length > 1 || threat2[here.id] === 0;
         const gap = here.nb.map((j) => g2.regions[j]).find((r) => atWar(g2, nat, r.ctrl) && lost(r) && !late(r) && !hostileUnits(g2, r, nat).length && c.ap >= Math.min(moveCost(g2, c, r), 4) && (allowed(g2, r) || forsaken(g2, nat, r)));
         if (gap && others && moveCorps(g2, c, gap)) continue;
       }
       if (line && !n.slowCommand && friendlyUnits(g2, here, nat).length >= 3) {
-        const door = here.nb.map((j) => g2.regions[j]).find((r) => mine(r) && !given.has(r.id) && threat2[r.id] > 0 && !friendlyUnits(g2, r, nat).length && c.ap >= Math.min(moveCost(g2, c, r), 4));
+        const door = here.nb.map((j) => g2.regions[j]).find((r) => mine2(r) && !given.has(r.id) && threat2[r.id] > 0 && !friendlyUnits(g2, r, nat).length && c.ap >= Math.min(moveCost(g2, c, r), 4));
         if (door) {
           const was = defPower(g2, c, here);
           if (moveCorps(g2, c, door)) {
@@ -12318,7 +13044,7 @@
       const d = hops(g2, here.id, (r) => allied(g2, nat, r.ctrl) && within(r));
       let to = null, bs = 0;
       for (const r of g2.regions) {
-        if (!mine(r) || d[r.id] <= 0 || friendlyUnits(g2, r, nat).length >= STACK) continue;
+        if (!mine2(r) || d[r.id] <= 0 || friendlyUnits(g2, r, nat).length >= STACK) continue;
         const s = need(r) / (1 + 0.5 * d[r.id]);
         if (s > bs) {
           bs = s;
@@ -12660,6 +13386,24 @@
   function orderAirBase(g2, id, region) {
     const f = myAir(g2, id);
     return !!f && rebaseAir(g2, f, g2.regions[region]);
+  }
+  var airfieldsSeen = (g2) => airfields(g2, g2.human);
+  var airfieldAt = (g2, region) => airfieldCard(g2, region, g2.human);
+  var myAirGroups = (g2) => g2.human ? airGroups(g2, g2.human) : [];
+  var airGroupJobs = (g2, id) => groupJobs(g2, id, g2.human);
+  function orderGroupJob(g2, id, key2) {
+    return !!myAir(g2, id) && setGroupJob(g2, id, key2, g2.human);
+  }
+  var airGroupBases = (g2, id) => groupBases(g2, id, g2.human);
+  var raidMenu = (g2) => raidKinds(g2, g2.human);
+  var raidTargetsFor = (g2, kind, lead2 = -1) => raidTargets(g2, kind, g2.human, lead2);
+  var previewRaid = (g2, kind, target, ids2) => planRaid(g2, kind, target, ids2, g2.human);
+  function orderRaid(g2, kind, target, ids2) {
+    return g2.human !== null && humanUp(g2) ? launchRaid(g2, kind, target, ids2, g2.human) : null;
+  }
+  var flownRaids = (g2, turn = g2.turn) => raidReplays(g2, turn, g2.human);
+  function orderScout(g2, id, target) {
+    return myAir(g2, id) ? scout(g2, id, target, g2.human) : { ok: false, text: "It is not your month.", lost: 0 };
   }
   function previewAirOrder(g2, id, mission, target) {
     const f = g2.airFleets.find((x) => x.id === id);
@@ -13078,8 +13822,8 @@
     g2.corps = d.corps;
     const byId = new Map(g2.corps.map((c) => [c.id, c]));
     g2.regions.forEach((r, i) => {
-      const ids = d.regions[i][6];
-      if (ids) for (const id of ids) {
+      const ids2 = d.regions[i][6];
+      if (ids2) for (const id of ids2) {
         const c = byId.get(id);
         if (c && c.reg === r.id) {
           r.units.push(c);
@@ -13114,6 +13858,7 @@
       g2.sky = d.sky ?? {};
       g2.raids = d.raids ?? {};
     }
+    if (g2.flags.open === 1) openAirWar(g2);
     g2.stories = { ...newStories(), ...d.stories ?? {} };
     g2.intel = { agents: [], next: 1, notes: [], heat: {}, ...d.intel ?? {} };
     if (Array.isArray(d.fleets)) {
@@ -13132,6 +13877,220 @@
     g2.supplyDirty = grown || !!d.dirty;
     if (g2.flags.open === 1 && !Object.values(g2.supply).some((t) => t.includes(2))) g2.supplyDirty = true;
     return g2;
+  }
+
+  // ../../src/campaign/airpages.ts
+  var num2 = (n) => Math.round(n).toLocaleString("en-US");
+  var pct5 = (x) => `${Math.round(x * 100)}%`;
+  var craft = (x) => [x.ftr >= 1 ? `${num2(x.ftr)} fighters` : "", x.bmr >= 1 ? `${num2(x.bmr)} bombers` : ""].filter(Boolean).join(", ") || "no aircraft fit to fly";
+  var KINDS2 = ["bomb", "night", "ground", "superiority", "strike", "recon"];
+  var isKind = (k) => KINDS2.includes(k);
+  var ids = (s) => s ? s.split(".").map(Number).filter((n) => Number.isFinite(n)) : [];
+  var BACK = { label: "BACK TO THE AIRFIELD", act: "open:airfield", ok: true, tip: "" };
+  function groupLines(x) {
+    return [
+      `${craft(x)}${x.command ? `, of ${x.command}` : ""}${x.leader ? `. ${x.leader} commands` : ""}. Reaches ${num2(x.range)} km. Readiness ${pct5(x.ready)}.`,
+      `${x.doing}.${x.crowd < 1 ? ` The airfield is crowded: only ${pct5(x.crowd)} of it can fly.` : ""}`
+    ];
+  }
+  function airfieldPage(g2, region) {
+    const c = airfieldAt(g2, region);
+    if (!c) return null;
+    const up = humanUp(g2);
+    const rows = c.rows.map((x) => ({
+      nat: x.nat,
+      title: x.name,
+      lines: groupLines(x),
+      buttons: x.mine ? [{ label: "ORDERS", act: `open:group:${x.id}`, ok: true, tip: "Its standing orders, the raids it can fly, a reconnaissance, or a move to another airfield." }] : []
+    }));
+    return {
+      id: "airfield",
+      title: `${(c.field?.word ?? "NO AIRFIELD").toUpperCase()} AT ${c.name.toUpperCase()}`,
+      headline: !c.field ? "No aircraft can be based here" : c.hidden ? "What flies from here is not known" : rows.length ? `${rows.length} air group${rows.length === 1 ? "" : "s"} based here` : "No air group is based here",
+      note: `${c.note} ${c.build} Aircraft take off from an airfield and come back to it. A fighter group patrols its sky, sticks with a bomber group as escort, or rests; any group can fly one raid a month, planned from its target.`,
+      top: [{ label: "PLAN A RAID", act: "open:raids", ok: up, tip: "Pick the kind of raid, then the target: you see the chance of success and the losses to expect, then choose which groups fly it together." }],
+      sections: [{ heading: "THE AIR GROUPS", text: rows.length || c.hidden ? "" : c.field ? "Order aircraft from the ARSENAL, or move a group here from another airfield." : "", rows }]
+    };
+  }
+  function groupPage(g2, id) {
+    const x = myAirGroups(g2).find((r) => r.id === id);
+    if (!x) return null;
+    const up = humanUp(g2);
+    const jobs = airGroupJobs(g2, id).map((j) => ({
+      nat: x.nat,
+      title: j.label,
+      lines: [j.forecast, j.why ?? ""].filter(Boolean),
+      buttons: [{ label: j.on ? "ITS ORDERS NOW" : "GIVE THIS ORDER", act: `job:${id}:${j.key}`, ok: up && !j.on && !j.why, tip: j.why ?? "" }]
+    }));
+    const menu = raidMenu(g2);
+    const raids = menu.filter((k) => k.key !== "recon").map((k) => {
+      const n = raidTargetsFor(g2, k.key, id).length;
+      const cannot = x.flew ? "It has flown its raid this month." : k.why ?? (n ? null : x.kind === "ftr" && k.key === "night" ? "Fighters do not fly with the night bombers." : "Nothing in its reach.");
+      return { nat: x.nat, title: k.label, lines: [k.blurb, cannot ?? `${n} target${n === 1 ? "" : "s"} in its reach.`], buttons: [{ label: "PICK A TARGET", act: `open:raid:${k.key}:${id}`, ok: up && !cannot, tip: cannot ?? "" }] };
+    });
+    return {
+      id: `group:${id}`,
+      title: x.name.toUpperCase(),
+      headline: `${craft(x)} at ${x.baseName}`,
+      note: groupLines(x).join(" "),
+      top: [
+        BACK,
+        { label: "SCOUT FROM THE AIR", act: `open:scout:${id}`, ok: up && !x.scouted, tip: x.scouted ? "It has flown its reconnaissance this month." : "A few aircraft photograph one province: its armies are seen whole until the month ends." },
+        { label: "MOVE TO ANOTHER AIRFIELD", act: `open:rebase:${id}`, ok: up, tip: "Settling in costs it some readiness for a month." }
+      ],
+      sections: [{ heading: "STANDING ORDERS", text: "What it does between raids.", rows: jobs }, { heading: "RAIDS", text: "One raid a month. A raid is flown the moment you order it, and the group is away until next month.", rows: raids }]
+    };
+  }
+  function raidsPage(g2) {
+    const menu = raidMenu(g2);
+    if (!menu.length) return null;
+    const up = humanUp(g2);
+    return {
+      id: "raids",
+      title: "PLAN A RAID",
+      headline: "Pick the kind of raid, then its target",
+      note: "You pick the target and see the chance of success and the losses to expect. Then you choose which groups fly it, from one airfield or several: bombers that meet up lose fewer of their number, and fighters in range go with them.",
+      top: [BACK],
+      sections: [{ heading: "KINDS OF RAID", text: "", rows: menu.map((k) => ({ nat: "", title: k.label, lines: [k.blurb, k.why ?? `${k.targets} target${k.targets === 1 ? "" : "s"} in reach this month.`], buttons: [{ label: "PICK A TARGET", act: `open:raid:${k.key}`, ok: up && !k.why, tip: k.why ?? "" }] })) }]
+    };
+  }
+  var lossLine = (p) => `Chance of success ${pct5(p.success)}: ${p.verdict.toLowerCase()}. Likely losses: ${[p.bombers ? `${num2(p.bomberLossN)} of ${num2(p.bombers)} bombers (${pct5(p.bomberLoss)})` : "", p.fighters ? `${num2(p.fighterLossN)} of ${num2(p.fighters)} fighters` : ""].filter(Boolean).join(", ") || "none"}${p.foeLossN ? `, for about ${num2(p.foeLossN)} enemy fighters` : ""}.`;
+  function targetsPage(g2, kind, group) {
+    const k = raidMenu(g2).find((x) => x.key === kind);
+    if (!k) return null;
+    const up = humanUp(g2);
+    const lead2 = group >= 0 ? [group] : void 0;
+    const all = raidTargetsFor(g2, kind, group);
+    const rows = all.slice(0, 12).map((t) => {
+      const p = previewRaid(g2, kind, t.id, lead2);
+      const lines = [`${num2(t.km)} km. ${t.what ? `${t.what[0].toUpperCase()}${t.what.slice(1)}.` : ""} ${t.groups} of your groups could fly it.`];
+      if (p.why) lines.push(p.why);
+      else if (kind === "recon") lines.push(`${p.verdict}. ${p.effects[0]}`);
+      else lines.push(`With ${p.seats.filter((s) => s.picked).map((s) => s.name).join(", ")}: ${lossLine(p)}`, ...p.effects.slice(0, 1));
+      const act2 = kind === "recon" ? `scout:${p.picked[0]}:${t.id}` : `open:plan:${kind}:${t.id}:${p.picked.join(".")}`;
+      return { nat: t.holder, title: t.name, lines, buttons: [{ label: kind === "recon" ? "SEND THE FLIGHT" : "PLAN THIS RAID", act: act2, ok: up && !p.why, tip: p.why ?? (kind === "recon" ? "" : "Choose which groups fly it, and see what meeting up is worth, before you give the order.") }] };
+    });
+    return {
+      id: group >= 0 ? `raid:${kind}:${group}` : `raid:${kind}`,
+      title: k.label.toUpperCase(),
+      headline: all.length ? `${all.length} target${all.length === 1 ? "" : "s"} in reach, nearest first` : "No target is in reach",
+      note: k.blurb,
+      top: [{ label: "BACK", act: group >= 0 ? `open:group:${group}` : "open:raids", ok: true, tip: "" }],
+      sections: [{ heading: "TARGETS", text: all.length ? "" : "Move a group to an airfield nearer the enemy, or wait until one that has flown is back.", rows }]
+    };
+  }
+  function planPage(g2, kind, target, picked) {
+    if (kind === "recon") return null;
+    const p = previewRaid(g2, kind, target, picked);
+    const up = humanUp(g2);
+    const link = (list4) => `open:plan:${kind}:${target}:${list4.join(".")}`;
+    const seat3 = (s) => ({
+      nat: g2.human ?? "",
+      title: s.name,
+      lines: [`${num2(s.aircraft)} ${s.kind === "ftr" ? "fighters" : s.kind === "bmr" ? "bombers" : "aircraft"} at ${s.baseName}. ${s.why ?? `${s.note[0].toUpperCase()}${s.note.slice(1)}.`}${s.locked ? " It goes because it is ordered to stick with its bombers." : ""}`],
+      buttons: s.why ? [] : s.picked ? [{ label: "LEAVE IT OUT", act: link(p.picked.filter((id) => id !== s.id)), ok: !s.locked, tip: s.locked ? "Change its standing order to take it off escort." : "" }] : [{ label: "ADD IT TO THE RAID", act: link([...p.picked, s.id]), ok: true, tip: s.kind === "ftr" ? "It goes as escort, and leaves its patrol for the rest of the month." : "Bombers that meet up lose fewer of their number." }]
+    });
+    const going = p.seats.filter((s) => s.picked), could = p.seats.filter((s) => !s.picked && !s.why), cannot = p.seats.filter((s) => s.why);
+    return {
+      id: `plan:${kind}:${target}:${p.picked.join(".")}`,
+      title: p.title.toUpperCase(),
+      headline: p.why ?? `${p.verdict}: ${pct5(p.success)}`,
+      note: p.why ? "" : [lossLine(p), ...p.effects, p.massed, p.offPatrol].filter(Boolean).join(" "),
+      top: [
+        { label: "FLY THE RAID", act: `raid:${kind}:${target}:${p.picked.join(".")}`, ok: up && !p.why, tip: p.why ?? "Flown at once. Every group that goes is away for the rest of the month." },
+        { label: "ANOTHER TARGET", act: `open:raid:${kind}`, ok: true, tip: "" }
+      ],
+      sections: [
+        { heading: "FLYING THE RAID", text: going.length ? "" : "No group is picked.", rows: going.map(seat3) },
+        { heading: "COULD JOIN IT", text: could.length ? "" : "No other group can reach it this month.", rows: could.map(seat3) },
+        { heading: "RISING TO MEET THEM", text: p.meets.length ? "" : "No enemy fighters are in reach.", rows: p.meets.map((m) => ({ nat: m.nat, title: m.name, lines: [`${num2(m.ftr)} fighters at ${m.baseName}: about ${num2(m.able)} can meet the raid.`], buttons: [] })) },
+        { heading: "THE BATTLE TICKET", text: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ""}`).join("\n"), rows: [] },
+        { heading: "CANNOT GO", text: "", rows: cannot.slice(0, 8).map(seat3) }
+      ].filter((s) => s.rows.length || s.text)
+    };
+  }
+  function scoutPage(g2, id) {
+    const x = myAirGroups(g2).find((r) => r.id === id);
+    if (!x) return null;
+    const up = humanUp(g2);
+    const rows = raidTargetsFor(g2, "recon", id).slice(0, 14).map((t) => ({ t, p: previewRaid(g2, "recon", t.id, [id]) })).map(({ t, p }) => ({
+      nat: t.holder,
+      title: t.name,
+      lines: [`${num2(t.km)} km. ${t.what}. ${p.verdict}.`],
+      buttons: [{ label: "SEND THE FLIGHT", act: `scout:${id}:${t.id}`, ok: up, tip: p.effects[0] ?? "" }]
+    }));
+    return {
+      id: `scout:${id}`,
+      title: `A RECONNAISSANCE  ·  ${x.name.toUpperCase()}`,
+      headline: rows.length ? `${rows.length} province${rows.length === 1 ? "" : "s"} it could photograph, nearest first` : x.scouted ? "It has flown its reconnaissance this month" : "Nothing in its reach is hidden",
+      note: "A few aircraft photograph one province and the ground beside it: every army there is seen whole until the month ends. One flight a month for each group, beside its raid, and it keeps its patrol.",
+      top: [{ label: "BACK", act: `open:group:${id}`, ok: true, tip: "" }],
+      sections: [{ heading: "PROVINCES", text: "", rows }]
+    };
+  }
+  function rebasePage(g2, id) {
+    const x = myAirGroups(g2).find((r) => r.id === id);
+    if (!x) return null;
+    const up = humanUp(g2);
+    const rows = airGroupBases(g2, id).slice(0, 14).map((b) => ({
+      nat: g2.regions[b.region].ctrl,
+      title: b.name,
+      lines: [`${b.word}, ${num2(b.km)} km away: serves ${num2(b.holds)} aircraft, room for ${num2(b.free)} more.${b.free < x.aircraft ? " It would be crowded: not all of the group could fly." : ""}${b.why ? ` ${b.why}` : ""}`],
+      buttons: [{ label: "MOVE HERE", act: `airbase:${id}:${b.region}`, ok: up && !b.why, tip: b.why ?? "Settling in costs it some readiness for a month." }]
+    }));
+    return {
+      id: `rebase:${id}`,
+      title: `A NEW AIRFIELD  ·  ${x.name.toUpperCase()}`,
+      headline: `${rows.length} airfield${rows.length === 1 ? "" : "s"} it could move to, nearest first`,
+      note: `${x.name} is based at ${x.baseName}. Aircraft can be based only where there is an airfield: engineers lay new ones out, and the treasury enlarges them. A group reaches farther into enemy country from a field nearer the front.`,
+      top: [{ label: "BACK", act: `open:group:${id}`, ok: true, tip: "" }],
+      sections: [{ heading: "AIRFIELDS", text: "", rows }]
+    };
+  }
+  function airPage(g2, id, region = -1) {
+    if (!airWar(g2) || !g2.human) return null;
+    const part = id.split(":");
+    if (id === "airfield") return airfieldPage(g2, region);
+    if (id === "raids") return raidsPage(g2);
+    if (part[0] === "group") return groupPage(g2, Number(part[1]));
+    if (part[0] === "raid" && isKind(part[1])) return targetsPage(g2, part[1], part[2] === void 0 ? -1 : Number(part[2]));
+    if (part[0] === "plan" && isKind(part[1])) return planPage(g2, part[1], Number(part[2]), ids(part[3]));
+    if (part[0] === "scout") return scoutPage(g2, Number(part[1]));
+    if (part[0] === "rebase") return rebasePage(g2, Number(part[1]));
+    return null;
+  }
+  function airAct(g2, action) {
+    if (!airWar(g2) || !g2.human) return null;
+    const part = action.split(":");
+    if (part[0] === "raid" && isKind(part[1]) && part.length >= 4) {
+      const kind = part[1], target = Number(part[2]), list4 = ids(part[3]);
+      const first = g2.airFleets.find((f) => f.id === list4[0]);
+      const h0 = g2.headlines.length;
+      const rep = orderRaid(g2, kind, target, list4);
+      if (!rep) return { ok: false, note: previewRaid(g2, kind, target, list4).why ?? "That raid cannot be flown now." };
+      const p = kind === "strike" ? g2.seas[target] : g2.regions[target];
+      return {
+        ok: true,
+        note: g2.headlines.slice(h0).map((h) => h.text).join(" "),
+        open: "airfield",
+        report: rep.id,
+        fly: first ? { from: first.base, x: p.x, y: p.y, nat: first.nat, bombers: rep.att.some((s) => s.bmr > 0), region: kind === "strike" ? -1 : target } : void 0
+      };
+    }
+    if (part[0] === "job") {
+      const id = Number(part[1]), key2 = part.slice(2).join(":");
+      const ok = orderGroupJob(g2, id, key2);
+      return { ok, note: ok ? `${g2.airFleets.find((f) => f.id === id)?.name ?? "The group"} has its new orders.` : "That order cannot be given now.", open: `group:${id}` };
+    }
+    if (part[0] === "scout") {
+      const r = orderScout(g2, Number(part[1]), Number(part[2]));
+      return { ok: r.ok, note: r.text, open: `group:${part[1]}` };
+    }
+    if (part[0] === "airbase") {
+      const ok = orderAirBase(g2, Number(part[1]), Number(part[2]));
+      return { ok, note: ok ? `The group moves to ${g2.regions[Number(part[2])]?.name ?? "its new airfield"}.` : "It cannot move there now.", open: `group:${part[1]}` };
+    }
+    return null;
   }
 
   // Rules/starts.ts
@@ -13362,6 +14321,9 @@
     const up = humanUp(s);
     const seen = sight(s);
     const based = new Set(s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => f.base));
+    const fields = airfieldsSeen(s);
+    const fieldSize = new Map(fields.map((a) => [a.region, a.size]));
+    const fieldHidden = new Set(fields.filter((a) => a.groups < 0).map((a) => a.region));
     return {
       rules: "campaign",
       turn: s.turn,
@@ -13384,7 +14346,7 @@
       // Each region: who holds it, and the works built there since the war began that the table shows as models:
       // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
       regions: s.regions.map((r) => {
-        const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, "aa", r.id), Math.max(workLevel(s, "field", r.id), based.has(r.id) ? 1 : 0)];
+        const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, "aa", r.id), fields.length ? fieldSize.get(r.id) ?? 0 : Math.max(workLevel(s, "field", r.id), based.has(r.id) ? 1 : 0)];
         return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
       }),
       // Under the fog of war the player's map shows only what he is allowed to know: an army seen whole, an army
@@ -13430,7 +14392,10 @@
         // For the player's own fleets: the seas each can reach this month, so that a fleet in hand shows where it can go.
         reach: f.nat === s.human && up ? fleetReach(s, f) : []
       })),
-      air: s.airFleets.filter((f) => f.ftr + f.bmr > 0).map((f) => ({
+      // The airfields as the player knows them (the grand campaign): where each is, whose, how big (1 to 4), and how
+      // many groups and aircraft stand on it, or -1 where the fog hides that.
+      airfields: fields.map((a) => ({ region: a.region, nat: a.holder, side: a.side, size: a.size, word: a.word, holds: a.holds, groups: a.groups, aircraft: a.aircraft, crowded: a.crowded })),
+      air: s.airFleets.filter((f) => f.ftr + f.bmr > 0 && !fieldHidden.has(f.base)).map((f) => ({
         id: f.id,
         nat: f.nat,
         name: f.name,
@@ -13539,22 +14504,61 @@
       canCancel: b.ordered === s.turn && humanUp(s)
     };
   }
-  var corpsById = (s, ids) => ids.map((id) => s.corps.find((c) => c.id === id)).filter((c) => !!c && !c.dead);
+  var corpsById = (s, ids2) => ids2.map((id) => s.corps.find((c) => c.id === id)).filter((c) => !!c && !c.dead);
+  var lastAirReport = (s) => s.airReports.reduce((m, r) => Math.max(m, r.id), -1);
+  function raidsSince(s, since, turns, skipNat = null) {
+    const flights = [], notes = [], focus = [];
+    let mine2 = false;
+    const seenIds = /* @__PURE__ */ new Set();
+    for (const turn of [...new Set(turns)]) {
+      for (const r of flownRaids(s, turn)) {
+        if (r.id <= since || seenIds.has(r.id) || r.attNat === skipNat) continue;
+        seenIds.add(r.id);
+        const riser = r.defenders.find((d) => d.ftr >= 1 && d.base >= 0);
+        let first = true;
+        for (const a of r.attackers.filter((x) => x.base >= 0 && x.ftr + x.bmr >= 1).slice(0, 4)) {
+          flights.push({
+            from: a.base,
+            x: r.x,
+            y: r.y,
+            nat: a.nat,
+            bombers: a.bmr >= 1,
+            escort: a.bmr >= 1 && a.ftr >= 1,
+            region: r.region,
+            aa: first && r.region >= 0 ? workLevel(s, "aa", r.region) : 0,
+            meet: first && riser ? riser.nat : "",
+            meetFrom: first && riser ? riser.base : -1,
+            loss: a.bmr >= 1 ? a.lostBmr / a.bmr : a.ftr >= 1 ? a.lostFtr / a.ftr : 0
+          });
+          first = false;
+        }
+        if (first) continue;
+        notes.push(r.result);
+        if (r.region >= 0) focus.push(r.region);
+        if (r.defNat === s.human || r.region >= 0 && s.regions[r.region].ctrl === s.human) mine2 = true;
+      }
+    }
+    return { flights, notes, focus, mine: mine2 };
+  }
   function stepOne(s, steps) {
     {
       const ctrl = s.regions.map((r) => r.ctrl);
       const r0 = s.reports.length;
       const month2 = s.turn;
       const stood = new Map(s.corps.filter((c) => !c.dead).map((c) => [c.id, c.reg]));
+      const air0 = lastAirReport(s);
       const nat = stepAI(s);
       if (s.human && s.turn !== month2) judgeGoals(s, s.human);
       if (!steps) return;
+      const air = raidsSince(s, air0, [month2, s.turn]);
+      const raidNote = air.notes.slice(0, 2).join(" ");
       const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
       const reps = s.reports.slice(r0);
       if (!taken.length && !reps.length) {
         const seen = sight(s);
         const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)] > 0)).map((c) => c.reg))];
-        if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
+        if (air.flights.length) steps.push({ nat, note: raidNote, taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine, raids: air.flights, view: view() });
+        else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
         return;
       }
       const some = (names) => names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
@@ -13568,8 +14572,9 @@
       ].filter(Boolean);
       steps.push({
         nat,
-        note: `${s.nations[nat].adj} forces ${said.join(", ")}.`,
+        note: `${s.nations[nat].adj} forces ${said.join(", ")}.${raidNote ? ` ${raidNote}` : ""}`,
         taken,
+        raids: air.flights,
         battles: reps.map((r) => r.region),
         focus: [.../* @__PURE__ */ new Set([...taken, ...reps.map((r) => r.region)])],
         // The player's own ground or troops were involved.
@@ -13709,11 +14714,11 @@
     }
     return view();
   }
-  function reachOf(ids) {
+  function reachOf(ids2) {
     const s = game();
     const merged = /* @__PURE__ */ new Map();
     if (humanUp(s)) {
-      const cs = corpsById(s, ids);
+      const cs = corpsById(s, ids2);
       for (const c of cs) {
         for (const [id, r] of reach2(s, c)) {
           if (id === c.reg) continue;
@@ -13730,10 +14735,10 @@
     }
     return { regions: [...merged.values()] };
   }
-  function move(ids, to) {
+  function move(ids2, to) {
     const s = game();
     const moved = [];
-    for (const c of corpsById(s, ids)) {
+    for (const c of corpsById(s, ids2)) {
       const m = reach2(s, c);
       const end = m.get(to);
       if (!end || end.attack || to === c.reg) continue;
@@ -13744,13 +14749,13 @@
     }
     return { moved, view: view() };
   }
-  function attackers(s, ids, to) {
-    const able = new Set(candidates(s, s.regions[to]).map((c) => c.id));
-    return corpsById(s, ids).filter((c) => able.has(c.id));
+  function attackers(s, ids2, to) {
+    const able2 = new Set(candidates(s, s.regions[to]).map((c) => c.id));
+    return corpsById(s, ids2).filter((c) => able2.has(c.id));
   }
-  function preview(ids, to) {
+  function preview(ids2, to) {
     const s = game();
-    const corps = attackers(s, ids, to);
+    const corps = attackers(s, ids2, to);
     const a = previewAttack(s, corps, s.regions[to]);
     if (!a) return null;
     return {
@@ -13769,10 +14774,10 @@
     const prisoners = r.prisoners > 0 ? `, ${r.prisoners.toLocaleString("en")} prisoners` : "";
     return `${r.level} at ${r.regionName}: ${r.taken ? "the ground is taken" : "the attack is held"}, ${cost}${prisoners}.`;
   }
-  function attack(ids, to) {
+  function attack(ids2, to) {
     const s = game();
     const before = new Map(s.corps.map((c) => [c.id, c.reg]));
-    const report = orderAttack(s, attackers(s, ids, to), s.regions[to]);
+    const report = orderAttack(s, attackers(s, ids2, to), s.regions[to]);
     const moved = report ? s.corps.filter((c) => !c.dead && c.nat === s.human && c.reg === to && before.get(c.id) !== to).map((c) => ({ id: c.id, path: [to] })) : [];
     return { report, note: report ? battleNote(s, report) : "", moved, view: view() };
   }
@@ -13787,11 +14792,14 @@
       const month2 = s.turn;
       for (let guard = 0; guard < 80 && s.turn === month2; guard++) stepOne(s, steps);
     } else {
+      const air0 = lastAirReport(s), month2 = s.turn, me = s.human;
       if (onEve(s)) endEve(s);
       else {
         judgeGoals(s, s.human);
         endHuman(s);
       }
+      const air = raidsSince(s, air0, [month2, s.turn]);
+      if (air.flights.length) steps.push({ nat: me, note: air.notes.slice(0, 2).join(" "), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: true, raids: air.flights, view: view() });
       runOthers(s, steps);
       fallen = arrive(s);
     }
@@ -13810,52 +14818,52 @@
     const announce = [];
     for (const n of Object.values(s.nations)) {
       if (n.id === s.human || n.id === fallen) continue;
-      const mine = s.human ? allied(s, s.human, n.id) : false;
+      const mine2 = s.human ? allied(s, s.human, n.id) : false;
       const foe = s.human ? atWar(s, s.human, n.id) : false;
       if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} HAS FALLEN`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is eliminated from the war.`, good: foe });
-      else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is free again, and back in the war.`, good: mine || !foe });
+      else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is free again, and back in the war.`, good: mine2 || !foe });
     }
     return { steps, headlines, events, fallen, announce, view: view() };
   }
-  function stance(ids, posture) {
+  function stance(ids2, posture) {
     const s = game();
-    for (const c of corpsById(s, ids)) orderStance(s, c, posture);
+    for (const c of corpsById(s, ids2)) orderStance(s, c, posture);
     return view();
   }
-  function railReach2(ids) {
+  function railReach2(ids2) {
     const s = game();
     const out = /* @__PURE__ */ new Set();
     if (humanUp(s)) {
-      for (const c of corpsById(s, ids)) if (canOrder(s, c)) for (const id of railReach(s, c)) out.add(id);
+      for (const c of corpsById(s, ids2)) if (canOrder(s, c)) for (const id of railReach(s, c)) out.add(id);
     }
     return { regions: [...out] };
   }
-  function rail(ids, to) {
+  function rail(ids2, to) {
     const s = game();
     const moved = [];
-    for (const c of corpsById(s, ids)) if (c.reg !== to && orderRail(s, c, to)) moved.push({ id: c.id, path: [to] });
+    for (const c of corpsById(s, ids2)) if (c.reg !== to && orderRail(s, c, to)) moved.push({ id: c.id, path: [to] });
     return { moved, view: view() };
   }
-  function seaReach(ids) {
+  function seaReach(ids2) {
     const s = game();
     const ports = /* @__PURE__ */ new Set();
     let beaches = [];
     if (humanUp(s) && !onEve(s)) {
-      const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+      const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
       for (const c of cs) for (const r of s.regions) if (r.port && r.id !== c.reg && whyNotShip(s, c, r) === null) ports.add(r.id);
       beaches = landingTargets(s, cs).map((r) => r.id);
     }
     return { ports: [...ports], beaches };
   }
-  function ship(ids, to) {
+  function ship(ids2, to) {
     const s = game();
     const moved = [];
-    for (const c of corpsById(s, ids)) if (c.reg !== to && orderShip(s, c, to)) moved.push({ id: c.id, path: [to] });
+    for (const c of corpsById(s, ids2)) if (c.reg !== to && orderShip(s, c, to)) moved.push({ id: c.id, path: [to] });
     return { moved, view: view() };
   }
-  function landingPlan(ids, to) {
+  function landingPlan(ids2, to) {
     const s = game();
-    const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+    const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
     const p = previewLanding(s, cs, to);
     const lines = [];
     if (!p.why) {
@@ -13866,9 +14874,9 @@
     }
     return { ok: !p.why, why: p.why ?? "", name: s.regions[to].name, lines };
   }
-  function landOn(ids, to) {
+  function landOn(ids2, to) {
     const s = game();
-    const cs = corpsById(s, ids).filter((c) => canOrder(s, c));
+    const cs = corpsById(s, ids2).filter((c) => canOrder(s, c));
     const before = new Map(cs.map((c) => [c.id, c.reg]));
     const r = orderLand(s, cs, to);
     const moved = cs.filter((c) => !c.dead && c.reg !== before.get(c.id)).map((c) => ({ id: c.id, path: [c.reg] }));
@@ -14017,8 +15025,8 @@
       count2(f2.ships.ss, "submarine", "submarines");
       const sea = s.seas[f2.zone]?.name ?? "the sea";
       const doing2 = f2.stance === "port" ? `In harbour at ${f2.port}.` : f2.stance === "raid" ? `Raiding shipping in the ${sea}.` : `On patrol in the ${sea}.`;
-      const mine2 = f2.nat === s.human;
-      if (mine2) {
+      const mine3 = f2.nat === s.human;
+      if (mine3) {
         const reach3 = fleetReach(s, f2).slice().sort((a, b) => a === f2.zone ? -1 : b === f2.zone ? 1 : 0);
         for (const z of reach3) {
           const here = f2.zone === z && f2.stance === "patrol";
@@ -14030,15 +15038,15 @@
         }
         options.push({ key: `fleet:${id}:${f2.home}:port`, label: `Return to harbour at ${f2.port}`, detail: "Safe from the enemy fleet, and takes no part at sea.", ok: up && f2.stance !== "port", why: f2.stance === "port" ? "It is in harbour now." : notNow });
       }
-      return { name: f2.name, nat: f2.nat, mine: mine2, lines: [parts.join(", ") || "No ships left", doing2], options };
+      return { name: f2.name, nat: f2.nat, mine: mine3, lines: [parts.join(", ") || "No ships left", doing2], options };
     }
     const f = s.airFleets.find((x) => x.id === id);
     if (!f) return null;
     const base = s.regions[f.base];
     const targetName = (m, t) => m === "strike" ? `the ${s.seas[t]?.name ?? "sea"}` : s.regions[t]?.name ?? "";
     const doing = `${MISSION[f.mission].label}${f.target >= 0 ? `: ${targetName(f.mission, f.target)}` : ""}.`;
-    const mine = f.nat === s.human;
-    if (mine) {
+    const mine2 = f.nat === s.human;
+    if (mine2) {
       for (const m of ["support", "rest"]) {
         options.push({ key: `air:${id}:${m}:-1`, label: MISSION[m].label, detail: MISSION[m].what, ok: up && f.mission !== m, why: f.mission === m ? "It is doing so now." : notNow });
       }
@@ -14061,7 +15069,7 @@
     return {
       name: f.name,
       nat: f.nat,
-      mine,
+      mine: mine2,
       lines: [`${Math.round(f.ftr)} fighters, ${Math.round(f.bmr)} bombers`, `Based in ${base?.name ?? "the field"}.`, doing],
       options
     };
@@ -14146,7 +15154,7 @@
     const f = previewDeclare(s, on);
     const n = s.nations[on];
     if (!f || !n || !s.human) return { ok: false, name: "", lead: "", friends: "", lines: [] };
-    const mine = bloc(s.nations[s.human]);
+    const mine2 = bloc(s.nations[s.human]);
     const blocOf = (b) => b === "axis" ? "the Axis" : "the Allies";
     const The = upFirst(theName2(s, on));
     const trade = shown(DIPLOMACY.tradeIncome).toLocaleString("en-US");
@@ -14161,7 +15169,7 @@
     else lines.push("No surprise: its army is watching the frontier and is ready for you.");
     const moved = f.alarm.filter((a) => a.from !== a.to);
     const friends = f.alarm.filter((a) => a.friend);
-    const other = mine === "axis" ? "the Allies" : "the Axis", own = mine === "axis" ? "the Axis" : "the Allies";
+    const other = mine2 === "axis" ? "the Allies" : "the Axis", own = mine2 === "axis" ? "the Axis" : "the Allies";
     if (f.alarm.length) {
       if (friends.length) lines.push(`Its friends turn against you. Public opinion in ${listOf3(friends.map((a) => theName2(s, a.nat)))} swings hard toward ${other}, and part of that never comes back.`);
       const rest = f.alarm.length - friends.length;
@@ -14174,7 +15182,7 @@
       if (!moved.length) lines.push("Nobody changes sides over this one attack, but the next may tip them.");
     } else if (f.joins === null && bloc(n) === "league") lines.push("The neutrals on the track between the blocs take no side in a quarrel with the League.");
     else if (f.joins === null && bloc(n) !== null) lines.push(`${The} already belongs to ${blocOf(bloc(n))}: the neutral world expects this war and takes no fright at it.`);
-    else if (!mine) lines.push("Your country belongs to neither bloc, so the neutrals have no side to turn away from. They will remember it all the same.");
+    else if (!mine2) lines.push("Your country belongs to neither bloc, so the neutrals have no side to turn away from. They will remember it all the same.");
     const at = TRACK.indexOf(n.align) - 3;
     const stands = n.league ? `is a member of ${LEAGUE.name} and at peace with you` : at === 0 ? "is neutral and at peace with you" : Math.abs(at) === 1 ? `is neutral, leans toward ${blocOf(at > 0 ? "axis" : "allies")}, and is at peace with you` : `is ${TRACK_PHRASE[n.align]}, but at peace with you`;
     const r = target >= 0 ? s.regions[target] : null;
@@ -14201,7 +15209,7 @@
     else if (act2?.open && !act2.peace) out.push("The war between the alliances is decided. Open DIPLOMACY and choose THE LAST ACT.");
     return out;
   }
-  var pct4 = (x) => `${Math.round(x * 100)}%`;
+  var pct6 = (x) => `${Math.round(x * 100)}%`;
   function spiesPage(s, region) {
     const room2 = secretService(s);
     if (!room2) return null;
@@ -14213,13 +15221,13 @@
         label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(),
         act: `spy:mission:${a.id}:${m.id}`,
         ok: up && m.ok && !m.now,
-        tip: `${m.text}${m.success !== null ? ` Chance of success ${pct4(m.success)}.` : ""} Chance of being caught ${pct4(m.caught)}.${m.ok ? "" : ` ${m.why}`}`
+        tip: `${m.text}${m.success !== null ? ` Chance of success ${pct6(m.success)}.` : ""} Chance of being caught ${pct6(m.caught)}.${m.ok ? "" : ` ${m.why}`}`
       }));
       buttons.push({ label: here ? `SEND TO ${here.name.toUpperCase()}` : "SEND TO A PROVINCE", act: `spy:send:${a.id}`, ok: up && !!here && whySend === null && here.id !== a.reg, tip: whySend ?? `The agent travels to ${here?.name ?? "the province selected on the map"} and sets to work there.` });
       buttons.push({ label: "RETIRE", act: `spy:retire:${a.id}`, ok: up, tip: "The agent leaves the service, which frees a place in it.", danger: true });
       const lines = [`${a.where}${a.abroad ? `, in ${theName2(s, a.host)}` : ", at home"}. ${a.doing}`];
       if (a.wait > 0) lines.push(`At work in ${a.wait} month${a.wait === 1 ? "" : "s"}.`);
-      if (a.atWork) lines.push(`Chance of being caught this month: ${pct4(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
+      if (a.atWork) lines.push(`Chance of being caught this month: ${pct6(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
       for (const x of a.sees.slice(0, 5)) lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? "" : "s"}.`);
       return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };
     });
@@ -14228,7 +15236,7 @@
       id: "spies",
       title: "THE SECRET SERVICE",
       headline: `${room2.agents.length} of ${room2.most} agents in the service`,
-      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct4(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.` : "No enemy service is working against you at home."}`,
+      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct6(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.` : "No enemy service is working against you at home."}`,
       top: [
         { label: `RECRUIT AN AGENT  ·  ${Math.round(room2.cost).toLocaleString("en-US")}`, act: "spy:recruit", ok: up && room2.whyNotRecruit === null, tip: room2.whyNotRecruit ?? "A new agent joins the service, at home, and can be sent abroad." },
         { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
@@ -14247,7 +15255,7 @@
     const row2 = (r) => ({
       nat: r.nat,
       title: r.you ? `${r.name} (you)` : r.name,
-      lines: [r.alive ? `${r.provinces} province${r.provinces === 1 ? "" : "s"}, ${pct4(r.share)} of the world. ${r.few ? `Fewer than ${r.divisions} divisions` : `${r.exact ? "" : "About "}${r.divisions} division${r.divisions === 1 ? "" : "s"}`}${r.income !== null ? `. Income ${Math.round(r.income * board.scale).toLocaleString("en-US")} a month` : ""}.` : `Fell in ${r.fell ? turnToDate(r.fell.turn).label : "the war"}${r.fell ? ` to ${theName2(s, r.fell.to)}` : ""}.`],
+      lines: [r.alive ? `${r.provinces} province${r.provinces === 1 ? "" : "s"}, ${pct6(r.share)} of the world. ${r.few ? `Fewer than ${r.divisions} divisions` : `${r.exact ? "" : "About "}${r.divisions} division${r.divisions === 1 ? "" : "s"}`}${r.income !== null ? `. Income ${Math.round(r.income * board.scale).toLocaleString("en-US")} a month` : ""}.` : `Fell in ${r.fell ? turnToDate(r.fell.turn).label : "the war"}${r.fell ? ` to ${theName2(s, r.fell.to)}` : ""}.`],
       buttons: []
     });
     const top = [];
@@ -14277,18 +15285,18 @@
   var airPlace = (s, m, t) => m === "strike" ? `the ${s.seas[t]?.name ?? "sea"}` : s.regions[t]?.name ?? "";
   var airDoing = (s, f) => `${MISSION[f.mission].label}${f.target >= 0 ? `: ${airPlace(s, f.mission, f.target)}` : ""}`;
   var RAID_TITLE = { bomb: "A BOMBING RAID BY DAY", night: "RAIDS BY NIGHT", superiority: "A FIGHT FOR THE SKY", strike: "A STRIKE ON SHIPPING" };
-  function airfieldPage(s, region) {
+  function airfieldPage2(s, region) {
     const r = s.regions[region];
     if (!r || !s.human) return null;
     const up = humanUp(s) && !onEve(s);
     const here = s.airFleets.filter((f) => f.base === region && f.ftr + f.bmr > 0);
     const level = workLevel(s, "field", region);
     const rows = here.map((f) => {
-      const mine = f.nat === s.human;
+      const mine2 = f.nat === s.human;
       const rg = airRange(f);
       const lines = [`${craftOf(f.ftr, f.bmr)}. Fighters reach ${rg.ftr} km, bombers ${rg.bmr} km.`, `Orders: ${airDoing(s, f)}.`];
       const buttons = [];
-      if (mine) {
+      if (mine2) {
         if (f.bmr >= 1) {
           buttons.push({ label: "PLAN A BOMBING RAID", act: `open:raid:bomb:${f.id}`, ok: up, tip: MISSION.bomb.what });
           buttons.push({ label: "PLAN RAIDS BY NIGHT", act: `open:raid:night:${f.id}`, ok: up, tip: MISSION.night.what });
@@ -14362,7 +15370,7 @@
       sections: [{ heading: "TARGETS", text: targets2.length ? "" : "Move the group to an airfield nearer the enemy, or wait for aircraft with a longer reach.", rows }]
     };
   }
-  function rebasePage(s, id) {
+  function rebasePage2(s, id) {
     const f = s.airFleets.find((x) => x.id === id);
     if (!f || f.nat !== s.human) return null;
     const up = humanUp(s) && !onEve(s);
@@ -14385,7 +15393,7 @@
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
-    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "airfield" ? airfieldPage(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage(s, Number(part[1])) : null;
+    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
     return p ? { ok: true, ...p } : { ok: false };
   }
   function act(action, region = -1) {
@@ -14394,6 +15402,22 @@
     const part = action.split(":");
     let ok = false, note3 = "";
     let fly2 = null;
+    let flies = [];
+    let open = "";
+    const air0 = lastAirReport(s);
+    const air = airAct(s, action);
+    if (air) {
+      ok = air.ok;
+      note3 = air.note;
+      open = air.ok ? air.open ?? "" : "";
+      if (air.ok && air.report !== void 0) {
+        const flown = raidsSince(s, air0, [s.turn]);
+        flies = flown.flights;
+        const told = flown.notes.join(" ") || note3;
+        note3 = told.length > 190 ? `${told.slice(0, told.lastIndexOf(".", 190) + 1) || told.slice(0, 190)}` : told;
+      }
+      return { ok, note: note3, fly: fly2, flies, open, view: view() };
+    }
     if (part[0] === "air") {
       const f = s.airFleets.find((x) => x.id === Number(part[1]));
       const m = part[2], t = Number(part[3]);
@@ -14403,7 +15427,7 @@
       note3 = ok ? t >= 0 ? `${f?.name ?? "The group"} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? "The group"}: ${MISSION[m].label.toLowerCase()}.` : "That order cannot be given now.";
       if (ok && f && t >= 0) {
         const p = m === "strike" ? s.seas[t] : s.regions[t];
-        fly2 = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== "superiority" && f.bmr >= 1, escort: m !== "night" && f.ftr >= 1, region: m === "strike" ? -1 : t, ...meets };
+        fly2 = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== "superiority" && f.bmr >= 1, escort: m !== "night" && f.ftr >= 1, region: m === "strike" ? -1 : t, meetFrom: -1, ...meets };
       }
     } else if (part[0] === "airbase") {
       ok = orderAirBase(s, Number(part[1]), Number(part[2]));
@@ -14444,7 +15468,7 @@
       note3 = ok ? "You take the victory, and the world stays as it is." : "";
     }
     const news2 = s.headlines.slice(h0).map((h) => h.text);
-    return { ok, note: news2.length ? news2.join(" ") : note3, fly: fly2, view: view() };
+    return { ok, note: news2.length ? news2.join(" ") : note3, fly: fly2, flies: fly2 ? [fly2] : [], open: "", view: view() };
   }
   function storesOf2(s) {
     const v = s.human ? depots(s) : null;
@@ -14480,7 +15504,7 @@
     const s = game();
     const me = s.human && s.nations[s.human]?.alive ? s.nations[s.human] : null;
     if (!me) return null;
-    const mine = bloc(me);
+    const mine2 = bloc(me);
     const up = humanUp(s) && !onEve(s);
     const can = new Set(up ? declarable(s) : []);
     const partners = new Set(tradePartners(s, me.id).map((n) => n.id));
@@ -14498,9 +15522,9 @@
       war: can.has(n.id)
     }));
     const rows = all.filter((n) => n.alive && !n.atWar.length && !n.league && n.id !== me.id).sort((a, b) => a.opinion - b.opinion).map((n) => {
-      const open = (mine === "axis" || mine === "allies") && courtable(n);
+      const open = (mine2 === "axis" || mine2 === "allies") && courtable(n);
       const c = open ? canCourt(s, me.id, n.id) : { ok: false, why: "" };
-      const k = open ? receptive(n, mine) : 0;
+      const k = open ? receptive(n, mine2) : 0;
       const frs = friendsOf(n.id).filter((f) => s.nations[f.nat]?.alive);
       return {
         nat: n.id,
@@ -14518,7 +15542,7 @@
         war: can.has(n.id)
       };
     });
-    const side2 = mine === "axis" ? "the Axis" : mine === "allies" ? "the Allies" : mine === "league" ? LEAGUE.name : "";
+    const side2 = mine2 === "axis" ? "the Axis" : mine2 === "allies" ? "the Allies" : mine2 === "league" ? LEAGUE.name : "";
     const born = s.flags["league:born"];
     const members = leagueMembers(s);
     const league = {
@@ -14538,7 +15562,7 @@
     const others = members.filter((n) => n.id !== me.id);
     const foes = me.atWar.filter((x) => s.nations[x]?.alive);
     const at = step(me);
-    const where = mine === "league" ? `a member of ${LEAGUE.name}${others.length ? `, with ${listOf3(others.map((n) => theName2(s, n.id)))}` : ""}` : mine ? `a member of ${mine === "axis" ? "the Axis" : "the Allies"}` : TRACK_PHRASE[me.align];
+    const where = mine2 === "league" ? `a member of ${LEAGUE.name}${others.length ? `, with ${listOf3(others.map((n) => theName2(s, n.id)))}` : ""}` : mine2 ? `a member of ${mine2 === "axis" ? "the Axis" : "the Allies"}` : TRACK_PHRASE[me.align];
     const path = {
       open: opts.length > 0,
       lead: opts.length ? `${upFirst(theName2(s, me.id))} is ${where}. ${foes.length ? `You are at war with ${listOf3(foes.map((x) => theName2(s, x)))}.` : "You are at peace."} A small country chooses its own path, and nobody chooses it for you: no treaty signs your land away, and no courting moves you.` : "",
@@ -14573,7 +15597,7 @@
       partners: partners.size,
       cost: DIPLOMACY.court.cost,
       wind,
-      help: mine === "league" ? "The League courts nobody: it wins members by invitation, and only those who feel the danger say yes." : mine ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side2}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth2} a month to your treasury` : ""}; one that is fully won over joins your side.` : "Your country belongs to neither bloc, so it has nobody to win the neutrals over to.",
+      help: mine2 === "league" ? "The League courts nobody: it wins members by invitation, and only those who feel the danger say yes." : mine2 ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side2}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth2} a month to your treasury` : ""}; one that is fully won over joins your side.` : "Your country belongs to neither bloc, so it has nobody to win the neutrals over to.",
       powers,
       rows,
       league,
@@ -14619,7 +15643,7 @@
       const ahead = Math.round(monthsAhead(lab, f));
       const eta = arrival(s, me.id, f);
       const k = lead(s, me.id, f);
-      const pct5 = Math.round(spec2.per * k * 100);
+      const pct7 = Math.round(spec2.per * k * 100);
       const n = lab.teams[f];
       const at = (t) => Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS;
       return {
@@ -14629,7 +15653,7 @@
         pace: ahead > 0 ? `${ahead} month${ahead === 1 ? "" : "s"} ahead` : ahead < 0 ? `${-ahead} month${ahead === -1 ? "" : "s"} behind` : "On history's schedule",
         now: cur?.name ?? "nothing yet",
         next: next ? `Next: ${next.name}. History had it in ${when(next.at)}; ${eta === null ? "at this pace it never comes" : `yours is due ${when(eta)}`}.` : "The designers have nothing further on the drawing board.",
-        effect: k ? `${spec2.who}: ${pct5 > 0 ? "+" : ""}${pct5}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
+        effect: k ? `${spec2.who}: ${pct7 > 0 ? "+" : ""}${pct7}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
         good: k > 0,
         teams: n,
         max: MAX_TEAMS,
@@ -14715,8 +15739,8 @@
     if (!me) return null;
     const up = humanUp(s) && !onEve(s);
     const corpsLine = (c) => `${c.name} (${KIND[c.kind].label.toLowerCase()}, ${c.divs} division${c.divs === 1 ? "" : "s"}) at ${s.regions[c.reg].name}`;
-    const mine = s.generals.filter((x) => x.nat === me.id && (x.status === "active" || x.status === "wounded"));
-    const list3 = mine.sort((a, b) => (a.corps >= 0 ? 0 : 1) - (b.corps >= 0 ? 0 : 1) || b.level - a.level || a.id - b.id).map((x) => {
+    const mine2 = s.generals.filter((x) => x.nat === me.id && (x.status === "active" || x.status === "wounded"));
+    const list4 = mine2.sort((a, b) => (a.corps >= 0 ? 0 : 1) - (b.corps >= 0 ? 0 : 1) || b.level - a.level || a.id - b.id).map((x) => {
       const c = corpsOf(s, x);
       const next = xpToNext(x);
       return {
@@ -14737,8 +15761,8 @@
     });
     const free2 = waiting(s, me.id);
     const empty = vacant(s, me.id).filter((c) => !c.dead).sort((a, b) => b.divs - a.divs || a.id - b.id).map((c) => {
-      const able = free2.filter((x) => !whyNotAssign(s, x, c)).sort((a, b) => fit(s, b, c) - fit(s, a, c) || b.level - a.level);
-      const best = able[0];
+      const able2 = free2.filter((x) => !whyNotAssign(s, x, c)).sort((a, b) => fit(s, b, c) - fit(s, a, c) || b.level - a.level);
+      const best = able2[0];
       const why = whyNotPromote(s, c);
       return {
         corps: c.id,
@@ -14755,10 +15779,10 @@
       up,
       capital: Math.floor(me.pc),
       promoteCost: COMMAND.promote.pc,
-      commanding: list3.filter((x) => x.commands).length,
+      commanding: list4.filter((x) => x.commands).length,
       waiting: free2.length,
       note: `A corps with no general fights by the book. Give it one who is waiting, or promote an unknown officer from its ranks for ${COMMAND.promote.pc} political capital: he starts at level 1 and learns faster than the old guard. Generals gain experience in battle, and each new level gives a skill point to spend.`,
-      generals: list3,
+      generals: list4,
       vacant: empty
     };
   }
@@ -14818,9 +15842,9 @@
     if (!c) return null;
     const n = s.nations[c.nat];
     const gen = generalOf(s, c);
-    const mine = c.nat === s.human;
+    const mine2 = c.nat === s.human;
     const notes = [];
-    if (c.home !== void 0 && mine && c.kind !== "fort") {
+    if (c.home !== void 0 && mine2 && c.kind !== "fort") {
       const home = s.regions[c.home];
       notes.push(c.rec?.exile ? `Home: ${home.name}. It is in enemy hands. The corps attacks ${Math.round(STORIES.home.attack * 100)}% stronger to win it back.` : `Home: ${home.name}. The corps defends it ${Math.round(STORIES.home.defence * 100)}% stronger than any other ground.`);
     }
@@ -14852,7 +15876,7 @@
   function roll() {
     const s = game();
     const me = s.human;
-    const ours = (list3) => me ? list3.filter((x) => x.nat === me) : list3;
+    const ours = (list4) => me ? list4.filter((x) => x.nat === me) : list4;
     return {
       awards: ours(s.stories.awards).filter((a) => !a.old).slice(-40).reverse().map((a) => ({
         id: a.id,
@@ -14878,7 +15902,12 @@
       }))
     };
   }
+  function raidsFlown(turn) {
+    const s = game();
+    return { battles: s.flags.airBattles ?? 0, reports: s.airReports.length, turns: [...new Set(s.airReports.map((r) => r.turn))], raids: flownRaids(s, turn ?? s.turn) };
+  }
   globalThis.TC = {
+    raidsFlown,
     land,
     work,
     force,

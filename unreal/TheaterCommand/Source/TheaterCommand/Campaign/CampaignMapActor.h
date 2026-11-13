@@ -127,6 +127,10 @@ public:
 	 */
 	void ShowBuildings(const TArray<FIntVector4>& Works);
 
+	/** Where a province's airfield lies on the map (or where it would), and the province whose airfield is at a point, if one is. */
+	FVector2D AirfieldSpot(int32 RegionId) const;
+	int32 AirfieldNear(const FVector2D& MapPoint) const;
+
 	/** Draws the shipping lanes over the sea: pale where the cargoes get through, amber where raiders are at them, red where the lane is cut. */
 	void ShowLanes(const TArray<FViewLane>& Lanes);
 
@@ -270,6 +274,7 @@ private:
 	bool bSmokeMade = false;
 	void UpdateSmoke(float CameraDistance, const FVector& CameraFocus);
 	TArray<FIntVector4> ShownBuildings;
+	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
 	FLandFeatures Land;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> WaterMaterial;
