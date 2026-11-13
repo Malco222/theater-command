@@ -2186,6 +2186,65 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 	FFlight& Flight = Flights.AddDefaulted_GetRef();
 	Flight.Sortie = Sortie;
 	Flight.Began = GetWorld()->GetTimeSeconds();
+
+	// The aircraft are the nation's own, as they stand on its pieces: its bomber in a vic of three with a pair of
+	// its fighters above them if they are escorted, or four of its fighters alone. They are built once, nose
+	// toward the model's own front, and then flown as one.
+	FMiniatureMesh Model;
+	const double U = UnitScale;
+	const FString Bomber = FMiniatureMesh::MainBomberOf(Sortie.Nation), Fighter = FMiniatureMesh::MainFighterOf(Sortie.Nation);
+	// (a model's front is toward -X and its right toward -Y; behind is +X)
+	if (Sortie.bBombers)
+	{
+		const double Metre = 0.34 * U; // a heavy bomber's wings then span about ten units of the table
+		Model.Vehicle(Bomber, FVector(0.0, 0.0, 0.0), Metre, 0.0, true);
+		Model.Vehicle(Bomber, FVector(26.0 * Metre, 22.0 * Metre, 3.0 * Metre), Metre, 0.0, true);
+		Model.Vehicle(Bomber, FVector(26.0 * Metre, -22.0 * Metre, 3.0 * Metre), Metre, 0.0, true);
+		if (Sortie.bEscort)
+		{
+			const double Small = 0.5 * U;
+			Model.Vehicle(Fighter, FVector(-6.0 * Metre, 34.0 * Metre, 16.0 * Metre), Small, 0.0, true);
+			Model.Vehicle(Fighter, FVector(10.0 * Metre, -36.0 * Metre, 18.0 * Metre), Small, 0.0, true);
+		}
+	}
+	else
+	{
+		const double Small = 0.55 * U;
+		Model.Vehicle(Fighter, FVector(0.0, 0.0, 0.0), Small, 0.0, true);
+		Model.Vehicle(Fighter, FVector(9.0 * Small, 8.0 * Small, 1.0 * Small), Small, 0.0, true);
+		Model.Vehicle(Fighter, FVector(9.0 * Small, -8.0 * Small, 1.0 * Small), Small, 0.0, true);
+		Model.Vehicle(Fighter, FVector(18.0 * Small, 16.0 * Small, 2.0 * Small), Small, 0.0, true);
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		Flight.Formation = NewObject<UProceduralMeshComponent>(this);
+		Flight.Formation->SetupAttachment(Root);
+		Flight.Formation->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Flight.Formation->RegisterComponent();
+		Flight.Formation->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		Flight.Formation->SetMaterial(0, PieceMaterial);
+		Flight.Formation->SetCastShadow(true);
+	}
+	// The defender's fighters, if any can reach: a pair of his own, that rise as the raid comes in.
+	if (!Sortie.Meet.IsEmpty())
+	{
+		FMiniatureMesh Pair;
+		const double Small = 0.55 * U;
+		const FString Theirs = FMiniatureMesh::MainFighterOf(Sortie.Meet);
+		Pair.Vehicle(Theirs, FVector(0.0, 0.0, 0.0), Small, 0.0, true);
+		Pair.Vehicle(Theirs, FVector(10.0 * Small, 9.0 * Small, 1.5 * Small), Small, 0.0, true);
+		if (Pair.Vertices.Num() > 0)
+		{
+			Flight.Rivals = NewObject<UProceduralMeshComponent>(this);
+			Flight.Rivals->SetupAttachment(Root);
+			Flight.Rivals->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Flight.Rivals->RegisterComponent();
+			Flight.Rivals->CreateMeshSection(0, Pair.Vertices, Pair.Triangles, Pair.Normals, TArray<FVector2D>(), Pair.Colors, TArray<FProcMeshTangent>(), false);
+			Flight.Rivals->SetMaterial(0, PieceMaterial);
+			Flight.Rivals->SetCastShadow(true);
+			Flight.Rivals->SetVisibility(false);
+		}
+	}
 }
 
 void ACampaignMapActor::UpdateSorties()
@@ -2204,15 +2263,23 @@ void ACampaignMapActor::UpdateSorties()
 		return;
 	}
 	const double Now = World->GetTimeSeconds();
-	const double FlightLasts = 10.0;
+	const double FlightLasts = 11.0;
 	const double U = UnitScale;
-	FMiniatureMesh Model;
+	FCampaignMeshBuffers Courses;
 	for (int32 Index = Flights.Num() - 1; Index >= 0; --Index)
 	{
 		FFlight& Flight = Flights[Index];
 		const double Share = (Now - Flight.Began) / FlightLasts;
 		if (Share >= 1.0)
 		{
+			if (Flight.Formation)
+			{
+				Flight.Formation->DestroyComponent();
+			}
+			if (Flight.Rivals)
+			{
+				Flight.Rivals->DestroyComponent();
+			}
 			Flights.RemoveAt(Index);
 			continue;
 		}
@@ -2224,6 +2291,7 @@ void ACampaignMapActor::UpdateSorties()
 		const double Leg = FVector::Dist2D(Field0, Aim);
 		const double Circle = FMath::Clamp(Leg * 0.08, 3.0 * U, 9.0 * U); // the turn over the target
 		FVector Where, Heading;
+		double Bank = 0.0;
 		const double Out = 0.44, TurnShare = 0.12;
 		if (Share < Out)
 		{
@@ -2233,10 +2301,12 @@ void ACampaignMapActor::UpdateSorties()
 		}
 		else if (Share < Out + TurnShare)
 		{
-			// Round in a half circle over the target.
+			// Round in a half circle over the target, banked into the turn.
 			const double Angle = PI * (Share - Out) / TurnShare;
 			Where = Aim - Course * Circle * FMath::Cos(Angle) + Abeam * Circle * FMath::Sin(Angle) * 0.6;
+			// The way it is moving: the path's own direction as it goes round.
 			Heading = (Course * FMath::Sin(Angle) + Abeam * FMath::Cos(Angle) * 0.6).GetSafeNormal();
+			Bank = 28.0 * FMath::Sin(Angle);
 			if (!Flight.bStruck && Angle > PI * 0.4)
 			{
 				Flight.bStruck = true;
@@ -2249,63 +2319,68 @@ void ACampaignMapActor::UpdateSorties()
 		else
 		{
 			const double T = FMath::SmoothStep(0.0, 1.0, (Share - Out - TurnShare) / (1.0 - Out - TurnShare));
-			Where = FMath::Lerp(Aim - Course * Circle * -1.0 * 0.0 + Course * 0.0, Field0, T) + FMath::Lerp(Course * Circle, FVector::ZeroVector, T) * 0.0;
-			Where = FMath::Lerp(Aim + Course * Circle * 0.0, Field0, T);
+			Where = FMath::Lerp(Aim + Course * Circle, Field0, T);
 			Heading = -Course;
 		}
 		// They climb away from the field, fly high, and let down again to land.
-		const double Aloft = (2.0 + 9.0 * FMath::Sin(PI * FMath::Clamp(Share, 0.0, 1.0))) * U;
-		const FVector Across(-Heading.Y, Heading.X, 0.0);
-		const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Heading.Y, Heading.X));
-		const FLinearColor PlanePaint = FMiniatureMesh::VehicleColour(Flight.Sortie.Nation) * 1.2f;
-		const FLinearColor PlaneDark = PlanePaint * 0.6f;
-		const double PlaneSize = (Flight.Sortie.bBombers ? 3.0 : 2.2) * U; // larger than life, to be seen from high over the table
-		const int32 Planes = Flight.Sortie.bBombers ? 5 : 4;
-		for (int32 Plane = 0; Plane < Planes; ++Plane)
+		const double Aloft = (2.5 + 9.0 * FMath::Sin(PI * FMath::Clamp(Share, 0.0, 1.0))) * U;
+		if (Flight.Formation)
 		{
-			// A vic: the leader ahead, the rest stepped back and out on either hand.
-			const int32 Row = (Plane + 1) / 2;
-			const double Hand = Plane == 0 ? 0.0 : (Plane % 2 == 1 ? 1.0 : -1.0);
-			const FVector At = Where - Heading * (Row * 2.4 * PlaneSize) + Across * (Hand * Row * 2.0 * PlaneSize) + FVector(0.0, 0.0, Aloft + Row * 0.3 * PlaneSize);
-			Model.Box(At, FVector(2.6, 0.34, 0.34) * PlaneSize, PlanePaint, Yaw);
-			Model.Box(At + Heading * (0.25 * PlaneSize), FVector(0.62, 3.4, 0.07) * PlaneSize, PlanePaint, Yaw);
-			Model.Box(At - Heading * (1.15 * PlaneSize), FVector(0.36, 1.2, 0.06) * PlaneSize, PlanePaint, Yaw);
-			Model.Box(At - Heading * (1.15 * PlaneSize) + FVector(0.0, 0.0, 0.25 * PlaneSize), FVector(0.4, 0.06, 0.46) * PlaneSize, PlanePaint, Yaw);
-			Model.Box(At + Heading * (0.75 * PlaneSize) + FVector(0.0, 0.0, 0.16 * PlaneSize), FVector(0.5, 0.26, 0.14) * PlaneSize, PlaneDark, Yaw);
-			if (Flight.Sortie.bBombers)
+			// The models face -X, so the formation is turned half round from the way it is heading.
+			const double Yaw = FMath::RadiansToDegrees(FMath::Atan2(Heading.Y, Heading.X)) + 180.0;
+			Flight.Formation->SetRelativeLocationAndRotation(Where + FVector(0.0, 0.0, Aloft), FRotator(0.0, Yaw, Bank));
+		}
+		Flight.At = Where + FVector(0.0, 0.0, Aloft);
+		Flight.Dir = Heading;
+		Flight.Share = Share;
+		// The defender's fighters: up from the ground as the raid comes in, round and through the bombers while
+		// it is over the target, and away again when it turns for home.
+		Flight.bEngaged = false;
+		if (Flight.Rivals)
+		{
+			const double Meets = Out - 0.16, Parts = Out + TurnShare + 0.1, Climb = 0.1;
+			const FVector Ground = Aim + FVector(0.0, 0.0, 1.0 * U);
+			const double Round = FMath::Clamp((Share - Meets) / (Parts - Meets), 0.0, 1.0) * PI * 3.0;
+			const FVector Among = Flight.At + (Course * FMath::Cos(Round) + Abeam * FMath::Sin(Round)) * (6.5 * U) + FVector(0.0, 0.0, 2.2 * U * FMath::Sin(Round * 2.0));
+			FVector Now3 = Among;
+			bool bShown = true;
+			if (Share < Meets - Climb || Share > Parts + Climb)
 			{
-				for (const double Engine : { -0.8, 0.8 })
-				{
-					Model.Box(At + Heading * (0.55 * PlaneSize) + Across * (Engine * PlaneSize), FVector(0.8, 0.26, 0.26) * PlaneSize, PlaneDark, Yaw);
-				}
+				bShown = false;
 			}
+			else if (Share < Meets)
+			{
+				Now3 = FMath::Lerp(Ground, Among, FMath::SmoothStep(0.0, 1.0, (Share - (Meets - Climb)) / Climb));
+			}
+			else if (Share > Parts)
+			{
+				Now3 = FMath::Lerp(Among, Ground, FMath::SmoothStep(0.0, 1.0, (Share - Parts) / Climb));
+			}
+			else
+			{
+				Flight.bEngaged = true;
+			}
+			Flight.Rivals->SetVisibility(bShown);
+			if (bShown)
+			{
+				const FVector Moved = Now3 - Flight.RivalAt;
+				const double RivalYaw = Moved.SizeSquared2D() > 0.0001 ? FMath::RadiansToDegrees(FMath::Atan2(Moved.Y, Moved.X)) + 180.0 : 0.0;
+				Flight.Rivals->SetRelativeLocationAndRotation(Now3, FRotator(0.0, RivalYaw, Flight.bEngaged ? 30.0 : 0.0));
+			}
+			Flight.RivalAt = Now3;
+		}
+		// The course of the raid, pencilled on the table from the airfield to the target while it is flown.
+		const double Length = FVector2D::Distance(Field, Flight.Sortie.To);
+		const int32 Dashes = FMath::Clamp(FMath::RoundToInt32(Length / 7.0), 2, 200);
+		for (int32 Dash = 0; Dash < Dashes; ++Dash)
+		{
+			TArray<FVector2D> Stroke;
+			Stroke.Add(FMath::Lerp(Field, Flight.Sortie.To, (Dash + 0.15) / Dashes));
+			Stroke.Add(FMath::Lerp(Field, Flight.Sortie.To, (Dash + 0.75) / Dashes));
+			AppendRibbon(Courses, Stroke, 0.45, 0.4, FLinearColor(1.0f, 0.86f, 0.4f, 0.75f).ToFColor(false), false);
 		}
 	}
-	if (Model.Vertices.Num() > 0)
-	{
-		SortieMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
-		SortieMesh->SetMaterial(0, PieceMaterial);
-		// The course of each raid, pencilled on the table from the airfield to the target while it is flown.
-		FCampaignMeshBuffers Courses;
-		for (const FFlight& Flight : Flights)
-		{
-			const FVector2D From = Data.Regions[Flight.Sortie.From].Center + FVector2D(-10.0, 12.0);
-			const double Length = FVector2D::Distance(From, Flight.Sortie.To);
-			const int32 Dashes = FMath::Clamp(FMath::RoundToInt32(Length / 7.0), 2, 200);
-			for (int32 Dash = 0; Dash < Dashes; ++Dash)
-			{
-				TArray<FVector2D> Stroke;
-				Stroke.Add(FMath::Lerp(From, Flight.Sortie.To, (Dash + 0.15) / Dashes));
-				Stroke.Add(FMath::Lerp(From, Flight.Sortie.To, (Dash + 0.75) / Dashes));
-				AppendRibbon(Courses, Stroke, 0.45, 0.4, FLinearColor(1.0f, 0.86f, 0.4f, 0.75f).ToFColor(false), false);
-			}
-		}
-		if (!Courses.Commit(SortieMesh, 1, HighlightMaterial))
-		{
-			SortieMesh->ClearMeshSection(1);
-		}
-	}
-	else
+	if (!Courses.Commit(SortieMesh, 0, HighlightMaterial))
 	{
 		SortieMesh->ClearAllMeshSections();
 	}
@@ -2331,7 +2406,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	{
 		return;
 	}
-	const int32 MaxPuffs = 420, Rim = 8, PerPuff = Rim + 1;
+	const int32 MaxPuffs = 560, Rim = 8, PerPuff = Rim + 1;
 	if (!bSmokeMade)
 	{
 		// The mesh is made once, with room for every puff; after that only its points and colours change.
@@ -2472,6 +2547,61 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const FVector Offset(Random.FRandRange(-1.2f, 1.2f) * Big, Random.FRandRange(-1.2f, 1.2f) * Big, 0.0);
 			const FVector At = Battle.Where + Offset + FVector(0.0, 0.0, (0.6 + 5.0 * Age) * Big) + Wind * (3.2 * Big * Age * Age);
 			Draw(At, (0.9 + 2.6 * Age) * Big, Dark, 0.72f * FMath::SmoothStep(0.0, 0.1, Age) * FMath::Pow(1.0 - Age, 1.2));
+		}
+	}
+
+	// Raids in flight: flak round the bombers over a defended target, tracer between them and the fighters that
+	// rise to meet them, and a damaged bomber trailing smoke on the way home.
+	const FLinearColor FlakBlack(0.03f, 0.03f, 0.035f), Tracer(1.0f, 0.86f, 0.35f);
+	const double Table = UnitScale;
+	for (int32 F = 0; F < Flights.Num(); ++F)
+	{
+		const FFlight& Flight = Flights[F];
+		if (Flight.At.IsZero())
+		{
+			continue;
+		}
+		if (Flight.Sortie.Flak > 0 && Flight.Share > 0.3 && Flight.Share < 0.64)
+		{
+			// More guns, more bursts: each lives a second and a half and is thrown up somewhere new each time.
+			const int32 Bursts = FMath::Min(Flight.Sortie.Flak, 4) * 6;
+			for (int32 K = 0; K < Bursts; ++K)
+			{
+				const double Clock = Now / 1.5 + K * 0.371;
+				const double Age = FMath::Frac(Clock);
+				FRandomStream Random(static_cast<int32>(FMath::FloorToDouble(Clock)) * 7919 + K * 131 + F * 17);
+				const FVector Offset(Random.FRandRange(-9.0f, 9.0f) * Table, Random.FRandRange(-9.0f, 9.0f) * Table, Random.FRandRange(-3.0f, 2.5f) * Table);
+				if (Age < 0.07)
+				{
+					Draw(Flight.At + Offset, 1.1 * Table, Fire, 0.9f);
+				}
+				Draw(Flight.At + Offset + FVector(0.0, 0.0, 0.6 * Table * Age), (0.7 + 1.5 * Age) * Table, FlakBlack, 0.78f * FMath::Pow(1.0 - Age, 1.1));
+			}
+		}
+		if (Flight.bEngaged)
+		{
+			// Bursts of tracer: the fighters at the bombers, and the bombers' gunners (and their escort) back at them.
+			for (int32 K = 0; K < 6; ++K)
+			{
+				const double T = FMath::Frac(Now * 2.6 + K / 6.0);
+				if (FMath::Frac(Now * 0.9) < 0.6)
+				{
+					Draw(FMath::Lerp(Flight.RivalAt, Flight.At, T), 0.26 * Table, Tracer, 0.95f);
+				}
+				if (FMath::Frac(Now * 0.9 + 0.5) < 0.6)
+				{
+					Draw(FMath::Lerp(Flight.At + FVector(0.0, 0.0, 0.6 * Table), Flight.RivalAt, T), 0.2 * Table, FLinearColor(1.0f, 0.5f, 0.3f), 0.9f);
+				}
+			}
+		}
+		if (Flight.Sortie.Loss >= 0.1f && Flight.Share > 0.5)
+		{
+			// One of them has been hit: it trails smoke behind the formation all the way home.
+			for (int32 K = 0; K < 7; ++K)
+			{
+				const double Back = (7.0 + K * 1.9) * Table;
+				Draw(Flight.At - Flight.Dir * Back + FVector(0.0, 0.0, -0.25 * Table * K + 0.4 * Table * FMath::Sin(Now * 2.0 + K)), (0.7 + 0.3 * K) * Table, Dark, 0.55f - 0.06f * K);
+			}
 		}
 	}
 

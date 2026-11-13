@@ -1185,7 +1185,7 @@ void ACampaignPlayerController::OpenScreen5() { if (bLedgerOpen) { CloseLedger()
 void ACampaignPlayerController::ToggleWatchAll()
 {
 	bWatchAll = !bWatchAll;
-	Notify(bWatchAll ? TEXT("At the end of a month you will watch every nation's move.") : TEXT("At the end of a month you will be shown only what touches you. The rest is in the news."), 5.0);
+	Notify(bWatchAll ? TEXT("At the end of a month you will watch every nation's moves and battles.") : TEXT("Quick months: you will be shown only what touches you. The rest is in the news."), 5.0);
 }
 
 void ACampaignPlayerController::NextArmy()
@@ -2496,6 +2496,12 @@ void ACampaignPlayerController::EndMonth()
 	}
 	PutDownArmy();
 	CampaignSounds::Play(this, TEXT("bell"), 0.5f);
+	// Where every corps stands as the month ends, so that the others' marches can be seen from there.
+	WatchStood.Reset();
+	for (const FViewCorps& Unit : Session->GetView().Corps)
+	{
+		WatchStood.Add(Unit.Id, Unit.Region);
+	}
 	Month = Session->EndMonth();
 	WatchIndex = 0;
 	if (const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
@@ -2540,7 +2546,33 @@ void ACampaignPlayerController::WatchNextStep()
 		return;
 	}
 	const FMonthStep& Step = Month.Steps[WatchIndex++];
-	ShowWar(Step.View, TArray<FCorpsMove>());
+	// The armies are seen to march: every corps that stands somewhere new since the last step goes there on the table.
+	TArray<FCorpsMove> Marches;
+	for (const FViewCorps& Unit : Step.View.Corps)
+	{
+		const int32* Was = WatchStood.Find(Unit.Id);
+		if (Was && *Was != Unit.Region)
+		{
+			FCorpsMove& March = Marches.AddDefaulted_GetRef();
+			March.CorpsId = Unit.Id;
+			March.Path.Add(Unit.Region);
+		}
+	}
+	WatchStood.Reset();
+	for (const FViewCorps& Unit : Step.View.Corps)
+	{
+		WatchStood.Add(Unit.Id, Unit.Region);
+	}
+	ShowWar(Step.View, Marches);
+	// Where there was fighting, the field smokes.
+	for (int32 RegionId : Step.Battles)
+	{
+		Map->AddBattleSmoke(RegionId);
+	}
+	if (Step.Battles.Num() > 0 && !Step.bMine)
+	{
+		CampaignSounds::Play(this, TEXT("field_gun"), 0.25f);
+	}
 
 	// Travel to where it happened.
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
@@ -2567,7 +2599,7 @@ void ACampaignPlayerController::WatchNextStep()
 	{
 		CampaignSounds::Play(this, TEXT("explosion"), 0.3f);
 	}
-	const double Pause = Step.bMine ? 1.1 : 0.5;
+	const double Pause = Step.bMine ? 1.3 : Step.bMarchOnly ? 0.55 : 0.8;
 	Notify(Step.Note, Pause + 0.3);
 	WatchNext = FPlatformTime::Seconds() + Pause;
 }

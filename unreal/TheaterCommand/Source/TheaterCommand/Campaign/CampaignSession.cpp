@@ -724,6 +724,15 @@ FMonthResult FCampaignSession::EndMonth()
 			Entry->TryGetStringField(TEXT("nat"), Step.Nation);
 			Entry->TryGetStringField(TEXT("note"), Step.Note);
 			Entry->TryGetBoolField(TEXT("mine"), Step.bMine);
+			Entry->TryGetBoolField(TEXT("moved"), Step.bMarchOnly);
+			const TArray<TSharedPtr<FJsonValue>>* Battles = nullptr;
+			if (Entry->TryGetArrayField(TEXT("battles"), Battles))
+			{
+				for (const TSharedPtr<FJsonValue>& Region : *Battles)
+				{
+					Step.Battles.AddUnique(FMath::RoundToInt32(Region->AsNumber()));
+				}
+			}
 			const TArray<TSharedPtr<FJsonValue>>* Focus = nullptr;
 			if (Entry->TryGetArrayField(TEXT("focus"), Focus))
 			{
@@ -1626,6 +1635,12 @@ bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNo
 			(*Fly)->TryGetNumberField(TEXT("region"), OutSortie->Region);
 			(*Fly)->TryGetStringField(TEXT("nat"), OutSortie->Nation);
 			(*Fly)->TryGetBoolField(TEXT("bombers"), OutSortie->bBombers);
+			(*Fly)->TryGetBoolField(TEXT("escort"), OutSortie->bEscort);
+			(*Fly)->TryGetNumberField(TEXT("aa"), OutSortie->Flak);
+			(*Fly)->TryGetStringField(TEXT("meet"), OutSortie->Meet);
+			double Loss = 0.0;
+			(*Fly)->TryGetNumberField(TEXT("loss"), Loss);
+			OutSortie->Loss = static_cast<float>(Loss);
 			double X = 0.0, Y = 0.0;
 			(*Fly)->TryGetNumberField(TEXT("x"), X);
 			(*Fly)->TryGetNumberField(TEXT("y"), Y);

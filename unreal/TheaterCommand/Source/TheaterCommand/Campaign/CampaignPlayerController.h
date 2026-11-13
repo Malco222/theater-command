@@ -507,7 +507,8 @@ private:
 	bool bHaveLastMouse = false;
 	FText HoverTip;
 	int32 HoverTipRegion = INDEX_NONE;
-	bool bWatchAll = false; // watch every nation's move at the month's end, not only what touches the player
+	bool bWatchAll = true; // watch every nation's move at the month's end; V switches to only what touches the player
+	TMap<int32, int32> WatchStood; // where each corps stood at the last step watched, to see who has marched
 	void OpenScreen1();
 	void OpenScreen2();
 	void OpenScreen3();

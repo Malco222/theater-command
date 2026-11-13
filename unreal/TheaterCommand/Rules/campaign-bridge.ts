@@ -254,12 +254,19 @@ function stepOne(s: Game, steps: unknown[] | null): void {
     const ctrl = s.regions.map((r) => r.ctrl);
     const r0 = s.reports.length;
     const month = s.turn;
+    const stood = new Map(s.corps.filter((c) => !c.dead).map((c) => [c.id, c.reg] as const));
     const nat = stepAI(s);
     if (s.human && s.turn !== month) judgeGoals(s, s.human);
     if (!steps) return;
     const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
     const reps = s.reports.slice(r0);
-    if (!taken.length && !reps.length) return;
+    if (!taken.length && !reps.length) {
+      // Nothing was fought for or taken, but armies the player can see may have marched: that is shown too.
+      const seen = sight(s);
+      const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)!] > 0)).map((c) => c.reg))];
+      if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
+      return;
+    }
     const some = (names: string[]): string => (names.length <= 3 ? names.join(', ') : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`);
     const won = reps.filter((r) => r.taken).map((r) => r.regionName);
     const held = reps.filter((r) => !r.taken).map((r) => r.regionName);
@@ -1184,13 +1191,16 @@ function act(action: string, region = -1) {
   const part = action.split(':');
   let ok = false, note = '';
   // Aircraft seen leaving for their target when a raid is ordered: where from, where to, whose, and what flies.
-  let fly: { from: number; x: number; y: number; nat: string; bombers: boolean; region: number } | null = null;
+  let fly: { from: number; x: number; y: number; nat: string; bombers: boolean; escort: boolean; region: number; aa: number; meet: string; loss: number } | null = null;
   if (part[0] === 'air') {
     const f = s.airFleets.find((x) => x.id === Number(part[1]));
     const m = part[2] as AirMission, t = Number(part[3]);
+    // What the raid will meet, as the planner worked it out: guns round the target, fighters rising, likely losses.
+    const before = f && t >= 0 ? previewAirOrder(s, f.id, m, t) : null;
+    const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? '', loss: forecastAir(s, before, m, t).bomberLoss } : { aa: 0, meet: '', loss: 0 };
     ok = orderAir(s, Number(part[1]), m, t);
     note = ok ? (t >= 0 ? `${f?.name ?? 'The group'} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? 'The group'}: ${MISSION[m].label.toLowerCase()}.`) : 'That order cannot be given now.';
-    if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, region: m === 'strike' ? -1 : t }; }
+    if (ok && f && t >= 0) { const p = m === 'strike' ? s.seas[t] : s.regions[t]; fly = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== 'superiority' && f.bmr >= 1, escort: m !== 'night' && f.ftr >= 1, region: m === 'strike' ? -1 : t, ...meets }; }
   } else if (part[0] === 'airbase') {
     ok = orderAirBase(s, Number(part[1]), Number(part[2]));
     note = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? 'its new airfield'}.` : 'It cannot move there now.';

@@ -127,6 +127,10 @@ struct FSortie
 	int32 Region = INDEX_NONE; // the province bombed, if it is one
 	FString Nation;
 	bool bBombers = false;
+	bool bEscort = false; // fighters go with the bombers
+	int32 Flak = 0; // the level of the anti-aircraft guns round the target
+	FString Meet; // the nation whose fighters rise to meet the raid; empty if none can
+	float Loss = 0.0f; // the share of the bombers likely to be lost
 };
 
 /** A button in one of the rooms the rules set out themselves. */
@@ -323,6 +327,8 @@ struct FMonthStep
 	FString Nation;
 	FString Note;
 	TArray<int32> Focus; // the regions it happened in
+	TArray<int32> Battles; // the regions fought over
+	bool bMarchOnly = false; // nothing was fought for or taken: armies only moved
 	bool bMine = false; // the player's own ground or troops were involved
 	FCampaignView View; // the war as it stood when that nation had finished
 };

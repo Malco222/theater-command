@@ -230,6 +230,15 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.bCloseRoom = true;
 		}
 		{
+			// A raid on a defended target, caught over it: the defender's fighters among the bombers, and the guns firing.
+			FShot& Shot = Add(TEXT("31l-raid-met"), TEXT("Lodz"), 0.3f, 20.0f, 8.0f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("airfield");
+			Shot.RoomAct = TEXT("air:1:bomb:37");
+			Shot.bCloseRoom = true;
+			Shot.Wait = 2.3f;
+		}
+		{
 			// The secret service, with the capital selected and an agent recruited.
 			FShot& Shot = Add(TEXT("31h-secret-service"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");
@@ -718,7 +727,7 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 	}
 
 	// Give the picture three seconds to settle, then take it.
-	if (!bTaken && Clock >= 3.0f)
+	if (!bTaken && Clock >= 3.0f + Shots[Current].Wait)
 	{
 		const FShot& Shot = Shots[Current];
 		const FString File = FPaths::Combine(Folder, Shot.Name + TEXT(".png"));
@@ -735,7 +744,7 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 	}
 
 	// A second later, move on.
-	if (bTaken && Clock >= 4.0f)
+	if (bTaken && Clock >= 4.0f + Shots[Current].Wait)
 	{
 		++Current;
 		if (!Shots.IsValidIndex(Current))

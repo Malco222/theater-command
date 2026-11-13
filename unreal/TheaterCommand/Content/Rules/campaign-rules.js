@@ -13545,12 +13545,18 @@
       const ctrl = s.regions.map((r) => r.ctrl);
       const r0 = s.reports.length;
       const month2 = s.turn;
+      const stood = new Map(s.corps.filter((c) => !c.dead).map((c) => [c.id, c.reg]));
       const nat = stepAI(s);
       if (s.human && s.turn !== month2) judgeGoals(s, s.human);
       if (!steps) return;
       const taken = s.regions.filter((r, i) => r.ctrl !== ctrl[i]).map((r) => r.id);
       const reps = s.reports.slice(r0);
-      if (!taken.length && !reps.length) return;
+      if (!taken.length && !reps.length) {
+        const seen = sight(s);
+        const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)] > 0)).map((c) => c.reg))];
+        if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
+        return;
+      }
       const some = (names) => names.length <= 3 ? names.join(", ") : `${names.slice(0, 3).join(", ")} and ${names.length - 3} more`;
       const won = reps.filter((r) => r.taken).map((r) => r.regionName);
       const held = reps.filter((r) => !r.taken).map((r) => r.regionName);
@@ -14380,11 +14386,13 @@
     if (part[0] === "air") {
       const f = s.airFleets.find((x) => x.id === Number(part[1]));
       const m = part[2], t = Number(part[3]);
+      const before = f && t >= 0 ? previewAirOrder(s, f.id, m, t) : null;
+      const meets = before && !before.why ? { aa: before.aa, meet: before.def.find((x) => x.f.ftr * x.w >= 1)?.f.nat ?? "", loss: forecastAir(s, before, m, t).bomberLoss } : { aa: 0, meet: "", loss: 0 };
       ok = orderAir(s, Number(part[1]), m, t);
       note3 = ok ? t >= 0 ? `${f?.name ?? "The group"} will fly against ${airPlace(s, m, t)} when the month ends.` : `${f?.name ?? "The group"}: ${MISSION[m].label.toLowerCase()}.` : "That order cannot be given now.";
       if (ok && f && t >= 0) {
         const p = m === "strike" ? s.seas[t] : s.regions[t];
-        fly2 = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== "superiority" && f.bmr >= 1, region: m === "strike" ? -1 : t };
+        fly2 = { from: f.base, x: p.x, y: p.y, nat: f.nat, bombers: m !== "superiority" && f.bmr >= 1, escort: m !== "night" && f.ftr >= 1, region: m === "strike" ? -1 : t, ...meets };
       }
     } else if (part[0] === "airbase") {
       ok = orderAirBase(s, Number(part[1]), Number(part[2]));

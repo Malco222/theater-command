@@ -202,6 +202,13 @@ private:
 		FSortie Sortie;
 		double Began = 0.0;
 		bool bStruck = false; // the bombs have been seen to fall
+		TObjectPtr<UProceduralMeshComponent> Formation; // the aircraft themselves, built once and flown as one
+		TObjectPtr<UProceduralMeshComponent> Rivals; // the defender's fighters that rise to meet them
+		FVector At = FVector::ZeroVector; // where the formation is now, and which way it is heading
+		FVector Dir = FVector::ForwardVector;
+		FVector RivalAt = FVector::ZeroVector;
+		double Share = 0.0; // how far through its flight it is, 0 to 1
+		bool bEngaged = false; // the defender's fighters are among the bombers
 	};
 	TArray<FFlight> Flights;
 	void UpdateSorties();
