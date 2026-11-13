@@ -602,7 +602,8 @@ export interface PlanPhase {
  * What an air fleet is doing this month. Left on support it flies for the armies and defends
  * its own sky; the others are month-long air campaigns against a region or a sea.
  */
-export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest';
+/** What an air fleet is doing. 'ground' is a raid on troops, flown only in the grand campaign's air war. */
+export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground';
 
 export interface AirLeader {
   name: string;
@@ -633,6 +634,18 @@ export interface AirFleet extends Storied {
   lost: { ftr: number; bmr: number };
   /** Wings bought from the arsenal in the grand campaign, kept on top of the strength the staff allots. */
   extra?: { ftr: number; bmr: number };
+  /** The grand campaign's air war: the one kind of aircraft this air group flies. Unset, the fleet is mixed, as history lists it. */
+  kind?: 'ftr' | 'bmr';
+  /** The command the group was formed from: the name of its row in air.json, which still sets what it is kept at and how far it reaches. */
+  parent?: string;
+  /** Its share of that command's aircraft of its kind. */
+  share?: number;
+  /** The month it last flew a raid planned by its owner: one raid a month. */
+  flew?: number;
+  /** The month it last flew a reconnaissance: one a month, beside its raid. */
+  scouted?: number;
+  /** A fighter group's standing order to stick with one bomber group: that group's id. It goes on every day raid the bombers fly, as far as its fighters reach. */
+  escorts?: number;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -648,6 +661,9 @@ export interface AirPool {
 export interface AirSide {
   nat: string;
   fleet: string;
+  /** The air fleet or group itself, and the region whose airfield it flew from: enough to draw the flight again. */
+  id?: number;
+  base?: number;
   leader: string | null;
   ftr: number;
   bmr: number;
@@ -770,6 +786,8 @@ export interface Intel {
   notes: IntelNote[];
   /** Provinces on alert after an act of sabotage, and the month the alert ends. */
   heat: Record<number, number>;
+  /** Provinces the player's aircraft have photographed, and the month they did. */
+  scout?: Record<number, number>;
 }
 
 export const MEN_PER_DIV = 15000;

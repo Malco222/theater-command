@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import arsenal from '../data/campaign/arsenal.json';
 import budget from '../data/campaign/budget.json';
-import { AIR, airUpkeep, assessAir, crowding, forecastAir } from '../src/campaign/air';
+import { AIR, airUpkeep, assessAir, crowding, forecastAir, hasAirfield } from '../src/campaign/air';
 import { ARSENAL, aiArsenal, canStation, factoriesBuilt, isCity, offers, orderOffer, workLevel, yardLevel, type Offer } from '../src/campaign/arsenal';
 import { techOf } from '../src/campaign/tech';
 import { BUDGET, PRODUCTION, cancelBuild, canRaiseKind, deliver, income, isHome, ledger, needsOf, orderCorps, raiseSite, upkeepTotal } from '../src/campaign/economy';
@@ -262,10 +262,11 @@ describe('aircraft by the wing', () => {
     expect(orderOffer(g, nat, 'air:ftr')).toBeNull();
   });
 
-  it('needs airfields to be stationed on: build them and a new air fleet can be founded there', () => {
+  it('needs airfields to be stationed on: build them and a new air group can be formed there', () => {
     const g = grand(3, 'GER');
     rich(g, 'GER');
-    const r = g.regions.find((x) => isHome(g, 'GER', x) && !g.airFleets.some((f) => f.base === x.id))!;
+    // An airfield is a place: most of the country has none.
+    const r = g.regions.find((x) => isHome(g, 'GER', x) && !hasAirfield(g, x.id))!;
     expect(canStation(g, 'GER', r)).toBe(false);
     expect(offer(g, 'GER', 'air:bmr', r.id).at).not.toBe(r.id);
     arrive(g, 'GER', orderArsenal(g, 'work:field', r.id));
@@ -273,12 +274,15 @@ describe('aircraft by the wing', () => {
     expect(canStation(g, 'GER', r)).toBe(true);
     const o = offer(g, 'GER', 'air:bmr', r.id);
     expect(o.at).toBe(r.id);
-    expect(o.note).toMatch(/new air fleet/);
+    expect(o.note).toMatch(/new air group/);
     const fleets = g.airFleets.length;
     arrive(g, 'GER', orderArsenal(g, 'air:bmr', r.id));
     expect(g.airFleets.length).toBe(fleets + 1);
     const f = g.airFleets[g.airFleets.length - 1];
-    expect(f.name).toBe(`${r.name} Air Command`);
+    // It is a bomber group, numbered after the nation's others, under a command named for the place.
+    expect(f.kind).toBe('bmr');
+    expect(f.name).toMatch(/^Kampfgeschwader \d+$/);
+    expect(f.parent).toBe(`${r.name} Air Command`);
     expect(f.base).toBe(r.id);
     expect(f.bmr).toBe(ARSENAL.air.bmr.count);
     airUpkeep(g, 'GER');
@@ -301,6 +305,8 @@ describe('anti-aircraft guns', () => {
     const g = grand();
     const warsaw = g.byName['Warsaw'];
     const f = g.airFleets.filter((x) => x.nat === 'GER' && x.bmr > 0).sort((a, b) => assessAir(g, [b], 'bomb', warsaw.id).B - assessAir(g, [a], 'bomb', warsaw.id).B)[0];
+    // With no fighters to meet them the bombers' losses are the guns' alone, well short of the most a raid can lose.
+    for (const x of g.airFleets) if (x.nat === 'POL') x.ftr = 0;
     const bare = assessAir(g, [f], 'bomb', warsaw.id);
     expect(bare.why).toBeNull();
     expect(bare.aa).toBe(0);

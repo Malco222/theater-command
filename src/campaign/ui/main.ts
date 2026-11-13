@@ -11,6 +11,7 @@ import {
   beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
   previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
+  airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
@@ -27,9 +28,10 @@ import { barred, groundAttack, groundDefence, groundNotes, groundRules, groundSa
 import { CROSSINGS, ENGINEERING, RIVERS, blocked, bridgeDown, noCrossing, riverNotes, whyBlocked } from '../rivers';
 import { jobLine, minesAt, type JobKind } from '../engineers';
 import { RAILWAYS, RAIL_LINKS, railCut, railNote } from '../rails';
+import type { AirfieldRow, GroupRow, RaidKind, RaidPlan } from '../airwar';
 import { DIFFICULTY, FAIR, levelIndex, levelOf, setLevel, type Level } from '../difficulty';
 import {
-  AIR, MISSION, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, cover, crowding, forecastAir, isOffensive,
+  AIR, MISSION, airBases, airDeliveries, airFleetsOf, airIncomeLoss, airPlanFor, airPool, airRange, airTargets, airWar, cover, crowding, forecastAir, isOffensive,
   km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
 } from '../air';
 import {
@@ -73,8 +75,12 @@ const ui = {
   seenSea: 0,
   /** The air fleet being given orders under the Air tab. */
   air: -1,
-  /** What a click on the map means for that air fleet: a new base, or a target for a mission. */
-  airMode: '' as '' | 'base' | AirMission,
+  /** What a click on the map means for that air fleet: a new base, a province to photograph, or a target for a mission. */
+  airMode: '' as '' | 'base' | 'scout' | AirMission,
+  /** The grand campaign's air war: the airfield opened under the Air tab, the raid planner's step (its menu, or the kind of raid whose targets the map shows), and the group the raid is being planned for. */
+  field: -1,
+  raid: '' as '' | 'menu' | RaidKind,
+  lead: -1,
   seenAir: 0,
   /** A one-line answer to the last click, shown where the hint is. */
   msg: '',
@@ -317,7 +323,7 @@ function planeIcon(f: AirFleet): string {
 
 /** Air fleets at their bases, and a line from each one that is flying a mission to where it is flying it. */
 function airBaseMarks(): string {
-  let out = '';
+  let out = airWar(g) ? airfieldMarks() : '';
   for (const f of g.airFleets) {
     if (!isOffensive(f.mission) || f.ftr + f.bmr <= 0) continue;
     const b = g.regions[f.base];
@@ -327,9 +333,11 @@ function airBaseMarks(): string {
     const c = g.nations[f.nat].color;
     out += `<path class="airline under" d="M${b.x} ${b.y}L${t.x} ${ty}"/><path class="airline${f.mission === 'night' ? ' night' : ''}" d="M${b.x} ${b.y}L${t.x} ${ty}" stroke="${c}"/><circle class="airhit" cx="${t.x}" cy="${ty}" r="3.4" fill="${c}"/>`;
   }
+  // Under the fog of war an airfield is seen but not what flies from it.
+  const hidden = new Set(airWar(g) && g.human ? airfieldsSeen(g).filter((a) => a.groups < 0).map((a) => a.region) : []);
   const groups = new Map<string, AirFleet[]>();
   for (const f of g.airFleets) {
-    if (f.ftr + f.bmr <= 0) continue;
+    if (f.ftr + f.bmr <= 0 || hidden.has(f.base)) continue;
     const key = `${f.base}:${f.nat}`;
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(f);
   }
@@ -341,7 +349,9 @@ function airBaseMarks(): string {
     used.set(base, i + 1);
     const n = fs.reduce((t, f) => t + f.ftr + f.bmr, 0);
     const picked = ui.tab === 'air' && fs.some((f) => f.id === ui.air);
-    out += `<g class="ctr flt air" transform="translate(${(r.x - 17 - i * 13).toFixed(1)} ${(r.y + 11).toFixed(1)}) scale(.62)">${picked ? '<circle class="fsel" r="17"/>' : ''}<path class="hull" d="${PLANE}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(4.5 -12)">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="17.5">${n}</text></g>`;
+    // In the air war the aircraft stand on their airfield's pad: smaller, with the count under the pad.
+    const aw = airWar(g);
+    out += `<g class="ctr flt air${aw ? ' onpad' : ''}" transform="translate(${(r.x - 17 - i * (aw ? 16 : 13)).toFixed(1)} ${(r.y + 11).toFixed(1)}) scale(${aw ? '.5' : '.62'})">${picked ? `<circle class="fsel" r="${aw ? 22 : 17}"/>` : ''}<path class="hull" d="${PLANE}" fill="${g.nations[fs[0].nat].color}"/><g class="jack" transform="translate(${aw ? '9 -17' : '4.5 -12'})">${flagUse(fs[0].nat, g.nations[fs[0].nat].color, 10, 6.4)}<rect width="10" height="6.4" fill="none"/></g><text x="0" y="${aw ? 24 : 17.5}">${n}</text></g>`;
   }
   return out;
 }
@@ -354,7 +364,7 @@ function airMarks(f: AirFleet): string {
   let out = '';
   if (ui.airMode === 'base') for (const r of airBases(g, f)) out += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
   else if (ui.airMode === 'strike') for (const z of airTargets(g, f, 'strike')) out += `<circle class="mk sea${f.mission === 'strike' && f.target === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
-  else if (ui.airMode) for (const id of airTargets(g, f, ui.airMode)) out += `<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`;
+  else if (ui.airMode && ui.airMode !== 'scout') for (const id of airTargets(g, f, ui.airMode)) out += `<path class="mk hit" d="${pathOf(g.regions[id].polys)}"/>`;
   if (f.bmr > 0) out += `<circle class="mk ring bmr" cx="${b.x}" cy="${b.y}" r="${(R.bmr / u).toFixed(1)}"/>`;
   if (f.ftr > 0) out += `<circle class="mk ring ftr" cx="${b.x}" cy="${b.y}" r="${(R.ftr / u).toFixed(1)}"/><circle class="mk ring full" cx="${b.x}" cy="${b.y}" r="${((R.ftr * AIR.range.fullAt) / u).toFixed(1)}"/>`;
   return out;
@@ -381,7 +391,7 @@ function mount(): void {
         <div class="passing" id="passing"></div>
         <div class="alerts" id="alerts"></div>
         <div class="tray" id="tray"></div>
-        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Air fleet</span></div>
+        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg><span id="legair">Air fleet</span></span><span id="legfield" hidden><svg width="19" height="14" viewBox="-9.5 -7 19 14" style="vertical-align:-3px;margin-right:4px"><rect x="-8.5" y="-6" width="17" height="12" rx="2" fill="#66733f" stroke="#e9dfc4" stroke-width=".9"/><path d="M-6.3 2.4H6.3M0 -4.3L-4.6 4M0 -4.3L4.6 4" fill="none" stroke="#f1e9d4" stroke-width="1.3" stroke-linecap="round"/></svg>Airfield: click to open</span></div>
         <div class="zoom"><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
       </div>
@@ -508,7 +518,10 @@ function refresh(): void {
   if (!fl) ui.rebase = false;
   const af = ui.tab === 'air' ? myAir() : null;
   if (!af) ui.airMode = '';
-  if (af) marks += airMarks(af);
+  const raiding = ui.tab === 'air' && airWar(g) && !!g.human && humanUp(g);
+  if (!raiding) { ui.raid = ''; ui.lead = -1; }
+  if (raiding && (af || ui.raid)) marks += airWarMarks();
+  else if (af) marks += airMarks(af);
   else if (fl) {
     if (ui.rebase) for (const r of baseTargets(g, fl)) marks += `<path class="mk rail" d="${pathOf(r.polys)}"/>`;
     else for (const z of fleetReach(g, fl)) marks += `<circle class="mk sea${atSea(fl) && fl.zone === z ? ' at' : ''}" cx="${g.seas[z].x}" cy="${g.seas[z].y + 9}" r="29"/>`;
@@ -586,6 +599,8 @@ function refresh(): void {
   drawPane();
   drawTray();
   ($('#legsteep') as HTMLElement).hidden = !groundRules(g);
+  ($('#legfield') as HTMLElement).hidden = !airWar(g);
+  $('#legair').textContent = airWar(g) ? 'Aircraft based here' : 'Air fleet';
   ($('#legbridge') as HTMLElement).hidden = !groundRules(g) || !CROSSINGS.some((x) => bridgeDown(g, x));
   ($('#legrail') as HTMLElement).hidden = !groundRules(g);
   ($('#legrailcut') as HTMLElement).hidden = !groundRules(g) || !g.regions.some((r) => railCut(g, r.id));
@@ -650,9 +665,18 @@ function hintText(): string {
     if (f && ui.rebase) return `New base for the ${f.name}: click any blue port. The fleet spends the month in harbour there.`;
     return f ? `Click a ringed sea to send the ${f.name} there.` : 'Pick one of your fleets in the list to give it orders.';
   }
+  if (ui.tab === 'air' && airWar(g) && g.human) {
+    const f = myAir();
+    if (ui.raid && ui.raid !== 'menu') return ui.raid === 'strike' ? 'Shipping strike: click a ringed sea to plan it.' : `${raidMenu(g).find((k) => k.key === ui.raid)?.label ?? 'Raid'}: click a red province to plan it. You see the odds before you commit.`;
+    if (f && ui.airMode === 'base') return `A new airfield for the ${f.name}: click a blue province. Aircraft can be based only where there is an airfield.`;
+    if (f && ui.airMode === 'scout') return `Reconnaissance by the ${f.name}: click a marked province to photograph it.`;
+    if (f) return `The rings show how far the ${f.name} reaches. Give it standing orders, plan a raid with it, or move it.`;
+    return 'Click an airfield on the map, or one of your air groups in the list. Plan a raid from its target.';
+  }
   if (ui.tab === 'air') {
     const f = myAir();
     if (!f) return 'Pick one of your air fleets in the list to give it orders.';
+    if (ui.airMode === 'scout') return '';
     if (ui.airMode === 'base') return `New airfields for ${f.name}: click any blue region.`;
     if (ui.airMode === 'strike') return `Click a ringed sea to send ${f.name} against the shipping there.`;
     if (ui.airMode) return `${MISSION[ui.airMode].label}: click a red region to see the odds.`;
@@ -1222,10 +1246,13 @@ function provinceSlots(r: Region): string {
   const YARD = ['', 'builds destroyers, submarines and troopships', 'builds every ship up to cruisers', 'builds every class of ship'];
   const harbour = slot('work:yard', slotIcon(GLYPH.harbour), 'Harbour', r.port, r.port ? pipsOf(yard, yardComing, 3) : '', r.port ? (yard ? `Shipyard level ${yard}: ${YARD[yard]}` : 'A port with no shipyard') : sea, `${yard + yardComing ? 'Enlarge' : 'Build'} the shipyard`);
   const fl = workLevel(g, 'field', r.id), flComing = coming('field');
-  const field = slot('work:field', plane, 'Airfields', wings.length > 0 || fl > 0, pipsOf(fl, flComing, 3), `${flying}${fl ? `. Level ${fl} fields: room for ${num(AIR.airfields.holds + fl * ARSENAL.works.field.holds)} aircraft` : ''}`, `Build level ${fl + flComing + 1}`);
+  const afc = airfieldAt(g, r.id);
+  const field = afc
+    ? slot('work:field', plane, 'Airfield', !!afc.field, pipsOf(fl, flComing, 3), afc.field ? `${afc.field.word}: serves ${num(afc.field.holds)} aircraft. ${afc.hidden ? 'What flies from here is not known' : afc.rows.length ? `${afc.rows.length} air group${afc.rows.length > 1 ? 's' : ''}, ${num(afc.rows.reduce((t, x) => t + x.aircraft, 0))} aircraft` : 'No air group based here'}` : 'No airfield: no aircraft can be based here. Engineers can lay one out', afc.field ? `Enlarge it by ${num(ARSENAL.works.field.holds)} aircraft` : 'Build an airfield')
+    : slot('work:field', plane, 'Airfields', wings.length > 0 || fl > 0, pipsOf(fl, flComing, 3), `${flying}${fl ? `. Level ${fl} fields: room for ${num(AIR.airfields.holds + fl * ARSENAL.works.field.holds)} aircraft` : ''}`, `Build level ${fl + flComing + 1}`);
   const aa = workLevel(g, 'aa', r.id), aaComing = coming('aa');
   const guns = slot('work:aa', slotIcon(GUN), 'Air defence', aa > 0, pipsOf(aa, aaComing, 3), aa ? `Level ${aa} guns: they stop ${Math.round(aa * ARSENAL.works.aa.cut * 100)}% of any bombing here` : 'No anti-aircraft guns', `Build level ${aa + aaComing + 1}`);
-  return `<h3>The province</h3><div class="slots">${industry}${works}${harbour}${field}${guns}</div>`;
+  return `<h3>The province</h3><div class="slots">${industry}${works}${harbour}${field}${guns}</div>${afc?.field ? `<div class="acts"><button class="btn small" data-act="airfield" data-id="${r.id}" title="See the air groups based here and give them their orders.">Open the airfield</button></div>` : ''}`;
 }
 
 /** What the player can raise, station or lay down in this region, and what is already on order there. */
@@ -1279,7 +1306,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with fleets on patrol; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li><li>The fog of war hides what your side cannot see. A foreign army is seen whole on your own and your allies\' ground, beside your troops, and one province beyond; a province further off it is a flag and a count of corps; deeper than that the map is dark. Open <b>Spies</b> to recruit agents and send them anywhere on the map. An agent reports every army in its province and around it, reads a government\'s books in its capital, and can wreck a factory, blow a railway or fire an oilfield in a country you are at war with. Every month abroad an agent may be caught. Keep one at home on guard, because the other side has saboteurs too. The fog can be lifted under <b>Spies</b> if you would rather see everything.</li><li>When a great power has fallen and the great powers have stopped fighting each other, the war is decided and a card gives you the choice: take the victory, or <b>World Domination</b>. That dissolves every alliance and sets every nation still standing against every other, yesterday\'s allies among them, until one is left. It cannot be undone. The Powers tab then shows the standings.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li>${airWar(g) ? '<li>Aircraft fly from airfields, the round pads on the map: click one to see the air groups based there. Fighters patrol their sky to catch raids, stick with a bomber group as its escort, or rest. Any group flies one raid a month. Open <b>Air</b> and plan it from its target: you see the chance of success and the losses to expect, then pick who goes. Bombers from several airfields can meet up for one raid, and the more that go together the smaller the share they lose. Engineers lay out new airfields.</li>' : '<li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>'}${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with fleets on patrol; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li><li>The fog of war hides what your side cannot see. A foreign army is seen whole on your own and your allies\' ground, beside your troops, and one province beyond; a province further off it is a flag and a count of corps; deeper than that the map is dark. Open <b>Spies</b> to recruit agents and send them anywhere on the map. An agent reports every army in its province and around it, reads a government\'s books in its capital, and can wreck a factory, blow a railway or fire an oilfield in a country you are at war with. Every month abroad an agent may be caught. Keep one at home on guard, because the other side has saboteurs too. The fog can be lifted under <b>Spies</b> if you would rather see everything.</li><li>When a great power has fallen and the great powers have stopped fighting each other, the war is decided and a card gives you the choice: take the victory, or <b>World Domination</b>. That dissolves every alliance and sets every nation still standing against every other, yesterday\'s allies among them, until one is left. It cannot be undone. The Powers tab then shows the standings.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -1436,7 +1463,7 @@ function buildPane(): string {
     out += `<div class="seg shelves">${(Object.keys(SHELF) as (keyof typeof SHELF)[]).map((k) => `<button class="btn small${ui.arm === k ? ' on' : ''}" data-act="arm" data-arm="${k}">${SHELF[k]}</button>`).join('')}</div>`;
     if (ui.arm === 'army') out += army();
     else if (ui.arm === 'air') {
-      out += `<h3>Order aircraft</h3><p class="sub" style="margin:0 0 7px">Aircraft come by the wing from the nation's aircraft industry, and are stationed on airfields: a province where one of your air fleets is based, or one where you have built airfields. ${sel && canStation(g, me, sel) ? `Stationing at ${at(sel.name)}.` : 'Click such a province on the map to station them there.'}</p>${shelf('air')}`;
+      out += `<h3>Order aircraft</h3><p class="sub" style="margin:0 0 7px">${airWar(g) ? 'Aircraft come by the wing from the nation\'s aircraft industry, and are stationed on an airfield of yours, the round pads on the map. A new wing joins a group of its kind there if one has room, or forms a new air group.' : 'Aircraft come by the wing from the nation\'s aircraft industry, and are stationed on airfields: a province where one of your air fleets is based, or one where you have built airfields.'} ${sel && canStation(g, me, sel) ? `Stationing at ${at(sel.name)}.` : 'Click such a province on the map to station them there.'}</p>${shelf('air')}`;
     } else if (ui.arm === 'navy') {
       out += `<h3>Lay down ships</h3><p class="sub" style="margin:0 0 7px">Ships are laid down in a home port whose shipyard is big enough, and they take a long time. A level 1 yard builds destroyers, submarines and troopships, level 2 cruisers, level 3 carriers and battleships. ${sel && isHome(g, me, sel) && yardLevel(g, sel) > 0 ? `Building at ${at(sel.name)} where its yard will do.` : 'Click one of your ports on the map to build there.'}</p>${shelf('navy')}`;
     } else {
@@ -2123,12 +2150,12 @@ function airVerdict(r: AirReport): { text: string; cls: string } {
 }
 
 function airTitle(r: AirReport): string {
-  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
+  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
 }
 
 function airBrow(r: AirReport): string {
   const v = airVerdict(r);
-  return `<button class="brow" data-act="airreport" data-id="${r.id}"><b>${esc(airTitle(r))}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)} · air campaign, ${g.nations[r.attNat].adj} against ${r.defNat ? g.nations[r.defNat].adj : 'enemy'} ${r.mission === 'strike' ? 'shipping' : r.mission === 'superiority' ? 'fighters' : 'industry'}</span></button>`;
+  return `<button class="brow" data-act="airreport" data-id="${r.id}"><b>${esc(airTitle(r))}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)} · ${airWar(g) ? 'air raid' : 'air campaign'}, ${g.nations[r.attNat].adj} against ${r.defNat ? g.nations[r.defNat].adj : 'enemy'} ${r.mission === 'strike' ? 'shipping' : r.mission === 'superiority' ? 'fighters' : r.mission === 'ground' ? 'troops' : 'industry'}</span></button>`;
 }
 
 function landRow(r: BattleReport): string {
@@ -2704,6 +2731,7 @@ function missionText(f: AirFleet): string {
     case 'bomb': return `bombing ${where} by day`;
     case 'night': return `bombing ${where} by night`;
     case 'strike': return `striking at shipping in ${where}`;
+    case 'ground': return `raiding the troops at ${where}`;
   }
 }
 
@@ -2740,7 +2768,8 @@ function airOrders(f: AirFleet): string {
   const btns = (['support', 'superiority', 'bomb', 'night', 'strike', 'rest'] as AirMission[]).map(btn).join('')
     + `<button class="btn small${ui.airMode === 'base' ? ' on' : ''}" data-act="airbase" ${moved ? 'disabled' : ''} title="${moved ? 'It has already changed base this month.' : 'Move to airfields in another friendly region. Settling in costs readiness.'}">Change base</button>`;
   let body: string;
-  if (ui.airMode === 'base') {
+  if (ui.airMode === 'scout') body = '';
+  else if (ui.airMode === 'base') {
     body = `<p class="sub" style="margin:8px 0 6px">Click any blue region on the map to move ${esc(f.name)} there. Settling in costs it ${Math.round(AIR.ready.move * 100)}% readiness, which a month of rest more than makes up. The airfields of one region serve about ${num(AIR.airfields.holds)} aircraft: pack in more and they cannot all fly.</p>`;
   } else if (ui.airMode) {
     const m = ui.airMode;
@@ -2779,6 +2808,7 @@ function airPane(): string {
     return ph ? `<div class="note"><b>${mine ? "History's plan this month" : `${esc(natName(nat))}, on history's plan`}: ${esc(ph.name)}.</b> ${esc(ph.orders.map(airOrderText).join(' '))}${mine ? ' You are free to do something else.' : ''}</div>` : '';
   };
   let out = '';
+  if (me && airWar(g)) return airWarPane(me);
   if (me) {
     const n = g.nations[me];
     const mine = airFleetsOf(g, me);
@@ -2813,6 +2843,209 @@ function airPane(): string {
   const peace = g.airFleets.filter((f) => !g.nations[f.nat].atWar.length).sort(size);
   if (peace.length) out += `<h3>Air forces at peace</h3>${peace.map((f) => airRow(f, false, true)).join('')}`;
   return out;
+}
+
+// ---- The air war as its own game (the grand campaign): airfields, air groups, the raid planner ----
+
+const pctOf = (x: number): string => `${Math.round(x * 100)}%`;
+const kindWord = (k: 'ftr' | 'bmr' | 'mixed', n: number): string => `${num(n)} ${k === 'ftr' ? 'fighter' : k === 'bmr' ? 'bomber' : 'aircraft'}${k === 'mixed' || Math.round(n) === 1 ? '' : 's'}`;
+
+/** A fighter or a bomber seen from above, in its nation's colour. */
+function groupIcon(kind: 'ftr' | 'bmr' | 'mixed', nat: string): string {
+  return kind === 'bmr'
+    ? `<svg width="36" height="26" viewBox="-14 -11 28 22" class="ctr"><path class="hull" d="${BOMBER}" fill="${g.nations[nat].color}"/></svg>`
+    : `<svg width="34" height="24" viewBox="-14 -10.5 28 21" class="ctr"><path class="hull" d="${PLANE}" fill="${g.nations[nat].color}"/></svg>`;
+}
+
+/** Every airfield on the map: a patch of grass with its runways, larger for a larger field, rimmed in its holder's colours. A click opens it. */
+function airfieldMarks(): string {
+  let out = '';
+  for (const a of airfieldsSeen(g)) {
+    const k = Math.max(1, Math.min(4, a.size));
+    const w = [0, 11, 14, 17, 19][k], h = [0, 8, 10, 12, 13.5][k];
+    const on = ui.tab === 'air' && ui.field === a.region;
+    // One strip for a landing ground, a second across it for an airfield, the triangle of three for an air base.
+    const strips = k === 1 ? `M${(-w * 0.32).toFixed(1)} ${(h * 0.2).toFixed(1)}L${(w * 0.32).toFixed(1)} ${(-h * 0.2).toFixed(1)}`
+      : k === 2 ? `M${(-w * 0.36).toFixed(1)} ${(h * 0.16).toFixed(1)}H${(w * 0.36).toFixed(1)}M${(-w * 0.16).toFixed(1)} ${(-h * 0.32).toFixed(1)}L${(w * 0.2).toFixed(1)} ${(h * 0.32).toFixed(1)}`
+      : `M${(-w * 0.37).toFixed(1)} ${(h * 0.2).toFixed(1)}H${(w * 0.37).toFixed(1)}M0 ${(-h * 0.36).toFixed(1)}L${(-w * 0.27).toFixed(1)} ${(h * 0.33).toFixed(1)}M0 ${(-h * 0.36).toFixed(1)}L${(w * 0.27).toFixed(1)} ${(h * 0.33).toFixed(1)}`;
+    out += `<g class="afm ${a.side}${on ? ' on' : ''}" data-id="${a.region}" transform="translate(${(a.x - 17).toFixed(1)} ${(a.y + 11).toFixed(1)})">${on ? `<rect class="afsel" x="${(-w / 2 - 2.6).toFixed(1)}" y="${(-h / 2 - 2.6).toFixed(1)}" width="${(w + 5.2).toFixed(1)}" height="${(h + 5.2).toFixed(1)}" rx="3.6"/>` : ''}<rect class="afpad" x="${(-w / 2).toFixed(1)}" y="${(-h / 2).toFixed(1)}" width="${w}" height="${h}" rx="2"/><path class="afrun" d="${strips}"/></g>`;
+  }
+  return out;
+}
+
+/** What the map shows for the air war's orders: a raid's targets, where a group could move or scout, and the reach of the group picked. */
+function airWarMarks(): string {
+  let out = '';
+  const f = myAir();
+  if (ui.raid && ui.raid !== 'menu' && humanUp(g)) {
+    for (const t of raidTargetsFor(g, ui.raid, ui.lead)) out += t.sea ? `<circle class="mk sea" cx="${t.x}" cy="${t.y + 9}" r="29"/>` : `<path class="mk hit" d="${pathOf(g.regions[t.id].polys)}"/>`;
+  } else if (f && ui.airMode === 'base') {
+    for (const b of airGroupBases(g, f.id)) if (!b.why) out += `<path class="mk rail" d="${pathOf(g.regions[b.region].polys)}"/>`;
+  } else if (f && ui.airMode === 'scout') {
+    for (const t of raidTargetsFor(g, 'recon', f.id)) out += `<path class="mk scout" d="${pathOf(g.regions[t.id].polys)}"/>`;
+  }
+  if (f) {
+    const b = g.regions[f.base], R = airRange(f), u = AIR.kmPerUnit;
+    if (f.bmr > 0) out += `<circle class="mk ring bmr" cx="${b.x}" cy="${b.y}" r="${(R.bmr / u).toFixed(1)}"/>`;
+    if (f.ftr > 0) out += `<circle class="mk ring ftr" cx="${b.x}" cy="${b.y}" r="${(R.ftr / u).toFixed(1)}"/><circle class="mk ring full" cx="${b.x}" cy="${b.y}" r="${((R.ftr * AIR.range.fullAt) / u).toFixed(1)}"/>`;
+  }
+  return out;
+}
+
+/** One air group as a row: its kind, its name and command, where it is, what it is doing, and how fit it is. */
+function groupRowHtml(x: GroupRow, canOrder: boolean, whose = false): string {
+  const tags: string[] = [];
+  if (x.flew) tags.push('<span class="tag">Flew its raid</span>');
+  if (x.scouted) tags.push('<span class="tag">Scouted</span>');
+  if (x.crowd < 1) tags.push(`<span class="tag bad" title="More aircraft are based here than the airfield serves. Move a group to another airfield, or have engineers enlarge this one.">Crowded: flies ${pctOf(x.crowd)}</span>`);
+  if (x.est - x.aircraft > x.est * 0.2) tags.push(`<span class="tag bad">${num(x.est - x.aircraft)} aircraft short</span>`);
+  const f = g.airFleets.find((y) => y.id === x.id);
+  if (f && f.moved === g.turn) tags.push('<span class="tag">Moved this month</span>');
+  const el = canOrder ? 'button' : 'div';
+  const ldr = x.leader ? ` <span style="font-weight:400;color:var(--ink-2)">· ${esc(x.leader)} <span class="lvl" title="Level ${x.level} air commander">${x.level}</span></span>` : '';
+  return `<${el} class="corps fleet grp${canOrder && ui.air === x.id ? ' pick' : ''}" ${canOrder ? `data-act="airfleet" data-id="${x.id}"` : ''}>
+    ${groupIcon(x.kind, x.nat)}<span class="nm">${esc(x.name)}${f?.nick ? ` <i class="nick">${esc(f.nick)}</i>` : ''}${ldr}</span><span></span>
+    <span class="meta">${whose ? `${g.nations[x.nat].adj} · ` : ''}${esc(capital(kindWord(x.kind, x.aircraft)))}${x.command ? ` · ${esc(x.command)}` : ''} · reach ${num(x.range)} km</span>
+    <span class="meta">${esc(x.doing)}</span>
+    <span class="bars"><span>Readiness</span><span class="meter"><i class="${x.ready < 0.5 ? 'low' : ''}" style="width:${Math.round(x.ready * 100)}%"></i></span></span>
+    ${tags.length ? `<span class="tags">${tags.join('')}</span>` : ''}</${el}>${f && (ui.air === x.id || Object.keys(f.rec ?? {}).length > 0 || (f.hon?.length ?? 0) > 0) ? recStrip('air', f) : ''}`;
+}
+
+/** The orders for the air group that is picked: what it does between raids, each with what it would mean, and the raids, scouting and moves it can make. */
+function groupOrders(x: GroupRow): string {
+  const jobs = airGroupJobs(g, x.id).map((j) => `<button class="jobrow${j.on ? ' on' : ''}" data-act="groupjob" data-key="${esc(j.key)}" ${j.why || j.on ? 'disabled' : ''}><b>${esc(j.label)}${j.on ? ' <span class="tag good">Its order now</span>' : ''}</b><span>${esc(j.why ?? j.forecast)}</span></button>`).join('');
+  const f = g.airFleets.find((y) => y.id === x.id)!;
+  const moved = f.moved === g.turn;
+  const peace = !g.nations[x.nat].atWar.length;
+  const acts = `<div class="acts"><button class="btn small go${ui.raid && ui.lead === x.id ? ' on' : ''}" data-act="raidmenu" data-id="${x.id}" ${x.flew || peace ? 'disabled' : ''} title="${x.flew ? 'It has flown its raid this month.' : peace ? 'The nation is at peace.' : 'Pick the kind of raid and its target. You see the chance of success and the losses to expect, then choose who else flies it.'}">Plan a raid with it</button>
+    <button class="btn small${ui.airMode === 'scout' ? ' on' : ''}" data-act="scoutmode" ${x.scouted || peace ? 'disabled' : ''} title="${x.scouted ? 'It has flown its reconnaissance this month.' : 'A few aircraft photograph one province: every army there and beside it is seen whole until the month ends. It keeps its patrol.'}">Scout from the air</button>
+    <button class="btn small${ui.airMode === 'base' ? ' on' : ''}" data-act="airbase" ${moved ? 'disabled' : ''} title="${moved ? 'It has already changed base this month.' : 'Move to another airfield. Settling in costs readiness.'}">Move to another airfield</button></div>`;
+  let body = '';
+  if (ui.airMode === 'base') {
+    const bases = airGroupBases(g, x.id).filter((b) => !b.why).slice(0, 8);
+    body = `<p class="sub" style="margin:8px 0 6px">Click a blue province on the map, or pick one of the nearest airfields. Settling in costs ${pctOf(AIR.ready.move)} readiness. Where there is no airfield, an engineer corps can lay one out in a month.</p>${bases.map((b) => `<button class="pickrow" data-act="basepick" data-id="${b.region}"><span class="grow"><b>${esc(b.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(b.word)} · ${num(b.km)} km · room for ${num(b.free)} of ${num(b.holds)}${b.free < x.aircraft ? ' · it would be crowded' : ''}</span></span></button>`).join('') || '<div class="empty">No other airfield is in reach.</div>'}`;
+  } else if (ui.airMode === 'scout') {
+    const ts = raidTargetsFor(g, 'recon', x.id).slice(0, 8);
+    body = `<p class="sub" style="margin:8px 0 6px">Click a marked province on the map, or pick one of the nearest. ${AIRWAR_RECON} aircraft go; fighters on patrol there may bring some down.</p>${ts.map((t) => `<button class="pickrow" data-act="scoutpick" data-id="${t.id}"><span class="grow"><b>${esc(t.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(t.km)} km · ${esc(t.what)}</span></span></button>`).join('') || '<div class="empty">Nothing in its reach is hidden from you.</div>'}`;
+  }
+  return `<div class="orders"><p class="sub" style="margin:0 0 5px">Between raids:</p><div class="jobs">${jobs}</div>${acts}${body}</div>`;
+}
+
+const AIRWAR_RECON = 12;
+
+/** The raid planner's first steps, in the pane: the kind of raid, then its target. The map marks the targets too. */
+function raidPicker(): string {
+  const menu = raidMenu(g).filter((k) => k.key !== 'recon');
+  const lead = ui.lead >= 0 ? myAirGroups(g).find((x) => x.id === ui.lead) : undefined;
+  const kinds = menu.map((k) => {
+    const n = lead ? raidTargetsFor(g, k.key, lead.id).length : k.targets;
+    return `<button class="btn small${ui.raid === k.key ? ' on' : ''}" data-act="raidkind" data-kind="${k.key}" ${n ? '' : 'disabled'} title="${esc(n ? k.blurb : k.why ?? 'Nothing in reach.')}">${esc(k.label)} <span class="cnt">${n}</span></button>`;
+  }).join('');
+  let body = `<p class="sub" style="margin:8px 0 6px">Pick the kind of raid${lead ? ` for the ${esc(lead.name)}` : ''}. The number is how many targets are in reach this month.</p>`;
+  if (ui.raid && ui.raid !== 'menu') {
+    const k = menu.find((x) => x.key === ui.raid)!;
+    const ts = raidTargetsFor(g, ui.raid, ui.lead);
+    const rows = ts.slice(0, 10).map((t) => `<button class="pickrow" data-act="raidtarget" data-target="${t.id}"><span class="grow"><b>${esc(upFirst(t.name))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${[`${num(t.km)} km`, esc(t.what), `${t.groups} group${t.groups === 1 ? '' : 's'} can reach it`].filter(Boolean).join(' · ')}</span></span></button>`).join('');
+    body = `<p class="sub" style="margin:8px 0 6px">${esc(k.blurb)} Click a ${ui.raid === 'strike' ? 'ringed sea' : 'red province'} on the map, or pick one of the nearest here: you see the chance of success and the losses before anything flies.</p>${rows}${ts.length > 10 ? `<p class="sub">${ts.length - 10} more in reach: see the map.</p>` : ''}`;
+  }
+  return `<div class="orders planner"><div class="acts">${kinds}<button class="btn small" data-act="raidmenu" data-id="-1">Close</button></div>${body}</div>`;
+}
+
+/** The Air tab in the grand campaign: the air force by airfield, and the way into the raid planner. */
+function airWarPane(me: string): string {
+  const n = g.nations[me];
+  const order = humanUp(g);
+  const groups = myAirGroups(g);
+  const fields = airfieldsSeen(g);
+  const byRegion = new Map(fields.map((a) => [a.region, a]));
+  const p = airPool(g, me), d = airDeliveries(g, me);
+  const peace = !n.atWar.length;
+  let out = `<h2>The ${n.adj} air force</h2><p class="sub">Aircraft fly from airfields, the pads marked on the map. An air group is fighters or bombers. Between raids fighters patrol their sky, stick with a bomber group as its escort, or rest. Any group flies one raid a month: you plan it from its target, and it is flown at once.</p>
+    <div class="facts"><div class="fact"><span>Fighters</span><b>${num(groups.reduce((t, x) => t + x.ftr, 0))}</b></div><div class="fact"><span>Bombers</span><b>${num(groups.reduce((t, x) => t + x.bmr, 0))}</b></div><div class="fact"><span>Airfields</span><b>${fields.filter((a) => a.side === 'own').length}</b></div></div>
+    <p class="sub" style="margin-top:6px">In reserve: ${craft(p.ftr, p.bmr)}, and ${num(p.pilots)} spare pilots. Each month the factories deliver ${craft(d.ftr, d.bmr)} and the flying schools ${num(d.pilots)} pilots. Resting groups are made up first.${p.lostFtr + p.lostBmr ? ` Lost since the war began: ${craft(p.lostFtr, p.lostBmr)}, and ${num(p.lostPilots)} fighter pilots.` : ''}</p>
+    <div class="acts"><button class="btn small go${ui.raid && ui.lead < 0 ? ' on' : ''}" data-act="raidmenu" data-id="-1" ${order && !peace ? '' : 'disabled'} title="${peace ? 'The nation is at peace.' : 'Pick the kind of raid, then the target: you see the chance of success and the losses to expect, then choose which groups fly it together.'}">Plan a raid</button>${budgeted(g) ? '<button class="btn small" data-act="armgo" data-arm="air" title="Buy fighter and bomber wings from the arsenal.">Order more aircraft</button>' : ''}</div>`;
+  if (ui.raid && order) out += raidPicker();
+  if (peace) out += `<div class="note"><b>At peace.</b> The air force flies no raids until the nation is at war.</div>`;
+  const chain = AIR.radar.chains.find((c) => c.nat === me && c.from <= g.turn);
+  if (chain) out += `<div class="note"><b>${esc(capital(chain.name))}.</b> Radar warns of raids on your home ground: every fighter on patrol in reach gets up in time. An enemy without it meets raids with only ${Math.round(AIR.radar.without * 100)}% of his fighters.</div>`;
+  const cut = airIncomeLoss(g, me);
+  if (cut > 0) out += `<div class="note" style="border-left-color:var(--red)"><b>Under the bombs.</b> Bombing and attacks on coastal shipping stopped ${(cut * 100).toFixed(1)}% of your production this month.</div>`;
+  const held = g.regions.filter((r) => skyOver(g, r.id));
+  if (held.length) out += `<div class="note"><b>The sky.</b> ${held.map((r) => `The ${g.nations[skyOver(g, r.id)!].adj} air force holds the sky over ${esc(r.name)}.`).join(' ')} An army attacking there has the air on its side. It has to be won again every month.</div>`;
+
+  // An airfield opened that is not one of the player's own: what is known of it.
+  const open = ui.field >= 0 ? airfieldAt(g, ui.field) : null;
+  if (open && (!open.field || open.field.side !== 'own' || !groups.some((x) => x.base === ui.field))) {
+    const own = open.field?.side === 'own';
+    out += `<h3>${esc(open.name)}${open.field ? ` · ${natName(open.field.holder)}` : ''}</h3><div class="afield pick"><p class="sub" style="margin:0 0 6px">${esc(open.note)}${!open.field || own ? ` ${esc(open.build)}` : ''}${own ? ' To base a group here, pick the group and choose Move to another airfield.' : ''}</p>${open.rows.map((x) => groupRowHtml(x, false, true)).join('')}</div>`;
+  }
+
+  const flown = g.airReports.filter((r) => r.turn === g.turn && r.attNat === me);
+  if (flown.length) out += `<h3>Raids flown this month</h3>${flown.map((r) => airBrow(r)).join('')}`;
+
+  out += '<h3>Your airfields</h3>';
+  const bases = [...new Set(groups.map((x) => x.base))];
+  if (!bases.length) out += '<div class="empty">No air group flies under your flag.</div>';
+  for (const b of bases) {
+    const a = byRegion.get(b);
+    const here = groups.filter((x) => x.base === b);
+    const used = here.reduce((t, x) => t + x.aircraft, 0);
+    out += `<div class="afield${ui.field === b ? ' pick' : ''}"><button class="afhead" data-act="airfield" data-id="${b}"><b>${esc(g.regions[b].name)}</b><span>${a ? `${esc(a.word)} · ${num(used)} of ${num(a.holds)} aircraft` : 'No airfield'}</span>${a?.crowded ? '<span class="tag bad">Crowded</span>' : ''}</button>
+      ${here.map((x) => groupRowHtml(x, order) + (order && ui.air === x.id ? groupOrders(x) : '')).join('')}</div>`;
+  }
+  const empty = fields.filter((a) => a.side === 'own' && !bases.includes(a.region));
+  if (empty.length) out += `<p class="sub" style="margin-top:8px">Airfields with nobody based there: ${empty.map((a) => `<button class="lnk" data-act="airfield" data-id="${a.region}">${esc(a.name)}</button> (${esc(a.word.toLowerCase())}, ${num(a.holds)})`).join(', ')}. Engineers lay out new airfields and enlarge small ones; the treasury builds larger.</p>`;
+
+  const known = (f: AirFleet): boolean => (byRegion.get(f.base)?.groups ?? -1) >= 0;
+  const size = (a: AirFleet, b: AirFleet): number => b.ftr + b.bmr - (a.ftr + a.bmr);
+  const friends = g.airFleets.filter((f) => f.nat !== me && allied(g, f.nat, me) && f.ftr + f.bmr > 0).sort(size);
+  const foes = g.airFleets.filter((f) => atWar(g, f.nat, me) && f.ftr + f.bmr > 0);
+  const seen = foes.filter(known).sort(size);
+  if (friends.length) out += `<h3>Allied air forces</h3>${friends.map((f) => groupRowHtml(myGroupRow(f), false, true)).join('')}`;
+  if (foes.length) out += `<h3>Enemy air forces</h3>${seen.map((f) => groupRowHtml(myGroupRow(f), false, true)).join('')}${seen.length < foes.length ? `<p class="sub">${seen.length ? 'More fly' : 'They fly'} from airfields the fog of war hides. Scout an airfield from the air, or put an agent on watch there, to see what is based on it.</p>` : ''}`;
+  return out;
+}
+
+/** Any air group as a row for a list, whoever it belongs to. */
+const myGroupRow = (f: AirFleet): GroupRow => (airfieldAt(g, f.base)?.rows.find((x) => x.id === f.id) ?? {
+  id: f.id, nat: f.nat, name: f.name, command: '', kind: f.bmr <= 0 ? 'ftr' : f.ftr <= 0 ? 'bmr' : 'mixed', ftr: f.ftr, bmr: f.bmr, aircraft: f.ftr + f.bmr, est: f.est.ftr + f.est.bmr, ready: f.ready,
+  leader: f.leader?.name ?? null, level: f.leader?.level ?? 0, base: f.base, baseName: g.regions[f.base].name, doing: `Based at ${g.regions[f.base].name}`, job: 'patrol', escorts: -1, flew: false, scouted: false, range: 0, crowd: 1, mine: false,
+});
+
+/** The raid planner's card: the target, the chance of success and the losses to expect, and who flies it. Ticking groups works the odds out again. */
+function raidCard(): string {
+  const m = ui.modal!;
+  const kind = m.raid as RaidKind;
+  const p: RaidPlan = previewRaid(g, kind, m.target, m.ids);
+  m.ids = p.picked;
+  const me = g.human!;
+  const going = p.seats.filter((s) => s.picked), could = p.seats.filter((s) => !s.picked && !s.why), cannot = p.seats.filter((s) => s.why);
+  const seat = (s: RaidPlan['seats'][number]): string => `<button class="pickrow seat${s.picked ? ' pick' : ''}" data-act="raidtick" data-id="${s.id}" ${s.locked ? 'disabled title="It goes because it is ordered to stick with its bombers. Change its standing order to take it off escort."' : ''}>
+    <span class="tick">${s.picked ? '✓' : ''}</span>${groupIcon(s.kind, me)}<span class="grow"><b>${esc(s.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(kindWord(s.kind, s.aircraft))} · ${esc(s.baseName)} · ${esc(s.note)}${s.ready < 0.8 ? ` · readiness ${pctOf(s.ready)}` : ''}${s.locked ? ' · escort, sticks with its bombers' : ''}</span></span>
+    <span class="tag${s.picked ? ' good' : ''}">${s.picked ? 'Going' : s.kind === 'ftr' ? 'Add as escort' : 'Add'}</span></button>`;
+  let head: string;
+  if (p.why && !going.length) head = `<div class="empty">${esc(p.why)}</div>`;
+  else if (p.why) head = `<div class="verdict loss" style="font-size:22px">${esc(p.why)}</div>`;
+  else {
+    const cls = p.success >= 0.6 ? 'win' : p.success >= 0.4 ? '' : 'loss';
+    const loss = [p.bombers ? `<div class="fact"><span>Bombers likely lost</span><b>${num(p.bomberLossN)} of ${num(p.bombers)}</b><small>${pctOf(p.bomberLoss)}</small></div>` : '', p.fighters ? `<div class="fact"><span>Fighters likely lost</span><b>${num(p.fighterLossN)} of ${num(p.fighters)}</b></div>` : '', `<div class="fact"><span>Enemy fighters likely lost</span><b>${num(p.foeLossN)}</b></div>`].join('');
+    head = `<div class="verdict ${cls}" style="font-size:24px">${esc(p.verdict)}</div>
+      <div class="oddsbar" title="The chance the raid costs the enemy more than it costs you"><i style="width:${Math.round(p.success * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:var(--panel-3)"></i></div>
+      <div class="facts raidfacts"><div class="fact"><span>Chance of success</span><b>${pctOf(p.success)}</b></div>${loss}</div>
+      <div class="sub">${p.effects.map(esc).join(' ')}</div>
+      ${p.massed ? `<div class="note good"><b>Meeting up.</b> ${esc(p.massed.replace(/^Meeting up pays: /, ''))}</div>` : ''}
+      ${p.offPatrol ? `<div class="note" style="border-left-color:var(--red)"><b>Off patrol.</b> ${esc(upFirst(p.offPatrol))}</div>` : ''}`;
+  }
+  const meets = p.meets.length ? p.meets.map((x) => `<div class="pickrow">${groupIcon('ftr', x.nat)}<span class="grow"><b>${esc(x.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${g.nations[x.nat].adj}, from ${esc(x.baseName)} · ${num(x.ftr)} fighters, about ${num(x.able)} able to meet the raid</span></span></div>`).join('') : '<div class="empty">No enemy fighters are in reach.</div>';
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Raid planner · ${date(g.turn)}</div><h2>${esc(p.title)}</h2></header>
+    <div class="body">${head}
+      <h3>Flying the raid</h3>${going.map(seat).join('') || '<div class="empty">Nobody yet: tick a group below.</div>'}
+      ${could.length ? `<h3>Could join it</h3><p class="sub" style="margin:-2px 0 6px">Bombers from other airfields meet up on the way: together they lose a smaller share. Fighters in range go as escort.</p>${could.map(seat).join('')}` : ''}
+      ${p.why ? '' : `<h3>Rising to meet them</h3>${meets}<h3>Battle Ticket</h3>${ticketTable(p.lines)}`}
+      ${cannot.length ? `<details class="cannot"><summary>${cannot.length} group${cannot.length === 1 ? '' : 's'} cannot go</summary>${cannot.map((s) => `<div class="pickrow">${groupIcon(s.kind, me)}<span class="grow"><b>${esc(s.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${esc(s.baseName)} · ${esc(s.why ?? '')}</span></span></div>`).join('')}</details>` : ''}
+      <div class="note"><b>Flown at once.</b> Every group that goes is away for the rest of the month: it flies no second raid and meets no raid on its own sky. It is back at its airfield, on patrol as before, next month.</div>
+    </div>
+    <footer><button class="btn" data-act="close">Call it off</button><button class="btn go" data-act="doraid" ${p.why ? 'disabled' : ''}>Fly the raid</button></footer>`;
 }
 
 const ticketTable = (lines: { label: string; value: string; effect?: string }[]): string => `<table class="ticket">${lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
@@ -2860,11 +3093,12 @@ function airPlanCard(): string {
 function airReportCard(r: AirReport): string {
   const v = airVerdict(r);
   const sum = (ss: AirSide[], k: 'ftr' | 'bmr' | 'lostFtr' | 'lostBmr'): number => ss.reduce((n, x) => n + x[k], 0);
-  const side = (ss: AirSide[]): string => ss.length ? `<div class="big">${num(sum(ss, 'ftr') + sum(ss, 'bmr'))}</div><small>aircraft in ${ss.length} air fleet${ss.length > 1 ? 's' : ''} · lost ${num(sum(ss, 'lostFtr') + sum(ss, 'lostBmr'))}</small>` : '<div class="big">0</div><small>no fighters came up</small>';
+  const side = (ss: AirSide[]): string => ss.length ? `<div class="big">${num(sum(ss, 'ftr') + sum(ss, 'bmr'))}</div><small>aircraft in ${ss.length} air ${airWar(g) ? 'group' : 'fleet'}${ss.length > 1 ? 's' : ''} · lost ${num(sum(ss, 'lostFtr') + sum(ss, 'lostBmr'))}</small>` : '<div class="big">0</div><small>no fighters came up</small>';
   const list = (ss: AirSide[]): string => ss.length ? `<ul class="ulist">${ss.map((x) => `<li><span>${esc(x.fleet)} <span style="color:var(--ink-3)">(${g.nations[x.nat].adj}${x.leader ? `, ${esc(x.leader)}` : ''})</span><br><span style="color:var(--ink-2)">${esc(capital(craft(x.ftr, x.bmr)))}</span></span><span>${x.lostFtr + x.lostBmr ? `lost ${esc(craft(x.lostFtr, x.lostBmr))}` : 'no losses'}</span></li>`).join('')}</ul>` : '<div class="empty">None.</div>';
   const sky = r.mission === 'superiority' ? (r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${esc(r.place)}: its fighters ended the month with ${r.hold >= 9 ? 'no opposition left' : `${r.hold.toFixed(2)} times what the defenders could still put up`}.` : ` The attackers ended the month with ${r.hold.toFixed(2)} times the fighters the defenders could still put up. It takes ${AIR.sky.win} to win the sky.`) : '';
-  const what = r.mission === 'superiority' ? 'air superiority' : r.mission === 'bomb' ? 'day bombing' : r.mission === 'night' ? 'night bombing' : 'strikes on shipping';
-  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · air campaign, ${what} · ${date(r.turn)}</div><h2>${esc(airTitle(r))}</h2></header>
+  const what = r.mission === 'superiority' ? 'air superiority' : r.mission === 'bomb' ? 'day bombing' : r.mission === 'night' ? 'night bombing' : r.mission === 'ground' ? 'a raid on troops' : 'strikes on shipping';
+  const aw = airWar(g);
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Battle Ticket · ${aw ? 'air raid' : 'air campaign'}, ${what} · ${date(r.turn)}</div><h2>${esc(airTitle(r))}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
       <div class="sub">${esc(r.result)}${sky}</div>
@@ -2872,7 +3106,7 @@ function airReportCard(r: AirReport): string {
       <h3>What the campaign map fed into the battle</h3>
       ${ticketTable(r.lines)}
       <h3>Flying the mission</h3>${list(r.att)}<h3>Rising to meet them</h3>${list(r.def)}
-      <div class="note" style="margin-top:14px"><b>Auto-resolved.</b> A month of air fighting is settled from its ticket. In the full game its big days can be flown as 3D air battles, with the same ticket going in and the same kind of result coming back.</div>
+      <div class="note" style="margin-top:14px">${aw ? '<b>Flown and settled.</b> The raid is settled from its ticket the moment it is ordered. The groups that flew it are back on their airfields next month.' : '<b>Auto-resolved.</b> A month of air fighting is settled from its ticket. In the full game its big days can be flown as 3D air battles, with the same ticket going in and the same kind of result coming back.'}</div>
     </div><footer><button class="btn" data-act="${r.zone >= 0 ? 'showsea' : 'showmap'}" data-id="${r.zone >= 0 ? r.zone : r.region}">Show on map</button><button class="btn go" data-act="close">Close</button></footer>`;
 }
 
@@ -2890,7 +3124,7 @@ function openModal(m: typeof ui.modal): void {
   }
   veil.classList.add('open');
   const card = $('#card');
-  card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'report' || m.kind === 'ledger' || m.kind === 'tech' || m.kind === 'stores' || m.kind === 'books');
+  card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'report' || m.kind === 'ledger' || m.kind === 'tech' || m.kind === 'stores' || m.kind === 'books' || m.kind === 'raid');
   card.classList.toggle('techcard', m.kind === 'tech');
   if (m.kind === 'start') card.innerHTML = startCard();
   else if (m.kind === 'report') {
@@ -2909,6 +3143,7 @@ function openModal(m: typeof ui.modal): void {
     card.innerHTML = airReportCard(rep);
   }
   else if (m.kind === 'airplan') card.innerHTML = airPlanCard();
+  else if (m.kind === 'raid') card.innerHTML = raidCard();
   else if (m.kind === 'landing') card.innerHTML = landingCard();
   else if (m.kind === 'attack') card.innerHTML = attackCard();
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
@@ -3007,7 +3242,7 @@ function recallPick(): void {
 }
 
 const startHead = (title: string): string => `<header><div class="kick">Grand strategy · 1939 to 1945</div><h2>${title}</h2></header>`;
-const STEPS = `<ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and your air fleets under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol>`;
+const STEPS = `<ol class="steps"><li>Click one of your armies, then a green region to march or a red one to attack.</li><li>Press <b>End month</b> and the other nations take their turns.</li><li>Spend your factories' output under <b>Build</b>, steer your designers under <b>Research</b>, and send your fleets out under <b>Navy</b> and plan your air raids under <b>Air</b>. The game saves itself as you play.</li><li>Drag the map to move it. Scroll or pinch to zoom.</li></ol>`;
 
 const levelById = (id: string): Level => DIFFICULTY.levels.find((l) => l.id === id) ?? DIFFICULTY.levels[FAIR];
 /** A level's badge of rank: one pip for the easiest, five for the hardest. */
@@ -3877,9 +4112,26 @@ function myFleet(): Fleet | null {
   return f && f.nat === g.human && shipCount(f.ships) > 0 ? f : null;
 }
 
+/** Opens an airfield under the Air tab: the groups based there and what each is doing. */
+function openAirfield(id: number): void {
+  ui.tab = 'air'; ui.field = id; ui.sel = -1; ui.sea = -1; ui.picked.clear();
+  ui.rail = ui.ship = ui.land = ui.rebase = false; ui.spySend = false;
+  const f = g.airFleets.find((x) => x.id === ui.air);
+  if (!f || f.base !== id) { ui.air = -1; ui.airMode = ''; }
+  refresh();
+  document.querySelector('#pane .afield.pick')?.scrollIntoView({ block: 'nearest' });
+}
+
 function onSea(z: number): void {
   ui.flash = [];
   ui.msg = '';
+  if (ui.tab === 'air' && airWar(g) && humanUp(g) && ui.raid && ui.raid !== 'menu') {
+    if (ui.raid !== 'strike') ui.msg = 'This raid needs a province: click one of the red ones.';
+    else if (raidTargetsFor(g, 'strike', ui.lead).some((x) => x.sea && x.id === z)) { openModal({ kind: 'raid', raid: 'strike', target: z, ids: ui.lead >= 0 ? [ui.lead] : undefined }); return; }
+    else ui.msg = `The ${g.seas[z].name}: ${previewRaid(g, 'strike', z, ui.lead >= 0 ? [ui.lead] : undefined).why || 'no enemy shipping is known there, or no bomber reaches it.'}`;
+    refresh();
+    return;
+  }
   const af = ui.tab === 'air' ? myAir() : null;
   if (af && ui.airMode) {
     if (ui.airMode === 'strike') {
@@ -4027,7 +4279,7 @@ function onClick(e: MouseEvent): void {
       if (ui.tab === 'spies') ui.spySeen = g.turn;
       ui.spySend = false; ui.spyAsk = -1;
       if (ui.tab === 'battles') { ui.seenReports = g.reports.length; ui.seenSea = g.seaReports.length; ui.seenAir = g.airReports.length; }
-      ui.rail = ui.ship = ui.land = ui.rebase = false; ui.airMode = '';
+      ui.rail = ui.ship = ui.land = ui.rebase = false; ui.airMode = ''; ui.raid = ''; ui.lead = -1;
       refresh();
       break;
     case 'zin': zoomBy(0.7); break;
@@ -4120,9 +4372,62 @@ function onClick(e: MouseEvent): void {
     case 'seareport': openModal({ kind: 'seareport', id }); break;
     case 'airfleet': {
       ui.air = ui.air === id ? -1 : id;
-      ui.airMode = '';
+      ui.airMode = ''; ui.raid = ''; ui.lead = -1;
       const f = g.airFleets.find((x) => x.id === ui.air);
-      if (f) { ui.sel = -1; ui.sea = -1; ui.picked.clear(); }
+      if (f) { ui.sel = -1; ui.sea = -1; ui.picked.clear(); if (airWar(g)) ui.field = f.base; }
+      refresh(); break;
+    }
+    case 'airfield': openModal(null); openAirfield(id); focusOnPoint(g.regions[id].x, g.regions[id].y); break;
+    case 'groupjob': {
+      const f = myAir();
+      if (f && !orderGroupJob(g, f.id, t.dataset.key ?? '')) ui.msg = 'That order could not be given.';
+      refresh(); break;
+    }
+    case 'raidmenu': {
+      const open = ui.raid && ui.lead === id;
+      ui.raid = open ? '' : 'menu'; ui.lead = open ? -1 : id; ui.airMode = '';
+      if (id >= 0 && !open) ui.air = id;
+      refresh();
+      if (!open) document.querySelector('#pane .planner')?.scrollIntoView({ block: 'nearest' });
+      break;
+    }
+    case 'raidkind': { const k = t.dataset.kind as RaidKind; ui.raid = ui.raid === k ? 'menu' : k; ui.airMode = ''; refresh(); break; }
+    case 'raidtarget': if (ui.raid && ui.raid !== 'menu') openModal({ kind: 'raid', raid: ui.raid, target: Number(t.dataset.target), ids: ui.lead >= 0 ? [ui.lead] : undefined }); break;
+    case 'raidtick': {
+      const m = ui.modal;
+      if (!m || m.kind !== 'raid') break;
+      const ids: number[] = m.ids ?? [];
+      m.ids = ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
+      const at = $('#card').scrollTop;
+      openModal(m);
+      $('#card').scrollTop = at;
+      break;
+    }
+    case 'doraid': {
+      const m = ui.modal;
+      if (!m || m.kind !== 'raid') break;
+      const rep = orderRaid(g, m.raid, m.target, m.ids ?? []);
+      if (!rep) { ui.msg = 'The raid could not be flown as picked.'; openModal(null); refresh(); break; }
+      ui.raid = ''; ui.lead = -1; ui.airMode = '';
+      ui.seenAir = g.airReports.length;
+      openModal({ kind: 'airreport', id: rep.id });
+      refresh(); break;
+    }
+    case 'scoutmode': ui.airMode = ui.airMode === 'scout' ? '' : 'scout'; ui.raid = ''; ui.lead = -1; refresh(); break;
+    case 'scoutpick': {
+      const f = myAir();
+      if (!f) break;
+      const res = orderScout(g, f.id, id);
+      ui.msg = res.text;
+      if (res.ok) ui.airMode = '';
+      refresh(); break;
+    }
+    case 'basepick': {
+      const f = myAir();
+      if (!f) break;
+      const why = whyNotBase(g, f, g.regions[id]);
+      if (why) ui.msg = `${f.name} cannot move to ${g.regions[id].name}. ${why}`;
+      else { orderAirBase(g, f.id, id); ui.airMode = ''; ui.field = id; }
       refresh(); break;
     }
     case 'mission': {
@@ -4133,7 +4438,7 @@ function onClick(e: MouseEvent): void {
       else { orderAir(g, f.id, m); ui.airMode = ''; }
       refresh(); break;
     }
-    case 'airbase': ui.airMode = ui.airMode === 'base' ? '' : 'base'; refresh(); break;
+    case 'airbase': ui.airMode = ui.airMode === 'base' ? '' : 'base'; ui.raid = ''; ui.lead = -1; refresh(); break;
     case 'airtarget': {
       const f = myAir();
       if (f && ui.airMode && ui.airMode !== 'base') openModal({ kind: 'airplan', fleet: f.id, mission: ui.airMode, target: Number(t.dataset.target) });
@@ -4295,15 +4600,28 @@ function onRegion(id: number): void {
   const r = g.regions[id];
   ui.flash = [];
   ui.msg = '';
+  // The raid planner is open on a kind of raid: a click on the map is its target.
+  if (ui.tab === 'air' && airWar(g) && humanUp(g) && ui.raid && ui.raid !== 'menu') {
+    const lead = ui.lead >= 0 ? [ui.lead] : undefined;
+    if (ui.raid === 'strike') ui.msg = 'A strike on shipping needs a sea: click one of the ringed seas.';
+    else if (raidTargetsFor(g, ui.raid, ui.lead).some((x) => !x.sea && x.id === id)) { openModal({ kind: 'raid', raid: ui.raid, target: id, ids: lead }); return; }
+    else ui.msg = `${r.name}: ${previewRaid(g, ui.raid, id, lead).why || 'there is nothing there for this raid.'}`;
+    refresh();
+    return;
+  }
   // Under the Air tab with a fleet picked and an order half given, a click on the map finishes it.
   const af = ui.tab === 'air' ? myAir() : null;
   if (af && ui.airMode) {
     if (ui.airMode === 'base') {
       const why = whyNotBase(g, af, r);
       if (why) ui.msg = `${af.name} cannot move to ${r.name}. ${why}`;
-      else { orderAirBase(g, af.id, id); ui.airMode = ''; }
+      else { orderAirBase(g, af.id, id); ui.airMode = ''; if (airWar(g)) ui.field = id; }
     } else if (ui.airMode === 'strike') ui.msg = 'A strike on shipping needs a sea: click one of the ringed seas.';
-    else {
+    else if (ui.airMode === 'scout') {
+      const res = orderScout(g, af.id, id);
+      ui.msg = res.text;
+      if (res.ok) { ui.airMode = ''; ui.sel = id; }
+    } else {
       const why = whyNotMission(g, af, ui.airMode, id);
       if (!why) { openModal({ kind: 'airplan', fleet: af.id, mission: ui.airMode, target: id }); return; }
       ui.msg = `${r.name}: ${why}`;
@@ -4311,6 +4629,8 @@ function onRegion(id: number): void {
     refresh();
     return;
   }
+  // Under the Air tab a province with an airfield opens the airfield.
+  if (ui.tab === 'air' && airWar(g) && g.human && airfieldsSeen(g).some((a) => a.region === id)) { openAirfield(id); return; }
   // Under the Spies tab with an agent waiting to be sent, a click on the map is where it goes.
   if (ui.tab === 'spies' && ui.spySend && ui.spy >= 0) {
     const a = secretService(g)?.agents.find((x) => x.id === ui.spy);
@@ -4474,6 +4794,12 @@ function wireMap(): void {
       $('#tip').style.display = 'none';
       const el = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-id]') as HTMLElement | null;
       if (el && el.classList.contains('reg')) onRegion(Number(el.dataset.id));
+      else if (el && el.classList.contains('afm')) {
+        // An airfield's pad opens the airfield, unless the map is waiting for a province to finish an order.
+        const id = Number(el.dataset.id);
+        const aiming = ui.rail || ui.ship || ui.land || ui.rebase || ui.spySend || ui.tab === 'build' || (ui.tab === 'air' && (!!ui.airMode || (!!ui.raid && ui.raid !== 'menu')));
+        if (aiming) onRegion(id); else openAirfield(id);
+      }
       else if (!el) {
         const p = mapPoint(e.clientX, e.clientY);
         const z = seaAt(p.x, p.y);

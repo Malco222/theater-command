@@ -16,9 +16,10 @@ import { ENGINEERING, bridgeDown, crossingsAt, downBetween, farBank, rebuildAt, 
 import { addCorps, allied, atWar, ensureSupply, friendlyUnits, hasRoom, headline, hostileUnits, moveCorps, railMove, railReach } from './game';
 import { orderCorps, raiseSite } from './economy';
 import { mendRail, onNet, railCut, railheads, railsAt, rebuildFactory, ruinedAt } from './rails';
+import { AIRWAR, airWar, airfieldsHold } from './air';
 
-export type JobKind = 'bridge' | 'rail' | 'plant' | 'works' | 'mines' | 'demolish';
-export const JOBS: JobKind[] = ['bridge', 'rail', 'plant', 'works', 'mines', 'demolish'];
+export type JobKind = 'bridge' | 'rail' | 'plant' | 'works' | 'airfield' | 'mines' | 'demolish';
+export const JOBS: JobKind[] = ['bridge', 'rail', 'plant', 'works', 'airfield', 'mines', 'demolish'];
 /** Repairs: one corps to a job in a province, since two cannot relay the same track. */
 const REPAIRS: Partial<Record<JobKind, string>> = { bridge: 'rebuilding the bridges', rail: 'relaying the railway', plant: 'rebuilding a factory' };
 
@@ -35,6 +36,9 @@ export function liftMines(g: Game, r: Region): void {
   delete g.flags[mineKey(r)];
 }
 
+/** The levels of airfield built in a province on top of what the war began with: by engineers as far as the data allows, and by the treasury beyond. */
+const builtField = (g: Game, r: Region): number => g.flags[`wk:field:${r.id}`] ?? 0;
+
 /** The weight of engineers in a force: its engineer divisions at the strength they stand at. */
 export const sappers = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'eng' && !c.dead ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
 
@@ -49,6 +53,12 @@ function whyNot(g: Game, c: Corps, key: JobKind): string | null {
   const other = REPAIRS[key] && (key !== 'plant' || ruinedAt(g, r) <= 1) ? r.units.find((u) => u !== c && !u.dead && u.job?.what === key && u.job.reg === r.id) : undefined;
   if (other) return `${other.name} is already ${REPAIRS[key]} here.`;
   if (key === 'works' && (r.fort?.lv ?? 0) >= E.works.most) return `The works here are at level ${r.fort?.lv ?? 0}: as strong as field engineers can make them. Heavier fortifications are ordered from the treasury.`;
+  if (key === 'airfield') {
+    if (!airWar(g)) return 'Airfields are laid out only in the grand campaign.';
+    if (builtField(g, r) >= AIRWAR.fields.engineers) return `The airfield here is as large as field engineers can make it: it serves ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft. A larger one is ordered from the treasury.`;
+    const laying = r.units.find((u) => u !== c && !u.dead && u.job?.what === 'airfield' && u.job.reg === r.id);
+    if (laying) return `${laying.name} is already laying out an airfield here.`;
+  }
   if (key === 'mines' && minesAt(g, r) >= E.mines.most) return 'The minefields here are as thick as they can be laid.';
   if (key === 'demolish' && !r.fort) return 'There are no fortifications here to demolish.';
   return null;
@@ -81,7 +91,7 @@ export function jobLine(g: Game, c: Corps): string {
   if (!c.job) return '';
   const r = g.regions[c.job.reg];
   const what = c.job.what === 'bridge' ? `rebuilding the bridges at ${r.name}` : c.job.what === 'rail' ? `relaying the railway at ${r.name}` : c.job.what === 'plant' ? `rebuilding a factory at ${r.name}`
-    : c.job.what === 'works' ? `building field works at ${r.name}` : c.job.what === 'mines' ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
+    : c.job.what === 'works' ? `building field works at ${r.name}` : c.job.what === 'airfield' ? `laying out an airfield at ${r.name}` : c.job.what === 'mines' ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
   return `${what[0].toUpperCase()}${what.slice(1)}: done when next month begins`;
 }
 
@@ -115,6 +125,12 @@ export function engineersMonth(g: Game, nat: string): void {
       if ((r.fort?.lv ?? 0) < ENGINEERING.works.most) {
         r.fort = { lv: (r.fort?.lv ?? 0) + 1, vs: facing(g, r) };
         if (mine) headline(g, 'info', `${c.name} has finished field works at ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
+      }
+    } else if (job.what === 'airfield') {
+      if (airWar(g) && builtField(g, r) < AIRWAR.fields.engineers) {
+        const had = airfieldsHold(g, r.id);
+        g.flags[`wk:field:${r.id}`] = builtField(g, r) + 1;
+        if (mine) headline(g, 'info', `${c.name} has ${had > 0 ? 'enlarged the airfield' : 'laid out an airfield'} at ${r.name}: it serves ${airfieldsHold(g, r.id).toLocaleString('en-US')} aircraft. Air groups can be based there from next month.`, nat, r.id);
       }
     } else if (job.what === 'mines') {
       const lv = Math.min(ENGINEERING.mines.most, minesAt(g, r) + 1);

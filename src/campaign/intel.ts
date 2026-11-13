@@ -79,6 +79,8 @@ export function sightOf(g: Game, viewer: string | null = g.human): Uint8Array {
     if (allied(g, r.ctrl, me) || r.units.some((u) => !u.dead && allied(g, u.nat, me))) { dist[r.id] = 0; ring.push(r.id); }
   }
   for (const a of agentsOf(g, me)) if (atWork(g, a) && dist[a.reg] !== 0) { dist[a.reg] = 0; ring.push(a.reg); }
+  // Ground the player's aircraft have photographed this month is seen as an agent on watch would see it.
+  if (me === g.human) for (const [id, turn] of Object.entries(g.intel.scout ?? {})) if (turn === g.turn && dist[+id] !== 0) { dist[+id] = 0; ring.push(+id); }
   for (let d = 1; d <= far && ring.length; d++) {
     const next: number[] = [];
     for (const id of ring) for (const j of g.regions[id].nb) if (dist[j] < 0) { dist[j] = d; next.push(j); }

@@ -16,6 +16,7 @@ import { turnToDate } from '../core/ticket';
 import { holds } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat } from './difficulty';
 import { DOMINATION, dominating } from './domination';
+import { openAirWar } from './air';
 import { startEngineers } from './engineers';
 import { NAVY } from './navy';
 import { EASTERN, allied, atWar, collapseScore, corpsBase, frozen, weather } from './game';
@@ -67,6 +68,7 @@ export function startOpen(g: Game): Game {
   openTraits(g);
   openTech(g);
   openStores(g);
+  openAirWar(g);
   // The grand campaign counts its railheads with the supply picture: draw it afresh under these rules.
   g.supplyDirty = true;
   return g;

@@ -1014,3 +1014,47 @@ p.sub.whyno { color: #f0b3a5; }
 .wshare { text-align: right; line-height: 1.05; }
 .wshare b { display: block; font-family: var(--head); font-size: 19px; }
 .wshare small { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; }
+
+/* ---- The air war as its own game: airfields on the map, the airfield card, the raid planner ---- */
+.afm { pointer-events: auto; cursor: pointer; }
+.afm .afpad { fill: #66733f; stroke: #e9dfc4; stroke-width: .8; filter: drop-shadow(0 .6px .5px rgba(0, 0, 0, .55)); }
+.afm.ally .afpad { fill: #5f6f52; }
+.afm.foe .afpad { fill: #6b5a3c; stroke: #e2664d; }
+.afm.other .afpad { fill: #6c6f62; stroke: #b9b5a8; stroke-width: .6; opacity: .8; }
+.afm .afrun { fill: none; stroke: #f1e9d4; stroke-width: 1.15; stroke-linecap: round; }
+.afm.other .afrun { opacity: .75; }
+.afm:hover .afpad { stroke: var(--brass); stroke-width: 1.3; }
+.afm .afsel { fill: rgba(217, 180, 90, .22); stroke: var(--brass); stroke-width: 1.2; stroke-dasharray: 2.4 1.6; }
+.mk.scout { stroke: #d9b45a; stroke-width: 1.4; stroke-dasharray: 3 2; fill: rgba(217, 180, 90, .22); }
+.afield { border: 1px solid var(--line); border-radius: 5px; padding: 6px 7px 2px; margin: 0 0 9px; background: rgba(0, 0, 0, .12); }
+.afield.pick { border-color: var(--brass); box-shadow: inset 0 0 0 1px rgba(217, 180, 90, .45); }
+.afield .afhead { display: flex; align-items: baseline; gap: 8px; width: 100%; text-align: left; padding: 2px 2px 6px; background: none; border: 0; color: var(--ink); cursor: pointer; flex-wrap: wrap; }
+.afield .afhead b { font-family: var(--head); font-size: 15.5px; font-weight: 600; }
+.afield .afhead span { font-size: 11.5px; color: var(--ink-2); }
+.afield .afhead:hover b { color: var(--brass); }
+.afield .corps { margin-bottom: 6px; }
+.jobs { display: grid; gap: 5px; margin: 0 0 8px; }
+.jobrow { display: block; width: 100%; text-align: left; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2); color: var(--ink-2); font-size: 11.8px; line-height: 1.35; cursor: pointer; }
+.jobrow b { display: block; color: var(--ink); font-size: 12.5px; font-weight: 600; margin-bottom: 2px; }
+.jobrow span { display: block; }
+.jobrow b .tag { display: inline-block; margin-left: 6px; vertical-align: 1px; }
+.jobrow:hover:not(:disabled) { border-color: var(--brass); }
+.jobrow.on { border-color: var(--brass); box-shadow: inset 0 0 0 1px rgba(217, 180, 90, .4); cursor: default; }
+.jobrow:disabled:not(.on) { opacity: .6; cursor: default; }
+.acts .btn.on { border-color: var(--brass); color: var(--brass); opacity: 1; }
+.orders.planner { margin: 8px 0 12px; border-left-color: var(--red); }
+.orders.planner .acts { display: flex; flex-wrap: wrap; gap: 6px; }
+.cnt { display: inline-block; min-width: 16px; padding: 0 4px; margin-left: 3px; border-radius: 8px; background: rgba(0, 0, 0, .35); font-size: 10.5px; text-align: center; }
+.lnk { background: none; border: 0; padding: 0; color: var(--brass); text-decoration: underline; cursor: pointer; font: inherit; }
+.pickrow.seat { cursor: pointer; }
+.pickrow.seat:disabled { opacity: .85; cursor: default; }
+.pickrow.seat .tick { flex: 0 0 18px; height: 18px; border: 1px solid var(--line); border-radius: 3px; display: grid; place-items: center; font-size: 12px; color: var(--brass); background: rgba(0, 0, 0, .25); }
+.pickrow.seat.pick .tick { border-color: var(--brass); }
+.raidfacts { grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); margin: 10px 0 8px; }
+.raidfacts .fact small { display: block; font-size: 11px; color: var(--ink-3); }
+.note.good { border-left-color: #4f9a5a; }
+details.cannot { margin-top: 10px; }
+details.cannot summary { cursor: pointer; font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
+@media (max-width: 820px) {
+  .afm .afpad { stroke-width: 1; }
+}

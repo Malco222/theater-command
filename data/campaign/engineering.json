@@ -11,6 +11,7 @@
     "rail": { "label": "Relay the railway", "blurb": "The track torn up or bombed in this province is relaid by next month. Trains run through again, and the armies beyond are fed from a railhead that much nearer." },
     "plant": { "label": "Rebuild a factory", "blurb": "One factory wrecked by bombing is put back to work by next month and earns again." },
     "works": { "label": "Build field works", "blurb": "Trenches, wire and gun pits: the province's fortifications rise one level, as far as level 2. Heavier works are ordered from the treasury." },
+    "airfield": { "label": "Lay out an airfield", "blurb": "Runways, dispersal pens and a fuel dump: by next month air groups can be based in this province, or more of them if it has an airfield already. Each month's work serves 500 more aircraft, as far as two levels; a larger airfield is ordered from the treasury. An airfield costs a little to keep up." },
     "mines": { "label": "Lay minefields and traps", "blurb": "Mines and booby traps on every road in. Each level takes 12% off any attack on the province and costs the enemy a move to enter it, until his own engineers clear lanes. Two levels at most." },
     "demolish": { "label": "Demolish the fortifications", "blurb": "The works here are blown up, one level a month, so that nobody can use them." }
   },

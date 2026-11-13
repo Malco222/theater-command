@@ -406,8 +406,8 @@ describe('engineers', () => {
     const sap = engineersOf(g, 'GER')[0];
     expect(g.regions[sap.reg].name).toBe('Berlin');
     const jobs = engineerJobs(g, sap);
-    expect(jobs.map((j) => j.key)).toEqual(['bridge', 'rail', 'plant', 'works', 'mines', 'demolish']);
-    expect(jobs.map((j) => j.why)).toEqual(['Every bridge here is standing.', 'The railway here is working.', 'Every factory here is at work.', null, null, 'There are no fortifications here to demolish.']);
+    expect(jobs.map((j) => j.key)).toEqual(['bridge', 'rail', 'plant', 'works', 'airfield', 'mines', 'demolish']);
+    expect(jobs.map((j) => j.why)).toEqual(['Every bridge here is standing.', 'The railway here is working.', 'Every factory here is at work.', null, null, null, 'There are no fortifications here to demolish.']);
     expect(jobs[3].label).toBe('Build field works');
     // Away from the rivers there are no bridges to rebuild.
     const dresden = clear(g.regions.find((r) => r.ctrl === 'GER' && r.owner === 'GER' && !crossingsAt(r.id).length)!);
