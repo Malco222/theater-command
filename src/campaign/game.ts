@@ -16,6 +16,8 @@ import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { techTick, winterReady } from './tech';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
+import { crown } from './domination';
+import { INTEL, intelAttack, intelTick } from './intel';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
@@ -80,7 +82,7 @@ export function createGame(seed: number, human: string | null): Game {
     seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], generals: [], nextCorps: 1, nextBuild: 1, human,
     reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, railhead: {}, capDist: {}, week: 1,
     seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], convoys: {},
-    airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {}, stories: newStories(),
+    airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {}, stories: newStories(), intel: { agents: [], next: 1, notes: [], heat: {} },
     links: md.links, width: md.width, height: md.height, land: md.land,
   };
   for (const row of (setup as any).corps) addCorps(g, row[0], row[1], row[2], row[3], row[4], row[5] ?? {});
@@ -159,7 +161,8 @@ export function atWar(g: Game, a: string, b: string): boolean {
   return g.nations[a].atWar.includes(b);
 }
 
-function setWar(g: Game, a: string, b: string): void {
+/** Puts two nations at war and says nothing about it: the declaration, the surprise and the news are declareWar's business. */
+export function setWar(g: Game, a: string, b: string): void {
   const A = g.nations[a], B = g.nations[b];
   if (!A.atWar.includes(b)) A.atWar.push(b);
   if (!B.atWar.includes(a)) B.atWar.push(a);
@@ -552,7 +555,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   const land = opts.sea === undefined;
   // Tanks that cannot get over a river whose bridges are down are no help to the infantry that does.
   const armsA = wide ? combinedArms(g, land ? attackers.filter((c) => !noCrossing(g, c.kind, c.reg, target.id)) : attackers, target, false) : null, armsD = wide ? combinedArms(g, defenders, target, true) : null;
-  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1;
+  let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1, spied = '';
   // Armies that have outrun their railhead: how far the worst of them is from it, and what it is worth there.
   let roadA = 0, railA = 1, roadD = 0, railD = 1;
   const rivers = new Set<string>();
@@ -590,6 +593,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     if (wide) { const gift = traitAttack(g, c, target, !land); if (gift !== 1) { p *= gift; giftA = Math.max(giftA, gift); } }
     // Tanks without fuel and troops without shells: a nation whose depots are empty fights weaker (the grand campaign).
     if (wide) { const short = shortAttack(g, c); if (short !== 1) { p *= short; shortA = Math.min(shortA, short); } }
+    // An agent at work in the province has mapped its defences for the attackers (the grand campaign).
+    if (wide) { const spy = intelAttack(g, c.nat, target); if (spy) { p *= spy.mul; spied = spy.agent; } }
     if (g.nations[c.nat].slowCommand) p *= 0.85;
     p *= techMul(g, c.nat, 'doctrine');
     if (opts.sea !== undefined) p *= opts.sea;
@@ -769,6 +774,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       effect: [shortA < 1 ? `Attack cut to as little as ${Math.round(shortA * 100)}%` : '', shortD < 1 ? `${shortA < 1 ? 'defence' : 'Defence'} cut to as little as ${Math.round(shortD * 100)}%` : ''].filter(Boolean).join(', '),
     });
   }
+  if (spied) lines.push({ label: 'Intelligence', value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
   if (sneaked) lines.push({ label: 'Surprise', value: 'War was declared this month on a country at peace', effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
   if (armorShock) lines.push({ label: 'Armor', value: 'Tanks against a defence without armor', effect: 'Tank attack up 25%' });
   if (armorStuck) lines.push({ label: 'Armor', value: 'Tanks in close country', effect: 'Tank attack cut to 60%' });
@@ -1127,10 +1133,12 @@ export function capitulate(g: Game, nat: string, by: string): void {
   if (!X.alive) return;
   X.alive = false;
   X.fellOn = { turn: g.turn, week: g.week, to: by };
+  // In the last act of the grand campaign nobody signs an armistice: a fallen France is simply conquered.
+  const armistice = nat === 'FRA' && !g.flags.dom;
   for (const c of g.corps.filter((c) => c.nat === nat)) {
     const at = g.regions[c.reg];
     // The Army of Africa stays at its posts and answers to the new government.
-    if (nat === 'FRA' && at.vichy && at.overseas && at.ctrl === 'FRA') { c.nat = 'VIC'; c.hold = true; continue; }
+    if (armistice && at.vichy && at.overseas && at.ctrl === 'FRA') { c.nat = 'VIC'; c.hold = true; continue; }
     removeCorps(g, c);
   }
   fleetsOnFall(g, nat);
@@ -1138,7 +1146,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
   const pact = g.nations.SOV.alive && !atWar(g, 'SOV', by);
   for (const r of g.regions) {
     if (r.owner === nat) {
-      if (nat === 'FRA' && r.vichy && r.ctrl === 'FRA') { r.owner = 'VIC'; r.ctrl = 'VIC'; }
+      if (armistice && r.vichy && r.ctrl === 'FRA') { r.owner = 'VIC'; r.ctrl = 'VIC'; }
       else if (nat === 'POL' && r.sov && pact) r.ctrl = 'SOV';
       else if (r.ctrl === nat) {
         // Ground still held by the fallen nation's allies stays in their hands until it is taken.
@@ -1149,7 +1157,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
       r.ctrl = g.nations[r.owner].alive ? r.owner : by;
     }
   }
-  if (nat === 'FRA') {
+  if (armistice) {
     const V = g.nations.VIC;
     V.alive = true; V.dormant = false;
     const cap = g.regions.find((r) => r.owner === 'VIC' && r.name === 'Auvergne') ?? g.regions.find((r) => r.owner === 'VIC');
@@ -1178,6 +1186,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
   }
   // The fall of one nation can bring down another.
   for (const n of Object.values(g.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g, n.id, by);
+  // The last act of the grand campaign: was that the last but one?
+  crown(g);
 }
 
 /** Sea transport: a nation with shipping can send a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */
@@ -1473,6 +1483,8 @@ export function startPhase(g: Game, nat: string): void {
   techTick(g, nat);
   // Oil and supplies come in and go out before the month's money is counted: idle factories earn less (the grand campaign).
   resourcesTick(g, nat);
+  // The secret war: the player's agents report, strike or are caught, and the other side's saboteurs come calling (the grand campaign).
+  intelTick(g, nat);
   computeSupply(g);
   cutOffNews(g);
   // The month's production comes in, and in the grand campaign the forces are paid out of it. Losses are made good

@@ -730,10 +730,46 @@ export interface Game {
   raids: Record<string, { turn: number; share: number }>;
   /** The roll of honour, the memorial wall, rivalries and the rest of what the unit stories keep. */
   stories: Stories;
+  /** The player's secret service (the grand campaign): the agents, what they have reported, and where the alarm is up. */
+  intel: Intel;
   links: [number, number][];
   width: number;
   height: number;
   land: [number, number][][][];
+}
+
+/** What an agent is doing: watching, reading a government's books, an act of sabotage, or guarding the home country. */
+export type Mission = 'watch' | 'books' | 'factory' | 'rail' | 'oil' | 'guard';
+
+/** A spy: a piece the player recruits, sends abroad and may lose. */
+export interface Agent {
+  id: number;
+  nat: string;
+  /** A codename. */
+  name: string;
+  /** What the agent has learned from work that came off: rank is earned from it. */
+  xp: number;
+  reg: number;
+  /** The month from which the agent is at work where it stands. Before it the agent is in training or on the road. */
+  ready: number;
+  mission: Mission;
+  /** The month it was recruited. */
+  born: number;
+  /** After an act of sabotage: the month until which the agent must lie low. */
+  rest?: number;
+  /** Quiet months of work abroad, counted toward experience. */
+  months?: number;
+}
+
+/** A line in the secret service's file: what happened, to whom, where, and whether it was good news. */
+export interface IntelNote { turn: number; agent: string; nat: string; reg: number; what: string; text: string; good: boolean }
+
+export interface Intel {
+  agents: Agent[];
+  next: number;
+  notes: IntelNote[];
+  /** Provinces on alert after an act of sabotage, and the month the alert ends. */
+  heat: Record<number, number>;
 }
 
 export const MEN_PER_DIV = 15000;

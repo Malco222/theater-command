@@ -131,7 +131,8 @@ export interface PathOption {
 }
 
 /** The player's country, if its path is its own to choose. */
-const chooser = (g: Game, nat: string): Nation | null => (ownPath(g, nat) && g.nations[nat]?.alive ? g.nations[nat] : null);
+// In the last act of the grand campaign there are no alliances left to choose between.
+const chooser = (g: Game, nat: string): Nation | null => (ownPath(g, nat) && g.nations[nat]?.alive && !g.flags.dom ? g.nations[nat] : null);
 
 /**
  * The paths open to a small country in the player's hands: join the Axis, join the Allies, stand alone, found the

@@ -15,6 +15,7 @@ import { hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { holds } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat } from './difficulty';
+import { DOMINATION, dominating } from './domination';
 import { startEngineers } from './engineers';
 import { NAVY } from './navy';
 import { EASTERN, allied, atWar, collapseScore, corpsBase, frozen, weather } from './game';
@@ -80,7 +81,9 @@ export function temper(g: Game, nat: string): Temper {
   const mood = 1 + OPEN.mood * (2 * draw(g, nat, 'mood') - 1);
   // The level of the campaign steadies or stiffens the nerve of the player's rivals: at the fair level, neither.
   const lv = nerveOf(g, nat);
-  return { attackAt: t.attackAt * mood * lv.nerve, persist: t.persist * mood * lv.nerve, minOdds: t.minOdds * lv.odds };
+  // In the last act there is nobody to wait for: a staff strikes at shorter odds than it would in an ordinary war.
+  const last = dominating(g) ? DOMINATION.nerve : { attackAt: 1, persist: 1 };
+  return { attackAt: t.attackAt * mood * lv.nerve * last.attackAt, persist: t.persist * mood * lv.nerve * last.persist, minOdds: t.minOdds * lv.odds };
 }
 
 /** A stretch of country where this nation's side is in touch with an enemy: who is there, how strong, and the way in. */
@@ -127,11 +130,19 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
   for (const r of g.regions) if (inPlay(r)) side[r.id] = foe(r.ctrl) ? 2 : allied(g, nat, r.ctrl) ? 1 : 0;
   const label = new Int16Array(N).fill(-1);
   let groups = 0;
+  // In the last act every neighbour is an enemy and none of them is another's friend: each country is a front of
+  // its own, to be weighed and taken on one at a time, not one wall of enemies right round the frontier.
+  const each = dominating(g);
   for (const r of g.regions) {
     if (!side[r.id] || label[r.id] >= 0) continue;
     const q = [r.id];
     label[r.id] = groups;
-    for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (label[j] < 0 && side[j] === side[r.id]) { label[j] = groups; q.push(j); }
+    for (let i = 0; i < q.length; i++) {
+      for (const j of g.regions[q[i]].nb) {
+        if (label[j] >= 0 || side[j] !== side[r.id] || (each && side[j] === 2 && g.regions[j].ctrl !== r.ctrl)) continue;
+        label[j] = groups; q.push(j);
+      }
+    }
     groups++;
   }
   // Friendly areas where some of this nation's army stands: only from those can it reach a front.
@@ -632,6 +643,8 @@ export function afterDeclaring(g: Game, nat: string): void {
   const list = ops(nat);
   const op = flag(g, `st:go:${nat}`) === g.turn ? list[flag(g, `st:goOp:${nat}`) - 1] : null;
   const n = g.nations[nat];
+  // In the last act there are no sides left to take.
+  if (dominating(g)) return;
   if (!op?.join || !n.alive || n.align === 'allies' || n.align === 'axis') return;
   const others = n.atWar.some((e) => { const b = g.nations[e].align; return op.join === 'allies' ? b === 'axis' || b === 'axis_cobelligerent' : b === 'allies' || b === 'allies_cobelligerent'; });
   if (!others) return;

@@ -68,7 +68,18 @@ export interface ResLine { key: string; label: string; amount: number; count?: n
 /** What an oilfield yields a month to whoever holds it: less to a conqueror than to its owner. */
 export function fieldYield(g: Game, r: Region, nat: string = r.ctrl): number {
   if (!r.oil) return 0;
-  return (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied);
+  return (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied) * (1 - fieldOut(g, r));
+}
+
+/** The share of an oilfield's yield lost to sabotage this month: wells set alight burn for months. 0 for a field at work. */
+export const fieldOut = (g: Game, r: Region): number => (resRules(g) && (g.flags[`oilout:${r.id}`] ?? 0) > g.turn ? (g.flags[`oilcut:${r.id}`] ?? 0) / 100 : 0);
+
+/** Sets an oilfield alight: it gives this much less for this many months. False where there is no field, or it is burning already. */
+export function fireField(g: Game, r: Region, months: number, cut: number): boolean {
+  if (!resRules(g) || !r.oil || fieldOut(g, r) > 0) return false;
+  g.flags[`oilout:${r.id}`] = g.turn + months;
+  g.flags[`oilcut:${r.id}`] = Math.round(cut * 100);
+  return true;
 }
 
 /** What the technology tree's fuel plants make each month: so much for every working factory at home, and none from a bombed one. */
