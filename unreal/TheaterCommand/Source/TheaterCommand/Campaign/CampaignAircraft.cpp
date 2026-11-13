@@ -289,12 +289,55 @@ namespace AircraftParts
 			M.Box(At(6.5, Hand * 1.04, 0.3), FVector(0.5, 0.05, 0.3), Glass);
 			M.Box(At(0.6, Hand * 1.15, 0.45), FVector(0.4, 0.05, 0.3), Glass);
 		}
-		// The top turret behind the pilots: a glazed dome with two guns.
-		M.Ball(At(3.7, 0.0, 1.32), FVector(1.0, 1.0, 0.8), Glass, 5, 10);
-		M.Rod(At(3.7, 0.0, 1.1), At(3.7, 0.0, 1.3), 0.52, Olive, 12);
-		for (const double Hand : { -1.0, 1.0 })
+		// The top turret behind the pilots: a round glazed dome a metre across on its turning ring, framed in metal,
+		// with two heavy machine guns side by side in their slots.
 		{
-			Gun(M, 3.9, Hand * 0.16, 1.5, 4.95, Hand * 0.16, 1.78, 0.026);
+			const double TurretF = 3.75, TurretU = 1.46; // the middle of the dome, in the roof of the flight deck
+			const double Wide = 0.5, High = 0.46; // the dome's radius, and how far it stands above the ring
+			// The ring it turns on, let into the fuselage, with a lip.
+			M.Rod(At(TurretF, 0.0, TurretU - 0.12), At(TurretF, 0.0, TurretU + 0.07), Wide + 0.045, Olive, 24);
+			M.Rod(At(TurretF, 0.0, TurretU + 0.07), At(TurretF, 0.0, TurretU + 0.1), Wide + 0.02, Dark, 24);
+			// The dome itself: smooth, and round every way.
+			M.Ball(At(TurretF, 0.0, TurretU + 0.06), FVector(2.0 * Wide, 2.0 * Wide, 2.0 * High), Glass, 12, 24);
+			// The frame: a hoop round the dome a third of the way up, and ribs over the top either side of the guns.
+			const double Proud = 1.015; // the frame stands a little proud of the glass
+			auto OnDome = [&](double Along, double Across, double Up) { return At(TurretF + Along * Proud, Across * Proud, TurretU + 0.06 + Up * Proud); };
+			const double HoopUp = 0.17, HoopOut = Wide * FMath::Sqrt(1.0 - FMath::Square(HoopUp / High));
+			const int32 Steps = 20;
+			for (int32 K = 0; K < Steps; ++K)
+			{
+				const double A0 = 2.0 * PI * K / Steps, A1 = 2.0 * PI * (K + 1) / Steps;
+				M.Rod(OnDome(HoopOut * FMath::Cos(A0), HoopOut * FMath::Sin(A0), HoopUp), OnDome(HoopOut * FMath::Cos(A1), HoopOut * FMath::Sin(A1), HoopUp), 0.014, Dark, 4);
+			}
+			for (const double Across : { -0.3, 0.3 })
+			{
+				// A rib from front to back over the top, at this distance from the middle.
+				const double Shrink = FMath::Sqrt(1.0 - FMath::Square(Across / Wide));
+				for (int32 K = 0; K < 12; ++K)
+				{
+					const double A0 = PI * K / 12, A1 = PI * (K + 1) / 12;
+					M.Rod(OnDome(Wide * Shrink * FMath::Cos(A0), Across, High * Shrink * FMath::Sin(A0)), OnDome(Wide * Shrink * FMath::Cos(A1), Across, High * Shrink * FMath::Sin(A1)), 0.014, Dark, 4);
+				}
+			}
+			// The gunner's sight and the gun cradle, seen through the glass between the guns.
+			M.Box(At(TurretF + 0.12, 0.0, TurretU + 0.2), FVector(0.3, 0.2, 0.2), Dark);
+			// The guns: each a receiver inside the dome, a perforated cooling jacket through its slot, and the barrel beyond.
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				const double Side = Hand * 0.17;
+				const FVector Breech = At(TurretF - 0.1, Side, TurretU + 0.2), Slot = At(TurretF + 0.4, Side, TurretU + 0.33);
+				const FVector Jacket = At(TurretF + 1.02, Side, TurretU + 0.5), Muzzle = At(TurretF + 1.3, Side, TurretU + 0.575);
+				M.Rod(Breech, Slot, 0.05, GunSteel, 6);
+				M.Rod(Slot, Jacket, 0.036, GunSteel, 8);
+				M.Rod(Jacket, Muzzle, 0.02, GunSteel, 6);
+				// The slot in the dome it rises and falls in: a dark strip up the front.
+				for (int32 K = 1; K < 6; ++K)
+				{
+					const double Shrink = FMath::Sqrt(1.0 - FMath::Square(Side / Wide));
+					const double A0 = PI * 0.5 * K / 7.0, A1 = PI * 0.5 * (K + 1) / 7.0;
+					M.Rod(OnDome(Wide * Shrink * FMath::Cos(A0), Side, High * Shrink * FMath::Sin(A0)), OnDome(Wide * Shrink * FMath::Cos(A1), Side, High * Shrink * FMath::Sin(A1)), 0.032, Black, 4);
+				}
+			}
 		}
 		// The radio room gun, pointing up and back through its hatch.
 		M.Box(At(-0.3, 0.0, 1.14), FVector(1.0, 0.7, 0.06), Glass);
