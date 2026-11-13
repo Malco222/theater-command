@@ -17569,7 +17569,7 @@
       if (!taken2.length && !reps.length) {
         const seen = sight(s);
         const to = [...new Set(s.corps.filter((c) => !c.dead && c.nat === nat && stood.has(c.id) && stood.get(c.id) !== c.reg && (seen[c.reg] > 0 || seen[stood.get(c.id)] > 0)).map((c) => c.reg))];
-        if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine, raids: air.flights, seas: sea.zones, view: view() });
+        if (air.flights.length) steps.push({ nat, note: [raidNote, seaNote].filter(Boolean).join(" "), taken: [], battles: [], focus: air.focus.length ? air.focus : air.flights.map((f) => f.from), mine: air.mine || sea.mine || shore.mine, raids: air.flights, seas: sea.zones, shelled: shore.regions, view: view() });
         else if (sea.zones.length || shore.regions.length) steps.push({ nat, note: seaNote, taken: [], battles: [], focus: shore.regions, mine: sea.mine || shore.mine, seas: sea.zones, shelled: shore.regions, view: view() });
         else if (to.length) steps.push({ nat, note: `${s.nations[nat].adj} forces are on the move.`, taken: [], battles: [], focus: to.slice(0, 6), mine: false, moved: true, view: view() });
         return;
@@ -17585,7 +17585,7 @@
       ].filter(Boolean);
       steps.push({
         nat,
-        note: `${s.nations[nat].adj} forces ${said.join(", ")}.${raidNote ? ` ${raidNote}` : ""}`,
+        note: `${s.nations[nat].adj} forces ${said.join(", ")}.${shore.notes.length ? ` ${shore.notes[0]}` : ""}${raidNote ? ` ${raidNote}` : ""}`,
         taken: taken2,
         raids: air.flights,
         seas: sea.zones,
