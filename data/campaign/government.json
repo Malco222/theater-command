@@ -1,0 +1,75 @@
+{
+  "_about": "Government and the war cabinet (the grand campaign). Every nation has a form of government. The player's has a war cabinet of ministers he appoints and decrees he can carry, both paid for in political capital (the same that courts neutrals and signs trade agreements), and the cabinet's trust in him, which rises with ground won and jobs done and falls with ground lost and jobs ignored. Every few months the cabinet, or an ally, sets a directive: an optional job with a deadline and a reward. Computer nations keep a caretaker cabinet and no decrees, so none of this moves their wars. Rules in src/campaign/government.ts.",
+  "forms": {
+    "democracy": { "name": "Parliamentary democracy", "blurb": "The cabinet answers to a parliament and a free press. It gives its confidence quickly and takes it back as fast: good news and bad both count for more.", "capital": 0, "swing": 1.25, "start": 60, "fallsAt": 20, "crisis": "loses a vote of confidence" },
+    "oneparty": { "name": "One-party state", "blurb": "The party is the state, and the leader's word is its law: 1 more political capital a month. The cabinet's confidence moves slowly either way, and it takes a great deal to shake it.", "capital": 1, "swing": 0.75, "start": 70, "fallsAt": 12, "crisis": "is purged after a plot against the leadership" },
+    "authoritarian": { "name": "Authoritarian government", "blurb": "A strong man, a regent or a king's ministers rule with the army behind them. The cabinet follows while the news is good.", "capital": 0, "swing": 1, "start": 60, "fallsAt": 16, "crisis": "is dismissed by the head of state" }
+  },
+  "nations": {
+    "_default": "authoritarian",
+    "GER": "oneparty", "ITA": "oneparty", "SOV": "oneparty",
+    "UK": "democracy", "FRA": "democracy", "USA": "democracy", "NED": "democracy", "BEL": "democracy", "NOR": "democracy", "DEN": "democracy", "SWE": "democracy", "FIN": "democracy", "SUI": "democracy", "IRL": "democracy", "LUX": "democracy"
+  },
+  "capital": { "lowTrust": 35, "lowShare": 0.5, "highTrust": 75, "highAdd": 1 },
+  "trust": {
+    "rest": 55, "drift": 0.1,
+    "province": 1, "home": 1.5, "win": 0.5, "defeat": 0.5, "capitalTaken": 6, "debt": 2, "ringed": 3,
+    "cap": 5, "crisisMonths": 3, "afterCrisis": 45
+  },
+  "appoint": { "cost": 6, "wait": 4 },
+  "seats": [
+    { "id": "staff", "name": "Chief of the General Staff" },
+    { "id": "arms", "name": "Minister of Armaments" },
+    { "id": "foreign", "name": "Foreign Minister" },
+    { "id": "finance", "name": "Minister of Finance" }
+  ],
+  "ministers": [
+    { "id": "caretaker", "seat": "*", "name": "A caretaker", "plus": "Keeps the office running", "minus": "Changes nothing", "effects": {} },
+    { "id": "organiser", "seat": "staff", "name": "The organiser", "plus": "Replacements reach the armies 15% faster", "minus": "He fights the cabinet for every man: half a point less political capital a month", "effects": { "drafts": 1.15, "capital": -0.5 } },
+    { "id": "reformer", "seat": "staff", "name": "The reformer", "plus": "Research goes 10% faster", "minus": "Depots are stripped for his experiments: replacements 5% slower", "effects": { "research": 1.1, "drafts": 0.95 } },
+    { "id": "industrialist", "seat": "arms", "name": "The industrialist", "plus": "New corps cost 8% less", "minus": "His firms take their share: income down 2%", "effects": { "cost": 0.92, "income": 0.98 } },
+    { "id": "planner", "seat": "arms", "name": "The planner", "plus": "Every factory is given a quota: income up 5%", "minus": "The army waits its turn: new corps cost 4% more", "effects": { "income": 1.05, "cost": 1.04 } },
+    { "id": "merchant", "seat": "foreign", "name": "The merchant", "plus": "Trade agreements pay 25% more", "minus": "The cabinet distrusts his friends abroad: its trust falls a little each month", "effects": { "trade": 1.25, "trust": -0.3 } },
+    { "id": "statesman", "seat": "foreign", "name": "The statesman", "plus": "He carries parliament, party or court with him: 1 more political capital a month", "minus": "Trade is beneath him: agreements pay 10% less", "effects": { "capital": 1, "trade": 0.9 } },
+    { "id": "taxman", "seat": "finance", "name": "The taxman", "plus": "Nothing escapes him: income up 6%", "minus": "Nobody thanks him: the cabinet's trust falls each month", "effects": { "income": 1.06, "trust": -0.5 } },
+    { "id": "paymaster", "seat": "finance", "name": "The paymaster", "plus": "Wages, pensions and bread prices are kept steady: the cabinet's trust rises each month", "minus": "It costs money: income down 3%", "effects": { "trust": 0.5, "income": 0.97 } }
+  ],
+  "decree": { "wait": 6 },
+  "tracks": [
+    {
+      "id": "economy", "name": "The economy",
+      "steps": [
+        { "id": "peace", "name": "Peacetime economy", "text": "Shops are full and factories work one shift.", "effects": {} },
+        { "id": "war", "name": "War economy", "text": "Factories go over to war work: income up 6%. The shortages are felt: the cabinet's trust falls a little each month.", "cost": 8, "needs": "war", "effects": { "income": 1.06, "trust": -0.3 } },
+        { "id": "total", "name": "Total mobilisation", "text": "Everything for the front: income up 12%. The country is driven hard: the cabinet's trust falls each month.", "cost": 12, "needs": "long", "effects": { "income": 1.12, "trust": -0.8 } }
+      ]
+    },
+    {
+      "id": "service", "name": "The call-up",
+      "steps": [
+        { "id": "reserve", "name": "Volunteers and reservists", "text": "The army is fed from the trained classes.", "effects": {} },
+        { "id": "conscription", "name": "General conscription", "text": "Every fit man is called: replacements 20% faster. Workers leave the benches: income down 2%.", "cost": 6, "needs": "war", "effects": { "drafts": 1.2, "income": 0.98 } },
+        { "id": "levy", "name": "The last levy", "text": "Boys and old men are called up: replacements 45% faster. Income down 6%, and the cabinet's trust falls each month.", "cost": 10, "needs": "pressed", "effects": { "drafts": 1.45, "income": 0.94, "trust": -0.5 } }
+      ]
+    }
+  ],
+  "needs": { "longMonths": 12, "pressedHome": 0.1, "pressedMonths": 30 },
+  "directives": {
+    "first": 3, "every": 4, "retry": 2,
+    "success": { "trust": 4 },
+    "missed": { "base": 2, "step": 2, "most": 8, "rest": 5, "restMost": 25 },
+    "take": { "months": { "village": 4, "town": 4, "city": 5, "capital": 6 }, "capital": { "village": 3, "town": 4, "city": 6, "capital": 10 }, "money": { "village": 0.2, "town": 0.25, "city": 0.4, "capital": 0.6 } },
+    "hold": { "months": 4, "capital": 6, "odds": 1.5 },
+    "raise": { "months": 5, "grow": 1.2, "least": 5, "capital": 5 },
+    "relief": { "months": 5, "capital": 4, "corps": "inf", "pressed": 0.15 }
+  },
+  "notes": {
+    "forms": "'capital' is political capital a month the form adds to the nation's own; 'swing' multiplies every gain and loss of trust; 'start' is the trust a cabinet begins with; at or under 'fallsAt' for 'trust.crisisMonths' months running the cabinet falls.",
+    "capital": "Political capital is the nation's own (diplomacy.json: what it earns a month and the most it can hold). Under 'lowTrust' the cabinet withholds 'lowShare' of the monthly income; at 'highTrust' or over it adds 'highAdd'.",
+    "trust": "Each month trust moves 'drift' of the way back toward 'rest', then by the month's news: 'province' for each province gained, 'home' for each home province lost, 'win' and 'defeat' for each battle, 'capitalTaken' for an enemy capital, 'debt' while the treasury is in debt, 'ringed' while the capital is under siege. No single cause moves it more than 'cap' in a month.",
+    "appoint": "'cost' in political capital to put a minister in a seat, and 'wait' months before that seat can change again.",
+    "ministers": "Each has a seat ('*' for any), a gain and a price. 'effects' multiply income, drafts (replacements), cost (new corps), research and trade, or add to capital and trust each month.",
+    "tracks": "Decrees in steps. Each step replaces the one before. 'needs': 'war' at war; 'long' at war for 'needs.longMonths' months or with home ground lost; 'pressed' with 'needs.pressedHome' of the home country lost or 'needs.pressedMonths' months of war. Stepping down is free; the track cannot be raised again for 'decree.wait' months.",
+    "directives": "The first comes 'first' months into the player's campaign and another 'every' months after one ends ('retry' if nothing fitted). 'missed': trust lost for one ignored, 'base' and 'step' more for each ignored in a row, to 'most'; and for each ignored in a row the level trust settles at falls by 'rest', to 'restMost', until one is carried out. take: months and rewards by the size of the town, money as a share of a month's income. hold: a province of the player's own under siege, or with 'odds' times its own troops standing against it next door. raise: the army brought to 'grow' times its strength. relief: an ally who has lost 'pressed' of its home asks for an attack on its enemy; the reward is a corps of this kind."
+  }
+}

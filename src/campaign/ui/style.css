@@ -1480,3 +1480,81 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
 .alert.besieged { border-right-color: var(--red); }
 .alerts.inpane .alert.besieged { border-left-color: var(--red); }
 @media (max-width: 520px) { .sgfacts { grid-template-columns: repeat(2, 1fr); } }
+
+/* The war cabinet (the grand campaign): the trust meter, the directive, the four offices and the decree ladders. */
+.gov .facts { grid-template-columns: repeat(4, 1fr); }
+.gov .fact b small { font-family: var(--body); font-size: 11px; font-weight: 400; color: var(--ink-3); }
+.gvtrust { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: center; margin-top: 4px; }
+.gvnum { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 10px; }
+.gvnum b { font-family: var(--head); font-size: 40px; font-weight: 700; line-height: 1; color: var(--paper); }
+.gvnum span { font-family: var(--head); font-size: 17px; color: var(--brass); }
+.gvnum small { flex-basis: 100%; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin-top: 3px; }
+.gvmeter { position: relative; height: 14px; border-radius: 7px; background: var(--panel-3); overflow: visible; }
+.gvmeter .z { position: absolute; top: 0; bottom: 0; opacity: .85; }
+.gvmeter .z.fall { left: 0; background: #7d2f24; border-radius: 7px 0 0 7px; }
+.gvmeter .z.doubt { background: #7a5a1c; }
+.gvmeter .z.firm { background: #2f6a3a; border-radius: 0 7px 7px 0; }
+.gvmeter .rest { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink-3); }
+.gvmeter .pin { position: absolute; top: -5px; width: 12px; height: 24px; margin-left: -6px; border-radius: 3px; background: var(--paper); border: 2px solid var(--brass); box-shadow: 0 1px 4px rgba(0, 0, 0, .5); }
+.gvscale { position: relative; height: 16px; margin-top: 7px; }
+.gvscale span { position: absolute; transform: translateX(-50%); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.gvmoved { display: flex; flex-wrap: wrap; gap: 5px 12px; align-items: baseline; margin-top: 8px; font-size: 12px; color: var(--ink-2); }
+.gvmoved small { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.gvmoved .up b { color: #b8dcb2; }
+.gvmoved .down b { color: #f0b3a5; }
+.gvdir { background: var(--panel-2); border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: 0 5px 5px 0; padding: 10px 12px; }
+.gvdir.late { border-left-color: var(--red); }
+.gvdir.none { border-left-color: var(--ink-3); }
+.gvdir p { margin: 6px 0 0; font-size: 13px; color: var(--ink-2); }
+.gvdir p.gvprog { color: var(--ink); }
+.gvdhead { display: flex; align-items: center; gap: 10px; }
+.gvdhead .grow { flex: 1; min-width: 0; }
+.gvdhead small { display: block; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.gvdhead b { font-family: var(--head); font-size: 20px; font-weight: 600; line-height: 1.15; color: var(--paper); }
+.gvclock { text-align: center; padding: 3px 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); }
+.gvclock b { display: block; font-family: var(--head); font-size: 22px; line-height: 1; color: var(--brass); }
+.gvdir.late .gvclock b { color: #f0b3a5; }
+.gvclock small { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; }
+.gvterms { display: grid; gap: 4px; margin-top: 8px; font-size: 12.5px; color: var(--ink-2); }
+.gvdir .acts { margin-top: 9px; }
+.gvseats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; clear: both; }
+.gvseat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 8px 9px 4px; }
+.gvseat:not(.empty) { border-color: var(--brass); }
+.gvsh { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; }
+.gvsh small { grid-column: 1 / -1; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.gvsh b { font-family: var(--head); font-size: 18px; font-weight: 600; color: var(--paper); }
+.gvseat.empty .gvsh b { color: var(--ink-3); }
+.gvpm { margin: 2px 0 7px; font-size: 12.5px; color: var(--ink-3); }
+.gov .plus { color: #b8dcb2; }
+.gov .minus { color: #f0b3a5; }
+.gov .buy small.plus { color: #b8dcb2; }
+.gov .buy small.minus { color: #e3a597; }
+.gvtrack { margin-bottom: 8px; clear: both; }
+.gvtrack h4 { margin: 0 0 5px; font-family: var(--head); font-size: 15px; font-weight: 600; letter-spacing: .03em; color: var(--ink); }
+.gvsteps { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr); align-items: stretch; gap: 4px; }
+.gvstep { background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 7px 9px; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.gvstep.on { border-color: var(--brass); box-shadow: inset 0 0 0 1px var(--brass); }
+.gvstep.past { opacity: .6; }
+.gvstep b { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.gvstep small { font-size: 11.5px; line-height: 1.3; color: var(--ink-2); }
+.gvstep small.whyno { color: #f0b3a5; }
+.gvstep .btn, .gvstep .tag { margin-top: auto; }
+.gvarrow { align-self: center; font-style: normal; color: var(--ink-3); }
+.gvsums { display: flex; flex-wrap: wrap; gap: 5px; }
+.gvsums .tag { font-size: 11.5px; padding: 3px 7px; text-transform: none; letter-spacing: 0; }
+.gvlog { list-style: none; margin: 0; padding: 0; font-size: 12.5px; color: var(--ink-2); }
+.gvlog li { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 8px; padding: 3px 0; border-top: 1px solid var(--line); }
+.gvlog small { color: var(--ink-3); }
+.alert.directive { border-right-color: var(--brass); }
+.alert.cabinetfall { border-right-color: var(--red); }
+.alerts.inpane .alert.directive { border-left-color: var(--brass); }
+.alerts.inpane .alert.cabinetfall { border-left-color: var(--red); }
+@media (max-width: 760px) {
+  .gov .facts { grid-template-columns: repeat(2, 1fr); }
+  .gvtrust { grid-template-columns: 1fr; gap: 10px; }
+  .gov h3 .inhand { float: none; display: block; margin-top: 2px; }
+  .gvseats { grid-template-columns: 1fr; }
+  .gvsteps { grid-template-columns: 1fr; }
+  .gvarrow { display: none; }
+  .gvlog li { grid-template-columns: 1fr; gap: 0; }
+}

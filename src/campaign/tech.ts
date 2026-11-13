@@ -11,6 +11,7 @@ import { RESEARCH } from './research';
 import { traitRule, type Trait, type When } from './traits';
 import { RES, keepsStores, oilMonths } from './resources';
 import { researchSpeed } from './buildings';
+import { govMul } from './government';
 import type { Field, Game, Nation, TechState } from './types';
 
 export type Branch = 'land' | 'air' | 'naval' | 'industry' | 'doctrine';
@@ -217,7 +218,7 @@ function month(g: Game, n: Nation, turn: number, staffed: boolean, quiet: boolea
   const s = n.tech!;
   const due: string[] = [];
   // Schools and institutes at home quicken every team.
-  const pace = researchSpeed(g, n.id);
+  const pace = researchSpeed(g, n.id) * govMul(g, n.id, 'research');
   for (const w of s.work) { w.left -= pace; if (w.left <= 1e-9) due.push(w.id); }
   if (due.length) {
     s.work = s.work.filter((w) => w.left > 1e-9);

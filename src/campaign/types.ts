@@ -89,6 +89,57 @@ export interface Nation {
   tech?: TechState;
   /** Oil and supplies in the depots (the grand campaign), for a power that keeps stocks of its own. */
   res?: Stores;
+  /** The player's government (the grand campaign): his war cabinet, his decrees, the cabinet's trust and its directive. */
+  gov?: GovState;
+}
+
+/** A job the war cabinet, or an ally, has set the player (the grand campaign): optional, with a deadline and a reward. */
+export interface Directive {
+  /** The month it was set: one at a time, so that names it. */
+  id: number;
+  nat: string;
+  /** Take a town, hold one of his own, bring the army up to strength, or strike an ally's enemy. */
+  kind: 'take' | 'hold' | 'raise' | 'relief';
+  /** Who set it: the nation's own cabinet, or an ally. */
+  from: string;
+  region?: number;
+  /** For 'raise': the army to reach, in divisions. */
+  target?: number;
+  issued: number;
+  /** The last month it can be done in. */
+  due: number;
+  /** The reward: political capital, money and, from an ally, a corps. */
+  capital: number;
+  money: number;
+  corps?: Kind;
+  title: string;
+  text: string;
+}
+
+/** The player's government (the grand campaign). Rules in government.ts. */
+export interface GovState {
+  /** The war cabinet's trust in him, 0 to 100. */
+  trust: number;
+  /** The minister in each seat, by id; an empty seat is a caretaker's. */
+  seats: Record<string, string>;
+  /** The step each decree track stands at. */
+  steps: Record<string, number>;
+  /** The month a seat ('seat:<id>') can change hands again, or a track ('track:<id>') be raised again. */
+  wait: Record<string, number>;
+  /** The month the next directive is set. */
+  next: number;
+  /** Directives ignored in a row, and carried out in all. */
+  missed: number;
+  done: number;
+  /** Months running the cabinet has had no trust left. */
+  low: number;
+  log: { turn: number; text: string }[];
+  /** How things stood when the cabinet last read the news. */
+  mark: { held: number; home: number; caps: number; report: number };
+  /** What moved the cabinet's trust since it last read the news, cause by cause. */
+  last?: { label: string; amount: number }[];
+  dir?: Directive;
+  lastKind?: string;
 }
 
 /** A trade agreement between two countries (the grand campaign). It pays both every month. */

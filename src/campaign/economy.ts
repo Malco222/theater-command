@@ -24,6 +24,7 @@ import { TECH, locked, whyNoPara } from './tech';
 import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
+import { govMul } from './government';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -52,7 +53,12 @@ export function corpsKinds(g: Game): Kind[] {
 }
 
 /** What a corps of this kind costs this nation: the list price, less what its own abilities take off (the grand campaign). */
-export const corpsCost = (g: Game, nat: string, kind: string): number => priceOf(g, nat, `corps:${kind}`, specOf(g, kind)?.cost ?? 0);
+export function corpsCost(g: Game, nat: string, kind: string): number {
+  const price = priceOf(g, nat, `corps:${kind}`, specOf(g, kind)?.cost ?? 0);
+  // The player's Minister of Armaments drives the price down, or up (the grand campaign).
+  const m = govMul(g, nat, 'cost');
+  return m === 1 ? price : Math.round(price * m * 10) / 10;
+}
 
 /** How many factories a province must have for a corps of this kind to be raised there. None in a historical scenario. */
 export const needsOf = (g: Game, kind: string): number => (budgeted(g) ? (arsenalData.needs as Record<string, number>)[kind] ?? 0 : 0);
@@ -217,7 +223,9 @@ export function ledger(g: Game, nat: string): Ledger {
   const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
   const hard = budget ? incomeMul(g, nat) : 1;
   const fed = budget ? supIncome(g, nat) : 1;
-  const gross = budget ? afterAir * tech * hard * gift.mul * fed : income(g, nat);
+  // The player's ministers and decrees (the grand campaign).
+  const cabinet = budget ? govMul(g, nat, 'income') : 1;
+  const gross = budget ? afterAir * tech * hard * gift.mul * fed * cabinet : income(g, nat);
   const lines: LedgerLine[] = [
     { key: 'capital', label: budget ? 'The capital and the state' : 'The state', amount: seat },
     { key: 'factories', label: 'Factories at home', amount: facHome, count: nHome },
@@ -241,6 +249,7 @@ export function ledger(g: Game, nat: string): Ledger {
     { key: 'level', label: `Difficulty: ${levelOf(g).name}`, amount: afterAir * tech * (hard - 1) },
     { key: 'trait', label: gift.mulBy, amount: afterAir * tech * hard * (gift.mul - 1) },
     { key: 'supplies', label: 'Factories idle for want of supplies', amount: afterAir * tech * hard * gift.mul * (fed - 1) },
+    { key: 'cabinet', label: 'The war cabinet and its decrees', amount: afterAir * tech * hard * gift.mul * fed * (cabinet - 1) },
   ];
   const costs = upkeep(g, nat);
   const upkeepTotal = costs.reduce((s, l) => s + l.amount, 0);
@@ -272,7 +281,7 @@ export function income(g: Game, nat: string): number {
     // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
     const gift = traitMoney(g, nat);
     // Factories short of steel, coal and rubber stand idle part of the month.
-    return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul * supIncome(g, nat);
+    return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul * supIncome(g, nat) * govMul(g, nat, 'income');
   }
   let fac = 0;
   for (const r of g.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;

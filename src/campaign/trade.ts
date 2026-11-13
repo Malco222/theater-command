@@ -7,6 +7,7 @@
 import data from '../../data/campaign/trade.json';
 import diplomacyData from '../../data/campaign/diplomacy.json';
 import { civicSum } from './buildings';
+import { govMul } from './government';
 import { provinceYield } from './economy';
 import { atWar, bloc, headline } from './game';
 import { canPass, closedTo, seaRisk, zoneOf } from './navy';
@@ -272,7 +273,7 @@ export function tradeIncome(g: Game, nat: string): number {
   if (!tradeRules(g) || !g.trade.length) return 0;
   let sum = 0;
   for (const d of g.trade) if ((d.a === nat || d.b === nat) && d.state !== 'cut') sum += d.worth * (1 - d.lost);
-  return sum > 0 ? sum * (1 + civicSum(g, nat).trade) : 0;
+  return sum > 0 ? sum * (1 + civicSum(g, nat).trade) * govMul(g, nat, 'trade') : 0;
 }
 
 /** The partner that would pay a country most, of those that would sign now. */
