@@ -17,6 +17,7 @@ import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { techTick, winterReady } from './tech';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
 import { crown } from './domination';
+import { afterFall, recordFall, retaken, standsFreed } from './liberation';
 import { INTEL, intelAttack, intelTick } from './intel';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
@@ -82,7 +83,7 @@ export function createGame(seed: number, human: string | null): Game {
     seed, rng: new Rng(seed), turn: 1, phase: 0, order, nations, regions, byName, corps: [], generals: [], nextCorps: 1, nextBuild: 1, human,
     reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, railhead: {}, capDist: {}, week: 1,
     seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], convoys: {},
-    airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {}, stories: newStories(), intel: { agents: [], next: 1, notes: [], heat: {} },
+    airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {}, stories: newStories(), intel: { agents: [], next: 1, notes: [], heat: {} }, passings: [],
     links: md.links, width: md.width, height: md.height, land: md.land,
   };
   for (const row of (setup as any).corps) addCorps(g, row[0], row[1], row[2], row[3], row[4], row[5] ?? {});
@@ -1028,6 +1029,8 @@ export function capture(g: Game, r: Region, nat: string): void {
   // Overseas the prizes are the ports: whoever holds them feeds the army that fights there.
   else if (r.overseas && r.port && r.vp > 0 && atWar(g, nat, old)) headline(g, 'battle', `${r.name} falls to ${g.nations[nat].adj} forces.`, old, r.id);
   checkCollapse(g, old, nat);
+  // The grand campaign: a fallen country whose capital its conqueror's enemies now hold comes back into the war.
+  retaken(g, r, nat);
 }
 
 /**
@@ -1113,6 +1116,8 @@ export function collapseScore(g: Game, nat: string): number {
 export function checkCollapse(g: Game, nat: string, by: string): void {
   const n = g.nations[nat];
   if (!n || !n.alive || n.capital < 0) return;
+  // A country that has been liberated stands for as long as its capital does (the grand campaign).
+  if (standsFreed(g, n)) return;
   if (collapseScore(g, nat) >= n.resilience) capitulate(g, nat, by);
 }
 
@@ -1132,9 +1137,12 @@ export function capitulate(g: Game, nat: string, by: string): void {
   const X = g.nations[nat];
   if (!X.alive) return;
   X.alive = false;
-  X.fellOn = { turn: g.turn, week: g.week, to: by };
-  // In the last act of the grand campaign nobody signs an armistice: a fallen France is simply conquered.
-  const armistice = nat === 'FRA' && !g.flags.dom;
+  X.fellOn = { turn: g.turn, week: g.week, to: by, how: 'beaten' };
+  recordFall(g, nat, by, 'beaten');
+  // In the last act of the grand campaign nobody signs an armistice: a fallen France is simply conquered. So is a
+  // France that had been liberated and falls a second time.
+  const armistice = nat === 'FRA' && !g.flags.dom && !X.freedOn;
+  delete X.freedOn;
   for (const c of g.corps.filter((c) => c.nat === nat)) {
     const at = g.regions[c.reg];
     // The Army of Africa stays at its posts and answers to the new government.
@@ -1186,6 +1194,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
   }
   // The fall of one nation can bring down another.
   for (const n of Object.values(g.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g, n.id, by);
+  // The grand campaign: this fall may have put another country's capital into the hands of that country's friends.
+  afterFall(g, nat);
   // The last act of the grand campaign: was that the last but one?
   crown(g);
 }

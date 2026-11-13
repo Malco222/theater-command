@@ -1,0 +1,12 @@
+{
+  "_about": "The fall of nations and their return. Every fall is kept on a roll that both interfaces read, in every campaign. The return is a rule of the grand campaign only: a country beaten in the field comes back when its capital is in the hands of an alliance member at war with the country that conquered it (or whose conqueror has itself fallen), and ground of the fallen country has just been taken or its conqueror has just been beaten. 'gap' is how many months must pass after the fall first. The freed country joins its liberator's alliance, is at war with its liberator's enemies, and takes back every province of its own that its new allies hold. 'never' lists countries that do not return (Vichy is a government, not a country: its ground goes back to a freed France). A country annexed outright or divided by treaty does not return either, and nor does anyone in the last act of the grand campaign, when there are no alliances left to join. The League frees only countries that could be members of it. 'army' is what a freed country puts in the field the day it returns: one corps, and one more for every 'perVp' victory points of home ground it has on the map, up to 'most', each of 'divs' divisions of infantry at 'str' strength, 'org' organisation and 'xp' experience. A freed country stands for as long as its capital does: it cannot be brought down again while the capital is in its own side's hands.",
+  "gap": 1,
+  "never": ["VIC"],
+  "army": { "perVp": 12, "most": 3, "divs": 2, "str": 0.8, "org": 0.6, "xp": 0.1 },
+  "lines": {
+    "freed": "{Name} is liberated. {adj} troops hold {capital}, and {name} returns to the war {side}.",
+    "freedAfter": "{Name} is liberated. With {foe} beaten, {capital} is in {adj} hands, and {name} returns {side}.",
+    "freedSelf": "{Name} is liberated. {adj} troops hold {capital}: the country is yours to lead again, {side}.",
+    "sides": { "allies": "beside the Allies", "axis": "beside the Axis", "league": "as a member of the League" }
+  }
+}

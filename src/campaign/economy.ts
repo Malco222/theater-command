@@ -281,7 +281,7 @@ function roman(n: number): string {
   return out;
 }
 
-function corpsName(nat: string, kind: Kind, no: number): string {
+export function corpsName(nat: string, kind: Kind, no: number): string {
   const arm = PRODUCTION.armourName[nat] ?? PRODUCTION.armourName._default;
   const word = kind === 'arm' ? `${arm} ` : kind === 'mot' ? 'Motorized ' : kind === 'mtn' ? 'Mountain ' : kind === 'art' ? 'Artillery ' : kind === 'eng' ? 'Engineer ' : '';
   return `${roman(no)} ${word}Corps`;

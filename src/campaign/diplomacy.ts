@@ -14,6 +14,7 @@ import { alertNation, traitsMonth } from './traits';
 import { techMonth } from './tech';
 import { fleetsOnFall } from './navy';
 import { airOnFall } from './air';
+import { recordFall } from './liberation';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -390,9 +391,10 @@ function fire(g: Game, e: DiploEvent): boolean {
       // A country already in the war is no longer Moscow's to take, nor one that stands in an alliance, nor the player's own.
       if (!n?.alive || n.atWar.length || bloc(n) || ownPath(g, id)) continue;
       for (const c of g.corps.filter((c) => c.nat === id)) removeCorps(g, c);
+      recordFall(g, id, e.annex.by, 'annexed');
       for (const r of g.regions) if (r.owner === id) transfer(g, r, e.annex.by);
       n.alive = false;
-      n.fellOn = { turn: g.turn, week: g.week, to: e.annex.by };
+      n.fellOn = { turn: g.turn, week: g.week, to: e.annex.by, how: 'annexed' };
       did = true;
     }
     if (!did) return false;
@@ -499,7 +501,8 @@ function fire(g: Game, e: DiploEvent): boolean {
     for (const r of g.regions) if (r.ctrl === X.id) { r.ctrl = heir; r.cap = false; r.since = g.turn; }
     X.alive = false;
     X.align = 'independent'; // its ground is nobody's ally's now: whoever holds a piece holds it as a conquest
-    X.fellOn = { turn: g.turn, week: g.week, to: heir };
+    X.fellOn = { turn: g.turn, week: g.week, to: heir, how: 'terms' };
+    recordFall(g, X.id, heir, 'terms');
     for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((x) => x !== X.id);
     X.atWar = [];
     g.supplyDirty = true;

@@ -72,7 +72,10 @@ export interface Nation {
   /** Turn each current offensive began, by enemy. */
   offStart: Record<string, number>;
   lastFight: Record<string, number>;
-  fellOn?: { turn: number; week: number; to: string };
+  /** When it fell, and to whom. 'how' is absent in a save from before it was kept: such a fall counts as a defeat in the field. */
+  fellOn?: { turn: number; week: number; to: string; how?: Passing['how'] };
+  /** The grand campaign: when it was liberated, and by whom. A freed country stands for as long as its capital does. */
+  freedOn?: { turn: number; week: number; by: string };
   /** The nation's design teams and how far each branch of research has come. Null for a nation that buys its weapons abroad. */
   lab: Lab | null;
   /** A member of the League, the third alliance of smaller nations (the grand campaign). It stands off the track between the two blocs. */
@@ -748,10 +751,40 @@ export interface Game {
   stories: Stories;
   /** The player's secret service (the grand campaign): the agents, what they have reported, and where the alarm is up. */
   intel: Intel;
+  /** The roll of nations that have left the war and of those that came back into it, oldest first. */
+  passings: Passing[];
   links: [number, number][];
   width: number;
   height: number;
   land: [number, number][][][];
+}
+
+/**
+ * A nation leaving the war, or coming back into it. Both interfaces announce these.
+ */
+export interface Passing {
+  id: number;
+  turn: number;
+  week: number;
+  kind: 'fell' | 'freed';
+  nat: string;
+  /** Who it fell to, or who freed it. */
+  by: string;
+  /** Beaten in the field, taken over whole by treaty, or divided by the terms of a peace; or freed. */
+  how: 'beaten' | 'annexed' | 'terms' | 'freed';
+  /** Its capital (a region id), or -1 for a country that has none on the map. */
+  capital: number;
+  /** For a fall: the home provinces that passed out of its hands. For a return: the provinces handed back to it that day. */
+  provinces: number;
+  /** For a fall: how many weeks of war it had been in. */
+  weeks?: number;
+  /** For a return: the corps it put in the field, and the alliance it joined. */
+  corps?: number;
+  side?: 'allies' | 'axis' | 'league';
+  /** For a return that nobody fought for at the capital: the nation whose fall left that capital in friendly hands. */
+  after?: string;
+  /** True if this was the player's own country. */
+  player?: boolean;
 }
 
 /** What an agent is doing: watching, reading a government's books, an act of sabotage, or guarding the home country. */

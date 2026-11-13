@@ -13,7 +13,7 @@ import {
   previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
-  invasions, previewDeclare,
+  invasions, previewDeclare, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
@@ -41,6 +41,7 @@ import { phaseFor, theatrePhases } from '../ai';
 import { SIDE_NAME } from '../domination';
 import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
 import { fronts, isOpen, startOpen } from '../staff';
+import { liberate } from '../liberation';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCost, isHome, ledger, needsOf, provinceYield, raiseSite, specOf, type Ledger, type LedgerLine } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
 import { loadGame, peekSave, saveGame, staleSave } from '../save';
@@ -82,6 +83,8 @@ const ui = {
   raid: '' as '' | 'menu' | RaidKind,
   lead: -1,
   seenAir: 0,
+  /** How far down the roll of fallen and freed nations the player has been shown. */
+  seenPass: 0,
   /** A one-line answer to the last click, shown where the hint is. */
   msg: '',
   /** False until a game has been started or resumed, so the title screen never overwrites a saved game. */
@@ -391,7 +394,7 @@ function mount(): void {
         <div class="passing" id="passing"></div>
         <div class="alerts" id="alerts"></div>
         <div class="tray" id="tray"></div>
-        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg><span id="legair">Air fleet</span></span><span id="legfield" hidden><svg width="19" height="14" viewBox="-9.5 -7 19 14" style="vertical-align:-3px;margin-right:4px"><rect x="-8.5" y="-6" width="17" height="12" rx="2" fill="#66733f" stroke="#e9dfc4" stroke-width=".9"/><path d="M-6.3 2.4H6.3M0 -4.3L-4.6 4M0 -4.3L4.6 4" fill="none" stroke="#f1e9d4" stroke-width="1.3" stroke-linecap="round"/></svg>Airfield: click to open</span></div>
+        <div class="legend"><span><i style="background:rgba(92,170,96,.5);border-color:#2f6b39"></i>Can march here</span><span><i style="background:rgba(207,90,65,.55);border-color:#a22d18"></i>Can attack</span><span id="legwar" hidden><i style="background:rgba(224,170,60,.5);border-color:#b07a12"></i>Neutral: marching in means war</span><span id="legleague" hidden><i style="background:rgba(42,157,143,.6);border-color:#1c6b61"></i>The League</span><span><i style="background:repeating-linear-gradient(45deg,#8a8a80 0 2px,#cfc9b8 2px 4px);border-color:#555"></i>Occupied</span><span id="legfree" hidden><svg width="14" height="14" viewBox="-7 -7 14 14" style="vertical-align:-3px;margin-right:4px"><circle r="5.2" fill="none" stroke="#e8c15a" stroke-width="1.6" stroke-dasharray="2.6 1.8"/></svg>Fallen capital: take it to free the country</span><span id="legfog" hidden><i style="background:rgba(16,20,26,.62);border-color:#2a2f36"></i>Unseen ground: send an agent</span><span id="legsteep" hidden><svg width="15" height="10" viewBox="-6 -4.6 12 8" style="vertical-align:-1px;margin-right:4px"><path d="${PEAKS}" fill="none" stroke="#cfc9b8" stroke-width="1.1" stroke-linejoin="round"/></svg>Too steep for tanks</span><span id="legbridge" hidden><svg width="16" height="10" viewBox="-5.5 -3.4 11 6.8" style="vertical-align:-1px;margin-right:4px"><path d="M-3.6 -1.2H-1.1M1.1 -1.2H3.6M-3.6 1.2H-1.1M1.1 1.2H3.6M-1.5 -2.3L1.5 2.3M1.5 -2.3L-1.5 2.3" fill="none" stroke="#e2664d" stroke-width="1" stroke-linecap="round"/></svg>Bridges down</span><span id="legrail" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#15120f" stroke-width="3" stroke-linecap="round"/><path d="M1 4H17" stroke="#f1e9d4" stroke-width="1.5" stroke-dasharray="2.4 2.4"/></svg>Railway</span><span id="legrailcut" hidden><svg width="18" height="8" viewBox="0 0 18 8" style="vertical-align:0;margin-right:4px"><path d="M1 4H17" stroke="#e2664d" stroke-width="1.8" stroke-dasharray="1.4 2.6" stroke-linecap="round"/></svg>Line cut</span><span><svg width="22" height="10" viewBox="-13 -5.5 26 10.5" style="vertical-align:-1px;margin-right:4px"><path d="${HULL}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg>Fleet at sea</span><span><svg width="13" height="12" viewBox="-10.5 -9.5 21 19.5" style="vertical-align:-2px;margin-right:4px"><path d="${PLANE}" fill="#8f98a0" stroke="#15181b" stroke-width=".8"/></svg><span id="legair">Air fleet</span></span><span id="legfield" hidden><svg width="19" height="14" viewBox="-9.5 -7 19 14" style="vertical-align:-3px;margin-right:4px"><rect x="-8.5" y="-6" width="17" height="12" rx="2" fill="#66733f" stroke="#e9dfc4" stroke-width=".9"/><path d="M-6.3 2.4H6.3M0 -4.3L-4.6 4M0 -4.3L4.6 4" fill="none" stroke="#f1e9d4" stroke-width="1.3" stroke-linecap="round"/></svg>Airfield: click to open</span></div>
         <div class="zoom"><button class="btn" data-act="zin" aria-label="Zoom in">+</button><button class="btn" data-act="zout" aria-label="Zoom out">−</button></div>
         <div class="tip" id="tip"></div>
       </div>
@@ -503,7 +506,11 @@ function refresh(): void {
   // Where an air force has won the sky, the region is ringed in its colour.
   let skies = '';
   for (const k of Object.keys(g.sky)) { const who = skyOver(g, +k); if (who) skies += `<path class="skywon" d="${pathOf(g.regions[+k].polys)}" stroke="${g.nations[who].color}"/>`; }
-  $('#fx').innerHTML = ui.flash.map((id) => `<path class="flash" d="${pathOf(g.regions[id].polys)}"/>`).join('') + skies;
+  // The capital of a fallen country the player could free by taking it is ringed in gold.
+  let freeable = '';
+  if (me && isOpen(g)) for (const f of nationsFallen(g)) if (f.yours && f.capital >= 0 && !allied(g, me, f.holder)) freeable += `<circle class="freeme" cx="${g.regions[f.capital].x}" cy="${g.regions[f.capital].y}" r="15"/>`;
+  ($('#legfree') as HTMLElement).hidden = !freeable;
+  $('#fx').innerHTML = ui.flash.map((id) => `<path class="flash" d="${pathOf(g.regions[id].polys)}"/>`).join('') + skies + freeable;
 
   // Where the picked corps can go.
   let marks = '';
@@ -1030,6 +1037,8 @@ function orderAt(id: number): boolean {
   marchHide = arrived && way ? { reg: id, nat } : null;
   refresh();
   if (arrived && way) march(way.pts, nat, kind, id);
+  // A march that took a fallen country's capital, or brought a nation down, is announced as soon as it is made.
+  if (!ui.modal) { const next = nextCard(); if (next) openModal(next); }
   return true;
 }
 
@@ -1302,6 +1311,13 @@ function provinceWorth(r: Region): string {
   return `<button class="worth" data-act="ledger" data-nat="${r.ctrl}" title="Open the ledger of ${esc(natName(r.ctrl))}"><span>${mine ? 'Pays into your treasury each month' : `Worth to ${esc(natName(r.ctrl))} each month`}</span><b>${cash(y.total)}</b><small>${parts.join(' · ')}${less ? ` · ${less}` : ''}${taken && taken.total > 0 ? ` In your hands it would pay ${cash(taken.total)}.` : ''}</small></button>`;
 }
 
+/** The capital of a fallen country: who it fell to, and what taking it would do. */
+function freeNote(r: Region): string {
+  const f = fallenCapitalAt(g, r.id);
+  if (!f) return '';
+  return `<div class="note${f.yours ? ' good' : ''} freenote">${flagIcon(f.nat, g.nations[f.nat].color, 30)}<span><b>The capital of ${esc(theName(f.nat))}, which fell to ${esc(theName(f.fell.to))} in ${date(f.fell.turn)}.</b> ${esc(f.note)}</span></div>`;
+}
+
 function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
@@ -1337,7 +1353,7 @@ function regionPane(): string {
   const inView = r.units.filter((c) => inFull(r, c.nat));
   const veiled = r.units.length - inView.length;
   const units = (inView.length ? [...inView].sort((a, b) => (a.nat === me ? 0 : 1) - (b.nat === me ? 0 : 1)).map((c) => corpsRow(c, canOrder(g, c))).join('') : veiled || (fogOn(g) && seen[r.id] === 0) ? '' : '<div class="empty">No armies here.</div>') + fogNote(r);
-  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${standingNote(r)}
+  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${freeNote(r)}${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
     ${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${oilNote(r)}${provinceSlots(r)}
@@ -2317,6 +2333,13 @@ function beatenLine(beaten: ('axis' | 'allies')[]): string {
 function nextCard(): typeof ui.modal {
   const act = lastAct(g);
   const me = g.human;
+  // A nation that has fallen, or one that has come back: each is announced once, in the order it happened.
+  if (me && !passing && ui.seenPass < g.passings.length) {
+    // A country set free by its conqueror's fall is told on the conqueror's card, unless it is the player's own.
+    const ids = g.passings.slice(ui.seenPass).filter((p) => !(p.kind === 'freed' && p.after && !p.player && g.passings.some((q) => q.kind === 'fell' && q.nat === p.after && q.turn === p.turn))).map((p) => p.id);
+    ui.seenPass = g.passings.length;
+    if (ids.length) return { kind: 'passing', ids };
+  }
   if (!act || !me || !g.nations[me].alive || passing) return null;
   if (act.winner === me && !g.flags['dom:hail']) { g.flags['dom:hail'] = g.turn; return { kind: 'worldwon' }; }
   if (act.open && humanUp(g) && !onEve(g) && !g.flags['dom:seen']) { g.flags['dom:seen'] = g.turn; return { kind: 'lastact' }; }
@@ -2388,6 +2411,41 @@ function lastActCard(ask: boolean): string {
 }
 
 /** The end of the last act, for a player who is the last one standing. */
+/** The announcement of a nation that has fallen or been freed: its flag, what happened, and what follows from it. */
+function passingCardHtml(a: NonNullable<ReturnType<typeof announcement>>): string {
+  const X = g.nations[a.nat], B = g.nations[a.by];
+  const freed = a.kind === 'freed';
+  const banner = `<div class="passflags ${freed ? 'freed' : 'fell'}"><div class="pflag">${flagIcon(X.id, X.color, 132)}<span>${esc(X.name)}</span></div><div class="parrow">${freed ? 'freed by' : a.kicker.startsWith('Annexed') ? 'annexed by' : 'fell to'}</div><div class="pflag by">${flagIcon(B.id, B.color, 74)}<span>${esc(B.name)}</span></div></div>`;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${esc(a.kicker)}</div><h2>${esc(a.title)}</h2></header>
+    <div class="body path natcard">${banner}<p class="lead">${esc(a.text)}</p>
+    <div class="facts">${a.facts.map((f) => `<div class="fact"><span>${esc(f.label)}</span><b>${esc(f.value)}</b></div>`).join('')}</div>
+    ${freedStrip(a)}
+    ${a.more ? `<div class="note${freed ? ' good' : ''}" style="margin-top:12px">${esc(a.more)}</div>` : ''}</div>
+    <footer>${a.region >= 0 ? `<button class="btn" data-act="showmap" data-id="${a.region}">Show on map</button>` : ''}<button class="btn go" data-act="close">Close</button></footer>`;
+}
+
+/** The countries a conqueror's fall set free the same day, as a row of flags. */
+function freedStrip(a: NonNullable<ReturnType<typeof announcement>>): string {
+  if (!a.freed.length) return '';
+  return `<div class="pfreed"><span>Free again with ${esc(theName(a.nat))} beaten</span><div>${a.freed.map((id) => `<b>${flagIcon(id, g.nations[id].color, 30)}${esc(natName(id))}</b>`).join('')}</div></div>`;
+}
+
+const COUNT_WORDS = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve'];
+
+/** Several nations fallen or freed in the same month: one card, a row for each, in the order it happened. */
+function passingListHtml(list: NonNullable<ReturnType<typeof announcement>>[]): string {
+  const fell = list.filter((a) => a.kind === 'fell').length, free = list.length - fell;
+  const n = COUNT_WORDS[list.length] ?? String(list.length);
+  const title = !free ? `${n} nations have fallen` : !fell ? `${n} nations are free` : 'The map is redrawn';
+  const rows = list.map((a) => {
+    const X = g.nations[a.nat];
+    return `<div class="prow2 ${a.kind}"${a.region >= 0 ? ` data-act="showmap" data-id="${a.region}" title="Show on the map"` : ''}>${flagIcon(X.id, X.color, 58)}<div><div class="kick">${esc(a.kicker)}</div><h3>${esc(a.title)}</h3><p>${esc(a.text)}</p>${freedStrip(a)}${a.more ? `<small>${esc(a.more)}</small>` : ''}</div></div>`;
+  }).join('');
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The roll of nations · ${date(g.turn)}</div><h2>${title}</h2></header>
+    <div class="body path natcard natlist">${rows}</div>
+    <footer><button class="btn go" data-act="close">Close</button></footer>`;
+}
+
 function worldWonCard(): string {
   const B = standings(g);
   const me = g.nations[g.human!];
@@ -2411,14 +2469,17 @@ function powersPane(): string {
     ? `<div class="note lastnote"><b>${beatenLine(act.decided.beaten)}: the war is decided.</b> ${act.peace ? `You took the victory in ${date(act.peace)}. ` : ''}World Domination is open to you: every alliance dissolved, every nation for itself, the last one standing takes the world.<div class="acts" style="margin-top:7px"><button class="btn small warn" data-act="lastact">The last act ▸</button></div></div>`
     : '';
   let out = `${offer}<h2>Powers at war</h2><p class="sub">The bar shows how much fight a nation has left. It drains as the capital, territory and army are lost.</p>${isOpen(g) ? '<div class="acts" style="margin-top:8px"><button class="btn small" data-act="traits">National abilities: what each country does best</button></div>' : ''}<div style="height:10px"></div>`;
+  const fallen = nationsFallen(g);
   for (const n of at.sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || b.armyPeak - a.armyPeak)) {
     if (n.alive) {
       const will = Math.max(0, 1 - collapseScore(g, n.id) / n.resilience);
       const army = armyKnown(g, n.id);
       const books = isOpen(g) && g.human && !friendOf(n.id) && knowsBooks(g, n.id) ? ` <button class="btn tiny" data-act="books" data-nat="${n.id}" title="Your agent in its capital is reading its books.">Books</button>` : '';
-      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(natName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
     } else {
-      out += `<div class="nat" style="opacity:.7">${chip(n.id)}<b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}</small><div class="will"><small>Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}</small></div></div>`;
+      const f = fallen.find((x) => x.nat === n.id);
+      const how = f?.fell.how === 'annexed' ? `Annexed by ${theName(n.fellOn!.to)}` : f?.fell.how === 'terms' ? `Left the war by treaty with ${natName(n.fellOn!.to)}` : `Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}`;
+      out += `<div class="nat gone${f?.yours ? ' freeable' : ''}"${f && f.capital >= 0 ? ` data-act="showmap" data-id="${f.capital}" title="Show ${esc(f.capitalName)} on the map"` : ''}>${chip(n.id)}<b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}${f?.yours ? ' <i class="tag good">You can free it</i>' : ''}</small><div class="will"><small>${how}${f && isOpen(g) ? `. ${esc(f.note)}` : ''}</small></div></div>`;
     }
   }
   out += leaguePane();
@@ -3161,6 +3222,11 @@ function openModal(m: typeof ui.modal): void {
     if (lastAct(g)?.winner !== g.human || !g.human) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = worldWonCard();
   }
+  else if (m.kind === 'passing') {
+    const list = ((m.ids ?? []) as number[]).map((id) => announcement(g, id)).filter((a): a is NonNullable<typeof a> => !!a);
+    if (!list.length) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = list.length === 1 ? passingCardHtml(list[0]) : passingListHtml(list);
+  }
   else if (m.kind === 'tech') card.innerHTML = techCard(m.id);
   else if (m.kind === 'traits') card.innerHTML = traitsCard(m.nat && g.nations[m.nat] ? m.nat : g.human ?? 'GER');
   else if (m.kind === 'path') {
@@ -3879,7 +3945,7 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = from > 1 ? g.reports.length : 0; ui.flash = [];
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = from > 1 ? g.seaReports.length : 0;
-  ui.air = -1; ui.airMode = ''; ui.seenAir = from > 1 ? g.airReports.length : 0;
+  ui.air = -1; ui.airMode = ''; ui.seenAir = from > 1 ? g.airReports.length : 0; ui.seenPass = g.passings.length;
   drawStatic();
   const italy = view === 'italy', west = view === 'west', east = view === 'east';
   const britain = from === 11, desert = from === 13 || from === 33, balkans = from === 14, blue = from === 34, torch = from === 39, kursk = from === 47 && !italy;
@@ -3908,7 +3974,7 @@ function continueGame(): boolean {
   ui.live = true;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = false; ui.tab = 'region'; ui.unread = 0; ui.seenReports = g.reports.length; ui.flash = [];
   ui.sea = ui.fleet = -1; ui.land = ui.rebase = false; ui.msg = ''; ui.seenSea = g.seaReports.length;
-  ui.air = -1; ui.airMode = ''; ui.seenAir = g.airReports.length;
+  ui.air = -1; ui.airMode = ''; ui.seenAir = g.airReports.length; ui.seenPass = g.passings.length;
   drawStatic();
   const me = g.human;
   const cap = me ? g.nations[me].capital : -1;
@@ -4018,8 +4084,10 @@ function arrive(show: boolean, from: Since, before: string[]): void {
   const lost = g.human && !g.nations[g.human].alive ? g.human : null;
   if (lost) {
     // The month the country fell in is played out to its end, so the watcher's calendar starts on a month's last day.
-    g.human = null;
-    while (g.phase > 0) stepAI(g);
+    // The seat is remembered: if the country is liberated, the player is given it back.
+    playerFell(g);
+    while (g.phase > 0 && !g.human) stepAI(g);
+    ui.seenPass = g.passings.length;
   }
   if (humanUp(g)) beginHuman(g);
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
@@ -4031,9 +4099,11 @@ function arrive(show: boolean, from: Since, before: string[]): void {
     // A nation whose goals are about holding out is told how long it held.
     const weeks = Object.values(GOALS[lost] ?? {}).some((x) => x?.outlast !== undefined) ? weeksLasted(g, lost) : null;
     const nth = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth', 'eleventh', 'twelfth'];
-    $('#card').querySelector('.kick')!.textContent = weeks !== null && nth[weeks]
+    const hope = nationsFallen(g).find((f) => f.nat === lost);
+    const back = hope?.canReturn ? ` If ${natName(hope.fell.to)}'s enemies take ${hope.capitalName}, ${natName(lost)} is liberated and you lead it again.` : '';
+    $('#card').querySelector('.kick')!.textContent = (weeks !== null && nth[weeks]
       ? `${natName(lost)} has fallen in the ${nth[weeks]} week of the war. The war goes on without you.`
-      : `${natName(lost)} has fallen. The war goes on without you.`;
+      : `${natName(lost)} has fallen. The war goes on without you.`) + back;
     return;
   }
   if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
@@ -4044,6 +4114,17 @@ function nextMonth(): void {
   const before = g.regions.map((r) => r.ctrl);
   const hFrom = g.headlines.length, rFrom = g.reports.length;
   runTurnAI(g);
+  if (g.human) {
+    // The country the player lost has been liberated: the player is given it back, and the announcement says so.
+    stopAuto();
+    const mine = g.passings.findIndex((p, i) => i >= ui.seenPass && p.kind === 'freed' && p.nat === g.human);
+    ui.seenPass = mine >= 0 ? mine : g.passings.length;
+    ui.unread += g.headlines.length - hFrom;
+    const cap = g.nations[g.human].capital;
+    if (cap >= 0) focusOn([cap]);
+    advanceToHuman(false);
+    return;
+  }
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
   ui.unread += g.headlines.length - hFrom;
   // Follow the action.
@@ -4826,4 +4907,4 @@ recallPick();
 openModal({ kind: 'start' });
 
 // A handle for automated checks and for curious players in the browser console.
-(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, applyView, continueGame, save: () => saveGame(g) };
+(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, applyView, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by) };
