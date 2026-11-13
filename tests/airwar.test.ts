@@ -346,7 +346,8 @@ describe('the raid planner', () => {
     const alone = previewRaid(g, 'bomb', target, [bombers[0]]);
     expect(alone.meets.length).toBeGreaterThan(0);
     for (const m of alone.meets) { expect(m.able).toBeGreaterThan(0); expect(m.able).toBeLessThanOrEqual(m.ftr); expect(g.nations.GER.atWar).toContain(m.nat); }
-    expect(alone.bomberLoss).toBeGreaterThan(0.2);
+    expect(alone.bomberLoss).toBeGreaterThan(0.1);
+    expect(alone.bomberLoss).toBeLessThanOrEqual(AIRWAR.losses.most);
     expect(alone.foeLossN).toBe(0);
     const escorted = previewRaid(g, 'bomb', target, [bombers[0], ...fighters.slice(0, 2)]);
     expect(escorted.fighters).toBeGreaterThan(0);

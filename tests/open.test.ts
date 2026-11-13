@@ -180,7 +180,8 @@ describe('saving a free-play war', () => {
     expect(isOpen(b)).toBe(true);
     play(a, 32); play(b, 32);
     expect(print(b)).toBe(print(a));
-  });
+    // Forty months of war in all, with every air staff planning raids: more than the usual five seconds on a busy machine.
+  }, 20_000);
 
   it('says a historical save is not one', () => {
     expect(peekSave(saveGame(play(createGame(4, null), 2)))?.open).toBe(false);

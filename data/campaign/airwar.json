@@ -52,12 +52,21 @@
     "loss": 0.25,
     "ready": 0.04
   },
+  "losses": {
+    "_note": "What a raid costs in bombers, in the air war. The share lost is bombers x (the defending fighters' share of the fighting weight over the target) to the power 'power', plus what the guns bring down, and never more than most. The escort and the bombers' own guns are the rest of that weight, so an escort saves far more than its numbers. Set against history: a day raid that goes without escort into a strong patrol loses 15 to 25% of its bombers and an escorted one 3 to 8%. By night the few fighters that find the bombers take 2 to 5%. clash is how hard the fighters of the two sides fight over a raid, beside a fight for the sky (1): the escort is there to see the bombers through, not to hunt.",
+    "bombers": 0.26,
+    "power": 2,
+    "most": 0.3,
+    "night": { "bombers": 0.4, "power": 1 },
+    "clash": 0.5
+  },
   "success": {
     "_note": "The chance of success shown before a raid: a raid succeeds when it costs the enemy more than it costs you. k is how sharply the chance turns on the expected exchange. Set from 489 raids flown by four nations over six months: at 12 the raids given 10 to 25% won 15% of the time, those given 25 to 40% won 38%, and those given over 90% all won.",
     "k": 12
   },
   "ai": {
-    "_note": "The computer's air staff: the least readiness at which a fighter group flies escort.",
-    "escortReady": 0.5
+    "_note": "The computer's air staff. escortReady is the least readiness at which a fighter group flies escort. raids is how every computer nation at war plans raids of its own, at every level: each month 'share' of its bomber groups fit to fly go out (a group is fit with 'least' bombers and readiness 'ready'), each against the best target among the 'look' most promising it can reach, and only where the forecast gives a chance of success of 'success' or better, a gain of 'worth' aircraft or more, and bomber losses of no more than 'loss'. 'rail' is what a province with a junction and no factory is worth beside one with industry. It flies up to 'sweeps' fights for the sky a month, over front where its fighters go in at 'sky' times the odds that win it; 'skyWorth' is what the sky over an army's front is worth to it, in aircraft. The harder levels replace share, least, loss and rail for a rival (difficulty.json, bombing); the easier ones cut a rival's share.",
+    "escortReady": 0.5,
+    "raids": { "share": 0.34, "least": 60, "loss": 0.1, "rail": 0.25, "ready": 0.6, "success": 0.55, "look": 4, "worth": 15, "sweeps": 1, "sky": 1.2, "skyWorth": 150 }
   }
 }
