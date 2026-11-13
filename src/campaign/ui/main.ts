@@ -15,7 +15,7 @@ import {
   invasions, previewDeclare,
   leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   orderResearch, orderStopResearch,
-  agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, secretService, sight, whyNotRecruitAgent, whyNotSendAgent,
+  agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { INTEL, armyKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type SpyRoom } from '../intel';
 import { TECH, idleTeams, techView, type TechNode } from '../tech';
@@ -36,6 +36,7 @@ import {
   NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, shipCount, shipList, surfaceShips,
 } from '../navy';
 import { phaseFor, theatrePhases } from '../ai';
+import { SIDE_NAME } from '../domination';
 import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
 import { fronts, isOpen, startOpen } from '../staff';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCost, isHome, ledger, needsOf, provinceYield, raiseSite, specOf, type Ledger, type LedgerLine } from '../economy';
@@ -681,7 +682,7 @@ function drawBar(): void {
   const me = g.human;
   const w = weather(g);
   const eve = onEve(g);
-  const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? ' · free play' : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
+  const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? (lastAct(g)?.winner === me ? ' · the world is yours' : lastAct(g)?.on ? ` · World Domination, ${lastAct(g)!.left} left` : ' · free play') : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
   const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
   // The level of a grand campaign is always in sight beside the date: a click shows what it does and lets it be changed.
   const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign. Click to see what it does, or to change it.">${pips(levelIndex(g))}${esc(levelOf(g).name)}</button>` : '';
@@ -1064,6 +1065,9 @@ function alertList(): Alert[] {
   if (fresh.length) out.push({ kind: 'agent', text: fresh.length === 1 ? `Agent ${fresh[0].name} is ready for orders` : `${fresh.length} agents are ready for orders`, tab: 'spies' });
   const cited = unseen(g).length;
   if (cited) out.push({ kind: 'honours', text: `${cited} honour${cited === 1 ? '' : 's'} earned: read the citation${cited === 1 ? '' : 's'}` });
+  // The war between the alliances is decided and the player has not yet said what comes next.
+  const act = lastAct(g);
+  if (act?.open && !act.peace) out.unshift({ kind: 'lastact', text: 'The war is decided: take the victory, or World Domination' });
   return out;
 }
 
@@ -1075,6 +1079,7 @@ function followAlert(kind: string): void {
   if (!a) return;
   if (kind === 'honours') { const next = unseen(g)[0]; if (next) openModal({ kind: 'award', id: next.id }); return; }
   if (kind === 'debt') { openModal({ kind: 'ledger' }); return; }
+  if (kind === 'lastact') { openModal({ kind: 'lastact' }); return; }
   if (kind.startsWith('short ') || kind.startsWith('low ')) { openModal({ kind: 'stores', nat: g.human || '' }); return; }
   if (a.tab) { ui.tab = a.tab as typeof ui.tab; ui.rail = ui.ship = ui.land = ui.rebase = false; refresh(); return; }
   const regs = a.regs ?? [];
@@ -1274,7 +1279,7 @@ function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
     return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
-      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with fleets on patrol; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li><li>The fog of war hides what your side cannot see. A foreign army is seen whole on your own and your allies\' ground, beside your troops, and one province beyond; a province further off it is a flag and a count of corps; deeper than that the map is dark. Open <b>Spies</b> to recruit agents and send them anywhere on the map. An agent reports every army in its province and around it, reads a government\'s books in its capital, and can wreck a factory, blow a railway or fire an oilfield in a country you are at war with. Every month abroad an agent may be caught. Keep one at home on guard, because the other side has saboteurs too. The fog can be lifted under <b>Spies</b> if you would rather see everything.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
+      <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li><li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li><li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with fleets on patrol; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li><li>The fog of war hides what your side cannot see. A foreign army is seen whole on your own and your allies\' ground, beside your troops, and one province beyond; a province further off it is a flag and a count of corps; deeper than that the map is dark. Open <b>Spies</b> to recruit agents and send them anywhere on the map. An agent reports every army in its province and around it, reads a government\'s books in its capital, and can wreck a factory, blow a railway or fire an oilfield in a country you are at war with. Every month abroad an agent may be caught. Keep one at home on guard, because the other side has saboteurs too. The fog can be lifted under <b>Spies</b> if you would rather see everything.</li><li>When a great power has fallen and the great powers have stopped fighting each other, the war is decided and a card gives you the choice: take the victory, or <b>World Domination</b>. That dissolves every alliance and sets every nation still standing against every other, yesterday\'s allies among them, until one is left. It cannot be undone. The Powers tab then shows the standings.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
   const me = g.human;
@@ -2273,16 +2278,118 @@ function booksCard(nat: string): string {
     <footer>${S ? `<button class="btn" data-act="stores" data-nat="${nat}">Its depots in full</button>` : ''}<button class="btn go" data-act="close">Close</button></footer>`;
 }
 
+// ---- World Domination: the last act ------------------------------------------------------------------
+
+/** "The Axis is beaten", "The Allies are beaten", or both. */
+function beatenLine(beaten: ('axis' | 'allies')[]): string {
+  if (beaten.length > 1) return 'Both alliances are broken';
+  return beaten[0] === 'axis' ? 'The Axis is beaten' : 'The Allies are beaten';
+}
+
+/** A card that is waiting its turn: the war just decided, or the world just won. Each is shown unasked only once. */
+function nextCard(): typeof ui.modal {
+  const act = lastAct(g);
+  const me = g.human;
+  if (!act || !me || !g.nations[me].alive || passing) return null;
+  if (act.winner === me && !g.flags['dom:hail']) { g.flags['dom:hail'] = g.turn; return { kind: 'worldwon' }; }
+  if (act.open && humanUp(g) && !onEve(g) && !g.flags['dom:seen']) { g.flags['dom:seen'] = g.turn; return { kind: 'lastact' }; }
+  return null;
+}
+
+/** An army's size in words, as well as it is known: "35 divisions", "about 640 divisions", "a handful of divisions". */
+const armyWords = (a: { divs: number; exact: boolean; few?: boolean }): string => a.few ? 'a handful of divisions' : `${a.exact ? '' : 'about '}${num(a.divs)} division${a.exact && Math.round(a.divs) === 1 ? '' : 's'}`;
+
+/** One row of the world's standings. */
+function boardRow(r: ReturnType<typeof standings>['rows'][number], rank: number, scale: number): string {
+  const pct = r.share * 100;
+  const share = pct >= 9.5 ? Math.round(pct) : Math.round(pct * 10) / 10;
+  const army = armyWords({ divs: r.divisions, exact: r.exact, few: r.few });
+  const income = r.income !== null ? ` · ${num(Math.round(r.income * scale))} a month` : '';
+  return `<div class="wrow${r.you ? ' you' : ''}"><span class="wrank">${rank}</span>${chip(r.nat)}<span class="grow"><b>${esc(r.name)}</b>${r.you ? '<i class="tag pts">You</i>' : ''}<small${r.exact ? '' : ' title="Your staff\'s estimate through the fog of war."'}>${r.provinces} province${r.provinces === 1 ? '' : 's'} · ${army}${income}</small><div class="meter" title="How much fight it has left"><i class="${r.will < 0.35 ? 'low' : ''}" style="width:${Math.round(r.will * 100)}%"></i></div></span><span class="wshare"><b>${share}%</b><small>of the world</small></span></div>`;
+}
+
+/** The standings of the last act, on the Powers screen: who still stands and how much of the world each holds. */
+function worldPane(): string {
+  const B = standings(g);
+  const me = g.human;
+  const winner = B.winner ? g.nations[B.winner] : null;
+  const head = winner
+    ? `<p class="sub"><b>${esc(winner.name)} stands alone.</b> The last war began in ${date(B.since)} with ${B.began} nations and ended in ${date(g.flags['dom:won'] ?? g.turn)}.</p>`
+    : `<p class="sub">Every nation for itself since ${date(B.since)}. <b>${B.left} of ${B.began}</b> still stand, every one of them at war with all the rest, and the last one standing takes the world.</p>`;
+  const mine = B.rows.find((r) => r.you);
+  const facts = mine && !winner ? `<div class="facts"><div class="fact"><span>Still standing</span><b>${B.left}</b></div><div class="fact"><span>Your share</span><b>${Math.round(mine.share * 100)}%</b></div><div class="fact"><span>Your place</span><b>${B.rows.indexOf(mine) + 1}${['st', 'nd', 'rd'][B.rows.indexOf(mine)] ?? 'th'}</b></div></div>` : '';
+  const since = B.fallen.filter((r) => r.fell!.turn >= B.since);
+  const fell = (r: typeof B.fallen[number]): string => `<div class="wrow gone">${chip(r.nat)}<span class="grow"><b>${esc(r.name)}</b><small>fell in ${date(r.fell!.turn)} to ${esc(theName(r.fell!.to))}${r.fell!.to === me ? ' <i class="tag good">Yours</i>' : ''}</small></span></div>`;
+  return `<h2>World Domination</h2>${head}${facts}
+    <div class="wboard">${B.rows.map((r, i) => boardRow(r, i + 1, B.scale)).join('')}</div>
+    ${since.length ? `<h3>Fallen in the last war</h3><div class="wboard">${since.map(fell).join('')}</div>` : ''}
+    <div class="acts" style="margin-top:10px"><button class="btn small" data-act="traits">National abilities: what each country does best</button></div>`;
+}
+
+/** The choice at the end of the great war: take the victory, or dissolve every alliance and fight for the world. */
+function lastActCard(ask: boolean): string {
+  const act = lastAct(g)!;
+  const d = act.decided!;
+  const me = g.nations[g.human!];
+  const mine = bloc(me);
+  const B = standings(g);
+  const you = B.rows.find((r) => r.you);
+  const rival = B.rows.find((r) => !r.you);
+  // The great powers of the beaten alliances: one that fell on the winning side is not part of this sentence.
+  const lost = d.fallen.filter((id) => { const s = bloc(g.nations[id]); return (s === 'axis' || s === 'allies') && d.beaten.includes(s); });
+  const fallen = listOf((lost.length ? lost : d.fallen).map(natName));
+  const has = (lost.length ? lost : d.fallen).length === 1 ? 'has' : 'have';
+  const side = mine === 'axis' || mine === 'allies' ? mine : null;
+  const yours = side && d.victor === side ? ' Your alliance has won the war it went to fight.'
+    : side && d.beaten.includes(side) ? ` You fought on the losing side, and ${esc(theName(me.id))} still stands.`
+      : ` ${esc(upFirst(theName(me.id)))} has come through it standing.`;
+  const can = act.open && humanUp(g);
+  const peace = act.peace
+    ? `<div class="pathrow now"><div class="pathhead"><b>The victory is yours</b><span class="tag good">Taken in ${date(act.peace)}</span></div><p>The alliances stand and your campaign goes on as it is. World Domination stays open to you for as long as you want to leave it.</p></div>`
+    : `<div class="pathrow"><div class="pathhead"><b>Take the victory</b><button class="btn" data-act="keeppeace" ${can ? '' : 'disabled'}>Take the victory</button></div><p>The alliances stand and the peace holds. Your campaign goes on as it is and nothing is lost. World Domination stays open: you will find it under Powers whenever you want it.</p></div>`;
+  const btn = ask
+    ? `<span class="pathask"><b>Every nation becomes your enemy today. This cannot be undone.</b><button class="btn warn" data-act="domination" ${can ? '' : 'disabled'}>Begin the last war</button><button class="btn" data-act="lastact">Not yet</button></span>`
+    : `<button class="btn warn" data-act="lastact" data-ask="1" ${can ? '' : 'disabled'}>World Domination ▸</button>`;
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The grand campaign · ${date(g.turn)}</div><h2>The war is decided</h2></header>
+    <div class="body path lastact"><p class="lead"><b>${beatenLine(d.beaten)}.</b> ${esc(upFirst(fallen))} ${has} fallen, and no two great powers are still at war with each other.${yours}</p>
+    <p class="lead quiet">The guns fall silent, and the victors look at one another across the table. An alliance made against a common enemy has no enemy left, and every general knows how many divisions his friends still have in the field.</p>
+    <div class="facts"><div class="fact"><span>Nations still standing</span><b>${B.left}</b></div><div class="fact"><span>Your share of the world</span><b>${you ? Math.round(you.share * 100) : 0}%</b></div>${rival ? `<div class="fact"><span>The strongest of the others</span><b>${esc(rival.name)} <small>${armyWords({ divs: rival.divisions, exact: rival.exact, few: rival.few })}</small></b></div>` : ''}</div>
+    ${peace}
+    <div class="pathrow domrow${ask ? ' now' : ''}"><div class="pathhead"><b>World Domination</b>${btn}</div><p>Every alliance is dissolved. All ${B.left} nations still standing, yesterday's allies among them, are at war with one another from today. Troops on a former ally's soil go home under safe conduct. Nobody makes peace again: <b>the last nation standing has the world</b>.</p></div>
+    ${can ? '' : `<div class="note">${esc(act.why ?? 'Orders are given in your own month.')}</div>`}</div>
+    <footer><button class="btn go" data-act="close">Decide later</button></footer>`;
+}
+
+/** The end of the last act, for a player who is the last one standing. */
+function worldWonCard(): string {
+  const B = standings(g);
+  const me = g.nations[g.human!];
+  const cap = me.capital >= 0 ? g.regions[me.capital].name : me.name;
+  const months = Math.max(1, (g.flags['dom:won'] ?? g.turn) - B.since);
+  const since = B.fallen.filter((r) => r.fell!.turn >= B.since);
+  const yours = since.filter((r) => r.fell!.to === me.id);
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">World Domination · ${date(g.flags['dom:won'] ?? g.turn)}</div><h2>${flagIcon(me.id, me.color, 34, 'inh')} ${esc(me.name)} stands alone</h2></header>
+    <div class="body path lastact"><p class="lead"><b>There is nobody left to fight.</b> Every capital on the map answers to ${esc(cap)}, ${months} ${months === 1 ? 'month' : 'months'} after the alliances were dissolved. Of the ${B.began} nations that began the last war, one is left, and it is yours.</p>
+    <div class="facts"><div class="fact"><span>The last war</span><b>${months} <small>${months === 1 ? 'month' : 'months'}</small></b></div><div class="fact"><span>Nations you brought down</span><b>${yours.length} <small>of ${since.length}</small></b></div><div class="fact"><span>Your army today</span><b>${num(B.rows[0]?.divisions ?? 0)} <small>divisions</small></b></div></div>
+    ${since.length ? `<h3>How the world fell</h3><div class="wboard">${since.map((r) => `<div class="wrow gone">${chip(r.nat)}<span class="grow"><b>${esc(r.name)}</b><small>${date(r.fell!.turn)}, to ${esc(theName(r.fell!.to))}</small></span></div>`).join('')}</div>` : ''}</div>
+    <footer><button class="btn" data-act="new">New game</button><button class="btn go" data-act="close">Look at your world</button></footer>`;
+}
+
 function powersPane(): string {
+  const act = lastAct(g);
+  if (act?.on) return worldPane();
   const at = Object.values(g.nations).filter((n) => !n.dormant && (n.atWar.length || n.fellOn));
   const neutral = Object.values(g.nations).filter((n) => n.alive && !n.atWar.length && !n.dormant);
-  let out = `<h2>Powers at war</h2><p class="sub">The bar shows how much fight a nation has left. It drains as the capital, territory and army are lost.</p>${isOpen(g) ? '<div class="acts" style="margin-top:8px"><button class="btn small" data-act="traits">National abilities: what each country does best</button></div>' : ''}<div style="height:10px"></div>`;
+  const offer = act?.open && act.decided
+    ? `<div class="note lastnote"><b>${beatenLine(act.decided.beaten)}: the war is decided.</b> ${act.peace ? `You took the victory in ${date(act.peace)}. ` : ''}World Domination is open to you: every alliance dissolved, every nation for itself, the last one standing takes the world.<div class="acts" style="margin-top:7px"><button class="btn small warn" data-act="lastact">The last act ▸</button></div></div>`
+    : '';
+  let out = `${offer}<h2>Powers at war</h2><p class="sub">The bar shows how much fight a nation has left. It drains as the capital, territory and army are lost.</p>${isOpen(g) ? '<div class="acts" style="margin-top:8px"><button class="btn small" data-act="traits">National abilities: what each country does best</button></div>' : ''}<div style="height:10px"></div>`;
   for (const n of at.sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || b.armyPeak - a.armyPeak)) {
     if (n.alive) {
       const will = Math.max(0, 1 - collapseScore(g, n.id) / n.resilience);
       const army = armyKnown(g, n.id);
       const books = isOpen(g) && g.human && !friendOf(n.id) && knowsBooks(g, n.id) ? ` <button class="btn tiny" data-act="books" data-nat="${n.id}" title="Your agent in its capital is reading its books.">Books</button>` : '';
-      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${army.exact ? '' : 'about '}${num(army.divs)} divisions${books}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
     } else {
       out += `<div class="nat" style="opacity:.7">${chip(n.id)}<b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}</small><div class="will"><small>Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}</small></div></div>`;
     }
@@ -2774,7 +2881,13 @@ function airReportCard(r: AirReport): string {
 function openModal(m: typeof ui.modal): void {
   ui.modal = m;
   const veil = $('#veil');
-  if (!m) { veil.classList.remove('open'); return; }
+  if (!m) {
+    veil.classList.remove('open');
+    // A card that was waiting for this one to be put down: the war just decided, or the world just won.
+    const next = nextCard();
+    if (next) openModal(next);
+    return;
+  }
   veil.classList.add('open');
   const card = $('#card');
   card.classList.toggle('wide', m.kind === 'attack' || m.kind === 'report' || m.kind === 'ledger' || m.kind === 'tech' || m.kind === 'stores' || m.kind === 'books');
@@ -2805,6 +2918,14 @@ function openModal(m: typeof ui.modal): void {
     card.innerHTML = invadeCard(m.on, m.target ?? -1);
   }
   else if (m.kind === 'level') card.innerHTML = levelCard();
+  else if (m.kind === 'lastact') {
+    if (!lastAct(g)?.decided || lastAct(g)!.on) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = lastActCard(!!m.ask);
+  }
+  else if (m.kind === 'worldwon') {
+    if (lastAct(g)?.winner !== g.human || !g.human) { ui.modal = null; veil.classList.remove('open'); return; }
+    card.innerHTML = worldWonCard();
+  }
   else if (m.kind === 'tech') card.innerHTML = techCard(m.id);
   else if (m.kind === 'traits') card.innerHTML = traitsCard(m.nat && g.nations[m.nat] ? m.nat : g.human ?? 'GER');
   else if (m.kind === 'path') {
@@ -3681,6 +3802,7 @@ function arrive(show: boolean, from: Since, before: string[]): void {
     return;
   }
   if (show && (g.headlines.length > hFrom || g.reports.length > rFrom)) openModal({ kind: 'news', from: hFrom, reports: rFrom, sea: sFrom, air: aFrom });
+  else { const next = nextCard(); if (next) openModal(next); }
 }
 
 function nextMonth(): void {
@@ -4087,6 +4209,19 @@ function onClick(e: MouseEvent): void {
     case 'setlevel': { if (g.human && setLevel(g, t.dataset.level ?? '')) { const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; } break; }
     case 'askdeclare': openModal({ kind: 'invade', on: t.dataset.nat!, target: -1 }); break;
     case 'path': openModal({ kind: 'path', ask: t.dataset.ask ?? '' }); break;
+    case 'lastact': g.flags['dom:seen'] ??= g.turn; openModal({ kind: 'lastact', ask: t.dataset.ask === '1' }); break;
+    case 'keeppeace': if (orderKeepPeace(g)) { refresh(); openModal({ kind: 'lastact' }); } break;
+    case 'domination': {
+      const h = g.headlines.length;
+      if (orderDomination(g)) {
+        ui.unread += g.headlines.length - h;
+        ui.tab = 'powers'; ui.sel = -1; ui.picked.clear();
+        ui.msg = 'Every alliance is dissolved. Every nation still standing is your enemy, and you are theirs.';
+        openModal(null);
+        refresh();
+      }
+      break;
+    }
     case 'takepath': {
       const h = g.headlines.length;
       if (orderPath(g, t.dataset.path as PathId, t.dataset.nat || undefined)) { ui.unread += g.headlines.length - h; refresh(); openModal({ kind: 'path' }); }

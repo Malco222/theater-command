@@ -304,11 +304,12 @@ export function knowsBooks(g: Game, of: string, viewer: string | null = g.human)
 }
 
 /** The size of a nation's army as the viewer knows it: to the division with its books open, to the nearest ten without. */
-export function armyKnown(g: Game, of: string, viewer: string | null = g.human): { divs: number; exact: boolean } {
+export function armyKnown(g: Game, of: string, viewer: string | null = g.human): { divs: number; exact: boolean; few?: boolean } {
   const all = fieldArmy(g, of);
   if (!fogOn(g, viewer) || knowsBooks(g, of, viewer)) return { divs: all, exact: true };
   const k = INTEL.estimate.round;
-  return { divs: Math.max(k, Math.round(all / k) * k), exact: false };
+  // An army too small to round to the nearest ten is known only to be small.
+  return all < k / 2 ? { divs: k, exact: false, few: true } : { divs: Math.max(k, Math.round(all / k) * k), exact: false };
 }
 
 /** A foreign government's books, as an agent in its capital reads them. */

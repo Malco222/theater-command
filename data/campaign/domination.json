@@ -1,0 +1,19 @@
+{
+  "_about": "World Domination, the last act of the grand campaign. The war between the alliances is decided when a great power has fallen and no two great powers still standing are at war with each other. From then on the player may take the victory, or choose World Domination: every alliance is dissolved, every nation still standing is at war with every other, and the last one standing has won. Choosing it cannot be undone. A historical scenario has none of this, and neither has a war with nobody at the table.",
+  "nerve": {
+    "_about": "With every neighbour an enemy, a computer-run staff opens an offensive at this share of the odds it would want in an ordinary war (attackAt), and keeps one going at this share (persist).",
+    "attackAt": 0.85,
+    "persist": 0.9
+  },
+  "guests": {
+    "_about": "Troops standing on a former ally's soil when the alliances are dissolved go home under safe conduct: to the nearest ground their own nation holds, or to its capital by sea. They arrive with this much of their organisation and cannot move again that month.",
+    "org": 0.6
+  },
+  "lines": {
+    "_about": "What the news says as the last act opens, by who chose it. {n} is the number of nations still standing.",
+    "open": "World Domination. Every alliance is dissolved and every treaty is paper. {n} nations are left, each alone and at war with all the rest. The last one standing takes the world.",
+    "guests": "Armies on a former ally's soil are given safe conduct home: {n} corps cross the old frontiers for the last time.",
+    "leave": "{name} takes its armies and fleets home across the ocean and shuts its ports to the Old World.",
+    "won": "{name} stands alone. There is nobody left to fight: the world is {adj}."
+  }
+}

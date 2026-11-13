@@ -16,6 +16,7 @@ import { AIR, airOnFall, airUpkeep, setupAir, skyOver } from './air';
 import { researchTick, setupResearch, techMul, techNotes } from './research';
 import { techTick, winterReady } from './tech';
 import { fuelAir, fuelMet, fuelSlows, resourcesTick, shortAttack, shortDefence, supDrafts, suppliesMet, willLost } from './resources';
+import { crown } from './domination';
 import { INTEL, intelAttack, intelTick } from './intel';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
@@ -160,7 +161,8 @@ export function atWar(g: Game, a: string, b: string): boolean {
   return g.nations[a].atWar.includes(b);
 }
 
-function setWar(g: Game, a: string, b: string): void {
+/** Puts two nations at war and says nothing about it: the declaration, the surprise and the news are declareWar's business. */
+export function setWar(g: Game, a: string, b: string): void {
   const A = g.nations[a], B = g.nations[b];
   if (!A.atWar.includes(b)) A.atWar.push(b);
   if (!B.atWar.includes(a)) B.atWar.push(a);
@@ -1131,10 +1133,12 @@ export function capitulate(g: Game, nat: string, by: string): void {
   if (!X.alive) return;
   X.alive = false;
   X.fellOn = { turn: g.turn, week: g.week, to: by };
+  // In the last act of the grand campaign nobody signs an armistice: a fallen France is simply conquered.
+  const armistice = nat === 'FRA' && !g.flags.dom;
   for (const c of g.corps.filter((c) => c.nat === nat)) {
     const at = g.regions[c.reg];
     // The Army of Africa stays at its posts and answers to the new government.
-    if (nat === 'FRA' && at.vichy && at.overseas && at.ctrl === 'FRA') { c.nat = 'VIC'; c.hold = true; continue; }
+    if (armistice && at.vichy && at.overseas && at.ctrl === 'FRA') { c.nat = 'VIC'; c.hold = true; continue; }
     removeCorps(g, c);
   }
   fleetsOnFall(g, nat);
@@ -1142,7 +1146,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
   const pact = g.nations.SOV.alive && !atWar(g, 'SOV', by);
   for (const r of g.regions) {
     if (r.owner === nat) {
-      if (nat === 'FRA' && r.vichy && r.ctrl === 'FRA') { r.owner = 'VIC'; r.ctrl = 'VIC'; }
+      if (armistice && r.vichy && r.ctrl === 'FRA') { r.owner = 'VIC'; r.ctrl = 'VIC'; }
       else if (nat === 'POL' && r.sov && pact) r.ctrl = 'SOV';
       else if (r.ctrl === nat) {
         // Ground still held by the fallen nation's allies stays in their hands until it is taken.
@@ -1153,7 +1157,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
       r.ctrl = g.nations[r.owner].alive ? r.owner : by;
     }
   }
-  if (nat === 'FRA') {
+  if (armistice) {
     const V = g.nations.VIC;
     V.alive = true; V.dormant = false;
     const cap = g.regions.find((r) => r.owner === 'VIC' && r.name === 'Auvergne') ?? g.regions.find((r) => r.owner === 'VIC');
@@ -1182,6 +1186,8 @@ export function capitulate(g: Game, nat: string, by: string): void {
   }
   // The fall of one nation can bring down another.
   for (const n of Object.values(g.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g, n.id, by);
+  // The last act of the grand campaign: was that the last but one?
+  crown(g);
 }
 
 /** Sea transport: a nation with shipping can send a corps from one friendly port to another. It takes the whole month, and the enemy may find the convoy. */

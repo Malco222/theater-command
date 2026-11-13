@@ -551,6 +551,8 @@ function fire(g: Game, e: DiploEvent): boolean {
 
 /** Runs at the start of every month: opinion drifts, neutrals move along the track, and history's events are checked. */
 export function monthlyDiplomacy(g: Game): void {
+  // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
+  if ((g.flags.dom ?? 0) > 0) { traitsMonth(g); techMonth(g); return; }
   const m = momentum(g);
   for (const n of Object.values(g.nations)) {
     // A small country in the player's hands stays where its player puts it.

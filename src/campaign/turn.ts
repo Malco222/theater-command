@@ -26,6 +26,7 @@ import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
+import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -535,6 +536,62 @@ export function foreignBooks(g: Game, nat: string): Books | null {
 /** What the player's agent in a province reports of it beyond its armies: what is on order there and the air fleets based there. Null without one. */
 export function agentReport(g: Game, region: number): CityReport | null {
   return g.human ? cityReport(g, region, g.human) : null;
+}
+
+// ---- World Domination: the last act of the grand campaign ------------------------------------------------
+
+/** Where the campaign stands with its last act: whether the war between the alliances is decided, and what the player has chosen. */
+export interface LastAct {
+  /** How the war between the alliances was decided, or null while it is still being fought. */
+  decided: Decided | null;
+  /** True while the player may still choose World Domination: the war is decided and the last act has not begun. */
+  open: boolean;
+  /** Why it cannot be chosen today, in words, or null. */
+  why: string | null;
+  /** The month the player took the victory and left the world as it is, or 0. The last act stays open after that. */
+  peace: number;
+  /** True once the last act has begun, and the month it did. */
+  on: boolean;
+  since: number;
+  /** How many nations still stand. */
+  left: number;
+  /** The nation that has won the last act, or null. */
+  winner: string | null;
+}
+
+/** The state of the campaign's last act, for an interface. Null outside the grand campaign or with nobody at the controls. */
+export function lastAct(g: Game): LastAct | null {
+  if (g.flags.open !== 1 || !g.human) return null;
+  const why = whyNotDomination(g, g.human);
+  return {
+    decided: warDecided(g), open: why === null, why,
+    peace: g.flags['dom:peace'] ?? 0,
+    on: dominating(g), since: g.flags.dom ?? 0,
+    left: contenders(g).length,
+    winner: worldWinner(g),
+  };
+}
+
+/** Why the player cannot open the last act now, or null when he can. */
+export function whyNotOrderDomination(g: Game): string | null {
+  if (!g.human) return 'Nobody is at the controls.';
+  if (!humanUp(g)) return 'Orders are given in your own month.';
+  return whyNotDomination(g, g.human);
+}
+
+/** The player chooses World Domination: every alliance is dissolved and every nation still standing is at war with every other. It cannot be undone. */
+export function orderDomination(g: Game): boolean {
+  return whyNotOrderDomination(g) === null && startDomination(g, g.human);
+}
+
+/** The player takes the victory and leaves the world as it is. World Domination can still be chosen in a later month. */
+export function orderKeepPeace(g: Game): boolean {
+  return !!g.human && humanUp(g) && keepPeace(g);
+}
+
+/** The standings of the world: who still stands, how much of the map each holds, and who has fallen to whom. Foreign armies are as well known as the fog allows. */
+export function standings(g: Game): WorldBoard {
+  return worldBoard(g, g.human);
 }
 
 /** Why the player cannot begin this technology now, or null when a free research team can start on it. */
