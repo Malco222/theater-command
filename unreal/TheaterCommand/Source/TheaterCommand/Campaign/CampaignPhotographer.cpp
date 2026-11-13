@@ -404,6 +404,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			// The month ended and caught while the others' moves are shown: the strip of flags, and the march.
 			FShot& Shot = Add(TEXT("37-month-replay"), TEXT("@capital"), 0.5f);
 			Shot.bKeep = Shot.bWatch = true;
+			Shot.Wait = -2.35f; // taken early, while the replay is still going
 		}
 	}
 
