@@ -71,7 +71,8 @@ import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm,
 import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
-import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoinAll, orderSendBack } from '../../../src/campaign/turn';
+import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoinAll, orderSendBack, orderEvacuate } from '../../../src/campaign/turn';
+import { seaOpenAt } from '../../../src/campaign/navy';
 import { airfieldsSeen, announcements, attackOutlook, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
@@ -913,6 +914,16 @@ function province(id: number) {
           }
         } catch { /* the air war as its own game is the grand campaign's alone */ }
       }
+      // A corps of a sea power standing in a foreign port can be lifted off by sea, as from the beaches of Dunkirk.
+      const N = s.nations[me];
+      if (N?.seaSupply && r.port && r.owner !== me && N.capital >= 0) {
+        for (const c of s.corps) {
+          if (c.dead || c.nat !== me || c.reg !== r.id || c.kind === 'fort') continue;
+          const open = seaOpenAt(s, me, r);
+          const can = up && canOrder(s, c) && open;
+          out.push({ key: `evac:${c.id}`, label: `Lift ${c.name} off by sea`, detail: 'Taken off from the port to a haven or home. It leaves a quarter of its strength and its order behind, and can do no more this month.', ok: can, why: can ? '' : !up ? 'It is not your month.' : !open ? 'The enemy holds the sea off this port.' : 'That corps cannot be given orders now.' });
+        }
+      }
       if (!groundRules(s)) return out;
       for (const n of riverNotes(s, r.id)) {
         if (n.down) continue;
@@ -975,6 +986,11 @@ function work(key: string, region: number) {
     const c = s.corps.find((x) => x.id === Number(a));
     ok = !!c && orderStopWork(s, c);
     if (ok) note = 'The engineers are taken off their work.';
+  } else if (what === 'evac') {
+    const c = s.corps.find((x) => x.id === Number(a));
+    const h0 = s.headlines.length;
+    ok = !!c && orderEvacuate(s, c);
+    if (ok && c) note = s.headlines.slice(h0).map((h) => h.text).join(' ') || `${c.name} is lifted off by sea to ${s.regions[c.reg].name}.`;
   } else if (what === 'recon') {
     const group = s.airFleets.find((f) => f.id === Number(a));
     const flown = sendScout(s, Number(a), region);

@@ -4021,7 +4021,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			if (!Province.bHome)
 			{
 				// On ground that is not the player's, only what can be ordered from afar is offered.
-				RegionPanel.Options.RemoveAll([](const FProvinceOption& Option) { return !Option.Action.StartsWith(TEXT("work:recon")); });
+				RegionPanel.Options.RemoveAll([](const FProvinceOption& Option) { return !Option.Action.StartsWith(TEXT("work:recon")) && !Option.Action.StartsWith(TEXT("work:evac")); });
 			}
 			RegionPanel.Forming = Province.Forming;
 		}

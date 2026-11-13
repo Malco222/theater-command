@@ -14718,6 +14718,9 @@
   function orderBureau(g2) {
     return humanUp(g2) && foundBureau(g2, g2.human);
   }
+  function orderEvacuate(g2, c) {
+    return ownOrder(g2, c) && evacuate(g2, c);
+  }
   function announcements(g2, turn) {
     return passingsIn(g2, turn).map((p) => passingCard(g2, p));
   }
@@ -16349,6 +16352,15 @@
           } catch {
           }
         }
+        const N = s.nations[me];
+        if (N?.seaSupply && r.port && r.owner !== me && N.capital >= 0) {
+          for (const c of s.corps) {
+            if (c.dead || c.nat !== me || c.reg !== r.id || c.kind === "fort") continue;
+            const open = seaOpenAt(s, me, r);
+            const can = up && canOrder(s, c) && open;
+            out.push({ key: `evac:${c.id}`, label: `Lift ${c.name} off by sea`, detail: "Taken off from the port to a haven or home. It leaves a quarter of its strength and its order behind, and can do no more this month.", ok: can, why: can ? "" : !up ? "It is not your month." : !open ? "The enemy holds the sea off this port." : "That corps cannot be given orders now." });
+          }
+        }
         if (!groundRules(s)) return out;
         for (const n2 of riverNotes(s, r.id)) {
           if (n2.down) continue;
@@ -16408,6 +16420,11 @@
       const c = s.corps.find((x) => x.id === Number(a));
       ok = !!c && orderStopWork(s, c);
       if (ok) note3 = "The engineers are taken off their work.";
+    } else if (what === "evac") {
+      const c = s.corps.find((x) => x.id === Number(a));
+      const h0 = s.headlines.length;
+      ok = !!c && orderEvacuate(s, c);
+      if (ok && c) note3 = s.headlines.slice(h0).map((h) => h.text).join(" ") || `${c.name} is lifted off by sea to ${s.regions[c.reg].name}.`;
     } else if (what === "recon") {
       const group = s.airFleets.find((f) => f.id === Number(a));
       const flown = orderScout(s, Number(a), region);
