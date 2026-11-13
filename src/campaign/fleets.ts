@@ -10,7 +10,7 @@ import type { TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
 import { deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, type WingCard } from './carriers';
-import { allied, atWar, headline } from './game';
+import { allied, atWar, headline, routineNews } from './game';
 import { SIGHT, fogOn, sightOf } from './intel';
 import {
   CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, quality, screenGap, seaRng,
@@ -399,10 +399,13 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   if (works !== undefined) rep.works = works;
   g.shoreReports.push(rep);
   const adj = g.nations[defNat].adj;
-  headline(g, 'battle', what === 'troops'
+  const news = what === 'troops'
     ? `The ${f.name} shells the ${adj} troops at ${r.name} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
     : what === 'town' ? `The ${f.name} shells the defences of ${townName(r)} from the ${g.seas[f.zone].name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`
-    : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`, f.nat, r.id);
+    : `The ${f.name} shells the factories and docks of ${r.name}.${shipCount(sunk) ? ` The shore batteries sink ${shipList(sunk)}.` : ''}`;
+  // The same ships shelling the same shore month after month are one line of the month's summary; a ship lost is news.
+  if (shipCount(sunk)) headline(g, 'battle', news, f.nat, r.id);
+  else routineNews(g, `shell:${f.nat}:${what}:${r.id}`, 'battle', news, what === 'troops' ? `the ${adj} troops at ${r.name} shelled from the sea` : what === 'town' ? `the defences of ${townName(r)} shelled from the sea` : `${r.name} shelled from the sea`, f.nat, r.id);
   return rep;
 }
 

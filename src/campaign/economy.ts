@@ -27,7 +27,7 @@ import { SIEGE, besieged } from './siege';
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
 export const PRODUCTION = data as unknown as {
-  baseIncome: number; occupiedIncome: number; peaceIncome: number; replacementCost: number; manpower: number;
+  baseIncome: number; occupiedIncome: number; peaceIncome: number; replacementCost: number; manpower: number; aiLine?: number;
   aiBank: [number, number]; aiReserve: number;
   builds: Record<string, BuildSpec>;
   fort: { cost: number[]; months: number };
@@ -450,6 +450,9 @@ export function aiProduction(g: Game, nat: string): void {
   // Works on order (the grand campaign's guns and airfields) do not hold up the raising of troops.
   // Engineers are ordered by their own rule (the grand campaign) and do not take a place in the army's programme.
   const slots = (): number => n.queue.filter((b) => (b.what === 'corps' && b.kind !== 'eng') || b.what === 'fort').length;
+  // How many corps a staff has forming at once. Two, as history's programmes ran; in the grand campaign a great
+  // industry keeps more in hand, so that a rich country at war turns its money into an army and does not sit on it.
+  const most = g.flags.open === 1 && PRODUCTION.aiLine ? Math.max(2, Math.floor(home / PRODUCTION.aiLine)) : 2;
   // The nation's special formation comes first when it can be had (the grand campaign): one on order at a time.
   const u = budgeted(g) ? eliteOf(nat) : null;
   if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g, nat) === null && !locked(g, nat, `corps:${u.kind}`) && !(u.kind === 'arm' && shortOfOil(g, nat))) {
@@ -458,7 +461,7 @@ export function aiProduction(g: Game, nat: string): void {
     const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
     if (at >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && orderElite(g, nat, at)) spare -= cost;
   }
-  while (slots() < 2) {
+  while (slots() < most) {
     let kind: Kind = home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
     // nation's greatest industrial province; a nation with no such province raises infantry instead.

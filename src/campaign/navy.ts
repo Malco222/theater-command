@@ -15,7 +15,7 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
-import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, type Assessment } from './game';
+import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, routineNews, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { arrive, garrisonOf, roomIn, siegeRules } from './siege';
 import { RES, fuelFleet, laneStopped } from './resources';
@@ -679,8 +679,27 @@ export function huntersIn(g: Game, nat: string, z: number): { weight: number; fl
     const p = (f.ships.dd + f.ships.cv * H.carrier * deckWorth(g, f)) * huntShare(g, f, z) * quality(g, nat) * fit(g, f);
     if (p > 0) { w += p; fleets.push(f); }
   }
-  w += airOver(g, z, nat) * H.air;
+  w += ownAirOver(g, z, nat) * H.air;
   return { weight: w * techMul(g, nat, 'radar'), fleets };
+}
+
+/**
+ * The aircraft a nation itself flies from the coasts of a sea. The hunt counts these and not the whole alliance's
+ * air cover, which every ally would otherwise sink submarines with in turn.
+ */
+function ownAirOver(g: Game, z: number, nat: string): number {
+  const zone = g.seas[z];
+  const n = g.nations[nat];
+  if (!zone.coast.length || !n || !n.alive || !n.atWar.length) return 0;
+  let s = 0;
+  for (const id of zone.coast) {
+    const r = g.regions[id];
+    if (r.since >= g.turn) continue;
+    const sky = skyOver(g, id);
+    if (r.ctrl === nat) s += n.air * (sky ? AIR.sky.seaFoe : 1);
+    else if (sky === nat) s += n.air * AIR.sky.seaOwn;
+  }
+  return (s / zone.coast.length) * zone.air;
 }
 
 /** The share of the enemy submarines at sea in one place that hunters of this weight sink in a month. */
@@ -721,7 +740,8 @@ export function huntSubs(g: Game, nat: string): Record<number, number> {
     }
     const who = groups.length ? `Destroyers of the ${groups[0].name}` : h.fleets.length ? `The escorts of the ${h.fleets[0].name}` : `${g.nations[nat].adj} aircraft`;
     const told = !g.human || g.human === nat || allied(g, g.human, nat) || quarry.some((f) => f.nat === g.human);
-    if (told) headline(g, 'battle', `${who} sink ${sunk} ${g.nations[quarry[0].nat].adj} submarine${sunk === 1 ? '' : 's'} in the ${zone.name}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, nat);
+    const subsSunk = `${sunk} ${g.nations[quarry[0].nat].adj} submarine${sunk === 1 ? '' : 's'}`;
+    if (told) routineNews(g, `hunt:${nat}:${z}`, 'battle', `${who} sink ${subsSunk} in the ${zone.name}${cost ? `, for the loss of ${cost} destroyer${cost === 1 ? '' : 's'}` : ''}.`, `${subsSunk} sunk in the ${zone.name}`, nat);
   }
   return out;
 }

@@ -327,6 +327,8 @@ export interface BattleReport {
   town?: boolean;
   /** The field was won but the town holds out: the province is under siege, not taken (the grand campaign). */
   siege?: boolean;
+  /** The field was won and the town, held only by its guard, opened its gates without a fight (the grand campaign). */
+  gates?: boolean;
   /** A relief: the attackers came to raise a siege of their own side's town. */
   relief?: boolean;
   /** The garrison of a besieged town came out against the army round it. */
@@ -788,6 +790,8 @@ export interface AirReport {
   hold: number;
   /** What the bombers did, in a sentence. */
   result: string;
+  /** The grand campaign: what the raid achieved, on the scale its losses are counted on (one aircraft is 1). */
+  worth?: number;
   /** A strike on a fleet or a raid on a harbour: the fleets hit, as they were before it, and what each lost. */
   ships?: SeaSide[];
   /** The fleet a strike was aimed at. */

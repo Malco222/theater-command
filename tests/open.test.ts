@@ -7,7 +7,7 @@ import open from '../data/campaign/open.json';
 import setup from '../data/campaign/setup-1939.json';
 import { phaseFor, theatrePhases } from '../src/campaign/ai';
 import { airPlanFor } from '../src/campaign/air';
-import { createGame } from '../src/campaign/game';
+import { createGame, declareWar } from '../src/campaign/game';
 import { loadGame, peekSave, saveGame } from '../src/campaign/save';
 import { fronts, isOpen, startOpen, temper } from '../src/campaign/staff';
 import { beginHuman, declarable, endHuman, humanUp, runTurnAI, stepAI } from '../src/campaign/turn';
@@ -108,7 +108,9 @@ describe('the staffs', () => {
       if (begun.has(pair)) continue;
       const [a, b] = pair.split(':');
       const chosen = (ops[a] ?? []).some((op) => op.declare?.includes(b));
-      expect(chosen || byEvent.has(pair), `${pair} in month ${month}`).toBe(true);
+      // A member of the League of Free Nations goes to war when another member is attacked: that is its pact, not a choice.
+      const pact = !!g.nations[a].league;
+      expect(chosen || pact || byEvent.has(pair), `${pair} in month ${month}`).toBe(true);
     }
   });
 
@@ -133,17 +135,25 @@ describe('the staffs', () => {
   });
 
   it('call up the armies history raised for a war when that war comes, however late', () => {
-    // Italy attacks Greece in May 1941 in this war, seven months after history's date: the Greek army still mobilises.
-    const g = runs[0];
-    const month = g.flags['war:ITA:GRE'];
-    expect(month).toBeGreaterThan(20);
+    // Italy, kept at peace by its player until May 1941, attacks Greece seven months after history's date: the Greek army still mobilises.
+    const g = free(3, 'ITA');
+    const month = 21;
+    expect(sitOut(g, month - 1)).toBe(month - 1);
+    for (let guard = 0; !humanUp(g) && guard < 80; guard++) stepAI(g);
+    beginHuman(g);
+    expect(g.turn).toBe(month);
+    expect(g.flags['war:ITA:GRE']).toBeUndefined();
+    declareWar(g, 'ITA', 'GRE');
+    endHuman(g);
+    sitOut(g, 2);
+    expect(g.flags['war:ITA:GRE']).toBe(month);
     const rows = (setup.expeditions as unknown as [number, string][]).map((row, i) => ({ i, due: row[0], nat: row[1] })).filter((row) => row.nat === 'GRE');
     expect(rows.length).toBeGreaterThan(0);
     // By history's calendar every one of them would have been struck off before the war began.
     expect(Math.max(...rows.map((row) => row.due)) + 6).toBeLessThanOrEqual(month + 1);
     const sent = rows.filter((row) => g.flags[`sent:${row.i}`] === 1 && g.flags[`due:${row.i}`] >= month);
     expect(sent.length).toBeGreaterThanOrEqual(3);
-  });
+  }, 60_000);
 });
 
 describe('the player in free play', () => {

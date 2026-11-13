@@ -16,6 +16,7 @@ import {
   whyNotSally, whyNotStorm,
 } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
+import { townSize } from '../src/campaign/towns';
 import {
   beginHuman, candidates, garrisonsAt, humanUp, orderAttack, orderGarrison, orderMove, orderStorm, orderTakeField, reach, runTurnAI, siegesInSight, stepAI,
   stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotStormTown,
@@ -105,7 +106,8 @@ describe('the town as a fortress', () => {
   it('a town guard stands only for the country the town belongs to', () => {
     const { g, town, ger } = lodz({ inside: false });
     expect(guardOf(g, town)).toBeGreaterThan(0);
-    expect(orderMove(g, ger[0], town.id)).toBe(1);
+    // The guard gives way to an army that plainly overmatches it: the corps come up one behind another until it does.
+    for (const c of ger.slice(0, 4)) if (town.ctrl !== 'GER') expect(orderMove(g, c, town.id)).toBe(1);
     expect(town.ctrl).toBe('GER');
     expect(guardOf(g, town)).toBe(0);
   });
@@ -241,7 +243,10 @@ describe('winning the field does not win the province', () => {
 
   it('a town held only by its guard opens its gates to an army strong enough, and holds against a weak one', () => {
     const strong = lodz({ inside: false });
-    expect(orderMove(strong.g, strong.ger[0], strong.town.id)).toBe(1);
+    // One corps off the march is not enough to overawe it; the army coming up behind is.
+    let came = 0;
+    for (const c of strong.ger.slice(0, 4)) if (strong.town.ctrl !== 'GER') { expect(orderMove(strong.g, c, strong.town.id)).toBe(1); came++; }
+    expect(came).toBeGreaterThan(1);
     expect(strong.town.ctrl).toBe('GER');
     expect(strong.g.headlines.some((h) => /Lodz opens its gates/.test(h.text))).toBe(true);
 
@@ -267,7 +272,7 @@ describe('storming a town', () => {
     const ready = stormOutlook(g, town.id)!;
     expect(lineLabels(ready.lines)).not.toContain('A hasty assault');
     expect(ready.odds).toBeGreaterThan(hasty.odds);
-    expect(ready.odds / hasty.odds).toBeCloseTo(1 / SIEGE.assault.hasty, 1);
+    expect(ready.odds / hasty.odds).toBeCloseTo(1 / SIEGE.assault.hasty[townSize(g, town)], 1);
   });
 
   it('a town that is stormed falls with everyone in it', () => {
@@ -490,6 +495,13 @@ describe('the fall of a country', () => {
     expect(ringClosed(g, w)).toBe(true);
     expect(w.ctrl).toBe('POL');
     expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45 * SIEGE.capital, 6);
+    // And month by month the government shut inside loses its hold, until the capital counts as lost outright.
+    g.flags[`siege:${w.id}`] = g.turn;
+    expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45 * SIEGE.capital, 6);
+    g.flags[`siege:${w.id}`] = g.turn - SIEGE.capitalYear / 2;
+    expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45 * (SIEGE.capital + (1 - SIEGE.capital) / 2), 6);
+    g.flags[`siege:${w.id}`] = g.turn - 3 * SIEGE.capitalYear;
+    expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45, 6);
   });
 
   it('a beaten country gives in to the enemy at its throat, and to nobody when none is near', () => {

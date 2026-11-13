@@ -16,7 +16,7 @@ import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import type { TicketLine, VictoryLevel } from '../core/ticket';
-import { allied, atWar, headline } from './game';
+import { allied, atWar, headline, routineNews } from './game';
 import { techMul, techNotes } from './research';
 import { NAVY, atSea, shipCount, shipList, sinkShips, surfaceShips, zoneOf } from './navy';
 import { fleetKnown, seaStaff, syncWings } from './carriers';
@@ -72,7 +72,7 @@ export const AIRWAR = warData as unknown as {
   recon: { aircraft: number; loss: number; ready: number };
   losses: { bombers: number; power: number; most: number; night: { bombers: number; power: number }; clash: number };
   success: { k: number };
-  ai: { escortReady: number; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number } };
+  ai: { escortReady: number; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number } } };
 };
 
 /** True once the air war is its own game: airfields are places and air groups of one kind fly from them. The grand campaign only. */
@@ -903,7 +903,7 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   const through = Math.max(0, a.B - lostB) * (night ? C.night.accuracy : 1) * techMul(g, nat, 'bombers');
 
   // What the bombers did.
-  let result = '', value = 0, ground = 0, shipsSunk = 0;
+  let result = '', value = 0, ground = 0, shipsSunk = 0, notable = false;
   let struck: SeaSide[] | undefined;
   if (m === 'fleet' || m === 'harbour') {
     // A strike on ships: the hits fall on the classes the crews aim for, and each fleet under attack takes its share.
@@ -966,8 +966,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     result = r.fac > 0 ? `The bombing stopped ${Math.round(cut * 100)}% of ${r.name}'s output for a month: ${(nation * 100).toFixed(1)}% of ${g.nations[r.ctrl].adj} production.` : '';
     // The grand campaign: a heavy raid wrecks a factory outright, and the bombs that fall on the yards and
     // junctions may cut the province's railway. Both stay as they are until engineers come.
-    if (bombFactories(g, nat, r, cut)) { value += 300; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
-    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0)) { value += 300; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
+    if (bombFactories(g, nat, r, cut)) { value += 300; notable = true; result += ` A factory was wrecked outright: it earns nothing until engineers rebuild it.`; }
+    if (bombRail(g, nat, target, through, a.aa ? a.aa * WORKS.aa.cut : 0)) { value += 300; notable = true; result += ` The railway through ${r.name} is cut: no train runs until engineers relay it.`; }
     else if (!result) result = through > 0 ? `The bombs fell on the rail yards of ${r.name}, but the line still runs.` : 'No bombers got through.';
     result = result.trim();
   } else if (m === 'town') {
@@ -1055,6 +1055,8 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
     attNat: nat, defNat, att, def, lines: a.lines, odds: a.Dpow > 0 ? a.Epow / a.Dpow : 9, level, won, sky, hold, result,
   };
   if (struck) { rep.ships = struck; if (m === 'fleet') rep.fleet = target; if (a.surprise) rep.surprise = true; }
+  // The grand campaign keeps what the raid was worth beside what it cost: a staff learns from its own results.
+  if (g.flags.open === 1) rep.worth = Math.round(value);
   g.airReports.push(rep);
   storyAir(g, m === 'fleet' ? 'strike' : m === 'harbour' || m === 'town' ? 'bomb' : m, sea ? zone : target, a.att.map((x) => x.f), a.def.map((x) => x.f), { sky, sunk: shipsSunk, attLost: aLost, defLost: dLost });
 
@@ -1071,7 +1073,18 @@ export function fly(g: Game, nat: string, m: AirMission, target: number, fleets:
   else if (sea) text = `${who} ${a.att.length === 1 ? 'strikes' : 'strike'} at shipping in ${a.place}. ${result} ${cap(cost)}.`;
   else if (m === 'ground') text = `${who} ${a.att.length === 1 ? 'raids' : 'raid'} the ${adj} troops at ${a.place}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
   else text = `${who} ${a.att.length === 1 ? 'bombs' : 'bomb'} ${a.place}${night ? ' by night' : ''}. ${result} ${cap(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ''}.`;
-  headline(g, 'battle', text, nat, sea ? undefined : target);
+  // A fight for the sky in which nobody met anybody is not news (the grand campaign).
+  if (g.flags.open === 1 && m === 'superiority' && !sky && aLost + dLost === 0) return rep;
+  // What changes something is told in full: the sky won, a ship sunk, a factory wrecked, a railway cut, a fleet or
+  // a harbour struck. The same raid on the same place month after month goes into the month's summary line.
+  const full = sky || notable || shipsSunk > 0 || m === 'fleet' || m === 'harbour';
+  const brief = m === 'superiority' ? `a fight for the sky over ${a.place}`
+    : m === 'town' ? `the defences of ${townName(g.regions[target])} bombed`
+    : sea ? `shipping struck in ${a.place}`
+    : m === 'ground' ? `the ${adj} troops at ${a.place} raided`
+    : `${a.place} bombed${night ? ' by night' : ''}`;
+  if (full) headline(g, 'battle', text, nat, sea ? undefined : target);
+  else routineNews(g, `air:${nat}:${m}:${sea ? `z${zone}` : target}`, 'battle', text, `${brief}${aLost ? ` (${aLost} aircraft lost)` : ''}`, nat, sea ? undefined : target);
   return rep;
 }
 
@@ -1186,10 +1199,20 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
   for (const t of [...front.keys()]) if (!fought.has(t) && !pushed(t)) front.delete(t);
   // One raid on a place in a month: the staff spreads its blows.
   const hit = new Set<number>();
+  // A raid on factories that keeps costing more than it gains is given up: after so many poor trades running the
+  // staff leaves that target alone for a while. A wrecked factory or a cut railway counts as a good month.
+  const S = R.sour;
+  const soured = (m: AirMission, t: number): boolean => !!S && g.turn < (g.flags[`rso:${nat}:${m}:${t}`] ?? 0);
   const send = (m: AirMission, t: number, fleets: AirFleet[], k: number): void => {
     const rep = fly(g, nat, m, t, fleets, `:staff${k}`);
     hit.add(t);
     for (const f of fleets) { used.add(f.id); if (rep) { f.mission = m; f.target = t; f.flew = g.turn; } }
+    if (!rep || !S || (m !== 'bomb' && m !== 'night')) return;
+    const lost = rep.att.reduce((s, x) => s + x.lostFtr + x.lostBmr, 0);
+    const key = `rs:${nat}:${m}:${t}`;
+    if (lost < S.dear || (rep.worth ?? 0) >= S.trade * lost) { delete g.flags[key]; return; }
+    g.flags[key] = (g.flags[key] ?? 0) + 1;
+    if (g.flags[key] >= S.times) { delete g.flags[key]; g.flags[`rso:${nat}:${m}:${t}`] = g.turn + S.rest; }
   };
 
   // A fight for the sky over the stretch of front where most of the army stands, if the fighters should win it:
@@ -1226,6 +1249,7 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
       seen.add(homeOf(f));
       const escorts = fightersAt(homeOf(f));
       const weigh = (m: AirMission, r: Region, fleets: AirFleet[]): void => {
+        if (soured(m, r.id)) return;
         const a = assessAir(g, fleets, m, r.id);
         if (a.why) return;
         const fc = forecastAir(g, a, m, r.id);

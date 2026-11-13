@@ -143,6 +143,8 @@ const money = (pp: number): string => Math.floor(pp * BUDGET.scale + 1e-6).toLoc
 const cash = (pp: number, signed = false): string => { const v = Math.round(pp * BUDGET.scale); return `${v < 0 ? '−' : signed && v > 0 ? '+' : ''}${Math.abs(v).toLocaleString('en-US')}`; };
 /** What is in the treasury: rounded down in credit, so it never shows more than can be spent, and as a debt when it is one. */
 const inHand = (pp: number): string => (pp >= 0 ? money(pp) : cash(pp));
+/** "1 division", "12 divisions". */
+const divsOf = (n: number): string => `${num(n)} division${Math.round(n) === 1 ? '' : 's'}`;
 const natName = (id: string): string => g.nations[id]?.name ?? id;
 /** A nation's name as it reads inside a sentence: "the United Kingdom", "Germany". */
 const theName = (id: string): string => { const nm = natName(id); return /^(United|Soviet|Netherlands)/.test(nm) ? `the ${nm}` : nm; };
@@ -719,7 +721,7 @@ function refresh(): void {
         units += `<g class="ctr army unsure${picked ? ' chosen' : ''}" data-reg="${r.id}" data-nat="${nat}" transform="translate(${r.x - 11 + k * 4.5} ${r.y - 7 - k * 4})"><title>${esc(g.nations[nat].adj)} army, ${cs.length} corps, ${idd.length ? `${idd.length} identified` : 'none identified'}: ${estWords(e)}. ${HOW_TO_KNOW}</title>
         <ellipse class="base" cx="11" cy="16.2" rx="13" ry="3.4" fill="${g.nations[nat].color}"/><path class="pole" d="M-.6 -1.5V16.2"/>
         ${top ? standard(nat, top.kind) : `${flagUse(nat, g.nations[nat].color)}<rect class="box" width="22" height="14" rx=".7" fill="none"/>`}
-        ${k === 0 ? `<text x="11" y="24.6">${e ? `~${Math.max(1, Math.round((e.lo + e.hi) / 2))}` : '?'}</text><text class="size" x="11" y="-1.6">${cs.length > 1 ? 'XXXX' : 'XXX'}</text>` : ''}
+        ${k === 0 ? `<text x="11" y="24.6">${e ? `${Math.max(1, Math.round((e.lo + e.hi) / 2))}?` : '?'}</text><text class="size" x="11" y="-1.6">${cs.length > 1 ? 'XXXX' : 'XXX'}</text>` : ''}
         ${k === 0 && inSight > 1 ? `<circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${inSight}</text>` : ''}</g>`;
         return;
       }
@@ -783,6 +785,8 @@ function readSave(): string | null {
 }
 
 const sumDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
+/** Divisions as the cards of a face-off count them: every division on the roll, whatever its strength, as the corps cards beneath do. */
+const rollDivs = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs, 0);
 
 function pickedCorps(): Corps[] {
   if (!humanUp(g)) return [];
@@ -1848,7 +1852,7 @@ function siegeBlock(r: Region): string {
   const facts = fact('Walls', `+${pct}%`, `Troops inside ${v.town} fight ${pct}% stronger than in the open.${v.broken > 0 ? ` Bombardment has broken down ${Math.round(v.broken * 100)}% of its works.` : ''} Bombs, ships' guns and siege artillery break the works down, and engineers blow in the barricades.`, v.broken > 0 ? ' hurt' : '')
     + fact('Garrison', `${v.inside < 0 ? '?' : v.inside} of ${v.room}`, `${v.town} has room for ${v.room === 1 ? 'one corps' : `${v.room} corps`} inside.${v.inside < 0 ? ' How many are inside is not known: look with an agent or a reconnaissance flight.' : ''}`)
     + fact('Town guard', v.guard > 0 ? `${v.guard.toFixed(1)} div` : 'None', v.guard > 0
-      ? `Depot troops, police and militia who hold ${v.town} while no army does. A town held only by its guard opens its gates to a force with odds of ${SIEGE.summons} to 1 or better.`
+      ? `Depot troops, police and militia who hold ${v.town} while no army does. ${SIEGE.summonsNot.includes(v.size) ? `A ${v.size === 'capital' ? 'capital' : 'city'} never opens its gates at a summons: its guard has to be beaten in the streets or starved out.` : `A town held only by its guard opens its gates to a force with odds of ${SIEGE.summons} to 1 or better.`}`
       : `${v.town} has no guard of its own${r.ctrl !== r.owner ? ': it is held by a foreign army' : ''}. With no troops inside, it falls to whoever wins the country round it.`)
     + fact('Stores', v.by ? (v.bySea ? 'By sea' : `${v.left} of ${v.stores} mo`) : `${v.stores} mo`, v.by && v.bySea ? 'Ships still reach the harbour: the town cannot be starved while they do.' : `Closely shut in, ${v.town} feeds its defenders for ${monthsWord(v.stores)}. After that they go hungry, and a hungry garrison gives in.`, v.by && !v.bySea && v.left === 0 ? ' hurt' : '');
   let head: string;
@@ -1875,7 +1879,7 @@ function siegeBlock(r: Region): string {
   // The orders.
   let acts = '';
   if (mine && up) {
-    const field = r.units.filter((c) => c.nat === me && canOrder(g, c) && c.kind !== 'fort');
+    const field = r.units.filter((c) => c.nat === me && canOrder(g, c) && c.kind !== 'fort' && c.kind !== 'eng');
     const into = field.slice(0, 6).map((c) => {
       const why = whyNotGarrisonTown(g, c);
       return `<button class="btn small" data-act="garrison" data-id="${c.id}" ${why ? `disabled title="${esc(why)}"` : `title="${esc(c.name)} goes inside the walls and fights ${pct}% stronger there. It does nothing more this month."`}>Into the town: ${esc(c.name)}</button>`;
@@ -1897,20 +1901,21 @@ function siegeBlock(r: Region): string {
 /** What the staff says of a battle before it is ordered: the verdict, the balance (a band where the enemy is not fully known) and the Battle Ticket. */
 function outlookBlock(look: Outlook, mineColor: string, foeColor: string, what: string, sure: string, scout: Region | null): string {
   const at = (odds: number): number => (100 * odds) / (1 + odds);
-  const need = (100 * 1.2 / 2.2).toFixed(1);
+  const need = at(look.even).toFixed(1);
+  const takes = look.even.toFixed(look.even === 1.2 ? 1 : 2);
   const p = look.chance;
   if (!look.exact) {
     const word = look.chanceLo >= 0.95 ? `${sure} looks certain` : look.chanceHi <= 0 ? 'This looks hopeless' : p >= 0.6 ? 'The staff thinks the odds favour you' : p >= 0.3 ? 'The staff cannot call it' : 'The staff thinks it a long shot';
     return `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${Math.round(look.chanceLo * 100)}%` : `${Math.round(look.chanceLo * 100)} to ${Math.round(look.chanceHi * 100)}%`} chance ${what}</span></div>
-      <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span><span class="need" style="left:${need}%" title="What it takes: roughly 1.2 to 1 on the day"></span></div>
-      <div class="ends"><span>Your strength on the day</span><span>The white mark is what it takes; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>
+      <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
+      <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>
       <div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${scout ? scoutButton(scout) : ''}</div>
       ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
   }
   const word = p >= 0.95 ? `${sure} is all but certain` : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : 'This will fail';
   return `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds ${look.odds.toFixed(2)} to 1 · about ${Math.round(p * 100)}% chance ${what}</span></div>
-    <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="need" style="left:${need}%" title="What it takes: roughly 1.2 to 1 on the day"></span></div>
-    <div class="ends"><span>Your strength on the day</span><span>The white mark is what it takes: about 1.2 to 1</span><span>Theirs</span></div></div>
+    <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${mineColor}"></i><i style="flex:1;background:${foeColor}"></i></div><span class="need" style="left:${need}%" title="An even chance: roughly ${takes} to 1"></span></div>
+    <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${takes} to 1</span><span>Theirs</span></div></div>
     ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
 }
 
@@ -1930,13 +1935,13 @@ function siegeCard(): string {
   const foes = out ? besiegers(g, r) : garrisonOf(r).filter((c) => !c.dead);
   const guard = !out && v.guard > 0 ? `<div class="ucard" title="Depot troops, police and militia: no match for an army, but behind walls they must still be beaten."><span class="utop">${ringIcon(g.nations[r.ctrl].color, 30)}</span><b>Town guard</b><span class="um">${v.guard.toFixed(1)} div · about ${num(guardMen(g, r))} men</span></div>` : '';
   const ours: Side = {
-    nats: [me, ...new Set(going.filter((c) => c.nat !== me).map((c) => c.nat))], role: out ? 'coming out' : 'storming', who: leaderOf(going), men: going.reduce((s, c) => s + men(c), 0), corps: going.length, divs: sumDivs(going),
+    nats: [me, ...new Set(going.filter((c) => c.nat !== me).map((c) => c.nat))], role: out ? 'coming out' : 'storming', who: leaderOf(going), men: going.reduce((s, c) => s + men(c), 0), corps: going.length, divs: rollDivs(going),
     cards: cands.map((c) => battleCard(c, { note: inSet.has(c.id) ? '' : 'Staff at its limit' })).join(''),
     under: `<small class="fhelp">${out ? 'Every corps of the garrison fit to fight comes out.' : 'Every corps round the town goes in, from every side at once.'}</small>`,
   };
   const foeNat = foes[0]?.nat ?? r.ctrl;
   const theirs: Side = {
-    nats: foes.length ? [...new Set(foes.map((c) => c.nat))] : [r.ctrl], role: out ? 'round the town' : 'inside the town', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0) + (out ? 0 : guardMen(g, r)), corps: foes.length, divs: Math.round((sumDivs(foes) + (out ? 0 : v.guard)) * 10) / 10,
+    nats: foes.length ? [...new Set(foes.map((c) => c.nat))] : [r.ctrl], role: out ? 'round the town' : 'inside the town', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0) + (out ? 0 : guardMen(g, r)), corps: foes.length, divs: rollDivs(foes) + (out ? 0 : Math.round(v.guard * 10) / 10),
     ...(look.exact ? {} : { menText: '?', divsText: '?' }),
     cards: foes.map((c) => (kn(c) === 'exact' ? battleCard(c) : foeCard(c))).join('') + guard,
     under: out ? '' : `<small class="fhelp">Behind the walls of ${esc(v.town)}: ${Math.round((v.bonus - 1) * 100)}% stronger${v.broken > 0 ? `, with ${Math.round(v.broken * 100)}% of the works broken down` : ''}.</small>`,
@@ -1944,7 +1949,7 @@ function siegeCard(): string {
   const hasty = !out && look.lines.some((l) => l.label === 'A hasty assault');
   const note = out
     ? '<div class="note" style="margin-top:14px"><b>What follows.</b> Win, and the army round the town is driven off and the siege is raised. Lose, and the garrison goes back inside the weaker for it. One sortie a month from each town.</div>'
-    : `<div class="note" style="margin-top:14px"><b>What follows.</b> Carry the town and ${esc(r.name)} is yours, with everyone inside taken prisoner. Fail, and your corps pay more dearly than in the open, though the town guard is thinned too. A town can be assaulted once a month.${hasty ? ` <b>This is a hasty assault:</b> your army has only just come up, and goes in at ${Math.round(SIEGE.assault.hasty * 100)}% of its weight. Next month it goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier.` : ''}</div>`;
+    : `<div class="note" style="margin-top:14px"><b>What follows.</b> Carry the town and ${esc(r.name)} is yours, with everyone inside taken prisoner. Fail, and your corps pay more dearly than in the open, though the town guard is thinned too. Luck runs wider in the streets than in the field, and mostly against the attacker: an assault is an even chance at about ${look.even.toFixed(2)} to 1. A town can be assaulted once a month.${hasty ? ` <b>This is a hasty assault:</b> your army has only just come up, and goes in at ${Math.round(SIEGE.assault.hasty[v.size] * 100)}% of its weight. Next month it goes in at full weight, and anything your bombers, ships and guns break down meanwhile makes it easier.` : ''}</div>`;
   return `${shut}
     <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(v.sizeWord[0].toUpperCase() + v.sizeWord.slice(1))}</small></div>${sidePanel(theirs, 'def')}</div>${out ? '' : prizeStrip(r)}
       ${outlookBlock(look, g.nations[me].color, g.nations[foeNat].color, out ? 'to break the siege' : `to carry ${esc(v.town)}`, out ? 'Breaking out' : 'Victory', out ? null : r)}${note}</div>
@@ -1954,7 +1959,7 @@ function siegeCard(): string {
 function regionPane(): string {
   if (ui.sel < 0 && ui.sea >= 0) return seaPane();
   if (ui.sel < 0) {
-    return `<h2>${g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${prizesBlock()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
+    return `<h2>${g.human && !g.nations[g.human].alive ? `${esc(natName(g.human))} has fallen` : g.human ? 'Your orders' : 'The map'}</h2><p class="sub">${g.human && !g.nations[g.human].alive ? 'Your country has laid down its arms. End the month and the war goes on without you.' : g.human ? 'Click a region to see who holds it and which armies are there.' : 'Click any region to inspect it. Use Next month or Play to watch the war unfold.'}</p>${alertList().length ? `<div class="alerts inpane">${alertButtons()}</div>` : ''}${scopeNote()}${advice()}${prizesBlock()}${goalsBlock()}${g.human ? `<p class="sub pref">${watchPref() ? 'When you end the month, the map follows the other nations as they move.' : 'When you end the month, the other nations move at once.'} <button class="btn small" data-act="watchpref">${watchPref() ? 'Play them at once' : 'Show their moves'}</button></p>` : ''}
       <h3>How a month works</h3><ol class="steps"><li>Each army gets four moves a month, shown as gold dots. Tanks and motorized troops in a fresh offensive get one or two more.</li><li>Marching through friendly ground costs one move. Entering enemy ground costs foot infantry two.</li><li>An attack is settled at once from the Battle Ticket: forces, terrain, forts, supply, air, commanders.</li><li>A nation asks for terms when it has lost too much of its capital, its territory and its army.</li><li>Fleets hold the seas. A sea the enemy commands is closed to troopships and supply ships. Click any sea to see who holds it.</li>${airWar(g) ? '<li>Aircraft fly from airfields, the round pads on the map: click one to see the air groups based there. Fighters patrol their sky to catch raids, stick with a bomber group as its escort, or rest. Any group flies one raid a month. Open <b>Air</b> and plan it from its target: you see the chance of success and the losses to expect, then pick who goes. Bombers from several airfields can meet up for one raid, and the more that go together the smaller the share they lose. Engineers lay out new airfields.</li>' : '<li>Air fleets fly from airfields. Left alone they support the armies and defend their own sky. Given a mission they fight for the sky, bomb industry or strike at shipping, as far as their range allows.</li>'}${g.turn >= 9 ? '<li>In the desert an army is only as strong as the port behind it. Every region of desert between a corps and its nearest working port weakens its attacks and slows its advance, and cargoes sunk on the way to Libya lengthen the Axis line. Infantry on foot in open desert is easy meat for tanks unless it stands in a fortress.</li>' : ''}${g.corps.some((c) => c.airborne) ? '<li>Airborne troops need no ships. Once a month a corps marked Airborne can be dropped on an enemy coast across one sea, whoever holds the water, as long as the enemy\'s fighters do not hold the sky there. It fights without heavy weapons, so pick a weakly held target.</li>' : ''}${g.turn >= 20 ? '<li>Deep inside the Soviet Union an invader outruns his supplies: attacks weaken and marches slow until the railways behind are relaid. Mud and winter make it worse.</li>' : ''}${g.human ? '<li>Every province you hold pays into your treasury each month: factories most, then cities, farmland, harbours and oilfields. Your armies, fleets and air fleets draw their upkeep from it, and what is left buys ' + (budgeted(g) ? 'the arsenal: corps of every kind, aircraft by the wing, warships, and works for your provinces' : 'new corps and works') + '. The treasury is on the top bar: click it for the ledger. Click one of your own regions to raise corps or build works there, or open <b>Build</b> to see everything on order.</li>' + (budgeted(g) ? '<li>The town is the key to its province. Beat the army in the field and you hold only the country round the town: the province is yours when the town itself falls. A town held by nobody but its guard opens its gates to a strong army. A town with troops inside must be <b>stormed</b> (once a month, costly, and weaker the month you arrive), <b>softened</b> first by bombers, ships\' guns and artillery, or <b>starved</b> by keeping an army round it until its stores are gone. An army that closes round a held town marches no further that month. Put your own corps inside a town (click the province, then <b>Into the town</b>) and they fight from behind its walls; a garrison shut in can <b>sally out</b>, and an attack from a neighbouring province can raise the siege. A province under siege pays nothing, raises nothing and runs no trains. A country that is overrun, with its capital ringed, asks for terms.</li><li>Towns grow by what you build in them. The chief place of every province has building plots, one in a village and four in the capital: click a province and look under <b>The town</b>. Commerce pays money, farming feeds the depots, learning quickens research, training and medicine serve the army, and administration brings tax and makes conquered ground pay. Trade agreements pay you and your partner every month: open <b>Build</b>, <b>Towns</b>, <b>Trade agreements</b>. Each needs a trading house, and goods that go by sea can be sunk.</li><li>Every arm has its ground. Tanks are at their best in open country, weak in mountains, cities, marsh and forest, and cannot enter the steepest mountains at all (marked with a pair of peaks). Mountain troops are at home in mountains and hills. Lorries and guns bog down in marsh and mountain. Click any province to see how its ground treats each arm.</li><li>Tanks and infantry are worth more together. Infantry attacking with armour beside it hits up to 15% harder, and the tanks 10% harder with infantry to cover them. One armoured division supports about three of infantry. Tanks sent into a city or a forest alone are easy to pick off.</li><li>The great rivers are on the map, with a bridge wherever a road crosses one. An attack over standing bridges is a little weaker. Blow the bridges (click your province on the bank) and nothing on wheels or tracks can cross, in either direction: tanks, lorries and guns wait while infantry goes over in boats at a heavy cost. Troops driven off a river bank blow the bridges behind them unless fast troops seize them first. Nothing rebuilds itself: bring up an engineer corps.</li><li>The railways are on the map. Troops go by rail only along a working line, and an army is fed from its railhead: the nearest province joined by working track to one of your depots or supplied ports. More than two provinces of road beyond it, your troops fight weaker. Troops driven out of a province often tear up the track behind them, you can order your own to do it, and bombers can cut a line from the air. A cut line stays cut until engineers relay it, so an advance is only as fast as the railway behind it.</li><li>Engineers are raised on the Army shelf. Click the province an engineer corps stands in to give it a month of work there: rebuild bridges, relay a cut railway, rebuild a bombed factory, build field works, lay minefields and booby traps, or demolish fortifications. Sent in with an attack, engineers breach enemy works, clear lanes through his mines and help the infantry across a bridgeless river.</li><li>Heavy equipment needs industry. Tanks, artillery and motorized troops are raised only in a province with factories; aircraft need an aircraft industry and airfields to fly from; ships need a shipyard in a home port. Build a factory in a city and it also pays into the treasury every month. Ring your industry with anti-aircraft guns against bombing, and build airfields where you want fighter patrols.</li><li>A grand campaign is fought at one of five levels, from Cadet to Field Marshal, shown as a badge beside the date. Colonel is the fair fight. Below it your treasury and replacements get a helping hand and rival staffs are slower to attack; above it your rivals are richer and bolder, their bombers come for your factories and railways, and at Field Marshal they land on thinly held coasts and attack together. Battles are worked out the same way at every level. Click the badge to change the level in any month.</li>' : '') + '<li>Neutral countries drift toward whoever is winning. Open <b>Powers</b> to court them with political capital, and to see who each one counts as a friend.</li><li>To invade a neutral, pick up an army beside its frontier and send it across. The ground shows in amber, and you are asked whether you mean war before anything moves.' + (budgeted(g) ? ' Striking a country at peace catches it unready: your attacks on its ground hit ' + Math.round((RELATIONS.sneak.attack - 1) * 100) + '% harder that month. The price is paid elsewhere. Every neutral grows warier of you, the victim\'s friends most of all, and some will stop trading with you or lean toward your enemies.' : '') + '</li>' + (budgeted(g) ? (paths(g).length ? '<li>Yours is a small country, and its path is its own. Open <b>Your path</b> on the top bar to join the Axis, join the Allies, stand alone, or found a League with a willing neighbour. No treaty signs your land away and no courting moves you; if you are attacked while you stand alone, you fight alone until you choose a side.</li>' : '') + '<li>Once in a while a few smaller nations found the League, a third alliance that belongs to neither the Axis nor the Allies and shows on the map in a colour of its own. Its members defend one another: declare war on one and you are at war with them all. The declaration prompt names them, and <b>Powers</b> lists its members.</li>' : '') + '<li>In the grand campaign every country has abilities of its own: Germany\'s tanks hit harder in open country, the Soviet Union makes good its losses faster and moves its factories out of reach, Switzerland is a fortress in its mountains and a bank while at peace. Many countries can also raise a special formation from the <b>Build</b> tab, marked with a star: Guards, Alpine troops, heavy tanks, ski troops. Open <b>Abilities</b> on the top bar, or from <b>Build</b> or <b>Powers</b>, to read any country\'s list. A battle\'s ticket names the abilities that count in it.</li><li>Generals gain experience in battle and earn traits from how they fight. Open <b>Generals</b> to give them commands and spend their skill points.</li><li>Every unit keeps a record, and one that has done enough is honoured: a breakthrough, a stand against the odds, a capital entered, a full tour of missions. Keep the honour at the front and the unit fights harder, or send its heroes home to sell war bonds or train the next drafts. Open <b>Honours</b>, or the <b>Record</b> strip under any unit.</li><li>Open <b>Navy</b> to send your fleets out. A corps standing in a port can be shipped to a friendly port or landed on an enemy coast.</li>' + (budgeted(g) ? '<li>Fleets are pieces on the map, handled like armies. Click one of your fleets to pick it up: its ships are laid out as cards by class, and the seas it can reach are ringed. Give it one of five orders. <b>Patrol</b> holds a sea and brings enemy fleets to battle. <b>Raid</b> goes after merchant ships. <b>Escort</b> binds it to one shipping lane and guards the convoys the whole way. <b>Hunt</b> sends its destroyers and carrier aircraft after submarines, which nothing else can sink. <b>Port</b> brings it home to refit. Battleships and cruisers standing off an enemy coast can shell the troops or the factories there once a month: shell first, attack after. Heavy ships need destroyers round them, or a submarine may get one. <b>Split off ships</b> makes an escort group or a bombardment force out of a big fleet.</li><li>A carrier is a floating airfield. Every fleet with carriers brings a wing of fighters and a wing of strike aircraft, laid out as cards beside its ships. At sea they reach every coast of the sea they are in, inland as far as their range allows, and the seas next door. The fighters keep enemy bombers off the fleet and rise to meet any raid on it. The strike aircraft go for a fleet at sea, for ships lying in a harbour, or for anything ashore: click a wing, or open <b>Air</b>, and plan the strike like any raid. Bombers on land can strike ships too, though few crews are trained for it. A fleet has to be found before it can be struck. You see only the enemy ships your side has identified or had reported, so keep the seas searched: ships and carriers search the sea they are in, aircraft search from your coasts, and any group can fly a search of one sea a month. Wings are made up to strength only in harbour, and a carrier with empty decks is worth little in a fight. A harbour raided in the month war is declared is caught unready.</li>' : '') + '<li>Open <b>Air</b> to move your air fleets and give them missions. The month\'s air campaigns are flown when you end the month.</li>' + (budgeted(g) ? '<li>Research is a tree of technologies in five branches: land, air, naval, industry and doctrine. Each of your research teams works on one technology at a time, and a technology opens when the ones before it are done. What you finish lasts for the rest of the war: stronger tanks and infantry weapons, better fighters, cheaper ships, more teams. Some things cannot be ordered at all until their technology is researched: armoured and motorised corps, aircraft carriers, airborne troops. A technology begun before its year takes longer. Open <b>Research</b>, then the tree; a locked order under <b>Build</b> takes you straight to the technology it waits on.</li><li>Money builds an army, oil moves it, and supplies keep it fighting. The six great powers keep a stock of each, shown beside the treasury on the top bar: every month what they make at home and bring in from abroad goes in, and what their tanks, aircraft, ships and people need comes out. When a stock runs dry the forces get only what arrived that month: tanks and lorried troops attack weaker and lose a move, aircraft and fleets are worth less, fewer replacements go out, factories stand idle, and after months of it the nation loses the will to fight. Oil comes from oilfields (click one on the map), from deals with neighbours, and across the sea along the shipping lanes drawn on the map. A lane in amber is losing cargoes to raiders and one in red is cut. Guard your own with an escort; send submarines into an enemy\'s. Synthetic fuel in the technology tree makes oil at home that no raider can reach. Smaller countries buy what they need abroad and are never short.</li><li>Allies can fight as one army. Where an ally\'s corps stands in a province with yours, the tray and the province panel offer <b>Join my army</b>. A corps that joins keeps its own flag, pay and supply, but takes your orders in your month: it marches and attacks with your corps, and the ground you take together is yours. Its country lends only a share of its army, and only against enemies it is itself at war with. Send it back from the same place, or leave it behind for a month and it goes home by itself.</li><li>The fog of war hides what your side cannot see. Beside your own lines a foreign army is a flag, a count of its corps and your staff\'s estimate of its strength; a province further off it is a flag and a count; deeper than that the map is dark. What an army is made of is known only once its corps are identified: by fighting them, by an agent with them in view, or by a reconnaissance flight over their province. A report is exact in the month it is made and then goes stale: the strength becomes an estimate that widens every month, morale and rest are no longer known, and after ' + INTEL.reports.keep + ' months the corps is unidentified again. Where the defence is not known, the card that plans an attack gives the odds as a band. Open <b>Spies</b> to recruit agents and send them anywhere on the map. An agent identifies every army in its province and around it, reads a government\'s books in its capital, and can wreck a factory, blow a railway or fire an oilfield in a country you are at war with. Every month abroad an agent may be caught. Keep one at home on guard, because the other side has saboteurs too. The fog can be lifted under <b>Spies</b> if you would rather see everything.</li><li>When a great power has fallen and the great powers have stopped fighting each other, the war is decided and a card gives you the choice: take the victory, or <b>World Domination</b>. That dissolves every alliance and sets every nation still standing against every other, yesterday\'s allies among them, until one is left. It cannot be undone. The Powers tab then shows the standings.</li>' : '<li>Weapons improve on history\'s clock. Open <b>Research</b> to put extra design teams on the branches you want early; a branch left without a team falls behind.</li>') + '' : ''}</ol>`;
   }
   const r = g.regions[ui.sel];
@@ -3333,7 +3338,7 @@ function leaguePane(): string {
   }
   let out = `<h3 class="lgh"><i></i>${esc(upFirst(LEAGUE.full))}</h3><p class="sub">A third alliance, of smaller nations, that belongs to neither the Axis nor the Allies. Founded ${date(g.flags['league:born'])}. War on one member is war on them all.</p>`;
   if (!members.length) return out + '<p class="sub">Every member has fallen. The League is history.</p>';
-  for (const n of members) out += `<div class="nat lg">${chip(n.id)}<b>${esc(n.name)}${n.id === g.human ? ' <span class="tag good">You</span>' : ''}</b><small>${num(fieldArmy(g, n.id))} divisions</small><div class="will"><small>${n.atWar.length ? `At war with ${n.atWar.map(natName).join(', ')}` : 'At peace'} · member since ${date(g.flags[`league:${n.id}`] ?? g.flags['league:born'])}</small></div></div>`;
+  for (const n of members) out += `<div class="nat lg">${chip(n.id)}<b>${esc(n.name)}${n.id === g.human ? ' <span class="tag good">You</span>' : ''}</b><small>${divsOf(fieldArmy(g, n.id))}</small><div class="will"><small>${n.atWar.length ? `At war with ${n.atWar.map(natName).join(', ')}` : 'At peace'} · member since ${date(g.flags[`league:${n.id}`] ?? g.flags['league:born'])}</small></div></div>`;
   if (mine && humanUp(g)) out += `<h3>Invite a country</h3>${inviteList()}`;
   else if (me && paths(g).some((o) => o.id === 'join' && o.ok)) out += `<button class="btn small" data-act="path">Ask to join ▸</button>`;
   return out;
@@ -4391,10 +4396,11 @@ function startCard(): string {
     <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)}` : ''}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
       <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}${smallPick ? ' Open <b>Your path</b> on the top bar to choose where you stand.' : ''}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
       ${pick.nat && hasTraits(pick.nat) ? `<div class="gctraits"><h5>What ${esc(theName(pick.nat))} does best</h5>${traitList(pick.nat)}</div>` : ''}
-      <button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button>${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
+      ${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
     <h3>Historical scenarios</h3>
     <div class="sides"><button class="sidebtn wide" data-act="menu" data-menu="scenarios"><b>Play a turning point of the war</b><span>Fourteen shorter campaigns, from the Battle of Britain and Barbarossa to D-Day and Operation Bagration. Each starts at a turning point with the other nations following history's plan, or you can sit back and watch history unfold.</span></button></div>
-    ${STEPS}</div>`;
+    ${STEPS}</div>
+    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 30) : ''}<span><b>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
 }
 
 function scenarioCard(): string {
@@ -4555,13 +4561,18 @@ const ticketBlock = (title: string, lines: BattleReport['lines']): string => `<h
 
 function reportCard(r: BattleReport): string {
   const v = verdictFor(r);
-  const side = (us: BattleReport['attackers'], lost: number, role: string, won: boolean): Side => {
+  const side = (us: BattleReport['attackers'], fought: number, role: string, won: boolean): Side => {
     const total = us.reduce((s, u) => s + u.men, 0);
+    // What the cards beneath add up to: the men lost in the fight, and those who laid down their arms after it.
+    const gave = us.reduce((s, u) => s + (u.fate === 'surrendered' || u.fate === 'destroyed' ? u.lost : 0), 0);
+    const lost = Math.max(fought, us.reduce((s, u) => s + u.lost, 0));
     const share = total > 0 ? Math.min(1, lost / total) : 0;
+    const line = gave > 0 && gave < lost ? `Lost ${num(lost)} men, ${Math.round(share * 100)}% of those engaged: ${num(lost - gave)} in the fight, ${num(gave)} taken or scattered after it`
+      : gave > 0 ? `Lost ${num(lost)} men, ${Math.round(share * 100)}% of those engaged: all taken or scattered` : `Lost ${num(lost)} men, ${Math.round(share * 100)}% of those engaged`;
     return {
       // A joint army attacks under the flag of the nation that commands it.
-      nats: [...new Set(role === 'attacking' ? [r.attNat, ...us.map((u) => u.nat)] : us.map((u) => u.nat))], role, men: total, corps: us.length, divs: us.reduce((s, u) => s + u.divs, 0),
-      under: `<div class="floss"><span class="meter"><i class="low" style="width:${Math.round(share * 100)}%"></i></span><small>Lost ${num(lost)} men, ${Math.round(share * 100)}% of those engaged</small></div>`,
+      nats: [...new Set(role === 'attacking' ? [r.attNat, ...us.map((u) => u.nat)] : us.map((u) => u.nat))], role, men: total, corps: us.filter((u) => !u.guard).length, divs: us.reduce((s, u) => s + u.divs, 0),
+      under: `<div class="floss"><span class="meter"><i class="low" style="width:${Math.round(share * 100)}%"></i></span><small>${line}</small></div>`,
       cards: us.map((u) => fateCard(u, won)).join(''),
     };
   };
@@ -4577,6 +4588,7 @@ function reportCard(r: BattleReport): string {
     : r.sally ? (r.taken ? `The garrison of ${town} drove off the army round it. The siege is raised.` : `The sortie from ${town} was beaten back inside the walls. The siege goes on.`)
     : r.relief ? (r.taken ? `The army round ${town} was driven off. The siege is raised.` : `The attempt to relieve ${town} failed. The siege goes on.`)
     : r.siege ? `The country round ${town} was won, but the town holds out. ${esc(r.regionName)} does not change hands until the town is stormed, starved out or opens its gates.`
+    : r.gates ? `The army outside was beaten, and ${town} opened its gates without a fight. ${esc(r.regionName)} has fallen.`
     : r.taken ? `${esc(r.regionName)} was taken.` : `The attack on ${esc(r.regionName)} was thrown back.`;
   const mineNow = !!r.siege && r.turn === g.turn && humanUp(g) && (r.attNat === g.human || r.attackers.some((u) => u.nat === g.human));
   const stormWhy = mineNow ? whyNotStormTown(g, r.region) : 'no';
@@ -4620,12 +4632,12 @@ function attackCard(): string {
   const foeEst = sure ? null : armyAt(g, target.id, foes[0]?.nat ?? target.ctrl)?.est ?? null;
   const why = (c: Corps): string => (c.joint && !hostileUnits(g, target, c.nat).length ? `${g.nations[c.nat].name} is not at war with them` : barred(g, c, target) ? 'Too steep for tanks' : blocked(g, c, target) ? 'Bridges down' : m.chosen.has(c.id) && !inSet.has(c.id) ? (g.nations[c.nat].maxAttack && chosen.length >= g.nations[c.nat].maxAttack ? 'Staff at its limit' : 'No room on the roads') : '');
   const ours: Side = {
-    nats: [me, ...new Set(chosen.filter((c) => c.nat !== me).map((c) => c.nat))], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: sumDivs(chosen),
+    nats: [me, ...new Set(chosen.filter((c) => c.nat !== me).map((c) => c.nat))], role: 'attacking', who: leaderOf(chosen), men: chosen.reduce((s, c) => s + men(c), 0), corps: chosen.length, divs: rollDivs(chosen),
     cards: cands.map((c) => battleCard(c, { act: true, on: inSet.has(c.id), note: why(c), from: true })).join(''),
     under: `<small class="fhelp">${cands.length > 1 ? 'Click a corps to send it in or hold it back.' : 'The one corps in reach.'}</small>`,
   };
   const theirs: Side = {
-    nats: [...new Set(foes.map((c) => c.nat))], role: 'defending', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0), corps: foes.length, divs: sumDivs(foes),
+    nats: [...new Set(foes.map((c) => c.nat))], role: 'defending', who: leaderOf(foes), men: foes.reduce((s, c) => s + men(c), 0), corps: foes.length, divs: rollDivs(foes),
     ...(sure ? {} : { menText: foeEst ? span(Math.round(foeEst.lo * 15) * 1000, Math.round(foeEst.hi * 15) * 1000) : '?', divsText: foeEst ? span(Math.max(1, Math.round(foeEst.lo)), Math.max(1, Math.round(foeEst.hi))) : '?' }),
     cards: foes.map((c) => (kn(c) === 'exact' ? battleCard(c) : foeCard(c))).join(''),
     under: target.fort ? `<small class="fhelp">Dug in behind level ${target.fort.lv} fortifications${target.fort.vs.includes(me) ? '' : ', which do not face you'}.</small>` : '',
@@ -4684,6 +4696,9 @@ function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: numbe
   const letters = hs.filter((h) => h.kind === 'letter');
   const rest = hs.filter((h) => !big.includes(h) && h.kind !== 'letter');
   const me = g.human;
+  // What waits behind the dispatches: nations fallen or freed this month, told on a card of their own.
+  const due = me && !passing ? g.passings.slice(ui.seenPass) : [];
+  const waiting = !due.length ? '' : due.length === 1 ? `${natName(due[0].nat)} ${due[0].kind === 'freed' ? 'is free again' : 'has fallen'}` : `${due.length} nations fallen or freed`;
   const reps = g.reports.slice(repFrom).filter((r) => me && (r.attNat === me || r.attackers.some((u) => u.nat === me) || r.defenders.some((u) => u.nat === me)));
   const seas = g.seaReports.slice(seaFrom).filter((r) => me && (r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
   const airs = g.airReports.slice(airFrom).filter((r) => me && (r.attNat === me || r.defNat === me || r.att.some((u) => u.nat === me) || r.def.some((u) => u.nat === me)));
@@ -4695,7 +4710,7 @@ function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: numbe
     ${letters.length ? `<h3>Letters from the front</h3>${letters.map(letterBlock).join('')}` : ''}
     ${reps.length || seas.length || airs.length || shores.length ? `<h3>Battles your forces fought</h3>${airs.map(airBrow).join('')}${shores.map(shoreRow).join('')}${seas.map(seaRow).join('')}${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
     ${all ? `<p class="sub" style="margin-top:10px">${all} battle${all > 1 ? 's were' : ' was'} fought across the map. They are filed under Battles.</p>` : ''}</div>
-    <footer><button class="btn go" data-act="close">${me && humanUp(g) ? 'Give orders' : 'Continue'}</button></footer>`;
+    <footer>${waiting ? `<small class="nextup">Next: ${esc(waiting)}</small>` : ''}<button class="btn go" data-act="close">${waiting ? 'Next ▸' : me && humanUp(g) ? 'Give orders' : 'Continue'}</button></footer>`;
 }
 
 // ---- Oil and supplies: the gauges on the top bar, the books, and the shipping lanes on the map ----
@@ -4949,13 +4964,16 @@ function invadeCard(on: string, target: number): string {
   const friendRows = f.friends.map((x) => `<div class="frow">${chip(x.nat)}<span class="grow"><b>${esc(natName(x.nat))}</b><small>${esc(upFirst(x.why))}</small></span><small class="stand">${esc(standLabel(g.nations[x.nat]))}</small></div>`).join('');
   const what: string[] = [];
   const The = esc(upFirst(theName(on)));
-  what.push(f.joins ? `<b>${The} joins ${blocOf(f.joins)}</b> the moment it is attacked, and its ${num(fieldArmy(g, on))} divisions fight for them.` : `<b>${The}</b> and its ${num(fieldArmy(g, on))} divisions are at war with you from today.`);
-  if (f.league.length) what.push(`<b>The League stands by it.</b> ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${esc(listOf(f.league.map(natName)))} ${f.league.length === 1 ? 'goes' : 'go'} to war with you the same day, with ${num(f.league.reduce((sum, id) => sum + fieldArmy(g, id), 0))} divisions between them.`);
+  what.push(f.joins ? `<b>${The} joins ${blocOf(f.joins)}</b> the moment it is attacked, and its ${divsOf(fieldArmy(g, on))} fight${Math.round(fieldArmy(g, on)) === 1 ? 's' : ''} for them.` : `<b>${The}</b> and its ${divsOf(fieldArmy(g, on))} are at war with you from today.`);
+  if (f.league.length) what.push(`<b>The League stands by it.</b> ${The} belongs to ${LEAGUE.name}, and war on one member is war on all: ${esc(listOf(f.league.map(natName)))} ${f.league.length === 1 ? 'goes' : 'go'} to war with you the same day, with ${divsOf(f.league.reduce((sum, id) => sum + fieldArmy(g, id), 0))} between them.`);
   if (f.trade) what.push(`<b>Its trade ends.</b> ${The} trades with you today, worth ${money(DIPLOMACY.tradeIncome)} a month to your treasury.`);
   if (f.sneak > 1) what.push(`<b>Surprise.</b> It is at peace and not expecting you: this month your attacks on its ground are <b>${Math.round((f.sneak - 1) * 100)}% stronger</b>. Next month the bonus is gone.`);
   else what.push(f.ready === 'war' ? 'No surprise: it is already at war with your side and its army is ready.'
     : f.ready === 'alert' ? `No surprise: ${esc(traitsOf(on).find((t) => t.alert)?.name.toLowerCase() ?? 'its intelligence service')} has read the signs, and its army is ready.`
     : 'No surprise: its army is watching the frontier.');
+  // The player's own allies are not bound to follow him into a war of his choosing.
+  const hang = Object.values(g.nations).filter((x) => x.id !== me && x.alive && !x.dormant && allied(g, me, x.id) && !atWar(g, x.id, on)).map((x) => x.id);
+  if (hang.length) what.push(`<b>Your allies do not follow at once.</b> ${esc(upFirst(listOf(hang.map(theName))))} ${hang.length === 1 ? 'stays' : 'stay'} at peace with ${esc(theName(on))}: each comes in when its own government judges the moment right, and that may be months away.`);
   const moved = f.alarm.filter((a) => a.from !== a.to);
   const friends = f.alarm.filter((a) => a.friend);
   if (f.alarm.length) {
@@ -4986,7 +5004,7 @@ function declareCard(): string {
   const list = declarable(g);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Diplomacy</div><h2>Declare war</h2></header>
     <div class="body"><p class="lead">A neutral that is attacked joins the other side, and its friends may march to help it at once.</p>
-    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${num(fieldArmy(g, id))} divisions · ${esc(standLabel(g.nations[id]))}${friendsOf(id).some((f) => g.nations[f.nat]?.alive) ? ` · friends: ${esc(listOf(friendsOf(id).filter((f) => g.nations[f.nat]?.alive).map((f) => natName(f.nat))))}` : ''}</span></span></button>`).join('')}
+    ${list.map((id) => `<button class="pickrow" data-act="askdeclare" data-nat="${id}">${chip(id)}<span class="grow"><b>${esc(natName(id))}</b><br><span style="font-size:11.5px;color:var(--ink-2)">${divsOf(fieldArmy(g, id))} · ${esc(standLabel(g.nations[id]))}${friendsOf(id).some((f) => g.nations[f.nat]?.alive) ? ` · friends: ${esc(listOf(friendsOf(id).filter((f) => g.nations[f.nat]?.alive).map((f) => natName(f.nat))))}` : ''}</span></span></button>`).join('')}
     <p class="sub" style="margin-top:8px">Pick a country to see what declaring war on it would mean. Nothing happens until you confirm.</p></div>
     <footer><button class="btn" data-act="close">Not now</button></footer>`;
 }
@@ -5151,15 +5169,16 @@ function dropPassing(): void {
 function arrive(show: boolean, from: Since, before: string[]): void {
   const hFrom = from.h, rFrom = from.r, sFrom = from.s, aFrom = from.a;
   if (g.human) judgeGoals(g, g.human);
-  const lost = g.human && !g.nations[g.human].alive ? g.human : null;
-  if (lost) {
-    // The month the country fell in is played out to its end, so the watcher's calendar starts on a month's last day.
-    // The seat is remembered: if the country is liberated, the player is given it back.
-    playerFell(g);
-    while (g.phase > 0 && !g.human) stepAI(g);
-    ui.seenPass = g.passings.length;
-  }
-  if (humanUp(g)) beginHuman(g);
+  // The month the country fell in is played out to its end, so the watcher's calendar starts on a month's last day.
+  // The seat is remembered: if the country is liberated, the player is given it back.
+  const fell = (): string | null => {
+    const who = g.human && !g.nations[g.human].alive ? g.human : null;
+    if (who) { playerFell(g); while (g.phase > 0 && !g.human) stepAI(g); ui.seenPass = g.passings.length; }
+    return who;
+  };
+  let lost = fell();
+  // A country can also fall as its own month opens, starved out or with its capital lost to hunger: the same is done then.
+  if (humanUp(g)) { beginHuman(g); lost = lost ?? fell(); }
   ui.raidsFrom = aFrom;
   ui.shoreFrom = from.shore ?? -1;
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);

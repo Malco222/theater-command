@@ -10,6 +10,7 @@
     96
   ],
   "aiReserve": 16,
+  "aiLine": 6,
   "builds": {
     "inf": {
       "label": "Infantry corps",

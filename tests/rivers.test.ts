@@ -360,8 +360,11 @@ describe('losing a river bank', () => {
       expect(mlawa.ctrl).toBe('POL');
       g.flags[`mine:${lodz.id}`] = 2;
       const inf = corps(g, 'GER', 'inf', poznan);
+      // The town's guard gives way only to an army that plainly overmatches it: two more corps come up behind the first.
+      const more = [corps(g, 'GER', 'inf', poznan), corps(g, 'GER', 'inf', poznan)];
       const chance = () => blowChance(g, x, lodz, 'GER');
       expect(moveCorps(g, inf, lodz)).toBe(true);
+      for (const c of more) if (lodz.ctrl !== 'GER') expect(moveCorps(g, c, lodz)).toBe(true);
       expect(lodz.ctrl).toBe('GER');
       expect(minesAt(g, lodz)).toBe(0);
       const roll = new Rng(hashString(`bridge:${seed}:${g.turn}:${x.a}:${x.b}`)).next();

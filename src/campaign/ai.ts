@@ -15,10 +15,9 @@ import { groundRules } from './ground';
 import { aiBridges, aiEngineers } from './engineers';
 import { landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding } from './navy';
 import { shoreAI } from './fleets';
-import { afterDeclaring, decide, isOpen, seaBase, staffPhase, theatreStaff } from './staff';
-import { landingsFor, seat } from './difficulty';
+import { afterDeclaring, decide, isOpen, probed, probing, seaBase, seaFoe, staffPhase, theatreStaff } from './staff';
 import { hashString } from '../core/rng';
-import { SIEGE, besieged, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
+import { SIEGE, besieged, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
@@ -226,7 +225,10 @@ function sieges(g: Game, nat: string, after = false): void {
     if (!r.units.length || !within(r) || !besieged(g, r)) continue;
     const mine = (): Corps[] => r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && atWar(g, nat, r.ctrl));
     if (!mine().length) continue;
-    const need = g.turn - investedOn(g, r) >= 2 ? SIEGE.ai.late : SIEGE.ai.assault;
+    const sat = g.turn - investedOn(g, r);
+    // Off the march it storms only what it is sure to carry; after a month round the place, what it probably will;
+    // and when the siege has dragged on, it settles for less and at last for a gamble.
+    const need = sat >= SIEGE.ai.last.after ? SIEGE.ai.last.odds : sat >= 2 ? SIEGE.ai.late : sat >= 1 ? SIEGE.ai.assault : SIEGE.ai.hasty;
     const pool = (): Corps[] => stormForce(g, mine().filter((c) => c.org >= 0.35), r);
     const odds = (): number => { const p = pool(); return p.length ? assess(g, p, r, { town: true }).odds : 0; };
     const inside = garrisonOf(r).reduce((s, c) => s + c.divs * c.str, 0) + guardOf(g, r);
@@ -237,7 +239,7 @@ function sieges(g: Game, nat: string, after = false): void {
     // of those, until there are enough or there is no more room. The corps next door come at once. Those up to
     // three marches off come too, unless they stand on a front of their own, and are counted while on their way.
     const outside = (): number => mine().reduce((s, c) => s + c.divs * c.str, 0);
-    const shut = (): boolean => outside() >= SIEGE.ring * inside;
+    const shut = (): boolean => ringClosed(g, r);
     if (!after && prize && (now < need || !shut())) {
       const far = hops(g, r.id, (x) => within(x) && allied(g, nat, fieldCtrl(g, x)));
       const front = (x: Region): boolean => x.nb.some((j) => atWar(g, nat, fieldCtrl(g, g.regions[j])));
@@ -250,7 +252,7 @@ function sieges(g: Game, nat: string, after = false): void {
       const a0 = force.length ? assess(g, force, r, { town: true }) : null;
       let coming = 0, power = 0, men = 0;
       for (const c of call) {
-        const enough = (a0 && a0.D > 0 ? Math.max(now, (a0.A + power) / a0.D) >= need : now >= need) && outside() + men >= SIEGE.ring * inside;
+        const enough = (a0 && a0.D > 0 ? Math.max(now, (a0.A + power) / a0.D) >= need : now >= need) && (shut() || outside() + men >= SIEGE.ring * inside);
         if (enough || mine().filter((u) => u.kind !== 'eng').length + coming >= STACK) break;
         if (far[c.reg] === 1) {
           if (!hasRoom(g, r, c)) continue;
@@ -425,7 +427,12 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   const n = g.nations[nat];
   hold(g, nat, ph);
   fallBack(g, nat);
-  if (posture === 'defend') { gather(g, nat, ph); mass(g, nat, ph); defend(g, nat); return; }
+  if (posture === 'defend') {
+    gather(g, nat, ph); mass(g, nat, ph);
+    if (!scope && isOpen(g)) localAttacks(g, nat);
+    if (n.alive) defend(g, nat);
+    return;
+  }
   const enemies = enemySet(g, nat);
   const follow = posture === 'attack' && !ph!.force;
   const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
@@ -629,9 +636,9 @@ function landings(g: Game, nat: string, ph: PlanPhase, within?: Set<number>): vo
  * and no army standing next door that would throw it straight back into the sea.
  */
 function descent(g: Game, nat: string): void {
-  const L = landingsFor(g, nat);
-  const you = seat(g);
-  if (!L || you === null) return;
+  const sea = seaFoe(g, nat);
+  if (!sea) return;
+  const L = sea.L, you = sea.foe;
   const quay = seaBase(g, nat);
   if (!quay) return;
   const ready = quay.units
@@ -797,6 +804,59 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
     // Nothing left to hit this week: close up to the front, then look again.
     if (!follow || !g.nations[nat].alive || !advance(g, nat, enemies, wave, doorstep(g, nat, axisGoal()), halt)) break;
    }
+  }
+}
+
+/**
+ * A quiet front is not a truce. A staff standing on the defensive still takes a weak point when it sees one: a
+ * province next to its line that nobody holds, or one where a single attack has good odds. A few a month and no
+ * more, with no pursuit: the line is put in order again afterwards.
+ */
+function localAttacks(g: Game, nat: string): void {
+  const P = probing(g, nat);
+  if (!P) return;
+  const failed = new Set<number>();
+  for (let made = 0; made < P.most && g.nations[nat].alive; made++) {
+    ensureSupply(g);
+    const cand = new Map<number, Corps[]>();
+    for (const c of g.corps) {
+      if (c.nat !== nat || c.dead || c.hold || c.kind === 'fort' || c.ap <= 0 || c.org < 0.35) continue;
+      for (const j of g.regions[c.reg].nb) {
+        const r = g.regions[j];
+        const lord = ctl(g, r);
+        if (failed.has(j) || !P.enemies.has(lord) || !atWar(g, nat, lord) || aside(g, r, nat) || blocked(g, c, r)) continue;
+        let list = cand.get(j);
+        if (!list) cand.set(j, (list = []));
+        list.push(c);
+      }
+    }
+    let best: { score: number; target: Region; corps: Corps[]; battle: boolean } | null = null;
+    for (const [j, avail] of cand) {
+      const target = g.regions[j];
+      const value = target.vp + (target.cap ? 4 : 0);
+      if (!hostileUnits(g, target, nat).length) {
+        // Nobody there: one corps walks in, if it leaves somebody behind where it stood.
+        const mover = avail.filter((c) => c.ap >= Math.min(moveCost(g, c, target), 4) && friendlyUnits(g, g.regions[c.reg], nat).length > 1).sort((a, b) => b.ap - a.ap)[0];
+        if (mover && (!best || 5 + value > best.score)) best = { score: 5 + value, target, corps: [mover], battle: false };
+        continue;
+      }
+      const pool = limitAttackers(g, avail, target).sort((a, b) => atkPower(g, b) - atkPower(g, a));
+      if (!pool.length) continue;
+      let pick: Corps[] = pool, odds = 0;
+      for (let k = 1; k <= pool.length; k++) {
+        odds = assess(g, pool.slice(0, k), target).odds;
+        if (odds >= 2.6) { pick = pool.slice(0, k); break; }
+      }
+      if (odds < P.odds) continue;
+      const score = Math.min(odds, 4) + value;
+      if (!best || score > best.score) best = { score, target, corps: pick, battle: true };
+    }
+    if (!best) break;
+    const foe = ctl(g, best.target);
+    const taken = best.battle ? resolveBattle(g, best.corps, best.target).taken : moveCorps(g, best.corps[0], best.target);
+    if (!taken) failed.add(best.target.id);
+    probed(g, nat, foe, P.step);
+    if (taken && g.nations[nat].alive) support(g, nat, best.target);
   }
 }
 
@@ -1082,7 +1142,9 @@ function defend(g: Game, nat: string, line = true): void {
     const kept = isOpen(g) ? massed : null;
     const pool = limitAttackers(g, g.corps.filter((c) => c.nat === nat && !c.hold && c.kind !== 'fort' && c.ap > 0 && !c.fought && c.org >= 0.6 && !kept?.has(c.id) && g.regions[c.reg].nb.includes(r.id)), r);
     // Overseas a local counter-stroke sends two corps in to hold what it wins: the rest keep the door open behind them.
-    if (pool.length && assess(g, pool, r).odds >= 1.8) resolveBattle(g, pool, r, scope ? { occupy: 2 } : {});
+    // (The grand campaign: an army goes to the relief of a town at shorter odds than it would counter-attack, and of its capital at shorter still.)
+    const bar = shut && siegeRules(g) ? (townSize(g, r) === 'capital' ? SIEGE.ai.relief.capital : SIEGE.ai.relief.other) : 1.8;
+    if (pool.length && assess(g, pool, r).odds >= bar) resolveBattle(g, pool, r, scope ? { occupy: 2 } : {});
   }
 }
 

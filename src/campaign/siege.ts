@@ -28,13 +28,13 @@ export const SIEGE = data as unknown as {
   bonus: Record<TownSize, number>; fortBonus: number[];
   guard: Record<TownSize, number>; guardShare: number; guardOrg: number;
   stores: Record<TownSize, number>; fortStores: number;
-  ring: number; summons: number;
-  assault: { ap: number; loss: number; armour: number; hasty: number; guardHit: number };
+  ring: number; ringNear: number; summons: number; summonsNot: TownSize[]; stand: number;
+  assault: { ap: number; loss: number; armour: number; hasty: Record<TownSize, number>; guardHit: number; dice: [number, number] };
   breach: { gun: number; raid: number; shell: number; most: number; mend: number };
   bombard: { raidFull: number; shellFull: number; org: number; floor: number; guard: number; intensity: number; value: number };
   sortie: number; pay: number;
-  capital: number;
-  ai: { assault: number; late: number; sally: number; raid: number; invest: number; hold: Partial<Record<TownSize, number>> };
+  capital: number; capitalYear: number;
+  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>> };
 };
 
 /** True where towns are garrisoned and besieged: the grand campaign. A historical scenario is fought as it always was. */
@@ -158,10 +158,24 @@ export function fedBySea(g: Game, r: Region): boolean {
 
 const strength = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
 
-/** True when the besiegers are strong enough to shut the town in: only then do its stores run down. */
+/**
+ * True when the town is shut in: only then do its stores run down. The army round it is strong enough by itself,
+ * or with its side's troops in the country next door (they count for part of their weight), or every road out of
+ * the place already runs into ground the enemy holds, so that nothing reaches it whatever stands at the gates.
+ */
 export function ringClosed(g: Game, r: Region): boolean {
   const out = strength(besiegers(g, r));
-  return out > 0 && out >= SIEGE.ring * (strength(garrisonOf(r)) + guardOf(g, r));
+  if (out <= 0) return false;
+  const need = SIEGE.ring * (strength(garrisonOf(r)) + guardOf(g, r));
+  if (out >= need) return true;
+  const by = besiegerOf(g, r);
+  let near = 0, road = false;
+  for (const j of r.nb) {
+    const x = g.regions[j];
+    if (allied(g, r.ctrl, fieldCtrl(g, x))) { road = true; continue; }
+    if (by) for (const u of x.units) if (!u.dead && allied(g, u.nat, by)) near += u.divs * u.str;
+  }
+  return !road || out + SIEGE.ringNear * near >= need;
 }
 
 /** True while the garrison still eats: the stores last, or ships still come in. */
@@ -183,19 +197,24 @@ export function joinTown(g: Game, r: Region, c: Corps): void {
 
 /**
  * Where a corps bound for a province goes when the enemy holds the country round its town and the town is full:
- * the nearest ground its own side still holds in the field. Null if the town has room, or there is no such ground.
+ * the nearest ground its own side still holds in the field with room for one more corps, or the nearest such
+ * ground at all if every province is full. Null if the town has room, or there is no such ground.
  */
 export function musterNear(g: Game, nat: string, r: Region): Region | null {
   if (garrisonOf(r).length < roomIn(g, r)) return null;
   const seen = new Uint8Array(g.regions.length);
   const q = [r.id];
   seen[r.id] = 1;
+  let crowded: Region | null = null;
   for (let i = 0; i < q.length; i++) {
     const x = g.regions[q[i]];
-    if (x !== r && allied(g, nat, x.ctrl) && allied(g, nat, fieldCtrl(g, x))) return x;
+    if (x !== r && allied(g, nat, x.ctrl) && allied(g, nat, fieldCtrl(g, x))) {
+      if (x.units.filter((u) => u.kind !== 'eng' && allied(g, u.nat, nat)).length < STACK) return x;
+      crowded ??= x;
+    }
     for (const j of x.nb) if (!seen[j]) { seen[j] = 1; q.push(j); }
   }
-  return null;
+  return crowded;
 }
 
 /** Takes a corps off the town's list, and does nothing else with it. */
@@ -336,7 +355,8 @@ export function summon(g: Game, r: Region, by: string): boolean {
   if (garrisonOf(r).length) return false;
   const force = besiegers(g, r);
   if (!force.length) return false;
-  if (guardOf(g, r) > 0 && assess(g, force, r, { town: true }).odds < SIEGE.summons) return false;
+  // A great city does not give itself up at the first summons, whatever stands outside: its guard has to be beaten.
+  if (guardOf(g, r) > 0 && (SIEGE.summonsNot.includes(townSize(g, r)) || assess(g, force, r, { town: true }).odds < SIEGE.summons)) return false;
   fall(g, r, by, guardOf(g, r) > 0 ? 'gates' : 'empty');
   return true;
 }
@@ -527,6 +547,20 @@ export function siegeFalls(g: Game, nat: string): void {
   }
 }
 
+/**
+ * The end of any nation's month: a town with nobody left to hold it, its guard broken by assault or bombardment and no
+ * garrison inside, or handed to a country whose enemy already stood round it, falls to the army in its field. It does
+ * not wait for its own country's month to come round.
+ */
+export function siegeEmpties(g: Game): void {
+  if (!siegeRules(g)) return;
+  for (const r of g.regions) {
+    if (!r.units.length || townHeld(g, r)) continue;
+    const by = besiegerOf(g, r);
+    if (by && g.nations[by]?.alive) fall(g, r, by, 'empty');
+  }
+}
+
 /** Marks which garrisons still eat. Called whenever the supply picture is drawn. */
 export function siegeSupply(g: Game): void {
   if (!siegeRules(g)) return;
@@ -643,9 +677,15 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   if (by) {
     const closed = ringClosed(g, r);
     lines.push(bySea ? 'Ships still reach the harbour: the town cannot be starved while they do.'
-      : !closed ? 'The army round it is too weak to shut it in: its stores are not running down.'
+      : !closed ? 'The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it.'
       : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? 'one more month' : `${left} more months`}; after that they go hungry.`
       : inside ? 'Its stores are gone: the garrison is starving, and loses men and heart every month.' : 'Its stores are gone: it is about to give in.');
+    // A capital shut in: the government loses its hold on the country month by month.
+    if (closed && r.cap && r.owner === r.ctrl) {
+      const sat = Math.max(0, g.turn - investedOn(g, r));
+      lines.push(sat >= SIEGE.capitalYear ? `Shut in for ${months(sat)}, the government has lost its hold on the country: the capital counts as lost when it reckons whether to fight on.`
+        : `A government shut in its capital loses its hold on the country month by month. After ${months(SIEGE.capitalYear)} of siege the capital counts as lost, whether it has fallen or not.`);
+    }
   } else {
     lines.push(`Closely invested, its stores would feed the defenders for ${months(stores)}${r.port ? ', and for as long as ships can reach its harbour' : ''}.`);
   }
