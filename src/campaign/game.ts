@@ -36,6 +36,7 @@ import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { lineSince, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
+import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
 import { traitAttack, traitDefence, traitDrafts, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, dropSieges, fall, fieldCtrl, garrisonOf, guardAfter, guardMen, guardOf, guardPower, joinTown, musterNear, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
@@ -1546,6 +1547,9 @@ function mobilise(g: Game, nat: string): void {
     for (const r of g.regions) if (r.owner === nat && !r.overseas) { own += r.fac; if (r.ctrl === nat) held += r.fac; }
     count = own > 0 ? Math.round(count * Math.pow(held / own, OPEN_CALLUP)) : 0;
   }
+  // The grand campaign: every corps of the call-up is filled from the reserve of men, and when that is spent the waves stop.
+  // The first waves take whatever there is; the standing call-up after them takes only what the armies in the field do not need.
+  if (g.flags.open === 1) count = Math.min(count, month < plan.perMonth.length ? raisable(g, nat, plan.divs) : Math.max(0, Math.floor(menSpare(g, nat) / plan.divs)));
   const enemyNear = (r: Region): boolean => r.nb.some((j) => atWar(g, nat, g.regions[j].ctrl));
   for (let k = 0; k < count; k++) {
     // Form up in the industrial towns still held, emptiest first, away from the fighting.
@@ -1558,6 +1562,7 @@ function mobilise(g: Game, nat: string): void {
     if (!best) break;
     const c = addCorps(g, nat, `${ordinal(n.corpsNo++)} ${plan.name}`, plan.kind, plan.divs, best.id, { xp: plan.xp });
     c.org = 0.7;
+    drawMen(g, nat, plan.divs);
   }
   if (count > 0 && month === 0) headline(g, 'event', `${n.name} orders general mobilisation.`, nat);
   // Behind the front, the people dig: anti-tank ditches and gun lines around the great cities.
@@ -1885,7 +1890,9 @@ export function startPhase(g: Game, nat: string): void {
   n.pp += earned - upkeepTotal(g, nat);
   const credit = BUDGET.debt.floor * Math.max(1, earned);
   const owed = budgeted(g) && n.pp < 0 ? Math.min(1, -n.pp / credit) : 0;
-  n.pc = Math.min(Math.max(n.pc, DIPLOMACY.pcCap), n.pc + Math.max(0, pcIncome(nat) + civicSum(g, nat).pc + govCapital(g, nat)));
+  // What the player's decrees take to keep can outrun what comes in (the grand campaign): the capital in hand pays for it.
+  const pcNet = pcIncome(nat) + civicSum(g, nat).pc + govCapital(g, nat);
+  n.pc = Math.max(0, Math.min(Math.max(n.pc, DIPLOMACY.pcCap), n.pc + (g.flags.open === 1 ? pcNet : Math.max(0, pcNet))));
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);
   const army = g.corps.filter((c) => c.nat === nat);
@@ -1903,7 +1910,11 @@ export function startPhase(g: Game, nat: string): void {
   // A corps that has spent the whole month out of the line takes in its drafts faster (the grand campaign).
   const want = army.map((c) => (c.supplied && !(c.lean && nat === g.human) && !shutIn(g, c) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * restedDrafts(g, c) * ward(c).drafts * c.divs * lineStrength(g, c).mul * (g.regions[c.reg].overseas ? DESERT.replace : 1)) : 0));
   const asked = want.reduce((s, x) => s + x, 0);
-  const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g, nat))) / asked) : 0;
+  // The month's class comes of age and joins the reserve, and the men the armies ask for are taken from it (the
+  // grand campaign): a nation whose reserve is spent makes good only what the class allows.
+  if (n.alive) classArrives(g, nat, govMul(g, nat, 'men'));
+  const share = asked > 0 ? Math.min(1, n.pp / perDiv / asked, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g, nat))) / asked, menLeft(g, nat) / asked) : 0;
+  let drafted_ = 0;
   // Corps starved into surrender this month, by where they stood: an army lost together is one piece of news.
   const starved = new Map<number, { names: string[]; men: number }>();
   army.forEach((c, i) => {
@@ -1915,6 +1926,7 @@ export function startPhase(g: Game, nat: string): void {
         // Green drafts thin out what a corps of the player's has learned.
         drafted(g, c, c.str, give / c.divs);
         c.str += give / c.divs; n.pp -= give * perDiv;
+        drafted_ += give;
       }
       // A Russian winter without winter clothing costs men to frostbite and leaves little rest.
       const cold = frozen(g, nat, g.regions[c.reg]);
@@ -1944,6 +1956,13 @@ export function startPhase(g: Game, nat: string): void {
     // A garrison keeps to its town until it is ordered out.
     if (c.town) c.ap = 0;
   });
+  if (drafted_ > 0) drawMen(g, nat, drafted_);
+  if (menRules(g) && nat === g.human) {
+    const level = menWarning(g, nat), left = menWords(menLeft(g, nat) * MEN_PER_DIV), start = menWords(poolAtStart(g, nat) * MEN_PER_DIV);
+    if (level === 1) headline(g, 'info', `The reserve of men is thinning: ${left} are left of the ${start} the war began with. Every loss made good and every new corps is taken from it.`, nat);
+    else if (level === 2) headline(g, 'info', `The reserve of men is running short: ${left} are left, under ${Math.round(MANPOWER.warn[1] * 100)}% of what the war began with. Spare the armies, or the day comes when losses cannot be made good.`, nat);
+    else if (level === 3) headline(g, 'info', 'The reserve of men is spent. From now on only the class that comes of age each month reaches the armies, and no new corps can be raised.', nat);
+  }
   // A town whose last defenders laid down their arms this month falls.
   siegeFalls(g, nat);
   for (const [reg, lost] of starved) {

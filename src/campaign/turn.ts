@@ -50,7 +50,8 @@ import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
 } from './prizes';
-import { appoint, decree, government, setAside, whyNotAppoint, whyNotDecree, whyNotSetAside, type GovView } from './government';
+import { appoint, cabinetOff, decree, govMul, government, setAside, setCabinet, whyNotAppoint, whyNotDecree, whyNotSetAside, type GovView } from './government';
+import { manpower, type MenView } from './manpower';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -455,6 +456,25 @@ export function orderScorchPolicy(g: Game, policy: ScorchPolicy): boolean {
  * With no nation named, the player's own. Null outside the grand campaign.
  */
 export const governmentOf = (g: Game, nat: string | null = g.human): GovView | null => government(g, nat);
+
+/**
+ * A nation's reserve of men fit to bear arms (the grand campaign): what stands in it, what it opened with, the class
+ * that comes of age each month under the government's call-up, and one word and one sentence for how it stands.
+ * Replacements and every new corps are drawn from it. With no nation named, the player's own. Null outside the grand campaign.
+ */
+export const manpowerOf = (g: Game, nat: string | null = g.human): MenView | null => manpower(g, nat, nat ? govMul(g, nat, 'men') : 1);
+
+/** True when the player has switched his war cabinet off (the grand campaign): governmentOf is then null, and no screen for it should show. */
+export const cabinetIsOff = (g: Game): boolean => cabinetOff(g);
+
+/**
+ * Switches the player's war cabinet off or on, for a player who wants the war without the politics. It can be done
+ * in any month and takes hold at once. Off: no ministers, decrees, trust or directives, and nothing they moved is
+ * moved. On again: the cabinet sits as it was left and sets its next directive some months on.
+ */
+export function orderCabinet(g: Game, on: boolean): boolean {
+  return g.human !== null && setCabinet(g, on);
+}
 
 /** Why the player cannot put this minister in this seat of his war cabinet, or null if he can. */
 export function whyNotAppointMinister(g: Game, seat: string, minister: string): string | null {

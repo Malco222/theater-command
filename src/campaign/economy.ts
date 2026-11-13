@@ -25,6 +25,7 @@ import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
+import { drawMen, menSpare, raisable, returnMen } from './manpower';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -339,9 +340,12 @@ export function orderCorps(g: Game, nat: string, kind: Kind, region: number, rev
   if (!n.alive || !spec || !r || !canRaiseKind(g, nat, r, kind) || n.pp < cost) return null;
   // In the grand campaign tanks and lorried infantry wait on the technology that makes them.
   if (locked(g, nat, `corps:${kind}`)) return null;
+  // And every new corps is filled from the reserve of men: with none left, none is raised.
+  if (raisable(g, nat, spec.divs) < 1) return null;
   const old = revive !== undefined ? revivable(g, nat, kind).find((f) => f.id === revive) : undefined;
   if (revive !== undefined && !old) return null;
   n.pp -= cost;
+  drawMen(g, nat, spec.divs);
   const b: Build = { id: g.nextBuild++, what: 'corps', kind, divs: spec.divs, name: old ? old.name : corpsName(nat, kind, n.corpsNo++), region, ordered: g.turn, eta: g.turn + spec.months, cost };
   if (old) b.revive = old.id;
   n.queue.push(b);
@@ -356,8 +360,9 @@ export function orderElite(g: Game, nat: string, region: number): Build | null {
   const n = g.nations[nat];
   const u = eliteOf(nat);
   const r = g.regions[region];
-  if (!n.alive || !u || whyNoElite(g, nat) !== null || locked(g, nat, `corps:${u.kind}`) || !r || !canRaiseKind(g, nat, r, u.kind) || n.pp < u.cost) return null;
+  if (!n.alive || !u || whyNoElite(g, nat) !== null || locked(g, nat, `corps:${u.kind}`) || !r || !canRaiseKind(g, nat, r, u.kind) || n.pp < u.cost || raisable(g, nat, u.divs) < 1) return null;
   n.pp -= u.cost;
+  drawMen(g, nat, u.divs);
   const no = (g.flags[`elite:${nat}`] ?? 0) + 1;
   g.flags[`elite:${nat}`] = no;
   const b: Build = { id: g.nextBuild++, what: 'corps', kind: u.kind, divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost: u.cost, elite: u.id };
@@ -374,8 +379,9 @@ export function orderPara(g: Game, nat: string, region: number): Build | null {
   const u = TECH.units.para;
   const r = g.regions[region];
   const cost = priceOf(g, nat, 'para', u.cost);
-  if (!n.alive || whyNoPara(g, nat) !== null || !r || !canRaiseKind(g, nat, r, 'inf') || n.pp < cost) return null;
+  if (!n.alive || whyNoPara(g, nat) !== null || !r || !canRaiseKind(g, nat, r, 'inf') || n.pp < cost || raisable(g, nat, u.divs) < 1) return null;
   n.pp -= cost;
+  drawMen(g, nat, u.divs);
   const no = (g.flags[`para:${nat}`] ?? 0) + 1;
   g.flags[`para:${nat}`] = no;
   const b: Build = { id: g.nextBuild++, what: 'corps', kind: 'inf', divs: u.divs, name: `${roman(no)} ${u.word} Corps`, region, ordered: g.turn, eta: g.turn + u.months, cost, airborne: true };
@@ -408,6 +414,8 @@ export function cancelBuild(g: Game, nat: string, id: number): boolean {
   const i = n.queue.findIndex((b) => b.id === id);
   if (i < 0 || n.queue[i].ordered !== g.turn) return false;
   n.pp += n.queue[i].cost;
+  // The men called up for a corps that was paid for go back to the reserve.
+  if (n.queue[i].what === 'corps' && n.queue[i].cost > 0) returnMen(g, nat, n.queue[i].divs ?? 0);
   if (n.queue[i].elite) g.flags[`elite:${nat}`] = (g.flags[`elite:${nat}`] ?? 1) - 1;
   else if (n.queue[i].airborne) g.flags[`para:${nat}`] = (g.flags[`para:${nat}`] ?? 1) - 1;
   else if (n.queue[i].what === 'corps' && n.queue[i].revive === undefined) n.corpsNo--;
@@ -473,18 +481,35 @@ export function aiProduction(g: Game, nat: string): void {
     const at = raiseSite(g, nat, u.kind, cap.id), cost = corpsUpkeep(u.kind, u.divs);
     // A staff never holds more than its bank allows, so a costly formation is ordered as soon as the bank is full.
     const need = Math.min(u.cost + PRODUCTION.aiReserve, PRODUCTION.aiBank[1]);
-    if (at >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && orderElite(g, nat, at)) spare -= cost;
+    if (at >= 0 && n.pp >= need && spare >= cost * BUDGET.debt.aiMargin && menSpare(g, nat) >= u.divs && orderElite(g, nat, at)) spare -= cost;
   }
+  // The grand campaign: a staff whose line has met dug-in troops orders massed guns to break them, one corps of guns
+  // to every few of the rest, and brings them up where the works are.
+  const wantsGuns = (): boolean => {
+    if (g.flags.open !== 1 || !n.atWar.length) return false;
+    const G = (arsenalData.ai as unknown as { guns: { per: number; most: number; facing: number } }).guns;
+    let guns = n.queue.filter((b) => b.what === 'corps' && b.kind === 'art').length, rest = 0;
+    for (const c of g.corps) if (c.nat === nat && !c.dead) { if (c.kind === 'art') guns++; else if (c.kind !== 'fort' && c.kind !== 'eng') rest++; }
+    if (guns >= G.most || guns * G.per >= rest) return false;
+    let dug = 0;
+    for (const c of g.corps) {
+      if (c.dead || !c.dug || !n.atWar.includes(c.nat) || !g.regions[c.reg].nb.some((j) => g.regions[j].ctrl === nat)) continue;
+      if (++dug >= G.facing) return true;
+    }
+    return false;
+  };
   while (slots() < most) {
-    let kind: Kind = home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
+    let kind: Kind = wantsGuns() ? 'art' : home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
     // nation's greatest industrial province; a nation with no such province raises infantry instead.
     let at = budgeted(g) ? raiseSite(g, nat, kind, cap.id) : cap.id;
     // A nation that has not researched the tank arm raises infantry instead, and so does one with no fuel to run more tanks.
     if (at < 0 || locked(g, nat, `corps:${kind}`) || (kind === 'arm' && shortOfOil(g, nat))) { kind = 'inf'; at = cap.id; }
     if (n.pp < corpsCost(g, nat, kind) + PRODUCTION.aiReserve) break;
-    const cost = corpsUpkeep(kind, PRODUCTION.builds[kind].divs);
+    const cost = corpsUpkeep(kind, specOf(g, kind)!.divs);
     if (spare < cost * BUDGET.debt.aiMargin) break;
+    // Nor does it raise new corps with men its armies in the field are waiting for (the grand campaign).
+    if (menSpare(g, nat) < specOf(g, kind)!.divs) break;
     if (!orderCorps(g, nat, kind, at)) break;
     spare -= cost;
   }
