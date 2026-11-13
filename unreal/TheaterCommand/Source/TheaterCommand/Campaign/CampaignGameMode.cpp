@@ -168,6 +168,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->ShowBuildings(Session->GetView().RegionWorks);
 		Table->ShowLanes(Session->GetView().Lanes);
 		Table->ShowFreeCapitals(Session->GetView().FreeCapitals);
+		Table->SetSeason(Session->GetView().Turn);
 	}
 }
 

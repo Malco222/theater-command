@@ -18,6 +18,8 @@ class THEATERCOMMAND_API ACampaignEnvironment : public AActor
 	GENERATED_BODY()
 
 public:
+	/** The light of the time of year: how hard the winter is and how high the summer, each from 0 to 1. */
+	void SetSeason(float Winter, float Summer);
 	ACampaignEnvironment();
 
 private:
@@ -32,4 +34,5 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = "Light")
 	TObjectPtr<USkyLightComponent> SkyLight;
+
 };

@@ -1,4 +1,7 @@
 #include "Campaign/CampaignMapActor.h"
+#include "Async/ParallelFor.h"
+#include "EngineUtils.h"
+#include "Campaign/CampaignEnvironment.h"
 
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignFlags.h"
@@ -2237,6 +2240,65 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 		}
 	}
 	Buffers.Commit(OrdersMesh, 0, HighlightMaterial);
+}
+
+void ACampaignMapActor::SetSeason(int32 Turn)
+{
+	// ("-TheaterSeason=5" on the command line holds the table at one month of the war, for a picture)
+	int32 Held = 0;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeason="), Held))
+	{
+		Turn = Held;
+	}
+	const int32 Month = ((Turn + 7) % 12 + 12) % 12; // 0 is January; the war's first month is September
+	if (Month == ShownMonth || !MasksPicture || Paint.Masks.Num() == 0 || Paint.Masks.Num() != Terrain.Height.Num())
+	{
+		return;
+	}
+	ShownMonth = Month;
+	// How hard the winter lies in each month of the year.
+	static const float Winter[12] = { 1.0f, 0.92f, 0.5f, 0.12f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.42f, 0.86f };
+	const float Hard = Winter[Month];
+	TArray<FColor> Pixels = Paint.Masks;
+	if (Hard > 0.0f)
+	{
+		const int32 NX = Terrain.NX, NY = Terrain.NY;
+		ParallelFor(NY, [&](int32 J)
+		{
+			for (int32 I = 0; I < NX; ++I)
+			{
+				const int32 Idx = Terrain.Index(I, J);
+				if (Terrain.Coverage[Idx] < 0.4f)
+				{
+					continue; // the sea does not lie under snow
+				}
+				const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
+				// The snow comes down from the north as the winter hardens, and farther south in the east, where
+				// the winter is a continental one. Its edge is ragged, not ruled.
+				const double Line = FMath::Lerp(120.0, 800.0, static_cast<double>(Hard)) + 0.22 * (P.X - 600.0);
+				const double Ragged = 95.0 * FMath::PerlinNoise2D(P * 0.011) + 40.0 * FMath::PerlinNoise2D(P * 0.047 + FVector2D(13.0, 71.0));
+				const float Lying = 1.0f - static_cast<float>(FMath::SmoothStep(Line - 170.0, Line + 60.0, P.Y + Ragged));
+				// It lies thinner than on the crests, so that each country's colour still shows through it.
+				const float Plain = 0.25f * FMath::Sqrt(Hard) * Lying;
+				// And the snow line on the mountains comes down.
+				const float H = Terrain.Height[Idx];
+				const float High = 0.9f * FMath::SmoothStep(5.0f - 1.5f * Hard, 6.6f - 1.7f * Hard, H);
+				const float Rock = Pixels[Idx].R / 255.0f;
+				const float Snow = FMath::Max3(Pixels[Idx].G / 255.0f, Plain * (1.0f - 0.35f * Rock), High);
+				Pixels[Idx].G = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Snow * 255.0f), 0, 255));
+			}
+		});
+	}
+	CampaignTextures::Update(MasksPicture, Pixels);
+	// The light of the season: colder and a little weaker in winter, warm in high summer.
+	static const float Summer[12] = { 0.0f, 0.0f, 0.1f, 0.3f, 0.6f, 0.9f, 1.0f, 0.95f, 0.6f, 0.3f, 0.1f, 0.0f };
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ACampaignEnvironment> It(World); It; ++It)
+		{
+			It->SetSeason(Hard, Summer[Month]);
+		}
+	}
 }
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)

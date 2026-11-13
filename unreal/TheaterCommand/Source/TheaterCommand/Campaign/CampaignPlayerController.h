@@ -386,6 +386,8 @@ public:
 	void ShowShipModel(const FString& Model, const FText& Name);
 	/** Picks up the next of the player's armies that can still move this month, and goes to it. */
 	void NextArmy();
+	/** How many of the player's armies can still move this month: the reminder beside the button that ends it. */
+	int32 ArmiesYetToMove() const;
 	/** The list of everything the player commands, each with a way to go to it (L). */
 	void OpenForces();
 	/** Looks at the player's capital (Home, or C). */

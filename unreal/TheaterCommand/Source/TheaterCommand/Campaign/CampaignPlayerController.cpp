@@ -1267,6 +1267,25 @@ void ACampaignPlayerController::OpenScreen3() { if (bResearchOpen) { CloseResear
 void ACampaignPlayerController::OpenScreen4() { if (bDiplomacyOpen) { CloseDiplomacy(); } else { OpenDiplomacy(); } }
 void ACampaignPlayerController::OpenScreen5() { if (bLedgerOpen) { CloseLedger(); } else { OpenLedger(); } }
 
+int32 ACampaignPlayerController::ArmiesYetToMove() const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || bWatching || Opening.bVisible || !Session->GetView().bHumanUp)
+	{
+		return 0;
+	}
+	const FCampaignView& View = Session->GetView();
+	TSet<int32> Places;
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		if (Unit.Nation == View.Human && Unit.bCanOrder && Unit.Moves > 0 && Unit.Kind != TEXT("fort"))
+		{
+			Places.Add(Unit.Region);
+		}
+	}
+	return Places.Num();
+}
+
 void ACampaignPlayerController::OpenForces()
 {
 	if (bPageOpen && Page.Id == TEXT("forces"))
@@ -2885,6 +2904,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 			}
 		}
 		Map->SetHolders(View.RegionHolder, View.League);
+		Map->SetSeason(View.Turn);
 		Map->ShowArmies(View, Marches, CarriedFrom);
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
 		Map->ShowBuildings(View.RegionWorks);

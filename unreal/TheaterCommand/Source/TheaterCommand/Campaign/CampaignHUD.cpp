@@ -522,6 +522,22 @@ namespace
 								]
 								]
 						]
+						// What is still to do before the month is ended: armies that have not moved. A click goes to the next of them.
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
+						[
+							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->ArmiesYetToMove() > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+							.ToolTipText(FText::FromString(TEXT("Armies that can still move this month. Click, or press Tab, to go to the next of them. You can end the month whenever you like.")))
+							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->NextArmy(); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(BrightBrass)
+								.Text_Lambda([this]()
+								{
+									const int32 Count = Controller.IsValid() ? Controller->ArmiesYetToMove() : 0;
+									return FText::FromString(FString::Printf(TEXT("%d ARM%s YET TO MOVE  \u00B7  TAB"), Count, Count == 1 ? TEXT("Y") : TEXT("IES")));
+								})
+							]
+						]
 						// The small map: every country in its colour, the armies as marks, the part on screen boxed.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 12.0f)
 						[

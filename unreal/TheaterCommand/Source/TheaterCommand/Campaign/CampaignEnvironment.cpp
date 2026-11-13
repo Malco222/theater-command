@@ -60,3 +60,15 @@ ACampaignEnvironment::ACampaignEnvironment()
 	SkyLight->SetIntensity(FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")) ? 1.0f : 0.72f);
 	SkyLight->bLowerHemisphereIsBlack = false;
 }
+
+void ACampaignEnvironment::SetSeason(float Winter, float Summer)
+{
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
+	{
+		return;
+	}
+	// The lamp is warm at 4900 K: winter takes it toward a cold white and takes a little off it; summer warms it.
+	KeyLight->SetTemperature(4900.0f + 1300.0f * Winter - 250.0f * Summer);
+	KeyLight->SetIntensity(7.0f - 0.9f * Winter + 0.3f * Summer);
+	FillLight->SetIntensity(0.75f + 0.25f * Winter);
+}

@@ -80,6 +80,8 @@ public:
 
 	/** Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it. */
 	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false);
+	/** The time of year, from the month of the war (1 is September 1939): snow lies over the north and the high ground in winter. */
+	void SetSeason(int32 Turn);
 	/** Rings in gold the capitals of fallen countries that the player would set free by taking them. */
 	void ShowFreeCapitals(const TArray<int32>& Capitals);
 	/** Rings the seas a fleet in hand can sail to, the one the pointer is over more brightly, and the fleet itself. None clears them. */
@@ -288,6 +290,7 @@ private:
 	bool bMiniStale = true;
 	TArray<FIntVector4> ShownBuildings;
 	TArray<int32> ShownFree;
+	int32 ShownMonth = -1;
 	TMap<int32, FVector2D> AirfieldSpots; // by province: where its airfield stands
 	FLandFeatures Land;
 	UPROPERTY()
