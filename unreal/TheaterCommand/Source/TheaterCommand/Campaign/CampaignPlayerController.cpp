@@ -15,7 +15,12 @@
 #include "Layout/WidgetPath.h"
 #include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
+#include "Dom/JsonObject.h"
 #include "Misc/CommandLine.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 #include "Misc/Parse.h"
 
 ACampaignPlayerController::ACampaignPlayerController()
@@ -149,7 +154,172 @@ void ACampaignPlayerController::LoadGrandNations()
 
 void ACampaignPlayerController::ShowOpeningTab(int32 Tab)
 {
-	Opening.Tab = Opening.Years.Num() == 0 ? 1 : FMath::Clamp(Tab, 0, 1);
+	Opening.Tab = Tab == 2 ? 2 : Opening.Years.Num() == 0 ? 1 : FMath::Clamp(Tab, 0, 1);
+	++Opening.Revision;
+}
+
+FString ACampaignPlayerController::OptionsFile()
+{
+	// (a run that only takes pictures keeps its own, as it keeps its own campaign)
+	FString Shots;
+	const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
+	return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Campaign"), bPictures ? TEXT("options-pictures.json") : TEXT("options.json"));
+}
+
+TArray<FGameOption> ACampaignPlayerController::GetOptions() const
+{
+	TArray<FGameOption> Out;
+	auto Add = [&Out](const TCHAR* Id, const TCHAR* Name, const TCHAR* Blurb, const TCHAR* State, bool bOn)
+	{
+		FGameOption& Option = Out.AddDefaulted_GetRef();
+		Option.Id = Id;
+		Option.Name = FText::FromString(Name);
+		Option.Blurb = FText::FromString(Blurb);
+		Option.State = FText::FromString(State);
+		Option.bOn = bOn;
+	};
+	const ACampaignGameMode* Mode = GetMode();
+	const bool bMusic = Mode && Mode->IsMusicOn();
+	const int32 Loud = Mode ? Mode->GetMusicLevel() : 1;
+	int32 Keeping = 0;
+	if (UWorld* World = GetWorld())
+	{
+		TActorIterator<ACampaignEnvironment> Room(World);
+		Keeping = Room ? Room->GetTimeKeeping() : 0;
+	}
+	Add(TEXT("music"), TEXT("Music"), TEXT("The game's own score, which follows the war. Key M."), bMusic ? TEXT("ON") : TEXT("OFF"), bMusic);
+	Add(TEXT("loud"), TEXT("How loud the music plays"), TEXT("From soft, under the sounds of the table, to full."), Loud == 0 ? TEXT("SOFT") : Loud == 1 ? TEXT("MIDDLE") : TEXT("FULL"), bMusic);
+	Add(TEXT("sounds"), TEXT("Sounds"), TEXT("Boots, engines, guns, aircraft and the click of every button. Key N."), CampaignSounds::IsOn() ? TEXT("ON") : TEXT("OFF"), CampaignSounds::IsOn());
+	Add(TEXT("newsreels"), TEXT("Newsreels"), TEXT("A month's great stories shown as film when it ends. Key K; Space skips one."), bNewsreels ? TEXT("ON") : TEXT("OFF"), bNewsreels);
+	Add(TEXT("narrator"), TEXT("The narrator"), TEXT("A voice that reads the newsreels aloud."), bNarrator ? TEXT("ON") : TEXT("OFF"), bNarrator);
+	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
+	Add(TEXT("watch"), TEXT("The other nations' month"), TEXT("At a month's end: watch every nation's moves, or only what touches you. Key V."), bWatchAll ? TEXT("EVERY MOVE") : TEXT("ONLY MINE"), bWatchAll);
+	Add(TEXT("day"), TEXT("Day and night in the room"), TEXT("The day passes over the table in twelve minutes, or the hour is held. Key T."), Keeping == 0 ? TEXT("PASSING") : Keeping == 1 ? TEXT("ALWAYS DAY") : TEXT("ALWAYS NIGHT"), Keeping == 0);
+	Add(TEXT("edge"), TEXT("Sliding the map at the window's edge"), TEXT("Rest the pointer at the window's very edge and the table slides that way."), bEdgeScroll ? TEXT("ON") : TEXT("OFF"), bEdgeScroll);
+	return Out;
+}
+
+void ACampaignPlayerController::PressOption(const FString& Id)
+{
+	ACampaignGameMode* Mode = GetMode();
+	if (Id == TEXT("music") && Mode && Mode->HasMusic())
+	{
+		Mode->ToggleMusic();
+	}
+	else if (Id == TEXT("loud") && Mode)
+	{
+		Mode->SetMusicLevel((Mode->GetMusicLevel() + 1) % 3);
+	}
+	else if (Id == TEXT("sounds"))
+	{
+		CampaignSounds::Toggle();
+	}
+	else if (Id == TEXT("newsreels"))
+	{
+		bNewsreels = !bNewsreels;
+	}
+	else if (Id == TEXT("narrator"))
+	{
+		bNarrator = !bNarrator;
+		if (!bNarrator)
+		{
+			HushNarrator();
+		}
+	}
+	else if (Id == TEXT("adviser"))
+	{
+		bAdviserWanted = !bAdviserWanted;
+		if (!bAdviserWanted && Adviser.bOn)
+		{
+			DismissAdviser();
+		}
+	}
+	else if (Id == TEXT("watch"))
+	{
+		bWatchAll = !bWatchAll;
+	}
+	else if (Id == TEXT("day"))
+	{
+		if (UWorld* World = GetWorld())
+		{
+			TActorIterator<ACampaignEnvironment> Room(World);
+			if (Room)
+			{
+				Room->NextTimeKeeping();
+			}
+		}
+	}
+	else if (Id == TEXT("edge"))
+	{
+		bEdgeScroll = !bEdgeScroll;
+	}
+	SaveOptions();
+}
+
+void ACampaignPlayerController::SaveOptions() const
+{
+	const ACampaignGameMode* Mode = GetMode();
+	int32 Keeping = 0;
+	if (UWorld* World = GetWorld())
+	{
+		TActorIterator<ACampaignEnvironment> Room(World);
+		Keeping = Room ? Room->GetTimeKeeping() : 0;
+	}
+	auto Word = [](bool bYes) { return bYes ? TEXT("true") : TEXT("false"); };
+	const FString Text = FString::Printf(
+		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s}\n"),
+		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll));
+	FFileHelper::SaveStringToFile(Text, *OptionsFile());
+	// (the options page, if it is up, is drawn again)
+	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
+}
+
+void ACampaignPlayerController::LoadOptions()
+{
+	// (a run that takes pictures starts from the choices as they come, unless told to keep what the last one left)
+	FString Pictures;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Pictures, false) && !FParse::Param(FCommandLine::Get(), TEXT("TheaterKeepOptions")))
+	{
+		return;
+	}
+	FString Text;
+	TSharedPtr<FJsonObject> Kept;
+	if (!FFileHelper::LoadFileToString(Text, *OptionsFile()) || !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Kept) || !Kept.IsValid())
+	{
+		return; // nothing kept yet: everything is as it comes
+	}
+	auto Yes = [&Kept](const TCHAR* Name, bool bElse) { bool bValue = bElse; Kept->TryGetBoolField(Name, bValue); return bValue; };
+	int32 Number = 0;
+	if (ACampaignGameMode* Mode = GetMode())
+	{
+		if (Kept->TryGetNumberField(TEXT("loud"), Number))
+		{
+			Mode->SetMusicLevel(Number);
+		}
+		if (Mode->HasMusic() && Mode->IsMusicOn() != Yes(TEXT("music"), true))
+		{
+			Mode->ToggleMusic();
+		}
+	}
+	CampaignSounds::SetOn(Yes(TEXT("sounds"), true));
+	bNewsreels = Yes(TEXT("newsreels"), true);
+	bNarrator = Yes(TEXT("narrator"), true);
+	bAdviserWanted = Yes(TEXT("adviser"), true);
+	bWatchAll = Yes(TEXT("watchAll"), true);
+	bEdgeScroll = Yes(TEXT("edge"), true);
+	if (Kept->TryGetNumberField(TEXT("day"), Number))
+	{
+		// (a run that takes pictures holds the hour it was asked for, whatever is kept)
+		FString Shots;
+		if (UWorld* World = GetWorld(); World && !FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false))
+		{
+			TActorIterator<ACampaignEnvironment> Room(World);
+			if (Room)
+			{
+				Room->SetTimeKeeping(Number);
+			}
+		}
+	}
 	++Opening.Revision;
 }
 
@@ -295,7 +465,7 @@ void ACampaignPlayerController::EnterCampaign()
 		const int32 Next = Adviser.Revision + 1; // (so that the screen writes his list afresh)
 		Adviser = FAdviser();
 		Adviser.Revision = Next;
-		Adviser.bOn = Nation != nullptr && View.Turn <= 2 && !bScripted;
+		Adviser.bOn = Nation != nullptr && View.Turn <= 2 && !bScripted && bAdviserWanted;
 	}
 	Notify(Nation
 		? FString::Printf(TEXT("%s. You lead %s.%s"), *View.Date, *Nation->Name, View.bEve ? TEXT(" Place your army, then end the month.") : TEXT(""))
@@ -1390,6 +1560,7 @@ void ACampaignPlayerController::ToggleMusic()
 		if (Mode->HasMusic())
 		{
 			Notify(Mode->ToggleMusic() ? TEXT("Music on.") : TEXT("Music off. Press M to bring it back."), 3.0);
+			SaveOptions();
 		}
 	}
 }
@@ -1397,6 +1568,7 @@ void ACampaignPlayerController::ToggleMusic()
 void ACampaignPlayerController::ToggleEffects()
 {
 	Notify(CampaignSounds::Toggle() ? TEXT("Sound effects on.") : TEXT("Sound effects off. Press N to bring them back."), 3.0);
+	SaveOptions();
 }
 
 void ACampaignPlayerController::SpaceBar()
@@ -1541,13 +1713,14 @@ void ACampaignPlayerController::ToggleNewsreels()
 		EndNewsreel();
 	}
 	Notify(bNewsreels ? TEXT("Newsreels on: the month's great stories are shown when it ends.") : TEXT("Newsreels off. Press K to bring them back."), 4.0);
+	SaveOptions();
 }
 
 void ACampaignPlayerController::Narrate(const FString& Words)
 {
 	HushNarrator();
 	// The stories are read by the computer's own voice. Not while pictures are being taken, nor with the sound off.
-	if (bScripted || !CampaignSounds::IsOn() || Words.IsEmpty() || FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")))
+	if (bScripted || !bNarrator || !CampaignSounds::IsOn() || Words.IsEmpty() || FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")))
 	{
 		return;
 	}
@@ -1584,6 +1757,7 @@ void ACampaignPlayerController::ToggleDayNight()
 			Notify(Now == 0 ? TEXT("Day and night go by in the room again.") : Now == 1 ? TEXT("Held at day. Press T again for night.") : TEXT("Held at night, by lamplight. Press T again to let the day run."), 4.0);
 		}
 	}
+	SaveOptions();
 }
 
 bool ACampaignPlayerController::IsWealthShown() const
@@ -1771,6 +1945,7 @@ void ACampaignPlayerController::ToggleWatchAll()
 {
 	bWatchAll = !bWatchAll;
 	Notify(bWatchAll ? TEXT("At the end of a month you will watch every nation's moves and battles.") : TEXT("Quick months: you will be shown only what touches you. The rest is in the news."), 5.0);
+	SaveOptions();
 }
 
 void ACampaignPlayerController::ShowCorpsModel(int32 CorpsId)
@@ -2003,6 +2178,13 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		bButtonDown = bDown;
 	}
 
+	// The standing choices are read once, when everything in the room is there to be told of them.
+	if (!bOptionsRead)
+	{
+		bOptionsRead = true;
+		LoadOptions();
+	}
+
 	// The music follows the war: the march while there is fighting to watch, the theme for a country at war,
 	// the quiet piece for one at peace.
 	if (ACampaignGameMode* Mode = GetMode())
@@ -2103,6 +2285,25 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		WatchNextStep();
 	}
 	const bool bBusy = bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || Announcements.Num() > 0;
+
+	// The pointer resting at the very edge of the window slides the table that way, as in any game of the kind.
+	// (Only after a moment's rest there, so a pointer on its way out of the window does not tug the map along.)
+	{
+		FVector2D Push = FVector2D::ZeroVector;
+		if (bEdgeScroll && bHaveMouse && !bScripted && !bBusy && !bLeftHeld && !bRightHeld && ViewWidth > 0 && ViewHeight > 0 && FSlateApplication::Get().IsActive())
+		{
+			const double Margin = 4.0;
+			if (Mouse.X <= Margin) Push.X -= 1.0;
+			if (Mouse.X >= ViewWidth - 1 - Margin) Push.X += 1.0;
+			if (Mouse.Y <= Margin) Push.Y += 1.0;
+			if (Mouse.Y >= ViewHeight - 1 - Margin) Push.Y -= 1.0;
+		}
+		EdgeRest = Push.IsZero() ? 0.0f : EdgeRest + DeltaTime;
+		if (EdgeRest > 0.3f)
+		{
+			Eye->Pan(Push * 0.85, DeltaTime);
+		}
+	}
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)

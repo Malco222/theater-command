@@ -3991,10 +3991,9 @@ namespace
 
 			// The tabs.
 			OpeningTabs->ClearChildren();
-			if (Opening.Years.Num() > 0)
 			{
-				const TCHAR* Names[] = { TEXT("THE GRAND CAMPAIGN"), TEXT("HISTORICAL SCENARIOS") };
-				for (int32 Tab = 0; Tab < 2; ++Tab)
+				const TCHAR* Names[] = { TEXT("THE GRAND CAMPAIGN"), TEXT("HISTORICAL SCENARIOS"), TEXT("OPTIONS") };
+				for (int32 Tab = Opening.Years.Num() > 0 ? 0 : 1; Tab < 3; ++Tab)
 				{
 					const bool bOn = Opening.Tab == Tab;
 					OpeningTabs->AddSlot().AutoWidth().Padding(5.0f, 0.0f)
@@ -4011,6 +4010,82 @@ namespace
 			Starts->ClearChildren();
 			OpeningFoot->SetContent(SNullWidget::NullWidget);
 			OpeningFoot->SetVisibility(EVisibility::Collapsed);
+
+			if (Opening.Tab == 2)
+			{
+				// ---- The options: the game's standing choices, each with what it does and a button that changes it.
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+					.Text(FText::FromString(TEXT("How the game looks, sounds and handles. What you choose here is remembered the next time you play.")))
+				];
+				const TArray<FGameOption> Options = Controller.IsValid() ? Controller->GetOptions() : TArray<FGameOption>();
+				TArray<TSharedRef<SWidget>> Cells;
+				for (const FGameOption& Option : Options)
+				{
+					const FString Id = Option.Id;
+					Cells.Add(
+						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(14.0f, 9.0f, 10.0f, 10.0f))
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+							[
+								SNew(SVerticalBox)
+								+ SVerticalBox::Slot().AutoHeight()
+								[
+									SNew(STextBlock).Text(Option.Name).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
+								]
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+								[
+									SNew(STextBlock).Text(Option.Blurb).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
+								]
+							]
+							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+							[
+								SNew(SBox).WidthOverride(138.0f)
+								[
+									SNew(SButton).ButtonStyle(Option.bOn ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(6.0f, 8.0f)).IsFocusable(false).HAlign(HAlign_Center)
+									.OnClicked_Lambda([this, Id]() { if (Controller.IsValid()) { Controller->PressOption(Id); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Text(Option.State).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Option.bOn ? BrightBrass : Muted)
+									]
+								]
+							]
+						]);
+				}
+				AddGrid(Cells, 2);
+				Starts->AddSlot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 6.0f)
+				[
+					Heading(TEXT("THE CONTROLS"))
+				];
+				const TCHAR* Controls[][2] =
+				{
+					{ TEXT("Move the view"), TEXT("drag the table, or W A S D or the arrow keys; double-click a place to centre on it") },
+					{ TEXT("Zoom, turn and tilt"), TEXT("scroll, or + and -; drag with the right button, or Q and E") },
+					{ TEXT("Armies and fleets"), TEXT("click a flag or a fleet to take it in hand; right-click where it should go; Esc puts it down; Tab goes to the next army yet to move") },
+					{ TEXT("The month"), TEXT("Enter ends it; Space skips what is being shown") },
+					{ TEXT("Screens"), TEXT("1 to 5 open the top bar's; L forces, R report, O goals, C your capital, Y map views, H how to play") },
+				};
+				for (const auto& Line : Controls)
+				{
+					Starts->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 3.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth()
+						[
+							SNew(SBox).WidthOverride(170.0f)
+							[
+								SNew(STextBlock).Text(FText::FromString(Line[0])).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream)
+							]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Line[1])).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						]
+					];
+				}
+				return;
+			}
 
 			if (Opening.Tab == 0 && Opening.Years.Num() > 0)
 			{

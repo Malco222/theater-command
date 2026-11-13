@@ -77,6 +77,11 @@ bool CampaignSounds::IsOn()
 	return bEffectsOn;
 }
 
+void CampaignSounds::SetOn(bool bOn)
+{
+	bEffectsOn = bOn;
+}
+
 bool CampaignSounds::Toggle()
 {
 	bEffectsOn = !bEffectsOn;

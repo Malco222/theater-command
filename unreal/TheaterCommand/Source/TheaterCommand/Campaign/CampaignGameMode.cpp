@@ -307,6 +307,17 @@ void ACampaignGameMode::DuckMusic(bool bDown)
 	}
 }
 
+void ACampaignGameMode::SetMusicLevel(int32 Level)
+{
+	MusicLevel = FMath::Clamp(Level, 0, 2);
+	const float Loud[] = { 0.26f, 0.55f, 0.9f };
+	MusicVolume = FParse::Param(FCommandLine::Get(), TEXT("TheaterQuiet")) ? 0.0005f : Loud[MusicLevel];
+	if (Music && bMusicOn)
+	{
+		Music->AdjustVolume(0.4f, bMusicDucked ? MusicVolume * 0.3f : MusicVolume);
+	}
+}
+
 bool ACampaignGameMode::ToggleMusic()
 {
 	if (!Music)

@@ -156,6 +156,13 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Shot.Months = 1;
 	}
 	Add(TEXT("14b-menu-with-save"), TEXT("Warsaw"), 0.5f).bMenu = true;
+	{
+		// The options page of the menu, with two of the choices changed.
+		FShot& Shot = Add(TEXT("14b2-options"), TEXT("Warsaw"), 0.5f);
+		Shot.bMenu = true;
+		Shot.OpeningTab = 2;
+		Shot.Options = TEXT("narrator,loud");
+	}
 	Add(TEXT("14e-guide"), TEXT("Warsaw"), 0.5f).bGuide = true;
 	{
 		FShot& Shot = Add(TEXT("14h-newsreel"), TEXT("Lodz"), 0.36f);
@@ -595,6 +602,16 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (Shot.bMenu)
 	{
 		Controller->OpenMenu();
+		if (Shot.OpeningTab >= 0)
+		{
+			Controller->ShowOpeningTab(Shot.OpeningTab);
+		}
+		TArray<FString> Presses;
+		Shot.Options.ParseIntoArray(Presses, TEXT(","));
+		for (const FString& Press : Presses)
+		{
+			Controller->PressOption(Press);
+		}
 		return;
 	}
 	Controller->CloseMenu();

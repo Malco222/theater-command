@@ -27,6 +27,10 @@ public:
 	/** Turns the music off, or on again. Returns true if it is now playing. */
 	bool ToggleMusic();
 	bool HasMusic() const { return Music != nullptr; }
+	bool IsMusicOn() const { return bMusicOn; }
+	/** How loud the music plays: 0 soft, 1 as it was written, 2 full. */
+	int32 GetMusicLevel() const { return MusicLevel; }
+	void SetMusicLevel(int32 Level);
 	/**
 	 * The music follows the war: "theme" for a country at war, "quiet" for one at peace, "battle" while there is
 	 * fighting to watch. One piece fades out as the next fades in. A piece that has not been made is passed over.
@@ -71,4 +75,5 @@ private:
 	FString MusicMood = TEXT("theme");
 	bool bMusicDucked = false;
 	float MusicVolume = 0.55f;
+	int32 MusicLevel = 1;
 };

@@ -166,7 +166,7 @@ struct FOpening
 	bool bCanReturn = false; // a campaign is under way behind the screen, so it can simply be closed
 
 	// The grand campaign: any country, taken over on one of a few days, and free to make its own history after.
-	int32 Tab = 0; // 0: the grand campaign, 1: the historical scenarios
+	int32 Tab = 0; // 0: the grand campaign, 1: the historical scenarios, 2: the options
 	TArray<FOpeningYear> Years;
 	int32 YearIndex = 0;
 	TArray<FOpeningNation> Nations;
@@ -181,6 +181,16 @@ struct FOpening
 	TArray<FOpeningGroup> Groups;
 	FText SavedLine; // empty when there is nothing to continue
 	int32 Revision = 0;
+};
+
+/** One of the game's standing choices, as the options page shows it. They are remembered from one day to the next. */
+struct FGameOption
+{
+	FString Id;
+	FText Name;
+	FText Blurb;
+	FText State; // what its button reads
+	bool bOn = false; // lit
 };
 
 /** The question put to the player before he goes to war with a country he is at peace with. */
@@ -275,6 +285,9 @@ public:
 
 	/** The opening screen's two pages: 0 is the grand campaign, 1 the historical scenarios. */
 	void ShowOpeningTab(int32 Tab);
+	/** The options page: the game's standing choices, and a press on one of them. */
+	TArray<FGameOption> GetOptions() const;
+	void PressOption(const FString& Id);
 
 	/**
 	 * Chooses the day the grand campaign is taken over on, and works out who can be led from it. For a later
@@ -656,6 +669,15 @@ private:
 	bool bBusyWithScreens() const { return bWatching || Newsreel.bOn || Opening.bVisible || Announcements.Num() > 0 || bScripted; }
 	FNewsreelShow Newsreel;
 	bool bNewsreels = true; // K turns them off
+	// The standing choices, kept in a file of their own so they outlast the campaign.
+	void LoadOptions();
+	void SaveOptions() const;
+	static FString OptionsFile();
+	bool bOptionsRead = false;
+	bool bNarrator = true; // the voice that reads the newsreels
+	bool bAdviserWanted = true; // the staff officer of the opening months
+	bool bEdgeScroll = true; // the pointer resting at the window's edge slides the table
+	float EdgeRest = 0.0f; // how long it has rested there
 	TArray<FAnnouncement> HeldAnnouncements; // waiting for the newsreel to end
 	FVector ReelReturnFocus = FVector::ZeroVector;
 	float ReelReturnZoom = 0.5f, ReelReturnYaw = 0.0f;

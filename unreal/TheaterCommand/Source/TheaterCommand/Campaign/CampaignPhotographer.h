@@ -76,6 +76,7 @@ private:
 	bool bWar = false; // answer yes to the question about declaring war
 	FString Click; // click this region, as the mouse would
 	int32 OpeningTab = -1; // on the opening screen: show this page
+	FString Options; // and press these options on it, joined by commas
 	int32 OpeningYear = -1; // and choose this day for the grand campaign
 	FString OpeningNation; // and this country
 	FString Carry; // hang the army in hand over this region, as if dragged there
