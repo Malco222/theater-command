@@ -7,7 +7,7 @@ import { AIR, AIRWAR, airFleetsOf, airUpkeep, airWar, airfieldsHold, crowding, h
 import { airPage, airAct } from '../src/campaign/airpages';
 import { airfieldCard, airfields, airGroups, fieldWord, groupJobs, groupRow, planRaid, raidKinds, raidTargets, setGroupJob } from '../src/campaign/airwar';
 import { engineersMonth } from '../src/campaign/engineers';
-import { addCorps, createGame } from '../src/campaign/game';
+import { addCorps, allied, createGame } from '../src/campaign/game';
 import { SIGHT, sightOf } from '../src/campaign/intel';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
@@ -472,7 +472,7 @@ describe('reconnaissance', () => {
   it('lifts the fog over one province for the month, once a month for each group', () => {
     const g = grand('GER');
     const b = mine(g, 'bmr')[0];
-    const ts = raidTargetsFor(g, 'recon', b.id);
+    const ts = raidTargetsFor(g, 'recon', b.id).filter((x) => sightOf(g)[x.id] !== SIGHT.full);
     expect(ts.length).toBeGreaterThan(0);
     const t = ts[0];
     expect(sightOf(g)[t.id]).not.toBe(SIGHT.full);
@@ -496,10 +496,12 @@ describe('reconnaissance', () => {
     expect(myAirGroups(g).find((x) => x.id === b.id)!.scouted).toBe(false);
   });
 
-  it('is flown only over ground that is hidden, and only by the player\'s own groups', () => {
+  it('is flown only over ground that is hidden or holds an army not identified, and only by the player\'s own groups', () => {
     const g = grand('GER');
     const full = sightOf(g);
-    for (const t of raidTargetsFor(g, 'recon')) expect(full[t.id], t.name).not.toBe(SIGHT.full);
+    // Ground in full view is worth a flight only for the armies there that are not yet identified (tests/reports.test.ts).
+    for (const t of raidTargetsFor(g, 'recon')) if (full[t.id] === SIGHT.full) expect(g.regions[t.id].units.some((u) => !allied(g, u.nat, 'GER')), t.name).toBe(true);
+    expect(raidTargetsFor(g, 'recon').some((t) => full[t.id] !== SIGHT.full)).toBe(true);
     const fra = g.airFleets.find((x) => x.nat === 'FRA')!;
     expect(orderScout(g, fra.id, raidTargetsFor(g, 'recon')[0].id).ok).toBe(false);
   });

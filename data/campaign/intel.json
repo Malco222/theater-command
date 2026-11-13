@@ -1,7 +1,7 @@
 {
   "_about": "Spies and the fog of war, the grand campaign only. A historical scenario has neither: the whole map is in sight and nobody has agents. In the grand campaign the player sees an enemy or neutral army in full only where his own side can see it, and less the deeper it stands (sight). Agents are recruited for money and sent abroad to see further, to read a government's books, and to wreck factories, railways and oilfields; each month abroad an agent may be caught. The computer's staffs see the whole map, as they always did, and keep no agents on it: their services work against the player as a monthly chance of sabotage (enemy), which the player's own agents on guard at home can stop. So a war with nobody at the table is fought exactly as before.",
   "sight": {
-    "_about": "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is seen whole: every corps, its kind and its strength. Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands.",
+    "_about": "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is in view: its flag, the number of its corps and the staff's estimate of its strength, and each corps that has been identified (see 'reports'). Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands.",
     "full": 1,
     "glimpse": 2
   },
@@ -113,6 +113,15 @@
   "estimate": {
     "_about": "Without an agent reading its books, a foreign army's size is known only to the nearest this many divisions.",
     "round": 10
+  },
+  "reports": {
+    "_about": "What the player knows of a foreign army's make-up. Seeing a flag is not knowing what stands under it. A corps is identified when the player's side fights it, when an agent at work has it in view, or when aircraft photograph its province. In the month it is identified (and for 'fresh' months more) the report is exact. For 'keep' months it is kept but goes stale: the corps' kind and its divisions are still known, its strength is an estimate inside a band 'drift' wider for every month of age (never wider than 'widest'), and its morale and rest are no longer known. After that the corps is unidentified again. Corps that stand beside the player's lines without a report are counted, and the staff estimates their strength in divisions inside a band 'contact' wide. On the card that plans an attack the odds are a band too: 'unknown' wide for a defender not identified, 'drift' wide for every month of age for one known from a stale report. Every band holds the truth.",
+    "fresh": 0,
+    "keep": 4,
+    "drift": 0.15,
+    "widest": 0.6,
+    "contact": 0.5,
+    "unknown": 0.5
   },
   "names": [
     "Nightjar",

@@ -23,16 +23,17 @@ import { foundBureau, setTeams } from './research';
 import { startResearch, stopResearch, techView, whyNotResearch, type TechView } from './tech';
 import { seaLanes, stores, type Lane, type StoresView } from './resources';
 import {
-  armiesSeen, booksOf, cityReport, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, spyRoom,
-  whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type SpyRoom,
+  armiesSeen, booksOf, cityReport, corpsKnown, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
+  whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
+import type { TicketLine } from '../core/ticket';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
 import { founders, invite, invites, pathOptions, takePath, whyNotInvite, type Invite, type PathId, type PathOption } from './league';
 import { awardOf, cashHonour } from './stories';
 import { contenders, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner, type Decided, type WorldBoard } from './domination';
 import { fallenNations, passingCard, passingsIn, standDown, type FallenRow, type PassingCard } from './liberation';
-import { armyCard, corpsCard, type ArmyCard, type CorpsCard } from './armies';
+import { armyCard, corpsCard, corpsSeen, type ArmyCard, type CorpsCard } from './armies';
 import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townsOf, type Prize, type TownView } from './towns';
 import EVE from '../../data/campaign/eve.json';
@@ -67,6 +68,8 @@ export function stepAI(g: Game): string {
 export function beginHuman(g: Game): void {
   g.week = 1;
   startPhase(g, current(g));
+  // The month's reports come in: what the player's agents have in view is identified afresh.
+  reconnoitre(g);
 }
 
 export function endHuman(g: Game): void {
@@ -250,6 +253,60 @@ export function previewAttack(g: Game, corps: Corps[], target: Region): Assessme
   return assess(g, corps, target);
 }
 
+/**
+ * What the player's staff can say of an attack before it is ordered. Where every defender has been identified this
+ * month the odds are the odds ('exact'). Otherwise the defence is partly a guess, and the odds are a band that holds
+ * the truth: 'lo' to 'hi', with the staff's best guess 'odds' between them. 'chance' is the chance of taking the
+ * ground at those odds, and 'lines' is the Battle Ticket with what is not known of the defenders left out.
+ */
+export interface Outlook {
+  exact: boolean;
+  odds: number; lo: number; hi: number;
+  chance: number; chanceLo: number; chanceHi: number;
+  /** Defending corps not identified, and those known only from a stale report. */
+  unidentified: number;
+  stale: number;
+  /** One sentence on why the odds are a band, and how to narrow it. Empty where they are exact. */
+  note: string;
+  lines: TicketLine[];
+}
+
+const chanceAt = (odds: number): number => Math.max(0, Math.min(1, (1.2 - 1.2 / Math.max(1e-6, odds)) / 0.4));
+
+export function attackOutlook(g: Game, corps: Corps[], target: Region): Outlook | null {
+  const a = previewAttack(g, corps, target);
+  if (!a) return null;
+  const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
+  const k = sortKnown(g, a.defenders, g.human);
+  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), unidentified: 0, stale: 0, note: '', lines: a.lines };
+  const n = a.defenders.length;
+  const corpsWord = (x: number): string => `${x} corps`;
+  // What the ticket says of the defenders' numbers, spirit and armour is left out where it is not known.
+  const lines = a.lines.map((l): TicketLine => {
+    if (l.label === 'Forces') return { ...l, value: `${l.value.split(', against ')[0]}, against ${corpsWord(n)}${k.none.length ? `, ${k.none.length === n ? 'none' : `${n - k.none.length}`} of them identified` : ', known from old reports'}` };
+    if (l.label === 'Morale') {
+      const ours = l.value.split(', defenders')[0];
+      return { ...l, value: /^Attackers/.test(ours) ? `${ours}; the defenders' spirit is not known` : "The defenders' spirit is not known", effect: l.effect ? l.effect.split(', defence')[0].replace(/^Defence.*$/, '') || undefined : undefined };
+    }
+    if (l.label === 'Armor' && /without armor/.test(l.value) && k.none.length) return { ...l, value: 'No tanks have been seen among the defenders', effect: 'Tank attack up 25% if there are none' };
+    return l;
+  });
+  const nn = k.none.length, old = k.report.length;
+  const count = (x: number): string => ['No', 'One', 'Two', 'Three', 'Four', 'Five', 'Six'][x] ?? `${x}`;
+  const dark = !nn ? '' : nn < n ? `${count(nn)} of the ${n} defending corps ${nn === 1 ? 'is' : 'are'} not identified`
+    : n === 1 ? 'The defending corps is not identified' : n === 2 ? 'Neither of the two defending corps is identified' : `None of the ${n} defending corps is identified`;
+  const dated = !old ? '' : nn ? `${count(old).toLowerCase()} ${old === 1 ? 'is' : 'are'} known only from ${old === 1 ? 'an old report' : 'old reports'}`
+    : old === n ? (n === 1 ? 'The defending corps is known only from an old report' : 'The defending corps are known only from old reports')
+    : `${count(old)} of the ${n} defending corps ${old === 1 ? 'is' : 'are'} known only from ${old === 1 ? 'an old report' : 'old reports'}`;
+  const what = [dark, dated].filter(Boolean).join(', and ');
+  return {
+    exact: false, odds: band.mid, lo: band.lo, hi: band.hi, chance: chanceAt(band.mid), chanceLo: chanceAt(band.lo), chanceHi: chanceAt(band.hi),
+    unidentified: k.none.length, stale: k.report.length,
+    note: `${what}, so the odds are the staff's estimate. A battle, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
+    lines,
+  };
+}
+
 export function orderAttack(g: Game, corps: Corps[], target: Region): BattleReport | null {
   if (onEve(g)) return null;
   const ok = limitAttackers(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target);
@@ -430,7 +487,11 @@ export const flownRaids = (g: Game, turn = g.turn): RaidReplay[] => raidReplays(
 
 /** Sends a few aircraft of one of the player's groups to photograph a province: its armies are seen whole until the month ends. */
 export function orderScout(g: Game, id: number, target: number): { ok: boolean; text: string; lost: number } {
-  return myAir(g, id) ? scout(g, id, target, g.human) : { ok: false, text: 'It is not your month.', lost: 0 };
+  if (!myAir(g, id)) return { ok: false, text: 'It is not your month.', lost: 0 };
+  const flown = scout(g, id, target, g.human);
+  // The photographs name every corps in the province and around it.
+  if (flown.ok) reconnoitre(g);
+  return flown;
 }
 
 /** The odds and the dangers of an air mission, before the order is given. */
@@ -761,8 +822,18 @@ export function armiesAt(g: Game, region: number): ArmyCard[] {
   return cards.sort((a, b) => Number(b.nat === g.human) - Number(a.nat === g.human) || b.divs - a.divs || b.corpsCount - a.corpsCount);
 }
 
-/** One corps opened up: its divisions, its record, its morale and its rest. */
+/** One corps opened up: its divisions, its record, its morale and its rest. For the player's own corps and allies': a foreign corps goes through corpsKnownAs. */
 export const corpsDetail = (g: Game, c: Corps): CorpsCard => corpsCard(g, c);
+
+/**
+ * How well the player knows a corps: 'exact' (its own, an ally's, or a foreign corps identified this month), 'report'
+ * (identified 'age' months ago: a dated report gone stale) or 'none' (seen, but not identified). A foreign corps is
+ * identified by fighting it, by an agent at work with it in view, or by a reconnaissance flight over its province.
+ */
+export const knowledgeOf = (g: Game, c: Corps): { level: Known; age: number } => corpsKnown(g, c, g.human);
+
+/** A corps as the player knows it: its card where it is identified (masked where the report is stale), null where it is not. */
+export const corpsKnownAs = (g: Game, c: Corps): CorpsCard | null => corpsSeen(g, c, g.human);
 
 /**
  * How a corps feels: morale and rest, each 0 to 1, each with its word ("Confident", "Rested"), which way morale is

@@ -20,7 +20,7 @@ import { KIND, MEN_PER_DIV, type Corps, type Game, type Kind } from './types';
 import { allied, men } from './game';
 import { generalOf } from './commanders';
 import { grade, STORIES } from './stories';
-import { SIGHT, sightOf } from './intel';
+import { SIGHT, armyBand, corpsKnown, reportSource, sightOf, sortKnown, strengthBand, type Source } from './intel';
 import { corpsMood, forceMorale, moraleWord, restWord, type Mood } from './morale';
 
 export const DIVISIONS = data as unknown as {
@@ -151,6 +151,17 @@ export interface CorpsCard {
   /** Morale and rest, 0 to 1, each with its word and a sentence on why. */
   mood: Mood;
   divisions: DivisionCard[];
+  /**
+   * How the viewer knows it. 'exact': everything above is true today. 'report': a dated report gone stale, 'age' months
+   * old. Its kind, divisions and experience stand; 'str' and 'men' are the middle of an estimate that runs from 'strLo'
+   * to 'strHi'; its morale and rest are not known (morale null, rest 0, the words say so) and its divisions are not listed.
+   */
+  known: 'exact' | 'report';
+  age: number;
+  /** How a foreign corps was last identified: in battle, by an agent, or from the air. Null for the viewer's own side, and where there is no fog. */
+  source: Source | null;
+  strLo: number;
+  strHi: number;
 }
 
 export interface ArmyMix { kind: Kind; word: string; divs: number; men: number }
@@ -160,9 +171,19 @@ export interface ArmyCard {
   nat: string;
   /** "German army at Paris". */
   name: string;
-  /** How much the viewer knows: everything, or only the flag and how many corps stand under it. */
-  known: 'full' | 'count';
+  /**
+   * How much the viewer knows. 'full': every corps is identified and what follows is true today. 'partial': the army is
+   * in view, but some corps are not identified or are known only from a stale report; 'corps' lists the identified ones,
+   * 'unidentified' counts the rest, and the figures are of the identified corps alone. 'count': only the flag and how
+   * many corps stand under it.
+   */
+  known: 'full' | 'partial' | 'count';
   corpsCount: number;
+  /** Corps under the flag that the viewer has not identified: their kind and strength are not known. */
+  unidentified: number;
+  /** The staff's estimate of the whole army's strength, counted in full divisions, as a band, where it has one; and the age in months of the oldest report used. */
+  est: { lo: number; hi: number } | null;
+  oldest: number;
   /** The rest is empty where only the count is known. */
   divs: number;
   men: number;
@@ -188,7 +209,7 @@ export function corpsCard(g: Game, c: Corps): CorpsCard {
   return {
     id: c.id, nat: c.nat, name: c.name, nick: c.nick ?? null, kind: c.kind, label: KIND[c.kind].label, divs: c.divs, men: men(c),
     str: c.str, xp: c.xp, grade: grade(c.xp), hardened, battles, won, service, general: generalOf(g, c)?.name ?? null,
-    mood: corpsMood(g, c), divisions: divisionsOf(g, c),
+    mood: corpsMood(g, c), divisions: divisionsOf(g, c), known: 'exact', age: 0, source: null, strLo: c.str, strHi: c.str,
   };
 }
 
@@ -216,8 +237,27 @@ export function mixLine(mix: ArmyMix[]): string {
 }
 
 /**
+ * A corps as the viewer knows it: as it is where it is identified this month, a stale report where it was identified
+ * some months ago, and null where it is not identified at all. The viewer's own corps and its allies' are always known.
+ */
+export function corpsSeen(g: Game, c: Corps, viewer: string | null = g.human): CorpsCard | null {
+  const k = corpsKnown(g, c, viewer);
+  if (k.level === 'none') return null;
+  const card = { ...corpsCard(g, c), source: reportSource(g, c, viewer) };
+  if (k.level === 'exact') return card;
+  const band = strengthBand(g, c, k.age);
+  const mid = (band.lo + band.hi) / 2;
+  const since = `Not known since the report of ${k.age === 1 ? 'last month' : `${k.age} months ago`}.`;
+  return {
+    ...card, known: 'report', age: k.age, str: mid, strLo: band.lo, strHi: band.hi, men: Math.round(c.divs * mid * MEN_PER_DIV), divisions: [],
+    mood: { morale: null, moraleWord: 'Not known', trend: 'steady', rest: 0, restWord: 'Not known', line: since, restLine: since, why: [], resting: false },
+  };
+}
+
+/**
  * One nation's army in a province, as the viewer knows it. The viewer's own armies and their allies' are always
- * known in full; anyone else's as far as the fog allows, and not at all (null) on ground the viewer cannot see.
+ * known in full. Anyone else's is a flag and a count until its corps are identified: in battle, by an agent, or
+ * from the air. On ground the viewer cannot see there is nothing (null).
  */
 export function armyCard(g: Game, region: number, nat: string, viewer: string | null = g.human): ArmyCard | null {
   const r = g.regions[region];
@@ -228,19 +268,36 @@ export function armyCard(g: Game, region: number, nat: string, viewer: string | 
   const sight = mine ? SIGHT.full : sightOf(g, viewer)[region];
   if (sight === SIGHT.none) return null;
   const name = `${g.nations[nat].adj} army at ${r.name}`;
-  if (sight !== SIGHT.full) {
-    return { region, nat, name, known: 'count', corpsCount: cs.length, divs: 0, men: 0, str: 0, morale: null, moraleWord: '', rest: 0, restWord: '', mix: [], line: '', corps: [] };
-  }
   const last = (c: Corps): number => (c.kind === 'fort' ? 1 : 0);
-  const order = [...cs].sort((a, b) => last(a) - last(b) || DIVISIONS.order.indexOf(a.kind) - DIVISIONS.order.indexOf(b.kind) || b.divs * b.str - a.divs * a.str || a.id - b.id);
+  const sorted = (xs: Corps[]): Corps[] => [...xs].sort((a, b) => last(a) - last(b) || DIVISIONS.order.indexOf(a.kind) - DIVISIONS.order.indexOf(b.kind) || b.divs * b.str - a.divs * a.str || a.id - b.id);
+  const k = mine ? null : sortKnown(g, cs, viewer);
+  if (k && (k.report.length || k.none.length)) {
+    const seen = sorted([...k.exact, ...k.report]);
+    if (!seen.length && sight !== SIGHT.full) {
+      return { region, nat, name, known: 'count', corpsCount: cs.length, unidentified: cs.length, est: null, oldest: 0, divs: 0, men: 0, str: 0, morale: null, moraleWord: '', rest: 0, restWord: '', mix: [], line: '', corps: [] };
+    }
+    // Part of the army is known: the identified corps as cards, the rest as a count, and the staff's estimate of the whole.
+    const cards = seen.map((c) => corpsSeen(g, c, viewer)!);
+    const dv = cards.reduce((s, c) => s + c.divs, 0);
+    const mix = mixOf(seen);
+    const est = armyBand(g, region, nat, cs, viewer, sight === SIGHT.full);
+    const words = [seen.length ? `${mixLine(mix)} identified` : '', k.none.length ? `${k.none.length} corps not identified` : ''].filter(Boolean).join(', ');
+    return {
+      region, nat, name, known: 'partial', corpsCount: cs.length, unidentified: k.none.length, est, oldest: cards.reduce((m, c) => Math.max(m, c.age), 0),
+      divs: dv, men: cards.reduce((s, c) => s + c.men, 0), str: dv > 0 ? cards.reduce((s, c) => s + c.divs * c.str, 0) / dv : 0,
+      morale: null, moraleWord: '', rest: 0, restWord: '', mix, line: `${words[0].toUpperCase()}${words.slice(1)}`, corps: cards,
+    };
+  }
+  const order = sorted(cs);
   const divs = cs.reduce((s, c) => s + c.divs, 0);
   const mix = mixOf(cs);
   const morale = forceMorale(cs);
   const rest = divs > 0 ? cs.reduce((s, c) => s + c.org * c.divs, 0) / divs : 0;
   return {
-    region, nat, name, known: 'full', corpsCount: cs.length, divs, men: cs.reduce((s, c) => s + men(c), 0),
+    region, nat, name, known: 'full', corpsCount: cs.length, unidentified: 0, est: { lo: cs.reduce((s, c) => s + c.divs * c.str, 0), hi: cs.reduce((s, c) => s + c.divs * c.str, 0) }, oldest: 0,
+    divs, men: cs.reduce((s, c) => s + men(c), 0),
     str: divs > 0 ? cs.reduce((s, c) => s + c.divs * c.str, 0) / divs : 0,
     morale, moraleWord: morale === null ? '' : moraleWord(morale), rest, restWord: restWord(rest),
-    mix, line: mixLine(mix), corps: order.map((c) => corpsCard(g, c)),
+    mix, line: mixLine(mix), corps: order.map((c) => (mine ? null : corpsSeen(g, c, viewer)) ?? corpsCard(g, c)),
   };
 }

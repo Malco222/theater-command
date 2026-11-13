@@ -1,5 +1,6 @@
-// Spies and the fog of war (the grand campaign). The player sees a foreign army whole only where his own side can
-// see it, a flag and a count a province further off, and nothing beyond. Agents are pieces he recruits and sends
+// Spies and the fog of war (the grand campaign). The player has a foreign army in view only where his own side can
+// see it, a flag and a count a province further off, and nothing beyond; what an army in view is made of he knows
+// only once it is identified (tests/reports.test.ts). Agents are pieces he recruits and sends
 // abroad: they see for him, read a government's books in its capital, and try acts of sabotage, and every month
 // abroad they may be caught. The computer's staffs see everything and keep no agents: their services strike at the
 // player's home ground by a monthly chance, which his guards can stop. Every number is in data/campaign/intel.json.
@@ -10,7 +11,7 @@ import { ledger } from '../src/campaign/economy';
 import { allied, assess, createGame, fieldArmy, startPhase } from '../src/campaign/game';
 import {
   INTEL, MISSIONS, MISSION_TEXT, SIGHT, abroad, agentAt, agentCost, agentsOf, armiesSeen, armyKnown, atWork, booksOf, caughtChance, cityReport, fogOn,
-  guardChance, homeBase, intelAttack, intelRules, intelTick, knowsBooks, mostAgents, rankOf, recruit, retire, sendAgent, setFog, setMission, sightOf,
+  guardChance, homeBase, intelAttack, intelRules, intelTick, knowsBooks, mostAgents, rankOf, reconnoitre, recruit, retire, sendAgent, setFog, setMission, sightOf,
   skillOf, spyRoom, successChance, threat, whyNotMission, whyNotRecruit, whyNotSend,
 } from '../src/campaign/intel';
 import { onNet, railCut, ruinedAt, workingFactories } from '../src/campaign/rails';
@@ -145,8 +146,12 @@ describe('the fog of war', () => {
       expect(all.has(`${a.reg}:${a.nat}`)).toBe(true);
       if (a.mine) { expect(a.sight).toBe(SIGHT.full); expect(a.divs).toBeGreaterThan(0); continue; }
       expect(s[a.reg]).toBeGreaterThan(SIGHT.none);
-      if (s[a.reg] === SIGHT.glimpse) { expect(a.divs).toBeNull(); expect(a.corps).toBeGreaterThan(0); }
-      else expect(a.divs).toBeGreaterThan(0);
+      // A foreign army is weighed only once it is identified: glimpsed it is a count, in view a count and an estimate.
+      expect(a.divs).toBeNull();
+      expect(a.corps).toBeGreaterThan(0);
+      expect(a.identified).toBe(0);
+      if (s[a.reg] === SIGHT.glimpse) { expect(a.known).toBe('count'); expect(a.est).toBeNull(); }
+      else { expect(a.known).toBe('partial'); expect(a.est!.hi).toBeGreaterThan(a.est!.lo); }
     }
     expect(seen.some((a) => a.divs === null)).toBe(true);
     // Every one of the player's own armies is on the list, wherever it stands.
@@ -200,7 +205,10 @@ describe('the fog of war', () => {
     expect(s[moscow.id]).toBe(SIGHT.full);
     for (const j of moscow.nb) expect(s[j], g.regions[j].name).toBe(SIGHT.full);
     for (const j of moscow.nb) for (const k of g.regions[j].nb) expect(s[k], g.regions[k].name).toBeGreaterThanOrEqual(SIGHT.glimpse);
-    expect(armiesSeen(g).filter((x) => x.reg === moscow.id).every((x) => x.divs !== null)).toBe(true);
+    // What the agent has in view is identified when the month's reports come in.
+    expect(armiesSeen(g).filter((x) => x.reg === moscow.id).every((x) => x.divs === null && x.known === 'partial')).toBe(true);
+    reconnoitre(g);
+    expect(armiesSeen(g).filter((x) => x.reg === moscow.id).every((x) => x.divs !== null && x.known === 'full')).toBe(true);
     // Another nation's agent is no use to the player.
     g.intel.agents.length = 0;
     plant(g, 'Moscow', 'watch', 'FRA');

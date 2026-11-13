@@ -20,7 +20,7 @@ import { crown } from './domination';
 import { afterFall, recordFall, retaken, standsFreed } from './liberation';
 import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, moraleWord, nerve, raiseMorale, restedDrafts, restedOrg } from './morale';
 import { numberCorps } from './armies';
-import { INTEL, intelAttack, intelTick } from './intel';
+import { INTEL, identify, intelAttack, intelTick } from './intel';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
 import eastData from '../../data/campaign/east.json';
@@ -981,6 +981,9 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     if (before > 0) bled.set(c.id, defU[i].lost / before);
   });
   moraleBattle(g, attackers, defenders, R, win, bled, enemyCapital);
+  // Whoever fights an army learns what it is made of: each side has identified the other's corps.
+  identify(g, defenders, attNat);
+  for (const nat of new Set(defenders.map((c) => c.nat))) identify(g, attackers, nat);
 
   const level: VictoryLevel = R >= 3 ? 'Heroic victory' : R >= 2 ? 'Decisive victory' : R >= 1.2 ? (attLost > defLost ? 'Pyrrhic victory' : 'Close victory') : R >= 0.8 ? 'Close defeat' : 'Decisive defeat';
   const affected = new Set(defenders.map((c) => c.nat));

@@ -827,6 +827,10 @@ export interface Intel {
   heat: Record<number, number>;
   /** Provinces the player's aircraft have photographed, and the month they did. */
   scout?: Record<number, number>;
+  /** Foreign corps the player's side has identified (in battle, by an agent, from the air), and the month it last did. */
+  known?: Record<number, number>;
+  /** How each of those corps was last identified. */
+  how?: Record<number, 'battle' | 'agent' | 'air'>;
 }
 
 export const MEN_PER_DIV = 15000;

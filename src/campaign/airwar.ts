@@ -23,7 +23,7 @@ import {
   forecastAir, gunsAt, isOffensive, km, seaKm, setMission, whyNotBase, whyNotMission,
 } from './air';
 import { allied, atWar, headline } from './game';
-import { SIGHT, sightOf } from './intel';
+import { SIGHT, corpsKnown, sightOf } from './intel';
 import { atSea, surfaceShips } from './navy';
 import { onNet, railCut, railsAt } from './rails';
 
@@ -290,6 +290,11 @@ function troopsSeen(g: Game, nat: string, region: number, sight: Uint8Array): bo
   return sight[region] !== SIGHT.none && g.regions[region].units.some((u) => !u.dead && atWar(g, nat, u.nat));
 }
 
+/** True if foreign troops stand in this region that the viewer has not identified this month. */
+function unidentified(g: Game, nat: string, region: number): boolean {
+  return g.regions[region].units.some((u) => !u.dead && !allied(g, u.nat, nat) && corpsKnown(g, u, nat).level !== 'exact');
+}
+
 function reachable(g: Game, nat: string, kind: RaidKind): Map<number, AirFleet[]> {
   const out = new Map<number, AirFleet[]>();
   const fleets = able(g, nat);
@@ -297,8 +302,8 @@ function reachable(g: Game, nat: string, kind: RaidKind): Map<number, AirFleet[]
   const sight = kind === 'ground' || kind === 'recon' ? sightOf(g, nat) : null;
   for (const t of targetIds(g, kind)) {
     if (kind === 'ground' && !troopsSeen(g, nat, t, sight!)) continue;
-    // Ground already in full view has nothing to show a camera.
-    if (kind === 'recon' && sight![t] === SIGHT.full) continue;
+    // Ground in full view has something to show a camera only where an army there is not identified, or known from an old report.
+    if (kind === 'recon' && sight![t] === SIGHT.full && !unidentified(g, nat, t)) continue;
     const can = fleets.filter((f) => whyNotSeat(g, f, kind, t) === null);
     // A raid that needs bombers is not offered where only fighters reach.
     if (!can.length || (needs === 'bmr' && !can.some((f) => f.bmr > 0))) continue;
@@ -332,12 +337,19 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   }
   if (kind === 'ground') {
     const foes = r.units.filter((u) => !u.dead && atWar(g, nat, u.nat));
-    return sight[t] === SIGHT.full ? `${plural(foes.length, 'corps', 'corps')}, ${plural(foes.reduce((s, c) => s + c.divs, 0), 'division')}${foes.some((c) => c.dug) ? ', dug in' : ''}` : `${plural(foes.length, 'corps', 'corps')} seen`;
+    const known = foes.every((c) => corpsKnown(g, c, nat).level === 'exact');
+    return sight[t] === SIGHT.full && known ? `${plural(foes.length, 'corps', 'corps')}, ${plural(foes.reduce((s, c) => s + c.divs, 0), 'division')}${foes.some((c) => c.dug) ? ', dug in' : ''}`
+      : sight[t] === SIGHT.full ? `${plural(foes.length, 'corps', 'corps')} seen, not identified${foes.some((c) => c.dug) ? ', dug in' : ''}` : `${plural(foes.length, 'corps', 'corps')} seen`;
   }
   if (kind === 'superiority') {
     const based = g.airFleets.filter((f) => f.base === t && flying(f) && atWar(g, f.nat, nat)).length;
     const up = fightersOver(g, t, nat);
     return [based ? `${plural(based, 'air group')} based there` : airfieldsHold(g, t) > 0 ? 'an empty airfield' : 'no airfield', up >= 1 ? `about ${num(up)} fighters can come up` : 'no fighters in reach'].join(', ');
+  }
+  if (sight[t] === SIGHT.full) {
+    const foes = g.regions[t].units.filter((u) => !u.dead && !allied(g, u.nat, nat));
+    const old = foes.filter((c) => corpsKnown(g, c, nat).level === 'report').length;
+    return old === foes.length ? `${plural(foes.length, 'corps', 'corps')} known only from old reports` : `${plural(foes.length, 'corps', 'corps')} in view, ${old ? `${foes.length - old} of them not identified` : 'not identified'}`;
   }
   return sight[t] === SIGHT.glimpse ? 'Only a flag and a count are known' : 'Nothing is known of what stands there';
 }
@@ -496,7 +508,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
     const lost = n * risk;
     if (f.ftr > 0) plan.fighterLossN = Math.round(lost); else plan.bomberLossN = Math.round(lost);
     plan.bomberLoss = f.ftr > 0 ? 0 : risk;
-    plan.effects = [`Every army at ${place} and in the provinces beside it is seen whole until the month ends.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
+    plan.effects = [`Every army at ${place} and in the provinces beside it is identified, corps by corps. The report is exact this month and goes stale after.`, `The ${f.name} still flies its raid and keeps its patrol: this takes only ${n} aircraft.`];
     return plan;
   }
 
@@ -595,7 +607,7 @@ export function raidReplays(g: Game, turn = g.turn, viewer: string | null = g.hu
 
 /**
  * A reconnaissance flight: a few aircraft of one group photograph a province. Every army there and in the provinces
- * beside it is seen whole until the month ends, as an agent on watch would see it. One flight a month for each group,
+ * beside it is identified this month, as an agent on watch would identify it. One flight a month for each group,
  * beside its raid and without leaving its patrol.
  */
 export function scout(g: Game, id: number, target: number, nat: string | null = g.human): { ok: boolean; text: string; lost: number } {
