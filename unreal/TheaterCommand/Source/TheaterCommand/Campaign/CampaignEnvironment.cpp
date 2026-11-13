@@ -129,7 +129,7 @@ void ACampaignEnvironment::UpdateAir()
 	{
 		AirNight = Night;
 		// Pale blue-grey by day; by lamplight the far table simply falls away into the dark of the room.
-		const FLinearColor Day(0.80f, 0.84f, 0.88f), Dark(0.035f, 0.04f, 0.055f);
+		const FLinearColor Day(0.80f, 0.84f, 0.88f), Dark = bLamplight ? FLinearColor(0.035f, 0.04f, 0.055f) : FLinearColor(0.06f, 0.085f, 0.15f);
 		Air->SetFogInscatteringColor(FMath::Lerp(Day, Dark, Night) * Glow);
 	}
 }
@@ -186,16 +186,41 @@ void ACampaignEnvironment::ApplyLight()
 	// The lamp is warm at 4900 K: winter takes it toward a cold white and takes a little off it; summer warms it.
 	// At night the lamp is all there is: warmer and a little lower, with the cool light of the windows gone,
 	// so the table stands in a pool of lamplight and the shadows deepen.
-	KeyLight->SetTemperature(4900.0f + 1300.0f * SeasonWinter * (1.0f - Night) - 250.0f * SeasonSummer - 900.0f * Night);
-	KeyLight->SetIntensity((7.0f - 0.9f * SeasonWinter + 0.3f * SeasonSummer) * (1.0f - 0.2f * Night));
-	FillLight->SetIntensity((0.75f + 0.25f * SeasonWinter) * (1.0f - 0.72f * Night));
-	SkyLight->SetIntensity(0.72f * (1.0f - 0.55f * Night));
-	// And the towns on the map light their windows.
+	const float DayWarmth = 4900.0f + 1300.0f * SeasonWinter - 250.0f * SeasonSummer, DayKey = 7.0f - 0.9f * SeasonWinter + 0.3f * SeasonSummer, DayFill = 0.75f + 0.25f * SeasonWinter;
+	if (bLamplight)
+	{
+		KeyLight->SetTemperature(4900.0f + 1300.0f * SeasonWinter * (1.0f - Night) - 250.0f * SeasonSummer - 900.0f * Night);
+		KeyLight->SetIntensity(DayKey * (1.0f - 0.2f * Night));
+		KeyLight->SetLightColor(FLinearColor::White);
+		FillLight->SetIntensity(DayFill * (1.0f - 0.72f * Night));
+		SkyLight->SetIntensity(0.72f * (1.0f - 0.55f * Night));
+		SkyLight->SetLightColor(FLinearColor::White);
+	}
+	else
+	{
+		// Night is moonlight: cool and low, from the same quarter as the day's light, so the hills keep their
+		// shadows. Enough of it to read the table by, with the colour drained and blue.
+		// (The blue is in the light itself and not in the lens, so that the lamps of the towns stay warm in it.)
+		KeyLight->SetTemperature(FMath::Lerp(DayWarmth, 6500.0f, Night));
+		// (the land carries moon colours of its own to go with this light: see the map's SetNight. The key is kept
+		// low and blue so that the yellow of autumn woods does not shine out of the dark like lamps.)
+		KeyLight->SetIntensity(FMath::Lerp(DayKey, 3.0f, Night));
+		KeyLight->SetLightColor(FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.5f, 1.0f), Night));
+		FillLight->SetIntensity(FMath::Lerp(DayFill, 0.55f, Night));
+		SkyLight->SetIntensity(FMath::Lerp(0.72f, 0.52f, Night));
+		SkyLight->SetLightColor(FMath::Lerp(FLinearColor::White, FLinearColor(0.42f, 0.58f, 1.0f), Night));
+	}
+	// And the towns on the map light their windows, and the lens takes the colour of the hour.
 	if (UWorld* World = GetWorld())
 	{
 		for (TActorIterator<ACampaignMapActor> It(World); It; ++It)
 		{
-			It->SetNight(Night);
+			It->SetNight(Night, bLamplight);
+		}
+		for (TActorIterator<ACampaignCameraPawn> It(World); It; ++It)
+		{
+			It->SetNight(Night, bLamplight);
 		}
 	}
+	AirNight = -1.0f; // (the air takes the hour's colour too)
 }

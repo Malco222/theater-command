@@ -102,7 +102,7 @@ namespace
 		static FVector3f Kept(0.0f);
 		if (Kept.X <= 0.0f)
 		{
-			Kept = FVector3f(0.66f, 0.71f, 0.75f);
+			Kept = FVector3f(0.74f, 0.79f, 0.83f); // (a tenth lighter than it first was: the far view by day now sits at the brightness of the art director's target)
 			FString Asked;
 			TArray<FString> Parts;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterTone="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)

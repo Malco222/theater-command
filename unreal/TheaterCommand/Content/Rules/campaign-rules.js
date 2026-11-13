@@ -19172,6 +19172,25 @@
       free: nationsFallen(s).filter((f) => f.canReturn && f.yours && f.capital >= 0).map((f) => ({ region: f.capital, nat: f.nat })),
       alerts: alertsOf(s),
       todo: todoOf(s),
+      // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
+      // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
+      dark: Object.values(s.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
+      fronts: (() => {
+        const there = /* @__PURE__ */ new Map();
+        for (const c of s.corps) {
+          if (c.dead || !(seen[c.reg] > 0) || c.kind === "fort") continue;
+          if (!there.has(c.reg)) there.set(c.reg, /* @__PURE__ */ new Set());
+          there.get(c.reg).add(c.nat);
+        }
+        const out = [];
+        for (const [reg, nats] of there) {
+          for (const nb of s.regions[reg].nb) {
+            const other2 = nb > reg ? there.get(nb) : void 0;
+            if (other2 && [...nats].some((a) => [...other2].some((b) => atWar(s, a, b)))) out.push(reg, nb);
+          }
+        }
+        return out.slice(0, 160);
+      })(),
       // Towns under siege that the player knows of (Version 54): region, 1 if the ring is closed, months of stores left.
       sieges: (() => {
         try {

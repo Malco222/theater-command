@@ -172,6 +172,11 @@ void ACampaignGameMode::LayOutWar()
 		Table->ShowShroud(Session->GetView().Unseen);
 		Table->ShowMud(Session->GetView().bMud ? Session->GetView().WeatherGround : TArray<int32>());
 		Table->SetSeason(Session->GetView().Turn);
+		// (and what the war has left on the table: works in hand, scars, sieges, and who keeps the blackout)
+		Table->ShowCivic(Session->GetView().Civic);
+		Table->ShowScars(Session->GetView().Scars);
+		Table->ShowSieges(Session->GetView().Sieges);
+		Table->SetWarAtNight(Session->GetView().Blackout, Session->GetView().Fronts);
 	}
 }
 

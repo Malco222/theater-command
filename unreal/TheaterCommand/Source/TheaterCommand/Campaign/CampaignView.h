@@ -340,6 +340,9 @@ struct FCampaignView
 	TArray<int32> Scars;
 	// Towns under siege that the player knows of, three numbers each: region, 1 if the ring is closed, months of stores left.
 	TArray<int32> Sieges;
+	// For the night: the nations at war (their towns are blacked out), and the fronts as pairs of regions.
+	TArray<FString> Blackout;
+	TArray<int32> Fronts;
 	TArray<FString> Alerts; // things to tell the player as his month opens
 	TArray<FString> PageIds; // the rooms the rules set out themselves that are open to him
 	TArray<FString> PageLabels;

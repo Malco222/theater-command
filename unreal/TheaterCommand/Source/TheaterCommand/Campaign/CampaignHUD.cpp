@@ -173,6 +173,7 @@ namespace
 			}
 			TArray<FMapLetter> Letters;
 			Controller->GetMapLetters(Letters);
+			const float Moon = Controller->GetMoonlight();
 			if (Letters.Num() == 0)
 			{
 				return LayerId;
@@ -214,7 +215,9 @@ namespace
 				const FVector2D Right = Each.Along / Scale / Unit, Down = -Each.Up / Scale / Unit;
 				const FSlateRenderTransform Lying(FMatrix2x2(static_cast<float>(Right.X), static_cast<float>(Right.Y), static_cast<float>(Down.X), static_cast<float>(Down.Y)));
 				const FGeometry Place = Geometry.MakeChild(Box, FSlateLayoutTransform(Each.At / Scale - Box * 0.5), Lying, FVector2D(0.5, 0.5));
-				const FLinearColor Ink = Each.bSea ? FLinearColor(FColor(214, 232, 236)).CopyWithNewOpacity(Each.Alpha) : FLinearColor(FColor(244, 232, 204)).CopyWithNewOpacity(Each.Alpha);
+				// (by moonlight the names sink back: a pale blue-grey, and fainter, so the lights of the towns lead the eye)
+				const FLinearColor Day = Each.bSea ? FLinearColor(FColor(214, 232, 236)) : FLinearColor(FColor(244, 232, 204));
+				const FLinearColor Ink = FMath::Lerp(Day, FLinearColor(FColor(168, 184, 212)), Moon).CopyWithNewOpacity(Each.Alpha * (1.0f - 0.42f * Moon));
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Place.ToPaintGeometry(), Glyph, Type, ESlateDrawEffect::None, Ink);
 			}
 			return LayerId;

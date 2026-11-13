@@ -1,5 +1,7 @@
 #include "Campaign/CampaignCameraPawn.h"
 
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 
@@ -186,6 +188,7 @@ void ACampaignCameraPawn::ApplyView()
 
 void ACampaignCameraPawn::SetNewsreel(bool bOn)
 {
+	bFilm = bOn;
 	FPostProcessSettings& Look = Camera->PostProcessSettings;
 	Look.bOverride_ColorSaturation = true;
 	Look.ColorSaturation = bOn ? FVector4(0.0, 0.0, 0.0, 1.0) : FVector4(1.07, 1.07, 1.07, 1.0);
@@ -195,4 +198,24 @@ void ACampaignCameraPawn::SetNewsreel(bool bOn)
 	Look.FilmGrainIntensity = bOn ? 0.75f : 0.0f;
 	Look.bOverride_ColorGamma = true;
 	Look.ColorGamma = bOn ? FVector4(0.92, 0.92, 0.92, 1.0) : FVector4(1.0, 1.0, 1.0, 1.0);
+	if (!bOn)
+	{
+		SetNight(NightKept, bLampKept); // (back to the colour of the hour)
+	}
+}
+
+void ACampaignCameraPawn::SetNight(float Night, bool bLamplight)
+{
+	NightKept = Night;
+	bLampKept = bLamplight;
+	if (bFilm || FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
+	{
+		return;
+	}
+	const double Moon = bLamplight ? 0.0 : Night;
+	FPostProcessSettings& Look = Camera->PostProcessSettings;
+	Look.bOverride_ColorSaturation = true;
+	// (only a little: the moon's blue is in the light, so the towns' lamps keep their warmth)
+	const double Colour = FMath::Lerp(1.07, 0.95, Moon);
+	Look.ColorSaturation = FVector4(Colour, Colour, Colour, 1.0);
 }

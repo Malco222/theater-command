@@ -122,7 +122,7 @@ public:
 	void ShowSides(bool bOn, const TArray<FString>& Standing);
 	bool AreSidesShown() const { return bSides; }
 	/** How far into the night the room is, 0 to 1: the windows of the towns are lit as it comes on. */
-	void SetNight(float Night);
+	void SetNight(float Night, bool bLamplight = false);
 	/** The mud of the eastern spring and autumn: the ground it lies on is washed brown. None clears it. */
 	void ShowMud(const TArray<int32>& Regions);
 	/** The fog of war: ground the player has no eyes on lies under a shadow, on the table and on the small map. */
@@ -232,6 +232,10 @@ public:
 	void ShowScars(const TArray<int32>& Scars);
 	/** Smoke hangs over the towns that are besieged: three numbers each, the region, 1 if the ring is closed, months of stores left. */
 	void ShowSieges(const TArray<int32>& Sieges);
+	/** The night's war: the nations whose towns are blacked out, and the fronts (pairs of regions) where the guns flicker. */
+	void SetWarAtNight(const TArray<FString>& Blackout, const TArray<int32>& Fronts);
+	/** How far the table is into a moonlit night, 0 to 1 (nothing by day, and nothing by lamplight). */
+	float GetMoonlight() const { return bLamplightNow ? 0.0f : NightNow; }
 	/** Where a flight takes off from: its airfield, or for a carrier's aircraft the ships themselves. */
 	FVector2D SortieStart(const FSortie& Sortie) const;
 
@@ -376,6 +380,17 @@ private:
 	TArray<FVector> LightPoints;
 	TArray<FColor> LightColours;
 	float ShownNight = -1.0f;
+	float NightNow = 0.0f; // how far into the night the room is, 0 to 1
+	bool bLamplightNow = false; // the night is the old lamplight, not moonlight
+	TArray<int32> PaneRegion; // the region each lit pane belongs to: a window of its town, or a village light
+	// The glow of each town's lamps as it is seen from far off: a soft disc of light over the town.
+	TArray<FVector> GlowPoints;
+	TArray<FColor> GlowColours;
+	TArray<int32> GlowRegion;
+	static constexpr int32 GlowRim = 10; // points round each ring of a glow
+	TArray<FString> BlackoutTags;
+	TArray<int32> FrontPairs;
+	TArray<FVector> FrontFires; // where the fires of a front burn by night: points along the frontier the armies face each other across
 	TArray<FVector> WorksChimneys; // and of the factories built since the war began
 	TArray<FBattleSmoke> Battles;
 	TArray<FVector> SmokeVertices;
@@ -469,6 +484,8 @@ private:
 	/** Matt paint for the scenery: houses and trees. */
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> SceneryMaterial;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> WoodsMaterial; // the trees' own, so that they can be cooled by moonlight
 
 	/** The towns, all in one mesh. */
 	UPROPERTY(Transient)

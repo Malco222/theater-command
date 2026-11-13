@@ -45,6 +45,8 @@ public:
 
 	/** The look of a newsreel: black and white, grainy, dark at the corners. */
 	void SetNewsreel(bool bOn);
+	/** The lens at night: by moonlight the colour drains and turns blue. By lamplight, and by day, it is as it was. */
+	void SetNight(float Night, bool bLamplight);
 
 	/** While hurried the view travels several times faster, for following the other nations' month. */
 	void SetHurry(bool bInHurry) { bHurry = bInHurry; }
@@ -95,5 +97,8 @@ private:
 	float TargetYaw = 0.0f;
 	float Tilt = 0.0f;
 	float TargetTilt = 0.0f;
+	float NightKept = 0.0f;
+	bool bLampKept = false;
+	bool bFilm = false;
 	bool bHurry = false;
 };

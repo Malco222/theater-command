@@ -103,7 +103,12 @@ def build_map_surface():
     painted = node(m, unreal.MaterialExpressionMultiply, -450, 0)
     connect(to_linear, "", painted, "A")
     connect(grain, "", painted, "B")
-    to_property(painted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    # A tint over the whole of it, white unless C++ says otherwise: the woods take a cool one by moonlight, so that
+    # the yellow of autumn does not shine out of the dark like lamps.
+    tinted = node(m, unreal.MaterialExpressionMultiply, -250, 0)
+    connect(painted, "", tinted, "A")
+    connect(vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -450, -200), "", tinted, "B")
+    to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     # Tooth: the engine's paper bump, laid flat and faded in by a strength.
     paper = unreal.load_asset("/Engine/EngineMaterials/PaperNormal")

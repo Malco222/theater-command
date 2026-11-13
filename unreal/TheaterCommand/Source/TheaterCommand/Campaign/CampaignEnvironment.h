@@ -33,6 +33,9 @@ public:
 	void SetTimeKeeping(int32 Keeping) { TimeKeeping = FMath::Clamp(Keeping, 0, 2); }
 	/** How far into the night the room's light has gone, 0 to 1. */
 	float GetNight() const { return Night; }
+	/** The night as it was first made: the room's warm lamp alone. Otherwise the night is moonlight. */
+	void SetLamplight(bool bLamp) { if (bLamp != bLamplight) { bLamplight = bLamp; ApplyLight(); } }
+	bool IsLamplight() const { return bLamplight; }
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Light")
@@ -58,6 +61,7 @@ private:
 	float Night = 0.0f; // how far into the night the light has gone, 0 to 1
 	FString DayClockHeld; // (only read from the command line)
 	int32 TimeKeeping = 0; // 0 the day runs, 1 held at day, 2 held at night
+	bool bLamplight = false;
 	void ApplyLight();
 
 };

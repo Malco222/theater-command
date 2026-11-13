@@ -197,6 +197,15 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("watch"), TEXT("The other nations' month"), TEXT("At a month's end: watch every nation's moves, or only what touches you. Key V."), bWatchAll ? TEXT("EVERY MOVE") : TEXT("ONLY MINE"), bWatchAll);
 	Add(TEXT("day"), TEXT("Day and night in the room"), TEXT("The day passes over the table in twelve minutes, or the hour is held. Key T."), Keeping == 0 ? TEXT("PASSING") : Keeping == 1 ? TEXT("ALWAYS DAY") : TEXT("ALWAYS NIGHT"), Keeping == 0);
 	{
+		bool bLamp = false;
+		if (UWorld* World = GetWorld())
+		{
+			TActorIterator<ACampaignEnvironment> Room(World);
+			bLamp = Room && Room->IsLamplight();
+		}
+		Add(TEXT("lamp"), TEXT("The night"), TEXT("Moonlight, cool and blue, with the blackout over countries at war. Or the room's own warm lamp."), bLamp ? TEXT("LAMPLIGHT") : TEXT("MOONLIGHT"), !bLamp);
+	}
+	{
 		const int32 Strength = Map.IsValid() ? Map->GetColourStrength() : 1;
 		Add(TEXT("colour"), TEXT("How strongly countries are coloured"), TEXT("Light shows more of the land itself, strong more of whose it is. Key Y has flat colours."), Strength == 0 ? TEXT("LIGHT") : Strength == 1 ? TEXT("MIDDLE") : TEXT("STRONG"), Strength == 2);
 	}
@@ -262,6 +271,17 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	{
 		bEdgeScroll = !bEdgeScroll;
 	}
+	else if (Id == TEXT("lamp"))
+	{
+		if (UWorld* World = GetWorld())
+		{
+			TActorIterator<ACampaignEnvironment> Room(World);
+			if (Room)
+			{
+				Room->SetLamplight(!Room->IsLamplight());
+			}
+		}
+	}
 	else if (Id == TEXT("colour") && Map.IsValid())
 	{
 		Map->SetColourStrength((Map->GetColourStrength() + 1) % 3);
@@ -279,9 +299,15 @@ void ACampaignPlayerController::SaveOptions() const
 		Keeping = Room ? Room->GetTimeKeeping() : 0;
 	}
 	auto Word = [](bool bYes) { return bYes ? TEXT("true") : TEXT("false"); };
+	bool bLampSaved = false;
+	if (UWorld* World = GetWorld())
+	{
+		TActorIterator<ACampaignEnvironment> Room(World);
+		bLampSaved = Room && Room->IsLamplight();
+	}
 	const FString Text = FString::Printf(
-		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d}\n"),
-		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1);
+		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s}\n"),
+		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved));
 	FFileHelper::SaveStringToFile(Text, *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
@@ -321,6 +347,14 @@ void ACampaignPlayerController::LoadOptions()
 	bWatchAll = Yes(TEXT("watchAll"), true);
 	bEdgeScroll = Yes(TEXT("edge"), true);
 	bBriefings = Yes(TEXT("briefing"), true);
+	if (UWorld* World = GetWorld())
+	{
+		TActorIterator<ACampaignEnvironment> Room(World);
+		if (Room)
+		{
+			Room->SetLamplight(Yes(TEXT("lamp"), false));
+		}
+	}
 	if (Kept->TryGetNumberField(TEXT("colour"), Number) && Map.IsValid())
 	{
 		Map->SetColourStrength(Number);
@@ -1211,6 +1245,11 @@ void ACampaignPlayerController::StopTech(const FString& Id)
 	Research = Session->Research();
 	Research.Revision = Revision;
 	bResearchOpen = Research.bValid;
+}
+
+float ACampaignPlayerController::GetMoonlight() const
+{
+	return Map.IsValid() ? Map->GetMoonlight() : 0.0f;
 }
 
 void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
@@ -4466,6 +4505,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowCivic(View.Civic);
 		Map->ShowScars(View.Scars);
 		Map->ShowSieges(View.Sieges);
+		Map->SetWarAtNight(View.Blackout, View.Fronts);
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowLanes(View.Lanes);
 		Map->ShowFreeCapitals(View.FreeCapitals);

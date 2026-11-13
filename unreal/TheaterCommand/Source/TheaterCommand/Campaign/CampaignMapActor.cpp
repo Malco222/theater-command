@@ -324,6 +324,7 @@ void ACampaignMapActor::LoadMaterials()
 		PieceMaterial = MakeSurface(0.5f, 0.38f, 0.0f, 0.0f); // as it was: smooth and a little shiny, like moulded plastic
 	}
 	SceneryMaterial = MakeSurface(0.85f, 0.2f, 0.0f, 0.0f);
+	WoodsMaterial = MakeSurface(0.85f, 0.2f, 0.0f, 0.0f);
 
 	// The land and the sea take their colour from pictures painted in PaintGround.
 	LandMaterial = UMaterialInstanceDynamic::Create(Load(TEXT("/Game/Campaign/Materials/M_Land.M_Land")), this);
@@ -1906,6 +1907,7 @@ void ACampaignMapActor::BuildTowns()
 	int32 Count = 0;
 	TownChimneys.Reset();
 	TownWindows.Reset();
+	PaneRegion.Reset();
 	Model.Windows = &TownWindows;
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
@@ -1942,7 +1944,12 @@ void ACampaignMapActor::BuildTowns()
 			Model.Pillar(Foot + FVector(-1.3 * U, 0.6 * U, 0.0), 0.7 * U, 0.7 * U, 0.8 * U, Tank, 12);
 		}
 		const int32 Houses = Region.bCapital ? 13 : (bCity ? 10 : (bBig ? 6 : 4));
+		const int32 WindowsBefore = TownWindows.Num();
 		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1, Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id, &TownChimneys, Region.bPort);
+		for (int32 Pane = WindowsBefore / 2; Pane < TownWindows.Num() / 2; ++Pane)
+		{
+			PaneRegion.Add(Region.Id);
+		}
 		++Count;
 	}
 	if (Model.Vertices.Num() > 0)
@@ -1982,29 +1989,221 @@ void ACampaignMapActor::BuildTowns()
 			Points.Append({ Proud - Side - Up, Proud + Side - Up, Proud + Side + Up, Proud - Side + Up });
 			Triangles.Append({ First, First + 1, First + 2, First, First + 2, First + 3, First, First + 2, First + 1, First, First + 3, First + 2 });
 		}
+		// And beyond the towns, the lights of villages and farms scattered over the settled low ground: each a small
+		// warm patch lying on the land, seen from high up as a country's own glow.
+		{
+			FRandomStream Random(4177);
+			for (const FCampaignRegion& Region : Data.Regions)
+			{
+				const int32 Wanted = Region.Terrain == TEXT("urban") ? 14 : Region.Terrain == TEXT("plains") ? 10 : Region.Terrain == TEXT("hills") ? 6
+					: Region.Terrain == TEXT("forest") ? 4 : Region.Terrain == TEXT("marsh") ? 2 : Region.Terrain == TEXT("mountain") ? 1 : 0;
+				if (!Region.Bounds.bIsValid)
+				{
+					continue;
+				}
+				for (int32 Light = 0, Tries = 0; Light < Wanted && Tries < Wanted * 6; ++Tries)
+				{
+					const double X = Random.FRandRange(Region.Bounds.Min.X, Region.Bounds.Max.X), Y = Random.FRandRange(Region.Bounds.Min.Y, Region.Bounds.Max.Y);
+					const float Ground = Terrain.HeightAt(X, Y);
+					if (Ground <= 0.02f || Ground > 2.2f || Data.FindRegionAt(X, Y) != Region.Id)
+					{
+						continue;
+					}
+					++Light;
+					const FVector At = SurfacePoint(X, Y, 0.12);
+					const double Half = Random.FRandRange(0.5f, 0.85f) * U;
+					const int32 First = Points.Num();
+					Points.Append({ At + FVector(-Half, -Half, 0.0), At + FVector(Half, -Half, 0.0), At + FVector(Half, Half, 0.0), At + FVector(-Half, Half, 0.0) });
+					Triangles.Append({ First, First + 1, First + 2, First, First + 2, First + 3, First, First + 2, First + 1, First, First + 3, First + 2 });
+					PaneRegion.Add(Region.Id);
+				}
+			}
+		}
 		Normals.Init(FVector::UpVector, Points.Num());
 		LightColours.Init(FColor(0, 0, 0, 0), Points.Num());
 		LightsMesh->CreateMeshSection(0, Points, Triangles, Normals, TArray<FVector2D>(), LightColours, TArray<FProcMeshTangent>(), false);
 		LightsMesh->SetMaterial(0, HighlightMaterial);
+
+		// The glow of a whole town's lamps, for the view from high up: a bright warm heart over each town and a wide
+		// soft halo round it that fades to nothing. The bigger the place, the wider the glow.
+		GlowPoints.Reset();
+		GlowColours.Reset();
+		GlowRegion.Reset();
+		TArray<int32> GlowTriangles;
+		const int32 Rim = GlowRim;
+		for (const FCampaignRegion& Region : Data.Regions)
+		{
+			const bool bCity = Region.Terrain == TEXT("urban");
+			const bool bBig = Region.bCapital || bCity || Region.VictoryPoints >= 2 || Region.Factories >= 2;
+			const bool bTown = bBig || Region.VictoryPoints > 0 || Region.Factories > 0 || Region.bOil || Region.bPort;
+			if (!bTown)
+			{
+				continue;
+			}
+			const double Spread = (Region.bCapital ? 11.0 : bCity ? 8.5 : bBig ? 6.5 : 4.2) * U;
+			const FVector Middle = SurfacePoint(Region.Center.X, Region.Center.Y, 2.6);
+			const int32 First = GlowPoints.Num();
+			GlowPoints.Add(Middle);
+			for (int32 Ring = 0; Ring < 2; ++Ring)
+			{
+				for (int32 K = 0; K < Rim; ++K)
+				{
+					const double Angle = K * UE_DOUBLE_TWO_PI / Rim;
+					GlowPoints.Add(Middle + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.0) * Spread * (Ring == 0 ? 0.3 : 1.0));
+				}
+			}
+			for (int32 K = 0; K < Rim; ++K)
+			{
+				const int32 A = First + 1 + K, B = First + 1 + (K + 1) % Rim, C = A + Rim, D = B + Rim;
+				GlowTriangles.Append({ First, A, B, First, B, A, A, C, D, A, D, C, A, D, B, A, B, D });
+			}
+			GlowRegion.Add(Region.Id);
+		}
+		if (GlowPoints.Num() > 0)
+		{
+			TArray<FVector> GlowNormals;
+			GlowNormals.Init(FVector::UpVector, GlowPoints.Num());
+			GlowColours.Init(FColor(0, 0, 0, 0), GlowPoints.Num());
+			LightsMesh->CreateMeshSection(1, GlowPoints, GlowTriangles, GlowNormals, TArray<FVector2D>(), GlowColours, TArray<FProcMeshTangent>(), false);
+			LightsMesh->SetMaterial(1, HighlightMaterial);
+		}
 	}
 	UE_LOG(LogTheater, Log, TEXT("Windows to light: %d"), Panes);
 }
 
-void ACampaignMapActor::SetNight(float Night)
+void ACampaignMapActor::SetWarAtNight(const TArray<FString>& Blackout, const TArray<int32>& Fronts)
 {
-	if (!LightsMesh || LightColours.Num() == 0 || LightPoints.Num() != LightColours.Num() || FMath::Abs(Night - ShownNight) < 0.02f)
+	if (Fronts != FrontPairs || (Fronts.Num() > 0 && FrontFires.Num() == 0))
+	{
+		// Where the fires of each front burn: along the very frontier the two provinces share, a fire every few
+		// miles, each a little off the line.
+		FrontPairs = Fronts;
+		FrontFires.Reset();
+		TArray<FVector2D> Spots;
+		FRandomStream Random(1939);
+		const double Apart = 4.6;
+		for (int32 K = 0; K + 1 < FrontPairs.Num(); K += 2)
+		{
+			if (!Data.Regions.IsValidIndex(FrontPairs[K]) || !Data.Regions.IsValidIndex(FrontPairs[K + 1]))
+			{
+				continue;
+			}
+			const FCampaignRegion& Here = Data.Regions[FrontPairs[K]];
+			const FCampaignRegion& There = Data.Regions[FrontPairs[K + 1]];
+			double Carried = Apart * 0.5;
+			for (const TArray<FVector2D>& Ring : Here.Polygons)
+			{
+				double SignedArea = 0.0;
+				for (int32 i = 0, n = Ring.Num(); i < n; ++i)
+				{
+					SignedArea += Ring[i].X * Ring[(i + 1) % n].Y - Ring[(i + 1) % n].X * Ring[i].Y;
+				}
+				const double Outward = SignedArea >= 0.0 ? 1.0 : -1.0;
+				for (int32 i = 0, n = Ring.Num(); i < n; ++i)
+				{
+					const FVector2D A = Ring[i], B = Ring[(i + 1) % n];
+					const double Length = FVector2D::Distance(A, B);
+					if (Length < 0.05)
+					{
+						continue;
+					}
+					const FVector2D Dir = (B - A) / Length, Side = FVector2D(Dir.Y, -Dir.X) * Outward;
+					const FVector2D Probe = (A + B) * 0.5 + Side * 0.35;
+					bool bShared = There.Bounds.bIsValid && There.Bounds.IsInside(Probe);
+					if (bShared)
+					{
+						bShared = false;
+						for (const TArray<FVector2D>& Theirs : There.Polygons)
+						{
+							bShared = bShared || FCampaignMapData::PointInRing(Theirs, Probe.X, Probe.Y);
+						}
+					}
+					if (!bShared)
+					{
+						continue;
+					}
+					double At = Carried;
+					for (; At < Length; At += Apart)
+					{
+						Spots.Add(A + Dir * At + Side * Random.FRandRange(-0.9f, 0.9f) + Dir * Random.FRandRange(-0.7f, 0.7f));
+					}
+					Carried = At - Length;
+				}
+			}
+		}
+		// (no more than the smoke can carry: a very long front is drawn with every other fire)
+		while (Spots.Num() > 240)
+		{
+			for (int32 K = Spots.Num() - 1; K >= 0; K -= 2)
+			{
+				Spots.RemoveAt(K, EAllowShrinking::No);
+			}
+		}
+		for (const FVector2D& Spot : Spots)
+		{
+			FrontFires.Add(SurfacePoint(Spot.X, Spot.Y, 0.5));
+		}
+	}
+	if (Blackout != BlackoutTags)
+	{
+		UE_LOG(LogTheater, Log, TEXT("The blackout: %d nations at war (%s), %d stretches of front"), Blackout.Num(), *FString::Join(Blackout, TEXT(" ")), Fronts.Num() / 2);
+		BlackoutTags = Blackout;
+		ShownNight = -1.0f; // (the lights are worked out again)
+		SetNight(NightNow, bLamplightNow);
+	}
+}
+
+void ACampaignMapActor::SetNight(float Night, bool bLamplight)
+{
+	const bool bLampChanged = bLamplight != bLamplightNow;
+	NightNow = Night;
+	bLamplightNow = bLamplight;
+	if (!bLampChanged && FMath::Abs(Night - ShownNight) < 0.02f)
 	{
 		return;
 	}
 	ShownNight = Night;
-	// The lamps are lit one by one as the light goes: each window has its own moment, and some stay dark all night.
+	// The land's own shading follows the light of the hour: a warm sun and cool shade by day (the lit tones a tenth
+	// brighter than they were first mixed), and by moonlight both of them cool. By lamplight they stay as by day.
+	if (LandMaterial)
+	{
+		const float Moon = bLamplight ? 0.0f : Night;
+		LandMaterial->SetVectorParameterValue(TEXT("SunColour"), FMath::Lerp(FLinearColor(0.69f, 0.62f, 0.5f), FLinearColor(0.7f, 0.74f, 0.96f), Moon));
+		LandMaterial->SetVectorParameterValue(TEXT("ShadeColour"), FMath::Lerp(FLinearColor(0.43f, 0.48f, 0.58f), FLinearColor(0.4f, 0.44f, 0.66f), Moon));
+		if (WoodsMaterial)
+		{
+			// (and the woods are cooled and dimmed with it, or the yellows of autumn shine like lamps in the blackout)
+			WoodsMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.36f, 0.56f, 0.8f), Moon));
+		}
+		// (by moonlight the nations' colours sink into the dark, as colours do: the land is mostly the land)
+		LandMaterial->SetScalarParameterValue(TEXT("Politics"), FMath::Lerp(0.94f, 0.42f, Moon));
+	}
+	if (!LightsMesh || LightColours.Num() == 0 || LightPoints.Num() != LightColours.Num())
+	{
+		return;
+	}
+	// The lamps are lit one by one as the light goes: each has its own moment, and some stay dark all night. A
+	// country at war keeps the blackout: its towns and villages show almost nothing.
+	TSet<int32> Black;
+	for (const FCampaignRegion& Region : Data.Regions)
+	{
+		if (BlackoutTags.Contains(Region.Owner))
+		{
+			Black.Add(Region.Id);
+		}
+	}
 	const int32 Panes = LightColours.Num() / 4;
 	for (int32 Pane = 0; Pane < Panes; ++Pane)
 	{
 		const uint32 Chance = (static_cast<uint32>(Pane) * 2654435761u) >> 24; // 0 to 255, the same for a pane every time
 		const float Moment = 0.15f + 0.6f * (Chance / 255.0f);
-		const bool bDark = Chance % 5 == 0;
-		const float Lit = bDark ? 0.0f : FMath::Clamp((Night - Moment) / 0.12f, 0.0f, 1.0f);
+		const bool bBlackedOut = PaneRegion.IsValidIndex(Pane) && Black.Contains(PaneRegion[Pane]);
+		// (behind the blackout one window in twelve shows a chink of light, and that dimly)
+		const bool bVillage = Pane >= TownWindows.Num() / 2;
+		const bool bDark = bBlackedOut ? (bVillage || Chance % 12 != 0) : Chance % 5 == 0;
+		// (the lights of the countryside are uneven: most of them faint, a few bright)
+		const float Strength = bBlackedOut ? 0.3f : !bVillage ? 1.0f : (Chance % 6 == 1 ? 1.0f : 0.42f + 0.4f * ((Chance >> 3) % 8) / 7.0f);
+		const float Lit = bDark ? 0.0f : FMath::Clamp((Night - Moment) / 0.12f, 0.0f, 1.0f) * Strength;
 		// Lamplight through a curtain: warm, and a little different from house to house.
 		// (the glow's material brightens what it is given, so the colour is kept below white to stay amber)
 		const FColor Glow(static_cast<uint8>(205 + Chance % 30), static_cast<uint8>(118 + Chance % 34), static_cast<uint8>(34 + Chance % 26), static_cast<uint8>(Lit * 240.0f));
@@ -2015,6 +2214,23 @@ void ACampaignMapActor::SetNight(float Night)
 	}
 	// (the points go with the colours: the mesh takes no change that does not come with as many points as it has)
 	LightsMesh->UpdateMeshSection(0, LightPoints, TArray<FVector>(), TArray<FVector2D>(), LightColours, TArray<FProcMeshTangent>());
+	// The towns' glow: only where there is no blackout.
+	const int32 PerGlow = 1 + 2 * GlowRim;
+	if (GlowColours.Num() == GlowRegion.Num() * PerGlow && GlowPoints.Num() == GlowColours.Num() && GlowColours.Num() > 0)
+	{
+		const float Dusk = FMath::SmoothStep(0.3f, 0.85f, Night);
+		for (int32 Glow = 0; Glow < GlowRegion.Num(); ++Glow)
+		{
+			const float Lit = Black.Contains(GlowRegion[Glow]) ? 0.0f : Dusk;
+			GlowColours[Glow * PerGlow] = FColor(255, 214, 150, static_cast<uint8>(0.95f * Lit * 255.0f));
+			for (int32 K = 0; K < GlowRim; ++K)
+			{
+				GlowColours[Glow * PerGlow + 1 + K] = FColor(255, 150, 60, static_cast<uint8>(0.42f * Lit * 255.0f));
+				GlowColours[Glow * PerGlow + 1 + GlowRim + K] = FColor(255, 120, 40, 0);
+			}
+		}
+		LightsMesh->UpdateMeshSection(1, GlowPoints, TArray<FVector>(), TArray<FVector2D>(), GlowColours, TArray<FProcMeshTangent>());
+	}
 }
 
 UTexture2D* ACampaignMapActor::GetMinimap()
@@ -2415,7 +2631,7 @@ void ACampaignMapActor::BuildTrees()
 			Mesh->SetCastShadow(false); // thousands of small shadows cost more than they show
 			Mesh->RegisterComponent();
 			Mesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
-			Mesh->SetMaterial(0, SceneryMaterial);
+			Mesh->SetMaterial(0, WoodsMaterial ? WoodsMaterial : SceneryMaterial);
 			Mesh->SetVisibility(false);
 			TreeMeshes.Add(Mesh);
 			TreeCentres.Add(MapToWorld((SX + 0.5) * Square, (SY + 0.5) * Square));
@@ -2719,7 +2935,9 @@ void ACampaignMapActor::BuildWords()
 		const double Span = (Hi - Lo) * 0.66;
 		// (letters well spaced out, as an atlas spaces them: a capital under half as high as the letters stand apart)
 		const double Height = FMath::Min3(Span / Gaps * 0.44, (Up - Down) * 0.2, 20.0);
-		if (Height < 2.4)
+		// (A name that would come out smaller than eight units a capital is left off: under the flags and plates
+		// of a small country it only made a smudge. Its capital's plate names the place.)
+		if (Height < 8.0)
 		{
 			continue;
 		}
@@ -4291,6 +4509,45 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		for (int32 K = 0; K < Smoulders.Num(); ++K)
 		{
 			Plume(Smoulders[K], K * 7 + 300, 1.7, &Oily);
+		}
+		// By night the guns are seen along every front where armies at war stand face to face: short flashes that
+		// come and go along the frontier between them. And the ground fought over this month still glows.
+		if (NightNow > 0.25f)
+		{
+			const float Dark = FMath::SmoothStep(0.25f, 0.8f, NightNow);
+			const FLinearColor Flash(1.0f, 0.74f, 0.38f), Ember(1.0f, 0.42f, 0.12f);
+			// (seen from high up a fire is drawn larger than life, or the front would not be seen at all)
+			const double Seen = FMath::Clamp(CameraDistance / (Unit * 400.0), 0.34, 2.0);
+			const float Soft = static_cast<float>(FMath::GetMappedRangeValueClamped(FVector2D(0.34, 1.0), FVector2D(0.7, 1.0), Seen));
+			// Fires that burn along the line all night, each flickering; and the flashes of the guns among them.
+			for (int32 K = 0; K < FrontFires.Num(); ++K)
+			{
+				if (FVector::DistSquared2D(FrontFires[K], CameraFocus) > Reach * Reach)
+				{
+					continue;
+				}
+				const float Flicker = 0.56f + 0.3f * FMath::Sin(static_cast<float>(Now) * (2.1f + (K % 5) * 0.37f) + K * 1.9f);
+				const double Big = (1.05 + 0.3 * ((K * 7) % 5) / 4.0) * Unit * Seen;
+				Draw(FrontFires[K] + FVector(0.0, 0.0, Big * 0.7), Big, Ember, Flicker * Dark * Soft);
+			}
+			const int32 Guns = FMath::Min(FrontFires.Num() / 4, 40);
+			for (int32 Gun = 0; Gun < Guns; ++Gun)
+			{
+				const double Beat = Now * (0.55 + 0.13 * (Gun % 4)) + Gun * 0.61;
+				const double Phase = FMath::Frac(Beat);
+				if (Phase > 0.09)
+				{
+					continue;
+				}
+				FRandomStream Where(static_cast<int32>(FMath::FloorToDouble(Beat)) * 31 + Gun * 7);
+				const FVector At = FrontFires[Where.RandRange(0, FrontFires.Num() - 1)] + FVector(Where.FRandRange(-2.0f, 2.0f), Where.FRandRange(-2.0f, 2.0f), 0.1) * Unit;
+				const double Burst = (0.9 + 5.0 * Phase) * Unit * Seen;
+				Draw(At + FVector(0.0, 0.0, Burst * 0.7), Burst, Flash, 0.9f * Dark * static_cast<float>(1.0 - Phase / 0.09));
+			}
+			for (int32 K = 0; K < Smoulders.Num(); ++K)
+			{
+				Draw(Smoulders[K] + FVector(0.0, 0.0, 0.8 * Unit), 3.2 * Unit, Ember, 0.2f * Dark * (0.8f + 0.2f * FMath::Sin(static_cast<float>(Now) * 1.7f + K)));
+			}
 		}
 		// And a pall hangs over every town that is besieged.
 		for (int32 K = 0; K < SiegeFires.Num(); ++K)
