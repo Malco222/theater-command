@@ -355,6 +355,23 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("atWar"), Out.bAtWar);
 	Object->TryGetBoolField(TEXT("eve"), Out.bEve);
 	Object->TryGetBoolField(TEXT("evePlan"), Out.bEvePlan);
+	{
+		const TSharedPtr<FJsonObject>* Weather = nullptr;
+		if (Object->TryGetObjectField(TEXT("weather"), Weather))
+		{
+			(*Weather)->TryGetBoolField(TEXT("mud"), Out.bMud);
+			(*Weather)->TryGetBoolField(TEXT("winter"), Out.bWinter);
+			(*Weather)->TryGetStringField(TEXT("text"), Out.WeatherText);
+			const TArray<TSharedPtr<FJsonValue>>* Ground = nullptr;
+			if ((*Weather)->TryGetArrayField(TEXT("ground"), Ground))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Ground)
+				{
+					Out.WeatherGround.Add(FMath::RoundToInt32(Value->AsNumber()));
+				}
+			}
+		}
+	}
 	Object->TryGetBoolField(TEXT("open"), Out.bOpen);
 	Object->TryGetStringField(TEXT("level"), Out.Level);
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten

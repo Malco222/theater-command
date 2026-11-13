@@ -255,6 +255,9 @@ struct FCampaignView
 	FString Human; // the nation the player leads
 	FString Current; // whose month it is
 	bool bHumanUp = false;
+	bool bMud = false, bWinter = false; // the weather in the east this month
+	FString WeatherText; // said on the date plate; empty in clear weather
+	TArray<int32> WeatherGround; // the provinces it lies on
 	bool bEvePlan = false; // on the eve of war, the staff has a plan for placing the army
 	bool bAtWar = false; // the player's country is at war with somebody
 	bool bEve = false; // the player is placing an army on the eve of war: marches at home only, no month passes

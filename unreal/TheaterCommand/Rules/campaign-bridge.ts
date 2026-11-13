@@ -36,7 +36,7 @@
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, men, railReach as railReachOf } from '../../../src/campaign/game';
+import { allied, atWar, bloc, collapseScore, createGame, fieldArmy, men, railReach as railReachOf, weather as weatherNow } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -148,6 +148,13 @@ function view() {
     }).filter((x) => x.n > 0) : [],
     // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
     unseen: s.human ? s.regions.filter((r) => seen[r.id] === 0).map((r) => r.id) : [],
+    // The weather the rules keep: mud in the east in spring and autumn, and the eastern winter. With it, the ground it lies on.
+    weather: (() => {
+      const w = weatherNow(s);
+      // (the countries the rules count as the east; the winter bites on Soviet ground)
+      const east = new Set(w.mud ? ['POL', 'SOV', 'LIT', 'LAT', 'EST', 'ROM', 'FIN'] : w.winter ? ['SOV'] : []);
+      return { mud: w.mud, winter: w.winter, text: w.mud || w.winter ? w.text : '', ground: s.regions.filter((r) => east.has(r.owner)).map((r) => r.id) };
+    })(),
     // On the eve of war: the staff has a plan for placing the army, and will carry it out if asked.
     evePlan: onEve(s) && !!evePlan(s),
     // Whether the player's country is at war with anybody: the music follows it.

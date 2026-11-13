@@ -93,6 +93,8 @@ public:
 	/** The friend-and-foe view: the player's own ground left as it is, his allies' washed blue, his enemies' red, on the table and on the small map. */
 	void ShowSides(bool bOn, const TArray<FString>& Standing);
 	bool AreSidesShown() const { return bSides; }
+	/** The mud of the eastern spring and autumn: the ground it lies on is washed brown. None clears it. */
+	void ShowMud(const TArray<int32>& Regions);
 	/** The fog of war: ground the player has no eyes on lies under a shadow, on the table and on the small map. */
 	void ShowShroud(const TArray<int32>& Unseen);
 	/** Rings in gold the capitals of fallen countries that the player would set free by taking them. */
@@ -321,6 +323,12 @@ private:
 	bool bMiniStale = true;
 	TArray<FIntVector4> ShownBuildings;
 	TArray<int32> ShownFree;
+	TArray<int32> ShownMud;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> CloudMesh;
+	TArray<FVector> CloudVertices;
+	TArray<FColor> CloudColours;
+	void UpdateClouds();
 	TArray<int32> ShownUnseen;
 	TSet<int32> UnseenSet;
 	TArray<FTownInfo> Towns; // by province id, once the rules have said

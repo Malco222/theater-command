@@ -1304,6 +1304,7 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("CAPITAL (C) looks at your capital; and MAP VIEWS (Y) steps through the map as it is, the wealth view (gold by what a province pays, so you can see what is worth taking) and friend and foe (your ground green, your allies' blue, your enemies' red). ")
 		TEXT("Click a province to see its chief town and THE PRIZE: what taking it would be worth to you. Its RECRUIT and WORKS tabs hold what can be ordered there. ")
 		TEXT("The line beside END THE MONTH says how many armies can still move: click it, or press Tab, to go to the next. ")
+		TEXT("The date plate says when the weather is against you: in the mud of the eastern spring and autumn the ground there turns brown and every army on it is slowed, and in the eastern winter armies without winter kit fight and march badly. ")
 		TEXT("In the grand campaign, ground under a shadow is ground you have no eyes on: what stands there is not known until your troops, your allies, an agent or a reconnaissance flight come near."));
 	Add(TEXT("YOUR ARMIES' CARDS"),
 		TEXT("Pick an army up and each corps is a card, with a small card for each of its divisions: its name, its strength and its stripes of experience. ")
@@ -1638,6 +1639,12 @@ void ACampaignPlayerController::SendBackCorps(int32 CorpsId)
 		RefreshRegionPanel(SelectedRegion);
 	}
 	Notify(Note, 6.0);
+}
+
+FText ACampaignPlayerController::GetWeatherText() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && !Opening.bVisible ? FText::FromString(Session->GetView().WeatherText) : FText::GetEmpty();
 }
 
 void ACampaignPlayerController::OpenGoals()
@@ -3489,6 +3496,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowLanes(View.Lanes);
 		Map->ShowFreeCapitals(View.FreeCapitals);
 		Map->ShowShroud(View.Unseen);
+		Map->ShowMud(View.bMud ? View.WeatherGround : TArray<int32>());
 		if (Map->AreSidesShown())
 		{
 			Map->ShowSides(true, View.RegionStanding); // ground that has changed sides changes colour

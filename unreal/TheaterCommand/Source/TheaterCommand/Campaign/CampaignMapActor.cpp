@@ -113,6 +113,7 @@ ACampaignMapActor::ACampaignMapActor()
 	WorksMesh = MakeMesh(TEXT("Works"), false);
 	BuildingsMesh = MakeMesh(TEXT("Buildings"), false);
 	RoomMesh = MakeMesh(TEXT("WarRoom"), false);
+	CloudMesh = MakeMesh(TEXT("Clouds"), false);
 	SmokeMesh = MakeMesh(TEXT("Smoke"), false);
 	LanesMesh = MakeMesh(TEXT("Lanes"), false);
 	SortieMesh = MakeMesh(TEXT("Sorties"), true);
@@ -2707,6 +2708,101 @@ void ACampaignMapActor::ShowSides(bool bOn, const TArray<FString>& Standing)
 	Buffers.Commit(OrdersMesh, 5, HighlightMaterial);
 }
 
+void ACampaignMapActor::ShowMud(const TArray<int32>& Regions)
+{
+	if (Regions == ShownMud)
+	{
+		return;
+	}
+	ShownMud = Regions;
+	OrdersMesh->ClearMeshSection(7);
+	if (Regions.Num() == 0)
+	{
+		return;
+	}
+	// The roads are rivers of mud: the ground is washed a wet brown.
+	FCampaignMeshBuffers Buffers;
+	for (int32 RegionId : Regions)
+	{
+		if (Data.Regions.IsValidIndex(RegionId))
+		{
+			AppendRegionFill(Buffers, RegionId, FLinearColor(0.075f, 0.045f, 0.02f, 0.46f)); // (the glow's material brightens what it is given: this comes out a dark wet brown)
+		}
+	}
+	Buffers.Commit(OrdersMesh, 7, HighlightMaterial);
+}
+
+void ACampaignMapActor::UpdateClouds()
+{
+	UWorld* World = GetWorld();
+	if (!CloudMesh || !World || !HighlightMaterial || !Data.IsLoaded())
+	{
+		return;
+	}
+	// The shadows of clouds, drifting slowly eastward over the map: a dozen soft patches of shade, each fading to
+	// nothing at its edge and as it comes to the edge of the map.
+	// Each is a middle of even shade with a soft edge round it: a point at the centre, a ring where the shade begins to
+	// thin, and a ring where it is gone.
+	const int32 Clouds = 12, Rim = 22, Per = 1 + 2 * Rim;
+	if (CloudVertices.Num() == 0)
+	{
+		CloudVertices.Init(FVector::ZeroVector, Clouds * Per);
+		CloudVertices[1] = FVector(-20000.0, -20000.0, 0.0);
+		CloudVertices[2] = FVector(20000.0, 20000.0, 2000.0);
+		CloudColours.Init(FColor(0, 0, 0, 0), Clouds * Per);
+		TArray<int32> Triangles;
+		for (int32 Cloud = 0; Cloud < Clouds; ++Cloud)
+		{
+			const int32 First = Cloud * Per;
+			for (int32 K = 0; K < Rim; ++K)
+			{
+				const int32 In0 = First + 1 + K, In1 = First + 1 + (K + 1) % Rim, Out0 = In0 + Rim, Out1 = In1 + Rim;
+				// (both faces of every triangle, so that it shows whichever way it is wound to the eye)
+				Triangles.Append({ First, In1, In0, First, In0, In1 });
+				Triangles.Append({ In0, In1, Out0, In0, Out0, In1 });
+				Triangles.Append({ In1, Out1, Out0, In1, Out0, Out1 });
+			}
+		}
+		TArray<FVector> Normals;
+		Normals.Init(FVector::UpVector, CloudVertices.Num());
+		CloudMesh->CreateMeshSection(0, CloudVertices, Triangles, Normals, TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>(), false);
+		CloudMesh->SetMaterial(0, HighlightMaterial);
+		CloudMesh->SetCastShadow(false);
+	}
+	const double Now = World->GetTimeSeconds();
+	const double Wide = Data.Width, High = Data.Height, Span = Wide * 1.5;
+	// ("-TheaterClouds=0.6" on the command line makes them darker, to see where they lie)
+	static const float Depth = []() { float Asked = 0.17f; FParse::Value(FCommandLine::Get(), TEXT("TheaterClouds="), Asked); return FMath::Clamp(Asked, 0.0f, 0.9f); }();
+	const double Lift = 9.0; // above the highest ground, so that the shade falls on the land and on the pieces alike
+	for (int32 Cloud = 0; Cloud < Clouds; ++Cloud)
+	{
+		FRandomStream Random(Cloud * 7919 + 13);
+		const double Size = Random.FRandRange(80.0f, 170.0f);
+		const double Speed = Random.FRandRange(2.2f, 4.0f); // map units a second: slow enough to be felt more than seen
+		const double X = FMath::Fmod(Random.FRandRange(0.0f, static_cast<float>(Span)) + Now * Speed, Span) - Wide * 0.25;
+		const double Y = Random.FRandRange(0.0f, static_cast<float>(High));
+		const double Squash = Random.FRandRange(0.55f, 0.85f);
+		// Fading in and out at the edges of the map, so that none falls on the table round it.
+		const double Edge = FMath::Min(FMath::Min(X, Wide - X), FMath::Min(Y, High - Y));
+		const uint8 Shade = static_cast<uint8>(FMath::Clamp(255.0 * Depth * FMath::SmoothStep(Size * 0.1, Size * 1.1, Edge), 0.0, 255.0));
+		const int32 First = Cloud * Per;
+		CloudVertices[First] = MapToWorld(X, Y, Lift);
+		CloudColours[First] = FColor(4, 6, 12, Shade);
+		for (int32 K = 0; K < Rim; ++K)
+		{
+			const double Angle = 2.0 * PI * K / Rim;
+			// A ragged outline, the same for each cloud every frame.
+			const double Reach = Size * (0.78 + 0.22 * FMath::Sin(Angle * 3.0 + Cloud) + 0.1 * FMath::Sin(Angle * 7.0 + Cloud * 2.3));
+			const FVector2D Out(FMath::Cos(Angle) * Reach, FMath::Sin(Angle) * Reach * Squash);
+			CloudVertices[First + 1 + K] = MapToWorld(X + Out.X * 0.55, Y + Out.Y * 0.55, Lift);
+			CloudColours[First + 1 + K] = FColor(4, 6, 12, Shade);
+			CloudVertices[First + 1 + Rim + K] = MapToWorld(X + Out.X, Y + Out.Y, Lift);
+			CloudColours[First + 1 + Rim + K] = FColor(4, 6, 12, 0);
+		}
+	}
+	CloudMesh->UpdateMeshSection(0, CloudVertices, TArray<FVector>(), TArray<FVector2D>(), CloudColours, TArray<FProcMeshTangent>());
+}
+
 void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen)
 {
 	if (Unseen == ShownUnseen)
@@ -3531,6 +3627,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSorties();
 	UpdateTrains(CameraFocus, CameraDistance);
+	UpdateClouds();
 	// The showpiece turns slowly on its stand.
 	if (ShowMesh && !ShowModel.IsEmpty() && GetWorld())
 	{

@@ -399,6 +399,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			int32 Long = 1;
 			FParse::Value(FCommandLine::Get(), TEXT("TheaterMonths="), Long);
 			Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = FMath::Clamp(Long, 1, 80);
+			Add(TEXT("32b-whole-map-later"), TEXT(""), 0.97f); // the whole table as it stands after those months: the season, the weather
 		}
 		{
 			// The month ended and caught while the others' moves are shown: the strip of flags, and the march.

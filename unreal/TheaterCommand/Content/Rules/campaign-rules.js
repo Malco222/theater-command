@@ -15844,6 +15844,12 @@
       }).filter((x) => x.n > 0) : [],
       // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
       unseen: s.human ? s.regions.filter((r) => seen[r.id] === 0).map((r) => r.id) : [],
+      // The weather the rules keep: mud in the east in spring and autumn, and the eastern winter. With it, the ground it lies on.
+      weather: (() => {
+        const w = weather(s);
+        const east = new Set(w.mud ? ["POL", "SOV", "LIT", "LAT", "EST", "ROM", "FIN"] : w.winter ? ["SOV"] : []);
+        return { mud: w.mud, winter: w.winter, text: w.mud || w.winter ? w.text : "", ground: s.regions.filter((r) => east.has(r.owner)).map((r) => r.id) };
+      })(),
       // On the eve of war: the staff has a plan for placing the army, and will carry it out if asked.
       evePlan: onEve(s) && !!evePlan(s),
       // Whether the player's country is at war with anybody: the music follows it.

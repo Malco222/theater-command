@@ -170,6 +170,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->ShowLanes(Session->GetView().Lanes);
 		Table->ShowFreeCapitals(Session->GetView().FreeCapitals);
 		Table->ShowShroud(Session->GetView().Unseen);
+		Table->ShowMud(Session->GetView().bMud ? Session->GetView().WeatherGround : TArray<int32>());
 		Table->SetSeason(Session->GetView().Turn);
 	}
 }

@@ -436,6 +436,8 @@ public:
 	/** Joint armies: asks the allied corps beside the army in hand to march with it; sends one of them home. */
 	void AskAlliesToJoin();
 	void SendBackCorps(int32 CorpsId);
+	/** The weather in the east this month, for the date plate; empty in clear weather. */
+	FText GetWeatherText() const;
 	/** The adviser's first steps, and the way to send him away. */
 	const FAdviser& GetAdviser() const { return Adviser; }
 	void DismissAdviser() { Adviser.bOn = false; ++Adviser.Revision; }

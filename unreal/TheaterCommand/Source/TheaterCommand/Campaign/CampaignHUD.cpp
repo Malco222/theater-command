@@ -334,6 +334,16 @@ namespace
 								SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(Muted)
 								.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetRulesNote() : FText::GetEmpty(); })
 							]
+							// The weather, when it is not fair: mud in the east, or the eastern winter.
+							+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
+							[
+								SNew(SBox).MaxDesiredWidth(330.0f)
+								.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWeatherText().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+								[
+									SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(FLinearColor(FColor::FromHex(TEXT("C9B48A")))).AutoWrapText(true)
+									.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWeatherText() : FText::GetEmpty(); })
+								]
+							]
 							// The treasury, always in view: what is in hand, and what comes in, goes out and is left each
 							// month. It is a button: pressing it opens the ledger.
 							+ SVerticalBox::Slot().AutoHeight().Padding(-8.0f, 6.0f, 0.0f, -4.0f)
