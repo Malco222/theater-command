@@ -198,6 +198,13 @@ def _feed(material, target, pin, value):
     connect(source, output, target, pin)
 
 
+def node_from(material, kind, source, x, y, **properties):
+    """A node with one input, fed from another node: a mask, for the most part."""
+    n = node(material, kind, x, y, **properties)
+    connect(*(source if isinstance(source, tuple) else (source, "")), n, "")
+    return n
+
+
 def lerp(material, a, b, alpha, x=0, y=0):
     n = node(material, unreal.MaterialExpressionLinearInterpolate, x, y)
     _feed(material, n, "A", a)
@@ -311,7 +318,7 @@ def build_land():
     # wheat to plough, read from a picture with one pixel to a field; the rows lean and wander a little so that it
     # is no chessboard. The quilt multiplies whatever is under it, so a nation's fields are still its own colour.
     # Small fields with hedges round them in the west, great open ones on the eastern plains.
-    place = world_uv(m, "FieldTiling", 0.0444, -3000, 1500)  # (a small field is about two and a quarter map units long)
+    place = world_uv(m, "FieldTiling", 0.03, -3000, 1500)  # (a small field is a strip about three map units long and one wide)
     east0 = node(m, unreal.MaterialExpressionComponentMask, -2900, 1500, r=True, g=False, b=False, a=False)
     connect(place, "", east0, "")
     south0 = node(m, unreal.MaterialExpressionComponentMask, -2900, 1600, r=False, g=True, b=False, a=False)
@@ -328,6 +335,14 @@ def build_land():
     rows = pair(m, plus(m, east, times(m, south, 0.33, -2500, 1560), -2350, 1500),
                 times(m, plus(m, south, times(m, east, -0.22, -2500, 1660), -2350, 1620), 1.389, -2200, 1620), -2050, 1550)
     rows = plus(m, rows, times(m, leaning(m, coarse, "R", "G", -2300, 1800), scalar(m, "FieldWander", 0.3, -2000, 1900), -1700, 1800), -1500, 1600)
+    # Fields are strips, two to four times as long as they are wide, and each row of them is set off from the
+    # last like a course of bricks, so that four corners seldom meet and the land does not read as squares.
+    row_u = node(m, unreal.MaterialExpressionComponentMask, -1450, 1750, r=True, g=False, b=False, a=False)
+    connect(rows, "", row_u, "")
+    row_v = times(m, node_from(m, unreal.MaterialExpressionComponentMask, rows, -1450, 1850, r=False, g=True, b=False, a=False),
+                  scalar(m, "FieldStrip", 2.2, -1450, 1950), -1350, 1850)
+    course = one_in(m, unreal.MaterialExpressionFloor, row_v, -1250, 1950)
+    rows = pair(m, plus(m, row_u, times(m, course, 0.37, -1150, 1950), -1050, 1750), row_v, -950, 1800)
     small = picture(m, "Fields", times(m, rows, 1.0 / 64.0, -1300, 1500), -1100, 1500, numbers=True)
     large = picture(m, "Fields", plus(m, times(m, rows, 0.42 / 64.0, -1300, 1700), 0.37, -1150, 1700), -950, 1700, numbers=True)
     tone = times(m, lerp(m, (small, "RGB"), (large, "RGB"), (cover, "G"), -750, 1600), 2.0, -600, 1600)

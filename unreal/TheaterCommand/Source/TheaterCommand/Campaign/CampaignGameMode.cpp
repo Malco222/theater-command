@@ -162,6 +162,7 @@ void ACampaignGameMode::LayOutWar()
 	{
 		// The rivers and railways the rules know are laid on the table, then the war as it stands.
 		Table->SetLand(Session->Land());
+		Table->SetTownPlots(Session->GetView().PageIds.Contains(TEXT("towns")));
 		Table->SetTowns(Session->Towns());
 		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League);
 		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());

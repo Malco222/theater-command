@@ -4805,6 +4805,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 				Map->SetTowns(Session->Towns());
 			}
 		}
+		Map->SetTownPlots(View.PageIds.Contains(TEXT("towns"))); // (the cities keep ground open for their owner's buildings only where the rules have such)
 		Map->SetHolders(View.RegionHolder, View.League);
 		Map->SetSeason(View.Turn);
 		Map->ShowArmies(View, Marches, CarriedFrom);

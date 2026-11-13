@@ -322,7 +322,7 @@ void CampaignTextures::MakeFields(TArray<FColor>& OutPixels)
 			}
 			auto Share = [](float Seen, float Mean) { return ToByte(FMath::Clamp(FMath::Pow(Seen / Mean, 2.2f), 0.0f, 2.0f) * 0.5f); };
 			const FColor Field(Share(Tone.X, Average.X), Share(Tone.Y, Average.Y), Share(Tone.Z, Average.Z), static_cast<uint8>((H >> 16) & 0xFF));
-			static const int32 Longs[] = { 1, 1, 2, 2, 2, 3 }, Deeps[] = { 1, 1, 1, 2 };
+			static const int32 Longs[] = { 1, 1, 1, 2 }, Deeps[] = { 1, 1, 1, 1, 2 }; // (strips two to four times as long as wide; a few are merged with a neighbour)
 			const int32 Long = Longs[(H >> 20) % UE_ARRAY_COUNT(Longs)], Deep = Deeps[(H >> 26) % UE_ARRAY_COUNT(Deeps)];
 			for (int32 DJ = 0; DJ < Deep && J + DJ < FieldsSize; ++DJ)
 			{

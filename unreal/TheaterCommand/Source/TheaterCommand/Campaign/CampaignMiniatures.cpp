@@ -1365,6 +1365,568 @@ void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool 
 	(void)bTown;
 }
 
+void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimneys, TArray<FVector2D>* OutQuarters)
+{
+	FRandomStream Dice(Site.Seed * 7919 + 13);
+	const double U = Site.Unit; // a house is under one of these long
+	const double PerMap = Site.MapUnit, Reach = Site.Radius; // (the plan is laid out in map units, and built in the table's)
+	const double Um = U / PerMap; // one house-unit, in map units
+
+	// ---- The paint of the place: walls and roofs by its part of Europe.
+	static const TCHAR* WallsOf[5][5] = {
+		{ TEXT("E6DCC4"), TEXT("D8C8A6"), TEXT("CEC6B6"), TEXT("E2D2AE"), TEXT("C9B79A") }, // middle Europe: plaster
+		{ TEXT("8E5A48"), TEXT("A0705A"), TEXT("C9B79A"), TEXT("B8A890"), TEXT("7A5547") }, // the north-west: brick
+		{ TEXT("F0E8D8"), TEXT("E8DCC0"), TEXT("F2E4C8"), TEXT("E0D0B0"), TEXT("EDE0CC") }, // the south: whitewash
+		{ TEXT("7A3B2E"), TEXT("8A5A3C"), TEXT("6B5236"), TEXT("C9B79A"), TEXT("9A6A4A") }, // the north and east: painted timber
+		{ TEXT("EDE3CF"), TEXT("E6D8BC"), TEXT("F3EAD6"), TEXT("DCCFB4"), TEXT("E9DEC8") }, // the far south: pale plaster
+	};
+	static const TCHAR* RoofsOf[5][5] = {
+		{ TEXT("9A4A32"), TEXT("7C3F2E"), TEXT("5E5A58"), TEXT("8B5A3C"), TEXT("A65B3A") }, // red tile, some slate
+		{ TEXT("4E5560"), TEXT("5E5A58"), TEXT("444B55"), TEXT("6A6660"), TEXT("3F454D") }, // slate
+		{ TEXT("C2643A"), TEXT("B4552F"), TEXT("CC7040"), TEXT("A84E30"), TEXT("BD6A45") }, // terracotta
+		{ TEXT("3E4640"), TEXT("4A4440"), TEXT("55504A"), TEXT("2F3A36"), TEXT("5A5248") }, // dark shingle and tin
+		{ TEXT("D9CDB4"), TEXT("CFC2A6"), TEXT("E0D5BE"), TEXT("C6B99C"), TEXT("D3C7AE") }, // flat roofs, the colour of their walls
+	};
+	const int32 Look = FMath::Clamp(Site.Look, 0, 4);
+	const bool bFlatRoofs = Look == 4;
+	auto WallPaint = [&]() { return FLinearColor(FColor::FromHex(WallsOf[Look][Dice.RandRange(0, 4)])); };
+	auto RoofPaint = [&]() { return FLinearColor(FColor::FromHex(RoofsOf[Look][Dice.RandRange(0, 4)])); };
+	const FLinearColor Ashlar(FColor::FromHex(TEXT("D9D2C0"))), Verdigris(FColor::FromHex(TEXT("6FA08C"))), RedBrick(FColor::FromHex(TEXT("7A5547")));
+	const FLinearColor Sooty(FColor::FromHex(TEXT("3B3532"))), LeadGrey(FColor::FromHex(TEXT("5E5A58"))), Cobbles(FColor::FromHex(TEXT("8F887A")));
+	const FLinearColor Gilding(FColor::FromHex(TEXT("C9A227"))), Paving(FColor::FromHex(TEXT("A39B8A"))), Lawn(FColor::FromHex(TEXT("5E7A45")));
+	const FLinearColor LeafDark(FColor::FromHex(TEXT("4F6B3A"))), LeafPale(FColor::FromHex(TEXT("668249"))), Glazing(FColor::FromHex(TEXT("6E7C80")));
+	const FLinearColor TowerWhite(FColor::FromHex(TEXT("EFE9DC"))), Ochre(FColor::FromHex(TEXT("B9A27E"))), Rust(FColor::FromHex(TEXT("8A3B2A")));
+
+	// ---- The plan's own frame: its streets run a little off the compass, each town its own way.
+	const double Yaw0 = Dice.FRandRange(-24.0f, 24.0f); // which way its long streets run, in degrees east of north
+	const double C0 = FMath::Cos(FMath::DegreesToRadians(Yaw0)), S0 = FMath::Sin(FMath::DegreesToRadians(Yaw0));
+	// (A and B are along and across its streets, in map units. On the table north is +X and east is +Y.)
+	auto MapAt = [&](double A, double B) { return FVector2D(Site.Centre.X + (A * S0 + B * C0), Site.Centre.Y - (A * C0 - B * S0)); };
+	auto Stand = [&](double A, double B, double Lift = 0.02) { const FVector2D M = MapAt(A, B); return Site.Ground(M.X, M.Y, Lift); };
+	auto BearingOf = [&](double A, double B) { const FVector2D M = MapAt(A, B) - Site.Centre; return FMath::Fmod(FMath::RadiansToDegrees(FMath::Atan2(M.X, -M.Y)) + 360.0, 360.0); };
+	// Ground kept for the buildings the town's owner will give it: a rectangle south of its middle, turned as the map says.
+	const double PlotC = FMath::Cos(FMath::DegreesToRadians(Site.PlotsTurn)), PlotS = FMath::Sin(FMath::DegreesToRadians(Site.PlotsTurn));
+	auto InPlots = [&](const FVector2D& M)
+	{
+		if (!Site.bPlots)
+		{
+			return false;
+		}
+		const FVector2D D = M - Site.Centre;
+		const double X = D.X * PlotC + D.Y * PlotS, Y = -D.X * PlotS + D.Y * PlotC;
+		return X > -4.0 && X < 22.0 && Y > Site.PlotsNear - 4.0 && Y < Site.PlotsNear + 11.5;
+	};
+	auto NearQuay = [&](const FVector2D& M) { return Site.bQuay && FVector2D::DistSquared(M, Site.Quay) < FMath::Square(2.6 * Um); };
+	auto CanBuild = [&](double A, double B)
+	{
+		const FVector2D M = MapAt(A, B);
+		return (!Site.Dry || Site.Dry(M.X, M.Y)) && !InPlots(M) && !NearQuay(M);
+	};
+	TArray<FVector>* const AllWindows = Windows;
+	// (Not every house keeps a lamp in its window: a great city would be all lamps.)
+	const float Lit = Site.Tier >= 3 ? 0.3f : Site.Tier == 2 ? 0.42f : 0.8f;
+	auto Dwelling = [&](double A, double B, double Long, double Wide, double High, double Roof, const FLinearColor& WallCol, const FLinearColor& RoofCol, double Turn, bool bAlwaysLit = false)
+	{
+		Windows = (bAlwaysLit || Dice.FRand() < Lit) ? AllWindows : nullptr;
+		House(Stand(A, B), Long * U, Wide * U, High * U, (bFlatRoofs ? 0.04 : Roof) * U, WallCol, RoofCol, Yaw0 + Turn);
+		Windows = AllWindows;
+	};
+	auto Tree = [&](double A, double B)
+	{
+		if (CanBuild(A, B))
+		{
+			Broadleaf(Stand(A, B), Dice.FRandRange(0.45f, 0.7f) * U, Dice.FRandRange(0.16f, 0.24f) * U, Dice.FRand() < 0.5f ? LeafDark : LeafPale);
+		}
+	};
+	// A street: a chain of short lengths of cobble, each lying on the ground where it is.
+	auto Street = [&](double A0, double B0, double A1, double B1, double Wide)
+	{
+		const double Long = FMath::Sqrt(FMath::Square(A1 - A0) + FMath::Square(B1 - B0));
+		const int32 Lengths = FMath::Max(1, FMath::CeilToInt32(Long / (1.6 * Um)));
+		const double Turn = FMath::RadiansToDegrees(FMath::Atan2(B1 - B0, A1 - A0));
+		for (int32 K = 0; K < Lengths; ++K)
+		{
+			const double T = (K + 0.5) / Lengths, A = FMath::Lerp(A0, A1, T), B = FMath::Lerp(B0, B1, T);
+			if (CanBuild(A, B))
+			{
+				Box(Stand(A, B, 0.012), FVector(Long / Lengths * PerMap * 1.06, Wide * U, 0.024 * U), Cobbles, Yaw0 + Turn);
+			}
+		}
+	};
+
+	// ---- The church, by the country's own manner of building one: a spire, a dome and a bell tower, or onion domes.
+	const int32 Manner = Look == 2 || Look == 4 ? 1 : Look == 3 ? 2 : 0;
+	auto Church = [&](double A, double B, double Size, double Turn)
+	{
+		const FVector At = Stand(A, B);
+		const double R = FMath::DegreesToRadians(Yaw0 + Turn);
+		auto Off = [&](double Along, double Across, double Up) { return At + FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, Up) * (Size * U); };
+		if (Manner == 0)
+		{
+			House(At, 0.95 * Size * U, 0.46 * Size * U, 0.44 * Size * U, 0.32 * Size * U, Ashlar, LeadGrey, Yaw0 + Turn);
+			Box(Off(0.55, 0.0, 0.5), FVector(0.3, 0.3, 1.0) * Size * U, Ashlar, Yaw0 + Turn);
+			Pillar(Off(0.55, 0.0, 1.0), 0.23 * Size * U, 0.0, 0.7 * Size * U, LeadGrey, 4);
+			Pillar(Off(0.55, 0.0, 1.7), 0.025 * Size * U, 0.0, 0.2 * Size * U, Gilding, 4);
+		}
+		else if (Manner == 1)
+		{
+			House(At, 0.9 * Size * U, 0.5 * Size * U, 0.42 * Size * U, 0.16 * Size * U, TowerWhite, FLinearColor(FColor::FromHex(TEXT("B4552F"))), Yaw0 + Turn);
+			Pillar(Off(-0.2, 0.0, 0.5), 0.2 * Size * U, 0.2 * Size * U, 0.16 * Size * U, TowerWhite, 10);
+			Ball(Off(-0.2, 0.0, 0.66), FVector(0.46, 0.46, 0.4) * Size * U, FLinearColor(FColor::FromHex(TEXT("B4552F"))), 4, 10);
+			Box(Off(0.58, 0.3, 0.65), FVector(0.24, 0.24, 1.3) * Size * U, TowerWhite, Yaw0 + Turn);
+			Pillar(Off(0.58, 0.3, 1.3), 0.2 * Size * U, 0.0, 0.26 * Size * U, FLinearColor(FColor::FromHex(TEXT("B4552F"))), 4);
+		}
+		else
+		{
+			Box(Off(0.0, 0.0, 0.26), FVector(0.7, 0.62, 0.52) * Size * U, TowerWhite, Yaw0 + Turn);
+			for (int32 Dome = 0; Dome < 3; ++Dome)
+			{
+				const double Along = Dome == 0 ? 0.0 : (Dome == 1 ? 0.24 : -0.24), Big = Dome == 0 ? 1.0 : 0.6;
+				Pillar(Off(Along, 0.0, 0.52), 0.11 * Big * Size * U, 0.1 * Big * Size * U, 0.22 * Big * Size * U, TowerWhite, 8);
+				Ball(Off(Along, 0.0, 0.52 + 0.3 * Big), FVector(0.3, 0.3, 0.34) * Big * Size * U, Dome == 0 ? Gilding : Verdigris, 5, 8);
+				Pillar(Off(Along, 0.0, 0.52 + 0.46 * Big), 0.02 * Size * U, 0.0, 0.16 * Big * Size * U, Gilding, 4);
+			}
+		}
+	};
+	// The works: a long shed with a saw-toothed annex and a stack, the stack taller for a place of much industry.
+	auto Works = [&](double A, double B, double Turn)
+	{
+		if (!CanBuild(A, B))
+		{
+			return;
+		}
+		const FVector At = Stand(A, B);
+		const double R = FMath::DegreesToRadians(Yaw0 + Turn);
+		auto Off = [&](double Along, double Across, double Up) { return At + FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, Up) * U; };
+		House(At, 1.5 * U, 0.8 * U, 0.5 * U, 0.22 * U, RedBrick, Sooty, Yaw0 + Turn);
+		Box(Off(0.0, 0.95, 0.2), FVector(1.2, 0.7, 0.4) * U, RedBrick, Yaw0 + Turn);
+		for (int32 Tooth = 0; Tooth < 3; ++Tooth)
+		{
+			Box(Off((Tooth - 1) * 0.4, 0.95, 0.46), FVector(0.3, 0.7, 0.1) * U, Glazing, Yaw0 + Turn, 18.0);
+		}
+		const double Tall = (1.3 + 0.1 * FMath::Min(Site.Factories, 6)) * U;
+		Pillar(Off(0.95, 0.0, 0.0), 0.13 * U, 0.09 * U, Tall, RedBrick, 7);
+		if (OutChimneys)
+		{
+			OutChimneys->Add(Off(0.95, 0.0, 0.0) + FVector(0.0, 0.0, Tall));
+		}
+	};
+
+	// ---- A capital's own great building, known from the air. It stands in the great square.
+	auto Landmark = [&](int32 Kind)
+	{
+		const FVector At = Stand(0.0, 0.0);
+		const double R = FMath::DegreesToRadians(Yaw0);
+		auto Off = [&](double Along, double Across, double Up) { return At + FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, Up) * U; };
+		auto Palace = [&](double Along, double Across)
+		{
+			// A long front with a wing at each end, a row of columns before it, and the dome.
+			Box(Off(Along, Across, 0.45), FVector(1.5, 2.3, 0.9) * U, Ashlar, Yaw0);
+			for (const double Wing : { -1.0, 1.0 })
+			{
+				Box(Off(Along + 0.25, Across + Wing * 1.35, 0.38), FVector(1.9, 0.55, 0.76) * U, Ashlar, Yaw0);
+				Box(Off(Along + 0.25, Across + Wing * 1.35, 0.79), FVector(2.0, 0.65, 0.06) * U, LeadGrey, Yaw0);
+			}
+			for (int32 Column = 0; Column < 6; ++Column)
+			{
+				Pillar(Off(Along + 0.86, Across + (Column - 2.5) * 0.36, 0.08), 0.06 * U, 0.05 * U, 0.72 * U, Ashlar, 6);
+			}
+			Box(Off(Along + 0.86, Across, 0.84), FVector(0.24, 2.1, 0.1) * U, Ashlar, Yaw0);
+			Box(Off(Along, Across, 0.93), FVector(1.6, 2.4, 0.06) * U, LeadGrey, Yaw0);
+			Pillar(Off(Along, Across, 0.9), 0.5 * U, 0.5 * U, 0.35 * U, Ashlar, 12);
+			Ball(Off(Along, Across, 1.25), FVector(1.0, 1.0, 0.9) * U, Verdigris, 5, 10);
+			Pillar(Off(Along, Across, 1.65), 0.06 * U, 0.0, 0.5 * U, Gilding, 6);
+			if (AllWindows)
+			{
+				for (int32 K = 0; K < 7; ++K)
+				{
+					AllWindows->Add(Off(Along + 0.76, Across + (K - 3) * 0.3, 0.52));
+					AllWindows->Add(FVector(FMath::Cos(R), FMath::Sin(R), 0.0));
+				}
+			}
+		};
+		switch (Kind)
+		{
+		case 1: // a cathedral with two west towers
+			House(Off(0.0, 0.0, 0.0), 2.8 * U, 0.9 * U, 1.0 * U, 0.62 * U, Ashlar, LeadGrey, Yaw0);
+			House(Off(-0.35, 0.0, 0.0), 0.8 * U, 1.9 * U, 0.95 * U, 0.55 * U, Ashlar, LeadGrey, Yaw0);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Box(Off(1.5, Side * 0.42, 1.0), FVector(0.5, 0.5, 2.0) * U, Ashlar, Yaw0);
+				Pillar(Off(1.5, Side * 0.42, 2.0), 0.36 * U, 0.0, 1.1 * U, LeadGrey, 4);
+			}
+			Pillar(Off(-0.35, 0.0, 1.5), 0.12 * U, 0.0, 0.9 * U, Verdigris, 6);
+			break;
+		case 2: // a castle: a keep within four towers and a wall, on its mound
+			Pillar(Off(0.0, 0.0, 0.0), 2.3 * U, 1.9 * U, 0.3 * U, Lawn, 14);
+			for (int32 K = 0; K < 4; ++K)
+			{
+				const double SA = K < 2 ? 1.0 : -1.0, SB = K % 2 == 0 ? 1.0 : -1.0;
+				Pillar(Off(SA * 1.1, SB * 1.1, 0.3), 0.3 * U, 0.28 * U, 1.0 * U, Ashlar, 8);
+				Pillar(Off(SA * 1.1, SB * 1.1, 1.3), 0.36 * U, 0.0, 0.5 * U, Rust, 8);
+				Box(Off(K < 2 ? SA * 1.1 : 0.0, K < 2 ? 0.0 : SB * 1.1, 0.62), (K < 2 ? FVector(0.16, 2.2, 0.64) : FVector(2.2, 0.16, 0.64)) * U, Ashlar, Yaw0);
+			}
+			Box(Off(-1.1, 0.0, 0.62), FVector(0.16, 2.2, 0.64) * U, Ashlar, Yaw0);
+			Box(Off(0.0, -1.1, 0.62), FVector(2.2, 0.16, 0.64) * U, Ashlar, Yaw0);
+			Box(Off(0.0, 0.0, 1.05), FVector(0.95, 0.95, 1.5) * U, Ashlar, Yaw0);
+			Pillar(Off(0.0, 0.0, 1.8), 0.72 * U, 0.0, 0.7 * U, Rust, 4);
+			Pillar(Off(0.0, 0.0, 2.5), 0.03 * U, 0.0, 0.5 * U, Gilding, 4);
+			break;
+		case 3: // a parliament house: a long front with a dome and end pavilions, and a column before it
+			Box(Off(-0.4, 0.0, 0.42), FVector(1.0, 3.4, 0.84) * U, Ashlar, Yaw0);
+			House(Off(-0.4, 0.0, 0.84), 0.9 * U, 3.3 * U, 0.02 * U, 0.3 * U, Ashlar, Rust, Yaw0 + 90.0);
+			for (const double End : { -1.0, 1.0 })
+			{
+				Box(Off(-0.4, End * 1.6, 0.6), FVector(1.25, 0.5, 1.2) * U, Ashlar, Yaw0);
+				Pillar(Off(-0.4, End * 1.6, 1.2), 0.42 * U, 0.0, 0.6 * U, Rust, 4);
+			}
+			Pillar(Off(-0.4, 0.0, 0.84), 0.42 * U, 0.42 * U, 0.5 * U, Ashlar, 12);
+			Ball(Off(-0.4, 0.0, 1.5), FVector(0.86, 0.86, 1.0) * U, Rust, 5, 10);
+			Pillar(Off(-0.4, 0.0, 2.0), 0.04 * U, 0.0, 0.6 * U, Gilding, 5);
+			Pillar(Off(1.3, 0.0, 0.0), 0.34 * U, 0.3 * U, 0.2 * U, Ashlar, 10);
+			Pillar(Off(1.3, 0.0, 0.2), 0.1 * U, 0.08 * U, 2.0 * U, Ashlar, 8);
+			Ball(Off(1.3, 0.0, 2.32), FVector(0.24, 0.24, 0.3) * U, Gilding, 4, 6);
+			break;
+		case 4: // a tower of iron lattice on four legs, and the palace beyond it
+		{
+			Palace(-1.5, 0.0);
+			const FLinearColor Iron(FColor::FromHex(TEXT("4A4038")));
+			const FVector Foot = Off(1.3, 0.0, 0.0);
+			auto Up = [&](double Along, double Across, double High) { return Foot + FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, High) * U; };
+			for (int32 K = 0; K < 4; ++K)
+			{
+				const double SA = K < 2 ? 1.0 : -1.0, SB = K % 2 == 0 ? 1.0 : -1.0;
+				Rod(Up(SA * 0.8, SB * 0.8, 0.0), Up(SA * 0.34, SB * 0.34, 1.3), 0.07 * U, Iron, 4);
+				Rod(Up(SA * 0.34, SB * 0.34, 1.3), Up(SA * 0.14, SB * 0.14, 2.6), 0.055 * U, Iron, 4);
+				Rod(Up(SA * 0.14, SB * 0.14, 2.6), Up(0.0, 0.0, 4.4), 0.04 * U, Iron, 4);
+				Rod(Up(SA * 0.8, SB * 0.8, 0.0), Up(K < 2 ? SA * 0.5 : 0.0, K < 2 ? 0.0 : SB * 0.5, 0.8), 0.04 * U, Iron, 4);
+			}
+			Box(Up(0.0, 0.0, 1.3), FVector(0.86, 0.86, 0.1) * U, Iron, Yaw0);
+			Box(Up(0.0, 0.0, 2.6), FVector(0.42, 0.42, 0.08) * U, Iron, Yaw0);
+			Pillar(Up(0.0, 0.0, 4.4), 0.03 * U, 0.0, 0.5 * U, Iron, 4);
+			break;
+		}
+		case 5: // a clock tower beside a long hall on the water-front
+			House(Off(-0.2, 0.0, 0.0), 3.2 * U, 0.85 * U, 0.9 * U, 0.3 * U, Ochre, LeadGrey, Yaw0);
+			Box(Off(1.75, 0.0, 1.5), FVector(0.52, 0.52, 3.0) * U, Ochre, Yaw0);
+			Box(Off(1.75, 0.0, 3.1), FVector(0.62, 0.62, 0.36) * U, Ashlar, Yaw0);
+			Pillar(Off(1.75, 0.0, 3.28), 0.44 * U, 0.0, 0.8 * U, LeadGrey, 4);
+			Pillar(Off(1.75, 0.0, 4.08), 0.03 * U, 0.0, 0.3 * U, Gilding, 4);
+			Box(Off(-1.9, 0.0, 0.7), FVector(0.5, 0.5, 1.4) * U, Ochre, Yaw0);
+			Pillar(Off(-1.9, 0.0, 1.4), 0.36 * U, 0.0, 0.5 * U, LeadGrey, 4);
+			break;
+		case 6: // a walled citadel: red walls, towers with green caps, and gold domes within
+		{
+			const FLinearColor WallRed(FColor::FromHex(TEXT("8E3A30"))), CapGreen(FColor::FromHex(TEXT("3F6A52")));
+			for (int32 K = 0; K < 4; ++K)
+			{
+				const double SA = K < 2 ? 1.0 : -1.0, SB = K % 2 == 0 ? 1.0 : -1.0;
+				Pillar(Off(SA * 1.7, SB * 1.7, 0.0), 0.3 * U, 0.26 * U, 1.1 * U, WallRed, 8);
+				Pillar(Off(SA * 1.7, SB * 1.7, 1.1), 0.3 * U, 0.0, 0.8 * U, CapGreen, 8);
+			}
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Box(Off(Side * 1.7, 0.0, 0.3), FVector(0.18, 3.4, 0.6) * U, WallRed, Yaw0);
+				Box(Off(0.0, Side * 1.7, 0.3), FVector(3.4, 0.18, 0.6) * U, WallRed, Yaw0);
+			}
+			Box(Off(0.0, 0.0, 0.45), FVector(1.3, 1.1, 0.9) * U, TowerWhite, Yaw0);
+			for (int32 Dome = 0; Dome < 5; ++Dome)
+			{
+				const double Along = Dome == 0 ? 0.0 : (Dome < 3 ? 0.42 : -0.42), Across = Dome == 0 ? 0.0 : (Dome % 2 == 1 ? 0.36 : -0.36), Big = Dome == 0 ? 1.0 : 0.62;
+				Pillar(Off(Along, Across, 0.9), 0.16 * Big * U, 0.15 * Big * U, 0.34 * Big * U, TowerWhite, 8);
+				Ball(Off(Along, Across, 0.9 + 0.46 * Big), FVector(0.44, 0.44, 0.5) * Big * U, Gilding, 5, 8);
+				Pillar(Off(Along, Across, 0.9 + 0.7 * Big), 0.025 * U, 0.0, 0.24 * Big * U, Gilding, 4);
+			}
+			Box(Off(1.0, -0.9, 0.9), FVector(0.4, 0.4, 1.8) * U, TowerWhite, Yaw0);
+			Ball(Off(1.0, -0.9, 1.95), FVector(0.36, 0.36, 0.42) * U, Gilding, 5, 8);
+			break;
+		}
+		case 7: // an arena of the ancients, and a domed temple beside it
+		{
+			const FLinearColor Travertine(FColor::FromHex(TEXT("CDBF9F"))), Sand(FColor::FromHex(TEXT("B79C6C")));
+			Pillar(Off(0.9, 0.0, 0.0), 1.55 * U, 1.5 * U, 0.75 * U, Travertine, 22);
+			Pillar(Off(0.9, 0.0, 0.752), 1.2 * U, 1.2 * U, 0.01 * U, FLinearColor(FColor::FromHex(TEXT("9A8D74"))), 22);
+			Pillar(Off(0.9, 0.0, 0.764), 0.7 * U, 0.7 * U, 0.01 * U, Sand, 22);
+			Pillar(Off(-1.6, 0.0, 0.0), 0.8 * U, 0.8 * U, 0.62 * U, Travertine, 16);
+			Ball(Off(-1.6, 0.0, 0.62), FVector(1.5, 1.5, 0.8) * U, FLinearColor(FColor::FromHex(TEXT("8E8A7C"))), 4, 14);
+			House(Off(-0.75, 0.0, 0.0), 0.5 * U, 1.0 * U, 0.5 * U, 0.2 * U, Travertine, Travertine, Yaw0 + 90.0);
+			break;
+		}
+		case 8: // a triumphal gate before the palace
+			Palace(-1.2, 0.0);
+			for (const double Side : { -1.0, 1.0 })
+			{
+				Box(Off(2.0, Side * 0.95, 0.6), FVector(0.5, 0.45, 1.2) * U, Ashlar, Yaw0);
+			}
+			for (int32 Column = 0; Column < 4; ++Column)
+			{
+				Pillar(Off(2.0, (Column - 1.5) * 0.36, 0.0), 0.07 * U, 0.06 * U, 1.1 * U, Ashlar, 6);
+			}
+			Box(Off(2.0, 0.0, 1.25), FVector(0.55, 2.4, 0.3) * U, Ashlar, Yaw0);
+			Box(Off(2.0, 0.0, 1.5), FVector(0.3, 0.6, 0.24) * U, Verdigris, Yaw0);
+			break;
+		default:
+			Palace(0.0, 0.0);
+			break;
+		}
+	};
+
+	// ---- The harbour: a quay at the water's edge, warehouses and cranes on it, and ships alongside.
+	if (Site.bQuay)
+	{
+		{
+			// Where the water lies beyond the town's last houses, a road runs down to the quay.
+			const FVector2D Way = Site.Quay - Site.Centre;
+			const double Far = Way.Size();
+			if (Far > Reach + 1.0)
+			{
+				// (the map's east and south, turned into the plan's along and across)
+				const double QA = -Way.Y * C0 + Way.X * S0, QB = Way.Y * S0 + Way.X * C0;
+				const double From = (Reach - 0.4 * Um) / Far, To = (Far - 0.5 * Um) / Far;
+				Street(QA * From, QB * From, QA * To, QB * To, 0.18);
+			}
+		}
+		const double Sea = FMath::DegreesToRadians(Site.SeaBearing);
+		const FVector Seaward(FMath::Cos(Sea), FMath::Sin(Sea), 0.0), Shoreline(-FMath::Sin(Sea), FMath::Cos(Sea), 0.0); // (on the table: north is +X, east +Y)
+		const FVector Edge = Site.Ground(Site.Quay.X, Site.Quay.Y, 0.03);
+		const double ShoreYaw = Site.SeaBearing + 90.0;
+		Box(Edge - Seaward * (0.25 * U) + FVector(0.0, 0.0, 0.05 * U), FVector(3.4, 0.8, 0.1) * U, Cobbles, ShoreYaw);
+		for (const double Along : { -0.9, 0.5 })
+		{
+			House(Edge - Seaward * (0.95 * U) + Shoreline * (Along * U), 1.1 * U, 0.5 * U, 0.34 * U, 0.16 * U, RedBrick, Sooty, ShoreYaw);
+		}
+		for (const double Along : { -1.2, 0.0, 1.2 })
+		{
+			const FVector Foot = Edge + Shoreline * (Along * U) + FVector(0.0, 0.0, 0.1 * U);
+			Pillar(Foot, 0.1 * U, 0.06 * U, 0.95 * U, Sooty, 4);
+			Rod(Foot + FVector(0.0, 0.0, 0.9 * U), Foot + Seaward * (0.75 * U) + FVector(0.0, 0.0, 1.2 * U), 0.035 * U, Sooty, 4);
+			Rod(Foot + FVector(0.0, 0.0, 0.9 * U), Foot - Seaward * (0.3 * U) + FVector(0.0, 0.0, 0.75 * U), 0.035 * U, Sooty, 4);
+		}
+		// Two merchant ships lying alongside: a black hull, a white house amidships, a funnel and two masts.
+		const FLinearColor HullBlack(FColor::FromHex(TEXT("2B2D31"))), FunnelRed(FColor::FromHex(TEXT("9A3A2E")));
+		for (const double Along : { -1.05, 1.15 })
+		{
+			const FVector Berth = Edge + Seaward * (0.72 * U) + Shoreline * (Along * U);
+			const FVector Afloat(Berth.X, Berth.Y, Edge.Z - 0.02 * U);
+			const double Long = 1.9 * U;
+			Slab(Afloat, Long, ShoreYaw, HullPlan(0.2), 0.0, 0.085, HullBlack);
+			Slab(Afloat, Long, ShoreYaw, HullPlan(0.16), 0.085, 0.092, DeckPlanks);
+			Box(Afloat + Shoreline * (-0.08 * Long) + FVector(0.0, 0.0, 0.13 * Long), FVector(0.2, 0.13, 0.08) * Long, TowerWhite, ShoreYaw);
+			Pillar(Afloat + Shoreline * (-0.12 * Long) + FVector(0.0, 0.0, 0.17 * Long), 0.028 * Long, 0.024 * Long, 0.1 * Long, FunnelRed, 7);
+			for (const double Mast : { -0.32, 0.26 })
+			{
+				Pillar(Afloat + Shoreline * (Mast * Long) + FVector(0.0, 0.0, 0.09 * Long), 0.008 * Long, 0.005 * Long, 0.2 * Long, Sooty, 4);
+			}
+		}
+	}
+
+	// ---- A small place, and a town: a church and its streets.
+	if (Site.Tier <= 1)
+	{
+		const bool bTown = Site.Tier == 1;
+		const double End = Reach - 0.55 * Um;
+		Street(-End, 0.0, End, 0.0, 0.2);
+		if (bTown)
+		{
+			Street(0.0, -End * 0.8, 0.0, End * 0.8, 0.18);
+		}
+		if (CanBuild(0.55 * Um, 0.62 * Um))
+		{
+			Church(0.55 * Um, 0.62 * Um, bTown ? 1.0 : 0.72, 0.0);
+		}
+		// Houses along the street, a row on either side, gable to the road; and along the cross street of a town.
+		for (int32 Row = 0; Row < (bTown ? 2 : 1); ++Row)
+		{
+			for (const double Side : { -1.0, 1.0 })
+			{
+				for (double Along = -End + 0.5 * Um; Along < End - 0.2 * Um; Along += Dice.FRandRange(0.92f, 1.2f) * Um)
+				{
+					const double Back = Side * Dice.FRandRange(0.5f, 0.66f) * Um;
+					const double A = Row == 0 ? Along : Back, B = Row == 0 ? Back : Along * 0.8;
+					if ((Row == 1 && FMath::Abs(Along) < 0.75 * Um) || (Row == 0 && bTown && FMath::Abs(Along) < 0.5 * Um))
+					{
+						continue; // (the crossing is kept open)
+					}
+					if (FVector2D(A - 0.55 * Um, B - 0.62 * Um).SizeSquared() < FMath::Square(0.95 * Um) || !CanBuild(A, B))
+					{
+						continue; // the church stands there
+					}
+					Dwelling(A, B, Dice.FRandRange(0.62f, 0.9f), Dice.FRandRange(0.42f, 0.56f), Dice.FRandRange(0.3f, 0.48f), Dice.FRandRange(0.22f, 0.34f), WallPaint(), RoofPaint(), (Row == 0 ? 90.0 : 0.0) + Dice.FRandRange(-8.0f, 8.0f));
+					if (Dice.FRand() < 0.4f)
+					{
+						Tree(A + (Row == 0 ? 0.0 : Side * 0.6 * Um), B + (Row == 0 ? Side * 0.62 * Um : 0.0));
+					}
+				}
+			}
+		}
+		for (int32 K = 0; K < FMath::Min(Site.Factories, 2); ++K)
+		{
+			Works(-End * 0.55 + K * 1.9 * Um, -End * 0.78, 0.0);
+		}
+		if (OutQuarters)
+		{
+			OutQuarters->Add(Site.Centre);
+		}
+		return;
+	}
+
+	// ---- A city, and a capital: blocks on a grid of streets, tall at the heart, lower and looser toward the edge.
+	const bool bCapital = Site.Tier >= 3;
+	const double PitchA = 1.95 * Um, PitchB = 1.5 * Um; // a block and its street, along and across
+	const int32 SquareA = bCapital ? 1 : 0, SquareB = bCapital ? 1 : 0; // the great square: so many blocks either way from the middle
+	const double Heart = bCapital ? 0.44 : 0.34, Middle = bCapital ? 0.76 : 0.7;
+	const int32 Span = FMath::CeilToInt32(Reach / FMath::Min(PitchA, PitchB)) + 1;
+	// The two avenues that cross in the square, and the paving of the square itself.
+	Street(-Reach + 0.3 * Um, 0.0, Reach - 0.3 * Um, 0.0, 0.3);
+	Street(0.0, -Reach + 0.3 * Um, 0.0, Reach - 0.3 * Um, 0.3);
+	Box(Stand(0.0, 0.0, 0.014), FVector((2 * SquareA + 1) * PitchA * PerMap, (2 * SquareB + 1) * PitchB * PerMap, 0.03 * U), Paving, Yaw0);
+	if (bCapital)
+	{
+		Landmark(Site.Landmark);
+	}
+	else
+	{
+		Church(0.0, 0.0, 1.45, 0.0);
+	}
+	int32 FactoriesLeft = FMath::Clamp(Site.Factories, 0, 6), TownHalls = bCapital ? 0 : 1, Stations = 1;
+	TArray<FVector2D> Bright;
+	for (int32 J = -Span; J <= Span; ++J)
+	{
+		for (int32 I = -Span; I <= Span; ++I)
+		{
+			if (FMath::Abs(I) <= SquareA && FMath::Abs(J) <= SquareB)
+			{
+				continue; // the square
+			}
+			const double A = I * PitchA, B = J * PitchB;
+			const double Far = FMath::Sqrt(A * A + B * B), Ring = Far / Reach;
+			// (a ragged edge: the town thins out as it reaches the country, and no two edges are alike)
+			if (Far > Reach * (0.9 + 0.1 * Dice.FRand()) - 0.5 * Um || !CanBuild(A, B))
+			{
+				continue;
+			}
+			const double Bearing = BearingOf(A, B);
+			// The factory quarter, to the north-west: a shed and a stack for each factory, at the town's edge.
+			if (FactoriesLeft > 0 && Ring > 0.55 && Bearing > 282.0 && Bearing < 338.0)
+			{
+				Works(A, B, (FactoriesLeft % 2) * 90.0);
+				--FactoriesLeft;
+				continue;
+			}
+			// The town hall, across the square from the church; and the station, out at the east end of the avenue.
+			if (TownHalls > 0 && I == 1 && J == 0)
+			{
+				--TownHalls;
+				Dwelling(A, B, 1.1, 0.62, 0.64, 0.26, Ochre, Rust, 90.0, true);
+				Box(Stand(A, B) + FVector(0.0, 0.0, 0.98 * U), FVector(0.22, 0.22, 0.4) * U, Ochre, Yaw0);
+				Pillar(Stand(A, B) + FVector(0.0, 0.0, 1.18 * U), 0.17 * U, 0.0, 0.3 * U, Verdigris, 4);
+				continue;
+			}
+			if (Stations > 0 && J == 1 && Ring > 0.62 && I > 0)
+			{
+				--Stations;
+				Dwelling(A, B, 1.75, 0.62, 0.42, 0.2, Ochre, Glazing, 0.0, true);
+				Box(Stand(A, B) + FVector(0.0, 0.0, 0.64 * U), FVector(0.24, 0.24, 0.44) * U, Ochre, Yaw0);
+				Pillar(Stand(A, B) + FVector(0.0, 0.0, 0.86 * U), 0.19 * U, 0.0, 0.22 * U, LeadGrey, 4);
+				continue;
+			}
+			if (Ring < Middle)
+			{
+				// (the floor of the city: every block of its heart and its middle stands on cobbles that meet the
+				// next block's, so that what lies between the houses is street and not field)
+				// (a slab thick enough to stand clear of the roll of the ground under it)
+				Box(Stand(A, B, 0.0), FVector(PitchA * PerMap * 1.03, PitchB * PerMap * 1.03, 0.2 * U), FLinearColor(FColor::FromHex(TEXT("777166"))), Yaw0);
+			}
+			if (Ring < Heart)
+			{
+				// The heart: one tall block of flats and offices to the block, on its own paving, taller toward the square.
+				const double High = FMath::Lerp(1.2, 0.78, Ring / Heart) * Dice.FRandRange(0.88f, 1.12f);
+				const FLinearColor Leads = Look == 2 || Look == 4 ? RoofPaint() : LeadGrey;
+				const float Sort = Dice.FRand();
+				if (Sort < 0.4f)
+				{
+					// Two great houses side by side, of different heights, each with a front on the street.
+					for (const double Side : { -1.0, 1.0 })
+					{
+						Dwelling(A + Side * 0.4 * Um, B, 0.76, 1.04, High * Dice.FRandRange(0.8f, 1.1f), 0.14, WallPaint(), Leads, 90.0);
+					}
+				}
+				else if (Sort < 0.75f)
+				{
+					// Four houses round a yard.
+					for (const double Side : { -1.0, 1.0 })
+					{
+						for (const double Along : { -1.0, 1.0 })
+						{
+							Dwelling(A + Along * 0.4 * Um, B + Side * 0.29 * Um, 0.74, 0.46, High * Dice.FRandRange(0.75f, 1.08f), 0.15, WallPaint(), Leads, 0.0);
+						}
+					}
+				}
+				else
+				{
+					// (two long houses back to back, with a yard between them)
+					for (const double Side : { -1.0, 1.0 })
+					{
+						Dwelling(A, B + Side * 0.3 * Um, 1.56, 0.44, High * Dice.FRandRange(0.85f, 1.0f), 0.16, WallPaint(), Leads, 0.0);
+					}
+				}
+				if (Dice.FRand() < 0.34f)
+				{
+					Bright.Add(MapAt(A, B));
+				}
+			}
+			else if (Ring < Middle)
+			{
+				if (Dice.FRand() < 0.1f)
+				{
+					// A park: a lawn with trees round it.
+					Box(Stand(A, B, 0.015), FVector(1.6, 1.15, 0.03) * U, Lawn, Yaw0);
+					for (int32 K = 0; K < 4; ++K)
+					{
+						Tree(A + (K < 2 ? -0.5 : 0.5) * Um, B + (K % 2 == 0 ? -0.34 : 0.34) * Um);
+					}
+					continue;
+				}
+				// Terraces: two rows of three houses to the block, their gardens between them.
+				for (const double Side : { -1.0, 1.0 })
+				{
+					for (const double Along : { -0.52, 0.0, 0.52 })
+					{
+						Dwelling(A + Along * Um, B + Side * 0.3 * Um, 0.5, 0.42, Dice.FRandRange(0.4f, 0.62f), Dice.FRandRange(0.2f, 0.28f), WallPaint(), RoofPaint(), 0.0);
+					}
+				}
+			}
+			else
+			{
+				// The edge: houses standing apart, each its own way, with trees in their gardens.
+				const int32 Homes = Dice.RandRange(1, 3);
+				for (int32 K = 0; K < Homes; ++K)
+				{
+					const double HA = A + Dice.FRandRange(-0.55f, 0.55f) * Um, HB = B + Dice.FRandRange(-0.4f, 0.4f) * Um;
+					if (CanBuild(HA, HB))
+					{
+						Dwelling(HA, HB, Dice.FRandRange(0.62f, 0.9f), Dice.FRandRange(0.42f, 0.56f), Dice.FRandRange(0.3f, 0.46f), Dice.FRandRange(0.22f, 0.32f), WallPaint(), RoofPaint(), Dice.FRandRange(0.0f, 180.0f));
+					}
+				}
+				if (Dice.FRand() < 0.6f)
+				{
+					Tree(A + Dice.FRandRange(-0.7f, 0.7f) * Um, B + Dice.FRandRange(-0.5f, 0.5f) * Um);
+				}
+			}
+		}
+	}
+	// (Where the plots are kept the ground is left open, a common inside the town, until something is built on it.)
+	if (OutQuarters)
+	{
+		OutQuarters->Add(Site.Centre);
+		const int32 Most = bCapital ? 5 : 2;
+		for (int32 K = 0; K < Bright.Num() && K < Most; ++K)
+		{
+			OutQuarters->Add(Bright[K]);
+		}
+	}
+}
+
 // ---------------------------------------------------------------------------- the figures
 
 void FMiniatureMesh::Rifleman(const FVector& Where, double Scale, const FLinearColor& Nation, double Turn)

@@ -248,6 +248,12 @@ public:
 	double TownSpread(int32 RegionId) const;
 	/** How far the outermost roofs of a province's town stand from its middle, in map units (about 3 where there is no town). */
 	double TownRadius(int32 RegionId) const;
+	/** How far south of a town's middle the buildings its owner gives it begin, and how far that whole quarter is turned (degrees). */
+	bool CivicInside(int32 RegionId) const; // true where that quarter is kept inside the town's own streets
+	double CivicNear(int32 RegionId) const;
+	double CivicTurn(int32 RegionId) const;
+	/** Whether towns keep ground open inside them for such buildings: only where the rules have them (the grand campaign). The towns are built again if it changes. */
+	void SetTownPlots(bool bPlots);
 	/** Prizes outside the towns (Version 56): a fire where one is wrecked, a pennant in the colour of the army that holds one outside a town it has not taken. */
 	void ShowPrizes(const TArray<FPrizeMark>& Marks);
 	/** The night's war: the nations whose towns are blacked out, and the fronts (pairs of regions) where the guns flicker. */
@@ -413,6 +419,8 @@ private:
 	static constexpr int32 VillageRim = 6; // points round a village light
 	// The glow of each town's lamps as it is seen from far off: a soft disc of light over the town.
 	TArray<FVector> GlowPoints;
+	TMap<int32, TArray<FVector2D>> TownQuarters; // by province: its town's middle and the middles of its lit quarters, on the map
+	bool bTownPlots = false;
 	TArray<FVector> GlowShown; // the same, with every dark glow gathered into its middle so that it costs nothing to draw
 	TArray<FColor> GlowColours;
 	TArray<int32> GlowRegion;

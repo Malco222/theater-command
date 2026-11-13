@@ -1786,35 +1786,17 @@ void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 		}
 		const FCampaignRegion& Region = Data.Regions[RegionId];
 		const bool bCity = Region.Terrain == TEXT("urban");
-		// (the near row stands just outside the last of the town's own houses)
-		const double Clear = TownRadius(RegionId) + 4.4;
+		// (Art fix 9: the buildings a town is given are a quarter of the town itself. In a city and a capital the
+		// ground for them is kept open inside the streets; beside a smaller place they stand against its last
+		// houses. The whole quarter is turned one way, so the town's builder knows where to leave room.)
+		const double Clear = CivicNear(RegionId);
 		const double Size = Region.bCapital ? 2.9 : (bCity ? 2.7 : 2.4);
 		const FVector2D Offset(Plots[Line].X, Clear + Plots[Line].Y);
-		// If its place is in the sea or over the frontier, the quarter is tried on the town's other sides.
-		FVector2D At = Region.Center;
-		int32 Found = 0; // 2 on the province's own dry land, 1 on dry land
-		for (const double Shift : { 0.0, -55.0, 55.0, -110.0, 110.0, 180.0 })
+		const double Angle = FMath::DegreesToRadians(CivicTurn(RegionId));
+		const FVector2D At = Region.Center + FVector2D(Offset.X * FMath::Cos(Angle) - Offset.Y * FMath::Sin(Angle), Offset.X * FMath::Sin(Angle) + Offset.Y * FMath::Cos(Angle));
+		if (Terrain.HeightAt(At.X, At.Y) <= 0.0f)
 		{
-			const double Angle = FMath::DegreesToRadians(Shift);
-			const FVector2D Try = Region.Center + FVector2D(Offset.X * FMath::Cos(Angle) - Offset.Y * FMath::Sin(Angle), Offset.X * FMath::Sin(Angle) + Offset.Y * FMath::Cos(Angle));
-			if (Terrain.HeightAt(Try.X, Try.Y) <= 0.0f)
-			{
-				continue;
-			}
-			const int32 Here = Data.FindRegionAt(Try.X, Try.Y) == RegionId ? 2 : 1;
-			if (Here > Found)
-			{
-				Found = Here;
-				At = Try;
-			}
-			if (Found == 2)
-			{
-				break;
-			}
-		}
-		if (Found == 0)
-		{
-			continue;
+			continue; // (that plot is in the water)
 		}
 		const FCampaignNation* Holder = Data.FindNation(Region.Owner);
 		Model.Civic(SurfacePoint(At.X, At.Y, 0.02), U * Size, Line, Level, Civic[K + 3] != 0, Holder ? FLinearColor(Holder->Color) : FLinearColor::Gray);
@@ -1978,6 +1960,75 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 		}
 	}
 	return TownSpreads[RegionId];
+}
+
+void ACampaignMapActor::SetTownPlots(bool bPlots)
+{
+	if (bPlots != bTownPlots)
+	{
+		bTownPlots = bPlots;
+		if (TownMesh && Data.IsLoaded())
+		{
+			BuildTowns(); // (the cities leave room for the quarter, or close it up)
+			ShownNight = -1.0f;
+			SetNight(NightNow, bLamplightNow);
+		}
+	}
+}
+
+bool ACampaignMapActor::CivicInside(int32 RegionId) const
+{
+	if (!Data.Regions.IsValidIndex(RegionId))
+	{
+		return false;
+	}
+	const FCampaignRegion& Region = Data.Regions[RegionId];
+	return (Region.bCapital || Region.Terrain == TEXT("urban")) && TownRadius(RegionId) >= 14.0;
+}
+
+double ACampaignMapActor::CivicNear(int32 RegionId) const
+{
+	if (!Data.Regions.IsValidIndex(RegionId))
+	{
+		return 8.0;
+	}
+	const FCampaignRegion& Region = Data.Regions[RegionId];
+	// (inside a great city, some way south of its square; against the last houses of a smaller place, or of a
+	// city too small to spare the ground: the quarter is as large as a small capital)
+	return CivicInside(RegionId) ? FMath::Max(TownRadius(RegionId) * 0.4, 6.5) : TownRadius(RegionId) + 2.4;
+}
+
+double ACampaignMapActor::CivicTurn(int32 RegionId) const
+{
+	if (!Data.Regions.IsValidIndex(RegionId))
+	{
+		return 0.0;
+	}
+	// The quarter lies south and east of the town's middle; if the middle of it would be in the sea or over the
+	// frontier it is turned to another side, the same for every building in it.
+	const FCampaignRegion& Region = Data.Regions[RegionId];
+	const FVector2D Offset(9.0, CivicNear(RegionId) + 3.6);
+	double Second = 0.0;
+	bool bSecond = false;
+	for (const double Shift : { 0.0, -55.0, 55.0, -110.0, 110.0, 180.0 })
+	{
+		const double Angle = FMath::DegreesToRadians(Shift);
+		const FVector2D Try = Region.Center + FVector2D(Offset.X * FMath::Cos(Angle) - Offset.Y * FMath::Sin(Angle), Offset.X * FMath::Sin(Angle) + Offset.Y * FMath::Cos(Angle));
+		if (Terrain.HeightAt(Try.X, Try.Y) <= 0.0f)
+		{
+			continue;
+		}
+		if (Data.FindRegionAt(Try.X, Try.Y) == RegionId)
+		{
+			return Shift;
+		}
+		if (!bSecond)
+		{
+			bSecond = true;
+			Second = Shift;
+		}
+	}
+	return Second;
 }
 
 double ACampaignMapActor::TownRadius(int32 RegionId) const
@@ -2205,6 +2256,7 @@ void ACampaignMapActor::BuildTowns()
 	TownChimneys.Reset();
 	TownWindows.Reset();
 	PaneRegion.Reset();
+	TownQuarters.Reset();
 	Model.Windows = &TownWindows;
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
@@ -2240,9 +2292,71 @@ void ACampaignMapActor::BuildTowns()
 			}
 			Model.Pillar(Foot + FVector(-1.3 * U, 0.6 * U, 0.0), 0.7 * U, 0.7 * U, 0.8 * U, Tank, 12);
 		}
-		const int32 Houses = Region.bCapital ? 13 : (bCity ? 10 : (bBig ? 6 : 4));
 		const int32 WindowsBefore = TownWindows.Num();
-		Model.Town(SurfacePoint(Region.Center.X, Region.Center.Y, 0.02), U * 2.1 * TownSpread(Region.Id), Houses, Region.bCapital, bCity, FMath::Min(Region.Factories / 2, 3), Region.Id, &TownChimneys, Region.bPort);
+		// (Art fix 9: the town is built to a plan of its own, with streets and blocks, and by the manner of its part
+		// of Europe. Its houses are the size houses always were: it is the town that is larger, not the houses.)
+		FMiniatureMesh::FTownSite Site;
+		Site.Centre = Region.Center;
+		Site.Radius = TownRadius(Region.Id);
+		Site.Unit = U * 2.1;
+		Site.MapUnit = U;
+		Site.Tier = Region.bCapital ? 3 : bCity ? 2 : bBig ? 1 : 0;
+		Site.Factories = Region.Factories;
+		Site.Seed = Region.Id;
+		{
+			// Roofs and walls by where it lies (the map is forty units to the degree of latitude).
+			const double Latitude = 71.4 - Region.Center.Y / 40.0, Longitude = -11.0 + Region.Center.X / 25.7;
+			Site.Look = Latitude < 37.5 || (Latitude < 42.0 && Longitude > 26.0) ? 4 : Latitude < 45.5 ? 2
+				: (Latitude > 55.0 && Longitude > 4.0) || Longitude > 22.0 ? 3 : Longitude < 7.5 ? 1 : 0;
+			// A capital's own great building: the great capitals have theirs, the rest one of four by turns.
+			static const TPair<const TCHAR*, int32> Named[] = {
+				TPair<const TCHAR*, int32>(TEXT("Berlin"), 8), TPair<const TCHAR*, int32>(TEXT("Paris"), 4), TPair<const TCHAR*, int32>(TEXT("London"), 5),
+				TPair<const TCHAR*, int32>(TEXT("Moscow"), 6), TPair<const TCHAR*, int32>(TEXT("Rome"), 7), TPair<const TCHAR*, int32>(TEXT("Warsaw"), 2),
+				TPair<const TCHAR*, int32>(TEXT("Budapest"), 3), TPair<const TCHAR*, int32>(TEXT("Madrid"), 0), TPair<const TCHAR*, int32>(TEXT("Athens"), 7),
+				TPair<const TCHAR*, int32>(TEXT("Istanbul"), 1), TPair<const TCHAR*, int32>(TEXT("Stockholm"), 0), TPair<const TCHAR*, int32>(TEXT("Brussels"), 3),
+			};
+			Site.Landmark = (Region.Id * 7 + 1) % 4;
+			for (const TPair<const TCHAR*, int32>& Each : Named)
+			{
+				if (Region.Name == Each.Key)
+				{
+					Site.Landmark = Each.Value;
+				}
+			}
+		}
+		Site.Ground = [this](double X, double Y, double Lift) { return SurfacePoint(X, Y, Lift); };
+		Site.Dry = [this](double X, double Y) { return Terrain.HeightAt(X, Y) > 0.0f; };
+		if (Region.bPort)
+		{
+			// A port's quay stands at the water's edge: the nearest shore to the town's middle, looked for all round.
+			double Nearest = Site.Radius + 16.0;
+			for (double Bearing = 0.0; Bearing < 360.0; Bearing += 10.0)
+			{
+				const FVector2D Way(FMath::Sin(FMath::DegreesToRadians(Bearing)), -FMath::Cos(FMath::DegreesToRadians(Bearing)));
+				for (double Out = 1.5; Out < Nearest; Out += 0.5)
+				{
+					const FVector2D Wet = Region.Center + Way * Out, Beyond = Region.Center + Way * (Out + 3.0);
+					if (Terrain.HeightAt(Wet.X, Wet.Y) <= 0.0f)
+					{
+						// (open water, not a river's mouth or a pond: it is still water three units further out)
+						if (Terrain.HeightAt(Beyond.X, Beyond.Y) <= 0.0f && Out > 2.5)
+						{
+							Nearest = Out;
+							Site.bQuay = true;
+							Site.Quay = Region.Center + Way * (Out - 0.25);
+							Site.SeaBearing = Bearing;
+						}
+						break;
+					}
+				}
+			}
+		}
+		Site.bPlots = bTownPlots && CivicInside(Region.Id);
+		Site.PlotsNear = CivicNear(Region.Id);
+		Site.PlotsTurn = CivicTurn(Region.Id);
+		TArray<FVector2D> Quarters;
+		Model.Township(Site, &TownChimneys, &Quarters);
+		TownQuarters.Add(Region.Id, MoveTemp(Quarters));
 		for (int32 Pane = WindowsBefore / 2; Pane < TownWindows.Num() / 2; ++Pane)
 		{
 			PaneRegion.Add(Region.Id);
@@ -2387,11 +2501,13 @@ void ACampaignMapActor::BuildTowns()
 			const double Grown = TownSpread(Region.Id);
 			const double Spread = (Region.bCapital ? 5.2 : bCity ? 4.4 : bBig ? 3.4 : 2.5) * U * Grown; // (half what it first was, on the town as it is now built)
 			AddGlow(SurfacePoint(Region.Center.X, Region.Center.Y, 5.4 * Grown), Spread, Region.Id, 0);
-			const int32 Quarters = Region.bCapital ? 4 : bCity ? 2 : 0;
-			for (int32 Quarter = 0; Quarter < Quarters; ++Quarter)
+			// (the lit quarters are where the town's tall blocks really stand: its builder says where)
+			if (const TArray<FVector2D>* Lit = TownQuarters.Find(Region.Id))
 			{
-				const double Angle = Scatter.FRandRange(0.0f, 6.283f) + Quarter * 1.7, Out = Scatter.FRandRange(2.0f, 3.9f) * Grown;
-				AddGlow(SurfacePoint(Region.Center.X + FMath::Cos(Angle) * Out, Region.Center.Y + FMath::Sin(Angle) * Out, 3.4 * Grown), Scatter.FRandRange(1.4f, 2.1f) * U * Grown, Region.Id, 1);
+				for (int32 Quarter = 1; Quarter < Lit->Num(); ++Quarter)
+				{
+					AddGlow(SurfacePoint((*Lit)[Quarter].X, (*Lit)[Quarter].Y, 3.6), Scatter.FRandRange(1.5f, 2.2f) * U, Region.Id, 1);
+				}
 			}
 			// (the wash is as wide as it was before the towns were built larger: a wider one cost frames by night)
 			AddGlow(SurfacePoint(Region.Center.X, Region.Center.Y, 1.4), FMath::Max(Spread / Grown * 3.2, 8.0 * U), Region.Id, 2);

@@ -161,6 +161,36 @@ struct FMiniatureMesh
 	 * for a capital, a church for a city, and a works with a chimney for each pair of factories.
 	 */
 	void Town(const FVector& Where, double Unit, int32 Houses, bool bCapital, bool bCity, int32 Works, int32 Seed, TArray<FVector>* OutChimneys = nullptr, bool bHarbour = false);
+
+	/** What the map tells the builder of a town about the place it is to stand in (art fix 9: cities worth capturing). */
+	struct FTownSite
+	{
+		FVector2D Centre = FVector2D::ZeroVector; // on the map
+		double Radius = 5.0; // how far its roofs reach from its middle, in map units
+		double Unit = 21.0; // the size its houses are built to, in the table's units: a house is under one of them long
+		double MapUnit = 10.0; // the table's units to one unit of the map
+		int32 Tier = 0; // 0 a small place, 1 a town, 2 a city, 3 a capital
+		int32 Factories = 0;
+		int32 Seed = 0;
+		int32 Look = 0; // roofs and walls by region: 0 middle Europe, 1 the north-west, 2 the south, 3 the north and east, 4 the far south
+		int32 Landmark = 0; // a capital's own great building, by kind (see Township)
+		bool bQuay = false; // it is a port, and its shore has been found:
+		FVector2D Quay = FVector2D::ZeroVector; // where its quay stands on the map, at the water's edge
+		double SeaBearing = 0.0; // and which way the open water lies from there, in degrees east of north
+		bool bPlots = false; // ground is kept clear inside it for the buildings its owner will give it:
+		double PlotsNear = 0.0, PlotsTurn = 0.0; // how far south of its middle that ground begins, and how far the whole quarter is turned (degrees)
+		TFunction<FVector(double, double, double)> Ground; // a point of the map standing on the ground, lifted a little
+		TFunction<bool(double, double)> Dry; // true where the map is land
+	};
+	/**
+	 * A town as a place with a plan. A small place: a chapel and a street. A town: a church, a main street and a
+	 * cross street. A city: a grid of blocks, tall at its heart, a church and a town hall on its square, a station,
+	 * and a factory quarter with a shed and a stack for its factories. A capital: the same, greater, round a great
+	 * square with one landmark of its own that is known from the air. A port has its quay at the water's edge,
+	 * with cranes, warehouses and ships alongside. Roofs and walls are those of its part of Europe. OutQuarters
+	 * takes the middles of its lit quarters, on the map, for its glow by night.
+	 */
+	void Township(const FTownSite& Site, TArray<FVector>* OutChimneys = nullptr, TArray<FVector2D>* OutQuarters = nullptr);
 	/**
 	 * One of the buildings a town is given by its owner, standing at the town's edge: Line is 0 a market, 1 farms,
 	 * 2 a school, 3 a drill ground, 4 a hospital, 5 a town hall. Each grows with its level (1 to 3); bGoing puts
