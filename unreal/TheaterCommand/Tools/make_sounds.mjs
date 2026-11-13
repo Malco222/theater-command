@@ -485,6 +485,38 @@ made.drums = () => {
   return finish(b, 0.002, 0.2);
 };
 
+made.newsreel = () => {
+  // The band at the head of a newsreel: a short march figure on the brass, a drum under it.
+  const b = buffer(3.6);
+  [[0.0, 0.14, [67, 71, 74]], [0.18, 0.14, [67, 71, 74]], [0.36, 0.14, [67, 71, 74]], [0.54, 0.4, [72, 76, 79]],
+    [1.0, 0.18, [71, 74, 79]], [1.22, 0.18, [72, 76, 81]], [1.44, 0.2, [74, 79, 83]], [1.72, 1.4, [72, 79, 84, 88]]].forEach(([at, len, notes]) => {
+    notes.forEach((note, k) => brass(b, 0.04 + at, len, -0.45 + k * 0.3, 0.62, note));
+  });
+  for (const at of [0.0, 0.18, 0.36, 0.54, 1.0, 1.22, 1.44, 1.72]) {
+    const bp = bandpass(1900, 0.9);
+    add(b, 0.04 + at, 0.07, 0, (u) => bp(noise()) * Math.exp(-u / 0.02) * 0.4 + Math.sin(TAU * 180 * u) * Math.exp(-u / 0.025) * 0.3);
+  }
+  boom(b, 1.76, 0, 0.7, { from: 90, to: 48, ring: 0.2, bang: 0.03, tone: 500 });
+  // The thin sound of an old loudspeaker: the bottom and the top taken off.
+  for (const ch of [b.L, b.R]) { const hp = highpass(320), lp = lowpass(3400); for (let i = 0; i < b.n; i++) ch[i] = lp(hp(ch[i])) * 1.5; }
+  reverb(b, 1.2, 0.18);
+  return finish(b, 0.002, 0.5);
+};
+
+made.projector = () => {
+  // A film projector running: the claw pulling the film down sixteen times a second, and the motor's hum.
+  const b = buffer(6.0);
+  const shape = (t) => smooth(t / 0.4) * smooth((6.0 - t) / 0.8);
+  for (let t = 0.02; t < 5.95; t += 1 / 16 + between(-0.002, 0.002)) {
+    const bp = bandpass(between(2300, 2900), 2.5), g = between(0.5, 0.8) * shape(t);
+    add(b, t, 0.03, between(-0.2, 0.2), (u) => bp(noise()) * Math.exp(-u / 0.006) * g);
+    add(b, t + 0.012, 0.03, between(-0.2, 0.2), (u) => Math.sin(TAU * 410 * u) * Math.exp(-u / 0.008) * g * 0.25);
+  }
+  add(b, 0, 6.0, 0, (t) => (Math.sin(TAU * 96 * t) * 0.12 + Math.sin(TAU * 192 * t) * 0.05 + Math.sin(TAU * 48 * t) * 0.08) * shape(t));
+  { const lp = lowpass(1400); add(b, 0, 6.0, 0, (t) => lp(noise()) * 0.05 * shape(t)); }
+  return finish(b, 0.05, 0.6, 0.6);
+};
+
 made.battle = () => {
   // A fight heard from a little way off: rifles, a machine gun, shells bursting.
   const b = buffer(4.4);

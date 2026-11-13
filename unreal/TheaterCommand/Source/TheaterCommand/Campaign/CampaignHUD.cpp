@@ -251,6 +251,8 @@ namespace
 			};
 			ScrimBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 0.0f);
 			DeepScrimBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.72f), 0.0f);
+			FilmBrush = FSlateRoundedBoxBrush(FLinearColor(0.012f, 0.012f, 0.012f, 1.0f), 0.0f);
+			ClearBrush = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 0.0f);
 			PlainButton = MakeButtonStyle(CardFill, CardHover, Faint, 1.0f);
 			PlateButton = MakeButtonStyle(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), FLinearColor(0.2f, 0.16f, 0.09f, 0.6f), FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 1.0f);
 			ChosenCard = MakeButtonStyle(FLinearColor(0.12f, 0.09f, 0.045f, 0.98f), FLinearColor(0.17f, 0.125f, 0.065f, 0.98f), BrightBrass, 2.0f);
@@ -314,6 +316,7 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(24.0f)
 					[
 						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(20.0f, 12.0f, 26.0f, 14.0f))
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Collapsed : EVisibility::Visible; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the plate is not the map
 						[
 							SNew(SVerticalBox)
@@ -396,7 +399,7 @@ namespace
 						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(22.0f, 10.0f))
 						.Visibility_Lambda([this]()
 						{
-							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
+							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
 						})
 						[
 							SNew(STextBlock).Font(Font(TEXT("Regular"), 14)).ColorAndOpacity(Cream)
@@ -419,6 +422,7 @@ namespace
 					+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(24.0f)
 					[
 						SNew(SVerticalBox)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 12.0f)
 						[
 								SNew(SHorizontalBox)
@@ -1352,6 +1356,73 @@ namespace
 											[
 												SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(DiplomacyRows, SVerticalBox)]
 											]
+										]
+									]
+								]
+							]
+						]
+					]
+
+					// The newsreel: the map behind is in black and white; a black band above carries the masthead and one
+					// below the story being told. A click goes on to the next story.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ClearBrush).Padding(FMargin(0.0f))
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([this](const FGeometry&, const FPointerEvent&) { if (Controller.IsValid()) { Controller->NextNewsCard(); } return FReply::Handled(); })
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(SBorder).BorderImage(&FilmBrush).Padding(FMargin(48.0f, 26.0f, 48.0f, 22.0f))
+								[
+									SNew(SHorizontalBox)
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+									[
+										SNew(STextBlock).Text(FText::FromString(TEXT("THEATER NEWS"))).Font(Font(TEXT("Bold"), 30, 420)).ColorAndOpacity(FLinearColor(0.92f, 0.92f, 0.9f))
+									]
+									+ SHorizontalBox::Slot().FillWidth(1.0f)[SNew(SSpacer)]
+									+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 16, 260)).ColorAndOpacity(FLinearColor(0.7f, 0.7f, 0.68f))
+										.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetNewsreel().Date.ToUpper()) : FText::GetEmpty(); })
+									]
+								]
+							]
+							+ SVerticalBox::Slot().FillHeight(1.0f)[SNew(SSpacer)]
+							+ SVerticalBox::Slot().AutoHeight()
+							[
+								SNew(SBorder).BorderImage(&FilmBrush).Padding(FMargin(48.0f, 22.0f, 48.0f, 20.0f))
+								[
+									SNew(SBox).MinDesiredHeight(150.0f)
+									[
+										SNew(SVerticalBox)
+										+ SVerticalBox::Slot().AutoHeight()
+										[
+											SNew(SHorizontalBox)
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 28, 160)).ColorAndOpacity(FLinearColor(0.95f, 0.95f, 0.93f))
+												.Text_Lambda([this]()
+												{
+													const FNewsreelShow& Reel = Controller->GetNewsreel();
+													return FText::FromString(Reel.Cards.IsValidIndex(Reel.Index) ? Reel.Cards[Reel.Index].Title : FString(TEXT("THE MONTH IN REVIEW")));
+												})
+											]
+										]
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 18)).ColorAndOpacity(FLinearColor(0.82f, 0.82f, 0.8f)).AutoWrapText(true).LineHeightPercentage(1.2f)
+											.Text_Lambda([this]()
+											{
+												const FNewsreelShow& Reel = Controller->GetNewsreel();
+												return FText::FromString(Reel.Cards.IsValidIndex(Reel.Index) ? Reel.Cards[Reel.Index].Text : FString(TEXT("The war as it stood when the month closed.")));
+											})
+										]
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 12.0f, 0.0f, 0.0f)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Italic"), 11)).ColorAndOpacity(FLinearColor(0.5f, 0.5f, 0.48f))
+											.Text(FText::FromString(TEXT("Click: the next story    Space: skip the newsreel    K: no more newsreels")))
 										]
 									]
 								]
@@ -4131,6 +4202,8 @@ namespace
 		FButtonStyle PlainButton;
 		FSlateBrush ScrimBrush;
 		FSlateBrush DeepScrimBrush;
+		FSlateBrush FilmBrush;
+		FSlateBrush ClearBrush;
 		TSharedPtr<SVerticalBox> Starts;
 		TSharedPtr<SHorizontalBox> OpeningTabs;
 		TSharedPtr<SBox> OpeningFoot;

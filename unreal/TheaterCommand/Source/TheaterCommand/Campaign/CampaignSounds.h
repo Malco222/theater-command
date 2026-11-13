@@ -21,6 +21,7 @@ namespace CampaignSounds
 
 	/** Turns the effects on or off (the N key). Returns whether they are now on. */
 	bool Toggle();
+	bool IsOn();
 
 	/** What an army of these kinds of corps sounds like setting off: tracks, lorries, hooves or boots. */
 	const TCHAR* OfArmy(const TArray<FString>& Kinds, const FString& Nation);

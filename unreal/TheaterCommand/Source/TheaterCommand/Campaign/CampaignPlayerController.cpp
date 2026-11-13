@@ -293,6 +293,7 @@ void ACampaignPlayerController::EnterCampaign()
 
 void ACampaignPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	HushNarrator();
 	// Leaving the game keeps the campaign.
 	if (ACampaignGameMode* Mode = GetMode())
 	{
@@ -345,6 +346,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::Tab, IE_Pressed, this, &ACampaignPlayerController::NextArmy);
 	InputComponent->BindKey(EKeys::L, IE_Pressed, this, &ACampaignPlayerController::OpenForces);
 	InputComponent->BindKey(EKeys::R, IE_Pressed, this, &ACampaignPlayerController::OpenReports);
+	InputComponent->BindKey(EKeys::K, IE_Pressed, this, &ACampaignPlayerController::ToggleNewsreels);
 	InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
 	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
 	InputComponent->BindKey(EKeys::V, IE_Pressed, this, &ACampaignPlayerController::ToggleWatchAll);
@@ -1206,6 +1208,7 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("Aircraft belong to airfields, which stand on the map: a landing ground, an airfield, an air base. Click an airfield to open it and see the air groups based there. ")
 		TEXT("A fighter group patrols its own sky, sticks with a bomber group as escort, or rests. Any group can fly one raid a month. To plan a raid you pick its kind and its target, and you are shown the chance of success and the losses to expect. ")
 		TEXT("Then you choose which groups fly it, from one airfield or several: bombers that meet up lose fewer of their number. The raid is flown at once, and you watch it go. ")
+		TEXT("When a month with great events ends, a newsreel tells them over the map: Space skips it, and K turns newsreels off or on. ")
 		TEXT("Engineers lay out new airfields and enlarge old ones; the ARSENAL builds bigger ones. In a historical scenario air fleets are given a mission for the month instead."));
 	if (FCampaignSession* Session = GetSession())
 	{
@@ -1253,6 +1256,11 @@ void ACampaignPlayerController::ToggleEffects()
 
 void ACampaignPlayerController::SpaceBar()
 {
+	if (Newsreel.bOn)
+	{
+		EndNewsreel();
+		return;
+	}
 	if (Announcements.Num() > 0)
 	{
 		DismissAnnouncement();
@@ -1295,6 +1303,130 @@ void ACampaignPlayerController::OpenForces()
 		return;
 	}
 	OpenPage(TEXT("forces"));
+}
+
+void ACampaignPlayerController::PlayNewsreel(const FString& Date, const TArray<FNewsCard>& Cards)
+{
+	ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+	if (!Eye || !Map.IsValid() || Cards.Num() == 0)
+	{
+		return;
+	}
+	PutDownArmy();
+	PutDownFleet();
+	SelectRegion(INDEX_NONE);
+	Newsreel = FNewsreelShow();
+	Newsreel.bOn = true;
+	Newsreel.Date = Date;
+	Newsreel.Cards = Cards;
+	Newsreel.Index = -1;
+	Newsreel.Until = FPlatformTime::Seconds() + 3.4; // the title, while the band plays
+	// The great moments are told when the reel is over.
+	HeldAnnouncements = Announcements;
+	Announcements.Reset();
+	ReelReturnFocus = Eye->GetFocus();
+	ReelReturnZoom = Eye->GetZoom();
+	ReelReturnYaw = Eye->GetYaw();
+	Eye->SetNewsreel(true);
+	// The title is shown over the whole map.
+	const FCampaignMapData& Data = Map->GetData();
+	Eye->GoTo(Map->MapToWorld(Data.Width * 0.5, Data.Height * 0.48), 0.92f);
+	CampaignSounds::Play(this, TEXT("newsreel"), 0.6f);
+}
+
+void ACampaignPlayerController::NextNewsCard()
+{
+	if (!Newsreel.bOn)
+	{
+		return;
+	}
+	++Newsreel.Index;
+	if (!Newsreel.Cards.IsValidIndex(Newsreel.Index))
+	{
+		EndNewsreel();
+		return;
+	}
+	const FNewsCard& Card = Newsreel.Cards[Newsreel.Index];
+	// Long enough to be read out, and never rushed.
+	Newsreel.Until = FPlatformTime::Seconds() + FMath::Clamp(2.2 + Card.Text.Len() / 13.5, 5.5, 16.0);
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		const FCampaignMapData& Data = Map->GetData();
+		if (Data.Regions.IsValidIndex(Card.Region))
+		{
+			const FVector2D At = Data.Regions[Card.Region].Center;
+			Eye->GoTo(Map->MapToWorld(At.X, At.Y), 0.36f);
+		}
+		else
+		{
+			Eye->GoTo(Map->MapToWorld(Data.Width * 0.5, Data.Height * 0.48), 0.8f);
+		}
+	}
+	CampaignSounds::Play(this, TEXT("projector"), 0.35f);
+	Narrate(Card.Text);
+}
+
+void ACampaignPlayerController::EndNewsreel()
+{
+	if (!Newsreel.bOn)
+	{
+		return;
+	}
+	Newsreel.bOn = false;
+	HushNarrator();
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		Eye->SetNewsreel(false);
+		Eye->RotateBy(ReelReturnYaw - Eye->GetYaw()); // back the way the player was facing
+		Eye->GoTo(ReelReturnFocus, ReelReturnZoom);
+	}
+	Announcements = HeldAnnouncements;
+	HeldAnnouncements.Reset();
+	if (Announcements.Num() > 0)
+	{
+		CampaignSounds::Play(this, Announcements[0].bGood ? TEXT("victory") : TEXT("defeat"), 0.55f);
+	}
+}
+
+void ACampaignPlayerController::ToggleNewsreels()
+{
+	bNewsreels = !bNewsreels;
+	if (!bNewsreels)
+	{
+		EndNewsreel();
+	}
+	Notify(bNewsreels ? TEXT("Newsreels on: the month's great stories are shown when it ends.") : TEXT("Newsreels off. Press K to bring them back."), 4.0);
+}
+
+void ACampaignPlayerController::Narrate(const FString& Words)
+{
+	HushNarrator();
+	// The stories are read by the computer's own voice. Not while pictures are being taken, nor with the sound off.
+	if (bScripted || !CampaignSounds::IsOn() || Words.IsEmpty())
+	{
+		return;
+	}
+#if PLATFORM_MAC
+	FString Said = Words;
+	Said.ReplaceInline(TEXT("\""), TEXT("'"));
+	Said.ReplaceInline(TEXT("\\"), TEXT(" "));
+	Said.ReplaceInline(TEXT("\n"), TEXT(" "));
+	const FString Arguments = FString::Printf(TEXT("-v Daniel -r 182 \"%s\""), *Said);
+	Narrator = FPlatformProcess::CreateProc(TEXT("/usr/bin/say"), *Arguments, true, true, true, nullptr, 0, nullptr, nullptr);
+#endif
+}
+
+void ACampaignPlayerController::HushNarrator()
+{
+	if (Narrator.IsValid())
+	{
+		if (FPlatformProcess::IsProcRunning(Narrator))
+		{
+			FPlatformProcess::TerminateProc(Narrator);
+		}
+		FPlatformProcess::CloseProc(Narrator);
+		Narrator.Reset();
+	}
 }
 
 void ACampaignPlayerController::OpenReports()
@@ -1455,7 +1587,11 @@ void ACampaignPlayerController::NextArmy()
 void ACampaignPlayerController::Escape()
 {
 	// Esc backs out one step: the watching, the face-off, the army in hand, then the territory.
-	if (Announcements.Num() > 0)
+	if (Newsreel.bOn)
+	{
+		EndNewsreel();
+	}
+	else if (Announcements.Num() > 0)
 	{
 		DismissAnnouncement();
 	}
@@ -1546,6 +1682,16 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		return;
 	}
 
+	// The newsreel: the view drifts slowly round the place while its story is told, then the next comes on.
+	if (Newsreel.bOn)
+	{
+		Eye->RotateBy(DeltaTime * 1.8f);
+		if (FPlatformTime::Seconds() >= Newsreel.Until)
+		{
+			NextNewsCard();
+		}
+	}
+
 	// History being played for the opening screen: the screen has said so for a few frames; now do it.
 	if (Opening.bWorking && ++WorkingFrames >= 3)
 	{
@@ -1612,7 +1758,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || Announcements.Num() > 0;
+	const bool bBusy = bWatching || Newsreel.bOn || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen || Announcements.Num() > 0;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
@@ -1961,7 +2107,7 @@ UTexture2D* ACampaignPlayerController::GetMinimapTexture() const
 
 bool ACampaignPlayerController::IsMapShown() const
 {
-	return GetSession() != nullptr && Map.IsValid() && !Opening.bVisible;
+	return GetSession() != nullptr && Map.IsValid() && !Opening.bVisible && !Newsreel.bOn;
 }
 
 void ACampaignPlayerController::GetMinimapMarks(TArray<FVector>& OutDots, FBox2D& OutLooking) const
@@ -3270,9 +3416,16 @@ void ACampaignPlayerController::FinishMonth()
 
 	// The great moments of the month are told one at a time, each on a screen of its own.
 	Announcements = Month.Announcements;
-	if (Announcements.Num() > 0)
+	const bool bReel = bNewsreels && Month.Reel.Num() > 0 && Month.Fallen.IsEmpty();
+	if (Announcements.Num() > 0 && !bReel)
 	{
 		CampaignSounds::PlayLater(this, Announcements[0].bGood ? TEXT("victory") : TEXT("defeat"), 0.4f, 0.55f);
+	}
+
+	// First the newsreel, if the month had stories worth one; the great moments wait until it is over.
+	if (bReel)
+	{
+		PlayNewsreel(Month.ReelDate, Month.Reel);
 	}
 
 	// The month's news stays up for a while.

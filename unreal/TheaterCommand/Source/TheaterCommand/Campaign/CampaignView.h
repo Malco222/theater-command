@@ -366,6 +366,15 @@ struct FAnnouncement
 	int32 Region = INDEX_NONE; // its capital, to look at afterwards
 };
 
+/** One story of the month's newsreel: whose, its headline, the words read out, and the place shown meanwhile. */
+struct FNewsCard
+{
+	FString Tag;
+	FString Title;
+	FString Text;
+	int32 Region = INDEX_NONE;
+};
+
 /** Everything that happened between the player ending one month and beginning the next. */
 struct FMonthResult
 {
@@ -373,6 +382,8 @@ struct FMonthResult
 	TArray<FString> Headlines; // the month's news, most important first
 	FString Fallen; // the player's nation, if it has just been beaten
 	TArray<FAnnouncement> Announcements;
+	FString ReelDate; // the month the newsreel is of
+	TArray<FNewsCard> Reel; // the month's stories; empty in a quiet month
 };
 
 /** One way into a campaign: a nation to lead (or nobody, to watch), with a line about what lies ahead. */

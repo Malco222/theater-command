@@ -15124,12 +15124,24 @@
       if (stoodUp.has(n.id) && !n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} HAS FALLEN`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is eliminated from the war.`, good: foe });
       else if (wasDown.has(n.id) && n.alive) announce.push({ nat: n.id, title: `${n.name.toUpperCase()} IS LIBERATED`, text: said(n.id) || `${upFirst(theName2(s, n.id))} is free again, and back in the war.`, good: mine2 || !foe });
     }
+    const short = (t, most = 230) => t.length <= most ? t : `${t.slice(0, t.lastIndexOf(".", most) + 1) || `${t.slice(0, most)}...`}`;
+    const capitalOf = (nat) => nat ? s.regions.find((r) => r.cap && r.owner === nat)?.id ?? -1 : -1;
+    const reel = [];
+    for (const a of announce) reel.push({ nat: a.nat, title: a.title, text: short(a.text), region: a.region ?? capitalOf(a.nat) });
+    for (const h of headlines.filter((x) => x.kind === "war").slice(0, 2)) reel.push({ nat: h.nat ?? "", title: "WAR IS DECLARED", text: short(h.text), region: capitalOf(h.nat) });
+    const fights = steps.filter((x) => x.note && !x.moved && ((x.battles?.length ?? 0) > 0 || (x.taken?.length ?? 0) > 0 || (x.raids?.length ?? 0) > 0)).sort((a, b) => (b.mine ? 100 : 0) + (b.battles?.length ?? 0) + (b.taken?.length ?? 0) - ((a.mine ? 100 : 0) + (a.battles?.length ?? 0) + (a.taken?.length ?? 0)));
+    const big = reel.length > 0 || fights.some((x) => x.mine) || fights.length >= 3;
+    for (const f of fights.slice(0, 2)) {
+      const n = s.nations[f.nat];
+      reel.push({ nat: f.nat, title: (f.raids?.length ?? 0) > 0 && !f.battles?.length ? `${(n?.adj ?? f.nat).toUpperCase()} RAIDERS OVERHEAD` : `THE ${(n?.adj ?? f.nat).toUpperCase()} ARMY ON THE MARCH`, text: short(f.note), region: f.focus?.[0] ?? capitalOf(f.nat) });
+    }
+    const newsreel = big ? { date: turnToDate(month02).label, cards: reel.slice(0, 4) } : null;
     lastMonth = {
       date: turnToDate(month02).label,
       rows: steps.filter((x) => x.note && !x.moved).map((x) => ({ nat: x.nat, note: x.note, region: x.focus?.[0] ?? -1, mine: !!x.mine })),
       news: events.map((e) => e.text)
     };
-    return { steps, headlines, events, fallen, announce, view: view() };
+    return { steps, headlines, events, fallen, announce, newsreel, view: view() };
   }
   function stance(ids2, posture) {
     const s = game();

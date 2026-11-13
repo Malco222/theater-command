@@ -858,6 +858,24 @@ FMonthResult FCampaignSession::EndMonth()
 			}
 		}
 	}
+	const TSharedPtr<FJsonObject>* Reel = nullptr;
+	if (Object->TryGetObjectField(TEXT("newsreel"), Reel))
+	{
+		(*Reel)->TryGetStringField(TEXT("date"), Out.ReelDate);
+		const TArray<TSharedPtr<FJsonValue>>* Cards = nullptr;
+		if ((*Reel)->TryGetArrayField(TEXT("cards"), Cards))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Cards)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FNewsCard& Card = Out.Reel.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("nat"), Card.Tag);
+				Entry->TryGetStringField(TEXT("title"), Card.Title);
+				Entry->TryGetStringField(TEXT("text"), Card.Text);
+				Entry->TryGetNumberField(TEXT("region"), Card.Region);
+			}
+		}
+	}
 	TakeView(Object);
 	return Out;
 }

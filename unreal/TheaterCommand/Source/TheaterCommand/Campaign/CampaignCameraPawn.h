@@ -43,6 +43,9 @@ public:
 	/** Sets the compass direction the view faces and any extra tilt. Takes effect at the next GoTo or eases in. */
 	void SetHeading(float YawDegrees, float TiltDegrees = 0.0f);
 
+	/** The look of a newsreel: black and white, grainy, dark at the corners. */
+	void SetNewsreel(bool bOn);
+
 	/** While hurried the view travels several times faster, for following the other nations' month. */
 	void SetHurry(bool bInHurry) { bHurry = bInHurry; }
 

@@ -145,6 +145,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	}
 	Add(TEXT("14b-menu-with-save"), TEXT("Warsaw"), 0.5f).bMenu = true;
 	Add(TEXT("14e-guide"), TEXT("Warsaw"), 0.5f).bGuide = true;
+	{
+		FShot& Shot = Add(TEXT("14h-newsreel"), TEXT("Lodz"), 0.36f);
+		Shot.bNewsreel = true;
+		Shot.Wait = 1.5f;
+	}
+	Add(TEXT("14i-after-newsreel"), TEXT("Warsaw"), 0.5f);
 	Add(TEXT("14f-nation-fallen"), TEXT("Warsaw"), 0.5f).bAnnounce = true;
 	Add(TEXT("14g-after"), TEXT("Warsaw"), 0.5f).bDismiss = true;
 	{
@@ -603,6 +609,23 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		Controller->OrderTo(*Target);
 	}
 	Controller->SetProvinceTab(Shot.ProvinceTab);
+	if (Shot.bNewsreel)
+	{
+		TArray<FNewsCard> Cards;
+		FNewsCard& Card = Cards.AddDefaulted_GetRef();
+		Card.Tag = TEXT("GER");
+		Card.Title = TEXT("THE GERMAN ARMY ON THE MARCH");
+		Card.Text = TEXT("German forces took Pomorze and Lodz, and were thrown back at Poznan.");
+		for (const FCampaignRegion& Region : Table->GetData().Regions)
+		{
+			if (Region.Name == TEXT("Lodz"))
+			{
+				Card.Region = Region.Id;
+			}
+		}
+		Controller->PlayNewsreel(TEXT("September 1939"), Cards);
+		Controller->NextNewsCard();
+	}
 	if (Shot.bFleet && Controller->GetSession())
 	{
 		const FCampaignView& Now = Controller->GetSession()->GetView();

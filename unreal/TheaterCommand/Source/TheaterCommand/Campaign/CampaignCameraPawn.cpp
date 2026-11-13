@@ -176,3 +176,16 @@ void ACampaignCameraPawn::ApplyView()
 	Look.DepthOfFieldFstop = 2.0f;
 	Look.DepthOfFieldSensorWidth = 24.576f * FMath::Max(MiniatureStrength, 1.0f);
 }
+
+void ACampaignCameraPawn::SetNewsreel(bool bOn)
+{
+	FPostProcessSettings& Look = Camera->PostProcessSettings;
+	Look.bOverride_ColorSaturation = true;
+	Look.ColorSaturation = bOn ? FVector4(0.0, 0.0, 0.0, 1.0) : FVector4(1.07, 1.07, 1.07, 1.0);
+	Look.bOverride_VignetteIntensity = true;
+	Look.VignetteIntensity = bOn ? 1.1f : 0.5f;
+	Look.bOverride_FilmGrainIntensity = true;
+	Look.FilmGrainIntensity = bOn ? 0.75f : 0.0f;
+	Look.bOverride_ColorGamma = true;
+	Look.ColorGamma = bOn ? FVector4(0.92, 0.92, 0.92, 1.0) : FVector4(1.0, 1.0, 1.0, 1.0);
+}

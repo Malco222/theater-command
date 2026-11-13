@@ -70,6 +70,11 @@ void CampaignSounds::PlayLater(const UObject* World, const TCHAR* Name, float Se
 	}), FMath::Max(Seconds, 0.01f), false);
 }
 
+bool CampaignSounds::IsOn()
+{
+	return bEffectsOn;
+}
+
 bool CampaignSounds::Toggle()
 {
 	bEffectsOn = !bEffectsOn;

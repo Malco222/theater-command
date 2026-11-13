@@ -62,6 +62,16 @@ struct FShipCard
 	int32 Count = 1; // how many ships this card stands for, when the fleet has too many to show each
 };
 
+/** The newsreel being shown: the month it is of, its stories, and which is on the screen (-1 for the title). */
+struct FNewsreelShow
+{
+	bool bOn = false;
+	FString Date;
+	TArray<FNewsCard> Cards;
+	int32 Index = -1;
+	double Until = 0.0; // when the story on the screen gives way to the next
+};
+
 /** The army the player has picked up: its general, and its corps as cards. */
 struct FArmyTray
 {
@@ -390,6 +400,12 @@ public:
 	int32 ArmiesYetToMove() const;
 	/** The list of everything the player commands, each with a way to go to it (L). */
 	void OpenForces();
+	/** The newsreel: the month's great stories flown over in black and white, each read out. Space skips it; K turns newsreels off or on. */
+	const FNewsreelShow& GetNewsreel() const { return Newsreel; }
+	void PlayNewsreel(const FString& Date, const TArray<FNewsCard>& Cards);
+	void NextNewsCard();
+	void EndNewsreel();
+	void ToggleNewsreels();
 	/** What every nation did last month, each with a way to go and look (R). */
 	void OpenReports();
 	/** Looks at the player's capital (Home, or C). */
@@ -559,6 +575,14 @@ private:
 	TArray<FAnnouncement> Announcements;
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
+	FNewsreelShow Newsreel;
+	bool bNewsreels = true; // K turns them off
+	TArray<FAnnouncement> HeldAnnouncements; // waiting for the newsreel to end
+	FVector ReelReturnFocus = FVector::ZeroVector;
+	float ReelReturnZoom = 0.5f, ReelReturnYaw = 0.0f;
+	FProcHandle Narrator; // the voice reading the story
+	void Narrate(const FString& Words);
+	void HushNarrator();
 	int32 ProvinceTab = 0;
 	int32 FleetInHand = INDEX_NONE; // the fleet picked up, by its id
 	FString FleetNext = TEXT("patrol");
