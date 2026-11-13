@@ -211,6 +211,13 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("31f-research"), TEXT("@capital"), 0.45f).bResearch = true;
 		Add(TEXT("31g-generals"), TEXT("@capital"), 0.45f).bGenerals = true;
 		{
+			// The secret service, with the capital selected and an agent recruited.
+			FShot& Shot = Add(TEXT("31h-secret-service"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("spies");
+			Shot.RoomAct = TEXT("spy:recruit");
+		}
+		{
 			FShot& Shot = Add(TEXT("31c-arsenal"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");
 			Shot.bArsenal = true;
@@ -452,6 +459,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	Controller->CloseDiplomacy();
 	Controller->CloseResearch();
 	Controller->CloseGenerals();
+	Controller->ClosePage();
 	Controller->CloseArsenal();
 	if (!Shot.bKeep)
 	{
@@ -566,6 +574,14 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	if (Shot.bRoll)
 	{
 		Controller->OpenRoll();
+	}
+	if (!Shot.Room.IsEmpty())
+	{
+		Controller->OpenPage(Shot.Room);
+		if (!Shot.RoomAct.IsEmpty())
+		{
+			Controller->PressPage(Shot.RoomAct);
+		}
 	}
 	if (Shot.bGuide)
 	{

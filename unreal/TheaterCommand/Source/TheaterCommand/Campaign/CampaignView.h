@@ -23,6 +23,7 @@ struct FViewCorps
 	FString Name;
 	FString Kind; // inf, mot, arm, cav, mtn, fort
 	FString Elite; // the special formation it is, if it is one: "heavy", "ski", "guards"
+	bool bDim = false; // only glimpsed through the fog of war: a flag and no more
 	FString General; // empty when the corps has no named commander
 	FString Posture; // stand, dig, back
 	int32 Divisions = 0;
@@ -117,6 +118,47 @@ struct FViewFleet
 	int32 Ships() const { return Battleships + Carriers + Cruisers + Destroyers + Submarines; }
 };
 
+/** A button in one of the rooms the rules set out themselves. */
+struct FPageButton
+{
+	FString Label;
+	FString Act; // what to pass back when it is pressed
+	FString Tip;
+	bool bOk = false;
+	bool bDanger = false; // something that cannot be undone
+};
+
+struct FPageRow
+{
+	FString Tag; // the nation whose flag stands beside it, if any
+	FString Title;
+	TArray<FString> Lines;
+	TArray<FPageButton> Buttons;
+};
+
+struct FPageSection
+{
+	FString Heading;
+	FString Text;
+	TArray<FPageRow> Rows;
+};
+
+/**
+ * A room whose words and buttons the rules write and the game only draws: the secret service, the last act.
+ * A new room in the rules needs nothing new here.
+ */
+struct FOfficePage
+{
+	bool bValid = false;
+	FString Id;
+	FString Title;
+	FString Headline;
+	FString Note;
+	TArray<FPageButton> Top;
+	TArray<FPageSection> Sections;
+	int32 Revision = 0;
+};
+
 /** One of the two stocks a great power keeps in the grand campaign: oil, or supplies. */
 struct FViewStock
 {
@@ -166,6 +208,9 @@ struct FCampaignView
 	TArray<FString> Declarable; // the countries the player could declare war on this month
 	TArray<FString> League; // the members of the League, the third alliance
 	int32 IdleTeams = 0; // research teams of the player's with nothing to do
+	TArray<FString> Alerts; // things to tell the player as his month opens
+	TArray<FString> PageIds; // the rooms the rules set out themselves that are open to him
+	TArray<FString> PageLabels;
 	bool bStores = false; // the player's nation keeps oil and supplies (a great power in the grand campaign)
 	FViewStock Oil;
 	FViewStock Supplies;

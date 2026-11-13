@@ -49,6 +49,8 @@ private:
 		bool bSea = false; // switch the army in hand to going by sea
 	bool bLedger = false; // open the ledger
 	bool bDiplomacy = false; // open the foreign office
+	FString Room; // open this room of the rules' own ("spies"), and press RoomAct in it if given
+	FString RoomAct;
 	bool bGuide = false; // open the page that says how to play
 	bool bWorks = false; // stand a full set of works in the region looked at: factories, a shipyard, guns and an airfield
 	bool bGenerals = false; // open the generals' list, and give the first corps without one the man who suits it

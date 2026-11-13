@@ -112,6 +112,12 @@ public:
 	/** The abilities of the player's nation, a line each. bOutActive is false in a historical scenario, where they do not count. */
 	TArray<FString> Abilities(bool& bOutActive);
 
+	/** One of the rooms the rules set out themselves ("spies", "lastact"), with the province selected on the map in mind. */
+	FOfficePage Page(const FString& Id, int32 RegionId);
+
+	/** Something pressed in such a room. OutNote says what came of it. */
+	bool Act(const FString& Action, int32 RegionId, FString& OutNote);
+
 	/** The generals of the player's nation, and the corps that have none. */
 	FGeneralStaff Generals();
 	bool AssignGeneral(int32 GeneralId, int32 CorpsId);

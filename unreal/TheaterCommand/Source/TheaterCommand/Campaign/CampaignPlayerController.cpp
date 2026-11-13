@@ -509,6 +509,7 @@ void ACampaignPlayerController::OpenLedger()
 	{
 		return;
 	}
+	ClosePage();
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
 	CloseDiplomacy();
@@ -531,6 +532,66 @@ void ACampaignPlayerController::CloseLedger()
 	bLedgerOpen = false;
 }
 
+void ACampaignPlayerController::OpenPage(const FString& Id)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Session->GetView().Human.IsEmpty())
+	{
+		return;
+	}
+	CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	CloseArsenal();
+	CloseLedger();
+	CloseDiplomacy();
+	CloseResearch();
+	CloseGenerals();
+	const int32 Revision = Page.Revision + 1;
+	Page = Session->Page(Id, SelectedRegion);
+	Page.Revision = Revision;
+	bPageOpen = Page.bValid;
+}
+
+void ACampaignPlayerController::ClosePage()
+{
+	bPageOpen = false;
+}
+
+void ACampaignPlayerController::PressPage(const FString& Action)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bPageOpen)
+	{
+		return;
+	}
+	FString Note;
+	const bool bOk = Session->Act(Action, SelectedRegion, Note);
+	CampaignSounds::Play(this, bOk ? TEXT("stamp") : TEXT("click"), 0.6f);
+	if (bOk)
+	{
+		// Whatever it was may have changed the table: the fog lifted, the world at war.
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		RefreshOrders();
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 8.0);
+	}
+	const FString Id = Page.Id;
+	const int32 Revision = Page.Revision + 1;
+	Page = Session->Page(Id, SelectedRegion);
+	Page.Revision = Revision;
+	bPageOpen = Page.bValid;
+}
+
+void ACampaignPlayerController::GetPageLinks(TArray<FString>& OutIds, TArray<FString>& OutLabels) const
+{
+	if (const FCampaignSession* Session = GetSession())
+	{
+		OutIds = Session->GetView().PageIds;
+		OutLabels = Session->GetView().PageLabels;
+	}
+}
+
 void ACampaignPlayerController::OpenGenerals()
 {
 	FCampaignSession* Session = GetSession();
@@ -538,6 +599,7 @@ void ACampaignPlayerController::OpenGenerals()
 	{
 		return;
 	}
+	ClosePage();
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
 	CloseLedger();
@@ -649,6 +711,7 @@ void ACampaignPlayerController::OpenResearch()
 	{
 		return;
 	}
+	ClosePage();
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
 	CloseLedger();
@@ -763,6 +826,7 @@ void ACampaignPlayerController::OpenDiplomacy()
 	{
 		return;
 	}
+	ClosePage();
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseArsenal();
 	CloseLedger();
@@ -888,6 +952,7 @@ void ACampaignPlayerController::OpenArsenal()
 	{
 		return;
 	}
+	ClosePage();
 	CampaignSounds::Play(this, TEXT("click"), 0.6f);
 	CloseLedger();
 	CloseDiplomacy();
@@ -993,13 +1058,13 @@ void ACampaignPlayerController::OpenGuide()
 	CloseDiplomacy();
 	CloseResearch();
 	CloseGenerals();
-	FDocumentPage Page;
-	Page.bValid = true;
-	Page.Title = TEXT("How to play");
-	Page.Subtitle = TEXT("Theater Command, 1939 to 1945. Esc, or H again, closes this page.");
-	auto Add = [&Page](const TCHAR* Heading, const TCHAR* Body)
+	FDocumentPage Guide;
+	Guide.bValid = true;
+	Guide.Title = TEXT("How to play");
+	Guide.Subtitle = TEXT("Theater Command, 1939 to 1945. Esc, or H again, closes this page.");
+	auto Add = [&Guide](const TCHAR* Heading, const TCHAR* Body)
 	{
-		FDocumentSection& Section = Page.Sections.AddDefaulted_GetRef();
+		FDocumentSection& Section = Guide.Sections.AddDefaulted_GetRef();
 		Section.Heading = Heading;
 		Section.Body = Body;
 	};
@@ -1017,6 +1082,10 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("Marching onto amber ground means declaring war. The game first tells you who that country's friends are and what will follow, and nothing happens unless you say yes.\n")
 		TEXT("DIPLOMACY shows who is at war, where every neutral stands between the Axis and the Allies, and lets you court a neutral with political capital. ")
 		TEXT("A small country chooses its own path there: join a side, stand alone, or found the League with a willing neighbour."));
+	Add(TEXT("SPIES, THE FOG OF WAR AND THE LAST ACT"),
+		TEXT("In the grand campaign you see only what your armies and your agents can see. A foreign army far off shows as a flag with a question mark, or not at all. ")
+		TEXT("DIPLOMACY has a door to THE SECRET SERVICE, where you recruit agents, send them to the province selected on the map, and give them work: watching, reading a government's books, sabotage, or guarding at home. The fog can be lifted there if you would rather see everything.\n")
+		TEXT("When the war between the alliances is decided, DIPLOMACY gains a door to THE LAST ACT. You can take the victory and keep the peace, or choose World Domination, where every nation still standing fights every other."));
 	Add(TEXT("MONEY AND BUILDING"),
 		TEXT("Every province you hold pays into your treasury each month. The treasury is at the top left: click it, or LEDGER, for the books.\n")
 		TEXT("The ARSENAL sells corps, aircraft, ships and works such as factories, shipyards, airfields and anti-aircraft guns. Click one of your own territories first, so the game knows where to build. Works you build stand on the map."));
@@ -1040,7 +1109,7 @@ void ACampaignPlayerController::OpenGuide()
 		const TArray<FString> Lines = Session->Abilities(bActive);
 		if (Lines.Num() > 0)
 		{
-			FDocumentSection& Section = Page.Sections.AddDefaulted_GetRef();
+			FDocumentSection& Section = Guide.Sections.AddDefaulted_GetRef();
 			Section.Heading = TEXT("YOUR NATION'S ABILITIES");
 			Section.Body = FString::Join(Lines, TEXT("\n"));
 			if (!bActive)
@@ -1051,7 +1120,7 @@ void ACampaignPlayerController::OpenGuide()
 	}
 	Add(TEXT("SAVING, MUSIC AND SOUND"),
 		TEXT("The game saves itself every month and when you leave. MENU lets you continue or begin another campaign. M turns the music on and off, and N the sound effects."));
-	Document = Page;
+	Document = Guide;
 	++DocumentRevision;
 }
 
@@ -1116,6 +1185,10 @@ void ACampaignPlayerController::Escape()
 	else if (bGeneralsOpen)
 	{
 		CloseGenerals();
+	}
+	else if (bPageOpen)
+	{
+		ClosePage();
 	}
 	else if (WarPrompt.bVisible)
 	{
@@ -1227,7 +1300,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	{
 		WatchNextStep();
 	}
-	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen;
+	const bool bBusy = bWatching || FaceOff.bVisible || WarPrompt.bVisible || Opening.bVisible || Document.bValid || bLedgerOpen || bArsenalOpen || bDiplomacyOpen || bResearchOpen || bGeneralsOpen || bPageOpen;
 
 	// Right button: a press and drag turns and tilts the view; a press and release gives the army in hand its order.
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && bHaveMouse)
@@ -2429,6 +2502,10 @@ void ACampaignPlayerController::FinishMonth()
 		if (!Warning.IsEmpty())
 		{
 			CampaignSounds::Play(this, TEXT("siren"), 0.35f);
+		}
+		for (const FString& Alert : View.Alerts)
+		{
+			Warning += TEXT(" ") + Alert;
 		}
 		Notify(View.Human.IsEmpty() ? View.Date : FString::Printf(TEXT("%s. Your orders.%s"), *View.Date, *Warning), Warning.IsEmpty() ? 4.0 : 10.0);
 	}

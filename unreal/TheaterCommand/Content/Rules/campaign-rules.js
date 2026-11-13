@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of d874c88 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 6211167 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1563,7 +1563,7 @@
       headline(g2, "event", `${n.name} joins ${LEAGUE.name}: ${listOf(leagueMembers(g2).filter((m) => m.id !== n.id).map((m) => m.name))} now stand with it against any attack.`, n.id);
     }
   }
-  var chooser = (g2, nat) => ownPath(g2, nat) && g2.nations[nat]?.alive ? g2.nations[nat] : null;
+  var chooser = (g2, nat) => ownPath(g2, nat) && g2.nations[nat]?.alive && !g2.flags.dom ? g2.nations[nat] : null;
   function pathOptions(g2, nat) {
     const n = chooser(g2, nat);
     if (!n) return [];
@@ -4325,6 +4325,11 @@
     g2.flags[ruinKey(r.id)] = ruinedAt(g2, r) + 1;
     return true;
   }
+  function wreckFactory(g2, r) {
+    if (!groundRules(g2) || r.fac <= 0 || ruinedAt(g2, r) >= ruinMost(r)) return false;
+    g2.flags[ruinKey(r.id)] = ruinedAt(g2, r) + 1;
+    return true;
+  }
   function rebuildFactory(g2, r) {
     const n = ruinedAt(g2, r);
     if (n <= 0) return false;
@@ -4809,11 +4814,11 @@
     if (night) out.lines.push({ label: "Night", value: "Flown in darkness", effect: "Few fighters find the bombers, and only about a third of the bombs find the target" });
     else if (af > 0) {
       const far = out.att.filter((a) => a.f.ftr > 0).sort((a, b) => a.esc - b.esc)[0];
-      const pct4 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
+      const pct5 = Math.round(out.att.reduce((s, a) => s + a.f.ftr * a.esc, 0) / af * 100);
       out.lines.push({
         label: "Range",
-        value: pct4 >= 100 ? "The target is well inside fighter range" : pct4 > 0 ? `The fighters are at ${pct4}% effect over the target` : "The target is beyond fighter range",
-        effect: pct4 >= 100 ? void 0 : pct4 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
+        value: pct5 >= 100 ? "The target is well inside fighter range" : pct5 > 0 ? `The fighters are at ${pct5}% effect over the target` : "The target is beyond fighter range",
+        effect: pct5 >= 100 ? void 0 : pct5 > 0 ? `${far.f.name} flies ${Math.round(far.d)} km to get there, near the limit of its fighters` : "The bombers go alone"
       });
     } else if (out.B > 0) out.lines.push({ label: "Range", value: "No escort", effect: "The bombers go alone" });
     const packed = [...out.att.map((a) => a.f), ...out.def.map((x) => x.f)].filter((f) => crowding(g2, f) < 1);
@@ -5795,10 +5800,10 @@
       };
       g2.seaReports.push(rep);
       out.push(rep);
-      const win = won ? mine : met2, lose2 = won ? met2 : mine;
+      const win = won ? mine : met2, lose3 = won ? met2 : mine;
       const ws = total(won ? att : def), ls = total(won ? def : att);
-      storySea(g2, z, win, lose2, ls.bb + ls.cv, shipCount(ls), shipCount(ws));
-      headline(g2, "battle", `${cap2(names(win))} ${win.length === 1 ? "defeats" : "defeat"} ${names(lose2)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ""}.`, win[0].nat);
+      storySea(g2, z, win, lose3, ls.bb + ls.cv, shipCount(ls), shipCount(ws));
+      headline(g2, "battle", `${cap2(names(win))} ${win.length === 1 ? "defeats" : "defeat"} ${names(lose3)} in the ${zone.name}: ${shipList(ls)} sunk${shipCount(ws) ? ` for the loss of ${shipList(ws)}` : ""}.`, win[0].nat);
     }
     return out;
   }
@@ -5874,7 +5879,14 @@
   var pick = (row2, nat) => row2[nat] ?? row2._default ?? 0;
   function fieldYield(g2, r, nat = r.ctrl) {
     if (!r.oil) return 0;
-    return (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied);
+    return (RES.oil.fields[r.name] ?? RES.oil.fields._default) * (r.owner === nat ? 1 : RES.oil.occupied) * (1 - fieldOut(g2, r));
+  }
+  var fieldOut = (g2, r) => resRules(g2) && (g2.flags[`oilout:${r.id}`] ?? 0) > g2.turn ? (g2.flags[`oilcut:${r.id}`] ?? 0) / 100 : 0;
+  function fireField(g2, r, months, cut) {
+    if (!resRules(g2) || !r.oil || fieldOut(g2, r) > 0) return false;
+    g2.flags[`oilout:${r.id}`] = g2.turn + months;
+    g2.flags[`oilcut:${r.id}`] = Math.round(cut * 100);
+    return true;
   }
   function treeOil(g2, nat) {
     let rate = 0;
@@ -7094,11 +7106,11 @@
           r.since = g2.turn;
         }
       }
-      let heir;
+      let heir2;
       for (const [takers, names] of e.partition.shares) {
         const to = first(takers);
         if (!to) continue;
-        heir ?? (heir = to);
+        heir2 ?? (heir2 = to);
         for (const nm of names) {
           const r = g2.byName[nm];
           if (r && r.ctrl === X.id) {
@@ -7108,15 +7120,15 @@
           }
         }
       }
-      if (!heir) return false;
+      if (!heir2) return false;
       for (const r of g2.regions) if (r.ctrl === X.id) {
-        r.ctrl = heir;
+        r.ctrl = heir2;
         r.cap = false;
         r.since = g2.turn;
       }
       X.alive = false;
       X.align = "independent";
-      X.fellOn = { turn: g2.turn, week: g2.week, to: heir };
+      X.fellOn = { turn: g2.turn, week: g2.week, to: heir2 };
       for (const n of Object.values(g2.nations)) n.atWar = n.atWar.filter((x) => x !== X.id);
       X.atWar = [];
       g2.supplyDirty = true;
@@ -7168,6 +7180,11 @@
     return true;
   }
   function monthlyDiplomacy(g2) {
+    if ((g2.flags.dom ?? 0) > 0) {
+      traitsMonth(g2);
+      techMonth(g2);
+      return;
+    }
     const m = momentum(g2);
     for (const n of Object.values(g2.nations)) {
       if (!courtable(n) || ownPath(g2, n.id)) continue;
@@ -7845,6 +7862,719 @@
       if (!orderCorps(g2, nat, kind, at)) break;
       spare -= cost;
     }
+  }
+
+  // ../../data/campaign/domination.json
+  var domination_default = {
+    _about: "World Domination, the last act of the grand campaign. The war between the alliances is decided when a great power has fallen and no two great powers still standing are at war with each other. From then on the player may take the victory, or choose World Domination: every alliance is dissolved, every nation still standing is at war with every other, and the last one standing has won. Choosing it cannot be undone. A historical scenario has none of this, and neither has a war with nobody at the table.",
+    nerve: {
+      _about: "With every neighbour an enemy, a computer-run staff opens an offensive at this share of the odds it would want in an ordinary war (attackAt), and keeps one going at this share (persist).",
+      attackAt: 0.85,
+      persist: 0.9
+    },
+    guests: {
+      _about: "Troops standing on a former ally's soil when the alliances are dissolved go home under safe conduct: to the nearest ground their own nation holds, or to its capital by sea. They arrive with this much of their organisation and cannot move again that month.",
+      org: 0.6
+    },
+    lines: {
+      _about: "What the news says as the last act opens, by who chose it. {n} is the number of nations still standing.",
+      open: "World Domination. Every alliance is dissolved and every treaty is paper. {n} nations are left, each alone and at war with all the rest. The last one standing takes the world.",
+      guests: "Armies on a former ally's soil are given safe conduct home: {n} corps cross the old frontiers for the last time.",
+      leave: "{name} takes its armies and fleets home across the ocean and shuts its ports to the Old World.",
+      won: "{name} stands alone. There is nobody left to fight: the world is {adj}."
+    }
+  };
+
+  // ../../data/campaign/intel.json
+  var intel_default = {
+    _about: "Spies and the fog of war, the grand campaign only. A historical scenario has neither: the whole map is in sight and nobody has agents. In the grand campaign the player sees an enemy or neutral army in full only where his own side can see it, and less the deeper it stands (sight). Agents are recruited for money and sent abroad to see further, to read a government's books, and to wreck factories, railways and oilfields; each month abroad an agent may be caught. The computer's staffs see the whole map, as they always did, and keep no agents on it: their services work against the player as a monthly chance of sabotage (enemy), which the player's own agents on guard at home can stop. So a war with nobody at the table is fought exactly as before.",
+    sight: {
+      _about: "Counted in provinces from ground or troops of the viewer's own side. Up to 'full' steps away an army is seen whole: every corps, its kind and its strength. Up to 'glimpse' steps away only its flag and the number of corps are known. Beyond that nothing is known. An agent at work sees as if the viewer's troops stood where the agent stands.",
+      full: 1,
+      glimpse: 2
+    },
+    agents: {
+      _about: "cost is in production points (shown times the budget scale). most is how many agents a nation's service can run at once. train is the months before a recruit is ready, travel the months an agent is on the road when sent somewhere. skillAt is the experience at which an agent becomes an operative and then a master; watch is how many quiet months abroad earn one point of it.",
+      cost: 6,
+      most: {
+        _default: 2,
+        GER: 4,
+        UK: 5,
+        SOV: 5,
+        USA: 4,
+        FRA: 3,
+        ITA: 3,
+        JAP: 4
+      },
+      train: 1,
+      travel: 1,
+      skillAt: [
+        3,
+        8
+      ],
+      watch: 4,
+      ranks: [
+        "Agent",
+        "Operative",
+        "Master spy"
+      ]
+    },
+    missions: {
+      _about: "caught is the chance each month that the agent is found out while on this work; for sabotage it is the chance on the night of the attempt. success is the chance an attempt comes off. gain is the experience a success earns.",
+      watch: {
+        caught: 0.03
+      },
+      books: {
+        caught: 0.07
+      },
+      factory: {
+        caught: 0.18,
+        success: 0.45,
+        gain: 2
+      },
+      rail: {
+        caught: 0.14,
+        success: 0.55,
+        gain: 1
+      },
+      oil: {
+        caught: 0.18,
+        success: 0.45,
+        gain: 2,
+        months: 3,
+        cut: 0.5
+      },
+      guard: {
+        caught: 0
+      }
+    },
+    skill: {
+      _about: "For each rank above the first: caught takes this share off the chance of being found out, success adds this to the chance an attempt comes off, guard adds this to the chance of stopping a plot.",
+      caught: 0.2,
+      success: 0.1,
+      guard: 0.08
+    },
+    risk: {
+      _about: "What multiplies the chance of being caught: in a capital (not when reading the books, whose risk already counts it), in a country at war with the agent's own, and in a province on alert after an act of sabotage (heat months). lieLow is how many months an agent must wait after an attempt before the next.",
+      capital: 1.5,
+      war: 1.25,
+      heat: 1.6,
+      heatMonths: 3,
+      lieLow: 2
+    },
+    caught: {
+      _about: "A neutral that catches a spy thinks worse of the side that sent it: its opinion moves this far away from that side.",
+      opinion: 6
+    },
+    battle: {
+      _about: "An agent at work in a province has mapped its defences: the agent's own side attacks it this much harder.",
+      attack: 0.08
+    },
+    enemy: {
+      _about: "From 'quiet' months after the player's campaign begins, each month every great power on the 'services' list that is at war with the player has this chance of an act of sabotage on the player's home ground, times the number for the campaign's level (easiest first). kinds is how the acts divide. A guard in or next to the province stops it with chance 'near'; every other guard at home adds 'far', up to 'most' in all.",
+      chance: 0.05,
+      quiet: 3,
+      level: [
+        0,
+        0.5,
+        1,
+        1.4,
+        1.8
+      ],
+      services: [
+        "GER",
+        "UK",
+        "FRA",
+        "ITA",
+        "SOV",
+        "USA",
+        "JAP"
+      ],
+      kinds: {
+        factory: 0.6,
+        rail: 0.4
+      },
+      near: 0.7,
+      far: 0.15,
+      most: 0.9
+    },
+    estimate: {
+      _about: "Without an agent reading its books, a foreign army's size is known only to the nearest this many divisions.",
+      round: 10
+    },
+    names: [
+      "Nightjar",
+      "Cobalt",
+      "Lantern",
+      "Marigold",
+      "Sextant",
+      "Halberd",
+      "Tinsmith",
+      "Juniper",
+      "Plumbline",
+      "Saffron",
+      "Bellows",
+      "Thimble",
+      "Osprey",
+      "Quartz",
+      "Harrow",
+      "Gimlet",
+      "Tallow",
+      "Vesper",
+      "Mallard",
+      "Cinder",
+      "Hawthorn",
+      "Kestrel",
+      "Lodestar",
+      "Mosaic",
+      "Nettle",
+      "Pewter",
+      "Ratchet",
+      "Sorrel",
+      "Trellis",
+      "Anvil",
+      "Bramble",
+      "Chalice",
+      "Dovetail",
+      "Ember",
+      "Farrier",
+      "Garnet",
+      "Heron",
+      "Inkwell",
+      "Jackdaw",
+      "Keystone"
+    ]
+  };
+
+  // ../../src/campaign/intel.ts
+  var INTEL = intel_default;
+  var intelRules = (g2) => g2.flags.open === 1;
+  var KEEP_NOTES = 60;
+  var clamp3 = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+  var draw = (g2, ...key2) => new Rng(hashString(`intel:${g2.seed}:${key2.join(":")}`)).next();
+  var SIGHT = { none: 0, glimpse: 1, full: 2 };
+  function fogOn(g2, viewer = g2.human) {
+    return intelRules(g2) && viewer !== null && !!g2.nations[viewer]?.alive && g2.flags.nofog !== 1;
+  }
+  function setFog(g2, on) {
+    if (!intelRules(g2)) return false;
+    if (on) delete g2.flags.nofog;
+    else g2.flags.nofog = 1;
+    return true;
+  }
+  var atWork = (g2, a) => a.ready <= g2.turn;
+  var abroad = (g2, a) => !allied(g2, g2.regions[a.reg].ctrl, a.nat);
+  var agentsOf = (g2, nat) => nat === null || !intelRules(g2) ? [] : g2.intel.agents.filter((a) => a.nat === nat);
+  function sightOf(g2, viewer = g2.human) {
+    const out = new Uint8Array(g2.regions.length);
+    if (!fogOn(g2, viewer)) return out.fill(SIGHT.full);
+    const me = viewer;
+    const S = INTEL.sight, far = Math.max(S.full, S.glimpse);
+    const dist = new Int16Array(g2.regions.length).fill(-1);
+    let ring = [];
+    for (const r of g2.regions) {
+      if (allied(g2, r.ctrl, me) || r.units.some((u) => !u.dead && allied(g2, u.nat, me))) {
+        dist[r.id] = 0;
+        ring.push(r.id);
+      }
+    }
+    for (const a of agentsOf(g2, me)) if (atWork(g2, a) && dist[a.reg] !== 0) {
+      dist[a.reg] = 0;
+      ring.push(a.reg);
+    }
+    for (let d = 1; d <= far && ring.length; d++) {
+      const next = [];
+      for (const id of ring) for (const j of g2.regions[id].nb) if (dist[j] < 0) {
+        dist[j] = d;
+        next.push(j);
+      }
+      ring = next;
+    }
+    for (let i = 0; i < out.length; i++) out[i] = dist[i] < 0 ? SIGHT.none : dist[i] <= S.full ? SIGHT.full : SIGHT.glimpse;
+    return out;
+  }
+  var skillOf = (a) => 1 + INTEL.agents.skillAt.filter((x) => a.xp >= x).length;
+  var rankOf2 = (a) => INTEL.agents.ranks[skillOf(a) - 1] ?? INTEL.agents.ranks[0];
+  var mostAgents = (nat) => INTEL.agents.most[nat] ?? INTEL.agents.most._default;
+  var agentCost = () => Math.round(INTEL.agents.cost * BUDGET.scale);
+  var find = (g2, nat, id) => intelRules(g2) ? g2.intel.agents.find((a) => a.id === id && a.nat === nat) : void 0;
+  function homeBase(g2, nat) {
+    const n = g2.nations[nat];
+    if (!n) return -1;
+    if (n.capital >= 0 && g2.regions[n.capital].ctrl === nat) return n.capital;
+    const own = g2.regions.find((r) => r.ctrl === nat && r.owner === nat) ?? g2.regions.find((r) => r.ctrl === nat);
+    if (own) return own.id;
+    const friend2 = g2.regions.find((r) => r.cap && r.ctrl !== nat && allied(g2, r.ctrl, nat));
+    return friend2 ? friend2.id : -1;
+  }
+  function note2(g2, a, reg, what, text, good) {
+    const N = g2.intel.notes;
+    N.push({ turn: g2.turn, agent: a.name, nat: a.nat, reg, what, text, good });
+    if (N.length > KEEP_NOTES) N.splice(0, N.length - KEEP_NOTES);
+  }
+  function codename(g2, id) {
+    const used = /* @__PURE__ */ new Set([...g2.intel.agents.map((a) => a.name), ...g2.intel.notes.map((n) => n.agent)]);
+    const N = INTEL.names, at = hashString(`intelname:${g2.seed}:${id}`) % N.length;
+    for (let k = 0; k < N.length; k++) if (!used.has(N[(at + k) % N.length])) return N[(at + k) % N.length];
+    return `${N[at]} ${id}`;
+  }
+  var waitWords = (g2, a) => {
+    const m = a.ready - g2.turn;
+    return m <= 1 ? "until next month" : `for ${m} more months`;
+  };
+  function whyNotRecruit(g2, nat) {
+    if (!intelRules(g2)) return "Secret services belong to the grand campaign.";
+    const n = g2.nations[nat];
+    if (!n?.alive) return "There is no government left to run a secret service.";
+    const most = mostAgents(nat);
+    if (agentsOf(g2, nat).length >= most) return `Your service can run ${most} agents at once. Retire one to make room.`;
+    if (n.pp < INTEL.agents.cost) return `An agent costs ${agentCost()} to find and train. The treasury does not have it.`;
+    if (homeBase(g2, nat) < 0) return "There is nowhere left to train one.";
+    return null;
+  }
+  function recruit(g2, nat) {
+    if (whyNotRecruit(g2, nat)) return null;
+    const id = g2.intel.next++;
+    const a = { id, nat, name: codename(g2, id), xp: 0, reg: homeBase(g2, nat), ready: g2.turn + INTEL.agents.train, mission: "guard", born: g2.turn };
+    g2.nations[nat].pp -= INTEL.agents.cost;
+    g2.intel.agents.push(a);
+    note2(g2, a, a.reg, "recruit", `Agent ${a.name} is recruited and begins training at ${g2.regions[a.reg].name}.`, true);
+    return a;
+  }
+  function whyNotSend(g2, nat, id, to) {
+    const a = find(g2, nat, id);
+    if (!a) return "There is no such agent.";
+    const r = g2.regions[to];
+    if (!r) return "Pick a province.";
+    if (!atWork(g2, a)) return `${a.name} is ${a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months ? "in training" : "on the road"} ${waitWords(g2, a)}.`;
+    if (a.reg === to) return `${a.name} is already at ${r.name}.`;
+    if (g2.nations[r.ctrl]?.dormant) return `There is nothing at ${r.name} to watch.`;
+    return null;
+  }
+  function sendAgent(g2, nat, id, to) {
+    if (whyNotSend(g2, nat, id, to)) return false;
+    const a = find(g2, nat, id);
+    a.reg = to;
+    a.ready = g2.turn + INTEL.agents.travel;
+    a.mission = abroad(g2, a) ? "watch" : "guard";
+    return true;
+  }
+  function retire(g2, nat, id) {
+    const a = find(g2, nat, id);
+    if (!a) return false;
+    g2.intel.agents.splice(g2.intel.agents.indexOf(a), 1);
+    note2(g2, a, a.reg, "retire", `Agent ${a.name} is retired from the service.`, true);
+    return true;
+  }
+  var MISSIONS = ["watch", "books", "factory", "rail", "oil", "guard"];
+  var SABOTAGE = ["factory", "rail", "oil"];
+  var isSabotage = (m) => SABOTAGE.includes(m);
+  var MISSION_TEXT = {
+    watch: { label: "Watch and report", doing: "watching", text: "Reports every army in the province and the provinces around it: each corps, its kind and its strength. In the province itself the agent also reports what is on order there and which air fleets are based there, and your armies attack it harder for knowing its defences." },
+    books: { label: "Read the books", doing: "reading the government's books", text: "In a capital: the government's treasury and income, the true size of its army, what it has on order, what its laboratories are working on and what is in its depots." },
+    factory: { label: "Wreck a factory", doing: "preparing to wreck a factory", text: "One working factory is put out of action until engineers rebuild it. Tried once, next month, and then the agent must lie low." },
+    rail: { label: "Cut the railway", doing: "preparing to cut the railway", text: "The track is blown. No train runs through the province until engineers relay it. Tried once, next month, and then the agent must lie low." },
+    oil: { label: "Fire the oilfield", doing: "preparing to fire the oilfield", text: `The wells are set alight: the field gives ${Math.round((1 - intel_default.missions.oil.cut) * 100)}% of its oil for ${intel_default.missions.oil.months} months. Tried once, next month, and then the agent must lie low.` },
+    guard: { label: "Guard against saboteurs", doing: "on guard", text: "Watches for enemy agents here and in the provinces around, and is some help everywhere at home." }
+  };
+  function caughtChance(g2, a, m = a.mission) {
+    if (!abroad(g2, a)) return 0;
+    const r = g2.regions[a.reg], K = INTEL.risk;
+    let p = INTEL.missions[m].caught;
+    if (r.cap && m !== "books") p *= K.capital;
+    if (atWar(g2, a.nat, r.ctrl)) p *= K.war;
+    if ((g2.intel.heat[r.id] ?? 0) > g2.turn) p *= K.heat;
+    p *= 1 - INTEL.skill.caught * (skillOf(a) - 1);
+    return clamp3(p, 0, 0.95);
+  }
+  var successChance = (a, m) => clamp3((INTEL.missions[m].success ?? 0) + INTEL.skill.success * (skillOf(a) - 1), 0, 0.95);
+  function whyNotMission2(g2, nat, id, m) {
+    const a = find(g2, nat, id);
+    if (!a) return "There is no such agent.";
+    const r = g2.regions[a.reg], host = g2.nations[r.ctrl];
+    if (!atWork(g2, a)) return `${a.name} is not yet at work: ${waitWords(g2, a)}.`;
+    if (m === "guard") return abroad(g2, a) ? "An agent can stand guard only on friendly ground." : null;
+    if (!abroad(g2, a)) return `${a.name} is on friendly ground. Send the agent abroad first.`;
+    if (m === "watch") return null;
+    if (m === "books") {
+      if (!host?.alive || host.capital !== r.id || r.owner !== r.ctrl) return "A government keeps its books in its capital. Send the agent to one.";
+      return null;
+    }
+    if (!atWar(g2, nat, r.ctrl)) return `You are at peace with ${host?.name ?? "this country"}. Sabotage is an act of war.`;
+    if ((a.rest ?? 0) > g2.turn) {
+      const k = a.rest - g2.turn;
+      return `${a.name} is lying low for ${k === 1 ? "another month" : `${k} more months`} after the last attempt.`;
+    }
+    if (m === "factory") {
+      if (r.fac <= 0) return `There is no industry at ${r.name}.`;
+      if (workingFactories(g2, r) <= 0 || ruinedAt(g2, r) >= ruinMost(r)) return `No factory at ${r.name} is left to wreck.`;
+      return null;
+    }
+    if (m === "rail") {
+      if (!onNet(r.id)) return `No railway runs through ${r.name}.`;
+      if (railCut(g2, r.id)) return `The railway at ${r.name} is already cut.`;
+      return null;
+    }
+    if (!r.oil) return `There is no oilfield at ${r.name}.`;
+    if (fieldOut(g2, r) > 0) return `The wells at ${r.name} are already burning.`;
+    return null;
+  }
+  function setMission2(g2, nat, id, m) {
+    if (whyNotMission2(g2, nat, id, m)) return false;
+    find(g2, nat, id).mission = m;
+    return true;
+  }
+  function knowsBooks(g2, of, viewer = g2.human) {
+    if (!intelRules(g2) || viewer === null || !g2.nations[viewer]?.alive) return true;
+    if (allied(g2, of, viewer)) return true;
+    const n = g2.nations[of];
+    if (!n?.alive || n.capital < 0) return false;
+    return agentsOf(g2, viewer).some((a) => a.reg === n.capital && a.mission === "books" && atWork(g2, a) && g2.regions[a.reg].ctrl === of);
+  }
+  function armyKnown(g2, of, viewer = g2.human) {
+    const all = fieldArmy(g2, of);
+    if (!fogOn(g2, viewer) || knowsBooks(g2, of, viewer)) return { divs: all, exact: true };
+    const k = INTEL.estimate.round;
+    return all < k / 2 ? { divs: k, exact: false, few: true } : { divs: Math.max(k, Math.round(all / k) * k), exact: false };
+  }
+  function intelAttack(g2, nat, target) {
+    if (!intelRules(g2) || !g2.intel.agents.length) return null;
+    const a = g2.intel.agents.find((x) => x.reg === target.id && atWork(g2, x) && allied(g2, x.nat, nat) && abroad(g2, x));
+    return a ? { mul: 1 + INTEL.battle.attack, agent: a.name } : null;
+  }
+  function lose2(g2, a, text, what) {
+    g2.intel.agents.splice(g2.intel.agents.indexOf(a), 1);
+    note2(g2, a, a.reg, what, text, false);
+    headline(g2, "event", text, a.nat, a.reg);
+  }
+  function learn(g2, a, gain) {
+    const was = skillOf(a);
+    a.xp += gain;
+    if (skillOf(a) > was) {
+      const text = `Agent ${a.name} has earned the rank of ${rankOf2(a)}: harder to catch, and surer in what is attempted.`;
+      note2(g2, a, a.reg, "rank", text, true);
+      headline(g2, "info", text, a.nat, a.reg);
+    }
+  }
+  function attempt(g2, a) {
+    const m = a.mission, r = g2.regions[a.reg], host = g2.nations[r.ctrl];
+    const ok = draw(g2, g2.turn, a.id, "try") < successChance(a, m);
+    let text;
+    let done = false;
+    if (ok && m === "factory" && wreckFactory(g2, r)) {
+      done = true;
+      text = `Agent ${a.name} wrecks a factory at ${r.name}. ${host.adj} industry is one works short until engineers rebuild it.`;
+    } else if (ok && m === "rail" && cutRail(g2, r.id)) {
+      done = true;
+      text = `Agent ${a.name} blows the railway at ${r.name}. No ${host.adj} train runs through until engineers relay the track.`;
+    } else if (ok && m === "oil" && fireField(g2, r, INTEL.missions.oil.months ?? 3, INTEL.missions.oil.cut ?? 0.5)) {
+      done = true;
+      text = `Agent ${a.name} sets the oilfield at ${r.name} alight. The wells will burn for ${INTEL.missions.oil.months} months.`;
+    } else text = m === "factory" ? `Agent ${a.name}'s attempt on the factories at ${r.name} fails: the guards were too many.` : m === "rail" ? `Agent ${a.name}'s charges on the railway at ${r.name} are found before they go off.` : `Agent ${a.name} cannot get near the wells at ${r.name}.`;
+    note2(g2, a, r.id, done ? "sabotage" : "failed", text, done);
+    headline(g2, done ? "event" : "info", text, a.nat, r.id);
+    a.mission = "watch";
+    a.rest = g2.turn + INTEL.risk.lieLow;
+    g2.intel.heat[r.id] = g2.turn + INTEL.risk.heatMonths;
+    if (done) learn(g2, a, INTEL.missions[m].gain ?? 1);
+  }
+  function resent(g2, a, host) {
+    const H = g2.nations[host], b = bloc(g2.nations[a.nat]);
+    if (!H?.alive || H.atWar.length || H.league || bloc(H) !== null || b !== "axis" && b !== "allies") return "";
+    const k = b === "axis" ? -1 : 1;
+    H.opinion = clamp3(H.opinion + k * INTEL.caught.opinion, -100, 100);
+    return ` ${H.name} protests, and thinks the worse of ${b === "axis" ? "the Axis" : "the Allies"} for it.`;
+  }
+  function threat(g2, nat) {
+    const E = INTEL.enemy;
+    const quiet2 = g2.flags.spyfrom !== void 0 && g2.turn < g2.flags.spyfrom + E.quiet;
+    const each2 = intelRules(g2) && !quiet2 ? E.chance * (E.level[levelIndex(g2)] ?? 1) : 0;
+    const foes = each2 > 0 ? g2.order.filter((f) => E.services.includes(f) && g2.nations[f]?.alive && atWar(g2, nat, f)) : [];
+    return { chance: 1 - Math.pow(1 - each2, foes.length), each: each2, foes };
+  }
+  function guardChance(g2, nat, reg) {
+    const E = INTEL.enemy;
+    const guards = agentsOf(g2, nat).filter((a) => a.mission === "guard" && atWork(g2, a) && !abroad(g2, a));
+    if (!guards.length) return { chance: 0, by: null };
+    const r = g2.regions[reg];
+    const near = guards.filter((a) => a.reg === reg || r.nb.includes(a.reg)).sort((x, y) => skillOf(y) - skillOf(x))[0] ?? null;
+    const p = near ? E.near + INTEL.skill.guard * (skillOf(near) - 1) + E.far * (guards.length - 1) : E.far * guards.length;
+    return { chance: clamp3(p, 0, E.most), by: near ?? [...guards].sort((x, y) => skillOf(y) - skillOf(x) || x.id - y.id)[0] };
+  }
+  function plots(g2, nat) {
+    const T = threat(g2, nat);
+    for (const foe of T.foes) {
+      if (draw(g2, g2.turn, "plot", foe) >= T.each) continue;
+      const F = g2.nations[foe], K = INTEL.enemy.kinds;
+      const rail2 = draw(g2, g2.turn, "kind", foe) < K.rail / (K.rail + K.factory);
+      const pool = [];
+      for (const r2 of g2.regions) {
+        if (r2.ctrl !== nat || r2.owner !== nat || r2.overseas) continue;
+        if (rail2) {
+          if (onNet(r2.id) && !railCut(g2, r2.id)) pool.push(r2);
+        } else if (workingFactories(g2, r2) > 0 && ruinedAt(g2, r2) < ruinMost(r2)) for (let k = 0; k < workingFactories(g2, r2); k++) pool.push(r2);
+      }
+      if (!pool.length) continue;
+      const r = pool[Math.floor(draw(g2, g2.turn, "where", foe) * pool.length) % pool.length];
+      const G = guardChance(g2, nat, r.id);
+      const who = { name: G.by?.name ?? "", nat };
+      if (G.by && draw(g2, g2.turn, "guard", foe) < G.chance) {
+        const text2 = `Agent ${G.by.name}'s watchers catch ${/^[AEIOU]/.test(F.adj) ? "an" : "a"} ${F.adj} sabotage ring at ${r.name} before it can strike.`;
+        note2(g2, who, r.id, "foiled", text2, true);
+        headline(g2, "info", text2, nat, r.id);
+        learn(g2, G.by, 1);
+        continue;
+      }
+      const struck = rail2 ? cutRail(g2, r.id) : wreckFactory(g2, r);
+      if (!struck) continue;
+      const text = rail2 ? `Saboteurs blow the railway at ${r.name}. Your police blame ${F.adj} agents. No train runs through until engineers relay the track.` : `Saboteurs wreck a factory at ${r.name}. Your police blame ${F.adj} agents. It stands idle until engineers rebuild it.`;
+      note2(g2, who, r.id, "struck", text, false);
+      headline(g2, "event", text, nat, r.id);
+    }
+  }
+  function intelTick(g2, nat) {
+    if (!intelRules(g2) || nat !== g2.human || !g2.nations[nat]?.alive) return;
+    if (g2.flags.spyfrom === void 0) g2.flags.spyfrom = g2.turn;
+    for (const a of [...agentsOf(g2, nat)].sort((x, y) => x.id - y.id)) {
+      if (!atWork(g2, a)) continue;
+      const r = g2.regions[a.reg];
+      if (!abroad(g2, a)) {
+        a.mission = "guard";
+        continue;
+      }
+      if (a.mission === "guard" || a.mission !== "watch" && whyNotMission2(g2, nat, a.id, a.mission)) a.mission = "watch";
+      const was = a.mission;
+      const risk = caughtChance(g2, a, was);
+      if (isSabotage(was)) attempt(g2, a);
+      if (draw(g2, g2.turn, a.id, "caught") < risk) {
+        const host = g2.nations[r.ctrl];
+        lose2(g2, a, `Agent ${a.name} is caught at ${r.name} by ${host.adj} counter-intelligence. Nothing more is heard.${resent(g2, a, r.ctrl)}`, "caught");
+        continue;
+      }
+      a.months = (a.months ?? 0) + 1;
+      if (a.months % INTEL.agents.watch === 0) learn(g2, a, 1);
+    }
+    for (const k of Object.keys(g2.intel.heat)) if (g2.intel.heat[+k] <= g2.turn) delete g2.intel.heat[+k];
+    plots(g2, nat);
+  }
+  function viewOf(g2, a) {
+    const r = g2.regions[a.reg], out = abroad(g2, a), work2 = atWork(g2, a);
+    const offers2 = (out ? MISSIONS.filter((m) => m !== "guard") : ["guard"]).map((m) => {
+      const why = whyNotMission2(g2, a.nat, a.id, m);
+      return { id: m, label: MISSION_TEXT[m].label, text: MISSION_TEXT[m].text, ok: why === null, why: why ?? "", now: a.mission === m, caught: caughtChance(g2, a, m), success: isSabotage(m) ? successChance(a, m) : null };
+    });
+    const sees = [];
+    if (work2 && out) {
+      for (const id of [r.id, ...r.nb]) {
+        const by = /* @__PURE__ */ new Map();
+        for (const c of g2.regions[id].units) {
+          if (c.dead || allied(g2, c.nat, a.nat)) continue;
+          const row2 = by.get(c.nat) ?? by.set(c.nat, { corps: 0, divs: 0 }).get(c.nat);
+          row2.corps++;
+          row2.divs += c.divs * c.str;
+        }
+        for (const [nat, row2] of by) sees.push({ reg: id, nat, ...row2 });
+      }
+    }
+    const T = INTEL.agents.skillAt;
+    const training2 = !work2 && a.born + INTEL.agents.train === a.ready && a.xp === 0 && !a.months;
+    const doing = !work2 ? `${training2 ? "In training" : `On the road to ${r.name}`}: at work ${a.ready - g2.turn <= 1 ? "next month" : `in ${a.ready - g2.turn} months`}` : `${a.mission === "guard" ? "On guard" : a.mission === "watch" ? "Watching" : a.mission === "books" ? "Reading the books" : MISSION_TEXT[a.mission].label + ": tried next month"} at ${r.name}`;
+    return {
+      id: a.id,
+      nat: a.nat,
+      name: a.name,
+      rank: rankOf2(a),
+      skill: skillOf(a),
+      xp: a.xp,
+      next: T[skillOf(a) - 1] ?? null,
+      reg: a.reg,
+      where: r.name,
+      host: r.ctrl,
+      abroad: out,
+      atWork: work2,
+      wait: Math.max(0, a.ready - g2.turn),
+      mission: a.mission,
+      doing,
+      caught: work2 ? caughtChance(g2, a) : 0,
+      rest: Math.max(0, (a.rest ?? 0) - g2.turn),
+      missions: offers2,
+      sees
+    };
+  }
+  function spyRoom(g2, nat = g2.human) {
+    if (!intelRules(g2) || nat === null || !g2.nations[nat]) return null;
+    const mine = agentsOf(g2, nat);
+    const T = threat(g2, nat);
+    return {
+      nat,
+      agents: mine.map((a) => viewOf(g2, a)),
+      most: mostAgents(nat),
+      cost: agentCost(),
+      whyNotRecruit: whyNotRecruit(g2, nat),
+      notes: g2.intel.notes.filter((n) => n.nat === nat).slice().reverse(),
+      fog: fogOn(g2, nat),
+      books: Object.values(g2.nations).filter((n) => n.alive && !allied(g2, n.id, nat) && knowsBooks(g2, n.id, nat)).map((n) => n.id),
+      threat: { chance: T.chance, foes: T.foes, guards: mine.filter((a) => a.mission === "guard" && atWork(g2, a) && !abroad(g2, a)).length }
+    };
+  }
+
+  // ../../src/campaign/domination.ts
+  var DOMINATION = domination_default;
+  var SIDES = ["axis", "allies"];
+  var domRules = (g2) => g2.flags.open === 1;
+  var dominating = (g2) => (g2.flags.dom ?? 0) > 0;
+  var fill2 = (line, vars) => line.replace(/\{(\w+)\}/g, (_, k) => String(vars[k] ?? ""));
+  function contenders(g2) {
+    return Object.values(g2.nations).filter((n) => n.alive && !n.dormant && n.capital >= 0);
+  }
+  function warDecided(g2) {
+    if (!domRules(g2)) return null;
+    const majors = DIPLOMACY.majors.map((id) => g2.nations[id]).filter((n) => !!n);
+    const fallen = majors.filter((n) => !n.alive && !!n.fellOn).sort((a, b) => a.fellOn.turn - b.fellOn.turn || a.fellOn.week - b.fellOn.week);
+    if (!fallen.length) return null;
+    const live = majors.filter((n) => n.alive);
+    if (live.some((a) => a.atWar.some((e) => live.some((b) => b.id === e)))) return null;
+    const last = bloc(fallen[fallen.length - 1]);
+    const beaten = SIDES.filter((s) => fallen.some((n) => bloc(n) === s) && (s === last || !live.some((n) => bloc(n) === s)));
+    if (!beaten.length) return null;
+    const left = SIDES.filter((s) => !beaten.includes(s) && live.some((n) => bloc(n) === s));
+    return { beaten, victor: left.length === 1 ? left[0] : null, fallen: fallen.map((n) => n.id), standing: live.map((n) => n.id) };
+  }
+  function whyNotDomination(g2, nat = g2.human) {
+    if (!domRules(g2)) return "World Domination belongs to the grand campaign.";
+    if (!nat || !g2.nations[nat]?.alive) return "Your nation is out of the war.";
+    if (dominating(g2)) return "The last war has already begun.";
+    if (!warDecided(g2)) return "The war between the alliances is not decided yet: a great power must fall, and no two great powers may still be at war with each other.";
+    return null;
+  }
+  function wayHome(g2, c) {
+    const seen = new Uint8Array(g2.regions.length);
+    const q = [c.reg];
+    seen[c.reg] = 1;
+    for (let i = 0; i < q.length; i++) {
+      const r = g2.regions[q[i]];
+      if (r.ctrl === c.nat && q[i] !== c.reg) return r;
+      for (const j of r.nb) if (!seen[j]) {
+        seen[j] = 1;
+        q.push(j);
+      }
+    }
+    const N = g2.nations[c.nat];
+    const cap4 = N.capital >= 0 ? g2.regions[N.capital] : null;
+    return cap4 && cap4.ctrl === c.nat ? cap4 : null;
+  }
+  function heir(g2, r, gone) {
+    const owner = g2.nations[r.owner];
+    if (owner?.alive && owner.id !== gone && owner.capital >= 0) return owner.id;
+    const count2 = {};
+    for (const j of r.nb) {
+      const c = g2.regions[j].ctrl;
+      if (c !== gone && g2.nations[c]?.alive && g2.nations[c].capital >= 0) count2[c] = (count2[c] ?? 0) + 1;
+    }
+    return Object.keys(count2).sort((a, b) => count2[b] - count2[a] || (a < b ? -1 : 1))[0] ?? null;
+  }
+  function leave(g2, n) {
+    for (const c of g2.corps.filter((c2) => c2.nat === n.id)) removeCorps(g2, c);
+    fleetsOnFall(g2, n.id);
+    airOnFall(g2, n.id);
+    for (let pass = 0; pass < 8; pass++) {
+      let left = 0;
+      for (const r of g2.regions) {
+        if (r.ctrl !== n.id) continue;
+        const to = heir(g2, r, n.id);
+        if (to) r.ctrl = to;
+        else left++;
+      }
+      if (!left) break;
+    }
+    for (const m of Object.values(g2.nations)) m.atWar = m.atWar.filter((e) => e !== n.id);
+    n.atWar = [];
+    n.alive = false;
+    n.dormant = true;
+    headline(g2, "event", fill2(DOMINATION.lines.leave, { name: n.name }), n.id);
+  }
+  function startDomination(g2, by = g2.human) {
+    if (whyNotDomination(g2, by)) return false;
+    const guests = g2.corps.filter((c) => !c.dead && g2.regions[c.reg].ctrl !== c.nat && allied(g2, c.nat, g2.regions[c.reg].ctrl));
+    for (const n of Object.values(g2.nations)) if (n.alive && !n.dormant && n.capital < 0) leave(g2, n);
+    const live = contenders(g2);
+    for (const n of live) {
+      n.align = "independent";
+      n.league = false;
+      n.opinion = n.home = 0;
+    }
+    for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) setWar(g2, live[i].id, live[j].id);
+    g2.flags.dom = g2.turn;
+    g2.flags["dom:n"] = live.length;
+    headline(g2, "war", fill2(DOMINATION.lines.open, { n: live.length }), by ?? void 0);
+    let home = 0;
+    for (const c of guests) {
+      if (c.dead) continue;
+      const to = wayHome(g2, c);
+      if (!to) {
+        removeCorps(g2, c);
+        continue;
+      }
+      relocate(g2, c, to);
+      c.ap = 0;
+      c.org = Math.min(c.org, DOMINATION.guests.org);
+      home++;
+    }
+    if (home) headline(g2, "event", fill2(DOMINATION.lines.guests, { n: home }));
+    g2.supplyDirty = true;
+    crown(g2);
+    return true;
+  }
+  function keepPeace(g2) {
+    if (whyNotDomination(g2) || g2.flags["dom:peace"]) return false;
+    g2.flags["dom:peace"] = g2.turn;
+    return true;
+  }
+  function crown(g2) {
+    if (!dominating(g2) || g2.flags["dom:won"]) return;
+    const live = contenders(g2);
+    if (live.length !== 1) return;
+    g2.flags["dom:won"] = g2.turn;
+    headline(g2, "goal", fill2(DOMINATION.lines.won, { name: live[0].name, adj: live[0].adj }), live[0].id);
+  }
+  function worldWinner(g2) {
+    if (!dominating(g2) || !g2.flags["dom:won"]) return null;
+    return contenders(g2)[0]?.id ?? null;
+  }
+  function worldBoard(g2, viewer = g2.human) {
+    var _a;
+    const held = {};
+    let all = 0;
+    for (const r of g2.regions) {
+      all += r.vp;
+      const h = held[_a = r.ctrl] ?? (held[_a] = { n: 0, vp: 0 });
+      h.n++;
+      h.vp += r.vp;
+    }
+    let scale = 1;
+    const row2 = (n) => {
+      const L = n.alive ? ledger(g2, n.id) : null;
+      if (L) scale = L.scale;
+      const army = !n.alive ? { divs: 0, exact: true } : viewer && n.id !== viewer ? armyKnown(g2, n.id, viewer) : { divs: fieldArmy(g2, n.id), exact: true };
+      const open = !viewer || n.id === viewer || !fogOn(g2, viewer) || knowsBooks(g2, n.id, viewer);
+      return {
+        nat: n.id,
+        name: n.name,
+        you: n.id === viewer,
+        alive: n.alive,
+        provinces: n.alive ? held[n.id]?.n ?? 0 : 0,
+        share: n.alive && all > 0 ? (held[n.id]?.vp ?? 0) / all : 0,
+        divisions: army.divs,
+        exact: army.exact,
+        few: !!army.few,
+        income: L && open ? L.gross : null,
+        will: n.alive ? Math.max(0, Math.min(1, 1 - collapseScore(g2, n.id) / n.resilience)) : 0,
+        fell: n.fellOn ? { turn: n.fellOn.turn, to: n.fellOn.to } : null
+      };
+    };
+    const rows = contenders(g2).map(row2).sort((a, b) => b.share - a.share || b.divisions - a.divisions || (a.nat < b.nat ? -1 : 1));
+    const fallen = Object.values(g2.nations).filter((n) => !n.alive && !!n.fellOn).map(row2).sort((a, b) => b.fell.turn - a.fell.turn || (a.nat < b.nat ? -1 : 1));
+    return { on: dominating(g2), since: g2.flags.dom ?? 0, began: g2.flags["dom:n"] ?? rows.length, left: rows.length, rows, fallen, winner: worldWinner(g2), scale };
   }
 
   // ../../data/campaign/east.json
@@ -8602,6 +9332,7 @@
       sky: {},
       raids: {},
       stories: newStories(),
+      intel: { agents: [], next: 1, notes: [], heat: {} },
       links: md.links,
       width: md.width,
       height: md.height,
@@ -8992,7 +9723,7 @@
     const wide = groundRules(g2);
     const land2 = opts.sea === void 0;
     const armsA = wide ? combinedArms(g2, land2 ? attackers2.filter((c) => !noCrossing(g2, c.kind, c.reg, target.id)) : attackers2, target, false) : null, armsD = wide ? combinedArms(g2, defenders, target, true) : null;
-    let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1;
+    let tooSteep = 0, noBridge = 0, overBridges = 0, inBoats = 0, sneaked = false, giftA = 1, giftD = 1, shortA = 1, shortD = 1, spied = "";
     let roadA = 0, railA = 1, roadD = 0, railD = 1;
     const rivers = /* @__PURE__ */ new Set();
     const sap = wide ? sappers(attackers2.filter((c) => !land2 || !blocked(g2, c, target))) : 0;
@@ -9054,6 +9785,13 @@
         if (short !== 1) {
           p *= short;
           shortA = Math.min(shortA, short);
+        }
+      }
+      if (wide) {
+        const spy = intelAttack(g2, c.nat, target);
+        if (spy) {
+          p *= spy.mul;
+          spied = spy.agent;
         }
       }
       if (g2.nations[c.nat].slowCommand) p *= 0.85;
@@ -9277,6 +10015,7 @@
         effect: [shortA < 1 ? `Attack cut to as little as ${Math.round(shortA * 100)}%` : "", shortD < 1 ? `${shortA < 1 ? "defence" : "Defence"} cut to as little as ${Math.round(shortD * 100)}%` : ""].filter(Boolean).join(", ")
       });
     }
+    if (spied) lines.push({ label: "Intelligence", value: `Agent ${spied} has mapped the defences of ${target.name}`, effect: `Attack up ${Math.round(INTEL.battle.attack * 100)}%` });
     if (sneaked) lines.push({ label: "Surprise", value: "War was declared this month on a country at peace", effect: `The defenders are caught unready: attack up ${Math.round((RELATIONS.sneak.attack - 1) * 100)}%` });
     if (armorShock) lines.push({ label: "Armor", value: "Tanks against a defence without armor", effect: "Tank attack up 25%" });
     if (armorStuck) lines.push({ label: "Armor", value: "Tanks in close country", effect: "Tank attack cut to 60%" });
@@ -9315,9 +10054,9 @@
       const r = g2.regions[j];
       if (banned.has(j) || !allied(g2, c.nat, r.ctrl) || hostileUnits(g2, r, c.nat).length) continue;
       if (friendlyUnits(g2, r, c.nat).length >= STACK + 2 || barred(g2, c, r)) continue;
-      const abroad = g2.nations[c.nat].seaSupply && r.owner !== c.nat;
+      const abroad2 = g2.nations[c.nat].seaSupply && r.owner !== c.nat;
       const ways = inDesert(r) ? r.nb.filter((k) => k !== from.id && !banned.has(k) && allied(g2, c.nat, g2.regions[k].ctrl)).length : 2;
-      const back = (inDesert(r) ? g2.reach[c.nat]?.[j] ?? 0 : abroad ? r.port ? 0 : 3 : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
+      const back = (inDesert(r) ? g2.reach[c.nat]?.[j] ?? 0 : abroad2 ? r.port ? 0 : 3 : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
       const s = back + (g2.supply[c.nat]?.[j] ? 0 : 6) + r.units.length * 0.3;
       if (s < bs) {
         bs = s;
@@ -9640,9 +10379,10 @@
     if (!X.alive) return;
     X.alive = false;
     X.fellOn = { turn: g2.turn, week: g2.week, to: by };
+    const armistice = nat === "FRA" && !g2.flags.dom;
     for (const c of g2.corps.filter((c2) => c2.nat === nat)) {
       const at = g2.regions[c.reg];
-      if (nat === "FRA" && at.vichy && at.overseas && at.ctrl === "FRA") {
+      if (armistice && at.vichy && at.overseas && at.ctrl === "FRA") {
         c.nat = "VIC";
         c.hold = true;
         continue;
@@ -9654,7 +10394,7 @@
     const pact = g2.nations.SOV.alive && !atWar(g2, "SOV", by);
     for (const r of g2.regions) {
       if (r.owner === nat) {
-        if (nat === "FRA" && r.vichy && r.ctrl === "FRA") {
+        if (armistice && r.vichy && r.ctrl === "FRA") {
           r.owner = "VIC";
           r.ctrl = "VIC";
         } else if (nat === "POL" && r.sov && pact) r.ctrl = "SOV";
@@ -9666,7 +10406,7 @@
         r.ctrl = g2.nations[r.owner].alive ? r.owner : by;
       }
     }
-    if (nat === "FRA") {
+    if (armistice) {
       const V = g2.nations.VIC;
       V.alive = true;
       V.dormant = false;
@@ -9705,6 +10445,7 @@
       }
     }
     for (const n of Object.values(g2.nations)) if (n.alive && n.atWar.includes(by)) checkCollapse(g2, n.id, by);
+    crown(g2);
   }
   function shipMove(g2, c, to) {
     return shipCorps(g2, c, to);
@@ -9803,7 +10544,7 @@
     }
     return g2.regions[g2.nations[c.nat].capital];
   }
-  function draw(g2, nat, theatre, divs, made) {
+  function draw2(g2, nat, theatre, divs, made) {
     const k = THEATRE_LIST.findIndex((t) => t.name === theatre);
     for (let need = divs; k >= 0 && need > 0; ) {
       const c = g2.corps.filter((x) => x !== made && x.nat === nat && !x.dead && !x.hold && x.kind !== "fort" && g2.regions[x.reg].theatre === k && !(made && g2.flags[`formed:${x.id}`])).sort((a, b) => b.divs - a.divs || a.id - b.id)[0];
@@ -9873,7 +10614,7 @@
       if (o.from && !Array.isArray(o.from)) {
         const here = theatreName(reg) === o.from;
         if (here) g2.flags[`formed:${c.id}`] = 1;
-        draw(g2, o.of ?? nat, o.from, row2[4], here ? c : void 0);
+        draw2(g2, o.of ?? nat, o.from, row2[4], here ? c : void 0);
       }
       if (o.until) g2.flags[`lent:${i}`] = c.id;
       const the2 = /^(the |[A-Z] Force|Creforce)/i.test(c.name) ? "" : "the ";
@@ -9951,6 +10692,7 @@
     researchTick(g2, nat);
     techTick(g2, nat);
     resourcesTick(g2, nat);
+    intelTick(g2, nat);
     computeSupply(g2);
     cutOffNews(g2);
     const earned = income(g2, nat);
@@ -10266,12 +11008,13 @@
     g2.supplyDirty = true;
     return g2;
   }
-  var draw2 = (g2, ...key2) => hashString(`${g2.seed}:${key2.join(":")}`) / 4294967296;
+  var draw3 = (g2, ...key2) => hashString(`${g2.seed}:${key2.join(":")}`) / 4294967296;
   function temper(g2, nat) {
     const t = { attackAt: 99, persist: 0.85, minOdds: 1.4, ...OPEN.temper._default, ...OPEN.temper[nat] };
-    const mood = 1 + OPEN.mood * (2 * draw2(g2, nat, "mood") - 1);
+    const mood = 1 + OPEN.mood * (2 * draw3(g2, nat, "mood") - 1);
     const lv = nerveOf(g2, nat);
-    return { attackAt: t.attackAt * mood * lv.nerve, persist: t.persist * mood * lv.nerve, minOdds: t.minOdds * lv.odds };
+    const last = dominating(g2) ? DOMINATION.nerve : { attackAt: 1, persist: 1 };
+    return { attackAt: t.attackAt * mood * lv.nerve * last.attackAt, persist: t.persist * mood * lv.nerve * last.persist, minOdds: t.minOdds * lv.odds };
   }
   var atkP = (g2, c) => corpsBase(g2, c) * KIND[c.kind].atk * (g2.nations[c.nat].slowCommand ? 0.85 : 1);
   var defP = (g2, c, r) => corpsBase(g2, c) * KIND[c.kind].def * TERRAIN_DEF[r.terrain];
@@ -10283,13 +11026,17 @@
     for (const r of g2.regions) if (inPlay(r)) side2[r.id] = foe(r.ctrl) ? 2 : allied(g2, nat, r.ctrl) ? 1 : 0;
     const label = new Int16Array(N).fill(-1);
     let groups = 0;
+    const each2 = dominating(g2);
     for (const r of g2.regions) {
       if (!side2[r.id] || label[r.id] >= 0) continue;
       const q = [r.id];
       label[r.id] = groups;
-      for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (label[j] < 0 && side2[j] === side2[r.id]) {
-        label[j] = groups;
-        q.push(j);
+      for (let i = 0; i < q.length; i++) {
+        for (const j of g2.regions[q[i]].nb) {
+          if (label[j] >= 0 || side2[j] !== side2[r.id] || each2 && side2[j] === 2 && g2.regions[j].ctrl !== r.ctrl) continue;
+          label[j] = groups;
+          q.push(j);
+        }
       }
       groups++;
     }
@@ -10327,7 +11074,7 @@
         depth[j] = depth[q[i]] + 1;
         q.push(j);
       }
-      let def = 0, threat = 0;
+      let def = 0, threat2 = 0;
       const share = {};
       const enemies = /* @__PURE__ */ new Set();
       for (const id of q) {
@@ -10342,11 +11089,11 @@
           const p = defP(g2, u, r) * (d === 1 ? works(r) : 1) * near * (still && d > 1 ? 0.3 : 1) * (cold ? EASTERN.winter.defence : 1);
           def += p;
           share[u.nat] = (share[u.nat] ?? 0) + p;
-          if (!still && d <= 2) threat += atkP(g2, u) * (d === 1 ? 1 : 0.6) * (cold ? EASTERN.winter.attack : 1);
+          if (!still && d <= 2) threat2 += atkP(g2, u) * (d === 1 ? 1 : 0.6) * (cold ? EASTERN.winter.attack : 1);
         }
       }
       for (const id of edge3) if (depth[id] > 2) {
-        for (const u of g2.regions[id].units) if (foe(u.nat) && !u.hold && u.kind !== "fort") threat += atkP(g2, u) * 0.6;
+        for (const u of g2.regions[id].units) if (foe(u.nat) && !u.hold && u.kind !== "fort") threat2 += atkP(g2, u) * 0.6;
       }
       const ours = [...f.ours];
       const close = new Uint8Array(N);
@@ -10373,7 +11120,7 @@
       atk *= 1 + 0.3 * airEdge;
       def *= 1 - 0.2 * airEdge;
       if (!soft.length) def *= OPEN.headOn;
-      out.push({ key: key2, enemies: [...enemies], ours, edge: edge3, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat, fixed, ratio: 0 });
+      out.push({ key: key2, enemies: [...enemies], ours, edge: edge3, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat: threat2, fixed, ratio: 0 });
     }
     for (const f of out) {
       let kept = 0;
@@ -10612,7 +11359,7 @@
           if (!p || p.ratio < 0.9 * op.ratio) continue;
         }
         if (!op.side && op.season && ![0, 1, 2].some((late) => inSeason(g2, op, g2.turn + (op.prep ?? 0) + late))) continue;
-        if (draw2(g2, nat, op.id, g2.turn) >= op.chance * deterred(g2, nat, who)) continue;
+        if (draw3(g2, nat, op.id, g2.turn) >= op.chance * deterred(g2, nat, who)) continue;
         if (op.side || !(op.prep ?? 0)) {
           if (inSeason(g2, op)) go(k);
         } else {
@@ -10749,6 +11496,7 @@
     const list3 = ops(nat);
     const op = flag2(g2, `st:go:${nat}`) === g2.turn ? list3[flag2(g2, `st:goOp:${nat}`) - 1] : null;
     const n = g2.nations[nat];
+    if (dominating(g2)) return;
     if (!op?.join || !n.alive || n.align === "allies" || n.align === "axis") return;
     const others = n.atWar.some((e) => {
       const b = g2.nations[e].align;
@@ -11500,7 +12248,7 @@
     const n = g2.nations[nat];
     if (n.seaSupply && (!scope || leaving)) evacuations(g2, nat);
     const N = g2.regions.length;
-    const threat = new Float32Array(N), held = new Float32Array(N);
+    const threat2 = new Float32Array(N), held = new Float32Array(N);
     const mine = (r) => scope ? scope.has(r.id) && allied(g2, nat, r.ctrl) : !aside(g2, r, nat) && (r.ctrl === nat || r.owner === nat && allied(g2, nat, r.ctrl));
     for (const r of g2.regions) {
       if (!mine(r)) continue;
@@ -11508,11 +12256,11 @@
         const e = g2.regions[j];
         if (!atWar(g2, nat, e.ctrl) || masked.has(j)) continue;
         const foes = hostileUnits(g2, e, nat).filter((u) => u.kind !== "fort").map((u) => atkPower(g2, u)).sort((a, b) => b - a);
-        for (const p of foes.slice(0, frontage(r))) threat[r.id] += p;
+        for (const p of foes.slice(0, frontage(r))) threat2[r.id] += p;
       }
       for (const u of friendlyUnits(g2, r, nat)) held[r.id] += defPower(g2, u, r);
     }
-    if (!scope && isOpen(g2) && n.capital >= 0 && mine(g2.regions[n.capital]) && threat[n.capital] === 0) {
+    if (!scope && isOpen(g2) && n.capital >= 0 && mine(g2.regions[n.capital]) && threat2[n.capital] === 0) {
       const cap4 = g2.regions[n.capital];
       const seen = /* @__PURE__ */ new Set([cap4.id]);
       let ring = [cap4.id], worst = 0;
@@ -11527,10 +12275,10 @@
         }
         ring = next;
       }
-      threat[cap4.id] = worst;
+      threat2[cap4.id] = worst;
     }
     const importance = (r) => 1 + 0.5 * r.vp + (r.cap ? 4 : 0);
-    const need = (r) => entrusted.has(r.id) || given.has(r.id) ? 0 : importance(r) * Math.max(0, 1.3 * threat[r.id] - held[r.id]);
+    const need = (r) => entrusted.has(r.id) || given.has(r.id) ? 0 : importance(r) * Math.max(0, 1.3 * threat2[r.id] - held[r.id]);
     const lost = (r) => allied(g2, nat, r.owner) || r.prev === nat;
     const late = (r) => n.slowCommand && r.since >= g2.turn;
     const movers = g2.corps.filter((c) => c.nat === nat && !c.hold && !c.dyle && c.kind !== "fort" && c.ap > 0);
@@ -11539,12 +12287,12 @@
       const here = g2.regions[c.reg];
       if (!mine(here)) continue;
       if (!(scope && quiet)) {
-        const others = friendlyUnits(g2, here, nat).length > 1 || threat[here.id] === 0;
+        const others = friendlyUnits(g2, here, nat).length > 1 || threat2[here.id] === 0;
         const gap = here.nb.map((j) => g2.regions[j]).find((r) => atWar(g2, nat, r.ctrl) && lost(r) && !late(r) && !hostileUnits(g2, r, nat).length && c.ap >= Math.min(moveCost(g2, c, r), 4) && (allowed(g2, r) || forsaken(g2, nat, r)));
         if (gap && others && moveCorps(g2, c, gap)) continue;
       }
       if (line && !n.slowCommand && friendlyUnits(g2, here, nat).length >= 3) {
-        const door = here.nb.map((j) => g2.regions[j]).find((r) => mine(r) && !given.has(r.id) && threat[r.id] > 0 && !friendlyUnits(g2, r, nat).length && c.ap >= Math.min(moveCost(g2, c, r), 4));
+        const door = here.nb.map((j) => g2.regions[j]).find((r) => mine(r) && !given.has(r.id) && threat2[r.id] > 0 && !friendlyUnits(g2, r, nat).length && c.ap >= Math.min(moveCost(g2, c, r), 4));
         if (door) {
           const was = defPower(g2, c, here);
           if (moveCorps(g2, c, door)) {
@@ -11558,9 +12306,9 @@
       if (entrusted.has(here.id)) {
         if (!scope && here.units.filter((u) => u.nat === nat && u.kind !== "fort").length <= 1) continue;
         spared = defPower(g2, c, here);
-      } else if (threat[here.id] > 0) {
+      } else if (threat2[here.id] > 0) {
         spared = defPower(g2, c, here);
-        if (friendlyUnits(g2, here, nat).length <= 2 || held[here.id] - spared < 1.6 * threat[here.id]) continue;
+        if (friendlyUnits(g2, here, nat).length <= 2 || held[here.id] - spared < 1.6 * threat2[here.id]) continue;
       }
       const d = hops(g2, here.id, (r) => allied(g2, nat, r.ctrl) && within(r));
       let to = null, bs = 0;
@@ -11932,6 +12680,70 @@
   function shippingLanes(g2) {
     return seaLanes(g2);
   }
+  function sight(g2) {
+    return sightOf(g2, g2.human);
+  }
+  function secretService(g2) {
+    return spyRoom(g2, g2.human);
+  }
+  function whyNotRecruitAgent(g2) {
+    if (!g2.human) return "Nobody is at the controls.";
+    if (!humanUp(g2)) return "Orders are given in your own month.";
+    return whyNotRecruit(g2, g2.human);
+  }
+  function orderRecruitAgent(g2) {
+    return whyNotRecruitAgent(g2) ? null : recruit(g2, g2.human);
+  }
+  function whyNotSendAgent(g2, id, region) {
+    if (!g2.human) return "Nobody is at the controls.";
+    if (!humanUp(g2)) return "Orders are given in your own month.";
+    return whyNotSend(g2, g2.human, id, region);
+  }
+  function orderSendAgent(g2, id, region) {
+    return whyNotSendAgent(g2, id, region) === null && sendAgent(g2, g2.human, id, region);
+  }
+  function whyNotAgentMission(g2, id, mission) {
+    if (!g2.human) return "Nobody is at the controls.";
+    if (!humanUp(g2)) return "Orders are given in your own month.";
+    return whyNotMission2(g2, g2.human, id, mission);
+  }
+  function orderAgentMission(g2, id, mission) {
+    return whyNotAgentMission(g2, id, mission) === null && setMission2(g2, g2.human, id, mission);
+  }
+  function orderRetireAgent(g2, id) {
+    return !!g2.human && humanUp(g2) && retire(g2, g2.human, id);
+  }
+  function orderFog(g2, on) {
+    return !!g2.human && setFog(g2, on);
+  }
+  function lastAct(g2) {
+    if (g2.flags.open !== 1 || !g2.human) return null;
+    const why = whyNotDomination(g2, g2.human);
+    return {
+      decided: warDecided(g2),
+      open: why === null,
+      why,
+      peace: g2.flags["dom:peace"] ?? 0,
+      on: dominating(g2),
+      since: g2.flags.dom ?? 0,
+      left: contenders(g2).length,
+      winner: worldWinner(g2)
+    };
+  }
+  function whyNotOrderDomination(g2) {
+    if (!g2.human) return "Nobody is at the controls.";
+    if (!humanUp(g2)) return "Orders are given in your own month.";
+    return whyNotDomination(g2, g2.human);
+  }
+  function orderDomination(g2) {
+    return whyNotOrderDomination(g2) === null && startDomination(g2, g2.human);
+  }
+  function orderKeepPeace(g2) {
+    return !!g2.human && humanUp(g2) && keepPeace(g2);
+  }
+  function standings(g2) {
+    return worldBoard(g2, g2.human);
+  }
   function whyNotOrderResearch(g2, id) {
     if (!g2.human) return "Nobody is at the controls.";
     return whyNotResearch(g2, g2.human, id);
@@ -12185,6 +12997,8 @@
       sky: g2.sky,
       raids: g2.raids,
       stories: g2.stories,
+      // The secret service exists only in the grand campaign: a historical save is written exactly as it always was.
+      intel: g2.flags.open === 1 ? g2.intel : void 0,
       headlines: g2.headlines,
       reports: g2.reports.slice(-KEEP_REPORTS)
     });
@@ -12292,6 +13106,7 @@
       g2.raids = d.raids ?? {};
     }
     g2.stories = { ...newStories(), ...d.stories ?? {} };
+    g2.intel = { agents: [], next: 1, notes: [], heat: {}, ...d.intel ?? {} };
     if (Array.isArray(d.fleets)) {
       g2.fleets = d.fleets;
       g2.nextFleet = d.nextFleet;
@@ -12536,6 +13351,7 @@
   function view() {
     const s = game();
     const up = humanUp(s);
+    const seen = sight(s);
     return {
       rules: "campaign",
       turn: s.turn,
@@ -12561,7 +13377,9 @@
         const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, "aa", r.id), workLevel(s, "field", r.id)];
         return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
       }),
-      corps: s.corps.filter((c) => !c.dead).map((c) => ({
+      // Under the fog of war the player's map shows only what he is allowed to know: an army seen whole, an army
+      // only glimpsed (a flag and how many corps, 'dim'), or nothing at all.
+      corps: s.corps.filter((c) => !c.dead && seen[c.reg] > 0).map((c) => seen[c.reg] === 1 ? { id: c.id, nat: c.nat, name: "An army seen from afar", kind: "inf", elite: "", divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: 0, xp: 0, grade: "", nick: null, honours: [], dim: true } : {
         id: c.id,
         nat: c.nat,
         name: c.name,
@@ -12582,8 +13400,9 @@
         xp: Math.round(c.xp * 100),
         grade: grade(c.xp),
         nick: c.nick ?? null,
-        honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ["#b08d57", "#f2ead6"] }))
-      })),
+        honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ["#b08d57", "#f2ead6"] })),
+        dim: false
+      }),
       // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
       fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({
         id: f.id,
@@ -12620,6 +13439,9 @@
         }
         return [n.id, ["armour", "fighters", "bombers"].map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab.clock[f] - n.lab.months)) + 7) / 12))];
       })),
+      // Things the player should be told as his month opens, and the rooms beyond the main screens that are open to him.
+      alerts: alertsOf(s),
+      pages: pagesOf(s),
       // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
       // the months it will last and its books in words, and every shipping lane to draw over the sea.
       stores: storesOf2(s),
@@ -13129,23 +13951,23 @@
     const s = game();
     const [what, a, b] = key2.split(":");
     let ok = false;
-    let note2 = "That cannot be done now.";
+    let note3 = "That cannot be done now.";
     if (what === "blow") {
       ok = orderBlowBridges(s, region, Number(a));
-      if (ok) note2 = "The bridges are blown.";
+      if (ok) note3 = "The bridges are blown.";
     } else if (what === "cutrail") {
       ok = orderCutRailway(s, region);
-      if (ok) note2 = "The railway is torn up.";
+      if (ok) note3 = "The railway is torn up.";
     } else if (what === "job") {
       const c = s.corps.find((x) => x.id === Number(a));
       ok = !!c && orderEngineers(s, c, b);
-      if (ok && c) note2 = jobLine(s, c) + ".";
+      if (ok && c) note3 = jobLine(s, c) + ".";
     } else if (what === "stop") {
       const c = s.corps.find((x) => x.id === Number(a));
       ok = !!c && orderStopWork(s, c);
-      if (ok) note2 = "The engineers are taken off their work.";
+      if (ok) note3 = "The engineers are taken off their work.";
     }
-    return { ok, note: note2, view: view() };
+    return { ok, note: note3, view: view() };
   }
   function force(kind, id) {
     const s = game();
@@ -13333,6 +14155,143 @@
     const friendsLine = f.friends.length ? `Its friends: ${[...ties].map(([why, who]) => `${listOf3(who)} (${why})`).join("; ")}.` : `${The} has no close friends among the nations.`;
     return { ok: true, name: theName2(s, on), lead: lead2, friends: friendsLine, lines };
   }
+  var domAsked = 0;
+  function pagesOf(s) {
+    const out = [];
+    if (!s.human) return out;
+    if (secretService(s)) out.push({ id: "spies", label: "THE SECRET SERVICE" });
+    const act2 = lastAct(s);
+    if (act2 && (act2.decided || act2.on)) out.push({ id: "lastact", label: act2.on ? "THE WORLD STANDINGS" : "THE LAST ACT" });
+    return out;
+  }
+  function alertsOf(s) {
+    const out = [];
+    if (!s.human) return out;
+    const act2 = lastAct(s);
+    if (act2?.winner) out.push(`${s.nations[act2.winner]?.name ?? act2.winner} has won the world.`);
+    else if (act2?.open && !act2.peace) out.push("The war between the alliances is decided. Open DIPLOMACY and choose THE LAST ACT.");
+    return out;
+  }
+  var pct4 = (x) => `${Math.round(x * 100)}%`;
+  function spiesPage(s, region) {
+    const room2 = secretService(s);
+    if (!room2) return null;
+    const up = humanUp(s) && !onEve(s);
+    const here = s.regions[region];
+    const rows = room2.agents.map((a) => {
+      const whySend = here ? whyNotSendAgent(s, a.id, region) : "Close this, click a province on the map, and open the room again.";
+      const buttons = a.missions.map((m) => ({
+        label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(),
+        act: `spy:mission:${a.id}:${m.id}`,
+        ok: up && m.ok && !m.now,
+        tip: `${m.text}${m.success !== null ? ` Chance of success ${pct4(m.success)}.` : ""} Chance of being caught ${pct4(m.caught)}.${m.ok ? "" : ` ${m.why}`}`
+      }));
+      buttons.push({ label: here ? `SEND TO ${here.name.toUpperCase()}` : "SEND TO A PROVINCE", act: `spy:send:${a.id}`, ok: up && !!here && whySend === null && here.id !== a.reg, tip: whySend ?? `The agent travels to ${here?.name ?? "the province selected on the map"} and sets to work there.` });
+      buttons.push({ label: "RETIRE", act: `spy:retire:${a.id}`, ok: up, tip: "The agent leaves the service, which frees a place in it.", danger: true });
+      const lines = [`${a.where}${a.abroad ? `, in ${theName2(s, a.host)}` : ", at home"}. ${a.doing}`];
+      if (a.wait > 0) lines.push(`At work in ${a.wait} month${a.wait === 1 ? "" : "s"}.`);
+      if (a.atWork) lines.push(`Chance of being caught this month: ${pct4(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? "" : "s"} before another act of sabotage.` : ""}`);
+      for (const x of a.sees.slice(0, 5)) lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? "" : "s"}.`);
+      return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };
+    });
+    const notes = room2.notes.slice(-10).reverse().map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
+    return {
+      id: "spies",
+      title: "THE SECRET SERVICE",
+      headline: `${room2.agents.length} of ${room2.most} agents in the service`,
+      note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room2.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct4(room2.threat.chance)}, with ${room2.threat.guards} of your agents on guard.` : "No enemy service is working against you at home."}`,
+      top: [
+        { label: `RECRUIT AN AGENT  ·  ${Math.round(room2.cost).toLocaleString("en-US")}`, act: "spy:recruit", ok: up && room2.whyNotRecruit === null, tip: room2.whyNotRecruit ?? "A new agent joins the service, at home, and can be sent abroad." },
+        { label: room2.fog ? "LIFT THE FOG OF WAR" : "LAY THE FOG OF WAR AGAIN", act: room2.fog ? "fog:off" : "fog:on", ok: true, tip: room2.fog ? "Show every army on the map, as before spies were in the game. Agents and sabotage go on either way." : "Hide again what your armies and agents cannot see." }
+      ],
+      sections: [
+        { heading: "YOUR AGENTS", text: rows.length ? here ? `The province selected on the map is ${here.name}: an agent can be sent there.` : "To send an agent somewhere, close this, click the province on the map, and open the room again." : "The service has no agents yet. Recruit one above.", rows },
+        { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join("\n") : "Nothing has been reported yet.", rows: [] }
+      ]
+    };
+  }
+  function lastActPage(s) {
+    const act2 = lastAct(s);
+    if (!act2 || !(act2.decided || act2.on)) return null;
+    const board = standings(s);
+    const up = humanUp(s);
+    const row2 = (r) => ({
+      nat: r.nat,
+      title: r.you ? `${r.name} (you)` : r.name,
+      lines: [r.alive ? `${r.provinces} province${r.provinces === 1 ? "" : "s"}, ${pct4(r.share)} of the world. ${r.few ? `Fewer than ${r.divisions} divisions` : `${r.exact ? "" : "About "}${r.divisions} division${r.divisions === 1 ? "" : "s"}`}${r.income !== null ? `. Income ${Math.round(r.income * board.scale).toLocaleString("en-US")} a month` : ""}.` : `Fell in ${r.fell ? turnToDate(r.fell.turn).label : "the war"}${r.fell ? ` to ${theName2(s, r.fell.to)}` : ""}.`],
+      buttons: []
+    });
+    const top = [];
+    let note3 = "";
+    if (act2.winner) note3 = `${s.nations[act2.winner]?.name ?? act2.winner} is the last nation standing. The world is won.`;
+    else if (act2.on) note3 = `The last act began in ${turnToDate(act2.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act2.left} are left. The last one standing wins the world.`;
+    else {
+      const why = whyNotOrderDomination(s);
+      note3 = `The war between the alliances is decided. You can take the victory and leave the world as it is, or choose World Domination: every alliance is dissolved, your allies of yesterday become your enemies, and the last nation standing wins. It cannot be undone.${act2.peace ? " You have taken the victory; the last act stays open to you." : ""}`;
+      if (domAsked === 0) top.push({ label: "WORLD DOMINATION", act: "dom:ask", ok: up && why === null, tip: why ?? "Turn on every nation still standing. You will be asked twice whether you mean it.", danger: true });
+      else top.push({ label: domAsked === 1 ? "YES, I MEAN IT" : "YES. BEGIN THE LAST ACT. IT CANNOT BE UNDONE", act: domAsked === 1 ? "dom:ask2" : "dom:yes", ok: up && why === null, tip: why ?? "", danger: true }, { label: "NO", act: "dom:no", ok: true, tip: "Leave things as they are." });
+      if (!act2.peace) top.push({ label: "TAKE THE VICTORY AND KEEP THE PEACE", act: "dom:peace", ok: up, tip: "The war is won. The world stays as it is, and the last act can still be chosen in a later month." });
+    }
+    return {
+      id: "lastact",
+      title: act2.on ? "THE WORLD STANDINGS" : "THE LAST ACT",
+      headline: act2.winner ? "The world is won" : act2.on ? `${act2.left} nations still stand` : "The war is decided",
+      note: note3,
+      top,
+      sections: [
+        { heading: "STILL STANDING", text: "", rows: board.rows.map(row2) },
+        { heading: "FALLEN", text: board.fallen.length ? "" : "Nobody has fallen yet.", rows: board.fallen.map(row2) }
+      ]
+    };
+  }
+  function page(id, region = -1) {
+    const s = game();
+    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : null;
+    return p ? { ok: true, ...p } : { ok: false };
+  }
+  function act(action, region = -1) {
+    const s = game();
+    const h0 = s.headlines.length;
+    const part = action.split(":");
+    let ok = false, note3 = "";
+    if (action === "spy:recruit") {
+      const a = orderRecruitAgent(s);
+      ok = !!a;
+      note3 = a ? `${a.name} joins the service.` : "No agent could be recruited.";
+    } else if (part[0] === "spy" && part[1] === "send") {
+      const why = whyNotSendAgent(s, Number(part[2]), region);
+      ok = orderSendAgent(s, Number(part[2]), region);
+      note3 = ok ? `The agent sets out for ${s.regions[region]?.name ?? "the province"}.` : why ?? "The agent cannot go there.";
+    } else if (part[0] === "spy" && part[1] === "mission") {
+      ok = orderAgentMission(s, Number(part[2]), part[3]);
+      note3 = ok ? "The agent has new orders." : "The agent cannot take that work now.";
+    } else if (part[0] === "spy" && part[1] === "retire") {
+      ok = orderRetireAgent(s, Number(part[2]));
+      note3 = ok ? "The agent has left the service." : "";
+    } else if (action === "fog:off" || action === "fog:on") {
+      ok = orderFog(s, action === "fog:on");
+      note3 = ok ? action === "fog:on" ? "The fog of war lies on the map again." : "The fog of war is lifted: every army is shown." : "";
+    } else if (action === "dom:ask") {
+      domAsked = 1;
+      ok = true;
+    } else if (action === "dom:ask2") {
+      domAsked = 2;
+      ok = true;
+    } else if (action === "dom:no") {
+      domAsked = 0;
+      ok = true;
+    } else if (action === "dom:yes") {
+      domAsked = 0;
+      ok = orderDomination(s);
+      note3 = ok ? "The last act has begun. Every nation still standing is at war with every other." : whyNotOrderDomination(s) ?? "It cannot be chosen now.";
+    } else if (action === "dom:peace") {
+      domAsked = 0;
+      ok = orderKeepPeace(s);
+      note3 = ok ? "You take the victory, and the world stays as it is." : "";
+    }
+    const news2 = s.headlines.slice(h0).map((h) => h.text);
+    return { ok, note: news2.length ? news2.join(" ") : note3, view: view() };
+  }
   function storesOf2(s) {
     const v = s.human ? depots(s) : null;
     if (!v) return null;
@@ -13506,7 +14465,7 @@
       const ahead = Math.round(monthsAhead(lab, f));
       const eta = arrival(s, me.id, f);
       const k = lead(s, me.id, f);
-      const pct4 = Math.round(spec2.per * k * 100);
+      const pct5 = Math.round(spec2.per * k * 100);
       const n = lab.teams[f];
       const at = (t) => Math.max(0, Math.min(WAR_ENDS, t)) / WAR_ENDS;
       return {
@@ -13516,7 +14475,7 @@
         pace: ahead > 0 ? `${ahead} month${ahead === 1 ? "" : "s"} ahead` : ahead < 0 ? `${-ahead} month${ahead === -1 ? "" : "s"} behind` : "On history's schedule",
         now: cur?.name ?? "nothing yet",
         next: next ? `Next: ${next.name}. History had it in ${when(next.at)}; ${eta === null ? "at this pace it never comes" : `yours is due ${when(eta)}`}.` : "The designers have nothing further on the drawing board.",
-        effect: k ? `${spec2.who}: ${pct4 > 0 ? "+" : ""}${pct4}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
+        effect: k ? `${spec2.who}: ${pct5 > 0 ? "+" : ""}${pct5}% while these designs are ${Math.abs(k) === 1 ? "a generation" : `${Math.abs(k)} generations`} ${k > 0 ? "ahead of" : "behind"} history.` : "",
         good: k > 0,
         teams: n,
         max: MAX_TEAMS,
@@ -13695,8 +14654,8 @@
     const ok = orderCourt(s, nat);
     const news2 = s.headlines.slice(h0).map((h) => h.text);
     const moved = Math.round(Math.abs((s.nations[nat]?.opinion ?? 0) - before));
-    const note2 = !ok ? "They could not be courted this month." : news2.length ? news2.join(" ") : `Your envoys are heard in ${theName2(s, nat)}: opinion there moves ${moved} point${moved === 1 ? "" : "s"} your way.`;
-    return { ok, note: note2, view: view() };
+    const note3 = !ok ? "They could not be courted this month." : news2.length ? news2.join(" ") : `Your envoys are heard in ${theName2(s, nat)}: opinion there moves ${moved} point${moved === 1 ? "" : "s"} your way.`;
+    return { ok, note: note3, view: view() };
   }
   var dateOf = (turn) => turnToDate(turn).label;
   function record(id) {
@@ -13789,6 +14748,8 @@
     court: courtNation,
     path: takePathOf,
     invite: inviteNation,
+    page,
+    act,
     abilities,
     research,
     tech,

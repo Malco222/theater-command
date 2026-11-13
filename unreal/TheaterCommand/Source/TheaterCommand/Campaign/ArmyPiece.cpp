@@ -203,6 +203,12 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		// plate under the flag.
 		Size = FMath::Clamp(0.82 + 0.26 * FMath::Sqrt(Men / 30000.0), 0.9, 2.0);
 		Figure = Men >= 995000 ? FString::Printf(TEXT("%.1fM"), Men / 1000000.0) : FString::Printf(TEXT("%dk"), FMath::Max(1, FMath::RoundToInt32(Men / 1000.0)));
+		// An army only glimpsed through the fog of war: its flag, how many corps, and no more.
+		if (Corps.Num() > 0 && Corps[0].bDim)
+		{
+			Size = 1.0;
+			Figure = Corps.Num() == 1 ? FString(TEXT("?")) : FString::Printf(TEXT("%d ?"), Corps.Num());
+		}
 	}
 
 	// The standard: a pole at the back of the base, the nation's flag of the period, and a brass finial.

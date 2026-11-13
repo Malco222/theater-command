@@ -15,6 +15,7 @@
 #include "Widgets/Layout/SDPIScaler.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSpacer.h"
+#include "Widgets/Layout/SWrapBox.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/SOverlay.h"
@@ -795,6 +796,65 @@ namespace
 						]
 					]
 
+					// A room the rules set out themselves: the secret service, the last act.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(SBorder).BorderImage(&ScrimBrush).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsPageOpen() ? EVisibility::Visible : EVisibility::Collapsed; })
+						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
+						[
+							SNew(SBox).WidthOverride(1100.0f).HeightOverride(780.0f)
+							[
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 22.0f, 26.0f, 22.0f))
+								[
+									SNew(SVerticalBox)
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 16.0f, 0.0f)
+										[
+											SNew(SBox).WidthOverride(72.0f).HeightOverride(48.0f)
+											[
+												SNew(SImage).Image_Lambda([this]() { return FlagBrush(Controller.IsValid() && Controller->GetSession() ? Controller->GetLedgerNationTag() : FString()); })
+											]
+										]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center)
+										[
+											SNew(SVerticalBox)
+											+ SVerticalBox::Slot().AutoHeight()
+											[
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 240)).ColorAndOpacity(Brass)
+												.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetPage().Title) : FText::GetEmpty(); })
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 26)).ColorAndOpacity(Cream)
+												.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetPage().Headline) : FText::GetEmpty(); })
+											]
+											+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Muted).AutoWrapText(true)
+												.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetPage().Note) : FText::GetEmpty(); })
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(16.0f, 0.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(20.0f, 9.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ClosePage(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
+											]
+										]
+									]
+									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 14.0f, 0.0f, 0.0f)
+									[
+										SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)[SAssignNew(PageBody, SVerticalBox)]
+									]
+								]
+							]
+						]
+					]
+
 					// The generals: who commands what, who waits, and the corps that have nobody.
 					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
 					[
@@ -1323,6 +1383,13 @@ namespace
 				LayOutArsenal(Controller->GetArsenal());
 			}
 
+			// Set a room of the rules' own out when it is opened, and again after anything is pressed in it.
+			if (Controller.IsValid() && PageBody.IsValid() && Controller->IsPageOpen() && Controller->GetPage().Revision != ShownRoom)
+			{
+				ShownRoom = Controller->GetPage().Revision;
+				LayOutPage(Controller->GetPage());
+			}
+
 			// Set the generals out when their list is opened, and again after every appointment.
 			if (Controller.IsValid() && GeneralsList.IsValid() && Controller->IsGeneralsOpen() && Controller->GetGenerals().Revision != ShownGenerals)
 			{
@@ -1585,6 +1652,77 @@ namespace
 				[
 					SNew(SScrollBox) + SScrollBox::Slot().Padding(0.0f, 0.0f, 8.0f, 0.0f)[List]
 				];
+			}
+		}
+
+		/** A row of buttons that wraps onto the next line when there are many. */
+		TSharedRef<SWidget> PageButtons(const TArray<FPageButton>& Buttons)
+		{
+			TSharedRef<SWrapBox> Box = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6.0f, 5.0f));
+			for (const FPageButton& Button : Buttons)
+			{
+				Box->AddSlot()
+				[
+					OfficeButton(*Button.Label, Button.bDanger ? Alarm : BrightBrass, Button.bOk, Button.Tip, [this, Act = Button.Act]() { if (Controller.IsValid()) { Controller->PressPage(Act); } })
+				];
+			}
+			return Box;
+		}
+
+		/** A room of the rules' own: its buttons, then each section with its words and its rows. */
+		void LayOutPage(const FOfficePage& Page)
+		{
+			PageBody->ClearChildren();
+			if (Page.Top.Num() > 0)
+			{
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)[PageButtons(Page.Top)];
+			}
+			for (const FPageSection& Section : Page.Sections)
+			{
+				PageBody->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 4.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(Section.Heading)).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+				];
+				if (!Section.Text.IsEmpty())
+				{
+					PageBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Section.Text)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.15f)
+					];
+				}
+				for (const FPageRow& Entry : Section.Rows)
+				{
+					TSharedRef<SVerticalBox> Words = SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Text(FText::FromString(Entry.Title)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
+						];
+					for (const FString& Line : Entry.Lines)
+					{
+						Words->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Line)).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						];
+					}
+					if (Entry.Buttons.Num() > 0)
+					{
+						Words->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)[PageButtons(Entry.Buttons)];
+					}
+					TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox);
+					if (!Entry.Tag.IsEmpty())
+					{
+						Row->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
+						[
+							SNew(SBox).WidthOverride(36.0f).HeightOverride(24.0f)[SNew(SImage).Image(FlagBrush(Entry.Tag))]
+						];
+					}
+					Row->AddSlot().FillWidth(1.0f)[Words];
+					PageBody->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+					[
+						SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(12.0f, 8.0f, 12.0f, 9.0f))[Row]
+					];
+				}
+				PageBody->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(8.0f)];
 			}
 		}
 
@@ -2218,6 +2356,26 @@ namespace
 
 			DiplomacyPowers->ClearChildren();
 			const FLinearColor Teal = FLinearColor(FColor::FromHex(TEXT("5CC4B6")));
+			// The doors to the rooms beyond this one: the secret service, and the last act when its time comes.
+			{
+				TArray<FString> Ids, Labels;
+				if (Controller.IsValid())
+				{
+					Controller->GetPageLinks(Ids, Labels);
+				}
+				if (Ids.Num() > 0)
+				{
+					TSharedRef<SWrapBox> Doors = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(6.0f, 5.0f));
+					for (int32 Door = 0; Door < Ids.Num() && Door < Labels.Num(); ++Door)
+					{
+						Doors->AddSlot()
+						[
+							OfficeButton(*Labels[Door], BrightBrass, true, TEXT("Open this room."), [this, Id = Ids[Door]]() { if (Controller.IsValid()) { Controller->OpenPage(Id); } })
+						];
+					}
+					DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 14.0f)[Doors];
+				}
+			}
 			const FString Asked = Controller.IsValid() ? Controller->GetPathAsked() : FString();
 
 			// A small country's own path: join a bloc, stand alone, or found or join the League.
@@ -3342,6 +3500,8 @@ namespace
 		FButtonStyle PlateButton;
 		TSharedPtr<SHorizontalBox> ArsenalColumns;
 		int32 ShownArsenal = -1;
+		TSharedPtr<SVerticalBox> PageBody;
+		int32 ShownRoom = -1;
 		TSharedPtr<SVerticalBox> GeneralsList;
 		TSharedPtr<SVerticalBox> GeneralsVacant;
 		int32 ShownGenerals = -1;

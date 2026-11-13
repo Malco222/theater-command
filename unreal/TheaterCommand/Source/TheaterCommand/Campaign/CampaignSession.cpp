@@ -357,6 +357,19 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
 	Object->TryGetStringArrayField(TEXT("league"), Out.League);
 	Object->TryGetNumberField(TEXT("idle"), Out.IdleTeams);
+	Object->TryGetStringArrayField(TEXT("alerts"), Out.Alerts);
+	const TArray<TSharedPtr<FJsonValue>>* Pages = nullptr;
+	if (Object->TryGetArrayField(TEXT("pages"), Pages))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Pages)
+		{
+			FString Id, Label;
+			Value->AsObject()->TryGetStringField(TEXT("id"), Id);
+			Value->AsObject()->TryGetStringField(TEXT("label"), Label);
+			Out.PageIds.Add(Id);
+			Out.PageLabels.Add(Label);
+		}
+	}
 	const TSharedPtr<FJsonObject>* Stores = nullptr;
 	if (Object->TryGetObjectField(TEXT("stores"), Stores)) // null for a small country and in a scenario
 	{
@@ -514,6 +527,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			C.Name = Unit->GetStringField(TEXT("name"));
 			C.Kind = Unit->GetStringField(TEXT("kind"));
 			Unit->TryGetStringField(TEXT("elite"), C.Elite);
+			Unit->TryGetBoolField(TEXT("dim"), C.bDim);
 			Unit->TryGetStringField(TEXT("gen"), C.General); // null when nobody is named
 			Unit->TryGetStringField(TEXT("posture"), C.Posture);
 			C.Divisions = Unit->GetIntegerField(TEXT("divs"));
@@ -1531,6 +1545,82 @@ TArray<FString> FCampaignSession::Abilities(bool& bOutActive)
 		Object->TryGetStringArrayField(TEXT("lines"), Lines);
 	}
 	return Lines;
+}
+
+namespace
+{
+	void ReadButtons(const TSharedPtr<FJsonObject>& From, const TCHAR* Field, TArray<FPageButton>& Out)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Buttons = nullptr;
+		if (From->TryGetArrayField(Field, Buttons))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Buttons)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FPageButton& Button = Out.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("label"), Button.Label);
+				Entry->TryGetStringField(TEXT("act"), Button.Act);
+				Entry->TryGetStringField(TEXT("tip"), Button.Tip);
+				Entry->TryGetBoolField(TEXT("ok"), Button.bOk);
+				Entry->TryGetBoolField(TEXT("danger"), Button.bDanger);
+			}
+		}
+	}
+}
+
+FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
+{
+	FOfficePage Out;
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (!CallRules(TEXT("page"), FString::Printf(TEXT("[%s,%d]"), *JsonQuote(Id), RegionId), Object) || !Object.IsValid() || !Object->TryGetBoolField(TEXT("ok"), bOk) || !bOk)
+	{
+		return Out;
+	}
+	Out.bValid = true;
+	Out.Id = Id;
+	Object->TryGetStringField(TEXT("title"), Out.Title);
+	Object->TryGetStringField(TEXT("headline"), Out.Headline);
+	Object->TryGetStringField(TEXT("note"), Out.Note);
+	ReadButtons(Object, TEXT("top"), Out.Top);
+	const TArray<TSharedPtr<FJsonValue>>* Sections = nullptr;
+	if (Object->TryGetArrayField(TEXT("sections"), Sections))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Sections)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			FPageSection& Section = Out.Sections.AddDefaulted_GetRef();
+			Entry->TryGetStringField(TEXT("heading"), Section.Heading);
+			Entry->TryGetStringField(TEXT("text"), Section.Text);
+			const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;
+			if (Entry->TryGetArrayField(TEXT("rows"), Rows))
+			{
+				for (const TSharedPtr<FJsonValue>& RowValue : *Rows)
+				{
+					const TSharedPtr<FJsonObject> RowEntry = RowValue->AsObject();
+					FPageRow& Row = Section.Rows.AddDefaulted_GetRef();
+					RowEntry->TryGetStringField(TEXT("nat"), Row.Tag);
+					RowEntry->TryGetStringField(TEXT("title"), Row.Title);
+					RowEntry->TryGetStringArrayField(TEXT("lines"), Row.Lines);
+					ReadButtons(RowEntry, TEXT("buttons"), Row.Buttons);
+				}
+			}
+		}
+	}
+	return Out;
+}
+
+bool FCampaignSession::Act(const FString& Action, int32 RegionId, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("act"), FString::Printf(TEXT("[%s,%d]"), *JsonQuote(Action), RegionId), Object))
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("note"), OutNote);
+		TakeView(Object);
+	}
+	return bOk;
 }
 
 FGeneralStaff FCampaignSession::Generals()

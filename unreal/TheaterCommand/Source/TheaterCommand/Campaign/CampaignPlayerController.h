@@ -308,6 +308,15 @@ public:
 	/** How to play, as a page over the table. */
 	void OpenGuide();
 
+	/** A room the rules set out themselves: the secret service, the last act. */
+	const FOfficePage& GetPage() const { return Page; }
+	bool IsPageOpen() const { return bPageOpen; }
+	void OpenPage(const FString& Id);
+	void ClosePage();
+	void PressPage(const FString& Action);
+	/** The rooms open to the player now, for the buttons that lead to them: ids and labels, in step. */
+	void GetPageLinks(TArray<FString>& OutIds, TArray<FString>& OutLabels) const;
+
 	/** The generals: who commands what, who is waiting, and the corps that have nobody. */
 	const FGeneralStaff& GetGenerals() const { return Staff; }
 	bool IsGeneralsOpen() const { return bGeneralsOpen; }
@@ -451,6 +460,8 @@ private:
 	bool bResearchOpen = false;
 	FGeneralStaff Staff;
 	bool bGeneralsOpen = false;
+	FOfficePage Page;
+	bool bPageOpen = false;
 	void RefreshGenerals(bool bArmiesChanged);
 	FString PathAsked; // the path waiting for the player's yes, with its partner: "found:DEN"
 	FArsenal Arsenal;

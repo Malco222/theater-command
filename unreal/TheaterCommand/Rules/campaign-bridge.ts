@@ -49,6 +49,8 @@ import {
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes,
+  sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
+  lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
   invasions, previewDeclare, orderCourt, leagueInvites, leaguePartners, orderLeagueInvite, orderPath, paths, whyNotLeagueInvite,
   engineerJobs, orderBlowBridges, orderCutRailway, orderEngineers, orderStopWork, whyNotBlowBridges, whyNotCutRailway,
@@ -95,6 +97,7 @@ function standingOf(game: Game, nat: string): string {
 function view() {
   const s = game();
   const up = humanUp(s);
+  const seen = sight(s);
   return {
     rules: 'campaign',
     turn: s.turn,
@@ -120,13 +123,18 @@ function view() {
       const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, 'aa', r.id), workLevel(s, 'field', r.id)];
       return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
     }),
-    corps: s.corps.filter((c) => !c.dead).map((c) => ({
+    // Under the fog of war the player's map shows only what he is allowed to know: an army seen whole, an army
+    // only glimpsed (a flag and how many corps, 'dim'), or nothing at all.
+    corps: s.corps.filter((c) => !c.dead && seen[c.reg] > 0).map((c) => seen[c.reg] === 1
+      ? { id: c.id, nat: c.nat, name: 'An army seen from afar', kind: 'inf', elite: '', divs: 0, str: 0, org: 0, reg: c.reg, ap: 0, apMax: 0, gen: null, posture: postureOf(c), canOrder: false, supplied: true, men: 0, xp: 0, grade: '', nick: null, honours: [], dim: true }
+      : ({
       id: c.id, nat: c.nat, name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
       canOrder: up && canOrder(s, c), supplied: c.supplied, men: men(c),
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
+      dim: false,
     })),
     // The fleets, and the sea each is in (a fleet in harbour lies at its base), and the air fleets on their airfields.
     fleets: s.fleets.filter((f) => f.ships.bb + f.ships.cv + f.ships.ca + f.ships.dd + f.ships.ss > 0).map((f) => ({
@@ -150,6 +158,9 @@ function view() {
       }
       return [n.id, (['armour', 'fighters', 'bombers'] as const).map((f) => 1939 + Math.floor((Math.max(1, s.turn + Math.round(n.lab!.clock[f] - n.lab!.months)) + 7) / 12))];
     })),
+    // Things the player should be told as his month opens, and the rooms beyond the main screens that are open to him.
+    alerts: alertsOf(s),
+    pages: pagesOf(s),
     // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
     // the months it will last and its books in words, and every shipping lane to draw over the sea.
     stores: storesOf(s),
@@ -945,6 +956,131 @@ function warPlan(on: string, target = -1) {
   return { ok: true, name: theName(s, on), lead, friends: friendsLine, lines };
 }
 
+// ---- Rooms drawn by one general panel: the bridge writes the words and the buttons, the game draws them ----------
+
+interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
+interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[] }
+interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
+
+/** A question about World Domination waiting for its second and third yes. */
+let domAsked = 0;
+
+function pagesOf(s: Game): { id: string; label: string }[] {
+  const out: { id: string; label: string }[] = [];
+  if (!s.human) return out;
+  if (secretService(s)) out.push({ id: 'spies', label: 'THE SECRET SERVICE' });
+  const act = lastAct(s);
+  if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
+  return out;
+}
+
+function alertsOf(s: Game): string[] {
+  const out: string[] = [];
+  if (!s.human) return out;
+  const act = lastAct(s);
+  if (act?.winner) out.push(`${s.nations[act.winner]?.name ?? act.winner} has won the world.`);
+  else if (act?.open && !act.peace) out.push('The war between the alliances is decided. Open DIPLOMACY and choose THE LAST ACT.');
+  return out;
+}
+
+const pct = (x: number): string => `${Math.round(x * 100)}%`;
+
+function spiesPage(s: Game, region: number): Page | null {
+  const room = secretService(s);
+  if (!room) return null;
+  const up = humanUp(s) && !onEve(s);
+  const here = s.regions[region];
+  const rows: PageRow[] = room.agents.map((a) => {
+    const whySend = here ? whyNotSendAgent(s, a.id, region) : 'Close this, click a province on the map, and open the room again.';
+    const buttons: PageButton[] = a.missions.map((m) => ({
+      label: m.now ? `${m.label.toUpperCase()} (NOW)` : m.label.toUpperCase(), act: `spy:mission:${a.id}:${m.id}`, ok: up && m.ok && !m.now,
+      tip: `${m.text}${m.success !== null ? ` Chance of success ${pct(m.success)}.` : ''} Chance of being caught ${pct(m.caught)}.${m.ok ? '' : ` ${m.why}`}`,
+    }));
+    buttons.push({ label: here ? `SEND TO ${here.name.toUpperCase()}` : 'SEND TO A PROVINCE', act: `spy:send:${a.id}`, ok: up && !!here && whySend === null && here.id !== a.reg, tip: whySend ?? `The agent travels to ${here?.name ?? 'the province selected on the map'} and sets to work there.` });
+    buttons.push({ label: 'RETIRE', act: `spy:retire:${a.id}`, ok: up, tip: 'The agent leaves the service, which frees a place in it.', danger: true });
+    const lines = [`${a.where}${a.abroad ? `, in ${theName(s, a.host)}` : ', at home'}. ${a.doing}`];
+    if (a.wait > 0) lines.push(`At work in ${a.wait} month${a.wait === 1 ? '' : 's'}.`);
+    if (a.atWork) lines.push(`Chance of being caught this month: ${pct(a.caught)}.${a.rest > 0 ? ` Lying low for ${a.rest} more month${a.rest === 1 ? '' : 's'} before another act of sabotage.` : ''}`);
+    for (const x of a.sees.slice(0, 5)) lines.push(`In sight at ${s.regions[x.reg].name}: ${s.nations[x.nat]?.adj ?? x.nat} army, ${x.corps} corps, ${x.divs} division${x.divs === 1 ? '' : 's'}.`);
+    return { nat: a.nat, title: `${a.rank} ${a.name}`, lines, buttons };
+  });
+  const notes = room.notes.slice(-10).reverse().map((n) => `${turnToDate(n.turn).label}: ${n.text}`);
+  return {
+    id: 'spies', title: 'THE SECRET SERVICE',
+    headline: `${room.agents.length} of ${room.most} agents in the service`,
+    note: `Agents abroad show you what the fog of war hides, read a foreign government's books, and can strike at factories, railways and oil. Agents at home guard against the other side's. ${room.threat.foes.length ? `This month the chance of an enemy strike at home is ${pct(room.threat.chance)}, with ${room.threat.guards} of your agents on guard.` : 'No enemy service is working against you at home.'}`,
+    top: [
+      { label: `RECRUIT AN AGENT  \u00B7  ${Math.round(room.cost).toLocaleString('en-US')}`, act: 'spy:recruit', ok: up && room.whyNotRecruit === null, tip: room.whyNotRecruit ?? 'A new agent joins the service, at home, and can be sent abroad.' },
+      { label: room.fog ? 'LIFT THE FOG OF WAR' : 'LAY THE FOG OF WAR AGAIN', act: room.fog ? 'fog:off' : 'fog:on', ok: true, tip: room.fog ? 'Show every army on the map, as before spies were in the game. Agents and sabotage go on either way.' : 'Hide again what your armies and agents cannot see.' },
+    ],
+    sections: [
+      { heading: 'YOUR AGENTS', text: rows.length ? (here ? `The province selected on the map is ${here.name}: an agent can be sent there.` : 'To send an agent somewhere, close this, click the province on the map, and open the room again.') : 'The service has no agents yet. Recruit one above.', rows },
+      { heading: "THE SERVICE'S FILE", text: notes.length ? notes.join('\n') : 'Nothing has been reported yet.', rows: [] },
+    ],
+  };
+}
+
+function lastActPage(s: Game): Page | null {
+  const act = lastAct(s);
+  if (!act || !(act.decided || act.on)) return null;
+  const board = standings(s);
+  const up = humanUp(s);
+  const row = (r: (typeof board.rows)[number]): PageRow => ({
+    nat: r.nat, title: r.you ? `${r.name} (you)` : r.name,
+    lines: [r.alive
+      ? `${r.provinces} province${r.provinces === 1 ? '' : 's'}, ${pct(r.share)} of the world. ${r.few ? `Fewer than ${r.divisions} divisions` : `${r.exact ? '' : 'About '}${r.divisions} division${r.divisions === 1 ? '' : 's'}`}${r.income !== null ? `. Income ${Math.round(r.income * board.scale).toLocaleString('en-US')} a month` : ''}.`
+      : `Fell in ${r.fell ? turnToDate(r.fell.turn).label : 'the war'}${r.fell ? ` to ${theName(s, r.fell.to)}` : ''}.`],
+    buttons: [],
+  });
+  const top: PageButton[] = [];
+  let note = '';
+  if (act.winner) note = `${s.nations[act.winner]?.name ?? act.winner} is the last nation standing. The world is won.`;
+  else if (act.on) note = `The last act began in ${turnToDate(act.since).label}. Every alliance is dissolved and every nation still standing is at war with every other. ${act.left} are left. The last one standing wins the world.`;
+  else {
+    const why = whyNotOrderDomination(s);
+    note = `The war between the alliances is decided. You can take the victory and leave the world as it is, or choose World Domination: every alliance is dissolved, your allies of yesterday become your enemies, and the last nation standing wins. It cannot be undone.${act.peace ? ' You have taken the victory; the last act stays open to you.' : ''}`;
+    if (domAsked === 0) top.push({ label: 'WORLD DOMINATION', act: 'dom:ask', ok: up && why === null, tip: why ?? 'Turn on every nation still standing. You will be asked twice whether you mean it.', danger: true });
+    else top.push({ label: domAsked === 1 ? 'YES, I MEAN IT' : 'YES. BEGIN THE LAST ACT. IT CANNOT BE UNDONE', act: domAsked === 1 ? 'dom:ask2' : 'dom:yes', ok: up && why === null, tip: why ?? '', danger: true }, { label: 'NO', act: 'dom:no', ok: true, tip: 'Leave things as they are.' });
+    if (!act.peace) top.push({ label: 'TAKE THE VICTORY AND KEEP THE PEACE', act: 'dom:peace', ok: up, tip: 'The war is won. The world stays as it is, and the last act can still be chosen in a later month.' });
+  }
+  return {
+    id: 'lastact', title: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT',
+    headline: act.winner ? 'The world is won' : act.on ? `${act.left} nations still stand` : 'The war is decided',
+    note, top,
+    sections: [
+      { heading: 'STILL STANDING', text: '', rows: board.rows.map(row) },
+      { heading: 'FALLEN', text: board.fallen.length ? '' : 'Nobody has fallen yet.', rows: board.fallen.map(row) },
+    ],
+  };
+}
+
+/** One of the rooms the general panel shows. region is the province selected on the map, or -1. */
+function page(id: string, region = -1) {
+  const s = game();
+  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : null;
+  return p ? { ok: true, ...p } : { ok: false };
+}
+
+/** Something pressed in one of those rooms. Says what came of it; the game then draws the room again. */
+function act(action: string, region = -1) {
+  const s = game();
+  const h0 = s.headlines.length;
+  const part = action.split(':');
+  let ok = false, note = '';
+  if (action === 'spy:recruit') { const a = orderRecruitAgent(s); ok = !!a; note = a ? `${a.name} joins the service.` : 'No agent could be recruited.'; }
+  else if (part[0] === 'spy' && part[1] === 'send') { const why = whyNotSendAgent(s, Number(part[2]), region); ok = orderSendAgent(s, Number(part[2]), region); note = ok ? `The agent sets out for ${s.regions[region]?.name ?? 'the province'}.` : why ?? 'The agent cannot go there.'; }
+  else if (part[0] === 'spy' && part[1] === 'mission') { ok = orderAgentMission(s, Number(part[2]), part[3] as Parameters<typeof orderAgentMission>[2]); note = ok ? 'The agent has new orders.' : 'The agent cannot take that work now.'; }
+  else if (part[0] === 'spy' && part[1] === 'retire') { ok = orderRetireAgent(s, Number(part[2])); note = ok ? 'The agent has left the service.' : ''; }
+  else if (action === 'fog:off' || action === 'fog:on') { ok = orderFog(s, action === 'fog:on'); note = ok ? (action === 'fog:on' ? 'The fog of war lies on the map again.' : 'The fog of war is lifted: every army is shown.') : ''; }
+  else if (action === 'dom:ask') { domAsked = 1; ok = true; }
+  else if (action === 'dom:ask2') { domAsked = 2; ok = true; }
+  else if (action === 'dom:no') { domAsked = 0; ok = true; }
+  else if (action === 'dom:yes') { domAsked = 0; ok = orderDomination(s); note = ok ? 'The last act has begun. Every nation still standing is at war with every other.' : whyNotOrderDomination(s) ?? 'It cannot be chosen now.'; }
+  else if (action === 'dom:peace') { domAsked = 0; ok = orderKeepPeace(s); note = ok ? 'You take the victory, and the world stays as it is.' : ''; }
+  const news = s.headlines.slice(h0).map((h) => h.text);
+  return { ok, note: news.length ? news.join(' ') : note, view: view() };
+}
+
 /** The player's oil and supplies, for the two gauges beside the treasury. */
 function storesOf(s: Game) {
   const v = s.human ? depots(s) : null;
@@ -1355,4 +1491,4 @@ function roll() {
 }
 
 (globalThis as Record<string, unknown>).TC = {
-  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
+  land, work, force, forceOrder, seaReach, ship, landingPlan, landOn, record, roll, stance, railReach, rail, province, raise, fortify, cancel, declare, warPlan, diplomacy, court: courtNation, path: takePathOf, invite: inviteNation, page, act, abilities, research, tech, techStart, techStop, teams, bureau, generals, assign, promote: promoteIn, relieve: relieveOf, skill: skillUp, ledger, arsenal, order, starts, grand, start, save, peek, load, view, reach: reachOf, move, previewAttack: preview, attack, endMonth };
