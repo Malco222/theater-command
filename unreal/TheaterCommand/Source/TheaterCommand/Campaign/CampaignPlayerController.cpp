@@ -2094,7 +2094,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			FString Line = FString::Printf(TEXT("%s  \u00B7  %s%s"), *Region.Name, Nation ? *Nation->Name : *Holder,
 				Standing == TEXT("own") ? TEXT(" (yours)") : Standing == TEXT("enemy") ? TEXT(" (enemy)") : Standing == TEXT("ally") ? TEXT(" (ally)") : Standing == TEXT("neutral") ? TEXT(" (at peace)") : TEXT(""));
 			TArray<FString> Worth;
-			if (Region.VictoryPoints > 0) { Worth.Add(FString::Printf(TEXT("worth %d"), Region.VictoryPoints)); }
+			// What the place pays a month, where the rules have said; its victory points where they have not.
+			if (const FTownInfo* Town = Map->TownOf(TipRegion))
+			{
+				if (Town->Worth > 0) { Worth.Add(FString::Printf(TEXT("pays %d a month"), Town->Worth)); }
+			}
+			else if (Region.VictoryPoints > 0) { Worth.Add(FString::Printf(TEXT("worth %d"), Region.VictoryPoints)); }
 			if (Region.Factories > 0) { Worth.Add(FString::Printf(TEXT("%d %s"), Region.Factories, Region.Factories == 1 ? TEXT("factory") : TEXT("factories"))); }
 			if (Region.bOil) { Worth.Add(TEXT("oil")); }
 			if (Region.bPort) { Worth.Add(TEXT("harbour")); }

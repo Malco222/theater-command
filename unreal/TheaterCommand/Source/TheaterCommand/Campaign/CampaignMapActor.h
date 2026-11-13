@@ -85,6 +85,8 @@ public:
 	/** The chief town of each province with what it pays, from the rules: the labels are written again to say so. */
 	void SetTowns(const TArray<FTownInfo>& InTowns);
 	bool HasTowns() const { return Towns.Num() > 0; }
+	/** What the rules say of a province's chief town, or null before they have said. */
+	const FTownInfo* TownOf(int32 RegionId) const { return Towns.IsValidIndex(RegionId) && Towns[RegionId].Region == RegionId ? &Towns[RegionId] : nullptr; }
 	/** The wealth view: every province tinted gold by what it pays, on the table and on the small map. */
 	void ShowWealth(bool bOn);
 	bool IsWealthShown() const { return bWealth; }
