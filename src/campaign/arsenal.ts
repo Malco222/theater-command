@@ -8,12 +8,14 @@
 import data from '../../data/campaign/arsenal.json';
 import { AIRWAR, airFleetsOf, airPool, airWar, carrierRules, foundAirFleet, hasAirfield } from './air';
 import { syncWings } from './carriers';
+import { classNow, menLeft, menRules, menWords, raisable } from './manpower';
+import { govMul } from './government';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { headline } from './game';
 import { NAVY, fleetsOf, foundFleet, shipCount } from './navy';
-import type { AirFleet, Build, Fleet, Game, Kind, Region, ShipClass } from './types';
+import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 
 export type Wing = 'ftr' | 'bmr';
 export type Hull = ShipClass | 'tp';
@@ -162,6 +164,8 @@ export interface Offer {
   poor: boolean;
   /** The id of the technology the nation must research before it can place this order (the grand campaign), or absent. */
   tech?: string;
+  /** The men it takes from the reserve (the grand campaign): set for a new corps. */
+  men?: number;
 }
 
 const POOR = 'The treasury cannot cover it.';
@@ -178,6 +182,9 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
   const n = g.nations[nat];
   const out: Omit<Offer, 'poor'>[] = [];
   const poor = (cost: number): string | null => (n.pp < cost ? POOR : null);
+  // Every new corps is filled from the reserve of men (the grand campaign).
+  const noMen = (divs: number): string | null => (raisable(g, nat, divs) < 1 ? `The reserve has not the men: this takes ${menWords(divs * MEN_PER_DIV)} and ${menWords(menLeft(g, nat) * MEN_PER_DIV)} are left. ${menWords(classNow(g, nat, govMul(g, nat, 'men')) * MEN_PER_DIV)} come of age each month.` : null);
+  const menFor = (divs: number): { men?: number } => (menRules(g) ? { men: divs * MEN_PER_DIV } : {});
   const r = g.regions[sel] as Region | undefined;
   // What the technology tree still holds back (the grand campaign): the order is listed, and says what it waits on.
   const gate = (key: string): { why: string; tech: string } | null => { const t = locked(g, nat, key); return t ? { why: `Needs the technology ${t.name}. Open Research to begin it.`, tech: t.id } : null; };
@@ -192,7 +199,8 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       key: 'elite', group: 'army', label: u.label, blurb: `${u.text} ${eliteRule(u)}`, size: plural(u.divs, 'division'), cost: u.cost, months: u.months,
       upkeep: corpsUpkeep(u.kind, u.divs), at,
       note: at < 0 ? '' : `Forms up at ${g.regions[at].name}. ${eliteCount(g, nat)} of ${u.most} in the field or on order.`,
-      why: no ?? (at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : poor(u.cost)),
+      why: no ?? (at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : noMen(u.divs) ?? poor(u.cost)),
+      ...menFor(u.divs),
     });
   }
   for (const kind of corpsKinds(g)) {
@@ -206,8 +214,9 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       key: `corps:${kind}`, group: 'army', label: spec.label, blurb: spec.blurb, size: plural(spec.divs, 'division'), cost, months: spec.months,
       upkeep: budgeted(g) ? corpsUpkeep(kind, spec.divs) : 0, at,
       note: at < 0 ? '' : `Forms up at ${where}${need && at !== sel && r && canRaise(g, nat, r) ? `: ${r.name} has not the ${plural(need, 'factory', 'factories')} this needs` : ''}.`,
-      why: held?.why ?? (at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : poor(cost)),
+      why: held?.why ?? (at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : noMen(spec.divs) ?? poor(cost)),
       ...(held ? { tech: held.tech } : {}),
+      ...menFor(spec.divs),
     });
   }
   // Airborne troops, once the tree has given the nation its airborne forces (the grand campaign).
@@ -220,8 +229,9 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       key: 'para', group: 'army', label: p.label, blurb: p.blurb, size: plural(p.divs, 'division'), cost, months: p.months,
       upkeep: corpsUpkeep('inf', p.divs), at,
       note: at < 0 ? '' : `Forms up at ${g.regions[at].name}. ${paraCount(g, nat)} of ${p.most} in the field or on order.`,
-      why: held?.why ?? whyNoPara(g, nat) ?? (at < 0 ? 'There is no home ground left to raise troops on.' : poor(cost)),
+      why: held?.why ?? whyNoPara(g, nat) ?? (at < 0 ? 'There is no home ground left to raise troops on.' : noMen(p.divs) ?? poor(cost)),
       ...(held ? { tech: held.tech } : {}),
+      ...menFor(p.divs),
     });
   }
   if (!budgeted(g)) {

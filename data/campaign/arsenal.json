@@ -33,5 +33,5 @@
     "Rotterdam": 2, "Holland": 2, "Antwerp": 1, "Zealand": 2, "Oslo": 1, "Cadiz": 2, "Catalonia": 1, "Athens": 1, "Danzig Corridor": 1
   },
   "guns": { "soften": 0.15, "softenMost": 0.6, "thicken": 0.05, "thickenMost": 0.2 },
-  "ai": { "aaAfterRaid": true }
+  "ai": { "aaAfterRaid": true, "guns": { "per": 6, "most": 10, "facing": 3 } }
 }

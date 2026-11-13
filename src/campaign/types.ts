@@ -98,13 +98,20 @@ export interface Directive {
   /** The month it was set: one at a time, so that names it. */
   id: number;
   nat: string;
-  /** Take a town, hold one of his own, bring the army up to strength, or strike an ally's enemy. */
-  kind: 'take' | 'hold' | 'raise' | 'relief';
+  /** Take a town, hold one of his own, bring the army up to strength, sign a trade agreement, or strike an ally's enemy. */
+  kind: 'take' | 'hold' | 'raise' | 'relief' | 'trade';
   /** Who set it: the nation's own cabinet, or an ally. */
   from: string;
   region?: number;
-  /** For 'raise': the army to reach, in divisions. */
+  /** For 'raise': the army to reach, in divisions, in the field or forming. For 'trade': the agreements to have signed. */
   target?: number;
+  /** A town the cabinet knows is strongly held: it gave more months and a larger reward. */
+  hard?: boolean;
+  /** A town the cabinet has asked for before in this war. */
+  again?: boolean;
+  /** For 'hold': true once the place has been attacked or besieged while the order ran, and the last battle report read. */
+  tested?: boolean;
+  seen?: number;
   issued: number;
   /** The last month it can be done in. */
   due: number;
@@ -140,6 +147,10 @@ export interface GovState {
   last?: { label: string; amount: number }[];
   dir?: Directive;
   lastKind?: string;
+  /** The month the government was formed. */
+  since?: number;
+  /** Towns the cabinet asked for and did not get, by province: the month the order ended. */
+  asked?: Record<string, number>;
 }
 
 /** A trade agreement between two countries (the grand campaign). It pays both every month. */
