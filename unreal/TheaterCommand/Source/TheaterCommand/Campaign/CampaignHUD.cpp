@@ -5,6 +5,9 @@
 #include "Campaign/CampaignPlayerController.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Engine/Engine.h"
+#include "Fonts/FontMeasure.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Rendering/SlateRenderer.h"
 #include "Engine/GameViewportClient.h"
 #include "Styling/CoreStyle.h"
 #include "Styling/SlateTypes.h"
@@ -93,6 +96,95 @@ namespace
 	};
 
 	/** The small map in the corner: the countries in their colours, the armies as marks, and the part on screen boxed. A click goes there. */
+	/**
+	 * The name plates of the towns: each hangs before its town and faces the player, so a name can be read from
+	 * any side of the table and is never hidden by the models. A stripe in the holder's colour says whose it is.
+	 * Where plates would crowd one another the place that matters more keeps its plate.
+	 */
+	class STownPlates : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(STownPlates) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Controller)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Controller = Args._Controller;
+			Plate = FSlateRoundedBoxBrush(FLinearColor(0.035f, 0.031f, 0.026f, 0.86f), 3.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 1.0f);
+			CapitalPlate = FSlateRoundedBoxBrush(FLinearColor(0.035f, 0.031f, 0.026f, 0.92f), 3.0f, FLinearColor(FColor::FromHex(TEXT("B8975A"))).CopyWithNewOpacity(0.85f), 1.0f);
+			Stripe = FSlateRoundedBoxBrush(FLinearColor::White, 1.5f);
+			SetVisibility(EVisibility::HitTestInvisible);
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override { return FVector2D(16.0, 16.0); }
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
+			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
+		{
+			if (!Controller.IsValid())
+			{
+				return LayerId;
+			}
+			TArray<FTownPlate> Plates;
+			Controller->GetTownPlates(Plates);
+			if (Plates.Num() == 0)
+			{
+				return LayerId;
+			}
+			const float Scale = FMath::Max(Geometry.Scale, 0.01f);
+			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const FSlateFontInfo CapitalFont = Font(TEXT("Bold"), 12, 40);
+			const FSlateFontInfo TownFont = Font(TEXT("Bold"), 10, 30);
+			const FSlateFontInfo LineFont = Font(TEXT("Regular"), 9);
+			const FSlateFontInfo FarFont = Font(TEXT("Bold"), 8, 20);
+			const FLinearColor NameInk(FColor::FromHex(TEXT("F2E8D5")));
+			const FLinearColor LineInk(FColor::FromHex(TEXT("B9AC93")));
+			TArray<FBox2D> Taken;
+			for (const FTownPlate& Each : Plates)
+			{
+				// (from far off the capitals' plates are small, so the countries' own names can still be read)
+				const FSlateFontInfo& NameFont = Each.bFar ? FarFont : Each.bCapital ? CapitalFont : TownFont;
+				const FString Shown = Each.bCapital && !Each.bFar ? FString(TEXT("\u2605 ")) + Each.Name : Each.Name;
+				const FVector2D NameSize = Measure->Measure(Shown, NameFont);
+				const FVector2D LineSize = Each.Line.IsEmpty() ? FVector2D::ZeroVector : FVector2D(Measure->Measure(Each.Line, LineFont));
+				const double Wide = FMath::Max(NameSize.X, LineSize.X) + 19.0;
+				const double High = NameSize.Y + (Each.Line.IsEmpty() ? 0.0 : LineSize.Y - 1.0) + 5.0;
+				const FVector2D Corner(Each.At.X / Scale - Wide * 0.5, Each.At.Y / Scale);
+				const FBox2D Box(Corner - FVector2D(3.0, 2.0), Corner + FVector2D(Wide + 3.0, High + 2.0));
+				bool bCrowded = false;
+				for (const FBox2D& Other : Taken)
+				{
+					if (Other.Intersect(Box))
+					{
+						bCrowded = true;
+						break;
+					}
+				}
+				if (bCrowded)
+				{
+					continue;
+				}
+				Taken.Add(Box);
+				const FSlateBrush& Back = Each.bCapital && !Each.bFar ? CapitalPlate : Plate;
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, High), FSlateLayoutTransform(Corner)), &Back, ESlateDrawEffect::None, Back.GetTint(InWidgetStyle));
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, High - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour.CopyWithNewOpacity(1.0f));
+				FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 2.0))), Shown, NameFont, ESlateDrawEffect::None, NameInk);
+				if (!Each.Line.IsEmpty())
+				{
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(LineSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 1.0 + NameSize.Y))), Each.Line, LineFont, ESlateDrawEffect::None, LineInk);
+				}
+			}
+			return LayerId + 1;
+		}
+
+	private:
+		TWeakObjectPtr<ACampaignPlayerController> Controller;
+		FSlateBrush Plate;
+		FSlateBrush CapitalPlate;
+		FSlateBrush Stripe;
+	};
+
 	class SMinimap : public SLeafWidget
 	{
 	public:
@@ -312,6 +404,12 @@ namespace
 				})
 				[
 					SNew(SOverlay)
+
+					// Under everything else on the screen: the name plates of the towns on the table.
+					+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+					[
+						SNew(STownPlates).Controller(Controller)
+					]
 
 					// The date plate.
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(24.0f)

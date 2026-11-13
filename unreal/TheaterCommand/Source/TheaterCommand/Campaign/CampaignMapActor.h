@@ -46,6 +46,19 @@ public:
 
 	/** Map units to world space. Height is in map units above the sea. */
 	FVector MapToWorld(double X, double Y, double Height = 0.0) const;
+
+	/** A town's name plate: where it stands on the table, what it reads, and from how far off it is shown. */
+	struct FPlateSpot
+	{
+		int32 Region = INDEX_NONE;
+		FVector World = FVector::ZeroVector; // the town's place on the table
+		float Reach = 0.0f; // how far toward the eye, in the world's units, the plate hangs from it
+		FString Name;
+		FString Line; // what the place is worth, shown close up
+		int32 Tier = 0; // 0 a capital, shown from any distance; 1 a town, from the middle distance; 2 a place worth having, close up
+		int32 Rank = 0; // the more a place matters, the sooner its plate wins a crowded spot
+	};
+	const TArray<FPlateSpot>& GetPlateSpots() const { return PlateSpots; }
 	FVector2D WorldToMap(const FVector& World) const;
 
 	/** A point on the surface of the table: on the ground over land, on the water over sea. */
@@ -225,7 +238,9 @@ private:
 	FVector ArmySpot(int32 RegionId, int32 Slot) const;
 
 	/** Spacing is extra room between letters, as a fraction of their height. */
-	UTextRenderComponent* AddLabel(const FString& Text, const FVector2D& MapPos, float SizeUnits, const FColor& Color, int32 Tier, float Spacing = 0.0f);
+	UTextRenderComponent* AddLabel(const FString& Text, const FVector2D& MapPos, float SizeUnits, const FColor& Color, int32 Tier, float Spacing = 0.0f, int32 OfRegion = INDEX_NONE);
+	/** The ink a region's name is written in: dark on a pale country, pale on a dark one. */
+	FColor RegionInk(int32 RegionId) const;
 	UStaticMeshComponent* AddBlock(const FVector& CenterWorld, const FVector& SizeWorld, UMaterialInterface* Material);
 
 	UPROPERTY(VisibleAnywhere, Category = "Campaign")
@@ -470,6 +485,8 @@ private:
 
 	/** Which lettering tier each label belongs to: 0 always, 1 only from far off, 2 only close up. */
 	TArray<int32> LabelTiers;
+	TArray<int32> LabelRegions; // the region a label names, where its ink should suit that region's paint; or none
+	TArray<FPlateSpot> PlateSpots;
 
 	FCampaignMapData Data;
 	FCampaignTerrain Terrain;

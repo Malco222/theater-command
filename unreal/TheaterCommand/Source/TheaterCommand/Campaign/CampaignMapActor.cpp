@@ -404,6 +404,14 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetTextureParameterValue(TEXT("Masks"), MasksPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Detail"), DetailPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Bumps"), BumpsPicture);
+	{
+		// "-TheaterSheen=0.1" tries another strength for the sheen of the painted land.
+		float Sheen = 0.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSheen="), Sheen))
+		{
+			LandMaterial->SetScalarParameterValue(TEXT("Specular"), Sheen);
+		}
+	}
 	LandMaterial->SetVectorParameterValue(TEXT("RockColour"), FCampaignGround::RockColour());
 	LandMaterial->SetVectorParameterValue(TEXT("SnowColour"), FCampaignGround::SnowColour());
 	LandMaterial->SetVectorParameterValue(TEXT("SandColour"), FCampaignGround::SandColour());
@@ -2087,7 +2095,7 @@ void ACampaignMapActor::BuildTrees()
 	UE_LOG(LogTheater, Log, TEXT("Trees: %d, in %d squares of country"), Trees, TreeMeshes.Num());
 }
 
-UTextRenderComponent* ACampaignMapActor::AddLabel(const FString& Text, const FVector2D& MapPos, float SizeUnits, const FColor& Color, int32 Tier, float Spacing)
+UTextRenderComponent* ACampaignMapActor::AddLabel(const FString& Text, const FVector2D& MapPos, float SizeUnits, const FColor& Color, int32 Tier, float Spacing, int32 OfRegion)
 {
 	UTextRenderComponent* Label = NewObject<UTextRenderComponent>(this);
 	Label->SetupAttachment(Root);
@@ -2119,7 +2127,15 @@ UTextRenderComponent* ACampaignMapActor::AddLabel(const FString& Text, const FVe
 
 	Labels.Add(Label);
 	LabelTiers.Add(Tier);
+	LabelRegions.Add(OfRegion);
 	return Label;
+}
+
+FColor ACampaignMapActor::RegionInk(int32 RegionId) const
+{
+	const FCampaignNation* Nation = Data.Regions.IsValidIndex(RegionId) ? Data.FindNation(Data.Regions[RegionId].Owner) : nullptr;
+	const bool bDark = Nation && FLinearColor(Nation->Color).GetLuminance() < 0.16f;
+	return (bDark ? FromHex(TEXT("C9C3B2")) : FromHex(TEXT("2B251E"))).ToFColor(true);
 }
 
 void ACampaignMapActor::BuildLabels()
@@ -2133,10 +2149,11 @@ void ACampaignMapActor::BuildLabels()
 	}
 	Labels.Reset();
 	LabelTiers.Reset();
+	LabelRegions.Reset();
+	PlateSpots.Reset();
 	LabelState = -1;
 
 	const FColor Ink = FromHex(TEXT("17130F")).ToFColor(true);
-	const FColor FaintInk = FromHex(TEXT("2B251E")).ToFColor(true);
 	const FColor SeaInk = FromHex(TEXT("A9C6CE")).ToFColor(true);
 
 	// Towns and regions.
@@ -2147,9 +2164,8 @@ void ACampaignMapActor::BuildLabels()
 		const bool bWorth = Region.VictoryPoints > 0 || Region.Factories > 0 || Region.bOil || Region.bPort;
 		if (bTown || bWorth)
 		{
-			const float Size = Region.bCapital ? 4.4f : (bTown ? 3.4f : 2.9f);
-			// The name sits just south of the town's marker, and under it what the place is worth.
-			AddLabel(Region.Name, Region.Center + FVector2D(0.0, Size * 0.5 + 2.0), Size, Ink, Region.bCapital ? TierAlways : TierMiddle);
+			// Its name is on a plate that hangs before the town and faces whoever looks at the table (the screen
+			// draws it), and under the name, close up, what the place is worth.
 			TArray<FString> Worth;
 			if (Towns.IsValidIndex(Region.Id) && Towns[Region.Id].Region == Region.Id)
 			{
@@ -2180,14 +2196,18 @@ void ACampaignMapActor::BuildLabels()
 			{
 				Worth.Add(TEXT("harbour"));
 			}
-			if (Worth.Num() > 0)
-			{
-				AddLabel(FString::Join(Worth, TEXT("  \u00B7  ")), Region.Center + FVector2D(0.0, Size * 0.5 + 2.0 + Size * 0.95 + (Region.bCapital ? 2.2 : 0.0)), 2.3f, FromHex(TEXT("5A1E12")).ToFColor(true), TierMiddle);
-			}
+			FPlateSpot& Spot = PlateSpots.AddDefaulted_GetRef();
+			Spot.Region = Region.Id;
+			Spot.World = MapToWorld(Region.Center.X, Region.Center.Y, Terrain.HeightAt(Region.Center.X, Region.Center.Y));
+			Spot.Reach = (Region.bCapital ? 7.0f : bTown ? 5.2f : 3.6f) * UnitScale;
+			Spot.Name = Region.Name;
+			Spot.Line = FString::Join(Worth, TEXT("  \u00B7  "));
+			Spot.Tier = Region.bCapital ? 0 : bTown ? 1 : 2;
+			Spot.Rank = (Region.bCapital ? 1000 : 0) + Region.VictoryPoints * 20 + Region.Factories * 5 + (bTown ? 10 : 0);
 		}
 		else
 		{
-			AddLabel(Region.Name, Region.Centroid, 2.6f, FaintInk, TierNear);
+			AddLabel(Region.Name, Region.Centroid, 2.6f, RegionInk(Region.Id), TierNear, 0.0f, Region.Id);
 		}
 	}
 
@@ -2607,6 +2627,18 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	const int32 I1 = FMath::Clamp(FMath::CeilToInt32((Changed.Max.X + Margin) / Terrain.Cell), 0, Terrain.NX - 1);
 	const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Changed.Min.Y - Margin) / Terrain.Cell), 0, Terrain.NY - 1);
 	const int32 J1 = FMath::Clamp(FMath::CeilToInt32((Changed.Max.Y + Margin) / Terrain.Cell), 0, Terrain.NY - 1);
+	// (names written on ground that has changed hands are inked to suit its new paint)
+	for (int32 i = 0; i < Labels.Num() && i < LabelRegions.Num(); ++i)
+	{
+		if (Labels[i] && LabelRegions[i] != INDEX_NONE)
+		{
+			const FColor Ink = RegionInk(LabelRegions[i]);
+			if (Labels[i]->TextRenderColor != Ink)
+			{
+				Labels[i]->SetTextRenderColor(Ink);
+			}
+		}
+	}
 	// Only the nations' paint changes: the land itself is left as it is.
 	Paint.PaintTint(Data, Terrain, I0, J0, I1, J1);
 	CampaignTextures::Update(TintPicture, Paint.Tint);
@@ -2806,7 +2838,10 @@ void ACampaignMapActor::UpdateFlashes()
 		// A bright wash that comes up at once and dies away, with a second, fainter beat as it goes.
 		const double T = (Now - Flash.Value) / Lasts;
 		const float Beat = static_cast<float>(FMath::Square(1.0 - T) * (0.75 + 0.25 * FMath::Cos(T * PI * 4.0)));
-		AppendRegionFill(Buffers, Flash.Key, FLinearColor(0.62f, 0.56f, 0.4f, 0.7f * Beat));
+		// It is the new holder's own colour that sweeps over the ground, bright at first, and settles into the paint.
+		const FCampaignNation* Holder = Data.Regions.IsValidIndex(Flash.Key) ? Data.FindNation(Data.Regions[Flash.Key].Owner) : nullptr;
+		const FLinearColor Sweep = Holder ? FMath::Lerp(FLinearColor(Holder->Color), FLinearColor(0.75f, 0.7f, 0.55f), 0.35f) : FLinearColor(0.62f, 0.56f, 0.4f);
+		AppendRegionFill(Buffers, Flash.Key, FLinearColor(Sweep.R, Sweep.G, Sweep.B, 0.8f * Beat));
 	}
 	Buffers.Commit(OrdersMesh, 8, HighlightMaterial);
 }
@@ -3879,7 +3914,8 @@ void ACampaignMapActor::RebuildHighlight()
 	HighlightMesh->ClearAllMeshSections();
 	if (SelectedRegion != INDEX_NONE)
 	{
-		AddRegionOverlay(SelectedRegion, FLinearColor(1.0f, 0.82f, 0.42f, 0.34f), FLinearColor(1.0f, 0.9f, 0.62f, 0.95f), 0);
+		// (a light wash and a bright edge: the ground keeps the colour of whoever holds it while it is picked)
+		AddRegionOverlay(SelectedRegion, FLinearColor(1.0f, 0.82f, 0.42f, 0.11f), FLinearColor(1.0f, 0.9f, 0.62f, 0.95f), 0);
 	}
 	if (HoveredRegion != INDEX_NONE && HoveredRegion != SelectedRegion)
 	{

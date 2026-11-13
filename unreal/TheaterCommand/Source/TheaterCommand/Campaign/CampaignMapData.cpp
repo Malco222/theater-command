@@ -1,5 +1,7 @@
 #include "Campaign/CampaignMapData.h"
 
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "TheaterCommand.h"
 #include "Dom/JsonObject.h"
 #include "Dom/JsonValue.h"
@@ -254,6 +256,38 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 	{
 		OutError = FString::Printf(TEXT("%s has no nations"), *Path);
 		return false;
+	}
+	// The table's own paints. The colours in the data are chosen for a flat map on a screen; under the room's warm
+	// lamp a grey reads as bare paper, so ground held by a grey country looked as if nobody held it. These are
+	// the same countries' colours mixed stronger, so that ground always shows whose it is.
+	static const TCHAR* TablePaints[][2] =
+	{
+		{ TEXT("GER"), TEXT("56636F") },
+	};
+	for (const auto& Paint : TablePaints)
+	{
+		if (FCampaignNation* Nation = Nations.Find(Paint[0]))
+		{
+			Nation->Color = FColor::FromHex(Paint[1]);
+		}
+	}
+	// "-TheaterColour=GER:3D4A54,SVK:7C8794" tries other paints without a rebuild.
+	FString Tried;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterColour="), Tried, false))
+	{
+		TArray<FString> Pairs;
+		Tried.ParseIntoArray(Pairs, TEXT(","));
+		for (const FString& Pair : Pairs)
+		{
+			FString Tag, Hex;
+			if (Pair.Split(TEXT(":"), &Tag, &Hex))
+			{
+				if (FCampaignNation* Nation = Nations.Find(Tag))
+				{
+					Nation->Color = FColor::FromHex(Hex);
+				}
+			}
+		}
 	}
 	return true;
 }

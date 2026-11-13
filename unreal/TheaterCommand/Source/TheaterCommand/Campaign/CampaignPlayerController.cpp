@@ -1172,6 +1172,55 @@ void ACampaignPlayerController::StopTech(const FString& Id)
 	bResearchOpen = Research.bValid;
 }
 
+void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
+{
+	Out.Reset();
+	const FCampaignSession* Session = GetSession();
+	const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+	if (!Map.IsValid() || !Session || !Eye || !PlayerCameraManager || Opening.bVisible || Newsreel.bOn)
+	{
+		return;
+	}
+	// Capitals from any distance, towns from the middle distance, every place worth having closer in, and what
+	// each place is worth only close up: the table is never papered over with plates.
+	const float Distance = Eye->GetDistance();
+	const int32 State = Distance > 12500.0f ? 0 : (Distance > 5500.0f ? 1 : 2);
+	const bool bWorth = Distance <= 4200.0f;
+	FVector Toward = -PlayerCameraManager->GetCameraRotation().Vector();
+	Toward.Z = 0.0;
+	Toward = Toward.GetSafeNormal();
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	const FCampaignView& View = Session->GetView();
+	const FCampaignMapData& Data = Map->GetData();
+	for (const ACampaignMapActor::FPlateSpot& Spot : Map->GetPlateSpots())
+	{
+		if (Spot.Tier > State)
+		{
+			continue;
+		}
+		FVector2D Screen;
+		if (!ProjectWorldLocationToScreen(Spot.World + Toward * Spot.Reach, Screen, false)
+			|| Screen.X < -120.0 || Screen.X > Width + 120.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
+		{
+			continue;
+		}
+		FTownPlate& Plate = Out.AddDefaulted_GetRef();
+		Plate.At = Screen;
+		Plate.Name = Spot.Name;
+		Plate.Line = bWorth ? Spot.Line : FString();
+		Plate.bCapital = Spot.Tier == 0;
+		Plate.bFar = State == 0;
+		Plate.Rank = Spot.Rank;
+		const FString Holder = View.RegionHolder.IsValidIndex(Spot.Region) ? View.RegionHolder[Spot.Region] : (Data.Regions.IsValidIndex(Spot.Region) ? Data.Regions[Spot.Region].Owner : FString());
+		if (const FCampaignNation* Nation = Data.FindNation(Holder))
+		{
+			Plate.Colour = FLinearColor(Nation->Color);
+		}
+	}
+	Out.Sort([](const FTownPlate& A, const FTownPlate& B) { return A.Rank > B.Rank; });
+}
+
 FString ACampaignPlayerController::GetToDoText(int32 Index) const
 {
 	const FCampaignSession* Session = GetSession();

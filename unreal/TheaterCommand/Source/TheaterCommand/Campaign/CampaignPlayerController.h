@@ -183,6 +183,18 @@ struct FOpening
 	int32 Revision = 0;
 };
 
+/** A town's name plate as the screen should draw it this frame. */
+struct FTownPlate
+{
+	FVector2D At = FVector2D::ZeroVector; // on the screen, in its own points: the middle of the plate's top edge
+	FString Name;
+	FString Line; // empty from far off
+	FLinearColor Colour = FLinearColor::Gray; // of whoever holds the place
+	bool bCapital = false;
+	bool bFar = false; // seen from far off: a small plate
+	int32 Rank = 0;
+};
+
 /** One of the game's standing choices, as the options page shows it. They are remembered from one day to the next. */
 struct FGameOption
 {
@@ -439,6 +451,8 @@ public:
 	UTexture2D* GetMinimapTexture() const;
 	/** Armies as (x, y, whose) with x and y from 0 to 1 and whose 0 for the player's, 1 for a friend's, 2 for an enemy's, 3 for others; and the part of the map on screen. */
 	void GetMinimapMarks(TArray<FVector>& OutDots, FBox2D& OutLooking) const;
+	/** The name plates of the towns in view, the ones that matter most first. */
+	void GetTownPlates(TArray<FTownPlate>& Out) const;
 	void JumpToMapShare(const FVector2D& Share);
 	bool IsMapShown() const;
 	/** A fleet in hand: picked up like an army, sent to a sea with a right-click, its ships shown as cards. */

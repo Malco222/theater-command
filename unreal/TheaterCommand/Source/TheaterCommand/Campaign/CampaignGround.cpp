@@ -204,7 +204,10 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 			{
 				const FLinearColor& Colour = RegionTint[Id];
 				const float Lightness = FMath::Lerp(1.0f, Bare.GetLuminance() / PlainsLightness, 0.55f);
-				const FLinearColor Painted = FMath::Lerp(Colour * Lightness, Bare, 0.2f);
+				// (The trace of the ground's own colour is matched to the paint's lightness first: laid on as it
+				// is, pale ground washed a dark or a grey paint out until the country looked like bare paper.)
+				const float Match = FMath::Clamp(Colour.GetLuminance() * Lightness / FMath::Max(Bare.GetLuminance(), 0.02f), 0.0f, 1.0f);
+				const FLinearColor Painted = FMath::Lerp(Colour * Lightness, Bare * Match, 0.2f);
 				const float Edge = 1.0f - FMath::SmoothStep(0.6f, 4.5f, Terrain.BorderDistance[Idx] * static_cast<float>(Terrain.Cell));
 				C = FMath::Lerp(Painted, Colour * 0.8f, 0.6f * Edge);
 			}
