@@ -629,6 +629,9 @@ private:
 	FText ShowTitle;
 	int32 ShowCorps = INDEX_NONE;
 	bool bToldOfEvening = false; // the first dusk has been explained
+	int32 LastClickRegion = INDEX_NONE; // for a double click: where the last plain click fell, and when
+	double LastClickAt = 0.0;
+	bool bPointerOverPanel = false; // the pointer is on one of the screen's panels, not on the map
 	bool bButtonDown = false; // the mouse was down at the last look
 	const void* HoveredButton = nullptr; // the button the pointer is on, to tick once as it crosses onto one
 	double BattleMusicUntil = 0.0; // the march plays until then
@@ -656,6 +659,7 @@ private:
 	int32 SeaNear(const FVector2D& MapPoint) const;
 	int32 PointedField = INDEX_NONE; // the province whose airfield the pointer is over
 	int32 HoverTipField = INDEX_NONE;
+	int32 HoverTipHand = INDEX_NONE; // what was in hand, and how it was to travel, when the tip was written
 	int32 HoverTipRegion = INDEX_NONE;
 	bool bWatchAll = true; // watch every nation's move at the month's end; V switches to only what touches the player
 	TMap<int32, int32> WatchStood; // where each corps stood at the last step watched, to see who has marched

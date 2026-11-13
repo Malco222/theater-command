@@ -1943,13 +1943,19 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		FSlateApplication& Slate = FSlateApplication::Get();
 		const FWidgetPath Under = Slate.LocateWindowUnderMouse(Slate.GetCursorPos(), Slate.GetInteractiveTopLevelWindows(), true);
 		const void* Button = nullptr;
-		static const FName ButtonType(TEXT("SButton"));
+		static const FName ButtonType(TEXT("SButton")), OverlayType(TEXT("SCampaignOverlay"));
+		// (the game's own screen lets the mouse through to the map, so it is in the way only when one of its panels is)
+		bPointerOverPanel = false;
 		for (int32 Index = Under.Widgets.Num() - 1; Index >= 0; --Index)
 		{
 			const TSharedRef<SWidget>& Widget = Under.Widgets[Index].Widget;
-			if (Widget->GetType() == ButtonType)
+			if (!Button && Widget->GetType() == ButtonType)
 			{
 				Button = Widget->IsEnabled() ? &Widget.Get() : nullptr;
+			}
+			if (Widget->GetType() == OverlayType)
+			{
+				bPointerOverPanel = true;
 				break;
 			}
 		}
@@ -2192,7 +2198,22 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 		}
 		else if (!bDragging && !bBusy)
 		{
-			ClickOnTable(PointedPiece, PointedRegion);
+			// A second click on the same ground straight after the first goes there: the view centres on it, a little closer.
+			const double ClickedAt = FPlatformTime::Seconds();
+			const int32 Ground = PointedPiece && PointedPiece->IsArmy() ? PointedPiece->GetRegionId() : PointedRegion;
+			// (not with an army or a fleet in hand: there a second click on the same ground is the order to go)
+			if (ArmyRegion == INDEX_NONE && FleetInHand == INDEX_NONE && Ground != INDEX_NONE && Ground == LastClickRegion && ClickedAt - LastClickAt < 0.38 && Map->GetData().Regions.IsValidIndex(Ground))
+			{
+				const FVector2D At = Map->GetData().Regions[Ground].Center;
+				Eye->GoTo(Map->MapToWorld(At.X, At.Y), FMath::Min(Eye->GetZoom(), 0.34f), false);
+				LastClickRegion = INDEX_NONE;
+			}
+			else
+			{
+				LastClickRegion = Ground;
+				LastClickAt = ClickedAt;
+				ClickOnTable(PointedPiece, PointedRegion);
+			}
 		}
 		bLeftHeld = false;
 		bDragging = false;
@@ -2218,7 +2239,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	// Whatever the pointer rests on is lit faintly, and with an army in hand the road to it is drawn.
 	if (!bScripted && !bTurning && (!bDragging || HeldPiece.IsValid()))
 	{
-		Map->SetHoveredRegion(bBusy ? INDEX_NONE : PointedRegion);
+		Map->SetHoveredRegion(bBusy || bPointerOverPanel ? INDEX_NONE : PointedRegion); // (nor is the ground behind a panel lit)
 		if (ArmyRegion != INDEX_NONE && !bBusy)
 		{
 			ShowRouteTo(PointedRegion);
@@ -2228,12 +2249,15 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	Map->UpdateForCamera(Eye->GetDistance(), Eye->GetYaw(), Eye->GetFocus());
 
 	// A tip that follows the pointer: what the province under it is, whose, what it is worth and who stands there.
-	const int32 TipRegion = (bBusy || !bHaveMouse || bLeftHeld || bRightHeld) ? INDEX_NONE : PointedRegion;
+	// (no tip for the ground behind a panel the pointer is on)
+	const int32 TipRegion = (bBusy || !bHaveMouse || bLeftHeld || bRightHeld || bPointerOverPanel) ? INDEX_NONE : PointedRegion;
 	const int32 TipField = TipRegion == INDEX_NONE ? INDEX_NONE : PointedField;
-	if (TipRegion != HoverTipRegion || TipField != HoverTipField)
+	const int32 TipHand = ArmyRegion * 4 + (bByRail ? 1 : 0) + (bBySea ? 2 : 0);
+	if (TipRegion != HoverTipRegion || TipField != HoverTipField || TipHand != HoverTipHand)
 	{
 		HoverTipRegion = TipRegion;
 		HoverTipField = TipField;
+		HoverTipHand = TipHand;
 		HoverTip = FText::GetEmpty();
 		FCampaignSession* Session = GetSession();
 		if (Session && Map->GetData().Regions.IsValidIndex(TipRegion))
@@ -2286,6 +2310,34 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					: FString::Printf(TEXT("%d air group%s, %s aircraft%s"), Field->Groups, Field->Groups == 1 ? TEXT("") : TEXT("s"), *FText::AsNumber(Field->Aircraft).ToString(), Field->bCrowded ? TEXT(" (crowded)") : TEXT(""));
 				Line = FString::Printf(TEXT("%s  \u00B7  %s\nServes %s aircraft: %s.\nClick to open the airfield."), *Field->Word.ToUpper(), *Region.Name, *FText::AsNumber(Field->Holds).ToString(), *Stands);
 			}
+			// With an army in hand: what a right-click here would do, and what it would cost.
+			if (ArmyRegion != INDEX_NONE && TipRegion != ArmyRegion)
+			{
+				if (const FReachRegion* There = FindReach(TipRegion))
+				{
+					if (There->IsWar())
+					{
+						const FCampaignNation* Theirs = Map->GetData().FindNation(There->War);
+						Line += FString::Printf(TEXT("\nRight-click: march in, which means war with %s. You are asked first."), Theirs ? *Theirs->Name : *There->War);
+					}
+					else if (There->bAttack)
+					{
+						Line += bBySea ? TEXT("\nRight-click: land here from the sea. You are shown what it will meet first.") : TEXT("\nRight-click: attack. You are shown the odds first.");
+					}
+					else if (bByRail || bBySea)
+					{
+						Line += bByRail ? TEXT("\nRight-click: send them here by rail.") : TEXT("\nRight-click: send them here by sea.");
+					}
+					else
+					{
+						Line += FString::Printf(TEXT("\nRight-click: march here, %d week%s of the month."), FMath::Max(There->Cost, 1), There->Cost == 1 ? TEXT("") : TEXT("s"));
+					}
+				}
+				else
+				{
+					Line += TEXT("\nOut of this army's reach this month.");
+				}
+			}
 			if (FleetInHand != INDEX_NONE)
 			{
 				const FViewFleet* Held = View.Fleets.FindByPredicate([this](const FViewFleet& Each) { return Each.Id == FleetInHand; });
@@ -2303,7 +2355,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 	// With a fleet in hand, the sea under the pointer is marked, and what a right-click would do is said.
 	{
-		const int32 Sea = (FleetInHand != INDEX_NONE && !bBusy && bHaveMouse && bPointerOnWater && !bLeftHeld && !bRightHeld) ? SeaNear(PointerMap) : INDEX_NONE;
+		const int32 Sea = (FleetInHand != INDEX_NONE && !bBusy && bHaveMouse && bPointerOnWater && !bLeftHeld && !bRightHeld && !bPointerOverPanel) ? SeaNear(PointerMap) : INDEX_NONE;
 		if (Sea != FleetHoverSea)
 		{
 			FleetHoverSea = Sea;
