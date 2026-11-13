@@ -38,6 +38,7 @@ struct FViewCorps
 	FString Elite; // the special formation it is, if it is one: "heavy", "ski", "guards"
 	bool bDim = false; // only glimpsed through the fog of war, or in view but not identified: a flag and no more
 	bool bNear = false; // dim, but in plain view: a corps not identified
+	bool bLean = false; // it takes no drafts: the veterans are kept together
 	FString Ally; // an ally's corps that marches with the player's army: its own country
 	int32 Stale = 0; // known from a report this many months old (0: known as it is today)
 	FString General; // empty when the corps has no named commander
@@ -254,6 +255,7 @@ struct FCampaignView
 	FString Human; // the nation the player leads
 	FString Current; // whose month it is
 	bool bHumanUp = false;
+	bool bEvePlan = false; // on the eve of war, the staff has a plan for placing the army
 	bool bAtWar = false; // the player's country is at war with somebody
 	bool bEve = false; // the player is placing an army on the eve of war: marches at home only, no month passes
 	bool bOpen = false; // free play: no nation follows history's plan
@@ -485,6 +487,7 @@ struct FDocumentPage
 	FString Subtitle;
 	TArray<FHonourRibbon> Ribbons;
 	TArray<FDocumentSection> Sections;
+	FString Door, DoorLabel; // a room that leads on from this page, and what its button says
 };
 
 /** Something the player can order in a territory: a kind of corps to raise, or works to build. */
@@ -580,6 +583,8 @@ struct FGeneralEntry
 	bool bCommands = false;
 	bool bWaiting = false;
 	bool bRelieve = false; // he can be taken off his corps this month
+	bool bSack = false; // he can be dismissed for good
+	bool bPopular = false; // and the army would take it badly
 	TArray<FGeneralSkill> Skills;
 	TArray<FString> Traits; // "Panzer leader: ..."
 	TArray<bool> TraitGood;

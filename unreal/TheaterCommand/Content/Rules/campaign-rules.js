@@ -3432,6 +3432,21 @@
     appoint(g2, gen, null);
     return true;
   }
+  var popular = (gen) => gen.level >= COMMAND.sack.popularLevel || gen.rec.won >= COMMAND.sack.popularWins;
+  function sack(g2, gen) {
+    if (!serving(gen)) return false;
+    const loved = popular(gen);
+    const c = corpsOf(g2, gen);
+    if (loved) {
+      if (c) c.org = Math.max(0, c.org - COMMAND.sack.org);
+      const n = g2.nations[gen.nat];
+      n.pc = Math.max(0, n.pc - COMMAND.sack.pc);
+    }
+    appoint(g2, gen, null);
+    gen.status = "sacked";
+    headline(g2, "info", loved ? `${gen.name} is dismissed. He was popular with his men, and the army takes it badly.` : `${gen.name} is dismissed.`, gen.nat);
+    return true;
+  }
   function whyNotPromote(g2, c) {
     if (c.general !== null) return "The corps already has a general.";
     if (c.dead || c.kind === "fort") return "This formation takes no general.";
@@ -3459,6 +3474,9 @@
   var awardOf = (g2, id) => g2.stories.awards[id - 1];
   var fallenOf = (g2, id) => g2.stories.fallen[id - 1];
   var rivalryOf = (g2, id) => id ? g2.stories.rivals[id - 1] : void 0;
+  function unitOf(g2, kind, id) {
+    return kind === "corps" ? g2.corps.find((c) => c.id === id) : kind === "air" ? g2.airFleets.find((f) => f.id === id) : g2.fleets.find((f) => f.id === id);
+  }
   function grade(xp) {
     let out = STORIES.grades[0][1];
     for (const [from, name] of STORIES.grades) if (xp >= from) out = name;
@@ -4027,6 +4045,81 @@
       bump(f, "escort");
       earn2(g2, "fleet", f, f.zone);
     }
+  }
+  function homeFor(g2, c) {
+    const n = g2.nations[c.nat];
+    const room2 = (r) => r.owner === c.nat && r.ctrl === c.nat && !r.overseas && (r.id === c.reg || r.units.filter((u) => allied(g2, u.nat, c.nat)).length < STACK);
+    if (n.capital >= 0 && room2(g2.regions[n.capital])) return g2.regions[n.capital];
+    const here = g2.regions[c.reg];
+    let best = null, bd = Infinity;
+    for (const r of g2.regions) {
+      if (!room2(r) || r.fac <= 0) continue;
+      const d = Math.hypot(r.x - here.x, r.y - here.y);
+      if (d < bd) {
+        bd = d;
+        best = r;
+      }
+    }
+    return best;
+  }
+  function whyNotCash(g2, a, how) {
+    if (a.nat !== g2.human) return "This is not your unit.";
+    if (a.old) return "This honour was earned by the formation that carried the name before. It is a ribbon now, and no more.";
+    if (a.cash) return a.cash === "bonds" ? "This honour has already been home on a bond tour." : "The men who earned this honour are already at the schools.";
+    const u = unitOf(g2, a.kind, a.unit);
+    if (!u) return "The unit no longer exists.";
+    if (a.kind === "fleet" && how === "school") return "A fleet cannot be spared to the schools.";
+    if (a.kind === "corps") {
+      const c = u;
+      if (c.leave !== void 0) return "The corps is already at home.";
+      if (!c.supplied) return "The corps is cut off. There is no way home.";
+      if (!homeFor(g2, c)) return "There is nowhere at home for the corps to go.";
+    }
+    if (how === "school" && (g2.stories.schools[a.nat] ?? 0) >= STORIES.veterans.maxSchools) return "The schools have all the instructors they can use.";
+    return "";
+  }
+  function cashHonour(g2, id, how) {
+    const a = awardOf(g2, id);
+    if (!a || whyNotCash(g2, a, how)) return false;
+    const u = unitOf(g2, a.kind, a.unit);
+    const C = STORIES.cash, fame = fameOf(a);
+    const n = g2.nations[a.nat];
+    let gain;
+    if (how === "bonds") {
+      n.pp += C.bondsPp * fame;
+      n.pc = Math.min(DIPLOMACY.pcCap, n.pc + C.bondsPc * fame);
+      gain = `The bond drive brings in ${(C.bondsPp * fame * budget_default.scale).toLocaleString("en-US")} for the treasury and ${C.bondsPc * fame} political capital.`;
+    } else {
+      g2.stories.schools[a.nat] = Math.min(STORIES.veterans.maxSchools, (g2.stories.schools[a.nat] ?? 0) + fame);
+      if (a.kind === "air") {
+        const p = g2.airPool[a.nat];
+        if (p) p.pilots += C.pilots * fame;
+      }
+      gain = "From now on every draft reaches the front better trained.";
+    }
+    if (a.kind === "corps") {
+      const c = u;
+      const to = homeFor(g2, c);
+      if (how === "school") c.xp = Math.max(STORIES.veterans.green, c.xp - C.schoolXp * fame);
+      if (to.id !== c.reg) relocate(g2, c, to);
+      c.ap = 0;
+      c.leave = g2.turn + C.months;
+      delete c.yields;
+      delete c.digs;
+      note(g2, c, how, to.id);
+      moment(g2, 5, how, c, a.at >= 0 ? a.at : c.reg);
+      g2.supplyDirty = true;
+      headline(g2, "info", `${c.name} goes home to ${to.name} ${how === "bonds" ? "on a bond tour" : "to train the next drafts"} and is out of the line for ${C.months} months. ${gain}`, a.nat, to.id);
+    } else {
+      const f = u;
+      f.ready = Math.max(a.kind === "air" ? 0.3 : 0, f.ready - C.ready);
+      note(g2, f, how, -1);
+      headline(g2, "info", `The men of ${f.name} who earned its honour go home ${how === "bonds" ? "on a bond tour" : "to the training schools"}. ${gain}`, a.nat);
+    }
+    a.cash = how;
+    a.cashed = g2.turn;
+    a.seen = true;
+    return true;
   }
   function takeOver(g2) {
     for (const a of g2.stories.awards) a.seen = true;
@@ -14311,6 +14404,37 @@
     return { region, town, nat, kind, to, income: income2, incomeNow, factories, oil, oilNow, harbour: r.port, yard, airfield, fort, vp: r.vp, capitalOf, frees, rails, items, line };
   }
 
+  // ../../data/campaign/eve.json
+  var eve_default = {
+    _about: "What a nation's staff advises on the eve of war, for a player whose country is attacked before its first month comes round. 'place' is the deployment the staff would make by rail: so many corps to each place, strongest corps first. 'advice' is what the staff says beside it. The staff only places the army; the orders each army is given are the player's to choose, and the player is free to do something else altogether.",
+    POL: {
+      title: "Fall back on Warsaw",
+      advice: [
+        "An army strung out along the frontier is cut to pieces in a month. Bring the strongest corps into Warsaw by rail, five to a region, and stand the rest behind it.",
+        "Then give each army its orders. Troops told to dig in fight from trenches once they have sat a month where they are. Troops told to fall back give ground when they are outmatched, and reach the capital whole instead of being broken where they stand.",
+        "Keep out of the eastern provinces. Once the front breaks the Red Army crosses the border under its pact with Germany, and troops left there are lost."
+      ],
+      place: [
+        [
+          "Warsaw",
+          5
+        ],
+        [
+          "Lublin",
+          5
+        ],
+        [
+          "Kielce",
+          5
+        ],
+        [
+          "Przemysl",
+          3
+        ]
+      ]
+    }
+  };
+
   // ../../src/campaign/turn.ts
   var current = (g2) => g2.order[g2.phase];
   function closePhase(g2, nat) {
@@ -14366,6 +14490,29 @@
     g2.phase = g2.order.indexOf(g2.human);
     g2.week = 1;
     return true;
+  }
+  function evePlan(g2) {
+    if (!onEve(g2) || !g2.human) return null;
+    return eve_default[g2.human] ?? null;
+  }
+  function orderEvePlan(g2) {
+    const plan = evePlan(g2);
+    if (!plan) return 0;
+    const army = g2.corps.filter((c) => ownOrder(g2, c)).sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id);
+    const want = /* @__PURE__ */ new Map();
+    let k = 0;
+    for (const [name, n] of plan.place) {
+      const r = g2.byName[name];
+      for (let i = 0; i < n && k < army.length; i++, k++) if (r) want.set(army[k].id, r.id);
+    }
+    let moved = 0;
+    for (let pass = 0; pass < 6; pass++) {
+      for (const c of army) {
+        const to = want.get(c.id);
+        if (to !== void 0 && c.reg !== to && orderRail(g2, c, to)) moved++;
+      }
+    }
+    return moved;
   }
   function endEve(g2) {
     if (!onEve(g2)) return;
@@ -14617,6 +14764,19 @@
   function orderBuildCorps(g2, kind, region, revive) {
     return humanUp(g2) ? orderCorps(g2, g2.human, kind, region, revive) : null;
   }
+  function orderCash(g2, award2, how) {
+    return humanUp(g2) && cashHonour(g2, award2, how);
+  }
+  function orderSeen(g2, award2) {
+    const a = awardOf(g2, award2);
+    if (a && a.nat === g2.human) a.seen = true;
+  }
+  function orderDrafts(g2, c, take) {
+    if (c.dead || c.nat !== g2.human || c.kind === "fort") return false;
+    if (take) delete c.lean;
+    else c.lean = true;
+    return true;
+  }
   function arsenalOffers(g2, region = -1) {
     return g2.human ? offers(g2, g2.human, region) : [];
   }
@@ -14751,6 +14911,10 @@
   function orderRelieve(g2, general) {
     const gen = myGeneral(g2, general);
     return !!gen && relieve(g2, gen);
+  }
+  function orderSack(g2, general) {
+    const gen = myGeneral(g2, general);
+    return !!gen && sack(g2, gen);
   }
   function orderPromote(g2, corps) {
     const c = g2.corps.find((x) => x.id === corps);
@@ -15600,6 +15764,8 @@
       }).filter((x) => x.n > 0) : [],
       // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
       unseen: s.human ? s.regions.filter((r) => seen[r.id] === 0).map((r) => r.id) : [],
+      // On the eve of war: the staff has a plan for placing the army, and will carry it out if asked.
+      evePlan: onEve(s) && !!evePlan(s),
       // Whether the player's country is at war with anybody: the music follows it.
       atWar: !!s.human && (s.nations[s.human]?.atWar.length ?? 0) > 0,
       eve: onEve(s),
@@ -15656,6 +15822,7 @@
           honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ["#b08d57", "#f2ead6"] })),
           dim: false,
           // The player's own corps as its card reads: its divisions by name, its morale and its rest, each with why.
+          lean: !!c.lean,
           ...c.nat === s.human || s.human && c.joint === s.human ? cardOf(s, c) : {}
         };
       }),
@@ -16678,6 +16845,7 @@
     const out = [];
     if (!s.human) return out;
     if (lastMonth) out.push({ id: "reports", label: "THE MONTH'S REPORT" });
+    if (s.stories.awards.some((a) => a.nat === s.human && !a.old)) out.push({ id: "heroes", label: "HEROES AT HOME" });
     if (secretService(s)) out.push({ id: "spies", label: "THE SECRET SERVICE" });
     const act2 = lastAct(s);
     if (act2 && (act2.decided || act2.on)) out.push({ id: "lastact", label: act2.on ? "THE WORLD STANDINGS" : "THE LAST ACT" });
@@ -16895,6 +17063,38 @@
       ].filter((x) => x.rows.length || x.text)
     };
   }
+  function heroesPage(s) {
+    const me = s.human;
+    if (!me) return null;
+    const up = humanUp(s) && !onEve(s);
+    const mine2 = s.stories.awards.filter((a) => a.nat === me && !a.old);
+    for (const a of mine2) orderSeen(s, a.id);
+    const rows = mine2.slice(-30).reverse().map((a) => {
+      const fame = fameOf(a);
+      const button = (how, label, what) => {
+        const why = whyNotCash(s, a, how);
+        return { label, act: `cash:${a.id}:${how}`, ok: up && !why, tip: why || what };
+      };
+      return {
+        nat: me,
+        title: `${awardTitle(s, a)}  ·  ${a.name}`,
+        lines: [citation(s, a), a.cash ? a.cash === "bonds" ? "Its heroes have been home on a bond tour." : "The men who earned it are instructors at the schools." : `Worth ${fame} at home. Until it is cashed in, the honour gives its unit an edge at the front.`],
+        buttons: a.cash ? [] : [
+          button("bonds", "A BOND TOUR", `Its heroes go home to sell war bonds: money for the treasury and political capital, ${fame} time${fame === 1 ? "" : "s"} over. The honour stops giving its edge at the front, and a corps is out of the line for two months.`),
+          button("school", "INSTRUCTORS", "The men who earned it go to the schools: every later draft reaches the front better trained. The honour stops giving its edge at the front, and a corps is out of the line for two months.")
+        ]
+      };
+    });
+    const open = mine2.filter((a) => !a.cash).length;
+    return {
+      id: "heroes",
+      title: "HEROES AT HOME",
+      headline: mine2.length ? `${mine2.length} honour${mine2.length === 1 ? "" : "s"} won, ${open} not yet cashed in` : "No honours have been won yet",
+      note: "An honour gives its unit an edge at the front. It can be cashed in once instead: a bond tour brings money and political capital; instructors make every later draft better trained.",
+      top: [],
+      sections: [{ heading: "THE HONOURS", text: mine2.length ? "" : "Honours are won in battle: for ground taken against the odds, for standing fast, for a raid pressed home.", rows }]
+    };
+  }
   function goalsPage(s) {
     const me = s.human;
     if (!me) return null;
@@ -16996,7 +17196,7 @@ ${standing2}`,
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
-    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : id === "goals" ? goalsPage(s) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
+    const p = id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
     return p ? { ok: true, ...p } : { ok: false };
   }
   function act(action, region = -1) {
@@ -17035,6 +17235,11 @@ ${standing2}`,
     } else if (part[0] === "airbase") {
       ok = orderAirBase(s, Number(part[1]), Number(part[2]));
       note3 = ok ? `The group moves to ${s.regions[Number(part[2])]?.name ?? "its new airfield"}.` : "It cannot move there now.";
+    } else if (part[0] === "cash") {
+      const award2 = s.stories.awards[Number(part[1]) - 1];
+      const why = award2 ? whyNotCash(s, award2, part[2]) : "There is no such honour.";
+      ok = orderCash(s, Number(part[1]), part[2]);
+      note3 = ok ? "" : why || "That cannot be done now.";
     } else if (action === "spy:recruit") {
       const a = orderRecruitAgent(s);
       ok = !!a;
@@ -17359,7 +17564,10 @@ ${standing2}`,
         record: x.rec.battles ? `${x.rec.battles} battle${x.rec.battles === 1 ? "" : "s"}, ${x.rec.won} won${x.rec.wounds ? `, wounded ${x.rec.wounds === 1 ? "once" : `${x.rec.wounds} times`}` : ""}` : "No battles yet",
         skills: SKILLS.map((k) => ({ id: k, label: COMMAND.skills[k].label, value: x.skills[k], max: COMMAND.skillMax, blurb: COMMAND.skills[k].blurb, more: up && x.points > 0 && x.skills[k] < COMMAND.skillMax })),
         traits: x.traits.map((t) => COMMAND.traits[t]).filter(Boolean).map((t) => ({ label: t.label, good: t.good, effect: t.effect })),
-        relieve: up && x.status === "active" && !!c
+        relieve: up && x.status === "active" && !!c,
+        // Dismissed for good. A popular general's going is taken badly by the army.
+        sack: up && x.status === "active",
+        popular: popular(x)
       };
     });
     const free2 = waiting(s, me.id);
@@ -17401,6 +17609,23 @@ ${standing2}`,
   function relieveOf(general) {
     const s = game();
     return { ok: humanUp(s) && orderRelieve(s, general), view: view() };
+  }
+  function sackGeneral(general) {
+    const s = game();
+    const h0 = s.headlines.length;
+    const ok = humanUp(s) && orderSack(s, general);
+    return { ok, note: s.headlines.slice(h0).map((h) => h.text).join(" "), view: view() };
+  }
+  function draftsFor(ids2, take) {
+    const s = game();
+    let n = 0;
+    for (const c of corpsById(s, ids2)) if (orderDrafts(s, c, take)) n++;
+    return { ok: n > 0, note: n ? take ? "They take drafts as they come: their ranks fill, and the new men water down their experience." : "They keep their veterans together and take no drafts: they stay seasoned, and do not recover their strength." : "That order cannot be given to them.", view: view() };
+  }
+  function evePlanGo() {
+    const s = game();
+    const n = orderEvePlan(s);
+    return { ok: n > 0, note: n ? `The staff's plan is carried out: ${n} corps ${n === 1 ? "is" : "are"} moved by rail to ${n === 1 ? "its place" : "their places"}.` : "The army already stands where the staff would have it, or cannot be moved.", view: view() };
   }
   function skillUp(general, skill) {
     const s = game();
@@ -17511,6 +17736,9 @@ ${standing2}`,
   }
   globalThis.TC = {
     raidsFlown,
+    sack: sackGeneral,
+    drafts: draftsFor,
+    evePlanGo,
     towns: townsList,
     join: joinArmyAt,
     sendBack,

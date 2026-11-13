@@ -96,6 +96,10 @@ public:
 
 	/** Rivers, crossings, railways and steep country, as the rules have them. Empty with the stand-in rules. */
 	FLandFeatures Land();
+	/** Dismisses a general for good; sets the picked corps' standing order about drafts; places the army by the staff's plan on the eve of war. */
+	bool SackGeneral(int32 GeneralId, FString& OutNote);
+	bool SetDrafts(const TArray<int32>& CorpsIds, bool bTake, FString& OutNote);
+	bool PlaceByPlan(FString& OutNote);
 	/** Asks the allied corps in a province to march with the player's army there; sends one of them home again. */
 	bool JoinArmy(int32 RegionId, FString& OutNote);
 	bool SendBack(int32 CorpsId, FString& OutNote);

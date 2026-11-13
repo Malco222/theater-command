@@ -798,6 +798,74 @@ void ACampaignPlayerController::PromoteOfficer(int32 CorpsId)
 	RefreshGenerals(bOk);
 }
 
+void ACampaignPlayerController::SackGeneral(int32 GeneralId)
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !bGeneralsOpen)
+	{
+		return;
+	}
+	if (SackAsked != GeneralId)
+	{
+		// The first press asks; the second does it.
+		SackAsked = GeneralId;
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+		RefreshGenerals(false);
+		return;
+	}
+	SackAsked = INDEX_NONE;
+	FString Note;
+	const bool bOk = Session->SackGeneral(GeneralId, Note);
+	CampaignSounds::Play(this, bOk ? TEXT("stamp") : TEXT("click"), 0.6f);
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 7.0);
+	}
+	RefreshGenerals(bOk);
+}
+
+void ACampaignPlayerController::ToggleDrafts()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || ArmyRegion == INDEX_NONE || PickedCorps.Num() == 0)
+	{
+		return;
+	}
+	FString Note;
+	const bool bOk = Session->SetDrafts(PickedCorps, Tray.bLean, Note); // (lean now: so take them; taking now: so take none)
+	CampaignSounds::Play(this, bOk ? TEXT("stamp") : TEXT("click"), 0.5f);
+	RefreshOrders();
+	Notify(Note, 6.0);
+}
+
+bool ACampaignPlayerController::HasEvePlan() const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && Session->GetView().bEvePlan && Session->GetView().bHumanUp && !bWatching && !Opening.bVisible;
+}
+
+void ACampaignPlayerController::PlaceByPlan()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !HasEvePlan())
+	{
+		return;
+	}
+	PutDownArmy();
+	FString Note;
+	const bool bOk = Session->PlaceByPlan(Note);
+	CampaignSounds::Play(this, bOk ? TEXT("train") : TEXT("click"), 0.6f);
+	ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	RefreshOrders();
+	Notify(Note, 7.0);
+}
+
+void ACampaignPlayerController::OpenHeroes()
+{
+	CloseDocument();
+	OpenPage(TEXT("heroes"));
+}
+
 void ACampaignPlayerController::RelieveGeneral(int32 GeneralId)
 {
 	FCampaignSession* Session = GetSession();
@@ -1160,6 +1228,12 @@ void ACampaignPlayerController::OpenRoll()
 	if (FCampaignSession* Session = GetSession())
 	{
 		Document = Session->Roll();
+		// From the roll, the way to what can be made of the honours at home.
+		if (!Session->GetView().Human.IsEmpty())
+		{
+			Document.Door = TEXT("heroes");
+			Document.DoorLabel = TEXT("BOND TOURS AND INSTRUCTORS");
+		}
 		++DocumentRevision;
 	}
 }
@@ -3011,6 +3085,15 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	Tray.bByRail = bByRail;
 	Tray.bBySea = bBySea;
+	// Whether the picked corps keep their veterans together and take no drafts (all of them, or it is not lit).
+	Tray.bLean = PickedCorps.Num() > 0;
+	for (const FViewCorps& Unit : View.Corps)
+	{
+		if (PickedCorps.Contains(Unit.Id) && !Unit.bLean)
+		{
+			Tray.bLean = false;
+		}
+	}
 	// Allied corps standing beside the army that could be asked to march with it.
 	Tray.JoinButton = FText::GetEmpty();
 	if (const FString* Could = View.Joins.Find(ArmyRegion))

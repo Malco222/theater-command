@@ -561,6 +561,18 @@ namespace
 								]
 								]
 						]
+						// On the eve of war: the staff's plan for placing the army, carried out at a press.
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
+						[
+							SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->HasEvePlan() ? EVisibility::Visible : EVisibility::Collapsed; })
+							.ToolTipText(FText::FromString(TEXT("The staff moves the army by rail to where it advises, strongest corps first. It does the most when it is the first thing done; you can still move any corps yourself afterwards.")))
+							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->PlaceByPlan(); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(BrightBrass)
+								.Text(FText::FromString(TEXT("PLACE THE ARMY AS THE STAFF ADVISES")))
+							]
+						]
 						// What is still to do before the month is ended: armies that have not moved. A click goes to the next of them.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 						[
@@ -936,10 +948,25 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 18.0f, 12.0f, 0.0f)
 									[
-										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
-										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseDocument(); } return FReply::Handled(); })
+										SNew(SHorizontalBox)
+										// A room that leads on from this page: from the roll of honour, what can be made of the honours at home.
+										+ SHorizontalBox::Slot().AutoWidth().Padding(0.0f, 0.0f, 12.0f, 0.0f)
 										[
-											SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Cream)
+											SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(20.0f, 10.0f)).IsFocusable(false)
+											.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetDocument().Door.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenHeroes(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(BrightBrass)
+												.Text_Lambda([this]() { return Controller.IsValid() ? FText::FromString(Controller->GetDocument().DoorLabel) : FText::GetEmpty(); })
+											]
+										]
+										+ SHorizontalBox::Slot().AutoWidth()
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(26.0f, 10.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->CloseDocument(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 11, 160)).ColorAndOpacity(Cream)
+											]
 										]
 									]
 								]
@@ -2120,6 +2147,14 @@ namespace
 				[
 					OrderButton(TEXT("BY SEA"), Army.bBySea, [this]() { if (Controller.IsValid()) { Controller->ToggleSea(); } })
 				];
+				// Drafts: taken as they come, or none, to keep the veterans together.
+				TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+				[
+					SNew(SBox).ToolTipText(FText::FromString(TEXT("Lit: these corps keep their veterans together and take no drafts, so they stay seasoned but do not recover their strength. Unlit: they take drafts as they come, their ranks fill, and the new men water down their experience.")))
+					[
+						OrderButton(TEXT("NO DRAFTS"), Army.bLean, [this]() { if (Controller.IsValid()) { Controller->ToggleDrafts(); } })
+					]
+				];
 				// Allied corps beside the army that could be asked to march with it.
 				if (!Army.JoinButton.IsEmpty())
 				{
@@ -2530,6 +2565,17 @@ namespace
 				[
 					OfficeButton(TEXT("RELIEVE"), Muted, true, TEXT("Take him off his corps and put him back on the list, with no hard feelings. He can be given another command."),
 						[this, Id = General.Id]() { if (Controller.IsValid()) { Controller->RelieveGeneral(Id); } })
+				];
+			}
+			if (General.bSack)
+			{
+				const bool bAsked = Controller.IsValid() && Controller->GetSackAsked() == General.Id;
+				Card->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+				[
+					OfficeButton(bAsked ? TEXT("DISMISS HIM FOR GOOD? PRESS AGAIN") : TEXT("DISMISS"), bAsked ? Alarm : Muted, true,
+						General.bPopular ? TEXT("He leaves the army for good and cannot be recalled. He is popular with his men: his corps loses cohesion and you lose political capital.")
+							: TEXT("He leaves the army for good and cannot be recalled."),
+						[this, Id = General.Id]() { if (Controller.IsValid()) { Controller->SackGeneral(Id); } })
 				];
 			}
 			return SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(12.0f, 9.0f, 12.0f, 10.0f))[Card];

@@ -106,6 +106,7 @@ struct FArmyTray
 	FString Posture; // the standing order the picked corps are under: stand, dig or back; empty if they differ
 	bool bByRail = false; // the next order sends them by rail
 	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast
+	bool bLean = false; // the picked corps take no drafts
 	FText JoinButton; // "ASK 1 SLOVAK CORPS TO JOIN": allied corps beside the army that could march with it. Empty when there are none
 	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
 	FText Hint; // what to do next, in a line
@@ -371,6 +372,16 @@ public:
 	void AssignGeneral(int32 GeneralId, int32 CorpsId);
 	void PromoteOfficer(int32 CorpsId);
 	void RelieveGeneral(int32 GeneralId);
+	/** Dismisses a general for good: asked twice, since it cannot be undone. Says which general is being asked about. */
+	void SackGeneral(int32 GeneralId);
+	int32 GetSackAsked() const { return SackAsked; }
+	/** The army in hand takes drafts, or keeps its veterans together and takes none. */
+	void ToggleDrafts();
+	/** On the eve of war: the army is placed as the staff advises. */
+	void PlaceByPlan();
+	bool HasEvePlan() const;
+	/** The honours won, and what can be made of each at home. */
+	void OpenHeroes();
 	void SpendSkill(int32 GeneralId, const FString& Skill);
 
 	/** The design offices: the teams at work on each branch of the armed forces. */
@@ -613,6 +624,7 @@ private:
 	int32 ShowCorps = INDEX_NONE;
 	bool bToldOfEvening = false; // the first dusk has been explained
 	double BattleMusicUntil = 0.0; // the march plays until then
+	int32 SackAsked = INDEX_NONE; // the general whose dismissal has been asked once
 	FAdviser Adviser;
 	void AdviserSaw(int32 Step);
 	bool bBusyWithScreens() const { return bWatching || Newsreel.bOn || Opening.bVisible || Announcements.Num() > 0 || bScripted; }

@@ -354,6 +354,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	Object->TryGetBoolField(TEXT("humanUp"), Out.bHumanUp);
 	Object->TryGetBoolField(TEXT("atWar"), Out.bAtWar);
 	Object->TryGetBoolField(TEXT("eve"), Out.bEve);
+	Object->TryGetBoolField(TEXT("evePlan"), Out.bEvePlan);
 	Object->TryGetBoolField(TEXT("open"), Out.bOpen);
 	Object->TryGetStringField(TEXT("level"), Out.Level);
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
@@ -638,6 +639,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			Unit->TryGetBoolField(TEXT("canOrder"), C.bCanOrder);
 			Unit->TryGetNumberField(TEXT("xp"), C.Experience);
 			Unit->TryGetStringField(TEXT("grade"), C.Grade);
+			Unit->TryGetBoolField(TEXT("lean"), C.bLean);
 			Unit->TryGetStringField(TEXT("ally"), C.Ally);
 			Unit->TryGetBoolField(TEXT("near"), C.bNear);
 			Unit->TryGetNumberField(TEXT("stale"), C.Stale);
@@ -2005,6 +2007,8 @@ FGeneralStaff FCampaignSession::Generals()
 			Entry->TryGetBoolField(TEXT("commands"), General.bCommands);
 			Entry->TryGetBoolField(TEXT("waiting"), General.bWaiting);
 			Entry->TryGetBoolField(TEXT("relieve"), General.bRelieve);
+			Entry->TryGetBoolField(TEXT("sack"), General.bSack);
+			Entry->TryGetBoolField(TEXT("popular"), General.bPopular);
 			const TArray<TSharedPtr<FJsonValue>>* Skills = nullptr;
 			if (Entry->TryGetArrayField(TEXT("skills"), Skills))
 			{
@@ -2085,6 +2089,45 @@ bool FCampaignSession::PromoteOfficer(int32 CorpsId, FString& OutName)
 	{
 		Object->TryGetBoolField(TEXT("ok"), bOk);
 		Object->TryGetStringField(TEXT("name"), OutName);
+		TakeView(Object);
+	}
+	return bOk;
+}
+
+bool FCampaignSession::SackGeneral(int32 GeneralId, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("sack"), FString::Printf(TEXT("[%d]"), GeneralId), Object) && Object.IsValid())
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("note"), OutNote);
+		TakeView(Object);
+	}
+	return bOk;
+}
+
+bool FCampaignSession::SetDrafts(const TArray<int32>& CorpsIds, bool bTake, FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CorpsIds.Num() > 0 && CallRules(TEXT("drafts"), FString::Printf(TEXT("[[%s],%s]"), *IdList(CorpsIds), bTake ? TEXT("true") : TEXT("false")), Object) && Object.IsValid())
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("note"), OutNote);
+		TakeView(Object);
+	}
+	return bOk;
+}
+
+bool FCampaignSession::PlaceByPlan(FString& OutNote)
+{
+	TSharedPtr<FJsonObject> Object;
+	bool bOk = false;
+	if (CallRules(TEXT("evePlanGo"), TEXT("[]"), Object) && Object.IsValid())
+	{
+		Object->TryGetBoolField(TEXT("ok"), bOk);
+		Object->TryGetStringField(TEXT("note"), OutNote);
 		TakeView(Object);
 	}
 	return bOk;
