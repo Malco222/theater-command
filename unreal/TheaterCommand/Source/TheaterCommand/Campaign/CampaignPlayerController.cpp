@@ -3387,7 +3387,28 @@ void ACampaignPlayerController::EndMonth()
 	{
 		return;
 	}
+	// With a newsreel running or a great moment on the screen, the key that ends the month goes on to the next
+	// thing instead: it must not end another month unseen.
+	if (Newsreel.bOn || Announcements.Num() > 0)
+	{
+		if (!bScripted)
+		{
+			if (Newsreel.bOn)
+			{
+				EndNewsreel();
+			}
+			else
+			{
+				DismissAnnouncement();
+			}
+			return;
+		}
+		EndNewsreel();
+		Announcements.Reset();
+	}
 	PutDownArmy();
+	PutDownFleet();
+	ClosePage();
 	CampaignSounds::Play(this, TEXT("bell"), 0.5f);
 	// Where every corps stands as the month ends, so that the others' marches can be seen from there.
 	WatchStood.Reset();

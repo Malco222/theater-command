@@ -1397,6 +1397,10 @@ namespace
 												SNew(STextBlock).Font(Font(TEXT("Bold"), 28, 160)).ColorAndOpacity(FLinearColor(0.95f, 0.95f, 0.93f))
 												.Text_Lambda([this]()
 												{
+													if (!Controller.IsValid())
+													{
+														return FText::GetEmpty();
+													}
 													const FNewsreelShow& Reel = Controller->GetNewsreel();
 													return FText::FromString(Reel.Cards.IsValidIndex(Reel.Index) ? Reel.Cards[Reel.Index].Title : FString(TEXT("THE MONTH IN REVIEW")));
 												})
@@ -1407,6 +1411,10 @@ namespace
 											SNew(STextBlock).Font(Font(TEXT("Regular"), 18)).ColorAndOpacity(FLinearColor(0.82f, 0.82f, 0.8f)).AutoWrapText(true).LineHeightPercentage(1.2f)
 											.Text_Lambda([this]()
 											{
+												if (!Controller.IsValid())
+												{
+													return FText::GetEmpty();
+												}
 												const FNewsreelShow& Reel = Controller->GetNewsreel();
 												return FText::FromString(Reel.Cards.IsValidIndex(Reel.Index) ? Reel.Cards[Reel.Index].Text : FString(TEXT("The war as it stood when the month closed.")));
 											})

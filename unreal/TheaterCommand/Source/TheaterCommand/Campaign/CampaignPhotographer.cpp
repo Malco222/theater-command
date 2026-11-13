@@ -382,7 +382,12 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 				Shot.Drop = TEXT("Gelderland");
 			}
 		}
-		Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = 1;
+		{
+			// "-TheaterMonths=24" plays that many months before this picture: a long run, to see that nothing breaks.
+			int32 Long = 1;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterMonths="), Long);
+			Add(TEXT("32-grand-next-month"), TEXT("@capital"), 0.6f).Months = FMath::Clamp(Long, 1, 80);
+		}
 		{
 			// The month ended and caught while the others' moves are shown: the strip of flags, and the march.
 			FShot& Shot = Add(TEXT("37-month-replay"), TEXT("@capital"), 0.5f);

@@ -1186,7 +1186,7 @@ void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDis
 	for (int32 Index = 0; Index < Land.Rails.Num(); ++Index)
 	{
 		const FLandRail& Rail = Land.Rails[Index];
-		if (FVector2D::DistSquared(Rail.At, Looking) < Reach * Reach && !ShownCut.Contains(Rail.A) && !ShownCut.Contains(Rail.B)
+		if (Data.Regions.IsValidIndex(Rail.A) && Data.Regions.IsValidIndex(Rail.B) && FVector2D::DistSquared(Rail.At, Looking) < Reach * Reach && !ShownCut.Contains(Rail.A) && !ShownCut.Contains(Rail.B)
 			&& !Trains.ContainsByPredicate([Index](const FTrain& Each) { return Each.Rail == Index; }))
 		{
 			Near.Add(Index);
