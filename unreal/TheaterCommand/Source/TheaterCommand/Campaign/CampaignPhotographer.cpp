@@ -501,6 +501,24 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 				Shot.Select = TEXT("Danzig Corridor");
 				Shot.Wait = 2.0f;
 			}
+			{
+				// Prizes outside the town (version 56): the places of a province in its panel, the orders on its
+				// works tab, and the marks on the map: a fire where one is wrecked, a pennant where a besieger holds one.
+				FShot& Shot = Add(TEXT("42a-places-of-their-own"), TEXT("@capital"), 0.4f);
+				Shot.Select = TEXT("@capital");
+				Shot.Wait = 1.5f;
+			}
+			{
+				FShot& Shot = Add(TEXT("42b-wreck-and-scorch"), TEXT("@capital"), 0.4f);
+				Shot.Select = TEXT("@capital");
+				Shot.ProvinceTab = 2;
+				Shot.Wait = 1.5f;
+			}
+			{
+				FShot& Shot = Add(TEXT("42c-prizes-on-the-map"), TEXT("Danzig Corridor"), 0.22f);
+				Shot.Prizes = TEXT("Danzig Corridor:GER:1;Pomorze:GER:0;Grenzmark:-:1");
+				Shot.Wait = 2.0f;
+			}
 		}
 		{
 			// The title card that opens a year: four months on from September 1939. Then put away.
@@ -1121,6 +1139,26 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			Works[*Here] = FIntVector4(3, 3, 3, 2);
 		}
 		Table->ShowBuildings(Works);
+	}
+	if (!Shot.Prizes.IsEmpty())
+	{
+		TArray<FPrizeMark> Marks;
+		TArray<FString> Each;
+		Shot.Prizes.ParseIntoArray(Each, TEXT(";"));
+		for (const FString& One : Each)
+		{
+			TArray<FString> Part;
+			One.ParseIntoArray(Part, TEXT(":"));
+			const int32* Where = Part.Num() >= 3 ? Data.RegionByName.Find(Part[0]) : nullptr;
+			if (Where)
+			{
+				FPrizeMark& Mark = Marks.AddDefaulted_GetRef();
+				Mark.Region = *Where;
+				Mark.By = Part[1] == TEXT("-") ? FString() : Part[1];
+				Mark.bBurning = FCString::Atoi(*Part[2]) != 0;
+			}
+		}
+		Table->ShowPrizes(Marks);
 	}
 	if (!Shot.Scars.IsEmpty())
 	{

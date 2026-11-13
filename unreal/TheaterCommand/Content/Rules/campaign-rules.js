@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1b90c23 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of bc08350 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -5046,6 +5046,260 @@
     g2.stories.mail = [];
   }
 
+  // ../../data/campaign/prizes.json
+  var prizes_default = {
+    _about: "Prizes outside the town (the grand campaign). A province's oilfield, factory district, airfield, harbour and great rail junction are places of their own. Those outside the walls go with the countryside: the army that wins the field has the use of them once it has held them 'settle' months, while the town still holds. A prize can be wrecked by order, and burned by an army driven off it (scorched earth). Rules in src/campaign/prizes.ts.",
+    names: { oil: "Oilfield", works: "Factory district", airfield: "Airfield", harbour: "Harbour", junction: "Rail junction" },
+    works: { least: 2, outside: 0.5 },
+    junction: { lines: 5 },
+    harbourInside: ["city", "capital"],
+    settle: 1,
+    ap: 1,
+    wreck: { oil: 8, works: 6, airfield: 3, harbour: 5 },
+    burn: {
+      chance: 0.85,
+      unguarded: 0.35,
+      fastCaptor: 0.25,
+      months: { oil: 5, works: 3, airfield: 2, harbour: 3 }
+    },
+    mend: 1,
+    ai: {
+      policy: { _default: "never", SOV: "everywhere", GER: "conquered", UK: "conquered" }
+    },
+    notes: {
+      works: "A province with at least 'least' factories has a factory district outside the walls: 'outside' of its factories, rounded down. The rest stand in the town.",
+      junction: "A province where at least 'lines' railway lines meet has a great junction outside the town: the army holding the field runs its trains through, though the town holds.",
+      harbourInside: "A harbour lies inside the defences of a place of these sizes and of any fortress, and goes with the town. Elsewhere the quays lie outside: they go with the field, and a garrison whose harbour is lost or wrecked is not fed by sea.",
+      settle: "Months an army holds the field before the prizes outside the town work for it.",
+      ap: "Marching time a corps needs to wreck a prize by order. The work takes the rest of its month.",
+      wreck: "Months a prize is out of use when wrecked by order: a thorough job. A junction's line is cut until engineers relay it.",
+      burn: "Scorched earth, when an army with the order is driven off the ground. 'chance' that each prize is burned when the loser still has troops next door or in the town, 'unguarded' when not, less 'fastCaptor' when fast troops took the ground. 'months' each is then out of use: a hasty job. A junction is not burned this way: the railway keeps its own rule when ground is lost (rails.ts).",
+      mend: "Months an engineer corps standing in the province takes off each wrecked prize there, each month, beside the month that passes anyway.",
+      "ai.policy": "Each computer nation's scorched earth policy: never, conquered (ground that is not its own or an ally's) or everywhere."
+    }
+  };
+
+  // ../../src/campaign/prizes.ts
+  var PRIZE_KINDS = ["oil", "works", "airfield", "harbour", "junction"];
+  var POLICIES = ["never", "conquered", "everywhere"];
+  var PRIZES = prizes_default;
+  var prizeRules = (g2) => g2.flags.open === 1 && siegeRules(g2);
+  var worksOutside = (r) => r.fac >= PRIZES.works.least ? Math.floor(r.fac * PRIZES.works.outside) : 0;
+  function hasPrize(g2, r, kind) {
+    if (!prizeRules(g2)) return false;
+    if (kind === "oil") return r.oil;
+    if (kind === "works") return worksOutside(r) > 0;
+    if (kind === "airfield") return airWar(g2) && airfieldsHold(g2, r.id) > 0;
+    if (kind === "harbour") return r.port && r.seas.length > 0;
+    return railsAt(r.id).length >= PRIZES.junction.lines;
+  }
+  var prizeInside = (g2, r, kind) => kind === "harbour" && (!!r.fort || PRIZES.harbourInside.includes(townSize(g2, r)));
+  var outKey = (r, kind) => `pzo:${r.id}:${kind}`;
+  function prizeOut(g2, r, kind) {
+    if (!hasPrize(g2, r, kind)) return 0;
+    if (kind === "junction") return railCut(g2, r.id) ? 99 : 0;
+    if (kind === "oil") return fieldOut(g2, r) > 0 ? Math.max(1, (g2.flags[`oilout:${r.id}`] ?? 0) - g2.turn) : 0;
+    return Math.max(0, (g2.flags[outKey(r, kind)] ?? 0) - g2.turn);
+  }
+  function worksBurnt(g2, r) {
+    if ((g2.flags[`pzo:${r.id}:works`] ?? 0) <= g2.turn) return 0;
+    return Math.max(0, Math.min(worksOutside(r), r.fac - ruinedAt(g2, r)));
+  }
+  function prizeHolder(g2, r, kind) {
+    return prizeRules(g2) && besieged(g2, r) && !prizeInside(g2, r, kind) ? fieldCtrl(g2, r) : r.ctrl;
+  }
+  function prizeSettling(g2, r, kind) {
+    if (!prizeRules(g2) || !besieged(g2, r) || prizeInside(g2, r, kind)) return false;
+    const since = g2.flags[`siege:${r.id}`];
+    return since === void 0 || g2.turn - since < PRIZES.settle;
+  }
+  function prizeUser(g2, r, kind) {
+    if (!prizeRules(g2)) return r.ctrl;
+    if (!hasPrize(g2, r, kind) || prizeOut(g2, r, kind) > 0 || prizeSettling(g2, r, kind)) return null;
+    return prizeHolder(g2, r, kind);
+  }
+  var prizeTaker = (g2, r, kind) => prizeSettling(g2, r, kind) ? null : prizeHolder(g2, r, kind);
+  function airfieldOpenTo(g2, nat, r) {
+    if (!hasPrize(g2, r, "airfield")) return allied(g2, nat, r.ctrl) && !besieged(g2, r);
+    const user = prizeUser(g2, r, "airfield");
+    return user !== null && allied(g2, nat, user);
+  }
+  function junctionOpenTo(g2, nat, r) {
+    const user = prizeRules(g2) && besieged(g2, r) ? prizeUser(g2, r, "junction") : null;
+    return user !== null && allied(g2, nat, user);
+  }
+  function harbourOpen(g2, r) {
+    if (!r.port) return false;
+    if (!hasPrize(g2, r, "harbour")) return true;
+    return prizeUser(g2, r, "harbour") === r.ctrl;
+  }
+  function prizeMoney(g2, r, kind, nat) {
+    const own = r.owner === nat;
+    const k = own ? 1 : BUDGET.occupied;
+    if (kind === "works") return Math.max(0, Math.min(worksOutside(r), r.fac - ruinedAt(g2, r))) * (own ? 1 : PRODUCTION.occupiedIncome);
+    if (kind === "oil") return BUDGET.oil * k;
+    if (kind === "harbour") return BUDGET.port * k;
+    return 0;
+  }
+  function prizeIncome(g2, nat) {
+    const out = { works: 0, oil: 0, harbour: 0, total: 0, count: 0 };
+    if (!prizeRules(g2)) return out;
+    for (const r of g2.regions) {
+      if (r.ctrl === nat || !r.units.length || !besieged(g2, r) || fieldCtrl(g2, r) !== nat) continue;
+      for (const kind of ["works", "oil", "harbour"]) {
+        if (prizeUser(g2, r, kind) !== nat) continue;
+        const m = prizeMoney(g2, r, kind, nat);
+        out[kind] += m;
+        out.total += m;
+        out.count++;
+      }
+    }
+    return out;
+  }
+  var monthsWord = (n) => n <= 1 ? "a month" : `${n} months`;
+  function wreckPrize(g2, r, kind, months2) {
+    if (!hasPrize(g2, r, kind) || prizeOut(g2, r, kind) > 0) return false;
+    if (kind === "oil") return fireField(g2, r, months2, 1);
+    if (kind === "junction") return cutRail(g2, r.id);
+    g2.flags[outKey(r, kind)] = g2.turn + months2;
+    g2.supplyDirty = true;
+    return true;
+  }
+  function handsAt(g2, nat, r, kind) {
+    const field2 = r.units.filter((u) => !u.dead && u.nat === nat);
+    return prizeInside(g2, r, kind) || !besieged(g2, r) ? [...field2, ...garrisonOf(r).filter((u) => !u.dead && u.nat === nat)] : field2;
+  }
+  function whyNotWreck(g2, nat, region, kind) {
+    if (!prizeRules(g2)) return "Prizes are wrecked only in the grand campaign.";
+    const r = g2.regions[region];
+    if (!r) return "Pick a province.";
+    const name = PRIZES.names[kind].toLowerCase();
+    if (!hasPrize(g2, r, kind)) return `${r.name} has no ${name}.`;
+    if (prizeOut(g2, r, kind) > 0) return kind === "junction" ? `The line at ${r.name} is already cut.` : `The ${name} at ${r.name} is already wrecked.`;
+    if (!g2.nations[nat]?.atWar.length) return "Nobody wrecks what they hold in peacetime.";
+    if (!allied(g2, nat, prizeHolder(g2, r, kind))) return `The ${name} at ${r.name} is not in your hands.`;
+    const hands = handsAt(g2, nat, r, kind);
+    if (!hands.length) return `None of your troops stand at the ${name} of ${r.name}.`;
+    if (!hands.some((c) => c.ap >= PRIZES.ap && c.leave === void 0)) return "The troops there have no marching time left this month: it is a month's work.";
+    return null;
+  }
+  var wreckWords = (g2, r, kind, months2) => kind === "oil" ? `set the oilfields of ${r.name} alight: they will burn for ${months2} months` : kind === "works" ? `blow up the factory district of ${r.name}: its ${worksOutside(r) === 1 ? "factory stands" : `${worksOutside(r)} factories stand`} idle for ${months2} months` : kind === "airfield" ? `plough up the airfield at ${r.name}: no aircraft will fly from it for ${months2} months` : kind === "harbour" ? `block the harbour of ${townName(r)} and blow up its quays: no ship will use it for ${months2} months` : `blow up the rail junction at ${r.name}: no train runs through until engineers relay the line`;
+  function tellPrize(g2, r, text, nat, parties) {
+    const mine2 = g2.human !== null && parties.some((p) => p === g2.human || allied(g2, p, g2.human));
+    if (mine2 || r.oil || r.cap || r.fac >= 4) headline(g2, "battle", text, nat, r.id);
+  }
+  function orderWreckPrize(g2, nat, region, kind) {
+    if (whyNotWreck(g2, nat, region, kind)) return false;
+    const r = g2.regions[region];
+    const months2 = kind === "junction" ? 0 : PRIZES.wreck[kind];
+    const c = handsAt(g2, nat, r, kind).filter((u) => u.ap >= PRIZES.ap && u.leave === void 0).sort((a, b) => (b.kind === "eng" ? 1 : 0) - (a.kind === "eng" ? 1 : 0) || b.ap - a.ap)[0];
+    if (!wreckPrize(g2, r, kind, months2)) return false;
+    c.ap = 0;
+    tellPrize(g2, r, `${g2.nations[nat].adj} troops ${wreckWords(g2, r, kind, months2)}.`, nat, [nat, r.ctrl, r.owner]);
+    return true;
+  }
+  function scorchPolicy(g2, nat) {
+    const set = g2.flags[`scorch:${nat}`];
+    if (set !== void 0) return POLICIES[set] ?? "never";
+    return nat === g2.human ? "never" : PRIZES.ai.policy[nat] ?? PRIZES.ai.policy._default;
+  }
+  function setScorchPolicy(g2, nat, policy) {
+    g2.flags[`scorch:${nat}`] = POLICIES.indexOf(policy);
+  }
+  var burnOrder = (g2, nat, r) => g2.flags[`burn:${r.id}:${nat}`] ?? 0;
+  function setBurnOrder(g2, nat, r, order2) {
+    if (order2) g2.flags[`burn:${r.id}:${nat}`] = order2 > 0 ? 1 : -1;
+    else delete g2.flags[`burn:${r.id}:${nat}`];
+  }
+  function willBurn(g2, nat, r) {
+    if (!prizeRules(g2)) return false;
+    const order2 = burnOrder(g2, nat, r);
+    if (order2) return order2 > 0;
+    const p = scorchPolicy(g2, nat);
+    return p === "everywhere" || p === "conquered" && r.owner !== nat && !allied(g2, nat, r.owner);
+  }
+  function burnChance(g2, r, by, from) {
+    const B2 = PRIZES.burn;
+    const near = garrisonOf(r).some((c) => !c.dead && allied(g2, c.nat, from)) || r.nb.some((j) => g2.regions[j].units.some((u) => !u.dead && allied(g2, u.nat, from) && atWar(g2, u.nat, by)));
+    let p = near ? B2.chance : B2.unguarded;
+    if (r.units.some((u) => !u.dead && allied(g2, armyOf(u), by) && (KIND[u.kind].mobile || u.airborne))) p -= B2.fastCaptor;
+    return Math.max(0.05, Math.min(0.95, p));
+  }
+  function prizesOnLoss(g2, r, by, from, which) {
+    const burnt = [];
+    if (!prizeRules(g2) || !g2.nations[from] || !atWar(g2, by, from) || !willBurn(g2, from, r)) return burnt;
+    const p = burnChance(g2, r, by, from);
+    for (const kind of PRIZE_KINDS) {
+      if (!hasPrize(g2, r, kind) || prizeOut(g2, r, kind) > 0) continue;
+      const inside2 = prizeInside(g2, r, kind);
+      if (which === "outside" && inside2 || which === "inside" && !inside2) continue;
+      if (kind === "junction") continue;
+      const roll2 = new Rng(hashString(`prize:${g2.seed}:${g2.turn}:${r.id}:${kind}`)).next();
+      if (roll2 < p && wreckPrize(g2, r, kind, PRIZES.burn.months[kind])) burnt.push(kind);
+    }
+    if (burnt.length) {
+      const list4 = listed(burnt);
+      tellPrize(g2, r, `Scorched earth: ${g2.nations[from].adj} troops wreck ${list4} at ${r.name} as they are driven off. ${theName(g2.nations[by], true)} will get nothing from ${burnt.length === 1 && burnt[0] !== "oil" ? "it" : "them"} for months.`, from, [by, from, r.owner]);
+    }
+    return burnt;
+  }
+  var PLACE_WORDS = { oil: "the oilfields", works: "the factory district", airfield: "the airfield", harbour: "the harbour", junction: "the rail junction" };
+  var listed = (kinds) => {
+    const w = kinds.map((k) => PLACE_WORDS[k]);
+    return w.length === 1 ? w[0] : `${w.slice(0, -1).join(", ")} and ${w[w.length - 1]}`;
+  };
+  function tellSeized(g2, r, by) {
+    if (!prizeRules(g2) || g2.human === null || !g2.nations[by]) return;
+    if (![by, r.ctrl].some((p) => p === g2.human || allied(g2, p, g2.human))) return;
+    const got = PRIZE_KINDS.filter((k) => hasPrize(g2, r, k) && !prizeInside(g2, r, k) && prizeOut(g2, r, k) <= 0);
+    if (!got.some((k) => k !== "airfield")) return;
+    const words = listed(got);
+    const many = got.length > 1 || got[0] === "oil";
+    headline(g2, "info", `${words[0].toUpperCase()}${words.slice(1)} outside ${townName(r)} ${many ? "are" : "is"} in ${g2.nations[by].adj} hands, though the town holds. ${many ? "They work" : "It works"} for ${theName(g2.nations[by])} after ${monthsWord(PRIZES.settle)}.`, by, r.id);
+  }
+  function mendPrizes(g2, nat) {
+    if (!prizeRules(g2) || PRIZES.mend <= 0) return;
+    for (const r of g2.regions) {
+      if (!allied(g2, nat, fieldCtrl(g2, r)) || !r.units.some((u) => !u.dead && u.nat === nat && u.kind === "eng" && u.leave === void 0)) continue;
+      for (const kind of ["works", "airfield", "harbour"]) {
+        const key3 = outKey(r, kind);
+        if ((g2.flags[key3] ?? 0) > g2.turn + 1) g2.flags[key3] -= PRIZES.mend;
+      }
+      if ((g2.flags[`oilout:${r.id}`] ?? 0) > g2.turn + 1) g2.flags[`oilout:${r.id}`] -= PRIZES.mend;
+    }
+  }
+  function prizesAt(g2, region, nat = g2.human) {
+    const r = g2.regions[region];
+    if (!r || !prizeRules(g2)) return null;
+    const prizes = [];
+    for (const kind of PRIZE_KINDS) {
+      if (!hasPrize(g2, r, kind)) continue;
+      const inside2 = prizeInside(g2, r, kind), holder = prizeHolder(g2, r, kind), out = prizeOut(g2, r, kind), settling = prizeSettling(g2, r, kind);
+      const n = worksOutside(r);
+      const detail = kind === "works" ? `${n} of ${r.fac} ${r.fac === 1 ? "factory" : "factories"} outside the walls` : kind === "airfield" ? `room for ${airfieldsHold(g2, r.id).toLocaleString("en-US")} aircraft` : kind === "junction" ? `${railsAt(r.id).length} lines meet here` : kind === "harbour" ? inside2 ? "inside the defences: it goes with the town" : "the quays lie outside the town" : "wells and refineries";
+      const who2 = g2.nations[holder]?.adj ?? holder;
+      const state = out >= 99 ? "The line is cut until engineers relay it." : out > 0 ? `${kind === "oil" ? "Burning" : "Wrecked"}: out of use for ${monthsWord(out)} more.` : settling ? `Taken by ${who2} troops this month: it works for them from next month.` : holder !== r.ctrl ? `In ${who2} hands with the country round the town.` : besieged(g2, r) && inside2 ? "Held with the town, and still in use." : "At work.";
+      prizes.push({ kind, name: PRIZES.names[kind], inside: inside2, holder, user: prizeUser(g2, r, kind), out, settling, detail, state });
+    }
+    if (!prizes.length) return null;
+    const who = nat ?? r.ctrl;
+    return { region, prizes, order: burnOrder(g2, who, r), burns: willBurn(g2, who, r), policy: scorchPolicy(g2, who) };
+  }
+  function prizeMarks(g2) {
+    const out = [];
+    if (!prizeRules(g2)) return out;
+    for (const r of g2.regions) {
+      const burning = [], seized = [];
+      for (const kind of PRIZE_KINDS) {
+        if (!hasPrize(g2, r, kind)) continue;
+        if (kind !== "junction" && prizeOut(g2, r, kind) > 0) burning.push(kind);
+        if (prizeHolder(g2, r, kind) !== r.ctrl) seized.push(kind);
+      }
+      if (burning.length || seized.length) out.push({ region: r.id, by: seized.length ? fieldCtrl(g2, r) : null, burning, seized });
+    }
+    return out;
+  }
+
   // ../../src/campaign/siege.ts
   var SIEGE = siege_default;
   var siegeRules = (g2) => g2.flags.sieges === 1;
@@ -5104,6 +5358,7 @@
   var investedOn = (g2, r) => g2.flags[`siege:${r.id}`] ?? -1;
   function fedBySea(g2, r) {
     if (!r.port || !r.seas.length) return false;
+    if (!harbourOpen(g2, r)) return false;
     const nats = /* @__PURE__ */ new Set([r.ctrl, ...garrisonOf(r).map((c) => c.nat)]);
     for (const id of nats) {
       const n = g2.nations[id];
@@ -5220,22 +5475,28 @@
     const key3 = `siege:${r.id}`;
     if (g2.flags[key3] !== void 0) return;
     g2.flags[key3] = g2.turn;
+    g2.flags[`sgby:${r.id}`] = Object.keys(g2.nations).indexOf(by);
     delete g2.flags[`sgm:${r.id}`];
     g2.supplyDirty = true;
     tallySiege(g2, "begun");
     const inside2 = garrisonOf(r);
     const who = inside2.length ? `${inside2.length === 1 ? "one corps" : `${inside2.length} corps`} inside` : "only its guard inside";
     tell(g2, r, `${g2.nations[by].adj} troops close round ${townName(r)}: ${placeWords(g2, r)} is under siege, with ${who}.`, r.ctrl, [by, r.ctrl, ...inside2.map((c) => c.nat)]);
+    prizesOnLoss(g2, r, by, r.ctrl, "outside");
+    tellSeized(g2, r, by);
   }
   function lift(g2, r, by = null) {
     const key3 = `siege:${r.id}`;
     if (g2.flags[key3] === void 0) return;
     const lasted = g2.turn - g2.flags[key3];
+    const was = Object.keys(g2.nations)[g2.flags[`sgby:${r.id}`] ?? -1];
     delete g2.flags[key3];
+    delete g2.flags[`sgby:${r.id}`];
     delete g2.flags[`sgm:${r.id}`];
     g2.supplyDirty = true;
     tallySiege(g2, "raised");
     tell(g2, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ""}${by ? ` by ${g2.nations[by].adj} troops` : ""}.`, r.ctrl, [r.ctrl, ...by ? [by] : [], ...garrisonOf(r).map((c) => c.nat)]);
+    if (by && was && lasted >= PRIZES.settle) prizesOnLoss(g2, r, by, was, "outside");
   }
   function fall(g2, r, by, how) {
     const since = g2.flags[`siege:${r.id}`];
@@ -5249,12 +5510,14 @@
       removeCorps(g2, c);
     }
     delete g2.flags[`siege:${r.id}`];
+    delete g2.flags[`sgby:${r.id}`];
     delete g2.flags[`sgm:${r.id}`];
     delete g2.flags[`guard:${r.id}`];
     delete g2.flags[`storm:${r.id}`];
     delete g2.flags[`sally:${r.id}`];
     const adj = g2.nations[by].adj;
     const cap5 = r.cap && r.owner === old;
+    prizesOnLoss(g2, r, by, old, since === void 0 ? "all" : "inside");
     if (!cap5 && how !== "empty" && how !== "storm") {
       const text = how === "gates" ? `${townName(r)} opens its gates to ${adj} troops without a fight.` : `Starved out after a siege of ${months(lasted)}, ${townName(r)} surrenders to ${adj} forces.`;
       tell(g2, r, text, old, [by, old]);
@@ -5349,6 +5612,7 @@
     for (const r of g2.regions) {
       if (r.ctrl !== nat) continue;
       delete g2.flags[`siege:${r.id}`];
+      delete g2.flags[`sgby:${r.id}`];
       delete g2.flags[`sgm:${r.id}`];
       delete g2.flags[`guard:${r.id}`];
     }
@@ -5626,7 +5890,7 @@
   var railheadOf = (g2, c) => c.supplied ? railheadAt(g2, c.nat, c.reg) : AT_HOME;
   var ruinKey = (r) => `ruin:${r}`;
   var ruinedAt = (g2, r) => groundRules(g2) ? Math.min(r.fac, g2.flags[ruinKey(r.id)] ?? 0) : 0;
-  var workingFactories = (g2, r) => r.fac - ruinedAt(g2, r);
+  var workingFactories = (g2, r) => r.fac - ruinedAt(g2, r) - worksBurnt(g2, r);
   var ruinMost = (r) => Math.ceil(r.fac * RAILWAYS.ruin.most);
   function ruinChance(g2, r, stopped) {
     const U = RAILWAYS.ruin;
@@ -6882,7 +7146,12 @@
     if (c.kind === "fort" || c.ap < Math.min(4, c.apMax)) return "Only a corps that has not moved this month can embark.";
     if (!from.port || !to.port || to.id === from.id) return "Troops are shipped from one port to another.";
     if (!allied(g2, c.nat, to.ctrl)) return `${to.name} is not in friendly hands.`;
+    for (const p of [from, to]) {
+      const out = prizeOut(g2, p, "harbour");
+      if (out > 0) return `The harbour of ${p.name} is wrecked: no ship will use it for ${out === 1 ? "a month" : `${out} months`} more.`;
+    }
     if (hostileUnits(g2, to, c.nat).length) {
+      if (siegeRules(g2) && !harbourOpen(g2, to)) return `The enemy holds the quays of ${to.name}: nothing can be run into the town by sea.`;
       if (!siegeRules(g2)) return `${to.name} is not in friendly hands.`;
       if (c.kind === "eng") return `The enemy holds the country round ${to.name}: only fighting troops are run into the town.`;
       if (garrisonOf(to).length >= roomIn(g2, to)) return `${to.name} is under siege, and the town has no room for another corps.`;
@@ -7887,7 +8156,14 @@
   function whyNotBase(g2, f, r) {
     if (f.ship !== void 0) return "It flies from the carriers of its fleet, and goes where they go.";
     if (r.id === f.base) return "It is already based there.";
-    if (!allied(g2, f.nat, r.ctrl)) return "That ground is not in friendly hands.";
+    if (!airfieldOpenTo(g2, f.nat, r)) {
+      const ours = besieged(g2, r) && allied(g2, f.nat, fieldCtrl(g2, r));
+      if (!allied(g2, f.nat, r.ctrl) && !ours) return "That ground is not in friendly hands.";
+      if (!hasAirfield(g2, r.id)) return "There is no airfield there. Engineers can lay one out, and the treasury can build one.";
+      const out = prizeOut(g2, r, "airfield");
+      if (out > 0) return `The airfield there is wrecked: it will be ${out === 1 ? "a month" : `${out} months`} before aircraft can use it.`;
+      return ours ? "Airfields taken this month are not yet in use." : "The enemy holds the country round the town, and the airfield with it.";
+    }
     if (!hasAirfield(g2, r.id)) return "There is no airfield there. Engineers can lay one out, and the treasury can build one.";
     if (r.since >= g2.turn) return "Airfields taken this month are not yet in use.";
     if (f.moved === g2.turn) return "It has already changed base this month.";
@@ -7998,7 +8274,7 @@
     if (trained) p.pilots += trained[1];
     for (const f of airFleetsOf(g2, nat)) {
       if (f.ship !== void 0) continue;
-      if ((!allied(g2, nat, g2.regions[f.base].ctrl) || besieged(g2, g2.regions[f.base])) && !fallBack(g2, f)) continue;
+      if (!airfieldOpenTo(g2, nat, g2.regions[f.base]) && !fallBack(g2, f)) continue;
       const r = AIR.fleets.find((x) => x.nat === nat && x.name === (f.parent ?? f.name));
       const e = r ? row(r.est, g2.turn) : null;
       const ef = e ? f.kind === "bmr" ? 0 : Math.round(e[1] * (f.share ?? 1)) : 0, eb = e ? f.kind === "ftr" ? 0 : Math.round(e[2] * (f.share ?? 1)) : 0;
@@ -8047,7 +8323,7 @@
     const nearest = (fields) => {
       let out = null, bd = Infinity;
       for (const r of g2.regions) {
-        if (r.ctrl !== f.nat || fields && !hasAirfield(g2, r.id) || besieged(g2, r)) continue;
+        if (r.ctrl !== f.nat || fields && !hasAirfield(g2, r.id) || besieged(g2, r) || prizeOut(g2, r, "airfield") > 0) continue;
         const d = Math.hypot(r.x - old.x, r.y - old.y);
         if (d < bd) {
           bd = d;
@@ -9471,7 +9747,7 @@
     };
   }
   var townsOf = (g2) => g2.regions.map((r) => townAt(g2, r.id));
-  var listed = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var listed2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var plural4 = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
   function prizeOf(g2, region, nat = g2.human) {
     const r = g2.regions[region];
@@ -9528,7 +9804,7 @@
       r.port ? yard > 0 ? "a harbour and shipyard" : "a harbour" : "",
       r.vp > 0 && !r.overseas ? `${plural4(r.vp, "victory point")} of ${theName(owner)}'s ${vpAll}` : ""
     ].filter(Boolean);
-    const tail = gains.length ? `: ${listed(gains)}` : "";
+    const tail = gains.length ? `: ${listed2(gains)}` : "";
     const line = kind === "yours" ? `${town} pays ${income2} a month into your treasury${tail}.` : kind === "ally" ? `${town} is held by ${theName(holder)}, your ally, and pays ${incomeNow} a month into its treasury${tail}.` : frees ? `Taking ${town} frees ${g2.nations[frees].name}, which returns to the war on your side and takes its capital back. ${theName(holder, true)} loses ${incomeNow} a month${tail}.` : kind === "restored" ? `Taking ${town} gives it back to ${theName(owner)}, your ally, and takes ${incomeNow} a month from ${theName(holder)}${tail}.` : `Taking ${town} is worth ${income2} a month to you and costs ${theName(holder)} ${incomeNow}${tail}.${capitalOf && atWar(g2, nat, capitalOf) ? ` It is ${theName(owner)}'s capital.` : ""}`;
     return { region, town, nat, kind, to, income: income2, incomeNow, factories, oil, oilNow, harbour: r.port, yard, airfield, fort, vp: r.vp, capitalOf, frees, rails, items, line };
   }
@@ -9956,7 +10232,7 @@
     if (good === "oil") {
       let own = 0, nOwn = 0, taken2 = 0, nTaken = 0;
       for (const r of g2.regions) {
-        if (!r.oil || r.ctrl !== nat) continue;
+        if (!r.oil || prizeTaker(g2, r, "oil") !== nat) continue;
         if (r.owner === nat) {
           own += fieldYield(g2, r, nat);
           nOwn++;
@@ -11525,8 +11801,8 @@
     const fac = own ? works : works * (PRODUCTION.occupiedIncome + lift2);
     const k = !own ? BUDGET.occupied + lift2 : r.overseas ? BUDGET.overseas : 1;
     const land2 = BUDGET.land[r.terrain] * k;
-    const port = r.port ? BUDGET.port * k : 0;
-    const oil = r.oil ? BUDGET.oil * k : 0;
+    const port = r.port && (whole || prizeOut(g2, r, "harbour") <= 0) ? BUDGET.port * k : 0;
+    const oil = r.oil ? BUDGET.oil * k * (whole ? 1 : 1 - fieldOut(g2, r)) : 0;
     const capital = own && g2.nations[nat]?.capital === r.id ? BUDGET.capital : 0;
     if (!whole && nat === r.ctrl && besieged(g2, r)) {
       const p = SIEGE.pay;
@@ -11603,7 +11879,8 @@
     const civic = towns2 ? towns2.commerce + towns2.farms + towns2.tax : 0;
     const peace = n.atWar.length ? 1 : PRODUCTION.peaceIncome;
     const sea = seaIncomeLoss(g2, nat), air = airIncomeLoss(g2, nat), tech2 = techMul(g2, nat, "industry");
-    const before = seat3 + facHome + facOcc + away + land2 + ports + oil;
+    const prizes = prizeIncome(g2, nat);
+    const before = seat3 + facHome + facOcc + away + land2 + ports + oil + prizes.total;
     const gift = traitMoney(g2, nat);
     const atPeace = before * peace + trade + gift.flat + civic;
     const afterSea = atPeace * (1 - sea), afterAir = afterSea * (1 - air);
@@ -11618,6 +11895,7 @@
       { key: "land", label: "Towns, farms and land", amount: land2, count: held },
       { key: "ports", label: "Harbours", amount: ports, count: nPorts },
       { key: "oil", label: "Oilfields", amount: oil, count: nOil },
+      ...prizeRules(g2) ? [{ key: "prizes", label: "Prizes held outside towns under siege", amount: prizes.total, count: prizes.count }] : [],
       { key: "trade", label: budget ? "Trade agreements" : "Trade with friendly neutrals", amount: trade, count: partners },
       { key: "commerce", label: "Commerce in the towns", amount: towns2?.commerce ?? 0 },
       { key: "farms", label: "Farm produce sold", amount: towns2?.farms ?? 0 },
@@ -11661,7 +11939,7 @@
         sum2 += y.land + y.port + y.oil + y.fac;
         seat3 += y.capital;
       }
-      sum2 += seat3 + (n.offmap?.industry ?? 0);
+      sum2 += seat3 + (n.offmap?.industry ?? 0) + prizeIncome(g2, nat).total;
       const towns2 = civicSum(g2, nat, keepsStores(g2, nat));
       const trade2 = tradeIncome(g2, nat) + towns2.commerce + towns2.farms + towns2.tax;
       const gift = traitMoney(g2, nat);
@@ -12164,7 +12442,7 @@
     if (!c.mw.length) delete c.mw;
   }
   var lower = (s) => s[0].toLowerCase() + s.slice(1);
-  var listed2 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  var listed3 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   function corpsMood(g2, c) {
     const rest = clamp(c.org, 0, 1);
     const quiet2 = resting(g2, c);
@@ -12177,7 +12455,7 @@
     const trend = net >= 0.02 && c.mor < 0.995 ? "rising" : net <= -0.02 && c.mor > 5e-3 ? "falling" : "steady";
     const word = moraleWord(c.mor);
     const told = why.filter((w) => !w.earlier && w.key !== "time" && (trend === "falling" ? w.delta < 0 : trend === "rising" ? w.delta > 0 : true)).slice(0, 3).map((w) => lower(w.text));
-    const line = trend === "steady" ? `${word}, and holding steady${told.length ? `: ${listed2(told)}` : ""}.` : told.length ? `${word} and ${trend}: ${listed2(told)}.` : trend === "falling" ? `${word}, and settling back towards its usual temper.` : `${word}, and recovering with time.`;
+    const line = trend === "steady" ? `${word}, and holding steady${told.length ? `: ${listed3(told)}` : ""}.` : told.length ? `${word} and ${trend}: ${listed3(told)}.` : trend === "falling" ? `${word}, and settling back towards its usual temper.` : `${word}, and recovering with time.`;
     return { morale: c.mor, moraleWord: word, trend, rest, restWord: restWord(rest), line, restLine, why, resting: quiet2 };
   }
   function forceMorale(cs) {
@@ -14247,7 +14525,7 @@
   }
   function railReach(g2, c) {
     const out = /* @__PURE__ */ new Set();
-    if (c.kind === "fort" || c.ap < 4 || g2.regions[c.reg].terrain === DESERT.terrain || besieged(g2, g2.regions[c.reg])) return out;
+    if (c.kind === "fort" || c.ap < 4 || g2.regions[c.reg].terrain === DESERT.terrain || besieged(g2, g2.regions[c.reg]) && !junctionOpenTo(g2, c.nat, g2.regions[c.reg])) return out;
     const net = groundRules(g2);
     if (net && railCut(g2, c.reg)) return out;
     const seen = new Uint8Array(g2.regions.length);
@@ -14256,7 +14534,8 @@
     for (let i = 0; i < q.length; i++) {
       for (const j of net ? railsAt(q[i]) : g2.regions[q[i]].nb) {
         const r = g2.regions[j];
-        if (seen[j] || !allied(g2, c.nat, r.ctrl) || r.terrain === DESERT.terrain || besieged(g2, r)) continue;
+        if (seen[j] || r.terrain === DESERT.terrain) continue;
+        if ((!allied(g2, c.nat, r.ctrl) || besieged(g2, r)) && !junctionOpenTo(g2, c.nat, r)) continue;
         if (downBetween(g2, q[i], j)) continue;
         if (net && railCut(g2, j)) {
           if (c.kind === "eng") {
@@ -14273,7 +14552,8 @@
     return out;
   }
   function railMove(g2, c, to) {
-    if (c.kind === "fort" || c.ap < 4 || !allied(g2, c.nat, to.ctrl) || !hasRoom(g2, to, c) || barred(g2, c, to) || besieged(g2, to) || c.town) return false;
+    const friendly2 = allied(g2, c.nat, to.ctrl) && !besieged(g2, to) || junctionOpenTo(g2, c.nat, to);
+    if (c.kind === "fort" || c.ap < 4 || !friendly2 || !hasRoom(g2, to, c) || barred(g2, c, to) || c.town) return false;
     if (to.id !== c.reg && !railReach(g2, c).has(to.id)) return false;
     place(g2, c, to);
     c.ap = 0;
@@ -14687,6 +14967,7 @@
   function endPhase(g2, nat) {
     if (g2.nations[nat].alive) desertWorks(g2, nat, true);
     siegeEmpties(g2);
+    mendPrizes(g2, nat);
   }
   function startPhase(g2, nat) {
     const n = g2.nations[nat];
@@ -18044,6 +18325,37 @@
     return resolveBattle(g2, ok, target);
   }
   var townOrder = (g2, c) => !c.dead && g2.human !== null && current(g2) === g2.human && c.nat === g2.human && c.leave === void 0;
+  var prizesOf = (g2, region) => prizesAt(g2, region, g2.human);
+  function prizesOnMap(g2) {
+    const all = prizeMarks(g2);
+    if (g2.human === null || !fogOn(g2, g2.human)) return all;
+    const sight2 = sightOf(g2, g2.human);
+    return all.filter((m) => sight2[m.region] !== SIGHT.none || allied(g2, g2.human, g2.regions[m.region].ctrl));
+  }
+  function whyNotWreckPrize(g2, region, kind) {
+    if (g2.human === null || !humanUp(g2)) return "It is not your month.";
+    return whyNotWreck(g2, g2.human, region, kind);
+  }
+  function orderWreck(g2, region, kind) {
+    return g2.human !== null && humanUp(g2) && orderWreckPrize(g2, g2.human, region, kind);
+  }
+  function whyNotBurnOrder(g2, region) {
+    if (g2.human === null || !humanUp(g2)) return "It is not your month.";
+    const r = g2.regions[region];
+    if (!r || !prizesAt(g2, region, g2.human)) return "There is nothing there to burn.";
+    if (r.ctrl !== g2.human && fieldCtrl(g2, r) !== g2.human) return `${r.name} is not in your hands.`;
+    return null;
+  }
+  function orderBurn(g2, region, order2) {
+    if (whyNotBurnOrder(g2, region)) return false;
+    setBurnOrder(g2, g2.human, g2.regions[region], order2);
+    return true;
+  }
+  function orderScorchPolicy(g2, policy) {
+    if (g2.human === null || !humanUp(g2) || g2.flags.open !== 1) return false;
+    setScorchPolicy(g2, g2.human, policy);
+    return true;
+  }
   function townSiege(g2, region) {
     const v = siegeView(g2, region);
     if (!v || g2.human === null || !fogOn(g2, g2.human)) return v;
@@ -19532,6 +19844,15 @@
         }
         return out.slice(0, 160);
       })(),
+      // Prizes to mark on the map (Version 56): for each province the region, the tag of the army that holds prizes
+      // outside a town it has not taken ('' if none; an airfield alone does not count), and 1 if something there burns.
+      prizes: (() => {
+        try {
+          return prizesOnMap(s).map((m) => ({ region: m.region, by: m.by && m.seized.some((k) => k !== "airfield") ? m.by : "", burning: m.burning.length > 0 ? 1 : 0 })).filter((m) => m.by || m.burning);
+        } catch {
+          return [];
+        }
+      })(),
       // Towns under siege that the player knows of (Version 54): region, 1 if the ring is closed, months of stores left.
       sieges: (() => {
         try {
@@ -20346,6 +20667,8 @@
           return null;
         }
       })(),
+      // The places of the province that are prizes of their own (Version 56), in plain lines.
+      places: placesOf(s, r.id),
       jobs: (() => {
         const out = [];
         if (!me) return out;
@@ -20404,6 +20727,7 @@
           const why = whyNotCutRailway(s, r.id);
           out.push({ key: "cutrail", label: "Tear up the railway", detail: "No trains run through here, for either side, until engineers relay it.", ok: why === null, why: why ?? "" });
         }
+        out.push(...placeJobs(s, r.id));
         for (const c of s.corps) {
           if (c.dead || c.nat !== me || c.reg !== r.id || c.kind !== "eng") continue;
           if (c.job) {
@@ -20431,6 +20755,71 @@
         return lines;
       })()
     };
+  }
+  var WRECK_WORD = { oil: "Fire the wells", works: "Blow up the works", airfield: "Plough up the airfield", harbour: "Block the harbour", junction: "Blow the junction" };
+  var WRECKED_WORD = { oil: "The wells are fired.", works: "The works are blown up.", airfield: "The airfield is ploughed up.", harbour: "The harbour is blocked.", junction: "The junction is blown." };
+  var POLICY_WORD = { never: "never", conquered: "on conquered ground", everywhere: "everywhere" };
+  var wreckTip = (k) => k === "junction" ? "One corps spends its month on it. No train runs through for either side until engineers relay the line." : `One corps spends its month on it, engineers for choice. Nobody has the use of it for ${PRIZES.wreck[k]} months, you included.`;
+  function placesOf(s, region) {
+    let v = null;
+    try {
+      v = prizesOf(s, region);
+    } catch {
+      return null;
+    }
+    if (!v || !v.prizes.length) return null;
+    const r = s.regions[region];
+    const me = s.human;
+    const town = townSiege(s, region)?.town ?? r.name;
+    const under = v.prizes.some((p) => p.holder !== r.ctrl);
+    const lines = [];
+    if (under) lines.push(`The army round ${town} holds what lies outside its walls, and has the use of it after a month.`);
+    for (const p of v.prizes) {
+      const held = p.holder !== r.ctrl ? ` Held by ${s.nations[p.holder]?.name ?? p.holder}.` : "";
+      const where = /inside|outside/.test(p.detail) ? "" : p.inside ? " (inside the defences)" : " (outside the walls)";
+      lines.push(`${p.name}${where}: ${p.detail}. ${p.state}${held}`);
+    }
+    const mine2 = !!me && s.nations[me].alive && (r.ctrl === me || v.prizes.some((p) => p.holder === me));
+    if (mine2) {
+      const odds = Math.round(PRIZES.burn.chance * 100);
+      lines.push(`If your troops are driven off ${r.name}: ${v.burns ? `they burn what they hold as they go (each place about ${odds} times in 100; a burned place is out of use for ${PRIZES.burn.months.airfield} to ${PRIZES.burn.months.oil} months, whoever holds it).` : "they leave everything whole, for the enemy to use."} ${v.order ? "That is your order for this province." : `That follows your scorched earth policy: ${POLICY_WORD[v.policy]}.`}`);
+    }
+    return { head: "PLACES OF THEIR OWN", lines, seized: under, burns: v.burns };
+  }
+  function placeJobs(s, region) {
+    const out = [];
+    const me = s.human;
+    if (!me || !s.nations[me]?.alive) return out;
+    let v = null;
+    try {
+      v = prizesOf(s, region);
+    } catch {
+      return out;
+    }
+    if (!v) return out;
+    const r = s.regions[region];
+    const up = humanUp(s) && !onEve(s);
+    for (const p of v.prizes) {
+      if (p.holder !== me || p.out > 0) continue;
+      const why = up ? whyNotWreckPrize(s, region, p.kind) : "It is not your month.";
+      out.push({ key: `wreck:${p.kind}`, label: `${WRECK_WORD[p.kind]}`, detail: `${p.name}. ${wreckTip(p.kind)}`, ok: why === null, why: why ?? "" });
+    }
+    if (r.ctrl === me || v.prizes.some((p) => p.holder === me)) {
+      const why = up ? whyNotBurnOrder(s, region) : "It is not your month.";
+      const seg = (val, label, detail) => {
+        if (v.order !== val) out.push({ key: `burn:${val}`, label, detail, ok: why === null, why: why ?? "" });
+      };
+      seg(1, `If ${r.name} is lost: burn it`, "Scorched earth here, whatever your policy says.");
+      seg(-1, `If ${r.name} is lost: leave it whole`, "Nothing is burned here, whatever your policy says.");
+      seg(0, `If ${r.name} is lost: follow the policy`, `This province follows your scorched earth policy again: ${POLICY_WORD[v.policy]}.`);
+      const pol = (pp, label, detail) => {
+        if (v.policy !== pp) out.push({ key: `scorch:${pp}`, label, detail, ok: up, why: up ? "" : "It is not your month." });
+      };
+      pol("never", "Scorched earth policy: never", "For every province without an order of its own: your troops burn nothing they leave.");
+      pol("conquered", "Scorched earth policy: conquered ground", "For every province without an order of its own: your troops burn what they leave on ground that is not your own or an ally's.");
+      pol("everywhere", "Scorched earth policy: everywhere", "For every province without an order of its own: your troops burn what they leave, at home too.");
+    }
+    return out;
   }
   function work(key3, region) {
     const s = game();
@@ -20468,6 +20857,19 @@
       ok = !!c && !why && (what === "garrison" ? orderGarrison(s, c) : orderTakeField(s, c));
       const town = townSiege(s, region)?.town ?? s.regions[region]?.name ?? "the town";
       note3 = ok && c ? what === "garrison" ? `${c.name} goes into ${town} as its garrison.` : `${c.name} leaves ${town} and takes the field.` : why ?? note3;
+    } else if (what === "wreck") {
+      const kind = a;
+      const why = whyNotWreckPrize(s, region, kind);
+      ok = !why && orderWreck(s, region, kind);
+      note3 = ok ? `${WRECKED_WORD[kind] ?? "It is wrecked."} ${kind === "junction" ? "No train runs through until engineers relay the line." : `Nobody has the use of it for ${PRIZES.wreck[kind]} months.`}` : why ?? note3;
+    } else if (what === "burn") {
+      const why = whyNotBurnOrder(s, region);
+      ok = !why && orderBurn(s, region, Number(a));
+      const name = s.regions[region]?.name ?? "the province";
+      note3 = ok ? Number(a) === 1 ? `If ${name} is lost, your troops burn what they hold as they go.` : Number(a) === -1 ? `If ${name} is lost, your troops leave it whole.` : `${name} follows your scorched earth policy again.` : why ?? note3;
+    } else if (what === "scorch") {
+      ok = orderScorchPolicy(s, a);
+      if (ok) note3 = `Scorched earth policy: ${POLICY_WORD[a] ?? a}. A province's own order still overrides it.`;
     } else if (what === "recon") {
       const group = s.airFleets.find((f) => f.id === Number(a));
       const flown = orderScout(s, Number(a), region);

@@ -51,6 +51,7 @@ import {
   depots, shippingLanes, previewAirOrder,
   townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   fleetsInSight, wingsOfFleet,
+  prizesOf, prizesOnMap, whyNotWreckPrize, orderWreck, whyNotBurnOrder, orderBurn, orderScorchPolicy,
   townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
@@ -60,6 +61,7 @@ import {
 } from '../../../src/campaign/turn';
 import { jobLine, type JobKind } from '../../../src/campaign/engineers';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsUpkeep, fortCost, income, isHome, ledger as ledgerOf, provinceYield } from '../../../src/campaign/economy';
+import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign/prizes';
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND } from '../../../src/campaign/types';
@@ -268,6 +270,14 @@ function view() {
         }
       }
       return out.slice(0, 160);
+    })(),
+    // Prizes to mark on the map (Version 56): for each province the region, the tag of the army that holds prizes
+    // outside a town it has not taken ('' if none; an airfield alone does not count), and 1 if something there burns.
+    prizes: (() => {
+      try {
+        return prizesOnMap(s).map((m) => ({ region: m.region, by: m.by && m.seized.some((k) => k !== 'airfield') ? m.by : '', burning: m.burning.length > 0 ? 1 : 0 }))
+          .filter((m) => m.by || m.burning);
+      } catch { return []; }
     })(),
     // Towns under siege that the player knows of (Version 54): region, 1 if the ring is closed, months of stores left.
     sieges: (() => { try { return siegesInSight(s).filter((v) => v.by).flatMap((v) => [v.region, v.closed ? 1 : 0, v.left]); } catch { return []; } })(),
@@ -1135,6 +1145,8 @@ function province(id: number) {
     // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
     // The town as a fortress (Version 54): what it adds to its defenders, and how its siege stands, in plain lines.
     siege: (() => { try { const v = townSiege(s, r.id); return v ? { town: v.town, by: v.by ? s.nations[v.by]?.name ?? v.by : '', lines: v.lines, inside: v.inside, room: v.room } : null; } catch { return null; } })(),
+    // The places of the province that are prizes of their own (Version 56), in plain lines.
+    places: placesOf(s, r.id),
     jobs: (() => {
       const out: { key: string; label: string; detail: string; ok: boolean; why: string }[] = [];
       if (!me) return out;
@@ -1195,6 +1207,8 @@ function province(id: number) {
         const why = whyNotCutRailway(s, r.id);
         out.push({ key: 'cutrail', label: 'Tear up the railway', detail: 'No trains run through here, for either side, until engineers relay it.', ok: why === null, why: why ?? '' });
       }
+      // (Version 56) Wreck a prize the player's troops hold, and scorched earth for the province and the nation.
+      out.push(...placeJobs(s, r.id));
       for (const c of s.corps) {
         if (c.dead || c.nat !== me || c.reg !== r.id || c.kind !== 'eng') continue;
         if (c.job) {
@@ -1223,6 +1237,75 @@ function province(id: number) {
       return lines;
     })(),
   };
+}
+
+// ---- Prizes outside the town, and scorched earth (Version 56) ----------------------------------
+const WRECK_WORD: Record<PrizeKind, string> = { oil: 'Fire the wells', works: 'Blow up the works', airfield: 'Plough up the airfield', harbour: 'Block the harbour', junction: 'Blow the junction' };
+const WRECKED_WORD: Record<PrizeKind, string> = { oil: 'The wells are fired.', works: 'The works are blown up.', airfield: 'The airfield is ploughed up.', harbour: 'The harbour is blocked.', junction: 'The junction is blown.' };
+const POLICY_WORD: Record<ScorchPolicy, string> = { never: 'never', conquered: 'on conquered ground', everywhere: 'everywhere' };
+const wreckTip = (k: PrizeKind): string => (k === 'junction'
+  ? 'One corps spends its month on it. No train runs through for either side until engineers relay the line.'
+  : `One corps spends its month on it, engineers for choice. Nobody has the use of it for ${PRIZES.wreck[k]} months, you included.`);
+
+/**
+ * The places of a province that are prizes of their own: its oilfield, factory district, airfield, harbour and
+ * great rail junction, each with who holds it and how it stands, and what the player's troops do if they are
+ * driven off. In plain lines for the province panel; null where there are none (and outside the grand campaign).
+ */
+function placesOf(s: Game, region: number): { head: string; lines: string[]; seized: boolean; burns: boolean } | null {
+  let v: ReturnType<typeof prizesOf> = null;
+  try { v = prizesOf(s, region); } catch { return null; }
+  if (!v || !v.prizes.length) return null;
+  const r = s.regions[region];
+  const me = s.human;
+  const town = townSiege(s, region)?.town ?? r.name;
+  const under = v.prizes.some((p) => p.holder !== r.ctrl);
+  const lines: string[] = [];
+  if (under) lines.push(`The army round ${town} holds what lies outside its walls, and has the use of it after a month.`);
+  for (const p of v.prizes) {
+    const held = p.holder !== r.ctrl ? ` Held by ${s.nations[p.holder]?.name ?? p.holder}.` : '';
+    // (where the detail already says which side of the walls it lies, it is not said twice)
+    const where = /inside|outside/.test(p.detail) ? '' : p.inside ? ' (inside the defences)' : ' (outside the walls)';
+    lines.push(`${p.name}${where}: ${p.detail}. ${p.state}${held}`);
+  }
+  const mine = !!me && s.nations[me].alive && (r.ctrl === me || v.prizes.some((p) => p.holder === me));
+  if (mine) {
+    const odds = Math.round(PRIZES.burn.chance * 100);
+    lines.push(`If your troops are driven off ${r.name}: ${v.burns
+      ? `they burn what they hold as they go (each place about ${odds} times in 100; a burned place is out of use for ${PRIZES.burn.months.airfield} to ${PRIZES.burn.months.oil} months, whoever holds it).`
+      : 'they leave everything whole, for the enemy to use.'} ${v.order ? 'That is your order for this province.' : `That follows your scorched earth policy: ${POLICY_WORD[v.policy]}.`}`);
+  }
+  return { head: 'PLACES OF THEIR OWN', lines, seized: under, burns: v.burns };
+}
+
+/** The orders a province offers over its prizes: wreck one the player's troops hold, and scorched earth. */
+function placeJobs(s: Game, region: number): { key: string; label: string; detail: string; ok: boolean; why: string }[] {
+  const out: { key: string; label: string; detail: string; ok: boolean; why: string }[] = [];
+  const me = s.human;
+  if (!me || !s.nations[me]?.alive) return out;
+  let v: ReturnType<typeof prizesOf> = null;
+  try { v = prizesOf(s, region); } catch { return out; }
+  if (!v) return out;
+  const r = s.regions[region];
+  const up = humanUp(s) && !onEve(s);
+  for (const p of v.prizes) {
+    if (p.holder !== me || p.out > 0) continue;
+    const why = up ? whyNotWreckPrize(s, region, p.kind) : 'It is not your month.';
+    out.push({ key: `wreck:${p.kind}`, label: `${WRECK_WORD[p.kind]}`, detail: `${p.name}. ${wreckTip(p.kind)}`, ok: why === null, why: why ?? '' });
+  }
+  if (r.ctrl === me || v.prizes.some((p) => p.holder === me)) {
+    const why = up ? whyNotBurnOrder(s, region) : 'It is not your month.';
+    // (only the orders that would change something are offered: the one in force is told in the panel's own lines)
+    const seg = (val: number, label: string, detail: string): void => { if (v!.order !== val) out.push({ key: `burn:${val}`, label, detail, ok: why === null, why: why ?? '' }); };
+    seg(1, `If ${r.name} is lost: burn it`, 'Scorched earth here, whatever your policy says.');
+    seg(-1, `If ${r.name} is lost: leave it whole`, 'Nothing is burned here, whatever your policy says.');
+    seg(0, `If ${r.name} is lost: follow the policy`, `This province follows your scorched earth policy again: ${POLICY_WORD[v.policy]}.`);
+    const pol = (pp: ScorchPolicy, label: string, detail: string): void => { if (v!.policy !== pp) out.push({ key: `scorch:${pp}`, label, detail, ok: up, why: up ? '' : 'It is not your month.' }); };
+    pol('never', 'Scorched earth policy: never', 'For every province without an order of its own: your troops burn nothing they leave.');
+    pol('conquered', 'Scorched earth policy: conquered ground', 'For every province without an order of its own: your troops burn what they leave on ground that is not your own or an ally\'s.');
+    pol('everywhere', 'Scorched earth policy: everywhere', 'For every province without an order of its own: your troops burn what they leave, at home too.');
+  }
+  return out;
 }
 
 /** Carries out one of the works a province offers (see province().jobs). */
@@ -1262,6 +1345,19 @@ function work(key: string, region: number) {
     ok = !!c && !why && (what === 'garrison' ? orderGarrison(s, c) : orderTakeField(s, c));
     const town = townSiege(s, region)?.town ?? s.regions[region]?.name ?? 'the town';
     note = ok && c ? (what === 'garrison' ? `${c.name} goes into ${town} as its garrison.` : `${c.name} leaves ${town} and takes the field.`) : why ?? note;
+  } else if (what === 'wreck') {
+    const kind = a as PrizeKind;
+    const why = whyNotWreckPrize(s, region, kind);
+    ok = !why && orderWreck(s, region, kind);
+    note = ok ? `${WRECKED_WORD[kind] ?? 'It is wrecked.'} ${kind === 'junction' ? 'No train runs through until engineers relay the line.' : `Nobody has the use of it for ${PRIZES.wreck[kind as Exclude<PrizeKind, 'junction'>]} months.`}` : why ?? note;
+  } else if (what === 'burn') {
+    const why = whyNotBurnOrder(s, region);
+    ok = !why && orderBurn(s, region, Number(a));
+    const name = s.regions[region]?.name ?? 'the province';
+    note = ok ? (Number(a) === 1 ? `If ${name} is lost, your troops burn what they hold as they go.` : Number(a) === -1 ? `If ${name} is lost, your troops leave it whole.` : `${name} follows your scorched earth policy again.`) : why ?? note;
+  } else if (what === 'scorch') {
+    ok = orderScorchPolicy(s, a as ScorchPolicy);
+    if (ok) note = `Scorched earth policy: ${POLICY_WORD[a as ScorchPolicy] ?? a}. A province's own order still overrides it.`;
   } else if (what === 'recon') {
     const group = s.airFleets.find((f) => f.id === Number(a));
     const flown = sendScout(s, Number(a), region);

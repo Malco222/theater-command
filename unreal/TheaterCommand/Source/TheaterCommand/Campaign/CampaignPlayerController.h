@@ -34,6 +34,7 @@ struct FRegionPanelInfo
 	int32 PlotsFree = 0, PlotsCanBuild = 0;
 	FText ProvinceNote;
 	FText SiegeTitle, SiegeText; // the town as a fortress, and how its siege stands
+	FText PlacesTitle, PlacesText; // the places of the province that are prizes of their own, and scorched earth
 	TArray<FProvinceOption> Options;
 	/** The heading over those: "PROVINCE", or "ORDERS" for a fleet or an air fleet. */
 	FText OptionsTitle = FText::FromString(TEXT("PROVINCE"));

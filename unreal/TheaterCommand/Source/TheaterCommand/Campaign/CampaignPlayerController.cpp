@@ -4514,6 +4514,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowScars(View.Scars);
 		Map->ShowSieges(View.Sieges);
 		Map->SetWarAtNight(View.Blackout, View.Fronts);
+		Map->ShowPrizes(View.Prizes);
 		Map->ShowBuildings(View.RegionWorks);
 		Map->ShowLanes(View.Lanes);
 		Map->ShowFreeCapitals(View.FreeCapitals);
@@ -5274,6 +5275,11 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			{
 				RegionPanel.SiegeTitle = FText::FromString(Province.SiegeBy.IsEmpty() ? FString(TEXT("THE TOWN AS A FORTRESS")) : FString::Printf(TEXT("BESIEGED BY %s"), *Province.SiegeBy.ToUpper()));
 				RegionPanel.SiegeText = FText::FromString(FString::Join(Province.SiegeLines, TEXT("\n")));
+			}
+			if (Province.PlacesLines.Num() > 0)
+			{
+				RegionPanel.PlacesTitle = FText::FromString(Province.PlacesHead.IsEmpty() ? FString(TEXT("PLACES OF THEIR OWN")) : Province.PlacesHead);
+				RegionPanel.PlacesText = FText::FromString(FString::Join(Province.PlacesLines, TEXT("\n")));
 			}
 			// The town's plots: shown on the player's own ground, and elsewhere only where something stands.
 			const bool bBuiltOn = Province.Plots.ContainsByPredicate([](const FString& Plot) { return Plot != TEXT("Free plot"); });

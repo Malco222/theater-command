@@ -301,6 +301,14 @@ struct FViewAirFleet
 	int32 Groups = 1; // how many air groups this piece stands for (one piece for each airfield in the grand campaign)
 };
 
+/** A province marked on the map for its prizes (Version 56): something there burns, or an army holds what lies outside a town it has not taken. */
+struct FPrizeMark
+{
+	int32 Region = INDEX_NONE;
+	FString By; // the tag of the army that holds prizes outside the town, or empty
+	bool bBurning = false;
+};
+
 struct FCampaignView
 {
 	FString Rules; // "stand-in" until the real rules are bundled in
@@ -343,6 +351,7 @@ struct FCampaignView
 	// For the night: the nations at war (their towns are blacked out), and the fronts as pairs of regions.
 	TArray<FString> Blackout;
 	TArray<int32> Fronts;
+	TArray<FPrizeMark> Prizes; // provinces to mark for their prizes: a fire where one is wrecked, a pennant where a besieger holds one
 	TArray<FString> Alerts; // things to tell the player as his month opens
 	TArray<FString> PageIds; // the rooms the rules set out themselves that are open to him
 	TArray<FString> PageLabels;
@@ -973,5 +982,8 @@ struct FProvinceInfo
 	// The town as a fortress, and how its siege stands (the grand campaign): who stands round it, and plain lines.
 	FString SiegeBy;
 	TArray<FString> SiegeLines;
+	// The places of the province that are prizes of their own (Version 56), in plain lines.
+	FString PlacesHead;
+	TArray<FString> PlacesLines;
 	FString TownKind; // capital, city, town or village
 };

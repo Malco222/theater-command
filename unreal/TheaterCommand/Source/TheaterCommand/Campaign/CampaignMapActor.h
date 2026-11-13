@@ -232,6 +232,8 @@ public:
 	void ShowScars(const TArray<int32>& Scars);
 	/** Smoke hangs over the towns that are besieged: three numbers each, the region, 1 if the ring is closed, months of stores left. */
 	void ShowSieges(const TArray<int32>& Sieges);
+	/** Prizes outside the towns (Version 56): a fire where one is wrecked, a pennant in the colour of the army that holds one outside a town it has not taken. */
+	void ShowPrizes(const TArray<FPrizeMark>& Marks);
 	/** The night's war: the nations whose towns are blacked out, and the fronts (pairs of regions) where the guns flicker. */
 	void SetWarAtNight(const TArray<FString>& Blackout, const TArray<int32>& Fronts);
 	/** How far the table is into a moonlit night, 0 to 1 (nothing by day, and nothing by lamplight). */
@@ -501,6 +503,10 @@ private:
 	TArray<int32> ShownScars;
 	TArray<FVector> Smoulders; // wrecks still burning, for the smoke that rises from them
 	TArray<int32> ShownSieges;
+	FString ShownPrizes; // what the prize marks were last built from
+	TArray<FVector> PrizeFires; // wrecked prizes, for the flame and the smoke over them
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> PrizesMesh; // the pennants over prizes held outside a town
 	TArray<FVector> SiegeFires; // besieged towns, for the smoke that hangs over them
 	// Pieces on the move, to know when one is set down; and where pieces were lately set down, for the dust.
 	TSet<TWeakObjectPtr<AArmyPiece>> OnTheMarch;

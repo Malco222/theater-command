@@ -413,6 +413,24 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				Out.Fronts.Add(FMath::RoundToInt32(Value->AsNumber()));
 			}
 		}
+		const TArray<TSharedPtr<FJsonValue>>* Prizes = nullptr;
+		if (Object->TryGetArrayField(TEXT("prizes"), Prizes))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Prizes)
+			{
+				const TSharedPtr<FJsonObject>* Mark = nullptr;
+				if (Value->TryGetObject(Mark))
+				{
+					FPrizeMark& Out1 = Out.Prizes.AddDefaulted_GetRef();
+					double Region = -1.0, Burning = 0.0;
+					(*Mark)->TryGetNumberField(TEXT("region"), Region);
+					(*Mark)->TryGetNumberField(TEXT("burning"), Burning);
+					(*Mark)->TryGetStringField(TEXT("by"), Out1.By);
+					Out1.Region = FMath::RoundToInt32(Region);
+					Out1.bBurning = Burning > 0.5;
+				}
+			}
+		}
 		const TArray<TSharedPtr<FJsonValue>>* Sieges = nullptr;
 		if (Object->TryGetArrayField(TEXT("sieges"), Sieges))
 		{
@@ -1424,6 +1442,14 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		{
 			(*Siege)->TryGetStringField(TEXT("by"), Info.SiegeBy);
 			(*Siege)->TryGetStringArrayField(TEXT("lines"), Info.SiegeLines);
+		}
+	}
+	{
+		const TSharedPtr<FJsonObject>* Places = nullptr;
+		if (Object->TryGetObjectField(TEXT("places"), Places))
+		{
+			(*Places)->TryGetStringField(TEXT("head"), Info.PlacesHead);
+			(*Places)->TryGetStringArrayField(TEXT("lines"), Info.PlacesLines);
 		}
 	}
 	{

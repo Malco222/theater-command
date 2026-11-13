@@ -60,6 +60,7 @@ private:
 	int32 TownPlot = -1; // on the town's bar: click this plot, so its choices are laid out
 	FString TownOrder; // and order this line of building from them
 	FString Scars; // leave the scars of battle in these regions to be looked at: "Region:months since:size;..."
+	FString Prizes; // mark these regions for their prizes, to be looked at: "Region:tag of the army that holds them or -:1 if burning;..."
 	FString Dress; // dress the armies in these regions to be looked at: "Region:works:camp:supply;..." (works 0-2, camp 0-1, supply 0-2)
 	int32 Civic = 0; // stand every kind of town building at this level beside the region looked at (4: one of each level, some going up)
 	int32 ProvinceTab = 0; // the tab of the province panel to show

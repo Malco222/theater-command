@@ -1772,6 +1772,68 @@ void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
 	}
 }
 
+void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
+{
+	FString Signature;
+	for (const FPrizeMark& Mark : Marks)
+	{
+		Signature += FString::Printf(TEXT("%d:%s:%d;"), Mark.Region, *Mark.By, Mark.bBurning ? 1 : 0);
+	}
+	if (!Data.IsLoaded() || Signature == ShownPrizes)
+	{
+		return;
+	}
+	ShownPrizes = Signature;
+	PrizeFires.Reset();
+	if (!PrizesMesh)
+	{
+		PrizesMesh = NewObject<UProceduralMeshComponent>(this);
+		PrizesMesh->SetupAttachment(Root);
+		PrizesMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		PrizesMesh->RegisterComponent();
+		PrizesMesh->SetCastShadow(false);
+	}
+	PrizesMesh->ClearAllMeshSections();
+	FMiniatureMesh Model;
+	const double U = UnitScale;
+	const FLinearColor Pole(FColor::FromHex(TEXT("3A2E24")));
+	for (const FPrizeMark& Mark : Marks)
+	{
+		if (!Data.Regions.IsValidIndex(Mark.Region))
+		{
+			continue;
+		}
+		const FCampaignRegion& Region = Data.Regions[Mark.Region];
+		if (Mark.bBurning)
+		{
+			// What was wrecked lies outside the town: the fire is beside it, not in its streets.
+			PrizeFires.Add(SurfacePoint(Region.Center.X - 3.0, Region.Center.Y - 1.9, 0.5));
+		}
+		if (!Mark.By.IsEmpty())
+		{
+			// A pennant in the colour of the army that holds what lies outside the walls, though the town holds:
+			// two cloths crossed on one pole, so that it is read from any side of the table.
+			const FCampaignNation* Whose = Data.FindNation(Mark.By);
+			const FLinearColor Cloth = Whose ? FLinearColor(Whose->Color) : FLinearColor(0.7f, 0.7f, 0.7f);
+			// (a pale band along its top edge, so that a dark colour is still seen to be a flag)
+			const FLinearColor Band(FColor::FromHex(TEXT("EFE6CC")));
+			const FVector Foot = SurfacePoint(Region.Center.X + 3.6, Region.Center.Y + 2.6, 0.02);
+			Model.Pillar(Foot, 0.2 * U, 0.14 * U, 11.0 * U, Pole, 6);
+			for (int32 Cross = 0; Cross < 2; ++Cross)
+			{
+				Model.Box(Foot + FVector(0.0, 0.0, 9.0 * U), FVector(5.6, 0.16, 2.3) * U, Cloth, Cross * 90.0);
+				Model.Box(Foot + FVector(0.0, 0.0, 10.4 * U), FVector(5.6, 0.18, 0.5) * U, Band, Cross * 90.0);
+			}
+			Model.Pillar(Foot + FVector(0.0, 0.0, 11.0 * U), 0.34 * U, 0.05 * U, 0.8 * U, Pole, 6);
+		}
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		PrizesMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		PrizesMesh->SetMaterial(0, SceneryMaterial);
+	}
+}
+
 void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 {
 	if (!Data.IsLoaded() || (ScarsMesh && Scars == ShownScars))
@@ -4481,6 +4543,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterSmokeTest")))
 	{
 		Draw(CameraFocus + FVector(0.0, 0.0, 120.0), 300.0, FLinearColor(1.0f, 0.5f, 0.1f), 0.9f); // one great puff, to see that puffs draw at all
+		Draw(CameraFocus + FVector(500.0, 0.0, 120.0), 200.0, FLinearColor(0.03f, 0.03f, 0.03f), 0.9f); // and a black one beside it, to see that smoke can darken
 	}
 	// Chimneys: a thin grey plume from each, leaning with the wind. Only those near what the eye is looking at.
 	const FLinearColor Grey(0.6f, 0.6f, 0.62f);
@@ -4553,6 +4616,40 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		for (int32 K = 0; K < SiegeFires.Num(); ++K)
 		{
 			Plume(SiegeFires[K], K * 11 + 700, 2.3, &Oily);
+		}
+		// A prize that has been wrecked burns for as long as it is out of use: flame at its foot, black smoke above.
+		{
+			const FLinearColor Flame(1.0f, 0.5f, 0.12f);
+			const double Seen = FMath::Clamp(CameraDistance / (Unit * 480.0), 0.6, 1.5);
+			for (int32 K = 0; K < PrizeFires.Num(); ++K)
+			{
+				if (FVector::DistSquared2D(PrizeFires[K], CameraFocus) > Reach * Reach)
+				{
+					continue;
+				}
+				// A thick black column, leaning with the wind: oil and stores burning are seen for miles.
+				// (a puff is densest at its very middle and thins to nothing at its rim, so each is laid on three
+				// times over: one alone is a wisp)
+				for (int32 P = 0; P < 8; ++P)
+				{
+					const double Age = FMath::Frac(Now / 7.0 + P / 8.0 + K * 0.31);
+					const FVector At = PrizeFires[K] + FVector(0.0, 0.0, (1.6 + 11.0 * Age) * Unit) + Wind * (5.0 * Unit * Age * Age)
+						+ Right * (FMath::Sin(Now * 0.6 + P * 1.7 + K) * 0.6 * Unit * Age);
+					const float Dense = static_cast<float>(FMath::SmoothStep(0.0, 0.08, Age) * FMath::Pow(1.0 - Age, 0.8));
+					for (int32 Layer = 0; Layer < 3; ++Layer)
+					{
+						Draw(At, (1.5 + 3.6 * Age) * Unit * (1.0 - 0.14 * Layer), FLinearColor(0.02f, 0.019f, 0.018f), Dense);
+					}
+				}
+				// (a broad red glow at the foot, and brighter tongues of flame over it)
+				Draw(PrizeFires[K] + FVector(0.0, 0.0, 0.7 * Unit * Seen), 1.9 * Unit * Seen, FLinearColor(1.0f, 0.28f, 0.06f), 0.55f + 0.1f * FMath::Sin(static_cast<float>(Now) * 3.1f + K));
+				for (int32 Tongue = 0; Tongue < 3; ++Tongue)
+				{
+					const float Lick = 0.7f + 0.28f * FMath::Sin(static_cast<float>(Now) * (8.0f + Tongue * 3.1f) + K * 2.3f + Tongue);
+					const double Big = (1.15 - 0.25 * Tongue) * Unit * Seen;
+					Draw(PrizeFires[K] + FVector((Tongue - 1.0) * 0.7 * Unit, 0.0, Big * (0.8 + 0.45 * Tongue)), Big, Flame, Lick);
+				}
+			}
 		}
 	}
 	// The fires of armies in camp: a thin thread of smoke from each.

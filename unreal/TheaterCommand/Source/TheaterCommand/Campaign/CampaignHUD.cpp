@@ -2222,6 +2222,18 @@ namespace
 							SNew(STextBlock).Text(Info.SiegeText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.12f)
 						];
 					}
+					if ((ProvinceTab == 0 || !bProvince) && !Info.PlacesText.IsEmpty())
+					{
+						// The places of the province that are prizes of their own, and what happens to them if it is lost.
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.PlacesTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+						];
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.PlacesText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.12f)
+						];
+					}
 					if (ProvinceTab == 0 && bProvince && Info.Plots.Num() > 0)
 					{
 						// The town: its building plots as a row of lots, each with what stands on it, and the way to its plan.
