@@ -11,6 +11,7 @@ import { newStories } from './stories';
 import { restoreWorks } from './arsenal';
 import { resetRailheads } from './rails';
 import { openAirWar } from './air';
+import { openCarriers } from './carriers';
 import { FAIR } from './difficulty';
 import { rollFromMemory } from './liberation';
 import { openMorale } from './morale';
@@ -163,6 +164,8 @@ export function loadGame(text: string): Game | null {
   // A save from before the roll of the fallen was kept: it is written up from what each nation remembers of its own fall.
   g.passings = Array.isArray(d.passings) ? d.passings : rollFromMemory(g);
   if (Array.isArray(d.fleets)) { g.fleets = d.fleets; g.nextFleet = d.nextFleet; g.seaReports = d.seaReports ?? []; g.shoreReports = d.shoreReports ?? []; g.convoys = d.convoys ?? {}; }
+  // A grand campaign saved before carriers had aircraft of their own: every carrier fleet is given its wings.
+  if (g.flags.open === 1) openCarriers(g);
   // Trade agreements; a grand campaign saved before there were any signs history's when it is loaded.
   g.trade = Array.isArray(d.trade) ? d.trade : [];
   openTrade(g);

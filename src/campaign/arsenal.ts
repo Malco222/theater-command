@@ -6,7 +6,8 @@
 // classic corps and fortifications, as they always did.
 
 import data from '../../data/campaign/arsenal.json';
-import { AIRWAR, airFleetsOf, airPool, airWar, foundAirFleet, hasAirfield } from './air';
+import { AIRWAR, airFleetsOf, airPool, airWar, carrierRules, foundAirFleet, hasAirfield } from './air';
+import { syncWings } from './carriers';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
@@ -91,7 +92,7 @@ export function canStation(g: Game, nat: string, r: Region | undefined): boolean
   if (!r || r.ctrl !== nat || r.since >= g.turn) return false;
   // The air war: an airfield is a place, and aircraft are stationed only where there is one.
   if (airWar(g)) return hasAirfield(g, r.id);
-  return workLevel(g, 'field', r.id) > 0 || g.airFleets.some((f) => f.nat === nat && f.base === r.id);
+  return workLevel(g, 'field', r.id) > 0 || g.airFleets.some((f) => f.nat === nat && f.base === r.id && f.ship === undefined);
 }
 
 const strongest = (fs: AirFleet[]): AirFleet | null => fs.reduce<AirFleet | null>((best, f) => (!best || f.ftr + f.bmr > best.ftr + best.bmr ? f : best), null);
@@ -99,7 +100,7 @@ const strongest = (fs: AirFleet[]): AirFleet | null => fs.reduce<AirFleet | null
 /** Where a new wing would be stationed: the region asked for if it has airfields, else with the nation's strongest air fleet, else on any airfield it has built. */
 export function stationSite(g: Game, nat: string, want = -1): number {
   if (canStation(g, nat, g.regions[want])) return want;
-  const main = strongest(airFleetsOf(g, nat).filter((f) => canStation(g, nat, g.regions[f.base])));
+  const main = strongest(airFleetsOf(g, nat).filter((f) => f.ship === undefined && canStation(g, nat, g.regions[f.base])));
   if (main) return main.base;
   return g.regions.find((r) => canStation(g, nat, r))?.id ?? -1;
 }
@@ -108,7 +109,7 @@ export function stationSite(g: Game, nat: string, want = -1): number {
  * The air fleet a wing stationed here would join, if one of the nation's is based here. In the air war a wing joins
  * an air group of its own kind that has room for it, and otherwise founds a new group.
  */
-const fleetAt = (g: Game, nat: string, region: number, wing?: Wing): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region
+const fleetAt = (g: Game, nat: string, region: number, wing?: Wing): AirFleet | null => strongest(airFleetsOf(g, nat).filter((f) => f.base === region && f.ship === undefined
   && (!airWar(g) || !wing || (f.kind === wing && f.est[wing] + ARSENAL.air[wing].count <= AIRWAR.groups.most))));
 
 /** True if a ship needing a yard of this level can be laid down here. */
@@ -337,7 +338,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
       tell(war ? `A new air group, the ${f.name}, forms on the airfield at ${r.name} with ${word}.` : `A new air fleet, ${f.name}, forms on the airfields of ${r.name} with ${word}.`);
     } else {
       // The air war: the wing goes to the strongest group of its own kind.
-      f ??= strongest(airFleetsOf(g, nat).filter((x) => !war || x.kind === wing));
+      f ??= strongest(airFleetsOf(g, nat).filter((x) => x.ship === undefined && (!war || x.kind === wing)));
       if (f) tell(`${cap(word)} from the factories join ${f.name} at ${g.regions[f.base].name}.`);
     }
     if (!f) {
@@ -363,7 +364,10 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
     if (!f && isHome(g, nat, r) && r.port && r.seas.length) f = foundFleet(g, nat, r, `${r.name} Squadron`);
     if (!f) { tell(`With no port left to take them, the ${NAVY.classes[hull].many} building at ${r.name} are lost.`); return; }
     f.ships[hull] += count;
-    tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}.`);
+    // A new carrier joins with its aircraft aboard (the grand campaign).
+    const decks = hull === 'cv' && carrierRules(g);
+    if (decks) syncWings(g);
+    tell(`${cap(plural(count, `new ${NAVY.classes[hull].one}`, `new ${NAVY.classes[hull].many}`))} ${count === 1 ? 'joins' : 'join'} the ${f.name}${decks ? ', with fighters and strike aircraft aboard' : ''}.`);
     return;
   }
   const what = b.item as Work;

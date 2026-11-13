@@ -30,8 +30,8 @@ function contested(g: Game, kind: 'bomb' | 'ground' = 'bomb'): { target: number;
 }
 
 describe('the air war data', () => {
-  it('names six kinds of raid, sizes airfields in steps and numbers the groups of each nation', () => {
-    expect(airwar.raids.kinds.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'superiority', 'strike', 'recon']);
+  it('names eight kinds of raid, sizes airfields in steps and numbers the groups of each nation', () => {
+    expect(airwar.raids.kinds.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'superiority', 'strike', 'fleet', 'harbour', 'recon']);
     for (const k of airwar.raids.kinds) { expect(k.label.length).toBeGreaterThan(5); expect(k.blurb.length).toBeGreaterThan(30); expect(['bmr', 'any']).toContain(k.needs); }
     const S = airwar.fields.sizes;
     expect(S[0]).toBe(0);
@@ -70,7 +70,8 @@ describe('airfields', () => {
     const all = airfields(g, null);
     expect(all.length).toBeGreaterThan(100);
     for (const r of g.regions) if (r.cap) { expect(hasAirfield(g, r.id), r.name).toBe(true); expect(airfieldsHold(g, r.id), r.name).toBeGreaterThanOrEqual(1500); }
-    for (const f of g.airFleets) expect(hasAirfield(g, f.base), `${f.name} at ${g.regions[f.base].name}`).toBe(true);
+    // Every group on land has an airfield under it (a carrier's wing has its decks).
+    for (const f of g.airFleets) if (f.ship === undefined) expect(hasAirfield(g, f.base), `${f.name} at ${g.regions[f.base].name}`).toBe(true);
     // Open country has none.
     expect(g.regions.some((r) => !hasAirfield(g, r.id))).toBe(true);
     expect(all.some((a) => a.size === 1)).toBe(true);
@@ -141,7 +142,8 @@ describe('air groups', () => {
     const whole = createGame(7, 'GER');
     const g = grand('GER');
     for (const nat of new Set(whole.airFleets.map((f) => f.nat))) {
-      const before = whole.airFleets.filter((f) => f.nat === nat), after = g.airFleets.filter((f) => f.nat === nat);
+      // The carriers' own wings are new aircraft, not a share of history's air fleets.
+      const before = whole.airFleets.filter((f) => f.nat === nat), after = g.airFleets.filter((f) => f.nat === nat && f.ship === undefined);
       expect(sum(after, 'ftr'), nat).toBe(sum(before, 'ftr'));
       expect(sum(after, 'bmr'), nat).toBe(sum(before, 'bmr'));
       expect(after.reduce((s, f) => s + f.est.ftr + f.est.bmr, 0), nat).toBe(before.reduce((s, f) => s + f.est.ftr + f.est.bmr, 0));
@@ -151,6 +153,8 @@ describe('air groups', () => {
     for (const f of g.airFleets) {
       expect(f.kind === 'ftr' || f.kind === 'bmr', f.name).toBe(true);
       expect(f.kind === 'ftr' ? f.bmr : f.ftr, f.name).toBe(0);
+      // A carrier's wing is as large as its decks, and was never part of a land command.
+      if (f.ship !== undefined) continue;
       expect(f.ftr + f.bmr, f.name).toBeLessThanOrEqual(AIRWAR.groups.most);
       expect(f.parent, f.name).toBeTruthy();
       expect(f.share, f.name).toBeGreaterThan(0);
@@ -207,8 +211,11 @@ describe('air groups', () => {
     const up = loadGame(saveGame(old))!;
     expect(airWar(up)).toBe(true);
     expect(up.airFleets.every((x) => x.kind !== undefined)).toBe(true);
-    expect(sum(up.airFleets, 'ftr')).toBe(sum(old.airFleets, 'ftr'));
-    expect(up.airFleets.every((x) => hasAirfield(up, x.base))).toBe(true);
+    const ashore = up.airFleets.filter((x) => x.ship === undefined);
+    expect(sum(ashore, 'ftr')).toBe(sum(old.airFleets, 'ftr'));
+    expect(ashore.every((x) => hasAirfield(up, x.base))).toBe(true);
+    // And its carriers are given their wings.
+    expect(up.airFleets.some((x) => x.ship !== undefined)).toBe(true);
   });
 });
 
@@ -290,8 +297,9 @@ describe('the raid planner', () => {
   it('offers every kind of raid with its targets, nearest first, and nothing to a nation at peace', () => {
     const g = grand('GER');
     const menu = raidMenu(g);
-    expect(menu.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'superiority', 'strike', 'recon']);
-    for (const k of menu) { expect(k.targets, k.key).toBeGreaterThan(0); expect(k.why, k.key).toBeNull(); }
+    expect(menu.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'superiority', 'strike', 'fleet', 'harbour', 'recon']);
+    // A strike on a fleet needs a fleet found at sea: there may be none in reach in the first month.
+    for (const k of menu) if (k.key !== 'fleet' && k.key !== 'harbour') { expect(k.targets, k.key).toBeGreaterThan(0); expect(k.why, k.key).toBeNull(); }
     for (const kind of ['bomb', 'ground', 'superiority', 'strike'] as const) {
       const ts = raidTargetsFor(g, kind);
       for (let i = 1; i < ts.length; i++) expect(ts[i].km).toBeGreaterThanOrEqual(ts[i - 1].km);
@@ -553,7 +561,7 @@ describe('the pages the 3D game reads', () => {
   it('take standing orders, reconnaissance and moves as actions, and leave anything else alone', () => {
     const g = grand('GER');
     const f = mine(g, 'ftr')[0], b = mine(g, 'bmr')[0];
-    expect(airPage(g, 'raids')!.sections[0].rows.length).toBe(6);
+    expect(airPage(g, 'raids')!.sections[0].rows.length).toBe(8);
     expect(airAct(g, `job:${f.id}:rest`)).toMatchObject({ ok: true, open: `group:${f.id}` });
     expect(f.mission).toBe('rest');
     const esc = airPage(g, `group:${f.id}`)!.sections[0].rows.find((r) => r.buttons[0].act.startsWith(`job:${f.id}:escort:`))!;

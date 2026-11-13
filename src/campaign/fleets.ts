@@ -8,9 +8,10 @@
 
 import type { TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
-import { AIRWAR, raid as stopOutput } from './air';
+import { AIRWAR, carrierRules, raid as stopOutput } from './air';
+import { deckWorth, fleetKnown, moveWings, seaPicture, wingCards, wingShare, type WingCard } from './carriers';
 import { allied, atWar, headline } from './game';
-import { SIGHT, sightOf } from './intel';
+import { SIGHT, fogOn, sightOf } from './intel';
 import {
   CLASSES, FLEETS, NAVY, atSea, escort, fit, fleetPower, fleetReach, fleetsOf, huntShareSunk, huntersIn, laneLoss, quality, screenGap, seaRng,
   sail, seaRoutes, seaSide, seaWar, shipCount, shipList, sinkShips, torpedoRisk, whyNotEscort,
@@ -66,6 +67,9 @@ export interface FleetCard {
   screen: { have: number; need: number; gap: number; risk: number; word: string };
   /** True when its guns have already spoken this month. */
   shelled: boolean;
+  /** The aircraft its carriers bring, as cards (fighters first), and how full its decks are, 0..1. Empty and 1 for a fleet without carriers. */
+  wings: WingCard[];
+  decks: number;
 }
 
 const gunsRaw = (s: Ships): number => CLASSES.reduce((n, c) => n + s[c] * B.guns[c], 0);
@@ -88,7 +92,7 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
   const need = Math.ceil(heavy * FLEETS.screen.per);
   const gap = screenGap(f);
   let escortW = 0;
-  for (const c of CLASSES) escortW += f.ships[c] * NAVY.classes[c].escort;
+  for (const c of CLASSES) escortW += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
   return {
     id: f.id, nat: f.nat, name: f.name, nick: f.nick ?? null,
     admiral: f.admiral ? { name: f.admiral.name, level: f.admiral.level } : null,
@@ -97,12 +101,13 @@ export function fleetCard(g: Game, f: Fleet): FleetCard {
     ready: f.ready, power: fleetPower(g, f), ships: shipCount(f.ships),
     cards: CLASSES.filter((c) => f.ships[c] > 0).map((c) => ({ cls: c, label: NAVY.classes[c].label, count: f.ships[c], lost: f.lost[c], role: FLEETS.roles[c], brief: FLEETS.brief[c] })),
     guns: gunWeight(g, f), escort: escortW * quality(g, f.nat) * fit(g, f),
-    hunters: (f.ships.dd + f.ships.cv * FLEETS.hunt.carrier) * quality(g, f.nat) * fit(g, f),
+    hunters: (f.ships.dd + f.ships.cv * FLEETS.hunt.carrier * deckWorth(g, f)) * quality(g, f.nat) * fit(g, f),
     screen: {
       have: f.ships.dd, need, gap, risk: atSea(f) ? torpedoRisk(g, f, f.zone) : 0,
       word: heavy <= 0 ? 'No heavy ships to screen' : gap <= 0 ? 'Fully screened' : gap < 0.4 ? 'Thinly screened' : f.ships.dd > 0 ? 'Badly short of destroyers' : 'No destroyers at all',
     },
     shelled: f.shelled === g.turn,
+    wings: wingCards(g, f), decks: wingShare(g, f),
   };
 }
 
@@ -191,9 +196,12 @@ export interface SeaOption {
   /** Each side's strength there now: fleets at sea and aircraft from the coasts. */
   ours: number;
   theirs: number;
-  /** Enemy surface warships and enemy submarines at sea there. */
+  /** Enemy surface warships and enemy submarines at sea there, as far as they are identified; and enemy forces there known only from a report. */
   surface: number;
   subs: number;
+  reported: number;
+  /** How well the viewer's side has that sea searched, in a phrase. */
+  search: string;
   /** What a patrol there would meet: nobody, a fleet it would bring to battle, or one it would not face. */
   meet: 'clear' | 'battle' | 'shy';
   /** The share of those submarines this fleet's side would sink in a month if it hunted there, and as things stand. */
@@ -203,15 +211,23 @@ export interface SeaOption {
   torpedo: number;
 }
 
-/** The seas a fleet can be sent to, with what it would find in each. */
-export function seaOptions(g: Game, f: Fleet): SeaOption[] {
+/**
+ * The seas a fleet can be sent to, with what it would find in each. For a viewer under the fog of war (the player),
+ * only the enemy ships his side has identified are counted, and forces known only from a report are a number.
+ */
+export function seaOptions(g: Game, f: Fleet, viewer: string | null = null): SeaOption[] {
   const mine = fleetPower(g, f);
+  const fog = viewer !== null && carrierRules(g) && fogOn(g, viewer);
   return fleetReach(g, f).map((z) => {
     const here = atSea(f) && f.zone === z;
     const us = seaSide(g, z, f.nat, false), them = seaSide(g, z, f.nat, true);
-    let surface = 0, subs = 0;
+    const pic = fog ? seaPicture(g, z, viewer) : null;
+    if (pic) them.total = pic.theirs;
+    let surface = 0, subs = 0, reported = 0;
     for (const x of g.fleets) {
       if (x.zone !== z || !atSea(x) || !atWar(g, x.nat, f.nat)) continue;
+      const k = fog ? fleetKnown(g, x, viewer) : 'exact';
+      if (k !== 'exact') { if (k === 'report') reported++; continue; }
       subs += x.ships.ss;
       surface += CLASSES.reduce((n, c) => n + (c === 'ss' ? 0 : x.ships[c]), 0);
     }
@@ -227,7 +243,7 @@ export function seaOptions(g: Game, f: Fleet): SeaOption[] {
       if (keep.lane !== undefined) f.lane = keep.lane;
     }
     return {
-      zone: z, name: g.seas[z].name, here, ours: us.total, theirs: them.total, surface, subs,
+      zone: z, name: g.seas[z].name, here, ours: us.total, theirs: them.total, surface, subs, reported, search: pic?.word ?? '',
       meet: surface <= 0 ? 'clear' : own >= NAVY.battle.seek * Math.max(1, them.total) ? 'battle' : 'shy',
       hunt, huntNow, torpedo: seaWar(g) ? torpedoRisk(g, f, z) : 0,
     };
@@ -354,6 +370,8 @@ export function bombard(g: Game, f: Fleet, r: Region, what: ShoreTarget, viewer:
   if (shipCount(sunk)) result += ` The shore batteries sank ${shipList(sunk)}.`;
   f.shelled = g.turn;
   f.ready = Math.max(0, f.ready - B.ready);
+  // A fleet that stands in to shell a coast is seen from it: the coast's holder has it identified this month.
+  if (carrierRules(g)) (f.seen ??= {})[defNat] = g.turn;
   g.flags[`shell:${r.id}`] = g.turn;
   g.flags.shoreReports = (g.flags.shoreReports ?? 0) + 1;
   const rep: ShoreReport = {
@@ -416,7 +434,11 @@ export function detach(g: Game, f: Fleet, take: Partial<Ships>, name?: string): 
   };
   if (f.stance === 'escort' && f.lane !== undefined) sq.lane = f.lane;
   if (f.shelled !== undefined) sq.shelled = f.shelled;
+  if (f.seen) sq.seen = { ...f.seen };
+  if (f.struck) sq.struck = [f.struck[0], f.struck[1], f.struck[2]];
   g.fleets.push(sq);
+  // Carriers that go take their aircraft with them.
+  moveWings(g, f, sq, s.cv, f.ships.cv + s.cv);
   g.supplyDirty = true;
   return sq;
 }
@@ -440,7 +462,10 @@ export function merge(g: Game, a: Fleet, b: Fleet): boolean {
   if (!b.admiral && a.admiral) b.admiral = a.admiral;
   if (a.shelled !== undefined && (b.shelled ?? -1) < a.shelled) b.shelled = a.shelled;
   b.fought = Math.max(b.fought, a.fought);
+  for (const [k, t] of Object.entries(a.seen ?? {})) if ((b.seen?.[k] ?? -99) < t) (b.seen ??= {})[k] = t;
+  if (a.struck && (!b.struck || b.struck[0] < a.struck[0] || (b.struck[0] === a.struck[0] && b.struck[1] < a.struck[1]))) b.struck = [a.struck[0], a.struck[1], a.struck[2]];
   g.fleets.splice(g.fleets.indexOf(a), 1);
+  moveWings(g, a, b, a.ships.cv, a.ships.cv);
   g.supplyDirty = true;
   return true;
 }

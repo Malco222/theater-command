@@ -1,0 +1,58 @@
+{
+  "_about": {
+    "what": "Carriers and the air war at sea (the grand campaign only). A carrier is a floating airfield: every fleet with carriers has a wing of fighters and a wing of strike aircraft that go where the fleet goes. They are air groups like any other, planned from the same raid planner, and they are counted in the same Battle Ticket. None of this touches the history campaigns.",
+    "wing": "The aircraft one carrier brings, by navy: fighters and strike aircraft (bombers). A fleet's two wings are kept at that many for each carrier it has. names gives the wings their names: {fleet} is the fleet they sail with.",
+    "range": "How far carrier aircraft reach, in kilometres. A fleet at sea reaches every coast of the sea it is in at no distance, and ground inland as far from that coast as the range allows. 'next' is what a neighbouring sea counts as: bombers reach it, fighters cover it at part effect. A fleet in harbour flies from its port like any airfield. quality is what carrier aircraft are worth beside the same navy's land fighters.",
+    "naval": "What one bomber is worth against ships. Carrier crews are trained for it ('carrier'); land bombers mostly are not ('land', by nation).",
+    "strike": "A strike on one fleet at sea, which stands for a month of sorties. Hits = bombers that get through x their worth against ships x hit, less what the fighter cover spoils (spoil x the square root of the defending fighters' share of the fight, so even a few fighters break up a good deal of an unescorted strike). The hits fall on the classes by 'aim' x how many there are, and a ship of a class takes 'takes' hits to sink. No strike sinks more than 'most' of a fleet's surface ships; a second strike on the same fleet in a month finds it scattered and warned ('again' for each strike before it). A fleet at sea known only from a report is harder to find: 'report' of the strike arrives (a harbour does not move, and is struck in full). 'ready' is the fitness for sea the fleet loses when every ship is hit, and 'value' is what a ship of each class counts for when the raid is judged, in aircraft.",
+    "harbour": "A raid on ships lying in harbour. They cannot manoeuvre: hits are multiplied by 'hit', and up to 'most' can be sunk. In the month war is declared the harbour is caught unready: its fighters and guns count 'unready' and the hits are multiplied by 'surprise'.",
+    "flak": "Ships' anti-aircraft guns. The share of the bombers they bring down is per x the guns of the ships under attack (by class), never more than 'most'.",
+    "cap": "Fighter cover. 'spoil' is how much of a strike a strong fighter cover breaks up. Carrier fighters with a fleet also keep the enemy's coastal bombers off it: the monthly toll those take is cut by fighters / (fighters + scale), by no more than 'most'.",
+    "sunk": "When a carrier is sunk the aircraft aboard go with it, but 'saved' of them land on another deck or ashore.",
+    "empty": "What a carrier with no aircraft is still worth in a fleet action, with a convoy or hunting submarines, beside one with its full wings.",
+    "search": "Finding ships at sea. A nation's search of a sea is the ships its side has there (by class; carriers count by their aircraft), its carriers in neighbouring seas ('next' each), 'air' for each point of its coastal air strength over that sea, and 'flight' where its aircraft have searched the sea this month. A fleet is identified at 'find' and reported (ships are there, not what) at 'report'; open ocean needs more (x 1 + open x (1 - how well the coasts' aircraft cover that sea)), and submarines alone need 'subs' times as much. A fleet that fights, shells a coast or strikes with its aircraft is identified by its enemy that month and reported the month after. Ships in harbour are always reported, and identified where the port is in full view; a nation at peace with you hides nothing in its harbours.",
+    "ai": "The computer's admirals and air staff. A carrier wing strikes the best fleet its side has found in reach, or ships in a harbour, where the forecast gives 'success' or better and the wing's losses stay under 'loss'; its fighters go with the bombers when fighters will come up. 'landShare' of a nation's land bomber groups fit to fly may also be sent against ships, and only against a fleet that is identified. A carrier fleet in harbour puts to sea to strike where its side would be 'sortie' times the enemy there. A fleet struck from the air keeps out of that sea for 'shy' months, unless the homeland is invaded across it."
+  },
+  "wing": {
+    "_default": { "ftr": 12, "bmr": 24 },
+    "UK": { "ftr": 12, "bmr": 24 },
+    "FRA": { "ftr": 10, "bmr": 20 },
+    "GER": { "ftr": 12, "bmr": 28 },
+    "ITA": { "ftr": 16, "bmr": 24 },
+    "USA": { "ftr": 30, "bmr": 48 },
+    "JAP": { "ftr": 24, "bmr": 42 }
+  },
+  "names": { "ftr": "{fleet} carrier fighters", "bmr": "{fleet} strike wing" },
+  "range": { "ftr": 350, "bmr": 450, "next": 300 },
+  "quality": { "_default": 0.9, "UK": 0.85, "USA": 1, "JAP": 1.1 },
+  "naval": { "carrier": 1, "land": { "_default": 0.08, "GER": 0.12, "ITA": 0.12, "UK": 0.08, "USA": 0.12, "JAP": 0.4 } },
+  "strike": {
+    "hit": 0.04,
+    "most": 0.35,
+    "again": 0.6,
+    "report": 0.6,
+    "aim": { "bb": 2, "cv": 3, "ca": 1, "dd": 0.5, "ss": 0 },
+    "takes": { "bb": 2.5, "cv": 1.3, "ca": 1, "dd": 0.7, "ss": 1 },
+    "ready": 0.5,
+    "value": { "bb": 150, "cv": 150, "ca": 40, "dd": 10, "ss": 10 },
+    "intensity": 0.8
+  },
+  "harbour": { "hit": 1.5, "most": 0.5, "surprise": 3, "unready": 0.25, "intensity": 0.8 },
+  "flak": { "ships": { "bb": 3, "cv": 2, "ca": 1.5, "dd": 0.5, "ss": 0 }, "per": 0.0015, "most": 0.12 },
+  "cap": { "spoil": 0.8, "scale": 40, "most": 0.7 },
+  "sunk": { "saved": 0.4 },
+  "empty": 0.4,
+  "search": {
+    "ships": { "bb": 0.5, "cv": 4, "ca": 1, "dd": 0.3, "ss": 0.2 },
+    "next": 1.5,
+    "air": 0.5,
+    "flight": 6,
+    "find": 4,
+    "report": 1.5,
+    "open": 3,
+    "subs": 3,
+    "aircraft": 6,
+    "ready": 0.04
+  },
+  "ai": { "success": 0.55, "loss": 0.25, "worth": 10, "landShare": 0.1, "sortie": 1.5, "ready": 0.6, "shy": 4 }
+}

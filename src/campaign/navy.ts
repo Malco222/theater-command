@@ -9,7 +9,8 @@ import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
 import { turnToDate, type TicketLine, type VictoryLevel } from '../core/ticket';
-import { AIR, skyDenies, skyOver } from './air';
+import { AIR, CARRIERS, carrierRules, skyDenies, skyOver } from './air';
+import { capOver, deckWorth, syncWings } from './carriers';
 import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
@@ -183,7 +184,8 @@ const admiralMul = (f: Fleet): number => 1 + (f.admiral ? NAVY.admiral.perLevel 
 /** A fleet's weight in a fleet action. */
 export function fleetPower(g: Game, f: Fleet): number {
   let p = 0;
-  for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power;
+  // A carrier is worth what it can fly: one whose aircraft are spent counts for much less (the grand campaign).
+  for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].power * (c === 'cv' ? deckWorth(g, f) : 1);
   return p * quality(g, f.nat) * fit(g, f) * admiralMul(f) * storyEdge(g, f) * traitFleet(g, f.nat);
 }
 
@@ -600,6 +602,7 @@ export function rebase(g: Game, f: Fleet, r: Region): boolean {
   f.stance = 'port';
   delete f.lane;
   g.supplyDirty = true;
+  syncWings(g);
   return true;
 }
 
@@ -665,7 +668,7 @@ export function huntersIn(g: Game, nat: string, z: number): { weight: number; fl
   const fleets: Fleet[] = [];
   for (const f of g.fleets) {
     if (f.nat !== nat || !atSea(f)) continue;
-    const p = (f.ships.dd + f.ships.cv * H.carrier) * huntShare(g, f, z) * quality(g, nat) * fit(g, f);
+    const p = (f.ships.dd + f.ships.cv * H.carrier * deckWorth(g, f)) * huntShare(g, f, z) * quality(g, nat) * fit(g, f);
     if (p > 0) { w += p; fleets.push(f); }
   }
   w += airOver(g, z, nat) * H.air;
@@ -773,7 +776,8 @@ function airAttack(g: Game, f: Fleet): void {
   if (!surfaceShips(f)) return;
   const net = airOver(g, f.zone, f.nat, true) - airOver(g, f.zone, f.nat, false);
   if (net <= NAVY.air.safe) return;
-  const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer), seaRng(g, `air:${f.id}`), SURFACE);
+  // Carrier fighters on patrol over the fleet keep a share of them off it (the grand campaign).
+  const sunk = sinkShips(f, Math.min(NAVY.air.maxLoss, (net - NAVY.air.safe) * NAVY.air.lossPer) * (1 - capOver(g, f)), seaRng(g, `air:${f.id}`), SURFACE);
   f.ready = Math.max(0, f.ready - 0.1);
   if (shipCount(sunk)) headline(g, 'battle', `Bombers sink ${shipList(sunk)} of the ${f.name} in the ${g.seas[f.zone].name}.`, f.nat);
 }
@@ -814,7 +818,7 @@ export function convoyWar(g: Game, nat: string, sunkAt?: Record<number, number>)
         const w = guardShare(g, f, zones, route.id);
         if (w <= 0) continue;
         let p = 0;
-        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort;
+        for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
         p *= quality(g, f.nat) * fit(g, f) * w;
         if (p > 0) { guard += p; escorts.push(f); }
       }
@@ -873,7 +877,7 @@ export function laneLoss(g: Game, nat: string, zones: number[], lane?: string): 
       const w = guardShare(g, f, zones, lane);
       if (w <= 0) continue;
       let p = 0;
-      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort;
+      for (const c of CLASSES) p += f.ships[c] * NAVY.classes[c].escort * (c === 'cv' ? deckWorth(g, f) : 1);
       guard += p * quality(g, f.nat) * fit(g, f) * w;
     }
   }
@@ -972,6 +976,11 @@ export function seaBattles(g: Game, nat: string): SeaReport[] {
     if (worn.length) lines.push({ label: 'Readiness', value: `${worn.map((f) => f.name).join(', ')} not fully fit for sea`, effect: 'A fleet in need of refit fights below its strength' });
     mine.forEach((f, i) => afterAction(g, f, att[i], won, rng));
     met.forEach((f, i) => afterAction(g, f, def[i], !won, rng));
+    // Fleets that have fought are in contact: each side has the other identified this month (the grand campaign's search at sea).
+    if (carrierRules(g)) {
+      for (const f of mine) for (const e of met) (f.seen ??= {})[e.nat] = g.turn;
+      for (const f of met) for (const e of mine) (f.seen ??= {})[e.nat] = g.turn;
+    }
     // The beaten side breaks off and makes for harbour.
     for (const f of won ? met : mine) sail(g, f, f.home, 'port');
     const level: VictoryLevel = won ? (edge >= 2 ? 'Decisive victory' : 'Close victory') : edge >= 2 ? 'Decisive defeat' : 'Close defeat';
@@ -1038,6 +1047,8 @@ export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: st
       // Keep out of water the enemy's bombers command, unless the homeland is being invaded across it and there is a fighting chance.
       const invaded = invadedHere(g, z, nat) && own >= 0.5 * e.total;
       if (airOver(g, z, nat, true) - airOver(g, z, nat, false) > NAVY.air.avoid && !invaded) continue;
+      // A fleet that aircraft have just struck in a sea keeps out of it for a while (the grand campaign).
+      if (f.struck && f.struck[2] === z && g.turn - f.struck[0] <= CARRIERS.ai.shy && !invaded && carrierRules(g)) continue;
       // Enemy surface ships that could be brought to battle here. Submarines are no quarry for a battle fleet.
       let quarry = 0;
       for (const x of g.fleets) if (x.zone === z && atSea(x) && surfaceShips(x) > 0 && atWar(g, x.nat, nat)) quarry += fleetPower(g, x);

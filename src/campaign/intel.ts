@@ -441,7 +441,7 @@ export function cityReport(g: Game, reg: number, viewer: string | null = g.human
   for (const n of Object.values(g.nations)) for (const b of n.queue) if (b.region === reg && n.id === r.ctrl) orders.push({ name: b.name, eta: b.eta });
   return {
     reg, agent: a.name, orders: orders.sort((x, y) => x.eta - y.eta),
-    air: g.airFleets.filter((f) => f.base === reg && !allied(g, f.nat, a.nat)).map((f) => ({ name: f.name, nat: f.nat, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr) })),
+    air: g.airFleets.filter((f) => f.base === reg && f.ship === undefined && !allied(g, f.nat, a.nat)).map((f) => ({ name: f.name, nat: f.nat, ftr: Math.round(f.ftr), bmr: Math.round(f.bmr) })),
     factories: r.fac, ruined: ruinedAt(g, r),
   };
 }

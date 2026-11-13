@@ -427,9 +427,10 @@ describe('the standings', () => {
 describe('a war with nobody at the table', () => {
   it('is never given a last act, however it ends', () => {
     const g = grand(null, 1);
-    while (g.turn <= 70) runTurnAI(g);
-    // By now, in this war, Germany and Italy are beaten.
+    // In this war Germany and Italy are beaten somewhere in its sixth or seventh year: the month moves a little whenever the rules do.
+    while (g.turn <= 96 && !warDecided(g)) runTurnAI(g);
     expect(warDecided(g)).not.toBeNull();
+    for (let i = 0; i < 3; i++) runTurnAI(g);
     expect(dominating(g)).toBe(false);
     expect(g.flags.dom).toBeUndefined();
     expect(Object.keys(g.flags).some((k) => k.startsWith('dom'))).toBe(false);

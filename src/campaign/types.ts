@@ -389,6 +389,10 @@ export interface Fleet extends Storied {
   lane?: string;
   /** Month the fleet last shelled a coast: its guns speak once a month (the grand campaign). */
   shelled?: number;
+  /** The month each nation last had this fleet in contact: it fought it, was shelled by it, or was struck by its aircraft (the grand campaign). */
+  seen?: Record<string, number>;
+  /** The month it was last struck from the air, how many times that month (a fleet struck once is scattered and warned), and the sea it was in (-1 in harbour). */
+  struck?: [number, number, number?];
 }
 
 /** A coast shelled from the sea: the troops on it, or the works of its city (the grand campaign). */
@@ -669,7 +673,8 @@ export interface PlanPhase {
  * its own sky; the others are month-long air campaigns against a region or a sea.
  */
 /** What an air fleet is doing. 'ground' is a raid on troops, flown only in the grand campaign's air war. */
-export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground';
+/** 'fleet' is a strike on one fleet at sea (its target is that fleet's id) and 'harbour' a raid on the ships lying in a port: the grand campaign's carriers and air-sea war. */
+export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour';
 
 export interface AirLeader {
   name: string;
@@ -712,6 +717,8 @@ export interface AirFleet extends Storied {
   scouted?: number;
   /** A fighter group's standing order to stick with one bomber group: that group's id. It goes on every day raid the bombers fly, as far as its fighters reach. */
   escorts?: number;
+  /** A carrier wing: the id of the fleet whose carriers it flies from. It goes where that fleet goes and has no airfield (the grand campaign). */
+  ship?: number;
 }
 
 /** A nation's reserve of aircraft and fighter pilots, and its tally for the war. */
@@ -730,6 +737,8 @@ export interface AirSide {
   /** The air fleet or group itself, and the region whose airfield it flew from: enough to draw the flight again. */
   id?: number;
   base?: number;
+  /** A carrier wing: where its fleet was on the map when it flew. */
+  at?: [number, number];
   leader: string | null;
   ftr: number;
   bmr: number;
@@ -760,6 +769,12 @@ export interface AirReport {
   hold: number;
   /** What the bombers did, in a sentence. */
   result: string;
+  /** A strike on a fleet or a raid on a harbour: the fleets hit, as they were before it, and what each lost. */
+  ships?: SeaSide[];
+  /** The fleet a strike was aimed at. */
+  fleet?: number;
+  /** True when a harbour was caught unready in the month war was declared. */
+  surprise?: boolean;
 }
 
 export interface Game {
@@ -892,6 +907,8 @@ export interface Intel {
   known?: Record<number, number>;
   /** How each of those corps was last identified. */
   how?: Record<number, 'battle' | 'agent' | 'air'>;
+  /** Seas the player's aircraft have searched, and the month they did. */
+  sea?: Record<number, number>;
 }
 
 export const MEN_PER_DIV = 15000;
