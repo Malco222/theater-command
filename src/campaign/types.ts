@@ -262,6 +262,8 @@ export interface Corps extends Storied {
   digs?: boolean;
   /** The corps is entrenched: it spent its last month where it stood, under orders to dig in. Lost the moment it leaves the ground. */
   dug?: boolean;
+  /** Months it has been dug in where it stands (the grand campaign): its works grow with them. */
+  dugFor?: number;
   /** The month it was raised: the first month of the war for the armies that began it. */
   born?: number;
   /** The region it was raised in, if that was its own country's ground: home. */
@@ -374,6 +376,8 @@ export interface BattleReport {
   prisoners: number;
   /** No battle was fought: the defenders were under orders to give ground and fell back before the attack. */
   yielded?: boolean;
+  /** The share of the defence that was dug in and in supply, where any was (the grand campaign): luck ran against the attack by that much. */
+  prepared?: number;
   /** The fight was for the town itself: an assault on its garrison (the grand campaign). */
   town?: boolean;
   /** The field was won but the town holds out: the province is under siege, not taken (the grand campaign). */

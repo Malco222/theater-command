@@ -12,7 +12,7 @@ import { NAVY, baseTargets, canPass, landCorps, landingTargets, planLanding, reb
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
-  allied, assess, atWar, declareWar, ensureSupply, evacuate, friendlyUnits, hasRoom, hostileUnits, limitAttackers,
+  DEFENCE, allied, assess, atWar, chanceOn, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, hasRoom, hostileUnits, limitAttackers,
   endPhase, foldNews, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, theName, type Assessment,
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
@@ -102,6 +102,8 @@ export function endHuman(g: Game): void {
  * who marched, went by rail or attacked is not, and has to sit a month out before the trenches are ready again.
  */
 function entrench(g: Game, nat: string): void {
+  // In the grand campaign nobody has to be told: whoever stood the month digs in as it closes (endPhase).
+  if (g.flags.open === 1 && DEFENCE.entrench.auto) return;
   for (const c of g.corps) {
     if (c.nat !== nat || c.dead) continue;
     if (c.digs && c.kind !== 'fort' && c.ap >= c.apMax && !c.fought) c.dug = true;
@@ -314,7 +316,7 @@ export interface Outlook {
   exact: boolean;
   odds: number; lo: number; hi: number;
   chance: number; chanceLo: number; chanceHi: number;
-  /** The odds at which it is an even chance: 1.2 to 1 in the open, more for an assault on a town, where luck runs against the attacker. */
+  /** The odds at which it is an even chance: 1.2 to 1 in the open, more for an assault on a town or an attack on a prepared defence, where luck runs against the attacker. */
   even: number;
   /** Defending corps not identified, and those known only from a stale report. */
   unidentified: number;
@@ -324,19 +326,17 @@ export interface Outlook {
   lines: TicketLine[];
 }
 
-/** The dice of a battle in the open: the day's luck runs from the first to the second, and it takes 1.2 to 1 on the day to win. */
-const FIELD_DICE: [number, number] = [0.8, 1.2];
-const chanceOn = (odds: number, dice: [number, number]): number => Math.max(0, Math.min(1, (dice[1] - 1.2 / Math.max(1e-6, odds)) / (dice[1] - dice[0])));
-
 export function attackOutlook(g: Game, corps: Corps[], target: Region): Outlook | null {
   const a = previewAttack(g, corps, target);
   return a ? outlookOf(g, a, target) : null;
 }
 
 /** An assessment as the player's staff can report it: exact where every defender is identified, a band where not. */
-function outlookOf(g: Game, a: Assessment, target: Region, dice: [number, number] = FIELD_DICE): Outlook {
+function outlookOf(g: Game, a: Assessment, target: Region): Outlook {
+  // The run of the day's luck comes with the assessment: wider in the streets of a town, and on a line that is dug in and fed.
+  const dice = a.dice;
   const chanceAt = (odds: number): number => chanceOn(odds, dice);
-  const even = 2.4 / (dice[0] + dice[1]);
+  const even = evenOdds(dice);
   const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
   const k = sortKnown(g, a.defenders, g.human);
   if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', lines: a.lines };
@@ -568,7 +568,7 @@ export function stormOutlook(g: Game, region: number, corps?: Corps[]): Outlook 
   const r = g.regions[region];
   if (!r || whyNotStormTown(g, region)) return null;
   const a = previewStorm(g, corps ? corps.filter((c) => canOrder(g, c)) : stormCandidates(g, region), r);
-  return a ? outlookOf(g, a, r, SIEGE.assault.dice) : null;
+  return a ? outlookOf(g, a, r) : null;
 }
 
 /** Storms the town: once a month for each town. It costs more men than a fight in the open, and an assault the month the army comes up is a hasty one. */
@@ -658,7 +658,8 @@ export const joinable = (g: Game, region: number): Corps[] => (humanUp(g) ? coul
 export function orderStance(g: Game, c: Corps, posture: Posture): boolean {
   if (!canOrder(g, c)) return false;
   if (posture === 'back') c.yields = true; else delete c.yields;
-  if (posture === 'dig') c.digs = true; else { delete c.digs; delete c.dug; }
+  // (In the grand campaign whoever stands a month digs in unasked: only an order to give ground costs an army its trenches.)
+  if (posture === 'dig') c.digs = true; else { delete c.digs; if (posture === 'back' || !(g.flags.open === 1 && DEFENCE.entrench.auto)) delete c.dug; }
   return true;
 }
 

@@ -17,11 +17,11 @@ import { landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding 
 import { shoreAI } from './fleets';
 import { afterDeclaring, decide, isOpen, probed, probing, seaBase, seaFoe, staffPhase, theatreStaff } from './staff';
 import { hashString } from '../core/rng';
-import { SIEGE, besieged, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
+import { SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
-  allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage, havensOf,
+  DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage, havensOf,
   hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, railMove, railReach, resolveBattle, shipMove, weekOf,
 } from './game';
 
@@ -268,13 +268,48 @@ function sieges(g: Game, nat: string, after = false): void {
     if (now >= need && storm(g, pool(), r)?.taken) continue;
     if (!besieged(g, r) || after) continue;
     // Not stormed: the siege goes on. Round a prize every corps stays; round a small place held by its guard, enough to shut it in.
+    // A port that ships can feed is not starved by waiting: after a season round one only the ring stays, and the
+    // rest are free to overrun the country behind it (overrun, below) or to go where the staff wants them.
+    const fed = prize && sat >= SIEGE.ai.sea.after && feeders(g, r).length > 0;
     const fast = (c: Corps): number => (KIND[c.kind].mobile ? 1 : 0);
     let have = 0;
     for (const c of mine().filter((u) => u.kind !== 'eng').sort((x, y) => fast(x) - fast(y) || atkPower(g, x) - atkPower(g, y))) {
-      if (!prize && have > 0 && have >= SIEGE.ring * inside) break;
+      if ((!prize || fed) && have > 0 && have >= SIEGE.ring * inside) break;
       c.ap = 0;
       have += c.divs * c.str;
     }
+  }
+}
+
+/**
+ * The grand campaign: the country behind a port this nation has stood round for a season and cannot starve, because
+ * ships feed it. Corps with nothing in front of them walk into its undefended ground, the richest first, a province
+ * a month, until enough of the country is lost for its government to give in. Troops on a front of their own stay there.
+ */
+function overrun(g: Game, nat: string): void {
+  if (!siegeRules(g)) return;
+  const lands = new Set<string>();
+  for (const r of g.regions) {
+    if (!within(r) || !besieged(g, r) || !atWar(g, nat, r.ctrl) || g.turn - investedOn(g, r) < SIEGE.ai.sea.after || !feeders(g, r).length) continue;
+    if (r.units.some((c) => c.nat === nat && !c.dead)) lands.add(r.ctrl);
+  }
+  if (!lands.size) return;
+  for (const c of g.corps) {
+    if (c.nat !== nat || c.dead || c.town || c.hold || c.ap <= 0 || c.kind === 'fort' || c.kind === 'eng' || c.joint !== undefined || c.leave !== undefined) continue;
+    const here = g.regions[c.reg];
+    if (!within(here)) continue;
+    // An enemy army next door is a front: nobody leaves it to gather provinces.
+    if (!besieged(g, here) && here.nb.some((j) => hostileUnits(g, g.regions[j], nat).length > 0)) continue;
+    let best: Region | null = null, bv = -1;
+    for (const j of here.nb) {
+      const x = g.regions[j];
+      if (!within(x) || !lands.has(x.ctrl) || x.owner !== x.ctrl || !atWar(g, nat, x.ctrl) || x.units.length || besieged(g, x)) continue;
+      if (blocked(g, c, x) || c.ap < Math.min(moveCost(g, c, x), 4) || !hasRoom(g, x, c)) continue;
+      const v = x.vp + (x.cap ? 5 : 0) + x.fac * 0.2;
+      if (v > bv) { bv = v; best = x; }
+    }
+    if (best) moveCorps(g, c, best);
+    if (!g.nations[nat].alive) return;
   }
 }
 
@@ -326,6 +361,7 @@ function overseas(g: Game, nat: string): void {
     try {
       sorties(g, nat);
       sieges(g, nat);
+      overrun(g, nat);
       // The plan's standing orders come first: the force it keeps at a place stays, and ground it gives up is left,
       // the army falling back along the road to the base that feeds it.
       hold(g, nat, ph);
@@ -419,6 +455,7 @@ function fight(g: Game, nat: string, ph: PlanPhase | null, posture: string): voi
   // Towns under siege are dealt with first, while the troops round them have the whole month in hand.
   sorties(g, nat);
   sieges(g, nat);
+  overrun(g, nat);
   if (!n.alive) return;
   try { fightOn(g, nat, ph, posture); } finally { if (n.alive) sieges(g, nat, true); }
 }
@@ -781,12 +818,19 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           const fast = (c: Corps): number => (KIND[c.kind].mobile ? 1 : 0);
           pool.sort((a, b) => (main ? fast(b) - fast(a) : fast(a) - fast(b)) || atkPower(g, b) - atkPower(g, a));
           const least = main ? Math.max(1, pool.filter((c) => fast(c)).length) : 1;
-          let pick: Corps[] | null = null, odds = 0;
+          let pick: Corps[] | null = null, odds = 0, ready = 0;
           for (let k = least; k <= pool.length; k++) {
-            odds = assess(g, pool.slice(0, k), target).odds;
+            const a = assess(g, pool.slice(0, k), target);
+            odds = a.odds; ready = a.prepared;
             if (odds >= 2.6) { pick = pool.slice(0, k); break; }
           }
-          if (!pick) { if (odds < (oddsFor[target.name] ?? minOdds)) continue; pick = pool; }
+          // Against a line that is dug in and fed the staff asks for longer odds (the grand campaign), and it does
+          // not come straight back at a town whose siege has just been raised unless it has much the stronger force.
+          if (!pick) {
+            const sore = g.flags.open === 1 && g.turn - (g.flags[`relieved:${j}`] ?? -99) <= SIEGE.ai.relieved.months ? SIEGE.ai.relieved.odds : 0;
+            if (odds < (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready + sore) continue;
+            pick = pool;
+          }
           const score = value + Math.min(odds, 4);
           if (!best || score > best.score) best = { score, target, corps: pick, battle: true };
         }

@@ -18,10 +18,10 @@ import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
 import { allied, armySize, assess, atWar, capture, corpsBase, headline, men, removeCorps, resolveBattle, sendHome, type Assessment } from './game';
 import { armyOf } from './joint';
-import { seaOpenAt } from './navy';
+import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
 import { TOWNS, townName, townSize, type TownSize } from './towns';
-import { PRIZES, harbourOpen, prizesOnLoss, tellSeized } from './prizes';
+import { PRIZES, harbourOpen, prizesOnLoss } from './prizes';
 import { KIND, MEN_PER_DIV, STACK, type BattleReport, type Corps, type Game, type Region } from './types';
 
 export const SIEGE = data as unknown as {
@@ -34,8 +34,8 @@ export const SIEGE = data as unknown as {
   breach: { gun: number; raid: number; shell: number; most: number; mend: number };
   bombard: { raidFull: number; shellFull: number; org: number; floor: number; guard: number; intensity: number; value: number };
   sortie: number; pay: number;
-  capital: number; capitalYear: number;
-  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>> };
+  capital: number; capitalAfter: number; capitalYear: number;
+  ai: { hasty: number; assault: number; late: number; last: { after: number; odds: number }; sea: { after: number; blockade: number }; relieved: { months: number; odds: number }; sally: number; raid: number; invest: number; relief: { capital: number; other: number }; hold: Partial<Record<TownSize, number>> };
 };
 
 /** True where towns are garrisoned and besieged: the grand campaign. A historical scenario is fought as it always was. */
@@ -146,17 +146,23 @@ export const monthsShut = (g: Game, r: Region): number => g.flags[`sgm:${r.id}`]
 /** The month the town was invested, or -1. */
 export const investedOn = (g: Game, r: Region): number => g.flags[`siege:${r.id}`] ?? -1;
 
+/** The nations whose ships could feed this town: its holder and whoever has troops inside, if they have ships to send and the quays to land at. */
+export function feeders(g: Game, r: Region): string[] {
+  if (!r.port || !r.seas.length) return [];
+  // The quays of a small place lie outside the town: lost with the field, or wrecked, they land nothing (prizes.ts).
+  if (!harbourOpen(g, r)) return [];
+  return [...new Set([r.ctrl, ...garrisonOf(r).map((c) => c.nat)])].filter((id) => { const n = g.nations[id]; return !!n && n.alive && (n.seaSupply || n.sealift > 0); });
+}
+
 /** True where the defenders' ships can still bring food into the harbour: such a town is never starved. */
 export function fedBySea(g: Game, r: Region): boolean {
-  if (!r.port || !r.seas.length) return false;
-  // The quays of a small place lie outside the town: lost with the field, or wrecked, they land nothing (prizes.ts).
-  if (!harbourOpen(g, r)) return false;
-  const nats = new Set([r.ctrl, ...garrisonOf(r).map((c) => c.nat)]);
-  for (const id of nats) {
-    const n = g.nations[id];
-    if (n && n.alive && (n.seaSupply || n.sealift > 0) && seaOpenAt(g, id, r)) return true;
-  }
-  return false;
+  return feeders(g, r).some((id) => seaOpenAt(g, id, r));
+}
+
+/** The seas the town's food comes in by: those off its harbour that are still open to someone who feeds it. Close them all and it starves like any other. */
+export function feedingSeas(g: Game, r: Region): number[] {
+  const who = feeders(g, r);
+  return r.seas.filter((z) => who.some((id) => !closedTo(g, z, id)));
 }
 
 const strength = (cs: Corps[]): number => cs.reduce((s, c) => s + c.divs * c.str, 0);
@@ -307,10 +313,9 @@ export function invest(g: Game, r: Region, by: string): void {
   const inside = garrisonOf(r);
   const who = inside.length ? `${inside.length === 1 ? 'one corps' : `${inside.length} corps`} inside` : 'only its guard inside';
   tell(g, r, `${g.nations[by].adj} troops close round ${townName(r)}: ${placeWords(g, r)} is under siege, with ${who}.`, r.ctrl, [by, r.ctrl, ...inside.map((c) => c.nat)]);
-  // What lies outside the walls goes with the field: the side driven off it burns what it was ordered to, and the
-  // player is told what changed hands whole.
+  // What lies outside the walls goes with the field: the side driven off it burns what it was ordered to. What
+  // changed hands whole is news in the month it starts to work for its new holder (prizes.ts).
   prizesOnLoss(g, r, by, r.ctrl, 'outside');
-  tellSeized(g, r, by);
 }
 
 /** The besiegers are gone: the siege is raised. What was broken is mended month by month. */
@@ -322,6 +327,8 @@ export function lift(g: Game, r: Region, by: string | null = null): void {
   delete g.flags[key];
   delete g.flags[`sgby:${r.id}`];
   delete g.flags[`sgm:${r.id}`];
+  // Raised by a relieving army: a staff that has just been driven off a town leaves it alone for a season (ai.ts).
+  if (by) g.flags[`relieved:${r.id}`] = g.turn;
   g.supplyDirty = true;
   tallySiege(g, 'raised');
   tell(g, r, `The siege of ${townName(r)} is raised${lasted >= 1 ? ` after ${months(lasted)}` : ''}${by ? ` by ${g.nations[by].adj} troops` : ''}.`, r.ctrl, [r.ctrl, ...(by ? [by] : []), ...garrisonOf(r).map((c) => c.nat)]);
@@ -693,7 +700,8 @@ export function siegeView(g: Game, region: number): SiegeView | null {
   if (guard > 0) lines.push(`Its own guard of depot troops, police and militia is worth ${guard >= 0.95 ? `${guard.toFixed(1)} divisions` : 'part of a division'}. It holds the town while no army does.`);
   if (by) {
     const closed = ringClosed(g, r);
-    lines.push(bySea ? 'Ships still reach the harbour: the town cannot be starved while they do.'
+    const seas = bySea ? feedingSeas(g, r).map((z) => g.seas[z].name) : [];
+    lines.push(bySea ? `Ships still reach the harbour${seas.length ? ` by the ${seas.length === 1 ? seas[0] : `${seas.slice(0, -1).join(', ')} and the ${seas[seas.length - 1]}`}` : ''}: the town cannot be starved while they do. A fleet at sea there, strong enough to close ${seas.length > 1 ? 'those waters' : 'that water'} to them, starts its stores running down.`
       : !closed ? 'The ring is not closed: a road out is still open, and the army round it is too weak to shut it in alone. Its stores are not running down. Take the ground next door, or bring more troops up beside it.'
       : left > 0 ? `Closely invested. Its stores will feed the defenders ${left === 1 ? 'one more month' : `${left} more months`}; after that they go hungry.`
       : inside ? 'Its stores are gone: the garrison is starving, and loses men and heart every month.' : 'Its stores are gone: it is about to give in.');

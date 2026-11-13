@@ -485,7 +485,7 @@ describe('softening a town', () => {
 });
 
 describe('the fall of a country', () => {
-  it('a capital closely ringed counts part lost', () => {
+  it('a capital closely ringed counts part lost, more with every month of siege, and nothing in the month the ring closes', () => {
     const g = playing('GER');
     const w = g.byName['Warsaw'];
     const before = collapseScore(g, 'POL');
@@ -494,12 +494,21 @@ describe('the fall of a country', () => {
     expect(besieged(g, w)).toBe(true);
     expect(ringClosed(g, w)).toBe(true);
     expect(w.ctrl).toBe('POL');
-    expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45 * SIEGE.capital, 6);
-    // And month by month the government shut inside loses its hold, until the capital counts as lost outright.
+    // The month the ring closes nothing is lost yet: a capital stands a siege before its country gives in (Version 58).
     g.flags[`siege:${w.id}`] = g.turn;
+    expect(collapseScore(g, 'POL') - before).toBeCloseTo(0, 6);
+    // Month by month the government shut inside loses its hold: part of it after a season...
+    expect(SIEGE.capitalAfter).toBeGreaterThan(0);
+    g.flags[`siege:${w.id}`] = g.turn - 1;
+    expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45 * SIEGE.capital / SIEGE.capitalAfter, 6);
+    g.flags[`siege:${w.id}`] = g.turn - SIEGE.capitalAfter;
     expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45 * SIEGE.capital, 6);
-    g.flags[`siege:${w.id}`] = g.turn - SIEGE.capitalYear / 2;
+    // ...and on, until the capital counts as lost outright.
+    const half = SIEGE.capitalAfter + (SIEGE.capitalYear - SIEGE.capitalAfter) / 2;
+    g.flags[`siege:${w.id}`] = g.turn - half;
     expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45 * (SIEGE.capital + (1 - SIEGE.capital) / 2), 6);
+    g.flags[`siege:${w.id}`] = g.turn - SIEGE.capitalYear;
+    expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45, 6);
     g.flags[`siege:${w.id}`] = g.turn - 3 * SIEGE.capitalYear;
     expect(collapseScore(g, 'POL') - before).toBeCloseTo(0.45, 6);
   });
