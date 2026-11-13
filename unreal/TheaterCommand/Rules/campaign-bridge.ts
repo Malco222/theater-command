@@ -49,6 +49,7 @@ import {
   orderBuildFort, orderCancelBuild, orderMove, orderRail, orderStance, postureOf, previewAttack, reach, runTurnAI, stepAI,
   orderAir, orderAirBase, orderFleet, levelNow, orderLevel, orderLand, orderShip, previewLanding,
   depots, shippingLanes, previewAirOrder,
+  townBuildings, orderBuilding, buildingTips, tradeLedger, orderTrade, orderEndTrade,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
   lastAct, standings, orderDomination, orderKeepPeace, whyNotOrderDomination,
   orderBureau, orderTeams, techTree, orderResearch, orderStopResearch, whyNotOrderResearch, orderAssign, orderPromote, orderRelieve, orderSkill,
@@ -241,7 +242,11 @@ function view() {
     // Oil and supplies in the player's depots (the grand campaign; null for a small country or a scenario), each with
     // the months it will last and its books in words, and every shipping lane to draw over the sea.
     stores: storesOf(s),
-    lanes: s.flags.open === 1 ? shippingLanes(s).filter((l) => l.kind === 'sea' && l.path.length > 1 && l.state !== 'idle').map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })) : [],
+    lanes: s.flags.open === 1 ? [
+      ...shippingLanes(s).filter((l) => l.kind === 'sea' && l.path.length > 1 && l.state !== 'idle').map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })),
+      // The player's trade routes, over land and sea, in gold: red where one is cut.
+      ...(tradeLedger(s)?.deals ?? []).filter((d) => d.path.length > 1).map((d) => ({ path: d.path.flat(), state: d.state === 'open' ? 'trade' : `trade-${d.state}`, flow: d.full > 0 ? d.pays / d.full : 1 })),
+    ] : [],
     // Research teams of the player's with nothing to do: they never choose their own work, so the game says so.
     idle: s.human ? idleTeams(s, s.human) : 0,
     // The members of the League, the third alliance: their ground is shown in its own colour.
@@ -941,6 +946,15 @@ function province(id: number) {
     // The chief town of the province, and what the player gets for taking the place (or has from holding it).
     town: (() => { const t = townIn(s, r.id); return t ? { name: t.name, size: t.sizeWord, worth: t.worth, rank: t.rank } : null; })(),
     prize: (() => { const z = prizeOfPlace(s, r.id); return z && prizeLine(s, r.id) ? { kind: z.kind, line: z.line, items: z.items.map((i) => `${i.label}: ${i.text}`) } : null; })(),
+    // The town's building plots (the grand campaign): what stands, what is going up, how many are free.
+    plots: (() => {
+      const t = townBuildings(s, r.id);
+      if (!t) return null;
+      return {
+        town: t.town, mine: t.mine, free: t.free, can: t.offers.filter((o) => o.why === null).length,
+        list: t.plots.map((p) => (p.line ? `${p.name}: ${p.level > 0 ? p.label : 'going up'}${p.building && p.level > 0 ? ' (next level going up)' : ''}` : 'Free plot')),
+      };
+    })(),
     // A fallen country's capital: whether it can come back, and whether the player taking this place would free it.
     fallenNote: fallenCapitalAt(s, r.id)?.note ?? '',
     industry: r.fac,
@@ -1316,6 +1330,9 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   if (lastMonth) out.push({ id: 'reports', label: "THE MONTH'S REPORT" });
   if (s.stories.awards.some((a) => a.nat === s.human && !a.old)) out.push({ id: 'heroes', label: 'HEROES AT HOME' });
   if (secretService(s)) out.push({ id: 'spies', label: 'THE SECRET SERVICE' });
+  // Towns to build up and trade agreements (the grand campaign).
+  if (tradeLedger(s)) out.push({ id: 'trade', label: 'TRADE AGREEMENTS' });
+  if (s.nations[s.human] && townBuildings(s, s.nations[s.human].capital)) out.push({ id: 'towns', label: 'TOWNS TO BUILD UP' });
   const act = lastAct(s);
   if (act && (act.decided || act.on)) out.push({ id: 'lastact', label: act.on ? 'THE WORLD STANDINGS' : 'THE LAST ACT' });
   return out;
@@ -1345,6 +1362,15 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
       k: 'research', t: idle === 1 ? 'A DESIGN TEAM IS IDLE' : `${idle} DESIGN TEAMS ARE IDLE`,
       tip: 'A design team with nothing to do designs nothing. Open RESEARCH and give it work.',
     });
+  }
+  // Trade: a route cut, or a trading house idle with a country ready to sign.
+  const book = tradeLedger(s);
+  if (book) {
+    const cut = book.deals.filter((d) => d.state === 'cut').length;
+    if (cut) out.push({ k: 'page:trade', t: cut === 1 ? 'A TRADE ROUTE IS CUT' : `${cut} TRADE ROUTES ARE CUT`, tip: 'An agreement pays nothing while its route is cut. Open TRADE AGREEMENTS to see which, and why.' });
+    else if (book.houses > book.used && book.pc >= book.cost && book.offers.some((o) => o.why === null)) {
+      out.push({ k: 'page:trade', t: 'A TRADING HOUSE STANDS IDLE', tip: 'A country is ready to sign a trade agreement, and you have a trading house free for it. It would pay into the treasury every month.' });
+    }
   }
   // Nothing on order at all, with money in the treasury for something the arsenal offers.
   if (me.queue.length === 0 && arsenalOffers(s, -1).some((o) => !o.why)) {
@@ -1823,10 +1849,120 @@ function forcesPage(s: Game): Page | null {
 }
 
 /** One of the rooms the general panel shows. region is the province selected on the map, or -1. */
+const moneyWords = (pp: number): string => shown(pp).toLocaleString('en-US');
+const monthsWords = (n: number): string => `${n} month${n === 1 ? '' : 's'}`;
+
+/** The town plan of one province: its plots, what stands on them, and every line of building that could go up. */
+function townPage(s: Game, region: number): Page | null {
+  const t = townBuildings(s, region);
+  const r = s.regions[region];
+  if (!t || !r) return null;
+  const up = humanUp(s) && !onEve(s);
+  const date = (turn: number): string => turnToDate(turn).label;
+  const n = t.plots.length;
+  const plots: PageRow[] = t.plots.map((p, i) => p.line
+    ? {
+      nat: '', title: `Plot ${i + 1}  \u00B7  ${p.name}: ${p.level > 0 ? p.label : 'being built'}${p.level > 0 ? `  (level ${p.level} of 3)` : ''}`,
+      lines: [p.does, p.building ? `${p.level > 0 ? 'The next level is going up' : 'Going up'}: due ${date(p.due)}.` : ''].filter(Boolean), buttons: [],
+    }
+    : { nat: '', title: `Plot ${i + 1}  \u00B7  Free`, lines: [t.mine ? 'Choose a building for it below.' : 'Nothing built.'], buttons: [] });
+  const offers: PageRow[] = t.offers.map((o) => {
+    const p = t.plots.find((x) => x.line === o.line);
+    const going = !!p?.building, top = o.has >= 3 && !going;
+    const lines = top ? [`Complete: ${o.hasLabel}.`, o.blurb]
+      : going ? [`${o.label} is going up: due ${date(p!.due)}.`, o.blurb]
+        : [`${o.has ? 'Next' : 'First'}: ${o.label}  \u00B7  ${moneyWords(o.cost)}  \u00B7  ${monthsWords(o.months)}`, o.effect, o.blurb];
+    return {
+      nat: '', title: `${o.name}${o.has ? `  \u00B7  ${o.hasLabel}` : ''}`, lines,
+      buttons: top || going ? [] : [{ label: o.has ? 'RAISE' : 'BUILD', act: `civic:${region}:${o.line}`, ok: up && o.why === null, tip: !up ? 'It is not your month.' : o.why ?? `${o.label}: ${o.effect}` }],
+    };
+  });
+  const sections: Page['sections'] = [{ heading: 'THE PLOTS', text: `${r.name}${r.owner === r.ctrl ? '' : ', conquered ground'}.`, rows: plots }];
+  if (t.mine) sections.push({ heading: 'WHAT CAN BE BUILT HERE', text: 'One building goes up at a time in a town.', rows: offers });
+  return {
+    id: `town:${region}`, title: `THE TOWN PLAN  \u00B7  ${t.town.toUpperCase()}`,
+    headline: `${t.size === 'capital' ? 'The capital' : `A ${t.size}`}: ${n} building plot${n === 1 ? '' : 's'}, ${t.free ? `${t.free} free` : 'all taken'}`,
+    note: 'A town is a high street with a few empty lots: a village has one, a town two, a city three and the capital four. Each lot takes one kind of building, and each building can be raised two more levels. A lot once built on stays that kind.',
+    top: [
+      { label: 'SHOW ON THE MAP', act: `goto:region:${region}`, ok: true, tip: 'Looks at the place on the map.' },
+      { label: 'TOWNS TO BUILD UP', act: 'open:towns', ok: true, tip: 'The best place for each kind of building now.' },
+      { label: 'TRADE AGREEMENTS', act: 'open:trade', ok: !!tradeLedger(s), tip: 'What the commerce of your towns is traded for.' },
+    ],
+    sections,
+  };
+}
+
+/** The buildings worth ordering next: for each kind, the richest of the player's places that can take it now. */
+function townsPage(s: Game): Page | null {
+  const me = s.human ? s.nations[s.human] : null;
+  if (!me || !townBuildings(s, me.capital)) return null;
+  const up = humanUp(s) && !onEve(s);
+  const tips = buildingTips(s, 8);
+  const going = me.queue.filter((b) => (b as { what?: string }).what === 'civic');
+  const rows: PageRow[] = tips.map((tip) => {
+    const o = tip.offer;
+    return {
+      nat: '', title: `${o.name}: ${o.label}  \u00B7  ${tip.town}${tip.town === tip.province ? '' : `, ${tip.province}`}`,
+      lines: [`${moneyWords(o.cost)}  \u00B7  ${monthsWords(o.months)}`, o.effect],
+      buttons: [
+        { label: o.has ? 'RAISE' : 'BUILD', act: `civic:${tip.region}:${o.line}`, ok: up && o.why === null, tip: !up ? 'It is not your month.' : o.why ?? o.blurb },
+        { label: 'TOWN PLAN', act: `open:town:${tip.region}`, ok: true, tip: 'Every plot of this town and everything that could be built there.' },
+      ],
+    };
+  });
+  const sections: Page['sections'] = [{ heading: 'THE BEST PLACE FOR EACH KIND OF BUILDING NOW', text: tips.length ? '' : 'Nothing more can be built in your towns this month.', rows }];
+  if (going.length) {
+    sections.push({
+      heading: 'GOING UP', text: '',
+      rows: going.map((b) => ({ nat: '', title: orderLine(s, b).name, lines: [`Due ${turnToDate(b.eta).label}.`], buttons: [{ label: 'TOWN PLAN', act: `open:town:${b.region}`, ok: true, tip: 'Every plot of this town.' }] })),
+    });
+  }
+  return {
+    id: 'towns', title: 'TOWNS TO BUILD UP', headline: `${tips.length} building${tips.length === 1 ? '' : 's'} worth ordering${going.length ? `, ${going.length} going up` : ''}`,
+    note: 'Commerce pays into the treasury, farming fills the depots, learning quickens research, training and medicine look after the army, and administration brings in tax and political capital. Pick any province of yours on the map and press TOWN PLAN to see its plots.',
+    top: [{ label: 'TRADE AGREEMENTS', act: 'open:trade', ok: !!tradeLedger(s), tip: 'What the commerce of your towns is traded for.' }],
+    sections,
+  };
+}
+
+/** The player's trade: agreements in force and how the goods travel, and every country he could sign with. */
+function tradePage(s: Game): Page | null {
+  const b = tradeLedger(s);
+  if (!b) return null;
+  const up = humanUp(s) && !onEve(s);
+  const free = b.houses - b.used;
+  const deals: PageRow[] = b.deals.map((d) => ({
+    nat: d.nat, title: `${d.name}  \u00B7  +${moneyWords(d.pays)} a month${d.state === 'raided' ? ` of ${moneyWords(d.full)}` : ''}`,
+    lines: [
+      `${d.route}. Signed ${turnToDate(d.since).label}.`,
+      d.state === 'cut' ? 'CUT: nothing gets through, and it pays nothing until the way is open again.' : d.state === 'raided' ? `RAIDED: ${Math.round(d.lost * 100)}% of the cargoes are being sunk.` : '',
+    ].filter(Boolean),
+    buttons: [{ label: 'END IT', act: `trade:end:${d.nat}`, ok: up, tip: up ? 'Ends the agreement. The trading house is free for another.' : 'It is not your month.', danger: true }],
+  }));
+  // (those that could be signed now first, then those wanting only a trading house or political capital, then the rest)
+  const rank = (o: { why: string | null; pays: number; poor: boolean; full: boolean; way: string }): number => (o.why === null ? 3e9 : o.poor || o.full ? 2e9 : o.way !== 'none' ? 1e9 : 0) + o.pays;
+  const offers: PageRow[] = b.offers.slice().sort((x, y) => rank(y) - rank(x)).slice(0, 16).map((o) => ({
+    nat: o.nat, title: `${o.name}  \u00B7  +${moneyWords(o.pays)} a month`,
+    lines: [o.route, o.why ?? ''].filter(Boolean),
+    buttons: [{ label: 'SIGN', act: `trade:sign:${o.nat}`, ok: up && o.why === null, tip: !up ? 'It is not your month.' : o.why ?? `Costs ${b.cost} political capital and one trading house on each side.` }],
+  }));
+  return {
+    id: 'trade', title: 'TRADE AGREEMENTS',
+    headline: `${b.used} of ${b.houses} trading house${b.houses === 1 ? '' : 's'} in use  \u00B7  +${moneyWords(b.income)} a month`,
+    note: `An agreement takes one trading house on each side and costs ${b.cost} political capital to sign; you have ${Math.floor(b.pc)}. Goods go overland or by sea, and a sea route can be raided or cut. Commerce buildings in your towns give you more trading houses (${b.most} at most)${b.boost > 0 ? ` and add ${Math.round(b.boost * 100)}% to what every agreement pays` : ''}.`,
+    top: [{ label: 'TOWNS TO BUILD UP', act: 'open:towns', ok: true, tip: 'Where commerce buildings could go up.' }],
+    sections: [
+      { heading: 'AGREEMENTS IN FORCE', text: deals.length ? '' : 'None yet.', rows: deals },
+      { heading: 'COUNTRIES YOU COULD SIGN WITH', text: free > 0 ? `${free} trading house${free === 1 ? '' : 's'} free.` : 'Every trading house is in use: end an agreement or build more commerce to sign another.', rows: offers },
+    ],
+  };
+}
+
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
+  const p = id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
+    : id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
@@ -1855,6 +1991,27 @@ function act(action: string, region = -1) {
       // What came of it, in the report's own words first, kept short enough to read while the raid is flown.
       const told = flown.notes.join(' ') || note;
       note = told.length > 190 ? `${told.slice(0, told.lastIndexOf('.', 190) + 1) || told.slice(0, 190)}` : told;
+    }
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'civic') {
+    // A building ordered in one of the player's towns.
+    const at = Number(part[1]);
+    const before = townBuildings(s, at)?.offers.find((o) => o.line === part[2]);
+    const b = orderBuilding(s, at, part[2]);
+    ok = !!b;
+    note = b ? `${before?.label ?? 'The building'} ordered at ${townBuildings(s, at)?.town ?? s.regions[at]?.name ?? 'the town'}. Due ${turnToDate(b.eta).label}.` : before?.why ?? 'That cannot be built now.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'trade') {
+    const who = s.nations[part[2]]?.name ?? part[2];
+    if (part[1] === 'sign') {
+      const why = tradeLedger(s)?.offers.find((o) => o.nat === part[2])?.why ?? null;
+      ok = orderTrade(s, part[2]);
+      note = ok ? `A trade agreement is signed with ${who}.` : why ?? 'That agreement cannot be signed now.';
+    } else if (part[1] === 'end') {
+      ok = orderEndTrade(s, part[2]);
+      note = ok ? `The trade agreement with ${who} is ended.` : 'That cannot be done now.';
     }
     return { ok, note, fly, flies, open, view: view() };
   }

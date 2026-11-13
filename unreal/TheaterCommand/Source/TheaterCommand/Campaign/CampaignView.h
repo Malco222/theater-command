@@ -903,4 +903,9 @@ struct FProvinceInfo
 	FString Note;
 	TArray<FProvinceOption> Options;
 	TArray<FOrderLine> Forming;
+	// The town's building plots (the grand campaign): what stands on each or "Free plot", whether the town is the
+	// player's to build in, and how many kinds of building could be ordered there now.
+	bool bHasPlots = false, bPlotsMine = false;
+	TArray<FString> Plots;
+	int32 PlotsFree = 0, PlotsCanBuild = 0;
 };

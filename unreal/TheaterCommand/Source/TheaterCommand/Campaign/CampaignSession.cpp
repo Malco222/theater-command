@@ -1266,6 +1266,17 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 	Info.bValid = true;
 	Info.Region = RegionId;
 	Object->TryGetBoolField(TEXT("home"), Info.bHome);
+	{
+		const TSharedPtr<FJsonObject>* Plots = nullptr;
+		if (Object->TryGetObjectField(TEXT("plots"), Plots))
+		{
+			Info.bHasPlots = true;
+			(*Plots)->TryGetBoolField(TEXT("mine"), Info.bPlotsMine);
+			(*Plots)->TryGetNumberField(TEXT("free"), Info.PlotsFree);
+			(*Plots)->TryGetNumberField(TEXT("can"), Info.PlotsCanBuild);
+			(*Plots)->TryGetStringArrayField(TEXT("list"), Info.Plots);
+		}
+	}
 	Object->TryGetStringField(TEXT("raiseNote"), Info.Note);
 	{
 		const TSharedPtr<FJsonObject>* Town = nullptr;

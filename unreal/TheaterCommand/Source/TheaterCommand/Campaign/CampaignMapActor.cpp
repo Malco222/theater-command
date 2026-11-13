@@ -3123,8 +3123,11 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 		{
 			continue;
 		}
-		const FLinearColor Ink = Lane.State == TEXT("cut") ? FLinearColor(0.95f, 0.14f, 0.1f, 0.62f)
-			: Lane.State == TEXT("raided") ? FLinearColor(1.0f, 0.68f, 0.14f, 0.58f)
+		// (the player's trade routes are drawn in gold, over land as well as sea)
+		const bool bTrade = Lane.State.StartsWith(TEXT("trade"));
+		const FLinearColor Ink = Lane.State.EndsWith(TEXT("cut")) ? FLinearColor(0.95f, 0.14f, 0.1f, 0.62f)
+			: Lane.State.EndsWith(TEXT("raided")) ? FLinearColor(1.0f, 0.68f, 0.14f, 0.58f)
+			: bTrade ? FLinearColor(1.0f, 0.84f, 0.42f, 0.5f)
 			: FLinearColor(0.86f, 0.93f, 1.0f, 0.3f);
 		// The lane as a smooth curve through its points, a step every map unit or so.
 		TArray<FVector2D> Curve;
@@ -3147,7 +3150,7 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 			TArray<FVector2D> Stroke;
 			for (int32 K = First; K <= First + Dash && K < Curve.Num(); ++K)
 			{
-				if (Terrain.HeightAt(Curve[K].X, Curve[K].Y) > 0.0f)
+				if (!bTrade && Terrain.HeightAt(Curve[K].X, Curve[K].Y) > 0.0f)
 				{
 					break;
 				}
@@ -3155,7 +3158,7 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 			}
 			if (Stroke.Num() >= 2)
 			{
-				AppendRibbon(Buffers, Stroke, Lane.State == TEXT("open") ? 0.55 : 0.75, 0.12, Ink.ToFColor(false), false);
+				AppendRibbon(Buffers, Stroke, Lane.State == TEXT("open") ? 0.55 : bTrade ? 0.42 : 0.75, bTrade ? 0.3 : 0.12, Ink.ToFColor(false), false);
 			}
 		}
 	}

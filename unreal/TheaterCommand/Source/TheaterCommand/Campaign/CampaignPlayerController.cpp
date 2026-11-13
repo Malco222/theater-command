@@ -647,6 +647,14 @@ void ACampaignPlayerController::ProvinceAction(const FString& Action)
 	Notify(Note, 5.0);
 }
 
+void ACampaignPlayerController::OpenTownPlan()
+{
+	if (Map.IsValid() && Map->GetSelectedRegion() != INDEX_NONE)
+	{
+		OpenPage(FString::Printf(TEXT("town:%d"), Map->GetSelectedRegion()));
+	}
+}
+
 void ACampaignPlayerController::CancelOrder(int32 OrderId)
 {
 	FCampaignSession* Session = GetSession();
@@ -1242,7 +1250,11 @@ void ACampaignPlayerController::PressToDo(int32 Index)
 		return;
 	}
 	const FString Screen = Session->GetView().ToDo[Index].Screen;
-	if (Screen == TEXT("generals"))
+	if (Screen.StartsWith(TEXT("page:")))
+	{
+		OpenPage(Screen.Mid(5));
+	}
+	else if (Screen == TEXT("generals"))
 	{
 		OpenGenerals();
 	}
@@ -4846,6 +4858,12 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			RegionPanel.Prize = FText::FromString(Province.PrizeLine);
 			RegionPanel.PrizeTip = FText::FromString(FString::Join(Province.PrizeItems, TEXT("\n")));
 			RegionPanel.bPrizeToTake = Province.PrizeKind == TEXT("taken") || Province.PrizeKind == TEXT("restored");
+			// The town's plots: shown on the player's own ground, and elsewhere only where something stands.
+			const bool bBuiltOn = Province.Plots.ContainsByPredicate([](const FString& Plot) { return Plot != TEXT("Free plot"); });
+			RegionPanel.Plots = Province.bHasPlots && (Province.bPlotsMine || bBuiltOn) ? Province.Plots : TArray<FString>();
+			RegionPanel.bPlotsMine = Province.bPlotsMine;
+			RegionPanel.PlotsFree = Province.PlotsFree;
+			RegionPanel.PlotsCanBuild = Province.PlotsCanBuild;
 		}
 		// (ground that is not the player's can still have something to order: a reconnaissance flight over it)
 		if (Province.bValid && (Province.bHome || Province.Options.Num() > 0))

@@ -28,6 +28,10 @@ struct FRegionPanelInfo
 	FText Prize; // what taking the place is worth, or what holding it pays, in a sentence
 	FText PrizeTip; // and in detail
 	bool bPrizeToTake = false; // it is not the player's yet
+	// The town's building plots (the grand campaign), each as what stands on it or "Free plot".
+	TArray<FString> Plots;
+	bool bPlotsMine = false;
+	int32 PlotsFree = 0, PlotsCanBuild = 0;
 	FText ProvinceNote;
 	TArray<FProvinceOption> Options;
 	/** The heading over those: "PROVINCE", or "ORDERS" for a fleet or an air fleet. */
@@ -447,6 +451,8 @@ public:
 	/** Which part of the province panel is open: 0 the province, 1 what can be raised there, 2 the works. */
 	int32 GetProvinceTab() const { return ProvinceTab; }
 	void SetProvinceTab(int32 Tab) { ProvinceTab = Tab; RegionPanel.Revision = ++PanelRevision; }
+	/** Opens the town plan of the province picked on the map: its plots and what could be built on them. */
+	void OpenTownPlan();
 	/** The small map in the corner: its picture, the marks on it, and a jump to a place on it. */
 	UTexture2D* GetMinimapTexture() const;
 	/** Armies as (x, y, whose) with x and y from 0 to 1 and whose 0 for the player's, 1 for a friend's, 2 for an enemy's, 3 for others; and the part of the map on screen. */

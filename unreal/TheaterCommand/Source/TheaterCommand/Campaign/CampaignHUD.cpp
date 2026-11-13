@@ -711,6 +711,10 @@ namespace
 						[
 							MakeToDo(2)
 						]
+						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
+						[
+							MakeToDo(3)
+						]
 						// The small map: every country in its colour, the armies as marks, the part on screen boxed.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 4.0f, 0.0f, 12.0f)
 						[
@@ -1989,6 +1993,39 @@ namespace
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 						[
 							SNew(STextBlock).Text(Info.Holdings).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						];
+					}
+					if (ProvinceTab == 0 && bProvince && Info.Plots.Num() > 0)
+					{
+						// The town: its building plots as a row of lots, each with what stands on it, and the way to its plan.
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+							.Text(FText::FromString(FString::Printf(TEXT("THE TOWN  \u00B7  %d PLOT%s%s"), Info.Plots.Num(), Info.Plots.Num() == 1 ? TEXT("") : TEXT("S"),
+								Info.PlotsFree > 0 ? *FString::Printf(TEXT(", %d FREE"), Info.PlotsFree) : TEXT(""))))
+						];
+						TSharedRef<SWrapBox> Lots = SNew(SWrapBox).UseAllottedSize(true).InnerSlotPadding(FVector2D(4.0f, 4.0f));
+						for (const FString& Plot : Info.Plots)
+						{
+							const bool bFree = Plot == TEXT("Free plot");
+							Lots->AddSlot()
+							[
+								SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(7.0f, 3.0f))
+								[
+									SNew(STextBlock).Text(FText::FromString(Plot)).Font(Font(bFree ? TEXT("Italic") : TEXT("Bold"), 9)).ColorAndOpacity(bFree ? Faint : Cream)
+								]
+							];
+						}
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)[Lots];
+						ProvinceBox->AddSlot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 6.0f, 0.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(Info.bPlotsMine && Info.PlotsCanBuild > 0 ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(TEXT("The town plan: every plot, what stands on it, and everything that could be built here: commerce, farming, learning, training, medicine and administration.")))
+							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenTownPlan(); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 160)).ColorAndOpacity(Info.bPlotsMine && Info.PlotsCanBuild > 0 ? BrightBrass : Muted)
+								.Text(FText::FromString(Info.bPlotsMine && Info.PlotsCanBuild > 0 ? FString::Printf(TEXT("TOWN PLAN  \u00B7  %d TO BUILD"), Info.PlotsCanBuild) : FString(TEXT("TOWN PLAN"))))
+							]
 						];
 					}
 					if (!Info.ProvinceNote.IsEmpty() && ProvinceTab != 2)

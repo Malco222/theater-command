@@ -320,6 +320,35 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Wait = 5.2f;
 		}
 		{
+			// Towns you build up (version 52): the province panel shows the capital's plots, and its town plan.
+			FShot& Shot = Add(TEXT("38a-town-plan"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("town:0");
+		}
+		{
+			// A market hall ordered there, then the panel again with the plot taken.
+			FShot& Shot = Add(TEXT("38b-building-ordered"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("town:0");
+			Shot.RoomAct = TEXT("civic:0:market");
+		}
+		{
+			FShot& Shot = Add(TEXT("38c-plots-on-the-panel"), TEXT("@capital"), 0.45f);
+			Shot.Select = TEXT("@capital");
+		}
+		{
+			FShot& Shot = Add(TEXT("38d-towns-to-build-up"), TEXT("@capital"), 0.45f);
+			Shot.Room = TEXT("towns");
+		}
+		{
+			// Trade agreements, and the routes drawn in gold on the table behind.
+			FShot& Shot = Add(TEXT("38e-trade"), TEXT("@capital"), 0.62f);
+			Shot.Room = TEXT("trade");
+		}
+		{
+			FShot& Shot = Add(TEXT("38f-trade-routes"), TEXT("@capital"), 0.72f);
+		}
+		{
 			// The secret service, with the capital selected and an agent recruited.
 			FShot& Shot = Add(TEXT("31h-secret-service"), TEXT("@capital"), 0.45f);
 			Shot.Select = TEXT("@capital");
