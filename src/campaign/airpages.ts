@@ -36,7 +36,7 @@ export interface AirActResult {
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
 const craft = (x: { ftr: number; bmr: number }): string => [x.ftr >= 1 ? `${num(x.ftr)} fighters` : '', x.bmr >= 1 ? `${num(x.bmr)} bombers` : ''].filter(Boolean).join(', ') || 'no aircraft fit to fly';
-const KINDS: RaidKind[] = ['bomb', 'night', 'ground', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon'];
+const KINDS: RaidKind[] = ['bomb', 'night', 'ground', 'line', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon'];
 const isKind = (k: string): k is RaidKind => (KINDS as string[]).includes(k);
 const ids = (s: string | undefined): number[] => (s ? s.split('.').map(Number).filter((n) => Number.isFinite(n)) : []);
 const BACK: PageButton = { label: 'BACK TO THE AIRFIELD', act: 'open:airfield', ok: true, tip: '' };

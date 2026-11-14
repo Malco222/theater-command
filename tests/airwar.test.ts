@@ -31,7 +31,7 @@ function contested(g: Game, kind: 'bomb' | 'ground' = 'bomb'): { target: number;
 
 describe('the air war data', () => {
   it('names nine kinds of raid, sizes airfields in steps and numbers the groups of each nation', () => {
-    expect(airwar.raids.kinds.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon']);
+    expect(airwar.raids.kinds.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'line', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon']);
     for (const k of airwar.raids.kinds) { expect(k.label.length).toBeGreaterThan(5); expect(k.blurb.length).toBeGreaterThan(30); expect(['bmr', 'any']).toContain(k.needs); }
     const S = airwar.fields.sizes;
     expect(S[0]).toBe(0);
@@ -297,9 +297,9 @@ describe('the raid planner', () => {
   it('offers every kind of raid with its targets, nearest first, and nothing to a nation at peace', () => {
     const g = grand('GER');
     const menu = raidMenu(g);
-    expect(menu.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon']);
-    // A strike on a fleet needs a fleet found at sea: there may be none in reach in the first month.
-    for (const k of menu) if (k.key !== 'fleet' && k.key !== 'harbour') { expect(k.targets, k.key).toBeGreaterThan(0); expect(k.why, k.key).toBeNull(); }
+    expect(menu.map((k) => k.key)).toEqual(['bomb', 'night', 'ground', 'line', 'town', 'superiority', 'strike', 'fleet', 'harbour', 'recon']);
+    // A strike on a fleet needs a fleet found at sea, and bombing the line needs troops seen dug in: there may be none in reach in the first month.
+    for (const k of menu) if (k.key !== 'fleet' && k.key !== 'harbour' && k.key !== 'line') { expect(k.targets, k.key).toBeGreaterThan(0); expect(k.why, k.key).toBeNull(); }
     for (const kind of ['bomb', 'ground', 'superiority', 'strike'] as const) {
       const ts = raidTargetsFor(g, kind);
       for (let i = 1; i < ts.length; i++) expect(ts[i].km).toBeGreaterThanOrEqual(ts[i - 1].km);
@@ -561,7 +561,7 @@ describe('the pages the 3D game reads', () => {
   it('take standing orders, reconnaissance and moves as actions, and leave anything else alone', () => {
     const g = grand('GER');
     const f = mine(g, 'ftr')[0], b = mine(g, 'bmr')[0];
-    expect(airPage(g, 'raids')!.sections[0].rows.length).toBe(9);
+    expect(airPage(g, 'raids')!.sections[0].rows.length).toBe(10);
     expect(airAct(g, `job:${f.id}:rest`)).toMatchObject({ ok: true, open: `group:${f.id}` });
     expect(f.mission).toBe('rest');
     const esc = airPage(g, `group:${f.id}`)!.sections[0].rows.find((r) => r.buttons[0].act.startsWith(`job:${f.id}:escort:`))!;

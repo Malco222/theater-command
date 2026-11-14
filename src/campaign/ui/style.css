@@ -1728,3 +1728,24 @@ p.sub.mennow { margin: 0 0 8px; }
   .btn.ticketall { display: block; width: 100%; margin-top: 8px; }
   .costline .costrow > b { min-width: 0; flex: 1 0 100%; }
 }
+
+/* Version 64: soften the line first, fold two worn corps into one, fieldworks left on the ground. */
+.note.soften { display: grid; gap: 8px; margin: 12px 0 2px; }
+.softopt { display: flex; align-items: center; gap: 12px; }
+.softopt .btn { flex: none; white-space: nowrap; min-width: 168px; }
+.softopt small, .softdone { color: var(--ink-2); font-size: 12.5px; line-height: 1.35; }
+.softdone { display: block; color: var(--ink); }
+.foldpair { margin: 0 0 14px; }
+.foldpair h3 { margin: 0 0 4px; font-size: 14px; }
+.foldopt { display: flex; align-items: center; gap: 14px; padding: 9px 0; border-top: 1px solid var(--line); }
+.foldopt .grow { flex: 1; display: grid; gap: 3px; }
+.foldopt small { color: var(--ink-2); font-size: 12.5px; line-height: 1.4; }
+.foldopt small b { color: var(--ink); }
+.foldopt .btn { flex: none; }
+.note.leftworks { border-left-color: #d2b87e; }
+g.leftworks path { fill: none; stroke: #ecd392; stroke-width: 1.5; stroke-dasharray: .5 2.3; stroke-linecap: round; }
+g.leftworks path.u { stroke: #2b2415; stroke-width: 2.6; opacity: .55; }
+@media (max-width: 720px) {
+  .softopt, .foldopt { flex-direction: column; align-items: stretch; gap: 6px; }
+  .softopt .btn { white-space: normal; min-width: 0; }
+}
