@@ -17,7 +17,7 @@ import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { monthsFor, staffTeams, techById, techOf, teamsOf } from './tech';
 import { TRADE, bestPartner, dealsOf, endTrade, housesOf, signTrade, tradeRules, wealthOf } from './trade';
-import { DIPLOMACY, canCourt, court, receptive, step } from './diplomacy';
+import { DIPLOMACY, canCourt, court, courtable, receptive, step } from './diplomacy';
 import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
@@ -365,8 +365,8 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
     case 'diplomacy': {
       const b = bloc(n);
       if (!b || b === 'league') return 'Only a member of the Axis or the Allies courts neutrals.';
-      const open = Object.values(g.nations).filter((T) => canCourt(g, nat, T.id).ok || g.flags[`court:${nat}:${T.id}`] === g.turn).length;
-      return `${Math.floor(n.pc)} political capital in hand; a round of courting costs ${DIPLOMACY.court.cost}. ${open ? `${open} neutral${open === 1 ? '' : 's'} can be talked to.` : 'No neutral is open to courting.'}`;
+      const open = Object.values(g.nations).filter((T) => T.id !== nat && courtable(T)).length;
+      return `${Math.floor(n.pc)} political capital in hand; a round of courting costs ${DIPLOMACY.court.cost}. ${open ? `${open} neutral${open === 1 ? ' is' : 's are'} open to courting.` : 'No neutral is open to courting.'}`;
     }
     case 'spies': {
       const all = agentsOf(g, nat), out = all.filter((a) => abroad(g, a)).length;
