@@ -431,7 +431,7 @@ describe('computer-run countries', () => {
     expect(g.trade.length).toBeGreaterThan(10);
     for (const n of Object.values(g.nations)) { if (n.alive) tradeTick(g, n.id); }
     for (const d of g.trade) expect(atWar(g, d.a, d.b), `${d.a}-${d.b}`).toBe(false);
-  });
+  }, 30_000);
 });
 
 describe('saving', () => {

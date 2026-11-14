@@ -353,6 +353,7 @@ function outlookOf(g: Game, a: Assessment, target: Region): Outlook {
       const ours = l.value.split(', defenders')[0];
       return { ...l, value: /^Attackers/.test(ours) ? `${ours}; the defenders' spirit is not known` : "The defenders' spirit is not known", effect: l.effect ? l.effect.split(', defence')[0].replace(/^Defence.*$/, '') || undefined : undefined };
     }
+    if (l.label === 'Troops') return { label: l.label, value: 'How good the defenders are is not known', effect: 'Training and experience count for as much as numbers: identify them first' };
     if (l.label === 'Armor' && /without armor/.test(l.value) && k.none.length) return { ...l, value: 'No tanks have been seen among the defenders', effect: 'Tank attack up 25% if there are none' };
     return l;
   });
