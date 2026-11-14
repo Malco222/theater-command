@@ -2,17 +2,19 @@
 //
 // 1. A dug-in front that sleeps. A staff weighs a main effort against the enemy on the line and close behind it, not
 //    his whole army in depth; its patience counts battles in the field, so a town stormed behind the line does not
-//    start the wait again.
+//    start the wait again; and patience runs out: the longer the quiet, the less it asks before it comes on.
 // 2. The word of a main effort runs ahead of the blow: the month it is named the army masses, and attacks from the
 //    month after.
 // 3. A war nobody can fight ends: two computer nations that cannot come at each other, and whose sides have fought
 //    no battle on land for a year, sign an armistice on the lines as they stand. Never a war the player is in.
 // 4. Guns were the cheap way to win: an artillery corps now costs what an armoured corps costs.
+// 5. The player's advisers look a winter ahead: with a war in the east in sight they research winter equipment first.
 import { describe, expect, it } from 'vitest';
 import { runAI } from '../src/campaign/ai';
 import { specOf } from '../src/campaign/economy';
 import { addCorps, createGame, removeCorps, setWar } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
+import { staffPick, winterAhead } from '../src/campaign/tech';
 import { RIVALS, characterOf, decide, effortOf, fronts, quietInField, quietWith, staffPhase, stalemates, startOpen, type Character } from '../src/campaign/staff';
 import { beginHuman, humanUp, stepAI } from '../src/campaign/turn';
 import type { Corps, Game, Region } from '../src/campaign/types';
@@ -249,5 +251,100 @@ describe('guns are no longer the cheap way to win', () => {
   it('the historical scenarios have no artillery to buy', () => {
     const h = createGame(3, 'GER');
     expect(specOf(h, 'art')).toBeUndefined();
+  });
+});
+
+describe('the player\'s advisers look a winter ahead', () => {
+  it('at war with the Soviet Union they take up winter equipment first; a computer-run Germany keeps history\'s order', () => {
+    const g = playing('GER');
+    expect(winterAhead(g, 'GER')).toBe(false);
+    expect(staffPick(g, 'GER')).not.toBe('winterkit');
+    setWar(g, 'GER', 'SOV');
+    expect(winterAhead(g, 'GER')).toBe(true);
+    expect(staffPick(g, 'GER')).toBe('winterkit');
+    const w = watching();
+    setWar(w, 'GER', 'SOV');
+    expect(winterAhead(w, 'GER')).toBe(false);
+    expect(staffPick(w, 'GER')).not.toBe('winterkit');
+  });
+
+  it('a border with a Soviet Union that is no ally is enough, and a country made for the winter needs none', () => {
+    const g = playing('GER');
+    const r = g.regions.find((x) => x.ctrl === 'POL' && x.nb.some((j) => g.regions[j].ctrl === 'SOV'))!;
+    r.ctrl = 'GER';
+    expect(winterAhead(g, 'GER')).toBe(true);
+    expect(staffPick(g, 'GER')).toBe('winterkit');
+    // The Soviet Union's own advisers, and a historical scenario's, have nothing to look ahead to.
+    const s = playing('SOV');
+    setWar(s, 'GER', 'SOV');
+    expect(winterAhead(s, 'SOV')).toBe(false);
+    const h = createGame(3, 'GER');
+    setWar(h, 'GER', 'SOV');
+    expect(winterAhead(h, 'GER')).toBe(false);
+  });
+});
+
+describe('patience runs out', () => {
+  /** Poland at war with Germany for years, the clocks in the test's hands, and the staff's bars with them. */
+  function waiting(run: (g: Game, quietFor: (months: number) => void, C: (typeof RIVALS.characters)[Character], P: NonNullable<typeof RIVALS.effort.patience>) => void): void {
+    const g = playing('GER');
+    setWar(g, 'GER', 'POL');
+    hush(g);
+    g.turn = 30;
+    g.flags['war:GER:POL'] = 1;
+    const C = RIVALS.characters[characterOf(g, 'POL')], P = RIVALS.effort.patience!;
+    const oldC = { ...C }, oldP = { ...P };
+    try { run(g, (months) => { g.flags['ff:GER:POL'] = g.turn - months; }, C, P); } finally { Object.assign(C, oldC); Object.assign(P, oldP); }
+  }
+
+  it('a staff too weak by its own bar comes on once the front has lain quiet long enough', () => {
+    waiting((g, quietFor, C, P) => {
+      const f = fronts(g, 'POL').find((x) => x.enemies.includes('GER'))!;
+      Object.assign(C, { quiet: 2, strength: f.near + 0.25, local: 0.05 });
+      Object.assign(P, { step: 0.1, strength: 0, odds: 0 });
+      // Its own two months of quiet: the enemy near the line is too strong for it.
+      quietFor(2);
+      decide(g, 'POL');
+      expect(effortOf(g, 'POL')).toBeNull();
+      // Two months more: it asks a fifth less, and that is still not enough.
+      quietFor(4);
+      decide(g, 'POL');
+      expect(effortOf(g, 'POL')).toBeNull();
+      // Three months more: the bar is under its strength, and the effort is named at its usual odds.
+      quietFor(5);
+      decide(g, 'POL');
+      const e = effortOf(g, 'POL')!;
+      expect(e).not.toBeNull();
+      expect(e.odds).toBeUndefined();
+    });
+  });
+
+  it('it asks less in odds as well, never under the floor, and strikes at the odds it was named on', () => {
+    waiting((g, quietFor, C, P) => {
+      Object.assign(C, { quiet: 2, strength: 0, local: 5000 });
+      Object.assign(P, { step: 1000, strength: 0, odds: 0.2 });
+      // No place on the line offers the odds it asks, nor the odds it asks a month later.
+      quietFor(2);
+      decide(g, 'POL');
+      expect(effortOf(g, 'POL')).toBeNull();
+      quietFor(3);
+      decide(g, 'POL');
+      expect(effortOf(g, 'POL')).toBeNull();
+      // With the wait five months over its own the bar is at its floor.
+      quietFor(7);
+      decide(g, 'POL');
+      const e = effortOf(g, 'POL')!;
+      expect(e).not.toBeNull();
+      expect(e.odds).toBeCloseTo(0.2, 6);
+      g.turn++;
+      expect(staffPhase(g, 'POL')!.minOdds).toBeCloseTo(0.2, 6);
+    });
+  });
+
+  it('the numbers: a tenth a month, never under half the enemy near the line nor under even odds', () => {
+    const P = RIVALS.effort.patience!;
+    expect(P.step).toBeGreaterThan(0);
+    expect(P.strength).toBeGreaterThanOrEqual(0.5);
+    expect(P.odds).toBeGreaterThanOrEqual(1);
   });
 });

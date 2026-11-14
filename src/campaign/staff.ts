@@ -115,7 +115,7 @@ export interface CharacterRule { label: string; says: string; attackAt: number; 
 export const RIVALS = rivalsData as unknown as {
   characters: Record<Character, CharacterRule>;
   lean: Record<string, [number, number, number]>;
-  effort: { months: number; rest: number; mass: number; sector: number; busy: number };
+  effort: { months: number; rest: number; mass: number; sector: number; busy: number; patience?: { step: number; strength: number; odds: number } };
   press: { ratio: number; after: number; step: number; floor: number; waves: number; again: number };
   soften: { works: number; most: number; from: number; raid: number };
   fold: { worn: number; cadres: number };
@@ -548,7 +548,7 @@ const SEASONS = ['winter', 'winter', 'spring', 'spring', 'spring', 'summer', 'su
 const effKey = (k: string, nat: string, where: string): string => `st:${k}:${nat}${where}`;
 
 /** A staff's main effort: the province it is aimed at now, the one it was named for, the months it runs, and whom it is against. */
-export interface Effort { nat: string; target: number; first: number; from: number; to: number; enemy: string; name: string; won: number }
+export interface Effort { nat: string; target: number; first: number; from: number; to: number; enemy: string; name: string; won: number; /** The odds it strikes at, where patience has shortened them. */ odds?: number }
 
 /** The main effort a nation's staff has under way, on its main fronts or in a theatre overseas ('where'), or null. */
 export function effortOf(g: Game, nat: string, where = ''): Effort | null {
@@ -558,6 +558,7 @@ export function effortOf(g: Game, nat: string, where = ''): Effort | null {
   const enemy = Object.keys(g.nations)[flag(g, effKey('effE', nat, where)) - 1] ?? g.regions[t - 1].ctrl;
   return {
     nat, target: t - 1, first: first - 1, from, to: flag(g, effKey('effTo', nat, where)), enemy, won: flag(g, effKey('effWon', nat, where)),
+    ...(flag(g, effKey('effOdds', nat, where)) ? { odds: flag(g, effKey('effOdds', nat, where)) / 100 } : {}),
     name: `the ${SEASONS[turnToDate(from).month]} offensive towards ${g.regions[first - 1].name}`,
   };
 }
@@ -673,7 +674,7 @@ function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: strin
   const E = RIVALS.effort, who = characterOf(g, nat), C = RIVALS.characters[who];
   const key = (k: string): string => effKey(k, nat, where);
   const stop = (rest: number): void => {
-    for (const k of ['eff', 'eff0', 'effAt', 'effTo', 'effE', 'effWon']) delete g.flags[key(k)];
+    for (const k of ['eff', 'eff0', 'effAt', 'effTo', 'effE', 'effWon', 'effOdds']) delete g.flags[key(k)];
     if (rest) g.flags[key('effRest')] = g.turn + rest;
   };
   const cur = effortOf(g, nat, where);
@@ -700,10 +701,16 @@ function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: strin
     // An offensive just called off: the army rests before anything new is asked of it.
     if (!f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}${where}`))) continue;
     // The strength is weighed against the enemy on the line and close behind it, and the quiet is the quiet of the field.
-    if (f.near < C.strength) continue;
     const quiet = Math.min(...f.enemies.map((e) => quietInField(g, nat, e)));
-    if (quiet < C.quiet && !(who === 'opportunist' && f.enemies.some((e) => busyElsewhere(g, e, nat)))) continue;
-    const s = sector(g, nat, f, C.local);
+    const waited = quiet >= C.quiet;
+    if (!waited && !(who === 'opportunist' && f.enemies.some((e) => busyElsewhere(g, e, nat)))) continue;
+    // Patience runs out: for every month the front has lain quiet beyond the staff's own wait it asks a step less
+    // of its strength and of the odds at the place it would strike, down to a floor. No front sleeps for ever.
+    const P = E.patience, over = P && waited ? quiet - C.quiet : 0;
+    const strength = P ? Math.max(Math.min(P.strength, C.strength), C.strength - P.step * over) : C.strength;
+    const local = P ? Math.max(Math.min(P.odds, C.local), C.local - P.step * over) : C.local;
+    if (f.near < strength) continue;
+    const s = sector(g, nat, f, local);
     if (!s) continue;
     g.flags[key('eff')] = g.flags[key('eff0')] = s.target.id + 1;
     g.flags[key('effAt')] = g.turn;
@@ -711,6 +718,8 @@ function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: strin
     g.flags[key('effTo')] = g.turn + E.months;
     g.flags[key('effE')] = Object.keys(g.nations).indexOf(fieldCtrl(g, s.target)) + 1;
     delete g.flags[key('effWon')];
+    // An effort named on shortened odds strikes at them: a staff out of patience does not mass and then sit.
+    if (local < C.local) g.flags[key('effOdds')] = Math.round(local * 100); else delete g.flags[key('effOdds')];
     const named = effortOf(g, nat, where);
     if (named) effortNamed(g, named);
     return;
@@ -740,7 +749,7 @@ function effortOrders(g: Game, nat: string, e: Effort, real: Front[], T: Temper)
     enemies: f.enemies, objectives: [at.name, ...around.map((j) => g.regions[j].name)],
     targets: [at.name, ...around.map((j) => g.regions[j].name)],
     // No attack goes in the month the effort is named: the word of it runs ahead of the blow.
-    minOdds: g.turn === e.from ? HOLD_ODDS : T.minOdds, ...(g.turn === e.from ? { massing: true } : {}), staging, release: doors.filter((j) => j !== g.nations[nat].capital).map((j) => g.regions[j].name),
+    minOdds: g.turn === e.from ? HOLD_ODDS : e.odds ? Math.min(T.minOdds, e.odds) : T.minOdds, ...(g.turn === e.from ? { massing: true } : {}), staging, release: doors.filter((j) => j !== g.nations[nat].capital).map((j) => g.regions[j].name),
   };
 }
 

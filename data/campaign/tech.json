@@ -5,7 +5,7 @@
     "start": "What each nation has researched when the war begins. A campaign begun in a later year gives every nation the months of research in between, chosen as its own staff would.",
     "slots": "Research teams each nation begins with.",
     "units": "Formations the tree unlocks beyond the ordinary kinds: 'para' is an airborne corps, raised like infantry, 'most' at once in the field and on order.",
-    "ai": "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open), less 'fuel' for one that makes oil while the nation's stock of it is running down (the months in resources.json). 'order' is each nation's preference among the branches."
+    "ai": "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open), less 'fuel' for one that makes oil while the nation's stock of it is running down (the months in resources.json), less 'winter' for winter equipment when the advisers are the player's own and a winter in the east is in sight (Version 67: he is at war with the Soviet Union or his ground touches Soviet ground and he is no ally; a computer-run nation keeps history's order). 'order' is each nation's preference among the branches."
   },
   "months": [0, 5, 8, 11, 14],
   "early": 0.5,
@@ -93,7 +93,7 @@
     "para": { "label": "Airborne corps", "word": "Airborne", "divs": 2, "cost": 44, "months": 6, "most": 2, "blurb": "Parachute and glider troops. Once a month they can be dropped on an enemy coast across one sea with no ships at all, as long as the enemy's fighters do not hold the sky there. They land without heavy weapons, so pick a weakly held target." }
   },
   "ai": {
-    "tier": 10, "branch": 6, "early": 30, "teams": 14, "later": 100, "fuel": 40,
+    "tier": 10, "branch": 6, "early": 30, "teams": 14, "later": 100, "fuel": 40, "winter": 300,
     "skip": { "_all": ["airborne", "carriers"] },
     "order": {
       "_default": ["land", "industry", "doctrine", "air", "naval"],
