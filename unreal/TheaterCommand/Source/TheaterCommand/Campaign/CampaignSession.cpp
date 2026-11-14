@@ -635,6 +635,30 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	}
 	// The airfields (the grand campaign). There the aircraft belong to their airfield, so the table shows one
 	// piece for each airfield with aircraft on it instead of one for each group.
+	// (Version 64) Where two worn corps could be folded into one, and fieldworks standing empty.
+	const TArray<TSharedPtr<FJsonValue>>* Folds = nullptr;
+	if (Object->TryGetArrayField(TEXT("folds"), Folds))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Folds)
+		{
+			const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+			int32 Region = INDEX_NONE;
+			TArray<FString> Names;
+			if (Entry.IsValid() && Entry->TryGetNumberField(TEXT("region"), Region))
+			{
+				Entry->TryGetStringArrayField(TEXT("names"), Names);
+				Out.Folds.Add(Region, FString::Join(Names, TEXT(" and ")));
+			}
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* WorksLeft = nullptr;
+	if (Object->TryGetArrayField(TEXT("worksLeft"), WorksLeft))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *WorksLeft)
+		{
+			Out.WorksLeft.Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Joins = nullptr;
 	if (Object->TryGetArrayField(TEXT("joins"), Joins))
 	{
@@ -1026,6 +1050,30 @@ FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, in
 		Object->TryGetStringField(TEXT("opened"), Out.Opened);
 		ReadIds(Object, TEXT("ids"), Out.Ids);
 		ReadIds(Object, TEXT("pickedIds"), Out.PickedIds);
+		// (Version 64) soften the line first
+		const TSharedPtr<FJsonObject>* Soften = nullptr;
+		if (Object->TryGetObjectField(TEXT("soften"), Soften))
+		{
+			Out.bSoften = true;
+			(*Soften)->TryGetStringField(TEXT("head"), Out.SoftenHead);
+			(*Soften)->TryGetStringField(TEXT("done"), Out.SoftenDone);
+			const TSharedPtr<FJsonObject>* Probe = nullptr;
+			if ((*Soften)->TryGetObjectField(TEXT("probe"), Probe))
+			{
+				(*Probe)->TryGetStringField(TEXT("label"), Out.ProbeLabel);
+				(*Probe)->TryGetStringField(TEXT("text"), Out.ProbeText);
+				(*Probe)->TryGetBoolField(TEXT("ok"), Out.bProbeOk);
+				(*Probe)->TryGetNumberField(TEXT("corps"), Out.ProbeCorps);
+			}
+			const TSharedPtr<FJsonObject>* Bomb = nullptr;
+			if ((*Soften)->TryGetObjectField(TEXT("bomb"), Bomb))
+			{
+				Out.bBomb = true;
+				(*Bomb)->TryGetStringField(TEXT("text"), Out.BombText);
+				(*Bomb)->TryGetStringField(TEXT("open"), Out.BombOpen);
+				(*Bomb)->TryGetBoolField(TEXT("ok"), Out.bBombOk);
+			}
+		}
 	}
 	Out.Lines = ReadTicket(Object);
 	Out.Attackers = ReadUnits(Object, TEXT("attackers"));
@@ -1551,6 +1599,12 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 			(*Siege)->TryGetStringField(TEXT("by"), Info.SiegeBy);
 			(*Siege)->TryGetStringArrayField(TEXT("lines"), Info.SiegeLines);
 		}
+		const TSharedPtr<FJsonObject>* LeftWorks = nullptr;
+		if (Object->TryGetObjectField(TEXT("leftWorks"), LeftWorks))
+		{
+			(*LeftWorks)->TryGetStringField(TEXT("title"), Info.LeftWorksTitle);
+			(*LeftWorks)->TryGetStringField(TEXT("text"), Info.LeftWorksText);
+		}
 		const TSharedPtr<FJsonObject>* Pocket = nullptr;
 		if (Object->TryGetObjectField(TEXT("pocket"), Pocket))
 		{
@@ -1949,6 +2003,7 @@ FArsenal FCampaignSession::Arsenal(int32 RegionId)
 			FArsenalOffer& Offer = Out.Offers.AddDefaulted_GetRef();
 			Entry->TryGetStringField(TEXT("key"), Offer.Key);
 			Entry->TryGetStringField(TEXT("group"), Offer.Group);
+			Entry->TryGetStringField(TEXT("kind"), Offer.Kind);
 			Entry->TryGetStringField(TEXT("label"), Offer.Label);
 			Entry->TryGetStringField(TEXT("blurb"), Offer.Blurb);
 			Entry->TryGetStringField(TEXT("size"), Offer.Size);

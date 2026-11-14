@@ -68,6 +68,7 @@ import { PRIZES, type PrizeKind, type ScorchPolicy } from '../../../src/campaign
 import { COMMAND, SKILLS, corpsOf, fit, generalOf, rankOf, vacant, waiting, whyNotAssign, whyNotPromote, xpToNext } from '../../../src/campaign/commanders';
 import { STORIES, awardTitle, citation, designation, diaryText, fameOf, grade, honourDef, honoursOf, isGuards, stat, takeOver } from '../../../src/campaign/stories';
 import { KIND } from '../../../src/campaign/types';
+import { MANPOWER } from '../../../src/campaign/manpower';
 import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals, openGoals } from '../../../src/campaign/goals';
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
@@ -84,7 +85,7 @@ import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoi
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
-import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
+import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -155,6 +156,19 @@ function view() {
       const can = joinOffers(s, reg).filter((o) => !o.why);
       return { region: reg, n: can.length, nats: [...new Set(can.map((o) => s.nations[o.nat]?.adj ?? o.nat))] };
     }).filter((x) => x.n > 0) : [],
+    // (Version 64) Where two of the player's corps standing together are worn thin and could be folded into one: the province, and their names.
+    folds: s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== 'fort').map((c) => c.reg))].map((reg) => {
+      let vs: ReturnType<typeof foldChoicesAt> = [];
+      try { vs = foldChoicesAt(s, reg).filter((v) => !v.why); } catch { vs = []; }
+      return { region: reg, names: [...new Set(vs.map((v) => v.keepName))] };
+    }).filter((x) => x.names.length > 0) : [],
+    // (Version 64) Fieldworks standing empty on ground of the player's side: the province, tenths of a month of work, and room for how many corps.
+    worksLeft: (() => {
+      const out: number[] = [];
+      if (s.flags.open !== 1) return out;
+      try { for (const r of s.regions) { const v = fieldworksLeft(s, r.id); if (v) out.push(r.id, Math.round(v.months * 10), v.corps); } } catch { /* none */ }
+      return out;
+    })(),
     // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
     unseen: s.human ? s.regions.filter((r) => seen[r.id] === 0).map((r) => r.id) : [],
     // The weather the rules keep: mud in the east in spring and autumn, and the eastern winter. With it, the ground it lies on.
@@ -856,6 +870,35 @@ function massNote(s: Game, corps: Corps[], to: number, odds: number | null): { n
   };
 }
 
+/** (Version 64) The last probe of a line this month: who went, what was found, what it cost. Said on the attack card afterwards. */
+let lastProbe: { turn: number; region: number; name: string; found: string[]; wear: number; lost: number } | null = null;
+
+/**
+ * (Version 64) The row on the attack card that offers to soften the line first: a probe by one corps, or the
+ * bombers on its fieldworks. Null where there is nothing to soften and nothing more to find.
+ */
+function softenRow(s: Game, corps: Corps[], to: number) {
+  let v: ReturnType<typeof softenOptions> = null;
+  try { v = softenOptions(s, corps, s.regions[to]); } catch { v = null; }
+  const done = lastProbe && lastProbe.turn === s.turn && lastProbe.region === to ? lastProbe : null;
+  if (!v || (v.works <= 0 && v.probe.fresh <= 0 && !done)) return null;
+  const mo = (m: number): string => { const x = Math.round(m * 10) / 10; return x === 1 ? 'a month' : `${x} months`; };
+  const num = (n: number): string => Math.round(n).toLocaleString('en');
+  const gains = [v.probe.fresh ? `name the ${v.probe.fresh === 1 ? 'corps' : `${v.probe.fresh} corps`} the staff cannot see` : '', v.probe.wear > 0 ? `take ${mo(v.probe.wear)} off their fieldworks` : ''].filter(Boolean).join(' and ');
+  const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.` : 'There is nothing more a probe could find here.');
+  return {
+    head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ', finished' : ''}.` : 'The defenders are not dug in.',
+    done: done ? `${done.name} has probed this line: it found ${listOf(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.` : '',
+    probe: { label: `PROBE${v.probe.name ? ` WITH ${v.probe.name.toUpperCase()}` : ' THE LINE'}`, text: probeText, ok: !v.probe.why && !!gains, corps: v.probe.corps },
+    bomb: v.bomb ? {
+      label: 'BOMB THE LINE', ok: !v.bomb.why,
+      // (the raid planner, on this line, with the groups the staff would send)
+      open: v.bomb.why ? '' : `plan:line:${to}:${(() => { try { return weighRaid(s, 'line', to).picked.join('.'); } catch { return ''; } })()}`,
+      text: v.bomb.why ?? `${v.bomb.groups === 1 ? 'One air group' : `${v.bomb.groups} air groups`} with ${num(v.bomb.bombers)} bombers can reach it, and should take about ${mo(v.bomb.wear)} off the fieldworks. ${v.bomb.verdict}. The planner shows what will meet them.`,
+    } : null,
+  };
+}
+
 function preview(ids: number[], to: number, open = false) {
   const s = game();
   // (Version 63) The card opens on the best attack to be had: everyone the roads will carry, where that beats the
@@ -893,6 +936,8 @@ function preview(ids: number[], to: number, open = false) {
     chancePct: oddsPct(look?.chance ?? 0), chancePctLo: oddsPct(look?.chanceLo ?? look?.chance ?? 0), chancePctHi: oddsPct(look?.chanceHi ?? look?.chance ?? 0), hasChance: !!look, mass: mass?.note ?? '', massIds: mass?.ids ?? [],
     // (Version 63) the chance in words, the likely cost in men either way, and the corps the card opened with
     chanceWords: look ? chanceWords(look) : '', cost: costLines(look), ids, opened, pickedIds,
+    // (Version 64) soften the line first: a probe by one corps, or the bombers on its fieldworks
+    soften: softenRow(s, corps, to),
   };
   const evenLine = even > 1.21 && !saidAlready ? [{ label: 'An even chance', value: `${even.toFixed(1)} to 1`, effect: 'Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance.' }] : [];
   const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
@@ -1303,6 +1348,18 @@ function province(id: number) {
         return {
           title: v.spent ? 'CUT OFF, AND THE STORES ARE SPENT' : `CUT OFF SINCE ${turnToDate(v.since).label.toUpperCase()}  \u00B7  STORES FOR ${v.left} MONTH${v.left === 1 ? '' : 'S'}`,
           text: `${v.text}${tail}`, spent: v.spent, mine,
+        };
+      } catch { return null; }
+    })(),
+    // (Version 64) Fieldworks standing empty here, which a corps of the player's side takes over by marching in.
+    leftWorks: (() => {
+      try {
+        const v = fieldworksLeft(s, r.id);
+        if (!v) return null;
+        const m = Math.round(v.months * 10) / 10;
+        return {
+          title: `FIELDWORKS STAND EMPTY HERE  \u00B7  ROOM FOR ${v.corps === 1 ? 'ONE CORPS' : `${v.corps} CORPS`}  \u00B7  ${m === 1 ? 'A MONTH' : `${m} MONTHS`} OF WORK`,
+          text: 'A corps of yours that marches or rides in takes them over at once and fights from them, as if it had dug them itself. Empty, they lose a month of work every month.',
         };
       } catch { return null; }
     })(),
@@ -1735,7 +1792,7 @@ function arsenal(region = -1) {
     money: inHand(s.nations[me].pp),
     region: s.regions[region]?.name ?? '',
     offers: arsenalOffers(s, region).map((o) => ({
-      key: o.key, group: o.group, label: o.label, blurb: o.blurb, size: o.size, months: o.months,
+      key: o.key, group: o.group, label: o.label, blurb: o.blurb, size: o.size, months: o.months, kind: (o as { kind?: string }).kind ?? '',
       cost: shown(o.cost), upkeep: shown(o.upkeep), at: o.at, where: s.regions[o.at]?.name ?? '',
       // (Version 59: what it takes from the reserve of men, said with its note)
       note: [o.note, (o as { men?: number }).men ? `Takes ${Math.round((o as { men?: number }).men!).toLocaleString('en-US')} men from the reserve.` : ''].filter(Boolean).join(' '),
@@ -2788,6 +2845,46 @@ function menPage(s: Game): Page | null {
   };
 }
 
+/**
+ * (Version 64) The card that folds two worn corps into one: every pair that can be folded, either way round, and
+ * what each makes of them. Nothing is done until one of its buttons is pressed.
+ */
+function foldPage(s: Game, reg: number): Page | null {
+  const r = s.regions[reg];
+  if (!r || !s.human) return null;
+  let vs: ReturnType<typeof foldChoicesAt> = [];
+  try { vs = foldChoicesAt(s, reg); } catch { vs = []; }
+  const pct = (x: number): string => `${Math.round(x * 100)}%`;
+  const num = (n: number): string => Math.round(n).toLocaleString('en');
+  const corpsOfId = (id: number): Corps | undefined => s.corps.find((c) => c.id === id);
+  const pairs = new Map<string, typeof vs>();
+  for (const v of vs) { const k = [v.keep, v.gone].sort((a, b) => a - b).join(':'); (pairs.get(k) ?? pairs.set(k, []).get(k)!).push(v); }
+  const sections = [...pairs.values()].map((p) => {
+    const a = corpsOfId(p[0].keep), b = corpsOfId(p[0].gone);
+    return {
+      heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : 'TWO CORPS', text: a && b ? `${a.name}: ${num(men(a))} men, ${pct(a.str)} of its strength. ${b.name}: ${num(men(b))} men, ${pct(b.str)}.` : '',
+      rows: p.map((v): PageRow => ({
+        nat: s.human!, title: `Keep ${v.keepName}`,
+        lines: [
+          `${num(v.men)} men in one corps at ${pct(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
+          v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ''}.` : 'No general commands it.',
+          v.back > 0 ? `${num(v.back)} men over go back to the reserve.` : '',
+          v.works !== undefined ? `It takes over the fieldworks ${v.goneName} stands in.` : '',
+          `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${shown(v.cadreCost).toLocaleString('en')} from the treasury and ${num(v.cadreMen)} men from the reserve, in ${v.cadreMonths} month${v.cadreMonths === 1 ? '' : 's'}.`,
+          v.why ?? '',
+        ].filter(Boolean),
+        buttons: [{ label: `FOLD INTO ${v.keepName.toUpperCase()}`, act: `fold:${v.keep}:${v.gone}`, ok: !v.why, danger: true, tip: v.why ?? `${v.keepName} takes in the men of ${v.goneName}. It cannot be undone.` }],
+      })),
+    };
+  });
+  return {
+    id: `fold:${reg}`, title: 'FOLD TWO WORN CORPS INTO ONE', headline: `The army at ${r.name}  \u00B7  ${turnToDate(s.turn).label}`,
+    note: `Two corps of the same kind, both under ${Math.round(MANPOWER.fold.worn * 100)}% of their strength, can be made into one that can fight. The corps that is kept loses a little of its order while the men shake down together, and has the fewer moves of the two left this month. The other leaves the map with its name, its record and its honours, and waits in the arsenal to be raised again at ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps.`,
+    top: [],
+    sections: sections.length ? sections : [{ heading: 'NOTHING TO FOLD', text: 'No two corps here can be folded together this month.', rows: [] }],
+  };
+}
+
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
@@ -2796,7 +2893,7 @@ function page(id: string, region = -1) {
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
-    : part[0] === 'rebase' ? rebasePage(s, Number(part[1])) : null;
+    : part[0] === 'rebase' ? rebasePage(s, Number(part[1])) : part[0] === 'fold' ? foldPage(s, Number(part[1])) : null;
   return p ? { ok: true, ...p } : { ok: false };
 }
 
@@ -2838,6 +2935,26 @@ function act(action: string, region = -1) {
       }
     }
     return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'probe') {
+    // (Version 64) One corps feels out the line: the attack card is read again with what it found.
+    const who = s.corps.find((c) => c.id === Number(part[1])), target = s.regions[Number(part[2])];
+    const rep = who && target ? orderProbe(s, who, target) : null;
+    ok = !!rep;
+    if (rep) {
+      lastProbe = { turn: s.turn, region: target.id, name: rep.name, found: rep.found, wear: rep.wear, lost: rep.lost };
+      note = `${rep.name} has probed the line at ${target.name}: it found ${listOf(rep.found)}${rep.wear > 0 ? ', and wore their fieldworks down' : ''}. It cost ${rep.lost.toLocaleString('en')} men.`;
+    } else note = 'The line cannot be probed now.';
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'fold') {
+    // (Version 64) Two worn corps made into one: the corps that is emptied goes home as a cadre.
+    const keep = Number(part[1]), gone = Number(part[2]);
+    const a = s.corps.find((c) => c.id === keep), b = s.corps.find((c) => c.id === gone);
+    const names = a && b ? [a.name, b.name] : null;
+    ok = !!names && orderFold(s, keep, gone);
+    note = ok && names ? `${names[1]} is folded into ${names[0]}. Its cadre waits in the arsenal.` : 'They cannot be folded together now.';
+    return { ok, note, fly, flies, open: ok ? 'close' : open, view: view() };
   }
   if (part[0] === 'civic') {
     // A building ordered in one of the player's towns.

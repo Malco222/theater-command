@@ -1931,6 +1931,76 @@ void ACampaignMapActor::ShowSieges(const TArray<int32>& Sieges)
 	}
 }
 
+void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
+{
+	TArray<int32> Left = FromRules;
+	{
+		// (for pictures: -TheaterWorksLeft=Province,Province stands empty fieldworks in those provinces as well)
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterWorksLeft="), Asked, false))
+		{
+			TArray<FString> Names;
+			Asked.ParseIntoArray(Names, TEXT(","));
+			for (int32 K = 0; K < Names.Num(); ++K)
+			{
+				if (const int32* Found = Data.RegionByName.Find(Names[K].Replace(TEXT("_"), TEXT(" "))))
+				{
+					Left.Append({ *Found, K % 2 == 0 ? 20 : 10, 1 });
+				}
+			}
+		}
+	}
+	if (!Data.IsLoaded() || Left == ShownWorksLeft)
+	{
+		return;
+	}
+	ShownWorksLeft = Left;
+	if (!WorksLeftMesh)
+	{
+		WorksLeftMesh = NewObject<UProceduralMeshComponent>(this);
+		WorksLeftMesh->SetupAttachment(Root);
+		WorksLeftMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WorksLeftMesh->RegisterComponent();
+		WorksLeftMesh->SetCastShadow(false);
+	}
+	WorksLeftMesh->ClearAllMeshSections();
+	// A bank of sandbags where an army would stand, broken in four so that it is read as standing empty, and smaller
+	// than a piece's base so that it does not crowd the province. Two courses once there is two months' work in it.
+	FMiniatureMesh Model;
+	const double U = UnitScale * 1.4;
+	const FLinearColor Bag(FColor::FromHex(TEXT("9A8E68"))), BagDark(FColor::FromHex(TEXT("82775A"))), Spoil(FColor::FromHex(TEXT("54452F")));
+	for (int32 K = 0; K + 2 < Left.Num(); K += 3)
+	{
+		if (!Data.Regions.IsValidIndex(Left[K]))
+		{
+			continue;
+		}
+		const FVector Middle = ArmySpot(Left[K], 0, 1);
+		const int32 Courses = Left[K + 1] >= 20 ? 2 : 1;
+		const double Rim = 2.5 * U;
+		for (int32 Arc = 0; Arc < 4; ++Arc)
+		{
+			for (int32 Course = 0; Course < Courses; ++Course)
+			{
+				const int32 Bags = 3 - Course;
+				for (int32 B = 0; B < Bags; ++B)
+				{
+					const double Angle = FMath::DegreesToRadians(Arc * 90.0 + 21.0 + (B + 0.5 * Course) * 24.0);
+					const FVector At = Middle + FVector(FMath::Cos(Angle) * Rim, FMath::Sin(Angle) * Rim, (0.2 + 0.36 * Course) * U);
+					Model.Box(At, FVector(0.5, 1.05, 0.38) * U, (B + Course + Arc) % 2 == 0 ? Bag : BagDark, FMath::RadiansToDegrees(Angle));
+				}
+			}
+		}
+		// (the trodden earth inside it, so the bank has something to stand round)
+		Model.Pillar(Middle + FVector(0.0, 0.0, 0.02 * U), Rim - 0.75 * U, Rim - 0.95 * U, 0.04 * U, Spoil, 20);
+	}
+	if (Model.Vertices.Num() > 0)
+	{
+		WorksLeftMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
+		WorksLeftMesh->SetMaterial(0, SceneryMaterial);
+	}
+}
+
 void ACampaignMapActor::ShowPrizes(const TArray<FPrizeMark>& Marks)
 {
 	FString Signature;

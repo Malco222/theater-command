@@ -178,6 +178,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->ShowCivic(Session->GetView().Civic);
 		Table->ShowScars(Session->GetView().Scars);
 		Table->ShowSieges(Session->GetView().Sieges);
+		Table->ShowWorksLeft(Session->GetView().WorksLeft);
 		Table->SetWarAtNight(Session->GetView().Blackout, Session->GetView().Fronts);
 		Table->ShowPrizes(Session->GetView().Prizes);
 	}

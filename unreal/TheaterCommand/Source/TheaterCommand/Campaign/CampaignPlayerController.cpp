@@ -1018,6 +1018,16 @@ void ACampaignPlayerController::PressPage(const FString& Action)
 		ClosePage();
 		return;
 	}
+	if (bOk && Next == TEXT("close"))
+	{
+		// (Version 64) Two corps folded into one: the card is put away, and the army is in hand again as it now is.
+		ClosePage();
+		if (ArmyRegion != INDEX_NONE)
+		{
+			PickUpArmyIn(ArmyRegion);
+		}
+		return;
+	}
 	if (bOk && !Next.IsEmpty() && Next != Page.Id)
 	{
 		// The rules say which room comes next: back to the group once it has its orders.
@@ -4693,6 +4703,13 @@ void ACampaignPlayerController::RefreshOrders()
 	{
 		Tray.JoinButton = FText::FromString(FString::Printf(TEXT("ASK %s CORPS TO JOIN"), *Could->ToUpper()));
 	}
+	// (Version 64) Two corps of the army worn thin, which could be folded into one.
+	Tray.FoldButton = FText::GetEmpty();
+	if (const FString* Worn = View.Folds.Find(ArmyRegion))
+	{
+		Tray.FoldButton = FText::FromString(TEXT("FOLD WORN CORPS"));
+		Tray.FoldTip = FText::FromString(FString::Printf(TEXT("%s are worn thin. The men of both can fill one corps, under the better of the two generals; the corps that is emptied goes home as a cadre, to be raised again from the arsenal at half the price of a new corps. Nothing is done until you have seen what it makes of them."), **Worn));
+	}
 	// The model of one of its corps stands beside the cards: the one last pointed at, or the first.
 	{
 		const bool bStill = Tray.Cards.ContainsByPredicate([this](const FTrayCard& Card) { return Card.CorpsId == ShowCorps; });
@@ -5055,6 +5072,7 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowCivic(View.Civic);
 		Map->ShowScars(View.Scars);
 		Map->ShowSieges(View.Sieges);
+		Map->ShowWorksLeft(View.WorksLeft);
 		Map->SetWarAtNight(View.Blackout, View.Fronts);
 		Map->ShowPrizes(View.Prizes);
 		Map->ShowBuildings(View.RegionWorks);
@@ -5209,6 +5227,17 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening)
 	FaceOff.Opened = FText::FromString(!Preview.Opened.IsEmpty() ? Preview.Opened
 		: FaceOff.bWidened ? FString(TEXT("Every corps the roads will carry is going in.")) : FString());
 	FaceOff.Cost = FText::FromString(FString::Join(Preview.Cost, TEXT("\n")));
+	FaceOff.bSoften = Preview.bSoften;
+	FaceOff.SoftenHead = FText::FromString(Preview.SoftenHead);
+	FaceOff.SoftenDone = FText::FromString(Preview.SoftenDone);
+	FaceOff.ProbeLabel = FText::FromString(Preview.ProbeLabel);
+	FaceOff.ProbeText = FText::FromString(Preview.ProbeText);
+	FaceOff.bProbeOk = Preview.bProbeOk;
+	FaceOff.ProbeCorps = Preview.ProbeCorps;
+	FaceOff.bBomb = Preview.bBomb;
+	FaceOff.bBombOk = Preview.bBombOk;
+	FaceOff.BombText = FText::FromString(Preview.BombText);
+	FaceOff.BombOpen = Preview.BombOpen;
 	FaceOff.Title = FText::FromString(FString::Printf(TEXT("The attack on %s"), *Place));
 	{
 		// An army with allied corps marching in it is named for all of them: "Germany and Slovakia".
@@ -5293,6 +5322,62 @@ void ACampaignPlayerController::SendEveryone()
 	const int32 RegionId = FaceOff.Region;
 	PickedCorps = FaceOff.MassIds;
 	OpenFaceOff(RegionId);
+}
+
+void ACampaignPlayerController::ProbeLine()
+{
+	FCampaignSession* Session = GetSession();
+	if (!Session || !FaceOff.bVisible || FaceOff.bResolved || !FaceOff.bProbeOk || FaceOff.ProbeCorps == INDEX_NONE)
+	{
+		return;
+	}
+	const int32 RegionId = FaceOff.Region;
+	FString Note;
+	const bool bProbed = Session->Act(FString::Printf(TEXT("probe:%d:%d"), FaceOff.ProbeCorps, RegionId), RegionId, Note);
+	CampaignSounds::Play(this, bProbed ? TEXT("field_gun") : TEXT("click"), 0.5f);
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 9.0);
+	}
+	if (!bProbed)
+	{
+		return;
+	}
+	// It cost men and moves, and the corps it found are named now: the table and the card are read again.
+	ShowWar(Session->GetView(), TArray<FCorpsMove>());
+	RefreshOrders();
+	FaceOff.bVisible = false;
+	OpenFaceOff(RegionId);
+	if (!FaceOff.bVisible)
+	{
+		// (nobody in hand can attack any longer: the corps that were in hand before the staff widened the attack are in hand again)
+		if (PickedBeforeMass.Num() > 0)
+		{
+			PickedCorps = PickedBeforeMass;
+		}
+		PickedBeforeMass.Reset();
+	}
+}
+
+void ACampaignPlayerController::BombLine()
+{
+	if (!FaceOff.bVisible || FaceOff.bResolved || !FaceOff.bBombOk || FaceOff.BombOpen.IsEmpty())
+	{
+		return;
+	}
+	const FString Door = FaceOff.BombOpen;
+	const int32 RegionId = FaceOff.Region;
+	CloseFaceOff(); // the attack is put by: it is ordered again when the bombers are back
+	SelectRegion(RegionId);
+	OpenPage(Door);
+}
+
+void ACampaignPlayerController::OpenFold()
+{
+	if (ArmyRegion != INDEX_NONE)
+	{
+		OpenPage(FString::Printf(TEXT("fold:%d"), ArmyRegion));
+	}
 }
 
 void ACampaignPlayerController::SendOnlyPicked()
@@ -5952,6 +6037,8 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			RegionPanel.Prize = FText::FromString(Province.PrizeLine);
 			RegionPanel.PrizeTip = FText::FromString(FString::Join(Province.PrizeItems, TEXT("\n")));
 			RegionPanel.bPrizeToTake = Province.PrizeKind == TEXT("taken") || Province.PrizeKind == TEXT("restored");
+			RegionPanel.LeftWorksTitle = FText::FromString(Province.LeftWorksTitle);
+			RegionPanel.LeftWorksText = FText::FromString(Province.LeftWorksText);
 			RegionPanel.PocketTitle = FText::FromString(Province.PocketTitle);
 			RegionPanel.PocketText = FText::FromString(Province.PocketText);
 			RegionPanel.bPocketSpent = Province.bPocketSpent;

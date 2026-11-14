@@ -334,6 +334,8 @@ struct FCampaignView
 	TArray<FString> RegionHolder; // by region id: the nation that holds it now
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)
 	TMap<int32, FString> Joins; // provinces where allied corps could be asked to join the player's army: how many, and whose ("2 Slovak")
+	TMap<int32, FString> Folds; // (Version 64) provinces where two of the player's corps are worn thin and could be folded into one: their names
+	TArray<int32> WorksLeft; // (Version 64) fieldworks standing empty on the player's side's ground: three numbers each, the region, tenths of a month of work, room for how many corps
 	TArray<int32> Unseen; // provinces the player has no eyes on, under the fog of war
 	TArray<int32> FreeCapitals; // capitals of fallen countries the player would set free by taking them
 	TArray<FViewAirfield> Airfields; // every airfield the player knows of (the grand campaign; empty in a scenario)
@@ -457,6 +459,16 @@ struct FAttackPreview
 	TArray<int32> Ids;
 	FString Opened;
 	TArray<int32> PickedIds;
+	// (Version 64) Soften the line first: what the defenders' fieldworks are, what a probe just found, the probe by
+	// one corps (its button, what it would do, whether it can be ordered, and who goes), and the bombers on the line
+	// (the same, and the page of the raid planner that opens on it).
+	bool bSoften = false;
+	FString SoftenHead, SoftenDone;
+	FString ProbeLabel, ProbeText;
+	bool bProbeOk = false;
+	int32 ProbeCorps = INDEX_NONE;
+	bool bBomb = false, bBombOk = false;
+	FString BombText, BombOpen;
 	TArray<FTicketLine> Lines;
 	TArray<FBattleUnit> Attackers;
 	TArray<FBattleUnit> Defenders;
@@ -633,6 +645,7 @@ struct FArsenalOffer
 {
 	FString Key; // "corps:arm", "air:ftr", "ship:dd", "work:aa": what to pass back to order it
 	FString Group; // army, air, navy or works
+	FString Kind; // (Version 64) for a cadre: the kind of corps it is, for its picture
 	FString Label;
 	FString Blurb;
 	FString Size; // "2 divisions", "100 fighters", "level 2"
@@ -1013,6 +1026,8 @@ struct FProvinceInfo
 	// The town as a fortress, and how its siege stands (the grand campaign): who stands round it, and plain lines.
 	FString SiegeBy;
 	TArray<FString> SiegeLines;
+	// (Version 64) Fieldworks standing empty here: a heading, and who can use them.
+	FString LeftWorksTitle, LeftWorksText;
 	// (Version 63) A province cut off from the rest of its country: a heading, what its troops live on and for how long.
 	FString PocketTitle, PocketText;
 	bool bPocketSpent = false;

@@ -34,6 +34,7 @@ struct FRegionPanelInfo
 	int32 PlotsFree = 0, PlotsCanBuild = 0;
 	FText ProvinceNote;
 	FText SiegeTitle, SiegeText; // the town as a fortress, and how its siege stands
+	FText LeftWorksTitle, LeftWorksText; // fieldworks standing empty here, and who can use them
 	FText PocketTitle, PocketText; // a province cut off from the rest of its country: what its troops live on, and for how long
 	bool bPocketSpent = false;
 	FText PlacesTitle, PlacesText; // the places of the province that are prizes of their own, and scorched earth
@@ -127,6 +128,7 @@ struct FArmyTray
 	bool bBySea = false; // or by sea: to a friendly port, or ashore on an enemy coast
 	bool bLean = false; // the picked corps take no drafts
 	FText JoinButton; // "ASK 1 SLOVAK CORPS TO JOIN": allied corps beside the army that could march with it. Empty when there are none
+	FText FoldButton, FoldTip; // (Version 64) two corps of the army are worn thin and could be folded into one. Empty when there are none
 	FText PendingButton; // "MARCH TO LODZ": the place clicked once, waiting for the word. Empty when there is none
 	FText Hint; // what to do next, in a line
 	int32 Revision = 0; // goes up whenever the cards change, so the screen knows to redraw them
@@ -289,6 +291,12 @@ struct FFaceOff
 	FText Opened; // (Version 63) the staff has brought in more than were picked: said in a sentence
 	bool bWidened = false; // more corps go in than the player picked: one button goes back to his pick
 	FText Cost; // what the fight is likely to cost each side in men, if it carries and if it is thrown back
+	// (Version 64) Soften the line first: a probe by one corps, or the bombers on the fieldworks.
+	bool bSoften = false;
+	FText SoftenHead, SoftenDone, ProbeLabel, ProbeText, BombText;
+	bool bProbeOk = false, bBomb = false, bBombOk = false;
+	int32 ProbeCorps = INDEX_NONE;
+	FString BombOpen;
 	FText Ticket;
 	FText TicketKey; // the lines of the ticket that matter most: a long ticket opens folded to these
 	int32 TicketLines = 0, TicketHidden = 0;
@@ -650,6 +658,12 @@ public:
 	void SendEveryone();
 	/** (Version 63) Back to the corps that were in hand when the attack was ordered, where the staff brought in more. */
 	void SendOnlyPicked();
+	/** (Version 64) One corps feels out the line before the attack: the card is read again with what it found. */
+	void ProbeLine();
+	/** (Version 64) The raid planner, on this line: the attack is ordered again when the bombers are back. */
+	void BombLine();
+	/** (Version 64) The card that folds two worn corps of the army in hand into one. */
+	void OpenFold();
 	/** A long Battle Ticket opens folded to the lines that matter most: this unfolds it, or folds it again. */
 	void ToggleTicket() { bTicketAll = !bTicketAll; }
 	bool IsTicketAll() const { return bTicketAll; }

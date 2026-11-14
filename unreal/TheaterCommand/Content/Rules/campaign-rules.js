@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of fbbf11d 2026-11-14. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of dfdd292 2026-11-14. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -2657,6 +2657,7 @@
         { key: "bomb", label: "Bomb factories and railways", short: "Day bombing", blurb: "Bombers go for the factories and rail yards of one province by day. Fighters in range can go with them.", needs: "bmr" },
         { key: "night", label: "Bomb by night", short: "Night bombing", blurb: "Bombers go in darkness with no escort: few are lost, and only about a third of the bombs find the target.", needs: "bmr" },
         { key: "ground", label: "Raid troops", short: "Raid on troops", blurb: "Fighters and bombers go for an enemy army where it stands: its organisation is cut for the battle that follows, and some of its men and guns are lost.", needs: "any" },
+        { key: "line", label: "Bomb the line", short: "Bombing the line", blurb: "Bombers go for the fieldworks of an enemy army that is dug in: months of digging are taken off its works before your army attacks. The troops dig them back a month at a time, so follow the raid with the army.", needs: "bmr" },
         { key: "town", label: "Bomb a town", short: "Raid on a town", blurb: "Bombers go for the defences of a town your army stands round or beside: part of its works are broken down for the assault, and the troops inside are shaken. A town left alone mends its works month by month, so follow the raid with the army.", needs: "bmr" },
         { key: "superiority", label: "Fight for the sky", short: "Fight for the sky", blurb: "Fighters sweep the sky over one province and bombers hit its airfields. Win it and your armies and fleets have the air there for a month.", needs: "any" },
         { key: "strike", label: "Strike shipping", short: "Shipping strike", blurb: "Bombers hunt warships and merchant ships in one sea.", needs: "bmr" },
@@ -2664,6 +2665,13 @@
         { key: "harbour", label: "Raid a harbour", short: "Harbour raid", blurb: "Bombers go for the warships lying in one harbour. Ships at anchor cannot manoeuvre, and a harbour raided in the month war is declared is caught unready.", needs: "bmr" },
         { key: "recon", label: "Scout from the air", short: "Reconnaissance", blurb: "A few aircraft photograph one province and the ground round it: every army there is seen whole until the month ends.", needs: "any" }
       ]
+    },
+    line: {
+      _note: "Bombing the line (Version 64). The works of every enemy corps dug in at the target lose bombers-that-got-through / scale months of digging, to the nearest tenth and never more than most, whatever the ground. The men are not hurt and dig as usual that month. intensity is how hard the month's flying is beside a fight for the sky (1). value is what a month off the works of one division counts for when the raid is judged. With the scale at 300 it takes 600 bombers through to take the full two months and two air groups take a little over one, so a raid and a probe together wear a finished line down without wiping it out in one month. No computer air staff flies it yet.",
+      intensity: 0.6,
+      scale: 300,
+      most: 2,
+      value: 10
     },
     ground: {
       _note: "A raid on troops. intensity is how hard the month's fighting is beside a fight for the sky (1). fighters is what one fighter is worth beside a bomber against troops. The organisation cut is weight / (scale + perDiv x enemy divisions there), never more than max; troops in cover (by terrain) or dug in lose less. str is the share of the cut that is also lost in men and guns. fire is the share of the attacking fighters brought down by ground fire. value is what a point of the cut on one division counts for when the raid is judged.",
@@ -4448,6 +4456,10 @@
     return fill(d.cite, { unit: a.name, place: placeName(g2, a.kind, a.at) || "the front", year: turnToDate(a.turn).year, n: a.n, rival: a.rival, designation: designation(a.nat), adj: N?.adj });
   }
   var fameOf = (a) => (DEF.get(a.hon)?.fame ?? 1) + (a.first ? 1 : 0);
+  var corpsNamed = (g2, id) => (id === void 0 ? void 0 : g2.corps.find((c) => c.id === id) ?? Object.values(g2.nations).flatMap((n) => n.cadres ?? []).find((c) => c.id === id))?.name ?? "another corps";
+  function noteCorps(g2, c, what, where, n) {
+    note(g2, c, what, where, n);
+  }
   function diaryText(g2, u, line) {
     const [, what, where, n] = line;
     const sea = "ships" in u;
@@ -4502,6 +4514,12 @@
         return `Took in drafts: ${n}% of the corps is new to it.`;
       case "reraised":
         return `Raised again in the name of the formation lost at ${at}.`;
+      case "folded":
+        return `Took in the men of ${corpsNamed(g2, n)} at ${at}.`;
+      case "cadre":
+        return `Its men went to ${corpsNamed(g2, n)} at ${at}. A cadre was kept to raise it again.`;
+      case "rebuilt":
+        return `Raised again round its cadre at ${at}.`;
       case "destroyed":
         return `Destroyed at ${at}.`;
       case "surrendered":
@@ -8186,10 +8204,11 @@
     ground: { label: "Raid troops", what: "Fighters and bombers go for an enemy army where it stands, and cut its organisation for the battle that follows." },
     fleet: { label: "Strike a fleet", what: "Bombers go for one enemy fleet at sea, with fighters if it is in their range." },
     harbour: { label: "Raid a harbour", what: "Bombers go for the warships lying in one enemy port." },
-    town: { label: "Bomb a town", what: "Bombers go for the defences of a town an army means to take, and shake the troops inside it." }
+    town: { label: "Bomb a town", what: "Bombers go for the defences of a town an army means to take, and shake the troops inside it." },
+    line: { label: "Bomb the line", what: "Bombers go for the fieldworks of an enemy line, and take months of digging off them before the army attacks." }
   };
-  var OFFENSIVE = ["superiority", "bomb", "night", "strike", "ground", "fleet", "harbour", "town"];
-  var intensity = (m) => m === "ground" ? AIRWAR.ground.intensity : m === "fleet" ? CARRIERS.strike.intensity : m === "harbour" ? CARRIERS.harbour.intensity : m === "town" ? SIEGE.bombard.intensity : AIR.combat.intensity[m];
+  var OFFENSIVE = ["superiority", "bomb", "night", "strike", "ground", "fleet", "harbour", "town", "line"];
+  var intensity = (m) => m === "ground" ? AIRWAR.ground.intensity : m === "line" ? AIRWAR.line.intensity : m === "fleet" ? CARRIERS.strike.intensity : m === "harbour" ? CARRIERS.harbour.intensity : m === "town" ? SIEGE.bombard.intensity : AIR.combat.intensity[m];
   var isOffensive = (m) => OFFENSIVE.includes(m);
   var SURFACE2 = ["bb", "cv", "ca", "dd"];
   var spec = (nat) => AIR.nations[nat] ?? AIR.nations._default;
@@ -8504,6 +8523,12 @@
       if (!r.units.some((u) => !u.dead && atWar(g2, f.nat, u.nat))) return "There are no enemy troops there.";
       return f.ftr > 0 && d <= R.ftrRange || f.bmr > 0 && d <= R.bmrRange ? null : "It is out of range.";
     }
+    if (m === "line") {
+      if (!airWar(g2)) return "Fieldworks are bombed only in the grand campaign.";
+      if (!r.units.some((u) => !u.dead && atWar(g2, f.nat, u.nat) && worksOf(u) > 0)) return "No enemy troops are dug in there.";
+      if (!f.bmr && !escort2) return "It has no bombers.";
+      return d > (escort2 ? R.ftrRange : R.bmrRange) ? escort2 ? "That line is beyond its fighters." : "That line is beyond its bombers." : null;
+    }
     if (m === "town") {
       if (!siegeRules(g2) || !airWar(g2)) return "Towns are bombed only in the grand campaign.";
       if (!atWar(g2, f.nat, r.ctrl)) return `${townName(r)} is not in enemy hands.`;
@@ -8725,7 +8750,7 @@
         }
       }
     } else out.radar = radarAt(g2, g2.regions[target]);
-    const holder = sea || m === "ground" ? null : g2.regions[target].ctrl;
+    const holder = sea || m === "ground" || m === "line" ? null : g2.regions[target].ctrl;
     for (const f of g2.airFleets) {
       if (f.ftr <= 0 || f.mission !== "support" || !atWar(g2, f.nat, nat)) continue;
       if (holder && !allied(g2, f.nat, holder)) continue;
@@ -8835,6 +8860,11 @@
       l.level++;
     }
   }
+  var lineWear = (through) => Math.min(AIRWAR.line.most, Math.round(through / AIRWAR.line.scale * 10) / 10);
+  var monthsWord2 = (m) => {
+    const v = Math.round(m * 10) / 10;
+    return v === 1 ? "a month" : `${v} months`;
+  };
   function troopCut(r, foes, weight2) {
     const G = AIRWAR.ground;
     const divs = foes.reduce((s, c) => s + c.divs, 0);
@@ -8984,6 +9014,19 @@
       const hit = hitTown(g2, r, "raid", townShare("raid", through) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
       value += hit.share * hit.divs * SIEGE.bombard.value;
       result = through > 0 ? townHitText(g2, r, hit, "bombs", true) : "No bombers got through.";
+    } else if (m === "line") {
+      const r = g2.regions[target];
+      const months2 = lineWear(through);
+      let divs = 0, held = 0;
+      for (const c of r.units) {
+        if (c.dead || !atWar(g2, nat, c.nat) || worksOf(c) <= 0) continue;
+        held = Math.max(held, worksOf(c));
+        c.dugFor = Math.max(0, Math.round((worksOf(c) - months2) * 10) / 10);
+        divs += c.divs;
+      }
+      value += months2 * divs * AIRWAR.line.value;
+      const took = Math.min(months2, held), left = Math.max(0, held - months2);
+      result = took >= 0.05 ? `The bombing took ${monthsWord2(took)} off the fieldworks at ${r.name}, which leaves ${left < 0.05 ? "nothing of them" : `${monthsWord2(left)} of work in them`}. The troops there dig them back a month at a time: attack while it lasts.` : "Too few bombers got through to break up the works.";
     } else if (m === "ground") {
       const G = AIRWAR.ground;
       const r = g2.regions[target];
@@ -9054,7 +9097,7 @@
     }
     const level = sky || ratio >= 2 ? "Decisive victory" : ratio >= 1 ? "Close victory" : ratio >= 0.5 ? "Close defeat" : "Decisive defeat";
     g2.flags.airBattles = (g2.flags.airBattles ?? 0) + 1;
-    const troops = m === "ground" ? g2.regions[target].units.find((u) => !u.dead && atWar(g2, nat, u.nat))?.nat : void 0;
+    const troops = m === "ground" || m === "line" ? g2.regions[target].units.find((u) => !u.dead && atWar(g2, nat, u.nat))?.nat : void 0;
     const defNat = troops ?? struck?.[0]?.nat ?? def[0]?.nat ?? (sea ? "" : g2.regions[target].ctrl);
     const rep = {
       id: g2.flags.airBattles,
@@ -9093,11 +9136,12 @@
     else if (m === "harbour") text = `${who} ${a.att.length === 1 ? "raids" : "raid"} the harbour of ${a.place}${a.surprise ? " without warning" : ""}. ${result} ${cap2(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else if (m === "town") text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} the defences of ${townName(g2.regions[target])}. ${result} ${cap2(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else if (sea) text = `${who} ${a.att.length === 1 ? "strikes" : "strike"} at shipping in ${a.place}. ${result} ${cap2(cost)}.`;
+    else if (m === "line") text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} the ${adj} fieldworks at ${a.place}. ${result} ${cap2(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else if (m === "ground") text = `${who} ${a.att.length === 1 ? "raids" : "raid"} the ${adj} troops at ${a.place}. ${result} ${cap2(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     else text = `${who} ${a.att.length === 1 ? "bombs" : "bomb"} ${a.place}${night ? " by night" : ""}. ${result} ${cap2(cost)}${dLost ? `, ${dLost} ${adj} fighters shot down` : ""}.`;
     if (g2.flags.open === 1 && m === "superiority" && !sky && aLost + dLost === 0) return rep;
     const full = sky || notable2 || shipsSunk > 0 || m === "fleet" || m === "harbour";
-    const brief = m === "superiority" ? `a fight for the sky over ${a.place}` : m === "town" ? `the defences of ${townName(g2.regions[target])} bombed` : sea ? `shipping struck in ${a.place}` : m === "ground" ? `the ${adj} troops at ${a.place} raided` : `${a.place} bombed${night ? " by night" : ""}`;
+    const brief = m === "superiority" ? `a fight for the sky over ${a.place}` : m === "town" ? `the defences of ${townName(g2.regions[target])} bombed` : sea ? `shipping struck in ${a.place}` : m === "line" ? `the ${adj} fieldworks at ${a.place} bombed` : m === "ground" ? `the ${adj} troops at ${a.place} raided` : `${a.place} bombed${night ? " by night" : ""}`;
     if (full) headline(g2, "battle", text, nat, sea ? void 0 : target);
     else routineNews(g2, `air:${nat}:${m}:${sea ? `z${zone}` : target}`, "battle", text, `${brief}${aLost ? ` (${aLost} aircraft lost)` : ""}`, nat, sea ? void 0 : target);
     return rep;
@@ -9330,6 +9374,9 @@
       town = planTownHit(g2, g2.regions[target], "raid", townShare("raid", through) * (a.aa ? 1 - a.aa * WORKS.aa.cut : 1));
       cut = town.share;
       value = town.share * town.divs * SIEGE.bombard.value;
+    } else if (m === "line") {
+      cut = lineWear(through);
+      value = cut * g2.regions[target].units.reduce((s, c) => s + (!c.dead && atWar(g2, nat, c.nat) && worksOf(c) > 0 ? c.divs : 0), 0) * AIRWAR.line.value;
     } else if (m === "ground") {
       const G = AIRWAR.ground;
       const r = g2.regions[target];
@@ -9376,11 +9423,13 @@
     warn: [0.5, 0.25],
     classFloor: 0.1,
     early: { months: 6, gap: 6 },
+    fold: { worn: 0.7, org: 0.1, price: 0.5, xp: 0.75 },
     notes: {
       pool: "The reserve a great power opens a campaign of September 1939 with, in divisions' worth. 'minor': any other country has 'pool' and 'perDiv' for each division it has under arms as the campaign opens.",
       class: "The class that comes of age each month with the whole homeland held, in divisions' worth; a minor's is 'classShare' of its reserve. It shrinks with the share of the homeland lost, counted by the worth of the provinces, but never under 'classFloor' of it. The reserve never holds more than 'most' times what it opened with.",
       later: "A campaign that opens after 1939 finds 'spentAYear' of each warring nation's reserve gone for every year of war behind it, to 'spentMost'.",
       warn: "The player is told when his reserve falls under these shares of what it opened with, and when it is spent.",
+      fold: "Fold two worn corps into one (Version 64). The player may fold one of his corps into another of the same kind standing in the same province when both are under 'worn' of their full strength. The men of both fill the corps that is kept, as far as it has room, and any left over go back to the reserve; what the kept corps knows and how it feels become the average of the men now in it; it loses 'org' of its organisation shaking down, has the fewer moves of the two left, and the better of the two generals commands it while the other goes to the list of generals waiting. The corps folded away is kept off the map as a cadre, with its name, its record and its honours: it can be raised again from the arsenal at 'price' times the cost of a new corps of its kind, takes the men of a new corps from the reserve and the same months to form, and comes back with 'xp' of what it knew. No computer nation folds its corps.",
       early: "A say over the call-up. A country at war may call the next class up early: 'months' of classes join the reserve at once, and no class comes of age for the next 'gap' months, because the boys who would have are already with the colours: the same men, sooner. Where the reserve has room for fewer than 'months' of classes, only those come and the months without a class are fewer in step. A country with a standing call-up (east.json, mobilisation) may also hold it: no new corps are raised from the reserve while it is held, the waves wait, and the men of each wave that was not raised go to the corps in the field as drafts, over and above what the depots send and at no cost to the treasury. Only the player uses either."
     }
   };
@@ -10740,7 +10789,7 @@
     return true;
   }
   var round1 = (x) => Math.round(x * 10) / 10;
-  var monthsWord2 = (k) => k === 1 ? "a month" : `${k} months`;
+  var monthsWord3 = (k) => k === 1 ? "a month" : `${k} months`;
   function depths(g2, nat) {
     const out = /* @__PURE__ */ new Map();
     let ring = [];
@@ -10829,7 +10878,7 @@
       price,
       back,
       reward,
-      text: `${band.name}. With your corps within ${P.reach} provinces brought up, the attack card reads ${oddsWord} against ${townName(r)}${when}. It ${past ? "lay" : "lies"} ${where}${past ? " then" : ""}, and you allow yourself ${monthsWord2(months2)}, this one counted, to the end of ${date(due)}. Kept: ${reward}. Broken: its trust falls ${price}.`
+      text: `${band.name}. With your corps within ${P.reach} provinces brought up, the attack card reads ${oddsWord} against ${townName(r)}${when}. It ${past ? "lay" : "lies"} ${where}${past ? " then" : ""}, and you allow yourself ${monthsWord3(months2)}, this one counted, to the end of ${date(due)}. Kept: ${reward}. Broken: its trust falls ${price}.`
     };
   }
   function promiseTerms(g2, nat, region, months2) {
@@ -10854,7 +10903,7 @@
     if (!g2.nations[nat].atWar.length) return "Only a country at war has towns to promise.";
     if (st.vow) return `You have a promise standing: ${st.vow.title}. Keep it, or take it back, before you make another.`;
     const wait = (st.vowNext ?? 0) - g2.turn;
-    if (wait > 0) return `The cabinet heard your last promise lately: it will hear another in ${monthsWord2(wait)}.`;
+    if (wait > 0) return `The cabinet heard your last promise lately: it will hear another in ${monthsWord3(wait)}.`;
     if (region === void 0) return null;
     const r = g2.regions[region];
     if (!r) return "There is no such place.";
@@ -11396,6 +11445,26 @@
         ...menFor(u.divs)
       });
     }
+    for (const c of cadresOf(g2, nat)) {
+      if (n.queue.some((b) => b.cadre === c.id)) continue;
+      const t = cadreTerms(g2, nat, c);
+      const at = raiseSite(g2, nat, c.kind, sel);
+      out.push({
+        key: `cadre:${c.id}`,
+        group: "army",
+        kind: c.kind,
+        label: `${c.name}, a cadre`,
+        blurb: `The cadre of a corps whose men were folded into another: its staff, its name, its record and its honours. Raised again it is the same corps filled with new men, and it keeps ${Math.round(MANPOWER.fold.xp * 100)}% of what it knew.`,
+        size: plural3(c.divs, "division"),
+        cost: t.cost,
+        months: t.months,
+        upkeep: budgeted(g2) ? corpsUpkeep(c.kind, c.divs) : 0,
+        at,
+        note: at < 0 ? "" : `Forms up at ${g2.regions[at].name}, for ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps.`,
+        why: whyNoCadre(g2, nat, c) ?? (at < 0 ? "There is no home ground left to raise troops on." : noMen(c.divs) ?? poor(t.cost)),
+        ...menFor(c.divs)
+      });
+    }
     for (const kind of corpsKinds(g2)) {
       const spec2 = specOf(g2, kind);
       const need = needsOf(g2, kind);
@@ -11538,6 +11607,7 @@
     const [group, item] = key3.split(":");
     if (group === "elite") return orderElite(g2, nat, o.at);
     if (group === "para") return orderPara(g2, nat, o.at);
+    if (group === "cadre") return orderCadre(g2, nat, Number(item), o.at);
     if (group === "corps") return orderCorps(g2, nat, item, o.at);
     if (key3 === "work:fort") return orderFort(g2, nat, o.at);
     const r = g2.regions[o.at];
@@ -13613,6 +13683,179 @@
     }
   }
 
+  // ../../data/campaign/morale.json
+  var morale_default = {
+    _about: {
+      what: "Morale and rest (the grand campaign). Every corps carries its morale, 0 to 1, beside its strength and its rest. Morale rises with victories, on home soil, with friends close by and with a quiet month out of the line; it falls with defeats, heavy losses, being cut off, going unpaid and standing alone in front of the enemy. A corps in good heart hits harder and holds together longer; a shaken one does neither.",
+      rule: "Only the grand campaign keeps morale. A historical scenario has none: its corps fight exactly as they always did, and so its wars come out as they did before this rule was written.",
+      start: "The morale a corps begins the war with, or is raised with.",
+      level: "Where morale settles when nothing is happening to it, and 'drift', the share of the way back it goes each month. Because the mood settles by a share each month, what a corps gains every month adds up to a level and no further: 0.03 a month for home soil is worth 0.12 in the end, at a drift of 0.25.",
+      battle: "What one battle does to the morale of the corps that fought it. 'won' and 'decisive' (odds of 2 to 1 or better) for attackers who carry the ground, 'repulsed' and 'thrown' (odds under 0.8 to 1) for attackers who do not; 'held' for defenders who keep their ground, 'lost' and 'routed' (2 to 1 or better against them) for defenders driven off it. 'bloody' is added for a corps that lost 'bloodyAt' of its men or more in the one fight. 'capital' is for the corps that take an enemy's capital, and 'capitalLost' is what every corps of a nation feels the day its own capital falls.",
+      month: "The monthly reckoning, at the start of a nation's month. 'home': on its own country's soil. 'beside': other friendly corps in the same province. 'near': friendly corps in a province next door. 'alone': no friend in the province or next door, and the enemy next door. 'rested': a whole month in supply without marching or fighting. 'cutOff': out of supply. 'unpaid': the treasury is empty (scaled by how deep the debt is). 'winter': a winter in the east without winter equipment. 'general': a general in command who rallies men.",
+      fight: "'span': the whole range morale is worth in battle, half of it either side of morale 0.5 (0.3 is from 15% weaker to 15% stronger). 'steady': how much faster a corps with no heart loses its cohesion in a fight, and how much slower one in good heart does (0.5 is from 25% faster to 25% slower).",
+      rested: "What a whole month out of the line is worth besides morale: 'org' more rest recovered, and drafts arriving 'drafts' times as fast.",
+      words: "What a level of morale is called: [from, name].",
+      restWords: "What a level of rest (cohesion) is called: [from, name].",
+      why: "The words for each reason, as the player reads them."
+    },
+    start: 0.6,
+    level: 0.5,
+    drift: 0.25,
+    battle: {
+      won: 0.08,
+      decisive: 0.12,
+      repulsed: -0.06,
+      thrown: -0.1,
+      held: 0.08,
+      lost: -0.1,
+      routed: -0.14,
+      bloody: -0.04,
+      bloodyAt: 0.15,
+      capital: 0.08,
+      capitalLost: -0.1
+    },
+    month: {
+      home: 0.03,
+      beside: 0.02,
+      near: 0.01,
+      alone: -0.04,
+      rested: 0.04,
+      cutOff: -0.12,
+      unpaid: -0.05,
+      winter: -0.04,
+      general: 0.02
+    },
+    fight: { span: 0.3, steady: 0.5 },
+    rested: { org: 0.15, drafts: 1.5 },
+    words: [[0, "Broken"], [0.2, "Shaken"], [0.4, "Steady"], [0.6, "Confident"], [0.8, "Eager"]],
+    restWords: [[0, "Exhausted"], [0.25, "Worn"], [0.5, "Tired"], [0.75, "Rested"], [0.95, "Fresh"]],
+    why: {
+      won: "Carried the enemy's ground",
+      decisive: "A decisive victory",
+      repulsed: "An attack beaten off",
+      thrown: "An attack thrown back with loss",
+      held: "Held its ground",
+      lost: "Driven from its ground",
+      routed: "Routed",
+      bloody: "Heavy losses",
+      capital: "Took an enemy capital",
+      capitalLost: "The capital has fallen",
+      home: "On home soil",
+      friends: "Friendly troops close by",
+      alone: "Alone in front of the enemy",
+      rested: "A quiet month out of the line",
+      cutOff: "Cut off from supply",
+      unpaid: "Unpaid: the treasury is empty",
+      winter: "A winter without winter kit",
+      general: "A general the men trust",
+      time: "The mood settling"
+    }
+  };
+
+  // ../../src/campaign/morale.ts
+  var MORALE = morale_default;
+  var moraleRules = (g2) => g2.flags.open === 1;
+  var MONTHLY = /* @__PURE__ */ new Set(["home", "friends", "alone", "rested", "cutOff", "unpaid", "winter", "general", "time"]);
+  var r3 = (x) => Math.round(x * 1e3) / 1e3;
+  var named = (table, x) => {
+    let out = table[0][1];
+    for (const [from, name] of table) if (x >= from) out = name;
+    return out;
+  };
+  var moraleWord = (m) => named(MORALE.words, m);
+  var restWord = (org) => named(MORALE.restWords, org);
+  function openMorale(g2) {
+    if (!moraleRules(g2)) return;
+    for (const c of g2.corps) if (c.mor === void 0) c.mor = MORALE.start;
+  }
+  function raiseMorale(g2, c) {
+    if (moraleRules(g2)) c.mor = MORALE.start;
+  }
+  function feel(c, why, delta) {
+    if (c.mor === void 0 || !delta) return;
+    c.mor = r3(clamp(c.mor + delta, 0, 1));
+    const list4 = c.mw ?? (c.mw = []);
+    const e = list4.find((x) => x[0] === why && x[2] === 0);
+    if (e) e[1] = r3(e[1] + delta);
+    else list4.push([why, r3(delta), 0]);
+  }
+  var heart = (c) => c.mor === void 0 ? 1 : 1 + (c.mor - 0.5) * MORALE.fight.span;
+  var nerve = (c) => c.mor === void 0 ? 1 : 1 + (0.5 - c.mor) * MORALE.fight.steady;
+  var restedMonth = (g2, c) => moraleRules(g2) && c.supplied && !c.fought && c.ap >= c.apMax && c.kind !== "fort" && c.born !== g2.turn;
+  var resting = (g2, c) => moraleRules(g2) && c.supplied && !c.fought && c.ap >= c.apMax && c.kind !== "fort";
+  var restedDrafts = (g2, c) => restedMonth(g2, c) ? MORALE.rested.drafts : 1;
+  var restedOrg = (g2, c) => restedMonth(g2, c) ? MORALE.rested.org : 0;
+  function moraleBattle(g2, attackers2, defenders, odds, win, lost, capital) {
+    if (!moraleRules(g2)) return;
+    const B2 = MORALE.battle;
+    for (const c of attackers2) {
+      if (win) feel(c, odds >= 2 ? "decisive" : "won", odds >= 2 ? B2.decisive : B2.won);
+      else feel(c, odds < 0.8 ? "thrown" : "repulsed", odds < 0.8 ? B2.thrown : B2.repulsed);
+      if ((lost.get(c.id) ?? 0) >= B2.bloodyAt) feel(c, "bloody", B2.bloody);
+      if (win && capital) feel(c, "capital", B2.capital);
+    }
+    for (const c of defenders) {
+      if (win) feel(c, odds >= 2 ? "routed" : "lost", odds >= 2 ? B2.routed : B2.lost);
+      else feel(c, "held", B2.held);
+      if ((lost.get(c.id) ?? 0) >= B2.bloodyAt) feel(c, "bloody", B2.bloody);
+    }
+  }
+  function moraleCapital(g2, r, old) {
+    if (!moraleRules(g2) || !r.cap || r.owner !== old || r.ctrl === old || !g2.nations[old]?.alive) return;
+    if (g2.nations[old].capital !== r.id) return;
+    for (const c of g2.corps) if (c.nat === old && !c.dead) feel(c, "capitalLost", MORALE.battle.capitalLost);
+  }
+  function moraleMonth(g2, c, facts) {
+    if (c.mor === void 0) return;
+    c.mw = (c.mw ?? []).filter((e) => e[2] === 0 && !MONTHLY.has(e[0])).map((e) => [e[0], e[1], 1]);
+    const M = MORALE.month;
+    const here = g2.regions[c.reg];
+    feel(c, "time", (MORALE.level - c.mor) * MORALE.drift);
+    if (here.owner === c.nat && !here.overseas) feel(c, "home", M.home);
+    const friend2 = (u) => u !== c && !u.dead && allied(g2, u.nat, c.nat);
+    const beside = here.units.some(friend2);
+    let near = false, foe = false;
+    for (const j of here.nb) {
+      for (const u of g2.regions[j].units) {
+        if (friend2(u)) near = true;
+        else if (atWar(g2, u.nat, c.nat)) foe = true;
+      }
+    }
+    if (beside || near) feel(c, "friends", (beside ? M.beside : 0) + (near ? M.near : 0));
+    else if (foe) feel(c, "alone", M.alone);
+    if (restedMonth(g2, c)) feel(c, "rested", M.rested);
+    if (!c.supplied) feel(c, "cutOff", M.cutOff);
+    if (facts.owed > 0) feel(c, "unpaid", M.unpaid * facts.owed);
+    if (facts.cold) feel(c, "winter", M.winter);
+    if (cmdRally(g2, c) > 1) feel(c, "general", M.general);
+    if (!c.mw.length) delete c.mw;
+  }
+  var lower = (s) => s[0].toLowerCase() + s.slice(1);
+  var listed3 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+  function corpsMood(g2, c) {
+    const rest = clamp(c.org, 0, 1);
+    const quiet2 = resting(g2, c);
+    const restLine = !c.supplied ? "Cut off from supply: it gets no rest at all." : c.fought ? `${restWord(rest)}: it has fought this month, and will get back less of its rest for it.` : quiet2 ? `${restWord(rest)}: left where it stands for the month, it rests, takes in drafts half as fast again and recovers its spirits.` : `${restWord(rest)}: it has marched this month. A month where it neither marches nor fights would rest it properly.`;
+    if (c.mor === void 0) {
+      return { morale: null, moraleWord: "", trend: "steady", rest, restWord: restWord(rest), line: "", restLine: !c.supplied ? restLine : `${restWord(rest)}.`, why: [], resting: false };
+    }
+    const why = (c.mw ?? []).filter((e) => Math.abs(e[1]) >= 5e-3).map((e) => ({ key: e[0], text: MORALE.why[e[0]] ?? e[0], delta: e[1], earlier: e[2] === 1 })).sort((a, b) => Number(a.earlier) - Number(b.earlier) || Number(a.key === "time") - Number(b.key === "time") || Math.abs(b.delta) - Math.abs(a.delta));
+    const net = why.filter((w) => !w.earlier).reduce((s, w) => s + w.delta, 0);
+    const trend = net >= 0.02 && c.mor < 0.995 ? "rising" : net <= -0.02 && c.mor > 5e-3 ? "falling" : "steady";
+    const word = moraleWord(c.mor);
+    const told = why.filter((w) => !w.earlier && w.key !== "time" && (trend === "falling" ? w.delta < 0 : trend === "rising" ? w.delta > 0 : true)).slice(0, 3).map((w) => lower(w.text));
+    const line = trend === "steady" ? `${word}, and holding steady${told.length ? `: ${listed3(told)}` : ""}.` : told.length ? `${word} and ${trend}: ${listed3(told)}.` : trend === "falling" ? `${word}, and settling back towards its usual temper.` : `${word}, and recovering with time.`;
+    return { morale: c.mor, moraleWord: word, trend, rest, restWord: restWord(rest), line, restLine, why, resting: quiet2 };
+  }
+  function forceMorale(cs) {
+    let sum2 = 0, n = 0;
+    for (const c of cs) if (c.mor !== void 0) {
+      sum2 += c.mor * c.divs;
+      n += c.divs;
+    }
+    return n > 0 ? sum2 / n : null;
+  }
+
   // ../../src/campaign/economy.ts
   var PRODUCTION = production_default;
   function specOf(g2, kind) {
@@ -13872,6 +14115,58 @@
     n.queue.push(b);
     return b;
   }
+  var cadresOf = (g2, nat) => [...g2.nations[nat]?.cadres ?? []].reverse();
+  function cadreTerms(g2, nat, c) {
+    const u = c.elite ? eliteOf(nat) : null, p = TECH.units.para;
+    const kind = specOf(g2, c.kind) ? c.kind : "inf";
+    const list4 = u ? u.cost : c.airborne ? priceOf(g2, nat, "para", p.cost) : corpsCost(g2, nat, kind);
+    return { cost: Math.round(list4 * MANPOWER.fold.price * 10) / 10, months: u ? u.months : c.airborne ? p.months : specOf(g2, kind).months, divs: c.divs };
+  }
+  function whyNoCadre(g2, nat, c) {
+    if (g2.nations[nat].queue.some((b) => b.cadre === c.id)) return "It is being raised again already.";
+    if (c.elite) {
+      const no = whyNoElite(g2, nat);
+      if (no) return no;
+    }
+    if (c.airborne) {
+      const no = whyNoPara(g2, nat);
+      if (no) return no;
+    }
+    return null;
+  }
+  function orderCadre(g2, nat, id, region) {
+    const n = g2.nations[nat];
+    const c = n.cadres?.find((x) => x.id === id);
+    const r = g2.regions[region];
+    if (!n.alive || !c || !r || !canRaiseKind(g2, nat, r, c.kind) || whyNoCadre(g2, nat, c) !== null) return null;
+    const t = cadreTerms(g2, nat, c);
+    if (n.pp < t.cost || raisable(g2, nat, t.divs) < 1) return null;
+    n.pp -= t.cost;
+    drawMen(g2, nat, t.divs);
+    const b = { id: g2.nextBuild++, what: "corps", kind: c.kind, divs: c.divs, name: c.name, region, ordered: g2.turn, eta: g2.turn + t.months, cost: t.cost, cadre: c.id };
+    if (c.elite) b.elite = c.elite;
+    if (c.airborne) b.airborne = true;
+    n.queue.push(b);
+    return b;
+  }
+  function reform(g2, c, at) {
+    c.dead = false;
+    c.str = 1;
+    c.org = 0.7;
+    c.ap = c.apMax;
+    c.fought = false;
+    c.supplied = true;
+    c.general = null;
+    c.reg = at.id;
+    c.hold = false;
+    c.dyle = null;
+    c.xp = Math.max((c.nat === g2.human ? raisedXp(g2, c.nat) : 0.05) + campXp(g2, at.id), c.xp * MANPOWER.fold.xp);
+    for (const k of ["dug", "dugFor", "pressed", "blows", "relief", "yields", "gaveWay", "digs", "joint", "leave", "town", "job", "rival"]) delete c[k];
+    raiseMorale(g2, c);
+    g2.corps.push(c);
+    at.units.push(c);
+    noteCorps(g2, c, "rebuilt", at.id);
+  }
   function fortCost(g2, nat, r) {
     if (!isHome(g2, nat, r)) return null;
     const queued2 = g2.nations[nat].queue.filter((b) => b.what === "fort" && b.region === r.id).length;
@@ -13894,7 +14189,8 @@
     if (i < 0 || n.queue[i].ordered !== g2.turn) return false;
     n.pp += n.queue[i].cost;
     if (n.queue[i].what === "corps" && n.queue[i].cost > 0) returnMen(g2, nat, n.queue[i].divs ?? 0);
-    if (n.queue[i].elite) g2.flags[`elite:${nat}`] = (g2.flags[`elite:${nat}`] ?? 1) - 1;
+    if (n.queue[i].cadre !== void 0) {
+    } else if (n.queue[i].elite) g2.flags[`elite:${nat}`] = (g2.flags[`elite:${nat}`] ?? 1) - 1;
     else if (n.queue[i].airborne) g2.flags[`para:${nat}`] = (g2.flags[`para:${nat}`] ?? 1) - 1;
     else if (n.queue[i].what === "corps" && n.queue[i].revive === void 0) n.corpsNo--;
     n.queue.splice(i, 1);
@@ -13931,6 +14227,14 @@
       if (!at && n.capital >= 0 && room2(g2.regions[n.capital])) at = g2.regions[n.capital];
       if (!at) at = g2.regions.find((x) => room2(x) && x.fac > 0) ?? g2.regions.find(room2) ?? null;
       if (!at) continue;
+      if (b.cadre !== void 0) {
+        const i = (n.cadres ?? []).findIndex((x) => x.id === b.cadre);
+        if (i < 0) continue;
+        const c2 = n.cadres.splice(i, 1)[0];
+        reform(g2, c2, at);
+        if (nat === g2.human) headline(g2, "info", `${c2.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id);
+        continue;
+      }
       const c = addCorps(g2, nat, b.name, b.kind, b.divs, at.id, { xp: (nat === g2.human ? raisedXp(g2, nat) : 0.05) + campXp(g2, at.id), airborne: b.airborne });
       c.org = 0.7;
       if (b.elite) c.elite = b.elite;
@@ -14168,179 +14472,6 @@
     const rows = contenders(g2).map(row2).sort((a, b) => b.share - a.share || b.divisions - a.divisions || (a.nat < b.nat ? -1 : 1));
     const fallen = Object.values(g2.nations).filter((n) => !n.alive && !!n.fellOn).map(row2).sort((a, b) => b.fell.turn - a.fell.turn || (a.nat < b.nat ? -1 : 1));
     return { on: dominating(g2), since: g2.flags.dom ?? 0, began: g2.flags["dom:n"] ?? rows.length, left: rows.length, rows, fallen, winner: worldWinner(g2), scale };
-  }
-
-  // ../../data/campaign/morale.json
-  var morale_default = {
-    _about: {
-      what: "Morale and rest (the grand campaign). Every corps carries its morale, 0 to 1, beside its strength and its rest. Morale rises with victories, on home soil, with friends close by and with a quiet month out of the line; it falls with defeats, heavy losses, being cut off, going unpaid and standing alone in front of the enemy. A corps in good heart hits harder and holds together longer; a shaken one does neither.",
-      rule: "Only the grand campaign keeps morale. A historical scenario has none: its corps fight exactly as they always did, and so its wars come out as they did before this rule was written.",
-      start: "The morale a corps begins the war with, or is raised with.",
-      level: "Where morale settles when nothing is happening to it, and 'drift', the share of the way back it goes each month. Because the mood settles by a share each month, what a corps gains every month adds up to a level and no further: 0.03 a month for home soil is worth 0.12 in the end, at a drift of 0.25.",
-      battle: "What one battle does to the morale of the corps that fought it. 'won' and 'decisive' (odds of 2 to 1 or better) for attackers who carry the ground, 'repulsed' and 'thrown' (odds under 0.8 to 1) for attackers who do not; 'held' for defenders who keep their ground, 'lost' and 'routed' (2 to 1 or better against them) for defenders driven off it. 'bloody' is added for a corps that lost 'bloodyAt' of its men or more in the one fight. 'capital' is for the corps that take an enemy's capital, and 'capitalLost' is what every corps of a nation feels the day its own capital falls.",
-      month: "The monthly reckoning, at the start of a nation's month. 'home': on its own country's soil. 'beside': other friendly corps in the same province. 'near': friendly corps in a province next door. 'alone': no friend in the province or next door, and the enemy next door. 'rested': a whole month in supply without marching or fighting. 'cutOff': out of supply. 'unpaid': the treasury is empty (scaled by how deep the debt is). 'winter': a winter in the east without winter equipment. 'general': a general in command who rallies men.",
-      fight: "'span': the whole range morale is worth in battle, half of it either side of morale 0.5 (0.3 is from 15% weaker to 15% stronger). 'steady': how much faster a corps with no heart loses its cohesion in a fight, and how much slower one in good heart does (0.5 is from 25% faster to 25% slower).",
-      rested: "What a whole month out of the line is worth besides morale: 'org' more rest recovered, and drafts arriving 'drafts' times as fast.",
-      words: "What a level of morale is called: [from, name].",
-      restWords: "What a level of rest (cohesion) is called: [from, name].",
-      why: "The words for each reason, as the player reads them."
-    },
-    start: 0.6,
-    level: 0.5,
-    drift: 0.25,
-    battle: {
-      won: 0.08,
-      decisive: 0.12,
-      repulsed: -0.06,
-      thrown: -0.1,
-      held: 0.08,
-      lost: -0.1,
-      routed: -0.14,
-      bloody: -0.04,
-      bloodyAt: 0.15,
-      capital: 0.08,
-      capitalLost: -0.1
-    },
-    month: {
-      home: 0.03,
-      beside: 0.02,
-      near: 0.01,
-      alone: -0.04,
-      rested: 0.04,
-      cutOff: -0.12,
-      unpaid: -0.05,
-      winter: -0.04,
-      general: 0.02
-    },
-    fight: { span: 0.3, steady: 0.5 },
-    rested: { org: 0.15, drafts: 1.5 },
-    words: [[0, "Broken"], [0.2, "Shaken"], [0.4, "Steady"], [0.6, "Confident"], [0.8, "Eager"]],
-    restWords: [[0, "Exhausted"], [0.25, "Worn"], [0.5, "Tired"], [0.75, "Rested"], [0.95, "Fresh"]],
-    why: {
-      won: "Carried the enemy's ground",
-      decisive: "A decisive victory",
-      repulsed: "An attack beaten off",
-      thrown: "An attack thrown back with loss",
-      held: "Held its ground",
-      lost: "Driven from its ground",
-      routed: "Routed",
-      bloody: "Heavy losses",
-      capital: "Took an enemy capital",
-      capitalLost: "The capital has fallen",
-      home: "On home soil",
-      friends: "Friendly troops close by",
-      alone: "Alone in front of the enemy",
-      rested: "A quiet month out of the line",
-      cutOff: "Cut off from supply",
-      unpaid: "Unpaid: the treasury is empty",
-      winter: "A winter without winter kit",
-      general: "A general the men trust",
-      time: "The mood settling"
-    }
-  };
-
-  // ../../src/campaign/morale.ts
-  var MORALE = morale_default;
-  var moraleRules = (g2) => g2.flags.open === 1;
-  var MONTHLY = /* @__PURE__ */ new Set(["home", "friends", "alone", "rested", "cutOff", "unpaid", "winter", "general", "time"]);
-  var r3 = (x) => Math.round(x * 1e3) / 1e3;
-  var named = (table, x) => {
-    let out = table[0][1];
-    for (const [from, name] of table) if (x >= from) out = name;
-    return out;
-  };
-  var moraleWord = (m) => named(MORALE.words, m);
-  var restWord = (org) => named(MORALE.restWords, org);
-  function openMorale(g2) {
-    if (!moraleRules(g2)) return;
-    for (const c of g2.corps) if (c.mor === void 0) c.mor = MORALE.start;
-  }
-  function raiseMorale(g2, c) {
-    if (moraleRules(g2)) c.mor = MORALE.start;
-  }
-  function feel(c, why, delta) {
-    if (c.mor === void 0 || !delta) return;
-    c.mor = r3(clamp(c.mor + delta, 0, 1));
-    const list4 = c.mw ?? (c.mw = []);
-    const e = list4.find((x) => x[0] === why && x[2] === 0);
-    if (e) e[1] = r3(e[1] + delta);
-    else list4.push([why, r3(delta), 0]);
-  }
-  var heart = (c) => c.mor === void 0 ? 1 : 1 + (c.mor - 0.5) * MORALE.fight.span;
-  var nerve = (c) => c.mor === void 0 ? 1 : 1 + (0.5 - c.mor) * MORALE.fight.steady;
-  var restedMonth = (g2, c) => moraleRules(g2) && c.supplied && !c.fought && c.ap >= c.apMax && c.kind !== "fort" && c.born !== g2.turn;
-  var resting = (g2, c) => moraleRules(g2) && c.supplied && !c.fought && c.ap >= c.apMax && c.kind !== "fort";
-  var restedDrafts = (g2, c) => restedMonth(g2, c) ? MORALE.rested.drafts : 1;
-  var restedOrg = (g2, c) => restedMonth(g2, c) ? MORALE.rested.org : 0;
-  function moraleBattle(g2, attackers2, defenders, odds, win, lost, capital) {
-    if (!moraleRules(g2)) return;
-    const B2 = MORALE.battle;
-    for (const c of attackers2) {
-      if (win) feel(c, odds >= 2 ? "decisive" : "won", odds >= 2 ? B2.decisive : B2.won);
-      else feel(c, odds < 0.8 ? "thrown" : "repulsed", odds < 0.8 ? B2.thrown : B2.repulsed);
-      if ((lost.get(c.id) ?? 0) >= B2.bloodyAt) feel(c, "bloody", B2.bloody);
-      if (win && capital) feel(c, "capital", B2.capital);
-    }
-    for (const c of defenders) {
-      if (win) feel(c, odds >= 2 ? "routed" : "lost", odds >= 2 ? B2.routed : B2.lost);
-      else feel(c, "held", B2.held);
-      if ((lost.get(c.id) ?? 0) >= B2.bloodyAt) feel(c, "bloody", B2.bloody);
-    }
-  }
-  function moraleCapital(g2, r, old) {
-    if (!moraleRules(g2) || !r.cap || r.owner !== old || r.ctrl === old || !g2.nations[old]?.alive) return;
-    if (g2.nations[old].capital !== r.id) return;
-    for (const c of g2.corps) if (c.nat === old && !c.dead) feel(c, "capitalLost", MORALE.battle.capitalLost);
-  }
-  function moraleMonth(g2, c, facts) {
-    if (c.mor === void 0) return;
-    c.mw = (c.mw ?? []).filter((e) => e[2] === 0 && !MONTHLY.has(e[0])).map((e) => [e[0], e[1], 1]);
-    const M = MORALE.month;
-    const here = g2.regions[c.reg];
-    feel(c, "time", (MORALE.level - c.mor) * MORALE.drift);
-    if (here.owner === c.nat && !here.overseas) feel(c, "home", M.home);
-    const friend2 = (u) => u !== c && !u.dead && allied(g2, u.nat, c.nat);
-    const beside = here.units.some(friend2);
-    let near = false, foe = false;
-    for (const j of here.nb) {
-      for (const u of g2.regions[j].units) {
-        if (friend2(u)) near = true;
-        else if (atWar(g2, u.nat, c.nat)) foe = true;
-      }
-    }
-    if (beside || near) feel(c, "friends", (beside ? M.beside : 0) + (near ? M.near : 0));
-    else if (foe) feel(c, "alone", M.alone);
-    if (restedMonth(g2, c)) feel(c, "rested", M.rested);
-    if (!c.supplied) feel(c, "cutOff", M.cutOff);
-    if (facts.owed > 0) feel(c, "unpaid", M.unpaid * facts.owed);
-    if (facts.cold) feel(c, "winter", M.winter);
-    if (cmdRally(g2, c) > 1) feel(c, "general", M.general);
-    if (!c.mw.length) delete c.mw;
-  }
-  var lower = (s) => s[0].toLowerCase() + s.slice(1);
-  var listed3 = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
-  function corpsMood(g2, c) {
-    const rest = clamp(c.org, 0, 1);
-    const quiet2 = resting(g2, c);
-    const restLine = !c.supplied ? "Cut off from supply: it gets no rest at all." : c.fought ? `${restWord(rest)}: it has fought this month, and will get back less of its rest for it.` : quiet2 ? `${restWord(rest)}: left where it stands for the month, it rests, takes in drafts half as fast again and recovers its spirits.` : `${restWord(rest)}: it has marched this month. A month where it neither marches nor fights would rest it properly.`;
-    if (c.mor === void 0) {
-      return { morale: null, moraleWord: "", trend: "steady", rest, restWord: restWord(rest), line: "", restLine: !c.supplied ? restLine : `${restWord(rest)}.`, why: [], resting: false };
-    }
-    const why = (c.mw ?? []).filter((e) => Math.abs(e[1]) >= 5e-3).map((e) => ({ key: e[0], text: MORALE.why[e[0]] ?? e[0], delta: e[1], earlier: e[2] === 1 })).sort((a, b) => Number(a.earlier) - Number(b.earlier) || Number(a.key === "time") - Number(b.key === "time") || Math.abs(b.delta) - Math.abs(a.delta));
-    const net = why.filter((w) => !w.earlier).reduce((s, w) => s + w.delta, 0);
-    const trend = net >= 0.02 && c.mor < 0.995 ? "rising" : net <= -0.02 && c.mor > 5e-3 ? "falling" : "steady";
-    const word = moraleWord(c.mor);
-    const told = why.filter((w) => !w.earlier && w.key !== "time" && (trend === "falling" ? w.delta < 0 : trend === "rising" ? w.delta > 0 : true)).slice(0, 3).map((w) => lower(w.text));
-    const line = trend === "steady" ? `${word}, and holding steady${told.length ? `: ${listed3(told)}` : ""}.` : told.length ? `${word} and ${trend}: ${listed3(told)}.` : trend === "falling" ? `${word}, and settling back towards its usual temper.` : `${word}, and recovering with time.`;
-    return { morale: c.mor, moraleWord: word, trend, rest, restWord: restWord(rest), line, restLine, why, resting: quiet2 };
-  }
-  function forceMorale(cs) {
-    let sum2 = 0, n = 0;
-    for (const c of cs) if (c.mor !== void 0) {
-      sum2 += c.mor * c.divs;
-      n += c.divs;
-    }
-    return n > 0 ? sum2 / n : null;
   }
 
   // ../../data/campaign/divisions.json
@@ -14627,6 +14758,8 @@
   var defence_default = {
     _about: "Prepared defences (the grand campaign). An army that spends a whole month where it stands, without marching or fighting, digs in whoever commands it, the computer's armies as well as the player's. Against troops who are dug in and in supply the day's luck runs against the attacker, so that odds which would be safe in the open become a gamble, and an attack thrown back from such a line has shot its bolt for the month. Rules in src/campaign/game.ts (assess, resolveBattle, endPhase).",
     entrench: { auto: true, months: 3, share: [0.5, 0.75, 1] },
+    handover: { fade: 1 },
+    probe: { ap: 2, wear: 1, loss: 0.04, org: 0.06 },
     wear: { perAttack: 1, fullAt: 0.6, guns: 1, regrow: 0.5 },
     tired: { per: 0.15, most: 3 },
     hammer: { first: 0.5, second: 1 },
@@ -14634,7 +14767,9 @@
     prepared: { dice: [0.5, 1.2], spentAt: 0.5, surprise: 0.85, surpriseMonths: 1, openingMonths: 3, armour: 0.5, losses: { attacker: 1.5, defender: 0.65 } },
     staff: { odds: 0 },
     notes: {
-      entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. Fieldworks are lost the moment the corps leaves the ground (players read 'fieldworks', never 'trenches': Brian, 2026-11-14). With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by what its works are worth so far: 'share' gives that for one month's digging, two and three, since the first month's work does the most.",
+      entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. A corps that leaves the ground leaves its fieldworks behind it (players read 'fieldworks', never 'trenches': Brian, 2026-11-14). With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by what its works are worth so far: 'share' gives that for one month's digging, two and three, since the first month's work does the most.",
+      handover: "Hand over the fieldworks (Version 64). Works belong to the ground. A dug-in corps that marches off, entrains or goes forward after a battle won leaves its positions behind: a corps of its own side standing there without works takes them over at once, and otherwise they wait for the next corps of that side to march or ride in, which has them, as old as they were, from the moment it arrives and keeps them at the month's end though it marched. Standing empty they lose 'fade' months of work at the start of each of their owner's months, and they are gone the moment the enemy sets foot there. Troops driven off their ground leave nothing, and troops falling back or put down by any other means take nothing over. Remove the key to have works lost when a corps leaves, as before Version 64.",
+      probe: "Probe the line (Version 64). One fighting corps of the player's feels out the enemy army in the province beside it: every corps there is identified as a battle would identify it, and the works of each one that is dug in lose 'wear' months, whatever the weight of the corps that probes. It costs the probing corps 'loss' of its men, 'org' of its organisation and 'ap' of its moves, and it counts as having fought, so it does no digging that month. The defenders lose no men; they count as attacked, so they dig at the pace of troops who were. Nothing changes hands, no battle is filed, no offensive is opened by it, and a line is probed once a month at most. No computer staff probes.",
       prepared: "'dice' is the run of the day's luck for an attack on defenders who are all dug in and in supply (in the open it is 0.8 to 1.2, and it takes 1.2 to 1 on the day to carry the ground). Where only part of the defence is prepared the run lies between the two in proportion, and massed guns in the attack take their share off it as they do off the fieldworks. 'spentAt': an attack that fails against a defence at least this far prepared leaves the attacking corps with no moves for the rest of the month. 'surprise': how much of its preparedness a line loses to a new offensive by an army trained to it (Germany's): for 'surpriseMonths' months from its first blow, or for 'openingMonths' if it is the first offensive that army has ever made on that country. 'armour': how much it loses to an attack with tanks in it when the defence has no armour of its own. Both multiply with what the guns take off. 'losses': against a fully prepared line the attackers lose 'attacker' times the men they would in the open and the defenders 'defender' times, in proportion where the line is partly prepared.",
       wear: "Works wear down under attack (Version 61). Every attack on dug-in troops, won or lost, takes 'perAttack' months off the works of each defender who stays, in full if the attack came at 'fullAt' to 1 or better on the Battle Ticket and in proportion below that, so that a jab by one corps scratches a line and a real blow breaks into it. Massed guns in the attack add to it: by 'guns' times the share they take off the fieldworks. Works are never worn below nothing, and troops whose works are worn under one month lose the fieldworks' 25% in the same proportion. 'regrow': the months of digging a corps gets done in a month in which it was attacked. At a half, a line attacked once a month loses half a month's works every month and one attacked twice a month a month and a half, so steady pressure wears a line away and a quiet front builds it back. (At 0 the German player following history held Berlin to the end of 1944 in 17 to 19 wars of 24 instead of 12, and Moscow fell in 7 computer wars of 24 instead of 2: armies in contact never dug at all.)",
       tired: "Defenders who have already fought this month fight the next blow tired (Version 63). Every attack a corps stands against in the field, won or lost, counts against it until its own month begins again: 'per' off its defence for each blow at full weight, up to 'most' blows. The weight of a blow is the same measure the wear on works uses: full at wear.fullAt to 1 or better on the Battle Ticket, in proportion below that. The defenders' losses in men and in organisation go by the same weight, so that a jab by one corps at a great stack costs it almost nothing and tires nobody.",
@@ -16011,14 +16146,14 @@
       const ratio = theirs.worth / Math.max(0.01, ours.worth);
       const word = (xp) => xp < 0.2 ? "green" : xp < 0.45 ? "trained" : xp < 0.7 ? "seasoned" : "veteran";
       if (ratio >= 1.1 || ratio <= 1 / 1.1) {
-        const better = ratio > 1 ? "defending" : "attacking", worse = ratio > 1 ? "attacking" : "defending";
+        const better2 = ratio > 1 ? "defending" : "attacking", worse = ratio > 1 ? "attacking" : "defending";
         const k = ratio > 1 ? ratio : 1 / ratio;
         const armyK = ratio > 1 ? theirs.army / ours.army : ours.army / theirs.army, xpK = k / armyK;
         const why = [armyK >= 1.04 ? "the better trained and led army" : "", xpK >= 1.04 ? "the more experienced troops" : ""].filter(Boolean);
         lines.push({
           label: "Troops",
           value: `${word(ours.xp)[0].toUpperCase() + word(ours.xp).slice(1)} attackers against ${word(theirs.xp)} defenders`,
-          effect: `Division for division the ${better} side is the stronger${why.length ? `, as ${listAnd(why)}` : ""}: each ${better} division counts for about ${k.toFixed(1)} ${worse} ones`
+          effect: `Division for division the ${better2} side is the stronger${why.length ? `, as ${listAnd(why)}` : ""}: each ${better2} division counts for about ${k.toFixed(1)} ${worse} ones`
         });
       }
     }
@@ -16203,6 +16338,58 @@
     else r.units.splice(r.units.indexOf(c), 1);
     g2.corps.splice(g2.corps.indexOf(c), 1);
   }
+  var handover = (g2) => g2.flags.open === 1 && DEFENCE.entrench.auto && !!DEFENCE.handover;
+  function groundWorks(g2, reg) {
+    const months2 = g2.flags[`fw:${reg}`];
+    if (months2 === void 0 || months2 <= 0) return null;
+    const nat = Object.keys(g2.nations)[g2.flags[`fwn:${reg}`] ?? -1];
+    return nat ? { months: months2, corps: g2.flags[`fwk:${reg}`] ?? 1, nat } : null;
+  }
+  function clearWorks(g2, reg) {
+    if (g2.flags[`fw:${reg}`] === void 0) return;
+    delete g2.flags[`fw:${reg}`];
+    delete g2.flags[`fwk:${reg}`];
+    delete g2.flags[`fwn:${reg}`];
+  }
+  var mansWorks = (c) => !c.dead && c.kind !== "fort" && c.town === void 0 && !c.yields && !c.dug;
+  function leaveWorks(g2, c) {
+    if (!handover(g2) || !c.dug || c.town !== void 0 || c.kind === "fort") return;
+    const months2 = Math.round(worksOf(c) * 100) / 100;
+    if (months2 <= 0) return;
+    const from = g2.regions[c.reg];
+    const heir2 = friendlyUnits(g2, from, c.nat).find((u) => u !== c && mansWorks(u));
+    if (heir2) {
+      heir2.dug = true;
+      heir2.dugFor = months2;
+      heir2.relief = true;
+      return;
+    }
+    const old = groundWorks(g2, from.id);
+    const n = old ? old.corps : 0;
+    g2.flags[`fw:${from.id}`] = Math.round(((old ? old.months * n : 0) + months2) / (n + 1) * 100) / 100;
+    g2.flags[`fwk:${from.id}`] = Math.min(STACK, n + 1);
+    g2.flags[`fwn:${from.id}`] = Object.keys(g2.nations).indexOf(c.nat);
+  }
+  function takeWorks(g2, c, to) {
+    if (!handover(g2) || c.reg !== to.id || !mansWorks(c)) return;
+    const left = groundWorks(g2, to.id);
+    if (!left || !allied(g2, c.nat, left.nat)) return;
+    c.dug = true;
+    c.dugFor = left.months;
+    c.relief = true;
+    if (left.corps <= 1) clearWorks(g2, to.id);
+    else g2.flags[`fwk:${to.id}`] = left.corps - 1;
+  }
+  function fadeWorks(g2, nat) {
+    if (g2.flags.open !== 1) return;
+    const idx = Object.keys(g2.nations).indexOf(nat), fade = DEFENCE.handover?.fade ?? 1;
+    for (const r of g2.regions) {
+      const m = g2.flags[`fw:${r.id}`];
+      if (m === void 0 || g2.flags[`fwn:${r.id}`] !== idx) continue;
+      if (m - fade <= 1e-3) clearWorks(g2, r.id);
+      else g2.flags[`fw:${r.id}`] = Math.round((m - fade) * 100) / 100;
+    }
+  }
   function relocate(g2, c, to) {
     place(g2, c, to);
   }
@@ -16223,6 +16410,11 @@
     }
     to.units.push(c);
     if (c.dug) delete c.dug;
+    if (c.relief) delete c.relief;
+    if (g2.flags[`fw:${to.id}`] !== void 0) {
+      const left = groundWorks(g2, to.id);
+      if (!left || atWar(g2, c.nat, left.nat)) clearWorks(g2, to.id);
+    }
   }
   function sendHome(g2, c) {
     const to = nearestFriendly(g2, c);
@@ -16263,6 +16455,7 @@
         c.ap = Math.max(0, c.ap - 1);
         continue;
       }
+      leaveWorks(g2, c);
       place(g2, c, target);
       c.ap = Math.max(0, c.ap - cost);
       attU[i].fate = "advanced";
@@ -16557,6 +16750,52 @@
     for (const d of affected) checkCollapse(g2, d, attNat);
     return rep;
   }
+  var probeRules = (g2) => g2.flags.open === 1 && !!DEFENCE.probe;
+  function whyNoProbe(g2, c, target) {
+    const P = DEFENCE.probe;
+    if (!probeRules(g2) || !P) return "A line is probed only in the grand campaign.";
+    if (c.dead || c.kind === "fort" || c.kind === "art" || c.kind === "eng") return "Only a fighting corps probes: infantry, cavalry, mountain troops, motorized troops or tanks.";
+    if (c.town !== void 0) return "A garrison does not leave its town to probe.";
+    if (c.leave !== void 0) return "The corps is at home.";
+    if (!g2.regions[c.reg].nb.includes(target.id) || blocked(g2, c, target)) return "It cannot reach that line from where it stands.";
+    if (!hostileUnits(g2, target, armyOf(c)).length) return "No enemy army stands there in the field.";
+    if (g2.flags[`probed:${target.id}`] === g2.turn) return "That line has been probed this month already.";
+    if (c.ap < P.ap) return `A probe takes ${P.ap} of a corps' moves, and it has ${c.ap} left.`;
+    return null;
+  }
+  var probeCost = (g2, c) => Math.round(men(c) * Math.min(0.6, (DEFENCE.probe?.loss ?? 0) * cmdLoss(g2, c)));
+  function probeLine(g2, c, target) {
+    if (whyNoProbe(g2, c, target) !== null) return null;
+    const P = DEFENCE.probe, nat = armyOf(c);
+    const defenders = hostileUnits(g2, target, nat);
+    const lost = probeCost(g2, c);
+    const fresh3 = defenders.filter((d) => corpsKnown(g2, d, nat).level !== "exact").length;
+    c.str *= 1 - Math.min(0.6, P.loss * cmdLoss(g2, c));
+    c.org = clamp(c.org - P.org, 0, 1);
+    c.ap = Math.max(0, c.ap - P.ap);
+    c.fought = true;
+    let works = 0, left = 0;
+    for (const d of defenders) {
+      if (d.dug) {
+        const w = worksOf(d);
+        works = Math.max(works, w);
+        d.dugFor = Math.max(0, w - P.wear);
+        left = Math.max(left, worksOf(d));
+      }
+      d.pressed = true;
+    }
+    const wear = Math.round(Math.min(P.wear, works) * 10) / 10;
+    identify(g2, defenders, nat);
+    for (const d of new Set(defenders.map((x) => x.nat))) identify(g2, [c], d);
+    g2.flags[`probed:${target.id}`] = g2.turn;
+    const rep = { turn: g2.turn, region: target.id, nat, corps: c.id, name: c.name, lost, found: defenders.map((d) => d.name), fresh: fresh3, wear, works: Math.round(left * 10) / 10 };
+    const months2 = (m) => m === 1 ? "a month" : `${m} months`;
+    const worksNews = works <= 0 ? "They are not dug in." : `Their fieldworks are ${months2(wear)} the worse for it${rep.works < 0.05 ? ", and nothing is left of them" : `: ${months2(rep.works)} of work ${rep.works === 1 ? "is" : "are"} left in them`}.`;
+    if (nat === g2.human) headline(g2, "battle", `${c.name} probes the line at ${target.name} and finds ${listAnd(rep.found)}. ${worksNews} It cost ${lost.toLocaleString("en-US")} men.`, nat, target.id);
+    const mine3 = defenders.find((d) => d.nat === g2.human);
+    if (mine3) headline(g2, "battle", `${g2.nations[nat].adj} troops probe your line at ${target.name} in strength. They know now who holds it${works > 0 ? `, and your fieldworks there are ${months2(wear)} the worse` : ""}.`, mine3.nat, target.id);
+    return rep;
+  }
   function capture(g2, r, nat) {
     const old = r.ctrl;
     if (old === nat) return;
@@ -16566,6 +16805,10 @@
     moraleCapital(g2, r, old);
     r.prev = old;
     g2.supplyDirty = true;
+    if (g2.flags[`fw:${r.id}`] !== void 0) {
+      const left = groundWorks(g2, r.id);
+      if (!left || !allied(g2, r.ctrl, left.nat)) clearWorks(g2, r.id);
+    }
     if (groundRules(g2)) {
       liftMines(g2, r);
       if (atWar(g2, nat, old)) {
@@ -16594,8 +16837,10 @@
     if (hostileUnits(g2, to, c.nat).length) return false;
     if (!hasRoom(g2, to, c)) return false;
     g2.week = weekOf(c, cost);
+    leaveWorks(g2, c);
     place(g2, c, to);
     c.ap = Math.max(0, c.ap - cost);
+    if (friendly2) takeWorks(g2, c, to);
     if (!friendly2 && !arrive(g2, to, armyOf(c))) c.ap = 0;
     return true;
   }
@@ -16631,8 +16876,10 @@
     const friendly2 = allied(g2, c.nat, to.ctrl) && !besieged(g2, to) || junctionOpenTo(g2, c.nat, to);
     if (c.kind === "fort" || c.ap < 4 || !friendly2 || !hasRoom(g2, to, c) || barred(g2, c, to) || c.town) return false;
     if (to.id !== c.reg && !railReach(g2, c).has(to.id)) return false;
+    if (to.id !== c.reg) leaveWorks(g2, c);
     place(g2, c, to);
     c.ap = 0;
+    takeWorks(g2, c, to);
     return true;
   }
   function homeLost(g2, nat) {
@@ -17076,6 +17323,13 @@
     if (g2.flags.open !== 1 || !DEFENCE.entrench.auto) return;
     for (const c of g2.corps) {
       if (c.dead || c.kind === "fort" || armyOf(c) !== nat) continue;
+      if (c.relief) {
+        delete c.relief;
+        if (c.dug && c.town === void 0 && !c.yields && !c.fought) {
+          if (c.pressed) delete c.pressed;
+          continue;
+        }
+      }
       if (c.town === void 0 && !c.yields && c.ap >= c.apMax && !c.fought) {
         const gain = c.pressed ? DEFENCE.wear.regrow : 1;
         if (c.dug) c.dugFor = (c.dugFor ?? 1) + gain;
@@ -17100,6 +17354,7 @@
   }
   function startPhase(g2, nat) {
     const n = g2.nations[nat];
+    fadeWorks(g2, nat);
     if (!n.alive) return;
     for (const row2 of [...setup_1939_default.reinforcements, ...setup_1939_default.formations ?? []]) {
       if (row2[0] !== g2.turn || row2[1] !== nat) continue;
@@ -17281,6 +17536,10 @@
   var missionOf = (kind) => kind === "recon" ? "support" : kind;
   var kindOf = (f) => f.kind ?? (f.bmr <= 0 ? "ftr" : f.ftr <= 0 ? "bmr" : "mixed");
   var flying = (f) => f.ftr + f.bmr > 0;
+  var monthsOf = (m) => {
+    const v = Math.round(m * 10) / 10;
+    return v === 1 ? "a month" : `${v} months`;
+  };
   function fieldWord(holds3) {
     const W = AIRWAR.fields.words;
     const i = W.findIndex(([most]) => holds3 <= most);
@@ -17487,9 +17746,9 @@
     const out = /* @__PURE__ */ new Map();
     const fleets = able(g2, nat);
     const needs = kindRow(kind).needs;
-    const sight2 = kind === "ground" || kind === "recon" ? sightOf(g2, nat) : null;
+    const sight2 = kind === "ground" || kind === "line" || kind === "recon" ? sightOf(g2, nat) : null;
     for (const t of targetIds(g2, kind, nat)) {
-      if (kind === "ground" && !troopsSeen(g2, nat, t, sight2)) continue;
+      if ((kind === "ground" || kind === "line") && !troopsSeen(g2, nat, t, sight2)) continue;
       if (kind === "town" && !townWanted(g2, nat, t)) continue;
       if (kind === "recon" && sight2[t] === SIGHT.full && !unidentified(g2, nat, t)) continue;
       const can2 = fleets.filter((f) => whyNotSeat(g2, f, kind, t) === null);
@@ -17542,6 +17801,11 @@
     if (kind === "bomb" || kind === "night") {
       const bits = [r.fac > 0 ? plural5(r.fac, "factory", "factories") : "", onNet(t) && !railCut(g2, t) ? railsAt(t).length >= 3 ? "a railway junction" : "a railway" : "", gunsAt(g2, t) ? `level ${gunsAt(g2, t)} guns` : ""];
       return bits.filter(Boolean).join(", ");
+    }
+    if (kind === "line") {
+      const dug = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat) && worksOf(u) > 0);
+      const most = Math.max(0, ...dug.map(worksOf));
+      return `${plural5(dug.length, "corps", "corps")} dug in, in works of ${monthsOf(most)}${most >= DEFENCE.entrench.months ? ", finished" : ""}`;
     }
     if (kind === "ground") {
       const foes = r.units.filter((u) => !u.dead && atWar(g2, nat, u.nat));
@@ -17600,6 +17864,11 @@
       if (sunk && sunk.cv > 0.15) out.push("A carrier that goes down takes most of its aircraft with it.");
     } else if (kind === "town") {
       if (fc.town) out.push(townHitText(g2, g2.regions[target], fc.town, "bombs", false));
+    } else if (kind === "line") {
+      const most = Math.max(0, ...g2.regions[target].units.filter((u) => !u.dead && atWar(g2, nat, u.nat)).map(worksOf));
+      const took = Math.min(fc.cut, most), left = Math.max(0, most - fc.cut);
+      out.push(took >= 0.05 ? `Should take about ${monthsOf(took)} off the fieldworks at ${place2}, which would leave ${left < 0.05 ? "nothing of them" : `${monthsOf(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.` : `Too few bombers would get through to break up the works at ${place2}.`);
+      out.push("The men in the works are not hurt, and they dig the works back a month at a time: bomb in the month you attack.");
     } else if (kind === "ground") {
       const dug = g2.regions[target].units.some((u) => !u.dead && u.dug && atWar(g2, nat, u.nat));
       out.push(`The troops at ${place2} should lose about ${pct5(fc.cut)} of their organisation${dug ? " (less where they are dug in)" : ""}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
@@ -17648,7 +17917,7 @@
       plan.why = "No fleet has been found there. Search that sea first: a fleet has to be found before it can be struck.";
       return plan;
     }
-    if (kind === "ground" && !troopsSeen(g2, nat, target, sightOf(g2, nat))) {
+    if ((kind === "ground" || kind === "line") && !troopsSeen(g2, nat, target, sightOf(g2, nat))) {
       plan.why = "No enemy troops have been seen there.";
       return plan;
     }
@@ -17720,6 +17989,7 @@
     plan.fighterLossN = Math.round(fc.ftrLoss);
     plan.foeLossN = Math.round(fc.foeLoss);
     plan.effects = effectsOf2(g2, kind, target, fc, nat);
+    if (kind === "line") plan.wear = fc.cut;
     const bombers = going.filter((f) => f.bmr > 0);
     if (bombers.length >= 2) {
       const alone = bombers.map((b) => assessAir(g2, [b, ...going.filter((x) => x.bmr <= 0 && homeOf(x) === homeOf(b))], m, target)).filter((x) => !x.why).map((x) => x.bomberLoss);
@@ -17797,6 +18067,94 @@
     const text = `Aircraft of the ${f.name} photographed ${r.name}: ${seen2}.${lost ? ` ${plural5(lost, "aircraft", "aircraft")} did not come back.` : ""}`;
     if (f.nat === g2.human) headline(g2, "info", text, f.nat, r.id);
     return { ok: true, text, lost };
+  }
+
+  // ../../src/campaign/fold.ts
+  var foldRules = (g2) => g2.flags.open === 1 && !!MANPOWER.fold;
+  function whyNotFold(g2, keep, gone) {
+    if (!foldRules(g2)) return "Corps are folded together in the grand campaign.";
+    if (keep === gone || keep.dead || gone.dead) return "There is nothing to fold.";
+    if (keep.nat !== gone.nat) return "The two corps serve different countries.";
+    if (keep.kind === "fort" || gone.kind === "fort") return "Fortress troops stay in their works.";
+    if (keep.reg !== gone.reg || keep.town !== void 0 || gone.town !== void 0) return "The two corps must stand together in the field, in the same province.";
+    if (keep.kind !== gone.kind) return "The two corps must be of the same kind.";
+    if ((keep.elite ?? "") !== (gone.elite ?? "") || !!keep.airborne !== !!gone.airborne) return "A special formation folds only into another of its own.";
+    if (keep.joint || gone.joint) return "A corps marching with an ally cannot be folded.";
+    if (keep.leave !== void 0 || gone.leave !== void 0) return "A corps at home cannot be folded.";
+    if (!keep.supplied || !gone.supplied) return "Cut off, the cadre has no way home.";
+    const worn = MANPOWER.fold.worn;
+    if (keep.str >= worn || gone.str >= worn) return `Both corps must be under ${Math.round(worn * 100)}% of their strength.`;
+    return null;
+  }
+  var better = (a, b) => a.level !== b.level ? a.level > b.level : a.xp !== b.xp ? a.xp > b.xp : a.rec.won > b.rec.won;
+  function command(g2, keep, gone) {
+    const a = generalOf(g2, keep), b = generalOf(g2, gone);
+    const lead2 = b && (!a || better(b, a)) ? b : a;
+    return { lead: lead2, out: lead2 === b ? a : b };
+  }
+  function foldView(g2, keep, gone) {
+    const mine3 = keep.str * keep.divs, theirs = gone.str * gone.divs;
+    const fill4 = Math.min(keep.divs, mine3 + theirs), from = Math.max(0, fill4 - mine3);
+    const mix = (a, b) => fill4 > 0 ? (a * mine3 + b * from) / fill4 : a;
+    const { lead: lead2, out } = command(g2, keep, gone);
+    const t = cadreTerms(g2, gone.nat, gone);
+    const v = {
+      keep: keep.id,
+      gone: gone.id,
+      keepName: keep.name,
+      goneName: gone.name,
+      why: whyNotFold(g2, keep, gone),
+      str: fill4 / keep.divs,
+      men: Math.round(fill4 * MEN_PER_DIV),
+      xp: mix(keep.xp, gone.xp),
+      org: clamp(mix(keep.org, gone.org) - MANPOWER.fold.org, 0, 1),
+      ap: Math.min(keep.ap, gone.ap),
+      back: Math.round((mine3 + theirs - fill4) * MEN_PER_DIV),
+      general: lead2?.name ?? null,
+      stepsDown: out?.name ?? null,
+      cadreCost: t.cost,
+      cadreMonths: t.months,
+      cadreMen: t.divs * MEN_PER_DIV
+    };
+    if (worksOf(gone) > worksOf(keep)) v.works = worksOf(gone);
+    return v;
+  }
+  function foldChoices(g2, reg, nat) {
+    if (!foldRules(g2)) return [];
+    const cs = g2.regions[reg].units.filter((c) => c.nat === nat && !c.dead);
+    const out = [];
+    for (const keep of cs) for (const gone of cs) if (keep !== gone && whyNotFold(g2, keep, gone) === null) out.push(foldView(g2, keep, gone));
+    return out;
+  }
+  function foldCorps(g2, keep, gone) {
+    if (whyNotFold(g2, keep, gone) !== null) return false;
+    const v = foldView(g2, keep, gone), n = g2.nations[keep.nat], reg = keep.reg;
+    const mine3 = keep.str * keep.divs, fill4 = v.str * keep.divs, from = Math.max(0, fill4 - mine3);
+    if (keep.mor !== void 0 && gone.mor !== void 0 && fill4 > 0) keep.mor = (keep.mor * mine3 + gone.mor * from) / fill4;
+    keep.xp = v.xp;
+    keep.org = v.org;
+    keep.str = v.str;
+    keep.ap = v.ap;
+    if (gone.fought) keep.fought = true;
+    if (gone.pressed) keep.pressed = true;
+    if ((gone.blows ?? 0) > (keep.blows ?? 0)) keep.blows = gone.blows;
+    returnMen(g2, keep.nat, gone.str * gone.divs - from);
+    if (v.works !== void 0) {
+      keep.dug = true;
+      keep.dugFor = gone.dugFor;
+      if (keep.ap < keep.apMax) keep.relief = true;
+    }
+    const { lead: lead2, out } = command(g2, keep, gone);
+    if (out) appoint(g2, out, null);
+    if (lead2 && lead2.corps !== keep.id) appoint(g2, lead2, keep);
+    noteCorps(g2, keep, "folded", reg, gone.id);
+    noteCorps(g2, gone, "cadre", reg, keep.id);
+    removeCorps(g2, gone);
+    gone.str = 0;
+    gone.ap = 0;
+    (n.cadres ?? (n.cadres = [])).push(gone);
+    if (keep.nat === g2.human) headline(g2, "info", `${gone.name} is folded into ${keep.name} at ${g2.regions[reg].name}: ${v.men.toLocaleString("en-US")} men in one corps${v.back > 0 ? `, ${v.back.toLocaleString("en-US")} sent back to the reserve` : ""}. Its cadre has gone home and can be raised again from the arsenal.`, keep.nat, reg);
+    return true;
   }
 
   // ../../src/campaign/fleets.ts
@@ -20587,7 +20945,7 @@
       even,
       unidentified: k.none.length,
       stale: k.report.length,
-      note: `${what}, so the odds are the staff's estimate. A battle, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
+      note: `${what}, so the odds are the staff's estimate. ${probeRules(g2) ? "A probe by one corps" : "A battle"}, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
       wide: chanceAt(band.hi) - chanceAt(band.lo) > 0.4,
       guess: Array.from({ length: 21 }, (_, i) => chanceAt(band.lo + (band.hi - band.lo) * i / 20)).reduce((s, x) => s + x, 0) / 21,
       narrow,
@@ -20600,6 +20958,46 @@
     const ok = jointForce(g2, limitAttackers(g2, jointForce(g2, corps.filter((c) => canOrder(g2, c) && c.ap > 0 && g2.regions[c.reg].nb.includes(target.id)), target), target), target);
     if (!ok.length || !hostileUnits(g2, target, ok[0].nat).length || whyNotAttack(g2, target, ok[0].nat)) return null;
     return resolveBattle(g2, ok, target);
+  }
+  function orderProbe(g2, c, target) {
+    if (onEve(g2) || !canOrder(g2, c) || whyNotAttack(g2, target, c.nat)) return null;
+    return probeLine(g2, c, target);
+  }
+  function softenOptions(g2, corps, target) {
+    if (!probeRules(g2) || g2.human === null || !humanUp(g2)) return null;
+    const foes = hostileUnits(g2, target, g2.human);
+    if (!foes.length || whyNotAttack(g2, target, g2.human)) return null;
+    const P = DEFENCE.probe;
+    const works = Math.round(Math.max(0, ...foes.map(worksOf)) * 10) / 10;
+    const pool = [.../* @__PURE__ */ new Set([...corps, ...candidates(g2, target)])].filter((c) => canOrder(g2, c));
+    const can2 = pool.filter((c) => whyNoProbe(g2, c, target) === null).sort((a, b) => corpsBase(g2, a) * KIND[a.kind].atk - corpsBase(g2, b) * KIND[b.kind].atk || a.id - b.id);
+    const who = can2[0] ?? pool[0];
+    const fresh3 = foes.filter((d) => corpsKnown(g2, d, g2.human).level !== "exact").length;
+    const probe = who ? { corps: who.id, name: who.name, why: whyNoProbe(g2, who, target), ap: P.ap, men: probeCost(g2, who), wear: Math.min(P.wear, works), fresh: fresh3 } : { corps: -1, name: "", why: "No corps of yours stands beside that line with moves left.", ap: P.ap, men: 0, wear: Math.min(P.wear, works), fresh: fresh3 };
+    let bomb = null;
+    if (raidKinds(g2, g2.human).some((k) => k.key === "line")) {
+      if (works <= 0) bomb = { why: "Nobody there is dug in: there are no fieldworks to bomb.", groups: 0, bombers: 0, wear: 0, verdict: "" };
+      else {
+        const plan = planRaid(g2, "line", target.id, void 0, g2.human);
+        bomb = { why: plan.why, groups: plan.picked.length, bombers: plan.bombers, wear: Math.min(plan.wear ?? 0, works), verdict: plan.verdict };
+      }
+    }
+    return { works, probe, bomb };
+  }
+  function fieldworksLeft(g2, reg) {
+    const left = groundWorks(g2, reg);
+    return left && g2.human !== null && allied(g2, g2.human, left.nat) ? left : null;
+  }
+  function foldChoicesAt(g2, reg) {
+    return g2.human !== null && humanUp(g2) ? foldChoices(g2, reg, g2.human).filter((v) => {
+      const c = g2.corps.find((x) => x.id === v.keep);
+      return !!c && canOrder(g2, c);
+    }) : [];
+  }
+  function orderFold(g2, keep, gone) {
+    const a = g2.corps.find((c) => c.id === keep), b = g2.corps.find((c) => c.id === gone);
+    if (!a || !b || !canOrder(g2, a) || !canOrder(g2, b)) return false;
+    return foldCorps(g2, a, b);
   }
   var townOrder = (g2, c) => !c.dead && g2.human !== null && current(g2) === g2.human && c.nat === g2.human && c.leave === void 0;
   var prizesOf = (g2, region) => prizesAt(g2, region, g2.human);
@@ -21531,7 +21929,7 @@
   var num3 = (n) => Math.round(n).toLocaleString("en-US");
   var pct6 = (x) => `${Math.round(x * 100)}%`;
   var craft = (x) => [x.ftr >= 1 ? `${num3(x.ftr)} fighters` : "", x.bmr >= 1 ? `${num3(x.bmr)} bombers` : ""].filter(Boolean).join(", ") || "no aircraft fit to fly";
-  var KINDS3 = ["bomb", "night", "ground", "town", "superiority", "strike", "fleet", "harbour", "recon"];
+  var KINDS3 = ["bomb", "night", "ground", "line", "town", "superiority", "strike", "fleet", "harbour", "recon"];
   var isKind = (k) => KINDS3.includes(k);
   var ids = (s) => s ? s.split(".").map(Number).filter((n) => Number.isFinite(n)) : [];
   var BACK = { label: "BACK TO THE AIRFIELD", act: "open:airfield", ok: true, tip: "" };
@@ -22060,6 +22458,29 @@
         const can2 = joinOffers(s, reg).filter((o) => !o.why);
         return { region: reg, n: can2.length, nats: [...new Set(can2.map((o) => s.nations[o.nat]?.adj ?? o.nat))] };
       }).filter((x) => x.n > 0) : [],
+      // (Version 64) Where two of the player's corps standing together are worn thin and could be folded into one: the province, and their names.
+      folds: s.human && up ? [...new Set(s.corps.filter((c) => !c.dead && c.nat === s.human && c.kind !== "fort").map((c) => c.reg))].map((reg) => {
+        let vs = [];
+        try {
+          vs = foldChoicesAt(s, reg).filter((v) => !v.why);
+        } catch {
+          vs = [];
+        }
+        return { region: reg, names: [...new Set(vs.map((v) => v.keepName))] };
+      }).filter((x) => x.names.length > 0) : [],
+      // (Version 64) Fieldworks standing empty on ground of the player's side: the province, tenths of a month of work, and room for how many corps.
+      worksLeft: (() => {
+        const out = [];
+        if (s.flags.open !== 1) return out;
+        try {
+          for (const r of s.regions) {
+            const v = fieldworksLeft(s, r.id);
+            if (v) out.push(r.id, Math.round(v.months * 10), v.corps);
+          }
+        } catch {
+        }
+        return out;
+      })(),
       // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
       unseen: s.human ? s.regions.filter((r) => seen2[r.id] === 0).map((r) => r.id) : [],
       // The weather the rules keep: mud in the east in spring and autumn, and the eastern winter. With it, the ground it lies on.
@@ -22749,6 +23170,42 @@
       ids: cands.map((c) => c.id)
     };
   }
+  var lastProbe = null;
+  function softenRow(s, corps, to) {
+    let v = null;
+    try {
+      v = softenOptions(s, corps, s.regions[to]);
+    } catch {
+      v = null;
+    }
+    const done = lastProbe && lastProbe.turn === s.turn && lastProbe.region === to ? lastProbe : null;
+    if (!v || v.works <= 0 && v.probe.fresh <= 0 && !done) return null;
+    const mo = (m) => {
+      const x = Math.round(m * 10) / 10;
+      return x === 1 ? "a month" : `${x} months`;
+    };
+    const num4 = (n) => Math.round(n).toLocaleString("en");
+    const gains = [v.probe.fresh ? `name the ${v.probe.fresh === 1 ? "corps" : `${v.probe.fresh} corps`} the staff cannot see` : "", v.probe.wear > 0 ? `take ${mo(v.probe.wear)} off their fieldworks` : ""].filter(Boolean).join(" and ");
+    const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num4(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.` : "There is nothing more a probe could find here.");
+    return {
+      head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ", finished" : ""}.` : "The defenders are not dug in.",
+      done: done ? `${done.name} has probed this line: it found ${listOf3(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num4(done.lost)} men.` : "",
+      probe: { label: `PROBE${v.probe.name ? ` WITH ${v.probe.name.toUpperCase()}` : " THE LINE"}`, text: probeText, ok: !v.probe.why && !!gains, corps: v.probe.corps },
+      bomb: v.bomb ? {
+        label: "BOMB THE LINE",
+        ok: !v.bomb.why,
+        // (the raid planner, on this line, with the groups the staff would send)
+        open: v.bomb.why ? "" : `plan:line:${to}:${(() => {
+          try {
+            return previewRaid(s, "line", to).picked.join(".");
+          } catch {
+            return "";
+          }
+        })()}`,
+        text: v.bomb.why ?? `${v.bomb.groups === 1 ? "One air group" : `${v.bomb.groups} air groups`} with ${num4(v.bomb.bombers)} bombers can reach it, and should take about ${mo(v.bomb.wear)} off the fieldworks. ${v.bomb.verdict}. The planner shows what will meet them.`
+      } : null
+    };
+  }
   function preview(ids2, to, open = false) {
     const s = game();
     let pickedIds = [];
@@ -22787,7 +23244,9 @@
       cost: costLines(look),
       ids: ids2,
       opened,
-      pickedIds
+      pickedIds,
+      // (Version 64) soften the line first: a probe by one corps, or the bombers on its fieldworks
+      soften: softenRow(s, corps, to)
     };
     const evenLine = even > 1.21 && !saidAlready ? [{ label: "An even chance", value: `${even.toFixed(1)} to 1`, effect: "Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance." }] : [];
     const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
@@ -23203,6 +23662,20 @@
           return null;
         }
       })(),
+      // (Version 64) Fieldworks standing empty here, which a corps of the player's side takes over by marching in.
+      leftWorks: (() => {
+        try {
+          const v = fieldworksLeft(s, r.id);
+          if (!v) return null;
+          const m = Math.round(v.months * 10) / 10;
+          return {
+            title: `FIELDWORKS STAND EMPTY HERE  ·  ROOM FOR ${v.corps === 1 ? "ONE CORPS" : `${v.corps} CORPS`}  ·  ${m === 1 ? "A MONTH" : `${m} MONTHS`} OF WORK`,
+            text: "A corps of yours that marches or rides in takes them over at once and fights from them, as if it had dug them itself. Empty, they lose a month of work every month."
+          };
+        } catch {
+          return null;
+        }
+      })(),
       // (Version 59) A directive of the war cabinet that names this province: said on its panel, with the months left.
       directive: (() => {
         try {
@@ -23603,6 +24076,7 @@
         blurb: o.blurb,
         size: o.size,
         months: o.months,
+        kind: o.kind ?? "",
         cost: shown(o.cost),
         upkeep: shown(o.upkeep),
         at: o.at,
@@ -24681,10 +25155,56 @@ ${standing3}`,
       ]
     };
   }
+  function foldPage(s, reg) {
+    const r = s.regions[reg];
+    if (!r || !s.human) return null;
+    let vs = [];
+    try {
+      vs = foldChoicesAt(s, reg);
+    } catch {
+      vs = [];
+    }
+    const pct8 = (x) => `${Math.round(x * 100)}%`;
+    const num4 = (n) => Math.round(n).toLocaleString("en");
+    const corpsOfId = (id) => s.corps.find((c) => c.id === id);
+    const pairs = /* @__PURE__ */ new Map();
+    for (const v of vs) {
+      const k = [v.keep, v.gone].sort((a, b) => a - b).join(":");
+      (pairs.get(k) ?? pairs.set(k, []).get(k)).push(v);
+    }
+    const sections = [...pairs.values()].map((p) => {
+      const a = corpsOfId(p[0].keep), b = corpsOfId(p[0].gone);
+      return {
+        heading: a && b ? `${a.name.toUpperCase()} AND ${b.name.toUpperCase()}` : "TWO CORPS",
+        text: a && b ? `${a.name}: ${num4(men(a))} men, ${pct8(a.str)} of its strength. ${b.name}: ${num4(men(b))} men, ${pct8(b.str)}.` : "",
+        rows: p.map((v) => ({
+          nat: s.human,
+          title: `Keep ${v.keepName}`,
+          lines: [
+            `${num4(v.men)} men in one corps at ${pct8(v.str)} of its strength, ${grade(v.xp).toLowerCase()}.`,
+            v.general ? `${v.general} commands${v.stepsDown ? `; ${v.stepsDown} goes to the list of generals waiting for a corps` : ""}.` : "No general commands it.",
+            v.back > 0 ? `${num4(v.back)} men over go back to the reserve.` : "",
+            v.works !== void 0 ? `It takes over the fieldworks ${v.goneName} stands in.` : "",
+            `${v.goneName} goes home as a cadre: it can be raised again from the arsenal for ${shown(v.cadreCost).toLocaleString("en")} from the treasury and ${num4(v.cadreMen)} men from the reserve, in ${v.cadreMonths} month${v.cadreMonths === 1 ? "" : "s"}.`,
+            v.why ?? ""
+          ].filter(Boolean),
+          buttons: [{ label: `FOLD INTO ${v.keepName.toUpperCase()}`, act: `fold:${v.keep}:${v.gone}`, ok: !v.why, danger: true, tip: v.why ?? `${v.keepName} takes in the men of ${v.goneName}. It cannot be undone.` }]
+        }))
+      };
+    });
+    return {
+      id: `fold:${reg}`,
+      title: "FOLD TWO WORN CORPS INTO ONE",
+      headline: `The army at ${r.name}  ·  ${turnToDate(s.turn).label}`,
+      note: `Two corps of the same kind, both under ${Math.round(MANPOWER.fold.worn * 100)}% of their strength, can be made into one that can fight. The corps that is kept loses a little of its order while the men shake down together, and has the fewer moves of the two left this month. The other leaves the map with its name, its record and its honours, and waits in the arsenal to be raised again at ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps.`,
+      top: [],
+      sections: sections.length ? sections : [{ heading: "NOTHING TO FOLD", text: "No two corps here can be folded together this month.", rows: [] }]
+    };
+  }
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
-    const p = id === "cabinet" ? cabinetPage(s) : id === "men" ? menPage(s) : id === "trade" ? tradePage(s) : id === "towns" ? townsPage(s) : part[0] === "town" ? townPage(s, Number(part[1])) : id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : part[0] === "fleet" ? fleetPage(s, Number(part[1])) : part[0] === "shell" ? shellPage(s, Number(part[1]), Number(part[2])) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
+    const p = id === "cabinet" ? cabinetPage(s) : id === "men" ? menPage(s) : id === "trade" ? tradePage(s) : id === "towns" ? townsPage(s) : part[0] === "town" ? townPage(s, Number(part[1])) : id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : part[0] === "fleet" ? fleetPage(s, Number(part[1])) : part[0] === "shell" ? shellPage(s, Number(part[1]), Number(part[2])) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : part[0] === "fold" ? foldPage(s, Number(part[1])) : null;
     return p ? { ok: true, ...p } : { ok: false };
   }
   function act(action, region = -1) {
@@ -24731,6 +25251,24 @@ ${standing3}`,
         }
       }
       return { ok, note: note4, fly: fly2, flies, open, view: view() };
+    }
+    if (part[0] === "probe") {
+      const who = s.corps.find((c) => c.id === Number(part[1])), target = s.regions[Number(part[2])];
+      const rep = who && target ? orderProbe(s, who, target) : null;
+      ok = !!rep;
+      if (rep) {
+        lastProbe = { turn: s.turn, region: target.id, name: rep.name, found: rep.found, wear: rep.wear, lost: rep.lost };
+        note4 = `${rep.name} has probed the line at ${target.name}: it found ${listOf3(rep.found)}${rep.wear > 0 ? ", and wore their fieldworks down" : ""}. It cost ${rep.lost.toLocaleString("en")} men.`;
+      } else note4 = "The line cannot be probed now.";
+      return { ok, note: note4, fly: fly2, flies, open, view: view() };
+    }
+    if (part[0] === "fold") {
+      const keep = Number(part[1]), gone = Number(part[2]);
+      const a = s.corps.find((c) => c.id === keep), b = s.corps.find((c) => c.id === gone);
+      const names = a && b ? [a.name, b.name] : null;
+      ok = !!names && orderFold(s, keep, gone);
+      note4 = ok && names ? `${names[1]} is folded into ${names[0]}. Its cadre waits in the arsenal.` : "They cannot be folded together now.";
+      return { ok, note: note4, fly: fly2, flies, open: ok ? "close" : open, view: view() };
     }
     if (part[0] === "civic") {
       const at = Number(part[1]);

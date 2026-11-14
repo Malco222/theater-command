@@ -1609,17 +1609,25 @@ namespace
 						.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
-							SNew(SBox).WidthOverride(900.0f)
+							SNew(SBox).WidthOverride(912.0f)
+							.MaxDesiredHeight_Lambda([this]() { return FOptionalSize(FMath::Max(520.0f, static_cast<float>(GetTickSpaceGeometry().GetLocalSize().Y) - 44.0f)); })
 							[
-								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(34.0f, 24.0f, 34.0f, 26.0f))
+								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(34.0f, 24.0f, 22.0f, 26.0f))
 								[
 									SNew(SVerticalBox)
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 24)).ColorAndOpacity(Cream)
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Title : FText::GetEmpty(); })
 									]
 
+									// Everything between the title and the orders scrolls when the card is taller than the screen, so the orders are never pushed off it.
+									+ SVerticalBox::Slot().FillHeight(1.0f)
+									[
+										SNew(SScrollBox)
+										+ SScrollBox::Slot().Padding(0.0f, 0.0f, 12.0f, 0.0f)
+										[
+											SNew(SVerticalBox)
 									// What the battle came to, once it has been fought.
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 10.0f, 0.0f, 0.0f)
 									[
@@ -1737,6 +1745,72 @@ namespace
 										]
 									]
 
+									// (Version 64) Soften the line first: a probe by one corps, or the bombers on its fieldworks.
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 16.0f, 0.0f, 0.0f)
+									[
+										SNew(SVerticalBox)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && F->bSoften ? EVisibility::Visible : EVisibility::Collapsed; })
+										+ SVerticalBox::Slot().AutoHeight()
+										[
+											SNew(STextBlock).Text(FText::FromString(TEXT("SOFTEN THE LINE FIRST"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)
+										]
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+											.Text_Lambda([Face]()
+											{
+												const FFaceOff* F = Face();
+												return !F ? FText::GetEmpty() : F->SoftenDone.IsEmpty() ? F->SoftenHead : FText::FromString(F->SoftenHead.ToString() + TEXT("  ") + F->SoftenDone.ToString());
+											})
+										]
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+										[
+											SNew(SHorizontalBox)
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
+											[
+												SNew(SBox).MinDesiredWidth(210.0f)
+												[
+													SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
+													.IsEnabled_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bProbeOk; })
+													.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ProbeLine(); } return FReply::Handled(); })
+													[
+														SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 120))
+														.ColorAndOpacity_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F && F->bProbeOk ? BrightBrass : Faint); })
+														.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->ProbeLabel : FText::GetEmpty(); })
+													]
+												]
+											]
+											+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+												.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->ProbeText : FText::GetEmpty(); })
+											]
+										]
+										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+										[
+											SNew(SHorizontalBox)
+											.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bBomb ? EVisibility::Visible : EVisibility::Collapsed; })
+											+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top)
+											[
+												SNew(SBox).MinDesiredWidth(210.0f)
+												[
+													SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
+													.IsEnabled_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bBombOk; })
+													.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->BombLine(); } return FReply::Handled(); })
+													[
+														SNew(STextBlock).Text(FText::FromString(TEXT("BOMB THE LINE"))).Font(Font(TEXT("Bold"), 9, 120))
+														.ColorAndOpacity_Lambda([Face]() { const FFaceOff* F = Face(); return FSlateColor(F && F->bBombOk ? BrightBrass : Faint); })
+													]
+												]
+											]
+											+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(12.0f, 0.0f, 0.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+												.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->BombText : FText::GetEmpty(); })
+											]
+										]
+									]
+
 									// The Battle Ticket: what the map says about this fight.
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 0.0f)
 									[
@@ -1744,20 +1818,13 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 									[
-										// (Version 63) A long ticket opens folded to the lines that matter most; all of it never runs off the card.
-										SNew(SBox).MaxDesiredHeight(330.0f)
-										[
-											SNew(SScrollBox)
-											+ SScrollBox::Slot().Padding(0.0f, 0.0f, 10.0f, 0.0f)
-											[
-												SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.3f)
-												.Text_Lambda([this, Face]()
-												{
-													const FFaceOff* F = Face();
-													return !F ? FText::GetEmpty() : F->TicketHidden > 0 && Controller.IsValid() && !Controller->IsTicketAll() ? F->TicketKey : F->Ticket;
-												})
-											]
-										]
+											// (Version 63) A long ticket opens folded to the lines that matter most.
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.3f)
+										.Text_Lambda([this, Face]()
+										{
+											const FFaceOff* F = Face();
+											return !F ? FText::GetEmpty() : F->TicketHidden > 0 && Controller.IsValid() && !Controller->IsTicketAll() ? F->TicketKey : F->Ticket;
+										})
 									]
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 8.0f, 0.0f, 0.0f)
 									[
@@ -1774,8 +1841,11 @@ namespace
 										]
 									]
 
+										]
+									]
+
 									// What to do about it.
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 24.0f, 0.0f, 0.0f)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 20.0f, 12.0f, 0.0f)
 									[
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f)
@@ -2830,6 +2900,18 @@ namespace
 							SNew(STextBlock).Text(Info.Holdings).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
 						];
 					}
+					if ((ProvinceTab == 0 || !bProvince) && !Info.LeftWorksText.IsEmpty())
+					{
+						// (Version 64) Fieldworks standing empty here, for a corps of the player's side to take over.
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.LeftWorksTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass).AutoWrapText(true)
+						];
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.LeftWorksText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.12f)
+						];
+					}
 					if ((ProvinceTab == 0 || !bProvince) && !Info.PocketText.IsEmpty())
 					{
 						// (Version 63) Cut off from the rest of its country: what its troops live on, and for how long.
@@ -3353,6 +3435,19 @@ namespace
 						]
 					];
 				}
+				// (Version 64) Two corps of the army worn thin: the card that makes one of them.
+				if (!Army.FoldButton.IsEmpty())
+				{
+					TrayOrders->AddSlot().AutoWidth().Padding(22.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(11.0f, 4.0f)).IsFocusable(false)
+						.ToolTipText(Army.FoldTip)
+						.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenFold(); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Text(Army.FoldButton).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(BrightBrass)
+						]
+					];
+				}
 				}
 				// The place clicked once and waiting for the word, and the way to let the army go.
 				TrayOrders->AddSlot().FillWidth(1.0f)[SNew(SSpacer)];
@@ -3580,6 +3675,7 @@ namespace
 			const FString Tag = Controller.IsValid() ? Controller->GetPlayerTag() : FString();
 			FString Model;
 			if (Offer.Key.StartsWith(TEXT("corps:"))) { Model = ACampaignMapActor::ModelFor(Tag, Offer.Key.Mid(6)); }
+			else if (Offer.Key.StartsWith(TEXT("cadre:"))) { Model = ACampaignMapActor::ModelFor(Tag, Offer.Kind.IsEmpty() ? FString(TEXT("inf")) : Offer.Kind); } // (Version 64) a folded corps, raised again
 			else if (Offer.Key == TEXT("elite")) { Model = ACampaignMapActor::ModelFor(Tag, TEXT("heavy")); }
 			else if (Offer.Key == TEXT("para")) { Model = ACampaignMapActor::ModelFor(Tag, TEXT("inf")); }
 			else if (Offer.Key == TEXT("air:ftr")) { Model = FMiniatureMesh::MainFighterOf(Tag); }

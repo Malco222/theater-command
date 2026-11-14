@@ -239,6 +239,8 @@ public:
 	void ShowScars(const TArray<int32>& Scars);
 	/** Smoke hangs over the towns that are besieged: three numbers each, the region, 1 if the ring is closed, months of stores left. */
 	void ShowSieges(const TArray<int32>& Sieges);
+	/** (Version 64) Fieldworks standing empty: three numbers each, the region, tenths of a month of work, room for how many corps. A small broken bank where an army would stand. */
+	void ShowWorksLeft(const TArray<int32>& FromRules);
 	/**
 	 * The airfields that have air groups based on them (Brian's ask of 2026-11-13: no great aircraft piece standing
 	 * on the map; the airfield itself says it is in use): a small aircraft parked on the field for each group, in
@@ -592,6 +594,9 @@ private:
 	TArray<int32> ShownScars;
 	TArray<FVector> Smoulders; // wrecks still burning, for the smoke that rises from them
 	TArray<int32> ShownSieges;
+	TArray<int32> ShownWorksLeft;
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> WorksLeftMesh;
 	FString ShownPrizes; // what the prize marks were last built from
 	TArray<FVector> PrizeFires; // wrecked prizes, for the flame and the smoke over them
 	UPROPERTY(Transient)
