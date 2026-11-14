@@ -920,11 +920,11 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     label: 'Artillery',
     value: soften && thicken ? 'Massed guns on both sides' : soften ? 'Massed guns support the attack' : 'Massed guns stand in the defence',
     effect: [
-      soften ? town ? `The bombardment takes ${Math.round(soften * 100)}% off the worth of the town to its defenders` : (target.fort && fortFaced) || dugIn ? `The bombardment takes ${Math.round(soften * 100)}% off the worth of the ${target.fort && fortFaced ? (dugIn ? 'works and trenches' : 'works') : 'trenches'}` : 'There are no works or trenches here for the guns to break' : '',
+      soften ? town ? `The bombardment takes ${Math.round(soften * 100)}% off the worth of the town to its defenders` : (target.fort && fortFaced) || dugIn ? `The bombardment takes ${Math.round(soften * 100)}% off the worth of the ${target.fort && fortFaced ? (dugIn ? 'fortifications and fieldworks' : 'fortifications') : 'fieldworks'}` : 'There are no fortifications or fieldworks here for the guns to break' : '',
       thicken ? `${soften ? 'the' : 'The'} other defenders fight ${Math.round(thicken * 100)}% stronger under their own guns` : '',
     ].filter(Boolean).join('; '),
   });
-  if (dugIn && !wide) lines.push({ label: 'Dug in', value: dugIn === defenders.length ? 'The defenders have had a month to entrench' : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
+  if (dugIn && !wide) lines.push({ label: 'Dug in', value: dugIn === defenders.length ? 'The defenders have had a month to dig in' : `${dugIn} of the ${defenders.length} defending corps have had a month to dig in`, effect: `Troops in fieldworks defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
   // How old the works are, and what this blow takes off them whether it carries the ground or not (the grand campaign).
   const works = wide && !town && dugD > 0 ? worksD / dugD : 0;
   const wear = works > 0 ? Math.min(works, DEFENCE.wear.perAttack * Math.min(1, (A / D) / DEFENCE.wear.fullAt) * (1 + DEFENCE.wear.guns * soften)) : 0;
@@ -942,7 +942,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     lines.push({
       label: 'Dug in',
       value: `${who}: ${built}${lost.length ? `, but ${listAnd(lost)}` : ''}`,
-      effect: `${cover ? `Entrenched troops defend ${cover}% stronger. ` : ''}${luck}${after}`,
+      effect: `${cover ? `Troops in fieldworks defend ${cover}% stronger. ` : ''}${luck}${after}`,
     });
   }
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
@@ -1644,6 +1644,28 @@ const ordinal = (n: number): string => `${n}${n % 100 >= 11 && n % 100 <= 13 ? '
 /** How sharply the standing call-up falls with the share of home industry lost (the grand campaign): 1 is in step with it. */
 const OPEN_CALLUP = 1;
 
+/** True while the player holds his country's standing call-up (the grand campaign): no new corps are raised from the reserve, and the waves wait. */
+export const callUpHeld = (g: Game, nat: string): boolean => g.flags.open === 1 && nat === g.human && g.flags[`mph:${nat}`] === 1;
+
+/**
+ * A country's standing call-up as it stands (the grand campaign): whether the player holds it, and the corps the next
+ * wave would raise at most, of how many divisions each. Null for a country that has none, or is not yet at war.
+ */
+export function standingCallUp(g: Game, nat: string): { held: boolean; corps: number; divs: number } | null {
+  const plan = EASTERN.mobilisation[nat], n = g.nations[nat];
+  if (g.flags.open !== 1 || !plan || !n?.alive || !n.atWar.length) return null;
+  const began = g.flags[`mobilised:${nat}`];
+  const wave = began === undefined ? 0 : g.turn + 1 - began - (g.flags[`mphn:${nat}`] ?? 0);
+  return { held: callUpHeld(g, nat), corps: plan.perMonth[wave] ?? plan.after, divs: plan.divs };
+}
+
+/** The player holds his standing call-up, or lets it run again. False where there is none to hold or nothing changes. */
+export function holdCallUp(g: Game, nat: string, hold: boolean): boolean {
+  if (nat !== g.human || !standingCallUp(g, nat) || callUpHeld(g, nat) === hold) return false;
+  if (hold) g.flags[`mph:${nat}`] = 1; else delete g.flags[`mph:${nat}`];
+  return true;
+}
+
 /** A nation with a mobilisation plan raises a wave of new corps every month once it is at war. */
 function mobilise(g: Game, nat: string): void {
   const plan = EASTERN.mobilisation[nat];
@@ -1652,17 +1674,21 @@ function mobilise(g: Game, nat: string): void {
   const key = `mobilised:${nat}`;
   if (g.flags[key] === undefined) g.flags[key] = g.turn;
   const month = g.turn - g.flags[key];
-  let count = plan.perMonth[month] ?? plan.after;
+  // The player's say over the call-up (the grand campaign): held, it raises nothing, and the wave waits its turn.
+  const held = callUpHeld(g, nat), waited = g.flags.open === 1 ? g.flags[`mphn:${nat}`] ?? 0 : 0, wave = month - waited;
+  let count = plan.perMonth[wave] ?? plan.after;
+  if (held) g.flags[`mphn:${nat}`] = waited + 1;
   // The grand campaign: once the first waves are in, the standing call-up is only as large as the industry the
   // nation still holds can arm. A country that has lost half its factories raises half the corps.
-  if (g.flags.open === 1 && month >= plan.perMonth.length) {
+  if (g.flags.open === 1 && wave >= plan.perMonth.length) {
     let own = 0, held = 0;
     for (const r of g.regions) if (r.owner === nat && !r.overseas) { own += r.fac; if (r.ctrl === nat) held += r.fac; }
     count = own > 0 ? Math.round(count * Math.pow(held / own, OPEN_CALLUP)) : 0;
   }
   // The grand campaign: every corps of the call-up is filled from the reserve of men, and when that is spent the waves stop.
   // The first waves take whatever there is; the standing call-up after them takes only what the armies in the field do not need.
-  if (g.flags.open === 1) count = Math.min(count, month < plan.perMonth.length ? raisable(g, nat, plan.divs) : Math.max(0, Math.floor(menSpare(g, nat) / plan.divs)));
+  if (g.flags.open === 1) count = Math.min(count, wave < plan.perMonth.length ? raisable(g, nat, plan.divs) : Math.max(0, Math.floor(menSpare(g, nat) / plan.divs)));
+  if (held) count = 0;
   const enemyNear = (r: Region): boolean => r.nb.some((j) => atWar(g, nat, g.regions[j].ctrl));
   for (let k = 0; k < count; k++) {
     // Form up in the industrial towns still held, emptiest first, away from the fighting.
@@ -2078,8 +2104,10 @@ export function startPhase(g: Game, nat: string): void {
   if (drafted_ > 0) drawMen(g, nat, drafted_);
   if (menRules(g) && nat === g.human) {
     const level = menWarning(g, nat), left = menWords(menLeft(g, nat) * MEN_PER_DIV), start = menWords(poolAtStart(g, nat) * MEN_PER_DIV);
-    if (level === 1) headline(g, 'info', `The reserve of men is thinning: ${left} are left of the ${start} the war began with. Every loss made good and every new corps is taken from it.`, nat);
-    else if (level === 2) headline(g, 'info', `The reserve of men is running short: ${left} are left, under ${Math.round(MANPOWER.warn[1] * 100)}% of what the war began with. Spare the armies, or the day comes when losses cannot be made good.`, nat);
+    // What he can do about it is said with the warning: the say he has over the call-up is in the ledger.
+    const say = `In the ledger you can call the next class up early${standingCallUp(g, nat) ? ', or hold the standing call-up so that the men go to the corps in the field' : ''}.`;
+    if (level === 1) headline(g, 'info', `The reserve of men is thinning: ${left} are left of the ${start} the war began with. Every loss made good and every new corps is taken from it. ${say}`, nat);
+    else if (level === 2) headline(g, 'info', `The reserve of men is running short: ${left} are left, under ${Math.round(MANPOWER.warn[1] * 100)}% of what the war began with. Spare the armies, or the day comes when losses cannot be made good. ${say}`, nat);
     else if (level === 3) headline(g, 'info', 'The reserve of men is spent. From now on only the class that comes of age each month reaches the armies, and no new corps can be raised.', nat);
   }
   // A town whose last defenders laid down their arms this month falls.

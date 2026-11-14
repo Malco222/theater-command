@@ -253,7 +253,7 @@ export function autoSpend(gen: General): void {
 function earn(g: Game, gen: General, c: Corps): void {
   for (const [id, d] of Object.entries(COMMAND.traits)) {
     if (!d.needs || gen.traits.includes(id)) continue;
-    if (gen.rec[d.needs[0]] < d.needs[1]) continue;
+    if ((gen.rec[d.needs[0]] as number) < d.needs[1]) continue;
     if (d.not?.some((x) => gen.traits.includes(x))) continue;
     if (d.mobile && !KIND[c.kind].mobile) continue;
     gen.traits.push(id);
@@ -353,6 +353,7 @@ export function afterBattle(
     if (won) {
       r.won++;
       r.streak = 0;
+      if (r.lost) delete r.lost;
       xp += attacking ? X.won : X.held;
       if (againstOdds) xp += X.odds;
       if (attacking) {
@@ -365,6 +366,8 @@ export function afterBattle(
     } else {
       r.streak++;
       if (attacking && lossFrac >= COMMAND.costly) r.costly++;
+      // The grand campaign remembers which battles they were and at what odds: a cabinet looking for a head weighs them.
+      if (g.flags.open === 1) { (r.lost ??= []).push({ t: g.turn, reg: target.id, odds: Math.round(preOdds * 100) / 100, att: attacking }); if (r.lost.length > 6) r.lost.shift(); }
     }
     gainXp(g, gen, xp);
     earn(g, gen, c);

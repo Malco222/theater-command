@@ -23,14 +23,16 @@
 import data from '../../data/campaign/government.json';
 import { Rng, hashString } from '../core/rng';
 import { turnToDate } from '../core/ticket';
-import { FORT_MUL, MEN_PER_DIV, type Corps, type Directive, type Game, type General, type GovState, type Kind, type Nation, type Region, type Vow } from './types';
+import { KIND, MEN_PER_DIV, STACK, type Corps, type Directive, type Game, type General, type GovState, type Kind, type LostBattle, type Nation, type Region, type Vow } from './types';
 import { COMMAND, corpsOf, popular, rankOf, serving } from './commanders';
 import { raisable } from './manpower';
 import { BUDGET, corpsCost, corpsName, income, specOf, upkeepTotal } from './economy';
-import { allied, atWar, headline, homeLost, theName } from './game';
+import { allied, assess, atWar, corpsBase, frontage, headline, homeLost, hostileUnits, limitAttackers, theName, DEFENCE } from './game';
 import { DIPLOMACY, pcIncome } from './diplomacy';
-import { civicSum } from './buildings';
-import { besieged, besiegerOf, garrisonOf, guardOf, townBonus } from './siege';
+import { CIVIC, civicLevel, civicOffers, civicSum } from './buildings';
+import { besieged, besiegerOf, garrisonOf, townHeld } from './siege';
+import { agentCost, agentsOf, homeBase, mostAgents, oddsBand, INTEL } from './intel';
+import { armyOf } from './joint';
 import { prizeOf, prizesInReach, townName, townSize, type Prize, type TownSize } from './towns';
 import { dealsOf, whyNoTrade } from './trade';
 
@@ -64,16 +66,18 @@ export const GOV = data as unknown as {
     first: number; every: number; retry: number;
     success: { trust: number };
     missed: { base: number; step: number; most: number; rest: number; restMost: number; aside: number };
-    take: { months: Record<TownSize, number>; capital: Record<TownSize, number>; money: Record<TownSize, number>; odds: number; least: number; hard: { months: number; reward: number }; again: number };
-    hold: { months: number; capital: number; siegeCapital: number; odds: number };
+    take: { months: Record<TownSize, number>; capital: Record<TownSize, number>; money: Record<TownSize, number>; odds: number; least: number; reach: number; hard: { months: number; reward: number }; again: number };
+    hold: { months: number; capital: number; siegeCapital: number; threat: number; lost: number; fresh: number };
     raise: { months: number; grow: number; least: number; capital: number };
     trade: { months: number; capital: number; money: number };
     relief: { months: number; capital: number; corps: Kind; pressed: number; overrun: number };
     spare: { months: number; capital: number; worn: number; share: number };
+    build: { months: number; capital: number };
+    agent: { months: number; capital: number };
   };
   wings: { top: number; hawks: { won: number; wins: number; lost: number }; doves: { defeats: number; losses: number; spare: number; rest: number } };
-  promise: { every: number; months: number[]; reach: number; rings: number[]; fullOdds: number; oddsMost: number; perDepth: number; perMonth: number; back: number; size: Record<TownSize, number>; bands: Band[] };
-  head: { every: number; answer: number; streak: number; chance: number; sacked: number; refused: number; watch: number; vindicated: number; wrong: number };
+  promise: { every: number; months: number[]; reach: number; memory: number; deep: number[]; fullOdds: number; oddsMost: number; perDepth: number; perMonth: number; haste: number; back: number; size: Record<TownSize, number>; bands: Band[] };
+  head: { every: number; answer: number; streak: number; winnable: number; chance: number; sacked: number; refused: number; watch: number; vindicated: number; wrong: number };
 };
 
 const MINISTER: Record<string, Minister> = Object.fromEntries(GOV.ministers.map((m) => [m.id, m]));
@@ -85,6 +89,9 @@ export const govRules = (g: Game): boolean => g.flags.open === 1 && g.flags.nogo
 
 /** True in a grand campaign whose player has switched the war cabinet off (g.flags.nogov). */
 export const cabinetOff = (g: Game): boolean => g.flags.open === 1 && g.flags.nogov === 1;
+
+/** True where the player has made his office secure (the grand campaign): the cabinet sits, judges and withholds, but it can never bring him down. */
+export const officeSecure = (g: Game): boolean => g.flags.open === 1 && g.flags.nofall === 1;
 
 /** A nation's form of government. */
 export const formOf = (nat: string): FormId => GOV.nations[nat] ?? GOV.nations._default;
@@ -120,15 +127,26 @@ export function govOf(g: Game, nat: string | null): GovState | null {
 /**
  * Switches the war cabinet off or on (the grand campaign). With it off there are no ministers, no decrees, no trust
  * to keep and no directives: no lever moves, and political capital comes in as it would with no government at all.
- * A directive that stood is withdrawn without blame, and the cabinet is kept as it was left. Switched on again it
- * takes its seats back, reads the news from that day and sets its next directive some months on.
+ * Its open business is settled on the way out, at the price of leaving each thing undone: a directive is set aside,
+ * a promise is taken back, and a question about a general is answered by standing by him. A general it is watching
+ * is watched still when it comes back, so switching it off and on again clears no bill (cabinetBill lists it).
+ * Switched on again it takes its seats back, reads the news from that day and sets its next directive some months on.
  */
 export function setCabinet(g: Game, on: boolean): boolean {
   if (g.flags.open !== 1 || (g.flags.nogov !== 1) === on) return false;
   const nat = g.human;
   if (!on) {
     const st = nat ? g.nations[nat]?.gov : undefined;
-    if (st) { delete st.dir; delete st.vow; delete st.head; delete st.stood; delete st.last; st.low = 0; }
+    if (st && nat) {
+      const n = g.nations[nat];
+      // What is already done or lost is judged first; the rest is settled as if he had set it aside himself.
+      judgeDirective(g, nat);
+      if (st.dir) close(g, n, st, 'aside');
+      if (st.vow) closeVow(g, n, st, 'back');
+      if (st.head) standBy(g, nat);
+      st.offAt = g.turn;
+      st.low = 0;
+    }
     g.flags.nogov = 1;
     return true;
   }
@@ -139,8 +157,43 @@ export function setCabinet(g: Game, on: boolean): boolean {
     st.next = Math.max(st.next, g.turn + GOV.directives.first);
     st.low = 0;
     delete st.last;
+    // The watch on a general it stood by waited while it was away.
+    if (st.stood && st.offAt !== undefined) st.stood.until += g.turn - st.offAt;
+    delete st.offAt;
+    delete st.reach;
   }
   return true;
+}
+
+/**
+ * Says whether the player's government can fall (the grand campaign). With his office secure the cabinet, its
+ * ministers, its directives and its trust all work as before, and a cabinet that doubts him still withholds money
+ * and political capital: but however low its trust goes it never falls, and he is never turned out of office. It is
+ * a setting of its own, apart from the cabinet's switch, and may be changed in any month: the count of months
+ * without trust starts afresh either way.
+ */
+export function setCanFall(g: Game, can: boolean): boolean {
+  if (g.flags.open !== 1 || (g.flags.nofall !== 1) === can) return false;
+  if (can) delete g.flags.nofall; else g.flags.nofall = 1;
+  const st = g.human ? g.nations[g.human]?.gov : undefined;
+  if (st) st.low = 0;
+  return true;
+}
+
+/**
+ * What switching the cabinet off would settle today, line by line, with the trust each costs: what the player is
+ * shown before he confirms. Empty where nothing is open.
+ */
+export function cabinetBill(g: Game): { text: string; trust: number }[] {
+  const nat = g.human, st = seen(g, nat);
+  if (!st || !nat) return [];
+  const swing = GOV.forms[formOf(nat)].swing, out: { text: string; trust: number }[] = [];
+  if (st.dir && standing(g, st.dir) === 'open') out.push({ text: `The directive is set aside: ${st.dir.title}`, trust: round1(missedCost(st, true) * swing) });
+  const v = st.vow, vr = v ? g.regions[v.region] : undefined;
+  if (v && vr && atWar(g, nat, vr.ctrl) && g.turn <= v.due) out.push({ text: `Your promise is taken back: ${v.title}`, trust: round1(v.price * GOV.promise.back) });
+  const gen = st.head ? generalBy(g, st.head.general) : undefined;
+  if (gen) out.push({ text: `The cabinet takes it that you stand by ${gen.name}, and will watch his next battle when it is back`, trust: round1(GOV.head.refused * swing) });
+  return out;
 }
 
 /** Sets up the player's government as a grand campaign opens. */
@@ -336,41 +389,116 @@ export function armyCount(g: Game, nat: string): number {
 
 const weight = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.dead ? 0 : c.divs * c.str), 0);
 
+/** The odds the cabinet will name at most: anything better is as good as certain. */
+const ODDS_MOST = 99;
+
+/** The corps of an army that an attack could draw on, where they stand: fit to march, under its own flag, and not shut up in a town's garrison. */
+const fieldOf = (nat: string, x: Region): Corps[] => x.units.filter((c) => armyOf(c) === nat && !c.dead && c.kind !== 'fort' && !c.town);
+
 /**
- * The troops the player could bring against a province: his own in it or beside it count in full, those two provinces
- * off count half. `rings` gives what each ring of provinces counts for, the province itself first.
+ * The force an army could bring against a province with the corps in reach brought up. Its corps beside the province
+ * count where they stand. Those further off, to `reach` provinces, count as if they had marched up through their own
+ * side's ground to a province beside it, spread over the roads in. `inside` is the same force as it would stand in
+ * the province itself, for a town with no army left in the country round it. No more are brought up than the roads
+ * carry, so an army three times the size the ground can use reads no better for it.
  */
-function strengthNear(g: Game, nat: string, r: Region, rings: number[] = [1, 1, 0.5]): number {
-  const own = (x: Region): number => weight(x.units.filter((c) => c.nat === nat && c.kind !== 'eng' && c.kind !== 'fort'));
-  const seen = new Set<number>([r.id]);
-  let ring = [r.id], s = own(r) * rings[0];
-  for (let d = 1; d < rings.length; d++) {
-    const next: number[] = [];
-    for (const i of ring) for (const j of g.regions[i].nb) if (!seen.has(j)) { seen.add(j); next.push(j); }
-    for (const j of next) s += rings[d] * own(g.regions[j]);
-    ring = next;
+function broughtUp(g: Game, nat: string, r: Region, reach: number, deep?: Map<number, number>): { beside: Corps[]; inside: Corps[] } {
+  // For a town that lies beyond the front (a promise), the provinces on the way to it count as opened: `deep` says how far each lies from his ground.
+  const far0 = deep?.get(r.id) ?? 1, nearer = (x: Region): boolean => far0 > 1 && (deep?.get(x.id) ?? 99) < far0;
+  const open = (x: Region): boolean => allied(g, nat, x.ctrl) || nearer(x);
+  const gates = r.nb.filter((j) => open(g.regions[j]) || fieldOf(nat, g.regions[j]).length > 0);
+  const here = fieldOf(nat, r);
+  // Which of the provinces beside it each province further off can reach, through ground its side holds.
+  const reaches = new Map<number, number[]>();
+  for (const gate of gates) {
+    const seen = new Set<number>([gate, r.id]);
+    let ring = [gate];
+    for (let d = 2; d <= reach && ring.length; d++) {
+      const next: number[] = [];
+      for (const i of ring) for (const j of g.regions[i].nb) {
+        if (seen.has(j) || gates.includes(j) || !open(g.regions[j])) continue;
+        seen.add(j); next.push(j);
+        const via = reaches.get(j);
+        if (via) via.push(gate); else reaches.set(j, [gate]);
+      }
+      ring = next;
+    }
   }
-  return s;
+  const power = (c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk;
+  const beside: Corps[] = [], load: Record<number, number> = {};
+  for (const gate of gates) for (const c of fieldOf(nat, g.regions[gate])) { beside.push(c); load[gate] = (load[gate] ?? 0) + 1; }
+  // More than the roads carry is no use to a province: the strongest come up first, each to the emptiest road in.
+  const room = frontage(r) + DEFENCE.frontage.extra + DEFENCE.frontage.guns;
+  const far: Corps[] = [];
+  for (const [j] of reaches) far.push(...fieldOf(nat, g.regions[j]));
+  far.sort((x, y) => power(y) - power(x) || x.id - y.id);
+  for (const c of far) {
+    const via = reaches.get(c.reg)!.filter((gate) => (load[gate] ?? 0) < room).sort((x, y) => (load[x] ?? 0) - (load[y] ?? 0) || x - y)[0];
+    if (via === undefined) continue;
+    load[via] = (load[via] ?? 0) + 1;
+    beside.push({ ...c, reg: via });
+  }
+  const inside = [...here, ...beside.map((c) => ({ ...c, reg: r.id }))].sort((x, y) => power(y) - power(x) || x.id - y.id);
+  return { beside, inside };
 }
 
-/** What stands in a province against a nation: the enemy's field troops behind any fortress, and the town's garrison and guard behind its walls. */
-function defenceOf(g: Game, nat: string, r: Region): number {
-  const field = weight(r.units.filter((c) => atWar(g, c.nat, nat))) * (r.fort ? FORT_MUL[r.fort.lv] ?? 1 : 1);
-  return field + (weight(garrisonOf(r)) + guardOf(g, r)) * townBonus(g, r);
+/**
+ * What the attack card would read against a province for this army with the corps in reach brought up: the same
+ * reckoning as the card, so works, ground, the quality of the troops and the room on the roads all count. Against
+ * an army in the field it is the odds of the battle for the country round the town; with none left there, the odds
+ * of storming the town. Where the defenders are not all identified it is the staff's estimate, as on the card.
+ * 0 where nothing of his can reach it.
+ */
+function cardOdds(g: Game, nat: string, r: Region, reach: number, deep?: Map<number, number>): number {
+  const force = broughtUp(g, nat, r, reach, deep);
+  const foes = hostileUnits(g, r, nat);
+  let going: Corps[], town = false;
+  if (foes.length) going = limitAttackers(g, force.beside, r);
+  else {
+    if (!atWar(g, nat, r.ctrl)) return 0;
+    const line = force.inside.filter((c) => c.kind !== 'eng');
+    const most = line.length ? Math.min(STACK, g.nations[line[0].nat].maxAttack || 99) : 0;
+    going = [...line.slice(0, most), ...(most ? force.inside.filter((c) => c.kind === 'eng').slice(0, 1) : [])];
+    town = true;
+    if (going.length && !townHeld(g, r)) return ODDS_MOST;
+  }
+  if (!going.length) return 0;
+  const a = assess(g, going, r, town ? { town: true } : {});
+  const band = oddsBand(g, a.defenders, a.odds, r.id, nat);
+  return Math.min(ODDS_MOST, band.exact ? a.odds : band.mid);
 }
 
-/** The player's odds against a town, as the cabinet reckons them before it asks for it: his troops within reach over its defenders, walls counted. */
+/** The player's odds against a town, as the cabinet reckons them before it asks for it: what the attack card would read with his corps within two provinces brought up. */
 export function directiveOdds(g: Game, nat: string, region: number): number {
   const r = g.regions[region];
-  return r ? strengthNear(g, nat, r) / Math.max(0.25, defenceOf(g, nat, r)) : 0;
+  return r ? cardOdds(g, nat, r, GOV.directives.take.reach) : 0;
 }
 
-interface Target { p: Prize; hard: boolean; again: boolean }
+/**
+ * The odds an enemy could bring against a place of the nation's own, and who: the attack card as the enemy's staff
+ * would read it with its corps within two provinces brought up. Null where no enemy can reach it.
+ */
+export function threatOdds(g: Game, nat: string, region: number): { odds: number; by: string } | null {
+  const r = g.regions[region];
+  if (!r) return null;
+  const foes = new Set<string>();
+  for (const j of r.nb) for (const c of g.regions[j].units) if (!c.dead && atWar(g, armyOf(c), nat)) foes.add(armyOf(c));
+  let best: { odds: number; by: string } | null = null;
+  for (const e of [...foes].sort()) {
+    if (!atWar(g, e, r.ctrl) && !hostileUnits(g, r, e).length) continue;
+    const odds = cardOdds(g, e, r, GOV.directives.take.reach);
+    if (odds > 0 && (!best || odds > best.odds)) best = { odds, by: e };
+  }
+  return best;
+}
+
+interface Target { p: Prize; hard: boolean; again: boolean; odds: number }
 
 /**
- * The towns the cabinet could ask for, the best first: enemy towns in reach that the player's troops beside them
- * outnumber, walls counted. A town his side already stands round is about to fall, and is not asked for. With no
- * fair one it names a hard one, and only with nothing else one it has asked for and not been given.
+ * The towns the cabinet could ask for, the best first: enemy towns in reach against which the attack card, with
+ * the player's corps in reach brought up, reads fair odds. A town his side already stands round is about to fall,
+ * and is not asked for. With no fair one it names a hard one, and only with nothing else one it has asked for and
+ * not been given.
  */
 function takeable(g: Game, nat: string, st: GovState, only: (r: Region) => boolean = () => true): Target[] {
   const T = GOV.directives.take;
@@ -381,11 +509,10 @@ function takeable(g: Game, nat: string, st: GovState, only: (r: Region) => boole
     // A town he has promised of his own accord is his word already: the cabinet does not order it as well.
     if (st.vow?.region === r.id) continue;
     if (besieged(g, r)) { const by = besiegerOf(g, r); if (by && (by === nat || allied(g, nat, by))) continue; }
-    if (strengthNear(g, nat, r) <= 0) continue;
     const odds = directiveOdds(g, nat, r.id);
-    if (odds < T.least) continue;
+    if (odds <= 0 || odds < T.least) continue;
     const asked = st.asked?.[r.id];
-    all.push({ p, hard: odds < T.odds, again: asked !== undefined && g.turn - asked < T.again });
+    all.push({ p, hard: odds < T.odds, again: asked !== undefined && g.turn - asked < T.again, odds });
   }
   const tiers = [all.filter((x) => !x.hard && !x.again), all.filter((x) => x.hard && !x.again), all.filter((x) => !x.hard && x.again), all.filter((x) => x.hard && x.again)];
   return tiers.find((t) => t.length) ?? [];
@@ -401,24 +528,58 @@ function pressing(g: Game, a: Nation): string | null {
   return cap && cap.ctrl === a.id && besieged(g, cap) ? besiegerOf(g, cap) : null;
 }
 
+/** True while an enemy is on the move against the nation or its allies: it has attacked one of them within the months the cabinet counts as fresh. */
+function onTheMove(g: Game, foe: string, nat: string): boolean {
+  const last = g.nations[foe]?.lastFight ?? {};
+  for (const d of Object.keys(last)) if ((d === nat || allied(g, nat, d)) && g.turn - last[d] <= GOV.directives.hold.fresh) return true;
+  return false;
+}
+
 /**
  * A threatened province of the nation's own worth an order to hold: a city, a capital, a fortress or an oilfield
- * with troops in it and the enemy at its gates, or next door in greater strength than the troops who stand in it.
- * A place with nobody in it, or a town under siege with no garrison, is a lost cause and is not asked for.
+ * with troops in it and the enemy at its gates, or an enemy on the move who could bring a real attack against it:
+ * the attack card as his staff would read it, with his corps in reach brought up, reads `hold.threat` or better.
+ * An enemy who has sat still for months is not about to come. A place with nobody in it, a town under siege with
+ * no garrison, or one the enemy outnumbers past all help (`hold.lost`) is a lost cause and is not asked for.
  */
-function toHold(g: Game, nat: string): Region | null {
-  let best: Region | null = null, score = 0;
-  const men = (r: Region, foe: boolean): number => r.units.reduce((s, u) => s + (!u.dead && (foe ? atWar(g, u.nat, nat) : allied(g, u.nat, nat)) ? u.divs * u.str : 0), 0);
+function toHold(g: Game, nat: string): { r: Region; odds: number; by: string | null } | null {
+  const H = GOV.directives.hold;
+  let best: { r: Region; odds: number; by: string | null } | null = null, score = 0;
+  const men = (r: Region): number => r.units.reduce((s, u) => s + (!u.dead && allied(g, u.nat, nat) ? u.divs * u.str : 0), 0);
   for (const r of g.regions) {
     if (r.ctrl !== nat) continue;
     const size = townSize(g, r);
     if (size !== 'city' && size !== 'capital' && !r.fort && !r.oil) continue;
     const shut = besieged(g, r), inTown = weight(garrisonOf(r));
-    if (shut ? inTown <= 0 : men(r, false) + inTown <= 0) continue;
-    const pressed = shut || r.nb.reduce((s, j) => s + men(g.regions[j], true), 0) > Math.max(1, men(r, false) + inTown) * GOV.directives.hold.odds;
-    if (!pressed) continue;
+    if (shut ? inTown <= 0 : men(r) + inTown <= 0) continue;
+    const t = shut ? null : threatOdds(g, nat, r.id);
+    if (!shut && !(t && t.odds >= H.threat && t.odds <= H.lost && onTheMove(g, t.by, nat))) continue;
     const s = r.vp * 10 + r.fac * 3 + (r.cap ? 40 : 0) + (r.oil ? 20 : 0) + (shut ? 15 : 0);
-    if (s > score) { score = s; best = r; }
+    if (s > score) { score = s; best = { r, odds: t?.odds ?? 0, by: shut ? besiegerOf(g, r) : t?.by ?? null }; }
+  }
+  return best;
+}
+
+/** Odds in words, as a staff would say them: "about 1.8 to 1", "about 3 to 1", "better than 10 to 1". */
+function oddsWords(odds: number): string {
+  if (odds >= 10) return 'better than 10 to 1';
+  const x = odds >= 3 ? Math.round(odds * 2) / 2 : Math.round(odds * 10) / 10;
+  return `about ${x} to 1`;
+}
+
+/** The buildings a nation has standing in the provinces it holds, level by level, with those its builders are at work on. */
+function civicCount(g: Game, nat: string): number {
+  let s = g.nations[nat].queue.reduce((k, b) => k + (b.what === 'civic' ? 1 : 0), 0);
+  if (g.flags['cv:any']) for (const r of g.regions) if (r.ctrl === nat) for (const l of CIVIC.lines) s += civicLevel(g, l.id, r.id);
+  return s;
+}
+
+/** The cheapest building the nation could order today, money apart: what, where and the price. */
+function cheapestCivic(g: Game, nat: string): { label: string; town: string; cost: number } | null {
+  let best: { label: string; town: string; cost: number } | null = null;
+  for (const r of g.regions) {
+    if (r.ctrl !== nat || r.owner !== nat) continue;
+    for (const o of civicOffers(g, nat, r.id)) if ((o.why === null || o.poor) && (!best || o.cost < best.cost)) best = { label: o.label, town: townName(r), cost: o.cost };
   }
   return best;
 }
@@ -434,7 +595,7 @@ function draw(g: Game, nat: string, st: GovState): Directive | null {
     const r = g.regions[t.p.region], more = t.hard ? D.take.hard.months : 0, mul = t.hard ? D.take.hard.reward : 1;
     const due = g.turn + months + more;
     return { ...base, kind, from, region: r.id, due, capital: Math.round(capital * mul), money: Math.round(money * mul * 10) / 10, ...(corps ? { corps } : {}), ...(t.hard ? { hard: true } : {}), ...(t.again ? { again: true } : {}),
-      title, text: `${lead}, by you or an ally, by the end of ${date(due)}.${t.hard ? ' The place is strongly held: the cabinet knows it, and gives more time and a larger reward.' : ''}` };
+      title, text: `${lead}, by you or an ally, by the end of ${date(due)}. With your corps in reach brought up, the attack card reads ${oddsWords(t.odds)}.${t.hard ? ' The place is strongly held: the cabinet knows it, and gives more time and a larger reward.' : ''}` };
   };
   if (n.atWar.length) {
     // An ally with its back to the wall asks for a blow at the enemy pressing it; one that was overrun asks to be freed.
@@ -456,10 +617,11 @@ function draw(g: Game, nat: string, st: GovState): Directive | null {
     }
     const h = toHold(g, nat);
     // With the hawks on top the cabinet orders a place held only once the enemy is at its gates.
-    if (h && (wing !== 'hawks' || besieged(g, h))) {
-      const shut = besieged(g, h);
-      options.push({ ...base, kind: 'hold', from: nat, region: h.id, due: g.turn + D.hold.months, capital: shut ? D.hold.siegeCapital : D.hold.capital, money: 0, tested: shut, seen: lastReport(g),
-        title: `Hold ${townName(h)}`, text: `The enemy is at ${shut ? 'the gates of' : 'the approaches to'} ${townName(h)}. The war cabinet wants it held to the end of ${date(g.turn + D.hold.months)}.${shut ? '' : ' If the enemy never comes, the order is withdrawn.'}` });
+    if (h && (wing !== 'hawks' || besieged(g, h.r))) {
+      const shut = besieged(g, h.r);
+      const coming = !shut && h.by ? ` ${theName(g.nations[h.by], true)} is on the move, and its corps in reach could attack the place at ${oddsWords(h.odds)}.` : '';
+      options.push({ ...base, kind: 'hold', from: nat, region: h.r.id, due: g.turn + D.hold.months, capital: shut ? D.hold.siegeCapital : D.hold.capital, money: 0, tested: shut, seen: lastReport(g),
+        title: `Hold ${townName(h.r)}`, text: `The enemy is at ${shut ? 'the gates of' : 'the approaches to'} ${townName(h.r)}.${coming} The war cabinet wants it held to the end of ${date(g.turn + D.hold.months)}.${shut ? '' : ' If the enemy never comes, the order is withdrawn.'}` });
     }
     const top = takeable(g, nat, st).slice(0, 3);
     if (top.length) {
@@ -478,15 +640,27 @@ function draw(g: Game, nat: string, st: GovState): Directive | null {
         title: 'Spare the army', text: `The army is worn: its corps stand at ${Math.round(strength * 100)}% of their strength. The war cabinet wants it spared: lose no more than ${allowed.toLocaleString('en-US')} men in battle to the end of ${date(g.turn + D.spare.months)}.` });
     }
   }
-  if (!options.length || wing === 'doves') {
-    // Nothing presses, or the doves have the table: the cabinet looks to the army and to trade. It asks for no more men than the treasury can pay for.
+  if (!options.length || wing === 'doves' || (wing === 'balanced' && (st.lastKind === 'take' || st.lastKind === 'relief') && !options.some((o) => o.kind === 'relief'))) {
+    // Nothing presses, or the doves have the table, or a balanced table has just asked for a town and no ally is calling
+    // for help: the cabinet looks to the army, to trade and to the country. It asks for no more men than the treasury can pay for.
     const spec = specOf(g, 'inf'), now = armyCount(g, nat);
     const purse = Math.max(0, n.pp) + Math.max(0, income(g, nat) - upkeepTotal(g, nat)) * (D.raise.months - 1);
     const corps = spec ? Math.min(Math.ceil(Math.max(now * (D.raise.grow - 1), D.raise.least) / spec.divs), Math.floor((purse * 0.6) / corpsCost(g, nat, 'inf')), raisable(g, nat, spec.divs)) : 0;
     if (spec && corps >= 1) {
       const target = now + corps * spec.divs;
       options.push({ ...base, kind: 'raise', from: nat, target, due: g.turn + D.raise.months, capital: D.raise.capital, money: 0,
-        title: 'Build up the army', text: `${n.atWar.length ? 'While the front is quiet' : 'While the country is at peace'}, the war cabinet wants the army built up: bring it from ${now} to ${target} divisions, in the field or forming, by the end of ${date(g.turn + D.raise.months)}.` });
+        title: 'Build up the army', text: `${n.atWar.length ? 'The' : `${PEACE}the`} war cabinet wants the army built up: bring it from ${now} to ${target} divisions, in the field or forming, by the end of ${date(g.turn + D.raise.months)}.` });
+    }
+    // Small jobs that fit any country, at peace or at war: a town built up, and eyes abroad. Neither is asked of a treasury that cannot pay for it.
+    const spare = purse * 0.6;
+    const site = cheapestCivic(g, nat);
+    if (site && site.cost <= spare) {
+      options.push({ ...base, kind: 'build', from: nat, target: civicCount(g, nat) + 1, due: g.turn + D.build.months, capital: D.build.capital, money: 0,
+        title: 'Build up a town', text: `The war cabinet wants the country built up: order a new building in one of your towns by the end of ${date(g.turn + D.build.months)}. The cheapest today is the ${site.label.toLowerCase()} at ${site.town}, for ${moneyShown(site.cost)}.` });
+    }
+    if (agentsOf(g, nat).length < mostAgents(nat) && homeBase(g, nat) >= 0 && INTEL.agents.cost <= spare) {
+      options.push({ ...base, kind: 'agent', from: nat, target: agentsOf(g, nat).length + 1, due: g.turn + D.agent.months, capital: D.agent.capital, money: 0,
+        title: 'Recruit an agent', text: `The war cabinet wants eyes abroad: recruit an agent for the secret service by the end of ${date(g.turn + D.agent.months)}. One costs ${agentCost().toLocaleString('en-US')} to find and train.` });
     }
     const ctx = new Map();
     const partner = Object.values(g.nations).find((b) => b.id !== nat && b.alive && whyNoTrade(g, nat, b.id, ctx) === null);
@@ -504,15 +678,20 @@ function draw(g: Game, nat: string, st: GovState): Directive | null {
   if (wing === 'hawks') {
     const towns = opts.filter(attack);
     if (towns.length) return towns[rng.int(towns.length)];
-    if (opts.some((o) => o.kind === 'raise')) opts = opts.filter((o) => o.kind !== 'trade');
+    if (opts.some((o) => o.kind === 'raise')) opts = opts.filter((o) => o.kind !== 'trade' && o.kind !== 'build' && o.kind !== 'agent');
   } else if (wing === 'doves') {
+    // A table of doves that finds nothing of its own to ask for asks for nothing: it does not send the army at a town for want of other business.
     const calm = opts.filter((o) => o.kind !== 'take');
-    if (calm.length) opts = calm.some((o) => o.kind === 'trade') ? calm.filter((o) => o.kind !== 'raise') : calm;
+    if (!calm.length) return null;
+    opts = calm.some((o) => o.kind === 'trade') ? calm.filter((o) => o.kind !== 'raise') : calm;
   }
   const fresh = opts.filter((o) => o.kind !== st.lastKind);
   const pool = fresh.length ? fresh : opts.filter(attack);
   return pool.length ? pool[rng.int(pool.length)] : null;
 }
+
+/** How a job to build up the army opens in a country at peace: dropped from the words once it is at war. */
+const PEACE = 'While the country is at peace, ';
 
 /** Notes whether a town the player was told to hold has been attacked or besieged since the order came. */
 function test(g: Game, d: Directive): void {
@@ -533,6 +712,8 @@ function standing(g: Game, d: Directive): 'done' | 'failed' | 'open' | 'void' {
   const late = g.turn > d.due;
   if (d.kind === 'raise') return armyCount(g, d.nat) >= (d.target ?? 0) ? 'done' : late ? 'failed' : 'open';
   if (d.kind === 'trade') return dealsOf(g, d.nat).length >= (d.target ?? 0) ? 'done' : late ? 'failed' : 'open';
+  if (d.kind === 'build') return civicCount(g, d.nat) >= (d.target ?? 0) ? 'done' : late ? 'failed' : 'open';
+  if (d.kind === 'agent') return agentsOf(g, d.nat).length >= (d.target ?? 0) ? 'done' : late ? 'failed' : 'open';
   if (d.kind === 'spare') return (d.lost ?? 0) > (d.target ?? 0) ? 'failed' : late ? 'done' : 'open';
   const r = g.regions[d.region ?? -1];
   if (!r) return 'void';
@@ -657,7 +838,7 @@ export interface PromiseTerms {
   months: number;
   /** The last month it can be kept in: the months he allows himself count this one. */
   due: number;
-  /** The player's troops within reach over the town's defenders, walls counted; and how many provinces off the town lies (1 beside his ground or his troops). */
+  /** What the attack card reads against the town with the player's corps within the promise's reach brought up, the best of today and the last months; and how many provinces off the town lies (1 beside his ground or his troops). */
   odds: number;
   depth: number;
   /** How bold the cabinet reckons it: 'safe', 'fair', 'bold' or 'daring', and that in words. */
@@ -674,24 +855,73 @@ export interface PromiseTerms {
   text: string;
 }
 
-function termsAt(g: Game, nat: string, r: Region, months: number, depth: number): PromiseTerms {
+/**
+ * The odds a promise is reckoned on: the best the attack card has read against the town for the player's corps
+ * within the promise's whole reach, brought up, today or as any of the last months opened (`then`). A man who
+ * marches his army back a province before he names his bet is still reckoned on where it stood.
+ */
+function promiseOdds(g: Game, nat: string, r: Region, deep = depths(g, nat)): Reading {
+  const P = GOV.promise, depth = deep.get(r.id) ?? P.reach;
+  let best: Reading = { odds: cardOdds(g, nat, r, P.reach, deep), depth, then: null };
+  for (const m of seen(g, nat)?.reach ?? []) {
+    const was = g.turn - m.t < P.memory ? m.odds[r.id] : undefined;
+    if (was === undefined) continue;
+    const at = m.depth?.[r.id] ?? depth;
+    if (boldness(was, at) < boldness(best.odds, best.depth) - 1e-9) best = { odds: was, depth: at, then: m.t };
+  }
+  return best;
+}
+
+/** A reading of the card against a town: the odds, how deep the town lay beyond the player's ground, and the month it was taken in (null for today's). */
+interface Reading { odds: number; depth: number; then: number | null }
+
+/**
+ * How bold a promise of a town is before the time allowed is counted: more the worse the odds, and more with every
+ * province of depth. What stands on the way to a town beyond the front is not on the card, so its reading counts for
+ * less with every province.
+ */
+function boldness(odds: number, depth: number): number {
+  const P = GOV.promise, felt = odds * (P.deep[Math.min(depth, P.deep.length) - 1] ?? 1);
+  return clamp(2 * Math.log2(P.fullOdds / Math.max(felt, 0.01)), 0, P.oddsMost) + (depth - 1) * P.perDepth;
+}
+
+/** As the player's month opens the cabinet notes what the attack card reads against every town he could promise: it remembers for `promise.memory` months. */
+function noteReach(g: Game, nat: string, st: GovState): void {
+  const P = GOV.promise;
+  const kept = (st.reach ?? []).filter((m) => m.t !== g.turn && g.turn - m.t < P.memory);
+  if (!g.nations[nat].atWar.length) { if (kept.length) st.reach = kept; else delete st.reach; return; }
+  const odds: Record<string, number> = {}, depth: Record<string, number> = {}, deep = depths(g, nat);
+  for (const [id, d] of deep) {
+    const r = g.regions[id];
+    if (d < 1 || !atWar(g, nat, r.ctrl)) continue;
+    const o = cardOdds(g, nat, r, P.reach, deep);
+    if (o > 0) { odds[id] = Math.round(o * 100) / 100; depth[id] = d; }
+  }
+  st.reach = [...kept, { t: g.turn, odds, depth }];
+}
+
+function termsAt(g: Game, nat: string, r: Region, months: number, read = promiseOdds(g, nat, r)): PromiseTerms {
   const P = GOV.promise, swing = GOV.forms[formOf(nat)].swing;
-  const odds = strengthNear(g, nat, r, P.rings) / Math.max(0.25, defenceOf(g, nat, r));
-  const score = Math.max(0, clamp(2 * Math.log2(P.fullOdds / Math.max(odds, 0.01)), 0, P.oddsMost) + (depth - 1) * P.perDepth - (months - P.months[0]) * P.perMonth);
+  // The reading the cabinet goes by: the odds and the depth together, as they stood on the best day it remembers.
+  const odds = read.odds, depth = read.depth;
+  const score = Math.max(0, boldness(odds, depth) - (months - P.months[0]) * P.perMonth);
   const band = P.bands.find((b) => score < b.under) ?? P.bands[P.bands.length - 1];
   const size = P.size[townSize(g, r)] ?? 1;
-  const capital = band.capital ? Math.max(1, Math.round(band.capital * size)) : 0, money = round1(income(g, nat) * band.money * size);
-  const due = g.turn + months - 1, trust = round1(band.trust * swing), price = round1(band.price * swing), back = round1(band.price * P.back * swing);
+  // Within a band a shorter day pays a little more: the longest is no longer always the right pick.
+  const longest = P.months[P.months.length - 1], haste = 1 + (P.haste * (longest - months)) / Math.max(1, longest - P.months[0]);
+  const capital = band.capital ? Math.max(1, Math.round(band.capital * size * haste)) : 0, money = round1(income(g, nat) * band.money * size * haste);
+  const due = g.turn + months - 1, trust = round1(band.trust * swing * haste), price = round1(band.price * swing), back = round1(band.price * P.back * swing);
   const parts = [`the cabinet's trust rises ${trust}`];
   if (capital) parts.push(`it votes ${capital} political capital`);
   if (money) parts.push(`${moneyShown(money)} for the treasury`);
   const reward = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts[0];
   const oddsWord = odds >= 10 ? 'better than 10 to 1' : `${odds >= 1 ? round1(odds) : Math.round(odds * 100) / 100} to 1`;
   const where = depth <= 1 ? 'beside your ground or your troops' : `${depth === 2 ? 'two' : depth === 3 ? 'three' : 'four'} provinces from your ground and your troops`;
+  const past = read.then !== null, when = !past ? '' : read.then === g.turn ? ', as it did when the month opened' : `, as it did in ${date(read.then!)}`;
   return {
     region: r.id, town: townName(r), holder: r.ctrl, months, due, odds: Math.round(odds * 100) / 100, depth, band: band.id, bandName: band.name,
     trust, capital, money, price, back, reward,
-    text: `${band.name}. Your troops within reach stand at ${oddsWord} against ${townName(r)}, which lies ${where}, and you allow yourself ${monthsWord(months)}, this one counted, to the end of ${date(due)}. Kept: ${reward}. Broken: its trust falls ${price}.`,
+    text: `${band.name}. With your corps within ${P.reach} provinces brought up, the attack card reads ${oddsWord} against ${townName(r)}${when}. It ${past ? 'lay' : 'lies'} ${where}${past ? ' then' : ''}, and you allow yourself ${monthsWord(months)}, this one counted, to the end of ${date(due)}. Kept: ${reward}. Broken: its trust falls ${price}.`,
   };
 }
 
@@ -700,7 +930,7 @@ export function promiseTerms(g: Game, nat: string, region: number, months: numbe
   const r = g.regions[region];
   if (!r || !g.nations[nat] || !atWar(g, nat, r.ctrl) || !GOV.promise.months.includes(months)) return null;
   const depth = depths(g, nat).get(r.id);
-  return depth === undefined || depth < 1 ? null : termsAt(g, nat, r, months, depth);
+  return depth === undefined || depth < 1 ? null : termsAt(g, nat, r, months);
 }
 
 function whyNotTown(g: Game, nat: string, st: GovState, r: Region, depth: number | undefined): string | null {
@@ -756,7 +986,8 @@ export function promiseTargets(g: Game, nat: string | null = g.human, most = 8):
   rows.sort((a, b) => cap(a) - cap(b) || a.depth - b.depth || b.w - a.w || a.r.id - b.r.id);
   const caps = rows.filter((x) => cap(x) === 0).slice(0, 3), rest = rows.filter((x) => cap(x) === 1).slice(0, Math.max(0, most - caps.length));
   return [...caps, ...rest].map(({ r, depth }) => {
-    const terms = GOV.promise.months.map((m) => termsAt(g, nat, r, m, depth));
+    const read = promiseOdds(g, nat, r, deep);
+    const terms = GOV.promise.months.map((m) => termsAt(g, nat, r, m, read));
     return { region: r.id, town: townName(r), size: townSize(g, r), holder: r.ctrl, odds: terms[0].odds, depth, terms };
   });
 }
@@ -789,8 +1020,9 @@ function closeVow(g: Game, n: Nation, st: GovState, how: 'kept' | 'broken' | 'ba
   }
   if (how === 'kept') {
     st.kept = (st.kept ?? 0) + 1;
-    // A man who names his own target and takes it is not idle, whatever else he has left undone.
-    st.missed = Math.max(0, st.missed - 1);
+    // A man who names his own target and takes it is not idle, whatever else he has left undone. A safe promise
+    // proves nothing of the kind: the town was about to fall anyway.
+    if (v.band !== 'safe') st.missed = Math.max(0, st.missed - 1);
     n.pc = clamp(n.pc + v.capital, 0, Math.max(n.pc, DIPLOMACY.pcCap));
     n.pp += v.money;
     bump(st, 'A promise kept', v.trust);
@@ -835,20 +1067,37 @@ export function takeBack(g: Game, nat: string): boolean {
 
 const generalBy = (g: Game, id: number): General | undefined => g.generals.find((x) => x.id === id);
 
-/** The general the cabinet would name: the one with the most defeats running, a commander in the field it has not been proved wrong about. */
-function toBlame(g: Game, nat: string, st: GovState): { gen: General; why: string } | null {
+/**
+ * The defeats a cabinet holds against a general: the battles he has lost since he last won one that could have been
+ * won. A defence lost to an attack at under `head.winnable` to 1, or an attack of his own thrown back at those odds
+ * or better. A line nobody would have held, and an attack he was sent into at long odds, are not his fault.
+ */
+export const heldAgainst = (gen: General): LostBattle[] => (gen.rec.lost ?? []).filter((b) => (b.att ? b.odds >= GOV.head.winnable : b.odds < GOV.head.winnable));
+
+const oddsNum = (x: number): string => `${x >= 10 ? Math.round(x) : Math.round(x * 10) / 10}`;
+
+/** One lost battle as the cabinet tells it: "lost the defence of Kharkov in March 1943 to an attack at 1.3 to 1". */
+function lostWords(g: Game, b: LostBattle): string {
+  const place = g.regions[b.reg]?.name ?? 'the field';
+  return b.att ? `was thrown back from ${place} in ${date(b.t)}, attacking at ${oddsNum(b.odds)} to 1` : `lost the defence of ${place} in ${date(b.t)} to an attack at ${oddsNum(b.odds)} to 1`;
+}
+
+/** The general the cabinet would name: the one with the most defeats running that could have been won, a commander in the field it has not been proved wrong about. */
+function toBlame(g: Game, nat: string, st: GovState): { gen: General; why: string; lost: LostBattle[] } | null {
   const blamed = st.blame !== undefined && g.turn - st.blame <= 1;
   const need = blamed ? 1 : GOV.head.streak;
-  let best: General | null = null;
+  let best: General | null = null, most = 0;
   for (const gen of g.generals) {
-    if (gen.nat !== nat || gen.status !== 'active' || gen.corps < 0 || gen.rec.streak < need) continue;
+    if (gen.nat !== nat || gen.status !== 'active' || gen.corps < 0) continue;
     if (gen.traits.includes('vindicated') || st.stood?.general === gen.id) continue;
-    if (!best || gen.rec.streak > best.rec.streak || (gen.rec.streak === best.rec.streak && (gen.rec.costly > best.rec.costly || (gen.rec.costly === best.rec.costly && gen.id < best.id)))) best = gen;
+    const k = heldAgainst(gen).length;
+    if (k < need) continue;
+    if (!best || k > most || (k === most && (gen.rec.costly > best.rec.costly || (gen.rec.costly === best.rec.costly && gen.id < best.id)))) { best = gen; most = k; }
   }
   if (!best) return null;
-  const k = best.rec.streak;
-  const lost = k === 1 ? 'He lost his last battle' : `He has lost his last ${k === 2 ? 'two' : k === 3 ? 'three' : k} battles`;
-  return { gen: best, why: blamed ? `${lost}, and the cabinet's directive was not carried out.` : `${lost}.` };
+  const lost = heldAgainst(best).slice(-3), told = lost.map((b) => lostWords(g, b));
+  const said = told.length > 1 ? `${told.slice(0, -1).join(', ')} and ${told[told.length - 1]}` : told[0];
+  return { gen: best, lost, why: `He ${said}. The cabinet holds that ${lost.length === 1 ? 'it was a battle' : 'these were battles'} he could have won${blamed ? ', and its directive was not carried out' : ''}.` };
 }
 
 /** The general the war cabinet is asking the player to dismiss, by id, or null: cheap enough to ask for every row of a list. */
@@ -885,13 +1134,15 @@ export function standBy(g: Game, nat: string): boolean {
   delete st.head;
   st.headNext = g.turn + H.every;
   st.stood = { general: gen.id, until: g.turn + H.watch - 1, battles: gen.rec.battles, won: gen.rec.won };
+  // The count starts afresh: the cabinet cannot come back for him over the same battles.
+  delete gen.rec.lost;
   bump(st, 'You stood by a general', -H.refused * GOV.forms[formOf(nat)].swing);
   note(g, st, `You stood by ${gen.name}.`);
   headline(g, 'info', `You stand by ${gen.name}. The war cabinet does not hide its displeasure, and it will be watching his next battle.`, nat);
   return true;
 }
 
-/** The general the player stood by: a battle won vindicates him for the rest of the war, a battle lost first proves the cabinet right. */
+/** The general the player stood by: a battle won vindicates him for the rest of the war, a battle lost first that he could have won proves the cabinet right. */
 function watchStood(g: Game, n: Nation, st: GovState): void {
   const w = st.stood;
   if (!w) return;
@@ -904,8 +1155,9 @@ function watchStood(g: Game, n: Nation, st: GovState): void {
     bump(st, 'A general vindicated', H.vindicated * swing);
     note(g, st, `${gen.name} vindicated.`);
     headline(g, 'info', `Vindicated: ${gen.name}, whose dismissal the war cabinet asked for, has won his battle. The cabinet admits it was wrong, its confidence in you rises, and he carries the mark for the rest of the war.`, n.id);
-  } else if (gen.rec.battles > w.battles) {
+  } else if (heldAgainst(gen).length > 0) {
     delete st.stood;
+    delete gen.rec.lost;
     bump(st, 'The general you stood by lost again', -H.wrong * swing);
     note(g, st, `${gen.name} lost again.`);
     headline(g, 'info', `${gen.name}, the general you stood by, has lost again. The war cabinet says it told you so.`, n.id);
@@ -923,7 +1175,7 @@ function headMonth(g: Game, n: Nation, st: GovState): void {
   if (st.head || !n.atWar.length || g.turn < (st.headNext ?? 0)) return;
   const c = toBlame(g, n.id, st);
   if (!c || !new Rng(hashString(`head:${g.seed}:${g.turn}:${n.id}`)).chance(H.chance)) return;
-  st.head = { general: c.gen.id, issued: g.turn, due: g.turn + H.answer - 1, why: c.why };
+  st.head = { general: c.gen.id, issued: g.turn, due: g.turn + H.answer - 1, why: c.why, lost: c.lost };
   note(g, st, `The cabinet asks for the dismissal of ${c.gen.name}.`);
   headline(g, 'info', `The war cabinet wants a head: it asks you to dismiss ${c.gen.name}. ${c.why} Dismiss him and its confidence recovers; stand by him and it falls, unless his next battle proves the cabinet wrong.`, n.id);
 }
@@ -981,7 +1233,9 @@ export function govMonth(g: Game, nat: string): void {
     headline(g, 'info', `The decree lapses: ${was.name.toLowerCase()}. There is no political capital left to hold the country to it, and the law falls back to ${stepAt(st, t).name.toLowerCase()}.`, nat);
   }
   // A cabinet that has had no trust in him for months on end falls.
-  st.low = st.trust <= form.fallsAt ? st.low + 1 : 0;
+  // (Trust is counted in whole points, as the card shows it.)
+  // A player who has made his office secure is never brought down: the months are not counted at all.
+  st.low = !officeSecure(g) && Math.floor(st.trust) <= form.fallsAt ? st.low + 1 : 0;
   if (st.low >= T.crisisMonths) {
     st.low = 0;
     st.seats = {};
@@ -991,6 +1245,8 @@ export function govMonth(g: Game, nat: string): void {
     st.last = [];
     // The men a promise was made to are gone, and so is their grievance against a general.
     delete st.vow;
+    const named = st.head ? generalBy(g, st.head.general) : undefined;
+    if (named) delete named.rec.lost;
     delete st.head;
     note(g, st, 'The war cabinet fell.');
     headline(g, 'info', `The government falls: the war cabinet ${form.crisis}. Caretakers take every office, the newest decrees are withdrawn, and your political capital is spent.`, nat);
@@ -998,6 +1254,7 @@ export function govMonth(g: Game, nat: string): void {
   }
   judgeDirective(g, nat);
   headMonth(g, n, st);
+  noteReach(g, nat, st);
   if (!st.dir && g.turn >= st.next) {
     const d = draw(g, nat, st);
     if (d) {
@@ -1057,6 +1314,10 @@ export interface HeadView {
   wrong: number;
   /** True if the army thinks well of him: his corps takes his going badly. */
   loved: boolean;
+  /** His record: battles fought and won. And the defeats the cabinet holds against him, each in a sentence, with the odds it was fought at. */
+  fought: number;
+  won: number;
+  battles: { when: string; where: string; odds: number; attack: boolean; text: string }[];
 }
 export interface SeatView {
   id: string; name: string;
@@ -1079,12 +1340,15 @@ export interface DirectiveView extends Directive {
   asidePrice: number;
   /** The month the next directive would be set if this one were set aside today. */
   asideNext: number;
+  /** The odds as they stand today, in a sentence: for a town to take, what the attack card reads with the corps in reach brought up; for a place to hold, what the enemy's corps in reach could attack it at. Null for other jobs. */
+  oddsLine: string | null;
 }
 export interface GovView {
   nat: string;
   form: { id: FormId; name: string; blurb: string };
   /** True for the player's own government: the rest is filled in. */
   mine: boolean;
+  /** The cabinet's trust in whole points, rounded down: every mark it is measured against (doubt, the fall) is counted the same way. */
   trust: number;
   trustWord: string;
   /** The level trust drifts back to when there is no news: lower while directives stand ignored. */
@@ -1094,6 +1358,8 @@ export interface GovView {
   withheld: string | null;
   /** The month this government was formed. */
   since: number;
+  /** True where the player has made his office secure: the cabinet cannot fall, whatever its trust. */
+  secure: boolean;
   /** At or under this for `crisisMonths` months running the cabinet falls; `low` is how many months it has been there. */
   fallsAt: number;
   crisisMonths: number;
@@ -1127,7 +1393,7 @@ export interface GovView {
   log: { turn: number; text: string }[];
 }
 
-const trustWord = (t: number, fallsAt: number): string => (t <= fallsAt ? 'None left' : t < 35 ? 'Doubtful' : t < 55 ? 'Uneasy' : t < 75 ? 'Steady' : t < 90 ? 'Firm' : 'Complete');
+const trustWord = (t: number, fallsAt: number): string => (Math.floor(t) <= fallsAt ? 'None left' : t < 35 ? 'Doubtful' : t < 55 ? 'Uneasy' : t < 75 ? 'Steady' : t < 90 ? 'Firm' : 'Complete');
 const mv = (m: Minister): MinisterView => ({ id: m.id, name: m.name, plus: m.plus, minus: m.minus, wing: m.wing ?? null });
 const pct = (x: number): number => Math.round(x * 100);
 
@@ -1145,16 +1411,35 @@ function wingsView(st: GovState | null): WingsView {
     hawks, doves, lean, top, at: W.top,
     word: top === 'hawks' ? 'The hawks have the table' : top === 'doves' ? 'The doves have the table' : lean > 0 ? 'Leaning to the hawks' : lean < 0 ? 'Leaning to the doves' : 'Evenly balanced',
     text: top === 'hawks' ? 'The cabinet asks for a town whenever there is one to ask for, orders a place held only with the enemy at its gates, and in a quiet month wants the army built up before it wants trade.'
-      : top === 'doves' ? 'The cabinet asks you to hold, to build up, to trade, to help an ally and to spare a worn army, and for a town only when nothing else fits.'
+      : top === 'doves' ? 'The cabinet asks you to hold, to build up the army and the towns, to trade, to help an ally and to spare a worn army. It does not ask for towns: with nothing of its own to ask for, it asks for nothing.'
         : `Neither wing shapes the directives yet: it takes ${W.top} more ministers of one wing than of the other. Every minister tilts how the cabinet reads the news.`,
     effects,
   };
 }
 const LEVER_NAME: Record<Lever, string> = { income: 'Income', drafts: 'Replacements', cost: 'Price of new corps', research: 'Research', trade: 'Trade agreements', men: 'Men coming of age' };
 
+/** The odds on a directive as they stand today, in a sentence. */
+function oddsLineOf(g: Game, d: Directive): string | null {
+  const r = g.regions[d.region ?? -1];
+  if (!r) return null;
+  if (d.kind === 'take' || d.kind === 'relief') {
+    if (!atWar(g, d.nat, r.ctrl)) return null;
+    const odds = directiveOdds(g, d.nat, r.id);
+    return odds > 0 ? `With your corps in reach brought up, the attack card reads ${oddsWords(odds)} today.` : `None of your corps is within ${GOV.directives.take.reach === 2 ? 'two' : GOV.directives.take.reach} provinces of it today.`;
+  }
+  if (d.kind === 'hold') {
+    if (besieged(g, r)) return null;
+    const t = threatOdds(g, d.nat, r.id);
+    return t ? `${theName(g.nations[t.by], true)} could attack it today at ${oddsWords(t.odds)} with its corps in reach.` : 'No enemy corps is within reach of it today.';
+  }
+  return null;
+}
+
 function progressOf(g: Game, d: Directive): string {
   if (d.kind === 'raise') return `The army stands at ${armyCount(g, d.nat)} of ${d.target} divisions, in the field or forming.`;
   if (d.kind === 'trade') { const k = dealsOf(g, d.nat).length; return `You have ${k === 0 ? 'no trade agreements' : k === 1 ? 'one trade agreement' : `${k} trade agreements`}: one more is asked for. Open Trade to sign it.`; }
+  if (d.kind === 'build') return `You have ${civicCount(g, d.nat)} buildings standing or ordered: one more is asked for. Pick a town on the map and open its buildings.`;
+  if (d.kind === 'agent') { const k = agentsOf(g, d.nat).length; return `You have ${k === 0 ? 'no agents' : k === 1 ? 'one agent' : `${k} agents`}: one more is asked for. Open the secret service to recruit one.`; }
   if (d.kind === 'spare') { const lost = (d.lost ?? 0) + menLostSince(g, d.nat, d.seen ?? -1); return `The army has lost ${lost.toLocaleString('en-US')} men in battle since the order came: the cabinet will stand for ${(d.target ?? 0).toLocaleString('en-US')}.`; }
   const r = g.regions[d.region!];
   if (d.kind === 'hold') return besieged(g, r) ? `${townName(r)} is under siege, and holds.` : d.tested ? `${townName(r)} has been attacked, and holds.` : `${townName(r)} is in your hands, and the enemy has not come for it yet.`;
@@ -1169,7 +1454,7 @@ export function government(g: Game, nat: string | null = g.human): GovView | nul
   const st = seen(g, nat);
   const empty: GovView = {
     nat, form: { id, name: form.name, blurb: form.blurb }, mine: false, trust: form.start, trustWord: trustWord(form.start, form.fallsAt), rest: GOV.trust.rest, fallsAt: form.fallsAt, crisisMonths: GOV.trust.crisisMonths, low: 0,
-    doubts: false, withheld: null, since: 0,
+    doubts: false, withheld: null, since: 0, secure: officeSecure(g),
     capital: 0, capitalMonth: 0, capitalMost: DIPLOMACY.pcCap, appointCost: appointCost(nat), seats: [], tracks: [], directive: null, nextIn: 0, done: 0, missed: 0, sums: [], moved: [], log: [],
     wings: wingsView(null), promise: null, promiseWhy: null, kept: 0, broken: 0, head: null, stoodBy: null,
   };
@@ -1198,10 +1483,10 @@ export function government(g: Game, nat: string | null = g.human): GovView | nul
   const stood = st.stood ? generalBy(g, st.stood.general) : undefined;
   const H = GOV.head, P = GOV.promise;
   return {
-    ...empty, mine: true, trust: Math.round(st.trust), trustWord: trustWord(st.trust, form.fallsAt), rest: restOf(st), low: st.low, since: st.since ?? 0,
+    ...empty, mine: true, trust: Math.floor(st.trust + 1e-9), trustWord: trustWord(st.trust, form.fallsAt), rest: restOf(st), low: st.low, since: st.since ?? 0,
     doubts, withheld: doubts ? `It withholds ${Math.round(C.lowShare * 100)}% of the political capital you would earn each month and ${Math.round(C.lowIncome * 100)}% of the treasury's income until its trust is back to ${C.lowTrust}.` : null,
     capital: Math.floor(n.pc), capitalMonth: Math.round((pcIncome(nat) + civicSum(g, nat).pc + cm) * 100) / 100, seats, tracks,
-    directive: d ? { ...d, by: d.from === nat ? 'The war cabinet' : theName(g.nations[d.from], true), left: Math.max(0, d.due - g.turn + 1), progress: progressOf(g, d), reward: rewardWords(d), price: Math.round(missedCost(st) * form.swing * 10) / 10, asidePrice: Math.round(missedCost(st, true) * form.swing * 10) / 10, asideNext: Math.max(g.turn + GOV.directives.retry, d.due + 1 + GOV.directives.every) } : null,
+    directive: d ? { ...d, text: d.kind === 'raise' && n.atWar.length && d.text.startsWith(PEACE) ? `T${d.text.slice(PEACE.length + 1)}` : d.text, oddsLine: oddsLineOf(g, d), by: d.from === nat ? 'The war cabinet' : theName(g.nations[d.from], true), left: Math.max(0, d.due - g.turn + 1), progress: progressOf(g, d), reward: rewardWords(d), price: Math.round(missedCost(st) * form.swing * 10) / 10, asidePrice: Math.round(missedCost(st, true) * form.swing * 10) / 10, asideNext: Math.max(g.turn + GOV.directives.retry, d.due + 1 + GOV.directives.every) } : null,
     nextIn: d ? 0 : Math.max(0, st.next - g.turn), done: st.done, missed: st.missed, sums,
     wings: wingsView(st),
     promise: v && vr ? {
@@ -1213,6 +1498,8 @@ export function government(g: Game, nat: string | null = g.human): GovView | nul
     head: st.head && asked ? {
       general: asked.id, name: asked.name, rank: rankOf(asked), command: askedCorps?.name ?? '', why: st.head.why, left: Math.max(0, st.head.due - g.turn + 1),
       gain: round1(H.sacked * form.swing), cost: round1(H.refused * form.swing), vindicated: round1(H.vindicated * form.swing), wrong: round1(H.wrong * form.swing), loved: popular(asked),
+      fought: asked.rec.battles, won: asked.rec.won,
+      battles: (st.head.lost ?? []).map((b) => ({ when: date(b.t), where: g.regions[b.reg]?.name ?? '', odds: b.odds, attack: b.att, text: `${b.att ? 'Attacked' : 'Defended'} ${g.regions[b.reg]?.name ?? 'the field'} in ${date(b.t)}, the attacker at ${oddsNum(b.odds)} to 1: ${b.att ? 'thrown back' : 'lost'}.` })),
     } : null,
     stoodBy: st.stood && stood ? { general: stood.id, name: stood.name, left: Math.max(0, st.stood.until - g.turn + 1) } : null,
     moved: (st.last ?? []).map((c) => ({ label: c.label, amount: Math.round(c.amount * 10) / 10 })).filter((c) => c.amount !== 0), log: [...st.log].reverse(),

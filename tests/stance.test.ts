@@ -196,7 +196,7 @@ describe('the order to dig in', () => {
     expect(plain.A).toBeCloseTo(dug.A, 6);
   });
 
-  it('takes a month on the spot: troops who came by rail have no trenches until they have sat one out', () => {
+  it('takes a month on the spot: troops who came by rail have no fieldworks until they have sat one out', () => {
     const g = eve();
     orderEvePlan(g);
     const garrison = field(g, g.byName['Warsaw'], 'POL');
@@ -212,13 +212,13 @@ describe('the order to dig in', () => {
     for (const c of garrison) expect(c.dug, c.name).toBe(true);
   });
 
-  it('leaves the trenches behind when the army moves, retreats or is given other orders', () => {
+  it('leaves the fieldworks behind when the army moves, retreats or is given other orders', () => {
     const g = eve();
     const [a, b, c] = ['Lodz', 'Kielce', 'Lublin'].map((n) => field(g, g.byName[n], 'POL')[0]);
     for (const x of [a, b, c]) orderStance(g, x, 'dig');
     endEve(g);
     expect([a, b, c].map((x) => x.dug)).toEqual([true, true, true]);
-    // Beaten out of its position, an army loses the trenches it dug there.
+    // Beaten out of its position, an army loses the fieldworks it dug there.
     const lodz = g.byName['Lodz'];
     const rep = resolveBattle(g, germansRound(g, lodz), lodz);
     expect(rep.taken).toBe(true);
@@ -231,7 +231,7 @@ describe('the order to dig in', () => {
     expect(b.dug).toBeUndefined();
     expect(orderRail(g, c, g.byName['Przemysl'].id) || orderMove(g, c, g.byName['Przemysl'].id) > 0).toBe(true);
     expect(c.dug).toBeUndefined();
-    // Still under orders to dig, it has to sit a month before the new trenches are ready.
+    // Still under orders to dig, it has to sit a month before the new fieldworks are ready.
     expect(c.digs).toBe(true);
     endHuman(g);
     expect(c.dug).toBeUndefined();

@@ -17,7 +17,7 @@ import { startOpen } from '../src/campaign/staff';
 import { TECH, startResearch, techOf, techTick, whyNotResearch } from '../src/campaign/tech';
 import { signTrade, tradeIncome } from '../src/campaign/trade';
 import {
-  beginHuman, cabinetIsOff, endHuman, governmentOf, humanUp, orderAppoint, orderCabinet, orderDecree, orderSetAside, runTurnAI, stepAI, whyNotAppointMinister, whyNotOrderDecree, whyNotSetAsideDirective,
+  beginHuman, cabinetBillOf, cabinetIsOff, endHuman, governmentOf, humanUp, orderAppoint, orderCabinet, orderDecree, orderSetAside, runTurnAI, stepAI, whyNotAppointMinister, whyNotOrderDecree, whyNotSetAsideDirective,
 } from '../src/campaign/turn';
 import type { BattleReport, Directive, Game, GovState } from '../src/campaign/types';
 
@@ -568,12 +568,16 @@ describe('directives', () => {
     const g = playing('ITA');
     const st = govOf(g, 'ITA')!;
     const inf = specOf(g, 'inf')!;
-    // Italy opens with too little in hand for one more corps in the time: the cabinet does not ask for what cannot be paid for.
+    // A table of hawks, which in a quiet month looks to the army before anything else.
+    st.seats = { staff: 'organiser', arms: 'industrialist', foreign: 'statesman', finance: 'taxman' };
+    // Italy opens with too little in hand for one more corps in the time: the cabinet does not ask for what cannot be
+    // paid for. It finds a small job that can be (Version 62: a country at peace is not left with nothing to do).
     st.next = g.turn;
     govMonth(g, 'ITA');
-    expect(st.dir).toBeUndefined();
-    expect(st.next).toBe(g.turn + GOV.directives.retry);
+    expect(['build', 'agent', 'trade']).toContain(st.dir!.kind);
+    expect(st.dir!.text).not.toMatch(/army built up/);
     // With the money for two corps and a margin, it asks for two and no more.
+    delete st.dir;
     g.nations.ITA.pp = (corpsCost(g, 'ITA', 'inf') * 2.5) / 0.6;
     st.next = g.turn;
     govMonth(g, 'ITA');
@@ -967,6 +971,11 @@ describe('the war cabinet can be switched off', () => {
     st.trust = 20;
     expect(govMul(g, 'GER', 'income')).not.toBe(1);
     expect(cabinetIsOff(g)).toBe(false);
+    // The cabinet's open business is settled on the way out (Version 62): the directive that stood is set aside at the usual price.
+    const bill = cabinetBillOf(g);
+    expect(bill).toHaveLength(1);
+    expect(bill[0].text).toBe('The directive is set aside: Take the town');
+    expect(bill[0].trust).toBeGreaterThan(0);
     expect(orderCabinet(g, false)).toBe(true);
     expect(orderCabinet(g, false)).toBe(false);
     expect(cabinetIsOff(g)).toBe(true);
@@ -976,12 +985,15 @@ describe('the war cabinet can be switched off', () => {
     expect(governmentOf(g, 'UK')).toBeNull();
     for (const lever of ['income', 'drafts', 'cost', 'research', 'trade', 'men'] as const) expect(govMul(g, 'GER', lever), lever).toBe(1);
     expect(govCapital(g, 'GER')).toBe(0);
-    // The directive that stood is withdrawn without blame, and no month moves the trust.
+    // Nothing is left open, and from here no month moves the trust.
     expect(st.dir).toBeUndefined();
-    expect(st.missed).toBe(0);
+    expect(st.missed).toBe(1);
+    expect(st.trust).toBeCloseTo(20 - bill[0].trust, 1);   // the bill is shown to one place
+    const left = st.trust;
+    expect(cabinetBillOf(g)).toEqual([]);
     govMonth(g, 'GER');
     judgeDirective(g, 'GER');
-    expect(st.trust).toBe(20);
+    expect(st.trust).toBe(left);
     expect(orderAppoint(g, 'staff', 'organiser')).toBe(false);
     expect(orderDecree(g, 'service', 1)).toBe(false);
     expect(orderSetAside(g)).toBe(false);

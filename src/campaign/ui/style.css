@@ -1682,3 +1682,35 @@ text.qm { font-family: var(--head); font-size: 12px; font-weight: 700; fill: #f4
   table.ticket td:first-child { white-space: normal; font-size: 12px; }
   table.ticket td.fx:empty { display: none; }
 }
+
+/* Version 62: the cabinet room in pages, the evidence against a general, today's odds on a directive, the bill for
+   switching the cabinet off, and the player's say over the call-up in the ledger. */
+.seg.gvtabs { margin: 14px 0 2px; flex-wrap: wrap; }
+.seg.gvtabs .btn { flex: 1 1 0; white-space: nowrap; }
+.seg.gvtabs .btn.on { border-color: var(--brass); color: var(--brass); outline: 0; box-shadow: inset 0 -2px 0 var(--brass); }
+.seg.gvtabs .btn small { font-weight: 400; opacity: .75; margin-left: 4px; }
+.gvdir p.gvodds { color: var(--ink-2); font-size: 12.5px; border-left: 2px solid var(--line); padding-left: 8px; }
+.gvrecord { margin-top: 8px; background: rgba(0, 0, 0, .18); border-radius: 4px; padding: 7px 10px; font-size: 12.5px; color: var(--ink-2); }
+.gvrecord small { display: block; font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.gvrecord b { display: block; color: var(--ink); margin-bottom: 5px; }
+.gvrecord ul { margin: 2px 0 0; padding-left: 18px; }
+.gvbill { list-style: none; margin: 6px 0; padding: 0; }
+.gvbill li { display: flex; gap: 10px; justify-content: space-between; padding: 3px 0; border-top: 1px solid rgba(255, 255, 255, .08); }
+.gvbill li b { white-space: nowrap; color: #f0b3a5; }
+.ledger .lfacts.men.sum .lfact b.neg { color: #d98b78; }
+.ledger .lfacts.men.sum .lfact.eq { outline: 1px solid var(--brass); }
+p.sub.mennow { margin: 0 0 8px; }
+.menorders { display: grid; gap: 6px; margin: 4px 0 10px; }
+.menorders > small { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.menorder { display: flex; gap: 12px; align-items: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px; }
+.menorder .grow { flex: 1; min-width: 0; }
+.menorder b { display: block; font-size: 13.5px; }
+.menorder small { display: block; font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.menorder small.whyno { color: #f0b3a5; }
+.menorder .btn { white-space: nowrap; }
+.menorder.asking { display: block; }
+.menorder.asking .note { margin: 0 0 8px; font-size: 12.5px; }
+@media (max-width: 760px) {
+  .seg.gvtabs .btn { flex: 1 1 40%; }
+  .menorder { flex-direction: column; align-items: stretch; }
+}
