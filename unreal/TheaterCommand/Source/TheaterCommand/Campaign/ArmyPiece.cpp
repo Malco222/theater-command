@@ -98,13 +98,23 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		}
 		const float Mean = Counted > 0 ? Left / Counted : 1.0f;
 		FlagWear = Mean < 0.45f ? 2 : Mean < 0.72f ? 1 : 0;
+		// ("-TheaterFlagWear=2" wears every flag for a picture; "-TheaterFlagWear=2:GER" one country's only)
 		static int32 Forced = -2;
+		static FString ForcedFor;
 		if (Forced == -2)
 		{
 			Forced = -1;
-			FParse::Value(FCommandLine::Get(), TEXT("TheaterFlagWear="), Forced);
+			FString Asked, Count;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFlagWear="), Asked, false))
+			{
+				if (!Asked.Split(TEXT(":"), &Count, &ForcedFor))
+				{
+					Count = Asked;
+				}
+				Forced = FCString::Atoi(*Count);
+			}
 		}
-		if (Forced >= 0)
+		if (Forced >= 0 && (ForcedFor.IsEmpty() || ForcedFor == Nation.Tag))
 		{
 			FlagWear = FMath::Clamp(Forced, 0, 2);
 		}
@@ -537,58 +547,115 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		// air. Pieces are turned so that the viewer looks along their +X: the cloth faces back along -X, the pole
 		// on the viewer's left, which is the side a flag is read from.
 		const int32 Wear = What == 0 ? FlagWear : 0;
-		const int32 Across = 18, Down = Wear > 0 ? 12 : 6;
+		const int32 Across = Wear > 0 ? 30 : 18, Down = Wear > 0 ? 18 : 6;
 		const double Ripple = 0.045 * FlagWidth, Waves = 1.3, Droop = 0.035 * FlagHeight;
 		const double Phase = (RegionId * 37 % 100) * 0.0628; // no two neighbours hang alike
-		// (A worn flag's free end is torn away in ragged tongues, deeper for one in tatters: each row of the cloth ends
-		// where its own tear ends. And shot has been through it: a hole or two, three for one in tatters.)
+		// A flag's wear is told by its shape and by soot, not by fading (the art director's ruling: a faded
+		// black-white-red read as Poland's). Worn: the fly frayed, and one hole shot through it. In tatters: the
+		// fly torn into strips for a third of its length, each strip hanging by itself and torn off where it was
+		// torn off; three holes; and soot. The holes are ragged: they are cut a triangle at a time.
 		FRandomStream Tatter(RegionId * 977 + 31);
-		TArray<double> Ends;
-		for (int32 J = 0; J <= Down; ++J)
+		const int32 Period = 4; // (in tatters: three rows of cloth to a strip, then a row torn out)
+		TArray<int32> RowEnd, TearAt; // (for each row of cells: the first cell that is gone)
+		TArray<double> StripHang;
+		for (int32 K = 0; K <= Down / Period; ++K)
 		{
-			const double Rag = Wear == 0 ? 0.0 : (Wear == 1 ? 0.05 : 0.1) + (Wear == 1 ? 0.14 : 0.26) * Tatter.FRand() * (J % 3 == 0 ? 1.0 : 0.55);
-			Ends.Add(1.0 - Rag);
+			StripHang.Add(Wear == 2 ? 0.03 + 0.11 * Tatter.FRand() : 0.0);
 		}
-		TSet<int32> Holes;
-		for (int32 Shot = 0; Shot < (Wear == 0 ? 0 : Wear == 1 ? 1 : 3); ++Shot)
 		{
-			const int32 I = Tatter.RandRange(4, Across - 7), J = Tatter.RandRange(2, Down - 3);
-			Holes.Add(J * Across + I);
-			if (Wear == 2 && Shot == 0)
+			int32 StripEnd = Across;
+			for (int32 J = 0; J < Down; ++J)
 			{
-				Holes.Add(J * Across + I + 1); // (one of them a rent, not a hole)
-				Holes.Add((J + 1) * Across + I + 1);
+				if (Wear == 2 && J % Period == 0)
+				{
+					StripEnd = Across - Tatter.RandRange(0, 5); // (where this strip was torn off)
+				}
+				RowEnd.Add(Wear == 0 ? Across : Wear == 1 ? Across - Tatter.RandRange(0, 2) : StripEnd - Tatter.RandRange(0, 1));
+				TearAt.Add(Wear == 2 && J % Period == Period - 1 ? FMath::RoundToInt32(Across * (0.63 + 0.08 * Tatter.FRand())) : Across);
 			}
 		}
+		struct FShot { double I, J, RI, RJ; };
+		TArray<FShot> Shots;
+		for (int32 Shot = 0; Shot < (Wear == 0 ? 0 : Wear == 1 ? 1 : 3); ++Shot)
+		{
+			// (A hole never falls on the device that says whose flag it is: flags carry theirs in the middle or in the
+			// upper corner by the staff, so the holes fall toward the fly, or low down by the staff.)
+			const bool bFly = Shot == 0 ? Wear == 1 : Shot == 2;
+			Shots.Add({ bFly ? Tatter.FRandRange(Across * 0.76f, Across * 0.86f) : Tatter.FRandRange(Across * 0.1f, Across * 0.24f),
+				bFly ? Tatter.FRandRange(3.0f, Down - 3.0f) : Tatter.FRandRange(Down * 0.6f, Down - 3.0f),
+				Tatter.FRandRange(1.1f, 1.9f) * (Shot == 0 && Wear == 2 ? 1.3 : 1.0), Tatter.FRandRange(0.9f, 1.5f) });
+		}
+		auto Holed = [&Shots, &Tatter](double I, double J)
+		{
+			for (const FShot& Shot : Shots)
+			{
+				if (FMath::Sqrt(FMath::Square((I - Shot.I) / Shot.RI) + FMath::Square((J - Shot.J) / Shot.RJ)) + 0.45 * (Tatter.FRand() - 0.5) < 1.0)
+				{
+					return true;
+				}
+			}
+			return false;
+		};
 		TArray<FVector> Vertices;
 		TArray<FVector> Normals;
 		TArray<FVector2D> UVs;
 		TArray<FProcMeshTangent> Tangents;
 		TArray<int32> Triangles;
+		TArray<FLinearColor> Soot;
+		const double TornFrom = 0.62;
 		for (int32 J = 0; J <= Down; ++J)
 		{
 			for (int32 I = 0; I <= Across; ++I)
 			{
-				const double S = FMath::Min(static_cast<double>(I) / Across, Ends[J]), T = static_cast<double>(J) / Down;
+				const double S = static_cast<double>(I) / Across, T = static_cast<double>(J) / Down;
 				const double Angle = UE_DOUBLE_TWO_PI * Waves * S + Phase + 0.8 * T;
-				Vertices.Add(FVector(Pole.X + Ripple * S * FMath::Sin(Angle), Pole.Y + Hoist + S * FlagWidth, FlagAt.Z + FlagHeight * (0.5 - T) - Droop * S * S));
+				// (a strip torn free hangs lower the farther out it runs, each by its own amount)
+				const double Hang = StripHang[FMath::Min(J / Period, StripHang.Num() - 1)] * FMath::Square(FMath::Max(S - TornFrom, 0.0) / (1.0 - TornFrom)) * FlagHeight;
+				Vertices.Add(FVector(Pole.X + Ripple * S * FMath::Sin(Angle), Pole.Y + Hoist + S * FlagWidth, FlagAt.Z + FlagHeight * (0.5 - T) - Droop * S * S - Hang));
 				const FVector Along(Ripple * (FMath::Sin(Angle) + S * UE_DOUBLE_TWO_PI * Waves * FMath::Cos(Angle)), FlagWidth, -2.0 * Droop * S);
 				const FVector Downward(Ripple * S * 0.8 * FMath::Cos(Angle), 0.0, -FlagHeight);
 				Normals.Add((Along ^ Downward).GetSafeNormal());
 				Tangents.Add(FProcMeshTangent(Along.GetSafeNormal(), false));
 				UVs.Add(FVector2D(S, T));
+				// Soot: round every hole, and (in tatters) along the fly, in smudges.
+				double Dirt = 0.0;
+				for (const FShot& Shot : Shots)
+				{
+					const double Far = FMath::Sqrt(FMath::Square((I - Shot.I) / Shot.RI) + FMath::Square((J - Shot.J) / Shot.RJ));
+					Dirt = FMath::Max(Dirt, (Wear == 2 ? 0.5 : 0.3) * (1.0 - FMath::SmoothStep(1.0, 2.6, Far)));
+				}
+				if (Wear == 2)
+				{
+					Dirt = FMath::Max(Dirt, 0.42 * FMath::SmoothStep(0.5, 1.0, S) * (0.55 + 0.45 * FMath::Sin(S * 23.0 + T * 17.0 + Phase)));
+				}
+				const float Clean = static_cast<float>(1.0 - Dirt);
+				Soot.Add(FLinearColor(Clean, Clean * 0.98f, Clean * 0.95f, 1.0f));
 			}
 		}
 		for (int32 J = 0; J < Down; ++J)
 		{
 			for (int32 I = 0; I < Across; ++I)
 			{
-				if (Holes.Contains(J * Across + I))
+				const int32 End = FMath::Min(RowEnd[J], TearAt[J]);
+				if (I >= End)
 				{
-					continue;
+					continue; // torn away
 				}
 				const int32 A = J * (Across + 1) + I, B = A + 1, C = A + Across + 1, D = C + 1;
-				Triangles.Append({ A, C, B, B, C, D });
+				if (Wear == 0)
+				{
+					Triangles.Append({ A, C, B, B, C, D });
+					continue;
+				}
+				if (!Holed(I + 0.33, J + 0.33))
+				{
+					Triangles.Append({ A, C, B });
+				}
+				// (the last cell of a row keeps one corner of itself only: a frayed end, not a cut one)
+				if (I + 1 < End && !Holed(I + 0.67, J + 0.67))
+				{
+					Triangles.Append({ B, C, D });
+				}
 			}
 		}
 		Cloth = NewObject<UProceduralMeshComponent>(this);
@@ -596,7 +663,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Cloth->SetRelativeLocation(-StandardFoot); // (its points are written in the piece's own space)
 		Cloth->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Cloth->RegisterComponent();
-		Cloth->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UVs, TArray<FLinearColor>(), Tangents, false);
+		Cloth->CreateMeshSection_LinearColor(0, Vertices, Triangles, Normals, UVs, Wear > 0 ? Soot : TArray<FLinearColor>(), Tangents, false, false);
 		Cloth->SetMaterial(0, Colours);
 	}
 	else

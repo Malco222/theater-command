@@ -218,7 +218,7 @@ struct FMiniatureMesh
 	 * OutQuarters takes the middles of its lit quarters, on the map, for its glow by night; OutBeacon the lantern
 	 * of its lighthouse, on the table (left alone where it has none).
 	 */
-	void Township(const FTownSite& Site, TArray<FVector>* OutChimneys = nullptr, TArray<FVector2D>* OutQuarters = nullptr, FVector* OutBeacon = nullptr);
+	void Township(const FTownSite& Site, TArray<FVector>* OutChimneys = nullptr, TArray<FVector2D>* OutQuarters = nullptr, FVector* OutBeacon = nullptr, FVector* OutLandmarkTop = nullptr);
 	/**
 	 * One of the buildings a town is given by its owner, standing at the town's edge: Line is 0 a market, 1 farms,
 	 * 2 a school, 3 a drill ground, 4 a hospital, 5 a town hall. Each grows with its level (1 to 3); bGoing puts

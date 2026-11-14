@@ -249,6 +249,11 @@ public:
 	void ShowWorksLeft(const TArray<int32>& FromRules);
 	/** Factories that are not working (bombed, sabotaged, burnt): pairs, the region and how many. Their works stand as wrecks and their chimneys are cold. */
 	void ShowWrecked(const TArray<int32>& FromRules);
+	/** Works going up from the arsenal: pairs, the region and what. A builder's yard in scaffolding stands there meanwhile. Call it before ShowBuildings. */
+	void ShowWorksGoing(const TArray<int32>& FromRules);
+	/** Flies the holder's flag from the great building of every capital that is not in its own country's hands. */
+	void ShowVictorFlags();
+	void DrawVictorFlags();
 	/**
 	 * The airfields that have air groups based on them (Brian's ask of 2026-11-13: no great aircraft piece standing
 	 * on the map; the airfield itself says it is in use): a small aircraft parked on the field for each group, in
@@ -551,6 +556,22 @@ private:
 	TArray<FVector> WorksChimneys; // and of the factories built since the war began
 	TArray<FIntPoint> WorksChimneyRegion; // (for each of those: its region, and which of the region's stacks it is)
 	TMap<int32, int32> WreckedIn; // by region: how many of its factories are not working
+	TMap<int32, int32> GoingIn; // by region: what is being built there (bits: see ShowWorksGoing)
+	TMap<int32, FVector> TownLandmarks; // by region: the highest point of a capital's great building, on the table
+	struct FVictorFlag
+	{
+		FString Tag; // whose flag flies there (none: it is on its way down for good)
+		FString Was; // whose flew there before the change, while that one is hauled down
+		double Since = -1000.0; // when the change was made, by the world's clock
+	};
+	TMap<int32, FVictorFlag> VictorFlags; // by region: the flag over a captured capital
+	bool bVictorsStale = false;
+	bool bVictorsSeen = false; // the towns have stood once: a change from here on is acted out
+	bool bVictorsMoving = false; // a flag is on its way up or down
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> VictorFlagMesh;
+	TArray<TArray<FVector2D>> RiverPaths; // every river's course as it is drawn, wander and all
+	TArray<double> RiverBroad; // and how broad each is
 	TArray<FBattleSmoke> Battles;
 	TArray<FVector> SmokeVertices;
 	TArray<FColor> SmokeColours;

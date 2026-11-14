@@ -1644,6 +1644,16 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 		Known->Build(Fresh);
 		VehicleParts::bPlain = false;
 		Fresh.MarkWear(true); // (where its paint is knocked about: the nose, the track guards, the hatches)
+		if (Known->Room >= 100.0)
+		{
+			// (A ship is not knocked about as a tank is. What faces the sky, her decks and the tops of her turrets,
+			// is clean: marked as no painted metal, it takes no chips and no blots, which read as scorching on a
+			// deck. Her sides are plain painted metal, with no place where the paint gives way more readily.)
+			for (int32 K = 0; K < Fresh.Colors.Num(); ++K)
+			{
+				Fresh.Colors[K].A = Fresh.Normals[K].Z > 0.6 ? 255 : 128;
+			}
+		}
 		UE_LOG(LogTheater, Log, TEXT("Model %s%s built: %d points, %d triangles"), *Name, bFine ? TEXT("") : TEXT(" (plain)"), Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
 		Model = &Built.Add(Name, MoveTemp(Fresh));
 	}

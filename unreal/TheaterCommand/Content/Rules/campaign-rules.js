@@ -23623,6 +23623,27 @@
         }
         return out;
       })(),
+      // Works going up from the arsenal, for the table to show as a builder's yard in scaffolding: the province, and
+      // what is being built there as bits (1 a factory, 2 a shipyard, 4 anti-aircraft guns, 8 an airfield, 16
+      // fortifications). Only where the player can know it.
+      going: (() => {
+        const at = /* @__PURE__ */ new Map();
+        try {
+          for (const n of Object.values(s.nations)) {
+            for (const b of n.queue) {
+              const q = b;
+              if (q.region === void 0 || !s.regions[q.region]) continue;
+              const bit = q.what === "fort" ? 16 : q.what === "work" ? { factory: 1, yard: 2, aa: 4, field: 8 }[q.item ?? ""] ?? 0 : 0;
+              if (!bit) continue;
+              const r = s.regions[q.region];
+              const known = !s.human || r.ctrl === s.human || allied(s, r.ctrl, s.human) || seen2[r.id] > 0;
+              if (known) at.set(r.id, (at.get(r.id) ?? 0) | bit);
+            }
+          }
+        } catch {
+        }
+        return [...at.entries()].flat();
+      })(),
       // Factories that are not working (bombed, sabotaged or burnt by their own side), for the table to show as
       // wrecks with cold chimneys: the province and how many. Only where the player can know it: on his own side's
       // ground, or ground he has eyes on.
@@ -25648,6 +25669,20 @@
       buttons: r.region >= 0 ? [{ label: `GO TO ${s.regions[r.region].name.toUpperCase()}`, act: `goto:region:${r.region}`, ok: true, tip: "Looks at the place on the map." }] : []
     });
     const mine3 = lastMonth.rows.filter((r) => r.mine).map(row2), rest = lastMonth.rows.filter((r) => !r.mine).map(row2);
+    let staffed = [];
+    try {
+      const v = commandOf(s);
+      if (v && s.human && s.nations[s.human]?.alive) {
+        staffed = v.desks.filter((d) => d.staff && d.news).map((d) => ({
+          nat: "",
+          title: `${d.name}  ·  your staff runs it`,
+          lines: [d.news],
+          buttons: [{ label: "TAKE IT BACK", act: `desk:${d.id}:own`, ok: true, tip: `${deskDef(d.id)?.hand ?? ""} What your staff ordered this month stands.` }]
+        }));
+      }
+    } catch {
+      staffed = [];
+    }
     return {
       id: "reports",
       title: `THE MONTH'S REPORT  ·  ${lastMonth.date.toUpperCase()}`,
@@ -25656,6 +25691,7 @@
       top: [],
       sections: [
         { heading: "YOUR FRONTS", text: mine3.length ? "" : "No enemy moved against you, and none of your ground changed hands.", rows: mine3 },
+        { heading: "WHAT YOUR STAFF DID", text: "", rows: staffed },
         { heading: "ELSEWHERE", text: rest.length ? "" : "Nothing was fought for elsewhere.", rows: rest },
         { heading: "THE NEWS", text: lastMonth.news.join("\n"), rows: [] }
       ].filter((x) => x.rows.length || x.text)

@@ -171,6 +171,26 @@ function view() {
       try { for (const r of s.regions) { const v = fieldworksLeft(s, r.id); if (v) out.push(r.id, Math.round(v.months * 10), v.corps); } } catch { /* none */ }
       return out;
     })(),
+    // Works going up from the arsenal, for the table to show as a builder's yard in scaffolding: the province, and
+    // what is being built there as bits (1 a factory, 2 a shipyard, 4 anti-aircraft guns, 8 an airfield, 16
+    // fortifications). Only where the player can know it.
+    going: (() => {
+      const at = new Map<number, number>();
+      try {
+        for (const n of Object.values(s.nations)) {
+          for (const b of n.queue) {
+            const q = b as unknown as { what?: string; item?: string; region?: number };
+            if (q.region === undefined || !s.regions[q.region]) continue;
+            const bit = q.what === 'fort' ? 16 : q.what === 'work' ? ({ factory: 1, yard: 2, aa: 4, field: 8 } as Record<string, number>)[q.item ?? ''] ?? 0 : 0;
+            if (!bit) continue;
+            const r = s.regions[q.region];
+            const known = !s.human || r.ctrl === s.human || allied(s, r.ctrl, s.human) || seen[r.id] > 0;
+            if (known) at.set(r.id, (at.get(r.id) ?? 0) | bit);
+          }
+        }
+      } catch { /* nothing on order */ }
+      return [...at.entries()].flat();
+    })(),
     // Factories that are not working (bombed, sabotaged or burnt by their own side), for the table to show as
     // wrecks with cold chimneys: the province and how many. Only where the player can know it: on his own side's
     // ground, or ground he has eyes on.
@@ -2237,6 +2257,18 @@ function reportsPage(s: Game): Page | null {
     buttons: r.region >= 0 ? [{ label: `GO TO ${s.regions[r.region].name.toUpperCase()}`, act: `goto:region:${r.region}`, ok: true, tip: 'Looks at the place on the map.' }] : [],
   });
   const mine = lastMonth.rows.filter((r) => r.mine).map(row), rest = lastMonth.rows.filter((r) => !r.mine).map(row);
+  // What the staff did at the desks it runs, each with the way to take the desk back (Version 66: a staff's
+  // headline is never read without the button that undoes the arrangement beside it).
+  let staffed: PageRow[] = [];
+  try {
+    const v = commandOf(s);
+    if (v && s.human && s.nations[s.human]?.alive) {
+      staffed = v.desks.filter((d) => d.staff && d.news).map((d) => ({
+        nat: '', title: `${d.name}  \u00B7  your staff runs it`, lines: [d.news as string],
+        buttons: [{ label: 'TAKE IT BACK', act: `desk:${d.id}:own`, ok: true, tip: `${deskDef(d.id)?.hand ?? ''} What your staff ordered this month stands.` }],
+      }));
+    }
+  } catch { staffed = []; }
   return {
     id: 'reports', title: `THE MONTH'S REPORT  \u00B7  ${lastMonth.date.toUpperCase()}`,
     headline: lastMonth.rows.length ? `${mine.length ? `${mine.length} report${mine.length === 1 ? '' : 's'} from your own fronts` : 'Nothing touched your own fronts'}, ${rest.length} from elsewhere` : 'A quiet month',
@@ -2244,6 +2276,7 @@ function reportsPage(s: Game): Page | null {
     top: [],
     sections: [
       { heading: 'YOUR FRONTS', text: mine.length ? '' : 'No enemy moved against you, and none of your ground changed hands.', rows: mine },
+      { heading: 'WHAT YOUR STAFF DID', text: '', rows: staffed },
       { heading: 'ELSEWHERE', text: rest.length ? '' : 'Nothing was fought for elsewhere.', rows: rest },
       { heading: 'THE NEWS', text: lastMonth.news.join('\n'), rows: [] },
     ].filter((x) => x.rows.length || x.text),

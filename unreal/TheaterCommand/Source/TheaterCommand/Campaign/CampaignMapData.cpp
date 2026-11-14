@@ -153,6 +153,7 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 		Region.Id = Obj->GetIntegerField(TEXT("id"));
 		Region.Name = Obj->GetStringField(TEXT("name"));
 		Region.Owner = Obj->GetStringField(TEXT("owner"));
+		Region.Home = Region.Owner;
 		Region.Terrain = Obj->GetStringField(TEXT("terrain"));
 		Region.VictoryPoints = Obj->GetIntegerField(TEXT("vp"));
 		Region.Factories = Obj->GetIntegerField(TEXT("fac"));

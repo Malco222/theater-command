@@ -1100,18 +1100,38 @@ void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, in
 			const double R = FMath::DegreesToRadians(Turn);
 			// (a model's front is toward -X before it is turned: Ahead is the way her bows point on the table)
 			const FVector Ahead(-FMath::Cos(R), -FMath::Sin(R), 0.0), Abeam(-Ahead.Y, Ahead.X, 0.0);
-			const FLinearColor Foam(FColor::FromHex(TEXT("EEF4F2"))), Water(FColor::FromHex(TEXT("2B6E88")));
+			// (The art director's rulings: the wake read as a searchlight, and then as a beam with a frame round it,
+			// because a strip that fades by colour into one fixed sea colour shows wherever the sea is another. So the
+			// wake fades by shape: every part of it narrows to a point, as paint drawn off a dry brush, and its colour
+			// goes only part of the way to the sea's (by night the pieces are lit less than the sea, and paint that
+			// went all the way read as dark streaks on it). It is marked as
+			// paint laid on the water, by an alpha of 240, which the pieces' paint dims by night with the sea.)
+			TGuardValue<uint8> OnTheWater(Finish, 240);
+			const FLinearColor Foam(FColor::FromHex(TEXT("88949A"))), Water(FColor::FromHex(TEXT("227486")));
 			const FVector Sea(Where.X, Where.Y, 0.012 * Unit);
-			const int32 Pieces = 14;
+			const int32 Pieces = 12;
 			const FVector Up(0.0, 0.0, 1.0);
 			for (int32 Piece = 0; Piece < Pieces; ++Piece)
 			{
-				// The wake astern: one smooth tapering strip, widening a little and fading into the sea as it falls behind.
 				const double S0 = static_cast<double>(Piece) / Pieces, S1 = static_cast<double>(Piece + 1) / Pieces;
-				const double W0 = Beam * (0.34 + 0.75 * S0), W1 = Beam * (0.34 + 0.75 * S1);
-				const FVector P0 = Sea - Ahead * (Half * (0.9 + 1.7 * S0)), P1 = Sea - Ahead * (Half * (0.9 + 1.7 * S1));
-				const FLinearColor Shade = FMath::Lerp(Foam, Water, FMath::Pow((S0 + S1) * 0.5, 0.55));
-				Quad(P0 - Abeam * W0, P0 + Abeam * W0, P1 + Abeam * W1, P1 - Abeam * W1, Up, Shade.ToFColor(true)); // (corners in order round the strip)
+				// The churned water astern: a sliver as wide as her screws by the stern, drawn out to a point.
+				const double W0 = Beam * 0.3 * FMath::Pow(1.0 - S0, 0.8), W1 = Beam * 0.3 * FMath::Pow(1.0 - S1, 0.8);
+				const FVector P0 = Sea - Ahead * (Half * (0.9 + 1.5 * S0)), P1 = Sea - Ahead * (Half * (0.9 + 1.5 * S1));
+				const FLinearColor Shade = FMath::Lerp(Foam, Water, 0.1 + 0.35 * (S0 + S1) * 0.5);
+				static const double Bands[4] = { -1.0, -0.5, 0.5, 1.0 };
+				for (int32 Band = 0; Band < 3; ++Band)
+				{
+					Quad(P0 + Abeam * (W0 * Bands[Band]), P0 + Abeam * (W0 * Bands[Band + 1]), P1 + Abeam * (W1 * Bands[Band + 1]), P1 + Abeam * (W1 * Bands[Band]), Up,
+						FMath::Lerp(Shade, Water, Band == 1 ? 0.0f : 0.25f).ToFColor(true));
+				}
+				// The two arms of the wake, spreading from her quarters: thin lines, thinner as they go.
+				for (const double Side : { -1.0, 1.0 })
+				{
+					const FVector C0 = Sea - Ahead * (Half * (0.7 + 1.7 * S0)) + Abeam * (Side * Beam * (0.44 + 1.25 * S0));
+					const FVector C1 = Sea - Ahead * (Half * (0.7 + 1.7 * S1)) + Abeam * (Side * Beam * (0.44 + 1.25 * S1));
+					const double A0 = Beam * 0.085 * (1.0 - S0), A1 = Beam * 0.085 * (1.0 - S1);
+					Quad(C0 - Abeam * A0, C0 + Abeam * A0, C1 + Abeam * A1, C1 - Abeam * A1, Up, FMath::Lerp(Foam, Water, 0.25 + 0.25 * (S0 + S1) * 0.5).ToFColor(true));
+				}
 			}
 			for (const double Side : { -1.0, 1.0 })
 			{
@@ -1120,7 +1140,7 @@ void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, in
 				{
 					const double Share = (Piece + 0.5) / 4.0;
 					const FVector At = Sea + Ahead * (Half * (0.95 - 1.15 * Share)) + Abeam * Side * (Beam * (0.35 + 1.25 * Share));
-					Box(At, FVector(Half * 0.3, Beam * 0.16, 0.012 * Unit), FMath::Lerp(Foam, Water, 0.25 + 0.6 * Share), Turn + Side * 24.0);
+					Box(At, FVector(Half * 0.3, Beam * (0.14 - 0.08 * Share), 0.012 * Unit), FMath::Lerp(Foam, Water, 0.2 + 0.3 * Share), Turn + Side * 24.0);
 				}
 			}
 		}
@@ -1612,7 +1632,7 @@ void FMiniatureMesh::Town(const FVector& Where, double Unit, int32 Houses, bool 
 	(void)bTown;
 }
 
-void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimneys, TArray<FVector2D>* OutQuarters, FVector* OutBeacon)
+void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimneys, TArray<FVector2D>* OutQuarters, FVector* OutBeacon, FVector* OutLandmarkTop)
 {
 	FRandomStream Dice(Site.Seed * 7919 + 13);
 	const double U = Site.Unit * (Site.bPacked ? 0.85 : 1.0); // a house is under one of these long (a little smaller where the town is packed into a small province)
@@ -1777,13 +1797,17 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			// round it and the ground scorched. (Its dice are its own, so that the rest of the town stands where it did.)
 			FRandomStream Chance(Site.Seed * 131 + WorksBuilt * 17 + 5);
 			const FLinearColor Charred(FColor::FromHex(TEXT("2B2725"))), BurntBrick(FColor::FromHex(TEXT("59423A"))), Ash(FColor::FromHex(TEXT("6E6A64"))), Scorch(FColor::FromHex(TEXT("37312B")));
-			// (the scorched ground: a ragged patch of many small ones, never a neat round plate)
-			for (int32 Patch = 0; Patch < (bFar ? 5 : 14); ++Patch)
+			// (The art director's ruling: from working height a brown wreck on brown ground did not say "bombed".
+			// It lies in an apron of pale rubble and ash, half again as wide as the building, ragged at its edge,
+			// with the dark shell inside it and a scorched heart under the shell.)
+			const FLinearColor Rubble(FColor(150, 145, 135));
+			for (int32 Patch = 0; Patch < (bFar ? 7 : 16); ++Patch)
 			{
-				const double Angle = Chance.FRand() * 2.0 * PI, Out = (Patch == 0 ? 0.0 : 0.35 + 0.75 * Chance.FRand()), Big = (Patch == 0 ? 0.85 : 0.28 + 0.34 * Chance.FRand());
-				Pillar(At + FVector(FMath::Cos(Angle) * Out * 1.15, FMath::Sin(Angle) * Out * 0.85, 0.004 + 0.0006 * Patch) * U, Big * U, Big * 0.9 * U, 0.008 * U,
-					Patch % 3 == 0 ? Scorch : Patch % 3 == 1 ? Scorch * 1.25f : Scorch * 0.8f, 7 + Patch % 3);
+				const double Angle = Chance.FRand() * 2.0 * PI, Out = (Patch == 0 ? 0.0 : 0.5 + 0.8 * Chance.FRand()), Big = (Patch == 0 ? 1.15 : 0.34 + 0.4 * Chance.FRand());
+				Pillar(At + FVector(FMath::Cos(Angle) * Out * 1.25, FMath::Sin(Angle) * Out * 1.05, 0.004 + 0.0006 * Patch) * U + Off(0.0, 0.3, 0.0) - At, Big * U, Big * 0.9 * U, 0.008 * U,
+					Patch % 3 == 0 ? Rubble : Patch % 3 == 1 ? Rubble * 1.08f : Rubble * 0.9f, 7 + Patch % 3);
 			}
+			Pillar(Off(0.0, 0.1, 0.016), 0.62 * U, 0.55 * U, 0.006 * U, Scorch, 9);
 			if (bFar)
 			{
 				Box(Off(0.0, 0.0, 0.14), FVector(1.5, 0.8, 0.28) * U, BurntBrick, Yaw0 + Turn);
@@ -2229,7 +2253,19 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	}
 	if (bCapital)
 	{
+		const int32 Before = Vertices.Num();
 		Landmark(Site.Landmark, SquareHalfA * 0.24);
+		if (OutLandmarkTop)
+		{
+			// (the highest point of it: the tip of its dome or spire, where a flag would be flown from)
+			for (int32 K = Before; K < Vertices.Num(); ++K)
+			{
+				if (K == Before || Vertices[K].Z > OutLandmarkTop->Z)
+				{
+					*OutLandmarkTop = Vertices[K];
+				}
+			}
+		}
 	}
 	else
 	{

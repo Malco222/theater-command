@@ -259,6 +259,232 @@ float ACampaignMapActor::GroundAt(double InX, double Y) const
 	return Terrain.HeightAt(X, Y);
 }
 
+void ACampaignMapActor::ShowWorksGoing(const TArray<int32>& FromRules)
+{
+	// Works on order in a province: pairs, the province and what. A builder's yard stands there while they go up.
+	TMap<int32, int32> Now;
+	for (int32 K = 0; K + 1 < FromRules.Num(); K += 2)
+	{
+		if (Data.Regions.IsValidIndex(FromRules[K]) && FromRules[K + 1] != 0)
+		{
+			Now.Add(FromRules[K], FromRules[K + 1]);
+		}
+	}
+	// ("-TheaterGoing=Berlin,Hamburg" stands a builder's yard there for a picture)
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterGoing="), Asked, false))
+	{
+		TArray<FString> Places;
+		Asked.ParseIntoArray(Places, TEXT(","));
+		for (const FString& Place : Places)
+		{
+			if (const int32* Id = Data.RegionByName.Find(Place))
+			{
+				Now.Add(*Id, 1);
+			}
+		}
+	}
+	if (Now.OrderIndependentCompareEqual(GoingIn))
+	{
+		return;
+	}
+	GoingIn = MoveTemp(Now);
+	ShownBuildings.Reset(); // (the provinces' works are stood again when next they are shown, which is at once)
+	if (LastWorks.Num() > 0)
+	{
+		const TArray<FIntVector4> Again = LastWorks;
+		ShowBuildings(Again);
+	}
+}
+
+void ACampaignMapActor::ShowVictorFlags()
+{
+	// The victor's flag over a captured capital: where a capital is held by another than the country whose it was
+	// when the map was drawn, the holder's flag flies from the top of its great building. A small thing: a pole
+	// and a cloth under two houses long, read from working height as a patch of the victor's colours over the roofs.
+	TMap<int32, FString> Now;
+	for (const TPair<int32, FVector>& Top : TownLandmarks)
+	{
+		if (Data.Regions.IsValidIndex(Top.Key))
+		{
+			const FCampaignRegion& Region = Data.Regions[Top.Key];
+			if (Region.bCapital && !Region.Home.IsEmpty() && !Region.Owner.IsEmpty() && Region.Owner != Region.Home)
+			{
+				Now.Add(Top.Key, Region.Owner);
+			}
+		}
+	}
+	// ("-TheaterVictor=Berlin:SOV,Paris:GER" flies one for a picture)
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterVictor="), Asked, false))
+	{
+		TArray<FString> Places;
+		Asked.ParseIntoArray(Places, TEXT(","));
+		for (const FString& Place : Places)
+		{
+			FString Name, Tag;
+			if (Place.Split(TEXT(":"), &Name, &Tag))
+			{
+				const int32* Id = Data.RegionByName.Find(Name);
+				if (Id && TownLandmarks.Contains(*Id))
+				{
+					Now.Add(*Id, Tag);
+				}
+			}
+		}
+	}
+	// The flag changes where it can be seen to: a capital that falls has the victor's flag run up over it, one that
+	// passes from one victor to another has the first hauled down and then the second run up, and one that comes
+	// home has the victor's hauled down and the pole taken away. (What stands when the table is first laid stands
+	// at once: only a change made while the table is being watched is acted out.)
+	const double Clock = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	bool bChanged = bVictorsStale || !VictorFlagMesh;
+	for (const TPair<int32, FString>& Flown : Now)
+	{
+		FVictorFlag* Had = VictorFlags.Find(Flown.Key);
+		if (!Had)
+		{
+			FVictorFlag Fresh;
+			Fresh.Tag = Flown.Value;
+			Fresh.Since = bVictorsSeen ? Clock : -1000.0;
+			VictorFlags.Add(Flown.Key, Fresh);
+			bChanged = true;
+		}
+		else if (Had->Tag != Flown.Value)
+		{
+			Had->Was = bVictorsSeen ? Had->Tag : FString();
+			Had->Tag = Flown.Value;
+			Had->Since = bVictorsSeen ? Clock : -1000.0;
+			bChanged = true;
+		}
+	}
+	for (auto It = VictorFlags.CreateIterator(); It; ++It)
+	{
+		if (!Now.Contains(It.Key()) && !It.Value().Tag.IsEmpty())
+		{
+			if (bVictorsSeen && TownLandmarks.Contains(It.Key()))
+			{
+				It.Value().Was = It.Value().Tag;
+				It.Value().Tag.Reset();
+				It.Value().Since = Clock;
+			}
+			else
+			{
+				It.RemoveCurrent();
+			}
+			bChanged = true;
+		}
+	}
+	bVictorsSeen |= TownLandmarks.Num() > 0;
+	if (!bChanged)
+	{
+		return;
+	}
+	bVictorsStale = false;
+	DrawVictorFlags();
+}
+
+void ACampaignMapActor::DrawVictorFlags()
+{
+	if (!VictorFlagMesh)
+	{
+		VictorFlagMesh = NewObject<UProceduralMeshComponent>(this);
+		VictorFlagMesh->SetupAttachment(Root);
+		VictorFlagMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		VictorFlagMesh->RegisterComponent();
+		VictorFlagMesh->SetCastShadow(false);
+	}
+	VictorFlagMesh->ClearAllMeshSections();
+	bVictorsMoving = false;
+	const double Clock = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	const double Unit = UnitScale * 2.1; // the size the towns are built to
+	const double PoleHigh = 1.25 * Unit, Wide = 1.15 * Unit, High = 0.72 * Unit;
+	const double ComesDown = 1.2, GoesUp = 2.0; // seconds
+	FMiniatureMesh Poles;
+	int32 Section = 1;
+	for (auto It = VictorFlags.CreateIterator(); It; ++It)
+	{
+		const FVictorFlag& Flag = It.Value();
+		const FVector* Stands = TownLandmarks.Find(It.Key());
+		if (!Stands)
+		{
+			It.RemoveCurrent();
+			continue;
+		}
+		const double Passed = Clock - Flag.Since, Lowering = Flag.Was.IsEmpty() ? 0.0 : ComesDown;
+		FString Shown;
+		double Share = 1.0;
+		if (Passed < Lowering)
+		{
+			Shown = Flag.Was;
+			Share = 1.0 - Passed / Lowering;
+			bVictorsMoving = true;
+		}
+		else if (!Flag.Tag.IsEmpty())
+		{
+			Shown = Flag.Tag;
+			Share = FMath::Clamp((Passed - Lowering) / GoesUp, 0.0, 1.0);
+			bVictorsMoving |= Share < 1.0;
+		}
+		else
+		{
+			It.RemoveCurrent(); // (hauled down, and the capital its own country's again)
+			continue;
+		}
+		// ("-TheaterVictorAt=0.5" holds every such flag half way up its pole, for a picture)
+		float Held = 1.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterVictorAt="), Held))
+		{
+			Share = FMath::Clamp(static_cast<double>(Held), 0.0, 1.0);
+		}
+		const FVector Foot = *Stands;
+		Poles.Pillar(Foot - FVector(0.0, 0.0, 0.1 * Unit), 0.03 * Unit, 0.022 * Unit, PoleHigh + 0.1 * Unit, FLinearColor(FColor::FromHex(TEXT("2A2724"))), 5);
+		Poles.Ball(Foot + FVector(0.0, 0.0, PoleHigh + 0.04 * Unit), FVector(0.1 * Unit), FLinearColor(FColor::FromHex(TEXT("B08D57"))), 4, 6);
+		UMaterialInterface* Colours = GetFlagMaterial(Shown);
+		if (!Colours)
+		{
+			continue;
+		}
+		// (the cloth, as an army's standard hangs: read from the south, the pole on the reader's left, a slow ripple
+		// in it that grows toward the fly; on its way up or down the pole it is so far up it)
+		const double Top = FMath::Lerp(High + 0.06 * Unit, PoleHigh, FMath::SmoothStep(0.0, 1.0, Share));
+		const int32 Across = 10, Down = 4;
+		const double Phase = (It.Key() * 37 % 100) * 0.0628;
+		TArray<FVector> Vertices, Normals;
+		TArray<FVector2D> UVs;
+		TArray<FProcMeshTangent> Tangents;
+		TArray<int32> Triangles;
+		for (int32 J = 0; J <= Down; ++J)
+		{
+			for (int32 I = 0; I <= Across; ++I)
+			{
+				const double S = static_cast<double>(I) / Across, T = static_cast<double>(J) / Down;
+				const double Angle = UE_DOUBLE_TWO_PI * 1.2 * S + Phase + 0.8 * T;
+				Vertices.Add(Foot + FVector(0.05 * Wide * S * FMath::Sin(Angle), 0.03 * Unit + S * Wide, Top - T * High - 0.03 * High * S * S));
+				Normals.Add(FVector(-1.0, 0.0, 0.0));
+				Tangents.Add(FProcMeshTangent(FVector(0.0, 1.0, 0.0), false));
+				UVs.Add(FVector2D(S, T));
+			}
+		}
+		for (int32 J = 0; J < Down; ++J)
+		{
+			for (int32 I = 0; I < Across; ++I)
+			{
+				const int32 A = J * (Across + 1) + I, B = A + 1, C = A + Across + 1, D = C + 1;
+				Triangles.Append({ A, C, B, B, C, D });
+			}
+		}
+		VictorFlagMesh->CreateMeshSection_LinearColor(Section, Vertices, Triangles, Normals, UVs, TArray<FLinearColor>(), Tangents, false);
+		VictorFlagMesh->SetMaterial(Section, Colours);
+		++Section;
+	}
+	if (Poles.Vertices.Num() > 0)
+	{
+		VictorFlagMesh->CreateMeshSection(0, Poles.Vertices, Poles.Triangles, Poles.Normals, TArray<FVector2D>(), Poles.Colors, TArray<FProcMeshTangent>(), false);
+		VictorFlagMesh->SetMaterial(0, SceneryMaterial);
+	}
+}
+
 void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
 {
 	// Factories that are not working: the province and how many. The towns are built again only when that changes
@@ -584,8 +810,8 @@ UMaterialInterface* ACampaignMapActor::GetFlagMaterial(const FString& Tag, int32
 	UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(FlagMaterial, this);
 	Instance->SetTextureParameterValue(TEXT("Flag"), GetFlagTexture(Tag));
 	Instance->SetScalarParameterValue(TEXT("Glow"), 0.5f * (1.0f - 0.4f * GetMoonlight()));
-	// (a battered army's flag is faded, and a spent one's more so)
-	Instance->SetScalarParameterValue(TEXT("Fade"), Wear >= 2 ? 0.46f : Wear == 1 ? 0.26f : 0.0f);
+	// (a battered army's flag is dirtied a very little, and a spent one's a little more: never bleached)
+	Instance->SetScalarParameterValue(TEXT("Fade"), Wear >= 2 ? 0.2f : Wear == 1 ? 0.1f : 0.0f);
 	FlagMaterials.Add(Key, Instance);
 	return Instance;
 }
@@ -1792,7 +2018,8 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	for (int32 Id = 0; Id < Works.Num() && Id < Data.Regions.Num(); ++Id)
 	{
 		const FIntVector4& Built = Works[Id];
-		if (Built.X <= 0 && Built.Y <= 0 && Built.Z <= 0 && Built.W <= 0)
+		const int32 GoingUp = GoingIn.FindRef(Id);
+		if (Built.X <= 0 && Built.Y <= 0 && Built.Z <= 0 && Built.W <= 0 && GoingUp == 0)
 		{
 			continue;
 		}
@@ -1875,6 +2102,50 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 		};
 
 		FVector2D Spot;
+		// Something going up (a factory, a shipyard, guns, an airfield or fortifications on order): one builder's
+		// yard for the province, whatever and however much is on order. A wall half built inside a cage of scaffold
+		// poles, a derrick over it, and timber and brick stacked beside.
+		if (GoingUp != 0 && Place(FVector2D(1.5, 10.0), Spot))
+		{
+			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
+			const double Turn = Facing(Spot) + 90.0;
+			const FLinearColor Trodden(FColor::FromHex(TEXT("7A6B52"))), NewBrick(FColor::FromHex(TEXT("9A5E48"))), Pole(FColor::FromHex(TEXT("A58A5E")));
+			auto On = [&](double Along, double Across, double Up) { return At + Ahead(Turn, Along * Unit, Across * Unit) + FVector(0.0, 0.0, Up * Unit); };
+			Model.Box(On(0.0, 0.0, 0.012), FVector(1.9, 1.5, 0.024) * Unit, Trodden, Turn);
+			// (the walls, as far as they have got: one long, one short, one only begun)
+			Model.Box(On(-0.2, -0.42, 0.24), FVector(1.1, 0.07, 0.48) * Unit, NewBrick, Turn);
+			Model.Box(On(-0.72, -0.05, 0.16), FVector(0.07, 0.8, 0.32) * Unit, NewBrick, Turn);
+			Model.Box(On(0.1, 0.33, 0.07), FVector(0.7, 0.07, 0.14) * Unit, NewBrick, Turn);
+			// (the scaffold: four poles a side, with two rows of ledgers and a few boards)
+			for (int32 K = 0; K < 4; ++K)
+			{
+				const double Along = -0.75 + K * 0.37;
+				Model.Rod(On(Along, -0.55, 0.0), On(Along, -0.55, 0.86), 0.02 * Unit, Pole, 4);
+				Model.Rod(On(Along, -0.31, 0.0), On(Along, -0.31, 0.86), 0.02 * Unit, Pole, 4);
+				for (const double High : { 0.34, 0.66 })
+				{
+					Model.Rod(On(Along, -0.55, High), On(Along, -0.31, High), 0.014 * Unit, Pole, 4);
+				}
+			}
+			for (const double High : { 0.34, 0.66 })
+			{
+				Model.Rod(On(-0.75, -0.55, High), On(0.36, -0.55, High), 0.014 * Unit, Pole, 4);
+				Model.Box(On(-0.2, -0.43, High + 0.012), FVector(1.05, 0.2, 0.016) * Unit, Timber, Turn);
+			}
+			// (the derrick: a mast, a jib and its fall)
+			Model.Rod(On(0.45, 0.05, 0.0), On(0.45, 0.05, 1.15), 0.028 * Unit, Timber, 5);
+			Model.Rod(On(0.45, 0.05, 0.95), On(-0.25, -0.3, 1.3), 0.02 * Unit, Timber, 5);
+			Model.Rod(On(-0.25, -0.3, 1.3), On(-0.25, -0.3, 0.72), 0.007 * Unit, Girder, 4);
+			Model.Box(On(-0.25, -0.3, 0.68), FVector(0.14, 0.14, 0.08) * Unit, NewBrick, Turn);
+			// (stacked timber, a pile of brick, a heap of sand)
+			for (int32 K = 0; K < 3; ++K)
+			{
+				Model.Box(On(0.55, -0.5 + 0.03 * K, 0.03 + 0.05 * K), FVector(0.6, 0.2 - 0.04 * K, 0.05) * Unit, K % 2 == 0 ? Pole : Timber, Turn + 4.0 * K);
+			}
+			Model.Box(On(0.62, 0.5, 0.07), FVector(0.3, 0.24, 0.14) * Unit, NewBrick, Turn + 12.0);
+			Model.Pillar(On(0.05, 0.6, 0.0), 0.2 * Unit, 0.03 * Unit, 0.13 * Unit, Sandbag, 8);
+			++Count;
+		}
 		// Factories built since the war began: a works with a saw-tooth roof and tall chimneys, one bay for each.
 		if (Built.X > 0 && Place(FVector2D(0.0, -9.0), Spot))
 		{
@@ -2043,6 +2314,8 @@ void ACampaignMapActor::ShowWorks(const TArray<int32>& BridgesDown, const TArray
 void ACampaignMapActor::BuildWaterways()
 {
 	RiverMesh->ClearAllMeshSections();
+	RiverPaths.Reset();
+	RiverBroad.Reset();
 	// A river is a ribbon of water set into the land along its course: narrow at the source, broader at the
 	// mouth (a great river about a map unit and a quarter across, the rest under one), its course rounded and
 	// given a gentle wander so that it winds, blue-green, with a dark bank on either side.
@@ -2090,6 +2363,8 @@ void ACampaignMapActor::BuildWaterways()
 			}
 		}
 		const double Broad = Great.Contains(River.Name) ? 0.625 : 0.425;
+		RiverPaths.Add(Path); // (kept, with how broad it is, for the towns' own bridges)
+		RiverBroad.Add(Broad);
 		int32 Previous[5] = { INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE, INDEX_NONE };
 		for (int32 K = 0; K < Path.Num(); ++K)
 		{
@@ -2396,12 +2671,105 @@ void ACampaignMapActor::BuildWorks()
 			}
 		}
 	}
+	// A city's own bridge: where a river passes a city or a capital, a small bridge of pale dressed stone on two
+	// low arches, humped in the middle, with a lamp at each end. It is part of the town and nothing in the rules:
+	// it is half the size of a crossing's bridge, the colour of the town's own stone where a crossing's is grey,
+	// and it stands only where no crossing is near.
+	int32 TownBridges = 0;
+	FString TownBridgeNames;
+	{
+		const FLinearColor Ashlar(FColor::FromHex(TEXT("D6CDB6"))), AshlarDark(FColor::FromHex(TEXT("A89F8A"))), Under(FColor::FromHex(TEXT("4A463F"))), Lamp(FColor::FromHex(TEXT("2E2B28")));
+		for (const FCampaignRegion& Region : Data.Regions)
+		{
+			if (!(Region.bCapital || Region.Terrain == TEXT("urban") || Region.VictoryPoints >= 2 || Region.Factories >= 2))
+			{
+				continue;
+			}
+			// (Where the river runs under the town's own roofs a bridge at its nearest point is buried in the houses:
+			// it stands instead where the river comes out past the last of them, or, for a river that only passes
+			// the town, at its nearest.)
+			const double Reach = TownRadius(Region.Id) + 1.4, Rim = TownRadius(Region.Id) + 0.7;
+			double Nearest = Reach, Fit = Reach;
+			FVector2D At = FVector2D::ZeroVector, Across = FVector2D(1.0, 0.0);
+			double Broad = 0.425;
+			for (int32 R = 0; R < RiverPaths.Num(); ++R)
+			{
+				const TArray<FVector2D>& Path = RiverPaths[R];
+				for (int32 K = 0; K + 1 < Path.Num(); ++K)
+				{
+					for (int32 Step = 0; Step < 6; ++Step)
+					{
+						const FVector2D Point = FMath::Lerp(Path[K], Path[K + 1], Step / 6.0);
+						const double Far = FVector2D::Distance(Point, Region.Center);
+						if (Far < Reach && FMath::Abs(Far - Rim) < Fit && Terrain.HeightAt(Point.X, Point.Y) > 0.0f)
+						{
+							Fit = FMath::Abs(Far - Rim);
+							Nearest = Far;
+							At = Point;
+							const FVector2D Along = (Path[K + 1] - Path[K]).GetSafeNormal();
+							Across = FVector2D(Along.Y, -Along.X);
+							Broad = RiverBroad.IsValidIndex(R) ? RiverBroad[R] : 0.425;
+						}
+					}
+				}
+			}
+			if (Nearest >= Reach)
+			{
+				continue; // no river passes it
+			}
+			bool bCrossingNear = false;
+			for (const FLandCrossing& Crossing : Land.Crossings)
+			{
+				bCrossingNear |= FVector2D::Distance(Crossing.At, At) < 4.0;
+			}
+			if (bCrossingNear)
+			{
+				continue; // the road's own bridge is there
+			}
+			const FVector A = MapToWorld(0.0, 0.0), B = MapToWorld(Across.X, Across.Y);
+			const double Turn = FMath::RadiansToDegrees(FMath::Atan2(B.Y - A.Y, B.X - A.X));
+			const FQuat Facing(FRotator(0.0, Turn, 0.0));
+			const FVector Middle = SurfacePointOver(At.X, At.Y, 0.06);
+			const double Long = (2.0 * Broad + 1.3) * U, Wide = 0.5 * U;
+			auto On = [&](double Along, double Side, double Up) { return Middle + Facing.RotateVector(FVector(Along * Long, Side * Wide, 0.0)) + FVector(0.0, 0.0, Up * U); };
+			// (the roadway in five lengths, rising to the middle; the piers under it; the parapets; the lamps)
+			for (int32 Piece = -2; Piece <= 2; ++Piece)
+			{
+				const double Rise = 0.3 - 0.045 * Piece * Piece;
+				Model.Box(On(Piece * 0.2, 0.0, Rise), FVector(Long * 0.21, Wide, 0.1 * U), Ashlar, Turn, -Piece * 7.0);
+				for (const double Edge : { -1.0, 1.0 })
+				{
+					Model.Box(On(Piece * 0.2, Edge * 0.46, Rise + 0.09), FVector(Long * 0.21, Wide * 0.1, 0.09 * U), AshlarDark, Turn, -Piece * 7.0);
+				}
+			}
+			for (const double Pier : { -0.5, 0.0, 0.5 })
+			{
+				Model.Box(On(Pier, 0.0, 0.1), FVector(Long * 0.09, Wide * 1.08, 0.3 * U), Pier == 0.0 ? AshlarDark : Ashlar, Turn);
+			}
+			for (const double Arch : { -0.25, 0.25 })
+			{
+				Model.Box(On(Arch, 0.0, 0.08), FVector(Long * 0.3, Wide * 0.96, 0.12 * U), Under, Turn);
+			}
+			for (const double End : { -1.0, 1.0 })
+			{
+				for (const double Edge : { -1.0, 1.0 })
+				{
+					Model.Rod(On(End * 0.5, Edge * 0.46, 0.12), On(End * 0.5, Edge * 0.46, 0.52), 0.016 * U, Lamp, 4);
+					Model.Box(On(End * 0.5, Edge * 0.46, 0.55), FVector(0.05, 0.05, 0.06) * U, FLinearColor(FColor::FromHex(TEXT("E8D9A0"))), Turn);
+				}
+			}
+			++TownBridges;
+			UE_LOG(LogTheater, Verbose, TEXT("A town bridge at %s"), *Region.Name);
+			TownBridgeNames += (TownBridgeNames.IsEmpty() ? TEXT("") : TEXT(", ")) + Region.Name;
+		}
+	}
+	UE_LOG(LogTheater, Log, TEXT("Towns with a bridge of their own: %s"), *TownBridgeNames);
 	if (Model.Vertices.Num() > 0)
 	{
 		WorksMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		WorksMesh->SetMaterial(0, SceneryMaterial);
 	}
-	UE_LOG(LogTheater, Log, TEXT("Works: %d crossings (%d bridges down), %d railways cut"), Land.Crossings.Num(), ShownDown.Num(), ShownCut.Num());
+	UE_LOG(LogTheater, Log, TEXT("Works: %d crossings (%d bridges down), %d railways cut, %d towns' own bridges"), Land.Crossings.Num(), ShownDown.Num(), ShownCut.Num(), TownBridges);
 }
 
 UStaticMeshComponent* ACampaignMapActor::AddBlock(const FVector& CenterWorld, const FVector& SizeWorld, UMaterialInterface* Material)
@@ -3291,6 +3659,7 @@ void ACampaignMapActor::BuildTowns()
 	PaneRegion.Reset();
 	TownQuarters.Reset();
 	TownBeacons.Reset();
+	TownLandmarks.Reset();
 	Model.Windows = &TownWindows;
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
@@ -3401,8 +3770,12 @@ void ACampaignMapActor::BuildTowns()
 		Site.PlotsNear = CivicNear(Region.Id);
 		Site.PlotsTurn = CivicTurn(Region.Id);
 		TArray<FVector2D> Quarters;
-		FVector Beacon = FVector::ZeroVector;
-		Model.Township(Site, &TownChimneys, &Quarters, &Beacon);
+		FVector Beacon = FVector::ZeroVector, LandmarkTop = FVector::ZeroVector;
+		Model.Township(Site, &TownChimneys, &Quarters, &Beacon, &LandmarkTop);
+		if (!LandmarkTop.IsZero())
+		{
+			TownLandmarks.Add(Region.Id, LandmarkTop);
+		}
 		Site.bFar = true;
 		FarModel.Township(Site);
 		TownQuarters.Add(Region.Id, MoveTemp(Quarters));
@@ -3441,6 +3814,9 @@ void ACampaignMapActor::BuildTowns()
 	LightColours.Reset();
 	LightPoints.Reset();
 	ShownNight = -1.0f;
+	// (the towns have been built again: a victor's flag is flown again from where its landmark's top now is)
+	bVictorsStale = true;
+	ShowVictorFlags();
 	const int32 Panes = TownWindows.Num() / 2;
 	if (Panes > 0 && HighlightMaterial)
 	{
@@ -3863,6 +4239,8 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			// Their paint is greyed by night so that its saturation stays under about 0.6, and dimmed a little.)
 			PieceMaterial->SetScalarParameterValue(TEXT("Grey"), 0.5f * Moon);
 			PieceMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.86f, 0.84f, 0.78f), Moon));
+			// (a ship's wake is paint on the water: by night it goes down with the sea, or it shone like a searchlight)
+			PieceMaterial->SetVectorParameterValue(TEXT("WakeTone"), FMath::Lerp(FLinearColor::White, FLinearColor(0.85f, 0.64f, 0.66f), Moon));
 		}
 		if (WoodsMaterial)
 		{
@@ -5365,6 +5743,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 			}
 		}
 	}
+	ShowVictorFlags(); // (a capital that has changed hands flies its new holder's flag, or its own country's is home again)
 	// Only the nations' paint changes: the land itself is left as it is.
 	Paint.PaintTint(Data, Terrain, I0, J0, I1, J1);
 	CampaignTextures::Update(TintPicture, Paint.Tint);
@@ -6794,6 +7173,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 
 void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, const FVector& CameraFocus)
 {
+	if (bVictorsMoving)
+	{
+		DrawVictorFlags(); // (a flag on its way up or down a captured capital's pole)
+	}
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSorties();
 	UpdateTrains(CameraFocus, CameraDistance);
@@ -7000,14 +7383,13 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 				LandScalar(TEXT("SquareWork"), Work);
 			}
 			// (and as the eye climbs on, the smallest woods on the world's coarse sheet are let go)
-			// (they fade, they do not pop: the edge of a wood is softer the higher the eye, and the great masses stay)
-			const float Climb = FMath::SmoothStep(11000.0f, 18000.0f, CameraDistance);
-			const float Lift = 0.36f * Climb;
+			// (no further than this: a stronger fade began to eat the great masses. The corn belt's rash of small
+			// woods is thinned in the painter instead.)
+			const float Lift = 0.24f * FMath::SmoothStep(11000.0f, 19000.0f, CameraDistance);
 			if (WorldLandMaterial && FMath::Abs(Lift - WoodsLiftShown) > 0.004f)
 			{
 				WoodsLiftShown = Lift;
 				WorldLandMaterial->SetScalarParameterValue(TEXT("WoodsLift"), Lift);
-				WorldLandMaterial->SetScalarParameterValue(TEXT("WoodsSharp"), FMath::Lerp(2.2f, 1.5f, Climb));
 			}
 		}
 		if (FMath::Abs(Sheet - PaperShown) > 0.004f)

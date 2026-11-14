@@ -368,6 +368,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				// (where the rules name the kind of country, that still leans the woods; where nobody has yet, the look does)
 				const float Metres = Terrain.HasElevation() ? FMath::Max(Terrain.MetresAt(P.X, P.Y), 0.0f) : 0.0f;
 				Woods[Idx] = FMath::Lerp(-0.07f, LookWoods(Shares, Metres), Out);
+				// (The corn belt, from 96 to 82 west and 37.5 to 43.5 north: ploughed nearly from edge to edge. Its
+				// woods are thinned to about a third of what the look would stand there, with soft edges; the South
+				// keeps its own.)
+				const float Belt = FMath::SmoothStep(-97.0f, -95.0f, Longitude) * (1.0f - FMath::SmoothStep(-83.0f, -81.0f, Longitude))
+					* FMath::SmoothStep(36.5f, 38.5f, Latitude) * (1.0f - FMath::SmoothStep(42.5f, 44.5f, Latitude));
+				Woods[Idx] -= 0.085f * Belt;
 				Dry[Idx] = Shares[WorldLook::Desert] * Out;
 			}
 		}
@@ -583,7 +589,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			Sun *= 1.0f + 0.03f * (1.0f - 0.6f * Lowland) * FMath::PerlinNoise2D(FVector2D(I * 0.61, J * 0.61));
 			// (Beyond Europe a canopy is one great roof: it takes half the relief's light and shade that bare ground
 			// takes, so that a holder's colour reads on it in sun and in shadow alike.)
-			const float Roofed = 1.0f - 0.5f * Wooded * Beyond;
+			// (and on the world's coarse sheet, which is what is seen from high up, low ground takes half the shading
+			// too: a valley a cell wide, shaded whole, ran as a ruled band across New England)
+			const float FarLow = bBeyond && Terrain.Cell > 3.0 ? 1.0f - 0.5f * Beyond * (1.0f - FMath::SmoothStep(450.0f, 800.0f, Metres[Idx])) : 1.0f;
+			const float Roofed = (1.0f - 0.5f * Wooded * Beyond) * FarLow;
 			Sun = 1.0f + (Sun - 1.0f) * Roofed;
 			const float Shade = FMath::Clamp(Sun, 0.0f, 2.2f) / 2.2f * 2.0f; // (kept as half of it in the picture's blue, below)
 

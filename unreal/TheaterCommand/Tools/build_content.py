@@ -140,7 +140,12 @@ def build_map_surface():
     # chipped down to the bare metal in small patches, and the metal shines where the paint has gone. The marks are
     # laid out in the piece's own space, so they stay put on it when it is picked up and carried.
     wear = scalar(m, "Wear", 0.0, 300, -1500)
-    metal = one_in(m, unreal.MaterialExpressionSaturate, times(m, one_in(m, unreal.MaterialExpressionOneMinus, (colour, "A"), -900, -1500), 2.0, -750, -1500), -600, -1500)
+    # (A ship's wake and bow wave are paint laid on the water, which the mesh marks by an alpha of 240: no metal, and
+    # by night it is dimmed with the sea by "WakeTone", which is white unless C++ says otherwise.)
+    on_water = one_in(m, unreal.MaterialExpressionSaturate,
+                      plus(m, times(m, one_in(m, unreal.MaterialExpressionAbs, plus(m, (colour, "A"), -0.9412, -1100, -1380), -1000, -1380), -60.0, -900, -1380), 1.0, -800, -1380), -700, -1380)
+    metal = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, one_in(m, unreal.MaterialExpressionOneMinus, (colour, "A"), -900, -1500), 2.0, -750, -1500), -600, -1500),
+                  one_in(m, unreal.MaterialExpressionOneMinus, on_water, -600, -1420), -500, -1480)
     own = node(m, unreal.MaterialExpressionTransformPosition, -1500, -1700,
                transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
                transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
@@ -173,6 +178,7 @@ def build_map_surface():
     weathered = times(m, times(m, tinted, lerp(m, 1.0, plus(m, times(m, (blot, "R"), 0.42, -350, -1500), 0.8, -200, -1500),
                                                times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900), lit_top, 700, -1000)
     tinted = lerp(m, weathered, vector(m, "ChipColour", (0.13, 0.125, 0.12, 1.0), 450, -1300), chipped, 750, -900)
+    tinted = times(m, tinted, lerp(m, 1.0, vector(m, "WakeTone", (1.0, 1.0, 1.0, 1.0), 600, -1250), on_water, 800, -1200), 900, -950)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
 
@@ -239,8 +245,11 @@ def build_flag():
                    parameter_name="Flag",
                    texture=unreal.load_asset("/Engine/EngineResources/DefaultTexture"),
                    sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
-    # (A battered army's flag is faded: its colours are drawn toward the grey of weathered bunting by "Fade".)
-    cloth = lerp(m, (picture, "RGB"), vector(m, "Faded", (0.42, 0.39, 0.33, 1.0), -700, 180), scalar(m, "Fade", 0.0, -700, 260), -450, 60)
+    # (A battered army's flag is dirtied, a very little: its colours are drawn toward a dark dun by "Fade". It is not
+    # bleached: a faded black-white-red read as Poland's white and red. Its wear is told by its shape, and by soot,
+    # which the cloth's own points carry as their colour: white where the cloth is clean.)
+    cloth = lerp(m, (picture, "RGB"), vector(m, "Faded", (0.1, 0.09, 0.07, 1.0), -700, 180), scalar(m, "Fade", 0.0, -700, 260), -450, 60)
+    cloth = times(m, cloth, node(m, unreal.MaterialExpressionVertexColor, -700, -150), -300, 0)
     to_property(cloth, "", unreal.MaterialProperty.MP_BASE_COLOR)
     glow = node(m, unreal.MaterialExpressionMultiply, -350, 300)
     connect(cloth, "", glow, "A")

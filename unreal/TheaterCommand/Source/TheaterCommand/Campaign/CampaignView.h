@@ -350,6 +350,7 @@ struct FCampaignView
 	TArray<int32> Unseen; // provinces the player has no eyes on, under the fog of war
 	TArray<int32> FreeCapitals; // capitals of fallen countries the player would set free by taking them
 	TArray<FViewAirfield> Airfields; // every airfield the player knows of (the grand campaign; empty in a scenario)
+	TArray<int32> Going; // works going up from the arsenal, where the player can know it: flat pairs, the region and what (bits: 1 factory, 2 shipyard, 4 guns, 8 airfield, 16 fortifications)
 	TArray<int32> Wrecked; // factories not working (bombed, sabotaged, burnt), where the player can know it: flat pairs, the region and how many
 	TArray<FIntVector4> RegionWorks; // by region id: factories built since the war began, shipyard level, anti-aircraft level, airfield level
 	TArray<FViewCorps> Corps;
