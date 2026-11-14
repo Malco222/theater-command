@@ -102,6 +102,8 @@ const ui = {
   shoreFrom: -1,
   /** True once the player has asked to see every line of a Battle Ticket on a narrow screen, where it opens folded to the lines that matter most. */
   ticketAll: false,
+  /** True once the player has opened the tray's unit cards on a narrow screen, where the tray is folded to one row so that the map stays open to a finger. */
+  trayOpen: false,
   /** The directive the player has last looked at in his Cabinet card, by its id. */
   govSeen: -1,
   /** The page of the cabinet room that is open: its business, the ministers, the decrees or the minutes. */
@@ -873,10 +875,14 @@ function hintText(): string {
   if (ui.land) return byAir(pickedCorps()) ? 'Airborne assault: click a red coast to see the odds.' : 'Landing from the sea: click a red coast to see the odds.';
   if (ui.rail) return 'Rail move: click any blue region. It takes the whole month.';
   if (ui.ship) return 'Sea transport: click any blue port. It takes the whole month.';
-  if (pickedCorps().length) return invasions(g, pickedCorps()).size
+  // (A finger has no right button, and on a small screen a long hint lies over the provinces it speaks of.)
+  if (pickedCorps().length) return fingers()
+    ? invasions(g, pickedCorps()).size ? 'Tap green to march, red to attack. Amber is a country at peace with you.' : 'Tap green to march, red to attack.'
+    : invasions(g, pickedCorps()).size
     ? 'Right-click a green region to march there, or a red one to plan an attack. Amber ground is a country at peace with you: send an army there and you will be asked whether you mean war.'
     : 'Right-click a green region to march there, or a red one to plan an attack. On a touch screen, tap it, or press and hold.';
   const ready = g.corps.some((c) => c.nat === g.human && c.ap > 0 && c.kind !== 'fort');
+  if (fingers()) return ready ? 'Tap one of your armies (gold outline) to pick it up.' : 'All of your armies have used their month.';
   return ready ? 'Click one of your armies (gold outline) to pick it up. End the month when you are done.' : 'All of your armies have used their month. End the month to continue.';
 }
 
@@ -1330,9 +1336,20 @@ function drawFleetTray(f: Fleet): void {
   const wingCol = card.wings.length ? `<div class="wingcol">${card.wings.map((w) => wingCardHtml(card, w)).join('')}</div>` : '';
   const withCv = card.cards.some((c) => c.cls === 'cv');
   const cards = card.cards.map((c) => shipCardHtml(card, c) + (c.cls === 'cv' ? wingCol : '')).join('') + (withCv ? '' : wingCol);
-  el.innerHTML = `<div class="thead">${head}${tally}${orders}</div><div class="cards${card.wings.length ? ' haswings' : ''}">${cards}</div>`;
+  el.innerHTML = `<div class="thead">${head}${tally}${trayFold(card.ships, 'ship', 'ships')}${orders}</div><div class="cards${card.wings.length ? ' haswings' : ''}">${cards}</div>`;
   el.classList.add('open');
+  el.classList.toggle('slim', !ui.trayOpen);
 }
+
+/** True on a screen worked with a finger: a phone or a tablet. */
+const fingers = (): boolean => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+
+/**
+ * The button that folds the tray on a narrow screen (it is not shown on a wide one). Folded, the tray is one row:
+ * who is here and what of, so that the map above it stays open to a finger; opened, it shows the cards and the orders.
+ */
+const trayFold = (n: number, one: string, many: string): string =>
+  `<button class="tfold" data-act="trayfold" aria-expanded="${ui.trayOpen}" title="${ui.trayOpen ? 'Fold the tray away to see the map' : 'Open the tray: the units here and their orders'}">${ui.trayOpen ? 'Hide \u25be' : `${n} ${n === 1 ? one : many} \u25b4`}</button>`;
 
 function drawTray(): void {
   const el = $('#tray');
@@ -1373,8 +1390,9 @@ function drawTray(): void {
       ? `<button class="${!under.has('back') ? 'on' : ''}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_HOLD)}">Stand and dig in</button>`
       : `<button class="${all('stand')}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_STAND)}">Stand</button><button class="${all('dig')}" data-act="ifattacked" data-v="dig" title="${esc(STANCE_DIG)}">Dig in</button>`}<button class="${all('back')}" data-act="ifattacked" data-v="back" title="${esc(STANCE_BACK)}">Fall back</button></div>`
     : '';
-  el.innerHTML = `<div class="thead">${head}${tally}${stance}${a.nat === g.human ? jointBar(r) + siegeBar(r) + foldBar(r) : ''}</div><div class="cards">${cs.map((c) => (kn(c) === 'exact' ? unitCard(c, mine) : foeCard(c, true))).join('')}</div>`;
+  el.innerHTML = `<div class="thead">${head}${tally}${trayFold(cs.length, 'corps', 'corps')}${stance}${a.nat === g.human ? jointBar(r) + siegeBar(r) + foldBar(r) : ''}</div><div class="cards">${cs.map((c) => (kn(c) === 'exact' ? unitCard(c, mine) : foeCard(c, true))).join('')}</div>`;
   el.classList.add('open');
+  el.classList.toggle('slim', !ui.trayOpen);
 }
 
 // ---- Orders on the map: the road an army would take, and the march along it ------------------
@@ -1675,15 +1693,21 @@ const offerLabel = (o: Offer): string => (o.key === 'corps:arm' ? `${PRODUCTION.
 /** What an offer would cost to keep each month as things stand: forces cost half at peace, works the same always. */
 const offerKeep = (o: Offer): number => o.upkeep * (o.group !== 'works' && g.human && !g.nations[g.human].atWar.length ? BUDGET.upkeep.peace : 1);
 
+/** Money the only thing in the way of an order: how much is wanting. */
+const shortBy = (o: Offer): string => o.poor && g.human ? `${Math.max(1, Math.ceil((o.cost - g.nations[g.human].pp) * BUDGET.scale - 1e-6)).toLocaleString('en-US')} short` : '';
+
 /** An offer as a full-width row in the Build tab: what it is, what it does, where it goes, and why not when it cannot be ordered. */
 function offerButton(o: Offer, quiet = false): string {
   const ok = humanUp(g) && o.why === null;
+  // A row that cannot be ordered always says why: the money wanting, or the reason the rules give.
+  const short = shortBy(o);
+  const whyNot = short ? `${short}: the treasury holds ${money(g.nations[g.human!].pp)}.` : o.why ?? '';
   const keep = offerKeep(o);
   const line = [o.size, o.men ? `${menWords(o.men)} men` : '', `ready in ${months(o.months)}`, keep > 0 ? `upkeep ${cash(keep)} a month` : ''].filter(Boolean).join(' · ');
   const facts = line[0].toUpperCase() + line.slice(1);
   // An order the technology tree still holds back opens the tree at the technology it waits on.
-  const act = o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : 'disabled'}`;
-  return `<button class="buy offer${o.tech ? ' held' : ''}" ${act}>${offerIcon(o)}<span class="grow"><b>${o.tech ? LOCK : ''}${esc(offerLabel(o))}</b><small>${facts}</small><small>${esc(o.blurb)}</small>${o.note ? `<small class="where">${esc(o.note)}</small>` : ''}${o.why && !o.poor && !quiet ? `<small class="whyno">${esc(o.why)}</small>` : ''}</span><span class="cost${o.poor ? ' short' : ''}">${money(o.cost)}</span></button>`;
+  const act = o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : `disabled title="${esc(whyNot)}"`}`;
+  return `<button class="buy offer${o.tech ? ' held' : ''}" ${act}>${offerIcon(o)}<span class="grow"><b>${o.tech ? LOCK : ''}${esc(offerLabel(o))}</b><small>${facts}</small><small>${esc(o.blurb)}</small>${o.note ? `<small class="where">${esc(o.note)}</small>` : ''}${whyNot && !o.tech && !quiet ? `<small class="whyno">${esc(whyNot)}</small>` : ''}</span><span class="cost${o.poor ? ' short' : ''}">${money(o.cost)}</span></button>`;
 }
 
 /** An offer as a small card in a province: it can be ordered there only if this is where it would go. */
@@ -1701,7 +1725,7 @@ function offerCard(o: Offer, r: Region): string {
   const size = unit ? `${unit.divs} divs` : group === 'corps' ? `${specOf(g, item)!.divs} divs` : group === 'ship' ? (count > 1 ? `×${count}` : '') : `×${ARSENAL.air[item as 'ftr' | 'bmr'].count}`;
   const name = offerLabel(o).replace(/, a cadre$/, '').replace(/ corps$/i, '').replace(/ (wing|flotilla)$/i, 's').replace(/^Aircraft carrier$/, 'Carrier');
   // Money the only thing in the way: the card says how much is wanting.
-  const short = o.poor && g.human ? `${Math.max(1, Math.ceil((o.cost - g.nations[g.human].pp) * BUDGET.scale - 1e-6)).toLocaleString('en-US')} short` : '';
+  const short = shortBy(o);
   const why = o.tech ? 'Needs research' : !here ? need : o.why && !o.poor ? o.why : short;
   return `<button class="rcard${o.tech ? ' held' : ''}" ${o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : 'disabled'}`} title="${esc(offerLabel(o))}, ${esc(o.size)}: ${esc(o.blurb)}${o.men ? ` Takes ${menWords(o.men)} men from the reserve.` : ''}${keep > 0 ? ` Upkeep ${cash(keep)} a month.` : ''}${why ? ` ${esc(why)}.` : ''}">${offerIcon(o)}<b>${esc(name)}</b><small>${why ? esc(why) : [size, months(o.months)].filter(Boolean).join(' · ')}</small><span class="cost${here && !o.poor && o.why === null ? '' : ' short'}">${money(o.cost)}</span></button>`;
 }
@@ -6397,6 +6421,10 @@ function onClick(e: MouseEvent): void {
         : 'The army is already where the staff wants it, or has made its move for the eve.';
       refresh(); break;
     }
+    case 'trayfold':
+      ui.trayOpen = !ui.trayOpen;
+      drawTray();
+      break;
     case 'ifattacked': {
       const a = trayArmy;
       if (!a || a.nat !== g.human) break;

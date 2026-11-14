@@ -29,7 +29,7 @@ import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
-import { EASTERN, allied, assess, atWar, collapseScore, corpsBase, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
+import { EASTERN, allied, assess, atWar, bloc, collapseScore, corpsBase, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -120,6 +120,7 @@ export const RIVALS = rivalsData as unknown as {
   soften: { works: number; most: number; from: number; raid: number };
   fold: { worn: number; cadres: number };
   exhaust: { after: number; per: number };
+  stalemate?: { after: number };
 };
 
 /** True where the staffs have characters and name main efforts: the grand campaign. */
@@ -163,6 +164,11 @@ export interface Front {
   fixed: number;
   /** atk, less what other fronts need to stay safe, over def. */
   ratio: number;
+  /**
+   * The same against the enemy on the line and one province behind it only. A main effort is a push at one place
+   * for a season: his reserves deep in the country do not meet it, and a line held in depth is no reason to let it sleep.
+   */
+  near: number; defNear: number;
 }
 
 const atkP = (g: Game, c: Corps): number => corpsBase(g, c) * KIND[c.kind].atk * (g.nations[c.nat].slowCommand ? 0.85 : 1);
@@ -241,7 +247,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     for (const id of q) depth[id] = 1;
     for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (depth[j] < 0 && label[j] === comp && side[j] === 2) { depth[j] = depth[q[i]] + 1; q.push(j); }
 
-    let def = 0, threat = 0;
+    let def = 0, defNear = 0, threat = 0;
     const share: Record<string, number> = {};
     const enemies = new Set<string>();
     for (const id of q) {
@@ -256,6 +262,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
         const cold = frozen(g, u.nat, r);
         const p = defP(g, u, r) * (d === 1 ? works(r) : 1) * near * (still && d > 1 ? 0.3 : 1) * (cold ? EASTERN.winter.defence : 1);
         def += p;
+        if (d <= 2) defNear += p;
         share[u.nat] = (share[u.nat] ?? 0) + p;
         if (!still && d <= 2) threat += atkP(g, u) * (d === 1 ? 1 : 0.6) * (cold ? EASTERN.winter.attack : 1);
       }
@@ -288,9 +295,10 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
     const airEdge = (mine - his) / (mine + his + 1);
     atk *= 1 + 0.3 * airEdge;
     def *= 1 - 0.2 * airEdge;
+    defNear *= 1 - 0.2 * airEdge;
     // With no way round, the works have to be stormed head-on, and that takes far more than the sums say.
-    if (!soft.length) def *= OPEN.headOn;
-    out.push({ key, enemies: [...enemies], ours, edge, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat, fixed, ratio: 0 });
+    if (!soft.length) { def *= OPEN.headOn; defNear *= OPEN.headOn; }
+    out.push({ key, enemies: [...enemies], ours, edge, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat, fixed, ratio: 0, near: 0, defNear: Math.max(defNear, 0.01) });
   }
   // What a front can be given is what the others, reached from the same country, can spare: an offensive already
   // under way elsewhere keeps the force it needs, and a quiet front keeps enough to hold it.
@@ -302,6 +310,7 @@ export function fronts(g: Game, nat: string, o: FrontOpts = {}): Front[] {
       kept += o.busy?.(x) ? Math.max(cover, Math.min(x.atk, OPEN.commit * x.def)) : cover;
     }
     f.ratio = Math.max(0, f.atk - kept) / f.def;
+    f.near = Math.max(0, f.atk - kept) / f.defNear;
   }
   return out.sort((a, b) => b.def - a.def);
 }
@@ -440,6 +449,17 @@ export function quietWith(g: Game, nat: string, e: string): number {
 }
 
 /**
+ * Months since the two last fought in the open field, either way round (the grand campaign): a town stormed behind
+ * the line is not a battle on the front, and does not wake a staff that is waiting for the front to go quiet. A
+ * game saved before the field was counted apart reads the older clock.
+ */
+export function quietInField(g: Game, nat: string, e: string): number {
+  const field = Math.max(flag(g, `ff:${nat}:${e}`), flag(g, `ff:${e}:${nat}`));
+  if (!field) return quietWith(g, nat, e);
+  return g.turn - Math.max(field, flag(g, `war:${nat}:${e}`), flag(g, `war:${e}:${nat}`), 1);
+}
+
+/**
  * How far a staff's patience has run out on a front: 0 while there has been fighting on it lately, then a step for
  * each term of quiet in open.json that has gone by. A war nobody is fighting makes bolder generals.
  */
@@ -520,6 +540,9 @@ export function inConcert(g: Game, nat: string, f: Pick<Front, 'enemies'>): numb
 // in a month would go in at good odds, it names a main effort: one enemy province, attacked for a season with
 // everything that can be brought opposite it and nothing anywhere else. The army's orders for those months are an
 // ordinary attack phase bounded to that sector; the bombers and a probing corps soften the line first (air.ts, ai.ts).
+
+/** Odds no attack reaches: the orders of a month spent massing. */
+const HOLD_ODDS = 99;
 
 const SEASONS = ['winter', 'winter', 'spring', 'spring', 'spring', 'summer', 'summer', 'summer', 'autumn', 'autumn', 'autumn', 'winter'];
 const effKey = (k: string, nat: string, where: string): string => `st:${k}:${nat}${where}`;
@@ -676,14 +699,16 @@ function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: strin
     if (onSince(g, nat, f, where) || spoken(f)) continue;
     // An offensive just called off: the army rests before anything new is asked of it.
     if (!f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}${where}`))) continue;
-    if (f.ratio < C.strength) continue;
-    const quiet = Math.min(...f.enemies.map((e) => quietWith(g, nat, e)));
+    // The strength is weighed against the enemy on the line and close behind it, and the quiet is the quiet of the field.
+    if (f.near < C.strength) continue;
+    const quiet = Math.min(...f.enemies.map((e) => quietInField(g, nat, e)));
     if (quiet < C.quiet && !(who === 'opportunist' && f.enemies.some((e) => busyElsewhere(g, e, nat)))) continue;
     const s = sector(g, nat, f, C.local);
     if (!s) continue;
     g.flags[key('eff')] = g.flags[key('eff0')] = s.target.id + 1;
     g.flags[key('effAt')] = g.turn;
-    g.flags[key('effTo')] = g.turn + E.months - 1;
+    // The month it is named the army masses and the line is softened; the blows fall in the months after.
+    g.flags[key('effTo')] = g.turn + E.months;
     g.flags[key('effE')] = Object.keys(g.nations).indexOf(fieldCtrl(g, s.target)) + 1;
     delete g.flags[key('effWon')];
     const named = effortOf(g, nat, where);
@@ -714,7 +739,8 @@ function effortOrders(g: Game, nat: string, e: Effort, real: Front[], T: Temper)
     posture: 'attack', name: e.name.replace(/^t/, 'T'), from: e.from, effort: at.id,
     enemies: f.enemies, objectives: [at.name, ...around.map((j) => g.regions[j].name)],
     targets: [at.name, ...around.map((j) => g.regions[j].name)],
-    minOdds: T.minOdds, staging, release: doors.filter((j) => j !== g.nations[nat].capital).map((j) => g.regions[j].name),
+    // No attack goes in the month the effort is named: the word of it runs ahead of the blow.
+    minOdds: g.turn === e.from ? HOLD_ODDS : T.minOdds, ...(g.turn === e.from ? { massing: true } : {}), staging, release: doors.filter((j) => j !== g.nations[nat].capital).map((j) => g.regions[j].name),
   };
 }
 
@@ -1142,4 +1168,63 @@ export function theatreStaff(g: Game, nat: string, scope: Set<number>, k: number
     targets: [...new Set(live.flatMap((f) => bound(g, nat, f, [], false, OPEN.boundOverseas)))],
     release: [...new Set(live.flatMap((f) => f.ours.map((id) => g.regions[id].name)))],
   } as PlanPhase;
+}
+
+// ---- A war nobody can fight (the grand campaign) --------------------------------------------------------
+//
+// A war that has been won on land does not always end: the victor holds the continent, the loser's allies sit
+// behind the sea, and neither can come at the other. When two computer nations at war have no ground in touch
+// anywhere, with each other or with anyone on the other's side they are fighting, and their two sides have fought
+// no battle on land for a year, they sign an armistice on the lines as they stand. Never a war the player is
+// fighting in, and never in the last act, where every country fights for itself to the end.
+
+/** The nations on one's side of the war: its bloc, the fallen with the standing. A nation outside both blocs stands alone. */
+function sideOf(g: Game, nat: string): string[] {
+  const b = bloc(g.nations[nat]);
+  return b === 'axis' || b === 'allies' ? Object.keys(g.nations).filter((x) => bloc(g.nations[x]) === b) : [nat];
+}
+
+/** The month's armistices between nations that can no longer come at each other. Returns the pairs that signed. */
+export function stalemates(g: Game): [string, string][] {
+  const S = RIVALS.stalemate;
+  if (!rivalRules(g) || !S || dominating(g)) return [];
+  const me = g.human !== null && g.nations[g.human]?.alive ? g.human : null;
+  const live = Object.values(g.nations).filter((n) => n.alive && !n.dormant && n.atWar.length);
+  if (live.length < 2) return [];
+  // Where each nation stands in the field: the ground its army holds, and wherever its corps are.
+  const N = g.regions.length;
+  const at = new Map<string, Uint8Array>();
+  const mark = (id: string, r: number): void => { let a = at.get(id); if (!a) at.set(id, a = new Uint8Array(N)); a[r] = 1; };
+  for (const r of g.regions) { mark(fieldCtrl(g, r), r.id); for (const u of r.units) if (!u.dead) mark(u.nat, r.id); }
+  const touch = (a: string, b: string): boolean => {
+    const A = at.get(a), B = at.get(b);
+    if (!A || !B) return false;
+    for (let i = 0; i < N; i++) if (A[i] && (B[i] || g.regions[i].nb.some((j) => B[j]))) return true;
+    return false;
+  };
+  const lastBattle = (xs: string[], ys: string[]): number => {
+    let t = 0;
+    for (const x of xs) for (const y of ys) t = Math.max(t, g.nations[x].lastFight[y] ?? 0, g.nations[y].lastFight[x] ?? 0);
+    return t;
+  };
+  // Neither can come at the other, nor at anyone on the other's side that it is fighting.
+  const free = (x: string, side: string[]): boolean => !side.some((y) => g.nations[y].alive && atWar(g, x, y) && touch(x, y));
+  const signed: [string, string][] = [];
+  for (const A of live) for (const b of A.atWar) {
+    const B = g.nations[b];
+    if (!(A.id < b) || !B?.alive || B.dormant) continue;
+    if (me !== null && (A.id === me || b === me || atWar(g, me, A.id) || atWar(g, me, b))) continue;
+    const sa = sideOf(g, A.id), sb = sideOf(g, b);
+    const since = Math.max(lastBattle(sa, sb), flag(g, `war:${A.id}:${b}`), flag(g, `war:${b}:${A.id}`), 1);
+    if (g.turn - since < S.after || !free(A.id, sb) || !free(b, sa)) continue;
+    signed.push([A.id, b]);
+  }
+  for (const [a, b] of signed) {
+    const A = g.nations[a], B = g.nations[b];
+    A.atWar = A.atWar.filter((x) => x !== b);
+    B.atWar = B.atWar.filter((x) => x !== a);
+    g.flags[`arm:${a}:${b}`] = g.turn;
+    headline(g, 'event', `${A.name} and ${B.name} sign an armistice. Neither could come at the other, and their armies had not met for a year. Each keeps what it holds.`, a);
+  }
+  return signed;
 }

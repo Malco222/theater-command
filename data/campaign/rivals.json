@@ -9,7 +9,7 @@
     "cautious": {
       "label": "Cautious",
       "says": "Waits for long odds, masses and softens a line before it strikes, and seldom wastes an army.",
-      "attackAt": 1.2, "minOdds": 0.05, "quiet": 4, "strength": 0.85, "local": 1.5
+      "attackAt": 1.2, "minOdds": 0.05, "quiet": 3, "strength": 0.85, "local": 1.5
     },
     "opportunist": {
       "label": "Opportunist",
@@ -50,5 +50,9 @@
   "exhaust": {
     "_note": "A finish for a war that is won. A computer nation whose capital has been in enemy hands for more than 'after' months wears out: every month after that adds 'per' to how near it is to giving in, until it asks for terms. The player's own country is never worn out this way.",
     "after": 12, "per": 0.01
+  },
+  "stalemate": {
+    "_note": "A war nobody can fight. Two computer nations at war whose armies have no ground in touch anywhere, with each other or with anyone on the other's side they are fighting, and whose two sides have fought no battle on land for 'after' months, sign an armistice on the lines as they stand. Never a war the player is fighting in.",
+    "after": 12
   }
 }

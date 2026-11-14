@@ -47,7 +47,7 @@ import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
 import { SIEGE, fieldCtrl, garrison, garrisonOf, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
-import { RIVALS, characterOf, effortsOf, plansKnown, quietNews, rivalRules, type Character } from './staff';
+import { RIVALS, characterOf, effortsOf, plansKnown, quietNews, rivalRules, stalemates, type Character } from './staff';
 import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
@@ -78,6 +78,8 @@ function closePhase(g: Game, nat: string): void {
     g.phase = 0; g.turn++; g.week = 1;
     openTheatres(g);
     monthlyDiplomacy(g);
+    // Wars nobody can fight any longer end in an armistice (the grand campaign).
+    stalemates(g);
   }
 }
 
