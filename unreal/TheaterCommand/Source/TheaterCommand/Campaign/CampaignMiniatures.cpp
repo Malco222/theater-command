@@ -524,6 +524,7 @@ void FMiniatureMesh::Numerals(const FVector& Where, double High, int32 Number, c
 }
 
 bool FMiniatureMesh::bTrialTank = false;
+bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
 
 bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar)
@@ -538,6 +539,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		bool bMarks = false;
 		FVector Cross = FVector::ZeroVector, Number = FVector::ZeroVector;
 		double CrossSize = 0.2, NumberHigh = 0.26, Roof = 0.0;
+		double CrossLean = 0.13, NumberLean = 0.16; // (how far the plate each lies on leans back)
 	};
 	static TMap<FString, TSharedPtr<FRaw>> Read; // (a model that is not there is remembered as nothing, and not looked for again)
 	static TMap<FString, FMiniatureMesh> Painted;
@@ -574,7 +576,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				const TSharedPtr<FJsonObject>* Marks = nullptr;
 				const TArray<TSharedPtr<FJsonValue>> *CrossAt = nullptr, *NumberAt = nullptr;
 				if (File->TryGetObjectField(TEXT("marks"), Marks) && (*Marks)->TryGetArrayField(TEXT("cross"), CrossAt) && (*Marks)->TryGetArrayField(TEXT("number"), NumberAt)
-					&& CrossAt->Num() == 4 && NumberAt->Num() == 4)
+					&& CrossAt->Num() >= 4 && NumberAt->Num() >= 4)
 				{
 					// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
 					Raw->bMarks = true;
@@ -582,6 +584,8 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					Raw->CrossSize = (*CrossAt)[3]->AsNumber();
 					Raw->Number = FVector(-(*NumberAt)[0]->AsNumber(), (*NumberAt)[1]->AsNumber(), (*NumberAt)[2]->AsNumber());
 					Raw->NumberHigh = (*NumberAt)[3]->AsNumber();
+					if (CrossAt->Num() >= 5) { Raw->CrossLean = (*CrossAt)[4]->AsNumber(); }
+					if (NumberAt->Num() >= 5) { Raw->NumberLean = (*NumberAt)[4]->AsNumber(); }
 					(*Marks)->TryGetNumberField(TEXT("roof"), Raw->Roof);
 				}
 				UE_LOG(LogTheater, Log, TEXT("Sculpted model %s read: %d points, %d triangles"), *Which, Raw->Points.Num(), Raw->Triangles.Num() / 3);
@@ -637,8 +641,8 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				if (Raw->bMarks)
 				{
 					// (where the model's maker put them: the mark on the turret's side, the number on the hull's)
-					Fresh.Marking(FVector(Raw->Cross.X, Hand * Raw->Cross.Y, Raw->Cross.Z), Raw->CrossSize, Mark, FVector(0.0, Hand, 0.13));
-					Fresh.Numerals(FVector(Raw->Number.X, Hand * Raw->Number.Y, Raw->Number.Z), Raw->NumberHigh, Number, FVector(0.0, Hand, 0.16));
+					Fresh.Marking(FVector(Raw->Cross.X, Hand * Raw->Cross.Y, Raw->Cross.Z), Raw->CrossSize, Mark, FVector(0.0, Hand, Raw->CrossLean));
+					Fresh.Numerals(FVector(Raw->Number.X, Hand * Raw->Number.Y, Raw->Number.Z), Raw->NumberHigh, Number, FVector(0.0, Hand, Raw->NumberLean));
 				}
 				else
 				{

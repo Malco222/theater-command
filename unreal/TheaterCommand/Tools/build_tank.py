@@ -1,8 +1,12 @@
-"""The trial tank (art fix 12): one medium tank of our own design, sculpted wholly by this script.
+"""The tanks (art fix 12): tanks of our own design, sculpted wholly by this script.
 
 Run by Blender without its window (see build_tank.sh):
 
     Blender --background --python Tools/build_tank.py -- --out Content/Models/TrialTank.json
+    Blender --background --python Tools/build_tank.py -- --all Content/Models
+
+The first writes the trial tank alone; the second writes every tank in VARIANTS, each under the name the game
+knows its tank by, so that the game stands it on the table in place of the one it builds in code.
 
 Nothing is drawn by hand and nothing is fetched: every part is made here from numbers, so the piece can be
 rebuilt and changed by editing them, and the same script can later turn out national variants (a longer gun,
@@ -50,7 +54,79 @@ SPEC = {
     "idler_x": 2.42, "idler_z": 0.62, "idler_r": 0.33,
     "rollers": (-1.4, 0.0, 1.4), "roller_z": 0.93, "roller_r": 0.11,
     "bevel": 0.028,
+    # What a variant may change besides the measures above:
+    "scale": 1.0,            # the whole tank larger or smaller
+    "upper_lean": 0.94,      # how far the upper hull's sides lean in toward its roof (1 upright)
+    "tail": 0.18,            # how far the engine deck's tail slopes in
+    "interleaved": False,    # a second row of road wheels set between the first, inboard of them
+    "skirt": None,           # side plates over the running gear: (top, bottom, how many mud chutes)
+    "turret": "cast",        # "cast" (an egg in plan), "box" (welded plates) or "round" (a drum)
+    "turret_taper": 0.84,    # the turret's roof against its waist
+    "turret_y": 0.0,         # the turret set to one side
+    "bustle": True, "cupola": True, "brake": True,
+    "hull_gun": None,        # a gun in the hull's front beside the driver: (calibre, length, how far to the side)
+    "stowage": True,
 }
+
+# The tanks the game asks for by name. Each is the trial tank's numbers with some changed: generic tanks of the
+# period in each nation's manner (how many wheels, where the turret sits, how long the gun), not copies of any
+# drawing or of any other game's model.
+VARIANTS = {
+    # A medium tank with many small road wheels and a short gun for the infantry's support.
+    "PanzerIV": {"hull_long": 5.6, "wheels": 8, "wheel_r": 0.235, "wheel_first": -2.02, "wheel_step": 0.58, "rollers": (-1.6, -0.55, 0.5, 1.55),
+                 "roller_z": 0.86, "turret": "box", "turret_taper": 0.9, "gun_long": 1.55, "gun_calibre": 0.105, "brake": False},
+    # Sloped all round, on five large wheels with no rollers, the turret well forward.
+    "T34": {"hull_long": 5.9, "upper_long": 5.0, "upper_lean": 0.74, "glacis": 1.55, "tail": 0.5, "wheels": 5, "wheel_r": 0.41, "wheel_first": -1.9,
+            "wheel_step": 0.93, "rollers": (), "sprocket_x": -2.72, "idler_x": 2.6, "idler_z": 0.58, "sprocket_z": 0.6, "turret": "cast",
+            "turret_long": 1.9, "turret_wide": 1.6, "turret_high": 0.55, "turret_x": 0.85, "bustle": False, "cupola": False,
+            "gun_long": 2.5, "gun_calibre": 0.08, "brake": False, "track_wide": 0.52},
+    "T34-85": {"hull_long": 5.9, "upper_long": 5.0, "upper_lean": 0.74, "glacis": 1.55, "tail": 0.5, "wheels": 5, "wheel_r": 0.41, "wheel_first": -1.9,
+               "wheel_step": 0.93, "rollers": (), "sprocket_x": -2.72, "idler_x": 2.6, "idler_z": 0.58, "sprocket_z": 0.6, "turret": "cast",
+               "turret_long": 2.5, "turret_wide": 1.95, "turret_high": 0.68, "turret_x": 0.65, "bustle": False, "cupola": True,
+               "gun_long": 3.7, "gun_calibre": 0.09, "brake": False, "track_wide": 0.52},
+    # Tall, on three bogies of two wheels, with a rounded cast turret.
+    "Sherman": {"hull_long": 5.6, "hull_deck": 1.3, "upper_high": 0.72, "upper_lean": 0.9, "glacis": 1.25, "wheels": 6, "wheel_r": 0.26,
+                "wheel_xs": (-1.85, -1.3, -0.3, 0.25, 1.25, 1.8), "rollers": (-1.55, 0.0, 1.55), "roller_z": 0.98, "sprocket_x": 2.5, "idler_x": -2.5,
+                "sprocket_z": 0.72, "idler_z": 0.6, "turret": "round", "turret_long": 2.1, "turret_wide": 1.95, "turret_high": 0.72,
+                "turret_taper": 0.8, "turret_x": 0.35, "bustle": True, "gun_long": 2.2, "gun_calibre": 0.095, "brake": False},
+    # Low and heavy, its running gear behind side plates with mud chutes; a small turret and a slim gun.
+    "Matilda": {"hull_long": 5.6, "hull_deck": 1.05, "upper_high": 0.5, "upper_lean": 0.97, "glacis": 0.8, "wheels": 10, "wheel_r": 0.15,
+                "wheel_first": -1.95, "wheel_step": 0.43, "rollers": (-1.4, 0.0, 1.4), "roller_z": 0.9, "skirt": (1.02, 0.34, 5),
+                "turret": "round", "turret_long": 1.7, "turret_wide": 1.6, "turret_high": 0.62, "turret_taper": 0.92, "turret_x": 0.3,
+                "bustle": False, "gun_long": 1.7, "gun_calibre": 0.045, "brake": False},
+    # A heavy tank: a great box of a hull on wide tracks and interleaved wheels, with a long heavy gun.
+    "Tiger": {"scale": 1.12, "hull_long": 5.7, "upper_long": 4.9, "upper_wide": 2.9, "upper_lean": 1.0, "upper_high": 0.62, "glacis": 0.32,
+              "tail": 0.05, "wheels": 8, "wheel_r": 0.36, "wheel_first": -1.95, "wheel_step": 0.56, "rollers": (), "interleaved": True,
+              "track_wide": 0.62, "track_out": 1.36, "turret": "round", "turret_long": 2.7, "turret_wide": 2.2, "turret_high": 0.7,
+              "turret_taper": 0.97, "turret_x": 0.05, "gun_long": 4.0, "gun_calibre": 0.105, "brake": True},
+    # Long, with a well-sloped glacis, interleaved wheels and a long gun.
+    "Panther": {"scale": 1.08, "hull_long": 6.0, "upper_long": 5.2, "upper_lean": 0.82, "glacis": 1.5, "tail": 0.3, "wheels": 8, "wheel_r": 0.37,
+                "wheel_first": -2.1, "wheel_step": 0.6, "rollers": (), "interleaved": True, "track_wide": 0.56, "turret": "box",
+                "turret_long": 2.5, "turret_wide": 2.0, "turret_high": 0.66, "turret_taper": 0.78, "turret_x": 0.0, "gun_long": 4.4,
+                "gun_calibre": 0.085, "brake": True},
+    # Tall and narrow, the tracks running right round the hull behind side plates; a gun in the hull and a small turret.
+    "CharB1": {"hull_long": 6.2, "hull_deck": 1.5, "upper_high": 0.35, "upper_wide": 2.4, "upper_lean": 1.0, "glacis": 0.5, "wheels": 9,
+               "wheel_r": 0.17, "wheel_first": -2.3, "wheel_step": 0.56, "rollers": (-1.8, -0.6, 0.6, 1.8), "roller_z": 1.42, "roller_r": 0.1,
+               "sprocket_x": -2.85, "sprocket_z": 0.98, "sprocket_r": 0.5, "idler_x": 2.8, "idler_z": 0.98, "idler_r": 0.5,
+               "skirt": (1.5, 0.3, 3), "turret": "round", "turret_long": 1.5, "turret_wide": 1.4, "turret_high": 0.6, "turret_taper": 0.86,
+               "turret_x": 0.45, "bustle": False, "gun_long": 1.2, "gun_calibre": 0.055, "brake": False, "hull_gun": (0.085, 0.75, 0.55)},
+    # A small riveted box on four bogies of two small wheels.
+    "M13": {"scale": 0.86, "hull_long": 5.4, "upper_lean": 0.98, "glacis": 0.7, "wheels": 8, "wheel_r": 0.19,
+            "wheel_xs": (-1.9, -1.45, -0.85, -0.4, 0.2, 0.65, 1.25, 1.7), "rollers": (-1.3, 0.0, 1.3), "roller_z": 0.88, "turret": "box",
+            "turret_long": 1.8, "turret_wide": 1.6, "turret_high": 0.62, "turret_taper": 0.86, "turret_x": 0.3, "bustle": False,
+            "gun_long": 1.6, "gun_calibre": 0.055, "brake": False},
+    # Small, the turret set to one side, with a short gun.
+    "Type97": {"scale": 0.88, "hull_long": 5.4, "upper_lean": 0.9, "glacis": 1.0, "wheels": 6, "wheel_r": 0.27, "wheel_first": -1.75,
+               "wheel_step": 0.7, "rollers": (-1.2, 0.0, 1.2), "roller_z": 0.9, "sprocket_x": 2.45, "idler_x": -2.45, "turret": "cast",
+               "turret_long": 1.8, "turret_wide": 1.6, "turret_high": 0.6, "turret_x": 0.25, "turret_y": 0.18, "bustle": False,
+               "gun_long": 1.05, "gun_calibre": 0.075, "brake": False},
+    # A light tank: small, on two pairs of bogies, with a small turret and a thin gun.
+    "LightTank": {"scale": 0.78, "hull_long": 5.2, "upper_lean": 0.95, "glacis": 0.8, "wheels": 8, "wheel_r": 0.18,
+                  "wheel_xs": (-1.75, -1.3, -0.75, -0.3, 0.3, 0.75, 1.3, 1.75), "rollers": (-1.5, -0.5, 0.5, 1.5), "roller_z": 0.86,
+                  "sprocket_x": 2.4, "idler_x": -2.4, "turret": "box", "turret_long": 1.6, "turret_wide": 1.5, "turret_high": 0.62,
+                  "turret_taper": 0.84, "turret_x": 0.2, "bustle": False, "gun_long": 1.5, "gun_calibre": 0.045, "brake": False},
+}
+VARIANTS["7TP"] = dict(VARIANTS["LightTank"])
 
 
 def fresh_scene():
@@ -102,6 +178,13 @@ def drum(name, radius, depth, at, paint, sides=12, axis="Y", radius2=None, bevel
     return make(name, bm, paint, bevel)
 
 
+def wheel_places(s):
+    """Where along the hull each road wheel stands."""
+    if s.get("wheel_xs"):
+        return list(s["wheel_xs"])
+    return [s["wheel_first"] + k * s["wheel_step"] for k in range(s["wheels"])]
+
+
 def track(name, side, s):
     """One track: a band of links run round the sprocket, the road wheels and the idler."""
     # The path of the track, seen from the side: along the ground, up round the idler at the front, back
@@ -109,16 +192,20 @@ def track(name, side, s):
     path = []
     ground = 0.045
     front, rear = (s["idler_x"], s["idler_z"], s["idler_r"]), (s["sprocket_x"], s["sprocket_z"], s["sprocket_r"])
-    first, last = s["wheel_first"], s["wheel_first"] + s["wheel_step"] * (s["wheels"] - 1)
+    xs = wheel_places(s)
+    first, last = min(xs), max(xs)
+    front, rear = (front, rear) if front[0] > rear[0] else (rear, front)   # (whichever of the two wheels leads)
     for k in range(13):                                   # the ground run
         path.append((first - 0.1 + (last - first + 0.2) * k / 12.0, ground))
     for k in range(1, 9):                                 # up round the idler
         a = math.radians(-70.0 + 160.0 * k / 8.0)
         path.append((front[0] + front[2] * math.sin(a) * 1.0 + 0.0, front[1] - front[2] * math.cos(a)))
-    top = s["roller_z"] + s["roller_r"] + 0.03
+    rollers = s["rollers"]
+    # (with no return rollers the top run lies on the road wheels' own tops)
+    top = (s["roller_z"] + s["roller_r"] + 0.03) if rollers else (2.0 * s["wheel_r"] + 0.09)
     for k in range(1, 12):                                # the top run, sagging between the rollers
         x = front[0] - 0.12 - (front[0] - rear[0] - 0.24) * k / 12.0
-        sag = 0.035 * abs(math.sin(math.pi * (x - s["rollers"][0]) / (s["rollers"][1] - s["rollers"][0])))
+        sag = 0.035 * abs(math.sin(math.pi * (x - rollers[0]) / (rollers[1] - rollers[0]))) if len(rollers) > 1 else 0.0
         path.append((x, top - sag))
     for k in range(0, 8):                                 # down round the sprocket
         a = math.radians(90.0 + 160.0 * k / 8.0)
@@ -149,6 +236,8 @@ def build(s):
     parts = []
     b = s["bevel"]
     floor, deck = s["hull_floor"], s["hull_deck"]
+    k_long = s["hull_long"] / 5.5        # (what is placed along the hull is placed by the hull's own length)
+    half = s["hull_long"] * 0.5
 
     # ---- The hull: a welded tub between the tracks, its nose and tail plates sloped.
     def tub(p):
@@ -165,11 +254,11 @@ def build(s):
     up_top = deck + s["upper_high"]
     def upper(p):
         if p.z > 0.0:
-            p.y *= 0.94
+            p.y *= s["upper_lean"]
             if p.x > 0.0:
                 p.x -= s["glacis"] / s["upper_long"]     # the glacis
             else:
-                p.x += 0.18 / s["upper_long"]            # the engine deck's tail
+                p.x += s["tail"] / s["upper_long"]       # the engine deck's tail
         return p
     upper_x = -0.12
     parts.append(box("upper", (s["upper_long"], s["upper_wide"], s["upper_high"]), (upper_x, 0.0, deck + s["upper_high"] * 0.5), "paint", b, shape=upper))
@@ -180,16 +269,27 @@ def build(s):
     # ---- The track guards, with a flap turned down at each end.
     for side in (-1.0, 1.0):
         y = side * s["track_out"]
-        parts.append(box("guard", (5.35, s["track_wide"] + 0.14, 0.04), (-0.05, y, deck + 0.05), "paint", 0.012))
-        parts.append(box("flap_front", (0.42, s["track_wide"] + 0.14, 0.035), (2.78, y, deck - 0.06), "paint", 0.0, turn=(0.0, 32.0, 0.0)))
-        parts.append(box("flap_rear", (0.34, s["track_wide"] + 0.14, 0.035), (-2.86, y, deck - 0.04), "paint", 0.0, turn=(0.0, -28.0, 0.0)))
+        parts.append(box("guard", (s["hull_long"] - 0.15, s["track_wide"] + 0.14, 0.04), (-0.05, y, deck + 0.05), "paint", 0.012))
+        parts.append(box("flap_front", (0.42, s["track_wide"] + 0.14, 0.035), (half + 0.03, y, deck - 0.06), "paint", 0.0, turn=(0.0, 32.0, 0.0)))
+        parts.append(box("flap_rear", (0.34, s["track_wide"] + 0.14, 0.035), (-half - 0.11, y, deck - 0.04), "paint", 0.0, turn=(0.0, -28.0, 0.0)))
+        if s["skirt"]:
+            # Side plates over the running gear, with mud chutes cut in them as dark slots.
+            top, bottom, chutes = s["skirt"]
+            parts.append(box("skirt", (s["hull_long"] - 0.5, 0.05, top - bottom), (0.0, y + side * (s["track_wide"] * 0.5 + 0.04), (top + bottom) * 0.5), "paint", 0.012))
+            for c in range(chutes):
+                cx = -half * 0.62 + (s["hull_long"] * 0.62) * c / max(chutes - 1, 1)
+                parts.append(box("chute", (0.42, 0.06, (top - bottom) * 0.34), (cx, y + side * (s["track_wide"] * 0.5 + 0.045), bottom + (top - bottom) * 0.3), "shade"))
 
     # ---- The running gear.
     for side in (-1.0, 1.0):
         y = side * s["track_out"]
         parts.append(track("track", side, s))
-        for k in range(s["wheels"]):
-            x = s["wheel_first"] + k * s["wheel_step"]
+        places = wheel_places(s)
+        if s["interleaved"]:
+            # (a second row set between the first and inboard of it, as wide wheels overlapped on the heavy tanks)
+            for x in [(places[i] + places[i + 1]) * 0.5 for i in range(len(places) - 1)]:
+                parts.append(drum("inner_wheel", s["wheel_r"], 0.2, (x, y - side * 0.2, s["wheel_r"] + 0.05), "shade", 12))
+        for x in places:
             parts.append(drum("tyre", s["wheel_r"], 0.3, (x, y, s["wheel_r"] + 0.05), "rubber", 14))
             parts.append(drum("wheel", s["wheel_r"] * 0.78, 0.32, (x, y, s["wheel_r"] + 0.05), "paint", 12))
             parts.append(drum("hub", 0.09, 0.4, (x, y, s["wheel_r"] + 0.05), "shade", 8))
@@ -202,51 +302,75 @@ def build(s):
         for x in s["rollers"]:
             parts.append(drum("roller", s["roller_r"], 0.26, (x, y, s["roller_z"]), "rubber", 8))
 
-    # ---- The turret: cast, wider at its waist than at its roof, with a bustle behind.
-    tx, tz = s["turret_x"], up_top + 0.02
+    # ---- The turret: cast (an egg in plan, wider at its waist than at its roof), welded of plates, or a drum;
+    # with a bustle behind where the tank has one.
+    tx, ty, tz = s["turret_x"], s["turret_y"], up_top + 0.02
+    tw, tl = s["turret_wide"] / 1.9, s["turret_long"] / 2.25      # (the turret's fittings are placed by its own size)
     bm = bmesh.new()
-    bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=16, radius1=1.0, radius2=0.84, depth=1.0)
-    for v in bm.verts:
-        # an egg in plan: blunt and narrower at the front, fuller toward the rear
-        front = max(v.co.x, 0.0)
-        v.co.y *= s["turret_wide"] * 0.5 * (1.0 - 0.18 * front)
-        v.co.x *= s["turret_long"] * 0.5 * (0.86 if v.co.x > 0.0 else 1.0)
-        v.co.z = (v.co.z + 0.5) * s["turret_high"]
-    bmesh.ops.transform(bm, matrix=Matrix.Translation(Vector((tx - 0.1, 0.0, tz))), verts=bm.verts)
+    if s["turret"] == "box":
+        bmesh.ops.create_cube(bm, size=1.0)
+        for v in bm.verts:
+            roofed = v.co.z > 0.0
+            v.co.y *= s["turret_wide"] * (s["turret_taper"] if roofed else 1.0) * (0.8 if v.co.x > 0.0 else 1.0)
+            v.co.x *= s["turret_long"] * (0.9 if roofed else 1.0)
+            v.co.z = (v.co.z + 0.5) * s["turret_high"]
+    else:
+        bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=16, radius1=1.0, radius2=s["turret_taper"], depth=1.0)
+        for v in bm.verts:
+            # cast: blunt and narrower at the front, fuller toward the rear; a drum is the same all round
+            front = max(v.co.x, 0.0) if s["turret"] == "cast" else 0.0
+            v.co.y *= s["turret_wide"] * 0.5 * (1.0 - 0.18 * front)
+            v.co.x *= s["turret_long"] * 0.5 * (0.86 if v.co.x > 0.0 and s["turret"] == "cast" else 1.0)
+            v.co.z = (v.co.z + 0.5) * s["turret_high"]
+    bmesh.ops.transform(bm, matrix=Matrix.Translation(Vector((tx - 0.1, ty, tz))), verts=bm.verts)
     parts.append(make("turret", bm, "paint", b * 1.4, 2))
-    parts.append(box("bustle", (0.72, 1.24, 0.4), (tx - 1.32, 0.0, tz + 0.3), "paint", b,
-                     shape=lambda p: Vector((p.x, p.y * (0.86 if p.x < 0.0 else 1.0), p.z + (0.12 if p.x < 0.0 and p.z < 0.0 else 0.0)))))
+    if s["bustle"]:
+        parts.append(box("bustle", (0.72 * tl, 1.24 * tw, 0.4), (tx - 0.1 - s["turret_long"] * 0.5 - 0.12, ty, tz + 0.3), "paint", b,
+                         shape=lambda p: Vector((p.x, p.y * (0.86 if p.x < 0.0 else 1.0), p.z + (0.12 if p.x < 0.0 and p.z < 0.0 else 0.0)))))
     # The commander's cupola, with its hatch standing open a hand, and the loader's hatch flat on the roof.
     roof = tz + s["turret_high"]
-    parts.append(drum("cupola", 0.3, 0.2, (tx - 0.5, -0.38, roof + 0.1), "paint", 12, axis="Z", radius2=0.27, bevel=0.012))
-    parts.append(drum("cupola_hatch", 0.24, 0.035, (tx - 0.5, -0.38, roof + 0.225), "shade", 12, axis="Z"))
-    for k in range(5):
-        a = math.radians(-70.0 + 35.0 * k)
-        parts.append(box("periscope", (0.05, 0.11, 0.045), (tx - 0.5 + 0.3 * math.cos(a), -0.38 + 0.3 * math.sin(a), roof + 0.12), "glass", 0.0,
-                         turn=(0.0, 0.0, math.degrees(a))))
-    parts.append(box("hatch", (0.5, 0.42, 0.035), (tx - 0.42, 0.42, roof + 0.02), "shade", 0.008))
-    parts.append(drum("vent", 0.13, 0.07, (tx + 0.38, 0.0, roof + 0.03), "paint", 10, axis="Z", radius2=0.09))
-    parts.append(drum("aerial_foot", 0.035, 0.1, (tx - 1.5, 0.48, tz + 0.55), "shade", 6, axis="Z"))
+    if s["cupola"]:
+        parts.append(drum("cupola", 0.3 * tw, 0.2, (tx - 0.5 * tl, ty - 0.38 * tw, roof + 0.1), "paint", 12, axis="Z", radius2=0.27 * tw, bevel=0.012))
+        parts.append(drum("cupola_hatch", 0.24 * tw, 0.035, (tx - 0.5 * tl, ty - 0.38 * tw, roof + 0.225), "shade", 12, axis="Z"))
+        for k in range(5):
+            a = math.radians(-70.0 + 35.0 * k)
+            parts.append(box("periscope", (0.05, 0.11, 0.045), (tx - 0.5 * tl + 0.3 * tw * math.cos(a), ty - 0.38 * tw + 0.3 * tw * math.sin(a), roof + 0.12), "glass", 0.0,
+                             turn=(0.0, 0.0, math.degrees(a))))
+    else:
+        parts.append(box("hatch", (0.5 * tl, 0.42 * tw, 0.035), (tx - 0.42 * tl, ty - 0.4 * tw, roof + 0.02), "shade", 0.008))
+    parts.append(box("hatch", (0.5 * tl, 0.42 * tw, 0.035), (tx - 0.42 * tl, ty + 0.42 * tw, roof + 0.02), "shade", 0.008))
+    parts.append(drum("vent", 0.13 * tw, 0.07, (tx + 0.38 * tl, ty, roof + 0.03), "paint", 10, axis="Z", radius2=0.09 * tw))
+    back = tx - 0.1 - s["turret_long"] * 0.5 - (0.3 if s["bustle"] else -0.12)
+    parts.append(drum("aerial_foot", 0.035, 0.1, (back, ty + 0.48 * tw, tz + 0.55), "shade", 6, axis="Z"))
     # (a whip as thick as a model-maker's wire, and dark: one true to scale is thinner than a point of the screen and glitters)
-    parts.append(drum("aerial", 0.022, 1.1, (tx - 1.5, 0.48, tz + 1.15), "shade", 5, axis="Z"))
+    parts.append(drum("aerial", 0.022, 1.1, (back, ty + 0.48 * tw, tz + 1.15), "shade", 5, axis="Z"))
     # Lifting eyes, and a rail on the bustle with a rolled tarpaulin lashed to it.
     for side in (-1.0, 1.0):
-        parts.append(box("eye", (0.1, 0.03, 0.07), (tx + 0.25, side * 0.72, roof - 0.04), "shade"))
-    parts.append(drum("tarpaulin", 0.13, 1.05, (tx - 1.74, 0.0, tz + 0.34), "canvas", 8))
-    for y in (-0.36, 0.36):
-        parts.append(box("strap", (0.3, 0.035, 0.29), (tx - 1.74, y, tz + 0.34), "wood"))
+        parts.append(box("eye", (0.1, 0.03, 0.07), (tx + 0.25 * tl, ty + side * 0.72 * tw, roof - 0.04), "shade"))
+    if s["bustle"]:
+        parts.append(drum("tarpaulin", 0.13, 1.05 * tw, (back - 0.24, ty, tz + 0.34), "canvas", 8))
+        for y in (-0.36 * tw, 0.36 * tw):
+            parts.append(box("strap", (0.3, 0.035, 0.29), (back - 0.24, ty + y, tz + 0.34), "wood"))
 
     # ---- The gun: a mantlet, a sleeve, the barrel and its muzzle brake; and the machine-gun beside it.
-    gx, gz = tx + s["turret_long"] * 0.5 * 0.86 - 0.16, tz + s["turret_high"] * 0.52
-    parts.append(box("mantlet", (0.36, 1.0, 0.56), (gx + 0.06, 0.0, gz), "paint", b * 1.3,
+    gx, gz = tx + s["turret_long"] * 0.5 * (0.86 if s["turret"] == "cast" else 0.92) - 0.16, tz + s["turret_high"] * 0.52
+    parts.append(box("mantlet", (0.36, 1.0 * tw, 0.56 * min(s["turret_high"] / 0.62, 1.2)), (gx + 0.06, ty, gz), "paint", b * 1.3,
                      shape=lambda p: Vector((p.x, p.y * (0.72 if p.x > 0.0 else 1.0), p.z * (0.74 if p.x > 0.0 else 1.0)))))
     cal = s["gun_calibre"]
-    parts.append(drum("sleeve", cal * 1.75, 0.6, (gx + 0.5, 0.0, gz), "paint", 10, axis="X", radius2=cal * 1.35))
-    parts.append(drum("barrel", cal, s["gun_long"], (gx + 0.24 + s["gun_long"] * 0.5, 0.0, gz), "paint", 10, axis="X", radius2=cal * 0.82))
+    parts.append(drum("sleeve", cal * 1.75, 0.6, (gx + 0.5, ty, gz), "paint", 10, axis="X", radius2=cal * 1.35))
+    parts.append(drum("barrel", cal, s["gun_long"], (gx + 0.24 + s["gun_long"] * 0.5, ty, gz), "paint", 10, axis="X", radius2=cal * 0.82))
     end = gx + 0.24 + s["gun_long"]
-    parts.append(drum("brake", cal * 1.5, 0.3, (end - 0.1, 0.0, gz), "shade", 10, axis="X"))
-    parts.append(drum("muzzle", cal * 0.9, 0.34, (end - 0.1, 0.0, gz), "steel", 8, axis="X"))
-    parts.append(drum("coaxial", 0.022, 0.5, (gx + 0.36, 0.3, gz + 0.02), "steel", 5, axis="X"))
+    if s["brake"]:
+        parts.append(drum("brake", cal * 1.5, 0.3, (end - 0.1, ty, gz), "shade", 10, axis="X"))
+    parts.append(drum("muzzle", cal * 0.9, 0.34, (end - 0.1, ty, gz), "steel", 8, axis="X"))
+    parts.append(drum("coaxial", 0.022, 0.5, (gx + 0.36, ty + 0.3 * tw, gz + 0.02), "steel", 5, axis="X"))
+    if s["hull_gun"]:
+        # A gun in the hull's front, low beside the driver.
+        hc, hl, hy = s["hull_gun"]
+        hx = s["upper_long"] * 0.5 - 0.12 - s["glacis"] * 0.3
+        parts.append(box("hull_mount", (0.5, 0.62, 0.5), (hx, hy, deck + 0.08), "paint", b))
+        parts.append(drum("hull_gun", hc, hl, (hx + 0.25 + hl * 0.5, hy, deck + 0.1), "paint", 10, axis="X", radius2=hc * 0.85))
+        parts.append(drum("hull_muzzle", hc * 0.8, 0.1, (hx + 0.25 + hl, hy, deck + 0.1), "steel", 8, axis="X"))
 
     # ---- On the glacis: the driver's visor, the bow gun in its ball, spare links, and the headlamps.
     slope_x, slope_z = s["upper_long"] * 0.5 + upper_x - s["glacis"] * 0.5, deck + s["upper_high"] * 0.5
@@ -263,23 +387,26 @@ def build(s):
         parts.append(box("spare_link", (0.11, 0.42, 0.045), (slope_x + 0.34 - 0.15 * k, 0.0, slope_z - 0.13 + 0.079 * k), "track", 0.0,
                          turn=(0.0, -lean, 0.0)))
     for side in (-1.0, 1.0):
-        parts.append(drum("lamp", 0.085, 0.11, (2.5, side * 1.0, deck + 0.16), "paint", 8, axis="X"))
-        parts.append(drum("lamp_glass", 0.07, 0.115, (2.51, side * 1.0, deck + 0.16), "glass", 8, axis="X"))
-        parts.append(box("lamp_foot", (0.04, 0.04, 0.1), (2.5, side * 1.0, deck + 0.09), "shade"))
+        parts.append(drum("lamp", 0.085, 0.11, (half - 0.25, side * 1.0, deck + 0.16), "paint", 8, axis="X"))
+        parts.append(drum("lamp_glass", 0.07, 0.115, (half - 0.24, side * 1.0, deck + 0.16), "glass", 8, axis="X"))
+        parts.append(box("lamp_foot", (0.04, 0.04, 0.1), (half - 0.25, side * 1.0, deck + 0.09), "shade"))
 
     # ---- The engine deck: two grilles with their louvres, and the exhausts across the tail.
+    deck_x = -s["upper_long"] * 0.5 + upper_x + s["tail"] + 0.6      # the middle of the grilles
     for side in (-1.0, 1.0):
-        parts.append(box("grille", (0.95, 0.72, 0.03), (-1.55, side * 0.52, up_top + 0.012), "shade", 0.006))
+        parts.append(box("grille", (0.95, 0.72, 0.03), (deck_x, side * 0.52, up_top + 0.012), "shade", 0.006))
         for k in range(6):
-            parts.append(box("louvre", (0.05, 0.66, 0.035), (-1.95 + 0.16 * k, side * 0.52, up_top + 0.035), "paint", 0.0, turn=(0.0, 30.0, 0.0)))
-        parts.append(drum("exhaust", 0.11, 0.78, (-2.82, side * 0.52, deck + 0.22), "rust", 10))
-        parts.append(drum("exhaust_pipe", 0.04, 0.3, (-2.82, side * 0.98, deck + 0.3), "rust", 6, axis="Z"))
-    parts.append(box("tail_plate", (0.06, 1.9, 0.5), (-2.72, 0.0, deck + 0.1), "paint", 0.012))
+            parts.append(box("louvre", (0.05, 0.66, 0.035), (deck_x - 0.4 + 0.16 * k, side * 0.52, up_top + 0.035), "paint", 0.0, turn=(0.0, 30.0, 0.0)))
+        parts.append(drum("exhaust", 0.11, 0.78, (-half - 0.07, side * 0.52, deck + 0.22), "rust", 10))
+        parts.append(drum("exhaust_pipe", 0.04, 0.3, (-half - 0.07, side * 0.98, deck + 0.3), "rust", 6, axis="Z"))
+    parts.append(box("tail_plate", (0.06, 1.9, 0.5), (-half + 0.03, 0.0, deck + 0.1), "paint", 0.012))
+    if not s["stowage"]:
+        return parts
 
     # ---- Stowed on the guards and the deck: a tool box, a shovel and a pick, jerrycans, the jack and its
     # block, and the tow cable coiled on the tail.
-    parts.append(box("toolbox", (0.72, 0.36, 0.2), (0.55, -s["track_out"], deck + 0.18), "paint", 0.012))
-    parts.append(box("toolbox_lid", (0.74, 0.38, 0.02), (0.55, -s["track_out"], deck + 0.29), "shade"))
+    parts.append(box("toolbox", (0.72, 0.36, 0.2), (0.55 * k_long, -s["track_out"], deck + 0.18), "paint", 0.012))
+    parts.append(box("toolbox_lid", (0.74, 0.38, 0.02), (0.55 * k_long, -s["track_out"], deck + 0.29), "shade"))
     parts.append(drum("shovel_shaft", 0.017, 0.95, (-0.6, -s["track_out"] - 0.06, deck + 0.1), "wood", 5, axis="X"))
     parts.append(box("shovel_blade", (0.26, 0.19, 0.02), (-0.02, -s["track_out"] - 0.06, deck + 0.1), "steel"))
     parts.append(drum("pick_shaft", 0.017, 0.8, (-0.62, -s["track_out"] + 0.1, deck + 0.1), "wood", 5, axis="X"))
@@ -297,7 +424,7 @@ def build(s):
         for e in range(5):
             c = 2.0 * math.pi * e / 5.0
             r = 0.3 + 0.03 * math.cos(c)
-            ring.append(bm.verts.new((-2.25 + r * math.cos(a) * 0.62, r * math.sin(a), up_top + 0.045 + 0.03 * math.sin(c))))
+            ring.append(bm.verts.new((deck_x - 0.75 + r * math.cos(a) * 0.62, r * math.sin(a), up_top + 0.045 + 0.03 * math.sin(c))))
         cable.append(ring)
     for k in range(20):
         a_ring, b_ring = cable[k], cable[(k + 1) % 20]
@@ -321,7 +448,8 @@ def gather(parts, simple=False):
             # (and the smallest things are left off it: they cannot be seen from there)
             if obj.name.split(".")[0] in ("periscope", "eye", "strap", "louvre", "lamp_foot", "can_cap", "coaxial", "bow_gun", "aerial",
                                           "aerial_foot", "hub", "idler_hub", "arm", "visor_slit", "lamp_glass", "pick_head", "pick_shaft",
-                                          "shovel_shaft", "shovel_blade", "exhaust_pipe", "tow_cable", "spare_link", "toolbox_lid"):
+                                          "shovel_shaft", "shovel_blade", "exhaust_pipe", "tow_cable", "spare_link", "toolbox_lid", "chute", "inner_wheel",
+                                          "hull_muzzle"):
                 continue
             graph.update()
         bm = bmesh.new()
@@ -356,43 +484,75 @@ def gather(parts, simple=False):
     return {"points": points, "facings": facings, "paints": paints, "triangles": triangles}
 
 
-def main():
-    out = "TrialTank.json"
-    if "--" in sys.argv:
-        rest = sys.argv[sys.argv.index("--") + 1:]
-        if "--out" in rest:
-            out = rest[rest.index("--out") + 1]
+def marks_of(s):
+    """Where the game paints its markings, on the right-hand side (it mirrors them for the left): the nation's own
+    mark on the turret's side at its waist, a little behind the turret's middle (on the hull's side instead where
+    the turret is small or set to one side), and the number on the upper hull's side behind it. Each is a place
+    (x, y, z), a size, and how far the plate it lies on leans back. "roof" is the height of the turret's roof with
+    its cupola: the aerial stands higher, and must not be taken for the top of the tank."""
+    k = s["scale"]
+    turret_z = s["hull_deck"] + s["upper_high"] + 0.02
+    lean = s["upper_wide"] * 0.5 * (1.0 - s["upper_lean"]) / s["upper_high"]
+    hull_y = s["upper_wide"] * 0.5 * (1.0 + s["upper_lean"]) * 0.5 + 0.015
+    hull_z = s["hull_deck"] + s["upper_high"] * 0.5
+    high = min(0.26, s["upper_high"] * 0.56)
+    number = [-0.95 * s["hull_long"] / 5.5, hull_y, hull_z, high, lean]
+    if s["turret_y"] != 0.0 or s["turret_wide"] < 1.55:
+        cross = [0.1, hull_y, hull_z, min(0.2, s["upper_high"] * 0.42), lean]
+    else:
+        back = s["turret_long"] * 0.1
+        if s["turret"] == "box":
+            side = s["turret_wide"] * 0.5 * (1.0 + s["turret_taper"]) * 0.5
+            back = s["turret_long"] * 0.24
+        else:
+            across = math.sqrt(max(1.0 - (back / (s["turret_long"] * 0.5)) ** 2, 0.0))
+            side = across * (1.0 + s["turret_taper"]) * 0.5 * s["turret_wide"] * 0.5
+        lean_t = s["turret_wide"] * 0.5 * (1.0 - s["turret_taper"]) / s["turret_high"]
+        cross = [s["turret_x"] - 0.1 - back, side + 0.015, turret_z + s["turret_high"] * 0.5, min(0.2, s["turret_high"] * 0.34), lean_t]
+    return {
+        "cross": [round(cross[0] * k, 3), round(cross[1] * k, 3), round(cross[2] * k, 3), round(cross[3] * k, 3), round(cross[4], 3)],
+        "number": [round(number[0] * k, 3), round(number[1] * k, 3), round(number[2] * k, 3), round(number[3] * k, 3), round(number[4], 3)],
+        "roof": round((turret_z + s["turret_high"] + (0.25 if s["cupola"] else 0.05)) * k, 3),
+    }
+
+
+def write(name, title, s, out):
+    """Sculpts one tank and writes it out."""
     fresh_scene()
-    parts = build(SPEC)
+    parts = build(s)
     near = gather(parts)
     far = gather(parts, simple=True)
+    k = s["scale"]
+    if k != 1.0:
+        for mesh in (near, far):
+            mesh["points"] = [round(v * k, 4) for v in mesh["points"]]
     low = min(near["points"][2::3])
-    # Where the game paints its markings, on the right-hand side (it mirrors them for the left): the nation's own
-    # mark on the turret's side at its waist, a little behind the turret's middle, and the number on the upper
-    # hull's side behind it. Each is a place (x, y, z) and a size. "roof" is the height of the turret's roof with
-    # its cupola: the aerial stands higher, and must not be taken for the top of the tank.
-    s = SPEC
-    turret_z = s["hull_deck"] + s["upper_high"] + 0.02
-    back = 0.2                                                    # how far behind the turret's middle the mark sits
-    across = math.sqrt(max(1.0 - (back / (s["turret_long"] * 0.5)) ** 2, 0.0))
-    marks = {
-        "cross": [round(s["turret_x"] - 0.1 - back, 3), round(across * 0.92 * s["turret_wide"] * 0.5 + 0.015, 3), round(turret_z + s["turret_high"] * 0.5, 3), 0.2],
-        "number": [-0.95, round(s["upper_wide"] * 0.5 * 0.97 + 0.015, 3), round(s["hull_deck"] + s["upper_high"] * 0.5, 3), 0.26],
-        "roof": round(turret_z + s["turret_high"] + 0.25, 3),
-    }
     data = {
-        "name": "Trial medium tank",
+        "name": title,
         "about": "Made by Tools/build_tank.py. Metres; x forward, y right, z up. Paints: " + ", ".join(f"{v} {k}" for k, v in PAINTS.items()),
         "long": round(max(near["points"][0::3]) - min(near["points"][0::3]), 3),
         "high": round(max(near["points"][2::3]) - low, 3),
-        "marks": marks,
+        "marks": marks_of(s),
         "near": near,
         "far": far,
     }
     with open(out, "w") as file:
         json.dump(data, file, separators=(",", ":"))
-    print(f"Theater Command: trial tank written to {out}: {len(near['triangles']) // 3} triangles, {len(near['points']) // 3} points "
+    print(f"Theater Command: {name} written to {out}: {len(near['triangles']) // 3} triangles, {len(near['points']) // 3} points "
           f"(far: {len(far['triangles']) // 3} triangles), {data['long']} m long, {data['high']} m high")
+
+
+def main():
+    rest = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+    if "--all" in rest:
+        folder = rest[rest.index("--all") + 1]
+        for name, changes in VARIANTS.items():
+            spec = dict(SPEC)
+            spec.update(changes)
+            write(name, name + " (our own design)", spec, folder.rstrip("/") + "/" + name + ".json")
+        return
+    out = rest[rest.index("--out") + 1] if "--out" in rest else "TrialTank.json"
+    write("trial tank", "Trial medium tank", dict(SPEC), out)
 
 
 main()

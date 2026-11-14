@@ -87,6 +87,8 @@ struct FMiniatureMesh
 	static bool bTrialTank;
 	/** Set from the command line ("-TheaterOldPieces"): the pieces as they were before art fix 12 (plain bases, small figures in ranks, unweathered paint), to be photographed beside the new. */
 	static bool bOldPieces;
+	/** Set from the command line ("-TheaterCodeBuilt"): the vehicles built in code are shown even where a sculpted model of the same name exists. */
+	static bool bCodeBuilt;
 
 	/**
 	 * A real vehicle, built from its measurements: "PanzerIV", "T34", "Sherman", "Matilda". Metre is the size

@@ -1589,6 +1589,25 @@ FString& MiniatureParts::NationWanted()
 
 bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double Metre, double Turn, bool bFine)
 {
+	if (!bOldPieces && !bCodeBuilt)
+	{
+		// (Art fix 12, the set.) A model sculpted outside the game stands in for the one built here in code,
+		// wherever there is one of this name among the game's models: "Truck:SOV" is the lorry in Soviet paint.
+		// ("-TheaterCodeBuilt" shows the code-built ones, to hold the two side by side.)
+		FString Kind = Name, Whose;
+		Name.Split(TEXT(":"), &Kind, &Whose);
+		if (Whose.IsEmpty())
+		{
+			if (const VehicleParts::FModel* Known = VehicleParts::Find(Kind))
+			{
+				Whose = Known->Nation;
+			}
+		}
+		if (Sculpted(Kind, Whose, Where, Metre, Turn))
+		{
+			return true;
+		}
+	}
 	static TMap<FString, FMiniatureMesh> BuiltFine, BuiltPlain;
 	TMap<FString, FMiniatureMesh>& Built = bFine ? BuiltFine : BuiltPlain;
 	FMiniatureMesh* Model = Built.Find(Name);
