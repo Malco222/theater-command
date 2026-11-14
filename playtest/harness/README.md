@@ -192,3 +192,29 @@ Traps met on Version 61:
 - `T.candidates` returns nothing in a computer-only war (`g.human` is null). Pick the corps yourself and pass them through `limitAttackers` to `T.previewAttack`.
 
 Results of the Version 61 test: `/mnt/project-files/playtest/results-v61/` (the 141-job queue at the top; `lean-3-seeds`, `two-waves-3-seeds`, `card-recount`, `lean-12-seeds`, `first-strike-12-seeds`, `jab-and-hammer`, `why`, `undecided`, `saves`).
+
+## Version 62: a fair cabinet, a say over the men, a secure office
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `v62.tsv`, `v62b.tsv`, `v62c.tsv`, `v62d.tsv` | The queues of the Version 62 test for `jobs.sh`: the Version 60 queue again (252 jobs: government, promises, heads, men, cabinet off, battery, scorch, 24 Berlin wars, computer wars); call-up habits on twelve seeds as the Soviet Union, the Soviet first strike and Germany (132); Berlin on seeds 25 to 60 with the cabinet and 1 to 60 with it off (96); an idle player with a secure office and every ordinary war again with the small jobs done (35) | `./jobs.sh v62b.tsv out/v62b 4` |
+| `lib.ts` | New plan options: `"earlyClass":"half"`, `"quarter"`, `"war"` or a turn (call the next class early when the reserve is under that share, as soon as at war, or in that month); `"holdCallUp":[from,to]`, `"first:6"` or `"short:0.85"` (hold the standing call-up between two turns, for its first six months, or while under 85% of field divisions are filled); `"secure":true` (the office is secure); `"jobs":true` (carry out the cabinet's build and agent directives) | `node out62n/probe32.mjs SOV 1 11 76 '{"minOdds":1.5,"holdCallUp":"first:6"}'` |
+| `probe32.ts` | The men probe. Its `TOTAL` line now also gives the classes called early with their months, the months the call-up was held, the strongest army, who holds Berlin in December 1944, the provinces at the end, and each January's corps, divisions filled of full, and provinces | as above |
+| `probe40.ts` | The readings the cabinet has noted for a town as each of the last months opened, beside the promise on offer today (why standing back still moves one town) | `node out62n/probe40.mjs GER 1 7 24 '<plan>' Riga` |
+| `mentab.py` | One block a call-up habit: wars lost, against the same seeds as the game stands, Berlin, the reserve, each January | `python3 mentab.py out/v62b -v` |
+| `headtab.py` | Heads asked for, read from the cabinet's own words, beside the same wars on an older version | `python3 headtab.py out/v62 out/v60` |
+| `kindtab.py` | The kinds of directive issued and how they ended, new beside old, by set | `python3 kindtab.py out/v62 out/v60 gov-play` |
+| `settletab.py` | Whether a kept promise clears the count of ignored directives | `python3 settletab.py out/v62` |
+| `bandsum.py` | Battles by odds band summed over `probe28` outputs | `python3 bandsum.py out/v62/berlin-GER-*.txt` |
+| `ui23.cjs`, `ui23-all.sh` | The Cabinet card page by page with its height in screens, the head block, the men block with both call-up orders, the office picker and the bill for switching the cabinet off, on a desk and a phone, for a save from `probe34` | `node ui23.cjs out/v62saves/SOVd-11-thinning.json 88-v62-sov-men early,hold` |
+| `ui24.cjs` | The arsenal's tooltips and the office picker on the card that starts a campaign | `node ui24.cjs out/v62saves/GERh-7-short.json 88-v62-ger` |
+
+Traps met on Version 62:
+
+- The small arsenal cards with a tooltip are `.rcard` in the province panel (Region tab). The Build tab's cards are `#pane [data-act="arsenal"]` and carry their text in the card, with no tooltip.
+- `wingtab.py` cannot read how a take directive ended on files with the card bracket: count those with `cardtab.py` or `kindtab.py`.
+- The scripted player does not do the cabinet's small jobs unless the plan says `"jobs":true`. Without it every build and agent directive is missed, so its cabinet falls far more often than a player's would.
+- Twenty-four Berlin wars are too few: seeds 1 to 24 read 22 held on Version 62 where 13 held on Version 61. Use sixty or more each way.
+- `"holdCallUp":"short:0.85"` never lets the call-up go in a losing war. That is the finding, not a fault of the habit.
+
+Results of the Version 62 test: `/mnt/project-files/playtest/results-v62/` (the 252-job queue at the top; `call-up`, `secure-and-jobs`, `berlin`, `stand-back`, `screens`, `saves`, `off-and-on.txt`).
