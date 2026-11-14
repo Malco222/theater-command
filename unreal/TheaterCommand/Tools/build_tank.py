@@ -449,7 +449,7 @@ def gather(parts, simple=False):
             if obj.name.split(".")[0] in ("periscope", "eye", "strap", "louvre", "lamp_foot", "can_cap", "coaxial", "bow_gun", "aerial",
                                           "aerial_foot", "hub", "idler_hub", "arm", "visor_slit", "lamp_glass", "pick_head", "pick_shaft",
                                           "shovel_shaft", "shovel_blade", "exhaust_pipe", "tow_cable", "spare_link", "toolbox_lid", "chute", "inner_wheel",
-                                          "hull_muzzle"):
+                                          "hull_muzzle", "slat", "door_line", "stake", "hoop", "bench", "spoke", "sight", "round", "handspike", "mg", "nave", "rim"):
                 continue
             graph.update()
         bm = bmesh.new()
@@ -482,6 +482,240 @@ def gather(parts, simple=False):
             triangles.extend(corners)
         bm.free()
     return {"points": points, "facings": facings, "paints": paints, "triangles": triangles}
+
+
+# ---- Lorries, half-tracks and guns ---------------------------------------------------------------
+
+def tyre_wheel(parts, x, y, r, wide, hub="paint", sides=14):
+    """A road wheel on a rubber tyre, with its hub."""
+    parts.append(drum("tyre", r, wide, (x, y, r), "rubber", sides, bevel=0.02))
+    parts.append(drum("rim", r * 0.6, wide + 0.02, (x, y, r), hub, 10))
+    parts.append(drum("hub", r * 0.2, wide + 0.08, (x, y, r), "shade", 8))
+
+
+def hooped_tilt(parts, x0, x1, half, foot, top):
+    """A canvas tilt over hoops: flat sides rounded over at the top."""
+    bm = bmesh.new()
+    rings = []
+    steps = 9
+    for x in (x0, x1):
+        ring = []
+        for k in range(steps + 1):
+            a = math.pi * k / steps                        # from one eave over the top to the other
+            y = -math.cos(a) * half
+            z = foot + (top - foot) * (0.55 + 0.45 * math.sin(a)) if 0 < k < steps else foot + (top - foot) * 0.55
+            ring.append(bm.verts.new((x, y, z)))
+        ring.insert(0, bm.verts.new((x, -half, foot)))
+        ring.append(bm.verts.new((x, half, foot)))
+        rings.append(ring)
+    count = len(rings[0])
+    for k in range(count - 1):
+        bm.faces.new((rings[0][k], rings[0][k + 1], rings[1][k + 1], rings[1][k]))
+    bm.faces.new(rings[0])
+    bm.faces.new(list(reversed(rings[1])))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    parts.append(make("tilt", bm, "canvas", 0.02))
+    for k in range(4):                                     # the hoops showing through as ridges
+        x = x0 + (x1 - x0) * (k + 0.5) / 4.0
+        parts.append(box("hoop", (0.05, half * 2.0 + 0.03, 0.03), (x, 0.0, top + 0.005), "canvas"))
+
+
+def build_truck(s):
+    """A lorry of about three tons: bonnet, cab, a planked load bed under a canvas tilt."""
+    parts = []
+    b = 0.02
+    front, rear, r = s["front_x"], s["rear_x"], s["wheel_r"]
+    for side in (-1.0, 1.0):
+        tyre_wheel(parts, front, side * 0.86, r, 0.22)
+        for x in s["rear_axles"]:
+            tyre_wheel(parts, x, side * 0.8, r, 0.42 if s["twin"] else 0.24)
+        # mudguards over the front wheels, with a lamp on each; the running board under the door
+        parts.append(box("guard", (0.95, 0.32, 0.05), (front, side * 0.86, r * 2.0 + 0.1), "shade", 0.015,
+                         shape=lambda p: Vector((p.x, p.y, p.z - (0.9 if abs(p.x) > 0.4 else 0.0)))))
+        parts.append(drum("lamp", 0.09, 0.12, (front + 0.5, side * 0.72, 1.1), "paint", 8, axis="X"))
+        parts.append(drum("lamp_glass", 0.075, 0.125, (front + 0.51, side * 0.72, 1.1), "glass", 8, axis="X"))
+        parts.append(box("board", (1.0, 0.24, 0.04), (0.8, side * 1.0, 0.62), "shade", 0.01))
+        parts.append(box("window", (0.6, 0.02, 0.36), (0.72, side * 0.96, 1.85), "glass"))
+        parts.append(box("door_line", (0.02, 0.02, 0.9), (1.2, side * 0.955, 1.25), "shade"))
+    # the frame, the axles and the bumper
+    parts.append(box("frame", (rear - 1.2 - (front + 0.9), 0.8, 0.14), ((rear - 1.2 + front + 0.9) * 0.5, 0.0, 0.62), "shade"))
+    parts.append(drum("axle", 0.05, 1.6, (front, 0.0, r), "shade", 6))
+    for x in s["rear_axles"]:
+        parts.append(drum("axle", 0.07, 1.4, (x, 0.0, r), "shade", 6))
+    parts.append(box("bumper", (0.08, 1.9, 0.14), (front + 1.0, 0.0, 0.66), "shade", 0.02))
+    # the bonnet with its radiator, and the cab with its windscreen
+    parts.append(box("bonnet", (1.55, 1.0, 0.82), (front + 0.12, 0.0, 1.16), "paint", b * 2.0,
+                     shape=lambda p: Vector((p.x, p.y * (0.86 if p.x > 0.0 else 1.0), p.z - (0.1 if p.x > 0.0 and p.z > 0.0 else 0.0)))))
+    parts.append(box("radiator", (0.04, 0.7, 0.6), (front + 0.91, 0.0, 1.12), "shade"))
+    for k in range(6):
+        parts.append(box("slat", (0.03, 0.04, 0.56), (front + 0.925, -0.3 + k * 0.12, 1.12), "paint"))
+    parts.append(box("cab", (1.1, 1.9, 1.42), (0.75, 0.0, 1.47), "paint", b * 2.0,
+                     shape=lambda p: Vector((p.x - (0.16 if p.x > 0.0 and p.z > 0.0 else 0.0), p.y, p.z))))
+    parts.append(box("windscreen", (0.03, 1.6, 0.44), (1.2, 0.0, 1.9), "glass", 0.0, turn=(0.0, -18.0, 0.0)))
+    parts.append(box("cab_roof", (1.0, 1.94, 0.05), (0.7, 0.0, 2.2), "canvas" if s["soft_cab"] else "shade", 0.015))
+    # the load bed with its planked sides, and the tilt
+    bed0, bed1 = 0.1, rear - 1.35
+    parts.append(box("bed", (bed0 - bed1, 2.16, 0.12), ((bed0 + bed1) * 0.5, 0.0, 0.96), "wood", 0.01))
+    for side in (-1.0, 1.0):
+        parts.append(box("bed_side", (bed0 - bed1, 0.05, 0.56), ((bed0 + bed1) * 0.5, side * 1.08, 1.26), "paint", 0.01))
+        for k in range(5):
+            parts.append(box("stake", (0.07, 0.03, 0.58), (bed0 - 0.3 - k * (bed0 - bed1 - 0.5) / 4.0, side * 1.11, 1.26), "shade"))
+    parts.append(box("tailboard", (0.05, 2.16, 0.56), (bed1, 0.0, 1.26), "paint", 0.01))
+    if s["tilt"]:
+        hooped_tilt(parts, bed1 + 0.03, bed0 - 0.03, 1.08, 1.5, 2.55)
+    # a spare wheel behind the cab, and a jerrycan
+    parts.append(drum("spare", r * 0.95, 0.2, (0.02, 0.0, 1.75), "rubber", 12, axis="X"))
+    parts.append(box("jerrycan", (0.33, 0.17, 0.44), (0.9, -1.04, 0.86), "shade", 0.02))
+    return parts
+
+
+def build_halftrack(s):
+    """An armoured half-track: steered wheels in front, a short track behind, an open fighting compartment."""
+    parts = []
+    b = 0.025
+    r = s["wheel_r"]
+    for side in (-1.0, 1.0):
+        tyre_wheel(parts, s["front_x"], side * 0.9, r, 0.24, hub="shade")
+        parts.append(box("front_guard", (1.0, 0.34, 0.05), (s["front_x"], side * 0.9, r * 2.0 + 0.1), "paint", 0.015,
+                         shape=lambda p: Vector((p.x, p.y, p.z - (1.2 if p.x > 0.35 else 0.0)))))
+        parts.append(drum("lamp", 0.08, 0.11, (s["front_x"] + 0.45, side * 0.62, 1.12), "paint", 8, axis="X"))
+        parts.append(drum("lamp_glass", 0.065, 0.115, (s["front_x"] + 0.46, side * 0.62, 1.12), "glass", 8, axis="X"))
+        # the track unit: a band round a sprocket, road wheels and an idler
+        unit = dict(SPEC)
+        unit.update({"wheels": s["track_wheels"], "wheel_r": s["track_wheel_r"], "wheel_first": s["track_first"], "wheel_step": s["track_step"],
+                     "rollers": (), "sprocket_x": s["track_first"] - 0.55 if not s["drive_front"] else s["track_first"] + s["track_step"] * (s["track_wheels"] - 1) + 0.55,
+                     "idler_x": s["track_first"] + s["track_step"] * (s["track_wheels"] - 1) + 0.55 if not s["drive_front"] else s["track_first"] - 0.55,
+                     "sprocket_z": s["track_wheel_r"] + 0.12, "idler_z": s["track_wheel_r"] + 0.08, "sprocket_r": s["track_wheel_r"] * 0.95,
+                     "idler_r": s["track_wheel_r"] * 0.9, "track_wide": 0.3, "track_out": 0.92})
+        parts.append(track("track", side, unit))
+        places = wheel_places(unit)
+        if s["interleaved"]:
+            for x in [(places[i] + places[i + 1]) * 0.5 for i in range(len(places) - 1)]:
+                parts.append(drum("inner_wheel", unit["wheel_r"], 0.14, (x, side * 0.8, unit["wheel_r"] + 0.05), "shade", 12))
+        for x in places:
+            parts.append(drum("tyre", unit["wheel_r"], 0.2, (x, side * 0.92, unit["wheel_r"] + 0.05), "rubber", 12))
+            parts.append(drum("wheel", unit["wheel_r"] * 0.7, 0.22, (x, side * 0.92, unit["wheel_r"] + 0.05), "paint", 10))
+        parts.append(drum("sprocket", unit["sprocket_r"], 0.24, (unit["sprocket_x"], side * 0.92, unit["sprocket_z"]), "shade", 12))
+        parts.append(drum("idler", unit["idler_r"], 0.22, (unit["idler_x"], side * 0.92, unit["idler_z"]), "shade", 12))
+        parts.append(box("track_guard", (s["body_long"] * 0.62, 0.36, 0.04), (s["body_x"] - s["body_long"] * 0.16, side * 0.94, 1.0), "paint", 0.012))
+    # the armoured body: a bonnet, and a compartment whose sides lean (out below the fold, in above it) or stand upright
+    lean = s["lean"]
+    parts.append(box("bonnet", (1.5, 1.3, 0.62), (s["front_x"] + 0.1, 0.0, 1.16), "paint", b,
+                     shape=lambda p: Vector((p.x, p.y * (0.72 if p.x > 0.0 else 1.0) * (lean if p.z > 0.0 else 1.0), p.z - (0.12 if p.x > 0.0 and p.z > 0.0 else 0.0)))))
+    parts.append(box("radiator", (0.04, 0.7, 0.4), (s["front_x"] + 0.86, 0.0, 1.1), "shade"))
+    long, half = s["body_long"], s["body_wide"] * 0.5
+    parts.append(box("lower", (long, s["body_wide"], 0.5), (s["body_x"], 0.0, 1.1), "paint", b,
+                     shape=lambda p: Vector((p.x, p.y * (1.0 if p.z > 0.0 else 2.0 - lean), p.z))))
+    parts.append(box("upper", (long, s["body_wide"], 0.6), (s["body_x"], 0.0, 1.65), "paint", b,
+                     shape=lambda p: Vector((p.x - (0.25 / long if p.x > 0.0 and p.z > 0.0 else 0.0), p.y * (lean if p.z > 0.0 else 1.0), p.z))))
+    parts.append(box("well", (long * 0.62, s["body_wide"] * lean - 0.16, 0.05), (s["body_x"] - long * 0.16, 0.0, 1.93), "shade"))
+    parts.append(box("visor", (0.04, 0.5, 0.16), (s["body_x"] + long * 0.5 - 0.12, -0.38, 1.7), "glass"))
+    parts.append(box("visor", (0.04, 0.5, 0.16), (s["body_x"] + long * 0.5 - 0.12, 0.38, 1.7), "glass"))
+    for k in range(3):                                      # the benches' backs seen in the open well
+        parts.append(box("bench", (long * 0.5, 0.06, 0.2), (s["body_x"] - long * 0.18, (k - 1) * 0.5, 1.86), "wood" if k != 1 else "shade"))
+    # a machine-gun on its shield at the front of the well, and one at the rear
+    parts.append(box("gun_shield", (0.04, 0.5, 0.3), (s["body_x"] + long * 0.2, 0.0, 2.12), "paint", 0.008))
+    parts.append(drum("mg", 0.022, 0.7, (s["body_x"] + long * 0.2 + 0.3, 0.0, 2.1), "steel", 5, axis="X"))
+    parts.append(box("rear_door", (0.04, 0.9, 0.9), (s["body_x"] - long * 0.5 - 0.01, 0.0, 1.45), "shade", 0.008))
+    if s["roller"]:
+        parts.append(drum("roller", 0.16, 1.1, (s["front_x"] + 1.05, 0.0, 0.62), "shade", 10))
+    for k in range(3):
+        parts.append(box("jerrycan", (0.17, 0.33, 0.44), (s["body_x"] - 0.3 - 0.2 * k, half + 0.06, 1.25), "shade" if k == 1 else "paint", 0.02))
+    parts.append(drum("aerial", 0.02, 1.0, (s["body_x"] + long * 0.3, -half * lean + 0.08, 2.45), "shade", 5, axis="Z"))
+    return parts
+
+
+def build_gun(s):
+    """A field gun on its carriage: wheels, a shield, the barrel in its cradle, and the trail behind."""
+    parts = []
+    r, half = s["wheel_r"], s["track"]
+    for side in (-1.0, 1.0):
+        if s["spoked"]:
+            parts.append(drum("felloe", r, 0.1, (0.0, side * half, r), "wood", 14))
+            parts.append(drum("iron_tyre", r + 0.012, 0.08, (0.0, side * half, r), "steel", 14))
+            parts.append(drum("nave", r * 0.2, 0.2, (0.0, side * half, r), "shade", 8))
+            for k in range(6):
+                a = math.pi * k / 6.0
+                parts.append(box("spoke", (r * 1.8, 0.03, 0.05), (0.0, side * (half + 0.06), r), "shade", 0.0, turn=(0.0, math.degrees(a), 0.0)))
+        else:
+            tyre_wheel(parts, 0.0, side * half, r, 0.22)
+    parts.append(drum("axle", 0.06, half * 2.0, (0.0, 0.0, r), "shade", 6))
+    # the saddle, and the cradle with the barrel raised a little
+    high, up = s["high"], math.radians(s["raised"])
+    parts.append(box("saddle", (0.5, 0.5, high - r), (0.0, 0.0, (high + r) * 0.5), "paint", 0.02))
+    def along(d, lift=0.0):
+        return (d * math.cos(up) - lift * math.sin(up), 0.0, high + d * math.sin(up) + lift * math.cos(up))
+    bore = s["bore"]
+    lean = -s["raised"]
+    def tube(name, radius, length, mid, paint, sides=10, lift=0.0, radius2=None):
+        bm = bmesh.new()
+        bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=sides, radius1=radius, radius2=radius if radius2 is None else radius2, depth=length)
+        place = Matrix.Translation(Vector(along(mid, lift))) @ Matrix.Rotation(math.radians(90.0) - up, 4, "Y")
+        bmesh.ops.transform(bm, matrix=place, verts=bm.verts)
+        parts.append(make(name, bm, paint))
+    tube("barrel", bore, s["ahead"] + s["behind"], (s["ahead"] - s["behind"]) * 0.5, "paint", 10, radius2=bore * 1.25)
+    tube("breech", bore * 2.1, 0.34, -s["behind"] + 0.05, "shade", 8)
+    tube("recoil", bore * 1.5, s["recoil"], s["recoil"] * 0.5 - 0.2, "paint", 8, lift=bore * 2.4 * (1.0 if s["above"] else -1.0))
+    tube("cradle", bore * 1.3, s["recoil"] * 0.8, s["recoil"] * 0.4 - 0.15, "shade", 6, lift=-bore * 1.3 if s["above"] else bore * 1.3)
+    if s["brake"]:
+        tube("brake", bore * 1.7, 0.3, s["ahead"] - 0.12, "shade", 8)
+    tube("muzzle", bore * 0.85, 0.06, s["ahead"] + 0.01, "steel", 8)
+    # the shield: two plates meeting at a fold, the upper leaning back, with a port for the barrel
+    foot, top, wide = s["shield_foot"], s["shield_top"], s["shield"]
+    for side in (-1.0, 1.0):
+        parts.append(box("shield", (0.03, wide - bore * 1.6, top - foot), (0.32, side * (wide + bore * 1.6) * 0.5, (top + foot) * 0.5), "paint", 0.008,
+                         shape=lambda p: Vector((p.x - (6.0 if p.z > 0.0 else 0.0), p.y, p.z))))
+    parts.append(box("shield_top", (0.03, bore * 3.2, (top - high) * 0.6), (0.2, 0.0, top - (top - high) * 0.3), "paint", 0.006))
+    # the trail: two legs spread behind, or one box trail; a spade at each end
+    legs = (-1.0, 1.0) if s["split"] else (0.0,)
+    for leg in legs:
+        spread = math.radians(16.0) * leg
+        length = s["trail"]
+        mid = Vector((-length * 0.5 * math.cos(spread), -length * 0.5 * math.sin(spread) + leg * 0.18, r * 0.62))
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=1.0)
+        for v in bm.verts:
+            v.co = Vector((v.co.x * length, v.co.y * (0.16 if s["split"] else 0.34), v.co.z * 0.16))
+        place = Matrix.Translation(mid) @ Matrix.Rotation(spread, 4, "Z") @ Matrix.Rotation(math.radians(-9.0), 4, "Y")
+        bmesh.ops.transform(bm, matrix=place, verts=bm.verts)
+        parts.append(make("trail", bm, "paint", 0.015))
+        end = Vector((-length * math.cos(spread), -length * math.sin(spread) + leg * 0.18, 0.12))
+        parts.append(box("spade", (0.06, 0.42 if s["split"] else 0.5, 0.3), (end.x, end.y, 0.15), "shade", 0.008))
+        parts.append(drum("handspike", 0.02, 0.5, (end.x + 0.25, end.y, 0.42), "wood", 5, axis="X"))
+    if s["platform"]:
+        # a round firing platform carried under the trail and laid under the wheels
+        parts.append(drum("platform", half + 0.35, 0.06, (0.0, 0.0, 0.03), "shade", 20, axis="Z"))
+    # the layer's seat, the sight, and a box of rounds beside the trail
+    parts.append(box("seat", (0.26, 0.26, 0.04), (-0.45, -half * 0.7, r + 0.25), "shade", 0.008))
+    parts.append(box("sight", (0.06, 0.06, 0.2), (0.1, -bore * 3.0, high + 0.22), "steel"))
+    parts.append(box("round_box", (0.5, 0.3, 0.24), (-1.0, half + 0.15, 0.12), "wood", 0.01))
+    for k in range(3):
+        parts.append(drum("round", bore * 0.95, 0.5, (-1.0, half - 0.25 - k * (bore * 2.2), bore), "steel", 8, axis="X", radius2=bore * 0.7))
+    return parts
+
+
+TRUCK = {"kind": "truck", "scale": 1.0, "front_x": 1.95, "rear_x": -1.55, "rear_axles": (-1.55,), "wheel_r": 0.43, "twin": True, "tilt": True, "soft_cab": False,
+         "cupola": False, "turret_high": 0.0}
+HALFTRACK = {"kind": "halftrack", "scale": 1.0, "front_x": 2.1, "wheel_r": 0.42, "track_wheels": 6, "track_wheel_r": 0.3, "track_first": -2.0, "track_step": 0.52,
+             "interleaved": True, "drive_front": True, "body_x": -0.75, "body_long": 4.0, "body_wide": 1.95, "lean": 0.8, "roller": False}
+GUN = {"kind": "gun", "scale": 1.0, "wheel_r": 0.55, "track": 0.85, "spoked": False, "ahead": 2.2, "behind": 0.65, "bore": 0.075, "high": 1.1, "raised": 9.0,
+       "brake": False, "above": False, "recoil": 1.3, "shield": 0.85, "shield_foot": 0.5, "shield_top": 1.6, "split": True, "trail": 2.8, "platform": False}
+
+OTHERS = {
+    # Lorries, half-tracks and guns, under the names the game knows them by.
+    "Truck": dict(TRUCK),
+    # An armoured half-track with leaning plates and interleaved wheels; and a boxy one with a roller at its nose.
+    "Hanomag": dict(HALFTRACK),
+    "M3Halftrack": dict(HALFTRACK, track_wheels=4, track_wheel_r=0.2, track_first=-1.75, track_step=0.42, interleaved=False, drive_front=True,
+                        lean=1.0, body_long=3.9, roller=True),
+    # A light field howitzer on a split trail; a gun-howitzer with a muzzle brake on a box trail and a firing platform;
+    # a short howitzer on a split trail; a long divisional gun; and an old field gun on spoked wheels.
+    "leFH18": dict(GUN, bore=0.085, ahead=2.0, recoil=1.5, above=False, shield=0.95),
+    "25pdr": dict(GUN, bore=0.07, ahead=1.9, brake=True, split=False, trail=2.6, platform=True, shield=1.0, shield_top=1.55, above=False, wheel_r=0.46),
+    "Howitzer105": dict(GUN, bore=0.085, ahead=1.75, above=True, recoil=1.2, shield=0.75, shield_top=1.45, wheel_r=0.5, track=0.95),
+    "ZiS3": dict(GUN, bore=0.06, ahead=2.9, brake=True, above=False, recoil=1.5, shield=0.8, shield_foot=0.42, shield_top=1.4, high=0.98, wheel_r=0.46),
+    "Gun75": dict(GUN, bore=0.06, ahead=2.2, spoked=True, split=False, trail=2.5, wheel_r=0.66, shield=0.75, shield_top=1.5, high=1.15, above=False),
+}
 
 
 def marks_of(s):
@@ -517,9 +751,10 @@ def marks_of(s):
 
 
 def write(name, title, s, out):
-    """Sculpts one tank and writes it out."""
+    """Sculpts one model and writes it out."""
     fresh_scene()
-    parts = build(s)
+    kind = s.get("kind", "tank")
+    parts = build_truck(s) if kind == "truck" else build_halftrack(s) if kind == "halftrack" else build_gun(s) if kind == "gun" else build(s)
     near = gather(parts)
     far = gather(parts, simple=True)
     k = s["scale"]
@@ -527,12 +762,27 @@ def write(name, title, s, out):
         for mesh in (near, far):
             mesh["points"] = [round(v * k, 4) for v in mesh["points"]]
     low = min(near["points"][2::3])
+    high = round(max(near["points"][2::3]) - low, 3)
+    if kind == "tank":
+        marks = marks_of(s)
+    elif kind == "truck":
+        # the nation's mark on each door of the cab; no number
+        marks = {"cross": [0.72 * k, 0.975 * k, 1.3 * k, 0.16 * k, 0.0], "roof": round(2.25 * k, 3)}
+    elif kind == "halftrack":
+        half = s["body_wide"] * 0.5
+        marks = {"cross": [round((s["body_x"] + 0.5) * k, 3), round((half * (1.0 + s["lean"]) * 0.5 + 0.02) * k, 3), round(1.65 * k, 3), 0.17 * k,
+                           round(half * (1.0 - s["lean"]) / 0.6, 3)],
+                 "number": [round((s["body_x"] - 0.9) * k, 3), round((half * (1.0 + s["lean"]) * 0.5 + 0.02) * k, 3), round(1.65 * k, 3), 0.22 * k,
+                            round(half * (1.0 - s["lean"]) / 0.6, 3)],
+                 "roof": round(2.0 * k, 3)}
+    else:
+        marks = {"roof": high}                              # a gun carries no markings
     data = {
         "name": title,
         "about": "Made by Tools/build_tank.py. Metres; x forward, y right, z up. Paints: " + ", ".join(f"{v} {k}" for k, v in PAINTS.items()),
         "long": round(max(near["points"][0::3]) - min(near["points"][0::3]), 3),
-        "high": round(max(near["points"][2::3]) - low, 3),
-        "marks": marks_of(s),
+        "high": high,
+        "marks": marks,
         "near": near,
         "far": far,
     }
@@ -546,9 +796,16 @@ def main():
     rest = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
     if "--all" in rest:
         folder = rest[rest.index("--all") + 1]
+        only = rest[rest.index("--only") + 1].split(",") if "--only" in rest else None
         for name, changes in VARIANTS.items():
+            if only and name not in only:
+                continue
             spec = dict(SPEC)
             spec.update(changes)
+            write(name, name + " (our own design)", spec, folder.rstrip("/") + "/" + name + ".json")
+        for name, spec in OTHERS.items():
+            if only and name not in only:
+                continue
             write(name, name + " (our own design)", spec, folder.rstrip("/") + "/" + name + ".json")
         return
     out = rest[rest.index("--out") + 1] if "--out" in rest else "TrialTank.json"

@@ -536,7 +536,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		TArray<int32> Paints, Triangles;
 		// (where the model's maker says its markings go, on the right-hand side, and how high its roof is: a model
 		// that does not say is marked by its outline)
-		bool bMarks = false;
+		bool bMarks = false, bCross = false, bNumber = false; // (a lorry carries its nation's mark and no number; a gun carries neither)
 		FVector Cross = FVector::ZeroVector, Number = FVector::ZeroVector;
 		double CrossSize = 0.2, NumberHigh = 0.26, Roof = 0.0;
 		double CrossLean = 0.13, NumberLean = 0.16; // (how far the plate each lies on leans back)
@@ -574,18 +574,25 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 					Raw->Triangles.Add(static_cast<int32>(Value->AsNumber()));
 				}
 				const TSharedPtr<FJsonObject>* Marks = nullptr;
-				const TArray<TSharedPtr<FJsonValue>> *CrossAt = nullptr, *NumberAt = nullptr;
-				if (File->TryGetObjectField(TEXT("marks"), Marks) && (*Marks)->TryGetArrayField(TEXT("cross"), CrossAt) && (*Marks)->TryGetArrayField(TEXT("number"), NumberAt)
-					&& CrossAt->Num() >= 4 && NumberAt->Num() >= 4)
+				if (File->TryGetObjectField(TEXT("marks"), Marks))
 				{
 					// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
 					Raw->bMarks = true;
-					Raw->Cross = FVector(-(*CrossAt)[0]->AsNumber(), (*CrossAt)[1]->AsNumber(), (*CrossAt)[2]->AsNumber());
-					Raw->CrossSize = (*CrossAt)[3]->AsNumber();
-					Raw->Number = FVector(-(*NumberAt)[0]->AsNumber(), (*NumberAt)[1]->AsNumber(), (*NumberAt)[2]->AsNumber());
-					Raw->NumberHigh = (*NumberAt)[3]->AsNumber();
-					if (CrossAt->Num() >= 5) { Raw->CrossLean = (*CrossAt)[4]->AsNumber(); }
-					if (NumberAt->Num() >= 5) { Raw->NumberLean = (*NumberAt)[4]->AsNumber(); }
+					const TArray<TSharedPtr<FJsonValue>> *CrossAt = nullptr, *NumberAt = nullptr;
+					if ((*Marks)->TryGetArrayField(TEXT("cross"), CrossAt) && CrossAt->Num() >= 4)
+					{
+						Raw->bCross = true;
+						Raw->Cross = FVector(-(*CrossAt)[0]->AsNumber(), (*CrossAt)[1]->AsNumber(), (*CrossAt)[2]->AsNumber());
+						Raw->CrossSize = (*CrossAt)[3]->AsNumber();
+						if (CrossAt->Num() >= 5) { Raw->CrossLean = (*CrossAt)[4]->AsNumber(); }
+					}
+					if ((*Marks)->TryGetArrayField(TEXT("number"), NumberAt) && NumberAt->Num() >= 4)
+					{
+						Raw->bNumber = true;
+						Raw->Number = FVector(-(*NumberAt)[0]->AsNumber(), (*NumberAt)[1]->AsNumber(), (*NumberAt)[2]->AsNumber());
+						Raw->NumberHigh = (*NumberAt)[3]->AsNumber();
+						if (NumberAt->Num() >= 5) { Raw->NumberLean = (*NumberAt)[4]->AsNumber(); }
+					}
 					(*Marks)->TryGetNumberField(TEXT("roof"), Raw->Roof);
 				}
 				UE_LOG(LogTheater, Log, TEXT("Sculpted model %s read: %d points, %d triangles"), *Which, Raw->Points.Num(), Raw->Triangles.Num() / 3);
@@ -641,8 +648,14 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				if (Raw->bMarks)
 				{
 					// (where the model's maker put them: the mark on the turret's side, the number on the hull's)
-					Fresh.Marking(FVector(Raw->Cross.X, Hand * Raw->Cross.Y, Raw->Cross.Z), Raw->CrossSize, Mark, FVector(0.0, Hand, Raw->CrossLean));
-					Fresh.Numerals(FVector(Raw->Number.X, Hand * Raw->Number.Y, Raw->Number.Z), Raw->NumberHigh, Number, FVector(0.0, Hand, Raw->NumberLean));
+					if (Raw->bCross)
+					{
+						Fresh.Marking(FVector(Raw->Cross.X, Hand * Raw->Cross.Y, Raw->Cross.Z), Raw->CrossSize, Mark, FVector(0.0, Hand, Raw->CrossLean));
+					}
+					if (Raw->bNumber)
+					{
+						Fresh.Numerals(FVector(Raw->Number.X, Hand * Raw->Number.Y, Raw->Number.Z), Raw->NumberHigh, Number, FVector(0.0, Hand, Raw->NumberLean));
+					}
 				}
 				else
 				{
