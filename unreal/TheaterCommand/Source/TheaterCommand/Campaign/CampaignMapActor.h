@@ -456,6 +456,7 @@ private:
 	UPROPERTY()
 	TObjectPtr<UTexture2D> MiniTexture;
 	TArray<int16> MiniRegion; // the province under each point of the small map, or -1 for the sea
+	TArray<uint8> MiniShade; // how the ground there takes the light (160 is level ground), or for the sea how deep it is
 	int32 MiniWide = 0, MiniHigh = 0;
 	bool bMiniStale = true;
 	TArray<FIntVector4> ShownBuildings;

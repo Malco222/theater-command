@@ -112,6 +112,17 @@ void AArmyPiece::DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	Rebuild(Map, Nation);
 }
 
+bool AArmyPiece::GetColours(FVector& OutMiddle, double& OutRadius) const
+{
+	if (IsHidden() || !Cloth || !Cloth->IsVisible())
+	{
+		return false;
+	}
+	OutMiddle = Cloth->Bounds.Origin;
+	OutRadius = Cloth->Bounds.SphereRadius;
+	return OutRadius > 0.0;
+}
+
 FVector AArmyPiece::GetCampFire() const
 {
 	// (as it is placed when the piece is built: forward-left of the tents, on the viewer's right of the base)

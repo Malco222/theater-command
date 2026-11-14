@@ -2930,15 +2930,34 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 	}
 	if (MiniRegion.Num() == 0)
 	{
-		// Which province lies under each point: worked out once, since the provinces do not move.
-		MiniHigh = 264;
+		// Which province lies under each point, and how the ground there takes the light: worked out once, since
+		// neither the provinces nor the hills move. (Twice the size it is drawn at, so that it is crisp on a fine screen.)
+		MiniHigh = 472;
 		MiniWide = FMath::Max(8, FMath::RoundToInt32(MiniHigh * Data.Width / Data.Height));
 		MiniRegion.SetNumUninitialized(MiniWide * MiniHigh);
+		MiniShade.SetNumUninitialized(MiniWide * MiniHigh);
+		const double StepX = Data.Width / MiniWide, StepY = Data.Height / MiniHigh;
 		for (int32 Y = 0; Y < MiniHigh; ++Y)
 		{
 			for (int32 X = 0; X < MiniWide; ++X)
 			{
-				MiniRegion[Y * MiniWide + X] = static_cast<int16>(Data.FindRegionAt((X + 0.5) * Data.Width / MiniWide, (Y + 0.5) * Data.Height / MiniHigh));
+				const double MapX = (X + 0.5) * StepX, MapY = (Y + 0.5) * StepY;
+				const int32 Here = Data.FindRegionAt(MapX, MapY);
+				MiniRegion[Y * MiniWide + X] = static_cast<int16>(Here);
+				const float Metres = Terrain.MetresAt(MapX, MapY);
+				if (Here >= 0)
+				{
+					// Lit from the north-west like the table: a slope that faces the light is paler, one that
+					// faces away darker, and the high ground a little darker all over.
+					const float Slope = FMath::Max(Metres, 0.0f) - FMath::Max(Terrain.MetresAt(MapX - StepX * 1.5, MapY - StepY * 1.5), 0.0f);
+					const float Light = 1.0f + FMath::Clamp(Slope / 520.0f, -0.3f, 0.24f) - 0.1f * FMath::Clamp(Metres / 2200.0f, 0.0f, 1.0f);
+					MiniShade[Y * MiniWide + X] = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Light * 160.0f), 0, 255));
+				}
+				else
+				{
+					// The sea: how deep it is, from the shelf to the abyss.
+					MiniShade[Y * MiniWide + X] = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(-Metres / 2600.0f * 255.0f), 0, 255));
+				}
 			}
 		}
 		bMiniStale = true;
@@ -2950,55 +2969,70 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 	bMiniStale = false;
 	TArray<FColor> Pixels;
 	Pixels.SetNumUninitialized(MiniWide * MiniHigh);
-	const FColor Water(22, 52, 74), Shore(12, 28, 40);
 	auto At = [this](int32 X, int32 Y) -> int32
 	{
 		return (X < 0 || Y < 0 || X >= MiniWide || Y >= MiniHigh) ? -1 : MiniRegion[Y * MiniWide + X];
 	};
-	auto HolderOf = [this](int32 RegionId) -> const FString&
+	// Each province's colour, once: its holder's colour as a stain over the paper of the map (as on the table:
+	// the ground shows through it), or the colour of the view that is asked for.
+	const FLinearColor Ground(0.3f, 0.3f, 0.2f);
+	TArray<FLinearColor> Tints;
+	TArray<int32> Holders; // (a number for each holder, so that two provinces' holders are compared without their names)
+	Tints.SetNumUninitialized(Data.Regions.Num());
+	Holders.SetNumUninitialized(Data.Regions.Num());
 	{
-		static const FString None;
-		return Data.Regions.IsValidIndex(RegionId) ? Data.Regions[RegionId].Owner : None;
-	};
+		TMap<FString, int32> Numbers;
+		for (int32 Id = 0; Id < Data.Regions.Num(); ++Id)
+		{
+			const FString& Holder = Data.Regions[Id].Owner;
+			Holders[Id] = Numbers.FindOrAdd(Holder, Numbers.Num());
+			const FCampaignNation* Nation = Data.FindNation(Holder);
+			FLinearColor Tint = FMath::Lerp(Ground, Nation ? FLinearColor(Nation->Color) : FLinearColor(0.35f, 0.35f, 0.33f), 0.74f);
+			if (bSides && SideOf.IsValidIndex(Id))
+			{
+				// The friend-and-foe view: the player's own ground green, his allies' blue, his enemies' red, the rest grey.
+				const FString& Side = SideOf[Id];
+				Tint = Side == TEXT("own") ? FLinearColor(0.2f, 0.62f, 0.3f) : Side == TEXT("ally") ? FLinearColor(0.16f, 0.4f, 0.85f)
+					: Side == TEXT("enemy") ? FLinearColor(0.8f, 0.1f, 0.08f) : FLinearColor(0.3f, 0.3f, 0.29f);
+			}
+			else if (bWealth && Towns.IsValidIndex(Id))
+			{
+				// The wealth view: grey ground, gold by what the province pays.
+				static const float Gold[6] = { 0.0f, 0.22f, 0.4f, 0.6f, 0.8f, 1.0f };
+				const float Rich = Gold[FMath::Clamp(Towns[Id].Rank, 0, 5)];
+				Tint = FMath::Lerp(FLinearColor(0.16f, 0.16f, 0.15f), FLinearColor(1.0f, 0.74f, 0.1f), Rich);
+			}
+			if (UnseenSet.Contains(Id))
+			{
+				Tint *= 0.55f; // under the fog of war
+			}
+			Tints[Id] = Tint;
+		}
+	}
+	const FLinearColor Shelf(0.016f, 0.15f, 0.2f), Deep(0.004f, 0.035f, 0.1f), Surf(0.0f, 0.02f, 0.035f);
 	for (int32 Y = 0; Y < MiniHigh; ++Y)
 	{
 		for (int32 X = 0; X < MiniWide; ++X)
 		{
 			const int32 Here = At(X, Y);
 			FColor& Out = Pixels[Y * MiniWide + X];
+			const float Shade = MiniShade[Y * MiniWide + X];
 			if (Here < 0)
 			{
-				// The sea, darker along the shore so that the land stands out of it.
+				// The sea, paler on the shelf and dark in the deeps, with a dark line along the shore so that the
+				// land stands out of it.
 				const bool bCoast = At(X + 1, Y) >= 0 || At(X - 1, Y) >= 0 || At(X, Y + 1) >= 0 || At(X, Y - 1) >= 0;
-				Out = bCoast ? Shore : Water;
+				FLinearColor Water = bCoast ? Surf : FMath::Lerp(Shelf, Deep, FMath::Clamp(Shade / 255.0f, 0.0f, 1.0f));
+				Water.A = 1.0f;
+				Out = Water.ToFColor(true);
 				continue;
 			}
-			const FString& Holder = HolderOf(Here);
-			const FCampaignNation* Nation = Data.FindNation(Holder);
-			FLinearColor Tint = Nation ? FLinearColor(Nation->Color) : FLinearColor(0.35f, 0.35f, 0.33f);
-			if (bSides && SideOf.IsValidIndex(Here))
-			{
-				// The friend-and-foe view: the player's own ground green, his allies' blue, his enemies' red, the rest grey.
-				const FString& Side = SideOf[Here];
-				Tint = Side == TEXT("own") ? FLinearColor(0.2f, 0.62f, 0.3f) : Side == TEXT("ally") ? FLinearColor(0.16f, 0.4f, 0.85f)
-					: Side == TEXT("enemy") ? FLinearColor(0.8f, 0.1f, 0.08f) : FLinearColor(0.3f, 0.3f, 0.29f);
-			}
-			else if (bWealth && Towns.IsValidIndex(Here))
-			{
-				// The wealth view: grey ground, gold by what the province pays.
-				static const float Gold[6] = { 0.0f, 0.22f, 0.4f, 0.6f, 0.8f, 1.0f };
-				const float Rich = Gold[FMath::Clamp(Towns[Here].Rank, 0, 5)];
-				Tint = FMath::Lerp(FLinearColor(0.16f, 0.16f, 0.15f), FLinearColor(1.0f, 0.74f, 0.1f), Rich);
-			}
-			if (UnseenSet.Contains(Here))
-			{
-				Tint *= 0.55f; // under the fog of war
-			}
+			FLinearColor Tint = Tints[Here] * (Shade / 160.0f);
 			// A frontier between two countries is drawn dark; a province line inside one is not drawn at all.
 			const int32 East = At(X + 1, Y), South = At(X, Y + 1);
-			if ((East >= 0 && HolderOf(East) != Holder) || (South >= 0 && HolderOf(South) != Holder))
+			if ((East >= 0 && Holders[East] != Holders[Here]) || (South >= 0 && Holders[South] != Holders[Here]))
 			{
-				Tint *= 0.45f;
+				Tint *= 0.4f;
 			}
 			Tint.A = 1.0f;
 			Out = Tint.ToFColor(true);
@@ -4708,7 +4742,7 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 		const FLinearColor Ink = Lane.State.EndsWith(TEXT("cut")) ? FLinearColor(0.95f, 0.14f, 0.1f, 0.62f)
 			: Lane.State.EndsWith(TEXT("raided")) ? FLinearColor(1.0f, 0.68f, 0.14f, 0.58f)
 			: bTrade ? FLinearColor(0.2f, 0.135f, 0.07f, 0.78f)
-			: FLinearColor(0.86f, 0.93f, 1.0f, 0.42f); // (the ink of the lanes is laid on at its own strength now, not brightened: a little more of it)
+			: FLinearColor(0.86f, 0.93f, 1.0f, 0.5f); // (a sea lane is ruled like a trade route, a fine dotted line in pale ink: no chalk bars on the water)
 		const FLinearColor TradeAtSea(0.9f, 0.84f, 0.66f, 0.42f);
 		// The lane as a smooth curve through its points, a step every map unit or so.
 		TArray<FVector2D> Curve;
@@ -4725,7 +4759,7 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 		}
 		Curve.Add(Lane.Path.Last());
 		// Drawn as dashes, like a course pencilled on a chart; only over the water.
-		const int32 Dash = bTrade ? 1 : 4, Gap = bTrade ? 2 : 3;
+		const int32 Dash = 1, Gap = 2;
 		TArray<TArray<FVector2D>> Strokes;
 		TArray<bool> StrokeWet;
 		for (int32 First = 0; First + 1 < Curve.Num(); First += Dash + Gap)
@@ -4750,7 +4784,7 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 			{
 				const bool bOpenTrade = bTrade && Lane.State == TEXT("trade");
 				const FLinearColor Colour = bOpenTrade && StrokeWet[Index] ? TradeAtSea : Ink;
-				AppendRibbon(Buffers, Strokes[Index], Lane.State == TEXT("open") ? 0.55 : bTrade ? 0.24 : 0.75, bTrade ? 0.3 : 0.12, Colour.ToFColor(false), false);
+				AppendRibbon(Buffers, Strokes[Index], bTrade ? 0.24 : 0.3, bTrade ? 0.3 : 0.12, Colour.ToFColor(false), false);
 			}
 		}
 	}

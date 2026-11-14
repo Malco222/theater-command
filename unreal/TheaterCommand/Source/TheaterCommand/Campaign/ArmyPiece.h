@@ -74,6 +74,8 @@ public:
 	void DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 Works, bool bInCamp, int32 Supply);
 	/** Where its camp fire burns, in the world, for the smoke that rises from it. */
 	FVector GetCampFire() const;
+	/** Its colours, as a ball in the world: what a town's name plate must not be drawn across. False while the piece is hidden. */
+	bool GetColours(FVector& OutMiddle, double& OutRadius) const;
 
 	/** A picked-up piece shows a bright ring under its base and is held a little off the table. */
 	void SetSelected(bool bInSelected);

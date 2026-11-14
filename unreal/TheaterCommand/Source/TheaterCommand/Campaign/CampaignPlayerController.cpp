@@ -337,8 +337,8 @@ void ACampaignPlayerController::SaveOptions() const
 		bLampSaved = Room && Room->IsLamplight();
 	}
 	const FString Text = FString::Printf(
-		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s}\n"),
-		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved));
+		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s}\n"),
+		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen));
 	FFileHelper::SaveStringToFile(Text, *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
@@ -378,6 +378,7 @@ void ACampaignPlayerController::LoadOptions()
 	bWatchAll = Yes(TEXT("watchAll"), true);
 	bEdgeScroll = Yes(TEXT("edge"), true);
 	bBriefings = Yes(TEXT("briefing"), true);
+	bHelpSeen = Yes(TEXT("helped"), false);
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -1394,6 +1395,31 @@ void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 			Letter.Up = ScreenUp - Screen;
 			Letter.Alpha = Alpha;
 			Letter.bSea = Word.bSea;
+		}
+	}
+}
+
+void ACampaignPlayerController::GetColoursOnScreen(TArray<FBox2D>& Out) const
+{
+	Out.Reset();
+	if (!Map.IsValid() || !PlayerCameraManager || Opening.bVisible || Newsreel.bOn)
+	{
+		return;
+	}
+	int32 Width = 0, Height = 0;
+	GetViewportSize(Width, Height);
+	const FVector Up = PlayerCameraManager->GetCameraRotation().Quaternion().GetUpVector();
+	for (const TObjectPtr<AArmyPiece>& Piece : Map->GetPieces())
+	{
+		FVector Middle;
+		double Radius = 0.0;
+		FVector2D At, Top;
+		if (Piece && Piece->GetColours(Middle, Radius) && ProjectWorldLocationToScreen(Middle, At, false) && ProjectWorldLocationToScreen(Middle + Up * Radius, Top, false)
+			&& At.X > -60.0 && At.X < Width + 60.0 && At.Y > -60.0 && At.Y < Height + 60.0)
+		{
+			// (the cloth, and the strength plate that hangs under it)
+			const double Half = FMath::Clamp(FVector2D::Distance(At, Top) * 0.8, 6.0, 90.0);
+			Out.Add(FBox2D(At - FVector2D(Half, Half * 0.75), At + FVector2D(Half, Half * 1.35)));
 		}
 	}
 }
@@ -3499,6 +3525,26 @@ UTexture2D* ACampaignPlayerController::GetMinimapTexture() const
 	return Map.IsValid() ? Map->GetMinimap() : nullptr;
 }
 
+bool ACampaignPlayerController::IsHelpShown() const
+{
+	// (a run that takes pictures shows the frame as a player who knows the game sees it, unless told otherwise)
+	static const bool bPictures = FParse::Param(FCommandLine::Get(), TEXT("TheaterHelp")) ? false : FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr;
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterHelp"));
+	return bHelpPinned || bAsked || (!bHelpSeen && !bPictures) || IsInputKeyDown(EKeys::Slash);
+}
+
+void ACampaignPlayerController::ToggleHelp()
+{
+	// Open, it is folded away, and the first month's showing with it; folded, it is kept open.
+	const bool bOpen = bHelpPinned || !bHelpSeen;
+	bHelpPinned = !bOpen;
+	if (!bHelpSeen)
+	{
+		bHelpSeen = true;
+		SaveOptions();
+	}
+}
+
 bool ACampaignPlayerController::IsMapShown() const
 {
 	return GetSession() != nullptr && Map.IsValid() && !Opening.bVisible && !Newsreel.bOn;
@@ -5129,6 +5175,11 @@ void ACampaignPlayerController::EndMonth()
 		WatchStood.Add(Unit.Id, Unit.Region);
 	}
 	Month = Session->EndMonth();
+	if (!bHelpSeen)
+	{
+		bHelpSeen = true; // a month has been played: the reminder of the keys folds away into its mark
+		SaveOptions();
+	}
 	WatchIndex = 0;
 	if (const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 	{

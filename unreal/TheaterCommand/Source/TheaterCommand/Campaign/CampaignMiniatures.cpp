@@ -1393,7 +1393,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	auto RoofPaint = [&]() { return FLinearColor(FColor::FromHex(RoofsOf[Look][Dice.RandRange(0, 4)])); };
 	const FLinearColor Ashlar(FColor::FromHex(TEXT("D9D2C0"))), Verdigris(FColor::FromHex(TEXT("6FA08C"))), RedBrick(FColor::FromHex(TEXT("7A5547")));
 	const FLinearColor Sooty(FColor::FromHex(TEXT("3B3532"))), LeadGrey(FColor::FromHex(TEXT("5E5A58"))), Cobbles(FColor::FromHex(TEXT("8F887A")));
-	const FLinearColor Gilding(FColor::FromHex(TEXT("C9A227"))), Paving(FColor::FromHex(TEXT("A39B8A"))), Lawn(FColor::FromHex(TEXT("46553A")));
+	const FLinearColor Gilding(FColor::FromHex(TEXT("C9A227"))), Paving(FColor::FromHex(TEXT("7C766A"))), Lawn(FColor::FromHex(TEXT("46553A")));
 	const FLinearColor LeafDark(FColor::FromHex(TEXT("4F6B3A"))), LeafPale(FColor::FromHex(TEXT("668249"))), Glazing(FColor::FromHex(TEXT("6E7C80")));
 	const FLinearColor TowerWhite(FColor::FromHex(TEXT("EFE9DC"))), Ochre(FColor::FromHex(TEXT("B9A27E"))), Rust(FColor::FromHex(TEXT("8A3B2A")));
 
@@ -1838,7 +1838,24 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			const double Weight = K == 3 && Site.Factories > 0 ? 1.0 : (K == 1 ? 0.75 : 0.5);
 			Star = FMath::Max(Star, Weight * FMath::Exp(-FMath::Square(FRotator::NormalizeAxis(Bearing - (Yaw0 + 90.0 * K)) / 15.0)));
 		}
-		return Reach * (0.64 + 0.5 * Star);
+		// (a capital has a second ring of terraces between its arms, and its arms run a little further)
+		const double Out = Reach * (bCapital ? 0.78 + 0.44 * Star : 0.64 + 0.5 * Star);
+		// (the armies of the province stand to the north of its town, clear of its roofs: on that side no arm
+		// runs out past the town's own measure to meet them)
+		return FMath::Abs(FRotator::NormalizeAxis(Bearing - 15.0)) < 50.0 ? FMath::Min(Out, Reach * 1.06) : Out;
+	};
+	// The square is not all open ground: about a third of it is given to blocks. Before a capital's landmark the
+	// near half of the square is only as wide as the avenue's two blocks, with a block standing in each outer
+	// corner (where the landmark is not one that fills the square itself); and in a city a block stands in the
+	// corner of the square beside its great church.
+	const bool bLandmarkFills = Site.Landmark == 2 || Site.Landmark == 6 || Site.Landmark == 7;
+	auto BuiltInSquare = [&](double A, double B)
+	{
+		if (bPacked)
+		{
+			return false;
+		}
+		return bCapital ? (!bLandmarkFills && A < 0.0 && FMath::Abs(B) > PitchB) : (A > 0.0 && B > 0.0);
 	};
 	auto InSquare = [&](double A, double B) { return FMath::Abs(A) < SquareHalfA && FMath::Abs(B) < SquareHalfB; };
 	// (In a packed capital the square is left open on the side the eye looks from, a forecourt one block deep, so
@@ -1850,7 +1867,22 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	// The square, its two avenues, and what stands in it.
 	Street(-ReachAt(Yaw0 + 180.0) + 0.3 * Um, 0.0, ReachAt(Yaw0) - 0.3 * Um, 0.0, 0.3);
 	Street(0.0, -ReachAt(Yaw0 + 270.0) + 0.3 * Um, 0.0, ReachAt(Yaw0 + 90.0) - 0.3 * Um, 0.3);
-	Box(Stand(0.0, 0.0, 0.0), FVector(SquareDeep * PitchA * PerMap * 1.02, SquareWide * PitchB * PerMap * 1.02, 0.22 * U), Paving, Yaw0);
+	{
+		// (paved a block at a time, all at the height of its middle, leaving out the corners that are built on)
+		const FVector Mid = Stand(0.0, 0.0, 0.0);
+		for (int32 J = -SquareWide / 2; J < SquareWide / 2; ++J)
+		{
+			for (int32 I = -SquareDeep / 2; I < SquareDeep / 2; ++I)
+			{
+				const double A = (I + 0.5) * PitchA, B = (J + 0.5) * PitchB;
+				if (!BuiltInSquare(A, B))
+				{
+					const FVector At = Stand(A, B, 0.0);
+					Box(FVector(At.X, At.Y, Mid.Z), FVector(PitchA * PerMap * 1.02, PitchB * PerMap * 1.02, 0.22 * U), Paving, Yaw0);
+				}
+			}
+		}
+	}
 	if (bPacked && bCapital)
 	{
 		Box(Stand(-SquareHalfA - 0.5 * PitchA, 0.0, 0.0), FVector(PitchA * PerMap * 1.02, SquareWide * PitchB * PerMap * 1.02, 0.2 * U), Paving, Yaw0);
@@ -1926,7 +1958,8 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		for (int32 I = -Span; I < Span; ++I)
 		{
 			const double A = (I + 0.5) * PitchA, B = (J + 0.5) * PitchB;
-			if (InSquare(A, B) || InForecourt(A, B))
+			const bool bSquareCorner = InSquare(A, B) && BuiltInSquare(A, B);
+			if ((InSquare(A, B) && !bSquareCorner) || InForecourt(A, B))
 			{
 				continue; // the square
 			}
@@ -1969,7 +2002,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			const bool bTurned = ((((I >> 1) * 73856093) ^ ((J >> 1) * 19349663) ^ (Site.Seed * 83492791)) & 4) != 0;
 			// (A town packed into a small province is built tight and tall: closed blocks round its square, half as
 			// tall again, and tall terraces to its edge, with no parks and no houses standing apart.)
-			const bool bClosed = bPacked ? (FMath::Abs(A) < SquareHalfA + PitchA && FMath::Abs(B) < SquareHalfB + PitchB) : (Ring < Heart && Local < 0.86);
+			const bool bClosed = bSquareCorner || (bPacked ? (FMath::Abs(A) < SquareHalfA + PitchA && FMath::Abs(B) < SquareHalfB + PitchB) : (Ring < Heart && Local < 0.86));
 			const double Storeys = bPacked ? 1.3 : 1.0;
 			if (bClosed)
 			{
@@ -1985,7 +2018,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 					Bright.Add(MapAt(A, B));
 				}
 			}
-			else if (bPacked || Local < 0.8)
+			else if (bPacked || Local < (bCapital ? 0.88 : 0.8))
 			{
 				if (!bPacked && Dice.FRand() < 0.08f)
 				{

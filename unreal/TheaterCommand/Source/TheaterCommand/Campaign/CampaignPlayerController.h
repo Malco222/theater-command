@@ -492,6 +492,12 @@ public:
 	/** The town's plots as a bar of pictures; whether it is to be shown; a click on a plot; and an order from its choices. */
 	const FTownBar& GetTownBar() const { return TownBar; }
 	bool IsTownBarShown() const;
+	/** Where the armies' colours and their strength plates are on the screen, in its own pixels: the towns' name plates step aside from them. */
+	void GetColoursOnScreen(TArray<FBox2D>& Out) const;
+	/** Whether the reminder of the keys stands open: through a new player's first month, while the ? key is held, or kept open by a click on its mark. */
+	bool IsHelpShown() const;
+	/** A click on the mark: keep the reminder open, or fold it away (and with it the first month's showing). */
+	void ToggleHelp();
 	void PickTownPlot(int32 Index);
 	void OrderTownBuilding(const FString& Line);
 	/** The small map in the corner: its picture, the marks on it, and a jump to a place on it. */
@@ -760,6 +766,8 @@ private:
 	bool bOptionsRead = false;
 	bool bNarrator = true; // the voice that reads the newsreels
 	bool bBriefings = true; // the opening flight when a campaign begins, and the title card of each year
+	bool bHelpSeen = false; // the player has ended a month, or folded the keys away: they are not shown unasked again
+	bool bHelpPinned = false; // the reminder of the keys is kept open by a click on its mark
 	bool bFreshCampaign = false; // a campaign has just been begun, not continued
 	FYearCard LastYear; // the last year's card, to show again
 	// What an army answers as it is picked up, in its own language, for a moment.
