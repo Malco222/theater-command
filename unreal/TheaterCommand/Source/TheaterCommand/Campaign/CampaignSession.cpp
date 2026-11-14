@@ -937,11 +937,51 @@ TArray<FCorpsMove> FCampaignSession::Move(const TArray<int32>& CorpsIds, int32 R
 	return Out;
 }
 
-FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId)
+namespace
+{
+	/** The lines of a Battle Ticket, from a forecast or from a battle's report. */
+	TArray<FTicketLine> ReadTicket(const TSharedPtr<FJsonObject>& Object)
+	{
+		TArray<FTicketLine> Out;
+		const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
+		if (Object.IsValid() && Object->TryGetArrayField(TEXT("lines"), Lines))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Lines)
+			{
+				const TSharedPtr<FJsonObject> Line = Value->AsObject();
+				if (!Line.IsValid())
+				{
+					continue;
+				}
+				FTicketLine L;
+				Line->TryGetStringField(TEXT("label"), L.Label);
+				Line->TryGetStringField(TEXT("value"), L.Value);
+				Line->TryGetStringField(TEXT("effect"), L.Effect);
+				Out.Add(MoveTemp(L));
+			}
+		}
+		return Out;
+	}
+
+	/** A list of corps by their numbers. */
+	void ReadIds(const TSharedPtr<FJsonObject>& Object, const TCHAR* Field, TArray<int32>& Out)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Values = nullptr;
+		if (Object->TryGetArrayField(Field, Values))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Values)
+			{
+				Out.Add(static_cast<int32>(Value->AsNumber()));
+			}
+		}
+	}
+}
+
+FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening)
 {
 	FAttackPreview Out;
 	TSharedPtr<FJsonObject> Object;
-	if (CorpsIds.Num() == 0 || !CallRules(TEXT("previewAttack"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
+	if (CorpsIds.Num() == 0 || !CallRules(TEXT("previewAttack"), FString::Printf(TEXT("[[%s],%d,%s]"), *IdList(CorpsIds), RegionId, bOpening ? TEXT("true") : TEXT("false")), Object))
 	{
 		return Out; // also what comes back when the rules answer null: there is nobody there to attack
 	}
@@ -979,28 +1019,15 @@ FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, in
 			Object->TryGetNumberField(TEXT("chancePctHi"), Out.ChancePctHigh);
 		}
 		Object->TryGetStringField(TEXT("mass"), Out.Mass);
-		const TArray<TSharedPtr<FJsonValue>>* Everyone = nullptr;
-		if (Object->TryGetArrayField(TEXT("massIds"), Everyone))
-		{
-			for (const TSharedPtr<FJsonValue>& Value : *Everyone)
-			{
-				Out.MassIds.Add(static_cast<int32>(Value->AsNumber()));
-			}
-		}
+		ReadIds(Object, TEXT("massIds"), Out.MassIds);
+		// (Version 63) the chance in words, the bill before the order, and how the card opened
+		Object->TryGetStringField(TEXT("chanceWords"), Out.ChanceWords);
+		Object->TryGetStringArrayField(TEXT("cost"), Out.Cost);
+		Object->TryGetStringField(TEXT("opened"), Out.Opened);
+		ReadIds(Object, TEXT("ids"), Out.Ids);
+		ReadIds(Object, TEXT("pickedIds"), Out.PickedIds);
 	}
-	const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
-	if (Object->TryGetArrayField(TEXT("lines"), Lines))
-	{
-		for (const TSharedPtr<FJsonValue>& Value : *Lines)
-		{
-			const TSharedPtr<FJsonObject> Line = Value->AsObject();
-			FTicketLine L;
-			Line->TryGetStringField(TEXT("label"), L.Label);
-			Line->TryGetStringField(TEXT("value"), L.Value);
-			Line->TryGetStringField(TEXT("effect"), L.Effect);
-			Out.Lines.Add(MoveTemp(L));
-		}
-	}
+	Out.Lines = ReadTicket(Object);
 	Out.Attackers = ReadUnits(Object, TEXT("attackers"));
 	Out.Defenders = ReadUnits(Object, TEXT("defenders"));
 	return Out;
@@ -1026,7 +1053,12 @@ FAttackResult FCampaignSession::Attack(const TArray<int32>& CorpsIds, int32 Regi
 		(*Report)->TryGetNumberField(TEXT("prisoners"), Out.Prisoners);
 		Out.Attackers = ReadUnits(*Report, TEXT("attackers"));
 		Out.Defenders = ReadUnits(*Report, TEXT("defenders"));
+		Out.Lines = ReadTicket(*Report);
+		double Odds = 0.0;
+		(*Report)->TryGetNumberField(TEXT("odds"), Odds);
+		Out.Odds = static_cast<float>(Odds);
 	}
+	Object->TryGetStringField(TEXT("price"), Out.Price);
 	Object->TryGetStringField(TEXT("note"), Out.Note);
 	Object->TryGetBoolField(TEXT("siege"), Out.bSiege);
 	Out.Moved = ReadMoves(Object);
@@ -1518,6 +1550,13 @@ FProvinceInfo FCampaignSession::Province(int32 RegionId)
 		{
 			(*Siege)->TryGetStringField(TEXT("by"), Info.SiegeBy);
 			(*Siege)->TryGetStringArrayField(TEXT("lines"), Info.SiegeLines);
+		}
+		const TSharedPtr<FJsonObject>* Pocket = nullptr;
+		if (Object->TryGetObjectField(TEXT("pocket"), Pocket))
+		{
+			(*Pocket)->TryGetStringField(TEXT("title"), Info.PocketTitle);
+			(*Pocket)->TryGetStringField(TEXT("text"), Info.PocketText);
+			(*Pocket)->TryGetBoolField(TEXT("spent"), Info.bPocketSpent);
 		}
 	}
 	Object->TryGetStringField(TEXT("directive"), Info.DirectiveLine);

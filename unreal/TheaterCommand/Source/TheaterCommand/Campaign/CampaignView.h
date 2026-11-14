@@ -449,6 +449,14 @@ struct FAttackPreview
 	int32 ChancePct = -1, ChancePctLow = -1, ChancePctHigh = -1; // the chance of taking the place, in whole per cent (100 only when it cannot fail); -1 where the rules give none
 	FString Mass; // where more corps stand in reach than were picked: what sending everyone would come to, in a sentence
 	TArray<int32> MassIds; // ...and the corps to pick to make it so
+	// (Version 63) The chance in words (a best guess with its limits where the band is too wide to plan on), what the
+	// fight is likely to cost each side in men either way, and how the card opened: the corps it counts, a sentence
+	// where the staff brought in more than were picked, and the corps that were picked.
+	FString ChanceWords;
+	TArray<FString> Cost;
+	TArray<int32> Ids;
+	FString Opened;
+	TArray<int32> PickedIds;
 	TArray<FTicketLine> Lines;
 	TArray<FBattleUnit> Attackers;
 	TArray<FBattleUnit> Defenders;
@@ -473,6 +481,9 @@ struct FAttackResult
 	int32 AttackerLost = 0;
 	int32 DefenderLost = 0;
 	int32 Prisoners = 0;
+	FString Price; // (Version 63) what it cost each side in men, and the share of those sent in, in a sentence
+	float Odds = 0.0f; // the odds as they stood on the day
+	TArray<FTicketLine> Lines; // the Battle Ticket as it was on the day, read in the past
 	TArray<FBattleUnit> Attackers;
 	TArray<FBattleUnit> Defenders;
 	TArray<FCorpsMove> Moved; // the corps that followed up into the ground they won
@@ -1002,6 +1013,9 @@ struct FProvinceInfo
 	// The town as a fortress, and how its siege stands (the grand campaign): who stands round it, and plain lines.
 	FString SiegeBy;
 	TArray<FString> SiegeLines;
+	// (Version 63) A province cut off from the rest of its country: a heading, what its troops live on and for how long.
+	FString PocketTitle, PocketText;
+	bool bPocketSpent = false;
 	// The places of the province that are prizes of their own (Version 56), in plain lines.
 	FString DirectiveLine; // a directive of the war cabinet that names this province, in a sentence
 	FString PlacesHead;

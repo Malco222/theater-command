@@ -34,6 +34,8 @@ struct FRegionPanelInfo
 	int32 PlotsFree = 0, PlotsCanBuild = 0;
 	FText ProvinceNote;
 	FText SiegeTitle, SiegeText; // the town as a fortress, and how its siege stands
+	FText PocketTitle, PocketText; // a province cut off from the rest of its country: what its troops live on, and for how long
+	bool bPocketSpent = false;
 	FText PlacesTitle, PlacesText; // the places of the province that are prizes of their own, and scorched earth
 	FText DirectiveText; // a directive of the war cabinet that names this province
 	TArray<FProvinceOption> Options;
@@ -284,7 +286,12 @@ struct FFaceOff
 	FText Prize; // what taking the place is worth
 	FText Mass; // where more corps stand in reach than were picked: what sending everyone would come to
 	TArray<int32> MassIds; // ...and the corps that would go
+	FText Opened; // (Version 63) the staff has brought in more than were picked: said in a sentence
+	bool bWidened = false; // more corps go in than the player picked: one button goes back to his pick
+	FText Cost; // what the fight is likely to cost each side in men, if it carries and if it is thrown back
 	FText Ticket;
+	FText TicketKey; // the lines of the ticket that matter most: a long ticket opens folded to these
+	int32 TicketLines = 0, TicketHidden = 0;
 	FText ResultTitle;
 	FText ResultDetail;
 };
@@ -641,6 +648,11 @@ public:
 	void ConfirmAttack();
 	/** On the attack card: pick every corps that can reach the place, and show the attack again as it would then be. */
 	void SendEveryone();
+	/** (Version 63) Back to the corps that were in hand when the attack was ordered, where the staff brought in more. */
+	void SendOnlyPicked();
+	/** A long Battle Ticket opens folded to the lines that matter most: this unfolds it, or folds it again. */
+	void ToggleTicket() { bTicketAll = !bTicketAll; }
+	bool IsTicketAll() const { return bTicketAll; }
 
 	/** Calls the attack off, or closes the result of one that has been fought. */
 	void CloseFaceOff();
@@ -675,7 +687,8 @@ private:
 	void RefreshRegionPanel(int32 RegionId);
 	void RefreshOrders();
 	void Notify(const FString& Text, double Seconds = 5.0);
-	void OpenFaceOff(int32 RegionId);
+	void OpenFaceOff(int32 RegionId, bool bOpening = false);
+	bool bTicketAll = false;
 	void ShowWar(const FCampaignView& View, const TArray<FCorpsMove>& Marches, const FVector* CarriedFrom = nullptr);
 	bool CanPickUp(const AArmyPiece* Piece) const;
 	void ClickOnTable(AArmyPiece* Piece, int32 RegionId);

@@ -58,7 +58,8 @@ public:
 	TArray<FCorpsMove> Move(const TArray<int32>& CorpsIds, int32 RegionId);
 
 	/** The odds for the given corps attacking a region, with both armies and the Battle Ticket. */
-	FAttackPreview PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId);
+	/** bOpening: the card is being opened, so the staff may bring in everyone the roads will carry where that beats the pick. */
+	FAttackPreview PreviewAttack(const TArray<int32>& CorpsIds, int32 RegionId, bool bOpening = false);
 
 	/** Sends the given corps in. The battle is settled at once by the rules. */
 	FAttackResult Attack(const TArray<int32>& CorpsIds, int32 RegionId);

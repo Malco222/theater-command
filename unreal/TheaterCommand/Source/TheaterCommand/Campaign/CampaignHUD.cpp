@@ -1621,7 +1621,7 @@ namespace
 									]
 
 									// What the battle came to, once it has been fought.
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 10.0f, 0.0f, 0.0f)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 10.0f, 0.0f, 0.0f)
 									[
 										SNew(SVerticalBox)
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->bResolved ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
@@ -1630,9 +1630,9 @@ namespace
 											SNew(STextBlock).Font(Font(TEXT("Bold"), 26)).ColorAndOpacity(BrightBrass)
 											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->ResultTitle : FText::GetEmpty(); })
 										]
-										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 4.0f, 0.0f, 0.0f)
+										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(20.0f, 4.0f, 20.0f, 0.0f)
 										[
-											SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Cream)
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
 											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->ResultDetail : FText::GetEmpty(); })
 										]
 									]
@@ -1676,10 +1676,17 @@ namespace
 											]
 										]
 									]
-									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 7.0f, 0.0f, 0.0f)
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(0.0f, 7.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
+										SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->OddsLine : FText::GetEmpty(); })
+									]
+									// (Version 63) The bill before the order: what it is likely to cost each side in men, either way.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Fill).Padding(40.0f, 6.0f, 40.0f, 0.0f)
+									[
+										SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center).LineHeightPercentage(1.2f)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->Cost.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Cost : FText::GetEmpty(); })
 									]
 									// The prize: what taking the place is worth.
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(40.0f, 8.0f, 40.0f, 0.0f)
@@ -1687,6 +1694,27 @@ namespace
 										SNew(STextBlock).Font(Font(TEXT("Italic"), 12)).ColorAndOpacity(BrightBrass).AutoWrapText(true).Justification(ETextJustify::Center)
 										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && !F->Prize.IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Prize : FText::GetEmpty(); })
+									]
+
+									// (Version 63) The staff has brought in more corps than were picked: said, with the way back to the pick.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(40.0f, 12.0f, 40.0f, 0.0f)
+									[
+										SNew(SVerticalBox)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && F->bWidened ? EVisibility::Visible : EVisibility::Collapsed; })
+										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
+											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Opened : FText::GetEmpty(); })
+										]
+										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 8.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 7.0f)).IsFocusable(false)
+											.ToolTipText(FText::FromString(TEXT("Sends in only the corps you had in hand when you ordered the attack.")))
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->SendOnlyPicked(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("ONLY THE CORPS I PICKED"))).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(BrightBrass)
+											]
+										]
 									]
 
 									// More corps stand in reach than were picked: what sending everyone would come to.
@@ -1716,8 +1744,34 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 									[
-										SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.3f)
-										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Ticket : FText::GetEmpty(); })
+										// (Version 63) A long ticket opens folded to the lines that matter most; all of it never runs off the card.
+										SNew(SBox).MaxDesiredHeight(330.0f)
+										[
+											SNew(SScrollBox)
+											+ SScrollBox::Slot().Padding(0.0f, 0.0f, 10.0f, 0.0f)
+											[
+												SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.3f)
+												.Text_Lambda([this, Face]()
+												{
+													const FFaceOff* F = Face();
+													return !F ? FText::GetEmpty() : F->TicketHidden > 0 && Controller.IsValid() && !Controller->IsTicketAll() ? F->TicketKey : F->Ticket;
+												})
+											]
+										]
+									]
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(0.0f, 8.0f, 0.0f, 0.0f)
+									[
+										SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && F->TicketHidden > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->ToggleTicket(); } return FReply::Handled(); })
+										[
+											SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Brass)
+											.Text_Lambda([this, Face]()
+											{
+												const FFaceOff* F = Face();
+												return FText::FromString(!F ? FString() : Controller.IsValid() && Controller->IsTicketAll() ? FString(TEXT("THE MAIN LINES ONLY")) : FString::Printf(TEXT("SHOW ALL %d LINES"), F->TicketLines));
+											})
+										]
 									]
 
 									// What to do about it.
@@ -2774,6 +2828,18 @@ namespace
 						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 						[
 							SNew(STextBlock).Text(Info.Holdings).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true)
+						];
+					}
+					if ((ProvinceTab == 0 || !bProvince) && !Info.PocketText.IsEmpty())
+					{
+						// (Version 63) Cut off from the rest of its country: what its troops live on, and for how long.
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.PocketTitle).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Info.bPocketSpent ? Alarm : BrightBrass).AutoWrapText(true)
+						];
+						ProvinceBox->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(Info.PocketText).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.12f)
 						];
 					}
 					if ((ProvinceTab == 0 || !bProvince) && !Info.SiegeText.IsEmpty())

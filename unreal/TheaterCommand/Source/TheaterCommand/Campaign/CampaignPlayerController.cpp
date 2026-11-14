@@ -4866,7 +4866,7 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	if (Target->bAttack)
 	{
 		AdviserSaw(1);
-		OpenFaceOff(RegionId);
+		OpenFaceOff(RegionId, true); // (Version 63) the card opens on the best attack to be had
 		return;
 	}
 
@@ -5132,14 +5132,44 @@ namespace
 	}
 }
 
-void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
+namespace
+{
+	/** The Battle Ticket as text: every line of it, and the lines that matter most, which a long ticket opens folded to. */
+	void WriteTicket(const TArray<FTicketLine>& Ticket, FFaceOff& Out)
+	{
+		static const TCHAR* const Key[] = { TEXT("Forces"), TEXT("Troops"), TEXT("Dug in"), TEXT("Supply"), TEXT("Earlier attacks"), TEXT("Weight of attack") };
+		TArray<FString> Lines, Main;
+		for (const FTicketLine& Line : Ticket)
+		{
+			const FString Text = Line.Effect.IsEmpty()
+				? FString::Printf(TEXT("%s:  %s"), *Line.Label, *Line.Value)
+				: FString::Printf(TEXT("%s:  %s  \u2014  %s"), *Line.Label, *Line.Value, *Line.Effect);
+			Lines.Add(Text);
+			for (const TCHAR* Label : Key)
+			{
+				if (Line.Label == Label)
+				{
+					Main.Add(Text);
+					break;
+				}
+			}
+		}
+		Out.Ticket = FText::FromString(FString::Join(Lines, TEXT("\n")));
+		Out.TicketKey = FText::FromString(FString::Join(Main, TEXT("\n")));
+		Out.TicketLines = Lines.Num();
+		// (a ticket of a few lines is short enough as it is)
+		Out.TicketHidden = Lines.Num() > 8 && Main.Num() > 0 ? Lines.Num() - Main.Num() : 0;
+	}
+}
+
+void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening)
 {
 	FCampaignSession* Session = GetSession();
 	if (!Session || !Map.IsValid())
 	{
 		return;
 	}
-	const FAttackPreview Preview = Session->PreviewAttack(PickedCorps, RegionId);
+	const FAttackPreview Preview = Session->PreviewAttack(PickedCorps, RegionId, bOpening);
 	if (Preview.bValid && Preview.Attackers.Num() > 0)
 	{
 		CampaignSounds::Play(this, TEXT("drums"), 0.6f); // the two sides are drawn up
@@ -5161,9 +5191,24 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 	const FCampaignNation* Theirs = Data.FindNation(TheirTag);
 	const FString Place = Data.Regions.IsValidIndex(RegionId) ? Data.Regions[RegionId].Name : FString();
 
+	if (bOpening && Preview.PickedIds.Num() > 0 && Preview.Ids.Num() > 0)
+	{
+		// (Version 63) Everyone the roads will carry makes a better attack of it than the corps in hand: the staff has
+		// brought them in. The corps that were in hand are remembered, for the button that goes back to them and for
+		// the attack being called off.
+		if (PickedBeforeMass.Num() == 0)
+		{
+			PickedBeforeMass = PickedCorps;
+		}
+		PickedCorps = Preview.Ids;
+	}
 	FaceOff = FFaceOff();
 	FaceOff.bVisible = true;
 	FaceOff.Region = RegionId;
+	FaceOff.bWidened = PickedBeforeMass.Num() > 0;
+	FaceOff.Opened = FText::FromString(!Preview.Opened.IsEmpty() ? Preview.Opened
+		: FaceOff.bWidened ? FString(TEXT("Every corps the roads will carry is going in.")) : FString());
+	FaceOff.Cost = FText::FromString(FString::Join(Preview.Cost, TEXT("\n")));
 	FaceOff.Title = FText::FromString(FString::Printf(TEXT("The attack on %s"), *Place));
 	{
 		// An army with allied corps marching in it is named for all of them: "Germany and Slovakia".
@@ -5194,7 +5239,11 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 			? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), Preview.Odds)
 			: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f));
 		// (the chance is printed as 100 per cent only when the attack cannot fail)
-		if (Preview.ChancePct >= 0)
+		if (!Preview.ChanceWords.IsEmpty())
+		{
+			Odds += FString::Printf(TEXT("  \u00B7  %s to take %s"), *Preview.ChanceWords, *Place);
+		}
+		else if (Preview.ChancePct >= 0)
 		{
 			Odds += FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePct, *Place);
 		}
@@ -5205,7 +5254,12 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 		// The defenders are not all identified: the staff give the odds as a band that holds the truth.
 		auto Say = [](float Odds) { return Odds >= 1.0f ? FString::Printf(TEXT("%.1f to 1 for you"), Odds) : FString::Printf(TEXT("%.1f to 1 against"), 1.0f / FMath::Max(Odds, 0.01f)); };
 		FString Odds = FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Preview.OddsLow), *Say(Preview.OddsHigh));
-		if (Preview.ChancePctLow >= 0 && Preview.ChancePctHigh >= 0)
+		if (!Preview.ChanceWords.IsEmpty())
+		{
+			// (Version 63: a band too wide to plan on is given as the staff's best guess with its limits)
+			Odds += FString::Printf(TEXT("  \u00B7  %s to take %s"), *Preview.ChanceWords, *Place);
+		}
+		else if (Preview.ChancePctLow >= 0 && Preview.ChancePctHigh >= 0)
 		{
 			Odds += Preview.ChancePctLow == Preview.ChancePctHigh
 				? FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePctLow, *Place)
@@ -5219,14 +5273,7 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 	}
 
 	// The Battle Ticket: what the campaign map says about this fight, and what each thing does in it.
-	TArray<FString> Lines;
-	for (const FTicketLine& Line : Preview.Lines)
-	{
-		Lines.Add(Line.Effect.IsEmpty()
-			? FString::Printf(TEXT("%s:  %s"), *Line.Label, *Line.Value)
-			: FString::Printf(TEXT("%s:  %s  \u2014  %s"), *Line.Label, *Line.Value, *Line.Effect));
-	}
-	FaceOff.Ticket = FText::FromString(FString::Join(Lines, TEXT("\n")));
+	WriteTicket(Preview.Lines, FaceOff);
 	// Where more corps stand in reach than were picked: what the attack could be, and a button to make it so.
 	FaceOff.Mass = FText::FromString(Preview.Mass);
 	FaceOff.MassIds = Preview.MassIds;
@@ -5245,6 +5292,18 @@ void ACampaignPlayerController::SendEveryone()
 	}
 	const int32 RegionId = FaceOff.Region;
 	PickedCorps = FaceOff.MassIds;
+	OpenFaceOff(RegionId);
+}
+
+void ACampaignPlayerController::SendOnlyPicked()
+{
+	if (!FaceOff.bVisible || FaceOff.bResolved || PickedBeforeMass.Num() == 0)
+	{
+		return;
+	}
+	const int32 RegionId = FaceOff.Region;
+	PickedCorps = PickedBeforeMass;
+	PickedBeforeMass.Reset();
 	OpenFaceOff(RegionId);
 }
 
@@ -5292,7 +5351,28 @@ void ACampaignPlayerController::ConfirmAttack()
 	{
 		Cost += FString::Printf(TEXT(", %s of them taken prisoner"), *Thousands(Result.Prisoners));
 	}
-	FaceOff.ResultDetail = FText::FromString(Outcome + TEXT("  ") + Cost + TEXT("."));
+	Cost += TEXT(".");
+	if (!Result.Price.IsEmpty())
+	{
+		// (Version 63) The price as the rules state it: men lost on each side, and the share of those sent in.
+		Cost = Result.Price;
+		if (Result.Prisoners > 0)
+		{
+			Cost += FString::Printf(TEXT(" %s of theirs were taken prisoner."), *Thousands(Result.Prisoners));
+		}
+	}
+	FaceOff.ResultDetail = FText::FromString(Outcome + TEXT("  ") + Cost);
+	if (Result.Lines.Num() > 0)
+	{
+		WriteTicket(Result.Lines, FaceOff); // the ticket as it was on the day, read in the past
+	}
+	if (Result.Odds > 0.0f && !Result.bYielded)
+	{
+		// (and the odds as they stood on the day, in place of the forecast)
+		FaceOff.OddsLine = FText::FromString(Result.Odds >= 1.0f
+			? FString::Printf(TEXT("The odds on the day were %.1f to 1 in your favour"), Result.Odds)
+			: FString::Printf(TEXT("The odds on the day were %.1f to 1 against you"), 1.0f / FMath::Max(Result.Odds, 0.01f)));
+	}
 	FaceOff.OurUnits = FText::FromString(ListUnits(Result.Attackers, true));
 	FaceOff.TheirUnits = FText::FromString(ListUnits(Result.Defenders, true));
 
@@ -5872,6 +5952,9 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			RegionPanel.Prize = FText::FromString(Province.PrizeLine);
 			RegionPanel.PrizeTip = FText::FromString(FString::Join(Province.PrizeItems, TEXT("\n")));
 			RegionPanel.bPrizeToTake = Province.PrizeKind == TEXT("taken") || Province.PrizeKind == TEXT("restored");
+			RegionPanel.PocketTitle = FText::FromString(Province.PocketTitle);
+			RegionPanel.PocketText = FText::FromString(Province.PocketText);
+			RegionPanel.bPocketSpent = Province.bPocketSpent;
 			if (Province.SiegeLines.Num() > 0)
 			{
 				RegionPanel.SiegeTitle = FText::FromString(Province.SiegeBy.IsEmpty() ? FString(TEXT("THE TOWN AS A FORTRESS")) : FString::Printf(TEXT("BESIEGED BY %s"), *Province.SiegeBy.ToUpper()));

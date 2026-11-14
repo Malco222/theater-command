@@ -84,7 +84,7 @@ import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoi
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
-import { airfieldsSeen, announcements, attackOutlook, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
+import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -535,9 +535,13 @@ function stepOne(s: Game, steps: unknown[] | null): void {
       walked.length ? `moved into ${some(walked)}` : '',
       held.length ? `${won.length || walked.length ? 'and were' : 'were'} thrown back at ${some(held)}` : '',
     ].filter(Boolean);
+    // (Version 63) Where the player's own troops fought, the price of the costliest battle: men lost on each side, and the share of those sent in.
+    const own = reps.filter((r) => !r.yielded && !!s.human && (r.defenders.some((u) => u.nat === s.human) || r.attackers.some((u) => u.nat === s.human)))
+      .sort((a, b) => b.attLost + b.defLost - (a.attLost + a.defLost));
+    const price = own.length ? ` At ${own[0].regionName} ${priceLine(s, own[0]).replace(/^I/, 'i')}` : '';
     steps.push({
       nat,
-      note: `${s.nations[nat].adj} forces ${said.join(', ')}.${shore.notes.length ? ` ${shore.notes[0]}` : ''}${raidNote ? ` ${raidNote}` : ''}`,
+      note: `${s.nations[nat].adj} forces ${said.join(', ')}.${price}${shore.notes.length ? ` ${shore.notes[0]}` : ''}${raidNote ? ` ${raidNote}` : ''}`,
       taken,
       raids: air.flights,
       seas: sea.zones,
@@ -809,6 +813,30 @@ function frontLine(s: Game, ids: number[], to: number): { label: string; value: 
 /** A chance as a whole percentage that never rounds a near thing up to a sure one, or a faint hope down to none. */
 const oddsPct = (p: number): number => (p >= 0.9995 ? 100 : p <= 0.0005 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100))));
 
+type Look = NonNullable<ReturnType<typeof attackOutlook>>;
+/**
+ * (Version 63) A chance or a band of chances in words: one figure where the staff can give one, its best guess with
+ * the limits where the band is too wide to plan on.
+ */
+const chanceWords = (look: Look): string => (look.exact || Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%`
+  : look.wide ? `a best guess of ${oddsPct(look.guess)}%, anywhere from ${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`);
+/** Men to the nearest hundred, for a forecast that is not exact. */
+const roughMen = (n: number): string => (n < 100 ? 'under 100' : (Math.round(n / 100) * 100).toLocaleString('en'));
+/**
+ * (Version 63) The bill before the order: what the fight is likely to cost each side in men, if it carries the
+ * ground and if it is thrown back. The enemy's loss is a count where every defender is identified, and a share of
+ * his men where the defence is partly a guess.
+ */
+function costLines(look: Look | null): string[] {
+  if (!look?.cost) return [];
+  const row = (c: Look['cost']['won'], head: string): string => {
+    if (!c) return '';
+    const theirs = c.theirs !== null ? `${roughMen(c.theirs)} men` : `${Math.max(1, Math.round(c.share * 100))}% of their men`;
+    return `${head}: you lose about ${roughMen(c.ours)} men, they lose about ${theirs}.`;
+  };
+  return [row(look.cost.won, look.cost.lost ? 'If it carries' : 'It should carry'), row(look.cost.lost, look.cost.won ? 'If it is thrown back' : 'Thrown back, as it will be')].filter(Boolean);
+}
+
 /**
  * (Version 61) Everyone the roads will carry, where more stand in reach than were picked: what the attack could
  * be, said in a sentence, with the corps to pick to make it so.
@@ -821,15 +849,23 @@ function massNote(s: Game, corps: Corps[], to: number, odds: number | null): { n
   const extra = everyone.filter((c) => !inSet.has(c.id)).length;
   const massed = extra ? attackOutlook(s, everyone, target) : null;
   if (!massed || (odds !== null && massed.odds <= odds * 1.02)) return null;
-  const chance = massed.exact ? `about ${oddsPct(massed.chance)}%` : oddsPct(massed.chanceLo) === oddsPct(massed.chanceHi) ? `about ${oddsPct(massed.chanceLo)}%` : `${oddsPct(massed.chanceLo)} to ${oddsPct(massed.chanceHi)}%`;
+  const chance = chanceWords(massed);
   return {
     note: `${extra === 1 ? 'One more corps stands' : `${extra} more corps stand`} within reach. Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${odds !== null ? `go from ${odds.toFixed(2)} to ${massed.odds.toFixed(2)} to 1` : `are ${massed.odds.toFixed(2)} to 1`}: ${chance} to take ${target.name}.`,
     ids: cands.map((c) => c.id),
   };
 }
 
-function preview(ids: number[], to: number) {
+function preview(ids: number[], to: number, open = false) {
   const s = game();
+  // (Version 63) The card opens on the best attack to be had: everyone the roads will carry, where that beats the
+  // corps picked. It says so, and gives back the corps that were picked so one button can return to them.
+  let pickedIds: number[] = [];
+  if (open) {
+    const mine = wouldAttack(s, ids, to);
+    const best = mine.length ? openingForce(s, mine, s.regions[to]) : null;
+    if (best?.widened) { pickedIds = mine.map((c) => c.id); ids = best.corps.map((c) => c.id); }
+  }
   const corps = attackers(s, ids, to);
   // (Version 55) Enemy troops standing on the ground of a country the player is not at war with cannot be attacked
   // until war is declared on that country: the rules say why, and the game tells the player instead of the odds.
@@ -847,7 +883,17 @@ function preview(ids: number[], to: number) {
   // and what the attack takes off them.)
   const saidAlready = [...(look?.lines ?? []), ...a.lines].some((l) => l.label === 'Prepared defence' || (l.label === 'Dug in' && /even chance/.test(l.effect ?? '')));
   const mass = massNote(s, corps, to, look?.odds ?? a.odds);
-  const pct = { chancePct: oddsPct(look?.chance ?? 0), chancePctLo: oddsPct(look?.chanceLo ?? look?.chance ?? 0), chancePctHi: oddsPct(look?.chanceHi ?? look?.chance ?? 0), hasChance: !!look, mass: mass?.note ?? '', massIds: mass?.ids ?? [] };
+  // (Version 63) What was brought in over the pick, in a sentence.
+  let opened = '';
+  if (pickedIds.length && look) {
+    const mine = corpsById(s, pickedIds), mineLook = mine.length ? attackOutlook(s, mine, s.regions[to]) : null;
+    opened = `The staff has brought in every corps the roads will carry. ${corps.length === 1 ? 'One corps goes' : `${corps.length} corps go`} in at ${look.odds.toFixed(2)} to 1${mineLook ? `, where the ${mine.length === 1 ? 'corps' : `${mine.length} corps`} you picked ${mine.length === 1 ? 'reads' : 'read'} ${mineLook.odds.toFixed(2)} to 1` : ''}.`;
+  }
+  const pct = {
+    chancePct: oddsPct(look?.chance ?? 0), chancePctLo: oddsPct(look?.chanceLo ?? look?.chance ?? 0), chancePctHi: oddsPct(look?.chanceHi ?? look?.chance ?? 0), hasChance: !!look, mass: mass?.note ?? '', massIds: mass?.ids ?? [],
+    // (Version 63) the chance in words, the likely cost in men either way, and the corps the card opened with
+    chanceWords: look ? chanceWords(look) : '', cost: costLines(look), ids, opened, pickedIds,
+  };
   const evenLine = even > 1.21 && !saidAlready ? [{ label: 'An even chance', value: `${even.toFixed(1)} to 1`, effect: 'Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance.' }] : [];
   const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
   const named = (c: Corps) => {
@@ -859,7 +905,7 @@ function preview(ids: number[], to: number) {
   if (look && !look.exact) {
     return {
       region: to, allies, prize: prizeLine(s, to), attack: look.odds, defence: 1, odds: look.odds, ...pct,
-      exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: look.note, even,
+      exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: `${look.note}${look.wide && look.narrow ? ` ${look.narrow}` : ''}`, even,
       lines: [...look.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : []), ...evenLine],
       attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
       defenders: a.defenders.map(named),
@@ -883,7 +929,6 @@ function preview(ids: number[], to: number) {
 /** What a battle came to, in a sentence. */
 function battleNote(s: Game, r: BattleReport): string {
   if (r.yielded) return `The ${s.nations[r.defNat].adj} troops fell back from ${r.regionName} without a fight.`;
-  const cost = `${r.attLost.toLocaleString('en')} lost against ${r.defLost.toLocaleString('en')}`;
   const prisoners = r.prisoners > 0 ? `, ${r.prisoners.toLocaleString('en')} prisoners` : '';
   const x = r as BattleReport & { siege?: boolean; town?: boolean; relief?: boolean; sally?: boolean; gates?: boolean; prepared?: number };
   const town = townSiege(s, r.region)?.town ?? r.regionName;
@@ -897,7 +942,25 @@ function battleNote(s: Game, r: BattleReport): string {
           // (Version 58: a line that was dug in and fed either held or was broken, and the note says which)
           : (x.prepared ?? 0) >= 0.5 ? (r.taken ? 'the prepared line is broken and the ground is taken' : 'the attack breaks on a prepared line')
             : r.taken ? 'the ground is taken' : 'the attack is held';
-  return `${r.level} at ${r.regionName}: ${came}, ${cost}${prisoners}.${wornNote(s, r)}`;
+  // (Version 63) The price: men lost on each side, and the share of those sent in.
+  return `${r.level} at ${r.regionName}: ${came}${prisoners}. ${priceLine(s, r)}${wornNote(s, r)}`;
+}
+
+/** (Version 63) What one side lost in a battle, in men and as a share of those engaged: the fight itself and whoever laid down his arms after it. */
+function lostIn(us: BattleReport['attackers'], fought: number): { lost: number; pct: number } {
+  const total = us.reduce((n, u) => n + u.men, 0);
+  const lost = Math.max(fought, us.reduce((n, u) => n + u.lost, 0));
+  return { lost, pct: total > 0 && lost > 0 ? Math.max(1, Math.round(100 * Math.min(1, lost / total))) : 0 };
+}
+/** (Version 63) The price of a battle in one sentence, to whichever side reads its report. */
+function priceLine(s: Game, r: BattleReport): string {
+  if (r.yielded) return '';
+  const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
+  const num = (n: number): string => n.toLocaleString('en');
+  const of = (x: { lost: number; pct: number }): string => `${num(x.lost)}${x.pct ? ` (${x.pct}%)` : ''}`;
+  if (s.human && (r.attNat === s.human || r.attackers.some((u) => u.nat === s.human))) return `It cost you ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of theirs.`;
+  if (s.human && r.defenders.some((u) => u.nat === s.human)) return `It cost the attackers ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of yours.`;
+  return `The attackers lost ${of(a)} men, the defenders ${of(d)}.`;
 }
 
 /** (Version 61) An attack thrown back from dug-in troops still wears their works down: said to whichever side reads it. */
@@ -924,7 +987,8 @@ function attack(ids: number[], to: number) {
     : [];
   // (where the town still holds, the province has not changed hands: the screen shows no capture)
   const siege = !!(report as (BattleReport & { siege?: boolean }) | null)?.siege;
-  return { report: report && siege ? { ...report, taken: false } : report, siege, note: report ? battleNote(s, report) : '', moved, view: view() };
+  // (Version 63) The price in a sentence, for the result card; the report's own ticket reads in the past tense.
+  return { report: report && siege ? { ...report, taken: false } : report, siege, note: report ? battleNote(s, report) : '', price: report ? priceLine(s, report) : '', moved, view: view() };
 }
 
 function endMonth() {
@@ -1228,6 +1292,20 @@ function province(id: number) {
     // What can be done to the country itself this month: bridges blown, the railway torn up, engineers set to work.
     // The town as a fortress (Version 54): what it adds to its defenders, and how its siege stands, in plain lines.
     siege: (() => { try { const v = townSiege(s, r.id); return v ? { town: v.town, by: v.by ? s.nations[v.by]?.name ?? v.by : '', lines: v.lines, inside: v.inside, room: v.room } : null; } catch { return null; } })(),
+    // (Version 63) A province cut off from the rest of its country: what its troops live on, and for how long.
+    pocket: (() => {
+      try {
+        const v = pocketAt(s, r.id);
+        if (!v) return null;
+        const mine = v.nat === s.human, foe = !!s.human && atWar(s, s.human, v.nat);
+        const tail = mine ? (v.spent ? ' Break the ring from outside, or attack out of it while the corps can still fight.' : ' Break the ring from outside before the stores are gone.')
+          : foe ? (v.spent ? ' An attack now meets hungry troops whose works count for nothing.' : ' Wait, and they starve. Attack, and you meet them at full strength.') : '';
+        return {
+          title: v.spent ? 'CUT OFF, AND THE STORES ARE SPENT' : `CUT OFF SINCE ${turnToDate(v.since).label.toUpperCase()}  \u00B7  STORES FOR ${v.left} MONTH${v.left === 1 ? '' : 'S'}`,
+          text: `${v.text}${tail}`, spent: v.spent, mine,
+        };
+      } catch { return null; }
+    })(),
     // (Version 59) A directive of the war cabinet that names this province: said on its panel, with the months left.
     directive: (() => {
       try {
@@ -2542,6 +2620,9 @@ function cabinetPage(s: Game): Page | null {
   const directive: PageRow[] = d ? [{
     nat: s.nations[d.from] ? d.from : v.nat, title: `${d.title}  \u00B7  ${d.left <= 1 ? 'due this month' : `${months(d.left)} left`}`,
     lines: [d.text, `Set by ${d.by.replace(/^The /, 'the ')}, to be done by the end of ${turnToDate(d.due).label}.`, d.progress, (d as { oddsLine?: string }).oddsLine ?? '', `Reward: ${d.reward}.`.replace(/\.\.$/, '.'),
+      // (Version 63) What ignoring it costs: a building or an agent is a small matter, with a flat price that is not counted with the directives ignored.
+      (d as { small?: boolean }).small ? `Ignored: a small matter. The cabinet's trust falls by ${d.price} and no further, and it is not counted with the directives you have ignored.`
+        : `Ignored: the cabinet's trust falls by ${d.price}, and settles lower until a directive is carried out.`,
       (d as { hard?: boolean }).hard ? 'The cabinet knows the place is strongly held: it has given more time and a larger reward.' : '',
       (d as { again?: boolean }).again ? 'The cabinet has asked for this before.' : ''].filter(Boolean),
     buttons: [
@@ -2689,9 +2770,9 @@ function menPage(s: Game): Page | null {
   if (c) {
     const e = c.early;
     rows.push({ nat: s.human, title: 'The next class, early', lines: [e.text, e.why ?? ''].filter(Boolean),
-      buttons: [{ label: 'CALL THEM UP NOW', act: 'men:early', ok: !e.why, danger: true, tip: e.why ?? `About ${short(e.men)} men join the reserve at once, ${e.months} months of classes together. No class then comes of age for ${e.gap} months. It cannot be undone, and you are asked twice.` }] });
+      buttons: [{ label: 'CALL THEM UP NOW', act: 'men:early', ok: !e.why, danger: true, tip: e.why ?? `About ${short(e.men)} men join the reserve at once, ${e.months === 1 ? 'a month' : `${e.months} months`} of classes together. No class then comes of age for ${e.gap === 1 ? 'a month' : `${e.gap} months`}. They are the same men, sooner. It cannot be undone, and you are asked twice.` }] });
     if (c.callUp) {
-      rows.push({ nat: s.human, title: `The standing call-up${c.callUp.held ? '  \u00B7  held' : ''}`, lines: [c.callUp.text],
+      rows.push({ nat: s.human, title: `The standing call-up${c.callUp.held ? '  \u00B7  held' : ''}`, lines: [c.callUp.text, c.callUp.held && c.callUp.drafts > 0 ? `Going to the corps in the field while it is held: up to ${short(c.callUp.drafts)} men a month.` : ''].filter(Boolean),
         buttons: [{ label: c.callUp.held ? 'LET IT RUN' : 'HOLD IT', act: `men:hold:${c.callUp.held ? 0 : 1}`, ok: up, tip: up ? (c.callUp.held ? 'New corps are raised from the reserve again, from next month.' : 'No new corps are raised from the reserve: the men stay for the corps in the field. It takes hold from next month.') : 'It is not your month.' }] });
     }
   }
@@ -2775,7 +2856,7 @@ function act(action: string, region = -1) {
       const asking = `${action}:${s.turn}`;
       if (!why && c && cabinetAsked !== asking) {
         cabinetAsked = asking;
-        return { ok: false, note: `Call up the next class early? About ${Math.round(c.early.men).toLocaleString('en')} men join the reserve at once, and no class then comes of age for ${c.early.gap} months. It cannot be undone. Press it again to call them up.`, fly, flies, open, view: view() };
+        return { ok: false, note: `Call up the next class early? About ${Math.round(c.early.men).toLocaleString('en')} men join the reserve at once, ${c.early.months === 1 ? 'a month' : `${c.early.months} months`} of classes together, and no class then comes of age for ${c.early.gap === 1 ? 'a month' : `${c.early.gap} months`}. They are the same men, sooner, and it cannot be undone. Press it again to call them up.`, fly, flies, open, view: view() };
       }
       cabinetAsked = '';
       ok = !why && orderEarlyClass(s);
