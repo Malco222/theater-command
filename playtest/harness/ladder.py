@@ -23,7 +23,7 @@ def read(h):
         if m: r.update(dict(zip(['rings', 'ringMen', 'gave', 'gaveMen'], map(int, m.groups()))))
         m = re.search(r'longest stretch at war with no battle of the player\'s: (\d+) months', t)
         if m: r['quiet'] = int(m.group(1))
-        m = re.search(r'line corps in works: (.*)$', t)
+        m = re.search(r'line corps in works: (.*?)(?:; took |$)', t.rstrip())
         if m:
             r['line'] = {k.strip(): tuple(map(int, v.split('/'))) for k, v in (x.rsplit(' ', 1) for x in m.group(1).split(', ') if ' ' in x)}
         m = re.search(r'my field attacks by year (.*?); provinces', t)

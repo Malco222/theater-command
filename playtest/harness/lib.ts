@@ -453,15 +453,25 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   if (plan.rotate !== undefined) {
     for (const c of g.corps.filter((x) => x.nat === me && !(x as any).dead && x.town === undefined && x.kind !== 'fort' && x.kind !== 'eng' && x.kind !== 'art')) {
       if (!(c as any).dug || c.str >= plan.rotate || !beside(c) || !T.canOrder(g, c) || c.ap <= 0) continue;
-      const back = g.regions[c.reg].nb.map((j) => g.regions[j]).filter((r) => r.ctrl === me && !hostileUnits(g, r, me).length && !r.nb.some((k) => hostileUnits(g, g.regions[k], me).length > 0));
-      const fresh = back.flatMap((r) => r.units.filter((u) => u.nat === me && u.kind === c.kind && !(u as any).dead && u.town === undefined && u.str >= Math.max(0.85, c.str + 0.2) && T.canOrder(g, u) && u.ap > 0)).sort((a, b) => b.divs * b.str - a.divs * a.str)[0];
-      if (!fresh) { st64.rotNone = (st64.rotNone ?? 0) + 1; continue; }
-      const from = c.reg, to = fresh.reg, works = Math.round(((c as any).dugFor ?? 1) * 10) / 10;
-      const mIn = T.reach(g, fresh), mOut = T.reach(g, c);
-      if (!mIn.has(from) || mIn.get(from)!.attack || !mOut.has(to) || mOut.get(to)!.attack) { st64.rotNoRoad = (st64.rotNoRoad ?? 0) + 1; continue; }
+      // The relief comes from any province of the player's next door: one behind the line first, else a quieter part of the line itself.
+      const front = (r: Region): number => r.nb.reduce((n, k) => n + hostileUnits(g, g.regions[k], me).length, 0);
+      const back = g.regions[c.reg].nb.map((j) => g.regions[j]).filter((r) => r.ctrl === me && !hostileUnits(g, r, me).length && front(r) < front(g.regions[c.reg]));
+      const moved: Set<number> = st64.rotMoved?.turn === g.turn ? st64.rotMoved.ids : ((st64.rotMoved = { turn: g.turn, ids: new Set<number>() }), st64.rotMoved.ids);
+      if (moved.has(c.id)) continue;
+      const wks = (u: Corps): number => ((u as any).dug ? Math.round(((u as any).dugFor ?? 1) * 10) / 10 : 0);
+      const cands2 = back.flatMap((r) => r.units.filter((u) => u.nat === me && u.kind === c.kind && !(u as any).dead && u.town === undefined && !moved.has(u.id) && u.str >= c.str + 0.2 && T.canOrder(g, u) && u.ap > 0)).sort((x, y) => front(g.regions[x.reg]) - front(g.regions[y.reg]) || y.divs * y.str - x.divs * x.str);
+      if (!cands2.length) { st64.rotNone = (st64.rotNone ?? 0) + 1; continue; }
+      // The worn corps steps out first (its province may be full), then the relief steps in.
+      const mOut = T.reach(g, c);
+      const fresh = cands2.find((u) => mOut.has(u.reg) && !mOut.get(u.reg)!.attack);
+      if (!fresh) { st64.rotNoRoad = (st64.rotNoRoad ?? 0) + 1; continue; }
+      const from = c.reg, to = fresh.reg, works = wks(c) + wks(fresh);
       if (!T.orderMove(g, c, to)) { st64.rotNoRoad = (st64.rotNoRoad ?? 0) + 1; continue; }
-      if (!T.orderMove(g, fresh, from)) { st64.rotHalf = (st64.rotHalf ?? 0) + 1; continue; }
-      const got = (fresh as any).dug ? Math.round(((fresh as any).dugFor ?? 1) * 10) / 10 : 0;
+      moved.add(c.id); moved.add(fresh.id);
+      const mIn = T.reach(g, fresh);
+      if (!mIn.has(from) || mIn.get(from)!.attack || !T.orderMove(g, fresh, from)) { st64.rotHalf = (st64.rotHalf ?? 0) + 1; continue; }
+      if (front(g.regions[to]) > 0) st64.rotFromLine = (st64.rotFromLine ?? 0) + 1;
+      const got = ((fresh as any).dug ? Math.round(((fresh as any).dugFor ?? 1) * 10) / 10 : 0) + ((c as any).dug ? Math.round(((c as any).dugFor ?? 1) * 10) / 10 : 0);
       st64.rotations = (st64.rotations ?? 0) + 1; st64.rotWorksBefore = (st64.rotWorksBefore ?? 0) + works; st64.rotWorksAfter = (st64.rotWorksAfter ?? 0) + got; if (got > 0) st64.rotKept = (st64.rotKept ?? 0) + 1;
       (st64.rotIds = st64.rotIds ?? new Map<number, number>()).set(fresh.id, g.turn);
     }
@@ -503,7 +513,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
       const r = g.regions[j];
       let cands = attackersFor(r);
       let out = cands.length ? T.attackOutlook(g, cands, r) : null;
-      if (out && soften(r, cands, out.odds, minOdds)) { cands = attackersFor(r); const o2 = cands.length ? T.attackOutlook(g, cands, r) : null; if (o2) { st64.softOddsAfter = (st64.softOddsAfter ?? 0) + o2.odds; if (o2.odds >= minOdds && out.odds < minOdds) st64.softLifted = (st64.softLifted ?? 0) + 1; } out = o2; }
+      if (out && soften(r, cands, out.odds, minOdds)) { cands = attackersFor(r); const o2 = cands.length ? T.attackOutlook(g, cands, r) : null; if (o2) { st64.softOddsAfter = (st64.softOddsAfter ?? 0) + o2.odds; if (o2.odds >= minOdds && out.odds < minOdds) st64.softLifted = (st64.softLifted ?? 0) + 1; const cA = typeof (out as any).chance === 'number' ? (out as any).chance : out.odds, cB = typeof (o2 as any).chance === 'number' ? (o2 as any).chance : o2.odds; const k = cB > cA + 0.005 ? 'softBetter' : cB < cA - 0.005 ? 'softWorse' : 'softSame'; if (k === 'softWorse') st64.softDrop = (st64.softDrop ?? 0) + (cA - cB); st64[k] = (st64[k] ?? 0) + 1; if ((out as any).exact === false) { st64.softFog = (st64.softFog ?? 0) + 1; if (k === 'softWorse') st64.softFogWorse = (st64.softFogWorse ?? 0) + 1; } if (typeof (out as any).chance === 'number' && typeof (o2 as any).chance === 'number') { st64.softChA = (st64.softChA ?? 0) + (out as any).chance; st64.softChB = (st64.softChB ?? 0) + (o2 as any).chance; st64.softChN = (st64.softChN ?? 0) + 1; } } else st64.softNone = (st64.softNone ?? 0) + 1; out = o2; }
       if (out && (plan.grind !== undefined || plan.waves !== undefined)) withSum(g, out, cands, r);
       if (out && plan.waves !== undefined) { (out as any).spare = T.candidates(g, r).filter((c) => c.kind !== 'art' && c.kind !== 'eng').length - cands.length; (out as any).n = cands.length; }
       return { r, cands, odds: out?.odds ?? 0, out };

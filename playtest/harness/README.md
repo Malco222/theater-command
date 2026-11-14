@@ -245,3 +245,28 @@ Traps met on Version 63:
 - `"dig"` changes who is attacked as well as who attacks: the Soviet staff leaves a dug-in line alone for most of a year. Read the silence beside the Berlin number.
 
 Results of the Version 63 test: `/mnt/project-files/playtest/results-v63/` (the 325-job queue at the top; `berlin-ladder`, `call-up`, `secure-and-jobs`, `lean-and-strike`, `silence`, `endgame-and-jab`, `undecided`, `stand-back`, `screens`, `saves`).
+
+## Version 64: the line and the men (fold, hand over the line, probe, bomb the line)
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `v64.tsv`, `v64e.tsv` to `v64j.tsv` | The queues of the Version 64 test for `jobs.sh`: the Version 63 queue again (`v64`, 325 jobs); Berlin on sixty seeds for the plain and the digging German player, the new orders one at a time on twelve seeds, the Soviet seat (`v64e`, 240); the wars of 1941 with and without a probe and the bombers (`v64f`, 36); what the card reads after softening (`v64g`, `v64h`); the wider relief rule on both versions (`v64i`, not played: see the traps); the relief test (`v64j`, 16) | `./jobs.sh v64e.tsv out/v64e 3` |
+| `lib.ts` | New plan options. `"fold":true` folds two worn corps of a kind standing together every month (`"fold":"raise"` also raises every cadre again first). `"probe":true` probes a dug-in line whose attack reads 0.7 of the bar or better (a number sets the share) and is not a sure thing; `"bombLine":true` sends the bombers at the same line first. `"rotate":0.7` makes a dug-in line corps under that strength change places with a stronger corps of its kind next door | `'{"minOdds":1.4,...,"probe":true,"bombLine":true}'` |
+| `probe28.ts` | Its `TOTAL` line now ends with the towns taken and when, the attacks by year (fought, won, on a prepared line, men lost and inflicted), and Version 64's counters: folds, cadres raised, reliefs and the months of works handed over, probes, line raids, lines softened, how many attacks that lifted over the bar, and how often the card's chance read better or worse afterwards | `node out64n/probe28.mjs GER 1 7 76 '<plan>'` |
+| `probe41.ts` | The Soviet seat's `TOTAL` line also counts probes, line raids, softened lines and folds | `node out64n/probe41.mjs SOV 1 7 76 '<plan>'` |
+| `probe42.ts` | Writes saved games for the page as the player's month opens, the first month each new card is on offer: `-soften` (a dug-in line a corps can probe and the bombers can reach), `-fold` (two worn corps together), `-left` (works standing empty), each with a `.txt` saying what to click | `node out64n/probe42.mjs GER 1 7 30 '<plan>' out/v64saves/GER-7` |
+| `probe43.ts` | The relief test: on the turns given, every dug-in line corps changes places with a corps of its kind next door on a copy of the game, and the months of works on the two provinces are added up before and after | `node out64q/probe43.mjs GER 1 7 48 '<plan>' 31,35,41,47` |
+| `habits.py` | The new orders by habit from `probe28` outputs: Berlin, towns taken, attacks by year, and the Version 64 counters; a habit may be read from another folder as `DIR/HABIT` | `python3 habits.py out/v64e asis probebomb --seeds 1-24` |
+| `ui26.cjs` | The new cards on a desk and a phone from `probe42` saves: `soften` (the row on the attack card, the probe, the raid planner and the raid), `fold` (the tray's note, the fold card, the fold, the cadre in the arsenal), `left` (the note on works standing empty and the banks on the map) | `node ui26.cjs soften SAVE.json SAVE.txt 90-v64-soften` |
+
+Bundles: `out64` is the Version 63 queue's programs against Version 64; `out64n` is `probe28`, `probe41` and `probe42` with the new plan options; `out64p` adds the better-or-worse count; `out64q` and `out63q` are `probe28` and `probe43` with the wider relief rule against Versions 64 and 63. Building this `lib.ts` against Version 63 warns that `foldChoicesAt`, `orderFold`, `softenOptions` and `orderProbe` are undefined: harmless, the options do nothing there.
+
+Traps met on Version 64:
+
+- The scripted player does not rotate. `"rotate"` found a relief about once in ten wars, because its whole army stands in the line with nothing of the same kind behind it, so the `rotate` and `rotate63` sets read exactly like the plain player. Use `probe43` for what a relief costs, and the share of the line in works (`ladder.py`) for what the hand-over does in ordinary play.
+- A relief between two full provinces cannot be ordered: neither corps can step into a province that already holds five. In `probe43` two tries in three end as "no road, a full province". The worn corps has to step out first.
+- Softening everything wastes men: without a rule the player probed lines it already beat at 6 to 1. A sure thing (chance 0.9 or better and over the bar) is left alone.
+- The card's odds are not its chance: after a probe the odds number often falls (the corps that probed is out of the attack and the fog has lifted) while the chance rises (the works are a month weaker). Count better and worse by the chance.
+- `.leftworks` is also the class of the banks drawn on the map: read `.note.leftworks` for the province panel.
+- `ladder.py` read the line-in-works table to the end of the `TOTAL` line; it now stops at `; took`.
+- Do not rebuild a bundle folder a running queue is using: build changed programs into a new folder (`out64p`, `out64q`).
