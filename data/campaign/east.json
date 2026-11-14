@@ -114,7 +114,7 @@
     [54, "Pskov", 2, ["GER"], "Army Group North has fallen back from Leningrad to the Panther line, the northern end of the East Wall: bunkers and wire along the Narva river, the shore of Lake Peipus, and round Pskov and Ostrov."],
     [54, "Estonia", 2, ["GER"], "The Narva river is the northern anchor of the Panther line. The isthmus between the Gulf of Finland and Lake Peipus is thirty miles wide, and every yard of it is covered.", {"vs": ["SOV"]}],
     [62, "Courland", 1, ["GER"], "Army Group North is cut off in Courland with its back to the Baltic. Hitler will not have it brought out: the harbours of Libau and Windau keep it fed and armed by sea.", {"port": true, "vs": ["LAT", "LIT", "GER"]}],
-    [63, "Budapest", 2, ["HUN", "GER"], "Budapest is to be held to the last house. The Attila line, three belts of trenches and anti-tank ditches, covers Pest on the eastern bank, and the bridges over the Danube are mined.", {"vs": ["HUN", "ROM", "YUG", "SVK"]}]
+    [63, "Budapest", 2, ["HUN", "GER"], "Budapest is to be held to the last house. The Attila line, three belts of fieldworks and anti-tank ditches, covers Pest on the eastern bank, and the bridges over the Danube are mined.", {"vs": ["HUN", "ROM", "YUG", "SVK"]}]
   ],
   "roads": 1,
   "mud": [

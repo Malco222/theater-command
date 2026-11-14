@@ -81,12 +81,12 @@ describe('whoever sits a month out digs in', () => {
     def[0].ap = def[0].apMax - 1;
     def[1].fought = true;
     endPhase(g, 'POL');
-    // The corps that marched and the corps that fought have left their trenches; the third has had another month.
+    // The corps that marched and the corps that fought have left their fieldworks; the third has had another month.
     for (const c of def.slice(0, 2)) { expect(c.dug).toBeUndefined(); expect(c.dugFor).toBeUndefined(); }
     expect(def[2].dugFor).toBe(3);
     for (const c of inside) expect(c.dug).toBeFalsy();
     expect(garrisonOf(g.byName['Warsaw']).every((c) => !c.dug)).toBe(true);
-    // The player's order to give ground costs an army its trenches; an order to stand does not.
+    // The player's order to give ground costs an army its fieldworks; an order to stand does not.
     works(att, 2);
     expect(orderStance(g, att[0], 'back')).toBe(true);
     expect(att[0].dug).toBeUndefined();
@@ -151,7 +151,7 @@ describe('a prepared line', () => {
     // More months than the works need add nothing.
     works(def, M + 5);
     expect(assess(g, att, target).prepared).toBeCloseTo(1, 6);
-    // One line on the Battle Ticket for the trenches and the luck of the day (Version 61).
+    // One line on the Battle Ticket for the fieldworks and the luck of the day (Version 61).
     expect(ready.lines.some((l) => l.label === 'Prepared defence')).toBe(false);
     const row = ready.lines.find((l) => l.label === 'Dug in')!;
     expect(row.value).toBe('The defenders are dug in: their works are finished');
@@ -173,7 +173,7 @@ describe('a prepared line', () => {
     expect(starved.prepared).toBe(0);
     expect(starved.dice).toEqual(FIELD_DICE);
     for (const c of def) c.supplied = true;
-    // One corps of the two has just come up: it has no trenches.
+    // One corps of the two has just come up: it has no fieldworks.
     delete def[1].dug; delete def[1].dugFor;
     const half = assess(g, att, target);
     expect(half.prepared).toBeGreaterThan(0.5);

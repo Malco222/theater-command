@@ -13,8 +13,10 @@
 //   mps:<nat>   the reserve it opened the campaign with
 //   mpx:<nat>   men drawn from it since the campaign opened, in divisions' worth
 //   mpl:<nat>   the lowest warning the player has been given (1 half gone, 2 three quarters gone, 3 spent)
+//   mpe:<nat>   the last month in which no class comes of age, after one was called up early
 
 import data from '../../data/campaign/manpower.json';
+import { turnToDate } from '../core/ticket';
 import { MEN_PER_DIV, type Game } from './types';
 
 export const MANPOWER = data as unknown as {
@@ -33,6 +35,8 @@ export const MANPOWER = data as unknown as {
   warn: number[];
   /** The least share of the month's class a country still raises with its homeland overrun. */
   classFloor: number;
+  /** Calling the next class up early: that many months of classes come at once, and none comes of age for 'gap' months after. */
+  early: { months: number; gap: number };
 };
 
 const KP: Record<string, string> = {}, KX: Record<string, string> = {}, KL: Record<string, string> = {}, KS: Record<string, string> = {};
@@ -40,6 +44,7 @@ const ks = (nat: string): string => (KS[nat] ??= `mps:${nat}`);
 const kp = (nat: string): string => (KP[nat] ??= `mp:${nat}`);
 const kx = (nat: string): string => (KX[nat] ??= `mpx:${nat}`);
 const kl = (nat: string): string => (KL[nat] ??= `mpl:${nat}`);
+const ke = (nat: string): string => `mpe:${nat}`;
 
 /** True where the reserve of men is counted: the grand campaign. */
 export const menRules = (g: Game): boolean => g.flags.open === 1;
@@ -124,9 +129,46 @@ export function returnMen(g: Game, nat: string, divs: number): void {
   g.flags[kx(nat)] = Math.max(0, (g.flags[kx(nat)] ?? 0) - divs);
 }
 
+/** The last month in which no class comes of age, because it was called up early: 0 where none was. */
+export const classGapUntil = (g: Game, nat: string): number => (menRules(g) ? g.flags[ke(nat)] ?? 0 : 0);
+
+/** Why a nation cannot call its next class up early, or null if it can. */
+export function whyNotEarly(g: Game, nat: string): string | null {
+  if (!menRules(g)) return 'The reserve of men is counted in the grand campaign.';
+  const n = g.nations[nat];
+  if (!n?.alive) return 'There is no government left to call anyone up.';
+  if (!n.atWar.length) return 'Only a country at war calls its boys up before their time.';
+  const until = classGapUntil(g, nat);
+  if (g.turn <= until) return `The next class is with the colours already: none comes of age until ${turnToDate(until + 1).label}.`;
+  if (menLeft(g, nat) >= poolAtStart(g, nat) * MANPOWER.most - 1e-9) return 'The reserve is full: there is nowhere to put them.';
+  return null;
+}
+
+/** What calling the next class up early would bring today, in divisions' worth. */
+export function earlyClass(g: Game, nat: string, callUp = 1): number {
+  if (!menRules(g)) return 0;
+  return Math.max(0, Math.min(classNow(g, nat, callUp) * MANPOWER.early.months, poolAtStart(g, nat) * MANPOWER.most - menLeft(g, nat)));
+}
+
+/**
+ * Calls the next class up early: months of classes join the reserve at once, and none comes of age for a while
+ * after. Returns what came, in divisions' worth, or 0 where it cannot be done.
+ */
+export function callEarly(g: Game, nat: string, callUp = 1): number {
+  if (whyNotEarly(g, nat) !== null) return 0;
+  ensure(g, nat);
+  const come = earlyClass(g, nat, callUp);
+  if (come <= 0) return 0;
+  g.flags[kp(nat)] = menLeft(g, nat) + come;
+  g.flags[ke(nat)] = g.turn + MANPOWER.early.gap;
+  return come;
+}
+
 /** The month's class joins the reserve. Returns what came, in divisions' worth. */
 export function classArrives(g: Game, nat: string, callUp = 1): number {
   if (!menRules(g)) return 0;
+  // A class called up early is with the colours already: nobody comes of age in the months it was taken from.
+  if (g.turn <= (g.flags[ke(nat)] ?? 0)) return 0;
   ensure(g, nat);
   const have = menLeft(g, nat), top = poolAtStart(g, nat) * MANPOWER.most;
   const come = Math.max(0, Math.min(classNow(g, nat, callUp), top - have));
@@ -156,8 +198,11 @@ export interface MenView {
   /** The class that comes of age each month, in men, and the share of the homeland it is drawn from. */
   classMen: number;
   home: number;
-  /** Men drawn since the campaign opened. */
+  /** Men drawn since the campaign opened, and the men who have come of age and joined the reserve since then: what it opened with, and those who came, less those drawn, is what stands in it. */
   drawn: number;
+  came: number;
+  /** Months still to come, after this one, in which no class comes of age because one was called up early: 0 as a rule. */
+  gap: number;
   /** One word for how it stands: 'Ample', 'Thinning', 'Short' or 'Spent'. */
   word: string;
   /** How it stands, in a sentence. */
@@ -189,11 +234,12 @@ export function manpower(g: Game, nat: string | null = g.human, callUp = 1): Men
   const divs = menLeft(g, nat), start = poolAtStart(g, nat), cls = classNow(g, nat, callUp), home = homeShare(g, nat);
   const level = menLevel(g, nat);
   const months = cls > 0 ? Math.ceil(3 / cls) : 0;
-  const line = level === 3 ? `The reserve is spent. Only the ${menWords(cls * MEN_PER_DIV)} men who come of age each month reach the armies, and no new corps can be raised${months ? `: a new infantry corps is about ${months} months of them` : ''}.`
+  const gap = Math.max(0, classGapUntil(g, nat) - g.turn), drawnDivs = g.flags[kx(nat)] ?? 0;
+  const line = level === 3 ? `The reserve is spent. Only the ${menWords(cls * MEN_PER_DIV)} men who come of age each month reach the armies, and no new corps can be raised${months ? `: a new infantry corps is about ${months === 1 ? 'a month' : `${months} months`} of them` : ''}.`
     : level === 2 ? `The reserve is running short: ${menWords(divs * MEN_PER_DIV)} men are left. Every loss made good and every new corps is taken from it.`
     : level === 1 ? `The reserve is thinning: ${menWords(divs * MEN_PER_DIV)} men are left of ${menWords(start * MEN_PER_DIV)}.`
     : `${menWords(divs * MEN_PER_DIV)} men stand in reserve.`;
-  return { nat, divs, men: Math.round(divs * MEN_PER_DIV), start, share: start > 0 ? divs / start : 0, classMen: Math.round(cls * MEN_PER_DIV), home, drawn: Math.round((g.flags[kx(nat)] ?? 0) * MEN_PER_DIV), word: WORDS[level], line };
+  return { nat, divs, men: Math.round(divs * MEN_PER_DIV), start, share: start > 0 ? divs / start : 0, classMen: Math.round(cls * MEN_PER_DIV), home, drawn: Math.round(drawnDivs * MEN_PER_DIV), came: Math.round(Math.max(0, divs - start + drawnDivs) * MEN_PER_DIV), gap, word: WORDS[level], line };
 }
 
 /**

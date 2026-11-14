@@ -99,11 +99,11 @@ export interface Directive {
   id: number;
   nat: string;
   /** Take a town, hold one of his own, bring the army up to strength, sign a trade agreement, strike an ally's enemy, or spare the army. */
-  kind: 'take' | 'hold' | 'raise' | 'relief' | 'trade' | 'spare';
+  kind: 'take' | 'hold' | 'raise' | 'relief' | 'trade' | 'spare' | 'build' | 'agent';
   /** Who set it: the nation's own cabinet, or an ally. */
   from: string;
   region?: number;
-  /** For 'raise': the army to reach, in divisions, in the field or forming. For 'trade': the agreements to have signed. For 'spare': the most men that may be lost in battle while it runs. */
+  /** For 'raise': the army to reach, in divisions, in the field or forming. For 'trade': the agreements to have signed. For 'spare': the most men that may be lost in battle while it runs. For 'build': the buildings to have standing or ordered. For 'agent': the agents to have in the service. */
   target?: number;
   /** For 'spare': the men lost in battle since the order came. */
   lost?: number;
@@ -145,7 +145,7 @@ export interface Vow {
 }
 
 /** The war cabinet's demand for a general's dismissal, and the general the player stood by while the cabinet watches him. */
-export interface HeadAsk { general: number; issued: number; /** The last month the player can answer in. */ due: number; why: string }
+export interface HeadAsk { general: number; issued: number; /** The last month the player can answer in. */ due: number; why: string; /** The defeats the cabinet holds against him: battles that could have been won. */ lost?: LostBattle[] }
 export interface StoodBy { general: number; until: number; battles: number; won: number }
 
 /** The player's government (the grand campaign). Rules in government.ts. */
@@ -187,6 +187,10 @@ export interface GovState {
   stood?: StoodBy;
   /** The month a directive was last failed: cause for the cabinet to look for someone to blame. */
   blame?: number;
+  /** What the attack card read against the towns in reach as each of the last months opened, by province: a promise is reckoned on the best of them. */
+  reach?: { t: number; odds: Record<string, number>; depth?: Record<string, number> }[];
+  /** The month the cabinet was switched off, while it is: the watch on a general waits that long. */
+  offAt?: number;
   /** The wing of the cabinet that was on top when it last made the news. */
   wing?: 'hawks' | 'doves' | 'balanced';
 }
@@ -367,7 +371,12 @@ export interface ServiceRecord {
   costly: number;
   /** Defeats in a row. */
   streak: number;
+  /** The battles he has lost since he last won one, the newest last, with the odds they were fought at (the grand campaign): what a cabinet weighs before it asks for his head. */
+  lost?: LostBattle[];
 }
+
+/** A battle a general lost: the month, the province, the attacker's odds as the fight opened, and whether he was the one attacking. */
+export interface LostBattle { t: number; reg: number; odds: number; att: boolean }
 
 export interface General {
   id: number;
