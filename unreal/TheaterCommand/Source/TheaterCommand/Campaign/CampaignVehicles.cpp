@@ -19,9 +19,9 @@ namespace VehicleParts
 		return FLinearColor(FColor::FromHex(Code));
 	}
 
-	static const FLinearColor TrackLight = Hex(TEXT("45403A"));
-	static const FLinearColor TrackDark = Hex(TEXT("2E2B28"));
-	static const FLinearColor TrackEdge = Hex(TEXT("242220"));
+	static const FLinearColor TrackLight = Hex(TEXT("4D3E33")); // (dark steel gone to rust: art fix 12)
+	static const FLinearColor TrackDark = Hex(TEXT("33291F"));
+	static const FLinearColor TrackEdge = Hex(TEXT("2A211B"));
 	static const FLinearColor Tyre = Hex(TEXT("1C1C1B"));
 	static const FLinearColor GunSteel = Hex(TEXT("2E2F31"));
 	static const FLinearColor Rust = Hex(TEXT("5E4534"));
@@ -124,7 +124,14 @@ namespace VehicleParts
 		/** A national marking on a surface that faces the way given (forward, right, up). */
 		void Mark(double F, double R, double U, double Radius, const TCHAR* Tag, double FaceF, double FaceR, double FaceU) const
 		{
-			M.Marking(At(F, R, U), Radius, Tag, FVector(-FaceF, -FaceR, FaceU));
+			// (Art fix 12: a marking is painted for the distance it is seen from, half as large again as life; and on
+			// a plate that faces the side a number is painted behind it. Plain markings, and no party's emblem.)
+			const double Seen = FMiniatureMesh::bOldPieces ? 1.0 : 1.45;
+			M.Marking(At(F, R, U), Radius * Seen, Tag, FVector(-FaceF, -FaceR, FaceU));
+			if (!FMiniatureMesh::bOldPieces && FMath::Abs(FaceF) < 0.05 && FMath::Abs(FaceU) < 0.3 && FMath::Abs(FaceR) > 0.8)
+			{
+				M.Numerals(At(F - Radius * Seen * 2.5, R, U), Radius * Seen * 1.25, 100 + static_cast<int32>(GetTypeHash(FString(Tag)) % 500), FVector(-FaceF, -FaceR, FaceU));
+			}
 		}
 
 		/** Both tracks, link by link, with their wheels. */
@@ -1602,6 +1609,14 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 			Fresh.DustFoot = 0.0;
 			Fresh.DustTop = 1.25;
 			Fresh.DustAmount = 0.5f;
+			if (!bOldPieces)
+			{
+				// (Art fix 12: painted for the distance it is seen from. Mud in the tone of the base's earth, thick on
+				// the running gear and gone by the top of the lower hull.)
+				Fresh.DustTop = 1.0;
+				Fresh.DustAmount = 0.85f;
+				Fresh.Dust = FColor(124, 102, 74);
+			}
 		}
 		VehicleParts::NationTag = Whose.IsEmpty() ? FString(Known->Nation) : Whose;
 		MiniatureParts::NationWanted() = VehicleParts::NationTag;
@@ -1609,11 +1624,12 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 		VehicleParts::bPlain = !bFine;
 		Known->Build(Fresh);
 		VehicleParts::bPlain = false;
+		Fresh.MarkWear(true); // (where its paint is knocked about: the nose, the track guards, the hatches)
 		UE_LOG(LogTheater, Log, TEXT("Model %s%s built: %d points, %d triangles"), *Name, bFine ? TEXT("") : TEXT(" (plain)"), Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
 		Model = &Built.Add(Name, MoveTemp(Fresh));
 	}
 	{
-		TGuardValue<uint8> Painted(Finish, 128); // (a vehicle is painted metal: its paint chips)
+		TGuardValue<uint8> Painted(Finish, 255); // (the model says of each point how worn its paint is: see MarkWear)
 		Stamp(*Model, Where, Metre, Turn);
 	}
 	return true;

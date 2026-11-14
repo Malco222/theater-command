@@ -324,12 +324,12 @@ void ACampaignMapActor::LoadMaterials()
 	{
 		// The paint job (art fix 12): the pieces' paint is weathered, and on their metal it is chipped to the bare
 		// metal in patches. ("-TheaterWear=wear,chip tiling,blot tiling,chip at,chip sharp" tries others; 0 for none.)
-		float Worn[5] = { 1.0f, 0.018f, 0.005f, -0.52f, 9.0f };
+		float Worn[7] = { 1.0f, 0.016f, 0.005f, -0.56f, 10.0f, 0.5f, 0.26f };
 		FString Asked;
 		TArray<FString> Bits;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterWear="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) > 0)
 		{
-			for (int32 K = 0; K < Bits.Num() && K < 5; ++K) { Worn[K] = FCString::Atof(*Bits[K]); }
+			for (int32 K = 0; K < Bits.Num() && K < 7; ++K) { Worn[K] = FCString::Atof(*Bits[K]); }
 		}
 		FMiniatureMesh::bOldPieces = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldPieces"));
 		PieceMaterial->SetScalarParameterValue(TEXT("Wear"), FMiniatureMesh::bOldPieces ? 0.0f : Worn[0]);
@@ -337,6 +337,8 @@ void ACampaignMapActor::LoadMaterials()
 		PieceMaterial->SetScalarParameterValue(TEXT("BlotTiling"), Worn[2]);
 		PieceMaterial->SetScalarParameterValue(TEXT("ChipAt"), Worn[3]);
 		PieceMaterial->SetScalarParameterValue(TEXT("ChipSharp"), Worn[4]);
+		PieceMaterial->SetScalarParameterValue(TEXT("ChipGather"), Worn[5]); // (how much more readily the paint gives way on a nose, a track guard or a hatch)
+		PieceMaterial->SetScalarParameterValue(TEXT("TopLight"), Worn[6]); // (how much paler what faces the sky is than what faces the side)
 		PieceMaterial->SetVectorParameterValue(TEXT("ChipColour"), FLinearColor(0.3f, 0.285f, 0.26f)); // (bare steel, a little rusted)
 	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
@@ -4193,7 +4195,9 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			{
 				At += Out * 1.5;
 			}
-			At += Out * 6.0 + FVector2D(-Out.Y, Out.X) * (Others * 11.0);
+			// (ships in harbour lie close in and close together: they are small there, with a badge on the port in
+			// place of a standard over each fleet)
+			At += Out * 3.2 + FVector2D(-Out.Y, Out.X) * ((Others % 2 == 0 ? 1.0 : -1.0) * ((Others + 1) / 2) * 5.0);
 		}
 		else
 		{
@@ -4210,6 +4214,7 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 		if (Piece)
 		{
 			Piece->SetFleet(this, *Nation, Fleet);
+			Piece->SetAtAnchor(bInHarbour && !Fleet.bReport);
 			Piece->SetStandard(StandardGrowth, StandardLean);
 			Piece->SetRestLocation(MapToWorld(At.X, At.Y, 0.02));
 			Afloat.Add(Fleet.Id);
@@ -5892,6 +5897,23 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		{
 			SleeperShown = Sleeper;
 			SleeperInk->SetScalarParameterValue(TEXT("Opacity"), Sleeper);
+		}
+	}
+
+	// The flock on the pieces' bases is seen only close to: from higher it swallowed the figures and the holder's
+	// colour, so there the base is plain trodden earth inside its ring.
+	{
+		const bool bTurfNear = CameraDistance < (AArmyPiece::bFlockNear ? 4600.0f : 4200.0f);
+		if (bTurfNear != AArmyPiece::bFlockNear)
+		{
+			AArmyPiece::bFlockNear = bTurfNear;
+			for (AArmyPiece* Based : Pieces)
+			{
+				if (Based)
+				{
+					Based->SetFlockShown(bTurfNear);
+				}
+			}
 		}
 	}
 

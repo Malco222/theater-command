@@ -181,7 +181,10 @@ void ACampaignCameraPawn::ApplyView()
 	// many times larger than a real one: that is what gives the shallow focus
 	// of a close-up photograph of a model.
 	FPostProcessSettings& Look = Camera->PostProcessSettings;
-	Look.DepthOfFieldFocalDistance = Distance;
+	// (close to, what is looked at is a piece standing on the table, not the table: the plane of focus is brought
+	// forward to the height of its figures, or it lay behind them)
+	const float Stands = 30.0f * (1.0f - FMath::SmoothStep(1200.0f, 3200.0f, Distance));
+	Look.DepthOfFieldFocalDistance = Distance - Stands * FMath::Abs(FMath::Sin(FMath::DegreesToRadians(GetPitch())));
 	Look.DepthOfFieldFstop = 2.0f;
 	Look.DepthOfFieldSensorWidth = 24.576f * FMath::Max(MiniatureStrength, 1.0f);
 }

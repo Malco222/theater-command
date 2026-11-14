@@ -163,6 +163,7 @@ public:
 	float VerticalScale = 1.0f;
 
 	const TArray<TObjectPtr<AArmyPiece>>& GetPieces() const { return Pieces; }
+	const TMap<int32, TObjectPtr<AArmyPiece>>& GetFleetPieces() const { return FleetPieces; }
 
 	/** The models set out for inspection ("-TheaterParade=Kiev"): whether there are any, and where one stands on the map (or the middle of them all). */
 	bool HasParade() const { return ParadeSpots.Num() > 0; }

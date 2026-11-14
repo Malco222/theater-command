@@ -112,6 +112,29 @@ void AArmyPiece::DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 	Rebuild(Map, Nation);
 }
 
+bool AArmyPiece::bFlockNear = true;
+
+void AArmyPiece::SetFlockShown(bool bShown)
+{
+	if (Flock && Flock->IsVisible() != bShown)
+	{
+		Flock->SetVisibility(bShown);
+	}
+}
+
+void AArmyPiece::SetAtAnchor(bool bInHarbour)
+{
+	bAtAnchor = bInHarbour;
+	if (Standard)
+	{
+		Standard->SetVisibility(!bAtAnchor, true); // (the pole, the cloth and the plate with it)
+	}
+	if (What == 1)
+	{
+		SetSize(bAtAnchor ? 0.55f : 1.0f);
+	}
+}
+
 bool AArmyPiece::GetColours(FVector& OutMiddle, double& OutRadius) const
 {
 	if (IsHidden() || !Cloth || !Cloth->IsVisible())
@@ -176,6 +199,12 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Body->DestroyComponent();
 		Body = nullptr;
 	}
+	if (Flock)
+	{
+		Flock->DestroyComponent();
+		Flock = nullptr;
+	}
+	FMiniatureMesh Turf; // (the flock and tufts on the base: a mesh of their own, shown only close to)
 	if (Cloth)
 	{
 		Cloth->DestroyComponent();
@@ -301,9 +330,11 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			// of two greens scattered on it in patches and a few tufts of longer grass. (The counters under it keep
 			// the nation's colour, and the brass rim under them.)
 			FRandomStream Scatter(GetTypeHash(NationTag) * 31 + RegionId * 7 + 3);
-			const FLinearColor Earth(FColor::FromHex(TEXT("5E4A33"))), EarthPale(FColor::FromHex(TEXT("6F5A3C"))), Flock(FColor::FromHex(TEXT("3E4A26"))), FlockPale(FColor::FromHex(TEXT("4F5A2C"))), Straw(FColor::FromHex(TEXT("8C8448")));
+			// (the earth is pale, trodden and dry, so that the figures stand out against it from working height)
+			const FLinearColor Earth(FColor::FromHex(TEXT("806A4C"))), EarthPale(FColor::FromHex(TEXT("917A58"))), FlockDark(FColor::FromHex(TEXT("3E4A26"))), FlockPale(FColor::FromHex(TEXT("4F5A2C"))), Straw(FColor::FromHex(TEXT("8C8448")));
 			// (a ring of the counter's own painted wood is left showing round the ground, so that the base still says whose it is from above)
-			const double Ground = 0.07 * U, Reach = CounterWidth * 0.5 - 0.8 * U;
+			// (the ring of painted wood is a quarter of the base's radius)
+			const double Ground = 0.07 * U, Reach = CounterWidth * 0.5 * 0.75;
 			Model.Pillar(FVector(0.0, 0.0, Top), Reach, Reach - 0.05 * U, Ground, Earth, 30);
 			for (int32 K = 0; K < 26; ++K)
 			{
@@ -311,14 +342,14 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 				const double Wide = Scatter.FRandRange(0.3f, 0.8f) * U;
 				const FVector At(FMath::Cos(Angle) * Out, FMath::Sin(Angle) * Out, Top + Ground);
 				const int32 Sort = K % 5;
-				Model.Pillar(At, FMath::Min(Wide, Reach - Out), FMath::Min(Wide, Reach - Out) * 0.7, 0.02 * U + 0.003 * U * K, Sort == 0 ? EarthPale : Sort % 2 == 1 ? Flock : FlockPale, 11);
+				(Sort == 0 ? Model : Turf).Pillar(At, FMath::Min(Wide, Reach - Out), FMath::Min(Wide, Reach - Out) * 0.7, 0.02 * U + 0.003 * U * K, Sort == 0 ? EarthPale : Sort % 2 == 1 ? FlockDark : FlockPale, 11);
 				if (Sort == 3)
 				{
 					// (a tuft: three blades of dry grass)
 					for (int32 Blade = 0; Blade < 3; ++Blade)
 					{
 						const double Lean = Blade * 2.1 + Angle;
-						Model.Rod(At, At + FVector(FMath::Cos(Lean) * 0.12 * U, FMath::Sin(Lean) * 0.12 * U, 0.34 * U), 0.03 * U, Straw, 3);
+						Turf.Rod(At, At + FVector(FMath::Cos(Lean) * 0.12 * U, FMath::Sin(Lean) * 0.12 * U, 0.34 * U), 0.03 * U, Straw, 3);
 					}
 				}
 			}
@@ -566,6 +597,17 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Body->RegisterComponent();
 	Body->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 	Body->SetMaterial(0, Map->GetPieceMaterial());
+	if (Turf.Vertices.Num() > 0)
+	{
+		Flock = NewObject<UProceduralMeshComponent>(this);
+		Flock->SetupAttachment(Root);
+		Flock->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Flock->RegisterComponent();
+		Flock->CreateMeshSection(0, Turf.Vertices, Turf.Triangles, Turf.Normals, TArray<FVector2D>(), Turf.Colors, TArray<FProcMeshTangent>(), false);
+		Flock->SetMaterial(0, Map->GetPieceMaterial());
+		Flock->SetCastShadow(false);
+		Flock->SetVisibility(bFlockNear);
+	}
 	Mast = NewObject<UProceduralMeshComponent>(this);
 	Mast->SetupAttachment(Standard);
 	Mast->SetCollisionEnabled(ECollisionEnabled::NoCollision);

@@ -450,6 +450,77 @@ void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString&
 	}
 }
 
+void FMiniatureMesh::MarkWear(bool bAll)
+{
+	if (Vertices.Num() == 0)
+	{
+		return;
+	}
+	const FBox Bounds(Vertices);
+	const double Long = FMath::Max(Bounds.GetSize().X, 0.01), HalfWide = FMath::Max(FMath::Max(FMath::Abs(Bounds.Min.Y), FMath::Abs(Bounds.Max.Y)), 0.01), High = FMath::Max(Bounds.Max.Z, 0.01);
+	for (int32 K = 0; K < Vertices.Num(); ++K)
+	{
+		if (!bAll && Colors[K].A != 128)
+		{
+			continue;
+		}
+		const FVector& V = Vertices[K];
+		// The nose (the vehicle faces -X), the track guards, and what lies flat near the top: hatches and roof edges.
+		const double Nose = 0.9 * FMath::SmoothStep(0.6, 0.95, (Bounds.Max.X - V.X) / Long);
+		const double Guard = FMath::Abs(V.Y) > 0.74 * HalfWide && V.Z > 0.34 * High && V.Z < 0.58 * High ? 0.8 : 0.0;
+		const double Hatch = Normals[K].Z > 0.6 && V.Z > 0.7 * High ? 0.75 : 0.0;
+		Colors[K].A = static_cast<uint8>(128.0 - 100.0 * FMath::Max3(Nose, Guard, Hatch));
+	}
+}
+
+void FMiniatureMesh::Numerals(const FVector& Where, double High, int32 Number, const FVector& Facing)
+{
+	// Each figure is made of up to seven strokes, as a signwriter blocks figures in: a top, a middle, a bottom and
+	// four uprights. Laid out flat, then stood against the surface as a marking is. (Seen from outside, the flat
+	// sheet's +Y runs to the reader's right and its -X is up.)
+	static const uint8 Strokes[10] = { 0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F }; // bits: a top, b upper right, c lower right, d bottom, e lower left, f upper left, g middle
+	const FString Text = FString::FromInt(FMath::Abs(Number));
+	const double Wide = High * 0.56, Gap = High * 0.2, Thick = High * 0.15, All = Text.Len() * Wide + (Text.Len() - 1) * Gap;
+	const FColor White = FLinearColor(FColor::FromHex(TEXT("F2F0E8"))).ToFColor(true);
+	FMiniatureMesh Flat;
+	auto Stroke = [&](double X0, double Y0, double X1, double Y1)
+	{
+		// (a rectangle from (X0, Y0) to (X1, Y1) in the figure's own measure: x to the reader's right, y up)
+		auto At = [&](double X, double Y) { return FVector(-(Y - High * 0.5), X - All * 0.5, High * 0.02); };
+		Flat.Quad(At(X0, Y0), At(X1, Y0), At(X1, Y1), At(X0, Y1), FVector::UpVector, White);
+	};
+	for (int32 K = 0; K < Text.Len(); ++K)
+	{
+		const int32 Digit = FMath::Clamp(static_cast<int32>(Text[K] - TEXT('0')), 0, 9);
+		const uint8 Bits = Strokes[Digit];
+		const double X = K * (Wide + Gap), Mid = High * 0.5;
+		if (Bits & 0x01) { Stroke(X, High - Thick, X + Wide, High); }
+		if (Bits & 0x02) { Stroke(X + Wide - Thick, Mid, X + Wide, High); }
+		if (Bits & 0x04) { Stroke(X + Wide - Thick, 0.0, X + Wide, Mid); }
+		if (Bits & 0x08) { Stroke(X, 0.0, X + Wide, Thick); }
+		if (Bits & 0x10) { Stroke(X, 0.0, X + Thick, Mid); }
+		if (Bits & 0x20) { Stroke(X, Mid, X + Thick, High); }
+		if (Bits & 0x40) { Stroke(X, Mid - Thick * 0.5, X + Wide, Mid + Thick * 0.5); }
+	}
+	const FVector Out = Facing.GetSafeNormal();
+	const FVector Skyward = FMath::Abs(Out.Z) > 0.8 ? FVector(-1.0, 0.0, 0.0) : FVector::UpVector;
+	const FVector Top = (Skyward - Out * (Skyward | Out)).GetSafeNormal();
+	const FVector Side = Top ^ Out;
+	const int32 First = Vertices.Num();
+	for (int32 K = 0; K < Flat.Vertices.Num(); ++K)
+	{
+		const FVector V = Flat.Vertices[K];
+		Vertices.Add(Where + Top * -V.X + Side * V.Y + Out * V.Z);
+		Normals.Add(Out);
+		Colors.Add(Flat.Colors[K]);
+	}
+	// (each stroke is drawn to be seen from either side, since which way round it lies depends on the surface)
+	for (int32 K = 0; K + 2 < Flat.Triangles.Num(); K += 3)
+	{
+		Triangles.Append({ First + Flat.Triangles[K], First + Flat.Triangles[K + 1], First + Flat.Triangles[K + 2], First + Flat.Triangles[K], First + Flat.Triangles[K + 2], First + Flat.Triangles[K + 1] });
+	}
+}
+
 bool FMiniatureMesh::bTrialTank = false;
 bool FMiniatureMesh::bOldPieces = false;
 
@@ -481,8 +552,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				Raw = MakeShared<FRaw>();
 				for (int32 K = 0; K + 2 < PointList->Num(); K += 3)
 				{
-					Raw->Points.Add(FVector((*PointList)[K]->AsNumber(), (*PointList)[K + 1]->AsNumber(), (*PointList)[K + 2]->AsNumber()));
-					Raw->Facings.Add(FVector((*FacingList)[K]->AsNumber(), (*FacingList)[K + 1]->AsNumber(), (*FacingList)[K + 2]->AsNumber()).GetSafeNormal());
+					// (the file has x forward and y to the right; the game's vehicles are built nose toward -X with their right hand at -Y)
+					Raw->Points.Add(FVector(-(*PointList)[K]->AsNumber(), -(*PointList)[K + 1]->AsNumber(), (*PointList)[K + 2]->AsNumber()));
+					Raw->Facings.Add(FVector(-(*FacingList)[K]->AsNumber(), -(*FacingList)[K + 1]->AsNumber(), (*FacingList)[K + 2]->AsNumber()).GetSafeNormal());
 				}
 				for (const TSharedPtr<FJsonValue>& Value : *PaintList)
 				{
@@ -516,8 +588,9 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		FMiniatureMesh Fresh;
 		// (the dust of the road on the tracks and the lower hull, as on the code-built vehicles)
 		Fresh.DustFoot = 0.0;
-		Fresh.DustTop = 1.25;
-		Fresh.DustAmount = 0.5f;
+		Fresh.DustTop = 1.0;
+		Fresh.DustAmount = 0.85f;
+		Fresh.Dust = FColor(124, 102, 74);
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
 		{
 			const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, 8);
@@ -532,6 +605,18 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				Fresh.Face(A, B, C, Raw->Facings[A] + Raw->Facings[B] + Raw->Facings[C]);
 			}
 		}
+		// Its markings: the nation's own on each side of the turret, and a number behind it.
+		{
+			const FBox Bounds(Fresh.Vertices);
+			const double TurretUp = Bounds.Max.Z * 0.76, TurretOut = FMath::Max(FMath::Abs(Bounds.Min.Y), Bounds.Max.Y) * 0.56;
+			for (const double Hand : { -1.0, 1.0 })
+			{
+				TGuardValue<uint8> Metal(Fresh.Finish, 128);
+				Fresh.Marking(FVector(0.15, Hand * TurretOut, TurretUp), 0.22, Tag == TEXT("SOV") ? FString(TEXT("SOV-ARMY")) : Tag == TEXT("USA") ? FString(TEXT("USA-ARMY")) : Tag == TEXT("UK") ? FString(TEXT("UK-FLASH")) : Tag, FVector(0.0, Hand, 0.12));
+				Fresh.Numerals(FVector(0.82, Hand * TurretOut * 0.96, TurretUp), 0.3, 100 + static_cast<int32>(GetTypeHash(Tag) % 500), FVector(0.0, Hand, 0.12));
+			}
+		}
+		Fresh.MarkWear(false);
 		Model = &Painted.Add(Key, MoveTemp(Fresh));
 	}
 	TGuardValue<uint8> AsPainted(Finish, 255); // (each point keeps what the model says it is made of)

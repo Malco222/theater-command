@@ -560,6 +560,38 @@ namespace
 					Taken.Add(FBox2D(Corner - FVector2D(3.0, 2.0), Corner + FVector2D(SealWide + 3.0, SealHigh + 2.0)));
 					continue;
 				}
+				if (Each.bHarbour)
+				{
+					// Ships in harbour: a small plate with an anchor drawn on it and the number of ships.
+					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 9);
+					const FVector2D CountSize = Measure->Measure(Each.Name, CountFont);
+					const double BadgeWide = 30.0 + CountSize.X, BadgeHigh = 16.0;
+					const FVector2D Corner(Each.At.X / Scale - BadgeWide * 0.5, Each.At.Y / Scale);
+					if (UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(BadgeWide, BadgeHigh))))
+					{
+						continue;
+					}
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(BadgeWide, BadgeHigh), FSlateLayoutTransform(Corner)), &Plate, ESlateDrawEffect::None, Plate.GetTint(InWidgetStyle));
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, BadgeHigh - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour);
+					// (the anchor: a ring, a shank with its stock across, and the two flukes on their curved arm)
+					const FVector2D Middle = Corner + FVector2D(17.0, BadgeHigh * 0.5);
+					const FPaintGeometry Whole = Geometry.ToPaintGeometry();
+					auto Stroke = [&](std::initializer_list<FVector2D> Points, float Thick)
+					{
+						TArray<FVector2D> Line;
+						for (const FVector2D& Point : Points)
+						{
+							Line.Add(Middle + Point);
+						}
+						FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, Whole, Line, ESlateDrawEffect::None, NameInk, true, Thick);
+					};
+					Stroke({ { 0.0, -3.6 }, { 0.0, 5.0 } }, 1.5f);
+					Stroke({ { -2.6, -2.2 }, { 2.6, -2.2 } }, 1.4f);
+					Stroke({ { -1.0, -5.2 }, { 1.0, -5.2 }, { 1.0, -3.8 }, { -1.0, -3.8 }, { -1.0, -5.2 } }, 1.0f);
+					Stroke({ { -4.4, 1.6 }, { -3.2, 4.0 }, { 0.0, 5.2 }, { 3.2, 4.0 }, { 4.4, 1.6 } }, 1.5f);
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(25.0, 1.5))), Each.Name, CountFont, ESlateDrawEffect::None, NameInk);
+					continue;
+				}
 				if (Each.bAirfield)
 				{
 					// An airfield in use: a small plate with a little aircraft drawn on it and the number of groups.

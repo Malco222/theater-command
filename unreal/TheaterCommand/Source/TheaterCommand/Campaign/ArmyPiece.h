@@ -74,6 +74,15 @@ public:
 	void DressAs(ACampaignMapActor* Map, const FCampaignNation& Nation, int32 Works, bool bInCamp, int32 Supply);
 	/** Where its camp fire burns, in the world, for the smoke that rises from it. */
 	FVector GetCampFire() const;
+	/** Shows or hides the flock on every base (the map does it as the eye rises and comes down). New pieces take it as they are made. */
+	void SetFlockShown(bool bShown);
+	static bool bFlockNear;
+	/** A fleet lying in harbour is drawn small, at anchor by its port, with no standard over it: a small badge on the port says how many ships are in (the map is the clearer for it). */
+	void SetAtAnchor(bool bInHarbour);
+	bool IsAtAnchor() const { return What == 1 && bAtAnchor; }
+	int32 GetFleetShips() const { return What == 1 ? Fleet.Ships() : 0; }
+	int32 GetFleetBase() const { return What == 1 ? Fleet.Base : INDEX_NONE; }
+	const FString& GetNationTag() const { return NationTag; }
 	/** Its colours, as a ball in the world: what a town's name plate must not be drawn across. False while the piece is hidden. */
 	bool GetColours(FVector& OutMiddle, double& OutRadius) const;
 
@@ -95,7 +104,6 @@ public:
 	int32 GetRegionId() const { return RegionId; }
 	/** For an air fleet: the province its airfield is in. */
 	int32 GetBaseRegion() const { return What == 2 ? Wing.Base : RegionId; }
-	const FString& GetNationTag() const { return NationTag; }
 	const FString& GetGeneral() const { return General; }
 	int32 GetDivisions() const { return Divisions; }
 	int32 GetMen() const { return Men; }
@@ -163,6 +171,10 @@ private:
 	// What the army is about, shown round its base so it can be read without a click: 0 nothing, 1 digging in,
 	// 2 entrenched; in camp, resting; 0 not known, 1 supplied, 2 cut off.
 	int32 WorksState = 0;
+	bool bAtAnchor = false;
+	/** The flock and tufts on the base: shown only close to, where they are seen for what they are. From working height they swallowed the figures. */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> Flock;
 	bool bCamp = false;
 	int32 SupplyState = 0;
 	FVector CampFireAt = FVector::ZeroVector; // in the piece's own frame

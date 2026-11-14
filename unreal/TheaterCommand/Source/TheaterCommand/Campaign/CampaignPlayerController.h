@@ -214,7 +214,8 @@ struct FTownPlate
 	FLinearColor Colour = FLinearColor::Gray; // of whoever holds the place
 	bool bCapital = false;
 	bool bFar = false; // seen from far off: a small plate
-	bool bAirfield = false; // not a town at all: the badge of an airfield with air groups based on it (Name is how many)
+	bool bAirfield = false;
+	bool bHarbour = false; // ships in harbour: an anchor and how many // not a town at all: the badge of an airfield with air groups based on it (Name is how many)
 	bool bSeal = false; // not a town either: the seal on the town a directive of the war cabinet names (Name is the months left)
 	bool bVow = false; // with bSeal: it is the player's own promise to the cabinet, in wax red, not the cabinet's directive in brass
 	int32 Rank = 0;

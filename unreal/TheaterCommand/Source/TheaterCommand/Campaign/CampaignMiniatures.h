@@ -66,6 +66,14 @@ struct FMiniatureMesh
 	 */
 	void Marking(const FVector& Where, double Radius, const FString& Tag, const FVector& Facing, double Curve = 0.0);
 
+	/**
+	 * Marks where a finished vehicle (built nose toward -X, in metres) is knocked about, for the pieces' material:
+	 * its nose, its track guards and its hatches take their alpha down from a half toward nothing, and there the
+	 * paint chips most. With bAll every point is taken for painted metal; otherwise only those already marked so.
+	 */
+	void MarkWear(bool bAll);
+	/** A number painted on a surface that faces the way given, as a marking is: plain white figures, read from outside. */
+	void Numerals(const FVector& Where, double High, int32 Number, const FVector& Facing);
 	/** Copies a finished model into this mesh, at a place, to a size, turned. */
 	void Stamp(const FMiniatureMesh& Model, const FVector& Where, double Scale, double Turn);
 

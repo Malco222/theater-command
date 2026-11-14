@@ -1549,6 +1549,41 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 				Badge.Colour = FLinearColor(Nation->Color);
 			}
 		}
+		// Ships lying in harbour wear a small badge on their port in the same way: an anchor and how many ships
+		// are in, all the fleets of one nation in that port together. (The ships themselves lie small at anchor
+		// beside it, and a click on them takes that fleet in hand.)
+		TMap<FString, FTownPlate> Harbours;
+		for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : Map->GetFleetPieces())
+		{
+			const AArmyPiece* Fleet = Pair.Value;
+			FVector2D Screen;
+			if (!Fleet || !Fleet->IsAtAnchor() || Fleet->IsHidden() || !ProjectWorldLocationToScreen(Fleet->GetRestLocation(), Screen, false)
+				|| Screen.X < -40.0 || Screen.X > Width + 40.0 || Screen.Y < -20.0 || Screen.Y > Height + 20.0)
+			{
+				continue;
+			}
+			const FString Key = FString::Printf(TEXT("%d|%s"), Fleet->GetFleetBase(), *Fleet->GetNationTag());
+			if (FTownPlate* Known = Harbours.Find(Key))
+			{
+				Known->Rank += Fleet->GetFleetShips(); // (kept here until the badges are handed over)
+				Known->At.Y = FMath::Min(Known->At.Y, Screen.Y - 30.0);
+				continue;
+			}
+			FTownPlate& Badge = Harbours.Add(Key);
+			Badge.At = Screen - FVector2D(0.0, 30.0);
+			Badge.bHarbour = true;
+			Badge.Rank = Fleet->GetFleetShips();
+			if (const FCampaignNation* Nation = Data.FindNation(Fleet->GetNationTag()))
+			{
+				Badge.Colour = FLinearColor(Nation->Color);
+			}
+		}
+		for (TPair<FString, FTownPlate>& Pair : Harbours)
+		{
+			Pair.Value.Name = FString::FromInt(Pair.Value.Rank);
+			Pair.Value.Rank = -1;
+			Out.Add(Pair.Value);
+		}
 	}
 }
 

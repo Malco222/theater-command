@@ -157,12 +157,21 @@ def build_map_surface():
     connect(chip_uv, "", speck, "UVs")
     blot = node(m, unreal.MaterialExpressionTextureSample, -600, -1560, texture=noise, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
     connect(blot_uv, "", blot, "UVs")
-    # (a chip where the fine noise and the broad one are both high: chips come in patches, not evenly)
+    # (a chip where the fine noise and the broad one are both high: chips come in patches, not evenly. They gather
+    # where a vehicle is knocked about, its nose, its track guards and its hatches, which the mesh marks by taking
+    # its alpha down from a half toward nothing: there the paint gives way far more readily.)
+    gather = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, (colour, "A"), -1.0, -900, -1950), 0.5, -750, -1950), 2.56, -600, -1950), -450, -1950)
     chipped = times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate,
-                                       times(m, plus(m, times(m, (speck, "R"), plus(m, (blot, "G"), 0.5, -350, -1650), -200, -1700), scalar(m, "ChipAt", -0.78, -350, -1800), -50, -1750),
-                                             scalar(m, "ChipSharp", 9.0, -50, -1850), 100, -1750), 250, -1750), metal, 400, -1750), wear, 550, -1750)
-    weathered = times(m, tinted, lerp(m, 1.0, plus(m, times(m, (blot, "R"), 0.42, -350, -1500), 0.8, -200, -1500),
-                                      times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900)
+                                       times(m, plus(m, plus(m, times(m, (speck, "R"), plus(m, (blot, "G"), 0.5, -350, -1650), -200, -1700), scalar(m, "ChipAt", -0.78, -350, -1800), -50, -1750),
+                                                     times(m, gather, scalar(m, "ChipGather", 0.3, -350, -1900), -200, -1900), 50, -1800),
+                                             scalar(m, "ChipSharp", 9.0, -50, -1850), 150, -1750), 300, -1750), metal, 450, -1750), wear, 600, -1750)
+    # (and what faces the sky is paler than what faces the side: the light from above, and the dust that settles)
+    skyward = node(m, unreal.MaterialExpressionComponentMask, -900, -2100, r=False, g=False, b=True, a=False)
+    connect(node(m, unreal.MaterialExpressionVertexNormalWS, -1100, -2100), "", skyward, "")
+    lit_top = plus(m, 1.0, times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate, skyward, -750, -2100), scalar(m, "TopLight", 0.26, -750, -2000), -600, -2050),
+                                 times(m, metal, wear, -600, -2150), -450, -2100), -300, -2100)
+    weathered = times(m, times(m, tinted, lerp(m, 1.0, plus(m, times(m, (blot, "R"), 0.42, -350, -1500), 0.8, -200, -1500),
+                                               times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900), lit_top, 700, -1000)
     tinted = lerp(m, weathered, vector(m, "ChipColour", (0.13, 0.125, 0.12, 1.0), 450, -1300), chipped, 750, -900)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
     to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
