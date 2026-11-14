@@ -2,6 +2,7 @@
 // what is left buys new formations and fortifications that take months to arrive.
 // The numbers live in data/campaign/production.json so they can be changed without code.
 
+import { byHand } from './depth';
 import data from '../../data/campaign/production.json';
 import budgetData from '../../data/campaign/budget.json';
 import arsenalData from '../../data/campaign/arsenal.json';
@@ -542,7 +543,10 @@ export function gunsWanted(g: Game, nat: string): boolean {
 /** The computer's factory policy: keep a reserve for replacements, spend the rest on new corps. */
 export function aiProduction(g: Game, nat: string): void {
   const n = g.nations[nat];
-  if (nat === g.human || !n.alive || n.capital < 0 || !canBuildYet(g, nat)) return;
+  // The player places his own orders, unless he has handed building to his staff (depth.ts).
+  // (His staff does not wait for history's mobilisation to run its course, as a computer nation does: the player's
+  // treasury is not skimmed while it waits, so the money is there to be spent, in peace as in war.)
+  if (byHand(g, nat, 'build') || !n.alive || n.capital < 0 || (nat !== g.human && !canBuildYet(g, nat))) return;
   const cap = g.regions[n.capital];
   if (!isHome(g, nat, cap)) return;
   let home = 0;

@@ -57,6 +57,8 @@ import {
   whyNotAppoint, whyNotDecree, whyNotPromise, whyNotSetAside, whyNotStandBy, whyNotTakeBack, type GovView, type PromiseTarget, type PromiseTerms,
 } from './government';
 import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, manpower, menWords, raisable, whyNotEarly, type MenView } from './manpower';
+import { commandView, handOver, setDepth, setStaffCap, staffMonth, type CommandView } from './desks';
+import { staffRuns, type DeskId } from './depth';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -98,6 +100,8 @@ export function beginHuman(g: Game): void {
   // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
   noteReadings(g);
   quietNews(g);
+  // Last, the desks he has handed to his staff do their month's work, each with one line of news (the grand campaign).
+  staffMonth(g);
 }
 
 export function endHuman(g: Game): void {
@@ -204,6 +208,29 @@ export function whyNotSetLevel(g: Game, id: string): string | null {
 /** Puts the campaign on another level. It can be done in any month and takes hold at once. */
 export function orderLevel(g: Game, id: string): boolean {
   return whyNotSetLevel(g, id) === null && setLevel(g, id);
+}
+
+// ---- How deep the player plays (the grand campaign) --------------------------------------------
+
+/** The depths, the desks with who runs each and what it did this month, the spending cap and the three off switches. Null outside the grand campaign. */
+export const commandOf = (g: Game): CommandView | null => commandView(g);
+
+/** True while the player's staff runs this desk for him. */
+export const staffRunsDesk = (g: Game, desk: DeskId): boolean => staffRuns(g, g.human, desk);
+
+/** Hands a desk to the staff, or takes it back. In the player's own month a staff given a desk goes to work on it at once. */
+export function orderDesk(g: Game, desk: DeskId, staff: boolean): boolean {
+  return g.human !== null && handOver(g, desk, staff, humanUp(g) && !onEve(g));
+}
+
+/** Puts the campaign at one of the three depths: every desk, the cabinet, whether it can fall, and the fog of war. It can be done in any month. */
+export function orderDepth(g: Game, id: string): boolean {
+  return g.human !== null && setDepth(g, id, humanUp(g) && !onEve(g));
+}
+
+/** Sets the share of the treasury the staff may spend in a month: 25, 50, 75 or 100. */
+export function orderStaffCap(g: Game, pct: number): boolean {
+  return g.human !== null && setStaffCap(g, pct);
 }
 
 /** True when the nation up next is the player's and still in the war. */

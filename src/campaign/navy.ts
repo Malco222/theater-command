@@ -3,6 +3,7 @@
 // knows (ships by class, aircraft on the coasts, admirals, readiness), and every number
 // lives in data/campaign/navy.json and data/campaign/seas.json.
 
+import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
@@ -1069,7 +1070,8 @@ function blockadeWanted(g: Game, z: number, nat: string): boolean {
 
 /** Orders for one computer-run nation's fleets. Named orders from the plan come first. */
 export function navalAI(g: Game, nat: string, orders?: { fleet: string; zone: string; stance: Stance }[]): void {
-  if (nat === g.human) return;
+  // The player's fleets are his own to order, unless he has handed the navy to his admirals (depth.ts).
+  if (byHand(g, nat, 'navy')) return;
   const n = g.nations[nat];
   for (const f of fleetsOf(g, nat)) {
     const home = (): void => { sail(g, f, f.home, 'port'); };
