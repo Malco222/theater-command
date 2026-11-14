@@ -6,7 +6,7 @@
 import plan from '../../data/campaign/plan-historical.json';
 import theatreData from '../../data/campaign/theatres.json';
 import { airAI } from './air';
-import { aiProduction, income } from './economy';
+import { aiProduction, gunsWanted, income } from './economy';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { aiArsenal } from './arsenal';
@@ -136,7 +136,7 @@ export function runAI(g: Game, nat: string): void {
   aiBridges(g, nat, (x, from) => blowBridges(g, nat, x, from));
   aiProduction(g, nat);
   aiArsenal(g, nat);
-  civicAI(g, nat, income(g, nat), keepsStores(g, nat));
+  civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat));
 }
 
 function campaign(g: Game, nat: string): void {
@@ -229,7 +229,13 @@ function sieges(g: Game, nat: string, after = false): void {
     // Off the march it storms only what it is sure to carry; after a month round the place, what it probably will;
     // and when the siege has dragged on, it settles for less and at last for a gamble.
     const need = sat >= SIEGE.ai.last.after ? SIEGE.ai.last.odds : sat >= 2 ? SIEGE.ai.late : sat >= 1 ? SIEGE.ai.assault : SIEGE.ai.hasty;
-    const pool = (): Corps[] => stormForce(g, mine().filter((c) => c.org >= 0.35), r);
+    // Allies standing round the same town go in with it: besiegers who each fall short alone storm together. The
+    // player's own corps are his to order, and a corps lent to another army keeps to that army.
+    const friends = (): Corps[] => r.units.filter((c) => c.nat !== nat && c.nat !== g.human && !c.dead && c.kind !== 'fort' && c.joint === undefined && c.leave === undefined && allied(g, c.nat, nat) && atWar(g, c.nat, r.ctrl));
+    const pool = (): Corps[] => {
+      const own = mine().filter((c) => c.org >= 0.35);
+      return own.some((c) => c.kind !== 'eng') ? stormForce(g, [...own, ...friends().filter((c) => c.org >= 0.35)], r, nat) : [];
+    };
     const odds = (): number => { const p = pool(); return p.length ? assess(g, p, r, { town: true }).odds : 0; };
     const inside = garrisonOf(r).reduce((s, c) => s + c.divs * c.str, 0) + guardOf(g, r);
     const size = townSize(g, r);
@@ -474,6 +480,7 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   const follow = posture === 'attack' && !ph!.force;
   const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
   const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g, nat)) : null;
+  gunsUp(g, nat, enemies, only);
   offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
   if (!n.alive) return;
   if (posture === 'redeploy') redeploy(g, nat, ph!, enemies);
@@ -753,8 +760,61 @@ function doorstep(g: Game, nat: string, goal: Region | null): Int16Array | null 
   return d;
 }
 
+/**
+ * The grand campaign: the guns go where the works are. Before the month's attacks an artillery corps that stands
+ * beside no dug-in enemy and no fortress is sent to the nearest sector of its army's front that does, the sectors
+ * opposite the staff's targets first, as long as other troops stand there and the sector has not its guns already.
+ */
+export function gunsUp(g: Game, nat: string, enemies: Set<string>, targets: Set<string> | null): void {
+  if (g.flags.open !== 1) return;
+  const guns = g.corps.filter((c) => c.nat === nat && !c.dead && c.kind === 'art' && !c.hold && !c.town && c.ap > 0 && c.joint === undefined && c.leave === undefined && !massed.has(c.id));
+  if (!guns.length) return;
+  const works = (x: Region): boolean => enemies.has(ctl(g, x)) && atWar(g, nat, ctl(g, x)) && (!!x.fort || hostileUnits(g, x, nat).some((u) => u.dug));
+  const facing = (r: Region): number => {
+    let best = 0;
+    for (const j of r.nb) { const x = g.regions[j]; if (works(x)) best = Math.max(best, !targets || targets.has(x.name) ? 2 : 1); }
+    return best;
+  };
+  const gunsAt = (r: Region): number => r.units.filter((u) => u.nat === nat && u.kind === 'art').length;
+  for (const c of guns) {
+    const here = g.regions[c.reg];
+    const now = facing(here);
+    if (now === 2) continue;
+    const far = hops(g, c.reg, (x) => within(x) && allied(g, nat, ctl(g, x)));
+    let best: Region | null = null, bv = now ? 10 : 0;
+    for (const r of g.regions) {
+      const d = far[r.id];
+      if (d < 1 || d > 4) continue;
+      const f = facing(r);
+      if (!f || gunsAt(r) >= DEFENCE.frontage.guns || !r.units.some((u) => u.nat === nat && u.kind !== 'art' && u.kind !== 'eng')) continue;
+      const v = f * 10 - d;
+      if (v > bv) { bv = v; best = r; }
+    }
+    if (best) walkToward(g, c, best);
+  }
+}
+
+/**
+ * The two-wave attack (the grand campaign). Where the whole force the roads will carry cannot take a place at the
+ * odds the staff asks, but more corps stand ready behind it than the roads carry at once, the staff sends those in
+ * first, to wear the works and tire the men in them, and the main body after them the same month. Returns the first
+ * wave and the odds the main body will then have, or null where two waves would not do it either.
+ */
+export function twoWaves(g: Game, avail: Corps[], pool: Corps[], target: Region, need: number): { corps: Corps[]; then: number } | null {
+  if (g.flags.open !== 1) return null;
+  const H = DEFENCE.hammer;
+  const first = limitAttackers(g, avail.filter((c) => c.org >= 0.35 && !pool.includes(c)), target);
+  if (!first.length) return null;
+  const a1 = assess(g, first, target);
+  if (a1.odds < H.first) return null;
+  const a2 = assess(g, pool, target, { after: { blows: a1.weight, wear: a1.wear } });
+  return a2.odds >= need * H.second ? { corps: first, then: a2.odds } : null;
+}
+
 function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null, oddsFor: Record<string, number> = {}): void {
   const failed = new Set<number>();
+  // Places a first wave has gone in at this month: the main body follows, and nobody sends a third.
+  const waved = new Set<number>();
   const axis = new Set(axisList);
   // In the first month the armoured thrust takes its objectives in order; after that the whole line is open.
   const notYet = (name: string): boolean => {
@@ -798,7 +858,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           list.push(c);
         }
       }
-      let best: { score: number; target: Region; corps: Corps[]; battle: boolean } | null = null;
+      let best: { score: number; target: Region; corps: Corps[]; battle: boolean; wave?: boolean } | null = null;
       for (const [j, avail] of cand) {
         const target = g.regions[j];
         const value = target.vp * 2 + (target.cap ? 8 : 0) + pull[j];
@@ -829,13 +889,21 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
           }
           // Against a line that is dug in and fed the staff asks for longer odds (the grand campaign), and it does
           // not come straight back at a town whose siege has just been raised unless it has much the stronger force.
+          let wave = false;
           if (!pick) {
             const sore = g.flags.open === 1 && g.turn - (g.flags[`relieved:${j}`] ?? -99) <= SIEGE.ai.relieved.months ? SIEGE.ai.relieved.odds : 0;
-            if (odds < (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready + sore) continue;
-            pick = pool;
+            const need = (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready + sore;
+            if (odds >= need) pick = pool;
+            else {
+              // Not at these odds in one blow: in two, if there are the corps for it.
+              const two = single || waved.has(j) ? null : twoWaves(g, avail, pool, target, need);
+              if (!two) continue;
+              pick = two.corps; odds = two.then; wave = true;
+            }
           }
-          const score = value + Math.min(odds, 4);
-          if (!best || score > best.score) best = { score, target, corps: pick, battle: true };
+          // (A place that needs two waves is a dearer prize than one that falls to one.)
+          const score = value + Math.min(odds, 4) - (wave ? 0.5 : 0);
+          if (!best || score > best.score) best = { score, target, corps: pick, battle: true, wave };
         }
       }
       if (!best) break;
@@ -843,7 +911,9 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
       if (best.battle) {
         taken = resolveBattle(g, best.corps, best.target).taken;
         // A slow command does not get a second assault organised in the same month, and some plans allow only one.
-        if (!taken && (g.nations[nat].slowCommand || single)) failed.add(best.target.id);
+        // (Two waves laid on beforehand are one operation: the main body goes in behind the first wave.)
+        if (best.wave) waved.add(best.target.id);
+        else if (!taken && (g.nations[nat].slowCommand || single)) failed.add(best.target.id);
       }
       else { taken = moveCorps(g, best.corps[0], best.target); if (!taken) failed.add(best.target.id); }
       if (taken && g.nations[nat].alive) support(g, nat, best.target);

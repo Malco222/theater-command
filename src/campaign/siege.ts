@@ -16,7 +16,7 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { allied, armySize, assess, atWar, capture, corpsBase, headline, men, relocate, removeCorps, resolveBattle, sendHome, type Assessment } from './game';
+import { allied, armySize, assess, atWar, capture, corpsBase, headline, men, relocate, removeCorps, resolveBattle, sendHome, theName, type Assessment } from './game';
 import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
@@ -29,7 +29,7 @@ export const SIEGE = data as unknown as {
   bonus: Record<TownSize, number>; fortBonus: number[];
   guard: Record<TownSize, number>; guardShare: number; guardOrg: number;
   stores: Record<TownSize, number>; fortStores: number;
-  ring: number; ringNear: number; summons: number; summonsNot: TownSize[]; stand: number;
+  ring: number; ringNear: number; pocket: { least: number; share: number }; summons: number; summonsNot: TownSize[]; stand: number;
   assault: { ap: number; loss: number; armour: number; hasty: Record<TownSize, number>; guardHit: number; dice: [number, number] };
   breach: { gun: number; raid: number; shell: number; most: number; mend: number };
   bombard: { raidFull: number; shellFull: number; org: number; floor: number; guard: number; intensity: number; value: number };
@@ -151,7 +151,23 @@ export function feeders(g: Game, r: Region): string[] {
   if (!r.port || !r.seas.length) return [];
   // The quays of a small place lie outside the town: lost with the field, or wrecked, they land nothing (prizes.ts).
   if (!harbourOpen(g, r)) return [];
-  return [...new Set([r.ctrl, ...garrisonOf(r).map((c) => c.nat)])].filter((id) => { const n = g.nations[id]; return !!n && n.alive && (n.seaSupply || n.sealift > 0); });
+  // Ships have to sail from somewhere: a country down to its last harbour has nothing to send into it.
+  return [...new Set([r.ctrl, ...garrisonOf(r).map((c) => c.nat)])].filter((id) => { const n = g.nations[id]; return !!n && n.alive && (n.seaSupply || n.sealift > 0) && portElsewhere(g, id, [r.id]); });
+}
+
+/**
+ * True if a nation has a harbour to send ships from other than the places listed: a port of its own or of an ally
+ * that no enemy army stands round, or a base off the map.
+ */
+export function portElsewhere(g: Game, nat: string, not: number[]): boolean {
+  const n = g.nations[nat];
+  if (!n) return false;
+  if (n.offmap || g.fleets.some((f) => f.nat === nat && f.base < 0)) return true;
+  for (const x of g.regions) {
+    if (!x.port || !x.seas.length || not.includes(x.id) || !allied(g, nat, x.ctrl)) continue;
+    if (allied(g, nat, fieldCtrl(g, x))) return true;
+  }
+  return false;
 }
 
 /** True where the defenders' ships can still bring food into the harbour: such a town is never starved. */
@@ -189,6 +205,187 @@ export function ringClosed(g: Game, r: Region): boolean {
 
 /** True while the garrison still eats: the stores last, or ships still come in. */
 export const garrisonFed = (g: Game, r: Region): boolean => !besieged(g, r) || monthsShut(g, r) <= storesOf(g, r) || fedBySea(g, r);
+
+// ---- A pocket: part of a country cut off from the rest of it ------------------------------------
+//
+// An army is fed from its country's depots: the capital, the great industrial regions. That is right while the
+// country stands behind them. A capital with one province left to it and the enemy on every road is no country:
+// the army round it lives on what the town has in store, and when that is eaten it goes hungry like any army cut
+// off in the open. Four flags for each province of a pocket: `pkt:` the month it was cut off, `pkte:` the stores
+// eaten so far in tenths of a month, `pktn:` whose it was, and `pktx:` once the stores are spent.
+
+/** The provinces joined to one through ground a side holds in the field, or null if they come to more than `most`: that is a country, not a pocket. */
+function joined(g: Game, nat: string, from: number, most: number): number[] | null {
+  const out = [from];
+  for (let i = 0; i < out.length; i++) {
+    for (const j of g.regions[out[i]].nb) {
+      if (out.includes(j) || !allied(g, nat, fieldCtrl(g, g.regions[j]))) continue;
+      out.push(j);
+      if (out.length > most) return null;
+    }
+  }
+  return out;
+}
+
+/** True where a nation's army is fed from a province by right: its capital, its great industrial regions, a depot it has built. */
+const depotOf = (g: Game, nat: string, r: Region): boolean => r.ctrl === nat && r.owner === nat && (r.cap || r.fac >= 3 || !!g.flags[`depot:${r.id}`]);
+
+/**
+ * The pocket a province of this nation lies in, if it is cut off from its country: a few provinces, a small part
+ * of the home ground, every road out of them running into ground an enemy holds, and no ship able to come in from
+ * another port. Null otherwise. `home` is the count of the nation's home provinces.
+ */
+function cutOffAt(g: Game, nat: string, r: Region, home: number): number[] | null {
+  const P = SIEGE.pocket;
+  const most = Math.min(P.least - 1, Math.ceil(P.share * home) - 1);
+  if (most < 1 || !allied(g, nat, fieldCtrl(g, r))) return null;
+  const pocket = joined(g, nat, r.id, most);
+  if (!pocket) return null;
+  let roads = 0;
+  for (const id of pocket) {
+    for (const j of g.regions[id].nb) {
+      if (pocket.includes(j)) continue;
+      // A neutral neighbour is no enemy: the ring is not closed.
+      if (!atWar(g, nat, fieldCtrl(g, g.regions[j]))) return null;
+      roads++;
+    }
+  }
+  if (!roads) return null;
+  const n = g.nations[nat];
+  const ships = n.seaSupply || n.sealift > 0;
+  if (ships && pocket.some((id) => { const x = g.regions[id]; return x.port && x.seas.length > 0 && allied(g, nat, x.ctrl) && harbourOpen(g, x) && seaOpenAt(g, nat, x); }) && portElsewhere(g, nat, pocket)) return null;
+  return pocket;
+}
+
+/** The town a pocket lives on: the one with the most in store among those its side holds. */
+function larder(g: Game, nat: string, pocket: number[]): Region | null {
+  let best: Region | null = null;
+  for (const id of pocket) {
+    const x = g.regions[id];
+    if (!allied(g, nat, x.ctrl)) continue;
+    if (!best || storesOf(g, x) > storesOf(g, best)) best = x;
+  }
+  return best;
+}
+
+const natIndex = (g: Game, nat: string): number => Object.keys(g.nations).indexOf(nat);
+
+/** The nation whose troops are cut off in a province, or null if it lies in no pocket. */
+export function pocketNat(g: Game, r: Region): string | null {
+  if (g.flags.sieges !== 1 || g.flags[`pkt:${r.id}`] === undefined) return null;
+  return Object.keys(g.nations)[g.flags[`pktn:${r.id}`] ?? -1] ?? null;
+}
+
+/** True for a corps cut off with its country's last depot: it eats the town's stores, and no drafts reach it. */
+export const inPocket = (g: Game, c: Corps): boolean => g.flags[`pkt:${c.reg}`] !== undefined && pocketNat(g, g.regions[c.reg]) === c.nat;
+
+/** True where a pocket's stores are spent: the province feeds nobody of the nation cut off in it (game.ts, the supply). */
+export const pocketDry = (g: Game, r: Region, nat: string): boolean => g.flags[`pktx:${r.id}`] === 1 && pocketNat(g, r) === nat;
+
+function clearPocket(g: Game, r: Region): void {
+  delete g.flags[`pkt:${r.id}`];
+  delete g.flags[`pkte:${r.id}`];
+  delete g.flags[`pktn:${r.id}`];
+  delete g.flags[`pktx:${r.id}`];
+}
+
+/** How fast a pocket's troops eat the stores: a month's worth each month for as many corps as the town has room for, and more in proportion. */
+function mouths(g: Game, nat: string, pocket: number[], town: Region): number {
+  let corps = 0;
+  for (const id of pocket) {
+    const x = g.regions[id];
+    for (const c of x.units) if (c.nat === nat && !c.dead && c.kind !== 'fort') corps++;
+    for (const c of garrisonOf(x)) if (c.nat === nat && !c.dead) corps++;
+  }
+  return Math.max(1, corps / Math.max(1, roomIn(g, town)));
+}
+
+/**
+ * The start of a nation's month, before its supply is drawn (the grand campaign): which of its provinces are cut
+ * off from the country, what they have eaten, and whether a ring has been broken.
+ */
+export function pocketMonth(g: Game, nat: string): void {
+  if (!siegeRules(g)) return;
+  const n = g.nations[nat];
+  if (!n || !n.alive) return;
+  let home = -1;
+  const seen = new Set<number>();
+  for (const r of g.regions) {
+    if (r.ctrl !== nat || seen.has(r.id)) continue;
+    const was = g.flags[`pkt:${r.id}`];
+    // The enemy holds the country round the town: the siege has its own count of the stores (invest, above).
+    if (besieged(g, r)) { if (was !== undefined) clearPocket(g, r); continue; }
+    if (home < 0) home = g.regions.reduce((s, x) => s + (x.owner === nat ? 1 : 0), 0);
+    const pocket = n.atWar.length ? cutOffAt(g, nat, r, home) : null;
+    const town = pocket ? larder(g, nat, pocket) : null;
+    // A pocket with no depot and no harbour in it has nothing to live on: its troops are out of supply at once, as they always were.
+    const fed = !!pocket && pocket.some((id) => { const x = g.regions[id]; return depotOf(g, nat, x) || (x.port && allied(g, nat, x.ctrl)); });
+    if (!pocket || !town || !fed) {
+      if (was !== undefined) {
+        const mine = pocketNat(g, r) === nat;
+        const dry = g.flags[`pktx:${r.id}`] === 1;
+        clearPocket(g, r);
+        if (mine && allied(g, nat, fieldCtrl(g, r))) tell(g, r, `The ring round ${townName(r)} is broken: ${dry ? 'supplies reach' : 'the roads are open to'} the ${n.adj} troops there again.`, nat, [nat]);
+      }
+      continue;
+    }
+    const mine = pocket.filter((id) => g.regions[id].ctrl === nat);
+    for (const id of mine) seen.add(id);
+    const olds = mine.map((id) => (pocketNat(g, g.regions[id]) === nat ? g.flags[`pkt:${id}`] : undefined)).filter((t): t is number => t !== undefined);
+    const since = olds.length ? Math.min(...olds) : g.turn;
+    const stores = storesOf(g, town);
+    // What was eaten last month, by the mouths there are now.
+    let eaten = Math.max(0, ...mine.map((id) => (pocketNat(g, g.regions[id]) === nat ? g.flags[`pkte:${id}`] ?? 0 : 0)));
+    if (olds.length) eaten = Math.min(10 * stores, eaten + Math.round(10 * mouths(g, nat, pocket, town)));
+    const dry = eaten >= 10 * stores;
+    for (const id of mine) {
+      g.flags[`pkt:${id}`] = since;
+      g.flags[`pkte:${id}`] = eaten;
+      g.flags[`pktn:${id}`] = natIndex(g, nat);
+      if (dry) g.flags[`pktx:${id}`] = 1; else delete g.flags[`pktx:${id}`];
+    }
+    if (!olds.length) {
+      const by = [...new Set(pocket.flatMap((id) => g.regions[id].nb).filter((j) => !pocket.includes(j)).map((j) => fieldCtrl(g, g.regions[j])))];
+      const v = pocketView(g, town.id)!;
+      const corps = pocket.reduce((s, id) => s + g.regions[id].units.filter((c) => c.nat === nat && !c.dead).length + garrisonOf(g.regions[id]).filter((c) => c.nat === nat).length, 0);
+      const said = corps ? `${corps === 1 ? `One ${n.adj} corps is` : `${corps} ${n.adj} corps are`} cut off there, with stores for ${months(v.left)}; after that the troops go hungry.`
+        : `The town has stores for ${months(v.left)}, and any troops who fall back on it will live on them.`;
+      tell(g, town, `${townName(town)} is surrounded: no road and no ship reaches it from the rest of ${theName(n)}. ${said}`, nat, [nat, ...by]);
+    }
+  }
+}
+
+/** A pocket as the player reads it. */
+export interface PocketView {
+  /** Whose troops are cut off. */
+  nat: string;
+  /** The month the ring closed. */
+  since: number;
+  /** The town whose stores feed the pocket, and how many months they were laid in for. */
+  town: string; stores: number;
+  /** Months of stores left at the rate they are being eaten (0 once they are spent). */
+  left: number;
+  spent: boolean;
+  text: string;
+}
+
+/** The pocket a province lies in, or null. */
+export function pocketView(g: Game, region: number): PocketView | null {
+  const r = g.regions[region];
+  const nat = r ? pocketNat(g, r) : null;
+  if (!r || !nat) return null;
+  const n = g.nations[nat];
+  const pocket = joined(g, nat, r.id, SIEGE.pocket.least) ?? [r.id];
+  const town = larder(g, nat, pocket) ?? r;
+  const stores = storesOf(g, town);
+  const eaten = (g.flags[`pkte:${r.id}`] ?? 0) / 10;
+  const spent = g.flags[`pktx:${r.id}`] === 1;
+  const left = spent ? 0 : Math.max(1, Math.ceil((stores - eaten) / mouths(g, nat, pocket, town)));
+  const text = spent
+    ? `Cut off from the rest of ${theName(n)}, and the stores of ${townName(town)} are spent. The troops here are out of supply: they lose men and heart each month and lay down their arms unless the ring is broken.`
+    : `Cut off from the rest of ${theName(n)}: no road and no ship reaches it. The troops here live on the stores of ${townName(town)}, enough for ${months(left)} more at the rate they are eaten, and no drafts reach them. A bigger army eats them faster.`;
+  return { nat, since: g.flags[`pkt:${r.id}`], town: townName(town), stores, left, spent, text };
+}
 
 // ---- Into the town and out of it ----------------------------------------------------------------
 
@@ -308,6 +505,12 @@ export function invest(g: Game, r: Region, by: string): void {
   // Who closed round it: so that an army driven off again can be told to burn what it held outside the walls.
   g.flags[`sgby:${r.id}`] = Object.keys(g.nations).indexOf(by);
   delete g.flags[`sgm:${r.id}`];
+  // A town that has been feeding an army cut off round it starts its siege with those stores already eaten.
+  if (g.flags[`pkt:${r.id}`] !== undefined) {
+    const eaten = Math.min(storesOf(g, r), Math.floor((g.flags[`pkte:${r.id}`] ?? 0) / 10));
+    if (eaten > 0 && pocketNat(g, r) === r.ctrl) g.flags[`sgm:${r.id}`] = eaten;
+    clearPocket(g, r);
+  }
   g.supplyDirty = true;
   tallySiege(g, 'begun');
   const inside = garrisonOf(r);
@@ -356,6 +559,7 @@ export function fall(g: Game, r: Region, by: string, how: Fell): void {
   delete g.flags[`guard:${r.id}`];
   delete g.flags[`storm:${r.id}`];
   delete g.flags[`sally:${r.id}`];
+  clearPocket(g, r);
   const adj = g.nations[by].adj;
   // A capital's fall is told by the rules that take it; the rest is told here.
   const cap = r.cap && r.owner === old;
@@ -424,11 +628,13 @@ export function whyNotStorm(g: Game, r: Region, nat: string): string | null {
  * the width of the ground does not hold any back: only the size of battle its staff can run does. Engineers go in
  * with the infantry to breach the works.
  */
-export function stormForce(g: Game, corps: Corps[], r: Region): Corps[] {
+export function stormForce(g: Game, corps: Corps[], r: Region, lead?: string): Corps[] {
   const fit = corps.filter((c) => !c.dead && c.reg === r.id && !c.town && c.kind !== 'fort' && atWar(g, c.nat, r.ctrl));
-  const line = fit.filter((c) => c.kind !== 'eng').sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk);
+  // Where allies storm together, the troops of the nation that leads go in first and the town falls to it.
+  const own = (c: Corps): number => (lead && c.nat === lead ? 1 : 0);
+  const line = fit.filter((c) => c.kind !== 'eng').sort((x, y) => own(y) - own(x) || corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk);
   if (!line.length) return [];
-  const most = g.nations[line[0].nat].maxAttack || 99;
+  const most = g.nations[lead ?? line[0].nat].maxAttack || 99;
   return [...line.slice(0, most), ...fit.filter((c) => c.kind === 'eng')];
 }
 

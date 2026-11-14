@@ -479,7 +479,8 @@ function fire(g: Game, e: DiploEvent): boolean {
     // The grand campaign: terms go to whoever is on the ground. A power with no man in the country and none of its
     // provinces inherits nothing, whatever history's treaty said, and an army standing on a province keeps it.
     const open = g.flags.open === 1;
-    const home = g.regions.filter((r) => r.owner === X.id);
+    // (Its home ground, that is: a colony taken in Africa gives nobody a claim on the mother country.)
+    const home = g.regions.filter((r) => r.owner === X.id && (!open || !r.overseas));
     const live = (id: string): boolean => !!g.nations[id]?.alive && g.nations[id].atWar.length > 0;
     const stake = (id: string): number => home.reduce((s, r) => s + (r.ctrl === id ? 1 : 0) + (r.units.some((u) => u.nat === id && u.kind !== 'fort') ? 1 : 0), 0);
     const first = (list: string[]): string | undefined => list.find((id) => live(id) && (!open || stake(id) > 0));

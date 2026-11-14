@@ -218,15 +218,18 @@ describe('a promise is reckoned on the best day the cabinet remembers', () => {
 });
 
 describe('the cabinet asks for a head only over battles that could have been won', () => {
-  it('a battle is held against a general when he lost a defence to an attack at poor odds, or was thrown back attacking at good ones', () => {
+  it('a battle is held against a general when he lost a defence to an attack that had less than an even chance, or was thrown back attacking at good odds', () => {
     const W = GOV.head.winnable;
     const gen = { rec: { lost: [
-      { t: 1, reg: 0, odds: W - 0.1, att: false },   // a defence he could have held
-      { t: 1, reg: 0, odds: W + 0.5, att: false },   // a defence nobody could have held
-      { t: 1, reg: 0, odds: W, att: true },          // an attack that should have gone in
-      { t: 1, reg: 0, odds: W - 0.1, att: true },    // an attack that was a gamble
+      { t: 1, reg: 0, odds: 1.1, att: false },               // a defence the attack had less than an even chance against
+      { t: 1, reg: 0, odds: 1.3, att: false },               // in the open the attacker was likelier than not to carry it (Version 63)
+      { t: 1, reg: 0, odds: 1.4, att: false, even: 1.7 },    // against prepared positions the same attack was a gamble: it could have been held
+      { t: 1, reg: 0, odds: W + 0.5, att: false },           // a defence nobody could have held
+      { t: 1, reg: 0, odds: W, att: true },                  // an attack that should have gone in
+      { t: 1, reg: 0, odds: W - 0.1, att: true },            // an attack that was a gamble
+      { t: 1, reg: 0, odds: W + 0.1, att: true, even: 1.7 }, // an attack on prepared positions at less than an even chance
     ] } } as unknown as General;
-    expect(heldAgainst(gen).map((b) => [b.odds, b.att])).toEqual([[W - 0.1, false], [W, true]]);
+    expect(heldAgainst(gen).map((b) => [b.odds, b.att])).toEqual([[1.1, false], [1.4, false], [W, true]]);
     expect(heldAgainst({ rec: {} } as unknown as General)).toEqual([]);
   });
 
@@ -242,7 +245,7 @@ describe('the cabinet asks for a head only over battles that could have been won
     const gen = g.generals.find((x) => x.nat === 'GER' && x.status === 'active' && x.corps >= 0)!, c = corpsOf(g, gen)!;
     fight(g, gen, c, { taken: true, attacking: false, odds: 2.64 });
     fight(g, gen, c, { taken: false, attacking: true, odds: 1.8 });
-    expect(gen.rec.lost).toEqual([{ t: g.turn, reg: c.reg, odds: 2.64, att: false }, { t: g.turn, reg: c.reg, odds: 1.8, att: true }]);
+    expect(gen.rec.lost).toEqual([{ t: g.turn, reg: c.reg, odds: 2.64, att: false, even: 1.2 }, { t: g.turn, reg: c.reg, odds: 1.8, att: true, even: 1.2 }]);
     // Only the second could have been won.
     expect(heldAgainst(gen)).toHaveLength(1);
     // No more than six are kept, and a win wipes the slate.
@@ -267,11 +270,11 @@ describe('the cabinet asks for a head only over battles that could have been won
     for (let k = 0; k < 24; k++) { g.turn++; st.next = g.turn + 99; govMonth(g, 'GER'); }
     expect(st.head).toBeUndefined();
     // One more that could have been held, with one already on the slate, and the cabinet has its cause.
-    gen.rec.lost.push({ t: g.turn, reg: 0, odds: 1.1, att: false }, { t: g.turn, reg: 0, odds: 1.3, att: false });
+    gen.rec.lost.push({ t: g.turn, reg: 0, odds: 1.1, att: false }, { t: g.turn, reg: 0, odds: 1.15, att: false });
     for (let k = 0; k < 24 && !st.head; k++) { g.turn++; st.next = g.turn + 99; govMonth(g, 'GER'); }
     expect(st.head?.general).toBe(gen.id);
     expect(st.head!.lost).toHaveLength(2);
-    expect(st.head!.lost!.every((b) => b.odds < GOV.head.winnable)).toBe(true);
+    expect(st.head!.lost!.every((b) => b.odds < 1.2)).toBe(true);
   });
 });
 

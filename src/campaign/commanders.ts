@@ -331,7 +331,7 @@ function hazard(g: Game, gen: General, c: Corps, lossFrac: number, rng: Rng, rep
  */
 export function afterBattle(
   g: Game, rep: BattleReport, target: Region, preOdds: number,
-  attackers: Corps[], attGens: (General | null)[], defenders: Corps[], defGens: (General | null)[], luck: string = `${rep.id}`,
+  attackers: Corps[], attGens: (General | null)[], defenders: Corps[], defGens: (General | null)[], luck: string = `${rep.id}`, even = 1.2,
 ): void {
   const rng = new Rng(hashString(`command:${g.seed}:${luck}`));
   const X = COMMAND.xp;
@@ -367,7 +367,7 @@ export function afterBattle(
       r.streak++;
       if (attacking && lossFrac >= COMMAND.costly) r.costly++;
       // The grand campaign remembers which battles they were and at what odds: a cabinet looking for a head weighs them.
-      if (g.flags.open === 1) { (r.lost ??= []).push({ t: g.turn, reg: target.id, odds: Math.round(preOdds * 100) / 100, att: attacking }); if (r.lost.length > 6) r.lost.shift(); }
+      if (g.flags.open === 1) { (r.lost ??= []).push({ t: g.turn, reg: target.id, odds: Math.round(preOdds * 100) / 100, att: attacking, even: Math.round(even * 100) / 100 }); if (r.lost.length > 6) r.lost.shift(); }
     }
     gainXp(g, gen, xp);
     earn(g, gen, c);

@@ -319,6 +319,11 @@ export interface Corps extends Storied {
   dugFor?: number;
   /** It was attacked since its own last month ended (the grand campaign): it does no digging this month. */
   pressed?: boolean;
+  /**
+   * The weight of the attacks it has stood against since its own month began (the grand campaign): 1 for each
+   * blow at full weight, less for a light one. Men who have fought all month fight the next blow tired.
+   */
+  blows?: number;
   /** The month it was raised: the first month of the war for the armies that began it. */
   born?: number;
   /** The region it was raised in, if that was its own country's ground: home. */
@@ -376,7 +381,7 @@ export interface ServiceRecord {
 }
 
 /** A battle a general lost: the month, the province, the attacker's odds as the fight opened, and whether he was the one attacking. */
-export interface LostBattle { t: number; reg: number; odds: number; att: boolean }
+export interface LostBattle { t: number; reg: number; odds: number; att: boolean; /** The odds at which the attack had an even chance on the day: absent on battles from before Version 63, read as 1.2. */ even?: number }
 
 export interface General {
   id: number;
