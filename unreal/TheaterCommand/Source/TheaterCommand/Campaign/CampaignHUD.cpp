@@ -12,6 +12,7 @@
 #include "Rendering/SlateRenderer.h"
 #include "Engine/GameViewportClient.h"
 #include "Styling/CoreStyle.h"
+#include "Styling/SlateStyle.h"
 #include "Styling/SlateTypes.h"
 #include "Engine/Texture2D.h"
 #include "Engine/TextureRenderTarget2D.h"
@@ -495,6 +496,8 @@ namespace
 			Plate = FSlateRoundedBoxBrush(FLinearColor(0.035f, 0.031f, 0.026f, 0.86f), 3.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 1.0f);
 			CapitalPlate = FSlateRoundedBoxBrush(FLinearColor(0.035f, 0.031f, 0.026f, 0.92f), 3.0f, FLinearColor(FColor::FromHex(TEXT("B8975A"))).CopyWithNewOpacity(0.85f), 1.0f);
 			Stripe = FSlateRoundedBoxBrush(FLinearColor::White, 1.5f);
+			// (on the staff's paper map a plate is a paper label: paper, a thin edge of ink, the name in ink)
+			PaperLabel = FSlateRoundedBoxBrush(FLinearColor::White, 2.0f, FLinearColor(0.12f, 0.08f, 0.045f, 0.85f), 1.0f);
 			SetVisibility(EVisibility::HitTestInvisible);
 		}
 
@@ -519,8 +522,13 @@ namespace
 			const FSlateFontInfo TownFont = Serif(TEXT("Bold"), 10.0f, 10);
 			const FSlateFontInfo LineFont = Font(TEXT("Regular"), 9);
 			const FSlateFontInfo FarFont = Serif(TEXT("Bold"), 9.0f, 10);
-			const FLinearColor NameInk(FColor::FromHex(TEXT("F2E8D5")));
-			const FLinearColor LineInk(FColor::FromHex(TEXT("B9AC93")));
+			// From the height where the table is the staff's paper map, the plates are paper labels lettered in ink
+			// (leather plates were the heaviest marks on the sheet, and lay across the countries' names).
+			const bool bLabels = Controller->GetPaper() > 0.5f;
+			const float Moon = FMath::Clamp(Controller->GetMoonlight(), 0.0f, 1.0f);
+			const FLinearColor LabelPaper = FLinearColor(FColor::FromHex(TEXT("DDD0AE"))) * FMath::Lerp(1.0f, 0.45f, Moon);
+			const FLinearColor NameInk = bLabels ? FLinearColor(FColor::FromHex(TEXT("2B2118"))) : FLinearColor(FColor::FromHex(TEXT("F2E8D5")));
+			const FLinearColor LineInk = bLabels ? FLinearColor(FColor::FromHex(TEXT("5B4A38"))) : FLinearColor(FColor::FromHex(TEXT("B9AC93")));
 			TArray<FBox2D> Taken;
 			const TArray<FBox2D> Frame = FrameBoxes(Geometry);
 			// (where the armies' colours are: a town's plate is not drawn across a flag or its strength plate)
@@ -630,12 +638,12 @@ namespace
 					continue;
 				}
 				Taken.Add(Box);
-				const FSlateBrush& Back = Each.bCapital && !Each.bFar ? CapitalPlate : Plate;
-				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, High), FSlateLayoutTransform(Corner)), &Back, ESlateDrawEffect::None, Back.GetTint(InWidgetStyle));
+				const FSlateBrush& Back = bLabels ? PaperLabel : Each.bCapital && !Each.bFar ? CapitalPlate : Plate;
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, High), FSlateLayoutTransform(Corner)), &Back, ESlateDrawEffect::None, bLabels ? LabelPaper.CopyWithNewOpacity(0.92f) : Back.GetTint(InWidgetStyle));
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, High - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour.CopyWithNewOpacity(1.0f));
 				if (bStar)
 				{
-					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 3.0))), FString(TEXT("\u2605")), StarFont, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("E0B872"))));
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 3.0))), FString(TEXT("\u2605")), StarFont, ESlateDrawEffect::None, bLabels ? FLinearColor(FColor::FromHex(TEXT("8E2C20"))) : FLinearColor(FColor::FromHex(TEXT("E0B872"))));
 				}
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(13.0 + StarWide, 2.0))), Shown, NameFont, ESlateDrawEffect::None, NameInk);
 				if (!Each.Line.IsEmpty())
@@ -651,6 +659,7 @@ namespace
 		FSlateBrush Plate;
 		FSlateBrush CapitalPlate;
 		FSlateBrush Stripe;
+		FSlateBrush PaperLabel;
 	};
 
 	class SMinimap : public SLeafWidget
@@ -791,6 +800,20 @@ namespace
 		void Construct(const FArguments& InArgs)
 		{
 			Controller = InArgs._Controller;
+			{
+				// The tips that come up under the pointer are the engine's own: they are given the frame's typed face and
+				// a slip of its paper, once, before anything that has one is made.
+				static bool bDressed = false;
+				if (!bDressed)
+				{
+					bDressed = true;
+					FSlateStyleSet* Style = static_cast<FSlateStyleSet*>(const_cast<ISlateStyle*>(&FCoreStyle::Get()));
+					Style->Set("ToolTip.Font", Typed(9.5f));
+					Style->Set("ToolTip.LargerFont", Typed(10.5f));
+					Style->Set("ToolTip.BrightBackground", new FSlateRoundedBoxBrush(Paper, 3.0f, FLinearColor(0.05f, 0.035f, 0.02f, 0.9f), 1.0f));
+					Style->Set("ToolTip.Background", new FSlateRoundedBoxBrush(Paper, 3.0f, FLinearColor(0.05f, 0.035f, 0.02f, 0.9f), 1.0f));
+				}
+			}
 			// (the panels are brown leather with a brass edge; the date is a desk calendar; the dispatches are typed)
 			PanelBrush = FSlateRoundedBoxBrush(Leather, 6.0f, Brass.CopyWithNewOpacity(0.85f), 1.5f);
 			PaperBrush = FSlateRoundedBoxBrush(Paper, 5.0f, FLinearColor(0.05f, 0.035f, 0.02f, 0.9f), 1.0f);
@@ -2529,7 +2552,8 @@ namespace
 			{
 				if (Each->GetVisibility().IsVisible())
 				{
-					const FSlateRect Rect = Each->GetCachedGeometry().GetLayoutBoundingRect();
+					// (as it was last painted, in the window's own measure: the plates and the names are drawn in that)
+					const FSlateRect Rect = Each->GetPaintSpaceGeometry().GetLayoutBoundingRect();
 					if (Rect.GetSize().X > 1.0 && Rect.GetSize().Y > 1.0)
 					{
 						FrameRects.Add(Rect);
@@ -3349,7 +3373,7 @@ namespace
 		/** One of the small buttons under the minimap. */
 		TSharedRef<SWidget> MapButton(const TCHAR* Label, const TCHAR* Tip, TFunction<void()> Do)
 		{
-			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(4.0f, 4.0f)).IsFocusable(false).HAlign(HAlign_Center)
+			return SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(4.0f, 5.0f)).IsFocusable(false).HAlign(HAlign_Center)
 				.ToolTipText(FText::FromString(Tip))
 				.OnClicked_Lambda([this, Do]() { if (Controller.IsValid()) { Do(); } return FReply::Handled(); })
 				[

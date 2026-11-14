@@ -573,6 +573,9 @@ public:
 	void ToggleNewsreels();
 	/** Day and night in the room: running, held at day, or held at night (T). */
 	void ToggleDayNight();
+	/** Begins a moment over a province: the eye goes down to it, stays about three seconds and is handed back. Any key or click ends it sooner. */
+	void StartMoment(int32 RegionId);
+	void EndMoment();
 	/** The F key: puts the frame away for a clean picture of the table, or brings it back. */
 	void ToggleFrame();
 	bool IsFrameHidden() const;
@@ -780,11 +783,9 @@ private:
 	bool bMomentDue = false; // such a thing has just happened: the moment begins when its result has been read
 	bool bMomentOn = false;
 	double MomentUntil = 0.0;
+	double MomentGlideUntil = 0.0; // the eye keeps its slow travel until it is back where it was
 	FVector MomentHome = FVector::ZeroVector; // where the eye was looking, and from how high, before the moment
 	float MomentHomeZoom = 0.5f;
-	/** Begins a moment over a province: the eye goes down to it, stays about three seconds and is handed back. Any key or click ends it sooner. */
-	void StartMoment(int32 RegionId);
-	void EndMoment();
 	bool bHelpSeen = false; // the player has ended a month, or folded the keys away: they are not shown unasked again
 	bool bHelpPinned = false; // the reminder of the keys is kept open by a click on its mark
 	bool bFreshCampaign = false; // a campaign has just been begun, not continued

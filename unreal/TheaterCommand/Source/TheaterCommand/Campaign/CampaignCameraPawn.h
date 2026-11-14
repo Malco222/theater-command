@@ -50,6 +50,8 @@ public:
 
 	/** While hurried the view travels several times faster, for following the other nations' month. */
 	void SetHurry(bool bInHurry) { bHurry = bInHurry; }
+	/** A slower, deliberate travel for a moment at the front: how fast the view closes on where it is sent (about 2.5 takes a second); 0 gives it back its usual quickness. */
+	void SetGlide(float Speed) { Glide = FMath::Max(Speed, 0.0f); }
 
 	/** Sends the view to a place on the table. Zoom is 0 (closest) to 1 (furthest); negative leaves it alone. */
 	void GoTo(const FVector& WorldFocus, float InZoom = -1.0f, bool bImmediately = false);
@@ -101,4 +103,5 @@ private:
 	bool bLampKept = false;
 	bool bFilm = false;
 	bool bHurry = false;
+	float Glide = 0.0f;
 };

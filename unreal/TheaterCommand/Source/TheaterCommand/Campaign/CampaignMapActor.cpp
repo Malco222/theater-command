@@ -200,6 +200,7 @@ bool ACampaignMapActor::BuildMap()
 	BuildBorders();
 	BuildTable();
 	BuildWarRoom();
+	BuildSheetMargin();
 	BuildTowns();
 	BuildParade();
 	BuildTrees();
@@ -429,6 +430,12 @@ void ACampaignMapActor::PaintGround()
 		LiePicture->Filter = TF_Nearest; // (an angle half way between two provinces' angles is neither's: no smoothing)
 		LiePicture->UpdateResource();
 	}
+	{
+		// Where nobody of the player's can see: nowhere, until the war says otherwise.
+		TArray<FColor> Clear;
+		Clear.Init(FColor(0, 0, 0, 255), Paint.NX * Paint.NY);
+		FogPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Clear, false, false, TEXT("TableFog"));
+	}
 	WaterPicture = CampaignTextures::Create(Paint.WaterNX, Paint.WaterNY, Paint.Water, true, false, TEXT("TableWater"));
 	ShorePicture = CampaignTextures::Create(Paint.WaterNX, Paint.WaterNY, Paint.Surf, false, false, TEXT("TableShore"));
 
@@ -457,6 +464,17 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetTextureParameterValue(TEXT("Cover"), CoverPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Fields"), FieldsPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Lie"), LiePicture);
+	LandMaterial->SetTextureParameterValue(TEXT("Fog"), FogPicture);
+	// (what stands on unseen ground is drawn, not coloured: the towns and the woods read the same picture by where they stand)
+	for (UMaterialInstanceDynamic* Stands : { SceneryMaterial.Get(), WoodsMaterial.Get() })
+	{
+		if (Stands && Data.Width > 0.0 && Data.Height > 0.0)
+		{
+			Stands->SetTextureParameterValue(TEXT("Fog"), FogPicture);
+			Stands->SetVectorParameterValue(TEXT("FogFrame"), FLinearColor(1.0f / (UnitScale * Data.Width), 0.5f, -1.0f / (UnitScale * Data.Height), 0.5f));
+			Stands->SetScalarParameterValue(TEXT("Drawn"), 1.0f);
+		}
+	}
 	// (the nation's stain lies over the canopy at a little under half its strength: a wood is green first, and its owner's second)
 	LandMaterial->SetScalarParameterValue(TEXT("WoodsStain"), 0.42f);
 	LandMaterial->SetVectorParameterValue(TEXT("FirColour"), FLinearColor(0.015f, 0.034f, 0.028f));
@@ -504,25 +522,23 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetVectorParameterValue(TEXT("SandColour"), FCampaignGround::SandColour());
 	{
 		// The staff map at the top of the zoom (art fix 11): parchment, sepia shading, a hand's tint.
-		// ("-TheaterPaperLand=r,g,b,shade,sun,wash,band" and "-TheaterPaperSea=r,g,b" try others without a rebuild)
+		// ("-TheaterPaperLand=r,g,b,shade,sun,wash,band", "-TheaterPaperSea=r,g,b" and "-TheaterPaperNight=land,sea,wash"
+		// try others without a rebuild)
 		FString Asked;
 		TArray<FString> Bits;
-		float SheetLand[7] = { 0.6f, 0.52f, 0.37f, 0.6f, 0.92f, 0.36f, 0.8f }, SheetSea[3] = { 0.34f, 0.42f, 0.41f };
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPaperLand="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) > 0)
 		{
-			for (int32 K = 0; K < Bits.Num() && K < 7; ++K) { SheetLand[K] = FCString::Atof(*Bits[K]); }
+			for (int32 K = 0; K < Bits.Num() && K < 7; ++K) { PaperLand[K] = FCString::Atof(*Bits[K]); }
 		}
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPaperSea="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) > 0)
 		{
-			for (int32 K = 0; K < Bits.Num() && K < 3; ++K) { SheetSea[K] = FCString::Atof(*Bits[K]); }
+			for (int32 K = 0; K < Bits.Num() && K < 3; ++K) { PaperSeaTone[K] = FCString::Atof(*Bits[K]); }
 		}
-		LandMaterial->SetVectorParameterValue(TEXT("PaperColour"), FLinearColor(SheetLand[0], SheetLand[1], SheetLand[2]));
-		LandMaterial->SetScalarParameterValue(TEXT("PaperShade"), SheetLand[3]);
-		LandMaterial->SetScalarParameterValue(TEXT("PaperSun"), SheetLand[4]);
-		LandMaterial->SetScalarParameterValue(TEXT("PaperWash"), SheetLand[5]);
-		LandMaterial->SetScalarParameterValue(TEXT("PaperBand"), SheetLand[6]);
-		SeaMaterial->SetVectorParameterValue(TEXT("PaperSea"), FLinearColor(SheetSea[0], SheetSea[1], SheetSea[2]));
-		SeaMaterial->SetVectorParameterValue(TEXT("PaperDeep"), FLinearColor(SheetSea[0], SheetSea[1], SheetSea[2]) * 0.84f);
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPaperNight="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) > 0)
+		{
+			for (int32 K = 0; K < Bits.Num() && K < 3; ++K) { PaperNight[K] = FCString::Atof(*Bits[K]); }
+		}
+		ApplyPaperLight();
 	}
 	SeaMaterial->SetTextureParameterValue(TEXT("Water"), WaterPicture);
 	SeaMaterial->SetTextureParameterValue(TEXT("Shore"), ShorePicture);
@@ -2795,6 +2811,94 @@ void ACampaignMapActor::SetWarAtNight(const TArray<FString>& Blackout, const TAr
 	}
 }
 
+void ACampaignMapActor::ApplyPaperLight()
+{
+	if (!LandMaterial || !SeaMaterial)
+	{
+		return;
+	}
+	// By day the sheet is parchment and its sea a pale grey-green, a step darker than the palest nation. By night
+	// it is dim paper: the land much the same for every holder (the wash thinner), and the sea darker than the
+	// land beside it, with some of its colour gone. The lights and the fires are left to shine on it.
+	const float Moon = bLamplightNow ? 0.0f : NightNow;
+	const float Dry = FMath::Lerp(1.0f, PaperNight[0], Moon), Water = FMath::Lerp(1.0f, PaperNight[1], Moon), Thin = FMath::Lerp(1.0f, PaperNight[2], Moon);
+	LandMaterial->SetVectorParameterValue(TEXT("PaperColour"), FLinearColor(PaperLand[0], PaperLand[1], PaperLand[2]) * Dry);
+	LandMaterial->SetVectorParameterValue(TEXT("PaperInk"), FLinearColor(0.2f, 0.135f, 0.075f) * FMath::Lerp(1.0f, 0.6f, Moon));
+	LandMaterial->SetVectorParameterValue(TEXT("FogColour"), FLinearColor(0.15f, 0.128f, 0.085f) * FMath::Lerp(1.0f, 0.62f, Moon));
+	LandMaterial->SetScalarParameterValue(TEXT("HatchSharp"), -13.0f);
+	LandMaterial->SetScalarParameterValue(TEXT("PaperShade"), PaperLand[3]);
+	LandMaterial->SetScalarParameterValue(TEXT("PaperSun"), PaperLand[4]);
+	LandMaterial->SetScalarParameterValue(TEXT("PaperWash"), PaperLand[5] * Thin);
+	LandMaterial->SetScalarParameterValue(TEXT("PaperBand"), PaperLand[6] * FMath::Lerp(1.0f, 0.8f, Moon));
+	const FLinearColor Sea(PaperSeaTone[0], PaperSeaTone[1], PaperSeaTone[2]);
+	const float Grey = Sea.GetLuminance();
+	const FLinearColor NightSea = FMath::Lerp(Sea, FLinearColor(Grey, Grey, Grey), 0.25f * Moon) * Water;
+	SeaMaterial->SetVectorParameterValue(TEXT("PaperSea"), NightSea);
+	SeaMaterial->SetVectorParameterValue(TEXT("PaperDeep"), NightSea * 0.86f);
+	SeaMaterial->SetVectorParameterValue(TEXT("PaperSeaInk"), FLinearColor(0.1f, 0.15f, 0.17f) * FMath::Lerp(1.0f, 0.45f, Moon));
+}
+
+void ACampaignMapActor::BuildSheetMargin()
+{
+	if (!Data.IsLoaded() || !SceneryMaterial || !HighlightMaterial)
+	{
+		return;
+	}
+	if (!MarginMesh)
+	{
+		MarginMesh = NewObject<UProceduralMeshComponent>(this);
+		MarginMesh->SetupAttachment(Root);
+		MarginMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		MarginMesh->RegisterComponent();
+		MarginMesh->SetCastShadow(false);
+		MarginMesh->SetVisibility(false);
+	}
+	MarginMesh->ClearAllMeshSections();
+	// Round the sheet, on the table: a margin of the same paper, a border ruled on it in ink a little way in from
+	// its edge, and outside it the soft shadow the sheet throws on the wood.
+	const FVector2D Half = GetWorldHalfExtent(); // X: north-south, Y: east-west
+	const double U = UnitScale, Top = 2.4 * U + 0.5 * U, Margin = 46.0 * U, Rule = 14.0 * U, Line = 1.1 * U, Soft = 26.0 * U;
+	auto Frame = [&Half](FCampaignMeshBuffers& Into, double Inner, double Outer, double Z, const FColor& In, const FColor& Out)
+	{
+		// (a frame between two rectangles: four quads, coloured at their inner and outer edges)
+		const FVector2D A(Half.X + Inner, Half.Y + Inner), B(Half.X + Outer, Half.Y + Outer);
+		const FVector Ins[4] = { FVector(A.X, -A.Y, Z), FVector(A.X, A.Y, Z), FVector(-A.X, A.Y, Z), FVector(-A.X, -A.Y, Z) };
+		const FVector Outs[4] = { FVector(B.X, -B.Y, Z), FVector(B.X, B.Y, Z), FVector(-B.X, B.Y, Z), FVector(-B.X, -B.Y, Z) };
+		for (int32 K = 0; K < 4; ++K)
+		{
+			const int32 N = (K + 1) % 4, First = Into.Vertices.Num();
+			Into.Vertices.Append({ Ins[K], Ins[N], Outs[N], Outs[K] });
+			Into.Normals.Append({ FVector::UpVector, FVector::UpVector, FVector::UpVector, FVector::UpVector });
+			Into.Colors.Append({ In, In, Out, Out });
+			Into.Triangles.Append({ First, First + 1, First + 2, First, First + 2, First + 3, First, First + 2, First + 1, First, First + 3, First + 2 });
+		}
+	};
+	{
+		FCampaignMeshBuffers Paper;
+		const FColor Sheet(255, 255, 255), Ink(96, 76, 56);
+		Frame(Paper, -0.2 * U, Margin, Top, Sheet, Sheet);
+		Frame(Paper, Rule, Rule + Line, Top + 0.06 * U, Ink, Ink);
+		Frame(Paper, Rule + 3.0 * Line, Rule + 3.5 * Line, Top + 0.06 * U, Ink, Ink);
+		if (!MarginPaper)
+		{
+			MarginPaper = UMaterialInstanceDynamic::Create(SceneryMaterial->GetBaseMaterial(), this);
+			MarginPaper->SetScalarParameterValue(TEXT("Grain"), 0.05f);
+		}
+		Paper.Commit(MarginMesh, 0, MarginPaper);
+	}
+	{
+		FCampaignMeshBuffers Shade;
+		Frame(Shade, Margin, Margin + Soft, Top - 0.3 * U, FColor(0, 0, 0, 120), FColor(0, 0, 0, 0));
+		if (!MarginShade)
+		{
+			MarginShade = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+			MarginShade->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+		}
+		Shade.Commit(MarginMesh, 1, MarginShade);
+	}
+	PaperShown = -1.0f; // (so that it is shown or hidden, and lit, at once)
+}
+
 void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 {
 	const bool bLampChanged = bLamplight != bLamplightNow;
@@ -2805,6 +2909,8 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		return;
 	}
 	ShownNight = Night;
+	ApplyPaperLight();
+	PaperShown = -1.0f; // (the margin's paper takes the hour's light too)
 	// The land's own shading follows the light of the hour: a warm sun and cool shade by day (the lit tones a tenth
 	// brighter than they were first mixed), and by moonlight both of them cool. By lamplight they stay as by day.
 	if (LandMaterial)
@@ -2849,11 +2955,6 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		{
 			LanesInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.36f, 0.5f), Moon));
 			LanesInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, 0.6f, Moon));
-		}
-		// The paper over unseen ground is not lit by the lamp, so the hour's light is given to it here.
-		if (ShroudPaper)
-		{
-			ShroudPaper->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor(0.82f, 0.8f, 0.76f), FLinearColor(0.085f, 0.12f, 0.2f), Moon));
 		}
 		// Province lines by night are blue-grey and faint (their strength is capped as the eye moves: UpdateForCamera).
 		if (ProvincePaleInk)
@@ -4583,37 +4684,37 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen)
 	UnseenSet = TSet<int32>(Unseen);
 	bMiniStale = true;
 	OrdersMesh->ClearMeshSection(6);
-	if (Unseen.Num() == 0)
+	// Ground nobody of the player's can see is the staff's own paper map (art fix 11): the land's material draws
+	// it so, and what stands on it is drawn rather than coloured, wherever this picture says. A pixel to each
+	// point of the terrain, smoothed by the picture itself so that the paper has no hard edge.
+	if (!FogPicture || Terrain.Region.Num() != Paint.NX * Paint.NY)
 	{
 		return;
 	}
-	// Paper over the ground nobody of the player's can see (art fix 11): what stands there is not known, and where
-	// the living table is not known the staff has only its map. Parchment, tinted by hand with the holder's colour
-	// and ruled across in ink; a little of the country shows through it, like a wash.
-	if (!ShroudPaper)
+	TArray<FColor> Pixels;
+	Pixels.Init(FColor(0, 0, 0, 255), Paint.NX * Paint.NY);
+	if (Unseen.Num() > 0)
 	{
-		if (UMaterialInterface* Sheet = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Paper.M_Paper")))
+		TArray<bool> Hidden;
+		Hidden.Init(false, Data.Regions.Num());
+		for (const int32 RegionId : Unseen)
 		{
-			ShroudPaper = UMaterialInstanceDynamic::Create(Sheet, this);
-			ShownNight = -1.0f; // (so that the hour's light is laid on it at once)
+			if (Hidden.IsValidIndex(RegionId))
+			{
+				Hidden[RegionId] = true;
+			}
+		}
+		for (int32 Index = 0; Index < Pixels.Num(); ++Index)
+		{
+			// (a point on the shore belongs to the province it is the shore of, as it does for the nations' paint)
+			const int32 Id = Paint.PaintedRegion(Index, Terrain);
+			if (Id >= 0 && Hidden[Id])
+			{
+				Pixels[Index].R = 255;
+			}
 		}
 	}
-	FCampaignMeshBuffers Buffers;
-	const FLinearColor Parchment(FColor::FromHex(TEXT("B9AC8A")));
-	for (int32 RegionId : Unseen)
-	{
-		if (Data.Regions.IsValidIndex(RegionId))
-		{
-			const FCampaignNation* Nation = Data.FindNation(Data.Regions[RegionId].Owner);
-			FLinearColor Sheet = FMath::Lerp(Parchment, Nation ? FLinearColor(Nation->Color) : Parchment, 0.42f); // (the holder's colour must still read: every tile is a shade of its holder's)
-			// (the mesh keeps its colours as a picture file does, and the paper's material reads them so)
-			Sheet = FLinearColor(FMath::Pow(Sheet.R, 1.0f / 2.2f), FMath::Pow(Sheet.G, 1.0f / 2.2f), FMath::Pow(Sheet.B, 1.0f / 2.2f));
-			Sheet.A = ShroudPaper ? 0.8f : 0.34f;
-			AppendRegionFill(Buffers, RegionId, ShroudPaper ? Sheet : FLinearColor(0.02f, 0.03f, 0.05f, 0.34f));
-		}
-	}
-	Buffers.Commit(OrdersMesh, 6, ShroudPaper ? static_cast<UMaterialInterface*>(ShroudPaper) : static_cast<UMaterialInterface*>(HighlightMaterial));
-	SetNight(NightNow, bLamplightNow);
+	CampaignTextures::Update(FogPicture, Pixels);
 }
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)
@@ -5806,6 +5907,26 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		if (FMath::Abs(Sheet - PaperShown) > 0.004f)
 		{
 			PaperShown = Sheet;
+			// The things left lying on the table are specks from this height: they are put away, and the sheet is
+			// seen whole, with its margin of paper and the shadow it throws on the wood.
+			if (RoomMesh)
+			{
+				RoomMesh->SetVisibility(Sheet < 0.2f);
+			}
+			if (MarginMesh)
+			{
+				MarginMesh->SetVisibility(Sheet > 0.01f);
+				const float Moon = bLamplightNow ? 0.0f : NightNow;
+				const FLinearColor Wood(FColor::FromHex(TEXT("2B1B11"))), Paper = FLinearColor(PaperLand[0], PaperLand[1], PaperLand[2]) * FMath::Lerp(1.0f, PaperNight[0], Moon);
+				if (MarginPaper)
+				{
+					MarginPaper->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(Wood, Paper, FMath::SmoothStep(0.0f, 0.5f, Sheet)));
+				}
+				if (MarginShade)
+				{
+					MarginShade->SetScalarParameterValue(TEXT("Opacity"), FMath::SmoothStep(0.0f, 0.5f, Sheet));
+				}
+			}
 			if (LandMaterial)
 			{
 				LandMaterial->SetScalarParameterValue(TEXT("Paper"), Sheet);

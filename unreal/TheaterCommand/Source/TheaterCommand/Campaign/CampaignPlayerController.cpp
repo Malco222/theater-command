@@ -2464,7 +2464,10 @@ void ACampaignPlayerController::StartMoment(int32 RegionId)
 	MomentHomeZoom = Eye->GetZoom();
 	MomentUntil = FPlatformTime::Seconds() + 3.2;
 	const FVector2D Place = Map->GetData().Regions[RegionId].Center;
-	// Down to the front: low over the place, where the smoke of the battle is still rising.
+	// Down to the front: low over the place, where the smoke of the battle is still rising. It goes down in about a
+	// second, not at the snap of an ordinary move.
+	Eye->SetGlide(2.6f);
+	MomentGlideUntil = 0.0;
 	Eye->GoTo(Map->MapToWorld(Place.X, Place.Y, 0.0), FMath::Min(Eye->GetZoom(), 0.2f));
 }
 
@@ -2475,10 +2478,11 @@ void ACampaignPlayerController::EndMoment()
 		return;
 	}
 	bMomentOn = false;
-	// The eye is handed back where it was, and as high.
+	// The eye is handed back where it was, and as high, at the same unhurried pace; then it is quick again.
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 	{
 		Eye->GoTo(MomentHome, MomentHomeZoom);
+		MomentGlideUntil = FPlatformTime::Seconds() + 1.5;
 	}
 }
 
@@ -2880,11 +2884,40 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 	PumpVoice();
-	// A moment at the front is over after about three seconds, or as soon as the player touches anything.
-	if (bMomentOn && (FPlatformTime::Seconds() >= MomentUntil || WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::Escape) || WasInputKeyJustPressed(EKeys::Enter)
-		|| WasInputKeyJustPressed(EKeys::LeftMouseButton) || WasInputKeyJustPressed(EKeys::RightMouseButton) || WasInputKeyJustPressed(EKeys::MouseScrollUp) || WasInputKeyJustPressed(EKeys::MouseScrollDown)))
+	if (MomentGlideUntil > 0.0 && FPlatformTime::Seconds() >= MomentGlideUntil)
 	{
-		EndMoment();
+		MomentGlideUntil = 0.0;
+		if (ACampaignCameraPawn* Back = Cast<ACampaignCameraPawn>(GetPawn()))
+		{
+			Back->SetGlide(0.0f);
+		}
+	}
+	// A moment at the front is over after about three seconds, or as soon as the player touches anything.
+	if (bMomentOn)
+	{
+		bool bTouched = FPlatformTime::Seconds() >= MomentUntil;
+		if (!bTouched)
+		{
+			// (any key at all, any button of the mouse, or its wheel)
+			static TArray<FKey> Every;
+			if (Every.Num() == 0)
+			{
+				EKeys::GetAllKeys(Every);
+				Every.RemoveAll([](const FKey& Key) { return Key.IsAxis1D() || Key.IsAxis2D() || Key.IsAxis3D() || Key.IsGamepadKey() || Key.IsTouch() || Key == EKeys::AnyKey; });
+			}
+			for (const FKey& Key : Every)
+			{
+				if (WasInputKeyJustPressed(Key))
+				{
+					bTouched = true;
+					break;
+				}
+			}
+		}
+		if (bTouched)
+		{
+			EndMoment();
+		}
 	}
 	if (Adviser.bOn && !bAdviserSpoke && !Newsreel.bOn && BriefingAt <= 0.0 && !Opening.bVisible && Announcements.Num() == 0 && !bWatching)
 	{

@@ -671,6 +671,22 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("review-5-army"), TEXT("Grenzmark"), 0.12f, -20.0f, 4.0f);
 	}
 
+	// "-TheaterMoment=Warsaw" takes four stills of a moment at the front over that region, as when its capital
+	// falls: as it starts, half way down, at its lowest, and with the eye handed back.
+	FString MomentAt;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterMoment="), MomentAt, false))
+	{
+		Shots.Reset();
+		static const TCHAR* Names[4] = { TEXT("moment-1-start"), TEXT("moment-2-half-way-down"), TEXT("moment-3-lowest"), TEXT("moment-4-handed-back") };
+		static const float Waits[4] = { -0.5f, -0.2f, 1.6f, 4.9f };
+		for (int32 K = 0; K < 4; ++K)
+		{
+			FShot& Shot = Add(Names[K], TEXT("@623,747"), 0.70f);
+			Shot.Moment = MomentAt;
+			Shot.Wait = Waits[K];
+		}
+	}
+
 	// "-TheaterOnly=13b,13c" takes only the pictures whose names begin with one of these.
 	FString Only;
 	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterOnly="), Only, false))
@@ -1351,6 +1367,19 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		if (To)
 		{
 			Controller->OrderTo(*To);
+		}
+	}
+
+	// A moment at the front begun just before the picture: the eye is caught on its way down, at the bottom, or back.
+	if (!bMarched && Clock >= 2.45f && !Shots[Current].Moment.IsEmpty())
+	{
+		bMarched = true;
+		ACampaignPlayerController* Controller = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController());
+		const int32* At = Controller && Controller->GetMap() ? Controller->GetMap()->GetData().RegionByName.Find(Shots[Current].Moment) : nullptr;
+		if (At)
+		{
+			Controller->GetMap()->AddBattleSmoke(*At);
+			Controller->StartMoment(*At);
 		}
 	}
 

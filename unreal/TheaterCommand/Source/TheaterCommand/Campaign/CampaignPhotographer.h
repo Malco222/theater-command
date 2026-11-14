@@ -36,6 +36,7 @@ private:
 		FString Army; // pick up the player's army in this region
 		FString Route; // show the road to this region
 		FString March; // order the army there just before the picture, to catch it in the air
+	FString Moment; // begin a moment at the front over this region just before the picture (the eye drops to it and is handed back): Wait says how far into it the picture is taken
 		FString Attack; // order the army against this region, which opens the face-off
 		bool bKeep = false; // leave the army in hand and the face-off as the last picture left them
 		bool bConfirm = false; // send the attack on the face-off in

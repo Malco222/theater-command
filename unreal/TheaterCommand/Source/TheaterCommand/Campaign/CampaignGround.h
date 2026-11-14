@@ -85,4 +85,8 @@ private:
 	float PlainsLightness = 1.0f;
 	// For points just off the shore: the region of the nearest land, so the paint runs right to the water's edge.
 	TArray<int16> ShoreRegion;
+
+public:
+	/** The region a point of the grid is painted as: its own, or for a point just off the shore the nearest land's. Negative for the open sea. */
+	int32 PaintedRegion(int32 Index, const FCampaignTerrain& Terrain) const;
 };

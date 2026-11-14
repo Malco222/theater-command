@@ -470,9 +470,23 @@ private:
 	TArray<FColor> CloudColours;
 	void UpdateClouds();
 	TArray<int32> ShownUnseen;
+	/** Where the ground nobody of the player's can see lies, a pixel to a point of the terrain: there the land is the staff's paper map, and what stands on it is drawn, not coloured. */
 	UPROPERTY(Transient)
-	TObjectPtr<UMaterialInstanceDynamic> ShroudPaper; // the paper laid over ground nobody of the player's can see
+	TObjectPtr<UTexture2D> FogPicture;
 	float PaperShown = -1.0f;
+	/** The paper's own colours by the hour: parchment and a pale sea by day, dim paper by night. */
+	void ApplyPaperLight();
+	float PaperLand[7] = { 0.6f, 0.52f, 0.37f, 0.6f, 0.92f, 0.5f, 0.62f }; // parchment (r, g, b), its shade and sun, the holder's wash and band
+	float PaperSeaTone[3] = { 0.221f, 0.302f, 0.305f };
+	float PaperNight[3] = { 0.42f, 0.3f, 0.6f }; // by night: what the land, the sea and the wash are multiplied by
+	/** A margin of paper round the sheet, with a ruled border, and its soft shadow on the table: seen from the height where the table is the staff's map. */
+	void BuildSheetMargin();
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> MarginMesh;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MarginPaper;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> MarginShade;
 	TSet<int32> UnseenSet;
 	TArray<FTownInfo> Towns; // by province id, once the rules have said
 	bool bWealth = false;

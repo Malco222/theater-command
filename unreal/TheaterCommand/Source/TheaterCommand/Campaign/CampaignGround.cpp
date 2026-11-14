@@ -506,6 +506,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	});
 }
 
+int32 FCampaignGround::PaintedRegion(int32 Index, const FCampaignTerrain& Terrain) const
+{
+	return ShoreRegion.IsValidIndex(Index) ? ShoreRegion[Index] : (Terrain.Region.IsValidIndex(Index) ? Terrain.Region[Index] : -1);
+}
+
 void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTerrain& Terrain, int32 I0, int32 J0, int32 I1, int32 J1)
 {
 	// Each nation's colour and how much wash it needs, looked up once per region.
