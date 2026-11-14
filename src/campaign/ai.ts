@@ -15,14 +15,15 @@ import { groundRules } from './ground';
 import { aiBridges, aiEngineers } from './engineers';
 import { landCorps, landingOpts, landingTargets, liftLeft, navalAI, planLanding } from './navy';
 import { shoreAI } from './fleets';
-import { afterDeclaring, decide, isOpen, probed, probing, seaBase, seaFoe, staffPhase, theatreStaff } from './staff';
+import { RIVALS, afterDeclaring, decide, isOpen, probed, probing, rivalRules, seaBase, seaFoe, staffPhase, theatreStaff } from './staff';
+import { foldCorps, foldRules, foldView, whyNotFold } from './fold';
 import { hashString } from '../core/rng';
 import { SIEGE, besieged, feeders, fieldCtrl, garrison, garrisonOf, guardOf, investedOn, previewSally, ringClosed, sally, siegeRules, storm, stormForce, takeField, townHeld, whyNotSally } from './siege';
 import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage, havensOf,
-  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, railMove, railReach, resolveBattle, shipMove, weekOf,
+  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, railMove, railReach, resolveBattle, shipMove, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -66,6 +67,10 @@ let scope: Set<number> | null = null;
 let quiet = false;
 /** True while the plan in force allows each place one assault a month: what fails is not tried again until the next. */
 let single = false;
+/** How many waves the army being run may send at one place in a month: two, or more for a staff pressing a won war. */
+let waves = 2;
+/** True while an army overseas is fighting its staff's main effort: the force massed opposite the target is there to attack it. */
+let striking = false;
 /** Set while the army being run has orders to leave the theatre once the front there has gone. */
 let leaving: PlanPhase['withdraw'] | null = null;
 /** Sectors the plan in force has handed over to an ally whose troops have arrived: the nation's own corps leave them, all but one. */
@@ -142,6 +147,8 @@ export function runAI(g: Game, nat: string): void {
 function campaign(g: Game, nat: string): void {
   const n = g.nations[nat];
   if (!n.alive) return;
+  // The grand campaign: two worn corps standing together are made into one before anyone marches.
+  foldWorn(g, nat);
   // The grand campaign: garrisons with no enemy near come out of their towns before the month's marching begins.
   garrisons(g, nat, false);
   try { campaignMoves(g, nat); } finally { if (n.alive) garrisons(g, nat, true); }
@@ -360,6 +367,8 @@ function overseas(g: Game, nat: string): void {
     scope = ids[k];
     quiet = !!ph?.quiet;
     single = ph?.renew === false;
+    waves = ph?.waves ?? 2;
+    striking = ph?.effort !== undefined;
     leaving = ph?.withdraw ?? null;
     given = new Set((ph?.abandon ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined && ids[k].has(id)));
     entrusted = handedOver(g, nat, ph);
@@ -385,6 +394,7 @@ function overseas(g: Game, nat: string): void {
           if (!ids[k].has(r.id)) { halt.add(r.name); edge.add(r.name); }
           else if (only && !only.has(r.name)) halt.add(r.name);
         }
+        softenLine(g, nat, enemies, halt, only, ph.minOdds ?? 1.3, ph.oddsFor);
         offensive(g, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
         // With the month's fighting done the rest of the army closes up to wherever the enemy now stands.
         if (n.alive) { advance(g, nat, enemies, 0, null, edge); mass(g, nat, ph); defend(g, nat, false); }
@@ -395,6 +405,8 @@ function overseas(g: Game, nat: string): void {
       scope = null;
       quiet = false;
       single = false;
+      waves = 2;
+      striking = false;
       leaving = null;
       given = new Set();
       entrusted = new Set();
@@ -434,8 +446,9 @@ function mainCampaign(g: Game, nat: string): void {
   given = new Set((ph?.abandon ?? []).map((nm) => g.byName[nm]?.id).filter((id): id is number => id !== undefined));
   quiet = !!ph?.quiet;
   single = ph?.renew === false;
+  waves = ph?.waves ?? 2;
   bound = ph?.strict ? new Set(ph.targets ?? []) : null;
-  try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; bound = null; }
+  try { fight(g, nat, ph, posture); } finally { entrusted = new Set(); massed = new Set(); given = new Set(); quiet = false; single = false; waves = 2; bound = null; }
 }
 
 /**
@@ -481,6 +494,7 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
   const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g, nat)) : null;
   gunsUp(g, nat, enemies, only);
+  softenLine(g, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
   offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
   if (!n.alive) return;
   if (posture === 'redeploy') redeploy(g, nat, ph!, enemies);
@@ -813,8 +827,9 @@ export function twoWaves(g: Game, avail: Corps[], pool: Corps[], target: Region,
 
 function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, minOdds: number, axisList: string[], axisOpen: boolean, follow: boolean, halt: Set<string>, only: Set<string> | null, oddsFor: Record<string, number> = {}): void {
   const failed = new Set<number>();
-  // Places a first wave has gone in at this month: the main body follows, and nobody sends a third.
-  const waved = new Set<number>();
+  // Places a first wave has gone in at this month, and how many: the main body follows, and nobody sends a third
+  // (a staff pressing a won war sends one more where it has the corps).
+  const waved = new Map<number, number>();
   const axis = new Set(axisList);
   // In the first month the armoured thrust takes its objectives in order; after that the whole line is open.
   const notYet = (name: string): boolean => {
@@ -845,7 +860,8 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
       for (const c of g.corps) {
         if (c.nat !== nat || c.hold || c.kind === 'fort' || c.ap <= 0 || weekOf(c, 1) > wave) continue;
         // An army overseas has no reserves to spare: the force its plan keeps at a place holds it, and joins no attack elsewhere.
-        if (scope && massed.has(c.id)) continue;
+        // (In a main effort the force massed opposite the target is the attack.)
+        if (scope && massed.has(c.id) && !striking) continue;
         // Early in the month the fast troops are kept for the main thrust if they can get to it.
         const kept = door !== null && wave <= 2 && KIND[c.kind].mobile && !massed.has(c.id) && door[c.reg] >= 0 && door[c.reg] <= c.ap;
         for (const j of g.regions[c.reg].nb) {
@@ -896,7 +912,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
             if (odds >= need) pick = pool;
             else {
               // Not at these odds in one blow: in two, if there are the corps for it.
-              const two = single || waved.has(j) ? null : twoWaves(g, avail, pool, target, need);
+              const two = single || (waved.get(j) ?? 0) >= waves - 1 ? null : twoWaves(g, avail, pool, target, need);
               if (!two) continue;
               pick = two.corps; odds = two.then; wave = true;
             }
@@ -912,7 +928,7 @@ function offensive(g: Game, nat: string, objs: string[], enemies: Set<string>, m
         taken = resolveBattle(g, best.corps, best.target).taken;
         // A slow command does not get a second assault organised in the same month, and some plans allow only one.
         // (Two waves laid on beforehand are one operation: the main body goes in behind the first wave.)
-        if (best.wave) waved.add(best.target.id);
+        if (best.wave) waved.set(best.target.id, (waved.get(best.target.id) ?? 0) + 1);
         else if (!taken && (g.nations[nat].slowCommand || single)) failed.add(best.target.id);
       }
       else { taken = moveCorps(g, best.corps[0], best.target); if (!taken) failed.add(best.target.id); }
@@ -974,6 +990,79 @@ function localAttacks(g: Game, nat: string): void {
     if (!taken) failed.add(best.target.id);
     probed(g, nat, foe, P.step);
     if (taken && g.nations[nat].alive) support(g, nat, best.target);
+  }
+}
+
+/**
+ * A staff softens a prepared line before it attacks it (the grand campaign), as the player can. Where the defenders
+ * stand in fieldworks and the attack the staff means to make falls short of the odds it asks, though not by far,
+ * one corps that is not going in with the main body probes the line first: the defenders are named, their works
+ * are a month the worse, and they meet the attack already pressed. A few probes a month and no more.
+ */
+export function softenLine(g: Game, nat: string, enemies: Set<string>, halt: Set<string>, only: Set<string> | null, minOdds: number, oddsFor: Record<string, number> = {}): void {
+  if (!rivalRules(g) || !probeRules(g) || nat === g.human) return;
+  const S = RIVALS.soften;
+  const cand = new Map<number, Corps[]>();
+  for (const c of g.corps) {
+    if (c.nat !== nat || c.dead || c.hold || c.kind === 'fort' || c.ap <= 0 || c.town !== undefined) continue;
+    if (scope && !scope.has(c.reg)) continue;
+    for (const j of g.regions[c.reg].nb) {
+      const r = g.regions[j];
+      if (halt.has(r.name) || (only && !only.has(r.name)) || !enemies.has(ctl(g, r)) || !atWar(g, nat, ctl(g, r)) || blocked(g, c, r)) continue;
+      let list = cand.get(j);
+      if (!list) cand.set(j, (list = []));
+      list.push(c);
+    }
+  }
+  const wants: { target: Region; prober: Corps; gap: number }[] = [];
+  for (const [j, avail] of cand) {
+    const target = g.regions[j];
+    const foes = hostileUnits(g, target, nat);
+    if (!foes.length || Math.max(...foes.map(worksOf)) < S.works) continue;
+    const pool = limitAttackers(g, avail.filter((c) => c.org >= 0.35), target);
+    if (!pool.length) continue;
+    const odds = assess(g, pool, target).odds;
+    const need = oddsFor[target.name] ?? minOdds;
+    if (odds >= need || odds < S.from * need) continue;
+    // Who probes: a corps beside the line that is not going in with the main body, or one of them where everyone is:
+    // the one with the weight for a full probe, and of those the weakest in the attack.
+    const free = avail.filter((c) => whyNoProbe(g, c, target) === null);
+    const spare = free.filter((c) => !pool.includes(c));
+    const prober = [...(spare.length ? spare : free.length > 1 ? free : [])].sort((a, b) => probeWeight(b) - probeWeight(a) || atkPower(g, a) - atkPower(g, b) || a.id - b.id)[0];
+    if (prober) wants.push({ target, prober, gap: need - odds });
+  }
+  wants.sort((a, b) => a.gap - b.gap || a.target.id - b.target.id);
+  const used = new Set<number>();
+  let made = 0;
+  for (const w of wants) {
+    if (made >= S.most) break;
+    if (used.has(w.prober.id) || whyNoProbe(g, w.prober, w.target) !== null) continue;
+    if (probeLine(g, w.prober, w.target)) { used.add(w.prober.id); made++; }
+  }
+}
+
+/**
+ * A computer staff folds its worn corps together (the grand campaign), as the player can: where two of its corps
+ * of a kind stand in one province, both well under strength, the men of both fill one and the other goes home as
+ * a cadre, to be raised again when the treasury allows (economy.ts, aiProduction). Nobody is folded where men
+ * would be left over.
+ */
+export function foldWorn(g: Game, nat: string): void {
+  if (!rivalRules(g) || !foldRules(g) || nat === g.human) return;
+  const worn = RIVALS.fold.worn;
+  const seen = new Set<number>();
+  for (const c of [...g.corps]) {
+    if (c.nat !== nat || c.dead || c.str >= worn || seen.has(c.reg)) continue;
+    seen.add(c.reg);
+    const here = g.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && u.str < worn);
+    let best: { keep: Corps; gone: Corps; str: number } | null = null;
+    for (const keep of here) for (const gone of here) {
+      if (keep === gone || whyNotFold(g, keep, gone) !== null) continue;
+      const v = foldView(g, keep, gone);
+      if (v.back > 0) continue;
+      if (!best || v.str > best.str || (v.str === best.str && (keep.xp > best.keep.xp || (keep.xp === best.keep.xp && keep.id < best.keep.id)))) best = { keep, gone, str: v.str };
+    }
+    if (best) foldCorps(g, best.keep, best.gone);
   }
 }
 

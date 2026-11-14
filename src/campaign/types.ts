@@ -769,6 +769,10 @@ export interface PlanPhase {
   limited?: boolean;
   /** A single stroke: only these places are attacked, whatever else is in reach. */
   targets?: string[];
+  /** The grand campaign: this phase is a staff's main effort for the season, aimed at this province (its id). */
+  effort?: number;
+  /** The grand campaign: how many waves a staff pressing a won war will send at one place in a month (two otherwise). */
+  waves?: number;
   /**
    * An army kept to the letter of its orders: besides attacking only its targets, nobody steps into ground the
    * enemy has left empty, or counter-attacks to win ground back, unless the place is one of them.

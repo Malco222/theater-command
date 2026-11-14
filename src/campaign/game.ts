@@ -30,6 +30,7 @@ import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFalle
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import defenceData from '../../data/campaign/defence.json';
+import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot } from './ground';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
@@ -578,7 +579,7 @@ export const DEFENCE = defenceData as unknown as {
   entrench: { auto: boolean; months: number; share: number[] };
   handover?: { fade: number };
   /** Probing the line: see the note in the data. */
-  probe?: { ap: number; wear: number; loss: number; org: number };
+  probe?: { ap: number; wear: number; weight?: number; loss: number; org: number };
   wear: { perAttack: number; fullAt: number; guns: number; regrow: number };
   tired: { per: number; most: number };
   hammer: { first: number; second: number };
@@ -1555,6 +1556,9 @@ export function whyNoProbe(g: Game, c: Corps, target: Region): string | null {
   return null;
 }
 
+/** How much of a probe's full effect on the works this corps has the weight for, 0 to 1: a probe in strength takes men. */
+export const probeWeight = (c: Corps): number => { const w = DEFENCE.probe?.weight ?? 0; return w > 0 ? Math.min(1, men(c) / w) : 1; };
+
 /** The men a probe would cost this corps. */
 export const probeCost = (g: Game, c: Corps): number => Math.round(men(c) * Math.min(0.6, (DEFENCE.probe?.loss ?? 0) * cmdLoss(g, c)));
 
@@ -1564,6 +1568,8 @@ export function probeLine(g: Game, c: Corps, target: Region): ProbeReport | null
   const P = DEFENCE.probe!, nat = armyOf(c);
   const defenders = hostileUnits(g, target, nat);
   const lost = probeCost(g, c);
+  // The works are worn by the weight that comes at them: reckoned before the probe's own losses.
+  const reach = P.wear * probeWeight(c);
   const fresh = defenders.filter((d) => corpsKnown(g, d, nat).level !== 'exact').length;
   c.str *= 1 - Math.min(0.6, P.loss * cmdLoss(g, c));
   c.org = clamp(c.org - P.org, 0, 1);
@@ -1571,10 +1577,10 @@ export function probeLine(g: Game, c: Corps, target: Region): ProbeReport | null
   c.fought = true;
   let works = 0, left = 0;
   for (const d of defenders) {
-    if (d.dug) { const w = worksOf(d); works = Math.max(works, w); d.dugFor = Math.max(0, w - P.wear); left = Math.max(left, worksOf(d)); }
+    if (d.dug) { const w = worksOf(d); works = Math.max(works, w); d.dugFor = Math.max(0, w - reach); left = Math.max(left, worksOf(d)); }
     d.pressed = true;
   }
-  const wear = Math.round(Math.min(P.wear, works) * 10) / 10;
+  const wear = Math.round(Math.min(reach, works) * 10) / 10;
   // Whoever is felt out is known, and so is the corps that came to feel.
   identify(g, defenders, nat);
   for (const d of new Set(defenders.map((x) => x.nat))) identify(g, [c], d);
@@ -1647,6 +1653,45 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
 }
 
 /**
+ * Why these two corps cannot change places in one order, or null if they can (the grand campaign, Version 65).
+ * Two corps of one side in neighbouring provinces their side holds march at the same moment, so it does not matter
+ * that both provinces are full: a worn corps in the line and a fresh one behind it are exchanged, which a march
+ * one after the other cannot do on a full front.
+ */
+export function whyNoSwap(g: Game, a: Corps, b: Corps): string | null {
+  if (g.flags.open !== 1) return 'Two corps change places in one order only in the grand campaign.';
+  if (a === b || a.dead || b.dead) return 'It takes two corps.';
+  for (const c of [a, b]) if (c.kind === 'fort' || c.town !== undefined || c.leave !== undefined) return `${c.name} is not in the field.`;
+  if (!allied(g, a.nat, b.nat)) return 'They are not of one side.';
+  const ra = g.regions[a.reg], rb = g.regions[b.reg];
+  if (ra === rb || !ra.nb.includes(rb.id)) return 'They do not stand in neighbouring provinces.';
+  if (!allied(g, a.nat, ra.ctrl) || !allied(g, a.nat, rb.ctrl) || hostileUnits(g, ra, a.nat).length || hostileUnits(g, rb, a.nat).length) return 'Both provinces must be in your side\'s hands, with no enemy in them.';
+  if (blocked(g, a, rb) || blocked(g, b, ra)) return 'The way between them is closed to one of them.';
+  if ((a.kind === 'eng') !== (b.kind === 'eng')) return 'Engineers change places only with engineers.';
+  for (const [c, to] of [[a, rb], [b, ra]] as [Corps, Region][]) { const cost = moveCost(g, c, to); if (c.ap < Math.min(cost, 4) || c.ap <= 0) return `${c.name} has not the moves left for the march.`; }
+  return null;
+}
+
+/** Two corps change places in one order: each leaves its works behind it and takes over what the other left. False if they cannot. */
+export function swapCorps(g: Game, a: Corps, b: Corps): boolean {
+  if (whyNoSwap(g, a, b) !== null) return false;
+  const ra = g.regions[a.reg], rb = g.regions[b.reg];
+  const ca = moveCost(g, a, rb), cb = moveCost(g, b, ra);
+  g.week = weekOf(a, ca);
+  // The works go from hand to hand: the corps that comes in has first claim on what the one going out stood in,
+  // before anyone else there. Works nobody can man are left as a march would leave them.
+  const wa = handover(g) && a.dug ? Math.round(worksOf(a) * 100) / 100 : 0, wb = handover(g) && b.dug ? Math.round(worksOf(b) * 100) / 100 : 0;
+  if (wa > 0 && b.yields) leaveWorks(g, a);
+  if (wb > 0 && a.yields) leaveWorks(g, b);
+  place(g, a, rb); place(g, b, ra);
+  a.ap = Math.max(0, a.ap - ca); b.ap = Math.max(0, b.ap - cb);
+  if (wa > 0 && mansWorks(b)) { b.dug = true; b.dugFor = wa; b.relief = true; }
+  if (wb > 0 && mansWorks(a)) { a.dug = true; a.dugFor = wb; a.relief = true; }
+  takeWorks(g, a, rb); takeWorks(g, b, ra);
+  return true;
+}
+
+/**
  * Where a corps could go by rail this month: any friendly region joined to its own by friendly track. No railway
  * crosses the desert. In the grand campaign the trains keep to the lines on the map, and none runs into, out of
  * or through a province whose line is cut; only engineers can be carried to the break itself.
@@ -1713,10 +1758,32 @@ export function collapseScore(g: Game, nat: string): number {
   const capLost = !allied(g, nat, seat.ctrl) ? 1 : shut ? Math.min(1, hold) : 0;
   // The colonies are fought over like any other ground, but a nation stands or falls by its home country.
   const army = n.armyPeak > 0 ? clamp(armySize(g, nat) / n.armyPeak, 0, 1) : 1;
-  const score = 0.45 * capLost + 0.35 * homeLost(g, nat) + 0.2 * (1 - army);
+  const score = 0.45 * capLost + 0.35 * homeLost(g, nat) + 0.2 * (1 - army) + exhausted(g, nat);
   // A people gone short for months will bear less (the grand campaign): this is how a blockade chokes a country.
   const worn = willLost(g, nat);
   return worn > 0 ? score + worn : score;
+}
+
+const EXHAUST = (rivalsData as unknown as { exhaust?: { after: number; per: number } }).exhaust;
+
+/**
+ * A finish for a war that is won (the grand campaign): a computer nation whose capital has been in enemy hands for
+ * more than a year wears out, a little more each month, until it asks for terms however much army it has left.
+ * The player's own country is never worn out this way: he decides when he is beaten.
+ */
+export function exhausted(g: Game, nat: string): number {
+  const out = g.flags[`capOut:${nat}`];
+  if (g.flags.open !== 1 || !EXHAUST || nat === g.human || out === undefined) return 0;
+  return Math.max(0, g.turn - out - EXHAUST.after) * EXHAUST.per;
+}
+
+/** Notes the month a nation's capital passed into enemy hands, and forgets it when the capital is its own again. */
+function capitalWatch(g: Game, nat: string): void {
+  const n = g.nations[nat];
+  if (g.flags.open !== 1 || n.capital < 0) return;
+  const key = `capOut:${nat}`;
+  if (allied(g, nat, g.regions[n.capital].ctrl)) delete g.flags[key];
+  else if (g.flags[key] === undefined) g.flags[key] = g.turn;
 }
 
 export function checkCollapse(g: Game, nat: string, by: string): void {
@@ -2227,6 +2294,12 @@ function digIn(g: Game, nat: string): void {
     if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) {
       // A month in which the line was attacked is a month's digging lost: the works are what the attack left of them.
       const gain = c.pressed ? DEFENCE.wear.regrow : 1;
+      // Works standing empty where it stood the month are its own (Version 65): a corps raised beside a ready line
+      // does not dig from nothing while the line falls in.
+      if (!c.dug) {
+        takeWorks(g, c, g.regions[c.reg]);
+        if (c.relief) { delete c.relief; c.dugFor = Math.max(c.dugFor ?? 0, gain); if (c.pressed) delete c.pressed; continue; }
+      }
       if (c.dug) c.dugFor = (c.dugFor ?? 1) + gain;
       else if (gain > 0) { c.dugFor = gain; c.dug = true; }
     }
@@ -2405,6 +2478,7 @@ export function startPhase(g: Game, nat: string): void {
   if (tempo) g.flags[`tempo:${nat}:${g.turn}`] = 1;
   storyMonth(g, nat);
   jointMonth(g, nat);
+  capitalWatch(g, nat);
   checkCollapse(g, nat, n.atWar[0] ?? nat);
 }
 
