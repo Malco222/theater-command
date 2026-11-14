@@ -747,7 +747,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			float Floor = 1.0f;
 			// (the seas beyond Europe's frame, as the art director's world look has them)
 			const float SeaLatitude = static_cast<float>(Data.LatitudeAt(Y));
-			const float SeaBeyond = bBeyond ? BeyondEurope(SeaLatitude, static_cast<float>(Data.LongitudeAt(X))) : 0.0f;
+			const float SeaBeyond = bBeyond ? BeyondEuropeBy(SeaLatitude, static_cast<float>(Data.LongitudeAt(X)), 6.0f) : 0.0f; // (the world's seas come in over six degrees from Europe's sheet: over three, the Barents Sea stepped from Europe's turquoise to the world's slate)
 			if (Terrain.HasElevation())
 			{
 				float Depth = -Bed(X, Y);
