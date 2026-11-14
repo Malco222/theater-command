@@ -227,7 +227,8 @@ def build(s):
     parts.append(box("hatch", (0.5, 0.42, 0.035), (tx - 0.42, 0.42, roof + 0.02), "shade", 0.008))
     parts.append(drum("vent", 0.13, 0.07, (tx + 0.38, 0.0, roof + 0.03), "paint", 10, axis="Z", radius2=0.09))
     parts.append(drum("aerial_foot", 0.035, 0.1, (tx - 1.5, 0.48, tz + 0.55), "shade", 6, axis="Z"))
-    parts.append(drum("aerial", 0.008, 1.5, (tx - 1.5, 0.48, tz + 1.35), "steel", 4, axis="Z"))
+    # (a whip as thick as a model-maker's wire, and dark: one true to scale is thinner than a point of the screen and glitters)
+    parts.append(drum("aerial", 0.022, 1.1, (tx - 1.5, 0.48, tz + 1.15), "shade", 5, axis="Z"))
     # Lifting eyes, and a rail on the bustle with a rolled tarpaulin lashed to it.
     for side in (-1.0, 1.0):
         parts.append(box("eye", (0.1, 0.03, 0.07), (tx + 0.25, side * 0.72, roof - 0.04), "shade"))
@@ -366,11 +367,25 @@ def main():
     near = gather(parts)
     far = gather(parts, simple=True)
     low = min(near["points"][2::3])
+    # Where the game paints its markings, on the right-hand side (it mirrors them for the left): the nation's own
+    # mark on the turret's side at its waist, a little behind the turret's middle, and the number on the upper
+    # hull's side behind it. Each is a place (x, y, z) and a size. "roof" is the height of the turret's roof with
+    # its cupola: the aerial stands higher, and must not be taken for the top of the tank.
+    s = SPEC
+    turret_z = s["hull_deck"] + s["upper_high"] + 0.02
+    back = 0.2                                                    # how far behind the turret's middle the mark sits
+    across = math.sqrt(max(1.0 - (back / (s["turret_long"] * 0.5)) ** 2, 0.0))
+    marks = {
+        "cross": [round(s["turret_x"] - 0.1 - back, 3), round(across * 0.92 * s["turret_wide"] * 0.5 + 0.015, 3), round(turret_z + s["turret_high"] * 0.5, 3), 0.2],
+        "number": [-0.95, round(s["upper_wide"] * 0.5 * 0.97 + 0.015, 3), round(s["hull_deck"] + s["upper_high"] * 0.5, 3), 0.26],
+        "roof": round(turret_z + s["turret_high"] + 0.25, 3),
+    }
     data = {
         "name": "Trial medium tank",
         "about": "Made by Tools/build_tank.py. Metres; x forward, y right, z up. Paints: " + ", ".join(f"{v} {k}" for k, v in PAINTS.items()),
         "long": round(max(near["points"][0::3]) - min(near["points"][0::3]), 3),
         "high": round(max(near["points"][2::3]) - low, 3),
+        "marks": marks,
         "near": near,
         "far": far,
     }

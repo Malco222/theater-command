@@ -626,8 +626,8 @@ void ACampaignMapActor::PaintGround()
 		// The New World's square fields: fallow, wheat and green, as what each does to the ground under it.
 		// (The art director's swatches are (156, 130, 94), (204, 180, 106) and (146, 154, 94) on prairie ground.)
 		LandVector(TEXT("FieldFallow"), FLinearColor(0.83f, 0.66f, 0.6f));
-		LandVector(TEXT("FieldWheat"), FLinearColor(1.42f, 1.24f, 0.96f));
-		LandVector(TEXT("FieldGreen"), FLinearColor(0.74f, 0.92f, 0.76f));
+		LandVector(TEXT("FieldWheat"), FLinearColor(1.62f, 1.4f, 0.96f));
+		LandVector(TEXT("FieldGreen"), FLinearColor(0.84f, 1.1f, 0.86f));
 	}
 	{
 		// Woods on a warm-stained nation (Poland's red, Holland's orange) went chocolate: a very dark green takes

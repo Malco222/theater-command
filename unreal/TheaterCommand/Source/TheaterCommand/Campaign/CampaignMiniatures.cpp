@@ -450,14 +450,14 @@ void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString&
 	}
 }
 
-void FMiniatureMesh::MarkWear(bool bAll)
+void FMiniatureMesh::MarkWear(bool bAll, double Roof)
 {
 	if (Vertices.Num() == 0)
 	{
 		return;
 	}
 	const FBox Bounds(Vertices);
-	const double Long = FMath::Max(Bounds.GetSize().X, 0.01), HalfWide = FMath::Max(FMath::Max(FMath::Abs(Bounds.Min.Y), FMath::Abs(Bounds.Max.Y)), 0.01), High = FMath::Max(Bounds.Max.Z, 0.01);
+	const double Long = FMath::Max(Bounds.GetSize().X, 0.01), HalfWide = FMath::Max(FMath::Max(FMath::Abs(Bounds.Min.Y), FMath::Abs(Bounds.Max.Y)), 0.01), High = FMath::Max(Roof > 0.0 ? Roof : Bounds.Max.Z, 0.01);
 	for (int32 K = 0; K < Vertices.Num(); ++K)
 	{
 		if (!bAll && Colors[K].A != 128)
@@ -531,6 +531,11 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 	{
 		TArray<FVector> Points, Facings;
 		TArray<int32> Paints, Triangles;
+		// (where the model's maker says its markings go, on the right-hand side, and how high its roof is: a model
+		// that does not say is marked by its outline)
+		bool bMarks = false;
+		FVector Cross = FVector::ZeroVector, Number = FVector::ZeroVector;
+		double CrossSize = 0.2, NumberHigh = 0.26, Roof = 0.0;
 	};
 	static TMap<FString, TSharedPtr<FRaw>> Read; // (a model that is not there is remembered as nothing, and not looked for again)
 	static TMap<FString, FMiniatureMesh> Painted;
@@ -563,6 +568,19 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				for (const TSharedPtr<FJsonValue>& Value : *TriangleList)
 				{
 					Raw->Triangles.Add(static_cast<int32>(Value->AsNumber()));
+				}
+				const TSharedPtr<FJsonObject>* Marks = nullptr;
+				const TArray<TSharedPtr<FJsonValue>> *CrossAt = nullptr, *NumberAt = nullptr;
+				if (File->TryGetObjectField(TEXT("marks"), Marks) && (*Marks)->TryGetArrayField(TEXT("cross"), CrossAt) && (*Marks)->TryGetArrayField(TEXT("number"), NumberAt)
+					&& CrossAt->Num() == 4 && NumberAt->Num() == 4)
+				{
+					// (the file has x forward and y to the right; here the nose is toward -X and the right hand at -Y)
+					Raw->bMarks = true;
+					Raw->Cross = FVector(-(*CrossAt)[0]->AsNumber(), (*CrossAt)[1]->AsNumber(), (*CrossAt)[2]->AsNumber());
+					Raw->CrossSize = (*CrossAt)[3]->AsNumber();
+					Raw->Number = FVector(-(*NumberAt)[0]->AsNumber(), (*NumberAt)[1]->AsNumber(), (*NumberAt)[2]->AsNumber());
+					Raw->NumberHigh = (*NumberAt)[3]->AsNumber();
+					(*Marks)->TryGetNumberField(TEXT("roof"), Raw->Roof);
 				}
 				UE_LOG(LogTheater, Log, TEXT("Sculpted model %s read: %d points, %d triangles"), *Which, Raw->Points.Num(), Raw->Triangles.Num() / 3);
 			}
@@ -607,16 +625,27 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		}
 		// Its markings: the nation's own on each side of the turret, and a number behind it.
 		{
+			const FString Mark = Tag == TEXT("SOV") ? FString(TEXT("SOV-ARMY")) : Tag == TEXT("USA") ? FString(TEXT("USA-ARMY")) : Tag == TEXT("UK") ? FString(TEXT("UK-FLASH")) : Tag;
+			const int32 Number = 100 + static_cast<int32>(GetTypeHash(Tag) % 500);
 			const FBox Bounds(Fresh.Vertices);
 			const double TurretUp = Bounds.Max.Z * 0.76, TurretOut = FMath::Max(FMath::Abs(Bounds.Min.Y), Bounds.Max.Y) * 0.56;
 			for (const double Hand : { -1.0, 1.0 })
 			{
 				TGuardValue<uint8> Metal(Fresh.Finish, 128);
-				Fresh.Marking(FVector(0.15, Hand * TurretOut, TurretUp), 0.22, Tag == TEXT("SOV") ? FString(TEXT("SOV-ARMY")) : Tag == TEXT("USA") ? FString(TEXT("USA-ARMY")) : Tag == TEXT("UK") ? FString(TEXT("UK-FLASH")) : Tag, FVector(0.0, Hand, 0.12));
-				Fresh.Numerals(FVector(0.82, Hand * TurretOut * 0.96, TurretUp), 0.3, 100 + static_cast<int32>(GetTypeHash(Tag) % 500), FVector(0.0, Hand, 0.12));
+				if (Raw->bMarks)
+				{
+					// (where the model's maker put them: the mark on the turret's side, the number on the hull's)
+					Fresh.Marking(FVector(Raw->Cross.X, Hand * Raw->Cross.Y, Raw->Cross.Z), Raw->CrossSize, Mark, FVector(0.0, Hand, 0.13));
+					Fresh.Numerals(FVector(Raw->Number.X, Hand * Raw->Number.Y, Raw->Number.Z), Raw->NumberHigh, Number, FVector(0.0, Hand, 0.16));
+				}
+				else
+				{
+					Fresh.Marking(FVector(0.15, Hand * TurretOut, TurretUp), 0.22, Mark, FVector(0.0, Hand, 0.1));
+					Fresh.Numerals(FVector(0.82, Hand * TurretOut * 0.96, TurretUp), 0.3, Number, FVector(0.0, Hand, 0.12));
+				}
 			}
 		}
-		Fresh.MarkWear(false);
+		Fresh.MarkWear(false, Raw->Roof); // (an aerial is not the top of the tank: the wear is laid by the height of its roof)
 		Model = &Painted.Add(Key, MoveTemp(Fresh));
 	}
 	TGuardValue<uint8> AsPainted(Finish, 255); // (each point keeps what the model says it is made of)

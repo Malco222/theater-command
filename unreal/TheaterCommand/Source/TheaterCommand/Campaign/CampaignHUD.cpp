@@ -958,7 +958,9 @@ namespace
 			const FVector2D Size = Geometry.GetLocalSize();
 			const double Wide = Size.X / 8.0;
 			// (a soft falling away, not a ramp: most of it in the outer half of the eighth)
-			const float Dark = 0.2f * Shade;
+			// (the lamp's own pool already leaves the screen's edge at about 0.77 of its middle from this height: the
+			// falling away laid over it is the lighter for that, and takes the very edge to about 0.68)
+			const float Dark = 0.12f * Shade;
 			auto Ink = [Dark](float Share) { return FLinearColor(0.0f, 0.0f, 0.0f, Dark * Share); };
 			TArray<FSlateGradientStop> Left, Right;
 			Left.Add(FSlateGradientStop(FVector2D(0.0, 0.0), Ink(1.0f)));

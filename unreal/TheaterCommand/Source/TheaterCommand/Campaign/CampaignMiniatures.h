@@ -71,7 +71,7 @@ struct FMiniatureMesh
 	 * its nose, its track guards and its hatches take their alpha down from a half toward nothing, and there the
 	 * paint chips most. With bAll every point is taken for painted metal; otherwise only those already marked so.
 	 */
-	void MarkWear(bool bAll);
+	void MarkWear(bool bAll, double Roof = 0.0);
 	/** A number painted on a surface that faces the way given, as a marking is: plain white figures, read from outside. */
 	void Numerals(const FVector& Where, double High, int32 Number, const FVector& Facing);
 	/** Copies a finished model into this mesh, at a place, to a size, turned. */
