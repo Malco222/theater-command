@@ -1002,7 +1002,8 @@ function priceLine(s: Game, r: BattleReport): string {
   if (r.yielded) return '';
   const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
   const num = (n: number): string => n.toLocaleString('en');
-  const of = (x: { lost: number; pct: number }): string => `${num(x.lost)}${x.pct ? ` (${x.pct}%)` : ''}`;
+  // (a figure and its share are kept together where the line folds)
+  const of = (x: { lost: number; pct: number }): string => `${num(x.lost)}${x.pct ? `\u00A0(${x.pct}%)` : ''}`;
   if (s.human && (r.attNat === s.human || r.attackers.some((u) => u.nat === s.human))) return `It cost you ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of theirs.`;
   if (s.human && r.defenders.some((u) => u.nat === s.human)) return `It cost the attackers ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of yours.`;
   return `The attackers lost ${of(a)} men, the defenders ${of(d)}.`;

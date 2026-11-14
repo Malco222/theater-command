@@ -1530,7 +1530,8 @@ namespace
 						]
 
 						// The army in hand: its general, and a card for each corps. A click on a card leaves that corps behind.
-						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
+						// (It takes the room that is left on the screen and no more: with more corps than fit, the row of cards scrolls.)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).HAlign(HAlign_Left).VAlign(VAlign_Bottom)
 						[
 							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 12.0f, 10.0f, 14.0f))
 							.Visibility_Lambda([Tray]()
@@ -5946,9 +5947,10 @@ namespace
 				{
 					Face->AddSlot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 					[
-						SNew(SBox).WidthOverride(74.0f)
+						// (a division's name folds to a second line and is not cut short; every tile keeps room for two)
+						SNew(SBox).WidthOverride(74.0f).MinDesiredHeight(21.0f)
 						[
-							SNew(STextBlock).Text(FText::FromString(Part->Name)).Font(Font(TEXT("Bold"), 8)).ColorAndOpacity(bGoing ? Cream : Faint).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+							SNew(STextBlock).Text(FText::FromString(Part->Name)).Font(Font(TEXT("Bold"), 8)).ColorAndOpacity(bGoing ? Cream : Faint).AutoWrapText(true).LineHeightPercentage(0.95f)
 						]
 					];
 				}

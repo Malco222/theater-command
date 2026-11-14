@@ -23315,7 +23315,7 @@
     if (r.yielded) return "";
     const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
     const num4 = (n) => n.toLocaleString("en");
-    const of = (x) => `${num4(x.lost)}${x.pct ? ` (${x.pct}%)` : ""}`;
+    const of = (x) => `${num4(x.lost)}${x.pct ? ` (${x.pct}%)` : ""}`;
     if (s.human && (r.attNat === s.human || r.attackers.some((u) => u.nat === s.human))) return `It cost you ${num4(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ""} against ${of(d)} of theirs.`;
     if (s.human && r.defenders.some((u) => u.nat === s.human)) return `It cost the attackers ${num4(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ""} against ${of(d)} of yours.`;
     return `The attackers lost ${of(a)} men, the defenders ${of(d)}.`;
