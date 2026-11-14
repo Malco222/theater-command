@@ -6,6 +6,7 @@
 // holds the orders beyond sailing, the forecasts both interfaces show before an order is given, and the cards they
 // draw. Every number is in data/campaign/fleets.json. None of it touches the history campaigns.
 
+import { byHand } from './depth';
 import type { TicketLine } from '../core/ticket';
 import fleetData from '../../data/campaign/fleets.json';
 import { AIRWAR, carrierRules, raid as stopOutput } from './air';
@@ -513,7 +514,7 @@ export function openEscorts(g: Game): void {
 
 /** A computer admiral shells the troops on a coast its own army, or an ally's, stands beside. */
 export function shoreAI(g: Game, nat: string): void {
-  if (!seaWar(g) || !FLEETS.ai.bombard || nat === g.human || !g.nations[nat]?.atWar.length) return;
+  if (!seaWar(g) || !FLEETS.ai.bombard || byHand(g, nat, 'navy') || !g.nations[nat]?.atWar.length) return;
   // Only where the army can follow it up: enemy troops on a coast with one of its own side's armies beside them.
   // A town its own side stands round counts too: the guns break down its works for the assault.
   const sieged = (r: Region): boolean => besieged(g, r) && allied(g, nat, besiegerOf(g, r) ?? '') && townHeld(g, r) && breachOf(g, r) * 100 <= SIEGE.breach.most - 10;

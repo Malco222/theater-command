@@ -14,6 +14,7 @@
 //
 // Every number is in data/campaign/carriers.json. None of this touches the history campaigns.
 
+import { byHand } from './depth';
 import { Rng, hashString } from '../core/rng';
 import {
   AIR, AIRWAR, CARRIERS, afloat, airFleetsOf, airPool, airRange, airWar, assessAir, carrierOf, carrierRules, fly, forecastAir, homeOf, kmToSea,
@@ -480,11 +481,14 @@ function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit
  * harbour with nothing in reach puts to sea for the month to strike, where its side would be much the stronger.
  * A few of the land bombers may go for ships too. A strike is flown only where the forecast says it should pay.
  */
-export function seaStaff(g: Game, nat: string): void {
-  if (!carrierRules(g) || nat === g.human || !g.nations[nat]?.alive || !g.nations[nat].atWar.length) return;
+export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 'all'): void {
+  // The player's carriers go with his navy and his land bombers with his air force: each flies for him only where
+  // he has handed that desk to his staff (depth.ts), and then it is asked for by itself.
+  const his = what === 'decks' ? byHand(g, nat, 'navy') : what === 'land' ? byHand(g, nat, 'air') : nat === g.human;
+  if (!carrierRules(g) || his || !g.nations[nat]?.alive || !g.nations[nat].atWar.length) return;
   const A = CARRIERS.ai, R = AIRWAR.ai.raids;
   const hit = new Set<string>();
-  let flown = 0;
+  let flown = what === 'land' ? 100 : 0;
   const fit = (f: AirFleet | undefined): f is AirFleet => !!f && f.flew !== g.turn && f.mission === 'support' && f.ready >= A.ready;
   const send = (b: Blow): void => {
     const rep = fly(g, nat, b.m, b.t, b.fleets, `:sea${flown++}`);
@@ -492,7 +496,7 @@ export function seaStaff(g: Game, nat: string): void {
     if (rep) for (const f of b.fleets) { f.mission = b.m; f.target = b.t; f.flew = g.turn; }
   };
   // The carriers.
-  for (const c of fleetsOf(g, nat)) {
+  for (const c of what === 'land' ? [] : fleetsOf(g, nat)) {
     if (c.ships.cv <= 0) continue;
     const lead = wingOf(g, c.id, 'bmr'), cap = wingOf(g, c.id, 'ftr');
     if (!fit(lead) || lead.bmr < 6) continue;
@@ -518,6 +522,7 @@ export function seaStaff(g: Game, nat: string): void {
     }
   }
   // A few of the land bombers.
+  if (what === 'decks') return;
   const rng = new Rng(hashString(`air:${g.seed}:${g.turn}:seastaff:${nat}`));
   const leads = airFleetsOf(g, nat).filter((f) => !afloat(f) && f.kind !== 'ftr' && f.bmr >= R.least && fit(f)).sort((a, b) => b.bmr - a.bmr || a.id - b.id);
   let most = Math.floor(leads.length * A.landShare + rng.range(0, 1));

@@ -9,6 +9,7 @@
 // lists is split into air groups of one kind, fighters or bombers, and a group flies one raid a month, planned
 // from its target and flown the moment the order is given. A historical scenario keeps the fleets as they were.
 
+import { byHand } from './depth';
 import data from '../../data/campaign/air.json';
 import warData from '../../data/campaign/airwar.json';
 import carrierData from '../../data/campaign/carriers.json';
@@ -1170,15 +1171,17 @@ export function airBattles(g: Game, nat: string): AirReport[] {
 
 /** Orders for one computer-run nation's air fleets: history's plan where it has one, otherwise support for the armies. */
 export function airAI(g: Game, nat: string): void {
-  if (nat === g.human) return;
+  // The player's air force is his own to order, unless he has handed the air war to his staff (depth.ts).
+  if (byHand(g, nat, 'air')) return;
   const n = g.nations[nat];
-  const mine = airFleetsOf(g, nat);
+  // His air staff leaves the carriers' wings to whoever runs his navy.
+  const mine = airFleetsOf(g, nat).filter((f) => !afloat(f) || !byHand(g, nat, 'navy'));
   // A group that has flown this month already stays away until the next.
   for (const f of mine) if (f.flew !== g.turn) { f.mission = 'support'; f.target = -1; }
   if (!n.alive || !n.atWar.length) return;
   // In the grand campaign history's air plan does not apply: the air groups patrol, and the staff plans raids of its own.
   // Ships come first: the carriers' wings, and a few of the land bombers, go for the fleets the staff has found.
-  if (g.flags.open === 1) { seaStaff(g, nat); raidStaff(g, nat, mine); return; }
+  if (g.flags.open === 1) { seaStaff(g, nat, nat === g.human ? 'land' : 'all'); raidStaff(g, nat, mine); return; }
   for (const ph of AIR.plan) {
     if (ph.nat !== nat || g.turn < ph.from || g.turn > ph.to || !atWar(g, nat, ph.against)) continue;
     for (const o of ph.orders) {

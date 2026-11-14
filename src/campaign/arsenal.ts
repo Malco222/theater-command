@@ -5,6 +5,7 @@
 // same list. The numbers live in data/campaign/arsenal.json. The historical scenarios offer only the four
 // classic corps and fortifications, as they always did.
 
+import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
 import { AIRWAR, airFleetsOf, airPool, airWar, carrierRules, foundAirFleet, hasAirfield } from './air';
 import { syncWings } from './carriers';
@@ -425,7 +426,7 @@ export function deliverArsenal(g: Game, nat: string, b: Build): void {
  */
 export function aiArsenal(g: Game, nat: string): void {
   const n = g.nations[nat];
-  if (!budgeted(g) || nat === g.human || !n.alive) return;
+  if (!budgeted(g) || byHand(g, nat, 'build') || !n.alive) return;
   const raided = g.raids[nat];
   if (!raided || g.turn - raided.turn > 2) return;
   if (n.queue.some((b) => b.what === 'work' && b.item === 'aa')) return;

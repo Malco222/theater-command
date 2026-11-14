@@ -5,6 +5,7 @@
 // A level is kept as a mark on the game ('cv:market:17' = 2), so a save carries it and a game that never builds
 // carries nothing. Every number is in data/campaign/buildings.json. None of it touches the history campaigns.
 
+import { byHand } from './depth';
 import data from '../../data/campaign/buildings.json';
 import budgetData from '../../data/campaign/budget.json';
 import { townName, townSize, type TownSize } from './towns';
@@ -304,7 +305,7 @@ export function hallShare(g: Game, r: Region): number {
  */
 export function civicAI(g: Game, nat: string, earned: number, keeps = false, wait = false): void {
   const n = g.nations[nat];
-  if (!civicRules(g) || nat === g.human || !n?.alive || n.capital < 0) return;
+  if (!civicRules(g) || byHand(g, nat, 'build') || !n?.alive || n.capital < 0) return;
   const A = CIVIC.ai, purse = `cvb:${nat}`;
   g.flags[purse] = (g.flags[purse] ?? 0) + Math.max(0, earned) * A.share;
   // Guns before town halls: while the staff is saving for the artillery its front is asking for, the builders wait.
