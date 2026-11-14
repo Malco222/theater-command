@@ -11,7 +11,8 @@
 
 import { DEPTH, DESKS, capOf, capPct, deskDef, deskRan, depthRules, markRan, setCap, setDesk, staffRuns, type DeskId, type DepthDef } from './depth';
 import { atWar, bloc } from './game';
-import { PRODUCTION, aiProduction, gunsWanted, income } from './economy';
+import { PRODUCTION, aiProduction, gunsWanted, income, specOf } from './economy';
+import { menSpare } from './manpower';
 import { aiArsenal } from './arsenal';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
@@ -360,7 +361,9 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
     case 'build': {
       const corps = n.queue.filter((b) => b.what === 'corps').length, other = n.queue.length - corps;
       const deals = dealsOf(g, nat).length, houses = housesOf(g, nat);
-      return `${corps ? `${corps} corps forming` : 'No corps forming'}${other ? `, ${other} other order${other === 1 ? '' : 's'} in hand` : ''}. ${deals} of ${houses} trading house${houses === 1 ? '' : 's'} in use.`;
+      // A staff raises no corps with men the armies in the field are waiting for: say so, or a full treasury looks like idleness.
+      const noMen = staffRuns(g, nat, 'build') && menSpare(g, nat) < (specOf(g, 'inf')?.divs ?? 1);
+      return `${corps ? `${corps} corps forming` : 'No corps forming'}${other ? `, ${other} other order${other === 1 ? '' : 's'} in hand` : ''}. ${deals} of ${houses} trading house${houses === 1 ? '' : 's'} in use.${noMen ? ' There are no men to spare for new corps: the armies in the field are waiting for theirs. Aircraft, ships and factories need few, and can be ordered by hand.' : ''}`;
     }
     case 'diplomacy': {
       const b = bloc(n);

@@ -220,6 +220,21 @@ describe('building and trade left to the staff', () => {
     expect(g.nations.SOV.queue.length).toBe(0);
   });
 
+  it('with no men to spare the staff raises no corps, and the desk says why the treasury is waiting', () => {
+    const g = ready('GER', 3);
+    hand(g, 'build');
+    startPhase(g, 'GER');
+    g.nations.GER.pp = 400;
+    g.flags['mp:GER'] = 0;
+    staffMonth(g);
+    expect(g.nations.GER.queue.filter((b) => b.what === 'corps').length).toBe(0);
+    const desk = commandView(g)!.desks.find((d) => d.id === 'build')!;
+    expect(desk.state).toMatch(/no men to spare for new corps/);
+    // The same desk in the player's own hands makes no such excuse: the arsenal's cards tell him there.
+    setDesk(g, 'build', false);
+    expect(commandView(g)!.desks.find((d) => d.id === 'build')!.state).not.toMatch(/no men to spare/);
+  });
+
   it('a trading house that stands idle is given an agreement, at the player\'s price in political capital', () => {
     const g = playing('GER', 3);
     const mine = dealsOf(g, 'GER');
