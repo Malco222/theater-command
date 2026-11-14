@@ -88,43 +88,60 @@ namespace
 		return Info;
 	}
 
+	FSlateFontInfo Typed(float Size, bool bBold = false, int32 Spacing = 0);
+
+	/**
+	 * The frame is lettered in two faces only: the serif for names and titles, and the typewriter for everything
+	 * else. What asks for a large size is a title or a name and is set in the serif, and so is anything in italic
+	 * (a typewriter has none); the rest is typed, a little smaller than asked, since every typed letter is as
+	 * wide as the widest, and with less of the letter-spacing the old plain face needed.
+	 */
 	FSlateFontInfo Font(const TCHAR* Weight, int32 Size, int32 Spacing = 0)
 	{
-		FSlateFontInfo Info = FCoreStyle::GetDefaultFontStyle(Weight, Size);
-		Info.LetterSpacing = Spacing;
-		return Info;
+		const bool bBold = FCString::Stricmp(Weight, TEXT("Bold")) == 0, bItalic = FCString::Stricmp(Weight, TEXT("Italic")) == 0;
+		if (Size >= 16 || bItalic)
+		{
+			return Serif(Weight, static_cast<float>(Size), Spacing / 2);
+		}
+		return Typed(Size * 0.9f, bBold, Spacing / 4);
 	}
 
 	/**
 	 * The frame's typewriter face, for what a clerk would have typed: the treasury, the dispatches, the labels of
-	 * the doors. It is the Mac's own American Typewriter, read from the system's fonts where it stands (nothing
-	 * is shipped with the game); failing that its Courier New, and failing that the engine's plain fixed face.
+	 * the doors, and every line that is not a name or a title. It is Courier Prime (Quote-Unquote Apps; SIL Open
+	 * Font License 1.1), read from the project's own Content/Fonts folder beside its licence. No lettering reads
+	 * a font from the machine it runs on. Until that file is in the folder the engine's own fixed face stands in.
 	 */
-	FSlateFontInfo Typed(float Size, bool bBold = false, int32 Spacing = 0)
+	FSlateFontInfo Typed(float Size, bool bBold, int32 Spacing)
 	{
 		static TSharedPtr<FStandaloneCompositeFont> Face;
 		static bool bLooked = false;
 		if (!bLooked)
 		{
 			bLooked = true;
-			const FString Folder = TEXT("/System/Library/Fonts/Supplemental/");
-			auto Add = [](FStandaloneCompositeFont& Into, const TCHAR* Name, const FString& File, int32 SubFace)
-			{
-				FTypefaceEntry& Entry = Into.DefaultTypeface.Fonts.Emplace_GetRef(FName(Name));
-				Entry.Font = FFontData(File, EFontHinting::Default, EFontLoadingPolicy::LazyLoad, SubFace);
-			};
-			if (FPaths::FileExists(Folder + TEXT("AmericanTypewriter.ttc")))
-			{
-				// (in the system's collection the faces stand in this order: regular, light, bold, semibold, ...)
-				Face = MakeShared<FStandaloneCompositeFont>();
-				Add(*Face, TEXT("Regular"), Folder + TEXT("AmericanTypewriter.ttc"), 0);
-				Add(*Face, TEXT("Bold"), Folder + TEXT("AmericanTypewriter.ttc"), 2);
-			}
-			else if (FPaths::FileExists(Folder + TEXT("Courier New.ttf")) && FPaths::FileExists(Folder + TEXT("Courier New Bold.ttf")))
+			const FString Own = FPaths::ProjectContentDir() / TEXT("Fonts");
+			if (FPaths::FileExists(Own / TEXT("CourierPrime-Regular.ttf")) && FPaths::FileExists(Own / TEXT("CourierPrime-Bold.ttf")))
 			{
 				Face = MakeShared<FStandaloneCompositeFont>();
-				Add(*Face, TEXT("Regular"), Folder + TEXT("Courier New.ttf"), 0);
-				Add(*Face, TEXT("Bold"), Folder + TEXT("Courier New Bold.ttf"), 0);
+				auto Add = [](FTypeface& Into, const TCHAR* Name, const FString& File)
+				{
+					FTypefaceEntry& Entry = Into.Fonts.Emplace_GetRef(FName(Name));
+					Entry.Font = FFontData(File, EFontHinting::Default, EFontLoadingPolicy::LazyLoad);
+				};
+				Add(Face->DefaultTypeface, TEXT("Regular"), Own / TEXT("CourierPrime-Regular.ttf"));
+				Add(Face->DefaultTypeface, TEXT("Bold"), Own / TEXT("CourierPrime-Bold.ttf"));
+				// (a tick, a star or an arrow the typewriter has no key for is cut from the engine's plain face)
+				const FString Plain = FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Regular.ttf"), Wide = FPaths::EngineContentDir() / TEXT("Slate/Fonts/DroidSansFallback.ttf");
+				if (FPaths::FileExists(Plain))
+				{
+					Add(Face->FallbackTypeface.Typeface, TEXT("Regular"), Plain);
+					Add(Face->FallbackTypeface.Typeface, TEXT("Bold"), Plain);
+				}
+				else if (FPaths::FileExists(Wide))
+				{
+					Add(Face->FallbackTypeface.Typeface, TEXT("Regular"), Wide);
+					Add(Face->FallbackTypeface.Typeface, TEXT("Bold"), Wide);
+				}
 			}
 		}
 		if (!Face.IsValid())
@@ -138,10 +155,13 @@ namespace
 		return Info;
 	}
 
+	/** Where the pieces of the frame are on the screen this frame (absolute): a town's plate or a province's name is not drawn under one. */
+	TArray<FSlateRect> FrameRects;
+
 	// The frame is made of the things on a staff officer's desk in 1939: calendar paper and typing paper, written
 	// on in ink; brown leather; and brass.
-	const FLinearColor Paper = FLinearColor(FColor::FromHex(TEXT("E9DCBA")));
-	const FLinearColor TypingPaper = FLinearColor(FColor::FromHex(TEXT("EFE6CC")));
+	const FLinearColor Paper = FLinearColor(FColor::FromHex(TEXT("CDBE9B")));
+	const FLinearColor TypingPaper = FLinearColor(FColor::FromHex(TEXT("D3C6A4")));
 	const FLinearColor DeskInk = FLinearColor(FColor::FromHex(TEXT("2B2118")));
 	const FLinearColor InkSoft = FLinearColor(FColor::FromHex(TEXT("5B4A38")));
 	const FLinearColor InkRed = FLinearColor(FColor::FromHex(TEXT("8E2C20")));
@@ -149,6 +169,30 @@ namespace
 	const FLinearColor Leather = FLinearColor(FColor::FromHex(TEXT("2A1C12"))).CopyWithNewOpacity(0.93f);
 	const FLinearColor DoorBrass = FLinearColor(FColor::FromHex(TEXT("C9A55A")));
 	const FLinearColor PillBrass = FLinearColor(FColor::FromHex(TEXT("B8934D")));
+
+	/** The pieces of the frame, in a widget's own measure and a little larger than life: what is drawn there would lie under one. */
+	TArray<FBox2D> FrameBoxes(const FGeometry& Geometry)
+	{
+		TArray<FBox2D> Out;
+		for (const FSlateRect& Rect : FrameRects)
+		{
+			const FVector2D Min = Geometry.AbsoluteToLocal(FVector2D(Rect.Left, Rect.Top)), Max = Geometry.AbsoluteToLocal(FVector2D(Rect.Right, Rect.Bottom));
+			Out.Add(FBox2D(Min - FVector2D(4.0, 4.0), Max + FVector2D(4.0, 4.0)));
+		}
+		return Out;
+	}
+
+	bool UnderFrame(const TArray<FBox2D>& Frame, const FBox2D& Box)
+	{
+		for (const FBox2D& Each : Frame)
+		{
+			if (Each.Intersect(Box))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 
 	/** Which month of the year a date such as "September 1939" names: 1 to 12, or 12 if it names none. */
 	int32 MonthOf(const FString& Date)
@@ -367,12 +411,14 @@ namespace
 			TArray<FMapLetter> Letters;
 			Controller->GetMapLetters(Letters);
 			const float Moon = Controller->GetMoonlight();
+			const float Sheet = Controller->GetPaper(); // (on the staff's paper map the names are in ink, not in cream)
 			if (Letters.Num() == 0)
 			{
 				return LayerId;
 			}
 			const float Scale = FMath::Max(Geometry.Scale, 0.01f);
 			const TSharedRef<FSlateFontMeasure> Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+			const TArray<FBox2D> Frame = FrameBoxes(Geometry);
 			// A few sizes of type only, so the letters are cut once and not afresh for every size on the screen.
 			static const float Sizes[] = { 10.0f, 14.0f, 20.0f, 28.0f, 40.0f, 56.0f, 80.0f };
 			for (const FMapLetter& Each : Letters)
@@ -398,7 +444,7 @@ namespace
 				{
 					// (a soft dark edge, so cream letters hold on pale ground and on snow)
 					Type.OutlineSettings.OutlineSize = FMath::Max(1, FMath::RoundToInt32(Size / 22.0f));
-					Type.OutlineSettings.OutlineColor = FLinearColor(0.02f, 0.013f, 0.01f, 0.55f * Each.Alpha);
+					Type.OutlineSettings.OutlineColor = FMath::Lerp(FLinearColor(0.02f, 0.013f, 0.01f, 0.55f * Each.Alpha), FLinearColor(0.8f, 0.72f, 0.55f, 0.0f), Sheet);
 				}
 				const FString Glyph = bWhole ? Each.Whole : FString(1, &Each.Char);
 				const FVector2D Box = Measure->Measure(Glyph, Type);
@@ -407,9 +453,20 @@ namespace
 				const double Unit = Size * 0.7;
 				const FVector2D Right = Each.Along / Scale / Unit, Down = -Each.Up / Scale / Unit;
 				const FSlateRenderTransform Lying(FMatrix2x2(static_cast<float>(Right.X), static_cast<float>(Right.Y), static_cast<float>(Down.X), static_cast<float>(Down.Y)));
+				{
+					// A name is not lettered under a piece of the frame: a province's name not at all if any of it
+					// would lie there, and of a country's or a sea's spread-out name the letters that would.
+					const FVector2D Middle = Each.At / Scale;
+					const FVector2D Half(FMath::Abs(Right.X) * Box.X * 0.5 + FMath::Abs(Down.X) * Box.Y * 0.5, FMath::Abs(Right.Y) * Box.X * 0.5 + FMath::Abs(Down.Y) * Box.Y * 0.5);
+					if (UnderFrame(Frame, FBox2D(Middle - Half, Middle + Half)))
+					{
+						continue;
+					}
+				}
 				const FGeometry Place = Geometry.MakeChild(Box, FSlateLayoutTransform(Each.At / Scale - Box * 0.5), Lying, FVector2D(0.5, 0.5));
 				// (by moonlight the names sink back: a pale blue-grey, and fainter, so the lights of the towns lead the eye)
-				const FLinearColor Day = Each.bSea ? FLinearColor(FColor(214, 232, 236)) : FLinearColor(FColor(244, 232, 204));
+				const FLinearColor Day = FMath::Lerp(Each.bSea ? FLinearColor(FColor(214, 232, 236)) : FLinearColor(FColor(244, 232, 204)),
+					Each.bSea ? FLinearColor(FColor(58, 78, 88)) : FLinearColor(FColor(52, 36, 22)), Sheet * (1.0f - Moon));
 				const FLinearColor Ink = FMath::Lerp(Day, FLinearColor(FColor(168, 184, 212)), Moon).CopyWithNewOpacity(Each.Alpha * (1.0f - 0.42f * Moon));
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId, Place.ToPaintGeometry(), Glyph, Type, ESlateDrawEffect::None, Ink);
 			}
@@ -465,6 +522,7 @@ namespace
 			const FLinearColor NameInk(FColor::FromHex(TEXT("F2E8D5")));
 			const FLinearColor LineInk(FColor::FromHex(TEXT("B9AC93")));
 			TArray<FBox2D> Taken;
+			const TArray<FBox2D> Frame = FrameBoxes(Geometry);
 			// (where the armies' colours are: a town's plate is not drawn across a flag or its strength plate)
 			TArray<FBox2D> Colours;
 			Controller->GetColoursOnScreen(Colours);
@@ -483,6 +541,10 @@ namespace
 					const FVector2D SealSize = Measure->Measure(Months, SealFont);
 					const double SealWide = SealSize.X + 14.0, SealHigh = 18.0;
 					const FVector2D Corner(Each.At.X / Scale - SealWide * 0.5, Each.At.Y / Scale);
+					if (UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(SealWide, SealHigh))))
+					{
+						continue;
+					}
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(SealWide + 2.0, SealHigh + 2.0), FSlateLayoutTransform(Corner - FVector2D(1.0, 1.0))), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("3A2E12"))));
 					// (the cabinet's directive is brass; the player's own promise is sealing-wax red)
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(SealWide, SealHigh), FSlateLayoutTransform(Corner)), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(Each.bVow ? TEXT("9C2B22") : TEXT("C9A227"))));
@@ -497,6 +559,10 @@ namespace
 					const FVector2D CountSize = Measure->Measure(Each.Name, CountFont);
 					const double BadgeWide = 30.0 + CountSize.X, BadgeHigh = 16.0;
 					const FVector2D Corner(Each.At.X / Scale - BadgeWide * 0.5, Each.At.Y / Scale);
+					if (UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(BadgeWide, BadgeHigh))))
+					{
+						continue;
+					}
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(BadgeWide, BadgeHigh), FSlateLayoutTransform(Corner)), &Plate, ESlateDrawEffect::None, Plate.GetTint(InWidgetStyle));
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, BadgeHigh - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour);
 					// (the aircraft, seen from above with its nose up the plate: a body, wings and a tailplane)
@@ -550,7 +616,7 @@ namespace
 					}
 				}
 				const FBox2D Box(Corner - FVector2D(3.0, 2.0), Corner + FVector2D(Wide + 3.0, High + 2.0));
-				bool bCrowded = false;
+				bool bCrowded = UnderFrame(Frame, Box); // (a plate that would sit under a piece of the frame is not drawn)
 				for (const FBox2D& Other : Taken)
 				{
 					if (Other.Intersect(Box))
@@ -750,6 +816,8 @@ namespace
 				PillStyle.SetDisabled(FSlateRoundedBoxBrush(PillBrass.CopyWithNewOpacity(0.6f), 25.0f, Edge, 1.0f));
 				PillStyle.SetNormalPadding(FMargin(0.0f));
 				PillStyle.SetPressedPadding(FMargin(0.0f, 1.0f, 0.0f, -1.0f));
+				// The prompts under it, and the guide and the menu: plates of leather with a brass edge.
+				PromptStyle = MakeButtonStyle(Leather, FLinearColor(FColor::FromHex(TEXT("3D2A1A"))).CopyWithNewOpacity(0.97f), Brass.CopyWithNewOpacity(0.85f), 1.5f);
 				PillShine = FSlateRoundedBoxBrush(FLinearColor(0.0f, 0.0f, 0.0f, 0.0f), 21.0f, FLinearColor(FColor::FromHex(TEXT("EBD096"))).CopyWithNewOpacity(0.75f), 1.0f);
 			}
 			ChipBrush = FSlateRoundedBoxBrush(FLinearColor::White, 3.0f, FLinearColor(0.0f, 0.0f, 0.0f, 0.6f), 1.0f);
@@ -822,7 +890,26 @@ namespace
 
 			ChildSlot
 			[
+				SNew(SOverlay)
+				// With the frame put away for a clean picture (the F key), only the map's own lettering is left, and
+				// for a moment a line that says how to bring the frame back.
+				+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+				[
+					SNew(SMapLettering).Controller(Controller)
+					.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsFrameHidden() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+				]
+				+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Bottom).Padding(24.0f)
+				[
+					SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 8.0f))
+					.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsFrameHidden() && Controller->IsFrameHintShown() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+					[
+						SNew(STextBlock).Text(FText::FromString(TEXT("The frame is put away. Press F to bring it back."))).Font(Typed(12)).ColorAndOpacity(Cream)
+					]
+				]
+				+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+				[
 				SNew(SDPIScaler)
+				.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsFrameHidden() ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 				.DPIScale_Lambda([]()
 				{
 					FVector2D Size(1920.0, 1080.0);
@@ -851,26 +938,27 @@ namespace
 					// treasury holds, typed.
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(24.0f)
 					[
-						SNew(SBorder).BorderImage(&PaperBrush).Padding(FMargin(1.0f))
+						Piece(SNew(SBorder).BorderImage(&PaperBrush).Padding(FMargin(1.0f))
 						.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); }) // (paper is not so white by night)
+						.ColorAndOpacity_Lambda([this]() { return InkLight(); }) // (and the ink on it is darker)
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Collapsed : EVisibility::Visible; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the plate is not the map
 						[
 							SNew(SVerticalBox)
 							+ SVerticalBox::Slot().AutoHeight()
 							[
-								SNew(SBorder).BorderImage(&BindingBrush).Padding(FMargin(19.0f, 4.0f, 19.0f, 4.0f))
+								SNew(SBorder).BorderImage(&BindingBrush).Padding(FMargin(19.0f, 3.0f, 19.0f, 3.0f))
 								.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); })
 								[
 									SNew(STextBlock).Text(FText::FromString(TEXT("THEATER COMMAND"))).Font(Font(TEXT("Bold"), 8, 320)).ColorAndOpacity(TypingPaper.CopyWithNewOpacity(0.92f))
 								]
 							]
-							+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(19.0f, 8.0f, 24.0f, 12.0f))
+							+ SVerticalBox::Slot().AutoHeight().Padding(FMargin(19.0f, 6.0f, 24.0f, 8.0f))
 							[
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight()
 								[
-									SNew(STextBlock).Font(Serif(TEXT("Bold"), 13, 300)).ColorAndOpacity(InkRed)
+									SNew(STextBlock).Font(Serif(TEXT("Bold"), 12, 300)).ColorAndOpacity(InkRed)
 									.Text_Lambda([this]()
 									{
 										// (the month, without its year: "SEPTEMBER")
@@ -878,9 +966,9 @@ namespace
 										return FText::FromString((Date.Split(TEXT(" "), &Month, &Year, ESearchCase::IgnoreCase, ESearchDir::FromEnd) ? Month : Date).ToUpper());
 									})
 								]
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, -6.0f, 0.0f, -4.0f)
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, -4.0f, 0.0f, -3.0f)
 								[
-									SNew(STextBlock).Font(Serif(TEXT("Bold"), 40)).ColorAndOpacity(DeskInk)
+									SNew(STextBlock).Font(Serif(TEXT("Bold"), 27)).ColorAndOpacity(DeskInk)
 									.Text_Lambda([this]()
 									{
 										FString Date = Controller.IsValid() ? Controller->GetDateText().ToString() : FString(), Month, Year;
@@ -889,7 +977,7 @@ namespace
 								]
 								+ SVerticalBox::Slot().AutoHeight()
 								[
-									SNew(STextBlock).Font(Serif(TEXT("Italic"), 12)).ColorAndOpacity(InkSoft)
+									SNew(STextBlock).Font(Serif(TEXT("Italic"), 11)).ColorAndOpacity(InkSoft)
 									.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetRulesNote() : FText::GetEmpty(); })
 								]
 								// The weather, when it is not fair: mud in the east, or the eastern winter.
@@ -903,7 +991,7 @@ namespace
 									]
 								]
 								// The ruled line.
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 								[
 									SNew(SBox).HeightOverride(1.0f)
 									.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetTreasuryText().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
@@ -913,9 +1001,9 @@ namespace
 								]
 								// The treasury, always in view: what is in hand, and what comes in, goes out and is left each
 								// month. It is a button: pressing it opens the ledger.
-								+ SVerticalBox::Slot().AutoHeight().Padding(-8.0f, 4.0f, 0.0f, -4.0f)
+								+ SVerticalBox::Slot().AutoHeight().Padding(-8.0f, 2.0f, 0.0f, -4.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlateButton).ContentPadding(FMargin(8.0f, 4.0f)).IsFocusable(false)
+									SNew(SButton).ButtonStyle(&PlateButton).ContentPadding(FMargin(8.0f, 3.0f)).IsFocusable(false)
 									.ToolTipText(FText::FromString(TEXT("Open the ledger: where the money comes from, what the forces cost, and what every province gives.")))
 									.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetTreasuryText().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenLedger(); } return FReply::Handled(); })
@@ -923,20 +1011,20 @@ namespace
 										SNew(SVerticalBox)
 										+ SVerticalBox::Slot().AutoHeight()
 										[
-											SNew(STextBlock).Font(Typed(14, true))
+											SNew(STextBlock).Font(Typed(13, true))
 											.ColorAndOpacity_Lambda([this]() { return FSlateColor(Controller.IsValid() && Controller->IsInDebt() ? InkRed : DeskInk); })
 											.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetTreasuryText() : FText::GetEmpty(); })
 										]
 										+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)
 										[
-											SNew(STextBlock).Font(Typed(10)).ColorAndOpacity(InkSoft)
+											SNew(STextBlock).Font(Typed(9)).ColorAndOpacity(InkSoft)
 											.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetBudgetText() : FText::GetEmpty(); })
 											.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetBudgetText().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 										]
 									]
 								]
 								// Oil and supplies, for a power that keeps stocks of them: how full the depots are and how long they last.
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 8.0f, 0.0f, 0.0f)
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 								[
 									SNew(SHorizontalBox)
 									.Visibility_Lambda([this]() { return StoresShown() ? EVisibility::Visible : EVisibility::Collapsed; })
@@ -944,14 +1032,14 @@ namespace
 									+ SHorizontalBox::Slot().AutoWidth()[MakeGauge(TEXT("SUPPLIES"), 1)]
 								]
 								// The reserve of men (version 59), for every nation that keeps one: a line of its own.
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 								[
 									SNew(SHorizontalBox)
 									.Visibility_Lambda([this]() { return StockOf(2) ? EVisibility::Visible : EVisibility::Collapsed; })
 									+ SHorizontalBox::Slot().AutoWidth()[MakeGauge(TEXT("MEN"), 2)]
 								]
 							]
-						]
+						])
 					]
 
 					// A tip that follows the pointer over the map: the province under it, in a few words.
@@ -981,15 +1069,15 @@ namespace
 					// News for the player, for a few seconds at a time.
 					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(24.0f, 112.0f, 24.0f, 0.0f)
 					[
-						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(22.0f, 10.0f))
+						Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(24.0f, 10.0f))
 						.Visibility_Lambda([this]()
 						{
 							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
 						})
 						[
-							SNew(STextBlock).Font(Font(TEXT("Regular"), 14)).ColorAndOpacity(Cream)
+							SNew(STextBlock).Font(Typed(13)).ColorAndOpacity(Cream)
 							.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetNotice() : FText::GetEmpty(); })
-						]
+						])
 					]
 
 					// The adviser: the first steps of a campaign, each ticked as it is done. He can be sent away.
@@ -1046,7 +1134,7 @@ namespace
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 						[
-							SNew(SHorizontalBox)
+							Piece(SNew(SHorizontalBox)
 							// The six doors, on a strip of leather: round and dark, each with its sign engraved in brass.
 							+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 10.0f, 0.0f)
 							[
@@ -1067,19 +1155,19 @@ namespace
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 5.0f)
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
+									SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(14.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
 									.ToolTipText(FText::FromString(TEXT("How to play: the table, a month, moving and attacking, and what every button is for. (H)")))
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenGuide(); } return FReply::Handled(); })
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("GUIDE"))).Font(Typed(10, true, 120)).ColorAndOpacity(Muted)
+										SNew(STextBlock).Text(FText::FromString(TEXT("GUIDE"))).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
 									]
 								]
 								+ SVerticalBox::Slot().AutoHeight()
 								[
-									SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
+									SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(14.0f, 6.0f)).IsFocusable(false).HAlign(HAlign_Center)
 									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMenu(); } return FReply::Handled(); })
 									[
-										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(Typed(10, true, 120)).ColorAndOpacity(Muted)
+										SNew(STextBlock).Text(FText::FromString(TEXT("MENU"))).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.92f))
 									]
 								]
 							]
@@ -1141,35 +1229,35 @@ namespace
 										]
 									]
 								]
-							]
+							])
 						]
 						// On the eve of war: the staff's plan for placing the army, carried out at a press.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 						[
-							SNew(SButton).ButtonStyle(&EndMonthStyle).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+							Piece(SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->HasEvePlan() ? EVisibility::Visible : EVisibility::Collapsed; })
 							.ToolTipText(FText::FromString(TEXT("The staff moves the army by rail to where it advises, strongest corps first. It does the most when it is the first thing done; you can still move any corps yourself afterwards.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->PlaceByPlan(); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(BrightBrass)
+								SNew(STextBlock).Font(Typed(8.5f, true)).ColorAndOpacity(BrightBrass)
 								.Text(FText::FromString(TEXT("PLACE THE ARMY AS THE STAFF ADVISES")))
-							]
+							])
 						]
 						// What is still to do before the month is ended: armies that have not moved. A click goes to the next of them.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 						[
-							SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+							Piece(SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->ArmiesYetToMove() > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
 							.ToolTipText(FText::FromString(TEXT("Armies that can still move this month. Click, or press Tab, to go to the next of them. You can end the month whenever you like.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->NextArmy(); } return FReply::Handled(); })
 							[
-								SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(BrightBrass)
+								SNew(STextBlock).Font(Typed(8.5f, true)).ColorAndOpacity(BrightBrass)
 								.Text_Lambda([this]()
 								{
 									const int32 Count = Controller.IsValid() ? Controller->ArmiesYetToMove() : 0;
 									return FText::FromString(Count > 0 ? TEXT("GO TO THE NEXT ARMY  \u00B7  TAB") : TEXT(""));
 								})
-							]
+							])
 						]
 						// And the rest of it: a general with no command, a design team with no work, nothing on order.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
@@ -1195,7 +1283,7 @@ namespace
 						// The small map: every country in its colour, the armies as marks, the part on screen boxed.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 4.0f, 0.0f, 12.0f)
 						[
-							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(6.0f))
+							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(6.0f))
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMapShown() ? EVisibility::Visible : EVisibility::Collapsed; })
 							.ToolTipText(FText::FromString(TEXT("The whole map. White marks are your armies, blue your allies', red the enemy's. Click or drag to look somewhere else.")))
 							[
@@ -1227,19 +1315,21 @@ namespace
 								[
 									MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; and friend and foe, your own ground green, your allies' blue, your enemies' red. (Y)"), [this]() { Controller->ToggleWealth(); })
 								]
-							]
+							])
 						]
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
 						[
-						SNew(SBox).WidthOverride(400.0f)
+						Piece(SNew(SBox).WidthOverride(400.0f)
 						.Visibility_Lambda([this]()
 						{
 							return Controller.IsValid() && !Controller->GetDispatches().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed;
 						})
 						[
-							// (a strip of typing paper off the signals office's machine: DISPATCH in red, the news typed under it)
-							SNew(SBorder).BorderImage(&StripBrush).Padding(FMargin(18.0f, 11.0f, 18.0f, 14.0f))
+							// (a strip of typing paper off the signals office's machine: DISPATCH in red, the news typed under it;
+							// a little room is left at its right edge for a wider face)
+							SNew(SBorder).BorderImage(&StripBrush).Padding(FMargin(18.0f, 11.0f, 26.0f, 14.0f))
 							.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); })
+							.ColorAndOpacity_Lambda([this]() { return InkLight(); })
 							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the news is not the map
 							[
 								SNew(SVerticalBox)
@@ -1253,11 +1343,11 @@ namespace
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)
 								[
-									SNew(STextBlock).Font(Typed(11)).ColorAndOpacity(DeskInk).AutoWrapText(true).LineHeightPercentage(1.2f)
+									SNew(STextBlock).Font(Typed(10.5f)).ColorAndOpacity(DeskInk).AutoWrapText(true).LineHeightPercentage(1.2f)
 									.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetDispatches() : FText::GetEmpty(); })
 								]
 							]
-						]
+						])
 					]
 					]
 
@@ -1268,7 +1358,7 @@ namespace
 
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom).Padding(0.0f, 0.0f, 16.0f, 0.0f)
 						[
-							SNew(SBox).WidthOverride(390.0f)
+							Piece(SNew(SBox).WidthOverride(390.0f)
 							.Visibility_Lambda([Region]()
 							{
 								const FRegionPanelInfo* Info = Region();
@@ -1328,25 +1418,25 @@ namespace
 										]
 									]
 								]
-							]
+							])
 						]
 
 						// The town of the province picked, when nothing is in hand: its building plots as pictures. A click on
 						// a plot lays out above the bar what could go up on it, and a click on one of those orders it.
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
 						[
-							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 11.0f, 14.0f, 13.0f))
+							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 11.0f, 14.0f, 13.0f))
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsTownBarShown() ? EVisibility::Visible : EVisibility::Collapsed; })
 							.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); }) // the bar is not the map
 							[
 								SAssignNew(TownBarBox, SVerticalBox)
-							]
+							])
 						]
 
 						// The army in hand: its general, and a card for each corps. A click on a card leaves that corps behind.
 						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Bottom)
 						[
-							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 12.0f, 10.0f, 14.0f))
+							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(18.0f, 12.0f, 10.0f, 14.0f))
 							.Visibility_Lambda([Tray]()
 							{
 								const FArmyTray* Info = Tray();
@@ -1396,7 +1486,7 @@ namespace
 									SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted)
 									.Text_Lambda([Tray]() { const FArmyTray* Info = Tray(); return Info ? Info->Hint : FText::GetEmpty(); })
 								]
-							]
+							])
 						]
 
 					]
@@ -1410,17 +1500,17 @@ namespace
 						.Visibility_Lambda([this, Tray]() { const FArmyTray* Info = Tray(); return (Info && Info->bVisible) || (Controller.IsValid() && (Controller->IsTownBarShown() || !Controller->IsMapShown())) ? EVisibility::Collapsed : EVisibility::SelfHitTestInvisible; })
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right)
 						[
-							SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 9.0f))
+							Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(16.0f, 9.0f))
 							.Visibility_Lambda([this]() { return HelpOpen() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 							[
 								SNew(STextBlock)
 								.Text(FText::FromString(TEXT("Drag or W A S D: move the map    Scroll: zoom    Right-drag or Q / E: turn    C: your capital    Y: map views    T: day or night\nClick a flag, a fleet or an airfield; double-click a place to go there. Right-click where an army or a fleet should go    Tab: next army    Esc: put it down    Enter: end the month\n1 to 5: the screens    L: forces    R: report    O: goals    H: how to play    ?: these keys")))
 								.Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).Justification(ETextJustify::Right)
-							]
+							])
 						]
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 8.0f, 0.0f, 0.0f)
 						[
-							SNew(SBox).WidthOverride(34.0f).HeightOverride(34.0f)
+							Piece(SNew(SBox).WidthOverride(34.0f).HeightOverride(34.0f)
 							[
 								SAssignNew(HelpMark, SButton).ButtonStyle(&DoorStyle).ContentPadding(FMargin(0.0f)).IsFocusable(false).HAlign(HAlign_Center).VAlign(VAlign_Center)
 								.ToolTipText(FText::FromString(TEXT("The keys. Point here, or hold the ? key, to see them; click to keep them open or fold them away.")))
@@ -1428,7 +1518,7 @@ namespace
 								[
 									SNew(STextBlock).Text(FText::FromString(TEXT("?"))).Font(Serif(TEXT("Bold"), 16)).ColorAndOpacity(DoorBrass)
 								]
-							]
+							])
 						]
 					]
 
@@ -2416,6 +2506,7 @@ namespace
 						]
 					]
 				]
+				]
 			];
 
 			SetVisibility(EVisibility::SelfHitTestInvisible);
@@ -2424,6 +2515,19 @@ namespace
 		virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override
 		{
 			SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+			// Where the pieces of the frame are now, for the plates and names that must keep out from under them.
+			FrameRects.Reset();
+			for (const TSharedRef<SWidget>& Each : FramePieces)
+			{
+				if (Each->GetVisibility().IsVisible())
+				{
+					const FSlateRect Rect = Each->GetCachedGeometry().GetLayoutBoundingRect();
+					if (Rect.GetSize().X > 1.0 && Rect.GetSize().Y > 1.0)
+					{
+						FrameRects.Add(Rect);
+					}
+				}
+			}
 			// The adviser's steps, ticked as they are done.
 			if (Controller.IsValid() && AdviserSteps.IsValid() && Controller->GetAdviser().Revision != ShownAdviser)
 			{
@@ -3165,11 +3269,26 @@ namespace
 		}
 
 	private:
+		/** Notes a widget as a piece of the frame: the towns' plates and the provinces' names are not drawn under it. */
+		template <typename WidgetType>
+		TSharedRef<WidgetType> Piece(TSharedRef<WidgetType> Widget)
+		{
+			FramePieces.Add(Widget);
+			return Widget;
+		}
+
+		/** What the ink on the frame's paper is multiplied by: nothing by day; by night it is darker, as the paper is. */
+		FLinearColor InkLight() const
+		{
+			const float Moon = Controller.IsValid() ? FMath::Clamp(Controller->GetMoonlight(), 0.0f, 1.0f) : 0.0f;
+			return FMath::Lerp(FLinearColor::White, FLinearColor(0.5f, 0.5f, 0.5f, 1.0f), Moon);
+		}
+
 		/** The light the frame's paper lies in: the day's, or by night the lamp's, a good deal dimmer and a little cool. */
 		FLinearColor PaperLight() const
 		{
 			const float Moon = Controller.IsValid() ? FMath::Clamp(Controller->GetMoonlight(), 0.0f, 1.0f) : 0.0f;
-			return FMath::Lerp(FLinearColor::White, FLinearColor(0.6f, 0.62f, 0.68f), Moon);
+			return FMath::Lerp(FLinearColor::White, FLinearColor(0.36f, 0.38f, 0.42f), Moon);
 		}
 
 		/** Whether the reminder of the keys is open: asked for, or the pointer is on its mark. */
@@ -3226,7 +3345,7 @@ namespace
 				.ToolTipText(FText::FromString(Tip))
 				.OnClicked_Lambda([this, Do]() { if (Controller.IsValid()) { Do(); } return FReply::Handled(); })
 				[
-					SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Muted)
+					SNew(STextBlock).Text(FText::FromString(Label)).Font(Typed(8, true)).ColorAndOpacity(Cream.CopyWithNewOpacity(0.85f))
 				];
 		}
 
@@ -4854,17 +4973,18 @@ namespace
 		/** One of the chips under the END THE MONTH button that say what is still worth doing; a click opens the screen for it. */
 		TSharedRef<SWidget> MakeToDo(int32 Index)
 		{
-			return SNew(SBox).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
+			// (a plate of leather with a brass edge, its words typed; a little room is left in it for a wider face)
+			return Piece(SNew(SBox).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
 				.Visibility_Lambda([this, Index]() { return Controller.IsValid() && !Controller->GetToDoText(Index).IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
 				[
-					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+					SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
 					.ToolTipText_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoTip(Index) : FString()); })
 					.OnClicked_Lambda([this, Index]() { if (Controller.IsValid()) { Controller->PressToDo(Index); } return FReply::Handled(); })
 					[
-						SNew(STextBlock).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(Brass)
+						SNew(STextBlock).Font(Typed(8.5f, true)).ColorAndOpacity(BrightBrass.CopyWithNewOpacity(0.9f))
 						.Text_Lambda([this, Index]() { return FText::FromString(Controller.IsValid() ? Controller->GetToDoText(Index) : FString()); })
 					]
-				];
+				]);
 		}
 
 		void AddGrid(const TArray<TSharedRef<SWidget>>& Cells, int32 Columns)
@@ -5724,6 +5844,8 @@ namespace
 		FButtonStyle DoorStyle;
 		FButtonStyle PillStyle;
 		TSharedPtr<SWidget> HelpMark;
+		TArray<TSharedRef<SWidget>> FramePieces;
+		FButtonStyle PromptStyle;
 		FSlateBrush ChipBrush;
 		FSlateBrush BarBrush;
 		FSlateBrush DotBrush;

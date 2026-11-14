@@ -422,6 +422,19 @@ def build_land():
     light = plus(m, vector(m, "ShadeColour", (0.43, 0.48, 0.58, 1.0), -1100, 260),
                  times(m, vector(m, "SunColour", (0.63, 0.56, 0.45, 1.0), -1100, 420), sun, -900, 300), -700, 200)
     c = times(m, times(m, c, detail, -400, -400), light, -200, -400)
+    # The staff map (art fix 11): from the top of the zoom the land is a sheet of paper, as the staff's own map
+    # is. The hills are shaded on it in sepia, as if printed (from the same picture that shades the living
+    # ground); each country is tinted by hand, a thin wash all over and a firm band of colour inside its frontier.
+    # "Paper" is nothing until the eye is high, and all of it at the top.
+    paper = scalar(m, "Paper", 0.0, 0, -900)
+    hill = one_in(m, unreal.MaterialExpressionSaturate,
+                  plus(m, scalar(m, "PaperShade", 0.6, -600, -1000), times(m, (relief, "B"), scalar(m, "PaperSun", 0.92, -600, -900), -450, -950), -300, -950), -150, -950)
+    sheet = lerp(m, vector(m, "PaperInk", (0.2, 0.135, 0.075, 1.0), -300, -1150), vector(m, "PaperColour", (0.74, 0.66, 0.5, 1.0), -300, -1300), hill, 0, -1100)
+    tinted = one_in(m, unreal.MaterialExpressionSaturate,
+                    plus(m, times(m, scalar(m, "PaperWash", 0.2, -600, -1450), plus(m, (relief, "A"), 1.0, -600, -1380), -450, -1420),
+                         times(m, (tint, "A"), scalar(m, "PaperBand", 0.62, -600, -1550), -450, -1550), -300, -1480), -150, -1480)
+    sheet = lerp(m, sheet, times(m, (tint, "RGB"), plus(m, times(m, hill, 0.5, 0, -1380), 0.6, 100, -1380), 150, -1300), tinted, 250, -1200)
+    c = lerp(m, c, sheet, paper, 400, -600)
     to_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     # Which way the surface leans: the ground itself, and the tree-tops and the rock on it.
@@ -435,10 +448,42 @@ def build_land():
     upward = one_in(m, unreal.MaterialExpressionSquareRoot,
                     one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, squared, -1.0, -400, 1500), 1.0, -250, 1500), -100, 1500), 50, 1500)
     normal = one_in(m, unreal.MaterialExpressionNormalize, pair(m, lean, upward, 200, 1500), 400, 1500)
+    # (paper lies flat: the hills are printed on it, not modelled)
+    level = node(m, unreal.MaterialExpressionConstant3Vector, 400, 1700, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
+    normal = one_in(m, unreal.MaterialExpressionNormalize, lerp(m, normal, level, times(m, paper, 0.85, 500, 1650), 600, 1550), 750, 1550)
     to_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
 
     to_property(scalar(m, "Roughness", 0.92, -200, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
     to_property(scalar(m, "Specular", 0.22, -200, 300), "", unreal.MaterialProperty.MP_SPECULAR)
+    finish(m)
+
+
+def build_paper():
+    """Paper laid over ground the player's side cannot see (the fog of war, art fix 11): the staff's own map where
+    the living table is not known. The colour is the mesh's own (parchment, tinted by hand with the holder's colour),
+    ruled across with fine slanting lines of ink; see-through by the mesh's alpha. Not shaded: C++ dims it by night."""
+    m = new_material("M_Paper")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    colour = node(m, unreal.MaterialExpressionVertexColor, -900, 0)
+    to_linear = node(m, unreal.MaterialExpressionPower, -700, 0, const_exponent=2.2)
+    connect(colour, "", to_linear, "Base")
+    # The ruling: lines that slant across the table, a little under one map unit apart.
+    place = world_uv(m, "HatchTiling", 0.012, -1600, 400)
+    east = node(m, unreal.MaterialExpressionComponentMask, -1100, 350, r=True, g=False, b=False, a=False)
+    connect(place, "", east, "")
+    south = node(m, unreal.MaterialExpressionComponentMask, -1100, 450, r=False, g=True, b=False, a=False)
+    connect(place, "", south, "")
+    across = one_in(m, unreal.MaterialExpressionFrac, plus(m, east, south, -950, 400), -800, 400)
+    middle = one_in(m, unreal.MaterialExpressionAbs, plus(m, across, -0.5, -650, 400), -500, 400)
+    line = one_in(m, unreal.MaterialExpressionSaturate,
+                  plus(m, times(m, middle, scalar(m, "HatchSharp", -9.0, -500, 550), -350, 400), 1.0, -200, 400), -50, 400)
+    inked = lerp(m, to_linear, vector(m, "HatchInk", (0.16, 0.11, 0.06, 1.0), -350, 150), times(m, line, scalar(m, "Hatch", 0.3, -200, 550), 0, 450), 150, 100)
+    to_property(times(m, inked, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), 0, -160), 300, 0), "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    faded = node(m, unreal.MaterialExpressionMultiply, 0, 700)
+    connect(colour, "A", faded, "A")
+    connect(scalar(m, "Opacity", 1.0, -200, 800), "", faded, "B")
+    to_property(faded, "", unreal.MaterialProperty.MP_OPACITY)
     finish(m)
 
 
@@ -465,6 +510,19 @@ def build_sea():
     greyed = lerp(m, (water, "RGB"), brightness, scalar(m, "Grey", 0.0, -1100, -880), -950, -760)
     graded = plus(m, times(m, greyed, vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -950, -960), -800, -760), vector(m, "Lift", (0.0, 0.0, 0.0, 1.0), -800, -960), -650, -760)
     colour = lerp(m, graded, vector(m, "SurfColour", (0.86, 0.9, 0.86, 1.0), -850, -400), surf, -400, -100)
+    # The staff map (art fix 11): from the top of the zoom the sea is pale blue-grey paper, a little darker over the
+    # deeps, with the coast drawn in ink and a second line ruled round it a little way out, as a chart has.
+    paper = scalar(m, "Paper", 0.0, 0, -900)
+
+    def ruled(at, wide, x, y):
+        off = one_in(m, unreal.MaterialExpressionAbs, plus(m, (water, "A"), -at, x, y), x + 150, y)
+        return one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, off, -1.0 / wide, x + 300, y), 1.0, x + 450, y), x + 600, y)
+
+    lines = plus(m, ruled(0.03, 0.09, -1000, -1300), times(m, ruled(0.62, 0.1, -1000, -1450), 0.55, -250, -1450), -100, -1350)
+    sheet = lerp(m, vector(m, "PaperSea", (0.3, 0.37, 0.37, 1.0), -300, -1100), vector(m, "PaperDeep", (0.24, 0.31, 0.33, 1.0), -300, -1200),
+                 one_in(m, unreal.MaterialExpressionSaturate, plus(m, times(m, brightness, -6.0, -500, -1150), 1.0, -400, -1150), -300, -1050), -100, -1100)
+    sheet = lerp(m, sheet, vector(m, "PaperSeaInk", (0.1, 0.15, 0.17, 1.0), -100, -1250), one_in(m, unreal.MaterialExpressionSaturate, lines, 0, -1350), 100, -1150)
+    colour = lerp(m, colour, sheet, paper, 250, -500)
     to_property(colour, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     first_uv = node(m, unreal.MaterialExpressionPanner, -1400, 400, speed_x=0.011, speed_y=0.006)
@@ -474,13 +532,14 @@ def build_sea():
     first = picture(m, "Ripples", first_uv, -1100, 400, numbers=True)
     second = picture(m, "Ripples", second_uv, -1100, 700, numbers=True)
     lean = times(m, plus(m, leaning(m, first, "R", "G", -800, 400), leaning(m, second, "B", "A", -800, 700), -200, 550),
-                 scalar(m, "RippleStrength", 0.07, -400, 800), 0, 550)
+                 times(m, scalar(m, "RippleStrength", 0.07, -400, 800), one_in(m, unreal.MaterialExpressionOneMinus, paper, -400, 900), -250, 850), 0, 550)
     up = node(m, unreal.MaterialExpressionConstant, 0, 750, r=1.0)
     normal = one_in(m, unreal.MaterialExpressionNormalize, pair(m, lean, up, 200, 550), 400, 550)
     to_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
 
-    to_property(scalar(m, "Roughness", 0.16, -400, 100), "", unreal.MaterialProperty.MP_ROUGHNESS)
-    to_property(scalar(m, "Specular", 0.75, -400, 200), "", unreal.MaterialProperty.MP_SPECULAR)
+    # (paper does not shine)
+    to_property(lerp(m, scalar(m, "Roughness", 0.16, -400, 100), 0.92, paper, -200, 100), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(lerp(m, scalar(m, "Specular", 0.75, -400, 200), 0.2, paper, -200, 200), "", unreal.MaterialProperty.MP_SPECULAR)
     finish(m)
 
 
@@ -497,11 +556,11 @@ def build_level():
 
 
 # Each asset is left alone if it is already there, so adding one does not rewrite the others.
-# Set TC_REBUILD=all to remake everything, or to a material's name to remake that one.
+# Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea)):
-    if REBUILD in ("all", name) or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Paper", build_paper)):
+    if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:
         unreal.log(f"Theater Command: {MATERIALS}/{name} already exists, left alone")

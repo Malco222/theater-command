@@ -1426,22 +1426,41 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	TArray<FVector>* const AllWindows = Windows;
 	// (Not every house keeps a lamp in its window: a great city would be all lamps.)
 	const float Lit = Site.Tier >= 3 ? 0.3f : Site.Tier == 2 ? 0.42f : 0.8f;
+	// (The far town is laid out exactly as the near one, so that nothing moves when the eye rises past the height
+	// where one gives way to the other: it throws the same dice in the same order, and builds fewer pieces. While
+	// "bMute" is set a dwelling is reckoned and not built.)
+	const bool bFar = Site.bFar;
+	bool bMute = false;
 	auto Dwelling = [&](double A, double B, double Long, double Wide, double High, double Roof, const FLinearColor& WallCol, const FLinearColor& RoofCol, double Turn, bool bAlwaysLit = false)
 	{
 		Windows = (bAlwaysLit || Dice.FRand() < Lit) ? AllWindows : nullptr;
-		House(Stand(A, B), Long * U, Wide * U, High * U, (bFlatRoofs ? 0.04 : Roof) * U, WallCol, RoofCol, Yaw0 + Turn);
+		if (!bMute)
+		{
+			House(Stand(A, B), Long * U, Wide * U, High * U, (bFlatRoofs ? 0.04 : Roof) * U, WallCol, RoofCol, Yaw0 + Turn);
+		}
 		Windows = AllWindows;
 	};
+	// (a colour for a far block, from the place's own paints, chosen by where it stands and not by the dice)
+	auto PaintAt = [&](const TCHAR* const Paints[5][5], int32 I, int32 J) { return FLinearColor(FColor::FromHex(Paints[Look][((I * 7 + J * 13 + Site.Seed) % 5 + 5) % 5])); };
 	auto Tree = [&](double A, double B)
 	{
 		if (CanBuild(A, B))
 		{
-			Broadleaf(Stand(A, B), Dice.FRandRange(0.45f, 0.7f) * U, Dice.FRandRange(0.16f, 0.24f) * U, Dice.FRand() < 0.5f ? LeafDark : LeafPale);
+			const double High = Dice.FRandRange(0.45f, 0.7f) * U, Round = Dice.FRandRange(0.16f, 0.24f) * U;
+			const bool bDark = Dice.FRand() < 0.5f;
+			if (!bFar)
+			{
+				Broadleaf(Stand(A, B), High, Round, bDark ? LeafDark : LeafPale);
+			}
 		}
 	};
 	// A street: a chain of short lengths of cobble, each lying on the ground where it is.
 	auto Street = [&](double A0, double B0, double A1, double B1, double Wide, bool bAcrossPlots = false)
 	{
+		if (bFar)
+		{
+			return; // (a street is not seen from high up)
+		}
 		const double Long = FMath::Sqrt(FMath::Square(A1 - A0) + FMath::Square(B1 - B0));
 		const int32 Lengths = FMath::Max(1, FMath::CeilToInt32(Long / (1.6 * Um)));
 		const double Turn = FMath::RadiansToDegrees(FMath::Atan2(B1 - B0, A1 - A0));
@@ -1504,7 +1523,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		auto Off = [&](double Along, double Across, double Up) { return At + FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, Up) * U; };
 		House(At, 1.5 * U, 0.8 * U, 0.5 * U, 0.22 * U, RedBrick, Sooty, Yaw0 + Turn);
 		Box(Off(0.0, 0.95, 0.2), FVector(1.2, 0.7, 0.4) * U, RedBrick, Yaw0 + Turn);
-		for (int32 Tooth = 0; Tooth < 3; ++Tooth)
+		for (int32 Tooth = 0; Tooth < 3 && !bFar; ++Tooth)
 		{
 			Box(Off((Tooth - 1) * 0.4, 0.95, 0.46), FVector(0.3, 0.7, 0.1) * U, Glazing, Yaw0 + Turn, 18.0);
 		}
@@ -1719,6 +1738,10 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		}
 		for (const double Along : { -1.2, 0.0, 1.2 })
 		{
+			if (bFar)
+			{
+				break; // (cranes are not seen from high up)
+			}
 			const FVector Foot = Edge + Shoreline * (Along * U) + FVector(0.0, 0.0, 0.1 * U);
 			Pillar(Foot, 0.1 * U, 0.06 * U, 0.95 * U, Sooty, 4);
 			Rod(Foot + FVector(0.0, 0.0, 0.9 * U), Foot + Seaward * (0.75 * U) + FVector(0.0, 0.0, 1.2 * U), 0.035 * U, Sooty, 4);
@@ -1752,7 +1775,10 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			Pillar(Afloat + Shoreline * (-0.12 * Long) + FVector(0.0, 0.0, 0.17 * Long), 0.028 * Long, 0.024 * Long, 0.1 * Long, FunnelRed, 7);
 			for (const double Mast : { -0.32, 0.26 })
 			{
-				Pillar(Afloat + Shoreline * (Mast * Long) + FVector(0.0, 0.0, 0.09 * Long), 0.008 * Long, 0.005 * Long, 0.2 * Long, Sooty, 4);
+				if (!bFar)
+				{
+					Pillar(Afloat + Shoreline * (Mast * Long) + FVector(0.0, 0.0, 0.09 * Long), 0.008 * Long, 0.005 * Long, 0.2 * Long, Sooty, 4);
+				}
 			}
 		}
 	}
@@ -1762,6 +1788,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 	{
 		const bool bTown = Site.Tier == 1;
 		const double End = Reach - 0.55 * Um;
+		int32 FarCount = 0;
 		Street(-End, 0.0, End, 0.0, 0.2);
 		if (bTown)
 		{
@@ -1788,7 +1815,10 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 					{
 						continue; // the church stands there
 					}
-					Dwelling(A, B, Dice.FRandRange(0.62f, 0.9f), Dice.FRandRange(0.42f, 0.56f), Dice.FRandRange(0.3f, 0.48f), Dice.FRandRange(0.22f, 0.34f), WallPaint(), RoofPaint(), (Row == 0 ? 90.0 : 0.0) + Dice.FRandRange(-8.0f, 8.0f));
+					// (from high up every other house of a small place is enough, each a little larger)
+					bMute = bFar && (++FarCount % 2 == 0);
+					Dwelling(A, B, Dice.FRandRange(0.62f, 0.9f) * (bFar ? 1.3 : 1.0), Dice.FRandRange(0.42f, 0.56f) * (bFar ? 1.2 : 1.0), Dice.FRandRange(0.3f, 0.48f), Dice.FRandRange(0.22f, 0.34f), WallPaint(), RoofPaint(), (Row == 0 ? 90.0 : 0.0) + Dice.FRandRange(-8.0f, 8.0f));
+					bMute = false;
 					if (Dice.FRand() < 0.4f)
 					{
 						Tree(A + (Row == 0 ? 0.0 : Side * 0.6 * Um), B + (Row == 0 ? Side * 0.62 * Um : 0.0));
@@ -2008,10 +2038,17 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 			{
 				// The heart: a closed block, four wings round a courtyard, taller toward the square.
 				const double Tall = bPacked ? 1.45 : FMath::Lerp(1.25, 0.88, FMath::Min(Ring / Heart, 1.0));
+				bMute = bFar;
 				for (const double Side : { -1.0, 1.0 })
 				{
 					Dwelling(A + Side * (BlockA * 0.5 - 0.21 * Um), B, BlockB / Um, 0.42, Tall * Dice.FRandRange(0.86f, 1.1f), 0.14, WallPaint(), Leads, 90.0);
 					Dwelling(A, B + Side * (BlockB * 0.5 - 0.21 * Um), BlockA / Um - 0.86, 0.42, Tall * Dice.FRandRange(0.86f, 1.1f), 0.14, WallPaint(), Leads, 0.0);
+				}
+				bMute = false;
+				if (bFar)
+				{
+					// (from high up: the whole block as one piece)
+					House(Stand(A, B), BlockA / Um * U, BlockB / Um * U, Tall * U, (bFlatRoofs ? 0.04 : 0.14) * U, PaintAt(WallsOf, I, J), Leads, Yaw0);
 				}
 				if (Dice.FRand() < 0.34f)
 				{
@@ -2029,6 +2066,22 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 						Tree(A + (K < 2 ? -0.5 : 0.5) * Um, B + (K % 2 == 0 ? -0.34 : 0.34) * Um);
 					}
 					continue;
+				}
+				bMute = bFar;
+				if (bFar)
+				{
+					// (from high up: each row of a terrace as one long house)
+					for (const double Side : { -1.0, 1.0 })
+					{
+						if (!bTurned)
+						{
+							House(Stand(A, B + Side * 0.3 * Um), 1.54 * U, 0.42 * U, Storeys * 0.5 * U, (bFlatRoofs ? 0.04 : 0.24) * U, PaintAt(WallsOf, I, J + (Side > 0.0 ? 1 : 0)), PaintAt(RoofsOf, I + (Side > 0.0 ? 2 : 0), J), Yaw0);
+						}
+						else
+						{
+							House(Stand(A + Side * 0.42 * Um, B), 1.12 * U, 0.5 * U, Storeys * 0.5 * U, (bFlatRoofs ? 0.04 : 0.24) * U, PaintAt(WallsOf, I, J + (Side > 0.0 ? 1 : 0)), PaintAt(RoofsOf, I + (Side > 0.0 ? 2 : 0), J), Yaw0 + 90.0);
+						}
+					}
 				}
 				if (!bTurned)
 				{
@@ -2052,6 +2105,7 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 						}
 					}
 				}
+				bMute = false;
 			}
 			else
 			{
@@ -2062,7 +2116,9 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 					const double HA = A + Dice.FRandRange(-0.55f, 0.55f) * Um, HB = B + Dice.FRandRange(-0.4f, 0.4f) * Um;
 					if (CanBuild(HA, HB))
 					{
+						bMute = bFar && K > 0;
 						Dwelling(HA, HB, Dice.FRandRange(0.62f, 0.9f), Dice.FRandRange(0.42f, 0.56f), Dice.FRandRange(0.3f, 0.46f), Dice.FRandRange(0.22f, 0.32f), WallPaint(), RoofPaint(), Dice.FRandRange(0.0f, 180.0f));
+						bMute = false;
 					}
 				}
 				if (Dice.FRand() < 0.6f)

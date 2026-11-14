@@ -183,6 +183,7 @@ struct FMiniatureMesh
 		TFunction<bool(double, double)> Dry; // true where the town may be built: land, and its own province's
 		bool bPacked = false; // a city or capital in a province too small for it: built tight and tall, with no parks, works or detached houses
 		TArray<double> Arms; // the bearings (degrees east of north) of the roads and railways out of it: the town runs out along them
+		bool bFar = false; // the same town as seen from high up: one piece for each block, no trees, streets or cranes (laid out exactly as the near one is)
 	};
 	/**
 	 * A town as a place with a plan. A small place: a chapel and a street. A town: a church, a main street and a

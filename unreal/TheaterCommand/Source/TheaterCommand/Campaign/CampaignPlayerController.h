@@ -510,6 +510,8 @@ public:
 	void GetMapLetters(TArray<FMapLetter>& Out) const;
 	/** How far into a moonlit night the table is, 0 to 1: the lettering on the map dims with it. */
 	float GetMoonlight() const;
+	/** How far the table has gone over to the staff's paper map (the top of the zoom): 0 to 1. Names are lettered on it in ink. */
+	float GetPaper() const;
 	/** True where whoever stands a month digs in unasked (the grand campaign): the tray then offers stand, or fall back. */
 	bool IsAutoDig() const;
 	/** The reserve of men, where the rules keep one (the grand campaign); null otherwise. */
@@ -569,6 +571,10 @@ public:
 	void ToggleNewsreels();
 	/** Day and night in the room: running, held at day, or held at night (T). */
 	void ToggleDayNight();
+	/** The F key: puts the frame away for a clean picture of the table, or brings it back. */
+	void ToggleFrame();
+	bool IsFrameHidden() const;
+	bool IsFrameHintShown() const { return FPlatformTime::Seconds() < FrameHintUntil; }
 	/** The wealth view of the map: provinces tinted by what they pay (Y). */
 	void ToggleWealth();
 	bool IsWealthShown() const;
@@ -766,6 +772,17 @@ private:
 	bool bOptionsRead = false;
 	bool bNarrator = true; // the voice that reads the newsreels
 	bool bBriefings = true; // the opening flight when a campaign begins, and the title card of each year
+	bool bFrameHidden = false; // the frame is put away for a clean picture (the F key)
+	double FrameHintUntil = 0.0;
+	bool bMoments = true; // the eye drops to the front for a few seconds when a capital falls or a great battle is decided
+	bool bMomentDue = false; // such a thing has just happened: the moment begins when its result has been read
+	bool bMomentOn = false;
+	double MomentUntil = 0.0;
+	FVector MomentHome = FVector::ZeroVector; // where the eye was looking, and from how high, before the moment
+	float MomentHomeZoom = 0.5f;
+	/** Begins a moment over a province: the eye goes down to it, stays about three seconds and is handed back. Any key or click ends it sooner. */
+	void StartMoment(int32 RegionId);
+	void EndMoment();
 	bool bHelpSeen = false; // the player has ended a month, or folded the keys away: they are not shown unasked again
 	bool bHelpPinned = false; // the reminder of the keys is kept open by a click on its mark
 	bool bFreshCampaign = false; // a campaign has just been begun, not continued

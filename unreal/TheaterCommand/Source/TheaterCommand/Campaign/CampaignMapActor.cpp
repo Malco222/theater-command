@@ -502,6 +502,28 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetVectorParameterValue(TEXT("RockColour"), FCampaignGround::RockColour());
 	LandMaterial->SetVectorParameterValue(TEXT("SnowColour"), FCampaignGround::SnowColour() * 0.86f); // (the baked sun lifts it to white where it is lit)
 	LandMaterial->SetVectorParameterValue(TEXT("SandColour"), FCampaignGround::SandColour());
+	{
+		// The staff map at the top of the zoom (art fix 11): parchment, sepia shading, a hand's tint.
+		// ("-TheaterPaperLand=r,g,b,shade,sun,wash,band" and "-TheaterPaperSea=r,g,b" try others without a rebuild)
+		FString Asked;
+		TArray<FString> Bits;
+		float SheetLand[7] = { 0.6f, 0.52f, 0.37f, 0.6f, 0.92f, 0.36f, 0.8f }, SheetSea[3] = { 0.34f, 0.42f, 0.41f };
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPaperLand="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) > 0)
+		{
+			for (int32 K = 0; K < Bits.Num() && K < 7; ++K) { SheetLand[K] = FCString::Atof(*Bits[K]); }
+		}
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPaperSea="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) > 0)
+		{
+			for (int32 K = 0; K < Bits.Num() && K < 3; ++K) { SheetSea[K] = FCString::Atof(*Bits[K]); }
+		}
+		LandMaterial->SetVectorParameterValue(TEXT("PaperColour"), FLinearColor(SheetLand[0], SheetLand[1], SheetLand[2]));
+		LandMaterial->SetScalarParameterValue(TEXT("PaperShade"), SheetLand[3]);
+		LandMaterial->SetScalarParameterValue(TEXT("PaperSun"), SheetLand[4]);
+		LandMaterial->SetScalarParameterValue(TEXT("PaperWash"), SheetLand[5]);
+		LandMaterial->SetScalarParameterValue(TEXT("PaperBand"), SheetLand[6]);
+		SeaMaterial->SetVectorParameterValue(TEXT("PaperSea"), FLinearColor(SheetSea[0], SheetSea[1], SheetSea[2]));
+		SeaMaterial->SetVectorParameterValue(TEXT("PaperDeep"), FLinearColor(SheetSea[0], SheetSea[1], SheetSea[2]) * 0.84f);
+	}
 	SeaMaterial->SetTextureParameterValue(TEXT("Water"), WaterPicture);
 	SeaMaterial->SetTextureParameterValue(TEXT("Shore"), ShorePicture);
 	SeaMaterial->SetTextureParameterValue(TEXT("Ripples"), RipplesPicture);
@@ -2319,6 +2341,17 @@ void ACampaignMapActor::BuildTowns()
 		TownMesh->RegisterComponent();
 	}
 	TownMesh->ClearAllMeshSections();
+	if (!TownFarMesh)
+	{
+		TownFarMesh = NewObject<UProceduralMeshComponent>(this);
+		TownFarMesh->SetupAttachment(Root);
+		TownFarMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		TownFarMesh->RegisterComponent();
+		TownFarMesh->SetCastShadow(false);
+	}
+	TownFarMesh->ClearAllMeshSections();
+	TownsFarShown = -1;
+	FMiniatureMesh FarModel; // (the same towns for the eye high up: see FTownSite::bFar)
 
 	// Every town of note stands on the table as a cluster of houses: a few for a town, more for a city, a domed
 	// palace in the middle of a capital, and a works with a chimney for each pair of factories the province has.
@@ -2441,6 +2474,8 @@ void ACampaignMapActor::BuildTowns()
 		TArray<FVector2D> Quarters;
 		FVector Beacon = FVector::ZeroVector;
 		Model.Township(Site, &TownChimneys, &Quarters, &Beacon);
+		Site.bFar = true;
+		FarModel.Township(Site);
 		TownQuarters.Add(Region.Id, MoveTemp(Quarters));
 		if (!Beacon.IsZero())
 		{
@@ -2457,7 +2492,12 @@ void ACampaignMapActor::BuildTowns()
 		TownMesh->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 		TownMesh->SetMaterial(0, SceneryMaterial);
 	}
-	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points"), Count, Model.Vertices.Num());
+	if (FarModel.Vertices.Num() > 0)
+	{
+		TownFarMesh->CreateMeshSection(0, FarModel.Vertices, FarModel.Triangles, FarModel.Normals, TArray<FVector2D>(), FarModel.Colors, TArray<FProcMeshTangent>(), false);
+		TownFarMesh->SetMaterial(0, SceneryMaterial);
+	}
+	UE_LOG(LogTheater, Log, TEXT("Towns: %d, in %d points (and %d from high up)"), Count, Model.Vertices.Num(), FarModel.Vertices.Num());
 
 	// The windows, each a small warm pane a hair proud of its wall: dark by day, lit as night comes on.
 	if (!LightsMesh)
@@ -2809,6 +2849,11 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		{
 			LanesInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.36f, 0.5f), Moon));
 			LanesInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, 0.6f, Moon));
+		}
+		// The paper over unseen ground is not lit by the lamp, so the hour's light is given to it here.
+		if (ShroudPaper)
+		{
+			ShroudPaper->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor(0.82f, 0.8f, 0.76f), FLinearColor(0.085f, 0.12f, 0.2f), Moon));
 		}
 		// Province lines by night are blue-grey and faint (their strength is capped as the eye moves: UpdateForCamera).
 		if (ProvincePaleInk)
@@ -4542,16 +4587,33 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen)
 	{
 		return;
 	}
-	// A shadow over the ground nobody of the player's can see: what stands there is not known.
+	// Paper over the ground nobody of the player's can see (art fix 11): what stands there is not known, and where
+	// the living table is not known the staff has only its map. Parchment, tinted by hand with the holder's colour
+	// and ruled across in ink; a little of the country shows through it, like a wash.
+	if (!ShroudPaper)
+	{
+		if (UMaterialInterface* Sheet = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Paper.M_Paper")))
+		{
+			ShroudPaper = UMaterialInstanceDynamic::Create(Sheet, this);
+			ShownNight = -1.0f; // (so that the hour's light is laid on it at once)
+		}
+	}
 	FCampaignMeshBuffers Buffers;
+	const FLinearColor Parchment(FColor::FromHex(TEXT("B9AC8A")));
 	for (int32 RegionId : Unseen)
 	{
 		if (Data.Regions.IsValidIndex(RegionId))
 		{
-			AppendRegionFill(Buffers, RegionId, FLinearColor(0.02f, 0.03f, 0.05f, 0.34f));
+			const FCampaignNation* Nation = Data.FindNation(Data.Regions[RegionId].Owner);
+			FLinearColor Sheet = FMath::Lerp(Parchment, Nation ? FLinearColor(Nation->Color) : Parchment, 0.42f); // (the holder's colour must still read: every tile is a shade of its holder's)
+			// (the mesh keeps its colours as a picture file does, and the paper's material reads them so)
+			Sheet = FLinearColor(FMath::Pow(Sheet.R, 1.0f / 2.2f), FMath::Pow(Sheet.G, 1.0f / 2.2f), FMath::Pow(Sheet.B, 1.0f / 2.2f));
+			Sheet.A = ShroudPaper ? 0.8f : 0.34f;
+			AppendRegionFill(Buffers, RegionId, ShroudPaper ? Sheet : FLinearColor(0.02f, 0.03f, 0.05f, 0.34f));
 		}
 	}
-	Buffers.Commit(OrdersMesh, 6, HighlightMaterial);
+	Buffers.Commit(OrdersMesh, 6, ShroudPaper ? static_cast<UMaterialInterface*>(ShroudPaper) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	SetNight(NightNow, bLamplightNow);
 }
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)
@@ -5709,6 +5771,49 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		{
 			SleeperShown = Sleeper;
 			SleeperInk->SetScalarParameterValue(TEXT("Opacity"), Sleeper);
+		}
+	}
+
+	// Beyond working height the towns are drawn in their cheaper form: one piece to a block, laid out just the same,
+	// and throwing no shadows. (The windows' panes are too small to see from there, and are not drawn either.)
+	{
+		const int32 FarNow = CameraDistance > (TownsFarShown == 1 ? 10800.0f : 11600.0f) ? 1 : 0;
+		if (FarNow != TownsFarShown && TownMesh && TownFarMesh)
+		{
+			TownsFarShown = FarNow;
+			TownMesh->SetVisibility(FarNow == 0);
+			TownFarMesh->SetVisibility(FarNow == 1);
+			if (LightsMesh && LightsMesh->GetNumSections() > 0)
+			{
+				LightsMesh->SetMeshSectionVisible(0, FarNow == 0);
+			}
+		}
+	}
+
+	// The staff map (art fix 11): from the top of the zoom the living table gives way to the staff's own paper map,
+	// little by little as the eye rises through the last of its climb.
+	{
+		// ("-TheaterPaperFrom=17500" and "-TheaterPaperFull=25000" try other heights)
+		static float From = -1.0f, Full = -1.0f;
+		if (From < 0.0f)
+		{
+			From = 17500.0f;
+			Full = 25000.0f;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterPaperFrom="), From);
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterPaperFull="), Full);
+		}
+		const float Sheet = FMath::SmoothStep(From, FMath::Max(Full, From + 1.0f), CameraDistance);
+		if (FMath::Abs(Sheet - PaperShown) > 0.004f)
+		{
+			PaperShown = Sheet;
+			if (LandMaterial)
+			{
+				LandMaterial->SetScalarParameterValue(TEXT("Paper"), Sheet);
+			}
+			if (SeaMaterial)
+			{
+				SeaMaterial->SetScalarParameterValue(TEXT("Paper"), Sheet);
+			}
 		}
 	}
 

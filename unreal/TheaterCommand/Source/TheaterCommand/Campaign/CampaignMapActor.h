@@ -262,6 +262,8 @@ public:
 	void SetWarAtNight(const TArray<FString>& Blackout, const TArray<int32>& Fronts);
 	/** How far the table is into a moonlit night, 0 to 1 (nothing by day, and nothing by lamplight). */
 	float GetMoonlight() const { return bLamplightNow ? 0.0f : NightNow; }
+	/** How far the table has gone over to the staff's paper map: nothing until the eye is high, all of it at the top of the zoom (art fix 11). */
+	float GetPaper() const { return PaperShown < 0.0f ? 0.0f : PaperShown; }
 	/** Where a flight takes off from: its airfield, or for a carrier's aircraft the ships themselves. */
 	FVector2D SortieStart(const FSortie& Sortie) const;
 
@@ -468,6 +470,9 @@ private:
 	TArray<FColor> CloudColours;
 	void UpdateClouds();
 	TArray<int32> ShownUnseen;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> ShroudPaper; // the paper laid over ground nobody of the player's can see
+	float PaperShown = -1.0f;
 	TSet<int32> UnseenSet;
 	TArray<FTownInfo> Towns; // by province id, once the rules have said
 	bool bWealth = false;
@@ -551,6 +556,10 @@ private:
 	/** The towns, all in one mesh. */
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> TownMesh;
+	/** The same towns as they are drawn from high up: one piece to a block, and no shadows thrown. */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> TownFarMesh;
+	int32 TownsFarShown = -1; // 1 while the far towns are the ones drawn, 0 the near, -1 not yet said
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> CivicMesh;
 	TArray<int32> ShownCivic;

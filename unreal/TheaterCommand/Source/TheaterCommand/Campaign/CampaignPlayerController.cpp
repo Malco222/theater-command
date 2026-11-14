@@ -206,6 +206,7 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 	Add(TEXT("newsreels"), TEXT("Newsreels"), TEXT("A month's great stories shown as film when it ends. Key K; Space skips one."), bNewsreels ? TEXT("ON") : TEXT("OFF"), bNewsreels);
 	Add(TEXT("narrator"), TEXT("The narrator"), TEXT("The game's voice: it reads the newsreels and the opening flight aloud, speaks for the adviser, and lets your armies answer."), bNarrator ? TEXT("ON") : TEXT("OFF"), bNarrator);
 	Add(TEXT("briefing"), TEXT("The opening flight"), TEXT("A flight over the situation when a campaign begins, and a title card as each year opens."), bBriefings ? TEXT("ON") : TEXT("OFF"), bBriefings);
+	Add(TEXT("moments"), TEXT("Moments at the front"), TEXT("When you take a capital or win a great battle, the eye drops to the place for about three seconds and is handed back. Any key or click ends it sooner."), bMoments ? TEXT("ON") : TEXT("OFF"), bMoments);
 	Add(TEXT("adviser"), TEXT("The adviser"), TEXT("A staff officer who points out the first steps of a campaign."), bAdviserWanted ? TEXT("ON") : TEXT("OFF"), bAdviserWanted);
 	Add(TEXT("watch"), TEXT("The other nations' month"), TEXT("At a month's end: watch every nation's moves, or only what touches you. Key V."), bWatchAll ? TEXT("EVERY MOVE") : TEXT("ONLY MINE"), bWatchAll);
 	Add(TEXT("day"), TEXT("Day and night in the room"), TEXT("The day passes over the table in twelve minutes, or the hour is held. Key T."), Keeping == 0 ? TEXT("PASSING") : Keeping == 1 ? TEXT("ALWAYS DAY") : TEXT("ALWAYS NIGHT"), Keeping == 0);
@@ -256,6 +257,10 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("briefing"))
 	{
 		bBriefings = !bBriefings;
+	}
+	else if (Id == TEXT("moments"))
+	{
+		bMoments = !bMoments;
 	}
 	else if (Id == TEXT("adviser"))
 	{
@@ -337,8 +342,8 @@ void ACampaignPlayerController::SaveOptions() const
 		bLampSaved = Room && Room->IsLamplight();
 	}
 	const FString Text = FString::Printf(
-		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s}\n"),
-		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen));
+		TEXT("{\"music\":%s,\"loud\":%d,\"sounds\":%s,\"newsreels\":%s,\"narrator\":%s,\"adviser\":%s,\"watchAll\":%s,\"day\":%d,\"edge\":%s,\"briefing\":%s,\"colour\":%d,\"lamp\":%s,\"helped\":%s,\"moments\":%s}\n"),
+		Word(!Mode || Mode->IsMusicOn()), Mode ? Mode->GetMusicLevel() : 1, Word(CampaignSounds::IsOn()), Word(bNewsreels), Word(bNarrator), Word(bAdviserWanted), Word(bWatchAll), Keeping, Word(bEdgeScroll), Word(bBriefings), Map.IsValid() ? Map->GetColourStrength() : 1, Word(bLampSaved), Word(bHelpSeen), Word(bMoments));
 	FFileHelper::SaveStringToFile(Text, *OptionsFile());
 	// (the options page, if it is up, is drawn again)
 	++const_cast<ACampaignPlayerController*>(this)->Opening.Revision;
@@ -379,6 +384,7 @@ void ACampaignPlayerController::LoadOptions()
 	bEdgeScroll = Yes(TEXT("edge"), true);
 	bBriefings = Yes(TEXT("briefing"), true);
 	bHelpSeen = Yes(TEXT("helped"), false);
+	bMoments = Yes(TEXT("moments"), true);
 	if (UWorld* World = GetWorld())
 	{
 		TActorIterator<ACampaignEnvironment> Room(World);
@@ -622,6 +628,7 @@ void ACampaignPlayerController::SetupInputComponent()
 	InputComponent->BindKey(EKeys::O, IE_Pressed, this, &ACampaignPlayerController::OpenGoals);
 	InputComponent->BindKey(EKeys::Y, IE_Pressed, this, &ACampaignPlayerController::ToggleWealth);
 	InputComponent->BindKey(EKeys::T, IE_Pressed, this, &ACampaignPlayerController::ToggleDayNight);
+	InputComponent->BindKey(EKeys::F, IE_Pressed, this, &ACampaignPlayerController::ToggleFrame);
 	InputComponent->BindKey(EKeys::K, IE_Pressed, this, &ACampaignPlayerController::ToggleNewsreels);
 	InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
 	InputComponent->BindKey(EKeys::C, IE_Pressed, this, &ACampaignPlayerController::GoToCapital);
@@ -1291,6 +1298,11 @@ bool ACampaignPlayerController::IsAutoDig() const
 {
 	const FCampaignSession* Session = GetSession();
 	return Session && Session->GetView().bAutoDig;
+}
+
+float ACampaignPlayerController::GetPaper() const
+{
+	return Map.IsValid() ? Map->GetPaper() : 0.0f;
 }
 
 float ACampaignPlayerController::GetMoonlight() const
@@ -2402,6 +2414,54 @@ void ACampaignPlayerController::SpeakAdviser()
 	}
 }
 
+bool ACampaignPlayerController::IsFrameHidden() const
+{
+	// ("-TheaterNoFrame" takes a run's pictures with the frame put away)
+	static const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterNoFrame"));
+	return bFrameHidden || bAsked;
+}
+
+void ACampaignPlayerController::ToggleFrame()
+{
+	// (only over the table itself: a page, the face-off or a newsreel is not put away)
+	if (!bFrameHidden && (!IsMapShown() || FaceOff.bVisible || bWatching))
+	{
+		return;
+	}
+	bFrameHidden = !bFrameHidden;
+	FrameHintUntil = bFrameHidden ? FPlatformTime::Seconds() + 3.0 : 0.0;
+}
+
+void ACampaignPlayerController::StartMoment(int32 RegionId)
+{
+	ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+	if (!Eye || !Map.IsValid() || !Map->GetData().Regions.IsValidIndex(RegionId) || bMomentOn)
+	{
+		return;
+	}
+	bMomentOn = true;
+	MomentHome = Eye->GetFocus();
+	MomentHomeZoom = Eye->GetZoom();
+	MomentUntil = FPlatformTime::Seconds() + 3.2;
+	const FVector2D Place = Map->GetData().Regions[RegionId].Center;
+	// Down to the front: low over the place, where the smoke of the battle is still rising.
+	Eye->GoTo(Map->MapToWorld(Place.X, Place.Y, 0.0), FMath::Min(Eye->GetZoom(), 0.2f));
+}
+
+void ACampaignPlayerController::EndMoment()
+{
+	if (!bMomentOn)
+	{
+		return;
+	}
+	bMomentOn = false;
+	// The eye is handed back where it was, and as high.
+	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
+	{
+		Eye->GoTo(MomentHome, MomentHomeZoom);
+	}
+}
+
 void ACampaignPlayerController::ToggleDayNight()
 {
 	if (UWorld* World = GetWorld())
@@ -2702,6 +2762,11 @@ void ACampaignPlayerController::NextArmy()
 void ACampaignPlayerController::Escape()
 {
 	// Esc backs out one step: the watching, the face-off, the army in hand, then the territory.
+	if (bFrameHidden)
+	{
+		ToggleFrame(); // (and first of all it brings back a frame that was put away)
+		return;
+	}
 	if (Newsreel.bOn)
 	{
 		EndNewsreel();
@@ -2795,6 +2860,12 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 	PumpVoice();
+	// A moment at the front is over after about three seconds, or as soon as the player touches anything.
+	if (bMomentOn && (FPlatformTime::Seconds() >= MomentUntil || WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::Escape) || WasInputKeyJustPressed(EKeys::Enter)
+		|| WasInputKeyJustPressed(EKeys::LeftMouseButton) || WasInputKeyJustPressed(EKeys::RightMouseButton) || WasInputKeyJustPressed(EKeys::MouseScrollUp) || WasInputKeyJustPressed(EKeys::MouseScrollDown)))
+	{
+		EndMoment();
+	}
 	if (Adviser.bOn && !bAdviserSpoke && !Newsreel.bOn && BriefingAt <= 0.0 && !Opening.bVisible && Announcements.Num() == 0 && !bWatching)
 	{
 		bAdviserSpoke = true;
@@ -5094,6 +5165,15 @@ void ACampaignPlayerController::ConfirmAttack()
 	CampaignSounds::PlayLater(this, Result.bTaken || Result.bSiege ? TEXT("victory") : TEXT("defeat"), 2.8f, 0.6f);
 
 	FaceOff.bResolved = true;
+	{
+		// A capital taken, or a great battle won outright (a hundred thousand men and more lost between the two
+		// sides): when its result has been read, the eye drops to the place for a moment. Not in a run that takes pictures.
+		FString Shots;
+		const bool bPictures = FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), Shots, false);
+		const bool bCapital = Map->GetData().Regions.IsValidIndex(RegionId) && Map->GetData().Regions[RegionId].bCapital;
+		const bool bGreat = !Result.bYielded && Result.Level.Contains(TEXT("Decisive victory")) && Result.AttackerLost + Result.DefenderLost >= 100000;
+		bMomentDue = bMoments && !bPictures && !bScripted && ((Result.bTaken && bCapital) || bGreat);
+	}
 	FaceOff.ResultTitle = FText::FromString(Result.bYielded ? FString(TEXT("They fell back without a fight")) : Result.Level);
 	const FString Outcome = Result.bSiege ? TEXT("The country is yours, but the town holds. It is now besieged: starve it out, or pick the province and storm it.")
 		: Result.bTaken ? TEXT("The ground is yours.") : TEXT("The attack was held. The ground is still theirs.");
@@ -5134,7 +5214,13 @@ void ACampaignPlayerController::CloseFaceOff()
 		PickedCorps = PickedBeforeMass; // called off after "send everyone": the corps that were in hand are in hand again
 	}
 	PickedBeforeMass.Reset();
+	const bool bMoment = FaceOff.bVisible && FaceOff.bResolved && bMomentDue;
+	bMomentDue = false;
 	FaceOff.bVisible = false;
+	if (bMoment)
+	{
+		StartMoment(FaceOff.Region);
+	}
 }
 
 void ACampaignPlayerController::EndMonth()
