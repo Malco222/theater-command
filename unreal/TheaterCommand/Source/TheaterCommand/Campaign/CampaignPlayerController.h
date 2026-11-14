@@ -541,6 +541,8 @@ public:
 	int32 ArmiesYetToMove() const;
 	/** The list of everything the player commands, each with a way to go to it (L). */
 	void OpenForces();
+	/** The reserve of men as a sum, and the player's say over the call-up (version 62). */
+	void OpenMen() { OpenPage(TEXT("men")); }
 	/** Looks at an army that is not in hand (an enemy's, an ally's, or one of the player's that cannot move): its corps are dealt as cards, as far as they are known. */
 	void LookAtArmy(int32 RegionId, const FString& Nation);
 	void StopLooking();

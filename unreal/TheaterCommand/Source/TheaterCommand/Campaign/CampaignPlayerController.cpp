@@ -197,7 +197,13 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 		if (Session->IsRunning() && Session->GetView().bCabinetCan)
 		{
 			const bool bSits = !Session->GetView().bCabinetOff;
-			Add(TEXT("cabinet"), TEXT("The war cabinet"), TEXT("Ministers, decrees, the cabinet's trust and its directives. Off: none of it, and nothing it moved is moved. It can be switched in any month, and this campaign remembers it."), bSits ? TEXT("ON") : TEXT("OFF"), bSits);
+			Add(TEXT("cabinet"), TEXT("The war cabinet"), TEXT("Ministers, decrees, the cabinet's trust and its directives. Off: none of it, and nothing it moved is moved; what stands open is settled first, and you are shown the bill. It can be switched in any month, and this campaign remembers it."), bSits ? TEXT("ON") : TEXT("OFF"), bSits);
+			// (Version 62) Whether the cabinet can bring the player down: a setting of its own, under the cabinet's switch.
+			if (bSits)
+			{
+				const bool bSecure = Session->GetView().bOfficeSecure;
+				Add(TEXT("office"), TEXT("Your office"), TEXT("Secure: the cabinet still doubts and withholds, but it never falls and you are never turned out. Otherwise a cabinet left with no trust in you for months running falls."), bSecure ? TEXT("SECURE") : TEXT("CAN BE BROUGHT DOWN"), bSecure);
+			}
 		}
 	}
 	Add(TEXT("music"), TEXT("Music"), TEXT("The game's own score, which follows the war. Key M."), bMusic ? TEXT("ON") : TEXT("OFF"), bMusic);
@@ -303,6 +309,20 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("colour") && Map.IsValid())
 	{
 		Map->SetColourStrength((Map->GetColourStrength() + 1) % 3);
+	}
+	else if (Id == TEXT("office"))
+	{
+		if (FCampaignSession* Session = GetSession())
+		{
+			FString Note;
+			Session->Act(Session->GetView().bOfficeSecure ? TEXT("cabinet:office:fall") : TEXT("cabinet:office:secure"), INDEX_NONE, Note);
+			if (!Note.IsEmpty())
+			{
+				Notify(Note, 6.0);
+			}
+		}
+		++Opening.Revision;
+		return; // (kept by the campaign, not with the options)
 	}
 	else if (Id == TEXT("cabinet"))
 	{

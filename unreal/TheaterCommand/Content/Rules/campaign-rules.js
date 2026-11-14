@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9e3388d 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a997cca 2026-11-14. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -912,8 +912,8 @@
   var arsenal_default = {
     _about: "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided.",
     land: {
-      art: { label: "Artillery corps", divs: 2, cost: 40, months: 5, blurb: "Massed guns. Breaks fortified lines and trenches in the attack, and thickens any defence it stands in. Slow, and weak if caught alone." },
-      eng: { label: "Engineer corps", divs: 1, cost: 18, months: 3, blurb: "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, builds field works, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own." }
+      art: { label: "Artillery corps", divs: 2, cost: 40, months: 5, blurb: "Massed guns. Breaks fortified lines and fieldworks in the attack, and thickens any defence it stands in. Slow, and weak if caught alone." },
+      eng: { label: "Engineer corps", divs: 1, cost: 18, months: 3, blurb: "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, fortifies provinces, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own." }
     },
     needs: { inf: 0, mtn: 0, cav: 0, eng: 0, mot: 1, art: 1, arm: 2 },
     air: {
@@ -3204,7 +3204,7 @@
       bridge: { label: "Rebuild the bridges", blurb: "Every bridge that is down on this province's rivers is rebuilt by next month, and tanks, lorries and guns can cross again." },
       rail: { label: "Relay the railway", blurb: "The track torn up or bombed in this province is relaid by next month. Trains run through again, and the armies beyond are fed from a railhead that much nearer." },
       plant: { label: "Rebuild a factory", blurb: "One factory wrecked by bombing is put back to work by next month and earns again." },
-      works: { label: "Build field works", blurb: "Trenches, wire and gun pits: the province's fortifications rise one level, as far as level 2. Heavier works are ordered from the treasury." },
+      works: { label: "Fortify the province", blurb: "Bunkers, wire and gun pits: the province's fortifications rise one level, as far as level 2. Heavier works are ordered from the treasury." },
       airfield: { label: "Lay out an airfield", blurb: "Runways, dispersal pens and a fuel dump: by next month air groups can be based in this province, or more of them if it has an airfield already. Each month's work serves 500 more aircraft, as far as two levels; a larger airfield is ordered from the treasury. An airfield costs a little to keep up." },
       mines: { label: "Lay minefields and traps", blurb: "Mines and booby traps on every road in. Each level takes 12% off any attack on the province and costs the enemy a move to enter it, until his own engineers clear lanes. Two levels at most." },
       demolish: { label: "Demolish the fortifications", blurb: "The works here are blown up, one level a month, so that nobody can use them." }
@@ -4271,6 +4271,7 @@
       if (won) {
         r.won++;
         r.streak = 0;
+        if (r.lost) delete r.lost;
         xp += attacking ? X.won : X.held;
         if (againstOdds) xp += X.odds;
         if (attacking) {
@@ -4283,6 +4284,10 @@
       } else {
         r.streak++;
         if (attacking && lossFrac >= COMMAND.costly) r.costly++;
+        if (g2.flags.open === 1) {
+          (r.lost ?? (r.lost = [])).push({ t: g2.turn, reg: target.id, odds: Math.round(preOdds * 100) / 100, att: attacking });
+          if (r.lost.length > 6) r.lost.shift();
+        }
       }
       gainXp(g2, gen, xp);
       earn(g2, gen, c);
@@ -9218,11 +9223,13 @@
     spentMost: 0.5,
     warn: [0.5, 0.25],
     classFloor: 0.1,
+    early: { months: 6, gap: 9 },
     notes: {
       pool: "The reserve a great power opens a campaign of September 1939 with, in divisions' worth. 'minor': any other country has 'pool' and 'perDiv' for each division it has under arms as the campaign opens.",
       class: "The class that comes of age each month with the whole homeland held, in divisions' worth; a minor's is 'classShare' of its reserve. It shrinks with the share of the homeland lost, counted by the worth of the provinces, but never under 'classFloor' of it. The reserve never holds more than 'most' times what it opened with.",
       later: "A campaign that opens after 1939 finds 'spentAYear' of each warring nation's reserve gone for every year of war behind it, to 'spentMost'.",
-      warn: "The player is told when his reserve falls under these shares of what it opened with, and when it is spent."
+      warn: "The player is told when his reserve falls under these shares of what it opened with, and when it is spent.",
+      early: "A say over the call-up. A country at war may call the next class up early: 'months' of classes join the reserve at once, and no class comes of age for the next 'gap' months, because the boys who would have are already with the colours. It gives men now at the price of fewer later. A country with a standing call-up (east.json, mobilisation) may also hold it: no new corps are raised from the reserve while it is held, the waves wait, and the men stay for the corps in the field. Only the player uses either."
     }
   };
 
@@ -9236,6 +9243,7 @@
   var kp = (nat) => KP[nat] ?? (KP[nat] = `mp:${nat}`);
   var kx = (nat) => KX[nat] ?? (KX[nat] = `mpx:${nat}`);
   var kl = (nat) => KL[nat] ?? (KL[nat] = `mpl:${nat}`);
+  var ke = (nat) => `mpe:${nat}`;
   var menRules = (g2) => g2.flags.open === 1;
   function tablePool(g2, nat) {
     const own = MANPOWER.pool[nat];
@@ -9292,8 +9300,33 @@
     g2.flags[kp(nat)] = menLeft(g2, nat) + divs;
     g2.flags[kx(nat)] = Math.max(0, (g2.flags[kx(nat)] ?? 0) - divs);
   }
+  var classGapUntil = (g2, nat) => menRules(g2) ? g2.flags[ke(nat)] ?? 0 : 0;
+  function whyNotEarly(g2, nat) {
+    if (!menRules(g2)) return "The reserve of men is counted in the grand campaign.";
+    const n = g2.nations[nat];
+    if (!n?.alive) return "There is no government left to call anyone up.";
+    if (!n.atWar.length) return "Only a country at war calls its boys up before their time.";
+    const until = classGapUntil(g2, nat);
+    if (g2.turn <= until) return `The next class is with the colours already: none comes of age until ${turnToDate(until + 1).label}.`;
+    if (menLeft(g2, nat) >= poolAtStart(g2, nat) * MANPOWER.most - 1e-9) return "The reserve is full: there is nowhere to put them.";
+    return null;
+  }
+  function earlyClass(g2, nat, callUp = 1) {
+    if (!menRules(g2)) return 0;
+    return Math.max(0, Math.min(classNow(g2, nat, callUp) * MANPOWER.early.months, poolAtStart(g2, nat) * MANPOWER.most - menLeft(g2, nat)));
+  }
+  function callEarly(g2, nat, callUp = 1) {
+    if (whyNotEarly(g2, nat) !== null) return 0;
+    ensure(g2, nat);
+    const come = earlyClass(g2, nat, callUp);
+    if (come <= 0) return 0;
+    g2.flags[kp(nat)] = menLeft(g2, nat) + come;
+    g2.flags[ke(nat)] = g2.turn + MANPOWER.early.gap;
+    return come;
+  }
   function classArrives(g2, nat, callUp = 1) {
     if (!menRules(g2)) return 0;
+    if (g2.turn <= (g2.flags[ke(nat)] ?? 0)) return 0;
     ensure(g2, nat);
     const have = menLeft(g2, nat), top = poolAtStart(g2, nat) * MANPOWER.most;
     const come = Math.max(0, Math.min(classNow(g2, nat, callUp), top - have));
@@ -9327,8 +9360,9 @@
     const divs = menLeft(g2, nat), start2 = poolAtStart(g2, nat), cls = classNow(g2, nat, callUp), home = homeShare(g2, nat);
     const level = menLevel(g2, nat);
     const months2 = cls > 0 ? Math.ceil(3 / cls) : 0;
-    const line = level === 3 ? `The reserve is spent. Only the ${menWords(cls * MEN_PER_DIV)} men who come of age each month reach the armies, and no new corps can be raised${months2 ? `: a new infantry corps is about ${months2} months of them` : ""}.` : level === 2 ? `The reserve is running short: ${menWords(divs * MEN_PER_DIV)} men are left. Every loss made good and every new corps is taken from it.` : level === 1 ? `The reserve is thinning: ${menWords(divs * MEN_PER_DIV)} men are left of ${menWords(start2 * MEN_PER_DIV)}.` : `${menWords(divs * MEN_PER_DIV)} men stand in reserve.`;
-    return { nat, divs, men: Math.round(divs * MEN_PER_DIV), start: start2, share: start2 > 0 ? divs / start2 : 0, classMen: Math.round(cls * MEN_PER_DIV), home, drawn: Math.round((g2.flags[kx(nat)] ?? 0) * MEN_PER_DIV), word: WORDS[level], line };
+    const gap = Math.max(0, classGapUntil(g2, nat) - g2.turn), drawnDivs = g2.flags[kx(nat)] ?? 0;
+    const line = level === 3 ? `The reserve is spent. Only the ${menWords(cls * MEN_PER_DIV)} men who come of age each month reach the armies, and no new corps can be raised${months2 ? `: a new infantry corps is about ${months2 === 1 ? "a month" : `${months2} months`} of them` : ""}.` : level === 2 ? `The reserve is running short: ${menWords(divs * MEN_PER_DIV)} men are left. Every loss made good and every new corps is taken from it.` : level === 1 ? `The reserve is thinning: ${menWords(divs * MEN_PER_DIV)} men are left of ${menWords(start2 * MEN_PER_DIV)}.` : `${menWords(divs * MEN_PER_DIV)} men stand in reserve.`;
+    return { nat, divs, men: Math.round(divs * MEN_PER_DIV), start: start2, share: start2 > 0 ? divs / start2 : 0, classMen: Math.round(cls * MEN_PER_DIV), home, drawn: Math.round(drawnDivs * MEN_PER_DIV), came: Math.round(Math.max(0, divs - start2 + drawnDivs) * MEN_PER_DIV), gap, word: WORDS[level], line };
   }
   function menWarning(g2, nat) {
     if (!menRules(g2)) return 0;
@@ -9428,12 +9462,14 @@
       retry: 2,
       success: { trust: 4 },
       missed: { base: 3, step: 2, most: 11, rest: 9, restMost: 55, aside: 0.5 },
-      take: { months: { village: 4, town: 4, city: 5, capital: 6 }, capital: { village: 3, town: 4, city: 6, capital: 10 }, money: { village: 0.2, town: 0.25, city: 0.4, capital: 0.6 }, odds: 1.5, least: 0.6, hard: { months: 2, reward: 1.5 }, again: 12 },
-      hold: { months: 4, capital: 6, siegeCapital: 9, odds: 1.5 },
+      take: { months: { village: 4, town: 4, city: 5, capital: 6 }, capital: { village: 3, town: 4, city: 6, capital: 10 }, money: { village: 0.2, town: 0.25, city: 0.4, capital: 0.6 }, odds: 1.5, least: 0.6, reach: 2, hard: { months: 2, reward: 1.5 }, again: 12 },
+      hold: { months: 4, capital: 6, siegeCapital: 9, threat: 1, lost: 4, fresh: 2 },
       raise: { months: 6, grow: 1.2, least: 5, capital: 5 },
       trade: { months: 5, capital: 4, money: 0.2 },
       relief: { months: 5, capital: 4, corps: "inf", pressed: 0.15, overrun: 0.9 },
-      spare: { months: 4, capital: 5, worn: 0.85, share: 0.04 }
+      spare: { months: 4, capital: 5, worn: 0.85, share: 0.04 },
+      build: { months: 3, capital: 4 },
+      agent: { months: 3, capital: 3 }
     },
     wings: {
       top: 2,
@@ -9444,11 +9480,13 @@
       every: 6,
       months: [2, 3, 4, 6],
       reach: 4,
-      rings: [1, 1, 0.5, 0.25, 0.125],
-      fullOdds: 3,
+      memory: 3,
+      deep: [1, 0.5, 0.25, 0.125],
+      fullOdds: 2,
       oddsMost: 5,
       perDepth: 1.5,
       perMonth: 0.6,
+      haste: 0.25,
       back: 0.5,
       size: { village: 0.7, town: 0.85, city: 1, capital: 1.4 },
       bands: [
@@ -9458,7 +9496,7 @@
         { id: "daring", name: "A daring promise", under: 99, trust: 9, capital: 10, money: 0.8, price: 10 }
       ]
     },
-    head: { every: 8, answer: 2, streak: 2, chance: 0.5, sacked: 5, refused: 4, watch: 6, vindicated: 6, wrong: 3 },
+    head: { every: 8, answer: 2, streak: 2, winnable: 1.5, chance: 0.5, sacked: 5, refused: 4, watch: 6, vindicated: 6, wrong: 3 },
     notes: {
       forms: "'capital' is political capital a month the form adds to the nation's own; 'swing' multiplies every gain and loss of trust; 'start' is the trust a cabinet begins with; at or under 'fallsAt' for 'trust.crisisMonths' months running the cabinet falls.",
       capital: "Political capital is the nation's own (diplomacy.json: what it earns a month and the most it can hold). Under 'lowTrust' the cabinet doubts the player: it withholds 'lowShare' of the political capital he would earn each month and 'lowIncome' of the treasury's income; at 'highTrust' or over it adds 'highAdd'. A decree that costs capital to keep ('capital' below zero in its effects) lapses a step when there is none left to pay for it.",
@@ -9466,10 +9504,10 @@
       appoint: "'cost' in political capital to put a minister in a seat ('costMinor' for a country that is not a great power), and 'wait' months before that seat can change again. The player's country opens its campaign with at least 'start' political capital.",
       ministers: "Each has a seat ('*' for any), a gain and a price. 'effects' multiply income, drafts (replacements), cost (new corps), research, trade and men (the class that comes of age each month, manpower.json), or add to capital and trust each month; 'missed' multiplies the trust a missed directive costs. What ministers and decrees add to trust or take from it is felt in full under every form of government.",
       tracks: "Decrees in steps. Each step replaces the one before. 'needs': 'war' at war; 'long' at war for 'needs.longMonths' months or with home ground lost; 'pressed' with 'needs.pressedHome' of the home country lost or 'needs.pressedMonths' months of war. Stepping down is free; the track cannot be raised again for 'decree.wait' months.",
-      directives: "The first comes 'first' months into the player's campaign and another 'every' months after one ends ('retry' if nothing fitted). 'missed': trust lost for one ignored, 'base' and 'step' more for each ignored in a row, to 'most'; and for each ignored in a row the level trust settles at falls by 'rest', to 'restMost', until one is carried out: five in a row bring any cabinet down. One set aside costs 'aside' of that, and the next comes on the day it would have. take: months and rewards by the size of the town, money as a share of a month's income; the cabinet names a town only where the player's troops beside it (those two provinces off count half) outnumber its defenders, walls counted, by 'odds'; with none such it may name one down to 'least', as a hard one, with 'hard.months' more months and 'hard.reward' times the reward; a town it asked for and did not get is not named again for 'again' months unless there is no other. hold: a province of the player's own with troops in it, under siege or with 'odds' times its own troops standing against it next door; it counts only if the place was attacked or besieged while the order ran, and is withdrawn otherwise; 'siegeCapital' is the reward where the siege had already begun. raise: the army, in the field or forming, brought to 'grow' times its strength or by 'least' divisions, but never by more than the treasury and the months of income can pay for, and never twice running. trade: a country with nothing else to do is asked to sign a trade agreement. relief: an ally who has lost 'pressed' of its home asks for an attack on the enemy pressing it; one that has lost 'overrun' of it asks to be liberated; the reward is a corps of this kind. spare: with the doves on top and the army's corps under 'worn' of their strength on average, the cabinet asks that no more than 'share' of the army's men be lost in battle over 'months' months.",
-      wings: "Hawks and doves. Every minister but a caretaker sits with one wing ('wing' on his row); the lean of the table is hawks less doves, from -4 to 4. Each point of lean toward the hawks makes ground won count 'won' more and battles won 'wins' more with the cabinet, and home ground lost 'lost' more. Each point toward the doves makes battles lost count 'defeats' more, raises the level trust settles at by 'rest', and costs 'losses' points of trust for every hundredth of the army's men lost in battle in a month beyond 'spare'. At 'top' points of lean a wing is on top and shapes the directives: hawks ask for towns, doves ask to hold, to build up, to trade, to spare the army and to help an ally, and for a town only when nothing else fits.",
-      promise: "Call your shot. The player may promise the cabinet an enemy town within 'reach' provinces of his ground or his troops, in one of 'months' months (the month he promises in is the first), once every 'every' months. The odds are read on the day: his troops in the town's province and one province off count in full, then by 'rings' for each province further, over its defenders with walls counted. Boldness is two points for every halving of the odds under 'fullOdds' (to 'oddsMost'), 'perDepth' for each province of depth past the first, less 'perMonth' for each month allowed past the shortest. The band whose 'under' it falls below sets the terms: 'trust' and 'price' in points of trust (kept or broken), 'capital' in political capital and 'money' as a share of a month's income, both times 'size' for the town. Taking a promise back costs 'back' of its price.",
-      head: "The cabinet wants a head. No more often than every 'every' months, with a chance of 'chance' in a month that gives it cause, the cabinet names a general who has lost 'streak' battles running (one is enough in a month a directive was failed) and asks for his dismissal; the player has 'answer' months. Dismissed: trust rises 'sacked'. Stood by, or left unanswered: trust falls 'refused', and for 'watch' months the cabinet watches him: a battle won earns 'vindicated' points of trust and the mark (commanders.json, trait 'vindicated'), a battle lost first costs 'wrong' more."
+      directives: "The first comes 'first' months into the player's campaign and another 'every' months after one ends ('retry' if nothing fitted). 'missed': trust lost for one ignored, 'base' and 'step' more for each ignored in a row, to 'most'; and for each ignored in a row the level trust settles at falls by 'rest', to 'restMost', until one is carried out: five in a row bring any cabinet down. One set aside costs 'aside' of that, and the next comes on the day it would have. take: months and rewards by the size of the town, money as a share of a month's income; the cabinet reckons a town from the attack card: what the card would read against it with the player's corps within 'reach' provinces brought up (as many as the roads carry; works, ground and the quality of the troops all counted), and names it only where that is 'odds' to 1 or better; with none such it may name one down to 'least', as a hard one, with 'hard.months' more months and 'hard.reward' times the reward; a town it asked for and did not get is not named again for 'again' months unless there is no other. hold: a province of the player's own with troops in it, under siege, or which an enemy who has attacked the player or an ally within 'fresh' months could attack at 'threat' to 1 or better with his corps in reach brought up (the attack card as his staff would read it), but not past 'lost' to 1, where nothing would hold it; it counts only if the place was attacked or besieged while the order ran, and is withdrawn otherwise; 'siegeCapital' is the reward where the siege had already begun. raise: the army, in the field or forming, brought to 'grow' times its strength or by 'least' divisions, but never by more than the treasury and the months of income can pay for, and never twice running. trade: a country with nothing else to do is asked to sign a trade agreement. relief: an ally who has lost 'pressed' of its home asks for an attack on the enemy pressing it; one that has lost 'overrun' of it asks to be liberated; the reward is a corps of this kind. spare: with the doves on top and the army's corps under 'worn' of their strength on average, the cabinet asks that no more than 'share' of the army's men be lost in battle over 'months' months. build and agent: small jobs for a quiet month, at peace or at war: order one building in a town, or recruit one agent; neither is asked of a treasury that cannot pay for it. They are asked when nothing presses, by a table of doves, and by a balanced table that has just asked for a town.",
+      wings: "Hawks and doves. Every minister but a caretaker sits with one wing ('wing' on his row); the lean of the table is hawks less doves, from -4 to 4. Each point of lean toward the hawks makes ground won count 'won' more and battles won 'wins' more with the cabinet, and home ground lost 'lost' more. Each point toward the doves makes battles lost count 'defeats' more, raises the level trust settles at by 'rest', and costs 'losses' points of trust for every hundredth of the army's men lost in battle in a month beyond 'spare'. At 'top' points of lean a wing is on top and shapes the directives: hawks ask for towns, doves ask to hold, to build up, to trade, to spare the army and to help an ally, and never for a town: a table of doves that finds nothing of its own to ask for asks for nothing.",
+      promise: "Call your shot. The player may promise the cabinet an enemy town within 'reach' provinces of his ground or his troops, in one of 'months' months (the month he promises in is the first), once every 'every' months. The odds are what the attack card would read against the town with his corps within the whole reach brought up, and the cabinet takes the best reading of today and of the opening of each of the last 'memory' months, so marching the army back before promising changes nothing. For a town beyond the front the reading counts by 'deep' for its depth. Boldness is two points for every halving of the odds under 'fullOdds' (to 'oddsMost'), 'perDepth' for each province of depth past the first, less 'perMonth' for each month allowed past the shortest. The band whose 'under' it falls below sets the terms: 'trust' and 'price' in points of trust (kept or broken), 'capital' in political capital and 'money' as a share of a month's income, both times 'size' for the town; what it pays when kept is up to 'haste' more for the shortest day than for the longest. A safe promise kept does not forgive a directive ignored. Taking a promise back costs 'back' of its price.",
+      head: "The cabinet wants a head. No more often than every 'every' months, with a chance of 'chance' in a month that gives it cause, the cabinet names a general who has lost 'streak' battles running that could have been won (one is enough in a month a directive was failed) and asks for his dismissal; the player has 'answer' months. A battle that could have been won is a defence lost to an attack at under 'winnable' to 1, or an attack of his own thrown back at 'winnable' to 1 or better; others are not held against him. Dismissed: trust rises 'sacked'. Stood by, or left unanswered: trust falls 'refused', and for 'watch' months the cabinet watches him: a battle won earns 'vindicated' points of trust and the mark (commanders.json, trait 'vindicated'), a battle lost first that could have been won costs 'wrong' more. Once the player has stood by him the count starts afresh: the cabinet does not ask again over the same battles."
     }
   };
 
@@ -9877,6 +9915,7 @@
   var date = (t) => turnToDate(t).label;
   var govRules = (g2) => g2.flags.open === 1 && g2.flags.nogov !== 1;
   var cabinetOff = (g2) => g2.flags.open === 1 && g2.flags.nogov === 1;
+  var officeSecure = (g2) => g2.flags.open === 1 && g2.flags.nofall === 1;
   var formOf = (nat) => GOV.nations[nat] ?? GOV.nations._default;
   var heldBy = (g2, nat) => g2.regions.reduce((s, r) => s + (r.ctrl === nat ? 1 : 0), 0);
   var homeHeld = (g2, nat) => g2.regions.reduce((s, r) => s + (r.owner === nat && r.ctrl === nat ? 1 : 0), 0);
@@ -9908,12 +9947,13 @@
     const nat = g2.human;
     if (!on) {
       const st2 = nat ? g2.nations[nat]?.gov : void 0;
-      if (st2) {
-        delete st2.dir;
-        delete st2.vow;
-        delete st2.head;
-        delete st2.stood;
-        delete st2.last;
+      if (st2 && nat) {
+        const n = g2.nations[nat];
+        judgeDirective(g2, nat);
+        if (st2.dir) close(g2, n, st2, "aside");
+        if (st2.vow) closeVow(g2, n, st2, "back");
+        if (st2.head) standBy(g2, nat);
+        st2.offAt = g2.turn;
         st2.low = 0;
       }
       g2.flags.nogov = 1;
@@ -9926,8 +9966,30 @@
       st.next = Math.max(st.next, g2.turn + GOV.directives.first);
       st.low = 0;
       delete st.last;
+      if (st.stood && st.offAt !== void 0) st.stood.until += g2.turn - st.offAt;
+      delete st.offAt;
+      delete st.reach;
     }
     return true;
+  }
+  function setCanFall(g2, can2) {
+    if (g2.flags.open !== 1 || g2.flags.nofall !== 1 === can2) return false;
+    if (can2) delete g2.flags.nofall;
+    else g2.flags.nofall = 1;
+    const st = g2.human ? g2.nations[g2.human]?.gov : void 0;
+    if (st) st.low = 0;
+    return true;
+  }
+  function cabinetBill(g2) {
+    const nat = g2.human, st = seen(g2, nat);
+    if (!st || !nat) return [];
+    const swing = GOV.forms[formOf(nat)].swing, out = [];
+    if (st.dir && standing(g2, st.dir) === "open") out.push({ text: `The directive is set aside: ${st.dir.title}`, trust: round1(missedCost(st, true) * swing) });
+    const v = st.vow, vr = v ? g2.regions[v.region] : void 0;
+    if (v && vr && atWar(g2, nat, vr.ctrl) && g2.turn <= v.due) out.push({ text: `Your promise is taken back: ${v.title}`, trust: round1(v.price * GOV.promise.back) });
+    const gen = st.head ? generalBy(g2, st.head.general) : void 0;
+    if (gen) out.push({ text: `The cabinet takes it that you stand by ${gen.name}, and will watch his next battle when it is back`, trust: round1(GOV.head.refused * swing) });
+    return out;
   }
   function openGovernment(g2) {
     if (!govOf(g2, g2.human)) return;
@@ -10078,28 +10140,83 @@
     return s;
   }
   var weight = (cs) => cs.reduce((s, c) => s + (c.dead ? 0 : c.divs * c.str), 0);
-  function strengthNear(g2, nat, r, rings = [1, 1, 0.5]) {
-    const own = (x) => weight(x.units.filter((c) => c.nat === nat && c.kind !== "eng" && c.kind !== "fort"));
-    const seen2 = /* @__PURE__ */ new Set([r.id]);
-    let ring = [r.id], s = own(r) * rings[0];
-    for (let d = 1; d < rings.length; d++) {
-      const next = [];
-      for (const i of ring) for (const j of g2.regions[i].nb) if (!seen2.has(j)) {
-        seen2.add(j);
-        next.push(j);
+  var ODDS_MOST = 99;
+  var fieldOf = (nat, x) => x.units.filter((c) => armyOf(c) === nat && !c.dead && c.kind !== "fort" && !c.town);
+  function broughtUp(g2, nat, r, reach3, deep) {
+    const far0 = deep?.get(r.id) ?? 1, nearer = (x) => far0 > 1 && (deep?.get(x.id) ?? 99) < far0;
+    const open = (x) => allied(g2, nat, x.ctrl) || nearer(x);
+    const gates = r.nb.filter((j) => open(g2.regions[j]) || fieldOf(nat, g2.regions[j]).length > 0);
+    const here = fieldOf(nat, r);
+    const reaches = /* @__PURE__ */ new Map();
+    for (const gate of gates) {
+      const seen2 = /* @__PURE__ */ new Set([gate, r.id]);
+      let ring = [gate];
+      for (let d = 2; d <= reach3 && ring.length; d++) {
+        const next = [];
+        for (const i of ring) for (const j of g2.regions[i].nb) {
+          if (seen2.has(j) || gates.includes(j) || !open(g2.regions[j])) continue;
+          seen2.add(j);
+          next.push(j);
+          const via = reaches.get(j);
+          if (via) via.push(gate);
+          else reaches.set(j, [gate]);
+        }
+        ring = next;
       }
-      for (const j of next) s += rings[d] * own(g2.regions[j]);
-      ring = next;
     }
-    return s;
+    const power = (c) => corpsBase(g2, c) * KIND[c.kind].atk;
+    const beside = [], load2 = {};
+    for (const gate of gates) for (const c of fieldOf(nat, g2.regions[gate])) {
+      beside.push(c);
+      load2[gate] = (load2[gate] ?? 0) + 1;
+    }
+    const room2 = frontage(r) + DEFENCE.frontage.extra + DEFENCE.frontage.guns;
+    const far = [];
+    for (const [j] of reaches) far.push(...fieldOf(nat, g2.regions[j]));
+    far.sort((x, y) => power(y) - power(x) || x.id - y.id);
+    for (const c of far) {
+      const via = reaches.get(c.reg).filter((gate) => (load2[gate] ?? 0) < room2).sort((x, y) => (load2[x] ?? 0) - (load2[y] ?? 0) || x - y)[0];
+      if (via === void 0) continue;
+      load2[via] = (load2[via] ?? 0) + 1;
+      beside.push({ ...c, reg: via });
+    }
+    const inside2 = [...here, ...beside.map((c) => ({ ...c, reg: r.id }))].sort((x, y) => power(y) - power(x) || x.id - y.id);
+    return { beside, inside: inside2 };
   }
-  function defenceOf(g2, nat, r) {
-    const field2 = weight(r.units.filter((c) => atWar(g2, c.nat, nat))) * (r.fort ? FORT_MUL[r.fort.lv] ?? 1 : 1);
-    return field2 + (weight(garrisonOf(r)) + guardOf(g2, r)) * townBonus(g2, r);
+  function cardOdds(g2, nat, r, reach3, deep) {
+    const force2 = broughtUp(g2, nat, r, reach3, deep);
+    const foes = hostileUnits(g2, r, nat);
+    let going, town = false;
+    if (foes.length) going = limitAttackers(g2, force2.beside, r);
+    else {
+      if (!atWar(g2, nat, r.ctrl)) return 0;
+      const line = force2.inside.filter((c) => c.kind !== "eng");
+      const most = line.length ? Math.min(STACK, g2.nations[line[0].nat].maxAttack || 99) : 0;
+      going = [...line.slice(0, most), ...most ? force2.inside.filter((c) => c.kind === "eng").slice(0, 1) : []];
+      town = true;
+      if (going.length && !townHeld(g2, r)) return ODDS_MOST;
+    }
+    if (!going.length) return 0;
+    const a = assess(g2, going, r, town ? { town: true } : {});
+    const band = oddsBand(g2, a.defenders, a.odds, r.id, nat);
+    return Math.min(ODDS_MOST, band.exact ? a.odds : band.mid);
   }
   function directiveOdds(g2, nat, region) {
     const r = g2.regions[region];
-    return r ? strengthNear(g2, nat, r) / Math.max(0.25, defenceOf(g2, nat, r)) : 0;
+    return r ? cardOdds(g2, nat, r, GOV.directives.take.reach) : 0;
+  }
+  function threatOdds(g2, nat, region) {
+    const r = g2.regions[region];
+    if (!r) return null;
+    const foes = /* @__PURE__ */ new Set();
+    for (const j of r.nb) for (const c of g2.regions[j].units) if (!c.dead && atWar(g2, armyOf(c), nat)) foes.add(armyOf(c));
+    let best = null;
+    for (const e of [...foes].sort()) {
+      if (!atWar(g2, e, r.ctrl) && !hostileUnits(g2, r, e).length) continue;
+      const odds = cardOdds(g2, e, r, GOV.directives.take.reach);
+      if (odds > 0 && (!best || odds > best.odds)) best = { odds, by: e };
+    }
+    return best;
   }
   function takeable(g2, nat, st, only = () => true) {
     const T = GOV.directives.take;
@@ -10112,11 +10229,10 @@
         const by = besiegerOf(g2, r);
         if (by && (by === nat || allied(g2, nat, by))) continue;
       }
-      if (strengthNear(g2, nat, r) <= 0) continue;
       const odds = directiveOdds(g2, nat, r.id);
-      if (odds < T.least) continue;
+      if (odds <= 0 || odds < T.least) continue;
       const asked2 = st.asked?.[r.id];
-      all.push({ p, hard: odds < T.odds, again: asked2 !== void 0 && g2.turn - asked2 < T.again });
+      all.push({ p, hard: odds < T.odds, again: asked2 !== void 0 && g2.turn - asked2 < T.again, odds });
     }
     const tiers = [all.filter((x) => !x.hard && !x.again), all.filter((x) => x.hard && !x.again), all.filter((x) => !x.hard && x.again), all.filter((x) => x.hard && x.again)];
     return tiers.find((t) => t.length) ?? [];
@@ -10129,22 +10245,48 @@
     const cap5 = a.capital >= 0 ? g2.regions[a.capital] : null;
     return cap5 && cap5.ctrl === a.id && besieged(g2, cap5) ? besiegerOf(g2, cap5) : null;
   }
+  function onTheMove(g2, foe, nat) {
+    const last = g2.nations[foe]?.lastFight ?? {};
+    for (const d of Object.keys(last)) if ((d === nat || allied(g2, nat, d)) && g2.turn - last[d] <= GOV.directives.hold.fresh) return true;
+    return false;
+  }
   function toHold(g2, nat) {
+    const H = GOV.directives.hold;
     let best = null, score = 0;
-    const men2 = (r, foe) => r.units.reduce((s, u) => s + (!u.dead && (foe ? atWar(g2, u.nat, nat) : allied(g2, u.nat, nat)) ? u.divs * u.str : 0), 0);
+    const men2 = (r) => r.units.reduce((s, u) => s + (!u.dead && allied(g2, u.nat, nat) ? u.divs * u.str : 0), 0);
     for (const r of g2.regions) {
       if (r.ctrl !== nat) continue;
       const size = townSize(g2, r);
       if (size !== "city" && size !== "capital" && !r.fort && !r.oil) continue;
       const shut = besieged(g2, r), inTown = weight(garrisonOf(r));
-      if (shut ? inTown <= 0 : men2(r, false) + inTown <= 0) continue;
-      const pressed = shut || r.nb.reduce((s2, j) => s2 + men2(g2.regions[j], true), 0) > Math.max(1, men2(r, false) + inTown) * GOV.directives.hold.odds;
-      if (!pressed) continue;
+      if (shut ? inTown <= 0 : men2(r) + inTown <= 0) continue;
+      const t = shut ? null : threatOdds(g2, nat, r.id);
+      if (!shut && !(t && t.odds >= H.threat && t.odds <= H.lost && onTheMove(g2, t.by, nat))) continue;
       const s = r.vp * 10 + r.fac * 3 + (r.cap ? 40 : 0) + (r.oil ? 20 : 0) + (shut ? 15 : 0);
       if (s > score) {
         score = s;
-        best = r;
+        best = { r, odds: t?.odds ?? 0, by: shut ? besiegerOf(g2, r) : t?.by ?? null };
       }
+    }
+    return best;
+  }
+  function oddsWords(odds) {
+    if (odds >= 10) return "better than 10 to 1";
+    const x = odds >= 3 ? Math.round(odds * 2) / 2 : Math.round(odds * 10) / 10;
+    return `about ${x} to 1`;
+  }
+  function civicCount(g2, nat) {
+    let s = g2.nations[nat].queue.reduce((k, b) => k + (b.what === "civic" ? 1 : 0), 0);
+    if (g2.flags["cv:any"]) {
+      for (const r of g2.regions) if (r.ctrl === nat) for (const l of CIVIC.lines) s += civicLevel(g2, l.id, r.id);
+    }
+    return s;
+  }
+  function cheapestCivic(g2, nat) {
+    let best = null;
+    for (const r of g2.regions) {
+      if (r.ctrl !== nat || r.owner !== nat) continue;
+      for (const o of civicOffers(g2, nat, r.id)) if ((o.why === null || o.poor) && (!best || o.cost < best.cost)) best = { label: o.label, town: townName(r), cost: o.cost };
     }
     return best;
   }
@@ -10169,7 +10311,7 @@
         ...t.hard ? { hard: true } : {},
         ...t.again ? { again: true } : {},
         title,
-        text: `${lead2}, by you or an ally, by the end of ${date(due)}.${t.hard ? " The place is strongly held: the cabinet knows it, and gives more time and a larger reward." : ""}`
+        text: `${lead2}, by you or an ally, by the end of ${date(due)}. With your corps in reach brought up, the attack card reads ${oddsWords(t.odds)}.${t.hard ? " The place is strongly held: the cabinet knows it, and gives more time and a larger reward." : ""}`
       };
     };
     if (n.atWar.length) {
@@ -10188,20 +10330,21 @@
         break;
       }
       const h = toHold(g2, nat);
-      if (h && (wing !== "hawks" || besieged(g2, h))) {
-        const shut = besieged(g2, h);
+      if (h && (wing !== "hawks" || besieged(g2, h.r))) {
+        const shut = besieged(g2, h.r);
+        const coming = !shut && h.by ? ` ${theName(g2.nations[h.by], true)} is on the move, and its corps in reach could attack the place at ${oddsWords(h.odds)}.` : "";
         options.push({
           ...base,
           kind: "hold",
           from: nat,
-          region: h.id,
+          region: h.r.id,
           due: g2.turn + D.hold.months,
           capital: shut ? D.hold.siegeCapital : D.hold.capital,
           money: 0,
           tested: shut,
           seen: lastReport(g2),
-          title: `Hold ${townName(h)}`,
-          text: `The enemy is at ${shut ? "the gates of" : "the approaches to"} ${townName(h)}. The war cabinet wants it held to the end of ${date(g2.turn + D.hold.months)}.${shut ? "" : " If the enemy never comes, the order is withdrawn."}`
+          title: `Hold ${townName(h.r)}`,
+          text: `The enemy is at ${shut ? "the gates of" : "the approaches to"} ${townName(h.r)}.${coming} The war cabinet wants it held to the end of ${date(g2.turn + D.hold.months)}.${shut ? "" : " If the enemy never comes, the order is withdrawn."}`
         });
       }
       const top = takeable(g2, nat, st).slice(0, 3);
@@ -10239,7 +10382,7 @@
         });
       }
     }
-    if (!options.length || wing === "doves") {
+    if (!options.length || wing === "doves" || wing === "balanced" && (st.lastKind === "take" || st.lastKind === "relief") && !options.some((o) => o.kind === "relief")) {
       const spec2 = specOf(g2, "inf"), now = armyCount(g2, nat);
       const purse = Math.max(0, n.pp) + Math.max(0, income(g2, nat) - upkeepTotal(g2, nat)) * (D.raise.months - 1);
       const corps = spec2 ? Math.min(Math.ceil(Math.max(now * (D.raise.grow - 1), D.raise.least) / spec2.divs), Math.floor(purse * 0.6 / corpsCost(g2, nat, "inf")), raisable(g2, nat, spec2.divs)) : 0;
@@ -10254,7 +10397,35 @@
           capital: D.raise.capital,
           money: 0,
           title: "Build up the army",
-          text: `${n.atWar.length ? "While the front is quiet" : "While the country is at peace"}, the war cabinet wants the army built up: bring it from ${now} to ${target} divisions, in the field or forming, by the end of ${date(g2.turn + D.raise.months)}.`
+          text: `${n.atWar.length ? "The" : `${PEACE}the`} war cabinet wants the army built up: bring it from ${now} to ${target} divisions, in the field or forming, by the end of ${date(g2.turn + D.raise.months)}.`
+        });
+      }
+      const spare = purse * 0.6;
+      const site = cheapestCivic(g2, nat);
+      if (site && site.cost <= spare) {
+        options.push({
+          ...base,
+          kind: "build",
+          from: nat,
+          target: civicCount(g2, nat) + 1,
+          due: g2.turn + D.build.months,
+          capital: D.build.capital,
+          money: 0,
+          title: "Build up a town",
+          text: `The war cabinet wants the country built up: order a new building in one of your towns by the end of ${date(g2.turn + D.build.months)}. The cheapest today is the ${site.label.toLowerCase()} at ${site.town}, for ${moneyShown(site.cost)}.`
+        });
+      }
+      if (agentsOf(g2, nat).length < mostAgents(nat) && homeBase(g2, nat) >= 0 && INTEL.agents.cost <= spare) {
+        options.push({
+          ...base,
+          kind: "agent",
+          from: nat,
+          target: agentsOf(g2, nat).length + 1,
+          due: g2.turn + D.agent.months,
+          capital: D.agent.capital,
+          money: 0,
+          title: "Recruit an agent",
+          text: `The war cabinet wants eyes abroad: recruit an agent for the secret service by the end of ${date(g2.turn + D.agent.months)}. One costs ${agentCost().toLocaleString("en-US")} to find and train.`
         });
       }
       const ctx = /* @__PURE__ */ new Map();
@@ -10278,15 +10449,17 @@
     if (wing === "hawks") {
       const towns2 = opts.filter(attack2);
       if (towns2.length) return towns2[rng.int(towns2.length)];
-      if (opts.some((o) => o.kind === "raise")) opts = opts.filter((o) => o.kind !== "trade");
+      if (opts.some((o) => o.kind === "raise")) opts = opts.filter((o) => o.kind !== "trade" && o.kind !== "build" && o.kind !== "agent");
     } else if (wing === "doves") {
       const calm = opts.filter((o) => o.kind !== "take");
-      if (calm.length) opts = calm.some((o) => o.kind === "trade") ? calm.filter((o) => o.kind !== "raise") : calm;
+      if (!calm.length) return null;
+      opts = calm.some((o) => o.kind === "trade") ? calm.filter((o) => o.kind !== "raise") : calm;
     }
     const fresh3 = opts.filter((o) => o.kind !== st.lastKind);
     const pool = fresh3.length ? fresh3 : opts.filter(attack2);
     return pool.length ? pool[rng.int(pool.length)] : null;
   }
+  var PEACE = "While the country is at peace, ";
   function test(g2, d) {
     if (d.kind === "spare") {
       d.lost = (d.lost ?? 0) + menLostSince(g2, d.nat, d.seen ?? -1);
@@ -10304,6 +10477,8 @@
     const late = g2.turn > d.due;
     if (d.kind === "raise") return armyCount(g2, d.nat) >= (d.target ?? 0) ? "done" : late ? "failed" : "open";
     if (d.kind === "trade") return dealsOf(g2, d.nat).length >= (d.target ?? 0) ? "done" : late ? "failed" : "open";
+    if (d.kind === "build") return civicCount(g2, d.nat) >= (d.target ?? 0) ? "done" : late ? "failed" : "open";
+    if (d.kind === "agent") return agentsOf(g2, d.nat).length >= (d.target ?? 0) ? "done" : late ? "failed" : "open";
     if (d.kind === "spare") return (d.lost ?? 0) > (d.target ?? 0) ? "failed" : late ? "done" : "open";
     const r = g2.regions[d.region ?? -1];
     if (!r) return "void";
@@ -10401,20 +10576,57 @@
     }
     return out;
   }
-  function termsAt(g2, nat, r, months2, depth) {
+  function promiseOdds(g2, nat, r, deep = depths(g2, nat)) {
+    const P = GOV.promise, depth = deep.get(r.id) ?? P.reach;
+    let best = { odds: cardOdds(g2, nat, r, P.reach, deep), depth, then: null };
+    for (const m of seen(g2, nat)?.reach ?? []) {
+      const was = g2.turn - m.t < P.memory ? m.odds[r.id] : void 0;
+      if (was === void 0) continue;
+      const at = m.depth?.[r.id] ?? depth;
+      if (boldness(was, at) < boldness(best.odds, best.depth) - 1e-9) best = { odds: was, depth: at, then: m.t };
+    }
+    return best;
+  }
+  function boldness(odds, depth) {
+    const P = GOV.promise, felt = odds * (P.deep[Math.min(depth, P.deep.length) - 1] ?? 1);
+    return clamp3(2 * Math.log2(P.fullOdds / Math.max(felt, 0.01)), 0, P.oddsMost) + (depth - 1) * P.perDepth;
+  }
+  function noteReach(g2, nat, st) {
+    const P = GOV.promise;
+    const kept = (st.reach ?? []).filter((m) => m.t !== g2.turn && g2.turn - m.t < P.memory);
+    if (!g2.nations[nat].atWar.length) {
+      if (kept.length) st.reach = kept;
+      else delete st.reach;
+      return;
+    }
+    const odds = {}, depth = {}, deep = depths(g2, nat);
+    for (const [id, d] of deep) {
+      const r = g2.regions[id];
+      if (d < 1 || !atWar(g2, nat, r.ctrl)) continue;
+      const o = cardOdds(g2, nat, r, P.reach, deep);
+      if (o > 0) {
+        odds[id] = Math.round(o * 100) / 100;
+        depth[id] = d;
+      }
+    }
+    st.reach = [...kept, { t: g2.turn, odds, depth }];
+  }
+  function termsAt(g2, nat, r, months2, read = promiseOdds(g2, nat, r)) {
     const P = GOV.promise, swing = GOV.forms[formOf(nat)].swing;
-    const odds = strengthNear(g2, nat, r, P.rings) / Math.max(0.25, defenceOf(g2, nat, r));
-    const score = Math.max(0, clamp3(2 * Math.log2(P.fullOdds / Math.max(odds, 0.01)), 0, P.oddsMost) + (depth - 1) * P.perDepth - (months2 - P.months[0]) * P.perMonth);
+    const odds = read.odds, depth = read.depth;
+    const score = Math.max(0, boldness(odds, depth) - (months2 - P.months[0]) * P.perMonth);
     const band = P.bands.find((b) => score < b.under) ?? P.bands[P.bands.length - 1];
     const size = P.size[townSize(g2, r)] ?? 1;
-    const capital = band.capital ? Math.max(1, Math.round(band.capital * size)) : 0, money = round1(income(g2, nat) * band.money * size);
-    const due = g2.turn + months2 - 1, trust = round1(band.trust * swing), price = round1(band.price * swing), back = round1(band.price * P.back * swing);
+    const longest = P.months[P.months.length - 1], haste = 1 + P.haste * (longest - months2) / Math.max(1, longest - P.months[0]);
+    const capital = band.capital ? Math.max(1, Math.round(band.capital * size * haste)) : 0, money = round1(income(g2, nat) * band.money * size * haste);
+    const due = g2.turn + months2 - 1, trust = round1(band.trust * swing * haste), price = round1(band.price * swing), back = round1(band.price * P.back * swing);
     const parts = [`the cabinet's trust rises ${trust}`];
     if (capital) parts.push(`it votes ${capital} political capital`);
     if (money) parts.push(`${moneyShown(money)} for the treasury`);
     const reward = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
     const oddsWord = odds >= 10 ? "better than 10 to 1" : `${odds >= 1 ? round1(odds) : Math.round(odds * 100) / 100} to 1`;
     const where = depth <= 1 ? "beside your ground or your troops" : `${depth === 2 ? "two" : depth === 3 ? "three" : "four"} provinces from your ground and your troops`;
+    const past = read.then !== null, when = !past ? "" : read.then === g2.turn ? ", as it did when the month opened" : `, as it did in ${date(read.then)}`;
     return {
       region: r.id,
       town: townName(r),
@@ -10431,14 +10643,14 @@
       price,
       back,
       reward,
-      text: `${band.name}. Your troops within reach stand at ${oddsWord} against ${townName(r)}, which lies ${where}, and you allow yourself ${monthsWord2(months2)}, this one counted, to the end of ${date(due)}. Kept: ${reward}. Broken: its trust falls ${price}.`
+      text: `${band.name}. With your corps within ${P.reach} provinces brought up, the attack card reads ${oddsWord} against ${townName(r)}${when}. It ${past ? "lay" : "lies"} ${where}${past ? " then" : ""}, and you allow yourself ${monthsWord2(months2)}, this one counted, to the end of ${date(due)}. Kept: ${reward}. Broken: its trust falls ${price}.`
     };
   }
   function promiseTerms(g2, nat, region, months2) {
     const r = g2.regions[region];
     if (!r || !g2.nations[nat] || !atWar(g2, nat, r.ctrl) || !GOV.promise.months.includes(months2)) return null;
     const depth = depths(g2, nat).get(r.id);
-    return depth === void 0 || depth < 1 ? null : termsAt(g2, nat, r, months2, depth);
+    return depth === void 0 || depth < 1 ? null : termsAt(g2, nat, r, months2);
   }
   function whyNotTown(g2, nat, st, r, depth) {
     if (!atWar(g2, nat, r.ctrl)) return allied(g2, nat, r.ctrl) ? `${townName(r)} is in your side's hands already.` : `You are not at war with ${theName(g2.nations[r.ctrl])}.`;
@@ -10481,7 +10693,8 @@
     rows.sort((a, b) => cap5(a) - cap5(b) || a.depth - b.depth || b.w - a.w || a.r.id - b.r.id);
     const caps = rows.filter((x) => cap5(x) === 0).slice(0, 3), rest = rows.filter((x) => cap5(x) === 1).slice(0, Math.max(0, most - caps.length));
     return [...caps, ...rest].map(({ r, depth }) => {
-      const terms = GOV.promise.months.map((m) => termsAt(g2, nat, r, m, depth));
+      const read = promiseOdds(g2, nat, r, deep);
+      const terms = GOV.promise.months.map((m) => termsAt(g2, nat, r, m, read));
       return { region: r.id, town: townName(r), size: townSize(g2, r), holder: r.ctrl, odds: terms[0].odds, depth, terms };
     });
   }
@@ -10510,7 +10723,7 @@
     }
     if (how === "kept") {
       st.kept = (st.kept ?? 0) + 1;
-      st.missed = Math.max(0, st.missed - 1);
+      if (v.band !== "safe") st.missed = Math.max(0, st.missed - 1);
       n.pc = clamp3(n.pc + v.capital, 0, Math.max(n.pc, DIPLOMACY.pcCap));
       n.pp += v.money;
       bump2(st, "A promise kept", v.trust);
@@ -10546,19 +10759,30 @@
     return true;
   }
   var generalBy = (g2, id) => g2.generals.find((x) => x.id === id);
+  var heldAgainst = (gen) => (gen.rec.lost ?? []).filter((b) => b.att ? b.odds >= GOV.head.winnable : b.odds < GOV.head.winnable);
+  var oddsNum = (x) => `${x >= 10 ? Math.round(x) : Math.round(x * 10) / 10}`;
+  function lostWords(g2, b) {
+    const place2 = g2.regions[b.reg]?.name ?? "the field";
+    return b.att ? `was thrown back from ${place2} in ${date(b.t)}, attacking at ${oddsNum(b.odds)} to 1` : `lost the defence of ${place2} in ${date(b.t)} to an attack at ${oddsNum(b.odds)} to 1`;
+  }
   function toBlame(g2, nat, st) {
     const blamed = st.blame !== void 0 && g2.turn - st.blame <= 1;
     const need = blamed ? 1 : GOV.head.streak;
-    let best = null;
+    let best = null, most = 0;
     for (const gen of g2.generals) {
-      if (gen.nat !== nat || gen.status !== "active" || gen.corps < 0 || gen.rec.streak < need) continue;
+      if (gen.nat !== nat || gen.status !== "active" || gen.corps < 0) continue;
       if (gen.traits.includes("vindicated") || st.stood?.general === gen.id) continue;
-      if (!best || gen.rec.streak > best.rec.streak || gen.rec.streak === best.rec.streak && (gen.rec.costly > best.rec.costly || gen.rec.costly === best.rec.costly && gen.id < best.id)) best = gen;
+      const k = heldAgainst(gen).length;
+      if (k < need) continue;
+      if (!best || k > most || k === most && (gen.rec.costly > best.rec.costly || gen.rec.costly === best.rec.costly && gen.id < best.id)) {
+        best = gen;
+        most = k;
+      }
     }
     if (!best) return null;
-    const k = best.rec.streak;
-    const lost = k === 1 ? "He lost his last battle" : `He has lost his last ${k === 2 ? "two" : k === 3 ? "three" : k} battles`;
-    return { gen: best, why: blamed ? `${lost}, and the cabinet's directive was not carried out.` : `${lost}.` };
+    const lost = heldAgainst(best).slice(-3), told = lost.map((b) => lostWords(g2, b));
+    const said = told.length > 1 ? `${told.slice(0, -1).join(", ")} and ${told[told.length - 1]}` : told[0];
+    return { gen: best, lost, why: `He ${said}. The cabinet holds that ${lost.length === 1 ? "it was a battle" : "these were battles"} he could have won${blamed ? ", and its directive was not carried out" : ""}.` };
   }
   function headAsked(g2, gen) {
     return seen(g2, gen.nat)?.head?.general === gen.id;
@@ -10584,6 +10808,7 @@
     delete st.head;
     st.headNext = g2.turn + H.every;
     st.stood = { general: gen.id, until: g2.turn + H.watch - 1, battles: gen.rec.battles, won: gen.rec.won };
+    delete gen.rec.lost;
     bump2(st, "You stood by a general", -H.refused * GOV.forms[formOf(nat)].swing);
     note3(g2, st, `You stood by ${gen.name}.`);
     headline(g2, "info", `You stand by ${gen.name}. The war cabinet does not hide its displeasure, and it will be watching his next battle.`, nat);
@@ -10604,8 +10829,9 @@
       bump2(st, "A general vindicated", H.vindicated * swing);
       note3(g2, st, `${gen.name} vindicated.`);
       headline(g2, "info", `Vindicated: ${gen.name}, whose dismissal the war cabinet asked for, has won his battle. The cabinet admits it was wrong, its confidence in you rises, and he carries the mark for the rest of the war.`, n.id);
-    } else if (gen.rec.battles > w.battles) {
+    } else if (heldAgainst(gen).length > 0) {
       delete st.stood;
+      delete gen.rec.lost;
       bump2(st, "The general you stood by lost again", -H.wrong * swing);
       note3(g2, st, `${gen.name} lost again.`);
       headline(g2, "info", `${gen.name}, the general you stood by, has lost again. The war cabinet says it told you so.`, n.id);
@@ -10621,7 +10847,7 @@
     if (st.head || !n.atWar.length || g2.turn < (st.headNext ?? 0)) return;
     const c = toBlame(g2, n.id, st);
     if (!c || !new Rng(hashString(`head:${g2.seed}:${g2.turn}:${n.id}`)).chance(H.chance)) return;
-    st.head = { general: c.gen.id, issued: g2.turn, due: g2.turn + H.answer - 1, why: c.why };
+    st.head = { general: c.gen.id, issued: g2.turn, due: g2.turn + H.answer - 1, why: c.why, lost: c.lost };
     note3(g2, st, `The cabinet asks for the dismissal of ${c.gen.name}.`);
     headline(g2, "info", `The war cabinet wants a head: it asks you to dismiss ${c.gen.name}. ${c.why} Dismiss him and its confidence recovers; stand by him and it falls, unless his next battle proves the cabinet wrong.`, n.id);
   }
@@ -10672,7 +10898,7 @@
       note3(g2, st, `Lapsed for want of political capital: ${was.name}.`);
       headline(g2, "info", `The decree lapses: ${was.name.toLowerCase()}. There is no political capital left to hold the country to it, and the law falls back to ${stepAt(st, t).name.toLowerCase()}.`, nat);
     }
-    st.low = st.trust <= form.fallsAt ? st.low + 1 : 0;
+    st.low = !officeSecure(g2) && Math.floor(st.trust) <= form.fallsAt ? st.low + 1 : 0;
     if (st.low >= T.crisisMonths) {
       st.low = 0;
       st.seats = {};
@@ -10681,6 +10907,8 @@
       st.trust = T.afterCrisis;
       st.last = [];
       delete st.vow;
+      const named2 = st.head ? generalBy(g2, st.head.general) : void 0;
+      if (named2) delete named2.rec.lost;
       delete st.head;
       note3(g2, st, "The war cabinet fell.");
       headline(g2, "info", `The government falls: the war cabinet ${form.crisis}. Caretakers take every office, the newest decrees are withdrawn, and your political capital is spent.`, nat);
@@ -10688,6 +10916,7 @@
     }
     judgeDirective(g2, nat);
     headMonth(g2, n, st);
+    noteReach(g2, nat, st);
     if (!st.dir && g2.turn >= st.next) {
       const d = draw2(g2, nat, st);
       if (d) {
@@ -10700,7 +10929,7 @@
       }
     }
   }
-  var trustWord = (t, fallsAt) => t <= fallsAt ? "None left" : t < 35 ? "Doubtful" : t < 55 ? "Uneasy" : t < 75 ? "Steady" : t < 90 ? "Firm" : "Complete";
+  var trustWord = (t, fallsAt) => Math.floor(t) <= fallsAt ? "None left" : t < 35 ? "Doubtful" : t < 55 ? "Uneasy" : t < 75 ? "Steady" : t < 90 ? "Firm" : "Complete";
   var mv = (m) => ({ id: m.id, name: m.name, plus: m.plus, minus: m.minus, wing: m.wing ?? null });
   var pct2 = (x) => Math.round(x * 100);
   function wingsView(st) {
@@ -10720,16 +10949,36 @@
       top,
       at: W.top,
       word: top === "hawks" ? "The hawks have the table" : top === "doves" ? "The doves have the table" : lean > 0 ? "Leaning to the hawks" : lean < 0 ? "Leaning to the doves" : "Evenly balanced",
-      text: top === "hawks" ? "The cabinet asks for a town whenever there is one to ask for, orders a place held only with the enemy at its gates, and in a quiet month wants the army built up before it wants trade." : top === "doves" ? "The cabinet asks you to hold, to build up, to trade, to help an ally and to spare a worn army, and for a town only when nothing else fits." : `Neither wing shapes the directives yet: it takes ${W.top} more ministers of one wing than of the other. Every minister tilts how the cabinet reads the news.`,
+      text: top === "hawks" ? "The cabinet asks for a town whenever there is one to ask for, orders a place held only with the enemy at its gates, and in a quiet month wants the army built up before it wants trade." : top === "doves" ? "The cabinet asks you to hold, to build up the army and the towns, to trade, to help an ally and to spare a worn army. It does not ask for towns: with nothing of its own to ask for, it asks for nothing." : `Neither wing shapes the directives yet: it takes ${W.top} more ministers of one wing than of the other. Every minister tilts how the cabinet reads the news.`,
       effects
     };
   }
   var LEVER_NAME = { income: "Income", drafts: "Replacements", cost: "Price of new corps", research: "Research", trade: "Trade agreements", men: "Men coming of age" };
+  function oddsLineOf(g2, d) {
+    const r = g2.regions[d.region ?? -1];
+    if (!r) return null;
+    if (d.kind === "take" || d.kind === "relief") {
+      if (!atWar(g2, d.nat, r.ctrl)) return null;
+      const odds = directiveOdds(g2, d.nat, r.id);
+      return odds > 0 ? `With your corps in reach brought up, the attack card reads ${oddsWords(odds)} today.` : `None of your corps is within ${GOV.directives.take.reach === 2 ? "two" : GOV.directives.take.reach} provinces of it today.`;
+    }
+    if (d.kind === "hold") {
+      if (besieged(g2, r)) return null;
+      const t = threatOdds(g2, d.nat, r.id);
+      return t ? `${theName(g2.nations[t.by], true)} could attack it today at ${oddsWords(t.odds)} with its corps in reach.` : "No enemy corps is within reach of it today.";
+    }
+    return null;
+  }
   function progressOf(g2, d) {
     if (d.kind === "raise") return `The army stands at ${armyCount(g2, d.nat)} of ${d.target} divisions, in the field or forming.`;
     if (d.kind === "trade") {
       const k = dealsOf(g2, d.nat).length;
       return `You have ${k === 0 ? "no trade agreements" : k === 1 ? "one trade agreement" : `${k} trade agreements`}: one more is asked for. Open Trade to sign it.`;
+    }
+    if (d.kind === "build") return `You have ${civicCount(g2, d.nat)} buildings standing or ordered: one more is asked for. Pick a town on the map and open its buildings.`;
+    if (d.kind === "agent") {
+      const k = agentsOf(g2, d.nat).length;
+      return `You have ${k === 0 ? "no agents" : k === 1 ? "one agent" : `${k} agents`}: one more is asked for. Open the secret service to recruit one.`;
     }
     if (d.kind === "spare") {
       const lost = (d.lost ?? 0) + menLostSince(g2, d.nat, d.seen ?? -1);
@@ -10757,6 +11006,7 @@
       doubts: false,
       withheld: null,
       since: 0,
+      secure: officeSecure(g2),
       capital: 0,
       capitalMonth: 0,
       capitalMost: DIPLOMACY.pcCap,
@@ -10807,7 +11057,7 @@
     return {
       ...empty,
       mine: true,
-      trust: Math.round(st.trust),
+      trust: Math.floor(st.trust + 1e-9),
       trustWord: trustWord(st.trust, form.fallsAt),
       rest: restOf(st),
       low: st.low,
@@ -10818,7 +11068,7 @@
       capitalMonth: Math.round((pcIncome(nat) + civicSum(g2, nat).pc + cm) * 100) / 100,
       seats,
       tracks,
-      directive: d ? { ...d, by: d.from === nat ? "The war cabinet" : theName(g2.nations[d.from], true), left: Math.max(0, d.due - g2.turn + 1), progress: progressOf(g2, d), reward: rewardWords(d), price: Math.round(missedCost(st) * form.swing * 10) / 10, asidePrice: Math.round(missedCost(st, true) * form.swing * 10) / 10, asideNext: Math.max(g2.turn + GOV.directives.retry, d.due + 1 + GOV.directives.every) } : null,
+      directive: d ? { ...d, text: d.kind === "raise" && n.atWar.length && d.text.startsWith(PEACE) ? `T${d.text.slice(PEACE.length + 1)}` : d.text, oddsLine: oddsLineOf(g2, d), by: d.from === nat ? "The war cabinet" : theName(g2.nations[d.from], true), left: Math.max(0, d.due - g2.turn + 1), progress: progressOf(g2, d), reward: rewardWords(d), price: Math.round(missedCost(st) * form.swing * 10) / 10, asidePrice: Math.round(missedCost(st, true) * form.swing * 10) / 10, asideNext: Math.max(g2.turn + GOV.directives.retry, d.due + 1 + GOV.directives.every) } : null,
       nextIn: d ? 0 : Math.max(0, st.next - g2.turn),
       done: st.done,
       missed: st.missed,
@@ -10847,7 +11097,10 @@
         cost: round1(H.refused * form.swing),
         vindicated: round1(H.vindicated * form.swing),
         wrong: round1(H.wrong * form.swing),
-        loved: popular(asked2)
+        loved: popular(asked2),
+        fought: asked2.rec.battles,
+        won: asked2.rec.won,
+        battles: (st.head.lost ?? []).map((b) => ({ when: date(b.t), where: g2.regions[b.reg]?.name ?? "", odds: b.odds, attack: b.att, text: `${b.att ? "Attacked" : "Defended"} ${g2.regions[b.reg]?.name ?? "the field"} in ${date(b.t)}, the attacker at ${oddsNum(b.odds)} to 1: ${b.att ? "thrown back" : "lost"}.` }))
       } : null,
       stoodBy: st.stood && stood ? { general: stood.id, name: stood.name, left: Math.max(0, st.stood.until - g2.turn + 1) } : null,
       moved: (st.last ?? []).map((c) => ({ label: c.label, amount: Math.round(c.amount * 10) / 10 })).filter((c) => c.amount !== 0),
@@ -14171,7 +14424,7 @@
       [54, "Pskov", 2, ["GER"], "Army Group North has fallen back from Leningrad to the Panther line, the northern end of the East Wall: bunkers and wire along the Narva river, the shore of Lake Peipus, and round Pskov and Ostrov."],
       [54, "Estonia", 2, ["GER"], "The Narva river is the northern anchor of the Panther line. The isthmus between the Gulf of Finland and Lake Peipus is thirty miles wide, and every yard of it is covered.", { vs: ["SOV"] }],
       [62, "Courland", 1, ["GER"], "Army Group North is cut off in Courland with its back to the Baltic. Hitler will not have it brought out: the harbours of Libau and Windau keep it fed and armed by sea.", { port: true, vs: ["LAT", "LIT", "GER"] }],
-      [63, "Budapest", 2, ["HUN", "GER"], "Budapest is to be held to the last house. The Attila line, three belts of trenches and anti-tank ditches, covers Pest on the eastern bank, and the bridges over the Danube are mined.", { vs: ["HUN", "ROM", "YUG", "SVK"] }]
+      [63, "Budapest", 2, ["HUN", "GER"], "Budapest is to be held to the last house. The Attila line, three belts of fieldworks and anti-tank ditches, covers Pest on the eastern bank, and the bridges over the Danube are mined.", { vs: ["HUN", "ROM", "YUG", "SVK"] }]
     ],
     roads: 1,
     mud: [
@@ -14190,9 +14443,9 @@
     prepared: { dice: [0.5, 1.2], spentAt: 0.5, surprise: 0.85, surpriseMonths: 1, openingMonths: 3, armour: 0.5, losses: { attacker: 1.5, defender: 0.65 } },
     staff: { odds: 0 },
     notes: {
-      entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. Trenches are lost the moment the corps leaves the ground. With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by what its works are worth so far: 'share' gives that for one month's digging, two and three, since the first month's work does the most.",
-      prepared: "'dice' is the run of the day's luck for an attack on defenders who are all dug in and in supply (in the open it is 0.8 to 1.2, and it takes 1.2 to 1 on the day to carry the ground). Where only part of the defence is prepared the run lies between the two in proportion, and massed guns in the attack take their share off it as they do off the trenches. 'spentAt': an attack that fails against a defence at least this far prepared leaves the attacking corps with no moves for the rest of the month. 'surprise': how much of its preparedness a line loses to a new offensive by an army trained to it (Germany's): for 'surpriseMonths' months from its first blow, or for 'openingMonths' if it is the first offensive that army has ever made on that country. 'armour': how much it loses to an attack with tanks in it when the defence has no armour of its own. Both multiply with what the guns take off. 'losses': against a fully prepared line the attackers lose 'attacker' times the men they would in the open and the defenders 'defender' times, in proportion where the line is partly prepared.",
-      wear: "Works wear down under attack (Version 61). Every attack on dug-in troops, won or lost, takes 'perAttack' months off the works of each defender who stays, in full if the attack came at 'fullAt' to 1 or better on the Battle Ticket and in proportion below that, so that a jab by one corps scratches a line and a real blow breaks into it. Massed guns in the attack add to it: by 'guns' times the share they take off the trenches. Works are never worn below nothing, and troops whose works are worn under one month lose the trenches' 25% in the same proportion. 'regrow': the months of digging a corps gets done in a month in which it was attacked. At a half, a line attacked once a month loses half a month's works every month and one attacked twice a month a month and a half, so steady pressure wears a line away and a quiet front builds it back. (At 0 the German player following history held Berlin to the end of 1944 in 17 to 19 wars of 24 instead of 12, and Moscow fell in 7 computer wars of 24 instead of 2: armies in contact never dug at all.)",
+      entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. Fieldworks are lost the moment the corps leaves the ground (players read 'fieldworks', never 'trenches': Brian, 2026-11-14). With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by what its works are worth so far: 'share' gives that for one month's digging, two and three, since the first month's work does the most.",
+      prepared: "'dice' is the run of the day's luck for an attack on defenders who are all dug in and in supply (in the open it is 0.8 to 1.2, and it takes 1.2 to 1 on the day to carry the ground). Where only part of the defence is prepared the run lies between the two in proportion, and massed guns in the attack take their share off it as they do off the fieldworks. 'spentAt': an attack that fails against a defence at least this far prepared leaves the attacking corps with no moves for the rest of the month. 'surprise': how much of its preparedness a line loses to a new offensive by an army trained to it (Germany's): for 'surpriseMonths' months from its first blow, or for 'openingMonths' if it is the first offensive that army has ever made on that country. 'armour': how much it loses to an attack with tanks in it when the defence has no armour of its own. Both multiply with what the guns take off. 'losses': against a fully prepared line the attackers lose 'attacker' times the men they would in the open and the defenders 'defender' times, in proportion where the line is partly prepared.",
+      wear: "Works wear down under attack (Version 61). Every attack on dug-in troops, won or lost, takes 'perAttack' months off the works of each defender who stays, in full if the attack came at 'fullAt' to 1 or better on the Battle Ticket and in proportion below that, so that a jab by one corps scratches a line and a real blow breaks into it. Massed guns in the attack add to it: by 'guns' times the share they take off the fieldworks. Works are never worn below nothing, and troops whose works are worn under one month lose the fieldworks' 25% in the same proportion. 'regrow': the months of digging a corps gets done in a month in which it was attacked. At a half, a line attacked once a month loses half a month's works every month and one attacked twice a month a month and a half, so steady pressure wears a line away and a quiet front builds it back. (At 0 the German player following history held Berlin to the end of 1944 in 17 to 19 wars of 24 instead of 12, and Moscow fell in 7 computer wars of 24 instead of 2: armies in contact never dug at all.)",
       frontage: "Attacked from 'sides' provinces or more at once, a defence cannot cover every road: each side's roads carry 'extra' more corps. Against fortress works or dug-in troops up to 'guns' artillery corps join an attack without taking room on the roads, since they fire over the heads of the infantry.",
       staff: "'odds': how much better odds than usual a computer staff asks before it attacks a fully prepared line. At 0 it attacks as it always did, and learns the cost in men.",
       measured: "Over 72 computer wars to the end of 1944 (Version 57 before, Version 58 after): Berlin fallen in 38 and 25, the German army still deep in Russia in 16 and 7, neither in 10 and 40; Paris falls between 2 and 3 months later. Of 36 wars run on to January 1947 Berlin had fallen in 29 and 7 were undecided. A dug-in, supplied line now throws back an attack at 1.5 to 1 about 4 times in 10 and at 2 to 1 about 1 in 7; nothing is safe under 2.4 to 1. Version 61 (works that wear, the share of each month's digging, the opening offensive, room on the roads), over 24 computer wars to December 1944 against Version 60: Paris falls in October 1940 at the median (November) and by August in 5 (none), Berlin has fallen in 6 (5) and Moscow in 4 (2); finished, supplied lines throw back 60% of attacks at 1.2 to 1.6 to 1 and 26% at 1.6 to 2.2 to 1 (59% and 23%); 280 attacks thrown back wore works down. Over 24 wars played as Germany on history's plan at Colonel, Berlin holds to the end of 1944 in 13 (12). A Soviet player who strikes first in June 1940 takes Berlin from Germany in 6 wars of 8 (4)."
@@ -14250,7 +14503,7 @@
   function jobLine(g2, c) {
     if (!c.job) return "";
     const r = g2.regions[c.job.reg];
-    const what = c.job.what === "bridge" ? `rebuilding the bridges at ${r.name}` : c.job.what === "rail" ? `relaying the railway at ${r.name}` : c.job.what === "plant" ? `rebuilding a factory at ${r.name}` : c.job.what === "works" ? `building field works at ${r.name}` : c.job.what === "airfield" ? `laying out an airfield at ${r.name}` : c.job.what === "mines" ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
+    const what = c.job.what === "bridge" ? `rebuilding the bridges at ${r.name}` : c.job.what === "rail" ? `relaying the railway at ${r.name}` : c.job.what === "plant" ? `rebuilding a factory at ${r.name}` : c.job.what === "works" ? `fortifying ${r.name}` : c.job.what === "airfield" ? `laying out an airfield at ${r.name}` : c.job.what === "mines" ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
     return `${what[0].toUpperCase()}${what.slice(1)}: done when next month begins`;
   }
   function facing(g2, r) {
@@ -14288,7 +14541,7 @@
       } else if (job.what === "works") {
         if ((r.fort?.lv ?? 0) < ENGINEERING.works.most) {
           r.fort = { lv: (r.fort?.lv ?? 0) + 1, vs: facing(g2, r) };
-          if (mine3) headline(g2, "info", `${c.name} has finished field works at ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
+          if (mine3) headline(g2, "info", `${c.name} has finished fortifying ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
         }
       } else if (job.what === "airfield") {
         if (airWar(g2) && builtField(g2, r) < AIRWAR.fields.engineers) {
@@ -15618,11 +15871,11 @@
       label: "Artillery",
       value: soften && thicken ? "Massed guns on both sides" : soften ? "Massed guns support the attack" : "Massed guns stand in the defence",
       effect: [
-        soften ? town ? `The bombardment takes ${Math.round(soften * 100)}% off the worth of the town to its defenders` : target.fort && fortFaced || dugIn ? `The bombardment takes ${Math.round(soften * 100)}% off the worth of the ${target.fort && fortFaced ? dugIn ? "works and trenches" : "works" : "trenches"}` : "There are no works or trenches here for the guns to break" : "",
+        soften ? town ? `The bombardment takes ${Math.round(soften * 100)}% off the worth of the town to its defenders` : target.fort && fortFaced || dugIn ? `The bombardment takes ${Math.round(soften * 100)}% off the worth of the ${target.fort && fortFaced ? dugIn ? "fortifications and fieldworks" : "fortifications" : "fieldworks"}` : "There are no fortifications or fieldworks here for the guns to break" : "",
         thicken ? `${soften ? "the" : "The"} other defenders fight ${Math.round(thicken * 100)}% stronger under their own guns` : ""
       ].filter(Boolean).join("; ")
     });
-    if (dugIn && !wide) lines.push({ label: "Dug in", value: dugIn === defenders.length ? "The defenders have had a month to entrench" : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
+    if (dugIn && !wide) lines.push({ label: "Dug in", value: dugIn === defenders.length ? "The defenders have had a month to dig in" : `${dugIn} of the ${defenders.length} defending corps have had a month to dig in`, effect: `Troops in fieldworks defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
     const works = wide && !town && dugD > 0 ? worksD / dugD : 0;
     const wear = works > 0 ? Math.min(works, DEFENCE.wear.perAttack * Math.min(1, A / D / DEFENCE.wear.fullAt) * (1 + DEFENCE.wear.guns * soften)) : 0;
     if (wide && dugIn) {
@@ -15636,7 +15889,7 @@
       lines.push({
         label: "Dug in",
         value: `${who}: ${built}${lost.length ? `, but ${listAnd(lost)}` : ""}`,
-        effect: `${cover3 ? `Entrenched troops defend ${cover3}% stronger. ` : ""}${luck}${after}`
+        effect: `${cover3 ? `Troops in fieldworks defend ${cover3}% stronger. ` : ""}${luck}${after}`
       });
     }
     const aUns = attackers2.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
@@ -16303,6 +16556,20 @@
   }
   var ordinal3 = (n) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd", "th", "th", "th", "th", "th", "th"][n % 10]}`;
   var OPEN_CALLUP = 1;
+  var callUpHeld = (g2, nat) => g2.flags.open === 1 && nat === g2.human && g2.flags[`mph:${nat}`] === 1;
+  function standingCallUp(g2, nat) {
+    const plan = EASTERN.mobilisation[nat], n = g2.nations[nat];
+    if (g2.flags.open !== 1 || !plan || !n?.alive || !n.atWar.length) return null;
+    const began = g2.flags[`mobilised:${nat}`];
+    const wave = began === void 0 ? 0 : g2.turn + 1 - began - (g2.flags[`mphn:${nat}`] ?? 0);
+    return { held: callUpHeld(g2, nat), corps: plan.perMonth[wave] ?? plan.after, divs: plan.divs };
+  }
+  function holdCallUp(g2, nat, hold2) {
+    if (nat !== g2.human || !standingCallUp(g2, nat) || callUpHeld(g2, nat) === hold2) return false;
+    if (hold2) g2.flags[`mph:${nat}`] = 1;
+    else delete g2.flags[`mph:${nat}`];
+    return true;
+  }
   function mobilise(g2, nat) {
     const plan = EASTERN.mobilisation[nat];
     const n = g2.nations[nat];
@@ -16310,16 +16577,19 @@
     const key3 = `mobilised:${nat}`;
     if (g2.flags[key3] === void 0) g2.flags[key3] = g2.turn;
     const month2 = g2.turn - g2.flags[key3];
-    let count3 = plan.perMonth[month2] ?? plan.after;
-    if (g2.flags.open === 1 && month2 >= plan.perMonth.length) {
-      let own = 0, held = 0;
+    const held = callUpHeld(g2, nat), waited = g2.flags.open === 1 ? g2.flags[`mphn:${nat}`] ?? 0 : 0, wave = month2 - waited;
+    let count3 = plan.perMonth[wave] ?? plan.after;
+    if (held) g2.flags[`mphn:${nat}`] = waited + 1;
+    if (g2.flags.open === 1 && wave >= plan.perMonth.length) {
+      let own = 0, held2 = 0;
       for (const r of g2.regions) if (r.owner === nat && !r.overseas) {
         own += r.fac;
-        if (r.ctrl === nat) held += r.fac;
+        if (r.ctrl === nat) held2 += r.fac;
       }
-      count3 = own > 0 ? Math.round(count3 * Math.pow(held / own, OPEN_CALLUP)) : 0;
+      count3 = own > 0 ? Math.round(count3 * Math.pow(held2 / own, OPEN_CALLUP)) : 0;
     }
-    if (g2.flags.open === 1) count3 = Math.min(count3, month2 < plan.perMonth.length ? raisable(g2, nat, plan.divs) : Math.max(0, Math.floor(menSpare(g2, nat) / plan.divs)));
+    if (g2.flags.open === 1) count3 = Math.min(count3, wave < plan.perMonth.length ? raisable(g2, nat, plan.divs) : Math.max(0, Math.floor(menSpare(g2, nat) / plan.divs)));
+    if (held) count3 = 0;
     const enemyNear = (r) => r.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl));
     for (let k = 0; k < count3; k++) {
       let best = null, bs = 1e9;
@@ -16650,8 +16920,9 @@
     if (drafted_ > 0) drawMen(g2, nat, drafted_);
     if (menRules(g2) && nat === g2.human) {
       const level = menWarning(g2, nat), left = menWords(menLeft(g2, nat) * MEN_PER_DIV), start2 = menWords(poolAtStart(g2, nat) * MEN_PER_DIV);
-      if (level === 1) headline(g2, "info", `The reserve of men is thinning: ${left} are left of the ${start2} the war began with. Every loss made good and every new corps is taken from it.`, nat);
-      else if (level === 2) headline(g2, "info", `The reserve of men is running short: ${left} are left, under ${Math.round(MANPOWER.warn[1] * 100)}% of what the war began with. Spare the armies, or the day comes when losses cannot be made good.`, nat);
+      const say = `In the ledger you can call the next class up early${standingCallUp(g2, nat) ? ", or hold the standing call-up so that the men go to the corps in the field" : ""}.`;
+      if (level === 1) headline(g2, "info", `The reserve of men is thinning: ${left} are left of the ${start2} the war began with. Every loss made good and every new corps is taken from it. ${say}`, nat);
+      else if (level === 2) headline(g2, "info", `The reserve of men is running short: ${left} are left, under ${Math.round(MANPOWER.warn[1] * 100)}% of what the war began with. Spare the armies, or the day comes when losses cannot be made good. ${say}`, nat);
       else if (level === 3) headline(g2, "info", "The reserve of men is spent. From now on only the class that comes of age each month reaches the armies, and no new corps can be raised.", nat);
     }
     siegeFalls(g2, nat);
@@ -18191,7 +18462,7 @@
     const last = Math.max(g2.nations[nat]?.lastFight[e] ?? 0, g2.nations[e]?.lastFight[nat] ?? 0, flag2(g2, `war:${nat}:${e}`), flag2(g2, `war:${e}:${nat}`), 1);
     return g2.turn - last;
   }
-  function boldness(g2, nat, f) {
+  function boldness2(g2, nat, f) {
     const I = OPEN.impatience;
     if (!I || !f.enemies.length) return 0;
     const quiet2 = Math.min(...f.enemies.map((e) => quietWith(g2, nat, e)));
@@ -18277,7 +18548,7 @@
     const list4 = ops(nat);
     const meant = (op, f) => !op.side && f.enemies.some((e) => (op.if ?? []).includes(`war:${nat},${e}`));
     const planned = (f) => list4.some((op) => meant(op, f) && !flag2(g2, `st:done:${nat}:${op.id}`) && g2.turn <= (op.to ?? 999) && (op.if ?? []).filter((c) => c !== "quiet").every((c) => cond(g2, nat, c, real)));
-    const hurried = (op) => real.some((f) => meant(op, f) && boldness(g2, nat, f) > 0);
+    const hurried = (op) => real.some((f) => meant(op, f) && boldness2(g2, nat, f) > 0);
     for (const f of real) {
       const since = onSince(g2, nat, f);
       if (since) {
@@ -18290,7 +18561,7 @@
       } else if (f.enemies.every((e) => g2.turn >= flag2(g2, `st:rest:${nat}:${e}`))) {
         const usual = T.attackAt * inConcert(g2, nat, f);
         const I = OPEN.impatience;
-        const k0 = boldness(g2, nat, f);
+        const k0 = boldness2(g2, nat, f);
         const k = k0 < (I?.after.length ?? 0) && planned(f) ? 0 : k0;
         const none3 = T.attackAt >= 50;
         const eager = !k ? usual : none3 ? k >= I.after.length ? I.any : usual : Math.max(I.floor, usual * I.ratio[k - 1]);
@@ -19722,7 +19993,7 @@
       title: "Fall back on Warsaw",
       advice: [
         "An army strung out along the frontier is cut to pieces in a month. Bring the strongest corps into Warsaw by rail, five to a region, and stand the rest behind it.",
-        "Then give each army its orders. Troops told to dig in fight from trenches once they have sat a month where they are. Troops told to fall back give ground when they are outmatched, and reach the capital whole instead of being broken where they stand.",
+        "Then give each army its orders. Troops told to dig in fight from fieldworks once they have sat a month where they are. Troops told to fall back give ground when they are outmatched, and reach the capital whole instead of being broken where they stand.",
         "Keep out of the eastern provinces. Once the front breaks the Red Army crosses the border under its pact with Germany, and troops left there are lost."
       ],
       place: [
@@ -20005,10 +20276,38 @@
   }
   var governmentOf = (g2, nat = g2.human) => government(g2, nat);
   var manpowerOf = (g2, nat = g2.human) => manpower(g2, nat, nat ? govMul(g2, nat, "men") : 1);
+  function callUpOf(g2) {
+    const nat = g2.human;
+    if (nat === null || g2.flags.open !== 1 || !g2.nations[nat]) return null;
+    const E = MANPOWER.early, men2 = Math.round(earlyClass(g2, nat, govMul(g2, nat, "men")) * MEN_PER_DIV);
+    const why = !humanUp(g2) ? "It is not your month." : whyNotEarly(g2, nat);
+    const wave = standingCallUp(g2, nat);
+    return {
+      early: { men: men2, months: E.months, gap: E.gap, why, text: `Call up the next class early: about ${menWords(men2)} men join the reserve at once. No class then comes of age for ${E.gap} months, because those boys are with the colours already: men now, at the price of fewer later.` },
+      callUp: wave ? { ...wave, text: wave.held ? "The standing call-up is held: no new corps are raised from the reserve, and the men stay for the corps in the field. The waves wait until you let it run." : `The standing call-up is running: next month it raises up to ${wave.corps} new corps of ${wave.divs} divisions from the reserve, if the men are there. Hold it, and they stay for the corps in the field instead.` } : null
+    };
+  }
+  function orderEarlyClass(g2) {
+    if (g2.human === null || !humanUp(g2)) return false;
+    const come = callEarly(g2, g2.human, govMul(g2, g2.human, "men"));
+    if (come <= 0) return false;
+    headline(g2, "info", `The next class is called up early: ${menWords(come * MEN_PER_DIV)} men join the reserve. No class comes of age for the next ${MANPOWER.early.gap} months.`, g2.human);
+    return true;
+  }
+  function orderCallUp(g2, hold2) {
+    if (g2.human === null || !holdCallUp(g2, g2.human, hold2)) return false;
+    headline(g2, "info", hold2 ? "The standing call-up is held: no new corps are raised from the reserve until you let it run again." : "The standing call-up runs again: new corps are raised from the reserve each month.", g2.human);
+    return true;
+  }
   var cabinetIsOff = (g2) => cabinetOff(g2);
   function orderCabinet(g2, on) {
     return g2.human !== null && setCabinet(g2, on);
   }
+  var officeIsSecure = (g2) => officeSecure(g2);
+  function orderOffice(g2, canFall) {
+    return g2.human !== null && setCanFall(g2, canFall);
+  }
+  var cabinetBillOf = (g2) => cabinetBill(g2);
   function whyNotAppointMinister(g2, seat3, minister) {
     if (g2.human === null || !humanUp(g2)) return "It is not your month.";
     return whyNotAppoint(g2, g2.human, seat3, minister);
@@ -21646,7 +21945,8 @@
               `That is enough for about ${Math.floor(m.divs)} division${Math.floor(m.divs) === 1 ? "" : "s"}.`,
               `Each month ${words(m.classMen)} more come of age${m.home < 0.995 ? `, from the ${Math.round(m.home * 100)}% of the homeland still in your hands` : ""}.`,
               `Drawn since the campaign opened: ${words(m.drawn)}.`,
-              "Every new corps and every replacement comes out of this reserve. When it is spent, nothing new can be raised."
+              "Every new corps and every replacement comes out of this reserve. When it is spent, nothing new can be raised.",
+              "Click for the count, and your say over the call-up."
             ].join("\n")
           };
         } catch {
@@ -21657,9 +21957,9 @@
       cabinet: (() => {
         try {
           const off = cabinetIsOff(s);
-          return s.human && s.flags.open === 1 ? { can: true, off } : { can: false, off: false };
+          return s.human && s.flags.open === 1 ? { can: true, off, secure: officeIsSecure(s) } : { can: false, off: false, secure: false };
         } catch {
-          return { can: false, off: false };
+          return { can: false, off: false, secure: false };
         }
       })(),
       lanes: s.flags.open === 1 ? [
@@ -21957,6 +22257,12 @@
     }
     g.human = human;
     if (human && options?.level) orderLevel(g, options.level);
+    if (human && options?.secure) {
+      try {
+        orderOffice(g, false);
+      } catch {
+      }
+    }
     if (from > 1) takeOver(g);
     if (human) {
       openGoals(g, human, from);
@@ -22639,6 +22945,8 @@
   }
   var wreckAsked = "";
   var cabinetAsked = "";
+  var cabinetTab = "now";
+  var cabinetTabTurn = -1;
   function work(key3, region) {
     const s = game();
     const [what, a, b] = key3.split(":");
@@ -23730,7 +24038,16 @@ ${standing3}`,
     const notNow = "It is not your month.";
     const months2 = (n) => `${n} month${n === 1 ? "" : "s"}`;
     const cap5 = (t) => t ? t[0].toUpperCase() + t.slice(1) : t;
+    if (cabinetTabTurn !== s.turn) {
+      cabinetTabTurn = s.turn;
+      cabinetTab = "now";
+    }
     const d = v.directive;
+    const doorOf = {
+      build: { label: "OPEN THE BUILDING LIST", act: "open:towns", tip: "Your towns and what can be built in them." },
+      agent: { label: "OPEN THE SECRET SERVICE", act: "open:spies", tip: "Your agents, and recruiting more." },
+      trade: { label: "OPEN TRADE AGREEMENTS", act: "open:trade", tip: "Your trade agreements, and who would sign another." }
+    };
     const directive = d ? [{
       nat: s.nations[d.from] ? d.from : v.nat,
       title: `${d.title}  ·  ${d.left <= 1 ? "due this month" : `${months2(d.left)} left`}`,
@@ -23738,12 +24055,14 @@ ${standing3}`,
         d.text,
         `Set by ${d.by.replace(/^The /, "the ")}, to be done by the end of ${turnToDate(d.due).label}.`,
         d.progress,
+        d.oddsLine ?? "",
         `Reward: ${d.reward}.`.replace(/\.\.$/, "."),
         d.hard ? "The cabinet knows the place is strongly held: it has given more time and a larger reward." : "",
         d.again ? "The cabinet has asked for this before." : ""
       ].filter(Boolean),
       buttons: [
         ...d.region !== void 0 && d.region >= 0 ? [{ label: "SHOW ON THE MAP", act: `goto:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? "the place"}.` }] : [],
+        ...doorOf[d.kind] ? [{ ...doorOf[d.kind], ok: true }] : [],
         (() => {
           const why = up ? whyNotSetAsideDirective(s) : notNow;
           const aside2 = d.asidePrice ?? d.price, next = d.asideNext;
@@ -23822,7 +24141,14 @@ ${standing3}`,
       head = { heading: "THE CABINET WANTS A HEAD", text: "", rows: [{
         nat: v.nat,
         title: `${h.rank} ${h.name}  ·  ${h.left <= 1 ? "answer this month" : `${months2(h.left)} to answer`}`,
-        lines: [h.why, h.command ? `He commands ${h.command}.${h.loved ? " The army thinks well of him: his corps will take his going badly." : ""}` : "He holds no command.", "Unanswered, the cabinet takes it as a refusal."],
+        lines: [
+          h.why,
+          h.command ? `He commands ${h.command}.${h.loved ? " The army thinks well of him: his corps will take his going badly." : ""}` : "He holds no command.",
+          // (Version 62) His record, and the battles the cabinet holds against him.
+          h.fought !== void 0 ? `His record: ${h.fought} battle${h.fought === 1 ? "" : "s"} fought, ${h.won ?? 0} won.` : "",
+          ...h.battles?.length ? ["What the cabinet holds against him:", ...h.battles.map((b) => `  ${b.text}`)] : [],
+          "Unanswered, the cabinet takes it as a refusal."
+        ].filter(Boolean),
         buttons: [
           { label: "DISMISS HIM", act: `cabinet:sack:${h.general}`, ok: up, danger: true, tip: !up ? notNow : `The cabinet has its head: its trust rises ${h.gain}. He leaves the army for good.` },
           { label: "STAND BY HIM", act: "cabinet:standby", ok: sw === null, tip: sw ?? `You refuse. The cabinet's trust falls ${h.cost} at once, and his next battle settles it: won, its trust rises ${h.vindicated} and he is vindicated for the rest of the war; lost, it falls ${h.wrong} more.` }
@@ -23832,30 +24158,92 @@ ${standing3}`,
       head = { heading: "THE CABINET WANTS A HEAD", text: `You stood by ${x.stoodBy.name}. His next battle settles it${x.stoodBy.left > 0 ? `, within ${months2(x.stoodBy.left)}` : ""}.`, rows: [] };
     }
     const wings = x.wings ? { heading: "HAWKS AND DOVES", text: [`${x.wings.hawks} hawk${x.wings.hawks === 1 ? "" : "s"} and ${x.wings.doves} dove${x.wings.doves === 1 ? "" : "s"} at the table: ${x.wings.word.toLowerCase()}. ${x.wings.text}`, ...x.wings.effects].join("\n"), rows: [] } : null;
+    const filled = v.seats.filter((seat3) => seat3.minister.id !== "caretaker").length, inForce = v.tracks.filter((t) => t.at > 0).length;
+    const tabs = [
+      { id: "now", label: `BUSINESS${x.head ? "  ·  A QUESTION" : d && d.left <= 2 ? "  ·  DUE" : ""}`, tip: "The directive, a general the cabinet asks about, and your own word to it." },
+      { id: "table", label: `MINISTERS  ·  ${filled} OF ${v.seats.length}`, tip: "The four offices, who holds them, and the hawks and doves at the table." },
+      { id: "decrees", label: `DECREES${inForce ? `  ·  ${inForce} IN FORCE` : ""}`, tip: "The measures your government has decreed, and the next step of each." },
+      { id: "minutes", label: "MINUTES", tip: "What moved the cabinet's trust, and what it has minuted." }
+    ];
+    const comes = { heading: "WHAT IT ALL COMES TO", text: v.sums.length ? v.sums.join("  ·  ") : "Nothing either way.", rows: [] };
+    const shown2 = cabinetTab === "table" ? [
+      { heading: "THE FOUR OFFICES", text: `A new minister costs ${v.appointCost} political capital. Each brings something and costs something.`, rows: offices },
+      ...wings ? [wings] : [],
+      comes
+    ] : cabinetTab === "decrees" ? [
+      { heading: "DECREES", text: "One step up at a time, for political capital. A step down is free.", rows: decrees },
+      comes
+    ] : cabinetTab === "minutes" ? [
+      { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => `${m.label} ${m.amount > 0 ? "+" : ""}${m.amount.toFixed(1)}`).join("  ·  ") : "Nothing since it last read the news.", rows: [] },
+      { heading: "MINUTES", text: v.log.length ? v.log.slice(-12).reverse().map((l) => `${turnToDate(l.turn).label}: ${l.text}`).join("\n") : "Nothing minuted yet.", rows: [] }
+    ] : [
+      { heading: "THE DIRECTIVE", text: d ? "" : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months2(v.nextIn)}.` : "The cabinet is weighing the next."}`, rows: directive },
+      ...head ? [head] : [],
+      ...word ? [word] : []
+    ];
+    const secure = !!x.secure;
+    const standing3 = secure && falling ? `The cabinet has no trust left in you. Your office is secure, so it cannot bring you down, but it still withholds. ${v.withheld ?? ""}` : secure ? `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. Your office is secure: the cabinet cannot fall.` : falling ? `The cabinet's trust is at ${v.fallsAt} or under: if it stays there for ${months2(v.crisisMonths)} running the cabinet falls (it has been there for ${months2(v.low)}).` : `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. At ${v.fallsAt} or under for ${months2(v.crisisMonths)} running, the cabinet falls.`;
     return {
       id: "cabinet",
       title: "THE CABINET",
-      // (the headline is one short line: the screen cuts a long one off)
-      headline: `Trust ${Math.round(v.trust)} of 100  ·  ${v.trustWord}`,
-      note: `${v.form.name}${v.since !== void 0 ? `, in office since ${turnToDate(v.since).label}` : ""}. Political capital ${Math.floor(v.capital)} of ${v.capitalMost}, +${v.capitalMonth.toFixed(1)} a month. ${v.doubts ? `THE CABINET DOUBTS YOU. ${v.withheld ?? ""} ` : ""}${v.form.blurb} ${falling ? `The cabinet's trust is at ${v.fallsAt} or under: if it stays there for ${months2(v.crisisMonths)} running the cabinet falls (it has been there for ${months2(v.low)}).` : `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. At ${v.fallsAt} or under for ${months2(v.crisisMonths)} running, the cabinet falls.`} Directives carried out: ${v.done}. Missed or set aside: ${v.missed}.`,
-      top: [{ label: "PLAY WITHOUT THE CABINET", act: "cabinet:switch:off", ok: true, danger: true, tip: "Switches the war cabinet off: no ministers, decrees, trust or directives, and nothing they moved is moved. A standing directive is withdrawn without blame. You can switch it on again in any month, from MENU, OPTIONS." }],
+      // (the headline is one short line: the screen cuts a long one off. Trust is shown rounded down, as the cabinet reckons it.)
+      headline: `Trust ${Math.floor(v.trust)} of 100  ·  ${v.trustWord}`,
+      note: `${v.form.name}${v.since !== void 0 ? `, in office since ${turnToDate(v.since).label}` : ""}. Political capital ${Math.floor(v.capital)} of ${v.capitalMost}, +${v.capitalMonth.toFixed(1)} a month. ${v.doubts && !(secure && falling) ? `THE CABINET DOUBTS YOU. ${v.withheld ?? ""} ` : ""}${cabinetTab === "now" ? `${v.form.blurb} ` : ""}${standing3} Directives carried out: ${v.done}. Missed or set aside: ${v.missed}.`,
+      top: [
+        ...tabs.map((t) => ({ label: t.label, act: `cabinet:tab:${t.id}`, ok: t.id !== cabinetTab, tip: t.id === cabinetTab ? "This page is open." : t.tip })),
+        secure ? { label: "YOUR OFFICE IS SECURE", act: "cabinet:office:fall", ok: true, tip: "The cabinet never falls and you are never turned out of office, though a cabinet that doubts you still holds back money and political capital. Press to let it bring you down again: a cabinet left with no trust in you for months running then falls." } : { label: "YOU CAN BE BROUGHT DOWN", act: "cabinet:office:secure", ok: true, tip: `A cabinet left with no trust in you for ${months2(v.crisisMonths)} running falls. Press to make your office secure: the cabinet, its ministers, directives and trust all work as they do, and it still withholds when it doubts you, but it never falls.` },
+        { label: "PLAY WITHOUT THE CABINET", act: "cabinet:switch:off", ok: true, danger: true, tip: "Switches the war cabinet off: no ministers, decrees, trust or directives, and nothing they moved is moved. What stands open is settled first, each at its usual price, and you are shown the bill before it is done. You can switch it on again in any month, from MENU, OPTIONS." }
+      ],
+      sections: shown2
+    };
+  }
+  function menPage(s) {
+    let m = null;
+    try {
+      m = manpowerOf(s);
+    } catch {
+      return null;
+    }
+    if (!m || !s.human) return null;
+    const up = humanUp(s) && !onEve(s);
+    const short = (n) => Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1)} million` : Math.round(n).toLocaleString("en");
+    const x = m;
+    const start2 = Math.round(x.men - (x.came ?? 0) + x.drawn);
+    const c = callUpOf(s);
+    const rows = [];
+    if (c) {
+      const e = c.early;
+      rows.push({
+        nat: s.human,
+        title: "The next class, early",
+        lines: [e.text, e.why ?? ""].filter(Boolean),
+        buttons: [{ label: "CALL THEM UP NOW", act: "men:early", ok: !e.why, danger: true, tip: e.why ?? `About ${short(e.men)} men join the reserve at once, ${e.months} months of classes together. No class then comes of age for ${e.gap} months. It cannot be undone, and you are asked twice.` }]
+      });
+      if (c.callUp) {
+        rows.push({
+          nat: s.human,
+          title: `The standing call-up${c.callUp.held ? "  ·  held" : ""}`,
+          lines: [c.callUp.text],
+          buttons: [{ label: c.callUp.held ? "LET IT RUN" : "HOLD IT", act: `men:hold:${c.callUp.held ? 0 : 1}`, ok: up, tip: up ? c.callUp.held ? "New corps are raised from the reserve again, from next month." : "No new corps are raised from the reserve: the men stay for the corps in the field. It takes hold from next month." : "It is not your month." }]
+        });
+      }
+    }
+    return {
+      id: "men",
+      title: "THE RESERVE OF MEN",
+      headline: `${short(x.men)} men in reserve  ·  ${x.word}`,
+      note: `${x.line}${(x.gap ?? 0) > 0 ? ` A class was called up early: none comes of age for ${x.gap} more month${x.gap === 1 ? "" : "s"}.` : ""}`,
+      top: [],
       sections: [
-        { heading: "THE DIRECTIVE", text: d ? "" : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months2(v.nextIn)}.` : "The cabinet is weighing the next."}`, rows: directive },
-        ...head ? [head] : [],
-        ...word ? [word] : [],
-        { heading: "THE FOUR OFFICES", text: `A new minister costs ${v.appointCost} political capital. Each brings something and costs something.`, rows: offices },
-        ...wings ? [wings] : [],
-        { heading: "DECREES", text: "One step up at a time, for political capital. A step down is free.", rows: decrees },
-        { heading: "WHAT IT ALL COMES TO", text: v.sums.length ? v.sums.join("  ·  ") : "Nothing either way.", rows: [] },
-        { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => `${m.label} ${m.amount > 0 ? "+" : ""}${m.amount.toFixed(1)}`).join("  ·  ") : "Nothing since it last read the news.", rows: [] },
-        { heading: "MINUTES", text: v.log.length ? v.log.slice(-8).reverse().map((l) => `${turnToDate(l.turn).label}: ${l.text}`).join("\n") : "Nothing minuted yet.", rows: [] }
+        { heading: "THE COUNT", text: [`At the start: ${short(start2)}`, `Come of age since: +${short(x.came ?? 0)}`, `Called up so far: −${short(x.drawn)}`, `In reserve today: ${short(x.men)}`, `Come of age each month: +${short(x.classMen)}`].join("\n"), rows: [] },
+        ...rows.length ? [{ heading: "YOUR SAY OVER THE CALL-UP", text: "", rows }] : []
       ]
     };
   }
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
-    const p = id === "cabinet" ? cabinetPage(s) : id === "trade" ? tradePage(s) : id === "towns" ? townsPage(s) : part[0] === "town" ? townPage(s, Number(part[1])) : id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : part[0] === "fleet" ? fleetPage(s, Number(part[1])) : part[0] === "shell" ? shellPage(s, Number(part[1]), Number(part[2])) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
+    const p = id === "cabinet" ? cabinetPage(s) : id === "men" ? menPage(s) : id === "trade" ? tradePage(s) : id === "towns" ? townsPage(s) : part[0] === "town" ? townPage(s, Number(part[1])) : id === "spies" ? spiesPage(s, region) : id === "lastact" ? lastActPage(s) : id === "forces" ? forcesPage(s) : id === "reports" ? reportsPage(s) : id === "goals" ? goalsPage(s) : id === "heroes" ? heroesPage(s) : part[0] === "fleet" ? fleetPage(s, Number(part[1])) : part[0] === "shell" ? shellPage(s, Number(part[1]), Number(part[2])) : airPage(s, id, region) ? airPage(s, id, region) : id === "airfield" ? airfieldPage2(s, region) : part[0] === "raid" ? raidPage(s, part[1], Number(part[2])) : part[0] === "rebase" ? rebasePage2(s, Number(part[1])) : null;
     return p ? { ok: true, ...p } : { ok: false };
   }
   function act(action, region = -1) {
@@ -23911,10 +24299,54 @@ ${standing3}`,
       note4 = b ? `${before?.label ?? "The building"} ordered at ${townBuildings(s, at)?.town ?? s.regions[at]?.name ?? "the town"}. Due ${turnToDate(b.eta).label}.` : before?.why ?? "That cannot be built now.";
       return { ok, note: note4, fly: fly2, flies, open, view: view() };
     }
+    if (part[0] === "men") {
+      if (part[1] === "early") {
+        const c = callUpOf(s);
+        const why = c ? c.early.why : "The reserve of men is counted in the grand campaign.";
+        const asking = `${action}:${s.turn}`;
+        if (!why && c && cabinetAsked !== asking) {
+          cabinetAsked = asking;
+          return { ok: false, note: `Call up the next class early? About ${Math.round(c.early.men).toLocaleString("en")} men join the reserve at once, and no class then comes of age for ${c.early.gap} months. It cannot be undone. Press it again to call them up.`, fly: fly2, flies, open, view: view() };
+        }
+        cabinetAsked = "";
+        ok = !why && orderEarlyClass(s);
+        note4 = ok ? "The next class is called up early." : why ?? "They cannot be called up now.";
+      } else if (part[1] === "hold") {
+        const hold2 = part[2] === "1";
+        ok = orderCallUp(s, hold2);
+        note4 = ok ? hold2 ? "The standing call-up is held: no new corps are raised from the reserve until you let it run again." : "The standing call-up runs again." : "That cannot be changed now.";
+      }
+      return { ok, note: note4, fly: fly2, flies, open, view: view() };
+    }
     if (part[0] === "cabinet") {
       const v = governmentOf(s);
+      if (part[1] === "tab") {
+        cabinetTab = part[2] === "table" || part[2] === "decrees" || part[2] === "minutes" ? part[2] : "now";
+        return { ok: true, note: "", fly: fly2, flies, open, view: view() };
+      }
+      if (part[1] === "office") {
+        const canFall = part[2] === "fall";
+        ok = orderOffice(s, canFall);
+        note4 = ok ? canFall ? "Your office is no longer secure: a cabinet left with no trust in you for months running will fall." : "Your office is secure: the cabinet still doubts and withholds, but it never falls." : canFall ? "Your office can be brought down already." : "Your office is secure already.";
+        return { ok, note: note4, fly: fly2, flies, open, view: view() };
+      }
       if (part[1] === "switch") {
         const on = part[2] === "on";
+        if (!on) {
+          let bill = [];
+          try {
+            bill = cabinetIsOff(s) ? [] : cabinetBillOf(s);
+          } catch {
+            bill = [];
+          }
+          const asking2 = `${action}:${s.turn}`;
+          if (bill.length && cabinetAsked !== asking2) {
+            cabinetAsked = asking2;
+            const sum2 = Math.round(bill.reduce((t, b) => t + b.trust, 0) * 10) / 10;
+            return { ok: false, note: `Switch the war cabinet off? Its open business is settled first: ${bill.map((b) => `${b.text} (trust −${b.trust})`).join("; ")}. In all its trust falls by ${sum2}, and it is kept at that should you want it back. Press it again to switch it off.`, fly: fly2, flies, open, view: view() };
+          }
+          cabinetAsked = "";
+        }
         ok = orderCabinet(s, on);
         note4 = ok ? on ? "The war cabinet sits again, as it was left. It will set its next directive in a few months." : "The war cabinet is switched off. Switch it on again from MENU, OPTIONS." : on ? "The war cabinet is sitting already." : "The war cabinet is switched off already.";
         return { ok, note: note4, fly: fly2, flies, open, view: view() };

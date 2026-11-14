@@ -1036,7 +1036,15 @@ namespace
 								[
 									SNew(SHorizontalBox)
 									.Visibility_Lambda([this]() { return StockOf(2) ? EVisibility::Visible : EVisibility::Collapsed; })
-									+ SHorizontalBox::Slot().AutoWidth()[MakeGauge(TEXT("MEN"), 2)]
+									+ SHorizontalBox::Slot().AutoWidth().Padding(-6.0f, -2.0f, 0.0f, -2.0f)
+									[
+										// (a button: pressing it opens the count of men and the call-up)
+										SNew(SButton).ButtonStyle(&PlateButton).ContentPadding(FMargin(6.0f, 2.0f)).IsFocusable(false)
+										.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenMen(); } return FReply::Handled(); })
+										[
+											MakeGauge(TEXT("MEN"), 2)
+										]
+									]
 								]
 							]
 						])

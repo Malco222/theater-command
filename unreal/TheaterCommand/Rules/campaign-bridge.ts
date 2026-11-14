@@ -53,7 +53,7 @@ import {
   fleetsInSight, wingsOfFleet,
   prizesOf, prizesOnMap, whyNotWreckPrize, orderWreck, whyNotBurnOrder, orderBurn, orderScorchPolicy,
   governmentOf, whyNotAppointMinister, orderAppoint, whyNotOrderDecree, orderDecree, whyNotSetAsideDirective, orderSetAside,
-  manpowerOf, cabinetIsOff, orderCabinet,
+  manpowerOf, cabinetIsOff, orderCabinet, cabinetBillOf, callUpOf, officeIsSecure, orderOffice, orderEarlyClass, orderCallUp,
   promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, orderPromise, whyNotTakeBackPromise, orderTakeBack, whyNotStandByGeneral, orderStandBy, orderSack,
   townSiege, siegesInSight, whyNotGarrisonTown, orderGarrison, whyNotLeaveTown, orderTakeField, whyNotStormTown, stormOutlook, orderStorm, whyNotSallyOut, sallyOutlook, orderSally,
   sight, secretService, orderRecruitAgent, orderSendAgent, orderAgentMission, orderRetireAgent, orderFog, whyNotSendAgent,
@@ -346,12 +346,12 @@ function view() {
           share: Math.max(0, Math.min(1, m.share)), word: m.word, short: m.word === 'Short' || m.word === 'Spent',
           tip: [m.line, `That is enough for about ${Math.floor(m.divs)} division${Math.floor(m.divs) === 1 ? '' : 's'}.`,
             `Each month ${words(m.classMen)} more come of age${m.home < 0.995 ? `, from the ${Math.round(m.home * 100)}% of the homeland still in your hands` : ''}.`,
-            `Drawn since the campaign opened: ${words(m.drawn)}.`, 'Every new corps and every replacement comes out of this reserve. When it is spent, nothing new can be raised.'].join('\n'),
+            `Drawn since the campaign opened: ${words(m.drawn)}.`, 'Every new corps and every replacement comes out of this reserve. When it is spent, nothing new can be raised.', 'Click for the count, and your say over the call-up.'].join('\n'),
         };
       } catch { return null; }
     })(),
     // (Version 59) The war cabinet can be switched off by a player who wants the war without the politics.
-    cabinet: (() => { try { const off = cabinetIsOff(s); return s.human && s.flags.open === 1 ? { can: true, off } : { can: false, off: false }; } catch { return { can: false, off: false }; } })(),
+    cabinet: (() => { try { const off = cabinetIsOff(s); return s.human && s.flags.open === 1 ? { can: true, off, secure: officeIsSecure(s) } : { can: false, off: false, secure: false }; } catch { return { can: false, off: false, secure: false }; } })(),
     lanes: s.flags.open === 1 ? [
       ...shippingLanes(s).filter((l) => l.kind === 'sea' && l.path.length > 1 && l.state !== 'idle').map((l) => ({ path: l.path.flat(), state: l.state, flow: l.flow })),
       // The player's trade routes, over land and sea, in gold: red where one is cut.
@@ -672,7 +672,7 @@ function listNames(names: string[]): string {
 }
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string }) {
+function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string; secure?: boolean }) {
   const human = options?.human === undefined ? 'GER' : options.human;
   const from = options?.from ?? 1;
   const seed = options?.seed ?? 1939;
@@ -689,6 +689,8 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   g.human = human;
   // How hard the war is to be (the grand campaign only): set once the player has his seat.
   if (human && options?.level) orderLevel(g, options.level);
+  // (Version 62) A government that cannot fall, chosen as the campaign is set up.
+  if (human && options?.secure) { try { orderOffice(g, false); } catch { /* no government in this game */ } }
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
   if (human) {
@@ -1414,6 +1416,9 @@ function placeJobs(s: Game, region: number): { key: string; label: string; detai
 let wreckAsked = '';
 /** The appointment or decree the player has been asked to confirm, and the month. */
 let cabinetAsked = '';
+/** The page of the cabinet room that is open (Version 62): its business, the ministers, the decrees or the minutes. Back to its business as each month opens. */
+let cabinetTab: 'now' | 'table' | 'decrees' | 'minutes' = 'now';
+let cabinetTabTurn = -1;
 
 /** Carries out one of the works a province offers (see province().jobs). */
 function work(key: string, region: number) {
@@ -2524,14 +2529,22 @@ function cabinetPage(s: Game): Page | null {
   const notNow = 'It is not your month.';
   const months = (n: number): string => `${n} month${n === 1 ? '' : 's'}`;
   const cap = (t: string): string => (t ? t[0].toUpperCase() + t.slice(1) : t);
+  if (cabinetTabTurn !== s.turn) { cabinetTabTurn = s.turn; cabinetTab = 'now'; }
   const d = v.directive;
+  // (Version 62) A directive that names no town is carried out in another room: a door to it.
+  const doorOf: Record<string, { label: string; act: string; tip: string }> = {
+    build: { label: 'OPEN THE BUILDING LIST', act: 'open:towns', tip: 'Your towns and what can be built in them.' },
+    agent: { label: 'OPEN THE SECRET SERVICE', act: 'open:spies', tip: 'Your agents, and recruiting more.' },
+    trade: { label: 'OPEN TRADE AGREEMENTS', act: 'open:trade', tip: 'Your trade agreements, and who would sign another.' },
+  };
   const directive: PageRow[] = d ? [{
     nat: s.nations[d.from] ? d.from : v.nat, title: `${d.title}  \u00B7  ${d.left <= 1 ? 'due this month' : `${months(d.left)} left`}`,
-    lines: [d.text, `Set by ${d.by.replace(/^The /, 'the ')}, to be done by the end of ${turnToDate(d.due).label}.`, d.progress, `Reward: ${d.reward}.`.replace(/\.\.$/, '.'),
+    lines: [d.text, `Set by ${d.by.replace(/^The /, 'the ')}, to be done by the end of ${turnToDate(d.due).label}.`, d.progress, (d as { oddsLine?: string }).oddsLine ?? '', `Reward: ${d.reward}.`.replace(/\.\.$/, '.'),
       (d as { hard?: boolean }).hard ? 'The cabinet knows the place is strongly held: it has given more time and a larger reward.' : '',
       (d as { again?: boolean }).again ? 'The cabinet has asked for this before.' : ''].filter(Boolean),
     buttons: [
       ...(d.region !== undefined && d.region >= 0 ? [{ label: 'SHOW ON THE MAP', act: `goto:${d.region}`, ok: true, tip: `Goes to ${s.regions[d.region]?.name ?? 'the place'}.` }] : []),
+      ...(doorOf[d.kind as string] ? [{ ...doorOf[d.kind as string], ok: true }] : []),
       (() => {
         const why = up ? whyNotSetAsideDirective(s) : notNow;
         const aside = (d as { asidePrice?: number }).asidePrice ?? d.price, next = (d as { asideNext?: number }).asideNext;
@@ -2562,7 +2575,8 @@ function cabinetPage(s: Game): Page | null {
     wings?: { hawks: number; doves: number; lean: number; word: string; text: string; effects: string[] } | null;
     promise?: { town: string; bandName: string; left: number; progress: string; reward: string; back: number; region?: number } | null;
     promiseWhy?: string | null; kept?: number; broken?: number;
-    head?: { general: number; name: string; rank: string; command: string; why: string; left: number; gain: number; cost: number; vindicated: number; wrong: number; loved: boolean } | null;
+    head?: { general: number; name: string; rank: string; command: string; why: string; left: number; gain: number; cost: number; vindicated: number; wrong: number; loved: boolean; fought?: number; won?: number; battles?: { text: string }[] } | null;
+    secure?: boolean;
     stoodBy?: { general: number; name: string; left: number } | null;
   };
   const wingOf = (m: { wing?: string | null }): string => (m.wing === 'hawk' ? ' (a hawk)' : m.wing === 'dove' ? ' (a dove)' : '');
@@ -2600,7 +2614,11 @@ function cabinetPage(s: Game): Page | null {
     const sw = up ? whyNotStandByGeneral(s) : notNow;
     head = { heading: 'THE CABINET WANTS A HEAD', text: '', rows: [{
       nat: v.nat, title: `${h.rank} ${h.name}  \u00B7  ${h.left <= 1 ? 'answer this month' : `${months(h.left)} to answer`}`,
-      lines: [h.why, h.command ? `He commands ${h.command}.${h.loved ? ' The army thinks well of him: his corps will take his going badly.' : ''}` : 'He holds no command.', 'Unanswered, the cabinet takes it as a refusal.'],
+      lines: [h.why, h.command ? `He commands ${h.command}.${h.loved ? ' The army thinks well of him: his corps will take his going badly.' : ''}` : 'He holds no command.',
+        // (Version 62) His record, and the battles the cabinet holds against him.
+        h.fought !== undefined ? `His record: ${h.fought} battle${h.fought === 1 ? '' : 's'} fought, ${h.won ?? 0} won.` : '',
+        ...(h.battles?.length ? ['What the cabinet holds against him:', ...h.battles.map((b) => `  ${b.text}`)] : []),
+        'Unanswered, the cabinet takes it as a refusal.'].filter(Boolean),
       buttons: [
         { label: 'DISMISS HIM', act: `cabinet:sack:${h.general}`, ok: up, danger: true, tip: !up ? notNow : `The cabinet has its head: its trust rises ${h.gain}. He leaves the army for good.` },
         { label: 'STAND BY HIM', act: 'cabinet:standby', ok: sw === null, tip: sw ?? `You refuse. The cabinet's trust falls ${h.cost} at once, and his next battle settles it: won, its trust rises ${h.vindicated} and he is vindicated for the rest of the war; lost, it falls ${h.wrong} more.` },
@@ -2610,22 +2628,79 @@ function cabinetPage(s: Game): Page | null {
     head = { heading: 'THE CABINET WANTS A HEAD', text: `You stood by ${x.stoodBy.name}. His next battle settles it${x.stoodBy.left > 0 ? `, within ${months(x.stoodBy.left)}` : ''}.`, rows: [] };
   }
   const wings = x.wings ? { heading: 'HAWKS AND DOVES', text: [`${x.wings.hawks} hawk${x.wings.hawks === 1 ? '' : 's'} and ${x.wings.doves} dove${x.wings.doves === 1 ? '' : 's'} at the table: ${x.wings.word.toLowerCase()}. ${x.wings.text}`, ...x.wings.effects].join('\n'), rows: [] as PageRow[] } : null;
+  // (Version 62) Four pages, so that the cabinet's business is all on the first: the directive, a question about a
+  // general, and the player's own promise; then the ministers, the decrees, and the minutes.
+  const filled = v.seats.filter((seat) => seat.minister.id !== 'caretaker').length, inForce = v.tracks.filter((t) => t.at > 0).length;
+  const tabs: { id: typeof cabinetTab; label: string; tip: string }[] = [
+    { id: 'now', label: `BUSINESS${x.head ? '  \u00B7  A QUESTION' : d && d.left <= 2 ? '  \u00B7  DUE' : ''}`, tip: 'The directive, a general the cabinet asks about, and your own word to it.' },
+    { id: 'table', label: `MINISTERS  \u00B7  ${filled} OF ${v.seats.length}`, tip: 'The four offices, who holds them, and the hawks and doves at the table.' },
+    { id: 'decrees', label: `DECREES${inForce ? `  \u00B7  ${inForce} IN FORCE` : ''}`, tip: 'The measures your government has decreed, and the next step of each.' },
+    { id: 'minutes', label: 'MINUTES', tip: "What moved the cabinet's trust, and what it has minuted." },
+  ];
+  const comes = { heading: 'WHAT IT ALL COMES TO', text: v.sums.length ? v.sums.join('  \u00B7  ') : 'Nothing either way.', rows: [] as PageRow[] };
+  const shown = cabinetTab === 'table' ? [
+    { heading: 'THE FOUR OFFICES', text: `A new minister costs ${v.appointCost} political capital. Each brings something and costs something.`, rows: offices },
+    ...(wings ? [wings] : []), comes,
+  ] : cabinetTab === 'decrees' ? [
+    { heading: 'DECREES', text: 'One step up at a time, for political capital. A step down is free.', rows: decrees }, comes,
+  ] : cabinetTab === 'minutes' ? [
+    { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => `${m.label} ${m.amount > 0 ? '+' : ''}${m.amount.toFixed(1)}`).join('  \u00B7  ') : 'Nothing since it last read the news.', rows: [] as PageRow[] },
+    { heading: 'MINUTES', text: v.log.length ? v.log.slice(-12).reverse().map((l) => `${turnToDate(l.turn).label}: ${l.text}`).join('\n') : 'Nothing minuted yet.', rows: [] as PageRow[] },
+  ] : [
+    { heading: 'THE DIRECTIVE', text: d ? '' : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months(v.nextIn)}.` : 'The cabinet is weighing the next.'}`, rows: directive },
+    ...(head ? [head] : []),
+    ...(word ? [word] : []),
+  ];
+  const secure = !!x.secure;
+  const standing = secure && falling
+    ? `The cabinet has no trust left in you. Your office is secure, so it cannot bring you down, but it still withholds. ${(v as { withheld?: string | null }).withheld ?? ''}`
+    : secure ? `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. Your office is secure: the cabinet cannot fall.`
+      : falling ? `The cabinet's trust is at ${v.fallsAt} or under: if it stays there for ${months(v.crisisMonths)} running the cabinet falls (it has been there for ${months(v.low)}).`
+        : `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. At ${v.fallsAt} or under for ${months(v.crisisMonths)} running, the cabinet falls.`;
   return {
     id: 'cabinet', title: 'THE CABINET',
-    // (the headline is one short line: the screen cuts a long one off)
-    headline: `Trust ${Math.round(v.trust)} of 100  \u00B7  ${v.trustWord}`,
-    note: `${v.form.name}${(v as { since?: number }).since !== undefined ? `, in office since ${turnToDate((v as { since?: number }).since!).label}` : ''}. Political capital ${Math.floor(v.capital)} of ${v.capitalMost}, +${v.capitalMonth.toFixed(1)} a month. ${(v as { doubts?: boolean }).doubts ? `THE CABINET DOUBTS YOU. ${(v as { withheld?: string | null }).withheld ?? ''} ` : ''}${v.form.blurb} ${falling ? `The cabinet's trust is at ${v.fallsAt} or under: if it stays there for ${months(v.crisisMonths)} running the cabinet falls (it has been there for ${months(v.low)}).` : `With no news the cabinet's trust drifts back toward ${Math.round(v.rest)}. At ${v.fallsAt} or under for ${months(v.crisisMonths)} running, the cabinet falls.`} Directives carried out: ${v.done}. Missed or set aside: ${v.missed}.`,
-    top: [{ label: 'PLAY WITHOUT THE CABINET', act: 'cabinet:switch:off', ok: true, danger: true, tip: 'Switches the war cabinet off: no ministers, decrees, trust or directives, and nothing they moved is moved. A standing directive is withdrawn without blame. You can switch it on again in any month, from MENU, OPTIONS.' }],
+    // (the headline is one short line: the screen cuts a long one off. Trust is shown rounded down, as the cabinet reckons it.)
+    headline: `Trust ${Math.floor(v.trust)} of 100  \u00B7  ${v.trustWord}`,
+    note: `${v.form.name}${(v as { since?: number }).since !== undefined ? `, in office since ${turnToDate((v as { since?: number }).since!).label}` : ''}. Political capital ${Math.floor(v.capital)} of ${v.capitalMost}, +${v.capitalMonth.toFixed(1)} a month. ${(v as { doubts?: boolean }).doubts && !(secure && falling) ? `THE CABINET DOUBTS YOU. ${(v as { withheld?: string | null }).withheld ?? ''} ` : ''}${cabinetTab === 'now' ? `${v.form.blurb} ` : ''}${standing} Directives carried out: ${v.done}. Missed or set aside: ${v.missed}.`,
+    top: [
+      ...tabs.map((t) => ({ label: t.label, act: `cabinet:tab:${t.id}`, ok: t.id !== cabinetTab, tip: t.id === cabinetTab ? 'This page is open.' : t.tip })),
+      secure
+        ? { label: 'YOUR OFFICE IS SECURE', act: 'cabinet:office:fall', ok: true, tip: 'The cabinet never falls and you are never turned out of office, though a cabinet that doubts you still holds back money and political capital. Press to let it bring you down again: a cabinet left with no trust in you for months running then falls.' }
+        : { label: 'YOU CAN BE BROUGHT DOWN', act: 'cabinet:office:secure', ok: true, tip: `A cabinet left with no trust in you for ${months(v.crisisMonths)} running falls. Press to make your office secure: the cabinet, its ministers, directives and trust all work as they do, and it still withholds when it doubts you, but it never falls.` },
+      { label: 'PLAY WITHOUT THE CABINET', act: 'cabinet:switch:off', ok: true, danger: true, tip: 'Switches the war cabinet off: no ministers, decrees, trust or directives, and nothing they moved is moved. What stands open is settled first, each at its usual price, and you are shown the bill before it is done. You can switch it on again in any month, from MENU, OPTIONS.' },
+    ],
+    sections: shown,
+  };
+}
+
+/** (Version 62) The reserve of men as a sum, and the player's two orders over the call-up. */
+function menPage(s: Game): Page | null {
+  let m: ReturnType<typeof manpowerOf> = null;
+  try { m = manpowerOf(s); } catch { return null; }
+  if (!m || !s.human) return null;
+  const up = humanUp(s) && !onEve(s);
+  const short = (n: number): string => (Math.abs(n) >= 1e6 ? `${(n / 1e6).toFixed(Math.abs(n) >= 1e7 ? 0 : 1)} million` : Math.round(n).toLocaleString('en'));
+  const x = m as typeof m & { came?: number; gap?: number; start: number; drawn: number; classMen: number; men: number; line: string; word: string };
+  const start = Math.round(x.men - (x.came ?? 0) + x.drawn);
+  const c = callUpOf(s);
+  const rows: PageRow[] = [];
+  if (c) {
+    const e = c.early;
+    rows.push({ nat: s.human, title: 'The next class, early', lines: [e.text, e.why ?? ''].filter(Boolean),
+      buttons: [{ label: 'CALL THEM UP NOW', act: 'men:early', ok: !e.why, danger: true, tip: e.why ?? `About ${short(e.men)} men join the reserve at once, ${e.months} months of classes together. No class then comes of age for ${e.gap} months. It cannot be undone, and you are asked twice.` }] });
+    if (c.callUp) {
+      rows.push({ nat: s.human, title: `The standing call-up${c.callUp.held ? '  \u00B7  held' : ''}`, lines: [c.callUp.text],
+        buttons: [{ label: c.callUp.held ? 'LET IT RUN' : 'HOLD IT', act: `men:hold:${c.callUp.held ? 0 : 1}`, ok: up, tip: up ? (c.callUp.held ? 'New corps are raised from the reserve again, from next month.' : 'No new corps are raised from the reserve: the men stay for the corps in the field. It takes hold from next month.') : 'It is not your month.' }] });
+    }
+  }
+  return {
+    id: 'men', title: 'THE RESERVE OF MEN',
+    headline: `${short(x.men)} men in reserve  \u00B7  ${x.word}`,
+    note: `${x.line}${(x.gap ?? 0) > 0 ? ` A class was called up early: none comes of age for ${x.gap} more month${x.gap === 1 ? '' : 's'}.` : ''}`,
+    top: [],
     sections: [
-      { heading: 'THE DIRECTIVE', text: d ? '' : `No directive stands. ${v.nextIn > 0 ? `The cabinet sets the next in ${months(v.nextIn)}.` : 'The cabinet is weighing the next.'}`, rows: directive },
-      ...(head ? [head] : []),
-      ...(word ? [word] : []),
-      { heading: 'THE FOUR OFFICES', text: `A new minister costs ${v.appointCost} political capital. Each brings something and costs something.`, rows: offices },
-      ...(wings ? [wings] : []),
-      { heading: 'DECREES', text: 'One step up at a time, for political capital. A step down is free.', rows: decrees },
-      { heading: 'WHAT IT ALL COMES TO', text: v.sums.length ? v.sums.join('  \u00B7  ') : 'Nothing either way.', rows: [] },
-      { heading: "WHAT MOVED THE CABINET'S TRUST", text: v.moved.length ? v.moved.map((m) => `${m.label} ${m.amount > 0 ? '+' : ''}${m.amount.toFixed(1)}`).join('  \u00B7  ') : 'Nothing since it last read the news.', rows: [] },
-      { heading: 'MINUTES', text: v.log.length ? v.log.slice(-8).reverse().map((l) => `${turnToDate(l.turn).label}: ${l.text}`).join('\n') : 'Nothing minuted yet.', rows: [] },
+      { heading: 'THE COUNT', text: [`At the start: ${short(start)}`, `Come of age since: +${short(x.came ?? 0)}`, `Called up so far: \u2212${short(x.drawn)}`, `In reserve today: ${short(x.men)}`, `Come of age each month: +${short(x.classMen)}`].join('\n'), rows: [] },
+      ...(rows.length ? [{ heading: 'YOUR SAY OVER THE CALL-UP', text: '', rows }] : []),
     ],
   };
 }
@@ -2633,7 +2708,7 @@ function cabinetPage(s: Game): Page | null {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'cabinet' ? cabinetPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
+  const p = id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
     : id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
@@ -2690,12 +2765,55 @@ function act(action: string, region = -1) {
     note = b ? `${before?.label ?? 'The building'} ordered at ${townBuildings(s, at)?.town ?? s.regions[at]?.name ?? 'the town'}. Due ${turnToDate(b.eta).label}.` : before?.why ?? 'That cannot be built now.';
     return { ok, note, fly, flies, open, view: view() };
   }
+  if (part[0] === 'men') {
+    // (Version 62) The player's say over the call-up: the next class early (asked twice), or the standing call-up held or let run.
+    if (part[1] === 'early') {
+      const c = callUpOf(s);
+      const why = c ? c.early.why : 'The reserve of men is counted in the grand campaign.';
+      const asking = `${action}:${s.turn}`;
+      if (!why && c && cabinetAsked !== asking) {
+        cabinetAsked = asking;
+        return { ok: false, note: `Call up the next class early? About ${Math.round(c.early.men).toLocaleString('en')} men join the reserve at once, and no class then comes of age for ${c.early.gap} months. It cannot be undone. Press it again to call them up.`, fly, flies, open, view: view() };
+      }
+      cabinetAsked = '';
+      ok = !why && orderEarlyClass(s);
+      note = ok ? 'The next class is called up early.' : why ?? 'They cannot be called up now.';
+    } else if (part[1] === 'hold') {
+      const hold = part[2] === '1';
+      ok = orderCallUp(s, hold);
+      note = ok ? (hold ? 'The standing call-up is held: no new corps are raised from the reserve until you let it run again.' : 'The standing call-up runs again.') : 'That cannot be changed now.';
+    }
+    return { ok, note, fly, flies, open, view: view() };
+  }
   if (part[0] === 'cabinet') {
     // The government (Version 57): a minister appointed, a decree, or the directive set aside.
     const v = governmentOf(s);
+    if (part[1] === 'tab') {
+      cabinetTab = part[2] === 'table' || part[2] === 'decrees' || part[2] === 'minutes' ? part[2] : 'now';
+      return { ok: true, note: '', fly, flies, open, view: view() };
+    }
+    if (part[1] === 'office') {
+      // (Version 62) Whether the player's government can fall: a setting of its own beside the cabinet's switch.
+      const canFall = part[2] === 'fall';
+      ok = orderOffice(s, canFall);
+      note = ok ? (canFall ? 'Your office is no longer secure: a cabinet left with no trust in you for months running will fall.' : 'Your office is secure: the cabinet still doubts and withholds, but it never falls.') : (canFall ? 'Your office can be brought down already.' : 'Your office is secure already.');
+      return { ok, note, fly, flies, open, view: view() };
+    }
     if (part[1] === 'switch') {
       // The cabinet switched off or on (Version 59): it takes hold at once, in any month.
       const on = part[2] === 'on';
+      if (!on) {
+        // (Version 62) What stands open is settled first, each at its usual price: the bill is shown, and it is asked twice.
+        let bill: { text: string; trust: number }[] = [];
+        try { bill = cabinetIsOff(s) ? [] : cabinetBillOf(s); } catch { bill = []; }
+        const asking = `${action}:${s.turn}`;
+        if (bill.length && cabinetAsked !== asking) {
+          cabinetAsked = asking;
+          const sum = Math.round(bill.reduce((t, b) => t + b.trust, 0) * 10) / 10;
+          return { ok: false, note: `Switch the war cabinet off? Its open business is settled first: ${bill.map((b) => `${b.text} (trust \u2212${b.trust})`).join('; ')}. In all its trust falls by ${sum}, and it is kept at that should you want it back. Press it again to switch it off.`, fly, flies, open, view: view() };
+        }
+        cabinetAsked = '';
+      }
       ok = orderCabinet(s, on);
       note = ok ? (on ? 'The war cabinet sits again, as it was left. It will set its next directive in a few months.' : 'The war cabinet is switched off. Switch it on again from MENU, OPTIONS.') : (on ? 'The war cabinet is sitting already.' : 'The war cabinet is switched off already.');
       return { ok, note, fly, flies, open, view: view() };
