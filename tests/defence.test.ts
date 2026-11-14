@@ -6,7 +6,7 @@
 // the first blows of a new offensive catch it off balance, and tanks break into one with no armour of its own.
 // None of this is in the historical scenarios. The numbers are in data/campaign/defence.json.
 import { describe, expect, it } from 'vitest';
-import { DEFENCE, DUG_IN, FIELD_DICE, GUNS, addCorps, assess, chanceOn, createGame, endPhase, evenOdds, relocate, resolveBattle } from '../src/campaign/game';
+import { DEFENCE, DUG_IN, FIELD_DICE, GUNS, addCorps, assess, chanceOn, createGame, endPhase, evenOdds, relocate, resolveBattle, worksShare } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { garrisonOf, joinTown } from '../src/campaign/siege';
 import { startOpen } from '../src/campaign/staff';
@@ -35,6 +35,7 @@ function line(g: Game, defenders = 2, attackers = 2): Line {
   const att = Array.from({ length: attackers }, (_, i) => addCorps(g, 'GER', `Storm ${i + 1}`, 'inf', 3, from.id, {}));
   for (const c of [...def, ...att]) { c.supplied = true; c.ap = c.apMax; }
   g.nations.GER.offStart.POL = g.turn - 6;
+  g.nations.GER.lastFight.POL = g.turn - 1;
   return { target, from, def, att };
 }
 /** Sets a line's works to so many months' digging. */
@@ -134,11 +135,14 @@ describe('a prepared line', () => {
     expect(open.lines.some((l) => l.label === 'Prepared defence')).toBe(false);
     works(def, 1);
     const young = assess(g, att, target);
-    expect(young.prepared).toBeCloseTo(1 / M, 6);
+    // The first month's digging does more than its share of the job (Version 61).
+    const first = worksShare(1);
+    expect(first).toBeGreaterThanOrEqual(1 / M);
+    expect(young.prepared).toBeCloseTo(first, 6);
     expect(young.odds).toBeCloseTo(open.odds / DUG_IN, 6);
     const P = DEFENCE.prepared.dice;
-    expect(young.dice[0]).toBeCloseTo(FIELD_DICE[0] + (P[0] - FIELD_DICE[0]) / M, 6);
-    expect(young.dice[1]).toBeCloseTo(FIELD_DICE[1] + (P[1] - FIELD_DICE[1]) / M, 6);
+    expect(young.dice[0]).toBeCloseTo(FIELD_DICE[0] + (P[0] - FIELD_DICE[0]) * first, 6);
+    expect(young.dice[1]).toBeCloseTo(FIELD_DICE[1] + (P[1] - FIELD_DICE[1]) * first, 6);
     works(def, M);
     const ready = assess(g, att, target);
     expect(ready.prepared).toBeCloseTo(1, 6);
@@ -147,8 +151,10 @@ describe('a prepared line', () => {
     // More months than the works need add nothing.
     works(def, M + 5);
     expect(assess(g, att, target).prepared).toBeCloseTo(1, 6);
-    const row = ready.lines.find((l) => l.label === 'Prepared defence')!;
-    expect(row.value).toBe('The line is dug in, fed and has had months to finish its works');
+    // One line on the Battle Ticket for the trenches and the luck of the day (Version 61).
+    expect(ready.lines.some((l) => l.label === 'Prepared defence')).toBe(false);
+    const row = ready.lines.find((l) => l.label === 'Dug in')!;
+    expect(row.value).toBe('The defenders are dug in: their works are finished');
     expect(row.effect).toContain(`an even chance takes about ${evenOdds(P).toFixed(1)} to 1`);
     expect(row.effect).toContain(`nothing is sure under ${(1.2 / P[0]).toFixed(1)} to 1`);
     expect(row.effect).toContain(`The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * 100)}% fewer`);
@@ -172,7 +178,7 @@ describe('a prepared line', () => {
     const half = assess(g, att, target);
     expect(half.prepared).toBeGreaterThan(0.5);
     expect(half.prepared).toBeLessThan(0.62);
-    expect(half.lines.find((l) => l.label === 'Prepared defence')!.value).toBe('The line is dug in and fed, but its works are not complete everywhere');
+    expect(half.lines.find((l) => l.label === 'Dug in')!.value).toBe('1 of the 2 defending corps are dug in: their works are finished');
   });
 
   it('is broken up by massed guns, caught off balance by a new offensive, and broken into by tanks it has no armour to meet', () => {
@@ -180,18 +186,19 @@ describe('a prepared line', () => {
     const { target, from, def, att } = line(g);
     expect(['mountain', 'urban', 'marsh']).not.toContain(target.terrain);
     works(def, M);
-    const value = (cs: Corps[]): string => assess(g, cs, target).lines.find((l) => l.label === 'Prepared defence')!.value;
-    // The first two months of an offensive by an army trained to it.
+    const dug = 'The defenders are dug in: their works are finished';
+    const value = (cs: Corps[]): string => assess(g, cs, target).lines.find((l) => l.label === 'Dug in')!.value;
+    // The first month of an offensive by an army trained to it.
     g.nations.GER.offStart.POL = g.turn;
     expect(assess(g, att, target).prepared).toBeCloseTo(1 - DEFENCE.prepared.surprise, 6);
-    expect(value(att)).toBe('The line is dug in and fed, but the new offensive has caught it off balance');
+    expect(value(att)).toBe(`${dug}, but the new offensive has caught the line off balance`);
     g.nations.GER.offStart.POL = g.turn - 6;
     expect(assess(g, att, target).prepared).toBeCloseTo(1, 6);
     // Tanks.
     const tanks = addCorps(g, 'GER', 'Test panzers', 'arm', 3, from.id, {});
     tanks.supplied = true;
     expect(assess(g, [...att, tanks], target).prepared).toBeCloseTo(1 - DEFENCE.prepared.armour, 6);
-    expect(value([...att, tanks])).toBe('The line is dug in and fed, but it has no armour to meet the tanks');
+    expect(value([...att, tanks])).toBe(`${dug}, but the line has no armour to meet the tanks`);
     // With armour of its own behind the line the tanks find no opening.
     const reserve = addCorps(g, 'POL', 'Test armour', 'arm', 1, target.id, {});
     reserve.supplied = true; reserve.dug = true; reserve.dugFor = M;
@@ -203,11 +210,11 @@ describe('a prepared line', () => {
     const soften = Math.min(GUNS.softenMost, GUNS.soften * guns.divs * guns.str);
     expect(soften).toBeGreaterThan(0);
     expect(assess(g, [...att, guns], target).prepared).toBeCloseTo(1 - soften, 6);
-    expect(value([...att, guns])).toBe('The line is dug in and fed, but the guns have worked it over');
+    expect(value([...att, guns])).toBe(`${dug}, but the guns have worked the line over`);
     // All three together.
     g.nations.GER.offStart.POL = g.turn;
     expect(assess(g, [...att, tanks, guns], target).prepared).toBeCloseTo((1 - soften) * (1 - DEFENCE.prepared.surprise) * (1 - DEFENCE.prepared.armour), 6);
-    expect(value([...att, tanks, guns])).toBe('The line is dug in and fed, but the guns have worked it over, the new offensive has caught it off balance and it has no armour to meet the tanks');
+    expect(value([...att, tanks, guns])).toBe(`${dug}, but the guns have worked the line over, the new offensive has caught it off balance and it has no armour to meet the tanks`);
   });
 
   it('turns odds that are safe in the open into a gamble', () => {
@@ -304,7 +311,9 @@ describe('a prepared line', () => {
 
 describe('a whole war with nobody at the table', () => {
   it('the armies of every nation dig in, and attacks on their lines are sometimes thrown back', () => {
-    const g = free(7);
+    // A war in which lines are attacked early enough to see some hold: since Version 61 works wear under attack,
+    // and in most wars the first two years see few attacks on finished lines.
+    const g = free(11);
     let dug = 0, held = 0, met = 0, seen = 0;
     const nations = new Set<string>();
     while (g.turn <= 26) {

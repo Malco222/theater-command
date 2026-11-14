@@ -8,7 +8,7 @@ import data from '../../data/campaign/diplomacy.json';
 import relationsData from '../../data/campaign/relations.json';
 import type { Align, Game, Nation, Region } from './types';
 import { STACK } from './types';
-import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps } from './game';
+import { addCorps, allied, atWar, bloc, capture, declareWar, headline, relocate, removeCorps, theName } from './game';
 import { leagueMonth, ownPath, standsWith } from './league';
 import { alertNation, traitsMonth } from './traits';
 import { techMonth } from './tech';
@@ -476,12 +476,18 @@ function fire(g: Game, e: DiploEvent): boolean {
   if (e.partition) {
     const X = g.nations[e.partition.nation];
     if (!X?.alive) return false;
-    const first = (list: string[]): string | undefined => list.find((id) => g.nations[id]?.alive && g.nations[id].atWar.length > 0);
+    // The grand campaign: terms go to whoever is on the ground. A power with no man in the country and none of its
+    // provinces inherits nothing, whatever history's treaty said, and an army standing on a province keeps it.
+    const open = g.flags.open === 1;
+    const home = g.regions.filter((r) => r.owner === X.id);
+    const live = (id: string): boolean => !!g.nations[id]?.alive && g.nations[id].atWar.length > 0;
+    const stake = (id: string): number => home.reduce((s, r) => s + (r.ctrl === id ? 1 : 0) + (r.units.some((u) => u.nat === id && u.kind !== 'fort') ? 1 : 0), 0);
+    const first = (list: string[]): string | undefined => list.find((id) => live(id) && (!open || stake(id) > 0));
     for (const c of g.corps.filter((c) => c.nat === X.id)) removeCorps(g, c);
     fleetsOnFall(g, X.id);
     airOnFall(g, X.id);
     // Where another army stands on the country's ground, that ground is its own to hold: the terms divide the rest.
-    if (e.partition.occupied) for (const r of g.regions) {
+    if (e.partition.occupied || open) for (const r of g.regions) {
       if (r.ctrl !== X.id) continue;
       const guest = r.units.find((u) => u.kind !== 'fort' && g.nations[u.nat]?.alive && g.nations[u.nat].atWar.length > 0);
       if (guest) { r.ctrl = guest.nat; r.cap = false; r.since = g.turn; }
@@ -496,12 +502,20 @@ function fire(g: Game, e: DiploEvent): boolean {
         if (r && r.ctrl === X.id) { r.ctrl = to; r.cap = false; r.since = g.turn; }
       }
     }
+    // Nobody the treaty names is there: the country gives in to whichever power at war has most of its home ground under its boots.
+    if (!heir && open) heir = Object.keys(g.nations).filter((id) => id !== X.id && live(id) && stake(id) > 0).sort((a, b) => stake(b) - stake(a) || (a < b ? -1 : 1))[0];
     if (!heir) return false;
     // Anything the terms forgot goes with the rest.
     for (const r of g.regions) if (r.ctrl === X.id) { r.ctrl = heir; r.cap = false; r.since = g.turn; }
     X.alive = false;
     X.align = 'independent'; // its ground is nobody's ally's now: whoever holds a piece holds it as a conquest
     X.fellOn = { turn: g.turn, week: g.week, to: heir, how: 'terms' };
+    // Where the terms went to somebody history's treaty does not name, the news is told as it happened here.
+    if (open && heir !== e.partition.shares[0]?.[0]?.[0]) {
+      const H = g.nations[heir];
+      headline(g, 'event', `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.`, X.id);
+      told = true;
+    }
     recordFall(g, X.id, heir, 'terms');
     for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((x) => x !== X.id);
     X.atWar = [];
@@ -553,6 +567,9 @@ function fire(g: Game, e: DiploEvent): boolean {
 }
 
 /** Runs at the start of every month: opinion drifts, neutrals move along the track, and history's events are checked. */
+/** Carries out one of history's events now, whatever the calendar says: for the tests of what an event does. */
+export const fireEvent = (g: Game, id: string): boolean => { const e = DIPLOMACY.events.find((x) => x.id === id); return !!e && fire(g, e); };
+
 export function monthlyDiplomacy(g: Game): void {
   // The last act of the grand campaign: no alliances, no courting, no treaties, and history's calendar is closed.
   if ((g.flags.dom ?? 0) > 0) { traitsMonth(g); techMonth(g); return; }

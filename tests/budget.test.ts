@@ -260,8 +260,10 @@ describe('the computer\'s nations', () => {
     let worst = 0;
     while (g.turn <= 40) {
       runTurnAI(g);
-      // A country in its last weeks, most of its home overrun and its army still to be paid, may owe a little. Nobody else may.
-      for (const n of Object.values(g.nations)) if (n.alive && !n.dormant && homeLost(g, n.id) < 0.5) worst = Math.min(worst, n.pp);
+      // A country in its last weeks, much of its home overrun and its army still to be paid, may owe a little. Nobody else may.
+      // (Since Version 61 an opening offensive goes deeper in its first month: Poland can lose 13 of its 17 provinces in
+      // September 1939 with Warsaw still standing, which is 44% of the worth of its home.)
+      for (const n of Object.values(g.nations)) if (n.alive && !n.dormant && homeLost(g, n.id) < 0.4) worst = Math.min(worst, n.pp);
     }
     expect(worst).toBeGreaterThanOrEqual(0);
   }, 60000);

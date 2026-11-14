@@ -16,7 +16,7 @@
 
 import data from '../../data/campaign/siege.json';
 import { clamp } from '../core/math';
-import { allied, armySize, assess, atWar, capture, corpsBase, headline, men, removeCorps, resolveBattle, sendHome, type Assessment } from './game';
+import { allied, armySize, assess, atWar, capture, corpsBase, headline, men, relocate, removeCorps, resolveBattle, sendHome, type Assessment } from './game';
 import { armyOf } from './joint';
 import { closedTo, seaOpenAt } from './navy';
 import { storyFallen } from './stories';
@@ -511,6 +511,13 @@ export function siegeSweep(g: Game): void {
   for (const r of g.regions) {
     if (!r.garr) continue;
     for (const c of [...r.garr]) if (!allied(g, c.nat, r.ctrl)) sendHome(g, c);
+    // A town whose works were blown up, or that shrank, holds fewer than it did: the last corps in come out again,
+    // into the country round it if no enemy stands there, and otherwise to the nearest ground their side holds.
+    while (r.garr && r.garr.length > roomIn(g, r)) {
+      const c = r.garr[r.garr.length - 1];
+      if (!takeField(g, c)) { const to = musterNear(g, c.nat, r); if (!to) break; relocate(g, c, to); c.ap = 0; }
+      if (r.garr?.includes(c)) break;
+    }
   }
 }
 

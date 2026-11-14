@@ -525,19 +525,35 @@ export function frontage(r: Region): number {
 
 /** Trims an attacking force to what the roads into the target can carry, strongest first. */
 export function limitAttackers(g: Game, corps: Corps[], target: Region): Corps[] {
-  const cap = frontage(target);
-  const used: Record<number, number> = {};
-  const out: Corps[] = [];
+  let cap = frontage(target);
   // A staff that cannot yet run a big battle brings fewer corps into it, however many stand ready.
   const most = corps.length ? g.nations[corps[0].nat].maxAttack || 99 : 99;
-  for (const c of [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk)) {
-    if (out.length >= most) break;
-    if (blocked(g, c, target)) continue; // tanks have no way up the steepest ground, and nothing on wheels crosses a river whose bridges are down
-    if ((used[c.reg] ?? 0) >= cap) continue;
-    used[c.reg] = (used[c.reg] ?? 0) + 1;
-    out.push(c);
+  const ranked = [...corps].sort((x, y) => corpsBase(g, y) * KIND[y.kind].atk - corpsBase(g, x) * KIND[x.kind].atk);
+  const guns: Corps[] = [];
+  if (g.flags.open === 1 && corps.length) {
+    // Attacked from several sides at once a defence cannot cover every road: each side's roads carry more (the grand campaign).
+    if (new Set(corps.filter((c) => !blocked(g, c, target)).map((c) => c.reg)).size >= DEFENCE.frontage.sides) cap += DEFENCE.frontage.extra;
+    // Guns fire over the heads of the infantry: against works, a few artillery corps join without taking room on the roads.
+    if (target.fort || hostileUnits(g, target, armyOf(corps[0])).some((u) => u.dug)) {
+      for (const c of ranked) if (c.kind === 'art' && guns.length < DEFENCE.frontage.guns && !blocked(g, c, target)) guns.push(c);
+    }
   }
-  return out;
+  const fill = (over: Corps[]): Corps[] => {
+    const used: Record<number, number> = {};
+    const out: Corps[] = [];
+    for (const c of ranked) {
+      if (out.length >= most) break;
+      if (over.includes(c)) continue;
+      if (blocked(g, c, target)) continue; // tanks have no way up the steepest ground, and nothing on wheels crosses a river whose bridges are down
+      if ((used[c.reg] ?? 0) >= cap) continue;
+      used[c.reg] = (used[c.reg] ?? 0) + 1;
+      out.push(c);
+    }
+    return out;
+  };
+  const out = fill(guns);
+  // The guns support somebody: with nobody else to go in, they take the roads themselves like any other corps.
+  return out.length ? [...out, ...guns] : fill([]);
 }
 
 /** Which week of the month a corps reaches after spending this many more action points. */
@@ -557,8 +573,10 @@ const HELD_LOSS = 0.6;
 export const DUG_IN = 1.25;
 /** Prepared defences (the grand campaign): who digs in, and how the day's luck runs against an attack on a line that is ready for it. */
 export const DEFENCE = defenceData as unknown as {
-  entrench: { auto: boolean; months: number };
-  prepared: { dice: [number, number]; spentAt: number; surprise: number; armour: number; losses: { attacker: number; defender: number } };
+  entrench: { auto: boolean; months: number; share: number[] };
+  wear: { perAttack: number; fullAt: number; guns: number; regrow: number };
+  frontage: { sides: number; extra: number; guns: number };
+  prepared: { dice: [number, number]; spentAt: number; surprise: number; surpriseMonths: number; openingMonths: number; armour: number; losses: { attacker: number; defender: number } };
   staff: { odds: number };
 };
 /** The run of the day's luck in the open: it takes 1.2 to 1 on the day to carry the ground. */
@@ -568,6 +586,34 @@ export const chanceOn = (odds: number, dice: [number, number]): number => Math.m
 const listAnd = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 /** The odds at which an attack is an even chance. */
 export const evenOdds = (dice: [number, number]): number => 2.4 / (dice[0] + dice[1]);
+/** Months of works a dug-in corps has to its name, up to the months they take to finish (the grand campaign). Attacks wear them down. */
+export const worksOf = (c: Corps): number => (c.dug ? Math.max(0, Math.min(DEFENCE.entrench.months, c.dugFor ?? 1)) : 0);
+/** What works that many months old are worth, as a share of finished ones: the first month's digging does the most. */
+export function worksShare(months: number): number {
+  const s = DEFENCE.entrench.share;
+  if (months <= 0) return 0;
+  const at = (k: number): number => (k <= 0 ? 0 : s[Math.min(k, s.length) - 1]);
+  const i = Math.floor(months);
+  return at(i) + (at(i + 1) - at(i)) * (months - i);
+}
+/**
+ * True while a new offensive still has the defenders off balance (the grand campaign): an army trained to it
+ * (Germany's) takes most of the worth out of a prepared line for the first month of each new offensive, and for
+ * longer in the first one it ever makes on a country. A blow after three quiet months is a new offensive.
+ */
+function surprised(g: Game, nat: string, foes: Iterable<string>): boolean {
+  const n = g.nations[nat];
+  if (!n?.blitz) return false;
+  for (const d of foes) {
+    const last = n.lastFight[d], start = n.offStart[d];
+    // The first blow ever struck at them, or the first after a lull: the offensive begins with this battle.
+    if (last === undefined || g.turn - last >= 3) { if (atWar(g, nat, d)) return true; continue; }
+    if (start === undefined) continue;
+    const months = g.flags[`opening:${nat}:${d}`] === start ? DEFENCE.prepared.openingMonths : DEFENCE.prepared.surpriseMonths;
+    if (g.turn - start <= months - 1) return true;
+  }
+  return false;
+}
 /** What artillery does in a land battle (the grand campaign's arsenal). */
 export const GUNS = (arsenalData as unknown as { guns: { soften: number; softenMost: number; thicken: number; thickenMost: number } }).guns;
 /** The weight of guns in a force: its artillery divisions, at the strength they stand at. */
@@ -597,6 +643,10 @@ export interface Assessment {
   dice: [number, number];
   /** The share of the defence that is dug in and in supply, less what the attacker's guns have broken up (the grand campaign): 0 to 1. */
   prepared: number;
+  /** How old the works of the dug-in defenders are, in months, up to the months they take to finish (the grand campaign; 0 where nobody is dug in). */
+  works: number;
+  /** The months this attack takes off those works whether it carries the ground or not (the grand campaign). */
+  wear: number;
 }
 
 /** How an attack arrives: over land, or (sea) from landing craft at that share of its strength. */
@@ -723,7 +773,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   A *= flank;
   // What the town is worth to those inside it, after the guns and the engineers of this assault have done their work.
   const walls = town ? townBonus(g, target, breach ? 1 - (1 - soften) * (1 - breach) : soften) : 1;
-  let D = 0, thin = 1, readyD = 0;
+  let D = 0, thin = 1, readyD = 0, dugD = 0, worksD = 0;
   for (const d of defenders) {
     // In the streets the country round about counts for nothing: the town is the ground.
     let p = corpsBase(g, d) * KIND[d.kind].def * (town ? walls : TERRAIN_DEF[target.terrain]);
@@ -732,7 +782,8 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       if (suits !== 1) p *= suits;
       if (armsD) p *= d.kind === 'arm' ? armsD.armour : isFoot(d, true) ? armsD.infantry : 1;
     }
-    if (d.dug) { p *= soften ? 1 + (DUG_IN - 1) * (1 - soften) : DUG_IN; dugIn++; }
+    // Trenches worn under a month's worth by attack after attack give less cover (the grand campaign).
+    if (d.dug) { const dug = wide ? 1 + (DUG_IN - 1) * Math.min(1, Math.max(0, d.dugFor ?? 1)) : DUG_IN; p *= soften ? 1 + (dug - 1) * (1 - soften) : dug; dugIn++; }
     if (thicken && d.kind !== 'art') p *= 1 + thicken;
     if (frozen(g, d.nat, target)) { p *= 1 - (1 - EASTERN.winter.defence) * cmdWinter(g, d); coldDef = true; }
     if (openDesert && !KIND[d.kind].mobile && d.kind !== 'fort') { p *= DESERT.open; turned = true; }
@@ -753,11 +804,12 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
     cmdD += p * lead;
     D += p * lead;
     // Works grow with the months spent on them: a line held since the spring is not one occupied last month.
-    if (d.dug && d.supplied) readyD += p * lead * Math.min(1, (d.dugFor ?? 1) / DEFENCE.entrench.months);
+    if (d.dug && d.supplied) readyD += p * lead * worksShare(worksOf(d));
+    if (d.dug) { dugD += p * lead; worksD += p * lead * worksOf(d); }
   }
   // A line that is dug in and fed (the grand campaign): the attacker's luck runs worse against it, by the share of the defence that is ready.
   // Massed guns break it up, and the first blows of a new offensive by an army trained to it catch it off balance.
-  const caught = tempo ? DEFENCE.prepared.surprise : 0;
+  const caught = wide && !town && surprised(g, attNat, new Set([...dN, target.ctrl])) ? DEFENCE.prepared.surprise : 0;
   // And tanks break into a line that has no armour of its own to meet them.
   const pierced = armorShock ? DEFENCE.prepared.armour : 0;
   const prepared = wide && !town && D > 0 ? Math.min(1, readyD / D) * (1 - soften) * (1 - caught) * (1 - pierced) : 0;
@@ -794,6 +846,27 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       label: 'The town', value: garrisonOf(target).length ? `${townName(target)} is garrisoned` : `${townName(target)} is held by its own guard`,
       effect: 'Winning here wins the country round it. The town must then be stormed or starved out, unless it opens its gates',
     });
+  }
+  if (wide && defenders.length) {
+    // Training and experience decide as many fights as numbers do: said in words, division for division.
+    const grade = (cs: Corps[]): { worth: number; army: number; xp: number } => {
+      let w = 0, worth = 0, army = 0, xp = 0;
+      for (const c of cs) { const k = c.divs * c.str; w += k; worth += k * g.nations[c.nat].quality * (0.85 + 0.4 * c.xp); army += k * g.nations[c.nat].quality; xp += k * c.xp; }
+      return w > 0 ? { worth: worth / w, army: army / w, xp: xp / w } : { worth: 1, army: 1, xp: 0 };
+    };
+    const ours = grade(attackers), theirs = grade(defenders);
+    const ratio = theirs.worth / Math.max(0.01, ours.worth);
+    const word = (xp: number): string => (xp < 0.2 ? 'green' : xp < 0.45 ? 'trained' : xp < 0.7 ? 'seasoned' : 'veteran');
+    if (ratio >= 1.1 || ratio <= 1 / 1.1) {
+      const better = ratio > 1 ? 'defending' : 'attacking', worse = ratio > 1 ? 'attacking' : 'defending';
+      const k = ratio > 1 ? ratio : 1 / ratio;
+      const armyK = ratio > 1 ? theirs.army / ours.army : ours.army / theirs.army, xpK = k / armyK;
+      const why = [armyK >= 1.04 ? 'the better trained and led army' : '', xpK >= 1.04 ? 'the more experienced troops' : ''].filter(Boolean);
+      lines.push({
+        label: 'Troops', value: `${word(ours.xp)[0].toUpperCase() + word(ours.xp).slice(1)} attackers against ${word(theirs.xp)} defenders`,
+        effect: `Division for division the ${better} side is the stronger${why.length ? `, as ${listAnd(why)}` : ''}: each ${better} division counts for about ${k.toFixed(1)} ${worse} ones`,
+      });
+    }
   }
   if (wide) {
     const a = groundLine(g, attackers.filter((c) => !barred(g, c, target)), target, false), d = town ? '' : groundLine(g, defenders, target, true);
@@ -851,12 +924,27 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
       thicken ? `${soften ? 'the' : 'The'} other defenders fight ${Math.round(thicken * 100)}% stronger under their own guns` : '',
     ].filter(Boolean).join('; '),
   });
-  if (dugIn) lines.push({ label: 'Dug in', value: dugIn === defenders.length ? 'The defenders have had a month to entrench' : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
-  if (prepared > 0) lines.push({
-    label: 'Prepared defence',
-    value: prepared >= 0.995 ? 'The line is dug in, fed and has had months to finish its works' : readyD < D * 0.995 ? 'The line is dug in and fed, but its works are not complete everywhere' : `The line is dug in and fed, but ${listAnd([soften ? 'the guns have worked it over' : '', caught ? 'the new offensive has caught it off balance' : '', pierced ? 'it has no armour to meet the tanks' : ''].filter(Boolean))}`,
-    effect: `The day runs against the attack: an even chance takes about ${evenOdds(dice).toFixed(1)} to 1, and nothing is sure under ${(1.2 / dice[0]).toFixed(1)} to 1. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer`,
-  });
+  if (dugIn && !wide) lines.push({ label: 'Dug in', value: dugIn === defenders.length ? 'The defenders have had a month to entrench' : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
+  // How old the works are, and what this blow takes off them whether it carries the ground or not (the grand campaign).
+  const works = wide && !town && dugD > 0 ? worksD / dugD : 0;
+  const wear = works > 0 ? Math.min(works, DEFENCE.wear.perAttack * Math.min(1, (A / D) / DEFENCE.wear.fullAt) * (1 + DEFENCE.wear.guns * soften)) : 0;
+  if (wide && dugIn) {
+    const full = DEFENCE.entrench.months, age = Math.round(works * 10) / 10;
+    const built = works >= full - 0.05 ? 'their works are finished' : works < 0.05 ? 'their works have been battered flat' : `their works are ${age === 1 ? 'a month' : `${age} months`} old of the ${full} they take to finish`;
+    const who = dugIn === defenders.length ? 'The defenders are dug in' : `${dugIn} of the ${defenders.length} defending corps are dug in`;
+    // (The first of them names the line, the rest call it "it".)
+    const lost = [soften && prepared < 1 ? 'the guns have worked LINE over' : '', caught ? 'the new offensive has caught LINE off balance' : '', pierced ? 'LINE has no armour to meet the tanks' : ''].filter(Boolean).map((t, i) => t.replace('LINE', i ? 'it' : 'the line'));
+    const cover = dugD > 0 ? Math.round((DUG_IN - 1) * Math.min(1, works) * 100) : 0;
+    const luck = prepared > 0.005
+      ? `The day runs against the attack: an even chance takes about ${evenOdds(dice).toFixed(1)} to 1, and nothing is sure under ${(1.2 / dice[0]).toFixed(1)} to 1. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer`
+      : defenders.some((d) => d.dug && !d.supplied) && !defenders.some((d) => d.dug && d.supplied) ? 'Cut off from supply, the line is no better than open ground on the day' : 'On the day the line is no better than open ground';
+    const after = wear >= 0.05 ? `. Won or lost, this attack takes ${wear >= 0.95 && wear < 1.05 ? 'a month' : `${Math.round(wear * 10) / 10} months`} off the works${wear < works - 0.05 ? '' : ', which leaves nothing of them'}` : '';
+    lines.push({
+      label: 'Dug in',
+      value: `${who}: ${built}${lost.length ? `, but ${listAnd(lost)}` : ''}`,
+      effect: `${cover ? `Entrenched troops defend ${cover}% stronger. ` : ''}${luck}${after}`,
+    });
+  }
   const aUns = attackers.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
   lines.push({ label: 'Supply', value: `${aUns ? `${aUns} attacking corps cut off` : 'Attackers in supply'}; ${dUns ? `${dUns} defending corps cut off` : 'defenders in supply'}`, effect: aUns || dUns ? 'Corps that are cut off fight at half strength' : undefined });
   lines.push({ label: 'Air', value: skyWon ? `The ${g.nations[sky!].adj} air force has won the sky here` : airEdge > 0.15 ? 'Attacker holds the sky' : airEdge < -0.15 ? 'Defender holds the sky' : 'Contested', effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? 'Attack' : 'Defence'} strengthened by about ${Math.round(Math.abs(airEdge) * 30)}%` : undefined });
@@ -934,7 +1022,7 @@ export function assess(g: Game, attackers: Corps[], target: Region, opts: Attack
   if (streets) lines.push({ label: 'Armor', value: 'Tanks in the streets of the town', effect: `Tank attack cut to ${Math.round(SIEGE.assault.armour * 100)}%` });
   if (hasty) lines.push({ label: 'A hasty assault', value: 'The army has only just come up to the town: it goes in off the march', effect: `Attack cut to ${Math.round(rushed * 100)}%. Next month the assault is made ready and goes in at full weight` });
   if (flank > 1) lines.push({ label: 'Direction', value: `Attack from ${sources.size} sides`, effect: `Attack up ${Math.round((flank - 1) * 100)}%` });
-  return { A, D, odds: A / D, lines, defenders, dice, prepared };
+  return { A, D, odds: A / D, lines, defenders, dice, prepared, works, wear };
 }
 
 function reportUnit(c: Corps): ReportUnit {
@@ -957,6 +1045,8 @@ function place(g: Game, c: Corps, to: Region): void {
   const r = g.regions[c.reg];
   // A corps of a garrison comes off the town's list, not the field's (the grand campaign).
   if (c.town) quitTown(g, c); else r.units.splice(r.units.indexOf(c), 1);
+  // Engineers driven off their work, or marched away from it, have done nothing: the job is dropped there and then.
+  if (c.job && c.job.reg !== to.id) delete c.job;
   c.reg = to.id;
   // Put down where the enemy holds the country round a town, it goes into the town: the two never share a field.
   // A full town takes no more: the corps is set down on the nearest ground its side still holds.
@@ -1060,7 +1150,10 @@ function walkIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
   const AN = g.nations[attNat];
   // The offensive is counted as under way all the same: the attackers came on and the ground changed hands.
   for (const d of new Set(gone.map((u) => u.nat))) {
-    if (AN.lastFight[d] === undefined || g.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== undefined && g.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g.turn;
+    const first = AN.lastFight[d] === undefined;
+    if (first || g.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== undefined && g.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g.turn;
+    // The first offensive an army ever makes on a country keeps its surprise longer (the grand campaign).
+    if (first && g.flags.open === 1) g.flags[`opening:${attNat}:${d}`] = AN.offStart[d];
     AN.lastFight[d] = g.turn;
   }
   const week = Math.max(...attackers.map((c) => weekOf(c, 1)));
@@ -1105,7 +1198,10 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   const relief = sieges && !town && allied(g, attNat, target.ctrl);
   const watchMen = town ? guardMen(g, target) : 0, watch = town ? guardOf(g, target) : 0;
   for (const d of new Set(defenders.map((c) => c.nat))) {
-    if (AN.lastFight[d] === undefined || g.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== undefined && g.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g.turn;
+    const first = AN.lastFight[d] === undefined;
+    if (first || g.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== undefined && g.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g.turn;
+    // The first offensive an army ever makes on a country keeps its surprise longer (the grand campaign).
+    if (first && g.flags.open === 1) g.flags[`opening:${attNat}:${d}`] = AN.offStart[d];
     AN.lastFight[d] = g.turn;
   }
   const week = Math.max(...attackers.map((c) => weekOf(c, 1)));
@@ -1156,6 +1252,14 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     defLost += defU[i].lost;
     if (before > 0) bled.set(c.id, defU[i].lost / before);
   });
+  // Works wear down under attack (the grand campaign): whoever is still in them next month has less to stand behind,
+  // and troops who were attacked dig slower that month, or not at all.
+  if (!town && g.flags.open === 1) {
+    for (const c of defenders) {
+      if (c.dug && a.wear > 0) c.dugFor = Math.max(0, worksOf(c) - a.wear);
+      c.pressed = true;
+    }
+  }
   moraleBattle(g, attackers, defenders, R, win, bled, enemyCapital);
   // Whoever fights an army learns what it is made of: each side has identified the other's corps.
   identify(g, defenders, attNat);
@@ -1235,6 +1339,12 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   if (relief) rep.relief = true;
   if (opts.sally) rep.sally = true;
   if (a.prepared > 0) rep.prepared = Math.round(a.prepared * 100) / 100;
+  if (!win && !town && a.wear > 0) { rep.worn = Math.round(a.wear * 10) / 10; rep.works = Math.round(Math.max(0, a.works - a.wear) * 10) / 10; }
+  // The first time a dug-in line of the player's is broken with no guns in it, his staff says what would have helped.
+  if (win && !town && a.prepared > 0 && defNat === g.human && g.flags.open === 1 && !g.flags['tip:guns'] && !defenders.some((c) => c.kind === 'art')) {
+    g.flags['tip:guns'] = g.turn;
+    headline(g, 'info', `Your staff on the loss of ${target.name}: the line was dug in and it still broke. Artillery standing in a line makes every corps beside it fight up to ${Math.round(GUNS.thickenMost * 100)}% stronger, and the enemy's staff thinks twice before attacking guns. An artillery corps behind each threatened sector would help the next one hold.`, defNat, target.id);
+  }
   g.reports.push(rep);
   // The generals' luck on the main fronts is counted off the main fronts' own battles, for the same reason.
   if (aside) g.flags.asideBattles = (g.flags.asideBattles ?? 0) + 1;
@@ -1464,8 +1574,11 @@ export function capitulate(g: Game, nat: string, by: string): void {
       }
     } else if (r.ctrl === nat) {
       // Foreign ground the fallen country held goes back to its owner, unless an army of the fallen country's side
-      // still stands on it (the grand campaign): then it is that army's until it is taken.
-      const stays = g.flags.open === 1 ? r.units.find((u) => u.nat !== nat && !u.dead && atWar(g, u.nat, r.owner)) : undefined;
+      // still stands on it (the grand campaign): then it is that army's until it is taken. An army at war with the
+      // victor counts as much as one at war with the owner: ground in a country long dead is not handed to an enemy
+      // over the heads of the troops who hold it.
+      const keeps = (u: Corps): boolean => u.nat !== nat && !u.dead && (atWar(g, u.nat, r.owner) || atWar(g, u.nat, by));
+      const stays = g.flags.open === 1 ? r.units.find(keeps) ?? garrisonOf(r).find(keeps) : undefined;
       r.ctrl = stays ? stays.nat : g.nations[r.owner].alive ? r.owner : by;
     }
   }
@@ -1828,8 +1941,14 @@ function digIn(g: Game, nat: string): void {
   if (g.flags.open !== 1 || !DEFENCE.entrench.auto) return;
   for (const c of g.corps) {
     if (c.dead || c.kind === 'fort' || armyOf(c) !== nat) continue;
-    if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) { c.dugFor = c.dug ? (c.dugFor ?? 1) + 1 : 1; c.dug = true; }
+    if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) {
+      // A month in which the line was attacked is a month's digging lost: the works are what the attack left of them.
+      const gain = c.pressed ? DEFENCE.wear.regrow : 1;
+      if (c.dug) c.dugFor = (c.dugFor ?? 1) + gain;
+      else if (gain > 0) { c.dugFor = gain; c.dug = true; }
+    }
     else { if (c.dug) delete c.dug; if (c.dugFor !== undefined) delete c.dugFor; }
+    if (c.pressed) delete c.pressed;
   }
 }
 
