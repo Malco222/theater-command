@@ -214,6 +214,14 @@ export interface Plan {
   waves?: number;
   /** Version 63: a player who digs the line in. A corps that has works and stands beside the enemy stays in them: it joins an attack only where the card reads these odds or better with everyone in, it is not railed away to mass elsewhere, and it does not march. Corps without works (reserves, troops that have just moved) attack at minOdds as before (default off: every corps attacks, masses and marches whatever works it leaves behind). */
   dig?: number;
+  /** Version 64: fold two worn corps of a kind standing together into one, every month, before anything else (default off). "raise" also raises every cadre again from the arsenal ahead of everything else. */
+  fold?: boolean | 'raise';
+  /** Version 64: probe a dug-in line before attacking it. The staff's corps probes every dug-in province whose attack reads at least this share of the bar (default 0.7 when true), then the attack is weighed again. */
+  probe?: boolean | number;
+  /** Version 64: bomb a dug-in line before attacking it, with the groups the staff proposes, on the same rule as the probe. */
+  bombLine?: boolean;
+  /** Version 64: relieve the line. A line corps in works under this strength changes places with the strongest corps of its kind standing in a friendly province beside it that is not itself in the line. */
+  rotate?: number;
 }
 
 function distanceToEnemy(g: Game, me: string, homeOnly: boolean): Int16Array {
@@ -369,11 +377,13 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     const men = plan.menKeep !== undefined ? (T as any).manpowerOf?.(g, me) : null;
     const want1 = men && men.share < plan.menKeep! ? want0.filter((k) => !k.startsWith('corps:')) : want0;
     const want = needGuns && want1 === want0 ? ['corps:art', ...want0] : want1;
-    const o = want.map((k) => offers.find((x) => x.key === k)).find((x) => x && x.why === null);
+    const cadre = plan.fold === 'raise' ? offers.find((x) => x.key.startsWith('cadre:') && x.why === null) : undefined;
+    const o = cadre ?? want.map((k) => offers.find((x) => x.key === k)).find((x) => x && x.why === null);
     if (!o) break;
     const b = T.orderArsenal(g, o.key, o.at);
     if (!b) break;
     if (o.key === 'corps:art') gunsDue.push(g.turn + 5);
+    if (o.key.startsWith('cadre:')) (run as any).cadresRaised = ((run as any).cadresRaised ?? 0) + 1;
     row.bought.push(o.key);
   }
 
@@ -424,6 +434,66 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     (run as any).dugKept = ((run as any).dugKept ?? 0) + 1;
     return pickAttackers(g, all.filter((c) => !lineDug(c)), r, plan);
   };
+  const st64 = run as any;
+  const beside = (c: Corps): boolean => g.regions[c.reg].nb.some((j) => hostileUnits(g, g.regions[j], me).length > 0);
+  // Version 64: fold worn corps together, fewest men sent back to the reserve first.
+  if (plan.fold && (T as any).foldChoicesAt) {
+    for (const reg of new Set(g.corps.filter((c) => c.nat === me && !(c as any).dead).map((c) => c.reg))) {
+      for (let n = 0; n < 4; n++) {
+        const ch = ((T as any).foldChoicesAt(g, reg) as any[]).filter((v) => v.why === null).sort((a, b) => a.back - b.back || b.xp - a.xp);
+        if (!ch.length) break;
+        const v = ch[0], wasBeside = g.corps.some((c) => c.id === v.keep && beside(c));
+        if (!(T as any).orderFold(g, v.keep, v.gone)) break;
+        st64.folds = (st64.folds ?? 0) + 1; st64.foldBack = (st64.foldBack ?? 0) + v.back; st64.foldStr = (st64.foldStr ?? 0) + v.str; if (wasBeside) st64.foldsInLine = (st64.foldsInLine ?? 0) + 1;
+        (st64.foldLog = st64.foldLog ?? []).push(`${date(g.turn)} ${g.regions[reg].name}: ${v.goneName} into ${v.keepName}, ${Math.round(v.str * 100)}% after, ${v.back} men back`);
+      }
+    }
+  }
+  // Version 64: relieve the line. The worn corps marches back to where its relief stood; the relief marches in and should find the works.
+  if (plan.rotate !== undefined) {
+    for (const c of g.corps.filter((x) => x.nat === me && !(x as any).dead && x.town === undefined && x.kind !== 'fort' && x.kind !== 'eng' && x.kind !== 'art')) {
+      if (!(c as any).dug || c.str >= plan.rotate || !beside(c) || !T.canOrder(g, c) || c.ap <= 0) continue;
+      const back = g.regions[c.reg].nb.map((j) => g.regions[j]).filter((r) => r.ctrl === me && !hostileUnits(g, r, me).length && !r.nb.some((k) => hostileUnits(g, g.regions[k], me).length > 0));
+      const fresh = back.flatMap((r) => r.units.filter((u) => u.nat === me && u.kind === c.kind && !(u as any).dead && u.town === undefined && u.str >= Math.max(0.85, c.str + 0.2) && T.canOrder(g, u) && u.ap > 0)).sort((a, b) => b.divs * b.str - a.divs * a.str)[0];
+      if (!fresh) { st64.rotNone = (st64.rotNone ?? 0) + 1; continue; }
+      const from = c.reg, to = fresh.reg, works = Math.round(((c as any).dugFor ?? 1) * 10) / 10;
+      const mIn = T.reach(g, fresh), mOut = T.reach(g, c);
+      if (!mIn.has(from) || mIn.get(from)!.attack || !mOut.has(to) || mOut.get(to)!.attack) { st64.rotNoRoad = (st64.rotNoRoad ?? 0) + 1; continue; }
+      if (!T.orderMove(g, c, to)) { st64.rotNoRoad = (st64.rotNoRoad ?? 0) + 1; continue; }
+      if (!T.orderMove(g, fresh, from)) { st64.rotHalf = (st64.rotHalf ?? 0) + 1; continue; }
+      const got = (fresh as any).dug ? Math.round(((fresh as any).dugFor ?? 1) * 10) / 10 : 0;
+      st64.rotations = (st64.rotations ?? 0) + 1; st64.rotWorksBefore = (st64.rotWorksBefore ?? 0) + works; st64.rotWorksAfter = (st64.rotWorksAfter ?? 0) + got; if (got > 0) st64.rotKept = (st64.rotKept ?? 0) + 1;
+      (st64.rotIds = st64.rotIds ?? new Map<number, number>()).set(fresh.id, g.turn);
+    }
+  }
+  // Version 64: soften a dug-in line (bombers first, then the probe), once a province a month.
+  const softened: Set<number> = st64.softTurn === g.turn ? st64.softSet : ((st64.softTurn = g.turn), (st64.softSet = new Set<number>()));
+  const soften = (r: Region, cands: Corps[], odds: number, bar: number): boolean => {
+    if ((!plan.probe && !plan.bombLine) || !(T as any).softenOptions || softened.has(r.id)) return false;
+    const share = typeof plan.probe === 'number' ? plan.probe : 0.7;
+    if (odds < bar * share) return false;
+    // A sure thing is not softened: the card must leave some doubt.
+    const sure = cands.length ? (T.attackOutlook(g, cands, r) as any) : null;
+    if (sure && typeof sure.chance === 'number' && sure.chance >= 0.9 && odds >= bar) return false;
+    const sv = (T as any).softenOptions(g, cands, r);
+    if (!sv || sv.works <= 0) return false;
+    softened.add(r.id);
+    let did = false;
+    if (plan.bombLine && sv.bomb && sv.bomb.why === null && sv.bomb.wear > 0) {
+      const pr = (T as any).previewRaid(g, 'line', r.id);
+      const rep = pr && pr.why === null ? (T as any).orderRaid(g, 'line', r.id, pr.picked) : null;
+      if (rep) { const after = (T as any).softenOptions(g, cands, r); st64.lineRaids = (st64.lineRaids ?? 0) + 1; st64.lineRaidWear = (st64.lineRaidWear ?? 0) + Math.max(0, sv.works - (after?.works ?? 0)); st64.lineRaidGroups = (st64.lineRaidGroups ?? 0) + pr.picked.length; did = true; }
+      else st64.lineRaidsRefused = (st64.lineRaidsRefused ?? 0) + 1;
+    }
+    if (plan.probe) {
+      const sv2 = (T as any).softenOptions(g, cands, r);
+      const who = sv2 && sv2.probe.why === null ? g.corps.find((c) => c.id === sv2.probe.corps) : undefined;
+      const rep = who ? (T as any).orderProbe(g, who, r) : null;
+      if (rep) { st64.probes = (st64.probes ?? 0) + 1; st64.probeMen = (st64.probeMen ?? 0) + rep.lost; st64.probeWear = (st64.probeWear ?? 0) + rep.wear; st64.probeFresh = (st64.probeFresh ?? 0) + rep.fresh; did = true; }
+    }
+    if (did) { st64.softOddsBefore = (st64.softOddsBefore ?? 0) + odds; st64.softN = (st64.softN ?? 0) + 1; }
+    return did;
+  };
   for (let pass = 0; pass < 4; pass++) {
     let did = 0;
     // Attacks, best odds first.
@@ -431,8 +501,9 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     for (const c of my()) for (const j of g.regions[c.reg].nb) if (hostileUnits(g, g.regions[j], me).length) targets.add(j);
     const looked = [...targets].map((j) => {
       const r = g.regions[j];
-      const cands = attackersFor(r);
-      const out = cands.length ? T.attackOutlook(g, cands, r) : null;
+      let cands = attackersFor(r);
+      let out = cands.length ? T.attackOutlook(g, cands, r) : null;
+      if (out && soften(r, cands, out.odds, minOdds)) { cands = attackersFor(r); const o2 = cands.length ? T.attackOutlook(g, cands, r) : null; if (o2) { st64.softOddsAfter = (st64.softOddsAfter ?? 0) + o2.odds; if (o2.odds >= minOdds && out.odds < minOdds) st64.softLifted = (st64.softLifted ?? 0) + 1; } out = o2; }
       if (out && (plan.grind !== undefined || plan.waves !== undefined)) withSum(g, out, cands, r);
       if (out && plan.waves !== undefined) { (out as any).spare = T.candidates(g, r).filter((c) => c.kind !== 'art' && c.kind !== 'eng').length - cands.length; (out as any).n = cands.length; }
       return { r, cands, odds: out?.odds ?? 0, out };
