@@ -698,6 +698,14 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 	}
+	const TArray<TSharedPtr<FJsonValue>>* Wrecked = nullptr;
+	if (Object->TryGetArrayField(TEXT("wrecked"), Wrecked))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Wrecked)
+		{
+			Out.Wrecked.Add(FMath::RoundToInt32(Value->AsNumber()));
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* WorksLeft = nullptr;
 	if (Object->TryGetArrayField(TEXT("worksLeft"), WorksLeft))
 	{

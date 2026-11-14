@@ -171,6 +171,8 @@ private:
 	// What the army is about, shown round its base so it can be read without a click: 0 nothing, 1 digging in,
 	// 2 entrenched; in camp, resting; 0 not known, 1 supplied, 2 cut off.
 	int32 WorksState = 0;
+	/** How worn its flag is: 0 whole, 1 torn and faded (a battered army), 2 in tatters (one nearly spent). */
+	int32 FlagWear = 0;
 	bool bAtAnchor = false;
 	/** The flock and tufts on the base: shown only close to, where they are seen for what they are. From working height they swallowed the figures. */
 	UPROPERTY(Transient)

@@ -151,7 +151,8 @@ public:
 	UTexture2D* GetFlagTexture(const FString& Tag);
 
 	/** The cloth a nation's standards are cut from: its flag, readable from either side. Null if the flag material is missing. */
-	UMaterialInterface* GetFlagMaterial(const FString& Tag);
+	/** A nation's flag for the cloth of a standard; Wear 1 is the faded flag of a battered army, 2 of one nearly spent. */
+	UMaterialInterface* GetFlagMaterial(const FString& Tag, int32 Wear = 0);
 
 	/** The paint the pieces are moulded in: each point of a piece carries its own colour. */
 	UMaterialInterface* GetPieceMaterial() const { return PieceMaterial; }
@@ -246,6 +247,8 @@ public:
 	void ShowSieges(const TArray<int32>& Sieges);
 	/** (Version 64) Fieldworks standing empty: three numbers each, the region, tenths of a month of work, room for how many corps. A small broken bank where an army would stand. */
 	void ShowWorksLeft(const TArray<int32>& FromRules);
+	/** Factories that are not working (bombed, sabotaged, burnt): pairs, the region and how many. Their works stand as wrecks and their chimneys are cold. */
+	void ShowWrecked(const TArray<int32>& FromRules);
 	/**
 	 * The airfields that have air groups based on them (Brian's ask of 2026-11-13: no great aircraft piece standing
 	 * on the map; the airfield itself says it is in use): a small aircraft parked on the field for each group, in
@@ -546,6 +549,8 @@ private:
 	float TownWash = 0.2f; // the strength of the faint warm wash under a lit town
 	float FrontLineGlow = 0.085f; // the strength of the line of glow under a front's fires
 	TArray<FVector> WorksChimneys; // and of the factories built since the war began
+	TArray<FIntPoint> WorksChimneyRegion; // (for each of those: its region, and which of the region's stacks it is)
+	TMap<int32, int32> WreckedIn; // by region: how many of its factories are not working
 	TArray<FBattleSmoke> Battles;
 	TArray<FVector> SmokeVertices;
 	TArray<FColor> SmokeColours;
@@ -573,6 +578,7 @@ private:
 	float PaperShown = -1.0f;
 	double MarginLine = 11.0; // (round a world) how wide the chart's ruled border is drawn, in the world's units
 	float SquareWorkShown = -1.0f; // (round a world) how much of the prairie's roads and furrows is shown at this height
+	float FarFieldsShown = -1.0f; // (round a world) how strong the quilt of fields is on the world's coarse sheet
 	float WoodsLiftShown = -1.0f; // (round a world) how much more is asked of a wood on the coarse sheet before it is drawn
 	/** The paper's own colours by the hour: parchment and a pale sea by day, dim paper by night. */
 	void ApplyPaperLight();

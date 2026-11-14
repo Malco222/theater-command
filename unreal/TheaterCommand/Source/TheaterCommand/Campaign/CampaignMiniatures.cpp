@@ -1759,6 +1759,8 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		}
 	};
 	// The works: a long shed with a saw-toothed annex and a stack, the stack taller for a place of much industry.
+	// (The first of them are wrecks where the place has factories bombed out or burnt: see below.)
+	int32 WorksBuilt = 0;
 	auto Works = [&](double A, double B, double Turn)
 	{
 		if (!CanBuild(A, B))
@@ -1768,6 +1770,67 @@ void FMiniatureMesh::Township(const FTownSite& Site, TArray<FVector>* OutChimney
 		const FVector At = Stand(A, B);
 		const double R = FMath::DegreesToRadians(Yaw0 + Turn);
 		auto Off = [&](double Along, double Across, double Up) { return At + FVector(FMath::Cos(R) * Along - FMath::Sin(R) * Across, FMath::Sin(R) * Along + FMath::Cos(R) * Across, Up) * U; };
+		if (WorksBuilt++ < Site.Ruined)
+		{
+			// A wreck: the shed's walls standing to different heights round a burnt-out floor, the roof gone but
+			// for a fallen length of it, the annex down, the stack broken off short and cold, rubble thrown out
+			// round it and the ground scorched. (Its dice are its own, so that the rest of the town stands where it did.)
+			FRandomStream Chance(Site.Seed * 131 + WorksBuilt * 17 + 5);
+			const FLinearColor Charred(FColor::FromHex(TEXT("2B2725"))), BurntBrick(FColor::FromHex(TEXT("59423A"))), Ash(FColor::FromHex(TEXT("6E6A64"))), Scorch(FColor::FromHex(TEXT("37312B")));
+			// (the scorched ground: a ragged patch of many small ones, never a neat round plate)
+			for (int32 Patch = 0; Patch < (bFar ? 5 : 14); ++Patch)
+			{
+				const double Angle = Chance.FRand() * 2.0 * PI, Out = (Patch == 0 ? 0.0 : 0.35 + 0.75 * Chance.FRand()), Big = (Patch == 0 ? 0.85 : 0.28 + 0.34 * Chance.FRand());
+				Pillar(At + FVector(FMath::Cos(Angle) * Out * 1.15, FMath::Sin(Angle) * Out * 0.85, 0.004 + 0.0006 * Patch) * U, Big * U, Big * 0.9 * U, 0.008 * U,
+					Patch % 3 == 0 ? Scorch : Patch % 3 == 1 ? Scorch * 1.25f : Scorch * 0.8f, 7 + Patch % 3);
+			}
+			if (bFar)
+			{
+				Box(Off(0.0, 0.0, 0.14), FVector(1.5, 0.8, 0.28) * U, BurntBrick, Yaw0 + Turn);
+				Box(Off(0.0, 0.0, 0.285), FVector(1.36, 0.66, 0.01) * U, Charred, Yaw0 + Turn);
+				Pillar(Off(0.95, 0.0, 0.0), 0.13 * U, 0.11 * U, 0.55 * U, BurntBrick, 6);
+				return;
+			}
+			// (the walls, in lengths that stand to different heights; the corners stand highest)
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				for (int32 Piece = 0; Piece < 5; ++Piece)
+				{
+					const double High = (Piece == 0 || Piece == 4 ? 0.46 : 0.16 + 0.26 * Chance.FRand()) * U;
+					Box(Off((Piece - 2) * 0.3, (Side == 0 ? -1.0 : 1.0) * 0.38, 0.0) + FVector(0.0, 0.0, High * 0.5), FVector(0.3 * U, 0.05 * U, High), Piece % 2 == 0 ? BurntBrick : BurntBrick * 0.82f, Yaw0 + Turn);
+				}
+				const double Gable = (0.3 + 0.3 * Chance.FRand()) * U;
+				Box(Off((Side == 0 ? -1.0 : 1.0) * 0.73, 0.0, 0.0) + FVector(0.0, 0.0, Gable * 0.5), FVector(0.05 * U, 0.76 * U, Gable), BurntBrick * 0.9f, Yaw0 + Turn);
+			}
+			Box(Off(0.0, 0.0, 0.02), FVector(1.4, 0.7, 0.04) * U, Charred, Yaw0 + Turn); // the burnt-out floor
+			Box(Off(-0.3, 0.05, 0.17), FVector(0.62, 0.5, 0.03) * U, Sooty, Yaw0 + Turn + 8.0, 27.0); // a length of the roof, fallen in
+			for (int32 Beam = 0; Beam < 3; ++Beam)
+			{
+				Box(Off(0.15 + 0.2 * Beam, 0.02 * Beam, 0.1 + 0.05 * Beam), FVector(0.05, 0.74, 0.04) * U, Charred, Yaw0 + Turn + 14.0 * (Beam - 1), 9.0 * Beam);
+			}
+			// The annex, down: a low heap with one slab of its roof lying across it.
+			Box(Off(0.0, 0.95, 0.06), FVector(1.15, 0.66, 0.12) * U, Ash * 0.8f, Yaw0 + Turn);
+			Box(Off(0.12, 0.95, 0.15), FVector(0.7, 0.5, 0.03) * U, Sooty, Yaw0 + Turn - 6.0, 16.0);
+			// The stack: broken off short, with its top lying beside it.
+			const double Stump = (0.42 + 0.18 * Chance.FRand()) * U;
+			Pillar(Off(0.95, 0.0, 0.0), 0.13 * U, 0.115 * U, Stump, BurntBrick, 7);
+			Box(Off(1.3, 0.28, 0.05), FVector(0.55, 0.16, 0.1) * U, BurntBrick * 0.85f, Yaw0 + Turn + 34.0);
+			// Rubble thrown out round it, and two craters in the yard.
+			for (int32 Lump = 0; Lump < 10; ++Lump)
+			{
+				const double Angle = Chance.FRand() * 2.0 * PI, Out = 0.75 + 0.5 * Chance.FRand(), Big = 0.06 + 0.1 * Chance.FRand();
+				Box(At + FVector(FMath::Cos(Angle) * Out * 1.1, FMath::Sin(Angle) * Out * 0.8, Big * 0.3) * U, FVector(Big * 1.4, Big, Big * 0.6) * U,
+					Lump % 3 == 0 ? Ash : Lump % 3 == 1 ? BurntBrick : Charred, Chance.FRand() * 180.0);
+			}
+			for (int32 Hole = 0; Hole < 2; ++Hole)
+			{
+				const double Angle = Chance.FRand() * 2.0 * PI;
+				const FVector Hit = At + FVector(FMath::Cos(Angle) * 1.25, FMath::Sin(Angle) * 1.0, 0.0) * U;
+				Pillar(Hit + FVector(0.0, 0.0, 0.006 * U), 0.2 * U, 0.17 * U, 0.02 * U, Ash * 0.7f, 9);
+				Pillar(Hit + FVector(0.0, 0.0, 0.012 * U), 0.12 * U, 0.1 * U, 0.016 * U, Charred, 8);
+			}
+			return;
+		}
 		House(At, 1.5 * U, 0.8 * U, 0.5 * U, 0.22 * U, RedBrick, Sooty, Yaw0 + Turn);
 		Box(Off(0.0, 0.95, 0.2), FVector(1.2, 0.7, 0.4) * U, RedBrick, Yaw0 + Turn);
 		for (int32 Tooth = 0; Tooth < 3 && !bFar; ++Tooth)

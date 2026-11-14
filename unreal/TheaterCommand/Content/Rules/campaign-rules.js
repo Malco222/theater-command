@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a759bc5 2026-11-14. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 56f2523 2026-11-14. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -800,6 +800,10 @@
     cap: { steps: [25, 50, 75, 100], start: 50 },
     diplomacy: { keep: 2 },
     spies: { guards: 1, peace: false },
+    build: {
+      _machines: "Money without men (Version 68). When the armies in the field are waiting for the men a new corps would take, a building staff at war puts the treasury into aircraft, which need pilots and not divisions: 'each' wings of fighters and of bombers on order at a time, until the aircraft it has bought stand at 'share' of the air force's own establishment. Fighters come first while the enemy is bombing the factories.",
+      machines: { each: 1, share: 0.5 }
+    },
     desks: [
       {
         id: "research",
@@ -1908,7 +1912,7 @@
       SOV: {
         traits: [
           { id: "winter", name: "At home in the winter", builtin: true, text: "Soviet troops are clothed and equipped for the eastern winter. An invader without winter kit is not.", rule: "No winter penalty on Soviet ground from December to February, when an invader attacks at 70% and defends at 85%." },
-          { id: "reserves", name: "Reserves without end", text: "A vast population and a system that calls up class after class.", drafts: 1.25, cost: { what: ["corps:inf"], mul: 0.9 } },
+          { id: "reserves", name: "Reserves without end", text: "A vast population and a system that calls up class after class.", drafts: 1.25, cost: { what: ["corps:inf"], mul: 0.9 }, levy: { under: 200, spent: 0.1, men: 150, gap: 12, most: 3 } },
           { id: "urals", name: "Factories to the east", text: "Whole factories are loaded onto trains ahead of the enemy and set up again beyond the Urals, out of reach.", relocate: 0.25 }
         ],
         unit: { id: "guards", label: "Guards corps", word: "Guards", kind: "inf", divs: 3, cost: 58, months: 5, from: 1942, most: 3, attack: 1.15, defence: 1.15, text: "Formations that earned the Guards title in battle: picked men, the best equipment and first call on replacements." }
@@ -2037,6 +2041,181 @@
       }
     }
   };
+
+  // ../../data/campaign/manpower.json
+  var manpower_default = {
+    _about: "Manpower (the grand campaign). Every nation has a reserve of men fit to bear arms, counted in divisions' worth (15,000 men). The replacements that fill up worn corps and every new corps are drawn from it, and each month a class comes of age and joins it. A nation whose reserve is spent makes good only what the month's class allows and raises no new corps. The same rule holds for the player and the computer. The historical scenarios have none of this. Rules in src/campaign/manpower.ts.",
+    pool: { GER: 110, SOV: 375, UK: 45, FRA: 55, ITA: 35, USA: 150 },
+    class: { GER: 2.4, SOV: 7, UK: 0.9, FRA: 0.9, ITA: 0.7, USA: 3 },
+    minor: { pool: 2, perDiv: 0.6, classShare: 0.02 },
+    most: 1,
+    spentAYear: 0.12,
+    spentMost: 0.5,
+    warn: [0.5, 0.25],
+    classFloor: 0.1,
+    early: { months: 6, gap: 6 },
+    fold: { worn: 0.7, org: 0.1, price: 0.5, xp: 0.75 },
+    notes: {
+      pool: "The reserve a great power opens a campaign of September 1939 with, in divisions' worth. 'minor': any other country has 'pool' and 'perDiv' for each division it has under arms as the campaign opens.",
+      class: "The class that comes of age each month with the whole homeland held, in divisions' worth; a minor's is 'classShare' of its reserve. It shrinks with the share of the homeland lost, counted by the worth of the provinces, but never under 'classFloor' of it. The reserve never holds more than 'most' times what it opened with.",
+      later: "A campaign that opens after 1939 finds 'spentAYear' of each warring nation's reserve gone for every year of war behind it, to 'spentMost'.",
+      warn: "The player is told when his reserve falls under these shares of what it opened with, and when it is spent.",
+      fold: "Fold two worn corps into one (Version 64). The player may fold one of his corps into another of the same kind standing in the same province when both are under 'worn' of their full strength. The men of both fill the corps that is kept, as far as it has room, and any left over go back to the reserve; what the kept corps knows and how it feels become the average of the men now in it; it loses 'org' of its organisation shaking down, has the fewer moves of the two left, and the better of the two generals commands it while the other goes to the list of generals waiting. The corps folded away is kept off the map as a cadre, with its name, its record and its honours: it can be raised again from the arsenal at 'price' times the cost of a new corps of its kind, takes the men of a new corps from the reserve and the same months to form, and comes back with 'xp' of what it knew. No computer nation folds its corps.",
+      early: "A say over the call-up. A country at war may call the next class up early: 'months' of classes join the reserve at once, and no class comes of age for the next 'gap' months, because the boys who would have are already with the colours: the same men, sooner. Where the reserve has room for fewer than 'months' of classes, only those come and the months without a class are fewer in step. A country with a standing call-up (east.json, mobilisation) may also hold it: no new corps are raised from the reserve while it is held, the waves wait, and the men of each wave that was not raised go to the corps in the field as drafts, over and above what the depots send and at no cost to the treasury. Only the player uses either."
+    }
+  };
+
+  // ../../src/campaign/manpower.ts
+  var MANPOWER = manpower_default;
+  var KP = {};
+  var KX = {};
+  var KL = {};
+  var KS = {};
+  var ks = (nat) => KS[nat] ?? (KS[nat] = `mps:${nat}`);
+  var kp = (nat) => KP[nat] ?? (KP[nat] = `mp:${nat}`);
+  var kx = (nat) => KX[nat] ?? (KX[nat] = `mpx:${nat}`);
+  var kl = (nat) => KL[nat] ?? (KL[nat] = `mpl:${nat}`);
+  var ke = (nat) => `mpe:${nat}`;
+  var menRules = (g2) => g2.flags.open === 1;
+  function tablePool(g2, nat) {
+    const own = MANPOWER.pool[nat];
+    if (own !== void 0) return own;
+    let divs = 0;
+    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.kind !== "fort") divs += c.divs;
+    return MANPOWER.minor.pool + MANPOWER.minor.perDiv * divs;
+  }
+  var poolAtStart = (g2, nat) => g2.flags[ks(nat)] ?? tablePool(g2, nat);
+  var classFull = (g2, nat) => MANPOWER.class[nat] ?? poolAtStart(g2, nat) * MANPOWER.minor.classShare;
+  function ensure(g2, nat) {
+    if (g2.flags[ks(nat)] !== void 0) return;
+    const start2 = tablePool(g2, nat);
+    g2.flags[ks(nat)] = start2;
+    if (g2.flags[kp(nat)] === void 0) g2.flags[kp(nat)] = start2;
+  }
+  function homeShare(g2, nat) {
+    let all = 0, held = 0;
+    for (const r of g2.regions) {
+      if (r.owner !== nat || r.overseas) continue;
+      const w = 1 + r.vp + r.fac;
+      all += w;
+      if (r.ctrl === nat) held += w;
+    }
+    return all ? held / all : 1;
+  }
+  function menLeft(g2, nat) {
+    if (!menRules(g2)) return Infinity;
+    return g2.flags[kp(nat)] ?? poolAtStart(g2, nat);
+  }
+  var raisable = (g2, nat, divs) => menRules(g2) ? Math.floor((menLeft(g2, nat) + 1e-9) / Math.max(0.1, divs)) : Infinity;
+  function menSpare(g2, nat) {
+    if (!menRules(g2)) return Infinity;
+    let short = 0;
+    for (const c of g2.corps) if (c.nat === nat && !c.dead) short += (1 - c.str) * c.divs;
+    return menLeft(g2, nat) - short;
+  }
+  function classNow(g2, nat, callUp = 1) {
+    if (!menRules(g2)) return 0;
+    return classFull(g2, nat) * Math.max(MANPOWER.classFloor, homeShare(g2, nat)) * callUp;
+  }
+  function drawMen(g2, nat, divs) {
+    if (!menRules(g2) || divs <= 0) return divs;
+    ensure(g2, nat);
+    const have = menLeft(g2, nat);
+    const give = Math.min(have, divs);
+    g2.flags[kp(nat)] = have - give;
+    g2.flags[kx(nat)] = (g2.flags[kx(nat)] ?? 0) + give;
+    return give;
+  }
+  function returnMen(g2, nat, divs) {
+    if (!menRules(g2) || divs <= 0) return;
+    ensure(g2, nat);
+    g2.flags[kp(nat)] = menLeft(g2, nat) + divs;
+    g2.flags[kx(nat)] = Math.max(0, (g2.flags[kx(nat)] ?? 0) - divs);
+  }
+  function levyMen(g2, nat, divs) {
+    if (!menRules(g2) || divs <= 0) return;
+    ensure(g2, nat);
+    g2.flags[kp(nat)] = menLeft(g2, nat) + divs;
+    if (g2.flags[kl(nat)] !== void 0) g2.flags[kl(nat)] = Math.min(g2.flags[kl(nat)], menLevel(g2, nat));
+  }
+  var classGapUntil = (g2, nat) => menRules(g2) ? g2.flags[ke(nat)] ?? 0 : 0;
+  function whyNotEarly(g2, nat) {
+    if (!menRules(g2)) return "The reserve of men is counted in the grand campaign.";
+    const n = g2.nations[nat];
+    if (!n?.alive) return "There is no government left to call anyone up.";
+    if (!n.atWar.length) return "Only a country at war calls its boys up before their time.";
+    const until = classGapUntil(g2, nat);
+    if (g2.turn <= until) return `The next class is with the colours already: none comes of age until ${turnToDate(until + 1).label}.`;
+    if (poolAtStart(g2, nat) * MANPOWER.most - menLeft(g2, nat) < 1e3 / MEN_PER_DIV) return "The reserve is full: there is nowhere to put them.";
+    return null;
+  }
+  function earlyGap(g2, nat, come, callUp = 1) {
+    const E = MANPOWER.early, one = classNow(g2, nat, callUp);
+    return one > 0 ? Math.max(1, Math.ceil(come / one * (E.gap / E.months) - 1e-6)) : E.gap;
+  }
+  function earlyClass(g2, nat, callUp = 1) {
+    if (!menRules(g2)) return 0;
+    return Math.max(0, Math.min(classNow(g2, nat, callUp) * MANPOWER.early.months, poolAtStart(g2, nat) * MANPOWER.most - menLeft(g2, nat)));
+  }
+  function callEarly(g2, nat, callUp = 1) {
+    if (whyNotEarly(g2, nat) !== null) return 0;
+    ensure(g2, nat);
+    const come = earlyClass(g2, nat, callUp);
+    if (come <= 0) return 0;
+    g2.flags[kp(nat)] = menLeft(g2, nat) + come;
+    g2.flags[ke(nat)] = g2.turn + earlyGap(g2, nat, come, callUp);
+    return come;
+  }
+  function classArrives(g2, nat, callUp = 1) {
+    if (!menRules(g2)) return 0;
+    if (g2.turn <= (g2.flags[ke(nat)] ?? 0)) return 0;
+    ensure(g2, nat);
+    const have = menLeft(g2, nat), top = poolAtStart(g2, nat) * MANPOWER.most;
+    const come = Math.max(0, Math.min(classNow(g2, nat, callUp), top - have));
+    g2.flags[kp(nat)] = have + come;
+    return come;
+  }
+  function openManpower(g2) {
+    const years = Math.max(0, (g2.turn - 1) / 12);
+    for (const n of Object.values(g2.nations)) {
+      const gone = n.atWar.length || years >= 2 ? Math.min(MANPOWER.spentMost, MANPOWER.spentAYear * years) : 0;
+      const start2 = tablePool(g2, n.id);
+      g2.flags[ks(n.id)] = start2;
+      g2.flags[kp(n.id)] = start2 * (1 - gone);
+    }
+  }
+  var round = (men2) => men2 >= 1e5 ? Math.round(men2 / 1e4) * 1e4 : Math.round(men2 / 1e3) * 1e3;
+  function menWords(men2) {
+    const m = round(Math.max(0, men2));
+    return m >= 1e6 ? `${(m / 1e6).toFixed(m >= 1e7 ? 0 : 1).replace(/\.0$/, "")} million` : m.toLocaleString("en-US");
+  }
+  var WORDS = ["Ample", "Thinning", "Short", "Spent"];
+  function menLevel(g2, nat) {
+    if (!menRules(g2)) return 0;
+    const have = menLeft(g2, nat), start2 = poolAtStart(g2, nat);
+    if (have < Math.max(1, classFull(g2, nat))) return 3;
+    const share = start2 > 0 ? have / start2 : 0;
+    return share < MANPOWER.warn[1] ? 2 : share < MANPOWER.warn[0] ? 1 : 0;
+  }
+  function manpower(g2, nat = g2.human, callUp = 1) {
+    if (!nat || !menRules(g2) || !g2.nations[nat]) return null;
+    const divs = menLeft(g2, nat), start2 = poolAtStart(g2, nat), cls = classNow(g2, nat, callUp), home = homeShare(g2, nat);
+    const level = menLevel(g2, nat);
+    const months3 = cls > 0 ? Math.ceil(3 / cls) : 0;
+    const gap = Math.max(0, classGapUntil(g2, nat) - g2.turn), drawnDivs = g2.flags[kx(nat)] ?? 0;
+    const line = level === 3 ? `The reserve is spent. Only the ${menWords(cls * MEN_PER_DIV)} men who come of age each month reach the armies, and no new corps can be raised${months3 ? `: a new infantry corps is about ${months3 === 1 ? "a month" : `${months3} months`} of them` : ""}.` : level === 2 ? `The reserve is running short: ${menWords(divs * MEN_PER_DIV)} men are left. Every loss made good and every new corps is taken from it.` : level === 1 ? `The reserve is thinning: ${menWords(divs * MEN_PER_DIV)} men are left of ${menWords(start2 * MEN_PER_DIV)}.` : `${menWords(divs * MEN_PER_DIV)} men stand in reserve.`;
+    return { nat, divs, men: Math.round(divs * MEN_PER_DIV), start: start2, share: start2 > 0 ? divs / start2 : 0, classMen: Math.round(cls * MEN_PER_DIV), home, drawn: Math.round(drawnDivs * MEN_PER_DIV), came: Math.round(Math.max(0, divs - start2 + drawnDivs) * MEN_PER_DIV), gap, word: WORDS[level], line };
+  }
+  function menWarning(g2, nat) {
+    if (!menRules(g2)) return 0;
+    const level = menLevel(g2, nat), told = g2.flags[kl(nat)] ?? 0;
+    if (level > told) {
+      g2.flags[kl(nat)] = level;
+      return level;
+    }
+    if (level < told) g2.flags[kl(nat)] = level;
+    return 0;
+  }
 
   // ../../data/campaign/tech.json
   var tech_default = {
@@ -9636,175 +9815,6 @@
     return { odds, bomberLoss: a.bomberLoss, cut, nation, rail: rail2, ruin, ftrLoss, bmrLoss, foeLoss, success, worth: value + 300 * (pr + pf), ships, hits, town };
   }
 
-  // ../../data/campaign/manpower.json
-  var manpower_default = {
-    _about: "Manpower (the grand campaign). Every nation has a reserve of men fit to bear arms, counted in divisions' worth (15,000 men). The replacements that fill up worn corps and every new corps are drawn from it, and each month a class comes of age and joins it. A nation whose reserve is spent makes good only what the month's class allows and raises no new corps. The same rule holds for the player and the computer. The historical scenarios have none of this. Rules in src/campaign/manpower.ts.",
-    pool: { GER: 110, SOV: 375, UK: 45, FRA: 55, ITA: 35, USA: 150 },
-    class: { GER: 2.4, SOV: 7, UK: 0.9, FRA: 0.9, ITA: 0.7, USA: 3 },
-    minor: { pool: 2, perDiv: 0.6, classShare: 0.02 },
-    most: 1,
-    spentAYear: 0.12,
-    spentMost: 0.5,
-    warn: [0.5, 0.25],
-    classFloor: 0.1,
-    early: { months: 6, gap: 6 },
-    fold: { worn: 0.7, org: 0.1, price: 0.5, xp: 0.75 },
-    notes: {
-      pool: "The reserve a great power opens a campaign of September 1939 with, in divisions' worth. 'minor': any other country has 'pool' and 'perDiv' for each division it has under arms as the campaign opens.",
-      class: "The class that comes of age each month with the whole homeland held, in divisions' worth; a minor's is 'classShare' of its reserve. It shrinks with the share of the homeland lost, counted by the worth of the provinces, but never under 'classFloor' of it. The reserve never holds more than 'most' times what it opened with.",
-      later: "A campaign that opens after 1939 finds 'spentAYear' of each warring nation's reserve gone for every year of war behind it, to 'spentMost'.",
-      warn: "The player is told when his reserve falls under these shares of what it opened with, and when it is spent.",
-      fold: "Fold two worn corps into one (Version 64). The player may fold one of his corps into another of the same kind standing in the same province when both are under 'worn' of their full strength. The men of both fill the corps that is kept, as far as it has room, and any left over go back to the reserve; what the kept corps knows and how it feels become the average of the men now in it; it loses 'org' of its organisation shaking down, has the fewer moves of the two left, and the better of the two generals commands it while the other goes to the list of generals waiting. The corps folded away is kept off the map as a cadre, with its name, its record and its honours: it can be raised again from the arsenal at 'price' times the cost of a new corps of its kind, takes the men of a new corps from the reserve and the same months to form, and comes back with 'xp' of what it knew. No computer nation folds its corps.",
-      early: "A say over the call-up. A country at war may call the next class up early: 'months' of classes join the reserve at once, and no class comes of age for the next 'gap' months, because the boys who would have are already with the colours: the same men, sooner. Where the reserve has room for fewer than 'months' of classes, only those come and the months without a class are fewer in step. A country with a standing call-up (east.json, mobilisation) may also hold it: no new corps are raised from the reserve while it is held, the waves wait, and the men of each wave that was not raised go to the corps in the field as drafts, over and above what the depots send and at no cost to the treasury. Only the player uses either."
-    }
-  };
-
-  // ../../src/campaign/manpower.ts
-  var MANPOWER = manpower_default;
-  var KP = {};
-  var KX = {};
-  var KL = {};
-  var KS = {};
-  var ks = (nat) => KS[nat] ?? (KS[nat] = `mps:${nat}`);
-  var kp = (nat) => KP[nat] ?? (KP[nat] = `mp:${nat}`);
-  var kx = (nat) => KX[nat] ?? (KX[nat] = `mpx:${nat}`);
-  var kl = (nat) => KL[nat] ?? (KL[nat] = `mpl:${nat}`);
-  var ke = (nat) => `mpe:${nat}`;
-  var menRules = (g2) => g2.flags.open === 1;
-  function tablePool(g2, nat) {
-    const own = MANPOWER.pool[nat];
-    if (own !== void 0) return own;
-    let divs = 0;
-    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.kind !== "fort") divs += c.divs;
-    return MANPOWER.minor.pool + MANPOWER.minor.perDiv * divs;
-  }
-  var poolAtStart = (g2, nat) => g2.flags[ks(nat)] ?? tablePool(g2, nat);
-  var classFull = (g2, nat) => MANPOWER.class[nat] ?? poolAtStart(g2, nat) * MANPOWER.minor.classShare;
-  function ensure(g2, nat) {
-    if (g2.flags[ks(nat)] !== void 0) return;
-    const start2 = tablePool(g2, nat);
-    g2.flags[ks(nat)] = start2;
-    if (g2.flags[kp(nat)] === void 0) g2.flags[kp(nat)] = start2;
-  }
-  function homeShare(g2, nat) {
-    let all = 0, held = 0;
-    for (const r of g2.regions) {
-      if (r.owner !== nat || r.overseas) continue;
-      const w = 1 + r.vp + r.fac;
-      all += w;
-      if (r.ctrl === nat) held += w;
-    }
-    return all ? held / all : 1;
-  }
-  function menLeft(g2, nat) {
-    if (!menRules(g2)) return Infinity;
-    return g2.flags[kp(nat)] ?? poolAtStart(g2, nat);
-  }
-  var raisable = (g2, nat, divs) => menRules(g2) ? Math.floor((menLeft(g2, nat) + 1e-9) / Math.max(0.1, divs)) : Infinity;
-  function menSpare(g2, nat) {
-    if (!menRules(g2)) return Infinity;
-    let short = 0;
-    for (const c of g2.corps) if (c.nat === nat && !c.dead) short += (1 - c.str) * c.divs;
-    return menLeft(g2, nat) - short;
-  }
-  function classNow(g2, nat, callUp = 1) {
-    if (!menRules(g2)) return 0;
-    return classFull(g2, nat) * Math.max(MANPOWER.classFloor, homeShare(g2, nat)) * callUp;
-  }
-  function drawMen(g2, nat, divs) {
-    if (!menRules(g2) || divs <= 0) return divs;
-    ensure(g2, nat);
-    const have = menLeft(g2, nat);
-    const give = Math.min(have, divs);
-    g2.flags[kp(nat)] = have - give;
-    g2.flags[kx(nat)] = (g2.flags[kx(nat)] ?? 0) + give;
-    return give;
-  }
-  function returnMen(g2, nat, divs) {
-    if (!menRules(g2) || divs <= 0) return;
-    ensure(g2, nat);
-    g2.flags[kp(nat)] = menLeft(g2, nat) + divs;
-    g2.flags[kx(nat)] = Math.max(0, (g2.flags[kx(nat)] ?? 0) - divs);
-  }
-  var classGapUntil = (g2, nat) => menRules(g2) ? g2.flags[ke(nat)] ?? 0 : 0;
-  function whyNotEarly(g2, nat) {
-    if (!menRules(g2)) return "The reserve of men is counted in the grand campaign.";
-    const n = g2.nations[nat];
-    if (!n?.alive) return "There is no government left to call anyone up.";
-    if (!n.atWar.length) return "Only a country at war calls its boys up before their time.";
-    const until = classGapUntil(g2, nat);
-    if (g2.turn <= until) return `The next class is with the colours already: none comes of age until ${turnToDate(until + 1).label}.`;
-    if (poolAtStart(g2, nat) * MANPOWER.most - menLeft(g2, nat) < 1e3 / MEN_PER_DIV) return "The reserve is full: there is nowhere to put them.";
-    return null;
-  }
-  function earlyGap(g2, nat, come, callUp = 1) {
-    const E = MANPOWER.early, one = classNow(g2, nat, callUp);
-    return one > 0 ? Math.max(1, Math.ceil(come / one * (E.gap / E.months) - 1e-6)) : E.gap;
-  }
-  function earlyClass(g2, nat, callUp = 1) {
-    if (!menRules(g2)) return 0;
-    return Math.max(0, Math.min(classNow(g2, nat, callUp) * MANPOWER.early.months, poolAtStart(g2, nat) * MANPOWER.most - menLeft(g2, nat)));
-  }
-  function callEarly(g2, nat, callUp = 1) {
-    if (whyNotEarly(g2, nat) !== null) return 0;
-    ensure(g2, nat);
-    const come = earlyClass(g2, nat, callUp);
-    if (come <= 0) return 0;
-    g2.flags[kp(nat)] = menLeft(g2, nat) + come;
-    g2.flags[ke(nat)] = g2.turn + earlyGap(g2, nat, come, callUp);
-    return come;
-  }
-  function classArrives(g2, nat, callUp = 1) {
-    if (!menRules(g2)) return 0;
-    if (g2.turn <= (g2.flags[ke(nat)] ?? 0)) return 0;
-    ensure(g2, nat);
-    const have = menLeft(g2, nat), top = poolAtStart(g2, nat) * MANPOWER.most;
-    const come = Math.max(0, Math.min(classNow(g2, nat, callUp), top - have));
-    g2.flags[kp(nat)] = have + come;
-    return come;
-  }
-  function openManpower(g2) {
-    const years = Math.max(0, (g2.turn - 1) / 12);
-    for (const n of Object.values(g2.nations)) {
-      const gone = n.atWar.length || years >= 2 ? Math.min(MANPOWER.spentMost, MANPOWER.spentAYear * years) : 0;
-      const start2 = tablePool(g2, n.id);
-      g2.flags[ks(n.id)] = start2;
-      g2.flags[kp(n.id)] = start2 * (1 - gone);
-    }
-  }
-  var round = (men2) => men2 >= 1e5 ? Math.round(men2 / 1e4) * 1e4 : Math.round(men2 / 1e3) * 1e3;
-  function menWords(men2) {
-    const m = round(Math.max(0, men2));
-    return m >= 1e6 ? `${(m / 1e6).toFixed(m >= 1e7 ? 0 : 1).replace(/\.0$/, "")} million` : m.toLocaleString("en-US");
-  }
-  var WORDS = ["Ample", "Thinning", "Short", "Spent"];
-  function menLevel(g2, nat) {
-    if (!menRules(g2)) return 0;
-    const have = menLeft(g2, nat), start2 = poolAtStart(g2, nat);
-    if (have < Math.max(1, classFull(g2, nat))) return 3;
-    const share = start2 > 0 ? have / start2 : 0;
-    return share < MANPOWER.warn[1] ? 2 : share < MANPOWER.warn[0] ? 1 : 0;
-  }
-  function manpower(g2, nat = g2.human, callUp = 1) {
-    if (!nat || !menRules(g2) || !g2.nations[nat]) return null;
-    const divs = menLeft(g2, nat), start2 = poolAtStart(g2, nat), cls = classNow(g2, nat, callUp), home = homeShare(g2, nat);
-    const level = menLevel(g2, nat);
-    const months3 = cls > 0 ? Math.ceil(3 / cls) : 0;
-    const gap = Math.max(0, classGapUntil(g2, nat) - g2.turn), drawnDivs = g2.flags[kx(nat)] ?? 0;
-    const line = level === 3 ? `The reserve is spent. Only the ${menWords(cls * MEN_PER_DIV)} men who come of age each month reach the armies, and no new corps can be raised${months3 ? `: a new infantry corps is about ${months3 === 1 ? "a month" : `${months3} months`} of them` : ""}.` : level === 2 ? `The reserve is running short: ${menWords(divs * MEN_PER_DIV)} men are left. Every loss made good and every new corps is taken from it.` : level === 1 ? `The reserve is thinning: ${menWords(divs * MEN_PER_DIV)} men are left of ${menWords(start2 * MEN_PER_DIV)}.` : `${menWords(divs * MEN_PER_DIV)} men stand in reserve.`;
-    return { nat, divs, men: Math.round(divs * MEN_PER_DIV), start: start2, share: start2 > 0 ? divs / start2 : 0, classMen: Math.round(cls * MEN_PER_DIV), home, drawn: Math.round(drawnDivs * MEN_PER_DIV), came: Math.round(Math.max(0, divs - start2 + drawnDivs) * MEN_PER_DIV), gap, word: WORDS[level], line };
-  }
-  function menWarning(g2, nat) {
-    if (!menRules(g2)) return 0;
-    const level = menLevel(g2, nat), told = g2.flags[kl(nat)] ?? 0;
-    if (level > told) {
-      g2.flags[kl(nat)] = level;
-      return level;
-    }
-    if (level < told) g2.flags[kl(nat)] = level;
-    return 0;
-  }
-
   // ../../data/campaign/government.json
   var government_default = {
     _about: "Government and the war cabinet (the grand campaign). Every nation has a form of government. The player's has a war cabinet of ministers he appoints and decrees he can carry, both paid for in political capital (the same that courts neutrals and signs trade agreements), and the cabinet's trust in him, which rises with ground won and jobs done and falls with ground lost and jobs ignored. Every few months the cabinet, or an ally, sets a directive: an optional job with a deadline and a reward. Computer nations keep a caretaker cabinet and no decrees, so none of this moves their wars. Rules in src/campaign/government.ts.",
@@ -13352,6 +13362,24 @@
       }
     }
   }
+  function fieldStrength(g2, nat) {
+    let s = 0;
+    for (const c of g2.corps) if (c.nat === nat && !c.dead && c.kind !== "fort") s += c.divs * c.str;
+    return s;
+  }
+  function traitLevy(g2, nat) {
+    const n = g2.nations[nat];
+    const L = traitRules(g2) && n?.alive && n.atWar.length ? traitsOf(nat).find((t) => t.levy)?.levy : void 0;
+    if (!L) return 0;
+    const count3 = g2.flags[`lv:${nat}`] ?? 0, last = g2.flags[`lvt:${nat}`];
+    if (count3 >= L.most || last !== void 0 && g2.turn - last < L.gap) return 0;
+    if (homeShare(g2, nat) >= 1 || menLeft(g2, nat) >= L.spent * poolAtStart(g2, nat) || fieldStrength(g2, nat) >= L.under) return 0;
+    levyMen(g2, nat, L.men);
+    g2.flags[`lv:${nat}`] = count3 + 1;
+    g2.flags[`lvt:${nat}`] = g2.turn;
+    headline(g2, "event", `${/^(United|Soviet|Netherlands)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${menWords(L.men * MEN_PER_DIV)} more men for its armies.`, nat);
+    return L.men;
+  }
   function traitsMonth(g2) {
     if (!traitRules(g2)) return;
     for (const [nat, row2] of Object.entries(TRAITS.nations)) {
@@ -13421,6 +13449,7 @@
     const head = a !== void 0 && d !== void 0 ? a === d ? `Attack and defence up ${pct4(a)}` : `Attack up ${pct4(a)}, defence up ${pct4(d)}` : a !== void 0 ? `Attack up ${pct4(a)}` : `Defence up ${pct4(d)}`;
     return `${head}${whenWords(x.when, who)}.`;
   }
+  var TIMES = { 3: "three", 4: "four", 5: "five" };
   function traitRule(t, scale = 100) {
     if (t.builtin) return t.rule ?? "Part of the rules of every campaign.";
     const out = [];
@@ -13432,6 +13461,7 @@
     if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? "double" : `${t.oil} times as much`}.`);
     if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);
     if (t.drafts) out.push(`Losses are made good ${pct4(t.drafts)} ${t.drafts > 1 ? "faster" : "slower"}.`);
+    if (t.levy) out.push(`With the enemy on its soil, its reserve of men all but spent and its army in the field under ${t.levy.under} divisions, it calls up every man fit to bear arms: ${menWords(t.levy.men * MEN_PER_DIV)} more men, ${t.levy.most === 1 ? "once" : t.levy.most === 2 ? "twice" : `${TIMES[t.levy.most] ?? t.levy.most} times`} in a war at most and never twice within ${t.levy.gap === 12 ? "a year" : `${t.levy.gap} months`}.`);
     if (t.cost) out.push(`${list2(t.cost.what.map((k) => ORDER_WORD[k] ?? k)).replace(/^./, (ch) => ch.toUpperCase())} cost ${pct4(t.cost.mul)} ${t.cost.mul < 1 ? "less" : "more"}.`);
     if (t.sealift) out.push(`Shipping for ${t.sealift === 1 ? "one more corps" : `${t.sealift} more corps`} a month.`);
     if (t.alert) out.push("No enemy gets the surprise of the first month against it.");
@@ -17723,6 +17753,7 @@
     const want = army.map((c) => c.supplied && !(c.lean && nat === g2.human) && !shutIn(g2, c) && !inPocket(g2, c) ? Math.min((1 - c.str) * c.divs, 0.2 * drafts * restedDrafts(g2, c) * ward(c).drafts * c.divs * lineStrength(g2, c).mul * (g2.regions[c.reg].overseas ? DESERT.replace : 1)) : 0);
     const asked2 = want.reduce((s, x) => s + x, 0);
     if (n.alive) classArrives(g2, nat, govMul(g2, nat, "men"));
+    if (n.alive) traitLevy(g2, nat);
     const heldMen = heldDrafts(g2, nat);
     const share = asked2 > 0 ? Math.min(1, (Math.max(0, n.pp) / perDiv + heldMen) / asked2, (PRODUCTION.manpower * drafts * Math.max(n.armyPeak, armySize(g2, nat)) + heldMen) / asked2, menLeft(g2, nat) / asked2) : 0;
     let drafted_ = 0, freeLeft = heldMen;
@@ -21376,6 +21407,7 @@
     if (g2.flags["dk:alwt"] !== g2.turn) {
       g2.flags["dk:alwt"] = g2.turn;
       g2.flags["dk:alw"] = Math.max(0, g2.nations[nat].pp) * capOf(g2);
+      g2.flags["dk:alwc"] = capPct(g2);
     }
     return g2.flags["dk:alw"] ?? 0;
   }
@@ -21402,7 +21434,44 @@
     });
     return `put ${begun2.length === 1 ? "a research team" : `${begun2.length} research teams`} to work on ${listAnd2(names)}.`;
   }
-  var orderWords = (g2, b) => b.what === "civic" ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "work" ? `${b.item === "aa" ? "anti-aircraft guns" : b.item ?? "works"} at ${g2.regions[b.region].name}` : `${b.name} at ${g2.regions[b.region].name}`;
+  var orderWords = (g2, b) => b.what === "civic" ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "air" ? `a ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "work" ? `${b.item === "aa" ? "anti-aircraft guns" : b.item ?? "works"} at ${g2.regions[b.region].name}` : `${b.name} at ${g2.regions[b.region].name}`;
+  function boughtAir(g2, nat) {
+    const over = { ftr: 0, bmr: 0 }, base = { ftr: 0, bmr: 0 }, forming = { ftr: 0, bmr: 0 };
+    for (const f of airFleetsOf(g2, nat)) {
+      if (f.ship !== void 0) continue;
+      for (const w of ["ftr", "bmr"]) {
+        const x = f.extra?.[w] ?? 0;
+        over[w] += x;
+        base[w] += Math.max(0, f.est[w] - x);
+      }
+    }
+    for (const b of g2.nations[nat].queue) if (b.what === "air" && (b.item === "ftr" || b.item === "bmr")) {
+      forming[b.item] += 1;
+      over[b.item] += b.count ?? ARSENAL.air[b.item].count;
+    }
+    return { over, base, forming };
+  }
+  var noMenFor = (g2, nat) => menSpare(g2, nat) < (specOf(g2, "inf")?.divs ?? 1);
+  function wingsWanted(g2, nat) {
+    const n = g2.nations[nat], M = DEPTH.build?.machines;
+    if (!M || !n?.alive || !n.atWar.length || !noMenFor(g2, nat)) return [];
+    const A = boughtAir(g2, nat);
+    const raid2 = g2.raids[nat], raided = !!raid2 && g2.turn - raid2.turn <= 2;
+    const fill4 = (w) => A.over[w] / Math.max(1, A.base[w]);
+    const kinds = raided || fill4("ftr") <= fill4("bmr") ? ["ftr", "bmr"] : ["bmr", "ftr"];
+    return kinds.filter((w) => A.over[w] + ARSENAL.air[w].count <= M.share * A.base[w]);
+  }
+  function machines(g2, nat) {
+    const n = g2.nations[nat], M = DEPTH.build?.machines;
+    if (!M) return;
+    let spare = income(g2, nat) - upkeepTotal(g2, nat);
+    for (const w of wingsWanted(g2, nat)) {
+      if (boughtAir(g2, nat).forming[w] >= M.each) continue;
+      const o = offers(g2, nat).find((x) => x.key === `air:${w}`);
+      if (!o || o.why !== null || o.at < 0 || n.pp < o.cost + PRODUCTION.aiReserve || spare < o.upkeep * BUDGET.debt.aiMargin) continue;
+      if (orderOffer(g2, nat, o.key, o.at)) spare -= o.upkeep;
+    }
+  }
   function build2(g2, nat) {
     const n = g2.nations[nat];
     const did = [];
@@ -21426,6 +21495,7 @@
       aiProduction(g2, nat);
       aiArsenal(g2, nat);
       civicAI(g2, nat, income(g2, nat), keepsStores(g2, nat), gunsWanted(g2, nat));
+      machines(g2, nat);
     });
     const fresh3 = n.queue.filter((b) => !had.has(b.id));
     if (fresh3.length) did.unshift(`ordered ${some(fresh3.map((b) => orderWords(g2, b)), 4)}`);
@@ -21446,8 +21516,14 @@
         best = T;
       }
     }
-    if (!best || !court(g2, nat, best.id)) return null;
-    return `courted ${the2(best)}.`;
+    if (!best) return null;
+    const before = step(best);
+    if (!court(g2, nat, best.id)) return null;
+    const key4 = `dk:crt:${best.id}`, same = g2.flags[key4] === 1, now = step(best);
+    g2.flags[key4] = 1;
+    if (!same) return `began courting ${the2(best)}.`;
+    if (now === before) return null;
+    return (now - before) * side3 > 0 ? `courted ${the2(best)}, which has moved a step towards us.` : `courted ${the2(best)}, which has moved a step away all the same.`;
   }
   function frontOf(g2, nat) {
     const front = /* @__PURE__ */ new Map();
@@ -21563,13 +21639,22 @@
   }
   var WORK = { research, build: build2, diplomacy, spies, air, navy };
   var ORDER2 = ["research", "build", "diplomacy", "spies", "navy", "air"];
+  function saidLastMonth(g2, desk, line) {
+    let h = 7;
+    for (let i = 0; i < line.length; i++) h = (h * 31 + line.charCodeAt(i)) % 2147483647;
+    const said = `dk:said:${desk}`, when = `dk:saidAt:${desk}`;
+    const again = g2.flags[said] === h && g2.flags[when] === g2.turn - 1;
+    g2.flags[said] = h;
+    g2.flags[when] = g2.turn;
+    return again;
+  }
   function runDesk(g2, nat, desk) {
     const from = g2.headlines.length;
     const line = WORK[desk](g2, nat);
     const made = g2.headlines.splice(from);
     for (const h of made) if (!(h.nat === nat && (h.kind === "info" || h.kind === "battle"))) g2.headlines.push(h);
     markRan(g2, desk);
-    if (line) g2.headlines.push({ turn: g2.turn, week: g2.week, kind: "info", text: `${deskDef(desk).lead} ${line}`, nat, desk });
+    if (line && !saidLastMonth(g2, desk, line)) g2.headlines.push({ turn: g2.turn, week: g2.week, kind: "info", text: `${deskDef(desk).lead} ${line}`, nat, desk });
   }
   function staffMonth(g2) {
     const nat = g2.human;
@@ -21613,14 +21698,17 @@
       case "build": {
         const corps = n.queue.filter((b) => b.what === "corps").length, other2 = n.queue.length - corps;
         const deals = dealsOf(g2, nat).length, houses = housesOf(g2, nat);
-        const noMen = staffRuns(g2, nat, "build") && menSpare(g2, nat) < (specOf(g2, "inf")?.divs ?? 1);
-        return `${corps ? `${corps} corps forming` : "No corps forming"}${other2 ? `, ${other2} other order${other2 === 1 ? "" : "s"} in hand` : ""}. ${deals} of ${houses} trading house${houses === 1 ? "" : "s"} in use.${noMen ? " There are no men to spare for new corps: the armies in the field are waiting for theirs. Aircraft, ships and factories need few, and can be ordered by hand." : ""}`;
+        const noMen = staffRuns(g2, nat, "build") && noMenFor(g2, nat);
+        const air2 = !noMen || !DEPTH.build?.machines || !n.atWar.length ? "" : wingsWanted(g2, nat).length || n.queue.some((b) => b.what === "air") ? " Your staff is putting the money into aircraft instead, which need pilots and not divisions." : " The air force has all the aircraft its pilots can fly, so what is left in the treasury is your reserve.";
+        return `${corps ? `${corps} corps forming` : "No corps forming"}${other2 ? `, ${other2} other order${other2 === 1 ? "" : "s"} in hand` : ""}. ${deals} of ${houses} trading house${houses === 1 ? "" : "s"} in use.${noMen ? ` There are no men to spare for new corps: the armies in the field are waiting for theirs.${air2 || " Aircraft, ships and factories need few, and can be ordered by hand."}` : ""}`;
       }
       case "diplomacy": {
         const b = bloc(n);
         if (!b || b === "league") return "Only a member of the Axis or the Allies courts neutrals.";
         const open = Object.values(g2.nations).filter((T) => T.id !== nat && courtable(T)).length;
-        return `${Math.floor(n.pc)} political capital in hand; a round of courting costs ${DIPLOMACY.court.cost}. ${open ? `${open} neutral${open === 1 ? " is" : "s are"} open to courting.` : "No neutral is open to courting."}`;
+        const who = staffRuns(g2, nat, "diplomacy") ? Object.values(g2.nations).filter((T) => (g2.flags[`court:${nat}:${T.id}`] ?? -9) >= g2.turn - 1).sort((x, y) => g2.flags[`court:${nat}:${y.id}`] - g2.flags[`court:${nat}:${x.id}`])[0] : void 0;
+        const at = who ? ` Your envoys are courting ${the2(who)}.` : "";
+        return `${Math.floor(n.pc)} political capital in hand; a round of courting costs ${DIPLOMACY.court.cost}. ${open ? `${open} neutral${open === 1 ? " is" : "s are"} open to courting.` : "No neutral is open to courting."}${at}`;
       }
       case "spies": {
         const all = agentsOf(g2, nat), out = all.filter((a) => abroad(g2, a)).length;
@@ -21666,6 +21754,7 @@
       caps: DEPTH.cap.steps,
       left: g2.flags["dk:alwt"] === g2.turn ? g2.flags["dk:alw"] ?? 0 : Math.max(0, g2.nations[nat].pp) * capOf(g2),
       spent: g2.flags["dk:ran:build"] === g2.turn ? g2.flags["dk:spent"] ?? 0 : 0,
+      capNext: g2.flags["dk:alwt"] === g2.turn && g2.flags["dk:alwc"] !== void 0 && g2.flags["dk:alwc"] !== capPct(g2),
       cabinet: !cabinetOff(g2),
       canFall: !officeSecure(g2),
       fog: g2.flags.nofog !== 1
@@ -23529,6 +23618,23 @@
           for (const r of s.regions) {
             const v = fieldworksLeft(s, r.id);
             if (v) out.push(r.id, Math.round(v.months * 10), v.corps);
+          }
+        } catch {
+        }
+        return out;
+      })(),
+      // Factories that are not working (bombed, sabotaged or burnt by their own side), for the table to show as
+      // wrecks with cold chimneys: the province and how many. Only where the player can know it: on his own side's
+      // ground, or ground he has eyes on.
+      wrecked: (() => {
+        const out = [];
+        try {
+          for (const r of s.regions) {
+            if (r.fac <= 0) continue;
+            const lost = r.fac - workingFactories(s, r);
+            if (lost <= 0) continue;
+            const known = !s.human || r.ctrl === s.human || allied(s, r.ctrl, s.human) || seen2[r.id] > 0;
+            if (known) out.push(r.id, lost);
           }
         } catch {
         }
@@ -26392,7 +26498,7 @@ ${standing3}`,
         },
         {
           heading: "WHAT YOUR STAFF MAY SPEND",
-          text: `Your staff may spend ${v.cap}% of the treasury in a month on what it builds. ${shown(v.left).toLocaleString("en-US")} is left of this month's allowance${v.spent > 0 ? `, and ${shown(v.spent).toLocaleString("en-US")} has been spent` : ""}.`,
+          text: `Your staff may spend ${v.cap}% of the treasury in a month on what it builds. ${shown(v.left).toLocaleString("en-US")} is left of this month's allowance${v.spent > 0 ? `, and ${shown(v.spent).toLocaleString("en-US")} has been spent` : ""}.${v.capNext ? " The new share takes hold from next month: this month's allowance was already drawn." : ""}`,
           rows: [{
             nat: "",
             title: "The share of the treasury",

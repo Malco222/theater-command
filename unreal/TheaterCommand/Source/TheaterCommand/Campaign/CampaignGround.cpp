@@ -654,7 +654,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			for (int32 Idx = 0; Idx < Count; ++Idx)
 			{
 				uint8& Kept = Part == 0 ? Relief[Idx].R : Part == 1 ? Relief[Idx].G : Relief[Idx].B;
-				Kept = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(FMath::Lerp(static_cast<float>(Kept), Soft[Idx], Outside[Idx])), 0, 255));
+				// (by half: softened wholly, the ranges lost some of their bite)
+				Kept = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(FMath::Lerp(static_cast<float>(Kept), Soft[Idx], 0.5f * Outside[Idx])), 0, 255));
 			}
 		}
 	}

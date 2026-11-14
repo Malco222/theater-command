@@ -23,10 +23,13 @@ namespace ShipParts
 		return FLinearColor(FColor::FromHex(Code));
 	}
 
-	static const FLinearColor Boot = Hex(TEXT("23262A"));     // the dark band at the waterline
+	static const FLinearColor Boot = Hex(TEXT("1E2023"));     // the dark band at the waterline, a tenth of the hull's height
 	static const FLinearColor Steel = Hex(TEXT("2E3134"));
-	static const FLinearColor Planks = Hex(TEXT("A08C68"));
+	static const FLinearColor Black = Hex(TEXT("17181A"));    // funnel caps
+	static const FLinearColor Planks = Hex(TEXT("B79E74"));   // a wooden deck
+	static const FLinearColor Plating = Hex(TEXT("4E5459"));  // a steel deck
 	static const FLinearColor Canvas = Hex(TEXT("B7B09A"));
+	static const FLinearColor Rust = Hex(TEXT("6E4A34"));
 
 	/** What a navy's ships look like: the grey of the hull, the lighter grey of the upper works, the deck. */
 	struct FLivery
@@ -34,15 +37,22 @@ namespace ShipParts
 		FLinearColor Hull, Upper, Deck, Flight;
 	};
 
-	static FLivery LiveryOf(const FString& Tag)
+	/**
+	 * A navy's paint (the art director's ruling on the ships, 2026-11-14): the hull grey by navy, the upper works
+	 * the same but for Germany's pale ones; a wooden deck on battleships and cruisers and a steel one on destroyers;
+	 * a wooden flight deck for Japan and the United States and a steel one for the others; a submarine's casing
+	 * dark. No hull markings, and no emblem on any deck but the plain red disc on a Japanese flight deck.
+	 * Class: 0 battleship, 1 cruiser, 2 destroyer, 3 carrier, 4 submarine.
+	 */
+	static FLivery LiveryOf(const FString& Tag, int32 Class)
 	{
-		if (Tag == TEXT("GER")) return { Hex(TEXT("666D72")), Hex(TEXT("8A9297")), Planks, Hex(TEXT("6A6E70")) };
-		if (Tag == TEXT("USA")) return { Hex(TEXT("4A5868")), Hex(TEXT("7B8794")), Hex(TEXT("4A5868")), Hex(TEXT("3E4A58")) };
-		if (Tag == TEXT("JAP") || Tag == TEXT("JPN")) return { Hex(TEXT("555C61")), Hex(TEXT("666D72")), Hex(TEXT("B09A70")), Hex(TEXT("A89268")) };
-		if (Tag == TEXT("ITA")) return { Hex(TEXT("8E969A")), Hex(TEXT("A6ADB0")), Planks, Hex(TEXT("7A7F82")) };
-		if (Tag == TEXT("FRA") || Tag == TEXT("VIC") || Tag == TEXT("FFR")) return { Hex(TEXT("7E8890")), Hex(TEXT("98A1A8")), Planks, Hex(TEXT("70767A")) };
-		if (Tag == TEXT("SOV")) return { Hex(TEXT("6E777C")), Hex(TEXT("838C91")), Hex(TEXT("7A4A3A")), Hex(TEXT("6A6E70")) };
-		return { Hex(TEXT("737C82")), Hex(TEXT("8D969B")), Planks, Hex(TEXT("666C70")) }; // the Royal Navy's grey, and the default
+		const bool bJapan = Tag == TEXT("JAP") || Tag == TEXT("JPN"), bFrance = Tag == TEXT("FRA") || Tag == TEXT("VIC") || Tag == TEXT("FFR");
+		const FLinearColor Hull = Tag == TEXT("GER") ? Hex(TEXT("6A7278")) : bJapan ? Hex(TEXT("5C6266")) : Tag == TEXT("USA") ? Hex(TEXT("5F6E80"))
+			: Tag == TEXT("ITA") ? Hex(TEXT("A2A8A6")) : bFrance ? Hex(TEXT("8E9AA6")) : Tag == TEXT("SOV") ? Hex(TEXT("565E6A")) : Hex(TEXT("7A848C"));
+		const FLinearColor Upper = Tag == TEXT("GER") ? Hex(TEXT("A9AEB0")) : Hull;
+		const FLinearColor Deck = Class == 4 ? Hex(TEXT("3E4448")) : Class == 0 || Class == 1 ? Planks : Plating;
+		const FLinearColor Flight = bJapan || Tag == TEXT("USA") ? Planks : Plating;
+		return { Hull, Upper, Deck, Flight };
 	}
 
 	/** The shape of a hull. */
@@ -94,19 +104,40 @@ namespace ShipParts
 			const double Lean = T > 0.3 ? H.Rake * FMath::Square((T - 0.3) / 0.2) : 0.0;
 			const double Water = Top * (T > 0.15 ? FMath::Lerp(0.94, 0.55, (T - 0.15) / 0.35) : 0.94);
 			TArray<FVector>& Ring = Rings.AddDefaulted_GetRef();
+			// (two points close together a tenth of the way up each side, so that the dark band at the waterline ends
+			// on a line and does not fade away up the hull)
+			const double Band = 0.1, Above = 0.13;
+			auto Side = [&](double Hand, double Share) { return At(X + Lean * Share, Hand * FMath::Lerp(Water, Top, Share), Z * Share); };
 			Ring.Add(At(X + Lean, -Top, Z));
-			Ring.Add(At(X + Lean * 0.5, -(Top + Water) * 0.5, Z * 0.5));
+			Ring.Add(Side(-1.0, 0.5));
+			Ring.Add(Side(-1.0, Above));
+			Ring.Add(Side(-1.0, Band));
 			Ring.Add(At(X, -Water, 0.0));
 			Ring.Add(At(X, -Water * 0.8, -2.0));
 			Ring.Add(At(X, 0.0, -3.5));
 			Ring.Add(At(X, Water * 0.8, -2.0));
 			Ring.Add(At(X, Water, 0.0));
-			Ring.Add(At(X + Lean * 0.5, (Top + Water) * 0.5, Z * 0.5));
+			Ring.Add(Side(1.0, Band));
+			Ring.Add(Side(1.0, Above));
+			Ring.Add(Side(1.0, 0.5));
 			Ring.Add(At(X + Lean, Top, Z));
 			Port.Add(At(X + Lean, -Top, Z + 0.05));
 			Starboard.Add(At(X + Lean, Top, Z + 0.05));
 		}
-		Skin(M, Rings, [&L](const FVector& Place, const FVector&, int32) { return Place.Z < 0.9 ? Boot : L.Hull; });
+		// (Its paint: the dark band, then the navy's grey, with a little rust weeping down it here and there and
+		// more toward the waterline, and a little soot. Light: a ship in service, not a wreck.)
+		Skin(M, Rings, [&L, &H](const FVector& Place, const FVector&, int32)
+		{
+			const double Up = Place.Z / FMath::Max(DeckAt(H, -Place.X), 0.5); // (a model is built with its bow toward -X)
+			if (Up < 0.115)
+			{
+				return Boot;
+			}
+			const float Streak = FMath::Max(0.0f, FMath::PerlinNoise1D(static_cast<float>(Place.X) * 0.19f + 7.3f) - 0.15f);
+			const float Weep = Streak * 0.55f * static_cast<float>(1.0 - FMath::Clamp(Up, 0.0, 1.0) * 0.6);
+			const float Grime = 0.05f * (0.5f + 0.5f * FMath::PerlinNoise1D(static_cast<float>(Place.X) * 0.047f + 31.0f));
+			return FMath::Lerp(L.Hull * (1.0f - Grime), Rust, FMath::Clamp(Weep, 0.0f, 0.3f));
+		});
 		// The deck, laid in strips across the hull.
 		const FColor DeckPaint = L.Deck.ToFColor(true);
 		for (int32 K = 0; K < Stations; ++K)
@@ -165,7 +196,9 @@ namespace ShipParts
 				return Plan;
 			};
 			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Oval(X, Long * 0.5, Wide * 0.5), Oval(X - High * Lean, Long * 0.47, Wide * 0.47) }, { Z, Z + High * 0.88 }, L.Upper, true);
-			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Oval(X - High * Lean, Long * 0.48, Wide * 0.48), Oval(X - High * Lean * 1.1, Long * 0.46, Wide * 0.46) }, { Z + High * 0.88, Z + High }, Steel, true);
+			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Oval(X - High * Lean, Long * 0.48, Wide * 0.48), Oval(X - High * Lean * 1.1, Long * 0.46, Wide * 0.46) }, { Z + High * 0.88, Z + High }, Black, true);
+			// (and a little soot down the after side of it)
+			M.Box(At(X - Long * 0.47, 0.0, Z + High * 0.72), FVector(0.3, Wide * 0.5, High * 0.3), FMath::Lerp(L.Upper, Black, 0.45f));
 		}
 
 		/** A mast, with a yard across it and a top. */
@@ -190,6 +223,11 @@ namespace ShipParts
 				{ { { X + F * Half * 1.25, Side - Half * 0.62 }, { X + F * Half * 1.25, Side + Half * 0.62 }, { X + F * Half * 0.2, Side + Half * 0.95 }, { X - F * Half * 1.0, Side + Half * 0.8 }, { X - F * Half * 1.0, Side - Half * 0.8 }, { X + F * Half * 0.2, Side - Half * 0.95 } },
 					{ { X + F * Half * 0.95, Side - Half * 0.55 }, { X + F * Half * 0.95, Side + Half * 0.55 }, { X + F * Half * 0.15, Side + Half * 0.85 }, { X - F * Half * 0.95, Side + Half * 0.72 }, { X - F * Half * 0.95, Side - Half * 0.72 }, { X + F * Half * 0.15, Side - Half * 0.85 } } },
 				{ Z + 0.7, Z + 0.7 + Size * 0.32 }, L.Upper, false);
+			// (its roof a quarter darker than its sides, as the tops of turrets were painted against the eye above)
+			M.Stack(FVector::ZeroVector, 1.0, 0.0,
+				{ { { X + F * Half * 0.93, Side - Half * 0.53 }, { X + F * Half * 0.93, Side + Half * 0.53 }, { X + F * Half * 0.14, Side + Half * 0.83 }, { X - F * Half * 0.93, Side + Half * 0.7 }, { X - F * Half * 0.93, Side - Half * 0.7 }, { X + F * Half * 0.14, Side - Half * 0.83 } },
+					{ { X + F * Half * 0.93, Side - Half * 0.53 }, { X + F * Half * 0.93, Side + Half * 0.53 }, { X + F * Half * 0.14, Side + Half * 0.83 }, { X - F * Half * 0.93, Side + Half * 0.7 }, { X - F * Half * 0.93, Side - Half * 0.7 }, { X + F * Half * 0.14, Side - Half * 0.83 } } },
+				{ Z + 0.7 + Size * 0.32, Z + 0.7 + Size * 0.32 + 0.12 }, L.Upper * 0.75f, false);
 			for (int32 K = 0; K < Barrels; ++K)
 			{
 				const double Out = Side + (K - (Barrels - 1) * 0.5) * Size * (Barrels > 3 ? 0.24 : 0.32);
@@ -208,7 +246,7 @@ namespace ShipParts
 		/** A ship's boat on the deck. */
 		void Boat(double X, double Side, double Z, double Long) const
 		{
-			M.Ball(At(X, Side, Z + Long * 0.08), FVector(Long, Long * 0.28, Long * 0.2), Hex(TEXT("D6D0C0")), 3, 8);
+			M.Ball(At(X, Side, Z + Long * 0.08), FVector(Long, Long * 0.28, Long * 0.2), Hex(TEXT("D8D2C4")), 3, 8);
 		}
 
 		/** Light anti-aircraft guns: a pair of thin barrels on a small round base. */
@@ -341,7 +379,7 @@ namespace ShipParts
 	static void Battleship(FMiniatureMesh& M)
 	{
 		const FString Tag = MiniatureParts::NationWanted();
-		const FLivery L = LiveryOf(Tag);
+		const FLivery L = LiveryOf(Tag, 0);
 		FCapital C;
 		if (Tag == TEXT("GER"))
 		{
@@ -424,7 +462,7 @@ namespace ShipParts
 	static void Cruiser(FMiniatureMesh& M)
 	{
 		const FString Tag = MiniatureParts::NationWanted();
-		const FLivery L = LiveryOf(Tag);
+		const FLivery L = LiveryOf(Tag, 1);
 		FCapital C;
 		C.GunSize = 7.0;
 		C.GunLong = 9.5;
@@ -475,7 +513,7 @@ namespace ShipParts
 	static void Destroyer(FMiniatureMesh& M)
 	{
 		const FString Tag = MiniatureParts::NationWanted();
-		const FLivery L = LiveryOf(Tag);
+		const FLivery L = LiveryOf(Tag, 2);
 		const bool bFlush = Tag == TEXT("USA"); // the American destroyers had one unbroken deck
 		FHull H{ Tag == TEXT("GER") ? 123.0 : 114.0, 11.6, bFlush ? 4.0 : 3.0, bFlush ? 3.0 : 1.5, 0.0, 5.0, 0.4 };
 		if (!bFlush)
@@ -526,7 +564,7 @@ namespace ShipParts
 	static void Carrier(FMiniatureMesh& M)
 	{
 		const FString Tag = MiniatureParts::NationWanted();
-		const FLivery L = LiveryOf(Tag);
+		const FLivery L = LiveryOf(Tag, 3);
 		const bool bJapan = Tag == TEXT("JAP") || Tag == TEXT("JPN");
 		const FHull H{ Tag == TEXT("USA") ? 247.0 : (bJapan ? 257.0 : 243.0), Tag == TEXT("USA") ? 28.0 : 29.0, 9.0, 1.5, 0.0, 9.0, 0.6 };
 		const FYard Y{ M, H, L };
@@ -569,7 +607,7 @@ namespace ShipParts
 				Head.Add(FVector2D(7.0 + C * 5.6, Side + S * 2.0));
 			}
 			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Foot, Head }, { Top + 7.0, Top + 15.0 }, L.Upper, true);
-			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Head, Head }, { Top + 15.0, Top + 16.2 }, Steel, true);
+			M.Stack(FVector::ZeroVector, 1.0, 0.0, { Head, Head }, { Top + 15.0, Top + 16.2 }, Black, true);
 		}
 		// Guns along the edges of the deck.
 		for (const double Hand : { -1.0, 1.0 })
@@ -594,10 +632,10 @@ namespace ShipParts
 	static void Submarine(FMiniatureMesh& M)
 	{
 		const FString Tag = MiniatureParts::NationWanted();
-		const FLivery L = LiveryOf(Tag);
+		const FLivery L = LiveryOf(Tag, 4);
 		const double Long = Tag == TEXT("USA") ? 95.0 : (Tag == TEXT("GER") ? 67.0 : 80.0);
 		const FHull H{ Long, Tag == TEXT("USA") ? 8.3 : 6.2, 1.6, 0.9, 0.0, 2.0, 0.0 };
-		const FYard Y{ M, H, FLivery{ L.Hull * 0.8f, L.Hull, L.Hull * 0.7f, L.Hull } };
+		const FYard Y{ M, H, FLivery{ L.Hull * 0.8f, L.Hull, L.Deck, L.Hull } };
 		Hull(M, H, Y.L);
 		const double Z = Y.Deck(0.0);
 		// The conning tower, with the periscopes and the platform for the anti-aircraft gun behind it.

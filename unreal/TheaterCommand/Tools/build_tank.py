@@ -451,7 +451,7 @@ def gather(parts, simple=False):
         if simple:
             for mod in obj.modifiers:
                 mod.show_viewport = False                 # the far mesh has no bevels
-            if FAR_RATIO < 1.0 and len(obj.data.polygons) > 12:
+            if FAR_RATIO < 1.0 and len(obj.data.polygons) > 6:
                 thin = obj.modifiers.new("thin", "DECIMATE")
                 thin.ratio = FAR_RATIO
             # (and the smallest things are left off it: they cannot be seen from there)
@@ -731,8 +731,15 @@ OTHERS = {
 
 # ---- The infantry figure --------------------------------------------------------------------------
 
+# (The art director's ruling on the figures: they read as wooden lay figures, so arms and legs are a third thicker
+# than they were first made, and a horse's legs half as thick again.)
+THICKER = {"thigh": 1.33, "shin": 1.33, "knee": 1.33, "upper_arm": 1.33, "forearm": 1.33, "elbow": 1.33, "hand": 1.15,
+           "gaskin": 1.5, "cannon": 1.5, "hock": 1.5, "hoof": 1.3}
+
+
 def limb(name, a, b, ra, rb, paint, sides=8):
     """A tapered round limb from one point to another."""
+    ra, rb = ra * THICKER.get(name, 1.0), rb * THICKER.get(name, 1.0)
     a, b = Vector(a), Vector(b)
     bm = bmesh.new()
     bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=sides, radius1=ra, radius2=rb, depth=(b - a).length)
@@ -744,6 +751,7 @@ def limb(name, a, b, ra, rb, paint, sides=8):
 def ball(name, at, size, paint, flat_below=None, u=10, v=6):
     """A ball, or an egg ('size' may be three radii); 'flat_below' cuts it level at that height above its middle."""
     radii = size if isinstance(size, tuple) else (size, size, size)
+    radii = tuple(r * THICKER.get(name, 1.0) for r in radii)
     bm = bmesh.new()
     bmesh.ops.create_uvsphere(bm, u_segments=u, v_segments=v, radius=1.0)
     for vert in bm.verts:
@@ -945,7 +953,7 @@ def horse():
             parts.append(limb("gaskin", top, joint, thick, 0.055, "coat", 8))
             parts.append(ball("hock", joint, 0.058, "coat", u=8, v=5))
             parts.append(limb("cannon", joint, foot, 0.05, 0.038, "coat", 6))
-            parts.append(drum("hoof", 0.06, 0.1, (foot[0], foot[1], 0.05), "hoof", 8, axis="Z", radius2=0.048))
+            parts.append(drum("hoof", 0.06 * THICKER["hoof"], 0.1, (foot[0], foot[1], 0.05), "hoof", 8, axis="Z", radius2=0.048 * THICKER["hoof"]))
     # the saddle on its blanket, with a girth, and a rolled cloak behind it
     parts.append(box("saddle_blanket", (0.72, 0.64, 0.05), (-0.02, 0.0, 1.535), "blanket", 0.015,
                      shape=lambda p: Vector((p.x, p.y, p.z - (2.2 if abs(p.y) > 0.4 else 0.0)))))
@@ -1013,7 +1021,7 @@ def write(name, title, s, out):
     global PAINT_SET, FAR_RATIO
     kind = s.get("kind", "tank")
     PAINT_SET = FIGURE_PAINTS if kind == "figure" else PAINTS
-    FAR_RATIO = 0.5 if kind == "figure" else 1.0
+    FAR_RATIO = 0.42 if kind == "figure" else 1.0   # (about 450 triangles a rifleman, as the art director ruled)
     parts = (build_figure(s) if kind == "figure" else build_truck(s) if kind == "truck" else build_halftrack(s) if kind == "halftrack"
              else build_gun(s) if kind == "gun" else build(s))
     near = gather(parts)

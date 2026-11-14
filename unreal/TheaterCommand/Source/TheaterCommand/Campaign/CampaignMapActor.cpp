@@ -259,6 +259,48 @@ float ACampaignMapActor::GroundAt(double InX, double Y) const
 	return Terrain.HeightAt(X, Y);
 }
 
+void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
+{
+	// Factories that are not working: the province and how many. The towns are built again only when that changes
+	// (a raid that told, a saboteur, a works relaid): their wrecked works stand roofless, with cold stacks.
+	TMap<int32, int32> Now;
+	for (int32 K = 0; K + 1 < FromRules.Num(); K += 2)
+	{
+		if (Data.Regions.IsValidIndex(FromRules[K]) && FromRules[K + 1] > 0)
+		{
+			Now.Add(FromRules[K], FromRules[K + 1]);
+		}
+	}
+	// ("-TheaterWrecked=Berlin:2,Hamburg:1" wrecks works for a picture)
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterWrecked="), Asked, false))
+	{
+		TArray<FString> Places;
+		Asked.ParseIntoArray(Places, TEXT(","));
+		for (const FString& Place : Places)
+		{
+			FString Name, Count;
+			if (Place.Split(TEXT(":"), &Name, &Count))
+			{
+				if (const int32* Id = Data.RegionByName.Find(Name))
+				{
+					Now.Add(*Id, FCString::Atoi(*Count));
+				}
+			}
+		}
+	}
+	if (Now.OrderIndependentCompareEqual(WreckedIn))
+	{
+		return;
+	}
+	const bool bTowns = TownMesh != nullptr;
+	WreckedIn = MoveTemp(Now);
+	if (bTowns)
+	{
+		BuildTowns();
+	}
+}
+
 void ACampaignMapActor::DressBeyond(UMaterialInstanceDynamic* Sheet) const
 {
 	if (!Sheet)
@@ -528,20 +570,23 @@ UTexture2D* ACampaignMapActor::GetFlagTexture(const FString& Tag)
 	return Texture;
 }
 
-UMaterialInterface* ACampaignMapActor::GetFlagMaterial(const FString& Tag)
+UMaterialInterface* ACampaignMapActor::GetFlagMaterial(const FString& Tag, int32 Wear)
 {
 	if (!FlagMaterial)
 	{
 		return nullptr;
 	}
-	if (TObjectPtr<UMaterialInstanceDynamic>* Found = FlagMaterials.Find(Tag))
+	const FString Key = Wear > 0 ? FString::Printf(TEXT("%s|w%d"), *Tag, Wear) : Tag;
+	if (TObjectPtr<UMaterialInstanceDynamic>* Found = FlagMaterials.Find(Key))
 	{
 		return *Found;
 	}
 	UMaterialInstanceDynamic* Instance = UMaterialInstanceDynamic::Create(FlagMaterial, this);
 	Instance->SetTextureParameterValue(TEXT("Flag"), GetFlagTexture(Tag));
 	Instance->SetScalarParameterValue(TEXT("Glow"), 0.5f * (1.0f - 0.4f * GetMoonlight()));
-	FlagMaterials.Add(Tag, Instance);
+	// (a battered army's flag is faded, and a spent one's more so)
+	Instance->SetScalarParameterValue(TEXT("Fade"), Wear >= 2 ? 0.46f : Wear == 1 ? 0.26f : 0.0f);
+	FlagMaterials.Add(Key, Instance);
 	return Instance;
 }
 
@@ -1731,6 +1776,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 	LastWorks = Works;
 	BuildingsMesh->ClearAllMeshSections();
 	WorksChimneys.Reset();
+	WorksChimneyRegion.Reset();
 	AirfieldSpots.Reset();
 	AirfieldLie.Reset();
 	ShownAirSigns.Reset(); // (the aircraft parked on the airfields are stood again where the airfields now are)
@@ -1853,6 +1899,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 				Model.Pillar(Foot, 0.12 * Unit, 0.08 * Unit, 1.7 * Unit, Brick, 8);
 				Model.Pillar(Foot + FVector(0.0, 0.0, 1.7 * Unit), 0.09 * Unit, 0.09 * Unit, 0.06 * Unit, Soot, 8);
 				WorksChimneys.Add(Foot + FVector(0.0, 0.0, 1.76 * Unit));
+				WorksChimneyRegion.Add(FIntPoint(Id, Stack));
 			}
 			++Count;
 		}
@@ -3289,6 +3336,7 @@ void ACampaignMapActor::BuildTowns()
 		Site.MapUnit = U;
 		Site.Tier = Region.bCapital ? 3 : bCity ? 2 : bBig ? 1 : 0;
 		Site.Factories = Region.Factories;
+		Site.Ruined = FMath::Clamp(WreckedIn.FindRef(Region.Id), 0, Region.Factories); // (bombed-out works: the first of them are wrecks)
 		Site.Seed = Region.Id;
 		{
 			// Roofs and walls by where it lies (the map is forty units to the degree of latitude).
@@ -6621,6 +6669,13 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	}
 	for (int32 K = 0; K < WorksChimneys.Num(); ++K)
 	{
+		// (Where more factories are wrecked than the town had before the war, the stacks of the works built since
+		// stand cold too, as many as are wrecked.)
+		if (WorksChimneyRegion.IsValidIndex(K) && Data.Regions.IsValidIndex(WorksChimneyRegion[K].X)
+			&& WorksChimneyRegion[K].Y < WreckedIn.FindRef(WorksChimneyRegion[K].X) - Data.Regions[WorksChimneyRegion[K].X].Factories)
+		{
+			continue;
+		}
 		Plume(WorksChimneys[K], K + 500);
 	}
 
@@ -6823,10 +6878,20 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	const float Fields = (CameraDistance < 9000.0f ? FMath::GetMappedRangeValueClamped(FVector2f(3000.0f, 9000.0f), FVector2f(FieldsNear, FieldsWorking), CameraDistance)
 		: FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 19000.0f), FVector2f(FieldsWorking, FieldsWorking * 0.45f), CameraDistance)) * (1.0f - 0.5f * GetMoonlight());
 	const float Hedges = FMath::GetMappedRangeValueClamped(FVector2f(2600.0f, 7000.0f), FVector2f(HedgesNear, 0.0f), CameraDistance);
-	if (LandMaterial && FMath::Abs(Fields - FieldsShown) > 0.005f)
+	// (On the world's coarse sheet, which is what is seen from high up beyond Europe, the quilt all but goes as the
+	// eye climbs: its squares and strips were ruled lines from there, and where one manner of field met another the
+	// ground stepped along a ruled line.)
+	const float FarFields = Fields * (1.0f - 0.85f * FMath::SmoothStep(11000.0f, 18000.0f, CameraDistance));
+	const bool bFieldsMoved = LandMaterial && FMath::Abs(Fields - FieldsShown) > 0.005f;
+	if (bFieldsMoved)
 	{
 		FieldsShown = Fields;
 		LandScalar(TEXT("FieldsStrength"), Fields);
+	}
+	if (WorldLandMaterial && (bFieldsMoved || FMath::Abs(FarFields - FarFieldsShown) > 0.003f))
+	{
+		FarFieldsShown = FarFields;
+		WorldLandMaterial->SetScalarParameterValue(TEXT("FieldsStrength"), FarFields);
 	}
 	if (LandMaterial && FMath::Abs(Hedges - HedgesShown) > 0.005f)
 	{
@@ -6935,11 +7000,14 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 				LandScalar(TEXT("SquareWork"), Work);
 			}
 			// (and as the eye climbs on, the smallest woods on the world's coarse sheet are let go)
-			const float Lift = 0.24f * FMath::SmoothStep(11000.0f, 19000.0f, CameraDistance);
-			if (WorldLandMaterial && FMath::Abs(Lift - WoodsLiftShown) > 0.005f)
+			// (they fade, they do not pop: the edge of a wood is softer the higher the eye, and the great masses stay)
+			const float Climb = FMath::SmoothStep(11000.0f, 18000.0f, CameraDistance);
+			const float Lift = 0.36f * Climb;
+			if (WorldLandMaterial && FMath::Abs(Lift - WoodsLiftShown) > 0.004f)
 			{
 				WoodsLiftShown = Lift;
 				WorldLandMaterial->SetScalarParameterValue(TEXT("WoodsLift"), Lift);
+				WorldLandMaterial->SetScalarParameterValue(TEXT("WoodsSharp"), FMath::Lerp(2.2f, 1.5f, Climb));
 			}
 		}
 		if (FMath::Abs(Sheet - PaperShown) > 0.004f)

@@ -239,9 +239,11 @@ def build_flag():
                    parameter_name="Flag",
                    texture=unreal.load_asset("/Engine/EngineResources/DefaultTexture"),
                    sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
-    to_property(picture, "RGB", unreal.MaterialProperty.MP_BASE_COLOR)
+    # (A battered army's flag is faded: its colours are drawn toward the grey of weathered bunting by "Fade".)
+    cloth = lerp(m, (picture, "RGB"), vector(m, "Faded", (0.42, 0.39, 0.33, 1.0), -700, 180), scalar(m, "Fade", 0.0, -700, 260), -450, 60)
+    to_property(cloth, "", unreal.MaterialProperty.MP_BASE_COLOR)
     glow = node(m, unreal.MaterialExpressionMultiply, -350, 300)
-    connect(picture, "RGB", glow, "A")
+    connect(cloth, "", glow, "A")
     connect(scalar(m, "Glow", 0.5, -700, 350), "", glow, "B")
     to_property(glow, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     to_property(scalar(m, "Roughness", 0.75, -700, 500), "", unreal.MaterialProperty.MP_ROUGHNESS)
@@ -353,7 +355,6 @@ def build_land():
     m = new_material("M_Land")
     m.set_editor_property("tangent_space_normal", False)  # the picture says which way the ground leans in the world
     uv = node(m, unreal.MaterialExpressionTextureCoordinate, -3000, 0)
-    ground = picture(m, "Ground", uv, -2600, -500)
     tint = picture(m, "Tint", uv, -2600, -250)
     # The detail, at two sizes so that its repeat does not show. (It is read here, ahead of its use, because the
     # shading of the hills, the edges of the woods and the lie of the fields are roughened by it.)
@@ -367,6 +368,10 @@ def build_land():
     jitter = vector(m, "ReliefJitter", (0.0, 0.0, 0.0, 0.0), -3300, 150)
     shake = times(m, plus(m, pair(m, (fine, "R"), (fine, "B"), -3150, 250), -0.5, -3050, 250), pair(m, (jitter, "R"), (jitter, "G"), -3150, 150), -2950, 200)
     relief_uv = plus(m, uv, shake, -2800, 150)
+    # (Tried and taken out: shaking the ground's own colour on the world's coarse sheet by the coarser detail, against
+    # the straight valleys of New England seen from high up. It combed the coasts and the woods and left the valleys
+    # as they were: they are the Hudson, the Green Mountains and the Connecticut, which do run north and south.)
+    ground = picture(m, "Ground", uv, -2600, -500)
     relief = picture(m, "Relief", relief_uv, -2600, 0, numbers=True)
     masks = picture(m, "Masks", relief_uv, -2600, 250, numbers=True)
 

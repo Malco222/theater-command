@@ -83,6 +83,33 @@ void AArmyPiece::SetArmy(ACampaignMapActor* Map, const FCampaignNation& Nation, 
 		SupplyState = Known == 0 ? 0 : Starved > 0 ? 2 : 1;
 		NewSignature += FString::Printf(TEXT("|w%dc%ds%d"), WorksState, bCamp ? 1 : 0, SupplyState);
 	}
+	// A flag that shows its wear: a battered army flies a torn and faded flag, by the strength its known corps have
+	// left. ("-TheaterFlagWear=2" wears every flag, for a picture.)
+	{
+		float Left = 0.0f;
+		int32 Counted = 0;
+		for (const FViewCorps& Unit : Corps)
+		{
+			if (!Unit.bDim && Unit.Stale <= 0)
+			{
+				Left += FMath::Clamp(Unit.Strength, 0.0f, 1.0f);
+				++Counted;
+			}
+		}
+		const float Mean = Counted > 0 ? Left / Counted : 1.0f;
+		FlagWear = Mean < 0.45f ? 2 : Mean < 0.72f ? 1 : 0;
+		static int32 Forced = -2;
+		if (Forced == -2)
+		{
+			Forced = -1;
+			FParse::Value(FCommandLine::Get(), TEXT("TheaterFlagWear="), Forced);
+		}
+		if (Forced >= 0)
+		{
+			FlagWear = FMath::Clamp(Forced, 0, 2);
+		}
+		NewSignature += FString::Printf(TEXT("|f%d"), FlagWear);
+	}
 	// The standard carries a streamer for every honour its corps have won.
 	int32 HonourCount = 0;
 	for (const FViewCorps& Unit : Corps)
@@ -504,14 +531,35 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Staff.Ball(FVector(0.0, 0.0, PoleHeight + 0.4 * U), FVector(1.1 * U), BrassPaint, 6, 10);
 	const double Hoist = 0.2 * U; // where the cloth begins, just clear of the pole
 	const FVector FlagAt = Pole + FVector(0.0, Hoist + FlagWidth * 0.5, Top + PoleHeight - FlagHeight * 0.5 - 0.3 * U);
-	if (UMaterialInterface* Colours = Map->GetFlagMaterial(Nation.Tag))
+	if (UMaterialInterface* Colours = Map->GetFlagMaterial(Nation.Tag, What == 0 ? FlagWear : 0))
 	{
 		// The cloth is a sheet with a slow ripple in it that grows toward the free end, as a flag hangs in a light
 		// air. Pieces are turned so that the viewer looks along their +X: the cloth faces back along -X, the pole
 		// on the viewer's left, which is the side a flag is read from.
-		const int32 Across = 18, Down = 6;
+		const int32 Wear = What == 0 ? FlagWear : 0;
+		const int32 Across = 18, Down = Wear > 0 ? 12 : 6;
 		const double Ripple = 0.045 * FlagWidth, Waves = 1.3, Droop = 0.035 * FlagHeight;
 		const double Phase = (RegionId * 37 % 100) * 0.0628; // no two neighbours hang alike
+		// (A worn flag's free end is torn away in ragged tongues, deeper for one in tatters: each row of the cloth ends
+		// where its own tear ends. And shot has been through it: a hole or two, three for one in tatters.)
+		FRandomStream Tatter(RegionId * 977 + 31);
+		TArray<double> Ends;
+		for (int32 J = 0; J <= Down; ++J)
+		{
+			const double Rag = Wear == 0 ? 0.0 : (Wear == 1 ? 0.05 : 0.1) + (Wear == 1 ? 0.14 : 0.26) * Tatter.FRand() * (J % 3 == 0 ? 1.0 : 0.55);
+			Ends.Add(1.0 - Rag);
+		}
+		TSet<int32> Holes;
+		for (int32 Shot = 0; Shot < (Wear == 0 ? 0 : Wear == 1 ? 1 : 3); ++Shot)
+		{
+			const int32 I = Tatter.RandRange(4, Across - 7), J = Tatter.RandRange(2, Down - 3);
+			Holes.Add(J * Across + I);
+			if (Wear == 2 && Shot == 0)
+			{
+				Holes.Add(J * Across + I + 1); // (one of them a rent, not a hole)
+				Holes.Add((J + 1) * Across + I + 1);
+			}
+		}
 		TArray<FVector> Vertices;
 		TArray<FVector> Normals;
 		TArray<FVector2D> UVs;
@@ -521,7 +569,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		{
 			for (int32 I = 0; I <= Across; ++I)
 			{
-				const double S = static_cast<double>(I) / Across, T = static_cast<double>(J) / Down;
+				const double S = FMath::Min(static_cast<double>(I) / Across, Ends[J]), T = static_cast<double>(J) / Down;
 				const double Angle = UE_DOUBLE_TWO_PI * Waves * S + Phase + 0.8 * T;
 				Vertices.Add(FVector(Pole.X + Ripple * S * FMath::Sin(Angle), Pole.Y + Hoist + S * FlagWidth, FlagAt.Z + FlagHeight * (0.5 - T) - Droop * S * S));
 				const FVector Along(Ripple * (FMath::Sin(Angle) + S * UE_DOUBLE_TWO_PI * Waves * FMath::Cos(Angle)), FlagWidth, -2.0 * Droop * S);
@@ -535,6 +583,10 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		{
 			for (int32 I = 0; I < Across; ++I)
 			{
+				if (Holes.Contains(J * Across + I))
+				{
+					continue;
+				}
 				const int32 A = J * (Across + 1) + I, B = A + 1, C = A + Across + 1, D = C + 1;
 				Triangles.Append({ A, C, B, B, C, D });
 			}

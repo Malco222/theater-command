@@ -393,6 +393,22 @@
    "where": "Manchuria"
   },
   {
+   "look": "temperate",
+   "west": 124.5,
+   "east": 131,
+   "south": 38,
+   "north": 42,
+   "where": "northern Korea and the hills east of Mukden (added 14 November; after Manchuria, so the prairie stops at the hills)"
+  },
+  {
+   "look": "temperate",
+   "west": 126.5,
+   "east": 131,
+   "south": 42,
+   "north": 44.5,
+   "where": "the Changbai hills (added 14 November; after Manchuria and before the Amur forest)"
+  },
+  {
    "look": "taiga",
    "west": 128,
    "east": 142,

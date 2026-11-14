@@ -76,7 +76,7 @@ import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
 import { CROSSINGS, RIVERS, bridgeDown, riverNotes } from '../../../src/campaign/rivers';
-import { RAIL_LINKS, railCut, railNote } from '../../../src/campaign/rails';
+import { RAIL_LINKS, railCut, railNote, workingFactories } from '../../../src/campaign/rails';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
@@ -169,6 +169,22 @@ function view() {
       const out: number[] = [];
       if (s.flags.open !== 1) return out;
       try { for (const r of s.regions) { const v = fieldworksLeft(s, r.id); if (v) out.push(r.id, Math.round(v.months * 10), v.corps); } } catch { /* none */ }
+      return out;
+    })(),
+    // Factories that are not working (bombed, sabotaged or burnt by their own side), for the table to show as
+    // wrecks with cold chimneys: the province and how many. Only where the player can know it: on his own side's
+    // ground, or ground he has eyes on.
+    wrecked: (() => {
+      const out: number[] = [];
+      try {
+        for (const r of s.regions) {
+          if (r.fac <= 0) continue;
+          const lost = r.fac - workingFactories(s, r);
+          if (lost <= 0) continue;
+          const known = !s.human || r.ctrl === s.human || allied(s, r.ctrl, s.human) || seen[r.id] > 0;
+          if (known) out.push(r.id, lost);
+        }
+      } catch { /* no such rule in this game */ }
       return out;
     })(),
     // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
@@ -3016,7 +3032,7 @@ function staffPage(s: Game): Page | null {
       },
       {
         heading: 'WHAT YOUR STAFF MAY SPEND',
-        text: `Your staff may spend ${v.cap}% of the treasury in a month on what it builds. ${shown(v.left).toLocaleString('en-US')} is left of this month's allowance${v.spent > 0 ? `, and ${shown(v.spent).toLocaleString('en-US')} has been spent` : ''}.`,
+        text: `Your staff may spend ${v.cap}% of the treasury in a month on what it builds. ${shown(v.left).toLocaleString('en-US')} is left of this month's allowance${v.spent > 0 ? `, and ${shown(v.spent).toLocaleString('en-US')} has been spent` : ''}.${(v as { capNext?: boolean }).capNext ? ' The new share takes hold from next month: this month\'s allowance was already drawn.' : ''}`,
         rows: [{
           nat: '', title: 'The share of the treasury', lines: [],
           buttons: v.caps.map((c) => ({ label: c === v!.cap ? `${c}% (NOW)` : `${c}%`, act: `cap:${c}`, ok: c !== v!.cap, tip: `Let the staff spend up to ${c}% of the treasury in a month.` })),

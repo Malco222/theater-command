@@ -194,6 +194,7 @@ struct FMiniatureMesh
 		double MapUnit = 10.0; // the table's units to one unit of the map
 		int32 Tier = 0; // 0 a small place, 1 a town, 2 a city, 3 a capital
 		int32 Factories = 0;
+		int32 Ruined = 0; // how many of its works are wrecks: bombed out, roofless, their stacks broken and cold
 		int32 Seed = 0;
 		int32 Look = 0; // roofs and walls by region: 0 middle Europe, 1 the north-west, 2 the south, 3 the north and east, 4 the far south
 		int32 Landmark = 0; // a capital's own great building, by kind (see Township)
