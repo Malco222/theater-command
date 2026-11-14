@@ -259,6 +259,25 @@ float ACampaignMapActor::GroundAt(double InX, double Y) const
 	return Terrain.HeightAt(X, Y);
 }
 
+void ACampaignMapActor::DressBeyond(UMaterialInstanceDynamic* Sheet) const
+{
+	if (!Sheet)
+	{
+		return;
+	}
+	// The land beyond Europe's own sheet: its woods are edged with a fringe of thin single trees, round every wood
+	// and every opening in one, as the northern forest thins out toward the tundra. The painter lays the edge of a
+	// wood there as a slow thinning-out, and here each tree-top is let stand or fall by itself across it. (Europe's
+	// woods keep their firm edge.)
+	Sheet->SetScalarParameterValue(TEXT("WoodsFringe"), 1.2f);
+	if (Sheet == WorldLandMaterial)
+	{
+		// (the coarse sheet is what is seen from high up: there a wood's edge is feathered over a few points of the
+		// screen, where a firm one read as a blot of tar)
+		Sheet->SetScalarParameterValue(TEXT("WoodsSharp"), 2.2f);
+	}
+}
+
 void ACampaignMapActor::LandScalar(FName Name, float Value)
 {
 	if (LandMaterial) { LandMaterial->SetScalarParameterValue(Name, Value); }
@@ -599,7 +618,7 @@ void ACampaignMapActor::PaintGround()
 	{
 		// (the whole-world map) The canopy of the tropics: the art director's jungle, seen at about (54, 87, 56).
 		// ("-TheaterJungle=r,g,b" tries another.)
-		FLinearColor Jungle(0.041f, 0.092f, 0.071f); // (an eighth down on what it was, and a little less red) // (cooler and a step darker than it first was: lit canopy stays under 0.36, its blue within 32 of its green)
+		FLinearColor Jungle(0.043f, 0.088f, 0.066f); // (an eighth down on what it was, and a little less red) // (cooler and a step darker than it first was: lit canopy stays under 0.36, its blue within 32 of its green)
 		FString Asked;
 		TArray<FString> Parts;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterJungle="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
@@ -617,7 +636,7 @@ void ACampaignMapActor::PaintGround()
 		// The broadleaf woods of the temperate lands beyond Europe: the art director's (50, 64, 46), its blue within
 		// 16 of its green. ("-TheaterFarWoods=r,g,b" tries another.) (The paint is far bluer than what is seen: the
 		// lamp is warm, and the ground's own colour shows through the canopy as a yellow-green.)
-		FLinearColor FarWoods(0.019f, 0.038f, 0.045f);
+		FLinearColor FarWoods(0.011f, 0.058f, 0.042f); // (greener than it first was: the art director's first figure had been read off woods under Germany's grey stain)
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFarWoods="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
 		{
 			FarWoods = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
@@ -626,8 +645,8 @@ void ACampaignMapActor::PaintGround()
 		// The New World's square fields: fallow, wheat and green, as what each does to the ground under it.
 		// (The art director's swatches are (156, 130, 94), (204, 180, 106) and (146, 154, 94) on prairie ground.)
 		LandVector(TEXT("FieldFallow"), FLinearColor(0.83f, 0.66f, 0.6f));
-		LandVector(TEXT("FieldWheat"), FLinearColor(1.62f, 1.4f, 0.96f));
-		LandVector(TEXT("FieldGreen"), FLinearColor(0.84f, 1.1f, 0.86f));
+		LandVector(TEXT("FieldWheat"), FLinearColor(1.93f, 1.47f, 0.79f)); // (gold, not cream)
+		LandVector(TEXT("FieldGreen"), FLinearColor(0.88f, 1.33f, 0.95f));
 	}
 	{
 		// Woods on a warm-stained nation (Poland's red, Holland's orange) went chocolate: a very dark green takes
@@ -1164,6 +1183,7 @@ void ACampaignMapActor::BuildWorld()
 	// The same paint as the map's own, with this sheet's pictures in place of the map's.
 	WorldLandMaterial = UMaterialInstanceDynamic::Create(LandMaterial->Parent, this);
 	WorldLandMaterial->CopyParameterOverrides(LandMaterial);
+	DressBeyond(WorldLandMaterial);
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Ground"), Picture(WorldPaint.Ground, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldGround")));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Tint"), Picture(WorldPaint.Tint, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldTint")));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Relief"), Picture(WorldPaint.Relief, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldRelief")));
@@ -1395,7 +1415,10 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 		else
 		{
 			UpdateLand(Sheet.Land, CameraDistance, CameraFocus, false);
-			if (Now - Sheet.LastWanted > 20.0)
+			// (Kept a while once the eye has moved on, in case it comes back. But once the eye has climbed past the
+			// height the fine sheets are for, they are put away at once: left standing they showed from high up as
+			// a crisp square beside the coarse ground, and then went all together.)
+			if (Now - Sheet.LastWanted > (bLow ? 20.0 : 1.0))
 			{
 				Gone.Add(Pair.Key);
 			}
@@ -1428,6 +1451,7 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	Clear.Init(FColor(0, 0, 0, 255), 16);
 	Sheet.LandPaint = UMaterialInstanceDynamic::Create(LandMaterial->Parent, this);
 	Sheet.LandPaint->CopyParameterOverrides(LandMaterial);
+	DressBeyond(Sheet.LandPaint);
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Ground"), Picture(Painted.Ground, Painted.NX, Painted.NY, true, TEXT("Ground")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Tint"), Picture(Painted.Tint, Painted.NX, Painted.NY, true, TEXT("Tint")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Relief"), Picture(Painted.Relief, Painted.NX, Painted.NY, false, TEXT("Relief")));
@@ -2366,6 +2390,8 @@ void ACampaignMapActor::BuildTable()
 	const double LipZ = Top + LipHeight * 0.5;
 	if (Data.bWorld)
 	{
+		// (seen from the chart's north edge the lamp's own sheen on polished wood turned the table grey: this wood is dull)
+		Wood = GetSolidMaterial(FromHex(TEXT("2B1B11")), 0.92f, 0.0f);
 		// The chart table: wood and a brass lip along the chart's north edge and its south, running on past
 		// anything the eye can reach (it is kept within half a world of the middle, and the chart is laid a turn
 		// of the world to either side of it), and the floor of the tray under the whole.
@@ -3690,7 +3716,8 @@ void ACampaignMapActor::BuildSheetMargin()
 	// Round the sheet, on the table: a margin of the same paper, a border ruled on it in ink a little way in from
 	// its edge, and outside it the soft shadow the sheet throws on the wood.
 	const FVector2D Half = GetWorldHalfExtent(); // X: north-south, Y: east-west
-	const double U = UnitScale, Top = 2.4 * U + 0.5 * U, Margin = 46.0 * U, Rule = 14.0 * U, Line = 1.1 * U, Soft = 26.0 * U;
+	// (round a world the ruled border is kept about a point and a half of the screen wide at any height: see where the eye's height is told)
+	const double U = UnitScale, Top = 2.4 * U + 0.5 * U, Margin = 46.0 * U, Rule = 14.0 * U, Line = Data.bWorld ? FMath::Max(1.1 * U, MarginLine) : 1.1 * U, Soft = 26.0 * U;
 	const bool bRollers = Data.bWorld;
 	const double NorthEdge = MapToWorld(0.0, Data.WorldMinY).X, SouthEdge = MapToWorld(0.0, Data.WorldMinY + Data.WorldHeight).X, HalfLong = Data.WorldWidth * U;
 	auto Frame = [&Half, bRollers, NorthEdge, SouthEdge, HalfLong](FCampaignMeshBuffers& Into, double Inner, double Outer, double Z, const FColor& In, const FColor& Out)
@@ -3699,14 +3726,21 @@ void ACampaignMapActor::BuildSheetMargin()
 		{
 			// (Round a world the chart is on rollers: the margin, its ruled border and its shadow run along the
 			// north edge and the south, and there is none to east or west.)
+			// (In pieces along its length: what is seen through, as the shadow is, takes the haze of the air from its
+			// corners, and one piece two worlds long took it from corners half a world away and went pale.)
+			const int32 Pieces = 96;
 			for (int32 Side = 0; Side < 2; ++Side)
 			{
 				const double A = Side == 0 ? NorthEdge + Inner : SouthEdge - Inner, B = Side == 0 ? NorthEdge + Outer : SouthEdge - Outer;
-				const int32 First = Into.Vertices.Num();
-				Into.Vertices.Append({ FVector(A, -HalfLong, Z), FVector(A, HalfLong, Z), FVector(B, HalfLong, Z), FVector(B, -HalfLong, Z) });
-				Into.Normals.Append({ FVector::UpVector, FVector::UpVector, FVector::UpVector, FVector::UpVector });
-				Into.Colors.Append({ In, In, Out, Out });
-				Into.Triangles.Append({ First, First + 1, First + 2, First, First + 2, First + 3, First, First + 2, First + 1, First, First + 3, First + 2 });
+				for (int32 Piece = 0; Piece < Pieces; ++Piece)
+				{
+					const double Y0 = -HalfLong + 2.0 * HalfLong * Piece / Pieces, Y1 = -HalfLong + 2.0 * HalfLong * (Piece + 1) / Pieces;
+					const int32 First = Into.Vertices.Num();
+					Into.Vertices.Append({ FVector(A, Y0, Z), FVector(A, Y1, Z), FVector(B, Y1, Z), FVector(B, Y0, Z) });
+					Into.Normals.Append({ FVector::UpVector, FVector::UpVector, FVector::UpVector, FVector::UpVector });
+					Into.Colors.Append({ In, In, Out, Out });
+					Into.Triangles.Append({ First, First + 1, First + 2, First, First + 2, First + 3, First, First + 2, First + 1, First, First + 3, First + 2 });
+				}
 			}
 			return;
 		}
@@ -6876,6 +6910,24 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			FParse::Value(FCommandLine::Get(), TEXT("TheaterPaperFull="), Full);
 		}
 		const float Sheet = FMath::SmoothStep(From, FMath::Max(Full, From + 1.0f), CameraDistance);
+		if (Data.bWorld)
+		{
+			// The chart's ruled border, kept about a point and a half of the screen wide: from the staff map's height
+			// a line as fine as the one drawn for the working view broke into dashes.
+			const double Wanted = FMath::Max(1.1 * UnitScale, CameraDistance * 0.00105);
+			if (FMath::Abs(Wanted - MarginLine) > 0.15 * MarginLine)
+			{
+				MarginLine = Wanted;
+				BuildSheetMargin();
+			}
+			// The prairie's section roads and furrows: nothing from high up, where they would only shimmer.
+			const float Work = 1.0f - FMath::SmoothStep(8000.0f, 13000.0f, CameraDistance);
+			if (FMath::Abs(Work - SquareWorkShown) > 0.02f)
+			{
+				SquareWorkShown = Work;
+				LandScalar(TEXT("SquareWork"), Work);
+			}
+		}
 		if (FMath::Abs(Sheet - PaperShown) > 0.004f)
 		{
 			PaperShown = Sheet;
@@ -6887,16 +6939,19 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			}
 			if (MarginMesh)
 			{
-				MarginMesh->SetVisibility(Sheet > 0.01f);
+				// (Round a world the chart's paper margin and ruled border are there at every height: Narvik and the
+				// Murmansk run lie on its north edge, and the sea was cut straight against the bare table.)
+				const float Shown = Data.bWorld ? 1.0f : FMath::SmoothStep(0.0f, 0.5f, Sheet);
+				MarginMesh->SetVisibility(Sheet > 0.01f || Data.bWorld);
 				const float Moon = bLamplightNow ? 0.0f : NightNow;
 				const FLinearColor Wood(FColor::FromHex(TEXT("2B1B11"))), Paper = FLinearColor(PaperLand[0], PaperLand[1], PaperLand[2]) * FMath::Lerp(1.0f, PaperNight[0], Moon);
 				if (MarginPaper)
 				{
-					MarginPaper->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(Wood, Paper, FMath::SmoothStep(0.0f, 0.5f, Sheet)));
+					MarginPaper->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(Wood, Paper, Shown));
 				}
 				if (MarginShade)
 				{
-					MarginShade->SetScalarParameterValue(TEXT("Opacity"), FMath::SmoothStep(0.0f, 0.5f, Sheet));
+					MarginShade->SetScalarParameterValue(TEXT("Opacity"), Shown);
 				}
 			}
 			if (LandMaterial)

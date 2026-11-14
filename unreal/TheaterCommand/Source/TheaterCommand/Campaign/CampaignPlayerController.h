@@ -538,8 +538,6 @@ public:
 	bool IsMinimapWorld() const;
 	/** Where the eye looks, as a share of the way round the whole world's small map (0 at its west edge, 1 at its east). */
 	double GetMinimapCentre() const;
-	/** How far the chart's east and west sides fall out of the lamplight: nothing below the staff map's height, 1 at the top. */
-	float GetChartEdgeShade() const;
 	/** The name plates of the towns in view, the ones that matter most first. */
 	void GetTownPlates(TArray<FTownPlate>& Out) const;
 	/** The names of the countries and the seas, letter by letter, lying on the map. */

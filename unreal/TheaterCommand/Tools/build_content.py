@@ -415,15 +415,64 @@ def build_land():
     small = picture(m, "Fields", times(m, rows, 1.0 / 64.0, -1300, 1500), -1100, 1500, numbers=True)
     large = picture(m, "Fields", plus(m, times(m, rows, 0.42 / 64.0, -1300, 1700), 0.37, -1150, 1700), -950, 1700, numbers=True)
     tone = times(m, lerp(m, (small, "RGB"), (large, "RGB"), (cover, "G"), -750, 1600), 2.0, -600, 1600)
-    # (and the squares are the prairie's wheat, fallow and green, in place of Europe's pasture, wheat and plough: a
-    # field's own tone says which, its green part how pale or dark, its blue part whether it is under grass)
-    tone_g = node_from(m, unreal.MaterialExpressionComponentMask, tone, -550, 1700, r=False, g=True, b=False, a=False)
-    tone_b = node_from(m, unreal.MaterialExpressionComponentMask, tone, -550, 1780, r=False, g=False, b=True, a=False)
-    grain = lerp(m, vector(m, "FieldFallow", (0.83, 0.63, 0.83, 1.0), -700, 1860), vector(m, "FieldWheat", (1.49, 1.28, 1.09, 1.0), -700, 1960),
-                 one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, tone_g, -0.75, -500, 1700), 2.0, -420, 1700), -340, 1700), -250, 1800)
-    grain = lerp(m, grain, vector(m, "FieldGreen", (0.72, 0.91, 0.83, 1.0), -700, 2060),
-                 one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, tone_b, -1.05, -500, 1780), 6.0, -420, 1780), -340, 1780), -160, 1850)
+    # (And the squares are the prairie's wheat, fallow and green, in place of Europe's pasture, wheat and plough.
+    # A square is read on a grid of its own: the great open fields' grid where the fields are great, the small
+    # fields' where they are small, never a blend of the two. About a third of the squares are split into halves or
+    # quarters, each part with a crop of its own; one part in five is green, the rest wheat and fallow.)
+    big = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (cover, "G"), -0.5, -1300, 2500), 1000.0, -1150, 2500), -1000, 2500)
+    grid = lerp(m, rows, plus(m, times(m, rows, 0.42, -1300, 2600), 0.37 * 64.0, -1150, 2600), big, -850, 2550)
+    home = one_in(m, unreal.MaterialExpressionFloor, grid, -700, 2500)
+    cell = one_in(m, unreal.MaterialExpressionFrac, grid, -700, 2620)
+    lot = picture(m, "Fields", times(m, plus(m, home, 0.5, -550, 2500), 1.0 / 64.0, -400, 2500), -250, 2500, numbers=True)
+    # (which squares are split, and how: a third of them; of those, half in two and half in four)
+    dice = one_in(m, unreal.MaterialExpressionFrac, times(m, (lot, "R"), 13.7, -100, 2480), 50, 2480)
+    split = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, dice, -1.0, 200, 2480), 0.33, 300, 2480), 1000.0, 400, 2480), 550, 2480)
+    dice2 = one_in(m, unreal.MaterialExpressionFrac, times(m, (lot, "G"), 29.3, -100, 2580), 50, 2580)
+    in_four = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, dice2, -0.5, 200, 2580), 1000.0, 300, 2580), 450, 2580)
+    dice3 = one_in(m, unreal.MaterialExpressionFrac, times(m, (lot, "B"), 17.1, -100, 2680), 50, 2680)
+    across = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, dice3, -0.5, 200, 2680), 1000.0, 300, 2680), 450, 2680)
+    cell_u = node_from(m, unreal.MaterialExpressionComponentMask, cell, -550, 2760, r=True, g=False, b=False, a=False)
+    cell_v = node_from(m, unreal.MaterialExpressionComponentMask, cell, -550, 2840, r=False, g=True, b=False, a=False)
+    half_u = one_in(m, unreal.MaterialExpressionFloor, times(m, cell_u, 2.0, -400, 2760), -250, 2760)
+    half_v = one_in(m, unreal.MaterialExpressionFloor, times(m, cell_v, 2.0, -400, 2840), -250, 2840)
+    cut_u = times(m, split, lerp(m, across, 1.0, in_four, 600, 2700), 750, 2700)
+    cut_v = times(m, split, lerp(m, one_in(m, unreal.MaterialExpressionOneMinus, across, 500, 2800), 1.0, in_four, 600, 2800), 750, 2800)
+    part_at = pair(m, times(m, times(m, half_u, cut_u, 900, 2700), 19.0, 1000, 2700), times(m, times(m, half_v, cut_v, 900, 2800), 37.0, 1000, 2800), 1150, 2750)
+    crop = picture(m, "Fields", times(m, plus(m, plus(m, home, 0.5, 1300, 2700), part_at, 1400, 2750), 1.0 / 64.0, 1550, 2750), 1700, 2750, numbers=True)
+    # (which crop: a number from 0 to 1 made of the part's own tone; under 0.2 green, to 0.62 wheat, the rest fallow)
+    lots = one_in(m, unreal.MaterialExpressionFrac, plus(m, times(m, (crop, "R"), 7.1, 1900, 2700), times(m, (crop, "G"), 3.3, 1900, 2800), 2050, 2750), 2200, 2750)
+    is_green = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, lots, -1.0, 2350, 2700), scalar(m, "SquareGreen", 0.2, 2350, 2800), 2450, 2700), 1000.0, 2550, 2700), 2700, 2700)
+    is_wheat = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, lots, -1.0, 2350, 2900), 0.62, 2450, 2900), 1000.0, 2550, 2900), 2700, 2900)
+    grain = lerp(m, vector(m, "FieldFallow", (0.83, 0.63, 0.83, 1.0), 2700, 3000), vector(m, "FieldWheat", (1.49, 1.28, 1.09, 1.0), 2700, 3100), is_wheat, 2900, 3000)
+    grain = lerp(m, grain, vector(m, "FieldGreen", (0.72, 0.91, 0.83, 1.0), 2700, 3200), is_green, 3050, 3050)
+    # (each part a little paler or darker than the next of its kind)
+    grain = times(m, grain, plus(m, times(m, (crop, "B"), 0.16, 3050, 3200), 0.92, 3150, 3200), 3250, 3100)
+    # Furrows inside each part, north to south in some and east to west in others, at about a tenth of the
+    # contrast between one square and the next. ("SquareWork" is nothing from high up, where they would shimmer.)
+    work = scalar(m, "SquareWork", 1.0, 3250, 3400)
+    dice4 = one_in(m, unreal.MaterialExpressionFrac, times(m, (crop, "G"), 11.3, 1900, 3300), 2050, 3300)
+    upright = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, dice4, -0.5, 2200, 3300), 1000.0, 2300, 3300), 2450, 3300)
+    along = lerp(m, cell_u, cell_v, upright, 2600, 3350)
+    ridge = one_in(m, unreal.MaterialExpressionFrac, times(m, along, lerp(m, 7.0, 15.0, big, 2600, 3450), 2750, 3400), 2900, 3400)
+    furrow = plus(m, times(m, one_in(m, unreal.MaterialExpressionAbs, plus(m, ridge, -0.5, 3050, 3400), 3150, 3400), 4.0, 3250, 3450), -1.0, 3350, 3450)
+    grain = times(m, grain, plus(m, times(m, times(m, furrow, 0.03, 3450, 3450), work, 3550, 3450), 1.0, 3650, 3450), 3750, 3300)
     tone = lerp(m, tone, grain, square, -80, 1700)
+    # The section roads: a pale line on the squares' own grid, about a point of the screen wide at working height.
+    back_u = one_in(m, unreal.MaterialExpressionOneMinus, cell_u, -550, 2920)
+    back_v = one_in(m, unreal.MaterialExpressionOneMinus, cell_v, -550, 3000)
+    near_u = node(m, unreal.MaterialExpressionMin, -400, 2920)
+    connect(cell_u, "", near_u, "A")
+    connect(back_u, "", near_u, "B")
+    near_v = node(m, unreal.MaterialExpressionMin, -400, 3000)
+    connect(cell_v, "", near_v, "A")
+    connect(back_v, "", near_v, "B")
+    to_road = node(m, unreal.MaterialExpressionMin, -250, 2960)
+    connect(near_u, "", to_road, "A")
+    connect(near_v, "", to_road, "B")
+    road = times(m, times(m, one_in(m, unreal.MaterialExpressionOneMinus,
+                                    one_in(m, unreal.MaterialExpressionSaturate, times(m, to_road, lerp(m, 26.0, 62.0, big, -250, 3080), -100, 3000), 50, 3000), 200, 3000),
+                             times(m, square, (cover, "R"), 200, 3100), 350, 3050),
+                 times(m, work, scalar(m, "SquareRoads", 0.55, 350, 3200), 500, 3200), 650, 3100)
     quilt = lerp(m, 1.0, tone, times(m, (cover, "R"), scalar(m, "FieldsStrength", 0.45, -750, 1800), -600, 1800), -400, 1650)
     # Hedges: a thin dark line round each small field, seen only close to.
     part = one_in(m, unreal.MaterialExpressionFrac, rows, -1300, 2000)
@@ -444,6 +493,7 @@ def build_land():
                     times(m, times(m, hedge_line, scalar(m, "HedgeStrength", 0.0, -250, 2200), -100, 2100),
                           times(m, (cover, "R"), one_in(m, unreal.MaterialExpressionOneMinus, (cover, "G"), -250, 2350), -100, 2300), 50, 2150), 200, 2150)
     c = times(m, times(m, c, quilt, -1750, -330), hedged, -1650, -330)
+    c = lerp(m, c, vector(m, "SquareRoadColour", (0.552, 0.479, 0.262, 1.0), -1750, -200), road, -1550, -330)
 
     # Woods are one dark cloth laid over the paint: a standing mass with a ragged edge, thick enough to read as
     # woods on any nation's colour, fir-dark in the north and on the high ground. The woods take the nation's
@@ -452,6 +502,14 @@ def build_land():
     # and throws a copse or two out beyond its edge; then the edge is made firm, a shape and not a fade)
     ragged = plus(m, times(m, plus(m, (fine, "G"), -0.5, -2500, -1250), scalar(m, "WoodsRag", 0.5, -2500, -1150), -2350, -1250),
                   times(m, plus(m, (coarse, "G"), -0.5, -2500, -1400), scalar(m, "WoodsRagBroad", 1.1, -2500, -1320), -2350, -1400), -2250, -1320)
+    # (Beyond Europe the painter lays the edge of a wood as a slow thinning-out, and "WoodsFringe" lets each
+    # tree-top stand or fall by itself across it: most where the wood is half there, not at all where it is whole
+    # or where there is none. It is nothing on Europe's own sheet, whose woods keep their firm edge.)
+    thin = times(m, times(m, (ground, "A"), one_in(m, unreal.MaterialExpressionOneMinus, (ground, "A"), -2700, -1050), -2600, -1050), 4.0, -2500, -1050)
+    # (How tall the tree-top at a point stands, 0 to 1, read back out of the detail's picture: across a thin edge
+    # only the tallest crowns stand at first, as single trees, then more of them, until they close up.)
+    crown_high = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (fine, "G"), -0.2, -2850, -980), 2.94, -2750, -980), -2700, -980)
+    ragged = plus(m, ragged, times(m, times(m, plus(m, crown_high, -0.5, -2650, -980), scalar(m, "WoodsFringe", 0.0, -2700, -900), -2600, -950), thin, -2450, -1000), -2300, -1100)
     wooded = one_in(m, unreal.MaterialExpressionSaturate,
                     plus(m, times(m, plus(m, plus(m, (ground, "A"), ragged, -2200, -1250),
                                           -0.5, -2050, -1250), scalar(m, "WoodsSharp", 6.0, -2050, -1150), -1900, -1250), 0.5, -1750, -1250), -1600, -1250)

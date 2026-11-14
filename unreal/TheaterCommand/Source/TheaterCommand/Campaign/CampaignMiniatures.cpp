@@ -505,7 +505,9 @@ void FMiniatureMesh::Numerals(const FVector& Where, double High, int32 Number, c
 	const FVector Out = Facing.GetSafeNormal();
 	const FVector Skyward = FMath::Abs(Out.Z) > 0.8 ? FVector(-1.0, 0.0, 0.0) : FVector::UpVector;
 	const FVector Top = (Skyward - Out * (Skyward | Out)).GetSafeNormal();
-	const FVector Side = Top ^ Out;
+	// (to the reader's right, for one who stands outside and faces the surface: the other way round every figure
+	// is read in a mirror, and a 7 leading a number is taken for a Greek gamma)
+	const FVector Side = Out ^ Top;
 	const int32 First = Vertices.Num();
 	for (int32 K = 0; K < Flat.Vertices.Num(); ++K)
 	{

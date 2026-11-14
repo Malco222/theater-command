@@ -3,6 +3,8 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Camera/CameraComponent.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "GameFramework/SpringArmComponent.h"
 
 ACampaignCameraPawn::ACampaignCameraPawn()
@@ -166,7 +168,34 @@ void ACampaignCameraPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	TargetFocus.X = FMath::Clamp(TargetFocus.X, bBoxed ? BoundsMin.X : -HalfExtent.X, bBoxed ? BoundsMax.X : HalfExtent.X);
+	{
+		// (How far along the ground from the point looked at a line of the screen lies: the line a given share of the
+		// way from the screen's middle to its top, or to its bottom. The eye looks down at its pitch, and sees half
+		// its upright angle of view above and below that.)
+		auto Reach = [this](double Share, bool bFar) -> double
+		{
+			const double Down = FMath::DegreesToRadians(FMath::Clamp(FMath::Abs(static_cast<double>(GetPitch())), 5.0, 89.0));
+			double Aspect = 1.6;
+			if (GEngine && GEngine->GameViewport)
+			{
+				FVector2D Size(1600.0, 1000.0);
+				GEngine->GameViewport->GetViewportSize(Size);
+				Aspect = Size.Y > 1.0 ? Size.X / Size.Y : 1.6;
+			}
+			const double HalfUp = FMath::Atan(FMath::Tan(FMath::DegreesToRadians(GetHorizontalFov() * 0.5)) / Aspect);
+			const double Off = FMath::Atan(Share * FMath::Tan(HalfUp)), Far = GetDistance();
+			const double Ray = bFar ? FMath::Max(Down - Off, 0.05) : FMath::Min(Down + Off, PI * 0.5);
+			const double Along = Far * FMath::Sin(Down) / FMath::Tan(Ray) - Far * FMath::Cos(Down);
+			return bFar ? FMath::Max(Along, 0.0) : FMath::Max(-Along, 0.0);
+		};
+		// (with the edge on the line three fifths of the way up, what lies beyond it fills a fifth of the screen)
+		// (from the staff map's height a good deal less of it: the air between the eye and the far table turns the
+		// wood grey there, and the chart's margin is all that need show)
+		const double Less = 1.0 - 0.5 * FMath::SmoothStep(0.8f, 0.92f, Zoom);
+		const double South = (bBoxed ? BoundsMin.X : -HalfExtent.X) + (HoldSouth > 0.0f ? Reach(1.0 - 2.0 * HoldSouth * Less, false) : 0.0);
+		const double North = (bBoxed ? BoundsMax.X : HalfExtent.X) - (HoldNorth > 0.0f ? Reach(1.0 - 2.0 * HoldNorth * Less, true) : 0.0);
+		TargetFocus.X = South < North ? FMath::Clamp(TargetFocus.X, South, North) : (South + North) * 0.5;
+	}
 	if (bWraps)
 	{
 		// Past one end of the world the eye comes in again at the other, with everything it was doing.

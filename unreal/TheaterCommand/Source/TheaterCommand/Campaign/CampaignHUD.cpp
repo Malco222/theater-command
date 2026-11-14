@@ -925,61 +925,6 @@ namespace
 		bool bHeld = false;
 	};
 
-	/**
-	 * Round a world the chart runs on rollers: it never ends to east or west. From the staff map's height the lamp's
-	 * light falls away over the left and the right eighth of the screen, down to about four fifths of what it is in
-	 * the middle, so that the chart reads as running on out of the lamplight.
-	 */
-	class SChartEdges : public SLeafWidget
-	{
-	public:
-		SLATE_BEGIN_ARGS(SChartEdges) {}
-			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Controller)
-		SLATE_END_ARGS()
-
-		void Construct(const FArguments& Args)
-		{
-			Controller = Args._Controller;
-		}
-
-		virtual FVector2D ComputeDesiredSize(float) const override
-		{
-			return FVector2D::ZeroVector;
-		}
-
-		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
-			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
-		{
-			const float Shade = Controller.IsValid() ? Controller->GetChartEdgeShade() : 0.0f;
-			if (Shade <= 0.01f)
-			{
-				return LayerId;
-			}
-			const FVector2D Size = Geometry.GetLocalSize();
-			const double Wide = Size.X / 8.0;
-			// (a soft falling away, not a ramp: most of it in the outer half of the eighth)
-			// (the lamp's own pool already leaves the screen's edge at about 0.77 of its middle from this height: the
-			// falling away laid over it is the lighter for that, and takes the very edge to about 0.68)
-			const float Dark = 0.12f * Shade;
-			auto Ink = [Dark](float Share) { return FLinearColor(0.0f, 0.0f, 0.0f, Dark * Share); };
-			TArray<FSlateGradientStop> Left, Right;
-			Left.Add(FSlateGradientStop(FVector2D(0.0, 0.0), Ink(1.0f)));
-			Left.Add(FSlateGradientStop(FVector2D(Wide * 0.35, 0.0), Ink(0.62f)));
-			Left.Add(FSlateGradientStop(FVector2D(Wide * 0.7, 0.0), Ink(0.2f)));
-			Left.Add(FSlateGradientStop(FVector2D(Wide, 0.0), Ink(0.0f)));
-			Right.Add(FSlateGradientStop(FVector2D(0.0, 0.0), Ink(0.0f)));
-			Right.Add(FSlateGradientStop(FVector2D(Wide * 0.3, 0.0), Ink(0.2f)));
-			Right.Add(FSlateGradientStop(FVector2D(Wide * 0.65, 0.0), Ink(0.62f)));
-			Right.Add(FSlateGradientStop(FVector2D(Wide, 0.0), Ink(1.0f)));
-			FSlateDrawElement::MakeGradient(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, Size.Y), FSlateLayoutTransform(FVector2D::ZeroVector)), Left, Orient_Vertical);
-			FSlateDrawElement::MakeGradient(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, Size.Y), FSlateLayoutTransform(FVector2D(Size.X - Wide, 0.0))), Right, Orient_Vertical);
-			return LayerId;
-		}
-
-	private:
-		TWeakObjectPtr<ACampaignPlayerController> Controller;
-	};
-
 	class SCampaignOverlay : public SCompoundWidget
 	{
 	public:
@@ -1104,11 +1049,6 @@ namespace
 			ChildSlot
 			[
 				SNew(SOverlay)
-				// (under everything, and there whether the frame is shown or put away: it belongs to the chart, not to the frame)
-				+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
-				[
-					SNew(SChartEdges).Controller(Controller).Visibility(EVisibility::HitTestInvisible)
-				]
 				// With the frame put away for a clean picture (the F key), only the map's own lettering is left, and
 				// for a moment a line that says how to bring the frame back.
 				+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)

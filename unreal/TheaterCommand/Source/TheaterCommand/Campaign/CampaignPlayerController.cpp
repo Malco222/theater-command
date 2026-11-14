@@ -738,6 +738,8 @@ void ACampaignPlayerController::BeginPlay()
 				// (and from west to east it runs right round: the eye's place is kept within half a world of the map's own middle)
 				const double HalfWorld = World.WorldWidth * 0.5 * Map->UnitScale;
 				Eye->SetWrap(-HalfWorld, HalfWorld);
+				// (and at the chart's north and south edges the table beyond it fills no more than about a fifth of the screen)
+				Eye->SetEdgeHold(0.2f, 0.2f);
 			}
 			// Open on central Europe, with Germany, Poland and France all in view.
 			const int32* Start = Map->GetData().RegionByName.Find(TEXT("Frankfurt"));
@@ -3928,11 +3930,6 @@ double ACampaignPlayerController::GetMinimapCentre() const
 	return Share - FMath::FloorToDouble(Share);
 }
 
-float ACampaignPlayerController::GetChartEdgeShade() const
-{
-	// (the chart on its rollers runs on out of the lamplight to east and west: only round a world, and only from the staff map's height)
-	return IsMinimapWorld() && IsMapShown() ? Map->GetPaper() : 0.0f;
-}
 
 void ACampaignPlayerController::JumpToMapShare(const FVector2D& Share)
 {

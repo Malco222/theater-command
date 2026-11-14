@@ -30,6 +30,11 @@ public:
 
 	/** The same as a box that need not lie evenly round the middle of the table: the whole-world map, with today's map near one end of it. */
 	void SetBoundsBox(const FVector2D& InMin, const FVector2D& InMax) { BoundsMin = InMin; BoundsMax = InMax; bBoxed = true; }
+	/**
+	 * Holds the point looked at short of the north and south bounds, so that what lies beyond the map's edge (the
+	 * table) fills no more than this share of the screen's height at any height and tilt of the eye: 0.2 for a fifth.
+	 */
+	void SetEdgeHold(float North, float South) { HoldNorth = North; HoldSouth = South; }
 
 	/**
 	 * A world that runs right round (the whole-world map): the eye's place from west to east is kept between these
@@ -106,6 +111,7 @@ private:
 	FVector2D HalfExtent = FVector2D(8500.0, 7500.0);
 	FVector2D BoundsMin = FVector2D::ZeroVector, BoundsMax = FVector2D::ZeroVector;
 	bool bBoxed = false;
+	float HoldNorth = 0.0f, HoldSouth = 0.0f;
 	float TopZoom = 1.0f; // the highest the eye may be sent (the wheel never takes it past 1)
 	double WrapWest = 0.0, WrapEast = 0.0;
 	bool bWraps = false;
