@@ -27,6 +27,7 @@
       { "key": "bomb", "label": "Bomb factories and railways", "short": "Day bombing", "blurb": "Bombers go for the factories and rail yards of one province by day. Fighters in range can go with them.", "needs": "bmr" },
       { "key": "night", "label": "Bomb by night", "short": "Night bombing", "blurb": "Bombers go in darkness with no escort: few are lost, and only about a third of the bombs find the target.", "needs": "bmr" },
       { "key": "ground", "label": "Raid troops", "short": "Raid on troops", "blurb": "Fighters and bombers go for an enemy army where it stands: its organisation is cut for the battle that follows, and some of its men and guns are lost.", "needs": "any" },
+      { "key": "line", "label": "Bomb the line", "short": "Bombing the line", "blurb": "Bombers go for the fieldworks of an enemy army that is dug in: months of digging are taken off its works before your army attacks. The troops dig them back a month at a time, so follow the raid with the army.", "needs": "bmr" },
       { "key": "town", "label": "Bomb a town", "short": "Raid on a town", "blurb": "Bombers go for the defences of a town your army stands round or beside: part of its works are broken down for the assault, and the troops inside are shaken. A town left alone mends its works month by month, so follow the raid with the army.", "needs": "bmr" },
       { "key": "superiority", "label": "Fight for the sky", "short": "Fight for the sky", "blurb": "Fighters sweep the sky over one province and bombers hit its airfields. Win it and your armies and fleets have the air there for a month.", "needs": "any" },
       { "key": "strike", "label": "Strike shipping", "short": "Shipping strike", "blurb": "Bombers hunt warships and merchant ships in one sea.", "needs": "bmr" },
@@ -34,6 +35,13 @@
       { "key": "harbour", "label": "Raid a harbour", "short": "Harbour raid", "blurb": "Bombers go for the warships lying in one harbour. Ships at anchor cannot manoeuvre, and a harbour raided in the month war is declared is caught unready.", "needs": "bmr" },
       { "key": "recon", "label": "Scout from the air", "short": "Reconnaissance", "blurb": "A few aircraft photograph one province and the ground round it: every army there is seen whole until the month ends.", "needs": "any" }
     ]
+  },
+  "line": {
+    "_note": "Bombing the line (Version 64). The works of every enemy corps dug in at the target lose bombers-that-got-through / scale months of digging, to the nearest tenth and never more than most, whatever the ground. The men are not hurt and dig as usual that month. intensity is how hard the month's flying is beside a fight for the sky (1). value is what a month off the works of one division counts for when the raid is judged. With the scale at 300 it takes 600 bombers through to take the full two months and two air groups take a little over one, so a raid and a probe together wear a finished line down without wiping it out in one month. No computer air staff flies it yet.",
+    "intensity": 0.6,
+    "scale": 300,
+    "most": 2,
+    "value": 10
   },
   "ground": {
     "_note": "A raid on troops. intensity is how hard the month's fighting is beside a fight for the sky (1). fighters is what one fighter is worth beside a bomber against troops. The organisation cut is weight / (scale + perDiv x enemy divisions there), never more than max; troops in cover (by terrain) or dug in lose less. str is the share of the cut that is also lost in men and guns. fire is the share of the attacking fighters brought down by ground fire. value is what a point of the cut on one division counts for when the raid is judged.",

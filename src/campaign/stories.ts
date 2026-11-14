@@ -134,6 +134,13 @@ export function citation(g: Game, a: Award): string {
 /** What an honour is worth when it is cashed in: more for the first of its kind in the nation. */
 export const fameOf = (a: Award): number => (DEF.get(a.hon)?.fame ?? 1) + (a.first ? 1 : 0);
 
+/** A corps by its number, in the field or kept as a cadre, as a diary names it. */
+const corpsNamed = (g: Game, id: number | undefined): string =>
+  (id === undefined ? undefined : g.corps.find((c) => c.id === id) ?? Object.values(g.nations).flatMap((n) => n.cadres ?? []).find((c) => c.id === id))?.name ?? 'another corps';
+
+/** Writes a line in a corps' diary from outside this file: what happened, where, and a number that goes with it. */
+export function noteCorps(g: Game, c: Corps, what: string, where: number, n?: number): void { note(g, c, what, where, n); }
+
 /** One line of a diary as a sentence. */
 export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: unknown }, line: DiaryLine): string {
   const [, what, where, n] = line;
@@ -162,6 +169,9 @@ export function diaryText(g: Game, u: { kind?: unknown; ships?: unknown; ftr?: u
     case 'score': { const r = rivalryOf(g, n); return r ? `Destroyed its old enemy ${r.theirsName} at ${at}.` : `Destroyed an old enemy at ${at}.`; }
     case 'drafts': return `Took in drafts: ${n}% of the corps is new to it.`;
     case 'reraised': return `Raised again in the name of the formation lost at ${at}.`;
+    case 'folded': return `Took in the men of ${corpsNamed(g, n)} at ${at}.`;
+    case 'cadre': return `Its men went to ${corpsNamed(g, n)} at ${at}. A cadre was kept to raise it again.`;
+    case 'rebuilt': return `Raised again round its cadre at ${at}.`;
     case 'destroyed': return `Destroyed at ${at}.`;
     case 'surrendered': return `Laid down its arms at ${at}.`;
     case 'starved': return `Cut off and out of supply, laid down its arms at ${at}.`;

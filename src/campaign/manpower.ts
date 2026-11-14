@@ -37,6 +37,8 @@ export const MANPOWER = data as unknown as {
   classFloor: number;
   /** Calling the next class up early: that many months of classes come at once, and none comes of age for 'gap' months after. */
   early: { months: number; gap: number };
+  /** Folding two worn corps into one: see the note in the data. */
+  fold: { worn: number; org: number; price: number; xp: number };
 };
 
 const KP: Record<string, string> = {}, KX: Record<string, string> = {}, KL: Record<string, string> = {}, KS: Record<string, string> = {};

@@ -23,7 +23,7 @@ import { MORALE, forceMorale, heart, moraleBattle, moraleCapital, moraleMonth, m
 import { civicDrafts, civicSum, hospitalNear, hospitalWorth } from './buildings';
 import { tradeTick } from './trade';
 import { numberCorps } from './armies';
-import { INTEL, identify, intelAttack, intelTick } from './intel';
+import { INTEL, corpsKnown, identify, intelAttack, intelTick } from './intel';
 import { armyOf, jointHold, jointMonth } from './joint';
 import { fleetsOnFall, navalUpkeep, openSeas, openingStations, seaOpenAt, setupNavy, shipCorps } from './navy';
 import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFallen, storyMonth, storyWalk } from './stories';
@@ -576,6 +576,9 @@ export const DUG_IN = 1.25;
 /** Prepared defences (the grand campaign): who digs in, and how the day's luck runs against an attack on a line that is ready for it. */
 export const DEFENCE = defenceData as unknown as {
   entrench: { auto: boolean; months: number; share: number[] };
+  handover?: { fade: number };
+  /** Probing the line: see the note in the data. */
+  probe?: { ap: number; wear: number; loss: number; org: number };
   wear: { perAttack: number; fullAt: number; guns: number; regrow: number };
   tired: { per: number; most: number };
   hammer: { first: number; second: number };
@@ -1078,6 +1081,72 @@ export function removeCorps(g: Game, c: Corps): void {
   g.corps.splice(g.corps.indexOf(c), 1);
 }
 
+// ---- Fieldworks left on the ground (the grand campaign) ------------------------------
+// Works belong to the ground, not to the men who dug them. A dug-in corps that marches off, entrains, or goes
+// forward after a battle won leaves its positions where they are: a corps of its own side standing there without
+// works takes them over at once, and otherwise they wait on the ground for whoever marches in next. Empty, they
+// lose a month's work with every month, and they are gone the moment the enemy sets foot there. Troops driven
+// off their ground leave nothing a relief could use, and troops falling back never take works over: nobody
+// retires into a ready line. Kept in the flags, since a region is saved as a fixed row: `fw:` the months of work
+// in each position, `fwk:` how many corps they hold, `fwn:` whose they are.
+
+/** Fieldworks standing empty in a province: how many months' work, room for how many corps, and whose. */
+export interface GroundWorks { months: number; corps: number; nat: string }
+
+const handover = (g: Game): boolean => g.flags.open === 1 && DEFENCE.entrench.auto && !!DEFENCE.handover;
+
+/** The fieldworks left empty on a province's ground, if any (the grand campaign): for both interfaces. */
+export function groundWorks(g: Game, reg: number): GroundWorks | null {
+  const months = g.flags[`fw:${reg}`];
+  if (months === undefined || months <= 0) return null;
+  const nat = Object.keys(g.nations)[g.flags[`fwn:${reg}`] ?? -1];
+  return nat ? { months, corps: g.flags[`fwk:${reg}`] ?? 1, nat } : null;
+}
+
+function clearWorks(g: Game, reg: number): void {
+  if (g.flags[`fw:${reg}`] === undefined) return;
+  delete g.flags[`fw:${reg}`]; delete g.flags[`fwk:${reg}`]; delete g.flags[`fwn:${reg}`];
+}
+
+/** True if this corps could man works found or handed over where it stands: in the field, and not under orders to give ground. */
+const mansWorks = (c: Corps): boolean => !c.dead && c.kind !== 'fort' && c.town === undefined && !c.yields && !c.dug;
+
+/** Called before a corps leaves its ground in good order: its works stay behind it. */
+function leaveWorks(g: Game, c: Corps): void {
+  if (!handover(g) || !c.dug || c.town !== undefined || c.kind === 'fort') return;
+  const months = Math.round(worksOf(c) * 100) / 100;
+  if (months <= 0) return;
+  const from = g.regions[c.reg];
+  // Hand over the line: troops of its own side already standing there without works take these as their own.
+  const heir = friendlyUnits(g, from, c.nat).find((u) => u !== c && mansWorks(u));
+  if (heir) { heir.dug = true; heir.dugFor = months; heir.relief = true; return; }
+  const old = groundWorks(g, from.id);
+  const n = old ? old.corps : 0;
+  g.flags[`fw:${from.id}`] = Math.round(((old ? old.months * n : 0) + months) / (n + 1) * 100) / 100;
+  g.flags[`fwk:${from.id}`] = Math.min(STACK, n + 1);
+  g.flags[`fwn:${from.id}`] = Object.keys(g.nations).indexOf(c.nat);
+}
+
+/** Called when a corps has marched or come by rail onto ground its side holds: it takes over works standing empty there. */
+function takeWorks(g: Game, c: Corps, to: Region): void {
+  if (!handover(g) || c.reg !== to.id || !mansWorks(c)) return;
+  const left = groundWorks(g, to.id);
+  if (!left || !allied(g, c.nat, left.nat)) return;
+  c.dug = true; c.dugFor = left.months; c.relief = true;
+  if (left.corps <= 1) clearWorks(g, to.id); else g.flags[`fwk:${to.id}`] = left.corps - 1;
+}
+
+/** Works nobody mans fall in: a month's work gone with each month of their owner's (the start of his month). */
+function fadeWorks(g: Game, nat: string): void {
+  if (g.flags.open !== 1) return;
+  const idx = Object.keys(g.nations).indexOf(nat), fade = DEFENCE.handover?.fade ?? 1;
+  for (const r of g.regions) {
+    const m = g.flags[`fw:${r.id}`];
+    if (m === undefined || g.flags[`fwn:${r.id}`] !== idx) continue;
+    if (m - fade <= 0.001) clearWorks(g, r.id); else g.flags[`fw:${r.id}`] = Math.round((m - fade) * 100) / 100;
+  }
+}
+
 /** Puts a corps down in another region without a march: rail, ship, or an order from the capital. */
 export function relocate(g: Game, c: Corps, to: Region): void { place(g, c, to); }
 
@@ -1099,6 +1168,9 @@ function place(g: Game, c: Corps, to: Region): void {
   to.units.push(c);
   // Trenches stay where they were dug.
   if (c.dug) delete c.dug;
+  if (c.relief) delete c.relief;
+  // Works left empty here by the other side are overrun as its enemy sets foot on the ground (the grand campaign).
+  if (g.flags[`fw:${to.id}`] !== undefined) { const left = groundWorks(g, to.id); if (!left || atWar(g, c.nat, left.nat)) clearWorks(g, to.id); }
 }
 
 /** Sends a corps to the nearest ground its side holds, or strikes it off if there is none: for troops left where they can no longer stand. */
@@ -1145,6 +1217,7 @@ function moveIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
     // A force that came by sea all goes ashore together.
     const cost = opts.sea !== undefined ? 0 : moveCost(g, c, target);
     if (moved >= (opts.occupy ?? STACK) || (moved > 0 && c.ap < cost) || (opts.sea === undefined ? blocked(g, c, target) : barred(g, c, target))) { c.ap = Math.max(0, c.ap - 1); continue; }
+    leaveWorks(g, c);
     place(g, c, target);
     c.ap = Math.max(0, c.ap - cost);
     attU[i].fate = 'advanced';
@@ -1449,6 +1522,72 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
   return rep;
 }
 
+// ---- Probing the line (the grand campaign) ------------------------------------------
+// One corps feels out the enemy line in the province beside it: a fight of patrols and a few battalions, not a
+// battle. It names every corps that stands there, takes a month off their fieldworks, and costs the corps that
+// probes a few men, some of its order and half its month. Nothing changes hands, no battle is written in the
+// file, and a line is probed once a month at most (`probed:` in the flags). No computer staff probes.
+
+/** What a probe found and what it cost. */
+export interface ProbeReport {
+  turn: number; region: number; nat: string; corps: number; name: string;
+  /** Men the probing corps lost. */
+  lost: number;
+  /** The corps it found there, and how many of them the staff had not identified before. */
+  found: string[]; fresh: number;
+  /** The months it took off their fieldworks, and the most that is left of them. */
+  wear: number; works: number;
+}
+
+export const probeRules = (g: Game): boolean => g.flags.open === 1 && !!DEFENCE.probe;
+
+/** Why this corps cannot probe the enemy line in that province now, or null if it can. */
+export function whyNoProbe(g: Game, c: Corps, target: Region): string | null {
+  const P = DEFENCE.probe;
+  if (!probeRules(g) || !P) return 'A line is probed only in the grand campaign.';
+  if (c.dead || c.kind === 'fort' || c.kind === 'art' || c.kind === 'eng') return 'Only a fighting corps probes: infantry, cavalry, mountain troops, motorized troops or tanks.';
+  if (c.town !== undefined) return 'A garrison does not leave its town to probe.';
+  if (c.leave !== undefined) return 'The corps is at home.';
+  if (!g.regions[c.reg].nb.includes(target.id) || blocked(g, c, target)) return 'It cannot reach that line from where it stands.';
+  if (!hostileUnits(g, target, armyOf(c)).length) return 'No enemy army stands there in the field.';
+  if (g.flags[`probed:${target.id}`] === g.turn) return 'That line has been probed this month already.';
+  if (c.ap < P.ap) return `A probe takes ${P.ap} of a corps' moves, and it has ${c.ap} left.`;
+  return null;
+}
+
+/** The men a probe would cost this corps. */
+export const probeCost = (g: Game, c: Corps): number => Math.round(men(c) * Math.min(0.6, (DEFENCE.probe?.loss ?? 0) * cmdLoss(g, c)));
+
+/** One corps probes the enemy line in the province beside it. Null if it cannot. */
+export function probeLine(g: Game, c: Corps, target: Region): ProbeReport | null {
+  if (whyNoProbe(g, c, target) !== null) return null;
+  const P = DEFENCE.probe!, nat = armyOf(c);
+  const defenders = hostileUnits(g, target, nat);
+  const lost = probeCost(g, c);
+  const fresh = defenders.filter((d) => corpsKnown(g, d, nat).level !== 'exact').length;
+  c.str *= 1 - Math.min(0.6, P.loss * cmdLoss(g, c));
+  c.org = clamp(c.org - P.org, 0, 1);
+  c.ap = Math.max(0, c.ap - P.ap);
+  c.fought = true;
+  let works = 0, left = 0;
+  for (const d of defenders) {
+    if (d.dug) { const w = worksOf(d); works = Math.max(works, w); d.dugFor = Math.max(0, w - P.wear); left = Math.max(left, worksOf(d)); }
+    d.pressed = true;
+  }
+  const wear = Math.round(Math.min(P.wear, works) * 10) / 10;
+  // Whoever is felt out is known, and so is the corps that came to feel.
+  identify(g, defenders, nat);
+  for (const d of new Set(defenders.map((x) => x.nat))) identify(g, [c], d);
+  g.flags[`probed:${target.id}`] = g.turn;
+  const rep: ProbeReport = { turn: g.turn, region: target.id, nat, corps: c.id, name: c.name, lost, found: defenders.map((d) => d.name), fresh, wear, works: Math.round(left * 10) / 10 };
+  const months = (m: number): string => (m === 1 ? 'a month' : `${m} months`);
+  const worksNews = works <= 0 ? 'They are not dug in.' : `Their fieldworks are ${months(wear)} the worse for it${rep.works < 0.05 ? ', and nothing is left of them' : `: ${months(rep.works)} of work ${rep.works === 1 ? 'is' : 'are'} left in them`}.`;
+  if (nat === g.human) headline(g, 'battle', `${c.name} probes the line at ${target.name} and finds ${listAnd(rep.found)}. ${worksNews} It cost ${lost.toLocaleString('en-US')} men.`, nat, target.id);
+  const mine = defenders.find((d) => d.nat === g.human);
+  if (mine) headline(g, 'battle', `${g.nations[nat].adj} troops probe your line at ${target.name} in strength. They know now who holds it${works > 0 ? `, and your fieldworks there are ${months(wear)} the worse` : ''}.`, mine.nat, target.id);
+  return rep;
+}
+
 // ---- Moving, taking ground, and falling ---------------------------------------------
 
 export function capture(g: Game, r: Region, nat: string): void {
@@ -1460,6 +1599,8 @@ export function capture(g: Game, r: Region, nat: string): void {
   moraleCapital(g, r, old);
   r.prev = old;
   g.supplyDirty = true;
+  // Works standing empty go with the ground: whoever takes it from their owner finds nothing he can use.
+  if (g.flags[`fw:${r.id}`] !== undefined) { const left = groundWorks(g, r.id); if (!left || !allied(g, r.ctrl, left.nat)) clearWorks(g, r.id); }
   if (groundRules(g)) {
     // The minefields are lifted by whoever takes the ground, and the side driven off it blows the bridges behind it.
     liftMines(g, r);
@@ -1494,8 +1635,11 @@ export function moveCorps(g: Game, c: Corps, to: Region): boolean {
   if (hostileUnits(g, to, c.nat).length) return false;
   if (!hasRoom(g, to, c)) return false;
   g.week = weekOf(c, cost);
+  leaveWorks(g, c);
   place(g, c, to);
   c.ap = Math.max(0, c.ap - cost);
+  // A relief in place: works standing empty on ground its side holds are its own from the moment it marches in.
+  if (friendly) takeWorks(g, c, to);
   // Ground a corps walks into is taken for the army it marches with: the province too, unless its town is held
   // (the grand campaign), in which case the army has only the country round it and the town is under siege.
   if (!friendly && !arrive(g, to, armyOf(c))) c.ap = 0; // the town holds: closing round it is the rest of the month's work
@@ -1539,8 +1683,10 @@ export function railMove(g: Game, c: Corps, to: Region): boolean {
   const friendly = (allied(g, c.nat, to.ctrl) && !besieged(g, to)) || junctionOpenTo(g, c.nat, to);
   if (c.kind === 'fort' || c.ap < 4 || !friendly || !hasRoom(g, to, c) || barred(g, c, to) || c.town) return false;
   if (to.id !== c.reg && !railReach(g, c).has(to.id)) return false;
+  if (to.id !== c.reg) leaveWorks(g, c);
   place(g, c, to);
   c.ap = 0;
+  takeWorks(g, c, to);
   return true;
 }
 
@@ -2073,6 +2219,11 @@ function digIn(g: Game, nat: string): void {
   if (g.flags.open !== 1 || !DEFENCE.entrench.auto) return;
   for (const c of g.corps) {
     if (c.dead || c.kind === 'fort' || armyOf(c) !== nat) continue;
+    // A corps that took works over this month keeps them as it found them: it marched, so it dug nothing of its own.
+    if (c.relief) {
+      delete c.relief;
+      if (c.dug && c.town === undefined && !c.yields && !c.fought) { if (c.pressed) delete c.pressed; continue; }
+    }
     if (c.town === undefined && !c.yields && c.ap >= c.apMax && !c.fought) {
       // A month in which the line was attacked is a month's digging lost: the works are what the attack left of them.
       const gain = c.pressed ? DEFENCE.wear.regrow : 1;
@@ -2097,6 +2248,7 @@ export function endPhase(g: Game, nat: string): void {
 
 export function startPhase(g: Game, nat: string): void {
   const n = g.nations[nat];
+  fadeWorks(g, nat);
   if (!n.alive) return;
   // Reinforcements from the pre-war mobilisation, and the armies and fronts formed later from men already under arms.
   for (const row of [...(setup as any).reinforcements, ...((setup as any).formations ?? [])]) {
