@@ -2,7 +2,7 @@
 //
 // An engineer corps is raised like any other in the grand campaign. Given a month where it stands, it rebuilds
 // the bridges that are down on that province's rivers, relays a railway that has been cut, puts a bombed factory
-// back to work, raises field works, lays minefields and booby traps, or demolishes fortifications. Sent in with
+// back to work, fortifies provinces, lays minefields and booby traps, or demolishes fortifications. Sent in with
 // an assault, it breaches the enemy's works, clears lanes through his mines and gets infantry over a river whose
 // bridges are down. Nothing that is broken mends itself: without engineers on the spot a blown bridge stays
 // blown, a cut line stays cut and a wrecked factory stays a ruin.
@@ -91,11 +91,11 @@ export function jobLine(g: Game, c: Corps): string {
   if (!c.job) return '';
   const r = g.regions[c.job.reg];
   const what = c.job.what === 'bridge' ? `rebuilding the bridges at ${r.name}` : c.job.what === 'rail' ? `relaying the railway at ${r.name}` : c.job.what === 'plant' ? `rebuilding a factory at ${r.name}`
-    : c.job.what === 'works' ? `building field works at ${r.name}` : c.job.what === 'airfield' ? `laying out an airfield at ${r.name}` : c.job.what === 'mines' ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
+    : c.job.what === 'works' ? `fortifying ${r.name}` : c.job.what === 'airfield' ? `laying out an airfield at ${r.name}` : c.job.what === 'mines' ? `laying minefields round ${r.name}` : `demolishing the works at ${r.name}`;
   return `${what[0].toUpperCase()}${what.slice(1)}: done when next month begins`;
 }
 
-/** The nations whose ground borders a region, and its own: field works face all of them. */
+/** The nations whose ground borders a region, and its own: fortifications face all of them. */
 function facing(g: Game, r: Region): string[] {
   const vs = new Set(r.fort?.vs ?? []);
   vs.add(r.owner);
@@ -124,7 +124,7 @@ export function engineersMonth(g: Game, nat: string): void {
     } else if (job.what === 'works') {
       if ((r.fort?.lv ?? 0) < ENGINEERING.works.most) {
         r.fort = { lv: (r.fort?.lv ?? 0) + 1, vs: facing(g, r) };
-        if (mine) headline(g, 'info', `${c.name} has finished field works at ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
+        if (mine) headline(g, 'info', `${c.name} has finished fortifying ${r.name}: fortifications, level ${r.fort.lv}.`, nat, r.id);
       }
     } else if (job.what === 'airfield') {
       if (airWar(g) && builtField(g, r) < AIRWAR.fields.engineers) {

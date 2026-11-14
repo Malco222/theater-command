@@ -15,10 +15,10 @@ import { loadGame, saveGame } from '../src/campaign/save';
 import { startOpen } from '../src/campaign/staff';
 import { townName } from '../src/campaign/towns';
 import {
-  beginHuman, governmentOf, headWantedOf, humanUp, orderCabinet, orderPromise, orderSack, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, stepAI, whyNotOrderPromise, whyNotStandByGeneral,
+  beginHuman, cabinetBillOf, governmentOf, headWantedOf, humanUp, orderCabinet, orderPromise, orderSack, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, stepAI, whyNotOrderPromise, whyNotStandByGeneral,
   whyNotTakeBackPromise,
 } from '../src/campaign/turn';
-import { MEN_PER_DIV, type BattleReport, type Directive, type Game, type General, type GovState, type Region } from '../src/campaign/types';
+import { MEN_PER_DIV, type BattleReport, type Directive, type Game, type General, type GovState, type LostBattle, type Region } from '../src/campaign/types';
 
 const free = (seed: number, human: string | null = null): Game => startOpen(createGame(seed, human));
 /** A grand campaign with the player's first month open. */
@@ -67,11 +67,14 @@ function towns(g: Game): { near: Region; deep: Region } {
   const near = t.find((x) => x.depth === 1 && x.holder === 'POL')!, deep = t.find((x) => x.depth >= 2 && x.holder === 'POL') ?? t.find((x) => x.depth >= 2)!;
   return { near: g.regions[near.region], deep: g.regions[deep.region] };
 }
-/** A general of the player's with a corps, and the record of a man who has just lost `streak` battles running. */
+/** Defences lost to an attack at these odds: at 1.2 to 1 they could have been held, and a cabinet holds them against the general. */
+const lostAt = (g: Game, k: number, odds = 1.2, att = false): LostBattle[] => Array.from({ length: k }, () => ({ t: g.turn, reg: 0, odds, att }));
+/** A general of the player's with a corps, and the record of a man who has just lost `streak` battles running that he could have won. */
 function loser(g: Game, streak = 2, skip: number[] = []): General {
   const gen = g.generals.find((x) => x.nat === 'GER' && x.status === 'active' && x.corps >= 0 && !skip.includes(x.id))!;
   gen.rec.battles += streak;
   gen.rec.streak = streak;
+  gen.rec.lost = lostAt(g, streak);
   return gen;
 }
 /** Lets the months pass, with nothing else due, until the cabinet names a general or the months run out. */
@@ -317,13 +320,14 @@ describe('call your shot', () => {
     const easy = list.filter((t) => t.depth === 1 && t.odds >= 4);
     expect(easy.length).toBeGreaterThan(0);
     for (const t of easy) expect(t.terms[t.terms.length - 1].band).toBe('safe');
-    const far = list.filter((t) => t.depth >= 3 && t.odds < 0.5);
+    const far = list.filter((t) => t.depth >= 4);
     expect(far.length).toBeGreaterThan(0);
-    for (const t of far) expect(t.terms[0].band).toBe('daring');
+    for (const t of far) expect(t.terms[0].band, t.town).toBe('daring');
     // The same town, with the troops beside it thinned out, is a bolder promise.
     const t0 = easy[0], r = g.regions[t0.region];
     const before = promiseTerms(g, 'GER', r.id, P.months[0])!;
-    for (const c of g.corps) if (c.nat === 'GER' && !c.dead) c.str *= 0.15;
+    for (const c of g.corps) if (c.nat === 'GER' && !c.dead) c.str *= 0.6 / before.odds;
+    delete govOf(g, 'GER')!.reach;   // the cabinet remembers the odds each month opened on: forget them, to read today alone
     const after = promiseTerms(g, 'GER', r.id, P.months[0])!;
     expect(after.odds).toBeLessThan(before.odds);
     expect(rank(after.band)).toBeGreaterThan(rank(before.band));
@@ -499,12 +503,17 @@ describe('the cabinet wants a head', () => {
     const h = g.headlines.length;
     expect(untilAsked(g, st)).toBe(true);
     expect(st.head).toMatchObject({ general: gen.id, issued: g.turn, due: g.turn + H.answer - 1 });
-    expect(st.head!.why).toBe('He has lost his last two battles.');
+    expect(st.head!.why).toMatch(/^He lost the defence of .+ to an attack at 1\.2 to 1 and lost the defence of .+ to an attack at 1\.2 to 1\. The cabinet holds that these were battles he could have won\.$/);
+    expect(st.head!.lost).toHaveLength(2);
     expect(said(g, new RegExp(`The war cabinet wants a head: it asks you to dismiss ${gen.name}`), h)).toBe(true);
     expect(headWantedOf(g)).toBe(gen.id);
     expect(headOf(g, 'UK')).toBeNull();
     const v = governmentOf(g)!.head!;
-    expect(v).toMatchObject({ general: gen.id, name: gen.name, left: H.answer, command: corpsOf(g, gen)!.name, loved: popular(gen) });
+    expect(v).toMatchObject({ general: gen.id, name: gen.name, left: H.answer, command: corpsOf(g, gen)!.name, loved: popular(gen), fought: gen.rec.battles, won: gen.rec.won });
+    // The card shows the evidence: the battles, and the odds they were fought at.
+    expect(v.battles).toHaveLength(2);
+    expect(v.battles[0]).toMatchObject({ odds: 1.2, attack: false });
+    expect(v.battles[0].text).toMatch(/^Defended .+, the attacker at 1\.2 to 1: lost\.$/);
     expect(v.gain).toBeCloseTo(Math.round(H.sacked * swing('GER') * 10) / 10, 9);
     expect(v.cost).toBeCloseTo(Math.round(H.refused * swing('GER') * 10) / 10, 9);
     expect(whyNotStandByGeneral(g)).toBeNull();
@@ -533,16 +542,16 @@ describe('the cabinet wants a head', () => {
     }
     expect(asked).toBe(true);
     expect(st.head!.general).toBe(gen.id);
-    expect(st.head!.why).toBe('He lost his last battle, and the cabinet\'s directive was not carried out.');
+    expect(st.head!.why).toMatch(/The cabinet holds that it was a battle he could have won, and its directive was not carried out\.$/);
   });
 
   it('it never names a general without a command, one it was proved wrong about, or anyone in a country at peace', () => {
     const g = playing('GER');
     const st = quiet(g);
-    for (const x of g.generals) if (x.nat === 'GER') { x.rec.streak = 3; x.rec.battles += 3; if (x.corps >= 0) x.traits.push('vindicated'); }
+    for (const x of g.generals) if (x.nat === 'GER') { x.rec.streak = 3; x.rec.battles += 3; x.rec.lost = lostAt(g, 3); if (x.corps >= 0) x.traits.push('vindicated'); }
     expect(untilAsked(g, st, 12)).toBe(false);
     const s = playing('SWE'), ss = quiet(s);
-    for (const x of s.generals) if (x.nat === 'SWE') { x.rec.streak = 3; x.rec.battles += 3; }
+    for (const x of s.generals) if (x.nat === 'SWE') { x.rec.streak = 3; x.rec.battles += 3; x.rec.lost = lostAt(s, 3); }
     ss.headNext = 0;
     for (let k = 0; k < 12; k++) { s.turn++; ss.next = s.turn + 99; govMonth(s, 'SWE'); }
     expect(ss.head).toBeUndefined();
@@ -620,6 +629,7 @@ describe('the cabinet wants a head', () => {
     // The mark is kept in a save, and the cabinet never asks for him again.
     expect(copy(g).generals.find((x) => x.id === gen.id)!.traits).toContain('vindicated');
     gen.rec.streak = 6;
+    gen.rec.lost = lostAt(g, 6);
     expect(untilAsked(g, st, 12)).toBe(false);
   });
 
@@ -640,9 +650,17 @@ describe('the cabinet wants a head', () => {
     expect(st.stood?.general).toBe(gen.id);
     expect(st.trust).toBeLessThan(before);
     expect(trust).toBeGreaterThan(st.trust);
-    // He loses his next battle.
+    // Standing by him wiped the slate: the count starts afresh. A line nobody would have held is not held against him.
+    expect(gen.rec.lost).toBeUndefined();
     gen.rec.battles++;
     gen.rec.streak++;
+    gen.rec.lost = lostAt(g, 1, 2.6);
+    judgeDirective(g, 'GER');
+    expect(st.stood?.general).toBe(gen.id);
+    // He loses a battle he could have won.
+    gen.rec.battles++;
+    gen.rec.streak++;
+    gen.rec.lost.push(...lostAt(g, 1, 1.3));
     const t2 = st.trust, h = g.headlines.length;
     judgeDirective(g, 'GER');
     expect(st.stood).toBeUndefined();
@@ -684,7 +702,7 @@ describe('the cabinet wants a head', () => {
 });
 
 describe('all of it lives behind the cabinet switch', () => {
-  it('switched off: the promise, the demand and the watch are withdrawn without blame, and nothing new comes', () => {
+  it('switched off: the promise and the demand are settled at the price of leaving them, the watch waits, and nothing new comes', () => {
     const g = playing('GER');
     const st = quiet(g);
     const { near } = towns(g);
@@ -692,14 +710,22 @@ describe('all of it lives behind the cabinet switch', () => {
     const a = loser(g, 2);
     expect(untilAsked(g, st)).toBe(true);
     expect(standBy(g, 'GER')).toBe(true);
-    st.head = { general: a.id, issued: g.turn, due: g.turn + 1, why: 'He has lost his last two battles.' };
+    const b = loser(g, 2, [a.id]);
+    st.head = { general: b.id, issued: g.turn, due: g.turn + 1, why: 'He has lost two battles.' };
     st.seats = { ...HAWKS };
-    const trust = st.trust;
+    const trust = st.trust, back = st.vow!.price * GOV.promise.back;
+    // The bill is shown before he confirms, and it is what he pays.
+    const bill = cabinetBillOf(g);
+    expect(bill.map((x) => x.trust)).toEqual([Math.round(back * 10) / 10, Math.round(GOV.head.refused * swing('GER') * 10) / 10]);
+    expect(bill[0].text).toMatch(/^Your promise is taken back/);
+    expect(bill[1].text).toContain(b.name);
     expect(orderCabinet(g, false)).toBe(true);
     expect(st.vow).toBeUndefined();
     expect(st.head).toBeUndefined();
-    expect(st.stood).toBeUndefined();
-    expect(st.trust).toBe(trust);
+    expect(st.trust).toBeCloseTo(trust - Math.round(back * 10) / 10 - GOV.head.refused * swing('GER'), 9);
+    // The general he is taken to stand by is watched, and the watch waits while the cabinet is away.
+    expect(st.stood?.general).toBe(b.id);
+    const until = st.stood!.until;
     expect(governmentOf(g)).toBeNull();
     expect(headWantedOf(g)).toBeNull();
     expect(promiseTargetsOf(g)).toEqual([]);
@@ -707,13 +733,19 @@ describe('all of it lives behind the cabinet switch', () => {
     expect(orderPromise(g, near.id, 3)).toBe(false);
     expect(orderStandBy(g)).toBe(false);
     expect(orderTakeBack(g)).toBe(false);
-    // A general dismissed while it is off is dismissed as he always was.
-    a.rec.won++;
+    // Nothing is judged while it is off.
+    b.rec.won++;
     judgeDirective(g, 'GER');
-    expect(a.traits).not.toContain('vindicated');
-    // Switched on again, the ministers sit as they were left and the table leans as it did.
+    expect(b.traits).not.toContain('vindicated');
+    // Switched on again three months later, the ministers sit as they were left, the table leans as it did, and
+    // the watch has three months more to run: his battle is judged the day it is back.
+    g.turn += 3;
     expect(setCabinet(g, true)).toBe(true);
     expect(governmentOf(g)!.wings.top).toBe('hawks');
     expect(governmentOf(g)!.promise).toBeNull();
+    expect(st.stood!.until).toBe(until + 3);
+    expect(cabinetBillOf(g)).toEqual([]);
+    judgeDirective(g, 'GER');
+    expect(b.traits).toContain('vindicated');
   });
 });

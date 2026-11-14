@@ -114,7 +114,7 @@ describe('works wear down under attack', () => {
     expect(jab.odds).toBeLessThan(W.fullAt);
     expect(jab.wear).toBeCloseTo(W.perAttack * (jab.odds / W.fullAt), 6);
     expect(jab.wear).toBeLessThan(W.perAttack);
-    // Guns: by the share they take off the trenches.
+    // Guns: by the share they take off the fieldworks.
     const fresh = line(g, 2, 3);
     works(fresh.def, M);
     const guns = addCorps(g, 'GER', 'Test guns', 'art', 2, fresh.from.id, {});
@@ -129,7 +129,7 @@ describe('works wear down under attack', () => {
     expect(assess(g, [...fresh.att, guns], fresh.target).wear).toBeCloseTo(0.4, 6);
   });
 
-  it('trenches worn under a month give less cover, and battered flat give none', () => {
+  it('fieldworks worn under a month give less cover, and battered flat give none', () => {
     const g = playing('GER');
     const { target, def, att } = line(g);
     const open = assess(g, att, target);
@@ -159,7 +159,7 @@ describe('works wear down under attack', () => {
     expect(a.wear).toBe(0);
     expect(a.prepared).toBe(0);
     expect(a.lines.some((x) => x.label === 'Troops')).toBe(false);
-    expect(a.lines.find((x) => x.label === 'Dug in')!.value).toContain('have had a month to entrench');
+    expect(a.lines.find((x) => x.label === 'Dug in')!.value).toContain('have had a month to dig in');
     resolveBattle(g, att, target);
     for (const c of def) expect(c.pressed).toBeUndefined();
     expect(Object.keys(g.flags).some((k) => k.startsWith('opening:'))).toBe(false);
@@ -311,7 +311,7 @@ describe('the Battle Ticket', () => {
     expect(assess(g, att, target).lines.find((x) => x.label === 'Troops')!.effect).toContain(`each attacking division counts for about ${k.toFixed(1)} defending ones`);
   });
 
-  it('has one line for the trenches: how far the works have got, the luck of the day, and what the attack takes off them', () => {
+  it('has one line for the fieldworks: how far the works have got, the luck of the day, and what the attack takes off them', () => {
     const g = playing('GER');
     const { target, def, att } = line(g);
     expect(assess(g, att, target).lines.some((x) => x.label === 'Dug in')).toBe(false);
@@ -320,7 +320,7 @@ describe('the Battle Ticket', () => {
     expect(young.lines.some((x) => x.label === 'Prepared defence')).toBe(false);
     const row = young.lines.find((x) => x.label === 'Dug in')!;
     expect(row.value).toBe(`The defenders are dug in: their works are a month old of the ${M} they take to finish`);
-    expect(row.effect).toContain(`Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger`);
+    expect(row.effect).toContain(`Troops in fieldworks defend ${Math.round((DUG_IN - 1) * 100)}% stronger`);
     expect(row.effect).toContain('The day runs against the attack');
     expect(row.effect).toContain('Won or lost, this attack takes a month off the works, which leaves nothing of them');
     works(def, M);

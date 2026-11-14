@@ -182,7 +182,7 @@ describe('artillery', () => {
     expect(upkeepTotal(g, 'GER')).toBeGreaterThan(before);
   });
 
-  it('breaks up fortifications and trenches in the attack', () => {
+  it('breaks up fortifications and fieldworks in the attack', () => {
     const g = grand();
     const { target, from } = front(g);
     target.fort = { lv: 2, vs: ['GER'] };
@@ -198,7 +198,7 @@ describe('artillery', () => {
     // The infantry gets through works worth less: its share of the attack grows by exactly what the guns took off them.
     const fort = FORT_MUL[2], softened = 1 + (fort - 1) * (1 - soften);
     expect(both.A - gunsOnly.A).toBeCloseTo(alone.A * (fort / softened), 6);
-    // And the trenches are worth less too.
+    // And the fieldworks are worth less too.
     expect(both.D).toBeCloseTo(alone.D * ((1 + (DUG_IN - 1) * (1 - soften)) / DUG_IN), 6);
     expect(both.odds).toBeGreaterThan(alone.odds);
   });

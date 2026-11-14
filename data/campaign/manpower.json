@@ -8,10 +8,12 @@
   "spentMost": 0.5,
   "warn": [0.5, 0.25],
   "classFloor": 0.1,
+  "early": { "months": 6, "gap": 9 },
   "notes": {
     "pool": "The reserve a great power opens a campaign of September 1939 with, in divisions' worth. 'minor': any other country has 'pool' and 'perDiv' for each division it has under arms as the campaign opens.",
     "class": "The class that comes of age each month with the whole homeland held, in divisions' worth; a minor's is 'classShare' of its reserve. It shrinks with the share of the homeland lost, counted by the worth of the provinces, but never under 'classFloor' of it. The reserve never holds more than 'most' times what it opened with.",
     "later": "A campaign that opens after 1939 finds 'spentAYear' of each warring nation's reserve gone for every year of war behind it, to 'spentMost'.",
-    "warn": "The player is told when his reserve falls under these shares of what it opened with, and when it is spent."
+    "warn": "The player is told when his reserve falls under these shares of what it opened with, and when it is spent.",
+    "early": "A say over the call-up. A country at war may call the next class up early: 'months' of classes join the reserve at once, and no class comes of age for the next 'gap' months, because the boys who would have are already with the colours. It gives men now at the price of fewer later. A country with a standing call-up (east.json, mobilisation) may also hold it: no new corps are raised from the reserve while it is held, the waves wait, and the men stay for the corps in the field. Only the player uses either."
   }
 }

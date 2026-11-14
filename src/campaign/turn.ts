@@ -1,7 +1,7 @@
 // The monthly turn: each nation in order gets its month, the computer plays the nations
 // the player does not, and the player's orders go through the same rules.
 
-import { KIND, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
+import { KIND, MEN_PER_DIV, STACK, type Agent, type AirFleet, type AirMission, type AirReport, type BattleReport, type Build, type Cash, type Corps, type Field, type Fleet, type Game, type General, type Ships, type ShoreReport, type Kind, type Mission, type Posture, type Region, type Skill, type Stance } from './types';
 import { airBattles, airBases, airTargets, previewAir, rebaseAir, setMission, type AirAssess } from './air';
 import { fleetKnown, fleetsSeen, searchOptions, searchSea, seaPicture, syncWings, wingCards, type FleetSeen, type SeaPicture, type SearchOption, type WingCard } from './carriers';
 import {
@@ -12,8 +12,8 @@ import { NAVY, baseTargets, canPass, landCorps, landingTargets, planLanding, reb
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
-  DEFENCE, allied, assess, atWar, chanceOn, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, hasRoom, hostileUnits, limitAttackers,
-  endPhase, foldNews, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, theName, type Assessment,
+  DEFENCE, allied, assess, atWar, chanceOn, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
+  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, theName, type Assessment,
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { offers, orderOffer, type Offer } from './arsenal';
@@ -51,10 +51,10 @@ import {
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
 } from './prizes';
 import {
-  appoint, cabinetOff, decree, govMul, government, headAsked, headGiven, headOf, promise, promiseTargets, promiseTerms, setAside, setCabinet, standBy, takeBack,
+  appoint, cabinetBill, cabinetOff, decree, govMul, government, headAsked, headGiven, headOf, officeSecure, promise, promiseTargets, promiseTerms, setAside, setCabinet, setCanFall, standBy, takeBack,
   whyNotAppoint, whyNotDecree, whyNotPromise, whyNotSetAside, whyNotStandBy, whyNotTakeBack, type GovView, type PromiseTarget, type PromiseTerms,
 } from './government';
-import { manpower, type MenView } from './manpower';
+import { MANPOWER, callEarly, earlyClass, manpower, menWords, whyNotEarly, type MenView } from './manpower';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -468,6 +468,52 @@ export const governmentOf = (g: Game, nat: string | null = g.human): GovView | n
  */
 export const manpowerOf = (g: Game, nat: string | null = g.human): MenView | null => manpower(g, nat, nat ? govMul(g, nat, 'men') : 1);
 
+/**
+ * The player's say over the call-up (the grand campaign), for the panel that shows his reserve of men. `early`: what
+ * calling the next class up early would bring today, in men, the months no class would then come of age, and why it
+ * cannot be done now, or null if it can. `callUp`: his country's standing call-up, where it has one and is at war:
+ * whether he holds it, and the corps the next wave would raise at most. Null outside the grand campaign.
+ */
+export interface CallUpView {
+  early: { men: number; months: number; gap: number; why: string | null; text: string };
+  callUp: { held: boolean; corps: number; divs: number; text: string } | null;
+}
+export function callUpOf(g: Game): CallUpView | null {
+  const nat = g.human;
+  if (nat === null || g.flags.open !== 1 || !g.nations[nat]) return null;
+  const E = MANPOWER.early, men = Math.round(earlyClass(g, nat, govMul(g, nat, 'men')) * MEN_PER_DIV);
+  const why = !humanUp(g) ? 'It is not your month.' : whyNotEarly(g, nat);
+  const wave = standingCallUp(g, nat);
+  return {
+    early: { men, months: E.months, gap: E.gap, why, text: `Call up the next class early: about ${menWords(men)} men join the reserve at once. No class then comes of age for ${E.gap} months, because those boys are with the colours already: men now, at the price of fewer later.` },
+    callUp: wave ? { ...wave, text: wave.held
+      ? 'The standing call-up is held: no new corps are raised from the reserve, and the men stay for the corps in the field. The waves wait until you let it run.'
+      : `The standing call-up is running: next month it raises up to ${wave.corps} new corps of ${wave.divs} divisions from the reserve, if the men are there. Hold it, and they stay for the corps in the field instead.` } : null,
+  };
+}
+
+/** Why the player cannot call the next class up early, or null if he can. */
+export function whyNotOrderEarlyClass(g: Game): string | null {
+  if (g.human === null || !humanUp(g)) return 'It is not your month.';
+  return whyNotEarly(g, g.human);
+}
+
+/** The player calls the next class up early: months of classes join the reserve now, and none comes of age for a while after. */
+export function orderEarlyClass(g: Game): boolean {
+  if (g.human === null || !humanUp(g)) return false;
+  const come = callEarly(g, g.human, govMul(g, g.human, 'men'));
+  if (come <= 0) return false;
+  headline(g, 'info', `The next class is called up early: ${menWords(come * MEN_PER_DIV)} men join the reserve. No class comes of age for the next ${MANPOWER.early.gap} months.`, g.human);
+  return true;
+}
+
+/** The player holds his country's standing call-up, or lets it run again. It takes hold from next month's wave. */
+export function orderCallUp(g: Game, hold: boolean): boolean {
+  if (g.human === null || !holdCallUp(g, g.human, hold)) return false;
+  headline(g, 'info', hold ? 'The standing call-up is held: no new corps are raised from the reserve until you let it run again.' : 'The standing call-up runs again: new corps are raised from the reserve each month.', g.human);
+  return true;
+}
+
 /** True when the player has switched his war cabinet off (the grand campaign): governmentOf is then null, and no screen for it should show. */
 export const cabinetIsOff = (g: Game): boolean => cabinetOff(g);
 
@@ -479,6 +525,25 @@ export const cabinetIsOff = (g: Game): boolean => cabinetOff(g);
 export function orderCabinet(g: Game, on: boolean): boolean {
   return g.human !== null && setCabinet(g, on);
 }
+
+/** True when the player has made his office secure (the grand campaign): his government cannot fall, whatever the cabinet's trust. */
+export const officeIsSecure = (g: Game): boolean => officeSecure(g);
+
+/**
+ * Says whether the player's government can fall: a setting apart from the cabinet's switch, for a player who wants
+ * the cabinet, its ministers and its directives but never to be turned out. It can be changed in any month. With
+ * `canFall` false the cabinet's trust still moves and a cabinet that doubts him still withholds money and political
+ * capital, but it never falls.
+ */
+export function orderOffice(g: Game, canFall: boolean): boolean {
+  return g.human !== null && setCanFall(g, canFall);
+}
+
+/**
+ * What switching the war cabinet off would settle today, line by line, with the trust each costs: a directive set
+ * aside, a promise taken back, a general stood by. Show it before the player confirms. Empty where nothing is open.
+ */
+export const cabinetBillOf = (g: Game): { text: string; trust: number }[] => cabinetBill(g);
 
 /** Why the player cannot put this minister in this seat of his war cabinet, or null if he can. */
 export function whyNotAppointMinister(g: Game, seat: string, minister: string): string | null {

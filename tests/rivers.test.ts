@@ -411,7 +411,7 @@ describe('engineers', () => {
     const jobs = engineerJobs(g, sap);
     expect(jobs.map((j) => j.key)).toEqual(['bridge', 'rail', 'plant', 'works', 'airfield', 'mines', 'demolish']);
     expect(jobs.map((j) => j.why)).toEqual(['Every bridge here is standing.', 'The railway here is working.', 'Every factory here is at work.', null, null, null, 'There are no fortifications here to demolish.']);
-    expect(jobs[3].label).toBe('Build field works');
+    expect(jobs[3].label).toBe('Fortify the province');
     // Away from the rivers there are no bridges to rebuild.
     const dresden = clear(g.regions.find((r) => r.ctrl === 'GER' && r.owner === 'GER' && !crossingsAt(r.id).length)!);
     const away = corps(g, 'GER', 'eng', dresden, 1);
@@ -486,7 +486,7 @@ describe('engineers', () => {
       sap.ap = sap.apMax;
     }
     expect(berlin.fort).toBeNull();
-    expect(g.headlines.filter((h) => /1st Engineer Corps has (finished field works|laid minefields|demolished)/.test(h.text)).length).toBe(6);
+    expect(g.headlines.filter((h) => /1st Engineer Corps has (finished fortifying|laid minefields|demolished)/.test(h.text)).length).toBe(6);
   });
 
   it('can be put to work on the day they arrive, and lose the job if they leave it', () => {
