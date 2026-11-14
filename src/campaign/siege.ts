@@ -346,10 +346,11 @@ export function pocketMonth(g: Game, nat: string): void {
     }
     if (!olds.length) {
       const by = [...new Set(pocket.flatMap((id) => g.regions[id].nb).filter((j) => !pocket.includes(j)).map((j) => fieldCtrl(g, g.regions[j])))];
-      const v = pocketView(g, town.id)!;
+      // (Reckoned here and not read off the town's own view: the town that feeds a pocket may be an ally's, with no count kept on it.)
+      const left = dry ? 0 : Math.max(1, Math.ceil((stores - eaten / 10) / mouths(g, nat, pocket, town)));
       const corps = pocket.reduce((s, id) => s + g.regions[id].units.filter((c) => c.nat === nat && !c.dead).length + garrisonOf(g.regions[id]).filter((c) => c.nat === nat).length, 0);
-      const said = corps ? `${corps === 1 ? `One ${n.adj} corps is` : `${corps} ${n.adj} corps are`} cut off there, with stores for ${months(v.left)}; after that the troops go hungry.`
-        : `The town has stores for ${months(v.left)}, and any troops who fall back on it will live on them.`;
+      const said = corps ? `${corps === 1 ? `One ${n.adj} corps is` : `${corps} ${n.adj} corps are`} cut off there, with stores for ${months(left)}; after that the troops go hungry.`
+        : `The town has stores for ${months(left)}, and any troops who fall back on it will live on them.`;
       tell(g, town, `${townName(town)} is surrounded: no road and no ship reaches it from the rest of ${theName(n)}. ${said}`, nat, [nat, ...by]);
     }
   }

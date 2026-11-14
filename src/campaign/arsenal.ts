@@ -9,12 +9,12 @@ import { byHand } from './depth';
 import data from '../../data/campaign/arsenal.json';
 import { AIRWAR, airFleetsOf, airPool, airWar, carrierRules, foundAirFleet, hasAirfield } from './air';
 import { syncWings } from './carriers';
-import { MANPOWER, classNow, menLeft, menRules, menWords, raisable } from './manpower';
+import { MANPOWER, classNow, menLeft, menRules, menSpare, menWords, raisable } from './manpower';
 import { govMul } from './government';
 import { BUDGET, PRODUCTION, budgeted, cadreTerms, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
-import { headline } from './game';
+import { atWar, headline } from './game';
 import { NAVY, fleetsOf, foundFleet, shipCount } from './navy';
 import { MEN_PER_DIV, type AirFleet, type Build, type Fleet, type Game, type Kind, type Region, type ShipClass } from './types';
 
@@ -438,4 +438,35 @@ export function aiArsenal(g: Game, nat: string): void {
   if (!best) return;
   const o = offers(g, nat, best.id).find((x) => x.key === 'work:aa');
   if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g, nat, 'work:aa', best.id);
+}
+
+/** The coast watch's and the diggers' numbers (open.json, 'coast'): staff.ts keeps them, ai.ts hands them over. */
+export interface FortRules { works: number; dig?: { orders: number; top: number; capital: number; keep: number } }
+
+/**
+ * A computer-run nation in the grand campaign fortifies (Version 69). The harbours of its homeland where its staff
+ * keeps a coast watch are given works first, one order at a time. And a nation that can raise no more corps for
+ * want of men does not sit on its money: it goes into fortifications in the provinces of its homeland nearest the
+ * enemy that he does not yet stand next to, so many orders a month, with something kept back for the drafts.
+ * The player's own building staff does neither: his fortifications are his to order.
+ */
+export function aiFortify(g: Game, nat: string, watch: string[], C: FortRules | undefined): void {
+  const n = g.nations[nat];
+  if (!C || g.flags.open !== 1 || !budgeted(g) || nat === g.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
+  const level = (r: Region): number => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === 'fort' && b.region === r.id).length;
+  const order = (r: Region, keep: number): boolean => { const cost = fortCost(g, nat, r); return cost !== null && n.pp >= cost + keep && !!orderFort(g, nat, r.id); };
+  const coast = watch.map((nm) => g.byName[nm]).filter((r) => !!r && isHome(g, nat, r) && level(r) < C.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
+  if (coast.length && !n.queue.some((b) => b.what === 'fort' && watch.includes(g.regions[b.region].name))) order(coast[0], PRODUCTION.aiReserve);
+  const D = C.dig;
+  if (!D || menSpare(g, nat) >= (specOf(g, 'inf')?.divs ?? 1)) return;
+  // How many marches each province lies from ground an enemy holds.
+  const dist = new Int16Array(g.regions.length).fill(-1);
+  const q: number[] = [];
+  for (const r of g.regions) if (atWar(g, nat, r.ctrl)) { dist[r.id] = 0; q.push(r.id); }
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (dist[j] < 0) { dist[j] = dist[q[i]] + 1; q.push(j); }
+  const cands = g.regions
+    .filter((r) => isHome(g, nat, r) && !r.overseas && dist[r.id] >= 2 && level(r) < (r.id === n.capital ? D.capital : D.top))
+    .sort((a, b) => dist[a.id] - dist[b.id] || level(a) - level(b) || a.id - b.id);
+  let k = 0;
+  for (const r of cands) { if (k >= D.orders || !order(r, D.keep)) break; k++; }
 }

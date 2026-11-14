@@ -17,14 +17,14 @@ import { turnToDate } from '../core/ticket';
 import { holds } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
-import { openAirWar } from './air';
+import { openAirWar, skyDenies } from './air';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges } from './siege';
 import { agentsOf, atWork, knowsBooks } from './intel';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
-import { NAVY } from './navy';
+import { NAVY, canPass, closedTo } from './navy';
 import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
@@ -64,7 +64,9 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number };
+  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number };
+  /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
+  coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
 
 /** True in a free-play war: the computer's nations make their own decisions. */
@@ -1022,8 +1024,18 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   const cap = n.capital >= 0 ? g.regions[n.capital] : null;
   if (cap && cap.ctrl === nat && nearEnemy(g, nat, cap, OPEN.guardWithin)) phase.staging = { ...(phase.staging ?? {}), [cap.name]: OPEN.guard };
   // On the hardest level a rival with shipping keeps a force by the quay for a descent on the player's coast.
-  const quay = seaBase(g, nat);
-  if (quay) phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, seaFoe(g, nat)!.L.force) };
+  // The coast watch: the harbours of the homeland an enemy's ships could put an army into are not left empty.
+  const watch = coastWatch(g, nat);
+  for (const [name, count] of Object.entries(watch)) phase.staging = { ...(phase.staging ?? {}), [name]: Math.max(phase.staging?.[name] ?? 0, count) };
+  if (Object.keys(watch).length) phase.watch = Object.keys(watch);
+  // So does a staff opening a second front, at home and on a far shore: and while its men ashore still have a front, all its ships can carry.
+  for (const slot of [0, 1]) {
+    const quay = seaBase(g, nat, slot);
+    if (!quay) continue;
+    const sea = seaFoe(g, nat, slot)!;
+    const want = sea.second && lodgment(g, nat, slot)?.short ? Math.max(sea.L.force, Math.min(n.sealift, STACK)) : sea.L.force;
+    phase.staging = { ...(phase.staging ?? {}), [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, want) };
+  }
   // A force kept ready for a stroke still to come.
   for (const op of list) {
     if (!op.staging || flag(g, `st:done:${nat}:${op.id}`) || g.turn > (op.to ?? 999)) continue;
@@ -1032,81 +1044,311 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   return phase;
 }
 
-/** True where this nation's field troops stand next to ground an enemy holds: a land front with him. */
-function inTouch(g: Game, nat: string, e: string): boolean {
+/**
+ * True where this nation's field troops stand next to ground an enemy holds: a land front with him. With `among`,
+ * only the troops standing on that ground count (the army at home, say, and not an expedition overseas).
+ */
+function inTouch(g: Game, nat: string, e: string, among?: Uint8Array): boolean {
   for (const r of g.regions) {
     if (r.ctrl !== e) continue;
-    for (const j of r.nb) if (g.regions[j].units.some((u) => u.nat === nat && !u.dead && u.kind !== 'fort')) return true;
+    for (const j of r.nb) if ((!among || among[j]) && g.regions[j].units.some((u) => u.nat === nat && !u.dead && u.kind !== 'fort')) return true;
     if (r.units.some((u) => u.nat === nat && !u.dead)) return true;
   }
   return false;
 }
 
+/** The ground a nation holds in one piece with its capital, nearest first, and a mark on each province of it. Nothing for a capital off the map. */
+function homeGround(g: Game, nat: string): { list: number[]; on: Uint8Array } {
+  const on = new Uint8Array(g.regions.length);
+  const cap = g.nations[nat].capital;
+  if (cap < 0) return { list: [], on };
+  const list = [cap];
+  on[cap] = 1;
+  for (let i = 0; i < list.length; i++) for (const j of g.regions[list[i]].nb) if (!on[j] && g.regions[j].ctrl === nat) { on[j] = 1; list.push(j); }
+  return { list, on };
+}
+
+/** The two forces a staff may keep for the sea: 0 the army at home, 1 an army standing idle on a far shore. Each has its own flags. */
+const SLOT = ['', ':o'];
+
+/**
+ * The harbour a nation's second front began at (0 the landing from home, 1 the one from a far shore), while the
+ * nation still holds it (or the country round it, with its town under siege) and the ground won from it still
+ * touches the enemy, with every port on that ground whose quays are in friendly hands (the first harbour first:
+ * none while its town still holds out and no other has been taken). `short` while the men ashore are still too
+ * few: fewer than 'hold' divisions, or than 'feed' times the enemy army that stands next to their ground. Null
+ * once the harbour is lost or the front has gone.
+ */
+export function lodgment(g: Game, nat: string, slot = 0): { at: Region; ports: Region[]; short: boolean } | null {
+  const at = g.regions[flag(g, `st:lodged:${nat}${SLOT[slot]}`) - 1];
+  if (!at || !at.port || (at.ctrl !== nat && fieldCtrl(g, at) !== nat)) return null;
+  const D = OPEN.descent;
+  const seen = new Uint8Array(g.regions.length);
+  const q = [at.id];
+  seen[at.id] = 1;
+  let front = false, mine = 0, foes = 0;
+  for (let i = 0; i < q.length; i++) {
+    const r = g.regions[q[i]];
+    // A town on this ground that still holds out is a front of its own.
+    if (atWar(g, nat, r.ctrl)) front = true;
+    for (const u of r.units) if (u.nat === nat && !u.dead && u.kind !== 'fort') mine += u.divs * u.str;
+    for (const j of r.nb) {
+      if (seen[j]) continue;
+      const c = fieldCtrl(g, g.regions[j]);
+      if (allied(g, nat, c)) { seen[j] = 1; q.push(j); continue; }
+      if (!atWar(g, nat, c)) continue;
+      front = true;
+      seen[j] = 2;
+      for (const u of g.regions[j].units) if (!u.dead && u.kind !== 'fort' && atWar(g, nat, u.nat)) foes += u.divs * u.str;
+    }
+  }
+  if (!front) return null;
+  return { at, ports: q.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g, nat, r.ctrl)), short: mine < Math.max(D.hold ?? 15, (D.feed ?? 2) * foes) };
+}
+
+/** The seas a nation's troopships can reach from a quay within a landing's range, over seas not closed to them: the seas crossed to each, -1 where they cannot go. */
+function lanes(g: Game, nat: string, from: Region, shut: boolean[]): Int16Array {
+  const d = new Int16Array(g.seas.length).fill(-1);
+  const q: number[] = [];
+  for (const z of from.seas) if (!shut[z] && d[z] < 0) { d[z] = 1; q.push(z); }
+  for (let i = 0; i < q.length; i++) {
+    if (d[q[i]] >= NAVY.landing.range) continue;
+    for (const j of g.seas[q[i]].adj) if (d[j] < 0 && !shut[j] && canPass(g, q[i], j, nat)) { d[j] = d[q[i]] + 1; q.push(j); }
+  }
+  return d;
+}
+
+/**
+ * What a quay is worth for a descent on some shores: over the harbours its ships can reach, how lightly each is
+ * held (1 for an empty harbour with no army within a march, less as that army grows, next to nothing under a sky
+ * the enemy's fighters still hold), and the fewest seas to any of them. Worth nothing when no lane is open.
+ */
+function quayWorth(g: Game, nat: string, from: Region, shores: Region[], shut: boolean[]): { worth: number; seas: number } {
+  const d = lanes(g, nat, from, shut);
+  let worth = 0, seas = Infinity;
+  for (const s of shores) {
+    let k = Infinity;
+    for (const z of s.seas) if (d[z] > 0 && d[z] < k) k = d[z];
+    if (k === Infinity) continue;
+    seas = Math.min(seas, k);
+    if (!allied(g, nat, s.ctrl) && skyDenies(g, nat, s.id)) { worth += 0.02; continue; }
+    let near = 0;
+    for (const j of [s.id, ...s.nb]) for (const u of hostileUnits(g, g.regions[j], nat)) if (u.kind !== 'fort') near += u.divs * u.str;
+    worth += 1 / (1 + near / 4);
+  }
+  return { worth, seas };
+}
+
+/** The harbours a nation holds. */
+const harbours = (g: Game, e: string): Region[] => g.regions.filter((r) => r.ctrl === e && r.port && r.seas.length > 0);
+
 /**
  * Whom a staff with shipping means to cross the sea against, and the rules it lands by. On the hardest level a
  * rival goes for the player's coasts. On every level a nation that has been at war with an enemy for a year and
- * more with no land front against him and no fighting opens a second front: the choice stands for a year, and for
- * as long as the men it put ashore still have a front to hold. Null for the player and for a nation with no ships.
+ * more with no land front against him at home and no fighting opens a second front, against an enemy whose
+ * harbours its home ports can reach: the choice stands for a year, and after that for as long as his coast is
+ * still in reach and no front has opened at home, or the men it put ashore still have a front to hold. A nation
+ * with the enemy on its own soil sends nobody. The second force (slot 1) is an army standing idle on a far
+ * shore: see `abroad`. Null for the player and for a nation with no ships.
  */
-export function seaFoe(g: Game, nat: string): { foe: string; L: Landings } | null {
+export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landings; second?: boolean } | null {
   const n = g.nations[nat];
-  if (!n || !n.alive || n.dormant || n.sealift <= 0 || n.capital < 0 || nat === g.human) return null;
+  if (!n || !n.alive || n.dormant || n.sealift <= 0 || nat === g.human) return null;
+  const D = OPEN.descent;
+  if (slot) {
+    const far = D && isOpen(g) ? abroad(g, nat) : null;
+    return far ? { foe: far.foe, L: D, second: true } : null;
+  }
+  if (n.capital < 0) return null;
   const L = landingsFor(g, nat), you = seat(g);
   if (L && you !== null && atWar(g, nat, you)) return { foe: you, L };
-  const D = OPEN.descent;
   if (!D || !isOpen(g)) return null;
+  if (g.regions.some((r) => r.owner === nat && !r.overseas && atWar(g, nat, r.ctrl))) return null;
   const ids = Object.keys(g.nations);
   const key = `st:foe:${nat}`, at = `st:foeAt:${nat}`;
+  const home = homeGround(g, nat);
+  const from = [...new Set(home.list.map((id) => g.regions[id]).filter((r) => r.port && r.owner === nat && !r.overseas).flatMap((r) => r.seas))];
+  const inReach = (e: string): boolean => from.length > 0 && seaHops(g, from, harbours(g, e)) <= NAVY.landing.range;
   const kept = ids[flag(g, key) - 1];
   if (kept && g.nations[kept].alive && atWar(g, nat, kept)) {
-    const lodged = g.regions[flag(g, `st:lodged:${nat}`) - 1];
-    if (g.turn - flag(g, at) < 12 || (lodged && lodged.ctrl === nat && lodged.nb.some((j) => atWar(g, nat, g.regions[j].ctrl)))) return { foe: kept, L: D };
+    if (g.turn - flag(g, at) < 12 || lodgment(g, nat)) return { foe: kept, L: D, second: true };
+    if (inReach(kept) && !inTouch(g, nat, kept, home.on)) { g.flags[at] = g.turn; return { foe: kept, L: D, second: true }; }
   }
   let best: string | null = null, bq = D.after - 1;
   for (const e of [...n.atWar].sort()) {
     const x = g.nations[e];
     if (!x?.alive || x.capital < 0) continue;
     const q = quietWith(g, nat, e);
-    if (q > bq && !inTouch(g, nat, e)) { bq = q; best = e; }
+    if (q > bq && !inTouch(g, nat, e, home.on) && inReach(e)) { bq = q; best = e; }
   }
   if (!best) { delete g.flags[key]; return null; }
   g.flags[key] = ids.indexOf(best) + 1;
   g.flags[at] = g.turn;
-  return { foe: best, L: D };
+  return { foe: best, L: D, second: true };
 }
 
 /**
- * The harbour a rival's staff keeps its landing force at, on the level that has it land on the player's coasts:
- * a home port of its own, in touch with the capital by land, and the one with the shortest crossing to a harbour
- * the player holds. The choice is kept while it still serves and looked at again every half year.
+ * The army overseas. A nation with shipping whose troops stand idle on a far shore (friendly ground not in one
+ * piece with its capital, with no enemy on it or next to it) crosses from a port there against an enemy it has not
+ * fought for a season. The quay and the enemy are chosen together, by how lightly the harbours in reach are held,
+ * from the ports with a landing force of its own within three marches, and looked at again every three months.
+ * While the men it put ashore still have a front to hold, the same quay feeds them.
  */
-export function seaBase(g: Game, nat: string): Region | null {
-  const sea = seaFoe(g, nat);
-  const n = g.nations[nat];
+function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
+  const D = OPEN.descent, n = g.nations[nat];
+  const ids = Object.keys(g.nations);
+  const kf = `st:foe:${nat}:o`, kq = `st:quay:${nat}:o`, at = `st:quayAt:${nat}:o`, none = `st:far:${nat}`;
+  const foe = ids[flag(g, kf) - 1], quay = g.regions[flag(g, kq) - 1];
+  if (foe && quay && g.nations[foe].alive && atWar(g, nat, foe) && allied(g, nat, quay.ctrl) && (g.turn - flag(g, at) < 3 || lodgment(g, nat, 1)?.short)) return { foe, quay };
+  if (flag(g, none) === g.turn) return null;
+  const drop = (): null => { delete g.flags[kf]; delete g.flags[kq]; g.flags[none] = g.turn; return null; };
+  const foes = [...n.atWar].sort().filter((e) => { const x = g.nations[e]; return !!x?.alive && x.capital >= 0 && quietWith(g, nat, e) >= (D.abroad ?? 3); });
+  if (!foes.length) return drop();
+  const shores = foes.map((e) => harbours(g, e));
+  if (!shores.some((s) => s.length)) return drop();
+  const home = homeGround(g, nat).on;
+  // Each far shore in turn: a piece of friendly ground away from home. One with the enemy on it or next to it has work of its own.
+  const seen = new Uint8Array(g.regions.length);
+  const idle: Region[] = [];
+  for (const r0 of g.regions) {
+    if (seen[r0.id] || home[r0.id] || !allied(g, nat, r0.ctrl)) continue;
+    const q = [r0.id];
+    seen[r0.id] = 1;
+    let front = false, mine = 0;
+    for (let i = 0; i < q.length; i++) {
+      const r = g.regions[q[i]];
+      if (hostileUnits(g, r, nat).length) front = true;
+      for (const u of r.units) if (u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng') mine++;
+      for (const j of r.nb) {
+        const c = g.regions[j].ctrl;
+        if (atWar(g, nat, c)) front = true;
+        else if (!seen[j] && !home[j] && allied(g, nat, c)) { seen[j] = 1; q.push(j); }
+      }
+    }
+    if (!front && mine >= D.force) for (const id of q) if (g.regions[id].port && g.regions[id].seas.length > 0) idle.push(g.regions[id]);
+  }
+  if (!idle.length) return drop();
+  const shut = g.seas.map((z) => closedTo(g, z.id, nat));
+  let best: { foe: string; quay: Region } | null = null, bw = 0, bs = Infinity;
+  for (const p of idle) {
+    // The corps that could be on this quay within the season: those there now, and those within three marches that would not leave a place empty.
+    const d = new Int16Array(g.regions.length).fill(-1);
+    const q = [p.id];
+    d[p.id] = 0;
+    let spare = 0;
+    for (let i = 0; i < q.length; i++) {
+      const r = g.regions[q[i]];
+      const own = r.units.filter((u) => u.nat === nat && !u.dead && u.kind !== 'fort' && u.kind !== 'eng');
+      spare += r.id === p.id ? own.length : Math.min(own.filter((u) => !KIND[u.kind].mobile).length, Math.max(0, own.length - 1));
+      if (d[r.id] >= 3) continue;
+      for (const j of r.nb) if (d[j] < 0 && allied(g, nat, g.regions[j].ctrl)) { d[j] = d[r.id] + 1; q.push(j); }
+    }
+    if (spare < D.force) continue;
+    foes.forEach((e, k) => {
+      const w = quayWorth(g, nat, p, shores[k], shut);
+      if (w.worth > bw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs)) { best = { foe: e, quay: p }; bw = w.worth; bs = w.seas; }
+    });
+  }
+  if (!best) return drop();
+  const got = best as { foe: string; quay: Region };
+  g.flags[kf] = ids.indexOf(got.foe) + 1;
+  g.flags[kq] = got.quay.id + 1;
+  g.flags[at] = g.turn;
+  return got;
+}
+
+/**
+ * The harbour a staff keeps its landing force at. For the army at home: a home port of its own, in touch with the
+ * capital by land, and the one from which the most lightly held of the enemy's harbours can be reached over seas
+ * open to its ships (while it has men ashore, the one with an open lane to them). With no lane open from any home
+ * port the force waits where it was, or at the port nearest his harbours by the shortest way round. The choice is
+ * kept while its lane stays open and looked at again every half year. For the army on a far shore: see `abroad`.
+ */
+export function seaBase(g: Game, nat: string, slot = 0): Region | null {
+  const sea = seaFoe(g, nat, slot);
   if (!sea) return null;
+  if (slot) return abroad(g, nat)?.quay ?? null;
   const you = sea.foe;
   const key = `st:quay:${nat}`, at = `st:quayAt:${nat}`;
+  const lod = sea.second ? lodgment(g, nat) : null;
+  const shores = lod?.short ? [lod.at] : harbours(g, you);
+  const shut = g.seas.map((z) => closedTo(g, z.id, nat));
   const kept = g.regions[flag(g, key) - 1];
-  if (kept && kept.ctrl === nat && g.turn - flag(g, at) < 6) return kept;
-  // Home ground in touch with the capital.
-  const seen = new Uint8Array(g.regions.length);
-  const q = [n.capital];
-  seen[n.capital] = 1;
-  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!seen[j] && g.regions[j].ctrl === nat) { seen[j] = 1; q.push(j); }
-  const shores = g.regions.filter((r) => r.ctrl === you && r.port && r.seas.length > 0);
-  let best: Region | null = null, bd = Infinity;
-  for (const id of q) {
+  const fresh = !!kept && kept.ctrl === nat && g.turn - flag(g, at) < 6;
+  if (fresh && quayWorth(g, nat, kept, shores, shut).worth > 0) return kept;
+  let best: Region | null = null, bw = 0, bs = Infinity;
+  let near: Region | null = null, bd = Infinity;
+  for (const id of homeGround(g, nat).list) {
     const r = g.regions[id];
     if (!r.port || r.owner !== nat || r.overseas) continue;
-    // Seas between this quay and the nearest of the player's harbours, by the shortest way round.
+    // Seas between this quay and the nearest of his harbours, by the shortest way round, whoever holds them.
     const d = seaHops(g, r.seas, shores);
-    if (d < bd) { bd = d; best = r; }
+    if (d < bd) { bd = d; near = r; }
+    const w = quayWorth(g, nat, r, shores, shut);
+    if (w.worth > bw + 1e-9 || (w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs)) { best = r; bw = w.worth; bs = w.seas; }
   }
-  if (!best || bd > NAVY.landing.range) { delete g.flags[key]; return null; }
+  if (!best) {
+    if (fresh) return kept;
+    if (!near || bd > NAVY.landing.range) { delete g.flags[key]; return null; }
+    best = near;
+  }
   g.flags[key] = best.id + 1;
   g.flags[at] = g.turn;
   return best;
 }
+
+/**
+ * The coast watch (the grand campaign). A staff at war with an enemy who has shipping, and whose home army has no
+ * land front against it, expects him by sea once the two have not fought for a season (or his staff has named it
+ * for a descent): from then, and for a year after the last such month, it keeps a corps in each harbour of its
+ * homeland that his ships can reach within a landing's range (from the ports he holds, or an ally's where his
+ * troops stand), the most valuable first, up to 'share' of its corps in the field and 'each' to a harbour. The
+ * corps is one of the field army, of two divisions or more: a town's standing garrison is not counted (ai.ts). The coasts of the countries it has conquered are not watched: a landing
+ * there is met by the reserves, as any other front is. Its treasury fortifies the watched harbours (arsenal.ts).
+ */
+export function coastWatch(g: Game, nat: string): Record<string, number> {
+  const C = OPEN.coast, n = g.nations[nat], D = OPEN.descent;
+  const out: Record<string, number> = {};
+  if (!C || !D || !isOpen(g) || !n || !n.alive || n.capital < 0 || !n.atWar.length) return out;
+  const home = homeGround(g, nat);
+  const mine = home.list.map((id) => g.regions[id]).filter((r) => r.port && r.seas.length > 0 && r.owner === nat && !r.overseas);
+  if (!mine.length) return out;
+  // Whose ships: an enemy with sea lift whose army at home is not already at grips with this nation on land. They
+  // sail from the ports he holds and from an ally's where his troops stand, a landing's range and no further, and
+  // not through a strait that is shut to them.
+  const ids = Object.keys(g.nations);
+  const want = new Uint8Array(g.seas.length);
+  let fresh = false, any = false;
+  for (const e of [...n.atWar].sort()) {
+    const x = g.nations[e];
+    if (!x?.alive || x.dormant || x.sealift <= 0) continue;
+    if (x.capital >= 0 && inTouch(g, e, nat, homeGround(g, e).on)) continue;
+    if (quietWith(g, e, nat) >= (D.abroad ?? 3) || SLOT.some((s) => ids[flag(g, `st:foe:${e}${s}`) - 1] === nat)) fresh = true;
+    const d = new Int16Array(g.seas.length).fill(-1);
+    const q: number[] = [];
+    for (const r of g.regions) {
+      if (!r.port || !r.seas.length) continue;
+      if (r.ctrl !== e && !(allied(g, e, r.ctrl) && r.units.some((u) => u.nat === e && !u.dead && u.kind !== 'fort'))) continue;
+      for (const z of r.seas) if (d[z] < 0) { d[z] = 1; q.push(z); }
+    }
+    for (let i = 0; i < q.length; i++) {
+      want[q[i]] = 1;
+      any = true;
+      if (d[q[i]] >= NAVY.landing.range) continue;
+      for (const j of g.seas[q[i]].adj) if (d[j] < 0 && canPass(g, q[i], j, e)) { d[j] = d[q[i]] + 1; q.push(j); }
+    }
+  }
+  if (!any) return out;
+  if (fresh) g.flags[`st:watch:${nat}`] = g.turn;
+  else if (!flag(g, `st:watch:${nat}`) || g.turn - flag(g, `st:watch:${nat}`) >= 12) return out;
+  const open = mine.filter((r) => r.seas.some((z) => want[z])).sort((a, b) => 2 * b.vp + b.fac + (b.cap ? 8 : 0) - (2 * a.vp + a.fac + (a.cap ? 8 : 0)) || a.id - b.id);
+  let left = Math.max(C.least, Math.floor(C.share * g.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng').length));
+  for (let k = 1; k <= C.each && left > 0; k++) for (const r of open) { if (left <= 0) break; out[r.name] = k; left--; }
+  return out;
+}
+
+/** The coast watch's numbers, for the treasury's fortifications (arsenal.ts). */
+export const coastRules = (): typeof OPEN.coast => OPEN.coast;
 
 /** How many seas lie between a coast and the nearest of some shores: 1 when they share a sea. */
 function seaHops(g: Game, from: number[], shores: Region[]): number {
