@@ -61,11 +61,33 @@ namespace
 		const double Gx = X / WorldStep, Gy = FMath::Clamp(Y / WorldStep, 0.0, static_cast<double>(WorldHigh - 1));
 		const int32 X0 = FMath::FloorToInt32(Gx), Y0 = FMath::Min(FMath::FloorToInt32(Gy), WorldHigh - 2);
 		const float Fx = static_cast<float>(Gx - X0), Fy = static_cast<float>(Gy - Y0);
+		// (Read as a smooth surface through the sixteen heights round the point, not as flat facets between the four
+		// nearest: the world's heights stand two map units apart, and a fine sheet's cells are smaller than that. Read
+		// as facets, every slope changed at a facet's edge, and the shading of a range showed it as stair-steps.)
+		auto Curve = [](float A, float B, float C, float D, float T)
+		{
+			return B + 0.5f * T * (C - A + T * (2.0f * A - 5.0f * B + 4.0f * C - D + T * (3.0f * (B - C) + D - A)));
+		};
+		float Rows[4];
+		for (int32 J = 0; J < 4; ++J)
+		{
+			const int16* Row = WorldHeights.GetData() + FMath::Clamp(Y0 + J - 1, 0, WorldHigh - 1) * WorldWide;
+			float Taps[4];
+			for (int32 I = 0; I < 4; ++I)
+			{
+				Taps[I] = static_cast<float>(Row[(((X0 + I - 1) % WorldWide) + WorldWide) % WorldWide]);
+			}
+			Rows[J] = Curve(Taps[0], Taps[1], Taps[2], Taps[3], Fx);
+		}
+		const float Smooth = Curve(Rows[0], Rows[1], Rows[2], Rows[3], Fy);
+		// (a smooth surface may dip a little past the heights it runs through: it is kept the same side of the sea as
+		// the flat reading, so that no coast moves and no speck of land or water is made)
 		const int32 XA = ((X0 % WorldWide) + WorldWide) % WorldWide, XB = (XA + 1) % WorldWide;
 		const int16* Row0 = WorldHeights.GetData() + Y0 * WorldWide;
 		const int16* Row1 = Row0 + WorldWide;
-		return FMath::Lerp(FMath::Lerp(static_cast<float>(Row0[XA]), static_cast<float>(Row0[XB]), Fx),
+		const float Flat = FMath::Lerp(FMath::Lerp(static_cast<float>(Row0[XA]), static_cast<float>(Row0[XB]), Fx),
 			FMath::Lerp(static_cast<float>(Row1[XA]), static_cast<float>(Row1[XB]), Fx), Fy);
+		return (Flat > 0.0f) == (Smooth > 0.0f) ? Smooth : Flat;
 	}
 
 	/** Fills a ring into the fine bitmap. The ring is in map units; the bitmap's corner stands at (OffX, OffY). */

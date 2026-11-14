@@ -527,8 +527,12 @@ bool FMiniatureMesh::bTrialTank = false;
 bool FMiniatureMesh::bCodeBuilt = false;
 bool FMiniatureMesh::bOldPieces = false;
 
-bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar)
+bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar, const TArray<FLinearColor>* Kit)
 {
+	// (A vehicle's paints are its nation's scheme and the same steel, rubber and canvas for everyone. A figure comes
+	// with a kit: the colours of what its nation's soldier wears, by the numbers the figure's maker painted it with.
+	// A figure carries no markings and none of a vehicle's wear.)
+	const bool bFigure = Kit != nullptr && Kit->Num() > 0;
 	// The numbers as the script wrote them, read once: points, which way each faces, its paint, and the triangles.
 	struct FRaw
 	{
@@ -617,13 +621,22 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			FLinearColor(FColor::FromHex(TEXT("6C6E72"))), FLinearColor(FColor::FromHex(TEXT("857F5C"))), FLinearColor(FColor::FromHex(TEXT("27313A"))), FLinearColor(FColor::FromHex(TEXT("6B4A32"))) };
 		static const bool bMetal[9] = { true, true, true, false, false, true, false, false, true };
 		FMiniatureMesh Fresh;
-		// (the dust of the road on the tracks and the lower hull, as on the code-built vehicles)
+		// (the dust of the road on the tracks and the lower hull, as on the code-built vehicles; a little on a figure's boots)
 		Fresh.DustFoot = 0.0;
-		Fresh.DustTop = 1.0;
-		Fresh.DustAmount = 0.85f;
-		Fresh.Dust = FColor(124, 102, 74);
+		Fresh.DustTop = bFigure ? 0.5 : 1.0;
+		Fresh.DustAmount = bFigure ? 0.4f : 0.85f;
+		if (!bFigure)
+		{
+			Fresh.Dust = FColor(124, 102, 74);
+		}
 		for (int32 K = 0; K < Raw->Points.Num(); ++K)
 		{
+			if (bFigure)
+			{
+				Fresh.Finish = 255;
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], (*Kit)[FMath::Clamp(Raw->Paints[K], 0, Kit->Num() - 1)].ToFColor(true));
+				continue;
+			}
 			const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, 8);
 			Fresh.Finish = bMetal[Kind] ? 128 : 255;
 			Fresh.Add(Raw->Points[K], Raw->Facings[K], Colours[Kind].ToFColor(true));
@@ -637,6 +650,7 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 			}
 		}
 		// Its markings: the nation's own on each side of the turret, and a number behind it.
+		if (!bFigure)
 		{
 			const FString Mark = Tag == TEXT("SOV") ? FString(TEXT("SOV-ARMY")) : Tag == TEXT("USA") ? FString(TEXT("USA-ARMY")) : Tag == TEXT("UK") ? FString(TEXT("UK-FLASH")) : Tag;
 			const int32 Number = 100 + static_cast<int32>(GetTypeHash(Tag) % 500);
@@ -664,7 +678,10 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				}
 			}
 		}
-		Fresh.MarkWear(false, Raw->Roof); // (an aerial is not the top of the tank: the wear is laid by the height of its roof)
+		if (!bFigure)
+		{
+			Fresh.MarkWear(false, Raw->Roof); // (an aerial is not the top of the tank: the wear is laid by the height of its roof)
+		}
 		Model = &Painted.Add(Key, MoveTemp(Fresh));
 	}
 	TGuardValue<uint8> AsPainted(Finish, 255); // (each point keeps what the model says it is made of)

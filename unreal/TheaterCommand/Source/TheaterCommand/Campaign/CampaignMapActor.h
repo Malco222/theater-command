@@ -573,6 +573,7 @@ private:
 	float PaperShown = -1.0f;
 	double MarginLine = 11.0; // (round a world) how wide the chart's ruled border is drawn, in the world's units
 	float SquareWorkShown = -1.0f; // (round a world) how much of the prairie's roads and furrows is shown at this height
+	float WoodsLiftShown = -1.0f; // (round a world) how much more is asked of a wood on the coarse sheet before it is drawn
 	/** The paper's own colours by the hour: parchment and a pale sea by day, dim paper by night. */
 	void ApplyPaperLight();
 	float PaperLand[7] = { 0.6f, 0.52f, 0.37f, 0.6f, 0.92f, 0.5f, 0.62f }; // parchment (r, g, b), its shade and sun, the holder's wash and band

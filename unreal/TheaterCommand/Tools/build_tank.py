@@ -43,6 +43,12 @@ PAINTS = {
     "rust": 8,       # the exhausts
 }
 
+# A figure's paints, by number: the game gives each the colour of the nation's own kit.
+FIGURE_PAINTS = {"tunic": 0, "trousers": 1, "boots": 2, "lower": 3, "straps": 4, "helmet": 5, "pack": 6, "skin": 7, "wood": 8, "steel": 9,
+                 "coat": 10, "coat_dark": 11, "leather": 12, "blanket": 13, "hoof": 14}
+PAINT_SET = PAINTS     # (the paints the part being made is painted from: a vehicle's, or a figure's)
+FAR_RATIO = 1.0        # (how much of each part's mesh is kept in the plainer, far mesh: a figure's is thinned, since a base carries several)
+
 # The numbers the tank is made from, in metres. A national variant is another set of these.
 SPEC = {
     "hull_long": 5.5, "hull_wide": 1.78, "hull_floor": 0.42, "hull_deck": 1.18,
@@ -140,7 +146,7 @@ def make(name, bm, paint, bevel=0.0, segments=1):
     bm.free()
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.scene.collection.objects.link(obj)
-    obj["paint"] = PAINTS[paint]
+    obj["paint"] = PAINT_SET[paint]
     if bevel > 0.0:
         mod = obj.modifiers.new("bevel", "BEVEL")
         mod.width = bevel
@@ -445,11 +451,16 @@ def gather(parts, simple=False):
         if simple:
             for mod in obj.modifiers:
                 mod.show_viewport = False                 # the far mesh has no bevels
+            if FAR_RATIO < 1.0 and len(obj.data.polygons) > 12:
+                thin = obj.modifiers.new("thin", "DECIMATE")
+                thin.ratio = FAR_RATIO
             # (and the smallest things are left off it: they cannot be seen from there)
             if obj.name.split(".")[0] in ("periscope", "eye", "strap", "louvre", "lamp_foot", "can_cap", "coaxial", "bow_gun", "aerial",
                                           "aerial_foot", "hub", "idler_hub", "arm", "visor_slit", "lamp_glass", "pick_head", "pick_shaft",
                                           "shovel_shaft", "shovel_blade", "exhaust_pipe", "tow_cable", "spare_link", "toolbox_lid", "chute", "inner_wheel",
-                                          "hull_muzzle", "slat", "door_line", "stake", "hoop", "bench", "spoke", "sight", "round", "handspike", "mg", "nave", "rim"):
+                                          "hull_muzzle", "slat", "door_line", "stake", "hoop", "bench", "spoke", "sight", "round", "handspike", "mg", "nave", "rim", "buckle", "chin_strap", "brace", "bolt", "sling", "pack_flap",
+                                          "collar", "knee", "bread_bag", "bottle", "nose", "elbow", "ear", "rein", "cheek_strap", "stirrup",
+                                          "stirrup_strap", "girth", "forelock", "hock", "grip"):
                 continue
             graph.update()
         bm = bmesh.new()
@@ -718,6 +729,252 @@ OTHERS = {
 }
 
 
+# ---- The infantry figure --------------------------------------------------------------------------
+
+def limb(name, a, b, ra, rb, paint, sides=8):
+    """A tapered round limb from one point to another."""
+    a, b = Vector(a), Vector(b)
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=sides, radius1=ra, radius2=rb, depth=(b - a).length)
+    turn = Vector((0.0, 0.0, 1.0)).rotation_difference((b - a).normalized()).to_matrix().to_4x4()
+    bmesh.ops.transform(bm, matrix=Matrix.Translation((a + b) * 0.5) @ turn, verts=bm.verts)
+    return make(name, bm, paint)
+
+
+def ball(name, at, size, paint, flat_below=None, u=10, v=6):
+    """A ball, or an egg ('size' may be three radii); 'flat_below' cuts it level at that height above its middle."""
+    radii = size if isinstance(size, tuple) else (size, size, size)
+    bm = bmesh.new()
+    bmesh.ops.create_uvsphere(bm, u_segments=u, v_segments=v, radius=1.0)
+    for vert in bm.verts:
+        z = vert.co.z if flat_below is None else max(vert.co.z, flat_below)
+        vert.co = Vector((vert.co.x * radii[0], vert.co.y * radii[1], z * radii[2]))
+    bmesh.ops.transform(bm, matrix=Matrix.Translation(Vector(at)), verts=bm.verts)
+    return make(name, bm, paint)
+
+
+def oval(name, at, rx, ry, high, paint, top=1.0, sides=12, lean=0.0):
+    """A round body part standing on 'at': an oval in plan, 'top' times as large at its top as at its foot, leaning forward by 'lean'."""
+    bm = bmesh.new()
+    bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=sides, radius1=1.0, radius2=top, depth=1.0)
+    for vert in bm.verts:
+        up = vert.co.z + 0.5
+        vert.co = Vector((vert.co.x * rx + lean * up, vert.co.y * ry, up * high))
+    bmesh.ops.transform(bm, matrix=Matrix.Translation(Vector(at)), verts=bm.verts)
+    return make(name, bm, paint, 0.012)
+
+
+def build_figure(k):
+    """A rifleman stepping forward with his rifle at the port, held across his body in both hands. About 1.75
+    metres with his helmet."""
+    parts = []
+    pose = k.get("pose", "rifle")
+    knee, hip, belt, shoulder = 0.5, 0.9, 0.99, 1.43
+    if pose == "rider":
+        # astride: the thighs forward and out round the horse's barrel, the shins hanging to the stirrups
+        for side in (-1.0, 1.0):
+            at_knee, at_foot = (0.3, side * 0.31, 0.66), (0.2, side * 0.35, 0.26)
+            parts.append(limb("thigh", (0.0, side * 0.1, hip), at_knee, 0.09, 0.066, "trousers"))
+            parts.append(ball("knee", at_knee, 0.066, "trousers", u=8, v=5))
+            parts.append(limb("shin", at_knee, at_foot, 0.064, 0.05, "boots" if k["tall_boots"] else "lower"))
+            parts.append(box("boot", (0.27, 0.105, 0.1), (at_foot[0] + 0.06, at_foot[1], at_foot[2] - 0.04), "boots", 0.03))
+            parts.append(box("stirrup", (0.12, 0.13, 0.02), (at_foot[0] + 0.06, at_foot[1], at_foot[2] - 0.1), "steel"))
+            parts.append(limb("stirrup_strap", (0.05, side * 0.3, 0.84), (at_foot[0] + 0.05, at_foot[1], at_foot[2] - 0.08), 0.012, 0.012, "straps", 4))
+    # the legs: the left foot a pace forward and its knee a little bent, the right behind
+    feet = {-1.0: (0.16, -0.12), 1.0: (-0.1, 0.12)}            # by side: how far forward, how far out
+    for side in (() if pose == "rider" else (-1.0, 1.0)):
+        fx, fy = feet[side]
+        kx = fx * 0.55 + (0.05 if side < 0.0 else 0.0)
+        parts.append(box("boot", (0.27, 0.105, 0.1), (fx + 0.045, fy, 0.05), "boots", 0.03, turn=(0.0, 0.0, -8.0 * side)))
+        parts.append(limb("shin", (fx, fy, 0.1), (kx, fy * 0.98, knee), 0.05, 0.064, "boots" if k["tall_boots"] else "lower"))
+        parts.append(ball("knee", (kx, fy * 0.98, knee), 0.066, "trousers", u=8, v=5))
+        parts.append(limb("thigh", (kx, fy * 0.98, knee), (0.0, fy * 0.8, hip), 0.066, 0.09, "trousers"))
+    # the tunic: its skirt below the belt, the body rounded and fuller at the chest, the shoulders and the collar
+    parts.append(oval("skirt", (0.0, 0.0, 0.8), 0.125, 0.185, 0.2, "tunic", top=0.9))
+    parts.append(oval("body", (0.0, 0.0, 0.98), 0.105, 0.165, 0.5, "tunic", top=1.16, lean=0.03))
+    parts.append(oval("belt", (0.0, 0.0, belt - 0.025), 0.115, 0.172, 0.05, "straps", top=1.0, sides=12))
+    parts.append(box("buckle", (0.02, 0.05, 0.04), (0.12, 0.0, belt), "steel"))
+    parts.append(oval("collar", (0.03, 0.0, 1.46), 0.06, 0.075, 0.045, "tunic", top=0.9, sides=8))
+    for side in (-1.0, 1.0):
+        parts.append(ball("shoulder", (0.02, side * 0.185, shoulder), 0.08, "tunic", u=8, v=5))
+    def rifle_from(butt, way):
+        long = k["rifle"]
+        tip = butt + way * long
+        over = Vector((0.0, 0.0, 0.018)) if abs(way.x) < 0.5 and abs(way.z) < 0.95 else Vector((0.016, 0.0, 0.0))
+        parts.append(limb("butt", butt, butt + way * (long * 0.3), 0.036, 0.026, "wood", 6))
+        parts.append(limb("stock", butt + way * (long * 0.3), butt + way * (long * 0.78), 0.024, 0.02, "wood", 6))
+        parts.append(limb("barrel", butt + way * (long * 0.4) + over, tip + over, 0.011, 0.01, "steel", 5))
+        parts.append(box("bolt", (0.04, 0.05, 0.03), tuple(butt + way * (long * 0.34) + over + Vector((0.01, 0.02, 0.0))), "steel"))
+        if k["bayonet"] and pose == "rifle":
+            parts.append(limb("bayonet", tip + over, tip + way * 0.4 + over, 0.008, 0.003, "steel", 4))
+        return long
+
+    # what he holds across his body, at the port: its foot by the right hip, its head up past the left shoulder
+    butt = Vector((0.13, 0.25, 0.98))
+    way = Vector((0.1, -0.52, 0.85)).normalized()
+    if pose == "rifle":
+        long = rifle_from(butt, way)
+        parts.append(limb("sling", butt + way * (long * 0.1) + Vector((0.0, 0.0, -0.04)), butt + way * (long * 0.7) + Vector((0.0, 0.0, -0.035)), 0.006, 0.006, "straps", 4))
+    else:
+        # (a rider's and a pioneer's rifle is slung across his back, clear of his pack)
+        behind = -0.27 if k["pack"] else -0.15
+        long = rifle_from(Vector((behind, 0.2, 0.84)), Vector((0.02, -0.42, 0.9)).normalized())
+        parts.append(limb("sling", (0.1, -0.12, shoulder + 0.04), (0.08, 0.12, belt + 0.04), 0.012, 0.012, "straps", 4))
+    if pose == "shovel":
+        # a pioneer's shovel, carried the same way: the grip by the hip, the blade up
+        long = 1.15
+        parts.append(limb("shaft", butt, butt + way * long, 0.02, 0.02, "wood", 6))
+        parts.append(box("grip", (0.03, 0.11, 0.03), tuple(butt), "wood", 0.008))
+        blade = butt + way * (long + 0.12)
+        turn = Vector((0.0, 0.0, 1.0)).rotation_difference(way).to_matrix().to_4x4()
+        bm = bmesh.new()
+        bmesh.ops.create_cube(bm, size=1.0)
+        for vert in bm.verts:
+            vert.co = Vector((vert.co.x * 0.03, vert.co.y * (0.2 if vert.co.z < 0.0 else 0.16), vert.co.z * 0.28))
+        bmesh.ops.transform(bm, matrix=Matrix.Translation(blade) @ turn, verts=bm.verts)
+        parts.append(make("blade", bm, "steel", 0.008))
+    # the arms
+    if pose == "rider":
+        # both hands low in front, on the reins
+        for side in (-1.0, 1.0):
+            elbow, hand = Vector((0.05, side * 0.28, 1.15)), Vector((0.3, side * 0.07, 1.06))
+            parts.append(limb("upper_arm", (0.02, side * 0.21, shoulder), elbow, 0.058, 0.05, "tunic"))
+            parts.append(limb("forearm", elbow, hand, 0.05, 0.04, "tunic"))
+            parts.append(ball("elbow", tuple(elbow), 0.052, "tunic", u=8, v=5))
+            parts.append(ball("hand", tuple(hand), (0.045, 0.04, 0.04), "skin", u=8, v=5))
+    else:
+        # the right hand at the small of the butt, the left under the fore-end
+        long = k["rifle"] if pose == "rifle" else 1.15
+        right_hand, left_hand = butt + way * (long * 0.24), butt + way * (long * 0.56)
+        r_elbow, l_elbow = Vector((-0.04, 0.3, 1.14)), Vector((0.1, -0.29, 1.17))
+        parts.append(limb("upper_arm", (0.02, 0.21, shoulder), r_elbow, 0.058, 0.05, "tunic"))
+        parts.append(limb("forearm", r_elbow, right_hand + Vector((-0.02, 0.02, -0.01)), 0.05, 0.04, "tunic"))
+        parts.append(ball("hand", tuple(right_hand), (0.042, 0.04, 0.045), "skin", u=8, v=5))
+        parts.append(limb("upper_arm", (0.02, -0.21, shoulder), l_elbow, 0.058, 0.05, "tunic"))
+        parts.append(limb("forearm", l_elbow, left_hand + Vector((-0.01, -0.02, -0.03)), 0.05, 0.04, "tunic"))
+        parts.append(ball("hand", tuple(left_hand + Vector((0.0, 0.0, -0.02))), (0.042, 0.04, 0.045), "skin", u=8, v=5))
+        parts.append(ball("elbow", tuple(r_elbow), 0.052, "tunic", u=8, v=5))
+        parts.append(ball("elbow", tuple(l_elbow), 0.052, "tunic", u=8, v=5))
+    # the neck and the head, turned a little to his left
+    parts.append(limb("neck", (0.02, 0.0, 1.46), (0.03, 0.0, 1.56), 0.052, 0.048, "skin"))
+    hx = 0.04
+    parts.append(ball("head", (hx, 0.0, 1.63), (0.1, 0.086, 0.108), "skin"))
+    parts.append(box("nose", (0.03, 0.024, 0.04), (hx + 0.098, -0.008, 1.625), "skin", 0.008))
+    # the helmet
+    top = 1.665
+    kind = k["helmet"]
+    if kind == "stahl":
+        parts.append(ball("helmet", (hx - 0.012, 0.0, top), (0.128, 0.118, 0.105), "helmet", flat_below=0.0))
+        parts.append(drum("helmet_skirt", 0.15, 0.085, (hx - 0.037, 0.0, top - 0.04), "helmet", 12, axis="Z", radius2=0.124))
+        parts.append(box("visor", (0.06, 0.2, 0.012), (hx + 0.113, 0.0, top + 0.002), "helmet", 0.004))
+    elif kind == "brodie":
+        parts.append(ball("helmet", (hx - 0.012, 0.0, top + 0.02), (0.118, 0.112, 0.07), "helmet", flat_below=0.0))
+        parts.append(drum("brim", 0.175, 0.016, (hx - 0.012, 0.0, top + 0.02), "helmet", 14, axis="Z", radius2=0.13))
+    elif kind == "soviet":
+        parts.append(ball("helmet", (hx - 0.012, 0.0, top), (0.126, 0.116, 0.108), "helmet", flat_below=0.0))
+        parts.append(drum("helmet_skirt", 0.138, 0.05, (hx - 0.02, 0.0, top - 0.025), "helmet", 12, axis="Z", radius2=0.124))
+    elif kind == "adrian":
+        parts.append(ball("helmet", (hx - 0.012, 0.0, top + 0.01), (0.118, 0.11, 0.1), "helmet", flat_below=0.0))
+        parts.append(drum("brim", 0.15, 0.016, (hx - 0.002, 0.0, top + 0.008), "helmet", 14, axis="Z", radius2=0.122))
+        parts.append(box("crest", (0.2, 0.018, 0.03), (hx - 0.022, 0.0, top + 0.105), "helmet", 0.006))
+    elif kind == "eastern":
+        parts.append(ball("helmet", (hx - 0.012, 0.0, top), (0.122, 0.114, 0.108), "helmet", flat_below=0.0))
+        parts.append(drum("brim", 0.14, 0.014, (hx - 0.006, 0.0, top), "helmet", 14, axis="Z", radius2=0.124))
+    elif kind == "round":
+        parts.append(ball("helmet", (hx - 0.012, 0.0, top - 0.005), (0.124, 0.116, 0.112), "helmet", flat_below=-0.12))
+    else:
+        parts.append(ball("helmet", (hx - 0.012, 0.0, top - 0.01), (0.128, 0.12, 0.118), "helmet", flat_below=-0.1))
+    parts.append(limb("chin_strap", (hx + 0.05, -0.085, 1.66), (hx + 0.04, 0.0, 1.535), 0.008, 0.008, "straps", 4))
+    parts.append(limb("chin_strap", (hx + 0.05, 0.085, 1.66), (hx + 0.04, 0.0, 1.535), 0.008, 0.008, "straps", 4))
+    # what he carries
+    for side in (-1.0, 1.0):                                # the braces over each shoulder, front and back
+        parts.append(limb("brace", (0.105, side * 0.07, belt + 0.03), (0.075, side * 0.13, shoulder + 0.04), 0.014, 0.014, "straps", 4))
+        parts.append(limb("brace", (-0.1, side * 0.07, belt + 0.03), (-0.07, side * 0.13, shoulder + 0.04), 0.014, 0.014, "straps", 4))
+    if k["chest_pouches"]:
+        for side in (-1.0, 1.0):
+            parts.append(box("pouch", (0.07, 0.11, 0.19), (0.13, side * 0.105, 1.2), "pack", 0.015))
+    else:
+        for side in (-1.0, 1.0):
+            for n in range(2):
+                parts.append(box("pouch", (0.05, 0.07, 0.09), (0.115 - 0.02 * n, side * (0.065 + 0.085 * n), belt + 0.005), "straps", 0.01))
+    if k["pack"]:
+        parts.append(box("pack", (0.14, 0.3, 0.33), (-0.165, 0.0, 1.24), "pack", 0.03))
+        parts.append(box("pack_flap", (0.145, 0.31, 0.03), (-0.165, 0.0, 1.3), "straps"))
+        parts.append(drum("bedroll", 0.055, 0.34, (-0.165, 0.0, 1.45), "pack", 8))
+    if k["roll"]:
+        # a blanket roll worn across the body, from the left shoulder to the right hip
+        ring = []
+        for n in range(11):
+            t = 2.0 * math.pi * n / 10.0
+            lift = math.sin(t)
+            ring.append((0.15 * math.cos(t) - 0.01, -0.03 - 0.2 * lift, 1.2 + 0.25 * lift))
+        for n in range(10):
+            parts.append(limb("roll", ring[n], ring[n + 1], 0.05, 0.05, "pack", 7))
+    if k["canister"]:
+        parts.append(drum("canister", 0.055, 0.27, (-0.15, 0.03, belt - 0.03), "helmet", 10))
+    parts.append(ball("bottle", (-0.1, 0.18, belt - 0.07), (0.05, 0.035, 0.07), "pack", u=8, v=5))
+    parts.append(box("bread_bag", (0.07, 0.16, 0.14), (-0.09, -0.16, belt - 0.08), "pack", 0.02))
+    if pose == "rider":
+        for part in parts:
+            part.location.z += 0.72
+        parts += horse()
+        bpy.context.view_layer.update()
+    return parts
+
+
+def horse():
+    """A troop horse standing square, saddled, with a rolled cloak behind the saddle. About 1.6 metres at the withers."""
+    parts = []
+    parts.append(ball("barrel", (-0.1, 0.0, 1.22), (0.86, 0.3, 0.33), "coat", u=12, v=8))
+    parts.append(ball("chest", (0.5, 0.0, 1.27), (0.32, 0.27, 0.35), "coat", u=10, v=6))
+    parts.append(ball("rump", (-0.68, 0.0, 1.28), (0.35, 0.29, 0.33), "coat", u=10, v=6))
+    parts.append(limb("horse_neck", (0.6, 0.0, 1.38), (1.14, 0.0, 1.9), 0.22, 0.125, "coat", 10))
+    parts.append(ball("poll", (1.13, 0.0, 1.93), 0.135, "coat", u=8, v=5))
+    parts.append(limb("horse_head", (1.1, 0.0, 1.95), (1.58, 0.0, 1.66), 0.135, 0.08, "coat", 10))
+    parts.append(ball("muzzle", (1.6, 0.0, 1.65), (0.1, 0.085, 0.09), "coat_dark", u=8, v=5))
+    for side in (-1.0, 1.0):
+        parts.append(limb("ear", (1.12, side * 0.07, 2.03), (1.08, side * 0.09, 2.17), 0.035, 0.012, "coat", 4))
+        parts.append(limb("rein", (1.5, side * 0.085, 1.7), (0.3, side * 0.07, 1.78), 0.009, 0.009, "leather", 4))
+        parts.append(limb("cheek_strap", (1.22, side * 0.115, 1.9), (1.5, side * 0.09, 1.7), 0.009, 0.009, "leather", 4))
+    parts.append(limb("mane", (0.68, 0.0, 1.6), (1.1, 0.0, 2.04), 0.055, 0.04, "coat_dark", 5))
+    parts.append(limb("forelock", (1.1, 0.0, 2.05), (1.28, 0.0, 1.96), 0.04, 0.02, "coat_dark", 5))
+    parts.append(limb("tail", (-0.98, 0.0, 1.4), (-1.2, 0.0, 0.72), 0.07, 0.03, "coat_dark", 6))
+    for side in (-1.0, 1.0):
+        for top, joint, foot, thick in (((0.5, side * 0.15, 1.1), (0.55, side * 0.15, 0.58), (0.53, side * 0.15, 0.1), 0.09),
+                                        ((-0.62, side * 0.17, 1.14), (-0.8, side * 0.17, 0.62), (-0.72, side * 0.17, 0.1), 0.11)):
+            parts.append(limb("gaskin", top, joint, thick, 0.055, "coat", 8))
+            parts.append(ball("hock", joint, 0.058, "coat", u=8, v=5))
+            parts.append(limb("cannon", joint, foot, 0.05, 0.038, "coat", 6))
+            parts.append(drum("hoof", 0.06, 0.1, (foot[0], foot[1], 0.05), "hoof", 8, axis="Z", radius2=0.048))
+    # the saddle on its blanket, with a girth, and a rolled cloak behind it
+    parts.append(box("saddle_blanket", (0.72, 0.64, 0.05), (-0.02, 0.0, 1.535), "blanket", 0.015,
+                     shape=lambda p: Vector((p.x, p.y, p.z - (2.2 if abs(p.y) > 0.4 else 0.0)))))
+    parts.append(box("saddle", (0.5, 0.4, 0.08), (0.0, 0.0, 1.585), "leather", 0.025,
+                     shape=lambda p: Vector((p.x, p.y, p.z + (0.5 if p.z > 0.0 and abs(p.x) > 0.4 else 0.0)))))
+    parts.append(drum("cloak_roll", 0.07, 0.52, (-0.3, 0.0, 1.63), "pack", 8))
+    for side in (-1.0, 1.0):
+        parts.append(limb("girth", (0.08, side * 0.3, 1.5), (0.08, side * 0.2, 0.93), 0.02, 0.02, "leather", 4))
+    return parts
+
+
+RIFLEMAN = {"kind": "figure", "scale": 1.0, "helmet": "pot", "tall_boots": False, "pack": True, "roll": False, "canister": False, "chest_pouches": False,
+            "rifle": 1.11, "bayonet": False}
+FIGURES = {
+    # One rifleman for each helmet the game knows, with the kit that goes with it.
+    "Rifleman_Pot": dict(RIFLEMAN),
+    "Rifleman_Stahl": dict(RIFLEMAN, helmet="stahl", tall_boots=True, pack=False, canister=True),
+    "Rifleman_Brodie": dict(RIFLEMAN, helmet="brodie", chest_pouches=True, rifle=1.13),
+    "Rifleman_Soviet": dict(RIFLEMAN, helmet="soviet", tall_boots=True, pack=False, roll=True, rifle=1.23, bayonet=True),
+    "Rifleman_Adrian": dict(RIFLEMAN, helmet="adrian", rifle=1.08),
+    "Rifleman_Round": dict(RIFLEMAN, helmet="round", rifle=1.05),
+    "Rifleman_Eastern": dict(RIFLEMAN, helmet="eastern", rifle=1.27, bayonet=True),
+}
+# (and each as a pioneer with a shovel, and mounted)
+for _name, _spec in list(FIGURES.items()):
+    FIGURES[_name.replace("Rifleman", "Pioneer")] = dict(_spec, pose="shovel")
+    FIGURES[_name.replace("Rifleman", "Rider")] = dict(_spec, pose="rider")
+
+
 def marks_of(s):
     """Where the game paints its markings, on the right-hand side (it mirrors them for the left): the nation's own
     mark on the turret's side at its waist, a little behind the turret's middle (on the hull's side instead where
@@ -753,8 +1010,12 @@ def marks_of(s):
 def write(name, title, s, out):
     """Sculpts one model and writes it out."""
     fresh_scene()
+    global PAINT_SET, FAR_RATIO
     kind = s.get("kind", "tank")
-    parts = build_truck(s) if kind == "truck" else build_halftrack(s) if kind == "halftrack" else build_gun(s) if kind == "gun" else build(s)
+    PAINT_SET = FIGURE_PAINTS if kind == "figure" else PAINTS
+    FAR_RATIO = 0.5 if kind == "figure" else 1.0
+    parts = (build_figure(s) if kind == "figure" else build_truck(s) if kind == "truck" else build_halftrack(s) if kind == "halftrack"
+             else build_gun(s) if kind == "gun" else build(s))
     near = gather(parts)
     far = gather(parts, simple=True)
     k = s["scale"]
@@ -779,7 +1040,7 @@ def write(name, title, s, out):
         marks = {"roof": high}                              # a gun carries no markings
     data = {
         "name": title,
-        "about": "Made by Tools/build_tank.py. Metres; x forward, y right, z up. Paints: " + ", ".join(f"{v} {k}" for k, v in PAINTS.items()),
+        "about": "Made by Tools/build_tank.py. Metres; x forward, y right, z up. Paints: " + ", ".join(f"{v} {k}" for k, v in PAINT_SET.items()),
         "long": round(max(near["points"][0::3]) - min(near["points"][0::3]), 3),
         "high": high,
         "marks": marks,
@@ -803,7 +1064,7 @@ def main():
             spec = dict(SPEC)
             spec.update(changes)
             write(name, name + " (our own design)", spec, folder.rstrip("/") + "/" + name + ".json")
-        for name, spec in OTHERS.items():
+        for name, spec in list(OTHERS.items()) + list(FIGURES.items()):
             if only and name not in only:
                 continue
             write(name, name + " (our own design)", spec, folder.rstrip("/") + "/" + name + ".json")

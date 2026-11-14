@@ -1188,6 +1188,7 @@ void ACampaignMapActor::BuildWorld()
 	WorldLandMaterial = UMaterialInstanceDynamic::Create(LandMaterial->Parent, this);
 	WorldLandMaterial->CopyParameterOverrides(LandMaterial);
 	DressBeyond(WorldLandMaterial);
+	WorldLandMaterial->SetVectorParameterValue(TEXT("ReliefJitter"), FLinearColor(1.0f / FMath::Max(WorldPaint.NX, 1), 1.0f / FMath::Max(WorldPaint.NY, 1), 0.0f, 0.0f));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Ground"), Picture(WorldPaint.Ground, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldGround")));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Tint"), Picture(WorldPaint.Tint, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldTint")));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Relief"), Picture(WorldPaint.Relief, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldRelief")));
@@ -1456,6 +1457,8 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	Sheet.LandPaint = UMaterialInstanceDynamic::Create(LandMaterial->Parent, this);
 	Sheet.LandPaint->CopyParameterOverrides(LandMaterial);
 	DressBeyond(Sheet.LandPaint);
+	// (the place its shading is read at is shaken by a little over half a cell: see the land's paint)
+	Sheet.LandPaint->SetVectorParameterValue(TEXT("ReliefJitter"), FLinearColor(1.3f / FMath::Max(Sheet.Paint.NX, 1), 1.3f / FMath::Max(Sheet.Paint.NY, 1), 0.0f, 0.0f));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Ground"), Picture(Painted.Ground, Painted.NX, Painted.NY, true, TEXT("Ground")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Tint"), Picture(Painted.Tint, Painted.NX, Painted.NY, true, TEXT("Tint")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Relief"), Picture(Painted.Relief, Painted.NX, Painted.NY, false, TEXT("Relief")));
@@ -6930,6 +6933,13 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			{
 				SquareWorkShown = Work;
 				LandScalar(TEXT("SquareWork"), Work);
+			}
+			// (and as the eye climbs on, the smallest woods on the world's coarse sheet are let go)
+			const float Lift = 0.24f * FMath::SmoothStep(11000.0f, 19000.0f, CameraDistance);
+			if (WorldLandMaterial && FMath::Abs(Lift - WoodsLiftShown) > 0.005f)
+			{
+				WoodsLiftShown = Lift;
+				WorldLandMaterial->SetScalarParameterValue(TEXT("WoodsLift"), Lift);
 			}
 		}
 		if (FMath::Abs(Sheet - PaperShown) > 0.004f)

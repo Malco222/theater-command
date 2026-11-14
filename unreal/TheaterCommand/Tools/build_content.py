@@ -355,8 +355,20 @@ def build_land():
     uv = node(m, unreal.MaterialExpressionTextureCoordinate, -3000, 0)
     ground = picture(m, "Ground", uv, -2600, -500)
     tint = picture(m, "Tint", uv, -2600, -250)
-    relief = picture(m, "Relief", uv, -2600, 0, numbers=True)
-    masks = picture(m, "Masks", uv, -2600, 250, numbers=True)
+    # The detail, at two sizes so that its repeat does not show. (It is read here, ahead of its use, because the
+    # shading of the hills, the edges of the woods and the lie of the fields are roughened by it.)
+    fine_uv = world_uv(m, "DetailTiling", 0.0052, -3000, 700)
+    coarse_uv = world_uv(m, "DetailTilingCoarse", 0.00137, -3000, 1000)
+    fine = picture(m, "Detail", fine_uv, -2300, 700, numbers=True)
+    coarse = picture(m, "Detail", coarse_uv, -2300, 1000, numbers=True)
+    # (Beyond Europe the heights are known only every two map units, and the edge between a lit slope and a shaded
+    # one ran in straight steps a cell long. There the place the shading and the rock are read at is shaken by the
+    # fine detail, by about half a cell: "ReliefJitter" is that in the picture's own measure, and nothing in Europe.)
+    jitter = vector(m, "ReliefJitter", (0.0, 0.0, 0.0, 0.0), -3300, 150)
+    shake = times(m, plus(m, pair(m, (fine, "R"), (fine, "B"), -3150, 250), -0.5, -3050, 250), pair(m, (jitter, "R"), (jitter, "G"), -3150, 150), -2950, 200)
+    relief_uv = plus(m, uv, shake, -2800, 150)
+    relief = picture(m, "Relief", relief_uv, -2600, 0, numbers=True)
+    masks = picture(m, "Masks", relief_uv, -2600, 250, numbers=True)
 
     # The nation's colour is a stain over the bare ground: a wash everywhere (thicker for a nation of little colour,
     # which the Relief picture's alpha says) and a band along the national frontier (the Tint picture's alpha).
@@ -367,12 +379,6 @@ def build_land():
     stain = lerp(m, stain, 1.0, scalar(m, "Flat", 0.0, -2050, -600), -1850, -660)
     stain = times(m, stain, scalar(m, "Politics", 0.94, -1850, -570), -1750, -630)
     c = lerp(m, (ground, "RGB"), (tint, "RGB"), stain, -2000, -400)
-    # The detail, at two sizes so that its repeat does not show. (It is read here, ahead of its use, because the
-    # edges of the woods and the lie of the fields are roughened by it.)
-    fine_uv = world_uv(m, "DetailTiling", 0.0052, -3000, 700)
-    coarse_uv = world_uv(m, "DetailTilingCoarse", 0.00137, -3000, 1000)
-    fine = picture(m, "Detail", fine_uv, -2300, 700, numbers=True)
-    coarse = picture(m, "Detail", coarse_uv, -2300, 1000, numbers=True)
     cover = picture(m, "Cover", uv, -2600, 500, numbers=True)
 
     # Farmland: a quilt of fields on the low ground. Every field has a tone of its own, from pasture through
@@ -513,9 +519,12 @@ def build_land():
     # only the tallest crowns stand at first, as single trees, then more of them, until they close up.)
     crown_high = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (fine, "G"), -0.2, -2850, -980), 2.94, -2750, -980), -2700, -980)
     ragged = plus(m, ragged, times(m, times(m, plus(m, crown_high, -0.5, -2650, -980), scalar(m, "WoodsFringe", 0.0, -2700, -900), -2600, -950), thin, -2450, -1000), -2300, -1100)
+    # ("WoodsLift" asks more of a wood before it is drawn: from high up, on the world's coarse sheet, the smallest
+    # patches are let go, where they were so many same-sized spots.)
     wooded = one_in(m, unreal.MaterialExpressionSaturate,
                     plus(m, times(m, plus(m, plus(m, (ground, "A"), ragged, -2200, -1250),
-                                          -0.5, -2050, -1250), scalar(m, "WoodsSharp", 6.0, -2050, -1150), -1900, -1250), 0.5, -1750, -1250), -1600, -1250)
+                                          plus(m, times(m, scalar(m, "WoodsLift", 0.0, -2200, -1150), -1.0, -2120, -1150), -0.5, -2080, -1200), -2050, -1250),
+                               scalar(m, "WoodsSharp", 6.0, -2050, -1150), -1900, -1250), 0.5, -1750, -1250), -1600, -1250)
     # (a warm stain, red or orange, turns dark green to brown-black: the woods of such a nation take less of it)
     tint_r = node(m, unreal.MaterialExpressionComponentMask, -2500, -1550, r=True, g=False, b=False, a=False)
     connect(tint, "RGB", tint_r, "")

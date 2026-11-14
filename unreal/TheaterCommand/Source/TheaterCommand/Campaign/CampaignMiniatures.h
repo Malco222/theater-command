@@ -82,7 +82,7 @@ struct FMiniatureMesh
 	 * Blender) and read from Content/Models: set down at a place, to the game's scale, in the nation's paint.
 	 * bFar gives its plainer form for the far zoom. False if there is no such model on this machine.
 	 */
-	bool Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar = false);
+	bool Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar = false, const TArray<FLinearColor>* Kit = nullptr);
 	/** Set from the command line ("-TheaterTrialTank"): armoured pieces show the trial tank in place of the nation's code-built one, to be judged beside it. */
 	static bool bTrialTank;
 	/** Set from the command line ("-TheaterOldPieces"): the pieces as they were before art fix 12 (plain bases, small figures in ranks, unweathered paint), to be photographed beside the new. */

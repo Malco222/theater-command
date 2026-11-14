@@ -637,6 +637,28 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		}
 	}
 
+	if (bBeyond && Terrain.Cell <= 3.0)
+	{
+		// (On a fine sheet beyond Europe the heights are known only every two map units, less finely than the sheet
+		// is painted: the shading of a range changed from lit to shaded within a cell, along edges that ran in
+		// straight steps. It is softened by a cell, as far as the point lies beyond Europe.)
+		TArray<float> Soft;
+		Soft.SetNumUninitialized(Count);
+		for (int32 Part = 0; Part < 3; ++Part)
+		{
+			for (int32 Idx = 0; Idx < Count; ++Idx)
+			{
+				Soft[Idx] = Part == 0 ? Relief[Idx].R : Part == 1 ? Relief[Idx].G : Relief[Idx].B;
+			}
+			FCampaignTerrain::Smooth(Soft, NX, NY, 1, 1);
+			for (int32 Idx = 0; Idx < Count; ++Idx)
+			{
+				uint8& Kept = Part == 0 ? Relief[Idx].R : Part == 1 ? Relief[Idx].G : Relief[Idx].B;
+				Kept = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(FMath::Lerp(static_cast<float>(Kept), Soft[Idx], Outside[Idx])), 0, 255));
+			}
+		}
+	}
+
 	// What covers the ground (art fix 7): farmland for the quilt of fields, and the rims of the woods.
 	Cover.SetNumUninitialized(Count);
 	ParallelFor(NY, [&](int32 J)

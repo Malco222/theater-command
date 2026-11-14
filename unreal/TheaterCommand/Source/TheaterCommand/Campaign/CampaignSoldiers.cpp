@@ -543,6 +543,26 @@ void FMiniatureMesh::Pioneer(const FString& Tag, const FVector& Where, double Me
 
 void FMiniatureMesh::Figure(const FString& Tag, int32 Pose, const FVector& Where, double Metre, double Turn, bool bFine)
 {
+	if (Pose >= 0 && Pose <= 2 && !bOldPieces && !bCodeBuilt)
+	{
+		// (Art fix 12, the set.) The figure sculpted outside the game stands in for the one built here: a rifleman,
+		// a rider on his horse and a pioneer with his shovel for each helmet, painted in the nation's own kit. On
+		// the table the plainer of its two meshes is used, since a base carries several of them.
+		const SoldierParts::FKit K = SoldierParts::KitFor(Tag);
+		static const TCHAR* const Poses[] = { TEXT("Rifleman_"), TEXT("Rider_"), TEXT("Pioneer_") };
+		static const TCHAR* const Helmets[] = { TEXT("Pot"), TEXT("Stahl"), TEXT("Brodie"), TEXT("Soviet"), TEXT("Adrian"), TEXT("Round"), TEXT("Eastern") };
+		// (the horse's coat is one of three, by the nation, as on the figure built in code)
+		const FLinearColor Coats[3] = { SoldierParts::Hex(TEXT("5B3A26")), SoldierParts::Hex(TEXT("3A2A20")), SoldierParts::Hex(TEXT("7A5636")) };
+		const FLinearColor Coat = Coats[GetTypeHash(K.Tunic.ToFColor(true).ToHex()) % 3];
+		const TArray<FLinearColor> Kit = { K.Tunic, K.Trousers, K.Boots, K.bTallBoots ? K.Boots : K.Lower, K.Straps, K.HelmetPaint, K.Pack,
+			SoldierParts::Hex(TEXT("C49A78")), SoldierParts::Hex(TEXT("5E4128")), SoldierParts::Hex(TEXT("2E2F31")),
+			Coat, Coat * 0.35f, K.Straps * 0.9f, SoldierParts::Hex(TEXT("5C5A48")), SoldierParts::Hex(TEXT("2A2420")) };
+		const FString Name = FString(Poses[Pose]) + Helmets[FMath::Clamp(static_cast<int32>(K.Helmet), 0, 6)];
+		if (Sculpted(Name, Tag, Where, Metre, Turn, !bFine, &Kit))
+		{
+			return;
+		}
+	}
 	static TMap<FString, FMiniatureMesh> Built;
 	const FString Key = FString::Printf(TEXT("%s/%d/%d"), *Tag, Pose, bFine ? 1 : 0);
 	FMiniatureMesh* Model = Built.Find(Key);
