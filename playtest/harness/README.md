@@ -206,6 +206,7 @@ Results of the Version 61 test: `/mnt/project-files/playtest/results-v61/` (the 
 | `kindtab.py` | The kinds of directive issued and how they ended, new beside old, by set | `python3 kindtab.py out/v62 out/v60 gov-play` |
 | `settletab.py` | Whether a kept promise clears the count of ignored directives | `python3 settletab.py out/v62` |
 | `bandsum.py` | Battles by odds band summed over `probe28` outputs | `python3 bandsum.py out/v62/berlin-GER-*.txt` |
+| `berlintab.py` | Berlin held to the end of 1944 with the cabinet and with it off, by seed set and paired seed by seed | `python3 berlintab.py out/v62 out/v62c` |
 | `ui23.cjs`, `ui23-all.sh` | The Cabinet card page by page with its height in screens, the head block, the men block with both call-up orders, the office picker and the bill for switching the cabinet off, on a desk and a phone, for a save from `probe34` | `node ui23.cjs out/v62saves/SOVd-11-thinning.json 88-v62-sov-men early,hold` |
 | `ui24.cjs` | The arsenal's tooltips and the office picker on the card that starts a campaign | `node ui24.cjs out/v62saves/GERh-7-short.json 88-v62-ger` |
 
