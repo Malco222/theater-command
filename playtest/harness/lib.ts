@@ -167,6 +167,14 @@ export interface Plan {
   noCabinet?: boolean;
   /** Version 59: raise no new corps while the reserve of men stands under this share of what it opened with (default: never holds back). */
   menKeep?: number;
+  /** Version 62: call the next class up early. 'half' or 'quarter': whenever it may be done with the reserve under that share of what it opened with; 'war': whenever it may be done; a number: once, in that month (default: never). */
+  earlyClass?: string | number;
+  /** Version 62: hold the standing call-up (a Soviet player's). [from, to]: held from month `from` to month `to`; 'first:6': held for the first six months it is on offer; 'short:0.85': held while the corps in the field are filled under that share, and let run again once they are a tenth fuller (default: never held). */
+  holdCallUp?: [number, number] | string;
+  /** Version 62: "Your office is secure": the player's government cannot fall (default: it can). */
+  secure?: boolean;
+  /** Version 62: carry out the cabinet's small jobs: order the cheapest building when it asks for a town built up, recruit an agent when it asks for one (default: left undone). */
+  jobs?: boolean;
   chaseOdds?: number;
   /** Wars the player starts: [month number, nation]. */
   declare?: [number, string][];
@@ -242,11 +250,55 @@ export function headDetail(g: Game, me: string, hd: any): string {
   return `${hd.rank} ${hd.name} (${hd.command}); ${hd.why} record ${gen?.rec.won} won of ${gen?.rec.battles}, level ${gen?.level}${hd.loved ? ', popular' : ''}; ${hd.left} months to answer; sack +${hd.gain}, refuse -${hd.cost}; other generals with two defeats running: ${others}; his last battles: ${fights.join(' | ') || 'none found'}`;
 }
 
+/** Version 62: the player's say over the call-up before the month's moves: a class called early, the standing call-up held or let run. What he did is kept on the run (run.men). */
+function menMoves(run: Run, plan: Plan): void {
+  if (plan.earlyClass === undefined && plan.holdCallUp === undefined) return;
+  const g = run.g, me = run.me, X = T as any;
+  const log = ((run as any).men ??= { early: [] as number[], heldMonths: 0, holds: [] as string[] });
+  if (plan.earlyClass !== undefined && X.whyNotOrderEarlyClass?.(g) === null) {
+    const share = X.manpowerOf?.(g, me)?.share ?? 1;
+    const e = plan.earlyClass;
+    const go = typeof e === 'number' ? g.turn === e : e === 'war' ? true : e === 'half' ? share < 0.5 : e === 'quarter' ? share < 0.25 : false;
+    if (go && X.orderEarlyClass(g)) log.early.push(g.turn);
+  }
+  if (plan.holdCallUp !== undefined) {
+    const v = X.callUpOf?.(g)?.callUp;
+    if (v) {
+      let want: boolean;
+      if (Array.isArray(plan.holdCallUp)) want = g.turn >= plan.holdCallUp[0] && g.turn <= plan.holdCallUp[1];
+      else if (String(plan.holdCallUp).startsWith('first:')) { log.seen = (log.seen ?? 0) + 1; want = log.seen <= Number(String(plan.holdCallUp).split(':')[1]); }
+      else {
+        const bar = Number(String(plan.holdCallUp).split(':')[1] ?? 0.85);
+        const cs = g.corps.filter((c) => c.nat === me && !c.dead && c.kind !== 'fort');
+        const d = cs.reduce((t, c) => t + c.divs, 0), f = cs.reduce((t, c) => t + c.divs * c.str, 0);
+        const filled = d ? f / d : 1;
+        want = v.held ? filled < Math.min(0.98, bar + 0.1) : filled < bar;
+      }
+      if (want !== v.held && X.orderCallUp(g, want)) log.holds.push(`${want ? 'held' : 'let run'} ${turnToDate(g.turn).label}`);
+      if (X.callUpOf(g)?.callUp?.held) log.heldMonths++;
+    }
+  }
+}
+
 /** Version 60: the player's own dealings with the cabinet before the month's moves: his answer on a general, and a promise. What he did is kept on the run (run.cab). */
 function cabinetMoves(run: Run, plan: Plan): void {
-  if (!plan.vow && !plan.head) return;
+  if (!plan.vow && !plan.head && !plan.jobs) return;
   const g = run.g, X = T as any, v = X.governmentOf?.(g);
   if (!v || !v.mine) return;
+  if (plan.jobs && v.directive) {
+    const jl = ((run as any).jobs ??= { build: 0, agent: 0, could: 0 });
+    const d = v.directive;
+    if (d.kind === 'agent' && X.whyNotRecruitAgent?.(g) === null && X.orderRecruitAgent(g)) jl.agent++;
+    if (d.kind === 'build') {
+      let best: { region: number; line: string; cost: number } | null = null;
+      for (const r of g.regions) {
+        if (r.ctrl !== run.me) continue;
+        for (const o of (X.townBuildings?.(g, r.id)?.offers ?? []) as any[]) if (o.why === null && (!best || o.cost < best.cost)) best = { region: r.id, line: o.line, cost: o.cost };
+      }
+      if (best && X.orderBuilding(g, best.region, best.line)) jl.build++; else jl.could++;
+    }
+  }
+  if (!plan.vow && !plan.head) return;
   const log = ((run as any).cab ??= { vows: [] as any[], heads: [] as any[] });
   if (plan.head && v.head) {
     const h = v.head;
@@ -268,6 +320,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   plan.first?.(g, run);
   if (plan.idle) { plan.each?.(g, run); return; }
   cabinetMoves(run, plan);
+  menMoves(run, plan);
   const minOdds = plan.minOdds ?? 1.5;
 
   // A small country chooses its path in its first month.
@@ -568,6 +621,7 @@ export function campaign(me: string, from: number, seed: number, plan: Plan, o: 
   const g = start(me, from, seed, o.level ?? 'colonel');
   const run: Run = { g, me, from, seed, level: o.level ?? 'colonel', rows: [], problems: [], fellOn: null, errors: [] };
   if (plan.noCabinet) (T as any).orderCabinet?.(g, false);
+  if (plan.secure) (T as any).orderOffice?.(g, false);
   const seen = new Set<string>();
   let up: boolean;
   const t0 = Date.now();
