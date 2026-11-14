@@ -1,0 +1,141 @@
+why-GER-7	node out61/probe30.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' 37 49
+why-SOVF-7	node out61/probe30.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}' 10
+why-SOVF-11	node out61/probe30.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}' 10
+why-SOVF-23	node out61/probe30.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}' 10
+def-SOVF_base-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}'
+def-SOVF_base-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}'
+def-SOVF_base-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}'
+def-GER_grind-7	ROWS=1 node out61/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"grind":0.9}'
+def-SOV_grind-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"grind":0.9}'
+def-SOVF_grind-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"grind":0.9}'
+def-GER_grind-11	ROWS=1 node out61/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"grind":0.9}'
+def-SOV_grind-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"grind":0.9}'
+def-SOVF_grind-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"grind":0.9}'
+def-GER_grind-23	ROWS=1 node out61/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"grind":0.9}'
+def-SOV_grind-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"grind":0.9}'
+def-SOVF_grind-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"grind":0.9}'
+def-GER-7	ROWS=1 node out61/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+def-SOV-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.5}'
+def-UK-7	ROWS=1 node out61/probe28.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+def-FRA-7	ROWS=1 node out61/probe28.mjs FRA 1 7 76 '{"minOdds":1.6,"homeOnly":true}'
+def-ITA-7	ROWS=1 node out61/probe28.mjs ITA 1 7 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+def-GER-11	ROWS=1 node out61/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+def-SOV-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.5}'
+def-UK-11	ROWS=1 node out61/probe28.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+def-FRA-11	ROWS=1 node out61/probe28.mjs FRA 1 11 76 '{"minOdds":1.6,"homeOnly":true}'
+def-ITA-11	ROWS=1 node out61/probe28.mjs ITA 1 11 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+def-GER-23	ROWS=1 node out61/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+def-SOV-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.5}'
+def-UK-23	ROWS=1 node out61/probe28.mjs UK 1 23 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+def-FRA-23	ROWS=1 node out61/probe28.mjs FRA 1 23 76 '{"minOdds":1.6,"homeOnly":true}'
+def-ITA-23	ROWS=1 node out61/probe28.mjs ITA 1 23 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+card-GER-7	node out61/probe29.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+card-SOV-7	node out61/probe29.mjs SOV 1 7 76 '{"minOdds":1.5}'
+card-GER-11	node out61/probe29.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+card-SOV-11	node out61/probe29.mjs SOV 1 11 76 '{"minOdds":1.5}'
+card-GER-23	node out61/probe29.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+card-SOV-23	node out61/probe29.mjs SOV 1 23 76 '{"minOdds":1.5}'
+berlin-GER-1	node out61/probe28.mjs GER 1 1 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-2	node out61/probe28.mjs GER 1 2 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-3	node out61/probe28.mjs GER 1 3 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-4	node out61/probe28.mjs GER 1 4 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-5	node out61/probe28.mjs GER 1 5 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-6	node out61/probe28.mjs GER 1 6 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-7	node out61/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-8	node out61/probe28.mjs GER 1 8 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-9	node out61/probe28.mjs GER 1 9 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-10	node out61/probe28.mjs GER 1 10 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-11	node out61/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-12	node out61/probe28.mjs GER 1 12 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-13	node out61/probe28.mjs GER 1 13 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-14	node out61/probe28.mjs GER 1 14 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-15	node out61/probe28.mjs GER 1 15 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-16	node out61/probe28.mjs GER 1 16 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-17	node out61/probe28.mjs GER 1 17 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-18	node out61/probe28.mjs GER 1 18 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-19	node out61/probe28.mjs GER 1 19 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-20	node out61/probe28.mjs GER 1 20 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-21	node out61/probe28.mjs GER 1 21 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-22	node out61/probe28.mjs GER 1 22 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-23	node out61/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-24	node out61/probe28.mjs GER 1 24 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+play-GER	node out61/play.mjs GER 7,11,23 1 76 colonel
+play-GER_WEST	node out61/play.mjs GER_WEST 7,11,23 1 76 colonel
+play-GER_SEALION	node out61/play.mjs GER_SEALION 7,11,23 1 76 colonel
+play-UK	node out61/play.mjs UK 7,11,23 1 76 colonel
+play-FRA	node out61/play.mjs FRA 7,11,23 1 76 colonel
+play-FRA_ATTACK	node out61/play.mjs FRA_ATTACK 7,11,23 1 76 colonel
+play-SOV	node out61/play.mjs SOV 7,11,23 1 76 colonel
+play-SOV_FIRST	node out61/play.mjs SOV_FIRST 7,11,23 1 76 colonel
+play-ITA	node out61/play.mjs ITA 7,11,23 1 76 colonel
+play-ITA_BALKAN	node out61/play.mjs ITA_BALKAN 7,11,23 1 76 colonel
+play-POL	node out61/play.mjs POL 7,11,23 1 76 colonel
+play-BEL	node out61/play.mjs BEL 7,11,23 1 76 colonel
+play-FIN	node out61/play.mjs FIN 7,11,23 1 76 colonel
+play-TUR	node out61/play.mjs TUR 7,11,23 1 76 colonel
+play-ROM	node out61/play.mjs ROM 7,11,23 1 76 colonel
+play-SWE	node out61/play.mjs SWE 7,11,23 1 76 colonel
+play-ESP	node out61/play.mjs ESP 7,11,23 1 76 colonel
+late-5	node out61/play.mjs GER,UK,SOV,ITA,FRA 7 5 76 colonel
+late-17	node out61/play.mjs GER,UK,SOV,ITA,FRA 7 17 76 colonel
+late-29	node out61/play.mjs GER,UK,SOV,ITA,FRA 7 29 76 colonel
+level-marshal	node out61/play.mjs GER,UK,FRA,SOV,ITA 7 1 76 marshal
+level-cadet	node out61/play.mjs GER,UK,FRA,SOV,ITA 7 1 76 cadet
+minor-sweep	node out61/play.mjs BEL,FIN 1,2,3 1 76 colonel
+pol-sweep	node out61/play.mjs POL 1,2,3,4,5,6,8,9,10,12 1 76 colonel
+idle-7	node out61/idle.mjs GER,UK,FRA,SOV,ITA,POL 7 1 76
+idle-GER-90	node out61/idle.mjs GER 7 1 90
+idle-ITA-88	node out61/probe10.mjs ITA 7 88
+play-GER_STARVE	node out61/play.mjs GER_STARVE 7,11 1 40 colonel
+falls-a	node out61/probe11.mjs 1,2,3,4,5,6 88
+falls-b	node out61/probe11.mjs 7,8,9,10,11,12 88
+monkey-1	TC_PAGE=file:///home/user/tc61/dist/play.html node monkey.cjs GER 31 2500 1
+monkey-2	TC_PAGE=file:///home/user/tc61/dist/play.html node monkey.cjs SOV 32 2200 1
+monkey-3	TC_PAGE=file:///home/user/tc61/dist/play.html node monkey.cjs FRA 33 1500 1 marshal
+monkey-4	TC_PAGE=file:///home/user/tc61/dist/play.html node monkey.cjs POL 34 1200 1
+monkey-5	TC_PAGE=file:///home/user/tc61/dist/play.html node monkey.cjs UK 35 2200 1
+monkey-6	TC_PAGE=file:///home/user/tc61/dist/play.html node monkey.cjs ITA 36 2200 5
+monkey-7	TC_PAGE=file:///home/user/tc61/dist/play.html node monkey.cjs GER 37 2200 29 cadet
+monkey-8	TC_PAGE=file:///home/user/tc61/dist/play.html node monkey.cjs BEL 38 1200 1
+watch-1	node out61/watch.mjs 1,2,3,4,5,6 89
+watch-7	node out61/watch.mjs 7,8,9,10,11,12 89
+watch-13	node out61/watch.mjs 13,14,15,16,17,18 89
+watch-19	node out61/watch.mjs 19,20,21,22,23,24 89
+watch-25	node out61/watch.mjs 25,26,27,28,29,30 89
+watch-31	node out61/watch.mjs 31,32,33,34,35,36 89
+def-GER_guns-7	ROWS=1 node out61/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5}'
+def-GER_gunsup-7	ROWS=1 node out61/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true}'
+def-GER_card-7	ROWS=1 node out61/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"minChance":0.6}'
+def-GER_gunsgrind-7	ROWS=1 node out61/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOV_guns-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"guns":1.5}'
+def-SOV_gunsup-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true}'
+def-SOV_card-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"minChance":0.6}'
+def-SOV_gunsgrind-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOVF_guns-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5}'
+def-SOVF_gunsup-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true}'
+def-SOVF_card-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"minChance":0.6}'
+def-SOVF_gunsgrind-7	ROWS=1 node out61/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true,"grind":0.9}'
+def-GER_guns-11	ROWS=1 node out61/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5}'
+def-GER_gunsup-11	ROWS=1 node out61/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true}'
+def-GER_card-11	ROWS=1 node out61/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"minChance":0.6}'
+def-GER_gunsgrind-11	ROWS=1 node out61/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOV_guns-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"guns":1.5}'
+def-SOV_gunsup-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true}'
+def-SOV_card-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"minChance":0.6}'
+def-SOV_gunsgrind-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOVF_guns-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5}'
+def-SOVF_gunsup-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true}'
+def-SOVF_card-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"minChance":0.6}'
+def-SOVF_gunsgrind-11	ROWS=1 node out61/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true,"grind":0.9}'
+def-GER_guns-23	ROWS=1 node out61/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5}'
+def-GER_gunsup-23	ROWS=1 node out61/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true}'
+def-GER_card-23	ROWS=1 node out61/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"minChance":0.6}'
+def-GER_gunsgrind-23	ROWS=1 node out61/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOV_guns-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"guns":1.5}'
+def-SOV_gunsup-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true}'
+def-SOV_card-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"minChance":0.6}'
+def-SOV_gunsgrind-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOVF_guns-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5}'
+def-SOVF_gunsup-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true}'
+def-SOVF_card-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"minChance":0.6}'
+def-SOVF_gunsgrind-23	ROWS=1 node out61/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true,"grind":0.9}'

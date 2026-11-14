@@ -1,0 +1,12 @@
+card-hawks-GER-7	node out60/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"chase":true}' hawks
+card-hawks-SOV-7	node out60/probe24.mjs SOV 1 7 76 '{"minOdds":1.5,"chase":true}' hawks
+card-hawks-UK-7	node out60/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"chase":true}' hawks
+card-hawks-ITA-7	node out60/probe24.mjs ITA 1 7 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"chase":true}' hawks
+card-hawks-FRA-7	node out60/probe24.mjs FRA 1 7 76 '{"minOdds":1.6,"homeOnly":true,"chase":true}' hawks
+card-hawks-GER-11	node out60/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"chase":true}' hawks
+card-hawks-SOV-11	node out60/probe24.mjs SOV 1 11 76 '{"minOdds":1.5,"chase":true}' hawks
+card-hawks-UK-11	node out60/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"chase":true}' hawks
+card-hawks-ITA-11	node out60/probe24.mjs ITA 1 11 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"chase":true}' hawks
+card-hawks-FRA-11	node out60/probe24.mjs FRA 1 11 76 '{"minOdds":1.6,"homeOnly":true,"chase":true}' hawks
+card-chase-GER-7	node out60/probe24.mjs GER 1 7 76 '{"chase":true,"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' none
+card-chase-UK-7	node out60/probe24.mjs UK 1 7 76 '{"chase":true,"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' none

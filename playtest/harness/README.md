@@ -166,3 +166,29 @@ Traps met on Versions 59 and 60:
 - The machine can restart in the middle of a long run and kill background work; files survive. Use `jobs.sh`.
 - Swap a rebuilt bundle in with `mv` (build to another folder first), never in place, while a queue is running.
 - `ui20.cjs` puts `shots/` in front of the shot prefix itself; `ui21.cjs` takes the path as given.
+
+## Version 61 (works that wear, fronts that move again)
+
+Build against the version under test, for example `./build.sh probe38 /home/user/tc61 out61`. New plan options in `lib.ts`, all off unless named: `"grind":0.9` (lean on a line: attack troops with half a month of works or more from these odds up), `"byChance":0.6` (a player who reads the card: order any attack the card gives this chance or better, whatever its odds), `"waves":1.05` (the two-wave player: attack a dug-in line from these odds up only where a second wave stands by, and strike a line already struck that month again from the same odds).
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `v61.tsv`, `v61b.tsv` to `v61f.tsv` | The queues of the Version 61 test for `jobs.sh`: the whole battery with the defence wars, card wars, 24 Berlin wars and gun habits (141 jobs); players who lean or read the card (27); two waves (12); the card wars recounted (6); three kinds of attacking German on twelve seeds (36); the Soviet first strike on twelve seeds (24) | `./jobs.sh v61.tsv out/v61 4` |
+| `probe28.ts` | The defence probe. Its `TOTAL` line now also gives attacks thrown back that wore works (the player's and those on the player), attacks ordered under the player's bar, second blows on a line struck that month and how many won, the player's field attacks by year and the provinces held at the end | `ROWS=1 node out61/probe28.mjs GER 1 7 76 '<plan with "waves":1.05>'` |
+| `probe29.ts` | The card against its battles. Counts what the page prints: one chance where every defender is identified, a band where not. Prints `SURE THROWN BACK` (a flat 100% that was lost) with the card's odds, preparedness, works and dice beside the battle's, `OUTSIDE THE BAND` and a `FOG` line | `node out61/probe29.mjs SOV 1 7 76 '{"minOdds":1.5}'` |
+| `probe38.ts` | The jab and the hammer. From a month on, prints every dug-in line beside the player (works, the card's odds, the even mark, the chance), then: `jab` (the weakest corps alone at each line under the bar), `jab2`, `soften` (up to three spare corps, then the blow if it reads 60% or the bar), `hammer` and `hammer3` (the full attack again and again in one month on the best one or three lines, each blow meeting the works the last one left) | `node out61/probe38.mjs GER 1 7 37 '<plan>' hammer 8` |
+| `v61tab.py`, `rows2.py` | One line a defence war from the `TOTAL` lines; the battle rows of the same wars in two folders, like for like (lines held by readiness and odds, guns, battles by year) | `python3 rows2.py out/v59def out/v61` |
+| `probe39.ts` | The undecided computer-only war. Each January from 1943 it prints the great powers' provinces; at the end, every province the loser still holds beside an enemy: its troops and works, the enemies round it, the odds a full attack by the strongest would get, and when it was last attacked. With `GER dump` it also prints the siege of any ringed town (who is inside, why it may not be stormed, how it is fed) | `node out61/probe39.mjs 11,16 89 GER dump` |
+| `gunstab.py` | One line a gun-habit war: attacks on prepared lines, how many had artillery and how many of those won | `python3 gunstab.py out/v61` |
+| `ui22.cjs` | The attack card on a dug-in line on a desk and a phone: the Troops and Dug in lines, "Send everyone who can reach", the card's length, the battle report. With `JAB=1` it orders the attack as the card opens, reads the thrown-back report and looks again | `JAB=1 node ui22.cjs saves61/GER-7-line-prepared.json saves61/GER-7-line-prepared.txt 87-v61-jab` |
+
+Traps met on Version 61:
+
+- `T.attackOutlook` returns the Outlook (`exact, odds, lo, hi, chance, chanceLo, chanceHi, even, lines`). Works, wear, preparedness, the dice and the two strengths are on the Assessment from `T.previewAttack`. A plan option that reads `out.works` needs `withSum` in `lib.ts` (the first `grind` wars never leaned for this reason).
+- Where a defender is not identified the page prints a band, and `chance` is only the middle of it. A "sure" attack is `exact ? chance : chanceLo` at 0.9995 or more. Counting `chance` alone produced "sure attacks thrown back" that the page never promised (Versions 58 and 61).
+- Wars differ by seed drift far more than by one plan option: the same German plan falls between April 1944 and after December 1945 on 24 seeds. Compare kinds of player on twelve seeds or more, never on three.
+- A whole war now plays in about a minute on four streams, so wide seed sets are cheap.
+- A town's garrison is on the region's `garr` list, not among its `units`: a ringed town that looks empty is not. Use `siegeView(g, id).lines` to read how it is fed.
+- `T.candidates` returns nothing in a computer-only war (`g.human` is null). Pick the corps yourself and pass them through `limitAttackers` to `T.previewAttack`.
+
+Results of the Version 61 test: `/mnt/project-files/playtest/results-v61/` (the 141-job queue at the top; `lean-3-seeds`, `two-waves-3-seeds`, `card-recount`, `lean-12-seeds`, `first-strike-12-seeds`, `jab-and-hammer`, `why`, `undecided`, `saves`).

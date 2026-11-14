@@ -198,6 +198,12 @@ export interface Plan {
   guns?: number;
   /** Version 58: bring up to two artillery corps into an attack in place of the weakest corps from the same province, where the card then gives a better chance (default off: the staff's own picker, which takes the strongest and leaves the guns behind). */
   useGuns?: boolean;
+  /** Version 61: lean on a dug-in line. Attacks on troops with at least half a month of works are ordered from these odds up (under minOdds), since every blow, won or lost, takes time off the works. */
+  grind?: number;
+  /** Version 61: a player who goes by the card. An attack the card gives this chance or better is ordered whatever its odds (as well as those at minOdds or better). */
+  byChance?: number;
+  /** Version 61: the two-wave player. A dug-in line (half a month of works or more) is attacked from these odds up (under minOdds) only where a second wave stands by (at least three corps in reach beyond those the roads carry, or half as many again); a line already struck this month is struck again from these odds whatever is left. */
+  waves?: number;
 }
 
 function distanceToEnemy(g: Game, me: string, homeOnly: boolean): Int16Array {
@@ -361,18 +367,27 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
       const r = g.regions[j];
       const cands = pickAttackers(g, T.candidates(g, r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), r, plan);
       const out = cands.length ? T.attackOutlook(g, cands, r) : null;
+      if (out && (plan.grind !== undefined || plan.waves !== undefined)) withSum(g, out, cands, r);
+      if (out && plan.waves !== undefined) { (out as any).spare = T.candidates(g, r).filter((c) => c.kind !== 'art' && c.kind !== 'eng').length - cands.length; (out as any).n = cands.length; }
       return { r, cands, odds: out?.odds ?? 0, out };
     });
     plan.onLook?.(g, looked, pass);
-    const scored = looked.filter((x) => x.odds >= (x.r.id === chaseId ? chaseOdds : minOdds) && (!plan.homeOnly || x.r.owner === me || x.r.id === chaseId)).sort((a, b) => Number(b.r.id === chaseId) - Number(a.r.id === chaseId) || b.odds - a.odds);
+    const struck: Set<number> = (run as any).struckTurn === g.turn ? (run as any).struck : ((run as any).struckTurn = g.turn, (run as any).struck = new Set<number>());
+    const secondWave = (id: number, o: any): boolean => plan.waves !== undefined && !!o && (struck.has(id) || ((o.works ?? 0) >= 0.5 && (o.spare ?? 0) >= Math.max(3, Math.ceil((o.n ?? 0) / 2))));
+    const barFor = (id: number, o: any): number => id === chaseId ? chaseOdds : secondWave(id, o) ? Math.min(minOdds, plan.waves!) : plan.grind !== undefined && o && (o.works ?? 0) >= 0.5 ? Math.min(minOdds, plan.grind) : minOdds;
+    const goes = (id: number, o: any): boolean => !!o && (o.odds >= barFor(id, o) || (plan.byChance !== undefined && (o.chance ?? 0) >= plan.byChance));
+    const scored = looked.filter((x) => goes(x.r.id, x.out) && (!plan.homeOnly || x.r.owner === me || x.r.id === chaseId)).sort((a, b) => Number(b.r.id === chaseId) - Number(a.r.id === chaseId) || b.odds - a.odds);
     for (const x of scored) {
       const cands = pickAttackers(g, T.candidates(g, x.r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), x.r, plan);
       if (!cands.length || !hostileUnits(g, x.r, me).length) continue;
       const out = T.attackOutlook(g, cands, x.r);
-      if (!out || out.odds < (x.r.id === chaseId ? chaseOdds : minOdds)) continue;
+      if (out && (plan.grind !== undefined || plan.waves !== undefined || plan.onAttack)) withSum(g, out, cands, x.r);
+      if (out && plan.waves !== undefined) { (out as any).spare = T.candidates(g, x.r).filter((c) => c.kind !== 'art' && c.kind !== 'eng').length - cands.length; (out as any).n = cands.length; }
+      if (!out || !goes(x.r.id, out)) continue;
+      if (out.odds < minOdds && x.r.id !== chaseId) (run as any).grinds = ((run as any).grinds ?? 0) + 1;
       if (plan.minChance !== undefined && ((out as any).chance ?? 1) < plan.minChance) continue;
       const rep = T.orderAttack(g, cands, x.r);
-      if (rep) { row.attacksOrdered++; if (rep.taken || (rep as any).siege) row.attacksWon++; did++; plan.onAttack?.(g, out, rep, x.r); }
+      if (rep) { row.attacksOrdered++; if (rep.taken || (rep as any).siege) row.attacksWon++; did++; plan.onAttack?.(g, out, rep, x.r); if (plan.waves !== undefined && (out as any).works >= 0.5 || struck.has(x.r.id)) { if (struck.has(x.r.id)) (run as any).secondBlows = ((run as any).secondBlows ?? 0) + 1, (rep.taken || (rep as any).siege) && ((run as any).secondWon = ((run as any).secondWon ?? 0) + 1); struck.add(x.r.id); } }
     }
     // Towns (Version 54): storm the town the army stands round when the odds are good, sooner settled for once the
     // siege has lasted two months; and bring a garrison out against the besiegers when it can win.
@@ -451,6 +466,12 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   if (plan.land) tryLanding(run, row, minOdds, plan);
 
   plan.each?.(g, run);
+}
+
+/** Adds the sum behind the card to an outlook (Version 61): both sides' strength, how far the line is prepared, how old its works are, what this blow wears off them, the run of the dice. */
+function withSum(g: Game, out: any, cands: Corps[], r: any): void {
+  const a = (T as any).previewAttack?.(g, cands, r);
+  if (a) { out.A = a.A; out.D = a.D; out.prepared = a.prepared; out.works = a.works; out.wear = a.wear; out.dice = a.dice; }
 }
 
 /** The corps for an attack: the staff's pick under the frontage limit, or (plan.useGuns) the same with up to two artillery corps swapped in where that reads better on the card. */

@@ -19,6 +19,8 @@ const band = (o: number): string => (o < 1 ? '0 under 1' : o < 1.5 ? '1 1 to 1.5
 const card = (r: any): number => (r.dPower > 0 ? Math.min(99, r.aPower / r.dPower) : 99);
 const add = (k: string, r: any): void => { const t = (tab[k] ??= { n: 0, won: 0, attLost: 0, defLost: 0, odds: 0, day: 0 }); t.n++; if (won(r)) t.won++; t.attLost += r.attLost; t.defLost += r.defLost; t.odds += card(r); t.day += Math.min(99, r.odds); };
 let held64 = '?', quiet = 0, longest = 0, longestEnd = 0, lastTurn = 0;
+const wornBy = { mine: [0, 0], theirs: [0, 0] };   // Version 61: attacks thrown back that still wore the works, and the months they took off
+const myAttacksByYear: Record<number, number> = {};
 const hold = (g: any): string => { const r = g.regions.find((x: any) => x.name === town); return r ? r.ctrl : `no province ${town}`; };
 const run = campaign(me, Number(fromS), Number(seedS), { ...plan, each: (g: any) => {
   lastTurn = g.turn;
@@ -30,6 +32,8 @@ const run = campaign(me, Number(fromS), Number(seedS), { ...plan, each: (g: any)
     const iAttack = r.attNat === me || r.attackers.some((u: any) => u.nat === me), iDefend = r.defNat === me || r.defenders.some((u: any) => u.nat === me);
     if (!iAttack && !iDefend) continue;
     fought++;
+    if (typeof r.worn === 'number') { const w = iAttack ? wornBy.mine : wornBy.theirs; w[0]++; w[1] += r.worn; }
+    if (iAttack) { const y = 1939 + Math.floor((g.turn + 7) / 12); myAttacksByYear[y] = (myAttacksByYear[y] ?? 0) + 1; }
     const side = iAttack ? 'A the player attacks' : 'B the player is attacked', prep = (r.prepared ?? 0) > 0 ? 'prepared line' : 'open';
     if (process.env.ROWS) console.log(`ROW ${g.turn} ${iAttack ? 'A' : 'B'} ${r.attNat} ${r.defNat} ${(r.prepared ?? 0).toFixed(2)} ${card(r).toFixed(3)} ${Math.min(99, r.odds).toFixed(3)} ${won(r) ? 1 : 0} ${r.attLost} ${r.defLost} ${r.attackers.length} ${r.defenders.length} ${r.attackers.filter((u: any) => u.kind === 'art').length} ${String(r.regionName).replace(/ /g, '_')}`);
     add(`${side} | ${prep} | all odds`, r);
@@ -47,4 +51,4 @@ for (const k of Object.keys(tab).sort()) {
   const t = tab[k];
   console.log(`BATTLES ${k.padEnd(52)} ${String(t.n).padStart(4)} fought | attacker won ${String(t.won).padStart(4)} (${Math.round((100 * t.won) / t.n)}%) | mean odds ${(t.odds / t.n).toFixed(2)} | on the day ${(t.day / t.n).toFixed(2)} | lost a battle: attacker ${(t.attLost / t.n).toFixed(1)}, defender ${(t.defLost / t.n).toFixed(1)}`);
 }
-console.log(`TOTAL ${me} seed ${seedS}: played to ${date(lastTurn)}${run.fellOn ? ` (fell ${run.fellOn})` : ''}; ${town} in December 1944: ${held64}; in the last month: ${hold(run.g)}; longest stretch at war with no battle of the player's: ${longest} months, ending ${longest ? date(longestEnd) : '-'}`);
+console.log(`TOTAL ${me} seed ${seedS}: played to ${date(lastTurn)}${run.fellOn ? ` (fell ${run.fellOn})` : ''}; ${town} in December 1944: ${held64}; in the last month: ${hold(run.g)}; longest stretch at war with no battle of the player's: ${longest} months, ending ${longest ? date(longestEnd) : '-'}; thrown back but wore the works: my attacks ${wornBy.mine[0]} (${wornBy.mine[1].toFixed(1)} months), attacks on me ${wornBy.theirs[0]} (${wornBy.theirs[1].toFixed(1)} months); attacks under my bar to wear a line ${(run as any).grinds ?? 0}${(run as any).secondBlows !== undefined ? `, second blows on a line struck that month ${(run as any).secondBlows} (won ${(run as any).secondWon ?? 0})` : ''}; my field attacks by year ${Object.entries(myAttacksByYear).map(([y, n]) => `${y} ${n}`).join(', ')}; provinces at the end ${run.g.regions.filter((x: any) => x.ctrl === me).length}`);
