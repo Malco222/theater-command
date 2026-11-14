@@ -427,7 +427,7 @@ describe('ordering', () => {
   it('lists the same offers for both interfaces, each with a price, a place and a reason when it cannot be had', () => {
     const g = grand(3, 'GER');
     const list = arsenalOffers(g, g.byName['Hamburg'].id);
-    expect(list.map((o) => o.key)).toEqual(['elite', 'corps:mtn', 'corps:inf', 'corps:art', 'corps:mot', 'corps:arm', 'corps:eng', 'para', 'air:ftr', 'air:bmr', 'ship:dd', 'ship:ss', 'ship:tp', 'ship:ca', 'ship:cv', 'ship:bb', 'work:factory', 'work:yard', 'work:aa', 'work:field', 'work:fort']);
+    expect(list.map((o) => o.key)).toEqual(['elite', 'corps:mtn', 'corps:inf', 'corps:mot', 'corps:art', 'corps:arm', 'corps:eng', 'para', 'air:ftr', 'air:bmr', 'ship:dd', 'ship:ss', 'ship:tp', 'ship:ca', 'ship:cv', 'ship:bb', 'work:factory', 'work:yard', 'work:aa', 'work:field', 'work:fort']);
     for (const o of list) {
       expect(o.label.length, o.key).toBeGreaterThan(3);
       expect(o.blurb.length, o.key).toBeGreaterThan(20);

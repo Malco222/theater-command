@@ -144,7 +144,7 @@ describe('the main effort', () => {
     expect(e.first).toBe(e.target);
     expect(e.enemy).toBe(t.ctrl);
     expect(e.from).toBe(g.turn);
-    expect(e.to - e.from + 1).toBe(RIVALS.effort.months);
+    expect(e.to - e.from).toBe(RIVALS.effort.months); // a month of massing first (Version 67), then the months of the offensive
     expect(e.name).toMatch(/^the (spring|summer|autumn|winter) offensive towards /);
     expect(e.name.endsWith(t.name)).toBe(true);
     expect(effortsOf(g, 'POL')).toHaveLength(1);
@@ -577,7 +577,7 @@ describe('a war with every staff at work', () => {
         for (const e of effortsOf(g, n.id)) {
           named.add(`${n.id}:${e.from}:${e.first}`);
           now.set(`${n.id}:${e.from}:${e.first}`, e.to);
-          expect(e.to - e.from + 1).toBe(RIVALS.effort.months);
+          expect(e.to - e.from).toBe(RIVALS.effort.months); // a month of massing first (Version 67), then the months of the offensive
           expect(g.regions[e.target]).toBeDefined();
           live++;
         }
