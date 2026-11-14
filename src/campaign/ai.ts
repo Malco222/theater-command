@@ -23,7 +23,7 @@ import { townSize } from './towns';
 import { KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 import {
   DEFENCE, allied, assess, atWar, collapseScore, corpsBase, declareWar, ensureSupply, evacuate, friendlyUnits, frontage, havensOf,
-  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, railMove, railReach, resolveBattle, shipMove, weekOf, whyNoProbe, worksOf,
+  hasRoom, hostileUnits, limitAttackers, moveCorps, moveCost, probeLine, probeRules, probeWeight, railMove, railReach, resolveBattle, shipMove, weekOf, whyNoProbe, worksOf,
 } from './game';
 
 const PLAN = plan as unknown as Record<string, PlanPhase[] | string>;
@@ -1024,10 +1024,11 @@ export function softenLine(g: Game, nat: string, enemies: Set<string>, halt: Set
     const odds = assess(g, pool, target).odds;
     const need = oddsFor[target.name] ?? minOdds;
     if (odds >= need || odds < S.from * need) continue;
-    // Who probes: the weakest corps beside the line that is not going in with the main body, or the weakest of all where everyone is.
+    // Who probes: a corps beside the line that is not going in with the main body, or one of them where everyone is:
+    // the one with the weight for a full probe, and of those the weakest in the attack.
     const free = avail.filter((c) => whyNoProbe(g, c, target) === null);
     const spare = free.filter((c) => !pool.includes(c));
-    const prober = [...(spare.length ? spare : free.length > 1 ? free : [])].sort((a, b) => atkPower(g, a) - atkPower(g, b) || a.id - b.id)[0];
+    const prober = [...(spare.length ? spare : free.length > 1 ? free : [])].sort((a, b) => probeWeight(b) - probeWeight(a) || atkPower(g, a) - atkPower(g, b) || a.id - b.id)[0];
     if (prober) wants.push({ target, prober, gap: need - odds });
   }
   wants.sort((a, b) => a.gap - b.gap || a.target.id - b.target.id);

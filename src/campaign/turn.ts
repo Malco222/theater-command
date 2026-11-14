@@ -13,7 +13,7 @@ import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './diffic
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
   DEFENCE, allied, assess, atWar, battleCost, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, groundWorks, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
-  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, railMove, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
+  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, probeWeight, railMove, swapCorps, whyNoSwap, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
   type Assessment, type CostOf, type GroundWorks, type ProbeReport,
 } from './game';
 import { foldChoices, foldCorps, type FoldView } from './fold';
@@ -447,12 +447,25 @@ export function orderProbe(g: Game, c: Corps, target: Region): ProbeReport | nul
   return probeLine(g, c, target);
 }
 
+/** The corps in a neighbouring province that this corps of the player's could change places with in one order (the grand campaign). */
+export function swapChoices(g: Game, c: Corps, to: number): Corps[] {
+  if (g.human === null || !humanUp(g) || onEve(g) || !canOrder(g, c)) return [];
+  return g.regions[to].units.filter((b) => canOrder(g, b) && whyNoSwap(g, c, b) === null);
+}
+
+/** The player has two corps in neighbouring provinces change places. False if they cannot. */
+export function orderSwap(g: Game, a: Corps, b: Corps): boolean {
+  if (onEve(g) || !canOrder(g, a) || !canOrder(g, b)) return false;
+  return swapCorps(g, a, b);
+}
+
 /** What softening a line first would do, for the attack card. */
 export interface SoftenView {
   /** The most months of fieldworks any defender there stands in; 0 where nobody is dug in. */
   works: number;
   /** A probe by one corps: which corps the staff would send, what it costs it, what it finds, or why it cannot be done. */
-  probe: { corps: number; name: string; why: string | null; ap: number; men: number; wear: number; fresh: number };
+  /** 'weight' is how much of a full probe the corps has the men for (0 to 1), 'full' the men a full one takes. */
+  probe: { corps: number; name: string; why: string | null; ap: number; men: number; wear: number; fresh: number; weight: number; full: number };
   /** Bombing the line, where the air war is played: the groups the staff would send and the months they should take off, or why not. */
   bomb: { why: string | null; groups: number; bombers: number; wear: number; verdict: string } | null;
 }
@@ -469,12 +482,13 @@ export function softenOptions(g: Game, corps: Corps[], target: Region): SoftenVi
   const P = DEFENCE.probe!;
   const works = Math.round(Math.max(0, ...foes.map(worksOf)) * 10) / 10;
   const pool = [...new Set([...corps, ...candidates(g, target)])].filter((c) => canOrder(g, c));
-  const can = pool.filter((c) => whyNoProbe(g, c, target) === null).sort((a, b) => corpsBase(g, a) * KIND[a.kind].atk - corpsBase(g, b) * KIND[b.kind].atk || a.id - b.id);
+  // Who goes: a corps with the weight for a full probe, and of those the one the attack will miss least.
+  const can = pool.filter((c) => whyNoProbe(g, c, target) === null).sort((a, b) => probeWeight(b) - probeWeight(a) || corpsBase(g, a) * KIND[a.kind].atk - corpsBase(g, b) * KIND[b.kind].atk || a.id - b.id);
   const who = can[0] ?? pool[0];
   const fresh = foes.filter((d) => corpsKnown(g, d, g.human).level !== 'exact').length;
   const probe = who
-    ? { corps: who.id, name: who.name, why: whyNoProbe(g, who, target), ap: P.ap, men: probeCost(g, who), wear: Math.min(P.wear, works), fresh }
-    : { corps: -1, name: '', why: 'No corps of yours stands beside that line with moves left.', ap: P.ap, men: 0, wear: Math.min(P.wear, works), fresh };
+    ? { corps: who.id, name: who.name, why: whyNoProbe(g, who, target), ap: P.ap, men: probeCost(g, who), wear: Math.round(Math.min(P.wear * probeWeight(who), works) * 10) / 10, fresh, weight: probeWeight(who), full: P.weight ?? 0 }
+    : { corps: -1, name: '', why: 'No corps of yours stands beside that line with moves left.', ap: P.ap, men: 0, wear: Math.min(P.wear, works), fresh, weight: 1, full: P.weight ?? 0 };
   let bomb: SoftenView['bomb'] = null;
   if (raidKinds(g, g.human).some((k) => k.key === 'line')) {
     if (works <= 0) bomb = { why: 'Nobody there is dug in: there are no fieldworks to bomb.', groups: 0, bombers: 0, wear: 0, verdict: '' };

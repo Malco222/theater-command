@@ -6,6 +6,7 @@ import data from '../../data/campaign/production.json';
 import budgetData from '../../data/campaign/budget.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import setup from '../../data/campaign/setup-1939.json';
+import rivalsData from '../../data/campaign/rivals.json';
 import { STACK, type Build, type Corps, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
 import { addCorps, allied, headline } from './game';
 import { DIPLOMACY, tradePartners } from './diplomacy';
@@ -568,7 +569,8 @@ export function aiProduction(g: Game, nat: string): void {
   const wantsGuns = (): boolean => gunsWanted(g, nat);
   while (slots() < most) {
     // A cadre waiting at home is raised again before anything new is formed (the grand campaign): the same corps, for a share of the price.
-    const old = g.flags.open === 1 ? (n.cadres ?? []).find((c) => !c.elite && !c.airborne && whyNoCadre(g, nat, c) === null) : undefined;
+    // (So many at a time and no more: a staff does not rebuild its whole army at the cadre's price in one season.)
+    const old = g.flags.open === 1 && n.queue.filter((b) => b.cadre !== undefined).length < rivalsData.fold.cadres ? (n.cadres ?? []).find((c) => !c.elite && !c.airborne && whyNoCadre(g, nat, c) === null) : undefined;
     if (old) {
       const t = cadreTerms(g, nat, old), up = corpsUpkeep(old.kind, old.divs);
       const site = budgeted(g) ? raiseSite(g, nat, old.kind, cap.id) : cap.id;

@@ -118,7 +118,7 @@ export const RIVALS = rivalsData as unknown as {
   effort: { months: number; rest: number; mass: number; sector: number; busy: number };
   press: { ratio: number; after: number; step: number; floor: number; waves: number; again: number };
   soften: { works: number; most: number; from: number; raid: number };
-  fold: { worn: number };
+  fold: { worn: number; cadres: number };
   exhaust: { after: number; per: number };
 };
 

@@ -13,10 +13,10 @@ import { describe, expect, it } from 'vitest';
 import { foldWorn, softenLine } from '../src/campaign/ai';
 import { airAI } from '../src/campaign/air';
 import { aiProduction } from '../src/campaign/economy';
-import { DEFENCE, addCorps, allied, assess, capture, collapseScore, createGame, exhausted, limitAttackers, removeCorps, startPhase, worksOf } from '../src/campaign/game';
+import { DEFENCE, addCorps, allied, assess, capture, collapseScore, createGame, endPhase, exhausted, groundWorks, limitAttackers, moveCorps, probeLine, probeWeight, removeCorps, startPhase, whyNoSwap, worksOf } from '../src/campaign/game';
 import { loadGame, saveGame } from '../src/campaign/save';
 import { RIVALS, characterOf, decide, effortOf, effortsOf, plansKnown, pressing, rivalRules, staffPhase, startOpen, temper, type Character } from '../src/campaign/staff';
-import { beginHuman, humanUp, rivalStaff, rivalStaffs, runTurnAI, stepAI } from '../src/campaign/turn';
+import { beginHuman, humanUp, orderSwap, rivalStaff, rivalStaffs, runTurnAI, softenOptions, stepAI, swapChoices } from '../src/campaign/turn';
 import { STACK, type Agent, type Corps, type Game, type Region } from '../src/campaign/types';
 
 /** A grand campaign with the player's first month open, as the game's own screen would have it. */
@@ -90,8 +90,9 @@ describe('the character of a staff', () => {
     try { plain = temper(g, 'SOV'); } finally { Object.assign(C, old); }
     expect(with_.attackAt).toBeCloseTo(plain.attackAt * C.attackAt, 6);
     expect(with_.persist).toBeCloseTo(plain.persist, 6);
-    expect(RIVALS.characters.bold.attackAt).toBeLessThan(1);
-    expect(RIVALS.characters.cautious.attackAt).toBeGreaterThan(1);
+    expect(RIVALS.characters.bold.attackAt).toBeLessThan(RIVALS.characters.opportunist.attackAt);
+    expect(RIVALS.characters.opportunist.attackAt).toBeLessThan(RIVALS.characters.cautious.attackAt);
+    expect(RIVALS.characters.bold.minOdds).toBeLessThan(RIVALS.characters.cautious.minOdds);
     expect(RIVALS.characters.bold.quiet).toBeLessThan(RIVALS.characters.cautious.quiet);
     // The historical scenarios know no characters: the staffs there follow history's plan.
     expect(rivalRules(createGame(3, 'GER'))).toBe(false);
@@ -434,6 +435,132 @@ describe('the staffs use the player\'s tools', () => {
     foldWorn(g, 'GER');
     expect(x.str).toBeCloseTo(0.3, 6);
     expect(y.dead).toBeFalsy();
+  });
+});
+
+describe('small fixes that came with the staffs', () => {
+  it('a probe wears the works by the weight of the corps that makes it', () => {
+    const g = playing('GER');
+    war(g, 'GER', 'POL');
+    const target = g.byName['Lodz'];
+    const from = g.regions[target.nb.find((j) => g.regions[j].ctrl === 'GER')!];
+    for (const u of [...target.units]) if (u.kind !== 'fort') removeCorps(g, u);
+    for (const u of [...from.units]) if (u.kind !== 'fort') removeCorps(g, u);
+    const def = fresh(addCorps(g, 'POL', 'Line 1', 'inf', 3, target.id, {}));
+    def.dug = true; def.dugFor = 2;
+    const husk = fresh(addCorps(g, 'GER', 'Husk', 'inf', 3, from.id, {}));
+    husk.str = 0.2;
+    const whole = fresh(addCorps(g, 'GER', 'Whole', 'inf', 3, from.id, {}));
+    // 9,000 men are three tenths of the weight a probe in full takes; 45,000 are more than enough.
+    expect(DEFENCE.probe!.weight).toBe(30000);
+    expect(probeWeight(husk)).toBeCloseTo(0.3, 6);
+    expect(probeWeight(whole)).toBe(1);
+    // The card sends the corps with the weight, though the husk is the one the attack would miss least.
+    const s = softenOptions(g, [husk, whole], target)!;
+    expect(s.probe.corps).toBe(whole.id);
+    expect(s.probe.wear).toBe(1);
+    expect(s.probe.weight).toBe(1);
+    // Alone, the husk is offered for what it can do, and the card says how much that is.
+    const thin = softenOptions(g, [husk], target)!;
+    if (thin.probe.corps === husk.id) { expect(thin.probe.wear).toBeCloseTo(0.3, 6); expect(thin.probe.weight).toBeCloseTo(0.3, 6); expect(thin.probe.full).toBe(30000); }
+    // The husk scratches the line: three tenths of a month, and everyone there is named all the same.
+    const rep = probeLine(g, husk, target)!;
+    expect(rep.wear).toBeCloseTo(0.3, 6);
+    expect(worksOf(def)).toBeCloseTo(1.7, 6);
+    expect(rep.found).toEqual(['Line 1']);
+  });
+
+  it('a corps that stands the month where fieldworks are empty takes them as its own', () => {
+    const g = playing('GER');
+    const r = g.byName['Berlin'];
+    for (const u of [...r.units]) if (u.kind !== 'fort') removeCorps(g, u);
+    const c = fresh(addCorps(g, 'GER', 'New Corps', 'inf', 3, r.id, {}));
+    delete c.dug; delete c.dugFor;
+    g.flags[`fw:${r.id}`] = 2; g.flags[`fwk:${r.id}`] = 1; g.flags[`fwn:${r.id}`] = Object.keys(g.nations).indexOf('GER');
+    expect(groundWorks(g, r.id)).toEqual({ months: 2, corps: 1, nat: 'GER' });
+    endPhase(g, 'GER');
+    expect(c.dug).toBe(true);
+    expect(worksOf(c)).toBeCloseTo(2, 6);
+    expect(groundWorks(g, r.id)).toBeNull();
+    // With nothing on the ground it digs its first month, as it always did.
+    const g2 = playing('GER');
+    const r2 = g2.byName['Berlin'];
+    const c2 = fresh(addCorps(g2, 'GER', 'New Corps', 'inf', 3, r2.id, {}));
+    delete c2.dug; delete c2.dugFor;
+    endPhase(g2, 'GER');
+    expect(c2.dug).toBe(true);
+    expect(worksOf(c2)).toBeCloseTo(1, 6);
+    // And a corps that marched or fought that month takes nothing: the works wait for whoever comes to stay.
+    const g3 = playing('GER');
+    const r3 = g3.byName['Berlin'];
+    for (const u of [...r3.units]) if (u.kind !== 'fort') removeCorps(g3, u);
+    const c3 = fresh(addCorps(g3, 'GER', 'New Corps', 'inf', 3, r3.id, {}));
+    delete c3.dug; delete c3.dugFor;
+    c3.fought = true;
+    g3.flags[`fw:${r3.id}`] = 2; g3.flags[`fwk:${r3.id}`] = 1; g3.flags[`fwn:${r3.id}`] = Object.keys(g3.nations).indexOf('GER');
+    endPhase(g3, 'GER');
+    expect(c3.dug).toBeFalsy();
+    expect(groundWorks(g3, r3.id)).not.toBeNull();
+  });
+});
+
+describe('two corps change places in one order', () => {
+  /** Two German provinces side by side, far from any enemy, each holding every corps its roads will carry. */
+  function full(g: Game): { a: Region; b: Region; as: Corps[]; bs: Corps[] } {
+    const a = g.byName['Berlin'];
+    const b = g.regions[a.nb.find((j) => g.regions[j].ctrl === 'GER' && g.regions[j].owner === 'GER' && !g.regions[j].nb.some((k) => g.regions[k].ctrl !== 'GER'))!];
+    for (const r of [a, b]) for (const u of [...r.units]) if (u.kind !== 'fort') removeCorps(g, u);
+    const as = Array.from({ length: STACK }, (_, i) => fresh(addCorps(g, 'GER', `Line ${i + 1}`, 'inf', 3, a.id, {})));
+    const bs = Array.from({ length: STACK }, (_, i) => fresh(addCorps(g, 'GER', `Reserve ${i + 1}`, 'inf', 3, b.id, {})));
+    for (const c of bs) { delete c.dug; delete c.dugFor; }
+    return { a, b, as, bs };
+  }
+
+  it('on a full front, where neither could march in first: each takes over what the other leaves', () => {
+    const g = playing('GER');
+    const { a, b, as, bs } = full(g);
+    // One worn corps in finished works, with others beside it that have none: the corps that comes in has first claim.
+    for (const c of as) { delete c.dug; delete c.dugFor; }
+    as[0].dug = true; as[0].dugFor = M;
+    as[0].str = 0.4;
+    // A march cannot do it: the province next door is full.
+    expect(moveCorps(g, as[0], b)).toBe(false);
+    expect(whyNoSwap(g, as[0], bs[0])).toBeNull();
+    expect(swapChoices(g, as[0], b.id).map((c) => c.id).sort()).toEqual(bs.map((c) => c.id).sort());
+    const ap = { a: as[0].ap, b: bs[0].ap };
+    expect(orderSwap(g, as[0], bs[0])).toBe(true);
+    expect(as[0].reg).toBe(b.id);
+    expect(bs[0].reg).toBe(a.id);
+    // The fresh corps stands in the works the worn one dug; the worn one, in the rear, has none.
+    expect(bs[0].dug).toBe(true);
+    expect(worksOf(bs[0])).toBeCloseTo(M, 6);
+    expect(as[0].dug).toBeFalsy();
+    expect(as.slice(1).some((c) => c.dug)).toBe(false);
+    expect(groundWorks(g, a.id)).toBeNull();
+    // Both marched, and both provinces hold what they held.
+    expect(as[0].ap).toBeLessThan(ap.a);
+    expect(bs[0].ap).toBeLessThan(ap.b);
+    for (const r of [a, b]) expect(r.units.filter((u) => u.kind !== 'fort' && !u.dead).length).toBe(STACK);
+    // The works it took over are its own when the month closes: it marched, so it digs nothing more, and loses nothing.
+    endPhase(g, 'GER');
+    expect(worksOf(bs[0])).toBeCloseTo(M, 6);
+  });
+
+  it('not without the moves, not across the map, not with a garrison, and not in a historical scenario', () => {
+    const g = playing('GER');
+    const { as, bs } = full(g);
+    bs[1].ap = 0;
+    expect(whyNoSwap(g, as[1], bs[1])).toMatch(/has not the moves/);
+    expect(orderSwap(g, as[1], bs[1])).toBe(false);
+    expect(whyNoSwap(g, as[1], as[2])).toMatch(/neighbouring/);
+    const far = g.corps.find((c) => c.nat === 'GER' && !c.dead && c.kind !== 'fort' && c.reg !== as[0].reg && c.reg !== bs[0].reg && !g.regions[as[0].reg].nb.includes(c.reg))!;
+    expect(whyNoSwap(g, as[1], far)).toMatch(/neighbouring/);
+    const guns = fresh(addCorps(g, 'GER', 'Sappers', 'eng', 1, as[0].reg, {}));
+    expect(whyNoSwap(g, guns, bs[2])).toMatch(/Engineers/);
+    // A corps of a country the player is not allied with is no partner, and the computer's month is not the player's.
+    const h = createGame(3, 'GER');
+    const hc = h.corps.filter((c) => c.nat === 'GER' && !c.dead && c.kind !== 'fort');
+    expect(whyNoSwap(h, hc[0], hc[1])).toMatch(/grand campaign/);
   });
 });
 
