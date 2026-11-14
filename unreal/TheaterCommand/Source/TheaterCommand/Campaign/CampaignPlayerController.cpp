@@ -5234,6 +5234,8 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 		Map->ShowWorksLeft(View.WorksLeft);
 		Map->ShowWrecked(View.Wrecked);
 		Map->SetWarAtNight(View.Blackout, View.Fronts);
+		Map->ShowFrontLine(View.Wars, View.Human);
+		Map->ShowIdle(View.Cold);
 		Map->ShowPrizes(View.Prizes);
 		Map->ShowWorksGoing(View.Going);
 		Map->ShowBuildings(View.RegionWorks);

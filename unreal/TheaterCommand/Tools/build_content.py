@@ -496,6 +496,11 @@ def build_land():
                                     one_in(m, unreal.MaterialExpressionSaturate, times(m, to_road, lerp(m, 26.0, 62.0, big, -250, 3080), -100, 3000), 50, 3000), 200, 3000),
                              times(m, square, (cover, "R"), 200, 3100), 350, 3050),
                  times(m, work, scalar(m, "SquareRoads", 0.55, 350, 3200), 500, 3200), 650, 3100)
+    # (From high up the quilt's pattern is let go but not its colour: "FieldsFlat" draws every field toward the mean
+    # of its own manner of field, the squares' gold or the strips' own, so that the plain keeps its colour when the
+    # fields are too small to be seen.)
+    tone = lerp(m, tone, lerp(m, vector(m, "QuiltMean", (1.0, 1.0, 1.0, 1.0), -400, 1850), vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), -400, 1950), square, -250, 1900),
+                scalar(m, "FieldsFlat", 0.0, -250, 2000), -100, 1850)
     quilt = lerp(m, 1.0, tone, times(m, (cover, "R"), scalar(m, "FieldsStrength", 0.45, -750, 1800), -600, 1800), -400, 1650)
     # Hedges: a thin dark line round each small field, seen only close to.
     part = one_in(m, unreal.MaterialExpressionFrac, rows, -1300, 2000)

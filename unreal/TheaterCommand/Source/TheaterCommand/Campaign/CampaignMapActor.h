@@ -249,8 +249,17 @@ public:
 	void ShowWorksLeft(const TArray<int32>& FromRules);
 	/** Factories that are not working (bombed, sabotaged, burnt): pairs, the region and how many. Their works stand as wrecks and their chimneys are cold. */
 	void ShowWrecked(const TArray<int32>& FromRules);
+	/** Provinces with factories and nothing on order: their chimneys stand cold, the town's own and those of works built since. */
+	void ShowIdle(const TArray<int32>& FromRules);
 	/** Works going up from the arsenal: pairs, the region and what. A builder's yard in scaffolding stands there meanwhile. Call it before ShowBuildings. */
 	void ShowWorksGoing(const TArray<int32>& FromRules);
+	/**
+	 * The drawn front line (release 1): the wars as pairs of tags, and whom the player leads. A crayon line is laid
+	 * along every frontier between the holdings of two countries at war: bold, with barbs toward the enemy, where
+	 * it is the player's war; thin and plain where others fight. It is redrawn whenever ground changes hands.
+	 */
+	void ShowFrontLine(const TArray<FString>& Wars, const FString& Player);
+	void BuildFrontLine();
 	/** Flies the holder's flag from the great building of every capital that is not in its own country's hands. */
 	void ShowVictorFlags();
 	void DrawVictorFlags();
@@ -511,6 +520,8 @@ private:
 		double Began = 0.0;
 	};
 	TArray<FVector> TownChimneys; // the tops of the chimneys of the towns' own works
+	TArray<int32> TownChimneyRegion; // (and the region each of them stands in)
+	TSet<int32> IdleIn; // provinces with nothing on order: no smoke from their stacks
 	TArray<FVector> TownWindows; // the windows of the towns' houses, each as its place and the way it faces
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> LightsMesh; // those windows lit, at night
@@ -558,6 +569,21 @@ private:
 	TMap<int32, int32> WreckedIn; // by region: how many of its factories are not working
 	TMap<int32, int32> GoingIn; // by region: what is being built there (bits: see ShowWorksGoing)
 	TMap<int32, FVector> TownLandmarks; // by region: the highest point of a capital's great building, on the table
+	struct FSharedEdge
+	{
+		FVector2D A = FVector2D::ZeroVector, B = FVector2D::ZeroVector;
+		FVector2D Side = FVector2D::ZeroVector; // across the edge, out of Here and into There
+		int32 Here = INDEX_NONE, There = INDEX_NONE;
+	};
+	TArray<FSharedEdge> SharedEdges; // every stretch of line two provinces share, found once (see BuildFrontLine)
+	bool bSharedEdgesKnown = false;
+	TArray<FString> WarPairs; // the wars, as the rules last gave them
+	FString WarPlayer;
+	TSet<FString> WarSet; // the same, as "AAA|BBB" both ways round
+	TSet<FString> WarFoes; // whom the player is at war with
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> FrontLineMesh;
+	int32 FrontLineFar = -1; // which weight of the line is shown: 0 the working one, 1 the staff map's (none yet: -1)
 	struct FVictorFlag
 	{
 		FString Tag; // whose flag flies there (none: it is on its way down for good)
@@ -600,6 +626,8 @@ private:
 	double MarginLine = 11.0; // (round a world) how wide the chart's ruled border is drawn, in the world's units
 	float SquareWorkShown = -1.0f; // (round a world) how much of the prairie's roads and furrows is shown at this height
 	float FarFieldsShown = -1.0f; // (round a world) how strong the quilt of fields is on the world's coarse sheet
+	float FarFlatShown = -1.0f; // how far the world's far sheet has its fields drawn to their mean
+	FLinearColor QuiltMean = FLinearColor::White; // the mean of the quilt's tones, as the land's paint reads them
 	float WoodsLiftShown = -1.0f; // (round a world) how much more is asked of a wood on the coarse sheet before it is drawn
 	/** The paper's own colours by the hour: parchment and a pale sea by day, dim paper by night. */
 	void ApplyPaperLight();

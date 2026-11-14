@@ -23661,6 +23661,24 @@
         }
         return out;
       })(),
+      // Cold chimneys (Brian's pick, the idle half): from his second month on, when the player has nothing at all on
+      // order and the arsenal has something he could order (the very state the NOTHING IS ON ORDER chip tells of,
+      // whoever runs the desk), the stacks of every factory town he holds stand cold, so
+      // idle industry shows at a glance. (Orders here are placed with the country's arsenal, not with one factory:
+      // counted town by town, all but two or three of a country's towns would stand cold in every month of the war.
+      // Other countries' order books are their own secret, so their chimneys say nothing about them.)
+      cold: (() => {
+        try {
+          const me = s.human ? s.nations[s.human] : null;
+          if (!me || !me.alive || me.queue.length > 0) return [];
+          if (!arsenalOffers(s, -1).some((o) => !o.why)) return [];
+          const began = s.flags.began;
+          if (began !== void 0 && s.turn <= began) return [];
+          return s.regions.filter((r) => r.fac > 0 && r.ctrl === me.id).map((r) => r.id);
+        } catch {
+          return [];
+        }
+      })(),
       // Ground the player has no eyes on (where the fog of war is kept): the map dims it.
       unseen: s.human ? s.regions.filter((r) => seen2[r.id] === 0).map((r) => r.id) : [],
       // The weather the rules keep: mud in the east in spring and autumn, and the eastern winter. With it, the ground it lies on.
@@ -23806,6 +23824,16 @@
       // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
       // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
       dark: Object.values(s.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
+      // For the drawn front line (release 1): every pair of living nations at war, tag by tag, two by two. The table
+      // draws the line itself along every frontier between two such holders, so it moves the moment ground changes hands.
+      wars: (() => {
+        const out = [];
+        for (const n of Object.values(s.nations)) {
+          if (!n.alive) continue;
+          for (const b of n.atWar) if (n.id < b && s.nations[b]?.alive) out.push(n.id, b);
+        }
+        return out.slice(0, 400);
+      })(),
       fronts: (() => {
         const there = /* @__PURE__ */ new Map();
         for (const c of s.corps) {
@@ -24247,6 +24275,7 @@
       } catch {
       }
     }
+    if (human) g.flags.began = g.turn;
     if (from > 1) takeOver(g);
     if (human) {
       openGoals(g, human, from);

@@ -1127,8 +1127,9 @@ void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, in
 				// The two arms of the wake, spreading from her quarters: thin lines, thinner as they go.
 				for (const double Side : { -1.0, 1.0 })
 				{
-					const FVector C0 = Sea - Ahead * (Half * (0.7 + 1.7 * S0)) + Abeam * (Side * Beam * (0.44 + 1.25 * S0));
-					const FVector C1 = Sea - Ahead * (Half * (0.7 + 1.7 * S1)) + Abeam * (Side * Beam * (0.44 + 1.25 * S1));
+					// (half a ship's length and no more: longer, and three ships abreast drew crossing lines)
+					const FVector C0 = Sea - Ahead * (Half * (0.7 + 0.95 * S0)) + Abeam * (Side * Beam * (0.44 + 0.7 * S0));
+					const FVector C1 = Sea - Ahead * (Half * (0.7 + 0.95 * S1)) + Abeam * (Side * Beam * (0.44 + 0.7 * S1));
 					const double A0 = Beam * 0.085 * (1.0 - S0), A1 = Beam * 0.085 * (1.0 - S1);
 					Quad(C0 - Abeam * A0, C0 + Abeam * A0, C1 + Abeam * A1, C1 - Abeam * A1, Up, FMath::Lerp(Foam, Water, 0.25 + 0.25 * (S0 + S1) * 0.5).ToFColor(true));
 				}

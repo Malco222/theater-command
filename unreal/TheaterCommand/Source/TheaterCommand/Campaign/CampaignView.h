@@ -372,6 +372,8 @@ struct FCampaignView
 	// For the night: the nations at war (their towns are blacked out), and the fronts as pairs of regions.
 	TArray<FString> Blackout;
 	TArray<int32> Fronts;
+	TArray<FString> Wars; // every pair of nations at war, two by two: the front line is drawn between their holdings
+	TArray<int32> Cold; // provinces with factories and nothing on order, where the player can know it: their chimneys stand cold
 	TArray<FPrizeMark> Prizes; // provinces to mark for their prizes: a fire where one is wrecked, a pennant where a besieger holds one
 	TArray<FString> Alerts; // things to tell the player as his month opens
 	TArray<FString> PageIds; // the rooms the rules set out themselves that are open to him

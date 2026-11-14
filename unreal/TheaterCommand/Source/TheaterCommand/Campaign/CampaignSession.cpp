@@ -458,6 +458,15 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			}
 		}
 		Object->TryGetStringArrayField(TEXT("dark"), Out.Blackout);
+		Object->TryGetStringArrayField(TEXT("wars"), Out.Wars);
+		const TArray<TSharedPtr<FJsonValue>>* Cold = nullptr;
+		if (Object->TryGetArrayField(TEXT("cold"), Cold))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Cold)
+			{
+				Out.Cold.Add(FMath::RoundToInt32(Value->AsNumber()));
+			}
+		}
 		const TArray<TSharedPtr<FJsonValue>>* Fronts = nullptr;
 		if (Object->TryGetArrayField(TEXT("fronts"), Fronts))
 		{

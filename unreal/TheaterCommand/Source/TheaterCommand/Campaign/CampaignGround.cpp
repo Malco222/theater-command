@@ -371,9 +371,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				// (The corn belt, from 96 to 82 west and 37.5 to 43.5 north: ploughed nearly from edge to edge. Its
 				// woods are thinned to about a third of what the look would stand there, with soft edges; the South
 				// keeps its own.)
-				const float Belt = FMath::SmoothStep(-97.0f, -95.0f, Longitude) * (1.0f - FMath::SmoothStep(-83.0f, -81.0f, Longitude))
+				// (a sheet may count the Americas' longitudes eastward past 180: the far sheet did, and kept its woods)
+				const float West = Longitude > 180.0f ? Longitude - 360.0f : Longitude;
+				const float Belt = FMath::SmoothStep(-97.0f, -95.0f, West) * (1.0f - FMath::SmoothStep(-83.0f, -81.0f, West))
 					* FMath::SmoothStep(36.5f, 38.5f, Latitude) * (1.0f - FMath::SmoothStep(42.5f, 44.5f, Latitude));
-				Woods[Idx] -= 0.085f * Belt;
+				// (the far sheet's woods answer the same lean far more sharply: there, half of it leaves a third standing)
+				Woods[Idx] -= (Terrain.Cell > 3.0 ? 0.045f : 0.085f) * Belt;
 				Dry[Idx] = Shares[WorldLook::Desert] * Out;
 			}
 		}

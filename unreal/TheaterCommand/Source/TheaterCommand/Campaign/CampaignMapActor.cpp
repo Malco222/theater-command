@@ -485,6 +485,178 @@ void ACampaignMapActor::DrawVictorFlags()
 	}
 }
 
+void ACampaignMapActor::ShowFrontLine(const TArray<FString>& Wars, const FString& Player)
+{
+	if (Wars == WarPairs && Player == WarPlayer && FrontLineMesh)
+	{
+		return;
+	}
+	WarPairs = Wars;
+	WarPlayer = Player;
+	WarSet.Reset();
+	WarFoes.Reset();
+	for (int32 K = 0; K + 1 < Wars.Num(); K += 2)
+	{
+		WarSet.Add(Wars[K] + TEXT("|") + Wars[K + 1]);
+		WarSet.Add(Wars[K + 1] + TEXT("|") + Wars[K]);
+		if (Wars[K] == Player)
+		{
+			WarFoes.Add(Wars[K + 1]);
+		}
+		else if (Wars[K + 1] == Player)
+		{
+			WarFoes.Add(Wars[K]);
+		}
+	}
+	BuildFrontLine();
+}
+
+void ACampaignMapActor::BuildFrontLine()
+{
+	// The front, drawn as a staff officer draws it: a crayon line along every frontier between the holdings of two
+	// countries at war. Where the war is the player's (the country beyond is one he is at war with, and the country
+	// on this side is not) the line is vermilion over a dark edge, with small barbs along it that point at the
+	// enemy. Where two others fight, it is a thinner buff line with no barbs. It lies on the ground with the other
+	// inked lines, under every piece and flag, and it is laid in two weights: one for working height, and a
+	// heavier one that can be read from the staff map's height (see UpdateForCamera).
+	if (!Data.IsLoaded())
+	{
+		return;
+	}
+	if (!FrontLineMesh)
+	{
+		FrontLineMesh = NewObject<UProceduralMeshComponent>(this);
+		FrontLineMesh->SetupAttachment(Root);
+		FrontLineMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		FrontLineMesh->RegisterComponent();
+		FrontLineMesh->SetCastShadow(false);
+	}
+	FrontLineMesh->ClearAllMeshSections();
+	FrontLineFar = -1;
+	if (WarSet.Num() == 0 || FParse::Param(FCommandLine::Get(), TEXT("TheaterNoFrontLine")))
+	{
+		return;
+	}
+	if (!bSharedEdgesKnown)
+	{
+		// Every stretch of line two provinces share, found once: what lies just across each edge of each ring.
+		bSharedEdgesKnown = true;
+		SharedEdges.Reset();
+		for (const FCampaignRegion& Region : Data.Regions)
+		{
+			for (const TArray<FVector2D>& Ring : Region.Polygons)
+			{
+				double SignedArea = 0.0;
+				for (int32 i = 0, n = Ring.Num(); i < n; ++i)
+				{
+					SignedArea += Ring[i].X * Ring[(i + 1) % n].Y - Ring[(i + 1) % n].X * Ring[i].Y;
+				}
+				const double Outward = SignedArea >= 0.0 ? 1.0 : -1.0;
+				for (int32 i = 0, n = Ring.Num(); i < n; ++i)
+				{
+					const FVector2D A = Ring[i], B = Ring[(i + 1) % n];
+					const double Length = FVector2D::Distance(A, B);
+					if (Length < 0.05)
+					{
+						continue;
+					}
+					const FVector2D Dir = (B - A) / Length, Side = FVector2D(Dir.Y, -Dir.X) * Outward;
+					const FVector2D Probe = (A + B) * 0.5 + Side * 0.35;
+					const int32 Other = Data.FindRegionAt(Probe.X, Probe.Y);
+					if (Other == INDEX_NONE || Other == Region.Id || Other < Region.Id)
+					{
+						continue; // coast, or a line the neighbour has already given
+					}
+					FSharedEdge& Edge = SharedEdges.AddDefaulted_GetRef();
+					Edge.A = A;
+					Edge.B = B;
+					Edge.Side = Side;
+					Edge.Here = Region.Id;
+					Edge.There = Other;
+				}
+			}
+		}
+	}
+	const FColor Vermilion = FromHex(TEXT("A63A2C")).ToFColor(true), Edging = FromHex(TEXT("2A1410")).ToFColor(true);
+	const FColor Buff = FromHex(TEXT("8A8172")).ToFColor(true), BuffEdging = FromHex(TEXT("2A2420")).ToFColor(true);
+	FCampaignMeshBuffers Weights[2];
+	static const double Heavier[2] = { 1.0, 2.7 };
+	int32 Mine = 0, Theirs = 0;
+	double ToBarb = 1.1;
+	for (const FSharedEdge& Edge : SharedEdges)
+	{
+		const FString& Here = Data.Regions[Edge.Here].Owner;
+		const FString& There = Data.Regions[Edge.There].Owner;
+		if (Here == There || !WarSet.Contains(Here + TEXT("|") + There))
+		{
+			continue;
+		}
+		const bool bHereFoe = WarFoes.Contains(Here), bThereFoe = WarFoes.Contains(There);
+		const bool bMine = bHereFoe != bThereFoe;
+		(bMine ? Mine : Theirs)++;
+		const FVector2D Toward = bThereFoe ? Edge.Side : -Edge.Side; // (toward the player's enemy)
+		const double Length = FVector2D::Distance(Edge.A, Edge.B);
+		const FVector2D Dir = (Edge.B - Edge.A) / Length;
+		// (where the barbs stand along this edge: evenly along the whole front, whatever the lengths of its edges)
+		TArray<double, TInlineAllocator<8>> Barbs;
+		if (bMine)
+		{
+			for (double Along = ToBarb; Along < Length; Along += 2.2)
+			{
+				Barbs.Add(Along);
+			}
+			ToBarb = Barbs.Num() > 0 ? Barbs.Last() + 2.2 - Length : ToBarb - Length;
+		}
+		for (int32 Weight = 0; Weight < 2; ++Weight)
+		{
+			FCampaignMeshBuffers& Into = Weights[Weight];
+			const double W = Heavier[Weight] * (bMine ? 1.0 : 0.62);
+			auto Ribbon = [&](double HalfWidth, double Lift, const FColor& Ink)
+			{
+				const int32 Steps = FMath::Max(1, FMath::CeilToInt32(Length / 1.4));
+				int32 PrevLeft = INDEX_NONE, PrevRight = INDEX_NONE;
+				for (int32 k = 0; k <= Steps; ++k)
+				{
+					const double T = k == 0 ? -HalfWidth * 0.6 : (k == Steps ? Length + HalfWidth * 0.6 : Length * k / Steps);
+					const FVector2D P = Edge.A + Dir * T;
+					const FVector2D L = P + Edge.Side * HalfWidth, R = P - Edge.Side * HalfWidth;
+					const int32 Left = Into.AddVertex(SurfacePointOver(L.X, L.Y, Lift), FVector::UpVector, Ink);
+					const int32 Right = Into.AddVertex(SurfacePointOver(R.X, R.Y, Lift), FVector::UpVector, Ink);
+					if (PrevLeft != INDEX_NONE)
+					{
+						Into.AddTriangleFacingUp(PrevLeft, PrevRight, Left);
+						Into.AddTriangleFacingUp(PrevRight, Left, Right);
+					}
+					PrevLeft = Left;
+					PrevRight = Right;
+				}
+			};
+			Ribbon(0.36 * W, 0.16, bMine ? Edging : BuffEdging);
+			Ribbon(0.22 * W, 0.2, bMine ? Vermilion : Buff);
+			for (const double Along : Barbs)
+			{
+				// (a barb: a small dark-edged tooth of the same crayon, standing off the line toward the enemy)
+				const FVector2D Foot = Edge.A + Dir * Along;
+				auto Tooth = [&](double Base, double Reach, double Lift, const FColor& Ink)
+				{
+					const FVector2D P0 = Foot - Dir * Base, P1 = Foot + Dir * Base, P2 = Foot + Toward * Reach;
+					const int32 I0 = Into.AddVertex(SurfacePointOver(P0.X, P0.Y, Lift), FVector::UpVector, Ink);
+					const int32 I1 = Into.AddVertex(SurfacePointOver(P1.X, P1.Y, Lift), FVector::UpVector, Ink);
+					const int32 I2 = Into.AddVertex(SurfacePointOver(P2.X, P2.Y, Lift), FVector::UpVector, Ink);
+					Into.AddTriangleFacingUp(I0, I1, I2);
+				};
+				Tooth(0.5 * W, 0.98 * W, 0.17, Edging);
+				Tooth(0.34 * W, 0.74 * W, 0.21, Vermilion);
+			}
+		}
+	}
+	Weights[0].Commit(FrontLineMesh, 0, InkMaterial);
+	Weights[1].Commit(FrontLineMesh, 1, InkMaterial);
+	FrontLineMesh->SetMeshSectionVisible(1, false);
+	FrontLineFar = 0;
+	UE_LOG(LogTheater, Log, TEXT("The front line: %d stretches of the player's own fronts, %d of others' (%d wars)"), Mine, Theirs, WarPairs.Num() / 2);
+}
+
 void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
 {
 	// Factories that are not working: the province and how many. The towns are built again only when that changes
@@ -524,6 +696,27 @@ void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
 	if (bTowns)
 	{
 		BuildTowns();
+	}
+}
+
+void ACampaignMapActor::ShowIdle(const TArray<int32>& FromRules)
+{
+	// Only the smoke changes: the stacks stand as they are, and the plumes are drawn afresh every frame.
+	IdleIn.Reset();
+	IdleIn.Append(FromRules);
+	// ("-TheaterIdle=Berlin,Hamburg" stands a city idle for a picture)
+	FString Asked;
+	if (FParse::Value(FCommandLine::Get(), TEXT("TheaterIdle="), Asked, false))
+	{
+		TArray<FString> Places;
+		Asked.ParseIntoArray(Places, TEXT(","));
+		for (const FString& Place : Places)
+		{
+			if (const int32* Id = Data.RegionByName.Find(Place))
+			{
+				IdleIn.Add(*Id);
+			}
+		}
 	}
 }
 
@@ -856,6 +1049,18 @@ void ACampaignMapActor::PaintGround()
 	BumpsPicture = CampaignTextures::Create(CampaignTextures::DetailSize, CampaignTextures::DetailSize, Pixels, false, true, TEXT("TableBumps"));
 	// The fields of the quilt: one pixel a field, read without smoothing so that each keeps its own tone and its edge.
 	CampaignTextures::MakeFields(Pixels);
+	{
+		// (the mean of the quilt's own tones, as the land's paint reads them: what the strips fade toward from high up)
+		double Sum[3] = { 0.0, 0.0, 0.0 };
+		for (const FColor& Pixel : Pixels)
+		{
+			Sum[0] += Pixel.R;
+			Sum[1] += Pixel.G;
+			Sum[2] += Pixel.B;
+		}
+		const double Share = Pixels.Num() > 0 ? 2.0 / (255.0 * Pixels.Num()) : 0.0;
+		QuiltMean = Pixels.Num() > 0 ? FLinearColor(Sum[0] * Share, Sum[1] * Share, Sum[2] * Share) : FLinearColor::White;
+	}
 	FieldsPicture = CampaignTextures::Create(CampaignTextures::FieldsSize, CampaignTextures::FieldsSize, Pixels, false, true, TEXT("TableFields"));
 	if (FieldsPicture)
 	{
@@ -922,6 +1127,7 @@ void ACampaignMapActor::PaintGround()
 		LandVector(TEXT("FieldGreen"), Green);
 		// (a part in five is green and a part in five fallow, so that the plain reads gold; and what the crops fade toward from high up)
 		LandVector(TEXT("FieldMean"), Wheat * 0.6f + Fallow * 0.2f + Green * 0.2f);
+		LandVector(TEXT("QuiltMean"), QuiltMean);
 	}
 	{
 		// Woods on a warm-stained nation (Poland's red, Holland's orange) went chocolate: a very dark green takes
@@ -2760,7 +2966,7 @@ void ACampaignMapActor::BuildWorks()
 			}
 			++TownBridges;
 			UE_LOG(LogTheater, Verbose, TEXT("A town bridge at %s"), *Region.Name);
-			TownBridgeNames += (TownBridgeNames.IsEmpty() ? TEXT("") : TEXT(", ")) + Region.Name;
+			TownBridgeNames += (TownBridgeNames.IsEmpty() ? TEXT("") : TEXT(", ")) + FString::Printf(TEXT("%s (%.0f,%.0f)"), *Region.Name, At.X, At.Y);
 		}
 	}
 	UE_LOG(LogTheater, Log, TEXT("Towns with a bridge of their own: %s"), *TownBridgeNames);
@@ -3655,6 +3861,7 @@ void ACampaignMapActor::BuildTowns()
 	const double U = UnitScale;
 	int32 Count = 0;
 	TownChimneys.Reset();
+	TownChimneyRegion.Reset();
 	TownWindows.Reset();
 	PaneRegion.Reset();
 	TownQuarters.Reset();
@@ -3772,6 +3979,11 @@ void ACampaignMapActor::BuildTowns()
 		TArray<FVector2D> Quarters;
 		FVector Beacon = FVector::ZeroVector, LandmarkTop = FVector::ZeroVector;
 		Model.Township(Site, &TownChimneys, &Quarters, &Beacon, &LandmarkTop);
+		TownChimneyRegion.SetNumZeroed(TownChimneys.Num()); // (the new ones are this town's)
+		for (int32 Stack = TownChimneyRegion.Num() - 1; Stack >= 0 && TownChimneyRegion[Stack] == 0; --Stack)
+		{
+			TownChimneyRegion[Stack] = Region.Id + 1;
+		}
 		if (!LandmarkTop.IsZero())
 		{
 			TownLandmarks.Add(Region.Id, LandmarkTop);
@@ -5744,6 +5956,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		}
 	}
 	ShowVictorFlags(); // (a capital that has changed hands flies its new holder's flag, or its own country's is home again)
+	BuildFrontLine(); // (and the front is drawn where it now runs)
 	// Only the nations' paint changes: the land itself is left as it is.
 	Paint.PaintTint(Data, Terrain, I0, J0, I1, J1);
 	CampaignTextures::Update(TintPicture, Paint.Tint);
@@ -7044,6 +7257,11 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	}
 	for (int32 K = 0; K < TownChimneys.Num(); ++K)
 	{
+		// (a city with nothing on order is idle, and its stacks stand cold)
+		if (TownChimneyRegion.IsValidIndex(K) && IdleIn.Contains(TownChimneyRegion[K] - 1))
+		{
+			continue;
+		}
 		Plume(TownChimneys[K], K);
 	}
 	for (int32 K = 0; K < WorksChimneys.Num(); ++K)
@@ -7052,6 +7270,10 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 		// stand cold too, as many as are wrecked.)
 		if (WorksChimneyRegion.IsValidIndex(K) && Data.Regions.IsValidIndex(WorksChimneyRegion[K].X)
 			&& WorksChimneyRegion[K].Y < WreckedIn.FindRef(WorksChimneyRegion[K].X) - Data.Regions[WorksChimneyRegion[K].X].Factories)
+		{
+			continue;
+		}
+		if (WorksChimneyRegion.IsValidIndex(K) && IdleIn.Contains(WorksChimneyRegion[K].X))
 		{
 			continue;
 		}
@@ -7177,6 +7399,17 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	{
 		DrawVictorFlags(); // (a flag on its way up or down a captured capital's pole)
 	}
+	// The front line is drawn heavier from the staff map's height, where the working line would be a hair.
+	if (FrontLineMesh && FrontLineFar >= 0)
+	{
+		const int32 Far = CameraDistance > (FrontLineFar == 1 ? 8200.0f : 9000.0f) ? 1 : 0;
+		if (Far != FrontLineFar)
+		{
+			FrontLineFar = Far;
+			FrontLineMesh->SetMeshSectionVisible(0, Far == 0);
+			FrontLineMesh->SetMeshSectionVisible(1, Far == 1);
+		}
+	}
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSorties();
 	UpdateTrains(CameraFocus, CameraDistance);
@@ -7264,7 +7497,11 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	// (On the world's coarse sheet, which is what is seen from high up beyond Europe, the quilt all but goes as the
 	// eye climbs: its squares and strips were ruled lines from there, and where one manner of field met another the
 	// ground stepped along a ruled line.)
-	const float FarFields = Fields * (1.0f - 0.85f * FMath::SmoothStep(11000.0f, 18000.0f, CameraDistance));
+	// (The art director's ruling of round 13: fading the quilt itself cost the plains a sixth of their colour. So
+	// the quilt keeps its strength and its fields are drawn toward the mean of their own kind instead: the pattern
+	// goes, the gold stays.)
+	const float FarFlat = 0.85f * FMath::SmoothStep(11000.0f, 18000.0f, CameraDistance);
+	const float FarFields = Fields;
 	const bool bFieldsMoved = LandMaterial && FMath::Abs(Fields - FieldsShown) > 0.005f;
 	if (bFieldsMoved)
 	{
@@ -7275,6 +7512,11 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	{
 		FarFieldsShown = FarFields;
 		WorldLandMaterial->SetScalarParameterValue(TEXT("FieldsStrength"), FarFields);
+	}
+	if (WorldLandMaterial && FMath::Abs(FarFlat - FarFlatShown) > 0.003f)
+	{
+		FarFlatShown = FarFlat;
+		WorldLandMaterial->SetScalarParameterValue(TEXT("FieldsFlat"), FarFlat);
 	}
 	if (LandMaterial && FMath::Abs(Hedges - HedgesShown) > 0.005f)
 	{
