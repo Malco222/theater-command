@@ -316,10 +316,29 @@ void ACampaignMapActor::LoadMaterials()
 	SleeperInk = MakeInk();
 	// The pieces: painted metal and cloth, not bare plastic. A fine grain in the paint and a slight tooth to the
 	// surface catch the lamp, at a scale that suits things the size of a model.
+	FMiniatureMesh::bTrialTank = FParse::Param(FCommandLine::Get(), TEXT("TheaterTrialTank")); // (the sculpted trial tank on every armoured base, to be judged)
 	PieceMaterial = MakeSurface(0.56f, 0.4f, 0.1f, 0.3f);
 	PieceMaterial->SetScalarParameterValue(TEXT("GrainTilingCoarse"), 0.012f);
 	PieceMaterial->SetScalarParameterValue(TEXT("GrainTilingFine"), 0.06f);
 	PieceMaterial->SetScalarParameterValue(TEXT("ToothTiling"), 0.09f);
+	{
+		// The paint job (art fix 12): the pieces' paint is weathered, and on their metal it is chipped to the bare
+		// metal in patches. ("-TheaterWear=wear,chip tiling,blot tiling,chip at,chip sharp" tries others; 0 for none.)
+		float Worn[5] = { 1.0f, 0.018f, 0.005f, -0.52f, 9.0f };
+		FString Asked;
+		TArray<FString> Bits;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterWear="), Asked, false) && Asked.ParseIntoArray(Bits, TEXT(",")) > 0)
+		{
+			for (int32 K = 0; K < Bits.Num() && K < 5; ++K) { Worn[K] = FCString::Atof(*Bits[K]); }
+		}
+		FMiniatureMesh::bOldPieces = FParse::Param(FCommandLine::Get(), TEXT("TheaterOldPieces"));
+		PieceMaterial->SetScalarParameterValue(TEXT("Wear"), FMiniatureMesh::bOldPieces ? 0.0f : Worn[0]);
+		PieceMaterial->SetScalarParameterValue(TEXT("ChipTiling"), Worn[1]);
+		PieceMaterial->SetScalarParameterValue(TEXT("BlotTiling"), Worn[2]);
+		PieceMaterial->SetScalarParameterValue(TEXT("ChipAt"), Worn[3]);
+		PieceMaterial->SetScalarParameterValue(TEXT("ChipSharp"), Worn[4]);
+		PieceMaterial->SetVectorParameterValue(TEXT("ChipColour"), FLinearColor(0.3f, 0.285f, 0.26f)); // (bare steel, a little rusted)
+	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
 	{
 		PieceMaterial = MakeSurface(0.5f, 0.38f, 0.0f, 0.0f); // as it was: smooth and a little shiny, like moulded plastic
@@ -2824,12 +2843,13 @@ void ACampaignMapActor::ApplyPaperLight()
 	const float Dry = FMath::Lerp(1.0f, PaperNight[0], Moon), Water = FMath::Lerp(1.0f, PaperNight[1], Moon), Thin = FMath::Lerp(1.0f, PaperNight[2], Moon);
 	LandMaterial->SetVectorParameterValue(TEXT("PaperColour"), FLinearColor(PaperLand[0], PaperLand[1], PaperLand[2]) * Dry);
 	LandMaterial->SetVectorParameterValue(TEXT("PaperInk"), FLinearColor(0.2f, 0.135f, 0.075f) * FMath::Lerp(1.0f, 0.6f, Moon));
-	LandMaterial->SetVectorParameterValue(TEXT("FogColour"), FLinearColor(0.15f, 0.128f, 0.085f) * FMath::Lerp(1.0f, 0.62f, Moon));
+	// (by night unseen ground is lifted and warmed against the moon's blue: it was the colour of the sea beside it, and the coast was lost)
+	LandMaterial->SetVectorParameterValue(TEXT("FogColour"), FMath::Lerp(FLinearColor(0.15f, 0.128f, 0.085f), FLinearColor(0.3f, 0.13f, 0.024f), Moon));
 	LandMaterial->SetScalarParameterValue(TEXT("HatchSharp"), -13.0f);
 	LandMaterial->SetScalarParameterValue(TEXT("PaperShade"), PaperLand[3]);
 	LandMaterial->SetScalarParameterValue(TEXT("PaperSun"), PaperLand[4]);
 	LandMaterial->SetScalarParameterValue(TEXT("PaperWash"), PaperLand[5] * Thin);
-	LandMaterial->SetScalarParameterValue(TEXT("PaperBand"), PaperLand[6] * FMath::Lerp(1.0f, 0.8f, Moon));
+	LandMaterial->SetScalarParameterValue(TEXT("PaperBand"), PaperLand[6] * FMath::Lerp(1.0f, 0.5f, Moon)); // (a pale holder's band and wash must not glow on the night sheet)
 	const FLinearColor Sea(PaperSeaTone[0], PaperSeaTone[1], PaperSeaTone[2]);
 	const float Grey = Sea.GetLuminance();
 	const FLinearColor NightSea = FMath::Lerp(Sea, FLinearColor(Grey, Grey, Grey), 0.25f * Moon) * Water;

@@ -134,7 +134,38 @@ def build_map_surface():
     connect(weights2, "", light2, "B")
     sketched = times(m, vector(m, "DrawnTone", (1.0, 0.92, 0.76, 1.0), -300, -1150), light2, -150, -1050)
     tinted = lerp(m, tinted, lerp(m, tinted, sketched, 0.55, 0, -950), drawn, 150, -500)
+    # The paint job of a piece (art fix 12): worn painted metal. "Wear" is nothing unless C++ says so (the pieces'
+    # own material does). All paint is mottled a little, as paint is that has seen weather. Where the mesh marks
+    # itself as painted metal (its alpha at a half: the tanks, guns, lorries, ships and aircraft), the paint is
+    # chipped down to the bare metal in small patches, and the metal shines where the paint has gone. The marks are
+    # laid out in the piece's own space, so they stay put on it when it is picked up and carried.
+    wear = scalar(m, "Wear", 0.0, 300, -1500)
+    metal = one_in(m, unreal.MaterialExpressionSaturate, times(m, one_in(m, unreal.MaterialExpressionOneMinus, (colour, "A"), -900, -1500), 2.0, -750, -1500), -600, -1500)
+    own = node(m, unreal.MaterialExpressionTransformPosition, -1500, -1700,
+               transform_source_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD,
+               transform_type=unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    connect(node(m, unreal.MaterialExpressionWorldPosition, -1750, -1700), "", own, "")
+    own_xy = node(m, unreal.MaterialExpressionComponentMask, -1300, -1750, r=True, g=True, b=False, a=False)
+    connect(own, "", own_xy, "")
+    own_z = node(m, unreal.MaterialExpressionComponentMask, -1300, -1650, r=False, g=False, b=True, a=False)
+    connect(own, "", own_z, "")
+    skew = node(m, unreal.MaterialExpressionConstant2Vector, -1300, -1550, r=0.37, g=0.61)
+    spread = plus(m, own_xy, times(m, own_z, skew, -1100, -1600), -950, -1700)
+    chip_uv = times(m, spread, scalar(m, "ChipTiling", 0.035, -950, -1580), -800, -1700)
+    blot_uv = times(m, spread, scalar(m, "BlotTiling", 0.009, -950, -1480), -800, -1560)
+    speck = node(m, unreal.MaterialExpressionTextureSample, -600, -1750, texture=noise, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    connect(chip_uv, "", speck, "UVs")
+    blot = node(m, unreal.MaterialExpressionTextureSample, -600, -1560, texture=noise, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+    connect(blot_uv, "", blot, "UVs")
+    # (a chip where the fine noise and the broad one are both high: chips come in patches, not evenly)
+    chipped = times(m, times(m, one_in(m, unreal.MaterialExpressionSaturate,
+                                       times(m, plus(m, times(m, (speck, "R"), plus(m, (blot, "G"), 0.5, -350, -1650), -200, -1700), scalar(m, "ChipAt", -0.78, -350, -1800), -50, -1750),
+                                             scalar(m, "ChipSharp", 9.0, -50, -1850), 100, -1750), 250, -1750), metal, 400, -1750), wear, 550, -1750)
+    weathered = times(m, tinted, lerp(m, 1.0, plus(m, times(m, (blot, "R"), 0.42, -350, -1500), 0.8, -200, -1500),
+                                      times(m, wear, plus(m, times(m, metal, 0.5, 100, -1450), 0.5, 200, -1450), 300, -1450), 450, -1500), 600, -900)
+    tinted = lerp(m, weathered, vector(m, "ChipColour", (0.13, 0.125, 0.12, 1.0), 450, -1300), chipped, 750, -900)
     to_property(tinted, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    to_property(times(m, chipped, 0.85, 750, -700), "", unreal.MaterialProperty.MP_METALLIC)
 
     # Tooth: the engine's paper bump, laid flat and faded in by a strength.
     paper = unreal.load_asset("/Engine/EngineMaterials/PaperNormal")
@@ -147,7 +178,8 @@ def build_map_surface():
     connect(scalar(m, "Tooth", 0.35, -850, 1250), "", tooth, "Alpha")
     to_property(tooth, "", unreal.MaterialProperty.MP_NORMAL)
 
-    to_property(scalar(m, "Roughness", 0.9, -450, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    # (bare metal is smoother than paint: the lamp glints on the chips)
+    to_property(lerp(m, scalar(m, "Roughness", 0.9, -450, 200), 0.34, chipped, -250, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
     to_property(scalar(m, "Specular", 0.25, -450, 300), "", unreal.MaterialProperty.MP_SPECULAR)
     finish(m)
 

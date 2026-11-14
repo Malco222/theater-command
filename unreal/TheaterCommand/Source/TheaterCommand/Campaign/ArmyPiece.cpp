@@ -295,6 +295,35 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			Top += CounterHeight + CounterGap;
 		}
 		Top -= CounterGap;
+		if (!FMiniatureMesh::bOldPieces)
+		{
+			// The top of the base is ground, as a wargamer bases his figures (art fix 12): trodden earth, with flock
+			// of two greens scattered on it in patches and a few tufts of longer grass. (The counters under it keep
+			// the nation's colour, and the brass rim under them.)
+			FRandomStream Scatter(GetTypeHash(NationTag) * 31 + RegionId * 7 + 3);
+			const FLinearColor Earth(FColor::FromHex(TEXT("5E4A33"))), EarthPale(FColor::FromHex(TEXT("6F5A3C"))), Flock(FColor::FromHex(TEXT("3E4A26"))), FlockPale(FColor::FromHex(TEXT("4F5A2C"))), Straw(FColor::FromHex(TEXT("8C8448")));
+			// (a ring of the counter's own painted wood is left showing round the ground, so that the base still says whose it is from above)
+			const double Ground = 0.07 * U, Reach = CounterWidth * 0.5 - 0.8 * U;
+			Model.Pillar(FVector(0.0, 0.0, Top), Reach, Reach - 0.05 * U, Ground, Earth, 30);
+			for (int32 K = 0; K < 26; ++K)
+			{
+				const double Angle = Scatter.FRandRange(0.0f, 2.0f * PI), Out = Reach * FMath::Sqrt(Scatter.FRand()) * 0.9;
+				const double Wide = Scatter.FRandRange(0.3f, 0.8f) * U;
+				const FVector At(FMath::Cos(Angle) * Out, FMath::Sin(Angle) * Out, Top + Ground);
+				const int32 Sort = K % 5;
+				Model.Pillar(At, FMath::Min(Wide, Reach - Out), FMath::Min(Wide, Reach - Out) * 0.7, 0.02 * U + 0.003 * U * K, Sort == 0 ? EarthPale : Sort % 2 == 1 ? Flock : FlockPale, 11);
+				if (Sort == 3)
+				{
+					// (a tuft: three blades of dry grass)
+					for (int32 Blade = 0; Blade < 3; ++Blade)
+					{
+						const double Lean = Blade * 2.1 + Angle;
+						Model.Rod(At, At + FVector(FMath::Cos(Lean) * 0.12 * U, FMath::Sin(Lean) * 0.12 * U, 0.34 * U), 0.03 * U, Straw, 3);
+					}
+				}
+			}
+			Top += Ground + 0.03 * U;
+		}
 
 		// On the counters stand figures for the kinds of troops the army holds: riflemen, armour, lorries, horse.
 		TArray<FString> Kinds;

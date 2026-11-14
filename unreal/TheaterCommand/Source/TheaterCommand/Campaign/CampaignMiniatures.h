@@ -70,6 +70,17 @@ struct FMiniatureMesh
 	void Stamp(const FMiniatureMesh& Model, const FVector& Where, double Scale, double Turn);
 
 	/**
+	 * A model sculpted outside the game by a script (art fix 12: "TrialTank", made by Tools/build_tank.py with
+	 * Blender) and read from Content/Models: set down at a place, to the game's scale, in the nation's paint.
+	 * bFar gives its plainer form for the far zoom. False if there is no such model on this machine.
+	 */
+	bool Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar = false);
+	/** Set from the command line ("-TheaterTrialTank"): armoured pieces show the trial tank in place of the nation's code-built one, to be judged beside it. */
+	static bool bTrialTank;
+	/** Set from the command line ("-TheaterOldPieces"): the pieces as they were before art fix 12 (plain bases, small figures in ranks, unweathered paint), to be photographed beside the new. */
+	static bool bOldPieces;
+
+	/**
 	 * A real vehicle, built from its measurements: "PanzerIV", "T34", "Sherman", "Matilda". Metre is the size
 	 * of a real metre on the table, so everything set out with the same Metre is in scale with everything
 	 * else. False if there is no model of that name.
@@ -119,6 +130,8 @@ struct FMiniatureMesh
 
 	/** Dust: anything added below DustTop is tinted toward Dust, most at DustFoot. Off while DustTop is not above DustFoot. */
 	double DustFoot = 0.0, DustTop = 0.0;
+	/** What the paint lies on (art fix 12), kept in each point's alpha for the pieces' material: 255 cloth, wood, earth and skin; 128 painted metal, which chips down to the bare metal. */
+	uint8 Finish = 255;
 	float DustAmount = 0.0f;
 	FColor Dust = FColor(138, 122, 92);
 

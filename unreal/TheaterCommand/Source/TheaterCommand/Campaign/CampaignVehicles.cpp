@@ -1612,7 +1612,10 @@ bool FMiniatureMesh::Vehicle(const FString& Name, const FVector& Where, double M
 		UE_LOG(LogTheater, Log, TEXT("Model %s%s built: %d points, %d triangles"), *Name, bFine ? TEXT("") : TEXT(" (plain)"), Fresh.Vertices.Num(), Fresh.Triangles.Num() / 3);
 		Model = &Built.Add(Name, MoveTemp(Fresh));
 	}
-	Stamp(*Model, Where, Metre, Turn);
+	{
+		TGuardValue<uint8> Painted(Finish, 128); // (a vehicle is painted metal: its paint chips)
+		Stamp(*Model, Where, Metre, Turn);
+	}
 	return true;
 }
 

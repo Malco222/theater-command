@@ -478,7 +478,7 @@ private:
 	void ApplyPaperLight();
 	float PaperLand[7] = { 0.6f, 0.52f, 0.37f, 0.6f, 0.92f, 0.5f, 0.62f }; // parchment (r, g, b), its shade and sun, the holder's wash and band
 	float PaperSeaTone[3] = { 0.221f, 0.302f, 0.305f };
-	float PaperNight[3] = { 0.42f, 0.3f, 0.6f }; // by night: what the land, the sea and the wash are multiplied by
+	float PaperNight[3] = { 0.42f, 0.3f, 0.35f }; // by night: what the land, the sea and the wash are multiplied by
 	/** A margin of paper round the sheet, with a ruled border, and its soft shadow on the table: seen from the height where the table is the staff's map. */
 	void BuildSheetMargin();
 	UPROPERTY(Transient)

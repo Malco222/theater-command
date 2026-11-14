@@ -1,5 +1,11 @@
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignMiniatureParts.h"
+#include "TheaterCommand.h"
+#include "Dom/JsonObject.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "Serialization/JsonReader.h"
+#include "Serialization/JsonSerializer.h"
 
 namespace
 {
@@ -32,11 +38,11 @@ int32 FMiniatureMesh::Add(const FVector& Position, const FVector& Normal, const 
 		Colors.Add(FColor(
 			static_cast<uint8>(FMath::Lerp(static_cast<float>(Colour.R), static_cast<float>(Dust.R), Much)),
 			static_cast<uint8>(FMath::Lerp(static_cast<float>(Colour.G), static_cast<float>(Dust.G), Much)),
-			static_cast<uint8>(FMath::Lerp(static_cast<float>(Colour.B), static_cast<float>(Dust.B), Much)), Colour.A));
+			static_cast<uint8>(FMath::Lerp(static_cast<float>(Colour.B), static_cast<float>(Dust.B), Much)), Finish));
 	}
 	else
 	{
-		Colors.Add(Colour);
+		Colors.Add(FColor(Colour.R, Colour.G, Colour.B, Finish));
 	}
 	return Vertices.Num() - 1;
 }
@@ -444,6 +450,95 @@ void FMiniatureMesh::Marking(const FVector& Where, double Radius, const FString&
 	}
 }
 
+bool FMiniatureMesh::bTrialTank = false;
+bool FMiniatureMesh::bOldPieces = false;
+
+bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVector& Where, double Metre, double Turn, bool bFar)
+{
+	// The numbers as the script wrote them, read once: points, which way each faces, its paint, and the triangles.
+	struct FRaw
+	{
+		TArray<FVector> Points, Facings;
+		TArray<int32> Paints, Triangles;
+	};
+	static TMap<FString, TSharedPtr<FRaw>> Read; // (a model that is not there is remembered as nothing, and not looked for again)
+	static TMap<FString, FMiniatureMesh> Painted;
+	const FString Which = Name + (bFar ? TEXT("|far") : TEXT("|near"));
+	if (!Read.Contains(Which))
+	{
+		TSharedPtr<FRaw> Raw;
+		FString Text;
+		TSharedPtr<FJsonObject> File;
+		const FString Path = FPaths::ProjectContentDir() / TEXT("Models") / (Name + TEXT(".json"));
+		if (FFileHelper::LoadFileToString(Text, *Path) && FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), File) && File.IsValid())
+		{
+			const TSharedPtr<FJsonObject>* Part = nullptr;
+			const TArray<TSharedPtr<FJsonValue>> *PointList = nullptr, *FacingList = nullptr, *PaintList = nullptr, *TriangleList = nullptr;
+			if (File->TryGetObjectField(bFar ? TEXT("far") : TEXT("near"), Part) && (*Part)->TryGetArrayField(TEXT("points"), PointList) && (*Part)->TryGetArrayField(TEXT("facings"), FacingList)
+				&& (*Part)->TryGetArrayField(TEXT("paints"), PaintList) && (*Part)->TryGetArrayField(TEXT("triangles"), TriangleList)
+				&& PointList->Num() == PaintList->Num() * 3 && FacingList->Num() == PointList->Num() && TriangleList->Num() % 3 == 0)
+			{
+				Raw = MakeShared<FRaw>();
+				for (int32 K = 0; K + 2 < PointList->Num(); K += 3)
+				{
+					Raw->Points.Add(FVector((*PointList)[K]->AsNumber(), (*PointList)[K + 1]->AsNumber(), (*PointList)[K + 2]->AsNumber()));
+					Raw->Facings.Add(FVector((*FacingList)[K]->AsNumber(), (*FacingList)[K + 1]->AsNumber(), (*FacingList)[K + 2]->AsNumber()).GetSafeNormal());
+				}
+				for (const TSharedPtr<FJsonValue>& Value : *PaintList)
+				{
+					Raw->Paints.Add(static_cast<int32>(Value->AsNumber()));
+				}
+				for (const TSharedPtr<FJsonValue>& Value : *TriangleList)
+				{
+					Raw->Triangles.Add(static_cast<int32>(Value->AsNumber()));
+				}
+				UE_LOG(LogTheater, Log, TEXT("Sculpted model %s read: %d points, %d triangles"), *Which, Raw->Points.Num(), Raw->Triangles.Num() / 3);
+			}
+		}
+		Read.Add(Which, Raw);
+	}
+	const TSharedPtr<FRaw> Raw = Read[Which];
+	if (!Raw.IsValid() || Raw->Points.Num() == 0)
+	{
+		return false;
+	}
+	const FString Key = Which + TEXT("|") + Tag;
+	FMiniatureMesh* Model = Painted.Find(Key);
+	if (!Model)
+	{
+		// Painted for the nation: its vehicles' own colour and a darker shade of it, and the same steel, rubber,
+		// wood and canvas for everyone. Painted metal is marked as such, so that the pieces' material chips it.
+		const FLinearColor Paint = VehicleColour(Tag);
+		const FLinearColor Colours[9] = {
+			Paint, Paint * 0.7f, FLinearColor(FColor::FromHex(TEXT("3B3733"))), FLinearColor(FColor::FromHex(TEXT("1F1F21"))), FLinearColor(FColor::FromHex(TEXT("7A5C3A"))),
+			FLinearColor(FColor::FromHex(TEXT("6C6E72"))), FLinearColor(FColor::FromHex(TEXT("857F5C"))), FLinearColor(FColor::FromHex(TEXT("27313A"))), FLinearColor(FColor::FromHex(TEXT("6B4A32"))) };
+		static const bool bMetal[9] = { true, true, true, false, false, true, false, false, true };
+		FMiniatureMesh Fresh;
+		// (the dust of the road on the tracks and the lower hull, as on the code-built vehicles)
+		Fresh.DustFoot = 0.0;
+		Fresh.DustTop = 1.25;
+		Fresh.DustAmount = 0.5f;
+		for (int32 K = 0; K < Raw->Points.Num(); ++K)
+		{
+			const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, 8);
+			Fresh.Finish = bMetal[Kind] ? 128 : 255;
+			Fresh.Add(Raw->Points[K], Raw->Facings[K], Colours[Kind].ToFColor(true));
+		}
+		for (int32 K = 0; K + 2 < Raw->Triangles.Num(); K += 3)
+		{
+			const int32 A = Raw->Triangles[K], B = Raw->Triangles[K + 1], C = Raw->Triangles[K + 2];
+			if (Raw->Points.IsValidIndex(A) && Raw->Points.IsValidIndex(B) && Raw->Points.IsValidIndex(C))
+			{
+				Fresh.Face(A, B, C, Raw->Facings[A] + Raw->Facings[B] + Raw->Facings[C]);
+			}
+		}
+		Model = &Painted.Add(Key, MoveTemp(Fresh));
+	}
+	TGuardValue<uint8> AsPainted(Finish, 255); // (each point keeps what the model says it is made of)
+	Stamp(*Model, Where, Metre, Turn);
+	return true;
+}
+
 void FMiniatureMesh::Stamp(const FMiniatureMesh& Model, const FVector& Where, double Scale, double Turn)
 {
 	const double Cos = FMath::Cos(FMath::DegreesToRadians(Turn)), Sin = FMath::Sin(FMath::DegreesToRadians(Turn));
@@ -456,7 +551,7 @@ void FMiniatureMesh::Stamp(const FMiniatureMesh& Model, const FVector& Where, do
 		const FVector V = Model.Vertices[K], N = Model.Normals[K];
 		Vertices.Add(Where + FVector(V.X * Cos - V.Y * Sin, V.X * Sin + V.Y * Cos, V.Z) * Scale);
 		Normals.Add(FVector(N.X * Cos - N.Y * Sin, N.X * Sin + N.Y * Cos, N.Z));
-		Colors.Add(Model.Colors[K]);
+		Colors.Add(Finish != 255 ? FColor(Model.Colors[K].R, Model.Colors[K].G, Model.Colors[K].B, Finish) : Model.Colors[K]);
 	}
 	Triangles.Reserve(Triangles.Num() + Model.Triangles.Num());
 	for (const int32 Index : Model.Triangles)
@@ -823,6 +918,7 @@ void FMiniatureMesh::Aeroplane(const FVector& Where, double Span, bool bBomber, 
 
 void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& /*Nation*/, const FString& Tag, bool bUnderWay)
 {
+	TGuardValue<uint8> Painted(Finish, 128); // (ships are painted metal)
 	// The three kinds of ship most worth showing: the big ships first.
 	TArray<const TCHAR*> Show;
 	if (Battleships > 0) Show.Add(TEXT("Battleship:"));
@@ -886,6 +982,7 @@ void FMiniatureMesh::AirFleet(int32 Fighters, int32 Bombers, double Unit, const 
 	// A patch of airfield: mown grass with a runway across it.
 	Pillar(FVector(0.0, 0.0, 0.05 * Unit), 5.0 * Unit, 4.9 * Unit, 0.14 * Unit, FLinearColor(FColor::FromHex(TEXT("70804F"))), 28);
 	Box(FVector(0.0, 0.0, 0.2 * Unit), FVector(1.2, 9.0, 0.03) * Unit, FLinearColor(FColor::FromHex(TEXT("8E8A80"))), 28.0);
+	TGuardValue<uint8> Painted(Finish, 128); // (aircraft are painted metal)
 	// The aircraft fly over it on thin stands, to the same scale as the soldiers and tanks on the army pieces
 	// (a real metre is the same size on both): a bomber higher and behind, a fighter lower and to the fore.
 	// A nation with no model of its own yet flies a plain machine of a likely size.
@@ -2346,6 +2443,11 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 		case 0:
 			// The nation's own tank if there is a model of it, or a plain one of the same size in the nation's paint.
 			// (a heavy tank corps of a nation that has a heavy tank modelled shows that one)
+			// (while the trial tank is being judged, it stands in for the nation's own on every armoured base)
+			if (bTrialTank && Sculpted(TEXT("TrialTank"), Tag, Where, Metre, Turn))
+			{
+				break;
+			}
 			if (!(bHeavyTanks && Tag == TEXT("GER") && Vehicle(TEXT("Tiger"), Where, Metre, Turn, false)) && !MainTank(Where, Metre, Tag, Turn, false))
 			{
 				Tank(Where, Metre * 2.3, Vehicles, Turn);
@@ -2376,7 +2478,10 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 	// The men fill what room is left. With nothing big on the base they stand in three ranks of four;
 	// otherwise a few stand about it.
 	TArray<FVector2D> Places;
-	if (!bHeavy)
+	// (Art fix 12: five figures to a base, as a wargamer mounts them, each a little over life size beside the
+	// vehicles so that it reads from working height: three to the fore and two behind.)
+	const double FigureSize = bHeavy || bOldPieces ? 1.0 : 1.38;
+	if (!bHeavy && bOldPieces)
 	{
 		for (int32 Rank = 0; Rank < 3; ++Rank)
 		{
@@ -2385,6 +2490,10 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 				Places.Add(FVector2D(-1.7 + Rank * 1.35, (File - 1.5) * 1.2 + (Rank % 2 ? 0.25 : 0.0)));
 			}
 		}
+	}
+	else if (!bHeavy)
+	{
+		Places = { { -1.55, -2.1 }, { -1.75, 0.0 }, { -1.55, 2.1 }, { 0.95, -1.1 }, { 0.95, 1.1 } };
 	}
 	else if (Heavy == 0 || Heavy == 2)
 	{
@@ -2413,7 +2522,7 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 	}
 	// Riflemen for the corps on foot: two ranks for one corps, all three for more. A tank or a gun has a few
 	// men about it whatever else the army holds.
-	int32 Men = FMath::Min(bHeavy ? 2 + 2 * (Foot + Mountain) : 4 + 4 * (Foot + Mountain), Places.Num() - Slot);
+	int32 Men = FMath::Min(bHeavy ? 2 + 2 * (Foot + Mountain) : (bOldPieces ? 4 + 4 * (Foot + Mountain) : 5), Places.Num() - Slot);
 	if (!bHeavy && Foot + Mountain == 0 && Horse > 0)
 	{
 		Men = 0; // cavalry alone
@@ -2426,11 +2535,11 @@ void FMiniatureMesh::Force(const TArray<FString>& Kinds, double BaseRadius, doub
 	{
 		if (Heavy == 4)
 		{
-			Pioneer(Tag, On(Places[Slot].X, Places[Slot].Y), Metre, ((K * 7) % 5 - 2) * 5.0, false);
+			Pioneer(Tag, On(Places[Slot].X, Places[Slot].Y), Metre * FigureSize, ((K * 7) % 5 - 2) * 5.0, false);
 		}
 		else
 		{
-			Soldier(Tag, On(Places[Slot].X, Places[Slot].Y), Metre, ((K * 7) % 5 - 2) * 5.0, false);
+			Soldier(Tag, On(Places[Slot].X, Places[Slot].Y), Metre * FigureSize, ((K * 7) % 5 - 2) * 5.0, false);
 		}
 	}
 }

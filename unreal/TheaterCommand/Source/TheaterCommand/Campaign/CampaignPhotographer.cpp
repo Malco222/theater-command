@@ -805,6 +805,21 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	{
 		At = Table->FleetSpot(FCString::Atoi(*Shot.Region.Mid(6)));
 	}
+	if (Shot.Region.StartsWith(TEXT("@army ")))
+	{
+		// "@army Grenzmark": the first army piece standing in that province, looked at itself (not the province's middle).
+		if (const int32* Where = Table->GetData().RegionByName.Find(Shot.Region.Mid(6)))
+		{
+			for (const TObjectPtr<AArmyPiece>& Piece : Table->GetPieces())
+			{
+				if (Piece && Piece->GetRegionId() == *Where && !Piece->IsHidden())
+				{
+					At = Table->WorldToMap(Piece->GetRestLocation());
+					break;
+				}
+			}
+		}
+	}
 	Eye->SetHeading(Shot.Yaw, Shot.Tilt);
 	Eye->GoTo(Table->MapToWorld(At.X, At.Y), Shot.Zoom, true);
 
