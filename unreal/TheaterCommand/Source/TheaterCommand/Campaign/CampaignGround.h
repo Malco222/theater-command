@@ -37,6 +37,13 @@ public:
 	/** Paints every picture from the terrain and the map. */
 	void Build(const FCampaignMapData& Data, const FCampaignTerrain& Terrain, float VerticalScale);
 
+	/**
+	 * A fine sheet let into a coarse one (the whole-world map): well offshore its sea takes the coarse sheet's own
+	 * colour, so that in open water nobody can find the fine sheet's edge. Set before Build; both must outlive it.
+	 */
+	const FCampaignGround* CoarseSea = nullptr;
+	const FCampaignTerrain* CoarseShape = nullptr;
+
 	/** Repaints the nations' colours over a box of grid points, after ground has changed hands. */
 	void PaintTint(const FCampaignMapData& Data, const FCampaignTerrain& Terrain, int32 I0, int32 J0, int32 I1, int32 J1);
 

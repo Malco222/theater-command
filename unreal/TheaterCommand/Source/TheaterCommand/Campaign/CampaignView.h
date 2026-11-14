@@ -672,6 +672,12 @@ struct FArsenal
 /** One of the powers at war, as the foreign office lists it. */
 struct FDiplomacyPower
 {
+	// (Version 65) Its general staff as the player knows it: its character in a word, what it is doing in a sentence,
+	// how it fights (for a tooltip), and whether a main effort of its is aimed at the player or his allies, and where.
+	FString StaffLabel, StaffLine, StaffSays;
+	bool bThreat = false;
+	int32 ThreatRegion = INDEX_NONE;
+	FString ThreatName;
 	FString Tag;
 	FString Name;
 	FString Side; // own, ally, enemy or other: how it stands to the player

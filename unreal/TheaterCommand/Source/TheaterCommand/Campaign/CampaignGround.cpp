@@ -138,7 +138,7 @@ namespace
 	}
 
 	/** The bare ground of the world's looks, mixed by the share each has of a place. Colours as seen. */
-	FSeen LookGround(const float Shares[WorldLook::Count], float Metres, const FVector2D& P)
+	FSeen LookGround(const float Shares[WorldLook::Count], float Metres, const FVector2D& P, float TreeLine)
 	{
 		const FSeen ByHeight = GroundByHeight(Metres);
 		const float High = FMath::SmoothStep(900.0f, 2400.0f, Metres) * 0.85f; // (the looks of the low ground give way to the upland's own greys)
@@ -167,7 +167,11 @@ namespace
 			case WorldLook::Jungle: Look = FSeen::Bytes(104, 126, 76); break;
 			case WorldLook::Monsoon: Look = FSeen::Bytes(134, 152, 98); break;
 			case WorldLook::DryPlain: Look = FSeen::Bytes(184, 166, 110); break;
-			case WorldLook::Taiga: Look = FSeen::Bytes(118, 114, 88); break; // (what shows between the trees is bog, seen at about (140, 134, 94), not meadow)
+			case WorldLook::Taiga:
+				// (What shows between the trees is bog; where the trees stop, on the high ground and toward the north,
+				// the bog stops with them and the ground is the tundra's moss.)
+				Look = Mix(FSeen::Bytes(118, 128, 108), FSeen::Bytes(112, 126, 100), FMath::SmoothStep(TreeLine - 250.0f, TreeLine + 50.0f, Metres));
+				break; // (what shows between the trees is bog, seen at about (140, 134, 94), not meadow)
 			case WorldLook::Tundra:
 			{
 				// (mottled with moss and with peat)
@@ -209,7 +213,7 @@ namespace
 			0.25f, // jungle: closed canopy inside it, and an edge that thins out over some three degrees, in clumps
 			-0.16f + 0.34f * OnTheHills, // rice country: on the hills only
 			-0.3f, // the dry plain
-			0.13f, // the northern forest, with bog openings over about a fifth of it
+			0.19f, // the northern forest: about three quarters canopy, with bogs as windows in it
 			-0.6f, // tundra
 			-0.9f, // ice
 			-0.7f, // the high cold steppe
@@ -376,7 +380,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			{
 				float Shares[WorldLook::Count];
 				Climate.SharesAt(Data.LatitudeAt(P.Y), Data.LongitudeAt(P.X), Shares);
-				C = Mix(C, LookGround(Shares, Metres, P), Outside[Idx]);
+				C = Mix(C, LookGround(Shares, Metres, P, FMath::Max(LookSnow[Idx] - 1200.0f, 200.0f)), Outside[Idx]);
 			}
 			C = C * (0.95f + 0.10f * Fine);
 			GroundR[Idx] = C.R;
@@ -489,6 +493,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				+ 0.3f * FMath::SmoothStep(3.6f, 5.4f, H));
 			float Snow = 0.9f * FMath::SmoothStep(5.0f, 6.6f, H) * (1.0f - 0.5f * Steepness);
 			const float Beyond = bBeyond ? Outside[Idx] : 0.0f;
+			// (a jungle keeps its roof on the steepest range: no rock shows through it below about 3,300 metres)
+			const float JungleRoof = bBeyond ? LookTropic[Idx] * (1.0f - FMath::SmoothStep(3000.0f, 3600.0f, Metres[Idx])) : 0.0f;
 			if (Beyond > 0.0f)
 			{
 				// (one snow height for the whole world would whiten New Guinea and leave Alaska bare)
@@ -513,9 +519,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				+ 0.11f * FMath::PerlinNoise2D(P * 0.13 + FVector2D(3.0, 41.0)) + 0.06f * FMath::PerlinNoise2D(P * 0.31 + FVector2D(19.0, 7.0))
 				+ (FMath::SmoothStep(56.0f, 63.0f, Northing) * 0.2f - DryLand * 0.16f) * (1.0f - Beyond) + FMath::SmoothStep(250.0f, 900.0f, Metres[Idx]) * 0.08f;
 			// (the tree line stands where the snow line is, less about 1,200 metres: at 1,750 in Europe)
-			const float TreeLine = FMath::Lerp(1750.0f, FMath::Max(LookSnowOr(LookSnow, Idx) - 1200.0f, 200.0f), Beyond);
+			// (and in the jungle at about 3,300 metres)
+			const float TreeLine = FMath::Lerp(FMath::Lerp(1750.0f, FMath::Max(LookSnowOr(LookSnow, Idx) - 1200.0f, 200.0f), Beyond), 3300.0f, bBeyond ? LookTropic[Idx] : 0.0f);
 			float Wooded = FMath::SmoothStep(WoodsFrom(), WoodsFrom() + 0.07f, Thick) * FMath::SmoothStep(0.0f, 300.0f, TreeLine - Metres[Idx]);
-			Wooded *= (1.0f - Rock) * (1.0f - Sand / 0.35f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
+			Wooded *= (1.0f - Rock * (1.0f - JungleRoof)) * (1.0f - Sand / 0.35f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
 
 			// Shaded relief, as on a printed map: how squarely the ground faces the sun (1 on the flat, up to 2.2
 			// on a slope turned full to it, nothing on one turned away), less where a shadow is thrown across it,
@@ -549,7 +556,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			Bare.A = ToByte(Wooded);
 			Ground[Idx] = Bare;
 			Relief[Idx] = FColor(ToByte(Normal.X * 0.5f + 0.5f), ToByte(Normal.Y * 0.5f + 0.5f), ToByte(Shade * 0.5f), 255);
-			Masks[Idx] = FColor(ToByte(Rock), ToByte(Snow), ToByte(Sand), ToByte(Dry[Idx]));
+			Masks[Idx] = FColor(ToByte(Rock * (1.0f - JungleRoof)), ToByte(Snow), ToByte(Sand), ToByte(Dry[Idx]));
 		}
 	});
 
@@ -728,6 +735,17 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			auto Lift = [](float Part) { return Part + 0.031f * FMath::Max(0.0f, 1.0f - Part / 0.5f); };
 			C = FSeen(Lift(C.R), Lift(C.G) * 0.92f, Lift(C.B) * 0.98f);
 			C = Mix(C, FSeen(Grey, Grey, Grey), SeaGrey) * SeaStrength;
+			if (CoarseSea && CoarseShape && CoarseSea->WaterNX > 1 && OffShore > 3.0f)
+			{
+				// (the coarse sheet's sea at this place, between its four nearest points)
+				const double Gx = FMath::Clamp((X - CoarseShape->OriginX) / CoarseSea->WaterStep, 0.0, static_cast<double>(CoarseSea->WaterNX - 1));
+				const double Gy = FMath::Clamp((Y - CoarseShape->OriginY) / CoarseSea->WaterStep, 0.0, static_cast<double>(CoarseSea->WaterNY - 1));
+				const int32 X0 = FMath::Min(FMath::FloorToInt32(Gx), CoarseSea->WaterNX - 2), Y0 = FMath::Min(FMath::FloorToInt32(Gy), CoarseSea->WaterNY - 2);
+				const float Fx = static_cast<float>(Gx - X0), Fy = static_cast<float>(Gy - Y0);
+				auto At = [this, X0, Y0](int32 DX, int32 DY) { const FColor& Pixel = CoarseSea->Water[(Y0 + DY) * CoarseSea->WaterNX + X0 + DX]; return FSeen::Bytes(Pixel.R, Pixel.G, Pixel.B); };
+				const FSeen Far = Mix(Mix(At(0, 0), At(1, 0), Fx), Mix(At(0, 1), At(1, 1), Fx), Fy);
+				C = Mix(C, Far, FMath::SmoothStep(3.0f, 12.0f, OffShore));
+			}
 			Water[J * WaterNX + I] = FColor(ToByte(C.R), ToByte(C.G), ToByte(C.B), ToByte(FMath::Clamp(OffShore / 6.0f, 0.0f, 1.0f)));
 		}
 	});

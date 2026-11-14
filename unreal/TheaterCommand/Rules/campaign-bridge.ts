@@ -85,7 +85,7 @@ import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoi
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
-import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
+import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -775,19 +775,43 @@ function reachOf(ids: number[]) {
   return { regions: [...merged.values()] };
 }
 
+/** (Version 65) The swap last offered: asked once, done when the same march is ordered again. */
+let swapAsked = '';
+
 function move(ids: number[], to: number) {
   const s = game();
   const moved: { id: number; path: number[] }[] = [];
+  let note = '';
+  // (Version 65) A friendly province next door that is full: the corps can change places with one that stands
+  // there. It is asked once, and done when the same march is ordered again.
+  const trySwap = (c: Corps): void => {
+    let others: Corps[] = [];
+    try { others = s.regions[c.reg]?.nb.includes(to) ? swapChoices(s, c, to) : []; } catch { others = []; }
+    if (!others.length || moved.length) return;
+    const other = others[0], from = c.reg, key = `${c.id}:${to}:${s.turn}`;
+    if (swapAsked === key) {
+      swapAsked = '';
+      if (orderSwap(s, c, other)) {
+        moved.push({ id: c.id, path: [to] }, { id: other.id, path: [from] });
+        note = `${c.name} and ${other.name} have changed places.`;
+      }
+    } else {
+      swapAsked = key;
+      note = `${s.regions[to].name} is full. Order the march again and ${c.name} changes places with ${other.name}, which comes back to ${s.regions[from].name}.`;
+    }
+  };
   for (const c of corpsById(s, ids)) {
     const m = reach(s, c);
     const end = m.get(to);
-    if (!end || end.attack || to === c.reg) continue;
+    if (to === c.reg || end?.attack) continue;
+    if (!end) { trySwap(c); continue; }
     const path: number[] = [];
     for (let at = to; at !== c.reg && at >= 0; at = m.get(at)!.prev) path.unshift(at);
     const n = orderMove(s, c, to);
     if (n > 0) moved.push({ id: c.id, path: path.slice(0, n) });
+    else trySwap(c);
   }
-  return { moved, view: view() };
+  return { moved, note, view: view() };
 }
 
 /** The player's corps that could join an attack on a region: the ones picked that stand next to it. */
@@ -871,7 +895,7 @@ function massNote(s: Game, corps: Corps[], to: number, odds: number | null): { n
 }
 
 /** (Version 64) The last probe of a line this month: who went, what was found, what it cost. Said on the attack card afterwards. */
-let lastProbe: { turn: number; region: number; name: string; found: string[]; wear: number; lost: number } | null = null;
+let lastProbe: { turn: number; region: number; name: string; found: string[]; wear: number; lost: number; was: string; now: string } | null = null;
 
 /**
  * (Version 64) The row on the attack card that offers to soften the line first: a probe by one corps, or the
@@ -885,10 +909,13 @@ function softenRow(s: Game, corps: Corps[], to: number) {
   const mo = (m: number): string => { const x = Math.round(m * 10) / 10; return x === 1 ? 'a month' : `${x} months`; };
   const num = (n: number): string => Math.round(n).toLocaleString('en');
   const gains = [v.probe.fresh ? `name the ${v.probe.fresh === 1 ? 'corps' : `${v.probe.fresh} corps`} the staff cannot see` : '', v.probe.wear > 0 ? `take ${mo(v.probe.wear)} off their fieldworks` : ''].filter(Boolean).join(' and ');
-  const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.` : 'There is nothing more a probe could find here.');
+  // (Version 65) A corps too thin for a full probe does less: said, with what a full one takes.
+  const pw = v.probe as typeof v.probe & { weight?: number; full?: number };
+  const thin = pw.weight !== undefined && pw.weight < 0.995 ? ` It has the men for ${Math.max(1, Math.round(pw.weight * 100))}% of a full probe${pw.full ? `, which takes ${num(pw.full)} men` : ''}.` : '';
+  const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : 'There is nothing more a probe could find here.');
   return {
     head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ', finished' : ''}.` : 'The defenders are not dug in.',
-    done: done ? `${done.name} has probed this line: it found ${listOf(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.` : '',
+    done: done ? `${done.name} has probed this line: it found ${listOf(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now it reads ${done.now}.` : ''}` : '',
     probe: { label: `PROBE${v.probe.name ? ` WITH ${v.probe.name.toUpperCase()}` : ' THE LINE'}`, text: probeText, ok: !v.probe.why && !!gains, corps: v.probe.corps },
     bomb: v.bomb ? {
       label: 'BOMB THE LINE', ok: !v.bomb.why,
@@ -1797,7 +1824,8 @@ function arsenal(region = -1) {
       cost: shown(o.cost), upkeep: shown(o.upkeep), at: o.at, where: s.regions[o.at]?.name ?? '',
       // (Version 59: what it takes from the reserve of men, said with its note)
       note: [o.note, (o as { men?: number }).men ? `Takes ${Math.round((o as { men?: number }).men!).toLocaleString('en-US')} men from the reserve.` : ''].filter(Boolean).join(' '),
-      why: up ? o.why : 'It is not your month.', poor: o.poor,
+      // (Version 65) where money is the only thing in the way, how far short the treasury is
+      why: up ? (o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${o.why ?? ''} ${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short.`.trim() : o.why) : 'It is not your month.', poor: o.poor,
     })),
     orders: s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) })),
   };
@@ -2940,10 +2968,17 @@ function act(action: string, region = -1) {
   if (part[0] === 'probe') {
     // (Version 64) One corps feels out the line: the attack card is read again with what it found.
     const who = s.corps.find((c) => c.id === Number(part[1])), target = s.regions[Number(part[2])];
+    // (Version 65) The card's chance before the probe, where it was a guess, to set against what it reads after.
+    const force = (part[3] ?? '').split('.').map(Number).filter((n) => Number.isFinite(n));
+    const chanceOf = (): { words: string; exact: boolean } => {
+      try { const look = target && force.length ? attackOutlook(s, attackers(s, force, target.id), target) : null; return look ? { words: chanceWords(look), exact: look.exact } : { words: '', exact: true }; } catch { return { words: '', exact: true }; }
+    };
+    const before = chanceOf();
     const rep = who && target ? orderProbe(s, who, target) : null;
     ok = !!rep;
     if (rep) {
-      lastProbe = { turn: s.turn, region: target.id, name: rep.name, found: rep.found, wear: rep.wear, lost: rep.lost };
+      const after = chanceOf();
+      lastProbe = { turn: s.turn, region: target.id, name: rep.name, found: rep.found, wear: rep.wear, lost: rep.lost, was: before.exact ? '' : before.words, now: after.words };
       note = `${rep.name} has probed the line at ${target.name}: it found ${listOf(rep.found)}${rep.wear > 0 ? ', and wore their fieldworks down' : ''}. It cost ${rep.lost.toLocaleString('en')} men.`;
     } else note = 'The line cannot be probed now.';
     return { ok, note, fly, flies, open, view: view() };
@@ -3214,6 +3249,16 @@ function diplomacy() {
       side: n.id === me.id ? 'own' : atWar(s, me.id, n.id) ? 'enemy' : allied(s, me.id, n.id) ? 'ally' : 'other',
       note: n.alive ? `At war with ${listOf(n.atWar.map((x) => theName(s, x)))}` : `Fell in ${turnToDate(n.fellOn!.turn).label}: asked ${theName(s, n.fellOn!.to)} for terms`,
       war: can.has(n.id),
+      // (Version 65) Its general staff as the player knows it: its character, what it is doing in a sentence, and
+      // whether a main effort of its is aimed at the player or his allies, with the place it is aimed at.
+      staff: (() => {
+        try {
+          const v = rivalStaff(s, n.id);
+          if (!v) return null;
+          const hot = v.efforts.find((e) => e.atYou && !e.won) ?? null;
+          return { label: v.label, line: v.line, says: v.says, threat: !!hot, target: hot ? hot.target : -1, targetName: hot ? hot.targetName : '' };
+        } catch { return null; }
+      })(),
     }));
   const rows = all.filter((n) => n.alive && !n.atWar.length && !n.league && n.id !== me.id).sort((a, b) => a.opinion - b.opinion).map((n) => {
     const open = (mine === 'axis' || mine === 'allies') && courtable(n);

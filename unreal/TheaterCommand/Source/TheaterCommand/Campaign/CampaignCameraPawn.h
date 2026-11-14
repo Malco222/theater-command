@@ -31,6 +31,13 @@ public:
 	/** The same as a box that need not lie evenly round the middle of the table: the whole-world map, with today's map near one end of it. */
 	void SetBoundsBox(const FVector2D& InMin, const FVector2D& InMax) { BoundsMin = InMin; BoundsMax = InMax; bBoxed = true; }
 
+	/**
+	 * A world that runs right round (the whole-world map): the eye's place from west to east is kept between these
+	 * two, and when it passes one it comes in again at the other. The table shows the same ground at both, so
+	 * nothing is seen to happen.
+	 */
+	void SetWrap(double InWest, double InEast) { WrapWest = InWest; WrapEast = InEast; bWraps = InEast > InWest; }
+
 	/** For pictures of the whole world: lets the eye be sent higher than the player can take it. */
 	void SetTopZoom(float InTop) { TopZoom = InTop; }
 
@@ -100,6 +107,8 @@ private:
 	FVector2D BoundsMin = FVector2D::ZeroVector, BoundsMax = FVector2D::ZeroVector;
 	bool bBoxed = false;
 	float TopZoom = 1.0f; // the highest the eye may be sent (the wheel never takes it past 1)
+	double WrapWest = 0.0, WrapEast = 0.0;
+	bool bWraps = false;
 	FVector Focus = FVector::ZeroVector;
 	FVector TargetFocus = FVector::ZeroVector;
 	float Zoom = 0.62f;

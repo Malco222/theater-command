@@ -55,7 +55,8 @@ public:
 	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds);
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
-	TArray<FCorpsMove> Move(const TArray<int32>& CorpsIds, int32 RegionId);
+	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */
+	TArray<FCorpsMove> Move(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutNote = nullptr);
 
 	/** The odds for the given corps attacking a region, with both armies and the Battle Ticket. */
 	/** bOpening: the card is being opened, so the staff may bring in everyone the roads will carry where that beats the pick. */

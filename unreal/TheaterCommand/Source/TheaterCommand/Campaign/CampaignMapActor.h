@@ -309,6 +309,10 @@ private:
 		bool bKeep = false; // a sheet built with an apron round it draws only...
 		FBox2D Keep = FBox2D(ForceInit); // ...this box of its ground
 		bool bHidden = false; // its tiles are stood up out of sight, until all of them are there
+		// In a world that runs right round, ground is drawn a turn of the world east or west of where it is kept,
+		// whichever is nearest the eye: each tile by itself (1), or the whole sheet together by Turn (2). 0: it stays put.
+		int32 WrapMode = 0;
+		int32 Turn = 0;
 		/** True where a point lies well inside one of the holes: Margin map units in from its edge. */
 		bool InHole(double X, double Y, double Margin) const
 		{
@@ -354,6 +358,12 @@ private:
 	/** Stands the coarse world sheet's tiles over a box up afresh, after a hole in it has been made or closed. */
 	void RetileWorld(const FBox2D& Changed);
 	const FFineSheet* FineSheetAt(double X, double Y) const;
+	/** A place from west to east as the world's sheet keeps it, whichever turn of the world it was given in. */
+	double WrapX(double X) const;
+	/** How many turns of the world east (or, negative, west) of where it is kept a thing at X is drawn, to be nearest the eye. */
+	int32 TurnFor(double X, double EyeX) const;
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> WorldSeaTwin; // the same sea again, a turn of the world to the side the eye is on
 	void PrepareLand();
 	void LevelLand(FLandSheet& Sheet);
 	/** Returns true while tiles the view wants are still to be stood up. */

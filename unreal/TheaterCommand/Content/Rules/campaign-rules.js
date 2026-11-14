@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of dfdd292 2026-11-14. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 35cdbe5 2026-11-14. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -971,6 +971,84 @@
     },
     guns: { soften: 0.15, softenMost: 0.6, thicken: 0.05, thickenMost: 0.2 },
     ai: { aaAfterRaid: true, guns: { per: 6, most: 10, facing: 3 } }
+  };
+
+  // ../../data/campaign/rivals.json
+  var rivals_default = {
+    _about: "Rival staffs (Version 65, the grand campaign). Every computer nation's staff has a character in each war, drawn from the war's seed with a national lean ('lean': the weights of bold, cautious and opportunist, in that order). The character changes the nerve the nation has in open.json ('attackAt' multiplies the strength ratio at which it opens a general offensive, 'minOdds' is added to the odds a single attack needs) and sets when it names a main effort. A staff with the main effort in hand for its smaller pushes asks more before it throws in everything: the bold ask what the nation always asked, the others a tenth and a fifth more. A main effort is a limited offensive against one sector of a front where no general offensive is under way: the staff picks the enemy province where the force it could mass in a month has the best prospect, masses opposite it, softens the line (the bombers on the fieldworks, a probe by one corps) and attacks there and nowhere else for 'effort.months' months, then rests 'effort.rest' months. It names one when the front has been quiet for the character's 'quiet' months (an opportunist does not wait while the enemy is busy: fighting someone else on land within the last 'effort.busy' months), the strength ratio on the front (what it can bring to it against what the enemy has near it) is at least 'strength', and the massed attack would go in at odds of 'local' or better. 'effort.mass' is the corps it wants in each province beside the target, 'effort.sector' how many enemy provinces round the target it may attack.",
+    characters: {
+      bold: {
+        label: "Bold",
+        says: "Attacks on a smaller advantage than most, and does not let a front lie quiet for long.",
+        attackAt: 1,
+        minOdds: -0.05,
+        quiet: 2,
+        strength: 0.6,
+        local: 1.25
+      },
+      cautious: {
+        label: "Cautious",
+        says: "Waits for long odds, masses and softens a line before it strikes, and seldom wastes an army.",
+        attackAt: 1.2,
+        minOdds: 0.05,
+        quiet: 4,
+        strength: 0.85,
+        local: 1.5
+      },
+      opportunist: {
+        label: "Opportunist",
+        says: "Strikes where you are weak and when you are busy with someone else.",
+        attackAt: 1.1,
+        minOdds: 0,
+        quiet: 3,
+        strength: 0.7,
+        local: 1.35
+      }
+    },
+    lean: {
+      _default: [1, 2, 2],
+      GER: [5, 1, 2],
+      SOV: [2, 4, 2],
+      UK: [1, 4, 3],
+      USA: [4, 2, 2],
+      FRA: [1, 5, 1],
+      ITA: [2, 1, 5],
+      FIN: [2, 3, 1],
+      ROM: [1, 2, 4],
+      HUN: [1, 3, 3],
+      YUG: [1, 3, 2],
+      GRE: [2, 3, 1],
+      POL: [3, 2, 1],
+      TUR: [1, 4, 2],
+      ESP: [1, 3, 3]
+    },
+    effort: { months: 3, rest: 2, mass: 4, sector: 3, busy: 2 },
+    press: {
+      _note: "The will to finish. A staff with a general offensive under way on a front where it has 'ratio' times the enemy's strength, and that has gained no ground for 'after' months, accepts shorter odds battle by battle: 'step' less for each month since, never below 'floor', and it sends up to 'waves' waves at one place in a month where it has the corps (two is the rule otherwise). With less than 'ratio' times his strength, an offensive on which no battle has been fought either way for 'after' months is an offensive in name only: it is called off, the front is open to a main effort at once, and no new general offensive is opened there for 'again' months unless the strength grows to 'ratio' or the staff's patience runs out (open.json, impatience).",
+      ratio: 2,
+      after: 3,
+      step: 0.1,
+      floor: 1,
+      waves: 3,
+      again: 6
+    },
+    soften: {
+      _note: "A staff softens a prepared line before it attacks it, as the player can. Where the defenders stand in fieldworks of 'works' months or more and the attack it means to make falls short of the odds it asks but reaches 'from' of them, one corps that is not going in probes the line (game.ts, probeLine) before the attack, the one with the weight for a probe in full (defence.json, probe.weight) and of those the weakest in the attack; at most 'most' probes a month. The air staff flies the raid on the fieldworks (air.ts) at the target of a main effort, with every bomber group in reach, where it should take 'raid' months or more off the works, and weighs the same raid against its others where an offensive is under way.",
+      works: 1,
+      most: 1,
+      from: 0.75,
+      raid: 0.25
+    },
+    fold: {
+      _note: "A computer staff folds two of its corps into one where both are under 'worn' of their strength and the corps kept would not be over strength. The cadre is raised again from the arsenal when the treasury allows, 'cadres' on order at a time.",
+      worn: 0.4,
+      cadres: 1
+    },
+    exhaust: {
+      _note: "A finish for a war that is won. A computer nation whose capital has been in enemy hands for more than 'after' months wears out: every month after that adds 'per' to how near it is to giving in, until it asks for terms. The player's own country is never worn out this way.",
+      after: 12,
+      per: 0.01
+    }
   };
 
   // ../../src/campaign/types.ts
@@ -9284,6 +9362,20 @@
       if (!best) break;
       send("superiority", best.t, best.fleets, flown++);
     }
+    const lineAt = (t) => {
+      if (hit.has(t) || !g2.regions[t]) return;
+      const bombers = leads().filter((f) => whyNotMission2(g2, f, "line", t) === null).sort((a2, b) => b.bmr - a2.bmr || a2.id - b.id);
+      if (!bombers.length) return;
+      const fleets = [...bombers];
+      for (const base of new Set(bombers.map(homeOf))) fleets.push(...fightersAt(base).filter((e) => whyNotMission2(g2, e, "line", t) === null));
+      const a = assessAir(g2, fleets, "line", t);
+      if (a.why) return;
+      const fc = forecastAir(g2, a, "line", t);
+      if (fc.bomberLoss > rules.loss || fc.success < R.success || fc.cut < rivals_default.soften.raid) return;
+      send("line", t, fleets, flown++);
+    };
+    const aims = Object.keys(g2.flags).filter((k) => k === `st:eff:${nat}` || k.startsWith(`st:eff:${nat}:t`)).map((k) => g2.flags[k] - 1).sort((a, b) => a - b);
+    for (const t of aims) lineAt(t);
     const most = Math.floor(leads().length * rules.share + rng.range(0, 1));
     for (let k = 0; k < most; k++) {
       const pick2 = { best: null };
@@ -9297,7 +9389,7 @@
           const a = assessAir(g2, fleets, m, r.id);
           if (a.why) return;
           const fc = forecastAir(g2, a, m, r.id);
-          if (fc.bomberLoss > rules.loss || fc.success < R.success) return;
+          if (fc.bomberLoss > rules.loss || fc.success < R.success || m === "line" && fc.cut < rivals_default.soften.raid) return;
           const railWorth = (m === "bomb" || m === "night") && r.fac <= 0 ? rules.rail : 1;
           const v = (fc.worth * railWorth * (m === "town" ? SIEGE.ai.raid : 1) + fc.foeLoss) * (you !== null && r.ctrl === you ? rules.focus ?? 1 : 1) - fc.ftrLoss - fc.bmrLoss;
           if (v > R.worth && (!pick2.best || v > pick2.best.v)) pick2.best = { m, t: r.id, fleets, v };
@@ -9309,6 +9401,7 @@
         }
         const troops = [...front.keys()].map((t) => g2.regions[t]).filter((r) => !hit.has(r.id) && whyNotMission2(g2, f, "ground", r.id) === null).sort((a, b) => (front.get(b.id) ?? 0) * foes(b) - (front.get(a.id) ?? 0) * foes(a) || a.id - b.id).slice(0, R.look);
         for (const r of troops) weigh("ground", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "ground", r.id) === null)]);
+        for (const r of troops) if (pushed(r.id) && whyNotMission2(g2, f, "line", r.id) === null) weigh("line", r, [f, ...escorts.filter((e) => whyNotMission2(g2, e, "line", r.id) === null)]);
         if (siegeRules(g2)) {
           for (const r of g2.regions) {
             if (hit.has(r.id) || !besieged(g2, r) || !allied(g2, nat, besiegerOf(g2, r) ?? "") || breachOf(g2, r) * 100 > SIEGE.breach.most - 10 || whyNotMission2(g2, f, "town", r.id) !== null) continue;
@@ -14279,6 +14372,15 @@
     }
     const wantsGuns = () => gunsWanted(g2, nat);
     while (slots() < most) {
+      const old = g2.flags.open === 1 && n.queue.filter((b) => b.cadre !== void 0).length < rivals_default.fold.cadres ? (n.cadres ?? []).find((c) => !c.elite && !c.airborne && whyNoCadre(g2, nat, c) === null) : void 0;
+      if (old) {
+        const t = cadreTerms(g2, nat, old), up = corpsUpkeep(old.kind, old.divs);
+        const site = budgeted(g2) ? raiseSite(g2, nat, old.kind, cap5.id) : cap5.id;
+        if (n.pp >= t.cost + PRODUCTION.aiReserve && spare >= up * BUDGET.debt.aiMargin && menSpare(g2, nat) >= old.divs && orderCadre(g2, nat, old.id, site >= 0 ? site : cap5.id)) {
+          spare -= up;
+          continue;
+        }
+      }
       let kind = wantsGuns() ? "art" : home >= 20 && n.corpsNo % 3 === 2 ? "arm" : "inf";
       let at = budgeted(g2) ? raiseSite(g2, nat, kind, cap5.id) : cap5.id;
       if (at < 0 || locked(g2, nat, `corps:${kind}`) || kind === "arm" && shortOfOil(g2, nat)) {
@@ -14759,7 +14861,7 @@
     _about: "Prepared defences (the grand campaign). An army that spends a whole month where it stands, without marching or fighting, digs in whoever commands it, the computer's armies as well as the player's. Against troops who are dug in and in supply the day's luck runs against the attacker, so that odds which would be safe in the open become a gamble, and an attack thrown back from such a line has shot its bolt for the month. Rules in src/campaign/game.ts (assess, resolveBattle, endPhase).",
     entrench: { auto: true, months: 3, share: [0.5, 0.75, 1] },
     handover: { fade: 1 },
-    probe: { ap: 2, wear: 1, loss: 0.04, org: 0.06 },
+    probe: { ap: 2, wear: 1, weight: 3e4, loss: 0.04, org: 0.06 },
     wear: { perAttack: 1, fullAt: 0.6, guns: 1, regrow: 0.5 },
     tired: { per: 0.15, most: 3 },
     hammer: { first: 0.5, second: 1 },
@@ -14769,7 +14871,7 @@
     notes: {
       entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. A corps that leaves the ground leaves its fieldworks behind it (players read 'fieldworks', never 'trenches': Brian, 2026-11-14). With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by what its works are worth so far: 'share' gives that for one month's digging, two and three, since the first month's work does the most.",
       handover: "Hand over the fieldworks (Version 64). Works belong to the ground. A dug-in corps that marches off, entrains or goes forward after a battle won leaves its positions behind: a corps of its own side standing there without works takes them over at once, and otherwise they wait for the next corps of that side to march or ride in, which has them, as old as they were, from the moment it arrives and keeps them at the month's end though it marched. Standing empty they lose 'fade' months of work at the start of each of their owner's months, and they are gone the moment the enemy sets foot there. Troops driven off their ground leave nothing, and troops falling back or put down by any other means take nothing over. Remove the key to have works lost when a corps leaves, as before Version 64.",
-      probe: "Probe the line (Version 64). One fighting corps of the player's feels out the enemy army in the province beside it: every corps there is identified as a battle would identify it, and the works of each one that is dug in lose 'wear' months, whatever the weight of the corps that probes. It costs the probing corps 'loss' of its men, 'org' of its organisation and 'ap' of its moves, and it counts as having fought, so it does no digging that month. The defenders lose no men; they count as attacked, so they dig at the pace of troops who were. Nothing changes hands, no battle is filed, no offensive is opened by it, and a line is probed once a month at most. No computer staff probes.",
+      probe: "Probe the line (Version 64). One fighting corps of the player's feels out the enemy army in the province beside it: every corps there is identified as a battle would identify it, and the works of each one that is dug in lose 'wear' months where the probing corps has 'weight' men or more, and in proportion where it has fewer (Version 65: a husk of a corps scratches a line, it does not open it). It costs the probing corps 'loss' of its men, 'org' of its organisation and 'ap' of its moves, and it counts as having fought, so it does no digging that month. The defenders lose no men; they count as attacked, so they dig at the pace of troops who were. Nothing changes hands, no battle is filed, no offensive is opened by it, and a line is probed once a month at most. A computer staff probes as the player does since Version 65 (rivals.json, 'soften').",
       prepared: "'dice' is the run of the day's luck for an attack on defenders who are all dug in and in supply (in the open it is 0.8 to 1.2, and it takes 1.2 to 1 on the day to carry the ground). Where only part of the defence is prepared the run lies between the two in proportion, and massed guns in the attack take their share off it as they do off the fieldworks. 'spentAt': an attack that fails against a defence at least this far prepared leaves the attacking corps with no moves for the rest of the month. 'surprise': how much of its preparedness a line loses to a new offensive by an army trained to it (Germany's): for 'surpriseMonths' months from its first blow, or for 'openingMonths' if it is the first offensive that army has ever made on that country. 'armour': how much it loses to an attack with tanks in it when the defence has no armour of its own. Both multiply with what the guns take off. 'losses': against a fully prepared line the attackers lose 'attacker' times the men they would in the open and the defenders 'defender' times, in proportion where the line is partly prepared.",
       wear: "Works wear down under attack (Version 61). Every attack on dug-in troops, won or lost, takes 'perAttack' months off the works of each defender who stays, in full if the attack came at 'fullAt' to 1 or better on the Battle Ticket and in proportion below that, so that a jab by one corps scratches a line and a real blow breaks into it. Massed guns in the attack add to it: by 'guns' times the share they take off the fieldworks. Works are never worn below nothing, and troops whose works are worn under one month lose the fieldworks' 25% in the same proportion. 'regrow': the months of digging a corps gets done in a month in which it was attacked. At a half, a line attacked once a month loses half a month's works every month and one attacked twice a month a month and a half, so steady pressure wears a line away and a quiet front builds it back. (At 0 the German player following history held Berlin to the end of 1944 in 17 to 19 wars of 24 instead of 12, and Moscow fell in 7 computer wars of 24 instead of 2: armies in contact never dug at all.)",
       tired: "Defenders who have already fought this month fight the next blow tired (Version 63). Every attack a corps stands against in the field, won or lost, counts against it until its own month begins again: 'per' off its defence for each blow at full weight, up to 'most' blows. The weight of a blow is the same measure the wear on works uses: full at wear.fullAt to 1 or better on the Battle Ticket, in proportion below that. The defenders' losses in men and in organisation go by the same weight, so that a jab by one corps at a great stack costs it almost nothing and tires nobody.",
@@ -16763,12 +16865,17 @@
     if (c.ap < P.ap) return `A probe takes ${P.ap} of a corps' moves, and it has ${c.ap} left.`;
     return null;
   }
+  var probeWeight = (c) => {
+    const w = DEFENCE.probe?.weight ?? 0;
+    return w > 0 ? Math.min(1, men(c) / w) : 1;
+  };
   var probeCost = (g2, c) => Math.round(men(c) * Math.min(0.6, (DEFENCE.probe?.loss ?? 0) * cmdLoss(g2, c)));
   function probeLine(g2, c, target) {
     if (whyNoProbe(g2, c, target) !== null) return null;
     const P = DEFENCE.probe, nat = armyOf(c);
     const defenders = hostileUnits(g2, target, nat);
     const lost = probeCost(g2, c);
+    const reach3 = P.wear * probeWeight(c);
     const fresh3 = defenders.filter((d) => corpsKnown(g2, d, nat).level !== "exact").length;
     c.str *= 1 - Math.min(0.6, P.loss * cmdLoss(g2, c));
     c.org = clamp(c.org - P.org, 0, 1);
@@ -16779,12 +16886,12 @@
       if (d.dug) {
         const w = worksOf(d);
         works = Math.max(works, w);
-        d.dugFor = Math.max(0, w - P.wear);
+        d.dugFor = Math.max(0, w - reach3);
         left = Math.max(left, worksOf(d));
       }
       d.pressed = true;
     }
-    const wear = Math.round(Math.min(P.wear, works) * 10) / 10;
+    const wear = Math.round(Math.min(reach3, works) * 10) / 10;
     identify(g2, defenders, nat);
     for (const d of new Set(defenders.map((x) => x.nat))) identify(g2, [c], d);
     g2.flags[`probed:${target.id}`] = g2.turn;
@@ -16844,6 +16951,48 @@
     if (!friendly2 && !arrive(g2, to, armyOf(c))) c.ap = 0;
     return true;
   }
+  function whyNoSwap(g2, a, b) {
+    if (g2.flags.open !== 1) return "Two corps change places in one order only in the grand campaign.";
+    if (a === b || a.dead || b.dead) return "It takes two corps.";
+    for (const c of [a, b]) if (c.kind === "fort" || c.town !== void 0 || c.leave !== void 0) return `${c.name} is not in the field.`;
+    if (!allied(g2, a.nat, b.nat)) return "They are not of one side.";
+    const ra = g2.regions[a.reg], rb = g2.regions[b.reg];
+    if (ra === rb || !ra.nb.includes(rb.id)) return "They do not stand in neighbouring provinces.";
+    if (!allied(g2, a.nat, ra.ctrl) || !allied(g2, a.nat, rb.ctrl) || hostileUnits(g2, ra, a.nat).length || hostileUnits(g2, rb, a.nat).length) return "Both provinces must be in your side's hands, with no enemy in them.";
+    if (blocked(g2, a, rb) || blocked(g2, b, ra)) return "The way between them is closed to one of them.";
+    if (a.kind === "eng" !== (b.kind === "eng")) return "Engineers change places only with engineers.";
+    for (const [c, to] of [[a, rb], [b, ra]]) {
+      const cost = moveCost(g2, c, to);
+      if (c.ap < Math.min(cost, 4) || c.ap <= 0) return `${c.name} has not the moves left for the march.`;
+    }
+    return null;
+  }
+  function swapCorps(g2, a, b) {
+    if (whyNoSwap(g2, a, b) !== null) return false;
+    const ra = g2.regions[a.reg], rb = g2.regions[b.reg];
+    const ca = moveCost(g2, a, rb), cb = moveCost(g2, b, ra);
+    g2.week = weekOf(a, ca);
+    const wa = handover(g2) && a.dug ? Math.round(worksOf(a) * 100) / 100 : 0, wb = handover(g2) && b.dug ? Math.round(worksOf(b) * 100) / 100 : 0;
+    if (wa > 0 && b.yields) leaveWorks(g2, a);
+    if (wb > 0 && a.yields) leaveWorks(g2, b);
+    place(g2, a, rb);
+    place(g2, b, ra);
+    a.ap = Math.max(0, a.ap - ca);
+    b.ap = Math.max(0, b.ap - cb);
+    if (wa > 0 && mansWorks(b)) {
+      b.dug = true;
+      b.dugFor = wa;
+      b.relief = true;
+    }
+    if (wb > 0 && mansWorks(a)) {
+      a.dug = true;
+      a.dugFor = wb;
+      a.relief = true;
+    }
+    takeWorks(g2, a, rb);
+    takeWorks(g2, b, ra);
+    return true;
+  }
   function railReach(g2, c) {
     const out = /* @__PURE__ */ new Set();
     if (c.kind === "fort" || c.ap < 4 || g2.regions[c.reg].terrain === DESERT.terrain || besieged(g2, g2.regions[c.reg]) && !junctionOpenTo(g2, c.nat, g2.regions[c.reg])) return out;
@@ -16901,9 +17050,22 @@
     const hold2 = sat < after ? SIEGE.capital * sat / after : SIEGE.capital + (1 - SIEGE.capital) * (sat - after) / Math.max(1, SIEGE.capitalYear - after);
     const capLost = !allied(g2, nat, seat3.ctrl) ? 1 : shut ? Math.min(1, hold2) : 0;
     const army = n.armyPeak > 0 ? clamp(armySize(g2, nat) / n.armyPeak, 0, 1) : 1;
-    const score = 0.45 * capLost + 0.35 * homeLost(g2, nat) + 0.2 * (1 - army);
+    const score = 0.45 * capLost + 0.35 * homeLost(g2, nat) + 0.2 * (1 - army) + exhausted(g2, nat);
     const worn = willLost(g2, nat);
     return worn > 0 ? score + worn : score;
+  }
+  var EXHAUST = rivals_default.exhaust;
+  function exhausted(g2, nat) {
+    const out = g2.flags[`capOut:${nat}`];
+    if (g2.flags.open !== 1 || !EXHAUST || nat === g2.human || out === void 0) return 0;
+    return Math.max(0, g2.turn - out - EXHAUST.after) * EXHAUST.per;
+  }
+  function capitalWatch(g2, nat) {
+    const n = g2.nations[nat];
+    if (g2.flags.open !== 1 || n.capital < 0) return;
+    const key3 = `capOut:${nat}`;
+    if (allied(g2, nat, g2.regions[n.capital].ctrl)) delete g2.flags[key3];
+    else if (g2.flags[key3] === void 0) g2.flags[key3] = g2.turn;
   }
   function checkCollapse(g2, nat, by) {
     const n = g2.nations[nat];
@@ -17332,6 +17494,15 @@
       }
       if (c.town === void 0 && !c.yields && c.ap >= c.apMax && !c.fought) {
         const gain = c.pressed ? DEFENCE.wear.regrow : 1;
+        if (!c.dug) {
+          takeWorks(g2, c, g2.regions[c.reg]);
+          if (c.relief) {
+            delete c.relief;
+            c.dugFor = Math.max(c.dugFor ?? 0, gain);
+            if (c.pressed) delete c.pressed;
+            continue;
+          }
+        }
         if (c.dug) c.dugFor = (c.dugFor ?? 1) + gain;
         else if (gain > 0) {
           c.dugFor = gain;
@@ -17474,6 +17645,7 @@
     if (tempo) g2.flags[`tempo:${nat}:${g2.turn}`] = 1;
     storyMonth(g2, nat);
     jointMonth(g2, nat);
+    capitalWatch(g2, nat);
     checkCollapse(g2, nat, n.atWar[0] ?? nat);
   }
   function sovietEvent(g2) {
@@ -18836,8 +19008,20 @@
   }
   var draw4 = (g2, ...key3) => hashString(`${g2.seed}:${key3.join(":")}`) / 4294967296;
   var monthly = (g2, ...key3) => new Rng(hashString(`${g2.seed}:${key3.join(":")}`)).next();
+  var RIVALS = rivals_default;
+  var rivalRules = (g2) => isOpen(g2) && !!RIVALS.characters;
+  function characterOf(g2, nat) {
+    const w = RIVALS.lean[nat] ?? RIVALS.lean._default;
+    const x = monthly(g2, nat, "character") * (w[0] + w[1] + w[2]);
+    return x < w[0] ? "bold" : x < w[0] + w[1] ? "cautious" : "opportunist";
+  }
   function temper(g2, nat) {
     const t = { attackAt: 99, persist: 0.85, minOdds: 1.4, ...OPEN.temper._default, ...OPEN.temper[nat] };
+    if (rivalRules(g2)) {
+      const C = RIVALS.characters[characterOf(g2, nat)];
+      t.attackAt *= C.attackAt;
+      t.minOdds += C.minOdds;
+    }
     const mood = 1 + OPEN.mood * (2 * draw4(g2, nat, "mood") - 1);
     const lv = nerveOf(g2, nat);
     const last = dominating(g2) ? DOMINATION.nerve : { attackAt: 1, persist: 1 };
@@ -19139,6 +19323,195 @@
     for (const a of Object.keys(g2.nations)) if (a !== nat && g2.nations[a].alive && allied(g2, a, nat) && flag2(g2, onKey(a, you, ""))) return k;
     return 1;
   }
+  var SEASONS = ["winter", "winter", "spring", "spring", "spring", "summer", "summer", "summer", "autumn", "autumn", "autumn", "winter"];
+  var effKey = (k, nat, where) => `st:${k}:${nat}${where}`;
+  function effortOf(g2, nat, where = "") {
+    const t = flag2(g2, effKey("eff", nat, where));
+    if (!t || !rivalRules(g2) || !g2.regions[t - 1]) return null;
+    const first = flag2(g2, effKey("eff0", nat, where)) || t, from = flag2(g2, effKey("effAt", nat, where));
+    const enemy = Object.keys(g2.nations)[flag2(g2, effKey("effE", nat, where)) - 1] ?? g2.regions[t - 1].ctrl;
+    return {
+      nat,
+      target: t - 1,
+      first: first - 1,
+      from,
+      to: flag2(g2, effKey("effTo", nat, where)),
+      enemy,
+      won: flag2(g2, effKey("effWon", nat, where)),
+      name: `the ${SEASONS[turnToDate(from).month]} offensive towards ${g2.regions[first - 1].name}`
+    };
+  }
+  function effortsOf(g2, nat) {
+    if (!rivalRules(g2)) return [];
+    const base = `st:eff:${nat}`;
+    const out = [];
+    for (const k of Object.keys(g2.flags)) {
+      if (k !== base && !k.startsWith(`${base}:t`)) continue;
+      const e = effortOf(g2, nat, k.slice(base.length));
+      if (e) out.push(e);
+    }
+    return out;
+  }
+  var busyElsewhere = (g2, e, nat) => Object.keys(g2.nations).some((x) => x !== nat && x !== e && Math.max(g2.nations[e]?.lastFight[x] ?? -99, g2.nations[x].lastFight[e] ?? -99) >= g2.turn - RIVALS.effort.busy);
+  function sector(g2, nat, f, least, beside) {
+    const ours = new Set(f.ours);
+    const prize2 = objectives(g2, f).slice(0, 8);
+    const fit3 = (c) => c.nat === nat && !c.dead && c.kind !== "fort" && !c.hold && c.town === void 0 && c.leave === void 0 && c.org >= 0.35;
+    let best = null;
+    for (const id of f.edge) {
+      const t = g2.regions[id];
+      if (f.depth[id] !== 1 || beside && !beside.nb.includes(id) || !atWar(g2, nat, fieldCtrl(g2, t)) || !hostileUnits(g2, t, nat).length) continue;
+      const doors = t.nb.filter((j) => (ours.has(j) || beside && j === beside.id) && allied(g2, nat, fieldCtrl(g2, g2.regions[j])));
+      if (!doors.length) continue;
+      const front = [], back = [];
+      const seen2 = new Set(doors);
+      let room2 = 0;
+      for (const j of doors) {
+        const r = g2.regions[j];
+        for (const c of r.units) if (fit3(c)) front.push(c);
+        room2 += Math.max(0, STACK - r.units.filter((u) => allied(g2, nat, u.nat)).length);
+      }
+      for (const j of doors) for (const k of g2.regions[j].nb) {
+        if (seen2.has(k)) continue;
+        seen2.add(k);
+        const r = g2.regions[k];
+        if (allied(g2, nat, fieldCtrl(g2, r))) {
+          for (const c of r.units) if (fit3(c)) back.push(c);
+        }
+      }
+      back.sort((a, b) => atkP(g2, b) - atkP(g2, a) || a.id - b.id);
+      const force2 = limitAttackers(g2, [...front, ...back.slice(0, room2)], t);
+      if (!force2.length) continue;
+      const odds = assess(g2, force2, t).odds;
+      if (odds < least) continue;
+      const score = Math.min(odds, 3) + t.vp * 2 + (t.cap ? 8 : 0) + (prize2.includes(t.name) ? 2 : 0);
+      if (!best || score > best.score || score === best.score && t.id < best.target.id) best = { target: t, odds, score };
+    }
+    return best;
+  }
+  function plansKnown(g2, nat, viewer = g2.human) {
+    if (viewer === null || !g2.nations[viewer]?.alive || allied(g2, nat, viewer)) return "ally";
+    return knowsBooks(g2, nat, viewer) ? "agent" : null;
+  }
+  function effortNamed(g2, e) {
+    const me = g2.human;
+    if (me === null || !g2.nations[me]?.alive || e.nat === me) return;
+    const how = plansKnown(g2, e.nat, me);
+    if (!how) return;
+    const who = g2.nations[e.nat]?.name ?? e.nat;
+    const until = turnToDate(e.to).label;
+    const name = e.name.replace(/^the /, "");
+    if (how === "ally") {
+      if (atWar(g2, me, e.enemy) || allied(g2, me, e.enemy)) headline(g2, "info", `${who}'s staff has named its main effort: ${e.name}, against ${g2.nations[e.enemy]?.name ?? e.enemy}, until ${until}.`, e.nat, e.first);
+      return;
+    }
+    const cap5 = g2.nations[e.nat].capital;
+    const agent = agentsOf(g2, me).find((a) => a.reg === cap5 && a.mission === "books" && atWork(g2, a));
+    const mine3 = e.enemy === me || allied(g2, me, e.enemy);
+    headline(g2, mine3 ? "event" : "info", `${agent ? `Agent ${agent.name} reports from ${g2.regions[cap5].name}` : "Your secret service reports"}: ${who}'s staff has named its main effort, the ${name}. It will mass opposite ${g2.regions[e.first].name} and attack there until ${until}${mine3 ? ". You have the month it takes them to mass." : "."}`, e.nat, e.first);
+  }
+  function effortOver(g2, e) {
+    const me = g2.human;
+    if (me === null || !g2.nations[me]?.alive) return;
+    const who = g2.nations[e.nat]?.name ?? e.nat;
+    const got = e.won === 1 ? "one province" : `${e.won} provinces`;
+    const name = e.name.replace(/^the /, "");
+    if (atWar(g2, me, e.nat) && (e.enemy === me || allied(g2, me, e.enemy))) {
+      headline(g2, "event", `${who}'s ${name} is over. ${e.won ? `It took ${got}, and the staff that planned it will be looking for the next place.` : "The line held, and the staff that planned it will be looking for another place."}`, e.nat, e.first);
+    } else if (allied(g2, me, e.nat)) {
+      headline(g2, "info", `${who}'s ${name} is over: ${e.won ? `it took ${got}` : "it gained no ground"}.`, e.nat, e.first);
+    }
+  }
+  function mainEffort(g2, nat, real, T, where, spoken) {
+    if (!rivalRules(g2) || nat === g2.human) return;
+    const E = RIVALS.effort, who = characterOf(g2, nat), C = RIVALS.characters[who];
+    const key3 = (k) => effKey(k, nat, where);
+    const stop = (rest) => {
+      for (const k of ["eff", "eff0", "effAt", "effTo", "effE", "effWon"]) delete g2.flags[key3(k)];
+      if (rest) g2.flags[key3("effRest")] = g2.turn + rest;
+    };
+    const cur = effortOf(g2, nat, where);
+    if (cur) {
+      const at = g2.regions[cur.target];
+      const f = real.find((x) => x.enemies.includes(cur.enemy)) ?? null;
+      const taken2 = allied(g2, nat, fieldCtrl(g2, at));
+      if (taken2) {
+        g2.flags[key3("effWon")] = cur.won + 1;
+        cur.won++;
+      }
+      const gone = !f || !g2.nations[cur.enemy]?.alive || !atWar(g2, nat, cur.enemy);
+      const general = !!f && onSince(g2, nat, f, where) > 0;
+      const live = !gone && !general && g2.turn <= cur.to;
+      const next = live && taken2 ? sector(g2, nat, f, T.minOdds, at) : null;
+      if (next) {
+        g2.flags[key3("eff")] = next.target.id + 1;
+        return;
+      }
+      if (live && !taken2) return;
+      if (!general) effortOver(g2, cur);
+      stop(gone || general ? 0 : E.rest);
+      return;
+    }
+    if (g2.turn < flag2(g2, key3("effRest")) || flag2(g2, `st:op:${nat}`)) return;
+    for (const f of real) {
+      if (onSince(g2, nat, f, where) || spoken(f)) continue;
+      if (!f.enemies.every((e) => g2.turn >= flag2(g2, `st:rest:${nat}:${e}${where}`))) continue;
+      if (f.ratio < C.strength) continue;
+      const quiet2 = Math.min(...f.enemies.map((e) => quietWith(g2, nat, e)));
+      if (quiet2 < C.quiet && !(who === "opportunist" && f.enemies.some((e) => busyElsewhere(g2, e, nat)))) continue;
+      const s = sector(g2, nat, f, C.local);
+      if (!s) continue;
+      g2.flags[key3("eff")] = g2.flags[key3("eff0")] = s.target.id + 1;
+      g2.flags[key3("effAt")] = g2.turn;
+      g2.flags[key3("effTo")] = g2.turn + E.months - 1;
+      g2.flags[key3("effE")] = Object.keys(g2.nations).indexOf(fieldCtrl(g2, s.target)) + 1;
+      delete g2.flags[key3("effWon")];
+      const named2 = effortOf(g2, nat, where);
+      if (named2) effortNamed(g2, named2);
+      return;
+    }
+  }
+  function effortOrders(g2, nat, e, real, T) {
+    const E = RIVALS.effort;
+    const at = g2.regions[e.target];
+    const f = real.find((x) => x.depth[at.id] >= 1) ?? real.find((x) => x.enemies.includes(e.enemy));
+    if (!f) return null;
+    const doors = at.nb.filter((j) => allied(g2, nat, fieldCtrl(g2, g2.regions[j])));
+    const around = at.nb.filter((j) => f.depth[j] >= 1 && atWar(g2, nat, fieldCtrl(g2, g2.regions[j])) && g2.regions[j].nb.some((k) => doors.includes(k))).sort((a, b) => f.depth[a] - f.depth[b] || g2.regions[b].vp - g2.regions[a].vp || a - b).slice(0, Math.max(0, E.sector - 1));
+    const staging = {};
+    for (const j of doors) if (j !== g2.nations[nat].capital) staging[g2.regions[j].name] = Math.min(STACK, E.mass);
+    return {
+      posture: "attack",
+      name: e.name.replace(/^t/, "T"),
+      from: e.from,
+      effort: at.id,
+      enemies: f.enemies,
+      objectives: [at.name, ...around.map((j) => g2.regions[j].name)],
+      targets: [at.name, ...around.map((j) => g2.regions[j].name)],
+      minOdds: T.minOdds,
+      staging,
+      release: doors.filter((j) => j !== g2.nations[nat].capital).map((j) => g2.regions[j].name)
+    };
+  }
+  function pressing2(g2, nat, f, minOdds, where = "") {
+    const P = RIVALS.press;
+    if (!rivalRules(g2) || !P || f.ratio < P.ratio) return null;
+    const idle = g2.turn - flag2(g2, `st:gain:${nat}${where}`);
+    if (idle < P.after) return null;
+    return { minOdds: Math.max(Math.min(P.floor, minOdds), minOdds - P.step * (idle - P.after + 1)), waves: P.waves };
+  }
+  function inNameOnly(g2, nat, f, since) {
+    const P = RIVALS.press;
+    return rivalRules(g2) && nat !== g2.human && g2.turn - since >= P.after && f.ratio < P.ratio && Math.min(...f.enemies.map((e) => quietWith(g2, nat, e))) >= P.after;
+  }
+  function calledOffIdle(g2, nat, f, where = "") {
+    setOn(g2, nat, f, 0, where);
+    for (const e of f.enemies) g2.flags[`st:idle:${nat}:${e}${where}`] = g2.turn;
+  }
+  var shy = (g2, nat, f, where = "") => rivalRules(g2) && f.ratio < RIVALS.press.ratio && f.enemies.some((e) => {
+    const at = flag2(g2, `st:idle:${nat}:${e}${where}`);
+    return at > 0 && g2.turn - at < RIVALS.press.again;
+  });
   function cond(g2, nat, c, real) {
     const [key3, rest = ""] = c.split(/:(.*)/s);
     const a = rest.split(",");
@@ -19180,7 +19553,8 @@
       const since = onSince(g2, nat, f);
       if (since) {
         const fresh3 = g2.turn - since < 2 || pushed && f.enemies.some((e) => flag2(g2, `st:pushed:${nat}:${e}`)) || boldNow(g2, nat) > 0;
-        if (fresh3 || f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt)) setOn(g2, nat, f, since);
+        if (!fresh3 && inNameOnly(g2, nat, f, since)) calledOffIdle(g2, nat, f);
+        else if (fresh3 || f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt)) setOn(g2, nat, f, since);
         else {
           setOn(g2, nat, f, 0);
           for (const e of f.enemies) g2.flags[`st:rest:${nat}:${e}`] = g2.turn + OPEN.rest;
@@ -19192,7 +19566,7 @@
         const k = k0 < (I?.after.length ?? 0) && planned(f) ? 0 : k0;
         const none3 = T.attackAt >= 50;
         const eager = !k ? usual : none3 ? k >= I.after.length ? I.any : usual : Math.max(I.floor, usual * I.ratio[k - 1]);
-        if (f.ratio >= eager) {
+        if (f.ratio >= eager && !(!k && shy(g2, nat, f))) {
           setOn(g2, nat, f, g2.turn);
           g2.flags[`st:gain:${nat}`] = g2.turn;
           if (f.ratio < usual) {
@@ -19202,6 +19576,7 @@
         }
       }
     }
+    mainEffort(g2, nat, real, T, "", planned);
     const busy = real.some((f) => onSince(g2, nat, f) && !cond(g2, nat, "quiet", [f]) && g2.turn - flag2(g2, `st:gain:${nat}`) <= 1);
     let cur = flag2(g2, `st:op:${nat}`);
     const go = (k) => {
@@ -19323,7 +19698,17 @@
       phase.axis = way.slice(0, opening && n.blitz ? OPEN.thrust[0] : OPEN.thrust[1]);
       phase.targets = [...new Set(live.flatMap((f) => bound(g2, nat, f, f === main ? way : [], opening)))];
       if (opening) phase.haltOrder = g2.regions.filter((r) => r.cap && main.depth[r.id] >= 3 && main.enemies.includes(r.owner)).map((r) => r.name);
-    } else if (went) phase.name = went.name;
+      const press = pressing2(g2, nat, main, phase.minOdds ?? T.minOdds);
+      if (press) {
+        phase.minOdds = press.minOdds;
+        phase.waves = press.waves;
+      }
+    } else {
+      const eff = effortOf(g2, nat);
+      const orders = eff ? effortOrders(g2, nat, eff, real, T) : null;
+      if (orders) Object.assign(phase, orders);
+      else if (went) phase.name = went.name;
+    }
     const cap5 = n.capital >= 0 ? g2.regions[n.capital] : null;
     if (cap5 && cap5.ctrl === nat && nearEnemy(g2, nat, cap5, OPEN.guardWithin)) phase.staging = { ...phase.staging ?? {}, [cap5.name]: OPEN.guard };
     const quay = seaBase(g2, nat);
@@ -19453,19 +19838,26 @@
       for (const f of real) {
         const since = onSince(g2, nat, f, where);
         if (since) {
-          if (g2.turn - since < 2 || f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt)) setOn(g2, nat, f, since, where);
+          if (g2.turn - since >= 2 && inNameOnly(g2, nat, f, since)) calledOffIdle(g2, nat, f, where);
+          else if (g2.turn - since < 2 || f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt)) setOn(g2, nat, f, since, where);
           else {
             setOn(g2, nat, f, 0, where);
             for (const e of f.enemies) g2.flags[`st:rest:${nat}:${e}${where}`] = g2.turn + OPEN.rest;
           }
-        } else if (f.ratio >= T.attackAt && f.enemies.every((e) => g2.turn >= flag2(g2, `st:rest:${nat}:${e}${where}`))) {
+        } else if (f.ratio >= T.attackAt && !shy(g2, nat, f, where) && f.enemies.every((e) => g2.turn >= flag2(g2, `st:rest:${nat}:${e}${where}`))) {
           setOn(g2, nat, f, g2.turn, where);
           g2.flags[`st:gain:${nat}${where}`] = g2.turn;
         }
       }
+      mainEffort(g2, nat, real, T, where, () => false);
     }
     const live = real.filter((f) => onSince(g2, nat, f, where) > 0);
-    if (!live.length) return { name: "", from: g2.turn, to: g2.turn, posture: "defend" };
+    if (!live.length) {
+      const eff = effortOf(g2, nat, where);
+      const orders = eff ? effortOrders(g2, nat, eff, real, T) : null;
+      return { name: "", from: g2.turn, to: g2.turn, posture: "defend", ...orders ?? {} };
+    }
+    const press = pressing2(g2, nat, live[0], T.minOdds, where);
     return {
       name: `The offensive against ${g2.nations[live[0].key]?.name ?? live[0].key}`,
       from: onSince(g2, nat, live[0], where),
@@ -19473,7 +19865,8 @@
       posture: "attack",
       enemies: [...new Set(live.flatMap((f) => f.enemies))],
       objectives: [...new Set(live.flatMap((f) => objectives(g2, f)))],
-      minOdds: T.minOdds,
+      minOdds: press?.minOdds ?? T.minOdds,
+      ...press ? { waves: press.waves } : {},
       targets: [...new Set(live.flatMap((f) => bound(g2, nat, f, [], false, OPEN.boundOverseas)))],
       release: [...new Set(live.flatMap((f) => f.ours.map((id) => g2.regions[id].name)))]
     };
@@ -19502,6 +19895,8 @@
   var scope = null;
   var quiet = false;
   var single = false;
+  var waves = 2;
+  var striking = false;
   var leaving = null;
   var entrusted = /* @__PURE__ */ new Set();
   var masked = /* @__PURE__ */ new Set();
@@ -19539,6 +19934,7 @@
   function campaign(g2, nat) {
     const n = g2.nations[nat];
     if (!n.alive) return;
+    foldWorn(g2, nat);
     garrisons(g2, nat, false);
     try {
       campaignMoves(g2, nat);
@@ -19731,6 +20127,8 @@
       scope = ids2[k];
       quiet = !!ph?.quiet;
       single = ph?.renew === false;
+      waves = ph?.waves ?? 2;
+      striking = ph?.effort !== void 0;
       leaving = ph?.withdraw ?? null;
       given = new Set((ph?.abandon ?? []).map((nm) => g2.byName[nm]?.id).filter((id) => id !== void 0 && ids2[k].has(id)));
       entrusted = handedOver(g2, nat, ph);
@@ -19759,6 +20157,7 @@
               edge3.add(r.name);
             } else if (only && !only.has(r.name)) halt.add(r.name);
           }
+          softenLine(g2, nat, enemies, halt, only, ph.minOdds ?? 1.3, ph.oddsFor);
           offensive(g2, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
           if (n.alive) {
             advance(g2, nat, enemies, 0, null, edge3);
@@ -19775,6 +20174,8 @@
         scope = null;
         quiet = false;
         single = false;
+        waves = 2;
+        striking = false;
         leaving = null;
         given = /* @__PURE__ */ new Set();
         entrusted = /* @__PURE__ */ new Set();
@@ -19813,6 +20214,7 @@
     given = new Set((ph?.abandon ?? []).map((nm) => g2.byName[nm]?.id).filter((id) => id !== void 0));
     quiet = !!ph?.quiet;
     single = ph?.renew === false;
+    waves = ph?.waves ?? 2;
     bound2 = ph?.strict ? new Set(ph.targets ?? []) : null;
     try {
       fight(g2, nat, ph, posture);
@@ -19822,6 +20224,7 @@
       given = /* @__PURE__ */ new Set();
       quiet = false;
       single = false;
+      waves = 2;
       bound2 = null;
     }
   }
@@ -19864,6 +20267,7 @@
     const halt = /* @__PURE__ */ new Set([...ph && g2.turn === ph.from ? ph.haltOrder ?? [] : [], ...ph?.siege ?? []]);
     const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g2, nat)) : null;
     gunsUp(g2, nat, enemies, only);
+    softenLine(g2, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
     offensive(g2, nat, objectivesFor(g2, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g2.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
     if (!n.alive) return;
     if (posture === "redeploy") redeploy(g2, nat, ph, enemies);
@@ -20149,7 +20553,7 @@
   }
   function offensive(g2, nat, objs, enemies, minOdds, axisList, axisOpen, follow, halt, only, oddsFor = {}) {
     const failed = /* @__PURE__ */ new Set();
-    const waved = /* @__PURE__ */ new Set();
+    const waved = /* @__PURE__ */ new Map();
     const axis2 = new Set(axisList);
     const notYet = (name) => {
       if (axisOpen || !axis2.has(name)) return false;
@@ -20177,7 +20581,7 @@
           const cand = /* @__PURE__ */ new Map();
           for (const c of g2.corps) {
             if (c.nat !== nat || c.hold || c.kind === "fort" || c.ap <= 0 || weekOf(c, 1) > wave) continue;
-            if (scope && massed.has(c.id)) continue;
+            if (scope && massed.has(c.id) && !striking) continue;
             const kept = door !== null && wave <= 2 && KIND[c.kind].mobile && !massed.has(c.id) && door[c.reg] >= 0 && door[c.reg] <= c.ap;
             for (const j of g2.regions[c.reg].nb) {
               const r = g2.regions[j];
@@ -20224,7 +20628,7 @@
                 const need = (oddsFor[target.name] ?? minOdds) + DEFENCE.staff.odds * ready + sore;
                 if (odds >= need) pick2 = pool;
                 else {
-                  const two = single || waved.has(j) ? null : twoWaves(g2, avail, pool, target, need);
+                  const two = single || (waved.get(j) ?? 0) >= waves - 1 ? null : twoWaves(g2, avail, pool, target, need);
                   if (!two) continue;
                   pick2 = two.corps;
                   odds = two.then;
@@ -20239,7 +20643,7 @@
           let taken2;
           if (best.battle) {
             taken2 = resolveBattle(g2, best.corps, best.target).taken;
-            if (best.wave) waved.add(best.target.id);
+            if (best.wave) waved.set(best.target.id, (waved.get(best.target.id) ?? 0) + 1);
             else if (!taken2 && (g2.nations[nat].slowCommand || single)) failed.add(best.target.id);
           } else {
             taken2 = moveCorps(g2, best.corps[0], best.target);
@@ -20298,6 +20702,66 @@
       if (!taken2) failed.add(best.target.id);
       probed(g2, nat, foe, P.step);
       if (taken2 && g2.nations[nat].alive) support(g2, nat, best.target);
+    }
+  }
+  function softenLine(g2, nat, enemies, halt, only, minOdds, oddsFor = {}) {
+    if (!rivalRules(g2) || !probeRules(g2) || nat === g2.human) return;
+    const S = RIVALS.soften;
+    const cand = /* @__PURE__ */ new Map();
+    for (const c of g2.corps) {
+      if (c.nat !== nat || c.dead || c.hold || c.kind === "fort" || c.ap <= 0 || c.town !== void 0) continue;
+      if (scope && !scope.has(c.reg)) continue;
+      for (const j of g2.regions[c.reg].nb) {
+        const r = g2.regions[j];
+        if (halt.has(r.name) || only && !only.has(r.name) || !enemies.has(ctl(g2, r)) || !atWar(g2, nat, ctl(g2, r)) || blocked(g2, c, r)) continue;
+        let list4 = cand.get(j);
+        if (!list4) cand.set(j, list4 = []);
+        list4.push(c);
+      }
+    }
+    const wants = [];
+    for (const [j, avail] of cand) {
+      const target = g2.regions[j];
+      const foes = hostileUnits(g2, target, nat);
+      if (!foes.length || Math.max(...foes.map(worksOf)) < S.works) continue;
+      const pool = limitAttackers(g2, avail.filter((c) => c.org >= 0.35), target);
+      if (!pool.length) continue;
+      const odds = assess(g2, pool, target).odds;
+      const need = oddsFor[target.name] ?? minOdds;
+      if (odds >= need || odds < S.from * need) continue;
+      const free2 = avail.filter((c) => whyNoProbe(g2, c, target) === null);
+      const spare = free2.filter((c) => !pool.includes(c));
+      const prober = [...spare.length ? spare : free2.length > 1 ? free2 : []].sort((a, b) => probeWeight(b) - probeWeight(a) || atkPower(g2, a) - atkPower(g2, b) || a.id - b.id)[0];
+      if (prober) wants.push({ target, prober, gap: need - odds });
+    }
+    wants.sort((a, b) => a.gap - b.gap || a.target.id - b.target.id);
+    const used = /* @__PURE__ */ new Set();
+    let made = 0;
+    for (const w of wants) {
+      if (made >= S.most) break;
+      if (used.has(w.prober.id) || whyNoProbe(g2, w.prober, w.target) !== null) continue;
+      if (probeLine(g2, w.prober, w.target)) {
+        used.add(w.prober.id);
+        made++;
+      }
+    }
+  }
+  function foldWorn(g2, nat) {
+    if (!rivalRules(g2) || !foldRules(g2) || nat === g2.human) return;
+    const worn = RIVALS.fold.worn;
+    const seen2 = /* @__PURE__ */ new Set();
+    for (const c of [...g2.corps]) {
+      if (c.nat !== nat || c.dead || c.str >= worn || seen2.has(c.reg)) continue;
+      seen2.add(c.reg);
+      const here = g2.regions[c.reg].units.filter((u) => u.nat === nat && !u.dead && u.str < worn);
+      let best = null;
+      for (const keep of here) for (const gone of here) {
+        if (keep === gone || whyNotFold(g2, keep, gone) !== null) continue;
+        const v = foldView(g2, keep, gone);
+        if (v.back > 0) continue;
+        if (!best || v.str > best.str || v.str === best.str && (keep.xp > best.keep.xp || keep.xp === best.keep.xp && keep.id < best.keep.id)) best = { keep, gone, str: v.str };
+      }
+      if (best) foldCorps(g2, best.keep, best.gone);
     }
   }
   function support(g2, nat, at) {
@@ -20963,6 +21427,14 @@
     if (onEve(g2) || !canOrder(g2, c) || whyNotAttack(g2, target, c.nat)) return null;
     return probeLine(g2, c, target);
   }
+  function swapChoices(g2, c, to) {
+    if (g2.human === null || !humanUp(g2) || onEve(g2) || !canOrder(g2, c)) return [];
+    return g2.regions[to].units.filter((b) => canOrder(g2, b) && whyNoSwap(g2, c, b) === null);
+  }
+  function orderSwap(g2, a, b) {
+    if (onEve(g2) || !canOrder(g2, a) || !canOrder(g2, b)) return false;
+    return swapCorps(g2, a, b);
+  }
   function softenOptions(g2, corps, target) {
     if (!probeRules(g2) || g2.human === null || !humanUp(g2)) return null;
     const foes = hostileUnits(g2, target, g2.human);
@@ -20970,10 +21442,10 @@
     const P = DEFENCE.probe;
     const works = Math.round(Math.max(0, ...foes.map(worksOf)) * 10) / 10;
     const pool = [.../* @__PURE__ */ new Set([...corps, ...candidates(g2, target)])].filter((c) => canOrder(g2, c));
-    const can2 = pool.filter((c) => whyNoProbe(g2, c, target) === null).sort((a, b) => corpsBase(g2, a) * KIND[a.kind].atk - corpsBase(g2, b) * KIND[b.kind].atk || a.id - b.id);
+    const can2 = pool.filter((c) => whyNoProbe(g2, c, target) === null).sort((a, b) => probeWeight(b) - probeWeight(a) || corpsBase(g2, a) * KIND[a.kind].atk - corpsBase(g2, b) * KIND[b.kind].atk || a.id - b.id);
     const who = can2[0] ?? pool[0];
     const fresh3 = foes.filter((d) => corpsKnown(g2, d, g2.human).level !== "exact").length;
-    const probe = who ? { corps: who.id, name: who.name, why: whyNoProbe(g2, who, target), ap: P.ap, men: probeCost(g2, who), wear: Math.min(P.wear, works), fresh: fresh3 } : { corps: -1, name: "", why: "No corps of yours stands beside that line with moves left.", ap: P.ap, men: 0, wear: Math.min(P.wear, works), fresh: fresh3 };
+    const probe = who ? { corps: who.id, name: who.name, why: whyNoProbe(g2, who, target), ap: P.ap, men: probeCost(g2, who), wear: Math.round(Math.min(P.wear * probeWeight(who), works) * 10) / 10, fresh: fresh3, weight: probeWeight(who), full: P.weight ?? 0 } : { corps: -1, name: "", why: "No corps of yours stands beside that line with moves left.", ap: P.ap, men: 0, wear: Math.min(P.wear, works), fresh: fresh3, weight: 1, full: P.weight ?? 0 };
     let bomb = null;
     if (raidKinds(g2, g2.human).some((k) => k.key === "line")) {
       if (works <= 0) bomb = { why: "Nobody there is dug in: there are no fieldworks to bomb.", groups: 0, bombers: 0, wear: 0, verdict: "" };
@@ -21463,6 +21935,37 @@
   }
   function orderFog(g2, on) {
     return !!g2.human && setFog(g2, on);
+  }
+  function rivalStaff(g2, nat) {
+    const n = g2.nations[nat];
+    if (!rivalRules(g2) || !n?.alive || n.dormant || nat === g2.human) return null;
+    const character = characterOf(g2, nat);
+    const C = RIVALS.characters[character];
+    const source = plansKnown(g2, nat);
+    const me = g2.human;
+    const name = (id) => g2.nations[id]?.name ?? id;
+    const efforts = !source ? [] : effortsOf(g2, nat).map((e) => ({
+      name: e.name,
+      target: e.target,
+      targetName: g2.regions[e.target].name,
+      first: e.first,
+      firstName: g2.regions[e.first].name,
+      enemy: e.enemy,
+      from: e.from,
+      to: e.to,
+      won: e.won,
+      atYou: me !== null && (e.enemy === me || allied(g2, me, e.enemy))
+    }));
+    const offensives = [];
+    if (source) {
+      for (const e of n.atWar) {
+        const since = Object.keys(g2.flags).filter((k) => k === `st:on:${nat}:${e}` || k.startsWith(`st:on:${nat}:${e}:t`)).reduce((s, k) => Math.max(s, g2.flags[k]), 0);
+        if (since && g2.nations[e]?.alive && (g2.turn - since <= 3 || g2.turn - (n.lastFight[e] ?? -99) <= 3)) offensives.push({ enemy: e, since });
+      }
+    }
+    const cap5 = n.capital >= 0 ? g2.regions[n.capital].name : "its capital";
+    const line = !n.atWar.length ? "At peace: its staff has no plan of attack." : !source ? `Where its main effort will fall is not known. An agent reading its books in ${cap5} would learn it.` : efforts.length ? efforts.map((e) => `Main effort: ${e.name}, against ${name(e.enemy)}, until ${turnToDate(e.to).label}${e.target !== e.first ? `. It has moved on to ${e.targetName}` : ""}.`).join(" ") : offensives.length ? `A general offensive against ${offensives.map((o) => name(o.enemy)).join(" and ")}, under way since ${turnToDate(Math.min(...offensives.map((o) => o.since))).label}.` : "It stands on the defensive: no main effort is named.";
+    return { nat, character, label: C.label, says: C.says, source, efforts, offensives, line };
   }
   function lastAct(g2) {
     if (g2.flags.open !== 1 || !g2.human) return null;
@@ -23108,19 +23611,46 @@
     }
     return { regions: [...merged.values()] };
   }
+  var swapAsked = "";
   function move(ids2, to) {
     const s = game();
     const moved = [];
+    let note4 = "";
+    const trySwap = (c) => {
+      let others = [];
+      try {
+        others = s.regions[c.reg]?.nb.includes(to) ? swapChoices(s, c, to) : [];
+      } catch {
+        others = [];
+      }
+      if (!others.length || moved.length) return;
+      const other2 = others[0], from = c.reg, key3 = `${c.id}:${to}:${s.turn}`;
+      if (swapAsked === key3) {
+        swapAsked = "";
+        if (orderSwap(s, c, other2)) {
+          moved.push({ id: c.id, path: [to] }, { id: other2.id, path: [from] });
+          note4 = `${c.name} and ${other2.name} have changed places.`;
+        }
+      } else {
+        swapAsked = key3;
+        note4 = `${s.regions[to].name} is full. Order the march again and ${c.name} changes places with ${other2.name}, which comes back to ${s.regions[from].name}.`;
+      }
+    };
     for (const c of corpsById(s, ids2)) {
       const m = reach2(s, c);
       const end = m.get(to);
-      if (!end || end.attack || to === c.reg) continue;
+      if (to === c.reg || end?.attack) continue;
+      if (!end) {
+        trySwap(c);
+        continue;
+      }
       const path = [];
       for (let at = to; at !== c.reg && at >= 0; at = m.get(at).prev) path.unshift(at);
       const n = orderMove(s, c, to);
       if (n > 0) moved.push({ id: c.id, path: path.slice(0, n) });
+      else trySwap(c);
     }
-    return { moved, view: view() };
+    return { moved, note: note4, view: view() };
   }
   function wouldAttack(s, ids2, to) {
     const able2 = new Set(candidates(s, s.regions[to]).map((c) => c.id));
@@ -23186,10 +23716,12 @@
     };
     const num4 = (n) => Math.round(n).toLocaleString("en");
     const gains = [v.probe.fresh ? `name the ${v.probe.fresh === 1 ? "corps" : `${v.probe.fresh} corps`} the staff cannot see` : "", v.probe.wear > 0 ? `take ${mo(v.probe.wear)} off their fieldworks` : ""].filter(Boolean).join(" and ");
-    const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num4(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.` : "There is nothing more a probe could find here.");
+    const pw = v.probe;
+    const thin = pw.weight !== void 0 && pw.weight < 0.995 ? ` It has the men for ${Math.max(1, Math.round(pw.weight * 100))}% of a full probe${pw.full ? `, which takes ${num4(pw.full)} men` : ""}.` : "";
+    const probeText = v.probe.why ?? (gains ? `It would ${gains}, for about ${num4(v.probe.men)} men and ${v.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : "There is nothing more a probe could find here.");
     return {
       head: v.works > 0 ? `The defenders stand in fieldworks of ${mo(v.works)}${v.works >= DEFENCE.entrench.months ? ", finished" : ""}.` : "The defenders are not dug in.",
-      done: done ? `${done.name} has probed this line: it found ${listOf3(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num4(done.lost)} men.` : "",
+      done: done ? `${done.name} has probed this line: it found ${listOf3(done.found)}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ""}. It cost ${num4(done.lost)} men.${done.was && done.now && done.was !== done.now ? ` Before it the staff gave ${done.was} to take the place; now it reads ${done.now}.` : ""}` : "",
       probe: { label: `PROBE${v.probe.name ? ` WITH ${v.probe.name.toUpperCase()}` : " THE LINE"}`, text: probeText, ok: !v.probe.why && !!gains, corps: v.probe.corps },
       bomb: v.bomb ? {
         label: "BOMB THE LINE",
@@ -24083,7 +24615,8 @@
         where: s.regions[o.at]?.name ?? "",
         // (Version 59: what it takes from the reserve of men, said with its note)
         note: [o.note, o.men ? `Takes ${Math.round(o.men).toLocaleString("en-US")} men from the reserve.` : ""].filter(Boolean).join(" "),
-        why: up ? o.why : "It is not your month.",
+        // (Version 65) where money is the only thing in the way, how far short the treasury is
+        why: up ? o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${o.why ?? ""} ${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString("en")} short.`.trim() : o.why : "It is not your month.",
         poor: o.poor
       })),
       orders: s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) }))
@@ -25254,10 +25787,21 @@ ${standing3}`,
     }
     if (part[0] === "probe") {
       const who = s.corps.find((c) => c.id === Number(part[1])), target = s.regions[Number(part[2])];
+      const force2 = (part[3] ?? "").split(".").map(Number).filter((n) => Number.isFinite(n));
+      const chanceOf = () => {
+        try {
+          const look = target && force2.length ? attackOutlook(s, attackers(s, force2, target.id), target) : null;
+          return look ? { words: chanceWords(look), exact: look.exact } : { words: "", exact: true };
+        } catch {
+          return { words: "", exact: true };
+        }
+      };
+      const before = chanceOf();
       const rep = who && target ? orderProbe(s, who, target) : null;
       ok = !!rep;
       if (rep) {
-        lastProbe = { turn: s.turn, region: target.id, name: rep.name, found: rep.found, wear: rep.wear, lost: rep.lost };
+        const after = chanceOf();
+        lastProbe = { turn: s.turn, region: target.id, name: rep.name, found: rep.found, wear: rep.wear, lost: rep.lost, was: before.exact ? "" : before.words, now: after.words };
         note4 = `${rep.name} has probed the line at ${target.name}: it found ${listOf3(rep.found)}${rep.wear > 0 ? ", and wore their fieldworks down" : ""}. It cost ${rep.lost.toLocaleString("en")} men.`;
       } else note4 = "The line cannot be probed now.";
       return { ok, note: note4, fly: fly2, flies, open, view: view() };
@@ -25540,7 +26084,19 @@ ${standing3}`,
       will: n.alive ? Math.max(0, Math.min(1, 1 - collapseScore(s, n.id) / n.resilience)) : 0,
       side: n.id === me.id ? "own" : atWar(s, me.id, n.id) ? "enemy" : allied(s, me.id, n.id) ? "ally" : "other",
       note: n.alive ? `At war with ${listOf3(n.atWar.map((x) => theName2(s, x)))}` : `Fell in ${turnToDate(n.fellOn.turn).label}: asked ${theName2(s, n.fellOn.to)} for terms`,
-      war: can2.has(n.id)
+      war: can2.has(n.id),
+      // (Version 65) Its general staff as the player knows it: its character, what it is doing in a sentence, and
+      // whether a main effort of its is aimed at the player or his allies, with the place it is aimed at.
+      staff: (() => {
+        try {
+          const v = rivalStaff(s, n.id);
+          if (!v) return null;
+          const hot = v.efforts.find((e) => e.atYou && !e.won) ?? null;
+          return { label: v.label, line: v.line, says: v.says, threat: !!hot, target: hot ? hot.target : -1, targetName: hot ? hot.targetName : "" };
+        } catch {
+          return null;
+        }
+      })()
     }));
     const rows = all.filter((n) => n.alive && !n.atWar.length && !n.league && n.id !== me.id).sort((a, b) => a.opinion - b.opinion).map((n) => {
       const open = (mine3 === "axis" || mine3 === "allies") && courtable(n);

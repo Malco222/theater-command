@@ -229,9 +229,24 @@ FVector2D ACampaignMapActor::WorldToMap(const FVector& World) const
 	return FVector2D(World.Y / UnitScale + Data.Width * 0.5, Data.Height * 0.5 - World.X / UnitScale);
 }
 
-float ACampaignMapActor::GroundAt(double X, double Y) const
+double ACampaignMapActor::WrapX(double X) const
+{
+	if (!Data.bWorld || Data.WorldWidth <= 0.0)
+	{
+		return X;
+	}
+	return X - FMath::FloorToDouble((X - Data.WorldMinX) / Data.WorldWidth) * Data.WorldWidth;
+}
+
+int32 ACampaignMapActor::TurnFor(double X, double EyeX) const
+{
+	return Data.bWorld && Data.WorldWidth > 0.0 ? FMath::RoundToInt32((EyeX - X) / Data.WorldWidth) : 0;
+}
+
+float ACampaignMapActor::GroundAt(double InX, double Y) const
 {
 	// The map's own ground where it reaches; beyond it a fine sheet's where one stands, and the world's coarse sheet's elsewhere.
+	const double X = WrapX(InX);
 	if (Data.bWorld && (X < 0.0 || Y < 0.0 || X > Data.Width || Y > Data.Height))
 	{
 		if (const FFineSheet* Fine = FineSheetAt(X, Y))
@@ -283,8 +298,9 @@ void ACampaignMapActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
-const ACampaignMapActor::FFineSheet* ACampaignMapActor::FineSheetAt(double X, double Y) const
+const ACampaignMapActor::FFineSheet* ACampaignMapActor::FineSheetAt(double InX, double Y) const
 {
+	const double X = WrapX(InX);
 	for (const auto& Pair : FineSheets)
 	{
 		const FFineSheet& Sheet = *Pair.Value;
@@ -878,6 +894,7 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 		LandMeshes.Add(Mesh);
 	}
 	Buffers.Commit(Mesh, 0, Sheet.Material);
+	Mesh->SetRelativeLocation(FVector(0.0, Sheet.WrapMode == 2 ? Sheet.Turn * Data.WorldWidth * UnitScale : 0.0, 0.0));
 	Mesh->SetVisibility(!Sheet.bHidden);
 	return Mesh;
 }
@@ -894,6 +911,8 @@ bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, cons
 	// tile's distance from that point along the table.
 	const double TileUnits = TileQuads * Shape.Cell * UnitScale; // the side of a finest tile, in the world
 	const FVector2D Focus(CameraFocus.X, CameraFocus.Y);
+	const double EyeX = WorldToMap(CameraFocus).X, WorldSpan = Data.WorldWidth * UnitScale;
+	TMap<uint64, int32> Turns; // how many turns of the world east each wanted tile is drawn
 	TArray<uint64> Wanted;
 	TArray<FIntVector> Stack;
 	const int32 TopSide = 1 << Sheet.TopLevel;
@@ -916,7 +935,9 @@ bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, cons
 		}
 		const double Side = TileUnits * (1 << Level);
 		// The tile's box on the table, in the world: north is +X and east is +Y, and the sheet's corner is its north-west.
-		const FVector NorthWest = MapToWorld(Shape.OriginX + Tile.X * Side / UnitScale, Shape.OriginY + Tile.Y * Side / UnitScale);
+		// (in a world that runs right round, the tile stands a turn of the world east or west if that is nearer the eye)
+		const int32 Turn = Sheet.WrapMode == 1 ? TurnFor(Shape.OriginX + (Tile.X + 0.5) * Side / UnitScale, EyeX) : Sheet.WrapMode == 2 ? Sheet.Turn : 0;
+		const FVector NorthWest = MapToWorld(Shape.OriginX + Tile.X * Side / UnitScale, Shape.OriginY + Tile.Y * Side / UnitScale) + FVector(0.0, Turn * WorldSpan, 0.0);
 		const FBox2D Box(FVector2D(NorthWest.X - Side, NorthWest.Y), FVector2D(NorthWest.X, NorthWest.Y + Side));
 		const double Away = FMath::Sqrt(Box.ComputeSquaredDistanceToPoint(Focus));
 		const double Distance = CameraDistance * 0.6 + Away;
@@ -930,6 +951,10 @@ bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, cons
 		else
 		{
 			Wanted.Add(LandKey(Level, Tile.X, Tile.Y));
+			if (Sheet.WrapMode != 0)
+			{
+				Turns.Add(LandKey(Level, Tile.X, Tile.Y), Turn);
+			}
 		}
 	}
 
@@ -952,6 +977,23 @@ bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, cons
 		else
 		{
 			Missing.Add(Key);
+		}
+	}
+
+	if (Sheet.WrapMode != 0)
+	{
+		// Each wanted tile is set where it is nearest the eye.
+		for (const auto& Pair : Turns)
+		{
+			UProceduralMeshComponent* const* Standing = Sheet.Tiles.Find(Pair.Key);
+			if (Standing && *Standing)
+			{
+				const FVector Place(0.0, Pair.Value * WorldSpan, 0.0);
+				if (!(*Standing)->GetRelativeLocation().Equals(Place, 0.5))
+				{
+					(*Standing)->SetRelativeLocation(Place);
+				}
+			}
 		}
 	}
 
@@ -993,6 +1035,38 @@ bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, cons
 	return Missing.Num() > 0;
 }
 
+namespace
+{
+	/**
+	 * A picture or a field that runs right round the world is made to meet itself at the seam: along each row the
+	 * two ends are brought to the value half way between them, and the correction dies away over Reach points in
+	 * from each end. What is laid by noise (the swell, the grit, the tooth of the slopes) does not otherwise come
+	 * round to where it started, and would show as a line down the middle of the Atlantic.
+	 */
+	void MeetAtSeam(TArray<FColor>& Pixels, int32 Wide, int32 High, int32 Reach, bool bAlphaToo)
+	{
+		if (Wide < Reach * 2 + 2 || Pixels.Num() < Wide * High)
+		{
+			return;
+		}
+		for (int32 J = 0; J < High; ++J)
+		{
+			FColor* Row = Pixels.GetData() + J * Wide;
+			const FColor West = Row[0], East = Row[Wide - 1];
+			const float Half[4] = { (East.R - West.R) * 0.5f, (East.G - West.G) * 0.5f, (East.B - West.B) * 0.5f, (East.A - West.A) * 0.5f };
+			for (int32 K = 0; K < Reach; ++K)
+			{
+				const float Much = FMath::Square(1.0f - static_cast<float>(K) / Reach);
+				auto Shift = [Much](uint8 Was, float By) { return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Was + By * Much), 0, 255)); };
+				FColor& A = Row[K];
+				FColor& B = Row[Wide - 1 - K];
+				A = FColor(Shift(A.R, Half[0]), Shift(A.G, Half[1]), Shift(A.B, Half[2]), bAlphaToo ? Shift(A.A, Half[3]) : A.A);
+				B = FColor(Shift(B.R, -Half[0]), Shift(B.G, -Half[1]), Shift(B.B, -Half[2]), bAlphaToo ? Shift(B.A, -Half[3]) : B.A);
+			}
+		}
+	}
+}
+
 void ACampaignMapActor::BuildWorld()
 {
 	if (!Data.bWorld)
@@ -1003,6 +1077,14 @@ void ACampaignMapActor::BuildWorld()
 	// The land beyond today's map, on one coarse sheet that covers the whole world (the whole-world map, step one).
 	WorldTerrain.BuildOver(Data, Data.WorldMinX, Data.WorldMinY, Data.WorldWidth, Data.WorldHeight, 6.0, true);
 	WorldPaint.Build(Data, WorldTerrain, VerticalScale);
+	// (the world runs right round: its pictures are made to meet themselves at the seam)
+	MeetAtSeam(WorldPaint.Ground, WorldPaint.NX, WorldPaint.NY, 16, true);
+	MeetAtSeam(WorldPaint.Tint, WorldPaint.NX, WorldPaint.NY, 16, true);
+	MeetAtSeam(WorldPaint.Relief, WorldPaint.NX, WorldPaint.NY, 16, true);
+	MeetAtSeam(WorldPaint.Masks, WorldPaint.NX, WorldPaint.NY, 16, true);
+	MeetAtSeam(WorldPaint.Cover, WorldPaint.NX, WorldPaint.NY, 16, true);
+	MeetAtSeam(WorldPaint.Water, WorldPaint.WaterNX, WorldPaint.WaterNY, 16, true);
+	MeetAtSeam(WorldPaint.Surf, WorldPaint.WaterNX, WorldPaint.WaterNY, 16, true);
 	WorldPictures.Reset();
 	auto Picture = [this](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name)
 	{
@@ -1041,6 +1123,7 @@ void ACampaignMapActor::BuildWorld()
 	WorldLand.Material = WorldLandMaterial;
 	WorldLand.Holes.Add(FBox2D(FVector2D(0.0, 0.0), FVector2D(Data.Width, Data.Height)));
 	WorldLand.Sink = 0.06;
+	WorldLand.WrapMode = 1;
 	// The lines the fine sheets are ruled by: the map's own box is two of their rows high and one column wide, and
 	// the rest of the world is ruled from its edges in squares of 768 map units.
 	FineXs.Reset();
@@ -1102,6 +1185,18 @@ void ACampaignMapActor::BuildWorld()
 			}
 		}
 		Buffers.Commit(WorldSeaMesh, 0, WorldSeaMaterial);
+		// (the same sea again, to stand a turn of the world to whichever side the eye is on)
+		if (!WorldSeaTwin)
+		{
+			WorldSeaTwin = NewObject<UProceduralMeshComponent>(this);
+			WorldSeaTwin->SetupAttachment(Root);
+			WorldSeaTwin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			WorldSeaTwin->SetCastShadow(false);
+			WorldSeaTwin->RegisterComponent();
+		}
+		WorldSeaTwin->ClearAllMeshSections();
+		Buffers.Commit(WorldSeaTwin, 0, WorldSeaMaterial);
+		WorldSeaTwin->SetRelativeLocation(FVector(0.0, -Data.WorldWidth * UnitScale, 0.0));
 	}
 	UE_LOG(LogTheater, Log, TEXT("World: %.0f x %.0f map units round the map, on a sheet of %d x %d points (%.0f units a cell), %d levels of tiles, built in %.2f s"),
 		Data.WorldWidth, Data.WorldHeight, WorldTerrain.NX, WorldTerrain.NY, WorldTerrain.Cell, WorldLand.TopLevel + 1, FPlatformTime::Seconds() - StartTime);
@@ -1117,9 +1212,24 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 	// Which sheets the view wants: those within reach of what the eye looks at, while it is low enough for the
 	// coarse sheet's cells to show. (The map's own box needs none: it is fine already.)
 	const FVector2D Focus = WorldToMap(CameraFocus);
+	if (WorldSeaTwin)
+	{
+		// (the sea's twin stands to the west while the eye is in the west half of the world as it is kept, and to the east otherwise)
+		const double Side = Focus.X < Data.WorldMinX + Data.WorldWidth * 0.5 ? -1.0 : 1.0;
+		const FVector Place(0.0, Side * Data.WorldWidth * UnitScale, 0.0);
+		if (!WorldSeaTwin->GetRelativeLocation().Equals(Place, 0.5))
+		{
+			WorldSeaTwin->SetRelativeLocation(Place);
+		}
+	}
 	const bool bLow = CameraDistance < 11000.0f;
 	const double Reach = 260.0 + CameraDistance / UnitScale * 0.55;
-	auto Wanted = [&](const FBox2D& Box) { return bLow && Box.ComputeSquaredDistanceToPoint(Focus) < Reach * Reach; };
+	auto Wanted = [&](const FBox2D& Box)
+	{
+		// (the short way round the world)
+		const double Turned = TurnFor(Box.GetCenter().X, Focus.X) * Data.WorldWidth;
+		return bLow && Box.ShiftBy(FVector2D(Turned, 0.0)).ComputeSquaredDistanceToPoint(Focus) < Reach * Reach;
+	};
 	int32 BeingBuilt = 0;
 	for (const auto& Pair : FineSheets)
 	{
@@ -1169,6 +1279,9 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			// shaded across its edge comes out as it would on one great sheet.
 			const FCampaignMapData* Map = &Data;
 			const float Scale = VerticalScale;
+			// (well offshore its sea is the coarse sheet's own, so that its edge cannot be found in open water)
+			Sheet->Paint.CoarseSea = &WorldPaint;
+			Sheet->Paint.CoarseShape = &WorldTerrain;
 			Sheet->Building = Async(EAsyncExecution::ThreadPool, [Sheet, Map, Box, Scale]()
 			{
 				const double Apron = 36.0;
@@ -1187,6 +1300,16 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 		if (!Sheet.bBuilt)
 		{
 			continue;
+		}
+		// (each stands a turn of the world east or west of where it is kept, whichever is nearest the eye)
+		Sheet.Land.Turn = TurnFor(Sheet.Box.GetCenter().X, Focus.X);
+		if (Sheet.Sea)
+		{
+			const FVector Place(0.0, Sheet.Land.Turn * Data.WorldWidth * UnitScale, 0.0);
+			if (!Sheet.Sea->GetRelativeLocation().Equals(Place, 0.5))
+			{
+				Sheet.Sea->SetRelativeLocation(Place);
+			}
 		}
 		if (!Sheet.bDressed)
 		{
@@ -1257,6 +1380,7 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	Sheet.Land.bKeep = true;
 	Sheet.Land.Keep = Sheet.Box;
 	Sheet.Land.bHidden = true;
+	Sheet.Land.WrapMode = 2;
 	// (where it meets the map's own ground, the map's is the one seen)
 	Sheet.Land.Holes.Add(FBox2D(FVector2D(0.0, 0.0), FVector2D(Data.Width, Data.Height)));
 	Sheet.Land.Sink = 0.03;

@@ -949,7 +949,7 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds)
 	return Out;
 }
 
-TArray<FCorpsMove> FCampaignSession::Move(const TArray<int32>& CorpsIds, int32 RegionId)
+TArray<FCorpsMove> FCampaignSession::Move(const TArray<int32>& CorpsIds, int32 RegionId, FString* OutNote)
 {
 	TSharedPtr<FJsonObject> Object;
 	if (CorpsIds.Num() == 0 || !CallRules(TEXT("move"), FString::Printf(TEXT("[[%s],%d]"), *IdList(CorpsIds), RegionId), Object))
@@ -957,6 +957,10 @@ TArray<FCorpsMove> FCampaignSession::Move(const TArray<int32>& CorpsIds, int32 R
 		return TArray<FCorpsMove>();
 	}
 	TArray<FCorpsMove> Out = ReadMoves(Object);
+	if (OutNote)
+	{
+		Object->TryGetStringField(TEXT("note"), *OutNote);
+	}
 	TakeView(Object);
 	return Out;
 }
@@ -2156,6 +2160,16 @@ FDiplomacy FCampaignSession::Diplomacy()
 			Power.Will = static_cast<float>(Will);
 			Entry->TryGetBoolField(TEXT("alive"), Power.bAlive);
 			Entry->TryGetBoolField(TEXT("war"), Power.bWar);
+			const TSharedPtr<FJsonObject>* Staff = nullptr;
+			if (Entry->TryGetObjectField(TEXT("staff"), Staff))
+			{
+				(*Staff)->TryGetStringField(TEXT("label"), Power.StaffLabel);
+				(*Staff)->TryGetStringField(TEXT("line"), Power.StaffLine);
+				(*Staff)->TryGetStringField(TEXT("says"), Power.StaffSays);
+				(*Staff)->TryGetBoolField(TEXT("threat"), Power.bThreat);
+				(*Staff)->TryGetNumberField(TEXT("target"), Power.ThreatRegion);
+				(*Staff)->TryGetStringField(TEXT("targetName"), Power.ThreatName);
+			}
 		}
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Rows = nullptr;

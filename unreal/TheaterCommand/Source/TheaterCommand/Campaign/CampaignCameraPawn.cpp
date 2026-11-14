@@ -141,6 +141,13 @@ void ACampaignCameraPawn::SetHeading(float YawDegrees, float TiltDegrees)
 void ACampaignCameraPawn::GoTo(const FVector& WorldFocus, float InZoom, bool bImmediately)
 {
 	TargetFocus = FVector(WorldFocus.X, WorldFocus.Y, 0.0);
+	if (bWraps)
+	{
+		// (round the world the short way: the place is the same one a turn of the world east or west)
+		const double Span = WrapEast - WrapWest;
+		while (TargetFocus.Y - Focus.Y > Span * 0.5) { TargetFocus.Y -= Span; }
+		while (TargetFocus.Y - Focus.Y < -Span * 0.5) { TargetFocus.Y += Span; }
+	}
 	if (InZoom >= 0.0f)
 	{
 		TargetZoom = FMath::Clamp(InZoom, 0.0f, TopZoom);
@@ -160,7 +167,17 @@ void ACampaignCameraPawn::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 
 	TargetFocus.X = FMath::Clamp(TargetFocus.X, bBoxed ? BoundsMin.X : -HalfExtent.X, bBoxed ? BoundsMax.X : HalfExtent.X);
-	TargetFocus.Y = FMath::Clamp(TargetFocus.Y, bBoxed ? BoundsMin.Y : -HalfExtent.Y, bBoxed ? BoundsMax.Y : HalfExtent.Y);
+	if (bWraps)
+	{
+		// Past one end of the world the eye comes in again at the other, with everything it was doing.
+		const double Span = WrapEast - WrapWest;
+		while (TargetFocus.Y >= WrapEast) { TargetFocus.Y -= Span; Focus.Y -= Span; }
+		while (TargetFocus.Y < WrapWest) { TargetFocus.Y += Span; Focus.Y += Span; }
+	}
+	else
+	{
+		TargetFocus.Y = FMath::Clamp(TargetFocus.Y, bBoxed ? BoundsMin.Y : -HalfExtent.Y, bBoxed ? BoundsMax.Y : HalfExtent.Y);
+	}
 
 	Focus = FMath::VInterpTo(Focus, TargetFocus, DeltaSeconds, Glide > 0.0f ? Glide : (bHurry ? 26.0f : 9.0f));
 	Zoom = FMath::FInterpTo(Zoom, TargetZoom, DeltaSeconds, Glide > 0.0f ? Glide : (bHurry ? 20.0f : 8.0f));

@@ -627,6 +627,9 @@ void ACampaignPlayerController::BeginPlay()
 				const FCampaignMapData& World = Map->GetData();
 				const FVector NorthWest = Map->MapToWorld(World.WorldMinX, World.WorldMinY), SouthEast = Map->MapToWorld(World.WorldMinX + World.WorldWidth, World.WorldMinY + World.WorldHeight);
 				Eye->SetBoundsBox(FVector2D(SouthEast.X, NorthWest.Y), FVector2D(NorthWest.X, SouthEast.Y));
+				// (and from west to east it runs right round: the eye's place is kept within half a world of the map's own middle)
+				const double HalfWorld = World.WorldWidth * 0.5 * Map->UnitScale;
+				Eye->SetWrap(-HalfWorld, HalfWorld);
 			}
 			// Open on central Europe, with Germany, Poland and France all in view.
 			const int32* Start = Map->GetData().RegionByName.Find(TEXT("Frankfurt"));
@@ -4896,11 +4899,17 @@ void ACampaignPlayerController::OrderTo(int32 RegionId, const FVector* CarriedFr
 	}
 
 	AdviserSaw(1);
-	const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId);
+	FString Said;
+	const TArray<FCorpsMove> Marches = Session->Move(PickedCorps, RegionId, &Said);
 	if (Marches.Num() == 0)
 	{
-		Notify(TEXT("They cannot get there this month."));
+		// (Version 65: where the place is a full province next door, the rules offer to change places with a corps there)
+		Notify(Said.IsEmpty() ? FString(TEXT("They cannot get there this month.")) : Said, Said.IsEmpty() ? 5.0 : 9.0);
 		return;
+	}
+	if (!Said.IsEmpty())
+	{
+		Notify(Said, 7.0);
 	}
 	ShowWar(Session->GetView(), Marches, CarriedFrom);
 	CampaignSounds::Play(this, TEXT("stamp"), 0.7f);
@@ -5341,7 +5350,13 @@ void ACampaignPlayerController::ProbeLine()
 	}
 	const int32 RegionId = FaceOff.Region;
 	FString Note;
-	const bool bProbed = Session->Act(FString::Printf(TEXT("probe:%d:%d"), FaceOff.ProbeCorps, RegionId), RegionId, Note);
+	// (the corps in hand go with the order, so that the rules can say what the card read before the probe and after)
+	FString Force;
+	for (const int32 Id : PickedCorps)
+	{
+		Force += (Force.IsEmpty() ? TEXT("") : TEXT(".")) + FString::FromInt(Id);
+	}
+	const bool bProbed = Session->Act(FString::Printf(TEXT("probe:%d:%d:%s"), FaceOff.ProbeCorps, RegionId, *Force), RegionId, Note);
 	CampaignSounds::Play(this, bProbed ? TEXT("field_gun") : TEXT("click"), 0.5f);
 	if (!Note.IsEmpty())
 	{

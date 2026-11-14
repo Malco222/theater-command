@@ -4766,6 +4766,32 @@ namespace
 				[
 					SNew(STextBlock).Text(FText::FromString(Power.bAlive ? FString::Printf(TEXT("%s. %s"), Standing, *Power.Note) : Power.Note)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Power.bAlive ? Muted : Faint).AutoWrapText(true)
 				];
+				if (Power.bAlive && !Power.StaffLabel.IsEmpty())
+				{
+					// (Version 65) Its general staff: its character in a word, and what it is doing. A main effort aimed at the
+					// player or his allies is written as a threat, with a way to go and look at the place.
+					TSharedRef<SHorizontalBox> Staff = SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 1.0f, 8.0f, 0.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Power.StaffLabel.ToUpper())).Font(Font(TEXT("Bold"), 9, 140)).ColorAndOpacity(Power.bThreat ? Alarm : Brass)
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Top)
+						[
+							SNew(STextBlock).Text(FText::FromString(Power.StaffLine)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Power.bThreat ? Alarm : Muted).AutoWrapText(true)
+						];
+					if (Power.bThreat && Power.ThreatRegion != INDEX_NONE)
+					{
+						Staff->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(8.0f, 0.0f, 0.0f, 0.0f)
+						[
+							OfficeButton(*FString::Printf(TEXT("GO TO %s"), *Power.ThreatName.ToUpper()), Alarm, true, TEXT("Its main effort is aimed here. Looks at the place on the table."),
+								[this, Region = Power.ThreatRegion]() { if (Controller.IsValid()) { Controller->CloseDiplomacy(); Controller->ShowProvince(Region); } })
+						];
+					}
+					Words->AddSlot().AutoHeight().Padding(0.0f, 4.0f, 0.0f, 0.0f)
+					[
+						SNew(SBox).ToolTipText(FText::FromString(Power.StaffSays))[Staff]
+					];
+				}
 				TSharedRef<SHorizontalBox> Row = SNew(SHorizontalBox)
 					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 2.0f, 10.0f, 0.0f)
 					[
