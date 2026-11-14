@@ -200,14 +200,15 @@ bool ACampaignMapActor::BuildMap()
 	BuildSeaMesh();
 	BuildWorld();
 	BuildBorders();
+	// (Round a world the table is a chart table and the chart is on rollers: the wood, the brass lip and the sheet's
+	// margin lie to north and south of it only, and nothing ever ends it to east or west. The things left lying on
+	// the table are made for a map with four edges, and are not laid out round a world.)
+	BuildTable();
 	if (!Data.bWorld)
 	{
-		// (the table, the room and the sheet's margin are made for a map with four edges: what they become round a
-		// world that has no east or west edge is for a later step)
-		BuildTable();
 		BuildWarRoom();
-		BuildSheetMargin();
 	}
+	BuildSheetMargin();
 	BuildTowns();
 	BuildParade();
 	BuildTrees();
@@ -613,6 +614,15 @@ void ACampaignMapActor::PaintGround()
 			Taiga = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
 		}
 		LandVector(TEXT("NorthColour"), Taiga);
+		// The broadleaf woods of the temperate lands beyond Europe: the art director's (50, 64, 46), its blue within
+		// 16 of its green. ("-TheaterFarWoods=r,g,b" tries another.) (The paint is far bluer than what is seen: the
+		// lamp is warm, and the ground's own colour shows through the canopy as a yellow-green.)
+		FLinearColor FarWoods(0.019f, 0.038f, 0.045f);
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterFarWoods="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
+		{
+			FarWoods = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
+		}
+		LandVector(TEXT("FarWoodsColour"), FarWoods);
 		// The New World's square fields: fallow, wheat and green, as what each does to the ground under it.
 		// (The art director's swatches are (156, 130, 94), (204, 180, 106) and (146, 154, 94) on prairie ground.)
 		LandVector(TEXT("FieldFallow"), FLinearColor(0.83f, 0.66f, 0.6f));
@@ -2352,6 +2362,23 @@ void ACampaignMapActor::BuildTable()
 	const double Reach = 3000.0 * U; // far enough that its edge is never seen
 	const double CenterZ = Top - Thickness * 0.5;
 
+	const double Lip = 1.3 * U, LipHeight = 0.35 * U;
+	const double LipZ = Top + LipHeight * 0.5;
+	if (Data.bWorld)
+	{
+		// The chart table: wood and a brass lip along the chart's north edge and its south, running on past
+		// anything the eye can reach (it is kept within half a world of the middle, and the chart is laid a turn
+		// of the world to either side of it), and the floor of the tray under the whole.
+		const double North = MapToWorld(0.0, Data.WorldMinY).X, South = MapToWorld(0.0, Data.WorldMinY + Data.WorldHeight).X;
+		const double Long = 2.0 * Data.WorldWidth * U;
+		AddBlock(FVector(North + Reach * 0.5, 0.0, CenterZ), FVector(Reach, Long, Thickness), Wood);
+		AddBlock(FVector(South - Reach * 0.5, 0.0, CenterZ), FVector(Reach, Long, Thickness), Wood);
+		AddBlock(FVector(North + Lip * 0.5, 0.0, LipZ), FVector(Lip, Long, LipHeight), Brass);
+		AddBlock(FVector(South - Lip * 0.5, 0.0, LipZ), FVector(Lip, Long, LipHeight), Brass);
+		AddBlock(FVector((North + South) * 0.5, 0.0, -3.0 * U - 5.0 * U), FVector(North - South, Long, 10.0 * U), Wood);
+		return;
+	}
+
 	// Four slabs round the tray.
 	AddBlock(FVector(Half.X + Reach * 0.5, 0.0, CenterZ), FVector(Reach, 2.0 * (Half.Y + Reach), Thickness), Wood);
 	AddBlock(FVector(-Half.X - Reach * 0.5, 0.0, CenterZ), FVector(Reach, 2.0 * (Half.Y + Reach), Thickness), Wood);
@@ -2359,8 +2386,6 @@ void ACampaignMapActor::BuildTable()
 	AddBlock(FVector(0.0, -Half.Y - Reach * 0.5, CenterZ), FVector(2.0 * Half.X, Reach, Thickness), Wood);
 
 	// The brass lip, standing a little proud of the wood.
-	const double Lip = 1.3 * U, LipHeight = 0.35 * U;
-	const double LipZ = Top + LipHeight * 0.5;
 	AddBlock(FVector(Half.X + Lip * 0.5, 0.0, LipZ), FVector(Lip, 2.0 * (Half.Y + Lip), LipHeight), Brass);
 	AddBlock(FVector(-Half.X - Lip * 0.5, 0.0, LipZ), FVector(Lip, 2.0 * (Half.Y + Lip), LipHeight), Brass);
 	AddBlock(FVector(0.0, Half.Y + Lip * 0.5, LipZ), FVector(2.0 * Half.X, Lip, LipHeight), Brass);
@@ -3666,8 +3691,25 @@ void ACampaignMapActor::BuildSheetMargin()
 	// its edge, and outside it the soft shadow the sheet throws on the wood.
 	const FVector2D Half = GetWorldHalfExtent(); // X: north-south, Y: east-west
 	const double U = UnitScale, Top = 2.4 * U + 0.5 * U, Margin = 46.0 * U, Rule = 14.0 * U, Line = 1.1 * U, Soft = 26.0 * U;
-	auto Frame = [&Half](FCampaignMeshBuffers& Into, double Inner, double Outer, double Z, const FColor& In, const FColor& Out)
+	const bool bRollers = Data.bWorld;
+	const double NorthEdge = MapToWorld(0.0, Data.WorldMinY).X, SouthEdge = MapToWorld(0.0, Data.WorldMinY + Data.WorldHeight).X, HalfLong = Data.WorldWidth * U;
+	auto Frame = [&Half, bRollers, NorthEdge, SouthEdge, HalfLong](FCampaignMeshBuffers& Into, double Inner, double Outer, double Z, const FColor& In, const FColor& Out)
 	{
+		if (bRollers)
+		{
+			// (Round a world the chart is on rollers: the margin, its ruled border and its shadow run along the
+			// north edge and the south, and there is none to east or west.)
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				const double A = Side == 0 ? NorthEdge + Inner : SouthEdge - Inner, B = Side == 0 ? NorthEdge + Outer : SouthEdge - Outer;
+				const int32 First = Into.Vertices.Num();
+				Into.Vertices.Append({ FVector(A, -HalfLong, Z), FVector(A, HalfLong, Z), FVector(B, HalfLong, Z), FVector(B, -HalfLong, Z) });
+				Into.Normals.Append({ FVector::UpVector, FVector::UpVector, FVector::UpVector, FVector::UpVector });
+				Into.Colors.Append({ In, In, Out, Out });
+				Into.Triangles.Append({ First, First + 1, First + 2, First, First + 2, First + 3, First, First + 2, First + 1, First, First + 3, First + 2 });
+			}
+			return;
+		}
 		// (a frame between two rectangles: four quads, coloured at their inner and outer edges)
 		const FVector2D A(Half.X + Inner, Half.Y + Inner), B(Half.X + Outer, Half.Y + Outer);
 		const FVector Ins[4] = { FVector(A.X, -A.Y, Z), FVector(A.X, A.Y, Z), FVector(-A.X, A.Y, Z), FVector(-A.X, -A.Y, Z) };
@@ -3886,25 +3928,35 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 	{
 		// Which province lies under each point, and how the ground there takes the light: worked out once, since
 		// neither the provinces nor the hills move. (Twice the size it is drawn at, so that it is crisp on a fine screen.)
-		MiniHigh = 472;
-		MiniWide = FMath::Max(8, FMath::RoundToInt32(MiniHigh * Data.Width / Data.Height));
+		// (Where the world is attached the small map is the whole of it, in the world's own shape: 340 by 187 on the
+		// screen. Beyond the provinces the land is wherever the world's heights stand above the sea, and nobody's.)
+		const bool bWhole = Data.bWorld && Data.WorldWidth > 0.0 && Data.WorldHeight > 0.0;
+		const double FrameX = bWhole ? Data.WorldMinX : 0.0, FrameY = bWhole ? Data.WorldMinY : 0.0;
+		const double FrameWide = bWhole ? Data.WorldWidth : Data.Width, FrameHigh = bWhole ? Data.WorldHeight : Data.Height;
+		MiniHigh = bWhole ? 374 : 472;
+		MiniWide = FMath::Max(8, FMath::RoundToInt32(MiniHigh * FrameWide / FrameHigh));
 		MiniRegion.SetNumUninitialized(MiniWide * MiniHigh);
 		MiniShade.SetNumUninitialized(MiniWide * MiniHigh);
-		const double StepX = Data.Width / MiniWide, StepY = Data.Height / MiniHigh;
+		const double StepX = FrameWide / MiniWide, StepY = FrameHigh / MiniHigh;
+		const float Steep = 520.0f * static_cast<float>(FMath::Max(StepY / (1712.0 / 472.0), 1.0)); // (a coarser picture reads its slopes over a longer step)
 		for (int32 Y = 0; Y < MiniHigh; ++Y)
 		{
 			for (int32 X = 0; X < MiniWide; ++X)
 			{
-				const double MapX = (X + 0.5) * StepX, MapY = (Y + 0.5) * StepY;
-				const int32 Here = Data.FindRegionAt(MapX, MapY);
-				MiniRegion[Y * MiniWide + X] = static_cast<int16>(Here);
+				const double MapX = FrameX + (X + 0.5) * StepX, MapY = FrameY + (Y + 0.5) * StepY;
 				const float Metres = Terrain.MetresAt(MapX, MapY);
-				if (Here >= 0)
+				int32 Here = Data.FindRegionAt(MapX, MapY);
+				if (Here < 0 && bWhole && (MapX < 0.0 || MapY < 0.0 || MapX > Data.Width || MapY > Data.Height) && Metres > 0.0f)
+				{
+					Here = MiniUnclaimed;
+				}
+				MiniRegion[Y * MiniWide + X] = static_cast<int16>(Here);
+				if (Here != -1)
 				{
 					// Lit from the north-west like the table: a slope that faces the light is paler, one that
 					// faces away darker, and the high ground a little darker all over.
 					const float Slope = FMath::Max(Metres, 0.0f) - FMath::Max(Terrain.MetresAt(MapX - StepX * 1.5, MapY - StepY * 1.5), 0.0f);
-					const float Light = 1.0f + FMath::Clamp(Slope / 520.0f, -0.3f, 0.24f) - 0.1f * FMath::Clamp(Metres / 2200.0f, 0.0f, 1.0f);
+					const float Light = 1.0f + FMath::Clamp(Slope / Steep, -0.3f, 0.24f) - 0.1f * FMath::Clamp(Metres / 2200.0f, 0.0f, 1.0f);
 					MiniShade[Y * MiniWide + X] = static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Light * 160.0f), 0, 255));
 				}
 				else
@@ -3923,8 +3975,13 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 	bMiniStale = false;
 	TArray<FColor> Pixels;
 	Pixels.SetNumUninitialized(MiniWide * MiniHigh);
-	auto At = [this](int32 X, int32 Y) -> int32
+	const bool bRound = Data.bWorld; // (the whole world's picture has no east or west edge: its last column lies beside its first)
+	auto At = [this, bRound](int32 X, int32 Y) -> int32
 	{
+		if (bRound)
+		{
+			X = ((X % MiniWide) + MiniWide) % MiniWide;
+		}
 		return (X < 0 || Y < 0 || X >= MiniWide || Y >= MiniHigh) ? -1 : MiniRegion[Y * MiniWide + X];
 	};
 	// Each province's colour, once: its holder's colour as a stain over the paper of the map (as on the table:
@@ -3964,6 +4021,8 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 		}
 	}
 	const FLinearColor Shelf(0.016f, 0.15f, 0.2f), Deep(0.004f, 0.035f, 0.1f), Surf(0.0f, 0.02f, 0.035f);
+	// (land that is nobody's yet, beyond the provinces: bare paper in the plain view, grey in the others)
+	const FLinearColor Nobodys = bSides ? FLinearColor(0.3f, 0.3f, 0.29f) : bWealth ? FLinearColor(0.16f, 0.16f, 0.15f) : FLinearColor(0.36f, 0.34f, 0.26f);
 	for (int32 Y = 0; Y < MiniHigh; ++Y)
 	{
 		for (int32 X = 0; X < MiniWide; ++X)
@@ -3971,14 +4030,21 @@ UTexture2D* ACampaignMapActor::GetMinimap()
 			const int32 Here = At(X, Y);
 			FColor& Out = Pixels[Y * MiniWide + X];
 			const float Shade = MiniShade[Y * MiniWide + X];
-			if (Here < 0)
+			if (Here == -1)
 			{
 				// The sea, paler on the shelf and dark in the deeps, with a dark line along the shore so that the
 				// land stands out of it.
-				const bool bCoast = At(X + 1, Y) >= 0 || At(X - 1, Y) >= 0 || At(X, Y + 1) >= 0 || At(X, Y - 1) >= 0;
+				const bool bCoast = At(X + 1, Y) != -1 || At(X - 1, Y) != -1 || At(X, Y + 1) != -1 || At(X, Y - 1) != -1;
 				FLinearColor Water = bCoast ? Surf : FMath::Lerp(Shelf, Deep, FMath::Clamp(Shade / 255.0f, 0.0f, 1.0f));
 				Water.A = 1.0f;
 				Out = Water.ToFColor(true);
+				continue;
+			}
+			if (Here < 0)
+			{
+				FLinearColor Bare = Nobodys * (Shade / 160.0f);
+				Bare.A = 1.0f;
+				Out = Bare.ToFColor(true);
 				continue;
 			}
 			FLinearColor Tint = Tints[Here] * (Shade / 160.0f);

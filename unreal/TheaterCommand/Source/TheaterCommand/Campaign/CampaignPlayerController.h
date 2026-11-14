@@ -521,6 +521,12 @@ public:
 	UTexture2D* GetMinimapTexture() const;
 	/** Armies as (x, y, whose) with x and y from 0 to 1 and whose 0 for the player's, 1 for a friend's, 2 for an enemy's, 3 for others; and the part of the map on screen. */
 	void GetMinimapMarks(TArray<FVector>& OutDots, FBox2D& OutLooking) const;
+	/** Whether the small map shows the whole world, which it does wherever the world is attached. */
+	bool IsMinimapWorld() const;
+	/** Where the eye looks, as a share of the way round the whole world's small map (0 at its west edge, 1 at its east). */
+	double GetMinimapCentre() const;
+	/** How far the chart's east and west sides fall out of the lamplight: nothing below the staff map's height, 1 at the top. */
+	float GetChartEdgeShade() const;
 	/** The name plates of the towns in view, the ones that matter most first. */
 	void GetTownPlates(TArray<FTownPlate>& Out) const;
 	/** The names of the countries and the seas, letter by letter, lying on the map. */

@@ -740,6 +740,8 @@ namespace
 			Controller = Args._Controller;
 			High = Args._High;
 			Picture.DrawAs = ESlateBrushDrawType::Image;
+			West.DrawAs = ESlateBrushDrawType::Image;
+			East.DrawAs = ESlateBrushDrawType::Image;
 			Dot.DrawAs = ESlateBrushDrawType::Image;
 			Dot.TintColor = FSlateColor(FLinearColor::White);
 		}
@@ -747,14 +749,20 @@ namespace
 		virtual FVector2D ComputeDesiredSize(float) const override
 		{
 			double Share = 0.87;
+			// (the whole world's small map is 340 by 187, the world's own shape: wider and lower than the map of one theatre)
+			float Tall = High;
 			if (Controller.IsValid())
 			{
 				if (const UTexture2D* Texture = Controller->GetMinimapTexture())
 				{
 					Share = static_cast<double>(Texture->GetSizeX()) / FMath::Max(1, Texture->GetSizeY());
 				}
+				if (Controller->IsMinimapWorld())
+				{
+					Tall = 187.0f;
+				}
 			}
-			return FVector2D(High * Share, High);
+			return FVector2D(Tall * Share, Tall);
 		}
 
 		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
@@ -773,20 +781,77 @@ namespace
 			{
 				Picture.SetResourceObject(Texture);
 				Picture.ImageSize = FVector2D(Texture->GetSizeX(), Texture->GetSizeY());
+				West.SetResourceObject(Texture);
+				West.ImageSize = Picture.ImageSize;
+				East.SetResourceObject(Texture);
+				East.ImageSize = Picture.ImageSize;
 			}
 			const FVector2D Size = Geometry.GetLocalSize();
 			// (by night the small map goes to moonlight with the table: darker and bluer, its marks as bright as ever)
 			const float Moon = FMath::Clamp(Controller->GetMoonlight(), 0.0f, 1.0f);
-			FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), &Picture, ESlateDrawEffect::IgnoreTextureAlpha, FMath::Lerp(FLinearColor::White, FLinearColor(0.34f, 0.45f, 0.7f), Moon));
+			const FLinearColor Lit = FMath::Lerp(FLinearColor::White, FLinearColor(0.34f, 0.45f, 0.7f), Moon);
 
 			TArray<FVector> Dots;
 			FBox2D Looking(ForceInit);
 			Controller->GetMinimapMarks(Dots, Looking);
+			const bool bWorld = Controller->IsMinimapWorld();
+			if (bWorld)
+			{
+				// The whole world, centred on the longitude the eye is over: the world slides under a box that stays
+				// in the middle, and comes round again at either side, so that the picture has no seam and the box
+				// is never split in two. While the mouse is held in it the map is held still; let go, it eases to
+				// its new centre in about a quarter of a second.
+				const double Target = Controller->GetMinimapCentre();
+				if (!bCentred)
+				{
+					bCentred = true;
+					Centre = Target;
+				}
+				else if (!bHeld)
+				{
+					double Way = Target - Centre;
+					Way -= FMath::RoundToDouble(Way); // (the short way round)
+					Centre = FMath::Abs(Way) < 0.004 ? Target : Centre + Way * FMath::Min(1.0, static_cast<double>(Args.GetDeltaTime()) * 14.0);
+					Centre -= FMath::FloorToDouble(Centre);
+				}
+				double Shift = Centre - 0.5;
+				Shift -= FMath::FloorToDouble(Shift);
+				// (the picture in two parts: from the shift to its east edge on the left, from its west edge to the shift on the right)
+				const double Left = (1.0 - Shift) * Size.X;
+				West.SetUVRegion(FBox2f(FVector2f(static_cast<float>(Shift), 0.0f), FVector2f(1.0f, 1.0f)));
+				East.SetUVRegion(FBox2f(FVector2f(0.0f, 0.0f), FVector2f(static_cast<float>(Shift), 1.0f)));
+				if (Left > 0.5)
+				{
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Left, Size.Y), FSlateLayoutTransform(FVector2D::ZeroVector)), &West, ESlateDrawEffect::IgnoreTextureAlpha, Lit);
+				}
+				if (Size.X - Left > 0.5)
+				{
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Size.X - Left, Size.Y), FSlateLayoutTransform(FVector2D(Left, 0.0))), &East, ESlateDrawEffect::IgnoreTextureAlpha, Lit);
+				}
+				for (FVector& Mark : Dots)
+				{
+					Mark.X -= Shift;
+					Mark.X -= FMath::FloorToDouble(Mark.X);
+				}
+				if (Looking.bIsValid)
+				{
+					const double Half = FMath::Min((Looking.Max.X - Looking.Min.X) * 0.5, 0.5);
+					double Middle = (Looking.Max.X + Looking.Min.X) * 0.5 - Shift;
+					Middle -= FMath::FloorToDouble(Middle);
+					Looking.Min.X = Middle - Half;
+					Looking.Max.X = Middle + Half;
+				}
+			}
+			else
+			{
+				FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(), &Picture, ESlateDrawEffect::IgnoreTextureAlpha, Lit);
+			}
 			static const FLinearColor Inks[] = { FLinearColor(1.0f, 1.0f, 1.0f, 1.0f), FLinearColor(0.45f, 0.8f, 1.0f, 1.0f), FLinearColor(1.0f, 0.2f, 0.12f, 1.0f), FLinearColor(0.1f, 0.1f, 0.1f, 0.85f) };
 			for (const FVector& Mark : Dots)
 			{
 				const int32 Whose = FMath::Clamp(FMath::RoundToInt32(Mark.Z), 0, 3);
-				const double Wide = Whose == 0 ? 5.0 : Whose == 3 ? 3.0 : 4.0;
+				// (on the whole world's map a country is a few dozen points wide: the marks are smaller there, or they bury it)
+				const double Wide = (Whose == 0 ? 5.0 : Whose == 3 ? 3.0 : 4.0) * (bWorld ? 0.6 : 1.0);
 				const FVector2D At(Mark.X * Size.X - Wide * 0.5, Mark.Y * Size.Y - Wide * 0.5);
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(Wide, Wide), FSlateLayoutTransform(At)), &Dot, ESlateDrawEffect::None, Inks[Whose]);
 			}
@@ -844,15 +909,73 @@ namespace
 			const FVector2D Local = Geometry.AbsoluteToLocal(Event.GetScreenSpacePosition());
 			if (Controller.IsValid() && Size.X > 0.0 && Size.Y > 0.0)
 			{
-				Controller->JumpToMapShare(FVector2D(Local.X / Size.X, Local.Y / Size.Y));
+				// (on the whole world's map a place is told from where the map is centred, which is held still while the mouse is down)
+				const double Across = Controller->IsMinimapWorld() ? Centre - 0.5 + Local.X / Size.X : Local.X / Size.X;
+				Controller->JumpToMapShare(FVector2D(Across, Local.Y / Size.Y));
 			}
 		}
 
 		TWeakObjectPtr<ACampaignPlayerController> Controller;
 		float High = 200.0f;
 		mutable FSlateBrush Picture;
+		mutable FSlateBrush West, East; // (the whole world's picture, drawn in two parts either side of where it comes round)
+		mutable double Centre = 0.5; // (how far round the world the middle of the small map is: 0 at the picture's west edge, 1 at its east)
+		mutable bool bCentred = false;
 		FSlateBrush Dot;
 		bool bHeld = false;
+	};
+
+	/**
+	 * Round a world the chart runs on rollers: it never ends to east or west. From the staff map's height the lamp's
+	 * light falls away over the left and the right eighth of the screen, down to about four fifths of what it is in
+	 * the middle, so that the chart reads as running on out of the lamplight.
+	 */
+	class SChartEdges : public SLeafWidget
+	{
+	public:
+		SLATE_BEGIN_ARGS(SChartEdges) {}
+			SLATE_ARGUMENT(TWeakObjectPtr<ACampaignPlayerController>, Controller)
+		SLATE_END_ARGS()
+
+		void Construct(const FArguments& Args)
+		{
+			Controller = Args._Controller;
+		}
+
+		virtual FVector2D ComputeDesiredSize(float) const override
+		{
+			return FVector2D::ZeroVector;
+		}
+
+		virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& Geometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
+			int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override
+		{
+			const float Shade = Controller.IsValid() ? Controller->GetChartEdgeShade() : 0.0f;
+			if (Shade <= 0.01f)
+			{
+				return LayerId;
+			}
+			const FVector2D Size = Geometry.GetLocalSize();
+			const double Wide = Size.X / 8.0;
+			// (a soft falling away, not a ramp: most of it in the outer half of the eighth)
+			const float Dark = 0.2f * Shade;
+			auto Ink = [Dark](float Share) { return FLinearColor(0.0f, 0.0f, 0.0f, Dark * Share); };
+			TArray<FSlateGradientStop> Left, Right;
+			Left.Add(FSlateGradientStop(FVector2D(0.0, 0.0), Ink(1.0f)));
+			Left.Add(FSlateGradientStop(FVector2D(Wide * 0.35, 0.0), Ink(0.62f)));
+			Left.Add(FSlateGradientStop(FVector2D(Wide * 0.7, 0.0), Ink(0.2f)));
+			Left.Add(FSlateGradientStop(FVector2D(Wide, 0.0), Ink(0.0f)));
+			Right.Add(FSlateGradientStop(FVector2D(0.0, 0.0), Ink(0.0f)));
+			Right.Add(FSlateGradientStop(FVector2D(Wide * 0.3, 0.0), Ink(0.2f)));
+			Right.Add(FSlateGradientStop(FVector2D(Wide * 0.65, 0.0), Ink(0.62f)));
+			Right.Add(FSlateGradientStop(FVector2D(Wide, 0.0), Ink(1.0f)));
+			FSlateDrawElement::MakeGradient(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, Size.Y), FSlateLayoutTransform(FVector2D::ZeroVector)), Left, Orient_Vertical);
+			FSlateDrawElement::MakeGradient(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(Wide, Size.Y), FSlateLayoutTransform(FVector2D(Size.X - Wide, 0.0))), Right, Orient_Vertical);
+			return LayerId;
+		}
+
+	private:
+		TWeakObjectPtr<ACampaignPlayerController> Controller;
 	};
 
 	class SCampaignOverlay : public SCompoundWidget
@@ -979,6 +1102,11 @@ namespace
 			ChildSlot
 			[
 				SNew(SOverlay)
+				// (under everything, and there whether the frame is shown or put away: it belongs to the chart, not to the frame)
+				+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
+				[
+					SNew(SChartEdges).Controller(Controller).Visibility(EVisibility::HitTestInvisible)
+				]
 				// With the frame put away for a clean picture (the F key), only the map's own lettering is left, and
 				// for a moment a line that says how to bring the frame back.
 				+ SOverlay::Slot().HAlign(HAlign_Fill).VAlign(VAlign_Fill)
@@ -1395,21 +1523,46 @@ namespace
 										]
 									]
 								]
+								// (Under the map of one theatre the five buttons stand in three rows; under the wider map of the whole
+								// world, in two: three and two.)
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 								[
-									SNew(SHorizontalBox)
-									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("FORCES"), TEXT("Every army, fleet and airfield you command, each with a way to go to it. (L)"), [this]() { Controller->OpenForces(); })]
-									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("REPORT"), TEXT("What every nation did last month, each with a way to go and look. (R)"), [this]() { Controller->OpenReports(); })]
+									SNew(SVerticalBox)
+									.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMinimapWorld() ? EVisibility::Collapsed : EVisibility::Visible; })
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("FORCES"), TEXT("Every army, fleet and airfield you command, each with a way to go to it. (L)"), [this]() { Controller->OpenForces(); })]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("REPORT"), TEXT("What every nation did last month, each with a way to go and look. (R)"), [this]() { Controller->OpenReports(); })]
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("GOALS"), TEXT("What winning means for your country, and how far you have got. (O)"), [this]() { Controller->OpenGoals(); })]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("CAPITAL"), TEXT("Look at your capital. (C, or Home)"), [this]() { Controller->GoToCapital(); })]
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+									[
+										MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; and friend and foe, your own ground green, your allies' blue, your enemies' red. (Y)"), [this]() { Controller->ToggleWealth(); })
+									]
 								]
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
 								[
-									SNew(SHorizontalBox)
-									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("GOALS"), TEXT("What winning means for your country, and how far you have got. (O)"), [this]() { Controller->OpenGoals(); })]
-									+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("CAPITAL"), TEXT("Look at your capital. (C, or Home)"), [this]() { Controller->GoToCapital(); })]
-								]
-								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
-								[
-									MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; and friend and foe, your own ground green, your allies' blue, your enemies' red. (Y)"), [this]() { Controller->ToggleWealth(); })
+									SNew(SVerticalBox)
+									.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->IsMinimapWorld() ? EVisibility::Visible : EVisibility::Collapsed; })
+									+ SVerticalBox::Slot().AutoHeight()
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("FORCES"), TEXT("Every army, fleet and airfield you command, each with a way to go to it. (L)"), [this]() { Controller->OpenForces(); })]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("REPORT"), TEXT("What every nation did last month, each with a way to go and look. (R)"), [this]() { Controller->OpenReports(); })]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("GOALS"), TEXT("What winning means for your country, and how far you have got. (O)"), [this]() { Controller->OpenGoals(); })]
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
+									[
+										SNew(SHorizontalBox)
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("CAPITAL"), TEXT("Look at your capital. (C, or Home)"), [this]() { Controller->GoToCapital(); })]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; and friend and foe, your own ground green, your allies' blue, your enemies' red. (Y)"), [this]() { Controller->ToggleWealth(); })]
+									]
 								]
 							])
 						]

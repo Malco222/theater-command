@@ -553,7 +553,8 @@ private:
 	void UpdateSmoke(float CameraDistance, const FVector& CameraFocus);
 	UPROPERTY()
 	TObjectPtr<UTexture2D> MiniTexture;
-	TArray<int16> MiniRegion; // the province under each point of the small map, or -1 for the sea
+	TArray<int16> MiniRegion; // the province under each point of the small map, -1 for the sea, or MiniUnclaimed for land beyond the provinces
+	static constexpr int32 MiniUnclaimed = -2;
 	TArray<uint8> MiniShade; // how the ground there takes the light (160 is level ground), or for the sea how deep it is
 	int32 MiniWide = 0, MiniHigh = 0;
 	bool bMiniStale = true;

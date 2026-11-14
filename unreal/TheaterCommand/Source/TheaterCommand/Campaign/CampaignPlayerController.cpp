@@ -3763,6 +3763,10 @@ void ACampaignPlayerController::GetMinimapMarks(TArray<FVector>& OutDots, FBox2D
 	}
 	const FCampaignMapData& Data = Map->GetData();
 	const FCampaignView& View = Session->GetView();
+	// (the small map's picture is the map's own box, or the whole world where the world is attached)
+	const bool bWhole = Data.bWorld && Data.WorldWidth > 0.0;
+	const double FrameX = bWhole ? Data.WorldMinX : 0.0, FrameY = bWhole ? Data.WorldMinY : 0.0;
+	const double FrameWide = bWhole ? Data.WorldWidth : Data.Width, FrameHigh = bWhole ? Data.WorldHeight : Data.Height;
 	// One mark for each province an army stands in, for each side that has one there.
 	TSet<FIntPoint> Marked;
 	for (const FViewCorps& Unit : View.Corps)
@@ -3780,7 +3784,7 @@ void ACampaignPlayerController::GetMinimapMarks(TArray<FVector>& OutDots, FBox2D
 		if (!bAlready)
 		{
 			const FVector2D At = Data.Regions[Unit.Region].Center;
-			OutDots.Add(FVector(At.X / Data.Width, At.Y / Data.Height, Whose));
+			OutDots.Add(FVector((At.X - FrameX) / FrameWide, (At.Y - FrameY) / FrameHigh, Whose));
 		}
 	}
 	if (const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
@@ -3789,10 +3793,37 @@ void ACampaignPlayerController::GetMinimapMarks(TArray<FVector>& OutDots, FBox2D
 		const FVector2D Middle = Map->WorldToMap(Eye->GetFocus());
 		const double PerUnit = FVector::Dist(Map->MapToWorld(0.0, 0.0), Map->MapToWorld(1.0, 0.0));
 		const double Wide = PerUnit > 0.0 ? 2.0 * Eye->GetDistance() * FMath::Tan(FMath::DegreesToRadians(Eye->GetHorizontalFov() * 0.5)) / PerUnit : 100.0;
-		const FVector2D Half(Wide * 0.5 / Data.Width, Wide * 0.3 / Data.Height);
-		const FVector2D Centre(Middle.X / Data.Width, Middle.Y / Data.Height);
+		const FVector2D Half(Wide * 0.5 / FrameWide, Wide * 0.3 / FrameHigh);
+		const FVector2D Centre((Middle.X - FrameX) / FrameWide, (Middle.Y - FrameY) / FrameHigh);
 		OutLooking = FBox2D(Centre - Half, Centre + Half);
 	}
+}
+
+bool ACampaignPlayerController::IsMinimapWorld() const
+{
+	return Map.IsValid() && Map->GetData().bWorld && Map->GetData().WorldWidth > 0.0;
+}
+
+double ACampaignPlayerController::GetMinimapCentre() const
+{
+	if (!IsMinimapWorld())
+	{
+		return 0.5;
+	}
+	const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+	if (!Eye)
+	{
+		return 0.5;
+	}
+	const FCampaignMapData& Data = Map->GetData();
+	const double Share = (Map->WorldToMap(Eye->GetFocus()).X - Data.WorldMinX) / Data.WorldWidth;
+	return Share - FMath::FloorToDouble(Share);
+}
+
+float ACampaignPlayerController::GetChartEdgeShade() const
+{
+	// (the chart on its rollers runs on out of the lamplight to east and west: only round a world, and only from the staff map's height)
+	return IsMinimapWorld() && IsMapShown() ? Map->GetPaper() : 0.0f;
 }
 
 void ACampaignPlayerController::JumpToMapShare(const FVector2D& Share)
@@ -3804,6 +3835,12 @@ void ACampaignPlayerController::JumpToMapShare(const FVector2D& Share)
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 	{
 		const FCampaignMapData& Data = Map->GetData();
+		if (IsMinimapWorld())
+		{
+			// (round the world a share may run past either end of the picture: the eye takes the short way to it)
+			Eye->GoTo(Map->MapToWorld(Data.WorldMinX + Share.X * Data.WorldWidth, Data.WorldMinY + FMath::Clamp(Share.Y, 0.0, 1.0) * Data.WorldHeight));
+			return;
+		}
 		Eye->GoTo(Map->MapToWorld(FMath::Clamp(Share.X, 0.0, 1.0) * Data.Width, FMath::Clamp(Share.Y, 0.0, 1.0) * Data.Height));
 	}
 }

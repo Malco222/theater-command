@@ -286,13 +286,14 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	// beyond it each point lies, and what the look there says of fields, of their size, of fir and of the snow line.
 	const FCampaignClimate& Climate = FCampaignClimate::Get();
 	const bool bBeyond = Data.bWorld && Climate.IsLoaded();
-	TArray<float> Outside, LookFields, LookBig, LookFir, LookSnow, LookTropic, LookNorth;
+	TArray<float> Outside, LookFields, LookBig, LookFir, LookSnow, LookTropic, LookNorth, LookFloor;
 	TArray<uint8> LookSquare; // where the fields are the New World's squares on the compass
 	if (bBeyond)
 	{
 		Outside.SetNumUninitialized(Count);
 		LookTropic.SetNumUninitialized(Count);
 		LookNorth.SetNumUninitialized(Count);
+		LookFloor.Init(0.0f, Count);
 		LookSquare.Init(0, Count);
 		LookFields.SetNumUninitialized(Count);
 		LookBig.SetNumUninitialized(Count);
@@ -338,6 +339,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// (and the northern forest's is a lifted, cooler green than a fir wood of the Alps; the woods of the
 			// temperate lands beyond Europe take a share of it, which keeps them from going olive under the lamp)
 			LookNorth[Idx] = FMath::Clamp(Shares[WorldLook::Taiga] + 0.4f * Shares[WorldLook::Temperate], 0.0f, 1.0f) * Out;
+			// (and under them the ground is a forest floor: see where the bare ground is laid into its picture)
+			LookFloor[Idx] = Shares[WorldLook::Temperate] * Out;
 			// (the prairie's fields, and those of temperate North America, are squares laid on the compass)
 			const bool bNorthAmerica = Latitude > 24.0f && (Longitude < -52.0f || Longitude > 190.0f);
 			LookSquare[Idx] = Out > 0.5f && Shares[WorldLook::Prairie] + (bNorthAmerica ? Shares[WorldLook::Temperate] : 0.0f) > 0.5f ? 1 : 0;
@@ -523,13 +526,17 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// (and a third, small one breaks the outline, cuts clearings and throws out a copse here and there)
 			const float Thick = Cloudy(1.0 / 34.0, FVector2D(31.0, -17.0)) * 0.62f + Cloudy(1.0 / 150.0, FVector2D(-7.0, 53.0)) * 0.38f + Woods[Idx]
 				+ 0.11f * FMath::PerlinNoise2D(P * 0.13 + FVector2D(3.0, 41.0)) + 0.06f * FMath::PerlinNoise2D(P * 0.31 + FVector2D(19.0, 7.0))
-				+ (FMath::SmoothStep(56.0f, 63.0f, Northing) * 0.2f - DryLand * 0.16f) * (1.0f - Beyond) + FMath::SmoothStep(250.0f, 900.0f, Metres[Idx]) * 0.08f;
+				+ (FMath::SmoothStep(56.0f, 63.0f, Northing) * 0.2f - DryLand * 0.16f) * (1.0f - Beyond) + FMath::SmoothStep(250.0f, 900.0f, Metres[Idx]) * 0.08f
+				// (Beyond Europe, in temperate and northern country, the plain is farmed and the hills are left to the
+				// woods: the Appalachians, the Urals and Japan's ranges are wooded to the tree line.)
+				+ (bBeyond ? FMath::Clamp(LookNorth[Idx] * 2.5f, 0.0f, 1.0f) * (0.26f * FMath::SmoothStep(300.0f, 750.0f, Metres[Idx]) + 0.12f * FMath::SmoothStep(0.1f, 0.3f, Steepness)) : 0.0f);
 			// (the tree line stands where the snow line is, less about 1,200 metres: at 1,750 in Europe)
 			// (and in the jungle at about 3,300 metres)
 			const float TreeLine = FMath::Lerp(FMath::Lerp(1750.0f, FMath::Max(LookSnowOr(LookSnow, Idx) - 1200.0f, 200.0f), Beyond), 3300.0f, bBeyond ? LookTropic[Idx] : 0.0f);
 			float Wooded = FMath::SmoothStep(WoodsFrom(), WoodsFrom() + 0.07f, Thick) * FMath::SmoothStep(0.0f, 300.0f, TreeLine - Metres[Idx]);
 			// (beyond Europe the woods climb the steep ridges of the lower ranges too, under about 1,800 metres)
-			const float Roof = FMath::Max(JungleRoof, 0.85f * Beyond * (1.0f - FMath::SmoothStep(1500.0f, 2000.0f, Metres[Idx])));
+			// (wholly: a share of rock showing through a dark canopy turns a wooded ridge purple)
+			const float Roof = FMath::Max(JungleRoof, Beyond * (1.0f - FMath::SmoothStep(1500.0f, 2000.0f, Metres[Idx])));
 			Wooded *= (1.0f - Rock * (1.0f - Roof)) * (1.0f - Sand / 0.35f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
 
 			// Shaded relief, as on a printed map: how squarely the ground faces the sun (1 on the flat, up to 2.2
@@ -560,7 +567,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			const FVector3f Normal = FVector3f(Slope.Y * VerticalScale * (1.0f - 0.5f * Lowland) * Roofed, -Slope.X * VerticalScale * (1.0f - 0.5f * Lowland) * Roofed, 1.0f).GetSafeNormal();
 
 			const FVector3f Toned = Tone();
-			FColor Bare(ToByte(GroundR[Idx] * Toned.X), ToByte(GroundG[Idx] * Toned.Y), ToByte(GroundB[Idx] * Toned.Z), 255);
+			// (A sixth of the ground shows through any canopy. Under the broadleaf woods of the temperate lands beyond
+			// Europe it is a dark forest floor, or the pale upland showing through turns a wooded ridge grey-pink.)
+			const float Floor = bBeyond ? LookFloor[Idx] * FMath::SmoothStep(0.5f, 0.85f, Wooded) : 0.0f;
+			const FSeen Leafmould = FSeen::Bytes(46, 58, 42);
+			FColor Bare(ToByte(FMath::Lerp(GroundR[Idx], Leafmould.R, Floor) * Toned.X), ToByte(FMath::Lerp(GroundG[Idx], Leafmould.G, Floor) * Toned.Y), ToByte(FMath::Lerp(GroundB[Idx], Leafmould.B, Floor) * Toned.Z), 255);
 			Bare.A = ToByte(Wooded);
 			Ground[Idx] = Bare;
 			Relief[Idx] = FColor(ToByte(Normal.X * 0.5f + 0.5f), ToByte(Normal.Y * 0.5f + 0.5f), ToByte(Shade * 0.5f), 255);
