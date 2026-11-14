@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""Version 67: a fair shot from every seat, from probe53's SEAT lines (files DIR/PREFIX-NAT-SEED.txt).
+"""Versions 67 and 68: a fair shot from every seat, from probe53's or probe54's SEAT lines (files DIR/PREFIX-NAT-SEED.txt).
 usage: seattab.py DIR PREFIX... [--seeds A-B] [--rows]
 For each prefix (say `seat` by hand and `seatfield` at Field command) and each country: how many wars the player's
 country stood to the end of, how the war went for its side (won: the chief enemy fell while the player stands; lost:
 the player's country fell, or for a junior partner its senior partner fell; undecided), when the falls came, and how
-much of the war the player had a battle to fight in. --rows prints every war."""
+much of the war the player had a battle to fight in. With probe54's lines, also par: in how many wars the country
+beat its own history, and how near it came (home provinces in enemy hands at the worst, months with an enemy on home
+soil). --rows prints every war."""
 import re, sys, glob, os, statistics as st
 args = sys.argv[1:]
 lo, hi = 1, 9999
@@ -44,6 +46,13 @@ for name in names:
         m = re.search(r"at war (\d+) months(?: from (\w+ \d{4}))?, a battle of the player's in (\d+), longest silence (\d+)", s)
         r['war'], r['fought'], r['quiet'] = int(m.group(1)), int(m.group(3)), int(m.group(4))
         m = re.search(r'provinces at the start (\d+), most (\d+), at the end (\d+)', s); r['began'], r['most'], r['end'] = map(int, m.groups())
+        m = re.search(r'; par (BEATEN|missed) \((.*?)\); home provinces in enemy hands at the worst (\d+), an enemy on home soil in (\d+) months', s)
+        r['par'] = None if not m else m.group(1) == 'BEATEN'
+        r['parWhy'] = m.group(2) if m else ''
+        r['homeLost'], r['homeMonths'] = (int(m.group(3)), int(m.group(4))) if m else (0, 0)
+        m = re.search(r'Soviet levies (\d+)', s); r['levies'] = int(m.group(1)) if m else 0
+        m = re.search(r'ashore to stay from (\w+ \d{4})', s); r['ashore'] = turn(m.group(1)) if m else 0
+        r['gerFell'] = r['fallen']['GER'][0] if 'GER' in r['fallen'] and not r['fallen']['GER'][1] else 0
         r['line'] = s
         by.setdefault(nat, []).append(r)
     print(f'== {name}' + (f' (seeds {lo} to {hi})' if hi < 9999 else ''))
@@ -58,9 +67,20 @@ for name in names:
         print(f"   {NAME.get(nat, nat):13} {n:4} {sum(r['stands'] for r in rows):6} {len(won):4} {len(lost):4} {n - len(won) - len(lost):4}  "
               f"{(date(mid(fell)) + f' ({len(fell)})') if fell else '-':18} {(date(mid(cf)) + f' ({len(cf)})') if cf else '-':26} {share:8.0f}% {st.median(r['quiet'] for r in rows):7g} {sum(r['quiet'] >= 12 for r in rows):7} "
               f"{st.median(r['began'] for r in rows):g}, {st.median(r['most'] for r in rows):g}, {st.median(r['end'] for r in rows):g}")
+        if any(r['par'] is not None for r in rows):
+            pb = sum(1 for r in rows if r['par'])
+            extra = ''
+            if nat == 'UK':
+                a = [r['ashore'] for r in rows if r['ashore']]
+                extra = f"; ashore in the west to stay in {len(a)}" + (f", the middle one from {date(mid(a))}, before June 1944 in {sum(1 for x in a if x < 58)}" if a else '') + f"; invaded in {sum(1 for r in rows if r['homeMonths'])}"
+            if nat != 'GER':
+                gf = [r['gerFell'] for r in rows if r['gerFell']]
+                extra += f"; Germany fell in {len(gf)}" + (f", the middle one in {date(mid(gf))}" if gf else '')
+            lv = sum(1 for r in rows if r['levies'])
+            print(f"   {'':13} PAR BEATEN in {pb} of {n} ({round(100 * pb / n)}%); an enemy on home soil in {sum(1 for r in rows if r['homeMonths'])} wars (middle {st.median(r['homeMonths'] for r in rows):g} months), home provinces lost at the worst: middle {st.median(r['homeLost'] for r in rows):g}; a Soviet levy in {lv}{extra}")
         sen = SENIOR.get(nat)
         if sen:
             sf = [r['senFell'] for r in rows if r['senFell']]
             print(f"   {'':13} its senior partner {NAME[sen]} fell in {len(sf)} of {n}" + (f", the middle one in {date(mid(sf))}" if sf else '') + f"; the player's own country stood in {sum(r['stands'] for r in rows)}")
         if rowsToo:
-            for r in rows: print(f"      seed {r['seed']:2}: {r['side']:9} {'stands' if r['stands'] else 'fell ' + date(r['fell']):20} battle in {r['fought']} of {r['war']}, silence {r['quiet']}, land {r['began']} / {r['most']} / {r['end']}")
+            for r in rows: print(f"      seed {r['seed']:2}: {'par' if r['par'] else '   '} {r['side']:9} {'stands' if r['stands'] else 'fell ' + date(r['fell']):20} battle in {r['fought']} of {r['war']}, silence {r['quiet']}, land {r['began']} / {r['most']} / {r['end']}")
