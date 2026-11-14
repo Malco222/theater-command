@@ -9,7 +9,7 @@
     "cautious": {
       "label": "Cautious",
       "says": "Waits for long odds, masses and softens a line before it strikes, and seldom wastes an army.",
-      "attackAt": 1.2, "minOdds": 0.05, "quiet": 4, "strength": 0.85, "local": 1.5
+      "attackAt": 1.2, "minOdds": 0.05, "quiet": 3, "strength": 0.85, "local": 1.5
     },
     "opportunist": {
       "label": "Opportunist",
@@ -34,7 +34,11 @@
     "TUR": [1, 4, 2],
     "ESP": [1, 3, 3]
   },
-  "effort": { "months": 3, "rest": 2, "mass": 4, "sector": 3, "busy": 2 },
+  "effort": {
+    "_patience": "Patience runs out (Version 67). For every month a front has lain quiet beyond the character's own months a staff asks 'step' less of its strength there and 'step' less in odds at the place it would strike, never under 'strength' and 'odds'; an effort named on shortened odds strikes at them. So a weaker or more careful staff still comes on in the end, and no front sleeps for ever.",
+    "months": 3, "rest": 2, "mass": 4, "sector": 3, "busy": 2,
+    "patience": { "step": 0.1, "strength": 0.5, "odds": 1.0 }
+  },
   "press": {
     "_note": "The will to finish. A staff with a general offensive under way on a front where it has 'ratio' times the enemy's strength, and that has gained no ground for 'after' months, accepts shorter odds battle by battle: 'step' less for each month since, never below 'floor', and it sends up to 'waves' waves at one place in a month where it has the corps (two is the rule otherwise). With less than 'ratio' times his strength, an offensive on which no battle has been fought either way for 'after' months is an offensive in name only: it is called off, the front is open to a main effort at once, and no new general offensive is opened there for 'again' months unless the strength grows to 'ratio' or the staff's patience runs out (open.json, impatience).",
     "ratio": 2, "after": 3, "step": 0.1, "floor": 1.0, "waves": 3, "again": 6
@@ -50,5 +54,9 @@
   "exhaust": {
     "_note": "A finish for a war that is won. A computer nation whose capital has been in enemy hands for more than 'after' months wears out: every month after that adds 'per' to how near it is to giving in, until it asks for terms. The player's own country is never worn out this way.",
     "after": 12, "per": 0.01
+  },
+  "stalemate": {
+    "_note": "A war nobody can fight. Two computer nations at war whose armies have no ground in touch anywhere, with each other or with anyone on the other's side they are fighting, and whose two sides have fought no battle on land for 'after' months, sign an armistice on the lines as they stand. Never a war the player is fighting in.",
+    "after": 12
   }
 }

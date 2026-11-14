@@ -1269,6 +1269,7 @@ function walkIn(g: Game, attackers: Corps[], target: Region, opts: AttackOpts, a
     // The first offensive an army ever makes on a country keeps its surprise longer (the grand campaign).
     if (first && g.flags.open === 1) g.flags[`opening:${attNat}:${d}`] = AN.offStart[d];
     AN.lastFight[d] = g.turn;
+    if (g.flags.open === 1) g.flags[`ff:${attNat}:${d}`] = g.turn;
   }
   const week = Math.max(...attackers.map((c) => weekOf(c, 1)));
   g.week = week;
@@ -1360,6 +1361,8 @@ export function resolveBattle(g: Game, attackers: Corps[], target: Region, opts:
     // The first offensive an army ever makes on a country keeps its surprise longer (the grand campaign).
     if (first && g.flags.open === 1) g.flags[`opening:${attNat}:${d}`] = AN.offStart[d];
     AN.lastFight[d] = g.turn;
+    // The staffs' quiet clock for a front counts battles in the field, not a town stormed behind the line (the grand campaign).
+    if (g.flags.open === 1 && !town) g.flags[`ff:${attNat}:${d}`] = g.turn;
   }
   let week = Math.max(...attackers.map((c) => weekOf(c, 1)));
   // A later battle of the same army's month never reads an earlier week than the one before it (the grand campaign).

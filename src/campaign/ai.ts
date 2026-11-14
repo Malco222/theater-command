@@ -394,8 +394,11 @@ function overseas(g: Game, nat: string): void {
           if (!ids[k].has(r.id)) { halt.add(r.name); edge.add(r.name); }
           else if (only && !only.has(r.name)) halt.add(r.name);
         }
-        softenLine(g, nat, enemies, halt, only, ph.minOdds ?? 1.3, ph.oddsFor);
-        offensive(g, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
+        // (The month a main effort is named the army masses and attacks nowhere: the word of it runs ahead of the blow.)
+        if (!ph.massing) {
+          softenLine(g, nat, enemies, halt, only, ph.minOdds ?? 1.3, ph.oddsFor);
+          offensive(g, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
+        }
         // With the month's fighting done the rest of the army closes up to wherever the enemy now stands.
         if (n.alive) { advance(g, nat, enemies, 0, null, edge); mass(g, nat, ph); defend(g, nat, false); }
       } else { gather(g, nat, ph); mass(g, nat, ph); defend(g, nat); }
@@ -494,8 +497,11 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   const halt = new Set([...(ph && g.turn === ph.from ? ph.haltOrder ?? [] : []), ...(ph?.siege ?? [])]);
   const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g, nat)) : null;
   gunsUp(g, nat, enemies, only);
-  softenLine(g, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
-  offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
+  // (The month a main effort is named the army masses and attacks nowhere: the word of it runs ahead of the blow.)
+  if (!ph?.massing) {
+    softenLine(g, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
+    offensive(g, nat, objectivesFor(g, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
+  }
   if (!n.alive) return;
   if (posture === 'redeploy') redeploy(g, nat, ph!, enemies);
   else if (follow) {

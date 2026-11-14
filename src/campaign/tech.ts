@@ -7,7 +7,7 @@
 import { staffRuns } from './depth';
 import data from '../../data/campaign/tech.json';
 import { turnToDate } from '../core/ticket';
-import { headline } from './game';
+import { EASTERN, allied, atWar, headline } from './game';
 import { RESEARCH } from './research';
 import { traitRule, type Trait, type When } from './traits';
 import { RES, keepsStores, oilMonths } from './resources';
@@ -61,7 +61,7 @@ export const TECH = data as unknown as {
   techs: Tech[];
   start: Record<string, string[]>;
   units: { para: TechUnit };
-  ai: { tier: number; branch: number; early: number; teams: number; later: number; fuel?: number; skip: Record<string, string[]>; order: Record<string, Branch[]> };
+  ai: { tier: number; branch: number; early: number; teams: number; later: number; fuel?: number; winter?: number; skip: Record<string, string[]>; order: Record<string, Branch[]> };
 };
 
 const BY_ID: Record<string, Tech> = {};
@@ -194,6 +194,21 @@ function finish(g: Game, n: Nation, id: string, quiet: boolean): void {
   if (!quiet && n.id === g.human) headline(g, 'info', `Research complete: ${t.name}. ${techRule(t)}${staffRuns(g, n.id, 'research') ? '' : ' A research team is free for new work.'}`, n.id);
 }
 
+/**
+ * The player's advisers look a winter ahead (Version 67). True when his army is not made for the eastern winter and
+ * may have to fight in it: he is at war with a country of the deep east, or his ground touches the ground of one
+ * that is no ally of his. A computer-run nation keeps history's order, and its mistake.
+ */
+export function winterAhead(g: Game, nat: string): boolean {
+  if (g.flags.open !== 1 || nat !== g.human || EASTERN.winter.hardy.includes(nat) || EASTERN.deepOwners.includes(nat)) return false;
+  for (const e of EASTERN.deepOwners) {
+    if (!g.nations[e]?.alive || allied(g, nat, e)) continue;
+    if (atWar(g, nat, e)) return true;
+    for (const r of g.regions) if (r.ctrl === nat && r.nb.some((j) => g.regions[j].ctrl === e)) return true;
+  }
+  return false;
+}
+
 /** What a computer-run nation's staff would research next, or null when nothing is open to it. */
 export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
   const s = techOf(g, nat);
@@ -209,7 +224,9 @@ export function staffPick(g: Game, nat: string, turn = g.turn): string | null {
     const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
     // A small country buys its oil abroad and has no use for fuel chemistry.
     const idle = t.oil && !keepsStores(g, nat) ? A.later : 0;
-    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle;
+    // The player's advisers take up winter equipment as soon as a winter in the east is in sight.
+    const cold = t.winterKit && winterAhead(g, nat) ? A.winter ?? 0 : 0;
+    const score = t.tier * A.tier + (place < 0 ? order.length : place) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold;
     if (score < low) { low = score; best = t; }
   }
   return best ? best.id : null;
