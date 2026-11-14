@@ -1,0 +1,12 @@
+jab-GER-7-none	node out63n/probe38.mjs GER 1 7 37 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' none 8
+jab-SOVF-7-none	node out63n/probe38.mjs SOV 1 7 32 '{"minOdds":1.4,"declare":[[10,"GER"]]}' none 9
+jab-GER-7-jab	node out63n/probe38.mjs GER 1 7 37 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' jab 8
+jab-SOVF-7-jab	node out63n/probe38.mjs SOV 1 7 32 '{"minOdds":1.4,"declare":[[10,"GER"]]}' jab 9
+jab-GER-7-jab2	node out63n/probe38.mjs GER 1 7 37 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' jab2 8
+jab-SOVF-7-jab2	node out63n/probe38.mjs SOV 1 7 32 '{"minOdds":1.4,"declare":[[10,"GER"]]}' jab2 9
+jab-GER-7-soften	node out63n/probe38.mjs GER 1 7 37 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' soften 8
+jab-SOVF-7-soften	node out63n/probe38.mjs SOV 1 7 32 '{"minOdds":1.4,"declare":[[10,"GER"]]}' soften 9
+jab-GER-7-hammer	node out63n/probe38.mjs GER 1 7 37 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' hammer 8
+jab-SOVF-7-hammer	node out63n/probe38.mjs SOV 1 7 32 '{"minOdds":1.4,"declare":[[10,"GER"]]}' hammer 9
+jab-GER-7-hammer3	node out63n/probe38.mjs GER 1 7 37 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' hammer3 8
+jab-SOVF-7-hammer3	node out63n/probe38.mjs SOV 1 7 32 '{"minOdds":1.4,"declare":[[10,"GER"]]}' hammer3 9

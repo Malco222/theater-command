@@ -212,6 +212,8 @@ export interface Plan {
   byChance?: number;
   /** Version 61: the two-wave player. A dug-in line (half a month of works or more) is attacked from these odds up (under minOdds) only where a second wave stands by (at least three corps in reach beyond those the roads carry, or half as many again); a line already struck this month is struck again from these odds whatever is left. */
   waves?: number;
+  /** Version 63: a player who digs the line in. A corps that has works and stands beside the enemy stays in them: it joins an attack only where the card reads these odds or better with everyone in, it is not railed away to mass elsewhere, and it does not march. Corps without works (reserves, troops that have just moved) attack at minOdds as before (default off: every corps attacks, masses and marches whatever works it leaves behind). */
+  dig?: number;
 }
 
 function distanceToEnemy(g: Game, me: string, homeOnly: boolean): Int16Array {
@@ -411,6 +413,17 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   const my = (): Corps[] => g.corps.filter((c) => c.nat === me && T.canOrder(g, c) && c.ap > 0 && !(c.kind === 'eng' && (c.job || (c as any).ptBusy === g.turn)));
   const capital = g.nations[me].capital;
   const chaseId = chaseOf(g, plan), chaseOdds = plan.chaseOdds ?? 1.1;
+  // Version 63: the corps that stand in their works beside the enemy (for a player who digs the line in).
+  const lineDug = (c: Corps): boolean => plan.dig !== undefined && !!(c as any).dug && g.regions[c.reg].nb.some((j) => hostileUnits(g, g.regions[j], me).length > 0);
+  const attackersFor = (r: Region): Corps[] => {
+    const all = T.candidates(g, r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1));
+    const full = pickAttackers(g, all, r, plan);
+    if (plan.dig === undefined || !full.some(lineDug)) return full;
+    const out = full.length ? T.attackOutlook(g, full, r) : null;
+    if (out && out.odds >= plan.dig) return full;
+    (run as any).dugKept = ((run as any).dugKept ?? 0) + 1;
+    return pickAttackers(g, all.filter((c) => !lineDug(c)), r, plan);
+  };
   for (let pass = 0; pass < 4; pass++) {
     let did = 0;
     // Attacks, best odds first.
@@ -418,7 +431,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     for (const c of my()) for (const j of g.regions[c.reg].nb) if (hostileUnits(g, g.regions[j], me).length) targets.add(j);
     const looked = [...targets].map((j) => {
       const r = g.regions[j];
-      const cands = pickAttackers(g, T.candidates(g, r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), r, plan);
+      const cands = attackersFor(r);
       const out = cands.length ? T.attackOutlook(g, cands, r) : null;
       if (out && (plan.grind !== undefined || plan.waves !== undefined)) withSum(g, out, cands, r);
       if (out && plan.waves !== undefined) { (out as any).spare = T.candidates(g, r).filter((c) => c.kind !== 'art' && c.kind !== 'eng').length - cands.length; (out as any).n = cands.length; }
@@ -431,7 +444,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     const goes = (id: number, o: any): boolean => !!o && (o.odds >= barFor(id, o) || (plan.byChance !== undefined && (o.chance ?? 0) >= plan.byChance));
     const scored = looked.filter((x) => goes(x.r.id, x.out) && (!plan.homeOnly || x.r.owner === me || x.r.id === chaseId)).sort((a, b) => Number(b.r.id === chaseId) - Number(a.r.id === chaseId) || b.odds - a.odds);
     for (const x of scored) {
-      const cands = pickAttackers(g, T.candidates(g, x.r).filter((c) => !(c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1)), x.r, plan);
+      const cands = attackersFor(x.r);
       if (!cands.length || !hostileUnits(g, x.r, me).length) continue;
       const out = T.attackOutlook(g, cands, x.r);
       if (out && (plan.grind !== undefined || plan.waves !== undefined || plan.onAttack)) withSum(g, out, cands, x.r);
@@ -476,6 +489,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     for (const c of my()) {
       const here = g.regions[c.reg];
       if (c.reg === capital && here.units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 1) continue; // someone stays in the capital
+      if (lineDug(c)) continue; // a player who digs in leaves the line in its works
       const m = T.reach(g, c);
       let best = -1, bestScore = -1e9;
       for (const [id, info] of m) {
@@ -571,6 +585,7 @@ function mass(run: Run, plan: Plan, row: MonthRow, minOdds: number): void {
   let sent = 0;
   for (const c of g.corps) {
     if (c.nat !== me || !T.canOrder(g, c) || c.ap < 4 || c.kind === 'eng' || stagingIds.has(c.reg)) continue;
+    if (plan.dig !== undefined && (c as any).dug && nextToEnemy(c)) continue; // Version 63: a player who digs in masses his reserves, not his line
     // The line is thinned, not stripped: two corps stay in every province that faces the enemy.
     if (nextToEnemy(c)) {
       const here = g.regions[c.reg].units.filter((u) => u.nat === me && u.kind !== 'eng' && u.kind !== 'fort');

@@ -219,3 +219,28 @@ Traps met on Version 62:
 - `"holdCallUp":"short:0.85"` never lets the call-up go in a losing war. That is the finding, not a fault of the habit.
 
 Results of the Version 62 test: `/mnt/project-files/playtest/results-v62/` (the 252-job queue at the top; `call-up`, `secure-and-jobs`, `berlin`, `stand-back`, `screens`, `saves`, `off-and-on.txt`).
+
+## Version 63: wars that end, fronts that fight
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `v63.tsv`, `v63b.tsv` to `v63j.tsv` | The queues of the Version 63 test for `jobs.sh`: the Version 62 queue and the Version 61 follow-ups again (325 jobs); call-up habits on twelve seeds (`v63b`, 132); sixty Berlin wars for another computer (`v63c`); secure office and small jobs (`v63d`, 35); Berlin on sixty seeds for four kinds of German player, and two of them on Version 62 (`v63e`, 288); leaning, two waves, reading the chance and the Soviet first strike on twelve seeds (`v63f`, 60); the longest silence from January 1942 on Versions 61, 62 and 63 and for the digging player (`v63h`, 96); the end of Germany from the Soviet seat on twelve seeds (`v63i`, 48); the jab and the hammer (`v63j`, 12) | `./jobs.sh v63e.tsv out/v63e 4` |
+| `lib.ts` | New plan option `"dig":2`: a corps that has works and stands beside the enemy stays in them. It joins an attack only where the card reads these odds or better with everyone in, it is not railed away to mass elsewhere, and it does not march. A plan without `dig` plays the identical war | `'{"minOdds":1.4,...,"dig":2}'`, with guns `"guns":1.5` |
+| `probe28.ts` | Its `TOTAL` line now also gives the defences fought, lost, on a prepared line, met tired and against guns; the rings closed on the player and the men who surrendered; the longest silence from January 1942; and the line corps standing in works each January and July | `node out63n/probe28.mjs GER 1 7 76 '<plan>'` |
+| `probe41.ts` | The end of an enemy great power from the player's seat: the months its ground fell to ten, three and one provinces, when it gave in, the longest run without a battle after ten, the pocket headlines, and what it still holds | `node out63n/probe41.mjs SOV 1 7 76 '<plan>' GER` |
+| `ladder.py` | Berlin by habit from `probe28` outputs named `HABIT-GER-SEED.txt`: one line a habit and every pair of habits seed by seed | `python3 ladder.py out/v63e asis dig diggun gun` |
+| `silence.py` | The longest run of months without a battle from January 1942, by habit: median, wars with six and with twelve months or more | `python3 silence.py out/v63h silent61 silent62 silent63 silentdig63` |
+| `ui25.cjs` | The attack card's new parts on a desk and a phone: the verdict, the bill, the note on the force the staff brought, the fog note, the ticket lines in view and the fold button; with `mine` it goes back to the picked corps, attacks and reads the report | `node ui25.cjs SAVE.json SAVE.txt 89-v63-card mine` |
+
+The queues name their bundles: `out63n` is every program built against Version 63 with this `lib.ts`; `out62d`, `out62e` and `out61d` are `probe28` (and `probe41` in `out61d`) built against Versions 62 and 61 (`./build.sh probe28 /home/user/tc62 out62d`). Building this `lib.ts` against Version 61 warns that `orderOffice` is undefined: harmless.
+
+Traps met on Version 63:
+
+- Twelve seeds misled again. Seeds 1 to 12 read Berlin held in 4 for the plain German player; seeds 1 to 60 read 28. Sixty wars each way, paired by seed.
+- A battle report's `works` is set only when an attack is thrown back and wore the works. It does not say whether the defender stood in works: read `prepared`, or the corps' `dug` before the battle. Counting `works > 0` reads "none on works" for a line that is three-quarters dug in.
+- A job that is killed still leaves its `.done` marker. Delete `OUT/.done/NAME` and the partial file before the queue runs again.
+- Two `jobs.sh` calls chained with `;` play the second only after the first, at the first one's stream count. To queue behind a running queue, wait on `pgrep -f "jobs.sh FIRST.tsv"` in a background shell.
+- `ui25.cjs`: the fold button is in the page on a desk but hidden there. Ask `isVisible()` before clicking.
+- `"dig"` changes who is attacked as well as who attacks: the Soviet staff leaves a dug-in line alone for most of a year. Read the silence beside the Berlin number.
+
+Results of the Version 63 test: `/mnt/project-files/playtest/results-v63/` (the 325-job queue at the top; `berlin-ladder`, `call-up`, `secure-and-jobs`, `lean-and-strike`, `silence`, `endgame-and-jab`, `undecided`, `stand-back`, `screens`, `saves`).
