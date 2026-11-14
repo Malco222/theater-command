@@ -1802,6 +1802,15 @@ button.tag:hover, button.tag:focus-visible { filter: brightness(1.25); }
   .dswitch button { padding: 6px 10px; }
 }
 
+/* ---- Version 68: on a phone the badge keeps the depth in one word, and the Staff tab is shorter with links a finger can hit ---- */
+.rank .rdshort { display: none; color: var(--ink-2); letter-spacing: .06em; }
+@media (max-width: 820px) {
+  .rank .rdshort { display: inline; }
+  #pane .desk p.dtext { display: none; }
+  #pane .desk { padding: 7px 9px; }
+  .desk .link, .reel p.desk .link, .deskfoot .link { font-size: 13.5px; padding: 6px 0; }
+}
+
 /* ---- Version 67: on a phone the tray folds to one row, so that the map above it stays open to a finger ---- */
 .tfold { display: none; }
 @media (max-width: 820px) {

@@ -263,7 +263,7 @@ describe('diplomacy left to the envoys', () => {
     n.pc = 12;
     orderDesk(g, 'diplomacy', true);
     expect(n.pc).toBe(12 - DIPLOMACY.court.cost);
-    expect(lines(g, 'diplomacy')[0]).toMatch(/^Your envoys courted /);
+    expect(lines(g, 'diplomacy')[0]).toMatch(/^Your envoys began courting /);
     expect(Object.keys(g.flags).filter((k) => k.startsWith('court:GER:') && g.flags[k] === g.turn).length).toBe(1);
   });
 });

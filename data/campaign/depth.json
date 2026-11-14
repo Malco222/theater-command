@@ -4,6 +4,10 @@
   "cap": { "steps": [25, 50, 75, 100], "start": 50 },
   "diplomacy": { "keep": 2 },
   "spies": { "guards": 1, "peace": false },
+  "build": {
+    "_machines": "Money without men (Version 68). When the armies in the field are waiting for the men a new corps would take, a building staff at war puts the treasury into aircraft, which need pilots and not divisions: 'each' wings of fighters and of bombers on order at a time, until the aircraft it has bought stand at 'share' of the air force's own establishment. Fighters come first while the enemy is bombing the factories.",
+    "machines": { "each": 1, "share": 0.5 }
+  },
   "desks": [
     {
       "id": "research", "name": "Research", "tab": "research", "lead": "Your advisers",

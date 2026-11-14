@@ -30,7 +30,7 @@
     "SOV": {
       "traits": [
         { "id": "winter", "name": "At home in the winter", "builtin": true, "text": "Soviet troops are clothed and equipped for the eastern winter. An invader without winter kit is not.", "rule": "No winter penalty on Soviet ground from December to February, when an invader attacks at 70% and defends at 85%." },
-        { "id": "reserves", "name": "Reserves without end", "text": "A vast population and a system that calls up class after class.", "drafts": 1.25, "cost": { "what": ["corps:inf"], "mul": 0.9 } },
+        { "id": "reserves", "name": "Reserves without end", "text": "A vast population and a system that calls up class after class.", "drafts": 1.25, "cost": { "what": ["corps:inf"], "mul": 0.9 }, "levy": { "under": 200, "spent": 0.1, "men": 150, "gap": 12, "most": 3 } },
         { "id": "urals", "name": "Factories to the east", "text": "Whole factories are loaded onto trains ahead of the enemy and set up again beyond the Urals, out of reach.", "relocate": 0.25 }
       ],
       "unit": { "id": "guards", "label": "Guards corps", "word": "Guards", "kind": "inf", "divs": 3, "cost": 58, "months": 5, "from": 1942, "most": 3, "attack": 1.15, "defence": 1.15, "text": "Formations that earned the Guards title in battle: picked men, the best equipment and first call on replacements." }
