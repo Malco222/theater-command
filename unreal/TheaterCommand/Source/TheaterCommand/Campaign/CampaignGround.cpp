@@ -167,13 +167,13 @@ namespace
 			case WorldLook::Jungle: Look = FSeen::Bytes(104, 126, 76); break;
 			case WorldLook::Monsoon: Look = FSeen::Bytes(134, 152, 98); break;
 			case WorldLook::DryPlain: Look = FSeen::Bytes(184, 166, 110); break;
-			case WorldLook::Taiga: Look = FSeen::Bytes(100, 114, 86); break;
+			case WorldLook::Taiga: Look = FSeen::Bytes(118, 114, 88); break; // (what shows between the trees is bog, seen at about (140, 134, 94), not meadow)
 			case WorldLook::Tundra:
 			{
 				// (mottled with moss and with peat)
 				const float Mottle = FMath::PerlinNoise2D(P * 0.09 + FVector2D(23.0, 61.0));
-				// (laid bluer than its swatch: the lamp yellows it to about (128, 130, 108))
-				Look = Mix(FSeen::Bytes(138, 131, 158), Mottle > 0.0f ? FSeen::Bytes(124, 125, 140) : FSeen::Bytes(150, 129, 148), FMath::Min(FMath::Abs(Mottle) * 1.2f, 0.6f));
+				// (sage, its green the highest of the three: seen at about (149, 152, 137))
+				Look = Mix(FSeen::Bytes(130, 139, 131), Mottle > 0.0f ? FSeen::Bytes(120, 134, 118) : FSeen::Bytes(140, 136, 126), FMath::Min(FMath::Abs(Mottle) * 1.2f, 0.6f));
 				break;
 			}
 			case WorldLook::Ice: Look = FSeen::Bytes(232, 236, 238); bKeepsItsOwn = true; break;
@@ -219,6 +219,9 @@ namespace
 		{
 			Sum += Shares[K] * Lean[K];
 		}
+		// (Away from its edge the jungle is whole: no openings but the rivers, the tree line and the sand rim. The
+		// clumps belong to the blend zone alone.)
+		Sum += 0.5f * FMath::SmoothStep(0.72f, 0.94f, Shares[WorldLook::Jungle]);
 		return Sum;
 	}
 
@@ -531,11 +534,15 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			Sun -= 0.3f * FMath::Clamp((Surround[Idx] - Metres[Idx]) / 260.0f, -0.6f, 0.6f);
 			// A little unevenness, so that large areas do not look printed.
 			Sun *= 1.0f + 0.03f * (1.0f - 0.6f * Lowland) * FMath::PerlinNoise2D(FVector2D(I * 0.61, J * 0.61));
+			// (Beyond Europe a canopy is one great roof: it takes half the relief's light and shade that bare ground
+			// takes, so that a holder's colour reads on it in sun and in shadow alike.)
+			const float Roofed = 1.0f - 0.5f * Wooded * Beyond;
+			Sun = 1.0f + (Sun - 1.0f) * Roofed;
 			const float Shade = FMath::Clamp(Sun, 0.0f, 2.2f) / 2.2f * 2.0f; // (kept as half of it in the picture's blue, below)
 
 			// Which way the ground leans, as the lamp sees it: north is +X and east is +Y in the world.
 			// (on the low ground the lamp, too, sees the land leaning only half as much as it does)
-			const FVector3f Normal = FVector3f(Slope.Y * VerticalScale * (1.0f - 0.5f * Lowland), -Slope.X * VerticalScale * (1.0f - 0.5f * Lowland), 1.0f).GetSafeNormal();
+			const FVector3f Normal = FVector3f(Slope.Y * VerticalScale * (1.0f - 0.5f * Lowland) * Roofed, -Slope.X * VerticalScale * (1.0f - 0.5f * Lowland) * Roofed, 1.0f).GetSafeNormal();
 
 			const FVector3f Toned = Tone();
 			FColor Bare(ToByte(GroundR[Idx] * Toned.X), ToByte(GroundG[Idx] * Toned.Y), ToByte(GroundB[Idx] * Toned.Z), 255);
