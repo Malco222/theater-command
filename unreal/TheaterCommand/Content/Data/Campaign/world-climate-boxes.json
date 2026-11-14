@@ -473,6 +473,30 @@
    "where": "Hokkaido"
   },
   {
+   "look": "monsoon",
+   "west": 129.5,
+   "east": 142.5,
+   "south": 30.5,
+   "north": 41.5,
+   "where": "Japan south of Hokkaido (added 14 November; keep the woods on the ranges as the rules' terrain has them)"
+  },
+  {
+   "look": "monsoon",
+   "west": 123,
+   "east": 131.5,
+   "south": 24,
+   "north": 30.5,
+   "where": "the Ryukyu islands"
+  },
+  {
+   "look": "monsoon",
+   "west": 124.5,
+   "east": 129.5,
+   "south": 34,
+   "north": 39,
+   "where": "southern Korea"
+  },
+  {
    "look": "tundra",
    "west": 158,
    "east": 192,

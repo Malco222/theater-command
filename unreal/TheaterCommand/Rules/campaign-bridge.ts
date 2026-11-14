@@ -1835,8 +1835,8 @@ function arsenal(region = -1) {
       cost: shown(o.cost), upkeep: shown(o.upkeep), at: o.at, where: s.regions[o.at]?.name ?? '',
       // (Version 59: what it takes from the reserve of men, said with its note)
       note: [o.note, (o as { men?: number }).men ? `Takes ${Math.round((o as { men?: number }).men!).toLocaleString('en-US')} men from the reserve.` : ''].filter(Boolean).join(' '),
-      // (Version 65) where money is the only thing in the way, how far short the treasury is
-      why: up ? (o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${o.why ?? ''} ${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short.`.trim() : o.why) : 'It is not your month.', poor: o.poor,
+      // (Versions 65 and 67) where money is the only thing in the way, how far short the treasury is and what it holds
+      why: up ? (o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString('en')} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString('en')}.` : o.why) : 'It is not your month.', poor: o.poor,
     })),
     orders: s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) })),
   };

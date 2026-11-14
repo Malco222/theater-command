@@ -106,8 +106,32 @@ void ACampaignEnvironment::UpdateAir()
 	const float HalfUp = FMath::Atan(FMath::Tan(FMath::DegreesToRadians(Eye->GetHorizontalFov() * 0.5f)) * High / FMath::Max(Wide, 1));
 	const float FarEdge = Middle * FMath::Sin(Down) / FMath::Sin(FMath::Max(Down - HalfUp, 0.12f));
 	const float Begins = Middle * FMath::Sin(Down) / FMath::Sin(FMath::Max(Down - FMath::Atan(0.5f * FMath::Tan(HalfUp)), 0.14f));
-	const float Thick = Middle > 9000.0f ? FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 14000.0f), FVector2f(0.17f, 0.35f), Middle)
+	float Thick = Middle > 9000.0f ? FMath::GetMappedRangeValueClamped(FVector2f(9000.0f, 14000.0f), FVector2f(0.17f, 0.35f), Middle)
 		: FMath::GetMappedRangeValueClamped(FVector2f(4000.0f, 9000.0f), FVector2f(0.06f, 0.17f), Middle);
+	{
+		// Round a world the chart has a north edge with the table beyond it, at the far side of the view where the
+		// air is thickest: a dark table under a third of haze went grey. There is no air over the table: as the
+		// chart's north edge comes into the top of the view the air thins away, and is gone by the time the edge
+		// has come a little way down the screen.
+		static TWeakObjectPtr<ACampaignMapActor> Chart;
+		if (!Chart.IsValid() && GetWorld())
+		{
+			TActorIterator<ACampaignMapActor> It(GetWorld());
+			if (It)
+			{
+				Chart = *It;
+			}
+		}
+		if (Chart.IsValid() && Chart->GetData().bWorld)
+		{
+			const double North = Chart->MapToWorld(0.0, Chart->GetData().WorldMinY).X;
+			const FVector From = Player->PlayerCameraManager->GetCameraLocation();
+			const double TopAt = From.X + FarEdge * FMath::Cos(FMath::Max(Down - HalfUp, 0.12f));
+			const double BeginsAt = From.X + Begins * FMath::Cos(FMath::Max(Down - FMath::Atan(0.5f * FMath::Tan(HalfUp)), 0.14f));
+			const float Over = static_cast<float>((TopAt - North) / FMath::Max(TopAt - BeginsAt, 1.0));
+			Thick *= 1.0f - FMath::SmoothStep(0.0f, 0.15f, Over);
+		}
+	}
 	static float Strength = -1.0f, Glow = 1.0f;
 	if (Strength < 0.0f)
 	{
@@ -117,7 +141,7 @@ void ACampaignEnvironment::UpdateAir()
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterAirGlow="), Glow);
 	}
 	// (the engine's fog thins light by two to the power of minus its density, in thousandths, times the way through it)
-	const float Density = -FMath::Log2(1.0f - Thick) * 1000.0f / FMath::Max(FarEdge - Begins, 50.0f) * Strength;
+	const float Density = -FMath::Log2(1.0f - FMath::Clamp(Thick, 0.0f, 0.9f)) * 1000.0f / FMath::Max(FarEdge - Begins, 50.0f) * Strength;
 	if (FMath::Abs(Begins - AirStart) > Begins * 0.01f || FMath::Abs(Density - AirDensity) > AirDensity * 0.02f)
 	{
 		AirStart = Begins;

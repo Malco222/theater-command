@@ -442,7 +442,7 @@ def build_land():
     # (which crop: a number from 0 to 1 made of the part's own tone; under 0.2 green, to 0.62 wheat, the rest fallow)
     lots = one_in(m, unreal.MaterialExpressionFrac, plus(m, times(m, (crop, "R"), 7.1, 1900, 2700), times(m, (crop, "G"), 3.3, 1900, 2800), 2050, 2750), 2200, 2750)
     is_green = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, lots, -1.0, 2350, 2700), scalar(m, "SquareGreen", 0.2, 2350, 2800), 2450, 2700), 1000.0, 2550, 2700), 2700, 2700)
-    is_wheat = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, lots, -1.0, 2350, 2900), 0.62, 2450, 2900), 1000.0, 2550, 2900), 2700, 2900)
+    is_wheat = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, lots, -1.0, 2350, 2900), scalar(m, "SquareWheat", 0.8, 2350, 2980), 2450, 2900), 1000.0, 2550, 2900), 2700, 2900)
     grain = lerp(m, vector(m, "FieldFallow", (0.83, 0.63, 0.83, 1.0), 2700, 3000), vector(m, "FieldWheat", (1.49, 1.28, 1.09, 1.0), 2700, 3100), is_wheat, 2900, 3000)
     grain = lerp(m, grain, vector(m, "FieldGreen", (0.72, 0.91, 0.83, 1.0), 2700, 3200), is_green, 3050, 3050)
     # (each part a little paler or darker than the next of its kind)
@@ -456,6 +456,9 @@ def build_land():
     ridge = one_in(m, unreal.MaterialExpressionFrac, times(m, along, lerp(m, 7.0, 15.0, big, 2600, 3450), 2750, 3400), 2900, 3400)
     furrow = plus(m, times(m, one_in(m, unreal.MaterialExpressionAbs, plus(m, ridge, -0.5, 3050, 3400), 3150, 3400), 4.0, 3250, 3450), -1.0, 3350, 3450)
     grain = times(m, grain, plus(m, times(m, times(m, furrow, 0.03, 3450, 3450), work, 3550, 3450), 1.0, 3650, 3450), 3750, 3300)
+    # (From high up the squares are smaller than a point of the screen and their crops only speckle it: there they
+    # are drawn toward the plain's own mean, to about a third of their contrast.)
+    grain = lerp(m, vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), 3750, 3500), grain, lerp(m, 0.33, 1.0, work, 3850, 3500), 3950, 3400)
     tone = lerp(m, tone, grain, square, -80, 1700)
     # The section roads: a pale line on the squares' own grid, about a point of the screen wide at working height.
     back_u = one_in(m, unreal.MaterialExpressionOneMinus, cell_u, -550, 2920)

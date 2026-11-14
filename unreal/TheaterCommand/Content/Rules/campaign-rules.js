@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of e928f7b 2026-11-14. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of a759bc5 2026-11-14. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1029,7 +1029,7 @@
   var arsenal_default = {
     _about: "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided.",
     land: {
-      art: { label: "Artillery corps", divs: 2, cost: 40, months: 5, blurb: "Massed guns. Breaks fortified lines and fieldworks in the attack, and thickens any defence it stands in. Slow, and weak if caught alone." },
+      art: { label: "Artillery corps", divs: 2, cost: 66, months: 5, blurb: "Massed guns. Breaks fortified lines and fieldworks in the attack, and thickens any defence it stands in. Slow, weak if caught alone, and as dear as an armoured corps." },
       eng: { label: "Engineer corps", divs: 1, cost: 18, months: 3, blurb: "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, fortifies provinces, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own." }
     },
     needs: { inf: 0, mtn: 0, cav: 0, eng: 0, mot: 1, art: 1, arm: 2 },
@@ -1108,7 +1108,7 @@
         says: "Waits for long odds, masses and softens a line before it strikes, and seldom wastes an army.",
         attackAt: 1.2,
         minOdds: 0.05,
-        quiet: 4,
+        quiet: 3,
         strength: 0.85,
         local: 1.5
       },
@@ -1139,7 +1139,15 @@
       TUR: [1, 4, 2],
       ESP: [1, 3, 3]
     },
-    effort: { months: 3, rest: 2, mass: 4, sector: 3, busy: 2 },
+    effort: {
+      _patience: "Patience runs out (Version 67). For every month a front has lain quiet beyond the character's own months a staff asks 'step' less of its strength there and 'step' less in odds at the place it would strike, never under 'strength' and 'odds'; an effort named on shortened odds strikes at them. So a weaker or more careful staff still comes on in the end, and no front sleeps for ever.",
+      months: 3,
+      rest: 2,
+      mass: 4,
+      sector: 3,
+      busy: 2,
+      patience: { step: 0.1, strength: 0.5, odds: 1 }
+    },
     press: {
       _note: "The will to finish. A staff with a general offensive under way on a front where it has 'ratio' times the enemy's strength, and that has gained no ground for 'after' months, accepts shorter odds battle by battle: 'step' less for each month since, never below 'floor', and it sends up to 'waves' waves at one place in a month where it has the corps (two is the rule otherwise). With less than 'ratio' times his strength, an offensive on which no battle has been fought either way for 'after' months is an offensive in name only: it is called off, the front is open to a main effort at once, and no new general offensive is opened there for 'again' months unless the strength grows to 'ratio' or the staff's patience runs out (open.json, impatience).",
       ratio: 2,
@@ -1165,6 +1173,10 @@
       _note: "A finish for a war that is won. A computer nation whose capital has been in enemy hands for more than 'after' months wears out: every month after that adds 'per' to how near it is to giving in, until it asks for terms. The player's own country is never worn out this way.",
       after: 12,
       per: 0.01
+    },
+    stalemate: {
+      _note: "A war nobody can fight. Two computer nations at war whose armies have no ground in touch anywhere, with each other or with anyone on the other's side they are fighting, and whose two sides have fought no battle on land for 'after' months, sign an armistice on the lines as they stand. Never a war the player is fighting in.",
+      after: 12
     }
   };
 
@@ -2034,7 +2046,7 @@
       start: "What each nation has researched when the war begins. A campaign begun in a later year gives every nation the months of research in between, chosen as its own staff would.",
       slots: "Research teams each nation begins with.",
       units: "Formations the tree unlocks beyond the ordinary kinds: 'para' is an airborne corps, raised like infantry, 'most' at once in the field and on order.",
-      ai: "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open), less 'fuel' for one that makes oil while the nation's stock of it is running down (the months in resources.json). 'order' is each nation's preference among the branches."
+      ai: "How a computer-run nation chooses: the lowest of step times 'tier', plus the branch's place in its order of preference times 'branch', plus 'early' for every year a technology is ahead of its time, less 'teams' for one that adds a research team, plus 'later' for one in 'skip' (what a computer-run nation has no use for, taken only when nothing else is open), less 'fuel' for one that makes oil while the nation's stock of it is running down (the months in resources.json), less 'winter' for winter equipment when the advisers are the player's own and a winter in the east is in sight (Version 67: he is at war with the Soviet Union or his ground touches Soviet ground and he is no ally; a computer-run nation keeps history's order). 'order' is each nation's preference among the branches."
     },
     months: [0, 5, 8, 11, 14],
     early: 0.5,
@@ -2124,6 +2136,7 @@
       teams: 14,
       later: 100,
       fuel: 40,
+      winter: 300,
       skip: { _all: ["airborne", "carriers"] },
       order: {
         _default: ["land", "industry", "doctrine", "air", "naval"],
@@ -13006,6 +13019,15 @@
     if (t.sealift) n.sealift += t.sealift;
     if (!quiet2 && n.id === g2.human) headline(g2, "info", `Research complete: ${t.name}. ${techRule(t)}${staffRuns(g2, n.id, "research") ? "" : " A research team is free for new work."}`, n.id);
   }
+  function winterAhead(g2, nat) {
+    if (g2.flags.open !== 1 || nat !== g2.human || EASTERN.winter.hardy.includes(nat) || EASTERN.deepOwners.includes(nat)) return false;
+    for (const e of EASTERN.deepOwners) {
+      if (!g2.nations[e]?.alive || allied(g2, nat, e)) continue;
+      if (atWar(g2, nat, e)) return true;
+      for (const r of g2.regions) if (r.ctrl === nat && r.nb.some((j) => g2.regions[j].ctrl === e)) return true;
+    }
+    return false;
+  }
   function staffPick(g2, nat, turn = g2.turn) {
     const s = techOf(g2, nat);
     if (!s) return null;
@@ -13018,7 +13040,8 @@
       const place2 = order2.indexOf(t.branch);
       const fuel = t.oil && thirsty ? A.fuel ?? 0 : 0;
       const idle = t.oil && !keepsStores(g2, nat) ? A.later : 0;
-      const score = t.tier * A.tier + (place2 < 0 ? order2.length : place2) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle;
+      const cold2 = t.winterKit && winterAhead(g2, nat) ? A.winter ?? 0 : 0;
+      const score = t.tier * A.tier + (place2 < 0 ? order2.length : place2) * A.branch + Math.max(0, t.year - year) * A.early - (t.slots ? A.teams : 0) + (skip(t.id) ? A.later : 0) - fuel + idle - cold2;
       if (score < low) {
         low = score;
         best = t;
@@ -16721,6 +16744,7 @@
       if (first || g2.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== void 0 && g2.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g2.turn;
       if (first && g2.flags.open === 1) g2.flags[`opening:${attNat}:${d}`] = AN.offStart[d];
       AN.lastFight[d] = g2.turn;
+      if (g2.flags.open === 1) g2.flags[`ff:${attNat}:${d}`] = g2.turn;
     }
     const week = Math.max(...attackers2.map((c) => weekOf(c, 1)));
     g2.week = week;
@@ -16809,6 +16833,7 @@
       if (first || g2.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== void 0 && g2.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g2.turn;
       if (first && g2.flags.open === 1) g2.flags[`opening:${attNat}:${d}`] = AN.offStart[d];
       AN.lastFight[d] = g2.turn;
+      if (g2.flags.open === 1 && !town) g2.flags[`ff:${attNat}:${d}`] = g2.turn;
     }
     let week = Math.max(...attackers2.map((c) => weekOf(c, 1)));
     if (g2.flags.open === 1) {
@@ -19214,7 +19239,7 @@
         depth[j] = depth[q[i]] + 1;
         q.push(j);
       }
-      let def = 0, threat2 = 0;
+      let def = 0, defNear = 0, threat2 = 0;
       const share = {};
       const enemies = /* @__PURE__ */ new Set();
       for (const id of q) {
@@ -19228,6 +19253,7 @@
           const cold2 = frozen(g2, u.nat, r);
           const p = defP(g2, u, r) * (d === 1 ? works(r) : 1) * near * (still && d > 1 ? 0.3 : 1) * (cold2 ? EASTERN.winter.defence : 1);
           def += p;
+          if (d <= 2) defNear += p;
           share[u.nat] = (share[u.nat] ?? 0) + p;
           if (!still && d <= 2) threat2 += atkP(g2, u) * (d === 1 ? 1 : 0.6) * (cold2 ? EASTERN.winter.attack : 1);
         }
@@ -19259,8 +19285,12 @@
       const airEdge = (mine3 - his) / (mine3 + his + 1);
       atk *= 1 + 0.3 * airEdge;
       def *= 1 - 0.2 * airEdge;
-      if (!soft.length) def *= OPEN.headOn;
-      out.push({ key: key4, enemies: [...enemies], ours, edge: edge3, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat: threat2, fixed, ratio: 0 });
+      defNear *= 1 - 0.2 * airEdge;
+      if (!soft.length) {
+        def *= OPEN.headOn;
+        defNear *= OPEN.headOn;
+      }
+      out.push({ key: key4, enemies: [...enemies], ours, edge: edge3, depth, areas: f.areas, atk, def: Math.max(def, 0.01), threat: threat2, fixed, ratio: 0, near: 0, defNear: Math.max(defNear, 0.01) });
     }
     for (const f of out) {
       let kept = 0;
@@ -19270,6 +19300,7 @@
         kept += o.busy?.(x) ? Math.max(cover3, Math.min(x.atk, OPEN.commit * x.def)) : cover3;
       }
       f.ratio = Math.max(0, f.atk - kept) / f.def;
+      f.near = Math.max(0, f.atk - kept) / f.defNear;
     }
     return out.sort((a, b) => b.def - a.def);
   }
@@ -19401,6 +19432,11 @@
     const last = Math.max(g2.nations[nat]?.lastFight[e] ?? 0, g2.nations[e]?.lastFight[nat] ?? 0, flag2(g2, `war:${nat}:${e}`), flag2(g2, `war:${e}:${nat}`), 1);
     return g2.turn - last;
   }
+  function quietInField(g2, nat, e) {
+    const field2 = Math.max(flag2(g2, `ff:${nat}:${e}`), flag2(g2, `ff:${e}:${nat}`));
+    if (!field2) return quietWith(g2, nat, e);
+    return g2.turn - Math.max(field2, flag2(g2, `war:${nat}:${e}`), flag2(g2, `war:${e}:${nat}`), 1);
+  }
   function boldness2(g2, nat, f) {
     const I = OPEN.impatience;
     if (!I || !f.enemies.length) return 0;
@@ -19451,6 +19487,7 @@
     for (const a of Object.keys(g2.nations)) if (a !== nat && g2.nations[a].alive && allied(g2, a, nat) && flag2(g2, onKey(a, you, ""))) return k;
     return 1;
   }
+  var HOLD_ODDS = 99;
   var SEASONS = ["winter", "winter", "spring", "spring", "spring", "summer", "summer", "summer", "autumn", "autumn", "autumn", "winter"];
   var effKey = (k, nat, where) => `st:${k}:${nat}${where}`;
   function effortOf(g2, nat, where = "") {
@@ -19466,6 +19503,7 @@
       to: flag2(g2, effKey("effTo", nat, where)),
       enemy,
       won: flag2(g2, effKey("effWon", nat, where)),
+      ...flag2(g2, effKey("effOdds", nat, where)) ? { odds: flag2(g2, effKey("effOdds", nat, where)) / 100 } : {},
       name: `the ${SEASONS[turnToDate(from).month]} offensive towards ${g2.regions[first - 1].name}`
     };
   }
@@ -19555,7 +19593,7 @@
     const E = RIVALS.effort, who = characterOf(g2, nat), C = RIVALS.characters[who];
     const key4 = (k) => effKey(k, nat, where);
     const stop = (rest) => {
-      for (const k of ["eff", "eff0", "effAt", "effTo", "effE", "effWon"]) delete g2.flags[key4(k)];
+      for (const k of ["eff", "eff0", "effAt", "effTo", "effE", "effWon", "effOdds"]) delete g2.flags[key4(k)];
       if (rest) g2.flags[key4("effRest")] = g2.turn + rest;
     };
     const cur = effortOf(g2, nat, where);
@@ -19584,16 +19622,22 @@
     for (const f of real) {
       if (onSince(g2, nat, f, where) || spoken(f)) continue;
       if (!f.enemies.every((e) => g2.turn >= flag2(g2, `st:rest:${nat}:${e}${where}`))) continue;
-      if (f.ratio < C.strength) continue;
-      const quiet2 = Math.min(...f.enemies.map((e) => quietWith(g2, nat, e)));
-      if (quiet2 < C.quiet && !(who === "opportunist" && f.enemies.some((e) => busyElsewhere(g2, e, nat)))) continue;
-      const s = sector(g2, nat, f, C.local);
+      const quiet2 = Math.min(...f.enemies.map((e) => quietInField(g2, nat, e)));
+      const waited = quiet2 >= C.quiet;
+      if (!waited && !(who === "opportunist" && f.enemies.some((e) => busyElsewhere(g2, e, nat)))) continue;
+      const P = E.patience, over = P && waited ? quiet2 - C.quiet : 0;
+      const strength2 = P ? Math.max(Math.min(P.strength, C.strength), C.strength - P.step * over) : C.strength;
+      const local = P ? Math.max(Math.min(P.odds, C.local), C.local - P.step * over) : C.local;
+      if (f.near < strength2) continue;
+      const s = sector(g2, nat, f, local);
       if (!s) continue;
       g2.flags[key4("eff")] = g2.flags[key4("eff0")] = s.target.id + 1;
       g2.flags[key4("effAt")] = g2.turn;
-      g2.flags[key4("effTo")] = g2.turn + E.months - 1;
+      g2.flags[key4("effTo")] = g2.turn + E.months;
       g2.flags[key4("effE")] = Object.keys(g2.nations).indexOf(fieldCtrl(g2, s.target)) + 1;
       delete g2.flags[key4("effWon")];
+      if (local < C.local) g2.flags[key4("effOdds")] = Math.round(local * 100);
+      else delete g2.flags[key4("effOdds")];
       const named2 = effortOf(g2, nat, where);
       if (named2) effortNamed(g2, named2);
       return;
@@ -19616,7 +19660,9 @@
       enemies: f.enemies,
       objectives: [at.name, ...around.map((j) => g2.regions[j].name)],
       targets: [at.name, ...around.map((j) => g2.regions[j].name)],
-      minOdds: T.minOdds,
+      // No attack goes in the month the effort is named: the word of it runs ahead of the blow.
+      minOdds: g2.turn === e.from ? HOLD_ODDS : e.odds ? Math.min(T.minOdds, e.odds) : T.minOdds,
+      ...g2.turn === e.from ? { massing: true } : {},
       staging,
       release: doors.filter((j) => j !== g2.nations[nat].capital).map((j) => g2.regions[j].name)
     };
@@ -19999,6 +20045,58 @@
       release: [...new Set(live.flatMap((f) => f.ours.map((id) => g2.regions[id].name)))]
     };
   }
+  function sideOf3(g2, nat) {
+    const b = bloc(g2.nations[nat]);
+    return b === "axis" || b === "allies" ? Object.keys(g2.nations).filter((x) => bloc(g2.nations[x]) === b) : [nat];
+  }
+  function stalemates(g2) {
+    const S = RIVALS.stalemate;
+    if (!rivalRules(g2) || !S || dominating(g2)) return [];
+    const me = g2.human !== null && g2.nations[g2.human]?.alive ? g2.human : null;
+    const live = Object.values(g2.nations).filter((n) => n.alive && !n.dormant && n.atWar.length);
+    if (live.length < 2) return [];
+    const N = g2.regions.length;
+    const at = /* @__PURE__ */ new Map();
+    const mark = (id, r) => {
+      let a = at.get(id);
+      if (!a) at.set(id, a = new Uint8Array(N));
+      a[r] = 1;
+    };
+    for (const r of g2.regions) {
+      mark(fieldCtrl(g2, r), r.id);
+      for (const u of r.units) if (!u.dead) mark(u.nat, r.id);
+    }
+    const touch = (a, b) => {
+      const A = at.get(a), B2 = at.get(b);
+      if (!A || !B2) return false;
+      for (let i = 0; i < N; i++) if (A[i] && (B2[i] || g2.regions[i].nb.some((j) => B2[j]))) return true;
+      return false;
+    };
+    const lastBattle = (xs, ys) => {
+      let t = 0;
+      for (const x of xs) for (const y of ys) t = Math.max(t, g2.nations[x].lastFight[y] ?? 0, g2.nations[y].lastFight[x] ?? 0);
+      return t;
+    };
+    const free2 = (x, side3) => !side3.some((y) => g2.nations[y].alive && atWar(g2, x, y) && touch(x, y));
+    const signed = [];
+    for (const A of live) for (const b of A.atWar) {
+      const B2 = g2.nations[b];
+      if (!(A.id < b) || !B2?.alive || B2.dormant) continue;
+      if (me !== null && (A.id === me || b === me || atWar(g2, me, A.id) || atWar(g2, me, b))) continue;
+      const sa = sideOf3(g2, A.id), sb = sideOf3(g2, b);
+      const since = Math.max(lastBattle(sa, sb), flag2(g2, `war:${A.id}:${b}`), flag2(g2, `war:${b}:${A.id}`), 1);
+      if (g2.turn - since < S.after || !free2(A.id, sb) || !free2(b, sa)) continue;
+      signed.push([A.id, b]);
+    }
+    for (const [a, b] of signed) {
+      const A = g2.nations[a], B2 = g2.nations[b];
+      A.atWar = A.atWar.filter((x) => x !== b);
+      B2.atWar = B2.atWar.filter((x) => x !== a);
+      g2.flags[`arm:${a}:${b}`] = g2.turn;
+      headline(g2, "event", `${A.name} and ${B2.name} sign an armistice. Neither could come at the other, and their armies had not met for a year. Each keeps what it holds.`, a);
+    }
+    return signed;
+  }
 
   // ../../src/campaign/ai.ts
   var PLAN = plan_historical_default;
@@ -20285,8 +20383,10 @@
               edge3.add(r.name);
             } else if (only && !only.has(r.name)) halt.add(r.name);
           }
-          softenLine(g2, nat, enemies, halt, only, ph.minOdds ?? 1.3, ph.oddsFor);
-          offensive(g2, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
+          if (!ph.massing) {
+            softenLine(g2, nat, enemies, halt, only, ph.minOdds ?? 1.3, ph.oddsFor);
+            offensive(g2, nat, ph.objectives ?? [], enemies, ph.minOdds ?? 1.3, [], true, true, halt, only, ph.oddsFor);
+          }
           if (n.alive) {
             advance(g2, nat, enemies, 0, null, edge3);
             mass(g2, nat, ph);
@@ -20395,8 +20495,10 @@
     const halt = /* @__PURE__ */ new Set([...ph && g2.turn === ph.from ? ph.haltOrder ?? [] : [], ...ph?.siege ?? []]);
     const only = ph?.targets ? new Set(ph.targets) : ph?.limited ? new Set(objectivesFor(g2, nat)) : null;
     gunsUp(g2, nat, enemies, only);
-    softenLine(g2, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
-    offensive(g2, nat, objectivesFor(g2, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g2.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
+    if (!ph?.massing) {
+      softenLine(g2, nat, enemies, halt, only, ph?.minOdds ?? 1.3, ph?.oddsFor);
+      offensive(g2, nat, objectivesFor(g2, nat), enemies, ph?.minOdds ?? 1.3, ph?.axis ?? [], g2.turn > (ph?.from ?? 0), follow, halt, only, ph?.oddsFor);
+    }
     if (!n.alive) return;
     if (posture === "redeploy") redeploy(g2, nat, ph, enemies);
     else if (follow) {
@@ -21618,6 +21720,7 @@
       g2.week = 1;
       openTheatres(g2);
       monthlyDiplomacy(g2);
+      stalemates(g2);
     }
   }
   function stepAI(g2) {
@@ -25074,8 +25177,8 @@
         where: s.regions[o.at]?.name ?? "",
         // (Version 59: what it takes from the reserve of men, said with its note)
         note: [o.note, o.men ? `Takes ${Math.round(o.men).toLocaleString("en-US")} men from the reserve.` : ""].filter(Boolean).join(" "),
-        // (Version 65) where money is the only thing in the way, how far short the treasury is
-        why: up ? o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${o.why ?? ""} ${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString("en")} short.`.trim() : o.why : "It is not your month.",
+        // (Versions 65 and 67) where money is the only thing in the way, how far short the treasury is and what it holds
+        why: up ? o.poor && shown(o.cost) > inHand(s.nations[me].pp) ? `${(shown(o.cost) - inHand(s.nations[me].pp)).toLocaleString("en")} short: the treasury holds ${inHand(s.nations[me].pp).toLocaleString("en")}.` : o.why : "It is not your month.",
         poor: o.poor
       })),
       orders: s.nations[me].queue.map((b) => ({ ...orderLine(s, b), cost: shown(b.cost) }))

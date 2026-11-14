@@ -433,6 +433,7 @@ void ACampaignMapActor::LoadMaterials()
 	// The pieces: painted metal and cloth, not bare plastic. A fine grain in the paint and a slight tooth to the
 	// surface catch the lamp, at a scale that suits things the size of a model.
 	FMiniatureMesh::bTrialTank = FParse::Param(FCommandLine::Get(), TEXT("TheaterTrialTank")); // (the sculpted trial tank on every armoured base, to be judged)
+	FMiniatureMesh::bCodeBuilt = FParse::Param(FCommandLine::Get(), TEXT("TheaterCodeBuilt")); // (the vehicles built in code, where sculpted ones would stand)
 	PieceMaterial = MakeSurface(0.56f, 0.4f, 0.1f, 0.3f);
 	PieceMaterial->SetScalarParameterValue(TEXT("GrainTilingCoarse"), 0.012f);
 	PieceMaterial->SetScalarParameterValue(TEXT("GrainTilingFine"), 0.06f);
@@ -644,9 +645,12 @@ void ACampaignMapActor::PaintGround()
 		LandVector(TEXT("FarWoodsColour"), FarWoods);
 		// The New World's square fields: fallow, wheat and green, as what each does to the ground under it.
 		// (The art director's swatches are (156, 130, 94), (204, 180, 106) and (146, 154, 94) on prairie ground.)
-		LandVector(TEXT("FieldFallow"), FLinearColor(0.83f, 0.66f, 0.6f));
-		LandVector(TEXT("FieldWheat"), FLinearColor(1.93f, 1.47f, 0.79f)); // (gold, not cream)
-		LandVector(TEXT("FieldGreen"), FLinearColor(0.88f, 1.33f, 0.95f));
+		const FLinearColor Fallow(1.065f, 0.86f, 0.91f), Wheat(1.93f, 1.47f, 0.79f), Green(0.88f, 1.33f, 0.95f); // (fallow a good deal lighter than it first was, wheat gold and not cream)
+		LandVector(TEXT("FieldFallow"), Fallow);
+		LandVector(TEXT("FieldWheat"), Wheat);
+		LandVector(TEXT("FieldGreen"), Green);
+		// (a part in five is green and a part in five fallow, so that the plain reads gold; and what the crops fade toward from high up)
+		LandVector(TEXT("FieldMean"), Wheat * 0.6f + Fallow * 0.2f + Green * 0.2f);
 	}
 	{
 		// Woods on a warm-stained nation (Poland's red, Holland's orange) went chocolate: a very dark green takes

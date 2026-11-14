@@ -193,7 +193,7 @@ namespace
 			{
 				Look = Mix(Look, ByHeight, High);
 				// (between the tree line and the rock the ground is an alpine grey-brown, whatever lies below it)
-				Look = Mix(Look, FSeen::Bytes(128, 120, 98), 0.85f * FMath::SmoothStep(TreeLine - 150.0f, TreeLine + 150.0f, Metres));
+				Look = Mix(Look, FSeen::Bytes(130, 124, 84), 0.85f * FMath::SmoothStep(TreeLine - 150.0f, TreeLine + 150.0f, Metres)); // (laid yellower than it is to be seen: the rock and the cool shade on it turned it mauve)
 			}
 			Sum = FSeen(Sum.R + Look.R * Share, Sum.G + Look.G * Share, Sum.B + Look.B * Share);
 		}
@@ -302,7 +302,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	// beyond it each point lies, and what the look there says of fields, of their size, of fir and of the snow line.
 	const FCampaignClimate& Climate = FCampaignClimate::Get();
 	const bool bBeyond = Data.bWorld && Climate.IsLoaded();
-	TArray<float> Outside, LookFields, LookBig, LookFir, LookSnow, LookTropic, LookNorth, LookFloor;
+	TArray<float> Outside, LookFields, LookBig, LookFir, LookSnow, LookTropic, LookNorth, LookFloor, LookRice;
 	TArray<uint8> LookSquare; // where the fields are the New World's squares on the compass
 	if (bBeyond)
 	{
@@ -310,6 +310,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		LookTropic.SetNumUninitialized(Count);
 		LookNorth.SetNumUninitialized(Count);
 		LookFloor.Init(0.0f, Count);
+		LookRice.Init(0.0f, Count);
 		LookSquare.Init(0, Count);
 		LookFields.SetNumUninitialized(Count);
 		LookBig.SetNumUninitialized(Count);
@@ -358,6 +359,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				* (1.0f - FMath::SmoothStep(0.15f, 0.4f, Shares[WorldLook::Monsoon])); // (rice country's woods are the warm canopy's green, not the temperate woods' blue-green: Japan)
 			// (and under them the ground is a forest floor: see where the bare ground is laid into its picture)
 			LookFloor[Idx] = Shares[WorldLook::Temperate] * Out;
+			LookRice[Idx] = Shares[WorldLook::Monsoon] * Out; // (rice country: the plain is paddy, the ranges are wooded)
 			// (the prairie's fields, and those of temperate North America, are squares laid on the compass)
 			const bool bNorthAmerica = Latitude > 24.0f && (Longitude < -52.0f || Longitude > 190.0f);
 			LookSquare[Idx] = Out > 0.5f && Shares[WorldLook::Prairie] + (bNorthAmerica ? Shares[WorldLook::Temperate] : 0.0f) > 0.5f ? 1 : 0;
@@ -551,7 +553,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				+ (FMath::SmoothStep(56.0f, 63.0f, Northing) * 0.2f - DryLand * 0.16f) * (1.0f - Beyond) + FMath::SmoothStep(250.0f, 900.0f, Metres[Idx]) * 0.08f
 				// (Beyond Europe, in temperate and northern country, the plain is farmed and the hills are left to the
 				// woods: the Appalachians, the Urals and Japan's ranges are wooded to the tree line.)
-				+ (bBeyond ? FMath::Clamp(LookNorth[Idx] * 2.5f, 0.0f, 1.0f) * (0.26f * FMath::SmoothStep(300.0f, 750.0f, Metres[Idx]) + 0.12f * FMath::SmoothStep(0.1f, 0.3f, Steepness)) : 0.0f);
+				+ (bBeyond ? FMath::Clamp(LookNorth[Idx] * 2.5f + LookRice[Idx], 0.0f, 1.0f) * (0.26f * FMath::SmoothStep(300.0f, 750.0f, Metres[Idx]) + 0.12f * FMath::SmoothStep(0.1f, 0.3f, Steepness)) : 0.0f);
 			// (the tree line stands where the snow line is, less about 1,200 metres: at 1,750 in Europe)
 			// (and in the jungle at about 3,300 metres)
 			const float TreeLine = FMath::Lerp(1750.0f, WorldTreeLine(Northing), Beyond); // (Europe's own at 1,750 metres; beyond Europe it falls with the latitude, and the jungle's is 3,300)
