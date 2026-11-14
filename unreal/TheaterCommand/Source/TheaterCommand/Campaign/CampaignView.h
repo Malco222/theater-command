@@ -312,6 +312,17 @@ struct FPrizeMark
 	FString By; // the tag of the army that holds prizes outside the town, or empty
 	bool bBurning = false;
 };
+/** One of the six desks of the grand campaign (rules version 66): on the player's own desk, or run for him by his staff. */
+struct FViewDesk
+{
+	FString Id; // "research"
+	FString Name; // "Research"
+	bool bStaff = false; // true while the staff runs it
+	FString Line; // where the staff runs it: who does, and their news of the month
+	FString Label; // the button that changes hands: "TAKE IT BACK", or "LET MY STAFF RUN RESEARCH"
+	FString Act; // what the button tells the rules
+	FString Tip;
+};
 
 struct FCampaignView
 {
@@ -380,6 +391,11 @@ struct FCampaignView
 	TArray<FViewLane> Lanes;
 	TMap<FString, FIntVector> DesignYears; // by nation: the year its tank, fighter and bomber designs have reached
 	FString Level; // the difficulty the grand campaign is on ("Colonel"); empty in a scenario
+	// (rules version 66) How deep the player plays: the depth's name ("Theatre command", or "Your own mix"), the plain
+	// word under it, how many of the six desks his staff runs, and the desks. Empty outside the grand campaign.
+	FString CommandName, CommandUnder;
+	int32 Staffed = 0;
+	TArray<FViewDesk> Desks;
 	TArray<int32> BridgesDown; // crossings (by their place in the land's list) whose bridges are blown
 	TArray<int32> RailsCut; // regions whose railway is cut
 	TArray<FViewFleet> Fleets;
@@ -586,7 +602,9 @@ struct FGrandLevel
 	FString Name; // "Colonel"
 	FString Blurb;
 	TArray<FString> Lines; // what it changes
+	FString Under; // (a depth only) the plain word under its name: "Simple", "Standard", "Full"
 };
+
 
 struct FGrandYear
 {

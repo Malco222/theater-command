@@ -184,10 +184,10 @@ void ACampaignGameMode::LayOutWar()
 	}
 }
 
-bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, const FString& Level)
+bool ACampaignGameMode::StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, const FString& Level, const FString& Depth)
 {
 	FString Error;
-	if (!Session.IsValid() || !Session->Begin(Human, From, ViewMode, Seed, Error, Level))
+	if (!Session.IsValid() || !Session->Begin(Human, From, ViewMode, Seed, Error, Level, Depth))
 	{
 		UE_LOG(LogTheater, Error, TEXT("The campaign could not start: %s"), *Error);
 		return false;

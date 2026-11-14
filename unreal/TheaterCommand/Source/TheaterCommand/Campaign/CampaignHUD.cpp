@@ -1198,6 +1198,18 @@ namespace
 									SNew(STextBlock).Font(Serif(TEXT("Italic"), 11)).ColorAndOpacity(InkSoft)
 									.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetRulesNote() : FText::GetEmpty(); })
 								]
+								// (Rules version 66) How deep the campaign is played, and the door to the staff's room.
+								+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left)
+								[
+									SNew(SButton).ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("NoBorder")).ContentPadding(FMargin(0.0f, 1.0f, 0.0f, 0.0f)).IsFocusable(false)
+									.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetDepthLine().IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+									.ToolTipText(FText::FromString(TEXT("How deep you play: which parts of the war are on your own desk and which your staff runs for you. Click to open YOUR STAFF, where the depth or any one desk can be changed in any month.")))
+									.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->OpenStaff(); } return FReply::Handled(); })
+									[
+										SNew(STextBlock).Font(Serif(TEXT("Italic"), 11)).ColorAndOpacity(InkRed)
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetDepthLine() : FText::GetEmpty(); })
+									]
+								]
 								// The weather, when it is not fair: mud in the east, or the eastern winter.
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 								[
@@ -2162,6 +2174,11 @@ namespace
 											]
 										]
 									]
+									// (rules version 66: who runs this desk, and the way to change hands)
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+									[
+										DeskBar(TEXT("build"))
+									]
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 16.0f, 0.0f, 0.0f)
 									[
 										SAssignNew(ArsenalColumns, SHorizontalBox)
@@ -2460,6 +2477,11 @@ namespace
 											]
 										]
 									]
+									// (rules version 66: who runs this desk, and the way to change hands)
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+									[
+										DeskBar(TEXT("research"))
+									]
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 16.0f, 0.0f, 0.0f)
 									[
 										SNew(SHorizontalBox)
@@ -2536,6 +2558,11 @@ namespace
 												SNew(STextBlock).Text(FText::FromString(TEXT("CLOSE"))).Font(Font(TEXT("Bold"), 12, 180)).ColorAndOpacity(Muted)
 											]
 										]
+									]
+									// (rules version 66: who runs this desk, and the way to change hands)
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+									[
+										DeskBar(TEXT("diplomacy"))
 									]
 									+ SVerticalBox::Slot().FillHeight(1.0f).Padding(0.0f, 18.0f, 0.0f, 0.0f)
 									[
@@ -4615,6 +4642,39 @@ namespace
 		}
 
 		/** A small button on a row of the foreign office. */
+		/**
+		 * (Rules version 66) A bar at the head of a desk's own screen. Where the player's staff runs the desk it says
+		 * so, gives the staff's line for the month and offers to take the desk back; where the player runs it, it is
+		 * one quiet button that hands it over. Nothing at all outside the grand campaign.
+		 */
+		TSharedRef<SWidget> DeskBar(const TCHAR* Desk)
+		{
+			const FString Id(Desk);
+			auto Found = [this, Id]() -> const FViewDesk* { return Controller.IsValid() ? Controller->FindDesk(Id) : nullptr; };
+			return SNew(SBorder).BorderImage(&BarBrush).Padding(FMargin(12.0f, 6.0f))
+				.BorderBackgroundColor_Lambda([Found]() { const FViewDesk* D = Found(); return FSlateColor(D && D->bStaff ? FLinearColor(0.72f, 0.55f, 0.24f, 0.16f) : FLinearColor(0.0f, 0.0f, 0.0f, 0.0f)); })
+				.Visibility_Lambda([Found]() { return Found() ? EVisibility::Visible : EVisibility::Collapsed; })
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(0.0f, 0.0f, 14.0f, 0.0f)
+					[
+						SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+						.Text_Lambda([Found]() { const FViewDesk* D = Found(); return D ? FText::FromString(D->Line) : FText::GetEmpty(); })
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)
+					[
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false)
+						.ToolTipText_Lambda([Found]() { const FViewDesk* D = Found(); return D ? FText::FromString(D->Tip) : FText::GetEmpty(); })
+						.OnClicked_Lambda([this, Id]() { if (Controller.IsValid()) { Controller->PressDesk(Id); } return FReply::Handled(); })
+						[
+							SNew(STextBlock).Font(Font(TEXT("Bold"), 10, 160))
+							.ColorAndOpacity_Lambda([Found]() { const FViewDesk* D = Found(); return FSlateColor(D && D->bStaff ? BrightBrass : Muted); })
+							.Text_Lambda([Found]() { const FViewDesk* D = Found(); return D ? FText::FromString(D->Label) : FText::GetEmpty(); })
+						]
+					]
+				];
+		}
+
 		TSharedRef<SWidget> OfficeButton(const TCHAR* Label, const FLinearColor& Ink, bool bEnabled, const FString& Tip, TFunction<void()> Pressed)
 		{
 			return SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(12.0f, 5.0f)).IsFocusable(false).IsEnabled(bEnabled)
@@ -5848,6 +5908,39 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
 					];
 				}
+				// (Rules version 66) How deep it is played: three depths, the chosen one lit, with what it means beside them.
+				TSharedRef<SHorizontalBox> HowDeep = SNew(SHorizontalBox);
+				if (Opening.Depths.Num() > 0)
+				{
+					TSharedRef<SHorizontalBox> Steps = SNew(SHorizontalBox);
+					for (int32 DepthIndex = 0; DepthIndex < Opening.Depths.Num(); ++DepthIndex)
+					{
+						const FGrandLevel& Depth = Opening.Depths[DepthIndex];
+						const bool bPicked = DepthIndex == Opening.DepthIndex;
+						Steps->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(bPicked ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(10.0f, 5.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(Depth.Name + TEXT(" (") + Depth.Under + TEXT(")\n") + Depth.Blurb + TEXT("\nOil, supply and manpower are in the game at every depth. You can change the depth, or any one desk, in any month.")))
+							.OnClicked_Lambda([this, DepthIndex]() { if (Controller.IsValid()) { Controller->PickDepth(DepthIndex); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(Depth.Name.ToUpper())).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(bPicked ? BrightBrass : Muted)
+							]
+						];
+					}
+					const FString Says = Opening.Depths.IsValidIndex(Opening.DepthIndex) ? Opening.Depths[Opening.DepthIndex].Under + TEXT(". ") + Opening.Depths[Opening.DepthIndex].Blurb : FString();
+					HowDeep->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+					[
+						SNew(SBox).MinDesiredWidth(74.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HOW DEEP"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)]
+					];
+					HowDeep->AddSlot().AutoWidth().VAlign(VAlign_Center)
+					[
+						Steps
+					];
+					HowDeep->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+					];
+				}
 				Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 9.0f)).IsFocusable(false)
@@ -5872,9 +5965,13 @@ namespace
 				OpeningFoot->SetContent(SNew(SBorder).BorderImage(&FootBrush).Padding(FMargin(16.0f, 10.0f, 16.0f, 12.0f))
 				[
 					SNew(SVerticalBox)
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
 					[
 						Difficulty
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+					[
+						HowDeep
 					]
 					+ SVerticalBox::Slot().AutoHeight()
 					[

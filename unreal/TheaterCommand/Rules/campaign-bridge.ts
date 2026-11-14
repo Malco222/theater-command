@@ -42,6 +42,8 @@ import type { Field, Skill } from '../../../src/campaign/types';
 import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
 import { hasTech, idleTeams, techOf } from '../../../src/campaign/tech';
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
+import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
+import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
 import {
@@ -188,6 +190,9 @@ function view() {
     autoDig: s.flags.open === 1 && !!DEFENCE.entrench.auto, dugFull: DEFENCE.entrench.months,
     open: isOpen(s),
     level: isOpen(s) && s.human ? levelNow(s).name : '',
+    // (Version 66) How deep the player plays: the depth's name, and each desk with who runs it and a line for a bar on
+    // its own screen (the staff's news of the month where it runs the desk, an offer to hand it over where it does not).
+    command: commandBrief(s),
     fallen: fallenNation,
     // The player's treasury: production points in hand, what the factories earn a month, and what is on order.
     treasury: s.human ? treasuryOf(s, s.human) : null,
@@ -599,6 +604,9 @@ function starts() {
     // How hard a grand campaign can be made, easiest first, and the level it is on unless another is chosen.
     levels: DIFFICULTY.levels.map((l) => ({ id: l.id, name: l.name, blurb: l.blurb, lines: l.lines })),
     level: DIFFICULTY.start,
+    // (Version 66) How deep a grand campaign is played: which desks the player's staff runs for him. The one offered first.
+    depths: DEPTH.depths.map((d) => ({ id: d.id, name: d.name, under: d.under, blurb: d.blurb })),
+    depth: DEPTH.start,
     groups: STARTS.map((group) => ({
       ...group,
       sides: group.sides.map((side) => ({
@@ -692,7 +700,7 @@ function listNames(names: string[]): string {
 }
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string; secure?: boolean }) {
+function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string; secure?: boolean; depth?: string }) {
   const human = options?.human === undefined ? 'GER' : options.human;
   const from = options?.from ?? 1;
   const seed = options?.seed ?? 1939;
@@ -711,6 +719,9 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   if (human && options?.level) orderLevel(g, options.level);
   // (Version 62) A government that cannot fall, chosen as the campaign is set up.
   if (human && options?.secure) { try { orderOffice(g, false); } catch { /* no government in this game */ } }
+  // (Version 66) How deep he plays: a depth sets the desks his staff runs, the cabinet, whether it can fall, and the fog of
+  // war. The staff goes to work when his first month opens. A game started with no depth is the full game.
+  if (human && options?.view === 'grand' && options?.depth) { try { orderDepth(g, options.depth); } catch { /* no depths in this game */ } }
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
   if (human) {
@@ -1914,6 +1925,7 @@ function pagesOf(s: Game): { id: string; label: string }[] {
   if (!s.human) return out;
   if (lastMonth) out.push({ id: 'reports', label: "THE MONTH'S REPORT" });
   if (s.stories.awards.some((a) => a.nat === s.human && !a.old)) out.push({ id: 'heroes', label: 'HEROES AT HOME' });
+  if (commandBrief(s)) out.push({ id: 'staff', label: 'YOUR STAFF' });
   if (secretService(s)) out.push({ id: 'spies', label: 'THE SECRET SERVICE' });
   // The government and its war cabinet (Version 57, the grand campaign).
   try { if (governmentOf(s)?.mine) out.push({ id: 'cabinet', label: 'THE CABINET' }); } catch { /* no government in this game */ }
@@ -1992,7 +2004,9 @@ function todoOf(s: Game): { k: string; t: string; tip: string }[] {
       tip: `Nothing is being raised or built, and there is ${inHand(me.pp).toLocaleString('en-US')} in the treasury. Open the ARSENAL to order corps, aircraft, ships or works.`,
     });
   }
-  return out;
+  // (Version 66) What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
+  const theirs: Record<string, DeskId> = { research: 'research', arsenal: 'build', 'page:trade': 'build', 'page:spies': 'spies' };
+  return out.filter((t) => { const desk = theirs[t.k]; try { return !(desk && staffRunsDesk(s, desk)); } catch { return true; } });
 }
 
 function alertsOf(s: Game): string[] {
@@ -2917,13 +2931,99 @@ function foldPage(s: Game, reg: number): Page | null {
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
-  const p = id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
+  const p = id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
     : id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
     : part[0] === 'rebase' ? rebasePage(s, Number(part[1])) : part[0] === 'fold' ? foldPage(s, Number(part[1])) : null;
+  // (Version 66) A room that belongs to a desk the staff runs says so at its head, with the staff's line for the month
+  // and a way to take the desk back; one the player runs offers, at its head, to hand it over.
+  const desk = p ? deskOfPage(id) : null;
+  if (p && desk) {
+    const bar = deskBar(s, desk);
+    if (bar) {
+      p.note = bar.staff ? `${bar.line}${p.note ? `  ${p.note}` : ''}` : p.note;
+      p.top = [...p.top, { label: bar.label, act: bar.act, ok: true, tip: bar.tip }];
+    }
+  }
   return p ? { ok: true, ...p } : { ok: false };
+}
+
+// ---- How deep the player plays (Version 66) ----------------------------------------------------
+
+const lowFirst = (t: string): string => (/^The /.test(t) ? `the ${t.slice(4)}` : t.charAt(0).toLowerCase() + t.slice(1));
+/** "Your admirals run the navy and convoys." (and of the secret service, which is its own staff, that it runs itself) */
+const runsLine = (lead: string, desk: string): string => (lead.toLowerCase().endsWith(lowFirst(desk).replace(/^the /, ''))
+  ? `${lead} runs itself for you.` : `${lead} run${/s$/.test(lead) ? '' : 's'} ${lowFirst(desk)}.`);
+
+/** The desk a room belongs to, or null: the secret service's room, trade and the towns, the airfield's, a fleet's. (The rooms that only ask a question, such as where a raid is to go, carry no bar.) */
+function deskOfPage(id: string): DeskId | null {
+  const head = id.split(':')[0];
+  return head === 'spies' ? 'spies' : head === 'trade' || head === 'towns' ? 'build' : head === 'airfield' ? 'air' : head === 'fleet' ? 'navy' : null;
+}
+
+/** For a bar on a desk's own screen: who runs it, a line to read, and the button that changes hands. Null outside the grand campaign. */
+function deskBar(s: Game, desk: DeskId): { staff: boolean; line: string; label: string; act: string; tip: string } | null {
+  let v: ReturnType<typeof commandOf> = null;
+  try { v = commandOf(s); } catch { v = null; }
+  const d = v?.desks.find((x) => x.id === desk), def = deskDef(desk);
+  if (!v || !d || !def || !s.human || !s.nations[s.human]?.alive) return null;
+  return d.staff
+    ? { staff: true, line: `${runsLine(def.lead, d.name)} ${d.news ?? 'Nothing to report this month.'} What you order here by hand still goes out.`, label: 'TAKE IT BACK', act: `desk:${desk}:own`, tip: `${def.hand} You can hand it back to your staff in any month.` }
+    : { staff: false, line: '', label: `LET MY STAFF RUN ${d.name.toUpperCase()}`, act: `desk:${desk}:staff`, tip: `${def.runs} You can take it back in any month.` };
+}
+
+/** The depth and the desks, for the frame: null outside the grand campaign. */
+function commandBrief(s: Game): { name: string; under: string; depth: string; staffed: number; desks: { id: string; name: string; staff: boolean; line: string; label: string; act: string; tip: string }[] } | null {
+  try {
+    const v = commandOf(s);
+    if (!v || !s.human || !s.nations[s.human]?.alive) return null;
+    return {
+      name: v.name, under: v.under, depth: v.depth ?? '', staffed: v.desks.filter((d) => d.staff).length,
+      desks: v.desks.map((d) => { const bar = deskBar(s, d.id)!; return { id: d.id, name: d.name, staff: d.staff, line: bar.line, label: bar.label, act: bar.act, tip: bar.tip }; }),
+    };
+  } catch { return null; }
+}
+
+/** The staff's room: the three depths, the six desks with who runs each, and what the staff may spend. */
+function staffPage(s: Game): Page | null {
+  let v: ReturnType<typeof commandOf> = null;
+  try { v = commandOf(s); } catch { v = null; }
+  if (!v) return null;
+  const list = (names: string[]): string => (names.length ? names.join(', ') : 'nothing');
+  return {
+    id: 'staff', title: 'YOUR STAFF',
+    headline: v.depth ? `You are playing at ${v.name} (${v.under}).` : 'You are playing a mix of your own.',
+    note: 'The armies and their battles are always yours, and so are declaring war and landings. Any desk below can be handed to your staff or taken back in any month. How deep you play is separate from how hard the war is: the rival staffs fight the same at every depth.',
+    top: [],
+    sections: [
+      {
+        heading: 'HOW DEEP YOU PLAY', text: v.depth ? 'Pick a depth to set every switch at once.' : 'You have made a mix of your own from the desks below. Pick a depth to set them all at once.',
+        rows: v.depths.map((d) => ({
+          nat: '', title: `${d.name}  \u00B7  ${d.under}${d.on ? '  \u00B7  where you are' : ''}`,
+          lines: [d.blurb, `Yours: ${list(d.yours)}.`, `Your staff's: ${list(d.staff)}.`],
+          buttons: [{ label: d.on ? 'YOU PLAY AT THIS DEPTH' : `GO TO ${d.name.toUpperCase()}`, act: `depth:${d.id}`, ok: !d.on, tip: d.on ? 'The campaign stands at this depth.' : `${d.blurb} It can be changed again in any month.` }],
+        })),
+      },
+      {
+        heading: 'THE SIX DESKS', text: '',
+        rows: v.desks.map((d) => ({
+          nat: '', title: `${d.name}  \u00B7  ${d.staff ? 'your staff runs it' : 'you run it'}`,
+          lines: [d.text, d.state, d.staff ? (d.news ? `This month: ${d.news}` : 'This month: nothing to report.') : ''].filter(Boolean),
+          buttons: [{ label: d.staff ? 'TAKE IT BACK' : 'LET MY STAFF RUN IT', act: `desk:${d.id}:${d.staff ? 'own' : 'staff'}`, ok: true, tip: d.staff ? `${deskDef(d.id)?.hand ?? ''} What your staff ordered this month stands.` : `${deskDef(d.id)?.runs ?? ''} Handed over in your own month, the staff goes to work at once.` }],
+        })),
+      },
+      {
+        heading: 'WHAT YOUR STAFF MAY SPEND',
+        text: `Your staff may spend ${v.cap}% of the treasury in a month on what it builds. ${shown(v.left).toLocaleString('en-US')} is left of this month's allowance${v.spent > 0 ? `, and ${shown(v.spent).toLocaleString('en-US')} has been spent` : ''}.`,
+        rows: [{
+          nat: '', title: 'The share of the treasury', lines: [],
+          buttons: v.caps.map((c) => ({ label: c === v!.cap ? `${c}% (NOW)` : `${c}%`, act: `cap:${c}`, ok: c !== v!.cap, tip: `Let the staff spend up to ${c}% of the treasury in a month.` })),
+        }],
+      },
+    ],
+  };
 }
 
 /** Something pressed in one of those rooms. Says what came of it; the game then draws the room again. */
@@ -3018,6 +3118,35 @@ function act(action: string, region = -1) {
       const hold = part[2] === '1';
       ok = orderCallUp(s, hold);
       note = ok ? (hold ? 'The standing call-up is held: no new corps are raised from the reserve until you let it run again.' : 'The standing call-up runs again.') : 'That cannot be changed now.';
+    }
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'depth' || part[0] === 'desk' || part[0] === 'cap') {
+    // (Version 66) How deep the player plays: a depth, one desk handed over or taken back, or what the staff may spend.
+    if (part[0] === 'depth') {
+      const to = DEPTH.depths.find((d) => d.id === part[1]);
+      // A depth with no cabinet, picked while the cabinet has business open, is asked twice: the bill is shown first.
+      let bill: { text: string; trust: number }[] = [];
+      try { bill = to && !to.cabinet && !cabinetIsOff(s) ? cabinetBillOf(s) : []; } catch { bill = []; }
+      const asking = `${action}:${s.turn}`;
+      if (to && bill.length && cabinetAsked !== asking) {
+        cabinetAsked = asking;
+        const sum = Math.round(bill.reduce((t, b) => t + b.trust, 0) * 10) / 10;
+        return { ok: false, note: `${to.name} has no war cabinet. Its open business is settled first: ${bill.map((b) => `${b.text} (trust \u2212${b.trust})`).join('; ')}. In all its trust falls by ${sum}, and it is kept at that should you want it back. Press it again to go to ${to.name}.`, fly, flies, open, view: view() };
+      }
+      cabinetAsked = '';
+      let stands = false;
+      try { stands = commandOf(s)?.depth === part[1]; } catch { stands = false; }
+      ok = !stands && orderDepth(s, part[1]);
+      note = ok ? `You play at ${to?.name ?? 'that depth'} now.${to && to.staff.length ? ` Your staff runs ${to.staff.map((k) => lowFirst(deskDef(k)?.name ?? k)).join(', ')}.` : ' Everything is on your own desk.'}` : 'The campaign stands at that depth already.';
+    } else if (part[0] === 'desk') {
+      const def = deskDef(part[1]), staff = part[2] === 'staff';
+      ok = !!def && orderDesk(s, part[1] as DeskId, staff);
+      note = !def ? '' : ok ? (staff ? `${runsLine(def.lead, def.name).replace(/\.$/, '')} from now on.` : `${def.name} is on your own desk again. What your staff ordered this month stands.`)
+        : (staff ? `Your staff runs ${lowFirst(def.name)} already.` : `${def.name} is on your own desk already.`);
+    } else {
+      ok = orderStaffCap(s, Number(part[1]));
+      note = ok ? `Your staff may spend up to ${Number(part[1])}% of the treasury in a month.` : '';
     }
     return { ok, note, fly, flies, open, view: view() };
   }

@@ -141,6 +141,22 @@ TArray<FStartGroup> FCampaignSession::Starts()
 			LevelObject->TryGetStringArrayField(TEXT("lines"), Level.Lines);
 		}
 	}
+	// (rules version 66) How deep it is played.
+	Depths.Reset();
+	Object->TryGetStringField(TEXT("depth"), DefaultDepth);
+	const TArray<TSharedPtr<FJsonValue>>* DepthValues = nullptr;
+	if (Object->TryGetArrayField(TEXT("depths"), DepthValues))
+	{
+		for (const TSharedPtr<FJsonValue>& DepthValue : *DepthValues)
+		{
+			const TSharedPtr<FJsonObject> DepthObject = DepthValue->AsObject();
+			FGrandLevel& Depth = Depths.AddDefaulted_GetRef();
+			DepthObject->TryGetStringField(TEXT("id"), Depth.Id);
+			DepthObject->TryGetStringField(TEXT("name"), Depth.Name);
+			DepthObject->TryGetStringField(TEXT("under"), Depth.Under);
+			DepthObject->TryGetStringField(TEXT("blurb"), Depth.Blurb);
+		}
+	}
 	for (const TSharedPtr<FJsonValue>& GroupValue : Object->GetArrayField(TEXT("groups")))
 	{
 		const TSharedPtr<FJsonObject> GroupObject = GroupValue->AsObject();
@@ -191,16 +207,17 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 	return Out;
 }
 
-bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level)
+bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level, const FString& Depth)
 {
 	bRunning = false;
 	if (!bReady && !Prepare(OutError))
 	{
 		return false;
 	}
-	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d%s}]"),
+	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d%s%s}]"),
 		Human.IsEmpty() ? TEXT("null") : *JsonQuote(Human), From, *JsonQuote(ViewMode), Seed,
-		Level.IsEmpty() ? TEXT("") : *(TEXT(",\"level\":") + JsonQuote(Level)));
+		Level.IsEmpty() ? TEXT("") : *(TEXT(",\"level\":") + JsonQuote(Level)),
+		Depth.IsEmpty() ? TEXT("") : *(TEXT(",\"depth\":") + JsonQuote(Depth)));
 	FString ViewJson;
 	if (!Host->Call(TEXT("start"), Arguments, ViewJson, OutError))
 	{
@@ -380,6 +397,36 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 	}
 	Object->TryGetBoolField(TEXT("open"), Out.bOpen);
 	Object->TryGetStringField(TEXT("level"), Out.Level);
+	{
+		// (rules version 66) How deep the player plays, and the six desks.
+		const TSharedPtr<FJsonObject>* Command = nullptr;
+		if (Object->TryGetObjectField(TEXT("command"), Command))
+		{
+			(*Command)->TryGetStringField(TEXT("name"), Out.CommandName);
+			(*Command)->TryGetStringField(TEXT("under"), Out.CommandUnder);
+			(*Command)->TryGetNumberField(TEXT("staffed"), Out.Staffed);
+			const TArray<TSharedPtr<FJsonValue>>* DeskValues = nullptr;
+			if ((*Command)->TryGetArrayField(TEXT("desks"), DeskValues))
+			{
+				for (const TSharedPtr<FJsonValue>& DeskValue : *DeskValues)
+				{
+					const TSharedPtr<FJsonObject> DeskObject = DeskValue->AsObject();
+					if (!DeskObject.IsValid())
+					{
+						continue;
+					}
+					FViewDesk& Desk = Out.Desks.AddDefaulted_GetRef();
+					DeskObject->TryGetStringField(TEXT("id"), Desk.Id);
+					DeskObject->TryGetStringField(TEXT("name"), Desk.Name);
+					DeskObject->TryGetBoolField(TEXT("staff"), Desk.bStaff);
+					DeskObject->TryGetStringField(TEXT("line"), Desk.Line);
+					DeskObject->TryGetStringField(TEXT("label"), Desk.Label);
+					DeskObject->TryGetStringField(TEXT("act"), Desk.Act);
+					DeskObject->TryGetStringField(TEXT("tip"), Desk.Tip);
+				}
+			}
+		}
+	}
 	Object->TryGetStringField(TEXT("fallen"), Out.Fallen); // null unless the player's nation has been beaten
 	Object->TryGetStringArrayField(TEXT("declare"), Out.Declarable);
 	Object->TryGetStringArrayField(TEXT("league"), Out.League);

@@ -46,7 +46,7 @@ public:
 	 * Starts a new campaign and lays its armies on the table. Human is empty to watch. Seed sets the dice:
 	 * the same seed gives the same war as long as the same orders are given.
 	 */
-	bool StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed = 1939, const FString& Level = FString());
+	bool StartCampaign(const FString& Human, int32 From, const FString& ViewMode, int32 Seed = 1939, const FString& Level = FString(), const FString& Depth = FString());
 
 	/** Picks up the campaign saved on this computer. */
 	bool ContinueCampaign();

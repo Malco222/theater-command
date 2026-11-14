@@ -189,6 +189,9 @@ struct FOpening
 	// How hard the war is to be: the levels, easiest first, and the one chosen.
 	TArray<FGrandLevel> Levels;
 	int32 LevelIndex = INDEX_NONE;
+	// (rules version 66) How deep the campaign is to be played: the depths on offer and the one picked.
+	TArray<FGrandLevel> Depths;
+	int32 DepthIndex = INDEX_NONE;
 	bool bWorking = false; // history is being played up to the day chosen; the list of countries follows
 
 	// The scenarios: single campaigns in which the other nations keep to history's plan.
@@ -418,6 +421,16 @@ public:
 
 	/** On the opening screen: chooses how hard the grand campaign is to be. */
 	void PickLevel(int32 Index);
+	/** (rules version 66) How deep the campaign is to be played, picked as it is set up. */
+	void PickDepth(int32 Index);
+	/** The depth the campaign stands at and how many desks the staff runs, for a line under the date: empty outside the grand campaign. */
+	FText GetDepthLine() const;
+	/** The staff's room: the depths, the six desks and what the staff may spend. */
+	void OpenStaff();
+	/** One of the six desks, by its name in the rules ("research", "build", "diplomacy", "spies", "air", "navy"), or null. */
+	const FViewDesk* FindDesk(const FString& Id) const;
+	/** The button on a desk's bar: hands the desk to the staff, or takes it back, and reads the open screen again. */
+	void PressDesk(const FString& Id);
 
 	/** Shows a fleet or an air fleet in the panel, with the orders it can be given. */
 	void ShowForce(bool bFleet, int32 Id);

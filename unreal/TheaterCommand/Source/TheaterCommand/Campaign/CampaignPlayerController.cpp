@@ -103,6 +103,12 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 	{
 		Opening.LevelIndex = Opening.Levels.IndexOfByPredicate([Rules](const FGrandLevel& Level) { return Level.Id == Rules->FairLevel(); });
 	}
+	// (rules version 66) How deep it is played; the depth the rules offer first unless another was picked before.
+	Opening.Depths = Rules->GrandDepths();
+	if (!Opening.Depths.IsValidIndex(Opening.DepthIndex))
+	{
+		Opening.DepthIndex = Opening.Depths.IndexOfByPredicate([Rules](const FGrandLevel& Depth) { return Depth.Id == Rules->FirstDepth(); });
+	}
 	if (Opening.Years.Num() == 0)
 	{
 		Opening.Tab = 1;
@@ -205,6 +211,14 @@ TArray<FGameOption> ACampaignPlayerController::GetOptions() const
 				const bool bSecure = Session->GetView().bOfficeSecure;
 				Add(TEXT("office"), TEXT("Your office"), TEXT("Secure: the cabinet still doubts and withholds, but it never falls and you are never turned out. Otherwise a cabinet left with no trust in you for months running falls."), bSecure ? TEXT("SECURE") : TEXT("CAN BE BROUGHT DOWN"), bSecure);
 			}
+		}
+	}
+	// (rules version 66) How deep the campaign is played: the door to the staff's room, where a depth or any one desk is changed.
+	if (const FCampaignSession* Session = GetSession())
+	{
+		if (Session->IsRunning() && !Session->GetView().CommandName.IsEmpty() && !Session->GetView().Human.IsEmpty())
+		{
+			Add(TEXT("depth"), TEXT("How deep you play"), TEXT("Which parts of the war are on your own desk and which your staff runs for you: research, building and trade, diplomacy, the secret service, the air war and the navy. The armies are always yours. Press to open YOUR STAFF and change the depth, or any one desk, in any month."), *Session->GetView().CommandName.ToUpper(), true);
 		}
 	}
 	Add(TEXT("music"), TEXT("Music"), TEXT("The game's own score, which follows the war. Key M."), bMusic ? TEXT("ON") : TEXT("OFF"), bMusic);
@@ -310,6 +324,12 @@ void ACampaignPlayerController::PressOption(const FString& Id)
 	else if (Id == TEXT("colour") && Map.IsValid())
 	{
 		Map->SetColourStrength((Map->GetColourStrength() + 1) % 3);
+	}
+	else if (Id == TEXT("depth"))
+	{
+		CloseMenu();
+		OpenStaff();
+		return; // (kept by the campaign, not with the options)
 	}
 	else if (Id == TEXT("office"))
 	{
@@ -476,6 +496,86 @@ void ACampaignPlayerController::PickLevel(int32 Index)
 	}
 }
 
+void ACampaignPlayerController::PickDepth(int32 Index)
+{
+	if (Opening.Depths.IsValidIndex(Index) && Index != Opening.DepthIndex)
+	{
+		Opening.DepthIndex = Index;
+		++Opening.Revision;
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	}
+}
+
+FText ACampaignPlayerController::GetDepthLine() const
+{
+	const FCampaignSession* Session = GetSession();
+	if (!Session || Session->GetView().CommandName.IsEmpty() || Session->GetView().Human.IsEmpty())
+	{
+		return FText::GetEmpty();
+	}
+	const FCampaignView& View = Session->GetView();
+	return FText::FromString(FString::Printf(TEXT("%s  \u00B7  %s"), *View.CommandName,
+		View.Staffed == 0 ? TEXT("every desk is yours") : View.Staffed == 1 ? TEXT("your staff runs 1 desk") : *FString::Printf(TEXT("your staff runs %d desks"), View.Staffed)));
+}
+
+void ACampaignPlayerController::OpenStaff()
+{
+	OpenPage(TEXT("staff"));
+}
+
+const FViewDesk* ACampaignPlayerController::FindDesk(const FString& Id) const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session && !Session->GetView().Human.IsEmpty() ? Session->GetView().Desks.FindByPredicate([&Id](const FViewDesk& Desk) { return Desk.Id == Id; }) : nullptr;
+}
+
+void ACampaignPlayerController::PressDesk(const FString& Id)
+{
+	FCampaignSession* Session = GetSession();
+	const FViewDesk* Desk = FindDesk(Id);
+	if (!Session || !Desk)
+	{
+		return;
+	}
+	const FString Action = Desk->Act; // (kept: the desks are read again when the rules answer)
+	FString Note;
+	const bool bOk = Session->Act(Action, INDEX_NONE, Note);
+	CampaignSounds::Play(this, bOk ? TEXT("stamp") : TEXT("click"), 0.6f);
+	if (bOk)
+	{
+		// (a staff handed a desk in the player's own month goes to work at once: the table and the open screen are read again)
+		ShowWar(Session->GetView(), TArray<FCorpsMove>());
+		RefreshOrders();
+		if (bResearchOpen)
+		{
+			const int32 Revision = Research.Revision + 1;
+			Research = Session->Research();
+			Research.Revision = Revision;
+			bResearchOpen = Research.bValid;
+		}
+		if (bArsenalOpen)
+		{
+			const FCampaignView& View = Session->GetView();
+			const bool bMine = View.RegionHolder.IsValidIndex(SelectedRegion) && View.RegionHolder[SelectedRegion] == View.Human;
+			const int32 Revision = Arsenal.Revision + 1;
+			Arsenal = Session->Arsenal(bMine ? SelectedRegion : INDEX_NONE);
+			Arsenal.Revision = Revision;
+			bArsenalOpen = Arsenal.bValid;
+		}
+		if (bDiplomacyOpen)
+		{
+			const int32 Revision = Diplomacy.Revision + 1;
+			Diplomacy = Session->Diplomacy();
+			Diplomacy.Revision = Revision;
+			bDiplomacyOpen = Diplomacy.bValid;
+		}
+	}
+	if (!Note.IsEmpty())
+	{
+		Notify(Note, 8.0);
+	}
+}
+
 void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 {
 	ACampaignGameMode* Mode = GetMode();
@@ -485,7 +585,15 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 	}
 	const FString Human = bWatch ? FString() : Opening.Nations[Opening.NationIndex].Tag;
 	const FString Level = Opening.Levels.IsValidIndex(Opening.LevelIndex) ? Opening.Levels[Opening.LevelIndex].Id : FString();
-	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed, Level))
+	FString Depth = !bWatch && Opening.Depths.IsValidIndex(Opening.DepthIndex) ? Opening.Depths[Opening.DepthIndex].Id : FString();
+	if (FCString::Strifind(FCommandLine::Get(), TEXT("TheaterShots=")) != nullptr)
+	{
+		// (a run that takes pictures plays the full game, with every desk in the player's hands, as it always has:
+		// "-TheaterDepth=theatre" asks for another depth)
+		Depth.Reset();
+		FParse::Value(FCommandLine::Get(), TEXT("TheaterDepth="), Depth);
+	}
+	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed, Level, Depth))
 	{
 		bFreshCampaign = true;
 		EnterCampaign();

@@ -613,6 +613,16 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			}
 		}
 		{
+			// (Rules version 66) How deep the player plays: the staff's room; research handed to the staff from it; and
+			// the design offices with the bar that says who runs them. (The month that follows is then ended with a
+			// desk in the staff's hands, so that the staff's own month is run in every check.)
+			Add(TEXT("44a-your-staff"), TEXT("@capital"), 0.62f).Room = TEXT("staff");
+			FShot& Handed = Add(TEXT("44b-research-handed-over"), TEXT("@capital"), 0.62f);
+			Handed.Room = TEXT("staff");
+			Handed.RoomAct = TEXT("desk:research:staff");
+			Add(TEXT("44c-research-with-the-staff"), TEXT("@capital"), 0.45f).bResearch = true;
+		}
+		{
 			// "-TheaterMonths=24" plays that many months before this picture: a long run, to see that nothing breaks.
 			int32 Long = 1;
 			FParse::Value(FCommandLine::Get(), TEXT("TheaterMonths="), Long);
