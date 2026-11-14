@@ -140,8 +140,18 @@ export function whyNotEarly(g: Game, nat: string): string | null {
   if (!n.atWar.length) return 'Only a country at war calls its boys up before their time.';
   const until = classGapUntil(g, nat);
   if (g.turn <= until) return `The next class is with the colours already: none comes of age until ${turnToDate(until + 1).label}.`;
-  if (menLeft(g, nat) >= poolAtStart(g, nat) * MANPOWER.most - 1e-9) return 'The reserve is full: there is nowhere to put them.';
+  // (Room for under a thousand men is no room.)
+  if (poolAtStart(g, nat) * MANPOWER.most - menLeft(g, nat) < 1000 / MEN_PER_DIV) return 'The reserve is full: there is nowhere to put them.';
   return null;
+}
+
+/**
+ * The months no class comes of age after an early call that brings so many men (in divisions' worth): in step with
+ * what came, so that a call which finds room in the reserve for two months of classes costs two months of them.
+ */
+export function earlyGap(g: Game, nat: string, come: number, callUp = 1): number {
+  const E = MANPOWER.early, one = classNow(g, nat, callUp);
+  return one > 0 ? Math.max(1, Math.ceil((come / one) * (E.gap / E.months) - 1e-6)) : E.gap;
 }
 
 /** What calling the next class up early would bring today, in divisions' worth. */
@@ -160,7 +170,7 @@ export function callEarly(g: Game, nat: string, callUp = 1): number {
   const come = earlyClass(g, nat, callUp);
   if (come <= 0) return 0;
   g.flags[kp(nat)] = menLeft(g, nat) + come;
-  g.flags[ke(nat)] = g.turn + MANPOWER.early.gap;
+  g.flags[ke(nat)] = g.turn + earlyGap(g, nat, come, callUp);
   return come;
 }
 

@@ -1714,3 +1714,17 @@ p.sub.mennow { margin: 0 0 8px; }
   .seg.gvtabs .btn { flex: 1 1 40%; }
   .menorder { flex-direction: column; align-items: stretch; }
 }
+
+/* Version 63: the bill on the attack card (what the fight is likely to cost each side), the Battle Ticket folded to
+   the lines that matter most on a phone, and the note of a province cut off with its stores. */
+.costline { display: grid; gap: 4px; margin: 10px 0 4px; padding: 9px 12px; border: 1px solid var(--line); border-left: 3px solid var(--brass); border-radius: 4px; background: rgba(216, 165, 72, .06); font-size: 13px; }
+.costline .costrow { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.costline .costrow > b { font-family: var(--head); font-size: 12.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); min-width: 11.5em; }
+.costline .costrow span b { color: #f0d9a4; font-weight: 600; }
+.btn.ticketall { display: none; }
+.note.pocketnote { margin: 8px 0; }
+@media (max-width: 720px) {
+  table.ticket.fold tr.tx { display: none; }
+  .btn.ticketall { display: block; width: 100%; margin-top: 8px; }
+  .costline .costrow > b { min-width: 0; flex: 1 0 100%; }
+}
