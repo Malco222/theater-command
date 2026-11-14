@@ -289,6 +289,7 @@ Results of the Version 64 test: `/mnt/project-files/playtest/results-v64/` (the 
 | `probe47.ts` | Loads a save from the page, ends the month and prints the works a corps holds and the works standing empty | `node out65/probe47.mjs SAVE.json 137` |
 | `probe48.ts` | What a probe by a worn corps does: the probe row of a `-soften` save with the player's army at full, a half, a quarter and a tenth of its men | `node out65c/probe48.mjs GER-7-soften.json GER-7-soften.txt` |
 | `v65x.tsv` | A what-if, not a test of the build: `probe28` for the digging German on the 26 seeds with a long silence, built against two scratch copies of the rules with `data/campaign/rivals.json` changed (`x1`: every character's `strength` 0, so a main effort is judged by its sector alone; `x2`: the same and the cautious staff's `quiet` 3). The copies are not in the repository: copy `src` and `data`, change the file, and build with `./build.sh probe28 COPY out65x1` | `./jobs.sh v65x.tsv out/v65x 3` |
+| `probe49.ts` | Every staff's character on a run of seeds | `node out65c/probe49.mjs 1-12 SOV` |
 | `ui27.cjs` | Page checks on Version 65: `phone` (six screens: how much of the map a tap reaches before and after an army is picked, how many lit provinces a finger can find), `swap` (the "Change places" card on a desk and by press and hold on a phone), `powers` (the staff lines and the character card), `cadre` (a card greyed for want of money) | `node ui27.cjs phone SAVE.json 91-v65-phone` |
 
 Bundles: `out65` is every program against Version 65; `out65b` and `out65c` hold programs changed while a queue was using `out65`.
@@ -300,6 +301,7 @@ Traps met on Version 65:
 - An effort is dated by the month it was named (`effAt`). A first blow in the same month fell in the same move, before the player had a turn.
 - An order on the page needs a right-click on a desk or a press and hold on a touch screen; `onRegion` only picks. On a phone the province must first be dragged out from under the tray.
 - The treasury on the page is `pp` times about a hundred: set `pp = 1.36` for a player 136 short, not 136.
+- The `rotate` habit's "months handed over" read 66% on Version 65 because it counted months stood beyond three; works are finished at three months and `lib.ts` now caps the count there. No works were lost (`probe43`: 536 of 540 pairs, all kept).
 - The table scripts read the last line that starts with `TOTAL`. New summary lines take other first words (`STAFFS`, `EFFORT`, `SWAPS`, `QUIET`, `WHY`).
 
 Results of the Version 65 test: `/mnt/project-files/playtest/results-v65/`.

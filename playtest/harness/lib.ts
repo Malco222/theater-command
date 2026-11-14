@@ -458,7 +458,8 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
       const back = g.regions[c.reg].nb.map((j) => g.regions[j]).filter((r) => r.ctrl === me && !hostileUnits(g, r, me).length && front(r) < front(g.regions[c.reg]));
       const moved: Set<number> = st64.rotMoved?.turn === g.turn ? st64.rotMoved.ids : ((st64.rotMoved = { turn: g.turn, ids: new Set<number>() }), st64.rotMoved.ids);
       if (moved.has(c.id)) continue;
-      const wks = (u: Corps): number => ((u as any).dug ? Math.round(((u as any).dugFor ?? 1) * 10) / 10 : 0);
+      // (Works are finished at three months: months stood beyond that add nothing, and a hand-over passes on three at most.)
+      const wks = (u: Corps): number => ((u as any).dug ? Math.round(Math.min(3, (u as any).dugFor ?? 1) * 10) / 10 : 0);
       const cands2 = back.flatMap((r) => r.units.filter((u) => u.nat === me && u.kind === c.kind && !(u as any).dead && u.town === undefined && !moved.has(u.id) && u.str >= c.str + 0.2 && T.canOrder(g, u) && u.ap > 0)).sort((x, y) => front(g.regions[x.reg]) - front(g.regions[y.reg]) || y.divs * y.str - x.divs * x.str);
       if (!cands2.length) { st64.rotNone = (st64.rotNone ?? 0) + 1; continue; }
       // Version 65: two corps change places in one order, full provinces or not.
