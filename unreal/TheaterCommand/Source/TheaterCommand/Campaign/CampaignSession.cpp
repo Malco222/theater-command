@@ -484,6 +484,8 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 		if (Object->TryGetObjectField(TEXT("cabinet"), Cabinet))
 		{
 			(*Cabinet)->TryGetBoolField(TEXT("can"), Out.bCabinetCan);
+			Out.Allied.Reset();
+			Object->TryGetStringArrayField(TEXT("allied"), Out.Allied);
 			(*Cabinet)->TryGetBoolField(TEXT("off"), Out.bCabinetOff);
 			(*Cabinet)->TryGetBoolField(TEXT("secure"), Out.bOfficeSecure);
 		}

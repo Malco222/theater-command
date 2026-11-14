@@ -1585,6 +1585,28 @@ void ACampaignPlayerController::GetTownPlates(TArray<FTownPlate>& Out) const
 			Out.Add(Pair.Value);
 		}
 	}
+	// A crowded province shows one flag: beside it, a small count of the armies put away behind it. (Point at the
+	// province and they fan out.) At any height, since the armies it stands for are hidden at any height.
+	{
+		TArray<TPair<AArmyPiece*, int32>> Crowds;
+		Map->GetCrowds(Crowds);
+		const FVector Right = PlayerCameraManager->GetCameraRotation().Quaternion().GetRightVector();
+		for (const TPair<AArmyPiece*, int32>& Crowd : Crowds)
+		{
+			FVector Middle;
+			double Radius = 0.0;
+			FVector2D Screen;
+			if (Crowd.Key->GetColours(Middle, Radius) && ProjectWorldLocationToScreen(Middle + Right * Radius * 0.95, Screen, false)
+				&& Screen.X > -40.0 && Screen.X < Width + 40.0 && Screen.Y > -20.0 && Screen.Y < Height + 20.0)
+			{
+				FTownPlate& Count = Out.AddDefaulted_GetRef();
+				Count.At = Screen + FVector2D(16.0, -9.0);
+				Count.Name = FString::Printf(TEXT("+%d"), Crowd.Value);
+				Count.bCrowd = true;
+				Count.Rank = 900;
+			}
+		}
+	}
 }
 
 FString ACampaignPlayerController::GetToDoText(int32 Index) const

@@ -120,6 +120,10 @@ void AArmyPiece::SetFlockShown(bool bShown)
 	{
 		Flock->SetVisibility(bShown);
 	}
+	if (FarEarth && FarEarth->IsVisible() == bShown)
+	{
+		FarEarth->SetVisibility(!bShown);
+	}
 }
 
 void AArmyPiece::SetAtAnchor(bool bInHarbour)
@@ -204,7 +208,13 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Flock->DestroyComponent();
 		Flock = nullptr;
 	}
+	if (FarEarth)
+	{
+		FarEarth->DestroyComponent();
+		FarEarth = nullptr;
+	}
 	FMiniatureMesh Turf; // (the flock and tufts on the base: a mesh of their own, shown only close to)
+	FMiniatureMesh DarkEarth; // (and the darker earth that lies over the base's ground from working height)
 	if (Cloth)
 	{
 		Cloth->DestroyComponent();
@@ -336,6 +346,7 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 			// (the ring of painted wood is a quarter of the base's radius)
 			const double Ground = 0.07 * U, Reach = CounterWidth * 0.5 * 0.75;
 			Model.Pillar(FVector(0.0, 0.0, Top), Reach, Reach - 0.05 * U, Ground, Earth, 30);
+			DarkEarth.Pillar(FVector(0.0, 0.0, Top + Ground), Reach - 0.05 * U, Reach - 0.06 * U, 0.012 * U, FLinearColor(FColor::FromHex(TEXT("6C5A40"))), 30);
 			for (int32 K = 0; K < 26; ++K)
 			{
 				const double Angle = Scatter.FRandRange(0.0f, 2.0f * PI), Out = Reach * FMath::Sqrt(Scatter.FRand()) * 0.9;
@@ -607,6 +618,17 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 		Flock->SetMaterial(0, Map->GetPieceMaterial());
 		Flock->SetCastShadow(false);
 		Flock->SetVisibility(bFlockNear);
+	}
+	if (DarkEarth.Vertices.Num() > 0)
+	{
+		FarEarth = NewObject<UProceduralMeshComponent>(this);
+		FarEarth->SetupAttachment(Root);
+		FarEarth->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		FarEarth->RegisterComponent();
+		FarEarth->CreateMeshSection(0, DarkEarth.Vertices, DarkEarth.Triangles, DarkEarth.Normals, TArray<FVector2D>(), DarkEarth.Colors, TArray<FProcMeshTangent>(), false);
+		FarEarth->SetMaterial(0, Map->GetPieceMaterial());
+		FarEarth->SetCastShadow(false);
+		FarEarth->SetVisibility(!bFlockNear);
 	}
 	Mast = NewObject<UProceduralMeshComponent>(this);
 	Mast->SetupAttachment(Standard);

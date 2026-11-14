@@ -3986,7 +3986,7 @@ AArmyPiece* ACampaignMapActor::PieceAtRay(const FVector& Origin, const FVector& 
 	auto Try = [&](AArmyPiece* Piece)
 	{
 		double Distance = 0.0;
-		if (Piece && Piece->HitByRay(Origin, Direction, Distance) && Distance < Nearest)
+		if (Piece && !Piece->IsHidden() && Piece->HitByRay(Origin, Direction, Distance) && Distance < Nearest)
 		{
 			Nearest = Distance;
 			Best = Piece;
@@ -4077,6 +4077,11 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		}
 		TArray<FString>& Present = NationsIn[Group[0].Region];
 		Present.Sort();
+		// (the player's own army stands first, where it leads a crowded province)
+		if (!View.Human.IsEmpty() && Present.Remove(View.Human) > 0)
+		{
+			Present.Insert(View.Human, 0);
+		}
 		bool bSmall = false;
 		const FVector Spot = ArmySpot(Group[0].Region, Present.IndexOfByKey(Group[0].Nation), Present.Num(), &bSmall);
 		const FVector PieceSize(bSmall ? 0.8 : 1.0); // (in a crowded province the bases are drawn at four fifths)
@@ -4095,6 +4100,35 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 			Pieces.Add(Piece);
 		}
 	}
+
+	// A crowded province shows one flag with a count, and fans out when it is pointed at.
+	// (Flags of one side only are folded together: the player's and his allies', or the others'. An enemy's flag
+	// is never put away behind a friend's.)
+	CrowdLead.Reset();
+	CrowdFriends = TSet<FString>(View.Allied);
+	if (!View.Human.IsEmpty())
+	{
+		CrowdFriends.Add(View.Human);
+	}
+	for (const TPair<int32, TArray<FString>>& In : NationsIn)
+	{
+		for (int32 Side = 0; Side < 2; ++Side)
+		{
+			TArray<FString> Together;
+			for (const FString& Tag : In.Value)
+			{
+				if ((CrowdFriends.Contains(Tag) ? 0 : 1) == Side)
+				{
+					Together.Add(Tag);
+				}
+			}
+			if (Together.Num() >= 2)
+			{
+				CrowdLead.Add(FIntPoint(In.Key, Side), Together[0]);
+			}
+		}
+	}
+	ApplyCrowds();
 
 	// Carry the corps that have just moved along the road they took. Corps that arrive together travel as one piece.
 	TMap<AArmyPiece*, TArray<const FCorpsMove*>> Arrivals;
@@ -4158,8 +4192,50 @@ void ACampaignMapActor::ShowArmies(const FCampaignView& View, const TArray<FCorp
 		}
 	}
 
+	ApplyCrowds(); // (a piece on the march is not put away)
+
 	// The fleets and the air fleets are part of the same picture.
 	ShowFleets(View);
+}
+
+void ACampaignMapActor::ApplyCrowds()
+{
+	for (AArmyPiece* Piece : Pieces)
+	{
+		if (!Piece)
+		{
+			continue;
+		}
+		const FString* Lead = CrowdLead.Find(FIntPoint(Piece->GetRegionId(), CrowdFriends.Contains(Piece->GetNationTag()) ? 0 : 1));
+		const bool bFanned = !Lead || Piece->GetRegionId() == HoveredRegion || Piece->GetRegionId() == SelectedRegion;
+		const bool bPutAway = !bFanned && Piece->GetNationTag() != *Lead && !Piece->IsMarching();
+		if (Piece->IsHidden() != bPutAway)
+		{
+			Piece->SetActorHiddenInGame(bPutAway);
+		}
+	}
+}
+
+void ACampaignMapActor::GetCrowds(TArray<TPair<AArmyPiece*, int32>>& Out) const
+{
+	Out.Reset();
+	for (const TPair<FIntPoint, FString>& Crowd : CrowdLead)
+	{
+		if (Crowd.Key.X == HoveredRegion || Crowd.Key.X == SelectedRegion)
+		{
+			continue; // fanned out: every army shows its own flag
+		}
+		AArmyPiece* Lead = FindPiece(Crowd.Key.X, Crowd.Value);
+		int32 Others = 0;
+		for (const AArmyPiece* Piece : Pieces)
+		{
+			Others += Piece && Piece->GetRegionId() == Crowd.Key.X && Piece->IsHidden() && (CrowdFriends.Contains(Piece->GetNationTag()) ? 0 : 1) == Crowd.Key.Y ? 1 : 0;
+		}
+		if (Lead && Others > 0)
+		{
+			Out.Emplace(Lead, Others);
+		}
+	}
 }
 
 void ACampaignMapActor::ShowFleets(const FCampaignView& View)
@@ -6108,6 +6184,10 @@ void ACampaignMapActor::SetSelectedRegion(int32 RegionId)
 	{
 		SelectedRegion = RegionId;
 		RebuildHighlight();
+		if (CrowdLead.Num() > 0)
+		{
+			ApplyCrowds(); // (a crowded province that is picked stays fanned out)
+		}
 	}
 }
 
@@ -6117,6 +6197,10 @@ void ACampaignMapActor::SetHoveredRegion(int32 RegionId)
 	{
 		HoveredRegion = RegionId;
 		RebuildHighlight();
+		if (CrowdLead.Num() > 0)
+		{
+			ApplyCrowds(); // (the crowded province that is pointed at fans out; the one left folds up)
+		}
 	}
 }
 

@@ -175,6 +175,9 @@ private:
 	/** The flock and tufts on the base: shown only close to, where they are seen for what they are. From working height they swallowed the figures. */
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> Flock;
+	/** From working height the pale earth read as a tan coin: there a darker earth lies over it. */
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> FarEarth;
 	bool bCamp = false;
 	int32 SupplyState = 0;
 	FVector CampFireAt = FVector::ZeroVector; // in the piece's own frame

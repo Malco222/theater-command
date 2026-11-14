@@ -21954,6 +21954,8 @@
         }
       })(),
       // (Version 59) The war cabinet can be switched off by a player who wants the war without the politics.
+      // The countries whose armies fight beside the player's: a province crowded with friendly flags shows one, with a count.
+      allied: s.human ? Object.keys(s.nations).filter((n) => n !== s.human && s.nations[n].alive && allied(s, n, s.human)) : [],
       cabinet: (() => {
         try {
           const off = cabinetIsOff(s);

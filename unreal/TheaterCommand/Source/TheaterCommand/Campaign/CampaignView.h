@@ -366,6 +366,7 @@ struct FCampaignView
 	bool bMen = false;
 	FViewStock Men;
 	// (Version 59) The war cabinet can be switched off, and whether it is.
+	TArray<FString> Allied; // the countries whose armies fight beside the player's
 	bool bCabinetCan = false, bCabinetOff = false;
 	bool bOfficeSecure = false; // (version 62) the player's government cannot fall, whatever the cabinet's trust
 	// (Version 59) The town a directive of the war cabinet names, and the months left: for a small seal on the map.

@@ -560,6 +560,22 @@ namespace
 					Taken.Add(FBox2D(Corner - FVector2D(3.0, 2.0), Corner + FVector2D(SealWide + 3.0, SealHigh + 2.0)));
 					continue;
 				}
+				if (Each.bCrowd)
+				{
+					// The armies put away behind a crowded province's one flag: a small brass chip with their number.
+					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 10);
+					const FVector2D CountSize = Measure->Measure(Each.Name, CountFont);
+					const double ChipWide = CountSize.X + 12.0, ChipHigh = 17.0;
+					const FVector2D Corner(Each.At.X / Scale - ChipWide * 0.5, Each.At.Y / Scale);
+					if (UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(ChipWide, ChipHigh))))
+					{
+						continue;
+					}
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(ChipWide + 2.0, ChipHigh + 2.0), FSlateLayoutTransform(Corner - FVector2D(1.0, 1.0))), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("3A2E12"))));
+					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(ChipWide, ChipHigh), FSlateLayoutTransform(Corner)), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("C9A55A"))));
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(6.0, 1.5))), Each.Name, CountFont, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("1F1808"))));
+					continue;
+				}
 				if (Each.bHarbour)
 				{
 					// Ships in harbour: a small plate with an anchor drawn on it and the number of ships.

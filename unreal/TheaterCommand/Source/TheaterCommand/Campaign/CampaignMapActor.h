@@ -164,6 +164,12 @@ public:
 
 	const TArray<TObjectPtr<AArmyPiece>>& GetPieces() const { return Pieces; }
 	const TMap<int32, TObjectPtr<AArmyPiece>>& GetFleetPieces() const { return FleetPieces; }
+	/**
+	 * A province crowded with the flags of one side (two armies or more) shows one flag, the player's own if it is there, with a count
+	 * of the others beside it; pointed at or picked, it fans them all out. This gives, for each province that is
+	 * folded up, the piece that is shown and how many are put away behind it.
+	 */
+	void GetCrowds(TArray<TPair<AArmyPiece*, int32>>& Out) const;
 
 	/** The models set out for inspection ("-TheaterParade=Kiev"): whether there are any, and where one stands on the map (or the middle of them all). */
 	bool HasParade() const { return ParadeSpots.Num() > 0; }
@@ -659,6 +665,10 @@ private:
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AArmyPiece>> Pieces;
+	TMap<FIntPoint, FString> CrowdLead; // for each province crowded with flags of one side (the province, and 0 for the player's side or 1 for the rest): whose piece stands for them all while it is folded up
+	TSet<FString> CrowdFriends; // the player's country and those that fight beside it
+	/** Folds up the crowded provinces, and fans out the one that is pointed at or picked. */
+	void ApplyCrowds();
 
 	/** The fleets and the air fleets, each as a piece, by the number the rules know it by. */
 	UPROPERTY(Transient)
