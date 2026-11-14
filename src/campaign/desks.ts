@@ -11,9 +11,9 @@
 
 import { DEPTH, DESKS, capOf, capPct, deskDef, deskRan, depthRules, markRan, setCap, setDesk, staffRuns, type DeskId, type DepthDef } from './depth';
 import { atWar, bloc } from './game';
-import { PRODUCTION, aiProduction, gunsWanted, income, specOf } from './economy';
+import { BUDGET, PRODUCTION, aiProduction, gunsWanted, income, specOf, upkeepTotal } from './economy';
 import { menSpare } from './manpower';
-import { aiArsenal } from './arsenal';
+import { ARSENAL, aiArsenal, offers, orderOffer, type Wing } from './arsenal';
 import { civicAI } from './buildings';
 import { keepsStores } from './resources';
 import { monthsFor, staffTeams, techById, techOf, teamsOf } from './tech';
@@ -44,6 +44,8 @@ export function allowance(g: Game, nat: string): number {
   if (g.flags['dk:alwt'] !== g.turn) {
     g.flags['dk:alwt'] = g.turn;
     g.flags['dk:alw'] = Math.max(0, g.nations[nat].pp) * capOf(g);
+    // The share it was drawn at: a share changed later in the month takes hold with the next allowance.
+    g.flags['dk:alwc'] = capPct(g);
   }
   return g.flags['dk:alw'] ?? 0;
 }
@@ -78,8 +80,51 @@ function research(g: Game, nat: string): string | null {
 
 const orderWords = (g: Game, b: Build): string =>
   b.what === 'civic' ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}`
+    : b.what === 'air' ? `a ${b.name[0].toLowerCase()}${b.name.slice(1)}`
     : b.what === 'work' ? `${b.item === 'aa' ? 'anti-aircraft guns' : b.item ?? 'works'} at ${g.regions[b.region].name}`
       : `${b.name} at ${g.regions[b.region].name}`;
+
+/** The aircraft a nation has bought over its air force's own establishment, with the wings on order, by kind. */
+export function boughtAir(g: Game, nat: string): { over: Record<Wing, number>; base: Record<Wing, number>; forming: Record<Wing, number> } {
+  const over = { ftr: 0, bmr: 0 }, base = { ftr: 0, bmr: 0 }, forming = { ftr: 0, bmr: 0 };
+  for (const f of airFleetsOf(g, nat)) {
+    if (f.ship !== undefined) continue;
+    for (const w of ['ftr', 'bmr'] as Wing[]) { const x = f.extra?.[w] ?? 0; over[w] += x; base[w] += Math.max(0, f.est[w] - x); }
+  }
+  for (const b of g.nations[nat].queue) if (b.what === 'air' && (b.item === 'ftr' || b.item === 'bmr')) { forming[b.item] += 1; over[b.item] += b.count ?? ARSENAL.air[b.item].count; }
+  return { over, base, forming };
+}
+
+/** True while the armies in the field are waiting for the men a new corps would take: the staff raises none. */
+const noMenFor = (g: Game, nat: string): boolean => menSpare(g, nat) < (specOf(g, 'inf')?.divs ?? 1);
+
+/** The kinds of wing a building staff would still order: none while there are men for corps, or when it has bought its share. */
+export function wingsWanted(g: Game, nat: string): Wing[] {
+  const n = g.nations[nat], M = DEPTH.build?.machines;
+  if (!M || !n?.alive || !n.atWar.length || !noMenFor(g, nat)) return [];
+  const A = boughtAir(g, nat);
+  const raid = g.raids[nat], raided = !!raid && g.turn - raid.turn <= 2;
+  const fill = (w: Wing): number => A.over[w] / Math.max(1, A.base[w]);
+  const kinds: Wing[] = raided || fill('ftr') <= fill('bmr') ? ['ftr', 'bmr'] : ['bmr', 'ftr'];
+  return kinds.filter((w) => A.over[w] + ARSENAL.air[w].count <= M.share * A.base[w]);
+}
+
+/**
+ * Money without men (depth.json, 'build.machines'). A staff that can raise no corps for want of men puts the treasury
+ * into aircraft, which need pilots and not divisions: so many wings of each kind on order at a time, until what it has
+ * bought stands at its share of the air force's own establishment, and nothing the treasury could not keep flying.
+ */
+function machines(g: Game, nat: string): void {
+  const n = g.nations[nat], M = DEPTH.build?.machines;
+  if (!M) return;
+  let spare = income(g, nat) - upkeepTotal(g, nat);
+  for (const w of wingsWanted(g, nat)) {
+    if (boughtAir(g, nat).forming[w] >= M.each) continue;
+    const o = offers(g, nat).find((x) => x.key === `air:${w}`);
+    if (!o || o.why !== null || o.at < 0 || n.pp < o.cost + PRODUCTION.aiReserve || spare < o.upkeep * BUDGET.debt.aiMargin) continue;
+    if (orderOffer(g, nat, o.key, o.at)) spare -= o.upkeep;
+  }
+}
 
 function build(g: Game, nat: string): string | null {
   const n = g.nations[nat];
@@ -106,6 +151,7 @@ function build(g: Game, nat: string): string | null {
     aiProduction(g, nat);
     aiArsenal(g, nat);
     civicAI(g, nat, income(g, nat), keepsStores(g, nat), gunsWanted(g, nat));
+    machines(g, nat);
   });
   const fresh = n.queue.filter((b) => !had.has(b.id));
   if (fresh.length) did.unshift(`ordered ${some(fresh.map((b) => orderWords(g, b)), 4)}`);
@@ -127,8 +173,15 @@ function diplomacy(g: Game, nat: string): string | null {
     const v = receptive(T, b) * (2 + step(T) * side) * Math.sqrt(1 + wealthOf(g, T.id));
     if (v > top || (v === top && best !== null && T.id < best.id)) { top = v; best = T; }
   }
-  if (!best || !court(g, nat, best.id)) return null;
-  return `courted ${the(best)}.`;
+  if (!best) return null;
+  const before = step(best);
+  if (!court(g, nat, best.id)) return null;
+  // One line when the envoys take up a country and one when it moves: a month of the same courting is not news.
+  const key = `dk:crt:${best.id}`, same = g.flags[key] === 1, now = step(best);
+  g.flags[key] = 1;
+  if (!same) return `began courting ${the(best)}.`;
+  if (now === before) return null;
+  return (now - before) * side > 0 ? `courted ${the(best)}, which has moved a step towards us.` : `courted ${the(best)}, which has moved a step away all the same.`;
 }
 
 // ---- The secret service -------------------------------------------------------------------------------
@@ -254,6 +307,21 @@ const WORK: Record<DeskId, (g: Game, nat: string) => string | null> = { research
 const ORDER: DeskId[] = ['research', 'build', 'diplomacy', 'spies', 'navy', 'air'];
 
 /**
+ * True when this is word for word the line the desk gave the month before, and notes the line for the month to come.
+ * The same line is not news twice: a fleet that shells the same shore every month says so once, and again when it has
+ * stopped and begun anew. (Its bombardments and raids are still reported where battles are read.)
+ */
+export function saidLastMonth(g: Game, desk: DeskId, line: string): boolean {
+  let h = 7;
+  for (let i = 0; i < line.length; i++) h = (h * 31 + line.charCodeAt(i)) % 2147483647;
+  const said = `dk:said:${desk}`, when = `dk:saidAt:${desk}`;
+  const again = g.flags[said] === h && g.flags[when] === g.turn - 1;
+  g.flags[said] = h;
+  g.flags[when] = g.turn;
+  return again;
+}
+
+/**
  * One desk's month, done by the staff. What the routine itself printed for the player is folded into the desk's
  * one line of news; the reports of its raids and bombardments stay where battles are read.
  */
@@ -263,7 +331,7 @@ function runDesk(g: Game, nat: string, desk: DeskId): void {
   const made = g.headlines.splice(from);
   for (const h of made) if (!(h.nat === nat && (h.kind === 'info' || h.kind === 'battle'))) g.headlines.push(h);
   markRan(g, desk);
-  if (line) g.headlines.push({ turn: g.turn, week: g.week, kind: 'info', text: `${deskDef(desk)!.lead} ${line}`, nat, desk });
+  if (line && !saidLastMonth(g, desk, line)) g.headlines.push({ turn: g.turn, week: g.week, kind: 'info', text: `${deskDef(desk)!.lead} ${line}`, nat, desk });
 }
 
 /** The month's work on every desk the player has handed to his staff, as his month opens. */
@@ -346,6 +414,8 @@ export interface CommandView {
   cap: number; caps: number[];
   /** What is left of this month's allowance, and what building took of it, in production points. */
   left: number; spent: number;
+  /** True when the share was changed after this month's allowance was drawn: the new share takes hold next month. */
+  capNext: boolean;
   cabinet: boolean; canFall: boolean; fog: boolean;
 }
 
@@ -362,14 +432,21 @@ function stateOf(g: Game, nat: string, desk: DeskId): string {
       const corps = n.queue.filter((b) => b.what === 'corps').length, other = n.queue.length - corps;
       const deals = dealsOf(g, nat).length, houses = housesOf(g, nat);
       // A staff raises no corps with men the armies in the field are waiting for: say so, or a full treasury looks like idleness.
-      const noMen = staffRuns(g, nat, 'build') && menSpare(g, nat) < (specOf(g, 'inf')?.divs ?? 1);
-      return `${corps ? `${corps} corps forming` : 'No corps forming'}${other ? `, ${other} other order${other === 1 ? '' : 's'} in hand` : ''}. ${deals} of ${houses} trading house${houses === 1 ? '' : 's'} in use.${noMen ? ' There are no men to spare for new corps: the armies in the field are waiting for theirs. Aircraft, ships and factories need few, and can be ordered by hand.' : ''}`;
+      const noMen = staffRuns(g, nat, 'build') && noMenFor(g, nat);
+      // With no men to raise, the money goes into aircraft, as far as the air force can use them; what is left is a reserve.
+      const air = !noMen || !DEPTH.build?.machines || !n.atWar.length ? '' : wingsWanted(g, nat).length || n.queue.some((b) => b.what === 'air')
+        ? ' Your staff is putting the money into aircraft instead, which need pilots and not divisions.'
+        : ' The air force has all the aircraft its pilots can fly, so what is left in the treasury is your reserve.';
+      return `${corps ? `${corps} corps forming` : 'No corps forming'}${other ? `, ${other} other order${other === 1 ? '' : 's'} in hand` : ''}. ${deals} of ${houses} trading house${houses === 1 ? '' : 's'} in use.${noMen ? ` There are no men to spare for new corps: the armies in the field are waiting for theirs.${air || ' Aircraft, ships and factories need few, and can be ordered by hand.'}` : ''}`;
     }
     case 'diplomacy': {
       const b = bloc(n);
       if (!b || b === 'league') return 'Only a member of the Axis or the Allies courts neutrals.';
       const open = Object.values(g.nations).filter((T) => T.id !== nat && courtable(T)).length;
-      return `${Math.floor(n.pc)} political capital in hand; a round of courting costs ${DIPLOMACY.court.cost}. ${open ? `${open} neutral${open === 1 ? ' is' : 's are'} open to courting.` : 'No neutral is open to courting.'}`;
+      // Who the envoys are with, while they are at it: the news speaks only when they begin and when the country moves.
+      const who = staffRuns(g, nat, 'diplomacy') ? Object.values(g.nations).filter((T) => (g.flags[`court:${nat}:${T.id}`] ?? -9) >= g.turn - 1).sort((x, y) => g.flags[`court:${nat}:${y.id}`] - g.flags[`court:${nat}:${x.id}`])[0] : undefined;
+      const at = who ? ` Your envoys are courting ${the(who)}.` : '';
+      return `${Math.floor(n.pc)} political capital in hand; a round of courting costs ${DIPLOMACY.court.cost}. ${open ? `${open} neutral${open === 1 ? ' is' : 's are'} open to courting.` : 'No neutral is open to courting.'}${at}`;
     }
     case 'spies': {
       const all = agentsOf(g, nat), out = all.filter((a) => abroad(g, a)).length;
@@ -407,6 +484,7 @@ export function commandView(g: Game): CommandView | null {
     cap: capPct(g), caps: DEPTH.cap.steps,
     left: g.flags['dk:alwt'] === g.turn ? g.flags['dk:alw'] ?? 0 : Math.max(0, g.nations[nat].pp) * capOf(g),
     spent: g.flags['dk:ran:build'] === g.turn ? g.flags['dk:spent'] ?? 0 : 0,
+    capNext: g.flags['dk:alwt'] === g.turn && g.flags['dk:alwc'] !== undefined && g.flags['dk:alwc'] !== capPct(g),
     cabinet: !cabinetOff(g), canFall: !officeSecure(g), fog: g.flags.nofog !== 1,
   };
 }

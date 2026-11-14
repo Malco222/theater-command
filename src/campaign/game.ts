@@ -39,7 +39,7 @@ import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
-import { traitAttack, traitDefence, traitDrafts, traitNames } from './traits';
+import { traitAttack, traitDefence, traitDrafts, traitLevy, traitNames } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, breachOf, canShelter, dropSieges, fall, fieldCtrl, garrisonOf, guardAfter, guardMen, guardOf, guardPower, inPocket, joinTown, musterNear, pocketDry, pocketMonth, pocketView, quitTown, ringClosed, shutIn, siegeEmpties, siegeFalls, siegeMonth, siegeRules, siegeSupply, sortiePower, tallySiege, townBonus, townHeld } from './siege';
 import { TOWNS, townName, townSize } from './towns';
 import desertData from '../../data/campaign/desert.json';
@@ -2394,6 +2394,8 @@ export function startPhase(g: Game, nat: string): void {
   // The month's class comes of age and joins the reserve, and the men the armies ask for are taken from it (the
   // grand campaign): a nation whose reserve is spent makes good only what the class allows.
   if (n.alive) classArrives(g, nat, govMul(g, nat, 'men'));
+  // The last levy of a nation whose army is being worn away (Version 68; traits.ts).
+  if (n.alive) traitLevy(g, nat);
   // The player's say over the call-up (the grand campaign): while he holds the standing call-up, the men of the wave
   // that was not raised go out as drafts over and above what the depots send, and like the wave they cost the treasury nothing.
   const heldMen = heldDrafts(g, nat);

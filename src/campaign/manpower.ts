@@ -131,6 +131,17 @@ export function returnMen(g: Game, nat: string, divs: number): void {
   g.flags[kx(nat)] = Math.max(0, (g.flags[kx(nat)] ?? 0) - divs);
 }
 
+/**
+ * A levy brings men to the reserve who were in no class (Version 68; traits.ts). The warnings to the player start
+ * again from where the reserve now stands, so he is told when these men too are spent.
+ */
+export function levyMen(g: Game, nat: string, divs: number): void {
+  if (!menRules(g) || divs <= 0) return;
+  ensure(g, nat);
+  g.flags[kp(nat)] = menLeft(g, nat) + divs;
+  if (g.flags[kl(nat)] !== undefined) g.flags[kl(nat)] = Math.min(g.flags[kl(nat)], menLevel(g, nat));
+}
+
 /** The last month in which no class comes of age, because it was called up early: 0 where none was. */
 export const classGapUntil = (g: Game, nat: string): number => (menRules(g) ? g.flags[ke(nat)] ?? 0 : 0);
 

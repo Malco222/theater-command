@@ -903,7 +903,7 @@ function drawBar(): void {
   const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? (lastAct(g)?.winner === me ? ' · the world is yours' : lastAct(g)?.on ? ` · World Domination, ${lastAct(g)!.left} left` : ' · free play') : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
   const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
   // The level of a grand campaign is always in sight beside the date: a click shows what it does and lets it be changed.
-  const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign and how deep you play it. Click to change either, to hand a desk to your staff or take one back, or to switch the war cabinet ${cabinetIsOff(g) ? 'on' : 'off'}.">${pips(levelIndex(g))}${esc(levelOf(g).name)}<span class="rdepth"> · ${esc(commandOf(g)?.name ?? '')}</span></button>` : '';
+  const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign and how deep you play it. Click to change either, to hand a desk to your staff or take one back, or to switch the war cabinet ${cabinetIsOff(g) ? 'on' : 'off'}.">${pips(levelIndex(g))}${esc(levelOf(g).name)}<span class="rdepth"> · ${esc(commandOf(g)?.name ?? '')}</span><span class="rdshort"> · ${esc(commandOf(g)?.depth ? (commandOf(g)!.name.split(' ')[0]) : 'Own mix')}</span></button>` : '';
   $('#when').innerHTML = `${when}${rank}<small>${esc(who)}${me ? ` · ${esc(w.text)}` : ''}</small>`;
   $('#purse').innerHTML = me && g.nations[me].alive && !eve ? purse(me) + gauges(me) + menGauge(me) : '';
   let b = '';
@@ -923,7 +923,10 @@ function drawBar(): void {
 }
 
 function drawTabs(): void {
-  const newB = g.reports.length - ui.seenReports + Math.max(0, g.seaReports.length - ui.seenSea) + Math.max(0, g.airReports.length - ui.seenAir);
+  // Raids the player's own staff flew are in the staff's line of news: they are not unread battles of his.
+  const staffFlies = !!g.human && isOpen(g) && (staffRunsDesk(g, 'air') || staffRunsDesk(g, 'navy'));
+  const newAir = staffFlies ? g.airReports.slice(ui.seenAir).filter((r) => r.attNat !== g.human).length : Math.max(0, g.airReports.length - ui.seenAir);
+  const newB = g.reports.length - ui.seenReports + Math.max(0, g.seaReports.length - ui.seenSea) + newAir;
   const t = (id: string, label: string, n = 0) => `<button class="tab${ui.tab === id ? ' on' : ''}" data-act="tab" data-tab="${id}">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
   const me = g.human && g.nations[g.human].alive ? g.human : null;
   // Generals with no corps, when there is a corps for them: a decision waiting for the player.
@@ -932,7 +935,8 @@ function drawTabs(): void {
   const cmd = me ? commandOf(g) : null;
   const tucked = (id: string): boolean => !!cmd && cmd.desks.some((d) => d.tab === id && d.staff);
   const dt = (id: string, label: string, n = 0): string => (tucked(id) ? (ui.tab === id ? t(id, `${label}<i class="tstaff">staff</i>`) : '') : t(id, label, n));
-  const staffTab = cmd && (cmd.desks.some((d) => d.staff) || ui.tab === 'staff') ? t('staff', 'Staff') : '';
+  // Version 68: the Staff tab is there at every depth, Supreme command too, so a desk can be handed over without going back to the settings.
+  const staffTab = cmd ? t('staff', 'Staff') : '';
   $('#tabs').innerHTML = t('region', 'Region') + (me ? dt('build', 'Build') : '') + dt('research', 'Research', me && isOpen(g) ? idleTeams(g, me) : 0) + t('generals', 'Generals', idle) + t('honours', 'Honours', unseen(g).length) + dt('navy', 'Navy') + dt('air', 'Air') + (me && isOpen(g) ? dt('spies', 'Spies', spyNews()) : '') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers') + staffTab;
 }
 
@@ -4744,14 +4748,14 @@ function depthPicker(chosen: string | null, act: string, live = false): string {
 /** One desk: what it is, who runs it, and the switch. On the Staff tab it also says how the desk stands and what the staff did this month. */
 function deskRow(d: CommandView['desks'][number], full: boolean): string {
   const sw = `<span class="dswitch" role="group" aria-label="Who runs ${esc(lowFirst(d.name))}"><button class="${d.staff ? '' : 'on'}" data-act="desk" data-desk="${d.id}" data-on="0" aria-pressed="${!d.staff}">You</button><button class="${d.staff ? 'on' : ''}" data-act="desk" data-desk="${d.id}" data-on="1" aria-pressed="${d.staff}">Your staff</button></span>`;
-  return `<div class="desk${d.staff ? ' staffed' : ''}"><div class="dhead"><b>${esc(d.name)}</b>${sw}</div><p>${esc(d.text)}</p>${full ? `<p class="dstate">${esc(d.state)}</p>${d.staff && d.news ? `<p class="dnews">${esc(d.news)}</p>` : ''}${d.tab ? `<button class="link" data-act="tab" data-tab="${d.tab}">${d.staff ? 'Look in' : 'Open it'} ›</button>` : ''}` : ''}</div>`;
+  return `<div class="desk${d.staff ? ' staffed' : ''}"><div class="dhead"><b>${esc(d.name)}</b>${sw}</div><p class="dtext">${esc(d.text)}</p>${full ? `<p class="dstate">${esc(d.state)}</p>${d.staff && d.news ? `<p class="dnews">${esc(d.news)}</p>` : ''}${d.tab ? `<button class="link" data-act="tab" data-tab="${d.tab}">${d.staff ? 'Look in' : 'Open it'} ›</button>` : ''}` : ''}</div>`;
 }
 
 /** What the staff may spend in a month: four steps, and what is left of this month's allowance. */
 function capPicker(v: CommandView): string {
   const spends = v.desks.some((d) => d.staff && (d.id === 'build' || d.id === 'spies'));
   return `<div class="gclevels four">${v.caps.map((c) => `<button class="gclevel${c === v.cap ? ' on' : ''}" data-act="setcap" data-cap="${c}" aria-pressed="${c === v.cap}"><b>${esc(upFirst(capWord(c)))}</b><span>${c}% a month</span></button>`).join('')}</div>
-    <div class="gclevelnote"><p>Each month your staff may spend up to ${capWord(v.cap)} of what is in the treasury, on new corps, guns for bombed industry, buildings and agents. The rest is yours, and it pays for the replacements your armies ask for.</p><small>${spends ? `This month it may still spend ${money(v.left)}${v.spent > 0.005 ? `, and has spent ${money(v.spent)} on building` : ''}.` : 'Nothing your staff runs now spends money: this takes hold when you hand it building and trade, or the secret service.'}</small></div>`;
+    <div class="gclevelnote"><p>Each month your staff may spend up to ${capWord(v.cap)} of what is in the treasury, on new corps, guns for bombed industry, buildings and agents. The rest is yours, and it pays for the replacements your armies ask for.</p><small>${spends ? `This month it may still spend ${money(v.left)}${v.spent > 0.005 ? `, and has spent ${money(v.spent)} on building` : ''}.${v.capNext ? ` The new share takes hold from next month: this month's allowance was already drawn.` : ''}` : 'Nothing your staff runs now spends money: this takes hold when you hand it building and trade, or the secret service.'}</small></div>`;
 }
 
 /** The fog of war: on, or lifted. */

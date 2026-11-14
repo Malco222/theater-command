@@ -5,11 +5,12 @@
 import data from '../../data/campaign/traits.json';
 import { turnToDate } from '../core/ticket';
 import { allied, atWar, headline } from './game';
+import { homeShare, levyMen, menLeft, menWords, poolAtStart } from './manpower';
 import { provinceYield } from './economy';
 import type { LedgerLine } from './economy';
 import { techTraits } from './tech';
 import type { Corps, Game, Kind, Region, Terrain } from './types';
-import { KIND } from './types';
+import { KIND, MEN_PER_DIV } from './types';
 
 /** When a trait counts in a battle. Everything listed must hold. */
 export interface When {
@@ -40,6 +41,12 @@ export interface Trait {
   oil?: number;
   relocate?: number;
   drafts?: number;
+  /**
+   * The last levy (Version 68): with the enemy on its soil, its reserve of men under 'spent' of what it opened with
+   * and its army in the field under 'under' divisions, 'men' divisions' worth of men join the reserve; 'most' times in
+   * a campaign and never twice within 'gap' months.
+   */
+  levy?: { under: number; spent: number; men: number; gap: number; most: number };
   cost?: { what: string[]; mul: number };
   sealift?: number;
   alert?: boolean;
@@ -271,6 +278,34 @@ export function openTraits(g: Game): void {
 
 // ---- Month by month ---------------------------------------------------------------------------------
 
+/** The men a nation has in the field, in divisions' worth: every corps at the strength it stands at. */
+export function fieldStrength(g: Game, nat: string): number {
+  let s = 0;
+  for (const c of g.corps) if (c.nat === nat && !c.dead && c.kind !== 'fort') s += c.divs * c.str;
+  return s;
+}
+
+/**
+ * The last levy (Version 68): a nation with the ability, at war with the enemy on its own soil, whose reserve of men
+ * is all but spent and whose army in the field has been driven under so many divisions, calls up every man fit to
+ * bear arms. The men join the reserve, and the call-up and the depots do the rest. So an army that is being worn
+ * away comes back, and one that is in no trouble is no larger for it. The same for the player and the computer.
+ * Flags: lv:<nat> the levies called so far, lvt:<nat> the month of the last. Returns the men it brought, in divisions' worth.
+ */
+export function traitLevy(g: Game, nat: string): number {
+  const n = g.nations[nat];
+  const L = traitRules(g) && n?.alive && n.atWar.length ? traitsOf(nat).find((t) => t.levy)?.levy : undefined;
+  if (!L) return 0;
+  const count = g.flags[`lv:${nat}`] ?? 0, last = g.flags[`lvt:${nat}`];
+  if (count >= L.most || (last !== undefined && g.turn - last < L.gap)) return 0;
+  if (homeShare(g, nat) >= 1 || menLeft(g, nat) >= L.spent * poolAtStart(g, nat) || fieldStrength(g, nat) >= L.under) return 0;
+  levyMen(g, nat, L.men);
+  g.flags[`lv:${nat}`] = count + 1;
+  g.flags[`lvt:${nat}`] = g.turn;
+  headline(g, 'event', `${/^(United|Soviet|Netherlands)/.test(n.name) ? `The ${n.name}` : n.name} calls up every man fit to bear arms: ${menWords(L.men * MEN_PER_DIV)} more men for its armies.`, nat);
+  return L.men;
+}
+
 /**
  * The partisan war: every enemy corps standing on a nation's occupied ground, in the country that suits it,
  * loses part of its strength to raids and ambushes. It goes on after the country has fallen, against whoever
@@ -335,6 +370,8 @@ function fightWords(x: { attack?: number; defence?: number; when?: When }, who: 
   return `${head}${whenWords(x.when, who)}.`;
 }
 
+const TIMES: Record<number, string> = { 3: 'three', 4: 'four', 5: 'five' };
+
 /**
  * What an ability does, in plain words worked out from its numbers, so the words and the rule cannot drift apart.
  * 'scale' turns production points into the money the player sees (BUDGET.scale).
@@ -350,6 +387,7 @@ export function traitRule(t: Trait, scale = 100): string {
   if (t.oil) out.push(`Home oilfields earn ${t.oil === 2 ? 'double' : `${t.oil} times as much`}.`);
   if (t.relocate) out.push(`${Math.round(t.relocate * 100)}% of the factories in home provinces an enemy holds go on earning.`);
   if (t.drafts) out.push(`Losses are made good ${pct(t.drafts)} ${t.drafts > 1 ? 'faster' : 'slower'}.`);
+  if (t.levy) out.push(`With the enemy on its soil, its reserve of men all but spent and its army in the field under ${t.levy.under} divisions, it calls up every man fit to bear arms: ${menWords(t.levy.men * MEN_PER_DIV)} more men, ${t.levy.most === 1 ? 'once' : t.levy.most === 2 ? 'twice' : `${TIMES[t.levy.most] ?? t.levy.most} times`} in a war at most and never twice within ${t.levy.gap === 12 ? 'a year' : `${t.levy.gap} months`}.`);
   if (t.cost) out.push(`${list(t.cost.what.map((k) => ORDER_WORD[k] ?? k)).replace(/^./, (ch) => ch.toUpperCase())} cost ${pct(t.cost.mul)} ${t.cost.mul < 1 ? 'less' : 'more'}.`);
   if (t.sealift) out.push(`Shipping for ${t.sealift === 1 ? 'one more corps' : `${t.sealift} more corps`} a month.`);
   if (t.alert) out.push('No enemy gets the surprise of the first month against it.');

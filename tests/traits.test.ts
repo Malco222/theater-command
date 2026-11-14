@@ -67,7 +67,7 @@ describe('the data', () => {
   it('says in plain words what each rule does, from the rule itself', () => {
     const t = (nat: string, id: string) => traitsOf(nat).find((x) => x.id === id)!;
     expect(traitRule(t('GER', 'panzer'))).toBe('Attack up 15% for tanks and motorised troops in plains and desert.');
-    expect(traitRule(t('SOV', 'reserves'))).toBe('Losses are made good 25% faster. Infantry corps cost 10% less.');
+    expect(traitRule(t('SOV', 'reserves'))).toBe('Losses are made good 25% faster. With the enemy on its soil, its reserve of men all but spent and its army in the field under 200 divisions, it calls up every man fit to bear arms: 2.3 million more men, three times in a war at most and never twice within a year. Infantry corps cost 10% less.');
     expect(traitRule(t('SUI', 'banks'))).toBe('Earns 100 a month while at peace.');
     expect(traitRule(t('FIN', 'winterwar'))).toBe('Defence up 25% on its own ground from December to March.');
     expect(traitRule(t('UK', 'radar'))).toBe('Fighters over home ground meet every raid at full strength. Air forces without a radar chain fight at 70%.');
