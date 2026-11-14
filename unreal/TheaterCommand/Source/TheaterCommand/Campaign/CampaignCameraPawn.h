@@ -26,7 +26,13 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 
 	/** The camera's focus stays within this distance of the middle of the table. */
-	void SetBounds(const FVector2D& InHalfExtent) { HalfExtent = InHalfExtent; }
+	void SetBounds(const FVector2D& InHalfExtent) { HalfExtent = InHalfExtent; bBoxed = false; }
+
+	/** The same as a box that need not lie evenly round the middle of the table: the whole-world map, with today's map near one end of it. */
+	void SetBoundsBox(const FVector2D& InMin, const FVector2D& InMax) { BoundsMin = InMin; BoundsMax = InMax; bBoxed = true; }
+
+	/** For pictures of the whole world: lets the eye be sent higher than the player can take it. */
+	void SetTopZoom(float InTop) { TopZoom = InTop; }
 
 	/** Slides the focus: X to the viewer's right, Y away from the viewer, each -1 to 1. */
 	void Pan(const FVector2D& Input, float DeltaSeconds);
@@ -91,6 +97,9 @@ private:
 	TObjectPtr<UCameraComponent> Camera;
 
 	FVector2D HalfExtent = FVector2D(8500.0, 7500.0);
+	FVector2D BoundsMin = FVector2D::ZeroVector, BoundsMax = FVector2D::ZeroVector;
+	bool bBoxed = false;
+	float TopZoom = 1.0f; // the highest the eye may be sent (the wheel never takes it past 1)
 	FVector Focus = FVector::ZeroVector;
 	FVector TargetFocus = FVector::ZeroVector;
 	float Zoom = 0.62f;

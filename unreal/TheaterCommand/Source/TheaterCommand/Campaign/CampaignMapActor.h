@@ -289,10 +289,34 @@ public:
 private:
 	void LoadMaterials();
 	void PaintGround();
+	/** One sheet of land: a grid of heights with its own paint, drawn as tiles that are finer near the eye. */
+	struct FLandSheet
+	{
+		const FCampaignTerrain* Shape = nullptr; // its heights
+		UMaterialInterface* Material = nullptr; // its paint
+		TMap<uint64, UProceduralMeshComponent*> Tiles; // the tiles standing on the table now
+		TArray<TArray<float>> Heights; // the heights at each level: level 1 has every second point of level 0, and so on
+		TArray<TArray<float>> Cover; // the most land anywhere near each of those points, for telling which tiles are all sea
+		TArray<FIntPoint> Sizes; // how many points each level has, across and down
+		int32 TopLevel = 0;
+		bool bHole = false; // ground that a finer sheet draws is left out of this one...
+		FBox2D Hole = FBox2D(ForceInit); // ...this box of it, in map units
+		double Sink = 0.0; // how far the whole sheet lies below its true height, in map units, so that it never fights a finer one where they meet
+	};
 	void PrepareLand();
-	void UpdateLand(float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce);
-	UProceduralMeshComponent* BuildLandTile(int32 Level, int32 TileX, int32 TileY);
-	bool LandTileHasLand(int32 Level, int32 TileX, int32 TileY) const;
+	void LevelLand(FLandSheet& Sheet);
+	void UpdateLand(FLandSheet& Sheet, float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce);
+	UProceduralMeshComponent* BuildLandTile(FLandSheet& Sheet, int32 Level, int32 TileX, int32 TileY);
+	bool LandTileHasLand(const FLandSheet& Sheet, int32 Level, int32 TileX, int32 TileY) const;
+	/** The whole-world map, step one: the land and sea beyond today's map, on one coarse sheet (only with -TheaterWorld). */
+	void BuildWorld();
+	/** The height of the ground anywhere in the world, in map units: the map's own where it reaches, the world's sheet beyond. */
+	float GroundAt(double X, double Y) const;
+	// A setting of the land's or the sea's paint goes to every sheet's copy of it.
+	void LandScalar(FName Name, float Value) { if (LandMaterial) { LandMaterial->SetScalarParameterValue(Name, Value); } if (WorldLandMaterial) { WorldLandMaterial->SetScalarParameterValue(Name, Value); } }
+	void LandVector(FName Name, const FLinearColor& Value) { if (LandMaterial) { LandMaterial->SetVectorParameterValue(Name, Value); } if (WorldLandMaterial) { WorldLandMaterial->SetVectorParameterValue(Name, Value); } }
+	void SeaScalar(FName Name, float Value) { if (SeaMaterial) { SeaMaterial->SetScalarParameterValue(Name, Value); } if (WorldSeaMaterial) { WorldSeaMaterial->SetScalarParameterValue(Name, Value); } }
+	void SeaVector(FName Name, const FLinearColor& Value) { if (SeaMaterial) { SeaMaterial->SetVectorParameterValue(Name, Value); } if (WorldSeaMaterial) { WorldSeaMaterial->SetVectorParameterValue(Name, Value); } }
 	void BuildSeaMesh();
 	void BuildBorders();
 	void BuildWaterways();
@@ -704,11 +728,18 @@ private:
 	// match. The colour comes from pictures and is as fine as ever at any distance; only the shape coarsens.
 	// A tile's key packs its level (0 the finest) and its place among the tiles of that level.
 	static uint64 LandKey(int32 Level, int32 TileX, int32 TileY) { return (static_cast<uint64>(Level) << 48) | (static_cast<uint64>(TileX) << 24) | static_cast<uint64>(TileY); }
-	TMap<uint64, TObjectPtr<UProceduralMeshComponent>> LandTiles; // the tiles standing on the table now
-	TArray<TArray<float>> LandHeights; // the heights at each level: level 1 has every second point of level 0, and so on
-	TArray<TArray<float>> LandCover; // the most land anywhere near each of those points, for telling which tiles are all sea
-	TArray<FIntPoint> LandSizes; // how many points each level has, across and down
-	int32 LandTopLevel = 0;
+	FLandSheet HomeLand; // the map's own land
+	FLandSheet WorldLand; // the land beyond it (the whole-world map)
+	FCampaignTerrain WorldTerrain;
+	FCampaignGround WorldPaint;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> WorldLandMaterial;
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> WorldSeaMaterial;
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UTexture2D>> WorldPictures;
+	UPROPERTY(Transient)
+	TObjectPtr<UProceduralMeshComponent> WorldSeaMesh;
 	bool bLandShadows = false;
 
 	/** The tiles and the spare meshes, kept where the engine can see them. */

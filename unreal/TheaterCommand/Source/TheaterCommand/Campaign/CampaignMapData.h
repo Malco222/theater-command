@@ -87,6 +87,19 @@ public:
 
 	double Width = 0.0;
 	double Height = 0.0;
+	/**
+	 * The world the map lies in (the whole-world map, step one). For today's map of Europe alone the world is the
+	 * map itself. Run with -TheaterWorld, Europe is set in the frame the rules have fixed for the world map: 9,256.14
+	 * units round (the seam at 30.45 W) and 5,096 from 71.4 N to 56 S, with Europe where it will be in the world's
+	 * file, 500 units east of the seam. Until that file exists every coordinate stays Europe's own, so the world's
+	 * west edge is at x = -500 here; ShiftX is what to add to one of these x's to have the world file's.
+	 */
+	bool bWorld = false;
+	double WorldMinX = 0.0, WorldMinY = 0.0, WorldWidth = 0.0, WorldHeight = 0.0, ShiftX = 0.0;
+	/** The longitude of x = 0 and the latitude of y = 0, in degrees: the map is 25.7115 units to a degree east and 40 to a degree south. */
+	double Lon0 = -11.0, Lat0 = 71.4;
+	double LongitudeAt(double X) const { return Lon0 + X / 25.7115; }
+	double LatitudeAt(double Y) const { return Lat0 - Y / 40.0; }
 	TArray<TArray<FVector2D>> Land; // every landmass, including land no region claims
 	TArray<FCampaignRegion> Regions;
 	TMap<FString, FCampaignNation> Nations;

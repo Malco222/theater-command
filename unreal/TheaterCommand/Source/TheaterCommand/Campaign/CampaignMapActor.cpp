@@ -197,10 +197,16 @@ bool ACampaignMapActor::BuildMap()
 	PaintGround();
 	PrepareLand();
 	BuildSeaMesh();
+	BuildWorld();
 	BuildBorders();
-	BuildTable();
-	BuildWarRoom();
-	BuildSheetMargin();
+	if (!Data.bWorld)
+	{
+		// (the table, the room and the sheet's margin are made for a map with four edges: what they become round a
+		// world that has no east or west edge is for a later step)
+		BuildTable();
+		BuildWarRoom();
+		BuildSheetMargin();
+	}
 	BuildTowns();
 	BuildParade();
 	BuildTrees();
@@ -222,19 +228,29 @@ FVector2D ACampaignMapActor::WorldToMap(const FVector& World) const
 	return FVector2D(World.Y / UnitScale + Data.Width * 0.5, Data.Height * 0.5 - World.X / UnitScale);
 }
 
+float ACampaignMapActor::GroundAt(double X, double Y) const
+{
+	// The map's own ground where it reaches, and the world's coarse sheet beyond it.
+	if (Data.bWorld && (X < 0.0 || Y < 0.0 || X > Data.Width || Y > Data.Height))
+	{
+		return WorldTerrain.HeightAt(X, Y);
+	}
+	return Terrain.HeightAt(X, Y);
+}
+
 FVector ACampaignMapActor::SurfacePoint(double X, double Y, double Lift) const
 {
-	const double Ground = FMath::Max(static_cast<double>(Terrain.HeightAt(X, Y)), 0.0);
+	const double Ground = FMath::Max(static_cast<double>(GroundAt(X, Y)), 0.0);
 	return MapToWorld(X, Y, Ground + Lift);
 }
 
 FVector ACampaignMapActor::SurfacePointOver(double X, double Y, double Lift) const
 {
 	const double Reach = 0.8;
-	double Ground = FMath::Max(static_cast<double>(Terrain.HeightAt(X, Y)), 0.0);
+	double Ground = FMath::Max(static_cast<double>(GroundAt(X, Y)), 0.0);
 	for (const FVector2D& Step : { FVector2D(Reach, 0.0), FVector2D(-Reach, 0.0), FVector2D(0.0, Reach), FVector2D(0.0, -Reach) })
 	{
-		Ground = FMath::Max(Ground, static_cast<double>(Terrain.HeightAt(X + Step.X, Y + Step.Y)));
+		Ground = FMath::Max(Ground, static_cast<double>(GroundAt(X + Step.X, Y + Step.Y)));
 	}
 	return MapToWorld(X, Y, Ground + Lift);
 }
@@ -480,7 +496,7 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetTextureParameterValue(TEXT("Ground"), GroundPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Tint"), TintPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Relief"), ReliefPicture);
-	LandMaterial->SetScalarParameterValue(TEXT("Band"), 0.4f);
+	LandScalar(TEXT("Band"), 0.4f);
 	LandMaterial->SetTextureParameterValue(TEXT("Masks"), MasksPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Cover"), CoverPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Fields"), FieldsPicture);
@@ -497,8 +513,8 @@ void ACampaignMapActor::PaintGround()
 		}
 	}
 	// (the nation's stain lies over the canopy at a little under half its strength: a wood is green first, and its owner's second)
-	LandMaterial->SetScalarParameterValue(TEXT("WoodsStain"), 0.42f);
-	LandMaterial->SetVectorParameterValue(TEXT("FirColour"), FLinearColor(0.015f, 0.034f, 0.028f));
+	LandScalar(TEXT("WoodsStain"), 0.42f);
+	LandVector(TEXT("FirColour"), FLinearColor(0.015f, 0.034f, 0.028f));
 	{
 		// Woods on a warm-stained nation (Poland's red, Holland's orange) went chocolate: a very dark green takes
 		// on the least red that shows through it. There the canopy takes almost none of the stain, is laid on a
@@ -513,9 +529,9 @@ void ACampaignMapActor::PaintGround()
 			More = FCString::Atof(*Parts[1]);
 			Olive = FLinearColor(FCString::Atof(*Parts[2]), FCString::Atof(*Parts[3]), FCString::Atof(*Parts[4]));
 		}
-		LandMaterial->SetScalarParameterValue(TEXT("WoodsWarmLess"), -Less);
-		LandMaterial->SetScalarParameterValue(TEXT("WoodsWarmMore"), More);
-		LandMaterial->SetVectorParameterValue(TEXT("WoodsWarmTint"), Olive);
+		LandScalar(TEXT("WoodsWarmLess"), -Less);
+		LandScalar(TEXT("WoodsWarmMore"), More);
+		LandVector(TEXT("WoodsWarmTint"), Olive);
 	}
 	{
 		// "-TheaterFields=0.55,0.4,0.34" tries other strengths for the quilt of fields (close to, at working height) and its hedges.
@@ -535,12 +551,12 @@ void ACampaignMapActor::PaintGround()
 		float Sheen = 0.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSheen="), Sheen))
 		{
-			LandMaterial->SetScalarParameterValue(TEXT("Specular"), Sheen);
+			LandScalar(TEXT("Specular"), Sheen);
 		}
 	}
-	LandMaterial->SetVectorParameterValue(TEXT("RockColour"), FCampaignGround::RockColour());
-	LandMaterial->SetVectorParameterValue(TEXT("SnowColour"), FCampaignGround::SnowColour() * 0.86f); // (the baked sun lifts it to white where it is lit)
-	LandMaterial->SetVectorParameterValue(TEXT("SandColour"), FCampaignGround::SandColour());
+	LandVector(TEXT("RockColour"), FCampaignGround::RockColour());
+	LandVector(TEXT("SnowColour"), FCampaignGround::SnowColour() * 0.86f); // (the baked sun lifts it to white where it is lit)
+	LandVector(TEXT("SandColour"), FCampaignGround::SandColour());
 	{
 		// The staff map at the top of the zoom (art fix 11): parchment, sepia shading, a hand's tint.
 		// ("-TheaterPaperLand=r,g,b,shade,sun,wash,band", "-TheaterPaperSea=r,g,b" and "-TheaterPaperNight=land,sea,wash"
@@ -580,29 +596,43 @@ void ACampaignMapActor::PrepareLand()
 	}
 	LandMeshes.Reset();
 	SpareLandMeshes.Reset();
-	LandTiles.Reset();
+	HomeLand = FLandSheet();
+	HomeLand.Shape = &Terrain;
+	HomeLand.Material = LandMaterial;
+	WorldLand = FLandSheet();
+	LevelLand(HomeLand);
+	UE_LOG(LogTheater, Log, TEXT("Land: %d levels of tiles, the finest %.0f map units across and the coarsest %.0f"),
+		HomeLand.TopLevel + 1, TileQuads * Terrain.Cell, TileQuads * Terrain.Cell * (1 << HomeLand.TopLevel));
 
+	// Stand the table's first tiles up at once, for the view the game opens on.
+	UpdateLand(HomeLand, 12000.0f, FVector::ZeroVector, true);
+}
+
+void ACampaignMapActor::LevelLand(FLandSheet& Sheet)
+{
+	const FCampaignTerrain& Shape = *Sheet.Shape;
 	// The heights at every level. Each coarser level keeps every second point of the one below, each the
 	// average of itself and its neighbours there, so that far-off ground is smooth and not a jagged sample.
 	// Alongside, the most land near each point, so that a tile that is all open sea can be left out.
-	LandHeights.Reset();
-	LandCover.Reset();
-	LandSizes.Reset();
-	LandHeights.Add(Terrain.Height);
-	LandCover.Add(Terrain.Coverage);
-	LandSizes.Add(FIntPoint(Terrain.NX, Terrain.NY));
-	const double Longest = FMath::Max(Data.Width, Data.Height);
-	LandTopLevel = 0;
-	while (TileQuads * Terrain.Cell * (1 << LandTopLevel) < Longest * 0.5 && LandTopLevel < 12)
+	Sheet.Tiles.Reset();
+	Sheet.Heights.Reset();
+	Sheet.Cover.Reset();
+	Sheet.Sizes.Reset();
+	Sheet.Heights.Add(Shape.Height);
+	Sheet.Cover.Add(Shape.Coverage);
+	Sheet.Sizes.Add(FIntPoint(Shape.NX, Shape.NY));
+	const double Longest = FMath::Max(Shape.ExtentX, Shape.ExtentY);
+	Sheet.TopLevel = 0;
+	while (TileQuads * Shape.Cell * (1 << Sheet.TopLevel) < Longest * 0.5 && Sheet.TopLevel < 12)
 	{
-		++LandTopLevel;
+		++Sheet.TopLevel;
 	}
-	for (int32 Level = 1; Level <= LandTopLevel; ++Level)
+	for (int32 Level = 1; Level <= Sheet.TopLevel; ++Level)
 	{
-		const FIntPoint Fine = LandSizes[Level - 1];
+		const FIntPoint Fine = Sheet.Sizes[Level - 1];
 		const FIntPoint Coarse((Fine.X - 1) / 2 + 1, (Fine.Y - 1) / 2 + 1);
-		const TArray<float>& FineHeights = LandHeights[Level - 1];
-		const TArray<float>& FineCover = LandCover[Level - 1];
+		const TArray<float>& FineHeights = Sheet.Heights[Level - 1];
+		const TArray<float>& FineCover = Sheet.Cover[Level - 1];
 		TArray<float> Heights, Cover;
 		Heights.SetNumUninitialized(Coarse.X * Coarse.Y);
 		Cover.SetNumUninitialized(Coarse.X * Coarse.Y);
@@ -626,27 +656,32 @@ void ACampaignMapActor::PrepareLand()
 				Cover[J * Coarse.X + I] = Most;
 			}
 		}
-		LandHeights.Add(MoveTemp(Heights));
-		LandCover.Add(MoveTemp(Cover));
-		LandSizes.Add(Coarse);
+		Sheet.Heights.Add(MoveTemp(Heights));
+		Sheet.Cover.Add(MoveTemp(Cover));
+		Sheet.Sizes.Add(Coarse);
 	}
-	UE_LOG(LogTheater, Log, TEXT("Land: %d levels of tiles, the finest %.0f map units across and the coarsest %.0f"),
-		LandTopLevel + 1, TileQuads * Terrain.Cell, TileQuads * Terrain.Cell * (1 << LandTopLevel));
-
-	// Stand the table's first tiles up at once, for the view the game opens on.
-	UpdateLand(12000.0f, FVector::ZeroVector, true);
 }
 
-bool ACampaignMapActor::LandTileHasLand(int32 Level, int32 TileX, int32 TileY) const
+bool ACampaignMapActor::LandTileHasLand(const FLandSheet& Sheet, int32 Level, int32 TileX, int32 TileY) const
 {
-	const FIntPoint Size = LandSizes[Level];
-	const TArray<float>& Cover = LandCover[Level];
+	const FIntPoint Size = Sheet.Sizes[Level];
+	const TArray<float>& Cover = Sheet.Cover[Level];
 	const int32 I0 = TileX * TileQuads, J0 = TileY * TileQuads;
 	if (I0 >= Size.X - 1 || J0 >= Size.Y - 1)
 	{
 		return false; // off the edge of the map
 	}
 	const int32 I1 = FMath::Min(I0 + TileQuads, Size.X - 1), J1 = FMath::Min(J0 + TileQuads, Size.Y - 1);
+	if (Sheet.bHole)
+	{
+		// A tile that lies wholly on ground a finer sheet draws is that sheet's business.
+		const double Span = (1 << Level) * Sheet.Shape->Cell;
+		const FBox2D Box(FVector2D(Sheet.Shape->OriginX + I0 * Span, Sheet.Shape->OriginY + J0 * Span), FVector2D(Sheet.Shape->OriginX + I1 * Span, Sheet.Shape->OriginY + J1 * Span));
+		if (Box.Min.X >= Sheet.Hole.Min.X && Box.Min.Y >= Sheet.Hole.Min.Y && Box.Max.X <= Sheet.Hole.Max.X && Box.Max.Y <= Sheet.Hole.Max.Y)
+		{
+			return false;
+		}
+	}
 	for (int32 J = J0; J <= J1; ++J)
 	{
 		for (int32 I = I0; I <= I1; ++I)
@@ -660,11 +695,12 @@ bool ACampaignMapActor::LandTileHasLand(int32 Level, int32 TileX, int32 TileY) c
 	return false;
 }
 
-UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(int32 Level, int32 TileX, int32 TileY)
+UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, int32 Level, int32 TileX, int32 TileY)
 {
-	const FIntPoint Size = LandSizes[Level];
-	const TArray<float>& Heights = LandHeights[Level];
-	const TArray<float>& Cover = LandCover[Level];
+	const FCampaignTerrain& Shape = *Sheet.Shape;
+	const FIntPoint Size = Sheet.Sizes[Level];
+	const TArray<float>& Heights = Sheet.Heights[Level];
+	const TArray<float>& Cover = Sheet.Cover[Level];
 	const int32 Step = 1 << Level; // how many of the finest grid's points one quad of this tile spans
 	const int32 I0 = TileX * TileQuads, J0 = TileY * TileQuads;
 	const int32 I1 = FMath::Min(I0 + TileQuads, Size.X - 1), J1 = FMath::Min(J0 + TileQuads, Size.Y - 1);
@@ -675,10 +711,10 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(int32 Level, int32 Ti
 	Remap.Init(INDEX_NONE, Stride * (J1 - J0 + 1));
 	auto PointAt = [&](int32 I, int32 J, double Drop)
 	{
-		const double X = FMath::Min(I * Step * Terrain.Cell, Data.Width), Y = FMath::Min(J * Step * Terrain.Cell, Data.Height);
+		const double X = Shape.OriginX + FMath::Min(I * Step * Shape.Cell, Shape.ExtentX), Y = Shape.OriginY + FMath::Min(J * Step * Shape.Cell, Shape.ExtentY);
 		// The paint has one pixel for every point of the finest grid: this point's is at the middle of its pixel.
-		const FVector2D UV((FMath::Min(I * Step, Terrain.NX - 1) + 0.5) / Terrain.NX, (FMath::Min(J * Step, Terrain.NY - 1) + 0.5) / Terrain.NY);
-		return Buffers.AddVertex(MapToWorld(X, Y, Heights[J * Size.X + I] - Drop), FVector::UpVector, FColor::White, UV);
+		const FVector2D UV((FMath::Min(I * Step, Shape.NX - 1) + 0.5) / Shape.NX, (FMath::Min(J * Step, Shape.NY - 1) + 0.5) / Shape.NY);
+		return Buffers.AddVertex(MapToWorld(X, Y, Heights[J * Size.X + I] - Drop - Sheet.Sink), FVector::UpVector, FColor::White, UV);
 	};
 	auto VertexAt = [&](int32 I, int32 J)
 	{
@@ -695,11 +731,21 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(int32 Level, int32 Ti
 		{
 			return false;
 		}
+		if (Sheet.bHole)
+		{
+			// (ground a finer sheet draws; this one runs a little way under its edge, so that no gap shows between them)
+			const double Span = Step * Shape.Cell;
+			const double X = Shape.OriginX + (I + 0.5) * Span, Y = Shape.OriginY + (J + 0.5) * Span;
+			if (X > Sheet.Hole.Min.X + Span && Y > Sheet.Hole.Min.Y + Span && X < Sheet.Hole.Max.X - Span && Y < Sheet.Hole.Max.Y - Span)
+			{
+				return false;
+			}
+		}
 		// Sea bed well away from any shore is never seen: leave it out.
 		return FMath::Max(FMath::Max(Cover[J * Size.X + I], Cover[J * Size.X + I + 1]), FMath::Max(Cover[(J + 1) * Size.X + I], Cover[(J + 1) * Size.X + I + 1])) >= 0.3f;
 	};
 	// A skirt hangs from the tile's edge, so that where a fine tile meets a coarse one no daylight shows between them.
-	const double SkirtDrop = 0.9 * Step * Terrain.Cell;
+	const double SkirtDrop = 0.9 * Step * Shape.Cell;
 	auto Skirt = [&](int32 IA, int32 JA, int32 IB, int32 JB)
 	{
 		const int32 A = VertexAt(IA, JA), B = VertexAt(IB, JB);
@@ -738,45 +784,46 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(int32 Level, int32 Ti
 		Mesh->RegisterComponent();
 		LandMeshes.Add(Mesh);
 	}
-	Buffers.Commit(Mesh, 0, LandMaterial);
+	Buffers.Commit(Mesh, 0, Sheet.Material);
 	Mesh->SetVisibility(true);
 	return Mesh;
 }
 
-void ACampaignMapActor::UpdateLand(float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce)
+void ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce)
 {
-	if (LandHeights.Num() == 0)
+	if (Sheet.Heights.Num() == 0 || !Sheet.Shape)
 	{
 		return;
 	}
+	const FCampaignTerrain& Shape = *Sheet.Shape;
 	// Which tiles the view wants: starting from the coarsest, a tile is cut into its four quarters for as long
 	// as it is large for how far off it is. "How far off" is the eye's distance from what it looks at, and the
 	// tile's distance from that point along the table.
-	const double TileUnits = TileQuads * Terrain.Cell * UnitScale; // the side of a finest tile, in the world
+	const double TileUnits = TileQuads * Shape.Cell * UnitScale; // the side of a finest tile, in the world
 	const FVector2D Focus(CameraFocus.X, CameraFocus.Y);
 	TArray<uint64> Wanted;
 	TArray<FIntVector> Stack;
-	const int32 TopSide = 1 << LandTopLevel;
-	const int32 RootsX = FMath::DivideAndRoundUp(FMath::DivideAndRoundUp(Terrain.NX - 1, TileQuads), TopSide);
-	const int32 RootsY = FMath::DivideAndRoundUp(FMath::DivideAndRoundUp(Terrain.NY - 1, TileQuads), TopSide);
+	const int32 TopSide = 1 << Sheet.TopLevel;
+	const int32 RootsX = FMath::DivideAndRoundUp(FMath::DivideAndRoundUp(Shape.NX - 1, TileQuads), TopSide);
+	const int32 RootsY = FMath::DivideAndRoundUp(FMath::DivideAndRoundUp(Shape.NY - 1, TileQuads), TopSide);
 	for (int32 Y = 0; Y < RootsY; ++Y)
 	{
 		for (int32 X = 0; X < RootsX; ++X)
 		{
-			Stack.Add(FIntVector(X, Y, LandTopLevel));
+			Stack.Add(FIntVector(X, Y, Sheet.TopLevel));
 		}
 	}
 	while (Stack.Num() > 0)
 	{
 		const FIntVector Tile = Stack.Pop();
 		const int32 Level = Tile.Z;
-		if (!LandTileHasLand(Level, Tile.X, Tile.Y))
+		if (!LandTileHasLand(Sheet, Level, Tile.X, Tile.Y))
 		{
 			continue;
 		}
 		const double Side = TileUnits * (1 << Level);
-		// The tile's box on the table, in the world: north is +X and east is +Y, and the map's corner is its north-west.
-		const FVector NorthWest = MapToWorld(Tile.X * Side / UnitScale, Tile.Y * Side / UnitScale);
+		// The tile's box on the table, in the world: north is +X and east is +Y, and the sheet's corner is its north-west.
+		const FVector NorthWest = MapToWorld(Shape.OriginX + Tile.X * Side / UnitScale, Shape.OriginY + Tile.Y * Side / UnitScale);
 		const FBox2D Box(FVector2D(NorthWest.X - Side, NorthWest.Y), FVector2D(NorthWest.X, NorthWest.Y + Side));
 		const double Away = FMath::Sqrt(Box.ComputeSquaredDistanceToPoint(Focus));
 		const double Distance = CameraDistance * 0.6 + Away;
@@ -799,7 +846,7 @@ void ACampaignMapActor::UpdateLand(float CameraDistance, const FVector& CameraFo
 	TSet<uint64> Missing;
 	for (const uint64 Key : Wanted)
 	{
-		if (LandTiles.Contains(Key))
+		if (Sheet.Tiles.Contains(Key))
 		{
 			continue;
 		}
@@ -807,7 +854,7 @@ void ACampaignMapActor::UpdateLand(float CameraDistance, const FVector& CameraFo
 		{
 			--Budget;
 			const int32 Level = static_cast<int32>(Key >> 48), TileX = static_cast<int32>((Key >> 24) & 0xFFFFFF), TileY = static_cast<int32>(Key & 0xFFFFFF);
-			LandTiles.Add(Key, BuildLandTile(Level, TileX, TileY)); // null for a tile with nothing in it: remembered, so it is not tried again
+			Sheet.Tiles.Add(Key, BuildLandTile(Sheet, Level, TileX, TileY)); // null for a tile with nothing in it: remembered, so it is not tried again
 		}
 		else
 		{
@@ -818,7 +865,7 @@ void ACampaignMapActor::UpdateLand(float CameraDistance, const FVector& CameraFo
 	// Take away the tiles that are no longer wanted, but only once whatever replaces them is standing: a tile
 	// stays for as long as any wanted tile over the same ground (finer or coarser) is still to come.
 	const TSet<uint64> WantedSet(Wanted);
-	for (auto It = LandTiles.CreateIterator(); It; ++It)
+	for (auto It = Sheet.Tiles.CreateIterator(); It; ++It)
 	{
 		if (WantedSet.Contains(It.Key()))
 		{
@@ -850,6 +897,94 @@ void ACampaignMapActor::UpdateLand(float CameraDistance, const FVector& CameraFo
 			It.RemoveCurrent();
 		}
 	}
+}
+
+void ACampaignMapActor::BuildWorld()
+{
+	if (!Data.bWorld)
+	{
+		return;
+	}
+	const double StartTime = FPlatformTime::Seconds();
+	// The land beyond today's map, on one coarse sheet that covers the whole world (the whole-world map, step one).
+	WorldTerrain.BuildOver(Data, Data.WorldMinX, Data.WorldMinY, Data.WorldWidth, Data.WorldHeight, 6.0, true);
+	WorldPaint.Build(Data, WorldTerrain, VerticalScale);
+	WorldPictures.Reset();
+	auto Picture = [this](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name)
+	{
+		UTexture2D* Made = CampaignTextures::Create(Wide, High, Pixels, bColour, false, Name);
+		WorldPictures.Add(Made);
+		return Made;
+	};
+	UTexture2D* Lie = Picture(WorldPaint.Lie, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldLie"));
+	if (Lie)
+	{
+		Lie->Filter = TF_Nearest;
+		Lie->UpdateResource();
+	}
+	TArray<FColor> Clear;
+	Clear.Init(FColor(0, 0, 0, 255), 16);
+
+	// The same paint as the map's own, with this sheet's pictures in place of the map's.
+	WorldLandMaterial = UMaterialInstanceDynamic::Create(LandMaterial->Parent, this);
+	WorldLandMaterial->CopyParameterOverrides(LandMaterial);
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Ground"), Picture(WorldPaint.Ground, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldGround")));
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Tint"), Picture(WorldPaint.Tint, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldTint")));
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Relief"), Picture(WorldPaint.Relief, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldRelief")));
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Masks"), Picture(WorldPaint.Masks, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldMasks")));
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Cover"), Picture(WorldPaint.Cover, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldCover")));
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Lie"), Lie);
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Fog"), Picture(Clear, 4, 4, false, TEXT("WorldFog"))); // (nothing beyond the map is hidden: nobody is there yet)
+	WorldSeaMaterial = UMaterialInstanceDynamic::Create(SeaMaterial->Parent, this);
+	WorldSeaMaterial->CopyParameterOverrides(SeaMaterial);
+	WorldSeaMaterial->SetTextureParameterValue(TEXT("Water"), Picture(WorldPaint.Water, WorldPaint.WaterNX, WorldPaint.WaterNY, true, TEXT("WorldWater")));
+	WorldSeaMaterial->SetTextureParameterValue(TEXT("Shore"), Picture(WorldPaint.Surf, WorldPaint.WaterNX, WorldPaint.WaterNY, false, TEXT("WorldShore")));
+
+	// Its land, in tiles like the map's own, with the map's own ground left out of it and the whole of it a
+	// hair lower, so that where the two meet the finer one is always the one seen.
+	WorldLand = FLandSheet();
+	WorldLand.Shape = &WorldTerrain;
+	WorldLand.Material = WorldLandMaterial;
+	WorldLand.bHole = true;
+	WorldLand.Hole = FBox2D(FVector2D(0.0, 0.0), FVector2D(Data.Width, Data.Height));
+	WorldLand.Sink = 0.06;
+	LevelLand(WorldLand);
+	UpdateLand(WorldLand, 12000.0f, FVector::ZeroVector, true);
+
+	// Its sea: one flat sheet under the map's own, a hair lower for the same reason.
+	if (!WorldSeaMesh)
+	{
+		WorldSeaMesh = NewObject<UProceduralMeshComponent>(this);
+		WorldSeaMesh->SetupAttachment(Root);
+		WorldSeaMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		WorldSeaMesh->SetCastShadow(false);
+		WorldSeaMesh->RegisterComponent();
+	}
+	WorldSeaMesh->ClearAllMeshSections();
+	{
+		const int32 Across = 36, Down = 20;
+		FCampaignMeshBuffers Buffers;
+		for (int32 J = 0; J <= Down; ++J)
+		{
+			for (int32 I = 0; I <= Across; ++I)
+			{
+				const double X = Data.WorldWidth * I / Across, Y = Data.WorldHeight * J / Down;
+				const FVector2D UV((X / WorldPaint.WaterStep + 0.5) / WorldPaint.WaterNX, (Y / WorldPaint.WaterStep + 0.5) / WorldPaint.WaterNY);
+				Buffers.AddVertex(MapToWorld(Data.WorldMinX + X, Data.WorldMinY + Y, -0.05), FVector::UpVector, FColor::White, UV);
+			}
+		}
+		for (int32 J = 0; J < Down; ++J)
+		{
+			for (int32 I = 0; I < Across; ++I)
+			{
+				const int32 A = J * (Across + 1) + I, B = A + 1, C = A + Across + 1, D = C + 1;
+				Buffers.Triangles.Append({ A, C, B, B, C, D });
+			}
+		}
+		Buffers.Commit(WorldSeaMesh, 0, WorldSeaMaterial);
+	}
+	UE_LOG(LogTheater, Log, TEXT("World: %.0f x %.0f map units round the map, on a sheet of %d x %d points (%.0f units a cell), %d levels of tiles, built in %.2f s"),
+		Data.WorldWidth, Data.WorldHeight, WorldTerrain.NX, WorldTerrain.NY, WorldTerrain.Cell, WorldLand.TopLevel + 1, FPlatformTime::Seconds() - StartTime);
 }
 
 void ACampaignMapActor::BuildSeaMesh()
@@ -1891,7 +2026,7 @@ void ACampaignMapActor::SetFlatColours(bool bFlat)
 	bFlatColours = bFlat;
 	if (LandMaterial)
 	{
-		LandMaterial->SetScalarParameterValue(TEXT("Flat"), bFlat ? 1.0f : 0.0f);
+		LandScalar(TEXT("Flat"), bFlat ? 1.0f : 0.0f);
 	}
 }
 
@@ -1902,7 +2037,7 @@ void ACampaignMapActor::SetColourStrength(int32 Level)
 	if (LandMaterial)
 	{
 		static const float Bands[3] = { 0.32f, 0.4f, 0.48f };
-		LandMaterial->SetScalarParameterValue(TEXT("Band"), Bands[ColourStrength]);
+		LandScalar(TEXT("Band"), Bands[ColourStrength]);
 	}
 }
 
@@ -2913,21 +3048,21 @@ void ACampaignMapActor::ApplyPaperLight()
 	// land beside it, with some of its colour gone. The lights and the fires are left to shine on it.
 	const float Moon = bLamplightNow ? 0.0f : NightNow;
 	const float Dry = FMath::Lerp(1.0f, PaperNight[0], Moon), Water = FMath::Lerp(1.0f, PaperNight[1], Moon), Thin = FMath::Lerp(1.0f, PaperNight[2], Moon);
-	LandMaterial->SetVectorParameterValue(TEXT("PaperColour"), FLinearColor(PaperLand[0], PaperLand[1], PaperLand[2]) * Dry);
-	LandMaterial->SetVectorParameterValue(TEXT("PaperInk"), FLinearColor(0.2f, 0.135f, 0.075f) * FMath::Lerp(1.0f, 0.6f, Moon));
+	LandVector(TEXT("PaperColour"), FLinearColor(PaperLand[0], PaperLand[1], PaperLand[2]) * Dry);
+	LandVector(TEXT("PaperInk"), FLinearColor(0.2f, 0.135f, 0.075f) * FMath::Lerp(1.0f, 0.6f, Moon));
 	// (by night unseen ground is lifted and warmed against the moon's blue: it was the colour of the sea beside it, and the coast was lost)
-	LandMaterial->SetVectorParameterValue(TEXT("FogColour"), FMath::Lerp(FLinearColor(0.15f, 0.128f, 0.085f), FLinearColor(0.3f, 0.13f, 0.024f), Moon));
-	LandMaterial->SetScalarParameterValue(TEXT("HatchSharp"), -13.0f);
-	LandMaterial->SetScalarParameterValue(TEXT("PaperShade"), PaperLand[3]);
-	LandMaterial->SetScalarParameterValue(TEXT("PaperSun"), PaperLand[4]);
-	LandMaterial->SetScalarParameterValue(TEXT("PaperWash"), PaperLand[5] * Thin);
-	LandMaterial->SetScalarParameterValue(TEXT("PaperBand"), PaperLand[6] * FMath::Lerp(1.0f, 0.5f, Moon)); // (a pale holder's band and wash must not glow on the night sheet)
+	LandVector(TEXT("FogColour"), FMath::Lerp(FLinearColor(0.15f, 0.128f, 0.085f), FLinearColor(0.3f, 0.13f, 0.024f), Moon));
+	LandScalar(TEXT("HatchSharp"), -13.0f);
+	LandScalar(TEXT("PaperShade"), PaperLand[3]);
+	LandScalar(TEXT("PaperSun"), PaperLand[4]);
+	LandScalar(TEXT("PaperWash"), PaperLand[5] * Thin);
+	LandScalar(TEXT("PaperBand"), PaperLand[6] * FMath::Lerp(1.0f, 0.5f, Moon)); // (a pale holder's band and wash must not glow on the night sheet)
 	const FLinearColor Sea(PaperSeaTone[0], PaperSeaTone[1], PaperSeaTone[2]);
 	const float Grey = Sea.GetLuminance();
 	const FLinearColor NightSea = FMath::Lerp(Sea, FLinearColor(Grey, Grey, Grey), 0.25f * Moon) * Water;
-	SeaMaterial->SetVectorParameterValue(TEXT("PaperSea"), NightSea);
-	SeaMaterial->SetVectorParameterValue(TEXT("PaperDeep"), NightSea * 0.86f);
-	SeaMaterial->SetVectorParameterValue(TEXT("PaperSeaInk"), FLinearColor(0.1f, 0.15f, 0.17f) * FMath::Lerp(1.0f, 0.45f, Moon));
+	SeaVector(TEXT("PaperSea"), NightSea);
+	SeaVector(TEXT("PaperDeep"), NightSea * 0.86f);
+	SeaVector(TEXT("PaperSeaInk"), FLinearColor(0.1f, 0.15f, 0.17f) * FMath::Lerp(1.0f, 0.45f, Moon));
 }
 
 void ACampaignMapActor::BuildSheetMargin()
@@ -3008,8 +3143,8 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 	if (LandMaterial)
 	{
 		const float Moon = bLamplight ? 0.0f : Night;
-		LandMaterial->SetVectorParameterValue(TEXT("SunColour"), FMath::Lerp(FLinearColor(0.69f, 0.62f, 0.5f), FLinearColor(0.77f, 0.81f, 1.0f), Moon));
-		LandMaterial->SetVectorParameterValue(TEXT("ShadeColour"), FMath::Lerp(FLinearColor(0.43f, 0.48f, 0.58f), FLinearColor(0.44f, 0.48f, 0.7f), Moon));
+		LandVector(TEXT("SunColour"), FMath::Lerp(FLinearColor(0.69f, 0.62f, 0.5f), FLinearColor(0.77f, 0.81f, 1.0f), Moon));
+		LandVector(TEXT("ShadeColour"), FMath::Lerp(FLinearColor(0.43f, 0.48f, 0.58f), FLinearColor(0.44f, 0.48f, 0.7f), Moon));
 		if (PieceMaterial)
 		{
 			// (and the pieces: under a blue moon a blue base was the loudest thing on the table after the fires.
@@ -3023,7 +3158,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			WoodsMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.36f, 0.56f, 0.8f), Moon));
 		}
 		// (by moonlight the nations' colours sink into the dark, as colours do: the land is mostly the land)
-		LandMaterial->SetScalarParameterValue(TEXT("Politics"), FMath::Lerp(0.94f, 0.42f, Moon));
+		LandScalar(TEXT("Politics"), FMath::Lerp(0.94f, 0.42f, Moon));
 	}
 	{
 		// The water by moonlight: greyed (a blue moon on blue water is cobalt, and a blue nation's coast is lost
@@ -3033,10 +3168,10 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		const float Moon = bLamplight ? 0.0f : Night;
 		if (SeaMaterial)
 		{
-			SeaMaterial->SetScalarParameterValue(TEXT("Grey"), SeaNight.X * Moon);
-			SeaMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, SeaNightTint, Moon));
-			SeaMaterial->SetVectorParameterValue(TEXT("Lift"), FMath::Lerp(FLinearColor::Black, SeaNightLift, Moon));
-			SeaMaterial->SetScalarParameterValue(TEXT("Surf"), FMath::Lerp(0.45f, SeaNight.Y, Moon));
+			SeaScalar(TEXT("Grey"), SeaNight.X * Moon);
+			SeaVector(TEXT("Tint"), FMath::Lerp(FLinearColor::White, SeaNightTint, Moon));
+			SeaVector(TEXT("Lift"), FMath::Lerp(FLinearColor::Black, SeaNightLift, Moon));
+			SeaScalar(TEXT("Surf"), FMath::Lerp(0.45f, SeaNight.Y, Moon));
 		}
 		if (WaterMaterial)
 		{
@@ -4613,7 +4748,7 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 		WinterHard = Hard;
 		if (LandMaterial)
 		{
-			LandMaterial->SetVectorParameterValue(TEXT("WoodsColour"), Cloth[TreeLook]);
+			LandVector(TEXT("WoodsColour"), Cloth[TreeLook]);
 		}
 		if (bTrees && TreeMeshes.Num() > 0)
 		{
@@ -5937,7 +6072,8 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	}
 
 	// The land's tiles: fine near what the eye looks at, coarse far from it.
-	UpdateLand(CameraDistance, CameraFocus, false);
+	UpdateLand(HomeLand, CameraDistance, CameraFocus, false);
+	UpdateLand(WorldLand, CameraDistance, CameraFocus, false);
 
 	// Pieces cast shadows only near what the eye is looking at, and not at all from far off.
 	{
@@ -5987,10 +6123,10 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	if (LandMaterial && FMath::Abs(Woods - WoodsShown) > 0.01f)
 	{
 		WoodsShown = Woods;
-		LandMaterial->SetScalarParameterValue(TEXT("WoodsStrength"), Woods);
+		LandScalar(TEXT("WoodsStrength"), Woods);
 		// (the tree-tops' own bumps are for close to: from working height they are let down, so that the lie of
 		// the land still shades the canopy and a wood does not sit on the hills like a sticker)
-		LandMaterial->SetScalarParameterValue(TEXT("TreeBump"), FMath::Lerp(0.55f, 0.16f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance)));
+		LandScalar(TEXT("TreeBump"), FMath::Lerp(0.55f, 0.16f, FMath::SmoothStep(3200.0f, 6500.0f, CameraDistance)));
 	}
 	// The quilt of fields: plain to see close to, quieter at working height (where it must not fight the province
 	// lines), and fading out toward the top of the zoom. Its hedges are seen only close to.
@@ -6001,12 +6137,12 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	if (LandMaterial && FMath::Abs(Fields - FieldsShown) > 0.005f)
 	{
 		FieldsShown = Fields;
-		LandMaterial->SetScalarParameterValue(TEXT("FieldsStrength"), Fields);
+		LandScalar(TEXT("FieldsStrength"), Fields);
 	}
 	if (LandMaterial && FMath::Abs(Hedges - HedgesShown) > 0.005f)
 	{
 		HedgesShown = Hedges;
-		LandMaterial->SetScalarParameterValue(TEXT("HedgeStrength"), Hedges);
+		LandScalar(TEXT("HedgeStrength"), Hedges);
 	}
 
 	// The quiet lines. Province lines are faint from high up and a little firmer on the way down; every one is
@@ -6117,11 +6253,11 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			}
 			if (LandMaterial)
 			{
-				LandMaterial->SetScalarParameterValue(TEXT("Paper"), Sheet);
+				LandScalar(TEXT("Paper"), Sheet);
 			}
 			if (SeaMaterial)
 			{
-				SeaMaterial->SetScalarParameterValue(TEXT("Paper"), Sheet);
+				SeaScalar(TEXT("Paper"), Sheet);
 			}
 		}
 	}
@@ -6144,14 +6280,14 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			float Band = 0.0f;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterBand="), Band) && LandMaterial)
 			{
-				LandMaterial->SetScalarParameterValue(TEXT("Band"), Band);
+				LandScalar(TEXT("Band"), Band);
 			}
 		}
 		const float Wash = (CameraDistance > 9000.0f ? Far : Near) * Strengths[FMath::Clamp(ColourStrength, 0, 2)] * Tried;
 		if (LandMaterial && FMath::Abs(Wash - WashShown) > 0.004f)
 		{
 			WashShown = Wash;
-			LandMaterial->SetScalarParameterValue(TEXT("Wash"), Wash);
+			LandScalar(TEXT("Wash"), Wash);
 		}
 	}
 

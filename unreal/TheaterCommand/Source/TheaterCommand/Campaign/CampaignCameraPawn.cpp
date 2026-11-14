@@ -143,7 +143,7 @@ void ACampaignCameraPawn::GoTo(const FVector& WorldFocus, float InZoom, bool bIm
 	TargetFocus = FVector(WorldFocus.X, WorldFocus.Y, 0.0);
 	if (InZoom >= 0.0f)
 	{
-		TargetZoom = FMath::Clamp(InZoom, 0.0f, 1.0f);
+		TargetZoom = FMath::Clamp(InZoom, 0.0f, TopZoom);
 	}
 	if (bImmediately)
 	{
@@ -159,8 +159,8 @@ void ACampaignCameraPawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	TargetFocus.X = FMath::Clamp(TargetFocus.X, -HalfExtent.X, HalfExtent.X);
-	TargetFocus.Y = FMath::Clamp(TargetFocus.Y, -HalfExtent.Y, HalfExtent.Y);
+	TargetFocus.X = FMath::Clamp(TargetFocus.X, bBoxed ? BoundsMin.X : -HalfExtent.X, bBoxed ? BoundsMax.X : HalfExtent.X);
+	TargetFocus.Y = FMath::Clamp(TargetFocus.Y, bBoxed ? BoundsMin.Y : -HalfExtent.Y, bBoxed ? BoundsMax.Y : HalfExtent.Y);
 
 	Focus = FMath::VInterpTo(Focus, TargetFocus, DeltaSeconds, Glide > 0.0f ? Glide : (bHurry ? 26.0f : 9.0f));
 	Zoom = FMath::FInterpTo(Zoom, TargetZoom, DeltaSeconds, Glide > 0.0f ? Glide : (bHurry ? 20.0f : 8.0f));

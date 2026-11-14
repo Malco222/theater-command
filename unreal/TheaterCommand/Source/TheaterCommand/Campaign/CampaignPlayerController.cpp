@@ -620,6 +620,13 @@ void ACampaignPlayerController::BeginPlay()
 		if (Map.IsValid() && Map->GetData().IsLoaded())
 		{
 			Eye->SetBounds(Map->GetWorldHalfExtent());
+			if (Map->GetData().bWorld)
+			{
+				// (the whole-world map: the eye may go wherever the world goes, from its north-west corner to its south-east)
+				const FCampaignMapData& World = Map->GetData();
+				const FVector NorthWest = Map->MapToWorld(World.WorldMinX, World.WorldMinY), SouthEast = Map->MapToWorld(World.WorldMinX + World.WorldWidth, World.WorldMinY + World.WorldHeight);
+				Eye->SetBoundsBox(FVector2D(SouthEast.X, NorthWest.Y), FVector2D(NorthWest.X, SouthEast.Y));
+			}
 			// Open on central Europe, with Germany, Poland and France all in view.
 			const int32* Start = Map->GetData().RegionByName.Find(TEXT("Frankfurt"));
 			const FVector2D At = Start ? Map->GetData().Regions[*Start].Center : FVector2D(Map->GetData().Width * 0.42, Map->GetData().Height * 0.46);

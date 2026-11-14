@@ -124,6 +124,13 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 
 	Width = Root->GetNumberField(TEXT("width"));
 	Height = Root->GetNumberField(TEXT("height"));
+	// The world the map lies in: itself, or (with -TheaterWorld) the frame of the whole-world map with Europe set in it.
+	bWorld = FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld"));
+	WorldMinX = bWorld ? -500.0 : 0.0;
+	WorldMinY = 0.0;
+	WorldWidth = bWorld ? 9256.14 : Width;
+	WorldHeight = bWorld ? 5096.0 : Height;
+	ShiftX = bWorld ? 500.0 : 0.0;
 
 	for (const TSharedPtr<FJsonValue>& PolyValue : Root->GetArrayField(TEXT("land")))
 	{

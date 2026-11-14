@@ -199,13 +199,21 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		for (int32 I = 0; I < NX; ++I)
 		{
 			const int32 Idx = Terrain.Index(I, J);
-			const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
+			const FVector2D P = Terrain.PointAt(I, J);
 			const float Metres = Terrain.HasElevation() ? FMath::Max(Terrain.MetresAt(P.X, P.Y), 0.0f) : FMath::Max(Terrain.Height[Idx], 0.0f) * 380.0f;
 			// (the map is laid out forty units to the degree of latitude, its top edge a little north of the North Cape)
+			// (these two as Europe's recipe has always reckoned them, to the last figure: its ground is not repainted)
 			const float Latitude = 71.4f - static_cast<float>(P.Y) / 40.0f, Longitude = -11.0f + static_cast<float>(P.X) / 25.7f;
 			const float Broad = 0.5f + 0.5f * FMath::PerlinNoise2D(P * 0.02), Middling = 0.5f + 0.5f * FMath::PerlinNoise2D(P * 0.088 + FVector2D(7.0, 3.0));
 			const float Fine = 0.5f + 0.5f * FMath::PerlinNoise2D(P * 0.6 + FVector2D(11.0, 5.0));
-			const float DryCountry = FMath::Clamp(FMath::SmoothStep(0.0f, 8.0f, 46.0f - Latitude) * 0.8f + FMath::SmoothStep(28.0f, 44.0f, Longitude) * FMath::SmoothStep(0.0f, 6.0f, 52.0f - Latitude) * 0.45f, 0.0f, 1.0f);
+			float DryCountry = FMath::Clamp(FMath::SmoothStep(0.0f, 8.0f, 46.0f - Latitude) * 0.8f + FMath::SmoothStep(28.0f, 44.0f, Longitude) * FMath::SmoothStep(0.0f, 6.0f, 52.0f - Latitude) * 0.45f, 0.0f, 1.0f);
+			if (Data.bWorld && (P.X < 0.0 || P.X > Data.Width || P.Y > Data.Height))
+			{
+				// (Beyond today's map, until the world's own provinces say what kind of country each is: dry in the
+				// two belts of the deserts, about the tropics of Cancer and Capricorn, and green between and beyond them.)
+				const float FromEquator = FMath::Abs(Latitude);
+				DryCountry = 0.7f * FMath::SmoothStep(9.0f, 19.0f, FromEquator) * (1.0f - FMath::SmoothStep(29.0f, 38.0f, FromEquator));
+			}
 			const float Boreal = FMath::SmoothStep(56.0f, 63.0f, Latitude);
 			FSeen C = GroundByHeight(Metres);
 			C = Mix(C, FSeen::Bytes(186, 160, 108), FMath::Clamp(DryCountry * (0.55f + 0.3f * Broad), 0.0f, 0.8f) * FMath::SmoothStep(0.0f, 600.0f, 1600.0f - Metres));
@@ -258,7 +266,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		for (int32 I = 0; I < NX; ++I)
 		{
 			const int32 Idx = Terrain.Index(I, J);
-			const float M = Terrain.HasElevation() ? FMath::Max(Terrain.MetresAt(I * Terrain.Cell, J * Terrain.Cell), 0.0f) : FMath::Max(Terrain.Height[Idx], 0.0f) * 380.0f;
+			const FVector2D Here = Terrain.PointAt(I, J);
+			const float M = Terrain.HasElevation() ? FMath::Max(Terrain.MetresAt(Here.X, Here.Y), 0.0f) : FMath::Max(Terrain.Height[Idx], 0.0f) * 380.0f;
 			Metres[Idx] = M;
 			Squeezed[Idx] = FMath::Pow(M, 0.82f);
 		}
@@ -314,7 +323,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			const FVector2f Slope = Terrain.GradientAt(I, J);
 			const float Steepness = FMath::Clamp(Slope.Size() * 0.9f, 0.0f, 1.0f);
 			const float Shore = Terrain.ShoreDistance[Idx];
-			const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
+			const FVector2D P = Terrain.PointAt(I, J);
 
 			// Steep ground is rock whatever its height; high flat ground (a plateau) keeps its nation's colour.
 			// The highest crests are snow, and a narrow strip along the shore is sand.
@@ -381,7 +390,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		for (int32 I = 0; I < NX; ++I)
 		{
 			const int32 Idx = Terrain.Index(I, J);
-			const FVector2D P(I * Terrain.Cell, J * Terrain.Cell);
+			const FVector2D P = Terrain.PointAt(I, J);
 			const float Latitude = 71.4f - static_cast<float>(P.Y) / 40.0f, Longitude = -11.0f + static_cast<float>(P.X) / 25.7f;
 			const float Boreal = FMath::SmoothStep(56.0f, 63.0f, Latitude);
 			const float Broad = 0.5f + 0.5f * FMath::PerlinNoise2D(P * 0.02);
@@ -429,8 +438,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	// slopes to the abyss; the sea floor faintly shaded by the same sun as the land; a little unevenness for the
 	// swell; pale turquoise in the shallows for about three map units out; and the land's shadow on the water
 	// on the side away from the sun. The alpha is how far offshore the point is, for the line of surf.
-	WaterNX = FMath::CeilToInt32(Data.Width / WaterStep) + 1;
-	WaterNY = FMath::CeilToInt32(Data.Height / WaterStep) + 1;
+	WaterStep = FMath::Max(1.5, Terrain.Cell); // (a coarse sheet's sea is painted as coarsely as its land)
+	WaterNX = FMath::CeilToInt32(Terrain.ExtentX / WaterStep) + 1;
+	WaterNY = FMath::CeilToInt32(Terrain.ExtentY / WaterStep) + 1;
 	Water.SetNumUninitialized(WaterNX * WaterNY);
 	Surf.SetNumUninitialized(WaterNX * WaterNY);
 	const FVector2D SunOnMap = FVector2D(ToSun.X, ToSun.Y).GetSafeNormal();
@@ -455,8 +465,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		static const FSeen Blues[] = { FSeen::Bytes(86, 160, 160), FSeen::Bytes(52, 126, 144), FSeen::Bytes(30, 86, 116), FSeen::Bytes(17, 52, 82), FSeen::Bytes(11, 34, 60) };
 		for (int32 I = 0; I < WaterNX; ++I)
 		{
-			const double X = FMath::Min(I * WaterStep, Data.Width);
-			const double Y = FMath::Min(J * WaterStep, Data.Height);
+			const double X = Terrain.OriginX + FMath::Min(I * WaterStep, Terrain.ExtentX);
+			const double Y = Terrain.OriginY + FMath::Min(J * WaterStep, Terrain.ExtentY);
 			const float OffShore = -Terrain.ShoreAt(X, Y);
 			auto Bed = [&Terrain](double AtX, double AtY) { return FMath::Min(Terrain.MetresAt(AtX, AtY), 0.0f); };
 			float Deep = FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp(OffShore / 40.0f, 0.0f, 1.0f));

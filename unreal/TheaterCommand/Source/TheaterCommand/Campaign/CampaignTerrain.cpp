@@ -2,6 +2,7 @@
 
 #include "Campaign/CampaignMapData.h"
 #include "TheaterCommand.h"
+#include "Async/ParallelFor.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
@@ -15,13 +16,80 @@ namespace
 	constexpr float ShelfHeight = 0.55f; // how far the land stands above the water at the shore
 	constexpr float SeaDepth = 2.0f; // how deep the bed drops away from the shore
 
-	void FillRing(const TArray<FVector2D>& Ring, double Px, int32 RW, int32 RH, int16 Value, TArray<int16>& Raster)
+	// The world's heights, read once and shared by every sheet of terrain: one for every WorldStep map units, the
+	// first at the seam (30.45 W) and 71.4 N, wrapping round the world from east to west.
+	TArray<int16> WorldHeights;
+	int32 WorldWide = 0, WorldHigh = 0;
+	float WorldStep = 2.0f;
+
+	void LoadWorldHeights()
 	{
+		static bool bLooked = false;
+		if (bLooked)
+		{
+			return;
+		}
+		bLooked = true;
+		TArray<uint8> Bytes;
+		const FString Path = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Data/Campaign/elevation-world.bin"));
+		if (!FFileHelper::LoadFileToArray(Bytes, *Path, FILEREAD_Silent) || Bytes.Num() < 16 || FMemory::Memcmp(Bytes.GetData(), "TCE2", 4) != 0)
+		{
+			UE_LOG(LogTheater, Display, TEXT("No world elevation data at %s: there is no land beyond the map."), *Path);
+			return;
+		}
+		uint32 FileWidth = 0, FileHeight = 0;
+		FMemory::Memcpy(&FileWidth, Bytes.GetData() + 4, 4);
+		FMemory::Memcpy(&FileHeight, Bytes.GetData() + 8, 4);
+		FMemory::Memcpy(&WorldStep, Bytes.GetData() + 12, 4);
+		if (FileWidth == 0 || FileHeight == 0 || WorldStep <= 0.0f || static_cast<int64>(Bytes.Num()) < 16 + static_cast<int64>(FileWidth) * FileHeight * 2)
+		{
+			return;
+		}
+		WorldWide = static_cast<int32>(FileWidth);
+		WorldHigh = static_cast<int32>(FileHeight);
+		WorldHeights.SetNumUninitialized(WorldWide * WorldHigh);
+		FMemory::Memcpy(WorldHeights.GetData(), Bytes.GetData() + 16, WorldHeights.Num() * sizeof(int16));
+	}
+
+	/** The world's height at a point of the world's own frame (x east from the seam, round and round; y south from 71.4 N), in metres. */
+	float WorldMetresAt(double X, double Y)
+	{
+		if (WorldWide <= 1)
+		{
+			return 0.0f;
+		}
+		const double Gx = X / WorldStep, Gy = FMath::Clamp(Y / WorldStep, 0.0, static_cast<double>(WorldHigh - 1));
+		const int32 X0 = FMath::FloorToInt32(Gx), Y0 = FMath::Min(FMath::FloorToInt32(Gy), WorldHigh - 2);
+		const float Fx = static_cast<float>(Gx - X0), Fy = static_cast<float>(Gy - Y0);
+		const int32 XA = ((X0 % WorldWide) + WorldWide) % WorldWide, XB = (XA + 1) % WorldWide;
+		const int16* Row0 = WorldHeights.GetData() + Y0 * WorldWide;
+		const int16* Row1 = Row0 + WorldWide;
+		return FMath::Lerp(FMath::Lerp(static_cast<float>(Row0[XA]), static_cast<float>(Row0[XB]), Fx),
+			FMath::Lerp(static_cast<float>(Row1[XA]), static_cast<float>(Row1[XB]), Fx), Fy);
+	}
+
+	/** Fills a ring into the fine bitmap. The ring is in map units; the bitmap's corner stands at (OffX, OffY). */
+	void FillRing(const TArray<FVector2D>& InRing, double Px, int32 RW, int32 RH, int16 Value, TArray<int16>& Raster, double OffX = 0.0, double OffY = 0.0)
+	{
+		TArray<FVector2D> Moved;
+		if (OffX != 0.0 || OffY != 0.0)
+		{
+			Moved.Reserve(InRing.Num());
+			for (const FVector2D& P : InRing)
+			{
+				Moved.Add(FVector2D(P.X - OffX, P.Y - OffY));
+			}
+		}
+		const TArray<FVector2D>& Ring = Moved.Num() > 0 ? Moved : InRing;
 		double MinY = TNumericLimits<double>::Max(), MaxY = -TNumericLimits<double>::Max();
 		for (const FVector2D& P : Ring)
 		{
 			MinY = FMath::Min(MinY, P.Y);
 			MaxY = FMath::Max(MaxY, P.Y);
+		}
+		if (MaxY < 0.0 || MinY > RH * Px)
+		{
+			return; // wholly off the bitmap
 		}
 		const int32 Y0 = FMath::Clamp(FMath::FloorToInt32(MinY / Px - 0.5), 0, RH - 1);
 		const int32 Y1 = FMath::Clamp(FMath::CeilToInt32(MaxY / Px - 0.5), 0, RH - 1);
@@ -164,6 +232,11 @@ void FCampaignTerrain::LoadElevation()
 
 float FCampaignTerrain::MetresAt(double X, double Y) const
 {
+	// The map's own heights where they reach, and beyond them the world's.
+	if (WorldShiftX >= 0.0 && (ElevationWidth <= 1 || X < 0.0 || Y < 0.0 || X > ElevationWidth - 1 || Y > ElevationHeight - 1))
+	{
+		return WorldMetresAt(X + WorldShiftX, Y);
+	}
 	if (ElevationWidth <= 1)
 	{
 		return 0.0f;
@@ -181,28 +254,61 @@ float FCampaignTerrain::MetresAt(double X, double Y) const
 
 void FCampaignTerrain::Build(const FCampaignMapData& Data)
 {
+	BuildOver(Data, 0.0, 0.0, Data.Width, Data.Height, 1.5, false);
+}
+
+void FCampaignTerrain::BuildOver(const FCampaignMapData& Data, double MinX, double MinY, double Wide, double High, double InCell, bool bLandFromHeights)
+{
 	const double StartTime = FPlatformTime::Seconds();
 	LoadElevation();
+	OriginX = MinX;
+	OriginY = MinY;
+	ExtentX = Wide;
+	ExtentY = High;
+	Cell = InCell;
+	WorldShiftX = -1.0;
+	if (Data.bWorld)
+	{
+		LoadWorldHeights();
+		WorldShiftX = WorldWide > 1 ? Data.ShiftX : -1.0;
+	}
 
-	NX = FMath::CeilToInt32(Data.Width / Cell) + 1;
-	NY = FMath::CeilToInt32(Data.Height / Cell) + 1;
+	NX = FMath::CeilToInt32(Wide / Cell) + 1;
+	NY = FMath::CeilToInt32(High / Cell) + 1;
 	const int32 Count = NX * NY;
 
 	// 1. Paint land and regions into the fine bitmap.
 	const double Px = Cell / PixelsPerCell;
-	const int32 RW = FMath::CeilToInt32(Data.Width / Px);
-	const int32 RH = FMath::CeilToInt32(Data.Height / Px);
+	const int32 RW = FMath::CeilToInt32(Wide / Px);
+	const int32 RH = FMath::CeilToInt32(High / Px);
 	TArray<int16> Raster;
 	Raster.Init(Sea, RW * RH);
+	if (bLandFromHeights && WorldShiftX >= 0.0)
+	{
+		// Beyond the map's own box no coast is drawn yet: the land there is wherever the world's heights stand above the sea.
+		ParallelFor(RH, [&](int32 Y)
+		{
+			const double My = MinY + (Y + 0.5) * Px;
+			int16* Row = Raster.GetData() + Y * RW;
+			for (int32 X = 0; X < RW; ++X)
+			{
+				const double Mx = MinX + (X + 0.5) * Px;
+				if ((Mx < 0.0 || My < 0.0 || Mx > Data.Width || My > Data.Height) && WorldMetresAt(Mx + WorldShiftX, My) > 0.0f)
+				{
+					Row[X] = UnclaimedLand;
+				}
+			}
+		});
+	}
 	for (const TArray<FVector2D>& Ring : Data.Land)
 	{
-		FillRing(Ring, Px, RW, RH, UnclaimedLand, Raster);
+		FillRing(Ring, Px, RW, RH, UnclaimedLand, Raster, MinX, MinY);
 	}
 	for (const FCampaignRegion& R : Data.Regions)
 	{
 		for (const TArray<FVector2D>& Ring : R.Polygons)
 		{
-			FillRing(Ring, Px, RW, RH, static_cast<int16>(R.Id), Raster);
+			FillRing(Ring, Px, RW, RH, static_cast<int16>(R.Id), Raster, MinX, MinY);
 		}
 	}
 
@@ -251,15 +357,15 @@ void FCampaignTerrain::Build(const FCampaignMapData& Data)
 			continue;
 		}
 		const double Radius = FMath::Max(2.6, FMath::Sqrt(R.Area / UE_DOUBLE_PI) + 1.4);
-		const int32 I0 = FMath::Max(FMath::FloorToInt32((R.Centroid.X - Radius) / Cell), 0);
-		const int32 I1 = FMath::Min(FMath::CeilToInt32((R.Centroid.X + Radius) / Cell), NX - 1);
-		const int32 J0 = FMath::Max(FMath::FloorToInt32((R.Centroid.Y - Radius) / Cell), 0);
-		const int32 J1 = FMath::Min(FMath::CeilToInt32((R.Centroid.Y + Radius) / Cell), NY - 1);
+		const int32 I0 = FMath::Max(FMath::FloorToInt32((R.Centroid.X - OriginX - Radius) / Cell), 0);
+		const int32 I1 = FMath::Min(FMath::CeilToInt32((R.Centroid.X - OriginX + Radius) / Cell), NX - 1);
+		const int32 J0 = FMath::Max(FMath::FloorToInt32((R.Centroid.Y - OriginY - Radius) / Cell), 0);
+		const int32 J1 = FMath::Min(FMath::CeilToInt32((R.Centroid.Y - OriginY + Radius) / Cell), NY - 1);
 		for (int32 J = J0; J <= J1; ++J)
 		{
 			for (int32 I = I0; I <= I1; ++I)
 			{
-				const double D = FVector2D::Distance(FVector2D(I * Cell, J * Cell), R.Centroid);
+				const double D = FVector2D::Distance(PointAt(I, J), R.Centroid);
 				const float Mound = 1.0f - FMath::SmoothStep(static_cast<float>(Radius * 0.55), static_cast<float>(Radius), static_cast<float>(D));
 				const int32 Idx = Index(I, J);
 				if (Mound > Coverage[Idx])
@@ -327,8 +433,18 @@ void FCampaignTerrain::Build(const FCampaignMapData& Data)
 				// The real ground. Heights are raised the way a relief map raises them: low hills more than
 				// in proportion, so that they can be seen at all, and the great ranges less, so that they
 				// do not tower over the pieces. 2,500 metres stands about five and a half map units high.
-				const FVector2D P(I * Cell, J * Cell);
-				const float Metres = FMath::Max(MetresAt(P.X, P.Y), 0.0f);
+				const FVector2D P = PointAt(I, J);
+				float Metres = FMath::Max(MetresAt(P.X, P.Y), 0.0f);
+				if (Cell > 2.5)
+				{
+					// (a coarse sheet's point stands for the ground round it, not for the one spot it falls on)
+					const double Third = Cell / 3.0;
+					for (const FVector2D& Tap : { FVector2D(-Third, 0.0), FVector2D(Third, 0.0), FVector2D(0.0, -Third), FVector2D(0.0, Third) })
+					{
+						Metres += FMath::Max(MetresAt(P.X + Tap.X, P.Y + Tap.Y), 0.0f);
+					}
+					Metres /= 5.0f;
+				}
 				const float Lift = 5.6f * FMath::Pow(Metres / 2500.0f, 0.78f);
 				// A little tooth on the slopes, more of it the higher the country, so they do not look moulded in glass.
 				const float Tooth = (0.05f + 0.045f * Lift) * Fbm(P * 0.23, 3);
@@ -341,7 +457,7 @@ void FCampaignTerrain::Build(const FCampaignMapData& Data)
 				const float Fade = FMath::SmoothStep(1.0f, 8.0f, ShoreDistance[Idx]);
 				if (Fade > 0.0f)
 				{
-					const FVector2D P(I * Cell, J * Cell);
+					const FVector2D P = PointAt(I, J);
 					const float Amp = Roughness[Idx];
 					const float Rolling = 0.5f + 0.34f * Fbm(P * 0.033, 3) + 0.16f * Fbm(P * 0.12 + FVector2D(40.0, 7.0), 3);
 					// Ridges are sharpened so that a range reads as crests and valleys, not as a dome.
@@ -440,8 +556,8 @@ float FCampaignTerrain::Sample(const TArray<float>& Field, double X, double Y) c
 	{
 		return 0.0f;
 	}
-	const double Gx = FMath::Clamp(X / Cell, 0.0, static_cast<double>(NX - 1));
-	const double Gy = FMath::Clamp(Y / Cell, 0.0, static_cast<double>(NY - 1));
+	const double Gx = FMath::Clamp((X - OriginX) / Cell, 0.0, static_cast<double>(NX - 1));
+	const double Gy = FMath::Clamp((Y - OriginY) / Cell, 0.0, static_cast<double>(NY - 1));
 	const int32 I0 = FMath::Min(FMath::FloorToInt32(Gx), NX - 2);
 	const int32 J0 = FMath::Min(FMath::FloorToInt32(Gy), NY - 2);
 	const float Fx = static_cast<float>(Gx - I0);

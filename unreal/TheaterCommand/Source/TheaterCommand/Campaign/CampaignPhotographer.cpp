@@ -821,6 +821,7 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		}
 	}
 	Eye->SetHeading(Shot.Yaw, Shot.Tilt);
+	Eye->SetTopZoom(FMath::Clamp(Shot.Zoom, 1.0f, 1.45f)); // (a picture may be taken from higher than the player can go: the whole world in one)
 	Eye->GoTo(Table->MapToWorld(At.X, At.Y), Shot.Zoom, true);
 
 	Controller->SetScripted(true);

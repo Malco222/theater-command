@@ -22,6 +22,19 @@ class FCampaignTerrain
 public:
 	void Build(const FCampaignMapData& Data);
 
+	/**
+	 * The same over any box of the world, with any size of cell (the whole-world map): the coarse sheet that
+	 * carries the land beyond today's map. Where the map file draws no coast (everywhere outside its own box,
+	 * until the world's file exists) the land is wherever NOAA's heights stand above the sea.
+	 */
+	void BuildOver(const FCampaignMapData& Data, double MinX, double MinY, double Wide, double High, double InCell, bool bLandFromHeights);
+
+	/** The corner the grid starts from and the ground it covers, in map units. */
+	double OriginX = 0.0, OriginY = 0.0, ExtentX = 0.0, ExtentY = 0.0;
+
+	/** Where a grid point is on the map. */
+	FVector2D PointAt(int32 I, int32 J) const { return FVector2D(OriginX + I * Cell, OriginY + J * Cell); }
+
 	/** Works out how far every point is from a border between two nations. Run again when ground changes hands. */
 	void MeasureFrontiers(const FCampaignMapData& Data);
 
@@ -73,4 +86,7 @@ private:
 	TArray<int16> Elevation;
 	int32 ElevationWidth = 0;
 	int32 ElevationHeight = 0;
+	// Beyond those, the world's (Content/Data/Campaign/elevation-world.bin, made by Tools/make_elevation_world.mjs):
+	// what to add to an x of this map to have the world file's, or a negative number where the world is not used.
+	double WorldShiftX = -1.0;
 };
