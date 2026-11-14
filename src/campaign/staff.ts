@@ -11,6 +11,7 @@ import { openTraits } from './traits';
 import { openTech } from './tech';
 import { openStores } from './resources';
 import openData from '../../data/campaign/open.json';
+import rivalsData from '../../data/campaign/rivals.json';
 import { hashString, Rng } from '../core/rng';
 import { turnToDate } from '../core/ticket';
 import { holds } from './diplomacy';
@@ -19,6 +20,7 @@ import { DOMINATION, dominating } from './domination';
 import { openAirWar } from './air';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges } from './siege';
+import { agentsOf, atWork, knowsBooks } from './intel';
 import { startEngineers } from './engineers';
 import { openMorale } from './morale';
 import { numberDivisions } from './armies';
@@ -27,8 +29,8 @@ import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
-import { EASTERN, allied, atWar, collapseScore, corpsBase, frozen, headline, weather } from './game';
-import { FORT_MUL, KIND, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
+import { EASTERN, allied, assess, atWar, collapseScore, corpsBase, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
+import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
 
@@ -105,9 +107,36 @@ const draw = (g: Game, ...key: (string | number)[]): number => hashString(`${g.s
  */
 export const monthly = (g: Game, ...key: (string | number)[]): number => new Rng(hashString(`${g.seed}:${key.join(':')}`)).next();
 
+/** The character of a staff: how readily it attacks, and when it names a main effort. */
+export type Character = 'bold' | 'cautious' | 'opportunist';
+export interface CharacterRule { label: string; says: string; attackAt: number; minOdds: number; quiet: number; strength: number; local: number }
+
+/** Rival staffs: the characters, the main effort, the will to finish. The numbers are in data/campaign/rivals.json. */
+export const RIVALS = rivalsData as unknown as {
+  characters: Record<Character, CharacterRule>;
+  lean: Record<string, [number, number, number]>;
+  effort: { months: number; rest: number; mass: number; sector: number; busy: number };
+  press: { ratio: number; after: number; step: number; floor: number; waves: number; again: number };
+  soften: { works: number; most: number; from: number; raid: number };
+  fold: { worn: number; cadres: number };
+  exhaust: { after: number; per: number };
+};
+
+/** True where the staffs have characters and name main efforts: the grand campaign. */
+export const rivalRules = (g: Game): boolean => isOpen(g) && !!RIVALS.characters;
+
+/** The character of a nation's staff in this war: drawn once from the war's seed, with a national lean. */
+export function characterOf(g: Game, nat: string): Character {
+  const w = RIVALS.lean[nat] ?? RIVALS.lean._default;
+  const x = monthly(g, nat, 'character') * (w[0] + w[1] + w[2]);
+  return x < w[0] ? 'bold' : x < w[0] + w[1] ? 'cautious' : 'opportunist';
+}
+
 /** A nation's character in this war: its nerve differs a little from one war to the next. */
 export function temper(g: Game, nat: string): Temper {
   const t = { attackAt: 99, persist: 0.85, minOdds: 1.4, ...OPEN.temper._default, ...OPEN.temper[nat] } as Temper;
+  // The staff's character (the grand campaign): a bold one goes on a smaller advantage, a cautious one waits for more.
+  if (rivalRules(g)) { const C = RIVALS.characters[characterOf(g, nat)]; t.attackAt *= C.attackAt; t.minOdds += C.minOdds; }
   const mood = 1 + OPEN.mood * (2 * draw(g, nat, 'mood') - 1);
   // The level of the campaign steadies or stiffens the nerve of the player's rivals: at the fair level, neither.
   const lv = nerveOf(g, nat);
@@ -484,6 +513,241 @@ export function inConcert(g: Game, nat: string, f: Pick<Front, 'enemies'>): numb
   return 1;
 }
 
+// ---- The main effort (the grand campaign) ---------------------------------------------------------------
+//
+// A staff that stands on the defensive on a front is not asleep on it. When the front has been quiet long enough
+// for its character, the balance of strength is not hopeless, and somewhere on the line the force it could mass
+// in a month would go in at good odds, it names a main effort: one enemy province, attacked for a season with
+// everything that can be brought opposite it and nothing anywhere else. The army's orders for those months are an
+// ordinary attack phase bounded to that sector; the bombers and a probing corps soften the line first (air.ts, ai.ts).
+
+const SEASONS = ['winter', 'winter', 'spring', 'spring', 'spring', 'summer', 'summer', 'summer', 'autumn', 'autumn', 'autumn', 'winter'];
+const effKey = (k: string, nat: string, where: string): string => `st:${k}:${nat}${where}`;
+
+/** A staff's main effort: the province it is aimed at now, the one it was named for, the months it runs, and whom it is against. */
+export interface Effort { nat: string; target: number; first: number; from: number; to: number; enemy: string; name: string; won: number }
+
+/** The main effort a nation's staff has under way, on its main fronts or in a theatre overseas ('where'), or null. */
+export function effortOf(g: Game, nat: string, where = ''): Effort | null {
+  const t = flag(g, effKey('eff', nat, where));
+  if (!t || !rivalRules(g) || !g.regions[t - 1]) return null;
+  const first = flag(g, effKey('eff0', nat, where)) || t, from = flag(g, effKey('effAt', nat, where));
+  const enemy = Object.keys(g.nations)[flag(g, effKey('effE', nat, where)) - 1] ?? g.regions[t - 1].ctrl;
+  return {
+    nat, target: t - 1, first: first - 1, from, to: flag(g, effKey('effTo', nat, where)), enemy, won: flag(g, effKey('effWon', nat, where)),
+    name: `the ${SEASONS[turnToDate(from).month]} offensive towards ${g.regions[first - 1].name}`,
+  };
+}
+
+/** Every main effort a nation has under way: on its main fronts and in each theatre overseas. */
+export function effortsOf(g: Game, nat: string): Effort[] {
+  if (!rivalRules(g)) return [];
+  const base = `st:eff:${nat}`;
+  const out: Effort[] = [];
+  for (const k of Object.keys(g.flags)) {
+    if (k !== base && !k.startsWith(`${base}:t`)) continue;
+    const e = effortOf(g, nat, k.slice(base.length));
+    if (e) out.push(e);
+  }
+  return out;
+}
+
+/** True for an enemy who has his hands full: he has fought someone else on land within the last months. */
+const busyElsewhere = (g: Game, e: string, nat: string): boolean => Object.keys(g.nations).some((x) =>
+  x !== nat && x !== e && Math.max(g.nations[e]?.lastFight[x] ?? -99, g.nations[x].lastFight[e] ?? -99) >= g.turn - RIVALS.effort.busy);
+
+/**
+ * The best place for a main effort on a front: the enemy province where the force that could be massed in a month
+ * (the field corps beside it, and those a province further back as far as there is room to bring them up) has the
+ * best prospect, worth counted. Only places where that force would go in at 'least' odds or better; 'beside' keeps
+ * the choice next to a province just taken, when an effort is carried on.
+ */
+function sector(g: Game, nat: string, f: Front, least: number, beside?: Region): { target: Region; odds: number } | null {
+  const ours = new Set(f.ours);
+  const prize = objectives(g, f).slice(0, 8);
+  const fit = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && c.town === undefined && c.leave === undefined && c.org >= 0.35;
+  let best: { target: Region; odds: number; score: number } | null = null;
+  for (const id of f.edge) {
+    const t = g.regions[id];
+    // Behind strong works there is no way in; a place nobody holds is walked into, not attacked.
+    if (f.depth[id] !== 1 || (beside && !beside.nb.includes(id)) || !atWar(g, nat, fieldCtrl(g, t)) || !hostileUnits(g, t, nat).length) continue;
+    const doors = t.nb.filter((j) => (ours.has(j) || (beside && j === beside.id)) && allied(g, nat, fieldCtrl(g, g.regions[j])));
+    if (!doors.length) continue;
+    const front: Corps[] = [], back: Corps[] = [];
+    const seen = new Set(doors);
+    let room = 0;
+    for (const j of doors) {
+      const r = g.regions[j];
+      for (const c of r.units) if (fit(c)) front.push(c);
+      room += Math.max(0, STACK - r.units.filter((u) => allied(g, nat, u.nat)).length);
+    }
+    for (const j of doors) for (const k of g.regions[j].nb) {
+      if (seen.has(k)) continue;
+      seen.add(k);
+      const r = g.regions[k];
+      if (allied(g, nat, fieldCtrl(g, r))) for (const c of r.units) if (fit(c)) back.push(c);
+    }
+    back.sort((a, b) => atkP(g, b) - atkP(g, a) || a.id - b.id);
+    const force = limitAttackers(g, [...front, ...back.slice(0, room)], t);
+    if (!force.length) continue;
+    const odds = assess(g, force, t).odds;
+    if (odds < least) continue;
+    const score = Math.min(odds, 3) + t.vp * 2 + (t.cap ? 8 : 0) + (prize.includes(t.name) ? 2 : 0);
+    if (!best || score > best.score || (score === best.score && t.id < best.target.id)) best = { target: t, odds, score };
+  }
+  return best;
+}
+
+/**
+ * How a viewer comes to know a staff's plans: an ally tells him ('ally'), or an agent of his is reading its books in
+ * its capital ('agent'). Null where he does not know them. With no player at the table everything is known.
+ */
+export function plansKnown(g: Game, nat: string, viewer: string | null = g.human): 'ally' | 'agent' | null {
+  if (viewer === null || !g.nations[viewer]?.alive || allied(g, nat, viewer)) return 'ally';
+  return knowsBooks(g, nat, viewer) ? 'agent' : null;
+}
+
+/** What the player is told when a staff whose plans he knows names its main effort: an ally's, or an enemy's whose books his agent reads. */
+function effortNamed(g: Game, e: Effort): void {
+  const me = g.human;
+  if (me === null || !g.nations[me]?.alive || e.nat === me) return;
+  const how = plansKnown(g, e.nat, me);
+  if (!how) return;
+  const who = g.nations[e.nat]?.name ?? e.nat;
+  const until = turnToDate(e.to).label;
+  const name = e.name.replace(/^the /, '');
+  if (how === 'ally') {
+    if (atWar(g, me, e.enemy) || allied(g, me, e.enemy)) headline(g, 'info', `${who}'s staff has named its main effort: ${e.name}, against ${g.nations[e.enemy]?.name ?? e.enemy}, until ${until}.`, e.nat, e.first);
+    return;
+  }
+  const cap = g.nations[e.nat].capital;
+  const agent = agentsOf(g, me).find((a) => a.reg === cap && a.mission === 'books' && atWork(g, a));
+  const mine = e.enemy === me || allied(g, me, e.enemy);
+  headline(g, mine ? 'event' : 'info', `${agent ? `Agent ${agent.name} reports from ${g.regions[cap].name}` : 'Your secret service reports'}: ${who}'s staff has named its main effort, the ${name}. It will mass opposite ${g.regions[e.first].name} and attack there until ${until}${mine ? '. You have the month it takes them to mass.' : '.'}`, e.nat, e.first);
+}
+
+/** What the player is told when a main effort that concerned him is over: one against him or his allies, or an ally's. */
+function effortOver(g: Game, e: Effort): void {
+  const me = g.human;
+  if (me === null || !g.nations[me]?.alive) return;
+  const who = g.nations[e.nat]?.name ?? e.nat;
+  const got = e.won === 1 ? 'one province' : `${e.won} provinces`;
+  const name = e.name.replace(/^the /, '');
+  if (atWar(g, me, e.nat) && (e.enemy === me || allied(g, me, e.enemy))) {
+    headline(g, 'event', `${who}'s ${name} is over. ${e.won ? `It took ${got}, and the staff that planned it will be looking for the next place.` : 'The line held, and the staff that planned it will be looking for another place.'}`, e.nat, e.first);
+  } else if (allied(g, me, e.nat)) {
+    headline(g, 'info', `${who}'s ${name} is over: ${e.won ? `it took ${got}` : 'it gained no ground'}.`, e.nat, e.first);
+  }
+}
+
+/**
+ * The month's decision on a main effort, taken with the staff's others: one under way is carried on, moved to the
+ * next province when its target has fallen, or ended when its months are up; and with none under way one is named
+ * where a front calls for it. 'spoken' is true for a front the staff has a greater plan against already.
+ */
+function mainEffort(g: Game, nat: string, real: Front[], T: Temper, where: string, spoken: (f: Front) => boolean): void {
+  if (!rivalRules(g) || nat === g.human) return;
+  const E = RIVALS.effort, who = characterOf(g, nat), C = RIVALS.characters[who];
+  const key = (k: string): string => effKey(k, nat, where);
+  const stop = (rest: number): void => {
+    for (const k of ['eff', 'eff0', 'effAt', 'effTo', 'effE', 'effWon']) delete g.flags[key(k)];
+    if (rest) g.flags[key('effRest')] = g.turn + rest;
+  };
+  const cur = effortOf(g, nat, where);
+  if (cur) {
+    const at = g.regions[cur.target];
+    const f = real.find((x) => x.enemies.includes(cur.enemy)) ?? null;
+    const taken = allied(g, nat, fieldCtrl(g, at));
+    if (taken) { g.flags[key('effWon')] = cur.won + 1; cur.won++; }
+    const gone = !f || !g.nations[cur.enemy]?.alive || !atWar(g, nat, cur.enemy);
+    // A general offensive opened on the same front takes the effort over.
+    const general = !!f && onSince(g, nat, f, where) > 0;
+    const live = !gone && !general && g.turn <= cur.to;
+    // The place is taken: the effort is carried on to the next one beside it while its months last.
+    const next = live && taken ? sector(g, nat, f!, T.minOdds, at) : null;
+    if (next) { g.flags[key('eff')] = next.target.id + 1; return; }
+    if (live && !taken) return;
+    if (!general) effortOver(g, cur);
+    stop(gone || general ? 0 : E.rest);
+    return;
+  }
+  if (g.turn < flag(g, key('effRest')) || flag(g, `st:op:${nat}`)) return;
+  for (const f of real) {
+    if (onSince(g, nat, f, where) || spoken(f)) continue;
+    // An offensive just called off: the army rests before anything new is asked of it.
+    if (!f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}${where}`))) continue;
+    if (f.ratio < C.strength) continue;
+    const quiet = Math.min(...f.enemies.map((e) => quietWith(g, nat, e)));
+    if (quiet < C.quiet && !(who === 'opportunist' && f.enemies.some((e) => busyElsewhere(g, e, nat)))) continue;
+    const s = sector(g, nat, f, C.local);
+    if (!s) continue;
+    g.flags[key('eff')] = g.flags[key('eff0')] = s.target.id + 1;
+    g.flags[key('effAt')] = g.turn;
+    g.flags[key('effTo')] = g.turn + E.months - 1;
+    g.flags[key('effE')] = Object.keys(g.nations).indexOf(fieldCtrl(g, s.target)) + 1;
+    delete g.flags[key('effWon')];
+    const named = effortOf(g, nat, where);
+    if (named) effortNamed(g, named);
+    return;
+  }
+}
+
+/**
+ * The orders a main effort gives the army: attack the target and the enemy provinces beside it that touch the same
+ * jump-off ground, mass in the provinces next to the target, and let the garrisons there join. Null if the effort
+ * has no front left to be fought on.
+ */
+function effortOrders(g: Game, nat: string, e: Effort, real: Front[], T: Temper): Partial<PlanPhase> | null {
+  const E = RIVALS.effort;
+  const at = g.regions[e.target];
+  const f = real.find((x) => x.depth[at.id] >= 1) ?? real.find((x) => x.enemies.includes(e.enemy));
+  if (!f) return null;
+  const doors = at.nb.filter((j) => allied(g, nat, fieldCtrl(g, g.regions[j])));
+  // The sector: the target, then the enemy provinces beside it that the same jump-off ground touches.
+  const around = at.nb
+    .filter((j) => f.depth[j] >= 1 && atWar(g, nat, fieldCtrl(g, g.regions[j])) && g.regions[j].nb.some((k) => doors.includes(k)))
+    .sort((a, b) => f.depth[a] - f.depth[b] || g.regions[b].vp - g.regions[a].vp || a - b)
+    .slice(0, Math.max(0, E.sector - 1));
+  const staging: Record<string, number> = {};
+  for (const j of doors) if (j !== g.nations[nat].capital) staging[g.regions[j].name] = Math.min(STACK, E.mass);
+  return {
+    posture: 'attack', name: e.name.replace(/^t/, 'T'), from: e.from, effort: at.id,
+    enemies: f.enemies, objectives: [at.name, ...around.map((j) => g.regions[j].name)],
+    targets: [at.name, ...around.map((j) => g.regions[j].name)],
+    minOdds: T.minOdds, staging, release: doors.filter((j) => j !== g.nations[nat].capital).map((j) => g.regions[j].name),
+  };
+}
+
+/**
+ * The will to finish (the grand campaign): the odds a staff asks battle by battle on a front where its general
+ * offensive has the numbers and has gained no ground for months, and how many waves it will send at one place.
+ * Null where it fights by its usual rules.
+ */
+export function pressing(g: Game, nat: string, f: Pick<Front, 'ratio'>, minOdds: number, where = ''): { minOdds: number; waves: number } | null {
+  const P = RIVALS.press;
+  if (!rivalRules(g) || !P || f.ratio < P.ratio) return null;
+  const idle = g.turn - flag(g, `st:gain:${nat}${where}`);
+  if (idle < P.after) return null;
+  return { minOdds: Math.max(Math.min(P.floor, minOdds), minOdds - P.step * (idle - P.after + 1)), waves: P.waves };
+}
+
+/**
+ * An offensive in name only (the grand campaign): one that has been on for months without the strength to press it
+ * home, and on which nobody has fought a battle either way. The staff calls it off and looks for a main effort.
+ */
+function inNameOnly(g: Game, nat: string, f: Front, since: number): boolean {
+  const P = RIVALS.press;
+  return rivalRules(g) && nat !== g.human && g.turn - since >= P.after && f.ratio < P.ratio && Math.min(...f.enemies.map((e) => quietWith(g, nat, e))) >= P.after;
+}
+/** Called off as an offensive in name only: the front is marked, so that the next general offensive there waits for more strength. */
+function calledOffIdle(g: Game, nat: string, f: Front, where = ''): void {
+  setOn(g, nat, f, 0, where);
+  for (const e of f.enemies) g.flags[`st:idle:${nat}:${e}${where}`] = g.turn;
+}
+/** True while a front's last offensive in name only is fresh in the staff's mind and it has not the strength to do better. */
+const shy = (g: Game, nat: string, f: Front, where = ''): boolean => rivalRules(g) && f.ratio < RIVALS.press.ratio
+  && f.enemies.some((e) => { const at = flag(g, `st:idle:${nat}:${e}${where}`); return at > 0 && g.turn - at < RIVALS.press.again; });
+
 /** One of the staff's own conditions, or one that reads as in diplomacy.json. */
 function cond(g: Game, nat: string, c: string, real: Front[]): boolean {
   const [key, rest = ''] = c.split(/:(.*)/s);
@@ -551,7 +815,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
     if (since) {
       // A main effort opened out of impatience is given its season before anyone asks what it has gained.
       const fresh = g.turn - since < 2 || (pushed && f.enemies.some((e) => flag(g, `st:pushed:${nat}:${e}`))) || boldNow(g, nat) > 0;
-      if (fresh || (f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt))) setOn(g, nat, f, since);
+      if (!fresh && inNameOnly(g, nat, f, since)) calledOffIdle(g, nat, f);
+      else if (fresh || (f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt))) setOn(g, nat, f, since);
       else { setOn(g, nat, f, 0); for (const e of f.enemies) g.flags[`st:rest:${nat}:${e}`] = g.turn + OPEN.rest; }
     } else if (f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}`))) {
       const usual = T.attackAt * inConcert(g, nat, f);
@@ -562,7 +827,8 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       const k = k0 < (I?.after.length ?? 0) && planned(f) ? 0 : k0;
       const none = T.attackAt >= 50;
       const eager = !k ? usual : none ? (k >= I.after.length ? I.any : usual) : Math.max(I.floor, usual * I.ratio[k - 1]);
-      if (f.ratio >= eager) {
+      // (A front where the last offensive was one in name only waits for more strength, or for patience to run out.)
+      if (f.ratio >= eager && !(!k && shy(g, nat, f))) {
         setOn(g, nat, f, g.turn);
         g.flags[`st:gain:${nat}`] = g.turn;
         if (f.ratio < usual) {
@@ -572,6 +838,9 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
       }
     }
   }
+
+  // Where no general offensive is on, a front that has gone quiet may still be given a main effort for the season.
+  mainEffort(g, nat, real, T, '', planned);
 
   // History's great choices. One is prepared at a time, and none while a great offensive is still being fought.
   const busy = real.some((f) => onSince(g, nat, f) && !cond(g, nat, 'quiet', [f]) && g.turn - flag(g, `st:gain:${nat}`) <= 1);
@@ -704,7 +973,16 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
     phase.targets = [...new Set(live.flatMap((f) => bound(g, nat, f, f === main ? way : [], opening)))];
     // No army takes a capital deep in enemy country in its first bound: the opening month goes to breaking the front.
     if (opening) phase.haltOrder = g.regions.filter((r) => r.cap && main.depth[r.id] >= 3 && main.enemies.includes(r.owner)).map((r) => r.name);
-  } else if (went) phase.name = went.name;
+    // The will to finish: with the numbers and no ground gained for months, shorter odds and a third wave.
+    const press = pressing(g, nat, main, phase.minOdds ?? T.minOdds);
+    if (press) { phase.minOdds = press.minOdds; phase.waves = press.waves; }
+  } else {
+    // No general offensive: the season's main effort, if the staff has named one.
+    const eff = effortOf(g, nat);
+    const orders = eff ? effortOrders(g, nat, eff, real, T) : null;
+    if (orders) Object.assign(phase, orders);
+    else if (went) phase.name = went.name;
+  }
   // With the enemy a few marches from the capital, the staff keeps a force in it whatever else is going on.
   const cap = n.capital >= 0 ? g.regions[n.capital] : null;
   if (cap && cap.ctrl === nat && nearEnemy(g, nat, cap, OPEN.guardWithin)) phase.staging = { ...(phase.staging ?? {}), [cap.name]: OPEN.guard };
@@ -840,19 +1118,27 @@ export function theatreStaff(g: Game, nat: string, scope: Set<number>, k: number
     for (const f of real) {
       const since = onSince(g, nat, f, where);
       if (since) {
-        if (g.turn - since < 2 || (f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt))) setOn(g, nat, f, since, where);
+        if (g.turn - since >= 2 && inNameOnly(g, nat, f, since)) calledOffIdle(g, nat, f, where);
+        else if (g.turn - since < 2 || (f.ratio >= T.persist && (!stalled || f.ratio >= T.attackAt))) setOn(g, nat, f, since, where);
         else { setOn(g, nat, f, 0, where); for (const e of f.enemies) g.flags[`st:rest:${nat}:${e}${where}`] = g.turn + OPEN.rest; }
-      } else if (f.ratio >= T.attackAt && f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}${where}`))) {
+      } else if (f.ratio >= T.attackAt && !shy(g, nat, f, where) && f.enemies.every((e) => g.turn >= flag(g, `st:rest:${nat}:${e}${where}`))) {
         setOn(g, nat, f, g.turn, where);
         g.flags[`st:gain:${nat}${where}`] = g.turn;
       }
     }
+    // A theatre that has gone quiet may be given a main effort of its own.
+    mainEffort(g, nat, real, T, where, () => false);
   }
   const live = real.filter((f) => onSince(g, nat, f, where) > 0);
-  if (!live.length) return { name: '', from: g.turn, to: g.turn, posture: 'defend' } as PlanPhase;
+  if (!live.length) {
+    const eff = effortOf(g, nat, where);
+    const orders = eff ? effortOrders(g, nat, eff, real, T) : null;
+    return { name: '', from: g.turn, to: g.turn, posture: 'defend', ...(orders ?? {}) } as PlanPhase;
+  }
+  const press = pressing(g, nat, live[0], T.minOdds, where);
   return {
     name: `The offensive against ${g.nations[live[0].key]?.name ?? live[0].key}`, from: onSince(g, nat, live[0], where), to: g.turn, posture: 'attack',
-    enemies: [...new Set(live.flatMap((f) => f.enemies))], objectives: [...new Set(live.flatMap((f) => objectives(g, f)))], minOdds: T.minOdds,
+    enemies: [...new Set(live.flatMap((f) => f.enemies))], objectives: [...new Set(live.flatMap((f) => objectives(g, f)))], minOdds: press?.minOdds ?? T.minOdds, ...(press ? { waves: press.waves } : {}),
     targets: [...new Set(live.flatMap((f) => bound(g, nat, f, [], false, OPEN.boundOverseas)))],
     release: [...new Set(live.flatMap((f) => f.ours.map((id) => g.regions[id].name)))],
   } as PlanPhase;

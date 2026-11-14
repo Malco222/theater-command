@@ -404,7 +404,8 @@ describe('probe the line', () => {
     setFog(g, true);
     const l = line(g, 2, 2);
     works(l.def, 2);
-    l.att[1].str = 0.6;
+    // The weaker of the two, and still with the men for a probe in full (Version 65: a probe takes weight).
+    l.att[1].str = 0.7;
     const s = softenOptions(g, l.att, l.target)!;
     expect(s.works).toBe(2);
     expect(s.probe.corps).toBe(l.att[1].id);

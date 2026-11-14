@@ -1749,3 +1749,21 @@ g.leftworks path.u { stroke: #2b2415; stroke-width: 2.6; opacity: .55; }
   .softopt, .foldopt { flex-direction: column; align-items: stretch; gap: 6px; }
   .softopt .btn { white-space: normal; min-width: 0; }
 }
+
+/* ---- Rival staffs (Version 65): the character of a computer staff and its main effort ---- */
+.nat .staff { grid-column: 2 / 4; }
+.staff { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 7px; margin-top: 2px; }
+.staff small { flex: 1 1 180px; color: var(--ink-3); font-size: 11.5px; line-height: 1.4; }
+.staff.atyou small { color: #f0c9a0; }
+.staff .btn.tiny { margin-left: 5px; }
+button.tag { border: 0; cursor: pointer; font-family: inherit; line-height: 1.5; }
+button.tag:hover, button.tag:focus-visible { filter: brightness(1.25); }
+.tag.chr { flex: none; font-weight: 600; }
+.tag.chr.bold { background: #4a2a1e; color: #eab09a; }
+.tag.chr.cautious { background: #1f3247; color: #a9c8e8; }
+.tag.chr.opportunist { background: #4a3a12; color: #f0d68a; }
+.staffs .stkind { display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: baseline; margin: 6px 0; font-size: 13px; color: var(--ink-2); }
+.staffs .stkind .tag { justify-self: start; font-style: normal; }
+.staffs .strow { display: grid; grid-template-columns: 26px 1fr; gap: 2px 8px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); }
+.staffs .strow .staff { grid-column: 2; }
+.books .staff { margin: 2px 0 10px; }

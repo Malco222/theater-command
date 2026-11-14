@@ -16,7 +16,7 @@ import {
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
-  fieldworksLeft, foldChoicesAt, orderFold, orderProbe, softenOptions,
+  fieldworksLeft, foldChoicesAt, orderFold, orderProbe, orderSwap, softenOptions, swapChoices,
   joinOffers, jointForce, lending, orderJoin, orderJoinAll, orderSendBack,
   fleetOptions, fleetView, lanesToGuard, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit,
   cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
@@ -24,6 +24,7 @@ import {
   orderResearch, orderStopResearch,
   garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
+  rivalStaff, rivalStaffs, type StaffView,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { INTEL, armyKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type Known, type SpyRoom } from '../intel';
@@ -57,7 +58,7 @@ import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from
 import { phaseFor, theatrePhases } from '../ai';
 import { SIDE_NAME } from '../domination';
 import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
-import { fronts, isOpen, startOpen, type Front } from '../staff';
+import { RIVALS, fronts, isOpen, startOpen, type Front } from '../staff';
 import { liberate } from '../liberation';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCost, isHome, ledger, needsOf, provinceYield, raiseSite, specOf, type Ledger, type LedgerLine } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
@@ -68,7 +69,7 @@ import { TOWNS, townName, townSize, type Prize, type TownView } from '../towns';
 import type { Mood } from '../morale';
 import { STORIES, awardOf, awardTitle, cashWorth, citation, designation, diaryText, fallenOf, fameOf, grade, honourDef, honoursOf, isGuards, raisedXp, revivable, rivalryOf, stat, takeOver, training, unitOf, unseen, whyNotCash } from '../stories';
 import { DIPLOMACY, RELATIONS, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, standing, step, tradePartners, type Standing } from '../diplomacy';
-import { bloc, worksOf, worksShare } from '../game';
+import { bloc, hasRoom, worksOf, worksShare } from '../game';
 import { KIND, MEN_PER_DIV, type AirFleet, type AirMission, type AirReport, type AirSide, type Award, type BattleReport, type Cash, type Corps, type DiaryLine, type Fallen, type Storied, type UnitKind, type Field, type Fleet, type ShipClass, type Ships, type ShoreReport, type Game, type General, type Kind, type Mission, type Nation, type Posture, type Region, type SeaReport, type SeaSide, type Skill, type Stance } from '../types';
 import { turnToDate } from '../../core/ticket';
 
@@ -1168,7 +1169,7 @@ const pressedPace = (): string => { const r = DEFENCE.wear.regrow; return r <= 0
 /** How far a dug-in corps has got with its works (the grand campaign): for its tag, and for the tip behind it. */
 const worksTag = (c: Corps): string => { const w = Math.round(worksOf(c) * 10) / 10, full = DEFENCE.entrench.months; return w >= full ? 'works finished' : w < 0.05 ? 'works battered flat' : `works ${w} of ${full} months`; };
 const worksWords = (c: Corps): string => { const w = Math.round(worksOf(c) * 10) / 10, full = DEFENCE.entrench.months; return w >= full ? 'Its works are finished.' : `Its works are ${w === 1 ? 'a month' : `${w} months`} old of the ${full} they take to finish, and count for ${Math.round(worksShare(worksOf(c)) * 100)}% of finished ones.`; };
-const STANCE_HOLD = `Stand and fight. An army that spends a whole month where it stands, without marching or attacking, digs in: from then on it defends 25% stronger, and while it is in supply the day's luck runs against whoever attacks it, so that odds which would be safe in the open become a gamble (an even chance takes about ${evenOdds(DEFENCE.prepared.dice).toFixed(1)} to 1, and nothing is sure under ${(1.2 / DEFENCE.prepared.dice[0]).toFixed(1)} to 1). An attack thrown back from such a line does nothing more that month. Fieldworks (foxholes, gun pits, anti-tank ditches and mines) belong to the ground: an army that marches off leaves them behind, a corps of yours that marches in has them at once, and standing empty they lose a month of work every month. Guns in the attack break them up, bombers can be sent against them, and a probe by one corps takes a month off them. Works take ${DEFENCE.entrench.months} months to finish, and the first month does half the job. Every real attack on a line, won or lost, takes a month off its works, more with guns, and troops who were attacked ${pressedPace()} that month: steady pressure wears a line away, and a quiet month builds it back.`;
+const STANCE_HOLD = `Stand and fight. An army that spends a whole month where it stands, without marching or attacking, digs in: from then on it defends 25% stronger, and while it is in supply the day's luck runs against whoever attacks it, so that odds which would be safe in the open become a gamble (an even chance takes about ${evenOdds(DEFENCE.prepared.dice).toFixed(1)} to 1, and nothing is sure under ${(1.2 / DEFENCE.prepared.dice[0]).toFixed(1)} to 1). An attack thrown back from such a line does nothing more that month. Fieldworks (foxholes, gun pits, anti-tank ditches and mines) belong to the ground: an army that marches off leaves them behind, a corps of yours that marches in has them at once, and standing empty they lose a month of work every month. Where the province next door is full, send one corps at it all the same: it changes places with a corps there in one order, and each takes the other's works. Guns in the attack break them up, bombers can be sent against them, and a probe by a corps of ${num(DEFENCE.probe?.weight ?? 0)} men or more takes a month off them (a weaker corps takes less). Works take ${DEFENCE.entrench.months} months to finish, and the first month does half the job. Every real attack on a line, won or lost, takes a month off its works, more with guns, and troops who were attacked ${pressedPace()} that month: steady pressure wears a line away, and a quiet month builds it back.`;
 const STANCE_DIG = 'Dig in. An army that spends a whole month where it stands, without marching or attacking, fights from fieldworks from then on (foxholes, gun pits, anti-tank ditches and mines) and defends 25% stronger. It keeps them for as long as it stays put, and loses them the moment it leaves the ground.';
 const STANCE_BACK = 'Give ground instead of fighting when the enemy comes on with odds of 1.2 to 1 or better, which is what it takes to carry a position. The troops slip away whole to the ground behind them, at a cost in cohesion and the region itself. Caught again in the same month, they stand. Fortress troops always stand, and nobody gives up their own capital without a fight.';
 
@@ -1454,7 +1455,12 @@ function orderAt(id: number): boolean {
   const nat = lead.nat, kind = lead.kind;
   let moved = 0;
   for (const c of picked) if (orderMove(g, c, id) > 0) moved++;
-  if (!moved) return false;
+  if (!moved) {
+    // A full province next door: one corps can still change places with a corps there, in one order.
+    const one = picked.length === 1 ? picked[0] : null;
+    if (one && g.regions[one.reg].nb.includes(id) && !hasRoom(g, r, one) && swapChoices(g, one, id).length) { openModal({ kind: 'swap', corps: one.id, target: id }); return true; }
+    return false;
+  }
   ui.unread += g.headlines.length - h;
   ui.flash = g.regions.filter((x, i) => x.ctrl !== before[i]).map((x) => x.id);
   ui.sel = id;
@@ -1679,7 +1685,9 @@ function offerCard(o: Offer, r: Region): string {
   // A card is narrow: the count goes in as a multiple, and the title on hover says the rest.
   const size = unit ? `${unit.divs} divs` : group === 'corps' ? `${specOf(g, item)!.divs} divs` : group === 'ship' ? (count > 1 ? `×${count}` : '') : `×${ARSENAL.air[item as 'ftr' | 'bmr'].count}`;
   const name = offerLabel(o).replace(/, a cadre$/, '').replace(/ corps$/i, '').replace(/ (wing|flotilla)$/i, 's').replace(/^Aircraft carrier$/, 'Carrier');
-  const why = o.tech ? 'Needs research' : !here ? need : o.why && !o.poor ? o.why : '';
+  // Money the only thing in the way: the card says how much is wanting.
+  const short = o.poor && g.human ? `${Math.max(1, Math.ceil((o.cost - g.nations[g.human].pp) * BUDGET.scale - 1e-6)).toLocaleString('en-US')} short` : '';
+  const why = o.tech ? 'Needs research' : !here ? need : o.why && !o.poor ? o.why : short;
   return `<button class="rcard${o.tech ? ' held' : ''}" ${o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : 'disabled'}`} title="${esc(offerLabel(o))}, ${esc(o.size)}: ${esc(o.blurb)}${o.men ? ` Takes ${menWords(o.men)} men from the reserve.` : ''}${keep > 0 ? ` Upkeep ${cash(keep)} a month.` : ''}${why ? ` ${esc(why)}.` : ''}">${offerIcon(o)}<b>${esc(name)}</b><small>${why ? esc(why) : [size, months(o.months)].filter(Boolean).join(' · ')}</small><span class="cost${here && !o.poor && o.why === null ? '' : ' short'}">${money(o.cost)}</span></button>`;
 }
 
@@ -2024,12 +2032,25 @@ function foldCard(reg: number): string {
     <footer><button class="btn" data-act="close">Leave them as they are</button></footer>`;
 }
 
+/** Two corps in neighbouring provinces change places in one order: the card that asks which corps comes out. */
+function swapCard(corpsId: number, target: number): string {
+  const c = g.corps.find((x) => x.id === corpsId);
+  const r = g.regions[target];
+  const vs = c ? swapChoices(g, c, target) : [];
+  const pct = (x: number): string => `${Math.round(x * 100)}%`;
+  const state = (x: Corps): string => `${num(men(x))} men at ${pct(x.str)} of its strength, ${x.dug ? `dug in, ${worksTag(x)}` : 'not dug in'}`;
+  const rows = c ? vs.map((b) => `<div class="foldopt"><span class="grow"><b class="foldkeep">${esc(b.name)}</b><small>${esc(state(b))}. It marches to ${esc(g.regions[c.reg].name)}${c.dug ? ` and takes over the fieldworks ${esc(c.name)} stands in` : ''}${b.dug ? `; ${esc(c.name)} takes over its fieldworks` : ''}.</small></span><button class="btn small go" data-act="swap" data-a="${c.id}" data-b="${b.id}" title="${esc(c.name)} and ${esc(b.name)} change places.">Change places</button></div>`).join('') : '';
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${c ? `${esc(g.regions[c.reg].name)} and ${esc(r.name)}` : esc(r.name)} · ${date(g.turn)}</div><h2>Change places</h2></header>
+    <div class="body"><p class="sub" style="margin:0 0 10px">${esc(r.name)} holds every corps its roads will carry, so ${c ? esc(c.name) : 'the corps'} cannot march in beside them. It can change places with one of them in a single order${c ? ` (${esc(state(c))})` : ''}. Both march at the same moment, each spends the moves of its march, and each takes over the fieldworks the other leaves, so a worn corps comes out of the line and a fresh one goes in with nothing lost.</p>${rows || '<div class="empty">No corps there has the moves left to change places this month.</div>'}</div>
+    <footer><button class="btn" data-act="close">Leave them where they are</button></footer>`;
+}
+
 /** Fieldworks standing empty in a province of the player's side (the grand campaign): what is there, and who can use it. */
 function leftWorksNote(r: Region): string {
   const v = fieldworksLeft(g, r.id);
   if (!v) return '';
   const m = Math.round(v.months * 10) / 10;
-  return `<div class="note leftworks"><b>Fieldworks stand empty here: room for ${v.corps === 1 ? 'one corps' : `${v.corps} corps`}, ${m === 1 ? 'a month' : `${m} months`} of work.</b> A corps of yours that marches or rides in takes them over at once and fights from them, as if it had dug them itself. Empty, they lose a month of work every month.</div>`;
+  return `<div class="note leftworks"><b>Fieldworks stand empty here: room for ${v.corps === 1 ? 'one corps' : `${v.corps} corps`}, ${m === 1 ? 'a month' : `${m} months`} of work.</b> A corps of yours that marches or rides in takes them over at once and fights from them, as if it had dug them itself, and so does one that stands the month here. Empty, they lose a month of work every month.</div>`;
 }
 
 /** The row on the attack card that offers to soften the line first: a probe by one corps, or the bombers on its fieldworks. */
@@ -2039,10 +2060,18 @@ function softenRow(target: Region, chosen: Corps[]): string {
   if (!s || (s.works <= 0 && s.probe.fresh <= 0 && !done)) return '';
   const mo = (m: number): string => { const v = Math.round(m * 10) / 10; return v === 1 ? 'a month' : `${v} months`; };
   const gains = [s.probe.fresh ? `name the ${s.probe.fresh === 1 ? 'corps' : `${s.probe.fresh} corps`} the staff cannot see` : '', s.probe.wear > 0 ? `take ${mo(s.probe.wear)} off their fieldworks` : ''].filter(Boolean).join(' and ');
-  const probeText = s.probe.why ?? (gains ? `It would ${gains}, for about ${num(s.probe.men)} men and ${s.probe.ap} of its moves. It is not a battle: nothing changes hands.` : 'There is nothing more a probe could find here.');
+  const thin = s.works > 0 && s.probe.weight < 0.995 && s.probe.full > 0 ? ` It has too few men to probe in full: ${num(s.probe.full)} men take a whole month off.` : '';
+  const probeText = s.probe.why ?? (gains ? `It would ${gains}, for about ${num(s.probe.men)} men and ${s.probe.ap} of its moves. It is not a battle: nothing changes hands.${thin}` : 'There is nothing more a probe could find here.');
   const probe = `<div class="softopt"><button class="btn small" data-act="probe" data-id="${s.probe.corps}" ${s.probe.why || !gains ? 'disabled' : ''}>Probe${s.probe.name ? ` with ${esc(s.probe.name)}` : ' the line'}</button><small>${esc(probeText)}</small></div>`;
   const bomb = s.bomb ? `<div class="softopt"><button class="btn small" data-act="bombline" ${s.bomb.why ? 'disabled' : ''}>Bomb the line</button><small>${esc(s.bomb.why ?? `${s.bomb.groups === 1 ? 'One air group' : `${s.bomb.groups} air groups`} with ${num(s.bomb.bombers)} bombers can reach it, and should take about ${mo(s.bomb.wear)} off the fieldworks. ${s.bomb.verdict}. The planner shows what will meet them.`)}</small></div>` : '';
-  const found = done ? `<small class="softdone">${esc(done.name)} has probed this line: it found ${esc(listOf(done.found))}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.</small>` : '';
+  // After a probe, in two halves: what the staff knows now (a guess that has given way to the truth can read worse
+  // than the guess did, and the row says so), and what the probe earned.
+  const now = done ? attackOutlook(g, chosen, target) : null;
+  const was = done ? ((ui.modal?.probeWas as { words: string; chance: number } | null | undefined) ?? null) : null;
+  const truth = was && now && was.words !== chanceWords(now)
+    ? ` Before the probe the staff could only give this attack ${was.words}; with the defenders named it is ${chanceWords(now)}.${now.chance < was.chance - 0.005 ? ' The attack is no worse than it was: the guess has become the truth.' : ''}` : '';
+  const earned = done ? (done.wear > 0 ? `their fieldworks are ${mo(done.wear)} the worse.` : s.works > 0 ? 'nothing off their fieldworks: it had not the weight.' : 'nothing off the ground: they are not dug in.') : '';
+  const found = done ? `<small class="softdone">${esc(done.name)} has probed this line. It cost ${num(done.lost)} men.<br><b>What the staff knows now:</b> it found ${esc(listOf(done.found))}.${esc(truth)}<br><b>What the probe earned:</b> ${esc(earned)}</small>` : '';
   const head = s.works > 0 ? `The defenders stand in fieldworks of ${mo(s.works)}${s.works >= DEFENCE.entrench.months ? ', finished' : ''}.` : 'The defenders are not dug in.';
   return `<div class="note soften"><span><b>Soften the line first.</b> ${head}</span>${found}${probe}${bomb}</div>`;
 }
@@ -3388,11 +3417,13 @@ function booksCard(nat: string): string {
   const queue = b.queue.length ? b.queue.slice(0, 16).map((q) => `<div class="lrow"><span>${esc(q.name)} <small>${what[q.what] ?? ''}${g.regions[q.region] ? ` · ${esc(g.regions[q.region].name)}` : ''}</small></span><b>${date(q.eta)}</b></div>`).join('') + (b.queue.length > 16 ? `<div class="lrow"><span>and ${b.queue.length - 16} more orders</span><b></b></div>` : '') : '<div class="empty">Nothing is on order.</div>';
   const research = b.research.length ? b.research.map((w) => `<div class="lrow"><span>${esc(w.name)}</span><b>${w.left} ${w.left === 1 ? 'month' : 'months'}</b></div>`).join('') : '<div class="empty">No team is at work.</div>';
   const S = b.stores;
+  const staff = rivalStaff(g, nat);
   const depot = S ? `<div class="lfacts two"><div class="lfact"><span>Oil in the depots</span><b>${amt(S.oil.stock)} <small>${monthsWordOf(S.oil.months)}</small></b></div><div class="lfact"><span>Supplies in the depots</span><b>${amt(S.sup.stock)} <small>${monthsWordOf(S.sup.months)}</small></b></div></div>` : `<p class="sub">${esc(upFirst(theName(nat)))} keeps no stocks of oil and supplies.</p>`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Secret intelligence · ${date(g.turn)}</div><h2>${flagIcon(nat, n.color, 34, 'inh')} The books of ${esc(theName(nat))}</h2></header>
     <div class="body ledger books"><p class="sub">${b.agent ? `Read by agent ${esc(b.agent)} in ${esc(cap)}. For as long as the agent is not caught, these figures are the true ones, month by month.` : `${esc(upFirst(theName(nat)))} is your ally: its books are open to you.`}</p>
     <div class="lfacts"><div class="lfact"><span>Treasury</span><b>${inHand(b.treasury)}</b></div><div class="lfact"><span>Income a month</span><b>${cash(b.gross)}</b></div><div class="lfact"><span>Upkeep a month</span><b>${cash(b.upkeep)}</b></div><div class="lfact"><span>Left over</span><b class="${b.net < 0 ? 'neg' : ''}">${cash(b.net, true)}</b></div></div>
     <div class="lfacts"><div class="lfact"><span>Army</span><b>${num(b.divisions)} <small>divisions</small></b></div><div class="lfact"><span>Formations</span><b>${b.corps} <small>corps</small></b></div><div class="lfact"><span>Technologies</span><b>${b.researched} <small>researched</small></b></div><div class="lfact"><span>On order</span><b>${b.queue.length}</b></div></div>
+    ${staff ? `<h3>Its general staff</h3>${staffRow(staff)}` : ''}
     <div class="lcols"><div><h3>On order</h3>${queue}</div><div><h3>In the laboratories</h3>${research}<h3>Depots</h3>${depot}</div></div></div>
     <footer>${S ? `<button class="btn" data-act="stores" data-nat="${nat}">Its depots in full</button>` : ''}<button class="btn go" data-act="close">Close</button></footer>`;
 }
@@ -3536,6 +3567,31 @@ function worldWonCard(): string {
     <footer><button class="btn" data-act="new">New game</button><button class="btn go" data-act="close">Look at your world</button></footer>`;
 }
 
+/**
+ * A computer staff on the Powers tab and the Books card: its character in a word, and what it is doing where the
+ * player may know it (an ally's plans, or an enemy's whose books an agent of his is reading).
+ */
+function staffRow(v: StaffView): string {
+  const aim = v.efforts.find((e) => e.atYou) ?? v.efforts[0];
+  const show = aim ? ` <button class="btn tiny" data-act="showmap" data-id="${aim.target}" title="Show ${esc(aim.targetName)} on the map">Show</button>` : '';
+  const how = v.source === 'agent' ? ' title="Read from its books by your agent in its capital."' : v.source === 'ally' ? '' : ' title="Its plans are secret."';
+  return `<div class="staff${aim?.atYou ? ' atyou' : ''}"><button class="tag chr ${v.character}" data-act="staffs" title="${esc(v.says)}">${esc(v.label)}</button><small${how}>${esc(v.line)}${show}</small></div>`;
+}
+
+/** The card behind a staff's character: what the three characters mean, what a main effort is, and every staff at war as the player knows it. */
+function staffsCard(): string {
+  const all = rivalStaffs(g).filter((v) => g.nations[v.nat].atWar.length);
+  const kinds = (['bold', 'cautious', 'opportunist'] as const).map((k) => `<div class="stkind"><i class="tag chr ${k}">${esc(RIVALS.characters[k].label)}</i><span>${esc(RIVALS.characters[k].says)}</span></div>`).join('');
+  const rows = all.map((v) => `<div class="strow">${flagIcon(v.nat, g.nations[v.nat].color, 22)}<b>${esc(natName(v.nat))}</b>${staffRow(v)}</div>`).join('');
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The general staffs · ${date(g.turn)}</div><h2>Who you are up against</h2></header>
+    <div class="body staffs"><p class="lead">Every country the computer leads has a general staff with a character of its own in each war. The character decides how readily it attacks, and when it names a main effort.</p>
+    ${kinds}
+    <h3>The main effort</h3><p class="sub">A staff that is not strong enough for a general offensive does not sit still. When a front has gone quiet it picks one stretch of the line, masses its corps opposite it for a month, softens the fieldworks with a probe and its bombers, and attacks there and nowhere else for a season. An ally tells you where its main effort is going. An enemy keeps it secret: an agent reading its books in its capital learns the place and the months, and you are told the moment it is named.</p>
+    <p class="sub">A staff that is winning does not let go either. With twice its enemy\'s strength and no ground gained for three months it accepts shorter odds and sends a third wave. A country whose capital has been in enemy hands for more than a year wears out month by month until it asks for terms.</p>
+    <h3>The staffs at war</h3>${rows || '<div class="empty">No country the computer leads is at war.</div>'}</div>
+    <footer><button class="btn go" data-act="close">Close</button></footer>`;
+}
+
 function powersPane(): string {
   const act = lastAct(g);
   if (act?.on) return worldPane();
@@ -3544,7 +3600,7 @@ function powersPane(): string {
   const offer = act?.open && act.decided
     ? `<div class="note lastnote"><b>${beatenLine(act.decided.beaten)}: the war is decided.</b> ${act.peace ? `You took the victory in ${date(act.peace)}. ` : ''}World Domination is open to you: every alliance dissolved, every nation for itself, the last one standing takes the world.<div class="acts" style="margin-top:7px"><button class="btn small warn" data-act="lastact">The last act ▸</button></div></div>`
     : '';
-  let out = `${offer}<h2>Powers at war</h2><p class="sub">The bar shows how much fight a nation has left. It drains as the capital, territory and army are lost.</p>${isOpen(g) ? `<div class="acts" style="margin-top:8px"><button class="btn small" data-act="traits">National abilities: what each country does best</button>${g.human && tradeRules(g) ? '<button class="btn small" data-act="trade">Trade agreements</button>' : ''}</div>` : ''}<div style="height:10px"></div>`;
+  let out = `${offer}<h2>Powers at war</h2><p class="sub">The bar shows how much fight a nation has left. It drains as the capital, territory and army are lost.${isOpen(g) ? ' The word under a country is the character of its general staff in this war: press it to read what it means.' : ''}</p>${isOpen(g) ? `<div class="acts" style="margin-top:8px"><button class="btn small" data-act="traits">National abilities: what each country does best</button>${g.human && tradeRules(g) ? '<button class="btn small" data-act="trade">Trade agreements</button>' : ''}</div>` : ''}<div style="height:10px"></div>`;
   const fallen = nationsFallen(g);
   for (const n of at.sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || b.armyPeak - a.armyPeak)) {
     if (n.alive) {
@@ -3554,7 +3610,9 @@ function powersPane(): string {
       // Its form of government, in a word: a click opens the card.
       const gv = isOpen(g) ? governmentOf(g, n.id) : null;
       const form = gv ? ` <button class="btn tiny" data-act="cabinet" data-nat="${n.id}" title="${esc(gv.form.name)}. ${esc(gv.form.blurb)}">${FORM_WORD[gv.form.id]}</button>` : '';
-      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(natName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
+      // Its general staff: the character it has in this war, and its main effort where the player may know it.
+      const staff = rivalStaff(g, n.id);
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(natName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}</div>`;
     } else {
       const f = fallen.find((x) => x.nat === n.id);
       const how = f?.fell.how === 'annexed' ? `Annexed by ${theName(n.fellOn!.to)}` : f?.fell.how === 'terms' ? `Left the war by treaty with ${natName(n.fellOn!.to)}` : `Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}`;
@@ -4471,6 +4529,7 @@ function openModal(m: typeof ui.modal): void {
   else if (m.kind === 'attack') card.innerHTML = attackCard();
   else if (m.kind === 'siege') card.innerHTML = siegeCard();
   else if (m.kind === 'fold') card.innerHTML = foldCard(m.reg);
+  else if (m.kind === 'swap') card.innerHTML = swapCard(m.corps, m.target);
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
   else if (m.kind === 'invade') {
@@ -4525,6 +4584,7 @@ function openModal(m: typeof ui.modal): void {
     if (!nat || !g.nations[nat] || !resRules(g)) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = storesCard(nat);
   }
+  else if (m.kind === 'staffs') card.innerHTML = staffsCard();
   else if (m.kind === 'books') {
     const b = foreignBooks(g, m.nat);
     if (!b) { ui.modal = null; veil.classList.remove('open'); return; }
@@ -5145,6 +5205,8 @@ function attackCard(): string {
   const inSet = new Set(chosen.map((c) => c.id));
   const a = previewAttack(g, chosen, target);
   const look = a ? attackOutlook(g, chosen, target) : null;
+  // What the card says of the chance now, kept so that a probe can say what it changed: a guess, or nothing where it was sure.
+  m.lookWas = look && !look.exact ? { words: chanceWords(look), chance: look.wide ? look.guess : look.chance } : null;
   // Everyone the roads will carry, if more stand in reach than were picked: what the attack could be.
   const everyone = jointForce(g, limitAttackers(g, jointForce(g, cands, target), target), target);
   const extra = everyone.filter((c) => !inSet.has(c.id)).length;
@@ -5972,6 +6034,7 @@ function onClick(e: MouseEvent): void {
       break;
     }
     case 'books': openModal({ kind: 'books', nat: t.dataset.nat || '' }); break;
+    case 'staffs': openModal({ kind: 'staffs' }); break;
     case 'spyrecruit': {
       const why = whyNotRecruitAgent(g);
       const a = why ? null : orderRecruitAgent(g);
@@ -6594,8 +6657,9 @@ function onClick(e: MouseEvent): void {
       const target = g.regions[m.target];
       const who = g.corps.find((x) => x.id === id);
       const h = g.headlines.length;
+      const was = m.lookWas ?? null;
       const rep = who ? orderProbe(g, who, target) : null;
-      if (rep) { m.probe = rep; ui.unread += g.headlines.length - h; queueSave(); refresh(); }
+      if (rep) { m.probe = rep; m.probeWas = was; ui.unread += g.headlines.length - h; queueSave(); refresh(); }
       $('#card').innerHTML = attackCard(); break;
     }
     case 'bombline': {
@@ -6616,6 +6680,18 @@ function onClick(e: MouseEvent): void {
         ui.msg = `${b.name} is folded into ${a.name}. Its cadre waits in the arsenal.`;
         ui.unread += g.headlines.length - h;
         ui.picked.delete(gone);
+        queueSave();
+      }
+      openModal(null);
+      refresh(); break;
+    }
+    case 'swap': {
+      const a = g.corps.find((x) => x.id === Number(t.dataset.a)), b = g.corps.find((x) => x.id === Number(t.dataset.b));
+      if (a && b && orderSwap(g, a, b)) {
+        ui.msg = `${a.name} and ${b.name} change places: ${a.name} is at ${g.regions[a.reg].name} now, ${b.name} at ${g.regions[b.reg].name}.`;
+        ui.sel = a.reg;
+        ui.picked = new Set(a.ap > 0 ? [a.id] : []);
+        ui.tab = 'region';
         queueSave();
       }
       openModal(null);
@@ -6980,4 +7056,4 @@ recallPick();
 openModal({ kind: 'start' });
 
 // A handle for automated checks and for curious players in the browser console.
-(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, applyView, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by), shell: (fleet: number, region: number, what: 'troops' | 'city') => { const f = g.fleets.find((x) => x.id === fleet); return f ? bombard(g, f, g.regions[region], what) : null; } };
+(window as any).theater = { game: () => g, ui, newGame, nextMonth, onRegion, onSea, refresh, applyView, openModal, continueGame, save: () => saveGame(g), liberate: (nat: string, by: string) => liberate(g, nat, by), shell: (fleet: number, region: number, what: 'troops' | 'city') => { const f = g.fleets.find((x) => x.id === fleet); return f ? bombard(g, f, g.regions[region], what) : null; } };

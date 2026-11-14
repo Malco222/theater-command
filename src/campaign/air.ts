@@ -12,6 +12,7 @@
 import data from '../../data/campaign/air.json';
 import warData from '../../data/campaign/airwar.json';
 import carrierData from '../../data/campaign/carriers.json';
+import rivalsData from '../../data/campaign/rivals.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import { Rng, hashString } from '../core/rng';
 import { clamp } from '../core/math';
@@ -1280,6 +1281,24 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
     send('superiority', best.t, best.fleets, flown++);
   }
 
+  // The fieldworks in front of a main effort come first with the bombers (rivals.json, 'soften'): every bomber group
+  // in reach of the province the staff has named goes at the works there, with the fighters on their fields, before
+  // the army attacks. The works on a front where a general offensive is under way are weighed with the other raids below.
+  const lineAt = (t: number): void => {
+    if (hit.has(t) || !g.regions[t]) return;
+    const bombers = leads().filter((f) => whyNotMission(g, f, 'line', t) === null).sort((a, b) => b.bmr - a.bmr || a.id - b.id);
+    if (!bombers.length) return;
+    const fleets = [...bombers];
+    for (const base of new Set(bombers.map(homeOf))) fleets.push(...fightersAt(base).filter((e) => whyNotMission(g, e, 'line', t) === null));
+    const a = assessAir(g, fleets, 'line', t);
+    if (a.why) return;
+    const fc = forecastAir(g, a, 'line', t);
+    if (fc.bomberLoss > rules.loss || fc.success < R.success || fc.cut < rivalsData.soften.raid) return;
+    send('line', t, fleets, flown++);
+  };
+  const aims = Object.keys(g.flags).filter((k) => k === `st:eff:${nat}` || k.startsWith(`st:eff:${nat}:t`)).map((k) => g.flags[k] - 1).sort((a, b) => a - b);
+  for (const t of aims) lineAt(t);
+
   // The bombers: so many raids a month as the staff's share of the groups fit to fly, taken to the nearest whole raid by the luck of the month.
   const most = Math.floor(leads().length * rules.share + rng.range(0, 1));
   for (let k = 0; k < most; k++) {
@@ -1295,7 +1314,7 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
         const a = assessAir(g, fleets, m, r.id);
         if (a.why) return;
         const fc = forecastAir(g, a, m, r.id);
-        if (fc.bomberLoss > rules.loss || fc.success < R.success) return;
+        if (fc.bomberLoss > rules.loss || fc.success < R.success || (m === 'line' && fc.cut < rivalsData.soften.raid)) return;
         // Factories stopped, a factory wrecked, a junction cut or an army shaken, against the aircraft it should cost.
         const railWorth = (m === 'bomb' || m === 'night') && r.fac <= 0 ? rules.rail : 1;
         // (A town its own army stands round comes first with the staff: the assault waits on the bombers.)
@@ -1315,6 +1334,8 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
         .sort((a, b) => (front.get(b.id) ?? 0) * foes(b) - (front.get(a.id) ?? 0) * foes(a) || a.id - b.id)
         .slice(0, R.look);
       for (const r of troops) weigh('ground', r, [f, ...escorts.filter((e) => whyNotMission(g, e, 'ground', r.id) === null)]);
+      // The fieldworks where its own offensive is going in: months of digging taken off before the army attacks.
+      for (const r of troops) if (pushed(r.id) && whyNotMission(g, f, 'line', r.id) === null) weigh('line', r, [f, ...escorts.filter((e) => whyNotMission(g, e, 'line', r.id) === null)]);
       // A town its side's army stands round: the bombers break down the works for the assault.
       if (siegeRules(g)) {
         for (const r of g.regions) {
