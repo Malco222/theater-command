@@ -461,6 +461,18 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
       const wks = (u: Corps): number => ((u as any).dug ? Math.round(((u as any).dugFor ?? 1) * 10) / 10 : 0);
       const cands2 = back.flatMap((r) => r.units.filter((u) => u.nat === me && u.kind === c.kind && !(u as any).dead && u.town === undefined && !moved.has(u.id) && u.str >= c.str + 0.2 && T.canOrder(g, u) && u.ap > 0)).sort((x, y) => front(g.regions[x.reg]) - front(g.regions[y.reg]) || y.divs * y.str - x.divs * x.str);
       if (!cands2.length) { st64.rotNone = (st64.rotNone ?? 0) + 1; continue; }
+      // Version 65: two corps change places in one order, full provinces or not.
+      const swap = (T as any).orderSwap as undefined | ((g: Game, a: Corps, b: Corps) => boolean);
+      if (swap) {
+        const f2 = cands2[0], to2 = f2.reg, w2 = wks(c) + wks(f2);
+        if (!swap(g, c, f2)) { st64.rotNoRoad = (st64.rotNoRoad ?? 0) + 1; continue; }
+        moved.add(c.id); moved.add(f2.id);
+        if (front(g.regions[to2]) > 0) st64.rotFromLine = (st64.rotFromLine ?? 0) + 1;
+        const got2 = wks(f2) + wks(c);
+        st64.rotations = (st64.rotations ?? 0) + 1; st64.rotWorksBefore = (st64.rotWorksBefore ?? 0) + w2; st64.rotWorksAfter = (st64.rotWorksAfter ?? 0) + got2; if (got2 > 0) st64.rotKept = (st64.rotKept ?? 0) + 1;
+        (st64.rotIds = st64.rotIds ?? new Map<number, number>()).set(f2.id, g.turn);
+        continue;
+      }
       // The worn corps steps out first (its province may be full), then the relief steps in.
       const mOut = T.reach(g, c);
       const fresh = cands2.find((u) => mOut.has(u.reg) && !mOut.get(u.reg)!.attack);

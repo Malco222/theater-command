@@ -8,7 +8,8 @@
 // defender, the prepared share, the card's odds, the odds on the day, won, men lost on each side, corps on each side, artillery corps in the attack, province.
 // Each January: how many of the player's field corps are dug in. Who holds TOWN (Berlin unless named) in December 1944
 // and in the last month. The longest run of months with no battle of the player's at all.
-import { campaign, date } from './lib';
+import { campaign, date, allied } from './lib';
+import * as STAFF from '@tc/campaign/staff';
 const [me, fromS, seedS, untilS, planS, town = 'Berlin'] = process.argv.slice(2);
 const plan = JSON.parse(planS || '{"minOdds":1.5}');
 const seen = new Set<number>();
@@ -32,14 +33,40 @@ const hold = (g: any): string => { const r = g.regions.find((x: any) => x.name =
 const atk64: Record<number, { n: number; won: number; mine: number; theirs: number; prep: number; prepWon: number }> = {};
 const took64: Record<string, number> = {};
 const goals64 = me === 'GER' ? ['Moscow', 'Leningrad', 'Kiev', 'Stalingrad'] : ['Berlin', 'Warsaw', 'Rome', 'Paris'];
-const run = campaign(me, Number(fromS), Number(seedS), { ...plan, each: (g: any) => {
+// Version 65: the enemy staffs' main efforts where the player's corps stand, their probes of his line and their raids on his works.
+const effortsOf = (STAFF as any).effortsOf as undefined | ((g: any, nat: string) => any[]);
+const characterOf = (STAFF as any).characterOf as undefined | ((g: any, nat: string) => string);
+type Eff = { nat: string; from: number; firstName: string; targets: Set<number>; won: number; battles: number; lostB: number; odds: number; aLost: number; dLost: number; prep: number; tell: number; blow: number; last: number };
+const eff: Record<string, Eff> = {};
+let effNow: { key: string; nat: string; sector: Set<number> }[] = [];
+const foe = { probes: 0, probeWear: 0, raids: 0, named: 0, overTook: 0, overHeld: 0, effMonths: 0, genMonths: 0, allyEff: new Set<string>() };
+const tell = (reg: number | undefined, turn: number): void => { if (reg === undefined) return; for (const e of effNow) if (e.sector.has(reg) && !eff[e.key].tell) eff[e.key].tell = turn; };
+const run = campaign(me, Number(fromS), Number(seedS), { ...plan, first: (g: any) => {
+  effNow = [];
+  if (!effortsOf) return;
+  let gen = false;
+  for (const nat of g.nations[me].atWar) {
+    if (!g.nations[nat]?.alive) continue;
+    if (g.flags[`st:on:${nat}:${me}`]) gen = true;
+    for (const e of effortsOf(g, nat)) {
+      const key = `${nat}:${e.from}:${e.first}`;
+      const mine = g.regions[e.target].ctrl === me || g.regions[e.target].units.some((u: any) => u.nat === me && !u.dead) || !!eff[key];
+      if (!mine) { if (e.enemy === me || allied(g, me, e.enemy)) foe.allyEff.add(key); continue; }
+      const x = (eff[key] ??= { nat, from: e.from, firstName: g.regions[e.first].name, targets: new Set<number>(), won: 0, battles: 0, lostB: 0, odds: 0, aLost: 0, dLost: 0, prep: 0, tell: 0, blow: 0, last: 0 });
+      x.targets.add(e.target); x.won = e.won; x.last = g.turn;
+      effNow.push({ key, nat, sector: new Set<number>([e.target, ...g.regions[e.target].nb]) });
+    }
+  }
+  if (effNow.length) foe.effMonths++;
+  if (gen) foe.genMonths++;
+}, each: (g: any) => {
   lastTurn = g.turn;
   for (const nm of goals64) if (!(nm in took64)) { const r = g.regions.find((x: any) => x.name === nm); if (r && r.ctrl === me && r.owner !== me) took64[nm] = g.turn; }
   let fought = 0;
   for (const r of g.reports) {
     if (seen.has(r.id)) continue;
     seen.add(r.id);
-    if (r.yielded || r.town) continue;
+    if (r.yielded || r.town) { const e0 = effNow.find((e) => e.nat === r.attNat && e.sector.has(r.region)); if (e0 && (r.defNat === me || r.defenders.some((u: any) => u.nat === me))) { const x0 = eff[e0.key] as any; if (r.town) x0.storms = (x0.storms ?? 0) + 1; else x0.gave = (x0.gave ?? 0) + 1; if (!x0.blow) x0.blow = r.turn; } continue; }
     const iAttack = r.attNat === me || r.attackers.some((u: any) => u.nat === me), iDefend = r.defNat === me || r.defenders.some((u: any) => u.nat === me);
     if (!iAttack && !iDefend) continue;
     fought++;
@@ -48,6 +75,8 @@ const run = campaign(me, Number(fromS), Number(seedS), { ...plan, each: (g: any)
     if (iAttack) { const y = 1939 + Math.floor((g.turn + 7) / 12); const a = (atk64[y] = atk64[y] ?? { n: 0, won: 0, mine: 0, theirs: 0, prep: 0, prepWon: 0 }); a.n++; if (won(r)) a.won++; a.mine += r.attLost ?? 0; a.theirs += r.defLost ?? 0; if ((r.prepared ?? 0) > 0) { a.prep++; if (won(r)) a.prepWon++; } }
     const side = iAttack ? 'A the player attacks' : 'B the player is attacked', prep = (r.prepared ?? 0) > 0 ? 'prepared line' : 'open';
     if (!iAttack) {
+      const e65 = effNow.find((e) => e.nat === r.attNat && e.sector.has(r.region));
+      if (e65) { const x = eff[e65.key]; x.battles++; if (won(r)) x.lostB++; x.odds += card(r); x.aLost += r.attLost ?? 0; x.dLost += r.defLost ?? 0; if ((r.prepared ?? 0) > 0) x.prep++; if (!x.blow) x.blow = r.turn; add(`C a main effort hits the player | ${(r.prepared ?? 0) > 0 ? 'prepared line' : 'open'} | all odds`, r); }
       defs.n++; if (won(r)) defs.lost++;
       if ((r.prepared ?? 0) > 0) { defs.prep++; if (won(r)) defs.prepLost++; }
       if ((r.lines ?? []).some((l: any) => l.label === 'Earlier attacks')) defs.tired++;
@@ -60,6 +89,10 @@ const run = campaign(me, Number(fromS), Number(seedS), { ...plan, each: (g: any)
   const adj = g.nations[me].adj;
   for (const h of g.headlines.slice(seenHl)) {
     const t: string = h.text;
+    if (t.includes('probe your line at')) { foe.probes++; const w = t.match(/fieldworks there are (a month|([\d.]+) months) the worse/); if (w) foe.probeWear += w[2] ? Number(w[2]) : 1; tell(h.region, h.turn); }
+    else if (t.includes(`the ${adj} fieldworks at`)) { const pl = t.match(/fieldworks at (.+?)\. /); const rg = pl ? g.regions.find((x: any) => x.name === pl[1]) : undefined; if (rg && (rg.ctrl === me || rg.units.some((u: any) => u.nat === me))) { foe.raids++; tell(rg.id, h.turn); } }
+    else if (t.includes('has named its main effort')) { foe.named++; for (const e of effNow) if (t.includes(eff[e.key].firstName) && !eff[e.key].tell) eff[e.key].tell = h.turn; }
+    else if (/ offensive towards .+ is over[.:]/.test(t) && h.kind === 'event') { if (t.includes('The line held')) foe.overHeld++; else foe.overTook++; }
     if (!t.includes(adj)) continue;
     let m = t.match(/^The ring closes at .*?: (\d+) .*? corps, ([\d,]+) men/);
     if (m) { rings.closed++; rings.men += num(m[2]); continue; }
@@ -89,3 +122,14 @@ for (const k of Object.keys(tab).sort()) {
 }
 const R = run as any;
 console.log(`TOTAL ${me} seed ${seedS}: played to ${date(lastTurn)}${run.fellOn ? ` (fell ${run.fellOn})` : ''}; ${town} in December 1944: ${held64}; in the last month: ${hold(run.g)}; longest stretch at war with no battle of the player's: ${longest} months, ending ${longest ? date(longestEnd) : '-'}; thrown back but wore the works: my attacks ${wornBy.mine[0]} (${wornBy.mine[1].toFixed(1)} months), attacks on me ${wornBy.theirs[0]} (${wornBy.theirs[1].toFixed(1)} months); attacks under my bar to wear a line ${(run as any).grinds ?? 0}${(run as any).secondBlows !== undefined ? `, second blows on a line struck that month ${(run as any).secondBlows} (won ${(run as any).secondWon ?? 0})` : ''}; my field attacks by year ${Object.entries(myAttacksByYear).map(([y, n]) => `${y} ${n}`).join(', ')}; provinces at the end ${run.g.regions.filter((x: any) => x.ctrl === me).length}; defences ${defs.n}, lost ${defs.lost}, on a prepared line ${defs.prep} (lost ${defs.prepLost}), met tired ${defs.tired}, against guns ${defs.guns}; rings closed on the player ${rings.closed} (${rings.men} men), surrenders ${rings.gaveUp} (${rings.gaveUpMen} men); works kept from attacks ${(run as any).dugKept ?? 0}; longest silence from January 1942: ${longestLate} months${longestLate ? `, ending ${date(longestLateEnd)}` : ''}; line corps in works: ${lineLog.join(', ')}; took ${Object.entries(took64).map(([k, v]) => `${k} ${date(v)}`).join(', ') || 'none of ' + goals64.join(', ')}; attacks by year (fought, won, on a prepared line won of fought, my men, theirs): ${Object.entries(atk64).map(([y, a]) => `${y} ${a.n}, ${a.won}, ${a.prepWon} of ${a.prep}, ${a.mine}, ${a.theirs}`).join(' | ')}; Version 64: folds ${R.folds ?? 0} (in the line ${R.foldsInLine ?? 0}, men back ${R.foldBack ?? 0}), cadres raised ${R.cadresRaised ?? 0}; reliefs ${R.rotations ?? 0} (works found by ${R.rotKept ?? 0}, months handed over ${(R.rotWorksAfter ?? 0).toFixed(1)} of ${(R.rotWorksBefore ?? 0).toFixed(1)}; no relief near ${R.rotNone ?? 0}, no road ${R.rotNoRoad ?? 0}, half done ${R.rotHalf ?? 0}); probes ${R.probes ?? 0} (men ${R.probeMen ?? 0}, months off ${(R.probeWear ?? 0).toFixed(1)}, corps named ${R.probeFresh ?? 0}); line raids ${R.lineRaids ?? 0} (groups ${R.lineRaidGroups ?? 0}, months off ${(R.lineRaidWear ?? 0).toFixed(1)}, refused ${R.lineRaidsRefused ?? 0}); softened ${R.softN ?? 0} lines, odds ${(R.softN ? (R.softOddsBefore ?? 0) / R.softN : 0).toFixed(2)} to ${(R.softN ? (R.softOddsAfter ?? 0) / R.softN : 0).toFixed(2)}, lifted over the bar ${R.softLifted ?? 0}; after it the card read better ${R.softBetter ?? 0}, worse ${R.softWorse ?? 0}, the same ${R.softSame ?? 0}, no attackers left ${R.softNone ?? 0}; in fog before ${R.softFog ?? 0} (worse after ${R.softFogWorse ?? 0}); mean drop where worse ${(R.softWorse ? (R.softDrop ?? 0) / R.softWorse : 0).toFixed(3)}; chance ${(R.softChN ? (R.softChA ?? 0) / R.softChN : 0).toFixed(3)} to ${(R.softChN ? (R.softChB ?? 0) / R.softChN : 0).toFixed(3)}; reliefs from the line itself ${R.rotFromLine ?? 0}`);
+// Version 65: what the enemy staffs did to the player.
+{
+  const E = Object.values(eff), g = run.g as any;
+  const yr = (t: number): number => 1939 + Math.floor((t + 7) / 12);
+  for (const x of E) console.log(`EFFORT ${x.nat} named ${date(x.from)} at ${x.firstName}: places aimed at ${x.targets.size}, battles ${x.battles} (the player lost ${x.lostB}, on a prepared line ${x.prep}), card odds ${x.battles ? (x.odds / x.battles).toFixed(2) : '-'}, men lost by the attacker ${x.aLost}, by the player ${x.dLost}, provinces taken ${x.won}, assaults on a town ${(x as any).storms ?? 0}, ground given up without a fight ${(x as any).gave ?? 0}, first word ${x.tell ? date(x.tell) : 'none'}, first blow ${x.blow ? date(x.blow) : 'none'}`);
+  const by: Record<number, number> = {};
+  for (const x of E) by[yr(x.from)] = (by[yr(x.from)] ?? 0) + 1;
+  const fought = E.filter((x) => x.battles > 0 || (x as any).storms || (x as any).gave);
+  const b = E.reduce((s, x) => s + x.battles, 0);
+  console.log(`STAFFS ${me} seed ${seedS}: characters ${characterOf ? ['SOV', 'UK', 'USA', 'FRA', 'GER', 'ITA'].filter((n) => n !== me && g.nations[n]).map((n) => `${n} ${characterOf(g, n)}`).join(', ') : 'none'}; main efforts where the player stood ${E.length} (by year ${Object.entries(by).map(([y, n]) => `${y} ${n}`).join(', ') || '-'}), at allies only ${foe.allyEff.size}; months under one ${foe.effMonths}, months under a general offensive ${foe.genMonths}; efforts that came to blows ${fought.length}, that took ground ${E.filter((x) => x.won > 0).length}, provinces taken ${E.reduce((s, x) => s + x.won, 0)}; battles in them ${b} (the player lost ${E.reduce((s, x) => s + x.lostB, 0)}, on a prepared line ${E.reduce((s, x) => s + x.prep, 0)}), mean card odds ${b ? (E.reduce((s, x) => s + x.odds, 0) / b).toFixed(2) : '-'}, men lost by the attackers ${E.reduce((s, x) => s + x.aLost, 0)}, by the player ${E.reduce((s, x) => s + x.dLost, 0)}; word a month or more before the first blow ${fought.filter((x) => x.tell && x.tell < x.blow).length}, in the same month ${fought.filter((x) => x.tell && x.tell === x.blow).length}, none before it ${fought.filter((x) => !x.tell || x.tell > x.blow).length}; enemy probes of the player's line ${foe.probes} (months off ${foe.probeWear.toFixed(1)}), raids on his works ${foe.raids}; headlines: effort named ${foe.named}, over and took ground ${foe.overTook}, over and the line held ${foe.overHeld}`);
+}

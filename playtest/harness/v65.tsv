@@ -1,0 +1,325 @@
+watch-1	node out65/watch.mjs 1,2,3,4,5,6 89
+watch-7	node out65/watch.mjs 7,8,9,10,11,12 89
+watch-13	node out65/watch.mjs 13,14,15,16,17,18 89
+watch-19	node out65/watch.mjs 19,20,21,22,23,24 89
+watch-25	node out65/watch.mjs 25,26,27,28,29,30 89
+watch-31	node out65/watch.mjs 31,32,33,34,35,36 89
+play-GER	node out65/play.mjs GER 7,11,23 1 76 colonel
+play-GER_WEST	node out65/play.mjs GER_WEST 7,11,23 1 76 colonel
+play-GER_SEALION	node out65/play.mjs GER_SEALION 7,11,23 1 76 colonel
+play-UK	node out65/play.mjs UK 7,11,23 1 76 colonel
+play-FRA	node out65/play.mjs FRA 7,11,23 1 76 colonel
+play-FRA_ATTACK	node out65/play.mjs FRA_ATTACK 7,11,23 1 76 colonel
+play-SOV	node out65/play.mjs SOV 7,11,23 1 76 colonel
+play-SOV_FIRST	node out65/play.mjs SOV_FIRST 7,11,23 1 76 colonel
+play-ITA	node out65/play.mjs ITA 7,11,23 1 76 colonel
+play-ITA_BALKAN	node out65/play.mjs ITA_BALKAN 7,11,23 1 76 colonel
+play-POL	node out65/play.mjs POL 7,11,23 1 76 colonel
+play-BEL	node out65/play.mjs BEL 7,11,23 1 76 colonel
+play-FIN	node out65/play.mjs FIN 7,11,23 1 76 colonel
+play-TUR	node out65/play.mjs TUR 7,11,23 1 76 colonel
+play-ROM	node out65/play.mjs ROM 7,11,23 1 76 colonel
+play-SWE	node out65/play.mjs SWE 7,11,23 1 76 colonel
+play-ESP	node out65/play.mjs ESP 7,11,23 1 76 colonel
+play-GER_STARVE	node out65/play.mjs GER_STARVE 7,11 1 40 colonel
+monkey-1	TC_PAGE=file:///home/user/tc65/dist/play.html node monkey.cjs GER 31 2500 1
+monkey-2	TC_PAGE=file:///home/user/tc65/dist/play.html node monkey.cjs SOV 32 2200 1
+monkey-3	TC_PAGE=file:///home/user/tc65/dist/play.html node monkey.cjs FRA 33 1500 1 marshal
+monkey-4	TC_PAGE=file:///home/user/tc65/dist/play.html node monkey.cjs POL 34 1200 1
+monkey-5	TC_PAGE=file:///home/user/tc65/dist/play.html node monkey.cjs UK 35 2200 1
+monkey-6	TC_PAGE=file:///home/user/tc65/dist/play.html node monkey.cjs ITA 36 2200 5
+monkey-7	TC_PAGE=file:///home/user/tc65/dist/play.html node monkey.cjs GER 37 2200 29 cadet
+monkey-8	TC_PAGE=file:///home/user/tc65/dist/play.html node monkey.cjs BEL 38 1200 1
+late-5	node out65/play.mjs GER,UK,SOV,ITA,FRA 7 5 76 colonel
+late-17	node out65/play.mjs GER,UK,SOV,ITA,FRA 7 17 76 colonel
+late-29	node out65/play.mjs GER,UK,SOV,ITA,FRA 7 29 76 colonel
+level-marshal	node out65/play.mjs GER,UK,FRA,SOV,ITA 7 1 76 marshal
+level-cadet	node out65/play.mjs GER,UK,FRA,SOV,ITA 7 1 76 cadet
+minor-sweep	node out65/play.mjs BEL,FIN 1,2,3 1 76 colonel
+pol-sweep	node out65/play.mjs POL 1,2,3,4,5,6,8,9,10,12 1 76 colonel
+idle-7	node out65/idle.mjs GER,UK,FRA,SOV,ITA,POL 7 1 76
+idle-GER-90	node out65/idle.mjs GER 7 1 90
+idle-ITA-88	node out65/probe10.mjs ITA 7 88
+falls-a	node out65/probe11.mjs 1,2,3,4,5,6 88
+falls-b	node out65/probe11.mjs 7,8,9,10,11,12 88
+gov-vow-GER-7-safe	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"vow":"safe"}' none
+gov-vow-GER-7-fair	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"vow":"fair"}' none
+gov-vow-GER-7-bold	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"vow":"bold"}' none
+gov-vow-GER-7-any	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"vow":"any"}' none
+gov-head-GER-7-sack	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"head":"sack"}' none
+gov-head-GER-7-stand	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"head":"stand"}' none
+gov-vow-SOV-7-safe	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5,"vow":"safe"}' none
+gov-vow-SOV-7-fair	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5,"vow":"fair"}' none
+gov-vow-SOV-7-bold	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5,"vow":"bold"}' none
+gov-vow-SOV-7-any	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5,"vow":"any"}' none
+gov-head-SOV-7-sack	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5,"head":"sack"}' none
+gov-head-SOV-7-stand	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5,"head":"stand"}' none
+gov-vow-UK-7-safe	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"vow":"safe"}' none
+gov-vow-UK-7-fair	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"vow":"fair"}' none
+gov-vow-UK-7-bold	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"vow":"bold"}' none
+gov-vow-UK-7-any	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"vow":"any"}' none
+gov-head-UK-7-sack	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"head":"sack"}' none
+gov-head-UK-7-stand	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"head":"stand"}' none
+gov-vow-GER-11-safe	node out65/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"vow":"safe"}' none
+gov-vow-GER-11-fair	node out65/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"vow":"fair"}' none
+gov-vow-GER-11-bold	node out65/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"vow":"bold"}' none
+gov-vow-GER-11-any	node out65/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"vow":"any"}' none
+gov-head-GER-11-sack	node out65/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"head":"sack"}' none
+gov-head-GER-11-stand	node out65/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"head":"stand"}' none
+gov-vow-SOV-11-safe	node out65/probe24.mjs SOV 1 11 76 '{"minOdds":1.5,"vow":"safe"}' none
+gov-vow-SOV-11-fair	node out65/probe24.mjs SOV 1 11 76 '{"minOdds":1.5,"vow":"fair"}' none
+gov-vow-SOV-11-bold	node out65/probe24.mjs SOV 1 11 76 '{"minOdds":1.5,"vow":"bold"}' none
+gov-vow-SOV-11-any	node out65/probe24.mjs SOV 1 11 76 '{"minOdds":1.5,"vow":"any"}' none
+gov-head-SOV-11-sack	node out65/probe24.mjs SOV 1 11 76 '{"minOdds":1.5,"head":"sack"}' none
+gov-head-SOV-11-stand	node out65/probe24.mjs SOV 1 11 76 '{"minOdds":1.5,"head":"stand"}' none
+gov-vow-UK-11-safe	node out65/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"vow":"safe"}' none
+gov-vow-UK-11-fair	node out65/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"vow":"fair"}' none
+gov-vow-UK-11-bold	node out65/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"vow":"bold"}' none
+gov-vow-UK-11-any	node out65/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"vow":"any"}' none
+gov-head-UK-11-sack	node out65/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"head":"sack"}' none
+gov-head-UK-11-stand	node out65/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"head":"stand"}' none
+gov-hawks-GER-7	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"chase":true}' hawks
+gov-doves-GER-7	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' doves
+gov-hawks-SOV-7	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5,"chase":true}' hawks
+gov-doves-SOV-7	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5}' doves
+gov-hawks-UK-7	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"chase":true}' hawks
+gov-doves-UK-7	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' doves
+gov-hawks-ITA-7	node out65/probe24.mjs ITA 1 7 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"chase":true}' hawks
+gov-doves-ITA-7	node out65/probe24.mjs ITA 1 7 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}' doves
+gov-hawks-FRA-7	node out65/probe24.mjs FRA 1 7 76 '{"minOdds":1.6,"homeOnly":true,"chase":true}' hawks
+gov-doves-FRA-7	node out65/probe24.mjs FRA 1 7 76 '{"minOdds":1.6,"homeOnly":true}' doves
+gov-hawks-GER-11	node out65/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"chase":true}' hawks
+gov-doves-GER-11	node out65/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' doves
+gov-hawks-SOV-11	node out65/probe24.mjs SOV 1 11 76 '{"minOdds":1.5,"chase":true}' hawks
+gov-doves-SOV-11	node out65/probe24.mjs SOV 1 11 76 '{"minOdds":1.5}' doves
+gov-hawks-UK-11	node out65/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"chase":true}' hawks
+gov-doves-UK-11	node out65/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' doves
+gov-hawks-ITA-11	node out65/probe24.mjs ITA 1 11 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"chase":true}' hawks
+gov-doves-ITA-11	node out65/probe24.mjs ITA 1 11 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}' doves
+gov-hawks-FRA-11	node out65/probe24.mjs FRA 1 11 76 '{"minOdds":1.6,"homeOnly":true,"chase":true}' hawks
+gov-doves-FRA-11	node out65/probe24.mjs FRA 1 11 76 '{"minOdds":1.6,"homeOnly":true}' doves
+men-SOV-7-asis	node out65/probe32.mjs SOV 1 7 76 '{"minOdds":1.5}'
+men-SOV-7-half	node out65/probe32.mjs SOV 1 7 76 '{"minOdds":1.5,"menKeep":0.5}'
+men-SOV-7-quarter	node out65/probe32.mjs SOV 1 7 76 '{"minOdds":1.5,"menKeep":0.25}'
+men-SOVF-7-asis	node out65/probe32.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}'
+men-SOVF-7-half	node out65/probe32.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"menKeep":0.5}'
+men-SOVF-7-quarter	node out65/probe32.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"menKeep":0.25}'
+men-GER-7-asis	node out65/probe32.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+men-GER-7-half	node out65/probe32.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"menKeep":0.5}'
+men-GER-7-quarter	node out65/probe32.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"menKeep":0.25}'
+men-SOV-11-asis	node out65/probe32.mjs SOV 1 11 76 '{"minOdds":1.5}'
+men-SOV-11-half	node out65/probe32.mjs SOV 1 11 76 '{"minOdds":1.5,"menKeep":0.5}'
+men-SOV-11-quarter	node out65/probe32.mjs SOV 1 11 76 '{"minOdds":1.5,"menKeep":0.25}'
+men-SOVF-11-asis	node out65/probe32.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}'
+men-SOVF-11-half	node out65/probe32.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"menKeep":0.5}'
+men-SOVF-11-quarter	node out65/probe32.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"menKeep":0.25}'
+men-GER-11-asis	node out65/probe32.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+men-GER-11-half	node out65/probe32.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"menKeep":0.5}'
+men-GER-11-quarter	node out65/probe32.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"menKeep":0.25}'
+men-SOV-23-asis	node out65/probe32.mjs SOV 1 23 76 '{"minOdds":1.5}'
+men-SOV-23-half	node out65/probe32.mjs SOV 1 23 76 '{"minOdds":1.5,"menKeep":0.5}'
+men-SOV-23-quarter	node out65/probe32.mjs SOV 1 23 76 '{"minOdds":1.5,"menKeep":0.25}'
+men-SOVF-23-asis	node out65/probe32.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}'
+men-SOVF-23-half	node out65/probe32.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"menKeep":0.5}'
+men-SOVF-23-quarter	node out65/probe32.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"menKeep":0.25}'
+men-GER-23-asis	node out65/probe32.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+men-GER-23-half	node out65/probe32.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"menKeep":0.5}'
+men-GER-23-quarter	node out65/probe32.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"menKeep":0.25}'
+off-GER-7-off	node out65/probe33.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"noCabinet":true}'
+off-GER-7-on	node out65/probe33.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+off-UK-7-off	node out65/probe33.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"noCabinet":true}'
+off-UK-7-on	node out65/probe33.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+off-FRA-7-off	node out65/probe33.mjs FRA 1 7 76 '{"minOdds":1.6,"homeOnly":true,"noCabinet":true}'
+off-FRA-7-on	node out65/probe33.mjs FRA 1 7 76 '{"minOdds":1.6,"homeOnly":true}'
+off-SOV-7-off	node out65/probe33.mjs SOV 1 7 76 '{"minOdds":1.5,"noCabinet":true}'
+off-SOV-7-on	node out65/probe33.mjs SOV 1 7 76 '{"minOdds":1.5}'
+off-ITA-7-off	node out65/probe33.mjs ITA 1 7 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"noCabinet":true}'
+off-ITA-7-on	node out65/probe33.mjs ITA 1 7 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+off-GER-11-off	node out65/probe33.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"noCabinet":true}'
+off-GER-11-on	node out65/probe33.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+off-UK-11-off	node out65/probe33.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"],"noCabinet":true}'
+off-UK-11-on	node out65/probe33.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+off-FRA-11-off	node out65/probe33.mjs FRA 1 11 76 '{"minOdds":1.6,"homeOnly":true,"noCabinet":true}'
+off-FRA-11-on	node out65/probe33.mjs FRA 1 11 76 '{"minOdds":1.6,"homeOnly":true}'
+off-SOV-11-off	node out65/probe33.mjs SOV 1 11 76 '{"minOdds":1.5,"noCabinet":true}'
+off-SOV-11-on	node out65/probe33.mjs SOV 1 11 76 '{"minOdds":1.5}'
+off-ITA-11-off	node out65/probe33.mjs ITA 1 11 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"noCabinet":true}'
+off-ITA-11-on	node out65/probe33.mjs ITA 1 11 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+off-GER-7-again	node out65/probe33.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"noCabinet":true}' 31
+off-SOV-7-again	node out65/probe33.mjs SOV 1 7 76 '{"minOdds":1.5,"noCabinet":true}' 31
+gov-play-GER-7	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' none
+gov-play-UK-7	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' none
+gov-play-FRA-7	node out65/probe24.mjs FRA 1 7 76 '{"minOdds":1.6,"homeOnly":true}' none
+gov-play-SOV-7	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5}' none
+gov-play-ITA-7	node out65/probe24.mjs ITA 1 7 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}' none
+gov-play-POL-7	node out65/probe24.mjs POL 1 7 76 '{"minOdds":1.6,"homeOnly":true}' none
+gov-play-GER-11	node out65/probe24.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' none
+gov-play-UK-11	node out65/probe24.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' none
+gov-play-FRA-11	node out65/probe24.mjs FRA 1 11 76 '{"minOdds":1.6,"homeOnly":true}' none
+gov-play-SOV-11	node out65/probe24.mjs SOV 1 11 76 '{"minOdds":1.5}' none
+gov-play-ITA-11	node out65/probe24.mjs ITA 1 11 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}' none
+gov-play-POL-11	node out65/probe24.mjs POL 1 11 76 '{"minOdds":1.6,"homeOnly":true}' none
+gov-play-GER-23	node out65/probe24.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' none
+gov-play-UK-23	node out65/probe24.mjs UK 1 23 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' none
+gov-play-FRA-23	node out65/probe24.mjs FRA 1 23 76 '{"minOdds":1.6,"homeOnly":true}' none
+gov-play-SOV-23	node out65/probe24.mjs SOV 1 23 76 '{"minOdds":1.5}' none
+gov-play-ITA-23	node out65/probe24.mjs ITA 1 23 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}' none
+gov-play-POL-23	node out65/probe24.mjs POL 1 23 76 '{"minOdds":1.6,"homeOnly":true}' none
+gov-play-BEL-7	node out65/probe24.mjs BEL 1 7 76 '{"minOdds":1.6,"homeOnly":true,"path":"allies"}' none
+gov-play-FIN-7	node out65/probe24.mjs FIN 1 7 76 '{"minOdds":1.6,"homeOnly":true,"path":"league"}' none
+gov-play-TUR-7	node out65/probe24.mjs TUR 1 7 76 '{"minOdds":1.4,"path":"axis"}' none
+gov-play-ROM-7	node out65/probe24.mjs ROM 1 7 76 '{"minOdds":1.5,"path":"axis"}' none
+gov-play-SWE-7	node out65/probe24.mjs SWE 1 7 76 '{"minOdds":1.5,"path":"league"}' none
+gov-idle-GER-7	node out65/probe24.mjs GER 1 7 76 '{"idle":true}' none
+gov-idle-UK-7	node out65/probe24.mjs UK 1 7 76 '{"idle":true}' none
+gov-idle-FRA-7	node out65/probe24.mjs FRA 1 7 76 '{"idle":true}' none
+gov-idle-SOV-7	node out65/probe24.mjs SOV 1 7 76 '{"idle":true}' none
+gov-idle-ITA-7	node out65/probe24.mjs ITA 1 7 76 '{"idle":true}' none
+gov-idle-POL-7	node out65/probe24.mjs POL 1 7 76 '{"idle":true}' none
+gov-idle-BEL-7	node out65/probe24.mjs BEL 1 7 76 '{"idle":true}' none
+gov-idle-SWE-7	node out65/probe24.mjs SWE 1 7 76 '{"idle":true}' none
+gov-idle-TUR-7	node out65/probe24.mjs TUR 1 7 76 '{"idle":true}' none
+gov-idle-GER-11	node out65/probe24.mjs GER 1 11 76 '{"idle":true}' none
+gov-idle-UK-11	node out65/probe24.mjs UK 1 11 76 '{"idle":true}' none
+gov-idle-FRA-11	node out65/probe24.mjs FRA 1 11 76 '{"idle":true}' none
+gov-idle-SOV-11	node out65/probe24.mjs SOV 1 11 76 '{"idle":true}' none
+gov-idle-ITA-11	node out65/probe24.mjs ITA 1 11 76 '{"idle":true}' none
+gov-idle-POL-11	node out65/probe24.mjs POL 1 11 76 '{"idle":true}' none
+gov-idle-BEL-11	node out65/probe24.mjs BEL 1 11 76 '{"idle":true}' none
+gov-idle-SWE-11	node out65/probe24.mjs SWE 1 11 76 '{"idle":true}' none
+gov-idle-TUR-11	node out65/probe24.mjs TUR 1 11 76 '{"idle":true}' none
+gov-chase-GER-7	node out65/probe24.mjs GER 1 7 76 '{"chase":true,"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' none
+gov-chase-UK-7	node out65/probe24.mjs UK 1 7 76 '{"chase":true,"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' none
+gov-chase-FRA-7	node out65/probe24.mjs FRA 1 7 76 '{"chase":true,"minOdds":1.6,"homeOnly":true}' none
+gov-chase-SOV-7	node out65/probe24.mjs SOV 1 7 76 '{"chase":true,"minOdds":1.5}' none
+gov-chase-ITA-7	node out65/probe24.mjs ITA 1 7 76 '{"chase":true,"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}' none
+gov-chase-GER-11	node out65/probe24.mjs GER 1 11 76 '{"chase":true,"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' none
+gov-chase-UK-11	node out65/probe24.mjs UK 1 11 76 '{"chase":true,"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' none
+gov-chase-FRA-11	node out65/probe24.mjs FRA 1 11 76 '{"chase":true,"minOdds":1.6,"homeOnly":true}' none
+gov-chase-SOV-11	node out65/probe24.mjs SOV 1 11 76 '{"chase":true,"minOdds":1.5}' none
+gov-chase-ITA-11	node out65/probe24.mjs ITA 1 11 76 '{"chase":true,"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}' none
+gov-chase-GER-23	node out65/probe24.mjs GER 1 23 76 '{"chase":true,"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' none
+gov-chase-UK-23	node out65/probe24.mjs UK 1 23 76 '{"chase":true,"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' none
+gov-chase-FRA-23	node out65/probe24.mjs FRA 1 23 76 '{"chase":true,"minOdds":1.6,"homeOnly":true}' none
+gov-chase-SOV-23	node out65/probe24.mjs SOV 1 23 76 '{"chase":true,"minOdds":1.5}' none
+gov-chase-ITA-23	node out65/probe24.mjs ITA 1 23 76 '{"chase":true,"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}' none
+gov-cab-GER-7-money	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' money
+gov-cab-UK-7-money	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' money
+gov-cab-GER-7-men	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' men
+gov-cab-UK-7-men	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' men
+gov-cab-GER-7-calm	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' calm
+gov-cab-UK-7-calm	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' calm
+gov-cab-GER-7-most	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' most
+gov-cab-UK-7-most	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' most
+gov-aside-GER-7	node out65/probe24.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' aside
+gov-aside-UK-7	node out65/probe24.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}' aside
+gov-aside-SOV-7	node out65/probe24.mjs SOV 1 7 76 '{"minOdds":1.5}' aside
+scorch-GER-7-asis	node out65/probe20.mjs GER 1 7 64 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+scorch-GER-7-never	node out65/probe20.mjs GER 1 7 64 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' SOV=never
+scorch-SOV-7-everywhere	node out65/probe20.mjs SOV 1 7 64 '{"minOdds":1.5}' - everywhere
+scorch-SOV-7-never	node out65/probe20.mjs SOV 1 7 64 '{"minOdds":1.5}' - never
+scorch-GER-11-asis	node out65/probe20.mjs GER 1 11 64 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+scorch-GER-11-never	node out65/probe20.mjs GER 1 11 64 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' SOV=never
+scorch-SOV-11-everywhere	node out65/probe20.mjs SOV 1 11 64 '{"minOdds":1.5}' - everywhere
+scorch-SOV-11-never	node out65/probe20.mjs SOV 1 11 64 '{"minOdds":1.5}' - never
+scorch-GER-23-asis	node out65/probe20.mjs GER 1 23 64 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+scorch-GER-23-never	node out65/probe20.mjs GER 1 23 64 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' SOV=never
+scorch-SOV-23-everywhere	node out65/probe20.mjs SOV 1 23 64 '{"minOdds":1.5}' - everywhere
+scorch-SOV-23-never	node out65/probe20.mjs SOV 1 23 64 '{"minOdds":1.5}' - never
+berlin-GER-1	node out65/probe28.mjs GER 1 1 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-2	node out65/probe28.mjs GER 1 2 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-3	node out65/probe28.mjs GER 1 3 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-4	node out65/probe28.mjs GER 1 4 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-5	node out65/probe28.mjs GER 1 5 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-6	node out65/probe28.mjs GER 1 6 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-7	node out65/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-8	node out65/probe28.mjs GER 1 8 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-9	node out65/probe28.mjs GER 1 9 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-10	node out65/probe28.mjs GER 1 10 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-11	node out65/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-12	node out65/probe28.mjs GER 1 12 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-13	node out65/probe28.mjs GER 1 13 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-14	node out65/probe28.mjs GER 1 14 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-15	node out65/probe28.mjs GER 1 15 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-16	node out65/probe28.mjs GER 1 16 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-17	node out65/probe28.mjs GER 1 17 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-18	node out65/probe28.mjs GER 1 18 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-19	node out65/probe28.mjs GER 1 19 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-20	node out65/probe28.mjs GER 1 20 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-21	node out65/probe28.mjs GER 1 21 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-22	node out65/probe28.mjs GER 1 22 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-23	node out65/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+berlin-GER-24	node out65/probe28.mjs GER 1 24 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+why-GER-7	node out65/probe30.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}' 37 49
+why-SOVF-7	node out65/probe30.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}' 10
+why-SOVF-11	node out65/probe30.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}' 10
+why-SOVF-23	node out65/probe30.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}' 10
+def-SOVF_base-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}'
+def-SOVF_base-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}'
+def-SOVF_base-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]]}'
+def-GER_grind-7	ROWS=1 node out65/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"grind":0.9}'
+def-SOV_grind-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"grind":0.9}'
+def-SOVF_grind-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"grind":0.9}'
+def-GER_grind-11	ROWS=1 node out65/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"grind":0.9}'
+def-SOV_grind-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"grind":0.9}'
+def-SOVF_grind-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"grind":0.9}'
+def-GER_grind-23	ROWS=1 node out65/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"grind":0.9}'
+def-SOV_grind-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"grind":0.9}'
+def-SOVF_grind-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"grind":0.9}'
+def-GER-7	ROWS=1 node out65/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+def-SOV-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.5}'
+def-UK-7	ROWS=1 node out65/probe28.mjs UK 1 7 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+def-FRA-7	ROWS=1 node out65/probe28.mjs FRA 1 7 76 '{"minOdds":1.6,"homeOnly":true}'
+def-ITA-7	ROWS=1 node out65/probe28.mjs ITA 1 7 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+def-GER-11	ROWS=1 node out65/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+def-SOV-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.5}'
+def-UK-11	ROWS=1 node out65/probe28.mjs UK 1 11 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+def-FRA-11	ROWS=1 node out65/probe28.mjs FRA 1 11 76 '{"minOdds":1.6,"homeOnly":true}'
+def-ITA-11	ROWS=1 node out65/probe28.mjs ITA 1 11 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+def-GER-23	ROWS=1 node out65/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+def-SOV-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.5}'
+def-UK-23	ROWS=1 node out65/probe28.mjs UK 1 23 76 '{"minOdds":1.5,"land":true,"buy":["corps:arm","corps:inf","air:ftr","ship:dd","work:factory"]}'
+def-FRA-23	ROWS=1 node out65/probe28.mjs FRA 1 23 76 '{"minOdds":1.6,"homeOnly":true}'
+def-ITA-23	ROWS=1 node out65/probe28.mjs ITA 1 23 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true}'
+card-GER-7	node out65/probe29.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+card-SOV-7	node out65/probe29.mjs SOV 1 7 76 '{"minOdds":1.5}'
+card-GER-11	node out65/probe29.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+card-SOV-11	node out65/probe29.mjs SOV 1 11 76 '{"minOdds":1.5}'
+card-GER-23	node out65/probe29.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+card-SOV-23	node out65/probe29.mjs SOV 1 23 76 '{"minOdds":1.5}'
+def-GER_guns-7	ROWS=1 node out65/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5}'
+def-GER_gunsup-7	ROWS=1 node out65/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true}'
+def-GER_card-7	ROWS=1 node out65/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"minChance":0.6}'
+def-GER_gunsgrind-7	ROWS=1 node out65/probe28.mjs GER 1 7 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOV_guns-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"guns":1.5}'
+def-SOV_gunsup-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true}'
+def-SOV_card-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"minChance":0.6}'
+def-SOV_gunsgrind-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOVF_guns-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5}'
+def-SOVF_gunsup-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true}'
+def-SOVF_card-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"minChance":0.6}'
+def-SOVF_gunsgrind-7	ROWS=1 node out65/probe28.mjs SOV 1 7 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true,"grind":0.9}'
+def-GER_guns-11	ROWS=1 node out65/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5}'
+def-GER_gunsup-11	ROWS=1 node out65/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true}'
+def-GER_card-11	ROWS=1 node out65/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"minChance":0.6}'
+def-GER_gunsgrind-11	ROWS=1 node out65/probe28.mjs GER 1 11 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOV_guns-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"guns":1.5}'
+def-SOV_gunsup-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true}'
+def-SOV_card-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"minChance":0.6}'
+def-SOV_gunsgrind-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOVF_guns-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5}'
+def-SOVF_gunsup-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true}'
+def-SOVF_card-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"minChance":0.6}'
+def-SOVF_gunsgrind-11	ROWS=1 node out65/probe28.mjs SOV 1 11 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true,"grind":0.9}'
+def-GER_guns-23	ROWS=1 node out65/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5}'
+def-GER_gunsup-23	ROWS=1 node out65/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true}'
+def-GER_card-23	ROWS=1 node out65/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"minChance":0.6}'
+def-GER_gunsgrind-23	ROWS=1 node out65/probe28.mjs GER 1 23 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOV_guns-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"guns":1.5}'
+def-SOV_gunsup-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true}'
+def-SOV_card-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"minChance":0.6}'
+def-SOV_gunsgrind-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.5,"guns":1.5,"useGuns":true,"grind":0.9}'
+def-SOVF_guns-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5}'
+def-SOVF_gunsup-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true}'
+def-SOVF_card-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"minChance":0.6}'
+def-SOVF_gunsgrind-23	ROWS=1 node out65/probe28.mjs SOV 1 23 76 '{"minOdds":1.4,"declare":[[10,"GER"]],"guns":1.5,"useGuns":true,"grind":0.9}'

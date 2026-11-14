@@ -273,3 +273,33 @@ Traps met on Version 64:
 - Do not rebuild a bundle folder a running queue is using: build changed programs into a new folder (`out64p`, `out64q`).
 
 Results of the Version 64 test: `/mnt/project-files/playtest/results-v64/` (the 325-job queue at the top; `berlin-and-new-orders`, `wars-of-1941`, `relief-test`, `undecided`, `screens`, `saves`).
+
+## Version 65: rival staffs (characters, main efforts, staffs that probe, bomb and fold)
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `v65.tsv`, `v65e.tsv`, `v65f.tsv`, `v65j.tsv`, `v65s2.tsv`, `v65s3.tsv` | The queues of the Version 65 test for `jobs.sh`: the Version 63 queue again with the computer wars, the page sessions and the `play` wars first (`v65`, 325 jobs); Berlin on sixty seeds for the plain and the digging German player (`v65e`, 120); the new orders one at a time on twelve seeds and the Soviet seat (`v65f`, 108); the relief test on eight seeds (`v65j`); why a front slept, on thirty wars (`v65s2`, and `v65s3` with what set the staff's clock back) | `./jobs.sh v65e.tsv out/v65e 4` |
+| `lib.ts` | `"rotate"` now changes a worn corps and its relief in one order where the rules have `orderSwap` (Version 65), and falls back to the two marches on older versions | |
+| `probe28.ts` | Follows every main effort aimed where the player stands: an `EFFORT` line each (named when and where, places aimed at, battles, how many the player lost, on a prepared line, card odds, men lost each side, provinces taken, town assaults, ground given up, the first word in the news and the first blow), a `C a main effort hits the player` row in the battle table, and a `STAFFS` line a war (each staff's character, efforts by year, months under an effort and under a general offensive, enemy probes and raids on the player's works, headlines) | `node out65/probe28.mjs GER 1 7 76 '<plan>'` |
+| `staffs.py` | Adds up the `STAFFS`, `EFFORT`, battle-table and `TOTAL` lines of a folder by habit, and splits Berlin and the silence by the Soviet staff's character | `python3 staffs.py out/v65e asis dig` |
+| `probe43.ts` | The relief test with the one-order change of places; prints a `SWAPS` line with every refusal by its reason (`whyNoSwap`) | `node out65/probe43.mjs GER 1 7 48 '<plan>' 31,35,41,47` |
+| `probe44.ts` | Computer-only wars that never end: from the month Germany or the Soviet Union falls, each January and at the end it prints who is at war, where the great powers' ground touches, each staff's line, the armies and where they stand, and a tally of the last twelve months | `node out65/probe44.mjs 4 89` |
+| `probe45.ts` | Why a front sleeps: as each of the player's months opens from January 1942 it notes the enemy staff's flags, the corps each side of the line, the best attack as it stands and massed, the staff's own count of the front (`fronts().ratio`) and of the quiet (`quietWith`); it prints the longest silence month by month, a `QUIET` line and a `WHY` line with the reason nothing was named, in the staff's own order, and what last set its clock | `node out65c/probe45.mjs GER 1 33 64 '<plan>'` |
+| `probe46.ts` | Follows a landing through one month, nation by nation | `node out65/probe46.mjs 28 63 66 UK` |
+| `probe47.ts` | Loads a save from the page, ends the month and prints the works a corps holds and the works standing empty | `node out65/probe47.mjs SAVE.json 137` |
+| `probe48.ts` | What a probe by a worn corps does: the probe row of a `-soften` save with the player's army at full, a half, a quarter and a tenth of its men | `node out65c/probe48.mjs GER-7-soften.json GER-7-soften.txt` |
+| `v65x.tsv` | A what-if, not a test of the build: `probe28` for the digging German on the 26 seeds with a long silence, built against two scratch copies of the rules with `data/campaign/rivals.json` changed (`x1`: every character's `strength` 0, so a main effort is judged by its sector alone; `x2`: the same and the cautious staff's `quiet` 3). The copies are not in the repository: copy `src` and `data`, change the file, and build with `./build.sh probe28 COPY out65x1` | `./jobs.sh v65x.tsv out/v65x 3` |
+| `ui27.cjs` | Page checks on Version 65: `phone` (six screens: how much of the map a tap reaches before and after an army is picked, how many lit provinces a finger can find), `swap` (the "Change places" card on a desk and by press and hold on a phone), `powers` (the staff lines and the character card), `cadre` (a card greyed for want of money) | `node ui27.cjs phone SAVE.json 91-v65-phone` |
+
+Bundles: `out65` is every program against Version 65; `out65b` and `out65c` hold programs changed while a queue was using `out65`.
+
+Traps met on Version 65:
+
+- The silence in the `TOTAL` line counts battles of the player's own corps only. It leaves out town assaults and ground given up without a fight, and the staff's quiet clock (`quietWith`) counts both, so a month this harness calls silent may still set the staff's clock back. `probe45` says which.
+- A staff's count of a front (`fronts().ratio`) weighs the whole enemy army in depth, the reserve far behind the line too. It reads far lower than the corps count on the line (0.6 to 1 where the line reads 1.5 to 1), and the main effort is gated on it.
+- An effort is dated by the month it was named (`effAt`). A first blow in the same month fell in the same move, before the player had a turn.
+- An order on the page needs a right-click on a desk or a press and hold on a touch screen; `onRegion` only picks. On a phone the province must first be dragged out from under the tray.
+- The treasury on the page is `pp` times about a hundred: set `pp = 1.36` for a player 136 short, not 136.
+- The table scripts read the last line that starts with `TOTAL`. New summary lines take other first words (`STAFFS`, `EFFORT`, `SWAPS`, `QUIET`, `WHY`).
+
+Results of the Version 65 test: `/mnt/project-files/playtest/results-v65/`.
