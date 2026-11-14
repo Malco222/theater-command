@@ -30,6 +30,7 @@ import { drafted, newStories, storyAttack, storyBattle, storyDefence, storyFalle
 import eastData from '../../data/campaign/east.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import defenceData from '../../data/campaign/defence.json';
+import rivalsData from '../../data/campaign/rivals.json';
 import { barred, combinedArms, groundAttack, groundDefence, groundLine, groundMarch, groundRules, groundSays, isFoot } from './ground';
 import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCrossing, riverBetween, riverName } from './rivers';
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
@@ -1713,10 +1714,32 @@ export function collapseScore(g: Game, nat: string): number {
   const capLost = !allied(g, nat, seat.ctrl) ? 1 : shut ? Math.min(1, hold) : 0;
   // The colonies are fought over like any other ground, but a nation stands or falls by its home country.
   const army = n.armyPeak > 0 ? clamp(armySize(g, nat) / n.armyPeak, 0, 1) : 1;
-  const score = 0.45 * capLost + 0.35 * homeLost(g, nat) + 0.2 * (1 - army);
+  const score = 0.45 * capLost + 0.35 * homeLost(g, nat) + 0.2 * (1 - army) + exhausted(g, nat);
   // A people gone short for months will bear less (the grand campaign): this is how a blockade chokes a country.
   const worn = willLost(g, nat);
   return worn > 0 ? score + worn : score;
+}
+
+const EXHAUST = (rivalsData as unknown as { exhaust?: { after: number; per: number } }).exhaust;
+
+/**
+ * A finish for a war that is won (the grand campaign): a computer nation whose capital has been in enemy hands for
+ * more than a year wears out, a little more each month, until it asks for terms however much army it has left.
+ * The player's own country is never worn out this way: he decides when he is beaten.
+ */
+export function exhausted(g: Game, nat: string): number {
+  const out = g.flags[`capOut:${nat}`];
+  if (g.flags.open !== 1 || !EXHAUST || nat === g.human || out === undefined) return 0;
+  return Math.max(0, g.turn - out - EXHAUST.after) * EXHAUST.per;
+}
+
+/** Notes the month a nation's capital passed into enemy hands, and forgets it when the capital is its own again. */
+function capitalWatch(g: Game, nat: string): void {
+  const n = g.nations[nat];
+  if (g.flags.open !== 1 || n.capital < 0) return;
+  const key = `capOut:${nat}`;
+  if (allied(g, nat, g.regions[n.capital].ctrl)) delete g.flags[key];
+  else if (g.flags[key] === undefined) g.flags[key] = g.turn;
 }
 
 export function checkCollapse(g: Game, nat: string, by: string): void {
@@ -2405,6 +2428,7 @@ export function startPhase(g: Game, nat: string): void {
   if (tempo) g.flags[`tempo:${nat}:${g.turn}`] = 1;
   storyMonth(g, nat);
   jointMonth(g, nat);
+  capitalWatch(g, nat);
   checkCollapse(g, nat, n.atWar[0] ?? nat);
 }
 

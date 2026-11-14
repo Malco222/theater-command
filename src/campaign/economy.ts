@@ -567,6 +567,13 @@ export function aiProduction(g: Game, nat: string): void {
   // to every few of the rest, and brings them up where the works are.
   const wantsGuns = (): boolean => gunsWanted(g, nat);
   while (slots() < most) {
+    // A cadre waiting at home is raised again before anything new is formed (the grand campaign): the same corps, for a share of the price.
+    const old = g.flags.open === 1 ? (n.cadres ?? []).find((c) => !c.elite && !c.airborne && whyNoCadre(g, nat, c) === null) : undefined;
+    if (old) {
+      const t = cadreTerms(g, nat, old), up = corpsUpkeep(old.kind, old.divs);
+      const site = budgeted(g) ? raiseSite(g, nat, old.kind, cap.id) : cap.id;
+      if (n.pp >= t.cost + PRODUCTION.aiReserve && spare >= up * BUDGET.debt.aiMargin && menSpare(g, nat) >= old.divs && orderCadre(g, nat, old.id, site >= 0 ? site : cap.id)) { spare -= up; continue; }
+    }
     let kind: Kind = wantsGuns() ? 'art' : home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the
     // nation's greatest industrial province; a nation with no such province raises infantry instead.

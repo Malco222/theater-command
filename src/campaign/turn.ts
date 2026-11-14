@@ -33,7 +33,7 @@ import {
   INTEL, SIGHT, armiesSeen, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
   whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
-import type { TicketLine } from '../core/ticket';
+import { turnToDate, type TicketLine } from '../core/ticket';
 import { couldJoin, joinArmy, leaveArmy, lendLimit, lentBy, whyNotJoin } from './joint';
 import { phaseFor, runAI } from './ai';
 import { court, monthlyDiplomacy, warForecast, type WarForecast } from './diplomacy';
@@ -47,7 +47,7 @@ import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
 import { SIEGE, fieldCtrl, garrison, garrisonOf, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
-import { quietNews } from './staff';
+import { RIVALS, characterOf, effortsOf, plansKnown, quietNews, rivalRules, type Character } from './staff';
 import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
@@ -1459,6 +1459,73 @@ export function foreignBooks(g: Game, nat: string): Books | null {
 /** What the player's agent in a province reports of it beyond its armies: what is on order there and the air fleets based there. Null without one. */
 export function agentReport(g: Game, region: number): CityReport | null {
   return g.human ? cityReport(g, region, g.human) : null;
+}
+
+// ---- Rival staffs: the character of each computer staff, and its main effort where the player may know it ----
+
+/** One main effort of a staff, as the player is allowed to know it. */
+export interface EffortView {
+  /** "the summer offensive towards Smolensk". */
+  name: string;
+  /** The province it is aimed at this month, and the one it was named for. */
+  target: number; targetName: string; first: number; firstName: string;
+  /** Whom it is against, the months it runs (turn numbers), and the provinces it has taken so far. */
+  enemy: string; from: number; to: number; won: number;
+  /** True when it is aimed at the player or one of his allies. */
+  atYou: boolean;
+}
+
+/** A computer nation's general staff as the player knows it. */
+export interface StaffView {
+  nat: string;
+  /** Its character in this war, the word for it and the sentence that says how it fights. Always known. */
+  character: Character; label: string; says: string;
+  /** How the player knows its plans: an ally tells him, or his agent reads its books in its capital. Null: he does not. */
+  source: 'ally' | 'agent' | null;
+  /** Its main efforts under way, where the player knows its plans. Empty when he does not, or when it has none. */
+  efforts: EffortView[];
+  /** The general offensives it has under way, where the player knows its plans: against whom and since when. */
+  offensives: { enemy: string; since: number }[];
+  /** One sentence on what it is doing, ready to show under its name. */
+  line: string;
+}
+
+/** The staff of one computer-run nation as the player knows it, or null: the player's own, a fallen one, or outside the grand campaign. */
+export function rivalStaff(g: Game, nat: string): StaffView | null {
+  const n = g.nations[nat];
+  if (!rivalRules(g) || !n?.alive || n.dormant || nat === g.human) return null;
+  const character = characterOf(g, nat);
+  const C = RIVALS.characters[character];
+  const source = plansKnown(g, nat);
+  const me = g.human;
+  const name = (id: string): string => g.nations[id]?.name ?? id;
+  const efforts: EffortView[] = !source ? [] : effortsOf(g, nat).map((e) => ({
+    name: e.name, target: e.target, targetName: g.regions[e.target].name, first: e.first, firstName: g.regions[e.first].name,
+    enemy: e.enemy, from: e.from, to: e.to, won: e.won, atYou: me !== null && (e.enemy === me || allied(g, me, e.enemy)),
+  }));
+  const offensives: StaffView['offensives'] = [];
+  if (source) {
+    for (const e of n.atWar) {
+      const since = Object.keys(g.flags).filter((k) => k === `st:on:${nat}:${e}` || k.startsWith(`st:on:${nat}:${e}:t`)).reduce((s, k) => Math.max(s, g.flags[k]), 0);
+      // (Only one that is being fought: opened lately, or with a battle of its own in the last three months.)
+      if (since && g.nations[e]?.alive && (g.turn - since <= 3 || g.turn - (n.lastFight[e] ?? -99) <= 3)) offensives.push({ enemy: e, since });
+    }
+  }
+  const cap = n.capital >= 0 ? g.regions[n.capital].name : 'its capital';
+  const line = !n.atWar.length ? 'At peace: its staff has no plan of attack.'
+    : !source ? `Where its main effort will fall is not known. An agent reading its books in ${cap} would learn it.`
+    : efforts.length ? efforts.map((e) => `Main effort: ${e.name}, against ${name(e.enemy)}, until ${turnToDate(e.to).label}${e.target !== e.first ? `. It has moved on to ${e.targetName}` : ''}.`).join(' ')
+    : offensives.length ? `A general offensive against ${offensives.map((o) => name(o.enemy)).join(' and ')}, under way since ${turnToDate(Math.min(...offensives.map((o) => o.since))).label}.`
+    : 'It stands on the defensive: no main effort is named.';
+  return { nat, character, label: C.label, says: C.says, source, efforts, offensives, line };
+}
+
+/** Every computer-run nation's staff as the player knows it: the nations at war first, strongest first. */
+export function rivalStaffs(g: Game): StaffView[] {
+  return Object.values(g.nations)
+    .sort((a, b) => (b.atWar.length ? 1 : 0) - (a.atWar.length ? 1 : 0) || b.armyPeak - a.armyPeak || (a.id < b.id ? -1 : 1))
+    .map((n) => rivalStaff(g, n.id))
+    .filter((v): v is StaffView => v !== null);
 }
 
 // ---- World Domination: the last act of the grand campaign ------------------------------------------------

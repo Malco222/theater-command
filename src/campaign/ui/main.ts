@@ -24,6 +24,7 @@ import {
   orderResearch, orderStopResearch,
   garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
+  rivalStaff, rivalStaffs, type StaffView,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { INTEL, armyKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type Known, type SpyRoom } from '../intel';
@@ -57,7 +58,7 @@ import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from
 import { phaseFor, theatrePhases } from '../ai';
 import { SIDE_NAME } from '../domination';
 import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
-import { fronts, isOpen, startOpen, type Front } from '../staff';
+import { RIVALS, fronts, isOpen, startOpen, type Front } from '../staff';
 import { liberate } from '../liberation';
 import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsUpkeep, fortCost, isHome, ledger, needsOf, provinceYield, raiseSite, specOf, type Ledger, type LedgerLine } from '../economy';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, researches, stepsOf, teamsFree, teamsTotal } from '../research';
@@ -3388,11 +3389,13 @@ function booksCard(nat: string): string {
   const queue = b.queue.length ? b.queue.slice(0, 16).map((q) => `<div class="lrow"><span>${esc(q.name)} <small>${what[q.what] ?? ''}${g.regions[q.region] ? ` · ${esc(g.regions[q.region].name)}` : ''}</small></span><b>${date(q.eta)}</b></div>`).join('') + (b.queue.length > 16 ? `<div class="lrow"><span>and ${b.queue.length - 16} more orders</span><b></b></div>` : '') : '<div class="empty">Nothing is on order.</div>';
   const research = b.research.length ? b.research.map((w) => `<div class="lrow"><span>${esc(w.name)}</span><b>${w.left} ${w.left === 1 ? 'month' : 'months'}</b></div>`).join('') : '<div class="empty">No team is at work.</div>';
   const S = b.stores;
+  const staff = rivalStaff(g, nat);
   const depot = S ? `<div class="lfacts two"><div class="lfact"><span>Oil in the depots</span><b>${amt(S.oil.stock)} <small>${monthsWordOf(S.oil.months)}</small></b></div><div class="lfact"><span>Supplies in the depots</span><b>${amt(S.sup.stock)} <small>${monthsWordOf(S.sup.months)}</small></b></div></div>` : `<p class="sub">${esc(upFirst(theName(nat)))} keeps no stocks of oil and supplies.</p>`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Secret intelligence · ${date(g.turn)}</div><h2>${flagIcon(nat, n.color, 34, 'inh')} The books of ${esc(theName(nat))}</h2></header>
     <div class="body ledger books"><p class="sub">${b.agent ? `Read by agent ${esc(b.agent)} in ${esc(cap)}. For as long as the agent is not caught, these figures are the true ones, month by month.` : `${esc(upFirst(theName(nat)))} is your ally: its books are open to you.`}</p>
     <div class="lfacts"><div class="lfact"><span>Treasury</span><b>${inHand(b.treasury)}</b></div><div class="lfact"><span>Income a month</span><b>${cash(b.gross)}</b></div><div class="lfact"><span>Upkeep a month</span><b>${cash(b.upkeep)}</b></div><div class="lfact"><span>Left over</span><b class="${b.net < 0 ? 'neg' : ''}">${cash(b.net, true)}</b></div></div>
     <div class="lfacts"><div class="lfact"><span>Army</span><b>${num(b.divisions)} <small>divisions</small></b></div><div class="lfact"><span>Formations</span><b>${b.corps} <small>corps</small></b></div><div class="lfact"><span>Technologies</span><b>${b.researched} <small>researched</small></b></div><div class="lfact"><span>On order</span><b>${b.queue.length}</b></div></div>
+    ${staff ? `<h3>Its general staff</h3>${staffRow(staff)}` : ''}
     <div class="lcols"><div><h3>On order</h3>${queue}</div><div><h3>In the laboratories</h3>${research}<h3>Depots</h3>${depot}</div></div></div>
     <footer>${S ? `<button class="btn" data-act="stores" data-nat="${nat}">Its depots in full</button>` : ''}<button class="btn go" data-act="close">Close</button></footer>`;
 }
@@ -3536,6 +3539,31 @@ function worldWonCard(): string {
     <footer><button class="btn" data-act="new">New game</button><button class="btn go" data-act="close">Look at your world</button></footer>`;
 }
 
+/**
+ * A computer staff on the Powers tab and the Books card: its character in a word, and what it is doing where the
+ * player may know it (an ally's plans, or an enemy's whose books an agent of his is reading).
+ */
+function staffRow(v: StaffView): string {
+  const aim = v.efforts.find((e) => e.atYou) ?? v.efforts[0];
+  const show = aim ? ` <button class="btn tiny" data-act="showmap" data-id="${aim.target}" title="Show ${esc(aim.targetName)} on the map">Show</button>` : '';
+  const how = v.source === 'agent' ? ' title="Read from its books by your agent in its capital."' : v.source === 'ally' ? '' : ' title="Its plans are secret."';
+  return `<div class="staff${aim?.atYou ? ' atyou' : ''}"><button class="tag chr ${v.character}" data-act="staffs" title="${esc(v.says)}">${esc(v.label)}</button><small${how}>${esc(v.line)}${show}</small></div>`;
+}
+
+/** The card behind a staff's character: what the three characters mean, what a main effort is, and every staff at war as the player knows it. */
+function staffsCard(): string {
+  const all = rivalStaffs(g).filter((v) => g.nations[v.nat].atWar.length);
+  const kinds = (['bold', 'cautious', 'opportunist'] as const).map((k) => `<div class="stkind"><i class="tag chr ${k}">${esc(RIVALS.characters[k].label)}</i><span>${esc(RIVALS.characters[k].says)}</span></div>`).join('');
+  const rows = all.map((v) => `<div class="strow">${flagIcon(v.nat, g.nations[v.nat].color, 22)}<b>${esc(natName(v.nat))}</b>${staffRow(v)}</div>`).join('');
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The general staffs · ${date(g.turn)}</div><h2>Who you are up against</h2></header>
+    <div class="body staffs"><p class="lead">Every country the computer leads has a general staff with a character of its own in each war. The character decides how readily it attacks, and when it names a main effort.</p>
+    ${kinds}
+    <h3>The main effort</h3><p class="sub">A staff that is not strong enough for a general offensive does not sit still. When a front has gone quiet it picks one stretch of the line, masses its corps opposite it for a month, softens the fieldworks with a probe and its bombers, and attacks there and nowhere else for a season. An ally tells you where its main effort is going. An enemy keeps it secret: an agent reading its books in its capital learns the place and the months, and you are told the moment it is named.</p>
+    <p class="sub">A staff that is winning does not let go either. With twice its enemy\'s strength and no ground gained for three months it accepts shorter odds and sends a third wave. A country whose capital has been in enemy hands for more than a year wears out month by month until it asks for terms.</p>
+    <h3>The staffs at war</h3>${rows || '<div class="empty">No country the computer leads is at war.</div>'}</div>
+    <footer><button class="btn go" data-act="close">Close</button></footer>`;
+}
+
 function powersPane(): string {
   const act = lastAct(g);
   if (act?.on) return worldPane();
@@ -3544,7 +3572,7 @@ function powersPane(): string {
   const offer = act?.open && act.decided
     ? `<div class="note lastnote"><b>${beatenLine(act.decided.beaten)}: the war is decided.</b> ${act.peace ? `You took the victory in ${date(act.peace)}. ` : ''}World Domination is open to you: every alliance dissolved, every nation for itself, the last one standing takes the world.<div class="acts" style="margin-top:7px"><button class="btn small warn" data-act="lastact">The last act ▸</button></div></div>`
     : '';
-  let out = `${offer}<h2>Powers at war</h2><p class="sub">The bar shows how much fight a nation has left. It drains as the capital, territory and army are lost.</p>${isOpen(g) ? `<div class="acts" style="margin-top:8px"><button class="btn small" data-act="traits">National abilities: what each country does best</button>${g.human && tradeRules(g) ? '<button class="btn small" data-act="trade">Trade agreements</button>' : ''}</div>` : ''}<div style="height:10px"></div>`;
+  let out = `${offer}<h2>Powers at war</h2><p class="sub">The bar shows how much fight a nation has left. It drains as the capital, territory and army are lost.${isOpen(g) ? ' The word under a country is the character of its general staff in this war: press it to read what it means.' : ''}</p>${isOpen(g) ? `<div class="acts" style="margin-top:8px"><button class="btn small" data-act="traits">National abilities: what each country does best</button>${g.human && tradeRules(g) ? '<button class="btn small" data-act="trade">Trade agreements</button>' : ''}</div>` : ''}<div style="height:10px"></div>`;
   const fallen = nationsFallen(g);
   for (const n of at.sort((a, b) => (b.alive ? 1 : 0) - (a.alive ? 1 : 0) || b.armyPeak - a.armyPeak)) {
     if (n.alive) {
@@ -3554,7 +3582,9 @@ function powersPane(): string {
       // Its form of government, in a word: a click opens the card.
       const gv = isOpen(g) ? governmentOf(g, n.id) : null;
       const form = gv ? ` <button class="btn tiny" data-act="cabinet" data-nat="${n.id}" title="${esc(gv.form.name)}. ${esc(gv.form.blurb)}">${FORM_WORD[gv.form.id]}</button>` : '';
-      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(natName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div></div>`;
+      // Its general staff: the character it has in this war, and its main effort where the player may know it.
+      const staff = rivalStaff(g, n.id);
+      out += `<div class="nat">${chip(n.id)}<b>${esc(n.name)}${n.freedOn ? ` <i class="tag good" title="Liberated by ${esc(natName(n.freedOn.by))}. It stands for as long as its capital does.">Freed ${date(n.freedOn.turn)}</i>` : ''}</b><small${army.exact ? '' : ' title="Your staff\'s estimate. An agent reading its books in its capital would give the true figure."'}>${armyWords(army)}${books}${form}</small><div class="will"><div class="meter"><i class="${will < 0.35 ? 'low' : ''}" style="width:${Math.round(will * 100)}%"></i></div><small>At war with ${n.atWar.map(natName).join(', ')}</small></div>${staff ? staffRow(staff) : ''}</div>`;
     } else {
       const f = fallen.find((x) => x.nat === n.id);
       const how = f?.fell.how === 'annexed' ? `Annexed by ${theName(n.fellOn!.to)}` : f?.fell.how === 'terms' ? `Left the war by treaty with ${natName(n.fellOn!.to)}` : `Asked ${natName(n.fellOn!.to)} for terms in week ${n.fellOn!.week}`;
@@ -4525,6 +4555,7 @@ function openModal(m: typeof ui.modal): void {
     if (!nat || !g.nations[nat] || !resRules(g)) { ui.modal = null; veil.classList.remove('open'); return; }
     card.innerHTML = storesCard(nat);
   }
+  else if (m.kind === 'staffs') card.innerHTML = staffsCard();
   else if (m.kind === 'books') {
     const b = foreignBooks(g, m.nat);
     if (!b) { ui.modal = null; veil.classList.remove('open'); return; }
@@ -5972,6 +6003,7 @@ function onClick(e: MouseEvent): void {
       break;
     }
     case 'books': openModal({ kind: 'books', nat: t.dataset.nat || '' }); break;
+    case 'staffs': openModal({ kind: 'staffs' }); break;
     case 'spyrecruit': {
       const why = whyNotRecruitAgent(g);
       const a = why ? null : orderRecruitAgent(g);

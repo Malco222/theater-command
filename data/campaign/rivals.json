@@ -1,0 +1,54 @@
+{
+  "_about": "Rival staffs (Version 65, the grand campaign). Every computer nation's staff has a character in each war, drawn from the war's seed with a national lean ('lean': the weights of bold, cautious and opportunist, in that order). The character changes the nerve the nation has in open.json ('attackAt' multiplies the strength ratio at which it opens a general offensive, 'minOdds' is added to the odds a single attack needs) and sets when it names a main effort. A main effort is a limited offensive against one sector of a front where no general offensive is under way: the staff picks the enemy province where the force it could mass in a month has the best prospect, masses opposite it, softens the line (the bombers on the fieldworks, a probe by one corps) and attacks there and nowhere else for 'effort.months' months, then rests 'effort.rest' months. It names one when the front has been quiet for the character's 'quiet' months (an opportunist does not wait while the enemy is busy: fighting someone else on land within the last 'effort.busy' months), the strength ratio on the front (what it can bring to it against what the enemy has near it) is at least 'strength', and the massed attack would go in at odds of 'local' or better. 'effort.mass' is the corps it wants in each province beside the target, 'effort.sector' how many enemy provinces round the target it may attack.",
+  "characters": {
+    "bold": {
+      "label": "Bold",
+      "says": "Attacks on a smaller advantage than most, and does not let a front lie quiet for long.",
+      "attackAt": 0.9, "minOdds": -0.05, "quiet": 2, "strength": 0.6, "local": 1.25
+    },
+    "cautious": {
+      "label": "Cautious",
+      "says": "Waits for long odds, masses and softens a line before it strikes, and seldom wastes an army.",
+      "attackAt": 1.1, "minOdds": 0.05, "quiet": 4, "strength": 0.85, "local": 1.5
+    },
+    "opportunist": {
+      "label": "Opportunist",
+      "says": "Strikes where you are weak and when you are busy with someone else.",
+      "attackAt": 1.0, "minOdds": 0, "quiet": 3, "strength": 0.7, "local": 1.35
+    }
+  },
+  "lean": {
+    "_default": [1, 2, 2],
+    "GER": [5, 1, 2],
+    "SOV": [2, 4, 2],
+    "UK": [1, 4, 3],
+    "USA": [4, 2, 2],
+    "FRA": [1, 5, 1],
+    "ITA": [2, 1, 5],
+    "FIN": [2, 3, 1],
+    "ROM": [1, 2, 4],
+    "HUN": [1, 3, 3],
+    "YUG": [1, 3, 2],
+    "GRE": [2, 3, 1],
+    "POL": [3, 2, 1],
+    "TUR": [1, 4, 2],
+    "ESP": [1, 3, 3]
+  },
+  "effort": { "months": 3, "rest": 2, "mass": 4, "sector": 3, "busy": 2 },
+  "press": {
+    "_note": "The will to finish. A staff with a general offensive under way on a front where it has 'ratio' times the enemy's strength, and that has gained no ground for 'after' months, accepts shorter odds battle by battle: 'step' less for each month since, never below 'floor', and it sends up to 'waves' waves at one place in a month where it has the corps (two is the rule otherwise). With less than 'ratio' times his strength, an offensive on which no battle has been fought either way for 'after' months is an offensive in name only: it is called off, the front is open to a main effort at once, and no new general offensive is opened there for 'again' months unless the strength grows to 'ratio' or the staff's patience runs out (open.json, impatience).",
+    "ratio": 2, "after": 3, "step": 0.1, "floor": 1.0, "waves": 3, "again": 6
+  },
+  "soften": {
+    "_note": "A staff softens a prepared line before it attacks it, as the player can. Where the defenders stand in fieldworks of 'works' months or more and the attack it means to make falls short of the odds it asks but reaches 'from' of them, one corps that is not going in probes the line (game.ts, probeLine) before the attack; at most 'most' probes a month. The air staff flies the raid on the fieldworks (air.ts) at the target of a main effort, with every bomber group in reach, where it should take 'raid' months or more off the works, and weighs the same raid against its others where an offensive is under way.",
+    "works": 1, "most": 2, "from": 0.6, "raid": 0.25
+  },
+  "fold": {
+    "_note": "A computer staff folds two of its corps into one where both are under 'worn' of their strength and the corps kept would not be over strength. The cadre is raised again from the arsenal when the treasury allows.",
+    "worn": 0.5
+  },
+  "exhaust": {
+    "_note": "A finish for a war that is won. A computer nation whose capital has been in enemy hands for more than 'after' months wears out: every month after that adds 'per' to how near it is to giving in, until it asks for terms. The player's own country is never worn out this way.",
+    "after": 12, "per": 0.01
+  }
+}
