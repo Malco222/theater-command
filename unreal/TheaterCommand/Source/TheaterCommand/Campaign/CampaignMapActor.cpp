@@ -275,6 +275,12 @@ void ACampaignMapActor::LandVector(FName Name, const FLinearColor& Value)
 void ACampaignMapActor::SeaScalar(FName Name, float Value)
 {
 	if (SeaMaterial) { SeaMaterial->SetScalarParameterValue(Name, Value); }
+	if (Name == TEXT("Surf"))
+	{
+		// (the water's-edge line: the coarse world sheet has none, and a fine sheet's fades with the eye's height)
+		SurfNow = Value;
+		return;
+	}
 	if (WorldSeaMaterial) { WorldSeaMaterial->SetScalarParameterValue(Name, Value); }
 	for (const auto& Pair : FineSheets) { if (Pair.Value->SeaPaint) { Pair.Value->SeaPaint->SetScalarParameterValue(Name, Value); } }
 }
@@ -592,7 +598,7 @@ void ACampaignMapActor::PaintGround()
 	{
 		// (the whole-world map) The canopy of the tropics: the art director's jungle, seen at about (54, 87, 56).
 		// ("-TheaterJungle=r,g,b" tries another.)
-		FLinearColor Jungle(0.047f, 0.1f, 0.077f); // (cooler and a step darker than it first was: lit canopy stays under 0.36, its blue within 32 of its green)
+		FLinearColor Jungle(0.041f, 0.092f, 0.071f); // (an eighth down on what it was, and a little less red) // (cooler and a step darker than it first was: lit canopy stays under 0.36, its blue within 32 of its green)
 		FString Asked;
 		TArray<FString> Parts;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterJungle="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
@@ -607,6 +613,11 @@ void ACampaignMapActor::PaintGround()
 			Taiga = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
 		}
 		LandVector(TEXT("NorthColour"), Taiga);
+		// The New World's square fields: fallow, wheat and green, as what each does to the ground under it.
+		// (The art director's swatches are (156, 130, 94), (204, 180, 106) and (146, 154, 94) on prairie ground.)
+		LandVector(TEXT("FieldFallow"), FLinearColor(0.83f, 0.66f, 0.6f));
+		LandVector(TEXT("FieldWheat"), FLinearColor(1.42f, 1.24f, 0.96f));
+		LandVector(TEXT("FieldGreen"), FLinearColor(0.74f, 0.92f, 0.76f));
 	}
 	{
 		// Woods on a warm-stained nation (Poland's red, Holland's orange) went chocolate: a very dark green takes
@@ -1074,6 +1085,19 @@ void ACampaignMapActor::BuildWorld()
 		return;
 	}
 	const double StartTime = FPlatformTime::Seconds();
+	{
+		// The fine patterns that are laid by where a point is on the table (grass, crowns, fields, hatching, ripples)
+		// repeat a whole number of times round the world, so that they are the same pattern when the eye comes
+		// round: each tiling is taken to the nearest that does. (A change of less than a thousandth.)
+		const double Round = Data.WorldWidth * UnitScale;
+		auto Whole = [Round](double Tiling) { return static_cast<float>(FMath::RoundToDouble(Tiling * Round) / Round); };
+		LandScalar(TEXT("DetailTiling"), Whole(0.0052));
+		LandScalar(TEXT("DetailTilingCoarse"), Whole(0.00137));
+		LandScalar(TEXT("FieldTiling"), Whole(0.03));
+		LandScalar(TEXT("HatchTiling"), Whole(0.006));
+		SeaScalar(TEXT("RippleTiling"), Whole(0.0095));
+		SeaScalar(TEXT("RippleTilingSecond"), Whole(0.0061));
+	}
 	// The land beyond today's map, on one coarse sheet that covers the whole world (the whole-world map, step one).
 	WorldTerrain.BuildOver(Data, Data.WorldMinX, Data.WorldMinY, Data.WorldWidth, Data.WorldHeight, 6.0, true);
 	WorldPaint.Build(Data, WorldTerrain, VerticalScale);
@@ -1085,6 +1109,32 @@ void ACampaignMapActor::BuildWorld()
 	MeetAtSeam(WorldPaint.Cover, WorldPaint.NX, WorldPaint.NY, 16, true);
 	MeetAtSeam(WorldPaint.Water, WorldPaint.WaterNX, WorldPaint.WaterNY, 16, true);
 	MeetAtSeam(WorldPaint.Surf, WorldPaint.WaterNX, WorldPaint.WaterNY, 16, true);
+	if (Paint.WaterNX > 1 && Paint.WaterNY > 1)
+	{
+		// Along the map's own box the world's sea takes the colour of the map's sea at that edge, dying away over
+		// some forty units, so that no line shows in the water where the map's sheet ends.
+		const double Reach = 42.0;
+		ParallelFor(WorldPaint.WaterNY, [&](int32 J)
+		{
+			for (int32 I = 0; I < WorldPaint.WaterNX; ++I)
+			{
+				const double X = WorldTerrain.OriginX + I * WorldPaint.WaterStep, Y = WorldTerrain.OriginY + J * WorldPaint.WaterStep;
+				const double EdgeX = FMath::Clamp(X, 0.0, Data.Width), EdgeY = FMath::Clamp(Y, 0.0, Data.Height);
+				const double Away = FVector2D::Distance(FVector2D(X, Y), FVector2D(EdgeX, EdgeY));
+				if (Away <= 0.0 || Away >= Reach)
+				{
+					continue; // inside the box (the map's own sea lies there) or too far off to matter
+				}
+				const int32 EI = FMath::Clamp(FMath::RoundToInt32(EdgeX / Paint.WaterStep), 0, Paint.WaterNX - 1), EJ = FMath::Clamp(FMath::RoundToInt32(EdgeY / Paint.WaterStep), 0, Paint.WaterNY - 1);
+				const FColor& Edge = Paint.Water[EJ * Paint.WaterNX + EI];
+				FColor& Here = WorldPaint.Water[J * WorldPaint.WaterNX + I];
+				const float Much = 1.0f - FMath::SmoothStep(0.0f, static_cast<float>(Reach), static_cast<float>(Away));
+				Here = FColor(static_cast<uint8>(FMath::Lerp(static_cast<float>(Here.R), static_cast<float>(Edge.R), Much)),
+					static_cast<uint8>(FMath::Lerp(static_cast<float>(Here.G), static_cast<float>(Edge.G), Much)),
+					static_cast<uint8>(FMath::Lerp(static_cast<float>(Here.B), static_cast<float>(Edge.B), Much)), Here.A);
+			}
+		});
+	}
 	WorldPictures.Reset();
 	auto Picture = [this](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name)
 	{
@@ -1115,6 +1165,9 @@ void ACampaignMapActor::BuildWorld()
 	WorldSeaMaterial->CopyParameterOverrides(SeaMaterial);
 	WorldSeaMaterial->SetTextureParameterValue(TEXT("Water"), Picture(WorldPaint.Water, WorldPaint.WaterNX, WorldPaint.WaterNY, true, TEXT("WorldWater")));
 	WorldSeaMaterial->SetTextureParameterValue(TEXT("Shore"), Picture(WorldPaint.Surf, WorldPaint.WaterNX, WorldPaint.WaterNY, false, TEXT("WorldShore")));
+	// (The pale line at the water's edge belongs to the fine sheets, at working height. The coarse sheet's sea has
+	// none: from high up it would stand as a wire outline, and round islands too small for the coarse land to draw.)
+	WorldSeaMaterial->SetScalarParameterValue(TEXT("Surf"), 0.0f);
 
 	// Its land, in tiles like the map's own, with the map's own ground left out of it and the whole of it a
 	// hair lower, so that where the two meet the finer one is always the one seen.
@@ -1303,6 +1356,11 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 		}
 		// (each stands a turn of the world east or west of where it is kept, whichever is nearest the eye)
 		Sheet.Land.Turn = TurnFor(Sheet.Box.GetCenter().X, Focus.X);
+		if (Sheet.SeaPaint)
+		{
+			// (its water's-edge line fades out as the eye rises toward where the coarse sheet takes over)
+			Sheet.SeaPaint->SetScalarParameterValue(TEXT("Surf"), SurfNow * (1.0f - FMath::SmoothStep(6500.0f, 10000.0f, CameraDistance)));
+		}
 		if (Sheet.Sea)
 		{
 			const FVector Place(0.0, Sheet.Land.Turn * Data.WorldWidth * UnitScale, 0.0);

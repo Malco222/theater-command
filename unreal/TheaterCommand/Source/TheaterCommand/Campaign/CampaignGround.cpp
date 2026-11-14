@@ -182,7 +182,7 @@ namespace
 			}
 			case WorldLook::Ice: Look = FSeen::Bytes(232, 236, 238); bKeepsItsOwn = true; break;
 			case WorldLook::Alpine: Look = FSeen::Bytes(160, 148, 116); bKeepsItsOwn = true; break;
-			default: break; // temperate: as Europe's own lowland, by height
+			default: Look = FSeen(ByHeight.R, ByHeight.G, ByHeight.B + 0.05f); break; // temperate: as Europe's own lowland by height, a little bluer, so that open ground in the sun is not lime
 			}
 			if (!bKeepsItsOwn)
 			{
@@ -287,11 +287,13 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	const FCampaignClimate& Climate = FCampaignClimate::Get();
 	const bool bBeyond = Data.bWorld && Climate.IsLoaded();
 	TArray<float> Outside, LookFields, LookBig, LookFir, LookSnow, LookTropic, LookNorth;
+	TArray<uint8> LookSquare; // where the fields are the New World's squares on the compass
 	if (bBeyond)
 	{
 		Outside.SetNumUninitialized(Count);
 		LookTropic.SetNumUninitialized(Count);
 		LookNorth.SetNumUninitialized(Count);
+		LookSquare.Init(0, Count);
 		LookFields.SetNumUninitialized(Count);
 		LookBig.SetNumUninitialized(Count);
 		LookFir.SetNumUninitialized(Count);
@@ -333,8 +335,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			LookFir[Idx] = 0.6f * Shares[WorldLook::Taiga];
 			// (the canopy of the tropics is a lighter, fuller green than Europe's woods: the jungle's wholly, rice country's and the savanna's partly)
 			LookTropic[Idx] = FMath::Clamp(Shares[WorldLook::Jungle] + 0.7f * Shares[WorldLook::Monsoon] + 0.5f * Shares[WorldLook::Savanna], 0.0f, 1.0f) * Out;
-			// (and the northern forest's is a lifted, cooler green than a fir wood of the Alps)
-			LookNorth[Idx] = Shares[WorldLook::Taiga] * Out;
+			// (and the northern forest's is a lifted, cooler green than a fir wood of the Alps; the woods of the
+			// temperate lands beyond Europe take a share of it, which keeps them from going olive under the lamp)
+			LookNorth[Idx] = FMath::Clamp(Shares[WorldLook::Taiga] + 0.4f * Shares[WorldLook::Temperate], 0.0f, 1.0f) * Out;
+			// (the prairie's fields, and those of temperate North America, are squares laid on the compass)
+			const bool bNorthAmerica = Latitude > 24.0f && (Longitude < -52.0f || Longitude > 190.0f);
+			LookSquare[Idx] = Out > 0.5f && Shares[WorldLook::Prairie] + (bNorthAmerica ? Shares[WorldLook::Temperate] : 0.0f) > 0.5f ? 1 : 0;
 			if (Id < 0)
 			{
 				// (where the rules name the kind of country, that still leans the woods; where nobody has yet, the look does)
@@ -522,7 +528,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// (and in the jungle at about 3,300 metres)
 			const float TreeLine = FMath::Lerp(FMath::Lerp(1750.0f, FMath::Max(LookSnowOr(LookSnow, Idx) - 1200.0f, 200.0f), Beyond), 3300.0f, bBeyond ? LookTropic[Idx] : 0.0f);
 			float Wooded = FMath::SmoothStep(WoodsFrom(), WoodsFrom() + 0.07f, Thick) * FMath::SmoothStep(0.0f, 300.0f, TreeLine - Metres[Idx]);
-			Wooded *= (1.0f - Rock * (1.0f - JungleRoof)) * (1.0f - Sand / 0.35f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
+			// (beyond Europe the woods climb the steep ridges of the lower ranges too, under about 1,800 metres)
+			const float Roof = FMath::Max(JungleRoof, 0.85f * Beyond * (1.0f - FMath::SmoothStep(1500.0f, 2000.0f, Metres[Idx])));
+			Wooded *= (1.0f - Rock * (1.0f - Roof)) * (1.0f - Sand / 0.35f) * FMath::SmoothStep(0.5f, 0.8f, Terrain.Coverage[Idx]);
 
 			// Shaded relief, as on a printed map: how squarely the ground faces the sun (1 on the flat, up to 2.2
 			// on a slope turned full to it, nothing on one turned away), less where a shadow is thrown across it,
@@ -556,7 +564,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			Bare.A = ToByte(Wooded);
 			Ground[Idx] = Bare;
 			Relief[Idx] = FColor(ToByte(Normal.X * 0.5f + 0.5f), ToByte(Normal.Y * 0.5f + 0.5f), ToByte(Shade * 0.5f), 255);
-			Masks[Idx] = FColor(ToByte(Rock * (1.0f - JungleRoof)), ToByte(Snow), ToByte(Sand), ToByte(Dry[Idx]));
+			Masks[Idx] = FColor(ToByte(Rock * (1.0f - FMath::Max(JungleRoof, Roof * Wooded))), ToByte(Snow), ToByte(Sand), ToByte(Dry[Idx]));
 		}
 	});
 
@@ -613,13 +621,21 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		const uint8 NotTropic = !bBeyond ? 255 : LookNorth[Idx] > LookTropic[Idx] ? ToByte(0.49f - 0.49f * LookNorth[Idx]) : ToByte(1.0f - 0.49f * LookTropic[Idx]);
 		if (Id < 0)
 		{
-			Lie[Idx] = FColor(255, 128, 128, NotTropic);
+			// (Land nobody holds: its fields lie square on the compass where they are the New World's, and at a
+			// slant of twenty degrees elsewhere. "No turn at all", to the last figure, is what tells the land's
+			// paint to lay squares.)
+			const bool bSquare = LookSquare.IsValidIndex(Idx) && LookSquare[Idx] != 0;
+			Lie[Idx] = bSquare ? FColor(255, 128, 128, NotTropic) : (bBeyond ? FColor(247, 171, 128, NotTropic) : FColor(255, 129, 128, NotTropic));
 			continue;
 		}
 		const uint32 Seed = static_cast<uint32>(Id) * 2654435761u;
 		const float Angle = ((Seed >> 8) & 0xFFFF) / 65535.0f * UE_PI; // anywhere in the half circle: a grid turned further is the same grid again
 		const float Larger = 0.5f + 0.5f * ((((Seed >> 3) & 0xFF) / 255.0f) * 2.0f - 1.0f) * 0.6f; // 0.2 to 0.8
 		Lie[Idx] = FColor(ToByte(0.5f + 0.5f * FMath::Cos(Angle)), ToByte(0.5f + 0.5f * FMath::Sin(Angle)), ToByte(Larger), NotTropic);
+		if (Lie[Idx].R == 255 && Lie[Idx].G == 128)
+		{
+			Lie[Idx].G = 129; // (no province of Europe lies at exactly no turn: that is the sign for the New World's squares)
+		}
 	}
 
 	Tint.SetNumUninitialized(Count);
@@ -706,6 +722,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			{
 				C = Mix(C, FSeen::Bytes(63, 120, 128), 0.8f * (1.0f - Tropic) * (1.0f - FMath::SmoothStep(0.18f, 0.42f, Deep)) * SeaBeyond);
 				C = Mix(C, FSeen::Bytes(62, 88, 100), 0.5f * FMath::SmoothStep(55.0f, 66.0f, SeaLatitude) * SeaBeyond);
+				// (and the shelves of the far north are a steel blue-grey, not the south's turquoise: the Bering Sea)
+				C = Mix(C, FSeen::Bytes(70, 102, 116), 0.85f * FMath::SmoothStep(51.0f, 57.0f, SeaLatitude) * (1.0f - FMath::SmoothStep(0.18f, 0.5f, Deep)) * SeaBeyond);
 				// (the lens takes the red out of deep blue water: the open ocean is given some back, so it is blue and not ink)
 				C = Mix(C, FSeen::Bytes(58, 70, 104), 0.5f * FMath::SmoothStep(0.3f, 0.6f, Deep) * SeaBeyond);
 			}

@@ -391,22 +391,39 @@ def build_land():
     cosine = plus(m, times(m, (lie, "R"), 2.0, -2800, 1750), -1.0, -2700, 1750)
     sine = plus(m, times(m, (lie, "G"), 2.0, -2800, 1850), -1.0, -2700, 1850)
     size = plus(m, times(m, (lie, "B"), -0.7, -2800, 1950), 1.35, -2700, 1950)  # 1.21 (small blocks) down to 0.79 (large)
+    # (The whole-world map: the New World's fields are squares laid on the compass. Where the lie picture says "no
+    # turn at all", to the last figure, the rows are not slanted, do not wander, are not strips and are not bonded
+    # like brick. No province of Europe is given that turn.)
+    square = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (lie, "R"), -0.998, -3300, 2100), 1000.0, -3150, 2100), -3000, 2100),
+                   one_in(m, unreal.MaterialExpressionSaturate,
+                          plus(m, times(m, one_in(m, unreal.MaterialExpressionAbs, plus(m, (lie, "G"), -0.502, -3300, 2200), -3150, 2200), -400.0, -3000, 2200), 1.0, -2850, 2200), -2700, 2200),
+                   -2550, 2150)
+    slant = one_in(m, unreal.MaterialExpressionOneMinus, square, -2400, 2150)
     east = times(m, plus(m, times(m, east0, cosine, -2600, 1500), times(m, south0, sine, -2600, 1560), -2500, 1500), size, -2400, 1500)
     south = times(m, plus(m, times(m, south0, cosine, -2600, 1640), times(m, times(m, east0, sine, -2600, 1700), -1.0, -2550, 1700), -2500, 1640), size, -2400, 1640)
-    rows = pair(m, plus(m, east, times(m, south, 0.33, -2500, 1560), -2350, 1500),
-                times(m, plus(m, south, times(m, east, -0.22, -2500, 1660), -2350, 1620), 1.389, -2200, 1620), -2050, 1550)
-    rows = plus(m, rows, times(m, leaning(m, coarse, "R", "G", -2300, 1800), scalar(m, "FieldWander", 0.3, -2000, 1900), -1700, 1800), -1500, 1600)
+    rows = pair(m, plus(m, east, times(m, times(m, south, 0.33, -2500, 1560), slant, -2420, 1560), -2350, 1500),
+                times(m, plus(m, south, times(m, times(m, east, -0.22, -2500, 1660), slant, -2420, 1660), -2350, 1620), lerp(m, 1.389, 1.0, square, -2300, 1700), -2200, 1620), -2050, 1550)
+    rows = plus(m, rows, times(m, times(m, leaning(m, coarse, "R", "G", -2300, 1800), scalar(m, "FieldWander", 0.3, -2000, 1900), -1700, 1800), slant, -1600, 1800), -1500, 1600)
     # Fields are strips, two to four times as long as they are wide, and each row of them is set off from the
     # last like a course of bricks, so that four corners seldom meet and the land does not read as squares.
     row_u = node(m, unreal.MaterialExpressionComponentMask, -1450, 1750, r=True, g=False, b=False, a=False)
     connect(rows, "", row_u, "")
     row_v = times(m, node_from(m, unreal.MaterialExpressionComponentMask, rows, -1450, 1850, r=False, g=True, b=False, a=False),
-                  scalar(m, "FieldStrip", 2.2, -1450, 1950), -1350, 1850)
+                  lerp(m, scalar(m, "FieldStrip", 2.2, -1450, 1950), 1.0, square, -1400, 2000), -1350, 1850)
     course = one_in(m, unreal.MaterialExpressionFloor, row_v, -1250, 1950)
-    rows = pair(m, plus(m, row_u, times(m, course, 0.37, -1150, 1950), -1050, 1750), row_v, -950, 1800)
+    rows = pair(m, plus(m, row_u, times(m, times(m, course, 0.37, -1150, 1950), slant, -1100, 1950), -1050, 1750), row_v, -950, 1800)
     small = picture(m, "Fields", times(m, rows, 1.0 / 64.0, -1300, 1500), -1100, 1500, numbers=True)
     large = picture(m, "Fields", plus(m, times(m, rows, 0.42 / 64.0, -1300, 1700), 0.37, -1150, 1700), -950, 1700, numbers=True)
     tone = times(m, lerp(m, (small, "RGB"), (large, "RGB"), (cover, "G"), -750, 1600), 2.0, -600, 1600)
+    # (and the squares are the prairie's wheat, fallow and green, in place of Europe's pasture, wheat and plough: a
+    # field's own tone says which, its green part how pale or dark, its blue part whether it is under grass)
+    tone_g = node_from(m, unreal.MaterialExpressionComponentMask, tone, -550, 1700, r=False, g=True, b=False, a=False)
+    tone_b = node_from(m, unreal.MaterialExpressionComponentMask, tone, -550, 1780, r=False, g=False, b=True, a=False)
+    grain = lerp(m, vector(m, "FieldFallow", (0.83, 0.63, 0.83, 1.0), -700, 1860), vector(m, "FieldWheat", (1.49, 1.28, 1.09, 1.0), -700, 1960),
+                 one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, tone_g, -0.75, -500, 1700), 2.0, -420, 1700), -340, 1700), -250, 1800)
+    grain = lerp(m, grain, vector(m, "FieldGreen", (0.72, 0.91, 0.83, 1.0), -700, 2060),
+                 one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, tone_b, -1.05, -500, 1780), 6.0, -420, 1780), -340, 1780), -160, 1850)
+    tone = lerp(m, tone, grain, square, -80, 1700)
     quilt = lerp(m, 1.0, tone, times(m, (cover, "R"), scalar(m, "FieldsStrength", 0.45, -750, 1800), -600, 1800), -400, 1650)
     # Hedges: a thin dark line round each small field, seen only close to.
     part = one_in(m, unreal.MaterialExpressionFrac, rows, -1300, 2000)
@@ -477,13 +494,25 @@ def build_land():
     # sand on the shore and in the desert, nothing on snow.
     sandy = one_in(m, unreal.MaterialExpressionSaturate, plus(m, (masks, "B"), (masks, "A"), -2300, 500), -2100, 500)
 
-    def kind_of_ground(sample, x, y):
-        v = lerp(m, (sample, "R"), (sample, "G"), wooded, x, y)
+    # (On a great roof of canopy the one picture of tree-tops, repeating, shows as a lattice. Near to, the tree-tops
+    # are read a second time, a third finer and turned a quarter round, and a crown is wherever either has one.)
+    fine_u = node_from(m, unreal.MaterialExpressionComponentMask, fine_uv, -3000, 850, r=True, g=False, b=False, a=False)
+    fine_v = node_from(m, unreal.MaterialExpressionComponentMask, fine_uv, -3000, 930, r=False, g=True, b=False, a=False)
+    turned_uv = pair(m, times(m, fine_v, 1.37, -2850, 930), times(m, fine_u, -1.37, -2850, 850), -2700, 890)
+    turned = node(m, unreal.MaterialExpressionTextureSampleParameter2D, -2500, 890, parameter_name="Detail", texture=stand_in(True),
+                  sampler_type=sampler_for(stand_in(True)), sampler_source=unreal.SamplerSourceMode.SSM_WRAP_WORLD_GROUP_SETTINGS)
+    connect(turned_uv, "", turned, "UVs")
+    crowns = node(m, unreal.MaterialExpressionMax, -2250, 890)
+    connect(fine, "G", crowns, "A")
+    connect(turned, "G", crowns, "B")
+
+    def kind_of_ground(sample, x, y, trees=None):
+        v = lerp(m, (sample, "R"), trees if trees is not None else (sample, "G"), wooded, x, y)
         v = lerp(m, v, (sample, "B"), (masks, "R"), x + 200, y)
         v = lerp(m, v, (sample, "A"), sandy, x + 400, y)
         return lerp(m, v, 0.5, (masks, "G"), x + 600, y)
 
-    near = times(m, kind_of_ground(fine, -2000, 700), 2.0, -1200, 700)
+    near = times(m, kind_of_ground(fine, -2000, 700, crowns), 2.0, -1200, 700)
     far = lerp(m, 1.0, times(m, kind_of_ground(coarse, -2000, 1000), 2.0, -1200, 1000), scalar(m, "DetailCoarse", 0.45, -1200, 1150), -1000, 1000)
     detail = lerp(m, 1.0, times(m, near, far, -800, 850), scalar(m, "DetailStrength", 0.8, -800, 1000), -600, 850)
 

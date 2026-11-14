@@ -362,6 +362,7 @@ private:
 	double WrapX(double X) const;
 	/** How many turns of the world east (or, negative, west) of where it is kept a thing at X is drawn, to be nearest the eye. */
 	int32 TurnFor(double X, double EyeX) const;
+	float SurfNow = 0.45f; // how strong the line at the water's edge is at this hour
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> WorldSeaTwin; // the same sea again, a turn of the world to the side the eye is on
 	void PrepareLand();
