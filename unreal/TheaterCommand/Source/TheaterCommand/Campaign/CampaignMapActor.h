@@ -1,6 +1,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Async/Future.h"
+#include <atomic>
 #include "GameFramework/Actor.h"
 #include "Campaign/CampaignMapData.h"
 #include "Campaign/CampaignGround.h"
@@ -37,6 +39,9 @@ class THEATERCOMMAND_API ACampaignMapActor : public AActor
 
 public:
 	ACampaignMapActor();
+
+	/** Waits for any sheet of ground still being built on another thread: it reads this actor's map. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	/** Reads the campaign data and builds the whole table. Returns false if the data could not be read. */
 	bool BuildMap();
@@ -299,13 +304,60 @@ private:
 		TArray<TArray<float>> Cover; // the most land anywhere near each of those points, for telling which tiles are all sea
 		TArray<FIntPoint> Sizes; // how many points each level has, across and down
 		int32 TopLevel = 0;
-		bool bHole = false; // ground that a finer sheet draws is left out of this one...
-		FBox2D Hole = FBox2D(ForceInit); // ...this box of it, in map units
-		double Sink = 0.0; // how far the whole sheet lies below its true height, in map units, so that it never fights a finer one where they meet
+		TArray<FBox2D> Holes; // ground that a finer sheet draws is left out of this one: these boxes of it, in map units
+		double Sink = 0.0; // how far it lies below its true height round those boxes, in map units, so that it never fights the finer sheet where they meet
+		bool bKeep = false; // a sheet built with an apron round it draws only...
+		FBox2D Keep = FBox2D(ForceInit); // ...this box of its ground
+		bool bHidden = false; // its tiles are stood up out of sight, until all of them are there
+		/** True where a point lies well inside one of the holes: Margin map units in from its edge. */
+		bool InHole(double X, double Y, double Margin) const
+		{
+			for (const FBox2D& Hole : Holes)
+			{
+				if (X > Hole.Min.X + Margin && Y > Hole.Min.Y + Margin && X < Hole.Max.X - Margin && Y < Hole.Max.Y - Margin)
+				{
+					return true;
+				}
+			}
+			return false;
+		}
 	};
+	/**
+	 * A fine sheet of the world's ground beyond the map (the whole-world map, steps two and three): a box of it
+	 * modelled and painted as finely as Europe is, built on another thread when the eye comes near and low, stood
+	 * up in place of that box of the coarse world sheet, and taken down again when the eye has gone.
+	 */
+	struct FFineSheet
+	{
+		FIntPoint Key = FIntPoint::ZeroValue;
+		FBox2D Box = FBox2D(ForceInit);
+		FCampaignTerrain Shape;
+		FCampaignGround Paint;
+		TFuture<void> Building;
+		std::atomic<bool> bBuilt { false };
+		bool bDressed = false, bStanding = false;
+		double LastWanted = 0.0;
+		FLandSheet Land;
+		UMaterialInstanceDynamic* LandPaint = nullptr;
+		UMaterialInstanceDynamic* SeaPaint = nullptr;
+		TArray<UObject*> Kept; // its pictures and its paints, which FineKeep holds for the engine
+		UProceduralMeshComponent* Sea = nullptr;
+	};
+	TMap<FIntPoint, TSharedPtr<FFineSheet, ESPMode::ThreadSafe>> FineSheets;
+	TArray<double> FineXs, FineYs; // the lines the fine sheets are ruled by, west to east and north to south
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UObject>> FineKeep;
+	void UpdateFineSheets(float CameraDistance, const FVector& CameraFocus);
+	void DressFineSheet(FFineSheet& Sheet);
+	void StandFineSheet(FFineSheet& Sheet);
+	void DropFineSheet(FFineSheet& Sheet);
+	/** Stands the coarse world sheet's tiles over a box up afresh, after a hole in it has been made or closed. */
+	void RetileWorld(const FBox2D& Changed);
+	const FFineSheet* FineSheetAt(double X, double Y) const;
 	void PrepareLand();
 	void LevelLand(FLandSheet& Sheet);
-	void UpdateLand(FLandSheet& Sheet, float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce);
+	/** Returns true while tiles the view wants are still to be stood up. */
+	bool UpdateLand(FLandSheet& Sheet, float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce);
 	UProceduralMeshComponent* BuildLandTile(FLandSheet& Sheet, int32 Level, int32 TileX, int32 TileY);
 	bool LandTileHasLand(const FLandSheet& Sheet, int32 Level, int32 TileX, int32 TileY) const;
 	/** The whole-world map, step one: the land and sea beyond today's map, on one coarse sheet (only with -TheaterWorld). */
@@ -313,10 +365,10 @@ private:
 	/** The height of the ground anywhere in the world, in map units: the map's own where it reaches, the world's sheet beyond. */
 	float GroundAt(double X, double Y) const;
 	// A setting of the land's or the sea's paint goes to every sheet's copy of it.
-	void LandScalar(FName Name, float Value) { if (LandMaterial) { LandMaterial->SetScalarParameterValue(Name, Value); } if (WorldLandMaterial) { WorldLandMaterial->SetScalarParameterValue(Name, Value); } }
-	void LandVector(FName Name, const FLinearColor& Value) { if (LandMaterial) { LandMaterial->SetVectorParameterValue(Name, Value); } if (WorldLandMaterial) { WorldLandMaterial->SetVectorParameterValue(Name, Value); } }
-	void SeaScalar(FName Name, float Value) { if (SeaMaterial) { SeaMaterial->SetScalarParameterValue(Name, Value); } if (WorldSeaMaterial) { WorldSeaMaterial->SetScalarParameterValue(Name, Value); } }
-	void SeaVector(FName Name, const FLinearColor& Value) { if (SeaMaterial) { SeaMaterial->SetVectorParameterValue(Name, Value); } if (WorldSeaMaterial) { WorldSeaMaterial->SetVectorParameterValue(Name, Value); } }
+	void LandScalar(FName Name, float Value);
+	void LandVector(FName Name, const FLinearColor& Value);
+	void SeaScalar(FName Name, float Value);
+	void SeaVector(FName Name, const FLinearColor& Value);
 	void BuildSeaMesh();
 	void BuildBorders();
 	void BuildWaterways();

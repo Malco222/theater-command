@@ -1,4 +1,5 @@
 #include "Campaign/CampaignMapActor.h"
+#include "Async/Async.h"
 #include "Async/ParallelFor.h"
 #include "EngineUtils.h"
 #include "Campaign/CampaignEnvironment.h"
@@ -230,12 +231,69 @@ FVector2D ACampaignMapActor::WorldToMap(const FVector& World) const
 
 float ACampaignMapActor::GroundAt(double X, double Y) const
 {
-	// The map's own ground where it reaches, and the world's coarse sheet beyond it.
+	// The map's own ground where it reaches; beyond it a fine sheet's where one stands, and the world's coarse sheet's elsewhere.
 	if (Data.bWorld && (X < 0.0 || Y < 0.0 || X > Data.Width || Y > Data.Height))
 	{
+		if (const FFineSheet* Fine = FineSheetAt(X, Y))
+		{
+			return Fine->Shape.HeightAt(X, Y);
+		}
 		return WorldTerrain.HeightAt(X, Y);
 	}
 	return Terrain.HeightAt(X, Y);
+}
+
+void ACampaignMapActor::LandScalar(FName Name, float Value)
+{
+	if (LandMaterial) { LandMaterial->SetScalarParameterValue(Name, Value); }
+	if (WorldLandMaterial) { WorldLandMaterial->SetScalarParameterValue(Name, Value); }
+	for (const auto& Pair : FineSheets) { if (Pair.Value->LandPaint) { Pair.Value->LandPaint->SetScalarParameterValue(Name, Value); } }
+}
+
+void ACampaignMapActor::LandVector(FName Name, const FLinearColor& Value)
+{
+	if (LandMaterial) { LandMaterial->SetVectorParameterValue(Name, Value); }
+	if (WorldLandMaterial) { WorldLandMaterial->SetVectorParameterValue(Name, Value); }
+	for (const auto& Pair : FineSheets) { if (Pair.Value->LandPaint) { Pair.Value->LandPaint->SetVectorParameterValue(Name, Value); } }
+}
+
+void ACampaignMapActor::SeaScalar(FName Name, float Value)
+{
+	if (SeaMaterial) { SeaMaterial->SetScalarParameterValue(Name, Value); }
+	if (WorldSeaMaterial) { WorldSeaMaterial->SetScalarParameterValue(Name, Value); }
+	for (const auto& Pair : FineSheets) { if (Pair.Value->SeaPaint) { Pair.Value->SeaPaint->SetScalarParameterValue(Name, Value); } }
+}
+
+void ACampaignMapActor::SeaVector(FName Name, const FLinearColor& Value)
+{
+	if (SeaMaterial) { SeaMaterial->SetVectorParameterValue(Name, Value); }
+	if (WorldSeaMaterial) { WorldSeaMaterial->SetVectorParameterValue(Name, Value); }
+	for (const auto& Pair : FineSheets) { if (Pair.Value->SeaPaint) { Pair.Value->SeaPaint->SetVectorParameterValue(Name, Value); } }
+}
+
+void ACampaignMapActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	for (const auto& Pair : FineSheets)
+	{
+		if (Pair.Value->Building.IsValid())
+		{
+			Pair.Value->Building.Wait();
+		}
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+const ACampaignMapActor::FFineSheet* ACampaignMapActor::FineSheetAt(double X, double Y) const
+{
+	for (const auto& Pair : FineSheets)
+	{
+		const FFineSheet& Sheet = *Pair.Value;
+		if (Sheet.bStanding && X >= Sheet.Box.Min.X && Y >= Sheet.Box.Min.Y && X <= Sheet.Box.Max.X && Y <= Sheet.Box.Max.Y)
+		{
+			return &Sheet;
+		}
+	}
+	return nullptr;
 }
 
 FVector ACampaignMapActor::SurfacePoint(double X, double Y, double Lift) const
@@ -527,7 +585,7 @@ void ACampaignMapActor::PaintGround()
 		}
 		LandVector(TEXT("TropicColour"), Jungle);
 		// The canopy of the northern forest, seen at about (59, 79, 67). ("-TheaterTaiga=r,g,b" tries another.)
-		FLinearColor Taiga(0.046f, 0.086f, 0.09f);
+		FLinearColor Taiga(0.046f, 0.086f, 0.097f);
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterTaiga="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
 		{
 			Taiga = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
@@ -691,12 +749,20 @@ bool ACampaignMapActor::LandTileHasLand(const FLandSheet& Sheet, int32 Level, in
 		return false; // off the edge of the map
 	}
 	const int32 I1 = FMath::Min(I0 + TileQuads, Size.X - 1), J1 = FMath::Min(J0 + TileQuads, Size.Y - 1);
-	if (Sheet.bHole)
+	if (Sheet.Holes.Num() > 0 || Sheet.bKeep)
 	{
-		// A tile that lies wholly on ground a finer sheet draws is that sheet's business.
+		// A tile that lies wholly on ground a finer sheet draws is that sheet's business; and a sheet built with an
+		// apron round it has no tiles on the apron.
 		const double Span = (1 << Level) * Sheet.Shape->Cell;
 		const FBox2D Box(FVector2D(Sheet.Shape->OriginX + I0 * Span, Sheet.Shape->OriginY + J0 * Span), FVector2D(Sheet.Shape->OriginX + I1 * Span, Sheet.Shape->OriginY + J1 * Span));
-		if (Box.Min.X >= Sheet.Hole.Min.X && Box.Min.Y >= Sheet.Hole.Min.Y && Box.Max.X <= Sheet.Hole.Max.X && Box.Max.Y <= Sheet.Hole.Max.Y)
+		for (const FBox2D& Hole : Sheet.Holes)
+		{
+			if (Box.Min.X >= Hole.Min.X && Box.Min.Y >= Hole.Min.Y && Box.Max.X <= Hole.Max.X && Box.Max.Y <= Hole.Max.Y)
+			{
+				return false;
+			}
+		}
+		if (Sheet.bKeep && (Box.Max.X <= Sheet.Keep.Min.X || Box.Max.Y <= Sheet.Keep.Min.Y || Box.Min.X >= Sheet.Keep.Max.X || Box.Min.Y >= Sheet.Keep.Max.Y))
 		{
 			return false;
 		}
@@ -735,8 +801,7 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 		const FVector2D UV((FMath::Min(I * Step, Shape.NX - 1) + 0.5) / Shape.NX, (FMath::Min(J * Step, Shape.NY - 1) + 0.5) / Shape.NY);
 		// (a sheet with a finer one let into it lies a hair low round that one, and only there, so that where the two
 		// overlap the finer is always the one seen; elsewhere its land stands at its true height above the sea)
-		const double Reach = 3.0 * Step * Shape.Cell;
-		const bool bByTheHole = Sheet.bHole && X > Sheet.Hole.Min.X - Reach && X < Sheet.Hole.Max.X + Reach && Y > Sheet.Hole.Min.Y - Reach && Y < Sheet.Hole.Max.Y + Reach;
+		const bool bByTheHole = Sheet.Holes.Num() > 0 && Sheet.InHole(X, Y, -3.0 * Step * Shape.Cell);
 		return Buffers.AddVertex(MapToWorld(X, Y, Heights[J * Size.X + I] - Drop - (bByTheHole ? Sheet.Sink : 0.0)), FVector::UpVector, FColor::White, UV);
 	};
 	auto VertexAt = [&](int32 I, int32 J)
@@ -754,12 +819,17 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 		{
 			return false;
 		}
-		if (Sheet.bHole)
+		if (Sheet.Holes.Num() > 0 || Sheet.bKeep)
 		{
 			// (ground a finer sheet draws; this one runs a little way under its edge, so that no gap shows between them)
 			const double Span = Step * Shape.Cell;
 			const double X = Shape.OriginX + (I + 0.5) * Span, Y = Shape.OriginY + (J + 0.5) * Span;
-			if (X > Sheet.Hole.Min.X + Span && Y > Sheet.Hole.Min.Y + Span && X < Sheet.Hole.Max.X - Span && Y < Sheet.Hole.Max.Y - Span)
+			if (Sheet.InHole(X, Y, Span))
+			{
+				return false;
+			}
+			// (and a sheet with an apron draws nothing on it)
+			if (Sheet.bKeep && (X < Sheet.Keep.Min.X || Y < Sheet.Keep.Min.Y || X > Sheet.Keep.Max.X || Y > Sheet.Keep.Max.Y))
 			{
 				return false;
 			}
@@ -808,15 +878,15 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 		LandMeshes.Add(Mesh);
 	}
 	Buffers.Commit(Mesh, 0, Sheet.Material);
-	Mesh->SetVisibility(true);
+	Mesh->SetVisibility(!Sheet.bHidden);
 	return Mesh;
 }
 
-void ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce)
+bool ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, const FVector& CameraFocus, bool bAllAtOnce)
 {
 	if (Sheet.Heights.Num() == 0 || !Sheet.Shape)
 	{
-		return;
+		return false;
 	}
 	const FCampaignTerrain& Shape = *Sheet.Shape;
 	// Which tiles the view wants: starting from the coarsest, a tile is cut into its four quarters for as long
@@ -920,6 +990,7 @@ void ACampaignMapActor::UpdateLand(FLandSheet& Sheet, float CameraDistance, cons
 			It.RemoveCurrent();
 		}
 	}
+	return Missing.Num() > 0;
 }
 
 void ACampaignMapActor::BuildWorld()
@@ -968,9 +1039,22 @@ void ACampaignMapActor::BuildWorld()
 	WorldLand = FLandSheet();
 	WorldLand.Shape = &WorldTerrain;
 	WorldLand.Material = WorldLandMaterial;
-	WorldLand.bHole = true;
-	WorldLand.Hole = FBox2D(FVector2D(0.0, 0.0), FVector2D(Data.Width, Data.Height));
+	WorldLand.Holes.Add(FBox2D(FVector2D(0.0, 0.0), FVector2D(Data.Width, Data.Height)));
 	WorldLand.Sink = 0.06;
+	// The lines the fine sheets are ruled by: the map's own box is two of their rows high and one column wide, and
+	// the rest of the world is ruled from its edges in squares of 768 map units.
+	FineXs.Reset();
+	FineYs.Reset();
+	const double FineSide = 768.0;
+	for (double X = 0.0; X > Data.WorldMinX; X -= FineSide) { FineXs.Add(X); }
+	FineXs.Add(Data.WorldMinX);
+	for (double X = Data.Width; X < Data.WorldMinX + Data.WorldWidth; X += FineSide) { FineXs.Add(X); }
+	FineXs.Add(Data.WorldMinX + Data.WorldWidth);
+	FineYs.Append({ Data.WorldMinY, Data.Height * 0.5 });
+	for (double Y = Data.Height; Y < Data.WorldMinY + Data.WorldHeight; Y += FineSide) { FineYs.Add(Y); }
+	FineYs.Add(Data.WorldMinY + Data.WorldHeight);
+	FineXs.Sort();
+	FineYs.Sort();
 	LevelLand(WorldLand);
 	UpdateLand(WorldLand, 12000.0f, FVector::ZeroVector, true);
 
@@ -1021,6 +1105,275 @@ void ACampaignMapActor::BuildWorld()
 	}
 	UE_LOG(LogTheater, Log, TEXT("World: %.0f x %.0f map units round the map, on a sheet of %d x %d points (%.0f units a cell), %d levels of tiles, built in %.2f s"),
 		Data.WorldWidth, Data.WorldHeight, WorldTerrain.NX, WorldTerrain.NY, WorldTerrain.Cell, WorldLand.TopLevel + 1, FPlatformTime::Seconds() - StartTime);
+}
+
+void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& CameraFocus)
+{
+	if (!Data.bWorld || FineXs.Num() < 2 || FineYs.Num() < 2 || !WorldLandMaterial)
+	{
+		return;
+	}
+	const double Now = FPlatformTime::Seconds();
+	// Which sheets the view wants: those within reach of what the eye looks at, while it is low enough for the
+	// coarse sheet's cells to show. (The map's own box needs none: it is fine already.)
+	const FVector2D Focus = WorldToMap(CameraFocus);
+	const bool bLow = CameraDistance < 11000.0f;
+	const double Reach = 260.0 + CameraDistance / UnitScale * 0.55;
+	auto Wanted = [&](const FBox2D& Box) { return bLow && Box.ComputeSquaredDistanceToPoint(Focus) < Reach * Reach; };
+	int32 BeingBuilt = 0;
+	for (const auto& Pair : FineSheets)
+	{
+		BeingBuilt += Pair.Value->bDressed ? 0 : 1;
+	}
+	for (int32 Row = 0; Row + 1 < FineYs.Num(); ++Row)
+	{
+		for (int32 Column = 0; Column + 1 < FineXs.Num(); ++Column)
+		{
+			const FBox2D Box(FVector2D(FineXs[Column], FineYs[Row]), FVector2D(FineXs[Column + 1], FineYs[Row + 1]));
+			if (Box.GetSize().X < 1.0 || Box.GetSize().Y < 1.0 || !Wanted(Box))
+			{
+				continue;
+			}
+			const FVector2D Middle = Box.GetCenter();
+			if (Middle.X > 0.0 && Middle.X < Data.Width && Middle.Y > 0.0 && Middle.Y < Data.Height)
+			{
+				continue; // the map's own ground
+			}
+			const FIntPoint Key(Column, Row);
+			if (const TSharedPtr<FFineSheet, ESPMode::ThreadSafe>* Standing = FineSheets.Find(Key))
+			{
+				(*Standing)->LastWanted = Now;
+				continue;
+			}
+			if (BeingBuilt >= 2)
+			{
+				continue; // two at a time: the rest when these are up
+			}
+			// Is there any land in it? A box of open sea keeps the coarse sheet's water.
+			bool bAnyLand = false;
+			for (int32 Try = 0; Try < 81 && !bAnyLand; ++Try)
+			{
+				bAnyLand = WorldTerrain.CoverageAt(Box.Min.X + Box.GetSize().X * (Try % 9) / 8.0, Box.Min.Y + Box.GetSize().Y * (Try / 9) / 8.0) > 0.25f;
+			}
+			if (!bAnyLand)
+			{
+				continue;
+			}
+			TSharedPtr<FFineSheet, ESPMode::ThreadSafe> Sheet = MakeShared<FFineSheet, ESPMode::ThreadSafe>();
+			Sheet->Key = Key;
+			Sheet->Box = Box;
+			Sheet->LastWanted = Now;
+			FineSheets.Add(Key, Sheet);
+			++BeingBuilt;
+			// It is modelled and painted on another thread, with an apron round it so that what is smoothed or
+			// shaded across its edge comes out as it would on one great sheet.
+			const FCampaignMapData* Map = &Data;
+			const float Scale = VerticalScale;
+			Sheet->Building = Async(EAsyncExecution::ThreadPool, [Sheet, Map, Box, Scale]()
+			{
+				const double Apron = 36.0;
+				Sheet->Shape.BuildOver(*Map, Box.Min.X - Apron, Box.Min.Y - Apron, Box.GetSize().X + 2.0 * Apron, Box.GetSize().Y + 2.0 * Apron, 1.5, true);
+				Sheet->Paint.Build(*Map, Sheet->Shape, Scale);
+				Sheet->bBuilt = true;
+			});
+		}
+	}
+
+	// Bring on the ones that are built, and take down the ones the eye left a while ago.
+	TArray<FIntPoint> Gone;
+	for (const auto& Pair : FineSheets)
+	{
+		FFineSheet& Sheet = *Pair.Value;
+		if (!Sheet.bBuilt)
+		{
+			continue;
+		}
+		if (!Sheet.bDressed)
+		{
+			DressFineSheet(Sheet);
+		}
+		else if (!Sheet.bStanding)
+		{
+			// Its tiles are stood up a few each frame, out of sight; when the view has all it wants of them, the
+			// sheet is shown and that box of the coarse sheet is taken away, in the same frame.
+			if (!UpdateLand(Sheet.Land, CameraDistance, CameraFocus, false))
+			{
+				StandFineSheet(Sheet);
+			}
+		}
+		else
+		{
+			UpdateLand(Sheet.Land, CameraDistance, CameraFocus, false);
+			if (Now - Sheet.LastWanted > 20.0)
+			{
+				Gone.Add(Pair.Key);
+			}
+		}
+	}
+	for (const FIntPoint& Key : Gone)
+	{
+		DropFineSheet(*FineSheets[Key]);
+		FineSheets.Remove(Key);
+	}
+}
+
+void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
+{
+	auto Picture = [this, &Sheet](const TArray<FColor>& Pixels, int32 Wide, int32 High, bool bColour, const TCHAR* Name)
+	{
+		UTexture2D* Made = CampaignTextures::Create(Wide, High, Pixels, bColour, false, *FString::Printf(TEXT("Fine%s_%d_%d"), Name, Sheet.Key.X, Sheet.Key.Y));
+		Sheet.Kept.Add(Made);
+		FineKeep.Add(Made);
+		return Made;
+	};
+	const FCampaignGround& Painted = Sheet.Paint;
+	UTexture2D* Lie = Picture(Painted.Lie, Painted.NX, Painted.NY, false, TEXT("Lie"));
+	if (Lie)
+	{
+		Lie->Filter = TF_Nearest;
+		Lie->UpdateResource();
+	}
+	TArray<FColor> Clear;
+	Clear.Init(FColor(0, 0, 0, 255), 16);
+	Sheet.LandPaint = UMaterialInstanceDynamic::Create(LandMaterial->Parent, this);
+	Sheet.LandPaint->CopyParameterOverrides(LandMaterial);
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Ground"), Picture(Painted.Ground, Painted.NX, Painted.NY, true, TEXT("Ground")));
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Tint"), Picture(Painted.Tint, Painted.NX, Painted.NY, true, TEXT("Tint")));
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Relief"), Picture(Painted.Relief, Painted.NX, Painted.NY, false, TEXT("Relief")));
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Masks"), Picture(Painted.Masks, Painted.NX, Painted.NY, false, TEXT("Masks")));
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Cover"), Picture(Painted.Cover, Painted.NX, Painted.NY, false, TEXT("Cover")));
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Lie"), Lie);
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Fog"), Picture(Clear, 4, 4, false, TEXT("Fog")));
+	Sheet.SeaPaint = UMaterialInstanceDynamic::Create(SeaMaterial->Parent, this);
+	Sheet.SeaPaint->CopyParameterOverrides(SeaMaterial);
+	Sheet.SeaPaint->SetTextureParameterValue(TEXT("Water"), Picture(Painted.Water, Painted.WaterNX, Painted.WaterNY, true, TEXT("Water")));
+	Sheet.SeaPaint->SetTextureParameterValue(TEXT("Shore"), Picture(Painted.Surf, Painted.WaterNX, Painted.WaterNY, false, TEXT("Shore")));
+	Sheet.Kept.Append({ Sheet.LandPaint, Sheet.SeaPaint });
+	FineKeep.Append({ Sheet.LandPaint, Sheet.SeaPaint });
+
+	Sheet.Land = FLandSheet();
+	Sheet.Land.Shape = &Sheet.Shape;
+	Sheet.Land.Material = Sheet.LandPaint;
+	Sheet.Land.bKeep = true;
+	Sheet.Land.Keep = Sheet.Box;
+	Sheet.Land.bHidden = true;
+	// (where it meets the map's own ground, the map's is the one seen)
+	Sheet.Land.Holes.Add(FBox2D(FVector2D(0.0, 0.0), FVector2D(Data.Width, Data.Height)));
+	Sheet.Land.Sink = 0.03;
+	LevelLand(Sheet.Land);
+	Sheet.bDressed = true;
+}
+
+void ACampaignMapActor::StandFineSheet(FFineSheet& Sheet)
+{
+	Sheet.Land.bHidden = false;
+	for (const auto& Tile : Sheet.Land.Tiles)
+	{
+		if (Tile.Value)
+		{
+			Tile.Value->SetVisibility(true);
+		}
+	}
+	// Its own water, a hair above the coarse sheet's: the shore and the shallows drawn as finely as its land.
+	if (!Sheet.Sea)
+	{
+		Sheet.Sea = NewObject<UProceduralMeshComponent>(this);
+		Sheet.Sea->SetupAttachment(Root);
+		Sheet.Sea->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Sheet.Sea->SetCastShadow(false);
+		Sheet.Sea->RegisterComponent();
+	}
+	{
+		const FCampaignGround& Painted = Sheet.Paint;
+		FCampaignMeshBuffers Buffers;
+		const int32 Across = 4, Down = 4;
+		for (int32 J = 0; J <= Down; ++J)
+		{
+			for (int32 I = 0; I <= Across; ++I)
+			{
+				const double X = Sheet.Box.Min.X + Sheet.Box.GetSize().X * I / Across, Y = Sheet.Box.Min.Y + Sheet.Box.GetSize().Y * J / Down;
+				const FVector2D UV(((X - Sheet.Shape.OriginX) / Painted.WaterStep + 0.5) / Painted.WaterNX, ((Y - Sheet.Shape.OriginY) / Painted.WaterStep + 0.5) / Painted.WaterNY);
+				Buffers.AddVertex(MapToWorld(X, Y, 0.03), FVector::UpVector, FColor::White, UV);
+			}
+		}
+		for (int32 J = 0; J < Down; ++J)
+		{
+			for (int32 I = 0; I < Across; ++I)
+			{
+				const int32 A = J * (Across + 1) + I, B = A + 1, C = A + Across + 1, D = C + 1;
+				Buffers.Triangles.Append({ A, C, B, B, C, D });
+			}
+		}
+		Buffers.Commit(Sheet.Sea, 0, Sheet.SeaPaint);
+		Sheet.Sea->SetVisibility(true);
+	}
+	Sheet.bStanding = true;
+	WorldLand.Holes.Add(Sheet.Box);
+	RetileWorld(Sheet.Box);
+}
+
+void ACampaignMapActor::DropFineSheet(FFineSheet& Sheet)
+{
+	if (Sheet.Building.IsValid())
+	{
+		Sheet.Building.Wait();
+	}
+	for (const auto& Tile : Sheet.Land.Tiles)
+	{
+		if (UProceduralMeshComponent* Mesh = Tile.Value)
+		{
+			Mesh->SetVisibility(false);
+			Mesh->ClearAllMeshSections();
+			SpareLandMeshes.Add(Mesh);
+		}
+	}
+	Sheet.Land.Tiles.Reset();
+	if (Sheet.Sea)
+	{
+		Sheet.Sea->DestroyComponent();
+		Sheet.Sea = nullptr;
+	}
+	for (UObject* Kept : Sheet.Kept)
+	{
+		FineKeep.Remove(Kept);
+	}
+	Sheet.Kept.Reset();
+	Sheet.LandPaint = nullptr;
+	Sheet.SeaPaint = nullptr;
+	if (Sheet.bStanding)
+	{
+		Sheet.bStanding = false;
+		WorldLand.Holes.RemoveAll([&Sheet](const FBox2D& Hole) { return Hole.Min.Equals(Sheet.Box.Min, 0.01) && Hole.Max.Equals(Sheet.Box.Max, 0.01); });
+		RetileWorld(Sheet.Box);
+	}
+}
+
+void ACampaignMapActor::RetileWorld(const FBox2D& Changed)
+{
+	// Every tile of the coarse sheet that touches the box is stood up afresh, at once: with the hole, or without it.
+	const FCampaignTerrain& Shape = WorldTerrain;
+	TArray<uint64> Again;
+	for (const auto& Tile : WorldLand.Tiles)
+	{
+		const int32 Level = static_cast<int32>(Tile.Key >> 48), TileX = static_cast<int32>((Tile.Key >> 24) & 0xFFFFFF), TileY = static_cast<int32>(Tile.Key & 0xFFFFFF);
+		const double Side = TileQuads * Shape.Cell * (1 << Level), Margin = 4.0 * Shape.Cell * (1 << Level);
+		const FBox2D Box(FVector2D(Shape.OriginX + TileX * Side - Margin, Shape.OriginY + TileY * Side - Margin), FVector2D(Shape.OriginX + (TileX + 1) * Side + Margin, Shape.OriginY + (TileY + 1) * Side + Margin));
+		if (Box.Intersect(Changed))
+		{
+			Again.Add(Tile.Key);
+		}
+	}
+	for (const uint64 Key : Again)
+	{
+		if (UProceduralMeshComponent* Mesh = WorldLand.Tiles[Key])
+		{
+			Mesh->SetVisibility(false);
+			Mesh->ClearAllMeshSections();
+			SpareLandMeshes.Add(Mesh);
+		}
+		const int32 Level = static_cast<int32>(Key >> 48), TileX = static_cast<int32>((Key >> 24) & 0xFFFFFF), TileY = static_cast<int32>(Key & 0xFFFFFF);
+		WorldLand.Tiles[Key] = LandTileHasLand(WorldLand, Level, TileX, TileY) ? BuildLandTile(WorldLand, Level, TileX, TileY) : nullptr;
+	}
 }
 
 void ACampaignMapActor::BuildSeaMesh()
@@ -6120,6 +6473,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	// The land's tiles: fine near what the eye looks at, coarse far from it.
 	UpdateLand(HomeLand, CameraDistance, CameraFocus, false);
 	UpdateLand(WorldLand, CameraDistance, CameraFocus, false);
+	UpdateFineSheets(CameraDistance, CameraFocus);
 
 	// Pieces cast shadows only near what the eye is looking at, and not at all from far off.
 	{
