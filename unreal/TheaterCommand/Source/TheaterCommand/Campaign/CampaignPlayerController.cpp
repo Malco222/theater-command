@@ -3225,7 +3225,22 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				if (const AArmyPiece* Stands = Map->FindPiece(TipRegion, Force.Key))
 				{
 					TArray<FString> About;
-					if (Stands->GetWorksState() == 2) { About.Add(TEXT("dug in")); }
+					// (where months of digging are counted, how far its works have got: attacks wear them down)
+					float Works = -1.0f;
+					for (const FViewCorps& Unit : View.Corps)
+					{
+						if (Unit.Region == TipRegion && Unit.Nation == Force.Key && Unit.bDug && !Unit.bDim && Unit.Works >= 0.0f)
+						{
+							Works = Works < 0.0f ? Unit.Works : FMath::Min(Works, Unit.Works);
+						}
+					}
+					if (Works >= 0.0f)
+					{
+						About.Add(Works >= View.DugFull - 0.05f ? FString(TEXT("dug in, works finished"))
+							: Works < 0.05f ? FString(TEXT("dug in, works battered flat"))
+							: FString::Printf(TEXT("dug in, works %s of %d months"), *FString::SanitizeFloat(FMath::RoundToFloat(Works * 10.0f) / 10.0f, 0), View.DugFull));
+					}
+					else if (Stands->GetWorksState() == 2) { About.Add(TEXT("dug in")); }
 					else if (Stands->GetWorksState() == 1) { About.Add(TEXT("digging in")); }
 					if (Stands->IsInCamp()) { About.Add(TEXT("in camp, resting")); }
 					if (Stands->GetSupplyState() == 2) { About.Add(TEXT("cut off from supply")); }
@@ -4948,15 +4963,28 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 	FaceOff.Prize = FText::FromString(Preview.Prize);
 	if (Preview.bExact)
 	{
-		FaceOff.OddsLine = FText::FromString(Preview.Odds >= 1.0f
+		FString Odds = Preview.Odds >= 1.0f
 			? FString::Printf(TEXT("Odds of %.1f to 1 in your favour"), Preview.Odds)
-			: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f)));
+			: FString::Printf(TEXT("Odds of %.1f to 1 against you"), 1.0f / FMath::Max(Preview.Odds, 0.01f));
+		// (the chance is printed as 100 per cent only when the attack cannot fail)
+		if (Preview.ChancePct >= 0)
+		{
+			Odds += FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePct, *Place);
+		}
+		FaceOff.OddsLine = FText::FromString(Odds);
 	}
 	else
 	{
 		// The defenders are not all identified: the staff give the odds as a band that holds the truth.
 		auto Say = [](float Odds) { return Odds >= 1.0f ? FString::Printf(TEXT("%.1f to 1 for you"), Odds) : FString::Printf(TEXT("%.1f to 1 against"), 1.0f / FMath::Max(Odds, 0.01f)); };
-		FaceOff.OddsLine = FText::FromString(FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Preview.OddsLow), *Say(Preview.OddsHigh)));
+		FString Odds = FString::Printf(TEXT("The staff's estimate: between %s and %s"), *Say(Preview.OddsLow), *Say(Preview.OddsHigh));
+		if (Preview.ChancePctLow >= 0 && Preview.ChancePctHigh >= 0)
+		{
+			Odds += Preview.ChancePctLow == Preview.ChancePctHigh
+				? FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePctLow, *Place)
+				: FString::Printf(TEXT("  \u00B7  %d to %d%% to take %s"), Preview.ChancePctLow, Preview.ChancePctHigh, *Place);
+		}
+		FaceOff.OddsLine = FText::FromString(Odds);
 		if (!Preview.Note.IsEmpty())
 		{
 			FaceOff.Prize = FText::FromString(Preview.Note + (Preview.Prize.IsEmpty() ? FString() : TEXT("\n") + Preview.Prize));
@@ -4972,6 +5000,25 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId)
 			: FString::Printf(TEXT("%s:  %s  \u2014  %s"), *Line.Label, *Line.Value, *Line.Effect));
 	}
 	FaceOff.Ticket = FText::FromString(FString::Join(Lines, TEXT("\n")));
+	// Where more corps stand in reach than were picked: what the attack could be, and a button to make it so.
+	FaceOff.Mass = FText::FromString(Preview.Mass);
+	FaceOff.MassIds = Preview.MassIds;
+}
+
+void ACampaignPlayerController::SendEveryone()
+{
+	if (!FaceOff.bVisible || FaceOff.bResolved || FaceOff.MassIds.Num() == 0)
+	{
+		return;
+	}
+	// The corps in hand are remembered, and taken up again if the attack is called off.
+	if (PickedBeforeMass.Num() == 0)
+	{
+		PickedBeforeMass = PickedCorps;
+	}
+	const int32 RegionId = FaceOff.Region;
+	PickedCorps = FaceOff.MassIds;
+	OpenFaceOff(RegionId);
 }
 
 void ACampaignPlayerController::ConfirmAttack()
@@ -4983,6 +5030,7 @@ void ACampaignPlayerController::ConfirmAttack()
 	}
 	const int32 RegionId = FaceOff.Region;
 	const FAttackResult Result = Session->Attack(PickedCorps, RegionId);
+	PickedBeforeMass.Reset();
 	if (!Result.bFought)
 	{
 		FaceOff.bVisible = false;
@@ -5035,6 +5083,11 @@ void ACampaignPlayerController::CloseFaceOff()
 		// The result has been read: the field is still smoking when the eye goes back to the table.
 		Map->AddBattleSmoke(FaceOff.Region);
 	}
+	if (FaceOff.bVisible && !FaceOff.bResolved && PickedBeforeMass.Num() > 0)
+	{
+		PickedCorps = PickedBeforeMass; // called off after "send everyone": the corps that were in hand are in hand again
+	}
+	PickedBeforeMass.Reset();
 	FaceOff.bVisible = false;
 }
 

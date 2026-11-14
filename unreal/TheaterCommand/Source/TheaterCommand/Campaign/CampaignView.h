@@ -45,6 +45,7 @@ struct FViewCorps
 	FString Posture; // stand, dig, back
 	bool bDug = false; // it is entrenched: it spent last month where it stands, digging in
 	int32 DugFor = 0; // months it has been dug in where it stands (the grand campaign): its works grow with them; 0 where months are not counted
+	float Works = -1.0f; // how far its works have got, in months, where months are counted (attacks wear them down); -1 where they are not
 	bool bWorksDone = false; // dug in, and its works finished (or dug in where months are not counted): wire and sandbags, not only an earth bank
 	bool bSupplied = true; // supply reaches it
 	bool bInTown = false; // it is the garrison of the province's town, not in the field
@@ -443,6 +444,9 @@ struct FAttackPreview
 	FString Prize; // what taking the place is worth, in a sentence
 	FString Refused; // why the troops there may not be attacked at all (they stand on a neutral's ground): then nothing else is filled in
 	float Even = 1.2f; // the odds at which it is an even chance: 1.2 to 1 in the open, more for an assault on a town
+	int32 ChancePct = -1, ChancePctLow = -1, ChancePctHigh = -1; // the chance of taking the place, in whole per cent (100 only when it cannot fail); -1 where the rules give none
+	FString Mass; // where more corps stand in reach than were picked: what sending everyone would come to, in a sentence
+	TArray<int32> MassIds; // ...and the corps to pick to make it so
 	TArray<FTicketLine> Lines;
 	TArray<FBattleUnit> Attackers;
 	TArray<FBattleUnit> Defenders;

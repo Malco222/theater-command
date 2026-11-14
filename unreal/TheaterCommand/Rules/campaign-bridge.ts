@@ -36,7 +36,7 @@
 //   TC.record(corpsId)                  -> one corps' service record: what it is, its honours, its diary
 //   TC.roll()                           -> the roll of honour and the memorial wall of the player's nation
 
-import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, railReach as railReachOf, weather as weatherNow } from '../../../src/campaign/game';
+import { DEFENCE, allied, atWar, bloc, collapseScore, createGame, fieldArmy, frontage, limitAttackers, men, railReach as railReachOf, weather as weatherNow, worksOf } from '../../../src/campaign/game';
 import { FIELDS, MAX_TEAMS, RESEARCH, arrival, bureauCost, doctrineOf, inService, lead, monthsAhead, nextStep, stepsOf, teamsFree, teamsTotal } from '../../../src/campaign/research';
 import type { Field, Skill } from '../../../src/campaign/types';
 import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arsenal';
@@ -84,7 +84,7 @@ import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoi
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
-import { airfieldsSeen, announcements, attackOutlook, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
+import { airfieldsSeen, announcements, attackOutlook, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
 import { turnToDate } from '../../../src/core/ticket';
@@ -205,7 +205,9 @@ function view() {
       return ({
       id: c.id, nat: s.human && c.joint === s.human ? s.human : c.nat, ally: s.human && c.joint === s.human ? c.nat : '', name: c.name, kind: c.kind, elite: c.elite ?? '', divs: c.divs, str: c.str, org: c.org, reg: c.reg,
       ap: c.ap, apMax: c.apMax, gen: generalOf(s, c)?.name ?? null, posture: postureOf(c),
-      canOrder: up && canOrder(s, c), supplied: c.supplied, dug: !!c.dug, dugFor: (c as { dugFor?: number }).dugFor ?? 0, town: !!(c as { town?: unknown }).town, men: men(c),
+      canOrder: up && canOrder(s, c), supplied: c.supplied, dug: !!c.dug, dugFor: (c as { dugFor?: number }).dugFor ?? 0,
+      // (Version 61) how far its works have got, in months, where months are counted: attacks wear them down. -1 where they are not.
+      works: c.dug && s.flags.open === 1 && DEFENCE.entrench.auto ? Math.round(worksOf(c) * 10) / 10 : -1, town: !!(c as { town?: unknown }).town, men: men(c),
       // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
       xp: Math.round(c.xp * 100), grade: grade(c.xp), nick: c.nick ?? null,
       honours: honoursOf(s, c).filter((a) => !a.old).map((a) => ({ title: awardTitle(s, a), ribbon: honourDef(a.hon)?.ribbon ?? ['#b08d57', '#f2ead6'] })),
@@ -787,10 +789,38 @@ function frontLine(s: Game, ids: number[], to: number): { label: string; value: 
   const all = wouldAttack(s, ids, to), going = new Set(attackers(s, ids, to).map((c) => c.id));
   const left = all.filter((c) => !going.has(c.id));
   if (!left.length) return null;
-  const cap = frontage(s.regions[to]);
+  // (Version 61) Attacked from three sides or more, each side's roads carry one corps more; and against works a
+  // few artillery corps go in over and above the roads. The line says so where it happened.
+  const sent = attackers(s, ids, to);
+  const sides = new Set(sent.map((c) => c.reg)).size;
+  const wider = s.flags.open === 1 && sides >= DEFENCE.frontage.sides;
+  const cap = frontage(s.regions[to]) + (wider ? DEFENCE.frontage.extra : 0);
+  const gunsOver = s.flags.open === 1 && sent.some((c) => c.kind === 'art') && (!!s.regions[to].fort || s.regions[to].units.some((u) => !u.dead && u.dug && !!s.human && atWar(s, s.human, u.nat)));
   return {
     label: 'The front', value: `${going.size} of ${all.length} corps go in`,
-    effect: `Only ${cap} corps can attack ${s.regions[to].terrain === 'plains' ? 'open country' : s.regions[to].terrain === 'mountain' ? 'mountains' : 'this ground'} from one side, the strongest first. ${listOf(left.slice(0, 3).map((c) => c.name))}${left.length > 3 ? ` and ${left.length - 3} more` : ''} ${left.length === 1 ? 'waits' : 'wait'} behind.`,
+    effect: `Only ${cap} corps can attack ${s.regions[to].terrain === 'plains' ? 'open country' : s.regions[to].terrain === 'mountain' ? 'mountains' : 'this ground'} from one side${wider ? ` (one more than usual, as the attack comes in from ${sides} sides)` : ''}, the strongest first.${gunsOver ? ` Against works up to ${DEFENCE.frontage.guns} artillery corps fire over their heads and take no room on the roads.` : ''} ${listOf(left.slice(0, 3).map((c) => c.name))}${left.length > 3 ? ` and ${left.length - 3} more` : ''} ${left.length === 1 ? 'waits' : 'wait'} behind.`,
+  };
+}
+
+/** A chance as a whole percentage that never rounds a near thing up to a sure one, or a faint hope down to none. */
+const oddsPct = (p: number): number => (p >= 0.9995 ? 100 : p <= 0.0005 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100))));
+
+/**
+ * (Version 61) Everyone the roads will carry, where more stand in reach than were picked: what the attack could
+ * be, said in a sentence, with the corps to pick to make it so.
+ */
+function massNote(s: Game, corps: Corps[], to: number, odds: number | null): { note: string; ids: number[] } | null {
+  const target = s.regions[to];
+  const cands = candidates(s, target);
+  const everyone = jointForce(s, limitAttackers(s, jointForce(s, cands, target), target), target);
+  const inSet = new Set(corps.map((c) => c.id));
+  const extra = everyone.filter((c) => !inSet.has(c.id)).length;
+  const massed = extra ? attackOutlook(s, everyone, target) : null;
+  if (!massed || (odds !== null && massed.odds <= odds * 1.02)) return null;
+  const chance = massed.exact ? `about ${oddsPct(massed.chance)}%` : oddsPct(massed.chanceLo) === oddsPct(massed.chanceHi) ? `about ${oddsPct(massed.chanceLo)}%` : `${oddsPct(massed.chanceLo)} to ${oddsPct(massed.chanceHi)}%`;
+  return {
+    note: `${extra === 1 ? 'One more corps stands' : `${extra} more corps stand`} within reach. Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${odds !== null ? `go from ${odds.toFixed(2)} to ${massed.odds.toFixed(2)} to 1` : `are ${massed.odds.toFixed(2)} to 1`}: ${chance} to take ${target.name}.`,
+    ids: cands.map((c) => c.id),
   };
 }
 
@@ -808,9 +838,12 @@ function preview(ids: number[], to: number) {
   const look = attackOutlook(s, corps, s.regions[to]);
   // (Version 55) The odds at which it is an even chance: 1.2 to 1 in the open, more for an assault on a town.
   const even = look?.even ?? 1.2;
-  // (Version 58: an attack on a line that is dug in and fed needs better odds too, and the rules' own "Prepared
-  // defence" line says so: it is not said twice.)
-  const saidAlready = [...(look?.lines ?? []), ...a.lines].some((l) => l.label === 'Prepared defence');
+  // (Version 58: an attack on a line that is dug in and fed needs better odds too, and the rules' own line says so:
+  // it is not said twice. Since Version 61 that is the one "Dug in" line, which carries the works, the day's luck
+  // and what the attack takes off them.)
+  const saidAlready = [...(look?.lines ?? []), ...a.lines].some((l) => l.label === 'Prepared defence' || (l.label === 'Dug in' && /even chance/.test(l.effect ?? '')));
+  const mass = massNote(s, corps, to, look?.odds ?? a.odds);
+  const pct = { chancePct: oddsPct(look?.chance ?? 0), chancePctLo: oddsPct(look?.chanceLo ?? look?.chance ?? 0), chancePctHi: oddsPct(look?.chanceHi ?? look?.chance ?? 0), hasChance: !!look, mass: mass?.note ?? '', massIds: mass?.ids ?? [] };
   const evenLine = even > 1.21 && !saidAlready ? [{ label: 'An even chance', value: `${even.toFixed(1)} to 1`, effect: 'Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance.' }] : [];
   const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
   const named = (c: Corps) => {
@@ -821,7 +854,7 @@ function preview(ids: number[], to: number) {
   };
   if (look && !look.exact) {
     return {
-      region: to, allies, prize: prizeLine(s, to), attack: look.odds, defence: 1, odds: look.odds,
+      region: to, allies, prize: prizeLine(s, to), attack: look.odds, defence: 1, odds: look.odds, ...pct,
       exact: false, lo: look.lo, hi: look.hi, chance: look.chance, chanceLo: look.chanceLo, chanceHi: look.chanceHi, note: look.note, even,
       lines: [...look.lines, ...(frontLine(s, ids, to) ? [frontLine(s, ids, to)!] : []), ...evenLine],
       attackers: corps.map((c) => ({ id: c.id, name: c.name, kind: c.kind, divs: c.divs, men: men(c), gen: generalOf(s, c)?.name ?? null })),
@@ -829,6 +862,7 @@ function preview(ids: number[], to: number) {
     };
   }
   return {
+    ...pct,
     allies, exact: true, lo: a.odds, hi: a.odds, chance: look?.chance ?? 0, chanceLo: look?.chance ?? 0, chanceHi: look?.chance ?? 0, note: '', even,
     region: to,
     // What taking the place is worth, in a sentence, for the screen that asks whether to attack.
@@ -859,7 +893,21 @@ function battleNote(s: Game, r: BattleReport): string {
           // (Version 58: a line that was dug in and fed either held or was broken, and the note says which)
           : (x.prepared ?? 0) >= 0.5 ? (r.taken ? 'the prepared line is broken and the ground is taken' : 'the attack breaks on a prepared line')
             : r.taken ? 'the ground is taken' : 'the attack is held';
-  return `${r.level} at ${r.regionName}: ${came}, ${cost}${prisoners}.`;
+  return `${r.level} at ${r.regionName}: ${came}, ${cost}${prisoners}.${wornNote(s, r)}`;
+}
+
+/** (Version 61) An attack thrown back from dug-in troops still wears their works down: said to whichever side reads it. */
+function wornNote(s: Game, r: BattleReport): string {
+  const x = r as BattleReport & { worn?: number; works?: number };
+  if (!x.worn) return '';
+  const full = DEFENCE.entrench.months, left = x.works ?? 0;
+  const took = x.worn >= 0.95 && x.worn < 1.05 ? 'a month' : `${x.worn} months`;
+  const now = left < 0.05 ? 'nothing is left of them' : `they stand at ${left} of ${full} months`;
+  const regrow = DEFENCE.wear.regrow;
+  const pace = regrow <= 0 ? 'do no digging' : regrow >= 1 ? 'dig as usual' : regrow === 0.5 ? 'dig at half pace' : `get ${Math.round(regrow * 100)}% of their digging done`;
+  return r.defNat === s.human
+    ? ` The line held, but its works are worn: the attack took ${took} off them, and ${now}. Your troops there ${pace} this month. A quiet month builds the works up again.`
+    : ` Thrown back, but not for nothing: the attack took ${took} off the defenders' works, and ${now}. The defenders ${pace} this month, so the next blow meets less. Guns in the attack wear works down faster.`;
 }
 
 function attack(ids: number[], to: number) {

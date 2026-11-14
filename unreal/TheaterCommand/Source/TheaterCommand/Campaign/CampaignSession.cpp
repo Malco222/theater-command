@@ -765,7 +765,12 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				double Months = 0.0;
 				Unit->TryGetNumberField(TEXT("dugFor"), Months);
 				C.DugFor = FMath::RoundToInt32(Months);
-				C.bWorksDone = C.bDug && (C.DugFor == 0 || C.DugFor >= Out.DugFull);
+				double Works = -1.0;
+				Unit->TryGetNumberField(TEXT("works"), Works);
+				C.Works = static_cast<float>(Works);
+				// (where months are counted the works are finished when they have had them all, and attacks wear them
+				// down again; where they are not, to be dug in is to have finished)
+				C.bWorksDone = C.bDug && (Works >= 0.0 ? Works >= Out.DugFull - 0.05 : (C.DugFor == 0 || C.DugFor >= Out.DugFull));
 			}
 			Unit->TryGetBoolField(TEXT("supplied"), C.bSupplied);
 			Unit->TryGetBoolField(TEXT("town"), C.bInTown);
@@ -961,6 +966,24 @@ FAttackPreview FCampaignSession::PreviewAttack(const TArray<int32>& CorpsIds, in
 		Out.OddsHigh = static_cast<float>(High);
 		Object->TryGetStringField(TEXT("note"), Out.Note);
 		Object->TryGetStringArrayField(TEXT("allies"), Out.Allies);
+	}
+	{
+		bool bHasChance = false;
+		if (Object->TryGetBoolField(TEXT("hasChance"), bHasChance) && bHasChance)
+		{
+			Object->TryGetNumberField(TEXT("chancePct"), Out.ChancePct);
+			Object->TryGetNumberField(TEXT("chancePctLo"), Out.ChancePctLow);
+			Object->TryGetNumberField(TEXT("chancePctHi"), Out.ChancePctHigh);
+		}
+		Object->TryGetStringField(TEXT("mass"), Out.Mass);
+		const TArray<TSharedPtr<FJsonValue>>* Everyone = nullptr;
+		if (Object->TryGetArrayField(TEXT("massIds"), Everyone))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Everyone)
+			{
+				Out.MassIds.Add(static_cast<int32>(Value->AsNumber()));
+			}
+		}
 	}
 	const TArray<TSharedPtr<FJsonValue>>* Lines = nullptr;
 	if (Object->TryGetArrayField(TEXT("lines"), Lines))

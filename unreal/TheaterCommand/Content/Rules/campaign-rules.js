@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 1f7a6e1 2026-11-13. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 9e3388d 2026-11-13. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -5695,6 +5695,16 @@
     for (const r of g2.regions) {
       if (!r.garr) continue;
       for (const c of [...r.garr]) if (!allied(g2, c.nat, r.ctrl)) sendHome(g2, c);
+      while (r.garr && r.garr.length > roomIn(g2, r)) {
+        const c = r.garr[r.garr.length - 1];
+        if (!takeField(g2, c)) {
+          const to = musterNear(g2, c.nat, r);
+          if (!to) break;
+          relocate(g2, c, to);
+          c.ap = 0;
+        }
+        if (r.garr?.includes(c)) break;
+      }
     }
   }
   var guns = (cs) => cs.reduce((s, c) => s + (c.kind === "art" ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
@@ -13041,11 +13051,15 @@
     if (e.partition) {
       const X = g2.nations[e.partition.nation];
       if (!X?.alive) return false;
-      const first = (list4) => list4.find((id) => g2.nations[id]?.alive && g2.nations[id].atWar.length > 0);
+      const open = g2.flags.open === 1;
+      const home = g2.regions.filter((r) => r.owner === X.id);
+      const live = (id) => !!g2.nations[id]?.alive && g2.nations[id].atWar.length > 0;
+      const stake = (id) => home.reduce((s, r) => s + (r.ctrl === id ? 1 : 0) + (r.units.some((u) => u.nat === id && u.kind !== "fort") ? 1 : 0), 0);
+      const first = (list4) => list4.find((id) => live(id) && (!open || stake(id) > 0));
       for (const c of g2.corps.filter((c2) => c2.nat === X.id)) removeCorps(g2, c);
       fleetsOnFall(g2, X.id);
       airOnFall(g2, X.id);
-      if (e.partition.occupied) for (const r of g2.regions) {
+      if (e.partition.occupied || open) for (const r of g2.regions) {
         if (r.ctrl !== X.id) continue;
         const guest = r.units.find((u) => u.kind !== "fort" && g2.nations[u.nat]?.alive && g2.nations[u.nat].atWar.length > 0);
         if (guest) {
@@ -13068,6 +13082,7 @@
           }
         }
       }
+      if (!heir2 && open) heir2 = Object.keys(g2.nations).filter((id) => id !== X.id && live(id) && stake(id) > 0).sort((a, b) => stake(b) - stake(a) || (a < b ? -1 : 1))[0];
       if (!heir2) return false;
       for (const r of g2.regions) if (r.ctrl === X.id) {
         r.ctrl = heir2;
@@ -13077,6 +13092,11 @@
       X.alive = false;
       X.align = "independent";
       X.fellOn = { turn: g2.turn, week: g2.week, to: heir2, how: "terms" };
+      if (open && heir2 !== e.partition.shares[0]?.[0]?.[0]) {
+        const H = g2.nations[heir2];
+        headline(g2, "event", `${X.name} has signed an armistice and is out of the war. Its armies lay down their arms, and ${theName(H)} takes over what is left of the country.`, X.id);
+        told = true;
+      }
       recordFall(g2, X.id, heir2, "terms");
       for (const n of Object.values(g2.nations)) n.atWar = n.atWar.filter((x) => x !== X.id);
       X.atWar = [];
@@ -14164,14 +14184,18 @@
   // ../../data/campaign/defence.json
   var defence_default = {
     _about: "Prepared defences (the grand campaign). An army that spends a whole month where it stands, without marching or fighting, digs in whoever commands it, the computer's armies as well as the player's. Against troops who are dug in and in supply the day's luck runs against the attacker, so that odds which would be safe in the open become a gamble, and an attack thrown back from such a line has shot its bolt for the month. Rules in src/campaign/game.ts (assess, resolveBattle, endPhase).",
-    entrench: { auto: true, months: 3 },
-    prepared: { dice: [0.5, 1.2], spentAt: 0.5, surprise: 0.85, armour: 0.5, losses: { attacker: 1.5, defender: 0.65 } },
+    entrench: { auto: true, months: 3, share: [0.5, 0.75, 1] },
+    wear: { perAttack: 1, fullAt: 0.6, guns: 1, regrow: 0.5 },
+    frontage: { sides: 3, extra: 1, guns: 2 },
+    prepared: { dice: [0.5, 1.2], spentAt: 0.5, surprise: 0.85, surpriseMonths: 1, openingMonths: 3, armour: 0.5, losses: { attacker: 1.5, defender: 0.65 } },
     staff: { odds: 0 },
     notes: {
-      entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. Trenches are lost the moment the corps leaves the ground. With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by the share of them it has had, so a line occupied last month is a third of the obstacle one held since the spring is.",
-      prepared: "'dice' is the run of the day's luck for an attack on defenders who are all dug in and in supply (in the open it is 0.8 to 1.2, and it takes 1.2 to 1 on the day to carry the ground). Where only part of the defence is prepared the run lies between the two in proportion, and massed guns in the attack take their share off it as they do off the trenches. 'spentAt': an attack that fails against a defence at least this far prepared leaves the attacking corps with no moves for the rest of the month. 'surprise': how much of its preparedness a line loses to the first two months of a new offensive by an army trained to it (Germany's). 'armour': how much it loses to an attack with tanks in it when the defence has no armour of its own. Both multiply with what the guns take off. 'losses': against a fully prepared line the attackers lose 'attacker' times the men they would in the open and the defenders 'defender' times, in proportion where the line is partly prepared.",
+      entrench: "'auto': every corps in the field that ends its own month having neither moved nor fought is dug in from then on, unless it is under orders to give ground. Troops inside a town are not: its walls are their works. Trenches are lost the moment the corps leaves the ground. With 'auto' off only the player's corps under orders to dig do so, as in the historical scenarios. 'months': how long the works take to finish. A corps counts toward a prepared defence by what its works are worth so far: 'share' gives that for one month's digging, two and three, since the first month's work does the most.",
+      prepared: "'dice' is the run of the day's luck for an attack on defenders who are all dug in and in supply (in the open it is 0.8 to 1.2, and it takes 1.2 to 1 on the day to carry the ground). Where only part of the defence is prepared the run lies between the two in proportion, and massed guns in the attack take their share off it as they do off the trenches. 'spentAt': an attack that fails against a defence at least this far prepared leaves the attacking corps with no moves for the rest of the month. 'surprise': how much of its preparedness a line loses to a new offensive by an army trained to it (Germany's): for 'surpriseMonths' months from its first blow, or for 'openingMonths' if it is the first offensive that army has ever made on that country. 'armour': how much it loses to an attack with tanks in it when the defence has no armour of its own. Both multiply with what the guns take off. 'losses': against a fully prepared line the attackers lose 'attacker' times the men they would in the open and the defenders 'defender' times, in proportion where the line is partly prepared.",
+      wear: "Works wear down under attack (Version 61). Every attack on dug-in troops, won or lost, takes 'perAttack' months off the works of each defender who stays, in full if the attack came at 'fullAt' to 1 or better on the Battle Ticket and in proportion below that, so that a jab by one corps scratches a line and a real blow breaks into it. Massed guns in the attack add to it: by 'guns' times the share they take off the trenches. Works are never worn below nothing, and troops whose works are worn under one month lose the trenches' 25% in the same proportion. 'regrow': the months of digging a corps gets done in a month in which it was attacked. At a half, a line attacked once a month loses half a month's works every month and one attacked twice a month a month and a half, so steady pressure wears a line away and a quiet front builds it back. (At 0 the German player following history held Berlin to the end of 1944 in 17 to 19 wars of 24 instead of 12, and Moscow fell in 7 computer wars of 24 instead of 2: armies in contact never dug at all.)",
+      frontage: "Attacked from 'sides' provinces or more at once, a defence cannot cover every road: each side's roads carry 'extra' more corps. Against fortress works or dug-in troops up to 'guns' artillery corps join an attack without taking room on the roads, since they fire over the heads of the infantry.",
       staff: "'odds': how much better odds than usual a computer staff asks before it attacks a fully prepared line. At 0 it attacks as it always did, and learns the cost in men.",
-      measured: "Over 72 computer wars to the end of 1944 (Version 57 before, Version 58 after): Berlin fallen in 38 and 25, the German army still deep in Russia in 16 and 7, neither in 10 and 40; Paris falls between 2 and 3 months later. Of 36 wars run on to January 1947 Berlin had fallen in 29 and 7 were undecided. A dug-in, supplied line now throws back an attack at 1.5 to 1 about 4 times in 10 and at 2 to 1 about 1 in 7; nothing is safe under 2.4 to 1."
+      measured: "Over 72 computer wars to the end of 1944 (Version 57 before, Version 58 after): Berlin fallen in 38 and 25, the German army still deep in Russia in 16 and 7, neither in 10 and 40; Paris falls between 2 and 3 months later. Of 36 wars run on to January 1947 Berlin had fallen in 29 and 7 were undecided. A dug-in, supplied line now throws back an attack at 1.5 to 1 about 4 times in 10 and at 2 to 1 about 1 in 7; nothing is safe under 2.4 to 1. Version 61 (works that wear, the share of each month's digging, the opening offensive, room on the roads), over 24 computer wars to December 1944 against Version 60: Paris falls in October 1940 at the median (November) and by August in 5 (none), Berlin has fallen in 6 (5) and Moscow in 4 (2); finished, supplied lines throw back 60% of attacks at 1.2 to 1.6 to 1 and 26% at 1.6 to 2.2 to 1 (59% and 23%); 280 attacks thrown back wore works down. Over 24 wars played as Germany on history's plan at Colonel, Berlin holds to the end of 1944 in 13 (12). A Soviet player who strikes first in June 1940 takes Berlin from Germany in 6 wars of 8 (4)."
     }
   };
 
@@ -15195,18 +15219,31 @@
     return r.terrain === "plains" ? 4 : r.terrain === "mountain" ? 2 : 3;
   }
   function limitAttackers(g2, corps, target) {
-    const cap5 = frontage(target);
-    const used = {};
-    const out = [];
+    let cap5 = frontage(target);
     const most = corps.length ? g2.nations[corps[0].nat].maxAttack || 99 : 99;
-    for (const c of [...corps].sort((x, y) => corpsBase(g2, y) * KIND[y.kind].atk - corpsBase(g2, x) * KIND[x.kind].atk)) {
-      if (out.length >= most) break;
-      if (blocked(g2, c, target)) continue;
-      if ((used[c.reg] ?? 0) >= cap5) continue;
-      used[c.reg] = (used[c.reg] ?? 0) + 1;
-      out.push(c);
+    const ranked = [...corps].sort((x, y) => corpsBase(g2, y) * KIND[y.kind].atk - corpsBase(g2, x) * KIND[x.kind].atk);
+    const guns2 = [];
+    if (g2.flags.open === 1 && corps.length) {
+      if (new Set(corps.filter((c) => !blocked(g2, c, target)).map((c) => c.reg)).size >= DEFENCE.frontage.sides) cap5 += DEFENCE.frontage.extra;
+      if (target.fort || hostileUnits(g2, target, armyOf(corps[0])).some((u) => u.dug)) {
+        for (const c of ranked) if (c.kind === "art" && guns2.length < DEFENCE.frontage.guns && !blocked(g2, c, target)) guns2.push(c);
+      }
     }
-    return out;
+    const fill4 = (over) => {
+      const used = {};
+      const out2 = [];
+      for (const c of ranked) {
+        if (out2.length >= most) break;
+        if (over.includes(c)) continue;
+        if (blocked(g2, c, target)) continue;
+        if ((used[c.reg] ?? 0) >= cap5) continue;
+        used[c.reg] = (used[c.reg] ?? 0) + 1;
+        out2.push(c);
+      }
+      return out2;
+    };
+    const out = fill4(guns2);
+    return out.length ? [...out, ...guns2] : fill4([]);
   }
   function weekOf(c, cost) {
     return clamp(Math.ceil((c.apMax - c.ap + cost) / Math.max(1, c.apMax) * 4), 1, 4);
@@ -15222,6 +15259,29 @@
   var chanceOn = (odds, dice2) => Math.max(0, Math.min(1, (dice2[1] - 1.2 / Math.max(1e-6, odds)) / (dice2[1] - dice2[0])));
   var listAnd = (xs) => xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
   var evenOdds = (dice2) => 2.4 / (dice2[0] + dice2[1]);
+  var worksOf = (c) => c.dug ? Math.max(0, Math.min(DEFENCE.entrench.months, c.dugFor ?? 1)) : 0;
+  function worksShare(months2) {
+    const s = DEFENCE.entrench.share;
+    if (months2 <= 0) return 0;
+    const at = (k) => k <= 0 ? 0 : s[Math.min(k, s.length) - 1];
+    const i = Math.floor(months2);
+    return at(i) + (at(i + 1) - at(i)) * (months2 - i);
+  }
+  function surprised(g2, nat, foes) {
+    const n = g2.nations[nat];
+    if (!n?.blitz) return false;
+    for (const d of foes) {
+      const last = n.lastFight[d], start2 = n.offStart[d];
+      if (last === void 0 || g2.turn - last >= 3) {
+        if (atWar(g2, nat, d)) return true;
+        continue;
+      }
+      if (start2 === void 0) continue;
+      const months2 = g2.flags[`opening:${nat}:${d}`] === start2 ? DEFENCE.prepared.openingMonths : DEFENCE.prepared.surpriseMonths;
+      if (g2.turn - start2 <= months2 - 1) return true;
+    }
+    return false;
+  }
   var GUNS = arsenal_default.guns;
   var gunsIn = (cs) => cs.reduce((s, c) => s + (c.kind === "art" ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
   var men = (c) => Math.round(c.divs * c.str * MEN_PER_DIV);
@@ -15376,7 +15436,7 @@
     const flank = Math.min(1.3, 1 + 0.1 * (sources.size - 1));
     A *= flank;
     const walls = town ? townBonus(g2, target, breach2 ? 1 - (1 - soften) * (1 - breach2) : soften) : 1;
-    let D = 0, thin = 1, readyD = 0;
+    let D = 0, thin = 1, readyD = 0, dugD = 0, worksD = 0;
     for (const d of defenders) {
       let p = corpsBase(g2, d) * KIND[d.kind].def * (town ? walls : TERRAIN_DEF[target.terrain]);
       if (wide && !town) {
@@ -15385,7 +15445,8 @@
         if (armsD) p *= d.kind === "arm" ? armsD.armour : isFoot(d, true) ? armsD.infantry : 1;
       }
       if (d.dug) {
-        p *= soften ? 1 + (DUG_IN - 1) * (1 - soften) : DUG_IN;
+        const dug = wide ? 1 + (DUG_IN - 1) * Math.min(1, Math.max(0, d.dugFor ?? 1)) : DUG_IN;
+        p *= soften ? 1 + (dug - 1) * (1 - soften) : dug;
         dugIn++;
       }
       if (thicken && d.kind !== "art") p *= 1 + thicken;
@@ -15435,9 +15496,13 @@
       rawD += p;
       cmdD += p * lead2;
       D += p * lead2;
-      if (d.dug && d.supplied) readyD += p * lead2 * Math.min(1, (d.dugFor ?? 1) / DEFENCE.entrench.months);
+      if (d.dug && d.supplied) readyD += p * lead2 * worksShare(worksOf(d));
+      if (d.dug) {
+        dugD += p * lead2;
+        worksD += p * lead2 * worksOf(d);
+      }
     }
-    const caught = tempo ? DEFENCE.prepared.surprise : 0;
+    const caught = wide && !town && surprised(g2, attNat, /* @__PURE__ */ new Set([...dN, target.ctrl])) ? DEFENCE.prepared.surprise : 0;
     const pierced = armorShock ? DEFENCE.prepared.armour : 0;
     const prepared = wide && !town && D > 0 ? Math.min(1, readyD / D) * (1 - soften) * (1 - caught) * (1 - pierced) : 0;
     const dice2 = town ? [SIEGE.assault.dice[0], SIEGE.assault.dice[1]] : prepared > 0 ? [FIELD_DICE[0] + (DEFENCE.prepared.dice[0] - FIELD_DICE[0]) * prepared, FIELD_DICE[1] + (DEFENCE.prepared.dice[1] - FIELD_DICE[1]) * prepared] : FIELD_DICE;
@@ -15474,6 +15539,33 @@
         value: garrisonOf(target).length ? `${townName(target)} is garrisoned` : `${townName(target)} is held by its own guard`,
         effect: "Winning here wins the country round it. The town must then be stormed or starved out, unless it opens its gates"
       });
+    }
+    if (wide && defenders.length) {
+      const grade2 = (cs) => {
+        let w = 0, worth2 = 0, army = 0, xp = 0;
+        for (const c of cs) {
+          const k = c.divs * c.str;
+          w += k;
+          worth2 += k * g2.nations[c.nat].quality * (0.85 + 0.4 * c.xp);
+          army += k * g2.nations[c.nat].quality;
+          xp += k * c.xp;
+        }
+        return w > 0 ? { worth: worth2 / w, army: army / w, xp: xp / w } : { worth: 1, army: 1, xp: 0 };
+      };
+      const ours = grade2(attackers2), theirs = grade2(defenders);
+      const ratio = theirs.worth / Math.max(0.01, ours.worth);
+      const word = (xp) => xp < 0.2 ? "green" : xp < 0.45 ? "trained" : xp < 0.7 ? "seasoned" : "veteran";
+      if (ratio >= 1.1 || ratio <= 1 / 1.1) {
+        const better = ratio > 1 ? "defending" : "attacking", worse = ratio > 1 ? "attacking" : "defending";
+        const k = ratio > 1 ? ratio : 1 / ratio;
+        const armyK = ratio > 1 ? theirs.army / ours.army : ours.army / theirs.army, xpK = k / armyK;
+        const why = [armyK >= 1.04 ? "the better trained and led army" : "", xpK >= 1.04 ? "the more experienced troops" : ""].filter(Boolean);
+        lines.push({
+          label: "Troops",
+          value: `${word(ours.xp)[0].toUpperCase() + word(ours.xp).slice(1)} attackers against ${word(theirs.xp)} defenders`,
+          effect: `Division for division the ${better} side is the stronger${why.length ? `, as ${listAnd(why)}` : ""}: each ${better} division counts for about ${k.toFixed(1)} ${worse} ones`
+        });
+      }
     }
     if (wide) {
       const a = groundLine(g2, attackers2.filter((c) => !barred(g2, c, target)), target, false), d = town ? "" : groundLine(g2, defenders, target, true);
@@ -15530,12 +15622,23 @@
         thicken ? `${soften ? "the" : "The"} other defenders fight ${Math.round(thicken * 100)}% stronger under their own guns` : ""
       ].filter(Boolean).join("; ")
     });
-    if (dugIn) lines.push({ label: "Dug in", value: dugIn === defenders.length ? "The defenders have had a month to entrench" : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
-    if (prepared > 0) lines.push({
-      label: "Prepared defence",
-      value: prepared >= 0.995 ? "The line is dug in, fed and has had months to finish its works" : readyD < D * 0.995 ? "The line is dug in and fed, but its works are not complete everywhere" : `The line is dug in and fed, but ${listAnd([soften ? "the guns have worked it over" : "", caught ? "the new offensive has caught it off balance" : "", pierced ? "it has no armour to meet the tanks" : ""].filter(Boolean))}`,
-      effect: `The day runs against the attack: an even chance takes about ${evenOdds(dice2).toFixed(1)} to 1, and nothing is sure under ${(1.2 / dice2[0]).toFixed(1)} to 1. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer`
-    });
+    if (dugIn && !wide) lines.push({ label: "Dug in", value: dugIn === defenders.length ? "The defenders have had a month to entrench" : `${dugIn} of the ${defenders.length} defending corps have had a month to entrench`, effect: `Entrenched troops defend ${Math.round((DUG_IN - 1) * 100)}% stronger` });
+    const works = wide && !town && dugD > 0 ? worksD / dugD : 0;
+    const wear = works > 0 ? Math.min(works, DEFENCE.wear.perAttack * Math.min(1, A / D / DEFENCE.wear.fullAt) * (1 + DEFENCE.wear.guns * soften)) : 0;
+    if (wide && dugIn) {
+      const full = DEFENCE.entrench.months, age = Math.round(works * 10) / 10;
+      const built = works >= full - 0.05 ? "their works are finished" : works < 0.05 ? "their works have been battered flat" : `their works are ${age === 1 ? "a month" : `${age} months`} old of the ${full} they take to finish`;
+      const who = dugIn === defenders.length ? "The defenders are dug in" : `${dugIn} of the ${defenders.length} defending corps are dug in`;
+      const lost = [soften && prepared < 1 ? "the guns have worked LINE over" : "", caught ? "the new offensive has caught LINE off balance" : "", pierced ? "LINE has no armour to meet the tanks" : ""].filter(Boolean).map((t, i) => t.replace("LINE", i ? "it" : "the line"));
+      const cover3 = dugD > 0 ? Math.round((DUG_IN - 1) * Math.min(1, works) * 100) : 0;
+      const luck = prepared > 5e-3 ? `The day runs against the attack: an even chance takes about ${evenOdds(dice2).toFixed(1)} to 1, and nothing is sure under ${(1.2 / dice2[0]).toFixed(1)} to 1. The attackers lose ${Math.round((DEFENCE.prepared.losses.attacker - 1) * prepared * 100)}% more men and the defenders ${Math.round((1 - DEFENCE.prepared.losses.defender) * prepared * 100)}% fewer` : defenders.some((d) => d.dug && !d.supplied) && !defenders.some((d) => d.dug && d.supplied) ? "Cut off from supply, the line is no better than open ground on the day" : "On the day the line is no better than open ground";
+      const after = wear >= 0.05 ? `. Won or lost, this attack takes ${wear >= 0.95 && wear < 1.05 ? "a month" : `${Math.round(wear * 10) / 10} months`} off the works${wear < works - 0.05 ? "" : ", which leaves nothing of them"}` : "";
+      lines.push({
+        label: "Dug in",
+        value: `${who}: ${built}${lost.length ? `, but ${listAnd(lost)}` : ""}`,
+        effect: `${cover3 ? `Entrenched troops defend ${cover3}% stronger. ` : ""}${luck}${after}`
+      });
+    }
     const aUns = attackers2.filter((c) => !c.supplied).length, dUns = defenders.filter((c) => !c.supplied).length;
     lines.push({ label: "Supply", value: `${aUns ? `${aUns} attacking corps cut off` : "Attackers in supply"}; ${dUns ? `${dUns} defending corps cut off` : "defenders in supply"}`, effect: aUns || dUns ? "Corps that are cut off fight at half strength" : void 0 });
     lines.push({ label: "Air", value: skyWon ? `The ${g2.nations[sky].adj} air force has won the sky here` : airEdge > 0.15 ? "Attacker holds the sky" : airEdge < -0.15 ? "Defender holds the sky" : "Contested", effect: Math.abs(airEdge) > 0.05 ? `${airEdge > 0 ? "Attack" : "Defence"} strengthened by about ${Math.round(Math.abs(airEdge) * 30)}%` : void 0 });
@@ -15612,7 +15715,7 @@
     if (streets) lines.push({ label: "Armor", value: "Tanks in the streets of the town", effect: `Tank attack cut to ${Math.round(SIEGE.assault.armour * 100)}%` });
     if (hasty) lines.push({ label: "A hasty assault", value: "The army has only just come up to the town: it goes in off the march", effect: `Attack cut to ${Math.round(rushed * 100)}%. Next month the assault is made ready and goes in at full weight` });
     if (flank > 1) lines.push({ label: "Direction", value: `Attack from ${sources.size} sides`, effect: `Attack up ${Math.round((flank - 1) * 100)}%` });
-    return { A, D, odds: A / D, lines, defenders, dice: dice2, prepared };
+    return { A, D, odds: A / D, lines, defenders, dice: dice2, prepared, works, wear };
   }
   function reportUnit(c) {
     return { name: c.name, nat: c.nat, kind: c.kind, divs: c.divs, men: men(c), lost: 0, fate: "" };
@@ -15636,6 +15739,7 @@
     const r = g2.regions[c.reg];
     if (c.town) quitTown(g2, c);
     else r.units.splice(r.units.indexOf(c), 1);
+    if (c.job && c.job.reg !== to.id) delete c.job;
     c.reg = to.id;
     if (siegeRules(g2) && to.units.some((u) => atWar(g2, u.nat, c.nat))) {
       const alt = musterNear(g2, c.nat, to);
@@ -15719,7 +15823,9 @@
     const attNat = armyOf(attackers2[0]);
     const AN = g2.nations[attNat];
     for (const d of new Set(gone.map((u) => u.nat))) {
-      if (AN.lastFight[d] === void 0 || g2.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== void 0 && g2.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g2.turn;
+      const first = AN.lastFight[d] === void 0;
+      if (first || g2.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== void 0 && g2.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g2.turn;
+      if (first && g2.flags.open === 1) g2.flags[`opening:${attNat}:${d}`] = AN.offStart[d];
       AN.lastFight[d] = g2.turn;
     }
     const week = Math.max(...attackers2.map((c) => weekOf(c, 1)));
@@ -15776,7 +15882,9 @@
     const relief = sieges2 && !town && allied(g2, attNat, target.ctrl);
     const watchMen = town ? guardMen(g2, target) : 0, watch = town ? guardOf(g2, target) : 0;
     for (const d of new Set(defenders.map((c) => c.nat))) {
-      if (AN.lastFight[d] === void 0 || g2.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== void 0 && g2.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g2.turn;
+      const first = AN.lastFight[d] === void 0;
+      if (first || g2.turn - AN.lastFight[d] >= 3) AN.offStart[d] = AN.offStart[d] !== void 0 && g2.turn - AN.offStart[d] <= 1 ? AN.offStart[d] : g2.turn;
+      if (first && g2.flags.open === 1) g2.flags[`opening:${attNat}:${d}`] = AN.offStart[d];
       AN.lastFight[d] = g2.turn;
     }
     const week = Math.max(...attackers2.map((c) => weekOf(c, 1)));
@@ -15818,6 +15926,12 @@
       defLost += defU[i].lost;
       if (before > 0) bled.set(c.id, defU[i].lost / before);
     });
+    if (!town && g2.flags.open === 1) {
+      for (const c of defenders) {
+        if (c.dug && a.wear > 0) c.dugFor = Math.max(0, worksOf(c) - a.wear);
+        c.pressed = true;
+      }
+    }
     moraleBattle(g2, attackers2, defenders, R, win, bled, enemyCapital);
     identify(g2, defenders, attNat);
     for (const nat of new Set(defenders.map((c) => c.nat))) identify(g2, attackers2, nat);
@@ -15911,6 +16025,14 @@
     if (relief) rep.relief = true;
     if (opts.sally) rep.sally = true;
     if (a.prepared > 0) rep.prepared = Math.round(a.prepared * 100) / 100;
+    if (!win && !town && a.wear > 0) {
+      rep.worn = Math.round(a.wear * 10) / 10;
+      rep.works = Math.round(Math.max(0, a.works - a.wear) * 10) / 10;
+    }
+    if (win && !town && a.prepared > 0 && defNat === g2.human && g2.flags.open === 1 && !g2.flags["tip:guns"] && !defenders.some((c) => c.kind === "art")) {
+      g2.flags["tip:guns"] = g2.turn;
+      headline(g2, "info", `Your staff on the loss of ${target.name}: the line was dug in and it still broke. Artillery standing in a line makes every corps beside it fight up to ${Math.round(GUNS.thickenMost * 100)}% stronger, and the enemy's staff thinks twice before attacking guns. An artillery corps behind each threatened sector would help the next one hold.`, defNat, target.id);
+    }
     g2.reports.push(rep);
     if (aside2) g2.flags.asideBattles = (g2.flags.asideBattles ?? 0) + 1;
     if (late) {
@@ -16114,7 +16236,8 @@
           r.ctrl = holder ? holder.nat : by;
         }
       } else if (r.ctrl === nat) {
-        const stays = g2.flags.open === 1 ? r.units.find((u) => u.nat !== nat && !u.dead && atWar(g2, u.nat, r.owner)) : void 0;
+        const keeps = (u) => u.nat !== nat && !u.dead && (atWar(g2, u.nat, r.owner) || atWar(g2, u.nat, by));
+        const stays = g2.flags.open === 1 ? r.units.find(keeps) ?? garrisonOf(r).find(keeps) : void 0;
         r.ctrl = stays ? stays.nat : g2.nations[r.owner].alive ? r.owner : by;
       }
     }
@@ -16420,12 +16543,17 @@
     for (const c of g2.corps) {
       if (c.dead || c.kind === "fort" || armyOf(c) !== nat) continue;
       if (c.town === void 0 && !c.yields && c.ap >= c.apMax && !c.fought) {
-        c.dugFor = c.dug ? (c.dugFor ?? 1) + 1 : 1;
-        c.dug = true;
+        const gain = c.pressed ? DEFENCE.wear.regrow : 1;
+        if (c.dug) c.dugFor = (c.dugFor ?? 1) + gain;
+        else if (gain > 0) {
+          c.dugFor = gain;
+          c.dug = true;
+        }
       } else {
         if (c.dug) delete c.dug;
         if (c.dugFor !== void 0) delete c.dugFor;
       }
+      if (c.pressed) delete c.pressed;
     }
   }
   function endPhase(g2, nat) {
@@ -19813,6 +19941,7 @@
         const ours = l.value.split(", defenders")[0];
         return { ...l, value: /^Attackers/.test(ours) ? `${ours}; the defenders' spirit is not known` : "The defenders' spirit is not known", effect: l.effect ? l.effect.split(", defence")[0].replace(/^Defence.*$/, "") || void 0 : void 0 };
       }
+      if (l.label === "Troops") return { label: l.label, value: "How good the defenders are is not known", effect: "Training and experience count for as much as numbers: identify them first" };
       if (l.label === "Armor" && /without armor/.test(l.value) && k.none.length) return { ...l, value: "No tanks have been seen among the defenders", effect: "Tank attack up 25% if there are none" };
       return l;
     });
@@ -21329,6 +21458,8 @@
           supplied: c.supplied,
           dug: !!c.dug,
           dugFor: c.dugFor ?? 0,
+          // (Version 61) how far its works have got, in months, where months are counted: attacks wear them down. -1 where they are not.
+          works: c.dug && s.flags.open === 1 && DEFENCE.entrench.auto ? Math.round(worksOf(c) * 10) / 10 : -1,
           town: !!c.town,
           men: men(c),
           // Its story so far: how seasoned it is, the name the army gives it, and the honours on its colours.
@@ -21904,11 +22035,30 @@
     const all = wouldAttack(s, ids2, to), going = new Set(attackers(s, ids2, to).map((c) => c.id));
     const left = all.filter((c) => !going.has(c.id));
     if (!left.length) return null;
-    const cap5 = frontage(s.regions[to]);
+    const sent = attackers(s, ids2, to);
+    const sides = new Set(sent.map((c) => c.reg)).size;
+    const wider = s.flags.open === 1 && sides >= DEFENCE.frontage.sides;
+    const cap5 = frontage(s.regions[to]) + (wider ? DEFENCE.frontage.extra : 0);
+    const gunsOver = s.flags.open === 1 && sent.some((c) => c.kind === "art") && (!!s.regions[to].fort || s.regions[to].units.some((u) => !u.dead && u.dug && !!s.human && atWar(s, s.human, u.nat)));
     return {
       label: "The front",
       value: `${going.size} of ${all.length} corps go in`,
-      effect: `Only ${cap5} corps can attack ${s.regions[to].terrain === "plains" ? "open country" : s.regions[to].terrain === "mountain" ? "mountains" : "this ground"} from one side, the strongest first. ${listOf3(left.slice(0, 3).map((c) => c.name))}${left.length > 3 ? ` and ${left.length - 3} more` : ""} ${left.length === 1 ? "waits" : "wait"} behind.`
+      effect: `Only ${cap5} corps can attack ${s.regions[to].terrain === "plains" ? "open country" : s.regions[to].terrain === "mountain" ? "mountains" : "this ground"} from one side${wider ? ` (one more than usual, as the attack comes in from ${sides} sides)` : ""}, the strongest first.${gunsOver ? ` Against works up to ${DEFENCE.frontage.guns} artillery corps fire over their heads and take no room on the roads.` : ""} ${listOf3(left.slice(0, 3).map((c) => c.name))}${left.length > 3 ? ` and ${left.length - 3} more` : ""} ${left.length === 1 ? "waits" : "wait"} behind.`
+    };
+  }
+  var oddsPct = (p) => p >= 0.9995 ? 100 : p <= 5e-4 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100)));
+  function massNote(s, corps, to, odds) {
+    const target = s.regions[to];
+    const cands = candidates(s, target);
+    const everyone = jointForce(s, limitAttackers(s, jointForce(s, cands, target), target), target);
+    const inSet = new Set(corps.map((c) => c.id));
+    const extra = everyone.filter((c) => !inSet.has(c.id)).length;
+    const massed2 = extra ? attackOutlook(s, everyone, target) : null;
+    if (!massed2 || odds !== null && massed2.odds <= odds * 1.02) return null;
+    const chance = massed2.exact ? `about ${oddsPct(massed2.chance)}%` : oddsPct(massed2.chanceLo) === oddsPct(massed2.chanceHi) ? `about ${oddsPct(massed2.chanceLo)}%` : `${oddsPct(massed2.chanceLo)} to ${oddsPct(massed2.chanceHi)}%`;
+    return {
+      note: `${extra === 1 ? "One more corps stands" : `${extra} more corps stand`} within reach. Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${odds !== null ? `go from ${odds.toFixed(2)} to ${massed2.odds.toFixed(2)} to 1` : `are ${massed2.odds.toFixed(2)} to 1`}: ${chance} to take ${target.name}.`,
+      ids: cands.map((c) => c.id)
     };
   }
   function preview(ids2, to) {
@@ -21921,7 +22071,9 @@
     if (!a) return null;
     const look = attackOutlook(s, corps, s.regions[to]);
     const even = look?.even ?? 1.2;
-    const saidAlready = [...look?.lines ?? [], ...a.lines].some((l) => l.label === "Prepared defence");
+    const saidAlready = [...look?.lines ?? [], ...a.lines].some((l) => l.label === "Prepared defence" || l.label === "Dug in" && /even chance/.test(l.effect ?? ""));
+    const mass2 = massNote(s, corps, to, look?.odds ?? a.odds);
+    const pct8 = { chancePct: oddsPct(look?.chance ?? 0), chancePctLo: oddsPct(look?.chanceLo ?? look?.chance ?? 0), chancePctHi: oddsPct(look?.chanceHi ?? look?.chance ?? 0), hasChance: !!look, mass: mass2?.note ?? "", massIds: mass2?.ids ?? [] };
     const evenLine = even > 1.21 && !saidAlready ? [{ label: "An even chance", value: `${even.toFixed(1)} to 1`, effect: "Luck runs wider in the streets of a town than in the open, and mostly against the attacker: it takes better odds here than in the field to make it an even chance." }] : [];
     const allies = [...new Set(corps.filter((c) => c.nat !== s.human).map((c) => s.nations[c.nat]?.name ?? c.nat))];
     const named2 = (c) => {
@@ -21936,6 +22088,7 @@
         attack: look.odds,
         defence: 1,
         odds: look.odds,
+        ...pct8,
         exact: false,
         lo: look.lo,
         hi: look.hi,
@@ -21950,6 +22103,7 @@
       };
     }
     return {
+      ...pct8,
       allies,
       exact: true,
       lo: a.odds,
@@ -21977,7 +22131,17 @@
     const x = r;
     const town = townSiege(s, r.region)?.town ?? r.regionName;
     const came = x.gates ? `the army outside is beaten, and ${town} opens its gates without a fight` : x.town ? r.taken ? `${town} is stormed and taken` : `the assault on ${town} is thrown back` : x.sally ? r.taken ? `the garrison of ${town} breaks the ring: the siege is raised` : `the garrison's sortie from ${town} is driven back in` : x.relief ? r.taken ? `the besiegers are driven off and ${town} is relieved` : `the relief of ${town} is held off` : x.siege ? `the country is won, but ${town} holds: it is now besieged` : (x.prepared ?? 0) >= 0.5 ? r.taken ? "the prepared line is broken and the ground is taken" : "the attack breaks on a prepared line" : r.taken ? "the ground is taken" : "the attack is held";
-    return `${r.level} at ${r.regionName}: ${came}, ${cost}${prisoners}.`;
+    return `${r.level} at ${r.regionName}: ${came}, ${cost}${prisoners}.${wornNote(s, r)}`;
+  }
+  function wornNote(s, r) {
+    const x = r;
+    if (!x.worn) return "";
+    const full = DEFENCE.entrench.months, left = x.works ?? 0;
+    const took = x.worn >= 0.95 && x.worn < 1.05 ? "a month" : `${x.worn} months`;
+    const now = left < 0.05 ? "nothing is left of them" : `they stand at ${left} of ${full} months`;
+    const regrow = DEFENCE.wear.regrow;
+    const pace = regrow <= 0 ? "do no digging" : regrow >= 1 ? "dig as usual" : regrow === 0.5 ? "dig at half pace" : `get ${Math.round(regrow * 100)}% of their digging done`;
+    return r.defNat === s.human ? ` The line held, but its works are worn: the attack took ${took} off them, and ${now}. Your troops there ${pace} this month. A quiet month builds the works up again.` : ` Thrown back, but not for nothing: the attack took ${took} off the defenders' works, and ${now}. The defenders ${pace} this month, so the next blow meets less. Guns in the attack wear works down faster.`;
   }
   function attack(ids2, to) {
     const s = game();

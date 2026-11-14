@@ -280,6 +280,8 @@ struct FFaceOff
 	float Balance = 0.5f; // the attackers' share of the strength on the field
 	FText OddsLine;
 	FText Prize; // what taking the place is worth
+	FText Mass; // where more corps stand in reach than were picked: what sending everyone would come to
+	TArray<int32> MassIds; // ...and the corps that would go
 	FText Ticket;
 	FText ResultTitle;
 	FText ResultDetail;
@@ -618,6 +620,8 @@ public:
 
 	/** Sends the attack shown on the face-off in. */
 	void ConfirmAttack();
+	/** On the attack card: pick every corps that can reach the place, and show the attack again as it would then be. */
+	void SendEveryone();
 
 	/** Calls the attack off, or closes the result of one that has been fought. */
 	void CloseFaceOff();
@@ -679,6 +683,7 @@ private:
 	/** The army in hand: the region it stands in and the corps that will go when it is ordered. */
 	int32 ArmyRegion = INDEX_NONE;
 	TArray<int32> PickedCorps;
+	TArray<int32> PickedBeforeMass; // the corps that were in hand before "send everyone" was pressed on the attack card
 	TArray<FReachRegion> Reach;
 	int32 RouteTarget = INDEX_NONE;
 	int32 PendingTarget = INDEX_NONE; // ground clicked once with an army in hand: a second click, or the button, sends it there

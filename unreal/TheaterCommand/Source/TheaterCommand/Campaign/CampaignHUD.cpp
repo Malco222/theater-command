@@ -1201,6 +1201,26 @@ namespace
 										.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Prize : FText::GetEmpty(); })
 									]
 
+									// More corps stand in reach than were picked: what sending everyone would come to.
+									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(40.0f, 12.0f, 40.0f, 0.0f)
+									[
+										SNew(SVerticalBox)
+										.Visibility_Lambda([Face]() { const FFaceOff* F = Face(); return F && !F->bResolved && F->MassIds.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
+										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center)
+										[
+											SNew(STextBlock).Font(Font(TEXT("Regular"), 12)).ColorAndOpacity(Cream).AutoWrapText(true).Justification(ETextJustify::Center)
+											.Text_Lambda([Face]() { const FFaceOff* F = Face(); return F ? F->Mass : FText::GetEmpty(); })
+										]
+										+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 8.0f, 0.0f, 0.0f)
+										[
+											SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(18.0f, 7.0f)).IsFocusable(false)
+											.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->SendEveryone(); } return FReply::Handled(); })
+											[
+												SNew(STextBlock).Text(FText::FromString(TEXT("SEND EVERYONE WHO CAN REACH"))).Font(Font(TEXT("Bold"), 10, 140)).ColorAndOpacity(BrightBrass)
+											]
+										]
+									]
+
 									// The Battle Ticket: what the map says about this fight.
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 18.0f, 0.0f, 0.0f)
 									[
