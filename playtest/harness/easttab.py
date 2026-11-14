@@ -27,6 +27,7 @@ for name in names:
         m = re.search(r'over (\w+) (\d{4}) \((it fell|peace)\)', e)
         r['over'] = turn(m.group(1), m.group(2)) if m else 0
         r['how'] = m.group(3) if m else ''
+        if r['how'] == 'peace' and not r['stands']: r['how'] = ''; r['over'] = 0  # the player's own country fell: its wars ended with it
         m = re.search(r'while it lasted (\d+) months', e); r['during'] = int(m.group(1)) if m else 0
         m = re.search(r'after it: (\d+) months still at war with someone, a battle of the player\'s in (\d+), longest silence (\d+)', e)
         r['after'], r['afterFought'], r['afterQuiet'] = map(int, m.groups()) if m else (0, 0, 0)
