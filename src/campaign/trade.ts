@@ -289,6 +289,9 @@ const byWorth = (g: Game, a: string, ctx: TradeCtx, skip: (b: string) => boolean
   return best;
 };
 
+/** The partner that would pay this country most of those that would sign now, or null: what a staff with a free trading house signs with. */
+export const bestPartner = (g: Game, nat: string, ctx: TradeCtx = new Map()): string | null => byWorth(g, nat, ctx, () => false);
+
 /**
  * A nation's month of trade, at the start of its turn: agreements that war, a fall or bad feeling have ended are
  * struck out, the rest are looked over (what they are worth, how the goods go, what is sunk), and a computer-run

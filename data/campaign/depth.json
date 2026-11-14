@@ -1,0 +1,56 @@
+{
+  "_about": "How deep the player plays (the grand campaign). A desk is one part of the war the player can run himself or leave to his staff; the staff is the routine a computer nation uses for the same work, so there is one set of rules and one balance. A depth is a named set of switches: 'staff' lists the desks the staff runs at that depth, 'cabinet' says whether there is a war cabinet, 'canFall' whether it can bring the player down, 'fog' whether the fog of war lies on the map. Armies and battles are always the player's, and so are declaring war and landings. Oil, supply and manpower are on at every depth. Every later system adds a desk here and a place in the depths. 'cap' is the share of the treasury the staff may spend in a month, in percent: the steps on offer and where a campaign starts. 'start' is the depth the new-campaign screen offers first; a game in which no switch has been set is the full game, with everything on the player's desk. 'diplomacy.keep' is the political capital the envoys leave in hand; 'spies.guards' is how many agents the service keeps at home once it has more than one, and 'spies.peace' says whether it sends agents abroad before the country is at war.",
+  "start": "theatre",
+  "cap": { "steps": [25, 50, 75, 100], "start": 50 },
+  "diplomacy": { "keep": 2 },
+  "spies": { "guards": 1, "peace": false },
+  "desks": [
+    {
+      "id": "research", "name": "Research", "tab": "research", "lead": "Your advisers",
+      "runs": "Your advisers keep every research team at work, on the projects a general staff would put first.",
+      "hand": "You choose every project."
+    },
+    {
+      "id": "build", "name": "Building and trade", "tab": "build", "lead": "Your staff",
+      "runs": "Your staff raises new corps, puts guns round industry that has been bombed, builds in your towns and signs trade agreements, inside the share of the treasury you allow it.",
+      "hand": "You place every order and sign every agreement."
+    },
+    {
+      "id": "diplomacy", "name": "Diplomacy", "lead": "Your envoys",
+      "runs": "Your envoys court the neutral most ready to listen, month by month. Declaring war is always yours.",
+      "hand": "You decide whom to court."
+    },
+    {
+      "id": "spies", "name": "The secret service", "tab": "spies", "lead": "Your secret service",
+      "runs": "The service recruits agents, sends them to watch the enemy's front and to read the books in his capital, and keeps a guard at home. It tries no sabotage.",
+      "hand": "You recruit, post and brief every agent."
+    },
+    {
+      "id": "air", "name": "The air war", "tab": "air", "lead": "Your air staff",
+      "runs": "Your air staff plans and flies the raids: factories, railways, and the enemy's troops where your armies are fighting. Your fighters meet enemy raids either way.",
+      "hand": "You plan every raid."
+    },
+    {
+      "id": "navy", "name": "The navy and convoys", "tab": "navy", "lead": "Your admirals",
+      "runs": "Your admirals send the fleets out: they hunt the enemy's ships, guard your shipping lanes, shell the coasts your army stands beside and fly the carriers' strikes. Landings are always yours.",
+      "hand": "You give every fleet its orders."
+    }
+  ],
+  "depths": [
+    {
+      "id": "field", "name": "Field command", "under": "Simple",
+      "blurb": "You command the armies. Your staff runs everything behind them, there is no cabinet to answer to, and the map hides nothing.",
+      "staff": ["research", "build", "diplomacy", "spies", "air", "navy"], "cabinet": false, "canFall": false, "fog": false
+    },
+    {
+      "id": "theatre", "name": "Theatre command", "under": "Standard",
+      "blurb": "The armies, the factories, the laboratories and the envoys are yours. Your staff flies the raids, sails the fleets and runs the agents. A war cabinet sits behind you, and it cannot bring you down.",
+      "staff": ["spies", "air", "navy"], "cabinet": true, "canFall": false, "fog": true
+    },
+    {
+      "id": "supreme", "name": "Supreme command", "under": "Full",
+      "blurb": "Everything is on your desk, and a cabinet that has lost its trust in you can turn you out of office.",
+      "staff": [], "cabinet": true, "canFall": true, "fog": true
+    }
+  ]
+}

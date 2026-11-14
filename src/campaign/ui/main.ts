@@ -25,10 +25,13 @@ import {
   garrisonsAt, myGarrison, orderGarrison, orderSally, orderStorm, orderTakeField, sallyOutlook, siegesInSight, stormCandidates, stormOutlook, townSiege, whyNotGarrisonTown, whyNotLeaveTown, whyNotSallyOut, whyNotStormTown, type Outlook,
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
+  commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { INTEL, armyKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
+import { DEPTH, deskDef, type DeskId } from '../depth';
+import { setDepth, type CommandView } from '../desks';
 import { SIEGE, besiegers, garrisonOf, guardMen, salliers, siegeRules, stormForce, townHitText } from '../siege';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
 import { GOV, type GovView, type PromiseTarget, type PromiseTerms } from '../government';
@@ -123,7 +126,7 @@ const ui = {
   msg: '',
   /** False until a game has been started or resumed, so the title screen never overwrites a saved game. */
   live: false,
-  tab: 'region' as 'region' | 'build' | 'research' | 'generals' | 'honours' | 'navy' | 'air' | 'spies' | 'reel' | 'battles' | 'powers',
+  tab: 'region' as 'region' | 'build' | 'research' | 'generals' | 'honours' | 'navy' | 'air' | 'spies' | 'reel' | 'battles' | 'powers' | 'staff',
   /** The agent being given orders under the Spies tab, whether the next click on the map sends it there, and one waiting for a yes to its retirement. */
   spy: -1,
   spySend: false,
@@ -151,6 +154,8 @@ const ui = {
   gcCabinet: true,
   /** Whether the campaign being set up has a government that cannot fall. */
   gcSecure: false,
+  /** How deep the campaign being set up is played: Field, Theatre or Supreme command. */
+  gcDepth: DEPTH.start,
 };
 
 const $ = (s: string): HTMLElement => document.querySelector(s) as HTMLElement;
@@ -892,7 +897,7 @@ function drawBar(): void {
   const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? (lastAct(g)?.winner === me ? ' · the world is yours' : lastAct(g)?.on ? ` · World Domination, ${lastAct(g)!.left} left` : ' · free play') : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
   const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
   // The level of a grand campaign is always in sight beside the date: a click shows what it does and lets it be changed.
-  const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign. Click to see what it does, to change it, or to switch the war cabinet ${cabinetIsOff(g) ? 'on' : 'off'}.">${pips(levelIndex(g))}${esc(levelOf(g).name)}</button>` : '';
+  const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign and how deep you play it. Click to change either, to hand a desk to your staff or take one back, or to switch the war cabinet ${cabinetIsOff(g) ? 'on' : 'off'}.">${pips(levelIndex(g))}${esc(levelOf(g).name)}<span class="rdepth"> · ${esc(commandOf(g)?.name ?? '')}</span></button>` : '';
   $('#when').innerHTML = `${when}${rank}<small>${esc(who)}${me ? ` · ${esc(w.text)}` : ''}</small>`;
   $('#purse').innerHTML = me && g.nations[me].alive && !eve ? purse(me) + gauges(me) + menGauge(me) : '';
   let b = '';
@@ -915,10 +920,14 @@ function drawTabs(): void {
   const newB = g.reports.length - ui.seenReports + Math.max(0, g.seaReports.length - ui.seenSea) + Math.max(0, g.airReports.length - ui.seenAir);
   const t = (id: string, label: string, n = 0) => `<button class="tab${ui.tab === id ? ' on' : ''}" data-act="tab" data-tab="${id}">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
   const me = g.human && g.nations[g.human].alive ? g.human : null;
-  const build = me ? t('build', 'Build') : '';
   // Generals with no corps, when there is a corps for them: a decision waiting for the player.
   const idle = me && vacant(g, me).length ? waiting(g, me).length : 0;
-  $('#tabs').innerHTML = t('region', 'Region') + build + t('research', 'Research', me && isOpen(g) ? idleTeams(g, me) : 0) + t('generals', 'Generals', idle) + t('honours', 'Honours', unseen(g).length) + t('navy', 'Navy') + t('air', 'Air') + (me && isOpen(g) ? t('spies', 'Spies', spyNews()) : '') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers');
+  // A desk the staff runs is tucked away: its tab shows only while the player is looking in, and one Staff tab stands for them all.
+  const cmd = me ? commandOf(g) : null;
+  const tucked = (id: string): boolean => !!cmd && cmd.desks.some((d) => d.tab === id && d.staff);
+  const dt = (id: string, label: string, n = 0): string => (tucked(id) ? (ui.tab === id ? t(id, `${label}<i class="tstaff">staff</i>`) : '') : t(id, label, n));
+  const staffTab = cmd && (cmd.desks.some((d) => d.staff) || ui.tab === 'staff') ? t('staff', 'Staff') : '';
+  $('#tabs').innerHTML = t('region', 'Region') + (me ? dt('build', 'Build') : '') + dt('research', 'Research', me && isOpen(g) ? idleTeams(g, me) : 0) + t('generals', 'Generals', idle) + t('honours', 'Honours', unseen(g).length) + dt('navy', 'Navy') + dt('air', 'Air') + (me && isOpen(g) ? dt('spies', 'Spies', spyNews()) : '') + t('reel', 'News', ui.unread) + t('battles', 'Battles', newB) + t('powers', 'Powers') + staffTab;
 }
 
 /** Free play: nobody hands the player a plan. The note says so, and gives his own staff's reading of each front. */
@@ -1485,14 +1494,18 @@ function drawPane(): void {
   if (ui.tab === 'build' && !(g.human && g.nations[g.human].alive)) ui.tab = 'region';
   if (ui.tab === 'spies' && !(g.human && g.nations[g.human].alive && isOpen(g))) ui.tab = 'region';
   if (ui.tab !== 'spies') ui.spySend = false;
+  if (ui.tab === 'staff' && !commandOf(g)) ui.tab = 'region';
+  // A panel whose desk the staff runs says so at its head; one the player runs offers to hand it over at its foot.
+  const desk = (html: string): string => deskHead(ui.tab) + html + deskFoot(ui.tab);
   if (ui.tab === 'region') pane.innerHTML = regionPane();
-  else if (ui.tab === 'build') pane.innerHTML = buildPane();
-  else if (ui.tab === 'research') pane.innerHTML = researchPane();
+  else if (ui.tab === 'staff') pane.innerHTML = staffPane();
+  else if (ui.tab === 'build') pane.innerHTML = desk(buildPane());
+  else if (ui.tab === 'research') pane.innerHTML = desk(researchPane());
   else if (ui.tab === 'generals') pane.innerHTML = generalsPane();
   else if (ui.tab === 'honours') pane.innerHTML = honoursPane();
-  else if (ui.tab === 'navy') pane.innerHTML = navyPane();
-  else if (ui.tab === 'air') pane.innerHTML = airPane();
-  else if (ui.tab === 'spies') pane.innerHTML = spiesPane();
+  else if (ui.tab === 'navy') pane.innerHTML = desk(navyPane());
+  else if (ui.tab === 'air') pane.innerHTML = desk(airPane());
+  else if (ui.tab === 'spies') pane.innerHTML = desk(spiesPane());
   else if (ui.tab === 'reel') pane.innerHTML = reelPane();
   else if (ui.tab === 'battles') pane.innerHTML = battlesPane();
   else pane.innerHTML = powersPane();
@@ -1575,7 +1588,9 @@ function alertList(): Alert[] {
   // The war between the alliances is decided and the player has not yet said what comes next.
   const act = lastAct(g);
   if (act?.open && !act.peace) out.unshift({ kind: 'lastact', text: 'The war is decided: take the victory, or World Domination' });
-  return out;
+  // What belongs to a desk the staff runs is the staff's to deal with: it does not ask for the player's attention.
+  const theirs: Record<string, DeskId> = { build: 'build', tradeidle: 'build', tradecut: 'build', research: 'research', agent: 'spies', unescorted: 'navy' };
+  return out.filter((a) => !(theirs[a.kind] && staffRunsDesk(g, theirs[a.kind])));
 }
 
 const alertButtons = (): string => alertList().map((a) => `<button class="alert ${a.kind}" data-act="alert" data-kind="${a.kind}">${esc(a.text)}</button>`).join('');
@@ -3215,7 +3230,7 @@ function reelPane(): string {
   for (let i = g.headlines.length - 1; i >= 0; i--) {
     const h = g.headlines[i];
     if (h.turn !== t) { t = h.turn; out += `<div class="mo">${date(t)}</div>`; }
-    out += h.kind === 'letter' ? letterBlock(h) : `<p class="${h.kind}"><span class="wk">Week ${h.week}</span>${esc(h.text)}</p>`;
+    out += h.kind === 'letter' ? letterBlock(h) : `<p class="${h.kind}${h.desk ? ' desk' : ''}"><span class="wk">Week ${h.week}</span>${esc(h.text)}${deskLink(h)}</p>`;
   }
   return out + '</div>';
 }
@@ -4638,12 +4653,13 @@ function grandPick(): { nat: string; year: GrandYear; text: string } {
 }
 
 function rememberPick(): void {
-  try { localStorage.setItem('tc-grand', `${ui.gcNat}:${ui.gcYear}:${ui.gcLevel}:${ui.gcCabinet ? 1 : 0}:${ui.gcSecure ? 1 : 0}`); } catch { /* the pick is only a convenience */ }
+  try { localStorage.setItem('tc-grand', `${ui.gcNat}:${ui.gcYear}:${ui.gcLevel}:${ui.gcCabinet ? 1 : 0}:${ui.gcSecure ? 1 : 0}:${ui.gcDepth}`); } catch { /* the pick is only a convenience */ }
 }
 
 function recallPick(): void {
   try {
-    const [nat, year, level, cabinet, secure] = (localStorage.getItem('tc-grand') ?? '').split(':');
+    const [nat, year, level, cabinet, secure, depth] = (localStorage.getItem('tc-grand') ?? '').split(':');
+    if (depth && DEPTH.depths.some((d) => d.id === depth)) ui.gcDepth = depth;
     ui.gcCabinet = cabinet !== '0';
     ui.gcSecure = secure === '1';
     if (year) { ui.gcNat = nat; ui.gcYear = Number(year) || 1939; }
@@ -4681,6 +4697,85 @@ function officePicker(secure: boolean, act: string): string {
     : `A cabinet left with no trust in you for ${GOV.trust.crisisMonths} months running falls: caretakers take every office, your newest decrees are withdrawn and your political capital is spent.`;
   return `<div class="gclevels two"><button class="gclevel${secure ? '' : ' on'}" data-act="${act}" data-secure="0" aria-pressed="${!secure}"><b>You can be brought down</b><span>Lose its trust and the cabinet falls</span></button><button class="gclevel${secure ? ' on' : ''}" data-act="${act}" data-secure="1" aria-pressed="${secure}"><b>Your office is secure</b><span>The cabinet never falls</span></button></div>
     <div class="gclevelnote"><p>${note}</p></div>`;
+}
+
+// ---- How deep the player plays: the three depths, the desks and their switches --------------------
+
+const depthName = (id: string): string => DEPTH.depths.find((d) => d.id === id)?.name ?? 'Your own mix';
+const lowFirst = (s: string): string => (s ? s[0].toLowerCase() + s.slice(1) : s);
+const deskNames = (ids: DeskId[]): string => listOf(ids.map((k) => lowFirst(deskDef(k)!.name)));
+const capWord = (c: number): string => (c >= 100 ? 'all' : c === 75 ? 'three quarters' : c === 50 ? 'half' : c === 25 ? 'a quarter' : `${c}%`);
+
+/** The three depths side by side, the chosen one lit, and under them what the chosen one puts on the player's desk. */
+function depthPicker(chosen: string | null, act: string, live = false): string {
+  const on = DEPTH.depths.find((d) => d.id === chosen) ?? null;
+  const yours = on ? (['research', 'build', 'diplomacy', 'spies', 'air', 'navy'] as DeskId[]).filter((k) => !on.staff.includes(k)) : [];
+  const note = on
+    ? `<p>${esc(on.blurb)}</p><ul class="one"><li><b>On your desk:</b> the armies and their battles${yours.length ? `, ${esc(deskNames(yours))}` : ''}.</li>${on.staff.length ? `<li><b>Your staff runs:</b> ${esc(deskNames(on.staff))}.</li>` : ''}<li>${on.cabinet ? (on.canFall ? 'A war cabinet sits behind you, and it can bring you down.' : 'A war cabinet sits behind you. It cannot bring you down.') : 'No war cabinet.'} ${on.fog ? 'The fog of war lies on the map.' : 'No fog of war: every army is in plain sight.'}</li></ul>`
+    : '<p>You have made a mix of your own from the switches below. Pick a depth to set them all at once.</p>';
+  return `<div class="gclevels three">${DEPTH.depths.map((d, k) => `<button class="gclevel${d.id === chosen ? ' on' : ''}" data-act="${act}" data-depth="${d.id}" aria-pressed="${d.id === chosen}">${pips(k)}<b>${esc(d.name)}</b><span>${esc(d.under)}</span></button>`).join('')}</div>
+    <div class="gclevelnote">${note}<small>${live ? 'How deep you play is separate from how hard the war is: the rival staffs fight the same at every depth.' : 'Oil, supply and manpower are in the game at every depth. You can change the depth, or any single switch, in any month: click the badge beside the date.'}</small></div>`;
+}
+
+/** One desk: what it is, who runs it, and the switch. On the Staff tab it also says how the desk stands and what the staff did this month. */
+function deskRow(d: CommandView['desks'][number], full: boolean): string {
+  const sw = `<span class="dswitch" role="group" aria-label="Who runs ${esc(lowFirst(d.name))}"><button class="${d.staff ? '' : 'on'}" data-act="desk" data-desk="${d.id}" data-on="0" aria-pressed="${!d.staff}">You</button><button class="${d.staff ? 'on' : ''}" data-act="desk" data-desk="${d.id}" data-on="1" aria-pressed="${d.staff}">Your staff</button></span>`;
+  return `<div class="desk${d.staff ? ' staffed' : ''}"><div class="dhead"><b>${esc(d.name)}</b>${sw}</div><p>${esc(d.text)}</p>${full ? `<p class="dstate">${esc(d.state)}</p>${d.staff && d.news ? `<p class="dnews">${esc(d.news)}</p>` : ''}${d.tab ? `<button class="link" data-act="tab" data-tab="${d.tab}">${d.staff ? 'Look in' : 'Open it'} ›</button>` : ''}` : ''}</div>`;
+}
+
+/** What the staff may spend in a month: four steps, and what is left of this month's allowance. */
+function capPicker(v: CommandView): string {
+  const spends = v.desks.some((d) => d.staff && (d.id === 'build' || d.id === 'spies'));
+  return `<div class="gclevels four">${v.caps.map((c) => `<button class="gclevel${c === v.cap ? ' on' : ''}" data-act="setcap" data-cap="${c}" aria-pressed="${c === v.cap}"><b>${esc(upFirst(capWord(c)))}</b><span>${c}% a month</span></button>`).join('')}</div>
+    <div class="gclevelnote"><p>Each month your staff may spend up to ${capWord(v.cap)} of what is in the treasury, on new corps, guns for bombed industry, buildings and agents. The rest is yours, and it pays for the replacements your armies ask for.</p><small>${spends ? `This month it may still spend ${money(v.left)}${v.spent > 0.005 ? `, and has spent ${money(v.spent)} on building` : ''}.` : 'Nothing your staff runs now spends money: this takes hold when you hand it building and trade, or the secret service.'}</small></div>`;
+}
+
+/** The fog of war: on, or lifted. */
+function fogPicker(on: boolean): string {
+  const note = on
+    ? 'You see only what your armies, your agents and your aircraft find. Reports go stale, and an attack on troops nobody has identified is a guess.'
+    : 'Every army on the map is in plain sight and every attack card is exact. Agents and sabotage go on either way.';
+  return `<div class="gclevels two"><button class="gclevel${on ? ' on' : ''}" data-act="setfog" data-on="1" aria-pressed="${on}"><b>Fog of war</b><span>See what you find</span></button><button class="gclevel${on ? '' : ' on'}" data-act="setfog" data-on="0" aria-pressed="${!on}"><b>No fog</b><span>See everything</span></button></div>
+    <div class="gclevelnote"><p>${note}</p></div>`;
+}
+
+/** A panel whose desk the staff runs: who runs it, what it did this month, and the way to take it back. */
+function deskHead(tab: string): string {
+  const d = DEPTH.desks.find((x) => x.tab === tab);
+  if (!d || !g.human || !isOpen(g) || !g.nations[g.human].alive || !staffRunsDesk(g, d.id)) return '';
+  const news = commandOf(g)?.desks.find((x) => x.id === d.id)?.news;
+  return `<div class="deskbar"><b>Your staff runs ${esc(lowFirst(d.name))}.</b> ${news ? esc(news) : 'It has nothing to report this month.'}<small>What you order here by hand still goes out. The staff carries on from next month.</small><div class="acts"><button class="btn small" data-act="desk" data-desk="${d.id}" data-on="0">Take it back</button><button class="btn small" data-act="tab" data-tab="staff">Your staff ›</button></div></div>`;
+}
+
+/** Under a panel the player runs himself: the way to hand it over. */
+function deskFoot(tab: string): string {
+  const d = DEPTH.desks.find((x) => x.tab === tab);
+  if (!d || !g.human || !isOpen(g) || !g.nations[g.human].alive || staffRunsDesk(g, d.id) || onEve(g)) return '';
+  return `<div class="deskfoot"><button class="link" data-act="desk" data-desk="${d.id}" data-on="1" title="${esc(d.runs)}">Let my staff run ${esc(lowFirst(d.name))} ›</button></div>`;
+}
+
+/** For a line of news from a desk the staff runs: the way to take that desk back. */
+const deskLink = (h: Game['headlines'][number]): string => (h.desk && h.nat === g.human && isOpen(g) && staffRunsDesk(g, h.desk as DeskId) ? ` <button class="link" data-act="desk" data-desk="${h.desk}" data-on="0">Take it back ›</button>` : '');
+
+/** The Staff tab: every desk with who runs it, how it stands and what the staff did this month, and what the staff may spend. */
+function staffPane(): string {
+  const v = commandOf(g);
+  if (!v) return '<div class="empty">A staff to run things for you belongs to the grand campaign.</div>';
+  const run = v.desks.filter((d) => d.staff), own = v.desks.filter((d) => !d.staff);
+  return `<h2>Your staff</h2><p class="sub">You are playing at <b>${esc(v.name)}</b>${v.depth ? ` (${esc(v.under)})` : ''}. The armies and their battles are always yours. Any desk below can be handed to your staff or taken back in any month.</p>
+    ${run.length ? `<h3>Your staff runs</h3><div class="desks">${run.map((d) => deskRow(d, true)).join('')}</div>` : ''}
+    ${own.length ? `<h3>On your own desk</h3><div class="desks">${own.map((d) => deskRow(d, true)).join('')}</div>` : ''}
+    <h3>What your staff may spend</h3>${capPicker(v)}
+    <div class="acts"><button class="btn small" data-act="level">Depth and campaign settings</button></div>`;
+}
+
+/** Asked before a depth with no cabinet is picked while the cabinet has business open: the bill, as on the cabinet's own switch. */
+function depthOffAsk(): string {
+  if (ui.modal?.ask !== 'depthoff' || cabinetIsOff(g)) return '';
+  const bill = cabinetBillOf(g), sum = Math.round(bill.reduce((s, b) => s + b.trust, 0) * 10) / 10;
+  const d = DEPTH.depths.find((x) => x.id === ui.modal?.depth);
+  return `<div class="note warn"><b>${esc(d?.name ?? 'This depth')} has no war cabinet.</b> Its open business is settled first:<ul class="gvbill">${bill.map((b) => `<li><span>${esc(b.text)}</span><b>trust −${b.trust}</b></li>`).join('')}</ul>In all the cabinet's trust falls by ${sum}, and it is kept at that should you want it back.</div>
+    <div class="acts"><button class="btn small warn" data-act="setdepth" data-depth="${esc(d?.id ?? '')}" data-sure="1">Yes, go to ${esc(d?.name ?? 'it')}</button><button class="btn small" data-act="govkeep">Not now</button></div>`;
 }
 
 /** True for a nation with abilities or a special formation of its own. */
@@ -4894,11 +4989,16 @@ function cabinetOffAsk(): string {
 
 /** The level of the campaign under way, with the chance to change it. */
 function levelCard(): string {
+  const cmd = commandOf(g);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The grand campaign</div><h2>Campaign settings</h2></header>
-    <div class="body"><p class="lead">This campaign is being fought at <b>${esc(levelOf(g).name)}</b>, ${cabinetIsOff(g) ? 'with the war cabinet switched off' : `with a war cabinet${officeIsSecure(g) ? ' that cannot bring you down' : ''}`}. You can change any of it in any month, and it takes hold at once.</p>
+    <div class="body"><p class="lead">This campaign is being fought at <b>${esc(levelOf(g).name)}</b>${cmd ? ` and played at <b>${esc(cmd.name)}</b>` : ''}, ${cabinetIsOff(g) ? 'with the war cabinet switched off' : `with a war cabinet${officeIsSecure(g) ? ' that cannot bring you down' : ''}`}. You can change any of it in any month, and it takes hold at once.</p>
+    ${cmd ? `<h3 id="setdepth">How deep you play</h3>${depthPicker(cmd.depth, 'setdepth', true)}${depthOffAsk()}
+    <h3 id="setdesks">Who runs what</h3><p class="sub">The armies and their battles are always yours. A desk in your staff's hands is run as a rival's staff would run it, and tells you its month in one line of news.</p><div class="desks">${cmd.desks.map((d) => deskRow(d, false)).join('')}</div>
+    <h3 id="setcap">What your staff may spend</h3>${capPicker(cmd)}` : ''}
     <h3>How hard a war</h3>${levelPicker(levelOf(g).id, 'setlevel', true)}
     <h3 id="setcab">The war cabinet</h3>${cabinetPicker(!cabinetIsOff(g), 'setcabinet', true)}${cabinetOffAsk()}
-    <h3 id="setoffice">Your office</h3>${cabinetIsOff(g) ? '<p class="sub">With no war cabinet there is nobody to bring you down. Switch the cabinet on and you can say here whether it may.</p>' : officePicker(officeIsSecure(g), 'setoffice')}</div>
+    <h3 id="setoffice">Your office</h3>${cabinetIsOff(g) ? '<p class="sub">With no war cabinet there is nobody to bring you down. Switch the cabinet on and you can say here whether it may.</p>' : officePicker(officeIsSecure(g), 'setoffice')}
+    ${cmd ? `<h3 id="setfog">The fog of war</h3>${fogPicker(cmd.fog)}` : ''}</div>
     <footer><button class="btn go" data-act="close">Close</button></footer>`;
 }
 
@@ -4921,15 +5021,15 @@ function startCard(): string {
     <p class="gcsmallnote">A small country decides where it stands: join the Axis, join the Allies, stand alone, or found a League of smaller nations with its neighbours.</p>
     <h3>Choose the year you take over</h3>
     <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>
-    ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}<h3>The war cabinet</h3>${cabinetPicker(ui.gcCabinet, 'gccabinet')}${ui.gcCabinet ? `<h3>Your office</h3>${officePicker(ui.gcSecure, 'gcsecure')}` : ''}` : ''}
-    <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)}` : ''}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
+    ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}<h3>Choose how deep you play</h3>${depthPicker(ui.gcDepth, 'gcdepth')}` : ''}
+    <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
       <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}${smallPick ? ' Open <b>Your path</b> on the top bar to choose where you stand.' : ''}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
       ${pick.nat && hasTraits(pick.nat) ? `<div class="gctraits"><h5>What ${esc(theName(pick.nat))} does best</h5>${traitList(pick.nat)}</div>` : ''}
       ${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
     <h3>Historical scenarios</h3>
     <div class="sides"><button class="sidebtn wide" data-act="menu" data-menu="scenarios"><b>Play a turning point of the war</b><span>Fourteen shorter campaigns, from the Battle of Britain and Barbarossa to D-Day and Operation Bagration. Each starts at a turning point with the other nations following history's plan, or you can sit back and watch history unfold.</span></button></div>
     ${STEPS}</div>
-    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 30) : ''}<span><b>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-cabinet="${ui.gcCabinet ? 1 : 0}" data-secure="${ui.gcSecure ? 1 : 0}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
+    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 30) : ''}<span><b>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-depth="${pick.nat ? ui.gcDepth : ''}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
 }
 
 function scenarioCard(): string {
@@ -5300,7 +5400,7 @@ function newsCard(from: number, repFrom: number, seaFrom: number, airFrom: numbe
   const shores = !me || ui.shoreFrom < 0 ? [] : g.shoreReports.slice(ui.shoreFrom).filter((r) => r.turn >= g.turn - 1 && (r.nat === me || r.defNat === me || g.regions[r.region].units.some((c) => c.nat === me)));
   const all = g.reports.length - repFrom + (g.seaReports.length - seaFrom) + (g.airReports.length - airFrom);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">Dispatches</div><h2>${date(g.turn)}</h2></header>
-    <div class="body">${big.length ? `<div class="evcards">${big.map(eventCard).join('')}</div>` : ''}${rest.length ? `<div class="reel">${rest.map((h) => `<p class="${h.kind}"><span class="wk">${date(h.turn).split(' ')[0]} wk ${h.week}</span>${esc(h.text)}</p>`).join('')}</div>` : hs.length ? '' : '<p class="lead">A quiet month. No news of note.</p>'}
+    <div class="body">${big.length ? `<div class="evcards">${big.map(eventCard).join('')}</div>` : ''}${rest.length ? `<div class="reel">${rest.map((h) => `<p class="${h.kind}${h.desk ? ' desk' : ''}"><span class="wk">${date(h.turn).split(' ')[0]} wk ${h.week}</span>${esc(h.text)}${deskLink(h)}</p>`).join('')}</div>` : hs.length ? '' : '<p class="lead">A quiet month. No news of note.</p>'}
     ${letters.length ? `<h3>Letters from the front</h3>${letters.map(letterBlock).join('')}` : ''}
     ${reps.length || seas.length || airs.length || shores.length ? `<h3>Battles your forces fought</h3>${airs.map(airBrow).join('')}${shores.map(shoreRow).join('')}${seas.map(seaRow).join('')}${reps.map((r) => { const v = verdictFor(r); return `<button class="brow" data-act="report" data-id="${r.id}"><b>${esc(r.regionName)}</b><span class="res ${v.cls}">${v.text}</span><span>${date(r.turn)}, week ${r.week}</span></button>`; }).join('')}` : ''}
     ${all ? `<p class="sub" style="margin-top:10px">${all} battle${all > 1 ? 's were' : ' was'} fought across the map. They are filed under Battles.</p>` : ''}</div>
@@ -5646,7 +5746,7 @@ function declareCard(): string {
 // ---- Running the game ---------------------------------------------------------------------
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function newGame(human: string | null, seed?: number, from = 1, view = '', level: string = DIFFICULTY.start, cabinet = true, secure = false): void {
+function newGame(human: string | null, seed?: number, from = 1, view = '', level: string = DIFFICULTY.start, cabinet = true, secure = false, depth = ''): void {
   stopAuto();
   dropPassing();
   g = createGame(seed ?? (Date.now() % 900000) + 1, from > 1 ? null : human);
@@ -5661,6 +5761,9 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   // A player who wants the war without the politics plays with the war cabinet switched off.
   if (grand && human && !cabinet) orderCabinet(g, false);
   if (grand && human && secure) orderOffice(g, false);
+  // How deep he plays: a depth sets the desks his staff runs, the cabinet, whether it can fall, and the fog of war.
+  // (The staff goes to work when his first month opens. A game started with no depth is the full game.)
+  if (grand && human && depth) setDepth(g, depth);
   // Honours earned before the player took over are his to carry; their citations are old news.
   if (from > 1) takeOver(g);
   if (human) openGoals(g, human, from);
@@ -6011,10 +6114,10 @@ function onClick(e: MouseEvent): void {
   const id = Number(t.dataset.id ?? t.dataset.agent);
   ui.msg = '';
   switch (act) {
-    case 'start': if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1'); break;
+    case 'start': if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1', t.dataset.depth || ''); break;
     case 'menu': ui.menu = t.dataset.menu === 'scenarios' ? 'scenarios' : 'grand'; openModal({ kind: 'start' }); break;
-    case 'gcnat': case 'gcyear': case 'gclevel': case 'gccabinet': case 'gcsecure': {
-      if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else if (act === 'gclevel') ui.gcLevel = t.dataset.level ?? DIFFICULTY.start; else if (act === 'gccabinet') ui.gcCabinet = t.dataset.on === '1'; else if (act === 'gcsecure') ui.gcSecure = t.dataset.secure === '1'; else ui.gcYear = Number(t.dataset.year) || 1939;
+    case 'gcnat': case 'gcyear': case 'gclevel': case 'gccabinet': case 'gcsecure': case 'gcdepth': {
+      if (act === 'gcdepth') ui.gcDepth = t.dataset.depth ?? DEPTH.start; else if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else if (act === 'gclevel') ui.gcLevel = t.dataset.level ?? DIFFICULTY.start; else if (act === 'gccabinet') ui.gcCabinet = t.dataset.on === '1'; else if (act === 'gcsecure') ui.gcSecure = t.dataset.secure === '1'; else ui.gcYear = Number(t.dataset.year) || 1939;
       // Repainting the card must not throw the reader back to its top.
       const keep = $('#card').scrollTop;
       openModal({ kind: 'start' });
@@ -6569,6 +6672,33 @@ function onClick(e: MouseEvent): void {
       // Switching it off with business open is asked twice: the bill is shown first.
       if (g.human && t.dataset.on !== '1' && t.dataset.sure !== '1' && !cabinetIsOff(g) && cabinetBillOf(g).length) { openModal({ kind: 'level', ask: 'caboff' }); document.querySelector('#card #setcab')?.scrollIntoView({ block: 'start' }); break; }
       if (g.human && orderCabinet(g, t.dataset.on === '1')) { queueSave(); const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; }
+      break;
+    }
+    case 'setdepth': {
+      const id = t.dataset.depth ?? '', to = DEPTH.depths.find((d) => d.id === id);
+      // A depth with no cabinet, picked while the cabinet has business open, is asked twice: the bill is shown first.
+      if (g.human && to && !to.cabinet && t.dataset.sure !== '1' && !cabinetIsOff(g) && cabinetBillOf(g).length) { openModal({ kind: 'level', ask: 'depthoff', depth: id }); document.querySelector('#card #setdepth')?.scrollIntoView({ block: 'start' }); break; }
+      if (g.human && orderDepth(g, id)) { queueSave(); const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; }
+      break;
+    }
+    case 'desk': {
+      const d = t.dataset.desk as DeskId, on = t.dataset.on === '1';
+      if (!g.human || !orderDesk(g, d, on)) break;
+      queueSave();
+      const name = lowFirst(deskDef(d)?.name ?? '');
+      ui.msg = on ? `Your staff now runs ${name}.` : `${upFirst(name)} ${/ and /.test(name) ? 'are' : 'is'} on your own desk again.`;
+      // The card or the panel it was pressed on is drawn again where it stood.
+      const keep = ui.modal ? $('#card').scrollTop : 0;
+      refresh();
+      if (ui.modal) { openModal(ui.modal); $('#card').scrollTop = keep; }
+      break;
+    }
+    case 'setcap': {
+      if (g.human && orderStaffCap(g, Number(t.dataset.cap))) { queueSave(); const keep = ui.modal ? $('#card').scrollTop : 0; refresh(); if (ui.modal) { openModal(ui.modal); $('#card').scrollTop = keep; } }
+      break;
+    }
+    case 'setfog': {
+      if (g.human && fogOn(g) !== (t.dataset.on === '1') && orderFog(g, t.dataset.on === '1')) { queueSave(); const keep = ui.modal ? $('#card').scrollTop : 0; refresh(); if (ui.modal) { openModal(ui.modal); $('#card').scrollTop = keep; } }
       break;
     }
     case 'setoffice': {

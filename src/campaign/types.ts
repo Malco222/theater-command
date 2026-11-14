@@ -628,6 +628,8 @@ export interface Headline {
   award?: number;
   by?: string;
   unit?: number;
+  /** The grand campaign: the month's line from a desk the player's staff runs for him (depth.ts), so that an interface can offer to take it back. */
+  desk?: string;
 }
 
 export type UnitKind = 'corps' | 'air' | 'fleet';

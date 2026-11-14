@@ -4,6 +4,7 @@
 // Everything lives in data/campaign/tech.json, so every version of the game reads the same tree. A historical
 // scenario never sees it: there, research runs on history's clock (research.ts).
 
+import { staffRuns } from './depth';
 import data from '../../data/campaign/tech.json';
 import { turnToDate } from '../core/ticket';
 import { headline } from './game';
@@ -189,7 +190,8 @@ function finish(g: Game, n: Nation, id: string, quiet: boolean): void {
   if (!t || s.done.includes(id)) return;
   s.done.push(id);
   if (t.sealift) n.sealift += t.sealift;
-  if (!quiet && n.id === g.human) headline(g, 'info', `Research complete: ${t.name}. ${techRule(t)} A research team is free for new work.`, n.id);
+  // (With the laboratories in his advisers' hands the free team is theirs to set to work: desks.ts.)
+  if (!quiet && n.id === g.human) headline(g, 'info', `Research complete: ${t.name}. ${techRule(t)}${staffRuns(g, n.id, 'research') ? '' : ' A research team is free for new work.'}`, n.id);
 }
 
 /** What a computer-run nation's staff would research next, or null when nothing is open to it. */
@@ -252,15 +254,24 @@ export function openTech(g: Game): void {
   for (const n of all) if (n.alive && n.id !== g.human) month0(g, n);
 }
 
-/** Fills a staff's free teams without a month passing. */
-function month0(g: Game, n: Nation): void {
+/** Fills a staff's free teams without a month passing. Returns the projects begun. */
+function month0(g: Game, n: Nation): string[] {
   const s = n.tech!;
+  const begun: string[] = [];
   while (s.work.length < teamsOf(g, n.id)) {
     const id = staffPick(g, n.id);
     if (!id) break;
     const of = monthsFor(BY_ID[id], g.turn);
     s.work.push({ id, left: of, of });
+    begun.push(id);
   }
+  return begun;
+}
+
+/** The player's advisers set his free research teams to work, as a computer nation's staff would (depth.ts). Returns the projects begun. */
+export function staffTeams(g: Game, nat: string): string[] {
+  const s = techOf(g, nat), n = g.nations[nat];
+  return s && n?.alive ? month0(g, n) : [];
 }
 
 /** A nation's month of research, at the start of its turn. */
