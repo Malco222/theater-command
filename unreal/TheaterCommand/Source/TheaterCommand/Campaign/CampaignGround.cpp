@@ -155,13 +155,15 @@ namespace
 			switch (K)
 			{
 			case WorldLook::DrySouth: Look = Mix(ByHeight, FSeen::Bytes(186, 160, 108), 0.62f * FMath::SmoothStep(0.0f, 600.0f, 1600.0f - Metres)); break;
-			case WorldLook::Prairie: Look = FSeen::Bytes(180, 170, 110); break;
+			case WorldLook::Prairie: Look = FSeen::Bytes(172, 160, 124); break; // (laid a little darker than its swatch: the lamp lifts it to the swatch's (170, 161, 102))
 			case WorldLook::Steppe: Look = FSeen::Bytes(176, 164, 116); break;
 			case WorldLook::Desert:
 				// (a third of it is rock desert, in hard-edged patches)
-				Look = FMath::PerlinNoise2D(P * 0.021 + FVector2D(71.0, 13.0)) + 0.4f * FMath::PerlinNoise2D(P * 0.083 + FVector2D(5.0, 37.0)) > 0.24f ? FSeen::Bytes(170, 140, 106) : FSeen::Bytes(214, 188, 138);
+				// (their outlines are broken by a finer noise, and are soft enough that a coarse sheet's cells do not show in them)
+				Look = Mix(FSeen::Bytes(214, 178, 138), FSeen::Bytes(170, 140, 106), FMath::SmoothStep(0.17f, 0.31f,
+					FMath::PerlinNoise2D(P * 0.021 + FVector2D(71.0, 13.0)) + 0.4f * FMath::PerlinNoise2D(P * 0.083 + FVector2D(5.0, 37.0)) + 0.16f * FMath::PerlinNoise2D(P * 0.27 + FVector2D(43.0, 3.0))));
 				break;
-			case WorldLook::Savanna: Look = FSeen::Bytes(188, 164, 102); break;
+			case WorldLook::Savanna: Look = FSeen::Bytes(171, 146, 99); break; // (laid darker than its swatch: the lamp lifts it to about (190, 166, 102))
 			case WorldLook::Jungle: Look = FSeen::Bytes(104, 126, 76); break;
 			case WorldLook::Monsoon: Look = FSeen::Bytes(134, 152, 98); break;
 			case WorldLook::DryPlain: Look = FSeen::Bytes(184, 166, 110); break;
@@ -170,7 +172,8 @@ namespace
 			{
 				// (mottled with moss and with peat)
 				const float Mottle = FMath::PerlinNoise2D(P * 0.09 + FVector2D(23.0, 61.0));
-				Look = Mix(FSeen::Bytes(126, 128, 108), Mottle > 0.0f ? FSeen::Bytes(112, 122, 92) : FSeen::Bytes(142, 124, 100), FMath::Min(FMath::Abs(Mottle) * 1.6f, 0.8f));
+				// (laid bluer than its swatch: the lamp yellows it to about (128, 130, 108))
+				Look = Mix(FSeen::Bytes(138, 131, 158), Mottle > 0.0f ? FSeen::Bytes(124, 125, 140) : FSeen::Bytes(150, 129, 148), FMath::Min(FMath::Abs(Mottle) * 1.2f, 0.6f));
 				break;
 			}
 			case WorldLook::Ice: Look = FSeen::Bytes(232, 236, 238); bKeepsItsOwn = true; break;
@@ -202,11 +205,11 @@ namespace
 			-0.6f, // prairie: none
 			-0.6f, // steppe: none
 			-0.7f, // desert: none
-			-0.2f, // savanna: single trees, never masses
-			0.62f, // jungle: closed canopy
+			-0.1f, // savanna: single trees, never masses
+			0.25f, // jungle: closed canopy inside it, and an edge that thins out over some three degrees, in clumps
 			-0.16f + 0.34f * OnTheHills, // rice country: on the hills only
 			-0.3f, // the dry plain
-			0.24f, // the northern forest
+			0.13f, // the northern forest, with bog openings over about a fifth of it
 			-0.6f, // tundra
 			-0.9f, // ice
 			-0.7f, // the high cold steppe
@@ -276,11 +279,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	// beyond it each point lies, and what the look there says of fields, of their size, of fir and of the snow line.
 	const FCampaignClimate& Climate = FCampaignClimate::Get();
 	const bool bBeyond = Data.bWorld && Climate.IsLoaded();
-	TArray<float> Outside, LookFields, LookBig, LookFir, LookSnow, LookTropic;
+	TArray<float> Outside, LookFields, LookBig, LookFir, LookSnow, LookTropic, LookNorth;
 	if (bBeyond)
 	{
 		Outside.SetNumUninitialized(Count);
 		LookTropic.SetNumUninitialized(Count);
+		LookNorth.SetNumUninitialized(Count);
 		LookFields.SetNumUninitialized(Count);
 		LookBig.SetNumUninitialized(Count);
 		LookFir.SetNumUninitialized(Count);
@@ -307,6 +311,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			LookBig[Idx] = 0.5f;
 			LookFir[Idx] = 0.0f;
 			LookTropic[Idx] = 0.0f;
+			LookNorth[Idx] = 0.0f;
 			// (the snow line falls toward the poles: about 5,000 metres from the equator to 25 degrees, then 100 lower for each degree)
 			LookSnow[Idx] = 5000.0f - 100.0f * FMath::Max(FMath::Abs(Latitude) - 25.0f, 0.0f);
 			if (Out <= 0.0f)
@@ -317,9 +322,12 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			Climate.SharesAt(Latitude, Longitude, Shares);
 			LookFields[Idx] = Shares[WorldLook::Temperate] + Shares[WorldLook::Prairie] + Shares[WorldLook::DryPlain] + Shares[WorldLook::Monsoon] + 0.3f * Shares[WorldLook::DrySouth];
 			LookBig[Idx] = FMath::Clamp(0.5f * Shares[WorldLook::Temperate] + Shares[WorldLook::Prairie] + 0.3f * Shares[WorldLook::DrySouth], 0.0f, 1.0f);
-			LookFir[Idx] = Shares[WorldLook::Taiga];
+			// (the northern forest is fir and pine, but its canopy is not as black as a fir wood of the Alps: part of it is laid in the lighter green)
+			LookFir[Idx] = 0.6f * Shares[WorldLook::Taiga];
 			// (the canopy of the tropics is a lighter, fuller green than Europe's woods: the jungle's wholly, rice country's and the savanna's partly)
 			LookTropic[Idx] = FMath::Clamp(Shares[WorldLook::Jungle] + 0.7f * Shares[WorldLook::Monsoon] + 0.5f * Shares[WorldLook::Savanna], 0.0f, 1.0f) * Out;
+			// (and the northern forest's is a lifted, cooler green than a fir wood of the Alps)
+			LookNorth[Idx] = Shares[WorldLook::Taiga] * Out;
 			if (Id < 0)
 			{
 				// (where the rules name the kind of country, that still leans the woods; where nobody has yet, the look does)
@@ -553,7 +561,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			const FColor& Mask = Masks[Idx];
 			// Farmland: the low ground, where it is not desert, marsh, wood, rock or beach; thinning in the far north.
 			const float Beyond = bBeyond ? Outside[Idx] : 0.0f;
-			float Arable = FMath::SmoothStep(0.0f, 300.0f, 520.0f - Metres[Idx]) * (1.0f - FMath::Clamp(Dry[Idx] * 1.4f, 0.0f, 1.0f)) * (1.0f - Boreal * 0.75f * (1.0f - Beyond))
+			// (Europe's farmland stops at about 500 metres; the prairie and the plains of Asia are farmed far higher)
+			float Arable = FMath::SmoothStep(0.0f, 300.0f, FMath::Lerp(520.0f, 1700.0f, Beyond) - Metres[Idx]) * (1.0f - FMath::Clamp(Dry[Idx] * 1.4f, 0.0f, 1.0f)) * (1.0f - Boreal * 0.75f * (1.0f - Beyond))
 				* (0.55f + 0.45f * Broad) * (1.0f - Marsh[Idx]) * (1.0f - Wooded) * (1.0f - Mask.R / 255.0f) * (1.0f - Mask.G / 255.0f) * (1.0f - FMath::Min(Mask.B / 90.0f, 1.0f));
 			if (Beyond > 0.0f)
 			{
@@ -585,7 +594,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	{
 		const int32 Id = Terrain.Region[Idx] >= 0 ? Terrain.Region[Idx] : ShoreRegion[Idx];
 		// (the picture's alpha: 1 where the woods are Europe's, less where their canopy is the tropics')
-		const uint8 NotTropic = bBeyond ? ToByte(1.0f - LookTropic[Idx]) : 255;
+		// (One number carries both: from 1 down to a half it is how far the canopy is the tropics', from a half down to
+		// nought how far it is the northern forest's. The two are never found together.)
+		const uint8 NotTropic = !bBeyond ? 255 : LookNorth[Idx] > LookTropic[Idx] ? ToByte(0.49f - 0.49f * LookNorth[Idx]) : ToByte(1.0f - 0.49f * LookTropic[Idx]);
 		if (Id < 0)
 		{
 			Lie[Idx] = FColor(255, 128, 128, NotTropic);
@@ -713,6 +724,37 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			Water[J * WaterNX + I] = FColor(ToByte(C.R), ToByte(C.G), ToByte(C.B), ToByte(FMath::Clamp(OffShore / 6.0f, 0.0f, 1.0f)));
 		}
 	});
+	if (WaterStep > 2.5)
+	{
+		// A coarse sheet's sea is smoothed once it is painted, so that the sea floor's relief shows as shading and
+		// never as the steps of the sheet's own cells. (The alpha, how far offshore a point is, is left as it was.)
+		TArray<FColor> Before;
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			Before = Water;
+			ParallelFor(WaterNY, [&](int32 J)
+			{
+				for (int32 I = 0; I < WaterNX; ++I)
+				{
+					int32 R = 0, G = 0, B = 0, Weight = 0;
+					for (int32 DJ = -1; DJ <= 1; ++DJ)
+					{
+						for (int32 DI = -1; DI <= 1; ++DI)
+						{
+							const FColor& Near = Before[FMath::Clamp(J + DJ, 0, WaterNY - 1) * WaterNX + FMath::Clamp(I + DI, 0, WaterNX - 1)];
+							const int32 W = (DI == 0 ? 2 : 1) * (DJ == 0 ? 2 : 1);
+							R += Near.R * W;
+							G += Near.G * W;
+							B += Near.B * W;
+							Weight += W;
+						}
+					}
+					FColor& Here = Water[J * WaterNX + I];
+					Here = FColor(static_cast<uint8>(R / Weight), static_cast<uint8>(G / Weight), static_cast<uint8>(B / Weight), Here.A);
+				}
+			});
+		}
+	}
 }
 
 int32 FCampaignGround::PaintedRegion(int32 Index, const FCampaignTerrain& Terrain) const

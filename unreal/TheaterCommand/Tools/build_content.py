@@ -449,7 +449,15 @@ def build_land():
                 vector(m, "FirColour", (0.024, 0.056, 0.04, 1.0), -2000, -1050), (cover, "A"), -1800, -950)
     # (The whole-world map: the canopy of the tropics is a lighter, fuller green than Europe's woods. How much of the
     # canopy at a place is Europe's is in the alpha of the picture of the fields' lie: 1 everywhere in Europe.)
-    leaf = lerp(m, vector(m, "TropicColour", (0.075, 0.15, 0.07, 1.0), -2000, -1200), leaf, (lie, "A"), -1700, -1050)
+    # (One number carries two shares: from 1 down to a half, how far the canopy is the tropics'; from a half down to
+    # nought, how far it is the northern forest's, a lifted and cooler green than a fir wood of the Alps.)
+    not_a = one_in(m, unreal.MaterialExpressionOneMinus, (lie, "A"), -2250, -1250)
+    is_north = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, not_a, -0.5, -2100, -1300), 400.0, -1950, -1300), -1800, -1300)
+    tropic = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, not_a, 2.04, -2100, -1220), -1950, -1220),
+                   one_in(m, unreal.MaterialExpressionOneMinus, is_north, -1650, -1300), -1500, -1250)
+    north = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, not_a, -0.51, -2100, -1380), 2.04, -1950, -1380), -1800, -1380)
+    leaf = lerp(m, leaf, vector(m, "TropicColour", (0.05, 0.108, 0.074, 1.0), -2000, -1200), tropic, -1350, -1100)
+    leaf = lerp(m, leaf, vector(m, "NorthColour", (0.045, 0.085, 0.07, 1.0), -2000, -1450), north, -1200, -1100)
     # (on a warm stain the canopy itself is olive: a very dark green goes chocolate with the least red showing through)
     leaf = times(m, leaf, lerp(m, 1.0, vector(m, "WoodsWarmTint", (1.0, 1.0, 1.0, 1.0), -1800, -1180), warm, -1700, -1100), -1600, -1000)
     woods = lerp(m, leaf,

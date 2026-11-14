@@ -518,7 +518,7 @@ void ACampaignMapActor::PaintGround()
 	{
 		// (the whole-world map) The canopy of the tropics: the art director's jungle, seen at about (54, 87, 56).
 		// ("-TheaterJungle=r,g,b" tries another.)
-		FLinearColor Jungle(0.055f, 0.122f, 0.07f);
+		FLinearColor Jungle(0.047f, 0.1f, 0.077f); // (cooler and a step darker than it first was: lit canopy stays under 0.36, its blue within 32 of its green)
 		FString Asked;
 		TArray<FString> Parts;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterJungle="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
@@ -526,6 +526,13 @@ void ACampaignMapActor::PaintGround()
 			Jungle = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
 		}
 		LandVector(TEXT("TropicColour"), Jungle);
+		// The canopy of the northern forest, seen at about (59, 79, 67). ("-TheaterTaiga=r,g,b" tries another.)
+		FLinearColor Taiga(0.046f, 0.086f, 0.09f);
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterTaiga="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
+		{
+			Taiga = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
+		}
+		LandVector(TEXT("NorthColour"), Taiga);
 	}
 	{
 		// Woods on a warm-stained nation (Poland's red, Holland's orange) went chocolate: a very dark green takes
