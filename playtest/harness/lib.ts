@@ -165,6 +165,11 @@ export interface Plan {
   head?: string;
   /** Version 59: switch the war cabinet off as the campaign opens (default: left on). */
   noCabinet?: boolean;
+  /** Version 66: the depth the campaign is played at ('field', 'theatre' or 'supreme'), set as the page sets it, before the first month opens; 'desks' hands these desks to the staff as well, 'byHand' takes these back, 'cap' is the staff's allowance in percent (25, 50, 75 or 100). The scripted player leaves a staffed desk alone, as a person at that depth would. Default: nothing set, which replays Version 65. */
+  depth?: string;
+  desks?: string[];
+  byHand?: string[];
+  cap?: number;
   /** Version 59: raise no new corps while the reserve of men stands under this share of what it opened with (default: never holds back). */
   menKeep?: number;
   /** Version 62: call the next class up early. 'half' or 'quarter': whenever it may be done with the reserve under that share of what it opened with; 'war': whenever it may be done; a number: once, in that month (default: never). */
@@ -298,8 +303,8 @@ function cabinetMoves(run: Run, plan: Plan): void {
   if (plan.jobs && v.directive) {
     const jl = ((run as any).jobs ??= { build: 0, agent: 0, could: 0 });
     const d = v.directive;
-    if (d.kind === 'agent' && X.whyNotRecruitAgent?.(g) === null && X.orderRecruitAgent(g)) jl.agent++;
-    if (d.kind === 'build') {
+    if (d.kind === 'agent' && !X.staffRunsDesk?.(g, 'spies') && X.whyNotRecruitAgent?.(g) === null && X.orderRecruitAgent(g)) jl.agent++;
+    if (d.kind === 'build' && !X.staffRunsDesk?.(g, 'build')) {
       let best: { region: number; line: string; cost: number } | null = null;
       for (const r of g.regions) {
         if (r.ctrl !== run.me) continue;
@@ -352,9 +357,10 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     }
   }
 
-  // Research: put every free team on the quickest open technology.
+  // Research: put every free team on the quickest open technology. (Version 66: a desk the staff runs is left alone.)
+  const staffed = (desk: string): boolean => !!(T as any).staffRunsDesk?.(g, desk);
   const tree = T.techTree(g);
-  if (tree) {
+  if (tree && !staffed('research')) {
     let free = tree.teams - tree.busy;
     const first = plan.research ?? ['winterkit', 'mediums', 'tanks', 'motor'];
     const rank = (id: string): number => { const i = first.indexOf(id); return i < 0 ? 99 : i; };
@@ -364,12 +370,12 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
 
   // Trade: sign with whoever will.
   const book = T.tradeLedger(g) as any;
-  if (book?.offers) for (const o of book.offers) if (!o.why && T.orderTrade(g, o.nat)) row.bought.push(`trade:${o.nat}`);
+  if (book?.offers && !staffed('build')) for (const o of book.offers) if (!o.why && T.orderTrade(g, o.nat)) row.bought.push(`trade:${o.nat}`);
 
   // The arsenal: buy what is most wanted and can be afforded, keeping a small reserve.
   const want0 = plan.buy ?? ['corps:arm', 'corps:inf', 'corps:mot', 'air:ftr', 'work:factory'];
   const gunsDue = (run as any).gunsDue ?? ((run as any).gunsDue = [] as number[]);
-  for (let n = 0; n < 6; n++) {
+  for (let n = 0; n < 6 && !staffed('build'); n++) {
     const offers = T.arsenalOffers(g, g.nations[me].capital);
     // Guns on order arrive in five months; count them with the guns in the field.
     const mine = g.corps.filter((c) => c.nat === me && !(c as any).dead && c.kind !== 'fort');
@@ -731,6 +737,17 @@ export function campaign(me: string, from: number, seed: number, plan: Plan, o: 
   const run: Run = { g, me, from, seed, level: o.level ?? 'colonel', rows: [], problems: [], fellOn: null, errors: [] };
   if (plan.noCabinet) (T as any).orderCabinet?.(g, false);
   if (plan.secure) (T as any).orderOffice?.(g, false);
+  // Version 66: how deep the player plays. The page sets a depth before the first month opens, so that the staff goes to
+  // work when that month opens and not at once: the order is given under the eve flag, where no desk runs on the spot.
+  if ((plan.depth || plan.desks || plan.byHand || plan.cap) && (T as any).orderDepth) {
+    const X66 = T as any, was = g.flags.eve;
+    g.flags.eve = 1;
+    if (plan.depth && !X66.orderDepth(g, plan.depth)) run.problems.push(`[note] depth ${plan.depth} was refused`);
+    for (const d of plan.desks ?? []) X66.orderDesk(g, d, true);
+    for (const d of plan.byHand ?? []) X66.orderDesk(g, d, false);
+    if (was === undefined) delete g.flags.eve; else g.flags.eve = was;
+    if (plan.cap) X66.orderStaffCap(g, plan.cap);
+  }
   const seen = new Set<string>();
   let up: boolean;
   const t0 = Date.now();

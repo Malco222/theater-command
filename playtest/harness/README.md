@@ -305,3 +305,34 @@ Traps met on Version 65:
 - The table scripts read the last line that starts with `TOTAL`. New summary lines take other first words (`STAFFS`, `EFFORT`, `SWAPS`, `QUIET`, `WHY`).
 
 Results of the Version 65 test: `/mnt/project-files/playtest/results-v65/`.
+
+## Version 66: how deep you play (three depths, six desks the staff can run, an allowance)
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `v66e.tsv`, `v66f.tsv`, `v66g.tsv`, `v66h.tsv` | The queues of the Version 66 test for `jobs.sh`: five replay wars, then seeds 1 to 60 for the guns-first shopper, the infantry-only shopper, Field command and Theatre command (`v66e`, 245 jobs); Field command with research kept by hand and with a full allowance on sixty seeds, a quarter allowance on twelve (`v66f`, 132); the builder's seeds 25 to 36 with the six desks, or spies, air and navy, staffed and nothing else changed (`v66g`, 24); the building desk alone and the cabinet off alone on seeds 25 to 32 (`v66h`, 16) | `./jobs.sh v66e.tsv out/v66e 4` |
+| `lib.ts` | Plan options `"depth":"field"\|"theatre"\|"supreme"`, `"desks":[...]` (hand these desks to the staff), `"byHand":[...]` (take these back), `"cap":25\|50\|75\|100` (the staff's allowance). The depth is set before the eve of war, as the page sets it. The test player leaves a staffed desk alone: no research of its own, no trade, no arsenal orders, none of the agent or building small jobs | `'{"depth":"field","byHand":["research"]}'` |
+| `probe28.ts` | Two more lines a war: `DEPTH` (the depth and the desks staffed, the treasury and the men left each January, the highest treasury, what the staff spent on building, how many months the Staff tab said there were no men to spare and from when) and `LINES` (the staff's news lines by desk, how many wordings, how many word for word the same as that desk's line the month before, the most repeated) | as before |
+| `depthtab.py` | Adds up the `DEPTH`, `LINES` and `TOTAL` lines of a folder by set: Berlin, wars still undecided at the end, the middle war's treasury and men each January, the staff's lines | `python3 depthtab.py out/v66e art inf field theatre` |
+| `bycmp.py` | My wars against the rules builder's on the seeds both played (`/mnt/project-files/theater-command/results/v66/`): Berlin each way and the months between the two falls, seed by seed | `python3 bycmp.py out/v66e field d66f2` |
+| `probe50.ts` | One war month by month as the player's month opens: the depth, the treasury, the staff's spending and what is left of its allowance, the men, the corps, the Staff tab's state for each staffed desk when it changes, and every staff line; then a table by year and each desk's wordings and repeats | `node out66/probe50.mjs SOV 1 7 76 '{"minOdds":1.5,"depth":"field"}'` |
+| `probe51.ts` | Writes a save for the page at the turns asked for, as the player's month opens | `node out66b/probe51.mjs GER 1 25 56 '<plan>' out/v66saves/GER-25-field 41,53` |
+| `ui28.cjs` | Page checks on a desk and two phones: `start` (the new-campaign card: the depth picker, how long the card is, where Begin sits, a campaign begun) and `staff` (a campaign at each depth four months in: the tabs, the Staff tab's length and smallest buttons, the allowance, "Look in" and the notice on a staffed panel, "Take it back", the settings card, a change of depth and the question it asks) | `TC_PAGE=file:///home/user/tc66/dist/play.html node ui28.cjs staff shots/92-v66` |
+| `ui29.cjs` | What a player who hands desks over has to read after four months: unread counts, the News tab's lines by kind, the Battles tab, and where a Supreme command player finds the way to hand a desk over | `node ui29.cjs shots/92-v66` |
+| `ui30.cjs` | A late-war Field command save on a desk and a phone: the top bar, the Staff tab's building row, the Build panel once looked in on | `node ui30.cjs out/v66saves/GER-25-field-53.json shots/92-v66-1944` |
+| `monkey.cjs` | A sixth argument sets the depth | `node monkey.cjs GER 21 600 1 colonel field` |
+
+Bundles: `out66` is every program against Version 66 (e928f7b); `out66b` holds `probe51`, built while a queue was using `out66`.
+
+Traps met on Version 66:
+
+- Set the depth before the eve of war, as the page does (`newGame` calls `setDepth` before the first month opens). The builder's first Field command number (42 of 48) came from a harness that set the depth during the first month, so September 1939 was played by hand and the test player's own research (winter equipment first) carried the war. Set as the page sets it, Field command reads the same as playing by hand. The builder replayed both and agreed.
+- Our two test players are one program: on the builder's seeds the wars match to the month Germany falls whenever no desk is staffed. A difference by seed means a difference in set-up, not luck. `bycmp.py` finds it in a minute.
+- `window.theater.newGame(...)` leaves the new-campaign card open over the game: close it with `window.theater.openModal(null)` before clicking a tab.
+- The News tab is `data-tab="reel"`. At Supreme command there is no Staff tab.
+- A shopping list of corps only (`"buy":["corps:art","corps:inf"]`) lets the treasury pile up once the men run out. That is the list, not the game: only the Field command pile is a finding.
+- The air force is refilled to its establishment every month, so the air staff's losses (about 1,600 aircraft in a German war) do not shrink it.
+- `T.commandOf` can be read in a hook without changing the war (checked against `probe41`, which never calls it).
+- Side tests on the same four cores slow the main queue: the 245 wars took 50 minutes with page checks and three side tests running beside them.
+
+Results of the Version 66 test: `/mnt/project-files/playtest/results-v66/`.

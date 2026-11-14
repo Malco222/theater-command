@@ -8,7 +8,7 @@
 // defender, the prepared share, the card's odds, the odds on the day, won, men lost on each side, corps on each side, artillery corps in the attack, province.
 // Each January: how many of the player's field corps are dug in. Who holds TOWN (Berlin unless named) in December 1944
 // and in the last month. The longest run of months with no battle of the player's at all.
-import { campaign, date, allied } from './lib';
+import { campaign, date, allied, T } from './lib';
 import * as STAFF from '@tc/campaign/staff';
 const [me, fromS, seedS, untilS, planS, town = 'Berlin'] = process.argv.slice(2);
 const plan = JSON.parse(planS || '{"minOdds":1.5}');
@@ -41,7 +41,26 @@ const eff: Record<string, Eff> = {};
 let effNow: { key: string; nat: string; sector: Set<number> }[] = [];
 const foe = { probes: 0, probeWear: 0, raids: 0, named: 0, overTook: 0, overHeld: 0, effMonths: 0, genMonths: 0, allyEff: new Set<string>() };
 const tell = (reg: number | undefined, turn: number): void => { if (reg === undefined) return; for (const e of effNow) if (e.sector.has(reg) && !eff[e.key].tell) eff[e.key].tell = turn; };
+// Version 66: how deep the player plays. Each month as it opens: the treasury, what the staff spent, what the Staff tab
+// says of building, and every line the staff put in the news.
+const dk = { months: 0, spent: 0, noMen: 0, noMenFirst: 0, peak: 0, peakAt: 0, jan: {} as Record<number, number>, rich: 0, lines: [] as { turn: number; desk: string; text: string }[], name: '', desks: '', cap: 0, seenH: 0, menJan: {} as Record<number, string> };
+const depthMonth = (g: any): void => {
+  const v = (T as any).commandOf?.(g);
+  if (!v) return;
+  const scale = 100, tre = Math.round(g.nations[me].pp * scale);
+  dk.months++; dk.name = v.name; dk.cap = v.cap; dk.desks = v.desks.filter((d: any) => d.staff).map((d: any) => d.id).join(',') || 'none';
+  dk.spent += Math.round((v.spent ?? 0) * scale);
+  if (tre > dk.peak) { dk.peak = tre; dk.peakAt = g.turn; }
+  if (tre >= 5000) dk.rich++;
+  const yr = 1939 + Math.floor((g.turn + 7) / 12);
+  if ((g.turn + 7) % 12 === 0) { dk.jan[yr] = tre; const mp = (T as any).manpowerOf?.(g, me); if (mp) dk.menJan[yr] = `${Math.round((mp.share ?? 0) * 100)}%`; }
+  const build = v.desks.find((d: any) => d.id === 'build');
+  if (build?.staff && /no men to spare/.test(build.state)) { dk.noMen++; if (!dk.noMenFirst) dk.noMenFirst = g.turn; }
+  for (let i = dk.seenH; i < g.headlines.length; i++) { const h = g.headlines[i]; if (h.desk && h.nat === me) dk.lines.push({ turn: h.turn, desk: h.desk, text: h.text }); }
+  dk.seenH = g.headlines.length;
+};
 const run = campaign(me, Number(fromS), Number(seedS), { ...plan, first: (g: any) => {
+  depthMonth(g);
   effNow = [];
   if (!effortsOf) return;
   let gen = false;
@@ -132,4 +151,17 @@ console.log(`TOTAL ${me} seed ${seedS}: played to ${date(lastTurn)}${run.fellOn 
   const fought = E.filter((x) => x.battles > 0 || (x as any).storms || (x as any).gave);
   const b = E.reduce((s, x) => s + x.battles, 0);
   console.log(`STAFFS ${me} seed ${seedS}: characters ${characterOf ? ['SOV', 'UK', 'USA', 'FRA', 'GER', 'ITA'].filter((n) => n !== me && g.nations[n]).map((n) => `${n} ${characterOf(g, n)}`).join(', ') : 'none'}; main efforts where the player stood ${E.length} (by year ${Object.entries(by).map(([y, n]) => `${y} ${n}`).join(', ') || '-'}), at allies only ${foe.allyEff.size}; months under one ${foe.effMonths}, months under a general offensive ${foe.genMonths}; efforts that came to blows ${fought.length}, that took ground ${E.filter((x) => x.won > 0).length}, provinces taken ${E.reduce((s, x) => s + x.won, 0)}; battles in them ${b} (the player lost ${E.reduce((s, x) => s + x.lostB, 0)}, on a prepared line ${E.reduce((s, x) => s + x.prep, 0)}), mean card odds ${b ? (E.reduce((s, x) => s + x.odds, 0) / b).toFixed(2) : '-'}, men lost by the attackers ${E.reduce((s, x) => s + x.aLost, 0)}, by the player ${E.reduce((s, x) => s + x.dLost, 0)}; word a month or more before the first blow ${fought.filter((x) => x.tell && x.tell < x.blow).length}, in the same month ${fought.filter((x) => x.tell && x.tell === x.blow).length}, none before it ${fought.filter((x) => !x.tell || x.tell > x.blow).length}; enemy probes of the player's line ${foe.probes} (months off ${foe.probeWear.toFixed(1)}), raids on his works ${foe.raids}; headlines: effort named ${foe.named}, over and took ground ${foe.overTook}, over and the line held ${foe.overHeld}`);
+}
+// Version 66: the depth, the treasury and the staff's lines.
+if (dk.months) {
+  const shape = (t: string): string => t.replace(/[0-9][0-9,.]*/g, '#');
+  const by: Record<string, number> = {}; for (const l of dk.lines) by[l.desk] = (by[l.desk] ?? 0) + 1;
+  const texts: Record<string, number> = {}, shapes: Record<string, number> = {};
+  for (const l of dk.lines) { texts[l.text] = (texts[l.text] ?? 0) + 1; shapes[shape(l.text)] = (shapes[shape(l.text)] ?? 0) + 1; }
+  let same = 0; const last: Record<string, string> = {};
+  for (const l of dk.lines) { if (last[l.desk] === l.text) same++; last[l.desk] = l.text; }
+  const top = Object.entries(texts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t, n]) => `${n} times "${t.length > 110 ? t.slice(0, 107) + '...' : t}"`);
+  const longest = dk.lines.reduce((m, l) => Math.max(m, l.text.length), 0);
+  console.log(`DEPTH ${me} seed ${seedS}: ${dk.name} (staffed: ${dk.desks}; allowance ${dk.cap}%); treasury each January ${Object.entries(dk.jan).map(([y, v]) => `${y} ${v}`).join(', ')}; men in the pool each January ${Object.entries(dk.menJan).map(([y, v]) => `${y} ${v}`).join(', ') || '-'}; peak treasury ${dk.peak} in ${dk.peakAt ? date(dk.peakAt) : '-'}; months with 5,000 or more in the treasury ${dk.rich} of ${dk.months}; the staff spent ${dk.spent} on building in all; months the Staff tab said there were no men to spare ${dk.noMen}${dk.noMenFirst ? `, first ${date(dk.noMenFirst)}` : ''}`);
+  console.log(`LINES ${me} seed ${seedS}: staff lines ${dk.lines.length} (${Object.entries(by).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}); different wordings ${Object.keys(texts).length}, different once the numbers are taken out ${Object.keys(shapes).length}; word for word the same as that desk's line the month before ${same}; longest ${longest} letters; most repeated: ${top.join(' | ') || '-'}`);
 }

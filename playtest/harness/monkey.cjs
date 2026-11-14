@@ -1,7 +1,8 @@
 // A monkey at the controls: random clicks on every button, province, sea and army, with months ended now and then.
 // Reports every page error with the last actions that led to it.
 const { chromium } = require('playwright');
-const [nat, seedArg, stepsArg, fromArg, levelArg] = process.argv.slice(2);
+const [nat, seedArg, stepsArg, fromArg, levelArg, depthArg] = process.argv.slice(2);
+const depth = depthArg || undefined; // Version 66: field | theatre | supreme; left out, the page's own default
 const seed = Number(seedArg ?? 1), steps = Number(stepsArg ?? 800), from = Number(fromArg ?? 1), level = levelArg ?? 'colonel';
 let s = seed * 2654435761 % 4294967296;
 const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; };
@@ -15,7 +16,7 @@ const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0
   await page.addInitScript(() => { try { localStorage.setItem('tc-watch', '0'); } catch {} });
   await page.goto(process.env.TC_PAGE || 'file:///home/user/theater-command/dist/play.html');
   await page.waitForTimeout(800);
-  await page.evaluate(([nat, seed, from, level]) => window.theater.newGame(nat, seed, from, 'grand', level), [nat, seed, from, level]);
+  await page.evaluate(([nat, seed, from, level, depth]) => (depth ? window.theater.newGame(nat, seed, from, 'grand', level, true, false, depth) : window.theater.newGame(nat, seed, from, 'grand', level)), [nat, seed, from, level, depth ?? null]);
   await page.waitForTimeout(500);
   const map = await page.locator('#mapwrap').boundingBox();
   let months = 0;
