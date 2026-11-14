@@ -180,17 +180,20 @@ struct FMiniatureMesh
 		bool bPlots = false; // ground is kept clear inside it for the buildings its owner will give it:
 		double PlotsNear = 0.0, PlotsTurn = 0.0; // how far south of its middle that ground begins, and how far the whole quarter is turned (degrees)
 		TFunction<FVector(double, double, double)> Ground; // a point of the map standing on the ground, lifted a little
-		TFunction<bool(double, double)> Dry; // true where the map is land
+		TFunction<bool(double, double)> Dry; // true where the town may be built: land, and its own province's
+		bool bPacked = false; // a city or capital in a province too small for it: built tight and tall, with no parks, works or detached houses
+		TArray<double> Arms; // the bearings (degrees east of north) of the roads and railways out of it: the town runs out along them
 	};
 	/**
 	 * A town as a place with a plan. A small place: a chapel and a street. A town: a church, a main street and a
 	 * cross street. A city: a grid of blocks, tall at its heart, a church and a town hall on its square, a station,
 	 * and a factory quarter with a shed and a stack for its factories. A capital: the same, greater, round a great
 	 * square with one landmark of its own that is known from the air. A port has its quay at the water's edge,
-	 * with cranes, warehouses and ships alongside. Roofs and walls are those of its part of Europe. OutQuarters
-	 * takes the middles of its lit quarters, on the map, for its glow by night.
+	 * with cranes, warehouses, ships alongside and a lighthouse. Roofs and walls are those of its part of Europe.
+	 * OutQuarters takes the middles of its lit quarters, on the map, for its glow by night; OutBeacon the lantern
+	 * of its lighthouse, on the table (left alone where it has none).
 	 */
-	void Township(const FTownSite& Site, TArray<FVector>* OutChimneys = nullptr, TArray<FVector2D>* OutQuarters = nullptr);
+	void Township(const FTownSite& Site, TArray<FVector>* OutChimneys = nullptr, TArray<FVector2D>* OutQuarters = nullptr, FVector* OutBeacon = nullptr);
 	/**
 	 * One of the buildings a town is given by its owner, standing at the town's edge: Line is 0 a market, 1 farms,
 	 * 2 a school, 3 a drill ground, 4 a hospital, 5 a town hall. Each grows with its level (1 to 3); bGoing puts

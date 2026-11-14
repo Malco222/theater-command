@@ -248,6 +248,8 @@ public:
 	double TownSpread(int32 RegionId) const;
 	/** How far the outermost roofs of a province's town stand from its middle, in map units (about 3 where there is no town). */
 	double TownRadius(int32 RegionId) const;
+	/** True for a city or capital in a province too small for it: built tight and tall. */
+	bool IsTownPacked(int32 RegionId) const;
 	/** How far south of a town's middle the buildings its owner gives it begin, and how far that whole quarter is turned (degrees). */
 	bool CivicInside(int32 RegionId) const; // true where that quarter is kept inside the town's own streets
 	double CivicNear(int32 RegionId) const;
@@ -680,5 +682,12 @@ private:
 	float LastPieceYaw = 0.0f;
 	float StandardGrowth = 1.0f, StandardLean = 0.0f; // how large the pieces' standards are drawn just now, and how far they lean back toward the eye
 	mutable TArray<float> TownSpreads; // TownSpread for every province, worked out once
+	mutable TArray<bool> TownPacked; // true for a city or capital in a province too small for it: it is built tight and tall
+	TMap<int32, FVector> TownBeacons; // by province: the lantern of its port's lighthouse, on the table
+	TSet<int32> AirfieldsUsed; // the provinces whose airfields have air groups based on them
+	bool bAirfieldsKnown = false; // the rules say which airfields are in use (the grand campaign): an empty one is then built smaller
+	TArray<FIntVector4> LastWorks; // what the provinces' works were last built from
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> LanesInk; // the shipping lanes and trade routes: dimmed with the land by night
 	bool bFacingSet = false;
 };

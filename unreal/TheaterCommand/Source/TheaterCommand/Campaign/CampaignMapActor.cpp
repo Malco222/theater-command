@@ -922,6 +922,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 		return;
 	}
 	ShownBuildings = Works;
+	LastWorks = Works;
 	BuildingsMesh->ClearAllMeshSections();
 	WorksChimneys.Reset();
 	AirfieldSpots.Reset();
@@ -953,12 +954,17 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 		auto Place = [this, &Middle, Id, Roofs](const FVector2D& Offset, FVector2D& OutSpot) -> bool
 		{
 			const double Beyond = FMath::Max(Offset.Size() - 6.4, 2.5);
-			for (const double Share : { 1.0, 0.65, 0.35 })
+			// (its own side of the town first; then, for a town that stands by the sea or a frontier, round to another)
+			for (const double Round : { 0.0, 40.0, -40.0, 80.0, -80.0, 125.0, -125.0, 180.0 })
 			{
-				OutSpot = Middle + Offset.GetSafeNormal() * (Roofs + Beyond * Share);
-				if (Data.FindRegionAt(OutSpot.X, OutSpot.Y) == Id)
+				const FVector2D Way = Offset.GetSafeNormal().GetRotated(static_cast<float>(Round));
+				for (const double Share : { 1.0, 0.65, 0.35 })
 				{
-					return true;
+					OutSpot = Middle + Way * (Roofs + Beyond * Share);
+					if (Data.FindRegionAt(OutSpot.X, OutSpot.Y) == Id && Terrain.HeightAt(OutSpot.X, OutSpot.Y) > 0.0f)
+					{
+						return true;
+					}
 				}
 			}
 			return false; // no room in this province: leave it off the table
@@ -986,7 +992,18 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 					}
 					if (bClear)
 					{
-						OutSpot = Spot;
+						// (down to the water's edge: a slipway runs into the sea, it does not stand in a field)
+						FVector2D Shore = Spot;
+						for (double Further = 0.25; Further <= 3.75; Further += 0.25)
+						{
+							const FVector2D Next = Spot + Way * Further;
+							if (Terrain.HeightAt(Next.X, Next.Y) <= 0.03f || Data.FindRegionAt(Next.X, Next.Y) != Id)
+							{
+								break;
+							}
+							Shore = Next;
+						}
+						OutSpot = Shore - Way * 1.1;
 						return true;
 					}
 				}
@@ -1084,7 +1101,9 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 		if (Built.W > 0 && Place(FVector2D(-10.0, 13.0), Spot))
 		{
 			AirfieldSpots.Add(Id, Spot);
-			const double Field = Unit * 1.3; // an airfield is a big place, and the player has to find it
+			// (an airfield is a big place, and the player has to find it; but one with nobody flying from it is
+			// built smaller, so that it is not a greater thing than the town beside it)
+			const double Field = Unit * 1.3 * (bAirfieldsKnown && !AirfieldsUsed.Contains(Id) ? 0.62 : 1.0);
 			const int32 Size = FMath::Clamp(Built.W, 1, 4);
 			const FVector At = SurfacePoint(Spot.X, Spot.Y, 0.02);
 			const double Turn = Facing(Spot) + 90.0;
@@ -1939,11 +1958,13 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 		// a half of them, a city to about one and two thirds, a large town to a little over one, a small place to
 		// three quarters. A town is never built past the edge of its own province, though, nor smaller than it was.
 		TownSpreads.SetNum(Data.Regions.Num());
+		TownPacked.Init(false, Data.Regions.Num());
 		for (const FCampaignRegion& Region : Data.Regions)
 		{
 			const bool bCity = Region.Terrain == TEXT("urban");
 			const double First = FirstTownRadius(Region);
 			double Wanted = Region.bCapital ? 1.75 : bCity ? 1.4 : First >= 6.0 ? 1.25 : First > 0.0 ? 1.2 : 1.0;
+			bool bTight = false;
 			if (First > 0.0)
 			{
 				double Room = 1.0e9;
@@ -1954,9 +1975,31 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 						Room = FMath::Min(Room, FMath::PointDistToSegment(FVector(Region.Center, 0.0), FVector(Ring[i], 0.0), FVector(Ring[(i + 1) % n], 0.0)));
 					}
 				}
-				Wanted = FMath::Clamp(Room * 0.95 / First, 1.0, Wanted);
+				if (Room * 0.95 < First * Wanted)
+				{
+					// It does not fit as a circle. Where that is the doing of one near edge (a coast, a frontier) and
+					// most of the ground round it is still the province's own, the town is built to its full size and
+					// grows lopsided, away from that edge: its builder leaves out what would stand in the sea or over
+					// the frontier. Where the province really is small, the town is kept to the room there is, and
+					// a city or capital is then packed tight and tall.
+					int32 Inside = 0;
+					const int32 Looks = 24;
+					for (int32 K = 0; K < Looks; ++K)
+					{
+						const double Angle = K * UE_DOUBLE_TWO_PI / Looks;
+						const FVector2D At = Region.Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (First * Wanted * 0.75);
+						Inside += Terrain.HeightAt(At.X, At.Y) > 0.0f && Data.FindRegionAt(At.X, At.Y) == Region.Id ? 1 : 0;
+					}
+					if (Inside * 100 < Looks * 58)
+					{
+						const double Fits = FMath::Clamp(Room * 0.95 / First, 1.0, Wanted);
+						bTight = (Region.bCapital || bCity) && Fits < Wanted * 0.82;
+						Wanted = Fits;
+					}
+				}
 			}
 			TownSpreads[Region.Id] = static_cast<float>(Wanted);
+			TownPacked[Region.Id] = bTight;
 		}
 	}
 	return TownSpreads[RegionId];
@@ -2031,6 +2074,12 @@ double ACampaignMapActor::CivicTurn(int32 RegionId) const
 	return Second;
 }
 
+bool ACampaignMapActor::IsTownPacked(int32 RegionId) const
+{
+	TownSpread(RegionId); // (worked out with the sizes)
+	return TownPacked.IsValidIndex(RegionId) && TownPacked[RegionId];
+}
+
 double ACampaignMapActor::TownRadius(int32 RegionId) const
 {
 	if (!Data.Regions.IsValidIndex(RegionId))
@@ -2053,6 +2102,29 @@ bool ACampaignMapActor::GetAirfieldWorld(int32 RegionId, FVector& OutWorld) cons
 
 void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 {
+	{
+		// Which airfields are in use: if that has changed, the airfields themselves are built again, the empty ones smaller.
+		TSet<int32> Used;
+		for (const FViewAirfield& Field : Fields)
+		{
+			if (Field.Groups > 0)
+			{
+				Used.Add(Field.Region);
+			}
+		}
+		const bool bKnown = Fields.Num() > 0;
+		if (bKnown != bAirfieldsKnown || Used.Num() != AirfieldsUsed.Num() || !Used.Includes(AirfieldsUsed))
+		{
+			bAirfieldsKnown = bKnown;
+			AirfieldsUsed = MoveTemp(Used);
+			if (LastWorks.Num() > 0)
+			{
+				const TArray<FIntVector4> Again = LastWorks;
+				ShownBuildings.Reset();
+				ShowBuildings(Again);
+			}
+		}
+	}
 	FString Signature = FString::Printf(TEXT("%d|"), AirfieldSpots.Num());
 	for (const FViewAirfield& Field : Fields)
 	{
@@ -2076,7 +2148,7 @@ void ACampaignMapActor::ShowAirfieldSigns(const TArray<FViewAirfield>& Fields)
 	}
 	AirSignMesh->ClearAllMeshSections();
 	FMiniatureMesh Model;
-	const double Field = UnitScale * 2.1 * 1.3; // (the size the airfields themselves are built to)
+	const double Field = UnitScale * 2.1 * 1.3; // (the size the airfields in use are built to)
 	auto Ahead = [](double Turn, double Along, double Across) -> FVector
 	{
 		const double R = FMath::DegreesToRadians(Turn);
@@ -2257,6 +2329,7 @@ void ACampaignMapActor::BuildTowns()
 	TownWindows.Reset();
 	PaneRegion.Reset();
 	TownQuarters.Reset();
+	TownBeacons.Reset();
 	Model.Windows = &TownWindows;
 	for (const FCampaignRegion& Region : Data.Regions)
 	{
@@ -2325,7 +2398,18 @@ void ACampaignMapActor::BuildTowns()
 			}
 		}
 		Site.Ground = [this](double X, double Y, double Lift) { return SurfacePoint(X, Y, Lift); };
-		Site.Dry = [this](double X, double Y) { return Terrain.HeightAt(X, Y) > 0.0f; };
+		// (a town is built on land, and on its own province's: one that stands by the sea or a frontier grows away from it)
+		Site.Dry = [this, Id = Region.Id](double X, double Y) { return Terrain.HeightAt(X, Y) > 0.0f && Data.FindRegionAt(X, Y) == Id; };
+		Site.bPacked = IsTownPacked(Region.Id);
+		// The roads and railways out of it run toward the towns of the provinces next door.
+		for (const int32 Next : Region.Neighbors)
+		{
+			if (Data.Regions.IsValidIndex(Next))
+			{
+				const FVector2D Way = Data.Regions[Next].Center - Region.Center;
+				Site.Arms.Add(FMath::RadiansToDegrees(FMath::Atan2(Way.X, -Way.Y)));
+			}
+		}
 		if (Region.bPort)
 		{
 			// A port's quay stands at the water's edge: the nearest shore to the town's middle, looked for all round.
@@ -2355,8 +2439,13 @@ void ACampaignMapActor::BuildTowns()
 		Site.PlotsNear = CivicNear(Region.Id);
 		Site.PlotsTurn = CivicTurn(Region.Id);
 		TArray<FVector2D> Quarters;
-		Model.Township(Site, &TownChimneys, &Quarters);
+		FVector Beacon = FVector::ZeroVector;
+		Model.Township(Site, &TownChimneys, &Quarters, &Beacon);
 		TownQuarters.Add(Region.Id, MoveTemp(Quarters));
+		if (!Beacon.IsZero())
+		{
+			TownBeacons.Add(Region.Id, Beacon);
+		}
 		for (int32 Pane = WindowsBefore / 2; Pane < TownWindows.Num() / 2; ++Pane)
 		{
 			PaneRegion.Add(Region.Id);
@@ -2508,6 +2597,11 @@ void ACampaignMapActor::BuildTowns()
 				{
 					AddGlow(SurfacePoint((*Lit)[Quarter].X, (*Lit)[Quarter].Y, 3.6), Scatter.FRandRange(1.5f, 2.2f) * U, Region.Id, 1);
 				}
+			}
+			// A port's lighthouse: a small bright light at its lantern, lit where the country is at peace.
+			if (const FVector* Lantern = TownBeacons.Find(Region.Id))
+			{
+				AddGlow(*Lantern, 1.5 * U, Region.Id, 3);
 			}
 			// (the wash is as wide as it was before the towns were built larger: a wider one cost frames by night)
 			AddGlow(SurfacePoint(Region.Center.X, Region.Center.Y, 1.4), FMath::Max(Spread / Grown * 3.2, 8.0 * U), Region.Id, 2);
@@ -2710,6 +2804,12 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		{
 			WaterMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, RiverNightTint, Moon));
 		}
+		// The shipping lanes and trade routes are dimmed with the land by night: in the blackout they shone like chalk.
+		if (LanesInk)
+		{
+			LanesInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.36f, 0.5f), Moon));
+			LanesInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, 0.6f, Moon));
+		}
 		// Province lines by night are blue-grey and faint (their strength is capped as the eye moves: UpdateForCamera).
 		if (ProvincePaleInk)
 		{
@@ -2802,9 +2902,11 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			}
 			const uint8 Kind = GlowKind[Glow];
 			const float Heart = Kind == 2 ? TownWash : Kind == 1 ? 0.85f : 1.0f;
-			const float Fall[GlowRings] = { Kind == 2 ? 0.95f : 0.78f, Kind == 2 ? 0.55f : 0.24f, 0.0f };
-			// (lamp yellow, and kept below white: the glow's material brightens what it is given)
-			const FColor Hot = Kind == 2 ? FColor(255, 176, 96) : FColor(250, 208, 142), Warm = Kind == 2 ? FColor(255, 168, 88) : FColor(246, 190, 112), Edge = Kind == 2 ? FColor(255, 160, 80) : FColor(240, 168, 92);
+			const float Fall[GlowRings] = { Kind == 2 ? 0.95f : Kind == 3 ? 0.9f : 0.78f, Kind == 2 ? 0.55f : Kind == 3 ? 0.3f : 0.24f, 0.0f };
+			// (lamp yellow, and kept below white: the glow's material brightens what it is given. A lighthouse's is whiter.)
+			const FColor Hot = Kind == 2 ? FColor(255, 176, 96) : Kind == 3 ? FColor(255, 244, 214) : FColor(250, 208, 142);
+			const FColor Warm = Kind == 2 ? FColor(255, 168, 88) : Kind == 3 ? FColor(255, 232, 186) : FColor(246, 190, 112);
+			const FColor Edge = Kind == 2 ? FColor(255, 160, 80) : Kind == 3 ? FColor(255, 214, 150) : FColor(240, 168, 92);
 			GlowColours[Glow * PerGlow] = FColor(Hot.R, Hot.G, Hot.B, static_cast<uint8>(Heart * Lit * 255.0f));
 			for (int32 Ring = 0; Ring < GlowRings; ++Ring)
 			{
@@ -4601,10 +4703,13 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 		}
 		// (the player's trade routes are drawn in gold, over land as well as sea)
 		const bool bTrade = Lane.State.StartsWith(TEXT("trade"));
+		// (a trade route that is open is a dotted line in ink, as a clerk would rule it: sepia on the land and pale
+		// on the water. Raided it is amber and cut it is red, still dotted and thin.)
 		const FLinearColor Ink = Lane.State.EndsWith(TEXT("cut")) ? FLinearColor(0.95f, 0.14f, 0.1f, 0.62f)
 			: Lane.State.EndsWith(TEXT("raided")) ? FLinearColor(1.0f, 0.68f, 0.14f, 0.58f)
-			: bTrade ? FLinearColor(1.0f, 0.84f, 0.42f, 0.5f)
-			: FLinearColor(0.86f, 0.93f, 1.0f, 0.3f);
+			: bTrade ? FLinearColor(0.2f, 0.135f, 0.07f, 0.78f)
+			: FLinearColor(0.86f, 0.93f, 1.0f, 0.42f); // (the ink of the lanes is laid on at its own strength now, not brightened: a little more of it)
+		const FLinearColor TradeAtSea(0.9f, 0.84f, 0.66f, 0.42f);
 		// The lane as a smooth curve through its points, a step every map unit or so.
 		TArray<FVector2D> Curve;
 		const int32 Count = Lane.Path.Num();
@@ -4620,10 +4725,12 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 		}
 		Curve.Add(Lane.Path.Last());
 		// Drawn as dashes, like a course pencilled on a chart; only over the water.
-		const int32 Dash = 4, Gap = 3;
+		const int32 Dash = bTrade ? 1 : 4, Gap = bTrade ? 2 : 3;
+		TArray<TArray<FVector2D>> Strokes;
+		TArray<bool> StrokeWet;
 		for (int32 First = 0; First + 1 < Curve.Num(); First += Dash + Gap)
 		{
-			TArray<FVector2D> Stroke;
+			TArray<FVector2D>& Stroke = Strokes.AddDefaulted_GetRef();
 			for (int32 K = First; K <= First + Dash && K < Curve.Num(); ++K)
 			{
 				if (!bTrade && Terrain.HeightAt(Curve[K].X, Curve[K].Y) > 0.0f)
@@ -4632,13 +4739,29 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 				}
 				Stroke.Add(Curve[K]);
 			}
-			if (Stroke.Num() >= 2)
+			StrokeWet.Add(Terrain.HeightAt(Curve[First].X, Curve[First].Y) <= 0.0f);
+		}
+		for (int32 Index = 0; Index < Strokes.Num(); ++Index)
+		{
+			// (a dash of a sea lane with no dash before it and none after it, in the mouth of a river or a gap
+			// between islands, is left out: alone it is a coloured tile lying on the water)
+			const bool bBefore = Strokes.IsValidIndex(Index - 1) && Strokes[Index - 1].Num() >= 2, bAfter = Strokes.IsValidIndex(Index + 1) && Strokes[Index + 1].Num() >= 2;
+			if (Strokes[Index].Num() >= 2 && (bTrade || bBefore || bAfter))
 			{
-				AppendRibbon(Buffers, Stroke, Lane.State == TEXT("open") ? 0.55 : bTrade ? 0.42 : 0.75, bTrade ? 0.3 : 0.12, Ink.ToFColor(false), false);
+				const bool bOpenTrade = bTrade && Lane.State == TEXT("trade");
+				const FLinearColor Colour = bOpenTrade && StrokeWet[Index] ? TradeAtSea : Ink;
+				AppendRibbon(Buffers, Strokes[Index], Lane.State == TEXT("open") ? 0.55 : bTrade ? 0.24 : 0.75, bTrade ? 0.3 : 0.12, Colour.ToFColor(false), false);
 			}
 		}
 	}
-	Buffers.Commit(LanesMesh, 0, HighlightMaterial);
+	if (!LanesInk && HighlightMaterial)
+	{
+		LanesInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		LanesInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+		ShownNight = -1.0f; // (so that the hour's light is laid on it at once)
+	}
+	Buffers.Commit(LanesMesh, 0, LanesInk ? static_cast<UMaterialInterface*>(LanesInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	SetNight(NightNow, bLamplightNow);
 }
 
 FString ACampaignMapActor::ModelFor(const FString& Nation, const FString& Kind)

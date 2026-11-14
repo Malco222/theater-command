@@ -658,7 +658,7 @@ void ACampaignPlayerController::SetStance(const FString& Posture)
 	Session->SetStance(PickedCorps, Posture);
 	RefreshOrders();
 	Notify(Posture == TEXT("dig") ? TEXT("They will dig in. After a whole month on this ground they defend a quarter stronger.")
-		: Posture == TEXT("back") ? (IsAutoDig() ? TEXT("They will fall back whole if they are attacked at odds they cannot hold. An army told to give ground leaves its trenches.") : TEXT("They will fall back whole if they are attacked at odds they cannot hold."))
+		: Posture == TEXT("back") ? (IsAutoDig() ? TEXT("They will fall back whole if they are attacked at odds they cannot hold. An army told to give ground leaves its fieldworks.") : TEXT("They will fall back whole if they are attacked at odds they cannot hold."))
 		: IsAutoDig() ? TEXT("They will stand and fight where they are. Left there for the whole month, without marching or attacking, they dig in: a line that is dug in and fed is hard to break.")
 		: TEXT("They will stand and fight where they are."), IsAutoDig() ? 6.0 : 4.0);
 }
@@ -1853,7 +1853,7 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("Click one of your flags to pick the army up. Ground it can march to lightens, ground it can attack turns red, and a neutral country's ground beside it turns amber. ")
 		TEXT("Click where it should go and click again to send it, or drag the flag there. An attack first shows both armies and the odds: SEND THEM IN fights it, CALL IT OFF does not. Esc puts the army down.\n")
 		TEXT("In the army's tray you can leave some corps behind, say what it does if attacked (stand, dig in or fall back), and send it BY RAIL along a working railway or BY SEA from a port.\n")
-		TEXT("What stands round an army's base says what it is about: sandbags and wire when it is entrenched (a short row while it is still digging), tents and a fire when it is in camp and resting, ")
+		TEXT("What stands round an army's base says what it is about: sandbags and wire when it is dug in behind its fieldworks (a short row while it is still digging), tents and a fire when it is in camp and resting, ")
 		TEXT("a lorry and crates while supply reaches it, and a red barred board when it is cut off. The dotted line to where an army would go has a ring for each province on the way, and ends in red where there would be a battle."));
 	Add(TEXT("WAR AND PEACE"),
 		TEXT("Marching onto amber ground means declaring war. The game first tells you who that country's friends are and what will follow, and nothing happens unless you say yes.\n")
@@ -3225,7 +3225,7 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 				if (const AArmyPiece* Stands = Map->FindPiece(TipRegion, Force.Key))
 				{
 					TArray<FString> About;
-					if (Stands->GetWorksState() == 2) { About.Add(TEXT("entrenched")); }
+					if (Stands->GetWorksState() == 2) { About.Add(TEXT("dug in")); }
 					else if (Stands->GetWorksState() == 1) { About.Add(TEXT("digging in")); }
 					if (Stands->IsInCamp()) { About.Add(TEXT("in camp, resting")); }
 					if (Stands->GetSupplyState() == 2) { About.Add(TEXT("cut off from supply")); }
