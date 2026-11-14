@@ -458,6 +458,25 @@ export function deliver(g: Game, nat: string): void {
   }
 }
 
+/**
+ * The grand campaign: true while a computer staff whose line has met dug-in troops wants massed guns to break them,
+ * one corps of guns to every few of the rest, and has not got them yet.
+ */
+export function gunsWanted(g: Game, nat: string): boolean {
+  const n = g.nations[nat];
+  if (g.flags.open !== 1 || !n?.alive || !n.atWar.length) return false;
+  const G = (arsenalData.ai as unknown as { guns: { per: number; most: number; facing: number } }).guns;
+  let guns = n.queue.filter((b) => b.what === 'corps' && b.kind === 'art').length, rest = 0;
+  for (const c of g.corps) if (c.nat === nat && !c.dead) { if (c.kind === 'art') guns++; else if (c.kind !== 'fort' && c.kind !== 'eng') rest++; }
+  if (guns >= G.most || guns * G.per >= rest) return false;
+  let dug = 0;
+  for (const c of g.corps) {
+    if (c.dead || !c.dug || !n.atWar.includes(c.nat) || !g.regions[c.reg].nb.some((j) => g.regions[j].ctrl === nat)) continue;
+    if (++dug >= G.facing) return true;
+  }
+  return false;
+}
+
 /** The computer's factory policy: keep a reserve for replacements, spend the rest on new corps. */
 export function aiProduction(g: Game, nat: string): void {
   const n = g.nations[nat];
@@ -485,19 +504,7 @@ export function aiProduction(g: Game, nat: string): void {
   }
   // The grand campaign: a staff whose line has met dug-in troops orders massed guns to break them, one corps of guns
   // to every few of the rest, and brings them up where the works are.
-  const wantsGuns = (): boolean => {
-    if (g.flags.open !== 1 || !n.atWar.length) return false;
-    const G = (arsenalData.ai as unknown as { guns: { per: number; most: number; facing: number } }).guns;
-    let guns = n.queue.filter((b) => b.what === 'corps' && b.kind === 'art').length, rest = 0;
-    for (const c of g.corps) if (c.nat === nat && !c.dead) { if (c.kind === 'art') guns++; else if (c.kind !== 'fort' && c.kind !== 'eng') rest++; }
-    if (guns >= G.most || guns * G.per >= rest) return false;
-    let dug = 0;
-    for (const c of g.corps) {
-      if (c.dead || !c.dug || !n.atWar.includes(c.nat) || !g.regions[c.reg].nb.some((j) => g.regions[j].ctrl === nat)) continue;
-      if (++dug >= G.facing) return true;
-    }
-    return false;
-  };
+  const wantsGuns = (): boolean => gunsWanted(g, nat);
   while (slots() < most) {
     let kind: Kind = wantsGuns() ? 'art' : home >= 20 && n.corpsNo % 3 === 2 ? 'arm' : 'inf';
     // In the grand campaign tanks are built where the factories are: at the capital if it has them, else in the

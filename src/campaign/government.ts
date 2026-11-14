@@ -74,6 +74,7 @@ export const GOV = data as unknown as {
     spare: { months: number; capital: number; worn: number; share: number };
     build: { months: number; capital: number };
     agent: { months: number; capital: number };
+    small: { quiet: number; missed: number };
   };
   wings: { top: number; hawks: { won: number; wins: number; lost: number }; doves: { defeats: number; losses: number; spare: number; rest: number } };
   promise: { every: number; months: number[]; reach: number; memory: number; deep: number[]; fullOdds: number; oddsMost: number; perDepth: number; perMonth: number; haste: number; back: number; size: Record<TownSize, number>; bands: Band[] };
@@ -188,7 +189,7 @@ export function cabinetBill(g: Game): { text: string; trust: number }[] {
   const nat = g.human, st = seen(g, nat);
   if (!st || !nat) return [];
   const swing = GOV.forms[formOf(nat)].swing, out: { text: string; trust: number }[] = [];
-  if (st.dir && standing(g, st.dir) === 'open') out.push({ text: `The directive is set aside: ${st.dir.title}`, trust: round1(missedCost(st, true) * swing) });
+  if (st.dir && standing(g, st.dir) === 'open') out.push({ text: `The directive is set aside: ${st.dir.title}`, trust: round1(missedCost(st, true, st.dir) * swing) });
   const v = st.vow, vr = v ? g.regions[v.region] : undefined;
   if (v && vr && atWar(g, nat, vr.ctrl) && g.turn <= v.due) out.push({ text: `Your promise is taken back: ${v.title}`, trust: round1(v.price * GOV.promise.back) });
   const gen = st.head ? generalBy(g, st.head.general) : undefined;
@@ -595,7 +596,7 @@ function draw(g: Game, nat: string, st: GovState): Directive | null {
     const r = g.regions[t.p.region], more = t.hard ? D.take.hard.months : 0, mul = t.hard ? D.take.hard.reward : 1;
     const due = g.turn + months + more;
     return { ...base, kind, from, region: r.id, due, capital: Math.round(capital * mul), money: Math.round(money * mul * 10) / 10, ...(corps ? { corps } : {}), ...(t.hard ? { hard: true } : {}), ...(t.again ? { again: true } : {}),
-      title, text: `${lead}, by you or an ally, by the end of ${date(due)}. With your corps in reach brought up, the attack card reads ${oddsWords(t.odds)}.${t.hard ? ' The place is strongly held: the cabinet knows it, and gives more time and a larger reward.' : ''}` };
+      title, text: `${lead}, by you or an ally, by the end of ${date(due)}. ${READS}${oddsWords(t.odds)}.${t.hard ? ' The place is strongly held: the cabinet knows it, and gives more time and a larger reward.' : ''}` };
   };
   if (n.atWar.length) {
     // An ally with its back to the wall asks for a blow at the enemy pressing it; one that was overrun asks to be freed.
@@ -651,14 +652,16 @@ function draw(g: Game, nat: string, st: GovState): Directive | null {
       options.push({ ...base, kind: 'raise', from: nat, target, due: g.turn + D.raise.months, capital: D.raise.capital, money: 0,
         title: 'Build up the army', text: `${n.atWar.length ? 'The' : `${PEACE}the`} war cabinet wants the army built up: bring it from ${now} to ${target} divisions, in the field or forming, by the end of ${date(g.turn + D.raise.months)}.` });
     }
-    // Small jobs that fit any country, at peace or at war: a town built up, and eyes abroad. Neither is asked of a treasury that cannot pay for it.
-    const spare = purse * 0.6;
-    const site = cheapestCivic(g, nat);
+    // Small jobs for a quiet time: a town built up, and eyes abroad. They are asked of a country at peace, or of one that
+    // has fought no battle for `small.quiet` months, and never of a treasury that could not pay for the thing today.
+    const spare = Math.min(purse * 0.6, Math.max(0, n.pp));
+    const quiet = !n.atWar.length || quietMonths(g, nat) >= D.small.quiet;
+    const site = quiet ? cheapestCivic(g, nat) : null;
     if (site && site.cost <= spare) {
       options.push({ ...base, kind: 'build', from: nat, target: civicCount(g, nat) + 1, due: g.turn + D.build.months, capital: D.build.capital, money: 0,
         title: 'Build up a town', text: `The war cabinet wants the country built up: order a new building in one of your towns by the end of ${date(g.turn + D.build.months)}. The cheapest today is the ${site.label.toLowerCase()} at ${site.town}, for ${moneyShown(site.cost)}.` });
     }
-    if (agentsOf(g, nat).length < mostAgents(nat) && homeBase(g, nat) >= 0 && INTEL.agents.cost <= spare) {
+    if (quiet && agentsOf(g, nat).length < mostAgents(nat) && homeBase(g, nat) >= 0 && INTEL.agents.cost <= spare) {
       options.push({ ...base, kind: 'agent', from: nat, target: agentsOf(g, nat).length + 1, due: g.turn + D.agent.months, capital: D.agent.capital, money: 0,
         title: 'Recruit an agent', text: `The war cabinet wants eyes abroad: recruit an agent for the secret service by the end of ${date(g.turn + D.agent.months)}. One costs ${agentCost().toLocaleString('en-US')} to find and train.` });
     }
@@ -692,6 +695,16 @@ function draw(g: Game, nat: string, st: GovState): Directive | null {
 
 /** How a job to build up the army opens in a country at peace: dropped from the words once it is at war. */
 const PEACE = 'While the country is at peace, ';
+/** How a town to take gives its odds on the day it is asked for: said in the past once that month is over, beside what the card reads today. */
+const READS = 'With your corps in reach brought up, the attack card reads ';
+const READ = 'When the order was written the attack card, with your corps in reach brought up, read ';
+
+/** A directive's words as the player reads them today. */
+function textShown(g: Game, n: Nation, d: Directive): string {
+  if (d.kind === 'raise' && n.atWar.length && d.text.startsWith(PEACE)) return `T${d.text.slice(PEACE.length + 1)}`;
+  if ((d.kind === 'take' || d.kind === 'relief') && g.turn > d.issued) return d.text.replace(READS, READ);
+  return d.text;
+}
 
 /** Notes whether a town the player was told to hold has been attacked or besieged since the order came. */
 function test(g: Game, d: Directive): void {
@@ -722,10 +735,32 @@ function standing(g: Game, d: Directive): 'done' | 'failed' | 'open' | 'void' {
   return ours ? 'done' : !atWar(g, d.nat, r.ctrl) ? 'void' : late ? 'failed' : 'open';
 }
 
-/** The trust a directive costs when it is missed, or set aside: more for each one ignored in a row, less under a paymaster. */
-function missedCost(st: GovState, aside = false): number {
+/** A small job: a town built up, an agent recruited. Missed, it costs a small flat price and is not counted with the directives ignored. */
+export const smallJob = (d: Pick<Directive, 'kind'> | undefined): boolean => d?.kind === 'build' || d?.kind === 'agent';
+
+/**
+ * Months since the nation last fought a battle of its own, as attacker or defender, or since the newest of its wars
+ * began, if that is later: a war just declared is no quiet time. Without end for a country at peace that never fought.
+ */
+export function quietMonths(g: Game, nat: string): number {
+  let last = -Infinity;
+  for (const o of Object.values(g.nations)) {
+    if (o.id === nat) { for (const t of Object.values(o.lastFight)) last = Math.max(last, t); }
+    else if (o.lastFight[nat] !== undefined) last = Math.max(last, o.lastFight[nat]);
+  }
+  // A war the campaign opened with has no day written down: it is taken as begun the day the government was formed.
+  const opened = g.nations[nat].gov?.since ?? 0;
+  for (const e of g.nations[nat].atWar) last = Math.max(last, g.flags[`war:${nat}:${e}`] ?? g.flags[`war:${e}:${nat}`] ?? opened);
+  return g.turn - last;
+}
+
+/**
+ * The trust a directive costs when it is missed, or set aside: more for each one ignored in a row, less under a
+ * paymaster. A small job costs the same small price however many stand ignored.
+ */
+function missedCost(st: GovState, aside = false, d?: Directive): number {
   const M = GOV.directives.missed;
-  let c = Math.min(M.most, M.base + M.step * st.missed);
+  let c = smallJob(d) ? GOV.directives.small.missed : Math.min(M.most, M.base + M.step * st.missed);
   for (const e of effectsOf(st)) c *= e.missed ?? 1;
   return aside ? c * M.aside : c;
 }
@@ -771,14 +806,22 @@ function close(g: Game, n: Nation, st: GovState, how: 'done' | 'failed' | 'aside
     return;
   }
   // Set aside, the job costs less than failing it would, and the next comes on the day it would have.
-  if (how === 'failed') st.blame = g.turn;
-  const cost = missedCost(st, how === 'aside');
+  const small = smallJob(d);
+  if (how === 'failed' && !small) st.blame = g.turn;
+  const cost = missedCost(st, how === 'aside', d);
   if (how === 'aside') st.next = Math.max(g.turn + GOV.directives.retry, d.due + 1 + GOV.directives.every);
   if (town) (st.asked ??= {})[d.region!] = g.turn;
-  st.missed++;
+  // A small job left undone is a small matter: it is not counted with the directives ignored, and the price never climbs.
+  if (!small) st.missed++;
   st.trust = clamp(st.trust - cost * swing, 0, 100);
-  (st.last ??= []).push({ label: how === 'aside' ? 'A directive set aside' : 'A directive not carried out', amount: -cost * swing });
+  (st.last ??= []).push({ label: small ? (how === 'aside' ? 'A small job set aside' : 'A small job left undone') : how === 'aside' ? 'A directive set aside' : 'A directive not carried out', amount: -cost * swing });
   note(g, st, `Directive ${how === 'aside' ? 'set aside' : 'not carried out'}: ${d.title}.`);
+  if (small) {
+    headline(g, 'info', how === 'aside'
+      ? `You set the directive aside: ${d.title}. It was a small matter, and the war cabinet does not count it against you.`
+      : `The directive was not carried out: ${d.title}. It was a small matter: the war cabinet's confidence in you slips a little, and it is not counted with the directives you have ignored.`, n.id, d.region);
+    return;
+  }
   headline(g, 'info', how === 'aside'
     ? `You set the directive aside: ${d.title}. The war cabinet notes it${st.missed > 1 ? `, for the ${st.missed === 2 ? 'second' : st.missed === 3 ? 'third' : `${st.missed}th`} time running` : ''}.`
     : `The directive was not carried out: ${d.title}. The war cabinet's confidence in you falls${st.missed > 1 ? ', further than last time' : ''}.`, n.id, d.region);
@@ -898,6 +941,16 @@ function noteReach(g: Game, nat: string, st: GovState): void {
     if (o > 0) { odds[id] = Math.round(o * 100) / 100; depth[id] = d; }
   }
   st.reach = [...kept, { t: g.turn, odds, depth }];
+}
+
+/**
+ * Once the player's month has fully opened (the drafts in, the scouts' reports back) the cabinet notes its readings
+ * again, so that the one it remembers for the month is the one his page shows him: the first is taken as the month
+ * turns, before either, and read a fifth lower.
+ */
+export function noteReadings(g: Game): void {
+  const nat = g.human, st = govOf(g, nat);
+  if (nat && st && g.nations[nat].alive && st.reach?.some((m) => m.t === g.turn)) noteReach(g, nat, st);
 }
 
 function termsAt(g: Game, nat: string, r: Region, months: number, read = promiseOdds(g, nat, r)): PromiseTerms {
@@ -1069,10 +1122,12 @@ const generalBy = (g: Game, id: number): General | undefined => g.generals.find(
 
 /**
  * The defeats a cabinet holds against a general: the battles he has lost since he last won one that could have been
- * won. A defence lost to an attack at under `head.winnable` to 1, or an attack of his own thrown back at those odds
- * or better. A line nobody would have held, and an attack he was sent into at long odds, are not his fault.
+ * won. A defence lost to an attack the card gave less than an even chance (under the day's even odds: about 1.2 to 1 in
+ * the open, more against prepared positions), or an attack of his own thrown back at `head.winnable` to 1 or better
+ * and better than even. A line the attacker was likelier than not to carry, and an attack he was sent into at long
+ * odds, are not his fault.
  */
-export const heldAgainst = (gen: General): LostBattle[] => (gen.rec.lost ?? []).filter((b) => (b.att ? b.odds >= GOV.head.winnable : b.odds < GOV.head.winnable));
+export const heldAgainst = (gen: General): LostBattle[] => (gen.rec.lost ?? []).filter((b) => (b.att ? b.odds >= Math.max(GOV.head.winnable, b.even ?? 1.2) : b.odds < (b.even ?? 1.2)));
 
 const oddsNum = (x: number): string => `${x >= 10 ? Math.round(x) : Math.round(x * 10) / 10}`;
 
@@ -1337,6 +1392,8 @@ export interface DirectiveView extends Directive {
   reward: string;
   /** What letting it lapse costs in trust, and what setting it aside costs: less. */
   price: number;
+  /** A small job (a building, an agent): its price is flat, and missing it is not counted with the directives ignored. */
+  small: boolean;
   asidePrice: number;
   /** The month the next directive would be set if this one were set aside today. */
   asideNext: number;
@@ -1486,7 +1543,7 @@ export function government(g: Game, nat: string | null = g.human): GovView | nul
     ...empty, mine: true, trust: Math.floor(st.trust + 1e-9), trustWord: trustWord(st.trust, form.fallsAt), rest: restOf(st), low: st.low, since: st.since ?? 0,
     doubts, withheld: doubts ? `It withholds ${Math.round(C.lowShare * 100)}% of the political capital you would earn each month and ${Math.round(C.lowIncome * 100)}% of the treasury's income until its trust is back to ${C.lowTrust}.` : null,
     capital: Math.floor(n.pc), capitalMonth: Math.round((pcIncome(nat) + civicSum(g, nat).pc + cm) * 100) / 100, seats, tracks,
-    directive: d ? { ...d, text: d.kind === 'raise' && n.atWar.length && d.text.startsWith(PEACE) ? `T${d.text.slice(PEACE.length + 1)}` : d.text, oddsLine: oddsLineOf(g, d), by: d.from === nat ? 'The war cabinet' : theName(g.nations[d.from], true), left: Math.max(0, d.due - g.turn + 1), progress: progressOf(g, d), reward: rewardWords(d), price: Math.round(missedCost(st) * form.swing * 10) / 10, asidePrice: Math.round(missedCost(st, true) * form.swing * 10) / 10, asideNext: Math.max(g.turn + GOV.directives.retry, d.due + 1 + GOV.directives.every) } : null,
+    directive: d ? { ...d, text: textShown(g, n, d), small: smallJob(d), oddsLine: oddsLineOf(g, d), by: d.from === nat ? 'The war cabinet' : theName(g.nations[d.from], true), left: Math.max(0, d.due - g.turn + 1), progress: progressOf(g, d), reward: rewardWords(d), price: Math.round(missedCost(st, false, d) * form.swing * 10) / 10, asidePrice: Math.round(missedCost(st, true, d) * form.swing * 10) / 10, asideNext: Math.max(g.turn + GOV.directives.retry, d.due + 1 + GOV.directives.every) } : null,
     nextIn: d ? 0 : Math.max(0, st.next - g.turn), done: st.done, missed: st.missed, sums,
     wings: wingsView(st),
     promise: v && vr ? {

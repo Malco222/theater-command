@@ -12,8 +12,8 @@ import { NAVY, baseTargets, canPass, landCorps, landingTargets, planLanding, reb
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
-  DEFENCE, allied, assess, atWar, chanceOn, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
-  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, theName, type Assessment,
+  DEFENCE, allied, assess, atWar, battleCost, chanceOn, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
+  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, theName, type Assessment, type CostOf,
 } from './game';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { offers, orderOffer, type Offer } from './arsenal';
@@ -28,7 +28,7 @@ import {
   type EscortLane, type EscortPlan, type FleetCard, type SeaOption, type ShorePlan, type ShoreTarget,
 } from './fleets';
 import {
-  SIGHT, armiesSeen, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
+  INTEL, SIGHT, armiesSeen, booksOf, cityReport, corpsKnown, fogOn, oddsBand, reconnoitre, recruit, retire, sendAgent, setFog, setMission as setAgentMission, sightOf, sortKnown, spyRoom,
   whyNotMission, whyNotRecruit, whyNotSend, type ArmySeen, type Books, type CityReport, type Known, type SpyRoom,
 } from './intel';
 import type { TicketLine } from '../core/ticket';
@@ -44,17 +44,17 @@ import { corpsMood, type Mood } from './morale';
 import { prizeOf, prizesInReach, townAt, townName, townSize, townsOf, type Prize, type TownSize, type TownView } from './towns';
 import { CIVIC, civicOffers, civicRules, orderCivic, plotsAt, type CivicOffer, type PlotView } from './buildings';
 import { endTrade, signTrade, tradeBook, type TradeBook } from './trade';
-import { SIEGE, fieldCtrl, garrison, garrisonOf, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type SiegeView } from './siege';
+import { SIEGE, fieldCtrl, garrison, garrisonOf, pocketView, previewSally, previewStorm, sally, siegeRules, siegeView, siegesNow, storm, takeField, townHeld, whyNotGarrison, whyNotSally, whyNotStorm, whyNotTakeField, type PocketView, type SiegeView } from './siege';
 import { quietNews } from './staff';
 import {
   orderWreckPrize, prizeIncome, prizeMarks, prizesAt, scorchPolicy, setBurnOrder, setScorchPolicy, whyNotWreck,
   type PrizeIncome, type PrizeKind, type PrizeMark, type PrizesView, type ScorchPolicy,
 } from './prizes';
 import {
-  appoint, cabinetBill, cabinetOff, decree, govMul, government, headAsked, headGiven, headOf, officeSecure, promise, promiseTargets, promiseTerms, setAside, setCabinet, setCanFall, standBy, takeBack,
+  appoint, cabinetBill, cabinetOff, decree, govMul, government, headAsked, headGiven, headOf, noteReadings, officeSecure, promise, promiseTargets, promiseTerms, setAside, setCabinet, setCanFall, standBy, takeBack,
   whyNotAppoint, whyNotDecree, whyNotPromise, whyNotSetAside, whyNotStandBy, whyNotTakeBack, type GovView, type PromiseTarget, type PromiseTerms,
 } from './government';
-import { MANPOWER, callEarly, earlyClass, manpower, menWords, whyNotEarly, type MenView } from './manpower';
+import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, manpower, menWords, raisable, whyNotEarly, type MenView } from './manpower';
 import EVE from '../../data/campaign/eve.json';
 
 export const current = (g: Game): string => g.order[g.phase];
@@ -93,6 +93,8 @@ export function beginHuman(g: Game): void {
   startPhase(g, current(g));
   // The month's reports come in: what the player's agents have in view is identified afresh.
   reconnoitre(g);
+  // And the cabinet notes what the attack card reads against the towns he could promise, the way his page now reckons it.
+  noteReadings(g);
   quietNews(g);
 }
 
@@ -327,23 +329,61 @@ export interface Outlook {
   stale: number;
   /** One sentence on why the odds are a band, and how to narrow it. Empty where they are exact. */
   note: string;
+  /** True where the band of chances is too wide to plan on: more than 40 points from one end to the other. */
+  wide: boolean;
+  /** The staff's best guess at the chance where the odds are a band: the chance averaged over the band ('chance' is the chance at the middle of it). */
+  guess: number;
+  /** What would narrow the band, and by how much, in one sentence. Empty where the odds are exact. */
+  narrow: string;
+  /**
+   * What the fight is likely to cost in men if it carries the ground and if it is thrown back (null where that
+   * cannot happen): 'ours' is exact, 'share' is the defenders' loss as a share of their men, and 'theirs' is
+   * their loss in men where every defender is identified, null where the defence is partly a guess.
+   */
+  cost: { won: CostSeen | null; lost: CostSeen | null };
   lines: TicketLine[];
 }
+/** One result's bill as the player's staff can state it before the fight. */
+export interface CostSeen { ours: number; theirs: number | null; share: number }
 
 export function attackOutlook(g: Game, corps: Corps[], target: Region): Outlook | null {
   const a = previewAttack(g, corps, target);
-  return a ? outlookOf(g, a, target) : null;
+  if (!a) return null;
+  // The same force the battle will count: the bill is reckoned on it.
+  const going = jointForce(g, limitAttackers(g, jointForce(g, corps, target), target), target);
+  return outlookOf(g, a, target, going);
+}
+
+/**
+ * The force an attack card opens with (both interfaces): the corps the player picked, unless everyone the roads
+ * will carry makes a better attack of it, in which case everyone in reach, for the player to take corps out of.
+ * 'widened' says the staff brought more in than were picked.
+ */
+export function openingForce(g: Game, picked: Corps[], target: Region): { corps: Corps[]; widened: boolean } {
+  const all = candidates(g, target);
+  if (all.length <= picked.length) return { corps: picked, widened: false };
+  const mine = previewAttack(g, picked, target), full = previewAttack(g, all, target);
+  if (full && (!mine || full.odds > mine.odds * 1.02)) return { corps: all, widened: true };
+  return { corps: picked, widened: false };
 }
 
 /** An assessment as the player's staff can report it: exact where every defender is identified, a band where not. */
-function outlookOf(g: Game, a: Assessment, target: Region): Outlook {
+function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []): Outlook {
   // The run of the day's luck comes with the assessment: wider in the streets of a town, and on a line that is dug in and fed.
   const dice = a.dice;
   const chanceAt = (odds: number): number => chanceOn(odds, dice);
   const even = evenOdds(dice);
   const band = oddsBand(g, a.defenders, a.odds, target.id, g.human);
   const k = sortKnown(g, a.defenders, g.human);
-  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', lines: a.lines };
+  // The bill: in men for both sides where the defence is known, and the defenders' as a share of their men where it is not.
+  // (Where the staff's own estimate rules a result out but the band does not, that result is billed at the end of the band that allows it.)
+  const billAt = (odds: number): { won: CostOf | null; lost: CostOf | null } => (going.length ? battleCost(g, a, going, target, {}, odds) : { won: null, lost: null });
+  const bill = billAt(band.exact ? a.odds : band.mid);
+  if (!band.exact && !bill.won) bill.won = billAt(band.hi).won;
+  if (!band.exact && !bill.lost) bill.lost = billAt(band.lo).lost;
+  const seen = (c: CostOf | null): CostSeen | null => (c ? { ours: c.ours, theirs: band.exact ? c.theirs : null, share: c.share } : null);
+  const cost = { won: seen(bill.won), lost: seen(bill.lost) };
+  if (band.exact) return { exact: true, odds: a.odds, lo: a.odds, hi: a.odds, chance: chanceAt(a.odds), chanceLo: chanceAt(a.odds), chanceHi: chanceAt(a.odds), even, unidentified: 0, stale: 0, note: '', wide: false, guess: chanceAt(a.odds), narrow: '', cost, lines: a.lines };
   const n = a.defenders.length;
   const corpsWord = (x: number): string => `${x} corps`;
   // What the ticket says of the defenders' numbers, spirit and armour is left out where it is not known.
@@ -365,10 +405,21 @@ function outlookOf(g: Game, a: Assessment, target: Region): Outlook {
     : old === n ? (n === 1 ? 'The defending corps is known only from an old report' : 'The defending corps are known only from old reports')
     : `${count(old)} of the ${n} defending corps ${old === 1 ? 'is' : 'are'} known only from ${old === 1 ? 'an old report' : 'old reports'}`;
   const what = [dark, dated].filter(Boolean).join(', and ');
+  // What would narrow the band, and by how much: with the unidentified corps identified only the old reports are in doubt.
+  const R = INTEL.reports;
+  let w = 0, dOld = 0;
+  for (const c of a.defenders) { const x = c.divs * Math.max(0.05, c.str); w += x; if (k.report.includes(c)) dOld += x * Math.min(R.widest, R.drift * corpsKnown(g, c, g.human).age); }
+  dOld = w > 0 ? dOld / w : 0;
+  const part = band.doubt > 0 ? Math.round((dOld / band.doubt) * 10) * 10 : 0;
+  const them = (x: number): string => (x === 1 ? 'the one corps' : `the ${count(x).toLowerCase()} corps`);
+  const narrow = nn && !old ? `Identify ${them(nn)} the staff cannot see, and it can give one figure in place of this band.`
+    : nn ? `Identify ${them(nn)} the staff cannot see, and the band closes to about ${Math.max(10, Math.min(90, part))}% of its width; fresh reports on the rest close it altogether.`
+    : `Fresh reports on ${them(old)} known from old ones would turn this band into one figure.`;
   return {
     exact: false, odds: band.mid, lo: band.lo, hi: band.hi, chance: chanceAt(band.mid), chanceLo: chanceAt(band.lo), chanceHi: chanceAt(band.hi), even,
     unidentified: k.none.length, stale: k.report.length,
     note: `${what}, so the odds are the staff's estimate. A battle, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
+    wide: chanceAt(band.hi) - chanceAt(band.lo) > 0.4, guess: Array.from({ length: 21 }, (_, i) => chanceAt(band.lo + ((band.hi - band.lo) * i) / 20)).reduce((s, x) => s + x, 0) / 21, narrow, cost,
     lines,
   };
 }
@@ -472,23 +523,31 @@ export const manpowerOf = (g: Game, nat: string | null = g.human): MenView | nul
  * The player's say over the call-up (the grand campaign), for the panel that shows his reserve of men. `early`: what
  * calling the next class up early would bring today, in men, the months no class would then come of age, and why it
  * cannot be done now, or null if it can. `callUp`: his country's standing call-up, where it has one and is at war:
- * whether he holds it, and the corps the next wave would raise at most. Null outside the grand campaign.
+ * whether he holds it, the corps the next wave would raise at most, and `drafts`, the men a month that go to the
+ * corps in the field in their place while it is held. Null outside the grand campaign.
  */
 export interface CallUpView {
   early: { men: number; months: number; gap: number; why: string | null; text: string };
-  callUp: { held: boolean; corps: number; divs: number; text: string } | null;
+  callUp: { held: boolean; corps: number; divs: number; drafts: number; text: string } | null;
 }
 export function callUpOf(g: Game): CallUpView | null {
   const nat = g.human;
   if (nat === null || g.flags.open !== 1 || !g.nations[nat]) return null;
-  const E = MANPOWER.early, men = Math.round(earlyClass(g, nat, govMul(g, nat, 'men')) * MEN_PER_DIV);
+  const E = MANPOWER.early, mul = govMul(g, nat, 'men'), come = earlyClass(g, nat, mul), men = Math.round(come * MEN_PER_DIV);
   const why = !humanUp(g) ? 'It is not your month.' : whyNotEarly(g, nat);
+  // What comes is as many months of classes as the reserve has room for, and the months without a class after it are as many.
+  const one = classNow(g, nat, mul), months = one > 0 ? Math.max(1, Math.min(E.months, Math.round(come / one))) : E.months, gap = earlyGap(g, nat, come, mul);
+  const mo = (k: number): string => (k === 1 ? 'a month' : `${k} months`);
   const wave = standingCallUp(g, nat);
+  const drafts = wave ? Math.round(Math.min(wave.corps, raisable(g, nat, wave.divs)) * wave.divs * MEN_PER_DIV) : 0;
+  const notRaised = wave ? `${wave.corps === 1 ? 'one new corps' : `${wave.corps} new corps`} a month ${wave.corps === 1 ? 'is' : 'are'} not raised` : '';
   return {
-    early: { men, months: E.months, gap: E.gap, why, text: `Call up the next class early: about ${menWords(men)} men join the reserve at once. No class then comes of age for ${E.gap} months, because those boys are with the colours already: men now, at the price of fewer later.` },
-    callUp: wave ? { ...wave, text: wave.held
-      ? 'The standing call-up is held: no new corps are raised from the reserve, and the men stay for the corps in the field. The waves wait until you let it run.'
-      : `The standing call-up is running: next month it raises up to ${wave.corps} new corps of ${wave.divs} divisions from the reserve, if the men are there. Hold it, and they stay for the corps in the field instead.` } : null,
+    early: { men, months, gap, why, text: men < 1000
+      ? 'Calling the next class up early would bring nobody now: the reserve has no room for them.'
+      : `Call up the next class early: about ${menWords(men)} men join the reserve at once, ${mo(months)} of classes together. No class then comes of age for ${mo(gap)}, because those boys are with the colours already: the same men, sooner.` },
+    callUp: wave ? { ...wave, drafts, text: wave.held
+      ? `The standing call-up is held: ${notRaised}, and the waves wait until you let it run. Their men go to the corps in the field instead: up to ${menWords(drafts)} a month over and above what the depots send, at no cost to the treasury. Once the corps are full the men wait in the reserve, and the army is no bigger for it.`
+      : `The standing call-up is running: next month it raises up to ${wave.corps} new corps of ${wave.divs} divisions from the reserve, if the men are there. Hold it, and ${notRaised}: their men go as drafts to the corps in the field instead, over and above what the depots send. An army kept small that way can be outnumbered.` } : null,
   };
 }
 
@@ -503,14 +562,15 @@ export function orderEarlyClass(g: Game): boolean {
   if (g.human === null || !humanUp(g)) return false;
   const come = callEarly(g, g.human, govMul(g, g.human, 'men'));
   if (come <= 0) return false;
-  headline(g, 'info', `The next class is called up early: ${menWords(come * MEN_PER_DIV)} men join the reserve. No class comes of age for the next ${MANPOWER.early.gap} months.`, g.human);
+  const gap = Math.max(1, classGapUntil(g, g.human) - g.turn);
+  headline(g, 'info', `The next class is called up early: ${menWords(come * MEN_PER_DIV)} men join the reserve. No class comes of age for the next ${gap === 1 ? 'month' : `${gap} months`}.`, g.human);
   return true;
 }
 
 /** The player holds his country's standing call-up, or lets it run again. It takes hold from next month's wave. */
 export function orderCallUp(g: Game, hold: boolean): boolean {
   if (g.human === null || !holdCallUp(g, g.human, hold)) return false;
-  headline(g, 'info', hold ? 'The standing call-up is held: no new corps are raised from the reserve until you let it run again.' : 'The standing call-up runs again: new corps are raised from the reserve each month.', g.human);
+  headline(g, 'info', hold ? 'The standing call-up is held: no new corps are raised until you let it run again, and the men of each wave go to the corps in the field as drafts instead.' : 'The standing call-up runs again: new corps are raised from the reserve each month.', g.human);
   return true;
 }
 
@@ -627,6 +687,15 @@ export function whyNotStandByGeneral(g: Game): string | null {
 export function orderStandBy(g: Game): boolean {
   return g.human !== null && humanUp(g) && standBy(g, g.human);
 }
+
+/**
+ * A province cut off from the rest of its country (the grand campaign): whose troops are shut in, since when, the
+ * town whose stores feed them and the months those will last. Null where the province lies in no pocket.
+ */
+export function pocketAt(g: Game, region: number): PocketView | null {
+  return pocketView(g, region);
+}
+export type { PocketView };
 
 /** The town of a province as a fortress: what it holds, what it adds to its defenders, and how its siege stands. Null outside the grand campaign. */
 export function townSiege(g: Game, region: number): SiegeView | null {

@@ -67,8 +67,8 @@ function towns(g: Game): { near: Region; deep: Region } {
   const near = t.find((x) => x.depth === 1 && x.holder === 'POL')!, deep = t.find((x) => x.depth >= 2 && x.holder === 'POL') ?? t.find((x) => x.depth >= 2)!;
   return { near: g.regions[near.region], deep: g.regions[deep.region] };
 }
-/** Defences lost to an attack at these odds: at 1.2 to 1 they could have been held, and a cabinet holds them against the general. */
-const lostAt = (g: Game, k: number, odds = 1.2, att = false): LostBattle[] => Array.from({ length: k }, () => ({ t: g.turn, reg: 0, odds, att }));
+/** Defences lost to an attack at these odds: at 1.1 to 1 the attack had less than an even chance, and a cabinet holds them against the general. */
+const lostAt = (g: Game, k: number, odds = 1.1, att = false): LostBattle[] => Array.from({ length: k }, () => ({ t: g.turn, reg: 0, odds, att }));
 /** A general of the player's with a corps, and the record of a man who has just lost `streak` battles running that he could have won. */
 function loser(g: Game, streak = 2, skip: number[] = []): General {
   const gen = g.generals.find((x) => x.nat === 'GER' && x.status === 'active' && x.corps >= 0 && !skip.includes(x.id))!;
@@ -503,7 +503,7 @@ describe('the cabinet wants a head', () => {
     const h = g.headlines.length;
     expect(untilAsked(g, st)).toBe(true);
     expect(st.head).toMatchObject({ general: gen.id, issued: g.turn, due: g.turn + H.answer - 1 });
-    expect(st.head!.why).toMatch(/^He lost the defence of .+ to an attack at 1\.2 to 1 and lost the defence of .+ to an attack at 1\.2 to 1\. The cabinet holds that these were battles he could have won\.$/);
+    expect(st.head!.why).toMatch(/^He lost the defence of .+ to an attack at 1\.1 to 1 and lost the defence of .+ to an attack at 1\.1 to 1\. The cabinet holds that these were battles he could have won\.$/);
     expect(st.head!.lost).toHaveLength(2);
     expect(said(g, new RegExp(`The war cabinet wants a head: it asks you to dismiss ${gen.name}`), h)).toBe(true);
     expect(headWantedOf(g)).toBe(gen.id);
@@ -512,8 +512,8 @@ describe('the cabinet wants a head', () => {
     expect(v).toMatchObject({ general: gen.id, name: gen.name, left: H.answer, command: corpsOf(g, gen)!.name, loved: popular(gen), fought: gen.rec.battles, won: gen.rec.won });
     // The card shows the evidence: the battles, and the odds they were fought at.
     expect(v.battles).toHaveLength(2);
-    expect(v.battles[0]).toMatchObject({ odds: 1.2, attack: false });
-    expect(v.battles[0].text).toMatch(/^Defended .+, the attacker at 1\.2 to 1: lost\.$/);
+    expect(v.battles[0]).toMatchObject({ odds: 1.1, attack: false });
+    expect(v.battles[0].text).toMatch(/^Defended .+, the attacker at 1\.1 to 1: lost\.$/);
     expect(v.gain).toBeCloseTo(Math.round(H.sacked * swing('GER') * 10) / 10, 9);
     expect(v.cost).toBeCloseTo(Math.round(H.refused * swing('GER') * 10) / 10, 9);
     expect(whyNotStandByGeneral(g)).toBeNull();
@@ -660,7 +660,7 @@ describe('the cabinet wants a head', () => {
     // He loses a battle he could have won.
     gen.rec.battles++;
     gen.rec.streak++;
-    gen.rec.lost.push(...lostAt(g, 1, 1.3));
+    gen.rec.lost.push(...lostAt(g, 1, 1.1));
     const t2 = st.trust, h = g.headlines.length;
     judgeDirective(g, 'GER');
     expect(st.stood).toBeUndefined();

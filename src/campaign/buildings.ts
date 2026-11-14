@@ -302,11 +302,13 @@ export function hallShare(g: Game, r: Region): number {
  * A computer-run nation's building for the month. It sets aside a share of what it earned, and when that covers
  * the best building on offer and the treasury can spare it, orders it: one at a time, richest places first.
  */
-export function civicAI(g: Game, nat: string, earned: number, keeps = false): void {
+export function civicAI(g: Game, nat: string, earned: number, keeps = false, wait = false): void {
   const n = g.nations[nat];
   if (!civicRules(g) || nat === g.human || !n?.alive || n.capital < 0) return;
   const A = CIVIC.ai, purse = `cvb:${nat}`;
   g.flags[purse] = (g.flags[purse] ?? 0) + Math.max(0, earned) * A.share;
+  // Guns before town halls: while the staff is saving for the artillery its front is asking for, the builders wait.
+  if (wait) return;
   const worth = (r: Region): number => (g.nations[nat].capital === r.id ? 100 : 0) + r.vp * 3 + r.fac * 2 + LAND[r.terrain] * 10 + (r.port ? 1 : 0);
   const home = g.regions.filter((r) => r.ctrl === nat && r.owner === nat).sort((a, b) => worth(b) - worth(a) || a.id - b.id);
   // A big country has more builders: one gang at work for every 'gang' home provinces, and always one.

@@ -10,12 +10,12 @@ import {
 import {
   beginEve, beginHuman, canOrder, candidates, declarable, endEve, endHuman, eveAttacker, evePlan, humanUp, landTargets, onEve, orderAttack, orderBuildCorps, orderBuildFort, orderEvePlan,
   orderAir, orderAirBase, orderAssign, orderBureau, orderCancelBuild, orderCourt, orderDeclare, orderEvacuate, orderFleet, orderLand, orderMove, orderPromote, orderRail, orderRebase, orderRelieve, orderSack, orderShip, orderSkill, orderStance, orderTeams, postureOf,
-  previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
+  pocketAt, previewAirOrder, previewAttack, previewLanding, reach, runTurnAI, shipTargets, stepAI, type Reach,
   airGroupBases, airGroupJobs, airfieldAt, airfieldsSeen, myAirGroups, orderGroupJob, orderRaid, orderScout, previewRaid, raidMenu, raidTargetsFor,
   fleetsInSight, orderSearch, searchOptionsFor, seaPictureOf, wingsOfFleet,
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
-  armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, corpsKnownAs, knowledgeOf,
+  armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
   joinOffers, jointForce, lending, orderJoin, orderJoinAll, orderSendBack,
   fleetOptions, fleetView, lanesToGuard, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit,
   cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
@@ -95,6 +95,8 @@ const ui = {
   seenSea: 0,
   /** Where the list of shore bombardments stood when the player's last month ended: coasts of his shelled since are this month's. */
   shoreFrom: -1,
+  /** True once the player has asked to see every line of a Battle Ticket on a narrow screen, where it opens folded to the lines that matter most. */
+  ticketAll: false,
   /** The directive the player has last looked at in his Cabinet card, by its id. */
   govSeen: -1,
   /** The page of the cabinet room that is open: its business, the ministers, the decrees or the minutes. */
@@ -1426,7 +1428,9 @@ function orderAt(id: number): boolean {
   if (hostileUnits(g, r, g.human!).length) {
     const near = picked.filter((c) => g.regions[c.reg].nb.includes(id));
     if (!near.length) return false;
-    openModal({ kind: 'attack', target: id, chosen: new Set(near.map((c) => c.id)) });
+    // The card opens on the best attack to be had: everyone the roads will carry, where that beats the army picked.
+    const open = openingForce(g, near, r);
+    openModal({ kind: 'attack', target: id, chosen: new Set(open.corps.map((c) => c.id)), picked: open.widened ? near.map((c) => c.id) : null });
     return true;
   }
   // A country at peace with the player: sending an army over its frontier is a declaration of war, so ask first.
@@ -2007,6 +2011,17 @@ function garrisonRow(c: Corps, order: boolean): string {
  * The town of a province as a fortress (the grand campaign): what it adds to its defenders, who is inside, how its
  * siege stands, and the orders: into the town and out of it, the assault, the sortie, and softening it first.
  */
+/** A province cut off from the rest of its country: what its troops live on, and for how long. */
+function pocketNote(r: Region): string {
+  const v = pocketAt(g, r.id);
+  if (!v) return '';
+  const mine = v.nat === g.human;
+  const foe = g.human !== null && atWar(g, g.human, v.nat);
+  const tail = mine ? (v.spent ? ' Break the ring from outside, or attack out of it while the corps can still fight.' : ' Break the ring from outside before the stores are gone.')
+    : foe ? (v.spent ? ' An attack now meets hungry troops whose works count for nothing.' : ' Wait, and they starve. Attack, and you meet them at full strength.') : '';
+  return `<div class="note ${v.spent ? 'bad' : 'warn'} pocketnote"><b>${v.spent ? 'Cut off, and the stores are spent' : `Cut off since ${date(v.since)}: stores for ${monthsWord(v.left)}`}.</b> ${esc(v.text)}${tail}</div>`;
+}
+
 function siegeBlock(r: Region): string {
   const v = townSiege(g, r.id);
   if (!v) return '';
@@ -2158,7 +2173,7 @@ function regionPane(): string {
   const inView = r.units.filter((c) => inFull(r, c.nat));
   const veiled = r.units.length - inView.length;
   const units = (inView.length ? knownRows(r, [...inView].sort((a, b) => (a.nat === me ? 0 : 1) - (b.nat === me ? 0 : 1))) : veiled || (fogOn(g) && seen[r.id] === 0) ? '' : '<div class="empty">No armies here.</div>') + fogNote(r);
-  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${townLine(r)}${dirLine(r)}${vowLine(r)}${siegeBlock(r)}${freeNote(r)}${standingNote(r)}
+  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${townLine(r)}${dirLine(r)}${vowLine(r)}${pocketNote(r)}${siegeBlock(r)}${freeNote(r)}${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
     ${prizeBlock(r)}${placesBlock(r)}${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${oilNote(r)}${provinceSlots(r)}${townPlots(r)}
@@ -4620,7 +4635,7 @@ function cabinetCard(nat: string): string {
   const dir = d
     ? `<div class="gvdir${d.left <= 2 ? ' late' : ''}"><div class="gvdhead">${flagIcon(d.from, g.nations[d.from].color, 26)}<span class="grow"><small>${d.from === nat ? 'The war cabinet directs' : `${esc(d.by)} asks`}</small><b>${esc(d.title)}</b>${d.hard ? ' <span class="tag warn" title="The cabinet knows the place is strongly held, so it gives more months and a larger reward.">Strongly held</span>' : ''}${d.again ? ' <span class="tag" title="The cabinet has asked for this town before in this war.">Asked again</span>' : ''}</span><span class="gvclock" title="The job must be done by the end of ${date(d.due)}."><b>${d.left}</b><small>month${d.left === 1 ? '' : 's'} left</small></span></div>
         <p>${esc(d.text)}</p><p class="gvprog">${esc(d.progress)}</p>${d.oddsLine ? `<p class="gvodds">${esc(d.oddsLine)}</p>` : ''}
-        <div class="gvterms"><div><span class="tag good">Carried out</span> ${esc(upFirst(d.reward))}, and the cabinet's trust rises.</div><div><span class="tag bad">Ignored</span> The cabinet's trust falls by ${d.price}, and settles lower until a directive is carried out.</div>${d.kind === 'hold' && !d.tested ? '<div><span class="tag">Not attacked</span> If the enemy never comes for it the order is withdrawn, with no reward and no blame.</div>' : ''}<div><span class="tag">Set aside</span> The cabinet's trust falls by ${d.asidePrice}, and the next directive comes no sooner for it.</div></div>
+        <div class="gvterms"><div><span class="tag good">Carried out</span> ${esc(upFirst(d.reward))}, and the cabinet's trust rises.</div><div><span class="tag bad">Ignored</span> ${d.small ? `A small matter: the cabinet's trust falls by ${d.price} and no further. It is not counted with the directives you have ignored.` : `The cabinet's trust falls by ${d.price}, and settles lower until a directive is carried out.`}</div>${d.kind === 'hold' && !d.tested ? '<div><span class="tag">Not attacked</span> If the enemy never comes for it the order is withdrawn, with no reward and no blame.</div>' : ''}<div><span class="tag">Set aside</span> The cabinet's trust falls by ${d.asidePrice}, and the next directive comes no sooner for it.</div></div>
         ${asking ? `<div class="note warn"><b>Set this directive aside?</b> The cabinet's trust falls by ${d.asidePrice} at once: that is less than the ${d.price} it would cost to let the order run out undone. The next directive is set in ${date(d.asideNext)}, when it would have come anyway.</div><div class="acts"><button class="btn small warn" data-act="govaside" ${up ? '' : 'disabled'}>Yes, set it aside</button><button class="btn small" data-act="govkeep">Keep it</button></div>`
           : `<div class="acts">${d.region !== undefined ? `<button class="btn small go" data-act="govshow" data-id="${d.region}">Show it on the map</button>` : ''}${GOV_GO[d.kind] ? `<button class="btn small go" data-act="govgo" data-to="${d.kind}">${GOV_GO[d.kind]}</button>` : ''}<button class="btn small" data-act="govaside" ${up ? '' : 'disabled title="It is not your month."'}>Set it aside</button></div>`}</div>`
     : `<div class="gvdir none"><p>No directive stands. ${v.nextIn > 0 ? `The cabinet is expected to set one in ${months(v.nextIn)}.` : 'The cabinet sets one as your next month opens.'} A directive is a job with a last month and a reward, chosen from the state of the war. It is yours to carry out or to ignore.</p></div>`;
@@ -4949,11 +4964,50 @@ function wornNote(r: BattleReport): string {
   const took = r.worn >= 0.95 && r.worn < 1.05 ? 'a month' : `${r.worn} months`;
   const now = left < 0.05 ? 'nothing is left of them' : `they stand at ${left} of ${full} months`;
   const ours = r.defNat === g.human;
-  return `<div class="note wornnote"><b>${ours ? 'The line held, but its works are worn.' : 'Thrown back, but not for nothing.'}</b> The attack took ${took} off the ${ours ? '' : "defenders' "}works at ${esc(r.regionName)}: ${now}. ${ours ? `Your troops there ${pressedPace()} this month. A quiet month builds the works up again; another attack takes off more.` : `The defenders ${pressedPace()} this month, so the next blow meets less. Guns in the attack wear works down faster.`}</div>`;
+  const paid = lostIn(r.attackers, r.attLost);
+  return `<div class="note wornnote"><b>${ours ? 'The line held, but its works are worn.' : 'Thrown back, but not for nothing.'}</b> The attack took ${took} off the ${ours ? '' : "defenders' "}works at ${esc(r.regionName)}${ours ? '' : `, at the price of ${num(paid.lost)} men${paid.pct ? `, ${paid.pct}% of those sent in` : ''}`}: ${now}. ${ours ? `Your troops there ${pressedPace()} this month. A quiet month builds the works up again; another attack takes off more.` : `The defenders ${pressedPace()} this month, so the next blow meets less. Guns in the attack wear works down faster.`}</div>`;
+}
+/** What one side lost in a battle, in men and as a share of those engaged: the fight itself and whoever laid down his arms after it. */
+function lostIn(us: BattleReport['attackers'], fought: number): { lost: number; pct: number } {
+  const total = us.reduce((s, u) => s + u.men, 0);
+  const lost = Math.max(fought, us.reduce((s, u) => s + u.lost, 0));
+  return { lost, pct: total > 0 && lost > 0 ? Math.max(1, Math.round(100 * Math.min(1, lost / total))) : 0 };
+}
+/** The price of a battle in one sentence, to whichever side reads its report. */
+function priceLine(r: BattleReport): string {
+  if (r.yielded) return '';
+  const a = lostIn(r.attackers, r.attLost), d = lostIn(r.defenders, r.defLost);
+  const of = (x: { lost: number; pct: number }): string => `${num(x.lost)}${x.pct ? ` (${x.pct}%)` : ''}`;
+  if (g.human && (r.attNat === g.human || r.attackers.some((u) => u.nat === g.human))) return `It cost you ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of theirs.`;
+  if (g.human && r.defenders.some((u) => u.nat === g.human)) return `It cost the attackers ${num(a.lost)} men${a.pct ? `, ${a.pct}% of those sent in,` : ''} against ${of(d)} of yours.`;
+  return `The attackers lost ${of(a)} men, the defenders ${of(d)}.`;
 }
 /** A chance as a whole percentage that never rounds a near thing up to a sure one, or a faint hope down to none. */
 const oddsPct = (p: number): number => (p >= 0.9995 ? 100 : p <= 0.0005 ? 0 : Math.min(99, Math.max(1, Math.round(p * 100))));
-const ticketBlock = (title: string, lines: BattleReport['lines']): string => `<h3>${title}</h3><table class="ticket">${lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
+/** The lines of a Battle Ticket that matter most: on a narrow screen the ticket opens folded to these, with a button for the rest. */
+const TICKET_KEY = new Set(['Forces', 'Troops', 'Dug in', 'Supply', 'Earlier attacks', 'Weight of attack']);
+const ticketBlock = (title: string, lines: BattleReport['lines']): string => {
+  const more = lines.filter((l) => !TICKET_KEY.has(l.label)).length;
+  const fold = more > 0 && !ui.ticketAll;
+  return `<h3>${title}</h3><table class="ticket${fold ? ' fold' : ''}">${lines.map((l) => `<tr${TICKET_KEY.has(l.label) ? '' : ' class="tx"'}><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>${fold ? `<button class="btn small ticketall" data-act="ticketall">Show all ${lines.length} lines</button>` : ''}`;
+};
+/** Men to the nearest hundred, for a forecast that is not exact. */
+const roughMen = (n: number): string => (n < 100 ? 'under 100' : num(Math.round(n / 100) * 100));
+/** A chance or a band of chances in words: one figure where the staff can give one, its best guess with the limits where the band is too wide to plan on. */
+const chanceWords = (look: Outlook): string => (look.exact || Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%`
+  : look.wide ? `a best guess of ${oddsPct(look.guess)}%, anywhere from ${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`);
+/** The bill before the order: what the fight is likely to cost each side in men, if it carries the ground and if it is thrown back. */
+function costBlock(look: Outlook): string {
+  const row = (c: Outlook['cost']['won'], head: string): string => {
+    if (!c) return '';
+    const theirs = c.theirs !== null ? `<b>${roughMen(c.theirs)}</b> men` : `<b>${Math.max(1, Math.round(c.share * 100))}%</b> of their men`;
+    return `<div class="costrow"><b>${head}:</b><span>you lose about <b>${roughMen(c.ours)}</b> men, they lose about ${theirs}</span></div>`;
+  };
+  const won = row(look.cost.won, look.cost.lost ? 'If it carries' : 'It should carry');
+  const lost = row(look.cost.lost, look.cost.won ? 'If it is thrown back' : 'Thrown back, as it will be');
+  if (!won && !lost) return '';
+  return `<div class="costline" title="Each side's losses in the fight itself, at the middle of the luck that gives that result. Prisoners, and men lost in a retreat with nowhere to go, come on top of a victory.">${won}${lost}</div>`;
+}
 
 function reportCard(r: BattleReport): string {
   const v = verdictFor(r);
@@ -4993,7 +5047,7 @@ function reportCard(r: BattleReport): string {
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${kick} · ${date(r.turn)}, week ${r.week}</div><h2>${title}</h2></header>
     <div class="body">
       <div class="verdict ${v.cls}">${v.text}</div>
-      <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
+      <div class="sub">${r.yielded ? `The defenders were under orders to give ground and slipped away before the blow fell. ${esc(r.regionName)} was given up without a fight. The odds against them were ${r.odds.toFixed(2)} to 1.` : `${told} ${priceLine(r)} Final odds ${r.odds.toFixed(2)} to 1${r.prisoners ? ` · ${num(r.prisoners)} prisoners` : ''}.`}</div>
       ${spoils}${next}${wornNote(r)}
       <div class="faceoff">${sidePanel(side(r.attackers, r.attLost, 'attacking', r.taken), 'att')}<div class="fmid"><span class="vsmark">VS</span></div>${sidePanel(side(r.defenders, r.defLost, 'defending', !r.taken), 'def')}</div>
       <div class="balance"><div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[r.attNat].color}"></i><i style="flex:1;background:${g.nations[r.defNat].color}"></i></div><span class="need" style="left:${(100 * 1.2 / 2.2).toFixed(1)}%" title="What it takes to carry the ground: roughly 1.2 to 1"></span></div>
@@ -5026,8 +5080,13 @@ function attackCard(): string {
   const everyone = jointForce(g, limitAttackers(g, jointForce(g, cands, target), target), target);
   const extra = everyone.filter((c) => !inSet.has(c.id)).length;
   const massed = extra ? attackOutlook(g, everyone, target) : null;
-  const massNote = massed && (!look || massed.odds > look.odds * 1.02)
-    ? `<div class="note massnote"><span><b>${extra === 1 ? 'One more corps stands' : `${extra} more corps stand`} within reach.</b> Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${look ? `go from ${look.odds.toFixed(2)} to ${massed.odds.toFixed(2)} to 1` : `are ${massed.odds.toFixed(2)} to 1`}: ${massed.exact ? `about ${oddsPct(massed.chance)}%` : `${oddsPct(massed.chanceLo)} to ${oddsPct(massed.chanceHi)}%`} to take ${esc(target.name)}.</span><button class="btn small go" data-act="atkall" title="Pick every corps in reach. The staff sends the strongest the roads will carry, and any guns behind them.">Send everyone who can reach</button></div>` : '';
+  // The card opened on everyone in reach because that beat the army picked: said, with the way back to the pick.
+  const mine: Corps[] = m.picked ? cands.filter((c) => (m.picked as number[]).includes(c.id)) : [];
+  const mineLook = mine.length ? attackOutlook(g, mine, target) : null;
+  const openNote = m.picked && look && !extra && chosen.length > mine.length
+    ? `<div class="note massnote opennote"><span><b>The staff has brought in every corps the roads will carry.</b> ${chosen.length} corps go in at ${look.odds.toFixed(2)} to 1${mineLook ? `, where the ${mine.length === 1 ? 'corps' : `${mine.length} corps`} you picked ${mine.length === 1 ? 'reads' : 'read'} ${mineLook.odds.toFixed(2)} to 1` : ''}. Click a corps to hold it back.</span><button class="btn small" data-act="atkmine" title="Send only the corps that were picked when the attack was ordered.">Only the corps I picked</button></div>` : '';
+  const massNote = openNote ? openNote : massed && (!look || massed.odds > look.odds * 1.02)
+    ? `<div class="note massnote"><span><b>${extra === 1 ? 'One more corps stands' : `${extra} more corps stand`} within reach.</b> Send everyone the roads will carry, ${everyone.length} corps in all, and the odds ${look ? `go from ${look.odds.toFixed(2)} to ${massed.odds.toFixed(2)} to 1` : `are ${massed.odds.toFixed(2)} to 1`}: ${chanceWords(massed)} to take ${esc(target.name)}.</span><button class="btn small go" data-act="atkall" title="Pick every corps in reach. The staff sends the strongest the roads will carry, and any guns behind them.">Send everyone who can reach</button></div>` : '';
   const foes = a ? a.defenders : hostileUnits(g, target, me);
   // What is known of the defence: everything, or the staff's estimate of it.
   const sure = allKnown(foes);
@@ -5050,10 +5109,11 @@ function attackCard(): string {
     const at = (odds: number): number => (100 * odds) / (1 + odds);
     const p = look.chance;
     const word = look.chanceLo >= 0.95 ? 'Victory looks certain' : look.chanceHi <= 0 ? 'This attack looks hopeless' : p >= 0.6 ? 'The staff thinks the odds favour you' : p >= 0.3 ? 'The staff cannot call it' : 'The staff thinks it a long shot';
-    body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${Math.round(look.chanceLo * 100) === Math.round(look.chanceHi * 100) ? `about ${oddsPct(look.chanceLo)}%` : `${oddsPct(look.chanceLo)} to ${oddsPct(look.chanceHi)}%`} chance to take ${esc(target.name)}</span></div>
+    body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds between ${look.lo.toFixed(1)} and ${look.hi.toFixed(1)} to 1 · ${chanceWords(look)} chance to take ${esc(target.name)}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${at(look.odds).toFixed(1)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="doubt" style="left:${at(look.lo).toFixed(1)}%;width:${Math.max(1, at(look.hi) - at(look.lo)).toFixed(1)}%" title="The balance lies somewhere in this band"></span><span class="need" style="left:${(100 * look.even / (1 + look.even)).toFixed(1)}%" title="An even chance: roughly ${look.even.toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance; the hatched band is what the staff cannot see</span><span>Theirs</span></div></div>
-      <div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${scoutButton(target)}</div>
+      ${costBlock(look)}
+      <div class="note fogged" style="margin:10px 0 2px"><b>The defence is not fully known.</b> ${esc(look.note)}${look.wide ? ` <b>${esc(look.narrow)}</b>` : ''}${scoutButton(target)}</div>
       ${ticketBlock('What the campaign map feeds into this battle', look.lines)}`;
   } else if (a) {
     const p = chanceOn(a.odds, a.dice);
@@ -5062,6 +5122,7 @@ function attackCard(): string {
     body = `<div class="balance"><div class="bhead"><span class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}">${word}</span><span class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}</span></div>
       <div class="btrack"><div class="bal"><i style="width:${Math.round(share * 100)}%;background:${g.nations[me].color}"></i><i style="flex:1;background:${g.nations[foes[0].nat].color}"></i></div><span class="need" style="left:${(100 * evenOdds(a.dice) / (1 + evenOdds(a.dice))).toFixed(1)}%" title="An even chance: roughly ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ', against a line that is dug in and fed' : ''}"></span></div>
       <div class="ends"><span>Your strength on the day</span><span>The white mark is an even chance: about ${evenOdds(a.dice).toFixed(1)} to 1${a.prepared > 0 ? ' against prepared positions' : ''}</span><span>Theirs</span></div></div>
+      ${look ? costBlock(look) : ''}
       ${ticketBlock('What the campaign map feeds into this battle', a.lines)}`;
   } else body = cands.length && cands.every((c) => barred(g, c, target))
     ? `<div class="empty">${esc(target.name)} is too steep for tanks. Bring infantry or mountain troops up beside it to attack.</div>`
@@ -5151,7 +5212,7 @@ function menOrders(nat: string): string {
   if (!c) return '';
   const e = c.early, up = humanUp(g);
   const early = ui.modal?.ask === 'early' && !e.why
-    ? `<div class="menorder asking"><div class="note warn"><b>Call up the next class early?</b> About ${menWords(e.men)} men join the reserve at once, ${e.months} months of classes together. No class then comes of age for ${e.gap} months, because those boys are with the colours already. It is men now at the price of fewer later, and it cannot be undone.</div><div class="acts"><button class="btn small go" data-act="menearly" data-sure="1">Yes, call them up</button><button class="btn small" data-act="govkeep">Not now</button></div></div>`
+    ? `<div class="menorder asking"><div class="note warn"><b>Call up the next class early?</b> About ${menWords(e.men)} men join the reserve at once, ${e.months === 1 ? 'a month' : `${e.months} months`} of classes together. No class then comes of age for ${e.gap === 1 ? 'a month' : `${e.gap} months`}, because those boys are with the colours already. They are the same men, sooner, and it cannot be undone.</div><div class="acts"><button class="btn small go" data-act="menearly" data-sure="1">Yes, call them up</button><button class="btn small" data-act="govkeep">Not now</button></div></div>`
     : `<div class="menorder"><span class="grow"><b>The next class, early</b><small>${esc(e.text)}</small>${e.why ? `<small class="whyno">${esc(e.why)}</small>` : ''}</span><button class="btn small" data-act="menearly" ${e.why ? 'disabled' : ''}>Call them up now</button></div>`;
   const w = c.callUp;
   const wave = w ? `<div class="menorder"><span class="grow"><b>The standing call-up${w.held ? ' <span class="tag warn">Held</span>' : ''}</b><small>${esc(w.text)}</small></span><button class="btn small" data-act="menhold" data-hold="${w.held ? 0 : 1}" ${up ? '' : 'disabled title="It is not your month."'}>${w.held ? 'Let it run' : 'Hold it'}</button></div>` : '';
@@ -6457,6 +6518,20 @@ function onClick(e: MouseEvent): void {
       const m = ui.modal!;
       if (m.chosen.has(id)) m.chosen.delete(id); else m.chosen.add(id);
       $('#card').innerHTML = attackCard(); break;
+    }
+    case 'atkmine': {
+      // Back to the corps that were picked when the attack was ordered.
+      const m = ui.modal!;
+      if (m.picked) m.chosen = new Set(m.picked as number[]);
+      m.picked = null;
+      $('#card').innerHTML = attackCard(); break;
+    }
+    case 'ticketall': {
+      // Every line of the Battle Ticket, on a screen where it opens folded.
+      ui.ticketAll = true;
+      document.querySelectorAll('table.ticket.fold').forEach((t) => t.classList.remove('fold'));
+      document.querySelectorAll('.ticketall').forEach((b) => b.remove());
+      break;
     }
     case 'atkall': {
       // Everyone in reach: the staff trims the force to what the roads will carry.
