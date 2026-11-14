@@ -16,6 +16,7 @@ import {
   orderCash, orderDrafts, orderSeen, arsenalOffers, orderArsenal, engineerJobs, orderBlowBridges, orderEngineers, orderStopWork, whyNotBlowBridges, orderCutRailway, whyNotCutRailway,
   invasions, previewDeclare, announcement, fallenCapitalAt, nationsFallen, playerFell, playerLost,
   armyAt, corpsDetail, moodOf, prize, prizesNear, townIn, towns, attackOutlook, openingForce, corpsKnownAs, knowledgeOf,
+  fieldworksLeft, foldChoicesAt, orderFold, orderProbe, softenOptions,
   joinOffers, jointForce, lending, orderJoin, orderJoinAll, orderSendBack,
   fleetOptions, fleetView, lanesToGuard, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit,
   cabinetBillOf, cabinetIsOff, callUpOf, governmentOf, headWantedOf, manpowerOf, officeIsSecure, orderAppoint, orderCabinet, orderCallUp, orderDecree, orderEarlyClass, orderOffice, orderPromise, orderSetAside, orderStandBy, orderTakeBack, promiseTargetsOf, promiseTermsOf, whyNotOrderPromise, buildingTips, orderBuilding, orderEndTrade, orderTrade, townBuildings, tradeLedger, type BuildingTip, type TownBuildings,
@@ -762,7 +763,13 @@ function refresh(): void {
         ${k === 0 && inSight > 1 ? `<circle class="more" cx="22" cy="0" r="4"/><text class="moret" x="22" y="2">${inSight}</text>` : ''}</g>`;
     });
   }
-  $('#units').innerHTML = units + agentMarks();
+  // Fieldworks standing empty on ground the player's side holds: a small dotted bank, under whatever stands there.
+  let left = '';
+  if (groundRules(g)) for (const r of g.regions) {
+    const v = fieldworksLeft(g, r.id);
+    if (v) left += `<g class="leftworks" transform="translate(${r.x - 11} ${r.y - 7})"><path class="u" d="M-2.8 17A13.8 4.2 0 0 0 24.8 17"/><path d="M-2.8 17A13.8 4.2 0 0 0 24.8 17"/><title>Fieldworks standing empty: room for ${v.corps === 1 ? 'one corps' : `${v.corps} corps`}, ${Math.round(v.months * 10) / 10} months of work. A corps of yours that marches in takes them over.</title></g>`;
+  }
+  $('#units').innerHTML = left + units + agentMarks();
   drawLabels();
 
   drawBar();
@@ -1161,7 +1168,7 @@ const pressedPace = (): string => { const r = DEFENCE.wear.regrow; return r <= 0
 /** How far a dug-in corps has got with its works (the grand campaign): for its tag, and for the tip behind it. */
 const worksTag = (c: Corps): string => { const w = Math.round(worksOf(c) * 10) / 10, full = DEFENCE.entrench.months; return w >= full ? 'works finished' : w < 0.05 ? 'works battered flat' : `works ${w} of ${full} months`; };
 const worksWords = (c: Corps): string => { const w = Math.round(worksOf(c) * 10) / 10, full = DEFENCE.entrench.months; return w >= full ? 'Its works are finished.' : `Its works are ${w === 1 ? 'a month' : `${w} months`} old of the ${full} they take to finish, and count for ${Math.round(worksShare(worksOf(c)) * 100)}% of finished ones.`; };
-const STANCE_HOLD = `Stand and fight. An army that spends a whole month where it stands, without marching or attacking, digs in: from then on it defends 25% stronger, and while it is in supply the day's luck runs against whoever attacks it, so that odds which would be safe in the open become a gamble (an even chance takes about ${evenOdds(DEFENCE.prepared.dice).toFixed(1)} to 1, and nothing is sure under ${(1.2 / DEFENCE.prepared.dice[0]).toFixed(1)} to 1). An attack thrown back from such a line does nothing more that month. Fieldworks (foxholes, gun pits, anti-tank ditches and mines) are lost the moment the army leaves the ground, and guns in the attack break them up. Works take ${DEFENCE.entrench.months} months to finish, and the first month does half the job. Every real attack on a line, won or lost, takes a month off its works, more with guns, and troops who were attacked ${pressedPace()} that month: steady pressure wears a line away, and a quiet month builds it back.`;
+const STANCE_HOLD = `Stand and fight. An army that spends a whole month where it stands, without marching or attacking, digs in: from then on it defends 25% stronger, and while it is in supply the day's luck runs against whoever attacks it, so that odds which would be safe in the open become a gamble (an even chance takes about ${evenOdds(DEFENCE.prepared.dice).toFixed(1)} to 1, and nothing is sure under ${(1.2 / DEFENCE.prepared.dice[0]).toFixed(1)} to 1). An attack thrown back from such a line does nothing more that month. Fieldworks (foxholes, gun pits, anti-tank ditches and mines) belong to the ground: an army that marches off leaves them behind, a corps of yours that marches in has them at once, and standing empty they lose a month of work every month. Guns in the attack break them up, bombers can be sent against them, and a probe by one corps takes a month off them. Works take ${DEFENCE.entrench.months} months to finish, and the first month does half the job. Every real attack on a line, won or lost, takes a month off its works, more with guns, and troops who were attacked ${pressedPace()} that month: steady pressure wears a line away, and a quiet month builds it back.`;
 const STANCE_DIG = 'Dig in. An army that spends a whole month where it stands, without marching or attacking, fights from fieldworks from then on (foxholes, gun pits, anti-tank ditches and mines) and defends 25% stronger. It keeps them for as long as it stays put, and loses them the moment it leaves the ground.';
 const STANCE_BACK = 'Give ground instead of fighting when the enemy comes on with odds of 1.2 to 1 or better, which is what it takes to carry a position. The troops slip away whole to the ground behind them, at a cost in cohesion and the region itself. Caught again in the same month, they stand. Fortress troops always stand, and nobody gives up their own capital without a fight.';
 
@@ -1217,7 +1224,7 @@ function unitCard(c: Corps, mine: boolean): string {
   const special = eliteIn(c);
   const card = corpsDetail(g, c);
   const resting = card.mood.resting && c.nat === g.human && (c.str < 0.97 || c.org < 0.9 || (card.mood.morale ?? 1) < 0.7) ? `<span class="tag good" title="${esc(REST_RULE)}">Resting</span>` : '';
-  const flags = `${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger until it leaves this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
+  const flags = `${resting}${special ? `<span class="tag good" title="${esc(special.label)}: ${esc(eliteRule(special))}">★ ${esc(special.word)}</span>` : ''}${c.supplied ? '' : '<span class="tag bad">Cut off</span>'}${c.fought ? '<span class="tag">Fought</span>' : ''}${c.yields && c.nat === g.human ? '<span class="tag" title="Under orders to give ground when the enemy attacks in strength">Falls back</span>' : ''}${c.dug ? '<span class="tag good" title="In fieldworks: defends 25% stronger while it stands on this ground">Dug in</span>' : c.digs && c.nat === g.human ? '<span class="tag" title="Under orders to dig in: the fieldworks are ready next month if it stays put">Digging</span>' : ''}`;
   return `<${el} class="ucard corpsbox${ui.picked.has(c.id) ? ' pick' : ''}${can && c.ap <= 0 ? ' spent' : ''}" style="--n:${c.divs}" ${can ? `data-act="pick" data-id="${c.id}"` : ''} title="${esc(c.name)}${c.nick ? `, ${esc(c.nick)}` : ''}${gen ? ` · ${esc(gen.name)}` : ''} · ${c.divs} ${esc(DIVISIONS.kinds[c.kind].word)} division${c.divs > 1 ? 's' : ''}, ${num(men(c))} men">
     <span class="utop"><b>${esc(c.name)}</b>${pips}</span>
     <span class="um vet">${c.joint ? `${chip(c.nat)} ${esc(g.nations[c.nat].adj)} · ` : ''}${esc(card.service)}${gen ? ` · ${esc(surname(gen.name))}` : ''}${c.leave !== undefined ? ' · at home' : ''} ${ribbons(c, 3)}</span>
@@ -1356,7 +1363,7 @@ function drawTray(): void {
       ? `<button class="${!under.has('back') ? 'on' : ''}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_HOLD)}">Stand and dig in</button>`
       : `<button class="${all('stand')}" data-act="ifattacked" data-v="stand" title="${esc(STANCE_STAND)}">Stand</button><button class="${all('dig')}" data-act="ifattacked" data-v="dig" title="${esc(STANCE_DIG)}">Dig in</button>`}<button class="${all('back')}" data-act="ifattacked" data-v="back" title="${esc(STANCE_BACK)}">Fall back</button></div>`
     : '';
-  el.innerHTML = `<div class="thead">${head}${tally}${stance}${a.nat === g.human ? jointBar(r) + siegeBar(r) : ''}</div><div class="cards">${cs.map((c) => (kn(c) === 'exact' ? unitCard(c, mine) : foeCard(c, true))).join('')}</div>`;
+  el.innerHTML = `<div class="thead">${head}${tally}${stance}${a.nat === g.human ? jointBar(r) + siegeBar(r) + foldBar(r) : ''}</div><div class="cards">${cs.map((c) => (kn(c) === 'exact' ? unitCard(c, mine) : foeCard(c, true))).join('')}</div>`;
   el.classList.add('open');
 }
 
@@ -1634,6 +1641,7 @@ function offerIcon(o: Offer): string {
   if (group === 'corps') return icon({ nat: me, kind: item } as Corps);
   if (group === 'elite') return `<span class="starred">${icon({ nat: me, kind: eliteOf(me)!.kind } as Corps)}<i>★</i></span>`;
   if (group === 'para') return icon({ nat: me, kind: 'inf' } as Corps);
+  if (group === 'cadre') return icon({ nat: me, kind: o.kind ?? 'inf' } as Corps);
   // Aircraft and ships are drawn like the corps: a plate in the nation's colour with the silhouette on it.
   const plate = (d: string, k: number, dy = 0): string => `<svg width="34" height="24" viewBox="-1 -1 26 19" class="ctr"><rect class="box" x="0" y="0" width="24" height="15" rx="1.5" fill="${c}"/><path class="symf" d="${d}" transform="translate(12 ${7.5 + dy}) scale(${k})"/></svg>`;
   if (group === 'air') return plate(item === 'bmr' ? BOMBER : PLANE, item === 'bmr' ? 0.68 : 0.7, -0.2);
@@ -1663,14 +1671,14 @@ function offerCard(o: Offer, r: Region): string {
   const ok = humanUp(g) && here && o.why === null;
   const [group, key] = o.key.split(':');
   // The nation's special formation is raised like a corps of its kind.
-  const unit = group === 'elite' ? eliteOf(g.human!) : group === 'para' ? { kind: 'inf' as Kind, divs: TECH.units.para.divs } : null;
+  const unit = group === 'elite' ? eliteOf(g.human!) : group === 'para' ? { kind: 'inf' as Kind, divs: TECH.units.para.divs } : group === 'cadre' ? { kind: o.kind ?? ('inf' as Kind), divs: parseInt(o.size, 10) || 1 } : null;
   const item = unit ? unit.kind : key;
   const need = here ? '' : group === 'corps' || unit ? `Needs ${needsOf(g, item)} factor${needsOf(g, item) === 1 ? 'y' : 'ies'} here` : group === 'ship' ? `Needs a level ${ARSENAL.ships[item as Hull].yard} shipyard` : o.at < 0 ? 'No aircraft industry' : 'No airfields here';
   const keep = offerKeep(o);
   const count = group === 'ship' && item !== 'tp' ? ARSENAL.ships[item as Hull].count : 0;
   // A card is narrow: the count goes in as a multiple, and the title on hover says the rest.
   const size = unit ? `${unit.divs} divs` : group === 'corps' ? `${specOf(g, item)!.divs} divs` : group === 'ship' ? (count > 1 ? `×${count}` : '') : `×${ARSENAL.air[item as 'ftr' | 'bmr'].count}`;
-  const name = offerLabel(o).replace(/ corps$/i, '').replace(/ (wing|flotilla)$/i, 's').replace(/^Aircraft carrier$/, 'Carrier');
+  const name = offerLabel(o).replace(/, a cadre$/, '').replace(/ corps$/i, '').replace(/ (wing|flotilla)$/i, 's').replace(/^Aircraft carrier$/, 'Carrier');
   const why = o.tech ? 'Needs research' : !here ? need : o.why && !o.poor ? o.why : '';
   return `<button class="rcard${o.tech ? ' held' : ''}" ${o.tech ? `data-act="tech" data-id="${o.tech}"` : `data-act="arsenal" data-key="${o.key}" ${ok ? '' : 'disabled'}`} title="${esc(offerLabel(o))}, ${esc(o.size)}: ${esc(o.blurb)}${o.men ? ` Takes ${menWords(o.men)} men from the reserve.` : ''}${keep > 0 ? ` Upkeep ${cash(keep)} a month.` : ''}${why ? ` ${esc(why)}.` : ''}">${offerIcon(o)}<b>${esc(name)}</b><small>${why ? esc(why) : [size, months(o.months)].filter(Boolean).join(' · ')}</small><span class="cost${here && !o.poor && o.why === null ? '' : ' short'}">${money(o.cost)}</span></button>`;
 }
@@ -1980,6 +1988,65 @@ function siegeMarks(): { under: string; over: string } {
 }
 
 /** On the army tray: the siege this army is laying, with the assault one click away; or the town it could go into. */
+/** Two worn corps of the player's standing together (the grand campaign): the order that makes one corps of them. */
+function foldBar(r: Region): string {
+  const vs = foldChoicesAt(g, r.id);
+  if (!vs.length) return '';
+  const names = [...new Set(vs.map((v) => v.keepName))];
+  return `<div class="jointbar foldbar"><small>${names.length === 2 ? `${esc(names[0])} and ${esc(names[1])} are` : `${names.length} corps here are`} worn thin</small><button class="btn small" data-act="foldcard" data-id="${r.id}" title="The men of both fill one corps, the better of the two generals commands it, and the corps that is emptied goes home as a cadre, to be raised again from the arsenal at ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps. Nothing is done until you have seen what it makes of them.">Fold two worn corps into one</button></div>`;
+}
+
+/** The card that folds two worn corps into one: every pair that can be folded, either way round, and what each makes of them. */
+function foldCard(reg: number): string {
+  const r = g.regions[reg];
+  const vs = foldChoicesAt(g, reg);
+  const pct = (x: number): string => `${Math.round(x * 100)}%`;
+  const row = (v: (typeof vs)[number]): string => {
+    const bits = [
+      `<b>${num(v.men)} men</b> in one corps at ${pct(v.str)} of its strength, ${esc(grade(v.xp).toLowerCase())}.`,
+      v.general ? `${esc(v.general)} commands${v.stepsDown ? `; ${esc(v.stepsDown)} goes to the list of generals waiting for a corps` : ''}.` : 'No general commands it.',
+      v.back > 0 ? `${num(v.back)} men over go back to the reserve.` : '',
+      v.works !== undefined ? `It takes over the fieldworks ${esc(v.goneName)} stands in.` : '',
+      `${esc(v.goneName)} goes home as a cadre: it can be raised again from the arsenal for ${money(v.cadreCost)} from the treasury and ${num(v.cadreMen)} men from the reserve, in ${monthsWord(v.cadreMonths)}.`,
+    ].filter(Boolean).join(' ');
+    return `<div class="foldopt"><span class="grow"><b class="foldkeep">Keep ${esc(v.keepName)}</b><small>${bits}</small></span><button class="btn small go" data-act="fold" data-keep="${v.keep}" data-gone="${v.gone}" title="${esc(v.keepName)} takes in the men of ${esc(v.goneName)}. It cannot be undone.">Fold into ${esc(v.keepName)}</button></div>`;
+  };
+  const corps = (id: number): Corps | undefined => g.corps.find((c) => c.id === id);
+  const pairs = new Map<string, typeof vs>();
+  for (const v of vs) { const k = [v.keep, v.gone].sort((a, b) => a - b).join(':'); (pairs.get(k) ?? pairs.set(k, []).get(k)!).push(v); }
+  const body = [...pairs.values()].map((p) => {
+    const a = corps(p[0].keep), b = corps(p[0].gone);
+    const head = a && b ? `${esc(a.name)} (${num(men(a))} men, ${pct(a.str)}) and ${esc(b.name)} (${num(men(b))} men, ${pct(b.str)})` : '';
+    return `<div class="foldpair"><h3>${head}</h3>${p.map(row).join('')}</div>`;
+  }).join('');
+  return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The army at ${esc(r.name)} · ${date(g.turn)}</div><h2>Fold two worn corps into one</h2></header>
+    <div class="body"><p class="sub" style="margin:0 0 10px">Two corps of the same kind, both under ${Math.round(MANPOWER.fold.worn * 100)}% of their strength, can be made into one that can fight. The corps that is kept loses a little of its order while the men shake down together, and has the fewer moves of the two left this month. The other leaves the map with its name, its record and its honours, and waits in the arsenal to be raised again.</p>${body || '<div class="empty">No two corps here can be folded together now.</div>'}</div>
+    <footer><button class="btn" data-act="close">Leave them as they are</button></footer>`;
+}
+
+/** Fieldworks standing empty in a province of the player's side (the grand campaign): what is there, and who can use it. */
+function leftWorksNote(r: Region): string {
+  const v = fieldworksLeft(g, r.id);
+  if (!v) return '';
+  const m = Math.round(v.months * 10) / 10;
+  return `<div class="note leftworks"><b>Fieldworks stand empty here: room for ${v.corps === 1 ? 'one corps' : `${v.corps} corps`}, ${m === 1 ? 'a month' : `${m} months`} of work.</b> A corps of yours that marches or rides in takes them over at once and fights from them, as if it had dug them itself. Empty, they lose a month of work every month.</div>`;
+}
+
+/** The row on the attack card that offers to soften the line first: a probe by one corps, or the bombers on its fieldworks. */
+function softenRow(target: Region, chosen: Corps[]): string {
+  const s = softenOptions(g, chosen, target);
+  const done = ui.modal?.probe as { name: string; found: string[]; wear: number; lost: number } | undefined;
+  if (!s || (s.works <= 0 && s.probe.fresh <= 0 && !done)) return '';
+  const mo = (m: number): string => { const v = Math.round(m * 10) / 10; return v === 1 ? 'a month' : `${v} months`; };
+  const gains = [s.probe.fresh ? `name the ${s.probe.fresh === 1 ? 'corps' : `${s.probe.fresh} corps`} the staff cannot see` : '', s.probe.wear > 0 ? `take ${mo(s.probe.wear)} off their fieldworks` : ''].filter(Boolean).join(' and ');
+  const probeText = s.probe.why ?? (gains ? `It would ${gains}, for about ${num(s.probe.men)} men and ${s.probe.ap} of its moves. It is not a battle: nothing changes hands.` : 'There is nothing more a probe could find here.');
+  const probe = `<div class="softopt"><button class="btn small" data-act="probe" data-id="${s.probe.corps}" ${s.probe.why || !gains ? 'disabled' : ''}>Probe${s.probe.name ? ` with ${esc(s.probe.name)}` : ' the line'}</button><small>${esc(probeText)}</small></div>`;
+  const bomb = s.bomb ? `<div class="softopt"><button class="btn small" data-act="bombline" ${s.bomb.why ? 'disabled' : ''}>Bomb the line</button><small>${esc(s.bomb.why ?? `${s.bomb.groups === 1 ? 'One air group' : `${s.bomb.groups} air groups`} with ${num(s.bomb.bombers)} bombers can reach it, and should take about ${mo(s.bomb.wear)} off the fieldworks. ${s.bomb.verdict}. The planner shows what will meet them.`)}</small></div>` : '';
+  const found = done ? `<small class="softdone">${esc(done.name)} has probed this line: it found ${esc(listOf(done.found))}${done.wear > 0 ? `, and their fieldworks are ${mo(done.wear)} the worse` : ''}. It cost ${num(done.lost)} men.</small>` : '';
+  const head = s.works > 0 ? `The defenders stand in fieldworks of ${mo(s.works)}${s.works >= DEFENCE.entrench.months ? ', finished' : ''}.` : 'The defenders are not dug in.';
+  return `<div class="note soften"><span><b>Soften the line first.</b> ${head}</span>${found}${probe}${bomb}</div>`;
+}
+
 function siegeBar(r: Region): string {
   const me = g.human;
   const v = me ? townSiege(g, r.id) : null;
@@ -2173,7 +2240,7 @@ function regionPane(): string {
   const inView = r.units.filter((c) => inFull(r, c.nat));
   const veiled = r.units.length - inView.length;
   const units = (inView.length ? knownRows(r, [...inView].sort((a, b) => (a.nat === me ? 0 : 1) - (b.nat === me ? 0 : 1))) : veiled || (fogOn(g) && seen[r.id] === 0) ? '' : '<div class="empty">No armies here.</div>') + fogNote(r);
-  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${townLine(r)}${dirLine(r)}${vowLine(r)}${pocketNote(r)}${siegeBlock(r)}${freeNote(r)}${standingNote(r)}
+  return `<h2>${esc(r.name)}</h2><div class="sub">${held}</div>${townLine(r)}${dirLine(r)}${vowLine(r)}${pocketNote(r)}${leftWorksNote(r)}${siegeBlock(r)}${freeNote(r)}${standingNote(r)}
     <div class="facts"><div class="fact"><span>Terrain</span><b>${r.terrain[0].toUpperCase() + r.terrain.slice(1)}</b></div><div class="fact"><span>Victory pts</span><b>${r.vp}</b></div><div class="fact"><span>Industry</span><b>${r.fac}${railNote(g, r.id)?.ruined ? ` <small style="color:#f0b3a5;font-weight:500">${railNote(g, r.id)!.ruined} in ruins</small>` : ''}</b></div></div>
     ${tags.length ? `<div class="tags" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:8px">${tags.join('')}</div>` : ''}
     ${prizeBlock(r)}${placesBlock(r)}${groundBlock(r)}${riverBlock(r)}${railBlock(r)}${provinceWorth(r)}${oilNote(r)}${provinceSlots(r)}${townPlots(r)}
@@ -3174,7 +3241,7 @@ function airTitle(r: AirReport): string {
   if (r.mission === 'fleet') return `Air strike on the ${r.ships?.[0]?.fleet ?? 'fleet'}`;
   if (r.mission === 'harbour') return `Raid on the harbour of ${r.place}`;
   if (r.mission === 'town') return `Bombing of the defences of ${r.region >= 0 ? townName(g.regions[r.region]) : r.place}`;
-  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
+  return r.mission === 'superiority' ? `The sky over ${r.place}` : r.mission === 'bomb' ? `Bombing of ${r.place}` : r.mission === 'night' ? `Night raids on ${r.place}` : r.mission === 'ground' ? `Raid on the troops at ${r.place}` : r.mission === 'line' ? `Bombing of the line at ${r.place}` : `Air strikes, ${r.place.replace(/^the /, '')}`;
 }
 
 function airBrow(r: AirReport): string {
@@ -3937,6 +4004,7 @@ function missionText(f: AirFleet): string {
     case 'night': return `bombing ${where} by night`;
     case 'strike': return `striking at shipping in ${where}`;
     case 'ground': return `raiding the troops at ${where}`;
+    case 'line': return `bombing the fieldworks at ${where}`;
     case 'fleet': return `striking ${where}`;
     case 'harbour': return `raiding the harbour of ${where}`;
     case 'town': return `bombing the defences of ${g.regions[f.target] ? townName(g.regions[f.target]) : where}`;
@@ -4340,7 +4408,7 @@ function airReportCard(r: AirReport): string {
   const side = (ss: AirSide[]): string => ss.length ? `<div class="big">${num(sum(ss, 'ftr') + sum(ss, 'bmr'))}</div><small>aircraft in ${ss.length} air ${airWar(g) ? 'group' : 'fleet'}${ss.length > 1 ? 's' : ''} · lost ${num(sum(ss, 'lostFtr') + sum(ss, 'lostBmr'))}</small>` : '<div class="big">0</div><small>no fighters came up</small>';
   const list = (ss: AirSide[]): string => ss.length ? `<ul class="ulist">${ss.map((x) => `<li><span>${esc(x.fleet)} <span style="color:var(--ink-3)">(${g.nations[x.nat].adj}${x.leader ? `, ${esc(x.leader)}` : ''})</span><br><span style="color:var(--ink-2)">${esc(capital(craft(x.ftr, x.bmr)))}</span></span><span>${x.lostFtr + x.lostBmr ? `lost ${esc(craft(x.lostFtr, x.lostBmr))}` : 'no losses'}</span></li>`).join('')}</ul>` : '<div class="empty">None.</div>';
   const sky = r.mission === 'superiority' ? (r.sky ? ` The ${g.nations[r.attNat].adj} air force won the sky over ${esc(r.place)}: its fighters ended the month with ${r.hold >= 9 ? 'no opposition left' : `${r.hold.toFixed(2)} times what the defenders could still put up`}.` : ` The attackers ended the month with ${r.hold.toFixed(2)} times the fighters the defenders could still put up. It takes ${AIR.sky.win} to win the sky.`) : '';
-  const what = r.mission === 'superiority' ? 'air superiority' : r.mission === 'bomb' ? 'day bombing' : r.mission === 'night' ? 'night bombing' : r.mission === 'ground' ? 'a raid on troops' : r.mission === 'fleet' ? 'a strike on a fleet' : r.mission === 'harbour' ? 'a raid on a harbour' : r.mission === 'town' ? 'a raid on a town' : 'strikes on shipping';
+  const what = r.mission === 'superiority' ? 'air superiority' : r.mission === 'bomb' ? 'day bombing' : r.mission === 'night' ? 'night bombing' : r.mission === 'ground' ? 'a raid on troops' : r.mission === 'line' ? 'bombing the line' : r.mission === 'fleet' ? 'a strike on a fleet' : r.mission === 'harbour' ? 'a raid on a harbour' : r.mission === 'town' ? 'a raid on a town' : 'strikes on shipping';
   const aw = airWar(g);
   // The ships under the bombs, fleet by fleet, as they were before the strike and with what each lost.
   const ships = r.ships?.length
@@ -4402,6 +4470,7 @@ function openModal(m: typeof ui.modal): void {
   else if (m.kind === 'landing') card.innerHTML = landingCard();
   else if (m.kind === 'attack') card.innerHTML = attackCard();
   else if (m.kind === 'siege') card.innerHTML = siegeCard();
+  else if (m.kind === 'fold') card.innerHTML = foldCard(m.reg);
   else if (m.kind === 'news') card.innerHTML = newsCard(m.from, m.reports, m.sea ?? g.seaReports.length, m.air ?? g.airReports.length);
   else if (m.kind === 'declare') card.innerHTML = declareCard();
   else if (m.kind === 'invade') {
@@ -5131,7 +5200,7 @@ function attackCard(): string {
     : '<div class="empty">Choose at least one corps to attack with.</div>';
   const ground = `${target.terrain[0].toUpperCase() + target.terrain.slice(1)}${steep(g, target) ? ', too steep for tanks' : ''}`;
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">The armies meet · ${date(g.turn)}</div><h2>Battle for ${esc(target.name)}</h2></header>
-    <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def')}</div>${massNote}${prizeStrip(target)}${body}</div>
+    <div class="body"><div class="faceoff">${sidePanel(ours, 'att')}<div class="fmid"><span class="vsmark">VS</span><small>${esc(ground)}</small></div>${sidePanel(theirs, 'def')}</div>${massNote}${prizeStrip(target)}${a ? softenRow(target, chosen) : ''}${body}</div>
     <footer><button class="btn" data-act="close" title="Call the attack off. Nothing is spent.">Withdraw</button><button class="btn" disabled title="Fighting a battle yourself in real time comes with the 3D build of the game. Until then every battle is settled from the Battle Ticket.">Fight it yourself · 3D build</button><button class="btn go" data-act="attack" ${a ? '' : 'disabled'} title="Settle the battle at once from the Battle Ticket">Auto-resolve</button></footer>`;
 }
 
@@ -6518,6 +6587,39 @@ function onClick(e: MouseEvent): void {
       const m = ui.modal!;
       if (m.chosen.has(id)) m.chosen.delete(id); else m.chosen.add(id);
       $('#card').innerHTML = attackCard(); break;
+    }
+    case 'probe': {
+      // One corps feels out the line: the card is read again with what it found.
+      const m = ui.modal!;
+      const target = g.regions[m.target];
+      const who = g.corps.find((x) => x.id === id);
+      const h = g.headlines.length;
+      const rep = who ? orderProbe(g, who, target) : null;
+      if (rep) { m.probe = rep; ui.unread += g.headlines.length - h; queueSave(); refresh(); }
+      $('#card').innerHTML = attackCard(); break;
+    }
+    case 'bombline': {
+      // The raid planner, on this line: the attack is ordered again when the bombers are back.
+      const m = ui.modal!;
+      openModal({ kind: 'raid', raid: 'line', target: m.target });
+      break;
+    }
+    case 'foldcard': {
+      if (g.regions[id]) openModal({ kind: 'fold', reg: id });
+      break;
+    }
+    case 'fold': {
+      const keep = Number(t.dataset.keep), gone = Number(t.dataset.gone);
+      const a = g.corps.find((x) => x.id === keep), b = g.corps.find((x) => x.id === gone);
+      const h = g.headlines.length;
+      if (a && b && orderFold(g, keep, gone)) {
+        ui.msg = `${b.name} is folded into ${a.name}. Its cadre waits in the arsenal.`;
+        ui.unread += g.headlines.length - h;
+        ui.picked.delete(gone);
+        queueSave();
+      }
+      openModal(null);
+      refresh(); break;
     }
     case 'atkmine': {
       // Back to the corps that were picked when the attack was ordered.

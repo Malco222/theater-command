@@ -12,9 +12,11 @@ import { NAVY, baseTargets, canPass, landCorps, landingTargets, planLanding, reb
 import { DIFFICULTY, levelOf, setLevel, whyNotLevel, type Level } from './difficulty';
 import { assignGeneral, promote, relieve, sack, spendPoint } from './commanders';
 import {
-  DEFENCE, allied, assess, atWar, battleCost, chanceOn, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
-  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, railMove, resolveBattle, shipMove, sovietEvent, startPhase, theName, type Assessment, type CostOf,
+  DEFENCE, allied, assess, atWar, battleCost, chanceOn, corpsBase, declareWar, ensureSupply, evacuate, evenOdds, friendlyUnits, groundWorks, hasRoom, headline, holdCallUp, hostileUnits, limitAttackers,
+  endPhase, foldNews, standingCallUp, moveCorps, moveCost, openTheatres, probeCost, probeLine, probeRules, railMove, resolveBattle, shipMove, sovietEvent, startPhase, theName, whyNoProbe, worksOf,
+  type Assessment, type CostOf, type GroundWorks, type ProbeReport,
 } from './game';
+import { foldChoices, foldCorps, type FoldView } from './fold';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { offers, orderOffer, type Offer } from './arsenal';
 import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
@@ -418,7 +420,7 @@ function outlookOf(g: Game, a: Assessment, target: Region, going: Corps[] = []):
   return {
     exact: false, odds: band.mid, lo: band.lo, hi: band.hi, chance: chanceAt(band.mid), chanceLo: chanceAt(band.lo), chanceHi: chanceAt(band.hi), even,
     unidentified: k.none.length, stale: k.report.length,
-    note: `${what}, so the odds are the staff's estimate. A battle, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
+    note: `${what}, so the odds are the staff's estimate. ${probeRules(g) ? 'A probe by one corps' : 'A battle'}, an agent on watch or a reconnaissance flight over ${target.name} would show what is there.`,
     wide: chanceAt(band.hi) - chanceAt(band.lo) > 0.4, guess: Array.from({ length: 21 }, (_, i) => chanceAt(band.lo + ((band.hi - band.lo) * i) / 20)).reduce((s, x) => s + x, 0) / 21, narrow, cost,
     lines,
   };
@@ -429,6 +431,77 @@ export function orderAttack(g: Game, corps: Corps[], target: Region): BattleRepo
   const ok = jointForce(g, limitAttackers(g, jointForce(g, corps.filter((c) => canOrder(g, c) && c.ap > 0 && g.regions[c.reg].nb.includes(target.id)), target), target), target);
   if (!ok.length || !hostileUnits(g, target, ok[0].nat).length || whyNotAttack(g, target, ok[0].nat)) return null;
   return resolveBattle(g, ok, target);
+}
+
+// ---- Softening a line, handing it over, and folding corps together (the grand campaign) -------------------------
+//
+// Before an attack on troops who are dug in, the player can soften the line: one corps probes it (orderProbe), or
+// the bombers go for its fieldworks (the raid planner's 'line': previewRaid and orderRaid). softenOptions() says
+// what each would do, for one row on the attack card. Fieldworks a corps leaves behind stay on the ground for the
+// next corps of its side to march in (fieldworksLeft). Two worn corps standing together can be made into one
+// (foldChoicesAt, orderFold): the corps emptied becomes a cadre, raised again from the arsenal (key 'cadre:<id>').
+
+/** One of the player's corps probes the enemy line in the province beside it: who is there, and a month off their works. */
+export function orderProbe(g: Game, c: Corps, target: Region): ProbeReport | null {
+  if (onEve(g) || !canOrder(g, c) || whyNotAttack(g, target, c.nat)) return null;
+  return probeLine(g, c, target);
+}
+
+/** What softening a line first would do, for the attack card. */
+export interface SoftenView {
+  /** The most months of fieldworks any defender there stands in; 0 where nobody is dug in. */
+  works: number;
+  /** A probe by one corps: which corps the staff would send, what it costs it, what it finds, or why it cannot be done. */
+  probe: { corps: number; name: string; why: string | null; ap: number; men: number; wear: number; fresh: number };
+  /** Bombing the line, where the air war is played: the groups the staff would send and the months they should take off, or why not. */
+  bomb: { why: string | null; groups: number; bombers: number; wear: number; verdict: string } | null;
+}
+
+/**
+ * The two ways to soften the line in a province before attacking it with these corps, or null where there is no
+ * enemy army in the field there. The staff picks the corps it can best spare for the probe: the weakest of the
+ * force that still has the moves for it.
+ */
+export function softenOptions(g: Game, corps: Corps[], target: Region): SoftenView | null {
+  if (!probeRules(g) || g.human === null || !humanUp(g)) return null;
+  const foes = hostileUnits(g, target, g.human);
+  if (!foes.length || whyNotAttack(g, target, g.human)) return null;
+  const P = DEFENCE.probe!;
+  const works = Math.round(Math.max(0, ...foes.map(worksOf)) * 10) / 10;
+  const pool = [...new Set([...corps, ...candidates(g, target)])].filter((c) => canOrder(g, c));
+  const can = pool.filter((c) => whyNoProbe(g, c, target) === null).sort((a, b) => corpsBase(g, a) * KIND[a.kind].atk - corpsBase(g, b) * KIND[b.kind].atk || a.id - b.id);
+  const who = can[0] ?? pool[0];
+  const fresh = foes.filter((d) => corpsKnown(g, d, g.human).level !== 'exact').length;
+  const probe = who
+    ? { corps: who.id, name: who.name, why: whyNoProbe(g, who, target), ap: P.ap, men: probeCost(g, who), wear: Math.min(P.wear, works), fresh }
+    : { corps: -1, name: '', why: 'No corps of yours stands beside that line with moves left.', ap: P.ap, men: 0, wear: Math.min(P.wear, works), fresh };
+  let bomb: SoftenView['bomb'] = null;
+  if (raidKinds(g, g.human).some((k) => k.key === 'line')) {
+    if (works <= 0) bomb = { why: 'Nobody there is dug in: there are no fieldworks to bomb.', groups: 0, bombers: 0, wear: 0, verdict: '' };
+    else {
+      const plan = planRaid(g, 'line', target.id, undefined, g.human);
+      bomb = { why: plan.why, groups: plan.picked.length, bombers: plan.bombers, wear: Math.min(plan.wear ?? 0, works), verdict: plan.verdict };
+    }
+  }
+  return { works, probe, bomb };
+}
+
+/** Fieldworks standing empty in a province that the player's side could take over by marching in, or null. */
+export function fieldworksLeft(g: Game, reg: number): GroundWorks | null {
+  const left = groundWorks(g, reg);
+  return left && g.human !== null && allied(g, g.human, left.nat) ? left : null;
+}
+
+/** Every way two of the player's corps in a province could be folded into one this month: each allowed pair, both ways round. */
+export function foldChoicesAt(g: Game, reg: number): FoldView[] {
+  return g.human !== null && humanUp(g) ? foldChoices(g, reg, g.human).filter((v) => { const c = g.corps.find((x) => x.id === v.keep); return !!c && canOrder(g, c); }) : [];
+}
+
+/** Folds one of the player's corps into another: 'keep' takes the men of 'gone', which goes home as a cadre. */
+export function orderFold(g: Game, keep: number, gone: number): boolean {
+  const a = g.corps.find((c) => c.id === keep), b = g.corps.find((c) => c.id === gone);
+  if (!a || !b || !canOrder(g, a) || !canOrder(g, b)) return false;
+  return foldCorps(g, a, b);
 }
 
 // ---- Cities, towns and sieges (the grand campaign) -------------------------------------------------------------

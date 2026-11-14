@@ -23,14 +23,14 @@ import {
   fightersOver, fly, forecastAir, groupAt, gunsAt, homeOf, isOffensive, kmTo, kmToSea, setMission, shipsInPort, whyNotBase, whyNotMission,
 } from './air';
 import { fleetKnown } from './carriers';
-import { allied, atWar, headline } from './game';
+import { DEFENCE, allied, atWar, headline, worksOf } from './game';
 import { SIGHT, corpsKnown, sightOf } from './intel';
 import { CLASSES, NAVY, atSea, shipList, surfaceShips } from './navy';
 import { onNet, railCut, railsAt } from './rails';
 import { besiegerOf, siegeRules, siegeView, townHeld, townHitText } from './siege';
 import { townName } from './towns';
 
-export type RaidKind = 'bomb' | 'night' | 'ground' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon';
+export type RaidKind = 'bomb' | 'night' | 'ground' | 'line' | 'town' | 'superiority' | 'strike' | 'fleet' | 'harbour' | 'recon';
 
 const num = (n: number): string => Math.round(n).toLocaleString('en-US');
 const pct = (x: number): string => `${Math.round(x * 100)}%`;
@@ -70,6 +70,7 @@ function distTo(g: Game, f: AirFleet, kind: RaidKind, target: number): number {
 const missionOf = (kind: RaidKind): AirMission => (kind === 'recon' ? 'support' : kind);
 const kindOf = (f: AirFleet): 'ftr' | 'bmr' | 'mixed' => f.kind ?? (f.bmr <= 0 ? 'ftr' : f.ftr <= 0 ? 'bmr' : 'mixed');
 const flying = (f: AirFleet): boolean => f.ftr + f.bmr > 0;
+const monthsOf = (m: number): string => { const v = Math.round(m * 10) / 10; return v === 1 ? 'a month' : `${v} months`; };
 
 // ---- Airfields ----------------------------------------------------------------------------------------
 
@@ -366,9 +367,9 @@ function reachable(g: Game, nat: string, kind: RaidKind): Map<number, AirFleet[]
   const out = new Map<number, AirFleet[]>();
   const fleets = able(g, nat);
   const needs = kindRow(kind).needs;
-  const sight = kind === 'ground' || kind === 'recon' ? sightOf(g, nat) : null;
+  const sight = kind === 'ground' || kind === 'line' || kind === 'recon' ? sightOf(g, nat) : null;
   for (const t of targetIds(g, kind, nat)) {
-    if (kind === 'ground' && !troopsSeen(g, nat, t, sight!)) continue;
+    if ((kind === 'ground' || kind === 'line') && !troopsSeen(g, nat, t, sight!)) continue;
     if (kind === 'town' && !townWanted(g, nat, t)) continue;
     // Ground in full view has something to show a camera only where an army there is not identified, or known from an old report.
     if (kind === 'recon' && sight![t] === SIGHT.full && !unidentified(g, nat, t)) continue;
@@ -445,6 +446,11 @@ function whatIsThere(g: Game, nat: string, kind: RaidKind, t: number, sight: Uin
   if (kind === 'bomb' || kind === 'night') {
     const bits = [r.fac > 0 ? plural(r.fac, 'factory', 'factories') : '', onNet(t) && !railCut(g, t) ? (railsAt(t).length >= 3 ? 'a railway junction' : 'a railway') : '', gunsAt(g, t) ? `level ${gunsAt(g, t)} guns` : ''];
     return bits.filter(Boolean).join(', ');
+  }
+  if (kind === 'line') {
+    const dug = r.units.filter((u) => !u.dead && atWar(g, nat, u.nat) && worksOf(u) > 0);
+    const most = Math.max(0, ...dug.map(worksOf));
+    return `${plural(dug.length, 'corps', 'corps')} dug in, in works of ${monthsOf(most)}${most >= DEFENCE.entrench.months ? ', finished' : ''}`;
   }
   if (kind === 'ground') {
     const foes = r.units.filter((u) => !u.dead && atWar(g, nat, u.nat));
@@ -539,6 +545,8 @@ export interface RaidPlan {
   massed: string;
   /** What the raid costs at home: fighter groups taken off patrol for the rest of the month. */
   offPatrol: string;
+  /** Bombing the line: the months the raid should take off the fieldworks there. */
+  wear?: number;
 }
 
 const VERDICT: [number, string][] = [[0.8, 'Very likely to succeed'], [0.6, 'Likely to succeed'], [0.4, 'It could go either way'], [0.2, 'Likely to fail'], [0, 'Very likely to fail']];
@@ -565,6 +573,13 @@ function effectsOf(g: Game, kind: RaidKind, target: number, fc: ReturnType<typeo
     if (sunk && sunk.cv > 0.15) out.push('A carrier that goes down takes most of its aircraft with it.');
   } else if (kind === 'town') {
     if (fc.town) out.push(townHitText(g, g.regions[target], fc.town, 'bombs', false));
+  } else if (kind === 'line') {
+    const most = Math.max(0, ...g.regions[target].units.filter((u) => !u.dead && atWar(g, nat, u.nat)).map(worksOf));
+    const took = Math.min(fc.cut, most), left = Math.max(0, most - fc.cut);
+    out.push(took >= 0.05
+      ? `Should take about ${monthsOf(took)} off the fieldworks at ${place}, which would leave ${left < 0.05 ? 'nothing of them' : `${monthsOf(left)} of work in them`}. An army attacking this month meets that much less of a prepared line.`
+      : `Too few bombers would get through to break up the works at ${place}.`);
+    out.push('The men in the works are not hurt, and they dig the works back a month at a time: bomb in the month you attack.');
   } else if (kind === 'ground') {
     const dug = g.regions[target].units.some((u) => !u.dead && u.dug && atWar(g, nat, u.nat));
     out.push(`The troops at ${place} should lose about ${pct(fc.cut)} of their organisation${dug ? ' (less where they are dug in)' : ''}, and some of their men and guns. They fight the weaker for it until they have rested: attack while it lasts.`);
@@ -589,7 +604,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   if (!(kind === 'strike' ? g.seas[target] : kind === 'fleet' ? quarry : g.regions[target])) { plan.why = kind === 'strike' ? 'Pick a sea.' : kind === 'fleet' ? 'Pick a fleet.' : 'Pick a province.'; return plan; }
   if (!g.nations[nat].atWar.length) { plan.why = 'The nation is at peace.'; return plan; }
   if (quarry && fleetKnown(g, quarry, nat) === 'none') { plan.why = 'No fleet has been found there. Search that sea first: a fleet has to be found before it can be struck.'; return plan; }
-  if (kind === 'ground' && !troopsSeen(g, nat, target, sightOf(g, nat))) { plan.why = 'No enemy troops have been seen there.'; return plan; }
+  if ((kind === 'ground' || kind === 'line') && !troopsSeen(g, nat, target, sightOf(g, nat))) { plan.why = 'No enemy troops have been seen there.'; return plan; }
   const fleets = airFleetsOf(g, nat).filter((f) => flying(f) || f.est.ftr + f.est.bmr > 0);
   const whys = new Map(fleets.map((f) => [f.id, whyNotSeat(g, f, kind, target)]));
   const can = fleets.filter((f) => whys.get(f.id) === null);
@@ -653,6 +668,7 @@ export function planRaid(g: Game, kind: RaidKind, target: number, ids?: number[]
   plan.fighterLossN = Math.round(fc.ftrLoss);
   plan.foeLossN = Math.round(fc.foeLoss);
   plan.effects = effectsOf(g, kind, target, fc, nat);
+  if (kind === 'line') plan.wear = fc.cut;
   // What meeting up is worth: each bomber group alone, with the fighters from its own airfield, beside all of them together.
   const bombers = going.filter((f) => f.bmr > 0);
   if (bombers.length >= 2) {

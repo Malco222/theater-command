@@ -6,7 +6,7 @@ import data from '../../data/campaign/production.json';
 import budgetData from '../../data/campaign/budget.json';
 import arsenalData from '../../data/campaign/arsenal.json';
 import setup from '../../data/campaign/setup-1939.json';
-import { STACK, type Build, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
+import { STACK, type Build, type Corps, type Game, type Kind, type Region, type ShipClass, type Terrain } from './types';
 import { addCorps, allied, headline } from './game';
 import { DIPLOMACY, tradePartners } from './diplomacy';
 import { campXp, civicSum, deliverCivic, hallShare } from './buildings';
@@ -14,7 +14,7 @@ import { dealsOf, tradeIncome } from './trade';
 import { airIncomeLoss } from './air';
 import { seaIncomeLoss } from './navy';
 import { techMul } from './research';
-import { fallenOf, inherit, raisedXp, revivable } from './stories';
+import { fallenOf, inherit, noteCorps, raisedXp, revivable } from './stories';
 import { deliverArsenal, worksUpkeep } from './arsenal';
 import { barredKind } from './ground';
 import { workingFactories } from './rails';
@@ -25,7 +25,8 @@ import { fieldOut, keepsStores, shortOfOil, supIncome } from './resources';
 import { SIEGE, besieged } from './siege';
 import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
-import { drawMen, menSpare, raisable, returnMen } from './manpower';
+import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
+import { raiseMorale } from './morale';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -389,6 +390,57 @@ export function orderPara(g: Game, nat: string, region: number): Build | null {
   return b;
 }
 
+// ---- Cadres (the grand campaign) -------------------------------------------------------------------
+// A corps whose men were folded into another (fold.ts) is kept off the map as a cadre: its staff, its name, its
+// record and its honours. It can be raised again for a share of the price of a new corps, with a new corps' men.
+
+/** The cadres a nation keeps, newest first. */
+export const cadresOf = (g: Game, nat: string): Corps[] => [...(g.nations[nat]?.cadres ?? [])].reverse();
+
+/** What it takes to raise a cadre again as a full corps: the price, the months and the divisions' worth of men. */
+export function cadreTerms(g: Game, nat: string, c: Corps): { cost: number; months: number; divs: number } {
+  const u = c.elite ? eliteOf(nat) : null, p = TECH.units.para;
+  const kind = specOf(g, c.kind) ? c.kind : 'inf';
+  const list = u ? u.cost : c.airborne ? priceOf(g, nat, 'para', p.cost) : corpsCost(g, nat, kind);
+  return { cost: Math.round(list * MANPOWER.fold.price * 10) / 10, months: u ? u.months : c.airborne ? p.months : specOf(g, kind)!.months, divs: c.divs };
+}
+
+/** Why a cadre cannot be raised again now, apart from money and a place to raise it; null when it can. */
+export function whyNoCadre(g: Game, nat: string, c: Corps): string | null {
+  if (g.nations[nat].queue.some((b) => b.cadre === c.id)) return 'It is being raised again already.';
+  if (c.elite) { const no = whyNoElite(g, nat); if (no) return no; }
+  if (c.airborne) { const no = whyNoPara(g, nat); if (no) return no; }
+  return null;
+}
+
+/** Orders a cadre raised again as a full corps. The price is paid now and the men are drawn now, as for a new corps. */
+export function orderCadre(g: Game, nat: string, id: number, region: number): Build | null {
+  const n = g.nations[nat];
+  const c = n.cadres?.find((x) => x.id === id);
+  const r = g.regions[region];
+  if (!n.alive || !c || !r || !canRaiseKind(g, nat, r, c.kind) || whyNoCadre(g, nat, c) !== null) return null;
+  const t = cadreTerms(g, nat, c);
+  if (n.pp < t.cost || raisable(g, nat, t.divs) < 1) return null;
+  n.pp -= t.cost;
+  drawMen(g, nat, t.divs);
+  const b: Build = { id: g.nextBuild++, what: 'corps', kind: c.kind, divs: c.divs, name: c.name, region, ordered: g.turn, eta: g.turn + t.months, cost: t.cost, cadre: c.id };
+  if (c.elite) b.elite = c.elite;
+  if (c.airborne) b.airborne = true;
+  n.queue.push(b);
+  return b;
+}
+
+/** A cadre takes the field again: the same corps, with its number, its diary and its ribbons, filled with new men. */
+function reform(g: Game, c: Corps, at: Region): void {
+  c.dead = false; c.str = 1; c.org = 0.7; c.ap = c.apMax; c.fought = false; c.supplied = true; c.general = null; c.reg = at.id; c.hold = false; c.dyle = null;
+  c.xp = Math.max((c.nat === g.human ? raisedXp(g, c.nat) : 0.05) + campXp(g, at.id), c.xp * MANPOWER.fold.xp);
+  for (const k of ['dug', 'dugFor', 'pressed', 'blows', 'relief', 'yields', 'gaveWay', 'digs', 'joint', 'leave', 'town', 'job', 'rival'] as const) delete c[k];
+  raiseMorale(g, c);
+  g.corps.push(c);
+  at.units.push(c);
+  noteCorps(g, c, 'rebuilt', at.id);
+}
+
 /** What the next level of fortification would cost in a region, or null if it cannot be fortified further. */
 export function fortCost(g: Game, nat: string, r: Region): number | null {
   if (!isHome(g, nat, r)) return null;
@@ -416,7 +468,8 @@ export function cancelBuild(g: Game, nat: string, id: number): boolean {
   n.pp += n.queue[i].cost;
   // The men called up for a corps that was paid for go back to the reserve.
   if (n.queue[i].what === 'corps' && n.queue[i].cost > 0) returnMen(g, nat, n.queue[i].divs ?? 0);
-  if (n.queue[i].elite) g.flags[`elite:${nat}`] = (g.flags[`elite:${nat}`] ?? 1) - 1;
+  if (n.queue[i].cadre !== undefined) { /* the cadre keeps its own name and number: nothing to hand back */ }
+  else if (n.queue[i].elite) g.flags[`elite:${nat}`] = (g.flags[`elite:${nat}`] ?? 1) - 1;
   else if (n.queue[i].airborne) g.flags[`para:${nat}`] = (g.flags[`para:${nat}`] ?? 1) - 1;
   else if (n.queue[i].what === 'corps' && n.queue[i].revive === undefined) n.corpsNo--;
   n.queue.splice(i, 1);
@@ -448,6 +501,14 @@ export function deliver(g: Game, nat: string): void {
     if (!at && n.capital >= 0 && room(g.regions[n.capital])) at = g.regions[n.capital];
     if (!at) at = g.regions.find((x) => room(x) && x.fac > 0) ?? g.regions.find(room) ?? null;
     if (!at) continue; // nowhere left to form up
+    if (b.cadre !== undefined) {
+      const i = (n.cadres ?? []).findIndex((x) => x.id === b.cadre);
+      if (i < 0) continue;
+      const c = n.cadres!.splice(i, 1)[0];
+      reform(g, c, at);
+      if (nat === g.human) headline(g, 'info', `${c.name} has been raised again round its cadre at ${at.name}, and is ready for orders.`, nat, at.id);
+      continue;
+    }
     // The player's new corps are as well trained as the instructors he has sent home can make them.
     const c = addCorps(g, nat, b.name, b.kind!, b.divs!, at.id, { xp: (nat === g.human ? raisedXp(g, nat) : 0.05) + campXp(g, at.id), airborne: b.airborne });
     c.org = 0.7;

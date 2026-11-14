@@ -8,9 +8,9 @@
 import data from '../../data/campaign/arsenal.json';
 import { AIRWAR, airFleetsOf, airPool, airWar, carrierRules, foundAirFleet, hasAirfield } from './air';
 import { syncWings } from './carriers';
-import { classNow, menLeft, menRules, menWords, raisable } from './manpower';
+import { MANPOWER, classNow, menLeft, menRules, menWords, raisable } from './manpower';
 import { govMul } from './government';
-import { BUDGET, PRODUCTION, budgeted, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, type LedgerLine } from './economy';
+import { BUDGET, PRODUCTION, budgeted, cadreTerms, cadresOf, canRaise, corpsCost, corpsKinds, corpsUpkeep, fortCost, isHome, needsOf, orderCadre, orderCorps, orderElite, orderFort, orderPara, raiseSite, specOf, whyNoCadre, type LedgerLine } from './economy';
 import { TECH, locked, paraCount, whyNoPara } from './tech';
 import { eliteCount, eliteOf, eliteRule, priceOf, whyNoElite } from './traits';
 import { headline } from './game';
@@ -143,8 +143,10 @@ const liftBought = (g: Game, nat: string): number => (g.flags[`wk:tp:${nat}`] ??
 // ---- The offers -------------------------------------------------------------------------------------
 
 export interface Offer {
-  /** What it is: 'corps:inf', 'air:ftr', 'ship:dd', 'work:aa', 'work:fort', 'elite' (the special formation), 'para' (an airborne corps). Pass it to orderOffer. */
+  /** What it is: 'corps:inf', 'air:ftr', 'ship:dd', 'work:aa', 'work:fort', 'elite' (the special formation), 'para' (an airborne corps), 'cadre:<corps id>' (a folded corps raised again). Pass it to orderOffer. */
   key: string;
+  /** For a cadre: the kind of corps it is, for its picture. */
+  kind?: Kind;
   group: 'army' | 'air' | 'navy' | 'works';
   label: string;
   blurb: string;
@@ -201,6 +203,20 @@ function listOffers(g: Game, nat: string, sel: number): Omit<Offer, 'poor'>[] {
       note: at < 0 ? '' : `Forms up at ${g.regions[at].name}. ${eliteCount(g, nat)} of ${u.most} in the field or on order.`,
       why: no ?? (at < 0 ? (need ? `Needs a home province with ${plural(need, 'factory', 'factories')}. Build factories in a city first.` : 'There is no home ground left to raise troops on.') : noMen(u.divs) ?? poor(u.cost)),
       ...menFor(u.divs),
+    });
+  }
+  // Cadres (the grand campaign): corps folded into others, each waiting to be raised again for a share of the price.
+  for (const c of cadresOf(g, nat)) {
+    if (n.queue.some((b) => b.cadre === c.id)) continue;
+    const t = cadreTerms(g, nat, c);
+    const at = raiseSite(g, nat, c.kind, sel);
+    out.push({
+      key: `cadre:${c.id}`, group: 'army', kind: c.kind, label: `${c.name}, a cadre`,
+      blurb: `The cadre of a corps whose men were folded into another: its staff, its name, its record and its honours. Raised again it is the same corps filled with new men, and it keeps ${Math.round(MANPOWER.fold.xp * 100)}% of what it knew.`,
+      size: plural(c.divs, 'division'), cost: t.cost, months: t.months, upkeep: budgeted(g) ? corpsUpkeep(c.kind, c.divs) : 0, at,
+      note: at < 0 ? '' : `Forms up at ${g.regions[at].name}, for ${Math.round(MANPOWER.fold.price * 100)}% of the price of a new corps.`,
+      why: whyNoCadre(g, nat, c) ?? (at < 0 ? 'There is no home ground left to raise troops on.' : noMen(c.divs) ?? poor(t.cost)),
+      ...menFor(c.divs),
     });
   }
   for (const kind of corpsKinds(g)) {
@@ -318,6 +334,7 @@ export function orderOffer(g: Game, nat: string, key: string, sel = -1): Build |
   const [group, item] = key.split(':');
   if (group === 'elite') return orderElite(g, nat, o.at);
   if (group === 'para') return orderPara(g, nat, o.at);
+  if (group === 'cadre') return orderCadre(g, nat, Number(item), o.at);
   if (group === 'corps') return orderCorps(g, nat, item as Kind, o.at);
   if (key === 'work:fort') return orderFort(g, nat, o.at);
   const r = g.regions[o.at];

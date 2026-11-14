@@ -66,6 +66,8 @@ export interface Nation {
   pp: number;
   /** New formations and works on order. */
   queue: Build[];
+  /** Cadres (the grand campaign): corps whose men were folded into another, kept off the map to be raised again. */
+  cadres?: Corps[];
   /** Number the next new corps will carry. */
   corpsNo: number;
   /** Public opinion, from -100 (wants the Allies) to +100 (wants the Axis), and the leaning it drifts back to. */
@@ -263,6 +265,8 @@ export interface Build {
   elite?: string;
   /** An airborne corps, unlocked by the technology tree (the grand campaign). */
   airborne?: boolean;
+  /** A corps raised again round its cadre (the grand campaign): the id of the corps that was folded away. */
+  cadre?: number;
 }
 
 /** One line of a unit's diary: the month, what happened, where (a region, or a sea for a fleet), and a number that goes with it. */
@@ -319,6 +323,8 @@ export interface Corps extends Storied {
   dugFor?: number;
   /** It was attacked since its own last month ended (the grand campaign): it does no digging this month. */
   pressed?: boolean;
+  /** It took over fieldworks left on this ground this month (the grand campaign): it keeps them at the month's end though it marched. */
+  relief?: boolean;
   /**
    * The weight of the attacks it has stood against since its own month began (the grand campaign): 1 for each
    * blow at full weight, less for a light one. Men who have fought all month fight the next blow tired.
@@ -818,7 +824,8 @@ export interface PlanPhase {
  */
 /** What an air fleet is doing. 'ground' is a raid on troops, flown only in the grand campaign's air war. */
 /** 'fleet' is a strike on one fleet at sea (its target is that fleet's id) and 'harbour' a raid on the ships lying in a port: the grand campaign's carriers and air-sea war. 'town' is a raid on the defences of a town an army means to take (the grand campaign's sieges). */
-export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town';
+/** 'line' is a raid on the fieldworks of an enemy line (the grand campaign): the bombers take months off the works of the troops dug in there. */
+export type AirMission = 'support' | 'superiority' | 'bomb' | 'night' | 'strike' | 'rest' | 'ground' | 'fleet' | 'harbour' | 'town' | 'line';
 
 export interface AirLeader {
   name: string;

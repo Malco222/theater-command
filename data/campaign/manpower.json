@@ -9,11 +9,13 @@
   "warn": [0.5, 0.25],
   "classFloor": 0.1,
   "early": { "months": 6, "gap": 6 },
+  "fold": { "worn": 0.7, "org": 0.1, "price": 0.5, "xp": 0.75 },
   "notes": {
     "pool": "The reserve a great power opens a campaign of September 1939 with, in divisions' worth. 'minor': any other country has 'pool' and 'perDiv' for each division it has under arms as the campaign opens.",
     "class": "The class that comes of age each month with the whole homeland held, in divisions' worth; a minor's is 'classShare' of its reserve. It shrinks with the share of the homeland lost, counted by the worth of the provinces, but never under 'classFloor' of it. The reserve never holds more than 'most' times what it opened with.",
     "later": "A campaign that opens after 1939 finds 'spentAYear' of each warring nation's reserve gone for every year of war behind it, to 'spentMost'.",
     "warn": "The player is told when his reserve falls under these shares of what it opened with, and when it is spent.",
+    "fold": "Fold two worn corps into one (Version 64). The player may fold one of his corps into another of the same kind standing in the same province when both are under 'worn' of their full strength. The men of both fill the corps that is kept, as far as it has room, and any left over go back to the reserve; what the kept corps knows and how it feels become the average of the men now in it; it loses 'org' of its organisation shaking down, has the fewer moves of the two left, and the better of the two generals commands it while the other goes to the list of generals waiting. The corps folded away is kept off the map as a cadre, with its name, its record and its honours: it can be raised again from the arsenal at 'price' times the cost of a new corps of its kind, takes the men of a new corps from the reserve and the same months to form, and comes back with 'xp' of what it knew. No computer nation folds its corps.",
     "early": "A say over the call-up. A country at war may call the next class up early: 'months' of classes join the reserve at once, and no class comes of age for the next 'gap' months, because the boys who would have are already with the colours: the same men, sooner. Where the reserve has room for fewer than 'months' of classes, only those come and the months without a class are fewer in step. A country with a standing call-up (east.json, mobilisation) may also hold it: no new corps are raised from the reserve while it is held, the waves wait, and the men of each wave that was not raised go to the corps in the field as drafts, over and above what the depots send and at no cost to the treasury. Only the player uses either."
   }
 }
