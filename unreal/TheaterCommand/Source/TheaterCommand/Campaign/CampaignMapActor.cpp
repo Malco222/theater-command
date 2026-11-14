@@ -2096,14 +2096,16 @@ void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
 		WorksLeftMesh->SetupAttachment(Root);
 		WorksLeftMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		WorksLeftMesh->RegisterComponent();
-		WorksLeftMesh->SetCastShadow(false);
+		WorksLeftMesh->SetCastShadow(true); // (a thing that throws no shadow is lit as if nothing stood round it: its shaded faces go black)
 	}
 	WorksLeftMesh->ClearAllMeshSections();
 	// A bank of sandbags where an army would stand, broken in four so that it is read as standing empty, and smaller
 	// than a piece's base so that it does not crowd the province. Two courses once there is two months' work in it.
 	FMiniatureMesh Model;
 	const double U = UnitScale * 1.4;
-	const FLinearColor Bag(FColor::FromHex(TEXT("9A8E68"))), BagDark(FColor::FromHex(TEXT("82775A"))), Spoil(FColor::FromHex(TEXT("54452F")));
+	// (the art director's notes: the bags a step quieter than a flag, the floor trodden earth in the bases' own tone)
+	const FLinearColor Bag(FColor::FromHex(TEXT("84795A"))), BagDark(FColor::FromHex(TEXT("70674D"))), Spoil(FColor::FromHex(TEXT("655840"))), SpoilPale(FColor::FromHex(TEXT("6F644B")));
+	FRandomStream Ragged(1939);
 	for (int32 K = 0; K + 2 < Left.Num(); K += 3)
 	{
 		if (!Data.Regions.IsValidIndex(Left[K]))
@@ -2126,8 +2128,16 @@ void ACampaignMapActor::ShowWorksLeft(const TArray<int32>& FromRules)
 				}
 			}
 		}
-		// (the trodden earth inside it, so the bank has something to stand round)
-		Model.Pillar(Middle + FVector(0.0, 0.0, 0.02 * U), Rim - 0.75 * U, Rim - 0.95 * U, 0.04 * U, Spoil, 20);
+		// The trodden earth inside it, so the bank has something to stand round: not a plate but a patch, made of
+		// many small worn places that thin out toward the bank, so that its edge is ragged and gives way to the field.
+		for (int32 Patch = 0; Patch < 46; ++Patch)
+		{
+			// (thick in the middle, where they run together into one worn place, and small and thin toward the bank)
+			const double Angle = Ragged.FRandRange(0.0f, 6.283f), Out = Rim * 0.74 * FMath::Pow(Ragged.FRand(), 0.8);
+			const double Size = Rim * FMath::Lerp(0.34, 0.07, Out / (Rim * 0.74)) * Ragged.FRandRange(0.85f, 1.2f);
+			Model.Pillar(Middle + FVector(FMath::Cos(Angle) * Out, FMath::Sin(Angle) * Out, (0.016 + 0.0004 * Patch) * U), Size, Size * 0.86, 0.014 * U,
+				Out > Rim * 0.5 ? SpoilPale : Spoil, 7);
+		}
 	}
 	if (Model.Vertices.Num() > 0)
 	{

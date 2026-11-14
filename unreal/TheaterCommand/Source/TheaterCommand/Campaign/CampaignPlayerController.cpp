@@ -1,4 +1,5 @@
 #include "Campaign/CampaignPlayerController.h"
+#include "Campaign/CampaignText.h"
 #include "Campaign/CampaignMiniatures.h"
 #include "Campaign/CampaignSounds.h"
 
@@ -4311,7 +4312,7 @@ void ACampaignPlayerController::LayOutLook()
 	const FString Size = Unknown == 0 ? FString::Printf(TEXT("%d corps, %d division%s%s"), Known, Divisions, Divisions == 1 ? TEXT("") : TEXT("s"), Reports > 0 ? TEXT(" (from reports gone stale)") : TEXT(""))
 		: Known == 0 ? FString::Printf(TEXT("%d corps, none identified"), Unknown)
 		: FString::Printf(TEXT("%d corps: %d identified, %d not"), Known + Unknown, Known, Unknown);
-	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s army at %s  \u00B7  %s"), *Adjective, *Where, *Size));
+	Tray.Subtitle = FText::FromString(CampaignText::Phrases(FString::Printf(TEXT("%s army at %s  \u00B7  %s"), *Adjective, *Where, *Size)));
 	Tray.PendingButton = FText::GetEmpty();
 	Tray.JoinButton = FText::GetEmpty();
 	Tray.Hint = FText::FromString(bMine ? TEXT("This army has used its month, or holds its ground: it can be given no orders now.")
@@ -5109,11 +5110,11 @@ namespace
 		for (const FBattleUnit& Unit : Units)
 		{
 			// A corps not identified has no arm and no numbers to give.
-			FString Line = Unit.Kind.IsEmpty() ? Unit.Name : FString::Printf(TEXT("%s  \u00B7  %s, %d division%s"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind),
+			FString Line = Unit.Kind.IsEmpty() ? Unit.Name : FString::Printf(TEXT("%s \u00B7 %s, %d division%s"), *Unit.Name, *FCampaignMapData::CorpsKindLabel(Unit.Kind),
 				Unit.Divisions, Unit.Divisions == 1 ? TEXT("") : TEXT("s"));
 			if (bAfter)
 			{
-				Line += FString::Printf(TEXT("  \u00B7  lost %s"), *Thousands(Unit.Lost));
+				Line += FString::Printf(TEXT(" \u00B7 lost %s"), *Thousands(Unit.Lost));
 				if (!Unit.Fate.IsEmpty())
 				{
 					Line += FString::Printf(TEXT(", %s"), *Unit.Fate);
@@ -5121,9 +5122,9 @@ namespace
 			}
 			else if (Unit.Men > 0)
 			{
-				Line += FString::Printf(TEXT("  \u00B7  %s men"), *Thousands(Unit.Men));
+				Line += FString::Printf(TEXT(" \u00B7 %s men"), *Thousands(Unit.Men));
 			}
-			Lines.Add(Line);
+			Lines.Add(CampaignText::Phrases(Line)); // (it folds only after a separator dot, never inside a phrase)
 		}
 		return FString::Join(Lines, TEXT("\n"));
 	}
@@ -5151,9 +5152,9 @@ namespace
 		}
 		if (Unknown > 0)
 		{
-			return FString::Printf(TEXT("%d corps  \u00B7  strength not known"), Units.Num());
+			return CampaignText::Phrases(FString::Printf(TEXT("%d corps  \u00B7  strength not known"), Units.Num()));
 		}
-		return FString::Printf(TEXT("%d corps  \u00B7  %d division%s  \u00B7  %s men"), Units.Num(), Divisions, Divisions == 1 ? TEXT("") : TEXT("s"), *Thousands(Men));
+		return CampaignText::Phrases(FString::Printf(TEXT("%d corps  \u00B7  %d division%s  \u00B7  %s men"), Units.Num(), Divisions, Divisions == 1 ? TEXT("") : TEXT("s"), *Thousands(Men)));
 	}
 }
 
@@ -5283,7 +5284,7 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening)
 		{
 			Odds += FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePct, *Place);
 		}
-		FaceOff.OddsLine = FText::FromString(Odds);
+		FaceOff.OddsLine = FText::FromString(CampaignText::Phrases(Odds));
 	}
 	else
 	{
@@ -5301,7 +5302,7 @@ void ACampaignPlayerController::OpenFaceOff(int32 RegionId, bool bOpening)
 				? FString::Printf(TEXT("  \u00B7  about %d%% to take %s"), Preview.ChancePctLow, *Place)
 				: FString::Printf(TEXT("  \u00B7  %d to %d%% to take %s"), Preview.ChancePctLow, Preview.ChancePctHigh, *Place);
 		}
-		FaceOff.OddsLine = FText::FromString(Odds);
+		FaceOff.OddsLine = FText::FromString(CampaignText::Phrases(Odds));
 		if (!Preview.Note.IsEmpty())
 		{
 			FaceOff.Prize = FText::FromString(Preview.Note + (Preview.Prize.IsEmpty() ? FString() : TEXT("\n") + Preview.Prize));
@@ -5966,7 +5967,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 	if (Region.bOil) Lines.Add(TEXT("Oilfields"));
 	if (Region.bOre) Lines.Add(TEXT("Iron ore"));
 	if (Region.bDepot) Lines.Add(TEXT("Supply depot"));
-	RegionPanel.Details = FText::FromString(FString::Join(Lines, TEXT("   ·   ")));
+	RegionPanel.Details = FText::FromString(CampaignText::Phrases(FString::Join(Lines, TEXT("   \u00B7   "))));
 
 	// Who is standing here.
 	TArray<FString> ForceLines;
@@ -6039,7 +6040,7 @@ void ACampaignPlayerController::RefreshRegionPanel(int32 RegionId)
 			if (!Province.Town.IsEmpty() && Province.Town != Region.Name)
 			{
 				// (where the province is named for its city, its name has said so already)
-				RegionPanel.Details = FText::FromString(FString::Printf(TEXT("Chief town %s  \u00B7  %s"), *Province.Town, *RegionPanel.Details.ToString()));
+				RegionPanel.Details = FText::FromString(CampaignText::Phrases(FString::Printf(TEXT("Chief town %s  \u00B7  %s"), *Province.Town, *RegionPanel.Details.ToString())));
 			}
 			RegionPanel.Prize = FText::FromString(Province.PrizeLine);
 			RegionPanel.PrizeTip = FText::FromString(FString::Join(Province.PrizeItems, TEXT("\n")));

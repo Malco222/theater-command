@@ -1,4 +1,5 @@
 #include "Campaign/CampaignHUD.h"
+#include "Campaign/CampaignText.h"
 
 #include "Campaign/CampaignMapActor.h"
 #include "Campaign/CampaignMiniatures.h"
@@ -131,17 +132,19 @@ namespace
 				};
 				Add(Face->DefaultTypeface, TEXT("Regular"), Own / TEXT("CourierPrime-Regular.ttf"));
 				Add(Face->DefaultTypeface, TEXT("Bold"), Own / TEXT("CourierPrime-Bold.ttf"));
-				// (a tick, a star or an arrow the typewriter has no key for is cut from the engine's plain face)
+				// (a tick, a small triangle or an arrow the typewriter has no key for is cut from the engine's own face of
+				// signs, the one that drew them before the typewriter came: the plain face has none of them either, and
+				// a sign that no face has is drawn as an empty box)
 				const FString Plain = FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Regular.ttf"), Wide = FPaths::EngineContentDir() / TEXT("Slate/Fonts/DroidSansFallback.ttf");
-				if (FPaths::FileExists(Plain))
-				{
-					Add(Face->FallbackTypeface.Typeface, TEXT("Regular"), Plain);
-					Add(Face->FallbackTypeface.Typeface, TEXT("Bold"), Plain);
-				}
-				else if (FPaths::FileExists(Wide))
+				if (FPaths::FileExists(Wide))
 				{
 					Add(Face->FallbackTypeface.Typeface, TEXT("Regular"), Wide);
 					Add(Face->FallbackTypeface.Typeface, TEXT("Bold"), Wide);
+				}
+				else if (FPaths::FileExists(Plain))
+				{
+					Add(Face->FallbackTypeface.Typeface, TEXT("Regular"), Plain);
+					Add(Face->FallbackTypeface.Typeface, TEXT("Bold"), Plain);
 				}
 			}
 		}
@@ -563,7 +566,7 @@ namespace
 				if (Each.bCrowd)
 				{
 					// The armies put away behind a crowded province's one flag: a small brass chip with their number.
-					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 10);
+					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 12);
 					const FVector2D CountSize = Measure->Measure(Each.Name, CountFont);
 					const double ChipWide = CountSize.X + 12.0, ChipHigh = 17.0;
 					const FVector2D Corner(Each.At.X / Scale - ChipWide * 0.5, Each.At.Y / Scale);
@@ -573,15 +576,15 @@ namespace
 					}
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId, Geometry.ToPaintGeometry(FVector2D(ChipWide + 2.0, ChipHigh + 2.0), FSlateLayoutTransform(Corner - FVector2D(1.0, 1.0))), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("3A2E12"))));
 					FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(ChipWide, ChipHigh), FSlateLayoutTransform(Corner)), &Stripe, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("C9A55A"))));
-					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(6.0, 1.5))), Each.Name, CountFont, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("1F1808"))));
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(6.0, (ChipHigh - CountSize.Y) * 0.5))), Each.Name, CountFont, ESlateDrawEffect::None, FLinearColor(FColor::FromHex(TEXT("1F1808"))));
 					continue;
 				}
 				if (Each.bHarbour)
 				{
 					// Ships in harbour: a small plate with an anchor drawn on it and the number of ships.
-					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 9);
+					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 13); // (the typewriter's figures are small for their size: set a size up, in bold)
 					const FVector2D CountSize = Measure->Measure(Each.Name, CountFont);
-					const double BadgeWide = 30.0 + CountSize.X, BadgeHigh = 16.0;
+					const double BadgeWide = 31.0 + CountSize.X, BadgeHigh = 17.0;
 					const FVector2D Corner(Each.At.X / Scale - BadgeWide * 0.5, Each.At.Y / Scale);
 					if (UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(BadgeWide, BadgeHigh))))
 					{
@@ -605,15 +608,15 @@ namespace
 					Stroke({ { -2.6, -2.2 }, { 2.6, -2.2 } }, 1.4f);
 					Stroke({ { -1.0, -5.2 }, { 1.0, -5.2 }, { 1.0, -3.8 }, { -1.0, -3.8 }, { -1.0, -5.2 } }, 1.0f);
 					Stroke({ { -4.4, 1.6 }, { -3.2, 4.0 }, { 0.0, 5.2 }, { 3.2, 4.0 }, { 4.4, 1.6 } }, 1.5f);
-					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(25.0, 1.5))), Each.Name, CountFont, ESlateDrawEffect::None, NameInk);
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(25.0, (BadgeHigh - CountSize.Y) * 0.5))), Each.Name, CountFont, ESlateDrawEffect::None, NameInk);
 					continue;
 				}
 				if (Each.bAirfield)
 				{
 					// An airfield in use: a small plate with a little aircraft drawn on it and the number of groups.
-					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 9);
+					const FSlateFontInfo CountFont = Font(TEXT("Bold"), 13); // (the typewriter's figures are small for their size: set a size up, in bold)
 					const FVector2D CountSize = Measure->Measure(Each.Name, CountFont);
-					const double BadgeWide = 30.0 + CountSize.X, BadgeHigh = 16.0;
+					const double BadgeWide = 31.0 + CountSize.X, BadgeHigh = 17.0;
 					const FVector2D Corner(Each.At.X / Scale - BadgeWide * 0.5, Each.At.Y / Scale);
 					if (UnderFrame(Frame, FBox2D(Corner, Corner + FVector2D(BadgeWide, BadgeHigh))))
 					{
@@ -631,7 +634,7 @@ namespace
 					Stroke(FVector2D(0.0, -5.0), FVector2D(0.0, 5.0), 2.0f);
 					Stroke(FVector2D(-5.5, -0.8), FVector2D(5.5, -0.8), 2.2f);
 					Stroke(FVector2D(-2.4, 4.2), FVector2D(2.4, 4.2), 1.6f);
-					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(25.0, 1.5))), Each.Name, CountFont, ESlateDrawEffect::None, NameInk);
+					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(CountSize, FSlateLayoutTransform(Corner + FVector2D(25.0, (BadgeHigh - CountSize.Y) * 0.5))), Each.Name, CountFont, ESlateDrawEffect::None, NameInk);
 					continue;
 				}
 				// (from far off the capitals' plates are small, so the countries' own names can still be read)
@@ -639,8 +642,7 @@ namespace
 				// (a capital's star is cut from the plain face: the serif has none)
 				const bool bStar = Each.bCapital && !Each.bFar;
 				const FString Shown = Each.Name;
-				const FSlateFontInfo StarFont = Font(TEXT("Bold"), 10);
-				const double StarWide = bStar ? Measure->Measure(TEXT("\u2605"), StarFont).X + 4.0 : 0.0;
+				const double StarWide = bStar ? 15.0 : 0.0; // (the star is drawn, not lettered: the typewriter has no star)
 				FVector2D NameSize = Measure->Measure(Shown, NameFont);
 				NameSize.X += StarWide;
 				const FVector2D LineSize = Each.Line.IsEmpty() ? FVector2D::ZeroVector : FVector2D(Measure->Measure(Each.Line, LineFont));
@@ -691,7 +693,22 @@ namespace
 				FSlateDrawElement::MakeBox(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(FVector2D(4.0, High - 6.0), FSlateLayoutTransform(Corner + FVector2D(4.0, 3.0))), &Stripe, ESlateDrawEffect::None, Each.Colour.CopyWithNewOpacity(1.0f));
 				if (bStar)
 				{
-					FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(13.0, 3.0))), FString(TEXT("\u2605")), StarFont, ESlateDrawEffect::None, bLabels ? FLinearColor(FColor::FromHex(TEXT("8E2C20"))) : FLinearColor(FColor::FromHex(TEXT("E0B872"))));
+					// A capital's star, drawn as the frame's signs are drawn: the five strokes of a star in one line, close
+					// enough together at this size to fill it.
+					const FVector2D Heart = Corner + FVector2D(13.0 + 5.5, High * 0.5);
+					TArray<FVector2D> Strokes;
+					for (int32 Point = 0; Point <= 5; ++Point)
+					{
+						const double Angle = FMath::DegreesToRadians(144.0 * Point);
+						Strokes.Add(Heart + FVector2D(FMath::Sin(Angle), -FMath::Cos(Angle)) * 5.6);
+					}
+					const FLinearColor StarInk = bLabels ? FLinearColor(FColor::FromHex(TEXT("8E2C20"))) : FLinearColor(FColor::FromHex(TEXT("E0B872")));
+					FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(), Strokes, ESlateDrawEffect::None, StarInk, true, 1.8f);
+					for (int32 Point = 0; Point < 5; ++Point)
+					{
+						// (and a stroke from its heart to each point, so that the star is solid and not a knot of lines)
+						FSlateDrawElement::MakeLines(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(), TArray<FVector2D>{ Heart, FMath::Lerp(Heart, Strokes[Point], 0.72) }, ESlateDrawEffect::None, StarInk, true, 2.6f);
+					}
 				}
 				FSlateDrawElement::MakeText(OutDrawElements, LayerId + 1, Geometry.ToPaintGeometry(NameSize, FSlateLayoutTransform(Corner + FVector2D(13.0 + StarWide, 2.0))), Shown, NameFont, ESlateDrawEffect::None, NameInk);
 				if (!Each.Line.IsEmpty())
@@ -5442,7 +5459,7 @@ namespace
 								SNew(SVerticalBox)
 								+ SVerticalBox::Slot().AutoHeight()
 								[
-									SNew(STextBlock).Text(Option.Name).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
+									SNew(STextBlock).Text(Option.Name).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).AutoWrapText(true)
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 3.0f, 0.0f, 0.0f)
 								[
