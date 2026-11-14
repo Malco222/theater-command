@@ -447,6 +447,9 @@ def build_land():
     cool = plus(m, times(m, warm, scalar(m, "WoodsWarmLess", -0.45, -2050, -1440), -1950, -1500), 1.0, -1850, -1500)
     leaf = lerp(m, vector(m, "WoodsColour", (0.05, 0.09, 0.04, 1.0), -2000, -900),
                 vector(m, "FirColour", (0.024, 0.056, 0.04, 1.0), -2000, -1050), (cover, "A"), -1800, -950)
+    # (The whole-world map: the canopy of the tropics is a lighter, fuller green than Europe's woods. How much of the
+    # canopy at a place is Europe's is in the alpha of the picture of the fields' lie: 1 everywhere in Europe.)
+    leaf = lerp(m, vector(m, "TropicColour", (0.075, 0.15, 0.07, 1.0), -2000, -1200), leaf, (lie, "A"), -1700, -1050)
     # (on a warm stain the canopy itself is olive: a very dark green goes chocolate with the least red showing through)
     leaf = times(m, leaf, lerp(m, 1.0, vector(m, "WoodsWarmTint", (1.0, 1.0, 1.0, 1.0), -1800, -1180), warm, -1700, -1100), -1600, -1000)
     woods = lerp(m, leaf,

@@ -516,6 +516,18 @@ void ACampaignMapActor::PaintGround()
 	LandScalar(TEXT("WoodsStain"), 0.42f);
 	LandVector(TEXT("FirColour"), FLinearColor(0.015f, 0.034f, 0.028f));
 	{
+		// (the whole-world map) The canopy of the tropics: the art director's jungle, seen at about (54, 87, 56).
+		// ("-TheaterJungle=r,g,b" tries another.)
+		FLinearColor Jungle(0.055f, 0.122f, 0.07f);
+		FString Asked;
+		TArray<FString> Parts;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterJungle="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
+		{
+			Jungle = FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]));
+		}
+		LandVector(TEXT("TropicColour"), Jungle);
+	}
+	{
 		// Woods on a warm-stained nation (Poland's red, Holland's orange) went chocolate: a very dark green takes
 		// on the least red that shows through it. There the canopy takes almost none of the stain, is laid on a
 		// little thicker, and is itself olive. ("-TheaterWarmWoods=less,more,r,g,b" tries others.)
@@ -714,7 +726,11 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 		const double X = Shape.OriginX + FMath::Min(I * Step * Shape.Cell, Shape.ExtentX), Y = Shape.OriginY + FMath::Min(J * Step * Shape.Cell, Shape.ExtentY);
 		// The paint has one pixel for every point of the finest grid: this point's is at the middle of its pixel.
 		const FVector2D UV((FMath::Min(I * Step, Shape.NX - 1) + 0.5) / Shape.NX, (FMath::Min(J * Step, Shape.NY - 1) + 0.5) / Shape.NY);
-		return Buffers.AddVertex(MapToWorld(X, Y, Heights[J * Size.X + I] - Drop - Sheet.Sink), FVector::UpVector, FColor::White, UV);
+		// (a sheet with a finer one let into it lies a hair low round that one, and only there, so that where the two
+		// overlap the finer is always the one seen; elsewhere its land stands at its true height above the sea)
+		const double Reach = 3.0 * Step * Shape.Cell;
+		const bool bByTheHole = Sheet.bHole && X > Sheet.Hole.Min.X - Reach && X < Sheet.Hole.Max.X + Reach && Y > Sheet.Hole.Min.Y - Reach && Y < Sheet.Hole.Max.Y + Reach;
+		return Buffers.AddVertex(MapToWorld(X, Y, Heights[J * Size.X + I] - Drop - (bByTheHole ? Sheet.Sink : 0.0)), FVector::UpVector, FColor::White, UV);
 	};
 	auto VertexAt = [&](int32 I, int32 J)
 	{
@@ -951,7 +967,7 @@ void ACampaignMapActor::BuildWorld()
 	LevelLand(WorldLand);
 	UpdateLand(WorldLand, 12000.0f, FVector::ZeroVector, true);
 
-	// Its sea: one flat sheet under the map's own, a hair lower for the same reason.
+	// Its sea: one flat sheet at the level of the map's own, with the map's own box left out of it.
 	if (!WorldSeaMesh)
 	{
 		WorldSeaMesh = NewObject<UProceduralMeshComponent>(this);
@@ -962,21 +978,34 @@ void ACampaignMapActor::BuildWorld()
 	}
 	WorldSeaMesh->ClearAllMeshSections();
 	{
-		const int32 Across = 36, Down = 20;
+		// (its lines run along the edges of the map's box, so that the box can be left out cleanly)
+		TArray<double> Xs, Ys;
+		for (int32 I = 0; I <= 36; ++I) { Xs.Add(Data.WorldMinX + Data.WorldWidth * I / 36.0); }
+		for (int32 J = 0; J <= 20; ++J) { Ys.Add(Data.WorldMinY + Data.WorldHeight * J / 20.0); }
+		Xs.Append({ 0.0, Data.Width });
+		Ys.Append({ 0.0, Data.Height });
+		Xs.Sort();
+		Ys.Sort();
+		const int32 Across = Xs.Num() - 1, Down = Ys.Num() - 1;
 		FCampaignMeshBuffers Buffers;
 		for (int32 J = 0; J <= Down; ++J)
 		{
 			for (int32 I = 0; I <= Across; ++I)
 			{
-				const double X = Data.WorldWidth * I / Across, Y = Data.WorldHeight * J / Down;
+				const double X = Xs[I] - Data.WorldMinX, Y = Ys[J] - Data.WorldMinY;
 				const FVector2D UV((X / WorldPaint.WaterStep + 0.5) / WorldPaint.WaterNX, (Y / WorldPaint.WaterStep + 0.5) / WorldPaint.WaterNY);
-				Buffers.AddVertex(MapToWorld(Data.WorldMinX + X, Data.WorldMinY + Y, -0.05), FVector::UpVector, FColor::White, UV);
+				Buffers.AddVertex(MapToWorld(Xs[I], Ys[J], 0.0), FVector::UpVector, FColor::White, UV);
 			}
 		}
 		for (int32 J = 0; J < Down; ++J)
 		{
 			for (int32 I = 0; I < Across; ++I)
 			{
+				const double MidX = (Xs[I] + Xs[I + 1]) * 0.5, MidY = (Ys[J] + Ys[J + 1]) * 0.5;
+				if (MidX > 0.0 && MidX < Data.Width && MidY > 0.0 && MidY < Data.Height)
+				{
+					continue; // the map's own sea lies here
+				}
 				const int32 A = J * (Across + 1) + I, B = A + 1, C = A + Across + 1, D = C + 1;
 				Buffers.Triangles.Append({ A, C, B, B, C, D });
 			}
