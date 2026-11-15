@@ -246,7 +246,19 @@ FString ACampaignGameMode::DescribeSavedCampaign()
 bool ACampaignGameMode::ContinueCampaign()
 {
 	FString Text;
-	if (!Session.IsValid() || !FFileHelper::LoadFileToString(Text, *SaveFile()) || !Session->Load(Text))
+	if (!Session.IsValid() || !FFileHelper::LoadFileToString(Text, *SaveFile()))
+	{
+		return false;
+	}
+	// (Rules version 74: a campaign saved on the wider world has provinces and seas a table laid with Europe alone
+	// does not have. It is not continued there. The other way round is no trouble: a campaign saved on Europe
+	// alone plays on, with the world beyond as its backdrop.)
+	if (Text.Contains(TEXT("\"world\":1")) && !FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")))
+	{
+		UE_LOG(LogTheater, Display, TEXT("The saved campaign is played on the wider world, and this table is laid with Europe alone: it is not continued."));
+		return false;
+	}
+	if (!Session->Load(Text))
 	{
 		return false;
 	}

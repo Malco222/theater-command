@@ -40,6 +40,9 @@ if [ ! -d Content/Campaign/Sounds ] || [ "$(cat Saved/Sounds/made-from.txt 2> /d
 fi
 
 echo "Starting Theater Command..."
-"$ENGINE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" "$PWD/TheaterCommand.uproject" -game -windowed > /tmp/theater-command-game.log 2>&1 &
+# (-TheaterWorld: the whole-world map. The grand campaign is then played on the wider chart, with North America's
+# provinces; the history scenarios keep to Europe, with the world beyond as their backdrop. Take the flag out to
+# go back to the table laid with Europe alone.)
+"$ENGINE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor" "$PWD/TheaterCommand.uproject" -game -windowed -TheaterWorld > /tmp/theater-command-game.log 2>&1 &
 disown
 sleep 2
