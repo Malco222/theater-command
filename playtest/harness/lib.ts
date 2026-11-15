@@ -56,11 +56,14 @@ function dial(g: Game, stop?: number): void {
   f(g, n);
 }
 
+// Version 74: the grand campaign opens on the wider world. TC_EUROPE=1 keeps it on the map of Europe (startOpen(g, false)),
+// which plays Version 73's wars exactly; older versions take no second argument and ignore it.
+const openIt = (g: Game): void => { (startOpen as any)(g, !process.env.TC_EUROPE); };
 export function start(me: string | null, from: number, seed: number, level = 'colonel', stop?: number): Game {
   const g = createGame(seed, from > 1 ? null : me);
-  if (from === 1) { startOpen(g); dial(g, stop); }
+  if (from === 1) { openIt(g); dial(g, stop); }
   while (g.turn < from) T.runTurnAI(g);
-  if (from > 1) { startOpen(g); dial(g, stop); }
+  if (from > 1) { openIt(g); dial(g, stop); }
   g.human = me;
   if (me) setLevel(g, level);
   if (from > 1) takeOver(g);
