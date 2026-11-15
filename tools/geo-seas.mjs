@@ -2,10 +2,10 @@
 // regions have a coast on it, and the lines to draw between zones.
 import fs from 'node:fs';
 
-const CELL = 3;
+export const CELL = 3;
 
 /** Marks every grid cell whose centre lies inside the polygon (outer ring and holes, even-odd). */
-function fill(grid, cols, rows, poly, value) {
+export function fill(grid, cols, rows, poly, value) {
   let y0 = 1e9, y1 = -1e9;
   for (const [, y] of poly[0]) { if (y < y0) y0 = y; if (y > y1) y1 = y; }
   const r0 = Math.max(0, Math.floor(y0 / CELL)), r1 = Math.min(rows - 1, Math.ceil(y1 / CELL));
@@ -27,7 +27,7 @@ function fill(grid, cols, rows, poly, value) {
 }
 
 /** Douglas-Peucker on an open line. */
-function simplify(pts, tol) {
+export function simplify(pts, tol) {
   if (pts.length < 3) return pts;
   const keep = new Uint8Array(pts.length);
   keep[0] = keep[pts.length - 1] = 1;
@@ -48,7 +48,7 @@ function simplify(pts, tol) {
 }
 
 /** Rounds the corners of a line (Chaikin), keeping its two ends where they are. */
-function smooth(pts) {
+export function smooth(pts) {
   if (pts.length < 3) return pts;
   const out = [pts[0]];
   for (let i = 0; i < pts.length - 1; i++) {
@@ -218,5 +218,6 @@ export function buildSeas({ land, regions, proj, width, height }) {
     }
     grid.push(row + last + run);
   }
-  return { zones: zones.map(({ i, ...z }) => z), gates, borders, seaOf, cell: CELL * LOOK, grid };
+  // The last four are for the map of the wider world, which is laid around this one (build-geo-world.mjs).
+  return { zones: zones.map(({ i, ...z }) => z), gates, borders, seaOf, cell: CELL * LOOK, grid, zoneAt, dist, cols, rows };
 }
