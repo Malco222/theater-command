@@ -1789,11 +1789,13 @@ namespace
 		{
 			return -1.0f;
 		}
-		// (The art director's round 29: under full snow a stripe at the cap read like a venetian blind. The cap comes
-		// down with the snow: 10.5 with none, 9.0 under full snow.)
-		// (only over the second half of the snow's coming: where it lies thin, at Kiev or in Poland in January, a
-		// lower cap took the stripe under the floor of 8)
-		const float Cap = FMath::Lerp(10.5f, 9.0f, FMath::SmoothStep(0.5f, 1.0f, Snow / 0.34f));
+		// (The art director's round 29: under full snow a stripe at the cap read like a venetian blind: flat pale
+		// snow shows a stripe more than a quilt of fields does. She asked for about 8.5 there by the pictures, never
+		// above 9, and no more than 0.06 darker than the snow beside it: warmer, not darker. That is done in the
+		// land's paint, point by point where the snow lies whole: the snow lies less thin on a stripe there, and
+		// the stripe's colour is carried further from its holder's. This reckoning has little hold on it: under
+		// whole snow most of a point's colour is the snow's, and the mix moved the measure by a few tenths.)
+		const float Cap = 10.5f;
 		float Share = 0.55f;
 		if (Snow > 0.0f && At(Share) < Cap)
 		{
@@ -2046,6 +2048,12 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 		// (and darker still under snow, which lifts it)
 		RegionStripe[Region.Id] = Share < 0.0f ? RegionStain[Region.Id] * (0.68f - 0.2f * Snow) : Mix(RegionStain[Region.Id], Owner, Share);
 		RegionOccupied[Region.Id] = 1;
+		// ("-TheaterStripeLog" says what each occupied province was given)
+		static const bool bSayEach = FParse::Param(FCommandLine::Get(), TEXT("TheaterStripeLog"));
+		if (bSayEach)
+		{
+			UE_LOG(LogTheater, Display, TEXT("Stripe of %s (%s holding %s): snow %.2f, mixed %.2f"), *Region.Name, *Region.Owner, *Region.Lawful, Snow, Share);
+		}
 	}
 	if (Occupied.Num() != Tint.Num())
 	{

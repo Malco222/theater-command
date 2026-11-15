@@ -3250,7 +3250,10 @@ void ACampaignMapActor::BuildWaterways()
 	const FLinearColor MidstreamIce = FLinearColor(FColor(140, 162, 172)), BankIce = FLinearColor(FColor(186, 196, 199));
 	RiversDrawnFor = WinterHard;
 	const double Lift = 0.1;
-	FCampaignMeshBuffers Buffers, BuffersBeyond;
+	// The course of each river as it is laid, before any is drawn: so that one that runs into another can be ended
+	// at the other's bank.
+	TArray<TArray<FVector2D>> RiverLaid;
+	RiverLaid.SetNum(Land.Rivers.Num());
 	for (const FLandRiver& River : Land.Rivers)
 	{
 		const int32 Count = River.Course.Num();
@@ -3258,11 +3261,6 @@ void ACampaignMapActor::BuildWaterways()
 		{
 			continue;
 		}
-		// (a river of the wider chart goes in a section of its own, which is put away when the eye is high: from
-		// there the coarse sheet's painted great rivers stand for them, and a ribbon laid at the fine ground's
-		// height would show through the coarse ground only in scraps)
-		const bool bRiverBeyond = Data.bWorld && (River.Course[0].X < 0.0 || River.Course[0].Y < 0.0 || River.Course[0].X > Data.Width || River.Course[0].Y > Data.Height);
-		FCampaignMeshBuffers& Into = bRiverBeyond ? BuffersBeyond : Buffers;
 		// A smooth curve through the points of the course, a short step at a time.
 		TArray<FVector2D> Path;
 		for (int32 K = 0; K + 1 < Count; ++K)
@@ -3272,6 +3270,21 @@ void ACampaignMapActor::BuildWaterways()
 			for (int32 Step = 0; Step < Steps; ++Step)
 			{
 				const double T = static_cast<double>(Step) / Steps;
+				if (Data.bWorld && (River.Course[0].X < 0.0 || River.Course[0].Y < 0.0 || River.Course[0].X > Data.Width || River.Course[0].Y > Data.Height))
+				{
+					// (The wider chart's rivers are given by a score of points a thousand units apart in all, with here and
+					// there two close together where another river joins. The plain curve, which leaves each point by
+					// half the way between its neighbours, overshot such a short stretch and kinked: a notch in the
+					// Mississippi where the Missouri comes in. There the curve leaves a point by no more than the
+					// stretch is long. Europe's rivers are left as they were laid.)
+					const double Long = FVector2D::Distance(P1, P2);
+					FVector2D Leave = (P2 - P0) * 0.5, Arrive = (P3 - P1) * 0.5;
+					Leave *= FMath::Min(1.0, Long / FMath::Max(Leave.Size(), 1.0e-6));
+					Arrive *= FMath::Min(1.0, Long / FMath::Max(Arrive.Size(), 1.0e-6));
+					const double T2 = T * T, T3 = T2 * T;
+					Path.Add(P1 * (2.0 * T3 - 3.0 * T2 + 1.0) + Leave * (T3 - 2.0 * T2 + T) + P2 * (-2.0 * T3 + 3.0 * T2) + Arrive * (T3 - T2));
+					continue;
+				}
 				Path.Add(0.5 * ((2.0 * P1) + (-P0 + P2) * T + (2.0 * P0 - 5.0 * P1 + 4.0 * P2 - P3) * T * T + (-P0 + 3.0 * P1 - 3.0 * P2 + P3) * T * T * T));
 			}
 		}
@@ -3289,6 +3302,73 @@ void ACampaignMapActor::BuildWaterways()
 				Path[K] = Straight[K] + FVector2D(Along.Y, -Along.X) * Wobble * FMath::Sin(T * UE_DOUBLE_PI);
 			}
 		}
+		RiverLaid[static_cast<int32>(&River - Land.Rivers.GetData())] = MoveTemp(Path);
+	}
+	if (Data.bWorld)
+	{
+		// (The wider chart's rivers. A tributary's last point is a point of the river it joins, and its ribbon ran on
+		// to the middle of that river and past it, with a hook where the two wandered apart: the Missouri at the
+		// Mississippi. It is ended where it reaches the other's bank. Europe's rivers are left as they were laid.)
+		auto BreadthOf = [&](int32 Index, int32 At)
+		{
+			return (Great.Contains(Land.Rivers[Index].Name) ? 0.625 : 0.425) * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(At) / FMath::Max(RiverLaid[Index].Num() - 1, 1)));
+		};
+		for (int32 Index = 0; Index < RiverLaid.Num(); ++Index)
+		{
+			TArray<FVector2D>& Mine = RiverLaid[Index];
+			if (Mine.Num() < 6 || (Mine[0].X >= 0.0 && Mine[0].Y >= 0.0 && Mine[0].X <= Data.Width && Mine[0].Y <= Data.Height))
+			{
+				continue;
+			}
+			for (int32 Other = 0; Other < RiverLaid.Num(); ++Other)
+			{
+				const TArray<FVector2D>& Theirs = RiverLaid[Other];
+				if (Other == Index || Theirs.Num() < 6)
+				{
+					continue;
+				}
+				// (how far a place lies from the other river's line, and how broad that river is there)
+				auto Off = [&](const FVector2D& P, double& OutHalf)
+				{
+					double Best = 1.0e9;
+					for (int32 K = 0; K + 1 < Theirs.Num(); ++K)
+					{
+						const double Far = FMath::PointDistToSegment(FVector(P, 0.0), FVector(Theirs[K], 0.0), FVector(Theirs[K + 1], 0.0));
+						if (Far < Best)
+						{
+							Best = Far;
+							OutHalf = BreadthOf(Other, K);
+						}
+					}
+					return Best;
+				};
+				double Half = 0.0;
+				if (Off(Mine.Last(), Half) > 2.5)
+				{
+					continue; // it does not end on this one
+				}
+				while (Mine.Num() > 4 && Off(Mine.Last(), Half) < Half + 0.15)
+				{
+					Mine.Pop();
+				}
+				break;
+			}
+		}
+	}
+	FCampaignMeshBuffers Buffers, BuffersBeyond;
+	for (const FLandRiver& River : Land.Rivers)
+	{
+		const int32 Count = River.Course.Num();
+		if (Count < 2)
+		{
+			continue;
+		}
+		// (a river of the wider chart goes in a section of its own, which is put away when the eye is high: from
+		// there the coarse sheet's painted great rivers stand for them, and a ribbon laid at the fine ground's
+		// height would show through the coarse ground only in scraps)
+		const bool bRiverBeyond = Data.bWorld && (River.Course[0].X < 0.0 || River.Course[0].Y < 0.0 || River.Course[0].X > Data.Width || River.Course[0].Y > Data.Height);
+		FCampaignMeshBuffers& Into = bRiverBeyond ? BuffersBeyond : Buffers;
+		TArray<FVector2D> Path = RiverLaid[static_cast<int32>(&River - Land.Rivers.GetData())];
 		const double Broad = Great.Contains(River.Name) ? 0.625 : 0.425;
 		RiverPaths.Add(Path); // (kept, with how broad it is, for the towns' own bridges)
 		RiverBroad.Add(Broad);
@@ -6107,6 +6187,52 @@ void ACampaignMapActor::BuildWords()
 		const double Long = Word.Height * 1.75 * FMath::Max(Word.Text.Len() - 1, 1);
 		Word.From = Sea.Center - FVector2D(Long * 0.5, 0.0);
 		Word.To = Sea.Center + FVector2D(Long * 0.5, 0.0);
+		Word.bSea = true;
+	}
+	// The great lakes of the wider chart: each named along its own length, in the seas' lettering, smaller.
+	for (const FCampaignLake& Lake : Data.Lakes)
+	{
+		if (Lake.Outline.Num() < 3 || Lake.Name.IsEmpty())
+		{
+			continue;
+		}
+		// (its long axis: the line through its middle along which its shore is spread widest)
+		FVector2D Middle = FVector2D::ZeroVector;
+		for (const FVector2D& P : Lake.Outline)
+		{
+			Middle += P;
+		}
+		Middle /= Lake.Outline.Num();
+		double Sxx = 0.0, Sxy = 0.0, Syy = 0.0;
+		for (const FVector2D& P : Lake.Outline)
+		{
+			const FVector2D D = P - Middle;
+			Sxx += D.X * D.X;
+			Sxy += D.X * D.Y;
+			Syy += D.Y * D.Y;
+		}
+		const double Turn = 0.5 * FMath::Atan2(2.0 * Sxy, Sxx - Syy);
+		FVector2D Along(FMath::Cos(Turn), FMath::Sin(Turn));
+		if (Along.X < 0.0)
+		{
+			Along = -Along; // (read from the west)
+		}
+		double Least = 0.0, Most = 0.0;
+		for (const FVector2D& P : Lake.Outline)
+		{
+			const double T = (P - Middle) | Along;
+			Least = FMath::Min(Least, T);
+			Most = FMath::Max(Most, T);
+		}
+		FMapWord& Word = MapWords.AddDefaulted_GetRef();
+		Word.Text = Lake.Name.ToUpper();
+		// (no longer than six tenths of the lake: a small lake's name is lettered smaller, to a point)
+		const double Room = 0.6 * (Most - Least);
+		Word.Height = FMath::Clamp(Room / (1.75 * FMath::Max(Word.Text.Len() - 1, 1)), 1.3, 2.6);
+		const double Long = Word.Height * 1.75 * FMath::Max(Word.Text.Len() - 1, 1);
+		const FVector2D Centre = Middle + Along * (0.5 * (Least + Most));
+		Word.From = Centre - Along * (Long * 0.5);
+		Word.To = Centre + Along * (Long * 0.5);
 		Word.bSea = true;
 	}
 	// Countries: each along the long axis of the ground it holds today, worked out from its provinces, spanning

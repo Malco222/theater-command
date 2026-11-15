@@ -436,7 +436,6 @@ def build_land():
     fog_picture = picture(m, "Fog", uv, -2600, -1800, numbers=True)
     striped = times(m, times(m, lerp(m, stripe, 0.4, stripe_far, -900, -3350), (occupied, "A"), -750, -3350),
                     times(m, scalar(m, "Stripes", 1.0, -900, -3200), one_in(m, unreal.MaterialExpressionOneMinus, (fog_picture, "R"), -900, -3120), -750, -3160), -600, -3300)
-    tint_rgb = lerp(m, (tint, "RGB"), (occupied, "RGB"), striped, -450, -3200)
     # The detail, at two sizes so that its repeat does not show. (It is read here, ahead of its use, because the
     # shading of the hills, the edges of the woods and the lie of the fields are roughened by it.)
     fine_uv = world_uv(m, "DetailTiling", 0.0052, -3000, 700)
@@ -455,6 +454,17 @@ def build_land():
     ground = picture(m, "Ground", uv, -2600, -500)
     relief = picture(m, "Relief", relief_uv, -2600, 0, numbers=True)
     masks = picture(m, "Masks", relief_uv, -2600, 250, numbers=True)
+    # (Her trim of round 29: under whole snow a stripe was up to a tenth darker than the snow beside it, and read like
+    # a venetian blind. Where the snow lies whole it lies less thin on a stripe, which takes the darkness out; and
+    # the stripe's colour is carried further from its holder's, so that it is warmer than its ground, not darker.)
+    snow_whole = one_in(m, unreal.MaterialExpressionSaturate, times(m, (masks, "G"), 6.67, -1650, -3100), -1500, -3100)
+    # (only where it lies deep: measured, a little of this goes a long way on open snow, and where the snow is thin,
+    # at Kiev in January, the stripe needs none of it)
+    snow_deep = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (masks, "G"), -0.095, -1800, -3180), 40.0, -1650, -3180), -1500, -3180)
+    stripe_colour = one_in(m, unreal.MaterialExpressionSaturate,
+                           plus(m, (tint, "RGB"), times(m, plus(m, (occupied, "RGB"), times(m, (tint, "RGB"), -1.0, -1350, -3050), -1200, -3050),
+                                                        plus(m, times(m, snow_deep, scalar(m, "StripesSnowWarm", 0.06, -1350, -2950), -1200, -2950), 1.0, -1050, -2950), -900, -3000), -750, -3050), -600, -3050)
+    tint_rgb = lerp(m, (tint, "RGB"), stripe_colour, striped, -450, -3200)
 
     # The nation's colour is a stain over the bare ground: a wash everywhere (thicker for a nation of little colour,
     # which the Relief picture's alpha says) and a band along the national frontier (the Tint picture's alpha).
@@ -762,7 +772,10 @@ def build_land():
     # (The art director's round 28: under snow the stripes of occupied ground went quiet, and in the snowed woods of
     # the East they could not be seen at all, where what could be liberated matters most. The snow lies thinner on a
     # stripe: the old owner's colour shows through the dusting, as a dark thread shows through frost on cloth.)
-    snow_lying = times(m, (masks, "G"), one_in(m, unreal.MaterialExpressionOneMinus, times(m, striped, scalar(m, "StripesThinSnow", 0.3, -1500, -40), -1350, -60), -1200, -60), -1050, -100)
+    # (Her trim of round 29: under full snow a stripe was up to a tenth darker than the snow beside it. Where the snow
+    # lies full it lies less thin on a stripe, so that the stripe there is warmer than its ground and hardly darker.)
+    thin_snow = lerp(m, scalar(m, "StripesThinSnow", 0.38, -1500, -40), scalar(m, "StripesThinSnowFull", 0.28, -1500, 100), snow_whole, -1350, 20)
+    snow_lying = times(m, (masks, "G"), one_in(m, unreal.MaterialExpressionOneMinus, times(m, striped, thin_snow, -1350, -60), -1200, -60), -1050, -100)
     c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), snow_lying, -900, -400)
     # (The art director's ruling of round 19: in winter the snow took a wood's dark floor away, and every tree stood
     # alone on white like salt. A wood keeps a cool grey floor under the snow, like pencil shading on the map, about
