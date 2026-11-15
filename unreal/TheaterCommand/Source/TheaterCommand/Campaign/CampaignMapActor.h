@@ -777,11 +777,13 @@ private:
 		double Turn = 0.0, Wide = 1.5;
 		int32 Parked = 0, Mesh = INDEX_NONE;
 		bool bShown = false;
+		float Up = 0.0f; // how far its aircraft have come up out of the ground, 0 to 1
 	};
 	TArray<FParkedField> ParkedFields;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> ParkedMeshes;
 	bool bParkedClose = false;
+	float BoxesDown = 0.0f; // how far the silver box aircraft have gone down into the ground, 0 to 1
 	void ShowParkedPlanes(float CameraDistance, const FVector& CameraFocus);
 	UPROPERTY(Transient)
 	TObjectPtr<UProceduralMeshComponent> AirSignMesh; // aircraft parked on the airfields that have air groups based there

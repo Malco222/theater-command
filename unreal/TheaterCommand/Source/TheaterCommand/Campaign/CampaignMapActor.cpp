@@ -4335,18 +4335,28 @@ void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& Ca
 		return;
 	}
 	const bool bClose = CameraDistance < (bParkedClose ? 3500.0f : 3200.0f);
-	if (bClose != bParkedClose)
-	{
-		bParkedClose = bClose;
-		AirSignMesh->SetVisibility(!bClose);
-	}
+	bParkedClose = bClose;
 	const FVector2D Eye = WorldToMap(CameraFocus);
 	const double Field = UnitScale * 2.1 * 1.3, Metre = 0.5 * Field / 9.0;
+	// (The art director's note of round 23: the change from box to aircraft must not show as a pop. Neither is
+	// swapped in a single frame: the boxes go down into the ground and the aircraft come up out of it, over about
+	// a third of a second, as the eye comes close or a field comes near it, and the other way as it leaves.)
+	const float Step = (GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.016f) / 0.32f;
+	const double Sink = 0.4 * Field;
+	const float BoxesWere = BoxesDown;
+	BoxesDown = FMath::Clamp(BoxesDown + (bClose ? Step : -Step), 0.0f, 1.0f);
+	if (BoxesDown != BoxesWere)
+	{
+		AirSignMesh->SetVisibility(BoxesDown < 1.0f);
+		AirSignMesh->SetRelativeLocation(FVector(0.0, 0.0, -Sink * FMath::SmoothStep(0.0f, 1.0f, BoxesDown)));
+	}
 	const FLinearColor Dural(FColor::FromHex(TEXT("B9BDB6"))), Tyre(FColor::FromHex(TEXT("2E2C2A")));
 	for (FParkedField& Each : ParkedFields)
 	{
 		const bool bShow = bClose && FVector2D::DistSquared(Eye, Each.Spot) < 240.0 * 240.0;
-		if (bShow == Each.bShown)
+		const float UpWas = Each.Up;
+		Each.Up = FMath::Clamp(Each.Up + (bShow ? Step : -Step), 0.0f, 1.0f);
+		if (bShow == Each.bShown && Each.Up == UpWas)
 		{
 			continue;
 		}
@@ -4390,7 +4400,8 @@ void ACampaignMapActor::ShowParkedPlanes(float CameraDistance, const FVector& Ca
 		}
 		if (ParkedMeshes.IsValidIndex(Each.Mesh) && ParkedMeshes[Each.Mesh])
 		{
-			ParkedMeshes[Each.Mesh]->SetVisibility(bShow);
+			ParkedMeshes[Each.Mesh]->SetVisibility(Each.Up > 0.0f);
+			ParkedMeshes[Each.Mesh]->SetRelativeLocation(FVector(0.0, 0.0, -Sink * (1.0f - FMath::SmoothStep(0.0f, 1.0f, Each.Up))));
 		}
 	}
 }
@@ -7604,8 +7615,9 @@ void ACampaignMapActor::TakeStudioPicture(USceneCaptureComponent2D* Camera, bool
 	// is taken a stop and a little darker. "-TheaterPlaneBias=-2.0" tries another.)
 	static float PlaneBias = -2.2f;
 	static const bool bAsked = FParse::Value(FCommandLine::Get(), TEXT("TheaterPlaneBias="), PlaneBias);
-	// (The cards' pictures have always been taken at the plain exposure, and the turning showpiece at nine tenths of a stop under it.)
-	static float CardBias = 0.0f;
+	// (The art director's ruling of round 23: the cards are brought to the tray's light, so that a tank's card and an
+	// aircraft's side by side in the Arsenal are not two photographs from different studios.)
+	static float CardBias = -0.9f;
 	static const bool bCardAsked = FParse::Value(FCommandLine::Get(), TEXT("TheaterCardBias="), CardBias);
 	Camera->PostProcessSettings.AutoExposureBias = bAircraft ? PlaneBias : Camera == ShowCamera ? -0.9f : CardBias;
 	// (The art director's ruling of round 19: a unit's picture is taken in the studio's own steady light, the light
