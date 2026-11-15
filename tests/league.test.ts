@@ -47,12 +47,12 @@ describe('the data', () => {
     expect(LEAGUE.color).toMatch(/^#[0-9a-f]{6}$/i);
   });
 
-  it('offers sixteen small countries of Europe and two of the new world in the grand campaign, from September 1939', () => {
+  it('offers sixteen small countries of Europe and eight of the new world in the grand campaign, from September 1939', () => {
     const g = grand();
     const list = (grandData as unknown as { nations: { id: string; small?: boolean; years: Record<string, string> }[] }).nations;
     const smalls = list.filter((n) => n.small);
-    expect(smalls.length).toBe(18);
-    expect(smalls.slice(16).map((n) => n.id)).toEqual(['CAN', 'MEX']);
+    expect(smalls.length).toBe(24);
+    expect(smalls.slice(16).map((n) => n.id)).toEqual(['CAN', 'MEX', 'BRA', 'ARG', 'CHL', 'PER', 'COL', 'VEN']);
     for (const n of smalls) {
       const N = g.nations[n.id];
       expect(N, n.id).toBeDefined();

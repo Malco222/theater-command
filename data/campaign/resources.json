@@ -3,7 +3,7 @@
   "nations": ["GER", "UK", "FRA", "ITA", "SOV", "USA"],
   "oil": {
     "_about": "'fields' is what each oilfield yields a month to a nation that owns it, by the province's name; 'occupied' is the share a conqueror gets out of a field it has taken. 'home' is what a nation produces at home without a field on the map: small wells, pre-war synthetic plants, and for a country off the map its whole industry. 'need' is what the forces burn a month: corps by the division and kind, aircraft by the machine, ships by the hull at sea ('port' is the share a ship in harbour burns), and 'peace' the share of it all a nation at peace uses. 'start' is the stock a nation begins with, in months of its need, and 'cap' the most its tanks can hold, in months of need. 'short' is what a shortage does when only part of the need is met: the share of their attack and defence tanks and lorried troops lose when there is no fuel at all, the same for aircraft and for the fleet's readiness, and 'slowAt' the share of need met below which fast troops lose one move a month.",
-    "fields": {"Ploiesti": 14, "Maikop": 8, "Grozny": 12, "Kirovabad": 40, "Iraq": 12, "East Texas": 35, "Oklahoma": 25, "West Texas": 20, "San Joaquin": 20, "Tampico": 10, "_default": 8},
+    "fields": {"Ploiesti": 14, "Maikop": 8, "Grozny": 12, "Kirovabad": 40, "Iraq": 12, "East Texas": 35, "Oklahoma": 25, "West Texas": 20, "San Joaquin": 20, "Tampico": 10, "Maracaibo": 40, "Ciudad Bolivar": 12, "Santander": 6, "Comodoro Rivadavia": 5, "Piura": 4, "_default": 8},
     "occupied": 0.6,
     "home": {"GER": 14, "ITA": 2.5, "FRA": 1, "UK": 0, "SOV": 4, "USA": 120},
     "need": {

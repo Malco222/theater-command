@@ -52,6 +52,14 @@ function stripes(): string {
   return s;
 }
 
+// Latin America's stars (the art director's drawings): Brazil's twenty-one of 1889 to 1960, and Venezuela's seven in an arc.
+const BRA_STARS: [number, number, number][] = [[12.2, 5.5, 0.3], [8.8, 7.4, 0.3], [9.6, 8.4, 0.3], [9.2, 9.3, 0.3], [11, 8, 0.3], [11, 9.4, 0.3], [12.8, 8.1, 0.3],
+  [10.5, 8.7, 0.2], [11.5, 8.6, 0.2], [11.3, 9, 0.2], [11, 10.1, 0.2], [12, 9.4, 0.2], [12.5, 9.1, 0.2], [12.3, 9.7, 0.2],
+  [13.2, 8.3, 0.2], [13.5, 8.5, 0.2], [13.6, 9, 0.2], [13.3, 9.3, 0.2], [13, 9.5, 0.2], [12.8, 8.7, 0.2], [13.1, 8.8, 0.2]];
+const VEN_STARS: [number, number][] = [-66, -44, -22, 0, 22, 44, 66].map((a) => [+(11 + 4.4 * Math.sin((a * Math.PI) / 180)).toFixed(2), +(9.8 - 4.2 * Math.cos((a * Math.PI) / 180)).toFixed(2)]);
+/** The blue, white and blue of the old Central American federation, which five republics still fly, each with its own mark on the white. */
+const federal = (blue: string, mark: string): string => hb(blue, WHITE, blue) + mark;
+
 /** What is drawn inside each nation's flag. */
 export const FLAGS: Record<string, string> = {
   GER: hb(BLACK, WHITE, RED) + ironCross(11, 7, 4.3, 2.4, 0.8),
@@ -91,6 +99,39 @@ export const FLAGS: Record<string, string> = {
     + `<path d="M9.4 4.7L8.8 5L9.5 5.2Z" fill="${GOLD}"/><path d="M8.95 5.05L8.8 6.5" stroke="#3e7b3a" stroke-width=".3"/>`,
   // Cuba: unchanged since 1902.
   CUB: hb('#002a8f', WHITE, '#002a8f', WHITE, '#002a8f') + `<path d="M0 0L9.4 7L0 14Z" fill="#cf142b"/>` + star(3.1, 7, 1.7, WHITE),
+  // South America, as the flags flew in 1939 (the art director's drawings). Brazil, 1889 to 1960: twenty-one stars.
+  BRA: field('#009c3b') + `<path d="M1.9 7L11 1.4L20.1 7L11 12.6Z" fill="#ffdf00"/>` + disc(11, 7, 3.5, '#002776')
+    + `<path d="M7.55 6.55Q11 5.4 14.35 8.05" fill="none" stroke="${WHITE}" stroke-width=".65"/>` + BRA_STARS.map(([x, y, r]) => disc(x, y, r * 0.75, WHITE)).join(''),
+  // Argentina: the war flag, with the Sun of May.
+  ARG: hb('#74acdf', WHITE, '#74acdf') + star(11, 7, 1.9, '#f6b40e', 16, 0.62) + disc(11, 7, 1.1, '#f6b40e'),
+  // Chile: unchanged since 1817.
+  CHL: hb(WHITE, '#d52b1e') + rect(0, 0, 7.33, 7, '#0039a6') + star(3.67, 3.5, 1.9, WHITE),
+  // Colombia: unchanged since 1861; the yellow is half the flag.
+  COL: field('#fcd116') + rect(0, 7, W, 3.5, '#003893') + rect(0, 10.5, W, 3.56, '#ce1126'),
+  // Peru, until 1950: the arms on the white band, in a wreath.
+  PER: vb('#d91023', WHITE, '#d91023') + `<path d="M8.7 6A2.7 2.7 0 1 0 13.3 6" fill="none" stroke="#3e7b3a" stroke-width=".55"/>` + `<circle cx="11" cy="4.1" r=".45" fill="none" stroke="#3e7b3a" stroke-width=".35"/>`
+    + shield(11, 4.9, 3, 4, '#d91023', '#c8a22c') + rect(9.5, 4.9, 1.5, 1.7, '#7fb6d9') + rect(11, 4.9, 1.5, 1.7, WHITE) + disc(10.25, 5.8, 0.4, '#8c6239') + disc(11.75, 5.7, 0.42, '#3e7b3a') + disc(11, 7.6, 0.45, '#c8a22c'),
+  // Venezuela, 1930 to 1954: seven stars in an arc on the blue.
+  VEN: hb('#ffcc00', '#00247d', '#cf142b') + VEN_STARS.map(([x, y]) => star(x, y, 0.62, WHITE)).join(''),
+  // The small republics (drawn by the builder, for the art director to check). Central America: Guatemala's bands
+  // stand upright; El Salvador, Honduras and Nicaragua keep the federation's, with arms, five stars and a triangle.
+  GUA: vb('#4997d0', WHITE, '#4997d0') + `<path d="M9.2 7.4A2 2 0 1 0 12.8 7.4" fill="none" stroke="#3e7b3a" stroke-width=".55"/>` + disc(11, 6.6, 0.7, '#3e7b3a'),
+  ELS: federal('#0f47af', `<path d="M11 5.3L12.6 8.4H9.4Z" fill="${GOLD}"/>` + `<circle cx="11" cy="7" r="2.1" fill="none" stroke="#3e7b3a" stroke-width=".4"/>`),
+  HON: federal('#0073cf', [[11, 7], [9, 6], [13, 6], [9, 8], [13, 8]].map(([x, y]) => star(x, y, 0.75, '#0073cf')).join('')),
+  NIC: federal('#0067c6', `<path d="M11 5.5L12.7 8.5H9.3Z" fill="none" stroke="${GOLD}" stroke-width=".5"/>` + disc(11, 7.5, 0.45, '#0067c6')),
+  // Costa Rica: blue, white, a double band of red, white, blue.
+  COS: hb('#002b7f', WHITE, '#ce1126', '#ce1126', WHITE, '#002b7f'),
+  // Panama: quartered, a blue star and a red.
+  PAN: field(WHITE) + rect(11, 0, 11, 7, '#d21034') + rect(0, 7, 11, 7, '#005293') + star(5.5, 3.5, 1.7, '#005293') + star(16.5, 10.5, 1.7, '#d21034'),
+  // Haiti: blue over red, with the arms on a white panel. The Dominican Republic: a white cross between blue and red quarters.
+  HAI: hb('#00209f', '#d21034') + rect(8.6, 4.8, 4.8, 4.4, WHITE) + disc(11, 7.4, 0.9, '#3e7b3a') + rect(10.8, 5.4, 0.4, 2, '#3e7b3a'),
+  DOM: field(WHITE) + rect(0, 0, 9.6, 5.6, '#002d62') + rect(12.4, 0, 9.6, 5.6, '#ce1126') + rect(0, 8.4, 9.6, 5.6, '#ce1126') + rect(12.4, 8.4, 9.6, 5.6, '#002d62'),
+  // Ecuador flies Colombia's colours with its arms in the middle; Bolivia red, yellow and green; Paraguay red, white
+  // and blue with its seal; Uruguay nine stripes and the Sun of May.
+  ECU: field('#ffd100') + rect(0, 7, W, 3.5, '#0072ce') + rect(0, 10.5, W, 3.56, '#ef3340') + disc(11, 7, 2.1, '#7fb6d9') + `<circle cx="11" cy="7" r="2.1" fill="none" stroke="#8c6239" stroke-width=".5"/>` + disc(11, 7.5, 0.8, '#3e7b3a'),
+  BOL: hb('#d52b1e', '#f9e300', '#007934'),
+  PAR: hb('#d52b1e', WHITE, '#0038a8') + `<circle cx="11" cy="7" r="1.6" fill="none" stroke="#3e7b3a" stroke-width=".5"/>` + star(11, 7, 0.8, GOLD),
+  URU: hb(WHITE, '#0038a8', WHITE, '#0038a8', WHITE, '#0038a8', WHITE, '#0038a8', WHITE) + rect(0, 0, 9.4, 7.8, WHITE) + star(4.7, 3.9, 2.4, '#f6b40e', 16, 0.62) + disc(4.7, 3.9, 1.3, '#f6b40e'),
   // Nations of the wider war.
   JPN: field(WHITE) + disc(11, 7, 4.2, '#bc002d'),
   CHN: field(RED) + rect(0, 0, 11, 7, '#000095') + star(5.5, 3.5, 2.7, WHITE, 12, 0.62) + disc(5.5, 3.5, 1.3, WHITE),

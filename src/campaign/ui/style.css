@@ -385,6 +385,7 @@ button.corps:hover { border-color: var(--ink-3); }
 .cross table.ticket td.fx:empty { display: none; }
 h4.crh { font-family: var(--head); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--brass); margin: 10px 0 2px; }
 h4.crh.bad { color: #f1a58f; }
+h4.crh.amber { color: #e9c987; }
 .cross .holdwarn, .card .holdwarn { margin-top: 5px; color: #f1a58f; }
 .crossword.warned { color: #f1a58f; }
 .crossword.ready b { color: #9fd28a; }
@@ -392,6 +393,8 @@ h4.crh.bad { color: #f1a58f; }
 .card .costwarn { margin-top: 5px; }
 .card .fightline { font-family: var(--head); font-size: 18px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 6px; }
 .note.holdbad { border-left: 3px solid #f1a58f; }
+.note.holdamber { border-left: 3px solid #e9c987; }
+.cross .costwarn { margin-top: 5px; color: #e9c987; }
 .note.crosslead .link { display: inline-block; margin: 4px 0 0; font-size: 12.5px; }
 .evcard p { margin: 0; font-family: var(--head); font-size: 18px; font-weight: 600; letter-spacing: .02em; line-height: 1.2; }
 .pref { margin-top: 10px; }

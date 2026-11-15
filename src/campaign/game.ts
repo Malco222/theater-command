@@ -427,19 +427,37 @@ export function computeSupply(g: Game): void {
   // The grand campaign: where an army stands round a town it has not taken, the roads are that army's. Its supply
   // passes through; the town's holder draws none there and sends none on.
   const field = siegeRules(g) ? g.regions.map((r) => fieldCtrl(g, r)) : null;
+  // Worked out once for every country's picture: whose roads each province's are (the holders numbered, so that
+  // "is he my friend" is asked once a holder and not once a province), and where the long lines of the east and of
+  // the desert can run at all. With fifty countries on the chart the picture is drawn fifty times over.
+  const size = g.regions.length;
+  const holders: string[] = [], holderNo = new Map<string, number>();
+  const road = new Int16Array(size), deep = new Uint8Array(size), sand = new Uint8Array(size);
+  for (const r of g.regions) {
+    const who = field ? field[r.id] : r.ctrl;
+    let k = holderNo.get(who);
+    if (k === undefined) { k = holders.length; holderNo.set(who, k); holders.push(who); }
+    road[r.id] = k;
+    if (EASTERN.deepOwners.includes(r.owner)) deep[r.id] = 1;
+    if (inDesert(r)) sand[r.id] = 1;
+  }
   for (const id of active) {
-    const ok = new Uint8Array(g.regions.length);
+    const friend = new Uint8Array(holders.length);
+    for (let k = 0; k < holders.length; k++) if (allied(g, id, holders[k])) friend[k] = 1;
+    const ok = new Uint8Array(size);
     const q: number[] = [];
-    // Where the supply comes from, and in the desert how much of a head start each base gives.
-    const head = new Float32Array(g.regions.length).fill(-1);
+    // Where the supply comes from, and in the desert how much of a head start each base gives: [province, start].
+    const heads: number[] = [];
+    let east = false, desert = false;
     const sunk = convoyDrag(g, id);
     // A nation with ships can also be fed through any friendly port its supply ships can still reach.
     const open = lanesOf(id);
-    for (const r of g.regions) {
+    for (let at = 0; at < size; at++) {
+      if (!friend[road[at]]) continue;
+      const r = g.regions[at];
       // An army round a town it has not taken holds the beaches beside the harbour and no more: ships can still
       // land its stores there, but the place is no depot of anybody's while the siege lasts.
       const shut = !!field && field[r.id] !== r.ctrl;
-      if (!allied(g, id, shut ? field![r.id] : r.ctrl)) continue;
       // An army is fed from its own country: its capital, its big industrial regions, its depots.
       const home = !shut && r.ctrl === id && r.owner === id;
       const depot = home && (r.cap || r.fac >= 3 || !!g.flags['depot:' + r.id]);
@@ -458,17 +476,27 @@ export function computeSupply(g: Game): void {
       if (field && r.ctrl === id && pocketDry(g, r, id)) continue;
       // In the grand campaign the table also remembers where the stores are: the railheads are counted from there.
       ok[r.id] = wide ? 2 : 1; q.push(r.id);
-      head[r.id] = depot || !r.overseas ? 0 : (DESERT.ports[r.name] ?? DESERT.port) + sunk;
+      heads.push(r.id, depot || !r.overseas ? 0 : (DESERT.ports[r.name] ?? DESERT.port) + sunk);
+      if (deep[r.id]) east = true;
+      if (sand[r.id]) desert = true;
     }
     for (let i = 0; i < q.length; i++) {
       for (const j of g.regions[q[i]].nb) {
-        if (ok[j] || !allied(g, id, field ? field[j] : g.regions[j].ctrl)) continue;
+        if (ok[j] || !friend[road[j]]) continue;
         ok[j] = 1; q.push(j);
+        if (deep[j]) east = true;
+        if (sand[j]) desert = true;
       }
     }
     g.supply[id] = ok;
-    g.reach[id] = reachInto(g, id, ok);
-    desertLines(g, ok, head, g.reach[id]);
+    // A country with no supplied ground inside the Soviet Union has no line there to measure, and one with none in
+    // the desert or overseas has none there: both tables stay empty, as the long way round would leave them.
+    g.reach[id] = east ? reachInto(g, id, ok) : new Float32Array(size);
+    if (desert) {
+      const head = new Float32Array(size).fill(-1);
+      for (let i = 0; i < heads.length; i += 2) head[heads[i]] = heads[i + 1];
+      desertLines(g, ok, head, g.reach[id]);
+    }
   }
   // An army at peace is fed by its own country wherever it stands.
   for (const c of g.corps) c.supplied = !g.nations[c.nat].atWar.length || !!g.supply[c.nat]?.[c.reg];
@@ -646,6 +674,11 @@ export const GUNS = (arsenalData as unknown as { guns: { soften: number; softenM
 const gunsIn = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'art' ? c.divs * c.str * (c.supplied ? 1 : 0.5) : 0), 0);
 
 export const men = (c: Corps): number => Math.round(c.divs * c.str * MEN_PER_DIV);
+
+/** What a month cut off from its supplies costs a corps in order: it lays down its arms when none is left. */
+const UNFED = 0.4;
+/** How many months a corps in this order holds out on what it carries once it is cut off (a fresh one: three). */
+export const monthsUnfed = (org = 1): number => Math.max(1, Math.ceil(org / UNFED));
 
 function airOf(g: Game, nats: Set<string>, enemies: Set<string>): number {
   let s = 0;
@@ -2463,7 +2496,7 @@ export function startPhase(g: Game, nat: string): void {
       c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
       if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {
-      c.org -= 0.4;
+      c.org -= UNFED;
       c.str *= 0.85;
       if (c.org <= 0) {
         const lost = starved.get(c.reg) ?? { names: [], men: 0 };

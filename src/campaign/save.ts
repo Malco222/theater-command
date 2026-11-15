@@ -19,7 +19,7 @@ import { openMorale } from './morale';
 import { openTrade } from './trade';
 import { numberDivisions } from './armies';
 import mapData from '../generated/campaign-map.json';
-import { WORLD_REGIONS, attachWorld } from './world';
+import { WORLD_REGIONS, WORLD_STAGES, attachWorld, settleNewGround } from './world';
 import type { Corps, Game, General } from './types';
 
 /** A save is laid over the map it was played on, region by region. */
@@ -31,9 +31,10 @@ const MAP_REGIONS = (mapData as any).regions.length as number;
 const CARVED: Record<string, string> = { Cassino: 'Abruzzo', Anzio: 'Rome' };
 /**
  * True if a save with this many regions can be laid over today's map: every place it lacks was carved from one it
- * has. A campaign saved on the wider world (world.ts) has that world's provinces after Europe's, all of them.
+ * has. A campaign saved on the wider world (world.ts) has that world's provinces after Europe's: all of them, or
+ * as many as the chart had at an earlier stage of its drawing.
  */
-const fits = (saved: number, world = false): boolean => (world ? saved === MAP_REGIONS + WORLD_REGIONS : saved === MAP_REGIONS
+const fits = (saved: number, world = false): boolean => (world ? saved === MAP_REGIONS + WORLD_REGIONS || WORLD_STAGES.includes(saved - MAP_REGIONS) : saved === MAP_REGIONS
   || (saved < MAP_REGIONS && ((mapData as any).regions as { name: string }[]).slice(saved).every((r) => r.name in CARVED)));
 /** Whether a save was made on the wider world. */
 const wide = (d: any): boolean => d?.flags?.world === 1;
@@ -98,7 +99,10 @@ export function loadGame(text: string): Game | null {
   const saved: number = d.regions.length;
   const grown = saved < g.regions.length;
   for (let i = saved; i < g.regions.length; i++) {
-    const [owner, ctrl, , fort, since, prev] = d.regions[g.byName[CARVED[g.regions[i].name]].id];
+    const r = g.regions[i];
+    // A province of the wider world drawn since the save was made begins as it stood on the first day.
+    if (!(r.name in CARVED)) { d.regions.push([r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, null, []]); continue; }
+    const [owner, ctrl, , fort, since, prev] = d.regions[g.byName[CARVED[r.name]].id];
     d.regions.push([owner, ctrl, 0, fort ? { ...fort, vs: [...(fort.vs ?? [])] } : fort, since, prev, []]);
   }
   // A save from before a country was added to the game: it takes its place in the order of play, and the month goes on from where it was.
@@ -148,6 +152,7 @@ export function loadGame(text: string): Game | null {
   // or more corps free to move, the first of them takes post there.
   for (let i = saved; i < g.regions.length; i++) {
     const r = g.regions[i], parent = g.byName[CARVED[r.name]];
+    if (!parent) continue;
     const free = parent.units.filter((c) => c.nat === r.ctrl && !c.hold && c.kind !== 'fort');
     if (free.length < 2 || !r.nb.some((j) => atWar(g, r.ctrl, g.regions[j].ctrl))) continue;
     parent.units.splice(parent.units.indexOf(free[0]), 1);
@@ -182,6 +187,9 @@ export function loadGame(text: string): Game | null {
   if (g.flags.open === 1) openCarriers(g);
   // And one saved before towns were garrisoned and besieged goes on under those rules.
   openSieges(g);
+  // A campaign saved on an earlier stage of the wider chart: the ground drawn since stands as on the first day,
+  // with the garrisons and squadrons that belong on it.
+  if (wide(d) && grown) settleNewGround(g, saved);
   // Trade agreements; a grand campaign saved before there were any signs history's when it is loaded.
   g.trade = Array.isArray(d.trade) ? d.trade : [];
   openTrade(g);

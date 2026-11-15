@@ -17,6 +17,19 @@ export function loadLand(res) {
   return polys.map((p) => p.map(unwrapRing));
 }
 
+/**
+ * One country's own outline from the same atlas, as polygons of rings in lon/lat. 'within' keeps only the pieces
+ * whose middle lies inside a box of [west, south, east, north]: French Guiana out of France.
+ */
+export function loadCountry(name, within = null, res = '50m') {
+  const topo = JSON.parse(fs.readFileSync(new URL(`../node_modules/world-atlas/countries-${res}.json`, import.meta.url)));
+  const f = feature(topo, topo.objects.countries).features.find((x) => x.properties.name === name);
+  if (!f) throw new Error(`the atlas has no country called ${name}`);
+  const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+  const mid = (ring) => [ring.reduce((s, p) => s + p[0], 0) / ring.length, ring.reduce((s, p) => s + p[1], 0) / ring.length];
+  return polys.filter((p) => { if (!within) return true; const [x, y] = mid(p[0]); return x >= within[0] && x <= within[2] && y >= within[1] && y <= within[3]; });
+}
+
 // Eurasia's outline crosses the 180th meridian in Chukotka, where the longitudes jump from
 // +180 to -180. Left alone, that jump is a false edge running right across the map between
 // 65 and 69 degrees north, which turns Lapland into sea. Carry the ring on past 180 instead.

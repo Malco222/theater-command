@@ -26,7 +26,7 @@
       "long": { "title": "To Berlin", "text": "Berlin is in Allied hands by the end of 1945, with Moscow still yours.", "hold": ["Moscow", "Berlin"], "by": 76 }
     },
     "USA": {
-      "short": { "title": "A second front", "text": "An American army is ashore in France and Paris is in Allied hands, with Washington still yours.", "hold": ["Washington", "Paris"], "ashore": { "in": ["FRA"], "label": "An American army ashore in France" }, "by": 64 },
+      "short": { "title": "A second front", "text": "An American army is ashore in France and Paris is in Allied hands when 1945 opens, with Washington still yours.", "hold": ["Washington", "Paris"], "ashore": { "in": ["FRA"], "label": "An American army ashore in France" }, "until": 64 },
       "long": { "title": "Victory in Europe", "text": "Germany is beaten with an American army on the continent, and Washington still yours.", "hold": ["Washington"], "beaten": ["GER"], "ashore": { "in": ["GER", "FRA", "BEL", "NED", "LUX", "DEN", "NOR", "SWE", "FIN", "EST", "LAT", "LIT", "POL", "SVK", "HUN", "ROM", "YUG", "BUL", "GRE", "ITA", "SUI", "ESP", "POR", "SOV"], "label": "An American army on the continent" }, "by": 76 }
     }
   }

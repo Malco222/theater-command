@@ -1,4 +1,5 @@
-// The wider world, laid beside the map of Europe: North America and the Atlantic islands first.
+// The wider world, laid beside the map of Europe: North America and the Atlantic islands first (Version 74), then
+// Central America, the Caribbean and South America (Version 76).
 // tools/build-geo-world.mjs grows a province around every seed here, exactly as the map of Europe is made, and
 // writes src/generated/world-map.json. The provinces of Europe are not touched: these are added after them, in
 // this order, so a province keeps its number for good. Add new ones at the end of the list.
@@ -7,7 +8,7 @@
 // The grand campaign plays on the whole chart. The historical scenarios keep to the map of Europe.
 
 /** The edges of the chart, in degrees. The top edge and the scale are those of the map of Europe. */
-export const FRAME = { west: -141, east: 47, north: 71.4, south: 6 };
+export const FRAME = { west: -141, east: 47, north: 71.4, south: -56 };
 
 export const WORLD_REGIONS = [
   // The United States: the north-east
@@ -123,6 +124,115 @@ export const WORLD_REGIONS = [
   ['Azores', 37.78, -25.5, 'POR', 'hills', 0, 0, { port: 1, col: 1 }],
   ['Canary Islands', 28.3, -16.55, 'ESP', 'hills', 0, 0, { port: 1, col: 1 }],
   ['Southern Baja', 25.6, -111.6, 'MEX', 'hills', 0, 0, {}],
+  // ---- Latin America (Version 76). Central America, and the Canal on its own ground.
+  ['Guatemala City', 14.7, -90.6, 'GUA', 'mountain', 1, 0, { cap: 1, port: 1 }],
+  ['Peten', 16.8, -89.9, 'GUA', 'forest', 0, 0, {}],
+  ['British Honduras', 17.2, -88.6, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['San Salvador', 13.7, -88.9, 'ELS', 'hills', 1, 0, { cap: 1, port: 1 }],
+  ['Tegucigalpa', 14.3, -87.4, 'HON', 'mountain', 1, 0, { cap: 1, port: 1 }],
+  ['Mosquitia', 15.2, -84.8, 'HON', 'forest', 0, 0, { port: 1 }],
+  ['Managua', 12.4, -86.2, 'NIC', 'hills', 1, 0, { cap: 1, port: 1 }],
+  ['Mosquito Coast', 13.2, -84.2, 'NIC', 'forest', 0, 0, { port: 1 }],
+  ['San Jose', 9.93, -84.08, 'COS', 'mountain', 1, 0, { cap: 1, port: 1 }],
+  ['Chiriqui', 8.45, -81.7, 'PAN', 'forest', 0, 0, { port: 1 }],
+  ['Canal Zone', 9.1, -79.8, 'USA', 'forest', 2, 0, { port: 1, col: 1 }],
+  ['Panama City', 9.25, -79.0, 'PAN', 'forest', 1, 0, { cap: 1, port: 1 }],
+  // The Caribbean
+  ['Port-au-Prince', 19.0, -72.3, 'HAI', 'hills', 1, 0, { cap: 1, port: 1 }],
+  ['Ciudad Trujillo', 18.8, -70.3, 'DOM', 'hills', 1, 0, { cap: 1, port: 1 }],
+  // No oilfield is marked on Trinidad: its oil reaches Britain in tankers, and the Atlantic lane (resources.json)
+  // already counts them. A field marked here would be Britain's "at home", out of the submarines' reach.
+  ['Trinidad', 10.4, -61.3, 'UK', 'plains', 1, 0, { port: 1, col: 1 }],
+  ['Curacao', 12.18, -68.97, 'NED', 'hills', 1, 0, { port: 1, col: 1 }],
+  ['Martinique', 14.65, -61.0, 'FRA', 'hills', 0, 0, { port: 1, col: 1 }],
+  // Colombia
+  ['Bogota', 4.7, -74.1, 'COL', 'mountain', 3, 1, { cap: 1 }],
+  ['Medellin', 6.4, -75.6, 'COL', 'mountain', 1, 1, {}],
+  ['Barranquilla', 10.3, -74.7, 'COL', 'plains', 1, 0, { port: 1 }],
+  ['Cali', 3.4, -76.6, 'COL', 'hills', 1, 0, { port: 1 }],
+  ['Santander', 7.4, -73.2, 'COL', 'hills', 0, 0, { oil: 1 }],
+  ['Llanos', 4.8, -71.0, 'COL', 'plains', 0, 0, {}],
+  ['Caqueta', 0.6, -73.0, 'COL', 'forest', 0, 0, {}],
+  // Venezuela
+  ['Caracas', 10.2, -66.8, 'VEN', 'hills', 3, 0, { cap: 1, port: 1 }],
+  ['Maracaibo', 10.1, -72.2, 'VEN', 'plains', 2, 0, { port: 1, oil: 1 }],
+  ['Barquisimeto', 9.6, -69.8, 'VEN', 'hills', 0, 0, { port: 1 }],
+  ['Apure', 7.5, -68.5, 'VEN', 'plains', 0, 0, {}],
+  ['Ciudad Bolivar', 8.6, -63.6, 'VEN', 'plains', 1, 0, { port: 1, oil: 1 }],
+  ['Guayana', 5.6, -62.4, 'VEN', 'forest', 0, 0, {}],
+  ['Alto Orinoco', 3.2, -66.0, 'VEN', 'forest', 0, 0, {}],
+  // The Guianas
+  ['British Guiana', 5.5, -58.8, 'UK', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['Dutch Guiana', 4.5, -55.8, 'NED', 'forest', 0, 0, { port: 1, col: 1 }],
+  ['French Guiana', 4.0, -53.0, 'FRA', 'forest', 0, 0, { port: 1, col: 1 }],
+  // Ecuador and Peru
+  ['Quito', -0.4, -78.5, 'ECU', 'mountain', 1, 0, { cap: 1 }],
+  ['Guayaquil', -1.9, -79.9, 'ECU', 'plains', 1, 0, { port: 1 }],
+  ['Napo', -1.6, -76.8, 'ECU', 'forest', 0, 0, {}],
+  ['Lima', -11.9, -76.6, 'PER', 'urban', 3, 1, { cap: 1, port: 1 }],
+  ['Piura', -5.2, -80.3, 'PER', 'plains', 0, 0, { port: 1, oil: 1 }],
+  ['Trujillo', -7.9, -78.4, 'PER', 'hills', 0, 0, { port: 1 }],
+  ['Arequipa', -16.2, -71.9, 'PER', 'mountain', 1, 0, { port: 1 }],
+  ['Cuzco', -13.4, -72.2, 'PER', 'mountain', 0, 0, {}],
+  ['Loreto', -4.8, -74.8, 'PER', 'forest', 0, 0, {}],
+  ['Madre de Dios', -11.8, -70.6, 'PER', 'forest', 0, 0, {}],
+  // Bolivia, Paraguay, Uruguay
+  ['La Paz', -16.6, -68.0, 'BOL', 'mountain', 2, 0, { cap: 1 }],
+  ['Potosi', -19.8, -66.2, 'BOL', 'mountain', 1, 0, {}],
+  ['Santa Cruz', -17.6, -62.4, 'BOL', 'plains', 0, 0, {}],
+  ['Beni', -13.2, -65.4, 'BOL', 'forest', 0, 0, {}],
+  ['Asuncion', -25.4, -56.8, 'PAR', 'plains', 1, 0, { cap: 1 }],
+  ['Chaco Boreal', -21.6, -60.2, 'PAR', 'forest', 0, 0, {}],
+  ['Montevideo', -34.4, -56.0, 'URU', 'plains', 2, 0, { cap: 1, port: 1 }],
+  ['Tacuarembo', -32.0, -56.4, 'URU', 'plains', 0, 0, {}],
+  // Chile
+  ['Santiago', -33.6, -70.8, 'CHL', 'urban', 3, 1, { cap: 1, port: 1 }],
+  ['Tarapaca', -19.8, -69.5, 'CHL', 'hills', 0, 0, { port: 1 }],
+  ['Antofagasta', -23.8, -69.4, 'CHL', 'hills', 1, 0, { port: 1 }],
+  ['Atacama', -28.0, -70.4, 'CHL', 'hills', 0, 0, { port: 1 }],
+  ['Concepcion', -37.2, -72.4, 'CHL', 'forest', 1, 0, { port: 1 }],
+  ['Valdivia', -40.6, -72.6, 'CHL', 'forest', 0, 0, { port: 1 }],
+  ['Aysen', -46.4, -72.8, 'CHL', 'mountain', 0, 0, { port: 1 }],
+  ['Magallanes', -52.2, -71.6, 'CHL', 'hills', 0, 0, { port: 1 }],
+  // Argentina
+  ['Buenos Aires', -34.9, -58.9, 'ARG', 'urban', 4, 2, { cap: 1, port: 1 }],
+  ['Rosario', -32.6, -61.0, 'ARG', 'plains', 1, 1, {}],
+  ['Pampas', -36.6, -63.0, 'ARG', 'plains', 1, 0, {}],
+  ['Bahia Blanca', -38.4, -61.8, 'ARG', 'plains', 0, 0, { port: 1 }],
+  ['Cordoba', -31.4, -64.4, 'ARG', 'plains', 1, 0, {}],
+  ['Mendoza', -33.4, -68.4, 'ARG', 'hills', 0, 0, {}],
+  ['Tucuman', -26.6, -65.6, 'ARG', 'hills', 0, 0, {}],
+  ['Gran Chaco', -26.2, -60.6, 'ARG', 'forest', 0, 0, {}],
+  ['Corrientes', -28.6, -57.6, 'ARG', 'marsh', 0, 0, {}],
+  ['Neuquen', -39.4, -69.2, 'ARG', 'hills', 0, 0, {}],
+  ['Northern Patagonia', -41.6, -66.6, 'ARG', 'hills', 0, 0, { port: 1 }],
+  ['Comodoro Rivadavia', -45.0, -68.6, 'ARG', 'hills', 0, 0, { port: 1, oil: 1 }],
+  ['Southern Patagonia', -49.6, -70.2, 'ARG', 'hills', 0, 0, { port: 1 }],
+  ['Tierra del Fuego', -54.2, -67.6, 'ARG', 'hills', 0, 0, { port: 1 }],
+  ['Falkland Islands', -51.75, -58.6, 'UK', 'hills', 0, 0, { port: 1, col: 1 }],
+  // Brazil
+  ['Rio de Janeiro', -22.4, -43.2, 'BRA', 'urban', 4, 2, { cap: 1, port: 1 }],
+  ['Sao Paulo', -23.2, -47.2, 'BRA', 'urban', 4, 3, { port: 1 }],
+  ['Minas Gerais', -19.4, -44.4, 'BRA', 'hills', 1, 1, {}],
+  ['Bahia', -12.6, -40.2, 'BRA', 'hills', 1, 0, { port: 1 }],
+  ['Pernambuco', -8.4, -37.0, 'BRA', 'plains', 1, 0, { port: 1 }],
+  ['Natal', -5.8, -36.2, 'BRA', 'plains', 1, 0, { port: 1 }],
+  ['Ceara', -4.8, -39.8, 'BRA', 'plains', 0, 0, { port: 1 }],
+  ['Maranhao', -4.6, -45.0, 'BRA', 'forest', 0, 0, { port: 1 }],
+  ['Para', -2.6, -49.0, 'BRA', 'forest', 1, 0, { port: 1 }],
+  ['Amapa', 1.4, -51.8, 'BRA', 'forest', 0, 0, {}],
+  ['Amazonas', -3.6, -62.0, 'BRA', 'forest', 0, 0, {}],
+  ['Rio Negro', 0.4, -65.0, 'BRA', 'forest', 0, 0, {}],
+  ['Roraima', 2.2, -61.4, 'BRA', 'forest', 0, 0, {}],
+  ['Acre', -9.0, -70.0, 'BRA', 'forest', 0, 0, {}],
+  ['Guapore', -11.4, -63.0, 'BRA', 'forest', 0, 0, {}],
+  ['Tapajos', -6.4, -55.6, 'BRA', 'forest', 0, 0, {}],
+  ['Mato Grosso', -13.6, -56.0, 'BRA', 'forest', 0, 0, {}],
+  ['Campo Grande', -20.4, -54.6, 'BRA', 'plains', 0, 0, {}],
+  ['Goias', -15.4, -49.4, 'BRA', 'plains', 0, 0, {}],
+  ['Sertao', -8.6, -43.0, 'BRA', 'hills', 0, 0, {}],
+  ['Parana', -25.0, -51.6, 'BRA', 'forest', 0, 0, { port: 1 }],
+  ['Rio Grande do Sul', -29.8, -53.4, 'BRA', 'plains', 1, 0, { port: 1 }],
 ];
 
 /**
@@ -132,8 +242,6 @@ export const WORLD_REGIONS = [
 export const BEYOND = [
   ['the ice cap', 66.0, -43.0], ['the ice cap', 69.5, -38.0], ['the ice cap', 68.5, -50.5], ['the ice cap', 64.0, -49.5], ['the ice cap', 70.0, -26.5],
   ['the Arctic', 66.8, -95.0], ['the Arctic', 68.0, -107.0], ['the Arctic', 67.5, -128.0], ['the Arctic', 66.5, -63.5],
-  ['Guatemala', 15.4, -90.4], ['Honduras', 14.8, -86.8], ['Nicaragua', 12.8, -85.2], ['Costa Rica', 10.0, -84.0], ['Panama', 8.5, -80.2],
-  ['Colombia', 7.6, -74.6], ['Venezuela', 8.2, -66.0],
 ];
 
 /**
@@ -170,6 +278,19 @@ export const FRONTIERS = [
     // Down the middle of the Gulf of California, round the cape and back up the Pacific.
     close: [[31.0, -114.4], [30.0, -113.6], [29.3, -112.9], [28.0, -112.0], [27.0, -111.0], [26.0, -110.3], [25.0, -109.5], [24.0, -108.8], [23.0, -108.5], [22.0, -109.5], [22.0, -119.0]],
   },
+  // Latin America (Version 76): each country's own outline, from the atlas the coasts come from. 'country' is its
+  // name there; 'within' picks the pieces of it inside a box of [west, south, east, north] (French Guiana out of
+  // France). They stand before Mexico's side, whose closing line runs on south of them.
+  { country: 'Guatemala', owners: ['GUA'] }, { country: 'Belize', owners: ['UK'] }, { country: 'El Salvador', owners: ['ELS'] },
+  { country: 'Honduras', owners: ['HON'] }, { country: 'Nicaragua', owners: ['NIC'] }, { country: 'Costa Rica', owners: ['COS'] },
+  // The Canal Zone lay inside Panama, in American hands.
+  { country: 'Panama', owners: ['PAN', 'USA'] },
+  { country: 'Colombia', owners: ['COL'] }, { country: 'Venezuela', owners: ['VEN'] }, { country: 'Guyana', owners: ['UK'] },
+  { country: 'Suriname', owners: ['NED'] }, { country: 'France', owners: ['FRA'], within: [-60, 0, -50, 8] },
+  { country: 'Ecuador', owners: ['ECU'] }, { country: 'Peru', owners: ['PER'] }, { country: 'Bolivia', owners: ['BOL'] },
+  { country: 'Paraguay', owners: ['PAR'] }, { country: 'Uruguay', owners: ['URU'] }, { country: 'Chile', owners: ['CHL'] },
+  { country: 'Argentina', owners: ['ARG'] }, { country: 'Brazil', owners: ['BRA'] },
+  { country: 'Haiti', owners: ['HAI'] }, { country: 'Dominican Rep.', owners: ['DOM'] },
   {
     name: 'south', owners: ['MEX'],
     line: [
@@ -186,6 +307,8 @@ export const FRONTIERS = [
 /** Short crossings armies can use without a fleet. */
 export const WORLD_LINKS = [
   ['Vancouver', 'Vancouver Island'], ['Nova Scotia', 'Cape Breton'],
+  // The Strait of Magellan at its narrows, from either country's shore.
+  ['Magallanes', 'Tierra del Fuego'], ['Southern Patagonia', 'Tierra del Fuego'],
 ];
 /** Land borders the map-maker misses, because the line between the two runs mostly through water. */
 export const WORLD_ROADS = [];
@@ -219,6 +342,16 @@ export const WORLD_RIVERS = [
   ['Rio Grande', [[37.47, -105.87], [36.3, -105.7], [35.08, -106.65], [33.1, -107.2], [31.78, -106.53], [31.1, -105.6], [30.63, -104.99], [29.56, -104.37], [28.97, -103.15], [29.45, -102.8], [29.78, -102.4], [29.8, -101.5], [29.36, -100.9], [28.71, -100.5], [27.5, -99.5], [26.4, -99.1], [26.2, -98.3], [25.9, -97.5], [25.95, -97.15]]],
   ['Columbia', [[49.0, -117.63], [47.95, -118.98], [47.4, -120.3], [46.2, -119.1], [45.9, -119.3], [45.7, -121.5], [45.6, -122.7], [46.2, -123.8]]],
   ['Colorado', [[39.07, -108.55], [38.57, -109.55], [37.2, -110.9], [36.94, -111.48], [36.1, -112.1], [36.2, -113.3], [36.0, -114.74], [34.3, -114.14], [33.6, -114.55], [32.72, -114.72], [32.49, -114.81], [31.8, -114.8]]],
+  // South America. The Amazon from the foot of the Andes, with the Madeira; the Parana with the Paraguay and the
+  // Uruguay, which are frontiers for most of their length; the Orinoco, the Magdalena and the Sao Francisco.
+  ['Amazon', [[-4.45, -77.6], [-4.9, -75.2], [-4.5, -73.6], [-3.75, -73.25], [-3.4, -71.8], [-4.2, -69.94], [-3.1, -67.9], [-2.5, -66.1], [-3.35, -64.7], [-3.9, -63.1], [-3.3, -60.6], [-3.13, -59.9], [-3.14, -58.44], [-2.63, -56.74], [-1.9, -55.52], [-2.44, -54.7], [-1.52, -52.58], [-1.4, -51.65], [-0.2, -50.9], [0.5, -50.0]]],
+  ['Madeira', [[-10.8, -65.35], [-9.7, -65.4], [-8.76, -63.9], [-7.5, -63.02], [-5.81, -61.3], [-4.39, -59.59], [-3.37, -58.78]]],
+  ['Parana', [[-20.1, -51.0], [-22.5, -53.1], [-24.08, -54.25], [-25.6, -54.6], [-26.8, -55.2], [-27.37, -55.9], [-27.45, -57.0], [-27.3, -58.6], [-27.47, -58.83], [-29.14, -59.26], [-30.75, -59.65], [-31.73, -60.53], [-32.95, -60.63], [-33.33, -60.2], [-34.1, -59.0], [-34.2, -58.4]]],
+  ['Paraguay', [[-16.07, -57.68], [-17.9, -57.5], [-19.0, -57.65], [-20.2, -58.15], [-21.7, -57.9], [-22.1, -57.98], [-23.4, -57.43], [-25.28, -57.63], [-26.86, -58.3], [-27.3, -58.6]]],
+  ['Uruguay', [[-27.15, -53.9], [-27.6, -55.0], [-28.66, -56.0], [-29.75, -57.08], [-30.2, -57.6], [-31.39, -57.96], [-32.32, -58.08], [-33.12, -58.3], [-34.0, -58.4]]],
+  ['Orinoco', [[4.05, -67.7], [5.66, -67.63], [6.19, -67.48], [7.0, -66.9], [7.64, -66.17], [7.9, -64.8], [8.12, -63.55], [8.35, -62.65], [8.7, -62.2], [8.9, -61.3], [9.3, -60.9]]],
+  ['Magdalena', [[2.93, -75.28], [4.3, -74.8], [5.2, -74.74], [6.49, -74.4], [7.06, -73.87], [8.3, -73.8], [9.0, -73.97], [9.24, -74.75], [10.25, -74.91], [10.97, -74.8], [11.1, -74.85]]],
+  ['Sao Francisco', [[-17.35, -44.94], [-15.49, -44.36], [-13.25, -43.42], [-11.09, -43.14], [-9.62, -42.08], [-9.4, -40.5], [-8.51, -39.31], [-9.4, -38.2], [-10.29, -36.58], [-10.5, -36.4]]],
 ];
 /** Crossings the geometry finds that the country does not have: [region, region]. */
 export const WORLD_RIVER_CUT = [
@@ -231,14 +364,31 @@ export const WORLD_RIVER_ADD = [
   ['White Mountains', 'Montreal', 'St Lawrence'], ['Kennebec', 'Montreal', 'St Lawrence'], ['Kennebec', 'Quebec', 'St Lawrence'],
   // The whole frontier below El Paso is the river, and the lower Mississippi parts Louisiana from the state named for it.
   ['Rio Grande', 'Chihuahua', 'Rio Grande'], ['Louisiana', 'Mississippi', 'Mississippi'],
+  // The Amazon runs through the middle of the province named for it: the country to the north lies over the river.
+  ['Amazonas', 'Rio Negro', 'Amazon'], ['Amazonas', 'Roraima', 'Amazon'],
+  // The oilfields of eastern Venezuela lie north of the Orinoco and Guayana south of it; the Magdalena parts the
+  // coast and Antioquia from Santander.
+  ['Ciudad Bolivar', 'Guayana', 'Orinoco'], ['Apure', 'Guayana', 'Orinoco'], ['Barranquilla', 'Santander', 'Magdalena'], ['Medellin', 'Santander', 'Magdalena'],
+  // The Paraguay parts the Chaco from the country round Asuncion, and the Parana parts the land between the rivers from Rosario.
+  ['Chaco Boreal', 'Asuncion', 'Paraguay'], ['Gran Chaco', 'Asuncion', 'Paraguay'], ['Rosario', 'Corrientes', 'Parana'],
+  // The lower Sao Francisco is the border of Pernambuco and Bahia.
+  ['Pernambuco', 'Bahia', 'Sao Francisco'],
 ];
 
 /**
  * The railways of the new world, laid by tools/build-rails.mjs (run with 'world') as Europe's are: a line to every
  * province, main lines between the cities. No line ran into these in 1939: the far north, and the foot of Lower
- * California.
+ * California; the forests of Central America; the basin of the Amazon and the Orinoco, where the rivers were the
+ * roads; the Chaco; and the far south of Chile and Argentina.
  */
-export const WORLD_NO_RAIL = ['Ungava', 'Keewatin', 'Mackenzie', 'Yukon', 'Labrador', 'Southern Baja', 'Greenland', 'Iceland'];
+export const WORLD_NO_RAIL = [
+  'Ungava', 'Keewatin', 'Mackenzie', 'Yukon', 'Labrador', 'Southern Baja', 'Greenland', 'Iceland',
+  'Peten', 'British Honduras', 'Mosquitia', 'Mosquito Coast',
+  'Llanos', 'Caqueta', 'Apure', 'Ciudad Bolivar', 'Guayana', 'Alto Orinoco', 'British Guiana', 'Dutch Guiana', 'French Guiana',
+  'Napo', 'Loreto', 'Madre de Dios', 'Beni', 'Chaco Boreal',
+  'Para', 'Amapa', 'Amazonas', 'Rio Negro', 'Roraima', 'Acre', 'Guapore', 'Tapajos', 'Mato Grosso',
+  'Aysen', 'Magallanes', 'Southern Patagonia', 'Tierra del Fuego',
+];
 /** Lines the tool leaves out that history built: [region, region]. */
 export const WORLD_RAIL_ADD = [
   // The Overland Route to San Francisco, the Santa Fe to Los Angeles, the northern lines to Puget Sound.
@@ -250,10 +400,29 @@ export const WORLD_RAIL_ADD = [
   ['New York', 'Upstate New York'], ['Susquehanna', 'Pittsburgh'], ['Pittsburgh', 'Ohio Valley'], ['Virginia', 'North Carolina'], ['Tennessee', 'Alabama'], ['Missouri', 'Arkansas'],
   // Mexico: the west coast line from Guadalajara to Nogales, and the line to Oaxaca.
   ['Guadalajara', 'Sinaloa'], ['Sonora', 'Sinaloa'], ['Sonora', 'Arizona'], ['Mexico City', 'Oaxaca'],
+  // South America's lines over a frontier: the Transandine from Mendoza to Santiago, the lines up to La Paz from
+  // Arica, from Antofagasta and from the Argentine north, Tacna to Arica, and the train ferry to Paraguay.
+  ['Mendoza', 'Santiago'], ['Tarapaca', 'La Paz'], ['Antofagasta', 'Potosi'], ['Tucuman', 'Potosi'], ['Arequipa', 'Tarapaca'], ['Corrientes', 'Asuncion'],
+  ['Tacuarembo', 'Rio Grande do Sul'],
+  // Brazil's lines ran inland from Rio and Sao Paulo through Minas Gerais, and Argentina's north from Cordoba.
+  ['Minas Gerais', 'Goias'], ['Sao Paulo', 'Minas Gerais'], ['Minas Gerais', 'Bahia'], ['Cordoba', 'Tucuman'],
 ];
 /** Lines the tool lays that were never there: [region, region]. */
 export const WORLD_RAIL_CUT = [
   // Sonora's line ran north to Arizona: none crossed the head of the Gulf of California until 1948, and none
   // crossed the Sierra Madre from Chihuahua to the Pacific until 1961.
   ['San Diego', 'Sonora'], ['Sonora', 'Baja California'], ['Chihuahua', 'Sinaloa'],
+  // No line ran the length of Central America below El Salvador, none crossed the Darien, and none joined
+  // Colombia, Venezuela, Ecuador and Peru to each other or Brazil to its western neighbours.
+  ['Tegucigalpa', 'Managua'], ['Managua', 'San Jose'], ['San Jose', 'Chiriqui'], ['Panama City', 'Medellin'],
+  ['Santander', 'Maracaibo'], ['Barranquilla', 'Maracaibo'], ['Cali', 'Quito'], ['Guayaquil', 'Piura'],
+  ['Santa Cruz', 'Campo Grande'], ['Asuncion', 'Parana'], ['Asuncion', 'Campo Grande'], ['Corrientes', 'Rio Grande do Sul'], ['Corrientes', 'Parana'],
+  // Honduras had its banana lines and no more; Panama's western line met nothing; the two halves of Hispaniola
+  // were never joined; no bridge crossed the Uruguay or the Pilcomayo; and in the south no line crossed the Andes.
+  ['San Salvador', 'Tegucigalpa'], ['Chiriqui', 'Canal Zone'], ['Port-au-Prince', 'Ciudad Trujillo'],
+  ['Tacuarembo', 'Rosario'], ['Tacuarembo', 'Corrientes'], ['Asuncion', 'Gran Chaco'],
+  ['Concepcion', 'Neuquen'], ['Valdivia', 'Neuquen'], ['Antofagasta', 'Tucuman'], ['Atacama', 'Tucuman'], ['Cuzco', 'La Paz'],
+  // The oil port of Comodoro Rivadavia had a line of its own into the hills, joined to nothing; nor did any line
+  // run from Bahia or from Mato Grosso's south into Goias.
+  ['Northern Patagonia', 'Comodoro Rivadavia'], ['Bahia', 'Goias'], ['Campo Grande', 'Goias'],
 ];

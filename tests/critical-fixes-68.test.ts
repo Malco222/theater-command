@@ -147,10 +147,13 @@ describe('a staff that does not repeat itself', () => {
       all.push(...lines(g, 'diplomacy'));
       courted += Object.keys(g.flags).filter((f) => f.startsWith('court:GER:') && g.flags[f] === g.turn).length;
     }
-    // They courted in most months, and spoke in fewer: never the same line twice, and never the bare "courted X.".
+    // They courted in most months, and spoke in fewer: once when they take up a country and once each time it moves
+    // (on the chart with Latin America, Argentina moves twice in these months), and never the bare "courted X.".
     expect(courted).toBeGreaterThan(4);
     expect(all.length).toBeLessThan(courted);
-    expect(new Set(all).size).toBe(all.length);
+    const began = all.filter((t) => /began courting /.test(t));
+    expect(began).toEqual([...new Set(began)]);
+    expect(began.length).toBeGreaterThan(1);
     for (const t of all) expect(t).toMatch(/began courting |which has moved a step /);
   });
 

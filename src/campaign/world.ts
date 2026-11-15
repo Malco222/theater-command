@@ -1,14 +1,16 @@
 // The wider world.
 //
 // The history campaigns are fought on the map of Europe and never see any of this. A grand campaign opens on a
-// wider chart: the same sheet carried on westward, on the same scale, to the Pacific coast of North America. The
-// new provinces follow Europe's in number, the new seas follow Europe's seas, and Europe's own keep the numbers
-// they have, so nothing that names a province or a sea has to change.
+// wider chart: the same sheet carried on westward, on the same scale, to the Pacific coast of North America, and
+// (Version 76) south from the Rio Grande to Tierra del Fuego. The new provinces follow Europe's in number, the new
+// seas follow Europe's seas, and Europe's own keep the numbers they have, so nothing that names a province or a
+// sea has to change.
 //
 // What is attached: the provinces and seas of tools/build-geo-world.mjs, the countries that exist only out there
-// (Canada, Mexico, Cuba), and the United States at home. Until now America was a country beyond the map's edge
-// that woke in December 1941 with its industry out of reach. On the wider chart it is there from the first day:
-// neutral, its capital at Washington, its factories on its own soil, its army a cadre.
+// (Canada, Mexico, Cuba, and the eighteen republics of Latin America), and the United States at home. Before
+// Version 74 America was a country beyond the map's edge that woke in December 1941 with its industry out of
+// reach. On the wider chart it is there from the first day: neutral, its capital at Washington, its factories on
+// its own soil, its army a cadre.
 //
 // The world is attached once, as the grand campaign opens (staff.ts), before anything else is set up for it, and
 // again whenever a campaign saved on it is loaded (save.ts).
@@ -57,6 +59,12 @@ export interface OverseasRules { guard: number; ahead: number; bank: number; ris
 /** The first province beyond the map of Europe, and how many there are. */
 export const WORLD_FIRST = WORLD_MAP.first;
 export const WORLD_REGIONS = WORLD_MAP.regions.length;
+/**
+ * How many provinces the wider world had at each earlier stage of its drawing: North America and the Atlantic
+ * islands alone (Versions 74 and 75). The chart only ever grows at its end, so a campaign saved on an earlier
+ * stage can be laid over today's (save.ts): the ground it never knew begins as it stood on the first day.
+ */
+export const WORLD_STAGES = [104];
 
 /** True for a campaign played on the wider world. */
 export const worldOn = (g: Game): boolean => g.flags.world === 1;
@@ -140,6 +148,32 @@ export function attachWorld(g: Game, fresh = true): void {
     for (const e of M.atWar) if (g.nations[e]?.alive) setWar(g, id, e);
   }
   for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
+}
+
+/**
+ * A campaign saved on an earlier stage of the chart is being laid over today's (save.ts): the provinces from
+ * 'from' on are new to it. They stand as on the first day, with the first-day garrisons and squadrons that belong
+ * in them, except that ground of a country the save has already seen fall goes where a fallen country's ground
+ * overseas goes: into the keeping of a sea power still fighting the victor, or failing that to the victor.
+ */
+export function settleNewGround(g: Game, from: number): void {
+  if (!worldOn(g)) return;
+  for (let i = Math.max(from, WORLD_FIRST); i < g.regions.length; i++) {
+    const r = g.regions[i], n = g.nations[r.ctrl];
+    if (n?.alive || !n?.fellOn) continue;
+    const by = n.fellOn.to;
+    r.ctrl = (r.overseas ? protectorOf(g, by) : null) ?? (g.nations[by]?.alive ? by : r.ctrl);
+    r.since = g.turn;
+  }
+  const fresh = (name: string | null | undefined): boolean => !!name && !!g.byName[name] && g.byName[name].id >= from;
+  for (const [nat, name, kind, divs, at, o] of WORLD.corps) {
+    if (!fresh(at) || !g.nations[nat]?.alive || g.byName[at].ctrl !== nat) continue;
+    const c = addCorps(g, nat, name, kind as any, divs, at, o);
+    if (o.str !== undefined) c.str = o.str;
+  }
+  for (const row of WORLD.fleets) if (fresh(row.base) && g.nations[row.nat]?.alive && g.byName[row.base!].ctrl === row.nat) addFleet(g, row);
+  for (const n of Object.values(g.nations)) if (n.alive) n.armyPeak = Math.max(n.armyPeak, armySize(g, n.id));
+  g.supplyDirty = true;
 }
 
 /**

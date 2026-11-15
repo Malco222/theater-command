@@ -23,7 +23,7 @@ import { DIPLOMACY, canCourt, court, courtable, receptive, step } from './diplom
 import { INTEL, abroad, agentsOf, atWork, intelRules, mostAgents, recruit, sendAgent, setFog, setMission, threat, whyNotMission, whyNotRecruit, whyNotSend } from './intel';
 import { cabinetOff, officeSecure, setCabinet, setCanFall } from './government';
 import { airAI, airFleetsOf } from './air';
-import { atSea, crossingsOf, fleetsOf, navalAI, plannedCrossing } from './navy';
+import { atSea, crossingsOf, fleetsOf, navalAI, numberWord, plannedCrossing } from './navy';
 import { landingForce } from './staff';
 import { staysOut } from './history';
 import { shoreAI } from './fleets';
@@ -182,9 +182,12 @@ export function crossingWord(g: Game, nat: string): CrossingWord | null {
   if (force < want) wanting.push(`${want - force} more corps on the quay at ${plan.from.name} (a landing takes ${want}, and ${force === 0 ? 'none stands' : force === 1 ? 'one stands' : `${force} stand`} there)`);
   if (lift.lift < want) wanting.push(lift.building.length ? `shipping (the ships carry ${lift.lift} corps a month; troopships for more are on the slips, the next lot ready in ${turnToDate(lift.building[0]).label})` : `shipping (the ships carry ${lift.lift} corps a month)`);
   if (wanting.length) return { ...plan, state: 'waiting', text: `Your staff is preparing ${way}. Still wanting: ${listAnd(wanting)}.` };
-  if (!x.account.hold.open) return { ...plan, state: 'warned', text: `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close the ${g.seas[x.account.hold.sea].name} behind it. The order to sail under that warning is yours alone.` };
+  const h = x.account.hold;
+  if (!h.open) return { ...plan, state: 'warned', text: h.island
+    ? `Your staff has ${way} prepared, and it waits: the force can take ${plan.to.name}, but the enemy can close the ${g.seas[h.sea].name} behind it, and cut off it holds out for about ${numberWord(h.months)} months on what it carries. The order to sail under that warning is yours alone.`
+    : `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close the ${g.seas[h.sea].name} behind it. The order to sail under that warning is yours alone.` };
   const lost = Math.round(x.account.loss * 100);
-  return { ...plan, state: 'ready', text: `Your staff reports ${way} ready: the way is open, ${force} corps stand on the quay and the ships can carry ${Math.min(force, lift.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ''}. The order to land is yours.` };
+  return { ...plan, state: 'ready', text: `Your staff reports ${way} ready: the way is open, ${force} corps stand on the quay and the ships can carry ${Math.min(force, lift.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ''}.${h.contested ? ` The ${g.seas[h.sea].name} behind the beach is yours today, but the enemy can bring ships enough to fight you for it.` : ''} The order to land is yours.` };
 }
 
 /** The month's report on the named crossing: said once in the news when it is ready, or prepared and held back by the card's warning. */
