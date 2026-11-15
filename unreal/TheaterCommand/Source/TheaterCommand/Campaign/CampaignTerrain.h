@@ -55,6 +55,12 @@ public:
 	/** The real height of the ground or depth of the sea at a point, in metres. Zero when there is no elevation data. */
 	float MetresAt(double X, double Y) const;
 
+	/**
+	 * The height a fine sheet of the world gives ground at a place well inland, reckoned at the place itself and not
+	 * read off a grid: for what is built once on ground whose fine sheet comes and goes (a town, a river, a railway).
+	 */
+	float FineLandHeightAt(double X, double Y) const;
+
 	/** Slope of the ground at a grid point, as (dh/dx, dh/dy) in map units. */
 	FVector2f GradientAt(int32 I, int32 J) const;
 

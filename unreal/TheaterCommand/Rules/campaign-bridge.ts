@@ -76,8 +76,8 @@ import { GOALS, GOAL_KEYS, goalChecks, goalEnds, goalState, goalWhen, judgeGoals
 import { isOpen, startOpen } from '../../../src/campaign/staff';
 import { loadGame, peekSave, saveGame } from '../../../src/campaign/save';
 import { GROUND, groundRules, groundSays } from '../../../src/campaign/ground';
-import { CROSSINGS, RIVERS, blocked, bridgeDown, riverNotes } from '../../../src/campaign/rivers';
-import { RAIL_LINKS, railCut, railNote, workingFactories } from '../../../src/campaign/rails';
+import { blocked, bridgeDown, crossingsOf, riverNotes, riversOf } from '../../../src/campaign/rivers';
+import { railCut, railLinks, railNote, workingFactories } from '../../../src/campaign/rails';
 import { baseTargets, fleetReach, landingTargets, seaAt as seaUnder, whyNotShip } from '../../../src/campaign/navy';
 import { AIR, MISSION, airBases, airRange, airTargets, forecastAir, km as airKm, whyNotMission } from '../../../src/campaign/air';
 import type { AirMission, Stance } from '../../../src/campaign/types';
@@ -341,7 +341,7 @@ function view() {
     // The countries the player could declare war on this month: those at peace with him that he borders or can reach by sea.
     declare: up ? declarable(s) : [],
     // Bridges that are down (by their place in the list of crossings) and provinces whose railway is cut.
-    down: groundRules(s) ? CROSSINGS.map((c, i) => (bridgeDown(s, c) ? i : -1)).filter((i) => i >= 0) : [],
+    down: groundRules(s) ? crossingsOf(s).map((c, i) => (bridgeDown(s, c) ? i : -1)).filter((i) => i >= 0) : [],
     cut: groundRules(s) ? s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id) : [],
     // Each region: who holds it, and the works built there since the war began that the table shows as models:
     // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
@@ -2436,9 +2436,10 @@ function land() {
   const s = game();
   const steepNames = new Set<string>(GROUND.steep.regions);
   return {
-    rivers: RIVERS.map((r) => ({ name: r.name, pts: r.pts })),
-    crossings: CROSSINGS.map((c) => [c.a, c.b, c.river, c.x, c.y]),
-    rails: RAIL_LINKS.map((l) => [l.a, l.b, l.x, l.y]),
+    // (rules version 74: on the wider chart, its rivers, crossings and lines follow Europe's, which keep their numbers)
+    rivers: riversOf(s).map((r) => ({ name: r.name, pts: r.pts })),
+    crossings: crossingsOf(s).map((c) => [c.a, c.b, c.river, c.x, c.y]),
+    rails: railLinks(s).map((l) => [l.a, l.b, l.x, l.y]),
     steep: s.regions.filter((r) => steepNames.has(r.name)).map((r) => r.id),
   };
 }

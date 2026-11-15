@@ -762,7 +762,7 @@ def build_land():
     # (The art director's round 28: under snow the stripes of occupied ground went quiet, and in the snowed woods of
     # the East they could not be seen at all, where what could be liberated matters most. The snow lies thinner on a
     # stripe: the old owner's colour shows through the dusting, as a dark thread shows through frost on cloth.)
-    snow_lying = times(m, (masks, "G"), one_in(m, unreal.MaterialExpressionOneMinus, times(m, striped, scalar(m, "StripesThinSnow", 0.38, -1500, -40), -1350, -60), -1200, -60), -1050, -100)
+    snow_lying = times(m, (masks, "G"), one_in(m, unreal.MaterialExpressionOneMinus, times(m, striped, scalar(m, "StripesThinSnow", 0.3, -1500, -40), -1350, -60), -1200, -60), -1050, -100)
     c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), snow_lying, -900, -400)
     # (The art director's ruling of round 19: in winter the snow took a wood's dark floor away, and every tree stood
     # alone on white like salt. A wood keeps a cool grey floor under the snow, like pencil shading on the map, about

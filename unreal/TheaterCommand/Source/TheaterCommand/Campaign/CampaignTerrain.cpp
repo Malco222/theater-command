@@ -274,6 +274,15 @@ float FCampaignTerrain::MetresAt(double X, double Y) const
 		FMath::Lerp(static_cast<float>(Row1[0]), static_cast<float>(Row1[1]), Fx), Fy);
 }
 
+float FCampaignTerrain::FineLandHeightAt(double X, double Y) const
+{
+	// (the reckoning of BuildOver's step six, for ground more than a few units from any shore)
+	const float Metres = FMath::Max(MetresAt(X, Y), 0.0f);
+	const float Lift = 5.6f * FMath::Pow(Metres / 2500.0f, 0.78f);
+	const float Tooth = (0.05f + 0.045f * Lift) * Fbm(FVector2D(X, Y) * 0.23, 3);
+	return ShelfHeight + FMath::Max(Lift + Tooth, 0.0f);
+}
+
 void FCampaignTerrain::Build(const FCampaignMapData& Data)
 {
 	BuildOver(Data, 0.0, 0.0, Data.Width, Data.Height, 1.5, false);

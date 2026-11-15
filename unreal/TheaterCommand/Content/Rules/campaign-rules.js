@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2de61a2 2026-11-15. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 7198cd6 2026-11-15. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1968,6 +1968,7 @@
     if (p >= 1 || HISTORY.joined[side3].includes(id) || g2.flags[`courted:${id}`]) return true;
     return p > 0 && dialDraw(g2, "join", id, g2.turn) < p;
   }
+  var staysOut = (g2, id, side3) => stopDef(g2).join < 1 && !HISTORY.joined[side3].includes(id) && !g2.flags[`courted:${id}`];
   var theatreOf = (nat, opId) => HISTORY.theatre[`${nat}:${opId}`] ?? null;
   var onBook = (g2, theatre) => !!stopDef(g2).book && theatre !== null && !g2.flags[`hist:off:${theatre}`];
   var bookClosed = (g2, theatre) => g2.flags[`hist:off:${theatre}`] ?? 0;
@@ -3964,6 +3965,8 @@
   var ALL_RIVERS = [...RIVERS, ...WIDE.rivers];
   var WORLD_CROSSINGS = WIDE.crossings.map(([a, b, river, x, y]) => ({ a, b, river: river + RIVERS.length, x, y }));
   var ALL_CROSSINGS = [...CROSSINGS, ...WORLD_CROSSINGS];
+  var riversOf = (g2) => g2.flags.world === 1 ? ALL_RIVERS : RIVERS;
+  var crossingsOf = (g2) => g2.flags.world === 1 ? ALL_CROSSINGS : CROSSINGS;
   var pair = (a, b) => a < b ? a * 4096 + b : b * 4096 + a;
   var BY = new Map(ALL_CROSSINGS.map((c) => [pair(c.a, c.b), c]));
   var AT = /* @__PURE__ */ new Map();
@@ -6787,6 +6790,7 @@
   var RAIL_LINKS = campaign_rails_default.links.map(([a, b, x, y]) => ({ a, b, x, y }));
   var WORLD_RAIL_LINKS = world_rails_default.links.map(([a, b, x, y]) => ({ a, b, x, y }));
   var ALL_LINKS = [...RAIL_LINKS, ...WORLD_RAIL_LINKS];
+  var railLinks = (g2) => g2.flags.world === 1 ? ALL_LINKS : RAIL_LINKS;
   var NET = /* @__PURE__ */ new Map();
   for (const l of ALL_LINKS) for (const [p, q] of [[l.a, l.b], [l.b, l.a]]) (NET.get(p) ?? NET.set(p, []).get(p)).push(q);
   var NONE2 = [];
@@ -8627,7 +8631,7 @@
     const bar = barred3 === "lift" ? `${n.name} has no shipping for a landing. Troopships are laid down in the shipyards.` : barred3 === "sea" ? `The ${g2.seas[shut].name} is closed to your troopships: the enemy is much the stronger there.` : barred3 === "sky" ? `${g2.nations[to.ctrl].adj} fighters hold the sky over ${to.name}, and no invasion fleet can cross under them. Win the sky there first.` : null;
     return { from, to, path, bar, barred: barred3, account };
   }
-  function crossingsOf(g2, nat) {
+  function crossingsOf2(g2, nat) {
     const n = g2.nations[nat];
     if (!seaWar(g2) || !n?.alive || !n.atWar.length) return [];
     const troops = (r) => r.units.reduce((s, u) => s + (u.nat === nat && !u.dead && u.kind !== "fort" ? 1 : 0), 0);
@@ -10662,6 +10666,7 @@
       UK: "democracy",
       FRA: "democracy",
       USA: "democracy",
+      CAN: "democracy",
       NED: "democracy",
       BEL: "democracy",
       NOR: "democracy",
@@ -10836,18 +10841,20 @@
       follow: "Dominions: each goes to war with whoever its mother country is at war with on the day the world is attached.",
       corps: "The armies standing at home on the first day: [nation, name, kind, divisions, province, options]. 'str' is the strength it starts at (a peacetime army is a cadre).",
       fleets: "Squadrons in home waters on the first day, in the form of navy.json.",
-      peace: "The share of a great power's industry on war work while it is at peace, by month: [from month, share]. It stands in place of production.json's peaceIncome for that country. Once it is at war its factories work as any other's do.",
+      peace: "The share of a great power's industry on war work while it is at peace, by month: [from month, share]. It stands in place of production.json's peaceIncome for that country.",
+      warWork: "Going to war does not turn such a country's factories over in a day. From the month it is at war the share climbs from where the peace table stands by this much a month until it is all on war work (for the United States 0.037: at war in December 1941 with 35 in 100, full in June 1943; at war in September 1939 with 10 in 100, full in October 1941). It is the same for a player and for the computer. A country without a figure here works at full stretch from the day it is at war, as every other does.",
+      overseas: "The army sent across the ocean. A computer-run country here whose homeland lies an ocean away from every enemy ships the corps it raises to a port of an ally who is in the same war (never an opposed landing straight across the ocean), and from that far shore they go the way every second front goes (open.json, 'descent'): into a harbour of a landing its side has already made, or across the narrow sea when the way is open. 'guard' is how many of its field corps stay at home whatever happens. 'oceans' gives each ocean the share of the country's shipping that works that run each month (a share of 0.15 with shipping for four corps carries three corps in five months, about the pace at which the United States put its army across the Atlantic); the shares are banked from month to month up to 'bank' corps, so a month in which a landing took every ship is made up later. 'risk': no corps sails to a harbour where the danger of the crossing is above this (0.1: about six men in a hundred lost), so a beachhead beyond dangerous seas is not fed from across the ocean, and when the harbours of a second front are full the corps are put down where the army is built up and go on from there. 'ahead': its staff raises corps only as far ahead of the sailings as this many months of them, on top of the guard, so shipping is the limit of the army and not the treasury. History's dated formations are not sent to such a country as well: the corps it ships take their place. A player's own America is not run by any of this: his army forms at home and shipping it is his business.",
       protector: "Overseas ground beyond the old chart whose mother country falls does not go to the victor's hands across an ocean he cannot cross: it passes into the keeping of the first of these powers that is alive, lives by its ships and is at war with the victor.",
       pairs: "Trade agreements history had in 1939, added to trade.json's.",
       order: "Where the new countries stand in the order of play: after the countries of nations.json.",
-      idle: "A computer-run staff whose homeland lies beyond the old chart, with no enemy on its side of the ocean, does not go on raising an army to stand on the quay: once this many of its field corps are at home it raises no more. (It has no routine yet for shipping an army across an ocean by itself; history's dated formations still arrive where history landed them.) A player's own staff is not bound by it.",
+      idle: "A computer-run staff whose homeland lies beyond the old chart, with no enemy on its side of the ocean, does not go on raising an army to stand on the quay: once this many of its field corps are at home it raises no more. (A country with an entry under 'overseas' that is at war and has an ally's port to ship to raises by that rule instead.) A player's own staff is not bound by it.",
       oilHome: "What a country's small wells and plants at home yield once its own oilfields are on the map, in place of resources.json's 'home'. Off the map the United States had 120 a month from a homeland nobody could reach; on it the fields of Texas, Oklahoma and California yield 100 of that, and can be taken.",
       great: "Great powers beside diplomacy.json's 'majors', once their homeland is on the map: left alone when the neutrals are dealt afresh, paid a great power's political capital and trade houses, and counted among the great powers of the last act."
     },
     nations: {
-      CAN: { name: "Canada", adj: "Canadian", color: "#c0846a", quality: 0.9, air: 8, resilience: 0.9, align: "allies", seaSupply: true, sealift: 1 },
+      CAN: { name: "Canada", adj: "Canadian", color: "#eba181", quality: 0.9, air: 8, resilience: 0.9, align: "allies", seaSupply: true, sealift: 1 },
       MEX: { name: "Mexico", adj: "Mexican", color: "#1e7046", quality: 0.55, air: 2, resilience: 0.6, align: "independent" },
-      CUB: { name: "Cuba", adj: "Cuban", color: "#b0a488", quality: 0.5, air: 0, resilience: 0.5, align: "independent" }
+      CUB: { name: "Cuba", adj: "Cuban", color: "#644eb2", quality: 0.5, air: 0, resilience: 0.5, align: "independent" }
     },
     home: {
       USA: { align: "leaning_allies" }
@@ -10873,6 +10880,10 @@
     ],
     peace: {
       USA: [[1, 0.1], [10, 0.2], [19, 0.35]]
+    },
+    warWork: { USA: 0.037 },
+    overseas: {
+      USA: { guard: 4, ahead: 7, bank: 2, risk: 0.1, oceans: { atlantic: 0.15 } }
     },
     protector: ["UK", "USA"],
     pairs: [["UK", "USA"], ["USA", "CAN"], ["USA", "MEX"], ["USA", "CUB"], ["UK", "CAN"]],
@@ -10970,6 +10981,28 @@
     for (const [from, s] of rows) if (g2.turn >= from) share = s;
     return share;
   }
+  function warFooting(g2, nat) {
+    if (!worldOn(g2) || WORLD.warWork[nat] === void 0) return null;
+    return Math.min(1, g2.flags[`ww:${nat}`] ?? peaceFooting(g2, nat) ?? 1);
+  }
+  function warWorkMonth(g2) {
+    if (!worldOn(g2)) return;
+    for (const [id, step2] of Object.entries(WORLD.warWork)) {
+      const n = g2.nations[id], key4 = `ww:${id}`;
+      if (!n?.alive || !n.atWar.length) {
+        delete g2.flags[key4];
+        continue;
+      }
+      const table = peaceFooting(g2, id) ?? 1, was = g2.flags[key4];
+      const now = Math.min(1, Math.max(table, was === void 0 ? table : was + step2));
+      g2.flags[key4] = now;
+      if (was !== void 0 && was < 1 && now >= 1 && id === g2.human) headline(g2, "info", `${n.adj} industry is now wholly on war work: every factory at home earns its full worth.`, id);
+    }
+  }
+  function warWorkLeft(g2, nat) {
+    const share = warFooting(g2, nat), step2 = WORLD.warWork[nat];
+    return share === null || share >= 1 || !step2 ? 0 : Math.ceil((1 - share) / step2 - 1e-9);
+  }
   var oilAtHome = (g2, nat) => worldOn(g2) ? WORLD.oilHome[nat] ?? null : null;
   function armyIdle(g2, nat) {
     if (!worldOn(g2) || nat === g2.human) return false;
@@ -10982,7 +11015,50 @@
       for (const c of r.units) if (c.nat === nat && c.kind !== "fort" && c.kind !== "eng") home++;
       for (const c of r.garr ?? []) if (c.nat === nat && c.kind !== "fort" && c.kind !== "eng") home++;
     }
+    const O = overseasOf(g2, nat);
+    if (O) return home >= O.guard + Math.ceil(O.ahead * sailings(g2, nat, O));
     return home >= (WORLD.idle[nat] ?? WORLD.idle._default);
+  }
+  function overseasOf(g2, nat) {
+    const O = worldOn(g2) && nat !== g2.human ? WORLD.overseas[nat] : void 0;
+    const n = g2.nations[nat];
+    if (!O || !n?.alive || !n.atWar.length || n.sealift <= 0 || n.capital < 0 || !beyondEurope(n.capital) || g2.regions[n.capital].ctrl !== nat) return null;
+    for (let i = WORLD_FIRST; i < g2.regions.length; i++) if (n.atWar.includes(g2.regions[i].ctrl)) return null;
+    return O;
+  }
+  var shipsItsOwn = (g2, nat) => {
+    const n = g2.nations[nat];
+    return worldOn(g2) && nat !== g2.human && !!WORLD.overseas[nat] && !!n && n.capital >= 0 && beyondEurope(n.capital) && g2.regions[n.capital].ctrl === nat;
+  };
+  function acrossTheWater(g2, nat, majors) {
+    const n = g2.nations[nat];
+    if (!worldOn(g2) || !WORLD.overseas[nat] || !n?.alive) return [];
+    const side3 = bloc(n) ?? (n.align === "leaning_allies" ? "allies" : n.align === "leaning_axis" ? "axis" : null);
+    if (side3 !== "allies" && side3 !== "axis") return [];
+    return majors.filter((id) => id !== nat && g2.nations[id]?.alive && !g2.nations[id].dormant && bloc(g2.nations[id]) === (side3 === "allies" ? "axis" : "allies"));
+  }
+  function standWithAllies(g2, nat, was = null) {
+    const n = g2.nations[nat];
+    if (!worldOn(g2) || !WORLD.overseas[nat] || !n?.alive) return false;
+    const say = () => headline(g2, "event", `${theName(n, true)} stands with the Allies: their ports and their supply lines are open to its armies.`, nat);
+    if (bloc(n) === "allies" && was === "none") {
+      say();
+      return true;
+    }
+    if (bloc(n) !== null) return false;
+    const foes = n.atWar.map((id) => g2.nations[id]).filter((x) => x?.alive);
+    if (!foes.some((x) => bloc(x) === "axis") || foes.some((x) => bloc(x) === "allies")) return false;
+    if (!Object.values(g2.nations).some((x) => x.id !== nat && x.alive && !x.dormant && bloc(x) === "allies")) return false;
+    n.align = "allies_cobelligerent";
+    n.opinion = n.home = -100;
+    g2.flags[`step:${nat}`] = g2.turn;
+    g2.supplyDirty = true;
+    say();
+    return true;
+  }
+  var sailings = (g2, nat, O) => Object.values(O.oceans).reduce((s, x) => s + x, 0) * g2.nations[nat].sealift;
+  function acrossOcean(ocean, r) {
+    return ocean === "atlantic" ? !beyondEurope(r) : false;
   }
   function protectorOf(g2, by) {
     if (!worldOn(g2)) return null;
@@ -14987,6 +15063,7 @@
   }
   function monthlyDiplomacy(g2) {
     if ((g2.flags.dom ?? 0) > 0) {
+      warWorkMonth(g2);
       traitsMonth(g2);
       techMonth(g2);
       return;
@@ -14999,6 +15076,7 @@
       settle(g2, n);
     }
     worldMonth(g2);
+    warWorkMonth(g2);
     leagueMonth(g2);
     traitsMonth(g2);
     techMonth(g2);
@@ -15298,7 +15376,7 @@
     const trade = budget ? tradeIncome(g2, nat) : partners * DIPLOMACY.tradeIncome;
     const towns2 = budget ? civicSum(g2, nat, keepsStores(g2, nat)) : null;
     const civic = towns2 ? towns2.commerce + towns2.farms + towns2.tax : 0;
-    const peace = n.atWar.length ? 1 : peaceFooting(g2, nat) ?? PRODUCTION.peaceIncome;
+    const peace = n.atWar.length ? warFooting(g2, nat) ?? 1 : peaceFooting(g2, nat) ?? PRODUCTION.peaceIncome;
     const sea = seaIncomeLoss(g2, nat), air2 = airIncomeLoss(g2, nat), tech2 = techMul(g2, nat, "industry");
     const prizes = prizeIncome(g2, nat);
     const before = seat3 + facHome + facOcc + away + land2 + ports + oil + prizes.total;
@@ -15325,7 +15403,8 @@
       ...gift.lines
     ];
     const changes = [
-      { key: "peace", label: peaceFooting(g2, nat) === null ? "At peace: industry at half speed" : `At peace: ${Math.round(peace * 100)} in 100 of industry on war work`, amount: before * (peace - 1) },
+      // (At war, a country that climbs to full war work by steps says how far it has come and how long it has to go.)
+      { key: "peace", label: n.atWar.length ? peace >= 1 ? "At war: all of industry on war work" : `At war: ${Math.round(peace * 100)} in 100 of industry on war work so far, all of it in ${warWorkLeft(g2, nat) === 1 ? "a month" : `${warWorkLeft(g2, nat)} months`}` : peaceFooting(g2, nat) === null ? "At peace: industry at half speed" : `At peace: ${Math.round(peace * 100)} in 100 of industry on war work`, amount: before * (peace - 1) },
       { key: "sea", label: "Cargoes sunk at sea", amount: afterSea - atPeace },
       { key: "air", label: "Bombing of industry", amount: afterAir - afterSea },
       { key: "tech", label: tech2 >= 1 ? "Better production methods" : "Production methods behind the times", amount: afterAir * (tech2 - 1) },
@@ -15366,7 +15445,7 @@
       const towns2 = civicSum(g2, nat, keepsStores(g2, nat));
       const trade2 = tradeIncome(g2, nat) + towns2.commerce + towns2.farms + towns2.tax;
       const gift = traitMoney(g2, nat);
-      return (sum2 * (n.atWar.length ? 1 : peaceFooting(g2, nat) ?? PRODUCTION.peaceIncome) + trade2 + gift.flat) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry") * incomeMul(g2, nat) * gift.mul * supIncome(g2, nat) * govMul(g2, nat, "income");
+      return (sum2 * (n.atWar.length ? warFooting(g2, nat) ?? 1 : peaceFooting(g2, nat) ?? PRODUCTION.peaceIncome) + trade2 + gift.flat) * (1 - seaIncomeLoss(g2, nat)) * (1 - airIncomeLoss(g2, nat)) * techMul(g2, nat, "industry") * incomeMul(g2, nat) * gift.mul * supIncome(g2, nat) * govMul(g2, nat, "income");
     }
     let fac = 0;
     for (const r of g2.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
@@ -18775,6 +18854,7 @@
       }
       let reg = g2.byName[row2[5]];
       let due = row2[0];
+      if (shipsItsOwn(g2, nat)) return;
       if (g2.flags.open === 1) {
         const k = reg ? THEATRE_OF.get(reg.name) ?? -1 : -1;
         if (k >= 0 && THEATRE_LIST[k].scripted && row2[0] >= (THEATRE_LIST[k].opens ?? 0)) return;
@@ -19100,6 +19180,7 @@
     commandOf: () => commandOf,
     corpsDetail: () => corpsDetail,
     corpsKnownAs: () => corpsKnownAs,
+    crossingStaffWord: () => crossingStaffWord,
     crossings: () => crossings2,
     current: () => current,
     declarable: () => declarable,
@@ -20556,7 +20637,8 @@
       dig: { orders: 2, top: 2, capital: 3, keep: 40 }
     },
     descent: {
-      _about: "The second front. A nation with sea lift that has been at war with an enemy for 'after' months with no land battle against him and no troops of its home army in touch with ground he holds keeps 'force' corps by a quay (a home port with a lane open to his harbours) and crosses the sea: to a harbour of his that is unguarded, or guarded at 'odds' or better, with a crossing no riskier than 'risk' and no more than 'near' times its own strength within a march of the beach. It tries in a month with chance 'chance', and waits 'every' months after a landing. The staff names the beach it has its eye on a month ahead: its fleet then covers the crossing and its fighters fight for the sky over the beach, and a beach they cannot open in half a year is given up for a year. The men it puts ashore stay there, and while they are fewer than 'hold' divisions, or than 'feed' times the enemy army next to their ground, every ship it has carries more to them each month: into a harbour in friendly hands, or over the beach while the harbour town still holds out. An army standing idle on a far shore (friendly ground away from home with no enemy on it or next to it) does the same from a port there, against an enemy it has not fought for 'abroad' months. The hardest level has rules of its own for the player's coasts (difficulty.json).",
+      _about: "The second front. A nation with sea lift that has been at war with an enemy for 'after' months with no land battle against him and no troops of its home army in touch with ground he holds keeps 'force' corps by a quay (a home port with a lane open to his harbours) and crosses the sea: to a harbour of his that is unguarded, or guarded at 'odds' or better, with a crossing no riskier than 'risk' and no more than 'near' times its own strength within a march of the beach. It tries in a month with chance 'chance', and waits 'every' months after a landing. The staff names the beach it has its eye on a month ahead: its fleet then covers the crossing and its fighters fight for the sky over the beach, and a beach they cannot open in half a year is given up for a year. The men it puts ashore stay there, and while they are fewer than 'hold' divisions, or than 'feed' times the enemy army next to their ground, every ship it has carries more to them each month: into a harbour in friendly hands, or over the beach while the harbour town still holds out. An army standing idle on a far shore (friendly ground away from home with no enemy on it or next to it) does the same from a port there, against an enemy it has not fought for 'abroad' months. A staff heeds its own forecast ('heed'): it lands no force on a beach where the sea behind could be closed and the force cut off from its supplies (the same forecast a player reads on the landing card, navy.ts). 'mainland' is that rule for a first landing on a shore with a land frontier; 'island' is the same for a landing that takes a whole island (a province with no land frontier), and it is off: in the wars measured (Version 75) landings of that kind under a warning mostly held and cost few men, and the island war to come would be forbidden by it; 'wave' is the rule for a further wave sent over the beach to men already ashore. A player may still order any such landing by hand. The hardest level has rules of its own for the player's coasts (difficulty.json).",
+      heed: { mainland: true, island: false, wave: true },
       after: 12,
       abroad: 3,
       hold: 15,
@@ -21510,6 +21592,11 @@
     }
     return { worth: worth3, seas };
   }
+  function heedsCard(to, wave = false) {
+    const H = OPEN.descent?.heed;
+    return !!H && (wave ? H.wave : to.nb.length ? H.mainland : H.island);
+  }
+  var landingForce = () => OPEN.descent?.force ?? 3;
   var harbours = (g2, e) => g2.regions.filter((r) => r.ctrl === e && r.port && r.seas.length > 0);
   function seaFoe(g2, nat, slot = 0) {
     const n = g2.nations[nat];
@@ -21739,6 +21826,142 @@
       }
     }
     return Infinity;
+  }
+  function groundFrom(g2, nat, at) {
+    const on = new Uint8Array(g2.regions.length);
+    const q = [at.id];
+    on[at.id] = 1;
+    for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (!on[j] && allied(g2, nat, fieldCtrl(g2, g2.regions[j]))) {
+      on[j] = 1;
+      q.push(j);
+    }
+    return on;
+  }
+  function frontAshore(g2, nat) {
+    const n = g2.nations[nat];
+    if (!n?.alive) return null;
+    let best = null, bs = -1;
+    const look = (id, slot, own) => {
+      const l = lodgment(g2, id, slot);
+      if (!l || !l.ports.length) return;
+      const s = (own ? 2 : 0) + (l.short ? 1 : 0);
+      if (s > bs) {
+        bs = s;
+        best = { at: l.at, ports: l.ports };
+      }
+    };
+    for (const slot of [1, 0]) look(nat, slot, true);
+    for (const id of Object.keys(g2.nations)) {
+      const A = g2.nations[id];
+      if (id === nat || !A.alive || A.dormant || !allied(g2, nat, id) || !A.atWar.some((e) => n.atWar.includes(e))) continue;
+      for (const slot of [0, 1]) look(id, slot, false);
+    }
+    if (!best) return null;
+    const b = best;
+    return { ...b, ground: groundFrom(g2, nat, b.at) };
+  }
+  function oceanBase(g2, nat, ocean, safe) {
+    const n = g2.nations[nat];
+    const key4 = `st:base:${nat}:${ocean}`, at = `st:baseAt:${nat}:${ocean}`;
+    const serves = (p) => p.port && p.seas.length > 0 && acrossOcean(ocean, p) && allied(g2, nat, p.ctrl) && (p.ctrl === nat || !!g2.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g2, p, nat).length && safe(p);
+    const kept = g2.regions[flag2(g2, key4) - 1];
+    if (kept && serves(kept) && g2.turn - flag2(g2, at) < 6) return kept;
+    const shores = [...n.atWar].sort().filter((e) => g2.nations[e]?.alive && g2.nations[e].capital >= 0).flatMap((e) => harbours(g2, e));
+    if (!shores.length) {
+      delete g2.flags[key4];
+      return null;
+    }
+    const shut = g2.seas.map((z) => closedTo(g2, z.id, nat));
+    let best = null, bw = 0, bs = Infinity;
+    let near = null, bd = Infinity;
+    for (const p of g2.regions) {
+      if (!serves(p)) continue;
+      const d = seaHops(g2, p.seas, shores);
+      if (d < bd) {
+        bd = d;
+        near = p;
+      }
+      const w = quayWorth(g2, nat, p, shores, shut);
+      if (w.worth > bw + 1e-9 || w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs) {
+        best = p;
+        bw = w.worth;
+        bs = w.seas;
+      }
+    }
+    best ?? (best = near);
+    if (!best) {
+      delete g2.flags[key4];
+      return null;
+    }
+    g2.flags[key4] = best.id + 1;
+    g2.flags[at] = g2.turn;
+    return best;
+  }
+  function dangerFrom(g2, nat, quays) {
+    const N = g2.seas.length;
+    const risk = g2.seas.map((z) => closedTo(g2, z.id, nat) ? -1 : seaRisk(g2, z.id, nat));
+    const cost = new Float64Array(N).fill(1e9), safe = new Float64Array(N), done = new Uint8Array(N);
+    for (const r of quays) for (const z of r.seas) if (risk[z] >= 0) {
+      cost[z] = 1 + 20 * risk[z];
+      safe[z] = 1 - risk[z];
+    }
+    for (; ; ) {
+      let a = -1;
+      for (let i = 0; i < N; i++) if (!done[i] && cost[i] < 1e9 && (a < 0 || cost[i] < cost[a])) a = i;
+      if (a < 0) break;
+      done[a] = 1;
+      for (const j of g2.seas[a].adj) {
+        if (done[j] || risk[j] < 0 || !canPass(g2, a, j, nat)) continue;
+        const c = cost[a] + 1 + 20 * risk[j];
+        if (c < cost[j]) {
+          cost[j] = c;
+          safe[j] = safe[a] * (1 - risk[j]);
+        }
+      }
+    }
+    return safe.map((s, z) => cost[z] < 1e9 ? 1 - s : 1);
+  }
+  function oceanRuns(g2, nat) {
+    const O = overseasOf(g2, nat);
+    if (!O) return [];
+    const quays = homeGround(g2, nat).list.map((id) => g2.regions[id]).filter((r) => r.port && r.seas.length > 0 && r.owner === nat);
+    if (!quays.length) return [];
+    const danger = dangerFrom(g2, nat, quays);
+    const safe = (r) => r.seas.some((z) => danger[z] <= O.risk);
+    const front = frontAshore(g2, nat);
+    const out = [];
+    for (const [ocean, share] of Object.entries(O.oceans)) {
+      const to = front ? front.ports.filter((p) => acrossOcean(ocean, p) && safe(p)) : [];
+      const atFront = to.length > 0;
+      const base = oceanBase(g2, nat, ocean, safe);
+      if (base) {
+        const d = new Int16Array(g2.regions.length).fill(-1);
+        const q = [base.id];
+        d[base.id] = 0;
+        for (let i = 0; i < q.length; i++) {
+          if (d[q[i]] >= 3) continue;
+          for (const j of g2.regions[q[i]].nb) if (d[j] < 0 && allied(g2, nat, g2.regions[j].ctrl)) {
+            d[j] = d[q[i]] + 1;
+            q.push(j);
+          }
+        }
+        for (const id of q) {
+          const p = g2.regions[id];
+          if (p.port && p.seas.length > 0 && !hostileUnits(g2, p, nat).length && safe(p) && !to.includes(p)) to.push(p);
+        }
+      }
+      if (!to.length) continue;
+      let from = null, len = Infinity;
+      for (const r of quays) {
+        const path = seaPath(g2, nat, r, to[0]);
+        if (path && (path.length < len || path.length === len && from !== null && r.fac > from.fac)) {
+          from = r;
+          len = path.length;
+        }
+      }
+      if (from) out.push({ ocean, share, from, to, front: atFront });
+    }
+    return out;
   }
   function afterDeclaring(g2, nat) {
     const list4 = ops(nat);
@@ -22207,7 +22430,10 @@
     airAI(g2, nat);
     if (!n.atWar.length && !(open && ph?.posture === "redeploy")) return;
     if (ph?.landings) landings(g2, nat, ph);
-    if (open) descent(g2, nat);
+    if (open) {
+      descent(g2, nat);
+      ferry(g2, nat);
+    }
     if (ph?.release) {
       for (const c of g2.corps) if (c.nat === nat && c.hold && c.kind !== "fort" && ph.release.includes(g2.regions[c.reg].name)) c.hold = false;
     }
@@ -22617,6 +22843,7 @@
       }
     }
   }
+  var landingWatch = { tell: null };
   function descent(g2, nat) {
     for (const slot of [0, 1]) crossSea(g2, nat, slot);
   }
@@ -22644,9 +22871,13 @@
         const wave = ready.slice(0, Math.min(liftLeft(g2, nat), STACK - friendlyUnits(g2, ashore.at, nat).length));
         if (wave.length) {
           const plan = planLanding(g2, wave, ashore.at);
-          if (!plan.why && plan.risk <= L.risk && landCorps(g2, wave, ashore.at).ok) for (const c of wave) {
-            c.hold = false;
-            if (!c.dead) g2.flags[`sf:${c.id}`] = 1;
+          const warned = !!plan.hold && !plan.hold.open;
+          if (!plan.why && plan.risk <= L.risk && !(heedsCard(ashore.at, true) && warned) && landCorps(g2, wave, ashore.at).ok) {
+            landingWatch.tell?.({ nat, to: ashore.at, force: wave, warned, sea: plan.hold?.sea ?? -1, wave: true, taken: true });
+            for (const c of wave) {
+              c.hold = false;
+              if (!c.dead) g2.flags[`sf:${c.id}`] = 1;
+            }
           }
         }
         return;
@@ -22671,12 +22902,14 @@
     }
     if (hashString(`descent:${g2.seed}:${g2.turn}:${nat}${sfx}`) / 4294967296 >= L.chance) return;
     const men2 = force2.reduce((s, c) => s + c.divs * c.str, 0);
-    let best = null, bv = 0;
+    let best = null, bv = 0, bw = false, bz = -1;
     for (const r of landingTargets(g2, force2)) {
       if (r.ctrl !== you || !r.port) continue;
       if (!shoreOpen(g2, r.owner, !!r.overseas)) continue;
       const plan = planLanding(g2, force2, r);
       if (plan.why || plan.risk > L.risk) continue;
+      const warned = !!plan.hold && !plan.hold.open;
+      if (heedsCard(r) && warned) continue;
       if (plan.defended && (!plan.assess || plan.assess.odds < L.odds)) continue;
       let near = 0;
       for (const j of [r.id, ...r.nb]) for (const u of hostileUnits(g2, g2.regions[j], nat)) if (u.kind !== "fort") near += u.divs * u.str;
@@ -22685,17 +22918,79 @@
       if (!best || v > bv) {
         best = r;
         bv = v;
+        bw = warned;
+        bz = plan.hold?.sea ?? -1;
       }
     }
     if (!best) return;
     const res = landCorps(g2, force2, best);
     if (!res.ok) return;
+    landingWatch.tell?.({ nat, to: best, force: force2, warned: bw, sea: bz, wave: false, taken: !!res.taken });
     went(L.every);
     delete g2.flags[`st:aim:${nat}${sfx}`];
     if (res.taken) {
       g2.flags[`st:lodged:${nat}${sfx}`] = best.id + 1;
       if (sea.second) {
         for (const c of force2) if (!c.dead) g2.flags[`sf:${c.id}`] = 1;
+      }
+    }
+  }
+  function ferry(g2, nat) {
+    const O = overseasOf(g2, nat);
+    if (!O) return;
+    const n = g2.nations[nat];
+    const fit3 = (c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng" && !c.airborne && !c.town && c.joint === void 0 && c.supplied && c.str >= 0.7 && c.ap >= c.apMax;
+    const byWorth2 = (a, b) => atkPower(g2, b) - atkPower(g2, a) || a.id - b.id;
+    const went = (c) => {
+      c.hold = false;
+      g2.flags[`sf:${c.id}`] = 1;
+    };
+    const sails = (c, p) => {
+      if (friendlyUnits(g2, p, nat).length >= STACK) return false;
+      const path = seaPath(g2, nat, g2.regions[c.reg], p);
+      return !!path && crossingRisk(g2, nat, path) <= O.risk && shipMove(g2, c, p);
+    };
+    const front = frontAshore(g2, nat);
+    if (front) {
+      for (const c of g2.corps.filter(fit3).sort(byWorth2)) {
+        if (liftLeft(g2, nat) < 1) break;
+        const here = g2.regions[c.reg];
+        if (here.owner === nat || !here.port || front.ground[here.id] || !allied(g2, nat, here.ctrl)) continue;
+        if (here.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl))) continue;
+        if (front.ports.some((p) => sails(c, p))) went(c);
+      }
+    }
+    const home = () => g2.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng" && g2.regions[c.reg].owner === nat && !g2.regions[c.reg].overseas);
+    for (const run of oceanRuns(g2, nat)) {
+      const key4 = `fy:${nat}:${run.ocean}`, at = `fyAt:${nat}:${run.ocean}`;
+      if (g2.flags[at] !== g2.turn) {
+        g2.flags[at] = g2.turn;
+        g2.flags[key4] = Math.min(O.bank, (g2.flags[key4] ?? 0) + run.share * n.sealift);
+      }
+      let spare = home().length - O.guard;
+      for (const c of run.from.units.filter((u) => fit3(u) && !u.hold).sort(byWorth2)) {
+        if (spare <= 0 || (g2.flags[key4] ?? 0) < 1 || liftLeft(g2, nat) < 1) break;
+        const to = run.to.find((p) => sails(c, p));
+        if (!to) break;
+        g2.flags[key4] -= 1;
+        spare--;
+        went(c);
+        const first = !g2.flags[`fy:first:${nat}`];
+        g2.flags[`fy:first:${nat}`] = 1;
+        if (first) headline(g2, "event", `The first ${n.adj} troops to cross the ocean come ashore at ${to.name}: ${c.name}. More will follow as fast as the ships can carry them.`, nat, to.id);
+        else if (g2.human !== null && (allied(g2, g2.human, nat) || atWar(g2, g2.human, nat)) && allied(g2, g2.human, to.ctrl)) headline(g2, "info", `${c.name} of the ${n.adj} army has landed at ${to.name}.`, nat, to.id);
+      }
+      const want = Math.min(spare, Math.ceil(2 * run.share * n.sealift));
+      let have = run.from.units.filter((u) => u.nat === nat && !u.dead && !u.hold && u.kind !== "fort" && u.kind !== "eng").length;
+      for (const u of run.from.units) if (u.nat === nat && !u.hold) massed.add(u.id);
+      if (have >= want) continue;
+      const pool = home().filter((c) => !c.hold && c.reg !== run.from.id && !c.airborne && !c.town && c.joint === void 0 && c.str >= 0.6 && c.ap >= 4 && !massed.has(c.id)).sort(byWorth2);
+      for (const c of pool) {
+        if (have >= want || friendlyUnits(g2, run.from, nat).length >= STACK) break;
+        if (railToward(g2, c, run.from) && c.reg === run.from.id) {
+          massed.add(c.id);
+          have++;
+        }
       }
     }
   }
@@ -23446,7 +23741,7 @@
     });
     return `put ${begun2.length === 1 ? "a research team" : `${begun2.length} research teams`} to work on ${listAnd2(names)}.`;
   }
-  var orderWords = (g2, b) => b.what === "civic" ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "air" ? `a ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "work" ? `${b.item === "aa" ? "anti-aircraft guns" : b.item ?? "works"} at ${g2.regions[b.region].name}` : `${b.name} at ${g2.regions[b.region].name}`;
+  var orderWords = (g2, b) => b.what === "civic" ? `the ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "air" ? `a ${b.name[0].toLowerCase()}${b.name.slice(1)}` : b.what === "work" ? `${b.item === "aa" ? "anti-aircraft guns" : b.item ?? "works"} at ${g2.regions[b.region].name}` : b.what === "ship" ? `${b.name[0].toLowerCase()}${b.name.slice(1)}` : `${b.name} at ${g2.regions[b.region].name}`;
   function boughtAir(g2, nat) {
     const over = { ftr: 0, bmr: 0 }, base = { ftr: 0, bmr: 0 }, forming = { ftr: 0, bmr: 0 };
     for (const f of airFleetsOf(g2, nat)) {
@@ -23484,6 +23779,43 @@
       if (orderOffer(g2, nat, o.key, o.at)) spare -= o.upkeep;
     }
   }
+  function shipping2(g2, nat) {
+    const n = g2.nations[nat];
+    const plan = plannedCrossing(g2, nat);
+    if (!plan) return;
+    const lift2 = liftView(g2, nat);
+    const force2 = plan.from.units.filter((u) => u.nat === nat && !u.dead && u.kind !== "fort" && u.kind !== "eng" && !u.airborne).length;
+    const want = Math.min(STACK, Math.max(landingForce(), force2));
+    if (lift2.room <= 0 || lift2.lift + lift2.building.length >= want) return;
+    const o = offers(g2, nat).find((x) => x.key === "ship:tp");
+    if (o && o.why === null && o.at >= 0 && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g2, nat, o.key, o.at);
+  }
+  function crossingWord(g2, nat) {
+    const plan = plannedCrossing(g2, nat);
+    if (!plan) return null;
+    const x = crossingsOf2(g2, nat).find((c) => c.planned);
+    const lift2 = liftView(g2, nat);
+    const force2 = plan.from.units.filter((u) => u.nat === nat && !u.dead && u.kind !== "fort" && u.kind !== "eng" && !u.airborne).length;
+    const want = landingForce();
+    const way = `the crossing from ${plan.from.name} to ${plan.to.name}`;
+    if (!x) return { ...plan, state: "waiting", text: `Your staff is not preparing ${way}: your army can reach that shore by land.` };
+    const wanting = [];
+    if (x.bar) wanting.push(`the way itself (${x.bar.replace(/\.$/, "")})`);
+    if (force2 < want) wanting.push(`${want - force2} more corps on the quay at ${plan.from.name} (a landing takes ${want}, and ${force2 === 0 ? "none stands" : force2 === 1 ? "one stands" : `${force2} stand`} there)`);
+    if (lift2.lift < want) wanting.push(lift2.building.length ? `shipping (the ships carry ${lift2.lift} corps a month; troopships for more are on the slips, the next lot ready in ${turnToDate(lift2.building[0]).label})` : `shipping (the ships carry ${lift2.lift} corps a month)`);
+    if (wanting.length) return { ...plan, state: "waiting", text: `Your staff is preparing ${way}. Still wanting: ${listAnd2(wanting)}.` };
+    if (!x.account.hold.open) return { ...plan, state: "warned", text: `Your staff has ${way} prepared, and it waits: once the force is ashore the enemy can close the ${g2.seas[x.account.hold.sea].name} behind it. The order to sail under that warning is yours alone.` };
+    const lost = Math.round(x.account.loss * 100);
+    return { ...plan, state: "ready", text: `Your staff reports ${way} ready: the way is open, ${force2} corps stand on the quay and the ships can carry ${Math.min(force2, lift2.lift)} of them in a month${lost > 0 ? `, with about ${lost} men in a hundred likely to be lost at sea` : ""}. The order to land is yours.` };
+  }
+  function crossingReport(g2, nat) {
+    const w = crossingWord(g2, nat);
+    const code = w ? (w.to.id + 1) * 4 + (w.state === "ready" ? 1 : w.state === "warned" ? 2 : 3) : 0;
+    if (code === (g2.flags["dk:cross"] ?? 0)) return;
+    if (code) g2.flags["dk:cross"] = code;
+    else delete g2.flags["dk:cross"];
+    if (w && w.state !== "waiting") headline(g2, "info", w.text, nat, w.to.id);
+  }
   function build2(g2, nat) {
     const n = g2.nations[nat];
     const did = [];
@@ -23504,6 +23836,7 @@
     }
     const had = new Set(n.queue.map((b) => b.id));
     const spent = fromPurse(g2, nat, () => {
+      shipping2(g2, nat);
       aiProduction(g2, nat);
       aiArsenal(g2, nat);
       civicAI(g2, nat, income(g2, nat), keepsStores(g2, nat), gunsWanted(g2, nat) || armyWorn(g2, nat));
@@ -23519,16 +23852,24 @@
     const n = g2.nations[nat], b = bloc(n);
     if (!b || b === "league" || n.pc < DIPLOMACY.court.cost + DEPTH.diplomacy.keep) return null;
     const side3 = b === "axis" ? 1 : -1;
-    let best = null, top = 0;
+    let best = null, top = 0, book = 0;
     for (const T of Object.values(g2.nations)) {
       if (!canCourt(g2, nat, T.id).ok) continue;
+      if (staysOut(g2, T.id, b)) {
+        book++;
+        continue;
+      }
       const v = receptive(T, b) * (2 + step(T) * side3) * Math.sqrt(1 + wealthOf(g2, T.id));
       if (v > top || v === top && best !== null && T.id < best.id) {
         top = v;
         best = T;
       }
     }
-    if (!best) return null;
+    if (!best) {
+      if (!book || g2.flags["dk:crt:book"]) return null;
+      g2.flags["dk:crt:book"] = 1;
+      return "sent no envoys: by the book (the history dial) they court only the countries that history brought into the war on our side, and none of those is left to court. Court a country yourself and the staff will carry on with it.";
+    }
     const before = step(best);
     if (!court(g2, nat, best.id)) return null;
     const key4 = `dk:crt:${best.id}`, same = g2.flags[key4] === 1, now = step(best);
@@ -23672,6 +24013,7 @@
     const nat = g2.human;
     if (!depthRules(g2) || nat === null || !g2.nations[nat]?.alive) return;
     for (const desk of ORDER2) if (staffRuns(g2, nat, desk) && !deskRan(g2, desk)) runDesk(g2, nat, desk);
+    crossingReport(g2, nat);
   }
   function handOver(g2, desk, staff, now = false) {
     if (!setDesk(g2, desk, staff)) return false;
@@ -24639,10 +24981,16 @@
   }
   function orderLand(g2, cs, to) {
     if (!cs.length || onEve(g2) || !cs.every((c) => ownOrder(g2, c))) return { ok: false, why: cs.some((c) => c.joint !== void 0) ? "An ally's corps does not sail under your orders: send the landing with your own." : "Those corps cannot be given orders now." };
-    return landCorps(g2, cs, g2.regions[to]);
+    const beach = g2.regions[to], nat = cs[0].nat;
+    const res = landCorps(g2, cs, beach);
+    if (res.ok && res.taken && !res.air && beach.port && g2.flags.open === 1 && !lodgment(g2, nat)) g2.flags[`st:lodged:${nat}`] = beach.id + 1;
+    return res;
   }
   function crossings2(g2) {
-    return g2.human && g2.nations[g2.human].alive ? crossingsOf(g2, g2.human) : [];
+    return g2.human && g2.nations[g2.human].alive ? crossingsOf2(g2, g2.human) : [];
+  }
+  function crossingStaffWord(g2) {
+    return g2.human && g2.nations[g2.human].alive ? crossingWord(g2, g2.human) : null;
   }
   function orderCrossingPlan(g2, from, to) {
     const me = g2.human;
@@ -25080,6 +25428,7 @@
         }
       }
     }
+    for (const id of acrossTheWater(g2, me, majorsOf(g2))) add(id);
     return [...out];
   }
   function invasions(g2, cs) {
@@ -25120,7 +25469,9 @@
   }
   function orderDeclare(g2, on) {
     if (!g2.human || current(g2) !== g2.human || !declarable(g2).includes(on)) return false;
+    const was = bloc(g2.nations[g2.human]) ?? "none";
     declareWar(g2, g2.human, on);
+    standWithAllies(g2, g2.human, was);
     ensureSupply(g2);
     return true;
   }
@@ -25130,7 +25481,7 @@
 
   // ../../data/campaign/goals.json
   var goals_default = {
-    _about: "Campaign goals: what winning means for each nation a person can play. Every nation has a short campaign and a long one. 'hold' lists cities that must be in the nation's own hands or an ally's. 'beaten' lists nations that must have capitulated. 'by' is the last month in which the goal can be reached (months count from 1 = September 1939, so 16 is December 1940 and 76 is December 1945): the goal is won the moment everything holds, and lost when that month has gone by. 'until' makes it a goal of endurance instead: nothing is decided until the month after it opens, and the goal is won if everything still holds then. 'outlast' makes it a goal of holding out: the nation is still in the war after that many weeks of it, four to a month, and a nation that goes down fighting later than that has won it all the same. Except for 'outlast', the player's nation must still be in the war. Goals judge the war and never change it: no computer nation knows about them.",
+    _about: "Campaign goals: what winning means for each nation a person can play. Every nation has a short campaign and a long one. 'hold' lists cities that must be in the nation's own hands or an ally's. 'beaten' lists nations that must have capitulated. 'by' is the last month in which the goal can be reached (months count from 1 = September 1939, so 16 is December 1940 and 76 is December 1945): the goal is won the moment everything holds, and lost when that month has gone by. 'until' makes it a goal of endurance instead: nothing is decided until the month after it opens, and the goal is won if everything still holds then. 'outlast' makes it a goal of holding out: the nation is still in the war after that many weeks of it, four to a month, and a nation that goes down fighting later than that has won it all the same. 'ashore' asks for an army of the nation's own on the ground: one of its field corps stands in a province first owned by one of the countries listed ('in'), on that country's mainland (not overseas, not a lone island), and 'label' is how the panel names it; with 'beaten' beside it the goal is settled the day the enemy falls, so an army that arrives afterwards does not win it (the design director's ruling 33: a goal an idle player cannot win). Except for 'outlast', the player's nation must still be in the war. Goals judge the war and never change it: no computer nation knows about them.",
     nations: {
       GER: {
         short: { title: "Master of the continent", text: "Hold Warsaw, Oslo and Paris by the end of 1940, as history's Germany did.", hold: ["Berlin", "Warsaw", "Oslo", "Paris"], by: 16 },
@@ -25157,8 +25508,8 @@
         long: { title: "To Berlin", text: "Berlin is in Allied hands by the end of 1945, with Moscow still yours.", hold: ["Moscow", "Berlin"], by: 76 }
       },
       USA: {
-        short: { title: "A second front", text: "Paris is in Allied hands by the end of 1944, with Washington still yours.", hold: ["Washington", "Paris"], by: 64 },
-        long: { title: "Victory in Europe", text: "Beat Germany by the end of 1945 with Washington still yours.", hold: ["Washington"], beaten: ["GER"], by: 76 }
+        short: { title: "A second front", text: "An American army is ashore in France and Paris is in Allied hands, with Washington still yours.", hold: ["Washington", "Paris"], ashore: { in: ["FRA"], label: "An American army ashore in France" }, by: 64 },
+        long: { title: "Victory in Europe", text: "Germany is beaten with an American army on the continent, and Washington still yours.", hold: ["Washington"], beaten: ["GER"], ashore: { in: ["GER", "FRA", "BEL", "NED", "LUX", "DEN", "NOR", "SWE", "FIN", "EST", "LAT", "LIT", "POL", "SVK", "HUN", "ROM", "YUG", "BUL", "GRE", "ITA", "SUI", "ESP", "POR", "SOV"], label: "An American army on the continent" }, by: 76 }
       }
     }
   };
@@ -25188,6 +25539,14 @@
     for (const id of goal.beaten ?? []) {
       const n = g2.nations[id];
       out.push({ label: `${n?.name ?? id} beaten`, done: !!n && !n.alive && !n.dormant });
+    }
+    if (goal.ashore) {
+      const where = new Set(goal.ashore.in);
+      const stands = (reg) => {
+        const r = g2.regions[reg];
+        return where.has(r.owner) && !r.overseas && r.nb.length > 0;
+      };
+      out.push({ label: goal.ashore.label, done: g2.corps.some((c) => c.nat === nat && !c.dead && c.kind !== "fort" && stands(c.reg)) });
     }
     if (goal.outlast !== void 0) {
       const fell = weeksLasted(g2, nat);
@@ -25223,7 +25582,11 @@
       } else if (!g2.nations[nat].alive) won = false;
       else if (goal.until !== void 0) {
         if (g2.turn > goal.until) won = ok;
-      } else if (ok && g2.turn <= goalEnds(goal) + 1) won = true;
+      } else if (goal.ashore && goal.beaten?.length && goal.beaten.every((id) => {
+        const x = g2.nations[id];
+        return !!x && !x.alive && !x.dormant;
+      })) won = ok && g2.turn <= goalEnds(goal) + 1;
+      else if (ok && g2.turn <= goalEnds(goal) + 1) won = true;
       else if (g2.turn > goalEnds(goal)) won = false;
       if (won === null) continue;
       g2.flags[`goal:${key4}`] = won ? 1 : 2;
@@ -25875,11 +26238,11 @@
         "1941": "At war and losing it: beaten in the desert, stuck in the Greek mountains, the fleet hit in its own harbour. Hold Tripoli until help comes, or find another way out.",
         "1942": "The army is back at the gates of Cyrenaica and the convoys to Tripoli are getting through. Malta is still British, and it sits on your supply line."
       } },
-      { id: "USA", years: {
-        "1939": "At peace, an ocean away, with a small army at home and the greatest industry in the world working at a tenth of what it could. Arm while you can, and choose your moment.",
+      { id: "USA", under: "America stays out until December 1941 unless you decide otherwise. Start in 1942 to begin at war.", years: {
+        "1939": "At peace, an ocean away, with a small army at home and the greatest industry in the world working at a tenth of what it could. Going to war will not turn the factories over in a day: they climb to full war work over many months. Arm while you can, and choose your moment.",
         "1940": "Still at peace. The war in Europe has gone quiet for the winter, your factories are taking orders from London and Paris, and the army is still a cadre.",
-        "1941": "At peace and arming fast. France has fallen, Britain fights on alone and is paying with everything it has. How long can you stand aside?",
-        "1942": "At war since December. The army is forming at home and has an ocean to cross before it can fight: ship it port to port, to Britain or to Africa."
+        "1941": "At peace and arming fast. France has fallen, Britain fights on alone and is paying with everything it has. A fifth of your industry is on war work, and war itself will take the rest there only step by step. How long can you stand aside?",
+        "1942": "At war since December. Industry is turning over to war work month by month and will be at full stretch in 1943. The army is forming at home and has an ocean to cross before it can fight: ship it port to port, to Britain or to Africa."
       } },
       { id: "POL", years: {
         "1939": "Outnumbered and nearly surrounded. You place your army on the eve of war. The first month is the one history wrote: survive it and the rest is yours."
@@ -26149,7 +26512,7 @@
       // The countries the player could declare war on this month: those at peace with him that he borders or can reach by sea.
       declare: up ? declarable(s) : [],
       // Bridges that are down (by their place in the list of crossings) and provinces whose railway is cut.
-      down: groundRules(s) ? CROSSINGS.map((c, i) => bridgeDown(s, c) ? i : -1).filter((i) => i >= 0) : [],
+      down: groundRules(s) ? crossingsOf(s).map((c, i) => bridgeDown(s, c) ? i : -1).filter((i) => i >= 0) : [],
       cut: groundRules(s) ? s.regions.filter((r) => railCut(s, r.id)).map((r) => r.id) : [],
       // Each region: who holds it, and the works built there since the war began that the table shows as models:
       // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
@@ -28229,9 +28592,10 @@
     const s = game();
     const steepNames = new Set(GROUND.steep.regions);
     return {
-      rivers: RIVERS.map((r) => ({ name: r.name, pts: r.pts })),
-      crossings: CROSSINGS.map((c) => [c.a, c.b, c.river, c.x, c.y]),
-      rails: RAIL_LINKS.map((l) => [l.a, l.b, l.x, l.y]),
+      // (rules version 74: on the wider chart, its rivers, crossings and lines follow Europe's, which keep their numbers)
+      rivers: riversOf(s).map((r) => ({ name: r.name, pts: r.pts })),
+      crossings: crossingsOf(s).map((c) => [c.a, c.b, c.river, c.x, c.y]),
+      rails: railLinks(s).map((l) => [l.a, l.b, l.x, l.y]),
       steep: s.regions.filter((r) => steepNames.has(r.name)).map((r) => r.id)
     };
   }

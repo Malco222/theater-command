@@ -294,6 +294,23 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 					Lakes.Add(MoveTemp(Lake));
 				}
 			}
+			RuledRivers.Reset();
+			{
+				TSharedPtr<FJsonObject> Waters;
+				FString WatersError;
+				const TArray<TSharedPtr<FJsonValue>>* RiverValues = nullptr;
+				if (ReadJsonFile(ResolveDataFile(TEXT("world-rivers.json"), TEXT("src/generated")), Waters, WatersError) && Waters->TryGetArrayField(TEXT("rivers"), RiverValues))
+				{
+					for (const TSharedPtr<FJsonValue>& RiverValue : *RiverValues)
+					{
+						TArray<FVector2D> Course;
+						if (ReadRing(RiverValue->AsObject()->GetArrayField(TEXT("pts")), Course) || Course.Num() >= 2)
+						{
+							RuledRivers.Add(MoveTemp(Course));
+						}
+					}
+				}
+			}
 			UE_LOG(LogTheater, Display, TEXT("The wider chart: %d provinces beyond Europe (from %d), %d lands, %d waters cut out of them, %d lakes named, %d seas"),
 				Regions.Num() - FirstBeyond, FirstBeyond, Land.Num(), LandHoles.Num(), Lakes.Num(), Seas.Num());
 		}

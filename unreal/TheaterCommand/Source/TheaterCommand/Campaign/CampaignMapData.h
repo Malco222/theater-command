@@ -123,6 +123,7 @@ public:
 	int32 FirstBeyond = INDEX_NONE;
 	TArray<TArray<FVector2D>> LandHoles; // waters cut out of the land: the Great Lakes
 	TArray<FCampaignLake> Lakes;
+	TArray<TArray<FVector2D>> RuledRivers; // the courses of the rules' rivers of the wider chart, which are laid as ribbons: the painted courses stand aside for them
 	/** Is a place inside the box the files draw the coast in, whichever turn of the world it is counted in? */
 	bool IsCharted(double X, double Y) const;
 	TArray<FCampaignRegion> Regions;

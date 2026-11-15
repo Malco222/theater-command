@@ -261,9 +261,30 @@ float ACampaignMapActor::GroundAt(double InX, double Y) const
 		{
 			return Fine->Shape.HeightAt(X, Y);
 		}
-		return WorldTerrain.HeightAt(X, Y);
+		// (Where no fine sheet stands, the height one would give: what is built once, a town, a river, a railway,
+		// then sits on the ground the eye sees from near, whether the fine sheet stood when it was built or not.
+		// The coarse sheet's own height stands for a place by the mean of the ground round it, and in the hills a
+		// town built on that was buried or left in the air when the fine ground came up. Within a few units of a
+		// shore the coarse sheet's height is kept: the fine one cannot be had there without the fine sheet's coast.)
+		const float Coarse = WorldTerrain.HeightAt(X, Y);
+		const float Inland = WorldTerrain.NX > 0 ? FMath::SmoothStep(6.0f, 12.0f, WorldTerrain.ShoreAt(X, Y)) : 0.0f;
+		return Inland > 0.0f ? FMath::Lerp(Coarse, WorldTerrain.FineLandHeightAt(X, Y), Inland) : Coarse;
 	}
 	return Terrain.HeightAt(X, Y);
+}
+
+float ACampaignMapActor::CoverAt(double InX, double Y) const
+{
+	const double X = WrapX(InX);
+	if (Data.bWorld && (X < 0.0 || Y < 0.0 || X > Data.Width || Y > Data.Height))
+	{
+		if (const FFineSheet* Fine = FineSheetAt(X, Y))
+		{
+			return Fine->Shape.CoverageAt(X, Y);
+		}
+		return WorldTerrain.CoverageAt(X, Y);
+	}
+	return Terrain.CoverageAt(X, Y);
 }
 
 void ACampaignMapActor::ShowWorksGoing(const TArray<int32>& FromRules)
@@ -748,7 +769,7 @@ void ACampaignMapActor::AddSinking(int32 Zone, const FString& Nation, const FStr
 	for (const double Far : { 30.0, 24.0, 18.0, 13.0 })
 	{
 		const FVector2D Try = Data.Seas[Zone].Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (Far + 4.0 * (Nth % 2));
-		if (Terrain.HeightAt(Try.X, Try.Y) <= 0.0f && Data.FindRegionAt(Try.X, Try.Y) == INDEX_NONE)
+		if (GroundAt(Try.X, Try.Y) <= 0.0f && Data.FindRegionAt(Try.X, Try.Y) == INDEX_NONE)
 		{
 			Spot = Try;
 			break;
@@ -931,7 +952,7 @@ void ACampaignMapActor::ShowWrecks(const TArray<FWreckMark>& Wrecks, int32 Turn)
 		{
 			const double Angle = 2.39996 * (Mark.Seed + Try * 3), Far = 15.0 + 2.2 * ((Mark.Seed + Try) % 6);
 			const FVector2D Spot = Sea + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Far;
-			if (Terrain.HeightAt(Spot.X, Spot.Y) <= 0.0f && Data.FindRegionAt(Spot.X, Spot.Y) == INDEX_NONE)
+			if (GroundAt(Spot.X, Spot.Y) <= 0.0f && Data.FindRegionAt(Spot.X, Spot.Y) == INDEX_NONE)
 			{
 				At = Spot;
 				break;
@@ -1064,7 +1085,7 @@ void ACampaignMapActor::ShowChart(bool bOn, const TArray<int32>& Levels, const T
 			{
 				FChartPoint& Point = ChartPoints[J * ChartAcross + I];
 				const double X = I * Step, Y = J * Step;
-				Point.bWater = Terrain.HeightAt(X, Y) <= 0.0f && Data.FindRegionAt(X, Y) == INDEX_NONE;
+				Point.bWater = GroundAt(X, Y) <= 0.0f && Data.FindRegionAt(X, Y) == INDEX_NONE;
 				Point.At = SurfacePoint(X, Y, 0.22);
 				double Best = TNumericLimits<double>::Max(), Second = TNumericLimits<double>::Max();
 				for (int32 Sea = 0; Sea < Data.Seas.Num(); ++Sea)
@@ -1170,7 +1191,7 @@ void ACampaignMapActor::ShowChart(bool bOn, const TArray<int32>& Levels, const T
 		for (const FVector2D& Off : { FVector2D(-22.0, 20.0), FVector2D(22.0, 20.0), FVector2D(-22.0, -20.0), FVector2D(22.0, -20.0), FVector2D(0.0, 27.0), FVector2D(0.0, -27.0), FVector2D(-12.0, 12.0) })
 		{
 			const FVector2D Try = Data.Seas[Seen.Zone].Center + Off + FVector2D(9.0 * Nth, 0.0);
-			if (Terrain.HeightAt(Try.X, Try.Y) <= 0.0f && Data.FindRegionAt(Try.X, Try.Y) == INDEX_NONE)
+			if (GroundAt(Try.X, Try.Y) <= 0.0f && Data.FindRegionAt(Try.X, Try.Y) == INDEX_NONE)
 			{
 				Middle = Try;
 				break;
@@ -2304,13 +2325,17 @@ void ACampaignMapActor::BuildWorld()
 	DressBeyond(WorldLandMaterial);
 	WorldLandMaterial->SetVectorParameterValue(TEXT("ReliefJitter"), FLinearColor(1.0f / FMath::Max(WorldPaint.NX, 1), 1.0f / FMath::Max(WorldPaint.NY, 1), 0.0f, 0.0f));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Ground"), Picture(WorldPaint.Ground, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldGround")));
-	WorldLandMaterial->SetTextureParameterValue(TEXT("Tint"), Picture(WorldPaint.Tint, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldTint")));
-	WorldLandMaterial->SetTextureParameterValue(TEXT("Relief"), Picture(WorldPaint.Relief, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldRelief")));
+	WorldTintPicture = Picture(WorldPaint.Tint, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldTint"));
+	WorldReliefPicture = Picture(WorldPaint.Relief, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldRelief"));
+	WorldFogPicture = nullptr; // (made when there is first something to hide)
+	WorldOccupiedPicture = WorldPaint.Occupied.Num() == WorldPaint.NX * WorldPaint.NY ? Picture(WorldPaint.Occupied, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldOccupied")) : nullptr;
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Tint"), WorldTintPicture);
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Relief"), WorldReliefPicture);
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Masks"), Picture(WorldPaint.Masks, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldMasks")));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Cover"), Picture(WorldPaint.Cover, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldCover")));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Lie"), Lie);
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Fog"), Picture(Clear, 4, 4, false, TEXT("WorldFog"))); // (nothing beyond the map is hidden: nobody is there yet)
-	WorldLandMaterial->SetTextureParameterValue(TEXT("Occupied"), NoStripesPicture); // (and nothing beyond it is occupied: there are no provinces there yet)
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Occupied"), WorldOccupiedPicture ? WorldOccupiedPicture.Get() : NoStripesPicture.Get()); // (occupied ground beyond Europe keeps its old owner's stripes: from this height, their flat average)
 	if (WorldPaint.Wet.Num() == WorldPaint.NX * WorldPaint.NY && WorldPaint.Wet.Num() > 0)
 	{
 		// (the rivers of the world beyond Europe, painted into the land: see CampaignGround.h)
@@ -2434,6 +2459,15 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 		}
 	}
 	const bool bLow = CameraDistance < 11000.0f;
+	if (bLow != bRiversBeyondShown && RiverMesh)
+	{
+		// (the ribbons of the wider chart's rivers are seen only from where its fine ground is)
+		bRiversBeyondShown = bLow;
+		if (RiverMesh->GetNumSections() > 1)
+		{
+			RiverMesh->SetMeshSectionVisible(1, bLow);
+		}
+	}
 	const double Reach = 260.0 + CameraDistance / UnitScale * 0.55;
 	auto Wanted = [&](const FBox2D& Box)
 	{
@@ -2589,13 +2623,34 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	// (the place its shading is read at is shaken by a little over half a cell: see the land's paint)
 	Sheet.LandPaint->SetVectorParameterValue(TEXT("ReliefJitter"), FLinearColor(1.3f / FMath::Max(Sheet.Paint.NX, 1), 1.3f / FMath::Max(Sheet.Paint.NY, 1), 0.0f, 0.0f));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Ground"), Picture(Painted.Ground, Painted.NX, Painted.NY, true, TEXT("Ground")));
-	Sheet.LandPaint->SetTextureParameterValue(TEXT("Tint"), Picture(Painted.Tint, Painted.NX, Painted.NY, true, TEXT("Tint")));
-	Sheet.LandPaint->SetTextureParameterValue(TEXT("Relief"), Picture(Painted.Relief, Painted.NX, Painted.NY, false, TEXT("Relief")));
+	Sheet.TintPicture = Picture(Painted.Tint, Painted.NX, Painted.NY, true, TEXT("Tint"));
+	Sheet.ReliefPicture = Picture(Painted.Relief, Painted.NX, Painted.NY, false, TEXT("Relief"));
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Tint"), Sheet.TintPicture);
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Relief"), Sheet.ReliefPicture);
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Masks"), Picture(Painted.Masks, Painted.NX, Painted.NY, false, TEXT("Masks")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Cover"), Picture(Painted.Cover, Painted.NX, Painted.NY, false, TEXT("Cover")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Lie"), Lie);
-	Sheet.LandPaint->SetTextureParameterValue(TEXT("Fog"), Picture(Clear, 4, 4, false, TEXT("Fog")));
-	Sheet.LandPaint->SetTextureParameterValue(TEXT("Occupied"), NoStripesPicture);
+	{
+		// (the staff's paper over what nobody of the player's can see there, as it stands now)
+		TArray<FColor> Fogged;
+		Fogged.Init(FColor(0, 0, 0, 255), Painted.NX * Painted.NY);
+		if (UnseenSet.Num() > 0 && Sheet.Shape.Region.Num() == Fogged.Num())
+		{
+			for (int32 Index = 0; Index < Fogged.Num(); ++Index)
+			{
+				const int32 Id = Painted.PaintedRegion(Index, Sheet.Shape);
+				if (Id >= 0 && UnseenSet.Contains(Id))
+				{
+					Fogged[Index].R = 255;
+				}
+			}
+		}
+		Sheet.FogPicture = Picture(Fogged, Painted.NX, Painted.NY, false, TEXT("Fog"));
+		Sheet.LandPaint->SetTextureParameterValue(TEXT("Fog"), Sheet.FogPicture);
+	}
+	// (occupied ground beyond Europe keeps its old owner's stripes too)
+	Sheet.OccupiedPicture = Painted.Occupied.Num() == Painted.NX * Painted.NY ? Picture(Painted.Occupied, Painted.NX, Painted.NY, true, TEXT("Occupied")) : nullptr;
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Occupied"), Sheet.OccupiedPicture ? Sheet.OccupiedPicture : NoStripesPicture.Get());
 	if (Painted.Wet.Num() == Painted.WetNX * Painted.WetNY && Painted.Wet.Num() > 0)
 	{
 		Sheet.LandPaint->SetTextureParameterValue(TEXT("Wet"), Picture(Painted.Wet, Painted.WetNX, Painted.WetNY, false, TEXT("Wet")));
@@ -2906,7 +2961,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 				for (const double Share : { 1.0, 0.65, 0.35 })
 				{
 					OutSpot = Middle + Way * (Roofs + Beyond * Share);
-					if (Data.FindRegionAt(OutSpot.X, OutSpot.Y) == Id && Terrain.HeightAt(OutSpot.X, OutSpot.Y) > 0.0f)
+					if (Data.FindRegionAt(OutSpot.X, OutSpot.Y) == Id && GroundAt(OutSpot.X, OutSpot.Y) > 0.0f)
 					{
 						return true;
 					}
@@ -2925,8 +2980,8 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 					const FVector2D Way(FMath::Cos(Step * PI / 12.0), FMath::Sin(Step * PI / 12.0));
 					const FVector2D Offset = Way * Reach;
 					const FVector2D Spot = Middle + Offset, Beyond = Middle + Way * (Reach + 3.5);
-					if (Data.FindRegionAt(Spot.X, Spot.Y) != Id || Terrain.HeightAt(Spot.X, Spot.Y) <= 0.0f
-						|| Data.FindRegionAt(Beyond.X, Beyond.Y) != INDEX_NONE || Terrain.HeightAt(Beyond.X, Beyond.Y) > 0.0f)
+					if (Data.FindRegionAt(Spot.X, Spot.Y) != Id || GroundAt(Spot.X, Spot.Y) <= 0.0f
+						|| Data.FindRegionAt(Beyond.X, Beyond.Y) != INDEX_NONE || GroundAt(Beyond.X, Beyond.Y) > 0.0f)
 					{
 						continue;
 					}
@@ -2942,7 +2997,7 @@ void ACampaignMapActor::ShowBuildings(const TArray<FIntVector4>& Works)
 						for (double Further = 0.25; Further <= 3.75; Further += 0.25)
 						{
 							const FVector2D Next = Spot + Way * Further;
-							if (Terrain.HeightAt(Next.X, Next.Y) <= 0.03f || Data.FindRegionAt(Next.X, Next.Y) != Id)
+							if (GroundAt(Next.X, Next.Y) <= 0.03f || Data.FindRegionAt(Next.X, Next.Y) != Id)
 							{
 								break;
 							}
@@ -3189,12 +3244,13 @@ void ACampaignMapActor::BuildWaterways()
 	const FLinearColor MidstreamRuns = FLinearColor(FColor(72, 104, 125)), BankRuns = FLinearColor(FColor(60, 88, 106));
 	const FColor Earth = FColor(26, 38, 36);
 	static const TSet<FString> Great = { TEXT("Rhine"), TEXT("Danube"), TEXT("Vistula"), TEXT("Dnieper"), TEXT("Volga"), TEXT("Don"), TEXT("Elbe"), TEXT("Oder"), TEXT("Loire"), TEXT("Seine"),
-		TEXT("Rhone"), TEXT("Po"), TEXT("Nile"), TEXT("Dvina"), TEXT("Niemen"), TEXT("Bug"), TEXT("Dniester") };
+		TEXT("Rhone"), TEXT("Po"), TEXT("Nile"), TEXT("Dvina"), TEXT("Niemen"), TEXT("Bug"), TEXT("Dniester"),
+		TEXT("Mississippi"), TEXT("Missouri"), TEXT("Ohio"), TEXT("St Lawrence"), TEXT("Columbia") };
 	// (in the depth of winter the rivers freeze where the snow lies: ice, pale and dull, with a darker lead midstream)
 	const FLinearColor MidstreamIce = FLinearColor(FColor(140, 162, 172)), BankIce = FLinearColor(FColor(186, 196, 199));
 	RiversDrawnFor = WinterHard;
 	const double Lift = 0.1;
-	FCampaignMeshBuffers Buffers;
+	FCampaignMeshBuffers Buffers, BuffersBeyond;
 	for (const FLandRiver& River : Land.Rivers)
 	{
 		const int32 Count = River.Course.Num();
@@ -3202,6 +3258,11 @@ void ACampaignMapActor::BuildWaterways()
 		{
 			continue;
 		}
+		// (a river of the wider chart goes in a section of its own, which is put away when the eye is high: from
+		// there the coarse sheet's painted great rivers stand for them, and a ribbon laid at the fine ground's
+		// height would show through the coarse ground only in scraps)
+		const bool bRiverBeyond = Data.bWorld && (River.Course[0].X < 0.0 || River.Course[0].Y < 0.0 || River.Course[0].X > Data.Width || River.Course[0].Y > Data.Height);
+		FCampaignMeshBuffers& Into = bRiverBeyond ? BuffersBeyond : Buffers;
 		// A smooth curve through the points of the course, a short step at a time.
 		TArray<FVector2D> Path;
 		for (int32 K = 0; K + 1 < Count; ++K)
@@ -3239,7 +3300,7 @@ void ACampaignMapActor::BuildWaterways()
 			const double Half = Broad * FMath::Lerp(0.5, 1.0, FMath::Sqrt(static_cast<double>(K) / FMath::Max(Path.Num() - 1, 1)));
 			const double Shore = Half + 0.2; // the dark of the bank beside the water
 			// A river does not run over the sea: stop where the land does.
-			if (Terrain.HeightAt(Path[K].X, Path[K].Y) <= 0.0f && K > Path.Num() / 2)
+			if (GroundAt(Path[K].X, Path[K].Y) <= 0.0f && K > Path.Num() / 2)
 			{
 				break;
 			}
@@ -3251,14 +3312,14 @@ void ACampaignMapActor::BuildWaterways()
 			for (int32 P = 0; P < 5; ++P)
 			{
 				// (the banks a hair lower than the water between them, so the water is never hidden by its bank)
-				Here[P] = Buffers.AddVertex(SurfacePointOver(Across[P].X, Across[P].Y, P == 0 || P == 4 ? Lift - 0.03 : Lift), FVector::UpVector, Inks[P]);
+				Here[P] = Into.AddVertex(SurfacePointOver(Across[P].X, Across[P].Y, P == 0 || P == 4 ? Lift - 0.03 : Lift), FVector::UpVector, Inks[P]);
 			}
 			if (Previous[0] != INDEX_NONE)
 			{
 				for (int32 Strip = 0; Strip < 4; ++Strip)
 				{
-					Buffers.AddTriangleFacingUp(Previous[Strip], Previous[Strip + 1], Here[Strip]);
-					Buffers.AddTriangleFacingUp(Previous[Strip + 1], Here[Strip], Here[Strip + 1]);
+					Into.AddTriangleFacingUp(Previous[Strip], Previous[Strip + 1], Here[Strip]);
+					Into.AddTriangleFacingUp(Previous[Strip + 1], Here[Strip], Here[Strip + 1]);
 				}
 			}
 			for (int32 P = 0; P < 5; ++P)
@@ -3276,7 +3337,12 @@ void ACampaignMapActor::BuildWaterways()
 		WaterMaterial->SetScalarParameterValue(TEXT("Tooth"), 0.0f);
 	}
 	Buffers.Commit(RiverMesh, 0, WaterMaterial);
-	UE_LOG(LogTheater, Log, TEXT("Rivers: %d, in %d points"), Land.Rivers.Num(), Buffers.Vertices.Num());
+	if (BuffersBeyond.Vertices.Num() > 0)
+	{
+		BuffersBeyond.Commit(RiverMesh, 1, WaterMaterial);
+		RiverMesh->SetMeshSectionVisible(1, bRiversBeyondShown);
+	}
+	UE_LOG(LogTheater, Log, TEXT("Rivers: %d, in %d points (and %d beyond Europe)"), Land.Rivers.Num(), Buffers.Vertices.Num(), BuffersBeyond.Vertices.Num());
 }
 
 void ACampaignMapActor::UpdateTrains(const FVector& CameraFocus, float CameraDistance)
@@ -3570,7 +3636,7 @@ void ACampaignMapActor::BuildWorks()
 					{
 						const FVector2D Point = FMath::Lerp(Path[K], Path[K + 1], Step / 6.0);
 						const double Far = FVector2D::Distance(Point, Region.Center);
-						if (Far < Reach && FMath::Abs(Far - Rim) < Fit && Terrain.HeightAt(Point.X, Point.Y) > 0.0f)
+						if (Far < Reach && FMath::Abs(Far - Rim) < Fit && GroundAt(Point.X, Point.Y) > 0.0f)
 						{
 							Fit = FMath::Abs(Far - Rim);
 							Nearest = Far;
@@ -3920,7 +3986,7 @@ void ACampaignMapActor::ShowCivic(const TArray<int32>& Civic)
 		const FVector2D Offset(Plots[Line].X, Clear + Plots[Line].Y);
 		const double Angle = FMath::DegreesToRadians(CivicTurn(RegionId));
 		const FVector2D At = Region.Center + FVector2D(Offset.X * FMath::Cos(Angle) - Offset.Y * FMath::Sin(Angle), Offset.X * FMath::Sin(Angle) + Offset.Y * FMath::Cos(Angle));
-		if (Terrain.HeightAt(At.X, At.Y) <= 0.0f)
+		if (GroundAt(At.X, At.Y) <= 0.0f)
 		{
 			continue; // (that plot is in the water)
 		}
@@ -4175,7 +4241,7 @@ double ACampaignMapActor::TownSpread(int32 RegionId) const
 					{
 						const double Angle = K * UE_DOUBLE_TWO_PI / Looks;
 						const FVector2D At = Region.Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (First * Wanted * 0.75);
-						Inside += Terrain.HeightAt(At.X, At.Y) > 0.0f && Data.FindRegionAt(At.X, At.Y) == Region.Id ? 1 : 0;
+						Inside += GroundAt(At.X, At.Y) > 0.0f && Data.FindRegionAt(At.X, At.Y) == Region.Id ? 1 : 0;
 					}
 					if (Inside * 100 < Looks * 58)
 					{
@@ -4244,7 +4310,7 @@ double ACampaignMapActor::CivicTurn(int32 RegionId) const
 	{
 		const double Angle = FMath::DegreesToRadians(Shift);
 		const FVector2D Try = Region.Center + FVector2D(Offset.X * FMath::Cos(Angle) - Offset.Y * FMath::Sin(Angle), Offset.X * FMath::Sin(Angle) + Offset.Y * FMath::Cos(Angle));
-		if (Terrain.HeightAt(Try.X, Try.Y) <= 0.0f)
+		if (GroundAt(Try.X, Try.Y) <= 0.0f)
 		{
 			continue;
 		}
@@ -4519,7 +4585,7 @@ void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 				// (west, north-west and north first: the east is the army's, the south the town's new quarter)
 				const double Angle = FMath::DegreesToRadians(200.0 + Try * 45.0 + Turn * 0.1);
 				const FVector2D At = Region.Center + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * (TownRadius(RegionId) + 12.6);
-				if (Terrain.HeightAt(At.X, At.Y) > 0.0f && Data.FindRegionAt(At.X, At.Y) == RegionId)
+				if (GroundAt(At.X, At.Y) > 0.0f && Data.FindRegionAt(At.X, At.Y) == RegionId)
 				{
 					Field = At;
 					bFound = true;
@@ -4532,7 +4598,7 @@ void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 			{
 				const double Angle = Random.FRandRange(0.0f, 6.2832f), Far = Reach * FMath::Sqrt(Random.FRandRange(0.04f, 1.0f));
 				Out = Field + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * Far;
-				if (Terrain.HeightAt(Out.X, Out.Y) > 0.0f)
+				if (GroundAt(Out.X, Out.Y) > 0.0f)
 				{
 					return true;
 				}
@@ -4701,7 +4767,7 @@ void ACampaignMapActor::BuildTowns()
 		}
 		Site.Ground = [this](double X, double Y, double Lift) { return SurfacePoint(X, Y, Lift); };
 		// (a town is built on land, and on its own province's: one that stands by the sea or a frontier grows away from it)
-		Site.Dry = [this, Id = Region.Id](double X, double Y) { return Terrain.HeightAt(X, Y) > 0.0f && Data.FindRegionAt(X, Y) == Id; };
+		Site.Dry = [this, Id = Region.Id](double X, double Y) { return GroundAt(X, Y) > 0.0f && Data.FindRegionAt(X, Y) == Id; };
 		Site.bPacked = IsTownPacked(Region.Id);
 		// The roads and railways out of it run toward the towns of the provinces next door.
 		for (const int32 Next : Region.Neighbors)
@@ -4722,10 +4788,10 @@ void ACampaignMapActor::BuildTowns()
 				for (double Out = 1.5; Out < Nearest; Out += 0.5)
 				{
 					const FVector2D Wet = Region.Center + Way * Out, Beyond = Region.Center + Way * (Out + 3.0);
-					if (Terrain.HeightAt(Wet.X, Wet.Y) <= 0.0f)
+					if (GroundAt(Wet.X, Wet.Y) <= 0.0f)
 					{
 						// (open water, not a river's mouth or a pond: it is still water three units further out)
-						if (Terrain.HeightAt(Beyond.X, Beyond.Y) <= 0.0f && Out > 2.5)
+						if (GroundAt(Beyond.X, Beyond.Y) <= 0.0f && Out > 2.5)
 						{
 							Nearest = Out;
 							Site.bQuay = true;
@@ -4834,7 +4900,7 @@ void ACampaignMapActor::BuildTowns()
 				for (int32 Light = 0, Tries = 0; Light < Wanted && Tries < Wanted * 6; ++Tries)
 				{
 					const double X = Random.FRandRange(Region.Bounds.Min.X, Region.Bounds.Max.X), Y = Random.FRandRange(Region.Bounds.Min.Y, Region.Bounds.Max.Y);
-					const float Ground = Terrain.HeightAt(X, Y);
+					const float Ground = GroundAt(X, Y);
 					if (Ground <= 0.02f || Ground > 2.2f || Data.FindRegionAt(X, Y) != Region.Id)
 					{
 						continue;
@@ -5900,7 +5966,7 @@ UTextRenderComponent* ACampaignMapActor::AddLabel(const FString& Text, const FVe
 	{
 		for (int32 m = -1; m <= 1; ++m)
 		{
-			Ground = FMath::Max(Ground, static_cast<double>(Terrain.HeightAt(MapPos.X + HalfWidth * k / 4.0, MapPos.Y + SizeUnits * 0.5 * m)));
+			Ground = FMath::Max(Ground, static_cast<double>(GroundAt(MapPos.X + HalfWidth * k / 4.0, MapPos.Y + SizeUnits * 0.5 * m)));
 		}
 	}
 	Label->SetRelativeLocation(MapToWorld(MapPos.X, MapPos.Y, Ground + 0.3));
@@ -5978,7 +6044,7 @@ void ACampaignMapActor::BuildLabels()
 			}
 			FPlateSpot& Spot = PlateSpots.AddDefaulted_GetRef();
 			Spot.Region = Region.Id;
-			Spot.World = MapToWorld(Region.Center.X, Region.Center.Y, Terrain.HeightAt(Region.Center.X, Region.Center.Y));
+			Spot.World = MapToWorld(Region.Center.X, Region.Center.Y, GroundAt(Region.Center.X, Region.Center.Y));
 			Spot.Reach = (Region.bCapital ? 7.0f : bTown ? 5.2f : 3.6f) * UnitScale * static_cast<float>(TownSpread(Region.Id));
 			// (the plate is the town's: "Essen", not "Ruhr". The province's own name is lettered small on the ground.)
 			Spot.Name = Towns.IsValidIndex(Region.Id) && Towns[Region.Id].Region == Region.Id && !Towns[Region.Id].Name.IsEmpty() ? Towns[Region.Id].Name : Region.Name;
@@ -6253,7 +6319,7 @@ FVector ACampaignMapActor::ArmySpot(int32 RegionId, int32 Slot, int32 Count, boo
 		const double Out = TownRadius(Region.Id) + 8.0 * Size, Apart = 14.6 * Size;
 		auto Try = [this, &Region, &Spots, Wanted, Apart](const FVector2D& Spot)
 		{
-			if (Spots.Num() >= Wanted || Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id || Terrain.HeightAt(Spot.X, Spot.Y) <= 0.0f)
+			if (Spots.Num() >= Wanted || Data.FindRegionAt(Spot.X, Spot.Y) != Region.Id || GroundAt(Spot.X, Spot.Y) <= 0.0f)
 			{
 				return;
 			}
@@ -6610,7 +6676,7 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 			const FVector2D Port = Data.Regions[Fleet.Base].Center;
 			const FVector2D Out = (Sea - Port).GetSafeNormal();
 			At = Port;
-			for (int32 Step = 0; Step < 80 && Terrain.CoverageAt(At.X, At.Y) > 0.35f; ++Step)
+			for (int32 Step = 0; Step < 80 && CoverAt(At.X, At.Y) > 0.35f; ++Step)
 			{
 				At += Out * 1.5;
 			}
@@ -6728,8 +6794,158 @@ void ACampaignMapActor::LaySieges()
 	}
 }
 
+void ACampaignMapActor::RepaintBeyond(const FBox2D& Changed)
+{
+	if (!Data.bWorld || !Changed.bIsValid || Data.Regions.Num() <= Data.FirstBeyond)
+	{
+		return;
+	}
+	if (Changed.Min.X >= 0.0 && Changed.Min.Y >= 0.0 && Changed.Max.X <= Data.Width && Changed.Max.Y <= Data.Height)
+	{
+		return; // (all of it on the map's own ground)
+	}
+	const double Margin = FCampaignGround::BandReach + 2.0;
+	auto Again = [&](FCampaignGround& Painted, FCampaignTerrain& Shape, UTexture2D* Tint, UTexture2D* Relief, UTexture2D* Stripes)
+	{
+		if (Painted.Tint.Num() != Shape.NX * Shape.NY || Shape.NX <= 0)
+		{
+			return;
+		}
+		bool bAny = false;
+		for (int32 Turn = -1; Turn <= 1; ++Turn)
+		{
+			// (the changed ground in whichever turn of the world this sheet keeps it)
+			const double Shift = Turn * Data.WorldWidth;
+			const double X0 = Changed.Min.X + Shift - Margin, X1 = Changed.Max.X + Shift + Margin, Y0 = Changed.Min.Y - Margin, Y1 = Changed.Max.Y + Margin;
+			if (X1 < Shape.OriginX || X0 > Shape.OriginX + Shape.ExtentX || Y1 < Shape.OriginY || Y0 > Shape.OriginY + Shape.ExtentY)
+			{
+				continue;
+			}
+			if (!bAny)
+			{
+				Shape.MeasureFrontiers(Data);
+				bAny = true;
+			}
+			const int32 I0 = FMath::Clamp(FMath::FloorToInt32((X0 - Shape.OriginX) / Shape.Cell), 0, Shape.NX - 1), I1 = FMath::Clamp(FMath::CeilToInt32((X1 - Shape.OriginX) / Shape.Cell), 0, Shape.NX - 1);
+			const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Y0 - Shape.OriginY) / Shape.Cell), 0, Shape.NY - 1), J1 = FMath::Clamp(FMath::CeilToInt32((Y1 - Shape.OriginY) / Shape.Cell), 0, Shape.NY - 1);
+			Painted.PaintTint(Data, Shape, I0, J0, I1, J1);
+		}
+		if (bAny && Tint)
+		{
+			CampaignTextures::Update(Tint, Painted.Tint);
+			if (Relief)
+			{
+				CampaignTextures::Update(Relief, Painted.Relief);
+			}
+			if (Stripes && Painted.Occupied.Num() == Painted.Tint.Num())
+			{
+				CampaignTextures::Update(Stripes, Painted.Occupied);
+			}
+		}
+	};
+	Again(WorldPaint, WorldTerrain, WorldTintPicture, WorldReliefPicture, WorldOccupiedPicture);
+	for (const auto& Pair : FineSheets)
+	{
+		FFineSheet& Sheet = *Pair.Value;
+		if (Sheet.bBuilt)
+		{
+			// (one built and not yet dressed has no pictures: its paint is done again, and its pictures are made from that)
+			Again(Sheet.Paint, Sheet.Shape, Sheet.bDressed ? Sheet.TintPicture : nullptr, Sheet.bDressed ? Sheet.ReliefPicture : nullptr, Sheet.bDressed ? Sheet.OccupiedPicture : nullptr);
+		}
+	}
+	bMiniStale = true;
+}
+
+void ACampaignMapActor::FogBeyond()
+{
+	if (!Data.bWorld || !WorldLandMaterial || Data.Regions.Num() <= Data.FirstBeyond)
+	{
+		return;
+	}
+	TArray<bool> Hidden;
+	Hidden.Init(false, Data.Regions.Num());
+	bool bAnyHidden = false;
+	for (const int32 RegionId : UnseenSet)
+	{
+		if (Hidden.IsValidIndex(RegionId) && RegionId >= Data.FirstBeyond)
+		{
+			Hidden[RegionId] = true;
+			bAnyHidden = true;
+		}
+	}
+	if (!bAnyHidden && !WorldFogPicture)
+	{
+		return; // (nothing beyond the map is hidden, and nothing was)
+	}
+	auto Lay = [&Hidden, bAnyHidden](const FCampaignGround& Painted, const FCampaignTerrain& Shape, TArray<FColor>& OutPixels)
+	{
+		OutPixels.Init(FColor(0, 0, 0, 255), Painted.NX * Painted.NY);
+		if (!bAnyHidden || Shape.Region.Num() != OutPixels.Num())
+		{
+			return;
+		}
+		for (int32 Index = 0; Index < OutPixels.Num(); ++Index)
+		{
+			const int32 Id = Painted.PaintedRegion(Index, Shape);
+			if (Id >= 0 && Hidden[Id])
+			{
+				OutPixels[Index].R = 255;
+			}
+		}
+	};
+	TArray<FColor> Pixels;
+	Lay(WorldPaint, WorldTerrain, Pixels);
+	if (!WorldFogPicture)
+	{
+		WorldFogPicture = CampaignTextures::Create(WorldPaint.NX, WorldPaint.NY, Pixels, false, false, TEXT("WorldFog"));
+		WorldPictures.Add(WorldFogPicture);
+		WorldLandMaterial->SetTextureParameterValue(TEXT("Fog"), WorldFogPicture);
+	}
+	else
+	{
+		CampaignTextures::Update(WorldFogPicture, Pixels);
+	}
+	for (const auto& Pair : FineSheets)
+	{
+		FFineSheet& Sheet = *Pair.Value;
+		if (Sheet.bDressed && Sheet.FogPicture)
+		{
+			Lay(Sheet.Paint, Sheet.Shape, Pixels);
+			CampaignTextures::Update(Sheet.FogPicture, Pixels);
+		}
+	}
+}
+
 void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners, const TArray<FCampaignView::FSiegePaint>& Sieges)
 {
+	{
+		// ("-TheaterHold=Virginia:GER,Norfolk:GER" shows those provinces as held by another country, for a picture of
+		// occupied ground where the campaign has none: the rules know nothing of it.)
+		static FString HoldAsked;
+		static const bool bHold = FParse::Value(FCommandLine::Get(), TEXT("TheaterHold="), HoldAsked, false);
+		static bool bHolding = false;
+		if (bHold && !bHolding)
+		{
+			TArray<FString> Held = Holders, Lawful = Owners, Each;
+			Held.SetNum(Data.Regions.Num());
+			Lawful.SetNum(Data.Regions.Num());
+			HoldAsked.ParseIntoArray(Each, TEXT(","));
+			for (const FString& One : Each)
+			{
+				FString Province, Tag;
+				const int32* Index = One.Split(TEXT(":"), &Province, &Tag) ? Data.RegionByName.Find(Province) : nullptr;
+				if (Index && Data.Regions.IsValidIndex(*Index))
+				{
+					Lawful[*Index] = Data.Regions[*Index].Home;
+					Held[*Index] = Tag;
+				}
+			}
+			bHolding = true;
+			SetHolders(Held, League, Lawful, Sieges);
+			bHolding = false;
+			return;
+		}
+	}
 	// Countries that have joined or left the League since the table was last painted: their ground changes colour.
 	const TSet<FString> Members(League);
 	TSet<FString> Turned;
@@ -6747,7 +6963,33 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 			Turned.Add(Tag);
 		}
 	}
-	Data.League = Members;
+	if (Data.bWorld)
+	{
+		// (A fine sheet of the world is modelled and painted on another thread, and reads whose each province is as it
+		// goes. Before any of that is changed, a sheet still in the making is waited for: under a second, and only in
+		// a month when ground does change hands.)
+		bool bWrites = Turned.Num() > 0;
+		for (int32 i = 0; i < Data.Regions.Num() && i < Holders.Num() && !bWrites; ++i)
+		{
+			const FString& Holds = Holders[i].IsEmpty() ? Data.Regions[i].Owner : Holders[i];
+			const FString Lawful = Owners.IsValidIndex(i) && Owners[i] != Holds ? Owners[i] : FString();
+			bWrites = Holds != Data.Regions[i].Owner || Lawful != Data.Regions[i].Lawful;
+		}
+		if (bWrites)
+		{
+			for (const auto& Pair : FineSheets)
+			{
+				if (!Pair.Value->bBuilt && Pair.Value->Building.IsValid())
+				{
+					Pair.Value->Building.Wait();
+				}
+			}
+		}
+	}
+	if (Turned.Num() > 0)
+	{
+		Data.League = Members;
+	}
 
 	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	FBox2D Changed(ForceInit);
@@ -6779,7 +7021,10 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 		// (occupied ground: where the holder is not the lawful owner, the owner's stripes lie under the holder's colour)
 		const FString Lawful = Owners.IsValidIndex(i) && Owners[i] != Data.Regions[i].Owner ? Owners[i] : FString();
 		const bool bNewLaw = Data.Regions[i].Lawful != Lawful;
-		Data.Regions[i].Lawful = Lawful;
+		if (bNewLaw)
+		{
+			Data.Regions[i].Lawful = Lawful;
+		}
 		if ((bNewHolder || bNewLaw || Turned.Contains(Data.Regions[i].Owner)) && Data.Regions[i].Bounds.bIsValid)
 		{
 			Changed += Data.Regions[i].Bounds;
@@ -6920,6 +7165,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	LaySieges();
 	// Only the nations' paint changes: the land itself is left as it is.
 	Paint.PaintTint(Data, Terrain, I0, J0, I1, J1);
+	RepaintBeyond(Changed);
 	CampaignTextures::Update(ReliefPicture, Paint.Relief); // (it carries how much wash each nation's ground needs)
 	if (!bInk)
 	{
@@ -7627,6 +7873,7 @@ void ACampaignMapActor::ShowShroud(const TArray<int32>& Unseen)
 		}
 	}
 	CampaignTextures::Update(FogPicture, Pixels);
+	FogBeyond();
 }
 
 void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)
@@ -7884,13 +8131,13 @@ void ACampaignMapActor::ShowLanes(const TArray<FViewLane>& Lanes)
 			TArray<FVector2D>& Stroke = Strokes.AddDefaulted_GetRef();
 			for (int32 K = First; K <= First + Dash && K < Curve.Num(); ++K)
 			{
-				if (!bTrade && Terrain.HeightAt(Curve[K].X, Curve[K].Y) > 0.0f)
+				if (!bTrade && GroundAt(Curve[K].X, Curve[K].Y) > 0.0f)
 				{
 					break;
 				}
 				Stroke.Add(Curve[K]);
 			}
-			StrokeWet.Add(Terrain.HeightAt(Curve[First].X, Curve[First].Y) <= 0.0f);
+			StrokeWet.Add(GroundAt(Curve[First].X, Curve[First].Y) <= 0.0f);
 		}
 		for (int32 Index = 0; Index < Strokes.Num(); ++Index)
 		{

@@ -380,7 +380,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		for (int32 I = 0; I < NX; ++I)
 		{
 			const int32 Idx = Terrain.Index(I, J);
-			const int16 Id = Terrain.Region[Idx];
+			// (A province of the wider chart keeps the look of its part of the world. Europe's recipe lays woods, marsh
+			// and desert by each province's kind of country; laid on Kansas it put Europe's woods over the prairie.
+			// Beyond Europe the country's look is the climate table's business, province or none.)
+			const int16 Held = Terrain.Region[Idx];
+			const int16 Id = Held >= Data.FirstBeyond && Data.FirstBeyond != INDEX_NONE ? FCampaignTerrain::UnclaimedLand : Held;
 			Woods[Idx] = Id >= 0 ? RegionWoods[Id] : -0.07f;
 			Dry[Idx] = Id >= 0 ? RegionDry[Id] : 0.0f;
 			Marsh[Idx] = Id >= 0 && Data.Regions[Id].Terrain == TEXT("marsh") ? 1.0f : 0.0f;
@@ -550,7 +554,104 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			}
 		};
 		const bool bFromHigh = Terrain.Cell > 3.0; // (the coarse sheet of the whole world, seen from high up)
+		// The rules' own rivers of the wider chart are laid as ribbons of water, as Europe's are. Where one runs, the
+		// painted course of the same river stands aside, and a painted tributary runs right up to the ribbon (the art
+		// director's ruling of round 25). They are kept here in the world's own frame, as the courses are. (Not
+		// from high up: there the ribbons are put away, and the painted great rivers stand for them.)
+		struct FRuledStretch
+		{
+			FVector2D A, B;
+			bool bSource = false, bMouth = false;
+		};
+		TArray<FRuledStretch> Ruled;
+		FBox2D RuledBox(ForceInit);
+		if (!bFromHigh)
+		{
+			for (const TArray<FVector2D>& River : Data.RuledRivers)
+			{
+				for (int32 K = 0; K + 1 < River.Num(); ++K)
+				{
+					FRuledStretch& Stretch = Ruled.AddDefaulted_GetRef();
+					Stretch.A = FVector2D(FMath::Fmod(River[K].X + Data.ShiftX + Data.WorldWidth, Data.WorldWidth), River[K].Y);
+					Stretch.B = Stretch.A + (River[K + 1] - River[K]);
+					Stretch.bSource = K == 0;
+					Stretch.bMouth = K + 2 == River.Num();
+					RuledBox += Stretch.A;
+					RuledBox += Stretch.B;
+				}
+			}
+		}
+		// (how far a place of a course lies from the nearest ruled river, and the place on that river nearest it: past
+		// either end of a ruled river it counts as far off, unless it is all but on the end itself)
+		auto ToRuled = [&Ruled](const FVector2D& P, FVector2D& OutNearest) -> double
+		{
+			double Best = 1.0e9;
+			for (const FRuledStretch& Stretch : Ruled)
+			{
+				const FVector2D Along = Stretch.B - Stretch.A;
+				const double T = ((P - Stretch.A) | Along) / FMath::Max(Along.SizeSquared(), 1.0e-9);
+				const FVector2D Nearest = Stretch.A + Along * FMath::Clamp(T, 0.0, 1.0);
+				double Off = FVector2D::Distance(P, Nearest);
+				if (((T < 0.0 && Stretch.bSource) || (T > 1.0 && Stretch.bMouth)) && Off > 1.2)
+				{
+					Off += 100.0;
+				}
+				if (Off < Best)
+				{
+					Best = Off;
+					OutNearest = Nearest;
+				}
+			}
+			return Best;
+		};
+		// (which turn of the world brings a course over the ruled rivers, if any does)
+		auto RuledTurn = [&](const FCampaignWorldRivers::FCourse& Of, double& OutOffset)
+		{
+			if (Ruled.Num() == 0)
+			{
+				return false;
+			}
+			for (const double Offset : { 0.0, -Data.WorldWidth, Data.WorldWidth })
+			{
+				if (Of.MaxX + Offset >= RuledBox.Min.X - 32.0 && Of.MinX + Offset <= RuledBox.Max.X + 32.0 && Of.MaxY >= RuledBox.Min.Y - 32.0 && Of.MinY <= RuledBox.Max.Y + 32.0)
+				{
+					OutOffset = Offset;
+					return true;
+				}
+			}
+			return false;
+		};
+		// (A painted course is the ruled river itself where half of it or more runs within twenty-five units of one.
+		// The rules give a great river a score of points over a thousand units, and the ribbon drawn through them
+		// lies tens of units from the course the heights give in places: at eight units the painted river came back
+		// wherever the two parted, as fat blue scraps beside the ribbon.)
+		TArray<int8> SameRiver;
+		SameRiver.Init(-1, WorldRivers.Courses.Num());
+		auto IsSameRiver = [&](int32 Index)
+		{
+			if (!WorldRivers.Courses.IsValidIndex(Index))
+			{
+				return false;
+			}
+			if (SameRiver[Index] < 0)
+			{
+				const FCampaignWorldRivers::FCourse& Of = WorldRivers.Courses[Index];
+				double Offset = 0.0;
+				int32 Near = 0;
+				if (Of.Points.Num() >= 4 && RuledTurn(Of, Offset))
+				{
+					FVector2D Unused;
+					for (const FVector2f& Point : Of.Points)
+					{
+						Near += ToRuled(FVector2D(Point.X + Offset, Point.Y), Unused) < 25.0 ? 1 : 0;
+					}
+				}
+				SameRiver[Index] = Near * 2 >= Of.Points.Num() && Near > 0 ? 1 : 0;
+			}
+			return SameRiver[Index] == 1;
+		};
 		TArray<FVector2D> CourseLine, CourseLineBefore; // a course as it is laid on this sheet
+		TArray<bool> NearRuled, LaidSkip;
 		TArray<FVector2D> LaidLine;
 		TArray<float> LaidHalf, LaidWater;
 		for (const FCampaignWorldRivers::FCourse& Course : WorldRivers.Courses)
@@ -628,6 +729,69 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				}
 				return HalfLaid;
 			};
+			NearRuled.Reset();
+			{
+				double Offset = 0.0;
+				const int32 CourseIndex = static_cast<int32>(&Course - WorldRivers.Courses.GetData());
+				if (!bFromHigh && RuledTurn(Course, Offset))
+				{
+					FVector2D Nearest;
+					if (IsSameRiver(CourseIndex))
+					{
+						// (the ruled river itself: it stands aside wherever the ribbon runs)
+						NearRuled.SetNum(LaidTo + 1);
+						TArray<FVector2D> OnRibbon;
+						OnRibbon.SetNum(LaidTo + 1);
+						for (int32 K = 0; K <= LaidTo; ++K)
+						{
+							NearRuled[K] = ToRuled(CourseLine[K] + FVector2D(Offset, 0.0), Nearest) < 25.0;
+							OnRibbon[K] = Nearest - FVector2D(Offset, 0.0);
+						}
+						// (where its painted headwaters, above the ruled river's source, come down to the ribbon, the last
+						// painted stretch runs to the ribbon itself and not to a place beside it)
+						for (int32 K = 0; K < LaidTo; ++K)
+						{
+							if (NearRuled[K] != NearRuled[K + 1])
+							{
+								CourseLine[NearRuled[K] ? K : K + 1] = OnRibbon[NearRuled[K] ? K : K + 1];
+							}
+						}
+					}
+					else if ((IsSameRiver(Course.Joins) || Course.Joins < 0) && ToRuled(CourseLine[LaidTo] + FVector2D(Offset, 0.0), Nearest) < 30.0)
+					{
+						// (a tributary of it: the painted river it joined has stood aside, so it runs on to the ribbon.
+						// Where its course crosses the ribbon on the way to where the painted river ran, it stops there.)
+						bool bCrossed = false;
+						for (int32 K = 0; K < LaidTo && !bCrossed; ++K)
+						{
+							const FVector2D P0 = CourseLine[K] + FVector2D(Offset, 0.0), P1 = CourseLine[K + 1] + FVector2D(Offset, 0.0);
+							for (const FRuledStretch& Stretch : Ruled)
+							{
+								const FVector2D R = P1 - P0, Q = Stretch.B - Stretch.A;
+								const double Cross = R.X * Q.Y - R.Y * Q.X;
+								if (FMath::Abs(Cross) < 1.0e-9)
+								{
+									continue;
+								}
+								const FVector2D Between = Stretch.A - P0;
+								const double T = (Between.X * Q.Y - Between.Y * Q.X) / Cross, U = (Between.X * R.Y - Between.Y * R.X) / Cross;
+								if (T >= 0.0 && T <= 1.0 && U >= 0.0 && U <= 1.0)
+								{
+									CourseLine[K + 1] = P0 + R * T - FVector2D(Offset, 0.0);
+									LaidTo = K + 1;
+									bCrossed = true;
+									break;
+								}
+							}
+						}
+						if (!bCrossed)
+						{
+							ToRuled(CourseLine[LaidTo] + FVector2D(Offset, 0.0), Nearest);
+							CourseLine[LaidTo] = Nearest - FVector2D(Offset, 0.0);
+						}
+					}
+				}
+			}
 			if (!bFromHigh && !Course.bGreat)
 			{
 				// (A course a few points long, the last trickle into a closed hollow, is no river to the eye: a gully that
@@ -646,6 +810,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			LaidLine.Reset();
 			LaidHalf.Reset();
 			LaidWater.Reset();
+			LaidSkip.Reset();
 			if (bFromHigh)
 			{
 				for (int32 K = 0; K <= LaidTo; ++K)
@@ -675,6 +840,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				{
 					ToEnd += FVector2D::Distance(CourseLine[K], CourseLine[K + 1]);
 				}
+				bool bStandsAside = false; // the stretch that begins at the point being put is the ruled river's own, and is left out
 				auto Put = [&](const FVector2D& At, float HalfLaid, float Carried, double Left)
 				{
 					const float Thin = FMath::Lerp(JoinsThin, 1.0f - FMath::SmoothStep(0.15f, 0.35f, HalfLaid), FMath::SmoothStep(0.0f, 5.0f, static_cast<float>(Left)));
@@ -685,12 +851,14 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					LaidLine.Add(At + Wandered * Thin);
 					LaidHalf.Add(HalfLaid);
 					LaidWater.Add(Carried);
+					LaidSkip.Add(bStandsAside);
 				};
 				for (int32 K = 0; K < LaidTo; ++K)
 				{
 					float WaterA = 0.0f, WaterB = 0.0f;
 					const float HalfA = HalfHere(K, WaterA), HalfB = HalfHere(K + 1, WaterB);
 					const double Long = FVector2D::Distance(CourseLine[K], CourseLine[K + 1]);
+					bStandsAside = NearRuled.IsValidIndex(K + 1) && NearRuled[K] && NearRuled[K + 1];
 					// (a long straight stretch of a hairline is laid in pieces of about two units, each with its own wander)
 					const int32 Pieces = FMath::Max(HalfA, HalfB) < 0.35f ? FMath::Clamp(FMath::CeilToInt32(Long / 2.0), 1, 64) : 1;
 					for (int32 Piece = 0; Piece < Pieces; ++Piece)
@@ -702,6 +870,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				}
 				float Carried = 0.0f;
 				const float HalfLaid = HalfHere(LaidTo, Carried);
+				bStandsAside = false;
 				Put(CourseLine[LaidTo], HalfLaid, Carried, 0.0);
 			}
 			for (int32 Turn = -2; Turn <= 2; ++Turn)
@@ -714,7 +883,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				}
 				for (int32 K = 0; K + 1 < LaidLine.Num(); ++K)
 				{
-					if (bFromHigh && FMath::Max(LaidHalf[K], LaidHalf[K + 1]) <= 0.0f)
+					if ((bFromHigh && FMath::Max(LaidHalf[K], LaidHalf[K + 1]) <= 0.0f) || (LaidSkip.IsValidIndex(K) && LaidSkip[K]))
 					{
 						continue;
 					}
@@ -1351,8 +1520,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		// (One number carries both: from 1 down to a half it is how far the canopy is the tropics', from a half down to
 		// nought how far it is the northern forest's. The two are never found together.)
 		const uint8 NotTropic = !bBeyond ? 255 : LookNorth[Idx] > LookTropic[Idx] ? ToByte(0.49f - 0.49f * LookNorth[Idx]) : ToByte(1.0f - 0.49f * LookTropic[Idx]);
-		if (Id < 0)
+		if (Id < 0 || (Id >= Data.FirstBeyond && Data.FirstBeyond != INDEX_NONE))
 		{
+			// (and a province of the wider chart, whose fields lie as its country's do: the square mile of the prairie
+			// is not turned to an angle of each state's own)
 			// (Land nobody holds: its fields lie square on the compass where they are the New World's, and at a
 			// slant of twenty degrees elsewhere. "No turn at all", to the last figure, is what tells the land's
 			// paint to lay squares.)
@@ -1618,8 +1789,13 @@ namespace
 		{
 			return -1.0f;
 		}
+		// (The art director's round 29: under full snow a stripe at the cap read like a venetian blind. The cap comes
+		// down with the snow: 10.5 with none, 9.0 under full snow.)
+		// (only over the second half of the snow's coming: where it lies thin, at Kiev or in Poland in January, a
+		// lower cap took the stripe under the floor of 8)
+		const float Cap = FMath::Lerp(10.5f, 9.0f, FMath::SmoothStep(0.5f, 1.0f, Snow / 0.34f));
 		float Share = 0.55f;
-		if (Snow > 0.0f && At(Share) < 10.5f)
+		if (Snow > 0.0f && At(Share) < Cap)
 		{
 			// (under snow it may take more of the old owner's colour than the 0.55 the brief begins with, up to
 			// 0.85: the stripe is two fifths of the ground, so the holder's shade is still the main colour)
@@ -1627,18 +1803,18 @@ namespace
 			for (int32 Pass = 0; Pass < 12; ++Pass)
 			{
 				const float Middle = 0.5f * (Low + High);
-				(At(Middle) > 10.5f ? High : Low) = Middle;
+				(At(Middle) > Cap ? High : Low) = Middle;
 			}
 			return High;
 		}
 		if (At(Share) > 12.0f)
 		{
-			// (down to where it is about 10.5)
+			// (down to where it is about the cap)
 			float Low = 0.05f, High = Share;
 			for (int32 Pass = 0; Pass < 12; ++Pass)
 			{
 				const float Middle = 0.5f * (Low + High);
-				(At(Middle) > 10.5f ? High : Low) = Middle;
+				(At(Middle) > Cap ? High : Low) = Middle;
 			}
 			Share = Low;
 		}

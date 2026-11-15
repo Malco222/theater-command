@@ -409,6 +409,10 @@ private:
 		FCampaignTerrain Shape;
 		FCampaignGround Paint;
 		TFuture<void> Building;
+		UTexture2D* TintPicture = nullptr; // (these three are kept for the engine with its other pictures)
+		UTexture2D* ReliefPicture = nullptr;
+		UTexture2D* FogPicture = nullptr;
+		UTexture2D* OccupiedPicture = nullptr;
 		std::atomic<bool> bBuilt { false };
 		bool bDressed = false, bStanding = false;
 		double LastWanted = 0.0;
@@ -424,6 +428,7 @@ private:
 	TArray<TObjectPtr<UObject>> FineKeep;
 	void UpdateFineSheets(float CameraDistance, const FVector& CameraFocus);
 	bool bFineSheetsComing = false; // the view wants fine ground that does not stand yet
+	bool bRiversBeyondShown = true; // the ribbons of the wider chart's rivers: put away when the eye is high
 	bool bInkAllowed = false;
 	void DressFineSheet(FFineSheet& Sheet);
 	void StandFineSheet(FFineSheet& Sheet);
@@ -448,6 +453,12 @@ private:
 	void BuildWorld();
 	/** The height of the ground anywhere in the world, in map units: the map's own where it reaches, the world's sheet beyond. */
 	float GroundAt(double X, double Y) const;
+	/** How much of the ground at a place is land, anywhere in the world: 0 open sea, 0.5 the shoreline, 1 well inland. */
+	float CoverAt(double X, double Y) const;
+	/** Ground beyond the map's own box that has changed hands is painted again on the world's sheets. */
+	void RepaintBeyond(const FBox2D& Changed);
+	/** The staff's paper over ground beyond the map's own box that nobody of the player's can see. */
+	void FogBeyond();
 	// A setting of the land's or the sea's paint goes to every sheet's copy of it.
 	void LandScalar(FName Name, float Value);
 	void LandVector(FName Name, const FLinearColor& Value);
@@ -758,6 +769,14 @@ private:
 	TObjectPtr<UTexture2D> OccupiedPicture; // where the ground is occupied and the colour its stripes take, a pixel to a point of the terrain
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> NoStripesPicture; // "occupied nowhere": for ground beyond the map
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> WorldTintPicture; // the nations' paint, the wash each needs, and the staff's paper, on the world's coarse sheet
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> WorldReliefPicture;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> WorldFogPicture;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> WorldOccupiedPicture;
 	/** A siege as it stands on the table: its colour has come this far across the field and is on its way to that far. */
 	struct FSiegeShown
 	{
