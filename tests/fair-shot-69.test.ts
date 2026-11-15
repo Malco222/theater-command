@@ -14,7 +14,8 @@ import { aiFortify } from '../src/campaign/arsenal';
 import { PRODUCTION, aiProduction, armyWorn, corpsCost, fortCost, gunsWanted, isHome, orderFort } from '../src/campaign/economy';
 import { addCorps, armySize, atWar, createGame, removeCorps } from '../src/campaign/game';
 import { menSpare } from '../src/campaign/manpower';
-import { landingTargets } from '../src/campaign/navy';
+import { airAI, skyDenies, whyNotMission } from '../src/campaign/air';
+import { NAVY, fleetReach, landingTargets, navalAI, seaPath } from '../src/campaign/navy';
 import { pocketMonth } from '../src/campaign/siege';
 import { coastRules, coastWatch, lodgment, seaBase, seaFoe, staffPhase, startOpen, temper } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
@@ -129,6 +130,61 @@ describe('the second front', () => {
     for (const c of wave) expect(g.flags[`sf:${c.id}`]).toBe(1);
     // And the first wave has not been taken off: every corps of it is still on the Continent.
     expect(force.every((c) => !c.dead && g.regions[c.reg].owner !== 'UK')).toBe(true);
+  });
+});
+
+describe('the fleet and the fighters over the crossing', () => {
+  it('a patrolling fleet that can reach it stands off the beach the staff has its eye on, and not without one', () => {
+    const { g, quay, shores } = descent();
+    const beach = shores[0];
+    const path = seaPath(g, 'UK', quay, beach, { max: NAVY.landing.range, surprise: true })!;
+    const off = path[path.length - 1];
+    // The Home Fleet, with its usual beat moved to another sea it can reach.
+    const fleet = g.fleets.find((f) => f.nat === 'UK' && f.duty === 'patrol' && !f.tied && fleetReach(g, f).includes(off))!;
+    fleet.station = fleetReach(g, fleet).find((z) => z !== off)!;
+    navalAI(g, 'UK');
+    expect(fleet.zone).toBe(fleet.station);
+    g.flags['st:aim:UK'] = beach.id + 1;
+    g.flags['st:quay:UK'] = quay.id + 1;
+    navalAI(g, 'UK');
+    expect(fleet.zone).toBe(off);
+    expect(fleet.stance).toBe('patrol');
+    // A fleet tied to its station is not called away, and a beach in a country no longer at war draws nobody.
+    for (const f of g.fleets) if (f.nat === 'UK' && f.tied) expect(f.zone === off && f.station !== off).toBe(false);
+    for (const n of [g.nations.UK, g.nations.GER]) n.atWar = n.atWar.filter((x) => x !== 'GER' && x !== 'UK');
+    if (g.nations.UK.atWar.length) { navalAI(g, 'UK'); expect(fleet.zone).toBe(fleet.station); }
+  });
+
+  it('fighters fly for the sky over a beach the enemy holds the air above', () => {
+    // A stretch of the Low Countries' coast in German hands, in reach of the fighters in Kent, with a German
+    // fighter group on its airfields.
+    const setup = (aim: boolean): { g: Game; beach: Region; mine: Game['airFleets'] } => {
+      const g = quietYear();
+      const mine = g.airFleets.filter((f) => f.nat === 'UK' && f.kind === 'ftr' && f.ftr >= 100);
+      let beach: Region | null = null;
+      for (const r of g.regions) {
+        if (beach || (r.owner !== 'BEL' && r.owner !== 'NED')) continue;
+        const was = r.ctrl;
+        r.ctrl = 'GER';
+        if (mine.some((f) => whyNotMission(g, f, 'superiority', r.id) === null)) beach = r; else r.ctrl = was;
+      }
+      const foe = g.airFleets.find((f) => f.nat === 'GER' && f.kind === 'ftr')!;
+      foe.base = beach!.id;
+      foe.ftr = 60;
+      for (const f of g.airFleets) if (f.nat === 'GER' && f !== foe) f.ftr = f.bmr = 0;
+      if (aim) g.flags['st:aim:UK'] = beach!.id + 1;
+      return { g, beach: beach!, mine };
+    };
+    const a = setup(true);
+    expect(skyDenies(a.g, 'UK', a.beach.id)).toBe(true);
+    airAI(a.g, 'UK');
+    const over = (x: { g: Game; beach: Region; mine: Game['airFleets'] }): number => x.mine.filter((f) => f.mission === 'superiority' && f.target === x.beach.id && f.flew === x.g.turn).length;
+    expect(over(a)).toBeGreaterThan(0);
+    // With no beach in the staff's eye the same fighters stay over their own country: Britain has no front on land.
+    const b = setup(false);
+    expect(skyDenies(b.g, 'UK', b.beach.id)).toBe(true);
+    airAI(b.g, 'UK');
+    expect(over(b)).toBe(0);
   });
 });
 
