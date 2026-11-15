@@ -158,3 +158,30 @@ Version 75 (7198cd6) has a computer's America raise corps and ship them itself, 
 | `v75d0.tsv` | The twelve American wars at Field command on seeds 37 to 48 (the top of `v75d.tsv`), played beside the domination queue so that the scoreboard has 24 wars a row | `./jobs.sh v75d0.tsv out/v75 2` |
 | `probe72.ts` | Where the computer's American air groups stand each June and the month Germany falls, in a war with nobody playing (on Version 75: two groups, always at home) | `node out75b/probe72.mjs 17,24,36 80` |
 | `probe73.ts` | Why the computer's America lands in Norway before France, in a war with nobody playing. Each month a copy of the war is asked (so the war is not nudged) what three American corps on a British quay would meet on every enemy harbour in reach (`WATCH`: too dangerous for the staff, warned, guarded at poor odds, an army too strong within a march, clear) and what the staff itself holds for its two forces (`STAFF`: the enemy, the quay and who stands in it, the corps ready there, the men ashore, the beach it has its eye on); `LANDED` for every landing it makes (`landingWatch`). On Version 75 the quay moves to a harbour full of British corps | `node out75b/probe73.mjs 18 70 USA` |
+
+## Version 76: Latin America on the map
+
+Version 76 (b62e4cc) makes Brazil, Argentina, Chile, Peru, Colombia and Venezuela playable from September 1939 beside Mexico, and keeps twelve small republics for the computer. Build with `./build70.sh NAME /home/user/tc76 out76`. Build anything new into a second folder (`out76b`) while a queue is using the first. Each queue fits the two-hour limit of a background command.
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `mk76.py` | Writes the Version 76 queues: `v76a.tsv` (the war with nobody playing on seeds 17 to 40, the builder's hemisphere set on six seeds, the American and British seats on seeds 25 to 48), `v76b.tsv` (par from Germany, the Soviet Union, France and Italy), `v76c.tsv` (world domination and the landing forecast, 124 months), `v76d.tsv` (the idle player from six seats, Canada), `v76l.tsv` (the Latin set: `year-MODE-NAT-SEED` with `probe75` and `latin-MODE-NAT-SEED` with `probe74`) | `python3 mk76.py && ./jobs.sh v76l.tsv out/v76 3` |
+| `v76e.tsv` | The computer's American army on Version 76 (`v75e.tsv` with the new bundle) | `./jobs.sh v76e.tsv out/v76 2` |
+| `lib.ts` | The scripted player's `path` now takes `'league'`: join a League if one will have the country, else found one with the first willing partner. (`'league'` is not a path of the rules, and an invitation's answer is `ok`, so the old code never fired.) | `{"path":"league"}` |
+| `hemi76.ts`, `hemi76.py` | The rules builder's hemisphere set with nobody playing: income at peace and at war for every country of the Americas, who trades with both sides, which corps leave home. This copy of `hemi76.py` takes globs | `python3 hemi76.py 'out/v76/hemi-*.txt'` |
+| `probe74.ts` | The hemisphere set from a player's seat, one `H` line each January, an `ACT` line and a `SUM` line. Modes: `idle`; `merchant` (at peace: a market hall in the capital and every harbour town, the best trade offer signed, the poorest deal swapped for a richer one); `war` (the Allies' path, war on Germany in month T, default 36); `warearly` (the same in month 2); `league`; `axis` (war on the United States and Britain in month T) | `node out76b/probe74.mjs BRA 25 76 merchant` |
+| `latintab.py` | The table of those wars by seat and way of playing: income first, mean and most, the share from trade, months at war, attacked and attacking, provinces won and lost | `python3 latintab.py out/v76` |
+| `probe75.ts` | A year in a small country's seat. Modes `look`, `allies` (declares on Germany as soon as the rules offer it), `axis` (declares on the first of the United States, Britain and France the rules allow from month T, default 13), `league` (founds, then invites every willing country). A `Y` line in the first month and each January (the doors open today and why not, the League's willing founders, whom it may declare war on, trade, the arsenal, corps), a `YEAR` line a calendar year (months with a battle, a purchase, a move, no order at all, the news that named the country) | `node out76b/probe75.mjs ARG 25 76 axis` |
+| `yeartab.py` | One line a war from those files | `python3 yeartab.py out/v76` |
+| `probe76.ts` | What a small Axis country's early declaration of war on the United States does to America: a `U` line each January (America's bloc, wars, war work, corps at home, overseas and on the player's soil) and an `END` line. T of 0 is the base line with no declaration | `node out76b/probe76.mjs BRA 25 76 13` |
+| `peek76.ts`, `peek77.ts` | What a Latin player's desks offer in a given month (arsenal, trade book, towns), and where a Latin player at war can ship a corps | `node out76b/peek77.mjs BRA 25 3 allies` |
+| `ui44.cjs` | Now also presses the navy desk's "more shores" button (`data-act="crossall"`) and lists every shore | `TC_PAGE=file:///home/user/tc76/dist/play.html node ui44.cjs 1942 9 99-v76-hour42` |
+| `ui45.cjs` | A Latin player's first hour on the page: the picker, the start card, the map, the path card and each path's page, a path taken, Declare war and its card, the Build, Powers, Navy and Staff tabs, then some months | `node ui45.cjs BRA 4 99-v76-bra allies` |
+| `ui46.cjs`, `ui47.cjs` | The start card's own words for each seat; a zoomed-out picture of a seat's first screen | `node ui47.cjs ARG 99-v76-map 3` |
+
+Traps met on Version 76:
+
+- `seattab.py` takes the prefix without the nation (`seat`, `seatfield`, `seatstage`, `seatidle`); the nation comes from the file name.
+- A scripted Latin player's buy list has no mountain corps or engineers. Do not read "the arsenal sells nothing" or a falling war income from it: `peek76` shows what is on offer, and saboteurs wreck factories the script cannot repair.
+- The `attacked` months of a Latin player at war are corps the script shipped overseas. Read `provinces lost` and "an enemy beside a corps" for the home country.
+- `army-USA-*` and `watch49s3-*` files hold three wars each.

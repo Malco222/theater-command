@@ -9,7 +9,7 @@ import { start, date, T, saveGame, loadGame, atWar, hostileUnits } from './lib';
 import { landingWatch } from '@tc/campaign/ai';
 import { heedsCard, seaFoe, seaBase, lodgment } from '@tc/campaign/staff';
 import { landingTargets, planLanding } from '@tc/campaign/navy';
-import openData from '../../../../../../home/user/tc75/data/campaign/open.json';
+import openData from '@tc/../data/campaign/open.json';
 const [seedS = '18', untilS = '70', nat = 'USA'] = process.argv.slice(2);
 const D = (openData as any).descent, RISK = D.risk;
 const WEST = new Set(['FRA', 'BEL', 'NED', 'GER', 'DEN']);

@@ -366,10 +366,13 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
   // A small country chooses its path in its first month.
   if (plan.path) {
     const opts = T.paths(g);
-    const o = opts.find((p: any) => p.id === plan.path);
-    if (o && !(o as any).why && !run.g.flags[`pt:path`]) {
-      const partner = plan.path === 'league' ? T.leaguePartners(g).find((p: any) => p.yes)?.nat : undefined;
-      if (T.orderPath(g, plan.path as any, partner)) { g.flags['pt:path'] = 1; row.notes.push(`took path ${plan.path}${partner ? ' with ' + partner : ''}`); delete g.flags['pt:path']; (run as any).pathDone = true; }
+    // 'league' means found the League with the first willing partner, or join it once it stands (Version 76: the
+    // rules name these paths 'found' and 'join', and an invitation's answer is 'ok').
+    const want = plan.path === 'league' ? (opts.some((p: any) => p.id === 'join') ? 'join' : 'found') : plan.path;
+    const o = (run as any).pathDone ? undefined : opts.find((p: any) => p.id === want);
+    if (o && (o as any).ok && !(o as any).now && !run.g.flags[`pt:path`]) {
+      const partner = want === 'found' ? T.leaguePartners(g).find((p: any) => p.ok)?.nat : undefined;
+      if (T.orderPath(g, want as any, partner)) { g.flags['pt:path'] = 1; row.notes.push(`took path ${plan.path}${partner ? ' with ' + partner : ''}`); delete g.flags['pt:path']; (run as any).pathDone = true; }
     }
   }
 
