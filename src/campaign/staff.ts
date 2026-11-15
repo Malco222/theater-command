@@ -1223,10 +1223,23 @@ export const opensOn = (g: Game, nat: string, r: Region): boolean => { const P =
  */
 export function builtUp(g: Game, nat: string, r: Region): boolean {
   const need = planned(g, nat)?.with;
-  if (!need || r.overseas || !r.nb.length) return true;
+  return !need || !!r.overseas || !r.nb.length || armyAcross(g, nat) >= need;
+}
+/** The field corps a nation has across its ocean. */
+function armyAcross(g: Game, nat: string): number {
   let across = 0;
   for (const c of g.corps) if (c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !acrossHome(g, nat, c.reg)) across++;
-  return across >= need;
+  return across;
+}
+/**
+ * True while a staff with history's list is still building its army up across the sea for the front planned there:
+ * it has corps on the far shore, and fewer than it waits for. Its war is not yet one nobody can fight (`stalemates`).
+ */
+export function massing(g: Game, nat: string): boolean {
+  const need = planned(g, nat)?.with;
+  if (!need) return false;
+  const across = armyAcross(g, nat);
+  return across > 0 && across < need;
 }
 /** True for ground on a nation's own side of the ocean: beyond the old chart for a country whose capital is, on it for the others. */
 const acrossHome = (g: Game, nat: string, reg: number): boolean => { const cap = g.nations[nat].capital; return cap < 0 || beyondEurope(cap) === beyondEurope(reg); };
@@ -1715,7 +1728,8 @@ export function theatreStaff(g: Game, nat: string, scope: Set<number>, k: number
 // A war that has been won on land does not always end: the victor holds the continent, the loser's allies sit
 // behind the sea, and neither can come at the other. When two computer nations at war have no ground in touch
 // anywhere, with each other or with anyone on the other's side they are fighting, and their two sides have fought
-// no battle on land for a year, they sign an armistice on the lines as they stand. Never a war the player is
+// no battle on land for a year, they sign an armistice on the lines as they stand. (Not while a staff on either side
+// is still building its army up across the sea for the front history planned: Version 77.) Never a war the player is
 // fighting in, and never in the last act, where every country fights for itself to the end.
 
 /** The nations on one's side of the war: its bloc, the fallen with the standing. A nation outside both blocs stands alone. */
@@ -1749,13 +1763,21 @@ export function stalemates(g: Game): [string, string][] {
   };
   // Neither can come at the other, nor at anyone on the other's side that it is fighting.
   const free = (x: string, side: string[]): boolean => !side.some((y) => g.nations[y].alive && atWar(g, x, y) && touch(x, y));
+  // A staff still building its army up across the sea for the front history planned will come at the enemy: its
+  // side's war is not one nobody can fight, and the year is counted from the month that army is ready.
+  for (const n of live) if (massing(g, n.id)) g.flags[`st:massing:${n.id}`] = g.turn;
+  const massed = (xs: string[], ys: string[]): number => {
+    let t = 0;
+    for (const x of xs) if (g.nations[x].alive && ys.some((y) => atWar(g, x, y))) t = Math.max(t, flag(g, `st:massing:${x}`));
+    return t;
+  };
   const signed: [string, string][] = [];
   for (const A of live) for (const b of A.atWar) {
     const B = g.nations[b];
     if (!(A.id < b) || !B?.alive || B.dormant) continue;
     if (me !== null && (A.id === me || b === me || atWar(g, me, A.id) || atWar(g, me, b))) continue;
     const sa = sideOf(g, A.id), sb = sideOf(g, b);
-    const since = Math.max(lastBattle(sa, sb), flag(g, `war:${A.id}:${b}`), flag(g, `war:${b}:${A.id}`), 1);
+    const since = Math.max(lastBattle(sa, sb), massed(sa, sb), massed(sb, sa), flag(g, `war:${A.id}:${b}`), flag(g, `war:${b}:${A.id}`), 1);
     if (g.turn - since < S.after || !free(A.id, sb) || !free(b, sa)) continue;
     signed.push([A.id, b]);
   }

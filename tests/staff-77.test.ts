@@ -5,7 +5,8 @@
 //    United States: France and Italy, never Norway. Colonies and islands overseas are open always; a staff with no
 //    list goes where it judges best, and so does every staff at the stop of the dial where nobody has read the books.
 // 2. The build-up. Such a staff opens no front on a mainland until its army across the ocean is big enough to
-//    follow the landing in ('with'). An island taken whole and a colony need no such army.
+//    follow the landing in ('with'). An island taken whole and a colony need no such army. And while that army is
+//    still gathering, its war is not "a war nobody can fight": no armistice is signed until a year after it is ready.
 // 3. A front is any harbour its side holds near the enemy ('descent.front'), not only a landing still in the
 //    lander's hands; and a hop over a narrow sea into one has a ceiling of risk of its own (world.json 'hop').
 // 4. A quay must have room: a staff abroad never keeps its landing force at a harbour its allies' corps fill.
@@ -20,7 +21,7 @@ import { addCorps, allied, atWar, capture, createGame, removeCorps } from '../sr
 import { setStop } from '../src/campaign/history';
 import { NAVY, coastReport, crossingRisk, fleetsOf, seaPath } from '../src/campaign/navy';
 import { loadGame, saveGame } from '../src/campaign/save';
-import { builtUp, frontAshore, joinsOn, landingForce, oceanRuns, opensOn, seaBase, startOpen } from '../src/campaign/staff';
+import { RIVALS, builtUp, frontAshore, joinsOn, landingForce, massing, oceanRuns, opensOn, seaBase, stalemates, startOpen } from '../src/campaign/staff';
 import { runTurnAI } from '../src/campaign/turn';
 import { STACK, type Corps, type Game, type Region } from '../src/campaign/types';
 import { WORLD, beyondEurope, overseasOf } from '../src/campaign/world';
@@ -117,6 +118,46 @@ describe('the build-up', () => {
   it('every landing America\'s staff made on a mainland in that war had the army behind it', () => {
     const need = DESCENT.planned.USA.with!;
     for (const l of landings.filter((x) => x.nat === 'USA' && !x.wave && !x.island && !x.overseas)) expect(l.across, `${l.to}, month ${l.turn}`).toBeGreaterThanOrEqual(need);
+  });
+
+  it('an army still gathering across the sea is not a war nobody can fight: no armistice until a year after it is ready', () => {
+    const need = DESCENT.planned.USA.with!, year = RIVALS.stalemate!.after;
+    // America fights on its own account here, so that only its own war with Germany is weighed: no battle on land
+    // between them, no ground in touch, and the war more than a year old.
+    const quiet = (): Game => {
+      const g = at(JAN_42);
+      g.nations.USA.align = 'independent';
+      g.nations.USA.lastFight = {};
+      for (const e of g.nations.USA.atWar) { delete g.nations[e].lastFight.USA; g.flags[`war:USA:${e}`] = 1; g.flags[`war:${e}:USA`] = 1; }
+      g.turn += year;
+      return g;
+    };
+    const signs = (g: Game): boolean => stalemates(g).some(([a, b]) => a === 'GER' && b === 'USA');
+    // With nobody across the ocean it is such a war, and it ends as it did before.
+    const a = quiet();
+    for (const c of across(a, 'USA')) removeCorps(a, c);
+    expect(massing(a, 'USA')).toBe(false);
+    expect(signs(a)).toBe(true);
+    // With an army gathering in Britain it is not, however long the quiet has lasted.
+    const g = quiet();
+    if (!across(g, 'USA').length) addCorps(g, 'USA', 'The first across', 'inf', 2, g.byName.Cornwall.id, {});
+    expect(massing(g, 'USA')).toBe(true);
+    expect(signs(g)).toBe(false);
+    g.turn += 2 * year;
+    expect(signs(g)).toBe(false);
+    expect(g.nations.USA.atWar).toContain('GER');
+    // Once the army is ready the year is counted from that month.
+    for (let k = across(g, 'USA').length; k < need; k++) addCorps(g, 'USA', `Gathered Corps ${k}`, 'inf', 2, g.byName.Cornwall.id, {});
+    expect(massing(g, 'USA')).toBe(false);
+    expect(signs(g)).toBe(false);
+    g.turn += year - 1;
+    expect(signs(g)).toBe(false);
+    g.turn += 1;
+    expect(signs(g)).toBe(true);
+    expect(g.nations.USA.atWar).not.toContain('GER');
+    // A staff with no such figure is never gathering.
+    expect(massing(at(JAN_42), 'UK')).toBe(false);
+    expect(massing(at(JAN_42), 'CAN')).toBe(false);
   });
 });
 
