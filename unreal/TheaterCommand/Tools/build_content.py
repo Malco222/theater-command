@@ -735,7 +735,15 @@ def build_land():
     # A river is drawn from how far each point stands from its line, which the picture knows to one side and the
     # other: read between the picture's points, that distance crosses nothing exactly on the line, so a river far
     # narrower than the picture's own points still has a clean bank at any height of the eye.
-    river = times(m, times(m, times(m, inside, truly, -200, 2700), seen_from_here, -100, 2750), sat(times(m, half, 400.0, -350, 3020), -200, 3020), -50, 2750)
+    # (A lake is a broad water made of two or three stretches. Round its edge the picture's points look to one stretch
+    # or another, and where they disagreed the edge was bitten into: nicks, which the art director ruled out. A broad
+    # water with a steady shore, which is a lake, is drawn from the distance alone, which has no direction to
+    # disagree about and rounds every corner a little. Rivers, and every hairline, are drawn as before.)
+    broad_shape = less(sat(plus(m, over(less(half_seen, apart, -1100, 3200), px, -950, 3200), 0.5, -800, 3200), -650, 3200), 0.0, -500, 3200)
+    steady_water = sat(times(m, plus(m, (wet_ink, "A"), -0.495, -800, 3280), 100.0, -650, 3280), -500, 3280)
+    broadly = times(m, sat(over(less(half, times(m, wet_cell, 0.7, -1100, 3360), -950, 3360), times(m, wet_cell, 0.5, -950, 3420), -800, 3360), -650, 3360), steady_water, -500, 3360)
+    water_shape = lerp(m, times(m, inside, truly, -200, 2700), broad_shape, broadly, -150, 2720)
+    river = times(m, times(m, water_shape, seen_from_here, -100, 2750), sat(times(m, half, 400.0, -350, 3020), -200, 3020), -50, 2750)
     # (its bed: dry sand from the banks inward, by the share the picture gives. Under six tenths, the bed comes and
     # goes along the river, as bars do.)
     bars_place = world_uv(m, "BarsTiling", 0.0045, -3000, 3300)

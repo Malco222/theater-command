@@ -672,6 +672,10 @@ void ACampaignPlayerController::EnterCampaign()
 	{
 		return;
 	}
+	// (the table has just been laid out for this campaign as it stands: from here on, ground that changes hands from
+	// one month to the next is inked over)
+	TurnLaid = Session->GetView().Turn;
+	HumanLaid = Session->GetView().Human;
 	// A clean table: nothing in hand, nothing picked, no old news.
 	Opening.bVisible = false;
 	FaceOff = FFaceOff();

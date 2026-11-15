@@ -665,7 +665,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					return 0.0f; // (off this sheet: nothing can be said, and no lake is laid from there)
 				}
 				const int32 Idx = Terrain.Index(I, J);
-				return RiverHalf[Idx] > 0.0f ? RiverAt[Idx] - RiverHalf[Idx] : 1000.0f;
+				// (a lake may lie nearer another lake than a river: lakes come in groups; counted here as if it stood a unit further off)
+				return RiverHalf[Idx] > 0.0f ? RiverAt[Idx] - RiverHalf[Idx] + (RiverWater[Idx] < 0.0f ? 0.9f : 0.0f) : 1000.0f;
 			};
 			struct FLakeRuling
 			{
@@ -679,8 +680,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			{
 				{ false, true, 60.0, 0.34f, 1.6f, 2.35f, 1.0f, -0.6f, 0.3f },
 				{ true, true, 70.0, 0.34f, 1.9f, 2.4f, 1.0f, -0.6f, 0.3f },
-				{ false, false, 7.0, 0.86f, 0.4f, 1.8f, 1.3f, -0.1f, 0.35f },
-				{ true, false, 10.0, 0.9f, 0.5f, 2.2f, 1.3f, -0.35f, 0.25f },
+				{ false, false, 6.0, 1.0f, 0.4f, 1.7f, 1.3f, 0.0f, 0.3f },
+				{ true, false, 7.5, 1.0f, 0.6f, 2.35f, 1.05f, 0.05f, 0.3f },
 			};
 			for (const FLakeRuling& Ruling : Rulings)
 			{
@@ -705,8 +706,9 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						const float StretchA = FMath::Clamp(Radius * (0.3f + 0.95f * LongA), 0.0f, FMath::Max(0.92f * Room - RadiusA, 0.0f));
 						const float StretchB = FMath::Clamp(Radius * (0.3f + 0.95f * LongB), 0.0f, FMath::Max(0.92f * Room - RadiusB, 0.0f));
 						const bool bBulge = Ruling.bGreatOne || (Radius > 0.75f && Lobe < 0.6f);
-						const float RadiusC = Radius * (0.5f + 0.25f * LobeSize);
-						const float StretchC = bBulge ? FMath::Clamp(Radius * (0.45f + 0.5f * LobeSize), 0.0f, FMath::Max(0.92f * Room - RadiusC, 0.0f)) : 0.0f;
+						// (a bulge is broad and shallow: a narrow one stood out as a knob with a nick each side of it)
+						const float RadiusC = Radius * (0.7f + 0.2f * LobeSize);
+						const float StretchC = bBulge ? FMath::Clamp(Radius * (0.3f + 0.3f * LobeSize), 0.0f, FMath::Max(0.92f * Room - RadiusC, 0.0f)) : 0.0f;
 						const float Extent = FMath::Max(FMath::Max3(Radius, StretchA + RadiusA, StretchB + RadiusB), bBulge ? StretchC + RadiusC : 0.0f);
 						// (where in its square: anywhere it fits; and the square itself pushed about by a slow unevenness of
 						// the country, the same for its neighbours, so that the ruling never shows as rows)
@@ -724,7 +726,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						Climate.SharesAt(Latitude, Longitude, Shares);
 						const float Taiga = Shares[WorldLook::Taiga], Tundra = Shares[WorldLook::Tundra];
 						// (lake country lies in clusters, with empty ground between: a slow unevenness of the place says how thickly)
-						const float Unevenness = FMath::PerlinNoise2D(Kept * 0.021 + FVector2D(5.0, 91.0)) + 0.45f * FMath::PerlinNoise2D(Kept * 0.057 + FVector2D(63.0, 17.0));
+						// (at three sizes: the lake districts themselves, the groups within one, and the knots of two or three:
+						// measured in the pictures, lakes sown by the first alone were still spaced more evenly than chance)
+						const float Unevenness = 0.55f * FMath::PerlinNoise2D(Kept * 0.021 + FVector2D(5.0, 91.0)) + 0.8f * FMath::PerlinNoise2D(Kept * 0.06 + FVector2D(63.0, 17.0))
+							+ 0.45f * FMath::PerlinNoise2D(Kept * 0.13 + FVector2D(29.0, 47.0));
 						const float Country = FMath::SmoothStep(Ruling.CountryFrom, Ruling.CountryTo, Unevenness);
 						if ((Tundra > Taiga) != bPool || Luck > Ruling.Chance * Thickly * Country * FMath::SmoothStep(0.4f, 0.8f, bPool ? Tundra : Taiga))
 						{
@@ -754,7 +759,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						Lay(Centre, P2, Radius, RadiusB, -1.0f, -1.0f);
 						if (bBulge)
 						{
-							Lay(Centre, P3, Radius * 0.8f, RadiusC, -1.0f, -1.0f);
+							Lay(Centre, P3, Radius * 0.9f, RadiusC, -1.0f, -1.0f);
 						}
 					}
 				}

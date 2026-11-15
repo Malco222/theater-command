@@ -6840,6 +6840,8 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	}
 	bMiniStale = true;
 	BuildWords();
+	UE_LOG(LogTheater, Log, TEXT("Holders: ground changed hands (%d new holders in sight for ink, ink %s, land %s, %d sieges shown)"), Taken.Num(), bInkAllowed ? TEXT("allowed") : TEXT("not allowed"),
+		bLandLaid ? TEXT("laid") : TEXT("not laid"), SiegesShown.Num());
 
 	// Ground has changed hands. Repaint it, with a margin for the band of thick paint along the new
 	// frontier, rebuild only the pieces of the land that touches, and redraw the frontier lines.
@@ -7033,8 +7035,9 @@ void ACampaignMapActor::UpdateOwnershipPaint()
 			EndInk();
 			return;
 		}
-		// (about fifteen times a second: more than the eight steps the brief allows, and cheap: only the box is painted)
-		if (Now - PaintStepped >= 0.066)
+		// (in eight steps across the second, as the brief allows: fifteen cost three or four frames of the second on a
+		// machine with other work to do, and the front is soft enough that eight read as one movement)
+		if (Now - PaintStepped >= 0.125)
 		{
 			PaintStepped = Now;
 			StepInk(Second);
