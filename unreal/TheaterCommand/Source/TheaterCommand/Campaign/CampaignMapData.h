@@ -26,6 +26,7 @@ struct FCampaignRegion
 	int32 Id = INDEX_NONE;
 	FString Name;
 	FString Owner; // nation tag
+	FString Lawful; // its lawful owner where another holds it (occupied ground: the rules' owner against its holder); empty where its holder is its owner
 	FString Home; // whose it was when the map was drawn: a capital held by another flies the victor's flag
 	FString Terrain; // plains, hills, forest, mountain, urban, desert, marsh
 	int32 VictoryPoints = 0;

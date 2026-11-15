@@ -894,10 +894,42 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 		Out.AirFleets = MoveTemp(Stood);
 	}
 
+	{
+		// (the ownership paint: the sieges, for the besieger's colour on the field)
+		Out.SiegePaint.Reset();
+		const TArray<TSharedPtr<FJsonValue>>* Painted = nullptr;
+		if (Object->TryGetArrayField(TEXT("siegePaint"), Painted))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Painted)
+			{
+				const TSharedPtr<FJsonObject>* Entry = nullptr;
+				if (!Value->TryGetObject(Entry))
+				{
+					continue;
+				}
+				FCampaignView::FSiegePaint& Siege = Out.SiegePaint.AddDefaulted_GetRef();
+				(*Entry)->TryGetNumberField(TEXT("r"), Siege.Region);
+				(*Entry)->TryGetStringField(TEXT("by"), Siege.By);
+				(*Entry)->TryGetNumberField(TEXT("p"), Siege.Progress);
+				int32 Closed = 0;
+				(*Entry)->TryGetNumberField(TEXT("closed"), Closed);
+				Siege.bClosed = Closed != 0;
+				const TArray<TSharedPtr<FJsonValue>>* Sides = nullptr;
+				if ((*Entry)->TryGetArrayField(TEXT("from"), Sides))
+				{
+					for (const TSharedPtr<FJsonValue>& Side : *Sides)
+					{
+						Siege.From.Add(FMath::RoundToInt32(Side->AsNumber()));
+					}
+				}
+			}
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Regions = nullptr;
 	if (Object->TryGetArrayField(TEXT("regions"), Regions))
 	{
 		Out.RegionHolder.SetNum(Regions->Num());
+		Out.RegionOwner.SetNum(Regions->Num());
 		Out.RegionStanding.SetNum(Regions->Num());
 		Out.RegionWorks.Init(FIntVector4(0, 0, 0, 0), Regions->Num());
 		for (const TSharedPtr<FJsonValue>& Value : *Regions)
@@ -907,6 +939,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 			if (Out.RegionHolder.IsValidIndex(Id))
 			{
 				Out.RegionHolder[Id] = Region->GetStringField(TEXT("ctrl"));
+				Region->TryGetStringField(TEXT("own"), Out.RegionOwner[Id]);
 				Region->TryGetStringField(TEXT("stand"), Out.RegionStanding[Id]);
 				const TArray<TSharedPtr<FJsonValue>>* Built = nullptr;
 				if (Region->TryGetArrayField(TEXT("w"), Built) && Built->Num() >= 4)

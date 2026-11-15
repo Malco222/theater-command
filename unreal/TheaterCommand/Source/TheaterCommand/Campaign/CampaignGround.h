@@ -47,6 +47,57 @@ public:
 	/** Repaints the nations' colours over a box of grid points, after ground has changed hands. */
 	void PaintTint(const FCampaignMapData& Data, const FCampaignTerrain& Terrain, int32 I0, int32 J0, int32 I1, int32 J1);
 
+	/**
+	 * The ownership paint (the art director's brief of 15 November 2026). Three things, all of them in the stain:
+	 * nothing here is a line, a mark or a glow, and nothing is brighter than the stain it sits in.
+	 *
+	 * Occupied: point for point with the ground, the colour a stripe takes on occupied ground (the holder's stain
+	 * mixed toward the lawful owner's, each made the usual way), and in its alpha how far the ground there is
+	 * occupied: nothing near a national frontier, nothing under a besieger's colour, nothing on free ground. The
+	 * land's paint rules the stripes themselves.
+	 *
+	 * A siege: the besieger's plain stain lies over the field from the sides his side holds, as deep as the siege
+	 * has gone; the town keeps an island of its holder's colour to the end. Set before PaintTint.
+	 */
+	TArray<FColor> Occupied;
+	struct FSiege
+	{
+		int32 Region = INDEX_NONE;
+		FString By;
+		float Depth = 0.35f; // how far across the province the colour has come: 0.35 when the siege is laid, 1 when the town is about to fall
+		bool bEverySide = false;
+		TArray<int32> From;
+		FVector2D Town = FVector2D::ZeroVector;
+		float Island = 8.0f; // the radius of the ground round the town that never turns, in map units
+	};
+	TArray<FSiege> Sieges;
+
+	/**
+	 * How far each point of a province lies from the frontier a colour comes in by, as a share of the way to its far
+	 * side: for the besieger's colour, and for ink that spreads. From the sides named; from every side; or, with no
+	 * side named, from the coast, or else from the town.
+	 */
+	struct FFront
+	{
+		int32 I0 = 0, J0 = 0, NI = 0, NJ = 0;
+		float Reach = 1.0f; // how far the far side lies, in map units
+		TArray<float> Far; // for each point of the box: how far in it lies, in map units; less than nothing outside the province
+	};
+	const FFront& FrontOf(const FCampaignMapData& Data, const FCampaignTerrain& Terrain, int32 Region, const TArray<int32>& From, bool bEverySide);
+	/** How far a front that has come this share of the way covers a point: 1 behind it, 0 ahead, soft and wandering between. */
+	static float FrontCover(const FFront& Front, const FCampaignTerrain& Terrain, int32 I, int32 J, float Share);
+	/** The same as a place along the front's way, in map units behind the front (less than nothing ahead of it), for the wet rim. */
+	static float BehindFront(const FFront& Front, const FCampaignTerrain& Terrain, int32 I, int32 J, float Share);
+	void ForgetFronts() { Fronts.Reset(); }
+
+private:
+	// (Each front is kept in a place of its own that never moves. Kept in the map itself, a front already handed
+	// out was moved when the map grew to take another: with many provinces changing hands at once, as when a
+	// campaign of 1941 is laid over the map of 1939, the ink read a front that was no longer there.)
+	TMap<uint32, TSharedPtr<FFront>> Fronts;
+
+public:
+
 	int32 NX = 0;
 	int32 NY = 0;
 	TArray<FColor> Ground;
@@ -85,6 +136,14 @@ public:
 	 */
 	TArray<FColor> Wet, WetInk;
 	float WetReach = 4.0f;
+	/**
+	 * The picture of the waters may be ruled finer than the ground: so many of its points to each of the ground's,
+	 * each way (two on a fine sheet, one on the coarse sheet of the world). Where hairlines met inside one of the
+	 * ground's cells, the picture's points round the meeting looked to different waters and none was drawn there:
+	 * a creek stopped a cell short of the stream it joins. The picture's point K lies (K + 0.5) / WetScale - 0.5
+	 * of the ground's cells from the ground's first point, so that the same place on the sheet reads both pictures.
+	 */
+	int32 WetScale = 1, WetNX = 0, WetNY = 0;
 
 	/** The sea's colour, one pixel every WaterStep map units. */
 	double WaterStep = 1.5;

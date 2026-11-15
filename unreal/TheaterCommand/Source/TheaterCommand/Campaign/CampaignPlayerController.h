@@ -860,6 +860,8 @@ private:
 	bool bHelpSeen = false; // the player has ended a month, or folded the keys away: they are not shown unasked again
 	bool bHelpPinned = false; // the reminder of the keys is kept open by a click on its mark
 	bool bFreshCampaign = false; // a campaign has just been begun, not continued
+	int32 TurnLaid = -1; // the month the table's holders were last laid for, and for whom: ink spreads only from one month to the next
+	FString HumanLaid;
 	FYearCard LastYear; // the last year's card, to show again
 	// What an army answers as it is picked up, in its own language, for a moment.
 	FText ArmySaid;

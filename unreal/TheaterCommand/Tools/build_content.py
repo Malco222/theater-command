@@ -416,6 +416,27 @@ def build_land():
     m.set_editor_property("tangent_space_normal", False)  # the picture says which way the ground leans in the world
     uv = node(m, unreal.MaterialExpressionTextureCoordinate, -3000, 0)
     tint = picture(m, "Tint", uv, -2600, -250)
+    # The ownership paint (the art director's brief of 15 November 2026). Occupied ground keeps soft pinstripes of
+    # its lawful owner's colour under its holder's: woven into the stain, not ruled over it. They fall to the right,
+    # at right angles to the fog's ruled lines, sixteen pixels apart at working height (0.38 of the fog's spacing)
+    # and four tenths of that wide, each edge fading over a quarter of the stripe's width. The picture says where
+    # the ground is occupied and what colour a stripe takes there (the holder's stain mixed toward the owner's).
+    # From higher, as the stripes close to less than eight pixels apart, they go into their flat average, and
+    # below five they are that alone: so nothing shimmers. None on fogged ground.
+    occupied = picture(m, "Occupied", uv, -2600, -3000)
+    stripe_place = world_uv(m, "StripeTiling", 0.0158, -3000, -3300)
+    stripe_one = node_from(m, unreal.MaterialExpressionComponentMask, stripe_place, -2400, -3300, r=True, g=False, b=False, a=False)
+    stripe_other = node_from(m, unreal.MaterialExpressionComponentMask, stripe_place, -2400, -3220, r=False, g=True, b=False, a=False)
+    stripe_along = plus(m, stripe_one, times(m, stripe_other, -1.0, -2250, -3220), -2100, -3260)
+    stripe_off = one_in(m, unreal.MaterialExpressionAbs, plus(m, one_in(m, unreal.MaterialExpressionFrac, stripe_along, -1950, -3260), -0.5, -1800, -3260), -1650, -3260)
+    stripe = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, times(m, stripe_off, -1.0, -1500, -3260), 0.25, -1350, -3260), 10.0, -1200, -3260), -1050, -3260)
+    stripe_closeness = plus(m, one_in(m, unreal.MaterialExpressionAbs, one_in(m, unreal.MaterialExpressionDDX, stripe_along, -1950, -3400), -1800, -3400),
+                            one_in(m, unreal.MaterialExpressionAbs, one_in(m, unreal.MaterialExpressionDDY, stripe_along, -1950, -3480), -1800, -3480), -1650, -3440)
+    stripe_far = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, stripe_closeness, -0.125, -1500, -3440), 13.33, -1350, -3440), -1200, -3440)
+    fog_picture = picture(m, "Fog", uv, -2600, -1800, numbers=True)
+    striped = times(m, times(m, lerp(m, stripe, 0.4, stripe_far, -900, -3350), (occupied, "A"), -750, -3350),
+                    times(m, scalar(m, "Stripes", 1.0, -900, -3200), one_in(m, unreal.MaterialExpressionOneMinus, (fog_picture, "R"), -900, -3120), -750, -3160), -600, -3300)
+    tint_rgb = lerp(m, (tint, "RGB"), (occupied, "RGB"), striped, -450, -3200)
     # The detail, at two sizes so that its repeat does not show. (It is read here, ahead of its use, because the
     # shading of the hills, the edges of the woods and the lie of the fields are roughened by it.)
     fine_uv = world_uv(m, "DetailTiling", 0.0052, -3000, 700)
@@ -443,7 +464,7 @@ def build_land():
     stain = one_in(m, unreal.MaterialExpressionSaturate, plus(m, wash, band, -2050, -690), -1950, -690)
     stain = lerp(m, stain, 1.0, scalar(m, "Flat", 0.0, -2050, -600), -1850, -660)
     stain = times(m, stain, scalar(m, "Politics", 0.94, -1850, -570), -1750, -630)
-    c = lerp(m, (ground, "RGB"), (tint, "RGB"), stain, -2000, -400)
+    c = lerp(m, (ground, "RGB"), tint_rgb, stain, -2000, -400)
     cover = picture(m, "Cover", uv, -2600, 500, numbers=True)
 
     # Farmland: a quilt of fields on the low ground. Every field has a tone of its own, from pasture through
@@ -584,65 +605,6 @@ def build_land():
     # and throws a copse or two out beyond its edge; then the edge is made firm, a shape and not a fade)
     ragged = plus(m, times(m, plus(m, (fine, "G"), -0.5, -2500, -1250), scalar(m, "WoodsRag", 0.5, -2500, -1150), -2350, -1250),
                   times(m, plus(m, (coarse, "G"), -0.5, -2500, -1400), scalar(m, "WoodsRagBroad", 1.1, -2500, -1320), -2350, -1400), -2250, -1320)
-    # (Beyond Europe the painter lays the edge of a wood as a slow thinning-out, and "WoodsFringe" lets each
-    # tree-top stand or fall by itself across it: most where the wood is half there, not at all where it is whole
-    # or where there is none. It is nothing on Europe's own sheet, whose woods keep their firm edge.)
-    thin = times(m, times(m, (ground, "A"), one_in(m, unreal.MaterialExpressionOneMinus, (ground, "A"), -2700, -1050), -2600, -1050), 4.0, -2500, -1050)
-    # (How tall the tree-top at a point stands, 0 to 1, read back out of the detail's picture: across a thin edge
-    # only the tallest crowns stand at first, as single trees, then more of them, until they close up.)
-    crown_high = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (fine, "G"), -0.2, -2850, -980), 2.94, -2750, -980), -2700, -980)
-    ragged = plus(m, ragged, times(m, times(m, plus(m, crown_high, -0.5, -2650, -980), scalar(m, "WoodsFringe", 0.0, -2700, -900), -2600, -950), thin, -2450, -1000), -2300, -1100)
-    # ("WoodsLift" asks more of a wood before it is drawn: from high up, on the world's coarse sheet, the smallest
-    # patches are let go, where they were so many same-sized spots.)
-    wooded = one_in(m, unreal.MaterialExpressionSaturate,
-                    plus(m, times(m, plus(m, plus(m, (ground, "A"), ragged, -2200, -1250),
-                                          plus(m, times(m, scalar(m, "WoodsLift", 0.0, -2200, -1150), -1.0, -2120, -1150), -0.5, -2080, -1200), -2050, -1250),
-                               scalar(m, "WoodsSharp", 6.0, -2050, -1150), -1900, -1250), 0.5, -1750, -1250), -1600, -1250)
-    # (a warm stain, red or orange, turns dark green to brown-black: the woods of such a nation take less of it)
-    tint_r = node(m, unreal.MaterialExpressionComponentMask, -2500, -1550, r=True, g=False, b=False, a=False)
-    connect(tint, "RGB", tint_r, "")
-    tint_g = node(m, unreal.MaterialExpressionComponentMask, -2500, -1480, r=False, g=True, b=False, a=False)
-    connect(tint, "RGB", tint_g, "")
-    warm = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, tint_r, times(m, tint_g, -1.0, -2350, -1480), -2250, -1520), 2.5, -2150, -1520), -2050, -1520)
-    cool = plus(m, times(m, warm, scalar(m, "WoodsWarmLess", -0.45, -2050, -1440), -1950, -1500), 1.0, -1850, -1500)
-    leaf = lerp(m, vector(m, "WoodsColour", (0.05, 0.09, 0.04, 1.0), -2000, -900),
-                vector(m, "FirColour", (0.024, 0.056, 0.04, 1.0), -2000, -1050), (cover, "A"), -1800, -950)
-    # (The whole-world map: the canopy of the tropics is a lighter, fuller green than Europe's woods. How much of the
-    # canopy at a place is Europe's is in the alpha of the picture of the fields' lie: 1 everywhere in Europe.)
-    # (One number carries two shares: from 1 down to a half, how far the canopy is the tropics'; from a half down to
-    # nought, how far it is the northern forest's, a lifted and cooler green than a fir wood of the Alps.)
-    not_a = one_in(m, unreal.MaterialExpressionOneMinus, (lie, "A"), -2250, -1250)
-    is_north = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, not_a, -0.5, -2100, -1300), 400.0, -1950, -1300), -1800, -1300)
-    tropic = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, not_a, 2.04, -2100, -1220), -1950, -1220),
-                   one_in(m, unreal.MaterialExpressionOneMinus, is_north, -1650, -1300), -1500, -1250)
-    north = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, not_a, -0.51, -2100, -1380), 2.04, -1950, -1380), -1800, -1380)
-    leaf = lerp(m, leaf, vector(m, "TropicColour", (0.05, 0.108, 0.074, 1.0), -2000, -1200), tropic, -1350, -1100)
-    # (The northern share runs in two legs. Up to four tenths the canopy goes from Europe's woods to the broadleaf
-    # woods of the temperate lands beyond Europe, darker and bluer than Europe's; from there on, to the northern
-    # forest's. The painter gives temperate country four tenths and the northern forest the whole.)
-    leaf = lerp(m, leaf, vector(m, "FarWoodsColour", (0.025, 0.047, 0.04, 1.0), -2000, -1600),
-                one_in(m, unreal.MaterialExpressionSaturate, times(m, north, 2.5, -1650, -1380), -1500, -1380), -1280, -1100)
-    leaf = lerp(m, leaf, vector(m, "NorthColour", (0.045, 0.085, 0.07, 1.0), -2000, -1450),
-                one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, north, -0.4, -1650, -1460), 1.6667, -1500, -1460), -1350, -1460), -1200, -1100)
-    # (on a warm stain the canopy itself is olive: a very dark green goes chocolate with the least red showing through)
-    leaf = times(m, leaf, lerp(m, 1.0, vector(m, "WoodsWarmTint", (1.0, 1.0, 1.0, 1.0), -1800, -1180), warm, -1700, -1100), -1600, -1000)
-    woods = lerp(m, leaf,
-                 times(m, (tint, "RGB"), scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), -2100, -1000),
-                 times(m, times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), cool, -1950, -1080), -1650, -950)
-    c = lerp(m, c, woods,
-             one_in(m, unreal.MaterialExpressionSaturate,
-                    times(m, times(m, wooded, scalar(m, "WoodsStrength", 0.84, -2300, -900), -2000, -700),
-                          plus(m, times(m, warm, scalar(m, "WoodsWarmMore", 0.0, -2000, -620), -1900, -640), 1.0, -1800, -640), -1700, -680), -1600, -680), -1500, -500)
-    # The rim of a wood: lighter on its sunward edge, and a strip of shade on the open ground in its lee.
-    c = times(m, c, plus(m, 1.0, times(m, plus(m, (cover, "B"), -0.5, -1500, -700), scalar(m, "WoodsRim", 0.6, -1500, -600), -1350, -650), -1200, -650), -1100, -500)
-    c = lerp(m, c, vector(m, "RockColour", (0.235, 0.205, 0.162, 1.0), -2000, -150), (masks, "R"), -1000, -400)
-
-    # The waters of the world beyond Europe (the whole-world map): its rivers and its small lakes, laid over the
-    # ground and whatever stain is on it, since water is nobody's colour. Europe's own rivers are ribbons laid by
-    # the rules, and its picture of the waters says "none". (CampaignGround.h says what the two pictures hold.)
-    # A river is drawn from how far each point stands from its line, which the picture knows to one side and the
-    # other: read between the picture's points, that distance crosses nothing exactly on the line, so a river far
-    # narrower than the picture's own points still has a clean bank at any height of the eye.
     def larger(a, b, x=0, y=0):
         n = node(m, unreal.MaterialExpressionMax, x, y)
         _feed(m, n, "A", a)
@@ -688,8 +650,91 @@ def build_land():
     # (the picture's points round about must all look to this one line: where they look to different waters, the
     # distance with no direction to it is far more than the one read with it, and no line is there)
     truly = sat(times(m, over(less(times(m, wet_cell, scalar(m, "WetTrue", 0.62, -1250, 2880), -1100, 2800), less(apart, off, -950, 2850), -800, 2800), wet_cell, -650, 2800), 4.0, -500, 2800), -350, 2800)
+    # (deep inside a broad water, a lake above all, the distance with no direction to it says so by itself: along the
+    # middle of a lake made of two stretches at a bend the points look to both, and a pale thread showed down it)
+    truly = larger(truly, sat(over(less(half, apart, -950, 2900), px, -800, 2900), -650, 2900), -500, 2900)
     goes_at = lerp(m, scalar(m, "WetHairGoes", 0.19, -1100, 2950), scalar(m, "WetTributaryGoes", 0.36, -1100, 3010), sat(times(m, plus(m, half, -0.16, -950, 2950), 3.3, -850, 2950), -750, 2950), -650, 2950)
     seen_from_here = lerp(m, one_in(m, unreal.MaterialExpressionOneMinus, sat(over(less(px, goes_at, -500, 2950), times(m, goes_at, 0.4, -500, 3010), -400, 2950), -300, 2950), -200, 2950), 1.0, great, -100, 2950)
+
+    def smaller(a, b, x=0, y=0):
+        n = node(m, unreal.MaterialExpressionMin, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    # (The art director's ruling of round 27: from higher, red clearings are kept only beside the great river. A
+    # clearing beside a lesser river closes over as that river goes from sight: the red earth is known by its colour
+    # in the ground's picture, in the jungle and near a water, and the canopy is laid back over it by as much as
+    # the eye has risen above its working height (a little before that river itself goes from sight: the art director
+    # found the clearings beading the tributaries from higher, wider than the water they sat on). At working height,
+    # where the river shows, so does its clearing.)
+    # (red earth is more than half as red again as it is green: no other ground under the canopy is)
+    red_earth = sat(times(m, less((ground, "R"), times(m, (ground, "G"), 1.6, -3400, -1500), -3200, -1500), 40.0, -3100, -1500), -3000, -1500)
+    in_jungle = sat(smaller(times(m, one_in(m, unreal.MaterialExpressionOneMinus, (lie, "A"), -3300, -1420), 2.0, -3200, -1420),
+                            times(m, plus(m, (lie, "A"), -0.45, -3300, -1340), 20.0, -3200, -1340), -3100, -1380), -3000, -1380)
+    by_a_water = times(m, sat(times(m, half, 400.0, -3300, -1260), -3200, -1260), sat(less(plus(m, half, 4.0, -3300, -1180), off, -3200, -1180), -3100, -1180), -3000, -1220)
+    closed_over = times(m, times(m, red_earth, in_jungle, -2900, -1440), times(m, by_a_water, times(m, one_in(m, unreal.MaterialExpressionOneMinus, great, -3000, -1100),
+                                                                                       sat(times(m, less(px, scalar(m, "ClearingsGoFrom", 0.235, -3100, -1040), -3000, -1040), 20.0, -2950, -1040), -2900, -1040), -2850, -1080), -2900, -1160), -2800, -1300)
+    wood_share = larger((ground, "A"), times(m, closed_over, scalar(m, "ClearingsClose", 0.97, -2800, -1180), -2700, -1240), -2600, -1240)
+    # (Beyond Europe the painter lays the edge of a wood as a slow thinning-out, and "WoodsFringe" lets each
+    # tree-top stand or fall by itself across it: most where the wood is half there, not at all where it is whole
+    # or where there is none. It is nothing on Europe's own sheet, whose woods keep their firm edge.)
+    thin = times(m, times(m, wood_share, one_in(m, unreal.MaterialExpressionOneMinus, wood_share, -2700, -1050), -2600, -1050), 4.0, -2500, -1050)
+    # (How tall the tree-top at a point stands, 0 to 1, read back out of the detail's picture: across a thin edge
+    # only the tallest crowns stand at first, as single trees, then more of them, until they close up.)
+    crown_high = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, (fine, "G"), -0.2, -2850, -980), 2.94, -2750, -980), -2700, -980)
+    ragged = plus(m, ragged, times(m, times(m, plus(m, crown_high, -0.5, -2650, -980), scalar(m, "WoodsFringe", 0.0, -2700, -900), -2600, -950), thin, -2450, -1000), -2300, -1100)
+    # ("WoodsLift" asks more of a wood before it is drawn: from high up, on the world's coarse sheet, the smallest
+    # patches are let go, where they were so many same-sized spots.)
+    wooded = one_in(m, unreal.MaterialExpressionSaturate,
+                    plus(m, times(m, plus(m, plus(m, wood_share, ragged, -2200, -1250),
+                                          plus(m, times(m, scalar(m, "WoodsLift", 0.0, -2200, -1150), -1.0, -2120, -1150), -0.5, -2080, -1200), -2050, -1250),
+                               scalar(m, "WoodsSharp", 6.0, -2050, -1150), -1900, -1250), 0.5, -1750, -1250), -1600, -1250)
+    # (a warm stain, red or orange, turns dark green to brown-black: the woods of such a nation take less of it)
+    tint_r = node(m, unreal.MaterialExpressionComponentMask, -2500, -1550, r=True, g=False, b=False, a=False)
+    connect(tint, "RGB", tint_r, "")
+    tint_g = node(m, unreal.MaterialExpressionComponentMask, -2500, -1480, r=False, g=True, b=False, a=False)
+    connect(tint, "RGB", tint_g, "")
+    warm = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, tint_r, times(m, tint_g, -1.0, -2350, -1480), -2250, -1520), 2.5, -2150, -1520), -2050, -1520)
+    cool = plus(m, times(m, warm, scalar(m, "WoodsWarmLess", -0.45, -2050, -1440), -1950, -1500), 1.0, -1850, -1500)
+    leaf = lerp(m, vector(m, "WoodsColour", (0.05, 0.09, 0.04, 1.0), -2000, -900),
+                vector(m, "FirColour", (0.024, 0.056, 0.04, 1.0), -2000, -1050), (cover, "A"), -1800, -950)
+    # (The whole-world map: the canopy of the tropics is a lighter, fuller green than Europe's woods. How much of the
+    # canopy at a place is Europe's is in the alpha of the picture of the fields' lie: 1 everywhere in Europe.)
+    # (One number carries two shares: from 1 down to a half, how far the canopy is the tropics'; from a half down to
+    # nought, how far it is the northern forest's, a lifted and cooler green than a fir wood of the Alps.)
+    not_a = one_in(m, unreal.MaterialExpressionOneMinus, (lie, "A"), -2250, -1250)
+    is_north = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, not_a, -0.5, -2100, -1300), 400.0, -1950, -1300), -1800, -1300)
+    tropic = times(m, one_in(m, unreal.MaterialExpressionSaturate, times(m, not_a, 2.04, -2100, -1220), -1950, -1220),
+                   one_in(m, unreal.MaterialExpressionOneMinus, is_north, -1650, -1300), -1500, -1250)
+    north = one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, not_a, -0.51, -2100, -1380), 2.04, -1950, -1380), -1800, -1380)
+    leaf = lerp(m, leaf, vector(m, "TropicColour", (0.05, 0.108, 0.074, 1.0), -2000, -1200), tropic, -1350, -1100)
+    # (The northern share runs in two legs. Up to four tenths the canopy goes from Europe's woods to the broadleaf
+    # woods of the temperate lands beyond Europe, darker and bluer than Europe's; from there on, to the northern
+    # forest's. The painter gives temperate country four tenths and the northern forest the whole.)
+    leaf = lerp(m, leaf, vector(m, "FarWoodsColour", (0.025, 0.047, 0.04, 1.0), -2000, -1600),
+                one_in(m, unreal.MaterialExpressionSaturate, times(m, north, 2.5, -1650, -1380), -1500, -1380), -1280, -1100)
+    leaf = lerp(m, leaf, vector(m, "NorthColour", (0.045, 0.085, 0.07, 1.0), -2000, -1450),
+                one_in(m, unreal.MaterialExpressionSaturate, times(m, plus(m, north, -0.4, -1650, -1460), 1.6667, -1500, -1460), -1350, -1460), -1200, -1100)
+    # (on a warm stain the canopy itself is olive: a very dark green goes chocolate with the least red showing through)
+    leaf = times(m, leaf, lerp(m, 1.0, vector(m, "WoodsWarmTint", (1.0, 1.0, 1.0, 1.0), -1800, -1180), warm, -1700, -1100), -1600, -1000)
+    woods = lerp(m, leaf,
+                 times(m, tint_rgb, scalar(m, "WoodsStainDepth", 0.5, -2300, -1000), -2100, -1000),
+                 times(m, times(m, stain, scalar(m, "WoodsStain", 0.5, -2300, -1080), -2100, -1080), cool, -1950, -1080), -1650, -950)
+    c = lerp(m, c, woods,
+             one_in(m, unreal.MaterialExpressionSaturate,
+                    times(m, times(m, wooded, scalar(m, "WoodsStrength", 0.84, -2300, -900), -2000, -700),
+                          plus(m, times(m, warm, scalar(m, "WoodsWarmMore", 0.0, -2000, -620), -1900, -640), 1.0, -1800, -640), -1700, -680), -1600, -680), -1500, -500)
+    # The rim of a wood: lighter on its sunward edge, and a strip of shade on the open ground in its lee.
+    c = times(m, c, plus(m, 1.0, times(m, plus(m, (cover, "B"), -0.5, -1500, -700), scalar(m, "WoodsRim", 0.6, -1500, -600), -1350, -650), -1200, -650), -1100, -500)
+    c = lerp(m, c, vector(m, "RockColour", (0.235, 0.205, 0.162, 1.0), -2000, -150), (masks, "R"), -1000, -400)
+
+    # The waters of the world beyond Europe (the whole-world map): its rivers and its small lakes, laid over the
+    # ground and whatever stain is on it, since water is nobody's colour. Europe's own rivers are ribbons laid by
+    # the rules, and its picture of the waters says "none". (CampaignGround.h says what the two pictures hold.)
+    # A river is drawn from how far each point stands from its line, which the picture knows to one side and the
+    # other: read between the picture's points, that distance crosses nothing exactly on the line, so a river far
+    # narrower than the picture's own points still has a clean bank at any height of the eye.
     river = times(m, times(m, times(m, inside, truly, -200, 2700), seen_from_here, -100, 2750), sat(times(m, half, 400.0, -350, 3020), -200, 3020), -50, 2750)
     # (its bed: dry sand from the banks inward, by the share the picture gives. Under six tenths, the bed comes and
     # goes along the river, as bars do.)
@@ -757,7 +802,7 @@ def build_land():
     # whoever holds it, the wash is thin, and the holder's colour is carried by the ink: fine slanting lines ruled
     # across it, and the band inside the frontier.
     paper = scalar(m, "Paper", 0.0, 0, -900)
-    fog = times(m, (picture(m, "Fog", uv, -2600, -1800, numbers=True), "R"), scalar(m, "FogStrength", 0.92, -2300, -1700), -2100, -1800)
+    fog = times(m, (fog_picture, "R"), scalar(m, "FogStrength", 0.92, -2300, -1700), -2100, -1800)
     sheeted = node(m, unreal.MaterialExpressionMax, -1900, -1800)
     connect(paper, "", sheeted, "A")
     connect(fog, "", sheeted, "B")
@@ -770,7 +815,7 @@ def build_land():
     tinted = one_in(m, unreal.MaterialExpressionSaturate,
                     plus(m, times(m, wash_p, plus(m, (relief, "A"), 1.0, -600, -1380), -450, -1420),
                          times(m, (tint, "A"), scalar(m, "PaperBand", 0.62, -600, -1620), -450, -1620), -300, -1480), -150, -1480)
-    stain_p = times(m, (tint, "RGB"), plus(m, times(m, hill, 0.5, 0, -1380), 0.6, 100, -1380), 150, -1300)
+    stain_p = times(m, tint_rgb, plus(m, times(m, hill, 0.5, 0, -1380), 0.6, 100, -1380), 150, -1300)
     sheet = lerp(m, sheet, stain_p, tinted, 250, -1200)
     # (the ruling: lines that slant across the table, a little under two map units apart, in the holder's colour)
     hatch_place = world_uv(m, "HatchTiling", 0.006, -1600, -2100)

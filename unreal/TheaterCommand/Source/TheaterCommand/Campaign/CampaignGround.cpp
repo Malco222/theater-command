@@ -5,6 +5,7 @@
 #include "Campaign/CampaignClimate.h"
 #include "Campaign/CampaignMapData.h"
 #include "Campaign/CampaignTerrain.h"
+#include "TheaterCommand.h"
 #include "Async/ParallelFor.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -277,13 +278,13 @@ namespace
 		return Kept;
 	}
 
-	/** Of the squares the lakes are ruled by, the share that hold a lake in the northern forest, and a pool on the tundra. ("-TheaterLakes=0.26,0.45" tries others.) */
+	/** How thickly the lakes of the northern forest lie, and the pools of the tundra, against what the rulings give: 1 is as ruled. ("-TheaterLakes=1.2,0.8" tries others.) */
 	FVector2f LakesFrom()
 	{
 		static FVector2f Kept(-1.0f, -1.0f);
 		if (Kept.X < 0.0f)
 		{
-			Kept = FVector2f(0.34f, 0.45f);
+			Kept = FVector2f(1.0f, 1.0f);
 			FString Asked;
 			TArray<FString> Parts;
 			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLakes="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 2)
@@ -461,8 +462,22 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	WetReach = FMath::Max(4.0f, 2.5f * static_cast<float>(Terrain.Cell));
 	Wet.Reset();
 	WetInk.Reset();
+	// (the waters' picture is ruled twice as fine as the ground on a fine sheet: see the header)
+	WetScale = bWaters && Terrain.Cell <= 3.0 ? 2 : 1;
+	WetNX = NX * WetScale;
+	WetNY = NY * WetScale;
+	TArray<float> FinerAt, FinerDx, FinerDy, FinerHalf; // the same as the four above, at the points of the waters' own picture
+	TArray<float> HalfFloor; // the least half-breadth a water is drawn with at a point of the ground, where the country gives it one (a prairie creek, a gully of the steppe)
 	if (bWaters)
 	{
+		HalfFloor.Init(0.0f, Count);
+		if (WetScale > 1)
+		{
+			FinerAt.Init(WetReach, WetNX * WetNY);
+			FinerDx.Init(WetReach, WetNX * WetNY);
+			FinerDy.Init(WetReach, WetNX * WetNY);
+			FinerHalf.Init(0.0f, WetNX * WetNY);
+		}
 		RiverAt.Init(WetReach, Count);
 		RiverDx.Init(WetReach, Count);
 		RiverDy.Init(WetReach, Count);
@@ -506,13 +521,108 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					}
 				}
 			}
+			if (WetScale > 1)
+			{
+				// (and at the points of the waters' own finer picture)
+				const double FinerCell = Cell / WetScale;
+				const double FirstX = Terrain.OriginX + (0.5 / WetScale - 0.5) * Cell, FirstY = Terrain.OriginY + (0.5 / WetScale - 0.5) * Cell;
+				const int32 K0 = FMath::Clamp(FMath::FloorToInt32((Lx - FirstX) / FinerCell), 0, WetNX - 1), K1 = FMath::Clamp(FMath::CeilToInt32((Hx - FirstX) / FinerCell), 0, WetNX - 1);
+				const int32 L0 = FMath::Clamp(FMath::FloorToInt32((Ly - FirstY) / FinerCell), 0, WetNY - 1), L1 = FMath::Clamp(FMath::CeilToInt32((Hy - FirstY) / FinerCell), 0, WetNY - 1);
+				for (int32 L = L0; L <= L1; ++L)
+				{
+					for (int32 K = K0; K <= K1; ++K)
+					{
+						const FVector2D P(FirstX + K * FinerCell, FirstY + L * FinerCell);
+						const double T = FMath::Clamp(((P - A) | Along) / Long2, 0.0, 1.0);
+						const FVector2D To = A + Along * T - P;
+						const double Off = To.Size();
+						const float Half = FMath::Lerp(HalfA, HalfB, static_cast<float>(T));
+						const int32 At = L * WetNX + K;
+						if (Off < Reach && Off - Half < FinerAt[At] - FinerHalf[At])
+						{
+							FinerAt[At] = static_cast<float>(Off);
+							FinerDx[At] = static_cast<float>(To.X);
+							FinerDy[At] = static_cast<float>(To.Y);
+							FinerHalf[At] = Half;
+						}
+					}
+				}
+			}
 		};
+		const bool bFromHigh = Terrain.Cell > 3.0; // (the coarse sheet of the whole world, seen from high up)
+		TArray<FVector2D> CourseLine, CourseLineBefore; // a course as it is laid on this sheet
 		for (const FCampaignWorldRivers::FCourse& Course : WorldRivers.Courses)
 		{
 			if (Course.MaxY < BoxMinY || Course.MinY > BoxMaxY)
 			{
 				continue;
 			}
+			const int32 Last = Course.Points.Num() - 1;
+			if (Last < 1)
+			{
+				continue;
+			}
+			CourseLine.Reset();
+			for (const FVector2f& Point : Course.Points)
+			{
+				CourseLine.Emplace(Point.X, Point.Y);
+			}
+			int32 LaidTo = Last; // the last of its points that is laid
+			if (bFromHigh)
+			{
+				// (The art director's round 27. From the top a point of the waters' picture is six map units: a hairpin
+				// tighter than that had both its limbs inside one point, which looked to both and drew neither, and the
+				// line broke at the bend. The course is laid there without its smallest windings.)
+				for (int32 Pass = 0; Pass < 2; ++Pass)
+				{
+					CourseLineBefore = CourseLine;
+					for (int32 K = 1; K < Last; ++K)
+					{
+						const int32 Span = FMath::Min3(4, K, Last - K);
+						FVector2D Sum(0.0, 0.0);
+						for (int32 N = K - Span; N <= K + Span; ++N)
+						{
+							Sum += CourseLineBefore[N];
+						}
+						CourseLine[K] = Sum / (2.0 * Span + 1.0);
+					}
+				}
+				// (and a tributary stops at the bank of the river it joins, not at its middle: where the two lines ran
+				// into each other the picture drew a blob)
+				if (Course.Joins >= 0)
+				{
+					double RunBack = 0.0;
+					while (LaidTo > 1 && RunBack + FVector2D::Distance(CourseLine[LaidTo], CourseLine[LaidTo - 1]) < 3.0)
+					{
+						RunBack += FVector2D::Distance(CourseLine[LaidTo], CourseLine[LaidTo - 1]);
+						--LaidTo;
+					}
+				}
+			}
+			// (three ranks: the river, its tributaries at no more than 0.36 of its breadth, the rest hairlines: see the courses)
+			auto HalfHere = [&Course, bFromHigh](int32 Point, float& OutCarried)
+			{
+				float HalfLaid = Course.BreadthAt(Point, OutCarried);
+				if (Course.bGreat)
+				{
+					// (The art director's rounds 25 and 27: a great river is a great river in every country. The Niger
+					// takes most of its water far down its course, and by its water alone it was a thread at its great
+					// bend, beside a Nile of ten pixels. Once it carries a river's water it has a river's breadth, and
+					// it counts as running all the year: blue down the middle of its bed, with its strip of green.)
+					// (it comes to that breadth by degrees from near its source: brought in over a short reach, the Niger
+					// began as a hairline and was a river one confluence later)
+					const float River = FMath::SmoothStep(8000.0f, 60000.0f, OutCarried);
+					HalfLaid = FMath::Max(HalfLaid, River);
+					OutCarried = FMath::Max(OutCarried, 160000.0f * River);
+				}
+				if (bFromHigh && HalfLaid < 1.0f)
+				{
+					// (from high up only the great rivers, and each comes in from nothing: the land's paint draws a
+					// water from 0.8 of half-breadth up as a line of even width, and brings it in over the next eighth)
+					HalfLaid = HalfLaid < 0.72f ? 0.0f : 0.8f + 0.125f * FMath::SmoothStep(0.72f, 1.0f, HalfLaid);
+				}
+				return HalfLaid;
+			};
 			for (int32 Turn = -2; Turn <= 2; ++Turn)
 			{
 				// (the course in the map's own measure: the world's own less Europe's place in it, and any turn of the world east or west)
@@ -521,30 +631,30 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				{
 					continue;
 				}
-				const int32 Last = Course.Points.Num() - 1;
-				for (int32 K = 0; K < Last; ++K)
+				for (int32 K = 0; K < LaidTo; ++K)
 				{
 					float WaterA = 0.0f, WaterB = 0.0f;
-					// (three ranks: the river, its tributaries at no more than half its breadth, the rest hairlines: see the courses)
-					const float HalfA = Course.BreadthAt(K, WaterA), HalfB = Course.BreadthAt(K + 1, WaterB);
-					// (from high up, on the coarse sheet, only the great rivers: the rest were scraps and blobs at that size)
-					if (Terrain.Cell > 3.0 && FMath::Max(HalfA, HalfB) < 0.72f)
+					const float HalfA = HalfHere(K, WaterA), HalfB = HalfHere(K + 1, WaterB);
+					if (bFromHigh && FMath::Max(HalfA, HalfB) <= 0.0f)
 					{
 						continue;
 					}
-					Lay(FVector2D(Course.Points[K].X + Shift, Course.Points[K].Y), FVector2D(Course.Points[K + 1].X + Shift, Course.Points[K + 1].Y), HalfA, HalfB, WaterA, WaterB);
+					Lay(FVector2D(CourseLine[K].X + Shift, CourseLine[K].Y), FVector2D(CourseLine[K + 1].X + Shift, CourseLine[K + 1].Y), HalfA, HalfB, WaterA, WaterB);
 				}
 			}
 		}
 		// The small lakes of the northern forest and the pools of the tundra (the art director's world look: "many
-		// small lakes with pale shores", "pools over about 6%"; and her ruling of round 25: rounded pebbles and beans
-		// only, fewer and larger on the tundra, and none within a river's breadth of a river). Each is laid like a
-		// short stretch of river as broad at its ends as in its middle, which draws it as a pebble, or two such with a
-		// bend between them, which draws a bean. Where one lies is settled by the place alone, on a ruling seven map
-		// units square with one lake at most to a square and room between them, so that every sheet that draws a
-		// place draws the same lake there and no two run together. (From high up, on the coarse sheet, none: they
-		// are smaller than its points.)
-		if (Terrain.Cell <= 3.0)
+		// small lakes with pale shores", "pools over about 6%"; her ruling of round 25: rounded shapes only, and none
+		// within a river's breadth of a river; and of round 27: lake country, not sprinkles). They come in every
+		// size, a few of them many times the rest; they lie in clusters with empty ground between; and no two have
+		// the same outline. Each is laid like short stretches of river, broader at one end than the other, which
+		// draws a pebble; a second stretch at a bend makes it a bean, and a third to one side gives it a bulge.
+		// Where one lies is settled by the place alone, so that every sheet that draws a place draws the same lake
+		// there: the great ones first, on a ruling of their own; then the small ones on a finer ruling, each inside
+		// its own square of it (a square that is itself pushed about, so that no row of them shows), and each clear
+		// of every river and every lake laid before it. (From high up, on the coarse sheet, none: they are smaller
+		// than its points.)
+		if (!bFromHigh)
 		{
 			// (how near a river or another water runs to a place of this sheet, less its own half breadth: far away where none is known)
 			auto WaterNear = [&](const FVector2D& At) -> float
@@ -557,12 +667,26 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				const int32 Idx = Terrain.Index(I, J);
 				return RiverHalf[Idx] > 0.0f ? RiverAt[Idx] - RiverHalf[Idx] : 1000.0f;
 			};
-			// (The forest's lakes on a ruling seven units square; the tundra's pools on one of fourteen, so that they are
-			// fewer and each is larger, for no more water in all.)
-			for (int32 Kind = 0; Kind < 2; ++Kind)
+			struct FLakeRuling
 			{
-				const bool bPool = Kind == 1;
-				const double Pitch = bPool ? 14.0 : 7.0;
+				bool bPool, bGreatOne;
+				double Pitch; // the ruling's squares, in map units
+				float Chance; // of a square holding one, in the thick of lake country
+				float Least, Most, Skew; // half its breadth at its middle: from, to, and how far the small outnumber the large
+				float CountryFrom, CountryTo; // how much of the country is lake country
+			};
+			const FLakeRuling Rulings[] =
+			{
+				{ false, true, 60.0, 0.34f, 1.6f, 2.35f, 1.0f, -0.6f, 0.3f },
+				{ true, true, 70.0, 0.34f, 1.9f, 2.4f, 1.0f, -0.6f, 0.3f },
+				{ false, false, 7.0, 0.86f, 0.4f, 1.8f, 1.3f, -0.1f, 0.35f },
+				{ true, false, 10.0, 0.9f, 0.5f, 2.2f, 1.3f, -0.35f, 0.25f },
+			};
+			for (const FLakeRuling& Ruling : Rulings)
+			{
+				const bool bPool = Ruling.bPool;
+				const double Pitch = Ruling.Pitch;
+				const float Thickly = bPool ? LakesFrom().Y : LakesFrom().X;
 				const int32 A0 = FMath::FloorToInt32(BoxMinX / Pitch) - 1, A1 = FMath::CeilToInt32(BoxMaxX / Pitch) + 1, B0 = FMath::FloorToInt32(BoxMinY / Pitch) - 1, B1 = FMath::CeilToInt32(BoxMaxY / Pitch) + 1;
 				for (int32 B = B0; B <= B1; ++B)
 				{
@@ -570,10 +694,27 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					{
 						// (the same place is the same square whichever turn of the world it is counted in)
 						const double Around = FMath::Fmod(FMath::Fmod(A * Pitch + Data.ShiftX, Data.WorldWidth) + Data.WorldWidth, Data.WorldWidth);
-						uint32 Seed = HashCombineFast(GetTypeHash(FMath::RoundToInt32(Around / Pitch * 16.0)), GetTypeHash(B * 7919 + 13 + Kind * 104729));
+						uint32 Seed = HashCombineFast(GetTypeHash(FMath::RoundToInt32(Around / Pitch * 16.0)), GetTypeHash(B * 7919 + 13 + (bPool ? 104729 : 0) + (Ruling.bGreatOne ? 611953 : 0)));
 						auto Draw = [&Seed]() { Seed = Seed * 1664525u + 1013904223u; return static_cast<float>((Seed >> 8) & 0xFFFF) / 65535.0f; };
-						const float Luck = Draw(), Rx = Draw(), Ry = Draw(), Way = Draw(), Long = Draw(), Broad = Draw(), Bend = Draw();
-						const FVector2D Centre((A + 0.3 + 0.4 * Rx) * Pitch, (B + 0.3 + 0.4 * Ry) * Pitch);
+						const float Luck = Draw(), Rx = Draw(), Ry = Draw(), Way = Draw(), LongA = Draw(), LongB = Draw(), Broad = Draw(), Bend = Draw(), Lean = Draw(), Lobe = Draw(), LobeWay = Draw(), LobeSize = Draw();
+						// (its size: most are small, and a few are many times the rest)
+						const float Radius = Ruling.Least * FMath::Pow(Ruling.Most / Ruling.Least, FMath::Pow(Broad, Ruling.Skew));
+						// (its outline: broader at one end than the other, bent in the middle, and the larger with a bulge to one side)
+						const float RadiusA = Radius * (0.6f + 0.4f * Lean), RadiusB = Radius * (1.0f - 0.4f * Lean);
+						const float Room = static_cast<float>(Pitch) * 0.5f - 0.2f;
+						const float StretchA = FMath::Clamp(Radius * (0.3f + 0.95f * LongA), 0.0f, FMath::Max(0.92f * Room - RadiusA, 0.0f));
+						const float StretchB = FMath::Clamp(Radius * (0.3f + 0.95f * LongB), 0.0f, FMath::Max(0.92f * Room - RadiusB, 0.0f));
+						const bool bBulge = Ruling.bGreatOne || (Radius > 0.75f && Lobe < 0.6f);
+						const float RadiusC = Radius * (0.5f + 0.25f * LobeSize);
+						const float StretchC = bBulge ? FMath::Clamp(Radius * (0.45f + 0.5f * LobeSize), 0.0f, FMath::Max(0.92f * Room - RadiusC, 0.0f)) : 0.0f;
+						const float Extent = FMath::Max(FMath::Max3(Radius, StretchA + RadiusA, StretchB + RadiusB), bBulge ? StretchC + RadiusC : 0.0f);
+						// (where in its square: anywhere it fits; and the square itself pushed about by a slow unevenness of
+						// the country, the same for its neighbours, so that the ruling never shows as rows)
+						const double Free = FMath::Max(Room - Extent, 0.0f);
+						const FVector2D Kept(Around + 0.5 * Pitch, (B + 0.5) * Pitch); // (its square's middle, as the world keeps it)
+						const FVector2D Pushed = Ruling.bGreatOne ? FVector2D::ZeroVector
+							: FVector2D(FMath::PerlinNoise2D(Kept * 0.045 + FVector2D(23.0, 77.0)), FMath::PerlinNoise2D(Kept * 0.045 + FVector2D(59.0, 31.0))) * 2.2;
+						const FVector2D Centre = FVector2D((A + 0.5) * Pitch + (2.0 * Rx - 1.0) * Free, (B + 0.5) * Pitch + (2.0 * Ry - 1.0) * Free) + Pushed;
 						const float Latitude = static_cast<float>(Data.LatitudeAt(Centre.Y)), Longitude = static_cast<float>(Data.LongitudeAt(Centre.X));
 						if (BeyondEurope(Latitude, Longitude) < 0.9f)
 						{
@@ -582,32 +723,39 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						float Shares[WorldLook::Count];
 						Climate.SharesAt(Latitude, Longitude, Shares);
 						const float Taiga = Shares[WorldLook::Taiga], Tundra = Shares[WorldLook::Tundra];
-						if ((Tundra > Taiga) != bPool || Luck > (bPool ? LakesFrom().Y * FMath::SmoothStep(0.4f, 0.8f, Tundra) : LakesFrom().X * FMath::SmoothStep(0.4f, 0.8f, Taiga)))
+						// (lake country lies in clusters, with empty ground between: a slow unevenness of the place says how thickly)
+						const float Unevenness = FMath::PerlinNoise2D(Kept * 0.021 + FVector2D(5.0, 91.0)) + 0.45f * FMath::PerlinNoise2D(Kept * 0.057 + FVector2D(63.0, 17.0));
+						const float Country = FMath::SmoothStep(Ruling.CountryFrom, Ruling.CountryTo, Unevenness);
+						if ((Tundra > Taiga) != bPool || Luck > Ruling.Chance * Thickly * Country * FMath::SmoothStep(0.4f, 0.8f, bPool ? Tundra : Taiga))
 						{
 							continue;
 						}
+						const double Turned = Way * 2.0 * UE_DOUBLE_PI, Bent = Turned + (Bend - 0.5) * 1.5;
+						const FVector2D P0 = Centre - FVector2D(FMath::Cos(Turned), FMath::Sin(Turned)) * StretchA, P2 = Centre + FVector2D(FMath::Cos(Bent), FMath::Sin(Bent)) * StretchB;
+						const double Aside = Turned + (LobeWay < 0.5f ? 1.0 : -1.0) * (0.5 * UE_DOUBLE_PI + (LobeSize - 0.5) * 0.7);
+						const FVector2D P3 = Centre + FVector2D(FMath::Cos(Aside), FMath::Sin(Aside)) * StretchC;
 						// (on level ground, well inland, below the tree line)
 						const float Here = Terrain.MetresAt(Centre.X, Centre.Y);
 						const float Slope = FMath::Max(FMath::Abs(Terrain.MetresAt(Centre.X + 2.0, Centre.Y) - Terrain.MetresAt(Centre.X - 2.0, Centre.Y)),
 							FMath::Abs(Terrain.MetresAt(Centre.X, Centre.Y + 2.0) - Terrain.MetresAt(Centre.X, Centre.Y - 2.0)));
-						if (Here <= 2.0f || Slope > 45.0f || Terrain.ShoreAt(Centre.X, Centre.Y) < (bPool ? 5.5f : 3.5f) || (!bPool && Here > WorldTreeLine(Latitude) - 150.0f))
+						const float Tilt = FMath::Max(FMath::Abs(Terrain.MetresAt(P0.X, P0.Y) - Here), FMath::Abs(Terrain.MetresAt(P2.X, P2.Y) - Here));
+						if (Here <= 2.0f || Slope > 45.0f || Tilt > 60.0f || Terrain.ShoreAt(Centre.X, Centre.Y) < (bPool ? 5.5f : 3.5f) + (Ruling.bGreatOne ? Extent : 0.0f)
+							|| (!bPool && Here > WorldTreeLine(Latitude) - 150.0f))
 						{
 							continue;
 						}
-						// (a pebble: as broad at its ends as in its middle, and not twice as long as it is broad. A bean: bent in
-						// the middle. Each keeps within its own square of the ruling, so that no two run together.)
-						const float Radius = bPool ? 1.7f + 1.1f * Broad : 0.75f + 0.6f * Broad * Broad;
-						const double Stretch = FMath::Min(Radius * (0.15 + 0.95 * Long), (bPool ? 4.1 : 2.05) - Radius);
-						const double Turned = Way * UE_DOUBLE_PI, Bent = Turned + (Bend - 0.5) * 1.3;
-						const FVector2D P0 = Centre - FVector2D(FMath::Cos(Turned), FMath::Sin(Turned)) * Stretch, P2 = Centre + FVector2D(FMath::Cos(Bent), FMath::Sin(Bent)) * Stretch;
-						// (no lake within a river's breadth of a river, or a unit and a half: where a river widens it is the river's own water)
-						const float Clear = Radius + 1.5f;
-						if (WaterNear(Centre) < Clear || WaterNear(P0) < Clear || WaterNear(P2) < Clear)
+						// (no lake within a river's breadth of a river, or a unit and a half: where a river widens it is the
+						// river's own water. And none touching another lake: two that ran together made one with a nick in it.)
+						if (WaterNear(Centre) < Radius + 1.5f || WaterNear(P0) < RadiusA + 1.5f || WaterNear(P2) < RadiusB + 1.5f || (bBulge && WaterNear(P3) < RadiusC + 1.5f))
 						{
 							continue;
 						}
-						Lay(P0, Centre, Radius, Radius, -1.0f, -1.0f);
-						Lay(Centre, P2, Radius, Radius, -1.0f, -1.0f);
+						Lay(P0, Centre, RadiusA, Radius, -1.0f, -1.0f);
+						Lay(Centre, P2, Radius, RadiusB, -1.0f, -1.0f);
+						if (bBulge)
+						{
+							Lay(Centre, P3, Radius * 0.8f, RadiusC, -1.0f, -1.0f);
+						}
 					}
 				}
 			}
@@ -651,9 +799,13 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					const float Jungle = Shares[WorldLook::Jungle], Savanna = Shares[WorldLook::Savanna], Steppe = Shares[WorldLook::Steppe], Desert = Shares[WorldLook::Desert];
 					if (Half > 0.0f && Off < WetReach && RiverWater[Idx] < 0.0f)
 					{
-						// (a lake: deep blue-grey, with a pale shore)
+						// (a lake: deep blue-grey. Its pale shore lies along part of its edge only, the side the weather
+						// drives the water to; which side that is turns slowly from one stretch of country to the next.
+						// The art director's round 27: not an even ring.)
 						const FVector3f Laid = Tone();
-						WetInk[Idx] = FColor(ToByte(40.0f / 255.0f * Laid.X), ToByte(70.0f / 255.0f * Laid.Y), ToByte(100.0f / 255.0f * Laid.Z), BedByte(0.14f, true));
+						const float WeatherWay = 2.0f * UE_PI * FMath::PerlinNoise2D(P * 0.011 + FVector2D(41.0, 13.0));
+						const float Leeward = Off > 0.02f ? -(RiverDx[Idx] * FMath::Cos(WeatherWay) + RiverDy[Idx] * FMath::Sin(WeatherWay)) / Off : 0.0f;
+						WetInk[Idx] = FColor(ToByte(40.0f / 255.0f * Laid.X), ToByte(70.0f / 255.0f * Laid.Y), ToByte(100.0f / 255.0f * Laid.Z), BedByte(FMath::Max(0.3f * FMath::SmoothStep(0.1f, 0.8f, Leeward), 0.03f), true)); // (never quite none: at none the picture's number sits on the line between a steady shore and a river's bars, and the bars showed as a comb along the edge)
 					}
 					else if (Half > 0.0f && Off < WetReach)
 					{
@@ -680,14 +832,18 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						const FVector3f Laid = Tone();
 						WetInk[Idx] = FColor(ToByte(Ink.R * Laid.X), ToByte(Ink.G * Laid.Y), ToByte(Ink.B * Laid.Z), BedByte(Bed, bSteady));
 						// (a prairie creek is a thread of water to be seen between its trees)
+						// (The art director's round 27: at working height a prairie creek is a hairline with its ribbon of
+						// trees. At 0.15 the land's paint let it go from sight just under that height, with the jungle's hairlines.)
 						if (Shares[WorldLook::Prairie] > 0.5f)
 						{
-							RiverHalf[Idx] = FMath::Max(RiverHalf[Idx], 0.15f);
+							RiverHalf[Idx] = FMath::Max(RiverHalf[Idx], 0.25f);
+							HalfFloor[Idx] = 0.25f;
 						}
 						// (the steppe's gully is a pale bed some way across, with its thread of green: a hairline of it was a dark scratch)
 						if (Steppe > 0.5f && Great < 0.5f)
 						{
 							RiverHalf[Idx] = FMath::Max(RiverHalf[Idx], 0.38f * FMath::SmoothStep(0.5f, 0.8f, Steppe));
+							HalfFloor[Idx] = FMath::Max(HalfFloor[Idx], 0.38f * FMath::SmoothStep(0.5f, 0.8f, Steppe));
 						}
 						// (a great river through dry country waters a strip of it: green, and farmed)
 						const float Parched = FMath::Clamp(Desert + Steppe + Shares[WorldLook::DryPlain] + 0.6f * Shares[WorldLook::DrySouth], 0.0f, 1.0f);
@@ -811,7 +967,7 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	Masks.SetNumUninitialized(Count);
 	if (bWaters)
 	{
-		Wet.Init(FColor(255, 255, 255, 0), Count);
+		Wet.Init(FColor(255, 255, 255, 0), WetNX * WetNY);
 	}
 	ParallelFor(NY, [&](int32 J)
 	{
@@ -888,8 +1044,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					Wooded *= FMath::Lerp(1.0f, FMath::SmoothStep(Half + 0.05f, Half + 0.85f, Off), FMath::SmoothStep(0.2f, 0.45f, RiverHalf[Idx]));
 				}
 				Wooded *= 1.0f - Opened[Idx];
-				Wet[Idx] = FColor(ToByte(0.5f + 0.5f * FMath::Clamp(RiverDx[Idx] / WetReach, -1.0f, 1.0f)), ToByte(0.5f + 0.5f * FMath::Clamp(RiverDy[Idx] / WetReach, -1.0f, 1.0f)),
-					ToByte(FMath::Min(Off / WetReach, 1.0f)), ToByte(Half / 2.5f));
+				if (WetScale == 1)
+				{
+					Wet[Idx] = FColor(ToByte(0.5f + 0.5f * FMath::Clamp(RiverDx[Idx] / WetReach, -1.0f, 1.0f)), ToByte(0.5f + 0.5f * FMath::Clamp(RiverDy[Idx] / WetReach, -1.0f, 1.0f)),
+						ToByte(FMath::Min(Off / WetReach, 1.0f)), ToByte(Half / 2.5f));
+				}
 			}
 
 			// Shaded relief, as on a printed map: how squarely the ground faces the sun (1 on the flat, up to 2.2
@@ -936,6 +1095,34 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			Masks[Idx] = FColor(ToByte(Rock * (1.0f - FMath::Max(JungleRoof, Roof * Wooded))), ToByte(Snow), ToByte(Sand), ToByte(Dry[Idx]));
 		}
 	});
+
+	if (bWaters && WetScale > 1)
+	{
+		// (the waters' picture at its own finer points: each takes its country's floor for a water's breadth, and
+		// how far it is beyond Europe, from the point of the ground it lies nearest)
+		ParallelFor(WetNY, [&](int32 L)
+		{
+			const int32 J = FMath::Clamp(FMath::RoundToInt32((L + 0.5) / WetScale - 0.5), 0, NY - 1);
+			for (int32 K = 0; K < WetNX; ++K)
+			{
+				const int32 I = FMath::Clamp(FMath::RoundToInt32((K + 0.5) / WetScale - 0.5), 0, NX - 1);
+				const int32 Idx = Terrain.Index(I, J), At = L * WetNX + K;
+				const float Beyond = Outside[Idx];
+				if (Beyond <= 0.0f)
+				{
+					continue;
+				}
+				float Half = FinerHalf[At];
+				if (Half > 0.0f && RiverWater[Idx] >= 0.0f)
+				{
+					Half = FMath::Max(Half, HalfFloor[Idx]);
+				}
+				Half *= FMath::SmoothStep(0.25f, 0.7f, Beyond);
+				Wet[At] = FColor(ToByte(0.5f + 0.5f * FMath::Clamp(FinerDx[At] / WetReach, -1.0f, 1.0f)), ToByte(0.5f + 0.5f * FMath::Clamp(FinerDy[At] / WetReach, -1.0f, 1.0f)),
+					ToByte(FMath::Min(FinerAt[At] / WetReach, 1.0f)), ToByte(Half / 2.5f));
+			}
+		});
+	}
 
 	if (Terrain.Cell > 3.0)
 	{
@@ -1234,6 +1421,259 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 	}
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// The ownership paint: how far two colours differ to the eye, the fronts a colour comes in by, and the stripes.
+
+namespace
+{
+	/** A colour as it is seen (0 to 1), in the measure the difference between two colours is taken in. */
+	FVector3f ToLab(const FSeen& C)
+	{
+		auto Linear = [](float U) { return U <= 0.04045f ? U / 12.92f : FMath::Pow((U + 0.055f) / 1.055f, 2.4f); };
+		const float R = Linear(C.R), G = Linear(C.G), B = Linear(C.B);
+		const float X = (0.4124f * R + 0.3576f * G + 0.1805f * B) / 0.95047f, Y = 0.2126f * R + 0.7152f * G + 0.0722f * B, Z = (0.0193f * R + 0.1192f * G + 0.9505f * B) / 1.08883f;
+		auto Curve = [](float T) { return T > 0.008856f ? FMath::Pow(T, 1.0f / 3.0f) : 7.787f * T + 16.0f / 116.0f; };
+		return FVector3f(116.0f * Curve(Y) - 16.0f, 500.0f * (Curve(X) - Curve(Y)), 200.0f * (Curve(Y) - Curve(Z)));
+	}
+
+	/** How far two colours differ to the eye (CIEDE2000): about 10 reads at a glance. */
+	float Differs(const FSeen& One, const FSeen& Other)
+	{
+		const FVector3f A = ToLab(One), B = ToLab(Other);
+		const float C1 = FMath::Sqrt(A.Y * A.Y + A.Z * A.Z), C2 = FMath::Sqrt(B.Y * B.Y + B.Z * B.Z), Cb = 0.5f * (C1 + C2);
+		const float Cb7 = FMath::Pow(Cb, 7.0f), G = 0.5f * (1.0f - FMath::Sqrt(Cb7 / (Cb7 + 6103515625.0f)));
+		const float A1 = (1.0f + G) * A.Y, A2 = (1.0f + G) * B.Y;
+		const float Cp1 = FMath::Sqrt(A1 * A1 + A.Z * A.Z), Cp2 = FMath::Sqrt(A2 * A2 + B.Z * B.Z);
+		auto Hue = [](float Bb, float Aa) { float H = FMath::RadiansToDegrees(FMath::Atan2(Bb, Aa)); return H < 0.0f ? H + 360.0f : H; };
+		const float H1 = Hue(A.Z, A1), H2 = Hue(B.Z, A2);
+		const float DL = B.X - A.X, DC = Cp2 - Cp1;
+		float Dh = H2 - H1;
+		if (Cp1 * Cp2 == 0.0f) { Dh = 0.0f; }
+		else if (Dh > 180.0f) { Dh -= 360.0f; }
+		else if (Dh < -180.0f) { Dh += 360.0f; }
+		const float DH = 2.0f * FMath::Sqrt(Cp1 * Cp2) * FMath::Sin(FMath::DegreesToRadians(Dh * 0.5f));
+		const float Lb = 0.5f * (A.X + B.X), Cpb = 0.5f * (Cp1 + Cp2);
+		float Hb = H1 + H2;
+		if (Cp1 * Cp2 != 0.0f) { Hb = FMath::Abs(H1 - H2) <= 180.0f ? 0.5f * (H1 + H2) : (H1 + H2 < 360.0f ? 0.5f * (H1 + H2 + 360.0f) : 0.5f * (H1 + H2 - 360.0f)); }
+		const float T = 1.0f - 0.17f * FMath::Cos(FMath::DegreesToRadians(Hb - 30.0f)) + 0.24f * FMath::Cos(FMath::DegreesToRadians(2.0f * Hb))
+			+ 0.32f * FMath::Cos(FMath::DegreesToRadians(3.0f * Hb + 6.0f)) - 0.2f * FMath::Cos(FMath::DegreesToRadians(4.0f * Hb - 63.0f));
+		const float Turn = 30.0f * FMath::Exp(-FMath::Square((Hb - 275.0f) / 25.0f)), Cpb7 = FMath::Pow(Cpb, 7.0f), Rc = 2.0f * FMath::Sqrt(Cpb7 / (Cpb7 + 6103515625.0f));
+		const float Sl = 1.0f + 0.015f * FMath::Square(Lb - 50.0f) / FMath::Sqrt(20.0f + FMath::Square(Lb - 50.0f)), Sc = 1.0f + 0.045f * Cpb, Sh = 1.0f + 0.015f * Cpb * T;
+		const float Rt = -FMath::Sin(FMath::DegreesToRadians(2.0f * Turn)) * Rc;
+		return FMath::Sqrt(FMath::Square(DL / Sl) + FMath::Square(DC / Sc) + FMath::Square(DH / Sh) + Rt * (DC / Sc) * (DH / Sh));
+	}
+
+	/**
+	 * The stripe's colour for a holder over a lawful owner, as a share of the way from the holder's stain to the
+	 * owner's (the art director's brief: 0.55 to begin with; less for a pair that comes out louder than 12 on open
+	 * lowland by day; and where the two are too alike to reach 8 even at 0.6, the answer is less than nothing, which
+	 * says "the holder's own stain at four fifths of its brightness").
+	 */
+	float StripeMix(const FSeen& Holder, const FSeen& Owner, float PlainsLight)
+	{
+		// (Open lowland by day, as the game's own pictures show it. Measured with the stripes and without, on
+		// Germany's field grey over France, Belgium and the Netherlands: the ground between stripes is about the
+		// holder's stain laid 0.45 over a green of (100, 128, 96), and a stripe differs from it by the difference
+		// of the two stains, at about two thirds of it in the red and the green and 0.85 of it in the blue. A
+		// reckoning from the paint alone, as this first was, came out a third too quiet for a warm owner and not
+		// far off half too quiet for a blue one.)
+		const FSeen Between = Mix(FSeen::Bytes(100, 128, 96), Holder, 0.45f);
+		auto At = [&](float Share)
+		{
+			const FSeen Stripe(FMath::Clamp(Between.R + 0.67f * Share * (Owner.R - Holder.R), 0.0f, 1.0f), FMath::Clamp(Between.G + 0.62f * Share * (Owner.G - Holder.G), 0.0f, 1.0f),
+				FMath::Clamp(Between.B + 0.85f * Share * (Owner.B - Holder.B), 0.0f, 1.0f));
+			return Differs(Stripe, Between);
+		};
+		// (Two nations of one hue are too alike however the numbers fall: the art director names the Soviet Union over
+		// Poland, Britain over the Soviet Union. In the game's pictures a stripe of Poland's red on the Soviet Union's
+		// red measured under 4, where the reckoning gave it 10.)
+		const FVector3f HolderLab = ToLab(Holder), OwnerLab = ToLab(Owner);
+		const float HolderChroma = FMath::Sqrt(HolderLab.Y * HolderLab.Y + HolderLab.Z * HolderLab.Z), OwnerChroma = FMath::Sqrt(OwnerLab.Y * OwnerLab.Y + OwnerLab.Z * OwnerLab.Z);
+		const float HueApart = FMath::Abs(FMath::FindDeltaAngleDegrees(FMath::RadiansToDegrees(FMath::Atan2(HolderLab.Z, HolderLab.Y)), FMath::RadiansToDegrees(FMath::Atan2(OwnerLab.Z, OwnerLab.Y))));
+		if (At(0.6f) < 8.0f || (HolderChroma > 18.0f && OwnerChroma > 18.0f && HueApart < 30.0f))
+		{
+			return -1.0f;
+		}
+		float Share = 0.55f;
+		if (At(Share) > 12.0f)
+		{
+			// (down to where it is about 10.5)
+			float Low = 0.05f, High = Share;
+			for (int32 Pass = 0; Pass < 12; ++Pass)
+			{
+				const float Middle = 0.5f * (Low + High);
+				(At(Middle) > 10.5f ? High : Low) = Middle;
+			}
+			Share = Low;
+		}
+		else if (At(Share) < 8.0f)
+		{
+			Share = 0.6f;
+		}
+		return Share;
+	}
+
+	/** How the edge of a siege's colour or of spreading ink wanders, in map units either way: the same for a place every time. */
+	float Wander(const FVector2D& P)
+	{
+		// (up to nine pixels either way at working height, on a slow grain of about forty: 2.5 map units on eleven)
+		return 2.5f * FMath::Clamp(1.6f * FMath::PerlinNoise2D(P / 11.0 + FVector2D(37.0, 91.0)) + 0.5f * FMath::PerlinNoise2D(P / 4.3 + FVector2D(5.0, 13.0)), -1.0f, 1.0f);
+	}
+}
+
+const FCampaignGround::FFront& FCampaignGround::FrontOf(const FCampaignMapData& Data, const FCampaignTerrain& Terrain, int32 Region, const TArray<int32>& From, bool bEverySide)
+{
+	uint32 Key = HashCombineFast(GetTypeHash(Region), GetTypeHash(bEverySide));
+	for (const int32 Side : From)
+	{
+		Key = HashCombineFast(Key, GetTypeHash(Side));
+	}
+	if (const TSharedPtr<FFront>* Kept = Fronts.Find(Key))
+	{
+		return **Kept;
+	}
+	FFront& Front = *Fronts.Add(Key, MakeShared<FFront>());
+	if (!Data.Regions.IsValidIndex(Region) || !Data.Regions[Region].Bounds.bIsValid)
+	{
+		return Front;
+	}
+	const FBox2D& Box = Data.Regions[Region].Bounds;
+	const double Cell = Terrain.Cell;
+	Front.I0 = FMath::Clamp(FMath::FloorToInt32((Box.Min.X - Terrain.OriginX) / Cell) - 1, 0, Terrain.NX - 1);
+	Front.J0 = FMath::Clamp(FMath::FloorToInt32((Box.Min.Y - Terrain.OriginY) / Cell) - 1, 0, Terrain.NY - 1);
+	Front.NI = FMath::Clamp(FMath::CeilToInt32((Box.Max.X - Terrain.OriginX) / Cell) + 1, 0, Terrain.NX - 1) - Front.I0 + 1;
+	Front.NJ = FMath::Clamp(FMath::CeilToInt32((Box.Max.Y - Terrain.OriginY) / Cell) + 1, 0, Terrain.NY - 1) - Front.J0 + 1;
+	Front.Far.Init(-1.0f, Front.NI * Front.NJ);
+	// The province's own points, and those of them the colour starts from: the ones beside a point of a province it
+	// comes from; or beside any ground that is not this province's; or, with no such side, beside the sea; or, with
+	// no coast either, the point nearest the town.
+	auto Own = [&](int32 I, int32 J) { return I >= 0 && J >= 0 && I < Terrain.NX && J < Terrain.NY && Terrain.Region[Terrain.Index(I, J)] == Region; };
+	const TSet<int32> Sides(From);
+	TArray<int32> Start;
+	for (int32 Way = 0; Way < 3 && Start.Num() == 0; ++Way)
+	{
+		for (int32 J = 0; J < Front.NJ; ++J)
+		{
+			for (int32 I = 0; I < Front.NI; ++I)
+			{
+				const int32 GI = Front.I0 + I, GJ = Front.J0 + J;
+				if (!Own(GI, GJ))
+				{
+					continue;
+				}
+				bool bStarts = false;
+				static const int32 Dx[4] = { 1, -1, 0, 0 }, Dy[4] = { 0, 0, 1, -1 };
+				for (int32 K = 0; K < 4 && !bStarts; ++K)
+				{
+					const int32 NI = GI + Dx[K], NJ = GJ + Dy[K];
+					if (NI < 0 || NJ < 0 || NI >= Terrain.NX || NJ >= Terrain.NY)
+					{
+						continue;
+					}
+					const int16 There = Terrain.Region[Terrain.Index(NI, NJ)];
+					bStarts = Way == 0 ? (bEverySide ? There != Region : Sides.Contains(There)) : Way == 1 ? There == FCampaignTerrain::Sea : false;
+				}
+				if (bStarts)
+				{
+					Start.Add(J * Front.NI + I);
+				}
+			}
+		}
+		if (Way == 0 && !bEverySide && Sides.Num() == 0)
+		{
+			continue; // (no side named: the coast, then the town)
+		}
+	}
+	if (Start.Num() == 0)
+	{
+		// (the town: the province's point nearest its middle)
+		const FVector2D Town = Data.Regions[Region].Center;
+		int32 Best = INDEX_NONE;
+		double Nearest = TNumericLimits<double>::Max();
+		for (int32 J = 0; J < Front.NJ; ++J)
+		{
+			for (int32 I = 0; I < Front.NI; ++I)
+			{
+				if (Own(Front.I0 + I, Front.J0 + J))
+				{
+					const double There = FVector2D::DistSquared(Terrain.PointAt(Front.I0 + I, Front.J0 + J), Town);
+					if (There < Nearest)
+					{
+						Nearest = There;
+						Best = J * Front.NI + I;
+					}
+				}
+			}
+		}
+		if (Best != INDEX_NONE)
+		{
+			Start.Add(Best);
+		}
+	}
+	// Outward from those points through the province, by the shortest way: each point's distance in, in map units.
+	TArray<TPair<float, int32>> Heap;
+	auto Less = [](const TPair<float, int32>& A, const TPair<float, int32>& B) { return A.Key < B.Key; };
+	for (const int32 At : Start)
+	{
+		Front.Far[At] = 0.0f;
+		Heap.HeapPush(TPair<float, int32>(0.0f, At), Less);
+	}
+	float Furthest = 0.0f;
+	while (Heap.Num() > 0)
+	{
+		TPair<float, int32> Top;
+		Heap.HeapPop(Top, Less, EAllowShrinking::No);
+		if (Top.Key > Front.Far[Top.Value] + 1.0e-4f)
+		{
+			continue;
+		}
+		Furthest = FMath::Max(Furthest, Top.Key);
+		const int32 I = Top.Value % Front.NI, J = Top.Value / Front.NI;
+		for (int32 Dj = -1; Dj <= 1; ++Dj)
+		{
+			for (int32 Di = -1; Di <= 1; ++Di)
+			{
+				const int32 NI = I + Di, NJ = J + Dj;
+				if ((Di == 0 && Dj == 0) || NI < 0 || NJ < 0 || NI >= Front.NI || NJ >= Front.NJ || !Own(Front.I0 + NI, Front.J0 + NJ))
+				{
+					continue;
+				}
+				const float Step = static_cast<float>(Cell) * (Di != 0 && Dj != 0 ? 1.41421f : 1.0f), There = Top.Key + Step;
+				float& Known = Front.Far[NJ * Front.NI + NI];
+				if (Known < 0.0f || There < Known - 1.0e-4f)
+				{
+					Known = There;
+					Heap.HeapPush(TPair<float, int32>(There, NJ * Front.NI + NI), Less);
+				}
+			}
+		}
+	}
+	Front.Reach = FMath::Max(Furthest, static_cast<float>(Cell));
+	return Front;
+}
+
+float FCampaignGround::BehindFront(const FFront& Front, const FCampaignTerrain& Terrain, int32 I, int32 J, float Share)
+{
+	const int32 Li = I - Front.I0, Lj = J - Front.J0;
+	if (Li < 0 || Lj < 0 || Li >= Front.NI || Lj >= Front.NJ)
+	{
+		return -1000.0f;
+	}
+	const float Far = Front.Far[Lj * Front.NI + Li];
+	if (Far < 0.0f)
+	{
+		return -1000.0f;
+	}
+	// (the front stands a little beyond the far side when it has come the whole way, so that its wandering edge leaves nothing uncovered)
+	return Share * (Front.Reach + 6.0f) - 3.0f * Share - (Far + Wander(Terrain.PointAt(I, J)) * FMath::Min(1.0f, Far / 2.5f));
+}
+
+float FCampaignGround::FrontCover(const FFront& Front, const FCampaignTerrain& Terrain, int32 I, int32 J, float Share)
+{
+	// (soft over ten pixels at working height: 2.8 map units)
+	return Share <= 0.0f ? 0.0f : FMath::SmoothStep(-1.4f, 1.4f, BehindFront(Front, Terrain, I, J, Share));
+}
+
 int32 FCampaignGround::PaintedRegion(int32 Index, const FCampaignTerrain& Terrain) const
 {
 	return ShoreRegion.IsValidIndex(Index) ? ShoreRegion[Index] : (Terrain.Region.IsValidIndex(Index) ? Terrain.Region[Index] : -1);
@@ -1258,6 +1698,57 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 		RegionStain[Region.Id] = FSeen::Bytes(Colour.R, Colour.G, Colour.B);
 		RegionBoost[Region.Id] = WashBoost(Colour);
 	}
+	// (The ownership paint.) Occupied ground: the stripe's colour, for each province whose holder is not its lawful
+	// owner. And the sieges: the besieger's stain, and how far each point of the field lies from the side it comes by.
+	auto StainOf = [&Data](const FString& Tag)
+	{
+		const FCampaignNation* Nation = Data.FindNation(Tag);
+		const FColor Colour = Nation ? Nation->Color : FColor(150, 150, 150);
+		return FSeen::Bytes(Colour.R, Colour.G, Colour.B);
+	};
+	TArray<FSeen> RegionStripe;
+	TArray<uint8> RegionOccupied;
+	RegionStripe.SetNum(Data.Regions.Num());
+	RegionOccupied.Init(0, Data.Regions.Num());
+	TMap<FString, float> Mixes;
+	for (const FCampaignRegion& Region : Data.Regions)
+	{
+		if (Region.Lawful.IsEmpty() || Region.Lawful == Region.Owner)
+		{
+			continue;
+		}
+		const FSeen Owner = StainOf(Region.Lawful);
+		float* Known = Mixes.Find(Region.Owner + TEXT(">") + Region.Lawful);
+		const float Share = Known ? *Known : Mixes.Add(Region.Owner + TEXT(">") + Region.Lawful, StripeMix(RegionStain[Region.Id], Owner, PlainsLightness));
+		if (!Known)
+		{
+			const FSeen& Held = RegionStain[Region.Id];
+			UE_LOG(LogTheater, Log, TEXT("Stripes: %s holding %s: the holder's stain (%.0f, %.0f, %.0f), the owner's (%.0f, %.0f, %.0f), mixed %.2f toward the owner"), *Region.Owner, *Region.Lawful,
+				Held.R * 255.0f, Held.G * 255.0f, Held.B * 255.0f, Owner.R * 255.0f, Owner.G * 255.0f, Owner.B * 255.0f, Share);
+		}
+		// (two nations too alike for a stripe of the one to show on the other: the holder's own stain, a fifth darker)
+		// (too alike to tell apart: the holder's own stain, darker. At four fifths of its brightness, as the brief
+		// began, the Soviet Union over Poland measured 5.4 in the game's pictures, under the 8 asked: seven tenths.)
+		RegionStripe[Region.Id] = Share < 0.0f ? RegionStain[Region.Id] * 0.68f : Mix(RegionStain[Region.Id], Owner, Share);
+		RegionOccupied[Region.Id] = 1;
+	}
+	if (Occupied.Num() != Tint.Num())
+	{
+		Occupied.Init(FColor(0, 0, 0, 0), Tint.Num());
+	}
+	TArray<int32> SiegeOf;
+	SiegeOf.Init(INDEX_NONE, Data.Regions.Num());
+	TArray<const FFront*> SiegeFront;
+	TArray<FSeen> SiegeStain;
+	for (int32 K = 0; K < Sieges.Num(); ++K)
+	{
+		if (Data.Regions.IsValidIndex(Sieges[K].Region))
+		{
+			SiegeOf[Sieges[K].Region] = K;
+		}
+		SiegeFront.Add(&FrontOf(Data, Terrain, Sieges[K].Region, Sieges[K].From, Sieges[K].bEverySide));
+		SiegeStain.Add(StainOf(Sieges[K].By));
+	}
 	// The nation's colour is a stain over the ground, not a coat of paint: the colour a point takes under it is
 	// the nation's own, lighter on light ground and darker on dark, so the lie of the land shows through. How
 	// much of the stain lies there is the material's business: a wash everywhere, and a band along the frontier
@@ -1276,11 +1767,40 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 			float Band = 0.0f, Boost = 0.0f;
 			if (Id >= 0)
 			{
-				C = RegionStain[Id] * (0.42f + 1.05f * Bare.Light());
+				const float Shade = 0.42f + 1.05f * Bare.Light();
+				C = RegionStain[Id] * Shade;
 				const double Far = Terrain.BorderDistance[Idx] * Terrain.Cell;
 				Band = Terrain.Region[Idx] >= 0 ? FMath::Pow(FMath::Clamp(1.0f - static_cast<float>(Far / BandReach), 0.0f, 1.0f), 1.7f) : 0.0f;
 				C = C * (1.0f - 0.2f * Band);
 				Boost = RegionBoost[Id] - 1.0f;
+				// (A siege: the besieger's plain stain over the field, from the sides his side holds, as deep as the
+				// siege has gone. The town keeps an island of its holder's colour to the end. Soft-edged, and no line.)
+				float Besieged = 0.0f;
+				if (SiegeOf[Id] != INDEX_NONE && Terrain.Region[Idx] == Id)
+				{
+					const FSiege& Siege = Sieges[SiegeOf[Id]];
+					const float Out = static_cast<float>(FVector2D::Distance(Terrain.PointAt(I, J), Siege.Town));
+					Besieged = FrontCover(*SiegeFront[SiegeOf[Id]], Terrain, I, J, Siege.Depth) * FMath::SmoothStep(Siege.Island - 1.4f, Siege.Island + 1.4f, Out + 0.6f * Wander(Terrain.PointAt(I, J)));
+					C = Mix(C, SiegeStain[SiegeOf[Id]] * Shade * (1.0f - 0.2f * Band), Besieged);
+					Boost = FMath::Lerp(Boost, WashBoost(FColor(ToByte(SiegeStain[SiegeOf[Id]].R), ToByte(SiegeStain[SiegeOf[Id]].G), ToByte(SiegeStain[SiegeOf[Id]].B))) - 1.0f, Besieged);
+				}
+				// (Occupied ground: the stripe's colour, made as the stain is; none within about three map units of a
+				// national frontier, eleven pixels at working height, so that the frontier's band stays clean; and none
+				// under a besieger's colour, which is plain.)
+				if (RegionOccupied[Id])
+				{
+					const FSeen Stripe = RegionStripe[Id] * Shade * (1.0f - 0.2f * Band);
+					const float Clear = Terrain.Region[Idx] >= 0 ? FMath::SmoothStep(0.4f, 3.5f, static_cast<float>(Far)) : 0.0f;
+					Occupied[Idx] = FColor(ToByte(Stripe.R * Toned.X), ToByte(Stripe.G * Toned.Y), ToByte(Stripe.B * Toned.Z), ToByte(Clear * (1.0f - Besieged)));
+				}
+				else
+				{
+					Occupied[Idx] = FColor(ToByte(C.R * Toned.X), ToByte(C.G * Toned.Y), ToByte(C.B * Toned.Z), 0);
+				}
+			}
+			else
+			{
+				Occupied[Idx] = FColor(0, 0, 0, 0);
 			}
 			Tint[Idx] = FColor(ToByte(C.R * Toned.X), ToByte(C.G * Toned.Y), ToByte(C.B * Toned.Z), ToByte(Band));
 			if (Relief.IsValidIndex(Idx))

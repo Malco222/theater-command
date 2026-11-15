@@ -1662,6 +1662,24 @@ void ACampaignMapActor::PaintGround()
 
 	LandMaterial->SetTextureParameterValue(TEXT("Ground"), GroundPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Tint"), TintPicture);
+	{
+		// (the ownership paint: where the ground is occupied, and the colour its stripes take)
+		if (Paint.Occupied.Num() != Paint.NX * Paint.NY)
+		{
+			Paint.Occupied.Init(FColor(0, 0, 0, 0), Paint.NX * Paint.NY);
+		}
+		OccupiedPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Occupied, true, false, TEXT("TableOccupied"));
+		LandMaterial->SetTextureParameterValue(TEXT("Occupied"), OccupiedPicture);
+		// ("-TheaterStripes=0" takes the stripes of occupied ground away, to measure them against the plain stain)
+		float StripesAsked = 1.0f;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterStripes="), StripesAsked))
+		{
+			LandMaterial->SetScalarParameterValue(TEXT("Stripes"), StripesAsked);
+		}
+		TArray<FColor> Free;
+		Free.Init(FColor(0, 0, 0, 0), 16);
+		NoStripesPicture = CampaignTextures::Create(4, 4, Free, true, false, TEXT("TableNoStripes"));
+	}
 	LandMaterial->SetTextureParameterValue(TEXT("Relief"), ReliefPicture);
 	LandScalar(TEXT("Band"), 0.4f);
 	LandMaterial->SetTextureParameterValue(TEXT("Masks"), MasksPicture);
@@ -2203,6 +2221,7 @@ void ACampaignMapActor::BuildWorld()
 		LandScalar(TEXT("DetailTilingCoarse"), Whole(0.00137));
 		LandScalar(TEXT("FieldTiling"), Whole(0.03));
 		LandScalar(TEXT("HatchTiling"), Whole(0.006));
+		LandScalar(TEXT("StripeTiling"), Whole(0.0158)); // (the stripes of occupied ground: 0.38 of the ruling's spacing)
 		SeaScalar(TEXT("RippleTiling"), Whole(0.0095));
 		SeaScalar(TEXT("RippleTilingSecond"), Whole(0.0061));
 	}
@@ -2271,6 +2290,7 @@ void ACampaignMapActor::BuildWorld()
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Cover"), Picture(WorldPaint.Cover, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldCover")));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Lie"), Lie);
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Fog"), Picture(Clear, 4, 4, false, TEXT("WorldFog"))); // (nothing beyond the map is hidden: nobody is there yet)
+	WorldLandMaterial->SetTextureParameterValue(TEXT("Occupied"), NoStripesPicture); // (and nothing beyond it is occupied: there are no provinces there yet)
 	if (WorldPaint.Wet.Num() == WorldPaint.NX * WorldPaint.NY && WorldPaint.Wet.Num() > 0)
 	{
 		// (the rivers of the world beyond Europe, painted into the land: see CampaignGround.h)
@@ -2402,6 +2422,7 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 		return bLow && Box.ShiftBy(FVector2D(Turned, 0.0)).ComputeSquaredDistanceToPoint(Focus) < Reach * Reach;
 	};
 	int32 BeingBuilt = 0;
+	bool bStillComing = false;
 	for (const auto& Pair : FineSheets)
 	{
 		BeingBuilt += Pair.Value->bDressed ? 0 : 1;
@@ -2424,10 +2445,12 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			if (const TSharedPtr<FFineSheet, ESPMode::ThreadSafe>* Standing = FineSheets.Find(Key))
 			{
 				(*Standing)->LastWanted = Now;
+				bStillComing |= !(*Standing)->bStanding;
 				continue;
 			}
 			if (BeingBuilt >= 2)
 			{
+				bStillComing = true;
 				continue; // two at a time: the rest when these are up
 			}
 			// Is there any land in it? A box of open sea keeps the coarse sheet's water.
@@ -2446,6 +2469,7 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			Sheet->LastWanted = Now;
 			FineSheets.Add(Key, Sheet);
 			++BeingBuilt;
+			bStillComing = true;
 			// It is modelled and painted on another thread, with an apron round it so that what is smoothed or
 			// shaded across its edge comes out as it would on one great sheet.
 			const FCampaignMapData* Map = &Data;
@@ -2462,6 +2486,8 @@ void ACampaignMapActor::UpdateFineSheets(float CameraDistance, const FVector& Ca
 			});
 		}
 	}
+
+	bFineSheetsComing = bStillComing;
 
 	// Bring on the ones that are built, and take down the ones the eye left a while ago.
 	TArray<FIntPoint> Gone;
@@ -2549,12 +2575,13 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Cover"), Picture(Painted.Cover, Painted.NX, Painted.NY, false, TEXT("Cover")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Lie"), Lie);
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Fog"), Picture(Clear, 4, 4, false, TEXT("Fog")));
-	if (Painted.Wet.Num() == Painted.NX * Painted.NY && Painted.Wet.Num() > 0)
+	Sheet.LandPaint->SetTextureParameterValue(TEXT("Occupied"), NoStripesPicture);
+	if (Painted.Wet.Num() == Painted.WetNX * Painted.WetNY && Painted.Wet.Num() > 0)
 	{
-		Sheet.LandPaint->SetTextureParameterValue(TEXT("Wet"), Picture(Painted.Wet, Painted.NX, Painted.NY, false, TEXT("Wet")));
+		Sheet.LandPaint->SetTextureParameterValue(TEXT("Wet"), Picture(Painted.Wet, Painted.WetNX, Painted.WetNY, false, TEXT("Wet")));
 		Sheet.LandPaint->SetTextureParameterValue(TEXT("WetInk"), Picture(Painted.WetInk, Painted.NX, Painted.NY, true, TEXT("WetInk")));
 		Sheet.LandPaint->SetScalarParameterValue(TEXT("WetReach"), Painted.WetReach);
-		Sheet.LandPaint->SetScalarParameterValue(TEXT("WetCell"), static_cast<float>(Sheet.Shape.Cell));
+		Sheet.LandPaint->SetScalarParameterValue(TEXT("WetCell"), static_cast<float>(Sheet.Shape.Cell / FMath::Max(Painted.WetScale, 1))); // (the waters' picture is ruled finer than the ground)
 	}
 	Sheet.SeaPaint = UMaterialInstanceDynamic::Create(SeaMaterial->Parent, this);
 	Sheet.SeaPaint->CopyParameterOverrides(SeaMaterial);
@@ -6654,7 +6681,28 @@ void ACampaignMapActor::ShowFleets(const FCampaignView& View)
 	}
 }
 
-void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<FString>& League)
+void ACampaignMapActor::LaySieges()
+{
+	Paint.Sieges.Reset();
+	for (const TPair<int32, FSiegeShown>& Each : SiegesShown)
+	{
+		if (!Data.Regions.IsValidIndex(Each.Key) || Each.Value.Depth <= 0.0f)
+		{
+			continue;
+		}
+		FCampaignGround::FSiege& Siege = Paint.Sieges.AddDefaulted_GetRef();
+		Siege.Region = Each.Key;
+		Siege.By = Each.Value.By;
+		Siege.Depth = Each.Value.Depth;
+		Siege.bEverySide = Each.Value.bEverySide;
+		Siege.From = Each.Value.From;
+		Siege.Town = Data.Regions[Each.Key].Center;
+		// (the town's island: its built ground and a quarter more, and never less than 28 pixels at working height, which is about eight map units)
+		Siege.Island = static_cast<float>(FMath::Max(TownRadius(Each.Key) * 1.25, 7.9));
+	}
+}
+
+void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners, const TArray<FCampaignView::FSiegePaint>& Sieges)
 {
 	// Countries that have joined or left the League since the table was last painted: their ground changes colour.
 	const TSet<FString> Members(League);
@@ -6675,27 +6723,120 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	}
 	Data.League = Members;
 
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
 	FBox2D Changed(ForceInit);
+	TArray<int32> Taken; // (ink that spreads: the provinces in sight that have a new holder)
+	TSet<int32> TakenSet;
+	bool bHolders = false;
 	for (int32 i = 0; i < Data.Regions.Num() && i < Holders.Num(); ++i)
 	{
 		const bool bNewHolder = !Holders[i].IsEmpty() && Data.Regions[i].Owner != Holders[i];
 		if (bNewHolder)
 		{
 			Data.Regions[i].Owner = Holders[i];
-			// It flashes as it changes hands (not at the first laying out of the table, nor more than a dozen at once).
-			if (bLandLaid && GetWorld() && Flashes.Num() < 12)
+			bHolders = true;
+			if (bLandLaid && bInkAllowed && GetWorld())
 			{
-				Flashes.Emplace(i, GetWorld()->GetTimeSeconds());
+				if (!UnseenSet.Contains(i) && Data.Regions[i].Bounds.bIsValid)
+				{
+					// (in sight: the new colour seeps in over a second)
+					Taken.Add(i);
+					TakenSet.Add(i);
+				}
+				else if (Flashes.Num() < 12)
+				{
+					// (out of sight, on the staff's paper: it flashes as it changes hands, as it always has)
+					Flashes.Emplace(i, Now);
+				}
 			}
 		}
-		if ((bNewHolder || Turned.Contains(Data.Regions[i].Owner)) && Data.Regions[i].Bounds.bIsValid)
+		// (occupied ground: where the holder is not the lawful owner, the owner's stripes lie under the holder's colour)
+		const FString Lawful = Owners.IsValidIndex(i) && Owners[i] != Data.Regions[i].Owner ? Owners[i] : FString();
+		const bool bNewLaw = Data.Regions[i].Lawful != Lawful;
+		Data.Regions[i].Lawful = Lawful;
+		if ((bNewHolder || bNewLaw || Turned.Contains(Data.Regions[i].Owner)) && Data.Regions[i].Bounds.bIsValid)
 		{
 			Changed += Data.Regions[i].Bounds;
 		}
 	}
+
+	// The sieges: the besieger's colour on the field. A siege newly laid comes in from the frontier; one that has
+	// gone further moves to its new depth; one that is lifted drains back; where the town has fallen the ink takes over
+	// from where the colour stood. (None on ground nobody of the player's can see.)
+	// ("-TheaterSiegeAt=0.5" shows every siege that far gone, and "-TheaterSiegeOpen" with its ring open, for pictures)
+	static float SiegeHeldAt = -1.0f;
+	static const bool bSiegeHeld = FParse::Value(FCommandLine::Get(), TEXT("TheaterSiegeAt="), SiegeHeldAt);
+	static const bool bSiegeOpen = FParse::Param(FCommandLine::Get(), TEXT("TheaterSiegeOpen"));
+	TSet<int32> Standing;
+	for (const FCampaignView::FSiegePaint& Siege : Sieges)
+	{
+		if (!Data.Regions.IsValidIndex(Siege.Region) || UnseenSet.Contains(Siege.Region) || Siege.By.IsEmpty() || Siege.By == Data.Regions[Siege.Region].Owner)
+		{
+			continue;
+		}
+		Standing.Add(Siege.Region);
+		const float Target = 0.35f + 0.65f * FMath::Clamp(bSiegeHeld ? SiegeHeldAt : Siege.Progress, 0.0f, 1.0f);
+		FSiegeShown* Known = SiegesShown.Find(Siege.Region);
+		if (!Known)
+		{
+			Known = &SiegesShown.Add(Siege.Region);
+			Known->Depth = bLandLaid && bInkAllowed ? 0.0f : Target; // (laid out with the table, it is already there)
+		}
+		else if (!bInkAllowed)
+		{
+			Known->Depth = Target;
+		}
+		Known->By = Siege.By;
+		Known->From = Siege.From;
+		Known->bEverySide = (Siege.bClosed && !bSiegeOpen) || Siege.From.Num() == 0;
+		Known->bLeaving = false;
+		if (Known->Target != Target || Known->Depth != Target)
+		{
+			Known->Target = Target;
+			Known->Speed = FMath::Max(FMath::Abs(Target - Known->Depth), 0.05f) / 0.6f; // (to its new depth in six tenths of a second)
+		}
+	}
+	TMap<int32, float> StoodAt; // (how far a siege's colour had come where the town has now fallen to it)
+	for (auto It = SiegesShown.CreateIterator(); It; ++It)
+	{
+		if (Standing.Contains(It.Key()))
+		{
+			continue;
+		}
+		if (Data.Regions.IsValidIndex(It.Key()) && Data.Regions[It.Key()].Owner == It.Value().By)
+		{
+			StoodAt.Add(It.Key(), It.Value().Depth);
+			It.RemoveCurrent();
+		}
+		else if (!It.Value().bLeaving)
+		{
+			It.Value().bLeaving = true;
+			It.Value().Target = 0.0f;
+			It.Value().Speed = FMath::Max(It.Value().Depth, 0.05f); // (lifted: it drains back to the frontier in a second)
+		}
+	}
+	bSiegesMoving = false;
+	for (const TPair<int32, FSiegeShown>& Each : SiegesShown)
+	{
+		bSiegesMoving |= Each.Value.Depth != Each.Value.Target;
+	}
 	if (!Changed.bIsValid)
 	{
-		return;
+		if (!bLandLaid && SiegesShown.Num() > 0 && Paint.Sieges.Num() == 0)
+		{
+			// (the table's first laying, with sieges standing: painted in with it)
+			for (const TPair<int32, FSiegeShown>& Each : SiegesShown)
+			{
+				if (Data.Regions[Each.Key].Bounds.bIsValid)
+				{
+					Changed += Data.Regions[Each.Key].Bounds;
+				}
+			}
+		}
+		if (!Changed.bIsValid)
+		{
+			return;
+		}
 	}
 	bMiniStale = true;
 	BuildWords();
@@ -6722,11 +6863,233 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 	}
 	ShowVictorFlags(); // (a capital that has changed hands flies its new holder's flag, or its own country's is home again)
 	BuildFrontLine(); // (and the front is drawn where it now runs)
+
+	// Ink that spreads: what is on the table now is kept as the old paint, and the new is let in over a second from
+	// the frontier each province shares with ground its new holder held already. (Changes of the same moment run
+	// together. A second already running is ended where it stands: it never holds anything up.)
+	const bool bInk = Taken.Num() > 0 && Paint.Tint.Num() == Paint.NX * Paint.NY && Paint.Occupied.Num() == Paint.Tint.Num() && !FParse::Param(FCommandLine::Get(), TEXT("TheaterNoInk"));
+	if (InkRuns.Num() > 0)
+	{
+		EndInk();
+	}
+	if (bInk)
+	{
+		TintBefore = Paint.Tint;
+		OccupiedBefore = Paint.Occupied;
+	}
+	if (bInk || !bLandLaid)
+	{
+		// (while ink runs, and at the first laying, a siege's colour stands where it is going)
+		for (TPair<int32, FSiegeShown>& Each : SiegesShown)
+		{
+			Each.Value.Depth = Each.Value.Target;
+		}
+		bSiegesMoving = false;
+	}
+	LaySieges();
 	// Only the nations' paint changes: the land itself is left as it is.
 	Paint.PaintTint(Data, Terrain, I0, J0, I1, J1);
-	CampaignTextures::Update(TintPicture, Paint.Tint);
 	CampaignTextures::Update(ReliefPicture, Paint.Relief); // (it carries how much wash each nation's ground needs)
-	BuildBorders();
+	if (!bInk)
+	{
+		CampaignTextures::Update(TintPicture, Paint.Tint);
+		CampaignTextures::Update(OccupiedPicture, Paint.Occupied);
+		BuildBorders();
+		return;
+	}
+	for (const int32 Region : Taken)
+	{
+		FInkRun& Run = InkRuns.AddDefaulted_GetRef();
+		Run.Region = Region;
+		// (from the ground its new holder held already; failing that, from ground he took in the same moment;
+		// failing that the painter starts it from the coast, or from the town)
+		for (int32 Pass = 0; Pass < 2 && Run.From.Num() == 0; ++Pass)
+		{
+			for (const int32 Neighbour : Data.Regions[Region].Neighbors)
+			{
+				if (Data.Regions.IsValidIndex(Neighbour) && Data.Regions[Neighbour].Owner == Data.Regions[Region].Owner && (Pass == 1 || !TakenSet.Contains(Neighbour)))
+				{
+					Run.From.Add(Neighbour);
+				}
+			}
+		}
+		if (const float* Stood = StoodAt.Find(Region))
+		{
+			Run.Start = *Stood;
+		}
+	}
+	InkBegan = Now;
+	InkBox = FIntRect(I0, J0, I1, J1);
+	bInkBorders = true;
+	TintShown = Paint.Tint;
+	OccupiedShown = Paint.Occupied;
+	StepInk(0.0);
+}
+
+void ACampaignMapActor::StepInk(double Second)
+{
+	if (InkRuns.Num() == 0 || TintBefore.Num() != Paint.Tint.Num())
+	{
+		return;
+	}
+	// (It takes a second to cross a province, quick at first and slowing; the frontier's band and the paint of the
+	// ground beside it come to their new place in the last three tenths of it; the wet rim behind the front dries
+	// in three tenths more.)
+	const float T = static_cast<float>(FMath::Clamp(Second, 0.0, 1.0));
+	const float Late = FMath::SmoothStep(0.7f, 1.0f, T);
+	const float Dry = static_cast<float>(FMath::Clamp((Second - 1.0) / 0.3, 0.0, 1.0));
+	auto Blend = [](const FColor& A, const FColor& B, float Share, float Darker)
+	{
+		return FColor(static_cast<uint8>(FMath::Lerp(static_cast<float>(A.R), static_cast<float>(B.R), Share) * Darker), static_cast<uint8>(FMath::Lerp(static_cast<float>(A.G), static_cast<float>(B.G), Share) * Darker),
+			static_cast<uint8>(FMath::Lerp(static_cast<float>(A.B), static_cast<float>(B.B), Share) * Darker), 0);
+	};
+	// The ground beside: its band and its paint follow the frontier to its new place late in the second.
+	TArray<int32> RunOf;
+	RunOf.Init(INDEX_NONE, Data.Regions.Num());
+	for (int32 K = 0; K < InkRuns.Num(); ++K)
+	{
+		RunOf[InkRuns[K].Region] = K;
+	}
+	TArray<const FCampaignGround::FFront*> FrontOfRun;
+	TArray<float> ShareOfRun;
+	for (const FInkRun& Run : InkRuns)
+	{
+		FrontOfRun.Add(&Paint.FrontOf(Data, Terrain, Run.Region, Run.From, false));
+		// (share covered = 1 - (1 - t) squared; where a siege's colour stood already, it goes on from there)
+		ShareOfRun.Add(FMath::Lerp(Run.Start, 1.0f, 1.0f - FMath::Square(1.0f - T)));
+	}
+	for (int32 J = InkBox.Min.Y; J <= InkBox.Max.Y; ++J)
+	{
+		for (int32 I = InkBox.Min.X; I <= InkBox.Max.X; ++I)
+		{
+			const int32 Idx = Terrain.Index(I, J);
+			const FColor &Old = TintBefore[Idx], &New = Paint.Tint[Idx];
+			const int32 Region = Terrain.Region[Idx];
+			const int32 Run = Region >= 0 ? RunOf[Region] : INDEX_NONE;
+			float Share = Late, Darker = 1.0f;
+			if (Run != INDEX_NONE)
+			{
+				const float Behind = FCampaignGround::BehindFront(*FrontOfRun[Run], Terrain, I, J, ShareOfRun[Run]);
+				Share = FMath::SmoothStep(-1.4f, 1.4f, Behind);
+				// (the wet rim: the twelve pixels just behind the front are 15% darker, and dry to the plain stain. Never brighter.)
+				const float Wet = FMath::SmoothStep(-1.4f, 0.6f, Behind) * (1.0f - FMath::SmoothStep(2.2f, 3.4f, Behind));
+				Darker = 1.0f - 0.15f * Wet * (1.0f - Dry);
+			}
+			FColor Shown = Blend(Old, New, Share, Darker);
+			Shown.A = static_cast<uint8>(FMath::Lerp(static_cast<float>(Old.A), static_cast<float>(New.A), Late));
+			TintShown[Idx] = Shown;
+			// (the stripes of occupied ground arrive with the front, and leave with it)
+			const FColor &OldStripe = OccupiedBefore[Idx], &NewStripe = Paint.Occupied[Idx];
+			FColor Stripe = Blend(OldStripe, NewStripe, Share, Darker);
+			Stripe.A = static_cast<uint8>(FMath::Lerp(static_cast<float>(OldStripe.A), static_cast<float>(NewStripe.A), Share));
+			OccupiedShown[Idx] = Stripe;
+		}
+	}
+	CampaignTextures::UpdateBox(TintPicture, TintShown, InkBox.Min.X, InkBox.Min.Y, InkBox.Max.X, InkBox.Max.Y);
+	CampaignTextures::UpdateBox(OccupiedPicture, OccupiedShown, InkBox.Min.X, InkBox.Min.Y, InkBox.Max.X, InkBox.Max.Y);
+	if (bInkBorders && Second >= 0.7)
+	{
+		bInkBorders = false;
+		BuildBorders(); // (the frontier's line goes to its new place as the ink arrives there)
+	}
+}
+
+void ACampaignMapActor::EndInk()
+{
+	if (InkRuns.Num() == 0)
+	{
+		return;
+	}
+	InkRuns.Reset();
+	TintBefore.Reset();
+	OccupiedBefore.Reset();
+	TintShown.Reset();
+	OccupiedShown.Reset();
+	CampaignTextures::Update(TintPicture, Paint.Tint);
+	CampaignTextures::Update(OccupiedPicture, Paint.Occupied);
+	if (bInkBorders)
+	{
+		bInkBorders = false;
+		BuildBorders();
+	}
+}
+
+void ACampaignMapActor::UpdateOwnershipPaint()
+{
+	UWorld* World = GetWorld();
+	if (!World || (InkRuns.Num() == 0 && !bSiegesMoving))
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	if (InkRuns.Num() > 0)
+	{
+		// ("-TheaterInkAt=0.4" holds the ink at that point of its second, for a picture)
+		static float HeldAt = -1.0f;
+		static const bool bHeld = FParse::Value(FCommandLine::Get(), TEXT("TheaterInkAt="), HeldAt);
+		const double Second = bHeld ? HeldAt : Now - InkBegan;
+		if (!bHeld && Second >= 1.3)
+		{
+			EndInk();
+			return;
+		}
+		// (about fifteen times a second: more than the eight steps the brief allows, and cheap: only the box is painted)
+		if (Now - PaintStepped >= 0.066)
+		{
+			PaintStepped = Now;
+			StepInk(Second);
+		}
+		return;
+	}
+	if (Now - PaintStepped < 0.066)
+	{
+		return;
+	}
+	const float Passed = static_cast<float>(FMath::Clamp(Now - PaintStepped, 0.0, 0.2));
+	PaintStepped = Now;
+	FBox2D Moved(ForceInit);
+	bSiegesMoving = false;
+	for (auto It = SiegesShown.CreateIterator(); It; ++It)
+	{
+		FSiegeShown& Siege = It.Value();
+		if (Siege.Depth == Siege.Target)
+		{
+			continue;
+		}
+		Siege.Depth = FMath::FInterpConstantTo(Siege.Depth, Siege.Target, Passed, Siege.Speed);
+		if (Data.Regions.IsValidIndex(It.Key()) && Data.Regions[It.Key()].Bounds.bIsValid)
+		{
+			Moved += Data.Regions[It.Key()].Bounds;
+		}
+		if (Siege.Depth != Siege.Target)
+		{
+			bSiegesMoving = true;
+		}
+		else if (Siege.bLeaving)
+		{
+			It.RemoveCurrent();
+		}
+	}
+	if (!Moved.bIsValid)
+	{
+		return;
+	}
+	const int32 I0 = FMath::Clamp(FMath::FloorToInt32((Moved.Min.X - 2.0) / Terrain.Cell), 0, Terrain.NX - 1), I1 = FMath::Clamp(FMath::CeilToInt32((Moved.Max.X + 2.0) / Terrain.Cell), 0, Terrain.NX - 1);
+	const int32 J0 = FMath::Clamp(FMath::FloorToInt32((Moved.Min.Y - 2.0) / Terrain.Cell), 0, Terrain.NY - 1), J1 = FMath::Clamp(FMath::CeilToInt32((Moved.Max.Y + 2.0) / Terrain.Cell), 0, Terrain.NY - 1);
+	LaySieges();
+	Paint.PaintTint(Data, Terrain, I0, J0, I1, J1);
+	if (bSiegesMoving)
+	{
+		CampaignTextures::UpdateBox(TintPicture, Paint.Tint, I0, J0, I1, J1);
+		CampaignTextures::UpdateBox(OccupiedPicture, Paint.Occupied, I0, J0, I1, J1);
+	}
+	else
+	{
+		// (at rest: the pictures' smaller copies are made again, for the far view)
+		CampaignTextures::Update(TintPicture, Paint.Tint);
+		CampaignTextures::Update(OccupiedPicture, Paint.Occupied);
+		CampaignTextures::Update(ReliefPicture, Paint.Relief);
+	}
 }
 
 void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail)
@@ -8541,6 +8904,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateClouds();
 	UpdateFlashes();
+	UpdateOwnershipPaint();
 	// The showpiece turns slowly on its stand.
 	if (ShowMesh && !ShowModel.IsEmpty() && GetWorld())
 	{

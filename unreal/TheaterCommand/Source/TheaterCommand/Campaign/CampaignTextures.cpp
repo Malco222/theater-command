@@ -258,6 +258,33 @@ void CampaignTextures::Update(UTexture2D* Texture, const TArray<FColor>& Pixels)
 	Fill(Texture, Pixels, Texture->GetSizeX(), Texture->GetSizeY(), Texture->SRGB);
 }
 
+void CampaignTextures::UpdateBox(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1)
+{
+	if (!Texture || !Texture->GetPlatformData() || !Texture->GetResource() || Pixels.Num() != Texture->GetSizeX() * Texture->GetSizeY())
+	{
+		return;
+	}
+	const int32 Wide = Texture->GetSizeX(), High = Texture->GetSizeY();
+	X0 = FMath::Clamp(X0, 0, Wide - 1);
+	X1 = FMath::Clamp(X1, X0, Wide - 1);
+	Y0 = FMath::Clamp(Y0, 0, High - 1);
+	Y1 = FMath::Clamp(Y1, Y0, High - 1);
+	const int32 BoxWide = X1 - X0 + 1, BoxHigh = Y1 - Y0 + 1;
+	// (a copy of the box, which the renderer reads when it comes to it and then throws away)
+	FColor* Copy = static_cast<FColor*>(FMemory::Malloc(static_cast<SIZE_T>(BoxWide) * BoxHigh * sizeof(FColor)));
+	for (int32 Row = 0; Row < BoxHigh; ++Row)
+	{
+		FMemory::Memcpy(Copy + Row * BoxWide, Pixels.GetData() + (Y0 + Row) * Wide + X0, BoxWide * sizeof(FColor));
+	}
+	FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(X0, Y0, 0, 0, BoxWide, BoxHigh);
+	Texture->UpdateTextureRegions(0, 1, Region, BoxWide * sizeof(FColor), sizeof(FColor), reinterpret_cast<uint8*>(Copy),
+		[](uint8* Data, const FUpdateTextureRegion2D* Regions)
+		{
+			FMemory::Free(Data);
+			delete Regions;
+		});
+}
+
 void CampaignTextures::MakeGroundDetail(TArray<FColor>& OutPixels)
 {
 	TArray<float> Trees, Rock;

@@ -728,6 +728,14 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		Add(TEXT("review-5-army"), TEXT("Grenzmark"), 0.12f, -20.0f, 4.0f);
 	}
 
+	// "-TheaterLookMonths=1" plays that many months before the first "-TheaterLook" picture: ground changes hands, sieges go on.
+	int32 LookMonths = 0;
+	if (!Look.IsEmpty() && FParse::Value(FCommandLine::Get(), TEXT("TheaterLookMonths="), LookMonths) && Shots.Num() > 0)
+	{
+		Shots[0].Months = FMath::Clamp(LookMonths, 0, 80);
+		Shots[0].bDismiss = true; // (a nation fallen in those months is told on a screen of its own, which would cover the picture)
+	}
+
 	// "-TheaterMoment=Warsaw" takes four stills of a moment at the front over that region, as when its capital
 	// falls: as it starts, half way down, at its lowest, and with the eye handed back.
 	FString MomentAt;
@@ -1436,10 +1444,25 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		}
 		Current = 0;
 		Clock = 0.0f;
+		SheetWait = 0.0f;
 		Frames = 0;
 		bTaken = false;
 		Arrange(Shots[0]);
 		return;
+	}
+
+	// (The whole-world map: the fine ground under the eye is modelled on another thread, two sheets at a time. A
+	// picture taken before it stood showed the coarse sheet, with no lesser river, lake or clearing on it: so the
+	// Niger, the prairie's creeks and the taiga by night were sent to the art director with no water in them. The
+	// picture waits for the ground, up to two minutes.)
+	if (!bTaken && Clock >= 1.5f && SheetWait < 120.0f)
+	{
+		const ACampaignPlayerController* Player = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController());
+		if (Player && Player->GetMap() && Player->GetMap()->AreFineSheetsComing())
+		{
+			SheetWait += DeltaSeconds;
+			return;
+		}
 	}
 
 	Clock += DeltaSeconds;
@@ -1512,6 +1535,7 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 			return;
 		}
 		Clock = 0.0f;
+		SheetWait = 0.0f;
 		Frames = 0;
 		bTaken = false;
 		bMarched = false;

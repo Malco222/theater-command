@@ -174,7 +174,7 @@ void ACampaignGameMode::LayOutWar()
 		Table->SetLand(Session->Land());
 		Table->SetTownPlots(Session->GetView().PageIds.Contains(TEXT("towns")));
 		Table->SetTowns(Session->Towns());
-		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League);
+		Table->SetHolders(Session->GetView().RegionHolder, Session->GetView().League, Session->GetView().RegionOwner, Session->GetView().SiegePaint);
 		Table->ShowArmies(Session->GetView(), TArray<FCorpsMove>());
 		Table->ShowWorks(Session->GetView().BridgesDown, Session->GetView().RailsCut);
 		Table->ShowWorksGoing(Session->GetView().Going);

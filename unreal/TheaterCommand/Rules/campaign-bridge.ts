@@ -345,8 +345,23 @@ function view() {
     // [factories built, shipyard level, anti-aircraft level, airfield level]. Left out where there are none.
     regions: s.regions.map((r) => {
       const w = [factoriesBuilt(s, r.id), yardLevel(s, r), workLevel(s, 'aa', r.id), fields.length ? fieldSize.get(r.id) ?? 0 : Math.max(workLevel(s, 'field', r.id), based.has(r.id) ? 1 : 0)];
-      return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl) };
+      // (The ownership paint: where the holder is not the lawful owner, the owner is named too, for the stripes of occupied ground.)
+      const own = r.owner && r.owner !== r.ctrl ? { own: r.owner } : {};
+      return w.some((x) => x > 0) ? { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), w, ...own } : { id: r.id, ctrl: r.ctrl, stand: standingOf(s, r.ctrl), ...own };
     }),
+    // (The ownership paint: every siege the player knows of, for the besieger's colour creeping over the field. Who
+    // stands round the town, how far the siege has gone (the works broken down, or the stores eaten, whichever is
+    // further: 0 when it is laid, 1 when the town is about to fall), whether the ring is closed, and the
+    // neighbouring provinces the besieger's side holds, which are the sides his colour comes in from.)
+    siegePaint: (() => {
+      try {
+        return siegesInSight(s).filter((v) => v.by).map((v) => {
+          const from = (s.regions[v.region]?.nb ?? []).filter((n) => { const c = s.regions[n]?.ctrl; return !!c && (c === v.by || allied(s, c, v.by!)); });
+          const done = Math.max(v.broken ?? 0, v.stores > 0 ? 1 - v.left / v.stores : 0);
+          return { r: v.region, by: v.by, p: Math.max(0, Math.min(1, done)), closed: v.closed ? 1 : 0, from };
+        });
+      } catch { return []; }
+    })(),
     // Under the fog of war the player's map shows only what he is allowed to know: an army seen whole, an army
     // only glimpsed (a flag and how many corps, 'dim'), or nothing at all.
     corps: s.corps.filter((c) => !c.dead && seen[c.reg] > 0).map((c) => {

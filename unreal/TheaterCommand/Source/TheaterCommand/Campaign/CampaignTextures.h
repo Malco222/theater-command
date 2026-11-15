@@ -24,6 +24,11 @@ namespace CampaignTextures
 
 	/** Paints new pixels into a picture made by Create. The size must be the same. */
 	void Update(UTexture2D* Texture, const TArray<FColor>& Pixels);
+	/**
+	 * Puts a box of a picture's pixels on the table at once, without making the picture's smaller copies again: for
+	 * paint that moves several times a second (ink that spreads). The smaller copies are stale until Update is called.
+	 */
+	void UpdateBox(UTexture2D* Texture, const TArray<FColor>& Pixels, int32 X0, int32 Y0, int32 X1, int32 Y1);
 
 	/** The size of the detail pictures, each way. */
 	constexpr int32 DetailSize = 512;

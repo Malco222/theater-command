@@ -389,6 +389,17 @@ struct FCampaignView
 	int32 DugFull = 3; // months until a dug-in army's works are finished
 	FString Fallen; // the player's nation, once it has been beaten
 	TArray<FString> RegionHolder; // by region id: the nation that holds it now
+	TArray<FString> RegionOwner; // by region id: its lawful owner where that is not its holder (occupied ground); empty where it is
+	/** A siege as the land's paint shows it: the besieger's colour comes over the field from the sides his side holds. */
+	struct FSiegePaint
+	{
+		int32 Region = INDEX_NONE;
+		FString By; // who stands round the town
+		float Progress = 0.0f; // 0 when the siege is laid, 1 when the town is about to fall
+		bool bClosed = false; // the ring is closed: the colour comes in from every side
+		TArray<int32> From; // the neighbouring provinces the besieger's side holds
+	};
+	TArray<FSiegePaint> SiegePaint;
 	TArray<FString> RegionStanding; // by region id: where its holder stands with the player (own, ally, enemy, neutral)
 	TMap<int32, FString> Joins; // provinces where allied corps could be asked to join the player's army: how many, and whose ("2 Slovak")
 	TMap<int32, FString> Folds; // (Version 64) provinces where two of the player's corps are worn thin and could be folded into one: their names

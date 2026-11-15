@@ -103,6 +103,7 @@ private:
 	FString Folder;
 	int32 Current = -1;
 	float Clock = 0.0f;
+	float SheetWait = 0.0f; // how long this picture has waited for the world's fine ground
 	float WarmUp = 0.0f;
 	int32 Frames = 0;
 	bool bTaken = false;

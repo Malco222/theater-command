@@ -95,7 +95,15 @@ public:
 	void SetHoveredRegion(int32 RegionId);
 
 	/** Says who holds each region now, and repaints the table if ground has changed hands. */
-	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League = TArray<FString>());
+	/**
+	 * The whole-world map: is fine ground the view wants still being modelled? It is built on another thread, two
+	 * sheets at a time, and until it stands the coarse sheet shows in its place, with no lesser river, lake or
+	 * clearing on it. (A picture of the world waits for it.)
+	 */
+	bool AreFineSheetsComing() const { return bFineSheetsComing; }
+	/** Whether the next change of holders is one month following another (ink spreads, a siege's colour moves) or the table laid out afresh (it does not). */
+	void SetInkAllowed(bool bAllowed) { bInkAllowed = bAllowed; }
+	void SetHolders(const TArray<FString>& Holders, const TArray<FString>& League, const TArray<FString>& Owners = TArray<FString>(), const TArray<FCampaignView::FSiegePaint>& Sieges = TArray<FCampaignView::FSiegePaint>());
 
 	/**
 	 * Stands the armies on the table as the rules say they are. Marches are corps that have just moved:
@@ -405,6 +413,8 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UObject>> FineKeep;
 	void UpdateFineSheets(float CameraDistance, const FVector& CameraFocus);
+	bool bFineSheetsComing = false; // the view wants fine ground that does not stand yet
+	bool bInkAllowed = false;
 	void DressFineSheet(FFineSheet& Sheet);
 	void StandFineSheet(FFineSheet& Sheet);
 	void DropFineSheet(FFineSheet& Sheet);
@@ -733,6 +743,38 @@ private:
 	TObjectPtr<UTexture2D> FogPicture;
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> NoWatersPicture; // "no river and no lake anywhere": the picture of the waters for ground that has none painted
+	// The ownership paint (the art director's brief of 15 November 2026): occupied stripes, the siege colour, ink that spreads.
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> OccupiedPicture; // where the ground is occupied and the colour its stripes take, a pixel to a point of the terrain
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> NoStripesPicture; // "occupied nowhere": for ground beyond the map
+	/** A siege as it stands on the table: its colour has come this far across the field and is on its way to that far. */
+	struct FSiegeShown
+	{
+		FString By;
+		TArray<int32> From;
+		bool bEverySide = false;
+		float Depth = 0.0f, Target = 0.35f, Speed = 1.0f;
+		bool bLeaving = false; // lifted: the colour drains back to the frontier and is gone
+	};
+	TMap<int32, FSiegeShown> SiegesShown;
+	bool bSiegesMoving = false;
+	void LaySieges();
+	/** Ink that spreads: a province that has just changed hands, the sides its new colour comes in by, and how far a siege's colour had come already. */
+	struct FInkRun
+	{
+		int32 Region = INDEX_NONE;
+		TArray<int32> From;
+		float Start = 0.0f;
+	};
+	TArray<FInkRun> InkRuns;
+	double InkBegan = 0.0, PaintStepped = 0.0;
+	bool bInkBorders = false; // the frontier's lines are still to be drawn in their new place
+	FIntRect InkBox = FIntRect(0, 0, 0, 0);
+	TArray<FColor> TintBefore, OccupiedBefore, TintShown, OccupiedShown;
+	void StepInk(double Second);
+	void EndInk();
+	void UpdateOwnershipPaint();
 	float PaperShown = -1.0f;
 	double MarginLine = 11.0; // (round a world) how wide the chart's ruled border is drawn, in the world's units
 	float SquareWorkShown = -1.0f; // (round a world) how much of the prairie's roads and furrows is shown at this height

@@ -5458,7 +5458,13 @@ void ACampaignPlayerController::ShowWar(const FCampaignView& View, const TArray<
 			}
 		}
 		Map->SetTownPlots(View.PageIds.Contains(TEXT("towns"))); // (the cities keep ground open for their owner's buildings only where the rules have such)
-		Map->SetHolders(View.RegionHolder, View.League);
+		// (Ink that spreads is for ground that changes hands as the months go by. A campaign begun, or a saved one
+		// taken up, lays the table out as it stands: with ink, every province that had changed hands since 1939
+		// seeped in at once when a campaign of 1941 was opened.)
+		Map->SetInkAllowed(TurnLaid >= 0 && HumanLaid == View.Human && (View.Turn == TurnLaid || View.Turn == TurnLaid + 1));
+		TurnLaid = View.Turn;
+		HumanLaid = View.Human;
+		Map->SetHolders(View.RegionHolder, View.League, View.RegionOwner, View.SiegePaint);
 		Map->SetSeason(View.Turn);
 		Map->ShowArmies(View, Marches, CarriedFrom);
 		Map->ShowWorks(View.BridgesDown, View.RailsCut);
