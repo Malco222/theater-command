@@ -10,11 +10,12 @@
 // A claim is stored as named ground (data/campaign/history.json, 'ambitions'), so that diplomacy can read the same
 // list. The dial leashes the computer-run world and never the player: no claim is pressed for him.
 
-import { DIPLOMACY, holds, momentum, signPeace } from './diplomacy';
+import { DIPLOMACY, holds, signPeace } from './diplomacy';
 import { allied, atWar, bloc, collapseScore, declareWar, headline, theName } from './game';
 import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, type Mark } from './history';
+import { deterred } from './league';
 import { fronts, launch } from './staff';
-import type { Game, Nation, Region } from './types';
+import type { Game, Region } from './types';
 
 const listOf = (xs: string[]): string => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 const cap = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s);
@@ -91,7 +92,17 @@ const C = HISTORY.claims;
 const groundOf = (g: Game, a: Ambition): Region[] => a.ground.map((nm) => g.byName[nm]).filter((r): r is Region => !!r);
 /** The claimed ground the holder still owns and holds. */
 const stillHeld = (g: Game, a: Ambition): Region[] => groundOf(g, a).filter((r) => r.owner === a.on && r.ctrl === a.on);
-const sideOfBloc = (n: Nation): number => { const b = bloc(n); return b === 'axis' ? 1 : b === 'allies' ? -1 : 0; };
+
+/** True while a great power allied to the holder stands on the claimant's border with most of its will to fight left. */
+function guarded(g: Game, a: Ambition): boolean {
+  const hb = bloc(g.nations[a.on]);
+  if (hb !== 'axis' && hb !== 'allies') return false;
+  return DIPLOMACY.majors.some((id) => {
+    const P = g.nations[id];
+    if (!P?.alive || P.dormant || id === a.on || bloc(P) !== hb || collapseScore(g, id) / P.resilience >= C.guard) return false;
+    return g.regions.some((r) => r.ctrl === id && r.nb.some((j) => g.regions[j].ctrl === a.nat));
+  });
+}
 
 /** True for a claim that can be read at this stop: both countries stand, the claimant is the computer's, and the holder still has the ground. */
 export function readable(g: Game, a: Ambition): boolean {
@@ -100,6 +111,8 @@ export function readable(g: Game, a: Ambition): boolean {
   const n = g.nations[a.nat], H = g.nations[a.on];
   if (!n?.alive || !H?.alive || n.dormant || H.dormant || a.nat === g.human) return false;
   if (!(a.if ?? []).every((c) => holds(g, c))) return false;
+  // Where anything goes, not every claim is alive in every war: who holds which is dealt from the war's seed.
+  if (S.share !== undefined && dialDraw(g, 'claim', a.id) >= S.share) return false;
   return stillHeld(g, a).length > 0;
 }
 
@@ -109,6 +122,8 @@ export function moment(g: Game, a: Ambition): string | null {
   const n = g.nations[a.nat], H = g.nations[a.on];
   // A claimant marches from peace: a country already at war has its hands full. Nor does it march on an ally or from inside the League.
   if (n.atWar.length || n.league || allied(g, a.nat, a.on)) return null;
+  // A great power does not walk into the great war over a border claim: it marches only on a country outside both alliances.
+  if (DIPLOMACY.majors.includes(a.nat) && bloc(H)) return null;
   const held = stillHeld(g, a);
   if (!held.length) return null;
   const lost = collapseScore(g, a.on) / H.resilience;
@@ -119,19 +134,23 @@ export function moment(g: Game, a: Ambition): string | null {
   const thin = held.every((r) => r.units.reduce((s, u) => s + (u.nat === a.on && !u.dead ? u.divs : 0), 0) <= C.thin);
   const good = f ? f.ratio >= C.odds : thin;
   if (busy.length) {
-    // The war must not be going the holder's alliance's way (not asked where anything goes).
-    if (!S.bold && momentum(g) * sideOfBloc(H) > C.tide) return null;
+    // A great power of the holder's alliance on the claimant's own border deters it, until that power is hard pressed
+    // itself (not asked where anything goes).
+    if (!S.bold && guarded(g, a)) return null;
     if (lost >= C.weak) return `${H.name} is hard pressed by ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
-    if (good) return f ? `${theName(H, true)}'s armies are away fighting ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}` : `${theName(H, true)} holds it with a handful of troops while it fights ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
+    // (Ground across the sea is not gone for on a thin garrison alone, except where anything goes.)
+    if (good && (f || S.bold)) return f ? `${theName(H, true)}'s armies are away fighting ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}` : `${theName(H, true)} holds it with a handful of troops while it fights ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
     return null;
   }
-  return S.bold && good ? (f ? `the frontier is thinly held` : `it is held by a handful of troops`) : null;
+  // Where anything goes a claimant needs no war to hide behind, only the odds: but each bides its time, some for years.
+  if (!S.bold || !good || g.turn < 3 + Math.floor(dialDraw(g, 'wait', a.id) * (S.wait ?? 0))) return null;
+  return f ? 'the frontier is thinly held' : 'it is held by a handful of troops';
 }
 
 /** The claimant takes the field: war on the holder, a side if the holder has enemies, and an offensive pressed for a season. */
 function march(g: Game, a: Ambition, why: string): void {
   const n = g.nations[a.nat], H = g.nations[a.on];
-  if (a.lift) n.sealift = Math.max(n.sealift ?? 0, a.lift);
+  if (a.lift) { n.sealift = Math.max(n.sealift ?? 0, a.lift); g.flags[`st:claim:${a.nat}`] = Object.keys(g.nations).indexOf(a.on) + 1; }
   const hb = bloc(H);
   declareWar(g, a.nat, a.on);
   if (!atWar(g, a.nat, a.on)) return;
@@ -173,7 +192,7 @@ function treaty(g: Game, a: Ambition): boolean {
   const all = ground.length > 0 && ground.every((r) => r.ctrl === a.nat);
   if (!all) { delete g.flags[`amb:held:${a.id}`]; return false; }
   const since = g.flags[`amb:held:${a.id}`] ?? (g.flags[`amb:held:${a.id}`] = g.turn);
-  if (g.turn - since < C.treaty) return false;
+  if (g.turn - since + 1 < C.treaty) return false;
   for (const r of ground) { r.owner = a.nat; r.since = g.turn; }
   if (!signPeace(g, a.nat, a.on)) return false;
   g.supplyDirty = true;
@@ -205,7 +224,8 @@ export function claimsMonth(g: Game): void {
       if (!warned) {
         g.flags[`amb:${a.id}`] = g.turn;
         headline(g, 'event', `${n.name} presses its claim to ${a.name}: ${why}. ${cap(a.why)}. ${theName(H, true)} is warned that it may march.`, a.nat);
-      } else if (g.turn - warned >= C.notice && dialDraw(g, 'march', a.id, g.turn) < C.chance) {
+      } else if (g.turn - warned >= C.notice && dialDraw(g, 'march', a.id, g.turn) < C.chance * deterred(g, a.nat, [a.on])) {
+        // (A staff thinks twice before a march that would bring the whole League down on it.)
         march(g, a, why);
         live = live || !!g.flags[`amb:go:${a.id}`];
       }

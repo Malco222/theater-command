@@ -1209,10 +1209,12 @@ export function seaFoe(g: Game, nat: string, slot = 0): { foe: string; L: Landin
     if (inReach(kept) && !inTouch(g, nat, kept, home.on)) { g.flags[at] = g.turn; return { foe: kept, L: D, second: true }; }
   }
   let best: string | null = null, bq = D.after - 1;
+  // (A country that went to war for ground across the sea does not wait a year to cross it: the history dial's ambitions.)
+  const claim = ids[flag(g, `st:claim:${nat}`) - 1];
   for (const e of [...n.atWar].sort()) {
     const x = g.nations[e];
     if (!x?.alive || x.capital < 0) continue;
-    const q = quietWith(g, nat, e);
+    const q = e === claim ? 999 : quietWith(g, nat, e);
     if (q > bq && !inTouch(g, nat, e, home.on) && inReach(e)) { bq = q; best = e; }
   }
   if (!best) { delete g.flags[key]; return null; }

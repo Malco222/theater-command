@@ -22,6 +22,8 @@ export interface Stop {
   lean: 'real' | number;
   other: number; league: number; join: number;
   ambitions?: boolean; bold?: boolean; early?: number; deal?: number;
+  /** The share of the claims that anyone holds in a given war, and the most months a bold claimant lets go by before it first presses one. */
+  share?: number; wait?: number;
 }
 /** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
 export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
@@ -37,7 +39,7 @@ export const HISTORY = data as unknown as {
   theatre: Record<string, string>;
   theatres: Record<string, { name: string; after: string[] }>;
   marks: Mark[];
-  claims: { weak: number; odds: number; thin: number; notice: number; chance: number; tide: number; lapse: number; aid: number; treaty: number; push: number };
+  claims: { weak: number; odds: number; thin: number; notice: number; chance: number; guard: number; lapse: number; aid: number; treaty: number; push: number };
   ambitions: Ambition[];
 };
 
