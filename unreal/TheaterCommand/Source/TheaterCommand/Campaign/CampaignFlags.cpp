@@ -767,6 +767,104 @@ namespace
 			}
 		});
 
+		// The twelve small republics of Latin America, as they flew in 1939 (after the browser game's drawings, which
+		// the art director passed on 15 November 2026). Central America first: the blue, white and blue of the old
+		// federation, which three republics still fly, each with its own mark on the white.
+		Map.Add(TEXT("GUA"), [](FFlagPainter& P)
+		{
+			// (Guatemala's bands stand upright: a half wreath, and the quetzal above it)
+			const FLinearColor Green = Hex(TEXT("3E7B3A"));
+			P.Columns({ Hex(TEXT("4997D0")), White, Hex(TEXT("4997D0")) });
+			P.Fill(Green, 0.55, 0.5, 0.95, 0.78, [](double X, double Y)
+			{
+				const double D = FMath::Sqrt((X - 0.75) * (X - 0.75) + (Y - 0.59) * (Y - 0.59));
+				return Y > 0.53 && D > 0.123 && D < 0.163;
+			});
+			P.Disc(Green, 0.75, 0.471, 0.05);
+		});
+		Map.Add(TEXT("ELS"), [](FFlagPainter& P)
+		{
+			P.Rows({ Hex(TEXT("0F47AF")), White, Hex(TEXT("0F47AF")) });
+			P.Polygon(Hex(TEXT("D9A520")), { { 0.75, 0.379 }, { 0.859, 0.6 }, { 0.641, 0.6 } });
+			P.Ring(Hex(TEXT("3E7B3A")), 0.75, 0.5, 0.136, 0.164);
+		});
+		Map.Add(TEXT("HON"), [](FFlagPainter& P)
+		{
+			// (five blue stars, set as the five on a die)
+			const FLinearColor Blue = Hex(TEXT("0073CF"));
+			P.Rows({ Blue, White, Blue });
+			for (const FVector2D& At : { FVector2D(0.75, 0.5), FVector2D(0.614, 0.429), FVector2D(0.886, 0.429), FVector2D(0.614, 0.571), FVector2D(0.886, 0.571) })
+			{
+				P.Star(Blue, At.X, At.Y, 0.054);
+			}
+		});
+		Map.Add(TEXT("NIC"), [](FFlagPainter& P)
+		{
+			const FLinearColor Blue = Hex(TEXT("0067C6")), Gold = Hex(TEXT("D9A520"));
+			P.Rows({ Blue, White, Blue });
+			P.Bar(Gold, 0.75, 0.393, 0.866, 0.607, 0.018);
+			P.Bar(Gold, 0.866, 0.607, 0.634, 0.607, 0.018);
+			P.Bar(Gold, 0.634, 0.607, 0.75, 0.393, 0.018);
+			P.Disc(Blue, 0.75, 0.536, 0.032);
+		});
+		// Costa Rica: blue, white, a double band of red, white, blue.
+		Map.Add(TEXT("COS"), [](FFlagPainter& P) { P.Rows({ Hex(TEXT("002B7F")), White, Hex(TEXT("CE1126")), White, Hex(TEXT("002B7F")) }, { 1.0, 1.0, 2.0, 1.0, 1.0 }); });
+		// Panama: quartered, a blue star at the hoist and a red star in the fly.
+		Map.Add(TEXT("PAN"), [](FFlagPainter& P)
+		{
+			const FLinearColor Red = Hex(TEXT("D21034")), Blue = Hex(TEXT("005293"));
+			P.Field(White);
+			P.Rect(Red, 0.75, 0.0, 1.5, 0.5);
+			P.Rect(Blue, 0.0, 0.5, 0.75, 1.0);
+			P.Star(Blue, 0.375, 0.25, 0.121);
+			P.Star(Red, 1.125, 0.75, 0.121);
+		});
+		// Haiti: blue over red, with the arms (a palm) on a white panel.
+		Map.Add(TEXT("HAI"), [](FFlagPainter& P)
+		{
+			const FLinearColor Green = Hex(TEXT("3E7B3A"));
+			P.Rows({ Hex(TEXT("00209F")), Hex(TEXT("D21034")) });
+			P.Rect(White, 0.586, 0.343, 0.914, 0.657);
+			P.Rect(Green, 0.736, 0.386, 0.764, 0.529);
+			P.Disc(Green, 0.75, 0.529, 0.064);
+		});
+		// The Dominican Republic: a white cross between quarters of blue and red.
+		Map.Add(TEXT("DOM"), [](FFlagPainter& P)
+		{
+			const FLinearColor Red = Hex(TEXT("CE1126")), Blue = Hex(TEXT("002D62"));
+			P.Field(White);
+			P.Rect(Blue, 0.0, 0.0, 0.655, 0.4);
+			P.Rect(Red, 0.845, 0.0, 1.5, 0.4);
+			P.Rect(Red, 0.0, 0.6, 0.655, 1.0);
+			P.Rect(Blue, 0.845, 0.6, 1.5, 1.0);
+		});
+		// Ecuador flies Colombia's colours, the yellow half the flag, with its arms in the middle.
+		Map.Add(TEXT("ECU"), [](FFlagPainter& P)
+		{
+			P.Rows({ Hex(TEXT("FFD100")), Hex(TEXT("0072CE")), Hex(TEXT("EF3340")) }, { 2.0, 1.0, 1.0 });
+			P.Disc(Hex(TEXT("7FB6D9")), 0.75, 0.5, 0.15);
+			P.Ring(Hex(TEXT("8C6239")), 0.75, 0.5, 0.132, 0.168);
+			P.Disc(Hex(TEXT("3E7B3A")), 0.75, 0.536, 0.057);
+		});
+		// Bolivia: red, yellow and green.
+		Map.Add(TEXT("BOL"), [](FFlagPainter& P) { P.Rows({ Hex(TEXT("D52B1E")), Hex(TEXT("F9E300")), Hex(TEXT("007934")) }); });
+		// Paraguay: red, white and blue, with its seal (a star in a wreath).
+		Map.Add(TEXT("PAR"), [](FFlagPainter& P)
+		{
+			P.Rows({ Hex(TEXT("D52B1E")), White, Hex(TEXT("0038A8")) });
+			P.Ring(Hex(TEXT("3E7B3A")), 0.75, 0.5, 0.096, 0.132);
+			P.Star(Hex(TEXT("D9A520")), 0.75, 0.5, 0.057);
+		});
+		// Uruguay: nine stripes, and the Sun of May in the corner.
+		Map.Add(TEXT("URU"), [](FFlagPainter& P)
+		{
+			const FLinearColor Blue = Hex(TEXT("0038A8")), Sun = Hex(TEXT("F6B40E"));
+			P.Rows({ White, Blue, White, Blue, White, Blue, White, Blue, White });
+			P.Rect(White, 0.0, 0.0, 0.641, 0.5556);
+			P.Star(Sun, 0.32, 0.279, 0.171, 16, 0.62);
+			P.Disc(Sun, 0.32, 0.279, 0.093);
+		});
+
 		return Map;
 	}
 

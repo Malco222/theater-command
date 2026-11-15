@@ -419,6 +419,26 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 			Nation->Color = FColor::FromHex(Paint[1]);
 		}
 	}
+	// ("-TheaterPaint=ARG:3F86D0,URU:8C7AC0" on the command line tries another table paint for a country, for a picture)
+	{
+		FString Tried;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPaint="), Tried, false))
+		{
+			TArray<FString> Each;
+			Tried.ParseIntoArray(Each, TEXT(","));
+			for (const FString& One : Each)
+			{
+				FString TriedTag, TriedPaint;
+				if (One.Split(TEXT(":"), &TriedTag, &TriedPaint))
+				{
+					if (FCampaignNation* Nation = Nations.Find(TriedTag))
+					{
+						Nation->Color = FColor::FromHex(TriedPaint);
+					}
+				}
+			}
+		}
+	}
 	// No stain is pale or washed out, or its country reads as snow or as bare table (the art director's rule,
 	// 2026-11-13): none brighter than about 0.55, none with less colour in it than about 0.3. Germany's field
 	// grey is the one exception.

@@ -767,10 +767,11 @@ def build_land():
     bed = sat(plus(m, over(less(off, times(m, half_seen, one_in(m, unreal.MaterialExpressionOneMinus, share, -350, 3150), -200, 3150), -50, 3100), px, 100, 3100), 0.5, 250, 3100), 400, 3100)
     water_colour = lerp(m, (wet_ink, "RGB"), vector(m, "BedColour", (0.36, 0.334, 0.2, 1.0), -200, 3250), bed, 550, 3050)
     # (The art director's round 30: by night the creeks were an electric cobalt, (3, 40, 112), darker than the ground
-    # and far bluer. A lesser painted water sinks half way toward the ground it runs over by moonlight. The great
-    # rivers keep their pale ribbon, which is the accepted look.)
+    # and far bluer. A lesser painted water sinks six tenths of the way toward the ground it runs over by moonlight
+    # (at a half its thread still measured (13, 47, 101); the asking was about (25, 56, 104)). The great rivers keep
+    # their pale ribbon, which is the accepted look.)
     lesser = one_in(m, unreal.MaterialExpressionOneMinus, sat(times(m, plus(m, half, -0.3, 300, 3400), 2.5, 400, 3400), 500, 3400), 600, 3400)
-    water_colour = lerp(m, water_colour, c, times(m, times(m, scalar(m, "WetMoon", 0.0, 300, 3500), scalar(m, "WetNightGround", 0.5, 300, 3580), 450, 3540), lesser, 600, 3500), 700, 3150)
+    water_colour = lerp(m, water_colour, c, times(m, times(m, scalar(m, "WetMoon", 0.0, 300, 3500), scalar(m, "WetNightGround", 0.6, 300, 3580), 450, 3540), lesser, 600, 3500), 700, 3150)
     c = lerp(m, c, water_colour, river, -950, -400)
     waters = river
     wetness = times(m, river, one_in(m, unreal.MaterialExpressionOneMinus, bed, 550, 3250), 700, 3250)

@@ -1707,6 +1707,22 @@ void ACampaignMapActor::PaintGround()
 				}
 			}
 		}
+		// ("-TheaterLandVector=FieldMean:0.85/0.94/0.87" does the same for a colour of the land's paint)
+		FString VectorsAsked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandVector="), VectorsAsked, false))
+		{
+			TArray<FString> Each;
+			VectorsAsked.ParseIntoArray(Each, TEXT(","));
+			for (const FString& One : Each)
+			{
+				FString VectorName, VectorValue;
+				TArray<FString> Parts;
+				if (One.Split(TEXT(":"), &VectorName, &VectorValue) && VectorValue.ParseIntoArray(Parts, TEXT("/")) == 3)
+				{
+					LandMaterial->SetVectorParameterValue(FName(*VectorName), FLinearColor(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]), FCString::Atof(*Parts[2]), 1.0f));
+				}
+			}
+		}
 		// ("-TheaterStripes=0" takes the stripes of occupied ground away, to measure them against the plain stain)
 		float StripesAsked = 1.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterStripes="), StripesAsked))
