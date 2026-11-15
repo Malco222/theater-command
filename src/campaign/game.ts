@@ -647,6 +647,11 @@ const gunsIn = (cs: Corps[]): number => cs.reduce((s, c) => s + (c.kind === 'art
 
 export const men = (c: Corps): number => Math.round(c.divs * c.str * MEN_PER_DIV);
 
+/** What a month cut off from its supplies costs a corps in order: it lays down its arms when none is left. */
+const UNFED = 0.4;
+/** How many months a corps in this order holds out on what it carries once it is cut off (a fresh one: three). */
+export const monthsUnfed = (org = 1): number => Math.max(1, Math.ceil(org / UNFED));
+
 function airOf(g: Game, nats: Set<string>, enemies: Set<string>): number {
   let s = 0;
   // An air force short of fuel flies fewer sorties (the grand campaign).
@@ -2463,7 +2468,7 @@ export function startPhase(g: Game, nat: string): void {
       c.org = Math.min(1, c.org + (owed ? rest * (1 - BUDGET.debt.rest * owed) : rest));
       if (owed) c.str *= 1 - BUDGET.debt.desert * owed;
     } else {
-      c.org -= 0.4;
+      c.org -= UNFED;
       c.str *= 0.85;
       if (c.org <= 0) {
         const lost = starved.get(c.reg) ?? { names: [], men: 0 };

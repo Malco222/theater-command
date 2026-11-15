@@ -60,7 +60,7 @@ import {
   km as airKm, seaKm, skyOver, whyNotBase, whyNotMission, type AirOrder,
 } from '../air';
 import {
-  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
+  FLEETS, NAVY, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, numberWord, oreRoute, seaAt, seaBorders, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips, whyNotShip,
   type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
@@ -4035,9 +4035,18 @@ function crossingTicket(acc: CrossingAccount): string {
     ${acc.helps.length ? `<h4 class="crh">What would make it safer</h4><ul class="ulist">${acc.helps.map((h) => `<li><span>${esc(h.text)}</span><span>${lostAtSea(h.risk) > 0 ? `about ${lostAtSea(h.risk)}% lost` : 'almost nothing lost'}</span></li>`).join('')}</ul>` : ''}`;
 }
 
+/** The crossings list's word on the sea behind a beach: red where it can be closed, amber for a whole island or a contested sea. */
+function holdLine(h: SeaHold, to: Region): string {
+  const sea = esc(g.seas[h.sea].name);
+  if (!h.open) return h.island
+    ? `<div class="sub costwarn">Once ashore the force is on its own: it can take ${esc(to.name)}, but the enemy can close the ${sea} behind it. Cut off, it can hold out for about ${numberWord(h.months)} months on what it carries.</div>`
+    : `<div class="sub holdwarn">Once ashore, the enemy can close the ${sea} behind the force: he can bring more than twice your strength into it.</div>`;
+  return h.contested ? `<div class="sub costwarn">Once ashore, the ${sea} behind the force is contested: yours today, but the enemy can bring ships enough to fight you for it.</div>` : '';
+}
+
 /** Once ashore (Version 73): whether the sea behind the beach could be kept open, line by line like the crossing. */
 function holdTicket(h: SeaHold): string {
-  return `<h4 class="crh${h.open ? '' : ' bad'}">Once ashore: holding the sea behind the beach</h4><table class="ticket">${h.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
+  return `<h4 class="crh${h.open ? (h.contested ? ' amber' : '') : h.island ? ' amber' : ' bad'}">Once ashore: holding the sea behind the beach</h4><table class="ticket">${h.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
 }
 
 /** One way over the water: where from, where to, what it would cost today, and the button that makes it the plan. */
@@ -4056,7 +4065,7 @@ function crossingRow(x: CrossingOutlook, order: boolean): string {
     <div class="crhead"><b>${esc(natName(x.owner))}${x.owner !== x.foe ? `, held by ${esc(natName(x.foe))}` : ''}</b><span class="crloss ${x.bar ? 'bar' : loss >= 25 ? 'bad' : loss >= 10 ? 'mid' : 'ok'}">${x.bar ? 'Barred today' : loss > 0 ? `about ${loss}% lost at sea` : 'nothing in the way'}</span></div>
     <div class="sub">From ${esc(x.from.name)} to ${esc(x.to.name)}, by way of the ${esc(route)}.${x.account.skyWon !== null ? ` <b style="color:var(--ink)">With the sky over ${esc(x.to.name)} won: ${lostAtSea(x.account.skyWon) > 0 ? `about ${lostAtSea(x.account.skyWon)}% lost` : 'almost nothing lost'}.</b>` : ''}${x.hope ? ' Your fighters can reach this beach: it would be the safest way once its sky is yours.' : ''}</div>
     ${x.bar ? `<div class="note" style="margin-top:6px"><b>Barred.</b> ${esc(x.bar)}</div>` : ''}
-    ${!x.account.hold.open ? `<div class="sub holdwarn">Once ashore, the enemy can close the ${esc(g.seas[x.account.hold.sea].name)} behind the force: he can bring more than twice your strength into it.</div>` : ''}
+    ${holdLine(x.account.hold, x.to)}
     ${open ? crossingTicket(x.account) + holdTicket(x.account.hold) : ''}${prep}
     <div class="acts">${x.planned ? '' : `<button class="btn small" data-act="crosswhy" data-id="${x.to.id}">${open ? 'Hide the reckoning' : 'Why, and what would help'}</button>`}${order ? (x.planned ? '<button class="btn small" data-act="crossplan" data-id="-1" title="Your staff stops preparing this crossing.">Drop the plan</button>' : `<button class="btn small" data-act="crossplan" data-id="${x.to.id}" data-from="${x.from.id}" title="Name this crossing as your plan. Staff you have handed the air war or the navy prepare it each month.">Make this the plan</button>`) : ''}<button class="btn small" data-act="showmap" data-id="${x.to.id}">Show the beach</button></div>
   </div>`;
@@ -4159,9 +4168,15 @@ function landingCard(): string {
     // The headline speaks for the whole venture and is never more cheerful than its worst ticket: a force that can
     // land and be cut off says so in red, a crossing that costs one man in four says so in amber, and the fight
     // for the beach then has a line of its own. A fight that is itself all but lost keeps the headline.
-    const cut = !!plan.hold && !plan.hold.open;
-    const costly = !cut && !plan.surprise && loss >= 25;
-    const sea = plan.hold ? esc(g.seas[plan.hold.sea].name) : '';
+    const h = plan.hold ?? null;
+    const sea = h ? esc(g.seas[h.sea].name) : '';
+    // What applies, worst first (the design director's rulings 24, 36 and 37): a mainland beach that can be cut off, a
+    // costly crossing, a whole island that can be cut off (the force lives a while on what it carries), a contested sea.
+    const warns: { cls: 'loss' | 'costly'; warn: 'holdwarn' | 'costwarn'; head: string; text: string; also: string }[] = [];
+    if (h && !h.open && !h.island) warns.push({ cls: 'loss', warn: 'holdwarn', head: 'Ashore, then cut off', text: `The force can land, but the enemy can close the ${sea} behind it and the troops would be cut off from their supplies.`, also: `And a force that did get ashore could be cut off: the enemy can close the ${sea} behind it.` });
+    if (!plan.surprise && loss >= 25) warns.push({ cls: 'costly', warn: 'costwarn', head: 'A costly crossing', text: `About ${loss}% of the force would be lost at sea before it lands.`, also: `And about ${loss}% of the force would be lost at sea before it lands.` });
+    if (h && !h.open && h.island) warns.push({ cls: 'costly', warn: 'costwarn', head: 'Ashore, but on its own', text: `The force can take ${esc(target.name)}, but the enemy can close the ${sea} behind it. Cut off, it can hold out for about ${numberWord(h.months)} months on what it carries.`, also: `And a force that took ${esc(target.name)} would be on its own: the enemy can close the ${sea} behind it, and cut off it can hold out for about ${numberWord(h.months)} months on what it carries.` });
+    if (h && h.contested) warns.push({ cls: 'costly', warn: 'costwarn', head: 'Ashore, on a contested sea', text: `The force can land and the ${sea} behind it is yours today. But the enemy can bring ships enough to fight you for it, and if he wins the troops are cut off.`, also: `And the ${sea} behind the force is contested: yours today, but the enemy can bring ships enough to fight you for it.` });
     const p = a ? chanceOn(a.odds, a.dice) : 1;
     const hopeless = !!a && p < 0.3;
     const fight = !a ? 'The coast is undefended' : p >= 0.95 ? 'Victory is all but certain' : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : air ? 'This assault will fail' : 'This landing will fail';
@@ -4170,17 +4185,19 @@ function landingCard(): string {
       ? `<div class="oddsbar"><i style="width:${Math.round((a.A / (a.A + a.D)) * 100)}%;background:${g.nations[g.human!].color}"></i><i style="flex:1;background:${g.nations[a.defenders[0].nat].color}"></i></div>
         <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`
       : `<div class="sub">The force walks ashore and takes ${esc(target.name)}.</div>`;
-    const whole = (cut || costly) && !hopeless;
-    const odds = whole
-      ? `<div class="verdict ${cut ? 'loss' : 'costly'}" style="font-size:24px">${cut ? 'Ashore, then cut off' : 'A costly crossing'}</div>
-        <div class="sub ${cut ? 'holdwarn' : 'costwarn'}">${cut ? `The force can land, but the enemy can close the ${sea} behind it and the troops would be cut off from their supplies.` : `About ${loss}% of the force would be lost at sea before it lands.`}</div>
+    // The worst leads and the next one down is the line under it. A fight that is itself all but lost keeps the headline.
+    const lead = hopeless ? null : warns[0] ?? null;
+    const next = hopeless ? warns[0] ?? null : warns[1] ?? null;
+    const odds = lead
+      ? `<div class="verdict ${lead.cls}" style="font-size:24px">${lead.head}</div>
+        <div class="sub ${lead.warn}">${lead.text}</div>${next ? `<div class="sub ${next.warn}">${next.text}</div>` : ''}
         <h3 class="fighthead">${air ? 'The fight on the ground' : 'The fight for the beach'}</h3><div class="fightline ${fightTone}">${fight}</div>${fightBody}`
-      : `<div class="verdict ${fightTone}" style="font-size:24px">${fight}</div>${cut ? `<div class="sub holdwarn">And a force that did get ashore could be cut off: the enemy can close the ${sea} behind it.</div>` : ''}${fightBody}`;
+      : `<div class="verdict ${fightTone}" style="font-size:24px">${fight}</div>${next ? `<div class="sub ${next.warn}">${next.also}</div>` : ''}${fightBody}`;
     body = `${odds}
       ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>${plan.account && plan.account.risk > 0 ? crossingTicket(plan.account) : ''}${plan.hold ? holdTicket(plan.hold) : ''}`}
       ${a ? `<h3>Battle Ticket</h3><table class="ticket">${a.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>` : ''}
       <h3>${air ? 'Going in' : 'Going ashore'}</h3>${cs.map((c) => `<div class="pickrow pick">${icon(c)}<span class="grow"><b>${esc(c.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[c.reg].name)} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span></span></div>`).join('')}
-      <div class="note${plan.hold && !plan.hold.open ? ' holdbad' : ''}"><b>Once ${air ? 'down' : 'ashore'}</b> the force is supplied through a port you hold on a sea the enemy has not closed. ${plan.hold && !plan.hold.open ? `As things stand the enemy can close the ${esc(g.seas[plan.hold.sea].name)} behind it, and the troops would be cut off: beat his fleets or bring more of your own ships and aircraft into that sea first.` : plan.hold ? `As things stand the enemy cannot close the ${esc(g.seas[plan.hold.sea].name)} behind it.` : 'If your navy loses that sea, the troops are cut off.'}</div>`;
+      <div class="note${h && !h.open ? (h.island ? ' holdamber' : ' holdbad') : h && h.contested ? ' holdamber' : ''}"><b>Once ${air ? 'down' : 'ashore'}</b> the force is supplied through a port you hold on a sea the enemy has not closed. ${h && !h.open && h.island ? `As things stand the enemy can close the ${sea} behind it. On an island the force can hold out for about ${numberWord(h.months)} months on what it carries: beat his fleets or bring more of your own ships and aircraft into that sea in that time.` : h && !h.open ? `As things stand the enemy can close the ${sea} behind it, and the troops would be cut off: beat his fleets or bring more of your own ships and aircraft into that sea first.` : h && h.contested ? `As things stand the ${sea} behind it is yours, but contested: the enemy can bring ships enough to fight you for it. More of your own ships and aircraft in that sea would make it safe.` : h ? `As things stand the enemy cannot close the ${sea} behind it.` : 'If your navy loses that sea, the troops are cut off.'}</div>`;
   }
   const fromAir = byAir(cs);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${fromAir ? 'Airborne assault' : 'Landing from the sea'} · ${date(g.turn)}</div><h2>${fromAir ? 'Assault on' : 'Landing at'} ${esc(target.name)}</h2></header>

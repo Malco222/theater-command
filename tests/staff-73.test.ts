@@ -65,7 +65,7 @@ describe('holding the sea behind the beach', () => {
     expect(seaSide(g, h.sea, 'GER', true).total).toBeCloseTo(h.foe, 6);
   });
 
-  it('says it stays open once the invader has more there than half of what could come', () => {
+  it('keeps it open once the invader has more there than half of what could come (and since Version 76 calls it contested)', () => {
     const g = opened();
     const x = toBritain(g);
     const before = x.account.hold;
@@ -76,7 +76,9 @@ describe('holding the sea behind the beach', () => {
     const h = seaHold(g, 'GER', x.path, x.to);
     expect(h.own.total).toBeGreaterThan(h.need);
     expect(h.open).toBe(true);
-    expect(h.lines.some((l) => l.label === 'The sea behind the beach' && l.value === 'stays open')).toBe(true);
+    // More than half and less than all of it: open today, and contested (tests/latin-76.test.ts).
+    expect(h.contested).toBe(true);
+    expect(h.lines.some((l) => l.label === 'The sea behind the beach' && l.value === 'contested')).toBe(true);
     allCome(g, x);
     expect(closedTo(g, h.sea, 'GER')).toBe(false);
   });

@@ -17,7 +17,7 @@ import { COMMAND } from './commanders';
 import { storyConvoy, storyEdge, storySea } from './stories';
 import { techMul, techNotes } from './research';
 import { whyBarred } from './ground';
-import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
+import { allied, assess, atWar, capture, friendlyUnits, headline, hostileUnits, men, monthsUnfed, relocate, resolveBattle, routineNews, warning, type Assessment } from './game';
 import { traitFleet, traitSeaLoss } from './traits';
 import { SIEGE, arrive, besieged, besiegerOf, feeders, garrisonOf, roomIn, siegeRules } from './siege';
 import { harbourOpen, prizeOut } from './prizes';
@@ -560,6 +560,15 @@ export interface SeaHold {
   need: number;
   /** True when the sea would stay open with every one of those fleets in it. */
   open: boolean;
+  /**
+   * True where it stays open and is still contested: the invader has at least half of what the enemy could bring
+   * there within the month, and less than all of it. His today, and the enemy can fight him for it (ruling 37).
+   */
+  contested: boolean;
+  /** True for a landing that takes a whole island (a province with no land frontier): cut off there, a force lives on what it carries (ruling 36). */
+  island: boolean;
+  /** How many months a fresh force cut off from its supplies holds out (game.ts, `monthsUnfed`). */
+  months: number;
   /** False where the beach has no harbour: a force is fed only through a port. */
   port: boolean;
   lines: TicketLine[];
@@ -629,6 +638,9 @@ export function seaHold(g: Game, nat: string, path: number[], to: Region): SeaHo
   const foe = e.ships + come + e.air;
   const need = foe >= NAVY.closed.min ? foe / NAVY.closed.ratio : 0;
   const open = !(foe >= NAVY.closed.min && foe >= NAVY.closed.ratio * own.total);
+  const contested = open && need > 0 && own.total < foe;
+  const island = to.nb.length === 0;
+  const months = monthsUnfed();
   const name = g.seas[sea].name;
   const lines: TicketLine[] = [];
   if (e.ships >= 0.5) lines.push({ label: `Enemy ships in the ${name} now`, value: round(e.ships), effect: 'at sea there already' });
@@ -636,13 +648,18 @@ export function seaHold(g: Game, nat: string, path: number[], to: Region): SeaHo
   if (kept >= 0.5) lines.push({ label: 'Enemy fleets your aircraft keep away', value: round(kept), effect: 'no admiral takes his fleet under your bombers, except to save his own homeland' });
   if (shy >= 0.5) lines.push({ label: 'Enemy fleets that will not risk it', value: round(shy), effect: 'none of them will face what you have in that sea, while it stays there' });
   if (e.air >= 0.5) lines.push({ label: `Enemy aircraft over the ${name}`, value: round(e.air), effect: 'count against the supply ships too' });
-  lines.push({ label: `Your ships and aircraft in the ${name}`, value: `${round(own.ships)} and ${round(own.air)}`, effect: need <= 0 ? 'the enemy has too little in reach to close it' : open ? `more than the ${round(need)} that keep it open` : `${round(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
-  lines.push({ label: 'The sea behind the beach', value: open ? 'stays open' : 'can be closed', effect: open ? 'the supply ships reach the force' : 'the force ashore would be cut off from its supplies' });
+  lines.push({ label: `Your ships and aircraft in the ${name}`, value: `${round(own.ships)} and ${round(own.air)}`, effect: need <= 0 ? 'the enemy has too little in reach to close it' : contested ? `more than the ${round(need)} that keep it open today, and fewer than the ${round(foe)} he can bring` : open ? `more than the ${round(need)} that keep it open` : `${round(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
+  lines.push({
+    label: 'The sea behind the beach', value: contested ? 'contested' : open ? 'stays open' : 'can be closed',
+    effect: contested ? 'yours today, but he can bring enough to fight you for it' : open ? 'the supply ships reach the force' : island ? `cut off, the force can hold out for about ${numberWord(months)} months on what it carries` : 'the force ashore would be cut off from its supplies',
+  });
   if (!to.port) lines.push({ label: 'A harbour', value: `none at ${to.name}`, effect: 'the force is fed only once it holds a port on an open sea' });
-  return { sea, there: e.ships, come, air: e.air, kept, shy, foe, own, need, open, port: !!to.port, lines };
+  return { sea, there: e.ships, come, air: e.air, kept, shy, foe, own, need, open, contested, island, months, port: !!to.port, lines };
 }
 
 const round = (x: number): string => Math.round(x).toLocaleString('en-US');
+/** A small number in words, as the cards say it. */
+export const numberWord = (n: number): string => ['no', 'one', 'two', 'three', 'four', 'five', 'six'][n] ?? String(n);
 
 /**
  * The account of a crossing by these seas to that coast. Nothing is changed. (`reach` is the answer to where the

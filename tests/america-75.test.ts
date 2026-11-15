@@ -376,7 +376,10 @@ describe('the building staff and the crossing the player names', () => {
     if (row.bar) expect(word.state).toBe('waiting');
     else if (!row.account.hold.open) {
       expect(word.state).toBe('warned');
-      expect(word.text).toMatch(/it waits: once the force is ashore the enemy can close the .* behind it\. The order to sail under that warning is yours alone\.$/);
+      // A whole island is told what it is (Version 76, ruling 36): a force on its own, and for how long.
+      expect(word.text).toMatch(row.account.hold.island
+        ? /it waits: the force can take .*, but the enemy can close the .* behind it, and cut off it holds out for about three months on what it carries\. The order to sail under that warning is yours alone\.$/
+        : /it waits: once the force is ashore the enemy can close the .* behind it\. The order to sail under that warning is yours alone\.$/);
     } else {
       expect(word.state).toBe('ready');
       expect(word.text).toMatch(/^Your staff reports the crossing from .* ready: .* The order to land is yours\.$/);
