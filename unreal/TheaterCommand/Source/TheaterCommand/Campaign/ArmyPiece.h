@@ -168,6 +168,7 @@ private:
 	double MarchTime = 1.0;
 	double LiftHeight = 40.0;
 	bool bMarching = false;
+	bool bHasWake = false; // a fleet at sea: its body carries a wake for patrol (section 1) and one for passage (section 2)
 	// What the army is about, shown round its base so it can be read without a click: 0 nothing, 1 digging in,
 	// 2 entrenched; in camp, resting; 0 not known, 1 supplied, 2 cut off.
 	int32 WorksState = 0;

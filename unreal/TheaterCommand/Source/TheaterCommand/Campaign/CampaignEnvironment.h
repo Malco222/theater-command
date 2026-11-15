@@ -36,6 +36,12 @@ public:
 	/** The night as it was first made: the room's warm lamp alone. Otherwise the night is moonlight. */
 	void SetLamplight(bool bLamp) { if (bLamp != bLamplight) { bLamplight = bLamp; ApplyLight(); } }
 	bool IsLamplight() const { return bLamplight; }
+	/**
+	 * The studio's light (the art director's ruling of round 19): a unit's picture is a plate in a recognition manual,
+	 * and must look the same at any hour and in any season. While this is on the room's three lights stand as on a
+	 * plain day; turned off, they go back to the hour. It is put on for the moment a picture is taken and no longer.
+	 */
+	void StudioLight(bool bOn);
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "Light")
@@ -63,5 +69,6 @@ private:
 	int32 TimeKeeping = 0; // 0 the day runs, 1 held at day, 2 held at night
 	bool bLamplight = false;
 	void ApplyLight();
+	void LightRoom();
 
 };

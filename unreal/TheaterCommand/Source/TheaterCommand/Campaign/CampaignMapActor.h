@@ -164,6 +164,8 @@ public:
 
 	/** The paint the pieces are moulded in: each point of a piece carries its own colour. */
 	UMaterialInterface* GetPieceMaterial() const { return PieceMaterial; }
+	/** The foam of a ship's wake: see-through, breaking into streaks that drift astern, and dimmed with the sea by night. */
+	UMaterialInterface* GetWakeMaterial() const { return WakeInk; }
 
 	/** Half the size of the map in world units, for keeping the camera over the table. */
 	FVector2D GetWorldHalfExtent() const;
@@ -623,6 +625,21 @@ private:
 	TObjectPtr<UMaterialInstanceDynamic> OrdersInk; // the washes laid for an army in hand: dimmed by night, in the chart veil's step
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> SeaReachInk; // the brass rings of the seas in a fleet's reach: let down by night, or they shone on the dark sea
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> WakeInk; // the foam of every ship's wake
+	FVector WakeLook = FVector(1.0, 0.13, 1.0); // its brightness by day, what it is multiplied by under the moon, and its strength ("-TheaterWake=" for a trial)
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SeaFillInk; // the tinted water inside such a ring: one thin wash, with a night of its own
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SightingInk; // the red crayon of a place where the enemy was last seen
+	// (the art director's numbers of round 19, each open to "-TheaterSeaRings=" for a trial)
+	FVector2D SeaFill = FVector2D(0.05, 0.085); // how strong the wash inside a sea's ring is by day: any sea in reach, and the one under the pointer
+	FLinearColor SeaLineNight = FLinearColor(0.15f, 0.15f, 0.155f, 0.85f); // what a ring's line is multiplied by under the moon, and its strength
+	FLinearColor SeaFillNight = FLinearColor(0.45f, 0.45f, 0.47f, 1.0f); // and the wash inside it
+	FLinearColor SightingNight = FLinearColor(0.5f, 0.5f, 0.52f, 1.0f); // and a last-seen ring
+	FLinearColor SnowWoodFloor = FLinearColor(0.5f, 0.54f, 0.6f); // what a wood's floor is multiplied by under the snow: a cool grey, about a tenth below the snow round it
+	FLinearColor SnowOnTrees = FLinearColor(0.205f, 0.25f, 0.235f); // what snow lying on a tree takes its colour toward: a cool grey-green
+	void TakeStudioPicture(USceneCaptureComponent2D* Camera);
 	FVector StagedExtent = FVector(100.0); // half the size of the model last stood on a stage, each way
 	FLinearColor WashNight = FLinearColor(0.36f, 0.38f, 0.44f); // what the washes are multiplied by under the moon
 	float RingNightGlow = 0.05f; // and how much light of its own the ring round the piece in hand keeps
@@ -664,6 +681,7 @@ private:
 	TWeakObjectPtr<AArmyPiece> HandLampPiece;
 	UPROPERTY()
 	TObjectPtr<class USpotLightComponent> HandLamp;
+	bool bHandLampAtSea = false; // the piece under the lamp is a fleet: by day the lamp burns low over water
 	float HandLampGlow = 0.0f; // 0 out, 1 full: it comes up and goes down over a third of a second
 	FVector HandLampAt = FVector::ZeroVector;
 	struct FVictorFlag

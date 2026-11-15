@@ -4945,6 +4945,66 @@ namespace
 				DiplomacyPowers->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(10.0f)];
 			}
 
+			// (Rules version 70) Claims and ambitions, worded as the rules' own page words them: who claims what ground
+			// from whom, and how far it has gone. A click on one shows its ground on the map. The block stands above the
+			// powers at war when any claim is on the player's own ground, and below them when none is.
+			const bool bClaimOnMe = Office.Claims.ContainsByPredicate([](const FDiplomacy::FClaim& Claim) { return Claim.bOnYou; });
+			auto ShowClaims = [this, &Office]()
+			{
+				if (Office.ClaimsLead.IsEmpty())
+				{
+					return;
+				}
+				DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(TEXT("CLAIMS AND AMBITIONS"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
+				];
+				DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+				[
+					SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Muted).AutoWrapText(true).Text(FText::FromString(Office.ClaimsLead))
+				];
+				for (const FDiplomacy::FClaim& Claim : Office.Claims)
+				{
+					TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Cream).AutoWrapText(true)
+							.Text(FText::FromString(Claim.Title + (Claim.bOnYou ? TEXT("  \u00B7  YOUR GROUND") : TEXT(""))))
+						]
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).AutoWrapText(true).Text(FText::FromString(Claim.From))
+						]
+						+ SVerticalBox::Slot().AutoHeight()
+						[
+							SNew(STextBlock).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Claim.State == 2 ? Alarm : Claim.State == 1 ? BrightBrass : Faint).AutoWrapText(true).Text(FText::FromString(Claim.Tag))
+						];
+					DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)
+					[
+						SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(8.0f, 5.0f)).IsFocusable(false)
+						.ToolTipText(FText::FromString(Claim.Region >= 0 ? TEXT("Show this ground on the map.") : TEXT("")))
+						.OnClicked_Lambda([this, Region = Claim.Region]()
+						{
+							if (Controller.IsValid() && Region >= 0)
+							{
+								Controller->CloseDiplomacy();
+								Controller->ShowProvince(Region);
+							}
+							return FReply::Handled();
+						})
+						[
+							Lines
+						]
+					];
+				}
+				DiplomacyPowers->AddSlot().AutoHeight()[SNew(SBox).HeightOverride(12.0f)];
+			};
+			if (bClaimOnMe)
+			{
+				ShowClaims();
+			}
+
+
 			DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
 			[
 				SNew(STextBlock).Text(FText::FromString(TEXT("THE POWERS AT WAR"))).Font(Font(TEXT("Bold"), 11, 200)).ColorAndOpacity(Brass)
@@ -5036,6 +5096,10 @@ namespace
 					];
 				}
 				DiplomacyPowers->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 12.0f)[Row];
+			}
+			if (!bClaimOnMe)
+			{
+				ShowClaims();
 			}
 
 			// The head of the track stays put while the countries scroll under it.
@@ -5958,6 +6022,40 @@ namespace
 						SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
 					];
 				}
+				// (Rules version 70) The history dial: five stops, the chosen one lit, with what it means beside them.
+				TSharedRef<SHorizontalBox> Dial = SNew(SHorizontalBox);
+				if (Opening.Histories.Num() > 0)
+				{
+					TSharedRef<SHorizontalBox> Stops = SNew(SHorizontalBox);
+					for (int32 StopIndex = 0; StopIndex < Opening.Histories.Num(); ++StopIndex)
+					{
+						const FGrandLevel& Stop = Opening.Histories[StopIndex];
+						const bool bPicked = StopIndex == Opening.HistoryIndex;
+						Stops->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
+						[
+							SNew(SButton).ButtonStyle(bPicked ? &EndMonthStyle : &PlainButton).ContentPadding(FMargin(10.0f, 5.0f)).IsFocusable(false)
+							.ToolTipText(FText::FromString(FString::Printf(TEXT("%d. %s (%s)\n%s%s%s\nThe history dial can be turned again in any month."), Stop.Stop, *Stop.Name, *Stop.Under, *Stop.Blurb,
+								Stop.Lines.Num() > 0 ? TEXT("\n") : TEXT(""), *FString::Join(Stop.Lines, TEXT("\n")))))
+							.OnClicked_Lambda([this, StopIndex]() { if (Controller.IsValid()) { Controller->PickHistory(StopIndex); } return FReply::Handled(); })
+							[
+								SNew(STextBlock).Text(FText::FromString(Stop.Name.ToUpper())).Font(Font(TEXT("Bold"), 9, 120)).ColorAndOpacity(bPicked ? BrightBrass : Muted)
+							]
+						];
+					}
+					const FString Says = Opening.Histories.IsValidIndex(Opening.HistoryIndex) ? Opening.Histories[Opening.HistoryIndex].Under + TEXT(". ") + Opening.Histories[Opening.HistoryIndex].Blurb : FString();
+					Dial->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 12.0f, 0.0f)
+					[
+						SNew(SBox).MinDesiredWidth(74.0f)[SNew(STextBlock).Text(FText::FromString(TEXT("HISTORY"))).Font(Font(TEXT("Bold"), 9, 240)).ColorAndOpacity(Brass)]
+					];
+					Dial->AddSlot().AutoWidth().VAlign(VAlign_Center)
+					[
+						Stops
+					];
+					Dial->AddSlot().FillWidth(1.0f).VAlign(VAlign_Center).Padding(10.0f, 0.0f, 0.0f, 0.0f)
+					[
+						SNew(STextBlock).Text(FText::FromString(Says)).Font(Font(TEXT("Italic"), 10)).ColorAndOpacity(Muted).AutoWrapText(true)
+					];
+				}
 				Foot->AddSlot().AutoWidth().VAlign(VAlign_Center).Padding(14.0f, 0.0f, 0.0f, 0.0f)
 				[
 					SNew(SButton).ButtonStyle(&PlainButton).ContentPadding(FMargin(16.0f, 9.0f)).IsFocusable(false)
@@ -5986,9 +6084,13 @@ namespace
 					[
 						Difficulty
 					]
-					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 8.0f)
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, Opening.Histories.Num() > 0 ? 6.0f : 8.0f)
 					[
 						HowDeep
+					]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, Opening.Histories.Num() > 0 ? 8.0f : 0.0f)
+					[
+						Dial
 					]
 					+ SVerticalBox::Slot().AutoHeight()
 					[

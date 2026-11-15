@@ -105,6 +105,11 @@ void ACampaignPlayerController::RefreshOpening(bool bShow)
 	}
 	// (rules version 66) How deep it is played; the depth the rules offer first unless another was picked before.
 	Opening.Depths = Rules->GrandDepths();
+	Opening.Histories = Rules->HistoryStops();
+	if (!Opening.Histories.IsValidIndex(Opening.HistoryIndex))
+	{
+		Opening.HistoryIndex = Opening.Histories.IndexOfByPredicate([Rules](const FGrandLevel& Stop) { return Stop.Stop == Rules->FirstHistory(); });
+	}
 	if (!Opening.Depths.IsValidIndex(Opening.DepthIndex))
 	{
 		Opening.DepthIndex = Opening.Depths.IndexOfByPredicate([Rules](const FGrandLevel& Depth) { return Depth.Id == Rules->FirstDepth(); });
@@ -496,6 +501,16 @@ void ACampaignPlayerController::PickLevel(int32 Index)
 	}
 }
 
+void ACampaignPlayerController::PickHistory(int32 Index)
+{
+	if (Opening.Histories.IsValidIndex(Index) && Index != Opening.HistoryIndex)
+	{
+		Opening.HistoryIndex = Index;
+		++Opening.Revision;
+		CampaignSounds::Play(this, TEXT("click"), 0.6f);
+	}
+}
+
 void ACampaignPlayerController::PickDepth(int32 Index)
 {
 	if (Opening.Depths.IsValidIndex(Index) && Index != Opening.DepthIndex)
@@ -593,7 +608,10 @@ void ACampaignPlayerController::BeginGrandCampaign(bool bWatch)
 		Depth.Reset();
 		FParse::Value(FCommandLine::Get(), TEXT("TheaterDepth="), Depth);
 	}
-	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed, Level, Depth))
+	// (rules version 70) The history dial: the stop picked, for a watched war too. ("-TheaterHistory=5" asks for one in a picture run.)
+	int32 History = Opening.Histories.IsValidIndex(Opening.HistoryIndex) ? Opening.Histories[Opening.HistoryIndex].Stop : 0;
+	FParse::Value(FCommandLine::Get(), TEXT("TheaterHistory="), History);
+	if (Mode->StartCampaign(Human, Opening.Years[Opening.YearIndex].From, TEXT("grand"), GrandSeed, Level, Depth, History))
 	{
 		bFreshCampaign = true;
 		EnterCampaign();

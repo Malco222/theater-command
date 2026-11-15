@@ -33,12 +33,15 @@ public:
 	/** (rules version 66) How deep a grand campaign can be played, lightest first, and the depth offered first. */
 	const TArray<FGrandLevel>& GrandDepths() const { return Depths; }
 	const FString& FirstDepth() const { return DefaultDepth; }
+	/** (rules version 70) The history dial's five stops for the new-campaign card (none where the rules have no dial), and the one it opens on. */
+	const TArray<FGrandLevel>& HistoryStops() const { return Histories; }
+	int32 FirstHistory() const { return DefaultHistory; }
 
 	/** Who can be led in the grand campaign from a month. History is played up to it the first time this is asked. */
 	TArray<FGrandNation> GrandNations(int32 From, int32 Seed);
 
 	/** Starts a new campaign. Human is the nation the player leads, or empty to watch. From is the month to take over in. */
-	bool Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level = FString(), const FString& Depth = FString());
+	bool Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level = FString(), const FString& Depth = FString(), int32 History = 0);
 
 	/** The whole campaign as text, to be written to a file. Empty if there is no campaign. */
 	FString Save();
@@ -199,4 +202,6 @@ private:
 	FString DefaultLevel;
 	TArray<FGrandLevel> Depths;
 	FString DefaultDepth;
+	TArray<FGrandLevel> Histories;
+	int32 DefaultHistory = 3;
 };

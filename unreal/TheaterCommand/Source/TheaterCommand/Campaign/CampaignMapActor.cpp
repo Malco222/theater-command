@@ -769,17 +769,20 @@ void ACampaignMapActor::AddSinking(int32 Zone, const FString& Nation, const FStr
 		Water->SetCastShadow(false);
 		FCampaignMeshBuffers Patch;
 		// (the wake's white as it comes out on the screen by day, about (176, 185, 183); soft from its middle to its edge)
-		const FLinearColor White(0.5f, 0.63f, 0.67f); // (a shade to the cold side: on the sea's strong blue-green a neutral white reads as sand)
-		const int32 Sides = 28;
+		// (The art director's note of round 19: it was a soft lump with corners, wider than the ship, and read as a
+		// cloud lying on the water. It is an oval along her line now, her length long and a third as wide, whitest in
+		// its middle at about 0.85, with a smooth edge.)
+		const FLinearColor White(0.6f, 0.71f, 0.74f); // (a shade to the cold side: on the sea's strong blue-green a neutral white reads as sand)
+		const int32 Sides = 36;
 		static const double Rings[3] = { 0.4, 0.72, 1.0 };
-		static const float Thick[3] = { 0.5f, 0.24f, 0.0f };
-		const int32 Hub = Patch.AddVertex(FVector::ZeroVector, FVector::UpVector, FLinearColor(White.R, White.G, White.B, 0.58f).ToFColor(false));
+		static const float Thick[3] = { 0.62f, 0.28f, 0.0f };
+		const int32 Hub = Patch.AddVertex(FVector::ZeroVector, FVector::UpVector, FLinearColor(White.R, White.G, White.B, 0.8f).ToFColor(false));
 		TArray<int32> Ring[3];
 		for (int32 Side = 0; Side < Sides; ++Side)
 		{
 			const double Round = 2.0 * PI * Side / Sides;
-			const double Ragged = 1.0 + 0.11 * FMath::Sin(Round * 2.0 + Nth * 1.9) + 0.07 * FMath::Sin(Round * 5.0 + Zone);
-			const FVector Out(FMath::Cos(Round), FMath::Sin(Round) * 0.8, 0.0);
+			const double Ragged = 1.0 + 0.04 * FMath::Sin(Round * 2.0 + Nth * 1.9) + 0.025 * FMath::Sin(Round * 5.0 + Zone);
+			const FVector Out(FMath::Cos(Round), FMath::Sin(Round) * 0.34, 0.0);
 			for (int32 K = 0; K < 3; ++K)
 			{
 				Ring[K].Add(Patch.AddVertex(Out * (Rings[K] * Ragged), FVector::UpVector, FLinearColor(White.R, White.G, White.B, Thick[K]).ToFColor(false)));
@@ -851,7 +854,7 @@ void ACampaignMapActor::UpdateSinkings()
 			// is gone a few seconds after; it spreads all the while.
 			const float White = static_cast<float>(FMath::SmoothStep(0.45, 0.9, T) * (1.0 - FMath::SmoothStep(1.0, 1.6, T)));
 			Ship.Water->SetVisibility(White > 0.01f);
-			const double Wide = Ship.Long * (0.3 + 0.22 * FMath::SmoothStep(0.45, 1.6, T)); // (from a little over half her length across to about her length)
+			const double Wide = Ship.Long * (0.36 + 0.16 * FMath::SmoothStep(0.45, 1.6, T)); // (from about three quarters of her length long to a little over her length)
 			Ship.Water->SetWorldScale3D(FVector(Wide, Wide, 1.0));
 			Ship.WaterInk->SetScalarParameterValue(TEXT("Opacity"), White);
 			Ship.WaterInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.34f, 0.42f), Moon));
@@ -1148,6 +1151,7 @@ void ACampaignMapActor::ShowChart(bool bOn, const TArray<int32>& Levels, const T
 	// Old sightings: a navigator's fix where enemy ships were last seen, a ring with a cross in it, in red crayon,
 	// fainter for each month since. It stands a little off the middle of the sea, clear of a fleet that lies there.
 	TMap<int32, int32> InSea;
+	FCampaignMeshBuffers Fixes;
 	for (const FOldSighting& Seen : ChartOld)
 	{
 		if (!Data.Seas.IsValidIndex(Seen.Zone))
@@ -1175,10 +1179,18 @@ void ACampaignMapActor::ShowChart(bool bOn, const TArray<int32>& Levels, const T
 			const double Angle = 2.0 * PI * Side / 28.0;
 			Round.Add(Middle + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * 3.4);
 		}
-		AppendRibbon(Buffers, Round, 0.32, 0.3, Ink, true);
-		AppendRibbon(Buffers, { Middle - FVector2D(1.7, 1.7), Middle + FVector2D(1.7, 1.7) }, 0.28, 0.3, Ink, false);
-		AppendRibbon(Buffers, { Middle - FVector2D(1.7, -1.7), Middle + FVector2D(1.7, -1.7) }, 0.28, 0.3, Ink, false);
+		AppendRibbon(Fixes, Round, 0.32, 0.3, Ink, true);
+		AppendRibbon(Fixes, { Middle - FVector2D(1.7, 1.7), Middle + FVector2D(1.7, 1.7) }, 0.28, 0.3, Ink, false);
+		AppendRibbon(Fixes, { Middle - FVector2D(1.7, -1.7), Middle + FVector2D(1.7, -1.7) }, 0.28, 0.3, Ink, false);
 	}
+	// (the sightings in an ink of their own: the lanes' ink goes down so far by night that the ring was lost)
+	if (!SightingInk && HighlightMaterial)
+	{
+		SightingInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		ShownNight = -1.0f;
+		SetNight(NightNow, bLamplightNow);
+	}
+	Fixes.Commit(ChartMesh, 1, SightingInk ? static_cast<UMaterialInterface*>(SightingInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
 	// (in the lanes' own ink, which is dimmed with the land by night)
 	if (!LanesInk && HighlightMaterial)
 	{
@@ -1391,6 +1403,33 @@ void ACampaignMapActor::LoadMaterials()
 	SurfaceMaterial = Load(SurfaceMaterialPath);
 	SolidMaterial = Load(SolidMaterialPath);
 	HighlightMaterial = Load(HighlightMaterialPath);
+	// (the foam of a ship's wake: without its material the fleets simply have none)
+	if (UMaterialInterface* Foam = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Wake.M_Wake")))
+	{
+		WakeInk = UMaterialInstanceDynamic::Create(Foam, this);
+		FString Asked;
+		TArray<FString> Parts;
+		// ("-TheaterWake=brightness,night,strength[,sharp,drift[,centre,contrast]]")
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterWake="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) >= 3)
+		{
+			WakeLook = FVector(FCString::Atod(*Parts[0]), FCString::Atod(*Parts[1]), FCString::Atod(*Parts[2]));
+			if (Parts.Num() >= 5)
+			{
+				WakeInk->SetScalarParameterValue(TEXT("Sharp"), FCString::Atof(*Parts[3]));
+				WakeInk->SetScalarParameterValue(TEXT("Drift"), FCString::Atof(*Parts[4]));
+			}
+			if (Parts.Num() >= 7)
+			{
+				WakeInk->SetScalarParameterValue(TEXT("Centre"), FCString::Atof(*Parts[5]));
+				WakeInk->SetScalarParameterValue(TEXT("Contrast"), FCString::Atof(*Parts[6]));
+			}
+		}
+		// (no wake beyond the west edge of the map, where the table's frame begins: it thins out over the last three map units)
+		WakeInk->SetScalarParameterValue(TEXT("WestEdge"), static_cast<float>(MapToWorld(1.0, 0.0).Y));
+		WakeInk->SetScalarParameterValue(TEXT("EdgeSoft"), static_cast<float>(1.0 / (3.0 * UnitScale)));
+		WakeInk->SetScalarParameterValue(TEXT("Brightness"), static_cast<float>(WakeLook.X));
+		WakeInk->SetScalarParameterValue(TEXT("Opacity"), static_cast<float>(WakeLook.Z));
+	}
 	// Without the flag material the standards fall back to plain colours, so it is not an error for it to be missing.
 	FlagMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Campaign/Materials/M_Flag.M_Flag"));
 	if (!FlagMaterial)
@@ -1468,6 +1507,23 @@ void ACampaignMapActor::LoadMaterials()
 			SeaNight = FVector2f(FCString::Atof(*Parts[0]), FCString::Atof(*Parts[1]));
 			SeaNightTint = FLinearColor(FCString::Atof(*Parts[2]), FCString::Atof(*Parts[3]), FCString::Atof(*Parts[4]));
 			SeaNightLift = FLinearColor(FCString::Atof(*Parts[5]), FCString::Atof(*Parts[6]), FCString::Atof(*Parts[7]));
+		}
+		// ("-TheaterSeaRings=fill,fill under the pointer,line's night,its strength,fill's night,its strength,sighting's night,trees' snow r,g,b,wood floor r,g,b")
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSeaRings="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) >= 7)
+		{
+			auto Number = [&Parts](int32 Index) { return FCString::Atof(*Parts[Index]); };
+			SeaFill = FVector2D(Number(0), Number(1));
+			SeaLineNight = FLinearColor(Number(2), Number(2), Number(2) * 1.05f, Number(3));
+			SeaFillNight = FLinearColor(Number(4), Number(4), Number(4) * 1.05f, Number(5));
+			SightingNight = FLinearColor(Number(6), Number(6), Number(6) * 1.04f, 1.0f);
+			if (Parts.Num() >= 10)
+			{
+				SnowOnTrees = FLinearColor(Number(7), Number(8), Number(9));
+			}
+			if (Parts.Num() >= 13)
+			{
+				SnowWoodFloor = FLinearColor(Number(10), Number(11), Number(12));
+			}
 		}
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterNightRiver="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
 		{
@@ -4990,6 +5046,8 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 			// (and the woods are cooled and dimmed with it, or the yellows of autumn shine like lamps in the blackout)
 			WoodsMaterial->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.36f, 0.56f, 0.8f), Moon));
 		}
+		// (the grey floor a wood keeps under the snow: the art director's ruling of round 19)
+		LandVector(TEXT("SnowWoodFloor"), SnowWoodFloor);
 		// (by moonlight the nations' colours sink into the dark, as colours do: the land is mostly the land)
 		LandScalar(TEXT("Politics"), FMath::Lerp(0.94f, 0.42f, Moon));
 	}
@@ -5024,11 +5082,30 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		{
 			OrdersInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(WashNight.R, WashNight.G, WashNight.B), Moon));
 		}
+		if (WakeInk)
+		{
+			// (a wake dims with the sea: the ribbon about 0.25 at its whitest by night)
+			// (and it goes to the moon's side: left grey, foam a tenth as bright as by day was a brown smear on blue water)
+			const float Dim = static_cast<float>(WakeLook.Y);
+			WakeInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(Dim * 0.83f, Dim, Dim * 1.47f), Moon));
+		}
 		if (SeaReachInk)
 		{
-			// (the tinted water inside a ring is many thin washes laid over one another, so it takes a deep cut to tell)
-			SeaReachInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.055f, 0.058f, 0.066f), Moon));
-			SeaReachInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, 0.7f, Moon));
+			// (the ring's line by night: brass at about 0.45, the art director's number)
+			SeaReachInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SeaLineNight.R, SeaLineNight.G, SeaLineNight.B), Moon));
+			SeaReachInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SeaLineNight.A, Moon));
+		}
+		if (SeaFillInk)
+		{
+			// (and the water inside it: about 0.25 on a sea at 0.17)
+			SeaFillInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SeaFillNight.R, SeaFillNight.G, SeaFillNight.B), Moon));
+			SeaFillInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SeaFillNight.A, Moon));
+		}
+		if (SightingInk)
+		{
+			// (a place where the enemy was last seen: red crayon, kept findable by night at about 0.35)
+			SightingInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(SightingNight.R, SightingNight.G, SightingNight.B), Moon));
+			SightingInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, SightingNight.A, Moon));
 		}
 		if (UMaterialInstanceDynamic* Ring = GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("FFD27A"))), 0.4f, 0.0f, 2.5f))
 		{
@@ -5562,14 +5639,16 @@ void ACampaignMapActor::BuildTrees()
 					{
 						// Firs keep their green the year round, and carry the snow where it lies.
 						const FLinearColor Green(0.035f * Shade, 0.085f * Shade, 0.045f * Shade);
-						Model.Fir(Foot, 1.9 * Size * U, 0.55 * Size * U, FMath::Lerp(Green, FLinearColor(0.5f, 0.54f, 0.54f), 0.62f * Lying));
+						// (The art director's ruling of round 19: under snow the trees were pale grey dots, nearly the ground's own
+						// colour. They are a cool grey-green at about 0.6 now, a texture on the wood's grey floor.)
+						Model.Fir(Foot, 1.9 * Size * U, 0.55 * Size * U, FMath::Lerp(Green, FLinearColor(SnowOnTrees.R, SnowOnTrees.G, SnowOnTrees.B), 0.62f * Lying));
 					}
 					else
 					{
 						const FLinearColor Summer(0.055f * Shade, 0.115f * Shade, 0.038f * Shade), Fresh(0.085f * Shade, 0.17f * Shade, 0.045f * Shade);
 						// (autumn is ochre and rust, not lemon: the art director's (196, 150, 60), a little under it since the lamp is strong)
 						const FLinearColor Gold(0.15f * Shade, 0.105f * Shade, 0.032f), Orange(0.15f * Shade, 0.08f * Shade, 0.03f), Russet(0.11f * Shade, 0.055f * Shade, 0.028f);
-						const FLinearColor Twigs = FMath::Lerp(FLinearColor(0.115f * Shade, 0.095f * Shade, 0.08f * Shade), FLinearColor(0.5f, 0.52f, 0.52f), 0.5f * Lying);
+						const FLinearColor Twigs = FMath::Lerp(FLinearColor(0.115f * Shade, 0.095f * Shade, 0.08f * Shade), FLinearColor(SnowOnTrees.R, SnowOnTrees.G * 0.93f, SnowOnTrees.B * 0.95f), 0.5f * Lying);
 						FLinearColor Leaf = Summer;
 						bool bBare = false;
 						switch (TreeLook)
@@ -7026,11 +7105,38 @@ void ACampaignMapActor::ShowFreeCapitals(const TArray<int32>& Capitals)
 void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, int32 FleetId)
 {
 	OrdersMesh->ClearMeshSection(2);
+	OrdersMesh->ClearMeshSection(10);
 	if (Zones.Num() == 0)
 	{
 		return;
 	}
-	FCampaignMeshBuffers Buffers;
+	FCampaignMeshBuffers Buffers, Fills;
+	// (The art director's ruling of round 19: the line carries the mark and the fill stays faint. The water inside a
+	// ring was a ribbon folded over itself forty times, which came out as a pale disc at 0.8 that hid the ships and
+	// the sea's name. It is one thin wash now, a fan from the middle, in an ink of its own.)
+	auto Wash = [this, &Fills](const FVector2D& Middle, double Radius, const FLinearColor& Ink)
+	{
+		const int32 Sides = 48;
+		const FColor Colour = Ink.ToFColor(false);
+		const int32 Hub = Fills.AddVertex(SurfacePointOver(Middle.X, Middle.Y, 0.28), FVector::UpVector, Colour);
+		int32 First = INDEX_NONE, Last = INDEX_NONE;
+		for (int32 Side = 0; Side < Sides; ++Side)
+		{
+			const double Turn = 2.0 * PI * Side / Sides;
+			const FVector2D Rim = Middle + FVector2D(FMath::Cos(Turn), FMath::Sin(Turn)) * Radius;
+			const int32 Now = Fills.AddVertex(SurfacePointOver(Rim.X, Rim.Y, 0.28), FVector::UpVector, Colour);
+			if (Last != INDEX_NONE)
+			{
+				Fills.AddTriangleFacingUp(Hub, Last, Now);
+			}
+			else
+			{
+				First = Now;
+			}
+			Last = Now;
+		}
+		Fills.AddTriangleFacingUp(Hub, Last, First);
+	};
 	auto Ring = [this, &Buffers](const FVector2D& Middle, double Radius, double HalfWidth, const FLinearColor& Ink)
 	{
 		TArray<FVector2D> Round;
@@ -7064,7 +7170,7 @@ void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, in
 		const bool bHere = Zone == Hover;
 		// An anchorage marked on the chart: a ring of brass, doubled and brighter under the pointer.
 		const double Wide = bHere ? 15.0 : 13.0;
-		Ring(Middle, Wide * 0.5, Wide * 0.5, FLinearColor(1.0f, 0.82f, 0.3f, bHere ? 0.1f : 0.045f)); // the water inside it, tinted
+		Wash(Middle, Wide, FLinearColor(1.0f, 0.82f, 0.3f, static_cast<float>(bHere ? SeaFill.Y : SeaFill.X))); // the water inside it, tinted
 		Ring(Middle, Wide, bHere ? 0.9 : 0.55, FLinearColor(1.0f, 0.82f, 0.3f, bHere ? 0.98f : 0.7f));
 		Ring(Middle, 1.8, bHere ? 1.4 : 1.0, FLinearColor(1.0f, 0.86f, 0.4f, bHere ? 0.98f : 0.75f));
 		if (bHere && bHaveFleet && FVector2D::Distance(From, Middle) > 12.0)
@@ -7089,7 +7195,14 @@ void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, in
 		ShownNight = -1.0f;
 		SetNight(NightNow, bLamplightNow);
 	}
+	if (!SeaFillInk && HighlightMaterial)
+	{
+		SeaFillInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		ShownNight = -1.0f;
+		SetNight(NightNow, bLamplightNow);
+	}
 	Buffers.Commit(OrdersMesh, 2, SeaReachInk ? static_cast<UMaterialInterface*>(SeaReachInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	Fills.Commit(OrdersMesh, 10, SeaFillInk ? static_cast<UMaterialInterface*>(SeaFillInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
 }
 
 void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& Regions, int32 RouteEnds)
@@ -7354,6 +7467,29 @@ void ACampaignMapActor::AimStudioCamera(USceneCaptureComponent2D* Camera, const 
 	Camera->SetRelativeLocationAndRotation(Eye, (Middle - Eye).Rotation());
 }
 
+void ACampaignMapActor::TakeStudioPicture(USceneCaptureComponent2D* Camera)
+{
+	// (The art director's ruling of round 19: a unit's picture is taken in the studio's own steady light, the light
+	// of a plain day. Lit by the room, a half-track in field grey came out blue by night, and a picture first taken
+	// by night stayed blue by day. The room's lights are set to the day for the moment of the picture and put back:
+	// the picture is rendered between the two, and the table itself never sees the change.)
+	ACampaignEnvironment* Room = nullptr;
+	if (UWorld* World = GetWorld())
+	{
+		TActorIterator<ACampaignEnvironment> It(World);
+		Room = It ? *It : nullptr;
+	}
+	if (Room)
+	{
+		Room->StudioLight(true);
+	}
+	Camera->CaptureScene();
+	if (Room)
+	{
+		Room->StudioLight(false);
+	}
+}
+
 UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model, bool bLarge)
 {
 	TMap<FString, TObjectPtr<UTextureRenderTarget2D>>& Kept_ = bLarge ? LargePortraits : Portraits;
@@ -7386,7 +7522,7 @@ UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model, boo
 			PortraitCamera->SetRelativeLocationAndRotation(Eye, (Middle - Eye).Rotation());
 		}
 		PortraitCamera->TextureTarget = Picture;
-		PortraitCamera->CaptureScene();
+		TakeStudioPicture(PortraitCamera);
 	}
 	Kept_.Add(Model, Picture); // (kept even when there is none, so that it is not tried again every frame)
 	return Picture;
@@ -7414,7 +7550,7 @@ void ACampaignMapActor::SetShowpiece(const FString& Model)
 	}
 	AimStudioCamera(ShowCamera, ShowMesh->GetRelativeLocation(), Radius);
 	ShowCamera->TextureTarget = ShowTarget;
-	ShowCamera->CaptureScene();
+	TakeStudioPicture(ShowCamera);
 }
 
 FVector2D ACampaignMapActor::AirfieldSpot(int32 RegionId) const
@@ -8103,6 +8239,12 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		if (HandLampGlow > 0.0f)
 		{
 			static float Day = 1200.0f, Night = 1400.0f, High = 90.0f, Cone = 15.0f; // (candelas; the lamp hangs high, so that its pool is even and has no hot middle)
+			// (The art director's ruling of round 19: by day a fleet in hand stood on a pale disc at 0.85, its pale decks
+			// lost in it and the sea's name hidden under it. That disc was this lamp's pool on the water, which answers
+			// a lamp far more than the land does. Over the sea by day it burns at a fraction; by night it is as it was.)
+			// (By night the pool stood at a warm 0.46 under a film that is gone now, and the ships stood out on it: the
+			// lamp is turned down over the sea by night too, to keep it there.)
+			static float LampSeaDay = 0.1f, LampSeaNight = 0.4f;
 			static bool bRead = false;
 			if (!bRead)
 			{
@@ -8116,6 +8258,8 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 					if (Parts.IsValidIndex(1)) { Night = FCString::Atof(*Parts[1]); }
 					if (Parts.IsValidIndex(2)) { High = FCString::Atof(*Parts[2]); }
 					if (Parts.IsValidIndex(3)) { Cone = FCString::Atof(*Parts[3]); }
+					if (Parts.IsValidIndex(4)) { LampSeaDay = FCString::Atof(*Parts[4]); }
+					if (Parts.IsValidIndex(5)) { LampSeaNight = FCString::Atof(*Parts[5]); }
 				}
 			}
 			if (!HandLamp)
@@ -8135,12 +8279,13 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			if (Held)
 			{
 				HandLampAt = Held->GetActorLocation();
+				bHandLampAtSea = Held->IsFleet();
 			}
 			HandLamp->SetInnerConeAngle(Cone * 0.3f);
 			HandLamp->SetOuterConeAngle(Cone);
 			HandLamp->SetAttenuationRadius(High * UnitScale * 1.8f);
 			HandLamp->SetWorldLocation(HandLampAt + FVector(0.0, 0.0, High * UnitScale));
-			HandLamp->SetIntensity(HandLampGlow * HandLampGlow * FMath::Lerp(Day, Night, FMath::Clamp(NightNow, 0.0f, 1.0f)));
+			HandLamp->SetIntensity(HandLampGlow * HandLampGlow * FMath::Lerp(bHandLampAtSea ? Day * LampSeaDay : Day, bHandLampAtSea ? Night * LampSeaNight : Night, FMath::Clamp(NightNow, 0.0f, 1.0f)));
 			HandLamp->SetVisibility(true);
 		}
 		else if (HandLamp && HandLamp->IsVisible())
@@ -8181,7 +8326,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		if (ShowCamera && ShowTarget && Clock - LastTaken > 0.05)
 		{
 			LastTaken = Clock;
-			ShowCamera->CaptureScene();
+			TakeStudioPicture(ShowCamera); // (in the studio's own light, like every other picture of a unit)
 		}
 	}
 

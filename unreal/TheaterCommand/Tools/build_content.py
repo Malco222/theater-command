@@ -236,6 +236,56 @@ def build_highlight():
     finish(m)
 
 
+def build_wake():
+    """The foam of a ship's wake, lying on the water: light of its own, see-through. The mesh's own colour says how
+    white the foam is (red), how whole it still is (green: 1 unbroken by the stern, falling as it breaks up) and how
+    much of it there is (alpha: nothing at a soft edge). Its texture coordinate runs astern (u) and across (v) in
+    ship's beams. Where the foam is no longer whole, only the heights of a noise keep it: drawn out along the ship's
+    track they are streaks, and they drift slowly astern."""
+    m = new_material("M_Wake")
+    m.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+    m.set_editor_property("two_sided", True)
+    noise = unreal.load_asset("/Engine/MapTemplates/TilingNoise05")
+    colour = node(m, unreal.MaterialExpressionVertexColor, -1500, 0)
+    uv = node(m, unreal.MaterialExpressionTextureCoordinate, -1900, 400)
+    drift = scalar(m, "Drift", 0.022, -1900, 620)
+
+    def streaks(tile_u, tile_v, speed, x, y):
+        scaled = times(m, uv, node(m, unreal.MaterialExpressionConstant2Vector, x - 420, y + 120, r=tile_u, g=tile_v), x - 250, y)
+        moved = node(m, unreal.MaterialExpressionPanner, x - 100, y, speed_x=-1.0, speed_y=0.0)
+        connect(scaled, "", moved, "Coordinate")
+        clock = times(m, node(m, unreal.MaterialExpressionTime, x - 420, y + 240), times(m, drift, speed, x - 420, y + 320), x - 250, y + 240)
+        connect(clock, "", moved, "Time")
+        # (The noise is drawn out fifteen times longer than it is wide. Left to itself the sampler takes it from a
+        # picture small enough for the long way, which is a flat grey: no heights, no streaks. It is told to take a
+        # picture nearer the size of the short way.)
+        sample = node(m, unreal.MaterialExpressionTextureSample, x + 80, y, texture=noise, sampler_type=unreal.MaterialSamplerType.SAMPLERTYPE_COLOR,
+                      mip_value_mode=unreal.TextureMipValueMode.TMVM_MIP_BIAS, const_mip_value=-3.4)
+        connect(moved, "", sample, "UVs")
+        return sample
+
+    # (two scales of streak: long thin ones, and a broader breaking-up under them that drifts a little slower)
+    fine = streaks(0.11, 1.7, 1.0, -1400, 300)
+    broad = streaks(0.045, 0.55, 0.7, -1400, 700)
+    mix = plus(m, times(m, (fine, "R"), 0.62, -1000, 300), times(m, (broad, "G"), 0.38, -1000, 700), -850, 500)
+    # (stretched about its middle, so that the heights and hollows of the noise reach both ends)
+    # (the noise is a dark one, with its middle near a fifth: "Centre" is where that middle is taken to be)
+    mix = plus(m, times(m, plus(m, mix, times(m, scalar(m, "Centre", 0.23, -900, 560), -1.0, -820, 560), -750, 500), scalar(m, "Contrast", 2.4, -900, 640), -650, 500), 0.5, -550, 500)
+    kept = one_in(m, unreal.MaterialExpressionSaturate,
+                  times(m, plus(m, plus(m, mix, -1.0, -450, 500), times(m, (colour, "G"), 1.6, -650, 300), -350, 420), scalar(m, "Sharp", 3.0, -500, 640), -250, 460), -120, 460)
+    foam = times(m, times(m, times(m, vector(m, "Foam", (0.6, 0.66, 0.68, 1.0), -900, -260), (colour, "R"), -650, -200),
+                          scalar(m, "Brightness", 1.0, -900, -80), -450, -160),
+                 vector(m, "Tint", (1.0, 1.0, 1.0, 1.0), -650, -20), -250, -120)
+    to_property(foam, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    # (a wake stops at the west edge of the map: a fleet near it trailed its foam out over the table's frame)
+    east = node_from(m, unreal.MaterialExpressionComponentMask, node(m, unreal.MaterialExpressionWorldPosition, -500, 820), -300, 820, r=False, g=True, b=False, a=False)
+    on_the_map = one_in(m, unreal.MaterialExpressionSaturate,
+                        times(m, plus(m, east, times(m, scalar(m, "WestEdge", -10000000.0, -500, 940), -1.0, -400, 940), -200, 860), scalar(m, "EdgeSoft", 0.01, -400, 1020), -100, 900), 0, 900)
+    to_property(times(m, times(m, times(m, kept, (colour, "A"), 0, 380), scalar(m, "Opacity", 1.0, -200, 640), 150, 420), on_the_map, 300, 500), "", unreal.MaterialProperty.MP_OPACITY)
+    finish(m)
+
+
 def build_flag():
     """A nation's flag on the cloth of a standard. The picture is painted in C++ and handed in as 'Flag'.
     The cloth shows from both sides and, like the old plain banners, carries a little light of its own so it reads in shadow."""
@@ -586,6 +636,11 @@ def build_land():
     c = times(m, c, plus(m, 1.0, times(m, plus(m, (cover, "B"), -0.5, -1500, -700), scalar(m, "WoodsRim", 0.6, -1500, -600), -1350, -650), -1200, -650), -1100, -500)
     c = lerp(m, c, vector(m, "RockColour", (0.235, 0.205, 0.162, 1.0), -2000, -150), (masks, "R"), -1000, -400)
     c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), (masks, "G"), -900, -400)
+    # (The art director's ruling of round 19: in winter the snow took a wood's dark floor away, and every tree stood
+    # alone on white like salt. A wood keeps a cool grey floor under the snow, like pencil shading on the map, about
+    # a tenth below the snow round it; and so the woods can be found in winter, which matters, since they change a fight.)
+    c = lerp(m, c, times(m, c, vector(m, "SnowWoodFloor", (0.62, 0.66, 0.71, 1.0), -1700, -60), -1300, -330),
+             times(m, wooded, (masks, "G"), -1300, -260), -850, -330)
     c = lerp(m, c, vector(m, "SandColour", (0.694, 0.597, 0.371, 1.0), -1400, -150), (masks, "B"), -800, -400)
 
     # Which kind of detail shows where: grass by default, tree-tops where it is wooded, rock where rock shows,
@@ -753,7 +808,7 @@ def build_level():
 # Set TC_REBUILD=all to remake everything, or to a material's name (or several, with commas between) to remake those.
 import os
 REBUILD = os.environ.get("TC_REBUILD", "")
-for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea)):
+for name, build in (("M_MapSurface", build_map_surface), ("M_Solid", build_solid), ("M_Highlight", build_highlight), ("M_Flag", build_flag), ("M_Land", build_land), ("M_Sea", build_sea), ("M_Wake", build_wake)):
     if REBUILD == "all" or name in REBUILD.split(",") or not eal.does_asset_exist(f"{MATERIALS}/{name}"):
         build()
     else:

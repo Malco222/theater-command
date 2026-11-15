@@ -194,6 +194,8 @@ struct FOpening
 	// (rules version 66) How deep the campaign is to be played: the depths on offer and the one picked.
 	TArray<FGrandLevel> Depths;
 	int32 DepthIndex = INDEX_NONE;
+	TArray<FGrandLevel> Histories; // (rules version 70) the history dial's five stops, and the one picked
+	int32 HistoryIndex = INDEX_NONE;
 	bool bWorking = false; // history is being played up to the day chosen; the list of countries follows
 
 	// The scenarios: single campaigns in which the other nations keep to history's plan.
@@ -428,6 +430,7 @@ public:
 	void PickLevel(int32 Index);
 	/** (rules version 66) How deep the campaign is to be played, picked as it is set up. */
 	void PickDepth(int32 Index);
+	void PickHistory(int32 Index);
 	/** The depth the campaign stands at and how many desks the staff runs, for a line under the date: empty outside the grand campaign. */
 	FText GetDepthLine() const;
 	/** The staff's room: the depths, the six desks and what the staff may spend. */

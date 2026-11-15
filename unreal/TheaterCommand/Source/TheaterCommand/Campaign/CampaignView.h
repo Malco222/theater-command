@@ -418,6 +418,8 @@ struct FCampaignView
 	TArray<FString> Wars; // every pair of nations at war, two by two: the front line is drawn between their holdings
 	TArray<int32> Cold; // provinces with factories and nothing on order, where the player can know it: their chimneys stand cold
 	TArray<FArmNote> Arms; // (release 1) what each arm is, for the bigger unit card
+	int32 DialStop = 0; // (rules version 70) where the history dial stands, 1 to 5: 0 where there is none
+	FString DialName, DialUnder;
 	// (release 1) The admiral's chart: each sea by how well the player's side has it searched (0 not, 1 thinly, 2 well, 3 in full view), and old sightings.
 	TArray<int32> SeaSearch;
 	TArray<FOldSighting> OldSightings;
@@ -657,6 +659,7 @@ struct FGrandLevel
 	FString Blurb;
 	TArray<FString> Lines; // what it changes
 	FString Under; // (a depth only) the plain word under its name: "Simple", "Standard", "Full"
+	int32 Stop = 0; // (a stop of the history dial only) its number, 1 to 5
 };
 
 
@@ -966,6 +969,15 @@ struct FDiplomacy
 	FString Date;
 	FString Bloc; // "the Axis", "the Allies", or empty
 	FString Wind; // which way the neutrals are bending
+	/** (rules version 70) One claim on named ground: who claims it, from whom and why, and how far it has gone (0 not pressed, 1 pressing, 2 at war for it). */
+	struct FClaim
+	{
+		FString Title, From, Tag;
+		int32 State = 0, Region = INDEX_NONE;
+		bool bOnYou = false;
+	};
+	TArray<FClaim> Claims; // those on the player's own ground first
+	FString ClaimsLead; // what the Powers view says above them: empty where there is nothing to say
 	FString Help; // what courting does
 	int32 Capital = 0;
 	int32 Income = 0;

@@ -727,6 +727,20 @@ void AArmyPiece::Rebuild(ACampaignMapActor* Map, const FCampaignNation& Nation)
 	Body->RegisterComponent();
 	Body->CreateMeshSection(0, Model.Vertices, Model.Triangles, Model.Normals, TArray<FVector2D>(), Model.Colors, TArray<FProcMeshTangent>(), false);
 	Body->SetMaterial(0, Map->GetPieceMaterial());
+	// (a fleet at sea: its wake, foam lying on the water. Two of them, on patrol and on passage: the one that is not wanted is hidden.)
+	bHasWake = false;
+	if (Model.Wake[0].Vertices.Num() > 0 && Map->GetWakeMaterial())
+	{
+		for (int32 Passage = 0; Passage < 2; ++Passage)
+		{
+			const FMiniatureMesh::FWakeMesh& Foam = Model.Wake[Passage];
+			Body->CreateMeshSection(1 + Passage, Foam.Vertices, Foam.Triangles, Foam.Normals, Foam.UVs, Foam.Colors, TArray<FProcMeshTangent>(), false);
+			Body->SetMaterial(1 + Passage, Map->GetWakeMaterial());
+		}
+		bHasWake = true;
+		Body->SetMeshSectionVisible(1, !bMarching);
+		Body->SetMeshSectionVisible(2, bMarching);
+	}
 	if (Turf.Vertices.Num() > 0)
 	{
 		Flock = NewObject<UProceduralMeshComponent>(this);
@@ -947,6 +961,12 @@ void AArmyPiece::MarchAlong(const TArray<FVector>& Waypoints, bool bInRemoveOnAr
 	MarchClock = 0.0;
 	bMarching = true;
 	bRemoveOnArrival = bInRemoveOnArrival;
+	if (bHasWake && Body)
+	{
+		// (a fleet on passage between seas throws a longer wake)
+		Body->SetMeshSectionVisible(1, false);
+		Body->SetMeshSectionVisible(2, true);
+	}
 	SetActorLocation(Route[0]);
 	SetActorTickEnabled(true);
 }
@@ -986,6 +1006,11 @@ void AArmyPiece::Tick(float DeltaSeconds)
 	{
 		bMarching = false;
 		SetActorTickEnabled(false);
+		if (bHasWake && Body)
+		{
+			Body->SetMeshSectionVisible(1, true);
+			Body->SetMeshSectionVisible(2, false);
+		}
 		if (bRemoveOnArrival)
 		{
 			Destroy();

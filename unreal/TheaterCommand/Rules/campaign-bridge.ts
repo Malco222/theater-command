@@ -43,6 +43,7 @@ import { factoriesBuilt, workLevel, yardLevel } from '../../../src/campaign/arse
 import { hasTech, idleTeams, techOf } from '../../../src/campaign/tech';
 import { eliteOf, traitRule, traitRules, traitsOf, eliteRule } from '../../../src/campaign/traits';
 import { commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk } from '../../../src/campaign/turn';
+import * as everyRule from '../../../src/campaign/turn';
 import { DEPTH, deskDef, type DeskId } from '../../../src/campaign/depth';
 import { LEAGUE, leagueFounded, leagueMembers, type PathId } from '../../../src/campaign/league';
 import { DIPLOMACY, TRACK, TRACK_LABEL, TRACK_PHRASE, canCourt, courtable, friendsOf, momentum, pcIncome, receptive, step, tradePartners } from '../../../src/campaign/diplomacy';
@@ -424,6 +425,8 @@ function view() {
     // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
     // (release 1) What each arm is, for the bigger unit card.
     arms: armsTable(s),
+    // (Version 70) The history dial as it stands: null outside the grand campaign, and where the rules have none.
+    dial: (() => { const d = dialNow(s); return d ? { stop: d.stop, name: d.name, under: d.under } : null; })(),
     // (release 1) The admiral's chart: each sea by how well it is searched, and old sightings.
     chart: chartOf(s),
     // (release 1) Wrecks on the chart: where the big ships went down.
@@ -812,6 +815,9 @@ function starts() {
     // (Version 66) How deep a grand campaign is played: which desks the player's staff runs for him. The one offered first.
     depths: DEPTH.depths.map((d) => ({ id: d.id, name: d.name, under: d.under, blurb: d.blurb })),
     depth: DEPTH.start,
+    // (Version 70) The history dial's five stops, and the one a campaign opens on: none where the rules have no dial.
+    histories: dialStops().map((x) => ({ stop: x.stop, id: x.id, name: x.name, under: x.under, blurb: x.blurb, lines: x.lines })),
+    history: 3,
     groups: STARTS.map((group) => ({
       ...group,
       sides: group.sides.map((side) => ({
@@ -905,7 +911,7 @@ function listNames(names: string[]): string {
 }
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string; secure?: boolean; depth?: string }) {
+function start(options?: { human?: string | null; from?: number; view?: string; seed?: number; level?: string; secure?: boolean; depth?: string; history?: number }) {
   const human = options?.human === undefined ? 'GER' : options.human;
   const from = options?.from ?? 1;
   const seed = options?.seed ?? 1939;
@@ -927,6 +933,8 @@ function start(options?: { human?: string | null; from?: number; view?: string; 
   // (Version 66) How deep he plays: a depth sets the desks his staff runs, the cabinet, whether it can fall, and the fog of
   // war. The staff goes to work when his first month opens. A game started with no depth is the full game.
   if (human && options?.view === 'grand' && options?.depth) { try { orderDepth(g, options.depth); } catch { /* no depths in this game */ } }
+  // (Version 70) The history dial, for a campaign that starts at a stop other than the third: a watched war included.
+  if (options?.view === 'grand' && options?.history && options.history !== 3) { try { dialCalls.order?.(g, options.history, true); } catch { /* no dial in these rules */ } }
   // The month the player took his seat, kept with the game (the chimneys of an idle country stand cold only from his second month).
   if (human) (g.flags as Record<string, number>).began = g.turn;
   // Honours earned before the player took over are his to carry; their citations are old news.
@@ -967,6 +975,78 @@ function load(text: string) {
     arrive(g);
   }
   return view();
+}
+
+// ---- The history dial (Version 70) ---------------------------------------------------------------
+// One setting of the grand campaign with five stops, from "By the book" to "Anything goes": how far the computer's
+// countries may move away from what history did. Its calls are asked for by name, so that this bridge builds on
+// the rules before Version 70 as well: there the dial is simply not there.
+
+interface DialStop { stop: number; id: string; name: string; under: string; blurb: string; lines: string[] }
+interface DialNow { stop: number; name: string; under: string; blurb: string; lines: string[]; loosest: number; loosestName: string; closed: { theatre: string; name: string; turn: number }[]; locked: string | null }
+interface ClaimRow { id: string; nat: string; on: string; name: string; why: string; ground: string[]; state: 'claims' | 'pressing' | 'marched'; since: number; onYou: boolean }
+const rulesByName: Record<string, unknown> = { ...everyRule };
+const dialCalls = {
+  stops: rulesByName['historyStops'] as (() => DialStop[]) | undefined,
+  order: rulesByName['orderHistory'] as ((g: Game, stop: number, atStart?: boolean) => boolean) | undefined,
+  now: rulesByName['dialOf'] as ((g: Game) => DialNow | null) | undefined,
+  whyNot: rulesByName['whyNotSetHistory'] as ((g: Game, stop: number) => string | null) | undefined,
+  claims: rulesByName['claimsOf'] as ((g: Game) => ClaimRow[]) | undefined,
+};
+const dialStops = (): DialStop[] => { try { return dialCalls.stops ? dialCalls.stops() : []; } catch { return []; } };
+const dialNow = (s: Game): DialNow | null => { try { return dialCalls.now ? dialCalls.now(s) : null; } catch { return null; } };
+
+/**
+ * Claims and ambitions for the Powers view, worded as the browser words them: who claims what ground from whom, and
+ * how far it has gone. Claims on the player's ground come first. Null where there is nothing to say (no dial, or
+ * a dial that has never stood loose enough for a claim).
+ */
+function claimsPane(s: Game): { lead: string; rows: { title: string; from: string; tag: string; state: number; onYou: boolean; region: number }[] } | null {
+  try {
+    const d = dialNow(s);
+    if (!d) return null;
+    const list = dialCalls.claims ? dialCalls.claims(s) : [];
+    if (!list.length && d.stop <= 3) return null;
+    const rows = list.map((c) => {
+      const when = turnToDate(c.since).label, at = s.byName[c.ground[0]];
+      return {
+        title: `${upFirst(theName(s, c.nat))} claims ${c.name}`,
+        from: `from ${theName(s, c.on)}${c.why ? `: ${c.why}` : ''}.`,
+        tag: c.state === 'marched' ? `At war for it since ${when}` : c.state === 'pressing' ? `Pressing its claim since ${when}: it may march` : 'A claim it has not pressed',
+        state: c.state === 'marched' ? 2 : c.state === 'pressing' ? 1 : 0,
+        onYou: !!c.onYou,
+        region: at ? at.id : -1,
+      };
+    });
+    const lead = d.stop > 3
+      ? `With the history dial at ${d.name}, a country outside the war may press a claim on ground a neighbour holds and march for it when its moment comes. It always gives warning first, and every claim that could be pressed is listed here.${rows.length ? '' : ' No country holds a claim it could press today.'}`
+      : 'Raised while the history dial stood looser than it does now. A war begun for a claim is fought to its end.';
+    return { lead, rows };
+  } catch { return null; }
+}
+
+/** The dial's part of the staff's room: where it stands, the five stops with a button each, and where history's book is closed. */
+function dialSection(s: Game): { heading: string; text: string; rows: PageRow[] } | null {
+  const d = dialNow(s), stops = dialStops();
+  if (!d || !stops.length) return null;
+  const up = humanUp(s) && !onEve(s);
+  const closed = d.closed.map((c) => `History's book is closed in ${c.name} since ${turnToDate(c.turn).label}.`);
+  return {
+    heading: 'THE HISTORY DIAL',
+    text: [`How far the other countries may move away from what history did. It stands at ${d.name} (${d.under}). ${d.blurb}`,
+      d.locked ? d.locked : 'The dial leashes the world the computer runs, never you: your own orders are free at every stop.',
+      d.loosest !== d.stop ? `This campaign has been played as loose as ${d.loosestName}.` : '', ...closed].filter(Boolean).join('\n'),
+    rows: stops.map((x) => {
+      const on = x.stop === d.stop;
+      let why: string | null = null;
+      try { why = on ? null : dialCalls.whyNot ? dialCalls.whyNot(s, x.stop) : null; } catch { why = null; }
+      return {
+        nat: '', title: `${x.stop}  ·  ${x.name}  ·  ${x.under}${on ? '  ·  where it stands' : ''}`, lines: [x.blurb, ...x.lines],
+        buttons: [{ label: on ? 'THE DIAL STANDS HERE' : `TURN THE DIAL TO ${x.name.toUpperCase()}`, act: `history:${x.stop}`, ok: !on && up && !why,
+          tip: on ? 'The history dial stands at this stop.' : why ?? "The change reaches the other countries' decisions from next month. It can be turned again in any month." }],
+      };
+    }),
+  };
 }
 
 // ---- Marches that carry on (release 1) ----------------------------------------------------------
@@ -3429,6 +3509,7 @@ function staffPage(s: Game): Page | null {
           buttons: [{ label: d.on ? 'YOU PLAY AT THIS DEPTH' : `GO TO ${d.name.toUpperCase()}`, act: `depth:${d.id}`, ok: !d.on, tip: d.on ? 'The campaign stands at this depth.' : `${d.blurb} It can be changed again in any month.` }],
         })),
       },
+      ...(() => { const d = dialSection(s); return d ? [d] : []; })(),
       {
         heading: 'THE SIX DESKS', text: '',
         rows: v.desks.map((d) => ({
@@ -3542,6 +3623,15 @@ function act(action: string, region = -1) {
       ok = orderCallUp(s, hold);
       note = ok ? (hold ? 'The standing call-up is held: no new corps are raised from the reserve until you let it run again.' : 'The standing call-up runs again.') : 'That cannot be changed now.';
     }
+    return { ok, note, fly, flies, open, view: view() };
+  }
+  if (part[0] === 'history') {
+    // (Version 70) The history dial turned to another stop.
+    const stop = Number(part[1]), to = dialStops().find((x) => x.stop === stop);
+    let why: string | null = dialStops().length ? 'There is no such stop on the dial.' : 'These rules have no history dial.';
+    try { why = dialCalls.whyNot && to ? dialCalls.whyNot(s, stop) : why; } catch { /* as it was */ }
+    try { ok = !why && !!dialCalls.order && dialCalls.order(s, stop); } catch { ok = false; }
+    note = ok ? `The history dial stands at ${to?.name ?? stop} now. The other countries feel it from next month.` : why ?? 'The dial cannot be turned now.';
     return { ok, note, fly, flies, open, view: view() };
   }
   if (part[0] === 'depth' || part[0] === 'desk' || part[0] === 'cap') {
@@ -3875,6 +3965,8 @@ function diplomacy() {
       ? `Courting a neutral costs ${DIPLOMACY.court.cost} political capital and pulls it toward ${side}. A country that leans your way trades with you${DIPLOMACY.majors.includes(me.id) ? `, worth ${worth} a month to your treasury` : ''}; one that is fully won over joins your side.`
       : 'Your country belongs to neither bloc, so it has nobody to win the neutrals over to.',
     powers, rows, league, path,
+    // (Version 70) What one country claims of another's ground, at the dial's two loosest stops: those on the player first.
+    claims: claimsPane(s),
   };
 }
 

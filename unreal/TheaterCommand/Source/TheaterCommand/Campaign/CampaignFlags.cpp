@@ -668,6 +668,7 @@ namespace
 		});
 
 		// ---------------------------------------------------------------- the Americas
+		// Brazil, the flag of 1889 to 1960: twenty-one stars, one of them above the band. (Today's design has five.)
 		Map.Add(TEXT("BRA"), [](FFlagPainter& P)
 		{
 			P.Field(Hex(TEXT("009C3B")));
@@ -679,22 +680,41 @@ namespace
 				const double FromArc = FMath::Sqrt((X - 0.62) * (X - 0.62) + (Y - 1.02) * (Y - 1.02));
 				return InDisc < 0.25 * 0.25 && FMath::Abs(FromArc - 0.56) < 0.024;
 			});
-			for (const FVector2D& At : { FVector2D(0.66, 0.62), FVector2D(0.75, 0.66), FVector2D(0.84, 0.6), FVector2D(0.78, 0.56), FVector2D(0.9, 0.4) })
+			// The seven bright ones: Spica above the band, then Procyon, Sirius, Canopus, the head and foot of the Cross, Antares.
+			for (const FVector2D& At : { FVector2D(0.83, 0.39), FVector2D(0.60, 0.53), FVector2D(0.655, 0.60), FVector2D(0.63, 0.665),
+				FVector2D(0.75, 0.572), FVector2D(0.75, 0.668), FVector2D(0.875, 0.58) })
 			{
 				P.Star(White, At.X, At.Y, 0.022);
 			}
+			// The fourteen lesser ones: the rest of the Cross, the pole star, the Southern Triangle, the Scorpion.
+			for (const FVector2D& At : { FVector2D(0.718, 0.618), FVector2D(0.782, 0.612), FVector2D(0.767, 0.642), FVector2D(0.75, 0.722),
+				FVector2D(0.815, 0.668), FVector2D(0.853, 0.652), FVector2D(0.836, 0.695), FVector2D(0.898, 0.592), FVector2D(0.918, 0.61),
+				FVector2D(0.925, 0.64), FVector2D(0.908, 0.662), FVector2D(0.888, 0.678), FVector2D(0.87, 0.622), FVector2D(0.895, 0.628) })
+			{
+				P.Star(White, At.X, At.Y, 0.014);
+			}
 		});
+		// Mexico, the flag of 1934 to 1968: the eagle in profile, looking to the hoist, on its cactus, a snake in its
+		// beak, over a half wreath of oak and laurel. (Today's design shows the eagle from the front, which is the
+		// older arms.)
 		Map.Add(TEXT("MEX"), [](FFlagPainter& P)
 		{
+			const FLinearColor Brown = Hex(TEXT("8C6239")), Dark = Hex(TEXT("6E4A28")), Green = Hex(TEXT("3E7B3A")), Gold = Hex(TEXT("D9A520"));
 			P.Columns({ Hex(TEXT("006847")), White, Hex(TEXT("CE1126")) });
-			P.Disc(Hex(TEXT("8C6239")), 0.75, 0.47, 0.085);
-			P.Polygon(Hex(TEXT("8C6239")), { { 0.75, 0.42 }, { 0.6, 0.36 }, { 0.68, 0.52 } });
-			P.Polygon(Hex(TEXT("8C6239")), { { 0.75, 0.42 }, { 0.9, 0.36 }, { 0.82, 0.52 } });
-			P.Fill(Hex(TEXT("3E7B3A")), 0.6, 0.5, 0.9, 0.68, [](double X, double Y)
+			P.Fill(Green, 0.58, 0.5, 0.92, 0.72, [](double X, double Y)
 			{
-				const double D = FMath::Sqrt((X - 0.75) * (X - 0.75) + (Y - 0.47) * (Y - 0.47));
-				return Y > 0.53 && D > 0.125 && D < 0.155;
+				const double D = FMath::Sqrt((X - 0.75) * (X - 0.75) + (Y - 0.5) * (Y - 0.5));
+				return Y > 0.56 && D > 0.15 && D < 0.18;
 			});
+			P.Disc(Green, 0.705, 0.59, 0.028);
+			P.Disc(Green, 0.75, 0.585, 0.034);
+			P.Disc(Green, 0.795, 0.59, 0.028);
+			P.Polygon(Dark, { { 0.76, 0.47 }, { 0.82, 0.3 }, { 0.93, 0.27 }, { 0.9, 0.42 }, { 0.83, 0.52 } });
+			P.Disc(Brown, 0.755, 0.47, 0.072);
+			P.Polygon(Brown, { { 0.695, 0.45 }, { 0.65, 0.345 }, { 0.69, 0.325 }, { 0.765, 0.41 } });
+			P.Disc(Brown, 0.672, 0.35, 0.036);
+			P.Polygon(Gold, { { 0.645, 0.335 }, { 0.6, 0.36 }, { 0.648, 0.372 } });
+			P.Bar(Green, 0.612, 0.362, 0.6, 0.47, 0.009);
 		});
 		Map.Add(TEXT("ARG"), [](FFlagPainter& P)
 		{
@@ -715,7 +735,37 @@ namespace
 			P.Star(White, 0.29, 0.5, 0.16);
 		});
 		Map.Add(TEXT("COL"), [](FFlagPainter& P) { P.Rows({ Hex(TEXT("FCD116")), Hex(TEXT("003893")), Hex(TEXT("CE1126")) }, { 2.0, 1.0, 1.0 }); });
-		Map.Add(TEXT("PER"), [](FFlagPainter& P) { P.Columns({ Hex(TEXT("D91023")), White, Hex(TEXT("D91023")) }); });
+		// Peru, the national flag until 1950: the arms on the white band, in a wreath of palm and laurel, an oak crown
+		// above. (Today's design is the plain flag, which became the national flag only in 1950.)
+		Map.Add(TEXT("PER"), [](FFlagPainter& P)
+		{
+			const FLinearColor Red = Hex(TEXT("D91023")), Green = Hex(TEXT("3E7B3A")), Gold = Hex(TEXT("C8A22C")), Brown = Hex(TEXT("8C6239"));
+			P.Columns({ Red, White, Red });
+			P.Fill(Green, 0.5, 0.3, 1.0, 0.75, [](double X, double Y)
+			{
+				const double D = FMath::Sqrt((X - 0.75) * (X - 0.75) + (Y - 0.49) * (Y - 0.49));
+				return Y > 0.4 && D > 0.165 && D < 0.2;
+			});
+			P.Ring(Green, 0.75, 0.29, 0.02, 0.045);
+			P.Shield(Gold, 0.75, 0.345, 0.112, 0.29);
+			P.Shield(Red, 0.75, 0.357, 0.1, 0.266);
+			P.Rect(Hex(TEXT("7FB6D9")), 0.65, 0.357, 0.75, 0.475); // the vicuna's sky
+			P.Rect(White, 0.75, 0.357, 0.85, 0.475); // the cinchona tree's field
+			P.Disc(Brown, 0.70, 0.42, 0.028);
+			P.Disc(Green, 0.80, 0.41, 0.03);
+			P.Rect(Brown, 0.795, 0.43, 0.805, 0.465);
+			P.Disc(Gold, 0.75, 0.54, 0.032); // the horn of plenty
+		});
+		// Venezuela, the flag of 1930 to 1954: three equal bands and seven white stars in an arc on the blue, no arms.
+		Map.Add(TEXT("VEN"), [](FFlagPainter& P)
+		{
+			P.Rows({ Hex(TEXT("FFCC00")), Hex(TEXT("00247D")), Hex(TEXT("CF142B")) });
+			for (const double Turn : { -66.0, -44.0, -22.0, 0.0, 22.0, 44.0, 66.0 })
+			{
+				const double A = FMath::DegreesToRadians(Turn);
+				P.Star(White, 0.75 + 0.3 * FMath::Sin(A), 0.7 - 0.3 * FMath::Cos(A), 0.04, 5, 0.382, Turn);
+			}
+		});
 
 		return Map;
 	}

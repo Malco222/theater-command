@@ -1092,57 +1092,177 @@ void FMiniatureMesh::Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, in
 		Vehicle(FString(Show[K]) + Tag, Where, Metre, Turn);
 		if (bUnderWay)
 		{
-			// A ship at sea is under way: foam at her bows and a wake astern, painted on the water as on a model's base,
-			// white by the hull and fading into the sea behind her.
+			// A ship at sea is under way. (The art director's brief of 15 November, after Brian asked for a more
+			// realistic wake: a ribbon of foam astern, the V from her bow, and a curl of white at her stem, all
+			// sized in her own lengths and beams. It replaces the sliver and two arms that were painted on the water.)
 			const FString Kind(Show[K]);
-			const double Half = (Kind.StartsWith(TEXT("Battleship")) ? 112.0 : Kind.StartsWith(TEXT("Carrier")) ? 122.0 : Kind.StartsWith(TEXT("Cruiser")) ? 92.0 : Kind.StartsWith(TEXT("Destroyer")) ? 54.0 : 36.0) * Metre;
+			const double Long = (Kind.StartsWith(TEXT("Battleship")) ? 224.0 : Kind.StartsWith(TEXT("Carrier")) ? 244.0 : Kind.StartsWith(TEXT("Cruiser")) ? 184.0 : Kind.StartsWith(TEXT("Destroyer")) ? 108.0 : 72.0) * Metre;
 			const double Beam = (Kind.StartsWith(TEXT("Battleship")) || Kind.StartsWith(TEXT("Carrier")) ? 30.0 : Kind.StartsWith(TEXT("Cruiser")) ? 20.0 : Kind.StartsWith(TEXT("Destroyer")) ? 11.0 : 7.0) * Metre;
 			const double R = FMath::DegreesToRadians(Turn);
 			// (a model's front is toward -X before it is turned: Ahead is the way her bows point on the table)
 			const FVector Ahead(-FMath::Cos(R), -FMath::Sin(R), 0.0), Abeam(-Ahead.Y, Ahead.X, 0.0);
-			// (The art director's rulings: the wake read as a searchlight, and then as a beam with a frame round it,
-			// because a strip that fades by colour into one fixed sea colour shows wherever the sea is another. So the
-			// wake fades by shape: every part of it narrows to a point, as paint drawn off a dry brush, and its colour
-			// goes only part of the way to the sea's (by night the pieces are lit less than the sea, and paint that
-			// went all the way read as dark streaks on it). It is marked as
-			// paint laid on the water, by an alpha of 240, which the pieces' paint dims by night with the sea.)
-			TGuardValue<uint8> OnTheWater(Finish, 240);
-			const FLinearColor Foam(FColor::FromHex(TEXT("88949A"))), Water(FColor::FromHex(TEXT("227486")));
 			const FVector Sea(Where.X, Where.Y, 0.012 * Unit);
-			const int32 Pieces = 12;
-			const FVector Up(0.0, 0.0, 1.0);
-			for (int32 Piece = 0; Piece < Pieces; ++Piece)
+			// How much water she has on each side before the next ship's own: half the way to her neighbour. The V
+			// stops there, so that no arm crosses a neighbour's hull or her wake. (None on a side: the open sea.)
+			auto Room = [&](int32 Other) -> double
 			{
-				const double S0 = static_cast<double>(Piece) / Pieces, S1 = static_cast<double>(Piece + 1) / Pieces;
-				// The churned water astern: a sliver as wide as her screws by the stern, drawn out to a point.
-				const double W0 = Beam * 0.3 * FMath::Pow(1.0 - S0, 0.8), W1 = Beam * 0.3 * FMath::Pow(1.0 - S1, 0.8);
-				const FVector P0 = Sea - Ahead * (Half * (0.9 + 1.5 * S0)), P1 = Sea - Ahead * (Half * (0.9 + 1.5 * S1));
-				const FLinearColor Shade = FMath::Lerp(Foam, Water, 0.1 + 0.35 * (S0 + S1) * 0.5);
-				static const double Bands[4] = { -1.0, -0.5, 0.5, 1.0 };
-				for (int32 Band = 0; Band < 3; ++Band)
+				if (Other < 0 || Other >= Show.Num())
 				{
-					Quad(P0 + Abeam * (W0 * Bands[Band]), P0 + Abeam * (W0 * Bands[Band + 1]), P1 + Abeam * (W1 * Bands[Band + 1]), P1 + Abeam * (W1 * Bands[Band]), Up,
-						FMath::Lerp(Shade, Water, Band == 1 ? 0.0f : 0.25f).ToFColor(true));
+					return -1.0;
 				}
-				// The two arms of the wake, spreading from her quarters: thin lines, thinner as they go.
-				for (const double Side : { -1.0, 1.0 })
+				const FVector There((Other - (Show.Num() - 1) * 0.5) * 4.2 * Unit, (Other % 2 ? 2.4 : -1.8) * Unit, 0.0);
+				return FMath::Abs(FVector::DotProduct(There - FVector(Where.X, Where.Y, 0.0), Abeam)) * 0.5;
+			};
+			const FVector Lower((K - 1 - (Show.Num() - 1) * 0.5) * 4.2 * Unit, 0.0, 0.0);
+			const bool bLowerIsAbeam = FVector::DotProduct(Lower - FVector(Where.X, 0.0, 0.0), Abeam) > 0.0;
+			const double RoomPlus = Room(bLowerIsAbeam ? K - 1 : K + 1), RoomMinus = Room(bLowerIsAbeam ? K + 1 : K - 1);
+			for (int32 Passage = 0; Passage < 2; ++Passage)
+			{
+				LayWake(Wake[Passage], Sea, Ahead, Abeam, Long, Beam, Passage ? 1.5 : 1.0, RoomPlus, RoomMinus);
+			}
+		}
+	}
+}
+
+int32 FMiniatureMesh::FWakeMesh::Add(const FVector& At, const FVector2D& UV, double White, double Whole, double Much)
+{
+	auto Byte = [](double Share) { return static_cast<uint8>(FMath::Clamp(FMath::RoundToInt32(Share * 255.0), 0, 255)); };
+	Vertices.Add(At);
+	Normals.Add(FVector::UpVector);
+	UVs.Add(UV);
+	Colors.Add(FColor(Byte(White), Byte(Whole), 0, Byte(Much)));
+	return Vertices.Num() - 1;
+}
+
+void FMiniatureMesh::FWakeMesh::Quad(int32 A, int32 B, int32 C, int32 D)
+{
+	Triangles.Append({ A, B, C, A, C, D });
+}
+
+void FMiniatureMesh::LayWake(FWakeMesh& Out, const FVector& Sea, const FVector& Ahead, const FVector& Abeam, double Long, double Beam, double Reach, double RoomPlus, double RoomMinus)
+{
+	// 1. The stern ribbon, the main part: from the stern at the hull's own width, straight astern, widening slowly
+	// to twice her beam over three of her lengths. Whitest by the stern and whole there; then it breaks into
+	// streaks and thins away (the material does the breaking, by how whole each point says the foam still is),
+	// with soft edges and no hard point.
+	{
+		const double Run = 3.0 * Long * Reach;
+		const int32 Steps = 44;
+		static const double Across[5] = { -1.0, -0.5, 0.0, 0.5, 1.0 };
+		int32 Before[5] = { 0, 0, 0, 0, 0 };
+		for (int32 Step = 0; Step <= Steps; ++Step)
+		{
+			// (the steps are short by the stern, where the foam changes fastest)
+			const double Far = FMath::Pow(static_cast<double>(Step) / Steps, 1.5);
+			const double Astern = -0.04 * Long + Far * Run;
+			const double Wide = Beam * 0.5 * (0.86 + 1.14 * Far);
+			const double White = 1.0 - 0.3 * Far;
+			// (whole for the first quarter of a length; half gone by a length and a half; flecks at the last)
+			const double Whole = FMath::Clamp(1.0 - 0.75 * FMath::Pow(Far, 0.4), 0.0, 1.0);
+			const double Much = Step == Steps ? 0.0 : 1.0 - 0.55 * Far;
+			const FVector Middle = Sea - Ahead * (Long * 0.48 + Astern);
+			int32 Now[5];
+			for (int32 Column = 0; Column < 5; ++Column)
+			{
+				const bool bEdge = Column == 0 || Column == 4;
+				Now[Column] = Out.Add(Middle + Abeam * (Wide * Across[Column]), FVector2D(Astern / Beam, Wide * Across[Column] / Beam),
+					White, bEdge ? Whole * 0.5 : Column == 2 ? Whole : Whole * 0.92, bEdge ? 0.0 : Much);
+			}
+			if (Step > 0)
+			{
+				for (int32 Column = 0; Column < 4; ++Column)
 				{
-					// (half a ship's length and no more: longer, and three ships abreast drew crossing lines)
-					const FVector C0 = Sea - Ahead * (Half * (0.7 + 0.95 * S0)) + Abeam * (Side * Beam * (0.44 + 0.7 * S0));
-					const FVector C1 = Sea - Ahead * (Half * (0.7 + 0.95 * S1)) + Abeam * (Side * Beam * (0.44 + 0.7 * S1));
-					const double A0 = Beam * 0.085 * (1.0 - S0), A1 = Beam * 0.085 * (1.0 - S1);
-					Quad(C0 - Abeam * A0, C0 + Abeam * A0, C1 + Abeam * A1, C1 - Abeam * A1, Up, FMath::Lerp(Foam, Water, 0.25 + 0.25 * (S0 + S1) * 0.5).ToFColor(true));
+					Out.Quad(Before[Column], Before[Column + 1], Now[Column + 1], Now[Column]);
 				}
 			}
-			for (const double Side : { -1.0, 1.0 })
+			FMemory::Memcpy(Before, Now, sizeof(Now));
+		}
+	}
+	// 2. The V: two arms from her bow, about twenty degrees each side of her line, whatever her speed (speed gives
+	// them only their length and their strength). Each arm is short feathered crests, faint, lying a little more
+	// open than the arm itself as the crests of a ship's wave do; gone within one of her lengths astern of the
+	// stern (two on passage), and sooner on a side where another ship lies.
+	{
+		const double Open = FMath::DegreesToRadians(20.0), Lie = FMath::DegreesToRadians(36.0);
+		const FVector Bow = Sea + Ahead * (Long * 0.47);
+		const double Length = (Reach > 1.0 ? 3.0 : 2.0) * Long / FMath::Cos(Open);
+		const double Strength = Reach > 1.0 ? 0.3 : 0.23;
+		for (const double Side : { 1.0, -1.0 })
+		{
+			const double Space = Side > 0.0 ? RoomPlus : RoomMinus;
+			const FVector Line = -Ahead * FMath::Cos(Open) + Abeam * (Side * FMath::Sin(Open));
+			const FVector Crest = -Ahead * FMath::Cos(Lie) + Abeam * (Side * FMath::Sin(Lie));
+			const FVector Thick(-Crest.Y, Crest.X, 0.0);
+			for (double Out_ = Beam * 0.9; Out_ < Length; Out_ += Beam * 1.05)
 			{
-				// The bow wave: a thin line of foam thrown out on each side from the stem.
-				for (int32 Piece = 0; Piece < 4; ++Piece)
+				const double Share = Out_ / Length, Lateral = Out_ * FMath::Sin(Open);
+				double Fade = FMath::Pow(1.0 - Share, 0.8);
+				if (Space > 0.0)
 				{
-					const double Share = (Piece + 0.5) / 4.0;
-					const FVector At = Sea + Ahead * (Half * (0.95 - 1.15 * Share)) + Abeam * Side * (Beam * (0.35 + 1.25 * Share));
-					Box(At, FVector(Half * 0.3, Beam * (0.14 - 0.08 * Share), 0.012 * Unit), FMath::Lerp(Foam, Water, 0.2 + 0.3 * Share), Turn + Side * 24.0);
+					if (Lateral > Space - Beam * 0.2)
+					{
+						break;
+					}
+					Fade *= FMath::Clamp((Space - Beam * 0.2 - Lateral) / (Space * 0.45), 0.0, 1.0);
 				}
+				const FVector At = Bow + Line * Out_;
+				const double Half = Beam * (0.5 + 1.0 * Share), Fat = Beam * (0.09 + 0.07 * Share);
+				// (a crest is brightest along its middle and fades to nothing at both ends and both sides)
+				static const double Along[5] = { -1.0, -0.45, 0.0, 0.45, 1.0 };
+				static const double Peak[5] = { 0.0, 0.75, 1.0, 0.75, 0.0 };
+				int32 Before[3] = { 0, 0, 0 };
+				for (int32 Column = 0; Column < 5; ++Column)
+				{
+					const FVector On = At + Crest * (Half * Along[Column]);
+					int32 Now[3];
+					for (int32 Row = 0; Row < 3; ++Row)
+					{
+						const FVector Point = On + Thick * (Fat * (Row - 1));
+						Now[Row] = Out.Add(Point, FVector2D(FVector::DotProduct(Sea - Point, Ahead) / Beam, FVector::DotProduct(Point - Sea, Abeam) / Beam),
+							0.92, 1.0, Row == 1 ? Strength * Fade * Peak[Column] : 0.0);
+					}
+					if (Column > 0)
+					{
+						Out.Quad(Before[0], Before[1], Now[1], Now[0]);
+						Out.Quad(Before[1], Before[2], Now[2], Now[1]);
+					}
+					FMemory::Memcpy(Before, Now, sizeof(Now));
+				}
+			}
+		}
+	}
+	// 3. The bow wave: a small white curl each side of the stem, hugging the first quarter of the hull. It is
+	// laid from under the hull outward, so that it meets her side whatever her lines, widens as it goes aft, and
+	// peels away from her and thins out at its end.
+	{
+		const int32 Stations = 12;
+		const double Fuller = Reach > 1.0 ? 1.25 : 1.0;
+		for (const double Side : { 1.0, -1.0 })
+		{
+			int32 Before[3] = { 0, 0, 0 };
+			for (int32 Station = 0; Station <= Stations; ++Station)
+			{
+				const double Aft = static_cast<double>(Station) / Stations; // 0 at the stem, 1 a quarter of her length aft of it
+				const FVector On = Sea + Ahead * (Long * (0.495 - 0.25 * Aft));
+				// (her side at this station: a fine entrance, about four fifths of her beam by the quarter length)
+				const double Hull = Beam * 0.5 * 0.82 * (1.0 - FMath::Pow(1.0 - Aft, 1.8));
+				const double Thrown = Beam * Fuller * (0.1 + 0.2 * Aft) + Beam * 0.16 * Aft * Aft * Aft;
+				// (it rises from nothing at the very stem, is whitest a little aft of it, and thins away by the quarter length)
+				const double Left = FMath::SmoothStep(0.0, 0.12, Aft) * FMath::Pow(1.0 - Aft, 0.75);
+				const double Offsets[3] = { Hull * 0.4, Hull + Thrown * 0.5, Hull + Thrown };
+				const double Muches[3] = { Left, Left, 0.0 };
+				int32 Now[3];
+				for (int32 Row = 0; Row < 3; ++Row)
+				{
+					const FVector Point = On + Abeam * (Side * Offsets[Row]);
+					Now[Row] = Out.Add(Point, FVector2D(FVector::DotProduct(Sea - Point, Ahead) / Beam, Side * Offsets[Row] / Beam), 1.0, Row == 2 ? 0.6 : 1.0 - 0.45 * Aft, Muches[Row]);
+				}
+				if (Station > 0)
+				{
+					Out.Quad(Before[0], Before[1], Now[1], Now[0]);
+					Out.Quad(Before[1], Before[2], Now[2], Now[1]);
+				}
+				FMemory::Memcpy(Before, Now, sizeof(Now));
 			}
 		}
 	}

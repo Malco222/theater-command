@@ -23,6 +23,25 @@ struct FMiniatureMesh
 	TArray<FVector> Normals;
 	TArray<FColor> Colors;
 
+	/**
+	 * (fleets) The wake of ships under way: foam lying on the water, in a mesh of its own that is drawn see-through
+	 * over the sea. A point's colour says how white the foam is (red), how whole it still is (green: 1 unbroken by
+	 * the stern, falling as it breaks into streaks) and how much of it there is (alpha: nothing at a soft edge). Its
+	 * texture coordinate runs astern and across, in ship's beams, so that the streaks are in scale with the ship.
+	 */
+	struct FWakeMesh
+	{
+		TArray<FVector> Vertices;
+		TArray<int32> Triangles;
+		TArray<FVector> Normals;
+		TArray<FVector2D> UVs;
+		TArray<FColor> Colors;
+		int32 Add(const FVector& At, const FVector2D& UV, double White, double Whole, double Much);
+		void Quad(int32 A, int32 B, int32 C, int32 D);
+	};
+	/** Two wakes for a fleet at sea: on patrol, and on passage between seas (half as long again). */
+	FWakeMesh Wake[2];
+
 	/** A box, given its middle, its size, and how far it is turned about the upright axis (degrees). */
 	void Box(const FVector& Center, const FVector& Size, const FLinearColor& Colour, double Turn = 0.0, double Tip = 0.0);
 
@@ -163,6 +182,8 @@ struct FMiniatureMesh
 
 	/** A fleet: up to three ships for the classes it has most worth showing, lying together. Unit is one map unit. */
 	void Fleet(int32 Battleships, int32 Carriers, int32 Cruisers, int32 Destroyers, int32 Submarines, double Unit, const FLinearColor& Nation, const FString& Tag, bool bUnderWay = false);
+	/** One ship's wake laid on the water: the ribbon astern, the V from her bow and the curl at her stem. Reach is 1 on patrol and 1.5 on passage; the two rooms are how far the V may spread on each side (less than nothing: the open sea). */
+	static void LayWake(FWakeMesh& Out, const FVector& Sea, const FVector& Ahead, const FVector& Abeam, double Long, double Beam, double Reach, double RoomPlus, double RoomMinus);
 
 	/** An air fleet: a fighter and a bomber (whichever it has) over a patch of airfield. */
 	void AirFleet(int32 Fighters, int32 Bombers, double Unit, const FLinearColor& Nation, const FString& Tag);

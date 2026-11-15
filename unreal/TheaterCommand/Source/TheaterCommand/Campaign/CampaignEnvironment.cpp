@@ -201,12 +201,36 @@ void ACampaignEnvironment::Tick(float DeltaSeconds)
 	}
 }
 
-void ACampaignEnvironment::ApplyLight()
+void ACampaignEnvironment::StudioLight(bool bOn)
 {
 	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
 	{
 		return;
 	}
+	if (bOn)
+	{
+		// A plain day, in no season: the lamp at its own warmth, the room's cool fill and the sky's white.
+		// (The lamp's warmth is not touched, since a change of it remakes the light, and the turning showpiece has its
+		// picture taken twenty times a second. Its colour is set instead to what takes it from the warmth it has to
+		// the day's, which is the same light and costs nothing.)
+		const FLinearColor Want = FLinearColor::MakeFromColorTemperature(4900.0f), Have = FLinearColor::MakeFromColorTemperature(KeyLight->Temperature);
+		FLinearColor Shift(Want.R / FMath::Max(Have.R, 0.01f), Want.G / FMath::Max(Have.G, 0.01f), Want.B / FMath::Max(Have.B, 0.01f));
+		const float Most = FMath::Max3(Shift.R, Shift.G, Shift.B);
+		Shift = FLinearColor(Shift.R / Most, Shift.G / Most, Shift.B / Most);
+		KeyLight->SetLightColor(Shift);
+		KeyLight->SetIntensity(7.0f * Most);
+		FillLight->SetIntensity(0.75f);
+		SkyLight->SetIntensity(0.72f);
+		SkyLight->SetLightColor(FLinearColor::White);
+	}
+	else
+	{
+		LightRoom();
+	}
+}
+
+void ACampaignEnvironment::LightRoom()
+{
 	// The lamp is warm at 4900 K: winter takes it toward a cold white and takes a little off it; summer warms it.
 	// At night the lamp is all there is: warmer and a little lower, with the cool light of the windows gone,
 	// so the table stands in a pool of lamplight and the shadows deepen.
@@ -234,6 +258,15 @@ void ACampaignEnvironment::ApplyLight()
 		SkyLight->SetIntensity(FMath::Lerp(0.72f, 0.52f, Night));
 		SkyLight->SetLightColor(FMath::Lerp(FLinearColor::White, FLinearColor(0.42f, 0.58f, 1.0f), Night));
 	}
+}
+
+void ACampaignEnvironment::ApplyLight()
+{
+	if (FParse::Param(FCommandLine::Get(), TEXT("TheaterOldLook")))
+	{
+		return;
+	}
+	LightRoom();
 	// And the towns on the map light their windows, and the lens takes the colour of the hour.
 	if (UWorld* World = GetWorld())
 	{

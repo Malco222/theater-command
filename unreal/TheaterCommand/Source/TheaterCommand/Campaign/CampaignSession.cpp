@@ -157,6 +157,24 @@ TArray<FStartGroup> FCampaignSession::Starts()
 			DepthObject->TryGetStringField(TEXT("blurb"), Depth.Blurb);
 		}
 	}
+	// (rules version 70) The history dial's stops.
+	Histories.Reset();
+	Object->TryGetNumberField(TEXT("history"), DefaultHistory);
+	const TArray<TSharedPtr<FJsonValue>>* StopValues = nullptr;
+	if (Object->TryGetArrayField(TEXT("histories"), StopValues))
+	{
+		for (const TSharedPtr<FJsonValue>& StopValue : *StopValues)
+		{
+			const TSharedPtr<FJsonObject> StopObject = StopValue->AsObject();
+			FGrandLevel& Stop = Histories.AddDefaulted_GetRef();
+			StopObject->TryGetNumberField(TEXT("stop"), Stop.Stop);
+			StopObject->TryGetStringField(TEXT("id"), Stop.Id);
+			StopObject->TryGetStringField(TEXT("name"), Stop.Name);
+			StopObject->TryGetStringField(TEXT("under"), Stop.Under);
+			StopObject->TryGetStringField(TEXT("blurb"), Stop.Blurb);
+			StopObject->TryGetStringArrayField(TEXT("lines"), Stop.Lines);
+		}
+	}
 	for (const TSharedPtr<FJsonValue>& GroupValue : Object->GetArrayField(TEXT("groups")))
 	{
 		const TSharedPtr<FJsonObject> GroupObject = GroupValue->AsObject();
@@ -207,17 +225,18 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 	return Out;
 }
 
-bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level, const FString& Depth)
+bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& ViewMode, int32 Seed, FString& OutError, const FString& Level, const FString& Depth, int32 History)
 {
 	bRunning = false;
 	if (!bReady && !Prepare(OutError))
 	{
 		return false;
 	}
-	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d%s%s}]"),
+	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d%s%s%s}]"),
 		Human.IsEmpty() ? TEXT("null") : *JsonQuote(Human), From, *JsonQuote(ViewMode), Seed,
 		Level.IsEmpty() ? TEXT("") : *(TEXT(",\"level\":") + JsonQuote(Level)),
-		Depth.IsEmpty() ? TEXT("") : *(TEXT(",\"depth\":") + JsonQuote(Depth)));
+		Depth.IsEmpty() ? TEXT("") : *(TEXT(",\"depth\":") + JsonQuote(Depth)),
+		History > 0 ? *FString::Printf(TEXT(",\"history\":%d"), History) : TEXT(""));
 	FString ViewJson;
 	if (!Host->Call(TEXT("start"), Arguments, ViewJson, OutError))
 	{
@@ -502,6 +521,13 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 					}
 				}
 			}
+		}
+		const TSharedPtr<FJsonObject>* Dial = nullptr;
+		if (Object->TryGetObjectField(TEXT("dial"), Dial))
+		{
+			(*Dial)->TryGetNumberField(TEXT("stop"), Out.DialStop);
+			(*Dial)->TryGetStringField(TEXT("name"), Out.DialName);
+			(*Dial)->TryGetStringField(TEXT("under"), Out.DialUnder);
 		}
 		const TArray<TSharedPtr<FJsonValue>>* Arms = nullptr;
 		if (Object->TryGetArrayField(TEXT("arms"), Arms))
@@ -2334,6 +2360,29 @@ FDiplomacy FCampaignSession::Diplomacy()
 	Object->TryGetStringField(TEXT("date"), Out.Date);
 	Object->TryGetStringField(TEXT("bloc"), Out.Bloc);
 	Object->TryGetStringField(TEXT("wind"), Out.Wind);
+	const TSharedPtr<FJsonObject>* Claims = nullptr;
+	if (Object->TryGetObjectField(TEXT("claims"), Claims))
+	{
+		(*Claims)->TryGetStringField(TEXT("lead"), Out.ClaimsLead);
+		const TArray<TSharedPtr<FJsonValue>>* ClaimRows = nullptr;
+		if ((*Claims)->TryGetArrayField(TEXT("rows"), ClaimRows))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *ClaimRows)
+			{
+				const TSharedPtr<FJsonObject>* Claim = nullptr;
+				if (Value->TryGetObject(Claim))
+				{
+					FDiplomacy::FClaim& Row = Out.Claims.AddDefaulted_GetRef();
+					(*Claim)->TryGetStringField(TEXT("title"), Row.Title);
+					(*Claim)->TryGetStringField(TEXT("from"), Row.From);
+					(*Claim)->TryGetStringField(TEXT("tag"), Row.Tag);
+					(*Claim)->TryGetNumberField(TEXT("state"), Row.State);
+					(*Claim)->TryGetNumberField(TEXT("region"), Row.Region);
+					(*Claim)->TryGetBoolField(TEXT("onYou"), Row.bOnYou);
+				}
+			}
+		}
+	}
 	Object->TryGetStringField(TEXT("help"), Out.Help);
 	Object->TryGetNumberField(TEXT("capital"), Out.Capital);
 	Object->TryGetNumberField(TEXT("income"), Out.Income);
