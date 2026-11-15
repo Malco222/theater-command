@@ -246,7 +246,9 @@ describe('the army sent across the ocean', () => {
   it('joins a second front its side holds, but not beyond dangerous seas, and a full harbour does not stop the sailings', () => {
     const O = WORLD.overseas.USA;
     const g = at(JAN_42);
-    expect(frontAshore(g, 'USA')).toBeNull();
+    // (Since Version 77 a harbour an ally holds near the enemy is a front too: Egypt's, with the Italians at the
+    // frontier. No harbour of France is one before the landing.)
+    expect((frontAshore(g, 'USA')?.ports ?? []).filter((p) => p.owner === 'FRA')).toEqual([]);
     // A British beachhead in Brittany, with the Germans all round it.
     const beach = g.byName.Brittany;
     for (const c of [...beach.units]) removeCorps(g, c);

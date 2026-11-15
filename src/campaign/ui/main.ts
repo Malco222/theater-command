@@ -391,7 +391,7 @@ const SIGN = {
  * The line under a province's name at close zoom: its chief town where the province is not named for it, what it is
  * worth a month, and signs for factories, harbour and oilfield. Laid out about the centre from the widths of its parts.
  */
-function townFigures(t: TownView, cx: number, y: number): string {
+function townFigures(t: TownView, cx: number, y: number, end = false): string {
   const parts: { w: number; draw: (x: number) => string }[] = [];
   const text = (s: string, cls: string, per: number): void => { const w = s.length * per; parts.push({ w, draw: (x) => `<text class="lbl2 ${cls}" x="${x.toFixed(1)}" y="${y}" textLength="${w.toFixed(1)}" lengthAdjust="spacingAndGlyphs">${esc(s)}</text>` }); };
   const sign = (body: string): void => { parts.push({ w: 4.4, draw: (x) => `<g class="lbl2" transform="translate(${(x + 2.2).toFixed(1)} ${y - 1.7})">${body}</g>` }); };
@@ -402,7 +402,8 @@ function townFigures(t: TownView, cx: number, y: number): string {
   if (t.signs.includes('oil')) sign(SIGN.oil);
   if (!parts.length) return '';
   const gap = 1.5;
-  let x = cx - (parts.reduce((s, p) => s + p.w, 0) + gap * (parts.length - 1)) / 2;
+  const wide = parts.reduce((s, p) => s + p.w, 0) + gap * (parts.length - 1);
+  let x = cx - (end ? wide : wide / 2);
   let out = '';
   for (const p of parts) { out += p.draw(x); x += p.w + gap; }
   return out;
@@ -632,8 +633,12 @@ function drawLabels(): void {
     const fort = r.fort ? `<path class="fortmark" transform="translate(${r.x + (busy ? 17 : 0)} ${r.y + (busy ? 3 : -7)})" d="M-3 2.5V-2.5H-1.2V-.8H1.2V-2.5H3V2.5"/>` : '';
     // The steepest ground carries a pair of peaks: no tanks go there.
     const high = steep(g, r) ? `<path class="steepmark" transform="translate(${r.x + (busy ? 17 : r.fort ? 9 : 0)} ${r.y + (busy ? (r.fort ? -6 : 3) : -7.5)})" d="${PEAKS}"/>` : '';
-    const ly = r.y + (busy ? 26.5 : 3);
-    return `${star}${fort}${high}<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}" x="${r.x}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, r.x, ly + 6.3)}</g>`;
+    // A name sits on the middle of its province, under its counters. Where two would run into each other one is
+    // written by its own town mark instead (world.json, 'labels'): centred under it, or to the west of it and ending there.
+    const place = WORLD.labels?.[r.name];
+    const lx = place === 'under' ? t.x : place === 'west' ? Math.min(t.x, r.x) - (busy ? 15 : 9) : r.x;
+    const ly = place === 'under' ? Math.max(t.y + 13, r.y + (busy ? 26.5 : 3)) : place === 'west' ? t.y + 2 : r.y + (busy ? 26.5 : 3);
+    return `${star}${fort}${high}<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}${place === 'west' ? ' west' : ''}" x="${lx}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, lx, ly + 6.3, place === 'west')}</g>`;
   }).join('');
 }
 

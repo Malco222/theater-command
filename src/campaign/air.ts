@@ -406,7 +406,7 @@ export function openAirWar(g: Game): void {
 
 // ---- Bases and orders ---------------------------------------------------------------------
 
-export function whyNotBase(g: Game, f: AirFleet, r: Region): string | null {
+export function whyNotBase(g: Game, f: AirFleet, r: Region, bySea = false): string | null {
   if (f.ship !== undefined) return 'It flies from the carriers of its fleet, and goes where they go.';
   if (r.id === f.base) return 'It is already based there.';
   // An airfield lies outside the town, and goes with the country round it (prizes.ts): an army that holds the
@@ -422,7 +422,8 @@ export function whyNotBase(g: Game, f: AirFleet, r: Region): string | null {
   if (!hasAirfield(g, r.id)) return 'There is no airfield there. Engineers can lay one out, and the treasury can build one.';
   if (r.since >= g.turn) return 'Airfields taken this month are not yet in use.';
   if (f.moved === g.turn) return 'It has already changed base this month.';
-  if (km(g, f.base, r.id) > AIR.ferry) return 'Too far to move in one month.';
+  // (A group shipped across an ocean with its country's army goes in crates, however far: world.json 'overseas'.)
+  if (!bySea && km(g, f.base, r.id) > AIR.ferry) return 'Too far to move in one month.';
   return null;
 }
 
@@ -462,14 +463,20 @@ export function skyReach(g: Game, nat: string): (region: number) => { how: 'now'
   };
 }
 
-/** Moves a fleet to airfields in another friendly region. Settling in costs it some readiness. */
-export function rebaseAir(g: Game, f: AirFleet, r: Region): boolean {
-  if (whyNotBase(g, f, r)) return false;
+/** Moves a fleet to airfields in another friendly region (`bySea`: shipped there, however far). Settling in costs it some readiness. */
+export function rebaseAir(g: Game, f: AirFleet, r: Region, bySea = false): boolean {
+  if (whyNotBase(g, f, r, bySea)) return false;
   f.base = r.id;
   f.moved = g.turn;
   f.ready = Math.max(AIR.ready.floor, f.ready - AIR.ready.move);
   if (isOffensive(f.mission) && whyNotMission(g, f, f.mission, f.target)) { f.mission = 'support'; f.target = -1; }
   return true;
+}
+
+/** True where the airfields of a region have room for this group beside the aircraft already there. */
+export function fieldRoom(g: Game, base: number, f: AirFleet): boolean {
+  const there = g.airFleets.reduce((s, x) => s + (x !== f && x.base === base && x.ship === undefined ? x.ftr + x.bmr : 0), 0);
+  return there + f.ftr + f.bmr <= (airWar(g) ? Math.max(AIRWAR.fields.least, airfieldsHold(g, base)) : airfieldsHold(g, base));
 }
 
 /** True when a strike on this sea has something to hit: enemy ships at sea, or an enemy's trade along its coast. */

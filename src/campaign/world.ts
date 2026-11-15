@@ -51,10 +51,11 @@ export const WORLD = data as unknown as {
   great: string[];
   oilHome: Record<string, number>;
   idle: Record<string, number>;
+  labels?: Record<string, 'under' | 'west'>;
 };
 
 /** How a computer-run country an ocean away from its enemies sends its army across (world.json, 'overseas'). */
-export interface OverseasRules { guard: number; ahead: number; bank: number; risk: number; oceans: Record<string, number> }
+export interface OverseasRules { guard: number; ahead: number; bank: number; risk: number; hop?: number; from?: number; most?: number; air?: number; fleet?: string[]; oceans: Record<string, number> }
 
 /** The first province beyond the map of Europe, and how many there are. */
 export const WORLD_FIRST = WORLD_MAP.first;
@@ -267,6 +268,8 @@ export function overseasOf(g: Game, nat: string): OverseasRules | null {
   const O = worldOn(g) && nat !== g.human ? WORLD.overseas[nat] : undefined;
   const n = g.nations[nat];
   if (!O || !n?.alive || !n.atWar.length || n.sealift <= 0 || n.capital < 0 || !beyondEurope(n.capital) || g.regions[n.capital].ctrl !== nat) return null;
+  // (A small country's expeditionary force sails from history's month and not before: 'from'.)
+  if (O.from !== undefined && g.turn < O.from) return null;
   for (let i = WORLD_FIRST; i < g.regions.length; i++) if (n.atWar.includes(g.regions[i].ctrl)) return null;
   return O;
 }

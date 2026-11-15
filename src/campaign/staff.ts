@@ -30,8 +30,8 @@ import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
-import { acrossOcean, attachWorld, overseasOf } from './world';
-import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
+import { acrossOcean, attachWorld, beyondEurope, overseasOf } from './world';
+import { EASTERN, allied, assess, atWar, bloc, collapseScore, computeSupply, corpsBase, friendlyUnits, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
 interface Temper { attackAt: number; persist: number; minOdds: number }
@@ -66,7 +66,7 @@ const OPEN = openData as unknown as {
   /** A staff grows bolder the longer its front is quiet: months of quiet, and what each stage does. */
   impatience: { after: number[]; ratio: number[]; odds: number[]; effort: number; floor: number; any: number; local: number[]; locals: number };
   /** The second front: when a staff with shipping and no land front crosses the sea, and with what. */
-  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; heed?: { mainland: boolean; island: boolean; wave: boolean } };
+  descent: Landings & { after: number; abroad?: number; hold?: number; feed?: number; heed?: { mainland: boolean; island: boolean; wave: boolean }; front?: number; planned?: Record<string, { open: string[]; join: string[]; with?: number }> };
   /** The coast watch: the share of its field corps a staff will keep in the harbours of its homeland, the fewest it keeps, and the most in one harbour. */
   coast?: { share: number; least: number; each: number; works: number; dig?: { orders: number; top: number; capital: number; keep: number } };
 };
@@ -1206,6 +1206,34 @@ export const landingForce = (): number => OPEN.descent?.force ?? 3;
 const harbours = (g: Game, e: string): Region[] => g.regions.filter((r) => r.ctrl === e && r.port && r.seas.length > 0);
 
 /**
+ * The shores history planned for a staff's second front (open.json, 'descent.planned'), for a staff that has such a
+ * list: 'open' names the countries on whose own shores it may open a front by a landing of its own, 'join' those on
+ * whose ground it goes by ship to a front its side already holds. Colonies and islands overseas are open to it
+ * always. A staff with no list goes where it judges best, and so does every staff at the stop of the history dial
+ * where nobody has read the books.
+ */
+const planned = (g: Game, nat: string): { open: string[]; join: string[]; with?: number } | null => (stopDef(g).bold ? null : OPEN.descent?.planned?.[nat] ?? null);
+/** True where a staff may open a second front by a landing of its own (see `planned`). */
+export const opensOn = (g: Game, nat: string, r: Region): boolean => { const P = planned(g, nat); return !P || !!r.overseas || P.open.includes(r.owner); };
+/**
+ * The build-up (open.json, 'descent.planned', 'with'): a staff with history's list opens no front of its own on a
+ * mainland until this many of its field corps stand across the ocean: the landing force, and as many again to
+ * follow it in before the enemy's reserves arrive. An island taken whole and a colony overseas need no such army.
+ * True where the staff may land today.
+ */
+export function builtUp(g: Game, nat: string, r: Region): boolean {
+  const need = planned(g, nat)?.with;
+  if (!need || r.overseas || !r.nb.length) return true;
+  let across = 0;
+  for (const c of g.corps) if (c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng' && !acrossHome(g, nat, c.reg)) across++;
+  return across >= need;
+}
+/** True for ground on a nation's own side of the ocean: beyond the old chart for a country whose capital is, on it for the others. */
+const acrossHome = (g: Game, nat: string, reg: number): boolean => { const cap = g.nations[nat].capital; return cap < 0 || beyondEurope(cap) === beyondEurope(reg); };
+/** True where a staff sends its corps by ship to a front its side already holds (see `planned`). */
+export const joinsOn = (g: Game, nat: string, r: Region): boolean => { const P = planned(g, nat); return !P || !!r.overseas || P.join.includes(r.owner); };
+
+/**
  * Whom a staff with shipping means to cross the sea against, and the rules it lands by. On the hardest level a
  * rival goes for the player's coasts. On every level a nation that has been at war with an enemy for a year and
  * more with no land front against him at home and no fighting opens a second front, against an enemy whose
@@ -1264,12 +1292,15 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   const ids = Object.keys(g.nations);
   const kf = `st:foe:${nat}:o`, kq = `st:quay:${nat}:o`, at = `st:quayAt:${nat}:o`, none = `st:far:${nat}`;
   const foe = ids[flag(g, kf) - 1], quay = g.regions[flag(g, kq) - 1];
-  if (foe && quay && g.nations[foe].alive && atWar(g, nat, foe) && allied(g, nat, quay.ctrl) && (g.turn - flag(g, at) < 3 || lodgment(g, nat, 1)?.short)) return { foe, quay };
+  // A quay must have room for the force among whatever corps of its allies stand there: three Americans can never stand in a harbour five British corps fill.
+  const room = (p: Region): boolean => STACK - friendlyUnits(g, p, nat).filter((u) => u.nat !== nat).length >= D.force;
+  if (foe && quay && g.nations[foe].alive && atWar(g, nat, foe) && allied(g, nat, quay.ctrl) && room(quay) && (g.turn - flag(g, at) < 3 || lodgment(g, nat, 1)?.short)) return { foe, quay };
   if (flag(g, none) === g.turn) return null;
   const drop = (): null => { delete g.flags[kf]; delete g.flags[kq]; g.flags[none] = g.turn; return null; };
   const foes = [...n.atWar].sort().filter((e) => { const x = g.nations[e]; return !!x?.alive && x.capital >= 0 && quietWith(g, nat, e) >= (D.abroad ?? 3); });
   if (!foes.length) return drop();
-  const shores = foes.map((e) => harbours(g, e));
+  // (A staff with history's list of shores looks only at those: it does not go elsewhere because elsewhere is clear.)
+  const shores = foes.map((e) => harbours(g, e).filter((r) => opensOn(g, nat, r)));
   if (!shores.some((s) => s.length)) return drop();
   const home = homeGround(g, nat).on;
   // Each far shore in turn: a piece of friendly ground away from home. One with the enemy on it or next to it has work of its own.
@@ -1296,6 +1327,7 @@ function abroad(g: Game, nat: string): { foe: string; quay: Region } | null {
   const shut = g.seas.map((z) => closedTo(g, z.id, nat));
   let best: { foe: string; quay: Region } | null = null, bw = 0, bs = Infinity;
   for (const p of idle) {
+    if (!room(p)) continue;
     // The corps that could be on this quay within the season: those there now, and those within three marches that would not leave a place empty.
     const d = new Int16Array(g.regions.length).fill(-1);
     const q = [p.id];
@@ -1452,16 +1484,18 @@ function groundFrom(g: Game, nat: string, at: Region): Uint8Array {
 /**
  * The second front a nation can join by ship: one it opened itself, or else one an ally who is in the same war
  * opened and is still fighting on (a player's own landing counts, turn.ts). Its own comes first, and of two the one
- * where the men ashore are still too few. With its harbours in friendly hands and the ground it stands on. Null
- * where there is none.
+ * where the men ashore are still too few. With its harbours in friendly hands and the ground it stands on. After
+ * those ('lodged' of the ports), and where there is no such landing at all, every harbour its side holds near the enemy (`heldFront`): a
+ * harbour handed back to the country it was freed for, one reached overland, or an ally's own that the war has
+ * come to. A staff with history's list of shores joins a front only on those (`joinsOn`). Null where there is none.
  */
-export function frontAshore(g: Game, nat: string): { at: Region; ports: Region[]; ground: Uint8Array } | null {
+export function frontAshore(g: Game, nat: string): { at: Region; ports: Region[]; ground: Uint8Array; lodged: number } | null {
   const n = g.nations[nat];
   if (!n?.alive) return null;
   let best: { at: Region; ports: Region[] } | null = null, bs = -1;
   const look = (id: string, slot: number, own: boolean): void => {
     const l = lodgment(g, id, slot);
-    if (!l || !l.ports.length) return;
+    if (!l || !l.ports.length || (!own && !joinsOn(g, nat, l.at))) return;
     const s = (own ? 2 : 0) + (l.short ? 1 : 0);
     if (s > bs) { bs = s; best = { at: l.at, ports: l.ports }; }
   };
@@ -1471,9 +1505,52 @@ export function frontAshore(g: Game, nat: string): { at: Region; ports: Region[]
     if (id === nat || !A.alive || A.dormant || !allied(g, nat, id) || !A.atWar.some((e) => n.atWar.includes(e))) continue;
     for (const slot of [0, 1]) look(id, slot, false);
   }
-  if (!best) return null;
+  const marches = OPEN.descent?.front;
+  const held = marches !== undefined && isOpen(g) ? heldFront(g, nat, marches) : null;
+  if (!best) return held;
   const b = best as { at: Region; ports: Region[] };
-  return { ...b, ground: groundFrom(g, nat, b.at) };
+  const ground = groundFrom(g, nat, b.at);
+  if (!held) return { ...b, ground, lodged: b.ports.length };
+  for (let i = 0; i < ground.length; i++) if (held.ground[i]) ground[i] = 1;
+  return { at: b.at, ports: [...b.ports, ...held.ports.filter((p) => !b.ports.includes(p))], ground, lodged: b.ports.length };
+}
+
+/**
+ * The harbours a nation's side holds near the enemy (open.json, 'descent.front'): a port in the hands of an ally who
+ * is in the same war, or in its own, away from its own homeland, with no enemy in it and an enemy's ground within
+ * that many marches of the quay over ground its side holds. The nearest to the enemy first, and the ground they
+ * stand on. Null where there is none.
+ */
+function heldFront(g: Game, nat: string, marches: number): { at: Region; ports: Region[]; ground: Uint8Array; lodged: number } | null {
+  const n = g.nations[nat];
+  const home = homeGround(g, nat).on;
+  const ours = (c: string): boolean => c === nat || (allied(g, nat, c) && !!g.nations[c]?.atWar.some((e) => n.atWar.includes(e)));
+  const found: { p: Region; d: number }[] = [];
+  for (const p of g.regions) {
+    if (!p.port || !p.seas.length || home[p.id] || !ours(p.ctrl) || !joinsOn(g, nat, p) || hostileUnits(g, p, nat).length) continue;
+    const d = new Map<number, number>([[p.id, 0]]);
+    const q = [p.id];
+    let near = Infinity;
+    for (let i = 0; i < q.length && near === Infinity; i++) {
+      const k = d.get(q[i])!;
+      for (const j of g.regions[q[i]].nb) {
+        if (d.has(j)) continue;
+        const c = fieldCtrl(g, g.regions[j]);
+        if (atWar(g, nat, c)) { near = k + 1; break; }
+        if (k + 1 < marches && allied(g, nat, c)) { d.set(j, k + 1); q.push(j); }
+      }
+    }
+    if (near <= marches) found.push({ p, d: near });
+  }
+  if (!found.length) return null;
+  found.sort((a, b) => a.d - b.d || a.p.id - b.p.id);
+  const ground = new Uint8Array(g.regions.length);
+  for (const f of found) {
+    if (ground[f.p.id]) continue;
+    const on = groundFrom(g, nat, f.p);
+    for (let i = 0; i < on.length; i++) if (on[i]) ground[i] = 1;
+  }
+  return { at: found[0].p, ports: found.map((f) => f.p), ground, lodged: 0 };
 }
 
 /**
@@ -1489,7 +1566,10 @@ function oceanBase(g: Game, nat: string, ocean: string, safe: (r: Region) => boo
     && (p.ctrl === nat || !!g.nations[p.ctrl]?.atWar.some((e) => n.atWar.includes(e))) && !hostileUnits(g, p, nat).length && safe(p);
   const kept = g.regions[flag(g, key) - 1];
   if (kept && serves(kept) && g.turn - flag(g, at) < 6) return kept;
-  const shores = [...n.atWar].sort().filter((e) => g.nations[e]?.alive && g.nations[e].capital >= 0).flatMap((e) => harbours(g, e));
+  // (The shores history planned for it, where it has such a list and the enemy holds any of them: otherwise all his harbours.)
+  const all = [...n.atWar].sort().filter((e) => g.nations[e]?.alive && g.nations[e].capital >= 0).flatMap((e) => harbours(g, e));
+  const meant = all.filter((r) => opensOn(g, nat, r) || joinsOn(g, nat, r));
+  const shores = meant.length ? meant : all;
   if (!shores.length) { delete g.flags[key]; return null; }
   const shut = g.seas.map((z) => closedTo(g, z.id, nat));
   let best: Region | null = null, bw = 0, bs = Infinity;
