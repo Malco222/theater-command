@@ -4055,7 +4055,7 @@ function crossingRow(x: CrossingOutlook, order: boolean): string {
     <div class="crhead"><b>${esc(natName(x.owner))}${x.owner !== x.foe ? `, held by ${esc(natName(x.foe))}` : ''}</b><span class="crloss ${x.bar ? 'bar' : loss >= 25 ? 'bad' : loss >= 10 ? 'mid' : 'ok'}">${x.bar ? 'Barred today' : loss > 0 ? `about ${loss}% lost at sea` : 'nothing in the way'}</span></div>
     <div class="sub">From ${esc(x.from.name)} to ${esc(x.to.name)}, by way of the ${esc(route)}.${x.account.skyWon !== null ? ` <b style="color:var(--ink)">With the sky over ${esc(x.to.name)} won: ${lostAtSea(x.account.skyWon) > 0 ? `about ${lostAtSea(x.account.skyWon)}% lost` : 'almost nothing lost'}.</b>` : ''}${x.hope ? ' Your fighters can reach this beach: it would be the safest way once its sky is yours.' : ''}</div>
     ${x.bar ? `<div class="note" style="margin-top:6px"><b>Barred.</b> ${esc(x.bar)}</div>` : ''}
-    ${!x.account.hold.open ? `<div class="sub holdwarn">Once ashore, the ${esc(g.seas[x.account.hold.sea].name)} would be closed behind the force: the enemy can bring more than twice your strength into it.</div>` : ''}
+    ${!x.account.hold.open ? `<div class="sub holdwarn">Once ashore, the enemy can close the ${esc(g.seas[x.account.hold.sea].name)} behind the force: he can bring more than twice your strength into it.</div>` : ''}
     ${open ? crossingTicket(x.account) + holdTicket(x.account.hold) : ''}${prep}
     <div class="acts">${x.planned ? '' : `<button class="btn small" data-act="crosswhy" data-id="${x.to.id}">${open ? 'Hide the reckoning' : 'Why, and what would help'}</button>`}${order ? (x.planned ? '<button class="btn small" data-act="crossplan" data-id="-1" title="Your staff stops preparing this crossing.">Drop the plan</button>' : `<button class="btn small" data-act="crossplan" data-id="${x.to.id}" data-from="${x.from.id}" title="Name this crossing as your plan. Staff you have handed the air war or the navy prepare it each month.">Make this the plan</button>`) : ''}<button class="btn small" data-act="showmap" data-id="${x.to.id}">Show the beach</button></div>
   </div>`;
@@ -4152,19 +4152,26 @@ function landingCard(): string {
     const crossing = plan.surprise
       ? `War has only just been declared, so the enemy is caught unready: no fleet can stop the crossing this month, and the troops go ashore at full strength.`
       : loss > 0 ? `${plan.sortie >= 1 ? 'The enemy fleet will put to sea against the invasion' : 'Enemy ships and aircraft are at work on the way'}${plan.sky ? ', but your air force holds the sky over the beach and will keep most of it off the troopships' : ''}. Expect to lose about ${loss}% of the force at sea.` : 'No enemy ship or aircraft is in a position to stop the crossing.';
-    // A beach that can be won and not fed says so first: the headline is the whole verdict, not the battle alone.
+    // The headline speaks for the whole venture and is never more cheerful than its worst ticket: a force that can
+    // land and be cut off says so in red, a crossing that costs one man in four says so in amber, and the fight
+    // for the beach then has a line of its own. A fight that is itself all but lost keeps the headline.
     const cut = !!plan.hold && !plan.hold.open;
-    const cutLine = cut ? `<div class="sub holdwarn">Once ashore the ${esc(g.seas[plan.hold!.sea].name)} would be closed behind the force, and it would be cut off from its supplies. The reckoning is below.</div>` : '';
-    let odds = `<div class="verdict ${cut ? 'loss' : 'win'}" style="font-size:24px">${cut ? 'The coast is undefended, but the force would be cut off' : 'The coast is undefended'}</div><div class="sub">The force walks ashore and takes ${esc(target.name)}.</div>${cutLine}`;
-    if (a) {
-      const p = chanceOn(a.odds, a.dice);
-      const share = a.A / (a.A + a.D);
-      const fight = p >= 0.95 ? (cut ? 'The beach can be won' : 'Victory is all but certain') : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : air ? 'This assault will fail' : 'This landing will fail';
-      const word = cut && p > 0 ? `${fight}, ${p >= 0.6 ? 'but' : 'and'} the force would be cut off` : fight;
-      odds = `<div class="verdict ${cut ? 'loss' : p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}" style="font-size:24px">${word}</div>${cutLine}
-        <div class="oddsbar"><i style="width:${Math.round(share * 100)}%;background:${g.nations[g.human!].color}"></i><i style="flex:1;background:${g.nations[a.defenders[0].nat].color}"></i></div>
-        <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`;
-    }
+    const costly = !cut && !plan.surprise && loss >= 25;
+    const sea = plan.hold ? esc(g.seas[plan.hold.sea].name) : '';
+    const p = a ? chanceOn(a.odds, a.dice) : 1;
+    const hopeless = !!a && p < 0.3;
+    const fight = !a ? 'The coast is undefended' : p >= 0.95 ? 'Victory is all but certain' : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : air ? 'This assault will fail' : 'This landing will fail';
+    const fightTone = !a || p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss';
+    const fightBody = a
+      ? `<div class="oddsbar"><i style="width:${Math.round((a.A / (a.A + a.D)) * 100)}%;background:${g.nations[g.human!].color}"></i><i style="flex:1;background:${g.nations[a.defenders[0].nat].color}"></i></div>
+        <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`
+      : `<div class="sub">The force walks ashore and takes ${esc(target.name)}.</div>`;
+    const whole = (cut || costly) && !hopeless;
+    const odds = whole
+      ? `<div class="verdict ${cut ? 'loss' : 'costly'}" style="font-size:24px">${cut ? 'Ashore, then cut off' : 'A costly crossing'}</div>
+        <div class="sub ${cut ? 'holdwarn' : 'costwarn'}">${cut ? `The force can land, but the enemy can close the ${sea} behind it and the troops would be cut off from their supplies.` : `About ${loss}% of the force would be lost at sea before it lands.`}</div>
+        <h3 class="fighthead">${air ? 'The fight on the ground' : 'The fight for the beach'}</h3><div class="fightline ${fightTone}">${fight}</div>${fightBody}`
+      : `<div class="verdict ${fightTone}" style="font-size:24px">${fight}</div>${cut ? `<div class="sub holdwarn">And a force that did get ashore could be cut off: the enemy can close the ${sea} behind it.</div>` : ''}${fightBody}`;
     body = `${odds}
       ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>${plan.account && plan.account.risk > 0 ? crossingTicket(plan.account) : ''}${plan.hold ? holdTicket(plan.hold) : ''}`}
       ${a ? `<h3>Battle Ticket</h3><table class="ticket">${a.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>` : ''}

@@ -637,7 +637,7 @@ export function seaHold(g: Game, nat: string, path: number[], to: Region): SeaHo
   if (shy >= 0.5) lines.push({ label: 'Enemy fleets that will not risk it', value: round(shy), effect: 'none of them will face what you have in that sea, while it stays there' });
   if (e.air >= 0.5) lines.push({ label: `Enemy aircraft over the ${name}`, value: round(e.air), effect: 'count against the supply ships too' });
   lines.push({ label: `Your ships and aircraft in the ${name}`, value: `${round(own.ships)} and ${round(own.air)}`, effect: need <= 0 ? 'the enemy has too little in reach to close it' : open ? `more than the ${round(need)} that keep it open` : `${round(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
-  lines.push({ label: 'The sea behind the beach', value: open ? 'stays open' : 'would be closed', effect: open ? 'the supply ships reach the force' : 'the force ashore would be cut off from its supplies' });
+  lines.push({ label: 'The sea behind the beach', value: open ? 'stays open' : 'can be closed', effect: open ? 'the supply ships reach the force' : 'the force ashore would be cut off from its supplies' });
   if (!to.port) lines.push({ label: 'A harbour', value: `none at ${to.name}`, effect: 'the force is fed only once it holds a port on an open sea' });
   return { sea, there: e.ships, come, air: e.air, kept, shy, foe, own, need, open, port: !!to.port, lines };
 }
