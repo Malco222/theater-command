@@ -62,6 +62,15 @@ struct FCampaignSeaZone
 	FVector2D Center = FVector2D::ZeroVector;
 };
 
+/** A great lake cut out of the land (the wider chart): its name, the height of its water in metres, where its name is written, and its shore. */
+struct FCampaignLake
+{
+	FString Name;
+	double Level = 0.0;
+	FVector2D Label = FVector2D::ZeroVector;
+	TArray<FVector2D> Outline;
+};
+
 class FCampaignMapData
 {
 public:
@@ -103,6 +112,19 @@ public:
 	double LongitudeAt(double X) const { return Lon0 + X / 25.7115; }
 	double LatitudeAt(double Y) const { return Lat0 - Y / 40.0; }
 	TArray<TArray<FVector2D>> Land; // every landmass, including land no region claims
+	/**
+	 * (Rules version 74) The wider chart: the same sheet carried on westward to the Pacific coast of North America,
+	 * read with -TheaterWorld. Its provinces follow Europe's in number (FirstBeyond is the first of them) and keep
+	 * the map's own coordinates, so North America lies at x below nought; its coast is drawn for every land in its
+	 * frame, with the Great Lakes cut out. Charted is the box in which the coast is drawn by the files (Europe's
+	 * own box without the wider chart): beyond it the land is wherever NOAA's heights stand above the sea.
+	 */
+	FBox2D Charted = FBox2D(ForceInit);
+	int32 FirstBeyond = INDEX_NONE;
+	TArray<TArray<FVector2D>> LandHoles; // waters cut out of the land: the Great Lakes
+	TArray<FCampaignLake> Lakes;
+	/** Is a place inside the box the files draw the coast in, whichever turn of the world it is counted in? */
+	bool IsCharted(double X, double Y) const;
 	TArray<FCampaignRegion> Regions;
 	TMap<FString, FCampaignNation> Nations;
 	TSet<FString> League; // the members of the League, the third alliance: their ground is painted in its colour

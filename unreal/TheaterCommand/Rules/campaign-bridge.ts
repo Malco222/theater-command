@@ -902,7 +902,8 @@ function grandGame(from: number, seed: number, human: string | null): Game {
  * the shared data come first, each with the data's word about what the player is taking on that year, and
  * are offered only in the years the data gives them. Every other country is offered whenever it is still there.
  */
-function grand(from = 1, seed = 1939) {
+function grand(from = 1, seed = 1939, world = false) {
+  wideWorld = world === true;
   const h = grandGame(from, seed, null);
   const year = String(GRAND.years.find((y) => y.turn === from)?.year ?? '');
   const order = GRAND.nations.map((n) => n.id);

@@ -26753,7 +26753,8 @@
     if (from <= 1) return startOpen(createGame(seed, human), wideWorld);
     return startOpen(historyTo(from, seed), wideWorld);
   }
-  function grand(from = 1, seed = 1939) {
+  function grand(from = 1, seed = 1939, world = false) {
+    wideWorld = world === true;
     const h = grandGame(from, seed, null);
     const year = String(GRAND.years.find((y) => y.turn === from)?.year ?? "");
     const order2 = GRAND.nations.map((n) => n.id);

@@ -107,6 +107,12 @@ bool FCampaignMapData::Load(FString& OutError)
 	{
 		return false;
 	}
+	if (bWorld && Regions.Num() > FirstBeyond)
+	{
+		// (the countries that exist only on the wider chart: Canada, Mexico, Cuba)
+		FString Ignored;
+		LoadNations(ResolveDataFile(TEXT("world.json"), TEXT("data/campaign")), Ignored);
+	}
 
 	bLoaded = true;
 	UE_LOG(LogTheater, Log, TEXT("Campaign data: %d regions, %d nations, %d corps, %d seas, %d landmasses (from %s)"),
@@ -146,7 +152,9 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 		}
 	}
 
-	for (const TSharedPtr<FJsonValue>& RegionValue : Root->GetArrayField(TEXT("regions")))
+	auto ReadRegions = [this](const TArray<TSharedPtr<FJsonValue>>& RegionValues)
+	{
+	for (const TSharedPtr<FJsonValue>& RegionValue : RegionValues)
 	{
 		const TSharedPtr<FJsonObject> Obj = RegionValue->AsObject();
 		FCampaignRegion Region;
@@ -211,6 +219,8 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 		RegionByName.Add(Region.Name, Regions.Num());
 		Regions.Add(MoveTemp(Region));
 	}
+	};
+	ReadRegions(Root->GetArrayField(TEXT("regions")));
 
 	const TSharedPtr<FJsonObject>* SeasObj = nullptr;
 	if (Root->TryGetObjectField(TEXT("seas"), SeasObj))
@@ -225,12 +235,100 @@ bool FCampaignMapData::LoadMap(const FString& Path, FString& OutError)
 		}
 	}
 
+	Charted = FBox2D(FVector2D(0.0, 0.0), FVector2D(Width, Height));
+	FirstBeyond = Regions.Num();
+	LandHoles.Reset();
+	Lakes.Reset();
+	if (bWorld)
+	{
+		// (Rules version 74) The wider chart.
+		const FString WidePath = ResolveDataFile(TEXT("world-map.json"), TEXT("src/generated"));
+		TSharedPtr<FJsonObject> Wide;
+		FString WideError;
+		if (ReadJsonFile(WidePath, Wide, WideError))
+		{
+			const TSharedPtr<FJsonObject>* Frame = nullptr;
+			if (Wide->TryGetObjectField(TEXT("frame"), Frame))
+			{
+				Charted = FBox2D(FVector2D((*Frame)->GetNumberField(TEXT("x0")), (*Frame)->GetNumberField(TEXT("y0"))), FVector2D((*Frame)->GetNumberField(TEXT("x1")), (*Frame)->GetNumberField(TEXT("y1"))));
+			}
+			for (const TSharedPtr<FJsonValue>& PolyValue : Wide->GetArrayField(TEXT("land")))
+			{
+				// (the first ring is the coast; any after it are waters cut out of the land)
+				const TArray<TSharedPtr<FJsonValue>>& Rings = PolyValue->AsArray();
+				for (int32 K = 0; K < Rings.Num(); ++K)
+				{
+					TArray<FVector2D> Ring;
+					if (ReadRing(Rings[K]->AsArray(), Ring))
+					{
+						(K == 0 ? Land : LandHoles).Add(MoveTemp(Ring));
+					}
+				}
+			}
+			ReadRegions(Wide->GetArrayField(TEXT("regions")));
+			const TSharedPtr<FJsonObject>* WideSeas = nullptr;
+			if (Wide->TryGetObjectField(TEXT("seas"), WideSeas))
+			{
+				// (Europe's seas keep their numbers, and the oceans follow)
+				Seas.Reset();
+				for (const TSharedPtr<FJsonValue>& ZoneValue : (*WideSeas)->GetArrayField(TEXT("zones")))
+				{
+					const TSharedPtr<FJsonObject> Zone = ZoneValue->AsObject();
+					FCampaignSeaZone Sea;
+					Sea.Name = Zone->GetStringField(TEXT("name"));
+					Sea.Center = FVector2D(Zone->GetNumberField(TEXT("x")), Zone->GetNumberField(TEXT("y")));
+					Seas.Add(MoveTemp(Sea));
+				}
+			}
+			const TArray<TSharedPtr<FJsonValue>>* LakeValues = nullptr;
+			if (Wide->TryGetArrayField(TEXT("lakes"), LakeValues))
+			{
+				for (const TSharedPtr<FJsonValue>& LakeValue : *LakeValues)
+				{
+					const TSharedPtr<FJsonObject> Obj = LakeValue->AsObject();
+					FCampaignLake Lake;
+					Lake.Name = Obj->GetStringField(TEXT("name"));
+					Lake.Level = Obj->GetNumberField(TEXT("level"));
+					Lake.Label = FVector2D(Obj->GetNumberField(TEXT("x")), Obj->GetNumberField(TEXT("y")));
+					ReadRing(Obj->GetArrayField(TEXT("outline")), Lake.Outline);
+					Lakes.Add(MoveTemp(Lake));
+				}
+			}
+			UE_LOG(LogTheater, Display, TEXT("The wider chart: %d provinces beyond Europe (from %d), %d lands, %d waters cut out of them, %d lakes named, %d seas"),
+				Regions.Num() - FirstBeyond, FirstBeyond, Land.Num(), LandHoles.Num(), Lakes.Num(), Seas.Num());
+		}
+		else
+		{
+			UE_LOG(LogTheater, Warning, TEXT("No wider chart at %s (%s): the world beyond Europe has no provinces."), *WidePath, *WideError);
+		}
+	}
 	if (Regions.Num() == 0 || Width <= 0.0 || Height <= 0.0)
 	{
 		OutError = FString::Printf(TEXT("%s has no regions"), *Path);
 		return false;
 	}
 	return true;
+}
+
+bool FCampaignMapData::IsCharted(double X, double Y) const
+{
+	if (Y < Charted.Min.Y || Y > Charted.Max.Y)
+	{
+		return false;
+	}
+	for (int32 Turn = -1; Turn <= 1; ++Turn)
+	{
+		const double Turned = X + Turn * WorldWidth;
+		if (Turned >= Charted.Min.X && Turned <= Charted.Max.X)
+		{
+			return true;
+		}
+		if (!bWorld)
+		{
+			break;
+		}
+	}
+	return false;
 }
 
 bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
@@ -240,11 +338,14 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 	{
 		return false;
 	}
-	for (const auto& Pair : Root->Values)
+	// (the nations' own file has them at its top; the wider chart's file keeps its countries under "nations")
+	const TSharedPtr<FJsonObject>* Inner = nullptr;
+	const TSharedPtr<FJsonObject> From = Root->TryGetObjectField(TEXT("nations"), Inner) ? *Inner : Root;
+	for (const auto& Pair : From->Values)
 	{
 		const FString Key(Pair.Key.ToView());
 		const TSharedPtr<FJsonObject>* Obj = nullptr;
-		if (Key.StartsWith(TEXT("_")) || !Pair.Value.IsValid() || !Pair.Value->TryGetObject(Obj))
+		if (Key.StartsWith(TEXT("_")) || !Pair.Value.IsValid() || !Pair.Value->TryGetObject(Obj) || Nations.Contains(Key))
 		{
 			continue;
 		}
@@ -379,20 +480,25 @@ bool FCampaignMapData::PointInRing(const TArray<FVector2D>& Ring, double X, doub
 	return bInside;
 }
 
-int32 FCampaignMapData::FindRegionAt(double X, double Y) const
+int32 FCampaignMapData::FindRegionAt(double InX, double Y) const
 {
-	const FVector2D P(X, Y);
-	for (const FCampaignRegion& Region : Regions)
+	// (on the whole-world map a place may be counted a turn of the world east or west of where its province is kept)
+	for (int32 Turn = 0; Turn <= (bWorld ? 2 : 0); ++Turn)
 	{
-		if (!Region.Bounds.bIsValid || !Region.Bounds.IsInside(P))
+		const double X = InX + (Turn == 1 ? -WorldWidth : Turn == 2 ? WorldWidth : 0.0);
+		const FVector2D P(X, Y);
+		for (const FCampaignRegion& Region : Regions)
 		{
-			continue;
-		}
-		for (const TArray<FVector2D>& Ring : Region.Polygons)
-		{
-			if (PointInRing(Ring, X, Y))
+			if (!Region.Bounds.bIsValid || !Region.Bounds.IsInside(P))
 			{
-				return Region.Id;
+				continue;
+			}
+			for (const TArray<FVector2D>& Ring : Region.Polygons)
+			{
+				if (PointInRing(Ring, X, Y))
+				{
+					return Region.Id;
+				}
 			}
 		}
 	}

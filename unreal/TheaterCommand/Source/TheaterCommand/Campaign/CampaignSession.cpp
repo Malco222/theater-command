@@ -201,7 +201,7 @@ TArray<FGrandNation> FCampaignSession::GrandNations(int32 From, int32 Seed)
 	FString Json, Error;
 	TSharedPtr<FJsonObject> Object;
 	const double Began = FPlatformTime::Seconds();
-	if (!bReady || !Host->Call(TEXT("grand"), FString::Printf(TEXT("[%d,%d]"), From, Seed), Json, Error)
+	if (!bReady || !Host->Call(TEXT("grand"), FString::Printf(TEXT("[%d,%d,%s]"), From, Seed, FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) ? TEXT("true") : TEXT("false")), Json, Error)
 		|| !FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Json), Object) || !Object.IsValid())
 	{
 		UE_LOG(LogTheater, Warning, TEXT("The rules could not say who can be led from month %d: %s"), From, *Error);
@@ -232,8 +232,10 @@ bool FCampaignSession::Begin(const FString& Human, int32 From, const FString& Vi
 	{
 		return false;
 	}
-	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d%s%s%s}]"),
+	// (rules version 74: with -TheaterWorld the grand campaign is played on the wider chart, which the table then has laid out)
+	const FString Arguments = FString::Printf(TEXT("[{\"human\":%s,\"from\":%d,\"view\":%s,\"seed\":%d%s%s%s%s}]"),
 		Human.IsEmpty() ? TEXT("null") : *JsonQuote(Human), From, *JsonQuote(ViewMode), Seed,
+		FParse::Param(FCommandLine::Get(), TEXT("TheaterWorld")) ? TEXT(",\"world\":true") : TEXT(""),
 		Level.IsEmpty() ? TEXT("") : *(TEXT(",\"level\":") + JsonQuote(Level)),
 		Depth.IsEmpty() ? TEXT("") : *(TEXT(",\"depth\":") + JsonQuote(Depth)),
 		History > 0 ? *FString::Printf(TEXT(",\"history\":%d"), History) : TEXT(""));

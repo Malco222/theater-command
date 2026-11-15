@@ -315,23 +315,54 @@ void FCampaignTerrain::BuildOver(const FCampaignMapData& Data, double MinX, doub
 			for (int32 X = 0; X < RW; ++X)
 			{
 				const double Mx = MinX + (X + 0.5) * Px;
-				if ((Mx < 0.0 || My < 0.0 || Mx > Data.Width || My > Data.Height) && WorldMetresAt(Mx + WorldShiftX, My) > 0.0f)
+				// (and, since rules version 74, outside the wider chart's frame too: inside it the chart draws every coast)
+				if (!Data.IsCharted(Mx, My) && WorldMetresAt(Mx + WorldShiftX, My) > 0.0f)
 				{
 					Row[X] = UnclaimedLand;
 				}
 			}
 		});
 	}
+	// (On the whole-world map a sheet is kept anywhere round the world, and a land or a province of the wider chart
+	// keeps the map's own coordinates, with North America at x below nought: each is filled where it falls on this
+	// sheet, in whichever turn of the world that is.)
+	auto Fill = [&](const TArray<FVector2D>& Ring, int16 Value)
+	{
+		if (!Data.bWorld || Data.WorldWidth <= 0.0)
+		{
+			FillRing(Ring, Px, RW, RH, Value, Raster, MinX, MinY);
+			return;
+		}
+		double RingMinX = TNumericLimits<double>::Max(), RingMaxX = -TNumericLimits<double>::Max();
+		for (const FVector2D& P : Ring)
+		{
+			RingMinX = FMath::Min(RingMinX, P.X);
+			RingMaxX = FMath::Max(RingMaxX, P.X);
+		}
+		for (int32 Turn = -1; Turn <= 1; ++Turn)
+		{
+			const double Shift = Turn * Data.WorldWidth;
+			if (RingMaxX + Shift >= MinX && RingMinX + Shift <= MinX + Wide)
+			{
+				FillRing(Ring, Px, RW, RH, Value, Raster, MinX - Shift, MinY);
+			}
+		}
+	};
 	for (const TArray<FVector2D>& Ring : Data.Land)
 	{
-		FillRing(Ring, Px, RW, RH, UnclaimedLand, Raster, MinX, MinY);
+		Fill(Ring, UnclaimedLand);
 	}
 	for (const FCampaignRegion& R : Data.Regions)
 	{
 		for (const TArray<FVector2D>& Ring : R.Polygons)
 		{
-			FillRing(Ring, Px, RW, RH, static_cast<int16>(R.Id), Raster, MinX, MinY);
+			Fill(Ring, static_cast<int16>(R.Id));
 		}
+	}
+	// (the Great Lakes are water: cut out of the land, and out of any province drawn across them)
+	for (const TArray<FVector2D>& Ring : Data.LandHoles)
+	{
+		Fill(Ring, Sea);
 	}
 
 	// 2. For every grid point: how much of its patch is land, and whose.
