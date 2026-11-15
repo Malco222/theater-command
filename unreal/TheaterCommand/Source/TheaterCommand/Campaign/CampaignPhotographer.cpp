@@ -666,10 +666,16 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 				Asked.Lens = Parts.IsValidIndex(4) ? FCString::Atof(*Parts[4]) : 0.0f; // a fifth part is the width of the view in degrees: small for a long lens
 				if (Parts.IsValidIndex(5))
 				{
-					// a sixth part is a province whose army is picked up first ("keep" leaves the army of the picture before in hand)
+					// a sixth part is a province whose army is picked up first ("keep" leaves the army of the picture before
+					// in hand, "fleet" picks up the player's largest fleet)
 					if (Parts[5] == TEXT("keep"))
 					{
 						Asked.bKeep = true;
+					}
+					else if (Parts[5].StartsWith(TEXT("fleet")))
+					{
+						Asked.bFleet = true; // ("fleet" the largest; "fleet0" the first of the player's own, and so on)
+						Asked.FleetPick = Parts[5].Len() > 5 ? FCString::Atoi(*Parts[5].Mid(5)) : -1;
 					}
 					else
 					{
@@ -1058,9 +1064,17 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 	{
 		const FCampaignView& Now = Controller->GetSession()->GetView();
 		const FViewFleet* Best = nullptr;
+		int32 Own = 0;
 		for (const FViewFleet& Fleet : Now.Fleets)
 		{
-			if (Fleet.Nation == Now.Human && Fleet.Reach.Num() > 1 && (!Best || Fleet.Ships() > Best->Ships()))
+			if (Fleet.Nation == Now.Human && Shot.FleetPick >= 0)
+			{
+				if (Own++ == Shot.FleetPick)
+				{
+					Best = &Fleet;
+				}
+			}
+			else if (Fleet.Nation == Now.Human && Fleet.Reach.Num() > 1 && (!Best || Fleet.Ships() > Best->Ships()))
 			{
 				Best = &Fleet;
 			}

@@ -754,8 +754,58 @@ void ACampaignMapActor::AddSinking(int32 Zone, const FString& Nation, const FStr
 	Ship.At = MapToWorld(Spot.X, Spot.Y, 0.0) + FVector(0.0, 0.0, 0.02 * UnitScale);
 	Ship.Yaw = FMath::Fmod(Angle * 97.0, 360.0);
 	Ship.High = FMath::Max(Bounds.GetSize().Z, 1.0);
+	Ship.Long = FMath::Max(Bounds.GetSize().X, Bounds.GetSize().Y);
 	SinkingMeshes.Add(Mesh);
 	Mesh->SetWorldLocationAndRotation(Ship.At, FRotator(0.0, Ship.Yaw, 0.0));
+	// The white water where she goes under (the art director's ruling: from working height the sea stayed glassy and
+	// a lost ship just vanished): a patch of the wake's white, a ship's length across, ragged at its edge, that
+	// boils up as she goes and fades over a few seconds after. It is paint on the water: dimmed by night with the sea.
+	if (HighlightMaterial)
+	{
+		UProceduralMeshComponent* Water = NewObject<UProceduralMeshComponent>(this);
+		Water->SetupAttachment(Root);
+		Water->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Water->RegisterComponent();
+		Water->SetCastShadow(false);
+		FCampaignMeshBuffers Patch;
+		// (the wake's white as it comes out on the screen by day, about (176, 185, 183); soft from its middle to its edge)
+		const FLinearColor White(0.5f, 0.63f, 0.67f); // (a shade to the cold side: on the sea's strong blue-green a neutral white reads as sand)
+		const int32 Sides = 28;
+		static const double Rings[3] = { 0.4, 0.72, 1.0 };
+		static const float Thick[3] = { 0.5f, 0.24f, 0.0f };
+		const int32 Hub = Patch.AddVertex(FVector::ZeroVector, FVector::UpVector, FLinearColor(White.R, White.G, White.B, 0.58f).ToFColor(false));
+		TArray<int32> Ring[3];
+		for (int32 Side = 0; Side < Sides; ++Side)
+		{
+			const double Round = 2.0 * PI * Side / Sides;
+			const double Ragged = 1.0 + 0.11 * FMath::Sin(Round * 2.0 + Nth * 1.9) + 0.07 * FMath::Sin(Round * 5.0 + Zone);
+			const FVector Out(FMath::Cos(Round), FMath::Sin(Round) * 0.8, 0.0);
+			for (int32 K = 0; K < 3; ++K)
+			{
+				Ring[K].Add(Patch.AddVertex(Out * (Rings[K] * Ragged), FVector::UpVector, FLinearColor(White.R, White.G, White.B, Thick[K]).ToFColor(false)));
+			}
+		}
+		for (int32 Side = 0; Side < Sides; ++Side)
+		{
+			const int32 Next = (Side + 1) % Sides;
+			Patch.AddTriangleFacingUp(Hub, Ring[0][Side], Ring[0][Next]);
+			for (int32 K = 0; K + 1 < 3; ++K)
+			{
+				Patch.AddTriangleFacingUp(Ring[K][Side], Ring[K + 1][Side], Ring[K][Next]);
+				Patch.AddTriangleFacingUp(Ring[K][Next], Ring[K + 1][Side], Ring[K + 1][Next]);
+			}
+		}
+		UMaterialInstanceDynamic* Wash = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		Wash->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+		Wash->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
+		Patch.Commit(Water, 0, Wash);
+		Water->SetWorldLocationAndRotation(Ship.At + FVector(0.0, 0.0, 0.03 * UnitScale), FRotator(0.0, Ship.Yaw, 0.0));
+		Water->SetVisibility(false);
+		Ship.Water = Water;
+		Ship.WaterInk = Wash;
+		SinkingMeshes.Add(Water);
+		SinkingInks.Add(Wash);
+	}
 }
 
 void ACampaignMapActor::UpdateSinkings()
@@ -769,17 +819,23 @@ void ACampaignMapActor::UpdateSinkings()
 	static float Held = -1.0f;
 	static const bool bHeld = FParse::Value(FCommandLine::Get(), TEXT("TheaterSinkAt="), Held);
 	const double Now = GetWorld()->GetTimeSeconds(), Lasts = 6.0;
+	const float Moon = bLamplightNow ? 0.0f : FMath::Clamp(NightNow, 0.0f, 1.0f);
 	for (int32 Index = SinkingShips.Num() - 1; Index >= 0; --Index)
 	{
 		FSinkingShip& Ship = SinkingShips[Index];
 		const double T = bHeld ? Held : (Now - Ship.Began) / Lasts;
-		if (T >= 1.0 || !Ship.Mesh)
+		Ship.T = T;
+		if (T >= 1.6 || !Ship.Mesh)
 		{
-			if (Ship.Mesh)
+			for (UProceduralMeshComponent* Part : { Ship.Mesh.Get(), Ship.Water.Get() })
 			{
-				SinkingMeshes.Remove(Ship.Mesh);
-				Ship.Mesh->DestroyComponent();
+				if (Part)
+				{
+					SinkingMeshes.Remove(Part);
+					Part->DestroyComponent();
+				}
 			}
+			SinkingInks.Remove(Ship.WaterInk);
 			SinkingShips.RemoveAt(Index);
 			continue;
 		}
@@ -787,7 +843,19 @@ void ACampaignMapActor::UpdateSinkings()
 		const double Heel = 56.0 * FMath::SmoothStep(0.0, 0.7, T);
 		const double Stern = 14.0 * FMath::SmoothStep(0.3, 1.0, T);
 		const double Down = Ship.High * 1.4 * FMath::SmoothStep(0.5, 1.0, T);
+		Ship.Mesh->SetVisibility(T < 1.0);
 		Ship.Mesh->SetWorldLocationAndRotation(Ship.At - FVector(0.0, 0.0, Down), FRotator(Stern, Ship.Yaw, Heel));
+		if (Ship.Water && Ship.WaterInk)
+		{
+			// The white water: it comes as she begins to go, is at its whitest as the last of her slides under, and
+			// is gone a few seconds after; it spreads all the while.
+			const float White = static_cast<float>(FMath::SmoothStep(0.45, 0.9, T) * (1.0 - FMath::SmoothStep(1.0, 1.6, T)));
+			Ship.Water->SetVisibility(White > 0.01f);
+			const double Wide = Ship.Long * (0.3 + 0.22 * FMath::SmoothStep(0.45, 1.6, T)); // (from a little over half her length across to about her length)
+			Ship.Water->SetWorldScale3D(FVector(Wide, Wide, 1.0));
+			Ship.WaterInk->SetScalarParameterValue(TEXT("Opacity"), White);
+			Ship.WaterInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.34f, 0.42f), Moon));
+		}
 	}
 }
 
@@ -4956,6 +5024,12 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		{
 			OrdersInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(WashNight.R, WashNight.G, WashNight.B), Moon));
 		}
+		if (SeaReachInk)
+		{
+			// (the tinted water inside a ring is many thin washes laid over one another, so it takes a deep cut to tell)
+			SeaReachInk->SetVectorParameterValue(TEXT("Tint"), FMath::Lerp(FLinearColor::White, FLinearColor(0.055f, 0.058f, 0.066f), Moon));
+			SeaReachInk->SetScalarParameterValue(TEXT("Opacity"), FMath::Lerp(1.0f, 0.7f, Moon));
+		}
 		if (UMaterialInstanceDynamic* Ring = GetSolidMaterial(FLinearColor(FColor::FromHex(TEXT("FFD27A"))), 0.4f, 0.0f, 2.5f))
 		{
 			Ring->SetVectorParameterValue(TEXT("Color"), FMath::Lerp(FLinearColor(FColor::FromHex(TEXT("FFD27A"))), FLinearColor(FColor::FromHex(TEXT("6E6554"))), Moon)); // (the lamp over the piece lights the ring too: this is what comes out a warm cream at about 0.6 under it)
@@ -7007,7 +7081,15 @@ void ACampaignMapActor::ShowSeaReach(const TArray<int32>& Zones, int32 Hover, in
 			}
 		}
 	}
-	Buffers.Commit(OrdersMesh, 2, HighlightMaterial);
+	// (The proving round of release 1: by night the brass rings of the seas in a fleet's reach, and the tinted water
+	// inside them, shone at about 0.8 on a sea at 0.14. They have an ink of their own that the night lets down.)
+	if (!SeaReachInk && HighlightMaterial)
+	{
+		SeaReachInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		ShownNight = -1.0f;
+		SetNight(NightNow, bLamplightNow);
+	}
+	Buffers.Commit(OrdersMesh, 2, SeaReachInk ? static_cast<UMaterialInterface*>(SeaReachInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
 }
 
 void ACampaignMapActor::SetRoute(const FVector& FromWorld, const TArray<int32>& Regions, int32 RouteEnds)
@@ -7239,7 +7321,23 @@ bool ACampaignMapActor::StageModel(const FString& Model, UProceduralMeshComponen
 		Point -= Middle;
 	}
 	OutRadius = Box.GetExtent().Size();
-	StagedExtent = Box.GetExtent();
+	{
+		// (For the large portrait's fit: the box of all but the outermost hundredth of the model's points each way,
+		// so that a thin aerial does not make the whole tank small in its picture. The aerial may leave the frame.)
+		TArray<double> Along[3];
+		for (const FVector& Point : Built.Vertices)
+		{
+			Along[0].Add(Point.X);
+			Along[1].Add(Point.Y);
+			Along[2].Add(Point.Z);
+		}
+		for (int32 Axis = 0; Axis < 3; ++Axis)
+		{
+			Along[Axis].Sort();
+			const int32 Skip = Along[Axis].Num() / 100;
+			StagedExtent[Axis] = FMath::Max(FMath::Abs(Along[Axis][Skip]), FMath::Abs(Along[Axis][Along[Axis].Num() - 1 - Skip]));
+		}
+	}
 	Stage->ClearAllMeshSections();
 	Stage->CreateMeshSection(0, Built.Vertices, Built.Triangles, Built.Normals, TArray<FVector2D>(), Built.Colors, TArray<FProcMeshTangent>(), false);
 	Stage->SetMaterial(0, SceneryMaterial);
@@ -7674,7 +7772,7 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 	// Chimneys: a thin grey plume from each, leaning with the wind. Only those near what the eye is looking at.
 	const FLinearColor Grey(0.6f, 0.6f, 0.62f);
 	const double Reach = FMath::Min(CameraDistance * 1.4 + 1500.0, 9000.0);
-	auto Plume = [&](const FVector& Top, int32 Seed, double Scale = 1.0, const FLinearColor* Ink = nullptr)
+	auto Plume = [&](const FVector& Top, int32 Seed, double Scale = 1.0, const FLinearColor* Ink = nullptr, float Strength = 1.0f)
 	{
 		if (FVector::DistSquared2D(Top, CameraFocus) > Reach * Reach)
 		{
@@ -7688,10 +7786,25 @@ void ACampaignMapActor::UpdateSmoke(float CameraDistance, const FVector& CameraF
 			const double Age = FMath::Frac(Now / Life + static_cast<double>(K) / Count + Seed * 0.137);
 			const double Sway = FMath::Sin(Now * 0.7 + Seed + K * 1.7) * 0.12 * Big * Age;
 			const FVector At = Top + FVector(0.0, 0.0, 4.0 * Big * Age) + Wind * (2.8 * Big * Age * Age) + Right * Sway;
-			const float Alpha = 0.55f * FMath::SmoothStep(0.0, 0.1, Age) * FMath::Pow(1.0 - Age, 1.3);
+			const float Alpha = 0.55f * Strength * FMath::SmoothStep(0.0, 0.1, Age) * FMath::Pow(1.0 - Age, 1.3);
 			Draw(At, (0.22 + 1.1 * Age) * Big, Ink ? *Ink : Grey, Alpha);
 		}
 	};
+	// A ship going down burns as she heels over: dark smoke from her, thinning as she goes under. (The art director
+	// asked for the works' plume at about half its size. A ship is drawn far larger than a works, and at that size
+	// the plume was three points of the screen from working height, where it is wanted: it is sized to the ship.)
+	for (int32 K = 0; K < SinkingShips.Num(); ++K)
+	{
+		const FSinkingShip& Ship = SinkingShips[K];
+		const float Burning = static_cast<float>(FMath::SmoothStep(0.0, 0.12, Ship.T) * (1.0 - FMath::SmoothStep(0.7, 1.05, Ship.T)));
+		if (Burning > 0.01f)
+		{
+			const FLinearColor Oily(0.055f, 0.05f, 0.05f);
+			// (two plumes run together, so that the smoke is a column and not a string of puffs)
+			Plume(Ship.At + FVector(0.0, 0.0, Ship.High * 0.5), K * 11 + 700, Ship.Long / (Unit * 7.5), &Oily, 2.2f * Burning);
+			Plume(Ship.At + FVector(0.0, 0.0, Ship.High * 0.5), K * 11 + 733, Ship.Long / (Unit * 7.5), &Oily, 2.2f * Burning);
+		}
+	}
 	// The wrecks of a battle lately fought still burn: dark smoke from each.
 	{
 		const FLinearColor Oily(0.13f, 0.12f, 0.115f);
@@ -8051,9 +8164,9 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 			}
 		}
 	}
+	UpdateSinkings(); // (before the smoke, which reads how far each has gone)
 	UpdateSmoke(CameraDistance, CameraFocus);
 	UpdateSorties();
-	UpdateSinkings();
 	UpdateTrains(CameraFocus, CameraDistance);
 	UpdateClouds();
 	UpdateFlashes();

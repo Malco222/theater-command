@@ -1233,15 +1233,20 @@ namespace
 						}
 						const float Scale = FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f);
 						const FVector2D At = Controller.IsValid() ? Controller->GetPointer() / Scale : FVector2D::ZeroVector;
-						// Kept on the screen: to the left of the pointer when it is near the right edge.
+						// Kept on the screen, and out from under the column down its right side: to the left of the pointer
+						// when the tip would not fit between the pointer and that column. (The proving round of release 1:
+						// a long line about a sea ran on under the small map and lost its end. The tip is folded now, and
+						// placed by its own width.)
 						const float Width = static_cast<float>(Size.X) / Scale;
-						return FMargin(At.X > Width - 330.0f ? static_cast<float>(At.X) - 300.0f : static_cast<float>(At.X) + 18.0f, static_cast<float>(At.Y) + 20.0f, 0.0f, 0.0f);
+						const float Wide = HoverTipBox.IsValid() ? static_cast<float>(HoverTipBox->GetDesiredSize().X) : 300.0f;
+						const float Left = static_cast<float>(At.X) + 18.0f + Wide > Width - 262.0f ? FMath::Max(static_cast<float>(At.X) - Wide - 14.0f, 8.0f) : static_cast<float>(At.X) + 18.0f;
+						return FMargin(Left, static_cast<float>(At.Y) + 20.0f, 0.0f, 0.0f);
 					}))
 					[
-						SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(10.0f, 6.0f))
+						SAssignNew(HoverTipBox, SBorder).BorderImage(&PanelBrush).Padding(FMargin(10.0f, 6.0f))
 						.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetHoverTip().IsEmpty() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
 						[
-							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).LineHeightPercentage(1.15f)
+							SNew(STextBlock).Font(Font(TEXT("Regular"), 11)).ColorAndOpacity(Cream).LineHeightPercentage(1.15f).WrapTextAt(520.0f)
 							.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetHoverTip() : FText::GetEmpty(); })
 						]
 					]
@@ -6632,6 +6637,7 @@ namespace
 		TMap<FString, TSharedPtr<FSlateBrush>> PortraitBrushes;
 		TMap<FString, TSharedPtr<FSlateBrush>> LargePortraitBrushes; // (for the bigger unit card)
 		TSharedPtr<SBox> BigCardShow;
+		TSharedPtr<SBorder> HoverTipBox;
 		struct FBigCardTarget
 		{
 			TWeakPtr<SWidget> Widget;

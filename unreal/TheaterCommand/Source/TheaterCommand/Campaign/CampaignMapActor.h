@@ -621,19 +621,26 @@ private:
 	bool bPiecesShown = true;
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> OrdersInk; // the washes laid for an army in hand: dimmed by night, in the chart veil's step
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> SeaReachInk; // the brass rings of the seas in a fleet's reach: let down by night, or they shone on the dark sea
 	FVector StagedExtent = FVector(100.0); // half the size of the model last stood on a stage, each way
 	FLinearColor WashNight = FLinearColor(0.36f, 0.38f, 0.44f); // what the washes are multiplied by under the moon
 	float RingNightGlow = 0.05f; // and how much light of its own the ring round the piece in hand keeps
 	struct FSinkingShip
 	{
 		TObjectPtr<UProceduralMeshComponent> Mesh;
+		TObjectPtr<UProceduralMeshComponent> Water; // the patch of white water where she goes under
+		TObjectPtr<UMaterialInstanceDynamic> WaterInk;
 		double Began = 0.0;
 		FVector At = FVector::ZeroVector;
-		double Yaw = 0.0, High = 10.0;
+		double Yaw = 0.0, High = 10.0, Long = 10.0;
+		double T = 0.0; // how far through it she is: 0 afloat, 1 gone; the white water lingers to 1.6
 	};
 	TArray<FSinkingShip> SinkingShips;
 	UPROPERTY()
 	TArray<TObjectPtr<UProceduralMeshComponent>> SinkingMeshes; // (kept from the collector while they go down)
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> SinkingInks;
 	void UpdateSinkings();
 	TArray<FWreckMark> WrecksShown;
 	int32 WrecksTurn = -1;

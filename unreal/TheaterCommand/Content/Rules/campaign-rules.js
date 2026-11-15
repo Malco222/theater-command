@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 56f2523 2026-11-14. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 85c6a17 2026-11-15. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1031,7 +1031,7 @@
 
   // ../../data/campaign/arsenal.json
   var arsenal_default = {
-    _about: "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided.",
+    _about: "The arsenal: everything a nation can order in the grand campaign beyond the four classic corps of production.json, and the works a province can be given. The historical scenarios do not use it. 'land' adds kinds of corps. 'needs' is how many factories the province a corps is raised in must have: infantry and mountain troops can be raised anywhere at home, heavier equipment only where there is industry. 'air' is aircraft by the wing: 'count' machines with crews, ordered by a nation that has a home province with 'factories' factories (its aircraft industry) and stationed on airfields. 'ships' are laid down in a home port whose shipyard is of level 'yard' or better; 'count' hulls join the fleet based there, or the nation's main fleet of that kind; 'tp' is troopships, each order adding one corps a month to the nation's sea lift, up to 'lift.most' orders. 'works' are built in a province: a factory in a city (a province that is urban, the capital, already has industry or is worth two victory points), at 'cost' plus 'step' for each one already added there, up to 'most' new ones; shipyards, anti-aircraft guns and airfields in levels 1 to 3 at the listed 'cost' for each level. 'yards' is the shipyard level history left in each port. A level of anti-aircraft guns stops 'cut' of the bombing of that province's industry and adds 'flak' to the bombers' losses; a level of airfields lets 'holds' more aircraft fly from the province. 'upkeep' is the monthly cost of a level. Costs are in production points (shown times a hundred); months are how long the order takes. 'guns' is what artillery does in a land battle: each division in the attack takes 'soften' off the worth of the defender's fortifications and trenches, up to 'softenMost'; each division in the defence adds 'thicken' to the other defenders, up to 'thickenMost'. 'ai' is what a computer-run nation will do with it: put guns on its most bombed industry once it has been raided; and, facing 'facing' dug-in enemy corps or more, raise artillery corps until it has one to every 'per' of its other corps, 'most' at the most, and none while its field army is under 'fit' of the largest it has been (an army being worn away wants men in the line before guns).",
     land: {
       art: { label: "Artillery corps", divs: 2, cost: 66, months: 5, blurb: "Massed guns. Breaks fortified lines and fieldworks in the attack, and thickens any defence it stands in. Slow, weak if caught alone, and as dear as an armoured corps." },
       eng: { label: "Engineer corps", divs: 1, cost: 18, months: 3, blurb: "Bridging columns, sappers and labour battalions. Rebuilds blown bridges, fortifies provinces, lays minefields, and in an assault breaches fortifications and clears mines. A poor fighter on its own." }
@@ -1091,7 +1091,7 @@
       "Danzig Corridor": 1
     },
     guns: { soften: 0.15, softenMost: 0.6, thicken: 0.05, thickenMost: 0.2 },
-    ai: { aaAfterRaid: true, guns: { per: 6, most: 10, facing: 3 } }
+    ai: { aaAfterRaid: true, guns: { per: 6, most: 10, facing: 3, fit: 0.9 } }
   };
 
   // ../../data/campaign/rivals.json
@@ -5994,10 +5994,12 @@
       }
       if (!olds.length) {
         const by = [...new Set(pocket.flatMap((id) => g2.regions[id].nb).filter((j) => !pocket.includes(j)).map((j) => fieldCtrl(g2, g2.regions[j])))];
-        const v = pocketView(g2, town.id);
+        const left = dry ? 0 : Math.max(1, Math.ceil((stores2 - eaten / 10) / mouths(g2, nat, pocket, town)));
         const corps = pocket.reduce((s, id) => s + g2.regions[id].units.filter((c) => c.nat === nat && !c.dead).length + garrisonOf(g2.regions[id]).filter((c) => c.nat === nat).length, 0);
-        const said = corps ? `${corps === 1 ? `One ${n.adj} corps is` : `${corps} ${n.adj} corps are`} cut off there, with stores for ${months(v.left)}; after that the troops go hungry.` : `The town has stores for ${months(v.left)}, and any troops who fall back on it will live on them.`;
-        tell(g2, town, `${townName(town)} is surrounded: no road and no ship reaches it from the rest of ${theName(n)}. ${said}`, nat, [nat, ...by]);
+        const said = corps ? `${corps === 1 ? `One ${n.adj} corps is` : `${corps} ${n.adj} corps are`} cut off there, with stores for ${months(left)}; after that the troops go hungry.` : `The town has stores for ${months(left)}, and any troops who fall back on it will live on them.`;
+        const own = town.ctrl !== nat && mine3.length ? g2.regions[mine3[0]] : null;
+        const lead2 = own ? `The ${n.adj} troops round ${townName(own)} are surrounded, with their allies in ${townName(town)}: no road and no ship reaches them` : `${townName(town)} is surrounded: no road and no ship reaches it`;
+        tell(g2, own ?? town, `${lead2} from the rest of ${theName(n)}. ${said}`, nat, [nat, ...by]);
       }
     }
   }
@@ -8511,9 +8513,21 @@
       return by !== null && allied(g2, nat, by) && feeders(g2, r).length > 0;
     });
   }
+  function crossings(g2, nat) {
+    const off = /* @__PURE__ */ new Set(), way = /* @__PURE__ */ new Set();
+    for (const sfx of ["", ":o"]) {
+      const aim = g2.regions[(g2.flags[`st:aim:${nat}${sfx}`] ?? 0) - 1], quay = g2.regions[(g2.flags[`st:quay:${nat}${sfx}`] ?? 0) - 1];
+      if (!aim || !quay || !atWar(g2, nat, aim.ctrl)) continue;
+      const path = seaPath(g2, nat, quay, aim, { max: NAVY.landing.range, surprise: true });
+      if (!path) continue;
+      path.forEach((z, i) => (i === path.length - 1 ? off : way).add(z));
+    }
+    return { off, way };
+  }
   function navalAI(g2, nat, orders) {
     if (byHand(g2, nat, "navy")) return;
     const n = g2.nations[nat];
+    let cross = null;
     for (const f of fleetsOf(g2, nat)) {
       const home = () => {
         sail(g2, f, f.home, "port");
@@ -8539,6 +8553,7 @@
       if (lane && f.tied && escort(g2, f, lane.id)) continue;
       const mine3 = fleetPower(g2, f);
       const reach3 = fleetReach(g2, f);
+      cross ?? (cross = crossings(g2, nat));
       const beat = /* @__PURE__ */ new Set([f.station, ...g2.seas[f.station].adj]);
       let best = -1, bv = 0;
       for (const z of f.tied ? [f.station] : reach3) {
@@ -8552,6 +8567,7 @@
         let v = 0;
         if (f.duty === "patrol" && beat.has(z) && quarry > 0 && own >= NAVY.battle.seek * e.total) v += quarry;
         if (landedLately(g2, z, nat) && own >= e.total) v += 30;
+        if (f.duty === "patrol" && own >= e.total && (cross.off.has(z) || cross.way.has(z))) v += cross.off.has(z) ? 40 : 25;
         if (invaded) v += 60;
         if (f.duty === "patrol" && own >= NAVY.battle.seek * e.total && blockadeWanted(g2, z, nat)) v += SIEGE.ai.sea.blockade;
         if (z === f.station && f.duty === "patrol" && (quarry <= 0 || own >= 0.7 * e.total)) v += 5;
@@ -9653,11 +9669,26 @@
         g2.flags[`rso:${nat}:${m}:${t}`] = g2.turn + S.rest;
       }
     };
+    const beaches = ["", ":o"].map((s) => (g2.flags[`st:aim:${nat}${s}`] ?? 0) - 1).filter((t, i, a) => t >= 0 && a.indexOf(t) === i && !!g2.regions[t] && atWar(g2, nat, g2.regions[t].ctrl) && skyDenies(g2, nat, t));
+    for (const t of beaches) {
+      const fighters = mine3.filter((f) => f.kind === "ftr" && f.ftr > 0 && !afloat(f));
+      if (fighters.some((f) => whyNotMission2(g2, f, "superiority", t) === null)) continue;
+      const cap5 = g2.nations[nat].capital;
+      let move2 = null;
+      for (const f of fighters) {
+        if (f.moved === g2.turn || f.flew === g2.turn || g2.regions[f.base].owner === nat && !g2.regions[f.base].overseas && cap5 >= 0) continue;
+        for (const r of airBases(g2, f)) {
+          const d = km(g2, r.id, t);
+          if (d <= reach(f).ftrRange && (!move2 || d < move2.d)) move2 = { f, to: r, d };
+        }
+      }
+      if (move2) rebaseAir(g2, move2.f, move2.to);
+    }
     let flown = 0;
-    for (let k = 0; k < R.sweeps && front.size; k++) {
+    for (let k = 0; k < R.sweeps && (front.size || beaches.length); k++) {
       let best = null;
       const bases = [...new Set(mine3.filter((f) => fit3(f) && f.kind === "ftr" && f.ftr > 0 && f.ready >= R.ready).map(homeOf))];
-      const spots = [...front.entries()].filter(([t]) => !hit.has(t) && pushed(t) && skyOver(g2, t) === null).sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, R.look);
+      const spots = [...beaches.filter((t) => !hit.has(t)).map((t) => [t, 6]), ...[...front.entries()].filter(([t]) => !hit.has(t) && pushed(t) && skyOver(g2, t) === null).sort((a, b) => b[1] - a[1] || a[0] - b[0])].slice(0, R.look);
       for (const base of bases) {
         for (const [t, divs] of spots) {
           const fleets = fightersAt(base).filter((f) => f.ready >= R.ready && whyNotMission2(g2, f, "superiority", t) === null);
@@ -11943,6 +11974,36 @@
     const o = offers(g2, nat, best.id).find((x) => x.key === "work:aa");
     if (o && o.why === null && n.pp >= o.cost + PRODUCTION.aiReserve) orderOffer(g2, nat, "work:aa", best.id);
   }
+  function aiFortify(g2, nat, watch, C) {
+    const n = g2.nations[nat];
+    if (!C || g2.flags.open !== 1 || !budgeted(g2) || nat === g2.human || !n?.alive || n.capital < 0 || !n.atWar.length) return;
+    const level = (r) => (r.fort?.lv ?? 0) + n.queue.filter((b) => b.what === "fort" && b.region === r.id).length;
+    const order2 = (r, keep) => {
+      const cost = fortCost(g2, nat, r);
+      return cost !== null && n.pp >= cost + keep && !!orderFort(g2, nat, r.id);
+    };
+    const idle = corpsCost(g2, nat, "inf") + PRODUCTION.aiReserve;
+    const coast = watch.map((nm) => g2.byName[nm]).filter((r) => !!r && isHome(g2, nat, r) && level(r) < C.works).sort((a, b) => level(a) - level(b) || a.id - b.id);
+    if (coast.length && !n.queue.some((b) => b.what === "fort" && watch.includes(g2.regions[b.region].name))) order2(coast[0], idle);
+    const D = C.dig;
+    if (!D || menSpare(g2, nat) >= (specOf(g2, "inf")?.divs ?? 1)) return;
+    const dist = new Int16Array(g2.regions.length).fill(-1);
+    const q = [];
+    for (const r of g2.regions) if (atWar(g2, nat, r.ctrl)) {
+      dist[r.id] = 0;
+      q.push(r.id);
+    }
+    for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (dist[j] < 0) {
+      dist[j] = dist[q[i]] + 1;
+      q.push(j);
+    }
+    const cands = g2.regions.filter((r) => isHome(g2, nat, r) && !r.overseas && dist[r.id] >= 2 && level(r) < (r.id === n.capital ? D.capital : D.top)).sort((a, b) => dist[a.id] - dist[b.id] || level(a) - level(b) || a.id - b.id);
+    let k = 0;
+    for (const r of cands) {
+      if (k >= D.orders || !order2(r, Math.max(D.keep, idle))) break;
+      k++;
+    }
+  }
 
   // ../../data/campaign/liberation.json
   var liberation_default = {
@@ -12765,7 +12826,7 @@
     }
     return out;
   }
-  function incomeLines(g2, nat, good, lanes) {
+  function incomeLines(g2, nat, good, lanes2) {
     const n = g2.nations[nat];
     const out = [];
     if (good === "oil") {
@@ -12812,7 +12873,7 @@
       const farms = civicSum(g2, nat, true).sup;
       if (farms > 0) out.push({ key: "farms", label: "Cooperative farms, granaries and food works", amount: farms });
     }
-    for (const l of lanes) {
+    for (const l of lanes2) {
       if (l.full[good] <= 0) continue;
       const label = l.kind === "sea" ? `${l.name[0].toUpperCase()}${l.name.slice(1)}` : `${l.name}${l.from ? `, from ${the(l.from)}` : ""}`;
       out.push({ key: `lane:${l.id}`, label, amount: l[good], lane: l.id, note: l.state === "open" ? l.why || void 0 : l.state === "raided" ? `${Math.round(l.flow * 100)}% getting through` : l.why });
@@ -12850,16 +12911,16 @@
   function stores(g2, nat) {
     const st = storesOf2(g2, nat);
     if (!st) return null;
-    const lanes = lanesTo(g2, nat);
+    const lanes2 = lanesTo(g2, nat);
     const book = (good) => {
-      const income2 = incomeLines(g2, nat, good, lanes), spend = outLines(g2, nat, good);
+      const income2 = incomeLines(g2, nat, good, lanes2), spend = outLines(g2, nat, good);
       const made = income2.reduce((s, l) => s + l.amount, 0), need = spend.reduce((s, l) => s + l.amount, 0);
       const cap5 = (good === "oil" ? RES.oil.cap : RES.sup.cap) * Math.max(needOf(g2, nat, good, true), 1);
       const net = made - need;
       const met2 = good === "oil" ? st.oilMet : st.supMet;
       return { good, stock: st[good], cap: cap5, income: income2, spend, made, need, net, months: net < -1e-9 ? st[good] / -net : Infinity, met: met2, effects: met2 < 0.995 ? good === "oil" ? SHORT_OIL(met2) : SHORT_SUP(met2) : [] };
     };
-    return { nat, oil: book("oil"), sup: book("sup"), lanes, willLost: willLost(g2, nat) };
+    return { nat, oil: book("oil"), sup: book("sup"), lanes: lanes2, willLost: willLost(g2, nat) };
   }
   function openStores(g2) {
     if (!resRules(g2)) return;
@@ -14517,10 +14578,16 @@
       if (nat === g2.human) headline(g2, "info", old ? `${b.name} is raised again at ${at.name}, ${g2.turn - old.turn} months after it was lost at ${g2.regions[old.reg].name}. It carries the old colours and is ready for orders.` : `${b.name} has finished forming at ${at.name} and is ready for orders.`, nat, at.id);
     }
   }
+  function armyWorn(g2, nat) {
+    const n = g2.nations[nat];
+    const fit3 = arsenal_default.ai.guns.fit;
+    return g2.flags.open === 1 && !!fit3 && !!n?.alive && n.atWar.length > 0 && n.armyPeak > 0 && armySize(g2, nat) < fit3 * n.armyPeak;
+  }
   function gunsWanted(g2, nat) {
     const n = g2.nations[nat];
     if (g2.flags.open !== 1 || !n?.alive || !n.atWar.length) return false;
     const G = arsenal_default.ai.guns;
+    if (armyWorn(g2, nat)) return false;
     let guns2 = n.queue.filter((b) => b.what === "corps" && b.kind === "art").length, rest = 0;
     for (const c of g2.corps) if (c.nat === nat && !c.dead) {
       if (c.kind === "art") guns2++;
@@ -14543,7 +14610,7 @@
     for (const r of g2.regions) if (isHome(g2, nat, r)) home += r.fac;
     const keep = (b) => b.what === "corps" ? corpsUpkeep(b.kind, b.divs) : 0;
     let spare = budgeted(g2) ? income(g2, nat) - upkeepTotal(g2, nat) - n.queue.reduce((t, b) => t + keep(b), 0) : Infinity;
-    const slots = () => n.queue.filter((b) => b.what === "corps" && b.kind !== "eng" || b.what === "fort").length;
+    const slots = () => n.queue.filter((b) => b.what === "corps" && b.kind !== "eng" || b.what === "fort" && (nat === g2.human || g2.flags.open !== 1)).length;
     const most = g2.flags.open === 1 && PRODUCTION.aiLine ? Math.max(2, Math.floor(home / PRODUCTION.aiLine)) : 2;
     const u = budgeted(g2) ? eliteOf(nat) : null;
     if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g2, nat) === null && !locked(g2, nat, `corps:${u.kind}`) && !(u.kind === "arm" && shortOfOil(g2, nat))) {
@@ -15194,9 +15261,9 @@
       head = railheads(g2, nat);
     }
     const troops = (r) => r.units.some((u) => u.nat === nat && u.kind !== "eng");
-    const abroad2 = g2.nations[nat].atWar.length > 0;
+    const abroad3 = g2.nations[nat].atWar.length > 0;
     for (const r of g2.regions) {
-      if (r.ctrl !== nat && !(abroad2 && allied(g2, nat, r.ctrl) && (troops(r) || r.nb.some((j) => troops(g2.regions[j]))))) continue;
+      if (r.ctrl !== nat && !(abroad3 && allied(g2, nat, r.ctrl) && (troops(r) || r.nb.some((j) => troops(g2.regions[j]))))) continue;
       const site = { reg: r.id, score: 0, what: "bridge", spans: [] };
       const own = troops(r);
       for (const x of crossingsAt(r.id)) {
@@ -15967,13 +16034,13 @@
   }
   function computeSupply(g2) {
     const active = new Set(g2.corps.map((c) => c.nat));
-    const lanes = /* @__PURE__ */ new Map();
+    const lanes2 = /* @__PURE__ */ new Map();
     const lanesOf = (id) => {
-      if (!lanes.has(id)) {
+      if (!lanes2.has(id)) {
         const n = g2.nations[id];
-        lanes.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g2, id) : null);
+        lanes2.set(id, n && (n.seaSupply || n.sealift > 0) ? openSeas(g2, id) : null);
       }
-      return lanes.get(id);
+      return lanes2.get(id);
     };
     const withShips = Object.values(g2.nations).filter((n) => n.alive && (n.seaSupply || n.sealift > 0)).map((n) => n.id);
     const shippers = (id) => withShips.filter((a) => a !== id && allied(g2, id, a));
@@ -16714,9 +16781,9 @@
       const r = g2.regions[j];
       if (banned.has(j) || !allied(g2, c.nat, fieldCtrl(g2, r)) || hostileUnits(g2, r, c.nat).length) continue;
       if (friendlyUnits(g2, r, c.nat).length >= STACK + 2 || barred(g2, c, r)) continue;
-      const abroad2 = g2.nations[c.nat].seaSupply && r.owner !== c.nat;
+      const abroad3 = g2.nations[c.nat].seaSupply && r.owner !== c.nat;
       const ways = inDesert(r) ? r.nb.filter((k) => k !== from.id && !banned.has(k) && allied(g2, c.nat, g2.regions[k].ctrl)).length : 2;
-      const back = (inDesert(r) ? g2.reach[c.nat]?.[j] ?? 0 : abroad2 ? r.port ? 0 : 3 : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
+      const back = (inDesert(r) ? g2.reach[c.nat]?.[j] ?? 0 : abroad3 ? r.port ? 0 : 3 : d ? d[j] : 0) + (ways === 0 ? 4 : ways === 1 ? 1.5 : 0);
       const s = back + (g2.supply[c.nat]?.[j] ? 0 : 6) + r.units.length * 0.3;
       if (s < bs) {
         bs = s;
@@ -19096,9 +19163,20 @@
       local: [1.4, 1.25],
       locals: 2
     },
+    coast: {
+      _about: "The coast watch. A computer staff at war with an enemy who has sea lift, and whose home army is not already fighting it on land, expects him by sea once the two have not fought for a season, and for a year after: it keeps a corps of its field army (two divisions or more: a town's standing garrison does not count) in each harbour of its own homeland that his ships can reach within a landing's range, from the ports he holds or an ally's where his troops stand, the most valuable first, up to 'share' of its corps in the field (never fewer than 'least') and 'each' to a harbour, and its treasury raises fortifications there to level 'works'. Conquered coasts are not watched. 'dig': a computer staff that can raise no corps for want of men puts idle money into fortifications in the provinces of its homeland nearest the enemy that he does not yet stand next to, 'orders' a month, to level 'top' (the capital to 'capital'), keeping 'keep' in the treasury.",
+      share: 0.08,
+      least: 3,
+      each: 1,
+      works: 2,
+      dig: { orders: 2, top: 2, capital: 3, keep: 40 }
+    },
     descent: {
-      _about: "The second front. A nation with sea lift that has been at war with an enemy for 'after' months with no land battle against him and no troops in touch with ground he holds keeps 'force' corps by a quay and crosses the sea: to a harbour of his that is unguarded, or guarded at 'odds' or better, with a crossing no riskier than 'risk' and no more than 'near' times its own strength within a march of the beach. It tries in a month with chance 'chance', and waits 'every' months after a landing. The hardest level has rules of its own for the player's coasts (difficulty.json).",
+      _about: "The second front. A nation with sea lift that has been at war with an enemy for 'after' months with no land battle against him and no troops of its home army in touch with ground he holds keeps 'force' corps by a quay (a home port with a lane open to his harbours) and crosses the sea: to a harbour of his that is unguarded, or guarded at 'odds' or better, with a crossing no riskier than 'risk' and no more than 'near' times its own strength within a march of the beach. It tries in a month with chance 'chance', and waits 'every' months after a landing. The staff names the beach it has its eye on a month ahead: its fleet then covers the crossing and its fighters fight for the sky over the beach, and a beach they cannot open in half a year is given up for a year. The men it puts ashore stay there, and while they are fewer than 'hold' divisions, or than 'feed' times the enemy army next to their ground, every ship it has carries more to them each month: into a harbour in friendly hands, or over the beach while the harbour town still holds out. An army standing idle on a far shore (friendly ground away from home with no enemy on it or next to it) does the same from a port there, against an enemy it has not fought for 'abroad' months. The hardest level has rules of its own for the player's coasts (difficulty.json).",
       after: 12,
+      abroad: 3,
+      hold: 15,
+      feed: 2,
       force: 3,
       odds: 1.5,
       risk: 0.25,
@@ -19108,7 +19186,7 @@
     },
     temper: {
       _default: { persist: 0.85, minOdds: 1.4 },
-      GER: { attackAt: 1, persist: 0.6, minOdds: 1.3 },
+      GER: { attackAt: 1.2, persist: 0.9, minOdds: 1.3 },
       ITA: { attackAt: 1.5, persist: 0.9, minOdds: 1.3 },
       SOV: { attackAt: 1.3, persist: 0.8, minOdds: 1.2 },
       UK: { attackAt: 1.5, persist: 0.9, minOdds: 1.3 },
@@ -19916,42 +19994,139 @@
     }
     const cap5 = n.capital >= 0 ? g2.regions[n.capital] : null;
     if (cap5 && cap5.ctrl === nat && nearEnemy(g2, nat, cap5, OPEN.guardWithin)) phase.staging = { ...phase.staging ?? {}, [cap5.name]: OPEN.guard };
-    const quay = seaBase(g2, nat);
-    if (quay) phase.staging = { ...phase.staging ?? {}, [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, seaFoe(g2, nat).L.force) };
+    const watch = coastWatch(g2, nat);
+    for (const [name, count3] of Object.entries(watch)) phase.staging = { ...phase.staging ?? {}, [name]: Math.max(phase.staging?.[name] ?? 0, count3) };
+    if (Object.keys(watch).length) phase.watch = Object.keys(watch);
+    for (const slot of [0, 1]) {
+      const quay = seaBase(g2, nat, slot);
+      if (!quay) continue;
+      const sea = seaFoe(g2, nat, slot);
+      const want = sea.second && lodgment(g2, nat, slot)?.short ? Math.max(sea.L.force, Math.min(n.sealift, STACK)) : sea.L.force;
+      phase.staging = { ...phase.staging ?? {}, [quay.name]: Math.max(phase.staging?.[quay.name] ?? 0, want) };
+    }
     for (const op of list4) {
       if (!op.staging || flag2(g2, `st:done:${nat}:${op.id}`) || g2.turn > (op.to ?? 999)) continue;
       phase.staging = { ...phase.staging ?? {}, ...op.staging };
     }
     return phase;
   }
-  function inTouch(g2, nat, e) {
+  function inTouch(g2, nat, e, among) {
     for (const r of g2.regions) {
       if (r.ctrl !== e) continue;
-      for (const j of r.nb) if (g2.regions[j].units.some((u) => u.nat === nat && !u.dead && u.kind !== "fort")) return true;
+      for (const j of r.nb) if ((!among || among[j]) && g2.regions[j].units.some((u) => u.nat === nat && !u.dead && u.kind !== "fort")) return true;
       if (r.units.some((u) => u.nat === nat && !u.dead)) return true;
     }
     return false;
   }
-  function seaFoe(g2, nat) {
+  function homeGround(g2, nat) {
+    const on = new Uint8Array(g2.regions.length);
+    const cap5 = g2.nations[nat].capital;
+    if (cap5 < 0) return { list: [], on };
+    const list4 = [cap5];
+    on[cap5] = 1;
+    for (let i = 0; i < list4.length; i++) for (const j of g2.regions[list4[i]].nb) if (!on[j] && g2.regions[j].ctrl === nat) {
+      on[j] = 1;
+      list4.push(j);
+    }
+    return { list: list4, on };
+  }
+  var SLOT = ["", ":o"];
+  function lodgment(g2, nat, slot = 0) {
+    const at = g2.regions[flag2(g2, `st:lodged:${nat}${SLOT[slot]}`) - 1];
+    if (!at || !at.port || at.ctrl !== nat && fieldCtrl(g2, at) !== nat) return null;
+    const D = OPEN.descent;
+    const seen2 = new Uint8Array(g2.regions.length);
+    const q = [at.id];
+    seen2[at.id] = 1;
+    let front = false, mine3 = 0, foes = 0;
+    for (let i = 0; i < q.length; i++) {
+      const r = g2.regions[q[i]];
+      if (atWar(g2, nat, r.ctrl)) front = true;
+      for (const u of r.units) if (u.nat === nat && !u.dead && u.kind !== "fort") mine3 += u.divs * u.str;
+      for (const j of r.nb) {
+        if (seen2[j]) continue;
+        const c = fieldCtrl(g2, g2.regions[j]);
+        if (allied(g2, nat, c)) {
+          seen2[j] = 1;
+          q.push(j);
+          continue;
+        }
+        if (!atWar(g2, nat, c)) continue;
+        front = true;
+        seen2[j] = 2;
+        for (const u of g2.regions[j].units) if (!u.dead && u.kind !== "fort" && atWar(g2, nat, u.nat)) foes += u.divs * u.str;
+      }
+    }
+    if (!front) return null;
+    return { at, ports: q.map((id) => g2.regions[id]).filter((r) => r.port && r.seas.length > 0 && allied(g2, nat, r.ctrl)), short: mine3 < Math.max(D.hold ?? 15, (D.feed ?? 2) * foes) };
+  }
+  function lanes(g2, nat, from, shut) {
+    const d = new Int16Array(g2.seas.length).fill(-1);
+    const q = [];
+    for (const z of from.seas) if (!shut[z] && d[z] < 0) {
+      d[z] = 1;
+      q.push(z);
+    }
+    for (let i = 0; i < q.length; i++) {
+      if (d[q[i]] >= NAVY.landing.range) continue;
+      for (const j of g2.seas[q[i]].adj) if (d[j] < 0 && !shut[j] && canPass(g2, q[i], j, nat)) {
+        d[j] = d[q[i]] + 1;
+        q.push(j);
+      }
+    }
+    return d;
+  }
+  function quayWorth(g2, nat, from, shores, shut) {
+    const d = lanes(g2, nat, from, shut);
+    let worth2 = 0, seas = Infinity;
+    for (const s of shores) {
+      let k = Infinity;
+      for (const z of s.seas) if (d[z] > 0 && d[z] < k) k = d[z];
+      if (k === Infinity) continue;
+      seas = Math.min(seas, k);
+      if (!allied(g2, nat, s.ctrl) && skyDenies(g2, nat, s.id)) {
+        worth2 += 0.02;
+        continue;
+      }
+      let near = 0;
+      for (const j of [s.id, ...s.nb]) for (const u of hostileUnits(g2, g2.regions[j], nat)) if (u.kind !== "fort") near += u.divs * u.str;
+      worth2 += 1 / (1 + near / 4);
+    }
+    return { worth: worth2, seas };
+  }
+  var harbours = (g2, e) => g2.regions.filter((r) => r.ctrl === e && r.port && r.seas.length > 0);
+  function seaFoe(g2, nat, slot = 0) {
     const n = g2.nations[nat];
-    if (!n || !n.alive || n.dormant || n.sealift <= 0 || n.capital < 0 || nat === g2.human) return null;
+    if (!n || !n.alive || n.dormant || n.sealift <= 0 || nat === g2.human) return null;
+    const D = OPEN.descent;
+    if (slot) {
+      const far = D && isOpen(g2) ? abroad2(g2, nat) : null;
+      return far ? { foe: far.foe, L: D, second: true } : null;
+    }
+    if (n.capital < 0) return null;
     const L = landingsFor(g2, nat), you = seat2(g2);
     if (L && you !== null && atWar(g2, nat, you)) return { foe: you, L };
-    const D = OPEN.descent;
     if (!D || !isOpen(g2)) return null;
+    if (g2.regions.some((r) => r.owner === nat && !r.overseas && atWar(g2, nat, r.ctrl))) return null;
     const ids2 = Object.keys(g2.nations);
     const key4 = `st:foe:${nat}`, at = `st:foeAt:${nat}`;
+    const home = homeGround(g2, nat);
+    const from = [...new Set(home.list.map((id) => g2.regions[id]).filter((r) => r.port && r.owner === nat && !r.overseas).flatMap((r) => r.seas))];
+    const inReach = (e) => from.length > 0 && seaHops(g2, from, harbours(g2, e)) <= NAVY.landing.range;
     const kept = ids2[flag2(g2, key4) - 1];
     if (kept && g2.nations[kept].alive && atWar(g2, nat, kept)) {
-      const lodged = g2.regions[flag2(g2, `st:lodged:${nat}`) - 1];
-      if (g2.turn - flag2(g2, at) < 12 || lodged && lodged.ctrl === nat && lodged.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl))) return { foe: kept, L: D };
+      if (g2.turn - flag2(g2, at) < 12 || lodgment(g2, nat)) return { foe: kept, L: D, second: true };
+      if (inReach(kept) && !inTouch(g2, nat, kept, home.on)) {
+        g2.flags[at] = g2.turn;
+        return { foe: kept, L: D, second: true };
+      }
     }
     let best = null, bq = D.after - 1;
     for (const e of [...n.atWar].sort()) {
       const x = g2.nations[e];
       if (!x?.alive || x.capital < 0) continue;
       const q = quietWith(g2, nat, e);
-      if (q > bq && !inTouch(g2, nat, e)) {
+      if (q > bq && !inTouch(g2, nat, e, home.on) && inReach(e)) {
         bq = q;
         best = e;
       }
@@ -19962,42 +20137,177 @@
     }
     g2.flags[key4] = ids2.indexOf(best) + 1;
     g2.flags[at] = g2.turn;
-    return { foe: best, L: D };
+    return { foe: best, L: D, second: true };
   }
-  function seaBase(g2, nat) {
-    const sea = seaFoe(g2, nat);
-    const n = g2.nations[nat];
+  function abroad2(g2, nat) {
+    const D = OPEN.descent, n = g2.nations[nat];
+    const ids2 = Object.keys(g2.nations);
+    const kf = `st:foe:${nat}:o`, kq = `st:quay:${nat}:o`, at = `st:quayAt:${nat}:o`, none3 = `st:far:${nat}`;
+    const foe = ids2[flag2(g2, kf) - 1], quay = g2.regions[flag2(g2, kq) - 1];
+    if (foe && quay && g2.nations[foe].alive && atWar(g2, nat, foe) && allied(g2, nat, quay.ctrl) && (g2.turn - flag2(g2, at) < 3 || lodgment(g2, nat, 1)?.short)) return { foe, quay };
+    if (flag2(g2, none3) === g2.turn) return null;
+    const drop = () => {
+      delete g2.flags[kf];
+      delete g2.flags[kq];
+      g2.flags[none3] = g2.turn;
+      return null;
+    };
+    const foes = [...n.atWar].sort().filter((e) => {
+      const x = g2.nations[e];
+      return !!x?.alive && x.capital >= 0 && quietWith(g2, nat, e) >= (D.abroad ?? 3);
+    });
+    if (!foes.length) return drop();
+    const shores = foes.map((e) => harbours(g2, e));
+    if (!shores.some((s) => s.length)) return drop();
+    const home = homeGround(g2, nat).on;
+    const seen2 = new Uint8Array(g2.regions.length);
+    const idle = [];
+    for (const r0 of g2.regions) {
+      if (seen2[r0.id] || home[r0.id] || !allied(g2, nat, r0.ctrl)) continue;
+      const q = [r0.id];
+      seen2[r0.id] = 1;
+      let front = false, mine3 = 0;
+      for (let i = 0; i < q.length; i++) {
+        const r = g2.regions[q[i]];
+        if (hostileUnits(g2, r, nat).length) front = true;
+        for (const u of r.units) if (u.nat === nat && !u.dead && u.kind !== "fort" && u.kind !== "eng") mine3++;
+        for (const j of r.nb) {
+          const c = g2.regions[j].ctrl;
+          if (atWar(g2, nat, c)) front = true;
+          else if (!seen2[j] && !home[j] && allied(g2, nat, c)) {
+            seen2[j] = 1;
+            q.push(j);
+          }
+        }
+      }
+      if (!front && mine3 >= D.force) {
+        for (const id of q) if (g2.regions[id].port && g2.regions[id].seas.length > 0) idle.push(g2.regions[id]);
+      }
+    }
+    if (!idle.length) return drop();
+    const shut = g2.seas.map((z) => closedTo(g2, z.id, nat));
+    let best = null, bw = 0, bs = Infinity;
+    for (const p of idle) {
+      const d = new Int16Array(g2.regions.length).fill(-1);
+      const q = [p.id];
+      d[p.id] = 0;
+      let spare = 0;
+      for (let i = 0; i < q.length; i++) {
+        const r = g2.regions[q[i]];
+        const own = r.units.filter((u) => u.nat === nat && !u.dead && u.kind !== "fort" && u.kind !== "eng");
+        spare += r.id === p.id ? own.length : Math.min(own.filter((u) => !KIND[u.kind].mobile).length, Math.max(0, own.length - 1));
+        if (d[r.id] >= 3) continue;
+        for (const j of r.nb) if (d[j] < 0 && allied(g2, nat, g2.regions[j].ctrl)) {
+          d[j] = d[r.id] + 1;
+          q.push(j);
+        }
+      }
+      if (spare < D.force) continue;
+      foes.forEach((e, k) => {
+        const w = quayWorth(g2, nat, p, shores[k], shut);
+        if (w.worth > bw + 1e-9 || w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs) {
+          best = { foe: e, quay: p };
+          bw = w.worth;
+          bs = w.seas;
+        }
+      });
+    }
+    if (!best) return drop();
+    const got = best;
+    g2.flags[kf] = ids2.indexOf(got.foe) + 1;
+    g2.flags[kq] = got.quay.id + 1;
+    g2.flags[at] = g2.turn;
+    return got;
+  }
+  function seaBase(g2, nat, slot = 0) {
+    const sea = seaFoe(g2, nat, slot);
     if (!sea) return null;
+    if (slot) return abroad2(g2, nat)?.quay ?? null;
     const you = sea.foe;
     const key4 = `st:quay:${nat}`, at = `st:quayAt:${nat}`;
+    const lod = sea.second ? lodgment(g2, nat) : null;
+    const shores = lod?.short ? [lod.at] : harbours(g2, you);
+    const shut = g2.seas.map((z) => closedTo(g2, z.id, nat));
     const kept = g2.regions[flag2(g2, key4) - 1];
-    if (kept && kept.ctrl === nat && g2.turn - flag2(g2, at) < 6) return kept;
-    const seen2 = new Uint8Array(g2.regions.length);
-    const q = [n.capital];
-    seen2[n.capital] = 1;
-    for (let i = 0; i < q.length; i++) for (const j of g2.regions[q[i]].nb) if (!seen2[j] && g2.regions[j].ctrl === nat) {
-      seen2[j] = 1;
-      q.push(j);
-    }
-    const shores = g2.regions.filter((r) => r.ctrl === you && r.port && r.seas.length > 0);
-    let best = null, bd = Infinity;
-    for (const id of q) {
+    const fresh3 = !!kept && kept.ctrl === nat && g2.turn - flag2(g2, at) < 6;
+    if (fresh3 && quayWorth(g2, nat, kept, shores, shut).worth > 0) return kept;
+    let best = null, bw = 0, bs = Infinity;
+    let near = null, bd = Infinity;
+    for (const id of homeGround(g2, nat).list) {
       const r = g2.regions[id];
       if (!r.port || r.owner !== nat || r.overseas) continue;
       const d = seaHops(g2, r.seas, shores);
       if (d < bd) {
         bd = d;
+        near = r;
+      }
+      const w = quayWorth(g2, nat, r, shores, shut);
+      if (w.worth > bw + 1e-9 || w.worth > 0 && Math.abs(w.worth - bw) <= 1e-9 && w.seas < bs) {
         best = r;
+        bw = w.worth;
+        bs = w.seas;
       }
     }
-    if (!best || bd > NAVY.landing.range) {
-      delete g2.flags[key4];
-      return null;
+    if (!best) {
+      if (fresh3) return kept;
+      if (!near || bd > NAVY.landing.range) {
+        delete g2.flags[key4];
+        return null;
+      }
+      best = near;
     }
     g2.flags[key4] = best.id + 1;
     g2.flags[at] = g2.turn;
     return best;
   }
+  function coastWatch(g2, nat) {
+    const C = OPEN.coast, n = g2.nations[nat], D = OPEN.descent;
+    const out = {};
+    if (!C || !D || !isOpen(g2) || !n || !n.alive || n.capital < 0 || !n.atWar.length) return out;
+    const home = homeGround(g2, nat);
+    const mine3 = home.list.map((id) => g2.regions[id]).filter((r) => r.port && r.seas.length > 0 && r.owner === nat && !r.overseas);
+    if (!mine3.length) return out;
+    const ids2 = Object.keys(g2.nations);
+    const want = new Uint8Array(g2.seas.length);
+    let fresh3 = false, any = false;
+    for (const e of [...n.atWar].sort()) {
+      const x = g2.nations[e];
+      if (!x?.alive || x.dormant || x.sealift <= 0) continue;
+      if (x.capital >= 0 && inTouch(g2, e, nat, homeGround(g2, e).on)) continue;
+      if (quietWith(g2, e, nat) >= (D.abroad ?? 3) || SLOT.some((s) => ids2[flag2(g2, `st:foe:${e}${s}`) - 1] === nat)) fresh3 = true;
+      const d = new Int16Array(g2.seas.length).fill(-1);
+      const q = [];
+      for (const r of g2.regions) {
+        if (!r.port || !r.seas.length) continue;
+        if (r.ctrl !== e && !(allied(g2, e, r.ctrl) && r.units.some((u) => u.nat === e && !u.dead && u.kind !== "fort"))) continue;
+        for (const z of r.seas) if (d[z] < 0) {
+          d[z] = 1;
+          q.push(z);
+        }
+      }
+      for (let i = 0; i < q.length; i++) {
+        want[q[i]] = 1;
+        any = true;
+        if (d[q[i]] >= NAVY.landing.range) continue;
+        for (const j of g2.seas[q[i]].adj) if (d[j] < 0 && canPass(g2, q[i], j, e)) {
+          d[j] = d[q[i]] + 1;
+          q.push(j);
+        }
+      }
+    }
+    if (!any) return out;
+    if (fresh3) g2.flags[`st:watch:${nat}`] = g2.turn;
+    else if (!flag2(g2, `st:watch:${nat}`) || g2.turn - flag2(g2, `st:watch:${nat}`) >= 12) return out;
+    const open = mine3.filter((r) => r.seas.some((z) => want[z])).sort((a, b) => 2 * b.vp + b.fac + (b.cap ? 8 : 0) - (2 * a.vp + a.fac + (a.cap ? 8 : 0)) || a.id - b.id);
+    let left = Math.max(C.least, Math.floor(C.share * g2.corps.filter((c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.kind !== "eng").length));
+    for (let k = 1; k <= C.each && left > 0; k++) for (const r of open) {
+      if (left <= 0) break;
+      out[r.name] = k;
+      left--;
+    }
+    return out;
+  }
+  var coastRules = () => OPEN.coast;
   function seaHops(g2, from, shores) {
     const want = new Uint8Array(g2.seas.length);
     for (const r of shores) for (const z of r.seas) want[z] = 1;
@@ -20186,7 +20496,8 @@
     aiBridges(g2, nat, (x, from) => blowBridges(g2, nat, x, from));
     aiProduction(g2, nat);
     aiArsenal(g2, nat);
-    civicAI(g2, nat, income(g2, nat), keepsStores(g2, nat), gunsWanted(g2, nat));
+    aiFortify(g2, nat, Object.keys(coastWatch(g2, nat)), coastRules());
+    civicAI(g2, nat, income(g2, nat), keepsStores(g2, nat), gunsWanted(g2, nat) || armyWorn(g2, nat));
   }
   function campaign(g2, nat) {
     const n = g2.nations[nat];
@@ -20513,6 +20824,7 @@
   function fightOn(g2, nat, ph, posture) {
     const n = g2.nations[nat];
     hold(g2, nat, ph);
+    mass(g2, nat, ph, true);
     fallBack2(g2, nat);
     if (posture === "defend") {
       gather(g2, nat, ph);
@@ -20552,20 +20864,23 @@
     for (const [name, count3] of Object.entries(ph.staging)) {
       const r = g2.byName[name];
       if (!r || !allied(g2, nat, r.ctrl)) continue;
-      standing2(g2, nat, r).slice(0, count3).forEach((u, k) => {
+      standing2(g2, nat, r).filter((u) => watchman(ph, name, u)).slice(0, count3).forEach((u, k) => {
         if (!KIND[u.kind].mobile || k < 2) massed.add(u.id);
       });
     }
   }
-  function mass(g2, nat, ph) {
+  var watchman = (ph, name, u) => !ph.watch?.includes(name) || !u.hold && u.divs >= 2 && u.kind !== "eng";
+  function mass(g2, nat, ph, watchOnly = false) {
     if (!ph?.staging || ph.posture === "redeploy") return;
     const own = (r) => r.units.filter((u) => u.nat === nat && u.kind !== "fort");
-    for (const [name, count3] of Object.entries(ph.staging)) {
+    for (const [name, all] of Object.entries(ph.staging)) {
+      if (watchOnly && !ph.watch?.includes(name)) continue;
+      const count3 = watchOnly ? Math.min(all, coastRules()?.each ?? 1) : all;
       const r = g2.byName[name];
       if (!r || !allied(g2, nat, r.ctrl)) continue;
       let have = own(r).filter((u) => massed.has(u.id)).length;
       if (have >= count3) continue;
-      for (const u of standing2(g2, nat, r)) if (have < count3 && !massed.has(u.id) && (!KIND[u.kind].mobile || have < 2)) {
+      for (const u of standing2(g2, nat, r)) if (have < count3 && !massed.has(u.id) && watchman(ph, name, u) && (!KIND[u.kind].mobile || have < 2)) {
         massed.add(u.id);
         have++;
       }
@@ -20579,6 +20894,14 @@
           massed.add(c.id);
           have++;
         }
+      }
+      if (have < count3 && !pool.length && ph.watch?.includes(name) && friendlyUnits(g2, r, nat).length < STACK) {
+        const far = g2.corps.filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind === "inf" && c.ap >= 4 && !massed.has(c.id) && d[c.reg] > 3 && own(g2.regions[c.reg]).length >= 3).sort((a, b) => d[a.reg] - d[b.reg] || a.id - b.id);
+        const got = far.slice(0, 12).find((c) => railMove(g2, c, r));
+        if (got) {
+          massed.add(got.id);
+          have++;
+        } else if (far[0]) railToward(g2, far[0], r);
       }
     }
   }
@@ -20685,20 +21008,49 @@
     }
   }
   function descent(g2, nat) {
-    const sea = seaFoe(g2, nat);
+    for (const slot of [0, 1]) crossSea(g2, nat, slot);
+  }
+  function crossSea(g2, nat, slot) {
+    const sea = seaFoe(g2, nat, slot);
     if (!sea) return;
     const L = sea.L, you = sea.foe;
-    const quay = seaBase(g2, nat);
+    const quay = seaBase(g2, nat, slot);
     if (!quay) return;
+    const sfx = slot ? ":o" : "";
     const ready = quay.units.filter((u) => u.nat === nat && !u.dead && u.kind !== "fort" && u.kind !== "eng" && !u.airborne && u.supplied && u.str >= 0.7 && u.ap >= Math.min(4, u.apMax)).sort((a, b) => atkPower(g2, b) - atkPower(g2, a) || a.id - b.id);
+    if (sea.second) {
+      const ashore = lodgment(g2, nat, slot);
+      if (ashore?.short && ashore.ports.length) {
+        for (const c of ready) {
+          if (liftLeft(g2, nat) < 1) break;
+          if (ashore.ports.some((p) => friendlyUnits(g2, p, nat).length < STACK && shipMove(g2, c, p))) {
+            c.hold = false;
+            g2.flags[`sf:${c.id}`] = 1;
+          }
+        }
+        return;
+      }
+      if (ashore?.short) {
+        const wave = ready.slice(0, Math.min(liftLeft(g2, nat), STACK - friendlyUnits(g2, ashore.at, nat).length));
+        if (wave.length) {
+          const plan = planLanding(g2, wave, ashore.at);
+          if (!plan.why && plan.risk <= L.risk && landCorps(g2, wave, ashore.at).ok) for (const c of wave) {
+            c.hold = false;
+            if (!c.dead) g2.flags[`sf:${c.id}`] = 1;
+          }
+        }
+        return;
+      }
+    }
+    if (sea.second) takeAim(g2, nat, sfx, quay, ready.slice(0, L.force), L, you);
     const force2 = ready.slice(0, Math.min(L.force, liftLeft(g2, nat)));
     if (force2.length < L.force) return;
     const went = (k) => {
       for (const c of force2) c.hold = false;
-      g2.flags[`st:seaNext:${nat}`] = g2.turn + k;
+      g2.flags[`st:seaNext:${nat}${sfx}`] = g2.turn + k;
     };
-    if (g2.turn < (g2.flags[`st:seaNext:${nat}`] ?? 0)) return;
-    const lodged = g2.regions[(g2.flags[`st:lodged:${nat}`] ?? 0) - 1];
+    if (g2.turn < (g2.flags[`st:seaNext:${nat}${sfx}`] ?? 0)) return;
+    const lodged = g2.regions[(g2.flags[`st:lodged:${nat}${sfx}`] ?? 0) - 1];
     if (lodged && lodged.ctrl === nat && lodged.port && lodged.nb.some((j) => atWar(g2, nat, g2.regions[j].ctrl))) {
       let sent = 0;
       for (const c of force2) if (friendlyUnits(g2, lodged, nat).length < STACK && shipMove(g2, c, lodged)) sent++;
@@ -20707,7 +21059,7 @@
         return;
       }
     }
-    if (hashString(`descent:${g2.seed}:${g2.turn}:${nat}`) / 4294967296 >= L.chance) return;
+    if (hashString(`descent:${g2.seed}:${g2.turn}:${nat}${sfx}`) / 4294967296 >= L.chance) return;
     const men2 = force2.reduce((s, c) => s + c.divs * c.str, 0);
     let best = null, bv = 0;
     for (const r of landingTargets(g2, force2)) {
@@ -20728,7 +21080,48 @@
     const res = landCorps(g2, force2, best);
     if (!res.ok) return;
     went(L.every);
-    if (res.taken) g2.flags[`st:lodged:${nat}`] = best.id + 1;
+    delete g2.flags[`st:aim:${nat}${sfx}`];
+    if (res.taken) {
+      g2.flags[`st:lodged:${nat}${sfx}`] = best.id + 1;
+      if (sea.second) {
+        for (const c of force2) if (!c.dead) g2.flags[`sf:${c.id}`] = 1;
+      }
+    }
+  }
+  function takeAim(g2, nat, sfx, quay, force2, L, you) {
+    const key4 = `st:aim:${nat}${sfx}`, at = `st:aimAt:${nat}${sfx}`;
+    if (!force2.length) return;
+    const men2 = force2.reduce((s, c) => s + c.divs * c.str, 0);
+    let best = null, bv = 0;
+    for (const r of g2.regions) {
+      if (r.ctrl !== you || !r.port || !r.seas.length || g2.turn < (g2.flags[`st:aimNo:${nat}:${r.id}`] ?? 0)) continue;
+      if (!seaPath(g2, nat, quay, r, { max: NAVY.landing.range, surprise: true })) continue;
+      const defended = hostileUnits(g2, r, nat).length > 0;
+      if (defended && assess(g2, force2, r, landingOpts(g2, force2, r)).odds < L.odds) continue;
+      let near = 0;
+      for (const j of [r.id, ...r.nb]) for (const u of hostileUnits(g2, g2.regions[j], nat)) if (u.kind !== "fort") near += u.divs * u.str;
+      if (near > L.near * men2) continue;
+      const v = (2 + r.vp + r.fac + (r.cap ? 6 : 0) + (r.owner !== you ? 2 : 0)) * (defended ? 1 : 1.5) - 0.2 * near;
+      if (!best || v > bv) {
+        best = r;
+        bv = v;
+      }
+    }
+    if (!best) {
+      delete g2.flags[key4];
+      delete g2.flags[at];
+      return;
+    }
+    if (g2.flags[key4] !== best.id + 1) {
+      g2.flags[key4] = best.id + 1;
+      g2.flags[at] = g2.turn;
+      return;
+    }
+    if (g2.turn - (g2.flags[at] ?? g2.turn) >= 6) {
+      g2.flags[`st:aimNo:${nat}:${best.id}`] = g2.turn + 12;
+      delete g2.flags[key4];
+      delete g2.flags[at];
+    }
   }
   function hops(g2, from, pass) {
     const d = new Int16Array(g2.regions.length).fill(-1);
@@ -21152,6 +21545,12 @@
       c.hold = true;
     }
     const staged = /* @__PURE__ */ new Set();
+    if (isOpen(g2)) for (const name of Object.keys(ph.staging ?? {})) {
+      const r = g2.byName[name];
+      if (r && allied(g2, nat, r.ctrl)) {
+        for (const u of r.units) if (u.nat === nat && !u.hold) staged.add(u.id);
+      }
+    }
     for (const [name, count3] of Object.entries(ph.staging ?? {})) {
       const r = g2.byName[name];
       if (!r || !allied(g2, nat, r.ctrl)) continue;
@@ -21333,6 +21732,7 @@
   }
   function wantsOut(g2, c) {
     if (g2.regions[c.reg].owner === c.nat || c.dead) return false;
+    if (g2.flags[`sf:${c.id}`]) return !c.supplied || c.org < 0.3;
     if (theatreOf(g2, c) >= 0) {
       if (!scope || !leaving || !scope.has(c.reg) || havensOf(g2.regions[c.reg]).includes(g2.regions[c.reg].name)) return false;
       return !c.supplied || !g2.nations[g2.regions[c.reg].owner].alive || leaving.when.some((nm) => !!g2.byName[nm] && atWar(g2, c.nat, g2.byName[nm].ctrl));
@@ -21494,7 +21894,7 @@
     const spent = fromPurse(g2, nat, () => {
       aiProduction(g2, nat);
       aiArsenal(g2, nat);
-      civicAI(g2, nat, income(g2, nat), keepsStores(g2, nat), gunsWanted(g2, nat));
+      civicAI(g2, nat, income(g2, nat), keepsStores(g2, nat), gunsWanted(g2, nat) || armyWorn(g2, nat));
       machines(g2, nat);
     });
     const fresh3 = n.queue.filter((b) => !had.has(b.id));
@@ -26174,7 +26574,7 @@
         ]
       };
     });
-    const lanes = (o?.lanes ?? []).map((l) => ({
+    const lanes2 = (o?.lanes ?? []).map((l) => ({
       nat: l.to,
       title: l.name,
       lines: [l.why ?? `Cargoes lost on it now: ${share(l.now)}. With this fleet as its escort: ${share(l.then)}.`, l.bound ? "This fleet is its escort now." : ""].filter(Boolean),
@@ -26214,7 +26614,7 @@
       sections: [
         { heading: "ITS SHIPS", text: "", rows: ships },
         { heading: "SEAS IN ITS REACH", text: seas.length ? "" : up ? "The country is at peace: the fleet keeps its station." : "It is not your month.", rows: seas },
-        { heading: "LANES TO ESCORT", text: "", rows: lanes },
+        { heading: "LANES TO ESCORT", text: "", rows: lanes2 },
         { heading: "COASTS TO SHELL", text: "", rows: coasts },
         { heading: "FLEETS TO JOIN", text: "", rows: joins }
       ].filter((x) => x.rows.length || x.text)

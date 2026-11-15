@@ -75,6 +75,7 @@ private:
 	int32 Flight = -2; // play the opening flight and stop at this card of it (-1: its title)
 	bool bYearCard = false; // show the title card of the year that has just opened
 	bool bFleet = false; // pick up the player's largest fleet, as an army is picked up
+	int32 FleetPick = -1; // (or, from 0, which of the player's fleets in the order the rules list them)
 	bool bFleetSails = false;
 	FString FleetDo; // with the fleet in hand: "orders" opens its room, "shell" asks about shelling the first coast in reach, "fire" shells it // and send it to the farthest sea it can reach
 	bool bGenerals = false; // open the generals' list, and give the first corps without one the man who suits it
