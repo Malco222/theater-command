@@ -17,6 +17,7 @@ import { turnToDate } from '../core/ticket';
 import { holds } from './diplomacy';
 import { concertFor, landingsFor, nerveOf, seat, type Landings } from './difficulty';
 import { DOMINATION, dominating } from './domination';
+import { leanFor, leash, moodMul, stopDef } from './history';
 import { openAirWar, skyDenies } from './air';
 import { openCarriers } from './carriers';
 import { fieldCtrl, openSieges } from './siege';
@@ -130,7 +131,8 @@ export const rivalRules = (g: Game): boolean => isOpen(g) && !!RIVALS.characters
 
 /** The character of a nation's staff in this war: drawn once from the war's seed, with a national lean. */
 export function characterOf(g: Game, nat: string): Character {
-  const w = RIVALS.lean[nat] ?? RIVALS.lean._default;
+  // (The history dial: by the book each staff has its real counterpart's character, and higher up the lean is flattened.)
+  const w = leanFor(g, RIVALS.lean[nat] ?? RIVALS.lean._default);
   const x = monthly(g, nat, 'character') * (w[0] + w[1] + w[2]);
   return x < w[0] ? 'bold' : x < w[0] + w[1] ? 'cautious' : 'opportunist';
 }
@@ -140,7 +142,7 @@ export function temper(g: Game, nat: string): Temper {
   const t = { attackAt: 99, persist: 0.85, minOdds: 1.4, ...OPEN.temper._default, ...OPEN.temper[nat] } as Temper;
   // The staff's character (the grand campaign): a bold one goes on a smaller advantage, a cautious one waits for more.
   if (rivalRules(g)) { const C = RIVALS.characters[characterOf(g, nat)]; t.attackAt *= C.attackAt; t.minOdds += C.minOdds; }
-  const mood = 1 + OPEN.mood * (2 * draw(g, nat, 'mood') - 1);
+  const mood = 1 + OPEN.mood * moodMul(g) * (2 * draw(g, nat, 'mood') - 1);
   // The level of the campaign steadies or stiffens the nerve of the player's rivals: at the fair level, neither.
   const lv = nerveOf(g, nat);
   // In the last act there is nobody to wait for: a staff strikes at shorter odds than it would in an ordinary war.
@@ -823,6 +825,16 @@ export interface Decision {
 export const ops = (nat: string): Op[] => OPEN.ops[nat] ?? [];
 
 /**
+ * Opens an offensive against the given enemies and presses it for at least `push` months: what a staff does when
+ * it marches of its own accord, on no plan of history's (a neutral with an ambition, the history dial).
+ */
+export function launch(g: Game, nat: string, foes: string[], push: number): void {
+  g.flags[`st:push:${nat}`] = g.turn + push - 1;
+  g.flags[`st:gain:${nat}`] = g.turn;
+  for (const e of foes) { g.flags[onKey(nat, e, '')] = g.turn; g.flags[`st:pushed:${nat}:${e}`] = 1; }
+}
+
+/**
  * The month's decisions for one computer-run nation, taken once before its army moves: which offensives go on,
  * which stop, whether a new one opens, and whether one of history's great choices is taken up or carried out.
  */
@@ -882,13 +894,18 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
   // History's great choices. One is prepared at a time, and none while a great offensive is still being fought.
   const busy = real.some((f) => onSince(g, nat, f) && !cond(g, nat, 'quiet', [f]) && g.turn - flag(g, `st:gain:${nat}`) <= 1);
   let cur = flag(g, `st:op:${nat}`);
-  const go = (k: number): void => {
+  // The history dial: at a stop that keeps the book a side-show history dated is launched beside the army being
+  // brought up for the next great blow (Norway in April, the west in May), and its landings are given their second month.
+  const book = !!stopDef(g).book;
+  const go = (k: number, beside = false): void => {
     const op = list[k];
     const who = targets(g, nat, op);
+    const last = list[flag(g, `st:goOp:${nat}`) - 1];
+    if (book && last?.landings && !op.landings && g.turn - flag(g, `st:go:${nat}`) === 1) { g.flags[`st:landAt:${nat}`] = flag(g, `st:go:${nat}`); g.flags[`st:landOp:${nat}`] = flag(g, `st:goOp:${nat}`); }
     g.flags[`st:done:${nat}:${op.id}`] = g.turn;
     g.flags[`st:go:${nat}`] = g.turn;
     g.flags[`st:goOp:${nat}`] = k + 1;
-    delete g.flags[`st:op:${nat}`];
+    if (!beside) delete g.flags[`st:op:${nat}`];
     if (who.length) {
       g.flags[`st:push:${nat}`] = g.turn + (op.push ?? 2) - 1;
       g.flags[`st:gain:${nat}`] = g.turn;
@@ -899,38 +916,52 @@ export function decide(g: Game, nat: string, skip?: FrontOpts['skip']): void {
     const op = list[cur - 1];
     const p = op ? prospect(g, nat, op, skip) : null;
     const still = !!op && (op.if ?? []).filter((c) => c !== 'quiet').every((c) => cond(g, nat, c, real));
-    if (!op || !p || !still || (op.ratio !== undefined && p.ratio < 0.8 * op.ratio)) {
+    // The history dial: a blow the book has dated goes in on shorter odds, and is not put off once the army is up.
+    const L = op ? leash(g, nat, op.id) : null;
+    const dated = L?.kind === 'dated';
+    const need = op?.ratio !== undefined ? op.ratio * (dated ? L!.nerve : 1) : 0;
+    if (!op || !p || !still || (op.ratio !== undefined && p.ratio < 0.8 * need)) {
       // The moment has passed: stand the army down and think again in half a year.
       delete g.flags[`st:op:${nat}`];
       if (op) g.flags[`st:cool:${nat}:${op.id}`] = g.turn + 6;
       cur = 0;
-    } else if (g.turn - flag(g, `st:opAt:${nat}`) >= (op.prep ?? 0) && inSeason(g, op) && (op.ratio === undefined || p.ratio >= op.ratio)
-      && !(op.hold && !hurried(op) && inSeason(g, op, g.turn + 1) && monthly(g, nat, op.id, 'hold', g.turn) < op.hold)) {
+    } else if (g.turn - flag(g, `st:opAt:${nat}`) >= (op.prep ?? 0) && inSeason(g, op) && (op.ratio === undefined || p.ratio >= need)
+      && !(op.hold && !dated && !hurried(op) && inSeason(g, op, g.turn + 1) && monthly(g, nat, op.id, 'hold', g.turn) < op.hold)) {
       go(cur - 1);
       cur = 0;
     }
   }
   // One great choice a month: a second one launched in the same month would take the declaration of war away
   // from the first (the orders carry one operation), and the first would be marked done without ever happening.
-  if (!cur && flag(g, `st:go:${nat}`) !== g.turn) {
+  if ((!cur || book) && flag(g, `st:go:${nat}`) !== g.turn) {
     for (let k = 0; k < list.length; k++) {
       const op = list[k];
-      if (flag(g, `st:done:${nat}:${op.id}`) || g.turn < (op.from ?? 1) || g.turn > (op.to ?? 999) || g.turn < flag(g, `st:cool:${nat}:${op.id}`)) continue;
+      // The history dial: by the book a choice history dated waits for its month and is then taken without a draw,
+      // one that followed an ally into a war follows at once, and one history never took is not taken at all.
+      const L = leash(g, nat, op.id);
+      if (L.kind === 'never') continue;
+      // While an army is being brought up for one great choice, only a side-show the book has dated goes in beside it.
+      if (cur && !(op.side && L.kind === 'dated')) continue;
+      if (flag(g, `st:done:${nat}:${op.id}`) || g.turn < (op.from ?? 1) - L.early || g.turn > (op.to ?? 999) || g.turn < flag(g, `st:cool:${nat}:${op.id}`)) continue;
+      if (L.kind === 'dated' && g.turn < L.date! - (op.side ? 0 : op.prep ?? 0)) continue;
       if (!op.side && busy) continue;
       if (!(op.if ?? []).every((c) => cond(g, nat, c, real))) continue;
       const who = targets(g, nat, op);
       if ((op.declare ?? []).length && !who.length) { g.flags[`st:done:${nat}:${op.id}`] = -1; continue; }
-      if (op.ratio !== undefined) { const p = prospect(g, nat, op, skip); if (!p || p.ratio < 0.9 * op.ratio) continue; }
+      if (op.ratio !== undefined) { const p = prospect(g, nat, op, skip); if (!p || p.ratio < 0.9 * op.ratio * L.nerve) continue; }
       // The blow has to be able to fall in season once the army is up.
-      if (!op.side && op.season && ![0, 1, 2].some((late) => inSeason(g, op, g.turn + (op.prep ?? 0) + late))) continue;
+      // (A blow the book has dated falls in its month, or the month after it is taken up if that is later.)
+      const falls = L.kind === 'dated' ? Math.max(g.turn + 1, L.date!) : g.turn + (op.prep ?? 0);
+      if (!op.side && op.season && ![0, 1, 2].some((late) => inSeason(g, op, falls + late))) continue;
       // A staff thinks twice before a blow that would bring the whole League down on it.
       // (A front that has been quiet too long settles it: the plan is taken up without more waiting.)
-      if (!hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * deterred(g, nat, who)) continue;
+      if (L.kind === 'free' && !hurried(op) && monthly(g, nat, op.id, g.turn) >= op.chance * L.chance * deterred(g, nat, who)) continue;
       if (op.side || !(op.prep ?? 0)) {
-        if (inSeason(g, op)) go(k);
+        if (inSeason(g, op)) go(k, !!cur);
       } else {
         g.flags[`st:op:${nat}`] = k + 1;
-        g.flags[`st:opAt:${nat}`] = g.turn;
+        // (By the book the army has been coming up since the month history began to move it.)
+        g.flags[`st:opAt:${nat}`] = L.kind === 'dated' ? Math.min(g.turn, L.date! - (op.prep ?? 0)) : g.turn;
       }
       break;
     }
@@ -969,6 +1000,9 @@ function build(g: Game, nat: string, skip?: FrontOpts['skip']): PlanPhase | null
   const phase: PlanPhase = { name: '', from: g.turn, to: g.turn, posture: 'defend' } as PlanPhase;
   if (declare.length) phase.declare = declare;
   if (went?.landings) { phase.landings = went.landings; phase.to = flag(g, `st:go:${nat}`) + 6; }
+  // (By the book: the landings of a side-show launched the month before the great blow fell are still going ashore.)
+  const ashore = !went?.landings && flag(g, `st:landAt:${nat}`) && g.turn - flag(g, `st:landAt:${nat}`) <= 1 ? list[flag(g, `st:landOp:${nat}`) - 1] ?? null : null;
+  if (ashore?.landings) { phase.landings = ashore.landings; phase.to = flag(g, `st:landAt:${nat}`) + 6; }
   if (live.length) {
     phase.enemies = [...new Set(live.flatMap((f) => f.enemies))];
     phase.objectives = [...new Set(live.flatMap((f) => objectives(g, f)))];

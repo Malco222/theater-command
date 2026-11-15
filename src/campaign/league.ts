@@ -13,6 +13,7 @@ import { hashString } from '../core/rng';
 import type { Game, Nation } from './types';
 import { atWar, bloc, headline } from './game';
 import { DIPLOMACY, RELATIONS, friendsOf, step } from './diplomacy';
+import { leagueMul } from './history';
 
 export const LEAGUE = data as unknown as {
   name: string; full: string; color: string; never: string[];
@@ -97,7 +98,8 @@ export function leagueMonth(g: Game): void {
       if (founders.length < LEAGUE.found.least) continue;
       // The month after a friend is attacked is when such pacts are made. Unprovoked, it happens once in a great while.
       const shocked = founders.some((n) => friendsOf(n.id).some((f) => g.flags[`shock:${f.nat}`] === g.turn - 1));
-      const p = shocked ? LEAGUE.found.shock : g.turn > LEAGUE.found.after ? LEAGUE.found.month : 0;
+      // (The history dial: by the book no League is founded that history never saw; higher up it comes more readily.)
+      const p = (shocked ? LEAGUE.found.shock : g.turn > LEAGUE.found.after ? LEAGUE.found.month : 0) * leagueMul(g);
       if (dice(g, `found:${gp.id}`) >= p) continue;
       found(g, founders, shocked ? ' as the war reaches their neighbours' : '');
       return;
@@ -109,7 +111,7 @@ export function leagueMonth(g: Game): void {
   for (const n of Object.values(g.nations)) {
     if (!free(g, n) || members.length >= LEAGUE.join.most) continue;
     const w = willing(g, n.id, members);
-    if (!w.ok || dice(g, `join:${n.id}`) >= (w.friend ? LEAGUE.join.friend : LEAGUE.join.threat)) continue;
+    if (!w.ok || dice(g, `join:${n.id}`) >= (w.friend ? LEAGUE.join.friend : LEAGUE.join.threat) * leagueMul(g)) continue;
     enrol(g, n);
     members.push(n.id);
     headline(g, 'event', `${n.name} joins ${LEAGUE.name}: ${listOf(leagueMembers(g).filter((m) => m.id !== n.id).map((m) => m.name))} now stand with it against any attack.`, n.id);

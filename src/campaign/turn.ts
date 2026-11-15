@@ -58,6 +58,8 @@ import {
 } from './government';
 import { MANPOWER, callEarly, classGapUntil, classNow, earlyClass, earlyGap, manpower, menWords, raisable, whyNotEarly, type MenView } from './manpower';
 import { commandView, handOver, setDepth, setStaffCap, staffMonth, type CommandView } from './desks';
+import { HISTORY, dialView, setStop, whyNotStop, type DialView, type Stop } from './history';
+import { claimsView, historyMonth, type ClaimView } from './claims';
 import { staffRuns, type DeskId } from './depth';
 import EVE from '../../data/campaign/eve.json';
 
@@ -78,6 +80,8 @@ function closePhase(g: Game, nat: string): void {
     g.phase = 0; g.turn++; g.week = 1;
     openTheatres(g);
     monthlyDiplomacy(g);
+    // The history dial's month: the book's marks, and the neutrals' ambitions (the grand campaign, off the middle stop).
+    historyMonth(g);
     // Wars nobody can fight any longer end in an armistice (the grand campaign).
     stalemates(g);
   }
@@ -211,6 +215,27 @@ export function whyNotSetLevel(g: Game, id: string): string | null {
 export function orderLevel(g: Game, id: string): boolean {
   return whyNotSetLevel(g, id) === null && setLevel(g, id);
 }
+
+// ---- The history dial (the grand campaign) -----------------------------------------------------
+
+/** The five stops of the history dial, from By the book to Anything goes: number, name, a word under it, and what it does in plain lines. */
+export const historyStops = (): Stop[] => HISTORY.stops;
+/** The dial as it stands in this campaign: the stop, the loosest stop it has been played at, and where the book has been closed. Null outside the grand campaign. */
+export const dialOf = (g: Game): DialView | null => dialView(g);
+/** Why the player cannot turn the dial to this stop, or null if he can. */
+export function whyNotSetHistory(g: Game, stop: number): string | null {
+  if (g.human === null) return 'Nobody is playing this war.';
+  return whyNotStop(g, stop);
+}
+/**
+ * Turns the history dial. It can be done in any month and bears on what the computer's staffs and the neutral
+ * world decide from the next month on. `fresh` is for a campaign that starts at this stop.
+ */
+export function orderHistory(g: Game, stop: number, fresh = false): boolean {
+  return (fresh ? whyNotStop(g, stop) : whyNotSetHistory(g, stop)) === null && setStop(g, stop, fresh);
+}
+/** The claims on named ground that can be read now (stops 4 and 5): who claims what from whom and why, and whether it is being pressed or fought for. */
+export const claimsOf = (g: Game): ClaimView[] => claimsView(g);
 
 // ---- How deep the player plays (the grand campaign) --------------------------------------------
 

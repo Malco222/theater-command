@@ -1,0 +1,160 @@
+// The history dial (Version 70), in the grand campaign only. One setting from 1 (By the book) to 5 (Anything goes)
+// for how far the war the computer runs may move away from the war that was fought. It leashes the computer-run
+// world and never the player. The middle stop, History's shape, is the game with nothing added: a campaign with no
+// stop stored is played at it, every number below is 1 there and nothing is switched on. The stop is kept in
+// g.flags.hist, so it is saved with the game; g.flags.histMax keeps the loosest stop the campaign has been played at.
+// The numbers and the calendar live in data/campaign/history.json. What the dial does to who goes to war with whom
+// (the book's marks, the neutrals' ambitions) is in claims.ts.
+
+import data from '../../data/campaign/history.json';
+import { hashString, Rng } from '../core/rng';
+import type { Game } from './types';
+
+export interface Stop {
+  stop: number; id: string; name: string; under: string; blurb: string; lines: string[];
+  /** The great choices keep history's calendar while the war still looks like history. */
+  book?: boolean;
+  /** Months either way of history's date, by the war's seed. */
+  slack?: number;
+  /** A dated blow goes in on odds this much shorter than its staff would usually ask. */
+  nerve?: number;
+  mood: number;
+  lean: 'real' | number;
+  other: number; league: number; join: number;
+  ambitions?: boolean; bold?: boolean; early?: number; deal?: number;
+}
+/** What history's calendar expects in a theatre: these must hold before `until`, or from the month after `by`. */
+export interface Mark { theatre: string; until?: number; by?: number; if: string[]; why: string }
+/** A claim on named ground: who claims it, from whom, and why. */
+export interface Ambition { id: string; nat: string; on: string; ground: string[]; name: string; why: string; stop?: number; if?: string[]; lift?: number }
+
+export const HISTORY = data as unknown as {
+  start: number;
+  stops: Stop[];
+  dates: Record<string, Record<string, number>>;
+  unhistoric: string[];
+  joined: { axis: string[]; allies: string[] };
+  theatre: Record<string, string>;
+  theatres: Record<string, { name: string; after: string[] }>;
+  marks: Mark[];
+  claims: { weak: number; odds: number; thin: number; notice: number; chance: number; tide: number; lapse: number; aid: number; treaty: number; push: number };
+  ambitions: Ambition[];
+};
+
+/** The stop with nothing added: where a campaign starts, and what every game without a stop is played at. */
+export const FREE = HISTORY.start;
+
+/** True where the dial can be turned: the grand campaign. A historical scenario is always played by its own book. */
+export const dialRules = (g: Game): boolean => g.flags.open === 1;
+
+/** The stop a game is played at, 1 to 5. Outside the grand campaign it is always the middle one. */
+export const stopOf = (g: Game): number => (g.flags.open === 1 ? g.flags.hist ?? FREE : FREE);
+export const stopDef = (g: Game): Stop => HISTORY.stops.find((s) => s.stop === stopOf(g)) ?? HISTORY.stops.find((s) => s.stop === FREE)!;
+export const stopByNumber = (n: number): Stop | undefined => HISTORY.stops.find((s) => s.stop === n);
+/** The loosest stop this campaign has been played at: what its verdicts, medals and par are read against. */
+export const loosest = (g: Game): number => (g.flags.open === 1 ? g.flags.histMax ?? stopOf(g) : FREE);
+
+/** Why the dial cannot be set there, or null if it can. */
+export function whyNotStop(g: Game, n: number): string | null {
+  if (g.flags.open !== 1) return 'A historical scenario is always played as history fought it. The history dial belongs to the grand campaign.';
+  if ((g.flags.dom ?? 0) > 0) return 'The last act has begun: there is no history left to keep to.';
+  return stopByNumber(n) ? null : 'There is no such stop on the dial.';
+}
+
+/**
+ * Turns the dial. It bears on what the computer's staffs and the neutral world decide from the next month on, and is
+ * saved with the game. `fresh` is for a campaign that starts at this stop: it has been played at no other.
+ */
+export function setStop(g: Game, n: number, fresh = false): boolean {
+  if (whyNotStop(g, n)) return false;
+  const most = fresh ? n : Math.max(loosest(g), n);
+  if (n === FREE) delete g.flags.hist; else g.flags.hist = n;
+  if (most === FREE && g.flags.hist === undefined) delete g.flags.histMax; else g.flags.histMax = most;
+  return true;
+}
+
+/** A draw between 0 and 1 that depends only on the war's seed and what is being decided, never on the battle dice. */
+export const dialDraw = (g: Game, ...key: (string | number)[]): number => new Rng(hashString(`${g.seed}:hist:${key.join(':')}`)).next();
+
+/** What the stop does to how far a staff's nerve differs from one war to the next: 1 for no change. */
+export const moodMul = (g: Game): number => stopDef(g).mood;
+/** What the stop does to the chance that small countries found a League or join one: 1 for no change. */
+export const leagueMul = (g: Game): number => stopDef(g).league;
+
+/**
+ * The weights a staff's character is dealt by at this stop, from its national lean (bold, cautious, opportunist).
+ * By the book each staff has the character it most often has; higher up the lean is flattened toward an even deal.
+ */
+export function leanFor(g: Game, w: [number, number, number]): [number, number, number] {
+  const lean = stopDef(g).lean;
+  if (lean === 0) return w;
+  if (lean === 'real') { const k = w.indexOf(Math.max(...w)); return [k === 0 ? 1 : 0, k === 1 ? 1 : 0, k === 2 ? 1 : 0]; }
+  return [w[0] ** (1 - lean), w[1] ** (1 - lean), w[2] ** (1 - lean)];
+}
+
+/** True where a neutral whose opinion has reached the mark may join that bloc this month. */
+export function mayJoin(g: Game, id: string, side: 'allies' | 'axis'): boolean {
+  const p = stopDef(g).join;
+  if (p >= 1 || HISTORY.joined[side].includes(id) || g.flags[`courted:${id}`]) return true;
+  return p > 0 && dialDraw(g, 'join', id, g.turn) < p;
+}
+
+// ---- The book: history's calendar for the great choices ---------------------------------------------------
+
+/** The theatre one of the great choices belongs to, if the book has a word on it. */
+export const theatreOf = (nat: string, opId: string): string | null => HISTORY.theatre[`${nat}:${opId}`] ?? null;
+/** True while the book is still open in a theatre: the stop keeps one, and nothing there has left it. */
+export const onBook = (g: Game, theatre: string | null): boolean => !!stopDef(g).book && theatre !== null && !g.flags[`hist:off:${theatre}`];
+/** The month the book was closed in a theatre, or 0. */
+export const bookClosed = (g: Game, theatre: string): number => g.flags[`hist:off:${theatre}`] ?? 0;
+
+/** How the dial bears on one of the great choices this month. */
+export interface Leash {
+  /** 'free': the staff decides, its monthly chance multiplied. 'dated': the blow falls in `date`. 'follow': it follows at once. 'never': not at this stop. */
+  kind: 'free' | 'dated' | 'follow' | 'never';
+  chance: number;
+  /** The month the blow is to fall (the war's months, 1 for September 1939). */
+  date?: number;
+  /** A dated blow is taken up on odds this much shorter than usual. */
+  nerve: number;
+  /** Months before its usual first month that the choice may be taken up. */
+  early: number;
+}
+
+/** The month the book gives one of the great choices in this war: history's, give or take the stop's slack by the war's seed. */
+export function bookDate(g: Game, nat: string, opId: string): number | null {
+  const date = HISTORY.dates[nat]?.[opId];
+  if (date === undefined) return null;
+  const slack = stopDef(g).slack ?? 0;
+  return date + (slack ? Math.floor(dialDraw(g, 'date', nat, opId) * (2 * slack + 1)) - slack : 0);
+}
+
+export function leash(g: Game, nat: string, opId: string): Leash {
+  const S = stopDef(g);
+  const un = HISTORY.unhistoric.includes(`${nat}:${opId}`);
+  // Off the book, or at a stop that keeps none: the staff decides, and a choice history never took is weighed by the stop.
+  if (!S.book) return { kind: 'free', chance: un ? S.other : 1, nerve: 1, early: S.early ?? 0 };
+  if (!onBook(g, theatreOf(nat, opId))) return { kind: 'free', chance: 1, nerve: 1, early: 0 };
+  if (un) return S.other > 0 ? { kind: 'free', chance: S.other, nerve: 1, early: 0 } : { kind: 'never', chance: 0, nerve: 1, early: 0 };
+  const date = bookDate(g, nat, opId);
+  if (date === null) return { kind: 'follow', chance: 1, nerve: 1, early: 0 };
+  return { kind: 'dated', chance: 1, date, nerve: S.nerve ?? 1, early: 0 };
+}
+
+/** The dial as the player reads it: the stop, its name and what it does, and the loosest stop the campaign has seen. */
+export interface DialView {
+  stop: number; name: string; under: string; blurb: string; lines: string[];
+  loosest: number; loosestName: string;
+  /** Where the book has been closed, at a stop that keeps one: the theatre, the month and why. */
+  closed: { theatre: string; name: string; turn: number }[];
+  /** Why it cannot be turned now, or null. */
+  locked: string | null;
+}
+
+export function dialView(g: Game): DialView | null {
+  if (!dialRules(g)) return null;
+  const S = stopDef(g);
+  const most = loosest(g);
+  const closed = S.book ? Object.entries(HISTORY.theatres).filter(([id]) => bookClosed(g, id) > 0).map(([id, t]) => ({ theatre: id, name: t.name, turn: bookClosed(g, id) })) : [];
+  return { stop: S.stop, name: S.name, under: S.under, blurb: S.blurb, lines: S.lines, loosest: most, loosestName: stopByNumber(most)?.name ?? S.name, closed, locked: (g.flags.dom ?? 0) > 0 ? whyNotStop(g, S.stop) : null };
+}
