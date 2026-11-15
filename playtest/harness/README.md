@@ -412,3 +412,24 @@ Rome at the end of 1943. Brian, 2026-11-15: "I also want each faction to have an
 | `v69s.tsv` (`v69sa`, `v69sb`), `v69e.tsv`, `v69.tsv`, `v69f.tsv` | The Version 68 queues again against Version 69 (`out69`, `probe57` for the seats) | `./jobs.sh v69sa.tsv out/v69s 4` |
 
 Bundles: `out69` is every program against Version 69.
+
+## Version 70: the history dial
+
+Version 70 (f7aafe0) adds a five-stop history dial to the grand campaign: 1 By the book, 2 Close to history, 3 History's
+shape (the game as it was, and what a campaign with no stop plays), 4 Loose (neutrals with claims), 5 Anything goes.
+With no stop the wars are Version 69's, seed for seed. Par is measured at stops 2 and 3, the domination column at stop 3.
+
+Setting a stop: a plan's `"stop": n`, or `TC_STOP=n` in the environment for programs that take no plan (`watch`). The
+program must be built with `build70.sh`, which puts `stop70.ts` in front of it; `lib.ts` calls it straight after
+`startOpen`, as the page does (for a later start year, after the computer has played history up to the handover).
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `build70.sh` | As `build.sh`, for Version 70 or later (default repo `/home/user/tc70`, out `out70`) | `./build70.sh probe58` |
+| `probe58.ts` | `probe57` (the `SEAT` line) and one `DIAL` line a war: when the west, Norway, Italy's war, Greece, Yugoslavia and the east opened, when the war was decided, where the book was closed and why, every march and how many months after its warning it came, treaties and joiners, and for each claim on the player's ground the month it could first be read, was pressed and was marched for | `node out70/probe58.mjs ITA 1 3 76 '{"minOdds":1.4,"declare":[[10,"FRA"],[10,"UK"],[14,"GRE"]],"land":true,"stop":5}'` |
+| `probe59.ts` | Nobody at the controls at one stop, to December 1949: one `WATCH` line a war (decided when, or who still fights whom) | `node out70/probe59.mjs 5 17,18,19 124` |
+| `mk70x.py`, `v70x.tsv` | The Version 70 queue (656 jobs): stop 1 as Germany (by the book, my usual plan, never striking west, idle) and from the other seats; stops 4 and 5 as Italy and from the other seats; par at stop 2 on seeds 25 to 48; start years 1940 to 1942 at stops 1, 2, 4, 5; wars watched to 1949 | `python3 mk70x.py && ./jobs.sh v70x.tsv out/v70x 4` |
+| `ui33.cjs` | The dial on the page: `card W H PREFIX` (the new-campaign card at a screen size, then the first month and the Powers tab), `claims SAVE PREFIX` (three months round a claim: news, cards, the Powers tab), `book PREFIX` (an idle Germany by the book: when the book closes and how the player is told), `settings SAVE PREFIX` (the dial turned mid-war and kept through a reload) | `node ui33.cjs claims out/v70ui/ita5-10.json 97-v70-claims` |
+| `ui34.cjs` | The month a neighbour marches on the player: the notices as the month opens and where the lines stand in the newsreel | `node ui34.cjs out/v70ui/ita5-12.json 97-v70-march` |
+
+Saves for the page come from `probe55` built with `build70.sh` (a plan with `"stop"`).

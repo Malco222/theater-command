@@ -44,11 +44,23 @@ export interface Run {
 }
 
 /** Starts a grand campaign the way the start screen does. */
-export function start(me: string | null, from: number, seed: number, level = 'colonel'): Game {
+/** Version 70: the history dial. A stop (1 to 5) is set straight after the open war is started, as the page does:
+ *  from the plan's "stop", or from the environment (TC_STOP=4) for a program that takes no plan. No stop asked for
+ *  is stop 3, the game as it was. The rules' setStop comes from stop70.ts, which build70.sh puts in front of a program
+ *  built against Version 70 or later; lib.ts itself imports nothing an older version lacks. */
+function dial(g: Game, stop?: number): void {
+  const n = Number(stop ?? process.env.TC_STOP ?? 0);
+  if (!n) return;
+  const f = (globalThis as any).__tcSetStop;
+  if (!f) throw new Error('a stop of the history dial was asked for, but this program was built without it (use build70.sh)');
+  f(g, n);
+}
+
+export function start(me: string | null, from: number, seed: number, level = 'colonel', stop?: number): Game {
   const g = createGame(seed, from > 1 ? null : me);
-  if (from === 1) startOpen(g);
+  if (from === 1) { startOpen(g); dial(g, stop); }
   while (g.turn < from) T.runTurnAI(g);
-  if (from > 1) startOpen(g);
+  if (from > 1) { startOpen(g); dial(g, stop); }
   g.human = me;
   if (me) setLevel(g, level);
   if (from > 1) takeOver(g);
@@ -733,7 +745,7 @@ export interface Opts { until?: number; level?: string; checkSave?: number[]; qu
 
 export function campaign(me: string, from: number, seed: number, plan: Plan, o: Opts = {}): Run {
   const until = o.until ?? 76;
-  const g = start(me, from, seed, o.level ?? 'colonel');
+  const g = start(me, from, seed, o.level ?? 'colonel', (plan as any).stop);
   const run: Run = { g, me, from, seed, level: o.level ?? 'colonel', rows: [], problems: [], fellOn: null, errors: [] };
   if (plan.noCabinet) (T as any).orderCabinet?.(g, false);
   if (plan.secure) (T as any).orderOffice?.(g, false);
