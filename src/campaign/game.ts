@@ -36,6 +36,7 @@ import { ENGINEERING, blocked, bridgeDown, bridgesOnCapture, downBetween, noCros
 import { engineersMonth, liftMines, minesAt, sappers } from './engineers';
 import { lineSince, railCut, railOnCapture, railheadOf, railsAt, resetRailheads } from './rails';
 import { junctionOpenTo, mendPrizes, railOnScorch, tellBurnt, tellSettled } from './prizes';
+import { beyondEurope, protectorOf, worldOn } from './world';
 import { govCapital, govMonth, govMul, judgeDirective } from './government';
 import { MANPOWER, classArrives, drawMen, menLeft, menRules, menSpare, menWarning, menWords, poolAtStart, raisable } from './manpower';
 import { draftsMul } from './difficulty';
@@ -66,30 +67,49 @@ import {
 const ORDER = ['GER', 'ITA', 'SVK', 'HUN', 'SOV', 'POL', 'FRA', 'UK', 'USA', 'BEL', 'NED', 'LUX', 'DEN', 'NOR'];
 const EAST = new Set(['POL', 'SOV', 'LIT', 'LAT', 'EST', 'ROM', 'FIN']);
 
-export function createGame(seed: number, human: string | null): Game {
-  const md = mapData as any;
+/** A province as a game holds it, from its row in a map file (the map of Europe, or the wider world's: world.ts). */
+export function regionOf(r: any): Region {
   // Which side theatre each region belongs to. A theatre with an opening month is ordinary ground until then (see openTheatres).
-  const theatreAt = (name: string): number => { const k = THEATRE_OF.get(name) ?? -1; return k >= 0 && THEATRE_LIST[k].opens === undefined ? k : -1; };
-  const regions: Region[] = md.regions.map((r: any): Region => ({
+  const k = THEATRE_OF.get(r.name) ?? -1;
+  return {
     id: r.id, name: r.name, owner: r.owner, ctrl: r.owner, terrain: r.terrain, vp: r.vp, fac: r.fac,
     // A depot on the coast is a harbour too. One inland feeds an army but takes no ships.
     cap: !!r.flags.cap, port: !!r.flags.port || (!!r.flags.depot && (r.seas ?? []).length > 0),
     fort: r.flags.fort ? { lv: r.flags.fort[0], vs: r.flags.fort.slice(1) } : null,
-    vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil, overseas: !!r.flags.col, theatre: theatreAt(r.name),
+    vichy: !!r.flags.vichy, sov: !!r.flags.sov, oil: !!r.flags.oil, overseas: !!r.flags.col, theatre: k >= 0 && THEATRE_LIST[k].opens === undefined ? k : -1,
     x: r.x, y: r.y, nb: r.nb, polys: r.polys, units: [], seas: r.seas ?? [], since: 0, prev: null,
-  }));
+  };
+}
+
+/** A nation as a game holds it on its first day, from its row in the data: at peace, its books empty. */
+export function nationOf(id: string, d: any, capital: number): Nation {
+  return {
+    id, name: d.name, adj: d.adj, color: d.color, quality: d.quality, air: d.air, resilience: d.resilience, align: d.align,
+    blitz: !!d.blitz, slowCommand: !!d.slowCommand, maxAttack: d.maxAttack ?? 0, seaSupply: !!d.seaSupply, sealift: d.sealift ?? 0,
+    atWar: [], alive: !d.dormant, dormant: !!d.dormant, offmap: d.offmap ?? null, capital, pp: 0, queue: [], corpsNo: firstCorpsNumber(id),
+    opinion: homeOpinion(id, d.align), home: homeOpinion(id, d.align), pc: 0, armyPeak: 0, offStart: {}, lastFight: {}, lab: null,
+  };
+}
+
+/** How many provinces lie between each province and a nation's capital, by land (999 where there is no way). */
+export function capitalDistances(g: Game, capital: number): Int16Array {
+  const d = new Int16Array(g.regions.length).fill(999);
+  d[capital] = 0;
+  const q = [capital];
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (d[j] === 999) { d[j] = d[q[i]] + 1; q.push(j); }
+  return d;
+}
+
+export function createGame(seed: number, human: string | null): Game {
+  const md = mapData as any;
+  const regions: Region[] = md.regions.map(regionOf);
   const byName: Record<string, Region> = {};
   for (const r of regions) byName[r.name] = r;
   const nations: Record<string, Nation> = {};
   for (const [id, d] of Object.entries(nationsData as Record<string, any>)) {
     if (id.startsWith('_')) continue;
     const cap = regions.find((r) => r.owner === id && r.cap);
-    nations[id] = {
-      id, name: d.name, adj: d.adj, color: d.color, quality: d.quality, air: d.air, resilience: d.resilience, align: d.align,
-      blitz: !!d.blitz, slowCommand: !!d.slowCommand, maxAttack: d.maxAttack ?? 0, seaSupply: !!d.seaSupply, sealift: d.sealift ?? 0,
-      atWar: [], alive: !d.dormant, dormant: !!d.dormant, offmap: d.offmap ?? null, capital: cap ? cap.id : -1, pp: 0, queue: [], corpsNo: firstCorpsNumber(id),
-      opinion: homeOpinion(id, d.align), home: homeOpinion(id, d.align), pc: 0, armyPeak: 0, offStart: {}, lastFight: {}, lab: null,
-    };
+    nations[id] = nationOf(id, d, cap ? cap.id : -1);
   }
   const order = [...ORDER, ...Object.keys(nations).filter((n) => !ORDER.includes(n))];
   const g: Game = {
@@ -97,7 +117,7 @@ export function createGame(seed: number, human: string | null): Game {
     reports: [], headlines: [], flags: {}, supplyDirty: true, supply: {}, reach: {}, railhead: {}, capDist: {}, week: 1,
     seas: [], gates: [], fleets: [], nextFleet: 1, seaReports: [], shoreReports: [], trade: [], convoys: {},
     airFleets: [], nextAir: 1, airReports: [], airPool: {}, sky: {}, raids: {}, stories: newStories(), intel: { agents: [], next: 1, notes: [], heat: {} }, passings: [],
-    links: md.links, width: md.width, height: md.height, land: md.land,
+    links: md.links, x0: 0, width: md.width, height: md.height, land: md.land,
   };
   for (const row of (setup as any).corps) addCorps(g, row[0], row[1], row[2], row[3], row[4], row[5] ?? {});
   setupNavy(g);
@@ -105,14 +125,7 @@ export function createGame(seed: number, human: string | null): Game {
   setupResearch(g);
   // Depots: home regions that can feed an army even when cut off from the capital.
   (md.regions as any[]).forEach((r) => { if (r.flags.depot) g.flags['depot:' + r.id] = 1; });
-  for (const n of Object.values(nations)) {
-    if (n.capital < 0) continue;
-    const d = new Int16Array(regions.length).fill(999);
-    d[n.capital] = 0;
-    const q = [n.capital];
-    for (let i = 0; i < q.length; i++) for (const j of regions[q[i]].nb) if (d[j] === 999) { d[j] = d[q[i]] + 1; q.push(j); }
-    g.capDist[n.id] = d;
-  }
+  for (const n of Object.values(nations)) if (n.capital >= 0) g.capDist[n.id] = capitalDistances(g, n.capital);
   // 1 September 1939.
   setWar(g, 'GER', 'POL');
   setWar(g, 'SVK', 'POL');
@@ -1871,6 +1884,7 @@ export function capitulate(g: Game, nat: string, by: string): void {
   const pact = g.nations.SOV.alive && !atWar(g, 'SOV', by);
   // Its sieges end with it: nobody is left to hold the towns, or to stand round them.
   dropSieges(g, nat);
+  const kept: Region[] = [];
   for (const r of g.regions) {
     if (r.owner === nat) {
       if (armistice && r.vichy && r.ctrl === 'FRA') { r.owner = 'VIC'; r.ctrl = 'VIC'; }
@@ -1879,7 +1893,11 @@ export function capitulate(g: Game, nat: string, by: string): void {
         // Ground still held by the fallen nation's allies stays in their hands until it is taken.
         // (An ally's garrison holds its town the same way.)
         const holder = r.units.find((u) => u.nat !== nat && atWar(g, u.nat, by)) ?? garrisonOf(r).find((u) => u.nat !== nat && atWar(g, u.nat, by));
-        r.ctrl = holder ? holder.nat : by;
+        // An island or colony out in the ocean, beyond the old chart, is not the victor's for the asking: a sea power
+        // still fighting him takes it into its keeping (the wider world).
+        const keeper = !holder && r.overseas && beyondEurope(r) ? protectorOf(g, by) : null;
+        if (keeper) { r.ctrl = keeper; r.since = g.turn; kept.push(r); }
+        else r.ctrl = holder ? holder.nat : by;
       }
     } else if (r.ctrl === nat) {
       // Foreign ground the fallen country held goes back to its owner, unless an army of the fallen country's side
@@ -1899,6 +1917,11 @@ export function capitulate(g: Game, nat: string, by: string): void {
     headline(g, 'fall', 'France signs an armistice. The north and the Atlantic coast are occupied; a new government at Vichy keeps the south.', 'FRA');
   } else {
     headline(g, 'fall', `${X.name} capitulates to ${g.nations[by].name}.`, nat);
+  }
+  if (kept.length) {
+    const K = g.nations[kept[0].ctrl];
+    const names = kept.map((r) => r.name);
+    headline(g, 'event', `${K.adj} forces take ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`} into their keeping: ${X.name} has fallen, and ${names.length === 1 ? 'the place is' : 'they are'} not to be ${g.nations[by].adj} for the asking.`, K.id, kept[0].id);
   }
   for (const n of Object.values(g.nations)) n.atWar = n.atWar.filter((e) => e !== nat);
   X.atWar = [];
@@ -2173,6 +2196,11 @@ function expeditions(g: Game, nat: string): void {
       if (reg && reg.owner === nat && !allied(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
       // Nor is it put down in a friendly country that is at peace: it forms at home instead.
       if (reg && reg.ctrl !== nat && allied(g, nat, reg.ctrl) && !sharesWar(g, nat, reg.ctrl) && cap >= 0) reg = g.regions[cap];
+      // The wider world: a player whose homeland lies across the ocean has such an army form at home, and shipping
+      // it is his business. (A computer's still lands where history landed it, or not at all: its staff has no
+      // routine yet for carrying an army across an ocean by itself.)
+      if (worldOn(g) && nat === g.human && cap >= 0 && beyondEurope(cap) && g.regions[cap].ctrl === nat && reg && reg.owner !== nat && !o.from && !o.joins && row[3] !== 'fort')
+        reg = roomNear(g, nat, g.regions[cap]) ?? g.regions[cap];
       // A full province sends it on to the nearest ground with room.
       if (reg && !o.join && !o.joins && row[3] !== 'fort' && allied(g, nat, reg.ctrl)) reg = roomNear(g, nat, reg) ?? reg;
     }
@@ -2381,7 +2409,7 @@ export function startPhase(g: Game, nat: string): void {
   const credit = BUDGET.debt.floor * Math.max(1, earned);
   const owed = budgeted(g) && n.pp < 0 ? Math.min(1, -n.pp / credit) : 0;
   // What the player's decrees take to keep can outrun what comes in (the grand campaign): the capital in hand pays for it.
-  const pcNet = pcIncome(nat) + civicSum(g, nat).pc + govCapital(g, nat);
+  const pcNet = pcIncome(nat, g) + civicSum(g, nat).pc + govCapital(g, nat);
   n.pc = Math.max(0, Math.min(Math.max(n.pc, DIPLOMACY.pcCap), n.pc + (g.flags.open === 1 ? pcNet : Math.max(0, pcNet))));
   const perDiv = PRODUCTION.replacementCost;
   const tempo = freshOffensive(g, nat);

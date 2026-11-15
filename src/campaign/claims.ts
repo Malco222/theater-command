@@ -10,7 +10,7 @@
 // A claim is stored as named ground (data/campaign/history.json, 'ambitions'), so that diplomacy can read the same
 // list. The dial leashes the computer-run world and never the player: no claim is pressed for him.
 
-import { DIPLOMACY, holds, signPeace } from './diplomacy';
+import { DIPLOMACY, holds, majorsOf, signPeace } from './diplomacy';
 import { allied, atWar, bloc, collapseScore, declareWar, headline, theName, warning } from './game';
 import { HISTORY, dialDraw, dialRules, stopDef, stopOf, FREE, type Ambition, type Mark } from './history';
 import { deterred } from './league';
@@ -73,7 +73,7 @@ export function dealMonth(g: Game): string[] {
   const turned: string[] = [];
   for (const n of Object.values(g.nations)) {
     // The great powers, the countries already in the war or in an alliance, and the player's own are left as they are.
-    if (!n.alive || n.dormant || n.league || n.atWar.length || bloc(n) || n.id === g.human || DIPLOMACY.majors.includes(n.id)) continue;
+    if (!n.alive || n.dormant || n.league || n.atWar.length || bloc(n) || n.id === g.human || majorsOf(g).includes(n.id)) continue;
     const home = Math.round((2 * dialDraw(g, 'deal', n.id) - 1) * S.deal);
     const was = n.home;
     n.opinion = Math.max(-100, Math.min(100, n.opinion + (home - was)));
@@ -99,7 +99,7 @@ const stillHeld = (g: Game, a: Ambition): Region[] => groundOf(g, a).filter((r) 
 function guarded(g: Game, a: Ambition): boolean {
   const hb = bloc(g.nations[a.on]);
   if (hb !== 'axis' && hb !== 'allies') return false;
-  return DIPLOMACY.majors.some((id) => {
+  return majorsOf(g).some((id) => {
     const P = g.nations[id];
     if (!P?.alive || P.dormant || id === a.on || bloc(P) !== hb || collapseScore(g, id) / P.resilience >= C.guard) return false;
     return g.regions.some((r) => r.ctrl === id && r.nb.some((j) => g.regions[j].ctrl === a.nat));
@@ -125,7 +125,7 @@ export function moment(g: Game, a: Ambition): string | null {
   // A claimant marches from peace: a country already at war has its hands full. Nor does it march on an ally or from inside the League.
   if (n.atWar.length || n.league || allied(g, a.nat, a.on)) return null;
   // A great power does not walk into the great war over a border claim: it marches only on a country outside both alliances.
-  if (DIPLOMACY.majors.includes(a.nat) && bloc(H)) return null;
+  if (majorsOf(g).includes(a.nat) && bloc(H)) return null;
   const held = stillHeld(g, a);
   if (!held.length) return null;
   const lost = collapseScore(g, a.on) / H.resilience;
@@ -179,7 +179,7 @@ function aid(g: Game, a: Ambition): void {
   const n = g.nations[a.nat], H = g.nations[a.on];
   const hb = bloc(H);
   if (hb !== 'axis' && hb !== 'allies') return;
-  for (const id of DIPLOMACY.majors) {
+  for (const id of majorsOf(g)) {
     const G = g.nations[id];
     if (!G?.alive || G.dormant || id === g.human || id === a.on || bloc(G) !== hb || atWar(g, id, a.nat) || allied(g, id, a.nat)) continue;
     const borders = g.regions.some((r) => r.ctrl === id && r.nb.some((j) => g.regions[j].ctrl === a.nat));

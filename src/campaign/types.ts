@@ -1001,6 +1001,9 @@ export interface Game {
   /** The roll of nations that have left the war and of those that came back into it, oldest first. */
   passings: Passing[];
   links: [number, number][];
+  /** The chart's west edge. 0 on the map of Europe; further west (negative) once the wider world is attached (world.ts). */
+  x0: number;
+  /** How wide the chart is from its west edge, and how tall. */
   width: number;
   height: number;
   land: [number, number][][][];

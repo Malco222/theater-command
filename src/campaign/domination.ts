@@ -17,7 +17,7 @@
 //   dom:laid   how many countries laid down their arms that month, with no great power left to stand beside
 import data from '../../data/campaign/domination.json';
 import { airOnFall } from './air';
-import { DIPLOMACY } from './diplomacy';
+import { DIPLOMACY, majorsOf } from './diplomacy';
 import { ledger } from './economy';
 import { allied, bloc, collapseScore, fieldArmy, headline, relocate, removeCorps, setWar } from './game';
 import { dropSieges } from './siege';
@@ -195,7 +195,7 @@ function worth(g: Game): { all: number; held: Record<string, { n: number; vp: nu
 }
 
 /** The great powers still standing. */
-export const greatLeft = (g: Game): string[] => contenders(g).filter((n) => DIPLOMACY.majors.includes(n.id)).map((n) => n.id);
+export const greatLeft = (g: Game): string[] => contenders(g).filter((n) => majorsOf(g).includes(n.id)).map((n) => n.id);
 
 /**
  * How a nation stands against the two tests for winning the world: the rival great powers still standing, and its
@@ -235,7 +235,7 @@ export function crown(g: Game): void {
     headline(g, 'goal', fill(DOMINATION.lines.won, { name: live[0].name, adj: live[0].adj }), live[0].id);
     return;
   }
-  const great = live.filter((n) => DIPLOMACY.majors.includes(n.id));
+  const great = live.filter((n) => majorsOf(g).includes(n.id));
   if (great.length > 1) return;
   const { all, held } = worth(g);
   const share = (n: Nation): number => (all > 0 ? (held[n.id]?.vp ?? 0) / all : 0);

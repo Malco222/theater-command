@@ -11,6 +11,7 @@ import { govMul } from './government';
 import { provinceYield } from './economy';
 import { atWar, bloc, headline } from './game';
 import { canPass, closedTo, seaRisk, zoneOf } from './navy';
+import { WORLD, worldOn } from './world';
 import type { Game, Nation, Region, TradeDeal } from './types';
 
 export const TRADE = data as unknown as {
@@ -24,6 +25,7 @@ export const TRADE = data as unknown as {
 };
 
 const MAJORS = (diplomacyData as unknown as { majors: string[] }).majors;
+// (The wider world's own great powers and opening agreements are read from world.ts.)
 
 /** True when trade is by agreement: the grand campaign. */
 export const tradeRules = (g: Game): boolean => g.flags.open === 1;
@@ -47,7 +49,7 @@ const dealOf = (g: Game, a: string, b: string): TradeDeal | undefined => g.trade
 /** How many agreements a country can keep. */
 export function housesOf(g: Game, nat: string): number {
   const H = TRADE.houses;
-  return Math.min(H.most, (MAJORS.includes(nat) || !!g.nations[nat]?.offmap ? H.major : H.minor) + civicSum(g, nat).houses);
+  return Math.min(H.most, (MAJORS.includes(nat) || !!g.nations[nat]?.offmap || (worldOn(g) && WORLD.great.includes(nat)) ? H.major : H.minor) + civicSum(g, nat).houses);
 }
 
 // ---- The way the goods go ---------------------------------------------------------------------------
@@ -333,7 +335,7 @@ export function openTrade(g: Game): void {
   if (!tradeRules(g) || g.flags['trade:open']) return;
   g.flags['trade:open'] = 1;
   const ctx: TradeCtx = new Map();
-  for (const [a, b] of TRADE.pairs) signTrade(g, a, b, ctx, true);
+  for (const [a, b] of [...TRADE.pairs, ...(worldOn(g) ? WORLD.pairs : [])]) signTrade(g, a, b, ctx, true);
   const order = Object.values(g.nations).filter(can).sort((x, y) => wealthOf(g, y.id) - wealthOf(g, x.id) || (x.id < y.id ? -1 : 1));
   for (let round = 0; round < TRADE.houses.most; round++) {
     let signed = false;

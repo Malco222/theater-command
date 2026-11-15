@@ -1,0 +1,51 @@
+{
+  "_about": {
+    "what": "The wider world, attached to a grand campaign when it opens (src/campaign/world.ts). The history campaigns never see any of it: they keep the map of Europe. The provinces and seas themselves come from tools/build-geo-world.mjs (data/campaign/world.mjs, world-seas.json); this file holds what the rules add to them.",
+    "nations": "Countries that exist only on the wider map, in the same form as nations.json.",
+    "home": "What changes for a country of nations.json once its homeland is on the map. The United States is no longer a country beyond the map's edge that wakes in December 1941: it is there from the first day, neutral, with its factories on its own soil.",
+    "follow": "Dominions: each goes to war with whoever its mother country is at war with on the day the world is attached.",
+    "corps": "The armies standing at home on the first day: [nation, name, kind, divisions, province, options]. 'str' is the strength it starts at (a peacetime army is a cadre).",
+    "fleets": "Squadrons in home waters on the first day, in the form of navy.json.",
+    "peace": "The share of a great power's industry on war work while it is at peace, by month: [from month, share]. It stands in place of production.json's peaceIncome for that country. Once it is at war its factories work as any other's do.",
+    "protector": "Overseas ground beyond the old chart whose mother country falls does not go to the victor's hands across an ocean he cannot cross: it passes into the keeping of the first of these powers that is alive, lives by its ships and is at war with the victor.",
+    "pairs": "Trade agreements history had in 1939, added to trade.json's.",
+    "order": "Where the new countries stand in the order of play: after the countries of nations.json.",
+    "idle": "A computer-run staff whose homeland lies beyond the old chart, with no enemy on its side of the ocean, does not go on raising an army to stand on the quay: once this many of its field corps are at home it raises no more. (It has no routine yet for shipping an army across an ocean by itself; history's dated formations still arrive where history landed them.) A player's own staff is not bound by it.",
+    "great": "Great powers beside diplomacy.json's 'majors', once their homeland is on the map: left alone when the neutrals are dealt afresh, paid a great power's political capital and trade houses, and counted among the great powers of the last act."
+  },
+  "nations": {
+    "CAN": { "name": "Canada", "adj": "Canadian", "color": "#c0846a", "quality": 0.9, "air": 8, "resilience": 0.9, "align": "allies", "seaSupply": true, "sealift": 1 },
+    "MEX": { "name": "Mexico", "adj": "Mexican", "color": "#1e7046", "quality": 0.55, "air": 2, "resilience": 0.6, "align": "independent" },
+    "CUB": { "name": "Cuba", "adj": "Cuban", "color": "#b0a488", "quality": 0.5, "air": 0, "resilience": 0.5, "align": "independent" }
+  },
+  "home": {
+    "USA": { "align": "leaning_allies" }
+  },
+  "follow": { "CAN": "UK" },
+  "corps": [
+    ["USA", "First Army (1st Division)", "inf", 2, "New York", { "xp": 0.05, "str": 0.5 }],
+    ["USA", "Washington garrison", "inf", 1, "Washington", { "xp": 0.05, "str": 0.6, "hold": 1 }],
+    ["USA", "Second Army (5th and 6th Divisions)", "inf", 2, "Chicago", { "xp": 0.05, "str": 0.4 }],
+    ["USA", "Third Army (2nd Division and 1st Cavalry Division)", "inf", 2, "North Texas", { "xp": 0.05, "str": 0.5 }],
+    ["USA", "Fourth Army (3rd Division)", "inf", 1, "San Francisco", { "xp": 0.05, "str": 0.6 }],
+    ["CAN", "1st Canadian Division", "inf", 1, "Montreal", { "xp": 0.05, "str": 0.6 }],
+    ["CAN", "Atlantic Command", "inf", 1, "Nova Scotia", { "xp": 0.05, "str": 0.5, "hold": 1 }],
+    ["CAN", "Pacific Command", "inf", 1, "Vancouver", { "xp": 0.05, "str": 0.5, "hold": 1 }],
+    ["MEX", "1st Division and the Presidential Guard", "inf", 2, "Mexico City", { "xp": 0.05, "str": 0.6, "hold": 1 }],
+    ["MEX", "Northern military zones", "inf", 1, "Monterrey", { "xp": 0.05, "str": 0.5 }],
+    ["MEX", "Gulf military zones", "inf", 1, "Veracruz", { "xp": 0.05, "str": 0.5 }],
+    ["CUB", "Cuban Army", "inf", 1, "Havana", { "xp": 0.05, "str": 0.5, "hold": 1 }]
+  ],
+  "fleets": [
+    { "nat": "USA", "name": "Atlantic Squadron", "base": "Norfolk", "port": "Norfolk", "home": "seaboard", "zone": "seaboard", "duty": "patrol", "ships": { "bb": 4, "cv": 1, "ca": 4, "dd": 20, "ss": 0 } },
+    { "nat": "CAN", "name": "Royal Canadian Navy", "base": "Nova Scotia", "port": "Halifax", "home": "scotian", "zone": "scotian", "duty": "patrol", "ships": { "bb": 0, "cv": 0, "ca": 0, "dd": 6, "ss": 0 } }
+  ],
+  "peace": {
+    "USA": [[1, 0.1], [10, 0.2], [19, 0.35]]
+  },
+  "protector": ["UK", "USA"],
+  "pairs": [["UK", "USA"], ["USA", "CAN"], ["USA", "MEX"], ["USA", "CUB"], ["UK", "CAN"]],
+  "order": ["CAN", "MEX", "CUB"],
+  "great": ["USA"],
+  "idle": { "_default": 4, "USA": 8, "CUB": 2 }
+}

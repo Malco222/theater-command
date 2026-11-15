@@ -30,6 +30,7 @@ import { openEscorts } from './fleets';
 import { openTrade } from './trade';
 import { openGovernment } from './government';
 import { openManpower } from './manpower';
+import { attachWorld } from './world';
 import { EASTERN, allied, assess, atWar, bloc, collapseScore, corpsBase, frozen, headline, hostileUnits, limitAttackers, weather } from './game';
 import { FORT_MUL, KIND, STACK, TERRAIN_DEF, type Corps, type Game, type PlanPhase, type Region } from './types';
 
@@ -79,6 +80,8 @@ export const isOpen = (g: Game): boolean => g.flags.open === 1;
  */
 export function startOpen(g: Game): Game {
   g.flags.open = 1;
+  // The grand campaign is played on the wider world: it is attached before anything else is set up for it.
+  attachWorld(g);
   if (g.turn === 1) {
     g.flags['st:on:GER:POL'] = 1;
     g.flags['st:gain:GER'] = 1;

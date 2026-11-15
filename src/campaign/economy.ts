@@ -29,6 +29,7 @@ import { prizeIncome, prizeOut, prizeRules } from './prizes';
 import { govMul } from './government';
 import { MANPOWER, drawMen, menSpare, raisable, returnMen } from './manpower';
 import { raiseMorale } from './morale';
+import { armyIdle, peaceFooting } from './world';
 
 export interface BuildSpec { label: string; divs: number; cost: number; months: number; blurb: string }
 
@@ -216,7 +217,7 @@ export function ledger(g: Game, nat: string): Ledger {
   const trade = budget ? tradeIncome(g, nat) : partners * DIPLOMACY.tradeIncome;
   const towns = budget ? civicSum(g, nat, keepsStores(g, nat)) : null;
   const civic = towns ? towns.commerce + towns.farms + towns.tax : 0;
-  const peace = n.atWar.length ? 1 : PRODUCTION.peaceIncome;
+  const peace = n.atWar.length ? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome;
   const sea = seaIncomeLoss(g, nat), air = airIncomeLoss(g, nat), tech = techMul(g, nat, 'industry');
   // What its armies hold outside towns they have not yet taken: factory districts, oilfields and quays.
   const prizes = prizeIncome(g, nat);
@@ -246,7 +247,7 @@ export function ledger(g: Game, nat: string): Ledger {
     ...gift.lines,
   ];
   const changes: LedgerLine[] = [
-    { key: 'peace', label: 'At peace: industry at half speed', amount: before * (peace - 1) },
+    { key: 'peace', label: peaceFooting(g, nat) === null ? 'At peace: industry at half speed' : `At peace: ${Math.round(peace * 100)} in 100 of industry on war work`, amount: before * (peace - 1) },
     { key: 'sea', label: 'Cargoes sunk at sea', amount: afterSea - atPeace },
     { key: 'air', label: 'Bombing of industry', amount: afterAir - afterSea },
     { key: 'tech', label: tech >= 1 ? 'Better production methods' : 'Production methods behind the times', amount: afterAir * (tech - 1) },
@@ -285,7 +286,7 @@ export function income(g: Game, nat: string): number {
     // The level of the campaign adds to the player's earnings, or to his rivals': at the fair level, nothing.
     const gift = traitMoney(g, nat);
     // Factories short of steel, coal and rubber stand idle part of the month.
-    return (sum * (n.atWar.length ? 1 : PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul * supIncome(g, nat) * govMul(g, nat, 'income');
+    return (sum * (n.atWar.length ? 1 : peaceFooting(g, nat) ?? PRODUCTION.peaceIncome) + trade + gift.flat) * (1 - seaIncomeLoss(g, nat)) * (1 - airIncomeLoss(g, nat)) * techMul(g, nat, 'industry') * incomeMul(g, nat) * gift.mul * supIncome(g, nat) * govMul(g, nat, 'income');
   }
   let fac = 0;
   for (const r of g.regions) if (r.ctrl === nat) fac += r.owner === nat ? r.fac : r.fac * PRODUCTION.occupiedIncome;
@@ -575,7 +576,7 @@ export function aiProduction(g: Game, nat: string): void {
   // industry keeps more in hand, so that a rich country at war turns its money into an army and does not sit on it.
   const most = g.flags.open === 1 && PRODUCTION.aiLine ? Math.max(2, Math.floor(home / PRODUCTION.aiLine)) : 2;
   // The nation's special formation comes first when it can be had (the grand campaign): one on order at a time.
-  const u = budgeted(g) ? eliteOf(nat) : null;
+  const u = budgeted(g) && !armyIdle(g, nat) ? eliteOf(nat) : null;
   if (u && slots() < 2 && !n.queue.some((b) => b.elite) && whyNoElite(g, nat) === null && !locked(g, nat, `corps:${u.kind}`) && !(u.kind === 'arm' && shortOfOil(g, nat))) {
     const at = raiseSite(g, nat, u.kind, cap.id), cost = corpsUpkeep(u.kind, u.divs);
     // A staff never holds more than its bank allows, so a costly formation is ordered as soon as the bank is full.
@@ -586,6 +587,8 @@ export function aiProduction(g: Game, nat: string): void {
   // to every few of the rest, and brings them up where the works are.
   const wantsGuns = (): boolean => gunsWanted(g, nat);
   while (slots() < most) {
+    // The wider world: a staff an ocean away from every enemy raises no more corps than it has a use for at home.
+    if (armyIdle(g, nat)) break;
     // A cadre waiting at home is raised again before anything new is formed (the grand campaign): the same corps, for a share of the price.
     // (So many at a time and no more: a staff does not rebuild its whole army at the cadre's price in one season.)
     const old = g.flags.open === 1 && n.queue.filter((b) => b.cadre !== undefined).length < rivalsData.fold.cadres ? (n.cadres ?? []).find((c) => !c.elite && !c.airborne && whyNoCadre(g, nat, c) === null) : undefined;

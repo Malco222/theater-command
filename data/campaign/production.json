@@ -58,6 +58,7 @@
   },
   "armourName": {
     "GER": "Panzer",
+    "USA": "Armored",
     "_default": "Armoured"
   }
 }

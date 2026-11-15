@@ -5,6 +5,7 @@
 
 import { byHand } from './depth';
 import mapData from '../generated/campaign-map.json';
+import worldMap from '../generated/world-map.json';
 import data from '../../data/campaign/navy.json';
 import fleetData from '../../data/campaign/fleets.json';
 import { Rng, hashString } from '../core/rng';
@@ -26,7 +27,7 @@ import {
 } from './types';
 
 interface ClassSpec { label: string; one: string; many: string; power: number; tough: number; escort: number; raid: number }
-interface FleetRow { nat: string; name: string; from?: number; base: string | null; port: string; home: string; zone: string; duty: Stance; tied?: boolean; admiral?: string; ships: Partial<Ships> }
+export interface FleetRow { nat: string; name: string; from?: number; base: string | null; port: string; home: string; zone: string; duty: Stance; tied?: boolean; admiral?: string; ships: Partial<Ships> }
 /** A convoy route. 'base' is a fortress on the route whose own submarines and aircraft hunt the convoys while an enemy holds it. */
 interface Route { id: string; name: string; to: string; zones: string[]; share: number; tons: number; base?: { region: string; raid: number; starved: number } }
 
@@ -73,6 +74,8 @@ export const seaWar = (g: Game): boolean => g.flags.open === 1;
 export const CLASSES: ShipClass[] = ['bb', 'cv', 'ca', 'dd', 'ss'];
 /** The lines drawn on the chart between one sea and the next. */
 export const SEA_BORDERS = (mapData as any).seas.borders as [number, number][][];
+/** The same for the game in hand: on the wider world (world.ts) the oceans beyond the old chart have their lines too. */
+export const seaBorders = (g: Game): [number, number][][] => (g.flags.world === 1 ? (worldMap as any).seas.borders : SEA_BORDERS);
 const SURFACE: ShipClass[] = ['bb', 'cv', 'ca', 'dd'];
 const none = (): Ships => ({ bb: 0, cv: 0, ca: 0, dd: 0, ss: 0 });
 export const quality = (g: Game, nat: string): number => (NAVY.quality[nat] ?? NAVY.quality._default) * techMul(g, nat, 'navy');
@@ -115,9 +118,27 @@ export function shipList(s: Ships): string {
 
 let lookup: Int8Array | null = null;
 let lookCols = 0;
+let wide: Int8Array | null = null;
 
-/** The sea under a point on the map, or -1 where it is land or off the chart. */
-export function seaAt(x: number, y: number): number {
+/** The same on the wider world: its chart is laid out in the same squares, from its own west edge, each row as runs of [sea, squares]. */
+function seaAtWide(x: number, y: number): number {
+  const W = worldMap as any as { frame: { x0: number; y0: number }; seas: { cell: number; cols: number; grid: number[][] } };
+  const md = W.seas;
+  if (!wide) {
+    wide = new Int8Array(md.cols * md.grid.length).fill(-1);
+    md.grid.forEach((row, r) => {
+      let c = 0;
+      for (let i = 0; i < row.length; i += 2) for (let k = row[i + 1]; k > 0 && c < md.cols; k--) wide![r * md.cols + c++] = row[i];
+    });
+  }
+  const c = Math.floor((x - W.frame.x0) / md.cell), r = Math.floor((y - W.frame.y0) / md.cell);
+  if (c < 0 || r < 0 || c >= md.cols || r >= md.grid.length) return -1;
+  return wide[r * md.cols + c];
+}
+
+/** The sea under a point on the map, or -1 where it is land or off the chart. Given a game on the wider world, the point may lie anywhere on it. */
+export function seaAt(x: number, y: number, g?: Game): number {
+  if (g && g.flags.world === 1) return seaAtWide(x, y);
   const md = (mapData as any).seas as { cell: number; grid: string[] };
   if (!lookup) {
     lookCols = Math.ceil((mapData as any).width / md.cell);
@@ -137,10 +158,14 @@ export function seaAt(x: number, y: number): number {
 
 // ---- Setting up ---------------------------------------------------------------------------
 
-export function setupNavy(g: Game): void {
-  const md = (mapData as any).seas;
+/** Lays a chart's seas and straits into a game: the map of Europe's when it is made, the wider world's when that is attached (world.ts). */
+export function chartSeas(g: Game, md: any): void {
   g.seas = md.zones.map((z: any, id: number) => ({ id, key: z.id, name: z.name, x: z.x, y: z.y, adj: z.adj, coast: z.coast, air: z.air ?? 1, narrow: !!z.narrow }));
   g.gates = md.gates.map((gt: any) => ({ a: gt.a, b: gt.b, name: gt.name, region: gt.region ? g.byName[gt.region]?.id ?? -1 : -1, nation: gt.nation ?? null, closed: !!gt.closed }));
+}
+
+export function setupNavy(g: Game): void {
+  chartSeas(g, (mapData as any).seas);
   g.fleets = [];
   g.nextFleet = 1;
   g.seaReports = [];
@@ -149,7 +174,7 @@ export function setupNavy(g: Game): void {
   for (const row of NAVY.fleets) if ((row.from ?? 1) <= 1) addFleet(g, row);
 }
 
-function addFleet(g: Game, row: FleetRow): Fleet {
+export function addFleet(g: Game, row: FleetRow): Fleet {
   const f: Fleet = {
     id: g.nextFleet++, nat: row.nat, name: row.name, ships: { ...none(), ...row.ships }, lost: none(),
     base: row.base ? g.byName[row.base].id : -1, port: row.port, home: zoneOf(g, row.home), zone: zoneOf(g, row.home), stance: 'port',

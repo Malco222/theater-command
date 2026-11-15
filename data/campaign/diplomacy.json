@@ -12,15 +12,17 @@
   "pcCap": 30,
   "court": { "cost": 6, "opinion": 12, "home": 6 },
   "tradeIncome": 1,
-  "resist": { "SOV": 0.3, "SUI": 0.5, "IRL": 0.6, "SWE": 0.7 },
+  "resist": { "SOV": 0.3, "SUI": 0.5, "IRL": 0.6, "SWE": 0.7, "USA": 0.15 },
   "home": {
     "HUN": 40, "ESP": 35, "TUR": -35, "ROM": 0, "BUL": 15, "YUG": -5, "GRE": -20, "FIN": 5,
     "SWE": 0, "SUI": 0, "IRL": 0, "POR": -10, "NOR": -15, "DEN": -5, "BEL": -20, "NED": -15, "LUX": -10,
-    "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0, "VIC": 10, "IRQ": -35, "IRN": 5
+    "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0, "VIC": 10, "IRQ": -35, "IRN": 5,
+    "MEX": -10, "CUB": -25
   },
   "bandwagon": {
     "_default": 2, "HUN": 3, "ROM": 3, "BUL": 3, "ESP": 2.5, "FIN": 2, "YUG": 1.5, "TUR": 1, "SWE": 1, "POR": 1,
-    "GRE": 0.5, "SUI": 0.5, "IRL": 0.5, "VIC": 1.5, "IRQ": 1, "IRN": 1, "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0
+    "GRE": 0.5, "SUI": 0.5, "IRL": 0.5, "VIC": 1.5, "IRQ": 1, "IRN": 1, "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0,
+    "USA": 0, "MEX": 0.5, "CUB": 0.5
   },
   "events": [
     {
@@ -88,6 +90,27 @@
       "wake": { "nations": ["USA"], "align": "allies" },
       "war": [["USA", "GER"], ["USA", "ITA"]],
       "text": "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it."
+    },
+    {
+      "id": "pearl-harbor-world", "from": 28, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:USA", "peace:USA,GER", "notInBloc:USA"],
+      "enter": { "nations": ["USA"], "align": "allies" },
+      "war": [["USA", "GER"], ["USA", "ITA"]],
+      "text": "Japan attacks the American fleet at Pearl Harbor, and Germany and Italy declare war on the United States. America is in the war, with the greatest industry on earth behind it."
+    },
+    {
+      "id": "cuba-war", "from": 28, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:CUB", "war:USA,GER", "atPeace:CUB", "notInBloc:CUB"],
+      "enter": { "nations": ["CUB"], "align": "allies" },
+      "war": [["CUB", "GER"]],
+      "text": "Cuba follows the United States into the war: Havana declares war on Germany and opens its harbours and airfields to the American fleet."
+    },
+    {
+      "id": "mexico-war", "from": 33, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:MEX", "war:USA,GER", "atPeace:MEX", "notInBloc:MEX"],
+      "enter": { "nations": ["MEX"], "align": "allies" },
+      "war": [["MEX", "GER"]],
+      "text": "German submarines have sunk Mexican tankers in the Gulf. Mexico declares war on the Axis and joins the Allies."
     },
     {
       "id": "usa-italy", "from": 28, "to": 99, "mode": "open",
