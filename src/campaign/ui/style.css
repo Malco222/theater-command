@@ -385,7 +385,7 @@ button.corps:hover { border-color: var(--ink-3); }
 .cross table.ticket td.fx:empty { display: none; }
 h4.crh { font-family: var(--head); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; color: var(--brass); margin: 10px 0 2px; }
 h4.crh.bad { color: #f1a58f; }
-.cross .holdwarn { margin-top: 5px; color: #f1a58f; }
+.cross .holdwarn, .card .holdwarn { margin-top: 5px; color: #f1a58f; }
 .note.holdbad { border-left: 3px solid #f1a58f; }
 .note.crosslead .link { display: inline-block; margin: 4px 0 0; font-size: 12.5px; }
 .evcard p { margin: 0; font-family: var(--head); font-size: 18px; font-weight: 600; letter-spacing: .02em; line-height: 1.2; }

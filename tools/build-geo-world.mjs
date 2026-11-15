@@ -402,7 +402,9 @@ const told = new Set();
 for (const z of zones) for (const j of z.adj) told.add(z.i < j ? `${z.i}-${j}` : `${j}-${z.i}`);
 const nm = (k) => k.split('-').map((i) => zones[+i].id).join(' and ');
 for (const k of meets) if (!told.has(k) && k.split('-').some((i) => +i >= nCore)) console.warn(`? ${nm(k)} meet on the chart (${segs.get(k).length} cells) but are not adjacent`);
-for (const k of told) if (!meets.has(k) && k.split('-').some((i) => +i >= nCore)) console.warn(`? ${nm(k)} are adjacent but do not meet on the chart`);
+// A canal joins two seas that do not meet: a gate between them says so.
+const cut = new Set(gates.map((gt) => (gt.a < gt.b ? `${gt.a}-${gt.b}` : `${gt.b}-${gt.a}`)));
+for (const k of told) if (!meets.has(k) && !cut.has(k) && k.split('-').some((i) => +i >= nCore)) console.warn(`? ${nm(k)} are adjacent but do not meet on the chart`);
 
 // Which sea a point of the chart lies in, at half the detail: each row is [sea, cells, sea, cells...], -1 for land.
 const LOOK = 2;

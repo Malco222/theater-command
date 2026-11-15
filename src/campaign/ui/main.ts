@@ -4152,12 +4152,16 @@ function landingCard(): string {
     const crossing = plan.surprise
       ? `War has only just been declared, so the enemy is caught unready: no fleet can stop the crossing this month, and the troops go ashore at full strength.`
       : loss > 0 ? `${plan.sortie >= 1 ? 'The enemy fleet will put to sea against the invasion' : 'Enemy ships and aircraft are at work on the way'}${plan.sky ? ', but your air force holds the sky over the beach and will keep most of it off the troopships' : ''}. Expect to lose about ${loss}% of the force at sea.` : 'No enemy ship or aircraft is in a position to stop the crossing.';
-    let odds = `<div class="verdict win" style="font-size:24px">The coast is undefended</div><div class="sub">The force walks ashore and takes ${esc(target.name)}.</div>`;
+    // A beach that can be won and not fed says so first: the headline is the whole verdict, not the battle alone.
+    const cut = !!plan.hold && !plan.hold.open;
+    const cutLine = cut ? `<div class="sub holdwarn">Once ashore the ${esc(g.seas[plan.hold!.sea].name)} would be closed behind the force, and it would be cut off from its supplies. The reckoning is below.</div>` : '';
+    let odds = `<div class="verdict ${cut ? 'loss' : 'win'}" style="font-size:24px">${cut ? 'The coast is undefended, but the force would be cut off' : 'The coast is undefended'}</div><div class="sub">The force walks ashore and takes ${esc(target.name)}.</div>${cutLine}`;
     if (a) {
       const p = chanceOn(a.odds, a.dice);
       const share = a.A / (a.A + a.D);
-      const word = p >= 0.95 ? 'Victory is all but certain' : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : air ? 'This assault will fail' : 'This landing will fail';
-      odds = `<div class="verdict ${p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}" style="font-size:24px">${word}</div>
+      const fight = p >= 0.95 ? (cut ? 'The beach can be won' : 'Victory is all but certain') : p >= 0.6 ? 'The odds favour you' : p >= 0.3 ? 'It could go either way' : p > 0 ? 'A long shot' : air ? 'This assault will fail' : 'This landing will fail';
+      const word = cut && p > 0 ? `${fight}, ${p >= 0.6 ? 'but' : 'and'} the force would be cut off` : fight;
+      odds = `<div class="verdict ${cut ? 'loss' : p >= 0.6 ? 'win' : p >= 0.3 ? '' : 'loss'}" style="font-size:24px">${word}</div>${cutLine}
         <div class="oddsbar"><i style="width:${Math.round(share * 100)}%;background:${g.nations[g.human!].color}"></i><i style="flex:1;background:${g.nations[a.defenders[0].nat].color}"></i></div>
         <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`;
     }

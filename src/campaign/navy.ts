@@ -539,16 +539,19 @@ export interface CrossingAccount {
 /**
  * The holding of a beach (Version 73): whether the sea behind it could be kept open to the supply ships once the
  * force is ashore. A sea is closed to a nation when the enemy has `NAVY.closed.min` there and `NAVY.closed.ratio`
- * times its own strength. What the enemy could bring is counted whole: his ships in that sea now, every fleet
- * that could come into it (at sea on the way or next door, or in harbour on those seas), and his aircraft over it.
+ * times its own strength. What the enemy would bring is counted whole: his ships in that sea now, every fleet
+ * within a month's sail that his admirals would send into it (fleetsAnswer), and his aircraft over it.
  */
 export interface SeaHold {
   /** The sea off the beach: the last the supply ships cross. */
   sea: number;
-  /** What the enemy has in it now, the fleets that could come into it at their full strength, and his aircraft over it. */
+  /** What the enemy has in it now, the fleets that would come into it at their full strength, and his aircraft over it. */
   there: number;
   come: number;
   air: number;
+  /** Fleets that could sail there and would not: kept away by the invader's aircraft over that sea, or too weak to face what he has in it. */
+  kept: number;
+  shy: number;
   /** All of that together. */
   foe: number;
   /** What the invader has there now: his ships at sea in it and his aircraft over it. */
@@ -562,35 +565,81 @@ export interface SeaHold {
   lines: TicketLine[];
 }
 
-/** The enemy's surface fleets that could come into the last sea of a crossing and are not in it now: at sea elsewhere on the way or next door to it, or in harbour on those seas. */
-export function fleetsInReach(g: Game, nat: string, path: number[]): Fleet[] {
-  const last = path[path.length - 1];
-  const near = new Set<number>(path);
-  for (const z of path) for (const j of g.seas[z].adj) near.add(j);
-  return g.fleets.filter((f) => {
-    if (!atWar(g, f.nat, nat) || !surfaceShips(f)) return false;
-    if (atSea(f)) return f.zone !== last && near.has(f.zone);
-    return (f.base >= 0 ? g.regions[f.base].seas : [f.home]).some((z) => near.has(z));
-  });
+/** What the enemy's fleets within a month's sail of a beach would do once a force is ashore there. */
+export interface FleetsAnswer {
+  /** The fleets that would come into the sea off the beach. */
+  come: Fleet[];
+  /** Those that could sail there and are kept away by the invader's aircraft over that sea. */
+  kept: Fleet[];
+  /** Those that could sail there and would not face what the invader has in it. */
+  shy: Fleet[];
 }
+
+/**
+ * The enemy's surface fleets that could be in the last sea of a crossing within the month and are not in it now,
+ * and what each would do once a force is ashore at `to`. Every fleet that can sail there counts, wherever it lies
+ * (fleetReach: the seas within a month of its base, through the straits open to it). A player's own fleets may
+ * all come. A computer's admirals follow their own rule (navalAI), and the forecast follows it with them: a raider
+ * keeps to its raiding and a fleet tied to its convoys keeps its station; none goes into a sea the invader's
+ * aircraft command, unless its own homeland is being invaded across it; and none goes in alone against more than
+ * it can face (the invader's whole strength there, or half of it where the homeland is invaded).
+ */
+export function fleetsAnswer(g: Game, nat: string, path: number[], to?: Region): FleetsAnswer {
+  const last = path[path.length - 1];
+  const mine = seaSide(g, last, nat, false).total;
+  let there = seaSide(g, last, nat, true).total;
+  const come: Fleet[] = [], kept: Fleet[] = [];
+  const wait: { f: Fleet; home: boolean }[] = [];
+  const commanded: Record<string, boolean> = {};
+  for (const f of g.fleets) {
+    if (!atWar(g, f.nat, nat) || !surfaceShips(f) || (atSea(f) && f.zone === last)) continue;
+    const hand = byHand(g, f.nat, 'navy');
+    if (!hand && (f.duty === 'raid' || f.tied) && f.station !== last) continue;
+    if (!fleetReach(g, f).includes(last)) continue;
+    if (hand) { come.push(f); there += fleetPower(g, f); continue; }
+    const home = (!!to && to.owner === f.nat && !to.overseas) || invadedHere(g, last, f.nat);
+    commanded[f.nat] ??= airOver(g, last, f.nat, true) - airOver(g, last, f.nat, false) > NAVY.air.avoid;
+    if (commanded[f.nat] && !home) kept.push(f); else wait.push({ f, home });
+  }
+  // They come one at a time, and each that comes makes it safer for the next.
+  for (let moved = true; moved;) {
+    moved = false;
+    for (let i = 0; i < wait.length; i++) {
+      const p = fleetPower(g, wait[i].f);
+      if (there + p < (wait[i].home ? 0.5 : 1) * mine) continue;
+      come.push(wait[i].f);
+      there += p;
+      wait.splice(i--, 1);
+      moved = true;
+    }
+  }
+  return { come, kept, shy: wait.map((w) => w.f) };
+}
+
+/** The enemy's surface fleets that would come into the last sea of a crossing within the month of a landing at `to`, and are not in it now. */
+export const fleetsInReach = (g: Game, nat: string, path: number[], to?: Region): Fleet[] => fleetsAnswer(g, nat, path, to).come;
 
 /** Whether the sea behind a beach could be kept open, as things stand. Nothing is changed. */
 export function seaHold(g: Game, nat: string, path: number[], to: Region): SeaHold {
   const sea = path[path.length - 1];
   const e = seaSide(g, sea, nat, true), own = seaSide(g, sea, nat, false);
-  const come = fleetsInReach(g, nat, path).reduce((s, f) => s + fleetPower(g, f), 0);
+  const ans = fleetsAnswer(g, nat, path, to);
+  const power = (fs: Fleet[]): number => fs.reduce((s, f) => s + fleetPower(g, f), 0);
+  const come = power(ans.come), kept = power(ans.kept), shy = power(ans.shy);
   const foe = e.ships + come + e.air;
   const need = foe >= NAVY.closed.min ? foe / NAVY.closed.ratio : 0;
   const open = !(foe >= NAVY.closed.min && foe >= NAVY.closed.ratio * own.total);
   const name = g.seas[sea].name;
   const lines: TicketLine[] = [];
   if (e.ships >= 0.5) lines.push({ label: `Enemy ships in the ${name} now`, value: round(e.ships), effect: 'at sea there already' });
-  if (come >= 0.5) lines.push({ label: 'Enemy fleets that could come', value: round(come), effect: 'at their full strength, from the harbours and the seas in reach' });
+  if (come >= 0.5) lines.push({ label: 'Enemy fleets that could come', value: round(come), effect: 'at their full strength: every fleet within a month of that sea that his admirals would send' });
+  if (kept >= 0.5) lines.push({ label: 'Enemy fleets your aircraft keep away', value: round(kept), effect: 'no admiral takes his fleet under your bombers, except to save his own homeland' });
+  if (shy >= 0.5) lines.push({ label: 'Enemy fleets that will not risk it', value: round(shy), effect: 'none of them will face what you have in that sea, while it stays there' });
   if (e.air >= 0.5) lines.push({ label: `Enemy aircraft over the ${name}`, value: round(e.air), effect: 'count against the supply ships too' });
   lines.push({ label: `Your ships and aircraft in the ${name}`, value: `${round(own.ships)} and ${round(own.air)}`, effect: need <= 0 ? 'the enemy has too little in reach to close it' : open ? `more than the ${round(need)} that keep it open` : `${round(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
   lines.push({ label: 'The sea behind the beach', value: open ? 'stays open' : 'would be closed', effect: open ? 'the supply ships reach the force' : 'the force ashore would be cut off from its supplies' });
   if (!to.port) lines.push({ label: 'A harbour', value: `none at ${to.name}`, effect: 'the force is fed only once it holds a port on an open sea' });
-  return { sea, there: e.ships, come, air: e.air, foe, own, need, open, port: !!to.port, lines };
+  return { sea, there: e.ships, come, air: e.air, kept, shy, foe, own, need, open, port: !!to.port, lines };
 }
 
 const round = (x: number): string => Math.round(x).toLocaleString('en-US');

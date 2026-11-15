@@ -187,7 +187,10 @@ export function loadGame(text: string): Game | null {
   openTrade(g);
   // The supply picture is restored exactly as it stood, so the loaded game plays on identically.
   const fed = g.corps.map((c) => c.supplied);
+  // Drawing the picture marks the month a fortified port overseas last filled its stores: those marks are the save's own.
+  const stores = new Map(Object.entries(g.flags).filter(([k]) => k.startsWith('stores:')));
   computeSupply(g);
+  for (const k of Object.keys(g.flags)) if (k.startsWith('stores:')) { if (stores.has(k)) g.flags[k] = stores.get(k)!; else delete g.flags[k]; }
   g.corps.forEach((c, i) => { c.supplied = fed[i]; });
   // On a map that has grown since, the saved picture is a region short: it is drawn afresh the first time it is asked for.
   if (!grown) for (const [k, v] of Object.entries((d.supply ?? {}) as Record<string, string>)) g.supply[k] = Uint8Array.from(v, (ch) => (ch === '2' ? 2 : ch === '1' ? 1 : 0));

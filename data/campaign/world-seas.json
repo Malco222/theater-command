@@ -1,5 +1,5 @@
 {
-  "_about": "The seas of the wider world, added to those of the map of Europe (seas.json) for the grand campaign. The same rules: each zone is the water nearest its anchor point (lat, lon) by sea, 'waters' marks more of the same sea, 'air' is how much of it aircraft from its coasts can cover, and 'adjacent' lists the zones a fleet can sail between, here including the links to the seas of Europe. The seas of Europe keep their numbers; these come after them, in this order. Add new ones at the end.",
+  "_about": "The seas of the wider world, added to those of the map of Europe (seas.json) for the grand campaign. The same rules: each zone is the water nearest its anchor point (lat, lon) by sea, 'waters' marks more of the same sea, 'air' is how much of it aircraft from its coasts can cover, and 'adjacent' lists the zones a fleet can sail between, here including the links to the seas of Europe. The seas of Europe keep their numbers; these come after them, in this order. Add new ones at the end. 'gates' are passages somebody holds, as in seas.json: the Panama Canal joins the Caribbean to the Pacific coast, and is open to every nation not at war with the United States.",
   "zones": [
     {"id": "iceland", "air": 0.2, "name": "Iceland Gap", "at": [61.3, -17.5]},
     {"id": "denmark", "air": 0.2, "name": "Denmark Strait", "at": [66.6, -26.5]},
@@ -35,7 +35,9 @@
     ["florida", "gulf"], ["florida", "caribbean"], ["florida", "antilles"], ["gulf", "caribbean"],
     ["caribbean", "antilles"], ["antilles", "sargasso"], ["antilles", "tropic"], ["sargasso", "azores"], ["sargasso", "tropic"],
     ["azores", "canary"], ["canary", "tropic"],
-    ["california", "cascadia"], ["california", "tehuantepec"]
+    ["california", "cascadia"], ["california", "tehuantepec"], ["caribbean", "tehuantepec"]
   ],
-  "gates": []
+  "gates": [
+    {"between": ["caribbean", "tehuantepec"], "name": "the Panama Canal", "nation": "USA"}
+  ]
 }
