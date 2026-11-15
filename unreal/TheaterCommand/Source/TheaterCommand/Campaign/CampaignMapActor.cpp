@@ -4,6 +4,10 @@
 #include "EngineUtils.h"
 #include "Campaign/CampaignEnvironment.h"
 
+// (the land's own sun and shade at the evening: kept with the rest of the evening's look, in the room)
+FLinearColor ACampaignEnvironment_DuskSun();
+FLinearColor ACampaignEnvironment_DuskShade();
+
 #include "Campaign/ArmyPiece.h"
 #include "Campaign/CampaignFlags.h"
 #include "Campaign/CampaignMiniatures.h"
@@ -5155,9 +5159,11 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 	// brighter than they were first mixed), and by moonlight both of them cool. By lamplight they stay as by day.
 	if (LandMaterial)
 	{
-		const float Moon = bLamplight ? 0.0f : Night;
-		LandVector(TEXT("SunColour"), FMath::Lerp(FLinearColor(0.69f, 0.62f, 0.5f), FLinearColor(0.77f, 0.81f, 1.0f), Moon));
-		LandVector(TEXT("ShadeColour"), FMath::Lerp(FLinearColor(0.43f, 0.48f, 0.58f), FLinearColor(0.44f, 0.48f, 0.7f), Moon));
+		// (The art director's ruling of round 26: the moon's grading comes in after the evening, not through it. The
+		// evening has a sun and a shade of its own on the land: gold on the slopes the lamp lights, cool in the shade.)
+		const float Moon = bLamplight ? 0.0f : ACampaignEnvironment::MoonOf(Night), Dusk = bLamplight ? 0.0f : ACampaignEnvironment::DuskOf(Night);
+		LandVector(TEXT("SunColour"), FMath::Lerp(FMath::Lerp(FLinearColor(0.69f, 0.62f, 0.5f), ACampaignEnvironment_DuskSun(), Dusk), FLinearColor(0.77f, 0.81f, 1.0f), Moon));
+		LandVector(TEXT("ShadeColour"), FMath::Lerp(FMath::Lerp(FLinearColor(0.43f, 0.48f, 0.58f), ACampaignEnvironment_DuskShade(), Dusk), FLinearColor(0.44f, 0.48f, 0.7f), Moon));
 		if (PieceMaterial)
 		{
 			// (and the pieces: under a blue moon a blue base was the loudest thing on the table after the fires.
@@ -5182,7 +5188,7 @@ void ACampaignMapActor::SetNight(float Night, bool bLamplight)
 		// in it), the shelf seas taken down a little so that moonlit land is brighter than the water beside it, the
 		// deeps lifted a touch, and a thin pale line of surf kept along the shore. Rivers go to steel. By lamplight
 		// all of it stays as by day.
-		const float Moon = bLamplight ? 0.0f : Night;
+		const float Moon = bLamplight ? 0.0f : ACampaignEnvironment::MoonOf(Night);
 		if (SeaMaterial)
 		{
 			SeaScalar(TEXT("Grey"), SeaNight.X * Moon);

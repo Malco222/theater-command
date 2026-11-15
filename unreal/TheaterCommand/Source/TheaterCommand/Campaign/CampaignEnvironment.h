@@ -34,6 +34,15 @@ public:
 	/** How far into the night the room's light has gone, 0 to 1. */
 	float GetNight() const { return Night; }
 	/**
+	 * The two parts of the hour's light (the art director's ruling of round 26). The evening is not a point on a
+	 * straight road from the warm day to the blue night, which passes through grey: it is a light of its own, amber
+	 * on what the lamp lights and cool in the shade, most itself where the evening rests when a month ends. The
+	 * moon's blue comes in only after it.
+	 */
+	static float DuskOf(float Night); // how much of the evening's own light there is: 0 by day, 1 where the evening rests, 0 from the deep of the night
+	static float MoonOf(float Night); // how far the moonlight has come in: 0 until the evening rests, 1 at night
+	static float DuskRests(); // how far into the night the evening rests when a month ends
+	/**
 	 * Dusk when the month ends (Brian's approved list). While the rest of the world moves, evening comes over the
 	 * table: not the full night, so that the others' moves are still seen. With the player's new month it is
 	 * morning again, and the room's day begins afresh from there. Nothing where the player has held the hour (T).

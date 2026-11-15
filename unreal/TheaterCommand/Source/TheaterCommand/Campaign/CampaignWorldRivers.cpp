@@ -26,7 +26,7 @@ float FCampaignWorldRivers::HalfBreadth(float Water)
 	const float Doublings = FMath::Log2(FMath::Max(Water, 3500.0f) / 3500.0f);
 	if (Doublings >= 6.0f)
 	{
-		return FMath::Min(0.59f + 0.22f * (Doublings - 6.0f), 1.6f);
+		return FMath::Min(0.59f + 0.2f * (Doublings - 6.0f), 1.6f);
 	}
 	return FMath::Lerp(0.1f, 0.59f, FMath::SmoothStep(4.3f, 6.0f, Doublings));
 }
@@ -45,7 +45,7 @@ float FCampaignWorldRivers::FCourse::BreadthFor(float WaterThere) const
 		// (A tributary is at its broadest where it joins its river, and narrows from there up: more quickly than the
 		// water it carries would have it, or a long tributary is one even band from end to end.)
 		const float AtMouth = FMath::Max(HalfBreadth(Water.Last()), 0.1f);
-		Half = FMath::Min(Half, FMath::Max(HalfCap * FMath::Pow(Half / AtMouth, 1.4f), 0.1f));
+		Half = FMath::Min(Half, FMath::Max(HalfCap * FMath::Pow(Half / AtMouth, 1.6f), 0.1f));
 	}
 	return FMath::Min(Half, HalfCap);
 }
@@ -135,7 +135,7 @@ void FCampaignWorldRivers::Load()
 			return;
 		}
 		Rank(Course.Joins, Depth + 1);
-		Course.HalfCap = 0.4f * Courses[Course.Joins].BreadthFor(Course.JoinsWater);
+		Course.HalfCap = 0.36f * Courses[Course.Joins].BreadthFor(Course.JoinsWater);
 	};
 	int32 Rivers = 0;
 	for (int32 Index = 0; Index < Courses.Num(); ++Index)

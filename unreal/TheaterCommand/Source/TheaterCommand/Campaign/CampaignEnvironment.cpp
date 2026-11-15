@@ -13,10 +13,75 @@
 
 namespace
 {
-	// How far into the night the evening goes that comes when a month ends, and how warm dusk and dawn are.
-	const float DuskDepth = 0.5f;
-	const float DuskWarmth = 0.5f;
+	/**
+	 * The evening's light, as the art director ruled it in round 26 by its results at the resting evening: lit
+	 * ground red to blue 1.7 to 1.9, shaded ground 0.95 to 1.1, the land's colour kept, every nation still its own.
+	 * ("-TheaterDuskLook=rests,amberR,amberG,amberB,amber,dim,coolR,coolG,coolB,cool,sunR,sunG,sunB,shadeR,shadeG,shadeB"
+	 * tries others without a rebuild.)
+	 */
+	struct FDuskLook
+	{
+		float Rests = 0.4f; // how far into the night the evening rests when a month ends
+		FLinearColor Amber = FLinearColor(1.0f, 0.84f, 0.68f); // the lamp's light at the evening: only a little amber, since it falls on lit and shaded ground alike
+		float AmberShare = 0.6f; // how far the lamp's light is that amber where the evening rests
+		float Dim = 0.2f; // how much of the lamp's and the room's light is gone by then
+		FLinearColor Cool = FLinearColor(0.5f, 0.66f, 1.0f); // the fill's and the sky's light at the evening
+		float CoolShare = 0.9f;
+		// (The land's own printed sun and shade at the evening carry most of it: gold on the slopes that face the
+		// lamp, blue in the shade. Measured at working height over Silesia, by the art director's own measures: lit
+		// ground red to blue 1.77, shaded 1.11, the map's median brightness a quarter, Germany against Poland four
+		// fifths of what it is by day.)
+		FLinearColor Sun = FLinearColor(1.0f, 0.64f, 0.2f);
+		FLinearColor Shade = FLinearColor(0.2f, 0.43f, 0.88f);
+	};
+	const FDuskLook& DuskLook()
+	{
+		static FDuskLook Kept;
+		static bool bRead = false;
+		if (!bRead)
+		{
+			bRead = true;
+			FString Asked;
+			TArray<FString> Parts;
+			if (FParse::Value(FCommandLine::Get(), TEXT("TheaterDuskLook="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) >= 10)
+			{
+				auto Number = [&Parts](int32 K) { return FCString::Atof(*Parts[K]); };
+				Kept.Rests = Number(0);
+				Kept.Amber = FLinearColor(Number(1), Number(2), Number(3));
+				Kept.AmberShare = Number(4);
+				Kept.Dim = Number(5);
+				Kept.Cool = FLinearColor(Number(6), Number(7), Number(8));
+				Kept.CoolShare = Number(9);
+				if (Parts.Num() >= 16)
+				{
+					Kept.Sun = FLinearColor(Number(10), Number(11), Number(12));
+					Kept.Shade = FLinearColor(Number(13), Number(14), Number(15));
+				}
+			}
+		}
+		return Kept;
+	}
 }
+
+float ACampaignEnvironment::DuskRests()
+{
+	return DuskLook().Rests;
+}
+
+float ACampaignEnvironment::DuskOf(float Night)
+{
+	// (nothing by day, all of it where the evening rests, gone again by twice that far into the night)
+	const float Rests = FMath::Max(DuskLook().Rests, 0.05f);
+	return FMath::SmoothStep(0.0f, 1.0f, FMath::Clamp(1.0f - FMath::Abs(Night - Rests) / Rests, 0.0f, 1.0f));
+}
+
+float ACampaignEnvironment::MoonOf(float Night)
+{
+	return FMath::SmoothStep(DuskLook().Rests, 1.0f, Night);
+}
+
+FLinearColor ACampaignEnvironment_DuskSun() { return DuskLook().Sun; }
+FLinearColor ACampaignEnvironment_DuskShade() { return DuskLook().Shade; }
 
 ACampaignEnvironment::ACampaignEnvironment()
 {
@@ -208,7 +273,7 @@ void ACampaignEnvironment::Tick(float DeltaSeconds)
 		// (the month has ended: evening, whatever the hour was, and night if it was night already)
 		if (bMonthsEnd)
 		{
-			Wanted = FMath::Max(Wanted, DuskDepth);
+			Wanted = FMath::Max(Wanted, DuskRests());
 		}
 	}
 	// A held time is come to over a few seconds, not at a jump.
@@ -282,17 +347,19 @@ void ACampaignEnvironment::LightRoom()
 		// Night is moonlight: cool and low, from the same quarter as the day's light, so the hills keep their
 		// shadows. Enough of it to read the table by, with the colour drained and blue.
 		// (The blue is in the light itself and not in the lens, so that the lamps of the towns stay warm in it.)
-		KeyLight->SetTemperature(FMath::Lerp(DayWarmth, 6500.0f, Night));
+		// (The evening before it is a light of its own: the lamp's light amber and lower, the fill and the sky gone
+		// cool, so that the slopes the lamp lights go gold and the shade goes blue. The moon comes in after it.)
+		const FDuskLook& Look = DuskLook();
+		const float Dusk = DuskOf(Night), Moon = MoonOf(Night), Left = 1.0f - Look.Dim * Dusk;
+		KeyLight->SetTemperature(FMath::Lerp(DayWarmth, 6500.0f, Moon));
 		// (the land carries moon colours of its own to go with this light: see the map's SetNight. The key is kept
 		// low and blue so that the yellow of autumn woods does not shine out of the dark like lamps.)
-		KeyLight->SetIntensity(FMath::Lerp(DayKey, 3.0f, Night));
-		// (Dusk and dawn are warm before they are blue: between the day and the night the light goes through amber,
-		// most of it a little under half way, and none of it by day or once the night is two thirds come.)
-		const float Glow = FMath::Clamp(1.0f - FMath::Abs(Night - 0.4f) / 0.4f, 0.0f, 1.0f);
-		KeyLight->SetLightColor(FMath::Lerp(FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.5f, 1.0f), Night), FLinearColor(1.0f, 0.6f, 0.34f), DuskWarmth * Glow));
-		FillLight->SetIntensity(FMath::Lerp(DayFill, 0.55f, Night));
-		SkyLight->SetIntensity(FMath::Lerp(0.72f, 0.52f, Night));
-		SkyLight->SetLightColor(FMath::Lerp(FLinearColor::White, FLinearColor(0.42f, 0.58f, 1.0f), Night));
+		KeyLight->SetIntensity(FMath::Lerp(DayKey, 3.0f, Moon) * Left);
+		KeyLight->SetLightColor(FMath::Lerp(FMath::Lerp(FLinearColor::White, Look.Amber, Look.AmberShare * Dusk), FLinearColor(0.3f, 0.5f, 1.0f), Moon));
+		FillLight->SetIntensity(FMath::Lerp(DayFill, 0.55f, Moon) * Left);
+		FillLight->SetLightColor(FMath::Lerp(FLinearColor::White, Look.Cool, Look.CoolShare * Dusk));
+		SkyLight->SetIntensity(FMath::Lerp(0.72f, 0.52f, Moon) * Left);
+		SkyLight->SetLightColor(FMath::Lerp(FMath::Lerp(FLinearColor::White, Look.Cool, Look.CoolShare * Dusk), FLinearColor(0.42f, 0.58f, 1.0f), Moon));
 	}
 }
 

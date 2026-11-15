@@ -1,4 +1,5 @@
 #include "Campaign/CampaignCameraPawn.h"
+#include "Campaign/CampaignEnvironment.h"
 
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -261,7 +262,7 @@ void ACampaignCameraPawn::SetNight(float Night, bool bLamplight)
 	{
 		return;
 	}
-	const double Moon = bLamplight ? 0.0 : Night;
+	const double Moon = bLamplight ? 0.0 : ACampaignEnvironment::MoonOf(Night); // (the lens loses its colour to the moon, not to the evening)
 	FPostProcessSettings& Look = Camera->PostProcessSettings;
 	Look.bOverride_ColorSaturation = true;
 	// (only a little: the moon's blue is in the light, so the towns' lamps keep their warmth)

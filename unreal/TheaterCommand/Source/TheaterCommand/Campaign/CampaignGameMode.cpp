@@ -95,6 +95,13 @@ void ACampaignGameMode::InitGame(const FString& MapName, const FString& Options,
 
 	ApplyCampaignRendering();
 	ApplyWindow();
+	// (The engine writes messages of its own across the screen: "Preparing Shaders" the first time a paint is used,
+	// and how to turn such messages off. They are not for a player: the game shows none. "-TheaterEngineMessages"
+	// leaves them on.)
+	if (!FParse::Param(FCommandLine::Get(), TEXT("TheaterEngineMessages")))
+	{
+		GAreScreenMessagesEnabled = false;
+	}
 
 	UWorld* World = GetWorld();
 	if (!World)
