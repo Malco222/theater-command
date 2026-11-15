@@ -1284,6 +1284,12 @@ function redeploy(g: Game, nat: string, ph: PlanPhase, enemies: Set<string>): vo
   }
   // Small forces kept at a jumping-off point for a later operation.
   const staged = new Set<number>();
+  // (The grand campaign: whoever already stands at one of these places stays there. The watch in one harbour is
+  // not put on a train to make up the force wanted at the next.)
+  if (isOpen(g)) for (const name of Object.keys(ph.staging ?? {})) {
+    const r = g.byName[name];
+    if (r && allied(g, nat, r.ctrl)) for (const u of r.units) if (u.nat === nat && !u.hold) staged.add(u.id);
+  }
   for (const [name, count] of Object.entries(ph.staging ?? {})) {
     const r = g.byName[name];
     if (!r || !allied(g, nat, r.ctrl)) continue;

@@ -48,7 +48,7 @@
   },
   "temper": {
     "_default": { "persist": 0.85, "minOdds": 1.4 },
-    "GER": { "attackAt": 1.0, "persist": 0.6, "minOdds": 1.3 },
+    "GER": { "attackAt": 1.2, "persist": 0.9, "minOdds": 1.3 },
     "ITA": { "attackAt": 1.5, "persist": 0.9, "minOdds": 1.3 },
     "SOV": { "attackAt": 1.3, "persist": 0.8, "minOdds": 1.2 },
     "UK": { "attackAt": 1.5, "persist": 0.9, "minOdds": 1.3 },

@@ -1,7 +1,7 @@
 {
   "_about": "Manpower (the grand campaign). Every nation has a reserve of men fit to bear arms, counted in divisions' worth (15,000 men). The replacements that fill up worn corps and every new corps are drawn from it, and each month a class comes of age and joins it. A nation whose reserve is spent makes good only what the month's class allows and raises no new corps. The same rule holds for the player and the computer. The historical scenarios have none of this. Rules in src/campaign/manpower.ts.",
   "pool": { "GER": 110, "SOV": 375, "UK": 45, "FRA": 55, "ITA": 35, "USA": 150 },
-  "class": { "GER": 3.4, "SOV": 7.0, "UK": 0.9, "FRA": 0.9, "ITA": 0.7, "USA": 3.0 },
+  "class": { "GER": 2.4, "SOV": 7.0, "UK": 0.9, "FRA": 0.9, "ITA": 0.7, "USA": 3.0 },
   "minor": { "pool": 2, "perDiv": 0.6, "classShare": 0.02 },
   "most": 1,
   "spentAYear": 0.12,
