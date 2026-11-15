@@ -62,7 +62,7 @@ import {
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
 import { phaseFor, theatrePhases } from '../ai';
-import { SIDE_NAME } from '../domination';
+import { SIDE_NAME, shareWords } from '../domination';
 import { GOALS, GOAL_KEYS, goalChecks, goalState, goalWhen, judgeGoals, openGoals, weeksLasted } from '../goals';
 import { RIVALS, fronts, isOpen, startOpen, type Front } from '../staff';
 import { liberate } from '../liberation';
@@ -3519,10 +3519,16 @@ function worldPane(): string {
   const me = g.human;
   const winner = B.winner ? g.nations[B.winner] : null;
   const head = winner
-    ? `<p class="sub"><b>${esc(winner.name)} stands alone.</b> The last war began in ${date(B.since)} with ${B.began} nations and ended in ${date(g.flags['dom:won'] ?? g.turn)}.</p>`
-    : `<p class="sub">Every nation for itself since ${date(B.since)}. <b>${B.left} of ${B.began}</b> still stand, every one of them at war with all the rest, and the last one standing takes the world.</p>`;
+    ? `<p class="sub"><b>${esc(winner.name)} stands alone.</b> The last war began in ${date(B.since)} with ${B.began} nations and ended in ${date(g.flags['dom:won'] ?? g.turn)}${B.laid ? `, when the last ${B.laid === 1 ? 'country' : `${B.laid} countries`} still standing laid down ${B.laid === 1 ? 'its' : 'their'} arms` : ''}.</p>`
+    : `<p class="sub">Every nation for itself since ${date(B.since)}. <b>${B.left} of ${B.began}</b> still stand, every one of them at war with all the rest. The world goes to the <b>last great power standing</b>, once it holds <b>${shareWords(B.need)}</b> of it: the countries still standing then lay down their arms.</p>`;
   const mine = B.rows.find((r) => r.you);
-  const facts = mine && !winner ? `<div class="facts"><div class="fact"><span>Still standing</span><b>${B.left}</b></div><div class="fact"><span>Your share</span><b>${Math.round(mine.share * 100)}%</b></div><div class="fact"><span>Your place</span><b>${B.rows.indexOf(mine) + 1}${['st', 'nd', 'rd'][B.rows.indexOf(mine)] ?? 'th'}</b></div></div>` : '';
+  // The two tests for winning the world, as they stand for the player: the great powers still against him, and his share.
+  const rivals = B.great.filter((id) => id !== me);
+  const need = Math.round(B.need * 100);
+  const tests = mine && !winner
+    ? `<div class="wtests"><div class="wtest${rivals.length ? '' : ' met'}"><span>${rivals.length ? '○' : '✓'}</span><div><b>${rivals.length ? `${rivals.length === 1 ? 'One great power' : `${rivals.length} great powers`} still to beat` : 'No great power stands against you'}</b><small>${rivals.length ? esc(listOf(rivals.map((id, k) => (k ? theName(id) : natName(id))))) : 'The first test is met.'}</small></div></div><div class="wtest${mine.share >= B.need ? ' met' : ''}"><span>${mine.share >= B.need ? '✓' : '○'}</span><div><b>${Math.round(mine.share * 100)}% of the world is yours</b><small>It takes ${need}%.</small><div class="meter"><i style="width:${Math.min(100, Math.round((mine.share / B.need) * 100))}%"></i></div></div></div></div>`
+    : '';
+  const facts = mine && !winner ? `<div class="facts"><div class="fact"><span>Still standing</span><b>${B.left}</b></div><div class="fact"><span>Your share</span><b>${Math.round(mine.share * 100)}%</b></div><div class="fact"><span>Your place</span><b>${B.rows.indexOf(mine) + 1}${['st', 'nd', 'rd'][B.rows.indexOf(mine)] ?? 'th'}</b></div></div>${tests}` : '';
   const since = B.fallen.filter((r) => r.fell!.turn >= B.since);
   const fell = (r: typeof B.fallen[number]): string => `<div class="wrow gone">${chip(r.nat)}<span class="grow"><b>${esc(r.name)}</b><small>fell in ${date(r.fell!.turn)} to ${esc(theName(r.fell!.to))}${r.fell!.to === me ? ' <i class="tag good">Yours</i>' : ''}</small></span></div>`;
   return `<h2>World Domination</h2>${head}${facts}
@@ -3560,7 +3566,7 @@ function lastActCard(ask: boolean): string {
     <p class="lead quiet">The guns fall silent, and the victors look at one another across the table. An alliance made against a common enemy has no enemy left, and every general knows how many divisions his friends still have in the field.</p>
     <div class="facts"><div class="fact"><span>Nations still standing</span><b>${B.left}</b></div><div class="fact"><span>Your share of the world</span><b>${you ? Math.round(you.share * 100) : 0}%</b></div>${rival ? `<div class="fact"><span>The strongest of the others</span><b>${esc(rival.name)} <small>${armyWords({ divs: rival.divisions, exact: rival.exact, few: rival.few })}</small></b></div>` : ''}</div>
     ${peace}
-    <div class="pathrow domrow${ask ? ' now' : ''}"><div class="pathhead"><b>World Domination</b>${btn}</div><p>Every alliance is dissolved. All ${B.left} nations still standing, yesterday's allies among them, are at war with one another from today. Troops on a former ally's soil go home under safe conduct. Nobody makes peace again: <b>the last nation standing has the world</b>.</p></div>
+    <div class="pathrow domrow${ask ? ' now' : ''}"><div class="pathhead"><b>World Domination</b>${btn}</div><p>Every alliance is dissolved. All ${B.left} nations still standing, yesterday's allies among them, are at war with one another from today. Troops on a former ally's soil go home under safe conduct. Nobody makes peace again: <b>the last great power standing has the world</b> once it holds ${shareWords(B.need)} of it, and the countries still standing then lay down their arms.</p></div>
     ${can ? '' : `<div class="note">${esc(act.why ?? 'Orders are given in your own month.')}</div>`}</div>
     <footer><button class="btn go" data-act="close">Decide later</button></footer>`;
 }
@@ -3609,7 +3615,7 @@ function worldWonCard(): string {
   const since = B.fallen.filter((r) => r.fell!.turn >= B.since);
   const yours = since.filter((r) => r.fell!.to === me.id);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">World Domination · ${date(g.flags['dom:won'] ?? g.turn)}</div><h2>${flagIcon(me.id, me.color, 34, 'inh')} ${esc(me.name)} stands alone</h2></header>
-    <div class="body path lastact"><p class="lead"><b>There is nobody left to fight.</b> Every capital on the map answers to ${esc(cap)}, ${months} ${months === 1 ? 'month' : 'months'} after the alliances were dissolved. Of the ${B.began} nations that began the last war, one is left, and it is yours.</p>
+    <div class="body path lastact"><p class="lead">${B.laid ? `<b>No great power is left to fight you.</b> You hold ${Math.round((B.rows[0]?.share ?? 1) * 100)}% of the world, and the last ${B.laid === 1 ? 'country' : `${B.laid} countries`} still standing ${B.laid === 1 ? 'has' : 'have'} laid down ${B.laid === 1 ? 'its' : 'their'} arms.` : '<b>There is nobody left to fight.</b>'} Every capital on the map answers to ${esc(cap)}, ${months} ${months === 1 ? 'month' : 'months'} after the alliances were dissolved. Of the ${B.began} nations that began the last war, one is left, and it is yours.</p>
     <div class="facts"><div class="fact"><span>The last war</span><b>${months} <small>${months === 1 ? 'month' : 'months'}</small></b></div><div class="fact"><span>Nations you brought down</span><b>${yours.length} <small>of ${since.length}</small></b></div><div class="fact"><span>Your army today</span><b>${num(B.rows[0]?.divisions ?? 0)} <small>divisions</small></b></div></div>
     ${since.length ? `<h3>How the world fell</h3><div class="wboard">${since.map((r) => `<div class="wrow gone">${chip(r.nat)}<span class="grow"><b>${esc(r.name)}</b><small>${date(r.fell!.turn)}, to ${esc(theName(r.fell!.to))}</small></span></div>`).join('')}</div>` : ''}</div>
     <footer><button class="btn" data-act="new">New game</button><button class="btn go" data-act="close">Look at your world</button></footer>`;

@@ -84,6 +84,8 @@ let bound: Set<string> | null = null;
 let massed = new Set<number>();
 /** Ground the plan in force is giving up: the corps there march out and nobody is sent back in. */
 let given = new Set<number>();
+/** Places the staff has stepped out of this month because the ring was closing round them: no garrison is left behind there. */
+let sacks = new Set<number>();
 
 /** True for ground in a side theatre where this nation has a plan of its own: the army there looks after it, not the main plan. */
 const aside = (g: Game, r: Region, nat: string): boolean => r.theatre >= 0 && !!THEATRES[r.theatre] && apart(g, r.theatre, nat);
@@ -153,7 +155,8 @@ function campaign(g: Game, nat: string): void {
   foldWorn(g, nat);
   // The grand campaign: garrisons with no enemy near come out of their towns before the month's marching begins.
   garrisons(g, nat, false);
-  try { campaignMoves(g, nat); } finally { if (n.alive) garrisons(g, nat, true); }
+  sacks = new Set();
+  try { campaignMoves(g, nat); } finally { if (n.alive) garrisons(g, nat, true); sacks = new Set(); }
 }
 
 /**
@@ -185,7 +188,8 @@ function garrisons(g: Game, nat: string, post: boolean): void {
       continue;
     }
     const want = SIEGE.ai.hold[townSize(g, r)] ?? (r.fort ? 1 : 0);
-    if (inside.length >= want || !near(r, 1)) continue;
+    // (A place the staff stepped out of this month, because the ring was closing round it, is left no garrison.)
+    if (inside.length >= want || !near(r, 1) || sacks.has(r.id)) continue;
     const foot = r.units.filter((c) => c.nat === nat && !c.dead && c.kind === 'inf' && c.joint === undefined).sort((a, b) => corpsBase(g, a) - corpsBase(g, b));
     let field = r.units.filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && c.kind !== 'eng').length, have = inside.length;
     for (const c of foot) {
@@ -489,6 +493,9 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   hold(g, nat, ph);
   // The coast watch is set before anybody marches for the front: a corps that has gone forward is not called back.
   mass(g, nat, ph, true);
+  breakOut(g, nat);
+  if (!n.alive) return;
+  stepBack(g, nat);
   fallBack(g, nat);
   if (posture === 'defend') {
     gather(g, nat, ph); mass(g, nat, ph);
@@ -626,6 +633,148 @@ function fallBack(g: Game, nat: string, cap = g.nations[nat].capital): void {
       if (!to || c.ap < Math.min(moveCost(g, c, to), 4) || !moveCorps(g, c, to)) break;
     }
   });
+}
+
+/**
+ * A force that has been ringed tries to get back to its own lines (the grand campaign, the staffs named in
+ * rivals.json under `ring`). A place with the staff's field corps in it and no road home over friendly ground is
+ * cut off. Where ground that still joins the country lies within a few marches the corps make for it by the
+ * shortest way. Through a province the enemy holds but has left empty one corps marches, taking it, and the road
+ * is open again; where he stands on the way, the ringed corps next to him attack together with any of the army
+ * outside that stand next to him, if the odds are good enough, and go through if they win. Corps deeper in the ring close up behind. Whoever the plan keeps at a place
+ * stays, and so does a force with no way it can take.
+ */
+function breakOut(g: Game, nat: string): void {
+  const R = RIVALS.ring;
+  const n = g.nations[nat];
+  if (!R || scope || !rivalRules(g) || nat === g.human || !R.staffs.includes(nat) || n.capital < 0) return;
+  const friendly = (x: Region): boolean => allied(g, nat, ctl(g, x));
+  const field = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && !c.dyle && c.joint === undefined && !massed.has(c.id) && c.ap > 0;
+  const tried = new Set<number>();
+  for (let round = 0; round < 2 * R.reach && n.alive; round++) {
+    if (!friendly(g.regions[n.capital])) return;
+    ensureSupply(g);
+    const home = hops(g, n.capital, friendly);
+    const cut = g.regions.filter((r) => home[r.id] < 0 && friendly(r) && !aside(g, r, nat) && r.units.some(field));
+    if (!cut.length) return;
+    // How many marches each place lies from the country, over ground that is friendly or an enemy's.
+    const far = new Int16Array(g.regions.length).fill(-1);
+    const q: number[] = [];
+    for (const r of g.regions) if (home[r.id] >= 0) { far[r.id] = 0; q.push(r.id); }
+    for (let i = 0; i < q.length; i++) {
+      if (far[q[i]] >= R.reach) continue;
+      for (const j of g.regions[q[i]].nb) {
+        const x = g.regions[j];
+        if (far[j] >= 0 || !(friendly(x) || atWar(g, nat, ctl(g, x)))) continue;
+        far[j] = far[q[i]] + 1; q.push(j);
+      }
+    }
+    let did = false;
+    for (const r of cut.sort((a, b) => far[a.id] - far[b.id] || a.id - b.id)) {
+      if (far[r.id] < 0) continue;
+      const nexts = r.nb.map((j) => g.regions[j]).filter((x) => far[x.id] >= 0 && far[x.id] < far[r.id]);
+      const corps = r.units.filter(field).sort((a, b) => b.ap - a.ap || a.id - b.id);
+      // A way with nobody on it: friendly ground nearer the country, or a province the enemy has left empty.
+      const open = nexts.filter((x) => !hostileUnits(g, x, nat).length).sort((a, b) => (friendly(a) ? 0 : 1) - (friendly(b) ? 0 : 1) || a.id - b.id);
+      let moved = false;
+      for (const x of open) {
+        // One corps through an empty province opens the road, and the rest wait to see it held. Over ground still
+        // friendly the whole force closes up toward the country.
+        const ours = friendly(x);
+        for (const c of corps) {
+          if (blocked(g, c, x) || !hasRoom(g, x, c) || c.ap < Math.min(moveCost(g, c, x), 4)) continue;
+          if (moveCorps(g, c, x)) { moved = true; if (!ours) break; }
+        }
+        if (moved) break;
+      }
+      if (moved) { did = true; break; }
+      // The enemy stands on every way: the weakest place on the road home is attacked by everyone next to it,
+      // the ringed corps from inside and whoever of the army stands next to it outside.
+      let best: { x: Region; pool: Corps[]; odds: number } | null = null;
+      for (const x of nexts) {
+        if (tried.has(x.id) || !hostileUnits(g, x, nat).length) continue;
+        const near = x.nb.map((j) => g.regions[j]).filter((y) => friendly(y) && !aside(g, y, nat)).flatMap((y) => y.units.filter(field)).filter((c) => !blocked(g, c, x) && c.org >= 0.35);
+        const pool = limitAttackers(g, near, x);
+        if (!pool.length) continue;
+        const odds = assess(g, pool, x).odds;
+        if (odds >= R.odds && (!best || odds > best.odds)) best = { x, pool, odds };
+      }
+      if (best) { tried.add(best.x.id); resolveBattle(g, best.pool, best.x); did = true; break; }
+    }
+    if (!did) return;
+  }
+}
+
+/**
+ * A staff that will not be ringed (the grand campaign, the staffs named in rivals.json under `ring`). Before the
+ * month's operations it looks at each place of its own that faces the enemy. The ways out of a place are the
+ * friendly places next door that lie no further from the capital. Where few are left and none of them is safe (no
+ * enemy next to it, or held well enough against what stands there), the ring is closing: the place is given up, and
+ * so is any place whose only ways out run through ground being given up. A garrison comes out of the town and the
+ * field corps march out by the way with room nearest home, a stage further where they come to more ground being
+ * given up. The capital is never given up, a force the plan keeps massed stays, and where no way out is left the
+ * corps stand and fight where they are.
+ */
+function stepBack(g: Game, nat: string): void {
+  const R = RIVALS.ring;
+  const n = g.nations[nat];
+  if (!R || scope || !rivalRules(g) || nat === g.human || !R.staffs.includes(nat) || n.capital < 0 || !allied(g, nat, ctl(g, g.regions[n.capital]))) return;
+  ensureSupply(g);
+  const friendly = (x: Region): boolean => allied(g, nat, ctl(g, x));
+  const home = hops(g, n.capital, friendly);
+  const press = (r: Region): number => {
+    let t = 0;
+    for (const j of r.nb) {
+      const e = g.regions[j];
+      if (!atWar(g, nat, ctl(g, e))) continue;
+      const foes = hostileUnits(g, e, nat).filter((u) => u.kind !== 'fort').map((u) => atkPower(g, u)).sort((a, b) => b - a);
+      for (const p of foes.slice(0, frontage(r))) t += p;
+    }
+    return t;
+  };
+  const stand = (r: Region): number => friendlyUnits(g, r, nat).reduce((sum, u) => sum + defPower(g, u, r), 0);
+  const ways = (r: Region): Region[] => r.nb.map((j) => g.regions[j]).filter((x) => friendly(x) && !hostileUnits(g, x, nat).length && home[x.id] >= 0 && home[x.id] <= home[r.id]);
+  const safe = (x: Region): boolean => { if (given.has(x.id)) return false; const t = press(x); return t === 0 || stand(x) >= R.safe * t; };
+  // The staff's own ground, and an ally's where its corps stand in the field.
+  const own = g.regions.filter((r) => friendly(r) && !aside(g, r, nat) && (ctl(g, r) === nat || r.owner === nat || r.units.some((u) => u.nat === nat && u.kind !== 'fort')) && r.id !== n.capital && home[r.id] > 0 && !entrusted.has(r.id));
+  const found = new Set<number>();
+  for (let pass = 0; pass < 4; pass++) {
+    let more = false;
+    for (const r of own) {
+      if (given.has(r.id)) continue;
+      const w = ways(r);
+      if (!w.length || w.length > R.exits || w.some(safe)) continue;
+      // A place with no enemy next to it goes only when every way out of it runs through ground being given up.
+      if (press(r) === 0 && !w.every((x) => given.has(x.id))) continue;
+      given.add(r.id); found.add(r.id); more = true;
+    }
+    if (!more) break;
+  }
+  if (!found.size) return;
+  for (const id of found) {
+    sacks.add(id);
+    for (const c of [...garrisonOf(g.regions[id])]) if (c.nat === nat) takeField(g, c);
+  }
+  // Those nearest home go first and leave room behind them.
+  const leaving = g.corps
+    .filter((c) => c.nat === nat && !c.dead && c.kind !== 'fort' && !c.hold && !c.dyle && c.joint === undefined && !massed.has(c.id) && found.has(c.reg))
+    .sort((a, b) => home[a.reg] - home[b.reg] || a.id - b.id);
+  for (const c of leaving) {
+    for (let step = 0; step < R.steps && c.ap > 0 && given.has(c.reg); step++) {
+      let to: Region | null = null;
+      const worse = (x: Region): number => (given.has(x.id) ? 1000 : 0) + 10 * home[x.id] + friendlyUnits(g, x, nat).length;
+      for (const x of ways(g.regions[c.reg])) {
+        if (friendlyUnits(g, x, nat).length >= STACK || blocked(g, c, x) || c.ap < Math.min(moveCost(g, c, x), 4)) continue;
+        if (!to || worse(x) < worse(to)) to = x;
+      }
+      if (!to || !moveCorps(g, c, to)) break;
+    }
+  }
+}
+
+/** The staff's two judgements against a ring, made on their own as they are at the start of its month: the places it gives up. */
+export function ringJudgement(g: Game, nat: string): number[] {
+  try { breakOut(g, nat); if (g.nations[nat].alive) stepBack(g, nat); return [...sacks]; } finally { given = new Set(); sacks = new Set(); }
 }
 
 /**

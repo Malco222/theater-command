@@ -51,6 +51,10 @@
     "_note": "A computer staff folds two of its corps into one where both are under 'worn' of their strength and the corps kept would not be over strength. The cadre is raised again from the arsenal when the treasury allows, 'cadres' on order at a time.",
     "worn": 0.4, "cadres": 1
   },
+  "ring": {
+    "_note": "A staff that will not be ringed (Version 71; a judgement of the staff's, not a rule of the game). Before its month's operations each staff named in 'staffs' looks at the places of its own that face the enemy. The ways out of a place are the friendly places next door that lie no further from its capital. Where 'exits' or fewer are left and none is safe (a way out is safe with no enemy next to it, or held with 'safe' of what stands against it), the place is given up: a garrison comes out of the town, the field corps march out by the way with room nearest home, up to 'steps' stages where they come to more ground being given up, and nobody is sent back in that month. The capital is never given up. A force already ringed tries to get back first: where ground that still joins the country lies within 'reach' marches, one corps walks through any province on the way that the enemy holds but has left empty, taking it; where he stands on the way, the ringed corps next to him and any of the army outside that stand next to him attack together if the odds reach 'odds', and go through if they win. With the road open again the place is a sack like any other and is left. Only Germany's staff is named: its armies were being ringed whole by a careful Soviet player (about 85 divisions a war lost with no way out in Version 69).",
+    "staffs": ["GER"], "exits": 2, "safe": 0.67, "steps": 3, "reach": 3, "odds": 1
+  },
   "exhaust": {
     "_note": "A finish for a war that is won. A computer nation whose capital has been in enemy hands for more than 'after' months wears out: every month after that adds 'per' to how near it is to giving in, until it asks for terms. The player's own country is never worn out this way.",
     "after": 12, "per": 0.01

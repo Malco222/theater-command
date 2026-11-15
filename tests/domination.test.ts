@@ -3,9 +3,9 @@
 import { describe, expect, it } from 'vitest';
 import { DIPLOMACY } from '../src/campaign/diplomacy';
 import {
-  DOMINATION, contenders, crown, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldWinner,
+  DOMINATION, contenders, crown, dominating, keepPeace, startDomination, warDecided, whyNotDomination, worldBoard, worldTests, worldWinner,
 } from '../src/campaign/domination';
-import { allied, atWar, bloc, capitulate, createGame, fieldArmy } from '../src/campaign/game';
+import { allied, atWar, bloc, capitulate, createGame, fieldArmy, removeCorps } from '../src/campaign/game';
 import { fogOn } from '../src/campaign/intel';
 import { pathOptions } from '../src/campaign/league';
 import { loadGame, saveGame } from '../src/campaign/save';
@@ -315,27 +315,101 @@ describe('the last war', () => {
     expect(keen.minOdds).toBeCloseTo(calm.minOdds, 9);
   });
 
-  it('ends when one nation is left standing', () => {
+  // Version 71 (Brian's choice of 2026-11-15): the world goes to the last great power standing once it holds three
+  // quarters of the map's worth, and the countries still standing then lay down their arms.
+  it('is not won while a rival great power stands, whatever the leader holds', () => {
     const g = decided();
     startDomination(g);
+    for (const id of ['FRA', 'ITA']) capitulate(g, id, 'UK');
+    for (const r of g.regions) if (r.ctrl !== 'SOV') r.ctrl = 'UK';
+    const t = worldTests(g, 'UK');
+    expect(t.rivals).toEqual(['SOV']);
+    expect(t.need).toBe(DOMINATION.won.share);
+    crown(g);
     expect(worldWinner(g)).toBeNull();
-    const rest = contenders(g).filter((n) => n.id !== 'UK').map((n) => n.id);
-    for (const id of rest.slice(0, -1)) capitulate(g, id, 'UK');
+    expect(standings(g)).toMatchObject({ great: expect.arrayContaining(['UK', 'SOV']), need: DOMINATION.won.share, laid: 0, winner: null });
+  });
+
+  it('is won by the last great power standing with three quarters of the world, and the rest lay down their arms', () => {
+    const g = decided();
+    startDomination(g);
+    expect(g.headlines.filter((h) => h.kind === 'war').at(-1)!.text).toContain('The last great power standing takes the world, once it holds three quarters of it');
+    for (const id of ['FRA', 'ITA']) capitulate(g, id, 'UK');
+    for (const r of g.regions) if (r.ctrl !== 'SOV' && r.owner !== 'ESP' && r.owner !== 'SWE') r.ctrl = 'UK';
+    expect(worldTests(g, 'UK').share).toBeGreaterThan(0.5);
     expect(worldWinner(g)).toBeNull();
-    expect(g.flags['dom:won']).toBeUndefined();
-    capitulate(g, rest[rest.length - 1], 'UK');
+    const small = contenders(g).filter((n) => n.id !== 'UK' && n.id !== 'SOV').map((n) => n.id);
+    expect(small.length).toBeGreaterThan(1);
+    capitulate(g, 'SOV', 'UK');
+    expect(worldTests(g, 'UK')).toMatchObject({ rivals: [] });
+    expect(worldTests(g, 'UK').share).toBeGreaterThanOrEqual(DOMINATION.won.share);
+    expect(worldWinner(g)).toBe('UK');
     expect(contenders(g).map((n) => n.id)).toEqual(['UK']);
     expect(g.flags['dom:won']).toBe(g.turn);
-    expect(worldWinner(g)).toBe('UK');
+    // Spain and Sweden still held their own countries: they lay down their arms. (Those whose capitals were already
+    // in British hands gave in the usual way as the Soviet Union fell.)
+    const laid = g.flags['dom:laid'];
+    expect(laid).toBeGreaterThanOrEqual(2);
     expect(lastAct(g)).toMatchObject({ on: true, left: 1, winner: 'UK' });
+    expect(standings(g)).toMatchObject({ winner: 'UK', laid, great: ['UK'] });
+    for (const id of ['ESP', 'SWE']) expect(g.nations[id].fellOn).toMatchObject({ to: 'UK', how: 'terms', turn: g.turn });
+    for (const id of small) {
+      expect(g.nations[id].alive).toBe(false);
+      expect(g.corps.some((c) => c.nat === id && !c.dead)).toBe(false);
+    }
     const last = g.headlines.filter((h) => h.kind === 'goal').at(-1)!;
-    expect(last.text).toContain('United Kingdom stands alone');
+    expect(last.text).toContain('United Kingdom is the last great power standing');
+    expect(last.text).toContain(`The ${laid} countries still standing lay down their arms`);
     expect(last.nat).toBe('UK');
-    // Said once.
+    expect(g.regions.every((r) => r.ctrl === 'UK')).toBe(true);
+    expect(Object.values(g.nations).every((n) => n.atWar.length === 0)).toBe(true);
+    // Said once, and nobody is announced as having fallen in battle.
     const n = g.headlines.length;
     crown(g);
     expect(g.headlines.length).toBe(n);
-    expect(g.regions.every((r) => r.ctrl === 'UK')).toBe(true);
+    // Kept with the save.
+    const back = loadGame(saveGame(g))!;
+    expect(worldWinner(back)).toBe('UK');
+    expect(back.flags['dom:laid']).toBe(laid);
+  });
+
+  it('makes the last great power take its three quarters before the world is its own', () => {
+    const g = decided();
+    startDomination(g);
+    // The other great powers fall to a small country, which keeps their ground.
+    for (const id of ['FRA', 'ITA', 'SOV']) capitulate(g, id, 'ESP');
+    const t = worldTests(g, 'UK');
+    expect(t.rivals).toEqual([]);
+    expect(t.share).toBeLessThan(DOMINATION.won.share);
+    expect(worldWinner(g)).toBeNull();
+    expect(contenders(g).length).toBeGreaterThan(2);
+    // The ground comes in over the months: the test is made as each nation's month closes.
+    for (const c of [...g.corps]) if (c.nat !== 'UK' && g.regions[c.reg].owner !== 'ESP') removeCorps(g, c);
+    for (const r of g.regions) if (r.owner !== 'ESP') r.ctrl = 'UK';
+    expect(worldTests(g, 'UK').share).toBeGreaterThanOrEqual(DOMINATION.won.share);
+    expect(worldWinner(g)).toBeNull();
+    endHuman(g);
+    expect(worldWinner(g)).toBe('UK');
+    expect(contenders(g).map((n) => n.id)).toEqual(['UK']);
+    expect(g.nations.ESP.fellOn).toMatchObject({ to: 'UK', how: 'terms' });
+  });
+
+  it('gives the world to a nation left alone, whatever it holds, when no great power is left', () => {
+    const g = decided();
+    startDomination(g);
+    for (const id of ['FRA', 'ITA', 'SOV']) capitulate(g, id, 'ESP');
+    capitulate(g, 'UK', 'SWE');
+    // Two small countries with half the world each: neither has the share.
+    g.regions.forEach((r, k) => { r.ctrl = k % 2 ? 'ESP' : 'SWE'; });
+    crown(g);
+    expect(worldWinner(g)).toBeNull();
+    expect(standings(g).great).toEqual([]);
+    const rest = contenders(g).filter((n) => n.id !== 'SWE').map((n) => n.id);
+    for (const id of rest.slice(0, -1)) capitulate(g, id, 'SWE');
+    capitulate(g, rest[rest.length - 1], 'SWE');
+    expect(worldWinner(g)).toBe('SWE');
+    const last = g.headlines.filter((h) => h.kind === 'goal').at(-1)!;
+    expect(last.text).toMatch(/Sweden (stands alone|is the last)/);
   });
 
   it('can be won by somebody else', () => {

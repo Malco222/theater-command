@@ -122,6 +122,8 @@ export const RIVALS = rivalsData as unknown as {
   press: { ratio: number; after: number; step: number; floor: number; waves: number; again: number };
   soften: { works: number; most: number; from: number; raid: number };
   fold: { worn: number; cadres: number };
+  /** A staff that will not be ringed: who, how few ways out, how well one must be held to count as safe, how far the corps go. */
+  ring?: { staffs: string[]; exits: number; safe: number; steps: number; reach: number; odds: number };
   exhaust: { after: number; per: number };
   stalemate?: { after: number };
 };
