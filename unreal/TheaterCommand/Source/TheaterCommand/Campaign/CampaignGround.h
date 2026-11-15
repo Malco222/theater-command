@@ -68,6 +68,23 @@ public:
 	 */
 	TArray<FColor> Lie;
 
+	/**
+	 * The waters of the world beyond Europe (the whole-world map): its rivers, worked out from the heights
+	 * (CampaignWorldRivers.h), and the small lakes of the northern forest and the pools of the tundra. Empty where a
+	 * sheet has none. Point for point with the ground:
+	 *   Wet     red and green, which way the nearest water's own line lies from the point and how far, east and
+	 *           south: a half is nought, nought and one are WetReach map units either way. (Read between the
+	 *           picture's points, the two together come to nothing exactly on the line, and beside one straight
+	 *           stretch they are the true distance from it: which is what draws a river narrower than the picture's
+	 *           own points with a clean bank.) Blue, how far that line is, with no direction to it: where it is much
+	 *           more than the first two say, the points round about look to different waters and no line is there.
+	 *           Alpha, half the water's breadth there, 2.5 map units at one.
+	 *   WetInk  the colour of the water there as it is to be seen, and in its alpha how much of its breadth, from the
+	 *           banks inward, is dry bed (a river's bars, a dry river's sand, a lake's pale shore).
+	 */
+	TArray<FColor> Wet, WetInk;
+	float WetReach = 4.0f;
+
 	/** The sea's colour, one pixel every WaterStep map units. */
 	double WaterStep = 1.5;
 	int32 WaterNX = 0;

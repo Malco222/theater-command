@@ -1665,6 +1665,14 @@ void ACampaignMapActor::PaintGround()
 	LandMaterial->SetTextureParameterValue(TEXT("Fields"), FieldsPicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Lie"), LiePicture);
 	LandMaterial->SetTextureParameterValue(TEXT("Fog"), FogPicture);
+	{
+		// (Europe's own ground has the rules' rivers, laid as ribbons, and none painted: its picture of the waters says "none" everywhere)
+		TArray<FColor> Dry;
+		Dry.Init(FColor(255, 255, 0, 0), 16);
+		NoWatersPicture = CampaignTextures::Create(4, 4, Dry, false, false, TEXT("TableNoWaters"));
+		LandMaterial->SetTextureParameterValue(TEXT("Wet"), NoWatersPicture);
+		LandMaterial->SetTextureParameterValue(TEXT("WetInk"), NoWatersPicture);
+	}
 	// (what stands on unseen ground is drawn, not coloured: the towns and the woods read the same picture by where they stand)
 	for (UMaterialInstanceDynamic* Stands : { SceneryMaterial.Get(), WoodsMaterial.Get() })
 	{
@@ -2259,6 +2267,14 @@ void ACampaignMapActor::BuildWorld()
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Cover"), Picture(WorldPaint.Cover, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldCover")));
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Lie"), Lie);
 	WorldLandMaterial->SetTextureParameterValue(TEXT("Fog"), Picture(Clear, 4, 4, false, TEXT("WorldFog"))); // (nothing beyond the map is hidden: nobody is there yet)
+	if (WorldPaint.Wet.Num() == WorldPaint.NX * WorldPaint.NY && WorldPaint.Wet.Num() > 0)
+	{
+		// (the rivers of the world beyond Europe, painted into the land: see CampaignGround.h)
+		WorldLandMaterial->SetTextureParameterValue(TEXT("Wet"), Picture(WorldPaint.Wet, WorldPaint.NX, WorldPaint.NY, false, TEXT("WorldWet")));
+		WorldLandMaterial->SetTextureParameterValue(TEXT("WetInk"), Picture(WorldPaint.WetInk, WorldPaint.NX, WorldPaint.NY, true, TEXT("WorldWetInk")));
+		WorldLandMaterial->SetScalarParameterValue(TEXT("WetReach"), WorldPaint.WetReach);
+		WorldLandMaterial->SetScalarParameterValue(TEXT("WetCell"), static_cast<float>(WorldTerrain.Cell));
+	}
 	WorldSeaMaterial = UMaterialInstanceDynamic::Create(SeaMaterial->Parent, this);
 	WorldSeaMaterial->CopyParameterOverrides(SeaMaterial);
 	WorldSeaMaterial->SetTextureParameterValue(TEXT("Water"), Picture(WorldPaint.Water, WorldPaint.WaterNX, WorldPaint.WaterNY, true, TEXT("WorldWater")));
@@ -2529,6 +2545,13 @@ void ACampaignMapActor::DressFineSheet(FFineSheet& Sheet)
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Cover"), Picture(Painted.Cover, Painted.NX, Painted.NY, false, TEXT("Cover")));
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Lie"), Lie);
 	Sheet.LandPaint->SetTextureParameterValue(TEXT("Fog"), Picture(Clear, 4, 4, false, TEXT("Fog")));
+	if (Painted.Wet.Num() == Painted.NX * Painted.NY && Painted.Wet.Num() > 0)
+	{
+		Sheet.LandPaint->SetTextureParameterValue(TEXT("Wet"), Picture(Painted.Wet, Painted.NX, Painted.NY, false, TEXT("Wet")));
+		Sheet.LandPaint->SetTextureParameterValue(TEXT("WetInk"), Picture(Painted.WetInk, Painted.NX, Painted.NY, true, TEXT("WetInk")));
+		Sheet.LandPaint->SetScalarParameterValue(TEXT("WetReach"), Painted.WetReach);
+		Sheet.LandPaint->SetScalarParameterValue(TEXT("WetCell"), static_cast<float>(Sheet.Shape.Cell));
+	}
 	Sheet.SeaPaint = UMaterialInstanceDynamic::Create(SeaMaterial->Parent, this);
 	Sheet.SeaPaint->CopyParameterOverrides(SeaMaterial);
 	Sheet.SeaPaint->SetTextureParameterValue(TEXT("Water"), Picture(Painted.Water, Painted.WaterNX, Painted.WaterNY, true, TEXT("Water")));

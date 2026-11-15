@@ -636,6 +636,72 @@ def build_land():
     # The rim of a wood: lighter on its sunward edge, and a strip of shade on the open ground in its lee.
     c = times(m, c, plus(m, 1.0, times(m, plus(m, (cover, "B"), -0.5, -1500, -700), scalar(m, "WoodsRim", 0.6, -1500, -600), -1350, -650), -1200, -650), -1100, -500)
     c = lerp(m, c, vector(m, "RockColour", (0.235, 0.205, 0.162, 1.0), -2000, -150), (masks, "R"), -1000, -400)
+
+    # The waters of the world beyond Europe (the whole-world map): its rivers and its small lakes, laid over the
+    # ground and whatever stain is on it, since water is nobody's colour. Europe's own rivers are ribbons laid by
+    # the rules, and its picture of the waters says "none". (CampaignGround.h says what the two pictures hold.)
+    # A river is drawn from how far each point stands from its line, which the picture knows to one side and the
+    # other: read between the picture's points, that distance crosses nothing exactly on the line, so a river far
+    # narrower than the picture's own points still has a clean bank at any height of the eye.
+    def larger(a, b, x=0, y=0):
+        n = node(m, unreal.MaterialExpressionMax, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    def over(a, b, x=0, y=0):
+        n = node(m, unreal.MaterialExpressionDivide, x, y)
+        _feed(m, n, "A", a)
+        _feed(m, n, "B", b)
+        return n
+
+    def sat(v, x=0, y=0):
+        return one_in(m, unreal.MaterialExpressionSaturate, v, x, y)
+
+    def less(a, b, x=0, y=0):
+        return plus(m, a, times(m, b, -1.0, x - 100, y), x, y)
+
+    wet = picture(m, "Wet", uv, -2600, 2600, numbers=True)
+    wet_ink = picture(m, "WetInk", uv, -2600, 2850)
+    wet_reach = scalar(m, "WetReach", 4.0, -2600, 3080)
+    wet_cell = scalar(m, "WetCell", 1.5, -2600, 3160)
+    # (which way the water's own line lies and how far, in map units: read between the picture's points it comes to
+    # nothing exactly on the line)
+    to_line = times(m, times(m, plus(m, pair(m, (wet, "R"), (wet, "G"), -2450, 2600), -0.5, -2350, 2600), 2.0, -2250, 2600), wet_reach, -2150, 2600)
+    squared_off = node(m, unreal.MaterialExpressionDotProduct, -2050, 2600)
+    connect(to_line, "", squared_off, "A")
+    connect(to_line, "", squared_off, "B")
+    off = one_in(m, unreal.MaterialExpressionSquareRoot, squared_off, -1950, 2600)
+    apart = times(m, (wet, "B"), wet_reach, -2350, 2700)
+    half = times(m, (wet, "A"), 2.5, -2350, 2780)
+    # (how many map units one pixel of the screen covers there)
+    px = larger(plus(m, one_in(m, unreal.MaterialExpressionAbs, one_in(m, unreal.MaterialExpressionDDX, off, -1850, 2700), -1750, 2700),
+                     one_in(m, unreal.MaterialExpressionAbs, one_in(m, unreal.MaterialExpressionDDY, off, -1850, 2780), -1750, 2780), -1650, 2740), 0.002, -1550, 2740)
+    # (a great river is never drawn thinner than a pixel and a bit, from however high: the Amazon is seen from the top
+    # of the zoom. The lesser ones thin away as the eye rises, or from high up the land is a web of them.)
+    great = sat(times(m, plus(m, half, -0.42, -2150, 2880), 4.0, -2050, 2880), -1950, 2880)
+    half_seen = larger(half, times(m, times(m, px, scalar(m, "WetLeast", 0.6, -1700, 2960), -1550, 2900), great, -1400, 2900), -1250, 2850)
+    inside = less(sat(plus(m, over(less(half_seen, off, -1100, 2600), px, -950, 2600), 0.5, -800, 2600), -650, 2600),
+                  sat(plus(m, over(less(times(m, half_seen, -1.0, -1100, 2700), off, -950, 2700), px, -800, 2700), 0.5, -650, 2700), -500, 2700), -350, 2650)
+    # (the picture's points round about must all look to this one line: where they look to different waters, the
+    # distance with no direction to it is far more than the one read with it, and no line is there)
+    truly = sat(times(m, over(less(times(m, wet_cell, scalar(m, "WetTrue", 0.62, -1250, 2880), -1100, 2800), less(apart, off, -950, 2850), -800, 2800), wet_cell, -650, 2800), 4.0, -500, 2800), -350, 2800)
+    seen_from_here = lerp(m, sat(times(m, plus(m, over(times(m, half, 2.0, -1100, 2950), px, -950, 2950), -0.6, -800, 2950), 1.2, -650, 2950), -500, 2950), 1.0, great, -350, 2950)
+    river = times(m, times(m, times(m, inside, truly, -200, 2700), seen_from_here, -100, 2750), sat(times(m, half, 400.0, -350, 3020), -200, 3020), -50, 2750)
+    # (its bed: dry sand from the banks inward, by the share the picture gives. Under six tenths, the bed comes and
+    # goes along the river, as bars do.)
+    bars_place = world_uv(m, "BarsTiling", 0.0045, -3000, 3300)
+    bars_east = node_from(m, unreal.MaterialExpressionComponentMask, bars_place, -2300, 3300, r=True, g=False, b=False, a=False)
+    bars_south = node_from(m, unreal.MaterialExpressionComponentMask, bars_place, -2300, 3380, r=False, g=True, b=False, a=False)
+    swing = one_in(m, unreal.MaterialExpressionSine, plus(m, times(m, bars_south, 6.2832, -2150, 3380), times(m, one_in(m, unreal.MaterialExpressionSine, times(m, bars_east, 4.3, -2150, 3300), -2000, 3300), 1.9, -1850, 3300), -1700, 3340), -1550, 3340)
+    swing2 = one_in(m, unreal.MaterialExpressionSine, plus(m, times(m, bars_east, 7.9, -2150, 3460), times(m, bars_south, 2.3, -2150, 3540), -2000, 3500), -1850, 3500)
+    bars = sat(plus(m, times(m, plus(m, swing, swing2, -1400, 3420), 2.0, -1250, 3420), -2.1, -1100, 3420), -950, 3420)  # (a bar here and there, not a kerb)
+    share = lerp(m, times(m, (wet_ink, "A"), bars, -650, 3000), (wet_ink, "A"), sat(times(m, plus(m, (wet_ink, "A"), -0.6, -800, 3100), 5.0, -650, 3100), -500, 3100), -350, 3050)
+    bed = sat(plus(m, over(less(off, times(m, half_seen, one_in(m, unreal.MaterialExpressionOneMinus, share, -350, 3150), -200, 3150), -50, 3100), px, 100, 3100), 0.5, 250, 3100), 400, 3100)
+    water_colour = lerp(m, (wet_ink, "RGB"), vector(m, "BedColour", (0.36, 0.334, 0.2, 1.0), -200, 3250), bed, 550, 3050)
+    c = lerp(m, c, water_colour, river, -950, -400)
+    waters = river
+    wetness = times(m, river, one_in(m, unreal.MaterialExpressionOneMinus, bed, 550, 3250), 700, 3250)
     c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), (masks, "G"), -900, -400)
     # (The art director's ruling of round 19: in winter the snow took a wood's dark floor away, and every tree stood
     # alone on white like salt. A wood keeps a cool grey floor under the snow, like pencil shading on the map, about
@@ -669,6 +735,7 @@ def build_land():
     near = times(m, kind_of_ground(fine, -2000, 700, crowns), 2.0, -1200, 700)
     far = lerp(m, 1.0, times(m, kind_of_ground(coarse, -2000, 1000), 2.0, -1200, 1000), scalar(m, "DetailCoarse", 0.45, -1200, 1150), -1000, 1000)
     detail = lerp(m, 1.0, times(m, near, far, -800, 850), scalar(m, "DetailStrength", 0.8, -800, 1000), -600, 850)
+    detail = lerp(m, detail, 1.0, wetness, -500, 850)  # (no grass on water)
 
     # Shaded as a printed relief map is, on top of whatever the lamp does.
     # (the picture's blue is how squarely the ground faces a low sun in the north-west, shadows and all: the sun's
@@ -713,6 +780,8 @@ def build_land():
                    plus(m, times(m, middle, scalar(m, "HatchSharp", -9.0, -500, -1950), -350, -2100), 1.0, -200, -2100), -50, -2100)
     sheet = lerp(m, sheet, times(m, (tint, "RGB"), scalar(m, "HatchInk", 0.8, 100, -1950), 250, -2000),
                  times(m, times(m, ruled, fog, 100, -2100), scalar(m, "Hatch", 0.7, 100, -2200), 250, -2150), 400, -1500)
+    # (and on the paper the waters are drawn in a blue-grey ink)
+    sheet = lerp(m, sheet, vector(m, "PaperWater", (0.13, 0.19, 0.27, 1.0), 300, -1750), times(m, waters, scalar(m, "PaperWaters", 0.75, 300, -1650), 450, -1700), 500, -1500)
     c = lerp(m, c, sheet, sheeted, 550, -600)
     to_property(c, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
@@ -729,11 +798,14 @@ def build_land():
     normal = one_in(m, unreal.MaterialExpressionNormalize, pair(m, lean, upward, 200, 1500), 400, 1500)
     # (paper lies flat: the hills are printed on it, not modelled)
     level = node(m, unreal.MaterialExpressionConstant3Vector, 400, 1700, constant=unreal.LinearColor(0.0, 0.0, 1.0, 0.0))
-    normal = one_in(m, unreal.MaterialExpressionNormalize, lerp(m, normal, level, times(m, sheeted, 0.85, 500, 1650), 600, 1550), 750, 1550)
+    # (and water lies flat too)
+    normal = one_in(m, unreal.MaterialExpressionNormalize, lerp(m, normal, level, larger(times(m, sheeted, 0.85, 500, 1650), times(m, wetness, 0.9, 500, 1750), 550, 1700), 600, 1550), 750, 1550)
     to_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
 
-    to_property(scalar(m, "Roughness", 0.92, -200, 200), "", unreal.MaterialProperty.MP_ROUGHNESS)
-    to_property(scalar(m, "Specular", 0.22, -200, 300), "", unreal.MaterialProperty.MP_SPECULAR)
+    # (water takes the lamp's light as water does, a little: but none of it on the paper)
+    shine = times(m, wetness, one_in(m, unreal.MaterialExpressionOneMinus, sheeted, -350, 380), -250, 380)
+    to_property(lerp(m, scalar(m, "Roughness", 0.92, -200, 200), scalar(m, "WetRoughness", 0.32, -200, 260), shine, -50, 220), "", unreal.MaterialProperty.MP_ROUGHNESS)
+    to_property(lerp(m, scalar(m, "Specular", 0.22, -200, 300), 0.5, shine, -50, 320), "", unreal.MaterialProperty.MP_SPECULAR)
     finish(m)
 
 

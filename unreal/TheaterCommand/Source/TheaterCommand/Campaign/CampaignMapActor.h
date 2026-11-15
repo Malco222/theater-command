@@ -731,6 +731,8 @@ private:
 	/** Where the ground nobody of the player's can see lies, a pixel to a point of the terrain: there the land is the staff's paper map, and what stands on it is drawn, not coloured. */
 	UPROPERTY(Transient)
 	TObjectPtr<UTexture2D> FogPicture;
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> NoWatersPicture; // "no river and no lake anywhere": the picture of the waters for ground that has none painted
 	float PaperShown = -1.0f;
 	double MarginLine = 11.0; // (round a world) how wide the chart's ruled border is drawn, in the world's units
 	float SquareWorkShown = -1.0f; // (round a world) how much of the prairie's roads and furrows is shown at this height
