@@ -369,6 +369,8 @@ Brian's yardstick (2026-11-14): at Colonel a careful player beats their country'
 | `seattab.py` | Adds up the `SEAT` lines by seat and set: stands, won, lost, par beaten, the fall of the player's country and of its chief enemy, the share of months with a battle, the silence. `--rows` prints every war | `python3 seattab.py out/v68s seat seatfield seatidle --seeds 1-48` |
 | `seatvs.py` | What a player in the seat changes: the month Germany falls with a player against the builder's computer-only wars on the same seeds (`fin68L-*.txt`) | `python3 seatvs.py out/v68s seat seatfield` |
 | `peek.ts` | Prints a country's provinces (home and overseas) and its collapse numbers | `node out68/peek.mjs FRA` |
+| `probe55.ts` | Writes a save for the page after the player's orders of a month and before End month, at the turns asked for | `node out68b/probe55.mjs SOV 1 11 33 '<plan>' out/v68saves/SOV-11-soft 31` |
+| `ui32.cjs` | Loads such a save, presses End month three times and reports the page's errors and the date on the top bar each time: what a player sees when the rules stop on an error | `TC_PAGE=file:///home/user/tc68/dist/play.html node ui32.cjs SAVE.json 95-v68-crash` |
 
 The plans of the five seats (the same player by hand; add `"depth":"field"` for the staff, and `{"idle":true}` for the player who never gives an order):
 
@@ -388,5 +390,6 @@ Traps met on Version 68:
 - France is out the month Paris falls, with a third of the home country lost and every overseas province still French. Counting provinces at the fall shows how early the rule ends the war.
 - A note to another thread or to the coordinator is refused over 2,000 characters. Draft to 1,900 and count with `wc -c`.
 - `xargs -I{}` breaks the quotes of a JSON plan. Write a queue file and use `jobs.sh`.
+- A run that prints `ERROR ... computer month` is a finding, not a harness fault: `jobs.sh` leaves it in the folder and the queue's last line counts them (`grep -l "^ERROR"`). One in about 2,200 runs on Versions 67 and 68 (`end65-SOV_soft-11`: `pocketMonth` reads the stores of an ally's town it never marked). The error comes in the computer's months after the player's End month, so save in `each` at the turn before the month the error names (`probe55`), and press End month on the page (`ui32.cjs`).
 
 Results of the Version 68 test: `/mnt/project-files/playtest/results-v68/`.
