@@ -19,6 +19,7 @@ import {
 import { foldChoices, foldCorps, type FoldView } from './fold';
 import { cancelBuild, orderCorps, orderFort } from './economy';
 import { liftView, offers, orderOffer, type LiftView, type Offer } from './arsenal';
+import { cityOrders, ordersAt, type CityOrders, type OrderLine } from './orders';
 import { blocked, blowBridges, crossingOf, whyNotBlow } from './rivers';
 import { cancelJob, jobsFor, orderJob, type JobKind, type JobOffer } from './engineers';
 import { tearUp, whyNotCutRail } from './rails';
@@ -1568,6 +1569,23 @@ export function foreignBooks(g: Game, nat: string): Books | null {
 export function agentReport(g: Game, region: number): CityReport | null {
   return g.human ? cityReport(g, region, g.human) : null;
 }
+
+// ---- What is on order, place by place (Version 78; orders.ts) ----
+
+/**
+ * Every place where the player has something on order: what, how many of each, the months left for each and where
+ * it will stand when ready. Places with units forming come first, the soonest first. Also what his agents report
+ * of other countries' orders, marked `spied`. Display only: one call for the browser page and the 3D game.
+ */
+export function ordersByCity(g: Game): CityOrders[] {
+  return g.human ? cityOrders(g, g.human) : [];
+}
+
+/** The same for one province, or null where the player has nothing on order there and no agent's report. */
+export function ordersIn(g: Game, region: number): CityOrders | null {
+  return g.human ? ordersAt(g, region, g.human) : null;
+}
+export type { CityOrders, OrderLine };
 
 // ---- Rival staffs: the character of each computer staff, and its main effort where the player may know it ----
 

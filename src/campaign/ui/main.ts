@@ -3,6 +3,8 @@
 // only draws the state of the game and turns clicks into orders.
 
 import { flagDefs, flagIcon, flagUse } from './flags';
+import { ORDER_SIGN, ORDER_STAR } from './ordersigns';
+import { inMonths } from '../orders';
 import grandData from '../../../data/campaign/grand.json';
 import {
   DEFENCE, DESERT, allied, atWar, chanceOn, collapseScore, convoyDrag, createGame, ensureSupply, evenOdds, fieldArmy, frozen, hostileUnits, inDesert, limitAttackers, lineStrength, men, railReach, refuge, weather,
@@ -28,6 +30,7 @@ import {
   commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
   claimsOf, dialOf, historyStops, orderHistory,
   crossings, liftOf, orderCrossingPlan,
+  ordersByCity, ordersIn, type CityOrders, type OrderLine,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { INTEL, armyKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type Known, type SpyRoom } from '../intel';
@@ -110,6 +113,8 @@ const ui = {
   seenSea: 0,
   /** Where the list of shore bombardments stood when the player's last month ended: coasts of his shelled since are this month's. */
   shoreFrom: -1,
+  /** The orders handed over as this month opened, and where each stands: the chip that says so visits them in turn. */
+  ready: [] as { region: number; name: string }[],
   /** True once the player has asked to see every line of a Battle Ticket on a narrow screen, where it opens folded to the lines that matter most. */
   ticketAll: false,
   /** True once the player has opened the tray's unit cards on a narrow screen, where the tray is folded to one row so that the map stays open to a finger. */
@@ -534,7 +539,7 @@ function mount(): void {
       <div class="mapwrap" id="mapwrap">
         <svg id="map" preserveAspectRatio="xMidYMid slice">
           <defs>${flagDefs()}<pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="1.6" height="5" fill="rgba(20,22,24,.3)"/></pattern></defs>
-          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="fleets"></g><g id="units"></g><g id="orders"></g><g id="route"></g><g id="ghost"></g>
+          <g id="seas"></g><g id="lanes"></g><g id="land"></g><g id="regs"></g><g id="occ"></g><g id="riches"></g><g id="fog"></g><g id="fx"></g><g id="marks"></g><g id="rails"></g><g id="rivers"></g><g id="towns"></g><g id="labels"></g><g id="sieges"></g><g id="bridges"></g><g id="fleets"></g><g id="units"></g><g id="obadges"></g><g id="orders"></g><g id="route"></g><g id="ghost"></g>
         </svg>
         <div class="hint" id="hint"></div>
         <div class="passing" id="passing"></div>
@@ -638,8 +643,96 @@ function drawLabels(): void {
     const place = WORLD.labels?.[r.name];
     const lx = place === 'under' ? t.x : place === 'west' ? Math.min(t.x, r.x) - (busy ? 15 : 9) : r.x;
     const ly = place === 'under' ? Math.max(t.y + 13, r.y + (busy ? 26.5 : 3)) : place === 'west' ? t.y + 2 : r.y + (busy ? 26.5 : 3);
+    // The order badge hangs from the town's own mark, which never moves: a name shifts under the army that stands on it.
+    badgeSpot[r.id] = { x: t.x, y: t.y + (t.size === 'capital' || t.size === 'city' ? 5.6 : 4.6) };
     return `${star}${fort}${high}<text class="lbl${r.cap ? ' cap' : t.size === 'city' ? ' big' : ''}${place === 'west' ? ' west' : ''}" x="${lx}" y="${ly}">${esc(r.name)}</text><g class="figs ${t.size}">${townFigures(t, lx, ly + 6.3, place === 'west')}</g>`;
   }).join('');
+  $('#obadges').innerHTML = orderBadges();
+}
+
+// ---- What each city has on order (Version 78) -------------------------------------------------
+
+/** Where each province's badge hangs: just under its town's mark. */
+const badgeSpot: { x: number; y: number }[] = [];
+const capFirst = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** An order's sign as a small picture for a list: the badge's own sign, starred for a special formation, and a builder's yard for a work. */
+function orderSign(l: { mark: string; elite?: boolean; starred?: boolean }, px = 30): string {
+  const h = Math.round((px * 2) / 3);
+  if (!l.mark) return `<svg class="osign work" width="${px}" height="${h}" viewBox="0 0 24 18">${GLYPH.works}</svg>`;
+  return `<svg class="osign" width="${px}" height="${h}" viewBox="-1 -3 28 21"><path d="${ORDER_SIGN[l.mark] ?? ORDER_SIGN.inf}"/>${l.elite || l.starred ? `<path class="ostar" transform="translate(22.5 1.5)" d="${ORDER_STAR}"/>` : ''}</svg>`;
+}
+
+/**
+ * One city's badge at one of its three sizes: the owner's colour bar, the sign of the unit ready soonest, how many
+ * of exactly that are on order there (left off at one), a brass plus where other kinds of unit are on order too, and
+ * the months to it in a brass disc. Pulling back, the count and the plus go first, then the disc.
+ */
+function orderBadge(c: CityOrders, stage: 1 | 2 | 3): string {
+  const b = c.badge!;
+  const spot = badgeSpot[c.region] ?? { x: g.regions[c.region].x, y: g.regions[c.region].y + 8 };
+  const H = 8, sh = H * 0.66, k = sh / 16, bar = H * 0.14;
+  let x = bar + 0.9;
+  let body = `<g transform="translate(${x.toFixed(2)} ${((H - sh) / 2).toFixed(2)}) scale(${k.toFixed(4)})"><path class="osg" d="${ORDER_SIGN[b.mark] ?? ORDER_SIGN.inf}"/>${b.starred ? `<path class="ostar" transform="translate(22.5 1.5) scale(1.15)" d="${ORDER_STAR}"/>` : ''}</g>`;
+  x += 24 * k + 0.8;
+  if (stage === 1 && b.count > 1) {
+    const s = `×${b.count}`, w = s.length * 2.35;
+    body += `<text class="ocnt" x="${x.toFixed(2)}" y="${(H / 2 + 1.8).toFixed(2)}" textLength="${w.toFixed(2)}" lengthAdjust="spacingAndGlyphs">${s}</text>`;
+    x += w + 0.6;
+  }
+  if (stage === 1 && b.plus) { body += `<path class="oplus" d="M${x.toFixed(2)} ${H / 2}h2.6M${(x + 1.3).toFixed(2)} ${H / 2 - 1.3}v2.6"/>`; x += 3.3; }
+  if (stage < 3) {
+    const r = H * 0.37;
+    body += `<circle class="odisc" cx="${(x + r).toFixed(2)}" cy="${H / 2}" r="${r.toFixed(2)}"/><text class="omon" x="${(x + r).toFixed(2)}" y="${(H / 2 + 1.55).toFixed(2)}"${b.months > 9 ? ' textLength="4.4" lengthAdjust="spacingAndGlyphs"' : ''}>${b.months}</text>`;
+    x += 2 * r + 0.7;
+  } else x += 0.2;
+  const w = x, sc = stage === 1 ? 1.1 : stage === 2 ? 1.3 : 1.55;
+  const left = spot.x - (w * sc) / 2;
+  return `<g class="obadge s${stage}${c.spied ? ' spied' : ''}" data-id="${c.region}" transform="translate(${left.toFixed(1)} ${spot.y.toFixed(1)}) scale(${sc})"><rect class="oplate" width="${w.toFixed(2)}" height="${H}" rx="1.1"/><path d="M${bar.toFixed(2)} 0H1.1A1.1 1.1 0 0 0 0 1.1V${H - 1.1}A1.1 1.1 0 0 0 1.1 ${H}H${bar.toFixed(2)}Z" fill="${g.nations[c.holder].color}"/>${body}</g>`;
+}
+
+/** Every city's badge: the player's own cities with a unit forming, and another country's only where an agent of his reports it. */
+function orderBadges(): string {
+  if (!g.human || !g.nations[g.human]?.alive) return '';
+  let out = '';
+  for (const c of ordersByCity(g)) if (c.badge) out += orderBadge(c, 1) + orderBadge(c, 2) + orderBadge(c, 3);
+  return out;
+}
+
+/** One order as a line of a list: its sign, its kind, and when it is ready. */
+const orderWords = (l: OrderLine): string => `${orderSign(l, 21)} <b>${esc(capFirst(l.label))}</b>, ready ${inMonths(l.months)}${l.name.toLowerCase().startsWith(l.label.toLowerCase()) ? '' : ` <i>· ${esc(l.name)}</i>`}`;
+
+/** What pointing at a badge says: the whole number on order with its breakdown, then every order, units first. */
+function ordersTip(region: number): string {
+  const c = ordersIn(g, region);
+  if (!c) return '';
+  return `<b>${esc(c.town)}${c.spied ? ` <span class="tipfog">· your agent reports</span>` : ''}</b><br><span class="tiptown gold">${esc(c.summary)}</span>${c.lines.map((l) => `<span class="otip">${orderWords(l)}</span>`).join('')}`;
+}
+
+/** One order as a row of a panel: its sign, its name and kind, a bar of the months done out of the months it takes, and the month it is ready. */
+function orderRow(l: OrderLine, mine: boolean): string {
+  const size = l.holds > 1 ? ` of ${l.holds} ${l.what === 'air' ? 'aircraft' : 'ships'}` : '';
+  return `<div class="order oline">${orderSign(l)}<span class="grow"><b>${esc(l.name)}</b><small>${esc(capFirst(l.label))}${size} · ready ${esc(l.ready)} (${inMonths(l.months)})</small><span class="obar" title="${l.done} of ${l.need} months done"><i style="width:${Math.round((l.done / l.need) * 100)}%"></i></span><small class="obarn">${l.done} of ${l.need} month${l.need === 1 ? '' : 's'} done</small></span>${l.fresh && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${l.id}">Cancel</button>` : `<span class="cost">${money(l.cost)}<small>paid</small></span>`}</div>`;
+}
+
+/** The player's orders as they stand: kept as his month ends, to tell which were handed over when the next one opens. */
+const queueNow = (): NonNullable<Since['q']> => (g.human && g.nations[g.human] ? g.nations[g.human].queue.map((b) => ({ id: b.id, region: b.region, name: b.name, what: b.what })) : []);
+
+/** The orders handed over as the player's month opened, from the list he ended the last one with: what, and where it now stands. */
+function readyNow(was: NonNullable<Since['q']>): { region: number; name: string }[] {
+  const me = g.human;
+  if (!me || !g.nations[me]?.alive) return [];
+  const still = new Set(g.nations[me].queue.map((b) => b.id));
+  const out: { region: number; name: string }[] = [];
+  for (const b of was) {
+    if (still.has(b.id)) continue;
+    // A corps stands where it formed, which is the capital if its own place was full or lost.
+    // (The newest of that name: a corps raised again carries the name of one that fell.)
+    const c = b.what === 'corps' ? g.corps.filter((x) => x.nat === me && !x.dead && x.name === b.name).sort((x, y) => y.id - x.id)[0] ?? null : null;
+    if (b.what === 'corps' ? !c : g.regions[b.region]?.ctrl !== me) continue;
+    out.push({ region: c ? c.reg : b.region, name: b.name });
+  }
+  return out;
 }
 
 // ---- Drawing the changing parts -----------------------------------------------------------
@@ -1570,6 +1663,8 @@ function alertList(): Alert[] {
     const idle = g.regions.filter((r) => r.units.some((c) => canOrder(g, c) && c.ap >= c.apMax && !c.fought && !c.digs) && r.nb.some((j) => atWar(g, me, g.regions[j].ctrl))).map((r) => r.id);
     if (idle.length) out.push({ kind: 'front', text: `${idle.length} ${idle.length === 1 ? 'army' : 'armies'} at the front ${idle.length === 1 ? 'has' : 'have'} not moved`, regs: idle });
   }
+  // What was on order and is ready this month: the places to visit in turn.
+  if (ui.ready.length) out.push({ kind: 'ready', text: ui.ready.length === 1 ? `${ui.ready[0].name} is ready at ${g.regions[ui.ready[0].region].name}` : `${ui.ready.length} orders are ready this month`, regs: [...new Set(ui.ready.map((x) => x.region))] });
   const cheapest = Math.min(...Object.values(PRODUCTION.builds).map((b) => b.cost));
   if (n.pp < 0) out.push({ kind: 'debt', text: 'The treasury is in debt: open the ledger' });
   if (Math.floor(n.pp) >= cheapest) out.push({ kind: 'build', text: `${money(n.pp)} in the treasury to spend`, tab: 'build' });
@@ -1824,14 +1919,9 @@ function provinceMuster(r: Region): string {
     if (canStation(g, me, r)) out += head('Station aircraft here') + shelf('air');
     if (isHome(g, me, r) && yardLevel(g, r) > 0) out += head('Lay down ships here') + shelf('navy');
   }
-  const here = n.queue.filter((b) => b.region === r.id).sort((a, c) => a.eta - c.eta);
-  if (here.length) {
-    out += `<h3>${budgeted(g) ? 'On order here' : 'Forming here'}</h3>`;
-    for (const b of here) {
-      const left = b.eta - g.turn;
-      out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>Ready ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${money(b.cost)}<small>paid</small></span>`}</div>`;
-    }
-  }
+  // What is forming here: the whole number first, then a row an order, units before works.
+  const here = ordersIn(g, r.id);
+  if (here && !here.spied) out += `<h3 id="forming">Forming here</h3><p class="sub formsum">${esc(here.summary)}</p>${here.lines.map((l) => orderRow(l, mine)).join('')}`;
   return out;
 }
 
@@ -2472,10 +2562,10 @@ function buildPane(): string {
 
   out += `<h3>On order</h3>`;
   if (!n.queue.length) out += `<div class="empty">Nothing on order.</div>`;
-  for (const b of [...n.queue].sort((a, c) => a.eta - c.eta)) {
-    const left = b.eta - g.turn;
-    const where = g.regions[b.region]?.name ?? '';
-    out += `<div class="order"><span class="grow"><b>${esc(b.name)}</b><small>${b.what === 'corps' ? `Forming at ${esc(where)} · ready` : 'Ready'} ${date(b.eta)}${left > 0 ? ` (${left} month${left > 1 ? 's' : ''})` : ''}</small></span>${b.ordered === g.turn && mine ? `<button class="btn small" data-act="cancelbuild" data-id="${b.id}">Cancel</button>` : `<span class="cost">${money(b.cost)}<small>paid</small></span>`}</div>`;
+  // City by city, the one with something ready soonest first: a click on a city's heading shows it on the map.
+  const soonest = (c: CityOrders): number => Math.min(...c.lines.map((l) => l.months));
+  for (const c of ordersByCity(g).filter((x) => !x.spied).sort((a, b) => soonest(a) - soonest(b) || a.region - b.region)) {
+    out += `<button class="ocity" data-act="showmap" data-id="${c.region}" title="Show it on the map"><b>${esc(c.town)}</b>${c.town !== c.province ? ` <i>${esc(c.province)}</i>` : ''}<small>${esc(c.summary)}</small></button>${c.lines.map((l) => orderRow(l, mine)).join('')}`;
   }
   return out;
 }
@@ -3405,8 +3495,11 @@ function spyBlock(r: Region): string {
   for (const a of here) out += `<div class="note spyhere"><b>Agent ${esc(a.name)}.</b> ${esc(a.doing)}.${a.atWork && a.abroad ? ` Risk of being caught this month: ${chance(a.caught)}.` : ''} <button class="btn small" data-act="spypick" data-id="${a.id}">Orders</button></div>`;
   const rep = agentReport(g, r.id);
   if (rep) {
+    // What the agent sees on order, in the same signs as the player's own cities.
+    const seenHere = ordersIn(g, r.id);
+    const spied = seenHere && seenHere.spied ? seenHere : null;
     const air = rep.air.map((f) => `${esc(f.name)} (${f.ftr} fighters, ${f.bmr} bombers)`);
-    out += `<div class="note spyrep"><b>${esc(rep.agent)} reports from ${esc(r.name)}.</b><ul><li>${rep.orders.length ? `On order here: ${rep.orders.map((o) => `${esc(o.name)}, ready ${date(o.eta)}`).join('; ')}.` : 'Nothing is on order here.'}</li><li>${air.length ? `On the airfields: ${air.join('; ')}.` : 'No air fleet is based here.'}</li>${rep.factories ? `<li>${rep.factories - rep.ruined} of ${rep.factories} ${rep.factories === 1 ? 'factory' : 'factories'} at work.</li>` : ''}</ul>Your armies attack ${esc(r.name)} ${Math.round(INTEL.battle.attack * 100)}% harder for knowing its defences.</div>`;
+    out += `<div class="note spyrep"><b>${esc(rep.agent)} reports from ${esc(r.name)}.</b><ul><li>${spied ? `${esc(spied.summary)}${spied.lines.map((l) => `<span class="otip spyline">${orderWords(l)}</span>`).join('')}` : rep.orders.length ? `On order here: ${rep.orders.map((o) => `${esc(o.name)}, ready ${date(o.eta)}`).join('; ')}.` : 'Nothing is on order here.'}</li><li>${air.length ? `On the airfields: ${air.join('; ')}.` : 'No air fleet is based here.'}</li>${rep.factories ? `<li>${rep.factories - rep.ruined} of ${rep.factories} ${rep.factories === 1 ? 'factory' : 'factories'} at work.</li>` : ''}</ul>Your armies attack ${esc(r.name)} ${Math.round(INTEL.battle.attack * 100)}% harder for knowing its defences.</div>`;
   }
   // Agents that could be sent here, for a province that is not the player's own side's.
   if (humanUp(g) && !onEve(g)) {
@@ -6023,7 +6116,7 @@ function continueGame(): boolean {
 }
 
 /** Lets the computer play until it is the player's month again. */
-type Since = { h: number; r: number; s: number; a: number; shore?: number };
+type Since = { h: number; r: number; s: number; a: number; shore?: number; /** The player's orders as his month ended. */ q?: { id: number; region: number; name: string; what: string }[] };
 
 /** The other nations' months being played out in front of the player, one nation at a time. */
 let passing: { since: Since; before: string[]; show: boolean; view: { x: number; y: number; w: number }; timer: number; nat: string; note: string; done: number; total: number } | null = null;
@@ -6035,7 +6128,7 @@ function watchPref(): boolean {
 }
 
 function advanceToHuman(show: boolean, since?: Since): void {
-  const from: Since = since ?? { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length };
+  const from: Since = since ?? { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow() };
   const before = g.regions.map((r) => r.ctrl);
   if (show && g.human && watchPref() && !humanUp(g)) {
     passing = { since: from, before, show, view: { ...ui.view }, timer: 0, nat: '', note: '', done: 0, total: g.order.length - 1 };
@@ -6133,6 +6226,7 @@ function arrive(show: boolean, from: Since, before: string[]): void {
   if (humanUp(g)) { beginHuman(g); lost = lost ?? fell(); }
   ui.raidsFrom = aFrom;
   ui.shoreFrom = from.shore ?? -1;
+  ui.ready = readyNow(from.q ?? []);
   ui.flash = g.regions.filter((r, i) => r.ctrl !== before[i]).map((r) => r.id);
   ui.unread += g.headlines.length - hFrom;
   ui.sel = -1; ui.picked.clear(); ui.rail = ui.ship = ui.land = ui.rebase = false; ui.msg = ''; ui.airMode = '';
@@ -6529,7 +6623,7 @@ function onClick(e: MouseEvent): void {
       break;
     case 'end': {
       // The player's own fleet actions are fought as the month closes, so the dispatches start from here.
-      const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length };
+      const since = { h: g.headlines.length, r: g.reports.length, s: g.seaReports.length, a: g.airReports.length, shore: g.shoreReports.length, q: queueNow() };
       if (onEve(g)) endEve(g); else { judgeGoals(g, g.human!); endHuman(g); }
       advanceToHuman(true, since);
       break;
@@ -7293,6 +7387,10 @@ function applyView(): void {
   svg.setAttribute('viewBox', `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${h.toFixed(1)}`);
   svg.classList.toggle('near', v.w < 600);
   svg.classList.toggle('mid', v.w < 760);
+  // The city order badge in three sizes: whole, without its count, and the sign alone; beyond that it is put away.
+  svg.classList.toggle('ob1', v.w < 700);
+  svg.classList.toggle('ob2', v.w >= 700 && v.w < 900);
+  svg.classList.toggle('ob3', v.w >= 900 && v.w < 1200);
 }
 
 function zoomBy(f: number, cx?: number, cy?: number): void {
@@ -7306,6 +7404,15 @@ function zoomBy(f: number, cx?: number, cy?: number): void {
   v.w = Math.max(150, Math.min(widest(), v.w * f));
   v.x = mx - px * v.w; v.y = my - py * v.w * a;
   applyView();
+}
+
+/** Puts the map's tip by the pointer and inside the map. A list of orders is wider than a province's note, and can be long. */
+function placeTip(x: number, y: number, wide: boolean): void {
+  const tip = $('#tip'), wrap = $('#mapwrap').getBoundingClientRect();
+  tip.classList.toggle('wide', wide);
+  tip.style.display = 'block';
+  tip.style.left = Math.min(wrap.width - (wide ? 350 : 250), x - wrap.left + 14) + 'px';
+  tip.style.top = Math.min(wrap.height - Math.max(100, tip.offsetHeight + 8), y - wrap.top + 14) + 'px';
 }
 
 function wireMap(): void {
@@ -7369,6 +7476,8 @@ function wireMap(): void {
       const by = new Map<string, number>();
       for (const f of g.fleets) if (f.zone === z && atSea(f)) by.set(f.nat, (by.get(f.nat) ?? 0) + shipCount(f.ships));
       tip.innerHTML = `<b>${esc(g.seas[z].name)}</b><br>${by.size ? [...by].map(([nat, n]) => `${g.nations[nat].adj}: ${n} ships`).join(' · ') : 'No fleet at sea here'}`;
+    } else if (el.classList.contains('obadge')) {
+      tip.innerHTML = ordersTip(Number(el.dataset.id));
     } else {
     const r = g.regions[Number(el.dataset.id)];
     const armies = new Map<string, Corps[]>();
@@ -7395,10 +7504,7 @@ function wireMap(): void {
     const town = `<br><span class="tiptown">${esc(t.sizeWord)}${t.name !== t.province ? ` of ${esc(t.name)}` : ''}${has.length ? ` · ${esc(has.join(', '))}` : ''}</span>${stake ? `<br><span class="tiptown gold">${stake}</span>` : ''}`;
     tip.innerHTML = `<b>${esc(r.name)}</b><br>${natName(r.ctrl)} <span class="tiprel ${rel.kind}">${rel.word}</span>${r.ctrl !== r.owner ? ` (occupied ${g.nations[r.owner].adj} ground)` : ''} · ${r.terrain}${steep(g, r) ? ', too steep for tanks' : ''}${town}${here}${order}`;
     }
-    tip.style.display = 'block';
-    const wrap = $('#mapwrap').getBoundingClientRect();
-    tip.style.left = Math.min(wrap.width - 250, e.clientX - wrap.left + 14) + 'px';
-    tip.style.top = Math.min(wrap.height - 100, e.clientY - wrap.top + 14) + 'px';
+    placeTip(e.clientX, e.clientY, !!el && el.classList.contains('obadge'));
   });
   const up = (e: PointerEvent) => {
     const was = pts.size;
@@ -7422,6 +7528,17 @@ function wireMap(): void {
       }
       else if (piece && !busy) pickFleetMark((piece.dataset.fleets ?? '').split(',').map(Number));
       else if (el && el.classList.contains('reg')) onRegion(Number(el.dataset.id));
+      else if (el && el.classList.contains('obadge')) {
+        // A city's badge selects the city, whose panel lists what is forming there; a finger has no pointing, so a tap opens the list as well.
+        const id = Number(el.dataset.id);
+        if (busy || ui.rebase) onRegion(id);
+        else {
+          selectRegion(id);
+          refresh();
+          document.querySelector('#forming')?.scrollIntoView({ block: 'nearest' });
+          if (e.pointerType !== 'mouse') { $('#tip').innerHTML = ordersTip(id); placeTip(e.clientX, e.clientY, true); }
+        }
+      }
       else if (el && el.classList.contains('afm')) {
         // An airfield's pad opens the airfield, unless the map is waiting for a province to finish an order.
         const id = Number(el.dataset.id);

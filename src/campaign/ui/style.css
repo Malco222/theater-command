@@ -1904,3 +1904,36 @@ button.tag:hover, button.tag:focus-visible { filter: brightness(1.25); }
 .wtest > div { flex: 1; min-width: 0; }
 .wtest .meter { margin-top: 5px; }
 @media (max-width: 640px) { .wtests { grid-template-columns: 1fr; } }
+
+/* What each city has on order (Version 78): one badge a city on the map, and the same signs in the lists. */
+#obadges { pointer-events: none; }
+.obadge { display: none; pointer-events: auto; cursor: pointer; }
+svg#map.ob1 .obadge.s1, svg#map.ob2 .obadge.s2, svg#map.ob3 .obadge.s3 { display: inline; }
+.obadge .oplate { fill: var(--panel); fill-opacity: .94; stroke: var(--line); stroke-width: .45; filter: drop-shadow(0 .4px .5px rgba(0, 0, 0, .45)); }
+.obadge.spied .oplate { stroke: var(--ink); stroke-dasharray: 1.4 1; }
+.obadge:hover .oplate { stroke: var(--brass); stroke-width: .7; }
+.obadge .osg { fill: var(--ink); }
+.obadge .ostar, .osign .ostar { fill: var(--brass); stroke: var(--panel); stroke-width: 1.1; paint-order: stroke; }
+.obadge .ocnt { font-family: var(--head); font-weight: 700; font-size: 5px; fill: var(--ink); }
+.obadge .oplus { fill: none; stroke: var(--brass); stroke-width: .85; stroke-linecap: round; }
+.obadge .odisc { fill: var(--brass); }
+.obadge .omon { font-family: var(--head); font-weight: 700; font-size: 4.7px; fill: var(--brass-ink); text-anchor: middle; }
+.osign { flex: none; fill: var(--ink); }
+.osign.work { fill: var(--ink-2); }
+.otip .osign { vertical-align: -3px; margin-right: 2px; }
+.otip i { color: var(--ink-2); }
+.order.oline { align-items: flex-start; }
+.order.oline .osign { margin-top: 2px; }
+.obar { display: block; height: 4px; background: rgba(255, 255, 255, .1); border-radius: 2px; margin: 5px 0 2px; overflow: hidden; }
+.obar i { display: block; height: 100%; background: var(--brass); border-radius: 2px; min-width: 2px; }
+.order small.obarn { font-size: 10.5px; color: var(--ink-3); }
+.formsum { margin: 0 0 7px; color: var(--brass); }
+.ocity { display: block; width: 100%; text-align: left; background: none; border: 0; border-top: 1px solid var(--line); margin-top: 6px; padding: 8px 0 5px; color: var(--ink); cursor: pointer; font: inherit; }
+.ocity b { font-family: var(--head); font-size: 15px; letter-spacing: .03em; }
+.ocity i { color: var(--ink-2); font-size: 12px; }
+.ocity small { display: block; color: var(--brass); font-size: 11.5px; }
+.ocity:hover b { color: var(--brass); }
+.otip.spyline { display: block; margin-top: 3px; }
+.tip.wide { max-width: 340px; }
+.tip .otip { display: block; white-space: nowrap; margin-top: 2px; }
+.tip .otip b { font-family: inherit; font-size: 12.5px; letter-spacing: 0; font-weight: 600; }
