@@ -1,0 +1,8 @@
+seat-GER-25	node out73/probe58.mjs GER 1 25 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+seatfield-GER-25	node out73/probe58.mjs GER 1 25 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"depth":"field"}'
+seat-GER-26	node out73/probe58.mjs GER 1 26 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true}'
+seatfield-GER-26	node out73/probe58.mjs GER 1 26 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"depth":"field"}'
+seat2-GER-25	node out73/probe58.mjs GER 1 25 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"stop":2}'
+seat2field-GER-25	node out73/probe58.mjs GER 1 25 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"depth":"field","stop":2}'
+seat2-GER-26	node out73/probe58.mjs GER 1 26 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"stop":2}'
+seat2field-GER-26	node out73/probe58.mjs GER 1 26 76 '{"minOdds":1.4,"declare":[[8,"DEN"],[9,"LUX"],[9,"BEL"],[9,"NED"],[20,"YUG"],[22,"SOV"]],"land":true,"depth":"field","stop":2}'

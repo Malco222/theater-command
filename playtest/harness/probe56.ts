@@ -14,6 +14,7 @@
 // nations, how it ended (WON, the player fell, or how many nations were left), and how near the player came: the
 // share of the map's worth held at the end and at the most, the strongest rival, the nations beaten after the last
 // act began, and who was left. Tables: domtab.py.
+import * as NV from '@tc/campaign/navy';
 import { campaign, date, T } from './lib';
 const [me, fromS, seedS, untilS, planS] = process.argv.slice(2);
 const plan = JSON.parse(planS || '{}');
@@ -29,7 +30,15 @@ let aliveThen: string[] = [];
 let crossFoe = '', crossFirst = 0, crossMonths = 0, crossMost = 0, crossHeld = 0, crossRun: any = null, liftMost = 0;
 const share = (g: any): { mine: number; rows: any[]; left: number; winner: string | null } => { const b = X.standings(g); const row = b.rows.find((r: any) => r.nat === me); return { mine: row ? row.share : 0, rows: b.rows, left: b.left, winner: b.winner }; };
 const run = campaign(me, Number(fromS), Number(seedS), { ...plan,
-  first: (g: any) => {
+  first: (g: any, r0: any) => {
+    // Version 73: a month, two and three after each landing: is the sea the card spoke of closed, is the force fed, is it still there?
+    for (const e of ((r0 ?? crossRun)?.holdLog ?? []) as any[]) {
+      const age = g.turn - e.turn;
+      if (age < 1 || age > 3) continue;
+      const land = g.regions[e.beach].owner;
+      const mine = g.corps.filter((c: any) => c.nat === me && !c.dead && c.kind !== 'fort' && g.regions[c.reg].owner === land && !g.regions[c.reg].overseas);
+      (e.after ??= []).push({ age, closed: (NV as any).closedTo(g, e.sea, me), there: mine.length, unfed: mine.filter((c: any) => c.supplied === false).length });
+    }
     const la = X.lastAct?.(g);
     if (!la) return;
     if (la.decided && !decidedAt) { decidedAt = g.turn; victor = la.decided.victor ?? 'nobody'; beaten = la.decided.beaten.join('+'); standingThen = la.decided.standing.join(','); }
@@ -101,8 +110,19 @@ if (plan.cross) {
     if (q) { quays.add(q[1]); if (lastQuay && q[1] !== lastQuay) switches++; lastQuay = q[1]; }
   }
   console.log(`CROSS ${me} seed ${seedS} against ${crossFoe || plan.crossFoe || 'any'}: ${log.length ? `crossing prepared from ${firstLine.split(' ').slice(0, 2).join(' ')} for ${log.length} months (${barred} barred), the lowest danger ${lowest < 9 ? lowest.toFixed(2) : '-'}` : 'no crossing was ever on offer'}; the way open at a danger the player bears in ${openM} months, a force ready on the quay in ${readyM}, both in ${bothM}; the plan changed quay ${switches} times (${[...quays].join(', ')}); landings ordered ${landed.length}, ashore ${ashore}; first ashore ${crossFirst ? date(crossFirst) : 'never'}, months ashore ${crossMonths}, most corps there ${crossMost}, most provinces held ${crossHeld}; ${crossFoe && g.nations[crossFoe] ? (g.nations[crossFoe].alive ? `${crossFoe} stands` : `${crossFoe} fell ${g.nations[crossFoe].fellOn ? date(g.nations[crossFoe].fellOn.turn) : ''}`) : ''}; lift at the end ${g.nations[me].sealift}, at the most ${liftMost}; landing risk borne ${plan.landRisk ?? 0.25}`);
+  // Version 73: what the landing card said of the sea behind the beach before each landing the routine ordered.
+  const told = landed.filter((l) => l.includes('the sea behind:'));
+  if (told.length) console.log(`HOLD ${me} seed ${seedS}: before ${told.length} landings the card said the sea behind the beach would be closed in ${told.filter((l) => l.includes('would be closed')).length} and would stay open in ${told.filter((l) => l.includes('stays open')).length}`);
   for (const l of landed.slice(0, 12)) console.log('   ' + l);
   if (plan.crossLog) for (const l of log) console.log('  LOG ' + l);
+}
+{
+  const hl: any[] = (run as any).holdLog ?? [];
+  for (const e of hl) {
+    const af: any[] = e.after ?? [];
+    const one = af.find((x) => x.age === 1);
+    console.log(`HELD ${me} seed ${seedS}: ${date(e.turn)} ${e.name} with ${e.corps} corps: the card said the ${run.g.seas[e.sea].name} ${e.open ? 'stays open' : 'would be closed'} (enemy ${e.foe}, own ${e.own}, need ${e.need}${e.port ? '' : ', no harbour'}); a month later it was ${one ? (one.closed ? 'CLOSED' : 'open') : '?'}, the force ${one ? (one.there ? (one.unfed ? `unfed (${one.unfed} of ${one.there} corps)` : 'fed') : 'gone') : '?'}; closed in any of the three months after: ${af.some((x) => x.closed) ? 'yes' : 'no'}; corps on that ground after 1, 2, 3 months: ${[1, 2, 3].map((k) => af.find((x) => x.age === k)?.there ?? '?').join(', ')}`);
+  }
 }
 if (plan.landLog) {
   const log: string[] = (run as any).landLog ?? [];

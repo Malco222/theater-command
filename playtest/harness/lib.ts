@@ -731,6 +731,11 @@ function mass(run: Run, plan: Plan, row: MonthRow, minOdds: number): void {
 
 // Version 72: the rules builder's crossing routine, copied word for word from /mnt/project-files/theater-command/results/v72/lib.ts
 // (2026-11-15) so that the Playtester's hand player crosses a defended sea the way the builder's proof player does.
+// Version 73: what the landing card said of the sea behind the beach, for the log (the play is not changed).
+// Version 73: each landing that got ashore, with what the card said of the sea behind the beach (probe56 follows it up).
+const holdSeen = (st: any, g: any, r: any, h: any, n: number): void => { if (!h) return; (st.holdLog ??= []).push({ turn: g.turn, beach: r.id, name: r.name, sea: h.sea, open: !!h.open, foe: Math.round(h.foe), own: Math.round(h.own?.total ?? 0), need: Math.round(h.need), port: !!h.port, corps: n }); };
+const holdNote = (h: any): string => !h ? '' : `, the sea behind: ${h.open ? 'stays open' : 'would be closed'} (enemy ${Math.round(h.foe)}, own ${Math.round(h.own?.total ?? 0)}, need ${Math.round(h.need)}${h.port ? '' : ', no harbour'})`;
+
 function prepareCrossing(run: Run, plan: Plan, row: MonthRow, minOdds: number): void {
   const g = run.g, me = run.me, st = run as any;
   const n = g.nations[me];
@@ -768,8 +773,9 @@ function prepareCrossing(run: Run, plan: Plan, row: MonthRow, minOdds: number): 
     }
     if (!best) return '';
     const res = T.orderLand(g, ready, best.r.id);
+    if (res.ok && res.taken) holdSeen(st, g, best.r, (best.pl as any).hold, ready.length);
     row.notes.push(`crossing: landed at ${best.r.name}: ${res.ok ? (res.taken ? 'ashore' : 'thrown back') : 'refused: ' + res.why}`);
-    return ` | LANDED at ${best.r.name} with ${ready.length} corps: ${res.ok ? (res.taken ? 'ashore' : 'thrown back') : 'refused: ' + res.why}, caught ${best.pl.risk.toFixed(2)}, ${best.pl.assess ? `odds ${best.pl.assess.odds.toFixed(2)}` : 'undefended'}, lost at sea ${Math.round(res.lostAtSea ?? 0)}`;
+    return ` | LANDED at ${best.r.name} with ${ready.length} corps: ${res.ok ? (res.taken ? 'ashore' : 'thrown back') : 'refused: ' + res.why}, caught ${best.pl.risk.toFixed(2)}, ${best.pl.assess ? `odds ${best.pl.assess.odds.toFixed(2)}` : 'undefended'}, lost at sea ${Math.round(res.lostAtSea ?? 0)}${holdNote((best.pl as any).hold)}`;
   };
   const wait = (quay: Region): void => { for (const u of quay.units) if (field(u)) (u as any).ptWatch = g.turn; };
 
@@ -838,11 +844,12 @@ function tryLanding(run: Run, row: MonthRow, minOdds: number, plan: Plan = {}): 
       const odds = pl.assess ? pl.assess.odds : 9;
       if (odds < minOdds || pl.risk > (plan.landRisk ?? 0.25)) continue;
       const score = r.vp * 10 + (r.port ? 5 : 0) + odds - pl.risk * 20;
-      if (!best || score > best.score) best = { r, score };
+      if (!best || score > best.score) best = { r, score, pl } as any;
     }
     if (best) {
       const res = T.orderLand(g, cs, best.r.id);
-      row.notes.push(`landing at ${best.r.name} from ${p.name}: ${res.ok ? (res.taken ? 'ashore' : 'thrown back') : 'refused: ' + res.why}${res.lostAtSea ? `, ${Math.round(res.lostAtSea * 100) / 100} lost at sea` : ''}`);
+      if (res.ok && res.taken) holdSeen(run, g, best.r, (best as any).pl?.hold, cs.length);
+      row.notes.push(`landing at ${best.r.name} from ${p.name}: ${res.ok ? (res.taken ? 'ashore' : 'thrown back') : 'refused: ' + res.why}${res.lostAtSea ? `, ${Math.round(res.lostAtSea * 100) / 100} lost at sea` : ''}${holdNote((best as any).pl?.hold)}`);
       return; // one a month
     }
   }

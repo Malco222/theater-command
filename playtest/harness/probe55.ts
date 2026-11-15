@@ -11,5 +11,5 @@ const run = campaign(me, Number(fromS), Number(seedS), { ...JSON.parse(planS),
     writeFileSync(`${out}-${g.turn}.json`, saveGame(g));
     console.log(`${date(g.turn)} (turn ${g.turn}): saved ${out}-${g.turn}.json after the player's orders`);
   },
-} as any, Number(untilS));
+} as any, { until: Number(untilS) });
 console.log(`played to ${date(run.g.turn)}${run.fell ? ` (fell ${run.fell})` : ''}`);
