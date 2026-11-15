@@ -98,16 +98,18 @@ describe('the wider world', () => {
     const q = [0];
     for (let k = 0; k < q.length; k++) for (const j of g.seas[q[k]].adj) if (!seen.has(j)) { seen.add(j); q.push(j); }
     expect(seen.size).toBe(g.seas.length);
-    // The Pacific coast is joined to the Caribbean by the Panama Canal, which is America's to open and shut.
+    // The Pacific coast is joined to the Caribbean by the Panama Canal, which is America's to open and shut. Since
+    // Version 76 it stands on its own ground: the Canal Zone, between the Caribbean and the Gulf of Panama.
     const key = (k: string): number => g.seas.findIndex((s) => s.key === k);
     const canal = g.gates.find((gt) => gt.name === 'the Panama Canal')!;
-    expect([canal.a, canal.b].sort((a, b) => a - b)).toEqual([key('caribbean'), key('tehuantepec')]);
-    expect(canal.nation).toBe('USA');
-    expect(canPass(g, key('caribbean'), key('tehuantepec'), 'UK')).toBe(true);
-    expect(canPass(g, key('caribbean'), key('tehuantepec'), 'GER')).toBe(true);
+    expect([canal.a, canal.b].sort((a, b) => a - b)).toEqual([key('caribbean'), key('panama')]);
+    expect(g.regions[canal.region].name).toBe('Canal Zone');
+    expect(g.byName['Canal Zone'].ctrl).toBe('USA');
+    expect(canPass(g, key('caribbean'), key('panama'), 'UK')).toBe(true);
+    expect(canPass(g, key('caribbean'), key('panama'), 'GER')).toBe(true);
     setWar(g, 'USA', 'GER');
-    expect(canPass(g, key('caribbean'), key('tehuantepec'), 'GER')).toBe(false);
-    expect(canPass(g, key('caribbean'), key('tehuantepec'), 'UK')).toBe(true);
+    expect(canPass(g, key('caribbean'), key('panama'), 'GER')).toBe(false);
+    expect(canPass(g, key('caribbean'), key('panama'), 'UK')).toBe(true);
     expect(canPass(g, key('caribbean'), key('tehuantepec'), 'USA')).toBe(true);
     // The islands of the Atlantic stand alone on their seas.
     for (const name of ['Newfoundland', 'Iceland', 'Greenland', 'Azores', 'Puerto Rico', 'Jamaica', 'Bahamas', 'Canary Islands']) {
@@ -146,7 +148,9 @@ describe('the wider world', () => {
     expect(g.regions[n.CAN.capital].name).toBe('Ottawa');
     expect(g.regions[n.MEX.capital].name).toBe('Mexico City');
     expect(g.regions[n.CUB.capital].name).toBe('Havana');
-    expect(g.order.slice(-3)).toEqual(['CAN', 'MEX', 'CUB']);
+    // They follow the countries of the old chart in the order of play, and the countries of later slices follow them.
+    expect(g.order.slice(g.order.indexOf('CAN'), g.order.indexOf('CAN') + 3)).toEqual(['CAN', 'MEX', 'CUB']);
+    expect(g.order.indexOf('CAN')).toBe(createGame(1, null).order.length);
     expect(n.MEX.align).toBe('independent');
     expect(n.MEX.atWar).toEqual([]);
     // A dominion is in its mother country's wars from the day they began.
@@ -157,7 +161,7 @@ describe('the wider world', () => {
     for (const [nat, name, , divs, at, o] of WORLD.corps) {
       const c = g.corps.find((x) => x.nat === nat && x.name === name)!;
       expect(c, name).toBeDefined();
-      expect([c.divs, g.regions[c.reg].name, c.str], name).toEqual([divs, at, o.str]);
+      expect([c.divs, g.regions[c.reg].name, c.str], name).toEqual([divs, at, o.str ?? 1]);
     }
     const sq = g.fleets.find((f) => f.nat === 'USA' && f.name === 'Atlantic Squadron')!;
     expect(g.regions[sq.base].name).toBe('Norfolk');
@@ -237,7 +241,8 @@ describe('the wider world', () => {
     expect(crossingsOf(g).length).toBe(CROSSINGS.length + WORLD_CROSSINGS.length);
     expect(crossingsOf(g).slice(0, CROSSINGS.length)).toEqual(CROSSINGS);
     expect(riversOf(g).slice(0, RIVERS.length)).toEqual(RIVERS);
-    expect(riversOf(g).slice(RIVERS.length).map((r) => r.name)).toEqual(['Mississippi', 'Missouri', 'Ohio', 'St Lawrence', 'Rio Grande', 'Columbia', 'Colorado']);
+    expect(riversOf(g).slice(RIVERS.length).map((r) => r.name)).toEqual(['Mississippi', 'Missouri', 'Ohio', 'St Lawrence', 'Rio Grande', 'Columbia', 'Colorado',
+      'Amazon', 'Madeira', 'Parana', 'Paraguay', 'Uruguay', 'Orinoco', 'Magdalena', 'Sao Francisco']);
     const id = (name: string): number => g.byName[name].id;
     const river = (a: string, b: string): string | null => { const c = crossingOf(id(a), id(b)); return c ? riverName(c) : null; };
     expect(river('Illinois', 'Missouri')).toBe('Mississippi');

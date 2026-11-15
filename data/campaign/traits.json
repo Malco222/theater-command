@@ -169,6 +169,42 @@
         { "id": "sierra", "name": "The Sierra Madre", "text": "Two great mountain chains and the desert between them, with few roads and fewer railways for an invader to use.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills"] } },
         { "id": "mines", "name": "Silver, lead and oil", "text": "Silver, lead, zinc and the oil of the Gulf coast, which every power at war wants to buy. It pays while Mexico is at peace.", "income": 0.6, "incomeAt": "peace" }
       ]
+    },
+    "BRA": {
+      "traits": [
+        { "id": "coffee", "name": "Coffee, rubber and quartz", "text": "Coffee, the rubber of the Amazon and the quartz every radio set needs, sold to whoever sends ships for them. It pays while Brazil is at peace.", "income": 0.6, "incomeAt": "peace" }
+      ],
+      "unit": { "id": "expedition", "label": "Expeditionary corps", "word": "Expeditionary", "kind": "inf", "divs": 2, "cost": 30, "months": 4, "most": 1, "attack": 1.15, "defence": 1.15, "when": { "terrain": ["mountain", "hills"] }, "text": "A force raised to fight overseas, trained and armed on its allies' pattern, that learns its trade in the mountains. Its badge is a snake smoking a pipe." }
+    },
+    "ARG": {
+      "traits": [
+        { "id": "beef", "name": "Beef and wheat", "text": "The beef and wheat of the pampas feed half of Europe, and every power at war bids for them. It pays while Argentina is at peace.", "income": 0.6, "incomeAt": "peace" }
+      ],
+      "unit": { "id": "gauchos", "label": "Cavalry division group", "word": "Cavalry", "kind": "cav", "divs": 2, "cost": 30, "months": 4, "most": 2, "attack": 1.2, "defence": 1.1, "when": { "terrain": ["plains"] }, "text": "Mounted regiments raised on the pampas, at home on open grassland where a horse outruns a lorry and needs no road." }
+    },
+    "CHL": {
+      "traits": [
+        { "id": "copper", "name": "Copper and nitrates", "text": "The copper of the high desert and the nitrates of the north, which no arsenal can do without. It pays while Chile is at peace.", "income": 0.6, "incomeAt": "peace" },
+        { "id": "cordillera", "name": "The long country", "text": "A ribbon of desert, mountain and forest four thousand kilometres long, with the Andes at its back and few places to land.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills", "forest"] } }
+      ]
+    },
+    "PER": {
+      "traits": [
+        { "id": "sierra", "name": "The high sierra", "text": "Passes at four thousand metres, where an invader's men gasp for breath and his lorries boil.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills"] } },
+        { "id": "talara", "name": "Copper, cotton and oil", "text": "The copper of the sierra, the cotton of the coast and the oil of Talara. It pays while Peru is at peace.", "income": 0.4, "incomeAt": "peace" }
+      ]
+    },
+    "COL": {
+      "traits": [
+        { "id": "cordilleras", "name": "Three cordilleras", "text": "The Andes divide into three ranges here with deep valleys between them, and no road joins them all.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills"] } },
+        { "id": "platinum", "name": "Coffee and platinum", "text": "Coffee, gold and most of the platinum to be had outside the Soviet Union. It pays while Colombia is at peace.", "income": 0.4, "incomeAt": "peace" }
+      ]
+    },
+    "VEN": {
+      "traits": [
+        { "id": "maracaibo", "name": "The oil of Maracaibo", "text": "The third oil producer in the world. Much of what the fleets and air forces at war burn begins here.", "oil": 1.5 },
+        { "id": "llanos", "name": "Plain and forest", "text": "Plains that flood for half the year and forest beyond them: an invader's columns bog down long before they reach anything worth taking.", "defence": 1.15, "when": { "home": true, "terrain": ["plains", "forest"] } }
+      ]
     }
   }
 }

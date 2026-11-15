@@ -809,11 +809,28 @@ export function planCrossing(g: Game, nat: string, from: Region | null, to: Regi
   return true;
 }
 
-/** The ground a nation's army can reach by land: its own side's, and on from there through the ground of its enemies. */
+/**
+ * The ground a nation's side can reach by land: its own and its allies', and on from there through the ground of
+ * its enemies. The coast watch counts by it (a coast any of the attacker's allies can march to is not watched).
+ */
 function landReach(g: Game, nat: string): Uint8Array {
   const byLand = new Uint8Array(g.regions.length);
   const q: number[] = [];
   for (const r of g.regions) if (allied(g, nat, r.ctrl)) { byLand[r.id] = 1; q.push(r.id); }
+  for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!byLand[j] && atWar(g, nat, g.regions[j].ctrl)) { byLand[j] = 1; q.push(j); }
+  return byLand;
+}
+
+/**
+ * The ground a nation's own army can march to: enemy ground joined by land to ground it holds itself or to where a
+ * field corps of its own stands. An ally's front is not its own: the Red Army on the Bug does not put Brittany
+ * within a march of a British or an American corps in Devon, and those shores stay on the list of crossings.
+ */
+function armyReach(g: Game, nat: string): Uint8Array {
+  const byLand = new Uint8Array(g.regions.length);
+  const q: number[] = [];
+  const own = (u: Corps): boolean => u.nat === nat && !u.dead && u.kind !== 'fort';
+  for (const r of g.regions) if (r.ctrl === nat || (allied(g, nat, r.ctrl) && (r.units.some(own) || (r.garr ?? []).some(own)))) { byLand[r.id] = 1; q.push(r.id); }
   for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (!byLand[j] && atWar(g, nat, g.regions[j].ctrl)) { byLand[j] = 1; q.push(j); }
   return byLand;
 }
@@ -855,8 +872,10 @@ export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
     if (!p || troops(r) > troops(p) || (troops(r) === troops(p) && r.ctrl === nat && p.ctrl !== nat)) ports.set(k, r);
   }
   if (!ports.size) return [];
-  // Enemy ground the army can reach by land needs no ships. The other shores, by whose ground they are and who holds them.
-  const byLand = landReach(g, nat);
+  // Enemy ground the nation's own army can reach by land needs no ships. The other shores, by whose ground they are
+  // and who holds them. (Until Version 76 an ally's front counted as its own, and once the Soviet Union was in the
+  // war every shore of the continent dropped off a British or an American player's list.)
+  const byLand = armyReach(g, nat);
   const shores = new Map<string, Region[]>();
   for (const r of g.regions) {
     if (byLand[r.id] || !r.seas.length || !atWar(g, nat, r.ctrl) || !g.nations[r.ctrl]?.alive) continue;

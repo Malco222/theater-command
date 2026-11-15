@@ -10,7 +10,7 @@ import { runAI } from '../src/campaign/ai';
 import { liftView } from '../src/campaign/arsenal';
 import { AIR, AIRWAR, airAI, airBases, airRange, airfieldsHold, km, rebaseAir, skyDenies, skyOver, skyReach, whyNotMission } from '../src/campaign/air';
 import { setDesk } from '../src/campaign/depth';
-import { addCorps, allied, atWar, computeSupply, createGame, endPhase } from '../src/campaign/game';
+import { addCorps, atWar, computeSupply, createGame, endPhase } from '../src/campaign/game';
 import { onBook, setStop, shoreOpen } from '../src/campaign/history';
 import {
   NAVY, closedTo, coastReport, crossingAccount, crossingsOf, fleetPower, fleetReach, landCorps, landingRisk, landingTargets, liftLeft, navalAI, openSeas, planCrossing, planLanding,
@@ -221,7 +221,9 @@ describe('the crossings a nation could make', () => {
     for (const id of mainland) for (const j of g.regions[id].nb) if (g.regions[j].ctrl === 'FRA') mainland.add(j);
     expect(mainland.size).toBeGreaterThan(5);
     expect(rows.some((x) => mainland.has(x.to.id))).toBe(false);
-    expect(rows.every((x) => !x.to.nb.some((j) => allied(g, 'GER', g.regions[j].ctrl)))).toBe(true);
+    // Since Version 76 the march is the nation's own: ground beside Germany's own is no crossing, but Egypt is one
+    // until a German corps stands in Italy's Libya (an ally's front is not hers).
+    expect(rows.every((x) => !x.to.nb.some((j) => g.regions[j].ctrl === 'GER'))).toBe(true);
     expect(rows.some((x) => x.owner === 'UK' && x.home)).toBe(true);
     for (const x of rows) {
       expect(atWar(g, 'GER', x.to.ctrl)).toBe(true);

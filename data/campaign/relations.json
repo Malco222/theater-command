@@ -7,7 +7,9 @@
     { "id": "baltic", "name": "the Baltic states", "why": "the three Baltic republics, bound by their entente of 1934", "nations": ["EST", "LAT", "LIT"] },
     { "id": "low", "name": "the Low Countries", "why": "the Low Countries, neighbours and partners in trade", "nations": ["BEL", "NED", "LUX"] },
     { "id": "balkan", "name": "the Balkan Entente", "why": "partners in the Balkan Pact of 1934", "nations": ["YUG", "GRE", "ROM", "TUR"] },
-    { "id": "iberia", "name": "the Iberian neighbours", "why": "bound by the Iberian treaty of friendship of 1939", "nations": ["ESP", "POR"] }
+    { "id": "iberia", "name": "the Iberian neighbours", "why": "bound by the Iberian treaty of friendship of 1939", "nations": ["ESP", "POR"] },
+    { "id": "abc", "name": "the ABC powers", "why": "Argentina, Brazil and Chile, partners in the ABC pact of 1915", "nations": ["ARG", "BRA", "CHL"] },
+    { "id": "bolivar", "name": "the Bolivarian republics", "why": "the republics that Bolivar freed, which have met in congress since 1826", "nations": ["COL", "VEN", "ECU", "PER", "BOL"] }
   ],
   "pairs": [
     ["UK", "POR", "the oldest alliance in Europe, kept since 1373"],
@@ -19,6 +21,9 @@
     ["POL", "HUN", "an old friendship between the two peoples"],
     ["HUN", "ITA", "friends since their treaty of 1927"],
     ["BUL", "GER", "comrades in arms of the last war"],
-    ["IRL", "USA", "ties of family across the Atlantic"]
+    ["IRL", "USA", "ties of family across the Atlantic"],
+    ["USA", "PAN", "the Canal treaty of 1903, renewed in 1936"],
+    ["USA", "CUB", "neighbours bound by treaty since 1903"],
+    ["ARG", "URU", "neighbours across the River Plate"]
   ]
 }

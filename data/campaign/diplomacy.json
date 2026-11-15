@@ -17,12 +17,18 @@
     "HUN": 40, "ESP": 35, "TUR": -35, "ROM": 0, "BUL": 15, "YUG": -5, "GRE": -20, "FIN": 5,
     "SWE": 0, "SUI": 0, "IRL": 0, "POR": -10, "NOR": -15, "DEN": -5, "BEL": -20, "NED": -15, "LUX": -10,
     "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0, "VIC": 10, "IRQ": -35, "IRN": 5,
-    "MEX": -10, "CUB": -25
+    "MEX": -10, "CUB": -25,
+    "BRA": -10, "ARG": 10, "CHL": 0, "PER": -5, "COL": -15, "VEN": -10,
+    "GUA": -20, "ELS": -20, "HON": -20, "NIC": -25, "COS": -25, "PAN": -25, "HAI": -25, "DOM": -25,
+    "ECU": -10, "BOL": 0, "PAR": 5, "URU": -15
   },
   "bandwagon": {
     "_default": 2, "HUN": 3, "ROM": 3, "BUL": 3, "ESP": 2.5, "FIN": 2, "YUG": 1.5, "TUR": 1, "SWE": 1, "POR": 1,
     "GRE": 0.5, "SUI": 0.5, "IRL": 0.5, "VIC": 1.5, "IRQ": 1, "IRN": 1, "EST": 0, "LAT": 0, "LIT": 0, "SOV": 0,
-    "USA": 0, "MEX": 0.5, "CUB": 0.5
+    "USA": 0, "MEX": 0.5, "CUB": 0.5,
+    "BRA": 0.5, "ARG": 0.5, "CHL": 0.5, "PER": 0.5, "COL": 0.5, "VEN": 0.5,
+    "GUA": 0.5, "ELS": 0.5, "HON": 0.5, "NIC": 0.5, "COS": 0.5, "PAN": 0.5, "HAI": 0.5, "DOM": 0.5,
+    "ECU": 0.5, "BOL": 0.5, "PAR": 0.5, "URU": 0.5
   },
   "events": [
     {
@@ -111,6 +117,20 @@
       "enter": { "nations": ["MEX"], "align": "allies" },
       "war": [["MEX", "GER"]],
       "text": "German submarines have sunk Mexican tankers in the Gulf. Mexico declares war on the Axis and joins the Allies."
+    },
+    {
+      "id": "isthmus-war", "from": 28, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "war:USA,GER"],
+      "enter": { "nations": ["PAN", "COS", "NIC", "HON", "ELS", "GUA", "HAI", "DOM"], "align": "allies" },
+      "war": [["PAN", "GER"], ["COS", "GER"], ["NIC", "GER"], ["HON", "GER"], ["ELS", "GER"], ["GUA", "GER"], ["HAI", "GER"], ["DOM", "GER"]],
+      "text": "The republics of Central America and the Caribbean follow the United States into the war within the week. Their armies are small, but their harbours and airfields guard the approaches to the Canal."
+    },
+    {
+      "id": "brazil-war", "from": 36, "to": 99, "mode": "open",
+      "if": ["flag:world", "alive:GER", "alive:BRA", "war:USA,GER", "atPeace:BRA", "notInBloc:BRA"],
+      "enter": { "nations": ["BRA"], "align": "allies" },
+      "war": [["BRA", "GER"]],
+      "text": "German submarines have sunk Brazilian ships within sight of the coast, and crowds fill the streets of Rio. Brazil declares war on the Axis and joins the Allies."
     },
     {
       "id": "usa-italy", "from": 28, "to": 99, "mode": "open",

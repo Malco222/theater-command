@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import { Delaunay } from 'd3-delaunay';
 import polygonClipping from 'polygon-clipping';
-import { loadLand, clipToBox, simplifyRing, ringArea } from './geo-common.mjs';
+import { loadLand, loadCountry, clipToBox, simplifyRing, ringArea } from './geo-common.mjs';
 import { CELL, fill, simplify, smooth, buildSeas } from './geo-seas.mjs';
 import { FRAME, WORLD_REGIONS, BEYOND, FRONTIERS, WORLD_LINKS, WORLD_ROADS, WORLD_NO_BORDER, LAKES } from '../data/campaign/world.mjs';
 
@@ -68,11 +68,25 @@ const first = core.regions.length;
 const taken = new Set(core.regions.map((r) => r.name));
 // The frontiers drawn true: each side of one is a closed shape on the chart, and a point outside them all is on
 // the side that is left.
+// A side is either drawn by hand (a frontier line closed through open water) or a country's own outline from the
+// atlas. Either way it is a set of closed shapes.
+// The atlas draws a country's coast finer than the chart's own, so its outline is let out by a hair all round: the
+// coast then lies wholly inside it and no thread of shore is left over for the country on the far side of the chart.
+// Where two outlines overlap along a frontier the one listed first has the ground, as with every side.
+const HAIR = 1.5;
+const letOut = (multi) => {
+  const k = HAIR * Math.SQRT1_2;
+  const moves = [[HAIR, 0], [-HAIR, 0], [0, HAIR], [0, -HAIR], [k, k], [k, -k], [-k, k], [-k, -k]];
+  return polygonClipping.union(multi, ...moves.map(([dx, dy]) => multi.map((p) => p.map((r) => r.map(([x, y]) => [x + dx, y + dy])))));
+};
 const sides = FRONTIERS.map((f) => {
+  if (f.country) return { name: f.country, owners: f.owners, atlas: true, multi: letOut(loadCountry(f.country, f.within ?? null).map((p) => p.map((ring) => ring.map(proj)))) };
   const ring = [...f.line, ...f.close].map(([lat, lon]) => proj([lon, lat]));
-  return { name: f.name, owners: f.owners, poly: [[...ring, ring[0]]] };
+  return { name: f.name, owners: f.owners, multi: [[[...ring, ring[0]]]] };
 });
-const sideAt = (x, y) => sides.findIndex((sd) => inRing(sd.poly[0], x, y));
+const sideAt = (x, y) => sides.findIndex((sd) => sd.multi.some((p) => inPoly(p, x, y)));
+// The country whose homeland is the open side: its ground inside another side (the Canal Zone) is no mistake.
+const OPEN_SIDE = 'USA';
 const seeds = [];
 WORLD_REGIONS.forEach(([name, lat, lon, owner, terrain, vp, fac, flags], i) => {
   const [x, y] = proj([lon, lat]);
@@ -98,10 +112,10 @@ for (const [m, all] of onMass) {
   const split = new Set(all.map((s) => s.side)).size > 1;
   const cut = (k) => {
     try {
-      if (k < 0) return polygonClipping.difference(land[m], ...sides.map((sd) => sd.poly));
-      const own = polygonClipping.intersection(land[m], sides[k].poly);
+      if (k < 0) return polygonClipping.difference(land[m], ...sides.map((sd) => sd.multi));
+      const own = polygonClipping.intersection(land[m], sides[k].multi);
       // A side listed earlier is cut out of one listed later.
-      return k > 0 && own.length ? polygonClipping.difference(own, ...sides.slice(0, k).map((sd) => sd.poly)) : own;
+      return k > 0 && own.length ? polygonClipping.difference(own, ...sides.slice(0, k).map((sd) => sd.multi)) : own;
     }
     catch (e) { console.warn('! could not cut a land mass along a frontier', e.message); return [land[m]]; }
   };
@@ -111,7 +125,7 @@ for (const [m, all] of onMass) {
     const part = split ? cut(k) : [land[m]];
     for (const s of group) {
       s.part = part;
-      if (split && s.id >= 0 && (k >= 0 ? !sides[k].owners.includes(s.owner) : sides.some((sd) => sd.owners.includes(s.owner)))) console.warn(`! ${s.name} (${s.owner}) stands on the wrong side of a frontier`);
+      if (split && s.id >= 0 && (k >= 0 ? !sides[k].owners.includes(s.owner) : s.owner !== OPEN_SIDE && sides.some((sd) => sd.owners.includes(s.owner)))) console.warn(`! ${s.name} (${s.owner}) stands on the wrong side of a frontier`);
     }
     if (group.length < 2) { group[0].cell = null; continue; }
     const delaunay = Delaunay.from(group, (s) => s.x, (s) => s.y);
@@ -182,6 +196,17 @@ land.forEach((p, m) => {
   for (const s of seeds) {
     if (s.id < 0) continue;
     for (const [x, y] of p[0]) { const d = Math.hypot(x - s.x, y - s.y); if (d < bd) { bd = d; best = s; } }
+  }
+  if (!best) {
+    // An island inside a country's own outline (the channels of southern Chile, Marajo in the mouth of the Amazon)
+    // goes to that country's nearest province, though it lies further out than that.
+    const n = p[0].length - 1;
+    const cx = p[0].slice(0, n).reduce((t, q) => t + q[0], 0) / n, cy = p[0].slice(0, n).reduce((t, q) => t + q[1], 0) / n;
+    const k = sideAt(cx, cy);
+    if (k >= 0 && sides[k].atlas) {
+      let far = 200;
+      for (const s of seeds) { if (s.id < 0 || s.side !== k) continue; const d = Math.hypot(cx - s.x, cy - s.y); if (d < far) { far = d; best = s; } }
+    }
   }
   if (!best) return;
   const rings = p.filter((r) => Math.abs(ringArea(r)) > 1.5).map((r) => r.slice(0, -1).map(([x, y]) => [r1(x), r1(y)]));
@@ -402,8 +427,10 @@ const told = new Set();
 for (const z of zones) for (const j of z.adj) told.add(z.i < j ? `${z.i}-${j}` : `${j}-${z.i}`);
 const nm = (k) => k.split('-').map((i) => zones[+i].id).join(' and ');
 for (const k of meets) if (!told.has(k) && k.split('-').some((i) => +i >= nCore)) console.warn(`? ${nm(k)} meet on the chart (${segs.get(k).length} cells) but are not adjacent`);
-// A canal joins two seas that do not meet: a gate between them says so.
+// A canal joins two seas that do not meet: a gate between them says so. So does a passage that lies beyond the
+// chart's edge (round Cape Horn, round the Horn of Africa): world-seas.json, 'passages'.
 const cut = new Set(gates.map((gt) => (gt.a < gt.b ? `${gt.a}-${gt.b}` : `${gt.b}-${gt.a}`)));
+for (const [a, b] of seaData.passages ?? []) { const ia = index.get(a), ib = index.get(b); cut.add(ia < ib ? `${ia}-${ib}` : `${ib}-${ia}`); }
 for (const k of told) if (!meets.has(k) && !cut.has(k) && k.split('-').some((i) => +i >= nCore)) console.warn(`? ${nm(k)} are adjacent but do not meet on the chart`);
 
 // Which sea a point of the chart lies in, at half the detail: each row is [sea, cells, sea, cells...], -1 for land.
