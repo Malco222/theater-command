@@ -522,6 +522,7 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 				}
 			}
 		}
+		Object->TryGetStringField(TEXT("lift"), Out.LiftLine);
 		const TSharedPtr<FJsonObject>* Dial = nullptr;
 		if (Object->TryGetObjectField(TEXT("dial"), Dial))
 		{

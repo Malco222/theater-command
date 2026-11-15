@@ -427,6 +427,8 @@ function view() {
     arms: armsTable(s),
     // (Version 70) The history dial as it stands: null outside the grand campaign, and where the rules have none.
     dial: (() => { const d = dialNow(s); return d ? { stop: d.stop, name: d.name, under: d.under } : null; })(),
+    // (Version 72) The sea lift in a few words, for the heading of the fleet card: empty where the rules have none.
+    lift: (() => { try { const l = seaCalls.lift ? seaCalls.lift(s) : null; return l ? (l.lift > 0 ? `sea lift for ${l.lift} corps a month, ${l.left} left` : 'no sea lift') : ''; } catch { return ''; } })(),
     // (release 1) The admiral's chart: each sea by how well it is searched, and old sightings.
     chart: chartOf(s),
     // (release 1) Wrecks on the chart: where the big ships went down.
@@ -983,7 +985,7 @@ function load(text: string) {
 // the rules before Version 70 as well: there the dial is simply not there.
 
 interface DialStop { stop: number; id: string; name: string; under: string; blurb: string; lines: string[] }
-interface DialNow { stop: number; name: string; under: string; blurb: string; lines: string[]; loosest: number; loosestName: string; closed: { theatre: string; name: string; turn: number }[]; locked: string | null }
+interface DialNow { stop: number; name: string; under: string; blurb: string; lines: string[]; loosest: number; loosestName: string; closed: { theatre: string; name: string; turn: number }[]; locked: string | null; expects?: { theatre: string; name: string; turn: number; text: string }[] }
 interface ClaimRow { id: string; nat: string; on: string; name: string; why: string; ground: string[]; state: 'claims' | 'pressing' | 'marched'; since: number; onYou: boolean }
 const rulesByName: Record<string, unknown> = { ...everyRule };
 const dialCalls = {
@@ -994,6 +996,71 @@ const dialCalls = {
   claims: rulesByName['claimsOf'] as ((g: Game) => ClaimRow[]) | undefined,
 };
 const dialStops = (): DialStop[] => { try { return dialCalls.stops ? dialCalls.stops() : []; } catch { return []; } };
+
+// ---- Crossing a defended sea (Version 72) ---------------------------------------------------------
+// The danger of a landing's crossing can be read, prepared for and brought down: the reckoning line by line, what
+// would make it safer with the danger as it would then be, the list of crossings open to the player, the one he
+// names as his plan, and the shipping that carries his armies.
+
+interface CrossAccount { risk: number; loss: number; sky: string; worst: number; skyWon: number | null; lines: { label?: string; value?: string; effect?: string }[]; helps: { id: string; text: string; risk: number }[] }
+interface CrossingRow { foe: string; owner: string; home: boolean; from: { id: number; name: string }; to: { id: number; name: string }; path: number[]; bar: string | null; barred: string | null; account: CrossAccount; planned: boolean; hope?: boolean }
+const seaCalls = {
+  crossings: rulesByName['crossings'] as ((g: Game) => CrossingRow[]) | undefined,
+  plan: rulesByName['orderCrossingPlan'] as ((g: Game, from: number | null, to: number | null) => boolean) | undefined,
+  lift: rulesByName['liftOf'] as ((g: Game) => { lift: number; left: number; building: number[]; room: number } | null) | undefined,
+};
+
+/** The player's shipping for armies, in a line: what it carries a month, what is left this month, and the troopships on the slips. */
+function liftLine(s: Game): string {
+  try {
+    const l = seaCalls.lift ? seaCalls.lift(s) : null;
+    if (!l) return '';
+    const slips = (l.building ?? []).length;
+    return `Sea lift: your shipping carries ${l.lift} corps a month, and ${l.left} ${l.left === 1 ? 'is' : 'are'} left this month.${slips ? ` ${slips} lot${slips === 1 ? '' : 's'} of troopships on the slips, the first ready in ${turnToDate(Math.min(...l.building)).label}.` : ''}`;
+  } catch { return ''; }
+}
+
+/** The reckoning of a crossing as lines to read: each line of the account, then what would make it safer and the danger as it would then be. */
+function accountLines(a: CrossAccount | undefined | null): string[] {
+  if (!a) return [];
+  const out: string[] = [];
+  for (const l of a.lines ?? []) out.push(`${l.label ?? ''}${l.value ? `: ${l.value}` : ''}${l.effect ? `  (${l.effect})` : ''}`);
+  if ((a.helps ?? []).length) {
+    out.push('What would make it safer:');
+    for (const h of a.helps) out.push(`${h.text.replace(/[.\s]+$/, '')}: the danger would then be about ${Math.round(h.risk * 100)} in 100.`);
+  }
+  return out.filter(Boolean);
+}
+
+/** The crossings open to the player: for each shore an enemy holds that his army cannot march to, the safest way over, what bars it, why, and what would help. */
+function crossingsPage(s: Game): Page | null {
+  if (!seaCalls.crossings || !s.human) return null;
+  const up = humanUp(s) && !onEve(s);
+  let list: CrossingRow[] = [];
+  try { list = seaCalls.crossings(s); } catch { list = []; }
+  const rows: PageRow[] = list.map((c) => {
+    const risk = Math.round((c.account?.risk ?? 0) * 100);
+    return {
+      nat: c.owner, title: `${c.from.name} to ${c.to.name}${c.planned ? '  \u00B7  YOUR PLAN' : ''}`,
+      lines: [c.bar ? `Barred today: ${c.bar}` : `Open today. About ${risk} in 100 of the force would be caught at sea.`,
+        ...(c.hope ? ['It is listed because it would be the safest way to this shore once the sky over the beach was won.'] : []), ...accountLines(c.account)],
+      buttons: [c.planned
+        ? { label: 'DROP THE PLAN', act: 'crossing:none', ok: up, tip: 'Your admirals and your air staff go back to their own judgement.' }
+        : { label: 'NAME THIS THE PLAN', act: `crossing:${c.from.id}:${c.to.id}`, ok: up, tip: 'Where you have handed them the navy and the air war, your admirals stand a fleet off this beach and your air staff fights for the sky over it. The landing itself is always your own order.' }],
+    };
+  });
+  return {
+    id: 'crossings', title: 'SEA CROSSINGS',
+    headline: rows.length ? `${rows.length} shore${rows.length === 1 ? '' : 's'} across the water` : 'No crossing to plan',
+    note: liftLine(s) || 'You have no shipping for an army.', top: [],
+    sections: [{
+      heading: 'THE CROSSINGS',
+      text: rows.length ? 'For each shore an enemy holds that your army cannot march to: the safest way over from one of your ports, what bars it today, why it is as dangerous as it is, and what would make it safer. Each figure is exact: do the thing and the danger is that number.'
+        : 'Every enemy shore can be reached by land, or you are at war with nobody across the sea.',
+      rows,
+    }],
+  };
+}
 const dialNow = (s: Game): DialNow | null => { try { return dialCalls.now ? dialCalls.now(s) : null; } catch { return null; } };
 
 /**
@@ -1035,7 +1102,9 @@ function dialSection(s: Game): { heading: string; text: string; rows: PageRow[] 
     heading: 'THE HISTORY DIAL',
     text: [`How far the other countries may move away from what history did. It stands at ${d.name} (${d.under}). ${d.blurb}`,
       d.locked ? d.locked : 'The dial leashes the world the computer runs, never you: your own orders are free at every stop.',
-      d.loosest !== d.stop ? `This campaign has been played as loose as ${d.loosestName}.` : '', ...closed].filter(Boolean).join('\n'),
+      d.loosest !== d.stop ? `This campaign has been played as loose as ${d.loosestName}.` : '', ...closed,
+      // (Version 72) What history's book still expects, soonest first.
+      ...((d.expects ?? []).length ? ["History's book still expects:", ...(d.expects ?? []).slice(0, 4).map((e) => `${turnToDate(e.turn).label}, ${e.name}: ${e.text}`)] : [])].filter(Boolean).join('\n'),
     rows: stops.map((x) => {
       const on = x.stop === d.stop;
       let why: string | null = null;
@@ -1628,6 +1697,11 @@ function endMonth() {
   const said = (nat: string): string => [...headlines].reverse().find((h) => h.nat === nat && (h.kind === 'fall' || h.kind === 'event' || h.kind === 'war'))?.text ?? '';
   const announce: { nat: string; title: string; text: string; good: boolean; kicker?: string; more?: string; facts?: { label: string; value: string }[]; region?: number }[] = [];
   const capitalOfNat = (nat: string): number => s.regions.find((r) => r.cap && r.owner === nat)?.id ?? -1;
+  // (Version 72) A headline may carry a warning addressed to the player, with a short title: each is set out as a
+  // card of its own, with the place to look at where it names one (the coast the shipping is gathering against).
+  for (const h of s.headlines.slice(h0) as { nat?: string; text: string; warn?: string; region?: number }[]) {
+    if (h.warn && s.human && h.nat === s.human) announce.push({ nat: s.human, title: h.warn.toUpperCase(), text: h.text, good: false, kicker: 'A WARNING', region: typeof h.region === 'number' ? h.region : undefined });
+  }
   // The rules keep a roll of every nation that leaves the war or comes back into it, in words (the grand campaign).
   const cards = [...new Set([month0, s.turn])].flatMap((t) => announcements(s, t)).filter((c) => c.id > roll0 && c.nat !== fallen);
   for (const c of cards) {
@@ -1771,10 +1845,17 @@ function landingPlan(ids: number[], to: number) {
   const lines: string[] = [];
   if (!p.why) {
     lines.push(p.air ? 'The force goes in by air.' : p.surprise ? 'War was declared this month: the defenders are caught unready, and no fleet can stop the crossing.'
-      : p.risk > 0.005 ? `The crossing is dangerous: about ${Math.round(p.risk * 100)} in 100 of the men could be lost to enemy ships and aircraft on the way.` : 'The crossing is safe.');
+      // (Version 72: the danger is the share of the force caught at sea; the reckoning says what share of the men that costs.)
+      : p.risk > 0.005 ? ((p as { account?: CrossAccount }).account
+        ? `${p.risk >= 0.2 ? 'The crossing is dangerous' : 'The crossing carries some risk'}: about ${Math.max(1, Math.round(p.risk * 100))} in 100 of the force would be caught at sea by enemy ships and aircraft.`
+        : `The crossing is dangerous: about ${Math.round(p.risk * 100)} in 100 of the men could be lost to enemy ships and aircraft on the way.`) : 'The crossing is safe.');
     if (p.sortie > 0 && !p.surprise && !p.air) lines.push('Enemy warships within reach will put to sea against it.');
     lines.push(p.sky ? 'You hold the sky over the beach.' : 'You do not hold the sky over the beach.');
     lines.push(p.defended ? `The coast is defended: the troops must fight their way ashore${p.assess ? `, at odds of ${p.assess.odds.toFixed(1)} to 1` : ''}.` : 'The coast is undefended: they land unopposed.');
+    // (Version 72) Why the crossing is as dangerous as it is, and what would make it safer. (Absent in a surprise landing.)
+    // (Set apart under a heading of its own, each line marked, so that the card reads as a list and not as a block.)
+    const reckoning = accountLines((p as { account?: CrossAccount }).account);
+    if (reckoning.length) lines.push('', 'THE RECKONING', ...reckoning.map((l) => (l.endsWith(':') ? l : `\u00B7 ${l}`)));
   }
   return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines };
 }
@@ -3011,7 +3092,8 @@ function forcesPage(s: Game): Page | null {
   return {
     id: 'forces', title: 'YOUR FORCES', headline: `${armies.length} arm${armies.length === 1 ? 'y' : 'ies'}, ${fleets.length} fleet${fleets.length === 1 ? '' : 's'}, ${fields.length} airfield${fields.length === 1 ? '' : 's'} with aircraft`,
     note: up ? (canMove ? `${canMove} of your armies can still move this month. They are listed first.` : 'Every army has used its month.') : 'It is not your month.',
-    top: [],
+    // (Version 72) The crossings of a defended sea, and the plan the player names among them: the grand campaign only.
+    top: seaCalls.crossings && s.flags.open === 1 ? [{ label: 'SEA CROSSINGS', act: 'open:crossings', ok: true, tip: 'Each enemy shore your army cannot march to: the safest way over, what bars it, and what would make it safer. Name one as your plan.' }] : [],
     sections: [
       { heading: 'ARMIES', text: armies.length ? '' : 'You have no army in the field.', rows: armies },
       { heading: 'FLEETS', text: fleets.length ? '' : 'You have no fleet.', rows: fleets },
@@ -3463,7 +3545,7 @@ function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
   const p = id === 'staff' ? staffPage(s) : id === 'cabinet' ? cabinetPage(s) : id === 'men' ? menPage(s) : id === 'trade' ? tradePage(s) : id === 'towns' ? townsPage(s) : part[0] === 'town' ? townPage(s, Number(part[1]))
-    : id === 'spies' ? spiesPage(s, region) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
+    : id === 'spies' ? spiesPage(s, region) : id === 'crossings' ? crossingsPage(s) : id === 'lastact' ? lastActPage(s) : id === 'forces' ? forcesPage(s) : id === 'reports' ? reportsPage(s) : id === 'goals' ? goalsPage(s) : id === 'heroes' ? heroesPage(s) : part[0] === 'fleet' ? fleetPage(s, Number(part[1])) : part[0] === 'shell' ? shellPage(s, Number(part[1]), Number(part[2]))
     : airPage(s, id, region) ? airPage(s, id, region)
     : id === 'airfield' ? airfieldPage(s, region)
     : part[0] === 'raid' ? raidPage(s, part[1] as AirMission, Number(part[2]))
@@ -3663,6 +3745,13 @@ function act(action: string, region = -1) {
       note = ok ? (hold ? 'The standing call-up is held: no new corps are raised from the reserve until you let it run again.' : 'The standing call-up runs again.') : 'That cannot be changed now.';
     }
     return { ok, note, fly, flies, open, view: view() };
+  }
+  if (action === 'open:crossings') return { ok: true, note: '', fly, flies, open: 'crossings', view: view() };
+  if (part[0] === 'crossing') {
+    // (Version 72) One crossing named as the plan, or the plan dropped.
+    try { ok = !!seaCalls.plan && (part[1] === 'none' ? seaCalls.plan(s, null, null) : seaCalls.plan(s, Number(part[1]), Number(part[2]))); } catch { ok = false; }
+    note = ok ? (part[1] === 'none' ? 'The plan is dropped.' : `The crossing to ${s.regions[Number(part[2])]?.name ?? 'that shore'} is your plan. Staffs you have handed the navy or the air war now prepare it.`) : 'It cannot be changed now.';
+    return { ok, note, fly, flies, open: 'crossings', view: view() };
   }
   if (part[0] === 'history') {
     // (Version 70) The history dial turned to another stop.

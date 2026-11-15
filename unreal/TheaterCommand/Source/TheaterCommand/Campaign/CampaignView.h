@@ -420,6 +420,7 @@ struct FCampaignView
 	TArray<FString> Wars; // every pair of nations at war, two by two: the front line is drawn between their holdings
 	TArray<int32> Cold; // provinces with factories and nothing on order, where the player can know it: their chimneys stand cold
 	TArray<FArmNote> Arms; // (release 1) what each arm is, for the bigger unit card
+	FString LiftLine; // (rules version 72) the sea lift in a few words, for the fleet card's heading: what the shipping carries a month and what is left
 	int32 DialStop = 0; // (rules version 70) where the history dial stands, 1 to 5: 0 where there is none
 	FString DialName, DialUnder;
 	// (release 1) The admiral's chart: each sea by how well the player's side has it searched (0 not, 1 thinly, 2 well, 3 in full view), and old sightings.

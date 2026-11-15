@@ -137,7 +137,9 @@ ACampaignMapActor::ACampaignMapActor()
 		Camera->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
 		Camera->bCaptureEveryFrame = false;
 		Camera->bCaptureOnMovement = false;
-		Camera->bAlwaysPersistRenderingState = bEveryFrame;
+		// (Kept from one picture to the next for both cameras: a camera that keeps nothing takes every picture at one
+		// fixed exposure whatever it is told, and an aircraft's picture needs its own.)
+		Camera->bAlwaysPersistRenderingState = true;
 		Camera->FOVAngle = 20.0f;
 		// A plain, steady picture: the lamp and the light of the room, and nothing that needs several frames to settle.
 		Camera->ShowFlags.SetTemporalAA(false);
@@ -7544,10 +7546,45 @@ bool ACampaignMapActor::StageModel(const FString& Model, UProceduralMeshComponen
 			StagedExtent[Axis] = FMath::Max(FMath::Abs(Along[Axis][Skip]), FMath::Abs(Along[Axis][Along[Axis].Num() - 1 - Skip]));
 		}
 	}
+	StagedPoints = Built.Vertices;
 	Stage->ClearAllMeshSections();
 	Stage->CreateMeshSection(0, Built.Vertices, Built.Triangles, Built.Normals, TArray<FVector2D>(), Built.Colors, TArray<FProcMeshTangent>(), false);
 	Stage->SetMaterial(0, SceneryMaterial);
 	return true;
+}
+
+void ACampaignMapActor::FitStudioCamera(USceneCaptureComponent2D* Camera, const FVector& Middle, double HighOverWide, double Fill, const FVector& From)
+{
+	// (The art director's ruling of round 22: an aircraft across at least 85% of its picture. A box round an aircraft
+	// seen from the front quarter is mostly air, and fitted to the box the machine filled 64%. Here every point of the
+	// model is looked at as the camera sees it: the camera is aimed at the middle of what it sees and stood where the
+	// widest of it, or the tallest, fills the share asked for. Found by trying, six times over: it settles in three.)
+	const FRotator Looks = (-From).Rotation();
+	const FRotationMatrix Axes(Looks);
+	const FVector Ahead = Axes.GetUnitAxis(EAxis::X), Across = Axes.GetUnitAxis(EAxis::Y), Upward = Axes.GetUnitAxis(EAxis::Z);
+	const double TanWide = FMath::Tan(FMath::DegreesToRadians(Camera->FOVAngle * 0.5)), TanHigh = TanWide * HighOverWide;
+	FVector Aim = FVector::ZeroVector;
+	double Back = FMath::Max(StagedExtent.Size(), 1.0) / TanWide;
+	for (int32 Try = 0; Try < 6 && StagedPoints.Num() > 0; ++Try)
+	{
+		double Least[2] = { 1.0e9, 1.0e9 }, Most[2] = { -1.0e9, -1.0e9 };
+		for (const FVector& Point : StagedPoints)
+		{
+			const FVector Off = Point - Aim;
+			const double Depth = FMath::Max(Back + (Off | Ahead), 1.0);
+			const double Seen[2] = { (Off | Across) / Depth, (Off | Upward) / Depth };
+			for (int32 Way = 0; Way < 2; ++Way)
+			{
+				Least[Way] = FMath::Min(Least[Way], Seen[Way]);
+				Most[Way] = FMath::Max(Most[Way], Seen[Way]);
+			}
+		}
+		Aim += (Across * (Least[0] + Most[0]) + Upward * (Least[1] + Most[1])) * 0.5 * Back;
+		const double Needs = FMath::Max((Most[0] - Least[0]) * 0.5 / (TanWide * Fill), (Most[1] - Least[1]) * 0.5 / (TanHigh * Fill));
+		Back *= FMath::Clamp(Needs, 0.2, 5.0);
+	}
+	const FVector Eye = Middle + Aim + From * Back;
+	Camera->SetRelativeLocationAndRotation(Eye, Looks);
 }
 
 void ACampaignMapActor::AimStudioCamera(USceneCaptureComponent2D* Camera, const FVector& Middle, double Radius)
@@ -7560,8 +7597,17 @@ void ACampaignMapActor::AimStudioCamera(USceneCaptureComponent2D* Camera, const 
 	Camera->SetRelativeLocationAndRotation(Eye, (Middle - Eye).Rotation());
 }
 
-void ACampaignMapActor::TakeStudioPicture(USceneCaptureComponent2D* Camera)
+void ACampaignMapActor::TakeStudioPicture(USceneCaptureComponent2D* Camera, bool bAircraft)
 {
+	// (The art director's ruling of round 22: an aircraft's broad wings and back face the studio's lamp squarely, and
+	// in the exposure that suits a tank they were washed out: the two tones of a camouflage read as one. An aircraft
+	// is taken a stop and a little darker. "-TheaterPlaneBias=-2.0" tries another.)
+	static float PlaneBias = -2.2f;
+	static const bool bAsked = FParse::Value(FCommandLine::Get(), TEXT("TheaterPlaneBias="), PlaneBias);
+	// (The cards' pictures have always been taken at the plain exposure, and the turning showpiece at nine tenths of a stop under it.)
+	static float CardBias = 0.0f;
+	static const bool bCardAsked = FParse::Value(FCommandLine::Get(), TEXT("TheaterCardBias="), CardBias);
+	Camera->PostProcessSettings.AutoExposureBias = bAircraft ? PlaneBias : Camera == ShowCamera ? -0.9f : CardBias;
 	// (The art director's ruling of round 19: a unit's picture is taken in the studio's own steady light, the light
 	// of a plain day. Lit by the room, a half-track in field grey came out blue by night, and a picture first taken
 	// by night stayed blue by day. The room's lights are set to the day for the moment of the picture and put back:
@@ -7618,8 +7664,32 @@ UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model, boo
 			const FVector Middle = PortraitMesh->GetRelativeLocation(), Eye = Middle + From * Back;
 			PortraitCamera->SetRelativeLocationAndRotation(Eye, (Middle - Eye).Rotation());
 		}
+		FString What = Model, Owner;
+		Model.Split(TEXT(":"), &What, &Owner);
+		const bool bAircraft = FMiniatureMesh::VehicleAloft(What) > 0.0;
+		if (bAircraft)
+		{
+			// (An aircraft, large or small, is fitted to the machine itself: nine tenths of the picture's width.)
+			// (And it is looked at from higher than a tank is: its camouflage and its markings are on its back and its
+			// wings, and seen from low down the sky's light glances off them and washes them pale.)
+			static float PlaneFill = 0.9f;
+			static const bool bFillAsked = FParse::Value(FCommandLine::Get(), TEXT("TheaterPlaneFill="), PlaneFill);
+			static FVector PlaneFrom(-0.5, -0.72, 0.5); // (from here every one of the fifteen fills its picture both ways)
+			static bool bFromRead = false;
+			if (!bFromRead)
+			{
+				bFromRead = true;
+				FString Asked;
+				TArray<FString> Parts;
+				if (FParse::Value(FCommandLine::Get(), TEXT("TheaterPlaneFrom="), Asked, false) && Asked.ParseIntoArray(Parts, TEXT(",")) == 3)
+				{
+					PlaneFrom = FVector(FCString::Atod(*Parts[0]), FCString::Atod(*Parts[1]), FCString::Atod(*Parts[2]));
+				}
+			}
+			FitStudioCamera(PortraitCamera, PortraitMesh->GetRelativeLocation(), 336.0 / 552.0, PlaneFill, PlaneFrom.GetSafeNormal());
+		}
 		PortraitCamera->TextureTarget = Picture;
-		TakeStudioPicture(PortraitCamera);
+		TakeStudioPicture(PortraitCamera, bAircraft);
 	}
 	Kept_.Add(Model, Picture); // (kept even when there is none, so that it is not tried again every frame)
 	return Picture;
@@ -7647,7 +7717,12 @@ void ACampaignMapActor::SetShowpiece(const FString& Model)
 	}
 	AimStudioCamera(ShowCamera, ShowMesh->GetRelativeLocation(), Radius);
 	ShowCamera->TextureTarget = ShowTarget;
-	TakeStudioPicture(ShowCamera);
+	{
+		FString What = Model, Owner;
+		Model.Split(TEXT(":"), &What, &Owner);
+		bShowAircraft = FMiniatureMesh::VehicleAloft(What) > 0.0;
+	}
+	TakeStudioPicture(ShowCamera, bShowAircraft);
 }
 
 FVector2D ACampaignMapActor::AirfieldSpot(int32 RegionId) const
@@ -7745,6 +7820,17 @@ void ACampaignMapActor::FlySortie(const FSortie& Sortie)
 	}
 }
 
+bool ACampaignMapActor::FirstFlight(FVector2D& OutSpot, float& OutHeight) const
+{
+	if (Flights.Num() == 0 || Flights[0].At.IsZero())
+	{
+		return false;
+	}
+	OutSpot = WorldToMap(Flights[0].At);
+	OutHeight = static_cast<float>(Flights[0].At.Z); // (the eye's focus is on the table's own level: this is how far above it)
+	return true;
+}
+
 void ACampaignMapActor::UpdateSorties()
 {
 	UWorld* World = GetWorld();
@@ -7767,7 +7853,8 @@ void ACampaignMapActor::UpdateSorties()
 	for (int32 Index = Flights.Num() - 1; Index >= 0; --Index)
 	{
 		FFlight& Flight = Flights[Index];
-		const double Share = (Now - Flight.Began) / FlightLasts;
+		// (held at one point of its flight while its picture is taken)
+		const double Share = RaidHeldAt >= 0.0 ? RaidHeldAt : (Now - Flight.Began) / FlightLasts;
 		if (Share >= 1.0)
 		{
 			if (Flight.Formation)
@@ -8424,7 +8511,7 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 		if (ShowCamera && ShowTarget && Clock - LastTaken > 0.05)
 		{
 			LastTaken = Clock;
-			TakeStudioPicture(ShowCamera); // (in the studio's own light, like every other picture of a unit)
+			TakeStudioPicture(ShowCamera, bShowAircraft); // (in the studio's own light, like every other picture of a unit)
 		}
 	}
 

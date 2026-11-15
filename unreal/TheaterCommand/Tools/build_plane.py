@@ -667,6 +667,10 @@ def marks_of(s, hull):
         radius = round(min(radius, 0.56 * hull.h(-x)), 3)
         p, n = hull.at(x, 0.0), hull.out(x, 0.0)
         bend = max(hull.h(-x) ** 2 / max(hull.w(-x), 0.05) * (s.get("square", 2.0) / 2.0) ** 2, radius * 0.8)
+        # (The art director's ruling of round 22: a cross bent round the fuselage has its upright pinched, seen from
+        # the side. The German cross is laid flat on the side, as it is on the wing; a roundel or a star takes the bend.)
+        if tag == "GER":
+            bend = 0.0
         marks.append({"tag": tag, "at": [round(v, 3) for v in (p.x, p.y + 0.02, p.z)], "radius": radius, "facing": [round(n.x, 3), round(n.y, 3), 0.0], "curve": round(bend, 3), "both": True})
     for (out, x, radius, upper, lower, both_upper, both_lower) in s.get("wing_marks", []):
         c = min(max((x - wing.lead(out)) / (wing.trail(out) - wing.lead(out)), 0.05), 0.95)
@@ -678,6 +682,13 @@ def marks_of(s, hull):
                 p, n = wing.at(out, c, False, 0.012), wing.out(out, c, False)
                 marks.append({"tag": lower, "at": [round(p.x, 3), round(p.y * hand, 3), round(p.z, 3)], "radius": radius, "facing": [round(n.x, 3), round(n.y * hand, 3), round(n.z, 3)], "curve": 0.0})
     for (x, z, radius, tag) in s.get("fin_marks", []):
+        if s.get("fin_marks_at") and s.get("fins"):
+            # (twin fins out on the tailplane: the flash is on the outer face of each, not on the middle line where no fin stands)
+            fin = Wing(s["fins"][0][0], 1.0, True, s["fin_marks_at"])
+            c = min(max((x - fin.lead(z)) / (fin.trail(z) - fin.lead(z)), 0.05), 0.95)
+            p = fin.at(z, c, True, 0.015)
+            marks.append({"tag": tag, "at": [round(p.x, 3), round(p.y, 3), round(p.z, 3)], "radius": radius, "facing": [0.0, 1.0, 0.0], "curve": 0.0, "both": True})
+            continue
         marks.append({"tag": tag, "at": [x, 0.05, z], "radius": radius, "facing": [0.0, 1.0, 0.0], "curve": 0.0, "both": True})
     if s.get("code"):
         x, high = s["code"]

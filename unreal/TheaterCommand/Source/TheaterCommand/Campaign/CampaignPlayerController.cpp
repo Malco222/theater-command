@@ -4220,6 +4220,12 @@ void ACampaignPlayerController::LayOutFleet()
 	Tray.Title = FText::FromString(Fleet->Name);
 	Tray.Subtitle = FText::FromString(FString::Printf(TEXT("%s  \u00B7  %d ship%s%s  \u00B7  can reach %d sea%s"), *Doing, Fleet->Ships(), Fleet->Ships() == 1 ? TEXT("") : TEXT("s"),
 		FleetHand.Admiral.IsEmpty() ? TEXT("") : *FString::Printf(TEXT("  \u00B7  %s"), *FleetHand.Admiral), Fleet->Reach.Num(), Fleet->Reach.Num() == 1 ? TEXT("") : TEXT("s")));
+	// (Rules version 72: the sea lift is on the fleet's card, since it is the fleet that covers a crossing. It is in
+	// the card's plain heading and not on its warning line: it is a fact, not an alarm.)
+	if (!View.LiftLine.IsEmpty())
+	{
+		Tray.Subtitle = FText::FromString(Tray.Subtitle.ToString() + TEXT("  \u00B7  ") + View.LiftLine);
+	}
 	Tray.FleetWarning = FText::FromString(FleetHand.bShelled ? FString(TEXT("Its guns have spoken this month.")) : FleetHand.Screen);
 	Tray.FleetStance = Fleet->Stance;
 	if (FleetNext == TEXT("hunt") && !Tray.bFleetGrand)

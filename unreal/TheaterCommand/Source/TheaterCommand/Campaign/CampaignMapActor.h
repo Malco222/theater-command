@@ -226,6 +226,10 @@ public:
 
 	/** Aircraft take off from their airfield, fly to the target and come home, over some seconds. */
 	void FlySortie(const FSortie& Sortie);
+	/** For a picture: every raid in the air is held at this share of its flight (0 to 1). Less than nothing lets them fly on. */
+	void HoldRaids(double Share) { RaidHeldAt = Share; }
+	/** Where the first raid in the air is, on the map, and how high above the table. False when none is flying. */
+	bool FirstFlight(FVector2D& OutSpot, float& OutHeight) const;
 
 	/** Smoke and gun flashes over a region where a battle has just been fought, for a few seconds. */
 	void AddBattleSmoke(int32 RegionId);
@@ -639,8 +643,13 @@ private:
 	FLinearColor SightingNight = FLinearColor(0.5f, 0.5f, 0.52f, 1.0f); // and a last-seen ring
 	FLinearColor SnowWoodFloor = FLinearColor(0.5f, 0.54f, 0.6f); // what a wood's floor is multiplied by under the snow: a cool grey, about a tenth below the snow round it
 	FLinearColor SnowOnTrees = FLinearColor(0.205f, 0.25f, 0.235f); // what snow lying on a tree takes its colour toward: a cool grey-green
-	void TakeStudioPicture(USceneCaptureComponent2D* Camera);
+	void TakeStudioPicture(USceneCaptureComponent2D* Camera, bool bAircraft = false);
 	FVector StagedExtent = FVector(100.0); // half the size of the model last stood on a stage, each way
+	TArray<FVector> StagedPoints; // the points of that model, from its middle: an aircraft's picture is fitted to them
+	/** Stands the studio's camera where the model last staged fills this share of the picture, its middle in the middle. */
+	void FitStudioCamera(USceneCaptureComponent2D* Camera, const FVector& Middle, double HighOverWide, double Fill, const FVector& From);
+	bool bShowAircraft = false; // the model turning in the tray is an aircraft
+	double RaidHeldAt = -1.0;
 	FLinearColor WashNight = FLinearColor(0.36f, 0.38f, 0.44f); // what the washes are multiplied by under the moon
 	float RingNightGlow = 0.05f; // and how much light of its own the ring round the piece in hand keeps
 	struct FSinkingShip

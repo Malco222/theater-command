@@ -342,6 +342,26 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			Shot.Wait = 2.6f;
 		}
 		{
+			// (Rules version 72) The crossings of a defended sea: each shore, what bars it, why, and what would help.
+			Add(TEXT("35d-sea-crossings"), TEXT("@capital"), 0.5f).Room = TEXT("crossings");
+		}
+		{
+			// One of them named as the plan.
+			FShot& Shot = Add(TEXT("35e-crossing-planned"), TEXT("@capital"), 0.5f);
+			Shot.Room = TEXT("crossings");
+			Shot.RoomAct = TEXT("@row");
+		}
+		{
+			// The raid from close by: the bombers and their escort half way out, as near as the player can go.
+			FShot& Shot = Add(TEXT("31k2-raid-close"), TEXT("@capital"), 0.0f);
+			Shot.Select = TEXT("@capital");
+			Shot.Room = TEXT("airfield");
+			Shot.RoomAct = TEXT("open:raid:bomb|@row|@top");
+			Shot.bCloseRoom = true;
+			Shot.RaidAt = 0.22f; // (half way out, before the defender's fighters are in among them)
+			Shot.Tilt = -25.0f; // (looked down on more steeply than the closest view does of itself, so that no army's flag stands in front)
+		}
+		{
 			// A raid on troops, caught over them.
 			FShot& Shot = Add(TEXT("31l-raid-met"), TEXT("@capital"), 0.7f);
 			Shot.Select = TEXT("@capital");
@@ -581,6 +601,7 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 				Shot.bKeep = true;
 				Shot.bWar = true;
 			}
+
 		}
 		if (GrandNation == TEXT("SWE"))
 		{
@@ -856,6 +877,8 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 			}
 		}
 	}
+	Eye->FocusHeight = Shot.Region.StartsWith(TEXT("@parade")) ? Eye->FocusHeight : 0.0f;
+	Table->HoldRaids(Shot.RaidAt);
 	Eye->SetHeading(Shot.Yaw, Shot.Tilt);
 	Eye->SetTopZoom(FMath::Clamp(Shot.Zoom, 1.0f, 1.45f)); // (a picture may be taken from higher than the player can go: the whole world in one)
 	Eye->GoTo(Table->MapToWorld(At.X, At.Y), Shot.Zoom, true);
@@ -1199,6 +1222,10 @@ void ACampaignPhotographer::Arrange(const FShot& Shot)
 		if (Shot.bCloseRoom)
 		{
 			Controller->ClosePage();
+			if (Shot.RaidAt >= 0.0f)
+			{
+				Controller->SelectRegion(INDEX_NONE); // (the province's panels are put away too: the picture is of the sky)
+			}
 		}
 	}
 	if (Shot.bDismiss)
@@ -1440,6 +1467,20 @@ void ACampaignPhotographer::Tick(float DeltaSeconds)
 		{
 			Controller->GetMap()->AddBattleSmoke(*At);
 			Controller->StartMoment(*At);
+		}
+	}
+
+	// A raid held in the air for its picture: the eye stays on it, at the height it flies.
+	if (!bTaken && Shots[Current].RaidAt >= 0.0f)
+	{
+		ACampaignPlayerController* Controller = Cast<ACampaignPlayerController>(GetWorld()->GetFirstPlayerController());
+		ACampaignCameraPawn* Eye = Controller ? Cast<ACampaignCameraPawn>(Controller->GetPawn()) : nullptr;
+		FVector2D Spot;
+		float High = 0.0f;
+		if (Eye && Controller->GetMap() && Controller->GetMap()->FirstFlight(Spot, High))
+		{
+			Eye->FocusHeight = High;
+			Eye->GoTo(Controller->GetMap()->MapToWorld(Spot.X, Spot.Y), Shots[Current].Zoom, true);
 		}
 	}
 
