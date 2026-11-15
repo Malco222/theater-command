@@ -20,8 +20,8 @@ def field(r,key):
 par=sum('par BEATEN' in r for r in rows)
 first=[turn(m.group(1)) for r in rows if (m:=re.search(r'first on the continent (\w+ \d{4})',r))]
 where=collections.Counter(m.group(1) for r in rows if (m:=re.search(r'first on the continent \w+ \d{4} at [^(]*\((\w+)\)',r)))
-stay=[turn(m.group(1)) for r in rows if (m:=re.search(r'ashore in the west to stay from (\w+ \d{4})',r))]
-never=sum('ashore in the west to stay never' in r for r in rows)
+stay=[turn(m.group(1)) for r in rows if (m:=re.search(r'ashore in the west to stay from (\w+ \d{4})',r.split('| Germany ')[0]))]
+never=sum('ashore in the west to stay never' in r.split('| Germany ')[0] for r in rows)
 brit=[int(m.group(1)) for r in rows if (m:=re.search(r'in Britain at the most (\d+) corps',r))]
 most=[int(m.group(1)) for r in rows if (m:=re.search(r'most across (\d+) corps',r))]
 raised=[int(m.group(1)) for r in rows if (m:=re.search(r'corps raised (\d+)',r))]
