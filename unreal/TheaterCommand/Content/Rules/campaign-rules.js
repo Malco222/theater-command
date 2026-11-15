@@ -23575,6 +23575,78 @@
       return {};
     }
   }
+  function armsTable(s) {
+    const out = [];
+    try {
+      const grand2 = groundRules(s);
+      const GROUNDS = [["plains", "open country"], ["desert", "desert"], ["forest", "forest"], ["hills", "hills"], ["mountain", "mountains"], ["marsh", "marsh"], ["urban", "cities"]];
+      const by = (m) => `${m > 1 ? "+" : "−"}${Math.round(Math.abs(m - 1) * 100)}%`;
+      const upTo = (x) => `${Math.round(x * 100)}%`;
+      const A = GROUND.arms;
+      const roles = {
+        inf: grand2 ? `Holds ground better than it takes it. With tanks beside it, it is worth up to ${upTo(A.infantry)} more.` : "Holds ground better than it takes it.",
+        mot: grand2 ? "Infantry on wheels: quick off the roads, and it counts as the infantry tanks need beside them." : "Infantry on wheels: quick off the roads.",
+        arm: grand2 ? `The hardest hitter there is. With infantry beside it, it is worth up to ${upTo(A.armour)} more; alone in a city or a forest it is worth less.` : "The hardest hitter there is.",
+        cav: "Quick and light: for scouting and pursuit, not for a stand-up fight.",
+        mtn: "At home in hills and mountains, where everyone else struggles.",
+        fort: "A fortress garrison: it holds its works and does not march.",
+        art: grand2 ? `Massed guns. Against forts and dug-in troops, up to ${DEFENCE.frontage.guns} artillery corps join an attack without taking room on the roads, and their fire wears the works down.` : "Massed guns.",
+        eng: "Builds and breaches: bridges, fieldworks, minefields and railways. It is not there for its rifles."
+      };
+      for (const kind of Object.keys(KIND)) {
+        const k = KIND[kind];
+        const good = [], poor = [];
+        for (const [t, word] of GROUNDS) {
+          let a = grand2 ? GROUND.attack[kind]?.[t] ?? 1 : 1;
+          const d = grand2 ? GROUND.defence[kind]?.[t] ?? 1 : 1;
+          const m = grand2 ? GROUND.march[kind]?.[t] ?? 0 : 0;
+          if (kind === "arm" && (t === "mountain" || t === "urban" || t === "marsh")) a *= 0.6;
+          if (a === 1 && d === 1 && !m) continue;
+          const bits = [a !== 1 ? `attack ${by(a)}` : "", d !== 1 ? `defence ${by(d)}` : "", m ? "slow to enter" : ""].filter(Boolean).join(", ");
+          (a > 1 || d > 1 ? good : poor).push(`${word} (${bits})`);
+        }
+        if (kind === "arm") good.unshift("open country and desert");
+        if (grand2 && GROUND.steep.barred.includes(kind)) poor.push("the highest mountains (cannot enter)");
+        out.push({ kind, label: k.label, atk: k.atk, def: k.def, role: roles[kind] ?? "", good: good.join("; "), poor: poor.join("; ") });
+      }
+    } catch {
+    }
+    return out;
+  }
+  function chartOf(s) {
+    const seas = [], old = [];
+    try {
+      const me = s.human;
+      if (!me || !s.nations[me]?.alive) return { seas, old };
+      for (const z of s.seas) {
+        const p = seaPicture(s, z.id, me);
+        seas[z.id] = p.word.startsWith("In full view") ? 3 : p.search >= p.needFind ? 2 : p.search >= p.needReport ? 1 : 0;
+      }
+      const live = /* @__PURE__ */ new Set();
+      for (const f of s.fleets) {
+        const key4 = `sight:${f.id}`;
+        if (!shipCount(f.ships) || !atWar(s, f.nat, me)) continue;
+        live.add(key4);
+        const known = fleetKnown(s, f, me);
+        if (known !== "none") {
+          if (atSea(f)) s.flags[key4] = s.turn * 1e3 + f.zone;
+          else delete s.flags[key4];
+          continue;
+        }
+        const at = s.flags[key4];
+        if (at === void 0) continue;
+        const months3 = s.turn - Math.floor(at / 1e3);
+        if (months3 > 3) {
+          delete s.flags[key4];
+          continue;
+        }
+        if (months3 >= 1 && s.seas[at % 1e3]) old.push({ zone: at % 1e3, nat: f.nat, months: months3 });
+      }
+      for (const key4 of Object.keys(s.flags)) if (key4.startsWith("sight:") && !live.has(key4)) delete s.flags[key4];
+    } catch {
+    }
+    return { seas, old };
+  }
   function prizeLine(s, region) {
     const z = prize(s, region);
     return z && (z.income > 0 || z.incomeNow > 0 || z.vp > 0 || z.factories > 0 || z.oil > 0 || z.capitalOf || z.frees) ? z.line : "";
@@ -23826,6 +23898,10 @@
       todo: todoOf(s),
       // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
       // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
+      // (release 1) What each arm is, for the bigger unit card.
+      arms: armsTable(s),
+      // (release 1) The admiral's chart: each sea by how well it is searched, and old sightings.
+      chart: chartOf(s),
       dark: Object.values(s.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
       // For the drawn front line (release 1): every pair of living nations at war, tag by tag, two by two. The table
       // draws the line itself along every frontier between two such holders, so it moves the moment ground changes hands.

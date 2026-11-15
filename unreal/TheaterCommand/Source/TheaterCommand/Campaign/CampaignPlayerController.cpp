@@ -2218,6 +2218,78 @@ void ACampaignPlayerController::OpenScreen3() { if (bResearchOpen) { CloseResear
 void ACampaignPlayerController::OpenScreen4() { if (bDiplomacyOpen) { CloseDiplomacy(); } else { OpenDiplomacy(); } }
 void ACampaignPlayerController::OpenScreen5() { if (bLedgerOpen) { CloseLedger(); } else { OpenLedger(); } }
 
+const FArmNote* ACampaignPlayerController::FindArm(const FString& Kind) const
+{
+	const FCampaignSession* Session = GetSession();
+	return Session ? Session->GetView().FindArm(Kind) : nullptr;
+}
+
+void ACampaignPlayerController::ReadKeptViews()
+{
+	if (bKeptViewsRead)
+	{
+		return;
+	}
+	bKeptViewsRead = true;
+	// (kept in the game's own settings file, so that they are there again the next time it is opened)
+	for (int32 Slot = 0; Slot < 4; ++Slot)
+	{
+		FString Line;
+		TArray<FString> Parts;
+		if (GConfig && GConfig->GetString(TEXT("TheaterCommand.Views"), *FString::Printf(TEXT("View%d"), Slot + 6), Line, GGameUserSettingsIni) && Line.ParseIntoArray(Parts, TEXT(",")) == 5)
+		{
+			FKeptView& View = KeptViews[Slot];
+			View.bKept = true;
+			View.Focus = FVector(FCString::Atod(*Parts[0]), FCString::Atod(*Parts[1]), 0.0);
+			View.Zoom = FCString::Atof(*Parts[2]);
+			View.Yaw = FCString::Atof(*Parts[3]);
+			View.Tilt = FCString::Atof(*Parts[4]);
+		}
+	}
+}
+
+void ACampaignPlayerController::KeepView(int32 Slot)
+{
+	const ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+	if (!Eye || Slot < 0 || Slot >= 4)
+	{
+		return;
+	}
+	ReadKeptViews();
+	FKeptView& View = KeptViews[Slot];
+	View.bKept = true;
+	View.Focus = Eye->GetFocus();
+	View.Zoom = Eye->GetZoom();
+	View.Yaw = Eye->GetYaw();
+	View.Tilt = Eye->GetTilt();
+	if (GConfig)
+	{
+		GConfig->SetString(TEXT("TheaterCommand.Views"), *FString::Printf(TEXT("View%d"), Slot + 6),
+			*FString::Printf(TEXT("%.1f,%.1f,%.4f,%.2f,%.2f"), View.Focus.X, View.Focus.Y, View.Zoom, View.Yaw, View.Tilt), GGameUserSettingsIni);
+		GConfig->Flush(false, GGameUserSettingsIni);
+	}
+	CampaignSounds::Play(this, TEXT("stamp"), 0.4f);
+	Notify(FString::Printf(TEXT("This view is kept under %d. Press %d to come back to it."), Slot + 6, Slot + 6), 4.0);
+}
+
+void ACampaignPlayerController::GoToKeptView(int32 Slot)
+{
+	ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn());
+	if (!Eye || Slot < 0 || Slot >= 4)
+	{
+		return;
+	}
+	ReadKeptViews();
+	const FKeptView& View = KeptViews[Slot];
+	if (!View.bKept)
+	{
+		Notify(FString::Printf(TEXT("No view is kept under %d. Hold Shift and press %d to keep this one."), Slot + 6, Slot + 6), 5.0);
+		return;
+	}
+	Eye->SetHeading(View.Yaw, View.Tilt);
+	Eye->GoTo(View.Focus, View.Zoom);
+}
+
 int32 ACampaignPlayerController::ArmiesYetToMove() const
 {
 	const FCampaignSession* Session = GetSession();
@@ -2701,17 +2773,23 @@ void ACampaignPlayerController::ToggleWealth()
 	{
 		return;
 	}
-	// One key steps through the views of the map: as it is, the countries in flat colour, by wealth, by friend and foe.
-	const int32 Now = Map->IsWealthShown() ? 2 : Map->AreSidesShown() ? 3 : Map->AreColoursFlat() ? 1 : 0;
-	const int32 Next = (Now + 1) % 4;
+	// One key steps through the views of the map: as it is, the countries in flat colour, by wealth, by friend and
+	// foe, and (release 1) the admiral's chart.
+	const int32 Now = bChartView ? 4 : Map->IsWealthShown() ? 2 : Map->AreSidesShown() ? 3 : Map->AreColoursFlat() ? 1 : 0;
+	const int32 Next = (Now + 1) % 5;
 	Map->SetFlatColours(Next == 1);
 	Map->ShowWealth(Next == 2);
 	Map->ShowSides(Next == 3, Session->GetView().RegionStanding);
+	bChartView = Next == 4;
 	CampaignSounds::Play(this, TEXT("click"), 0.5f);
+	// (where this game keeps no fog at sea, every sea is in full view and the chart has nothing to veil)
+	const bool bFogAtSea = Session->GetView().SeaSearch.ContainsByPredicate([](int32 Level) { return Level < 3; });
 	Notify(Next == 1 ? TEXT("Flat colours: every country painted whole in its own colour. Press Y for the wealth view.")
 		: Next == 2 ? TEXT("The wealth view: the deeper the gold, the more a province pays. Press Y for friend and foe.")
-		: Next == 3 ? TEXT("Friend and foe: your own ground green, your allies' blue, your enemies' red. Press Y to put it away.")
-		: TEXT("The map as it is: each country's colour a stain over its own ground."), 5.0);
+		: Next == 3 ? TEXT("Friend and foe: your own ground green, your allies' blue, your enemies' red. Press Y for the admiral's chart.")
+		: Next == 4 ? (bFogAtSea ? TEXT("The admiral's chart: a sea you have not searched lies under a veil, a lighter one where the search is thin, and a red ring marks where enemy ships were last seen. Press Y to put it away.")
+			: TEXT("The admiral's chart: every sea is in full view in this campaign, so there is nothing to veil. Press Y to put it away."))
+		: TEXT("The map as it is: each country's colour a stain over its own ground."), 6.0);
 }
 
 void ACampaignPlayerController::AdviserSaw(int32 Step)
@@ -3499,6 +3577,38 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 	}
 
 	Map->SetShowProvinces(IsInputKeyDown(EKeys::P)); // (held: every province line at full strength)
+	// (release 1) Held: every piece is lifted off the table, to read the bare ground under it. ("-TheaterBareGround" holds it for a picture.)
+	{
+		static const bool bHeldForPicture = FParse::Param(FCommandLine::Get(), TEXT("TheaterBareGround"));
+		Map->SetPiecesShown(!(IsInputKeyDown(EKeys::B) || bHeldForPicture));
+	}
+	// (release 1) The admiral's chart: asked for as a view of the map, or laid out whenever a fleet is in hand. ("-TheaterChart" holds it for a picture.)
+	if (const FCampaignSession* Now = GetSession())
+	{
+		static const bool bChartForPicture = FParse::Param(FCommandLine::Get(), TEXT("TheaterChart"));
+		Map->ShowChart(bChartView || FleetInHand != INDEX_NONE || bChartForPicture, Now->GetView().SeaSearch, Now->GetView().OldSightings);
+	}
+	// (release 1) The lamp over the army or the fleet in hand.
+	Map->SetHandLamp(RingedPiece.IsValid() && ArmyRegion != INDEX_NONE ? RingedPiece.Get() : FleetInHand != INDEX_NONE ? Map->FindFleetPiece(FleetInHand) : nullptr);
+	// (release 1) Views kept under 6, 7, 8 and 9: Shift with the key keeps the view, the key alone comes back to it.
+	if (!Opening.bVisible && !Newsreel.bOn && !bWatching)
+	{
+		static const FKey Keys[4] = { EKeys::Six, EKeys::Seven, EKeys::Eight, EKeys::Nine };
+		for (int32 Slot = 0; Slot < 4; ++Slot)
+		{
+			if (WasInputKeyJustPressed(Keys[Slot]))
+			{
+				if (IsInputKeyDown(EKeys::LeftShift) || IsInputKeyDown(EKeys::RightShift))
+				{
+					KeepView(Slot);
+				}
+				else
+				{
+					GoToKeptView(Slot);
+				}
+			}
+		}
+	}
 	Map->UpdateForCamera(Eye->GetDistance(), Eye->GetYaw(), Eye->GetFocus());
 
 	// A tip that follows the pointer: what the province under it is, whose, what it is worth and who stands there.
@@ -3713,6 +3823,15 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					if (!There->Search.IsEmpty())
 					{
 						Known += FString::Printf(TEXT(" %s%s."), *There->Search.Left(1).ToUpper(), *There->Search.Mid(1));
+					}
+					// (release 1) Ships that were found here and are lost again.
+					for (const FOldSighting& Seen : Session->GetView().OldSightings)
+					{
+						if (Seen.Zone == Sea)
+						{
+							const FCampaignNation* Whose = Map->GetData().FindNation(Seen.Nation);
+							Known += FString::Printf(TEXT(" %s ships were last seen here %s ago."), Whose ? *Whose->Adjective : *Seen.Nation, Seen.Months == 1 ? TEXT("a month") : *FString::Printf(TEXT("%d months"), Seen.Months));
+						}
 					}
 					if (There->Meet == TEXT("shy"))
 					{
@@ -4422,6 +4541,7 @@ void ACampaignPlayerController::LayOutLook()
 			Card.Kind = FText::FromString(FCampaignMapData::CorpsKindLabel(Unit.Kind));
 			Card.Divisions = Unit.Divisions;
 			Card.Strength = Unit.Strength;
+			Card.Men = Unit.Men;
 			Card.KindId = Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy")) : Unit.Kind;
 			Card.Ally = Unit.Ally;
 			Card.Morale = Unit.Cohesion;
@@ -4760,6 +4880,7 @@ void ACampaignPlayerController::RefreshOrders()
 		Card.Kind = FText::FromString(Unit.bInTown ? FCampaignMapData::CorpsKindLabel(Unit.Kind) + TEXT(", in the town") : FCampaignMapData::CorpsKindLabel(Unit.Kind));
 		Card.Divisions = Unit.Divisions;
 		Card.Strength = Unit.Strength;
+		Card.Men = Unit.Men;
 		Card.KindId = Unit.Elite == TEXT("heavy") ? FString(TEXT("heavy")) : Unit.Kind;
 		Card.Ally = Unit.Ally;
 		Card.Morale = Unit.Cohesion;

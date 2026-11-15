@@ -211,7 +211,7 @@ public:
 	 * a vehicle's, an aircraft's or a ship's ("PanzerIV", "B17", "Battleship:UK"), or a figure's ("Soldier:GER",
 	 * "Rider:POL", "Pioneer:GER").
 	 */
-	UTextureRenderTarget2D* GetPortrait(const FString& Model);
+	UTextureRenderTarget2D* GetPortrait(const FString& Model, bool bLarge = false); // (the large one is for the bigger unit card)
 
 	/** The model that stands for a kind of corps of a nation, as it is this year: its tank, its gun, its soldier. */
 	static FString ModelFor(const FString& Nation, const FString& Kind);
@@ -241,6 +241,18 @@ public:
 	void SetFlatColours(bool bFlat);
 	/** While a key is held: every province line at full strength. */
 	void SetShowProvinces(bool bShow) { bShowProvinces = bShow; }
+	/**
+	 * (release 1) The admiral's chart: with it on, a sea the player's side has not searched lies under a veil, one
+	 * thinly searched under a lighter one, and a navigator's mark stands where enemy ships were last seen, fainter
+	 * for each month since. Levels are by sea: 0 not searched, 1 thinly, 2 well, 3 in full view.
+	 */
+	void ShowChart(bool bOn, const TArray<int32>& Levels, const TArray<FOldSighting>& Old);
+	bool IsChartShown() const { return bChartOn; }
+	/** (release 1) The bare ground: lifts every piece off the table (armies, fleets, air groups) while it is not shown, and sets them back. */
+	void SetPiecesShown(bool bShown);
+	/** (release 1) A warm lamp over the army or fleet in hand: it follows the piece, and goes out when the piece is put down. */
+	void SetHandLamp(AArmyPiece* Piece);
+	AArmyPiece* FindFleetPiece(int32 FleetId) const;
 	bool AreColoursFlat() const { return bFlatColours; }
 	/** How strongly the countries are coloured: 0 light, 1 as the art is meant, 2 strong. */
 	void SetColourStrength(int32 Level);
@@ -466,6 +478,8 @@ private:
 	UPROPERTY()
 	TMap<FString, TObjectPtr<UTextureRenderTarget2D>> Portraits;
 	UPROPERTY()
+	TMap<FString, TObjectPtr<UTextureRenderTarget2D>> LargePortraits;
+	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> ShowMesh;
 	UPROPERTY()
 	TObjectPtr<USceneCaptureComponent2D> ShowCamera;
@@ -593,6 +607,27 @@ private:
 	int32 FrontLineFar = -1; // which weight of the line is shown: 0 the working one, 1 the staff map's (none yet: -1)
 	UPROPERTY()
 	TObjectPtr<UProceduralMeshComponent> EnemyReachMesh; // the dashed line of the enemy's reach, in the front line's own ink and its two weights
+	bool bPiecesShown = true;
+	bool bChartOn = false;
+	TArray<int32> ChartLevels;
+	TArray<FOldSighting> ChartOld;
+	TArray<FOldSighting> ChartAsked; // (as the rules last gave them, before any stood for a picture)
+	UPROPERTY()
+	TObjectPtr<UProceduralMeshComponent> ChartMesh;
+	struct FChartPoint
+	{
+		FVector At = FVector::ZeroVector;
+		int32 Sea = INDEX_NONE, Next = INDEX_NONE; // the sea it lies in, and the nearest other
+		float Own = 1.0f; // how wholly it is the first sea's: 1 well inside, a half on the line between the two
+		bool bWater = false;
+	};
+	TArray<FChartPoint> ChartPoints; // a grid over the water, laid once
+	int32 ChartAcross = 0, ChartDown = 0;
+	TWeakObjectPtr<AArmyPiece> HandLampPiece;
+	UPROPERTY()
+	TObjectPtr<class USpotLightComponent> HandLamp;
+	float HandLampGlow = 0.0f; // 0 out, 1 full: it comes up and goes down over a third of a second
+	FVector HandLampAt = FVector::ZeroVector;
 	struct FVictorFlag
 	{
 		FString Tag; // whose flag flies there (none: it is on its way down for good)

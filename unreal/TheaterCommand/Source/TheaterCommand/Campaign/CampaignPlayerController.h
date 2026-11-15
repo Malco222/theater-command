@@ -54,6 +54,7 @@ struct FTrayCard
 	FText Kind;
 	int32 Divisions = 0;
 	float Strength = 1.0f;
+	int32 Men = 0; // (for the bigger card)
 	int32 Moves = 0;
 	int32 MovesMax = 0;
 	FString Marching; // (release 1) "Marching to X, about N months", where it is on a standing march
@@ -392,6 +393,8 @@ public:
 	bool IsWatching() const { return bWatching; }
 	ACampaignMapActor* GetMap() const { return Map.Get(); }
 	FCampaignSession* GetSession() const;
+	/** (release 1) What an arm is, for the bigger unit card; null where the rules give none. */
+	const FArmNote* FindArm(const FString& Kind) const;
 
 	FText GetDateText() const;
 	FText GetRulesNote() const;
@@ -750,6 +753,19 @@ private:
 	TArray<int32> PickedBeforeMass; // the corps that were in hand before "send everyone" was pressed on the attack card
 	TArray<FReachRegion> Reach;
 	TSet<int32> EnemyReach; // with an army in hand: the regions the enemy he can see could strike next month
+	/** (release 1) A view of the map that has been kept, to come back to: where it looks, from how far, turned and tipped how. */
+	struct FKeptView
+	{
+		bool bKept = false;
+		FVector Focus = FVector::ZeroVector;
+		float Zoom = 0.5f, Yaw = 0.0f, Tilt = 0.0f;
+	};
+	FKeptView KeptViews[4]; // under the keys 6, 7, 8 and 9
+	bool bKeptViewsRead = false;
+	bool bChartView = false; // (release 1) the admiral's chart, as one of the map's views; it is also shown while a fleet is in hand
+	void ReadKeptViews();
+	void KeepView(int32 Slot);
+	void GoToKeptView(int32 Slot);
 	TMap<int32, int32> FarMonths; // and friendly ground beyond this month's reach: about how many months the march there would take
 	TArray<int32> StandingRoad; // and the road still ahead of it, if it is on a standing march
 	int32 RouteTarget = INDEX_NONE;

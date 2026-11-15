@@ -87,6 +87,8 @@ import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoi
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
 import { seaOpenAt } from '../../../src/campaign/navy';
+import { atSea as fleetAtSea, shipCount as shipsIn } from '../../../src/campaign/navy';
+import { fleetKnown as fleetKnownTo, seaPicture as seaPictureOf } from '../../../src/campaign/carriers';
 import { airfieldsSeen, announcements, attackOutlook, openingForce, pocketAt, softenOptions, orderProbe, foldChoicesAt, orderFold, fieldworksLeft, rivalStaff, swapChoices, orderSwap, jointForce, whyNotAttack, corpsDetail, corpsKnownAs, fallenCapitalAt, flownRaids, knowledgeOf, nationsFallen, playerFell, prize as prizeOfPlace, townIn, towns as townsOfMap } from '../../../src/campaign/turn';
 import { STARTS } from './starts';
 import grandData from '../../../data/campaign/grand.json';
@@ -126,6 +128,89 @@ function cardOf(s: Game, c: Corps): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+/**
+ * (release 1) What each arm is, for the bigger unit card: its weight in attack and in defence, what it is for, and
+ * the ground it is at its best and its worst on. Every figure is read from the rules' own tables, so the card can
+ * never promise what a battle will not deliver.
+ */
+function armsTable(s: Game): { kind: string; label: string; atk: number; def: number; role: string; good: string; poor: string }[] {
+  const out: { kind: string; label: string; atk: number; def: number; role: string; good: string; poor: string }[] = [];
+  try {
+    const grand = groundRules(s);
+    const GROUNDS: [string, string][] = [['plains', 'open country'], ['desert', 'desert'], ['forest', 'forest'], ['hills', 'hills'], ['mountain', 'mountains'], ['marsh', 'marsh'], ['urban', 'cities']];
+    const by = (m: number): string => `${m > 1 ? '+' : '−'}${Math.round(Math.abs(m - 1) * 100)}%`;
+    const upTo = (x: number): string => `${Math.round(x * 100)}%`;
+    const A = GROUND.arms;
+    const roles: Record<string, string> = {
+      inf: grand ? `Holds ground better than it takes it. With tanks beside it, it is worth up to ${upTo(A.infantry)} more.` : 'Holds ground better than it takes it.',
+      mot: grand ? 'Infantry on wheels: quick off the roads, and it counts as the infantry tanks need beside them.' : 'Infantry on wheels: quick off the roads.',
+      arm: grand ? `The hardest hitter there is. With infantry beside it, it is worth up to ${upTo(A.armour)} more; alone in a city or a forest it is worth less.` : 'The hardest hitter there is.',
+      cav: 'Quick and light: for scouting and pursuit, not for a stand-up fight.',
+      mtn: 'At home in hills and mountains, where everyone else struggles.',
+      fort: 'A fortress garrison: it holds its works and does not march.',
+      art: grand ? `Massed guns. Against forts and dug-in troops, up to ${DEFENCE.frontage.guns} artillery corps join an attack without taking room on the roads, and their fire wears the works down.` : 'Massed guns.',
+      eng: 'Builds and breaches: bridges, fieldworks, minefields and railways. It is not there for its rifles.',
+    };
+    for (const kind of Object.keys(KIND) as (keyof typeof KIND)[]) {
+      const k = KIND[kind];
+      const good: string[] = [], poor: string[] = [];
+      for (const [t, word] of GROUNDS) {
+        let a = grand ? (GROUND.attack[kind] as Record<string, number> | undefined)?.[t] ?? 1 : 1;
+        const d = grand ? (GROUND.defence[kind] as Record<string, number> | undefined)?.[t] ?? 1 : 1;
+        const m = grand ? (GROUND.march[kind] as Record<string, number> | undefined)?.[t] ?? 0 : 0;
+        // (the classic rule, in every campaign: tanks attack at 60% in mountain, city and marsh)
+        if (kind === 'arm' && (t === 'mountain' || t === 'urban' || t === 'marsh')) a *= 0.6;
+        if (a === 1 && d === 1 && !m) continue;
+        const bits = [a !== 1 ? `attack ${by(a)}` : '', d !== 1 ? `defence ${by(d)}` : '', m ? 'slow to enter' : ''].filter(Boolean).join(', ');
+        (a > 1 || d > 1 ? good : poor).push(`${word} (${bits})`);
+      }
+      if (kind === 'arm') good.unshift('open country and desert');
+      if (grand && GROUND.steep.barred.includes(kind)) poor.push('the highest mountains (cannot enter)');
+      out.push({ kind, label: k.label, atk: k.atk, def: k.def, role: roles[kind] ?? '', good: good.join('; '), poor: poor.join('; ') });
+    }
+  } catch { /* a card without its notes is still a card */ }
+  return out;
+}
+
+/**
+ * (release 1) The admiral's chart: how well the player's side has each sea searched (0 not searched, 1 thinly: a
+ * fleet there would be reported, 2 well: it would be identified, 3 in full view, where this game keeps no fog at
+ * sea), and old sightings: enemy ships that were found at sea in the last three months and are lost again, each
+ * with the sea they were last seen in and how many months ago. The last sighting of each enemy fleet is kept with
+ * the game, as a flag.
+ */
+function chartOf(s: Game): { seas: number[]; old: { zone: number; nat: string; months: number }[] } {
+  const seas: number[] = [], old: { zone: number; nat: string; months: number }[] = [];
+  try {
+    const me = s.human;
+    if (!me || !s.nations[me]?.alive) return { seas, old };
+    for (const z of s.seas) {
+      const p = seaPictureOf(s, z.id, me);
+      seas[z.id] = p.word.startsWith('In full view') ? 3 : p.search >= p.needFind ? 2 : p.search >= p.needReport ? 1 : 0;
+    }
+    const live = new Set<string>();
+    for (const f of s.fleets) {
+      const key = `sight:${f.id}`;
+      if (!shipsIn(f.ships) || !atWar(s, f.nat, me)) continue;
+      live.add(key);
+      const known = fleetKnownTo(s, f, me);
+      if (known !== 'none') {
+        // (found: at sea it is on the chart as a piece; in harbour there is nothing to look for)
+        if (fleetAtSea(f)) s.flags[key] = s.turn * 1000 + f.zone; else delete s.flags[key];
+        continue;
+      }
+      const at = s.flags[key];
+      if (at === undefined) continue;
+      const months = s.turn - Math.floor(at / 1000);
+      if (months > 3) { delete s.flags[key]; continue; }
+      if (months >= 1 && s.seas[at % 1000]) old.push({ zone: at % 1000, nat: f.nat, months });
+    }
+    // (a fleet that is no more, or no longer an enemy's, leaves no sighting)
+    for (const key of Object.keys(s.flags)) if (key.startsWith('sight:') && !live.has(key)) delete s.flags[key];
+  } catch { /* a chart that cannot be drawn is left blank */ }
+  return { seas, old };
 }
 
 /** What taking a place is worth, in a sentence; nothing where it is worth nothing (bare ground, or a scenario that keeps no money). */
@@ -337,6 +422,10 @@ function view() {
     todo: todoOf(s),
     // For the night: the nations at war, whose towns are blacked out; and the fronts, where armies at war stand in
     // provinces side by side, as far as the player sees them (pairs of regions), for the guns that flicker there.
+    // (release 1) What each arm is, for the bigger unit card.
+    arms: armsTable(s),
+    // (release 1) The admiral's chart: each sea by how well it is searched, and old sightings.
+    chart: chartOf(s),
     dark: Object.values(s.nations).filter((n) => n.alive && n.atWar.length > 0).map((n) => n.id),
     // For the drawn front line (release 1): every pair of living nations at war, tag by tag, two by two. The table
     // draws the line itself along every frontier between two such holders, so it moves the moment ground changes hands.

@@ -459,6 +459,52 @@ FCampaignView FCampaignSession::ParseView(const TSharedPtr<FJsonObject>& Object)
 		}
 		Object->TryGetStringArrayField(TEXT("dark"), Out.Blackout);
 		Object->TryGetStringArrayField(TEXT("wars"), Out.Wars);
+		const TSharedPtr<FJsonObject>* Chart = nullptr;
+		if (Object->TryGetObjectField(TEXT("chart"), Chart))
+		{
+			const TArray<TSharedPtr<FJsonValue>>* Levels = nullptr;
+			if ((*Chart)->TryGetArrayField(TEXT("seas"), Levels))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Levels)
+				{
+					Out.SeaSearch.Add(Value.IsValid() && !Value->IsNull() ? FMath::RoundToInt32(Value->AsNumber()) : 3);
+				}
+			}
+			const TArray<TSharedPtr<FJsonValue>>* Old = nullptr;
+			if ((*Chart)->TryGetArrayField(TEXT("old"), Old))
+			{
+				for (const TSharedPtr<FJsonValue>& Value : *Old)
+				{
+					const TSharedPtr<FJsonObject>* Seen = nullptr;
+					if (Value->TryGetObject(Seen))
+					{
+						FOldSighting& Sighting = Out.OldSightings.AddDefaulted_GetRef();
+						(*Seen)->TryGetNumberField(TEXT("zone"), Sighting.Zone);
+						(*Seen)->TryGetStringField(TEXT("nat"), Sighting.Nation);
+						(*Seen)->TryGetNumberField(TEXT("months"), Sighting.Months);
+					}
+				}
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Arms = nullptr;
+		if (Object->TryGetArrayField(TEXT("arms"), Arms))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Arms)
+			{
+				const TSharedPtr<FJsonObject>* Arm = nullptr;
+				if (Value->TryGetObject(Arm))
+				{
+					FArmNote& Note = Out.Arms.AddDefaulted_GetRef();
+					(*Arm)->TryGetStringField(TEXT("kind"), Note.Kind);
+					(*Arm)->TryGetStringField(TEXT("label"), Note.Label);
+					(*Arm)->TryGetNumberField(TEXT("atk"), Note.Attack);
+					(*Arm)->TryGetNumberField(TEXT("def"), Note.Defence);
+					(*Arm)->TryGetStringField(TEXT("role"), Note.Role);
+					(*Arm)->TryGetStringField(TEXT("good"), Note.Good);
+					(*Arm)->TryGetStringField(TEXT("poor"), Note.Poor);
+				}
+			}
+		}
 		const TArray<TSharedPtr<FJsonValue>>* Cold = nullptr;
 		if (Object->TryGetArrayField(TEXT("cold"), Cold))
 		{

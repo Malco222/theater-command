@@ -11,6 +11,7 @@
 #include "TheaterCommand.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
+#include "Components/SpotLightComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -702,6 +703,250 @@ void ACampaignMapActor::ShowWrecked(const TArray<int32>& FromRules)
 	if (bTowns)
 	{
 		BuildTowns();
+	}
+}
+
+void ACampaignMapActor::SetHandLamp(AArmyPiece* Piece)
+{
+	HandLampPiece = Piece;
+}
+
+AArmyPiece* ACampaignMapActor::FindFleetPiece(int32 FleetId) const
+{
+	const TObjectPtr<AArmyPiece>* Piece = FleetPieces.Find(FleetId);
+	return Piece ? Piece->Get() : nullptr;
+}
+
+void ACampaignMapActor::ShowChart(bool bOn, const TArray<int32>& Levels, const TArray<FOldSighting>& Old)
+{
+	if (bOn == bChartOn && (!bOn || (Levels == ChartLevels && Old == ChartAsked)))
+	{
+		return;
+	}
+	ChartAsked = Old;
+	bChartOn = bOn;
+	ChartLevels = Levels;
+	ChartOld = Old;
+	{
+		// ("-TheaterSightings=10:GER:1,3:ITA:3" stands old sightings on the chart for a picture: the sea, whose, how many months ago)
+		FString Asked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterSightings="), Asked, false))
+		{
+			TArray<FString> Each;
+			Asked.ParseIntoArray(Each, TEXT(","));
+			for (const FString& One : Each)
+			{
+				TArray<FString> Parts;
+				if (One.ParseIntoArray(Parts, TEXT(":")) == 3)
+				{
+					FOldSighting& Seen = ChartOld.AddDefaulted_GetRef();
+					Seen.Zone = FCString::Atoi(*Parts[0]);
+					Seen.Nation = Parts[1];
+					Seen.Months = FCString::Atoi(*Parts[2]);
+				}
+			}
+		}
+	}
+	if (!ChartMesh)
+	{
+		if (!bOn)
+		{
+			return;
+		}
+		ChartMesh = NewObject<UProceduralMeshComponent>(this);
+		ChartMesh->SetupAttachment(Root);
+		ChartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		ChartMesh->RegisterComponent();
+		ChartMesh->SetCastShadow(false);
+	}
+	ChartMesh->ClearAllMeshSections();
+	if (!bOn || !Data.IsLoaded() || Data.Seas.Num() == 0)
+	{
+		return;
+	}
+	// The grid over the water, laid once: every point knows the sea it lies in (the nearest sea's, as the rules
+	// reckon which sea a coast is on) and the nearest other, so that one sea's veil runs softly into the next.
+	const double Step = 6.0;
+	if (ChartPoints.Num() == 0)
+	{
+		ChartAcross = FMath::CeilToInt32(Terrain.NX * Terrain.Cell / Step) + 1;
+		ChartDown = FMath::CeilToInt32(Terrain.NY * Terrain.Cell / Step) + 1;
+		ChartPoints.SetNum(ChartAcross * ChartDown);
+		for (int32 J = 0; J < ChartDown; ++J)
+		{
+			for (int32 I = 0; I < ChartAcross; ++I)
+			{
+				FChartPoint& Point = ChartPoints[J * ChartAcross + I];
+				const double X = I * Step, Y = J * Step;
+				Point.bWater = Terrain.HeightAt(X, Y) <= 0.0f && Data.FindRegionAt(X, Y) == INDEX_NONE;
+				Point.At = SurfacePoint(X, Y, 0.22);
+				double Best = TNumericLimits<double>::Max(), Second = TNumericLimits<double>::Max();
+				for (int32 Sea = 0; Sea < Data.Seas.Num(); ++Sea)
+				{
+					const double Far = FVector2D::Distance(Data.Seas[Sea].Center, FVector2D(X, Y));
+					if (Far < Best)
+					{
+						Second = Best;
+						Point.Next = Point.Sea;
+						Best = Far;
+						Point.Sea = Sea;
+					}
+					else if (Far < Second)
+					{
+						Second = Far;
+						Point.Next = Sea;
+					}
+				}
+				Point.Own = Point.Next == INDEX_NONE ? 1.0f : static_cast<float>(0.5 + 0.5 * FMath::SmoothStep(0.0, 26.0, Second - Best));
+			}
+		}
+	}
+	// The veil: none over a sea well searched or in full view, a light one over a sea thinly searched, a deeper
+	// one over a sea not searched at all. It is the fog of war as the land wears it: a wash the grey of blank chart
+	// paper, and over a sea not searched at all the same slanting hatch.
+	auto VeilOf = [this](int32 Sea) -> float
+	{
+		const int32 Level = ChartLevels.IsValidIndex(Sea) ? ChartLevels[Sea] : 3;
+		return Level <= 0 ? 0.5f : Level == 1 ? 0.24f : 0.0f;
+	};
+	FCampaignMeshBuffers Buffers;
+	TArray<int32> Index;
+	Index.Init(INDEX_NONE, ChartPoints.Num());
+	auto VeilAt = [&](const FChartPoint& Point) -> float
+	{
+		return !Point.bWater ? 0.0f : FMath::Lerp(VeilOf(Point.Next == INDEX_NONE ? Point.Sea : Point.Next), VeilOf(Point.Sea), Point.Own);
+	};
+	auto VertexOf = [&](int32 I, int32 J) -> int32
+	{
+		const int32 K = J * ChartAcross + I;
+		if (Index[K] == INDEX_NONE)
+		{
+			const FChartPoint& Point = ChartPoints[K];
+			Index[K] = Buffers.AddVertex(Point.At, FVector::UpVector, FLinearColor(0.56f, 0.55f, 0.5f, VeilAt(Point)).ToFColor(false));
+		}
+		return Index[K];
+	};
+	const FVector HatchLift(0.0, 0.0, 0.05 * UnitScale);
+	const FLinearColor HatchInk(0.13f, 0.17f, 0.26f, 1.0f);
+	for (int32 J = 0; J + 1 < ChartDown; ++J)
+	{
+		for (int32 I = 0; I + 1 < ChartAcross; ++I)
+		{
+			const FChartPoint& A = ChartPoints[J * ChartAcross + I];
+			const FChartPoint& B = ChartPoints[J * ChartAcross + I + 1];
+			const FChartPoint& C = ChartPoints[(J + 1) * ChartAcross + I];
+			const FChartPoint& D = ChartPoints[(J + 1) * ChartAcross + I + 1];
+			if (!(A.bWater || B.bWater || C.bWater || D.bWater))
+			{
+				continue; // dry land
+			}
+			const float VB_ = VeilAt(B), VC_ = VeilAt(C);
+			if (VeilAt(A) + VB_ + VC_ + VeilAt(D) <= 0.0f)
+			{
+				continue; // open water, well searched: nothing to lay over it
+			}
+			const int32 VA = VertexOf(I, J), VB = VertexOf(I + 1, J), VC = VertexOf(I, J + 1), VD = VertexOf(I + 1, J + 1);
+			Buffers.AddTriangleFacingUp(VA, VB, VC);
+			Buffers.AddTriangleFacingUp(VB, VC, VD);
+			// The hatch: one slanting stroke across every other square, so that the strokes join into lines from
+			// corner to corner of the sea; inked only as far as the sea is not searched at all.
+			// (they slant the way the land's hatch does, down to the east)
+			if (((I - J) % 2 + 2) % 2 == 0 && A.bWater && D.bWater)
+			{
+				const float InkB = FMath::Clamp((VeilAt(A) - 0.3f) * 2.2f, 0.0f, 0.42f), InkC = FMath::Clamp((VeilAt(D) - 0.3f) * 2.2f, 0.0f, 0.42f);
+				if (InkB + InkC > 0.0f)
+				{
+					const FVector Along = (D.At - A.At).GetSafeNormal2D();
+					const FVector Side = FVector(-Along.Y, Along.X, 0.0) * (0.11 * UnitScale);
+					const int32 H0 = Buffers.AddVertex(A.At + HatchLift + Side, FVector::UpVector, FLinearColor(HatchInk.R, HatchInk.G, HatchInk.B, InkB).ToFColor(false));
+					const int32 H1 = Buffers.AddVertex(A.At + HatchLift - Side, FVector::UpVector, FLinearColor(HatchInk.R, HatchInk.G, HatchInk.B, InkB).ToFColor(false));
+					const int32 H2 = Buffers.AddVertex(D.At + HatchLift + Side, FVector::UpVector, FLinearColor(HatchInk.R, HatchInk.G, HatchInk.B, InkC).ToFColor(false));
+					const int32 H3 = Buffers.AddVertex(D.At + HatchLift - Side, FVector::UpVector, FLinearColor(HatchInk.R, HatchInk.G, HatchInk.B, InkC).ToFColor(false));
+					Buffers.AddTriangleFacingUp(H0, H1, H2);
+					Buffers.AddTriangleFacingUp(H1, H2, H3);
+				}
+			}
+		}
+	}
+	// Old sightings: a navigator's fix where enemy ships were last seen, a ring with a cross in it, in red crayon,
+	// fainter for each month since. It stands a little off the middle of the sea, clear of a fleet that lies there.
+	TMap<int32, int32> InSea;
+	for (const FOldSighting& Seen : ChartOld)
+	{
+		if (!Data.Seas.IsValidIndex(Seen.Zone))
+		{
+			continue;
+		}
+		const int32 Nth = InSea.FindOrAdd(Seen.Zone)++;
+		// (clear of the fleets that lie at the middle of the sea: to one side of it, wherever there is water)
+		FVector2D Middle = Data.Seas[Seen.Zone].Center + FVector2D(-11.0, 8.0);
+		for (const FVector2D& Off : { FVector2D(-22.0, 20.0), FVector2D(22.0, 20.0), FVector2D(-22.0, -20.0), FVector2D(22.0, -20.0), FVector2D(0.0, 27.0), FVector2D(0.0, -27.0), FVector2D(-12.0, 12.0) })
+		{
+			const FVector2D Try = Data.Seas[Seen.Zone].Center + Off + FVector2D(9.0 * Nth, 0.0);
+			if (Terrain.HeightAt(Try.X, Try.Y) <= 0.0f && Data.FindRegionAt(Try.X, Try.Y) == INDEX_NONE)
+			{
+				Middle = Try;
+				break;
+			}
+		}
+		const float Strength = Seen.Months <= 1 ? 0.85f : Seen.Months == 2 ? 0.55f : 0.32f;
+		UE_LOG(LogTheater, Verbose, TEXT("A sighting in the %s"), *Data.Seas[Seen.Zone].Name);
+		const FColor Ink = FLinearColor(0.78f, 0.12f, 0.08f, Strength).ToFColor(false);
+		TArray<FVector2D> Round;
+		for (int32 Side = 0; Side < 28; ++Side)
+		{
+			const double Angle = 2.0 * PI * Side / 28.0;
+			Round.Add(Middle + FVector2D(FMath::Cos(Angle), FMath::Sin(Angle)) * 3.4);
+		}
+		AppendRibbon(Buffers, Round, 0.32, 0.3, Ink, true);
+		AppendRibbon(Buffers, { Middle - FVector2D(1.7, 1.7), Middle + FVector2D(1.7, 1.7) }, 0.28, 0.3, Ink, false);
+		AppendRibbon(Buffers, { Middle - FVector2D(1.7, -1.7), Middle + FVector2D(1.7, -1.7) }, 0.28, 0.3, Ink, false);
+	}
+	// (in the lanes' own ink, which is dimmed with the land by night)
+	if (!LanesInk && HighlightMaterial)
+	{
+		LanesInk = UMaterialInstanceDynamic::Create(HighlightMaterial, this);
+		LanesInk->SetScalarParameterValue(TEXT("Brightness"), 1.0f);
+		ShownNight = -1.0f;
+	}
+	Buffers.Commit(ChartMesh, 0, LanesInk ? static_cast<UMaterialInterface*>(LanesInk) : static_cast<UMaterialInterface*>(HighlightMaterial));
+	UE_LOG(LogTheater, Log, TEXT("The admiral's chart: %d seas, %d old sightings, %d points of veil"), ChartLevels.Num(), ChartOld.Num(), Buffers.Vertices.Num());
+	{
+		FString Names;
+		for (int32 Sea = 0; Sea < Data.Seas.Num(); ++Sea)
+		{
+			Names += FString::Printf(TEXT("%d %s (%d); "), Sea, *Data.Seas[Sea].Name, ChartLevels.IsValidIndex(Sea) ? ChartLevels[Sea] : -1);
+		}
+		UE_LOG(LogTheater, Log, TEXT("Seas by number, with how well each is searched: %s"), *Names);
+	}
+}
+
+void ACampaignMapActor::SetPiecesShown(bool bShown)
+{
+	// (while they are off the table it is said again every frame: a piece stood meanwhile is lifted off with the rest)
+	if (bShown && bPiecesShown)
+	{
+		return;
+	}
+	bPiecesShown = bShown;
+	auto Set = [bShown](AArmyPiece* Piece)
+	{
+		if (Piece)
+		{
+			Piece->SetActorHiddenInGame(!bShown);
+		}
+	};
+	for (AArmyPiece* Piece : Pieces)
+	{
+		Set(Piece);
+	}
+	for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : FleetPieces)
+	{
+		Set(Pair.Value);
+	}
+	for (const TPair<int32, TObjectPtr<AArmyPiece>>& Pair : AirPieces)
+	{
+		Set(Pair.Value);
 	}
 }
 
@@ -6787,9 +7032,10 @@ void ACampaignMapActor::AimStudioCamera(USceneCaptureComponent2D* Camera, const 
 	Camera->SetRelativeLocationAndRotation(Eye, (Middle - Eye).Rotation());
 }
 
-UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model)
+UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model, bool bLarge)
 {
-	if (const TObjectPtr<UTextureRenderTarget2D>* Kept = Portraits.Find(Model))
+	TMap<FString, TObjectPtr<UTextureRenderTarget2D>>& Kept_ = bLarge ? LargePortraits : Portraits;
+	if (const TObjectPtr<UTextureRenderTarget2D>* Kept = Kept_.Find(Model))
 	{
 		return Kept->Get();
 	}
@@ -6799,13 +7045,13 @@ UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model)
 	{
 		Picture = NewObject<UTextureRenderTarget2D>(this);
 		Picture->ClearColor = FLinearColor(0.03f, 0.028f, 0.024f, 1.0f);
-		Picture->InitCustomFormat(184, 112, PF_B8G8R8A8, false);
+		Picture->InitCustomFormat(bLarge ? 552 : 184, bLarge ? 336 : 112, PF_B8G8R8A8, false); // (the same shape, three times the size)
 		Picture->UpdateResourceImmediate(true);
 		AimStudioCamera(PortraitCamera, PortraitMesh->GetRelativeLocation(), Radius);
 		PortraitCamera->TextureTarget = Picture;
 		PortraitCamera->CaptureScene();
 	}
-	Portraits.Add(Model, Picture); // (kept even when there is none, so that it is not tried again every frame)
+	Kept_.Add(Model, Picture); // (kept even when there is none, so that it is not tried again every frame)
 	return Picture;
 }
 
@@ -7493,6 +7739,62 @@ void ACampaignMapActor::UpdateForCamera(float CameraDistance, float CameraYaw, c
 	if (bVictorsMoving)
 	{
 		DrawVictorFlags(); // (a flag on its way up or down a captured capital's pole)
+	}
+	// The lamp over the army in hand: a warm pool of light about a province wide on the table round the piece,
+	// from a shaded lamp hung over it. It follows the piece as it is carried or marches, comes up and goes down
+	// over a third of a second, and is a little stronger by night, when there is less light to compete with.
+	// ("-TheaterLamp=day,night,height,cone" tries other strengths, a height in map units and a cone in degrees.)
+	{
+		AArmyPiece* Held = bPiecesShown ? HandLampPiece.Get() : nullptr;
+		const float Step = GetWorld() ? GetWorld()->GetDeltaSeconds() * 3.0f : 0.05f;
+		HandLampGlow = FMath::Clamp(HandLampGlow + (Held ? Step : -Step), 0.0f, 1.0f);
+		if (HandLampGlow > 0.0f)
+		{
+			static float Day = 1200.0f, Night = 1400.0f, High = 90.0f, Cone = 15.0f; // (candelas; the lamp hangs high, so that its pool is even and has no hot middle)
+			static bool bRead = false;
+			if (!bRead)
+			{
+				bRead = true;
+				FString Asked;
+				if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLamp="), Asked, false))
+				{
+					TArray<FString> Parts;
+					Asked.ParseIntoArray(Parts, TEXT(","));
+					if (Parts.IsValidIndex(0)) { Day = FCString::Atof(*Parts[0]); }
+					if (Parts.IsValidIndex(1)) { Night = FCString::Atof(*Parts[1]); }
+					if (Parts.IsValidIndex(2)) { High = FCString::Atof(*Parts[2]); }
+					if (Parts.IsValidIndex(3)) { Cone = FCString::Atof(*Parts[3]); }
+				}
+			}
+			if (!HandLamp)
+			{
+				HandLamp = NewObject<USpotLightComponent>(this);
+				HandLamp->SetMobility(EComponentMobility::Movable);
+				HandLamp->SetupAttachment(Root);
+				HandLamp->SetCastShadows(false);
+				HandLamp->IntensityUnits = ELightUnits::Candelas;
+				HandLamp->bUseInverseSquaredFalloff = true;
+				HandLamp->SetLightColor(FLinearColor(FColor(255, 190, 120)));
+				HandLamp->SetSpecularScale(0.15f); // (it lights the table: it is not mirrored in the sea)
+				HandLamp->SetSourceRadius(4.0f);
+				HandLamp->RegisterComponent();
+				HandLamp->SetWorldRotation(FRotator(-90.0f, 0.0f, 0.0f));
+			}
+			if (Held)
+			{
+				HandLampAt = Held->GetActorLocation();
+			}
+			HandLamp->SetInnerConeAngle(Cone * 0.3f);
+			HandLamp->SetOuterConeAngle(Cone);
+			HandLamp->SetAttenuationRadius(High * UnitScale * 1.8f);
+			HandLamp->SetWorldLocation(HandLampAt + FVector(0.0, 0.0, High * UnitScale));
+			HandLamp->SetIntensity(HandLampGlow * HandLampGlow * FMath::Lerp(Day, Night, FMath::Clamp(NightNow, 0.0f, 1.0f)));
+			HandLamp->SetVisibility(true);
+		}
+		else if (HandLamp && HandLamp->IsVisible())
+		{
+			HandLamp->SetVisibility(false);
+		}
 	}
 	// The front line is drawn heavier from the staff map's height, where the working line would be a hair.
 	if (FrontLineMesh && FrontLineFar >= 0)

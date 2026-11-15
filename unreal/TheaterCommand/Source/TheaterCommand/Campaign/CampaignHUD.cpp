@@ -1096,7 +1096,7 @@ namespace
 					// treasury holds, typed.
 					+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(24.0f)
 					[
-						Piece(SNew(SBorder).BorderImage(&PaperBrush).Padding(FMargin(1.0f))
+						Edge(TopLeftPiece, SNew(SBorder).BorderImage(&PaperBrush).Padding(FMargin(1.0f))
 						.BorderBackgroundColor_Lambda([this]() { return FSlateColor(PaperLight()); }) // (paper is not so white by night)
 						.ColorAndOpacity_Lambda([this]() { return InkLight(); }) // (and the ink on it is darker)
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetNewsreel().bOn ? EVisibility::Collapsed : EVisibility::Visible; })
@@ -1245,7 +1245,11 @@ namespace
 					]
 
 					// News for the player, for a few seconds at a time.
-					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(24.0f, 112.0f, 24.0f, 0.0f)
+					// (The art director's ruling, as for the map's plates: the line keeps to the gap between the calendar on
+					// the left and the chips on the right, whatever their widths today, and folds onto a second line
+					// sooner than cross either or lose its end.)
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top)
+					.Padding(TAttribute<FMargin>::CreateLambda([this]() { return NoticeGap(nullptr); }))
 					[
 						Piece(SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(24.0f, 10.0f))
 						.Visibility_Lambda([this]()
@@ -1253,7 +1257,9 @@ namespace
 							return Controller.IsValid() && !Controller->GetNotice().IsEmpty() && !Controller->GetNewsreel().bOn ? EVisibility::HitTestInvisible : EVisibility::Collapsed;
 						})
 						[
-							SNew(STextBlock).Font(Typed(13)).ColorAndOpacity(Cream)
+							SNew(STextBlock).Font(Typed(13)).ColorAndOpacity(Cream).Justification(ETextJustify::Center).LineHeightPercentage(1.1f)
+							// (folded at the width of the gap less the plate's own margins: a short line keeps its own width)
+							.WrapTextAt_Lambda([this]() { float Width = 800.0f; NoticeGap(&Width); return FMath::Max(Width - 52.0f, 240.0f); })
 							.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetNotice() : FText::GetEmpty(); })
 						])
 					]
@@ -1302,6 +1308,12 @@ namespace
 						[
 							SAssignNew(WatchStrip, SHorizontalBox)
 						]
+					]
+
+					// (where the bigger unit card is stood for a picture: see "-TheaterBigCard")
+					+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Top).Padding(0.0f, 262.0f, 0.0f, 0.0f)
+					[
+						SAssignNew(BigCardShow, SBox).Visibility(EVisibility::HitTestInvisible)
 					]
 
 					// The top right corner: the six doors, the guide and the menu, and the control that ends the month;
@@ -1412,7 +1424,7 @@ namespace
 						// On the eve of war: the staff's plan for placing the army, carried out at a press.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 						[
-							Piece(SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
+							Chip(SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->HasEvePlan() ? EVisibility::Visible : EVisibility::Collapsed; })
 							.ToolTipText(FText::FromString(TEXT("The staff moves the army by rail to where it advises, strongest corps first. It does the most when it is the first thing done; you can still move any corps yourself afterwards.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->PlaceByPlan(); } return FReply::Handled(); })
@@ -1424,7 +1436,7 @@ namespace
 						// What is still to do before the month is ended: armies that have not moved. A click goes to the next of them.
 						+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Right).Padding(0.0f, 0.0f, 0.0f, 10.0f)
 						[
-							Piece(SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
+							Chip(SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
 							.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->ArmiesYetToMove() > 0 ? EVisibility::Visible : EVisibility::Collapsed; })
 							.ToolTipText(FText::FromString(TEXT("Armies that can still move this month. Click, or press Tab, to go to the next of them. You can end the month whenever you like.")))
 							.OnClicked_Lambda([this]() { if (Controller.IsValid()) { Controller->NextArmy(); } return FReply::Handled(); })
@@ -1497,7 +1509,7 @@ namespace
 									]
 									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 0.0f)
 									[
-										MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; and friend and foe, your own ground green, your allies' blue, your enemies' red. (Y)"), [this]() { Controller->ToggleWealth(); })
+										MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; friend and foe, your own ground green, your allies' blue, your enemies' red; and the admiral's chart, a veil over the seas you have not searched. (Y)"), [this]() { Controller->ToggleWealth(); })
 									]
 								]
 								+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
@@ -1515,7 +1527,7 @@ namespace
 									[
 										SNew(SHorizontalBox)
 										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(0.0f, 0.0f, 3.0f, 0.0f)[MapButton(TEXT("CAPITAL"), TEXT("Look at your capital. (C, or Home)"), [this]() { Controller->GoToCapital(); })]
-										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; and friend and foe, your own ground green, your allies' blue, your enemies' red. (Y)"), [this]() { Controller->ToggleWealth(); })]
+										+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(3.0f, 0.0f, 0.0f, 0.0f)[MapButton(TEXT("MAP VIEWS"), TEXT("Steps through the views of the map, here and on the table: the map as it is; every country in flat colour; the wealth view, gold by what a province pays; friend and foe, your own ground green, your allies' blue, your enemies' red; and the admiral's chart, a veil over the seas you have not searched. (Y)"), [this]() { Controller->ToggleWealth(); })]
 									]
 								]
 							])
@@ -3645,6 +3657,22 @@ namespace
 						MakeCard(Card)
 					];
 				}
+				// ("-TheaterBigCard" stands the bigger card of the army's first corps on the screen, for a picture: it is
+				// otherwise shown only while the pointer rests on a card; "-TheaterBigCard=2" the first division of it)
+				if (BigCardShow.IsValid())
+				{
+					BigCardShow->SetContent(SNullWidget::NullWidget);
+					int32 Which = 0;
+					const bool bAsked = FParse::Param(FCommandLine::Get(), TEXT("TheaterBigCard")) || FParse::Value(FCommandLine::Get(), TEXT("TheaterBigCard="), Which);
+					if (bAsked && Controller->GetArmyTray().Cards.Num() > 0)
+					{
+						const FTrayCard& First = Controller->GetArmyTray().Cards[0];
+						const FString Tag = !First.Ally.IsEmpty() ? First.Ally : Controller->GetArmyTray().Tag;
+						const FViewDivision* Part = Which == 2 && First.Parts.Num() > 0 ? &First.Parts[0] : nullptr;
+						BigCardShow->SetContent(MakeBigCard(First, Part, Part && !Part->Kind.IsEmpty() && First.KindId != TEXT("heavy") ? Part->Kind : First.KindId, Tag,
+							FString(TEXT("Click to tell this corps to come along or stay behind."))));
+					}
+				}
 				}
 			}
 		}
@@ -3657,6 +3685,54 @@ namespace
 			FramePieces.Add(Widget);
 			return Widget;
 		}
+
+		/**
+		 * Where the news line may stand: the margins that keep it between the calendar on the left and the chips on the
+		 * right, whatever their widths today; and, if asked, how wide that gap is.
+		 */
+		FMargin NoticeGap(float* OutWidth) const
+		{
+			FVector2D Size(1920.0, 1080.0);
+			if (GEngine && GEngine->GameViewport)
+			{
+				GEngine->GameViewport->GetViewportSize(Size);
+			}
+			const float Scale = FMath::Clamp(static_cast<float>(Size.Y / 900.0), 0.7f, 3.5f);
+			auto Wide = [Scale](const TWeakPtr<SWidget>& Kept) -> float
+			{
+				const TSharedPtr<SWidget> Widget = Kept.Pin();
+				return Widget.IsValid() && Widget->GetVisibility().IsVisible() ? static_cast<float>(Widget->GetTickSpaceGeometry().GetAbsoluteSize().X) / Scale : 0.0f;
+			};
+			const float Calendar = Wide(TopLeftPiece);
+			float Chips = 0.0f;
+			for (const TWeakPtr<SWidget>& Each : TopChips)
+			{
+				Chips = FMath::Max(Chips, Wide(Each));
+			}
+			const FMargin Gap(24.0f + (Calendar > 0.0f ? Calendar + 14.0f : 0.0f), 112.0f, 24.0f + (Chips > 0.0f ? Chips + 14.0f : 0.0f), 0.0f);
+			if (OutWidth)
+			{
+				*OutWidth = static_cast<float>(Size.X) / Scale - Gap.Left - Gap.Right;
+			}
+			return Gap;
+		}
+
+		/** A piece of the frame that the news line must keep clear of on its right: one of the chips. */
+		template <typename WidgetType>
+		TSharedRef<WidgetType> Chip(TSharedRef<WidgetType> Widget)
+		{
+			TopChips.Add(Widget);
+			return Piece(Widget);
+		}
+
+		/** And the one it must keep clear of on its left. */
+		template <typename WidgetType>
+		TSharedRef<WidgetType> Edge(TWeakPtr<SWidget>& Kept, TSharedRef<WidgetType> Widget)
+		{
+			Kept = Widget;
+			return Piece(Widget);
+		}
+
 
 		/** What the ink on the frame's paper is multiplied by: nothing by day; by night it is darker, as the paper is. */
 		FLinearColor InkLight() const
@@ -5415,7 +5491,7 @@ namespace
 		TSharedRef<SWidget> MakeToDo(int32 Index)
 		{
 			// (a plate of leather with a brass edge, its words typed; a little room is left in it for a wider face)
-			return Piece(SNew(SBox).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
+			return Chip(SNew(SBox).Padding(FMargin(0.0f, 0.0f, 0.0f, 6.0f))
 				.Visibility_Lambda([this, Index]() { return Controller.IsValid() && !Controller->GetToDoText(Index).IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
 				[
 					SNew(SButton).ButtonStyle(&PromptStyle).ContentPadding(FMargin(16.0f, 6.0f)).IsFocusable(false)
@@ -5670,6 +5746,8 @@ namespace
 				{
 					{ TEXT("Move the view"), TEXT("drag the table, or W A S D or the arrow keys; double-click a place to centre on it") },
 					{ TEXT("Zoom, turn and tilt"), TEXT("scroll, or + and -; drag with the right button, or Q and E") },
+					{ TEXT("Views"), TEXT("Shift with 6, 7, 8 or 9 keeps the view you are looking at; the key alone comes back to it") },
+					{ TEXT("The bare ground"), TEXT("hold B to lift every piece off the table; hold P to ink every province line") },
 					{ TEXT("Armies and fleets"), TEXT("click a flag or a fleet to take it in hand; right-click where it should go; Esc puts it down; Tab goes to the next army yet to move") },
 					{ TEXT("The month"), TEXT("Enter ends it; Space skips what is being shown") },
 					{ TEXT("Screens"), TEXT("1 to 5 open the top bar's; L forces, R report, O goals, C your capital, Y map views, H how to play") },
@@ -5985,23 +6063,148 @@ namespace
 		}
 
 		/** The studio's picture of a model, as something to draw; null if there is no such model. Kept once made. */
-		TSharedPtr<FSlateBrush> PortraitOf(const FString& Model)
+		TSharedPtr<FSlateBrush> PortraitOf(const FString& Model, bool bLarge = false)
 		{
-			if (const TSharedPtr<FSlateBrush>* Kept = PortraitBrushes.Find(Model))
+			TMap<FString, TSharedPtr<FSlateBrush>>& Brushes = bLarge ? LargePortraitBrushes : PortraitBrushes;
+			if (const TSharedPtr<FSlateBrush>* Kept = Brushes.Find(Model))
 			{
 				return *Kept;
 			}
 			TSharedPtr<FSlateBrush> Made;
 			ACampaignMapActor* Table = Controller.IsValid() ? Controller->GetMap() : nullptr;
-			if (UTextureRenderTarget2D* Picture = Table ? Table->GetPortrait(Model) : nullptr)
+			if (UTextureRenderTarget2D* Picture = Table ? Table->GetPortrait(Model, bLarge) : nullptr)
 			{
 				Made = MakeShared<FSlateBrush>();
 				Made->SetResourceObject(Picture);
-				Made->ImageSize = FVector2D(184.0, 112.0);
+				Made->ImageSize = bLarge ? FVector2D(552.0, 336.0) : FVector2D(184.0, 112.0);
 				Made->DrawAs = ESlateBrushDrawType::Image;
 			}
-			PortraitBrushes.Add(Model, Made);
+			Brushes.Add(Model, Made);
 			return Made;
+		}
+
+		/**
+		 * (release 1) The bigger card, shown when the pointer rests on a unit's card: a large picture of what it is,
+		 * how many men it has and how much of it is left, how it holds together, its weight in attack and defence,
+		 * what it is for, and the ground it is at its best and its worst on. Every figure is the rules' own. Part is
+		 * the one division pointed at, or null for the corps as a whole.
+		 */
+		TSharedRef<SToolTip> MakeBigCard(const FTrayCard& Card, const FViewDivision* Part, const FString& Kind, const FString& Tag, const FString& Foot)
+		{
+			const FString Arm = Kind == TEXT("heavy") ? FString(TEXT("arm")) : Kind;
+			const FArmNote* Note = Controller.IsValid() ? Controller->FindArm(Arm) : nullptr;
+			// (Laid out on its side, the picture on the left and the figures beside it, so that it stands clear of the
+			// army's tray below it; the notes on its ground run under both.)
+			const float Wide = 330.0f, PictureWide = 290.0f;
+			TSharedRef<SVerticalBox> Lines = SNew(SVerticalBox);
+			TSharedRef<SVerticalBox> Under = SNew(SVerticalBox);
+			const TSharedPtr<FSlateBrush> Portrait = PortraitOf(ACampaignMapActor::ModelFor(Tag, Kind), true);
+			// Its name, and what it is.
+			const FString Name = Part ? Part->Full : Card.Nickname.IsEmpty() ? Card.Name.ToString() : FString::Printf(TEXT("%s \u201C%s\u201D"), *Card.Name.ToString(), *Card.Nickname.ToString());
+			Lines->AddSlot().AutoHeight()[SNew(STextBlock).Text(FText::FromString(Name)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream).WrapTextAt(Wide)];
+			const int32 Men = Part ? Part->Men : Card.Men;
+			const float Left = Part ? Part->Strength : Card.Strength;
+			const FString About = Card.Stale > 0 ? FString(TEXT("about ")) : FString();
+			TArray<FString> What;
+			{
+				// (the frame's own word for the arm, as on the small card: "armoured", not the rules' table heading)
+				const FString Word = FCampaignMapData::CorpsKindLabel(Arm);
+				What.Add(Word.Left(1).ToUpper() + Word.Mid(1));
+			}
+			if (!Part)
+			{
+				What.Add(FString::Printf(TEXT("%d division%s"), Card.Divisions, Card.Divisions == 1 ? TEXT("") : TEXT("s")));
+			}
+			else if (!Part->Grade.IsEmpty())
+			{
+				What.Add(Part->bHardened ? Part->Grade + TEXT(", battle-hardened") : Part->Grade);
+			}
+			if (Men > 0)
+			{
+				What.Add(FString::Printf(TEXT("%s%s men"), *About, *FText::AsNumber(Men).ToString()));
+			}
+			Lines->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 7.0f)[SNew(STextBlock).Text(FText::FromString(FString::Join(What, TEXT("  \u00B7  ")))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Muted).WrapTextAt(Wide)];
+			// How much of it is left, and how it holds together: a bar each, with its figure or its word.
+			auto Bar = [this, &Lines](const TCHAR* Label, float Share, const FLinearColor& Colour, const FString& Word)
+			{
+				const float Full = FMath::Clamp(Share, 0.0f, 1.0f);
+				Lines->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 4.0f)
+				[
+					SNew(SHorizontalBox)
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(SBox).WidthOverride(76.0f)[SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Brass)]]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(0.0f, 0.0f, 8.0f, 0.0f)
+					[
+						SNew(SBox).WidthOverride(120.0f).HeightOverride(6.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().FillWidth(FMath::Max(Full, 0.001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(Colour)]
+							+ SHorizontalBox::Slot().FillWidth(FMath::Max(1.0f - Full, 0.001f))[SNew(SBorder).BorderImage(&BarBrush).BorderBackgroundColor(FLinearColor(1.0f, 1.0f, 1.0f, 0.1f))]
+						]
+					]
+					+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center)[SNew(STextBlock).Text(FText::FromString(Word)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream)]
+				];
+			};
+			Bar(TEXT("STRENGTH"), Left, Left < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("8FBF6A"))), FString::Printf(TEXT("%s%d%%"), *About, FMath::RoundToInt32(Left * 100.0f)));
+			if (Card.Stale == 0)
+			{
+				Bar(TEXT("MORALE"), Card.Morale, Card.Morale < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("6FA3D8"))),
+					Card.bMood && !Card.MoraleWord.IsEmpty() ? Card.MoraleWord : FString::Printf(TEXT("%d%%"), FMath::RoundToInt32(Card.Morale * 100.0f)));
+				if (Card.bMood)
+				{
+					Bar(TEXT("REST"), Card.Rest, Card.Rest < 0.4f ? Alarm : FLinearColor(FColor::FromHex(TEXT("C9A227"))), Card.bResting ? Card.RestWord + TEXT(", resting") : Card.RestWord);
+				}
+			}
+			if (Note)
+			{
+				// Its weight in a fight, what it is for, and its ground.
+				Lines->AddSlot().AutoHeight().Padding(0.0f, 5.0f, 0.0f, 5.0f)
+				[
+					SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("ATTACK %d      DEFENCE %d"), Note->Attack, Note->Defence))).Font(Typed(10, true)).ColorAndOpacity(BrightBrass)
+				];
+				if (!Note->Role.IsEmpty())
+				{
+					Lines->AddSlot().AutoHeight().Padding(0.0f, 0.0f, 0.0f, 6.0f)[SNew(STextBlock).Text(FText::FromString(Note->Role)).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream).WrapTextAt(Wide).LineHeightPercentage(1.1f)];
+				}
+				const float Full = Wide + (Portrait.IsValid() ? PictureWide + 14.0f : 0.0f);
+				auto Ground = [this, &Under, Full](const TCHAR* Label, const FString& Text, const FLinearColor& Colour)
+				{
+					if (Text.IsEmpty())
+					{
+						return;
+					}
+					Under->AddSlot().AutoHeight().Padding(0.0f, 6.0f, 0.0f, 0.0f)
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(118.0f).Padding(FMargin(0.0f, 2.0f, 0.0f, 0.0f))[SNew(STextBlock).Text(FText::FromString(Label)).Font(Font(TEXT("Bold"), 8, 140)).ColorAndOpacity(Colour)]]
+						+ SHorizontalBox::Slot().AutoWidth()[SNew(STextBlock).Text(FText::FromString(Text.Left(1).ToUpper() + Text.Mid(1) + TEXT("."))).Font(Font(TEXT("Regular"), 10)).ColorAndOpacity(Cream).WrapTextAt(Full - 118.0f).LineHeightPercentage(1.1f)]
+					];
+				};
+				Ground(TEXT("AT ITS BEST IN"), Note->Good, FLinearColor(FColor::FromHex(TEXT("8FBF6A"))));
+				Ground(TEXT("AT ITS WORST IN"), Note->Poor, FLinearColor(FColor::FromHex(TEXT("D98A6A"))));
+			}
+			if (!Part && !Card.Service.IsEmpty())
+			{
+				Lines->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 0.0f)[SNew(STextBlock).Text(FText::FromString(Card.Service)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Muted).WrapTextAt(Wide)];
+			}
+			if (!Foot.IsEmpty())
+			{
+				Under->AddSlot().AutoHeight().Padding(0.0f, 7.0f, 0.0f, 0.0f)[SNew(STextBlock).Text(FText::FromString(Foot)).Font(Font(TEXT("Regular"), 9)).ColorAndOpacity(Faint)];
+			}
+			TSharedRef<SHorizontalBox> Top = SNew(SHorizontalBox);
+			if (Portrait.IsValid())
+			{
+				Top->AddSlot().AutoWidth().VAlign(VAlign_Top).Padding(0.0f, 0.0f, 14.0f, 0.0f)[SNew(SPortrait).Picture(Portrait).Size(FVector2D(PictureWide, PictureWide * 336.0 / 552.0))];
+			}
+			Top->AddSlot().AutoWidth().VAlign(VAlign_Top)[SNew(SBox).WidthOverride(Wide)[Lines]];
+			return SNew(SToolTip).BorderImage(&PanelBrush)
+				[
+					SNew(SBox).Padding(FMargin(8.0f, 8.0f, 8.0f, 6.0f))
+					[
+						SNew(SVerticalBox)
+						+ SVerticalBox::Slot().AutoHeight()[Top]
+						+ SVerticalBox::Slot().AutoHeight()[Under]
+					]
+				];
 		}
 
 		/** A small picture of a kind of troops, made of plain shapes: a tank, a gun, a lorry, a horseman, men on foot. */
@@ -6184,10 +6387,11 @@ namespace
 				}
 				Divisions->AddSlot().AutoWidth().Padding(0.0f, 0.0f, 4.0f, 0.0f)
 				[
-					SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f)).ToolTipText(FText::FromString(PartTip))
-					[
-						Face
-					]
+					// (release 1) Point at a division's tile for the bigger card of that division.
+					Card.bUnknown
+					? StaticCastSharedRef<SWidget>(SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f)).ToolTipText(FText::FromString(PartTip))[Face])
+					: StaticCastSharedRef<SWidget>(SNew(SBorder).BorderImage(&CardBrush).Padding(FMargin(5.0f, 5.0f, 5.0f, 5.0f))
+						.ToolTip(MakeBigCard(Card, Part, Kind, Tag, Card.bLook ? FString() : FString(TEXT("Click to tell this corps to come along or stay behind."))))[Face])
 				];
 			}
 
@@ -6225,8 +6429,19 @@ namespace
 					])
 				: StaticCastSharedRef<SWidget>(SNew(SSpacer).Size(FVector2D(0.0, 0.0)));
 
+			// (release 1) Point at the corps' card for the bigger card of the corps. One nobody has identified keeps its plain line.
+			TSharedPtr<SToolTip> CardTip;
+			if (Card.bUnknown)
+			{
+				CardTip = SNew(SToolTip).Text(FText::FromString(Tip));
+			}
+			else
+			{
+				CardTip = MakeBigCard(Card, nullptr, Card.KindId, Tag, Card.bLook ? FString() : FString(TEXT("Click to tell this corps to come along or stay behind.")));
+			}
 			return SNew(SButton).ButtonStyle(bGoing ? &PickedCard : &LeftCard).ContentPadding(FMargin(8.0f, 6.0f, 4.0f, 7.0f))
-				.IsFocusable(false).IsEnabled(Card.bCanOrder || Card.bLook).ToolTipText(FText::FromString(Tip))
+				.IsFocusable(false).IsEnabled(Card.bCanOrder || Card.bLook)
+				.ToolTip(CardTip)
 				.OnHovered_Lambda([this, Id = Card.CorpsId]() { if (Controller.IsValid()) { Controller->ShowCorpsModel(Id); } })
 				.OnClicked_Lambda([this, Id = Card.CorpsId]()
 				{
@@ -6348,6 +6563,8 @@ namespace
 		TSharedPtr<SHorizontalBox> ArsenalColumns;
 		int32 ShownArsenal = -1;
 		TMap<FString, TSharedPtr<FSlateBrush>> PortraitBrushes;
+		TMap<FString, TSharedPtr<FSlateBrush>> LargePortraitBrushes; // (for the bigger unit card)
+		TSharedPtr<SBox> BigCardShow;
 		TSharedPtr<FSlateBrush> ShowBrush;
 		TSharedPtr<SVerticalBox> PageBody;
 		int32 ShownRoom = -1;
@@ -6375,6 +6592,8 @@ namespace
 		TSharedPtr<SVerticalBox> AdviserSteps;
 		int32 ShownAdviser = -1;
 		TSharedPtr<SHorizontalBox> WatchStrip;
+		TWeakPtr<SWidget> TopLeftPiece; // the calendar plate, and
+		TArray<TWeakPtr<SWidget>> TopChips; // the chips down the right: the news line keeps between them
 		TArray<FString> WatchShown;
 		int32 WatchNow = INDEX_NONE;
 		TSharedPtr<SVerticalBox> PageSections;

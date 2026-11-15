@@ -16,6 +16,27 @@ struct FHonourRibbon
 	FColor Second = FColor(242, 234, 214);
 };
 
+/** (release 1) What an arm is, for the bigger unit card: all of it from the rules' own tables. */
+struct FArmNote
+{
+	FString Kind; // inf, arm, art, mot, cav, mtn, eng, fort
+	FString Label;
+	int32 Attack = 0;
+	int32 Defence = 0;
+	FString Role; // what it is for, in a sentence
+	FString Good; // the ground it is at its best on
+	FString Poor; // and at its worst
+};
+
+/** (release 1) Enemy ships that were found at sea and are lost again: where they were last seen, and how long ago. */
+struct FOldSighting
+{
+	int32 Zone = INDEX_NONE;
+	FString Nation;
+	int32 Months = 1;
+	bool operator==(const FOldSighting& Other) const { return Zone == Other.Zone && Nation == Other.Nation && Months == Other.Months; }
+};
+
 /** One division of a corps, as its card shows it. */
 struct FViewDivision
 {
@@ -376,6 +397,11 @@ struct FCampaignView
 	TArray<int32> Fronts;
 	TArray<FString> Wars; // every pair of nations at war, two by two: the front line is drawn between their holdings
 	TArray<int32> Cold; // provinces with factories and nothing on order, where the player can know it: their chimneys stand cold
+	TArray<FArmNote> Arms; // (release 1) what each arm is, for the bigger unit card
+	// (release 1) The admiral's chart: each sea by how well the player's side has it searched (0 not, 1 thinly, 2 well, 3 in full view), and old sightings.
+	TArray<int32> SeaSearch;
+	TArray<FOldSighting> OldSightings;
+	const FArmNote* FindArm(const FString& Kind) const { return Arms.FindByPredicate([&Kind](const FArmNote& Each) { return Each.Kind == Kind; }); }
 	TArray<FPrizeMark> Prizes; // provinces to mark for their prizes: a fire where one is wrecked, a pennant where a besieger holds one
 	TArray<FString> Alerts; // things to tell the player as his month opens
 	TArray<FString> PageIds; // the rooms the rules set out themselves that are open to him

@@ -78,6 +78,7 @@ public:
 	float GetZoom() const { return TargetZoom; }
 	float GetDistance() const;
 	float GetYaw() const { return Yaw; }
+	float GetTilt() const { return TargetTilt; } // (the extra tilt asked for, as SetHeading takes it)
 	float GetPitch() const;
 	float GetHorizontalFov() const;
 
