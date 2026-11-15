@@ -5,7 +5,7 @@
 // for and how long the warning was (the rules promise two months), who stood by whom, treaties, who joined which
 // alliance, and for claims on the player's own ground the month each could first be read on the Powers tab, the month
 // it was pressed and the month it was marched for.
-import { campaign, date, T } from './lib';
+import { campaign, date, T, goalState } from './lib';
 const [me, fromS, seedS, untilS, planS] = process.argv.slice(2);
 const plan = JSON.parse(planS || '{}');
 const X = T as any;
@@ -103,6 +103,7 @@ const fraFell = fell.FRA ?? 0;
 if (me === 'GER') { old = capAt[64] === 'GER'; par = old && !!fraFell; parWhy = `Berlin at the end of 1944: ${capAt[64] === 'GER' ? 'held' : capAt[64] ? `held by ${capAt[64]}` : 'Germany had fallen'}; France ${fraFell ? `fell ${date(fraFell)}` : 'never beaten'}`; }
 else if (me === 'SOV') { old = stands && !!gerFell && gerFell < 69 && !capLost; par = stands && !!gerFell && !!eastAt && gerFell - eastAt < 47 && !capLost; parWhy = `Germany ${gerFell ? `fell ${date(gerFell)}${eastAt ? `, ${gerFell - eastAt} months after the invasion` : ''}` : 'stands'}; the east opened ${eastAt ? date(eastAt) : 'never'}; Moscow ${capLost ? `lost ${date(capLost)}${capBack ? `, back ${date(capBack)}` : ''}` : 'never lost'}`; }
 else if (me === 'UK') { par = stands && !!ashoreFrom && ashoreFrom < 58 && !invaded; old = par; parWhy = `ashore to stay ${ashoreFrom ? `from ${date(ashoreFrom)}` : 'never'}${ashoreFirst && ashoreFirst !== ashoreFrom ? ` (first ashore ${date(ashoreFirst)})` : ''}; ${invaded ? `invaded ${date(invaded)}` : 'never invaded'}; Germany ${gerFell ? `fell ${date(gerFell)}` : 'stands'}; by provinces held ${provFrom ? `from ${date(provFrom)}` : 'never'}`; }
+else if (me === 'USA') { old = stands && !!ashoreFrom && ashoreFrom < 58; par = old && !!gerFell && gerFell < 69; parWhy = `ashore in the west to stay ${ashoreFrom ? `from ${date(ashoreFrom)}` : 'never'}${ashoreFirst && ashoreFirst !== ashoreFrom ? ` (first ashore ${date(ashoreFirst)})` : ''}; Germany ${gerFell ? `fell ${date(gerFell)}` : 'stands'} (ruling 29: ashore before June 1944 and Germany beaten before May 1945)`; }
 else if (me === 'FRA') { old = capAt[16] === 'FRA'; par = parisOct === true; parWhy = `Paris as October 1940 opens: ${parisOct === true ? 'held' : 'lost'}; at the end of 1940: ${capAt[16] === 'FRA' ? 'held' : 'lost'}`; }
 else if (me === 'ITA') { old = capAt[52] === 'ITA'; par = old && itaWar > 0 && itaWar <= 16; parWhy = `Rome at the end of 1943: ${capAt[52] === 'ITA' ? 'held' : capAt[52] ? `held by ${capAt[52]}` : 'Italy had fallen'}; at war with Britain ${itaWar ? `from ${date(itaWar)}` : 'never'}; Germany ${gerFell ? `fell ${date(gerFell)}` : 'stands'}`; }
 const levies = Number(g.flags?.['lv:SOV'] ?? 0);
@@ -110,6 +111,7 @@ const near = `home provinces in enemy hands at the worst ${homeLostMost}, an ene
 const fallen = POWERS.filter((p) => fell[p]).map((p) => `${p} ${date(fell[p])}${N[p]?.alive ? ' (back)' : ''}`).join(', ') || 'none';
 const standing = POWERS.filter((p) => N[p] && N[p].alive).map((p) => (N[p].dormant ? `${p} (not in the war)` : p)).join(' ') || 'none';
 console.log(`SEAT ${me} seed ${seedS}: played to ${date(lastTurn)}; ${stands ? 'stands' : `fell ${date(myFall)}`}; result ${result}${result === 'won' ? ` (${chief} fell ${date(chiefFell)})` : ''}; capital ${cap?.name ?? '?'} held by ${cap?.ctrl ?? '?'}; great powers fallen: ${fallen}; standing: ${standing}; at war ${atWarMonths} months${firstWar ? ` from ${date(firstWar)}` : ''}, a battle of the player's in ${foughtMonths}, longest silence ${longest} months${longest ? ` ending ${date(longestEnd)}` : ''}; provinces at the start ${began}, most ${most}, at the end ${g.regions.filter((x: any) => x.ctrl === me).length}; par ${par ? 'BEATEN' : 'missed'} (${parWhy}); ${near}; depth ${plan.depth ?? 'by hand'}; old line ${old ? 'beaten' : 'missed'}; the east opened ${eastAt ? date(eastAt) : 'never'}; Italy at war with Britain ${itaWar ? `from ${date(itaWar)}` : 'never'}`);
+console.log(`GOALS ${me} seed ${seedS}: short ${goalState(g, 'short')}; long ${goalState(g, 'long')}`);
 scan(g);
 const stopNow = Number((globalThis as any).__tcStopOf?.(g) ?? 3);
 const dd = (k: string): string => (firstAt[k] ? date(firstAt[k]) : 'never');
