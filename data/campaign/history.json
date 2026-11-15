@@ -5,13 +5,13 @@
     {
       "stop": 1, "id": "book", "name": "By the book", "under": "History's dates",
       "blurb": "The computer keeps to the war that was fought for as long as the war still looks like it.",
-      "lines": ["The great attacks fall in history's months: Norway in April 1940, the west in May, the east in June 1941.", "Only the countries that really joined the war join it, each on its real side.", "No second front before its time: North Africa from November 1942, Italy from July 1943, France from June 1944.", "Every general staff has the character its real counterpart had.", "Where you leave the book, the book is closed: the staffs there think for themselves from then on."],
+      "lines": ["The great attacks fall in history's months: Norway in April 1940, the west in May, the east in June 1941.", "Only the countries that really joined the war join it, each on its real side.", "No second front before its time: North Africa from November 1942, Italy from July 1943, France from June 1944. So Germany has longer before it must fight in the west, and the Soviet Union fights alone for longer.", "Every general staff has the character its real counterpart had.", "Where you leave the book, the book is closed: the staffs there think for themselves from then on."],
       "book": true, "slack": 0, "nerve": 0.75, "mood": 0, "lean": "real", "other": 0, "league": 0, "join": 0
     },
     {
       "stop": 2, "id": "close", "name": "Close to history", "under": "Within a season",
       "blurb": "History's war with the dates loosened: each great attack falls within a season of its real month.",
-      "lines": ["The great attacks fall within a month or so of history's dates, and you cannot be sure which.", "A country that stayed out of the real war seldom joins this one.", "The general staffs have their real characters, with a little nerve of their own.", "Where you leave the book, the book is closed."],
+      "lines": ["The great attacks fall within a month or so of history's dates, and you cannot be sure which.", "A country that stayed out of the real war seldom joins this one.", "The Allies open no second front before history's dates: North Africa from November 1942, Italy from July 1943, France from June 1944. So Germany has longer before it must fight in the west, and the Soviet Union fights alone for longer.", "The general staffs have their real characters, with a little nerve of their own.", "Where you leave the book, the book is closed."],
       "book": true, "slack": 1, "nerve": 0.85, "mood": 0.5, "lean": "real", "other": 0.3, "league": 0.3, "join": 0.15
     },
     {

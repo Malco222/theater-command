@@ -60,7 +60,7 @@ import {
 } from '../air';
 import {
   FLEETS, NAVY, SEA_BORDERS, airborne as byAir, assaultStrength, atSea, baseTargets, canPass, closedTo, fleetPower, fleetReach, fleetsOf, liftLeft, oreRoute, seaAt, seaRisk, seaSide, seaWar, shipCount, shipList, surfaceShips,
-  type CrossingAccount, type CrossingOutlook,
+  type CrossingAccount, type CrossingOutlook, type SeaHold,
 } from '../navy';
 import { bombard, fleetDoing, squadronName, type FleetCard, type ShipCard } from '../fleets';
 import { phaseFor, theatrePhases } from '../ai';
@@ -4028,6 +4028,11 @@ function crossingTicket(acc: CrossingAccount): string {
     ${acc.helps.length ? `<h4 class="crh">What would make it safer</h4><ul class="ulist">${acc.helps.map((h) => `<li><span>${esc(h.text)}</span><span>${lostAtSea(h.risk) > 0 ? `about ${lostAtSea(h.risk)}% lost` : 'almost nothing lost'}</span></li>`).join('')}</ul>` : ''}`;
 }
 
+/** Once ashore (Version 73): whether the sea behind the beach could be kept open, line by line like the crossing. */
+function holdTicket(h: SeaHold): string {
+  return `<h4 class="crh${h.open ? '' : ' bad'}">Once ashore: holding the sea behind the beach</h4><table class="ticket">${h.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>`;
+}
+
 /** One way over the water: where from, where to, what it would cost today, and the button that makes it the plan. */
 function crossingRow(x: CrossingOutlook, order: boolean): string {
   const loss = lostAtSea(x.account.risk);
@@ -4044,7 +4049,8 @@ function crossingRow(x: CrossingOutlook, order: boolean): string {
     <div class="crhead"><b>${esc(natName(x.owner))}${x.owner !== x.foe ? `, held by ${esc(natName(x.foe))}` : ''}</b><span class="crloss ${x.bar ? 'bar' : loss >= 25 ? 'bad' : loss >= 10 ? 'mid' : 'ok'}">${x.bar ? 'Barred today' : loss > 0 ? `about ${loss}% lost at sea` : 'nothing in the way'}</span></div>
     <div class="sub">From ${esc(x.from.name)} to ${esc(x.to.name)}, by way of the ${esc(route)}.${x.account.skyWon !== null ? ` <b style="color:var(--ink)">With the sky over ${esc(x.to.name)} won: ${lostAtSea(x.account.skyWon) > 0 ? `about ${lostAtSea(x.account.skyWon)}% lost` : 'almost nothing lost'}.</b>` : ''}${x.hope ? ' Your fighters can reach this beach: it would be the safest way once its sky is yours.' : ''}</div>
     ${x.bar ? `<div class="note" style="margin-top:6px"><b>Barred.</b> ${esc(x.bar)}</div>` : ''}
-    ${open ? crossingTicket(x.account) : ''}${prep}
+    ${!x.account.hold.open ? `<div class="sub holdwarn">Once ashore, the ${esc(g.seas[x.account.hold.sea].name)} would be closed behind the force: the enemy can bring more than twice your strength into it.</div>` : ''}
+    ${open ? crossingTicket(x.account) + holdTicket(x.account.hold) : ''}${prep}
     <div class="acts">${x.planned ? '' : `<button class="btn small" data-act="crosswhy" data-id="${x.to.id}">${open ? 'Hide the reckoning' : 'Why, and what would help'}</button>`}${order ? (x.planned ? '<button class="btn small" data-act="crossplan" data-id="-1" title="Your staff stops preparing this crossing.">Drop the plan</button>' : `<button class="btn small" data-act="crossplan" data-id="${x.to.id}" data-from="${x.from.id}" title="Name this crossing as your plan. Staff you have handed the air war or the navy prepare it each month.">Make this the plan</button>`) : ''}<button class="btn small" data-act="showmap" data-id="${x.to.id}">Show the beach</button></div>
   </div>`;
 }
@@ -4137,10 +4143,10 @@ function landingCard(): string {
         <div class="sub">Odds ${a.odds.toFixed(2)} to 1 · about ${oddsPct(p)}% chance to take ${esc(target.name)}${air ? ` · airborne troops without their heavy weapons count for ${Math.round(NAVY.landing.airborne * 100)}%` : plan.surprise ? '' : ` · troops fighting their way off the beach count for ${Math.round(assaultStrength(g, cs[0].nat) * 100)}%`}</div>`;
     }
     body = `${odds}
-      ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>${plan.account && plan.account.risk > 0 ? crossingTicket(plan.account) : ''}`}
+      ${air ? `<h3>The flight</h3><p class="lead" style="font-size:13px">Transport aircraft and gliders carry the force across the water. It needs no ships and no fleet can stop it, but the transports can mount only one assault a month${plan.sky ? ', and your air force holds the sky over the target' : ''}.</p>` : `<h3>The crossing</h3><p class="lead" style="font-size:13px">By way of the ${esc(route)}. ${crossing}</p>${plan.account && plan.account.risk > 0 ? crossingTicket(plan.account) : ''}${plan.hold ? holdTicket(plan.hold) : ''}`}
       ${a ? `<h3>Battle Ticket</h3><table class="ticket">${a.lines.map((l) => `<tr><td>${esc(l.label)}</td><td>${esc(l.value)}</td><td class="fx">${esc(l.effect ?? '')}</td></tr>`).join('')}</table>` : ''}
       <h3>${air ? 'Going in' : 'Going ashore'}</h3>${cs.map((c) => `<div class="pickrow pick">${icon(c)}<span class="grow"><b>${esc(c.name)}</b><br><span style="font-size:11.5px;color:var(--ink-2)">from ${esc(g.regions[c.reg].name)} · ${c.divs} division${c.divs > 1 ? 's' : ''} · ${num(men(c))} men</span></span></div>`).join('')}
-      <div class="note"><b>Once ${air ? 'down' : 'ashore'}</b> the force is supplied through a port you hold on a sea the enemy has not closed. If your navy loses that sea, the troops are cut off.</div>`;
+      <div class="note${plan.hold && !plan.hold.open ? ' holdbad' : ''}"><b>Once ${air ? 'down' : 'ashore'}</b> the force is supplied through a port you hold on a sea the enemy has not closed. ${plan.hold && !plan.hold.open ? `As things stand the enemy can close the ${esc(g.seas[plan.hold.sea].name)} behind it, and the troops would be cut off: beat his fleets or bring more of your own ships and aircraft into that sea first.` : plan.hold ? `As things stand the enemy cannot close the ${esc(g.seas[plan.hold.sea].name)} behind it.` : 'If your navy loses that sea, the troops are cut off.'}</div>`;
   }
   const fromAir = byAir(cs);
   return `<header><button class="x" data-act="close" aria-label="Close">×</button><div class="kick">${fromAir ? 'Airborne assault' : 'Landing from the sea'} · ${date(g.turn)}</div><h2>${fromAir ? 'Assault on' : 'Landing at'} ${esc(target.name)}</h2></header>

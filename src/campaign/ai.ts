@@ -86,6 +86,19 @@ let massed = new Set<number>();
 let given = new Set<number>();
 /** Places the staff has stepped out of this month because the ring was closing round them: no garrison is left behind there. */
 let sacks = new Set<number>();
+// The corps a staff is resting this month (Version 73): each is kept where it is until the month's moves are made.
+let rested: Corps[] = [];
+/** True for the staffs that rest their worn corps (rivals.json, `relief`): the main plan of a computer nation in the grand campaign. */
+const relieves = (g: Game, nat: string): boolean => !!RIVALS.relief && !scope && rivalRules(g) && nat !== g.human && RIVALS.relief.staffs.includes(nat);
+/** A corps such a staff counts as worn: under `worn` of its strength, or sent to rest and neither back to `fit` nor through its months of it. */
+const wornOut = (g: Game, c: Corps): boolean => {
+  const R = RIVALS.relief!;
+  const since = g.flags[`rl:${c.id}`];
+  if (since === undefined || g.turn - since >= 2 * R.months) return c.str < R.worn;
+  return c.str < R.fit && g.turn - since < R.months;
+};
+/** A worn corps its staff will rest is stormed into no town and thrown at nobody, in the hours before the relief as after it. */
+const spared = (g: Game, c: Corps): boolean => relieves(g, c.nat) && wornOut(g, c);
 
 /** True for ground in a side theatre where this nation has a plan of its own: the army there looks after it, not the main plan. */
 const aside = (g: Game, r: Region, nat: string): boolean => r.theatre >= 0 && !!THEATRES[r.theatre] && apart(g, r.theatre, nat);
@@ -156,7 +169,8 @@ function campaign(g: Game, nat: string): void {
   // The grand campaign: garrisons with no enemy near come out of their towns before the month's marching begins.
   garrisons(g, nat, false);
   sacks = new Set();
-  try { campaignMoves(g, nat); } finally { if (n.alive) garrisons(g, nat, true); sacks = new Set(); }
+  rested = [];
+  try { campaignMoves(g, nat); } finally { if (n.alive) garrisons(g, nat, true); sacks = new Set(); for (const c of rested) c.hold = false; rested = []; }
 }
 
 /**
@@ -221,7 +235,7 @@ function sieges(g: Game, nat: string, after = false): void {
       const inside = garrisonOf(r).reduce((s, c) => s + c.divs * c.str, 0) + guardOf(g, r);
       const near = r.nb.map((j) => g.regions[j])
         .filter((x) => within(x) && allied(g, nat, fieldCtrl(g, x)) && !besieged(g, x))
-        .flatMap((x) => x.units.filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && c.org >= 0.35 && c.ap >= Math.min(moveCost(g, c, r), 4) && c.ap > 0 && !blocked(g, c, r)))
+        .flatMap((x) => x.units.filter((c) => c.nat === nat && !c.dead && !c.hold && !spared(g, c) && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && c.org >= 0.35 && c.ap >= Math.min(moveCost(g, c, r), 4) && c.ap > 0 && !blocked(g, c, r)))
         .sort((x, y) => atkPower(g, y) - atkPower(g, x) || x.id - y.id);
       const want = SIEGE.ai.invest * inside;
       if (near.reduce((s, c) => s + c.divs * c.str, 0) < want) continue;
@@ -263,7 +277,7 @@ function sieges(g: Game, nat: string, after = false): void {
       const far = hops(g, r.id, (x) => within(x) && allied(g, nat, fieldCtrl(g, x)));
       const front = (x: Region): boolean => x.nb.some((j) => atWar(g, nat, fieldCtrl(g, g.regions[j])));
       const call = g.corps
-        .filter((c) => c.nat === nat && !c.dead && !c.town && c.reg !== r.id && far[c.reg] >= 1 && far[c.reg] <= 3 && !c.hold && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && c.ap > 0
+        .filter((c) => c.nat === nat && !c.dead && !c.town && c.reg !== r.id && far[c.reg] >= 1 && far[c.reg] <= 3 && !c.hold && !spared(g, c) && c.kind !== 'fort' && c.kind !== 'eng' && c.joint === undefined && c.leave === undefined && c.ap > 0
           && !besieged(g, g.regions[c.reg]) && (far[c.reg] === 1 ? c.ap >= Math.min(moveCost(g, c, r), 4) : !front(g.regions[c.reg])))
         .sort((x, y) => far[x.reg] - far[y.reg] || atkPower(g, y) - atkPower(g, x) || x.id - y.id);
       // What is on its way counts for what it will be worth when it arrives.
@@ -314,7 +328,7 @@ function overrun(g: Game, nat: string): void {
   }
   if (!lands.size) return;
   for (const c of g.corps) {
-    if (c.nat !== nat || c.dead || c.town || c.hold || c.ap <= 0 || c.kind === 'fort' || c.kind === 'eng' || c.joint !== undefined || c.leave !== undefined) continue;
+    if (c.nat !== nat || c.dead || c.town || c.hold || spared(g, c) || c.ap <= 0 || c.kind === 'fort' || c.kind === 'eng' || c.joint !== undefined || c.leave !== undefined) continue;
     const here = g.regions[c.reg];
     if (!within(here)) continue;
     // An enemy army next door is a front: nobody leaves it to gather provinces.
@@ -497,6 +511,7 @@ function fightOn(g: Game, nat: string, ph: PlanPhase | null, posture: string): v
   if (!n.alive) return;
   stepBack(g, nat);
   fallBack(g, nat);
+  relieve(g, nat);
   if (posture === 'defend') {
     gather(g, nat, ph); mass(g, nat, ph);
     if (!scope && isOpen(g)) localAttacks(g, nat);
@@ -693,7 +708,7 @@ function breakOut(g: Game, nat: string): void {
       let best: { x: Region; pool: Corps[]; odds: number } | null = null;
       for (const x of nexts) {
         if (tried.has(x.id) || !hostileUnits(g, x, nat).length) continue;
-        const near = x.nb.map((j) => g.regions[j]).filter((y) => friendly(y) && !aside(g, y, nat)).flatMap((y) => y.units.filter(field)).filter((c) => !blocked(g, c, x) && c.org >= 0.35);
+        const near = x.nb.map((j) => g.regions[j]).filter((y) => friendly(y) && !aside(g, y, nat)).flatMap((y) => y.units.filter(field)).filter((c) => !blocked(g, c, x) && c.org >= 0.35 && (home[c.reg] < 0 || !spared(g, c))); // (a worn corps outside the ring, one its staff rests, is not thrown in)
         const pool = limitAttackers(g, near, x);
         if (!pool.length) continue;
         const odds = assess(g, pool, x).odds;
@@ -770,6 +785,64 @@ function stepBack(g: Game, nat: string): void {
       if (!to || !moveCorps(g, c, to)) break;
     }
   }
+}
+
+/**
+ * A staff that rests its worn corps (the grand campaign, the staffs named in rivals.json under `relief`; a judgement
+ * of the staff's, not a rule of the game). A corps under `worn` of its strength that stands in the line comes out
+ * of it before the month's operations, where another corps stays to hold the place and a quiet place lies behind:
+ * a friendly place with no enemy beside it, one march away or two, the one nearest home with room. A worn corps is
+ * thrown into no attack that month whether it got out or not. Out of the line it rests, and the reserves leave it
+ * alone, until the drafts have brought it back to `fit` or it has had `months` months of it; after that it is at
+ * the staff's disposal again and is not rested a second time for as many months more.
+ */
+function relieve(g: Game, nat: string): void {
+  const R = RIVALS.relief;
+  const n = g.nations[nat];
+  if (!R || !relieves(g, nat) || n.capital < 0 || !allied(g, nat, ctl(g, g.regions[n.capital]))) return;
+  const friendly = (x: Region): boolean => allied(g, nat, ctl(g, x));
+  const foeAt = (x: Region): boolean => hostileUnits(g, x, nat).length > 0;
+  const inLine = (x: Region): boolean => x.nb.some((j) => foeAt(g.regions[j]));
+  const home = hops(g, n.capital, friendly);
+  const room = (x: Region, c: Corps, from: number): boolean => friendly(x) && home[x.id] >= 0 && !given.has(x.id) && !foeAt(x) && friendlyUnits(g, x, nat).length < STACK && !blocked(g, c, x, from);
+  const quiet = (x: Region): boolean => !inLine(x);
+  const field = (c: Corps): boolean => c.nat === nat && !c.dead && c.kind !== 'fort' && c.town === undefined;
+  const mine = (c: Corps): boolean => field(c) && !c.hold && !c.dyle && c.joint === undefined && c.leave === undefined && !massed.has(c.id) && !aside(g, g.regions[c.reg], nat);
+  const key = (c: Corps): string => `rl:${c.id}`;
+  const keep = (c: Corps): void => { c.hold = true; rested.push(c); };
+  // The weakest first: where two worn corps stand together the stronger stays to hold the place.
+  for (const c of g.corps.filter(mine).sort((a, b) => a.str - b.str || a.id - b.id)) {
+    const since = g.flags[key(c)];
+    if (since !== undefined && (c.str >= R.fit || g.turn - since >= 2 * R.months)) delete g.flags[key(c)];
+    if (!wornOut(g, c)) continue; // fit to fight, or it has had its rest
+    const here = g.regions[c.reg];
+    if (inLine(here) && c.ap > 0 && here.units.some((u) => u !== c && field(u) && !rested.includes(u))) {
+      // The quiet place nearest home, one march away or two.
+      let way: Region[] | null = null;
+      const better = (x: Region): boolean => !way || home[x.id] < home[way[way.length - 1].id] || (home[x.id] === home[way[way.length - 1].id] && friendlyUnits(g, x, nat).length < friendlyUnits(g, way[way.length - 1], nat).length);
+      for (const j of here.nb) {
+        const x = g.regions[j];
+        const k1 = moveCost(g, c, x);
+        if (!room(x, c, here.id) || c.ap < Math.min(k1, 4)) continue;
+        if (quiet(x)) { if (!way || way.length > 1 || better(x)) way = [x]; continue; }
+        if (way?.length === 1) continue;
+        for (const jj of x.nb) {
+          const y = g.regions[jj];
+          if (y.id === here.id || !room(y, c, x.id) || !quiet(y) || c.ap - k1 < Math.min(moveCost(g, c, y, x.id), 4)) continue;
+          if (better(y)) way = [x, y];
+        }
+      }
+      if (way) for (const x of way) if (!moveCorps(g, c, x)) break;
+    }
+    // Out of the line its rest begins, or goes on. Wherever it stands it attacks nobody this month.
+    if (!inLine(g.regions[c.reg]) && g.flags[key(c)] === undefined) g.flags[key(c)] = g.turn;
+    keep(c);
+  }
+}
+
+/** The corps a staff would rest this month, on their own as the judgement stands at the start of its month: their ids, and where each stands afterwards. */
+export function reliefJudgement(g: Game, nat: string): { id: number; reg: number }[] {
+  try { rested = []; relieve(g, nat); return rested.map((c) => ({ id: c.id, reg: c.reg })); } finally { for (const c of rested) c.hold = false; rested = []; }
 }
 
 /** The staff's two judgements against a ring, made on their own as they are at the start of its month: the places it gives up. */

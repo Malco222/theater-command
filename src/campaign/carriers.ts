@@ -22,7 +22,7 @@ import {
 } from './air';
 import { allied, atWar, headline } from './game';
 import { INTEL, agentsOf, atWork, fogOn } from './intel';
-import { CLASSES, FLEETS, airOver, atSea, fleetPower, fleetReach, fleetsOf, sail, seaSide, shipCount, shipList, surfaceShips } from './navy';
+import { CLASSES, FLEETS, NAVY, airOver, atSea, fleetPower, fleetReach, fleetsInReach, fleetsOf, lodgedCrossing, plannedCrossing, sail, seaPath, seaSide, shipCount, shipList, surfaceShips } from './navy';
 import { RES, needOf } from './resources';
 import type { AirFleet, AirMission, Fleet, Game, Ships } from './types';
 
@@ -447,7 +447,7 @@ export function searchSea(g: Game, id: number, z: number, nat: string | null = g
 interface Blow { m: AirMission; t: number; fleets: AirFleet[]; v: number }
 
 /** The best strike on ships one bomber group could fly from where it is, with these fighters to go with it if fighters will come up. `sure` flies only at a fleet that is identified. */
-function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit: Set<string>, sure = false): Blow | null {
+function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit: Set<string>, sure = false, only?: Set<number>): Blow | null {
   const A = CARRIERS.ai;
   let best: Blow | null = null;
   const weigh = (m: AirMission, t: number): void => {
@@ -465,7 +465,7 @@ function bestBlow(g: Game, nat: string, lead: AirFleet, escorts: AirFleet[], hit
   };
   const ports = new Set<number>();
   for (const x of g.fleets) {
-    if (!atWar(g, nat, x.nat) || !surfaceShips(x)) continue;
+    if (!atWar(g, nat, x.nat) || !surfaceShips(x) || (only && !only.has(x.id))) continue;
     if (!atSea(x)) { if (x.base >= 0) ports.add(x.base); continue; }
     // Only what the staff has found can be struck.
     const k = fleetFound(g, x, nat);
@@ -526,8 +526,29 @@ export function seaStaff(g: Game, nat: string, what: 'all' | 'decks' | 'land' = 
   const rng = new Rng(hashString(`air:${g.seed}:${g.turn}:seastaff:${nat}`));
   const leads = airFleetsOf(g, nat).filter((f) => !afloat(f) && f.kind !== 'ftr' && f.bmr >= R.least && fit(f)).sort((a, b) => b.bmr - a.bmr || a.id - b.id);
   let most = Math.floor(leads.length * A.landShare + rng.range(0, 1));
+  // A player's staff, for the crossing he has named or the beach it has won him (Version 73): the bombers go first
+  // for the fleets that could close the sea behind that beach, at sea in it or lying in the harbours in reach, so
+  // many strikes a month and each only where the forecast says it should pay. The sea is what he asked for.
+  const beach = nat === g.human ? R.beach : undefined;
+  const plan = beach?.ships ? plannedCrossing(g, nat) ?? lodgedCrossing(g, nat) : null;
+  const way = plan ? seaPath(g, nat, plan.from, plan.to, { max: NAVY.landing.range, surprise: true }) : null;
+  if (beach?.ships && way) {
+    const off = way[way.length - 1];
+    const marks = new Set(fleetsInReach(g, nat, way).map((x) => x.id));
+    for (const x of g.fleets) if (x.zone === off && atSea(x) && surfaceShips(x) > 0 && atWar(g, nat, x.nat)) marks.add(x.id);
+    let left = beach.ships;
+    for (const lead of leads) {
+      if (left <= 0) break;
+      const escorts = airFleetsOf(g, nat).filter((x) => x.kind === 'ftr' && x.ftr > 0 && fit(x) && homeOf(x) === homeOf(lead));
+      const b = bestBlow(g, nat, lead, escorts, hit, false, marks);
+      if (!b) continue;
+      send(b);
+      left--;
+    }
+  }
   for (const lead of leads) {
     if (most <= 0) break;
+    if (!fit(lead)) continue;
     const escorts = airFleetsOf(g, nat).filter((x) => x.kind === 'ftr' && x.ftr > 0 && fit(x) && homeOf(x) === homeOf(lead));
     const b = bestBlow(g, nat, lead, escorts, hit, true);
     if (!b) continue;
