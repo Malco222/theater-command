@@ -11,6 +11,13 @@
 #include "Engine/TextureCube.h"
 #include "UObject/ConstructorHelpers.h"
 
+namespace
+{
+	// How far into the night the evening goes that comes when a month ends, and how warm dusk and dawn are.
+	const float DuskDepth = 0.5f;
+	const float DuskWarmth = 0.5f;
+}
+
 ACampaignEnvironment::ACampaignEnvironment()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -20,9 +27,17 @@ ACampaignEnvironment::ACampaignEnvironment()
 		TimeKeeping = 2;
 		Night = 1.0f;
 	}
+	else if (FParse::Value(FCommandLine::Get(), TEXT("TheaterDusk="), HeldNight))
+	{
+		// ("-TheaterDusk=0.5" holds the evening that comes when a month ends, for a picture of it)
+		TimeKeeping = 2;
+		HeldNight = FMath::Clamp(HeldNight, 0.0f, 1.0f);
+		Night = HeldNight;
+	}
 	else if (FParse::Value(FCommandLine::Get(), TEXT("TheaterShots="), DayClockHeld))
 	{
-		TimeKeeping = 1;
+		// ("-TheaterDayRuns" lets the room's day run while pictures are taken, as it does in play: for the evening that comes when a month ends)
+		TimeKeeping = FParse::Param(FCommandLine::Get(), TEXT("TheaterDayRuns")) ? 0 : 1;
 	}
 
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
@@ -184,12 +199,17 @@ void ACampaignEnvironment::Tick(float DeltaSeconds)
 	float Wanted = 0.0f;
 	if (TimeKeeping == 2)
 	{
-		Wanted = 1.0f;
+		Wanted = HeldNight >= 0.0f ? HeldNight : 1.0f;
 	}
 	else if (TimeKeeping == 0)
 	{
 		const float Clock = static_cast<float>(DayClock);
 		Wanted = Clock < 0.58f ? 0.0f : Clock < 0.68f ? FMath::SmoothStep(0.58f, 0.68f, Clock) : Clock < 0.9f ? 1.0f : 1.0f - FMath::SmoothStep(0.9f, 1.0f, Clock);
+		// (the month has ended: evening, whatever the hour was, and night if it was night already)
+		if (bMonthsEnd)
+		{
+			Wanted = FMath::Max(Wanted, DuskDepth);
+		}
 	}
 	// A held time is come to over a few seconds, not at a jump.
 	UpdateAir();
@@ -198,6 +218,19 @@ void ACampaignEnvironment::Tick(float DeltaSeconds)
 	{
 		Night = FMath::IsNearlyEqual(Next, Wanted, 0.002f) ? Wanted : Next;
 		ApplyLight();
+	}
+}
+
+void ACampaignEnvironment::SetMonthsEnd(bool bEnded)
+{
+	if (bEnded == bMonthsEnd)
+	{
+		return;
+	}
+	bMonthsEnd = bEnded;
+	if (!bEnded && TimeKeeping == 0)
+	{
+		DayClock = 0.02; // (a new month: it is morning, and the room's day begins afresh)
 	}
 }
 
@@ -253,7 +286,10 @@ void ACampaignEnvironment::LightRoom()
 		// (the land carries moon colours of its own to go with this light: see the map's SetNight. The key is kept
 		// low and blue so that the yellow of autumn woods does not shine out of the dark like lamps.)
 		KeyLight->SetIntensity(FMath::Lerp(DayKey, 3.0f, Night));
-		KeyLight->SetLightColor(FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.5f, 1.0f), Night));
+		// (Dusk and dawn are warm before they are blue: between the day and the night the light goes through amber,
+		// most of it a little under half way, and none of it by day or once the night is two thirds come.)
+		const float Glow = FMath::Clamp(1.0f - FMath::Abs(Night - 0.4f) / 0.4f, 0.0f, 1.0f);
+		KeyLight->SetLightColor(FMath::Lerp(FMath::Lerp(FLinearColor::White, FLinearColor(0.3f, 0.5f, 1.0f), Night), FLinearColor(1.0f, 0.6f, 0.34f), DuskWarmth * Glow));
 		FillLight->SetIntensity(FMath::Lerp(DayFill, 0.55f, Night));
 		SkyLight->SetIntensity(FMath::Lerp(0.72f, 0.52f, Night));
 		SkyLight->SetLightColor(FMath::Lerp(FLinearColor::White, FLinearColor(0.42f, 0.58f, 1.0f), Night));

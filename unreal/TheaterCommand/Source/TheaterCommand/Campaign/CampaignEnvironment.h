@@ -33,6 +33,13 @@ public:
 	void SetTimeKeeping(int32 Keeping) { TimeKeeping = FMath::Clamp(Keeping, 0, 2); }
 	/** How far into the night the room's light has gone, 0 to 1. */
 	float GetNight() const { return Night; }
+	/**
+	 * Dusk when the month ends (Brian's approved list). While the rest of the world moves, evening comes over the
+	 * table: not the full night, so that the others' moves are still seen. With the player's new month it is
+	 * morning again, and the room's day begins afresh from there. Nothing where the player has held the hour (T).
+	 */
+	void SetMonthsEnd(bool bEnded);
+	bool IsMonthsEnd() const { return bMonthsEnd; }
 	/** The night as it was first made: the room's warm lamp alone. Otherwise the night is moonlight. */
 	void SetLamplight(bool bLamp) { if (bLamp != bLamplight) { bLamplight = bLamp; ApplyLight(); } }
 	bool IsLamplight() const { return bLamplight; }
@@ -67,6 +74,8 @@ private:
 	float Night = 0.0f; // how far into the night the light has gone, 0 to 1
 	FString DayClockHeld; // (only read from the command line)
 	int32 TimeKeeping = 0; // 0 the day runs, 1 held at day, 2 held at night
+	bool bMonthsEnd = false; // the month has ended and the others are moving: it is evening
+	float HeldNight = -1.0f; // (for pictures, "-TheaterDusk=0.5": the hour is held this far into the night)
 	bool bLamplight = false;
 	void ApplyLight();
 	void LightRoom();

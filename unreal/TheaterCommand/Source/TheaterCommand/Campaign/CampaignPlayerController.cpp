@@ -3286,7 +3286,8 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 			if (It->GetNight() > 0.25f)
 			{
 				bToldOfEvening = true;
-				Notify(TEXT("Evening in the war room: the lamps are lit, and day will come round again. Press T to hold it at day."), 9.0);
+				Notify(It->IsMonthsEnd() ? TEXT("The month is over: evening in the war room while the rest of the world moves. Morning comes with your next month. Press T to hold it at day.")
+					: TEXT("Evening in the war room: the lamps are lit, and day will come round again. Press T to hold it at day."), 9.0);
 			}
 		}
 	}
@@ -5955,6 +5956,11 @@ void ACampaignPlayerController::EndMonth()
 		// Other nations did things: go and look at each in turn, quickly.
 		bWatching = true;
 		WatchNext = 0.0;
+		// (Dusk when the month ends: evening comes over the table while the rest of the world moves.)
+		for (TActorIterator<ACampaignEnvironment> Room(GetWorld()); Room; ++Room)
+		{
+			Room->SetMonthsEnd(true);
+		}
 		if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 		{
 			Eye->SetHurry(true);
@@ -6117,6 +6123,11 @@ void ACampaignPlayerController::FinishMonth()
 {
 	FCampaignSession* Session = GetSession();
 	bWatching = false;
+	// (and with the new month it is morning again)
+	for (TActorIterator<ACampaignEnvironment> Room(GetWorld()); Room; ++Room)
+	{
+		Room->SetMonthsEnd(false);
+	}
 	if (ACampaignCameraPawn* Eye = Cast<ACampaignCameraPawn>(GetPawn()))
 	{
 		Eye->SetHurry(false);
