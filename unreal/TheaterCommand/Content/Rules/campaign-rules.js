@@ -24327,7 +24327,35 @@
         merged.set(id, { id, cost: 0, attack: false, prev: from ? from.reg : -1, war: on });
       }
     }
-    return { regions: [...merged.values()] };
+    const danger = /* @__PURE__ */ new Set();
+    try {
+      const me = s.human;
+      if (me && humanUp(s)) {
+        const seen2 = sight(s);
+        const matters = (id) => {
+          const r = s.regions[id];
+          return r.ctrl === me || allied(s, r.ctrl, me) || merged.has(id);
+        };
+        for (const e of s.corps) {
+          if (e.dead || e.kind === "fort" || !(seen2[e.reg] > 0) || !atWar(s, e.nat, me)) continue;
+          const had = e.ap;
+          e.ap = Math.max(e.ap, e.apMax ?? e.ap);
+          try {
+            for (const [id, r] of reach2(s, e)) {
+              if (id !== e.reg && matters(id)) danger.add(id);
+              if (!r.attack && e.ap - r.cost >= 1) {
+                for (const j of s.regions[id].nb) if (atWar(s, e.nat, s.regions[j].ctrl) && matters(j)) danger.add(j);
+              }
+            }
+          } finally {
+            e.ap = had;
+          }
+        }
+      }
+    } catch {
+      danger.clear();
+    }
+    return { regions: [...merged.values()], danger: [...danger] };
   }
   var swapAsked = "";
   function move(ids2, to) {

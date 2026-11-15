@@ -362,7 +362,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			LookRice[Idx] = Shares[WorldLook::Monsoon] * Out; // (rice country: the plain is paddy, the ranges are wooded)
 			// (the prairie's fields, and those of temperate North America, are squares laid on the compass)
 			const bool bNorthAmerica = Latitude > 24.0f && (Longitude < -52.0f || Longitude > 190.0f);
-			LookSquare[Idx] = Out > 0.5f && Shares[WorldLook::Prairie] + (bNorthAmerica ? Shares[WorldLook::Temperate] : 0.0f) > 0.5f ? 1 : 0;
+			// (The number is also how wholly the country is square-field country, from 1 at its edge to 255 well inside:
+			// from high up its fields are drawn toward their own gold by that much, so that the gold comes in over a
+			// distance and no ruled line shows where one manner of field ends.)
+			const float SquareShare = Shares[WorldLook::Prairie] + (bNorthAmerica ? Shares[WorldLook::Temperate] : 0.0f);
+			LookSquare[Idx] = Out > 0.5f && SquareShare > 0.5f ? static_cast<uint8>(1 + FMath::RoundToInt32(254.0f * FMath::SmoothStep(0.5f, 0.8f, SquareShare))) : 0;
 			if (Id < 0)
 			{
 				// (where the rules name the kind of country, that still leans the woods; where nobody has yet, the look does)
@@ -729,7 +733,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			// slant of twenty degrees elsewhere. "No turn at all", to the last figure, is what tells the land's
 			// paint to lay squares.)
 			const bool bSquare = LookSquare.IsValidIndex(Idx) && LookSquare[Idx] != 0;
-			Lie[Idx] = bSquare ? FColor(255, 128, 128, NotTropic) : (bBeyond ? FColor(247, 171, 128, NotTropic) : FColor(255, 129, 128, NotTropic));
+			// (a square's blue is not its size, which is fixed: it is how wholly the country is square-field country)
+			Lie[Idx] = bSquare ? FColor(255, 128, LookSquare[Idx], NotTropic) : (bBeyond ? FColor(247, 171, 128, NotTropic) : FColor(255, 129, 128, NotTropic));
 			continue;
 		}
 		const uint32 Seed = static_cast<uint32>(Id) * 2654435761u;

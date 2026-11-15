@@ -995,9 +995,13 @@ namespace
 	}
 }
 
-TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds)
+TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger)
 {
 	TArray<FReachRegion> Out;
+	if (OutDanger)
+	{
+		OutDanger->Reset();
+	}
 	TSharedPtr<FJsonObject> Object;
 	if (CorpsIds.Num() == 0 || !CallRules(TEXT("reach"), FString::Printf(TEXT("[[%s]]"), *IdList(CorpsIds)), Object))
 	{
@@ -1016,6 +1020,14 @@ TArray<FReachRegion> FCampaignSession::Reach(const TArray<int32>& CorpsIds)
 			Entry->TryGetBoolField(TEXT("attack"), R.bAttack);
 			Entry->TryGetStringField(TEXT("war"), R.War);
 			Out.Add(R);
+		}
+	}
+	const TArray<TSharedPtr<FJsonValue>>* Danger = nullptr;
+	if (OutDanger && Object->TryGetArrayField(TEXT("danger"), Danger))
+	{
+		for (const TSharedPtr<FJsonValue>& Value : *Danger)
+		{
+			OutDanger->Add(FMath::RoundToInt32(Value->AsNumber()));
 		}
 	}
 	return Out;

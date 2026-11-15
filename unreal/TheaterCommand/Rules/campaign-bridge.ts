@@ -14,7 +14,7 @@
 //   TC.peek(text)                       -> { human, name, date, open } for a saved campaign, or null
 //   TC.load(text)                       -> view, or null if the save cannot be read
 //   TC.view()                           -> view
-//   TC.reach([corpsId, ...])            -> { regions: [{ id, cost, attack, prev }] }
+//   TC.reach([corpsId, ...])            -> { regions: [{ id, cost, attack, prev }], danger: [regionId, ...] }
 //   TC.move([corpsId, ...], regionId)   -> { moved: [{ id, path }], view }
 //   TC.previewAttack([corpsId, ...], regionId) -> the odds and the Battle Ticket, or null
 //   TC.attack([corpsId, ...], regionId) -> { report, note, view }
@@ -849,7 +849,31 @@ function reachOf(ids: number[]) {
       merged.set(id, { id, cost: 0, attack: false, prev: from ? from.reg : -1, war: on });
     }
   }
-  return { regions: [...merged.values()] };
+  // Enemy reach (release 1): how far the enemy corps the player can see could strike next month, were each of them
+  // fresh: the ground it could march onto, and the ground beside any place it could reach with a week still in
+  // hand. Kept to the ground that matters to the army in hand: his side's own, and wherever this army could go.
+  const danger = new Set<number>();
+  try {
+    const me = s.human;
+    if (me && humanUp(s)) {
+      const seen = sight(s);
+      const matters = (id: number): boolean => { const r = s.regions[id]; return r.ctrl === me || allied(s, r.ctrl, me) || merged.has(id); };
+      for (const e of s.corps) {
+        if (e.dead || e.kind === 'fort' || !(seen[e.reg] > 0) || !atWar(s, e.nat, me)) continue;
+        const had = e.ap;
+        e.ap = Math.max(e.ap, e.apMax ?? e.ap);
+        try {
+          for (const [id, r] of reach(s, e)) {
+            if (id !== e.reg && matters(id)) danger.add(id);
+            if (!r.attack && e.ap - r.cost >= 1) {
+              for (const j of s.regions[id].nb) if (atWar(s, e.nat, s.regions[j].ctrl) && matters(j)) danger.add(j);
+            }
+          }
+        } finally { e.ap = had; }
+      }
+    }
+  } catch { danger.clear(); }
+  return { regions: [...merged.values()], danger: [...danger] };
 }
 
 /** (Version 65) The swap last offered: asked once, done when the same march is ordered again. */

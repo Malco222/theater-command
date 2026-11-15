@@ -1469,11 +1469,12 @@ void ACampaignPlayerController::GetMapLetters(TArray<FMapLetter>& Out) const
 	{
 		return;
 	}
-	// Countries' names are for the view from high up, and fade out on the way down. The seas' are always there,
-	// faint.
+	// Countries' names are for the view from high up, and fade out on the way down. The seas' are there, faint, at
+	// working height and above; just below it they begin to go, and by the close view they are gone (the art
+	// director's ruling: close to, one letter of a sea's name was a pale patch on the water beside a ship).
 	const float Distance = Eye->GetDistance();
 	const float Countries = FMath::GetMappedRangeValueClamped(FVector2f(10500.0f, 12500.0f), FVector2f(0.0f, 0.92f), Distance);
-	const float Seas = FMath::GetMappedRangeValueClamped(FVector2f(2500.0f, 6000.0f), FVector2f(0.0f, 0.6f), Distance);
+	const float Seas = FMath::GetMappedRangeValueClamped(FVector2f(2100.0f, 4400.0f), FVector2f(0.0f, 0.6f), Distance);
 	int32 Width = 0, Height = 0;
 	GetViewportSize(Width, Height);
 	auto OnScreen = [this](const FVector2D& MapPoint, double Lift, FVector2D& OutScreen)
@@ -2096,7 +2097,7 @@ void ACampaignPlayerController::OpenGuide()
 		TEXT("Each turn is one month. Give your orders, then press END THE MONTH, or Enter. The other nations move, and the month's news is shown at the top right. ")
 		TEXT("Every corps has a few moves each month: marching through friendly ground costs one, and entering enemy ground costs more."));
 	Add(TEXT("MOVING AND ATTACKING"),
-		TEXT("Click one of your flags to pick the army up. Ground it can march to lightens, ground it can attack turns red, and a neutral country's ground beside it turns amber. ")
+		TEXT("Click one of your flags to pick the army up. Ground it can march to lightens, ground it can attack turns red, and a neutral country's ground beside it turns amber. A dashed red line marks how deep the enemy you can see could strike next month. ")
 		TEXT("Click where it should go and click again to send it, or drag the flag there. An attack first shows both armies and the odds: SEND THEM IN fights it, CALL IT OFF does not. Esc puts the army down.\n")
 		TEXT("In the army's tray you can leave some corps behind, say what it does if attacked (stand, dig in or fall back), and send it BY RAIL along a working railway or BY SEA from a port.\n")
 		TEXT("What stands round an army's base says what it is about: sandbags and wire when it is dug in behind its fieldworks (a short row while it is still digging), tents and a fire when it is in camp and resting, ")
@@ -3646,6 +3647,10 @@ void ACampaignPlayerController::PlayerTick(float DeltaTime)
 					else
 					{
 						Line += FString::Printf(TEXT("\nRight-click: march here, %d week%s of the month."), FMath::Max(There->Cost, 1), There->Cost == 1 ? TEXT("") : TEXT("s"));
+						if (EnemyReach.Contains(TipRegion))
+						{
+							Line += TEXT("\nThe enemy you can see could strike here next month.");
+						}
 					}
 				}
 				else
@@ -4871,6 +4876,7 @@ void ACampaignPlayerController::RefreshOrders()
 		ShowCorpsModel(Wanted);
 	}
 
+	TArray<int32> Danger;
 	if (bBySea)
 	{
 		TArray<int32> Ports, Beaches;
@@ -4903,9 +4909,11 @@ void ACampaignPlayerController::RefreshOrders()
 	}
 	else
 	{
-		Reach = Session->Reach(PickedCorps);
+		Reach = Session->Reach(PickedCorps, &Danger);
 	}
+	EnemyReach = TSet<int32>(Danger);
 	Map->SetReach(Reach, bByRail || bBySea);
+	Map->ShowEnemyReach(Danger); // (how far the enemy could strike next month: only for an army that marches)
 
 	RingedPiece = Map->FindPiece(ArmyRegion, View.Human);
 	if (RingedPiece.IsValid())

@@ -419,6 +419,8 @@ def build_land():
                           plus(m, times(m, one_in(m, unreal.MaterialExpressionAbs, plus(m, (lie, "G"), -0.502, -3300, 2200), -3150, 2200), -400.0, -3000, 2200), 1.0, -2850, 2200), -2700, 2200),
                    -2550, 2150)
     slant = one_in(m, unreal.MaterialExpressionOneMinus, square, -2400, 2150)
+    # (a square's size is fixed: its blue says instead how wholly the country is square-field country, see "FieldsFlat")
+    size = lerp(m, size, 1.0, square, -2550, 2000)
     east = times(m, plus(m, times(m, east0, cosine, -2600, 1500), times(m, south0, sine, -2600, 1560), -2500, 1500), size, -2400, 1500)
     south = times(m, plus(m, times(m, south0, cosine, -2600, 1640), times(m, times(m, east0, sine, -2600, 1700), -1.0, -2550, 1700), -2500, 1640), size, -2400, 1640)
     rows = pair(m, plus(m, east, times(m, times(m, south, 0.33, -2500, 1560), slant, -2420, 1560), -2350, 1500),
@@ -499,7 +501,8 @@ def build_land():
     # (From high up the quilt's pattern is let go but not its colour: "FieldsFlat" draws every field toward the mean
     # of its own manner of field, the squares' gold or the strips' own, so that the plain keeps its colour when the
     # fields are too small to be seen.)
-    tone = lerp(m, tone, lerp(m, vector(m, "QuiltMean", (1.0, 1.0, 1.0, 1.0), -400, 1850), vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), -400, 1950), square, -250, 1900),
+    tone = lerp(m, tone, lerp(m, vector(m, "QuiltMean", (1.0, 1.0, 1.0, 1.0), -400, 1850), vector(m, "FieldMean", (1.5, 1.3, 0.9, 1.0), -400, 1950),
+                              times(m, square, (lie, "B"), -330, 2050), -250, 1900),
                 scalar(m, "FieldsFlat", 0.0, -250, 2000), -100, 1850)
     quilt = lerp(m, 1.0, tone, times(m, (cover, "R"), scalar(m, "FieldsStrength", 0.45, -750, 1800), -600, 1800), -400, 1650)
     # Hedges: a thin dark line round each small field, seen only close to.

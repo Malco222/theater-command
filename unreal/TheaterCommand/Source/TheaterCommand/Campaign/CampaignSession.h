@@ -55,7 +55,8 @@ public:
 	/** Where the given corps could go this month. */
 	/** What declaring war on a country would mean, for the question asked first. RegionId is where the army in hand was going, or INDEX_NONE. */
 	FWarPlan PlanWar(const FString& Nation, int32 RegionId);
-	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds);
+	/** Where a picked-up army could go. OutDanger, if asked for: the regions the enemy the player can see could strike next month (release 1). */
+	TArray<FReachRegion> Reach(const TArray<int32>& CorpsIds, TArray<int32>* OutDanger = nullptr);
 
 	/** Orders the given corps to march to a region. Returns the marches that actually happened. */
 	/** OutNote: what the rules say of the order where it needs saying (Version 65: a full province next door, and the swap offered). */

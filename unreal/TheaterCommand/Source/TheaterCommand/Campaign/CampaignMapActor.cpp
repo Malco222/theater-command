@@ -511,6 +511,51 @@ void ACampaignMapActor::ShowFrontLine(const TArray<FString>& Wars, const FString
 	BuildFrontLine();
 }
 
+void ACampaignMapActor::FindSharedEdges()
+{
+	if (bSharedEdgesKnown)
+	{
+		return;
+	}
+	// Every stretch of line two provinces share, found once: what lies just across each edge of each ring.
+	bSharedEdgesKnown = true;
+	SharedEdges.Reset();
+	for (const FCampaignRegion& Region : Data.Regions)
+	{
+		for (const TArray<FVector2D>& Ring : Region.Polygons)
+		{
+			double SignedArea = 0.0;
+			for (int32 i = 0, n = Ring.Num(); i < n; ++i)
+			{
+				SignedArea += Ring[i].X * Ring[(i + 1) % n].Y - Ring[(i + 1) % n].X * Ring[i].Y;
+			}
+			const double Outward = SignedArea >= 0.0 ? 1.0 : -1.0;
+			for (int32 i = 0, n = Ring.Num(); i < n; ++i)
+			{
+				const FVector2D A = Ring[i], B = Ring[(i + 1) % n];
+				const double Length = FVector2D::Distance(A, B);
+				if (Length < 0.05)
+				{
+					continue;
+				}
+				const FVector2D Dir = (B - A) / Length, Side = FVector2D(Dir.Y, -Dir.X) * Outward;
+				const FVector2D Probe = (A + B) * 0.5 + Side * 0.35;
+				const int32 Other = Data.FindRegionAt(Probe.X, Probe.Y);
+				if (Other == INDEX_NONE || Other == Region.Id || Other < Region.Id)
+				{
+					continue; // coast, or a line the neighbour has already given
+				}
+				FSharedEdge& Edge = SharedEdges.AddDefaulted_GetRef();
+				Edge.A = A;
+				Edge.B = B;
+				Edge.Side = Side;
+				Edge.Here = Region.Id;
+				Edge.There = Other;
+			}
+		}
+	}
+}
+
 void ACampaignMapActor::BuildFrontLine()
 {
 	// The front, drawn as a staff officer draws it: a crayon line along every frontier between the holdings of two
@@ -537,46 +582,7 @@ void ACampaignMapActor::BuildFrontLine()
 	{
 		return;
 	}
-	if (!bSharedEdgesKnown)
-	{
-		// Every stretch of line two provinces share, found once: what lies just across each edge of each ring.
-		bSharedEdgesKnown = true;
-		SharedEdges.Reset();
-		for (const FCampaignRegion& Region : Data.Regions)
-		{
-			for (const TArray<FVector2D>& Ring : Region.Polygons)
-			{
-				double SignedArea = 0.0;
-				for (int32 i = 0, n = Ring.Num(); i < n; ++i)
-				{
-					SignedArea += Ring[i].X * Ring[(i + 1) % n].Y - Ring[(i + 1) % n].X * Ring[i].Y;
-				}
-				const double Outward = SignedArea >= 0.0 ? 1.0 : -1.0;
-				for (int32 i = 0, n = Ring.Num(); i < n; ++i)
-				{
-					const FVector2D A = Ring[i], B = Ring[(i + 1) % n];
-					const double Length = FVector2D::Distance(A, B);
-					if (Length < 0.05)
-					{
-						continue;
-					}
-					const FVector2D Dir = (B - A) / Length, Side = FVector2D(Dir.Y, -Dir.X) * Outward;
-					const FVector2D Probe = (A + B) * 0.5 + Side * 0.35;
-					const int32 Other = Data.FindRegionAt(Probe.X, Probe.Y);
-					if (Other == INDEX_NONE || Other == Region.Id || Other < Region.Id)
-					{
-						continue; // coast, or a line the neighbour has already given
-					}
-					FSharedEdge& Edge = SharedEdges.AddDefaulted_GetRef();
-					Edge.A = A;
-					Edge.B = B;
-					Edge.Side = Side;
-					Edge.Here = Region.Id;
-					Edge.There = Other;
-				}
-			}
-		}
-	}
+	FindSharedEdges();
 	const FColor Vermilion = FromHex(TEXT("A63A2C")).ToFColor(true), Edging = FromHex(TEXT("2A1410")).ToFColor(true);
 	const FColor Buff = FromHex(TEXT("8A8172")).ToFColor(true), BuffEdging = FromHex(TEXT("2A2420")).ToFColor(true);
 	FCampaignMeshBuffers Weights[2];
@@ -2884,7 +2890,10 @@ void ACampaignMapActor::BuildWorks()
 	int32 TownBridges = 0;
 	FString TownBridgeNames;
 	{
-		const FLinearColor Ashlar(FColor::FromHex(TEXT("D6CDB6"))), AshlarDark(FColor::FromHex(TEXT("A89F8A"))), Under(FColor::FromHex(TEXT("4A463F"))), Lamp(FColor::FromHex(TEXT("2E2B28")));
+		// (The art director's ruling: the stone read as fresh plaster. It is a warm grey-buff now, its parapets a step
+		// darker, and the openings under the arches are near-black and stand a little proud of the roadway's sides,
+		// so that the arches read.)
+		const FLinearColor Ashlar(FColor::FromHex(TEXT("A39780"))), AshlarDark(FColor::FromHex(TEXT("857A66"))), Under(FColor::FromHex(TEXT("141210"))), Lamp(FColor::FromHex(TEXT("2E2B28")));
 		for (const FCampaignRegion& Region : Data.Regions)
 		{
 			if (!(Region.bCapital || Region.Terrain == TEXT("urban") || Region.VictoryPoints >= 2 || Region.Factories >= 2))
@@ -2954,7 +2963,7 @@ void ACampaignMapActor::BuildWorks()
 			}
 			for (const double Arch : { -0.25, 0.25 })
 			{
-				Model.Box(On(Arch, 0.0, 0.08), FVector(Long * 0.3, Wide * 0.96, 0.12 * U), Under, Turn);
+				Model.Box(On(Arch, 0.0, 0.09), FVector(Long * 0.32, Wide * 1.1, 0.16 * U), Under, Turn);
 			}
 			for (const double End : { -1.0, 1.0 })
 			{
@@ -5967,6 +5976,7 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail)
 {
 	OrdersMesh->ClearMeshSection(0);
+	OrdersMesh->ClearMeshSection(9); // (the enemy's reach goes with the army's own)
 	if (Reach.Num() == 0)
 	{
 		return;
@@ -6000,6 +6010,56 @@ void ACampaignMapActor::SetReach(const TArray<FReachRegion>& Reach, bool bByRail
 		}
 	}
 	Buffers.Commit(OrdersMesh, 0, HighlightMaterial);
+}
+
+void ACampaignMapActor::ShowEnemyReach(const TArray<int32>& Danger)
+{
+	OrdersMesh->ClearMeshSection(9); // (a section of its own: the route to the province under the pointer is drawn and cleared in section 1)
+	if (Danger.Num() == 0 || !Data.IsLoaded())
+	{
+		return;
+	}
+	// The ground the enemy could strike next month takes a faint red wash, and where it ends inside the player's
+	// own country, or an ally's or a neutral's, a dashed red line is ruled: this deep, and no deeper. Along the
+	// front itself nothing more is drawn: the front line is there already.
+	const TSet<int32> In(Danger);
+	FCampaignMeshBuffers Buffers;
+	const FLinearColor Wash(0.85f, 0.08f, 0.04f, 0.06f);
+	const FColor Dash = FLinearColor(0.72f, 0.05f, 0.04f, 0.95f).ToFColor(false);
+	for (const int32 Id : In)
+	{
+		if (Data.Regions.IsValidIndex(Id) && !WarFoes.Contains(Data.Regions[Id].Owner))
+		{
+			AppendRegionFill(Buffers, Id, Wash);
+		}
+	}
+	FindSharedEdges();
+	const double HalfWidth = 0.28, Lift = 0.27, Long = 1.6, Gap = 1.0;
+	for (const FSharedEdge& Edge : SharedEdges)
+	{
+		if (In.Contains(Edge.Here) == In.Contains(Edge.There)
+			|| WarFoes.Contains(Data.Regions[Edge.Here].Owner) || WarFoes.Contains(Data.Regions[Edge.There].Owner))
+		{
+			continue;
+		}
+		const double Length = FVector2D::Distance(Edge.A, Edge.B);
+		const FVector2D Dir = (Edge.B - Edge.A) / Length;
+		// (dashes of an even length, centred on the edge so that each edge begins and ends in a gap or a whole dash)
+		const int32 Count = FMath::Max(1, FMath::FloorToInt32((Length + Gap) / (Long + Gap)));
+		const double Start = (Length - (Count * Long + (Count - 1) * Gap)) * 0.5;
+		for (int32 K = 0; K < Count; ++K)
+		{
+			const double From = FMath::Max(Start + K * (Long + Gap), 0.0), To = FMath::Min(From + Long, Length);
+			const FVector2D P0 = Edge.A + Dir * From, P1 = Edge.A + Dir * To;
+			const int32 A = Buffers.AddVertex(SurfacePointOver(P0.X + Edge.Side.X * HalfWidth, P0.Y + Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Dash);
+			const int32 B = Buffers.AddVertex(SurfacePointOver(P0.X - Edge.Side.X * HalfWidth, P0.Y - Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Dash);
+			const int32 C = Buffers.AddVertex(SurfacePointOver(P1.X + Edge.Side.X * HalfWidth, P1.Y + Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Dash);
+			const int32 D = Buffers.AddVertex(SurfacePointOver(P1.X - Edge.Side.X * HalfWidth, P1.Y - Edge.Side.Y * HalfWidth, Lift), FVector::UpVector, Dash);
+			Buffers.AddTriangleFacingUp(A, B, C);
+			Buffers.AddTriangleFacingUp(B, C, D);
+		}
+	}
+	Buffers.Commit(OrdersMesh, 9, HighlightMaterial);
 }
 
 float ACampaignMapActor::SnowLying(const FVector2D& P, float Hard)

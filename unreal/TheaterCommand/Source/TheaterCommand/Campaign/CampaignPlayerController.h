@@ -748,6 +748,7 @@ private:
 	TArray<int32> PickedCorps;
 	TArray<int32> PickedBeforeMass; // the corps that were in hand before "send everyone" was pressed on the attack card
 	TArray<FReachRegion> Reach;
+	TSet<int32> EnemyReach; // with an army in hand: the regions the enemy he can see could strike next month
 	int32 RouteTarget = INDEX_NONE;
 	int32 PendingTarget = INDEX_NONE; // ground clicked once with an army in hand: a second click, or the button, sends it there
 	bool bHeldWasInHand = false; // the flag pressed was already the army in hand, so a plain click on it puts it down

@@ -661,9 +661,17 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 			if (Parts.Num() > 0)
 			{
 				const float Zoom = Parts.IsValidIndex(1) ? FCString::Atof(*Parts[1]) : 0.3f;
-				Add(*FString::Printf(TEXT("look%d-%s-%s"), Shots.Num() + 1, *Parts[0].Replace(TEXT(" "), TEXT("-")).Replace(TEXT("@"), TEXT("")), Parts.IsValidIndex(1) ? *Parts[1] : TEXT("0.3")), *Parts[0], Zoom,
-					Parts.IsValidIndex(2) ? FCString::Atof(*Parts[2]) : 0.0f, Parts.IsValidIndex(3) ? FCString::Atof(*Parts[3]) : 0.0f)
-					.Lens = Parts.IsValidIndex(4) ? FCString::Atof(*Parts[4]) : 0.0f; // a fifth part is the width of the view in degrees: small for a long lens
+				auto& Asked = Add(*FString::Printf(TEXT("look%d-%s-%s"), Shots.Num() + 1, *Parts[0].Replace(TEXT(" "), TEXT("-")).Replace(TEXT("@"), TEXT("")), Parts.IsValidIndex(1) ? *Parts[1] : TEXT("0.3")), *Parts[0], Zoom,
+					Parts.IsValidIndex(2) ? FCString::Atof(*Parts[2]) : 0.0f, Parts.IsValidIndex(3) ? FCString::Atof(*Parts[3]) : 0.0f);
+				Asked.Lens = Parts.IsValidIndex(4) ? FCString::Atof(*Parts[4]) : 0.0f; // a fifth part is the width of the view in degrees: small for a long lens
+				if (Parts.IsValidIndex(5))
+				{
+					Asked.Army = Parts[5]; // a sixth part is a province whose army is picked up first
+					if (Parts.IsValidIndex(6))
+					{
+						Asked.Route = Parts[6]; // and a seventh is a province the road is shown to, as when the pointer rests on it
+					}
+				}
 			}
 		}
 	}

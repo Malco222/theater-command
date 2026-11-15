@@ -113,6 +113,13 @@ public:
 
 	/** Tints the regions a picked-up army could go to: its own colour for a march, red for an attack. An empty list clears it. */
 	void SetReach(const TArray<FReachRegion>& Reach, bool bByRail = false);
+	/**
+	 * (release 1) With an army in hand: the regions the enemy the player can see could strike next month. They take a
+	 * faint wash, and a dashed red line is drawn where that ground ends inside the player's own country (the front
+	 * itself is the front line's to draw). SetReach clears it: call this after it.
+	 */
+	void ShowEnemyReach(const TArray<int32>& Danger);
+	void FindSharedEdges();
 	/** The time of year, from the month of the war (1 is September 1939): snow lies over the north and the high ground in winter. */
 	void SetSeason(int32 Turn);
 	/** The chief town of each province with what it pays, from the rules: the labels are written again to say so. */

@@ -49,6 +49,9 @@ namespace
 	{
 		SetRenderSetting(TEXT("r.DynamicGlobalIlluminationMethod"), 0);
 		SetRenderSetting(TEXT("r.ReflectionMethod"), 2); // reflections from what is on screen
+		// (But nothing is traced for them: the only thing on screen the rippled sea could mirror was a flag standing
+		// over it, and that came out as a pale speckled patch on the water beside every fleet.)
+		SetRenderSetting(TEXT("r.SSR.Quality"), 0);
 		// The table is one very large model that is not yet in the form Unreal's shadow system likes best,
 		// and from high above it says so on screen. The shadows are right; the note is switched off.
 		SetRenderSetting(TEXT("r.Shadow.Virtual.AllowScreenOverflowMessages"), 0);
