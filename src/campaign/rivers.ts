@@ -12,6 +12,7 @@
 // cannot cross.
 
 import riverData from '../generated/campaign-rivers.json';
+import worldRivers from '../generated/world-rivers.json';
 import data from '../../data/campaign/engineering.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Kind, type Region } from './types';
@@ -35,24 +36,36 @@ export const ENGINEERING = data as unknown as {
   ai: { most: number; reserve: number };
 };
 
+/** The rivers and crossings of the map of Europe. */
 export const RIVERS = (riverData as unknown as { rivers: River[] }).rivers;
 export const CROSSINGS: Crossing[] = (riverData as unknown as { crossings: number[][] }).crossings.map(([a, b, river, x, y]) => ({ a, b, river, x, y }));
+/**
+ * Those of the wider world (tools/build-rivers.mjs world). Its provinces are numbered on from Europe's and its
+ * rivers follow Europe's in the list, so a crossing is found by its two provinces on either map.
+ */
+const WIDE = worldRivers as unknown as { rivers: River[]; crossings: number[][] };
+const ALL_RIVERS: River[] = [...RIVERS, ...WIDE.rivers];
+export const WORLD_CROSSINGS: Crossing[] = WIDE.crossings.map(([a, b, river, x, y]) => ({ a, b, river: river + RIVERS.length, x, y }));
+const ALL_CROSSINGS: Crossing[] = [...CROSSINGS, ...WORLD_CROSSINGS];
+/** The rivers drawn on a game's map, and the crossings over them: Europe's, and the wider world's where the campaign is played on it. */
+export const riversOf = (g: Game): River[] => (g.flags.world === 1 ? ALL_RIVERS : RIVERS);
+export const crossingsOf = (g: Game): Crossing[] => (g.flags.world === 1 ? ALL_CROSSINGS : CROSSINGS);
 
 const pair = (a: number, b: number): number => (a < b ? a * 4096 + b : b * 4096 + a);
-const BY = new Map(CROSSINGS.map((c) => [pair(c.a, c.b), c]));
+const BY = new Map(ALL_CROSSINGS.map((c) => [pair(c.a, c.b), c]));
 const AT = new Map<number, Crossing[]>();
-for (const c of CROSSINGS) for (const r of [c.a, c.b]) (AT.get(r) ?? AT.set(r, []).get(r)!).push(c);
+for (const c of ALL_CROSSINGS) for (const r of [c.a, c.b]) (AT.get(r) ?? AT.set(r, []).get(r)!).push(c);
 const WHEELS = new Set<Kind>(ENGINEERING.blown.barred);
 
 /** The river crossing between two neighbouring regions, if there is one. Geography: the same in every game. */
 export const crossingOf = (a: number, b: number): Crossing | null => BY.get(pair(a, b)) ?? null;
 /** Every river crossing on a region's borders. */
 export const crossingsAt = (r: number): Crossing[] => AT.get(r) ?? [];
-export const riverName = (c: Crossing): string => RIVERS[c.river].name;
+export const riverName = (c: Crossing): string => ALL_RIVERS[c.river].name;
 /** The region on the other bank. */
 export const farBank = (c: Crossing, from: number): number => (c.a === from ? c.b : c.a);
 
-const FLAGS = new Map(CROSSINGS.map((c) => [c, `br:${c.a}:${c.b}`]));
+const FLAGS = new Map(ALL_CROSSINGS.map((c) => [c, `br:${c.a}:${c.b}`]));
 const flag = (c: Crossing): string => FLAGS.get(c) ?? `br:${c.a}:${c.b}`;
 /** Whether the bridges of a crossing are down. Always standing outside the grand campaign. */
 export const bridgeDown = (g: Game, c: Crossing): boolean => g.flags[flag(c)] !== undefined;

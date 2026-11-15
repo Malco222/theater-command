@@ -85,6 +85,12 @@ export const FLAGS: Record<string, string> = {
   IRQ: hb(BLACK, WHITE, '#007a3d') + `<path d="M0 0L6.6 4.67V9.33L0 14Z" fill="#ce1126"/>` + star(2.5, 5.2, 1, WHITE, 7, 0.5) + star(2.5, 8.8, 1, WHITE, 7, 0.5),
   IRN: hb('#239f40', WHITE, '#da0000') + disc(11.6, 6.6, 1.5, GOLD) + `<path d="M8.8 8.4Q10.4 6.6 12.6 8.4" fill="none" stroke="${GOLD}" stroke-width=".9" stroke-linecap="round"/>`,
   SVK: hb(WHITE, '#0b4ea2', '#ee1c25'),
+  // The new world. Mexico, 1934 to 1968: the eagle in profile on its cactus, over a half wreath (the art director's drawing).
+  MEX: vb('#006847', WHITE, '#ce1126') + `<path d="M8.8 8.2A2.5 2.5 0 0 0 13.2 8.2" fill="none" stroke="#3e7b3a" stroke-width=".55"/>` + disc(11, 8.2, 0.55, '#3e7b3a')
+    + `<path d="M11.1 6.6L12 4.2L13.6 3.8L13.2 5.9L12.2 7.3Z" fill="#6e4a28"/>` + disc(11.1, 6.6, 1.05, '#8c6239') + `<path d="M10.2 6.3L9.5 4.8L10.1 4.5L11.2 5.7Z" fill="#8c6239"/>` + disc(9.85, 4.9, 0.55, '#8c6239')
+    + `<path d="M9.4 4.7L8.8 5L9.5 5.2Z" fill="${GOLD}"/><path d="M8.95 5.05L8.8 6.5" stroke="#3e7b3a" stroke-width=".3"/>`,
+  // Cuba: unchanged since 1902.
+  CUB: hb('#002a8f', WHITE, '#002a8f', WHITE, '#002a8f') + `<path d="M0 0L9.4 7L0 14Z" fill="#cf142b"/>` + star(3.1, 7, 1.7, WHITE),
   // Nations of the wider war.
   JPN: field(WHITE) + disc(11, 7, 4.2, '#bc002d'),
   CHN: field(RED) + rect(0, 0, 11, 7, '#000095') + star(5.5, 3.5, 2.7, WHITE, 12, 0.62) + disc(5.5, 3.5, 1.3, WHITE),

@@ -11,6 +11,7 @@
  */
 import data from '../../data/campaign/towns.json';
 import mapData from '../generated/campaign-map.json';
+import worldMap from '../generated/world-map.json';
 import type { Game, Region } from './types';
 import { allied, atWar, theName } from './game';
 import { BUDGET, budgeted, provinceYield } from './economy';
@@ -67,7 +68,8 @@ const SPOTS: [number, number][] = [[-22, -8], [22, -8], [-18, -9], [18, -9], [0,
 const TIGHT: [number, number][] = [[-12, -7], [12, -7], [0, -10], [-9, 2], [9, 2], [0, 0]];
 const ROOM = 3.5;
 
-const SITES: [number, number][] = ((mapData as any).regions as { x: number; y: number; polys: Ring[][] }[]).map((r) => {
+// The wider world's provinces follow Europe's in number (world.ts), so one list serves every game.
+const SITES: [number, number][] = ([...(mapData as any).regions, ...(worldMap as any).regions] as { x: number; y: number; polys: Ring[][] }[]).map((r) => {
   const fits = (dx: number, dy: number, room: number): boolean => {
     const x = r.x + dx, y = r.y + dy;
     return inside(r.polys, x, y) && (room === 0 || [[-room, 0], [room, 0], [0, -room], [0, room]].every(([a, b]) => inside(r.polys, x + a, y + b)));

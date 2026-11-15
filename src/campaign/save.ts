@@ -19,6 +19,7 @@ import { openMorale } from './morale';
 import { openTrade } from './trade';
 import { numberDivisions } from './armies';
 import mapData from '../generated/campaign-map.json';
+import { WORLD_REGIONS, attachWorld } from './world';
 import type { Corps, Game, General } from './types';
 
 /** A save is laid over the map it was played on, region by region. */
@@ -28,9 +29,14 @@ const MAP_REGIONS = (mapData as any).regions.length as number;
  * from. A campaign saved before they existed can still be continued: each begins in the hands its parent is in.
  */
 const CARVED: Record<string, string> = { Cassino: 'Abruzzo', Anzio: 'Rome' };
-/** True if a save with this many regions can be laid over today's map: every place it lacks was carved from one it has. */
-const fits = (saved: number): boolean => saved === MAP_REGIONS
-  || (saved < MAP_REGIONS && ((mapData as any).regions as { name: string }[]).slice(saved).every((r) => r.name in CARVED));
+/**
+ * True if a save with this many regions can be laid over today's map: every place it lacks was carved from one it
+ * has. A campaign saved on the wider world (world.ts) has that world's provinces after Europe's, all of them.
+ */
+const fits = (saved: number, world = false): boolean => (world ? saved === MAP_REGIONS + WORLD_REGIONS : saved === MAP_REGIONS
+  || (saved < MAP_REGIONS && ((mapData as any).regions as { name: string }[]).slice(saved).every((r) => r.name in CARVED)));
+/** Whether a save was made on the wider world. */
+const wide = (d: any): boolean => d?.flags?.world === 1;
 
 export const SAVE_VERSION = 1;
 const KEEP_REPORTS = 200;
@@ -40,7 +46,9 @@ export function saveGame(g: Game): string {
   return JSON.stringify({
     v: SAVE_VERSION, seed: g.seed, human: g.human, turn: g.turn, phase: g.phase, week: g.week, order: g.order,
     nextCorps: g.nextCorps, nextBuild: g.nextBuild, flags: g.flags, rng: g.rng.state,
-    dirty: g.supplyDirty, supply: Object.fromEntries(Object.entries(g.supply).map(([k, v]) => [k, Array.from(v).join('')])),
+    dirty: g.supplyDirty,
+    // The supply picture, in the order of the countries' names so that the same picture is always written the same way.
+    supply: Object.fromEntries(Object.entries(g.supply).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => [k, Array.from(v).join('')])),
     nations: g.nations,
     // The order corps stand in within a region is kept too: battles and retreats take them in that order.
     regions: g.regions.map((r) => [r.owner, r.ctrl, r.cap ? 1 : 0, r.fort, r.since, r.prev, r.units.map((c) => c.id)]),
@@ -65,7 +73,7 @@ export function saveGame(g: Game): string {
 export function peekSave(text: string): { human: string | null; turn: number; open: boolean; level: number | null } | null {
   try {
     const d = JSON.parse(text);
-    return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && fits(d.regions.length) ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1, level: d.flags?.open === 1 ? d.flags?.level ?? FAIR : null } : null;
+    return d && d.v === SAVE_VERSION && Array.isArray(d.regions) && fits(d.regions.length, wide(d)) ? { human: d.human ?? null, turn: d.turn, open: d.flags?.open === 1, level: d.flags?.open === 1 ? d.flags?.level ?? FAIR : null } : null;
   } catch { return null; }
 }
 
@@ -73,7 +81,7 @@ export function peekSave(text: string): { human: string | null; turn: number; op
 export function staleSave(text: string): boolean {
   try {
     const d = JSON.parse(text);
-    return !!d && d.v === SAVE_VERSION && Array.isArray(d.regions) && !fits(d.regions.length);
+    return !!d && d.v === SAVE_VERSION && Array.isArray(d.regions) && !fits(d.regions.length, wide(d));
   } catch { return false; }
 }
 
@@ -81,8 +89,11 @@ export function loadGame(text: string): Game | null {
   let d: any;
   try { d = JSON.parse(text); } catch { return null; }
   if (!d || d.v !== SAVE_VERSION || !Array.isArray(d.regions)) return null;
-  if (!fits(d.regions.length)) return null; // saved on a different map
+  if (!fits(d.regions.length, wide(d))) return null; // saved on a different map
   const g = createGame(d.seed, d.human ?? null);
+  // A campaign saved on the wider world is laid over that world: its provinces, seas and countries, and nothing
+  // of its first day, which the save brings itself.
+  if (wide(d)) attachWorld(g, false);
   // A place carved out since the save was made starts as the ground it was cut from stands: same owner, same holder, same works.
   const saved: number = d.regions.length;
   const grown = saved < g.regions.length;
@@ -176,7 +187,10 @@ export function loadGame(text: string): Game | null {
   openTrade(g);
   // The supply picture is restored exactly as it stood, so the loaded game plays on identically.
   const fed = g.corps.map((c) => c.supplied);
+  // Drawing the picture marks the month a fortified port overseas last filled its stores: those marks are the save's own.
+  const stores = new Map(Object.entries(g.flags).filter(([k]) => k.startsWith('stores:')));
   computeSupply(g);
+  for (const k of Object.keys(g.flags)) if (k.startsWith('stores:')) { if (stores.has(k)) g.flags[k] = stores.get(k)!; else delete g.flags[k]; }
   g.corps.forEach((c, i) => { c.supplied = fed[i]; });
   // On a map that has grown since, the saved picture is a region short: it is drawn afresh the first time it is asked for.
   if (!grown) for (const [k, v] of Object.entries((d.supply ?? {}) as Record<string, string>)) g.supply[k] = Uint8Array.from(v, (ch) => (ch === '2' ? 2 : ch === '1' ? 1 : 0));

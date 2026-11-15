@@ -1277,7 +1277,7 @@ export function govMonth(g: Game, nat: string): void {
   st.mark = { held, home, caps, report: lastReport(g) };
   // A decree that takes political capital to keep lapses a step when there is none left to pay for it.
   for (let guard = 0; guard < 4; guard++) {
-    const net = pcIncome(nat) + civicSum(g, nat).pc + capitalOf(nat, st);
+    const net = pcIncome(nat, g) + civicSum(g, nat).pc + capitalOf(nat, st);
     if (net >= 0 || n.pc + net >= 0) break;
     const t = GOV.tracks.filter((x) => (stepAt(st, x).effects.capital ?? 0) < 0).sort((x, y) => (stepAt(st, x).effects.capital ?? 0) - (stepAt(st, y).effects.capital ?? 0))[0];
     if (!t) break;
@@ -1542,7 +1542,7 @@ export function government(g: Game, nat: string | null = g.human): GovView | nul
   return {
     ...empty, mine: true, trust: Math.floor(st.trust + 1e-9), trustWord: trustWord(st.trust, form.fallsAt), rest: restOf(st), low: st.low, since: st.since ?? 0,
     doubts, withheld: doubts ? `It withholds ${Math.round(C.lowShare * 100)}% of the political capital you would earn each month and ${Math.round(C.lowIncome * 100)}% of the treasury's income until its trust is back to ${C.lowTrust}.` : null,
-    capital: Math.floor(n.pc), capitalMonth: Math.round((pcIncome(nat) + civicSum(g, nat).pc + cm) * 100) / 100, seats, tracks,
+    capital: Math.floor(n.pc), capitalMonth: Math.round((pcIncome(nat, g) + civicSum(g, nat).pc + cm) * 100) / 100, seats, tracks,
     directive: d ? { ...d, text: textShown(g, n, d), small: smallJob(d), oddsLine: oddsLineOf(g, d), by: d.from === nat ? 'The war cabinet' : theName(g.nations[d.from], true), left: Math.max(0, d.due - g.turn + 1), progress: progressOf(g, d), reward: rewardWords(d), price: Math.round(missedCost(st, false, d) * form.swing * 10) / 10, asidePrice: Math.round(missedCost(st, true, d) * form.swing * 10) / 10, asideNext: Math.max(g.turn + GOV.directives.retry, d.due + 1 + GOV.directives.every) } : null,
     nextIn: d ? 0 : Math.max(0, st.next - g.turn), done: st.done, missed: st.missed, sums,
     wings: wingsView(st),

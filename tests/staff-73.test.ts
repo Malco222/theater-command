@@ -49,7 +49,7 @@ describe('holding the sea behind the beach', () => {
     expect(seaHold(g, 'GER', x.path, x.to)).toEqual(h);
   });
 
-  it('says the sea would be closed exactly when it would be, with all of them in it', () => {
+  it('says the sea can be closed exactly when it can be, with all of them in it', () => {
     const g = opened();
     const x = toBritain(g);
     const h = x.account.hold;
@@ -58,7 +58,7 @@ describe('holding the sea behind the beach', () => {
     expect(h.open).toBe(false);
     expect(h.need).toBeCloseTo(h.foe / NAVY.closed.ratio, 9);
     expect(h.own.total).toBeLessThan(h.need);
-    expect(h.lines.some((l) => l.label === 'The sea behind the beach' && l.value === 'would be closed')).toBe(true);
+    expect(h.lines.some((l) => l.label === 'The sea behind the beach' && l.value === 'can be closed')).toBe(true);
     expect(h.lines.some((l) => l.label === 'Enemy fleets that could come' && l.value === Math.round(h.come).toLocaleString('en-US'))).toBe(true);
     allCome(g, x);
     expect(closedTo(g, h.sea, 'GER')).toBe(true);

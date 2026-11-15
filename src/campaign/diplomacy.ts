@@ -16,6 +16,8 @@ import { fleetsOnFall } from './navy';
 import { airOnFall } from './air';
 import { recordFall } from './liberation';
 import { mayJoin } from './history';
+import worldData from '../../data/campaign/world.json';
+import { worldMonth } from './world';
 
 export interface DiploEvent {
   id: string; from: number; to: number; if?: string[]; text: string;
@@ -35,6 +37,12 @@ export interface DiploEvent {
   war?: [string, string][];
   /** Countries that have stood aside until now and enter the story here, at this place on the alignment track. */
   wake?: { nations: string[]; align: Align };
+  /**
+   * Countries on the map and at peace, outside both alliances, that take this place on the alignment track as the
+   * event fires (the wider world, where America is there from the first day). A small country in the player's
+   * hands is left to its player.
+   */
+  enter?: { nations: string[]; align: Align };
   /**
    * A country that ends, its ground shared out. Each share is [who takes it, the regions]: the first taker on the
    * list still in the war gets every named region the country still holds. Ground someone else already holds stays theirs.
@@ -96,7 +104,11 @@ export function homeOpinion(id: string, align: Align): number {
   return DIPLOMACY.home[id] ?? s * 40;
 }
 
-export const pcIncome = (nat: string): number => (DIPLOMACY.majors.includes(nat) ? DIPLOMACY.pcIncome._major : DIPLOMACY.pcIncome._minor);
+/** The great powers. On the wider world (world.ts) those whose homeland is now on the map stand beside history's European five. */
+const WIDE_MAJORS = [...DIPLOMACY.majors, ...(worldData as unknown as { great: string[] }).great];
+export const majorsOf = (g: Game): string[] => (g.flags.world === 1 ? WIDE_MAJORS : DIPLOMACY.majors);
+
+export const pcIncome = (nat: string, g?: Game): number => ((g ? majorsOf(g) : DIPLOMACY.majors).includes(nat) ? DIPLOMACY.pcIncome._major : DIPLOMACY.pcIncome._minor);
 
 /**
  * Who is winning, from -1 (the Allies) to +1 (the Axis): the victory points each bloc has
@@ -116,7 +128,7 @@ export function momentum(g: Game): number {
 /** Neutrals that lean toward this nation's bloc and trade with it. Only the major powers of a bloc benefit. */
 export function tradePartners(g: Game, nat: string): Nation[] {
   const b = bloc(g.nations[nat]);
-  if (!b || b === 'league' || !DIPLOMACY.majors.includes(nat)) return [];
+  if (!b || b === 'league' || !majorsOf(g).includes(nat)) return [];
   const want = sideOf(b);
   return Object.values(g.nations).filter((n) => n.alive && !n.dormant && step(n) === want);
 }
@@ -237,7 +249,7 @@ export function alarmed(g: Game, by: string, on: string): Alarm[] {
     const to = wouldStand(g, n, opinion);
     out.push({
       nat: n.id, friend: why !== undefined, why: why ?? '', opinion, home: clamp(n.home + w.home * k, -100, 100), from: n.align, to,
-      trade: DIPLOMACY.majors.includes(by) && step(n) === sideOf(b) && TRACK.indexOf(to) - 3 !== sideOf(b),
+      trade: majorsOf(g).includes(by) && step(n) === sideOf(b) && TRACK.indexOf(to) - 3 !== sideOf(b),
     });
   }
   const rank = (a: Alarm): number => (a.friend ? 0 : a.from !== a.to ? 1 : 2);
@@ -471,6 +483,22 @@ function fire(g: Game, e: DiploEvent): boolean {
     headline(g, 'event', e.text, e.wake.nations[0]);
     told = true;
   }
+  if (e.enter) {
+    let any = false;
+    for (const id of e.enter.nations) {
+      const n = g.nations[id];
+      if (!n?.alive || n.dormant || bloc(n) || ownPath(g, id)) continue;
+      n.align = e.enter.align;
+      n.opinion = n.home = homeOpinion(id, n.align);
+      g.flags[`step:${id}`] = g.turn;
+      any = true;
+    }
+    if (!any) return false;
+    did = true;
+    g.supplyDirty = true;
+    headline(g, 'event', e.text, e.enter.nations[0]);
+    told = true;
+  }
   if (e.war) {
     for (const [a, b] of e.war) {
       const A = g.nations[a], B = g.nations[b];
@@ -591,6 +619,8 @@ export function monthlyDiplomacy(g: Game): void {
     n.opinion = clamp(n.opinion + (n.home - n.opinion) * DIPLOMACY.pull + m * bw, -100, 100);
     settle(g, n);
   }
+  // The wider world: the dominions follow their mother country.
+  worldMonth(g);
   // The grand campaign: now and then a circle of small countries founds the League, or another joins it.
   leagueMonth(g);
   traitsMonth(g);

@@ -39,7 +39,8 @@ describe('the data', () => {
   });
 
   it('is well formed: names, sane numbers, orders that exist, kinds that exist', () => {
-    const g = history();
+    // The grand campaign's own map, the wider world: Canada and Mexico have rows too.
+    const g = grand();
     for (const [nat, row] of Object.entries(TRAITS.nations)) {
       expect(g.nations[nat], nat).toBeDefined();
       expect(new Set(row.traits.map((t) => t.id)).size).toBe(row.traits.length);

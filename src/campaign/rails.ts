@@ -16,6 +16,7 @@
 // from the player's railhead.
 
 import railData from '../generated/campaign-rails.json';
+import worldRails from '../generated/world-rails.json';
 import data from '../../data/campaign/railways.json';
 import { Rng, hashString } from '../core/rng';
 import { KIND, type Corps, type Game, type Region } from './types';
@@ -36,9 +37,15 @@ export const RAILWAYS = data as unknown as {
   ruin: { over: number; chance: number; most: number };
 };
 
+/** The lines of the map of Europe. */
 export const RAIL_LINKS: RailLink[] = (railData as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
+/** Those of the wider world (tools/build-rails.mjs world), whose provinces are numbered on from Europe's. */
+export const WORLD_RAIL_LINKS: RailLink[] = (worldRails as unknown as { links: number[][] }).links.map(([a, b, x, y]) => ({ a, b, x, y }));
+const ALL_LINKS: RailLink[] = [...RAIL_LINKS, ...WORLD_RAIL_LINKS];
+/** The lines on a game's map: Europe's, and the wider world's where the campaign is played on it. */
+export const railLinks = (g: Game): RailLink[] => (g.flags.world === 1 ? ALL_LINKS : RAIL_LINKS);
 const NET = new Map<number, number[]>();
-for (const l of RAIL_LINKS) for (const [p, q] of [[l.a, l.b], [l.b, l.a]]) (NET.get(p) ?? NET.set(p, []).get(p)!).push(q);
+for (const l of ALL_LINKS) for (const [p, q] of [[l.a, l.b], [l.b, l.a]]) (NET.get(p) ?? NET.set(p, []).get(p)!).push(q);
 const NONE: number[] = [];
 
 /** The provinces a province's railway runs to. Geography: the same in every game. */

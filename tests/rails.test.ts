@@ -72,8 +72,11 @@ describe('the railway net', () => {
   it('reaches every province outside the desert, and the main lines history built are there', () => {
     const g = grand();
     const off = g.regions.filter((r) => !onNet(r.id)).map((r) => r.name);
-    // Nothing on the mainland of Europe is off the net: only the desert and a few islands.
-    for (const name of off) { const r = g.byName[name]; expect(r.terrain === 'desert' || r.overseas || r.nb.length <= 1, name).toBe(true); }
+    // Nothing on the mainland of Europe is off the net: only the desert and a few islands. In the new world no line
+    // ran into the far north of Canada in 1939, nor to the foot of Lower California.
+    const wild = ['Ungava', 'Keewatin', 'Mackenzie', 'Yukon', 'Southern Baja'];
+    for (const name of off) { const r = g.byName[name]; expect(r.terrain === 'desert' || r.overseas || r.nb.length <= 1 || wild.includes(name), name).toBe(true); }
+    for (const name of wild) expect(off, name).toContain(name);
     const trunks: string[][] = [
       ['Berlin', 'Neumark', 'Poznan', 'Lodz', 'Warsaw', 'Brest', 'Polesie', 'Minsk', 'Mogilev', 'Smolensk', 'Vyazma', 'Moscow'],
       ['Moscow', 'Kalinin', 'Valdai', 'Novgorod', 'Leningrad'],

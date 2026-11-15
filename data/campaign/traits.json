@@ -156,6 +156,19 @@
         { "id": "emergency", "name": "The Emergency", "text": "A neutrality kept carefully between two great powers at war, with cattle and food sold across the Irish Sea. It pays while Ireland is at peace.", "income": 0.5, "incomeAt": "peace" },
         { "id": "volunteers", "name": "The volunteer tradition", "text": "A small army backed by a countryside that has fought an occupier before.", "defence": 1.2, "when": { "home": true }, "cost": { "what": ["corps:inf"], "mul": 0.8 } }
       ]
+    },
+    "CAN": {
+      "traits": [
+        { "id": "airplan", "name": "The air training plan", "text": "Flying schools across the prairies, out of reach of any enemy, where the aircrew of the whole Commonwealth are trained.", "cost": { "what": ["air:ftr", "air:bmr"], "mul": 0.85 } },
+        { "id": "corvettes", "name": "The corvette yards", "text": "Small yards on the St Lawrence and the Great Lakes that turn out convoy escorts by the dozen, and a navy that grows up around them.", "cost": { "what": ["ship:dd"], "mul": 0.75 } },
+        { "id": "granary", "name": "Wheat and nickel", "text": "The wheat of the prairies and most of the nickel in the world, sold to every friend that can pay or borrow.", "income": 0.8 }
+      ]
+    },
+    "MEX": {
+      "traits": [
+        { "id": "sierra", "name": "The Sierra Madre", "text": "Two great mountain chains and the desert between them, with few roads and fewer railways for an invader to use.", "defence": 1.2, "when": { "home": true, "terrain": ["mountain", "hills"] } },
+        { "id": "mines", "name": "Silver, lead and oil", "text": "Silver, lead, zinc and the oil of the Gulf coast, which every power at war wants to buy. It pays while Mexico is at peace.", "income": 0.6, "incomeAt": "peace" }
+      ]
     }
   }
 }
