@@ -205,6 +205,14 @@ export interface Plan {
   path?: string;
   /** The share of a landing force the player will risk at sea (default a quarter). */
   landRisk?: number;
+  /** Version 72: prepare a crossing to the homeland of an enemy across the water, with the rules builder's own routine (prepareCrossing, ported from results/v72/lib.ts): name the way that can be made safest as the plan, hand the air and navy desks to the staff, gather up to four corps on the quay and land at a danger the player will bear (landRisk). */
+  cross?: boolean;
+  /** Version 72: cross only to this enemy's homeland (default: whichever shore can be made safest). */
+  crossFoe?: string;
+  /** Version 72: keep this many engineer corps (in the field or on order), bought ahead of everything else, so that the cut railways of conquered ground are mended (default off: the scripted player raises no engineers, and by 1945 a Soviet player holds 60 to 80 provinces whose line is cut). */
+  engs?: number;
+  /** Version 72: call the crossing routine before the army's orders of the month, not after them as the rules builder's own harness does. After them the routine finds nobody with a month's moves left whenever the army is marching to a land front somewhere (the Soviet seat in the last act, whose whole army walks towards the British Empire overland), and the quay stays empty (default off: the builder's order). */
+  crossFirst?: boolean;
   /** Technologies to research first. */
   research?: string[];
   /** Do not mass reserves on one point. */
@@ -394,13 +402,17 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     const needGuns = plan.guns !== undefined && mine.filter((c) => c.kind === 'art').length + gunsDue.filter((t: number) => t > g.turn).length < Math.floor((mine.length * plan.guns) / 10);
     const men = plan.menKeep !== undefined ? (T as any).manpowerOf?.(g, me) : null;
     const want1 = men && men.share < plan.menKeep! ? want0.filter((k) => !k.startsWith('corps:')) : want0;
-    const want = needGuns && want1 === want0 ? ['corps:art', ...want0] : want1;
+    const engDue = (run as any).engDue ?? ((run as any).engDue = [] as number[]);
+    const needEng = plan.engs !== undefined && g.corps.filter((c) => c.nat === me && !(c as any).dead && c.kind === 'eng').length + engDue.filter((t: number) => t > g.turn).length < plan.engs;
+    const want2 = needGuns && want1 === want0 ? ['corps:art', ...want0] : want1;
+    const want = needEng ? ['corps:eng', ...want2] : want2;
     const cadre = plan.fold === 'raise' ? offers.find((x) => x.key.startsWith('cadre:') && x.why === null) : undefined;
     const o = cadre ?? want.map((k) => offers.find((x) => x.key === k)).find((x) => x && x.why === null);
     if (!o) break;
     const b = T.orderArsenal(g, o.key, o.at);
     if (!b) break;
     if (o.key === 'corps:art') gunsDue.push(g.turn + 5);
+    if (o.key === 'corps:eng') (run as any).engDue.push(g.turn + ((o as any).months ?? 4));
     if (o.key.startsWith('cadre:')) (run as any).cadresRaised = ((run as any).cadresRaised ?? 0) + 1;
     row.bought.push(o.key);
   }
@@ -437,8 +449,11 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     }
   }
 
+  // Version 72: the crossing force is chosen before the army moves, when asked for (see Plan.crossFirst).
+  if (plan.cross && plan.crossFirst) prepareCrossing(run, plan, row, minOdds);
+
   // The army.
-  const my = (): Corps[] => g.corps.filter((c) => c.nat === me && T.canOrder(g, c) && c.ap > 0 && !(c.kind === 'eng' && (c.job || (c as any).ptBusy === g.turn)));
+  const my = (): Corps[] => g.corps.filter((c) => c.nat === me && T.canOrder(g, c) && c.ap > 0 && (c as any).ptWatch !== g.turn && !(c.kind === 'eng' && (c.job || (c as any).ptBusy === g.turn)));
   const capital = g.nations[me].capital;
   const chaseId = chaseOf(g, plan), chaseOdds = plan.chaseOdds ?? 1.1;
   // Version 63: the corps that stand in their works beside the enemy (for a player who digs the line in).
@@ -628,7 +643,7 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     const d = distanceToEnemy(g, me, false);
     let lifted = 0;
     for (const c of g.corps) {
-      if (c.nat !== me || !T.canOrder(g, c) || c.kind === 'fort' || c.kind === 'eng' || !g.regions[c.reg].port) continue;
+      if (c.nat !== me || !T.canOrder(g, c) || c.kind === 'fort' || c.kind === 'eng' || !g.regions[c.reg].port || (c as any).ptWatch === g.turn) continue;
       if (d[c.reg] >= 0 && d[c.reg] <= 6) continue;
       if (c.reg === capital && g.regions[capital].units.filter((u) => u.nat === me && u.kind !== 'fort').length <= 2) continue;
       // Half the army stays at home.
@@ -640,6 +655,9 @@ export function playMonth(run: Run, plan: Plan, row: MonthRow): void {
     }
     if (lifted) row.notes.push(`shipped ${lifted} corps overseas`);
   }
+
+  // The crossing to an enemy's homeland, when asked for (Version 72; the rules builder's routine).
+  if (plan.cross && !plan.crossFirst) prepareCrossing(run, plan, row, minOdds);
 
   // Landings from the sea, when asked for.
   if (plan.land) tryLanding(run, row, minOdds, plan);
@@ -711,11 +729,102 @@ function mass(run: Run, plan: Plan, row: MonthRow, minOdds: number): void {
   if (sent) row.notes.push(`massing ${sent} corps against ${focus.name}`);
 }
 
+// Version 72: the rules builder's crossing routine, copied word for word from /mnt/project-files/theater-command/results/v72/lib.ts
+// (2026-11-15) so that the Playtester's hand player crosses a defended sea the way the builder's proof player does.
+function prepareCrossing(run: Run, plan: Plan, row: MonthRow, minOdds: number): void {
+  const g = run.g, me = run.me, st = run as any;
+  const n = g.nations[me];
+  st.crossLog ??= [];
+  const field = (u: Corps): boolean => u.nat === me && !u.dead && u.kind !== 'fort' && u.kind !== 'eng' && !(u as any).airborne && !(u as any).town;
+  const homeOf = (r: Region, e: string): boolean => r.owner === e && !r.overseas;
+  const want = Math.max(1, Math.min(n.sealift, 4));
+  // Bring a force to the quay: the strongest corps with no enemy near them, by rail or by road.
+  const gather = (quay: Region, count: number): number => {
+    let here = quay.units.filter(field).length;
+    if (here >= count) return here;
+    const d = distanceToEnemy(g, me, false);
+    const spare = g.corps.filter((c) => field(c) && c.reg !== quay.id && T.canOrder(g, c) && c.ap >= 4 && (c as any).ptWatch !== g.turn && (d[c.reg] < 0 || d[c.reg] >= 3) && !g.regions[c.reg].overseas && g.regions[c.reg].owner !== st.crossFoe)
+      .sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id);
+    for (const c of spare) {
+      if (here >= count) break;
+      if ((T.orderRail(g, c, quay.id) || (T.reach(g, c).has(quay.id) && T.orderMove(g, c, quay.id) > 0)) && c.reg === quay.id) here++;
+    }
+    return here;
+  };
+  const readyAt = (quay: Region, count: number): Corps[] => quay.units.filter((u) => field(u) && T.canOrder(g, u) && u.ap >= u.apMax).sort((a, b) => b.divs * b.str - a.divs * a.str || a.id - b.id).slice(0, count);
+  // Lands a force on the best coast of the enemy's homeland it is offered, at odds and a danger the player will bear.
+  const land = (ready: Corps[], foe: string, prefer: number): string => {
+    let best: { r: Region; score: number; pl: any } | null = null;
+    let targets: Region[] = [];
+    try { targets = T.landTargets(g, ready); } catch (e) { run.errors.push(`landTargets threw: ${(e as Error).message}`); }
+    for (const r of targets) {
+      if (r.ctrl !== foe || !homeOf(r, foe)) continue;
+      const pl = T.previewLanding(g, ready, r.id);
+      if (pl.why) continue;
+      const odds = pl.assess ? pl.assess.odds : 9;
+      if (odds < minOdds || pl.risk > (plan.landRisk ?? 0.25)) continue;
+      const score = r.vp * 10 + (r.port ? 8 : 0) + Math.min(odds, 4) - pl.risk * 20 + (r.id === prefer ? 3 : 0);
+      if (!best || score > best.score) best = { r, score, pl };
+    }
+    if (!best) return '';
+    const res = T.orderLand(g, ready, best.r.id);
+    row.notes.push(`crossing: landed at ${best.r.name}: ${res.ok ? (res.taken ? 'ashore' : 'thrown back') : 'refused: ' + res.why}`);
+    return ` | LANDED at ${best.r.name} with ${ready.length} corps: ${res.ok ? (res.taken ? 'ashore' : 'thrown back') : 'refused: ' + res.why}, caught ${best.pl.risk.toFixed(2)}, ${best.pl.assess ? `odds ${best.pl.assess.odds.toFixed(2)}` : 'undefended'}, lost at sea ${Math.round(res.lostAtSea ?? 0)}`;
+  };
+  const wait = (quay: Region): void => { for (const u of quay.units) if (field(u)) (u as any).ptWatch = g.turn; };
+
+  // Men already ashore on the enemy's homeland come first: every ship feeds them, into a harbour they hold or over the beach beside them.
+  const foe0: string | undefined = st.crossFoe;
+  if (foe0 && g.nations[foe0]?.alive && atWar(g, me, foe0) && st.crossQuay !== undefined && g.regions.some((r) => homeOf(r, foe0) && allied(g, me, r.ctrl))) {
+    const quay = g.regions[st.crossQuay];
+    if (allied(g, me, quay.ctrl)) {
+      const count = Math.max(1, T.liftOf ? ((T as any).liftOf(g)?.left ?? n.sealift) : n.sealift);
+      const here = gather(quay, Math.min(count, 4));
+      const ready = readyAt(quay, count);
+      let shipped = 0;
+      for (const c of ready) {
+        let ports: Region[] = [];
+        try { ports = T.shipTargets(g, c); } catch (e) { run.errors.push(`shipTargets threw: ${(e as Error).message}`); }
+        const to = ports.filter((r) => homeOf(r, foe0)).sort((a, b) => b.vp - a.vp || a.id - b.id)[0];
+        if (to && T.orderShip(g, c, to.id)) shipped++;
+      }
+      const rest = readyAt(quay, 4);
+      const went = shipped || rest.length < 2 ? '' : land(rest, foe0, -1);
+      if (st.crossLog.length < 600) st.crossLog.push(`${date(g.turn)} feeding the men ashore from ${quay.name}: on the quay ${here}, shipped ${shipped} into a harbour${went} | lift ${n.sealift}`);
+      wait(quay);
+      return;
+    }
+  }
+
+  let rows: any[] = [];
+  try { rows = (T as any).crossings(g).filter((x: any) => x.home && (!(plan as any).crossFoe || x.foe === (plan as any).crossFoe)); } catch (e) { run.errors.push(`crossings threw: ${(e as Error).message}`); return; }
+  if (!rows.length) return;
+  if (!st.crossDesks) { T.orderDesk(g, 'air' as any, true); T.orderDesk(g, 'navy' as any, true); st.crossDesks = g.turn; }
+  // The plan is the way that can be made safest: as it stands, or once the sky over its beach is won. It is kept
+  // until another way is clearly better.
+  const made = (x: any): number => (x.barred === 'lift' || x.barred === 'sea' ? 9 : Math.min(x.bar ? 9 : x.account.risk, x.account.skyWon ?? 9));
+  const named = rows.find((x: any) => x.planned);
+  const other = rows.filter((x: any) => !x.planned).sort((a: any, b: any) => made(a) - made(b))[0];
+  const aim = named && !(other && made(other) < made(named) - 0.1) ? named : other ?? rows[0];
+  if (!aim.planned && (T as any).orderCrossingPlan(g, aim.from.id, aim.to.id)) row.notes.push(`crossing planned: ${aim.from.name} > ${aim.to.name}`);
+  const quay: Region = aim.from;
+  st.crossFoe = aim.foe;
+  st.crossQuay = quay.id;
+  const here = gather(quay, want);
+  const ready = readyAt(quay, want);
+  const acc = aim.account;
+  const line = `${date(g.turn)} ${quay.name} > ${aim.to.name}: caught ${acc.risk.toFixed(2)} sky ${acc.sky}${aim.bar ? ' BARRED' : ''} | helps ${acc.helps.map((h: any) => `${h.id} ${h.risk.toFixed(2)}`).join(', ') || 'none'} | on the quay ${here}, ready ${ready.length} of ${want} | lift ${n.sealift}`;
+  const went = ready.length >= Math.min(want, 2) || (ready.length >= 1 && n.sealift === 1) ? land(ready, aim.foe, aim.to.id) : '';
+  if (st.crossLog.length < 600) st.crossLog.push(line + went);
+  // The force waits on the quay for its day: the rest of the month's orders leave it alone.
+  wait(quay);
+}
+
 function tryLanding(run: Run, row: MonthRow, minOdds: number, plan: Plan = {}): void {
   const g = run.g, me = run.me;
-  const ports = g.regions.filter((r) => r.port && r.ctrl === me && r.units.some((u) => u.nat === me && T.canOrder(g, u) && u.ap > 0 && u.kind !== 'fort'));
+  const ports = g.regions.filter((r) => r.port && r.ctrl === me && r.units.some((u) => u.nat === me && T.canOrder(g, u) && u.ap > 0 && u.kind !== 'fort' && (u as any).ptWatch !== g.turn));
   for (const p of ports) {
-    const cs = p.units.filter((u) => u.nat === me && T.canOrder(g, u) && u.ap > 0 && u.kind !== 'fort').slice(0, Math.max(1, g.nations[me].sealift));
+    const cs = p.units.filter((u) => u.nat === me && T.canOrder(g, u) && u.ap > 0 && u.kind !== 'fort' && (u as any).ptWatch !== g.turn).slice(0, Math.max(1, g.nations[me].sealift));
     if (!cs.length) continue;
     let targets: Region[] = [];
     try { targets = T.landTargets(g, cs); } catch (e) { run.errors.push(`landTargets threw: ${(e as Error).message}`); continue; }

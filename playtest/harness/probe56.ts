@@ -7,6 +7,9 @@
 // the victory and plays on in peace instead (the control). "giveUp": N stops a war that is still undecided at turn N
 // (default 88, December 1946), so that a queue does not spend its time on wars that cannot be decided.
 // "landLog": true also prints why the player's landings were not made (the last lines of the landing log and a count by reason).
+// Version 72: "cross": true puts the rules builder's crossing routine (prepareCrossing) in the player's hands, "crossFoe" names the
+// one enemy to cross to; a CROSS line then says what came of it (the first month ashore on that enemy's homeland, the months
+// ashore, the most corps and provinces there, every landing ordered, the lift at the end) and "crossLog": true prints the routine's own log.
 // Prints one DOM line a war: when the war was decided and for whom, when the last act began and with how many
 // nations, how it ended (WON, the player fell, or how many nations were left), and how near the player came: the
 // share of the map's worth held at the end and at the most, the strongest rival, the nations beaten after the last
@@ -23,6 +26,7 @@ const byDec: string[] = [];
 const fellAfter: string[] = [];
 const seenFall = new Set<string>();
 let aliveThen: string[] = [];
+let crossFoe = '', crossFirst = 0, crossMonths = 0, crossMost = 0, crossHeld = 0, crossRun: any = null, liftMost = 0;
 const share = (g: any): { mine: number; rows: any[]; left: number; winner: string | null } => { const b = X.standings(g); const row = b.rows.find((r: any) => r.nat === me); return { mine: row ? row.share : 0, rows: b.rows, left: b.left, winner: b.winner }; };
 const run = campaign(me, Number(fromS), Number(seedS), { ...plan,
   first: (g: any) => {
@@ -36,8 +40,18 @@ const run = campaign(me, Number(fromS), Number(seedS), { ...plan,
     }
     if (!decidedAt && g.turn >= giveUp) throw new Error('GIVEUP');
   },
-  each: (g: any) => {
+  each: (g: any, r: any) => {
     lastTurn = g.turn;
+    if (r) crossRun = r;
+    liftMost = Math.max(liftMost, g.nations[me]?.sealift ?? 0);
+    const foe = crossRun?.crossFoe ?? plan.crossFoe;
+    if (plan.cross && foe) {
+      crossFoe = foe;
+      const there = g.corps.filter((c: any) => c.nat === me && !c.dead && c.kind !== 'fort' && g.regions[c.reg].owner === foe && !g.regions[c.reg].overseas).length;
+      const held = g.regions.filter((x: any) => x.owner === foe && !x.overseas && x.ctrl === me).length;
+      if (there || held) { crossMonths++; if (!crossFirst) crossFirst = g.turn; }
+      crossMost = Math.max(crossMost, there); crossHeld = Math.max(crossHeld, held);
+    }
     const s = share(g);
     if (s.mine > peak) { peak = s.mine; peakAt = g.turn; }
     if (g.turn % 12 === 4) byDec.push(`${1939 + Math.floor((g.turn + 7) / 12)} ${Math.round(s.mine * 100)}%`);
@@ -69,6 +83,27 @@ console.log(`DOM ${me} seed ${seedS} (${plan.depth ? plan.depth : 'by hand'}${pl
   + `; left at the end: ${s.rows.map((r: any) => `${r.nat} ${Math.round(r.share * 100)}%`).join(', ')}`
   + `; share each December: ${byDec.join(', ')}`
   + `; by the rule of Version 71 (the last great power standing, holding three quarters of the map's worth): rival great powers left ${rivals71.join(' ') || 'none'}, the player ${stands ? `holds ${Math.round(s.mine * 100)}%` : 'has fallen'}`);
+if (plan.cross) {
+  const log: string[] = (run as any).crossLog ?? [];
+  const landed = log.filter((l) => l.includes('LANDED'));
+  const ashore = landed.filter((l) => l.includes(': ashore')).length;
+  const firstLine = log[0] ?? '';
+  const lowest = log.map((l) => { const m = /caught ([\d.]+)/.exec(l); return m ? Number(m[1]) : 9; }).reduce((a, b) => Math.min(a, b), 9);
+  const barred = log.filter((l) => l.includes('BARRED')).length;
+  // Month by month: was the way open at a danger the player bears, and did a force stand ready on the quay?
+  const bears = Number(plan.landRisk ?? 0.25);
+  let openM = 0, readyM = 0, bothM = 0, quays = new Set<string>(), switches = 0, lastQuay = '';
+  for (const l of log) {
+    const m = /caught ([\d.]+)/.exec(l), r = /ready (\d+) of (\d+)/.exec(l), q = /^\w+ \d{4} (.+?) > /.exec(l);
+    if (!m || !r) continue;
+    const open = Number(m[1]) <= bears && !l.includes('BARRED'), ready = Number(r[1]) >= Math.min(Number(r[2]), 2);
+    if (open) openM++; if (ready) readyM++; if (open && ready) bothM++;
+    if (q) { quays.add(q[1]); if (lastQuay && q[1] !== lastQuay) switches++; lastQuay = q[1]; }
+  }
+  console.log(`CROSS ${me} seed ${seedS} against ${crossFoe || plan.crossFoe || 'any'}: ${log.length ? `crossing prepared from ${firstLine.split(' ').slice(0, 2).join(' ')} for ${log.length} months (${barred} barred), the lowest danger ${lowest < 9 ? lowest.toFixed(2) : '-'}` : 'no crossing was ever on offer'}; the way open at a danger the player bears in ${openM} months, a force ready on the quay in ${readyM}, both in ${bothM}; the plan changed quay ${switches} times (${[...quays].join(', ')}); landings ordered ${landed.length}, ashore ${ashore}; first ashore ${crossFirst ? date(crossFirst) : 'never'}, months ashore ${crossMonths}, most corps there ${crossMost}, most provinces held ${crossHeld}; ${crossFoe && g.nations[crossFoe] ? (g.nations[crossFoe].alive ? `${crossFoe} stands` : `${crossFoe} fell ${g.nations[crossFoe].fellOn ? date(g.nations[crossFoe].fellOn.turn) : ''}`) : ''}; lift at the end ${g.nations[me].sealift}, at the most ${liftMost}; landing risk borne ${plan.landRisk ?? 0.25}`);
+  for (const l of landed.slice(0, 12)) console.log('   ' + l);
+  if (plan.crossLog) for (const l of log) console.log('  LOG ' + l);
+}
 if (plan.landLog) {
   const log: string[] = (run as any).landLog ?? [];
   const why: Record<string, number> = {};
