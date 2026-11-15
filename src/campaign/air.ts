@@ -77,7 +77,7 @@ export const AIRWAR = warData as unknown as {
   recon: { aircraft: number; loss: number; ready: number };
   losses: { bombers: number; power: number; most: number; night: { bombers: number; power: number }; clash: number };
   success: { k: number };
-  ai: { escortReady: number; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number } } };
+  ai: { escortReady: number; raids: { share: number; least: number; loss: number; rail: number; ready: number; success: number; look: number; worth: number; sweeps: number; sky: number; skyWorth: number; sour?: { trade: number; dear: number; times: number; rest: number }; beach?: { groups: number; home: number; monthly: number; sky: number } } };
 };
 
 /** True once the air war is its own game: airfields are places and air groups of one kind fly from them. The grand campaign only. */
@@ -1352,6 +1352,20 @@ function raidStaff(g: Game, nat: string, mine: AirFleet[]): void {
         const v = R.skyWorth * Math.min(1, divs / 6) + fc.foeLoss - fc.ftrLoss;
         if (v > R.worth && (!best || v > best.v)) best = { t, fleets, v };
       }
+    }
+    // (A player's staff, over the beach of the crossing he has named: every fit fighter group in reach goes up
+    // together, from whatever fields they stand on, and it flies when it expects to win the sky, with 'sky' times
+    // the odds that win it. The sky is what he asked for; the margin a staff keeps for its own offensives is not.)
+    if (BP) for (const t of beaches) {
+      if (hit.has(t)) continue;
+      const fleets = mine.filter((f) => fit(f) && f.kind === 'ftr' && f.ftr > 0 && f.ready >= R.ready && f.ready >= AIRWAR.ai.escortReady && whyNotMission(g, f, 'superiority', t) === null);
+      if (!fleets.length) continue;
+      const a = assessAir(g, fleets, 'superiority', t);
+      if (a.why || a.E < AIR.sky.least) continue;
+      const fc = forecastAir(g, a, 'superiority', t);
+      if (fc.odds < AIR.sky.win * BP.sky) continue;
+      const v = R.skyWorth + fc.foeLoss - fc.ftrLoss;
+      if (v > R.worth && (!best || v > best.v)) best = { t, fleets, v };
     }
     if (!best) break;
     send('superiority', best.t, best.fleets, flown++);

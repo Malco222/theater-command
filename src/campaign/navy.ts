@@ -245,6 +245,16 @@ export function openSeas(g: Game, nat: string): Uint8Array {
   const start = (z: number): void => { if (!shut[z] && !open[z]) { open[z] = 1; q.push(z); } };
   for (const r of g.regions) if (r.port && r.owner === nat && r.ctrl === nat) r.seas.forEach(start);
   for (const f of g.fleets) if (f.nat === nat && f.base < 0) start(f.home); // a base off the map is a home port too
+  // The grand campaign: a harbour the nation has taken serves its supply ships as a home port does, once its own
+  // roads reach the quay: the stores come down to it overland and go on by sea. So an army put across a narrow sea
+  // from a conquered coast is fed from that coast, and not round by the harbours of the homeland.
+  if (seaWar(g) && (g.nations[nat]?.capital ?? -1) >= 0 && g.regions[g.nations[nat].capital].ctrl === nat) {
+    const linked = new Uint8Array(g.regions.length);
+    const road = [g.nations[nat].capital];
+    linked[road[0]] = 1;
+    for (let i = 0; i < road.length; i++) for (const j of g.regions[road[i]].nb) if (!linked[j] && allied(g, nat, g.regions[j].ctrl)) { linked[j] = 1; road.push(j); }
+    for (const r of g.regions) if (linked[r.id] && r.port && r.ctrl === nat && r.owner !== nat && prizeOut(g, r, 'harbour') <= 0) r.seas.forEach(start);
+  }
   // So is the sea a country off the map sends its convoys in by.
   const off = g.nations[nat]?.offmap;
   if (off && g.nations[nat].alive && zoneOf(g, off.sea) >= 0) start(zoneOf(g, off.sea));

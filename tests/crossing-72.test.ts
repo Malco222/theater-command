@@ -10,10 +10,10 @@ import { runAI } from '../src/campaign/ai';
 import { liftView } from '../src/campaign/arsenal';
 import { AIR, AIRWAR, airAI, airBases, airRange, airfieldsHold, km, rebaseAir, skyDenies, skyOver, skyReach, whyNotMission } from '../src/campaign/air';
 import { setDesk } from '../src/campaign/depth';
-import { addCorps, allied, atWar, createGame, endPhase } from '../src/campaign/game';
+import { addCorps, allied, atWar, computeSupply, createGame, endPhase } from '../src/campaign/game';
 import { onBook, setStop, shoreOpen } from '../src/campaign/history';
 import {
-  NAVY, closedTo, coastReport, crossingAccount, crossingsOf, fleetPower, fleetReach, landCorps, landingRisk, landingTargets, liftLeft, navalAI, planCrossing, planLanding,
+  NAVY, closedTo, coastReport, crossingAccount, crossingsOf, fleetPower, fleetReach, landCorps, landingRisk, landingTargets, liftLeft, navalAI, openSeas, planCrossing, planLanding,
   plannedCrossing, sail, seaPath, sortieAgainst, surfaceShips, whyNotLand, type CrossingOutlook,
 } from '../src/campaign/navy';
 import { coastWatch, seaBase, startOpen } from '../src/campaign/staff';
@@ -573,6 +573,82 @@ describe('the computer under the same rule', () => {
     expect(setStop(free.g, 3)).toBe(true);
     month(free.g, 'UK');
     expect(free.force.every((c) => !c.dead && free.shores.includes(free.g.regions[c.reg]))).toBe(true);
+  });
+});
+
+describe('an army across a narrow sea is fed from the conquered coast it sailed from', () => {
+  /**
+   * Germany with a road of her own from Berlin to a harbour on the Channel, a British harbour across it in her
+   * hands with a corps in it, and the Home Fleet in strength in every sea her own harbours stand on.
+   */
+  const lodged = (g: Game): { quay: Region; beach: Region; road: Region[]; c: Corps; channel: number } => {
+    harbours(g, 'GER');
+    const home = new Set(g.regions.filter((r) => r.port && r.owner === 'GER' && r.ctrl === 'GER').flatMap((r) => r.seas));
+    const coasts = g.regions.filter((r) => r.owner === 'UK' && r.ctrl === 'UK' && !r.overseas && r.port && r.seas.length > 0);
+    // (A stretch of water none of Germany's own harbours stands on.)
+    const shared = (a: Region, b: Region): number | undefined => a.seas.find((z) => b.seas.includes(z) && !home.has(z));
+    const quay = g.regions.find((r) => r.port && ['FRA', 'BEL', 'NED'].includes(r.owner) && coasts.some((c) => shared(r, c) !== undefined))!;
+    const beach = coasts.find((c) => shared(quay, c) !== undefined)!;
+    const channel = shared(quay, beach)!;
+    // The road: the shortest way overland from Berlin to the quay, all of it put in German hands.
+    const from = new Int32Array(g.regions.length).fill(-1);
+    const q = [g.nations.GER.capital];
+    from[q[0]] = q[0];
+    for (let i = 0; i < q.length; i++) for (const j of g.regions[q[i]].nb) if (from[j] < 0) { from[j] = q[i]; q.push(j); }
+    const road: Region[] = [];
+    for (let at = quay.id; at !== g.nations.GER.capital; at = from[at]) road.push(g.regions[at]);
+    for (const r of [...road, beach]) { clear(r); r.ctrl = 'GER'; r.since = g.turn - 3; }
+    const c = corps(g, 'GER', beach);
+    const fleet = g.fleets.find((f) => f.nat === 'UK' && surfaceShips(f) > 0)!;
+    for (const z of home) g.fleets.push({ ...fleet, id: 9000 + z, ships: { ...fleet.ships, bb: 60 }, base: -1, home: z, zone: z, stance: 'patrol' as const });
+    for (const f of g.fleets) if (f.nat === 'GER') sail(g, f, f.home, 'port');
+    g.airFleets = g.airFleets.filter((f) => f.nat !== 'UK' && f.nat !== 'FRA');
+    return { quay, beach, road, c, channel };
+  };
+
+  it('a harbour taken and reached by road serves the supply ships as a home port does', () => {
+    const g = opened();
+    const { quay, beach, road, c, channel } = lodged(g);
+    // Every sea Germany's own harbours stand on is closed to her, and the Channel is not.
+    for (const r of g.regions) if (r.port && r.owner === 'GER' && r.ctrl === 'GER') for (const z of r.seas) expect(closedTo(g, z, 'GER')).toBe(true);
+    expect(closedTo(g, channel, 'GER')).toBe(false);
+    expect(openSeas(g, 'GER')[channel]).toBe(1);
+    g.supplyDirty = true;
+    computeSupply(g);
+    expect(c.supplied).toBe(true);
+    // The road cut behind the quay: no stores come down to it, and the army across the water goes hungry.
+    const behind = road.filter((r) => r !== quay && r.owner !== 'GER');
+    expect(behind.length).toBeGreaterThan(0);
+    for (const r of behind) r.ctrl = r.owner;
+    expect(openSeas(g, 'GER')[channel]).toBe(0);
+    g.supplyDirty = true;
+    computeSupply(g);
+    expect(c.supplied).toBe(false);
+    for (const r of behind) r.ctrl = 'GER';
+    expect(openSeas(g, 'GER')[channel]).toBe(1);
+    // The Channel itself closed by the enemy's fleet: the quay is there, and nothing can sail from it.
+    const fleet = g.fleets.find((f) => f.nat === 'UK' && surfaceShips(f) > 0)!;
+    g.fleets.push({ ...fleet, id: 9500, ships: { ...fleet.ships, bb: 60 }, base: -1, home: channel, zone: channel, stance: 'patrol' as const });
+    expect(closedTo(g, channel, 'GER')).toBe(true);
+    expect(openSeas(g, 'GER')[channel]).toBe(0);
+    g.fleets.pop();
+    // An ally's harbour or a harbour held with the capital lost is no home port of this kind.
+    const taken = road.filter((r) => r.owner !== 'GER');
+    for (const r of taken) r.ctrl = 'ITA';
+    expect(openSeas(g, 'GER')[channel]).toBe(0);
+    for (const r of taken) r.ctrl = 'GER';
+    expect(openSeas(g, 'GER')[channel]).toBe(1);
+    g.regions[g.nations.GER.capital].ctrl = 'SOV';
+    expect(openSeas(g, 'GER')[channel]).toBe(0);
+    expect(beach.ctrl).toBe('GER');
+  });
+
+  it('is the grand campaign\'s rule alone: in history\'s scenarios supply ships sail from the homeland as before', () => {
+    const hist = createGame(3, null);
+    for (let k = 0; k < 3; k++) runTurnAI(hist);
+    const { channel } = lodged(hist);
+    expect(closedTo(hist, channel, 'GER')).toBe(false);
+    expect(openSeas(hist, 'GER')[channel]).toBe(0);
   });
 });
 
