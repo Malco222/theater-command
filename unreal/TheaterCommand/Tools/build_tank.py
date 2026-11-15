@@ -41,6 +41,7 @@ PAINTS = {
     "canvas": 6,     # a rolled tarpaulin, a bedroll
     "glass": 7,      # headlamps and periscopes
     "rust": 8,       # the exhausts
+    "stripe": 9,     # the thin lines that part the fields of a camouflage
 }
 
 # A figure's paints, by number: the game gives each the colour of the nation's own kit.
@@ -48,6 +49,7 @@ FIGURE_PAINTS = {"tunic": 0, "trousers": 1, "boots": 2, "lower": 3, "straps": 4,
                  "coat": 10, "coat_dark": 11, "leather": 12, "blanket": 13, "hoof": 14}
 PAINT_SET = PAINTS     # (the paints the part being made is painted from: a vehicle's, or a figure's)
 FAR_RATIO = 1.0        # (how much of each part's mesh is kept in the plainer, far mesh: a figure's is thinned, since a base carries several)
+CAMO = None            # (a camouflage in fields for the vehicle being made: the size of its fields in metres, or None for a plain coat)
 
 # The numbers the tank is made from, in metres. A national variant is another set of these.
 SPEC = {
@@ -125,7 +127,9 @@ VARIANTS = {
     "Type97": {"scale": 0.88, "hull_long": 5.4, "upper_lean": 0.9, "glacis": 1.0, "wheels": 6, "wheel_r": 0.27, "wheel_first": -1.75,
                "wheel_step": 0.7, "rollers": (-1.2, 0.0, 1.2), "roller_z": 0.9, "sprocket_x": 2.45, "idler_x": -2.45, "turret": "cast",
                "turret_long": 1.8, "turret_wide": 1.6, "turret_high": 0.6, "turret_x": 0.25, "turret_y": 0.18, "bustle": False,
-               "gun_long": 1.05, "gun_calibre": 0.075, "brake": False},
+               "gun_long": 1.05, "gun_calibre": 0.075, "brake": False,
+               # (the art director's sheet: khaki, with fields of brown (108, 78, 54) and green (86, 98, 62) parted by thin yellow lines (212, 180, 78))
+               "camo": {"size": 1.15, "a": "6C4E36", "b": "56623E", "stripe": "D4B44E"}},
     # A light tank: small, on two pairs of bogies, with a small turret and a thin gun.
     "LightTank": {"scale": 0.78, "hull_long": 5.2, "upper_lean": 0.95, "glacis": 0.8, "wheels": 8, "wheel_r": 0.18,
                   "wheel_xs": (-1.75, -1.3, -0.75, -0.3, 0.3, 0.75, 1.3, 1.75), "rollers": (-1.5, -0.5, 0.5, 1.5), "roller_z": 0.86,
@@ -441,9 +445,18 @@ def build(s):
     return parts
 
 
+def camo_field(p):
+    """Where a point of a camouflaged vehicle lies among the fields of its coat: above 0.18 it is in a field of the second
+    colour, below -0.18 in one of the third, and between them in the vehicle's own. The lines that part the fields run
+    where it is exactly one or the other."""
+    from mathutils import noise
+    return noise.noise(Vector((p.x / CAMO + 3.1, p.y / CAMO + 7.7, p.z / CAMO * 1.6 + 1.3)))
+
+
 def gather(parts, simple=False):
     """Every part's finished mesh (bevels and all) as flat lists the game can read."""
     points, facings, paints, triangles = [], [], [], []
+    camo_a, camo_b = [], []
     seen = {}
     graph = bpy.context.evaluated_depsgraph_get()
     crease = math.cos(math.radians(40.0))
@@ -467,8 +480,25 @@ def gather(parts, simple=False):
         bm.from_object(obj, graph)
         bmesh.ops.transform(bm, matrix=obj.matrix_world, verts=bm.verts)
         bmesh.ops.triangulate(bm, faces=bm.faces)
-        bm.normal_update()
         paint = int(obj["paint"])
+        # (The art director's sheet for the Pacific: a Japanese tank is khaki with fields of brown and of green, parted
+        # by thin yellow lines. The painted plates are cut into small triangles, each point says how far it is into a
+        # brown field and into a green one, and the game mixes the three; the yellow lines are thin ribbons laid along
+        # the very edge of each field, triangle by triangle, so they are sharp however coarse the plates are.)
+        # (Only the big plates carry the fields: hull, turret and guards. A wheel or a hatch cut that fine made the
+        # tank twelve times as heavy as its fellows for nothing the eye could find.)
+        fields = CAMO is not None and paint == PAINT_SET.get("paint", -1) and PAINT_SET is PAINTS and max(obj.dimensions) > 0.9
+        if fields:
+            limit = 0.7 if simple else 0.4
+            for _ in range(8):
+                # (the thin faces of a bevelled edge are left whole: only the flats of the plates are cut)
+                long = [e for e in bm.edges if e.calc_length() > limit and all(f.calc_area() > 0.02 for f in e.link_faces)]
+                if not long:
+                    break
+                bmesh.ops.subdivide_edges(bm, edges=long, cuts=1)
+                bmesh.ops.triangulate(bm, faces=bm.faces)
+        bm.normal_update()
+        ribbons = []
         for face in bm.faces:
             corners = []
             for loop in face.loops:
@@ -489,10 +519,44 @@ def gather(parts, simple=False):
                     points.extend(key[0:3])
                     facings.extend(key[3:6])
                     paints.append(paint)
+                    if fields:
+                        f = camo_field(p)
+                        step = lambda t: 0.0 if t <= 0.0 else 1.0 if t >= 1.0 else t * t * (3.0 - 2.0 * t)
+                        camo_a.append(int(round(100.0 * step((f - 0.15) / 0.06))))
+                        camo_b.append(int(round(100.0 * step((-0.15 - f) / 0.06))))
+                    else:
+                        camo_a.append(0)
+                        camo_b.append(0)
                 corners.append(index)
             triangles.extend(corners)
+            if fields and not simple and face.normal.z > -0.5 and face.calc_area() > 0.004:
+                # The line along the edge of a field, where it crosses this triangle.
+                at = [loop.vert.co.copy() for loop in face.loops]
+                value = [camo_field(q) for q in at]
+                for edge_of in (0.18, -0.18):
+                    cuts = []
+                    for a, b in ((0, 1), (1, 2), (2, 0)):
+                        if (value[a] - edge_of) * (value[b] - edge_of) < 0.0:
+                            cuts.append(at[a].lerp(at[b], (edge_of - value[a]) / (value[b] - value[a])))
+                    if len(cuts) == 2 and (cuts[1] - cuts[0]).length > 1.0e-4:
+                        ribbons.append((cuts[0], cuts[1], face.normal.copy()))
+        for a, b, n in ribbons:
+            side = n.cross(b - a).normalized() * 0.016
+            along = (b - a).normalized() * 0.006              # (run on a little at each end, so the pieces of a line meet)
+            first = len(points) // 3
+            for q in (a - along + side, a - along - side, b + along - side, b + along + side):
+                q = q + n * 0.004
+                points.extend((round(q.x, 4), round(-q.y, 4), round(q.z, 4)))
+                facings.extend((round(n.x, 3), round(-n.y, 3), round(n.z, 3)))
+                paints.append(PAINTS["stripe"])
+                camo_a.append(0)
+                camo_b.append(0)
+            triangles.extend((first, first + 1, first + 2, first, first + 2, first + 3))
         bm.free()
-    return {"points": points, "facings": facings, "paints": paints, "triangles": triangles}
+    out = {"points": points, "facings": facings, "paints": paints, "triangles": triangles}
+    if CAMO is not None:
+        out["camo_a"], out["camo_b"] = camo_a, camo_b
+    return out
 
 
 # ---- Lorries, half-tracks and guns ---------------------------------------------------------------
@@ -888,6 +952,16 @@ def build_figure(k):
     elif kind == "eastern":
         parts.append(ball("helmet", (hx - 0.012, 0.0, top), (0.122, 0.114, 0.108), "helmet", flat_below=0.0))
         parts.append(drum("brim", 0.14, 0.014, (hx - 0.006, 0.0, top), "helmet", 14, axis="Z", radius2=0.124))
+    elif kind == "cap":
+        # (The art director's sheet for the Pacific: the Japanese soldier wears a soft field cap with a short peak and
+        # a sun flap of four cloth strips hanging to his collar behind and at each side. It is cloth, in the cloth's colour.)
+        parts.append(ball("helmet", (hx - 0.008, 0.0, top - 0.005), (0.112, 0.104, 0.07), "helmet", flat_below=0.0))
+        parts.append(drum("cap_band", 0.107, 0.03, (hx - 0.008, 0.0, top - 0.012), "helmet", 12, axis="Z", radius2=0.104))
+        parts.append(box("visor", (0.07, 0.15, 0.01), (hx + 0.125, 0.0, top - 0.014), "helmet", 0.004))
+        parts.append(box("flap", (0.01, 0.1, 0.15), (hx - 0.118, 0.045, top - 0.095), "helmet", 0.003, turn=(0.0, 6.0, 0.0)))
+        parts.append(box("flap", (0.01, 0.1, 0.15), (hx - 0.118, -0.045, top - 0.095), "helmet", 0.003, turn=(0.0, 6.0, 0.0)))
+        for side in (-1.0, 1.0):
+            parts.append(box("flap", (0.09, 0.01, 0.14), (hx - 0.062, side * 0.103, top - 0.09), "helmet", 0.003))
     elif kind == "round":
         parts.append(ball("helmet", (hx - 0.012, 0.0, top - 0.005), (0.124, 0.116, 0.112), "helmet", flat_below=-0.12))
     else:
@@ -976,6 +1050,7 @@ FIGURES = {
     "Rifleman_Adrian": dict(RIFLEMAN, helmet="adrian", rifle=1.08),
     "Rifleman_Round": dict(RIFLEMAN, helmet="round", rifle=1.05),
     "Rifleman_Eastern": dict(RIFLEMAN, helmet="eastern", rifle=1.27, bayonet=True),
+    "Rifleman_Cap": dict(RIFLEMAN, helmet="cap", rifle=1.27, bayonet=True),
 }
 # (and each as a pioneer with a shovel, and mounted)
 for _name, _spec in list(FIGURES.items()):
@@ -1018,8 +1093,9 @@ def marks_of(s):
 def write(name, title, s, out):
     """Sculpts one model and writes it out."""
     fresh_scene()
-    global PAINT_SET, FAR_RATIO
+    global PAINT_SET, FAR_RATIO, CAMO
     kind = s.get("kind", "tank")
+    CAMO = s["camo"]["size"] if s.get("camo") else None
     PAINT_SET = FIGURE_PAINTS if kind == "figure" else PAINTS
     FAR_RATIO = 0.42 if kind == "figure" else 1.0   # (about 450 triangles a rifleman, as the art director ruled)
     parts = (build_figure(s) if kind == "figure" else build_truck(s) if kind == "truck" else build_halftrack(s) if kind == "halftrack"
@@ -1055,6 +1131,8 @@ def write(name, title, s, out):
         "near": near,
         "far": far,
     }
+    if s.get("camo"):
+        data["camo"] = {"a": s["camo"]["a"], "b": s["camo"]["b"], "stripe": s["camo"]["stripe"]}
     with open(out, "w") as file:
         json.dump(data, file, separators=(",", ":"))
     print(f"Theater Command: {name} written to {out}: {len(near['triangles']) // 3} triangles, {len(near['points']) // 3} points "

@@ -32,6 +32,7 @@ namespace SoldierParts
 		Adrian,   // the French helmet: a brim all round and a crest along the top
 		Round,    // the Italian and Polish helmets: a smooth round bowl
 		Eastern,  // the Japanese helmet: a round bowl with a small brim
+		Cap,      // the Japanese field cap: soft, with a short peak and a sun flap to the collar
 	};
 
 	/** What one army's rifleman wears and carries. */
@@ -86,8 +87,9 @@ namespace SoldierParts
 		}
 		else if (Tag == TEXT("USA"))
 		{
-			K.Tunic = Hex(TEXT("8E8660"));
-			K.Trousers = Hex(TEXT("6B6240"));
+			// (The art director's sheet: olive cloth (120, 114, 76), pot helmets, pale leggings.)
+			K.Tunic = Hex(TEXT("78724C"));
+			K.Trousers = Hex(TEXT("6C6644"));
 			K.Boots = Hex(TEXT("4A3626"));
 			K.Lower = Hex(TEXT("B0A47E"));
 			K.Straps = Hex(TEXT("9C9468"));
@@ -125,9 +127,11 @@ namespace SoldierParts
 		}
 		else if (Tag == TEXT("JAP") || Tag == TEXT("JPN"))
 		{
+			// (The art director's sheet for the Pacific: khaki cloth, a soft field cap with a sun flap, and puttees.)
 			K.Boots = Hex(TEXT("4A3626"));
-			K.HelmetPaint = Hex(TEXT("7A6A42"));
-			K.Helmet = EHelmet::Eastern;
+			K.HelmetPaint = K.Tunic * 0.94f;
+			K.Lower = K.Tunic * 0.86f;
+			K.Helmet = EHelmet::Cap;
 			K.Rifle = 1.27;
 			K.bBayonet = true;
 		}
@@ -503,6 +507,7 @@ namespace SoldierParts
 			Helmet(M, Brow, 0.125, 0.132, 0.118, 0.118,
 				[](double, double) { return 0.04; }, [](double, double) { return 0.035; }, K.HelmetPaint, bFine);
 			break;
+		case EHelmet::Cap: // (the figure built in code wears the small helmet in the cap's cloth colour: the cap itself is on the sculpted one)
 		case EHelmet::Eastern:
 			Helmet(M, Brow, 0.124, 0.13, 0.117, 0.112,
 				[](double, double) { return 0.032; }, [](double, double) { return 0.085; }, K.HelmetPaint, bFine);
@@ -550,14 +555,14 @@ void FMiniatureMesh::Figure(const FString& Tag, int32 Pose, const FVector& Where
 		// the table the plainer of its two meshes is used, since a base carries several of them.
 		const SoldierParts::FKit K = SoldierParts::KitFor(Tag);
 		static const TCHAR* const Poses[] = { TEXT("Rifleman_"), TEXT("Rider_"), TEXT("Pioneer_") };
-		static const TCHAR* const Helmets[] = { TEXT("Pot"), TEXT("Stahl"), TEXT("Brodie"), TEXT("Soviet"), TEXT("Adrian"), TEXT("Round"), TEXT("Eastern") };
+		static const TCHAR* const Helmets[] = { TEXT("Pot"), TEXT("Stahl"), TEXT("Brodie"), TEXT("Soviet"), TEXT("Adrian"), TEXT("Round"), TEXT("Eastern"), TEXT("Cap") };
 		// (the horse's coat is one of three, by the nation, as on the figure built in code)
 		const FLinearColor Coats[3] = { SoldierParts::Hex(TEXT("5B3A26")), SoldierParts::Hex(TEXT("3A2A20")), SoldierParts::Hex(TEXT("7A5636")) };
 		const FLinearColor Coat = Coats[GetTypeHash(K.Tunic.ToFColor(true).ToHex()) % 3];
 		const TArray<FLinearColor> Kit = { K.Tunic, K.Trousers, K.Boots, K.bTallBoots ? K.Boots : K.Lower, K.Straps, K.HelmetPaint, K.Pack,
 			SoldierParts::Hex(TEXT("C49A78")), SoldierParts::Hex(TEXT("5E4128")), SoldierParts::Hex(TEXT("2E2F31")),
 			Coat, Coat * 0.35f, K.Straps * 0.9f, SoldierParts::Hex(TEXT("5C5A48")), SoldierParts::Hex(TEXT("2A2420")) };
-		const FString Name = FString(Poses[Pose]) + Helmets[FMath::Clamp(static_cast<int32>(K.Helmet), 0, 6)];
+		const FString Name = FString(Poses[Pose]) + Helmets[FMath::Clamp(static_cast<int32>(K.Helmet), 0, 7)];
 		if (Sculpted(Name, Tag, Where, Metre, Turn, !bFine, &Kit))
 		{
 			return;

@@ -628,6 +628,11 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 		bool bAircraft = false, bNationPaint = false;
 		TArray<FLinearColor> PaintColours;
 		TArray<int32> Wear, Blend, Soot; // (each 0 to 100 a point: chipped paint, how far into the second camouflage colour, exhaust soot)
+		// (A vehicle with a camouflage in fields: each point of its paint says how far it is into a field of the second
+		// colour and of the third, and the thin lines that part the fields are a paint of their own.)
+		bool bFields = false;
+		TArray<int32> FieldA, FieldB;
+		FLinearColor FieldColourA = FLinearColor::Black, FieldColourB = FLinearColor::Black, FieldStripe = FLinearColor::White;
 		FLinearColor NumberInk = FLinearColor(FColor::FromHex(TEXT("F2F0E8"))); // what the side number is painted in: dark on a pale machine
 		struct FMark
 		{
@@ -691,6 +696,18 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 						if (NumberAt->Num() >= 5) { Raw->NumberLean = (*NumberAt)[4]->AsNumber(); }
 					}
 					(*Marks)->TryGetNumberField(TEXT("roof"), Raw->Roof);
+				}
+				const TSharedPtr<FJsonObject>* Fields = nullptr;
+				const TArray<TSharedPtr<FJsonValue>> *FieldListA = nullptr, *FieldListB = nullptr;
+				if (File->TryGetObjectField(TEXT("camo"), Fields) && (*Part)->TryGetArrayField(TEXT("camo_a"), FieldListA) && (*Part)->TryGetArrayField(TEXT("camo_b"), FieldListB))
+				{
+					Raw->bFields = true;
+					FString Hexed;
+					if ((*Fields)->TryGetStringField(TEXT("a"), Hexed)) { Raw->FieldColourA = FLinearColor(FColor::FromHex(Hexed)); }
+					if ((*Fields)->TryGetStringField(TEXT("b"), Hexed)) { Raw->FieldColourB = FLinearColor(FColor::FromHex(Hexed)); }
+					if ((*Fields)->TryGetStringField(TEXT("stripe"), Hexed)) { Raw->FieldStripe = FLinearColor(FColor::FromHex(Hexed)); }
+					for (const TSharedPtr<FJsonValue>& Value : *FieldListA) { Raw->FieldA.Add(static_cast<int32>(Value->AsNumber())); }
+					for (const TSharedPtr<FJsonValue>& Value : *FieldListB) { Raw->FieldB.Add(static_cast<int32>(Value->AsNumber())); }
 				}
 				FString KindOfModel;
 				if (File->TryGetStringField(TEXT("kind"), KindOfModel) && KindOfModel == TEXT("aircraft"))
@@ -828,9 +845,25 @@ bool FMiniatureMesh::Sculpted(const FString& Name, const FString& Tag, const FVe
 				Fresh.Add(Raw->Points[K], Raw->Facings[K], (*Kit)[FMath::Clamp(Raw->Paints[K], 0, Kit->Num() - 1)].ToFColor(true));
 				continue;
 			}
+			if (Raw->Paints[K] == 9)
+			{
+				// (the thin line that parts two fields of a camouflage: paint on the plate, in the file's own colour)
+				Fresh.Finish = 128;
+				Fresh.Add(Raw->Points[K], Raw->Facings[K], Raw->FieldStripe.ToFColor(true));
+				continue;
+			}
 			const int32 Kind = FMath::Clamp(Raw->Paints[K], 0, 8);
 			Fresh.Finish = bMetal[Kind] ? 128 : 255;
-			Fresh.Add(Raw->Points[K], Raw->Facings[K], Colours[Kind].ToFColor(true));
+			// (The art director's sheet: an American vehicle's olive is faded by the sun on what faces the sky, to (106, 112, 72).)
+			const bool bFadedTop = Kind == 0 && Tag == TEXT("USA") && Raw->Facings[K].Z > 0.7;
+			FLinearColor Coat = bFadedTop ? FLinearColor(FColor(106, 112, 72)) : Colours[Kind];
+			if (Raw->bFields && Kind == 0 && Raw->FieldA.IsValidIndex(K) && Raw->FieldB.IsValidIndex(K))
+			{
+				// (a camouflage in fields: the plate's own colour, with the second and third mixed in as far as the point lies in each)
+				Coat = FMath::Lerp(Coat, Raw->FieldColourA, FMath::Clamp(Raw->FieldA[K], 0, 100) / 100.0f);
+				Coat = FMath::Lerp(Coat, Raw->FieldColourB, FMath::Clamp(Raw->FieldB[K], 0, 100) / 100.0f);
+			}
+			Fresh.Add(Raw->Points[K], Raw->Facings[K], Coat.ToFColor(true));
 		}
 		for (int32 K = 0; K + 2 < Raw->Triangles.Num(); K += 3)
 		{
@@ -3003,11 +3036,11 @@ FLinearColor FMiniatureMesh::UniformColour(const FString& Tag)
 {
 	static const TMap<FString, const TCHAR*> Cloth = {
 		{ TEXT("GER"), TEXT("5F665C") }, // field grey
-		{ TEXT("USA"), TEXT("6B6A45") }, // olive drab
+		{ TEXT("USA"), TEXT("78724C") }, // olive cloth (120, 114, 76)
 		{ TEXT("UK"), TEXT("8B7B52") }, // khaki serge
 		{ TEXT("CAN"), TEXT("8B7B52") }, { TEXT("AUS"), TEXT("8B7B52") }, { TEXT("NZL"), TEXT("8B7B52") }, { TEXT("SAF"), TEXT("8B7B52") }, { TEXT("IND"), TEXT("8B7B52") },
 		{ TEXT("SOV"), TEXT("7B7748") }, // khaki-green
-		{ TEXT("JAP"), TEXT("9A8450") }, { TEXT("JPN"), TEXT("9A8450") }, // mustard khaki
+		{ TEXT("JAP"), TEXT("A08856") }, { TEXT("JPN"), TEXT("A08856") }, // khaki cloth (160, 136, 86)
 		{ TEXT("FRA"), TEXT("7A7250") }, { TEXT("VIC"), TEXT("7A7250") }, { TEXT("FFR"), TEXT("7A7250") }, // the khaki of 1940
 		{ TEXT("ITA"), TEXT("73806C") }, // grey-green
 		{ TEXT("POL"), TEXT("7C7450") }, { TEXT("BEL"), TEXT("857A56") }, { TEXT("NED"), TEXT("6E7B6A") }, // Dutch field grey-green
@@ -3024,10 +3057,10 @@ FLinearColor FMiniatureMesh::VehicleColour(const FString& Tag)
 {
 	static const TMap<FString, const TCHAR*> Paint = {
 		{ TEXT("GER"), TEXT("4E5459") }, // tank grey
-		{ TEXT("USA"), TEXT("5A5B3C") }, // olive drab
+		{ TEXT("USA"), TEXT("565C3A") }, // olive drab (the art director's sheet: 86, 92, 58)
 		{ TEXT("UK"), TEXT("65704E") }, { TEXT("CAN"), TEXT("65704E") }, { TEXT("AUS"), TEXT("65704E") }, { TEXT("IND"), TEXT("65704E") },
 		{ TEXT("SOV"), TEXT("4F5E3E") }, // protective green
-		{ TEXT("JAP"), TEXT("7A6A42") }, { TEXT("JPN"), TEXT("7A6A42") },
+		{ TEXT("JAP"), TEXT("988256") }, { TEXT("JPN"), TEXT("988256") }, // khaki (152, 130, 86)
 		{ TEXT("FRA"), TEXT("5E6A48") }, { TEXT("VIC"), TEXT("5E6A48") },
 		{ TEXT("ITA"), TEXT("8A7F5E") }, // sand
 		{ TEXT("POL"), TEXT("66684A") },
