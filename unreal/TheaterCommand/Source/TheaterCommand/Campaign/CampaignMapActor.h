@@ -8,6 +8,7 @@
 #include "Campaign/CampaignGround.h"
 #include "Campaign/CampaignTerrain.h"
 #include "Campaign/CampaignView.h"
+#include "Campaign/CampaignMiniatures.h"
 #include "CampaignMapActor.generated.h"
 
 class UProceduralMeshComponent;
@@ -474,6 +475,8 @@ private:
 	void BuildWarRoom();
 	void BuildLabels();
 	void BuildTowns();
+	/** What the builder of a town is told of the place: its size, its works, its kit, its quay. (The table's towns and the studio's picture of one are built from the same.) */
+	void FillTownSite(const FCampaignRegion& Region, FMiniatureMesh::FTownSite& Site);
 
 	/** For looking closely at the models ("-TheaterParade=Ardennes"): sets them out in a row, large, on a board over the region named. */
 	void BuildParade();

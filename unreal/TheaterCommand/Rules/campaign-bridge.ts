@@ -84,6 +84,8 @@ import type { AirMission, Stance } from '../../../src/campaign/types';
 import { DIFFICULTY } from '../../../src/campaign/difficulty';
 import { airAct, airPage } from '../../../src/campaign/airpages';
 import { fleetOptions, fleetView, orderBombard, orderEscort, orderMerge, orderSplit, previewBombard, whyNotSplit } from '../../../src/campaign/turn';
+import { raidMenu as raidKinds, raidTargetsFor as raidStopsFor } from '../../../src/campaign/turn';
+import type { RaidKind, RaidPlan } from '../../../src/campaign/airwar';
 import { orderScout as sendScout, previewRaid as weighRaid, joinOffers, orderJoinAll, orderSendBack, orderEvacuate, evePlan, orderEvePlan, orderCash, orderSeen, orderDrafts, orderSack } from '../../../src/campaign/turn';
 import { whyNotCash } from '../../../src/campaign/stories';
 import { popular } from '../../../src/campaign/commanders';
@@ -3625,6 +3627,84 @@ function foldPage(s: Game, reg: number): Page | null {
   };
 }
 
+/** What kind of picture a raid's target wants: the thing the bombs are meant for. */
+function raidSort(s: Game, kind: string, target: number): string {
+  if (kind === 'fleet' || kind === 'strike') return 'fleet';
+  if (kind === 'harbour') return 'harbour';
+  if (kind === 'superiority') return 'airfield';
+  if (kind === 'ground') return 'troops';
+  if (kind === 'line') return 'works';
+  if (kind === 'town') return 'town';
+  return (s.regions[target]?.fac ?? 0) > 0 ? 'factories' : 'rail';
+}
+
+/**
+ * (Brian's ask of 15 November 2026, ruling 54.) A raid being planned, as a card: the target and the others in reach,
+ * every air group as a seat with its aircraft and its readiness, and the forecast as numbers for bars. All of it is
+ * the rules' own preview of the raid: nothing is reckoned here. (Morale comes when the rules have it.)
+ */
+function raidCardOf(s: Game, kind: string, target: number, picked: number[]) {
+  try {
+    const k = kind as RaidKind;
+    const p: RaidPlan = weighRaid(s, k, target, picked);
+    const me = s.human ?? '';
+    const sea = kind === 'fleet' || kind === 'strike';
+    const link = (t: number, list: number[]): string => `open:plan:${kind}:${t}:${list.join('.')}`;
+    const picture = (t: number, holder: string): string => `Target:${raidSort(s, kind, t)}:${sea ? -1 : t}:${holder || 'X'}`;
+    const stops = raidStopsFor(s, k, -1);
+    const here = stops.find((t) => t.id === target);
+    const lead = p.seats.find((x) => x.picked && x.kind !== 'ftr') ?? p.seats.find((x) => x.picked);
+    return {
+      kind, kindLabel: raidKinds(s).find((x) => x.key === kind)?.label ?? '', why: p.why ?? '',
+      target: { id: target, name: here?.name ?? p.place, km: Math.round(here?.km ?? 0), holder: here?.holder ?? '', sort: raidSort(s, kind, target), act: '', now: true, picture: picture(target, here?.holder ?? '') },
+      // (about twenty words of prose on the card at most: the first sentence of what a hit would do; the rest is on the pointer)
+      what: here?.what ?? '', effect: p.why ? '' : ((t: string): string => { const i = t.indexOf('. '); return i > 0 && t.length > 90 ? t.slice(0, i + 1) : t; })(p.effects[0] ?? ''),
+      effects: p.why ? '' : p.effects.join(' '),
+      // (The art director's card: up to three boxes, each one number and a few words on what a hit does. The rules
+      // give these as sentences today, so the figures are read out of the rules' own words; a sentence that fits
+      // none of these gets no box, and the whole of it is on the pointer.)
+      hits: p.why ? [] : ((all: string): { n: string; words: string }[] => {
+        const out: { n: string; words: string }[] = [];
+        const take = (re: RegExp, n: (m: RegExpMatchArray) => string, words: string | ((m: RegExpMatchArray) => string)): void => {
+          const m = all.match(re);
+          if (m && out.length < 3) out.push({ n: n(m), words: typeof words === 'string' ? words : words(m) });
+        };
+        take(/stop about (\d+(?:\.\d+)?)% of [^.]*output/, (m) => `\u2212${m[1]}%`, 'output, for a month');
+        take(/(\d+)% chance of cutting the railway/, (m) => `${m[1]}%`, 'chance the railway is cut');
+        take(/(\d+)% chance of wrecking a factory/, (m) => `${m[1]}%`, 'chance a factory is wrecked');
+        take(/lose about (\d+)% of their organisation/, (m) => `\u2212${m[1]}%`, 'of the troops\' organisation');
+        take(/break down about (\d+)% of the works/, (m) => `\u2212${m[1]}%`, 'of the town\'s works');
+        take(/(\d+)% of the town guard/, (m) => `\u2212${m[1]}%`, 'of the town guard');
+        take(/Fighter odds (\d+(?:\.\d+)?) to 1/, (m) => `${m[1]} to 1`, 'fighter odds going in');
+        take(/with (\d+(?:\.\d+)?) times what the defender/, (m) => `${m[1]}\u00D7`, 'the defender\'s fighters wins the sky');
+        take(/lose up to (\d+)% of their number/, (m) => `${m[1]}%`, 'of warships caught, at most');
+        take(/About (\d+(?:\.\d+)?) bombs and torpedoes should hit/, (m) => m[1], 'bombs and torpedoes should hit');
+        take(/chance of (\d+)% for (an? [a-z ]+?)[.,]/, (m) => `${m[1]}%`, (m) => `chance ${m[2]} goes down`);
+        take(/takes? about (\d+(?:\.\d+)?) months? off/, (m) => `\u2212${m[1]}`, 'months of fieldworks');
+        return out;
+      })(p.effects.join(' ')),
+      from: lead?.baseName ?? '', holderName: s.nations[here?.holder ?? '']?.name ?? '', inReach: stops.length,
+      allAct: `open:raid:${kind}`, otherAct: 'open:raids',
+      strip: stops.slice(0, 10).map((t) => {
+        // (the same groups against the next target where they can fly it; the rules' own pick where they cannot)
+        let q = weighRaid(s, k, t.id, p.picked);
+        if (q.why || !q.picked.length) q = weighRaid(s, k, t.id);
+        return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, q.picked), now: t.id === target, picture: picture(t.id, t.holder) };
+      }),
+      seats: p.seats.map((x) => ({
+        id: x.id, name: x.name, kind: x.kind, aircraft: Math.round(x.aircraft), base: x.baseName, afloat: x.ship >= 0, km: Math.round(x.km), ready: x.ready,
+        picked: x.picked, locked: x.locked, lead: !!lead && x.id === lead.id, why: x.why ?? '', note: x.note, nat: me,
+        act: x.why ? '' : x.picked ? link(target, p.picked.filter((id) => id !== x.id)) : link(target, [...p.picked, x.id]),
+      })),
+      success: p.success, verdict: p.verdict, bombers: Math.round(p.bombers), bomberLoss: Math.round(p.bomberLossN), bomberShare: p.bomberLoss,
+      fighters: Math.round(p.fighters), fighterLoss: Math.round(p.fighterLossN), foeLoss: Math.round(p.foeLossN),
+      meets: p.meets.map((m) => ({ nat: m.nat, name: m.name, base: m.baseName, ftr: Math.round(m.ftr), able: Math.round(m.able) })),
+      massed: p.massed, offPatrol: p.offPatrol, ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ''}`).join('\n'),
+      fly: { label: 'FLY THE RAID', act: `raid:${kind}:${target}:${p.picked.join('.')}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? 'Flown at once. Every group that goes is away for the rest of the month.' },
+    };
+  } catch { return null; }
+}
+
 function page(id: string, region = -1) {
   const s = game();
   const part = id.split(':');
@@ -3654,6 +3734,12 @@ function page(id: string, region = -1) {
       p.note = bar.staff ? `${bar.line}${p.note ? `  ${p.note}` : ''}` : p.note;
       p.top = [...p.top, { label: bar.label, act: bar.act, ok: true, tip: bar.tip }];
     }
+  }
+  // (Ruling 54.) A raid being planned is set out as a card: the words give way to it, and the whole list of
+  // targets stays one button away.
+  const card = p && part[0] === 'plan' ? raidCardOf(s, part[1], Number(part[2]), (part[3] ?? '').split('.').filter(Boolean).map(Number).filter((n) => Number.isFinite(n))) : null;
+  if (p && card) {
+    return { ok: true, ...p, headline: '', note: '', top: [], card };
   }
   return p ? { ok: true, ...p } : { ok: false };
 }

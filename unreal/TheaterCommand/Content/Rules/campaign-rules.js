@@ -30114,6 +30114,106 @@ ${standing3}`,
       sections: sections.length ? sections : [{ heading: "NOTHING TO FOLD", text: "No two corps here can be folded together this month.", rows: [] }]
     };
   }
+  function raidSort(s, kind, target) {
+    if (kind === "fleet" || kind === "strike") return "fleet";
+    if (kind === "harbour") return "harbour";
+    if (kind === "superiority") return "airfield";
+    if (kind === "ground") return "troops";
+    if (kind === "line") return "works";
+    if (kind === "town") return "town";
+    return (s.regions[target]?.fac ?? 0) > 0 ? "factories" : "rail";
+  }
+  function raidCardOf(s, kind, target, picked) {
+    try {
+      const k = kind;
+      const p = previewRaid(s, k, target, picked);
+      const me = s.human ?? "";
+      const sea = kind === "fleet" || kind === "strike";
+      const link = (t, list4) => `open:plan:${kind}:${t}:${list4.join(".")}`;
+      const picture = (t, holder) => `Target:${raidSort(s, kind, t)}:${sea ? -1 : t}:${holder || "X"}`;
+      const stops = raidTargetsFor(s, k, -1);
+      const here = stops.find((t) => t.id === target);
+      const lead2 = p.seats.find((x) => x.picked && x.kind !== "ftr") ?? p.seats.find((x) => x.picked);
+      return {
+        kind,
+        kindLabel: raidMenu(s).find((x) => x.key === kind)?.label ?? "",
+        why: p.why ?? "",
+        target: { id: target, name: here?.name ?? p.place, km: Math.round(here?.km ?? 0), holder: here?.holder ?? "", sort: raidSort(s, kind, target), act: "", now: true, picture: picture(target, here?.holder ?? "") },
+        // (about twenty words of prose on the card at most: the first sentence of what a hit would do; the rest is on the pointer)
+        what: here?.what ?? "",
+        effect: p.why ? "" : ((t) => {
+          const i = t.indexOf(". ");
+          return i > 0 && t.length > 90 ? t.slice(0, i + 1) : t;
+        })(p.effects[0] ?? ""),
+        effects: p.why ? "" : p.effects.join(" "),
+        // (The art director's card: up to three boxes, each one number and a few words on what a hit does. The rules
+        // give these as sentences today, so the figures are read out of the rules' own words; a sentence that fits
+        // none of these gets no box, and the whole of it is on the pointer.)
+        hits: p.why ? [] : ((all) => {
+          const out = [];
+          const take = (re, n, words) => {
+            const m = all.match(re);
+            if (m && out.length < 3) out.push({ n: n(m), words: typeof words === "string" ? words : words(m) });
+          };
+          take(/stop about (\d+(?:\.\d+)?)% of [^.]*output/, (m) => `−${m[1]}%`, "output, for a month");
+          take(/(\d+)% chance of cutting the railway/, (m) => `${m[1]}%`, "chance the railway is cut");
+          take(/(\d+)% chance of wrecking a factory/, (m) => `${m[1]}%`, "chance a factory is wrecked");
+          take(/lose about (\d+)% of their organisation/, (m) => `−${m[1]}%`, "of the troops' organisation");
+          take(/break down about (\d+)% of the works/, (m) => `−${m[1]}%`, "of the town's works");
+          take(/(\d+)% of the town guard/, (m) => `−${m[1]}%`, "of the town guard");
+          take(/Fighter odds (\d+(?:\.\d+)?) to 1/, (m) => `${m[1]} to 1`, "fighter odds going in");
+          take(/with (\d+(?:\.\d+)?) times what the defender/, (m) => `${m[1]}×`, "the defender's fighters wins the sky");
+          take(/lose up to (\d+)% of their number/, (m) => `${m[1]}%`, "of warships caught, at most");
+          take(/About (\d+(?:\.\d+)?) bombs and torpedoes should hit/, (m) => m[1], "bombs and torpedoes should hit");
+          take(/chance of (\d+)% for (an? [a-z ]+?)[.,]/, (m) => `${m[1]}%`, (m) => `chance ${m[2]} goes down`);
+          take(/takes? about (\d+(?:\.\d+)?) months? off/, (m) => `−${m[1]}`, "months of fieldworks");
+          return out;
+        })(p.effects.join(" ")),
+        from: lead2?.baseName ?? "",
+        holderName: s.nations[here?.holder ?? ""]?.name ?? "",
+        inReach: stops.length,
+        allAct: `open:raid:${kind}`,
+        otherAct: "open:raids",
+        strip: stops.slice(0, 10).map((t) => {
+          let q = previewRaid(s, k, t.id, p.picked);
+          if (q.why || !q.picked.length) q = previewRaid(s, k, t.id);
+          return { id: t.id, name: t.name, km: Math.round(t.km), holder: t.holder, sort: raidSort(s, kind, t.id), act: link(t.id, q.picked), now: t.id === target, picture: picture(t.id, t.holder) };
+        }),
+        seats: p.seats.map((x) => ({
+          id: x.id,
+          name: x.name,
+          kind: x.kind,
+          aircraft: Math.round(x.aircraft),
+          base: x.baseName,
+          afloat: x.ship >= 0,
+          km: Math.round(x.km),
+          ready: x.ready,
+          picked: x.picked,
+          locked: x.locked,
+          lead: !!lead2 && x.id === lead2.id,
+          why: x.why ?? "",
+          note: x.note,
+          nat: me,
+          act: x.why ? "" : x.picked ? link(target, p.picked.filter((id) => id !== x.id)) : link(target, [...p.picked, x.id])
+        })),
+        success: p.success,
+        verdict: p.verdict,
+        bombers: Math.round(p.bombers),
+        bomberLoss: Math.round(p.bomberLossN),
+        bomberShare: p.bomberLoss,
+        fighters: Math.round(p.fighters),
+        fighterLoss: Math.round(p.fighterLossN),
+        foeLoss: Math.round(p.foeLossN),
+        meets: p.meets.map((m) => ({ nat: m.nat, name: m.name, base: m.baseName, ftr: Math.round(m.ftr), able: Math.round(m.able) })),
+        massed: p.massed,
+        offPatrol: p.offPatrol,
+        ticket: p.lines.map((l) => `${l.label}: ${l.value}${l.effect ? ` (${l.effect})` : ""}`).join("\n"),
+        fly: { label: "FLY THE RAID", act: `raid:${kind}:${target}:${p.picked.join(".")}`, ok: humanUp(s) && !onEve(s) && !p.why, tip: p.why ?? "Flown at once. Every group that goes is away for the rest of the month." }
+      };
+    } catch {
+      return null;
+    }
+  }
   function page(id, region = -1) {
     const s = game();
     const part = id.split(":");
@@ -30134,6 +30234,10 @@ ${standing3}`,
         p.note = bar.staff ? `${bar.line}${p.note ? `  ${p.note}` : ""}` : p.note;
         p.top = [...p.top, { label: bar.label, act: bar.act, ok: true, tip: bar.tip }];
       }
+    }
+    const card = p && part[0] === "plan" ? raidCardOf(s, part[1], Number(part[2]), (part[3] ?? "").split(".").filter(Boolean).map(Number).filter((n) => Number.isFinite(n))) : null;
+    if (p && card) {
+      return { ok: true, ...p, headline: "", note: "", top: [], card };
     }
     return p ? { ok: true, ...p } : { ok: false };
   }

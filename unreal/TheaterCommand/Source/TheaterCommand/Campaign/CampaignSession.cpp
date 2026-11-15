@@ -2596,6 +2596,118 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 	Object->TryGetStringField(TEXT("headline"), Out.Headline);
 	Object->TryGetStringField(TEXT("note"), Out.Note);
 	ReadButtons(Object, TEXT("top"), Out.Top);
+	// (Ruling 54.) A raid being planned comes with its card: the target, the groups and the forecast, as the rules reckon them.
+	const TSharedPtr<FJsonObject>* CardObject = nullptr;
+	if (Object->TryGetObjectField(TEXT("card"), CardObject) && CardObject && CardObject->IsValid())
+	{
+		const TSharedPtr<FJsonObject>& Told = *CardObject;
+		FRaidCard& Card = Out.Card;
+		Card.bValid = true;
+		Told->TryGetStringField(TEXT("kind"), Card.Kind);
+		Told->TryGetStringField(TEXT("kindLabel"), Card.KindLabel);
+		Told->TryGetStringField(TEXT("why"), Card.Why);
+		Told->TryGetStringField(TEXT("what"), Card.What);
+		Told->TryGetStringField(TEXT("effect"), Card.Effect);
+		Told->TryGetStringField(TEXT("effects"), Card.Effects);
+		Told->TryGetStringField(TEXT("from"), Card.From);
+		Told->TryGetStringField(TEXT("holderName"), Card.HolderName);
+		Told->TryGetStringField(TEXT("allAct"), Card.AllAct);
+		Told->TryGetStringField(TEXT("otherAct"), Card.OtherAct);
+		Told->TryGetNumberField(TEXT("inReach"), Card.InReach);
+		const TArray<TSharedPtr<FJsonValue>>* Hits = nullptr;
+		if (Told->TryGetArrayField(TEXT("hits"), Hits))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Hits)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FString HitNumber, HitWords;
+				Entry->TryGetStringField(TEXT("n"), HitNumber);
+				Entry->TryGetStringField(TEXT("words"), HitWords);
+				Card.Hits.Emplace(HitNumber, HitWords);
+			}
+		}
+		Told->TryGetStringField(TEXT("verdict"), Card.Verdict);
+		Told->TryGetStringField(TEXT("massed"), Card.Massed);
+		Told->TryGetStringField(TEXT("offPatrol"), Card.OffPatrol);
+		Told->TryGetStringField(TEXT("ticket"), Card.Ticket);
+		Told->TryGetNumberField(TEXT("success"), Card.Success);
+		Told->TryGetNumberField(TEXT("bombers"), Card.Bombers);
+		Told->TryGetNumberField(TEXT("bomberLoss"), Card.BomberLoss);
+		Told->TryGetNumberField(TEXT("bomberShare"), Card.BomberShare);
+		Told->TryGetNumberField(TEXT("fighters"), Card.Fighters);
+		Told->TryGetNumberField(TEXT("fighterLoss"), Card.FighterLoss);
+		Told->TryGetNumberField(TEXT("foeLoss"), Card.FoeLoss);
+		auto ReadStop = [](const TSharedPtr<FJsonObject>& Entry, FRaidStop& Stop)
+		{
+			Entry->TryGetNumberField(TEXT("id"), Stop.Id);
+			Entry->TryGetStringField(TEXT("name"), Stop.Name);
+			Entry->TryGetStringField(TEXT("sort"), Stop.Sort);
+			Entry->TryGetStringField(TEXT("holder"), Stop.Holder);
+			Entry->TryGetStringField(TEXT("act"), Stop.Act);
+			Entry->TryGetStringField(TEXT("picture"), Stop.Picture);
+			Entry->TryGetNumberField(TEXT("km"), Stop.Km);
+			Entry->TryGetBoolField(TEXT("now"), Stop.bNow);
+		};
+		const TSharedPtr<FJsonObject>* TargetObject = nullptr;
+		if (Told->TryGetObjectField(TEXT("target"), TargetObject) && TargetObject && TargetObject->IsValid())
+		{
+			ReadStop(*TargetObject, Card.Target);
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Strip = nullptr;
+		if (Told->TryGetArrayField(TEXT("strip"), Strip))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Strip)
+			{
+				ReadStop(Value->AsObject(), Card.Strip.AddDefaulted_GetRef());
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Seats = nullptr;
+		if (Told->TryGetArrayField(TEXT("seats"), Seats))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Seats)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FRaidSeat& Seat = Card.Seats.AddDefaulted_GetRef();
+				Entry->TryGetNumberField(TEXT("id"), Seat.Id);
+				Entry->TryGetStringField(TEXT("name"), Seat.Name);
+				Entry->TryGetStringField(TEXT("kind"), Seat.Kind);
+				Entry->TryGetStringField(TEXT("nat"), Seat.Nation);
+				Entry->TryGetStringField(TEXT("base"), Seat.Base);
+				Entry->TryGetStringField(TEXT("why"), Seat.Why);
+				Entry->TryGetStringField(TEXT("note"), Seat.Note);
+				Entry->TryGetStringField(TEXT("act"), Seat.Act);
+				Entry->TryGetNumberField(TEXT("aircraft"), Seat.Aircraft);
+				Entry->TryGetNumberField(TEXT("km"), Seat.Km);
+				Entry->TryGetNumberField(TEXT("ready"), Seat.Ready);
+				Entry->TryGetBoolField(TEXT("picked"), Seat.bPicked);
+				Entry->TryGetBoolField(TEXT("locked"), Seat.bLocked);
+				Entry->TryGetBoolField(TEXT("lead"), Seat.bLead);
+				Entry->TryGetBoolField(TEXT("afloat"), Seat.bAfloat);
+			}
+		}
+		const TArray<TSharedPtr<FJsonValue>>* Meets = nullptr;
+		if (Told->TryGetArrayField(TEXT("meets"), Meets))
+		{
+			for (const TSharedPtr<FJsonValue>& Value : *Meets)
+			{
+				const TSharedPtr<FJsonObject> Entry = Value->AsObject();
+				FRaidMeet& Meet = Card.Meets.AddDefaulted_GetRef();
+				Entry->TryGetStringField(TEXT("nat"), Meet.Tag);
+				Entry->TryGetStringField(TEXT("name"), Meet.Name);
+				Entry->TryGetStringField(TEXT("base"), Meet.Base);
+				Entry->TryGetNumberField(TEXT("ftr"), Meet.Fighters);
+				Entry->TryGetNumberField(TEXT("able"), Meet.Able);
+			}
+		}
+		const TSharedPtr<FJsonObject>* FlyObject = nullptr;
+		if (Told->TryGetObjectField(TEXT("fly"), FlyObject) && FlyObject && FlyObject->IsValid())
+		{
+			(*FlyObject)->TryGetStringField(TEXT("label"), Card.Fly.Label);
+			(*FlyObject)->TryGetStringField(TEXT("act"), Card.Fly.Act);
+			(*FlyObject)->TryGetStringField(TEXT("tip"), Card.Fly.Tip);
+			(*FlyObject)->TryGetBoolField(TEXT("ok"), Card.Fly.bOk);
+		}
+	}
 	const TArray<TSharedPtr<FJsonValue>>* Sections = nullptr;
 	if (Object->TryGetArrayField(TEXT("sections"), Sections))
 	{

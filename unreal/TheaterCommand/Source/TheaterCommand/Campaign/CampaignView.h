@@ -294,9 +294,79 @@ struct FPageSection
  * A room whose words and buttons the rules write and the game only draws: the secret service, the last act.
  * A new room in the rules needs nothing new here.
  */
+/** (Ruling 54.) One air group on the raid card: what it is, where it flies from, how fit it is, and whether it goes. */
+struct FRaidSeat
+{
+	int32 Id = INDEX_NONE;
+	FString Name;
+	FString Kind; // "ftr", "bmr" or "mixed"
+	FString Nation;
+	FString Base; // its airfield, or the fleet whose carriers it flies from
+	FString Why; // why it cannot go; empty when it can
+	FString Note; // what going means for it, in a few words
+	FString Act; // what to pass back to add it or leave it out
+	int32 Aircraft = 0;
+	int32 Km = 0;
+	float Ready = 0.0f; // 0 to 1
+	bool bPicked = false;
+	bool bLocked = false; // it goes because it is ordered to stick with its bombers
+	bool bLead = false;
+	bool bAfloat = false;
+};
+
+/** A target on the raid card: the one being planned, or another in reach to step to. */
+struct FRaidStop
+{
+	int32 Id = INDEX_NONE;
+	FString Name;
+	FString Sort; // factories, rail, harbour, airfield, works, troops, fleet, town
+	FString Holder;
+	FString Act;
+	FString Picture; // what the studio is asked for: "Target:<sort>:<province or -1>:<holder>"
+	int32 Km = 0;
+	bool bNow = false;
+};
+
+/** An enemy fighter group that would rise to meet the raid. */
+struct FRaidMeet
+{
+	FString Tag;
+	FString Name;
+	FString Base;
+	int32 Fighters = 0;
+	int32 Able = 0; // how many of them can reach the raid
+};
+
+/** The raid card: the target as a picture, the forecast as numbers for bars, and a seat for every air group. */
+struct FRaidCard
+{
+	bool bValid = false;
+	FString Kind, KindLabel;
+	FString Why; // why it cannot be flown as picked; empty when it can
+	FRaidStop Target;
+	FString What; // what is there, in a few words
+	FString Effect; // what a hit would do, in one line
+	FString Effects; // and in full, for the pointer
+	TArray<TPair<FString, FString>> Hits; // up to three: a number, and a few words on what a hit does
+	FString From; // the lead group's airfield, which the distance is counted from
+	FString HolderName; // the country that holds the target
+	FString AllAct, OtherAct; // the whole list of targets; another kind of raid
+	int32 InReach = 0; // how many targets are in reach
+	TArray<FRaidStop> Strip;
+	TArray<FRaidSeat> Seats;
+	TArray<FRaidMeet> Meets;
+	float Success = 0.0f;
+	FString Verdict;
+	int32 Bombers = 0, BomberLoss = 0, Fighters = 0, FighterLoss = 0, FoeLoss = 0;
+	float BomberShare = 0.0f;
+	FString Massed, OffPatrol, Ticket; // for the pointer: what meeting up is worth, what it costs at home, the battle ticket
+	FPageButton Fly;
+};
+
 struct FOfficePage
 {
 	bool bValid = false;
+	FRaidCard Card; // (ruling 54) set where the page is a raid being planned
 	FString Id;
 	FString Title;
 	FString Headline;

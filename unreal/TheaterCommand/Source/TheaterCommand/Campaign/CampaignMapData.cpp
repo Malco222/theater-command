@@ -411,6 +411,9 @@ bool FCampaignMapData::LoadNations(const FString& Path, FString& OutError)
 		{ TEXT("GUA"), TEXT("9383C4") }, { TEXT("ELS"), TEXT("C98494") }, { TEXT("HON"), TEXT("9DBD8C") }, { TEXT("NIC"), TEXT("BF7F73") },
 		{ TEXT("COS"), TEXT("7FAE8C") }, { TEXT("PAN"), TEXT("A8607F") }, { TEXT("HAI"), TEXT("8FBA7A") }, { TEXT("DOM"), TEXT("B08FB5") },
 		{ TEXT("ECU"), TEXT("CF8F66") }, { TEXT("BOL"), TEXT("6FA58C") }, { TEXT("PAR"), TEXT("C4838F") }, { TEXT("URU"), TEXT("9D8CC4") },
+		// (The art director's round 31: Venezuela's turquoise read as shallow sea from the top, 6.9 from the water
+		// beside it. Emerald, provisional until Brian approves it.)
+		{ TEXT("VEN"), TEXT("1F9D6B") },
 	};
 	for (const auto& Paint : TablePaints)
 	{

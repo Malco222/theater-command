@@ -3481,8 +3481,13 @@ void ACampaignMapActor::BuildWaterways()
 				// so that it and the painted tributaries that run into it are one water. Brown in the jungle.)
 				float Shares[WorldLook::Count];
 				FCampaignClimate::Get().SharesAt(Data.LatitudeAt(Path[K].Y), Data.LongitudeAt(Path[K].X), Shares);
-				MidstreamHere = FMath::Lerp(MidstreamHere, JungleMidstream, Shares[WorldLook::Jungle]);
-				BankHere = FMath::Lerp(BankHere, JungleBank, Shares[WorldLook::Jungle]);
+				// (Blue mixed straight into brown passes through grey, and where the climate is half jungle, as on the
+				// upper Amazon under the Andes, the ribbon read as a tarred road. It turns by way of a murky river
+				// green, and wholly by the time the country is three fifths jungle.)
+				const float Turned = FMath::SmoothStep(0.15f, 0.6f, Shares[WorldLook::Jungle]);
+				const FLinearColor Murky = FLinearColor(FColor(84, 108, 92));
+				MidstreamHere = Turned < 0.5f ? FMath::Lerp(MidstreamHere, Murky, Turned * 2.0f) : FMath::Lerp(Murky, JungleMidstream, Turned * 2.0f - 1.0f);
+				BankHere = Turned < 0.5f ? FMath::Lerp(BankHere, Murky * 0.84f, Turned * 2.0f) : FMath::Lerp(Murky * 0.84f, JungleBank, Turned * 2.0f - 1.0f);
 			}
 			const FColor Midstream = FMath::Lerp(MidstreamHere, MidstreamIce, Frozen).ToFColor(true), Bank = FMath::Lerp(BankHere, BankIce, Frozen).ToFColor(true);
 			// (a tributary's ribbon lies a hair lower where it runs under the ribbon of the river it joins)
@@ -4842,6 +4847,92 @@ void ACampaignMapActor::ShowScars(const TArray<int32>& Scars)
 	}
 }
 
+/** What the builder of a town is told of the place (see FTownSite): the table's towns and the studio's picture of one are built from the same. */
+void ACampaignMapActor::FillTownSite(const FCampaignRegion& Region, FMiniatureMesh::FTownSite& Site)
+{
+	const double U = UnitScale;
+	const bool bCity = Region.Terrain == TEXT("urban");
+	const bool bBig = Region.bCapital || bCity || Region.VictoryPoints >= 2 || Region.Factories >= 2;
+	Site.Centre = Region.Center;
+	Site.Radius = TownRadius(Region.Id);
+	Site.Unit = U * 2.1;
+	Site.MapUnit = U;
+	Site.Tier = Region.bCapital ? 3 : bCity ? 2 : bBig ? 1 : 0;
+	Site.Factories = Region.Factories;
+	Site.Ruined = FMath::Clamp(WreckedIn.FindRef(Region.Id), 0, Region.Factories); // (bombed-out works: the first of them are wrecks)
+	Site.Seed = Region.Id;
+	{
+		// Roofs and walls by where it lies (the map is forty units to the degree of latitude).
+		const double Latitude = 71.4 - Region.Center.Y / 40.0, Longitude = -11.0 + Region.Center.X / 25.7;
+		Site.Look = Latitude < 37.5 || (Latitude < 42.0 && Longitude > 26.0) ? 4 : Latitude < 45.5 ? 2
+			: (Latitude > 55.0 && Longitude > 4.0) || Longitude > 22.0 ? 3 : Longitude < 7.5 ? 1 : 0;
+		if (Data.bWorld && Data.FirstBeyond != INDEX_NONE && Region.Id >= Data.FirstBeyond && Longitude < -40.0)
+		{
+			// (The art director's brief 3.4 and her round 30: in the Americas a town takes the kit of the land it
+			// stands in. North of Mexico, the New World's brick and cream under tar; from Mexico south, the plaza
+			// town's white and ochre under red tile. The islands of the eastern Atlantic keep Europe's rule.)
+			const bool bNorth = Latitude > 33.0 || ((Region.Home == TEXT("USA") || Region.Home == TEXT("CAN")) && Latitude > 24.5);
+			Site.Look = bNorth ? 5 : 6;
+		}
+		// A capital's own great building: the great capitals have theirs, the rest one of four by turns.
+		static const TPair<const TCHAR*, int32> Named[] = {
+			TPair<const TCHAR*, int32>(TEXT("Berlin"), 8), TPair<const TCHAR*, int32>(TEXT("Paris"), 4), TPair<const TCHAR*, int32>(TEXT("London"), 5),
+			TPair<const TCHAR*, int32>(TEXT("Moscow"), 6), TPair<const TCHAR*, int32>(TEXT("Rome"), 7), TPair<const TCHAR*, int32>(TEXT("Warsaw"), 2),
+			TPair<const TCHAR*, int32>(TEXT("Budapest"), 3), TPair<const TCHAR*, int32>(TEXT("Madrid"), 0), TPair<const TCHAR*, int32>(TEXT("Athens"), 7),
+			TPair<const TCHAR*, int32>(TEXT("Istanbul"), 1), TPair<const TCHAR*, int32>(TEXT("Stockholm"), 0), TPair<const TCHAR*, int32>(TEXT("Brussels"), 3),
+		};
+		Site.Landmark = (Region.Id * 7 + 1) % 4;
+		for (const TPair<const TCHAR*, int32>& Each : Named)
+		{
+			if (Region.Name == Each.Key)
+			{
+				Site.Landmark = Each.Value;
+			}
+		}
+	}
+	Site.Ground = [this](double X, double Y, double Lift) { return SurfacePoint(X, Y, Lift); };
+	// (a town is built on land, and on its own province's: one that stands by the sea or a frontier grows away from it)
+	Site.Dry = [this, Id = Region.Id](double X, double Y) { return GroundAt(X, Y) > 0.0f && Data.FindRegionAt(X, Y) == Id; };
+	Site.bPacked = IsTownPacked(Region.Id);
+	// The roads and railways out of it run toward the towns of the provinces next door.
+	for (const int32 Next : Region.Neighbors)
+	{
+		if (Data.Regions.IsValidIndex(Next))
+		{
+			const FVector2D Way = Data.Regions[Next].Center - Region.Center;
+			Site.Arms.Add(FMath::RadiansToDegrees(FMath::Atan2(Way.X, -Way.Y)));
+		}
+	}
+	if (Region.bPort)
+	{
+		// A port's quay stands at the water's edge: the nearest shore to the town's middle, looked for all round.
+		double Nearest = Site.Radius + 16.0;
+		for (double Bearing = 0.0; Bearing < 360.0; Bearing += 10.0)
+		{
+			const FVector2D Way(FMath::Sin(FMath::DegreesToRadians(Bearing)), -FMath::Cos(FMath::DegreesToRadians(Bearing)));
+			for (double Out = 1.5; Out < Nearest; Out += 0.5)
+			{
+				const FVector2D Wet = Region.Center + Way * Out, Beyond = Region.Center + Way * (Out + 3.0);
+				if (GroundAt(Wet.X, Wet.Y) <= 0.0f)
+				{
+					// (open water, not a river's mouth or a pond: it is still water three units further out)
+					if (GroundAt(Beyond.X, Beyond.Y) <= 0.0f && Out > 2.5)
+					{
+						Nearest = Out;
+						Site.bQuay = true;
+						Site.Quay = Region.Center + Way * (Out - 0.25);
+						Site.SeaBearing = Bearing;
+					}
+					break;
+				}
+			}
+		}
+	}
+	Site.bPlots = bTownPlots && CivicInside(Region.Id);
+	Site.PlotsNear = CivicNear(Region.Id);
+	Site.PlotsTurn = CivicTurn(Region.Id);
+}
+
 void ACampaignMapActor::BuildTowns()
 {
 	TownMarkers->ClearInstances();
@@ -4917,84 +5008,7 @@ void ACampaignMapActor::BuildTowns()
 		// (Art fix 9: the town is built to a plan of its own, with streets and blocks, and by the manner of its part
 		// of Europe. Its houses are the size houses always were: it is the town that is larger, not the houses.)
 		FMiniatureMesh::FTownSite Site;
-		Site.Centre = Region.Center;
-		Site.Radius = TownRadius(Region.Id);
-		Site.Unit = U * 2.1;
-		Site.MapUnit = U;
-		Site.Tier = Region.bCapital ? 3 : bCity ? 2 : bBig ? 1 : 0;
-		Site.Factories = Region.Factories;
-		Site.Ruined = FMath::Clamp(WreckedIn.FindRef(Region.Id), 0, Region.Factories); // (bombed-out works: the first of them are wrecks)
-		Site.Seed = Region.Id;
-		{
-			// Roofs and walls by where it lies (the map is forty units to the degree of latitude).
-			const double Latitude = 71.4 - Region.Center.Y / 40.0, Longitude = -11.0 + Region.Center.X / 25.7;
-			Site.Look = Latitude < 37.5 || (Latitude < 42.0 && Longitude > 26.0) ? 4 : Latitude < 45.5 ? 2
-				: (Latitude > 55.0 && Longitude > 4.0) || Longitude > 22.0 ? 3 : Longitude < 7.5 ? 1 : 0;
-			if (Data.bWorld && Data.FirstBeyond != INDEX_NONE && Region.Id >= Data.FirstBeyond && Longitude < -40.0)
-			{
-				// (The art director's brief 3.4 and her round 30: in the Americas a town takes the kit of the land it
-				// stands in. North of Mexico, the New World's brick and cream under tar; from Mexico south, the plaza
-				// town's white and ochre under red tile. The islands of the eastern Atlantic keep Europe's rule.)
-				const bool bNorth = Latitude > 33.0 || ((Region.Home == TEXT("USA") || Region.Home == TEXT("CAN")) && Latitude > 24.5);
-				Site.Look = bNorth ? 5 : 6;
-			}
-			// A capital's own great building: the great capitals have theirs, the rest one of four by turns.
-			static const TPair<const TCHAR*, int32> Named[] = {
-				TPair<const TCHAR*, int32>(TEXT("Berlin"), 8), TPair<const TCHAR*, int32>(TEXT("Paris"), 4), TPair<const TCHAR*, int32>(TEXT("London"), 5),
-				TPair<const TCHAR*, int32>(TEXT("Moscow"), 6), TPair<const TCHAR*, int32>(TEXT("Rome"), 7), TPair<const TCHAR*, int32>(TEXT("Warsaw"), 2),
-				TPair<const TCHAR*, int32>(TEXT("Budapest"), 3), TPair<const TCHAR*, int32>(TEXT("Madrid"), 0), TPair<const TCHAR*, int32>(TEXT("Athens"), 7),
-				TPair<const TCHAR*, int32>(TEXT("Istanbul"), 1), TPair<const TCHAR*, int32>(TEXT("Stockholm"), 0), TPair<const TCHAR*, int32>(TEXT("Brussels"), 3),
-			};
-			Site.Landmark = (Region.Id * 7 + 1) % 4;
-			for (const TPair<const TCHAR*, int32>& Each : Named)
-			{
-				if (Region.Name == Each.Key)
-				{
-					Site.Landmark = Each.Value;
-				}
-			}
-		}
-		Site.Ground = [this](double X, double Y, double Lift) { return SurfacePoint(X, Y, Lift); };
-		// (a town is built on land, and on its own province's: one that stands by the sea or a frontier grows away from it)
-		Site.Dry = [this, Id = Region.Id](double X, double Y) { return GroundAt(X, Y) > 0.0f && Data.FindRegionAt(X, Y) == Id; };
-		Site.bPacked = IsTownPacked(Region.Id);
-		// The roads and railways out of it run toward the towns of the provinces next door.
-		for (const int32 Next : Region.Neighbors)
-		{
-			if (Data.Regions.IsValidIndex(Next))
-			{
-				const FVector2D Way = Data.Regions[Next].Center - Region.Center;
-				Site.Arms.Add(FMath::RadiansToDegrees(FMath::Atan2(Way.X, -Way.Y)));
-			}
-		}
-		if (Region.bPort)
-		{
-			// A port's quay stands at the water's edge: the nearest shore to the town's middle, looked for all round.
-			double Nearest = Site.Radius + 16.0;
-			for (double Bearing = 0.0; Bearing < 360.0; Bearing += 10.0)
-			{
-				const FVector2D Way(FMath::Sin(FMath::DegreesToRadians(Bearing)), -FMath::Cos(FMath::DegreesToRadians(Bearing)));
-				for (double Out = 1.5; Out < Nearest; Out += 0.5)
-				{
-					const FVector2D Wet = Region.Center + Way * Out, Beyond = Region.Center + Way * (Out + 3.0);
-					if (GroundAt(Wet.X, Wet.Y) <= 0.0f)
-					{
-						// (open water, not a river's mouth or a pond: it is still water three units further out)
-						if (GroundAt(Beyond.X, Beyond.Y) <= 0.0f && Out > 2.5)
-						{
-							Nearest = Out;
-							Site.bQuay = true;
-							Site.Quay = Region.Center + Way * (Out - 0.25);
-							Site.SeaBearing = Bearing;
-						}
-						break;
-					}
-				}
-			}
-		}
-		Site.bPlots = bTownPlots && CivicInside(Region.Id);
-		Site.PlotsNear = CivicNear(Region.Id);
-		Site.PlotsTurn = CivicTurn(Region.Id);
+		FillTownSite(Region, Site);
 		TArray<FVector2D> Quarters;
 		FVector Beacon = FVector::ZeroVector, LandmarkTop = FVector::ZeroVector;
 		Model.Township(Site, &TownChimneys, &Quarters, &Beacon, &LandmarkTop);
@@ -8464,6 +8478,107 @@ bool ACampaignMapActor::StageModel(const FString& Model, UProceduralMeshComponen
 			}
 		}
 	}
+	else if (Kind == TEXT("Target"))
+	{
+		// (Brian's ask of 15 November 2026, ruling 54.) The picture of a raid's target: "Target:<sort>:<province or
+		// -1>:<holder>". A place with a town is shown as its own town, built as it stands on the table (its works, its
+		// quay, its kit), on a round board of its own ground and water; a target with no town is a small scene of what
+		// the bombs are meant for. (These stand until the art director's painted pictures come.)
+		TArray<FString> Part;
+		Tag.ParseIntoArray(Part, TEXT(":"));
+		const FString Sort = Part.Num() > 0 ? Part[0] : FString();
+		const int32 RegionId = Part.Num() > 1 ? FCString::Atoi(*Part[1]) : INDEX_NONE;
+		const FString Holder = Part.Num() > 2 ? Part[2] : FString();
+		const FCampaignNation* Whose = Data.FindNation(Holder);
+		const FLinearColor Livery = Whose ? FLinearColor(Whose->Color) : FLinearColor(0.45f, 0.45f, 0.42f);
+		const double U = UnitScale;
+		// (the studio's lamp is bright: the board's green and its water are mixed deep, or they come out straw and chalk)
+		const FLinearColor Field(FColor::FromHex(TEXT("4E6034"))), Water(FColor::FromHex(TEXT("1F4660"))), Iron(FColor::FromHex(TEXT("2B2A28")));
+		const FLinearColor Earth(FColor::FromHex(TEXT("8C7A5A"))), Ballast(FColor::FromHex(TEXT("8A8478"))), Brick(FColor::FromHex(TEXT("8E5644"))), Slate(FColor::FromHex(TEXT("4A4A4E"))), Wood(FColor::FromHex(TEXT("6E5238")));
+		const FCampaignRegion* Region = Data.Regions.IsValidIndex(RegionId) ? &Data.Regions[RegionId] : nullptr;
+		const bool bPlace = Sort == TEXT("factories") || Sort == TEXT("rail") || Sort == TEXT("harbour") || Sort == TEXT("town");
+		const bool bHasTown = Region && (Region->bCapital || Region->Terrain == TEXT("urban") || Region->VictoryPoints > 0 || Region->Factories > 0 || Region->bOil || Region->bPort);
+		if (bPlace && bHasTown)
+		{
+			FMiniatureMesh::FTownSite Site;
+			FillTownSite(*Region, Site);
+			const FVector2D Middle = Region->Center;
+			const double High = U * VerticalScale;
+			Site.Ground = [U, High, Middle](double X, double Y, double Lift) { return FVector((Middle.Y - Y) * U, (X - Middle.X) * U, Lift * High); };
+			Site.bPlots = false;
+			Built.Township(Site);
+			// (The board: a round wooden base, wide enough for a port's quay and the ships alongside it, laid with the
+			// town's own ground where that is dry and with water where it is not.)
+			const double Reach = FMath::Max(Site.Radius + 2.5, Site.bQuay ? FVector2D::Distance(Site.Quay, Middle) + 5.5 : 0.0);
+			const int32 Cells = 30;
+			const double Step = 2.0 * Reach / Cells;
+			Built.Pillar(FVector(0.0, 0.0, -0.2 * U), Reach * U, Reach * U, 0.17 * U, FLinearColor(FColor::FromHex(TEXT("2E2218"))), 48);
+			for (int32 J = 0; J < Cells; ++J)
+			{
+				for (int32 I = 0; I < Cells; ++I)
+				{
+					const double X = Middle.X - Reach + (I + 0.5) * Step, Y = Middle.Y - Reach + (J + 0.5) * Step;
+					if (FVector2D(X - Middle.X, Y - Middle.Y).Size() < Reach - 0.75 * Step)
+					{
+						const bool bDry = GroundAt(X, Y) > 0.0f;
+						Built.Box(FVector((Middle.Y - Y) * U, (X - Middle.X) * U, bDry ? -0.03 * U : -0.05 * U), FVector(Step * U * 1.03, Step * U * 1.03, 0.06 * U), bDry ? Field : Water);
+					}
+				}
+			}
+		}
+		else if (Sort == TEXT("fleet"))
+		{
+			Built.Pillar(FVector(0.0, 0.0, -0.1 * U), 7.5 * U, 7.5 * U, 0.1 * U, Water, 44);
+			Built.Fleet(1, 0, 1, 2, 0, U, Livery, Holder, true);
+		}
+		else if (Sort == TEXT("airfield"))
+		{
+			Built.AirFleet(1, 1, U, Livery, Holder);
+		}
+		else if (Sort == TEXT("troops"))
+		{
+			const TArray<FString> Kinds = { FString(TEXT("inf")), FString(TEXT("arm")), FString(TEXT("inf")), FString(TEXT("art")) };
+			Built.Pillar(FVector(0.0, 0.0, -0.1 * U), 5.2 * U, 5.2 * U, 0.1 * U, Field, 40);
+			Built.Force(Kinds, 4.3 * U, 0.0, U, Livery, Holder);
+		}
+		else if (Sort == TEXT("works"))
+		{
+			// Fieldworks: casemates behind a zigzag of thrown-up earth, a gun, and men standing to.
+			Built.Pillar(FVector(0.0, 0.0, -0.1 * U), 5.2 * U, 5.2 * U, 0.1 * U, Field, 40);
+			Built.Bunker(FVector(-1.4 * U, -0.6 * U, 0.0), 1.3 * U, Livery, 14.0);
+			Built.Bunker(FVector(1.7 * U, 0.2 * U, 0.0), 1.1 * U, Livery, -8.0);
+			Built.FieldGun(FVector(0.2 * U, -2.4 * U, 0.0), 1.0 * U, Livery, 6.0);
+			for (int32 Leg = 0; Leg < 6; ++Leg)
+			{
+				Built.Box(FVector(2.9 * U + (Leg % 2 ? 0.25 : -0.25) * U, (Leg - 2.5) * 1.25 * U, 0.12 * U), FVector(0.36 * U, 1.5 * U, 0.24 * U), Earth, Leg % 2 ? 26.0 : -26.0);
+			}
+			for (int32 Man = 0; Man < 3; ++Man)
+			{
+				Built.Rifleman(FVector(2.2 * U, (Man - 1) * 1.3 * U, 0.0), 0.8 * U, Livery, 0.0);
+			}
+		}
+		else
+		{
+			// A rail yard on open ground: four roads of track with wagons standing, a goods shed and a water tower.
+			Built.Pillar(FVector(0.0, 0.0, -0.1 * U), 5.6 * U, 5.6 * U, 0.1 * U, Field, 44);
+			for (int32 Road = 0; Road < 4; ++Road)
+			{
+				const double Y = (Road - 1.5) * 0.8 * U;
+				Built.Box(FVector(0.0, Y, 0.015 * U), FVector(9.0 * U, 0.42 * U, 0.03 * U), Ballast);
+				for (const double Side : { -0.12, 0.12 })
+				{
+					Built.Rod(FVector(-4.5 * U, Y + Side * U, 0.05 * U), FVector(4.5 * U, Y + Side * U, 0.05 * U), 0.022 * U, Iron, 4);
+				}
+				for (int32 Wagon = 0; Wagon < 3 + Road % 2; ++Wagon)
+				{
+					const double X = (-3.2 + Wagon * 1.15 + Road * 0.5) * U;
+					Built.Box(FVector(X, Y, 0.24 * U), FVector(0.95 * U, 0.3 * U, 0.3 * U), (Wagon + Road) % 3 == 0 ? Slate : (Wagon + Road) % 3 == 1 ? Wood : Brick);
+				}
+			}
+			Built.House(FVector(0.5 * U, 2.6 * U, 0.0), 2.6 * U, 0.9 * U, 0.5 * U, 0.32 * U, Brick, Slate);
+			Built.Pillar(FVector(-3.6 * U, -2.4 * U, 0.0), 0.3 * U, 0.3 * U, 0.9 * U, Iron, 10);
+		}
+	}
 	else if (!Built.Vehicle(Model, FVector::ZeroVector, Metre, 0.0, true))
 	{
 		return false;
@@ -8601,7 +8716,8 @@ UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model, boo
 			// (The art director's ruling: the whole piece in the picture with a tenth of margin round it. The small
 			// pictures are framed on the model's roundness, which cut a standing figure at the helmet and the knee.
 			// The large one is fitted to the model's own box, as the camera sees it: its width and its height.)
-			const FVector From = FVector(-0.78, -0.5, 0.36).GetSafeNormal();
+			// (a raid's target is a town on a board, looked down on as the table is; a machine is looked at from lower)
+			const FVector From = (Model.StartsWith(TEXT("Target:")) ? FVector(-0.66, -0.4, 0.64) : FVector(-0.78, -0.5, 0.36)).GetSafeNormal();
 			const FRotator Looks = (-From).Rotation();
 			const FRotationMatrix Axes(Looks);
 			auto Half = [this](const FVector& Axis) { return FMath::Abs(StagedExtent.X * Axis.X) + FMath::Abs(StagedExtent.Y * Axis.Y) + FMath::Abs(StagedExtent.Z * Axis.Z); };
@@ -8638,6 +8754,11 @@ UTextureRenderTarget2D* ACampaignMapActor::GetPortrait(const FString& Model, boo
 				}
 			}
 			FitStudioCamera(PortraitCamera, PortraitMesh->GetRelativeLocation(), 336.0 / 552.0, PlaneFill, PlaneFrom.GetSafeNormal());
+		}
+		else if (Model.StartsWith(TEXT("Target:")))
+		{
+			// (a raid's target is looked down on as the table is, and its board fills the picture, large or small)
+			FitStudioCamera(PortraitCamera, PortraitMesh->GetRelativeLocation(), 336.0 / 552.0, 0.95, FVector(-0.66, -0.4, 0.64).GetSafeNormal());
 		}
 		PortraitCamera->TextureTarget = Picture;
 		TakeStudioPicture(PortraitCamera, bAircraft);

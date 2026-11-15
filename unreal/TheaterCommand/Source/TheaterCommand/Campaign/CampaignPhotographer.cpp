@@ -586,18 +586,35 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 		if (GrandNation == TEXT("UK"))
 		{
 			// An army sent by sea: where it can go, the question before a landing, and the landing made.
+			// ("-TheaterLanding=Calais:9:Kent" pictures another shore, after that many months have been played, with
+			// the army of another province: the landing card's amber verdicts come only later in a war, and a great
+			// army is more than the ships can carry.)
+			FString LandAt = TEXT("Hamburg"), LandFrom = TEXT("London");
+			int32 LandMonths = 0;
 			{
-				FShot& Shot = Add(TEXT("35-by-sea"), TEXT("Hamburg"), 0.62f);
-				Shot.Army = TEXT("London");
+				FString LandingAsked;
+				TArray<FString> LandingParts;
+				if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLanding="), LandingAsked, false) && LandingAsked.ParseIntoArray(LandingParts, TEXT(":")) > 0)
+				{
+					LandAt = LandingParts[0];
+					LandMonths = LandingParts.Num() > 1 ? FMath::Clamp(FCString::Atoi(*LandingParts[1]), 0, 80) : 0;
+					LandFrom = LandingParts.Num() > 2 ? LandingParts[2] : LandFrom;
+				}
+			}
+			{
+				FShot& Shot = Add(TEXT("35-by-sea"), *LandAt, 0.62f);
+				Shot.Army = LandFrom;
 				Shot.bSea = true;
+				Shot.Months = LandMonths;
+				Shot.bDismiss = LandMonths > 0; // (a nation fallen in those months is told on a screen of its own)
 			}
 			{
-				FShot& Shot = Add(TEXT("35b-landing-asked"), TEXT("Hamburg"), 0.5f);
+				FShot& Shot = Add(TEXT("35b-landing-asked"), *LandAt, 0.5f);
 				Shot.bKeep = true;
-				Shot.Attack = TEXT("Hamburg");
+				Shot.Attack = LandAt;
 			}
 			{
-				FShot& Shot = Add(TEXT("35c-landing-made"), TEXT("Hamburg"), 0.4f);
+				FShot& Shot = Add(TEXT("35c-landing-made"), *LandAt, 0.4f);
 				Shot.bKeep = true;
 				Shot.bWar = true;
 			}
@@ -734,6 +751,13 @@ void ACampaignPhotographer::Begin(const FString& InFolder)
 	{
 		Shots[0].Months = FMath::Clamp(LookMonths, 0, 80);
 		Shots[0].bDismiss = true; // (a nation fallen in those months is told on a screen of its own, which would cover the picture)
+	}
+
+	// "-TheaterRoom=plan:bomb:12:5.6" opens that room of the rules' own over the first "-TheaterLook" picture.
+	FString RoomAsked;
+	if (!Look.IsEmpty() && FParse::Value(FCommandLine::Get(), TEXT("TheaterRoom="), RoomAsked, false) && Shots.Num() > 0)
+	{
+		Shots[0].Room = RoomAsked;
 	}
 
 	// "-TheaterMoment=Warsaw" takes four stills of a moment at the front over that region, as when its capital
