@@ -387,6 +387,7 @@ h4.crh { font-family: var(--head); font-size: 12px; letter-spacing: .16em; text-
 h4.crh.bad { color: #f1a58f; }
 .cross .holdwarn { margin-top: 5px; color: #f1a58f; }
 .note.holdbad { border-left: 3px solid #f1a58f; }
+.note.crosslead .link { display: inline-block; margin: 4px 0 0; font-size: 12.5px; }
 .evcard p { margin: 0; font-family: var(--head); font-size: 18px; font-weight: 600; letter-spacing: .02em; line-height: 1.2; }
 .pref { margin-top: 10px; }
 .pref .btn { margin-left: 4px; }

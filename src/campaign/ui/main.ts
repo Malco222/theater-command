@@ -3986,9 +3986,10 @@ function navyPane(): string {
     out += `<h2>The ${n.adj} navy</h2><p class="sub">${seaWar(g) ? 'Your fleets are pieces on the map: click one there, or below, to pick it up and give it orders. A fleet holds a sea by patrolling it, guards a shipping lane by escorting it, and sinks submarines only by hunting them with destroyers and aircraft. Battleships and cruisers can shell an enemy coast. Ships at sea wear down, so bring a fleet home to refit.' : 'A fleet holds a sea by patrolling it. Where one side is much the stronger, that sea is closed to the other\'s troopships and supply ships. Ships at sea wear down, so bring a fleet home to refit after a fight.'}</p>
       <div class="facts"><div class="fact"><span>Ships</span><b>${num(mine.reduce((t, f) => t + shipCount(f.ships), 0))}</b></div><div class="fact"><span>Fleets at sea</span><b>${mine.filter(atSea).length} of ${mine.length}</b></div><div class="fact"><span>Sea lift left</span><b>${n.sealift > 0 ? `${liftLeft(g, me)} of ${n.sealift} corps` : 'None'}</b></div></div>${liftNote()}${budgeted(g) ? '<div class="acts"><button class="btn small" data-act="armgo" data-arm="navy" title="Lay down warships and troopships in your shipyards.">Lay down more ships</button></div>' : ''}`;
     if (!n.atWar.length) out += `<div class="note"><b>At peace.</b> The fleet stays in harbour until the nation is at war.</div>`;
+    // The crossings come first: a shore that can be reached only by sea is the navy's first business (Version 73).
+    out += crossingNotes();
     out += seaNotes();
     out += laneNotes();
-    out += crossingNotes();
     out += `<h3>Your fleets</h3>${mine.length ? mine.map((f) => fleetRow(f, order && n.atWar.length > 0) + (order && ui.fleet === f.id && n.atWar.length ? fleetOrders(f) : '')).join('') : '<div class="empty">No ships under your flag.</div>'}`;
     const friends = g.fleets.filter((f) => f.nat !== me && afloat(f) && allied(g, f.nat, me)).sort(size);
     const foes = g.fleets.filter((f) => afloat(f) && atWar(g, f.nat, me)).sort(size);
@@ -4053,6 +4054,19 @@ function crossingRow(x: CrossingOutlook, order: boolean): string {
     ${open ? crossingTicket(x.account) + holdTicket(x.account.hold) : ''}${prep}
     <div class="acts">${x.planned ? '' : `<button class="btn small" data-act="crosswhy" data-id="${x.to.id}">${open ? 'Hide the reckoning' : 'Why, and what would help'}</button>`}${order ? (x.planned ? '<button class="btn small" data-act="crossplan" data-id="-1" title="Your staff stops preparing this crossing.">Drop the plan</button>' : `<button class="btn small" data-act="crossplan" data-id="${x.to.id}" data-from="${x.from.id}" title="Name this crossing as your plan. Staff you have handed the air war or the navy prepare it each month.">Make this the plan</button>`) : ''}<button class="btn small" data-act="showmap" data-id="${x.to.id}">Show the beach</button></div>
   </div>`;
+}
+
+/**
+ * A pointer to the crossings from the Staff tab (Version 73): with the navy in the staff's hands its tab is tucked
+ * away, so a player at war with a shore he can reach only by sea is told here that the list exists and where.
+ */
+function crossingLead(): string {
+  if (!g.human || !isOpen(g) || !g.nations[g.human].atWar.length) return '';
+  const rows = crossings(g);
+  if (!rows.length) return '';
+  const plan = rows.find((x) => x.planned);
+  const where = [...new Set(rows.map((x) => natName(x.owner)))];
+  return `<div class="note crosslead"><b>Crossing the sea.</b> ${plan ? `Your plan is ${esc(plan.from.name)} to ${esc(plan.to.name)}. ` : ''}${rows.length === 1 ? 'One enemy shore' : `${rows.length} enemy shores`} can be reached only by sea (${esc(where.slice(0, 3).join(', '))}${where.length > 3 ? ' and more' : ''}). The navy desk has the safest way to each, what it would cost and whether the force could be supplied once ashore. <button class="link" data-act="tab" data-tab="navy">See the crossings ›</button></div>`;
 }
 
 /** Crossing the sea (the grand campaign): the safest way to each shore the army cannot march to, and why it costs what it costs. */
@@ -4901,6 +4915,7 @@ function staffPane(): string {
   if (!v) return '<div class="empty">A staff to run things for you belongs to the grand campaign.</div>';
   const run = v.desks.filter((d) => d.staff), own = v.desks.filter((d) => !d.staff);
   return `<h2>Your staff</h2><p class="sub">You are playing at <b>${esc(v.name)}</b>${v.depth ? ` (${esc(v.under)})` : ''}. The armies and their battles are always yours. Any desk below can be handed to your staff or taken back in any month.</p>
+    ${crossingLead()}
     ${run.length ? `<h3>Your staff runs</h3><div class="desks">${run.map((d) => deskRow(d, true)).join('')}</div>` : ''}
     ${own.length ? `<h3>On your own desk</h3><div class="desks">${own.map((d) => deskRow(d, true)).join('')}</div>` : ''}
     <h3>What your staff may spend</h3>${capPicker(v)}
