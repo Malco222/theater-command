@@ -26,11 +26,14 @@ import {
   orderBurn, orderScorchPolicy, orderWreck, prizesOf, prizesOnMap, whyNotWreckPrize,
   rivalStaff, rivalStaffs, type StaffView,
   commandOf, orderDepth, orderDesk, orderStaffCap, staffRunsDesk,
+  claimsOf, dialOf, historyStops, orderHistory,
   agentReport, foreignBooks, orderAgentMission, orderFog, orderRecruitAgent, orderRetireAgent, orderSendAgent, lastAct, orderDomination, orderKeepPeace, secretService, standings, sight, whyNotRecruitAgent, whyNotSendAgent,
 } from '../turn';
 import { INTEL, armyKnown, fogOn, homeBase, intelRules, knowsBooks, type AgentView, type Known, type SpyRoom } from '../intel';
 import { armyOf } from '../joint';
 import { DEPTH, deskDef, type DeskId } from '../depth';
+import { FREE as HIST_FREE, type DialView } from '../history';
+import type { ClaimView } from '../claims';
 import { setDepth, type CommandView } from '../desks';
 import { SIEGE, besiegers, garrisonOf, guardMen, salliers, siegeRules, stormForce, townHitText } from '../siege';
 import { PRIZES, type PrizeKind, type ScorchPolicy } from '../prizes';
@@ -158,6 +161,8 @@ const ui = {
   gcSecure: false,
   /** How deep the campaign being set up is played: Field, Theatre or Supreme command. */
   gcDepth: DEPTH.start,
+  /** The stop of the history dial the campaign being set up starts at: 1 (By the book) to 5 (Anything goes). */
+  gcHist: HIST_FREE as number,
 };
 
 const $ = (s: string): HTMLElement => document.querySelector(s) as HTMLElement;
@@ -903,7 +908,7 @@ function drawBar(): void {
   const who = passing ? 'The other nations are moving' : me ? (g.nations[me].alive ? (eve ? `The eve of war: place the army of ${natName(me)}` : `Your orders: ${natName(me)}${isOpen(g) ? (lastAct(g)?.winner === me ? ' · the world is yours' : lastAct(g)?.on ? ` · World Domination, ${lastAct(g)!.left} left` : ' · free play') : ''}`) : `${natName(me)} has fallen`) : isOpen(g) ? 'Watching a free-play war: every nation decides for itself' : 'Watching history unfold: every nation on its historical plan';
   const when = eve ? '31 August 1939' : me || g.turn === 1 ? (g.turn === 1 && !me ? '1 September 1939' : date(g.turn)) : `End of ${date(g.turn - 1)}`;
   // The level of a grand campaign is always in sight beside the date: a click shows what it does and lets it be changed.
-  const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign and how deep you play it. Click to change either, to hand a desk to your staff or take one back, or to switch the war cabinet ${cabinetIsOff(g) ? 'on' : 'off'}.">${pips(levelIndex(g))}${esc(levelOf(g).name)}<span class="rdepth"> · ${esc(commandOf(g)?.name ?? '')}</span><span class="rdshort"> · ${esc(commandOf(g)?.depth ? (commandOf(g)!.name.split(' ')[0]) : 'Own mix')}</span></button>` : '';
+  const rank = me && isOpen(g) ? `<button class="rank" data-act="level" title="The level of this campaign and how deep you play it. Click to change either, to hand a desk to your staff or take one back, or to switch the war cabinet ${cabinetIsOff(g) ? 'on' : 'off'}.">${pips(levelIndex(g))}${esc(levelOf(g).name)}<span class="rdepth"> · ${esc(commandOf(g)?.name ?? '')}</span><span class="rdshort"> · ${esc(commandOf(g)?.depth ? (commandOf(g)!.name.split(' ')[0]) : 'Own mix')}</span>${dialOf(g) && dialOf(g)!.stop !== HIST_FREE ? `<span class="rdial" title="The history dial stands at ${esc(dialOf(g)!.name)}.">${dialMark(dialOf(g)!.stop - 1)}</span>` : ''}</button>` : '';
   $('#when').innerHTML = `${when}${rank}<small>${esc(who)}${me ? ` · ${esc(w.text)}` : ''}</small>`;
   $('#purse').innerHTML = me && g.nations[me].alive && !eve ? purse(me) + gauges(me) + menGauge(me) : '';
   let b = '';
@@ -3662,6 +3667,7 @@ function powersPane(): string {
       out += `<div class="nat gone${f?.yours ? ' freeable' : ''}"${f && f.capital >= 0 ? ` data-act="showmap" data-id="${f.capital}" title="Show ${esc(f.capitalName)} on the map"` : ''}>${chip(n.id)}<b>${esc(n.name)}</b><small>fell ${date(n.fellOn!.turn)}${f?.yours ? ' <i class="tag good">You can free it</i>' : ''}</small><div class="will"><small>${how}${f && isOpen(g) ? `. ${esc(f.note)}` : ''}</small></div></div>`;
     }
   }
+  out += claimsPane();
   out += leaguePane();
   out += trackPane(neutral);
   return out;
@@ -4681,12 +4687,13 @@ function grandPick(): { nat: string; year: GrandYear; text: string } {
 }
 
 function rememberPick(): void {
-  try { localStorage.setItem('tc-grand', `${ui.gcNat}:${ui.gcYear}:${ui.gcLevel}:${ui.gcCabinet ? 1 : 0}:${ui.gcSecure ? 1 : 0}:${ui.gcDepth}`); } catch { /* the pick is only a convenience */ }
+  try { localStorage.setItem('tc-grand', `${ui.gcNat}:${ui.gcYear}:${ui.gcLevel}:${ui.gcCabinet ? 1 : 0}:${ui.gcSecure ? 1 : 0}:${ui.gcDepth}:${ui.gcHist}`); } catch { /* the pick is only a convenience */ }
 }
 
 function recallPick(): void {
   try {
-    const [nat, year, level, cabinet, secure, depth] = (localStorage.getItem('tc-grand') ?? '').split(':');
+    const [nat, year, level, cabinet, secure, depth, hist] = (localStorage.getItem('tc-grand') ?? '').split(':');
+    if (hist && historyStops().some((s) => s.stop === Number(hist))) ui.gcHist = Number(hist);
     if (depth && DEPTH.depths.some((d) => d.id === depth)) ui.gcDepth = depth;
     ui.gcCabinet = cabinet !== '0';
     ui.gcSecure = secure === '1';
@@ -4707,6 +4714,43 @@ function levelPicker(chosen: string, act: string, full = false): string {
   const on = levelById(chosen);
   return `<div class="gclevels">${DIFFICULTY.levels.map((l, k) => `<button class="gclevel${l.id === on.id ? ' on' : ''}" data-act="${act}" data-level="${l.id}" aria-pressed="${l.id === on.id}">${pips(k)}<b>${esc(l.name)}</b>${k === FAIR ? '<span>The fair fight</span>' : k < FAIR ? '<span>Easier</span>' : '<span>Harder</span>'}</button>`).join('')}</div>
     <div class="gclevelnote"><p>${esc(on.blurb)}</p><ul>${on.lines.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>${full ? '<small>Battles are worked out the same way at every level. A level changes what each side can afford and how the rival staffs think, never the dice.</small>' : ''}</div>`;
+}
+
+// ---- The history dial: how far the war the computer runs may move away from the war that was fought ----------
+
+const stopName = (n: number): string => historyStops().find((s) => s.stop === n)?.name ?? '';
+/** A stop's place on the dial: five notches, the chosen one lit. */
+const dialMark = (k: number): string => `<span class="dialmark" aria-hidden="true">${[0, 1, 2, 3, 4].map((j) => `<i${j === k ? ' class="on"' : ''}></i>`).join('')}</span>`;
+
+/** The five stops of the history dial side by side, the chosen one lit, and under them what it does. `dial` is given for a campaign in play. */
+function dialPicker(chosen: number, act: string, dial: DialView | null = null): string {
+  const stops = historyStops();
+  const on = stops.find((s) => s.stop === chosen) ?? stops.find((s) => s.stop === HIST_FREE)!;
+  const locked = dial?.locked ?? null;
+  const closed = dial && dial.closed.length ? `<p class="dialclosed"><b>History's book is closed</b> ${listOf(dial.closed.map((c) => `in ${esc(c.name)} since ${date(c.turn)}`))}. The staffs there decide for themselves, as they do at ${esc(stopName(HIST_FREE))}.</p>` : '';
+  const small = dial
+    ? `${locked ? esc(locked) : 'The dial leashes the world the computer runs, never you. Turn it in any month: it bears on what the rival staffs and the neutral countries decide from next month on.'}${dial.loosest !== dial.stop ? ` This campaign has been played as loose as <b>${esc(dial.loosestName)}</b>, and its record is read against that.` : ''}`
+    : 'The dial leashes the world the computer runs, never you: your own orders are free at every stop. You can turn it in any month: click the badge beside the date.';
+  return `<div class="gclevels dial">${stops.map((s, k) => `<button class="gclevel${s.stop === on.stop ? ' on' : ''}" data-act="${act}" data-stop="${s.stop}" aria-pressed="${s.stop === on.stop}"${locked ? ' disabled' : ''}>${dialMark(k)}<b>${esc(s.name)}</b><span>${esc(s.under)}</span></button>`).join('')}</div>
+    <div class="dialends" aria-hidden="true"><span>◂ Closer to history</span><span>Further from it ▸</span></div>
+    <div class="gclevelnote"><p>${esc(on.blurb)}</p><ul>${on.lines.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>${closed}<small>${small}</small></div>`;
+}
+
+/** Claims and ambitions on the Powers screen: who claims what ground from whom, and how far it has gone. Claims on the player's ground come first. */
+function claimsPane(): string {
+  const dial = dialOf(g);
+  if (!dial) return '';
+  const list = claimsOf(g);
+  if (!list.length && dial.stop <= HIST_FREE) return '';
+  const row = (c: ClaimView): string => {
+    const at = g.byName[c.ground[0]];
+    const state = c.state === 'marched' ? `<i class="tag bad">At war for it since ${date(c.since)}</i>` : c.state === 'pressing' ? `<i class="tag warn">Pressing its claim since ${date(c.since)}: it may march</i>` : '<i class="tag">A claim it has not pressed</i>';
+    return `<div class="nat claim${c.onYou ? ' onyou' : ''}"${at ? ` data-act="showmap" data-id="${at.id}" title="Show ${esc(at.name)} on the map"` : ''}>${chip(c.nat)}<b>${esc(natName(c.nat))} claims ${esc(c.name)}</b><small>from ${esc(theName(c.on))}${c.onYou ? ' <i class="tag bad">Your ground</i>' : ''}</small><div class="will"><small>${esc(upFirst(c.why))}.</small> ${state}</div></div>`;
+  };
+  const sub = dial.stop > HIST_FREE
+    ? `With the history dial at <b>${esc(dial.name)}</b>, a country outside the war may press a claim on ground a neighbour holds and march for it when its moment comes. It always gives warning first, and every claim that could be pressed is listed here.`
+    : 'Raised while the history dial stood looser than it does now. A war begun for a claim is fought to its end.';
+  return `<h2 class="claimhead">Claims and ambitions</h2><p class="sub">${sub}</p>${list.length ? `<div class="claims">${list.map(row).join('')}</div>` : '<p class="sub">No country holds a claim it could press today.</p>'}`;
 }
 
 /** The switch for the war cabinet: with one, or without. */
@@ -5024,6 +5068,7 @@ function levelCard(): string {
     <h3 id="setdesks">Who runs what</h3><p class="sub">The armies and their battles are always yours. A desk in your staff's hands is run as a rival's staff would run it, and tells you its month in one line of news.</p><div class="desks">${cmd.desks.map((d) => deskRow(d, false)).join('')}</div>
     <h3 id="setcap">What your staff may spend</h3>${capPicker(cmd)}` : ''}
     <h3>How hard a war</h3>${levelPicker(levelOf(g).id, 'setlevel', true)}
+    ${dialOf(g) ? `<h3 id="sethist">The history dial</h3><p class="sub">How far the war the computer runs may move away from the war that was fought.</p>${dialPicker(dialOf(g)!.stop, 'sethist', dialOf(g))}` : ''}
     <h3 id="setcab">The war cabinet</h3>${cabinetPicker(!cabinetIsOff(g), 'setcabinet', true)}${cabinetOffAsk()}
     <h3 id="setoffice">Your office</h3>${cabinetIsOff(g) ? '<p class="sub">With no war cabinet there is nobody to bring you down. Switch the cabinet on and you can say here whether it may.</p>' : officePicker(officeIsSecure(g), 'setoffice')}
     ${cmd ? `<h3 id="setfog">The fog of war</h3>${fogPicker(cmd.fog)}` : ''}</div>
@@ -5050,14 +5095,15 @@ function startCard(): string {
     <h3>Choose the year you take over</h3>
     <div class="gcyears">${GRAND.years.map((y) => `<button class="gcyear${y.year === pick.year.year ? ' on' : ''}" data-act="gcyear" data-year="${y.year}" ${years.includes(y.year) ? '' : 'disabled'} aria-pressed="${y.year === pick.year.year}"><b>${y.year}</b><span>${y.turn === 1 ? 'The war begins' : esc(date(y.turn))}</span></button>`).join('')}</div>
     ${pick.nat ? `<h3>Choose how hard a war</h3>${levelPicker(ui.gcLevel, 'gclevel')}<h3>Choose how deep you play</h3>${depthPicker(ui.gcDepth, 'gcdepth')}` : ''}
-    <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
+    <h3 id="gchist">Choose how close to history</h3>${dialPicker(ui.gcHist, 'gchist')}
+    <div class="gcbrief">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 88) : ''}<div class="grow"><div class="kick">${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</div><h4>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</h4>
       <p>${esc(pick.year.text)}</p><p class="you">${esc(pick.text)}${smallPick ? ' Open <b>Your path</b> on the top bar to choose where you stand.' : ''}</p>${goals ? `<div class="gcgoals">${goals}</div>` : ''}
       ${pick.nat && hasTraits(pick.nat) ? `<div class="gctraits"><h5>What ${esc(theName(pick.nat))} does best</h5>${traitList(pick.nat)}</div>` : ''}
       ${pick.year.turn > 1 ? `<small class="gcwait">The computer plays the first ${pick.year.turn - 1} months of the war first. That takes a few seconds.</small>` : ''}</div></div>
     <h3>Historical scenarios</h3>
     <div class="sides"><button class="sidebtn wide" data-act="menu" data-menu="scenarios"><b>Play a turning point of the war</b><span>Fourteen shorter campaigns, from the Battle of Britain and Barbarossa to D-Day and Operation Bagration. Each starts at a turning point with the other nations following history's plan, or you can sit back and watch history unfold.</span></button></div>
     ${STEPS}</div>
-    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 30) : ''}<span><b>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-depth="${pick.nat ? ui.gcDepth : ''}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
+    <footer class="gcfoot"><span class="grow">${pick.nat ? flagIcon(pick.nat, g.nations[pick.nat].color, 30) : ''}<span><b>${pick.nat ? esc(g.nations[pick.nat].name) : 'A war nobody has seen'}</b><small>${esc(pick.year.date)}${pick.nat ? ` · ${esc(levelById(ui.gcLevel).name)} · ${esc(depthName(ui.gcDepth))}` : ''}${ui.gcHist !== HIST_FREE ? ` · ${esc(stopName(ui.gcHist))}` : ''}</small></span></span><button class="btn go gcgo" data-act="start" data-nat="${pick.nat}" data-from="${pick.year.turn}" data-view="grand" data-level="${pick.nat ? ui.gcLevel : ''}" data-depth="${pick.nat ? ui.gcDepth : ''}" data-hist="${ui.gcHist}">${pick.nat ? 'Begin the campaign' : 'Watch it unfold'} ▸</button></footer>`;
 }
 
 function scenarioCard(): string {
@@ -5774,7 +5820,7 @@ function declareCard(): string {
 // ---- Running the game ---------------------------------------------------------------------
 
 /** Starts a campaign. With a later starting month, the computer plays history up to it and then hands over. */
-function newGame(human: string | null, seed?: number, from = 1, view = '', level: string = DIFFICULTY.start, cabinet = true, secure = false, depth = ''): void {
+function newGame(human: string | null, seed?: number, from = 1, view = '', level: string = DIFFICULTY.start, cabinet = true, secure = false, depth = '', hist: number = HIST_FREE): void {
   stopAuto();
   dropPassing();
   g = createGame(seed ?? (Date.now() % 900000) + 1, from > 1 ? null : human);
@@ -5784,6 +5830,8 @@ function newGame(human: string | null, seed?: number, from = 1, view = '', level
   while (g.turn < from) runTurnAI(g);
   if (grand && from > 1) startOpen(g);
   g.human = human;
+  // The history dial: how far the computer-run world may move away from history, in a watched war too.
+  if (grand && hist !== HIST_FREE) orderHistory(g, hist, true);
   // The level the player chose for his grand campaign. With nobody at the table every nation plays the fair game.
   if (grand && human) setLevel(g, level);
   // A player who wants the war without the politics plays with the war cabinet switched off.
@@ -6142,10 +6190,10 @@ function onClick(e: MouseEvent): void {
   const id = Number(t.dataset.id ?? t.dataset.agent);
   ui.msg = '';
   switch (act) {
-    case 'start': if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1', t.dataset.depth || ''); break;
+    case 'start': if (t.dataset.view === 'grand') rememberPick(); openModal(null); newGame(t.dataset.nat || null, undefined, Number(t.dataset.from || 1), t.dataset.view || '', t.dataset.level || DIFFICULTY.start, t.dataset.cabinet !== '0', t.dataset.secure === '1', t.dataset.depth || '', t.dataset.view === 'grand' ? Number(t.dataset.hist) || HIST_FREE : HIST_FREE); break;
     case 'menu': ui.menu = t.dataset.menu === 'scenarios' ? 'scenarios' : 'grand'; openModal({ kind: 'start' }); break;
-    case 'gcnat': case 'gcyear': case 'gclevel': case 'gccabinet': case 'gcsecure': case 'gcdepth': {
-      if (act === 'gcdepth') ui.gcDepth = t.dataset.depth ?? DEPTH.start; else if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else if (act === 'gclevel') ui.gcLevel = t.dataset.level ?? DIFFICULTY.start; else if (act === 'gccabinet') ui.gcCabinet = t.dataset.on === '1'; else if (act === 'gcsecure') ui.gcSecure = t.dataset.secure === '1'; else ui.gcYear = Number(t.dataset.year) || 1939;
+    case 'gcnat': case 'gcyear': case 'gclevel': case 'gccabinet': case 'gcsecure': case 'gcdepth': case 'gchist': {
+      if (act === 'gchist') ui.gcHist = Number(t.dataset.stop) || HIST_FREE; else if (act === 'gcdepth') ui.gcDepth = t.dataset.depth ?? DEPTH.start; else if (act === 'gcnat') ui.gcNat = t.dataset.nat ?? ''; else if (act === 'gclevel') ui.gcLevel = t.dataset.level ?? DIFFICULTY.start; else if (act === 'gccabinet') ui.gcCabinet = t.dataset.on === '1'; else if (act === 'gcsecure') ui.gcSecure = t.dataset.secure === '1'; else ui.gcYear = Number(t.dataset.year) || 1939;
       // Repainting the card must not throw the reader back to its top.
       const keep = $('#card').scrollTop;
       openModal({ kind: 'start' });
@@ -6706,6 +6754,7 @@ function onClick(e: MouseEvent): void {
       if (g.human && orderCabinet(g, t.dataset.on === '1')) { queueSave(); const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; }
       break;
     }
+    case 'sethist': { if (g.human && orderHistory(g, Number(t.dataset.stop))) { queueSave(); const keep = $('#card').scrollTop; refresh(); openModal({ kind: 'level' }); $('#card').scrollTop = keep; } break; }
     case 'setdepth': {
       const id = t.dataset.depth ?? '', to = DEPTH.depths.find((d) => d.id === id);
       // A depth with no cabinet, picked while the cabinet has business open, is asked twice: the bill is shown first.

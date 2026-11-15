@@ -134,17 +134,19 @@ export function moment(g: Game, a: Ambition): string | null {
   const f = fronts(g, a.nat, { extra: new Set([a.on]) }).find((x) => x.enemies.includes(a.on) && held.some((r) => x.depth[r.id] > 0));
   const thin = held.every((r) => r.units.reduce((s, u) => s + (u.nat === a.on && !u.dead ? u.divs : 0), 0) <= C.thin);
   const good = f ? f.near >= C.odds : thin;
+  // Where anything goes each claimant bides its own time, some for years: the month is dealt from the war's seed.
+  const waited = g.turn >= 3 + Math.floor(dialDraw(g, 'wait', a.id) * (S.wait ?? 0));
   if (busy.length) {
     // A great power of the holder's alliance on the claimant's own border deters it, until that power is hard pressed
     // itself (not asked where anything goes).
     if (!S.bold && guarded(g, a)) return null;
     if (lost >= C.weak) return `${H.name} is hard pressed by ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
-    // (Ground across the sea is not gone for on a thin garrison alone, except where anything goes.)
-    if (good && (f || S.bold)) return f ? `${theName(H, true)}'s armies are away fighting ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}` : `${theName(H, true)} holds it with a handful of troops while it fights ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
+    // (Ground across the sea is not gone for on a thin garrison alone, except where anything goes and its month has come.)
+    if (good && (f || (S.bold && waited))) return f ? `${theName(H, true)}'s armies are away fighting ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}` : `${theName(H, true)} holds it with a handful of troops while it fights ${listOf(busy.slice(0, 2).map((e) => g.nations[e].name))}`;
     return null;
   }
-  // Where anything goes a claimant needs no war to hide behind, only the odds: but each bides its time, some for years.
-  if (!S.bold || !good || g.turn < 3 + Math.floor(dialDraw(g, 'wait', a.id) * (S.wait ?? 0))) return null;
+  // Where anything goes a claimant needs no war to hide behind, only the odds and its month.
+  if (!S.bold || !good || !waited) return null;
   return f ? 'the frontier is thinly held' : 'it is held by a handful of troops';
 }
 
