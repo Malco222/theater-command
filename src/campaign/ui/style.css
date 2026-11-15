@@ -1850,3 +1850,15 @@ button.tag:hover, button.tag:focus-visible { filter: brightness(1.25); }
   .gclevels.dial .gclevel > .dialmark { display: inline-flex; gap: 3px; }
   .rank .rdial { display: none; }
 }
+
+/* ---- Winning the world (Version 71): the two tests on the standings ---- */
+.wtests { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0 12px; }
+.wtest { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 5px; }
+.wtest > span { font-size: 15px; line-height: 1.2; color: var(--ink-3); }
+.wtest.met { border-color: #3d6a45; }
+.wtest.met > span { color: #b8dcb2; }
+.wtest b { display: block; font-size: 13px; font-weight: 600; }
+.wtest small { display: block; color: var(--ink-3); font-size: 11.5px; }
+.wtest > div { flex: 1; min-width: 0; }
+.wtest .meter { margin-top: 5px; }
+@media (max-width: 640px) { .wtests { grid-template-columns: 1fr; } }

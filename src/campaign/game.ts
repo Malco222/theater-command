@@ -2320,6 +2320,8 @@ export function endPhase(g: Game, nat: string): void {
   tellBurnt(g);
   // The player's directive is looked at as his month closes: a town taken in it is a job done (the grand campaign).
   judgeDirective(g, nat);
+  // The last act of the grand campaign: has this month's ground given the last great power its share of the world?
+  crown(g);
 }
 
 export function startPhase(g: Game, nat: string): void {

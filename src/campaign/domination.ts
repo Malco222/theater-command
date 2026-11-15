@@ -14,11 +14,13 @@
 //   dom:seen   the month the player was first told the war was decided
 //   dom:peace  the month the player chose to take the victory (the last act can still be chosen later)
 //   dom:won    the month the last nation was left standing
+//   dom:laid   how many countries laid down their arms that month, with no great power left to stand beside
 import data from '../../data/campaign/domination.json';
 import { airOnFall } from './air';
 import { DIPLOMACY } from './diplomacy';
 import { ledger } from './economy';
 import { allied, bloc, collapseScore, fieldArmy, headline, relocate, removeCorps, setWar } from './game';
+import { dropSieges } from './siege';
 import { armyKnown, fogOn, knowsBooks } from './intel';
 import { fleetsOnFall } from './navy';
 import type { Corps, Game, Nation, Region } from './types';
@@ -26,7 +28,8 @@ import type { Corps, Game, Nation, Region } from './types';
 export const DOMINATION = data as unknown as {
   nerve: { attackAt: number; persist: number };
   guests: { org: number };
-  lines: { open: string; guests: string; leave: string; won: string };
+  won: { share: number };
+  lines: { open: string; guests: string; leave: string; won: string; last: string };
 };
 
 type Side = 'axis' | 'allies';
@@ -152,7 +155,7 @@ export function startDomination(g: Game, by: string | null = g.human): boolean {
   for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) setWar(g, live[i].id, live[j].id);
   g.flags.dom = g.turn;
   g.flags['dom:n'] = live.length;
-  headline(g, 'war', fill(DOMINATION.lines.open, { n: live.length }), by ?? undefined);
+  headline(g, 'war', fill(DOMINATION.lines.open, { n: live.length, share: shareWords(DOMINATION.won.share) }), by ?? undefined);
   let home = 0;
   for (const c of guests) {
     if (c.dead) continue;
@@ -176,13 +179,75 @@ export function keepPeace(g: Game): boolean {
   return true;
 }
 
-/** Notes the month the last nation is left standing. Safe to call as often as anyone likes. */
+/** A share as it is said: three quarters, two thirds, or a percentage. */
+export const shareWords = (s: number): string => (Math.abs(s - 0.75) < 1e-9 ? 'three quarters' : Math.abs(s - 2 / 3) < 1e-3 ? 'two thirds' : Math.abs(s - 0.5) < 1e-9 ? 'half' : `${Math.round(s * 100)}%`);
+
+/** The share of the map's worth (its victory points) each nation holds. */
+function worth(g: Game): { all: number; held: Record<string, { n: number; vp: number }> } {
+  const held: Record<string, { n: number; vp: number }> = {};
+  let all = 0;
+  for (const r of g.regions) {
+    all += r.vp;
+    const h = (held[r.ctrl] ??= { n: 0, vp: 0 });
+    h.n++; h.vp += r.vp;
+  }
+  return { all, held };
+}
+
+/** The great powers still standing. */
+export const greatLeft = (g: Game): string[] => contenders(g).filter((n) => DIPLOMACY.majors.includes(n.id)).map((n) => n.id);
+
+/**
+ * How a nation stands against the two tests for winning the world: the rival great powers still standing, and its
+ * share of the map's worth against the share that wins.
+ */
+export function worldTests(g: Game, nat: string): { rivals: string[]; share: number; need: number } {
+  const { all, held } = worth(g);
+  return { rivals: greatLeft(g).filter((id) => id !== nat), share: all > 0 && g.nations[nat]?.alive ? (held[nat]?.vp ?? 0) / all : 0, need: DOMINATION.won.share };
+}
+
+/** A country with no great power left to stand beside lays down its arms: its troops, ships and aircraft go home and its ground answers to the winner. */
+function layDown(g: Game, n: Nation, to: string): void {
+  n.alive = false;
+  n.fellOn = { turn: g.turn, week: g.week, to, how: 'terms' };
+  delete n.freedOn;
+  for (const c of g.corps.filter((c) => c.nat === n.id)) removeCorps(g, c);
+  fleetsOnFall(g, n.id);
+  airOnFall(g, n.id);
+  dropSieges(g, n.id);
+  for (const r of g.regions) if (r.ctrl === n.id) r.ctrl = to;
+  for (const m of Object.values(g.nations)) m.atWar = m.atWar.filter((e) => e !== n.id);
+  n.atWar = [];
+}
+
+/**
+ * Notes the month the world is won, and ends the last act. It is won by the last great power standing once it
+ * holds the set share of the map's worth: the countries still standing then lay down their arms. With no great
+ * power left the nation that holds the share has won, and a nation left alone has won whatever it holds. Safe to
+ * call as often as anyone likes.
+ */
 export function crown(g: Game): void {
   if (!dominating(g) || g.flags['dom:won']) return;
   const live = contenders(g);
-  if (live.length !== 1) return;
+  if (!live.length) return;
+  if (live.length === 1) {
+    g.flags['dom:won'] = g.turn;
+    headline(g, 'goal', fill(DOMINATION.lines.won, { name: live[0].name, adj: live[0].adj }), live[0].id);
+    return;
+  }
+  const great = live.filter((n) => DIPLOMACY.majors.includes(n.id));
+  if (great.length > 1) return;
+  const { all, held } = worth(g);
+  const share = (n: Nation): number => (all > 0 ? (held[n.id]?.vp ?? 0) / all : 0);
+  const top = great[0] ?? [...live].sort((a, b) => share(b) - share(a) || (a.id < b.id ? -1 : 1))[0];
+  if (share(top) < DOMINATION.won.share) return;
+  const pct = Math.round(share(top) * 100);
+  const rest = live.filter((n) => n.id !== top.id);
   g.flags['dom:won'] = g.turn;
-  headline(g, 'goal', fill(DOMINATION.lines.won, { name: live[0].name, adj: live[0].adj }), live[0].id);
+  g.flags['dom:laid'] = rest.length;
+  for (const n of rest) layDown(g, n, top.id);
+  g.supplyDirty = true;
+  headline(g, 'goal', fill(DOMINATION.lines.last, { name: top.name, adj: top.adj, pct, rest: rest.length === 1 ? `${rest[0].name} lays down its arms.` : `The ${rest.length} countries still standing lay down their arms.` }), top.id);
 }
 
 /** The nation that has won the last act, or null while more than one stands. */
@@ -224,19 +289,18 @@ export interface WorldBoard {
   fallen: BoardRow[];
   /** The winner, once only one is left. */
   winner: string | null;
+  /** The two tests for winning the world: the great powers still standing, and the share of the map's worth that wins it once only one of them is left. */
+  great: string[];
+  need: number;
+  /** How many countries laid down their arms the month the world was won. */
+  laid: number;
   /** One production point is shown as this many in the interface. */
   scale: number;
 }
 
 /** The standings of the last act, for an interface: who is left, how much of the world each holds, and who has fallen to whom. */
 export function worldBoard(g: Game, viewer: string | null = g.human): WorldBoard {
-  const held: Record<string, { n: number; vp: number }> = {};
-  let all = 0;
-  for (const r of g.regions) {
-    all += r.vp;
-    const h = (held[r.ctrl] ??= { n: 0, vp: 0 });
-    h.n++; h.vp += r.vp;
-  }
+  const { all, held } = worth(g);
   let scale = 1;
   const row = (n: Nation): BoardRow => {
     const L = n.alive ? ledger(g, n.id) : null;
@@ -255,5 +319,5 @@ export function worldBoard(g: Game, viewer: string | null = g.human): WorldBoard
   };
   const rows = contenders(g).map(row).sort((a, b) => b.share - a.share || b.divisions - a.divisions || (a.nat < b.nat ? -1 : 1));
   const fallen = Object.values(g.nations).filter((n) => !n.alive && !!n.fellOn).map(row).sort((a, b) => b.fell!.turn - a.fell!.turn || (a.nat < b.nat ? -1 : 1));
-  return { on: dominating(g), since: g.flags.dom ?? 0, began: g.flags['dom:n'] ?? rows.length, left: rows.length, rows, fallen, winner: worldWinner(g), scale };
+  return { on: dominating(g), since: g.flags.dom ?? 0, began: g.flags['dom:n'] ?? rows.length, left: rows.length, rows, fallen, winner: worldWinner(g), great: greatLeft(g), need: DOMINATION.won.share, laid: g.flags['dom:laid'] ?? 0, scale };
 }
