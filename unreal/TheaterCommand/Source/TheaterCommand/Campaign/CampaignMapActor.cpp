@@ -1670,6 +1670,21 @@ void ACampaignMapActor::PaintGround()
 		}
 		OccupiedPicture = CampaignTextures::Create(Paint.NX, Paint.NY, Paint.Occupied, true, false, TEXT("TableOccupied"));
 		LandMaterial->SetTextureParameterValue(TEXT("Occupied"), OccupiedPicture);
+		// ("-TheaterLandScalar=StripesThinSnow:0.4,Band:0.3" tries other numbers in the land's paint without a rebuild)
+		FString ScalarsAsked;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterLandScalar="), ScalarsAsked, false))
+		{
+			TArray<FString> Each;
+			ScalarsAsked.ParseIntoArray(Each, TEXT(","));
+			for (const FString& One : Each)
+			{
+				FString ScalarName, ScalarValue;
+				if (One.Split(TEXT(":"), &ScalarName, &ScalarValue))
+				{
+					LandMaterial->SetScalarParameterValue(FName(*ScalarName), FCString::Atof(*ScalarValue));
+				}
+			}
+		}
 		// ("-TheaterStripes=0" takes the stripes of occupied ground away, to measure them against the plain stain)
 		float StripesAsked = 1.0f;
 		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterStripes="), StripesAsked))
@@ -1955,7 +1970,12 @@ UProceduralMeshComponent* ACampaignMapActor::BuildLandTile(FLandSheet& Sheet, in
 		// (a sheet with a finer one let into it lies a hair low round that one, and only there, so that where the two
 		// overlap the finer is always the one seen; elsewhere its land stands at its true height above the sea)
 		const bool bByTheHole = Sheet.Holes.Num() > 0 && Sheet.InHole(X, Y, -3.0 * Step * Shape.Cell);
-		return Buffers.AddVertex(MapToWorld(X, Y, Heights[J * Size.X + I] - Drop - (bByTheHole ? Sheet.Sink : 0.0)), FVector::UpVector, FColor::White, UV);
+		// (And the strip of it that runs on under the finer sheet's edge falls away as it goes in: a third of a unit
+		// for every unit. Lying a hair low the whole way, it came up through the finer ground wherever that dipped
+		// below it: in a hollow on the Kazakh steppe, near where two fine sheets meet, two pale hard-edged chips of
+		// the coarse sheet showed, which the art director found in rounds 27 and 28 and I twice misnamed.)
+		const double Under = bByTheHole && Sheet.Sink > 0.0 ? 0.35 * Sheet.DeepInHole(X, Y) : 0.0;
+		return Buffers.AddVertex(MapToWorld(X, Y, Heights[J * Size.X + I] - Drop - (bByTheHole ? Sheet.Sink : 0.0) - Under), FVector::UpVector, FColor::White, UV);
 	};
 	auto VertexAt = [&](int32 I, int32 J)
 	{
@@ -6699,6 +6719,12 @@ void ACampaignMapActor::LaySieges()
 		Siege.Town = Data.Regions[Each.Key].Center;
 		// (the town's island: its built ground and a quarter more, and never less than 28 pixels at working height, which is about eight map units)
 		Siege.Island = static_cast<float>(FMath::Max(TownRadius(Each.Key) * 1.25, 7.9));
+		// (but never more than two fifths of the province: in a city province, Warsaw's, the island filled the field
+		// and the siege showed nothing. There the besieger's colour is a band inside the frontier that thickens.)
+		if (Data.Regions[Each.Key].Area > 0.0)
+		{
+			Siege.Island = FMath::Min(Siege.Island, static_cast<float>(FMath::Sqrt(0.4 * Data.Regions[Each.Key].Area / UE_DOUBLE_PI)));
+		}
 	}
 }
 
@@ -6775,7 +6801,10 @@ void ACampaignMapActor::SetHolders(const TArray<FString>& Holders, const TArray<
 			continue;
 		}
 		Standing.Add(Siege.Region);
-		const float Target = 0.35f + 0.65f * FMath::Clamp(bSiegeHeld ? SiegeHeldAt : Siege.Progress, 0.0f, 1.0f);
+		// (The art director's round 28: with the depth running evenly the besieger's colour covered seven tenths of
+		// the province when the siege was laid and nine tenths half way, so its second half could not be watched:
+		// area goes with the square of depth. It is the defender's remaining ground that shrinks evenly.)
+		const float Target = 1.0f - 0.65f * FMath::Sqrt(1.0f - FMath::Clamp(bSiegeHeld ? SiegeHeldAt : Siege.Progress, 0.0f, 1.0f));
 		FSiegeShown* Known = SiegesShown.Find(Siege.Region);
 		if (!Known)
 		{
@@ -7249,6 +7278,38 @@ void ACampaignMapActor::SetSeason(int32 Turn)
 	// How hard the winter lies in each month of the year.
 	static const float Winter[12] = { 1.0f, 0.92f, 0.5f, 0.12f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.08f, 0.42f, 0.86f };
 	const float Hard = Winter[Month];
+	{
+		// (The stripes of occupied ground are laid stronger where snow lies, so that they show as well in January as
+		// in July: the painter is told how far the snow takes each province toward white, and occupied ground is
+		// painted again when that has changed.)
+		bool bSnowMoved = false;
+		Paint.RegionSnow.SetNumZeroed(Data.Regions.Num());
+		for (const FCampaignRegion& Region : Data.Regions)
+		{
+			// (about a third in deep winter, by the game's own January pictures: Germany over Poland, and at Kiev)
+			// (where the snow's ragged edge crosses a province, the most that lies anywhere on it: its stripes are for its snowed half too)
+			float Most = SnowLying(Region.Center, Hard);
+			if (Region.Bounds.bIsValid && Hard > 0.0f)
+			{
+				const FVector2D Middle = Region.Bounds.GetCenter(), Reach = Region.Bounds.GetExtent() * 0.6;
+				for (int32 K = 0; K < 4; ++K)
+				{
+					Most = FMath::Max(Most, SnowLying(Middle + FVector2D((K % 2 ? 1.0 : -1.0) * Reach.X, (K / 2 ? 1.0 : -1.0) * Reach.Y), Hard));
+				}
+			}
+			const float Lies = 0.34f * FMath::Sqrt(Hard) * Most;
+			bSnowMoved |= !Region.Lawful.IsEmpty() && FMath::RoundToInt32(Lies * 20.0f) != FMath::RoundToInt32(Paint.RegionSnow[Region.Id] * 20.0f);
+			Paint.RegionSnow[Region.Id] = Lies;
+		}
+		if (bSnowMoved && bLandLaid && TintPicture && OccupiedPicture && Paint.Tint.Num() == Paint.NX * Paint.NY)
+		{
+			EndInk();
+			Paint.PaintTint(Data, Terrain, 0, 0, Terrain.NX - 1, Terrain.NY - 1);
+			CampaignTextures::Update(TintPicture, Paint.Tint);
+			CampaignTextures::Update(OccupiedPicture, Paint.Occupied);
+			CampaignTextures::Update(ReliefPicture, Paint.Relief);
+		}
+	}
 	TArray<FColor> Pixels = Paint.Masks;
 	if (Hard > 0.0f)
 	{

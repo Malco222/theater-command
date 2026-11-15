@@ -671,7 +671,7 @@ def build_land():
     # (red earth is more than half as red again as it is green: no other ground under the canopy is)
     red_earth = sat(times(m, less((ground, "R"), times(m, (ground, "G"), 1.6, -3400, -1500), -3200, -1500), 40.0, -3100, -1500), -3000, -1500)
     in_jungle = sat(smaller(times(m, one_in(m, unreal.MaterialExpressionOneMinus, (lie, "A"), -3300, -1420), 2.0, -3200, -1420),
-                            times(m, plus(m, (lie, "A"), -0.45, -3300, -1340), 20.0, -3200, -1340), -3100, -1380), -3000, -1380)
+                            times(m, plus(m, (lie, "A"), -0.5, -3300, -1340), 40.0, -3200, -1340), -3100, -1380), -3000, -1380)
     by_a_water = times(m, sat(times(m, half, 400.0, -3300, -1260), -3200, -1260), sat(less(plus(m, half, 4.0, -3300, -1180), off, -3200, -1180), -3100, -1180), -3000, -1220)
     closed_over = times(m, times(m, red_earth, in_jungle, -2900, -1440), times(m, by_a_water, times(m, one_in(m, unreal.MaterialExpressionOneMinus, great, -3000, -1100),
                                                                                        sat(times(m, less(px, scalar(m, "ClearingsGoFrom", 0.235, -3100, -1040), -3000, -1040), 20.0, -2950, -1040), -2900, -1040), -2850, -1080), -2900, -1160), -2800, -1300)
@@ -759,7 +759,11 @@ def build_land():
     c = lerp(m, c, water_colour, river, -950, -400)
     waters = river
     wetness = times(m, river, one_in(m, unreal.MaterialExpressionOneMinus, bed, 550, 3250), 700, 3250)
-    c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), (masks, "G"), -900, -400)
+    # (The art director's round 28: under snow the stripes of occupied ground went quiet, and in the snowed woods of
+    # the East they could not be seen at all, where what could be liberated matters most. The snow lies thinner on a
+    # stripe: the old owner's colour shows through the dusting, as a dark thread shows through frost on cloth.)
+    snow_lying = times(m, (masks, "G"), one_in(m, unreal.MaterialExpressionOneMinus, times(m, striped, scalar(m, "StripesThinSnow", 0.38, -1500, -40), -1350, -60), -1200, -60), -1050, -100)
+    c = lerp(m, c, vector(m, "SnowColour", (0.888, 0.871, 0.823, 1.0), -1700, -150), snow_lying, -900, -400)
     # (The art director's ruling of round 19: in winter the snow took a wood's dark floor away, and every tree stood
     # alone on white like salt. A wood keeps a cool grey floor under the snow, like pencil shading on the map, about
     # a tenth below the snow round it; and so the woods can be found in winter, which matters, since they change a fight.)

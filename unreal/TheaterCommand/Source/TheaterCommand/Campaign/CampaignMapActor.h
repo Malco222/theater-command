@@ -374,6 +374,16 @@ private:
 		// whichever is nearest the eye: each tile by itself (1), or the whole sheet together by Turn (2). 0: it stays put.
 		int32 WrapMode = 0;
 		int32 Turn = 0;
+		/** How far inside a hole a point lies, in map units from the hole's nearest edge: nought outside every hole. */
+		double DeepInHole(double X, double Y) const
+		{
+			double Deep = 0.0;
+			for (const FBox2D& Hole : Holes)
+			{
+				Deep = FMath::Max(Deep, FMath::Min(FMath::Min(X - Hole.Min.X, Hole.Max.X - X), FMath::Min(Y - Hole.Min.Y, Hole.Max.Y - Y)));
+			}
+			return Deep;
+		}
 		/** True where a point lies well inside one of the holes: Margin map units in from its edge. */
 		bool InHole(double X, double Y, double Margin) const
 		{

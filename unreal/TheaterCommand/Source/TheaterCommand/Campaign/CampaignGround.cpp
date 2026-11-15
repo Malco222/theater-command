@@ -551,6 +551,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		};
 		const bool bFromHigh = Terrain.Cell > 3.0; // (the coarse sheet of the whole world, seen from high up)
 		TArray<FVector2D> CourseLine, CourseLineBefore; // a course as it is laid on this sheet
+		TArray<FVector2D> LaidLine;
+		TArray<float> LaidHalf, LaidWater;
 		for (const FCampaignWorldRivers::FCourse& Course : WorldRivers.Courses)
 		{
 			if (Course.MaxY < BoxMinY || Course.MinY > BoxMaxY)
@@ -613,7 +615,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 					// began as a hairline and was a river one confluence later)
 					const float River = FMath::SmoothStep(8000.0f, 60000.0f, OutCarried);
 					HalfLaid = FMath::Max(HalfLaid, River);
-					OutCarried = FMath::Max(OutCarried, 160000.0f * River);
+					// (The art director's round 28: above its join at Mopti the Niger's cream bed was three times its
+					// water's width, a chalk road. A great river counts as running all the year from early in its
+					// course: its bed is then no wider than its water.)
+					OutCarried = FMath::Max(OutCarried, 160000.0f * FMath::SmoothStep(0.15f, 0.45f, River));
 				}
 				if (bFromHigh && HalfLaid < 1.0f)
 				{
@@ -623,6 +628,82 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				}
 				return HalfLaid;
 			};
+			if (!bFromHigh && !Course.bGreat)
+			{
+				// (A course a few points long, the last trickle into a closed hollow, is no river to the eye: a gully that
+				// short is a blob of its pale bed. One under seven map units long that is no great river's is not laid.)
+				double Long = 0.0;
+				for (int32 K = 0; K < LaidTo && Long < 7.0; ++K)
+				{
+					Long += FVector2D::Distance(CourseLine[K], CourseLine[K + 1]);
+				}
+				if (Long < 7.0)
+				{
+					continue;
+				}
+			}
+			// The course as it is laid: its points, half its breadth and its water at each.
+			LaidLine.Reset();
+			LaidHalf.Reset();
+			LaidWater.Reset();
+			if (bFromHigh)
+			{
+				for (int32 K = 0; K <= LaidTo; ++K)
+				{
+					float Carried = 0.0f;
+					const float HalfLaid = HalfHere(K, Carried);
+					LaidLine.Add(CourseLine[K]);
+					LaidHalf.Add(HalfLaid);
+					LaidWater.Add(Carried);
+				}
+			}
+			else
+			{
+				// (The art director's round 28: three hairlines ran dead straight for a hundred pixels and more, across
+				// flats where the heights give water no reason to turn. A hairline is given a slow wander, the same at a
+				// place for every course that passes it, so that two that meet still meet; where it joins a broader
+				// river it comes to that river's own line.)
+				float JoinsThin = 1.0f;
+				if (WorldRivers.Courses.IsValidIndex(Course.Joins))
+				{
+					const FCampaignWorldRivers::FCourse& Joined = WorldRivers.Courses[Course.Joins];
+					const float JoinedHalf = FMath::Max(Joined.BreadthFor(Course.JoinsWater), Joined.bGreat ? FMath::SmoothStep(8000.0f, 60000.0f, Course.JoinsWater) : 0.0f);
+					JoinsThin = 1.0f - FMath::SmoothStep(0.15f, 0.35f, JoinedHalf);
+				}
+				double ToEnd = 0.0;
+				for (int32 K = 0; K < LaidTo; ++K)
+				{
+					ToEnd += FVector2D::Distance(CourseLine[K], CourseLine[K + 1]);
+				}
+				auto Put = [&](const FVector2D& At, float HalfLaid, float Carried, double Left)
+				{
+					const float Thin = FMath::Lerp(JoinsThin, 1.0f - FMath::SmoothStep(0.15f, 0.35f, HalfLaid), FMath::SmoothStep(0.0f, 5.0f, static_cast<float>(Left)));
+					// (up to about two and a half units either way on a grain of eleven, and a third of that on a finer one:
+					// the measure of the wander the heights give the other hairlines)
+					const FVector2D Wandered = FVector2D(FMath::PerlinNoise2D(At * 0.09 + FVector2D(83.0, 19.0)), FMath::PerlinNoise2D(At * 0.09 + FVector2D(7.0, 61.0))) * 2.6
+						+ FVector2D(FMath::PerlinNoise2D(At * 0.31 + FVector2D(41.0, 5.0)), FMath::PerlinNoise2D(At * 0.31 + FVector2D(13.0, 97.0))) * 0.8;
+					LaidLine.Add(At + Wandered * Thin);
+					LaidHalf.Add(HalfLaid);
+					LaidWater.Add(Carried);
+				};
+				for (int32 K = 0; K < LaidTo; ++K)
+				{
+					float WaterA = 0.0f, WaterB = 0.0f;
+					const float HalfA = HalfHere(K, WaterA), HalfB = HalfHere(K + 1, WaterB);
+					const double Long = FVector2D::Distance(CourseLine[K], CourseLine[K + 1]);
+					// (a long straight stretch of a hairline is laid in pieces of about two units, each with its own wander)
+					const int32 Pieces = FMath::Max(HalfA, HalfB) < 0.35f ? FMath::Clamp(FMath::CeilToInt32(Long / 2.0), 1, 64) : 1;
+					for (int32 Piece = 0; Piece < Pieces; ++Piece)
+					{
+						const float T = static_cast<float>(Piece) / Pieces;
+						Put(FMath::Lerp(CourseLine[K], CourseLine[K + 1], static_cast<double>(T)), FMath::Lerp(HalfA, HalfB, T), FMath::Lerp(WaterA, WaterB, T), ToEnd - Long * T);
+					}
+					ToEnd -= Long;
+				}
+				float Carried = 0.0f;
+				const float HalfLaid = HalfHere(LaidTo, Carried);
+				Put(CourseLine[LaidTo], HalfLaid, Carried, 0.0);
+			}
 			for (int32 Turn = -2; Turn <= 2; ++Turn)
 			{
 				// (the course in the map's own measure: the world's own less Europe's place in it, and any turn of the world east or west)
@@ -631,15 +712,13 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 				{
 					continue;
 				}
-				for (int32 K = 0; K < LaidTo; ++K)
+				for (int32 K = 0; K + 1 < LaidLine.Num(); ++K)
 				{
-					float WaterA = 0.0f, WaterB = 0.0f;
-					const float HalfA = HalfHere(K, WaterA), HalfB = HalfHere(K + 1, WaterB);
-					if (bFromHigh && FMath::Max(HalfA, HalfB) <= 0.0f)
+					if (bFromHigh && FMath::Max(LaidHalf[K], LaidHalf[K + 1]) <= 0.0f)
 					{
 						continue;
 					}
-					Lay(FVector2D(CourseLine[K].X + Shift, CourseLine[K].Y), FVector2D(CourseLine[K + 1].X + Shift, CourseLine[K + 1].Y), HalfA, HalfB, WaterA, WaterB);
+					Lay(FVector2D(LaidLine[K].X + Shift, LaidLine[K].Y), FVector2D(LaidLine[K + 1].X + Shift, LaidLine[K + 1].Y), LaidHalf[K], LaidHalf[K + 1], LaidWater[K], LaidWater[K + 1]);
 				}
 			}
 		}
@@ -679,9 +758,11 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 			const FLakeRuling Rulings[] =
 			{
 				{ false, true, 60.0, 0.34f, 1.6f, 2.35f, 1.0f, -0.6f, 0.3f },
-				{ true, true, 70.0, 0.34f, 1.9f, 2.4f, 1.0f, -0.6f, 0.3f },
+				// (The art director's round 28: the tundra's lakes were too even in size. Each view has three or four
+				// thaw lakes two to three times the rest: long, at the most the picture can hold in breadth.)
+				{ true, true, 45.0, 1.0f, 2.25f, 2.45f, 1.0f, -0.25f, 0.45f },
 				{ false, false, 6.0, 1.0f, 0.4f, 1.7f, 1.3f, 0.0f, 0.3f },
-				{ true, false, 7.5, 1.0f, 0.6f, 2.35f, 1.05f, 0.05f, 0.3f },
+				{ true, false, 6.5, 1.0f, 0.55f, 1.5f, 1.15f, 0.05f, 0.3f },
 			};
 			for (const FLakeRuling& Ruling : Rulings)
 			{
@@ -703,8 +784,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						// (its outline: broader at one end than the other, bent in the middle, and the larger with a bulge to one side)
 						const float RadiusA = Radius * (0.6f + 0.4f * Lean), RadiusB = Radius * (1.0f - 0.4f * Lean);
 						const float Room = static_cast<float>(Pitch) * 0.5f - 0.2f;
-						const float StretchA = FMath::Clamp(Radius * (0.3f + 0.95f * LongA), 0.0f, FMath::Max(0.92f * Room - RadiusA, 0.0f));
-						const float StretchB = FMath::Clamp(Radius * (0.3f + 0.95f * LongB), 0.0f, FMath::Max(0.92f * Room - RadiusB, 0.0f));
+						// (a great pool of the tundra is a long thaw lake)
+						const float LongLeast = bPool && Ruling.bGreatOne ? 0.75f : 0.3f;
+						const float StretchA = FMath::Clamp(Radius * (LongLeast + 0.95f * LongA), 0.0f, FMath::Max(0.92f * Room - RadiusA, 0.0f));
+						const float StretchB = FMath::Clamp(Radius * (LongLeast + 0.95f * LongB), 0.0f, FMath::Max(0.92f * Room - RadiusB, 0.0f));
 						const bool bBulge = Ruling.bGreatOne || (Radius > 0.75f && Lobe < 0.6f);
 						// (a bulge is broad and shallow: a narrow one stood out as a knob with a nick each side of it)
 						const float RadiusC = Radius * (0.7f + 0.2f * LobeSize);
@@ -712,7 +795,10 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 						const float Extent = FMath::Max(FMath::Max3(Radius, StretchA + RadiusA, StretchB + RadiusB), bBulge ? StretchC + RadiusC : 0.0f);
 						// (where in its square: anywhere it fits; and the square itself pushed about by a slow unevenness of
 						// the country, the same for its neighbours, so that the ruling never shows as rows)
-						const double Free = FMath::Max(Room - Extent, 0.0f);
+						// (On the open tundra, where nothing hides it, a pool kept inside its square still showed the ruling
+						// faintly: a pool's nearest neighbours lay level or plumb with it too often. There a small pool
+						// may lie anywhere in its square, over its edge too; one that then lies on another is not laid.)
+						const double Free = bPool && !Ruling.bGreatOne ? Room : FMath::Max(Room - Extent, 0.0f);
 						const FVector2D Kept(Around + 0.5 * Pitch, (B + 0.5) * Pitch); // (its square's middle, as the world keeps it)
 						const FVector2D Pushed = Ruling.bGreatOne ? FVector2D::ZeroVector
 							: FVector2D(FMath::PerlinNoise2D(Kept * 0.045 + FVector2D(23.0, 77.0)), FMath::PerlinNoise2D(Kept * 0.045 + FVector2D(59.0, 31.0))) * 2.2;
@@ -851,7 +937,8 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 							HalfFloor[Idx] = FMath::Max(HalfFloor[Idx], 0.38f * FMath::SmoothStep(0.5f, 0.8f, Steppe));
 						}
 						// (a great river through dry country waters a strip of it: green, and farmed)
-						const float Parched = FMath::Clamp(Desert + Steppe + Shares[WorldLook::DryPlain] + 0.6f * Shares[WorldLook::DrySouth], 0.0f, 1.0f);
+						// (in the savanna too, a little less: the green of the Niger's lower course begins above Mopti)
+						const float Parched = FMath::Clamp(Desert + Steppe + Shares[WorldLook::DryPlain] + 0.6f * Shares[WorldLook::DrySouth] + 0.7f * Savanna, 0.0f, 1.0f);
 						const float Strip = Out * Parched * Great * (1.0f - FMath::SmoothStep(Half + 1.0f, Half + 4.6f, Off));
 						if (Strip > 0.0f)
 						{
@@ -1101,6 +1188,31 @@ void FCampaignGround::Build(const FCampaignMapData& Data, const FCampaignTerrain
 		}
 	});
 
+	{
+		// ("-TheaterProbe=2056,840" writes what the painter made of the ground round a place to the log)
+		FString ProbeAt, ProbeX, ProbeY;
+		if (FParse::Value(FCommandLine::Get(), TEXT("TheaterProbe="), ProbeAt, false) && ProbeAt.Split(TEXT(","), &ProbeX, &ProbeY))
+		{
+			const int32 ProbeI = FMath::RoundToInt32((FCString::Atod(*ProbeX) - Terrain.OriginX) / Terrain.Cell), ProbeJ = FMath::RoundToInt32((FCString::Atod(*ProbeY) - Terrain.OriginY) / Terrain.Cell);
+			if (ProbeI >= 12 && ProbeJ >= 12 && ProbeI + 12 < NX && ProbeJ + 12 < NY)
+			{
+				for (const TCHAR* What : { TEXT("shade"), TEXT("wooded"), TEXT("metres"), TEXT("dry"), TEXT("sand") })
+				{
+					for (int32 J = ProbeJ - 9; J <= ProbeJ + 9; ++J)
+					{
+						FString Row;
+						for (int32 I = ProbeI - 11; I <= ProbeI + 11; ++I)
+						{
+							const int32 Idx = Terrain.Index(I, J);
+							const FString W(What);
+							Row += FString::Printf(TEXT("%4d"), W == TEXT("shade") ? Relief[Idx].B : W == TEXT("wooded") ? Ground[Idx].A : W == TEXT("metres") ? FMath::RoundToInt32(Metres[Idx]) : W == TEXT("dry") ? Masks[Idx].A : Masks[Idx].B);
+						}
+						UE_LOG(LogTheater, Display, TEXT("Probe %s y %.0f: %s"), What, Terrain.OriginY + J * Terrain.Cell, *Row);
+					}
+				}
+			}
+		}
+	}
 	if (bWaters && WetScale > 1)
 	{
 		// (the waters' picture at its own finer points: each takes its country's floor for a water's breadth, and
@@ -1474,7 +1586,7 @@ namespace
 	 * lowland by day; and where the two are too alike to reach 8 even at 0.6, the answer is less than nothing, which
 	 * says "the holder's own stain at four fifths of its brightness").
 	 */
-	float StripeMix(const FSeen& Holder, const FSeen& Owner, float PlainsLight)
+	float StripeMix(const FSeen& Holder, const FSeen& Owner, float PlainsLight, float Snow)
 	{
 		// (Open lowland by day, as the game's own pictures show it. Measured with the stripes and without, on
 		// Germany's field grey over France, Belgium and the Netherlands: the ground between stripes is about the
@@ -1483,23 +1595,42 @@ namespace
 		// reckoning from the paint alone, as this first was, came out a third too quiet for a warm owner and not
 		// far off half too quiet for a blue one.)
 		const FSeen Between = Mix(FSeen::Bytes(100, 128, 96), Holder, 0.45f);
-		auto At = [&](float Share)
+		// (The art director's round 28: under snow a stripe went quiet. Measured, Germany over Poland fell from 9.8 in
+		// October to 7.2 in January at the same mix, and nothing showed at Smolensk in January 1942, where what could
+		// be liberated matters most. Snow takes the stripe and the ground between both toward its own white, by
+		// about three tenths in deep winter: the reckoning is made as the ground will be seen.)
+		const FSeen SnowSeen = FSeen::Bytes(236, 232, 220);
+		auto AtUnder = [&](float Share, float Lying)
 		{
 			const FSeen Stripe(FMath::Clamp(Between.R + 0.67f * Share * (Owner.R - Holder.R), 0.0f, 1.0f), FMath::Clamp(Between.G + 0.62f * Share * (Owner.G - Holder.G), 0.0f, 1.0f),
 				FMath::Clamp(Between.B + 0.85f * Share * (Owner.B - Holder.B), 0.0f, 1.0f));
-			return Differs(Stripe, Between);
+			return Differs(Mix(Stripe, SnowSeen, Lying), Mix(Between, SnowSeen, Lying));
 		};
+		auto At = [&](float Share) { return AtUnder(Share, Snow); };
 		// (Two nations of one hue are too alike however the numbers fall: the art director names the Soviet Union over
 		// Poland, Britain over the Soviet Union. In the game's pictures a stripe of Poland's red on the Soviet Union's
 		// red measured under 4, where the reckoning gave it 10.)
 		const FVector3f HolderLab = ToLab(Holder), OwnerLab = ToLab(Owner);
 		const float HolderChroma = FMath::Sqrt(HolderLab.Y * HolderLab.Y + HolderLab.Z * HolderLab.Z), OwnerChroma = FMath::Sqrt(OwnerLab.Y * OwnerLab.Y + OwnerLab.Z * OwnerLab.Z);
 		const float HueApart = FMath::Abs(FMath::FindDeltaAngleDegrees(FMath::RadiansToDegrees(FMath::Atan2(HolderLab.Z, HolderLab.Y)), FMath::RadiansToDegrees(FMath::Atan2(OwnerLab.Z, OwnerLab.Y))));
-		if (At(0.6f) < 8.0f || (HolderChroma > 18.0f && OwnerChroma > 18.0f && HueApart < 30.0f))
+		// (whether two nations are too alike is asked of the bare ground: it is not for the season to decide)
+		if (AtUnder(0.6f, 0.0f) < 8.0f || (HolderChroma > 18.0f && OwnerChroma > 18.0f && HueApart < 30.0f))
 		{
 			return -1.0f;
 		}
 		float Share = 0.55f;
+		if (Snow > 0.0f && At(Share) < 10.5f)
+		{
+			// (under snow it may take more of the old owner's colour than the 0.55 the brief begins with, up to
+			// 0.85: the stripe is two fifths of the ground, so the holder's shade is still the main colour)
+			float Low = Share, High = 0.85f;
+			for (int32 Pass = 0; Pass < 12; ++Pass)
+			{
+				const float Middle = 0.5f * (Low + High);
+				(At(Middle) > 10.5f ? High : Low) = Middle;
+			}
+			return High;
+		}
 		if (At(Share) > 12.0f)
 		{
 			// (down to where it is about 10.5)
@@ -1723,18 +1854,21 @@ void FCampaignGround::PaintTint(const FCampaignMapData& Data, const FCampaignTer
 			continue;
 		}
 		const FSeen Owner = StainOf(Region.Lawful);
-		float* Known = Mixes.Find(Region.Owner + TEXT(">") + Region.Lawful);
-		const float Share = Known ? *Known : Mixes.Add(Region.Owner + TEXT(">") + Region.Lawful, StripeMix(RegionStain[Region.Id], Owner, PlainsLightness));
+		const float Snow = RegionSnow.IsValidIndex(Region.Id) ? FMath::RoundToFloat(RegionSnow[Region.Id] * 20.0f) / 20.0f : 0.0f;
+		const FString Pair = FString::Printf(TEXT("%s>%s:%d"), *Region.Owner, *Region.Lawful, FMath::RoundToInt32(Snow * 20.0f));
+		float* Known = Mixes.Find(Pair);
+		const float Share = Known ? *Known : Mixes.Add(Pair, StripeMix(RegionStain[Region.Id], Owner, PlainsLightness, Snow));
 		if (!Known)
 		{
 			const FSeen& Held = RegionStain[Region.Id];
-			UE_LOG(LogTheater, Log, TEXT("Stripes: %s holding %s: the holder's stain (%.0f, %.0f, %.0f), the owner's (%.0f, %.0f, %.0f), mixed %.2f toward the owner"), *Region.Owner, *Region.Lawful,
-				Held.R * 255.0f, Held.G * 255.0f, Held.B * 255.0f, Owner.R * 255.0f, Owner.G * 255.0f, Owner.B * 255.0f, Share);
+			UE_LOG(LogTheater, Log, TEXT("Stripes: %s holding %s: the holder's stain (%.0f, %.0f, %.0f), the owner's (%.0f, %.0f, %.0f), mixed %.2f toward the owner (snow %.2f)"), *Region.Owner, *Region.Lawful,
+				Held.R * 255.0f, Held.G * 255.0f, Held.B * 255.0f, Owner.R * 255.0f, Owner.G * 255.0f, Owner.B * 255.0f, Share, Snow);
 		}
 		// (two nations too alike for a stripe of the one to show on the other: the holder's own stain, a fifth darker)
 		// (too alike to tell apart: the holder's own stain, darker. At four fifths of its brightness, as the brief
 		// began, the Soviet Union over Poland measured 5.4 in the game's pictures, under the 8 asked: seven tenths.)
-		RegionStripe[Region.Id] = Share < 0.0f ? RegionStain[Region.Id] * 0.68f : Mix(RegionStain[Region.Id], Owner, Share);
+		// (and darker still under snow, which lifts it)
+		RegionStripe[Region.Id] = Share < 0.0f ? RegionStain[Region.Id] * (0.68f - 0.2f * Snow) : Mix(RegionStain[Region.Id], Owner, Share);
 		RegionOccupied[Region.Id] = 1;
 	}
 	if (Occupied.Num() != Tint.Num())

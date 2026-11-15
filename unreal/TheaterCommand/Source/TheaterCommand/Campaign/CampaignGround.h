@@ -71,6 +71,12 @@ public:
 		float Island = 8.0f; // the radius of the ground round the town that never turns, in map units
 	};
 	TArray<FSiege> Sieges;
+	/**
+	 * By province: how far the snow lying on it takes the colours of its ground toward white, as they are seen
+	 * (nothing in summer, about 0.3 in deep winter in the east). A stripe of occupied ground is laid stronger
+	 * under snow, so that it shows as well in January as in July. Set before PaintTint.
+	 */
+	TArray<float> RegionSnow;
 
 	/**
 	 * How far each point of a province lies from the frontier a colour comes in by, as a share of the way to its far
