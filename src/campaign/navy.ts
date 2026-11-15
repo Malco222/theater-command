@@ -876,9 +876,17 @@ export function crossingsOf(g: Game, nat: string): CrossingOutlook[] {
   // and who holds them. (Until Version 76 an ally's front counted as its own, and once the Soviet Union was in the
   // war every shore of the continent dropped off a British or an American player's list.)
   const byLand = armyReach(g, nat);
+  // Nor is the lost ground of a living ally that the ally's own army can march to: freeing it is that army's work
+  // (Odessa is the Red Army's to retake, not a beach for a corps from Devon). A fallen ally's country stays.
+  const theirs = new Map<string, Uint8Array>();
+  const allysOwn = (r: Region): boolean => {
+    if (r.owner === nat || r.owner === r.ctrl || !g.nations[r.owner]?.alive || !allied(g, nat, r.owner)) return false;
+    if (!theirs.has(r.owner)) theirs.set(r.owner, armyReach(g, r.owner));
+    return !!theirs.get(r.owner)![r.id];
+  };
   const shores = new Map<string, Region[]>();
   for (const r of g.regions) {
-    if (byLand[r.id] || !r.seas.length || !atWar(g, nat, r.ctrl) || !g.nations[r.ctrl]?.alive) continue;
+    if (byLand[r.id] || !r.seas.length || !atWar(g, nat, r.ctrl) || !g.nations[r.ctrl]?.alive || allysOwn(r)) continue;
     const k = `${r.owner}:${r.ctrl}:${r.overseas ? 1 : 0}`;
     shores.set(k, [...(shores.get(k) ?? []), r]);
   }

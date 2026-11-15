@@ -97,8 +97,10 @@ describe('what a province has, and where it lies', () => {
     expect(count('oil')).toBe(5);
     expect(count('works')).toBe(37);
     expect(count('junction')).toBe(32);
-    expect(count('oil', true)).toBe(10);
-    expect(count('works', true)).toBe(54);
+    // Five more in Latin America since Version 76 (Maracaibo and eastern Venezuela, Santander, Talara, Comodoro Rivadavia).
+    expect(count('oil', true)).toBe(15);
+    // Buenos Aires, Rio de Janeiro and Sao Paulo are factory districts too.
+    expect(count('works', true)).toBe(57);
     expect(count('junction', true)).toBe(37);
     expect(g.regions.filter((r) => beyondEurope(r) && hasPrize(g, r, 'junction')).map((r) => r.name)).toEqual(['Pittsburgh', 'Chicago', 'Kansas', 'East Texas', 'Northern Ontario']);
     expect(kindsAt(g, g.byName['East Texas'])).toEqual(['oil', 'works', 'airfield', 'harbour', 'junction']);

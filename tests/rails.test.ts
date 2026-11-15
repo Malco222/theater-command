@@ -74,7 +74,12 @@ describe('the railway net', () => {
     const off = g.regions.filter((r) => !onNet(r.id)).map((r) => r.name);
     // Nothing on the mainland of Europe is off the net: only the desert and a few islands. In the new world no line
     // ran into the far north of Canada in 1939, nor to the foot of Lower California.
-    const wild = ['Ungava', 'Keewatin', 'Mackenzie', 'Yukon', 'Southern Baja'];
+    // Nor, in Latin America, through Central America south of El Salvador, into the Amazon basin and the Orinoco
+    // plains, across the Chaco Boreal, or into the far south.
+    const wild = ['Ungava', 'Keewatin', 'Mackenzie', 'Yukon', 'Southern Baja',
+      'Peten', 'Tegucigalpa', 'Mosquitia', 'Managua', 'Mosquito Coast', 'San Jose', 'Chiriqui', 'Llanos', 'Caqueta', 'Apure', 'Ciudad Bolivar', 'Guayana', 'Alto Orinoco',
+      'Napo', 'Loreto', 'Madre de Dios', 'Beni', 'Chaco Boreal', 'Aysen', 'Magallanes', 'Comodoro Rivadavia', 'Southern Patagonia', 'Tierra del Fuego',
+      'Para', 'Amapa', 'Amazonas', 'Rio Negro', 'Roraima', 'Acre', 'Guapore', 'Tapajos', 'Mato Grosso'];
     for (const name of off) { const r = g.byName[name]; expect(r.terrain === 'desert' || r.overseas || r.nb.length <= 1 || wild.includes(name), name).toBe(true); }
     for (const name of wild) expect(off, name).toContain(name);
     const trunks: string[][] = [

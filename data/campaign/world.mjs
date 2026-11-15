@@ -140,7 +140,9 @@ export const WORLD_REGIONS = [
   // The Caribbean
   ['Port-au-Prince', 19.0, -72.3, 'HAI', 'hills', 1, 0, { cap: 1, port: 1 }],
   ['Ciudad Trujillo', 18.8, -70.3, 'DOM', 'hills', 1, 0, { cap: 1, port: 1 }],
-  ['Trinidad', 10.4, -61.3, 'UK', 'plains', 1, 0, { port: 1, col: 1, oil: 1 }],
+  // No oilfield is marked on Trinidad: its oil reaches Britain in tankers, and the Atlantic lane (resources.json)
+  // already counts them. A field marked here would be Britain's "at home", out of the submarines' reach.
+  ['Trinidad', 10.4, -61.3, 'UK', 'plains', 1, 0, { port: 1, col: 1 }],
   ['Curacao', 12.18, -68.97, 'NED', 'hills', 1, 0, { port: 1, col: 1 }],
   ['Martinique', 14.65, -61.0, 'FRA', 'hills', 0, 0, { port: 1, col: 1 }],
   // Colombia

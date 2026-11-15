@@ -571,7 +571,7 @@ describe('an American player goes to war when he chooses (rulings 31 to 33)', ()
 
   it('his goals ask for an American army ashore: Paris in Allied hands is not enough, and an army that comes after the fall wins nothing', () => {
     const short = GOALS.USA.short!, long = GOALS.USA.long!;
-    expect(short.text).toBe('An American army is ashore in France and Paris is in Allied hands, with Washington still yours. Nothing counts before January 1942: a corps sent to a France that has not yet been attacked opens no second front.');
+    expect(short.text).toBe('An American army is ashore in France and Paris is in Allied hands when 1945 opens, with Washington still yours.');
     expect(long.text).toBe('Germany is beaten with an American army on the continent, and Washington still yours.');
     const g = playing('USA');
     openGoals(g, 'USA', 1);
@@ -592,9 +592,10 @@ describe('an American player goes to war when he chooses (rulings 31 to 33)', ()
     const ashore = addCorps(g, 'USA', 'V Corps', 'inf', 2, g.byName.Normandy.id, {});
     expect(label(short, 'An American army ashore in France')).toBe(true);
     expect(label(long, 'An American army on the continent')).toBe(true);
-    // It counts from January 1942 (Version 76: the Playtester won it in September 1939 with one corps in Bordeaux).
+    // It is settled on its date, as January 1945 opens (Version 76, ruling 41: the Playtester won it in September
+    // 1939 with one corps in Bordeaux).
     expect(judgeGoals(g, 'USA')).toEqual([]);
-    g.turn = 29;
+    g.turn = 65;
     expect(judgeGoals(g, 'USA').map((x) => [x.key, x.won])).toEqual([['short', true]]);
     // Germany falls with the corps gone: the long campaign is lost that day, and a corps sent afterwards does not win it back.
     removeCorps(g, ashore);

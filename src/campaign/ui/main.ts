@@ -102,6 +102,8 @@ const ui = {
   fleet: -1,
   /** The crossing whose reckoning is open under the Navy tab: the beach, or -1. */
   cross: -1,
+  /** True while the list of crossings shows every shore, not only the five safest. */
+  crossAll: false,
   stance: 'patrol' as Stance,
   /** Choosing a new home port for that fleet. */
   rebase: false,
@@ -4092,8 +4094,10 @@ function crossingNotes(): string {
   if (!g.human || !isOpen(g) || !g.nations[g.human].atWar.length) return '';
   const rows = crossings(g);
   if (!rows.length) return '';
-  const shown = rows.slice(0, 5);
-  return `<h3>Crossing the sea</h3><p class="sub">Where your army cannot march it has to sail. Each line is the safest way, as things stand this month, to a shore the enemy holds: what the troopships would lose, why, and what would bring it down. The enemy's coast watch sees troops and shipping gather on a quay, so expect to be met.</p>${shown.map((x) => crossingRow(x, humanUp(g))).join('')}${rows.length > shown.length ? `<p class="sub">${rows.length - shown.length} more ${rows.length - shown.length === 1 ? 'shore is' : 'shores are'} within reach, each more dangerous than these.</p>` : ''}`;
+  // The five safest, and the one named as the plan wherever it stands; the rest behind a button (Version 76: the
+  // second front's own shore was often the sixth, and could not be named).
+  const shown = ui.crossAll ? rows : rows.filter((x, i) => i < 5 || x.planned);
+  return `<h3>Crossing the sea</h3><p class="sub">Where your army cannot march it has to sail. Each line is the safest way, as things stand this month, to a shore the enemy holds: what the troopships would lose, why, and what would bring it down. The enemy's coast watch sees troops and shipping gather on a quay, so expect to be met.</p>${shown.map((x) => crossingRow(x, humanUp(g))).join('')}${rows.length > shown.length ? `<p class="sub">${rows.length - shown.length} more ${rows.length - shown.length === 1 ? 'shore is' : 'shores are'} within reach, each more dangerous than these. <button class="btn small" data-act="crossall">Show ${rows.length - shown.length === 1 ? 'it' : 'them'}</button></p>` : ui.crossAll && rows.length > 5 ? '<p class="sub"><button class="btn small" data-act="crossall">Show the five safest only</button></p>' : ''}`;
 }
 
 /** One sea: who holds it, which fleets are in it, and what it would cost to cross. */
@@ -6837,6 +6841,7 @@ function onClick(e: MouseEvent): void {
     case 'arm': ui.arm = t.dataset.arm as typeof ui.arm; refresh(); break;
     case 'armgo': ui.arm = t.dataset.arm as typeof ui.arm; ui.tab = 'build'; refresh(); break;
     case 'crosswhy': ui.cross = ui.cross === id ? -1 : id; refresh(); break;
+    case 'crossall': ui.crossAll = !ui.crossAll; refresh(); break;
     case 'crossplan': {
       const ok = id < 0 ? orderCrossingPlan(g, null, null) : orderCrossingPlan(g, Number(t.dataset.from), id);
       if (ok) { ui.msg = id < 0 ? 'The plan is dropped.' : `The crossing to ${g.regions[id].name} is the plan.`; queueSave(); }

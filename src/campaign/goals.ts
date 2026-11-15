@@ -19,8 +19,6 @@ export interface Goal {
   ashore?: { in: string[]; label: string };
   /** The last month in which the goal can be reached. */
   by?: number;
-  /** The first month in which it can be won: what holds earlier is not yet counted. */
-  from?: number;
   /** A goal of endurance: decided when the month after this one opens. */
   until?: number;
   /** A goal of holding out: the nation is still in the war after this many weeks of it, four to a month. */
@@ -84,8 +82,7 @@ const met = (g: Game, nat: string, goal: Goal): boolean => g.nations[nat].alive 
 /** How long a goal gives, in words for the goals panel. */
 export function goalWhen(goal: Goal, date: (turn: number) => string): string {
   if (goal.outlast !== undefined) return `decided by how long you hold out`;
-  if (goal.until !== undefined) return `decided when ${date(goal.until + 1)} opens`;
-  return goal.from !== undefined ? `from ${date(goal.from)} to the end of ${date(goal.by!)}` : `by the end of ${date(goal.by!)}`;
+  return goal.until !== undefined ? `decided when ${date(goal.until + 1)} opens` : `by the end of ${date(goal.by!)}`;
 }
 
 /**
@@ -119,9 +116,8 @@ export function judgeGoals(g: Game, nat: string): { key: GoalKey; goal: Goal; wo
     else if (goal.until !== undefined) { if (g.turn > goal.until) won = ok; }
     // A goal that asks for an army ashore when the enemy falls is settled the day he falls: arriving afterwards is no victory.
     else if (goal.ashore && goal.beaten?.length && goal.beaten.every((id) => { const x = g.nations[id]; return !!x && !x.alive && !x.dormant; })) won = ok && g.turn <= goalEnds(goal) + 1;
-    // What stands when the month after the last one opens still counts: an ally may have finished the job. A goal
-    // with a first month is not won before it, however things stand: it waits, and is judged as that month opens.
-    else if (ok && g.turn >= (goal.from ?? 1) && g.turn <= goalEnds(goal) + 1) won = true;
+    // What stands when the month after the last one opens still counts: an ally may have finished the job.
+    else if (ok && g.turn <= goalEnds(goal) + 1) won = true;
     else if (g.turn > goalEnds(goal)) won = false;
     if (won === null) continue;
     g.flags[`goal:${key}`] = won ? 1 : 2;

@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 import grandData from '../data/campaign/grand.json';
 import { DIPLOMACY, friendsOf, monthlyDiplomacy } from '../src/campaign/diplomacy';
 import { income } from '../src/campaign/economy';
-import { addCorps, allied, atWar, bloc, capitulate, capture, createGame, monthsUnfed, setWar } from '../src/campaign/game';
+import { addCorps, allied, atWar, bloc, capitulate, capture, createGame, monthsUnfed, removeCorps, setWar } from '../src/campaign/game';
 import { GOALS, goalState, goalWhen, judgeGoals, openGoals } from '../src/campaign/goals';
 import { formOf } from '../src/campaign/government';
 import { founders, pathOptions, small } from '../src/campaign/league';
@@ -387,22 +387,27 @@ describe('two faults of Version 75', () => {
     const g = wide(1, 'USA');
     openGoals(g, 'USA', 1);
     const goal = GOALS.USA.short!;
-    expect(goal.from).toBe(29);
+    // The design director's ruling 41: it is settled on its date, as January 1945 opens, like the other goals of
+    // endurance, and not in the first month it happens to be true.
+    expect([goal.until, goal.by]).toEqual([64, undefined]);
+    expect(goalWhen(goal, (t) => `month ${t}`)).toBe('decided when month 65 opens');
     setWar(g, 'USA', 'GER');
     g.nations.USA.align = 'allies';
-    addCorps(g, 'USA', 'I Corps', 'inf', 2, 'Bordeaux', {});
-    // Washington, Paris and an army ashore in France all hold in September 1939, and nothing is won.
-    expect(judgeGoals(g, 'USA')).toEqual([]);
-    expect(goalState(g, 'short')).toBe('open');
-    g.turn = 28;
-    expect(judgeGoals(g, 'USA')).toEqual([]);
-    // From January 1942 it counts: with France still standing and an American army in it, or with France freed.
-    g.turn = 29;
+    const corps = addCorps(g, 'USA', 'I Corps', 'inf', 2, 'Bordeaux', {});
+    // Washington, Paris and an army ashore in France all hold in September 1939, and nothing is won: not then, and
+    // not in any month before the date.
+    for (const turn of [1, 2, 29, 64]) {
+      g.turn = turn;
+      expect(judgeGoals(g, 'USA'), `month ${turn}`).toEqual([]);
+      expect(goalState(g, 'short')).toBe('open');
+    }
+    // What stands as January 1945 opens decides it: an army that went home before then has opened no second front.
+    const later = loadGame(saveGame(g))!;
+    g.turn = 65;
     expect(judgeGoals(g, 'USA').map((x) => [x.key, x.won])).toEqual([['short', true]]);
-    expect(goalWhen(goal, (t) => `month ${t}`)).toBe('from month 29 to the end of month 64');
-    expect(goalWhen(GOALS.USA.long!, (t) => `month ${t}`)).toBe('by the end of month 76');
-    // No other country's goals have a first month.
-    for (const [id, gs] of Object.entries(GOALS)) for (const k of ['short', 'long'] as const) if (!(id === 'USA' && k === 'short')) expect(gs[k]?.from, `${id} ${k}`).toBeUndefined();
+    removeCorps(later, later.corps.find((c) => c.name === corps.name && c.nat === 'USA')!);
+    later.turn = 65;
+    expect(judgeGoals(later, 'USA').map((x) => [x.key, x.won])).toEqual([['short', false]]);
   });
 
   it('keeps the shores of the continent on an Allied player\'s list of crossings once the Soviet Union is in the war', () => {
@@ -416,7 +421,14 @@ describe('two faults of Version 75', () => {
       for (const r of g.regions) if (mainland.has(r.id) || r.owner === 'POL') { r.ctrl = 'GER'; r.units = r.units.filter((u) => u.nat !== r.owner); }
       if (seat === 'USA') addCorps(g, 'USA', 'V Corps', 'inf', 2, 'West Country', {});
       expect(g.regions.some((r) => r.ctrl === 'SOV' && r.nb.some((j) => g.regions[j].ctrl === 'GER')), seat).toBe(true);
+      // The Germans hold Odessa, which the Red Army can march back to.
+      const odessa = g.byName.Odessa;
+      odessa.ctrl = 'GER';
+      odessa.units = [];
+      expect(odessa.seas.length).toBeGreaterThan(0);
       const list = crossingsOf(g, seat);
+      // The lost ground of a living ally, within a march of his own army, is no crossing of this nation's.
+      expect(list.filter((x) => x.owner === 'SOV').map((x) => x.to.name), `${seat}: Soviet ground`).toEqual([]);
       // Germany's own coast and the coast of occupied France are both over the water from Britain.
       expect(list.some((x) => x.owner === 'GER' && x.home), `${seat}: Germany`).toBe(true);
       expect(list.some((x) => x.owner === 'FRA' && x.foe === 'GER'), `${seat}: France`).toBe(true);
