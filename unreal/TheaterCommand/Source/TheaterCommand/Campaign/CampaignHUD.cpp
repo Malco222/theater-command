@@ -2741,7 +2741,8 @@ namespace
 						.Visibility_Lambda([this]() { return Controller.IsValid() && Controller->GetWarPrompt().bVisible ? EVisibility::Visible : EVisibility::Collapsed; })
 						.OnMouseButtonDown_Lambda([](const FGeometry&, const FPointerEvent&) { return FReply::Handled(); })
 						[
-							SNew(SBox).WidthOverride(640.0f)
+							// (a landing's question carries the reckoning and the holding of the sea: it is broader, so that its lines do not fold)
+							SNew(SBox).WidthOverride_Lambda([this]() { return FOptionalSize(Controller.IsValid() && Controller->GetWarPrompt().bLanding ? 900.0f : 640.0f); })
 							[
 								SNew(SBorder).BorderImage(&PanelBrush).Padding(FMargin(30.0f, 24.0f, 30.0f, 24.0f))
 								[
@@ -2762,6 +2763,13 @@ namespace
 									[
 										SNew(STextBlock).Font(Font(TEXT("Regular"), 13)).ColorAndOpacity(Muted).AutoWrapText(true).LineHeightPercentage(1.2f)
 										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Body : FText::GetEmpty(); })
+									]
+									+ SVerticalBox::Slot().AutoHeight().Padding(0.0f, 10.0f, 0.0f, 0.0f)
+									[
+										// (rules version 73: the warning that the sea behind the beach could be closed, in red)
+										SNew(STextBlock).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Alarm).AutoWrapText(true).LineHeightPercentage(1.2f)
+										.Visibility_Lambda([this]() { return Controller.IsValid() && !Controller->GetWarPrompt().Warning.IsEmpty() ? EVisibility::Visible : EVisibility::Collapsed; })
+										.Text_Lambda([this]() { return Controller.IsValid() ? Controller->GetWarPrompt().Warning : FText::GetEmpty(); })
 									]
 									+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Center).Padding(0.0f, 22.0f, 0.0f, 0.0f)
 									[
@@ -4029,6 +4037,14 @@ namespace
 						[
 							SNew(STextBlock).Text(FText::FromString(Entry.Title)).Font(Font(TEXT("Bold"), 13)).ColorAndOpacity(Cream)
 						];
+					if (!Entry.Alarm.IsEmpty())
+					{
+						// (rules version 73: a warning that goes with the row, in red under its title)
+						Words->AddSlot().AutoHeight().Padding(0.0f, 2.0f, 0.0f, 2.0f)
+						[
+							SNew(STextBlock).Text(FText::FromString(Entry.Alarm)).Font(Font(TEXT("Bold"), 11)).ColorAndOpacity(Alarm).AutoWrapText(true)
+						];
+					}
 					for (const FString& Line : Entry.Lines)
 					{
 						Words->AddSlot().AutoHeight().Padding(0.0f, 1.0f, 0.0f, 0.0f)

@@ -266,6 +266,7 @@ struct FWarPrompt
 	int32 Region = INDEX_NONE; // where the army in hand was being sent, to carry on there once war is declared
 	FText Title;
 	FText Body;
+	FText Warning; // (rules version 73) set out in red under the body: before a landing, that the sea behind the beach could be closed
 	bool bFromOffice = false; // asked from the foreign office: go back there afterwards
 	// The same question is put before a landing from the sea: then this is true, and the button says so.
 	bool bLanding = false;

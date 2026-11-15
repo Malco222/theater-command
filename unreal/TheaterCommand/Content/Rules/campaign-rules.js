@@ -1,4 +1,4 @@
-// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of ca0dad6 2026-11-15. Do not edit: run Tools/build_rules.sh.
+// The campaign rules, bundled from the browser prototype (src/campaign, data/campaign) as of 2dbf773 2026-11-15. Do not edit: run Tools/build_rules.sh.
 "use strict";
 (() => {
   var __defProp = Object.defineProperty;
@@ -1186,6 +1186,13 @@
       reach: 3,
       odds: 1
     },
+    relief: {
+      _note: "A staff that rests its worn corps (Version 73; a judgement of the staff's, not a rule of the game). Before its month's operations each staff named in 'staffs' looks for corps under 'worn' of their strength. One standing in the line (an enemy in the place next door) comes out of it where another corps stays to hold the place and a quiet place lies behind: a friendly place with no enemy beside it and room, one march away or two, the one nearest home. A worn corps is thrown into no attack. Out of the line it rests, and the reserves leave it alone, until the drafts have brought it back to 'fit' or it has had 'months' months of rest; a whole quiet month brings the drafts half as fast again (morale.json, 'rested'). After its rest it is at the staff's disposal again, and is not rested a second time for as many months more. Only Germany's staff is named: a careful Soviet player was grinding about 19 German corps a war down to nothing, more than half of them already worn when their staff's month began, most with a quiet place behind them.",
+      staffs: ["GER"],
+      worn: 0.4,
+      fit: 0.6,
+      months: 3
+    },
     exhaust: {
       _note: "A finish for a war that is won. A computer nation whose capital has been in enemy hands for more than 'after' months wears out: every month after that adds 'per' to how near it is to giving in, until it asks for terms. The player's own country is never worn out this way.",
       after: 12,
@@ -1725,7 +1732,7 @@
         name: "By the book",
         under: "History's dates",
         blurb: "The computer keeps to the war that was fought for as long as the war still looks like it.",
-        lines: ["The great attacks fall in history's months: Norway in April 1940, the west in May, the east in June 1941.", "Only the countries that really joined the war join it, each on its real side.", "No second front before its time: North Africa from November 1942, Italy from July 1943, France from June 1944.", "Every general staff has the character its real counterpart had.", "Where you leave the book, the book is closed: the staffs there think for themselves from then on."],
+        lines: ["The great attacks fall in history's months: Norway in April 1940, the west in May, the east in June 1941.", "Only the countries that really joined the war join it, each on its real side.", "No second front before its time: North Africa from November 1942, Italy from July 1943, France from June 1944. So Germany has longer before it must fight in the west, and the Soviet Union fights alone for longer.", "Every general staff has the character its real counterpart had.", "Where you leave the book, the book is closed: the staffs there think for themselves from then on."],
         book: true,
         slack: 0,
         nerve: 0.75,
@@ -1741,7 +1748,7 @@
         name: "Close to history",
         under: "Within a season",
         blurb: "History's war with the dates loosened: each great attack falls within a season of its real month.",
-        lines: ["The great attacks fall within a month or so of history's dates, and you cannot be sure which.", "A country that stayed out of the real war seldom joins this one.", "The general staffs have their real characters, with a little nerve of their own.", "Where you leave the book, the book is closed."],
+        lines: ["The great attacks fall within a month or so of history's dates, and you cannot be sure which.", "A country that stayed out of the real war seldom joins this one.", "The Allies open no second front before history's dates: North Africa from November 1942, Italy from July 1943, France from June 1944. So Germany has longer before it must fight in the west, and the Soviet Union fights alone for longer.", "The general staffs have their real characters, with a little nerve of their own.", "Where you leave the book, the book is closed."],
         book: true,
         slack: 1,
         nerve: 0.85,
@@ -8319,6 +8326,33 @@
       else delete g2.sky[region];
     }
   }
+  function fleetsInReach(g2, nat, path) {
+    const last = path[path.length - 1];
+    const near = new Set(path);
+    for (const z of path) for (const j of g2.seas[z].adj) near.add(j);
+    return g2.fleets.filter((f) => {
+      if (!atWar(g2, f.nat, nat) || !surfaceShips(f)) return false;
+      if (atSea(f)) return f.zone !== last && near.has(f.zone);
+      return (f.base >= 0 ? g2.regions[f.base].seas : [f.home]).some((z) => near.has(z));
+    });
+  }
+  function seaHold(g2, nat, path, to) {
+    const sea = path[path.length - 1];
+    const e = seaSide(g2, sea, nat, true), own = seaSide(g2, sea, nat, false);
+    const come = fleetsInReach(g2, nat, path).reduce((s, f) => s + fleetPower(g2, f), 0);
+    const foe = e.ships + come + e.air;
+    const need = foe >= NAVY.closed.min ? foe / NAVY.closed.ratio : 0;
+    const open = !(foe >= NAVY.closed.min && foe >= NAVY.closed.ratio * own.total);
+    const name = g2.seas[sea].name;
+    const lines = [];
+    if (e.ships >= 0.5) lines.push({ label: `Enemy ships in the ${name} now`, value: round2(e.ships), effect: "at sea there already" });
+    if (come >= 0.5) lines.push({ label: "Enemy fleets that could come", value: round2(come), effect: "at their full strength, from the harbours and the seas in reach" });
+    if (e.air >= 0.5) lines.push({ label: `Enemy aircraft over the ${name}`, value: round2(e.air), effect: "count against the supply ships too" });
+    lines.push({ label: `Your ships and aircraft in the ${name}`, value: `${round2(own.ships)} and ${round2(own.air)}`, effect: need <= 0 ? "the enemy has too little in reach to close it" : open ? `more than the ${round2(need)} that keep it open` : `${round2(need)} would keep it open: one for every ${NAVY.closed.ratio} of his` });
+    lines.push({ label: "The sea behind the beach", value: open ? "stays open" : "would be closed", effect: open ? "the supply ships reach the force" : "the force ashore would be cut off from its supplies" });
+    if (!to.port) lines.push({ label: "A harbour", value: `none at ${to.name}`, effect: "the force is fed only once it holds a port on an open sea" });
+    return { sea, there: e.ships, come, air: e.air, foe, own, need, open, port: !!to.port, lines };
+  }
   var round2 = (x) => Math.round(x).toLocaleString("en-US");
   function crossingAccount(g2, nat, path, to, reach3 = skyReach(g2, nat)) {
     const ds = seaDangers(g2, nat, path, to);
@@ -8354,7 +8388,7 @@
         tell2("all", "All of these together", helps.some((h) => h.id === "sky") ? withSky(g2, to.id, nat, rest) : rest());
       }
     }
-    return { risk, loss: risk * NAVY.intercept.loss, sky, worst: worst.z, skyWon, lines, helps };
+    return { risk, loss: risk * NAVY.intercept.loss, sky, worst: worst.z, skyWon, lines, helps, hold: seaHold(g2, nat, path, to) };
   }
   function planLanding(g2, cs, to) {
     const why = whyNotLand(g2, cs, to);
@@ -8384,6 +8418,7 @@
       risk: surprise ? 0 : landingRisk(g2, nat, path, to),
       defended,
       ...surprise ? {} : { account: crossingAccount(g2, nat, path, to) },
+      hold: seaHold(g2, nat, path, to),
       sky: sky !== null && allied(g2, sky, nat),
       sortie: surprise ? 0 : sortieAgainst(g2, nat, path),
       assess: defended ? assess(g2, cs, to, { sea: surprise ? NAVY.landing.surprise : assaultStrength(g2, nat), surprise }) : null
@@ -21526,6 +21561,15 @@
   var massed = /* @__PURE__ */ new Set();
   var given = /* @__PURE__ */ new Set();
   var sacks = /* @__PURE__ */ new Set();
+  var rested = [];
+  var relieves = (g2, nat) => !!RIVALS.relief && !scope && rivalRules(g2) && nat !== g2.human && RIVALS.relief.staffs.includes(nat);
+  var wornOut = (g2, c) => {
+    const R = RIVALS.relief;
+    const since = g2.flags[`rl:${c.id}`];
+    if (since === void 0 || g2.turn - since >= 2 * R.months) return c.str < R.worn;
+    return c.str < R.fit && g2.turn - since < R.months;
+  };
+  var spared = (g2, c) => relieves(g2, c.nat) && wornOut(g2, c);
   var aside = (g2, r, nat) => r.theatre >= 0 && !!THEATRES[r.theatre] && apart2(g2, r.theatre, nat);
   var within = (r) => !scope || scope.has(r.id);
   var allowed = (g2, r) => !bound2 || bound2.has(r.name) || r.ctrl === g2.human;
@@ -21561,11 +21605,14 @@
     foldWorn(g2, nat);
     garrisons(g2, nat, false);
     sacks = /* @__PURE__ */ new Set();
+    rested = [];
     try {
       campaignMoves(g2, nat);
     } finally {
       if (n.alive) garrisons(g2, nat, true);
       sacks = /* @__PURE__ */ new Set();
+      for (const c of rested) c.hold = false;
+      rested = [];
     }
   }
   function garrisons(g2, nat, post2) {
@@ -21615,7 +21662,7 @@
         const size = townSize(g2, r);
         if (!garrisonOf(r).length && size !== "capital" && size !== "city") continue;
         const inside2 = garrisonOf(r).reduce((s, c) => s + c.divs * c.str, 0) + guardOf(g2, r);
-        const near = r.nb.map((j) => g2.regions[j]).filter((x) => within(x) && allied(g2, nat, fieldCtrl(g2, x)) && !besieged(g2, x)).flatMap((x) => x.units.filter((c) => c.nat === nat && !c.dead && !c.hold && c.kind !== "fort" && c.kind !== "eng" && c.joint === void 0 && c.leave === void 0 && c.org >= 0.35 && c.ap >= Math.min(moveCost(g2, c, r), 4) && c.ap > 0 && !blocked(g2, c, r))).sort((x, y) => atkPower(g2, y) - atkPower(g2, x) || x.id - y.id);
+        const near = r.nb.map((j) => g2.regions[j]).filter((x) => within(x) && allied(g2, nat, fieldCtrl(g2, x)) && !besieged(g2, x)).flatMap((x) => x.units.filter((c) => c.nat === nat && !c.dead && !c.hold && !spared(g2, c) && c.kind !== "fort" && c.kind !== "eng" && c.joint === void 0 && c.leave === void 0 && c.org >= 0.35 && c.ap >= Math.min(moveCost(g2, c, r), 4) && c.ap > 0 && !blocked(g2, c, r))).sort((x, y) => atkPower(g2, y) - atkPower(g2, x) || x.id - y.id);
         const want = SIEGE.ai.invest * inside2;
         if (near.reduce((s, c) => s + c.divs * c.str, 0) < want) continue;
         let have = 0;
@@ -21651,7 +21698,7 @@
       if (!after && prize2 && (now < need || !shut())) {
         const far = hops(g2, r.id, (x) => within(x) && allied(g2, nat, fieldCtrl(g2, x)));
         const front = (x) => x.nb.some((j) => atWar(g2, nat, fieldCtrl(g2, g2.regions[j])));
-        const call = g2.corps.filter((c) => c.nat === nat && !c.dead && !c.town && c.reg !== r.id && far[c.reg] >= 1 && far[c.reg] <= 3 && !c.hold && c.kind !== "fort" && c.kind !== "eng" && c.joint === void 0 && c.leave === void 0 && c.ap > 0 && !besieged(g2, g2.regions[c.reg]) && (far[c.reg] === 1 ? c.ap >= Math.min(moveCost(g2, c, r), 4) : !front(g2.regions[c.reg]))).sort((x, y) => far[x.reg] - far[y.reg] || atkPower(g2, y) - atkPower(g2, x) || x.id - y.id);
+        const call = g2.corps.filter((c) => c.nat === nat && !c.dead && !c.town && c.reg !== r.id && far[c.reg] >= 1 && far[c.reg] <= 3 && !c.hold && !spared(g2, c) && c.kind !== "fort" && c.kind !== "eng" && c.joint === void 0 && c.leave === void 0 && c.ap > 0 && !besieged(g2, g2.regions[c.reg]) && (far[c.reg] === 1 ? c.ap >= Math.min(moveCost(g2, c, r), 4) : !front(g2.regions[c.reg]))).sort((x, y) => far[x.reg] - far[y.reg] || atkPower(g2, y) - atkPower(g2, x) || x.id - y.id);
         const force2 = stormForce(g2, mine3(), r);
         const a0 = force2.length ? assess(g2, force2, r, { town: true }) : null;
         let coming = 0, power = 0, men2 = 0;
@@ -21695,7 +21742,7 @@
     }
     if (!lands.size) return;
     for (const c of g2.corps) {
-      if (c.nat !== nat || c.dead || c.town || c.hold || c.ap <= 0 || c.kind === "fort" || c.kind === "eng" || c.joint !== void 0 || c.leave !== void 0) continue;
+      if (c.nat !== nat || c.dead || c.town || c.hold || spared(g2, c) || c.ap <= 0 || c.kind === "fort" || c.kind === "eng" || c.joint !== void 0 || c.leave !== void 0) continue;
       const here = g2.regions[c.reg];
       if (!within(here)) continue;
       if (!besieged(g2, here) && here.nb.some((j) => hostileUnits(g2, g2.regions[j], nat).length > 0)) continue;
@@ -21887,6 +21934,7 @@
     if (!n.alive) return;
     stepBack(g2, nat);
     fallBack2(g2, nat);
+    relieve2(g2, nat);
     if (posture === "defend") {
       gather(g2, nat, ph);
       mass(g2, nat, ph);
@@ -22050,7 +22098,7 @@
         let best = null;
         for (const x of nexts) {
           if (tried.has(x.id) || !hostileUnits(g2, x, nat).length) continue;
-          const near = x.nb.map((j) => g2.regions[j]).filter((y) => friendly2(y) && !aside(g2, y, nat)).flatMap((y) => y.units.filter(field2)).filter((c) => !blocked(g2, c, x) && c.org >= 0.35);
+          const near = x.nb.map((j) => g2.regions[j]).filter((y) => friendly2(y) && !aside(g2, y, nat)).flatMap((y) => y.units.filter(field2)).filter((c) => !blocked(g2, c, x) && c.org >= 0.35 && (home[c.reg] < 0 || !spared(g2, c)));
           const pool = limitAttackers(g2, near, x);
           if (!pool.length) continue;
           const odds = assess(g2, pool, x).odds;
@@ -22121,6 +22169,54 @@
         }
         if (!to || !moveCorps(g2, c, to)) break;
       }
+    }
+  }
+  function relieve2(g2, nat) {
+    const R = RIVALS.relief;
+    const n = g2.nations[nat];
+    if (!R || !relieves(g2, nat) || n.capital < 0 || !allied(g2, nat, ctl(g2, g2.regions[n.capital]))) return;
+    const friendly2 = (x) => allied(g2, nat, ctl(g2, x));
+    const foeAt = (x) => hostileUnits(g2, x, nat).length > 0;
+    const inLine = (x) => x.nb.some((j) => foeAt(g2.regions[j]));
+    const home = hops(g2, n.capital, friendly2);
+    const room2 = (x, c, from) => friendly2(x) && home[x.id] >= 0 && !given.has(x.id) && !foeAt(x) && friendlyUnits(g2, x, nat).length < STACK && !blocked(g2, c, x, from);
+    const quiet2 = (x) => !inLine(x);
+    const field2 = (c) => c.nat === nat && !c.dead && c.kind !== "fort" && c.town === void 0;
+    const mine3 = (c) => field2(c) && !c.hold && !c.dyle && c.joint === void 0 && c.leave === void 0 && !massed.has(c.id) && !aside(g2, g2.regions[c.reg], nat);
+    const key4 = (c) => `rl:${c.id}`;
+    const keep = (c) => {
+      c.hold = true;
+      rested.push(c);
+    };
+    for (const c of g2.corps.filter(mine3).sort((a, b) => a.str - b.str || a.id - b.id)) {
+      const since = g2.flags[key4(c)];
+      if (since !== void 0 && (c.str >= R.fit || g2.turn - since >= 2 * R.months)) delete g2.flags[key4(c)];
+      if (!wornOut(g2, c)) continue;
+      const here = g2.regions[c.reg];
+      if (inLine(here) && c.ap > 0 && here.units.some((u) => u !== c && field2(u) && !rested.includes(u))) {
+        let way = null;
+        const better2 = (x) => !way || home[x.id] < home[way[way.length - 1].id] || home[x.id] === home[way[way.length - 1].id] && friendlyUnits(g2, x, nat).length < friendlyUnits(g2, way[way.length - 1], nat).length;
+        for (const j of here.nb) {
+          const x = g2.regions[j];
+          const k1 = moveCost(g2, c, x);
+          if (!room2(x, c, here.id) || c.ap < Math.min(k1, 4)) continue;
+          if (quiet2(x)) {
+            if (!way || way.length > 1 || better2(x)) way = [x];
+            continue;
+          }
+          if (way?.length === 1) continue;
+          for (const jj of x.nb) {
+            const y = g2.regions[jj];
+            if (y.id === here.id || !room2(y, c, x.id) || !quiet2(y) || c.ap - k1 < Math.min(moveCost(g2, c, y, x.id), 4)) continue;
+            if (better2(y)) way = [x, y];
+          }
+        }
+        if (way) {
+          for (const x of way) if (!moveCorps(g2, c, x)) break;
+        }
+      }
+      if (!inLine(g2.regions[c.reg]) && g2.flags[key4(c)] === void 0) g2.flags[key4(c)] = g2.turn;
+      keep(c);
     }
   }
   function gather(g2, nat, ph) {
@@ -22839,13 +22935,13 @@
           }
         }
       }
-      let spared = 0;
+      let spared2 = 0;
       if (entrusted.has(here.id)) {
         if (!scope && here.units.filter((u) => u.nat === nat && u.kind !== "fort").length <= 1) continue;
-        spared = defPower(g2, c, here);
+        spared2 = defPower(g2, c, here);
       } else if (threat2[here.id] > 0) {
-        spared = defPower(g2, c, here);
-        if (friendlyUnits(g2, here, nat).length <= 2 || held[here.id] - spared < 1.6 * threat2[here.id]) continue;
+        spared2 = defPower(g2, c, here);
+        if (friendlyUnits(g2, here, nat).length <= 2 || held[here.id] - spared2 < 1.6 * threat2[here.id]) continue;
       }
       const d = hops(g2, here.id, (r) => allied(g2, nat, ctl(g2, r)) && within(r));
       let to = null, bs = 0;
@@ -22862,7 +22958,7 @@
       if (!scope && !n.slowCommand && d[to.id] > 2 && c.ap >= 4) railToward(g2, c, to);
       else walkToward(g2, c, to);
       if (c.reg !== before) {
-        held[here.id] -= spared;
+        held[here.id] -= spared2;
         held[to.id] += defPower(g2, c, to);
       }
     }
@@ -26414,6 +26510,15 @@
       return "";
     }
   }
+  function holdLines(h) {
+    if (!h || !(h.lines ?? []).length) return [];
+    return ["ONCE ASHORE: HOLDING THE SEA BEHIND THE BEACH", ...h.lines.map((l) => `· ${l.label ?? ""}${l.value ? `: ${l.value}` : ""}${l.effect ? `  (${l.effect})` : ""}`)];
+  }
+  function holdWarning(s, h, landing) {
+    if (!h || h.open) return "";
+    const sea = s.seas[h.sea]?.name ?? "sea";
+    return landing ? `As things stand the enemy can close the ${sea} behind the force, and the troops would be cut off from their supplies: beat his fleets, or bring more of your own ships and aircraft into that sea first.` : `Once ashore, the ${sea} would be closed behind the force: the enemy can bring more than twice your strength into it.`;
+  }
   function accountLines(a) {
     if (!a) return [];
     const out = [];
@@ -26441,8 +26546,11 @@
         lines: [
           c.bar ? `Barred today: ${c.bar}` : `Open today. About ${risk} in 100 of the force would be caught at sea.`,
           ...c.hope ? ["It is listed because it would be the safest way to this shore once the sky over the beach was won."] : [],
-          ...accountLines(c.account)
+          ...accountLines(c.account),
+          ...holdLines(c.account?.hold)
         ],
+        // (Version 73: set out in red where the enemy could close the sea behind the force)
+        alarm: holdWarning(s, c.account?.hold, false),
         buttons: [c.planned ? { label: "DROP THE PLAN", act: "crossing:none", ok: up, tip: "Your admirals and your air staff go back to their own judgement." } : { label: "NAME THIS THE PLAN", act: `crossing:${c.from.id}:${c.to.id}`, ok: up, tip: "Where you have handed them the navy and the air war, your admirals stand a fleet off this beach and your air staff fights for the sky over it. The landing itself is always your own order." }]
       };
     });
@@ -27227,8 +27335,13 @@
       lines.push(p.defended ? `The coast is defended: the troops must fight their way ashore${p.assess ? `, at odds of ${p.assess.odds.toFixed(1)} to 1` : ""}.` : "The coast is undefended: they land unopposed.");
       const reckoning = accountLines(p.account);
       if (reckoning.length) lines.push("", "THE RECKONING", ...reckoning.map((l) => l.endsWith(":") ? l : `· ${l}`));
+      const hold2 = p.hold;
+      const holding = holdLines(hold2);
+      if (holding.length) lines.push("", ...holding);
+      if (hold2 && hold2.open && !p.air) lines.push("", `As things stand the enemy cannot close the ${s.seas[hold2.sea]?.name ?? "sea"} behind it.`);
+      return { ok: !p.why, why: p.why ?? "", name: s.regions[to].name, lines, warn: p.air ? "" : holdWarning(s, hold2, true) };
     }
-    return { ok: !p.why, why: p.why ?? "", name: s.regions[to].name, lines };
+    return { ok: !p.why, why: p.why ?? "", name: s.regions[to].name, lines, warn: "" };
   }
   function landOn(ids2, to) {
     const s = game();

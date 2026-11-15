@@ -1002,7 +1002,9 @@ const dialStops = (): DialStop[] => { try { return dialCalls.stops ? dialCalls.s
 // would make it safer with the danger as it would then be, the list of crossings open to the player, the one he
 // names as his plan, and the shipping that carries his armies.
 
-interface CrossAccount { risk: number; loss: number; sky: string; worst: number; skyWon: number | null; lines: { label?: string; value?: string; effect?: string }[]; helps: { id: string; text: string; risk: number }[] }
+// (Version 73) Whether the sea behind a beach stays open to the supply ships once the force is ashore: a ticket shaped like the reckoning.
+interface SeaHoldView { sea: number; open: boolean; port: boolean; lines: { label?: string; value?: string; effect?: string }[] }
+interface CrossAccount { risk: number; loss: number; sky: string; worst: number; skyWon: number | null; lines: { label?: string; value?: string; effect?: string }[]; helps: { id: string; text: string; risk: number }[]; hold?: SeaHoldView }
 interface CrossingRow { foe: string; owner: string; home: boolean; from: { id: number; name: string }; to: { id: number; name: string }; path: number[]; bar: string | null; barred: string | null; account: CrossAccount; planned: boolean; hope?: boolean }
 const seaCalls = {
   crossings: rulesByName['crossings'] as ((g: Game) => CrossingRow[]) | undefined,
@@ -1018,6 +1020,20 @@ function liftLine(s: Game): string {
     const slips = (l.building ?? []).length;
     return `Sea lift: your shipping carries ${l.lift} corps a month, and ${l.left} ${l.left === 1 ? 'is' : 'are'} left this month.${slips ? ` ${slips} lot${slips === 1 ? '' : 's'} of troopships on the slips, the first ready in ${turnToDate(Math.min(...l.building)).label}.` : ''}`;
   } catch { return ''; }
+}
+
+/** (Version 73) The holding of the sea behind a beach as lines to read, under a heading of its own; nothing where the rules have none. */
+function holdLines(h: SeaHoldView | undefined | null): string[] {
+  if (!h || !(h.lines ?? []).length) return [];
+  return ['ONCE ASHORE: HOLDING THE SEA BEHIND THE BEACH', ...h.lines.map((l) => `\u00B7 ${l.label ?? ''}${l.value ? `: ${l.value}` : ''}${l.effect ? `  (${l.effect})` : ''}`)];
+}
+/** (Version 73) The warning where the enemy could close that sea behind the force, in the browser's own words; nothing where he could not. */
+function holdWarning(s: Game, h: SeaHoldView | undefined | null, landing: boolean): string {
+  if (!h || h.open) return '';
+  const sea = s.seas[h.sea]?.name ?? 'sea';
+  return landing
+    ? `As things stand the enemy can close the ${sea} behind the force, and the troops would be cut off from their supplies: beat his fleets, or bring more of your own ships and aircraft into that sea first.`
+    : `Once ashore, the ${sea} would be closed behind the force: the enemy can bring more than twice your strength into it.`;
 }
 
 /** The reckoning of a crossing as lines to read: each line of the account, then what would make it safer and the danger as it would then be. */
@@ -1043,7 +1059,9 @@ function crossingsPage(s: Game): Page | null {
     return {
       nat: c.owner, title: `${c.from.name} to ${c.to.name}${c.planned ? '  \u00B7  YOUR PLAN' : ''}`,
       lines: [c.bar ? `Barred today: ${c.bar}` : `Open today. About ${risk} in 100 of the force would be caught at sea.`,
-        ...(c.hope ? ['It is listed because it would be the safest way to this shore once the sky over the beach was won.'] : []), ...accountLines(c.account)],
+        ...(c.hope ? ['It is listed because it would be the safest way to this shore once the sky over the beach was won.'] : []), ...accountLines(c.account), ...holdLines(c.account?.hold)],
+      // (Version 73: set out in red where the enemy could close the sea behind the force)
+      alarm: holdWarning(s, c.account?.hold, false),
       buttons: [c.planned
         ? { label: 'DROP THE PLAN', act: 'crossing:none', ok: up, tip: 'Your admirals and your air staff go back to their own judgement.' }
         : { label: 'NAME THIS THE PLAN', act: `crossing:${c.from.id}:${c.to.id}`, ok: up, tip: 'Where you have handed them the navy and the air war, your admirals stand a fleet off this beach and your air staff fights for the sky over it. The landing itself is always your own order.' }],
@@ -1856,8 +1874,14 @@ function landingPlan(ids: number[], to: number) {
     // (Set apart under a heading of its own, each line marked, so that the card reads as a list and not as a block.)
     const reckoning = accountLines((p as { account?: CrossAccount }).account);
     if (reckoning.length) lines.push('', 'THE RECKONING', ...reckoning.map((l) => (l.endsWith(':') ? l : `\u00B7 ${l}`)));
+    // (Version 73) And whether the sea behind the beach stays open once they are ashore.
+    const hold = (p as { hold?: SeaHoldView }).hold;
+    const holding = holdLines(hold);
+    if (holding.length) lines.push('', ...holding);
+    if (hold && hold.open && !p.air) lines.push('', `As things stand the enemy cannot close the ${s.seas[hold.sea]?.name ?? 'sea'} behind it.`);
+    return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: p.air ? '' : holdWarning(s, hold, true) };
   }
-  return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines };
+  return { ok: !p.why, why: p.why ?? '', name: s.regions[to].name, lines, warn: '' };
 }
 
 /** Lands the chosen corps on an enemy coast. */
@@ -2485,7 +2509,7 @@ function warPlan(on: string, target = -1) {
 // ---- Rooms drawn by one general panel: the bridge writes the words and the buttons, the game draws them ----------
 
 interface PageButton { label: string; act: string; ok: boolean; tip: string; danger?: boolean }
-interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number; picture?: string }
+interface PageRow { nat: string; title: string; lines: string[]; buttons: PageButton[]; meter?: number; picture?: string; alarm?: string }
 interface Page { id: string; title: string; headline: string; note: string; top: PageButton[]; sections: { heading: string; text: string; rows: PageRow[] }[] }
 
 /** A question about World Domination waiting for its second and third yes. */

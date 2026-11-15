@@ -279,6 +279,7 @@ struct FPageRow
 	TArray<FString> Lines;
 	TArray<FPageButton> Buttons;
 	float Meter = -1.0f; // (rules version 71) a bar under the lines, 0 to 1: how far a test is met. None when less than nothing.
+	FString Alarm; // (rules version 73) a line set out in red under the title: a warning that goes with the row
 	FString Picture; // what to show a large picture of beside the row, if anything: "air:ftr:GER" is Germany's fighter, "air:bmr:UK" Britain's bomber
 };
 
@@ -1010,6 +1011,7 @@ struct FLandingPlan
 	FString Why; // why it cannot be made, if it cannot
 	FString Name; // the coast
 	TArray<FString> Lines; // the crossing, the sky, the defenders
+	FString Warn; // (rules version 73) set out in red: the enemy could close the sea behind the force once it is ashore
 };
 
 struct FLandingResult

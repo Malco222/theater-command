@@ -1733,6 +1733,7 @@ FLandingPlan FCampaignSession::PlanLanding(const TArray<int32>& CorpsIds, int32 
 		Object->TryGetStringField(TEXT("why"), Plan.Why);
 		Object->TryGetStringField(TEXT("name"), Plan.Name);
 		Object->TryGetStringArrayField(TEXT("lines"), Plan.Lines);
+		Object->TryGetStringField(TEXT("warn"), Plan.Warn);
 	}
 	return Plan;
 }
@@ -2577,6 +2578,7 @@ FOfficePage FCampaignSession::Page(const FString& Id, int32 RegionId)
 					RowEntry->TryGetStringArrayField(TEXT("lines"), Row.Lines);
 					ReadButtons(RowEntry, TEXT("buttons"), Row.Buttons);
 					RowEntry->TryGetNumberField(TEXT("meter"), Row.Meter);
+					RowEntry->TryGetStringField(TEXT("alarm"), Row.Alarm);
 					RowEntry->TryGetStringField(TEXT("picture"), Row.Picture);
 				}
 			}
