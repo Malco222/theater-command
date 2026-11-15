@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Versions 67 and 68: a fair shot from every seat, from probe53's or probe54's SEAT lines (files DIR/PREFIX-NAT-SEED.txt).
+"""Versions 67 to 69: a fair shot from every seat, from the SEAT lines of probe53, probe54 or probe57 (files DIR/PREFIX-NAT-SEED.txt).
 usage: seattab.py DIR PREFIX... [--seeds A-B] [--rows]
 For each prefix (say `seat` by hand and `seatfield` at Field command) and each country: how many wars the player's
 country stood to the end of, how the war went for its side (won: the chief enemy fell while the player stands; lost:
@@ -51,6 +51,8 @@ for name in names:
         r['parWhy'] = m.group(2) if m else ''
         r['homeLost'], r['homeMonths'] = (int(m.group(3)), int(m.group(4))) if m else (0, 0)
         m = re.search(r'Soviet levies (\d+)', s); r['levies'] = int(m.group(1)) if m else 0
+        m = re.search(r'; old line (beaten|missed)', s); r['old'] = None if not m else m.group(1) == 'beaten'
+        m = re.search(r'; the east opened (\w+ \d{4})', s); r['east'] = turn(m.group(1)) if m else 0
         m = re.search(r'ashore to stay from (\w+ \d{4})', s); r['ashore'] = turn(m.group(1)) if m else 0
         r['gerFell'] = r['fallen']['GER'][0] if 'GER' in r['fallen'] and not r['fallen']['GER'][1] else 0
         r['line'] = s
@@ -77,6 +79,9 @@ for name in names:
                 gf = [r['gerFell'] for r in rows if r['gerFell']]
                 extra += f"; Germany fell in {len(gf)}" + (f", the middle one in {date(mid(gf))}" if gf else '')
             lv = sum(1 for r in rows if r['levies'])
+            if any(r.get('old') is not None for r in rows): extra += f"; by the lines as first told (Version 68): {sum(1 for r in rows if r.get('old'))}"
+            ea = [r['east'] for r in rows if r.get('east')]
+            if ea and nat in ('SOV', 'GER'): extra += f"; the east opens in 1941 in {sum(1 for x in ea if x <= 28)}, in 1942 in {sum(1 for x in ea if 28 < x <= 40)}, later in {sum(1 for x in ea if x > 40)}, never in {len(rows) - len(ea)}"
             print(f"   {'':13} PAR BEATEN in {pb} of {n} ({round(100 * pb / n)}%); an enemy on home soil in {sum(1 for r in rows if r['homeMonths'])} wars (middle {st.median(r['homeMonths'] for r in rows):g} months), home provinces lost at the worst: middle {st.median(r['homeLost'] for r in rows):g}; a Soviet levy in {lv}{extra}")
         sen = SENIOR.get(nat)
         if sen:

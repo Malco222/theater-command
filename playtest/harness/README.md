@@ -393,3 +393,22 @@ Traps met on Version 68:
 - A run that prints `ERROR ... computer month` is a finding, not a harness fault: `jobs.sh` leaves it in the folder and the queue's last line counts them (`grep -l "^ERROR"`). One in about 2,200 runs on Versions 67 and 68 (`end65-SOV_soft-11`: `pocketMonth` reads the stores of an ally's town it never marked). The error comes in the computer's months after the player's End month, so save in `each` at the turn before the month the error names (`probe55`), and press End month on the page (`ui32.cjs`).
 
 Results of the Version 68 test: `/mnt/project-files/playtest/results-v68/`.
+
+## Version 69 and the world domination test
+
+Version 69 (46126a8) gives every par line a second leg, so that a player who never gives an order cannot meet it:
+Germany beats France and holds Berlin at the end of 1944; the Soviet Union beats Germany within 47 months of the
+invasion and never loses Moscow; Britain has corps ashore in the west to stay before June 1944 and before Germany falls,
+and is never invaded; France holds Paris as October 1940 opens; Italy is at war with Britain by the end of 1940 and holds
+Rome at the end of 1943. Brian, 2026-11-15: "I also want each faction to have an actual chance to global domination"
+(first target: about one war in ten at Colonel), measured from Version 70.
+
+| Script | What it does | Example |
+| --- | --- | --- |
+| `probe57.ts` | `probe54` with the Version 69 par lines; the lines as first told are still counted (`old line beaten`). Britain is ashore when British corps stand in the west, not when Britain holds provinces there: a liberated France takes its provinces back | `node out69/probe57.mjs UK 1 30 76 '<plan>'` |
+| `probe56.ts` | World Domination from any seat: the seat's player orders it the month the rules offer it and plays to the turn given (124 is December 1949); an undecided war is given up at turn 88 (`"giveUp"`). One `DOM` line a war: decided when and for whom, the last act begun, WON or how many nations were left, the share of the map's worth at the end and at the most. `"landLog":true` says why no landing was made; `"dominate":false` takes the victory instead | `node out69/probe56.mjs SOV 1 7 124 '{"minOdds":1.5,"land":true}'` |
+| `domtab.py` | Adds up the `DOM` lines by seat and set; `--rows` lists every war | `python3 domtab.py out/v69d dom domfield` |
+| `v68d.tsv`, `v69d.tsv` | The domination baseline: five seats by hand and at Field command on seeds 1 to 24 (240 jobs) | `./jobs.sh v69d.tsv out/v69d 4` |
+| `v69s.tsv` (`v69sa`, `v69sb`), `v69e.tsv`, `v69.tsv`, `v69f.tsv` | The Version 68 queues again against Version 69 (`out69`, `probe57` for the seats) | `./jobs.sh v69sa.tsv out/v69s 4` |
+
+Bundles: `out69` is every program against Version 69.
